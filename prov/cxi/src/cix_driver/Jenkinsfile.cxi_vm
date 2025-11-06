@@ -1,0 +1,8 @@
+@Library(['CrayNetworkCI@master']) _
+
+def map = [:]
+map.prScript = "cxi_vm_pr.sh"
+map.commitScript = "cxi_vm_commit.sh"
+map.primaryBranch = "main"
+map.downstreamProjects = ["os-networking-team/cassini-vm/HPE/hpc-shs-kfabric/integration", "os-networking-team/cassini-vm/HPE/hpc-shs-libcxi/main"]
+cxiVmPipeline (map)

@@ -1,0 +1,377 @@
+CXI - The Cassini core driver
+=============================
+
+This is the core driver for Cassini 1 and 2, and its Ethernet driver.
+
+Driver architecture
+-------------------
+
+                               +------------------------------+
+                               |   libfabric / CXI provider   |
+                               |                              |
+                               +------------------------------+
+                                              |
+          userspace                           |
+         +----------------------------------------------------------------------+
+          kernel                              |
+                                              |
+            +---------------------+ +----------------+ +------------------------+
+            | CXI Ethernet driver | | CXI user comm. | | KFabric +--------------+
+    clients |                     | |                | |         | CXI provider |
+            +---------------------+ +----------------+ +------------------------+
+                           ^                  ^                    |
+                           |                  |                    |
+                           +--------------+   |   +----------------+
+                                          |   |   |
+    +----------------------+       +---------------------+
+    | SBL (Cassini 1)      |       | CXI core  (cxi-ss1) |
+    | SL (Cassini 2)       |-------|                     |
+    +----------------------+       |           +---------|
+                                   |           | Cassini |
+                                   +---------------------+
+
+The cxi-ss1 driver is both a subsystem and a hardware driver. It
+provides services to the clients that register with it. The cxi part
+provides the interface with the upper layers, while the cass part manages
+the hardware access. Clients do see a 'struct cxi_dev', but internally
+the driver works with 'struct cass_dev'. A cass_dev embeds a
+cxi_dev. This layering would allow an easy split between a generic
+interface and the Cassini driver should the need arise, for instance
+if HPE wants to support a different hardware.
+
+
+How to build with the default (running) kernel
+----------------------------------------------
+
+After building the SBL and SL drivers, type 'make' to build the
+CXI drivers.
+
+
+How to build with a custom kernel
+---------------------------------
+
+A custom kernel is useful to test the build with a newer kernel or a
+debug kernel for instance.
+
+To build a custom kernel, configure it with virtme's help:
+
+  virtme-configkernel --arch=x86 --defconfig
+
+Then add a few more options we need, with 'make menuconfig':
+
+  Memory Management options  --->
+    [*] Transparent Hugepage Support
+
+  Device Drivers  --->
+    Graphics support  --->
+      <M> AMD GPU
+      [*]   Always enable userptr write support
+
+    [*] IOMMU Hardware Support  --->
+      [*]   AMD IOMMU support
+      <M>     AMD IOMMU Version 2 driver
+
+    [*] PCI support  --->
+      [*]   PCI IOV support
+
+
+Other options, such as some kernel debugging, can be added. Build the
+kernel.
+
+Export the location of the kernel:
+
+    export KDIR=......../linux/
+
+Build the SBL driver:
+
+    cd ../slingshot_base_link
+    SBL_EXTERNAL_BUILD=1 PLATFORM_CASSINI_SIM=1 make
+
+Build the Slingshot Link driver:
+
+    cd ../sl-driver
+    make
+
+Then the CXI drivers:
+
+    cd ../cxi-driver
+    make
+
+It is possible to select the compiler version to use. For instance
+SLES 15 defaults to gcc 7.5 which is ancient and lacks some features
+to support KASAN. After installing gcc-12, configure and build using
+the same commands as above, just adding "CC=gcc-12" _after_ "make",
+such as:
+
+   make CC=gcc-12
+
+
+Running in a VM
+---------------
+
+The scripts/startvm.sh can be used to start a VM, and
+scripts/startvm-setup.sh will load the drivers once in the VM:
+
+   $ cd scripts
+   $ ./startvm.sh
+
+The local filesystem will be mounted read-only so no damage can occur.
+
+The -N option can be set to 1, 2 or 4 to indicate to number of Cassini
+adapters present in the VM. The default is 1:
+
+   $ cd scripts
+   $ ./startvm.sh -N 2
+
+It is also possible to run several VMs with Cassini boards
+interconnected, using the -n option. It is recommended to set
+USE_XTERM so each VM is created in its own terminal:
+
+   $ cd scripts
+   $ USE_XTERM=1 ./startvm.sh -n 2
+
+The -n and -N are just netsim parameters. The other netsim
+options are also available, but may not make sense within the cxi
+driver context:
+
+    $ ./startvm.sh -h
+    netsim [-D blk][-a][-d][-h][-n nv][-N nn][-P][-p port][-r r][-q] [command]
+        -D   debug verbosity for a block (may be specified more than once)
+        -a   abort on NIC call to error
+        -d   debug verbosity (may be specified more than once)
+             Controls writing of debug trace entries to a r*.dbg
+             file for each router.
+        -h   this help message
+        -n   number of nodes to simulate (default is MPI Size)
+        -N   number of NICs per node
+        -P   turn on performance mode
+        -t   test mode
+
+
+How to test
+-----------
+
+Type 'make check' to run the testsuite, based on qemu.
+
+These tests can also be run individually. They will start a VM
+automatically:
+
+    $ cd tests
+    $ ./t0010-basic.t
+    ....
+    ok 1 - One device is present
+    ok 2 - Inserting driver
+    ok 3 - sys class entry for cxi0 exists
+    Fake CCN_VF Device loaded
+    Reset Fake CCN Device
+    Fake CCN_VF Device loaded
+    Reset Fake CCN Device
+    ok 4 - Create 2 VFs
+    ok 5 - Three devices are now present
+    ok 6 - Intel IOMMU is properly set up
+    ok 7 - MSI-X is present
+    ok 8 - PCI capabilities
+    ok 9 - No Oops
+    # passed all 9 test(s)
+    1..9
+
+It is also possible to run these tests when already inside a VM:
+
+   $ cd scripts
+   $ TESTING=1 ./startvm.sh
+   ....
+   (none):.... # cd ../tests
+   (none):.... # ./t0010-basic.t
+   ....
+
+The TESTING variable tells startvm.sh to make ./tests/tmptests/
+writable from inside a VM.
+
+
+Git hook
+--------
+
+A git pre-commit hook can be installed by running
+
+    ./contrib/install-git-hook.sh
+
+It will run checkpatch for every commit. If the commit has warnings or
+errors, the commit can't happen. That check can be disabled by adding
+the --no-verify option to git commit.
+
+
+Device class
+------------
+
+Each device is given a name (cxi0, cxi1, ...), and a link to each
+device appears in /sys/class/cxi/.
+
+
+Using Virtual Functions
+-----------------------
+
+Note that this is not working at this time.
+
+By default the driver doesn't load virtual functions. The desired
+number has to be passed to the PF device in sysfs. For instance:
+
+    echo 4 > /sys/class/cxi/cxi0/device/sriov_numvfs
+
+The same file can be queried to get the active number of VFs.
+
+The total number of VFs supported by the device can be queried from
+the PF device with:
+
+    cat /sys/class/cxi/cxi0/device/sriov_totalvfs
+
+Once the VFs have been created, the CXI core driver will bind them,
+rendering them unavailable to devices in VMs. To counter that, the
+operator must find their PCI function, and unbind them first before
+starting a VM:
+
+    ls -l /sys/class/cxi/cxi0/device/virtfn0
+    echo 0000:00:14.0 > /sys/bus/pci/drivers/cxi_ss1/unbind
+
+See startvm.sh for an example.
+
+
+Debugging
+---------
+
+Driver and per device debug files will exist under
+/sys/kernel/debug/cxi and /sys/kernel/debug/cxi_eth. The files they
+contain are not needed for production, as debugfs can be optionally
+mounted.
+
+
+The API
+-------
+
+The driver provides some functions to create and destroy the NIs, CQs
+(command queueus), CPs (communication profiles), EQs (event queues),
+..., such as cxi_lni_alloc / cxi_lni_free, cxi_eq_alloc /
+cxi_eq_free. These functions are loosely connected to Cassini
+specifications.
+
+There are other functions that are Cassini specific, provided by
+libcassini.h or the driver, such as cass_emit_dma, cass_update_wp, or
+cass_write / cass_read.
+
+A kernel driver using Cassini will interact directly with the cxi-ss1
+driver. For instance cxi-eth or kfabric. The client drivers call
+cxi_register_client() to register with the CXI core. When a device
+comes up, the CXI core calls the add() function of each client with
+the new cxi device. The clients can then use that cxi device. When the
+device is removed, the CXI core will call the clients' remove()
+operation, at which point the clients must terminate their use of that
+cxi device.
+
+An application will use libcxi to use Cassini. See utils/ directory in
+the libcxi repository for cxi_template.c for several examples.
+
+
+sysfs entries
+-------------
+
+Most sysfs entries have been described in
+docs/ABI/testing/sysfs-class-cxi.
+
+Enable or disable hardware error messages
+.........................................
+
+Error messages can be disabled by writing a bitmask of values to
+mask. For instance that message:
+
+    cxi_ss1 0000:00:07.0: LPE error: pt_disabled_dis (22) (was first error at 0:444793124)
+    cxi_ss1 0000:00:07.0:   C_LPE_ERR_INFO_NET_HDR 0000000100000000
+
+can be disabled by adding 2^22 (0x400000 in hex) to the corresponding LPE
+no_print_mask entry:
+
+    $ cat /sys/class/cxi/cxi0/device/err_flgs_irqa/lpe/no_print_mask
+    00000000,00042000
+
+    $ echo 00000000,00442000 > /sys/class/cxi/cxi0/device/err_flgs_irqa/lpe/no_print_mask
+
+Messages can be re-enabled by unsetting the bit.
+
+Enable or disable automatic masking of error bits
+.................................................
+
+The Cassini driver will mask an error interrupt bit if its rate
+becomes too high. But for some error bits, this must not happen. For
+instance the PI UC_ATTENTION bits must never be disabled because they
+are used to communicate with the micro-controller. Read and write the
+mask to cxiX/device/err_flgs_irqa/<block>/no_auto_mask. Most default
+to 0.
+
+Error interrupts mask
+.....................
+
+cxiX/device/err_flgs_irqa/<block>/mask show the current bitmask for
+error flags. A value of 0 means an interrupt will be generated for the
+error, while 1 means no interrupt will happen, although the
+corresponding error flag may be set. This field is read-only.
+
+Micro-controller version
+........................
+
+The current uC version is available in cxiX/device/uc/qspi_blob_version:
+
+    # cat /sys/class/cxi/cxi0/device/uc/qspi_blob_version
+    v001r009
+
+It is also printed in the kernel log when the device is instantiated
+by the driver.
+
+Reset the uC
+............
+
+For debugging / testing purposes it might be useful to reset the uC:
+
+    echo 1789 > /sys/class/cxi/cxi0/device/uc/reset
+
+
+firmware flashing
+-----------------
+
+Flashing the micro-controller firmware is done with ethtool. The
+firmware file must first be copied to allowed places, like
+/lib/firmware, and the CXI ethernet driver must be loaded.
+
+    ethtool --flash enp0s8 serdes.0x109E_208D.rom.bin
+
+
+Kernel Parameters
+-----------------
+
+A large number of module parameters are available for tuning and
+debugging, including:
+
+pause_too_long_timeout (uint): Pause too long timeout error specified
+in milliseconds. When non-zero, Cassini will generate an error
+interrupt after around pause_too_long_timeout milliseconds reporting
+it has been paused too long. While pause will not be deasserted when
+this error interrupt occurs, it is a sign of either bad congestion or
+a misconfiguration in the network.
+
+
+Debugging
+---------
+
+The driver can output more traces with the following commands:
+
+    echo 8 > /proc/sys/kernel/printk
+    echo -n 'module cxi_ss1 +p' >> /proc/dynamic_debug/control
+
+Fine-grained control at file or function level can also be
+enabled, like this:
+
+    echo 'file cxi/cass_atu.c +p' >> /proc/dynamic_debug/control
+    echo 'func cxi_cp_alloc +p' >> /proc/dynamic_debug/control
+
+On some kernels, /proc/dynamic_debug doesn't exist. Use
+/sys/kernel/debug/dynamic_debug instead.
+
+See the kernel's documentation for more information:
+Documentation/admin-guide/dynamic-debug-howto.rst

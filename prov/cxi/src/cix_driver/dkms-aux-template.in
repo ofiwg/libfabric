@@ -1,0 +1,39 @@
+#
+# Copyright 2025 Hewlett Packard Enterprise Development LP
+#
+
+#
+# Template for @SHS_DKMS_AUX_DIR@/@PACKAGE_NAME@-aux.conf  
+# for version @PACKAGE_VERSION@
+#
+
+#
+# The CXI driver has optional support for AMD, Intel, and Nvidia GPUs
+# including support for nvidia and nvidia-open driver variants.
+#
+# For GPUs, controls for optional support:
+#
+#       DISABLE_GPU_* _must_ be an integer
+#
+#               0               -> enabled
+#               non-zero        -> disabled
+#
+#       PATH_GPU_* _must_ an absolute path the DKMS source to use for that
+#       GPU driver.  For portability in paths, use DKMS's ${source_tree}.
+#
+# If PATH_GPU_<GPU-NAME> is not defined but its inclusion is _not_ _disabled_
+# by DISABLE_GPU_<GPU-NAME>=<non-zero>,  then an attempt to find and use the
+# latest version of <GPU-NAME> from ${source_tree} will be made.
+#
+
+DISABLE_GPU_AMD=0
+PATH_GPU_AMD=
+
+DISABLE_GPU_INTEL=0
+PATH_GPU_INTEL=
+
+DISABLE_GPU_NVIDIA=0
+PATH_GPU_NVIDIA=
+
+DISABLE_GPU_NVIDIA_OPEN=0
+PATH_GPU_NVIDIA_OPEN=

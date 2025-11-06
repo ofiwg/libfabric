@@ -1,0 +1,1 @@
+KERNEL=="cxi_ss1", SUBSYSTEM=="module", ACTION=="add", RUN+="/sbin/modprobe --use-blacklist -a cxi_user cxi_eth"

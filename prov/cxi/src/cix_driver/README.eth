@@ -1,0 +1,130 @@
+CXI Ethernet driver notes
+=========================
+
+RSS support
+-----------
+
+By default, the CXI driver has one queue. This will be a catch-all. If
+a user programs more than one queue, then that number of RSS queues
+will be created, and the catch-all will stay. For instance if the
+number of RSS queue is 8, then there will be 9 queues in the driver,
+one being hidden.
+
+See the RSS queues::
+
+  $ ethtool -l eth0
+
+  Channel parameters for eth0:
+  Pre-set maximums:
+  RX:             16
+  TX:             1
+  Other:          0
+  Combined:       1
+  Current hardware settings:
+  RX:             1
+  TX:             1
+  Other:          1
+  Combined:       1
+
+Allocate a new number of RSS queues. The driver defaults to 1. That
+number must be a power of 2, from 1 to 16. There is no reason to have
+a module parameter since the RSS queues would be otherwise unused
+until a hash is set.
+
+  $ ethtool -L eth0 rx 4
+
+When a new number of RSS entries is programmed, the indirection table
+is reset. The indirection table size is set to 64 entries per device
+through the rss_indir_size module parameter, leaving enough room for
+VF devices. There doesn't appear to be a way to change the size with
+ethtool.
+
+Show the indirection table::
+
+  $ ethtool -x eth0
+
+  RX flow hash indirection table for eth0 with 4 RX ring(s):
+      0:      0     1     2     3     0     1     2     3
+      8:      0     1     2     3     0     1     2     3
+     16:      0     1     2     3     0     1     2     3
+     24:      0     1     2     3     0     1     2     3
+     32:      0     1     2     3     0     1     2     3
+     40:      0     1     2     3     0     1     2     3
+     48:      0     1     2     3     0     1     2     3
+     56:      0     1     2     3     0     1     2     3
+
+In this example, a packet with a hash of 58 will go to RSS queue
+number 2.
+
+Program the indirection table to equally split the traffic between
+queues 0 and 1 only.
+
+  $ ethtool -X eth0 equal 2
+
+The driver is currently configured with default hashes::
+
+  C_RSS_HASH_IPV4_TCP
+  C_RSS_HASH_IPV4_UDP
+  C_RSS_HASH_IPV6_TCP
+  C_RSS_HASH_IPV6_UDP
+
+There is no way to change these values during operation, as ethtool
+doesn't exactly support the Cassini hash mechanism. ethtool needs to
+be patched, or another tool created.
+
+Buffer sizing
+=============
+
+Small received packets are sharing a set of large buffers, while
+bigger packets are received in individual smaller buffers. In other
+words, a large buffer will receive many small packets, while a small
+buffer (still enough to receive an MTU packet) will receive only one
+large packet before being re-used.
+
+The driver provides the following tuning parameters for these buffers:
+
+  small_pkts_buf_size: size of one large buffer receiving small
+      packets. It defaults to 1MB.
+
+  small_pkts_buf_count: number of large buffers to make available. It
+      defaults to 4.
+
+  large_pkts_buf_count: number of small buffers intended to receive
+      larger packets. Their size, which depends on the MTU, is 128
+      bytes to 4 KiB. Defaults to 64.
+
+  buffer_threshold: Ethernet packets with length greater than or equal
+      to this threshold are put in one large packet buffer,
+      otherwise they land in a shared small packet buffer.
+
+Other kernel parameters
+=======================
+
+  idc_dma_threshold: Ethernet packets up to this size will be sent
+      inline. Larger packets will use DMA. Valid values are 0 to
+      224. It defaults to 224. This value can be safely changed while
+      the device is active.
+
+Ethtool private flags
+=====================
+
+The behavior of the device can be changed through several private flags,
+which can be read and set through ethtool:
+
+- Set either "internal-loopback" or "external-loopback" to change the
+  loopback type. If both are off, there is no loopback which is the
+  regular mode.
+
+- "llr" to enable LLR mode.
+
+- "precoding" to enable precoding.
+
+- "ifg-hpc" to set the inter-frame gap format to HPC, otherwise it is
+  set to IEEE.
+
+- "roce-seg" to enable the special RoCE segmentation, which separates
+  headers from payload, and removes the iCRC.
+
+Example:
+
+  ethtool --set-priv-flags enp0s8 external-loopback on

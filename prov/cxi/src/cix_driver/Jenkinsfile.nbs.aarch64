@@ -1,0 +1,8 @@
+@Library('dst-shared-2@master') _
+@Library('CrayNetworkCI@master') _x
+
+buildRunner {
+    buildScript = "run.jenkins"
+    timeout = 40
+    buildAgent = "dst-arm"
+}

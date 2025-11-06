@@ -1,0 +1,325 @@
+#
+# Copyright 2025 Hewlett Packard Enterprise Development LP
+#
+
+#
+# Global options
+#
+PACKAGE_NAME="@PACKAGE_NAME@"
+PACKAGE_VERSION="@PACKAGE_VERSION@"
+SHS_DKMS_AUX_DIR="@SHS_DKMS_AUX_DIR@"
+
+#
+# SHS DKMS variables
+#
+SHS_DKMS_PACKAGEROOT="${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}"
+SHS_DKMS_BUILDROOT="${SHS_DKMS_PACKAGEROOT}/build"
+
+#
+# CXI driver optional auxiliary dkms configuration
+#
+SHS_DKMS_AUX_CONF=${SHS_DKMS_AUX_DIR}/${PACKAGE_NAME}-aux.conf
+if [ -f ${SHS_DKMS_AUX_CONF} ] && [ -r ${SHS_DKMS_AUX_CONF} ]
+then
+    . ${SHS_DKMS_AUX_CONF}
+fi
+
+#
+# The CXI driver has optional support for AMD, Intel, and Nvidia GPUs
+# including support for nvidia and nvidia-open driver variants.
+#
+# By default the "latest version" of each GPU installed in DKMS will
+# be included.
+#
+# If nvidia and nvidia-open are both installed, then the one with the
+# highest version among them will be chosen.
+#
+# If nvidia and nvidia-open are both installed with same version,
+# then nvidia will be used.
+#
+# _IF_ a different version of the GPU is needed _OR_ support for a
+# GPU disabled, then set the appropriate variable in the auxililiary
+# dkms configuration file.
+#       (its location is ${SHS_DKMS_AUX_CONF})
+#
+
+if [ ${DISABLE_GPU_AMD:-0} -eq 0 ]
+then
+    if [ -z "${PATH_GPU_AMD}" ]
+    then
+        #
+        # Find newest candidate directory that contains an 'include'
+        # subdirectory - sometimes uninstall can leave behind an empty
+        # directory in /usr/src
+        #
+	paths="$(find ${source_tree} -mindepth 1 -maxdepth 1 -name 'amdgpu-*' 2>/dev/null)"
+	if [ -n "${paths}" ]
+	then
+            tmp=$(find ${paths} -mindepth 1 -maxdepth 1 -type d -name include 2>/dev/null | sort --version-sort | tail -1)
+            PATH_GPU_AMD=${tmp%/*}
+        fi
+    elif [ ! -d "${PATH_GPU_AMD}" ]
+    then
+        printf 'dkms.conf:  ERROR:  PATH_GPU_AMD="%s" is not a path to a directory\n' "${PATH_GPU_AMD}"
+        unset PATH_GPU_AMD
+    fi
+else
+    unset PATH_GPU_AMD
+fi
+
+if [ ${DISABLE_GPU_INTEL:-0} -eq 0 ]
+then
+    if [ -z "${PATH_GPU_INTEL}" ]
+    then
+        #
+        # Find newest candidate directory that contains an 'include'
+        # subdirectory - sometimes uninstall can leave behind an empty
+        # directory in /usr/src
+        #
+	paths="$(find ${source_tree} -mindepth 1 -maxdepth 1 -name 'intel-dmabuf-*' 2>/dev/null)"
+	if [ -n "${paths}" ]
+	then
+            tmp=$(find ${paths} -mindepth 1 -maxdepth 1 -type d -name include 2>/dev/null | sort --version-sort | tail -1)
+            PATH_GPU_INTEL=${tmp%/*}
+        fi
+    elif [ ! -d "${PATH_GPU_INTEL}" ]
+    then
+        printf 'dkms.conf:  ERROR:  PATH_GPU_INTEL="%s" is not a path to a directory\n' "${PATH_GPU_INTEL}"
+        unset PATH_GPU_INTEL
+    fi
+else
+    unset PATH_GPU_INTEL
+fi
+
+if [ ${DISABLE_GPU_NVIDIA:-0} -eq 0 ]
+then
+    if [ -z "${PATH_GPU_NVIDIA}" ]
+    then
+        #
+        # 'sort --version-sort' does not just pick out and sort on version
+        # substrings.  It sorts on then entire string, then versions among
+        # the same base strings.  Mixing ${source_tree}/kernel-modules and
+        # ${source_tree} without kernel-modules will make it harder to get
+        # the newest version.  Splitting into two groups, prioritizing
+        # ${source_tree}/kernel-modules, finds highest version with ease
+        # if both variations are present (which is fairly unlikely).
+        #
+
+        #
+        # Find newest candidate directory that contains an 'nvidia'
+        # subdirectory - sometimes uninstall can leave behind an empty
+        # directory in /usr/src
+        #
+        for dir in $(find ${source_tree}/kernel-modules -mindepth 1 -maxdepth 1 -name 'nvidia-*' \! -name 'nvidia-open-*' 2>/dev/null | sort --version-sort)
+        do
+            if [ -d ${dir}/nvidia ]
+            then
+                PATH_GPU_NVIDIA=${dir}/nvidia
+            elif [ -d ${dir}/kernel-open/nvidia ]
+            then
+                PATH_GPU_NVIDIA=${dir}/kernel-open/nvidia
+            fi
+        done
+        #
+        # If nothing has been found ${source_tree}/kernel-modules,
+        # then look for the nvidia kernel modules in just ${source_tree}.
+        #
+        if [ -z "${PATH_GPU_NVIDIA}" ]
+        then
+            for dir in $(find ${source_tree} -mindepth 1 -maxdepth 1 -name 'nvidia-*' \! -name 'nvidia-open-*' 2>/dev/null | sort --version-sort)
+            do
+                if [ -d ${dir}/nvidia ]
+                then
+                    PATH_GPU_NVIDIA=${dir}/nvidia
+                elif [ -d ${dir}/kernel-open/nvidia ]
+                then
+                    PATH_GPU_NVIDIA=${dir}/kernel-open/nvidia
+                fi
+            done
+        fi
+    elif [ ! -d "${PATH_GPU_NVIDIA}" ]
+    then
+        printf 'dkms.conf:  ERROR:  PATH_GPU_NVIDIA="%s" is not a path to a directory\n' "${PATH_GPU_NVIDIA}"
+        unset PATH_GPU_NVIDIA
+    fi
+else
+    unset PATH_GPU_NVIDIA
+fi
+
+if [ ${DISABLE_GPU_NVIDIA_OPEN:-0} -eq 0 ]
+then
+    if [ -z "${PATH_GPU_NVIDIA_OPEN}" ]
+    then
+        #
+        # Find newest candidate directory that contains an 'nvidia'
+        # subdirectory - sometimes uninstall can leave behind an empty
+        # directoryin /usr/src
+        #
+        for dir in $(find ${source_tree}/kernel-modules -mindepth 1 -maxdepth 1 -name 'nvidia-open-*' 2>/dev/null | sort --version-sort)
+        do
+            if [ -d ${dir}/nvidia ]
+            then
+                PATH_GPU_NVIDIA=${dir}/nvidia
+            elif [ -d ${dir}/kernel-open/nvidia ]
+            then
+                PATH_GPU_NVIDIA=${dir}/kernel-open/nvidia
+            fi
+        done
+        #
+        # If nothing has been found ${source_tree}/kernel-modules,
+        # this may not be a COS system, then look for the nvidia
+        # kernel modulesin the normal place
+        #
+        if [ -z "${PATH_GPU_NVIDIA_OPEN}" ]
+        then
+            for dir in $(find ${source_tree} -mindepth 1 -maxdepth 1 -name 'nvidia-open-*' 2>/dev/null | sort --version-sort)
+            do
+                if [ -d ${dir}/nvidia ]
+                then
+                    PATH_GPU_NVIDIA=${dir}/nvidia
+                elif [ -d ${dir}/kernel-open/nvidia ]
+                then
+                    PATH_GPU_NVIDIA=${dir}/kernel-open/nvidia
+                fi
+            done
+        fi
+    elif [ ! -d "${PATH_GPU_NVIDIA_OPEN}" ]
+    then
+        printf 'dkms.conf:  ERROR:  PATH_GPU_NVIDIA_OPEN="%s" is not a path to a directory\n' "${PATH_GPU_NVIDIA_OPEN}"
+        unset PATH_GPU_NVIDIA_OPEN
+    fi
+else
+    unset PATH_GPU_NVIDIA_OPEN
+fi
+
+#
+# If both nvidia and nvidia-open paths have been found,
+# then pick highest version of the two, unsetting the other path.
+#
+if [ -n "${PATH_GPU_NVIDIA}" ] && [ -n "${PATH_GPU_NVIDIA_OPEN}" ]
+then
+    nvidia_version=$(echo "${PATH_GPU_NVIDIA}" | sed -e 's,^.*/nvidia-\([^/]*\)/.*$,\1,g')
+    nvidia_open_version=$(echo "${PATH_GPU_NVIDIA_OPEN}" | sed -e 's,^.*/nvidia-open-\([^/]*\)/.*$,\1,g')
+    version=$(printf '%s\n%s\n' "${nvidia_version}" "${nvidia_open_version}" | sort --version-sort | tail -1)
+    if [ "${version}" = "${nvidia_version}" ]
+    then
+        unset PATH_GPU_NVIDIA_OPEN
+    elif [ "${version}" = "${nvidia_open_version}" ]
+    then
+        unset PATH_GPU_NVIDIA
+    else
+        printf 'dkms.conf:  ERROR: version not identifiable among "%s" and "%s"\n' "${PATH_GPU_NVIDIA}" "${PATH_GPU_NVIDIA_OPEN}"
+        printf 'dkms.conf:  ERROR: versions "%s" and "%s" deterimined "%s"\n' "${nvidia_version}" "${nvidia_open_version}" "${version}"
+        unset PATH_GPU_NVIDIA
+        unset PATH_GPU_NVIDIA_OPEN
+    fi
+fi
+
+if [ -z "${PATH_GPU_NVIDIA}" ] && [ -z "${PATH_GPU_NVIDIA_OPEN}" ]
+then
+        printf "dkms.conf:  ERROR: No Nvidia driver installed"
+fi
+
+#
+# dependencies
+#
+# CXI driver has hard dependencies on some other SHS components and soft
+# dependencies on GPUs.  The GPU may or may not be installed as DKMS items.
+# Only add GPUS to BUILD_DEPENDS when then are recognized in DKMS.  The
+# implementation is purposely checking only for the GPU package-name and
+# omitting its version that would be contained in PATH_GPU_...
+#
+BUILD_DEPENDS=("cray-slingshot-base-link" "sl-driver")
+if [ -n "${PATH_GPU_AMD}" ]
+then
+    amd_version=$(echo "${PATH_GPU_AMD}" | sed -e 's,^.*/amdgpu-\(.*\)$,\1,g')
+    count=$(dkms status -m amdgpu -v ${amd_version} 2>/dev/null | wc -l)
+    if [ ${count} -ne 0 ]
+    then
+        BUILD_DEPENDS+=("amdgpu")
+    fi
+fi
+if [ -n "${PATH_GPU_INTEL}" ]
+then
+    intel_dmabuf_version=$(echo "${PATH_GPU_INTEL}" | sed -e 's,^.*/intel-dmabuf-\(.*\)$,\1,g')
+    count=$(dkms status -m intel-dmabuf -v ${intel_dmabuf_version} 2>/dev/null | wc -l)
+    if [ ${count} -ne 0 ]
+    then
+        BUILD_DEPENDS+=("intel-dmabuf")
+    fi
+fi
+#if [ -n "${PATH_GPU_NVIDIA}" ]
+#then
+#    nvidia_version=$(echo "${PATH_GPU_NVIDIA}" | sed -e 's,^.*/nvidia-\([^/]*\)/.*$,\1,g')
+#    count=$(dkms status -m nvidia -v ${nvidia_version} 2>/dev/null | wc -l)
+#    if [ ${count} -ne 0 ]
+#    then
+#        BUILD_DEPENDS+=("nvidia")
+#    fi
+#fi
+if [ -n "${PATH_GPU_NVIDIA_OPEN}" ]
+then
+    nvidia_open_version=$(echo "${PATH_GPU_NVIDIA_OPEN}" | sed -e 's,^.*/nvidia-open-\([^/]*\)/.*$,\1,g')
+    count=$(dkms status -m nvidia-open -v ${nvidia_open_version} 2>/dev/null | wc -l)
+    if [ ${count} -ne 0 ]
+    then
+        BUILD_DEPENDS+=("nvidia-open")
+    fi
+fi
+
+#
+# Use the Module.symvers stored in the DKMS tree for our dependencies
+#
+SLINGSHOT_BASE_LINK_SYMVERS=${dkms_tree}/cray-slingshot-base-link/kernel-${kernelver}-${arch}/module/Module.symvers
+SL_SYMVERS=${dkms_tree}/sl-driver/kernel-${kernelver}-${arch}/module/Module.symvers.sl
+
+SHS_MAKE_ARGS="\
+ -C ${kernel_source_dir}\
+ M=${SHS_DKMS_BUILDROOT}/drivers/net/ethernet/hpe/ss1\
+ NO_BUILD_TESTS=1\
+ FIRMWARE_CASSINI_DIR=/usr/include\
+ CASSINI_HEADERS_DIR=/usr/include\
+ SLINGSHOT_BASE_LINK_DIR=/usr/include\
+ SL_DIR=/usr/include\
+ AMDGPU_DIR=${PATH_GPU_AMD}\
+ INTEL_DMABUF_DIR=${PATH_GPU_INTEL}\
+ NVIDIA_DIR=${PATH_GPU_NVIDIA}\
+ KBUILD_EXTRA_SYMBOLS='${SLINGSHOT_BASE_LINK_SYMVERS} ${SL_SYMVERS}'\
+"
+
+MAKE="'make' --jobs=${parallel_jobs} ${SHS_MAKE_ARGS} modules"
+CLEAN="'make' --jobs=${parallel_jobs} ${SHS_MAKE_ARGS} clean"
+AUTOINSTALL='yes'
+
+#
+# cxi-ss1.ko
+#
+BUILT_MODULE_LOCATION[0]=drivers/net/ethernet/hpe/ss1
+DEST_MODULE_LOCATION[0]=/extra
+BUILT_MODULE_NAME[0]=cxi-ss1
+DEST_MODULE_NAME[0]=cxi-ss1
+STRIP[0]=no
+
+#
+# cxi-eth.ko
+#
+BUILT_MODULE_LOCATION[1]=drivers/net/ethernet/hpe/ss1
+DEST_MODULE_LOCATION[1]=/extra
+BUILT_MODULE_NAME[1]=cxi-eth
+DEST_MODULE_NAME[1]=cxi-eth
+STRIP[1]=no
+
+#
+# cxi-user.ko
+#
+BUILT_MODULE_LOCATION[2]=drivers/net/ethernet/hpe/ss1
+DEST_MODULE_LOCATION[2]=/extra
+BUILT_MODULE_NAME[2]=cxi-user
+DEST_MODULE_NAME[2]=cxi-user
+STRIP[2]=no
+
+#
+# Post-build hook to copy our Module.symvers into the DKMS tree
+# so that other modules can build against it
+#
+POST_BUILD="dkms.post_build.sh ${SHS_DKMS_BUILDROOT}/drivers/net/ethernet/hpe/ss1 ${SHS_DKMS_PACKAGEROOT}"
