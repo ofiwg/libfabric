@@ -1,0 +1,116 @@
+LIBCXI_1.0 {
+global:
+	cxil_open_device;
+	cxil_close_device;
+	cxil_alloc_svc;
+	cxil_destroy_svc;
+	cxil_get_svc_list;
+	cxil_free_svc_list;
+	cxil_alloc_lni;
+	cxil_destroy_lni;
+	cxil_alloc_cp;
+	cxil_destroy_cp;
+	cxil_reserve_domain;
+	cxil_alloc_domain;
+	cxil_destroy_domain;
+	cxil_alloc_cmdq;
+	cxil_destroy_cmdq;
+	cxil_cmdq_ack_counter;
+	cxil_map;
+	cxil_unmap;
+	cxil_alloc_evtq;
+	cxil_destroy_evtq;
+	cxil_evtq_adjust_reserved_fc;
+	cxil_evtq_resize;
+	cxil_evtq_resize_complete;
+	cxil_alloc_pte;
+	cxil_destroy_pte;
+	cxil_map_pte;
+	cxil_unmap_pte;
+	cxil_invalidate_pte_le;
+	cxil_pte_status;
+	cxil_alloc_wait_obj;
+	cxil_clear_wait_obj;
+	cxil_destroy_wait_obj;
+	cxil_get_wait_obj_fd;
+	cxil_free_device_list;
+	cxil_get_device_list;
+	cxil_alloc_ct;
+	cxil_ct_wb_update;
+	cxil_destroy_ct;
+	cxil_map_csr;
+	cxil_read_csr;
+	cxil_write_csr;
+	cxil_write8_csr;
+	cxil_read_cntr;
+	cxil_read_n_cntrs;
+	cxil_read_all_cntrs;
+	cxil_sbus_op;
+	cxil_sbus_op_compat;
+	cxil_sbus_op_reset;
+	cxil_sbus_op_reset_compat;
+	cxil_serdes_op;
+	cxil_read_n_cntrs_with_hdr;
+	cxil_get_telemetry;
+	cxil_reserve_cntr_pool_id;
+	cxil_release_cntr_pool_id;
+	cxil_get_telemetry_refresh_interval;
+	cxil_set_telemetry_refresh_interval;
+local:
+	*;
+};
+
+LIBCXI_1.1 {
+global:
+	cxil_inbound_wait;
+} LIBCXI_1.0;
+
+LIBCXI_1.2 {
+global:
+	cxil_update_svc;
+	cxil_get_svc;
+} LIBCXI_1.1;
+
+LIBCXI_1.3 {
+global:
+	cxil_get_amo_remap_to_pcie_fadd;
+} LIBCXI_1.2;
+
+LIBCXI_1.4 {
+global:
+	cxil_pte_transition_sm;
+} LIBCXI_1.3;
+
+LIBCXI_1.5 {
+global:
+	cxil_get_svc_rsrc_list;
+	cxil_free_svc_rsrc_list;
+	cxil_get_svc_rsrc_use;
+} LIBCXI_1.4;
+
+LIBCXI_1.6 {
+global:
+	cxil_page_size;
+	cxil_is_copy_on_fork;
+} LIBCXI_1.5;
+
+LIBCXI_1.7 {
+global:
+	cxil_update_md;
+} LIBCXI_1.6;
+
+LIBCXI_1.8 {
+global:
+	cxil_set_svc_lpr;
+	cxil_get_svc_lpr;
+} LIBCXI_1.7;
+
+LIBCXI_1.9 {
+global:
+	cxil_modify_cp;
+	cxil_svc_enable;
+	cxil_svc_set_exclusive_cp;
+	cxil_svc_get_exclusive_cp;
+	cxil_svc_set_vni_range;
+	cxil_svc_get_vni_range;
+} LIBCXI_1.8;

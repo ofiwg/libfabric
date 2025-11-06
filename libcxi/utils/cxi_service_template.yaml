@@ -1,0 +1,57 @@
+# Valid Values are 0 or 1
+resource_limits: 1
+restricted_members: 1
+restricted_tcs: 1
+exclusive_cp: 1
+
+## Ignored if resource_limits is set to false.
+# If a resource is not listed below, max/res will be set to 0 for said resource.
+limits:
+  - name: ACs
+    max: 1
+    res: 1
+  - name: CTs
+    max: 1
+    res: 1
+  - name: EQs
+    max: 1
+    res: 1
+  - name: LEs
+    max: 1
+    res: 1
+  - name: PTEs
+    max: 1
+    res: 1
+  - name: TGQs
+    max: 1
+    res: 1
+  - name: TXQs
+    max: 1
+    res: 1
+  - name: TLEs
+    max: 9
+    res: 9
+
+#vnis:
+#  vni_min: 64
+#  vni_max: 127
+
+vnis:
+  vni: 2
+  vni: 3
+  vni: 4
+  vni: 5
+
+members:
+# Type can be 'uid' or 'gid'
+  - type: uid
+    id: 1
+  - type: gid
+    id: 2
+#
+## Ignored if restricted_tcs is set to false
+#tcs:
+    tc: DEDICATED_ACCESS
+    tc: LOW_LATENCY
+    tc: BULK_DATA
+    tc: BEST_EFFORT
