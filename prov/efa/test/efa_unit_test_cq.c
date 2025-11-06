@@ -477,7 +477,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 	if (ibv_cq->unsolicited_write_recv_enabled) {
 		g_efa_unit_test_mocks.efa_ibv_cq_wc_is_unsolicited = &efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock;
-		will_return(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, false);
+		will_return_always(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, false);
 	}
 #endif
 
@@ -556,7 +556,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	if (use_unsolicited_recv) {
 		g_efa_unit_test_mocks.efa_ibv_cq_wc_is_unsolicited = &efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock;
 		ibv_cq->unsolicited_write_recv_enabled = true;
-		will_return(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, true);
+		will_return_always(efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock, true);
 		ibv_cq->ibv_cq_ex->wr_id = 0;
 	} else {
 		/*
