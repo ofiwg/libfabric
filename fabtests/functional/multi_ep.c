@@ -465,20 +465,6 @@ static int setup_av_ep(int idx)
 {
 	int ret;
 
-	fi_freeinfo(hints);
-	hints = fi_dupinfo(fi);
-	fi_freeinfo(fi);
-
-	free(hints->src_addr);
-	hints->src_addr = NULL;
-	hints->src_addrlen = 0;
-
-	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, 0, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
-	}
-
 	ret = fi_endpoint(domain, fi, &eps[idx], NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
