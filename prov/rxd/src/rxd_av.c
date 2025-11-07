@@ -108,18 +108,12 @@ close:
 
 static fi_addr_t rxd_av_dg_addr(struct rxd_av *av, fi_addr_t fi_addr)
 {
-	fi_addr_t dg_addr;
-	fi_addr_t rxd_addr = (intptr_t) ofi_idx_lookup(&av->fi_addr_idx,
+	fi_addr_t rxd_addr = (fi_addr_t) ofi_idx_lookup(&av->fi_addr_idx,
 					     RXD_IDX_OFFSET((int)fi_addr));
 	if (!rxd_addr)
-		goto err;
-	dg_addr = (intptr_t) ofi_idx_lookup(&av->rxdaddr_dg_idx, (int)rxd_addr);
-	if (!dg_addr)
-		goto err;
+		return FI_ADDR_UNSPEC;
 
-	return dg_addr;
-err:
-	return FI_ADDR_UNSPEC;
+	return (fi_addr_t) ofi_idx_lookup(&av->rxdaddr_dg_idx, (int)rxd_addr);
 }
 
 static int rxd_set_rxd_addr(struct rxd_av *av, fi_addr_t dg_addr, fi_addr_t *addr)
