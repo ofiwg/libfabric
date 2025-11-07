@@ -446,11 +446,10 @@ information.
 The CXI provider supports DMABUF for device memory registration.
 DMABUF is supported in ROCm 5.6+ and Cuda 11.7+ with nvidia open source driver
 525+.
-Both *FI_HMEM_ROCR_USE_DMABUF* and *FI_HMEM_CUDA_USE_DMABUF are disabled by
-default in libfabric core but the CXI provider enables
-*FI_HMEM_ROCR_USE_DMABUF* by default if not specifically set.
-There may be situations with CUDA that may double the BAR consumption.
-Until this is fixed in the CUDA stack, CUDA DMABUF will be disabled by default.
+Both *FI_HMEM_ROCR_USE_DMABUF* and *FI_HMEM_CUDA_USE_DMABUF* are disabled by
+default in libfabric core but the CXI provider enables both
+*FI_HMEM_ROCR_USE_DMABUF* and *FI_HMEM_CUDA_USE_DMABUF* by default if not
+specifically set.
 
 ## Translation Cache
 
