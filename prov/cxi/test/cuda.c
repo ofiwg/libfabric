@@ -590,9 +590,6 @@ Test(cuda, dmabuf_stress)
 	struct fid_mr *mr;
 	cudaError_t cuda_ret;
 
-	ret = setenv("FI_HMEM_CUDA_USE_DMABUF", "1", 1);
-	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
-
 	ret = setenv("FI_MR_CUDA_CACHE_MONITOR_ENABLED", "0", 1);
 	cr_assert_eq(ret, 0, "setenv failed: %d", -errno);
 
