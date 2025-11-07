@@ -794,10 +794,10 @@ static void cxip_env_init(void)
 		CXIP_INFO("Could not enable FI_HMEM_ROCR_USE_DMABUF ret:%d %s\n",
 			  ret, fi_strerror(errno));
 
-	/* Disable cuda DMABUF by default - honors the env if already set */
-	ret = setenv("FI_HMEM_CUDA_USE_DMABUF", "0", 0);
+	/* Use cuda DMABUF by default - honors the env if already set */
+	ret = setenv("FI_HMEM_CUDA_USE_DMABUF", "1", 0);
 	if (ret)
-		CXIP_INFO("Could not disable FI_HMEM_CUDA_USE_DMABUF ret:%d %s\n",
+		CXIP_INFO("Could not enable FI_HMEM_CUDA_USE_DMABUF ret:%d %s\n",
 			  ret, fi_strerror(errno));
 
 	fi_param_define(&cxip_prov, "ats_mlock_mode", FI_PARAM_STRING,
