@@ -317,8 +317,8 @@ err_free:
 
 	err = efa_domain_close(&efa_domain->util_domain.domain_fid.fid);
 	if (err) {
-		EFA_WARN(FI_LOG_DOMAIN, "When handling error (%d), domain resource was being released."
-			 "During the release process, an addtional error (%d) was encoutered\n",
+		EFA_WARN(FI_LOG_DOMAIN, "When handling error (%d), domain resource was being released. "
+			 "During the release process, an additional error (%d) was encountered\n",
 			 -ret, -err);
 	}
 
