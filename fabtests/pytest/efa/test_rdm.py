@@ -162,12 +162,19 @@ def test_rdm_bw_zcpy_recv_use_fi_more(cmdline_args, memory_type, zcpy_recv_max_m
 
 @pytest.mark.functional
 @pytest.mark.parametrize("comp_method", ["sread", "fd"])
-def test_rdm_pingpong_sread(cmdline_args, completion_semantic, memory_type_bi_dir, direct_message_size, support_sread, comp_method):
+def test_rdm_pingpong_sread(cmdline_args, completion_semantic, memory_type_bi_dir,
+                            direct_message_size, support_sread, comp_method, fabric):
     if not support_sread:
         pytest.skip("sread not supported by efa device.")
+    additional_env = ''
+    if fabric == "efa" and comp_method == "fd":
+        if cmdline_args.server_id == cmdline_args.client_id:
+            pytest.skip("FI_WAIT_FD not supported for EFA protocol with SHM enabled")
+        additional_env = "FI_EFA_ENABLE_SHM_TRANSFER=0"
     efa_run_client_server_test(cmdline_args, f"fi_rdm_pingpong -c {comp_method}", "short",
                                completion_semantic, memory_type_bi_dir,
-                               direct_message_size, fabric="efa-direct")
+                               direct_message_size if fabric == "efa-direct" else "all",
+                               fabric=fabric, additional_env=additional_env)
 
 
 # These tests skip efa-direct because efa-direct does not

@@ -88,15 +88,19 @@ def test_rma_bw_use_fi_more(cmdline_args, operation_type, iteration_type, rma_bw
 @pytest.mark.functional
 @pytest.mark.parametrize("comp_method", ["sread", "fd"])
 def test_rma_bw_sread(cmdline_args, rma_operation_type, rma_bw_completion_semantic,
-                      direct_rma_size, rma_bw_memory_type, support_sread, comp_method, rma_fabric):
+                      direct_rma_size, rma_bw_memory_type, support_sread, comp_method,
+                      rma_fabric):
     if not support_sread:
         pytest.skip("sread not supported by efa device.")
-    if rma_fabric == "efa":
-        pytest.skip("sread not implemented in efa fabric yet.")
+    additional_env = ''
+    if rma_fabric == "efa" and comp_method == "fd":
+        if cmdline_args.server_id == cmdline_args.client_id:
+            pytest.skip("FI_WAIT_FD not supported for EFA protocol with SHM enabled")
+        additional_env = "FI_EFA_ENABLE_SHM_TRANSFER=0"
     command = f"fi_rma_bw -e rdm -c {comp_method}"
     command = command + " -o " + rma_operation_type
     # rma_bw test with data verification takes longer to finish
     timeout = max(1080, cmdline_args.timeout)
     efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
-                               rma_bw_memory_type, direct_rma_size,
-                               timeout=timeout, fabric=rma_fabric)
+                               rma_bw_memory_type, direct_rma_size if rma_fabric == "efa-direct" else "all",
+                               timeout=timeout, fabric=rma_fabric, additional_env=additional_env)
