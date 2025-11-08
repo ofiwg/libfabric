@@ -461,7 +461,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 			/* Currently this is only expected for eager pkts */
 			assert(pkt_entry_cnt == 1);
 			assert(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
-			if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
+			if (pkt_entry->ope->fi_flags & FI_REMOTE_CQ_DATA) {
 				flags_in_loop |= FI_REMOTE_CQ_DATA;
 				cq_data = pkt_entry->ope->cq_entry.data;
 			}
