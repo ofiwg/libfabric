@@ -189,3 +189,5 @@ def support_sread(cmdline_args):
     """Check if both server and client support cq interrupts."""
     return (support_cq_interrupts(cmdline_args.server_id) and
             support_cq_interrupts(cmdline_args.client_id))
+
+
