@@ -965,10 +965,6 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq->efa_cq.poll_ibv_cq = efa_rdm_cq_poll_ibv_cq;
 
-	*cq_fid = &cq->efa_cq.util_cq.cq_fid;
-	(*cq_fid)->fid.ops = &efa_rdm_cq_fi_ops;
-	(*cq_fid)->ops = &efa_rdm_cq_ops;
-
 	/* open shm cq as peer cq */
 	if (efa_domain->shm_domain) {
 		memcpy(&shm_cq_attr, attr, sizeof(*attr));
@@ -983,6 +979,10 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			goto destroy_ibv_cq;
 		}
 	}
+
+	*cq_fid = &cq->efa_cq.util_cq.cq_fid;
+	(*cq_fid)->fid.ops = &efa_rdm_cq_fi_ops;
+	(*cq_fid)->ops = &efa_rdm_cq_ops;
 
 	return 0;
 destroy_ibv_cq:
