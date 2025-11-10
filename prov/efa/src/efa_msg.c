@@ -275,6 +275,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	if (OFI_UNLIKELY(ret))
 		ret = (ret == ENOMEM) ? -FI_EAGAIN : -ret;
 
+	efa_tracepoint(post_send, qp->ibv_qp_ex->wr_id, (uintptr_t)msg->context);
+
 out_err:
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
 	return ret;
