@@ -182,7 +182,7 @@ pipeline {
                     def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID"
                     // onesided tests are covered by imb, collective tests are covered by omb
                     def mpi_collective_tests = "'test_omb and not onesided'"
-                    def libfabric_tests = "test_efa_ut test_fabtests_functional test_fork_support test_backward_compatibility"
+                    def libfabric_tests = "test_efa_ut test_fabtests_functional test_fork_support test_backward_compatibility 'test_fabtests_performance and lttng'"
                     def one_sided_tests = "'test_imb and not collective'"
                     def libfabric_and_onesided_tests = "${libfabric_tests} ${one_sided_tests}"
                     def efa_direct_tests = "'test_fabtests_functional and efa-direct'"
