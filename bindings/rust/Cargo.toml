@@ -1,7 +1,27 @@
+# Libfabric Rust Bindings.
+#
+# This software is available to you under a choice of one of two
+# licenses. You may choose to be licensed under the terms of the BSD
+# license or the GNU General Public License (GPL) Version 2.
+#
+# See COPYING file for full license details.
+
 [package]
-name = "rust"
-version = "0.1.0"
-edition = "2024"
+name = "ofi-libfabric-sys"
+links = "libfabric"
+build = "build.rs"
+readme = "README.md"
+description.workspace = true
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+license-file.workspace = true
+homepage.workspace = true
+repository.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 vendored = []

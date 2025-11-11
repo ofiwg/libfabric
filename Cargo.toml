@@ -1,0 +1,29 @@
+# Libfabric Rust Bindings.
+#
+# This software is available to you under a choice of one of two
+# licenses. You may choose to be licensed under the terms of the BSD
+# license or the GNU General Public License (GPL) Version 2.
+#
+# See COPYING file for full license details.
+
+[workspace]
+members = [
+    "bindings/rust"
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+description = "Lightweight Rust bindings for Libfabric - a communication API for high-performance parallel and distributed applications."
+authors = [
+    "Libfabric Developers <libfabric-users@lists.openfabrics.org>",
+]
+license = "BSD-2-Clause OR GPL-2.0-only"
+license-file = "COPYING"
+homepage = "https://ofiwg.github.io/libfabric/"
+repository = "https://github.com/ofiwg/libfabric.git"
+documentation = "https://ofiwg.github.io/libfabric/"
+readme = "bindings/rust/README.md"
+keywords = ["libfabric", "hpc", "networking", "rdma", "ffi"]
+categories = ["network-programming", "api-bindings"]

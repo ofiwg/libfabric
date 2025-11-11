@@ -36,7 +36,7 @@ cargo test --features asan
 Add the crate dependency under your Rust application's `Cargo.toml` file. Then;
 
 ```rust
-use bindings as ffi;
+use ofi_libfabric_sys::bindgen as ffi;
 
 fn test_get_info() {
     unsafe {
