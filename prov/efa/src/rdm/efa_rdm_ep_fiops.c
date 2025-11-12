@@ -1699,17 +1699,13 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
-		/*
-		 * RDMA read is used to copy data from host bounce buffer to the
-		 * application buffer on device
+		/**
+		 * TODO: support this option after we fix the data copy atomicity
+		 * for general memory types of rx buffer
 		 */
-		if (*(bool *)optval) {
-			ret = efa_base_ep_check_qp_in_order_aligned_128_bytes(&efa_rdm_ep->base_ep, IBV_WR_RDMA_READ);
-			if (ret)
-				return ret;
-		}
-		efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = *(bool *)optval;
-		break;
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES is currently not supported\n");
+		return -FI_EOPNOTSUPP;
 	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
