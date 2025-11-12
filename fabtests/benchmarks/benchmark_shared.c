@@ -689,8 +689,13 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	offset_rma_start = FT_RMA_SYNC_MSG_BYTES +
 			   MAX(ft_tx_prefix_size(), ft_rx_prefix_size());
 	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
-		if (i == opts.warmup_iterations)
+		if (i == opts.warmup_iterations) {
+			ret = bw_rma_comp(rma_op, j);
+			if (ret)
+				return ret;
+			j = 0;
 			ft_start();
+		}
 		if (j == 0) {
 			offset = offset_rma_start;
 			if (ft_check_opts(FT_OPT_VERIFY_DATA) && opts.transfer_size > 0) {
