@@ -730,6 +730,23 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			}
 			break;
 		case FT_RMA_WRITEDATA:
+			if (i < opts.warmup_iterations) {
+				if (opts.dst_addr)
+					ret = ft_post_rx(
+						ep,
+						FT_RMA_SYNC_MSG_BYTES,
+						&rx_ctx_arr[j].context);
+				else
+					ret = ft_post_tx(
+						ep,
+						remote_fi_addr,
+						FT_RMA_SYNC_MSG_BYTES,
+						NO_CQ_DATA,
+						&tx_ctx_arr[j].context);
+				if (ret)
+					return ret;
+			}
+
 			if (!opts.dst_addr) {
 				if (fi->rx_attr->mode & FI_RX_CQ_DATA)
 					ret = ft_post_rx(ep, 0, &rx_ctx_arr[j].context);
