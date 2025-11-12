@@ -614,11 +614,109 @@ fail:
 	return TEST_RET_VAL(ret, testret);
 }
 
+static int
+av_lookup_good(void)
+{
+	int testret;
+	int ret;
+	int i, j, found, offset;
+	struct fid_av *av;
+	struct fi_av_attr attr;
+	uint8_t addrbuf[4096];
+	size_t buflen;
+	uint8_t lookup_buf[4096];
+	size_t lookup_len;
+	fi_addr_t *fi_addr;
+
+	testret = FAIL;
+
+	fi_addr = calloc(num_good_addr > 0 ? num_good_addr : 1,
+			 sizeof(fi_addr_t));
+	if (!fi_addr) {
+		sprintf(err_buf, "malloc fi_addr failed");
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
+
+	memset(&attr, 0, sizeof(attr));
+	attr.type = av_type;
+	attr.count = num_good_addr;
+
+	av = NULL;
+	ret = fi_av_open(domain, &attr, &av, NULL);
+	if (ret != 0) {
+		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
+			fi_tostr(&av_type, FI_TYPE_AV_TYPE), ret,
+			fi_strerror(-ret));
+		goto fail;
+	}
+
+	for (i = 0; i < num_good_addr; i++)
+		fi_addr[i] = FI_ADDR_NOTAVAIL;
+
+	buflen = sizeof(addrbuf);
+	ret = av_create_address_list(good_address, 0, num_good_addr, addrbuf, 0,
+				     buflen);
+	if (ret < 0)
+		goto fail;
+
+	ret = fi_av_insert(av, addrbuf, num_good_addr, fi_addr, 0, NULL);
+	if (ret != num_good_addr) {
+		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret,
+			fi_strerror(-ret));
+		goto fail;
+	}
+
+	for (i = 0; i < num_good_addr; i++) {
+		if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
+			sprintf(err_buf, "fi_av_insert failed ret=%d, %s", ret,
+				fi_strerror(-ret));
+		}
+	}
+
+	found = offset = 0;
+	for (i = 0; i < attr.count; i++) {
+		memset(lookup_buf, 0, sizeof(lookup_buf));
+		lookup_len = sizeof(lookup_buf);
+		ret = fi_av_lookup(av, fi_addr[i], &lookup_buf, &lookup_len);
+		if (ret != 0) {
+			sprintf(err_buf, "fi_av_lookup ret=%d, %s", ret,
+				fi_strerror(-ret));
+			goto fail;
+		}
+		found++;
+		for (j = 0; j < lookup_len; j++) {
+			if (addrbuf[j + offset] != lookup_buf[j]) {
+				sprintf(err_buf,
+					"fi_av_lookup returned incorrect "
+					"address data at position %d for "
+					"fi_addr[%d] = %ld", j, i,
+					(long) fi_addr[i]);
+				goto fail;
+			}
+		}
+		offset += lookup_len;
+	}
+	if (found != num_good_addr) {
+		sprintf(err_buf, "fi_av_lookup found incorrect number of"
+			"addresses. Expected %d, found %d", num_good_addr,
+			found);
+		goto fail;
+	}
+
+	testret = PASS;
+fail:
+	FT_CLOSE_FID(av);
+	free(fi_addr);
+	return TEST_RET_VAL(ret, testret);
+}
+
 struct test_entry test_array_good[] = {
 	TEST_ENTRY(av_open_close, "Test open and close AVs of varying sizes"),
 	TEST_ENTRY(av_good, "Test AV insert with good address"),
 	TEST_ENTRY(av_null_fi_addr, "Test AV insert without specifying fi_addr"),
 	TEST_ENTRY(av_insert_stages, "Test AV insert at various stages"),
+	TEST_ENTRY(av_lookup_good, "Test AV lookup with good address"),
 	{ NULL, "" }
 };
 
