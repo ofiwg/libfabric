@@ -26,7 +26,6 @@
 #define MAX_PEERS	MAX_WORKERS
 #define MAX_EP_ADDR_LEN 256
 #define MAX_MESSAGES	1000
-#define NOTIFY_PORT	8000
 
 // Message types
 #define MSG_TYPE_EP_UP	     1
@@ -1015,7 +1014,7 @@ static int setup_worker_resources(void **buf, struct fi_context2 **ctx,
 
 static int run_sender(void)
 {
-	int ret;
+	int ret, offset;
 	struct sender_context *workers;
 	pthread_t *threads;
 	int *listen_socks = NULL;
@@ -1117,7 +1116,9 @@ static int run_sender(void)
 		}
 
 		char port_str[16];
-		snprintf(port_str, sizeof(port_str), "%d", NOTIFY_PORT + i);
+		// space it out to avoid port conflict when multiple workers run in parallel
+		offset = 100 * i;
+		snprintf(port_str, sizeof(port_str), "%d", atoi(opts.oob_port) + offset);
 
 		printf("\nSender Worker %d:\n", i);
 		printf("  - Port: %s\n", port_str);
@@ -1238,7 +1239,7 @@ out:
 
 static int run_receiver(void)
 {
-	int ret;
+	int ret, offset;
 	struct receiver_context *workers;
 	pthread_t *threads;
 
@@ -1338,8 +1339,9 @@ static int run_receiver(void)
 					break;
 			}
 			char port_str[16];
+			offset = 100 * sender_idx;
 			snprintf(port_str, sizeof(port_str), "%d",
-				 NOTIFY_PORT + sender_idx);
+				 atoi(opts.oob_port) + offset);
 
 			if (topts.verbose) {
 				printf("Receiver %d connecting to sender %d on "
