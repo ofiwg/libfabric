@@ -168,6 +168,7 @@ nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_test_pke.c \
 	prov/efa/test/efa_unit_test_msg.c \
 	prov/efa/test/efa_unit_test_rma.c \
+	prov/efa/test/efa_unit_test_rdm_rma.c \
 	prov/efa/test/efa_unit_test_data_path_direct.c
 
 
