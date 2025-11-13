@@ -27,4 +27,21 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 
 ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 
+static inline
+bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe,
+					  struct efa_rdm_peer *peer, bool use_p2p)
+{
+	/*
+	 * Because EFA is unordered and EFA iov descriptions can be more
+	 * expressive than the IBV sge's, we only implement
+	 * FI_REMOTE_CQ_DATA using RDMA_WRITE_WITH_IMM when a single iov
+	 * is given, otherwise we use sends to emulate it.
+	 */
+	if ((txe->fi_flags & FI_REMOTE_CQ_DATA) &&
+	    (txe->iov_count > 1 || txe->rma_iov_count > 1))
+		return false;
+
+	return use_p2p && efa_both_support_rdma_write(ep, peer);
+}
+
 #endif

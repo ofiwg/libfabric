@@ -426,6 +426,16 @@ void test_efa_rdm_mr_reg_cuda_memory();
 void test_efa_direct_mr_reg_no_gdrcopy();
 /* end efa_unit_test_mr.c */
 
+/* begin efa_unit_test_rdm_rma.c */
+void test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_multiple_iovs_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_multiple_rma_iovs_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_use_device_rdma_false_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_peer_no_rdma_write_support_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_no_p2p_support_returns_false();
+void test_efa_rdm_rma_should_write_using_rdma_p2p_and_rdma_write_support_returns_true();
+void test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_single_iovs_with_rdma_support();
+/* end efa_unit_test_rdm_rma.c */
+
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)
 {
