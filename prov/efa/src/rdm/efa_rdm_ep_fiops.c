@@ -73,6 +73,7 @@ void efa_rdm_pke_pool_mr_dereg_handler(struct ofi_bufpool_region *region)
  * @param chunk_cnt count of chunks in the pool
  * @param max_cnt maximal count of chunks
  * @param alignment memory alignment
+ * @param base_flags base flags for the pool
  * @param pkt_pool pkt pool
  * @return int 0 on success, a negative integer on failure
  */
@@ -81,6 +82,7 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 			       size_t chunk_cnt,
 			       size_t max_cnt,
 			       size_t alignment,
+			       uint64_t base_flags,
 			       struct ofi_bufpool **pke_pool)
 {
 	/*
@@ -104,6 +106,10 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 	uint64_t mr_flags = (efa_env.huge_page_setting == EFA_ENV_HUGE_PAGE_DISABLED)
 					? OFI_BUFPOOL_NONSHARED
 					: OFI_BUFPOOL_HUGEPAGES;
+	uint64_t flags = base_flags;
+
+	if (need_mr)
+		flags |= mr_flags;
 
 	struct ofi_bufpool_attr wiredata_attr = {
 		.size = sizeof(struct efa_rdm_pke) + ep->mtu_size,
@@ -114,7 +120,7 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 		.free_fn = need_mr ? efa_rdm_pke_pool_mr_dereg_handler : NULL,
 		.init_fn = NULL,
 		.context = efa_rdm_ep_domain(ep),
-		.flags = need_mr ? mr_flags : 0,
+		.flags = flags,
 	};
 
 	return ofi_bufpool_create_attr(&wiredata_attr, pke_pool);
@@ -131,6 +137,11 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 {
 	int ret;
+	uint64_t rx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
+
+#if ENABLE_DEBUG
+	rx_pkt_pool_base_flags &= ~OFI_BUFPOOL_NO_TRACK;
+#endif
 
 	ret = efa_rdm_ep_create_pke_pool(
 		ep,
@@ -138,6 +149,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		efa_rdm_ep_get_tx_pool_size(ep),
 		efa_rdm_ep_get_tx_pool_size(ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
+		0,
 		&ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
@@ -148,6 +160,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		efa_rdm_ep_get_rx_pool_size(ep),
 		efa_rdm_ep_get_rx_pool_size(ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
+		rx_pkt_pool_base_flags,
 		&ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
@@ -157,7 +170,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			EFA_RDM_BUFPOOL_ALIGNMENT,
 			ep->base_ep.info->rx_attr->size,
 			ep->base_ep.info->rx_attr->size, /* max count==chunk_cnt means pool is not allowed to grow */
-			0);
+			rx_pkt_pool_base_flags);
 	if (ret)
 		goto err_free;
 
@@ -168,6 +181,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			efa_env.unexp_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
+			rx_pkt_pool_base_flags,
 			&ep->rx_unexp_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -180,6 +194,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			efa_env.ooo_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
+			0,
 			&ep->rx_ooo_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -194,6 +209,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			efa_env.readcopy_pool_size,
 			efa_env.readcopy_pool_size, /* max_cnt==chunk_cnt means pool is not allowed to grow */
 			EFA_RDM_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
+			0,
 			&ep->rx_readcopy_pkt_pool);
 		if (ret)
 			goto err_free;
