@@ -139,7 +139,8 @@ void test_efa_rdm_ep_handshake_receive_valid_peer_host_id_and_do_not_send_local_
 void test_efa_rdm_ep_handshake_receive_without_peer_host_id_and_do_not_send_local_host_id();
 void test_efa_rdm_ep_getopt_undersized_optlen();
 void test_efa_rdm_ep_getopt_oversized_optlen();
-void test_efa_rdm_ep_pkt_pool_flags();
+void test_efa_rdm_ep_tx_pkt_pool_flags();
+void test_efa_rdm_ep_rx_pkt_pool_flags();
 void test_efa_rdm_ep_pkt_pool_page_alignment();
 void test_efa_rdm_ep_dc_atomic_queue_before_handshake();
 void test_efa_rdm_ep_dc_send_queue_before_handshake();

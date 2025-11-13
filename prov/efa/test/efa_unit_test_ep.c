@@ -254,26 +254,41 @@ void test_efa_rdm_ep_handshake_receive_without_peer_host_id_and_do_not_send_loca
 	test_efa_rdm_ep_handshake_exchange_host_id(state, 0x0, 0x0, true);
 }
 
-static void check_ep_pkt_pool_flags(struct fid_ep *ep, int expected_flags)
-{
-       struct efa_rdm_ep *efa_rdm_ep;
-
-       efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-       assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, expected_flags);
-       assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, expected_flags);
-}
-
 /**
- * @brief Test the pkt pool flags in efa_rdm_ep
+ * @brief Test the tx pkt pool flags in efa_rdm_ep
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_pkt_pool_flags(struct efa_resource **state) {
+void test_efa_rdm_ep_tx_pkt_pool_flags(struct efa_resource **state) {
 	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
 
 	efa_env.huge_page_setting = EFA_ENV_HUGE_PAGE_DISABLED;
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-	check_ep_pkt_pool_flags(resource->ep, OFI_BUFPOOL_NONSHARED);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, OFI_BUFPOOL_NONSHARED);
+}
+
+/**
+ * @brief Test the rx pkt pool flags in efa_rdm_ep
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_rdm_ep_rx_pkt_pool_flags(struct efa_resource **state) {
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	uint64_t flags = OFI_BUFPOOL_NONSHARED | OFI_BUFPOOL_NO_TRACK;
+
+#ifdef ENABLE_DEBUG
+	flags &= ~OFI_BUFPOOL_NO_TRACK;
+#endif
+
+	efa_env.huge_page_setting = EFA_ENV_HUGE_PAGE_DISABLED;
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, flags);
 }
 
 /**
