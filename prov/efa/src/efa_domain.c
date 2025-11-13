@@ -181,6 +181,16 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (!efa_domain)
 		return -FI_ENOMEM;
 
+	/* This list_entry is not the head of the list. But we initialize it
+	 * anyway to prevent a segfault in efa_domain_close.
+	 *
+	 * efa_domain_close always removes this dlist_entry. If the domain is
+	 * successfully opened, then this entry is added to g_efa_domain_list
+	 * and is successfully removed in efa_domain_close. But if the domain
+	 * open fails and we reach efa_domain_close in the error path, then not
+	 * initializing this list_entry will cause a segfault efa_domain_close.
+	 */
+	dlist_init(&efa_domain->list_entry);
 	efa_domain->fabric = container_of(fabric_fid, struct efa_fabric,
 					  util_fabric.fabric_fid);
 
