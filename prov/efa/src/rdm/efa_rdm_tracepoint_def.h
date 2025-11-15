@@ -26,6 +26,49 @@
 	lttng_ust_field_integer_hex(size_t, ctx, ctx) \
 	lttng_ust_field_integer(int, total_len, total_len)
 
+#define RDM_MSG_ARGS \
+	size_t, msg_ctx, \
+	size_t, addr
+
+#define RDM_MSG_FIELDS \
+	lttng_ust_field_integer_hex(size_t, msg_ctx, msg_ctx) \
+	lttng_ust_field_integer_hex(size_t, addr, addr)
+
+#define CQ_ENTRY_ARGS \
+	int, tag, \
+	size_t, addr
+
+#define CQ_ENTRY_FIELDS \
+	lttng_ust_field_integer(int, tag, tag) \
+	lttng_ust_field_integer_hex(size_t, addr, addr)
+
+#define PKE_ARGS \
+	size_t, wr_id
+
+#define PKE_FIELDS \
+	lttng_ust_field_integer_hex(size_t, wr_id, wr_id)
+
+#define PKE_OPE_ARGS \
+	PKE_ARGS , \
+	int, size, \
+	X_ENTRY_ARGS
+
+#define PKE_OPE_FIELDS \
+	PKE_FIELDS \
+	lttng_ust_field_integer(int, size, size) \
+	X_ENTRY_FIELDS
+
+#define PKE_OPE_CQ_ENTRY_ARGS \
+	PKE_OPE_ARGS , \
+	CQ_ENTRY_ARGS
+
+#define PKE_OPE_CQ_ENTRY_FIELDS \
+	PKE_OPE_FIELDS \
+	CQ_ENTRY_FIELDS
+
+#define PKE_TYPE_ARGS \
+	int, pkt_type
+
 LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_RDM_TP_PROV, x_entry,
 	LTTNG_UST_TP_ARGS(X_ENTRY_ARGS),
 	LTTNG_UST_TP_FIELDS(X_ENTRY_FIELDS))
@@ -109,9 +152,13 @@ LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_RDM_TP_PROV, x_entry_cq_entry,
 	LTTNG_UST_TP_ARGS(X_ENTRY_ARGS, CQ_ENTRY_ARGS),
 	LTTNG_UST_TP_FIELDS(X_ENTRY_FIELDS CQ_ENTRY_FIELDS))
 
-LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, x_entry_cq_entry, EFA_RDM_TP_PROV,
+LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_RDM_TP_PROV, x_entry_cq_entry_pke_type,
+	LTTNG_UST_TP_ARGS(X_ENTRY_ARGS, CQ_ENTRY_ARGS, PKE_TYPE_ARGS),
+	LTTNG_UST_TP_FIELDS(X_ENTRY_FIELDS CQ_ENTRY_FIELDS lttng_ust_field_integer(int, pkt_type, pkt_type)))
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, x_entry_cq_entry_pke_type, EFA_RDM_TP_PROV,
 	poll_cq_ope,
-	LTTNG_UST_TP_ARGS(X_ENTRY_ARGS, CQ_ENTRY_ARGS))
+	LTTNG_UST_TP_ARGS(X_ENTRY_ARGS, CQ_ENTRY_ARGS, PKE_TYPE_ARGS))
 LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, poll_cq_ope, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
 
 LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, x_entry_cq_entry, EFA_RDM_TP_PROV,
@@ -202,6 +249,27 @@ LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, pke_ope, EFA_RDM_TP_PROV,
 	rx_pke_local_read_copy_payload_end,
 	LTTNG_UST_TP_ARGS(PKE_OPE_ARGS))
 LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, rx_pke_local_read_copy_payload_end, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, pke_ope, EFA_RDM_TP_PROV,
+	trigger_handshake_begin,
+	LTTNG_UST_TP_ARGS(PKE_OPE_ARGS))
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, trigger_handshake_begin, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, pke_ope, EFA_RDM_TP_PROV,
+	post_handshake_begin,
+	LTTNG_UST_TP_ARGS(PKE_OPE_ARGS))
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, post_handshake_begin, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, pke_ope, EFA_RDM_TP_PROV,
+	handshake_send_completion,
+	LTTNG_UST_TP_ARGS(PKE_OPE_ARGS))
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, handshake_send_completion, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT(EFA_RDM_TP_PROV,
+	handshake_recv_completion,
+	LTTNG_UST_TP_ARGS(PKE_ARGS),
+	LTTNG_UST_TP_FIELDS(PKE_FIELDS))
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, handshake_recv_completion, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
 
 #endif /* _EFA_RDM_TP_DEF_H */
 
