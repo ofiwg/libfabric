@@ -169,6 +169,7 @@ int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
 			    uint64_t *offset);
 int rocr_hmem_put_dmabuf_fd(int fd);
+bool rocr_is_dmabuf_requested(void);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
@@ -193,6 +194,7 @@ bool cuda_is_ipc_enabled(void);
 int cuda_get_ipc_handle_size(size_t *size);
 bool cuda_is_gdrcopy_enabled(void);
 bool cuda_is_dmabuf_supported(void);
+bool cuda_is_dmabuf_requested(void);
 int cuda_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 		       uint64_t *offset);
 int cuda_put_dmabuf_fd(int fd);
@@ -257,6 +259,7 @@ void neuron_free(void **handle);
 int neuron_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 			 uint64_t *offset);
 int neuron_put_dmabuf_fd(int fd);
+bool neuron_is_dmabuf_requested(void);
 
 int synapseai_init(void);
 int synapseai_cleanup(void);
@@ -270,6 +273,7 @@ bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
                              uint64_t *flags);
 int synapseai_host_register(void *ptr, size_t size);
 int synapseai_host_unregister(void *ptr);
+bool synapseai_is_dmabuf_requested(void);
 
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)

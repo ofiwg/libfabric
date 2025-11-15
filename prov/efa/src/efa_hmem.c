@@ -7,6 +7,34 @@
 
 struct efa_hmem_info g_efa_hmem_info[OFI_HMEM_MAX];
 
+/**
+ * @brief Check if DMABUF is enabled for a specific HMEM interface
+ *
+ * This function checks the environment variables to determine if DMABUF
+ * should be used for the specified HMEM interface. It respects both
+ * EFA-specific and core libfabric environment variables.
+ *
+ * @param[in] iface The HMEM interface to check
+ * @return true if DMABUF is enabled for the interface, false otherwise
+ */
+bool efa_hmem_is_dmabuf_env_var_enabled(enum fi_hmem_iface iface)
+{
+	switch (iface) {
+	case FI_HMEM_SYSTEM:
+		return false;
+	case FI_HMEM_CUDA:
+		return cuda_is_dmabuf_requested();
+	case FI_HMEM_NEURON:
+		return neuron_is_dmabuf_requested();
+	case FI_HMEM_SYNAPSEAI:
+		return synapseai_is_dmabuf_requested();
+	case FI_HMEM_ROCR:
+		return rocr_is_dmabuf_requested();
+	default:
+		return false;
+	}
+}
+
 #if HAVE_CUDA || HAVE_NEURON
 static size_t efa_max_eager_msg_size_with_largest_header() {
 	int mtu_size;
@@ -134,21 +162,28 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 	}
 
 #if HAVE_EFA_DMABUF_MR
-	ret = cuda_get_dmabuf_fd(ptr, len, &dmabuf_fd, &dmabuf_offset);
-	if (ret == FI_SUCCESS) {
-		ibv_mr = ibv_reg_dmabuf_mr(ibv_pd, dmabuf_offset,
-					   len, (uint64_t)ptr, dmabuf_fd, ibv_access);
-		(void)cuda_put_dmabuf_fd(dmabuf_fd);
-		if (!ibv_mr) {
+	if (efa_hmem_is_dmabuf_env_var_enabled(FI_HMEM_CUDA)) {
+		ret = ofi_hmem_get_dmabuf_fd(FI_HMEM_CUDA, ptr, len, &dmabuf_fd, &dmabuf_offset);
+		if (ret == FI_SUCCESS) {
+			ibv_mr = ibv_reg_dmabuf_mr(ibv_pd, dmabuf_offset,
+						   len, (uint64_t)ptr, dmabuf_fd, ibv_access);
+			(void)ofi_hmem_put_dmabuf_fd(FI_HMEM_CUDA, dmabuf_fd);
+			if (!ibv_mr) {
+				EFA_INFO(FI_LOG_CORE,
+					"Unable to register CUDA device buffer via dmabuf: %s. "
+					"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
+				ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+			} else {
+				info->dmabuf_supported_by_device_b = true;
+			}
+		} else {
 			EFA_INFO(FI_LOG_CORE,
-				"Unable to register CUDA device buffer via dmabuf: %s. "
-				"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
+				"Unable to retrieve dmabuf fd of CUDA device buffer: %d. "
+				"Fall back to ibv_reg_mr\n", ret);
 			ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
 		}
 	} else {
-		EFA_INFO(FI_LOG_CORE,
-			"Unable to retrieve dmabuf fd of CUDA device buffer: %d. "
-			"Fall back to ibv_reg_mr\n", ret);
+		EFA_INFO(FI_LOG_CORE, "FI_HMEM_CUDA DMABUF disabled by environment variable\n");
 		ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
 	}
 #else
@@ -217,15 +252,29 @@ static inline void efa_hmem_info_check_p2p_support_neuron(struct efa_hmem_info *
 	}
 
 #if HAVE_EFA_DMABUF_MR
-	ret = neuron_get_dmabuf_fd(ptr, (uint64_t)len, &dmabuf_fd, &offset);
-	if (ret == FI_SUCCESS) {
-		ibv_mr = ibv_reg_dmabuf_mr(
-					ibv_pd, offset,
-					len, (uint64_t)ptr, dmabuf_fd, ibv_access);
-	} else if (ret == -FI_EOPNOTSUPP) {
-		EFA_INFO(FI_LOG_MR,
-			"Unable to retrieve dmabuf fd of Neuron device buffer, "
-			"Fall back to ibv_reg_mr\n");
+	if (efa_hmem_is_dmabuf_env_var_enabled(FI_HMEM_NEURON)) {
+		ret = ofi_hmem_get_dmabuf_fd(FI_HMEM_NEURON, ptr, (uint64_t)len, &dmabuf_fd, &offset);
+		if (ret == FI_SUCCESS) {
+			ibv_mr = ibv_reg_dmabuf_mr(
+						ibv_pd, offset,
+						len, (uint64_t)ptr, dmabuf_fd, ibv_access);
+			(void)ofi_hmem_put_dmabuf_fd(FI_HMEM_NEURON, dmabuf_fd);
+			if (!ibv_mr) {
+				EFA_INFO(FI_LOG_CORE,
+					"Unable to register Neuron device buffer via dmabuf: %s. "
+					"Fall back to ibv_reg_mr\n", fi_strerror(-errno));
+				ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+			} else {
+				info->dmabuf_supported_by_device_b = true;
+			}
+		} else {
+			EFA_INFO(FI_LOG_MR,
+				"Unable to retrieve dmabuf fd of Neuron device buffer: %d. "
+				"Fall back to ibv_reg_mr\n", ret);
+			ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
+		}
+	} else {
+		EFA_INFO(FI_LOG_CORE, "FI_HMEM_NEURON DMABUF disabled by environment variable\n");
 		ibv_mr = ibv_reg_mr(ibv_pd, ptr, len, ibv_access);
 	}
 #else
@@ -284,9 +333,23 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 	}
 
 	info->initialized = true;
+	info->max_medium_msg_size = 0;
+	info->runt_size = 0;
+	info->min_read_msg_size = 0;
+	info->min_read_write_size = 0;
+	info->dmabuf_supported_by_device_b = false;
 
-	if (iface == FI_HMEM_SYNAPSEAI || iface == FI_HMEM_SYSTEM) {
+	if (iface == FI_HMEM_SYNAPSEAI) {
 		info->p2p_supported_by_device = true;
+		if (efa_hmem_is_dmabuf_env_var_enabled(FI_HMEM_SYNAPSEAI)) {
+			info->dmabuf_supported_by_device_b = true;
+		} else {
+			EFA_INFO(FI_LOG_CORE, "FI_HMEM_SYNAPSEAI DMABUF disabled by environment variable\n");
+			info->dmabuf_supported_by_device_b = false;
+		}
+	} else if(iface == FI_HMEM_SYSTEM) {
+		info->p2p_supported_by_device = true;
+		info->dmabuf_supported_by_device_b = false;
 	} else if (ofi_hmem_p2p_disabled()) {
 		info->p2p_supported_by_device = false;
 	} else {

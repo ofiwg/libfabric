@@ -506,77 +506,77 @@ struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
  * @param flags flags in fi_mr_reg/fi_mr_regattr
  * @return struct ibv_mr* the ptr to the registered MR
  */
-static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr,
-					int access, const uint64_t flags)
+static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
+                                        struct fi_mr_attr *mr_attr,
+                                        int access, const uint64_t flags)
 {
-	int dmabuf_fd;
-	uint64_t offset;
-	int ret;
-	struct ibv_mr *ibv_mr;
+    int dmabuf_fd;
+    uint64_t offset;
+    int ret;
 
-	if (flags & FI_MR_DMABUF)
-		return efa_mr_reg_ibv_dmabuf_mr(
-			efa_mr->domain->ibv_pd,
-			mr_attr->dmabuf->offset,
-			mr_attr->dmabuf->len,
-			(uintptr_t) mr_attr->dmabuf->base_addr + mr_attr->dmabuf->offset,
-			mr_attr->dmabuf->fd,
-			access
-		);
+    /* Explicit dmabuf registration */
+    if (flags & FI_MR_DMABUF) {
+        if (!mr_attr->dmabuf) {
+            EFA_WARN(FI_LOG_MR, "FI_MR_DMABUF set but mr_attr->dmabuf == NULL\n");
+            return NULL;
+        }
+        if (!g_efa_hmem_info[efa_mr->peer.iface].dmabuf_supported_by_device_b) {
+            EFA_WARN(FI_LOG_MR,
+                     "Requested FI_MR_DMABUF, but dmabuf not supported for iface=%d\n",
+                     efa_mr->peer.iface);
+            return NULL;
+        }
 
-	if (efa_mr_is_synapseai(efa_mr)) {
-		ret = ofi_hmem_get_dmabuf_fd(efa_mr->peer.iface,
-					     mr_attr->mr_iov->iov_base,
-					     (uint64_t) mr_attr->mr_iov->iov_len,
-					     &dmabuf_fd, &offset);
-		if (ret != FI_SUCCESS) {
-			EFA_WARN(FI_LOG_MR, "Unable to get dmabuf fd for Gaudi device buffer \n");
-			return NULL;
-		}
-		return efa_mr_reg_ibv_dmabuf_mr(
-				efa_mr->domain->ibv_pd, offset,
-				mr_attr->mr_iov->iov_len,
-				(uint64_t)mr_attr->mr_iov->iov_base,
-				dmabuf_fd, access);
+        EFA_INFO(FI_LOG_MR,
+                 "FI_MR_DMABUF: fd=%d offset=%lu len=%zu\n",
+                 mr_attr->dmabuf->fd, mr_attr->dmabuf->offset,
+                 mr_attr->dmabuf->len);
+
+        return efa_mr_reg_ibv_dmabuf_mr(
+            efa_mr->domain->ibv_pd,
+            mr_attr->dmabuf->offset,
+            mr_attr->dmabuf->len,
+            (uintptr_t) mr_attr->dmabuf->base_addr + mr_attr->dmabuf->offset,
+            mr_attr->dmabuf->fd,
+            access);
+    }
+
+    /* Implicit VA path with dmabuf-first */
+    if (g_efa_hmem_info[efa_mr->peer.iface].dmabuf_supported_by_device_b) {
+        ret = ofi_hmem_get_dmabuf_fd(
+                efa_mr->peer.iface,
+                mr_attr->mr_iov->iov_base,
+                (uint64_t) mr_attr->mr_iov->iov_len,
+                &dmabuf_fd, &offset);
+
+        if (ret == FI_SUCCESS) {
+            struct ibv_mr *dmabuf_mr;
+            EFA_INFO(FI_LOG_MR,
+                     "Registering dmabuf MR: fd=%d offset=%lu len=%zu\n",
+                     dmabuf_fd, offset, mr_attr->mr_iov->iov_len);
+
+            dmabuf_mr = efa_mr_reg_ibv_dmabuf_mr(
+                efa_mr->domain->ibv_pd, 0,
+                mr_attr->mr_iov->iov_len,
+                (uint64_t)mr_attr->mr_iov->iov_base,
+                dmabuf_fd, access);
+            
+            /* Close the dmabuf file descriptor - it's no longer needed after registration */
+            (void) ofi_hmem_put_dmabuf_fd(efa_mr->peer.iface, dmabuf_fd);
+            
+            return dmabuf_mr;
+        }
+
+        EFA_WARN(FI_LOG_MR,
+                 "ofi_hmem_get_dmabuf_fd failed for iface=%d: ret=%d (%s)\n",
+                 mr_attr->iface, ret, fi_strerror(-ret));
+    } else {
+		return ibv_reg_mr(efa_mr->domain->ibv_pd,
+                      (void *)mr_attr->mr_iov->iov_base,
+                      mr_attr->mr_iov->iov_len, access);
 	}
 
-	/*
-	 * TODO: need such fallback for cuda as well when
-	 * FI_CUDA_API_PERMITTED is true
-	 */
-	if (efa_mr_is_neuron(efa_mr)) {
-		ret = ofi_hmem_get_dmabuf_fd(
-				efa_mr->peer.iface,
-				mr_attr->mr_iov->iov_base,
-				mr_attr->mr_iov->iov_len,
-				&dmabuf_fd,
-				&offset);
-
-		if (ret == FI_SUCCESS) {
-			/* Success => invoke ibv_reg_dmabuf_mr */
-			ibv_mr = efa_mr_reg_ibv_dmabuf_mr(
-					efa_mr->domain->ibv_pd, 0,
-					mr_attr->mr_iov->iov_len,
-					(uint64_t)mr_attr->mr_iov->iov_base,
-					dmabuf_fd, access);
-			(void) ofi_hmem_put_dmabuf_fd(efa_mr->peer.iface, dmabuf_fd);
-			return ibv_mr;
-		} else if (ret == -FI_EOPNOTSUPP) {
-			/* Protocol not available => fallback */
-			EFA_INFO(FI_LOG_MR,
-				"Unable to get dmabuf fd for Neuron device buffer, "
-				"Fall back to ibv_reg_mr\n");
-			return ibv_reg_mr(
-				efa_mr->domain->ibv_pd,
-				(void *)mr_attr->mr_iov->iov_base,
-				mr_attr->mr_iov->iov_len, access);
-		}
-		return NULL;
-	}
-
-	return ibv_reg_mr(efa_mr->domain->ibv_pd,
-			(void *)mr_attr->mr_iov->iov_base,
-			mr_attr->mr_iov->iov_len, access);
+	return NULL;
 }
 
 #if HAVE_CUDA
