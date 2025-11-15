@@ -58,19 +58,23 @@ static int run(void)
 	if (ret)
 		return ret;
 
+	ret = bandwidth_rma(opts.rma_op, &remote, true);
+	if (ret)
+		goto out;
+
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (!ft_use_size(i, opts.sizes_enabled))
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = bandwidth_rma(opts.rma_op, &remote);
+			ret = bandwidth_rma(opts.rma_op, &remote, false);
 			if (ret)
 				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = bandwidth_rma(opts.rma_op, &remote);
+		ret = bandwidth_rma(opts.rma_op, &remote, false);
 		if (ret)
 			goto out;
 	}
