@@ -472,6 +472,11 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		pkt_entry->peer->is_local = 0;
 	}
 
+#if HAVE_LTTNG
+	if (efa_rdm_pkt_type_of_pke(pkt_entry) == EFA_RDM_EAGER_RTW_PKT)
+		efa_rdm_tracepoint(rtw_recv_completion, (size_t) pkt_entry);
+#endif /* HAVE_LTTNG */
+
 	efa_rdm_ep_post_handshake_or_queue(ep, pkt_entry->peer);
 
 	/**

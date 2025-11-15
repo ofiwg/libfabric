@@ -16,6 +16,7 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_req.h"
+#include "efa_rdm_tracepoint.h"
 
 /**
  * @brief initialize the payload and rma_iov of a RTW packet
@@ -116,6 +117,9 @@ void efa_rdm_pke_handle_eager_rtw_send_completion(struct efa_rdm_pke *pkt_entry)
 
 	txe = pkt_entry->ope;
 	assert(txe->total_len == pkt_entry->payload_size);
+	efa_rdm_tracepoint(rtw_send_completion, (size_t) pkt_entry,
+			   pkt_entry->payload_size, txe->msg_id,
+			   (size_t) txe->cq_entry.op_context, txe->total_len);
 	efa_rdm_ope_handle_send_completed(txe);
 }
 
