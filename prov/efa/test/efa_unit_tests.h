@@ -168,7 +168,6 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion();
 void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size();
 void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size();
 void test_efa_rdm_ep_support_unsolicited_write_recv();
-void test_efa_rdm_ep_rma_inconsistent_unsolicited_write_recv();
 void test_efa_rdm_ep_default_sizes();
 void test_dgram_cq_read_empty_cq();
 void test_ibv_cq_ex_read_empty_cq();
@@ -436,6 +435,7 @@ void test_efa_rdm_rma_should_write_using_rdma_peer_no_rdma_write_support_returns
 void test_efa_rdm_rma_should_write_using_rdma_no_p2p_support_returns_false();
 void test_efa_rdm_rma_should_write_using_rdma_p2p_and_rdma_write_support_returns_true();
 void test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_single_iovs_with_rdma_support();
+void test_efa_rdm_rma_should_write_using_rdma_unsolicited_write_recv_not_match();
 /* end efa_unit_test_rdm_rma.c */
 
 static inline
