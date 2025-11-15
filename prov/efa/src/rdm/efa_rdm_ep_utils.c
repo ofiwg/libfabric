@@ -658,6 +658,9 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer 
 	txe->msg_id = -1;
 	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 
+	efa_rdm_tracepoint(trigger_handshake_begin, 0, 0, txe->msg_id,
+			   (size_t) txe->cq_entry.op_context, txe->total_len);
+
 	err = efa_rdm_ope_post_send(txe, EFA_RDM_EAGER_RTW_PKT);
 
 	if (OFI_UNLIKELY(err))
@@ -708,6 +711,10 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	pkt_entry->peer = peer;
 
 	efa_rdm_pke_init_handshake(pkt_entry, peer);
+
+	efa_rdm_tracepoint(post_handshake_begin, (size_t) pkt_entry,
+			   pkt_entry->pkt_size, txe->msg_id,
+			   (size_t) txe->cq_entry.op_context, txe->total_len);
 
 	ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
 	if (OFI_UNLIKELY(ret)) {
