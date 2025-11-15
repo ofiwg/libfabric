@@ -158,14 +158,18 @@ static ssize_t ucx_writemsg(struct fid_ep *ep,
 			    const struct fi_msg_rma *msg,
 			    uint64_t flags)
 {
-	return ucx_proc_rma_msg(ep, msg, flags, UCX_DO_WRITE);
+	struct ucx_ep *u_ep = container_of(ep, struct ucx_ep, ep.ep_fid);
+
+	return ucx_proc_rma_msg(ep, msg, flags | u_ep->ep.tx_msg_flags, UCX_DO_WRITE);
 }
 
 static ssize_t ucx_readmsg(struct fid_ep *ep,
 			   const struct fi_msg_rma *msg,
 			   uint64_t flags)
 {
-	return ucx_proc_rma_msg(ep, msg, flags, UCX_DO_READ);
+	struct ucx_ep *u_ep = container_of(ep, struct ucx_ep, ep.ep_fid);
+
+	return ucx_proc_rma_msg(ep, msg, flags | u_ep->ep.tx_msg_flags, UCX_DO_READ);
 }
 
 void ucx_rma_callback(void *request, ucs_status_t status)
@@ -193,14 +197,12 @@ void ucx_rma_callback(void *request, ucs_status_t status)
 		if (cntr)
 			cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
 
-		if (ucx_req->completion.flags & FI_COMPLETION) {
-			ucx_write_error_completion(ucx_req->ep->ep.tx_cq,
-						   ucx_req->completion.op_context,
-						   ucx_req->completion.flags,
-						   status,
-						   -ucx_translate_errcode(status),
-						   0, ucx_req->completion.tag);
-		}
+		ucx_write_error_completion(ucx_req->ep->ep.tx_cq,
+					   ucx_req->completion.op_context,
+					   ucx_req->completion.flags,
+					   status,
+					   -ucx_translate_errcode(status),
+					   0, ucx_req->completion.tag);
 	}
 	ucx_req_release(request);
 }
