@@ -49,6 +49,7 @@ static struct fi_context2 *send_ctx;
 static struct fid_av **avs;
 static fi_addr_t *remote_fiaddr;
 static size_t num_eps = 3;
+static int num_ep_recycles = 5;
 char remote_raw_addr[FT_MAX_CTRL_MSG];
 
 static bool shared_av = false;
@@ -295,7 +296,7 @@ static int run_server(void)
 
 	// posting enough recv buffers for each ep
 	// so the sent pkts can at least find a match
-	num_recvs = opts.iterations * num_eps;
+	num_recvs = opts.iterations * num_eps * num_ep_recycles;
 	printf("Server: posting %d recv\n", num_recvs);
 	for (i = 0; i < num_recvs; i++) {
 		ret = ft_post_rx_buf(ep, FI_ADDR_UNSPEC, opts.transfer_size, &rx_ctx, rx_buf, mr_desc, ft_tag);
@@ -323,7 +324,7 @@ static int run_server(void)
 		if (num_cqes % 100 == 0)
 			printf("Server: Get %d completions from rx cq\n", num_cqes);
 		// This is the maximal number of sends client will do
-		if (num_cqes == num_eps * opts.iterations)
+		if (num_cqes == num_recvs)
 			break;
 	}
 
@@ -359,21 +360,25 @@ static int run_client(void)
 
 	context_cq.idx = num_eps;
 
-	pthread_create(&context_cq.thread, NULL, poll_tx_cq, &context_cq);
+	for (int cycle = 0; cycle < num_ep_recycles; cycle++) {
+		printf("Client: Starting cycle %d out of %d\n", cycle, num_ep_recycles);
 
-	for (i = 0; i < num_eps; i++) {
-		ret = pthread_create(&contexts_ep[i].thread, NULL, post_sends,
-				     &contexts_ep[i]);
-		if (ret)
-			printf("Client: thread %d post_sends create failed: "
-			       "%d\n",
-			       i, ret);
+		pthread_create(&context_cq.thread, NULL, poll_tx_cq, &context_cq);
+
+		for (i = 0; i < num_eps; i++) {
+			ret = pthread_create(&contexts_ep[i].thread, NULL, post_sends,
+					     &contexts_ep[i]);
+			if (ret)
+				printf("Client: thread %d post_sends create failed: "
+				       "%d\n",
+				       i, ret);
+		}
+
+		for (i = 0; i < num_eps; i++)
+			pthread_join(contexts_ep[i].thread, NULL);
+
+		pthread_join(context_cq.thread, NULL);
 	}
-
-	for (i = 0; i < num_eps; i++)
-		pthread_join(contexts_ep[i].thread, NULL);
-
-	pthread_join(context_cq.thread, NULL);
 
 	/* For a shared AV, close it at the end */
 	if (shared_av)
@@ -554,7 +559,7 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	opts.transfer_size = 256;
 	opts.options |= FT_OPT_OOB_ADDR_EXCH;
-	timeout = 10;
+	timeout = 10 * num_ep_recycles;
 
 	hints = fi_allocinfo();
 	if (!hints)
