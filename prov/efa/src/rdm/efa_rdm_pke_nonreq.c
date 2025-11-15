@@ -99,6 +99,8 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	peer = pkt_entry->peer;
 	assert(peer);
 
+	efa_rdm_tracepoint(handshake_recv_completion, (size_t) pkt_entry);
+
 	EFA_INFO(FI_LOG_CQ,
 		 "HANDSHAKE received from peer with explicit fi_addr %" PRIu64
 		 " implicit fi_addr %" PRIu64 "\n",
