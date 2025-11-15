@@ -689,8 +689,13 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	offset_rma_start = FT_RMA_SYNC_MSG_BYTES +
 			   MAX(ft_tx_prefix_size(), ft_rx_prefix_size());
 	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
-		if (i == opts.warmup_iterations)
+		if (i == opts.warmup_iterations) {
+			ret = bw_rma_comp(rma_op, j);
+			if (ret)
+				return ret;
+			j = 0;
 			ft_start();
+		}
 		if (j == 0) {
 			offset = offset_rma_start;
 			if (ft_check_opts(FT_OPT_VERIFY_DATA) && opts.transfer_size > 0) {
@@ -725,6 +730,23 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			}
 			break;
 		case FT_RMA_WRITEDATA:
+			if (i < opts.warmup_iterations) {
+				if (opts.dst_addr)
+					ret = ft_post_rx(
+						ep,
+						FT_RMA_SYNC_MSG_BYTES,
+						&rx_ctx_arr[j].context);
+				else
+					ret = ft_post_tx(
+						ep,
+						remote_fi_addr,
+						FT_RMA_SYNC_MSG_BYTES,
+						NO_CQ_DATA,
+						&tx_ctx_arr[j].context);
+				if (ret)
+					return ret;
+			}
+
 			if (!opts.dst_addr) {
 				if (fi->rx_attr->mode & FI_RX_CQ_DATA)
 					ret = ft_post_rx(ep, 0, &rx_ctx_arr[j].context);
