@@ -330,34 +330,6 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 /**
- * @brief Decide if we should issue this WRITE using rdma-core, or via emulation.
- *
- * This function could force a handshake with peer, otherwise ep and peer will be
- * read-only.
- *
- * @param ep[in,out]		The endpoint.
- * @param txe[in]		The ope context for this write.
- * @param peer[in,out]		The peer we will be writing to.
- * @return true			When WRITE can be done using RDMA_WRITE
- * @return false		When WRITE should be emulated with SEND's
- */
-static inline
-bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, struct efa_rdm_peer *peer)
-{
-	/*
-	 * Because EFA is unordered and EFA iov descriptions can be more
-	 * expressive than the IBV sge's, we only implement
-	 * FI_REMOTE_CQ_DATA using RDMA_WRITE_WITH_IMM when a single iov
-	 * is given, otherwise we use sends to emulate it.
-	 */
-	if ((txe->fi_flags & FI_REMOTE_CQ_DATA) &&
-	    (txe->iov_count > 1 || txe->rma_iov_count > 1))
-		return false;
-
-	return efa_both_support_rdma_write(ep, peer);
-}
-
-/**
  * @brief Post a WRITE described the txe
  *
  * @param ep		The endpoint.
@@ -372,6 +344,12 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	size_t max_eager_rtw_data_size;
 	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
+	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
+	if (err < 0)
+		return err;
+
+	use_p2p = err;
+
 	/*
 	 * A handshake is required to choose the correct protocol (whether to use device write/read).
 	 * For local write (writing it self), this handshake is not required because we only need to
@@ -380,7 +358,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	if (!ep->homogeneous_peers && !(txe->peer->is_self) && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 
-	if (efa_rdm_rma_should_write_using_rdma(ep, txe, txe->peer)) {
+	if (efa_rdm_rma_should_write_using_rdma(ep, txe, txe->peer, use_p2p)) {
 		/**
 		 * Unsolicited write recv is a feature that makes rdma-write with
 		 * imm not consume an rx buffer on the responder side, and this
@@ -423,12 +401,6 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	} else {
 		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_EAGER_RTW_PKT);
 	}
-
-	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
-	if (err < 0)
-		return err;
-
-	use_p2p = err;
 
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 
