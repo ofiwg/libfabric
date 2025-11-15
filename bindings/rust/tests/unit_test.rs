@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod unit_tests {
+    use ofi_libfabric_sys::bindgen::*;
     use paste;
-    use rust::bindings::*;
     use std::ffi::CString;
     use std::ptr;
 
