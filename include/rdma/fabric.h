@@ -777,6 +777,8 @@ enum fi_type {
 	FI_TYPE_MR_ATTR,
 	FI_TYPE_CNTR_ATTR,
 	FI_TYPE_CQ_ERR_ENTRY,
+	FI_TYPE_CQ_WAIT_COND,
+	FI_TYPE_WAIT_OBJ,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
