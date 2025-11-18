@@ -12,6 +12,9 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_DOMAIN, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_DOMAIN, __VA_ARGS__)
+
 TestSuite(domain, .init = cxit_setup_domain, .fini = cxit_teardown_domain,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
@@ -222,6 +225,119 @@ Test(domain, enable_optimized_mrs)
 			     "Client key altered domain specific setting");
 	}
 
+	cxit_destroy_domain();
+}
+Test(domain, rx_match_mode_override)
+{
+#define RX_MAX_MODES 3
+	int ret = 0, i = 0, exp_rxc_state = 0;
+	struct cxip_domain *cxip_dom = NULL;
+	struct cxip_ep *ep = NULL;
+	char buf[64], *modes[RX_MAX_MODES] = {"hardware", "software", "hybrid"};
+	bool exp_msg_offload;
+	size_t req_buf_size, saved_req_buf_size, min_free =
+			CXIP_REQ_BUF_HEADER_MAX_SIZE +
+			cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
+
+	memset(buf, 0, sizeof(buf));
+	cxit_create_domain();
+	cr_assert(cxit_domain != NULL);
+	cxip_dom = container_of(cxit_domain, struct cxip_domain,
+				util_domain.domain_fid);
+	/* they should be equal at this point, default is hardware */
+	cr_assert_eq(cxip_env.rx_match_mode,
+		     cxip_dom->rx_match_mode,
+		     "Domain rx_match_mode incorrect %d %d",
+		     cxip_env.rx_match_mode, cxip_dom->rx_match_mode);
+	cr_assert_eq(cxip_env.msg_offload,
+		     cxip_dom->msg_offload,
+		     "Domain msg_offload incorrect %d %d",
+		     cxip_env.msg_offload, cxip_dom->msg_offload);
+	cr_assert_eq(cxip_env.req_buf_size,
+		     cxip_dom->req_buf_size,
+		     "Domain req_buf_size incorrect %lu %lu",
+		     cxip_env.req_buf_size, cxip_dom->req_buf_size);
+	CXIP_WARN("Domain rx_match_mode %s msg_offload %d req_buf_size %lu %lu\n",
+		modes[cxip_dom->rx_match_mode%RX_MAX_MODES],
+		cxip_dom->msg_offload,
+		cxip_dom->req_buf_size, min_free);
+	ret = fi_control(&cxit_domain->fid,
+		FI_OPT_CXI_GET_REQ_BUF_SIZE_OVERRIDE, &saved_req_buf_size);
+	cr_assert_eq(ret, FI_SUCCESS, "saved domain get req buf size failed");
+	/* force a min adjustment */
+	req_buf_size = min_free - 1;
+	ret = fi_control(&cxit_domain->fid,
+		FI_OPT_CXI_SET_REQ_BUF_SIZE_OVERRIDE, &req_buf_size);
+	cr_assert_eq(ret, FI_SUCCESS, "domain set req buf size failed");
+	req_buf_size = 0;
+	ret = fi_control(&cxit_domain->fid,
+		FI_OPT_CXI_GET_REQ_BUF_SIZE_OVERRIDE, &req_buf_size);
+	cr_assert_eq(ret, FI_SUCCESS, "domain get req buf size failed");
+	CXIP_WARN("Domain read back req_buf_size %lu\n", req_buf_size);
+	cr_assert_eq(req_buf_size,
+		     min_free,
+		     "Read back req_buf_size incorrect %lu %lu",
+		     req_buf_size, min_free);
+	/* reset back */
+	ret = fi_control(&cxit_domain->fid,
+		FI_OPT_CXI_SET_REQ_BUF_SIZE_OVERRIDE, &saved_req_buf_size);
+	cr_assert_eq(ret, FI_SUCCESS, "domain set saved req buf size failed");
+	/* change the match mode and read it back for all modes */
+	for (i = 0; i < RX_MAX_MODES; i++) {
+		CXIP_WARN("Change domain override setting to %s\n", modes[i]);
+		exp_msg_offload = (i != CXIP_PTLTE_SOFTWARE_MODE);
+		exp_rxc_state = (i == CXIP_PTLTE_SOFTWARE_MODE) ? RXC_ENABLED_SOFTWARE : RXC_ENABLED;
+		ret = fi_control(&cxit_domain->fid,
+				 FI_OPT_CXI_SET_RX_MATCH_MODE_OVERRIDE, modes[i]);
+		cr_assert_eq(ret, FI_SUCCESS, "domain set match mode failed");
+		memset(buf, 0, sizeof(buf));
+		ret = fi_control(&cxit_domain->fid,
+				 FI_OPT_CXI_GET_RX_MATCH_MODE_OVERRIDE, buf);
+		cr_assert_eq(ret, FI_SUCCESS, "domain get match mode failed");
+		/* alloc and bind transport objs */
+		cxit_create_ep();
+		cr_assert(cxit_ep != NULL);
+		ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+		cxit_create_eq();
+		cxit_create_cqs();
+		cxit_bind_cqs();
+		cxit_create_cntrs();
+		cxit_bind_cntrs();
+		cxit_create_av();
+		cxit_bind_av();
+		/* enable the ep after binding */
+		ret = fi_enable(cxit_ep);
+		cr_assert_eq(ret, FI_SUCCESS, "EP enable failed %d", ret);
+		/* check ep values they should be equal domain */
+		cr_assert_eq(cxip_dom->rx_match_mode,
+			ep->ep_obj->domain->rx_match_mode,
+			"EP rx_match_mode incorrect exp:%d got:%d",
+			cxip_dom->rx_match_mode,
+			ep->ep_obj->domain->rx_match_mode);
+		cr_assert_eq(cxip_dom->msg_offload,
+			ep->ep_obj->domain->msg_offload,
+			"EP msg_offload incorrect exp:%d got:%d",
+			cxip_dom->msg_offload,
+			ep->ep_obj->domain->msg_offload);
+		/* check expected ep values */
+		cr_assert_eq(i,	ep->ep_obj->domain->rx_match_mode,
+			"EP exp rx_match_mode incorrect exp:%d got:%d",
+			i, ep->ep_obj->domain->rx_match_mode);
+		cr_assert_eq(exp_msg_offload, ep->ep_obj->domain->msg_offload,
+			"EP exp msg_offload incorrect exp:%d got:%d",
+			exp_msg_offload, ep->ep_obj->domain->msg_offload);
+		/* check other effected structure members after enable */
+		cr_assert_eq(exp_rxc_state, ep->ep_obj->rxc->state,
+			"RXC exp state incorrect exp:%d got:%d",
+			exp_rxc_state, ep->ep_obj->rxc->state);
+		/* free transport objects */
+		cxit_destroy_ep();
+		cxit_destroy_eq();
+		cxit_destroy_av();
+		cxit_destroy_cntrs();
+		cxit_destroy_cqs();
+
+	}
 	cxit_destroy_domain();
 }
 

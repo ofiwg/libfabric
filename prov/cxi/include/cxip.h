@@ -362,9 +362,9 @@ struct cxip_environment {
 
 extern struct cxip_environment cxip_env;
 
-static inline bool cxip_software_pte_allowed(void)
+static inline bool cxip_software_pte_allowed(enum cxip_ep_ptle_mode rx_match_mode)
 {
-	return cxip_env.rx_match_mode != CXIP_PTLTE_HARDWARE_MODE;
+	return rx_match_mode != CXIP_PTLTE_HARDWARE_MODE;
 }
 
 /*
@@ -1014,6 +1014,12 @@ struct cxip_domain {
 	unsigned int cmdq_cnt;
 	struct ofi_genlock cmdq_lock;
 	size_t tx_size;
+
+	/* domain level match mode override */
+	enum cxip_ep_ptle_mode rx_match_mode;
+	bool msg_offload;
+	size_t req_buf_size;
+
 };
 
 int cxip_domain_emit_idc_put(struct cxip_domain *dom, uint16_t vni,
