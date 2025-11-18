@@ -366,17 +366,19 @@ cleanup_client:
 		}
 
 		FT_INFO("Server: Step 1 - Send messages from all endpoints\n");
-		/* Send from all endpoints */
+		/*
+		 Send and wait for completion from each endpoint
+		 Waiting for a send completion from each endpoint is necessary
+		 to make sure that the packets from different endpoints do not
+		 get re-ordered
+		 */
 		for (i = 0; i < num_server_eps; i++) {
 			ret = server_post_send(i);
 			if (ret) {
 				FT_PRINTERR("server_post_send", ret);
 				goto cleanup_server;
 			}
-		}
 
-		/* Wait for all send completions */
-		for (i = 0; i < num_server_eps; i++) {
 			ret = get_one_comp(server_txcqs[i]);
 			if (ret) {
 				FT_PRINTERR("get_server_comp", ret);
