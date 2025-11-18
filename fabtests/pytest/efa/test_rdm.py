@@ -270,7 +270,7 @@ def test_implicit_av_limited_av_size_expected_path(cmdline_args, msg_size):
 # TODO: Add test with larger message size that uses the long read protocol after
 # fixing the test to poll CQ while waiting for the server to get send completions
 @pytest.mark.parametrize("msg_size", [1, 1024, 8192, 24756])
-def test_implicit_av_limited_av_size_unexpected_path(cmdline_args, msg_size, node_count):
+def test_implicit_av_limited_av_size_unexpected_path(cmdline_args, msg_size):
     import os
     binpath = cmdline_args.binpath or ""
     if not os.path.exists(os.path.join(binpath, "fi_efa_implicit_av_test")):
