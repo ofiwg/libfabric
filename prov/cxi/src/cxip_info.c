@@ -1047,7 +1047,7 @@ static void cxip_env_init(void)
 	fi_param_get_size_t(&cxip_prov, "req_buf_max_cached",
 			    &cxip_env.req_buf_max_cached);
 
-	if (cxip_software_pte_allowed()) {
+	if (cxip_software_pte_allowed(cxip_env.rx_match_mode)) {
 		min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE +
 			cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 

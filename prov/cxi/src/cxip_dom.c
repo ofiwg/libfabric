@@ -1311,6 +1311,122 @@ static int cxip_domain_enable_prov_key_cache(struct fid *fid, bool enable)
 	return FI_SUCCESS;
 }
 
+static int cxip_domain_check_req_buf_size(struct cxip_domain *dom)
+{
+	size_t min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE +
+			cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
+
+	if (dom->req_buf_size < min_free) {
+		dom->req_buf_size = min_free;
+		CXIP_WARN("Domain req_buf_size adjusted to min:%lu\n",
+			min_free);
+	} else {
+		CXIP_DBG("Domain req_buf_size ok:%lu\n", dom->req_buf_size);
+	}
+
+	return FI_SUCCESS;
+}
+
+static int cxip_domain_set_rx_match_mode(struct fid *fid, char *rx_match_mode)
+{
+	struct cxip_domain *dom;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		CXIP_WARN("Invalid FID: %p\n", fid);
+		return -FI_EINVAL;
+	}
+
+	dom = container_of(fid, struct cxip_domain,
+			   util_domain.domain_fid.fid);
+
+	if (rx_match_mode) {
+		if (!strcasecmp(rx_match_mode, "hardware")) {
+			dom->rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
+			dom->msg_offload = true;
+		} else if (!strcmp(rx_match_mode, "software")) {
+			dom->rx_match_mode = CXIP_PTLTE_SOFTWARE_MODE;
+			dom->msg_offload = false;
+		} else if (!strcmp(rx_match_mode, "hybrid")) {
+			dom->rx_match_mode = CXIP_PTLTE_HYBRID_MODE;
+			dom->msg_offload = true;
+		} else {
+			CXIP_WARN("Unrecognized rx_match_mode: %s\n",
+				rx_match_mode);
+			/* app trying to set an illegal mode */
+			return -FI_EINVAL;
+		}
+	} else {
+		CXIP_WARN("%s NULL rx_match_mode!\n",
+			  __func__);
+		return -FI_EINVAL;
+	}
+	/* check and adjust if needed */
+	cxip_domain_check_req_buf_size(dom);
+	CXIP_DBG("rx_match_mode:%d %s msg_offload:%d\n", dom->rx_match_mode,
+		rx_match_mode, dom->msg_offload);
+
+	return FI_SUCCESS;
+}
+
+static int cxip_domain_get_rx_match_mode(struct fid *fid, char *rx_match_mode)
+{
+	struct cxip_domain *dom;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		CXIP_WARN("Invalid FID: %p\n", fid);
+		return -FI_EINVAL;
+	}
+
+	dom = container_of(fid, struct cxip_domain,
+			   util_domain.domain_fid.fid);
+
+	if (rx_match_mode) {
+		if(dom->rx_match_mode == CXIP_PTLTE_HARDWARE_MODE) {
+			strcpy(rx_match_mode, "hardware");
+		} else if(dom->rx_match_mode == CXIP_PTLTE_SOFTWARE_MODE) {
+			strcpy(rx_match_mode, "software");
+		} else if(dom->rx_match_mode == CXIP_PTLTE_HYBRID_MODE) {
+			strcpy(rx_match_mode, "hybrid");
+		} else {
+			CXIP_WARN("Unrecognized rx_match_mode: %s\n",
+				rx_match_mode);
+			/* we should never hit this fatal case */
+			abort();	
+		}
+	} else {
+		CXIP_WARN("%s NULL rx_match_mode!\n",
+			  __func__);
+		return -FI_EINVAL;
+	}
+
+	CXIP_DBG("rx_match_mode:%d %s\n", dom->rx_match_mode,
+		rx_match_mode);
+	return FI_SUCCESS;
+}
+
+static int cxip_domain_set_req_buf_size(struct fid *fid, size_t req_buf_size)
+{
+	struct cxip_domain *dom;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		CXIP_WARN("Invalid FID: %p\n", fid);
+		return -FI_EINVAL;
+	}
+
+	dom = container_of(fid, struct cxip_domain,
+			   util_domain.domain_fid.fid);
+	if (req_buf_size) {
+		dom->req_buf_size = req_buf_size;
+		/* check and adjust if needed */
+		cxip_domain_check_req_buf_size(dom);
+	} else {
+		CXIP_WARN("%s req_buf_size 0!\n",
+			  __func__);
+		return -FI_EINVAL;
+	}
+	CXIP_DBG("domain req_buf_size set to:%lu\n", dom->req_buf_size);
+	return FI_SUCCESS;
+}
 
 static int cxip_dom_control(struct fid *fid, int command, void *arg)
 {
@@ -1349,6 +1465,22 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 
 	case FI_OPT_CXI_GET_PROV_KEY_CACHE:
 		*(bool *)arg = dom->prov_key_cache;
+		break;
+
+	case FI_OPT_CXI_SET_RX_MATCH_MODE_OVERRIDE:
+		return cxip_domain_set_rx_match_mode(fid, (char *)arg);
+		break;
+
+	case FI_OPT_CXI_GET_RX_MATCH_MODE_OVERRIDE:
+		return cxip_domain_get_rx_match_mode(fid, (char *)arg);
+		break;
+
+	case FI_OPT_CXI_SET_REQ_BUF_SIZE_OVERRIDE:
+		return cxip_domain_set_req_buf_size(fid, *(size_t *)arg);
+		break;
+
+	case FI_OPT_CXI_GET_REQ_BUF_SIZE_OVERRIDE:
+		*(size_t *)arg = dom->req_buf_size;
 		break;
 
 	default:
@@ -1934,6 +2066,9 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	cxi_domain->mr_match_events = cxip_env.mr_match_events;
 	cxi_domain->optimized_mrs = cxip_env.optimized_mrs;
 	cxi_domain->prov_key_cache = cxip_env.prov_key_cache;
+	cxi_domain->rx_match_mode = cxip_env.rx_match_mode;
+	cxi_domain->msg_offload = cxip_env.msg_offload;
+	cxi_domain->req_buf_size = cxip_env.req_buf_size;
 	*dom = &cxi_domain->util_domain.domain_fid;
 
 	return 0;
