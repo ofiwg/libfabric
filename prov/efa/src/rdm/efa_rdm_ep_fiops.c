@@ -127,6 +127,9 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 }
 
 /** @brief initializes the various buffer pools of EFA RDM endpoint.
+ * Grow the pools to avoid memory allocations during the first communication
+ * that add latency overhead to the fast path. RX pools growth is delayed until
+ * the first fi_cq_read call in efa_rdm_ep_grow_rx_pools.
  *
  * called by efa_rdm_ep_open()
  *
@@ -151,6 +154,10 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		EFA_RDM_BUFPOOL_ALIGNMENT,
 		0,
 		&ep->efa_tx_pkt_pool);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_grow(ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
 
@@ -239,6 +246,10 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
 				 ep->base_ep.info->tx_attr->size + ep->base_ep.info->rx_attr->size, 0);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_grow(ep->ope_pool);
 	if (ret)
 		goto err_free;
 
