@@ -108,6 +108,9 @@ static void *ofi_uffd_handler(void *arg)
 
 	for (;;) {
 		ret = poll(fds, 2, -1);
+		if (ret < 0 && errno == EINTR)
+			continue;
+
 		if (ret < 0 || fds[1].revents)
 			break;
 
@@ -117,7 +120,7 @@ static void *ofi_uffd_handler(void *arg)
 		if (ret != sizeof(msg)) {
 			pthread_mutex_unlock(&mm_lock);
 			pthread_rwlock_unlock(&mm_list_rwlock);
-			if (errno != EAGAIN)
+			if (errno != EAGAIN && errno != EINTR)
 				break;
 			continue;
 		}
