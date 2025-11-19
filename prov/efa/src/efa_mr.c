@@ -846,9 +846,17 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	} else {
 		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, &mr_attr, fi_ibv_access, flags);
 		if (!efa_mr->ibv_mr) {
-			EFA_WARN(FI_LOG_MR, "Unable to register MR of %zu bytes: %s, ibv pd: %p, total mr reg size %zu, mr reg count %zu\n",
-				 (flags & FI_MR_DMABUF) ? mr_attr.dmabuf->len : mr_attr.mr_iov->iov_len, fi_strerror(-errno), efa_mr->domain->ibv_pd,
-				 efa_mr->domain->ibv_mr_reg_sz, efa_mr->domain->ibv_mr_reg_ct);
+			EFA_WARN(FI_LOG_MR,
+				 "Unable to register MR of %zu bytes: %s, "
+				 "flags %ld, ibv pd: %p, total mr "
+				 "reg size %zu, mr reg count %zu\n",
+				 (flags & FI_MR_DMABUF) ?
+					 mr_attr.dmabuf->len :
+					 mr_attr.mr_iov->iov_len,
+				 fi_strerror(-errno), flags,
+				 efa_mr->domain->ibv_pd,
+				 efa_mr->domain->ibv_mr_reg_sz,
+				 efa_mr->domain->ibv_mr_reg_ct);
 			if (efa_mr->peer.iface == FI_HMEM_CUDA &&
 			    (efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
 				assert(efa_mr->peer.hmem_data);
@@ -860,10 +868,12 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 		efa_mr->domain->ibv_mr_reg_ct++;
 		efa_mr->domain->ibv_mr_reg_sz += efa_mr->ibv_mr->length;
 		EFA_INFO(FI_LOG_MR,
-			 "Registered memory at %p of size %zu for ibv pd %p, "
+			 "Registered memory at %p of size %zu"
+			 "flags %ld for ibv pd %p, "
 			 "total mr reg size %zu, mr reg count %zu\n",
 			 efa_mr->ibv_mr->addr, efa_mr->ibv_mr->length,
-			 efa_mr->domain->ibv_pd, efa_mr->domain->ibv_mr_reg_sz,
+			 flags, efa_mr->domain->ibv_pd,
+			 efa_mr->domain->ibv_mr_reg_sz,
 			 efa_mr->domain->ibv_mr_reg_ct);
 		efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	}
@@ -899,12 +909,14 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 		mr_attr.access = original_access;
 		if (ret) {
 			EFA_WARN(FI_LOG_MR,
-				"Unable to register shm MR. errno: %d err_msg: (%s) key: %ld buf: %p len: %zu\n",
-				ret,
-				fi_strerror(-ret),
-				efa_mr->mr_fid.key,
-				mr_attr.mr_iov ? mr_attr.mr_iov->iov_base : NULL,
-				mr_attr.mr_iov ? mr_attr.mr_iov->iov_len : 0);
+				 "Unable to register shm MR. errno: %d "
+				 "err_msg: (%s) key: %ld buf: %p len: %zu "
+				 "flags %ld\n",
+				 ret, fi_strerror(-ret), efa_mr->mr_fid.key,
+				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_base :
+						  NULL,
+				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_len : 0,
+				 flags);
 			efa_mr_dereg_impl(efa_mr);
 			return ret;
 		}
