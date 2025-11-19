@@ -44,9 +44,10 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 	opx_happy=0
 	opx_direct=0
 	hfi1dv_happy=0
-	sys_hfisvc_happy=0
-	user_hfisvc_happy=0
-	opx_CPPFLAGS=""
+	hfisvc_happy=0
+	opx_CPPFLAGS="-I/usr/include/uapi"
+	save_CPPFLAGS=$CPPFLAGS
+	CPPFLAGS="$CPPFLAGS $opx_CPPFLAGS"
 
 	dnl OPX hardware is not supported for MacOS or FreeBSD,
 	dnl and is not supported for non-x86 processors.
@@ -71,7 +72,8 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			[xmap], [OPX_AV_MODE=FI_AV_MAP],
 			[xtable], [OPX_AV_MODE=FI_AV_TABLE],
 			[xruntime], [OPX_AV_MODE=FI_AV_UNSPEC],
-			[OPX_AV_MODE=FI_AV_UNSPEC])
+			[OPX_AV_MODE=FI_AV_UNSPEC]
+		)
 
 		AC_SUBST(opx_av, [$OPX_AV_MODE])
 		AC_DEFINE_UNQUOTED(OPX_AV, [$OPX_AV_MODE], [fabric direct address vector])
@@ -79,7 +81,8 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		AS_CASE([x$OPX_MR],
 			[xscalable], [OPX_MR_MODE=OFI_MR_SCALABLE],
 			[xbasic], [OPX_MR_MODE=OFI_MR_BASIC],
-			[OPX_MR_MODE=OFI_MR_SCALABLE])
+			[OPX_MR_MODE=OFI_MR_SCALABLE]
+		)
 
 		AC_SUBST(opx_mr, [$OPX_MR_MODE])
 		AC_DEFINE_UNQUOTED(OPX_MR, [$OPX_MR_MODE], [fabric direct memory region])
@@ -94,7 +97,8 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			[xnone], [OPX_RELIABILITY=OFI_RELIABILITY_KIND_NONE],
 			[xoffload], [OPX_RELIABILITY=OFI_RELIABILITY_KIND_OFFLOAD],
 			dnl [xruntime], [OPX_RELIABILITY=OFI_RELIABILITY_KIND_ONLOAD],
-			[OPX_RELIABILITY=OFI_RELIABILITY_KIND_ONLOAD])
+			[OPX_RELIABILITY=OFI_RELIABILITY_KIND_ONLOAD]
+		)
 
 		AC_SUBST(opx_reliability, [$OPX_RELIABILITY])
 		AC_DEFINE_UNQUOTED(OPX_RELIABILITY, [$OPX_RELIABILITY], [fabric direct reliability])
@@ -108,7 +112,8 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			[],
 			[],
 			[],
-			[opx_happy=0])
+			[opx_happy=0]
+		)
 		FI_CHECK_PACKAGE([opx_numa],
 			[numa.h],
 			[numa],
@@ -117,15 +122,17 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			[],
 			[],
 			[],
-			[opx_happy=0])
+			[opx_happy=0]
+		)
 
 		_FI_CHECK_PACKAGE_HEADER([opx_hfi1],
 			[rdma/hfi/hfi1_user.h],
 			[],
 			[],
-			[opx_happy=0])
+			[opx_happy=0]
+		)
 
-		dnl Look for new HFI1 Direct Verbs header which comes with newer rdma-core
+		dnl Look for new HFI1 Direct Verbs header which comes with rdma-core
 		_FI_CHECK_PACKAGE_HEADER([hfi1dv],
 			[infiniband/hfi1dv.h],
 			[],
@@ -137,108 +144,28 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				AC_MSG_WARN([Did not detect system hfi1 direct verbs rdma-core support.])
 			]
 		)
-		dnl hfi1 direct verbs not found by default
-		AS_IF([test $hfi1dv_happy -eq 0],[
-			dnl Check /usr/include/uapi explicitly
-			save_CPPFLAGS=$CPPFLAGS
-			CPPFLAGS="-I/usr/include/uapi"
-			_FI_CHECK_PACKAGE_HEADER([uapi_hfi1dv],
-				[uapi/infiniband/hfi1dv.h],
-				[],
-				[
-					hfi1dv_happy=1
-					uapi_hfi1dv_happy=1
-					AC_MSG_NOTICE([Detected /usr/include/uapi rdma-core support for hfi1 direct verbs.])
-				],
-				[
-					AC_MSG_WARN([Did not detect /usr/include/uapi rdma-core support for hfi1 direct verbs.])
-				]
-			)
-			dnl necessary for now because there are dups in /usr/include and /usr/include/uapi
-			_FI_CHECK_PACKAGE_HEADER([uapi_hfi1dv],
-				[infiniband/hfi1dv.h],
-				[],
-				[
-					hfi1dv_happy=1
-					uapi_hfi1dv_happy=1
-					AC_MSG_NOTICE([Detected /usr/include/uapi rdma-core support for hfi1 direct verbs.])
-				],
-				[
-					AC_MSG_WARN([Did not detect /usr/include/uapi rdma-core support for hfi1 direct verbs.])
-				]
-			)
-			CPPFLAGS=$save_CPPFLAGS
-			dnl happy with the specified input path
-			AS_IF([test "$uapi_hfi1dv_happy" = "1" ],
-				[
-					opx_CPPFLAGS="$opx_CPPFLAGS -I/usr/include/uapi"
-				]
-			)
-			AS_IF([test $hfi1dv_happy -eq 1],[
-				AC_MSG_NOTICE([Set opx_CPPFLAGS=${opx_CPPFLAG}.])
-			])
-		])
 
-		dnl Look for new HFI service header which comes with newer rdma-core
-		_FI_CHECK_PACKAGE_HEADER([sys_hfisvc],
+		dnl Look for new HFI service header which comes with rdma-core
+		_FI_CHECK_PACKAGE_HEADER([hfisvc],
 			[infiniband/hfisvc_client.h],
 			[],
 			[
-				sys_hfisvc_happy=1
+				hfisvc_happy=1
 				AC_MSG_NOTICE([Detected system default rdma-core support for hfisvc.])
 			],
 			[
-				sys_hfisvc_happy=0
+				hfisvc_happy=0
 				AC_MSG_WARN([Did not detect system default rdma-core support for hfisvc.])
 			]
 		)
-		dnl hfisvc not found by default
-		AS_IF([test $sys_hfisvc_happy -eq 0],[
-			dnl Check /usr/include/uapi explicitly
-			save_CPPFLAGS=$CPPFLAGS
-			CPPFLAGS="-I/usr/include/uapi"
-			_FI_CHECK_PACKAGE_HEADER([uapi_hfisvc],
-				[uapi/infiniband/hfisvc_client.h],
-				[],
-				[
-					sys_hfisvc_happy=1
-					uapi_hfisvc_happy=1
-					AC_MSG_NOTICE([Detected /usr/include/uapi rdma-core support for hfisv.])
-				],
-				[
-					AC_MSG_WARN([Did not detect /usr/include/uapi rdma-core support for hfisvc.])
-				]
-			)
-			dnl necessary for now because there are dups in /usr/include and /usr/include/uapi
-			_FI_CHECK_PACKAGE_HEADER([uapi_hfisvc],
-				[infiniband/hfisvc_client.h],
-				[],
-				[
-					sys_hfisvc_happy=1
-					uapi_hfisvc_happy=1
-					AC_MSG_NOTICE([Detected /usr/include/uapi rdma-core support for hfisv.])
-				],
-				[
-					AC_MSG_WARN([Did not detect /usr/include/uapi rdma-core support for hfisvc.])
-				]
-			)
-			CPPFLAGS=$save_CPPFLAGS
-			dnl happy with the specified input path
-			AS_IF([test "$uapi_hfisvc_happy" = "1" ],
-				[
-					opx_CPPFLAGS="$opx_CPPFLAGS -I/usr/include/uapi"
-				]
-			)
-			AS_IF([test $sys_hfisvc_happy -eq 1],[
-				AC_MSG_NOTICE([Set opx_CPPFLAGS=${opx_CPPFLAG}.])
-			])
-		])
 		AC_CHECK_DECL([HAVE_ATOMICS],
 			[],
-			[cc_version=`$CC --version | head -n1`
+			[
+				cc_version=`$CC --version | head -n1`
 				AC_MSG_WARN(["$cc_version" does not support native atomics.  Disabling OPX provider.])
-				opx_happy=0])
-
+				opx_happy=0
+			]
+		)
 		AS_IF([test $opx_happy -eq 1],[
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 				[[#include <rdma/hfi/hfi1_user.h>]],
@@ -254,8 +181,6 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				])
 		])
 		AS_IF([test $opx_happy -eq 1 && (test $have_cuda -eq 1 || test $have_rocr -eq 1)], [
-			save_CPPFLAGS=$CPPFLAGS
-			CPPFLAGS="-I/usr/include/uapi"
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 				[[#include <rdma/hfi/hfi1_user.h>]],
 				[[
@@ -263,14 +188,13 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				]])],
 				[AC_MSG_NOTICE([hfi1_user.h struct sdma_req_meminfo defined... yes])],
 				[
-				AC_MSG_NOTICE([hfi1_user.h struct sdma_req_meminfo defined... no])
-				opx_happy=0
+					AC_MSG_NOTICE([hfi1_user.h struct sdma_req_meminfo defined... no])
+					opx_happy=0
 				])
 			OPX_PRODUCTION_BUILD_OVERRIDE=${OPX_PRODUCTION_BUILD_OVERRIDE:-""}
 			AS_IF([test "x$OPX_PRODUCTION_BUILD_OVERRIDE" != "x"], [
 				AC_MSG_NOTICE([OPX_PRODUCTION_BUILD_OVERRIDE is set to $OPX_PRODUCTION_BUILD_OVERRIDE])
 			])
-			CPPFLAGS=$save_CPPFLAGS
 			opx_hfi_version=$(/sbin/modinfo hfi1 -F version)
 			opx_hfi_version_sorted=$(echo -e "10.14.0.0\n$opx_hfi_version" | sort -V | tail -n 1)
 			opx_hfi_srcversion=$(/sbin/modinfo hfi1 -F srcversion)
@@ -290,7 +214,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			])
 			AS_IF([test $opx_happy -eq 1],[
 				AC_MSG_NOTICE([Appending OPX_HMEM to opx_CPPFLAGS])
-				opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_HMEM -I/usr/include/uapi"
+				opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_HMEM"
 
 				AS_IF([test $have_rocr -eq 1], [
 					AC_MSG_NOTICE([Appending -L/opt/rocm/lib -lamdhip64 to opx_LDFLAGS])
@@ -302,39 +226,21 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 
 
 		AS_IF([test $opx_happy -eq 1], [
-			save_CPPFLAGS=$CPPFLAGS
-			CPPFLAGS="-I/usr/include/uapi"
-			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
-				[[#include <uapi/rdma/hfi/hfi1_user.h>]],
-				[[struct hfi1_status_v2 s;]])],
-				[hfi1_status_v2_found=uapi],
-				[hfi1_status_v2_found=no]
-			)
-			CPPFLAGS=$save_CPPFLAGS
-
-			AS_IF([test "x$hfi1_status_v2_found" = "xno"], [
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 				[[#include <rdma/hfi/hfi1_user.h>]],
 				[[struct hfi1_status_v2 s;]])],
-				[hfi1_status_v2_found=regular],
-				[hfi1_status_v2_found=no])
-			])
+				[hfi1_status_v2_found=1],
+				[hfi1_status_v2_found=0]
+			)
 
 			AS_CASE([$hfi1_status_v2_found],
-			[uapi], [
-				AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined... yes (uapi)])
-				opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_JKR_SUPPORT -I/usr/include/uapi"
-			],
-			[regular], [
-				AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined... yes])
+			[1], [
+				AC_MSG_NOTICE([hfi1_user.h hfi1_status_v2 defined, building CN5000])
 				opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_JKR_SUPPORT"
 			],
 			[
-				AC_MSG_NOTICE([hfi1_status_v2 defined... no, no support for CN5000])
+				AC_MSG_WARN([hfi1_status_v2 not defined, building OPA100 only, no support for CN5000])
 			])
-		])
-
-		AS_IF([test $opx_happy -eq 1], [
 			AC_ARG_ENABLE([opx-hfisvc],
 				[AS_HELP_STRING([--enable-opx-hfisvc@<:@=yes|no|PATH@:>@],
 					[Enable hfisvc for opx @<:@default=yes@:>@
@@ -342,71 +248,65 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 						PATH: enable hfisvc and use rdma-core installed under PATH)])],
 			)
 
+			dnl User specified path to hfisvc
 			AS_IF([test x"$enable_opx_hfisvc" != x"no"],
-				[AC_MSG_NOTICE([Requested hfisvc - $enable_opx_hfisvc])
-
-					dnl if system wide hfisvc was found do not recheck
-					AS_IF([test x"$enable_opx_hfisvc" != x"yes" && test x"$sys_hfisvc_happy" != x"1" ],
-						[
-						_FI_CHECK_PACKAGE_HEADER([user_hfisvc],
+			[
+				AS_IF([test x"$enable_opx_hfisvc" != x"yes" && test x"$enable_opx_hfisvc" != x""],
+				[
+					AC_MSG_NOTICE([Requested hfisvc from $enable_opx_hfisvc])
+					_FI_CHECK_PACKAGE_HEADER([user_hfisvc],
 						[infiniband/hfisvc_client.h],
 						[$enable_opx_hfisvc],
 						[
-							user_hfisvc_happy=1
+							hfisvc_happy=1
 							AC_MSG_NOTICE([Detected rdma-core support for hfisvc in $enable_opx_hfisvc.])
 						],
 						[
 							AC_MSG_WARN([Did not detect rdma-core support for hfisvc in $enable_opx_hfisvc.])
 						])
-
-						dnl happy with the specified input path
-						AS_IF([test "$user_hfisvc_happy" = "1" ],
+					dnl happy with the specified input path
+					AS_IF([test $hfisvc_happy -eq 1 ],
 						[
-						opx_CPPFLAGS="$opx_CPPFLAGS $user_hfisvc_CPPFLAGS"
-						])
+							AC_MSG_NOTICE([Appending user path to opx_CPPFLAGS $user_hfisvc_CPPFLAGS ])
+							opx_CPPFLAGS="$opx_CPPFLAGS $user_hfisvc_CPPFLAGS"
 					])
-
-					dnl happy without a path
-					AS_IF([test x"$sys_hfisvc_happy" = x"1" ],
-						[user_hfisvc_happy=1])
-
-					AS_IF([test x"$enable_opx_hfisvc" != x"no" && test "$user_hfisvc_happy" = "0" ],
-						[AC_MSG_WARN([hfisvc support requested but hfisvc runtime not available.])])
-
-					AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$user_hfisvc_happy],
-						[hfisvc support availability])
-
-					dnl hfi1 direct verbs should be happy if hfisvc is happy
-					_FI_CHECK_PACKAGE_HEADER([user_hfi1dv],
+					AS_IF([test $hfisvc_happy -eq 0 ],
+					[AC_MSG_WARN([hfisvc support requested but hfisvc runtime not available.])])
+				])
+				dnl hfi1 direct verbs should be happy if hfisvc is happy so recheck if needed
+				AS_IF([test $hfi1dv_happy -eq 0 && test $hfisvc_happy -eq 1],
+				[
+					AC_MSG_NOTICE([Requested hfi1 direct verbs from $enable_opx_hfisvc])
+					_FI_CHECK_PACKAGE_HEADER(
+						[user_hfi1dv],
 						[infiniband/hfi1dv.h],
-						[],
+						[$enable_opx_hfisvc],
 						[
-						hfi1dv_happy=1
-						AC_MSG_NOTICE([Detected user rdma-core support for hfi1 direct verbs.])
+							hfi1dv_happy=1
+							AC_MSG_NOTICE([Detected rdma-core support for hfi1 direct verbs in $enable_opx_hfisvc.])
 						],
 						[
-						dnl Should not happen
-						hfi1dv_happy=0
-						AC_MSG_WARN([Did not detect hfi1 direct verbs with hfisvc.])
-					])
-					AC_CHECK_HEADERS(infiniband/verbs.h, [],
-						[
-							AC_MSG_WARN([Did not detect hfi1 direct verbs with hfisvc.])
-						], []
+							AC_MSG_WARN([Did not detect rdma-core support for hfi1 direct verbs in $enable_opx_hfisvc.])
+							hfi1dv_happy=0
+						]
 					)
-				]
-			)
-			AS_CASE([x$hfi1dv_happy],
-				[x0], [
-					HFI1DV_ENABLED=0
-					AC_MSG_WARN([OPX override will build without hfi1 direct verbs rdma-core support.])
-					],
-				[ HFI1DV_ENABLED=$hfi1dv_happy ]
-			)
-			AC_DEFINE_UNQUOTED(HAVE_HFI1_DIRECT_VERBS, [$HFI1DV_ENABLED], [hfi1 direct verbs enabled])
-			AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$user_hfisvc_happy], [hfisvc support availability])
+				])
+			])
+			AS_IF([test x"$enable_opx_hfisvc" = x"no"],
+			[
+				AC_MSG_NOTICE([hfisvc disabled by user.])
+				hfisvc_happy=0
+			])
+			AS_IF([test $hfi1dv_happy -eq 0 && test $hfisvc_happy -eq 1 ],
+			[
+				hfisvc_happy=0
+				AC_MSG_WARN([hfisvc disabled without hfi direct verbs.])
+			])
+			AC_DEFINE_UNQUOTED(HAVE_HFI1_DIRECT_VERBS, [$hfi1dv_happy], [hfi1 direct verbs enabled])
+			AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$hfisvc_happy], [hfisvc support availability])
 		])
 	])
+	CPPFLAGS=$save_CPPFLAGS
 	AS_IF([test $opx_happy -eq 0 ],
 		[AC_MSG_ERROR([OPX failed to configure.])])
 
