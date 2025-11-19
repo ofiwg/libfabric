@@ -221,31 +221,33 @@ struct fi_opx_ep_tx {
 	uint8_t		   use_sdma;
 	uint8_t		   unused_cacheline1_1;
 
-	/* == CACHE LINE 1,2 == */
-	struct fi_opx_hfi1_txe_scb_9B inject_9B; /* qws 5,6, and 7 specified at runtime */
+	struct {
+		/* == CACHE LINE 1,2 == */
+		union {
+			struct fi_opx_hfi1_txe_scb_9B  inject_9B; /* qws 5,6, and 7 specified at runtime */
+			struct fi_opx_hfi1_txe_scb_16B inject_16B;
+		};
 
-	/* == CACHE LINE 3,4 == */
-	struct fi_opx_hfi1_txe_scb_9B send_9B;
+		/* == CACHE LINE 3,4 == */
+		union {
+			struct fi_opx_hfi1_txe_scb_9B  send_9B;
+			struct fi_opx_hfi1_txe_scb_16B send_16B;
+		};
 
-	/* == CACHE LINE 5,6 == */
-	struct fi_opx_hfi1_txe_scb_9B send_mp_9B;
+		/* == CACHE LINE 5,6 == */
+		union {
+			struct fi_opx_hfi1_txe_scb_9B  send_mp_9B;
+			struct fi_opx_hfi1_txe_scb_16B send_mp_16B;
+		};
 
-	/* == CACHE LINE 7,8 == */
-	struct fi_opx_hfi1_txe_scb_9B rzv_9B;
+		/* == CACHE LINE 7,8 == */
+		union {
+			struct fi_opx_hfi1_txe_scb_9B  rzv_9B;
+			struct fi_opx_hfi1_txe_scb_16B rzv_16B;
+		};
+	};
 
-	/* == CACHE LINE 9,10 == */
-	struct fi_opx_hfi1_txe_scb_16B inject_16B;
-
-	/* == CACHE LINE 11,12 == */
-	struct fi_opx_hfi1_txe_scb_16B send_16B;
-
-	/* == CACHE LINE 13,14 == */
-	struct fi_opx_hfi1_txe_scb_16B send_mp_16B;
-
-	/* == CACHE LINE 15,16 == */
-	struct fi_opx_hfi1_txe_scb_16B rzv_16B;
-
-	/* == CACHE LINE 17 == */
+	/* == CACHE LINE 9 == */
 
 	union fi_opx_addr *av_addr; /* only FI_ADDR_TABLE */
 	uint64_t	   op_flags;
@@ -256,7 +258,7 @@ struct fi_opx_ep_tx {
 	struct fi_opx_cq  *cq;
 	struct slist	  *cq_pending_ptr; /* only rendezvous (typically) */
 
-	/* == CACHE LINE 18 == */
+	/* == CACHE LINE 10 == */
 
 	struct slist	    work_pending_completion;
 	struct ofi_bufpool *work_pending_pool;
@@ -267,7 +269,7 @@ struct fi_opx_ep_tx {
 	uint32_t	    tid_min_payload_bytes;
 	uint64_t	    unused_cacheline6_1;
 
-	/* == CACHE LINE 19 == */
+	/* == CACHE LINE 11 == */
 	struct opx_sdma_queue sdma_request_queue;
 	struct slist	      sdma_pending_queue;
 	struct ofi_bufpool   *sdma_request_pool;
@@ -278,7 +280,7 @@ struct fi_opx_ep_tx {
 	uint32_t	      sdma_bounce_buf_threshold;
 	uint32_t	      unused_cacheline7;
 
-	/* == CACHE LINE 20, 21+ == */
+	/* == CACHE LINE 12, 13+ == */
 
 	struct slist	      work_pending[OPX_WORK_TYPE_LAST];
 	int64_t		      ref_cnt;
@@ -296,22 +298,22 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_mp_9B) == (FI_OPX_CAC
 			"Offset of fi_opx_ep_tx->send_mp_9B should start at cacheline 5!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_9B) == (FI_OPX_CACHE_LINE_SIZE * 7),
 			"Offset of fi_opx_ep_tx->rzv_9B should start at cacheline 7!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, inject_16B) == (FI_OPX_CACHE_LINE_SIZE * 9),
-			"Offset of fi_opx_ep_tx->inject_16B should start at cacheline 9!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_16B) == (FI_OPX_CACHE_LINE_SIZE * 11),
-			"Offset of fi_opx_ep_tx->send_16B should start at cacheline 11!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_mp_16B) == (FI_OPX_CACHE_LINE_SIZE * 13),
-			"Offset of fi_opx_ep_tx->send_mp_16B should start at cacheline 13!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_16B) == (FI_OPX_CACHE_LINE_SIZE * 15),
-			"Offset of fi_opx_ep_tx->rzv_16B should start at cacheline 15!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_LINE_SIZE * 17),
-			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 17!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 18),
-			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 18!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 19),
-			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 19!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 20),
-			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 20!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, inject_16B) == (FI_OPX_CACHE_LINE_SIZE * 1),
+			"Offset of fi_opx_ep_tx->inject_16B should start at cacheline 1!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_16B) == (FI_OPX_CACHE_LINE_SIZE * 3),
+			"Offset of fi_opx_ep_tx->send_16B should start at cacheline 3!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_mp_16B) == (FI_OPX_CACHE_LINE_SIZE * 5),
+			"Offset of fi_opx_ep_tx->send_mp_16B should start at cacheline 5!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_16B) == (FI_OPX_CACHE_LINE_SIZE * 7),
+			"Offset of fi_opx_ep_tx->rzv_16B should start at cacheline 7!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_LINE_SIZE * 9),
+			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 9!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 10),
+			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 10!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 11),
+			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 11!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 12),
+			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 12!");
 
 struct fi_opx_ep_rx {
 	/* == CACHE LINE 0 == */
@@ -372,7 +374,7 @@ struct fi_opx_ep_rx {
 		volatile uint64_t *head_register;
 	} egrq __attribute__((__packed__));
 
-	/* == CACHE LINE 5 - 20 == */
+	/* == CACHE LINE 5 - 12 == */
 
 	/*
 	 * NOTE: These cachelines are shared between the application-facing
@@ -382,17 +384,25 @@ struct fi_opx_ep_rx {
 	 * This 'tx' information is used when sending acks, etc.
 	 */
 	struct {
-		struct fi_opx_hfi1_txe_scb_9B  dput_9B;
-		struct fi_opx_hfi1_txe_scb_9B  rzv_dput_9B;
-		struct fi_opx_hfi1_txe_scb_9B  cts_9B;
-		struct fi_opx_hfi1_txe_scb_9B  rma_rts_9B;
-		struct fi_opx_hfi1_txe_scb_16B dput_16B;
-		struct fi_opx_hfi1_txe_scb_16B rzv_dput_16B;
-		struct fi_opx_hfi1_txe_scb_16B cts_16B;
-		struct fi_opx_hfi1_txe_scb_16B rma_rts_16B;
+		union {
+			struct fi_opx_hfi1_txe_scb_9B  dput_9B;
+			struct fi_opx_hfi1_txe_scb_16B dput_16B;
+		};
+		union {
+			struct fi_opx_hfi1_txe_scb_9B  rzv_dput_9B;
+			struct fi_opx_hfi1_txe_scb_16B rzv_dput_16B;
+		};
+		union {
+			struct fi_opx_hfi1_txe_scb_9B  cts_9B;
+			struct fi_opx_hfi1_txe_scb_16B cts_16B;
+		};
+		union {
+			struct fi_opx_hfi1_txe_scb_9B  rma_rts_9B;
+			struct fi_opx_hfi1_txe_scb_16B rma_rts_16B;
+		};
 	} tx;
 
-	/* == CACHE LINE 21 == */
+	/* == CACHE LINE 13 == */
 	struct {
 		struct opx_hwcontext_ctrl *hwcontext_ctrl;
 		// Head index into endpoint's software rx RHQ
@@ -413,7 +423,7 @@ struct fi_opx_ep_rx {
 	} shd_ctx;
 
 	/* -- non-critical -- */
-	/* == CACHE LINE 31 == */
+	/* == CACHE LINE 23 == */
 	uint64_t	      min_multi_recv;
 	struct fi_opx_domain *domain;
 
@@ -438,10 +448,10 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, state) == (FI_OPX_CACHE_LI
 			"Offset of fi_opx_ep_rx->queue should start at cacheline 4!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, tx) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Offset of fi_opx_ep_rx->tx should start at cacheline 5!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, shd_ctx) == (FI_OPX_CACHE_LINE_SIZE * 21),
-			"Offset of fi_opx_ep_rx->shd_ctx should start at cacheline 21!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, min_multi_recv) == (FI_OPX_CACHE_LINE_SIZE * 31),
-			"Offset of fi_opx_ep_rx->min_multi_recv should start at cacheline 31!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, shd_ctx) == (FI_OPX_CACHE_LINE_SIZE * 13),
+			"Offset of fi_opx_ep_rx->shd_ctx should start at cacheline 13!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, min_multi_recv) == (FI_OPX_CACHE_LINE_SIZE * 23),
+			"Offset of fi_opx_ep_rx->min_multi_recv should start at cacheline 23!");
 
 struct fi_opx_daos_av_rank_key {
 	uint32_t rank;
