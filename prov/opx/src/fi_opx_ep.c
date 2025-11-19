@@ -854,11 +854,13 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	opx_ep->tx->pio_credits_addr  = hfi->info.pio.credits_addr;
 
 	/* initialize the models */
-	fi_opx_ep_tx_model_init(hfi, &opx_ep->tx->inject_9B, &opx_ep->tx->send_9B, &opx_ep->tx->send_mp_9B,
-				&opx_ep->tx->rzv_9B);
-
-	fi_opx_ep_tx_model_init_16B(hfi, &opx_ep->tx->inject_16B, &opx_ep->tx->send_16B, &opx_ep->tx->send_mp_16B,
-				    &opx_ep->tx->rzv_16B);
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+		fi_opx_ep_tx_model_init(hfi, &opx_ep->tx->inject_9B, &opx_ep->tx->send_9B, &opx_ep->tx->send_mp_9B,
+					&opx_ep->tx->rzv_9B);
+	} else {
+		fi_opx_ep_tx_model_init_16B(hfi, &opx_ep->tx->inject_16B, &opx_ep->tx->send_16B,
+					    &opx_ep->tx->send_mp_16B, &opx_ep->tx->rzv_16B);
+	}
 
 	// Retrieve the parameter for RZV min message length
 	int	l_rzv_min_payload_bytes;
@@ -1412,10 +1414,11 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 	/*
 	 * initialize tx for acks, etc
 	 */
-	{ /* 9B */
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+		/* 9B */
 		/* rendezvous CTS packet model */
 
-		/* Setup the 9B models whether or not they'll be used */
+		/* Setup the 9B models */
 		enum opx_hfi1_type __attribute__((unused)) hfi1_type =
 			(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? OPX_HFI1_WFR : OPX_HFI1_MIXED_9B;
 
@@ -1498,11 +1501,9 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 								    OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
 
 		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.rzv_dput_9B.hdr)), hfi1_type);
-	}
-
-	{ /* 16B */
+	} else { /* 16B */
 		/* rendezvous CTS packet model for 16B*/
-		/* Setup the 16B models whether or not they'll be used */
+		/* Setup the 16B models */
 
 		uint64_t hfi1_type = (OPX_HW_HFI1_TYPE & OPX_HFI1_CYR) ? OPX_HFI1_CYR : OPX_HFI1_JKR;
 
