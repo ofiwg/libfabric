@@ -258,7 +258,7 @@ struct fi_opx_ep_tx {
 	struct fi_opx_cq  *cq;
 	struct slist	  *cq_pending_ptr; /* only rendezvous (typically) */
 
-	/* == CACHE LINE 18 == */
+	/* == CACHE LINE 10 == */
 
 	struct slist	    work_pending_completion;
 	struct ofi_bufpool *work_pending_pool;
@@ -269,7 +269,7 @@ struct fi_opx_ep_tx {
 	uint32_t	    tid_min_payload_bytes;
 	uint64_t	    unused_cacheline6_1;
 
-	/* == CACHE LINE 19 == */
+	/* == CACHE LINE 11 == */
 	struct opx_sdma_queue sdma_request_queue;
 	struct slist	      sdma_pending_queue;
 	struct ofi_bufpool   *sdma_request_pool;
@@ -280,7 +280,7 @@ struct fi_opx_ep_tx {
 	uint32_t	      sdma_bounce_buf_threshold;
 	uint32_t	      unused_cacheline7;
 
-	/* == CACHE LINE 20, 21+ == */
+	/* == CACHE LINE 12, 13+ == */
 
 	struct slist	      work_pending[OPX_WORK_TYPE_LAST];
 	int64_t		      ref_cnt;
@@ -298,22 +298,22 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_mp_9B) == (FI_OPX_CAC
 			"Offset of fi_opx_ep_tx->send_mp_9B should start at cacheline 5!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_9B) == (FI_OPX_CACHE_LINE_SIZE * 7),
 			"Offset of fi_opx_ep_tx->rzv_9B should start at cacheline 7!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, inject_16B) == (FI_OPX_CACHE_LINE_SIZE * 9),
-			"Offset of fi_opx_ep_tx->inject_16B should start at cacheline 9!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_16B) == (FI_OPX_CACHE_LINE_SIZE * 11),
-			"Offset of fi_opx_ep_tx->send_16B should start at cacheline 11!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_mp_16B) == (FI_OPX_CACHE_LINE_SIZE * 13),
-			"Offset of fi_opx_ep_tx->send_mp_16B should start at cacheline 13!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_16B) == (FI_OPX_CACHE_LINE_SIZE * 15),
-			"Offset of fi_opx_ep_tx->rzv_16B should start at cacheline 15!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_LINE_SIZE * 17),
-			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 17!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 18),
-			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 18!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 19),
-			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 19!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 20),
-			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 20!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, inject_16B) == (FI_OPX_CACHE_LINE_SIZE * 1),
+			"Offset of fi_opx_ep_tx->inject_16B should start at cacheline 1!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_16B) == (FI_OPX_CACHE_LINE_SIZE * 3),
+			"Offset of fi_opx_ep_tx->send_16B should start at cacheline 3!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send_mp_16B) == (FI_OPX_CACHE_LINE_SIZE * 5),
+			"Offset of fi_opx_ep_tx->send_mp_16B should start at cacheline 5!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv_16B) == (FI_OPX_CACHE_LINE_SIZE * 7),
+			"Offset of fi_opx_ep_tx->rzv_16B should start at cacheline 7!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_LINE_SIZE * 9),
+			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 9!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_completion) == (FI_OPX_CACHE_LINE_SIZE * 10),
+			"Offset of fi_opx_ep_tx->work_pending_completion should start at cacheline 10!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, sdma_request_queue) == (FI_OPX_CACHE_LINE_SIZE * 11),
+			"Offset of fi_opx_ep_tx->sdma_request_queue should start at cacheline 11!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 12),
+			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 12!");
 
 struct fi_opx_ep_rx {
 	/* == CACHE LINE 0 == */

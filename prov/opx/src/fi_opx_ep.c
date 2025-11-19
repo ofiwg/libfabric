@@ -854,11 +854,13 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	opx_ep->tx->pio_credits_addr  = hfi->info.pio.credits_addr;
 
 	/* initialize the models */
-	fi_opx_ep_tx_model_init(hfi, &opx_ep->tx->inject_9B, &opx_ep->tx->send_9B, &opx_ep->tx->send_mp_9B,
-				&opx_ep->tx->rzv_9B);
-
-	fi_opx_ep_tx_model_init_16B(hfi, &opx_ep->tx->inject_16B, &opx_ep->tx->send_16B, &opx_ep->tx->send_mp_16B,
-				    &opx_ep->tx->rzv_16B);
+	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+		fi_opx_ep_tx_model_init(hfi, &opx_ep->tx->inject_9B, &opx_ep->tx->send_9B, &opx_ep->tx->send_mp_9B,
+					&opx_ep->tx->rzv_9B);
+	} else {
+		fi_opx_ep_tx_model_init_16B(hfi, &opx_ep->tx->inject_16B, &opx_ep->tx->send_16B,
+					    &opx_ep->tx->send_mp_16B, &opx_ep->tx->rzv_16B);
+	}
 
 	// Retrieve the parameter for RZV min message length
 	int	l_rzv_min_payload_bytes;
