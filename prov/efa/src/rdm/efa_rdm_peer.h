@@ -5,7 +5,6 @@
 #define EFA_RDM_PEER_H
 
 #include "ofi_recvwin.h"
-#include "efa_av.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_rxe_map.h"
@@ -112,7 +111,7 @@ struct efa_rdm_peer {
 	struct dlist_entry txe_list; /**< a list of txe related to this peer */
 	struct dlist_entry rxe_list; /**< a list of rxe related to this peer */
 	struct dlist_entry overflow_pke_list; /**< a list of out-of-order pke that overflow the current recvwin */
-
+	struct dlist_entry ep_peer_list_entry; /**< linked to efa_rdm_ep->ep_peer_list */
 	/**
 	 * @brief number of bytes that has been sent as part of runting protocols
 	 * @details this value is capped by efa_env.efa_runt_size
