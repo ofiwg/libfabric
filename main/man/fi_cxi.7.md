@@ -1384,6 +1384,30 @@ is enabled and can be used for provider keys that do not require events.
 The command will fail with -FI_EINVAL if FI_MR_PROV_KEY MR mode is not in use.
 It can only be changed prior to any MR being created.
 
+Command *FI_OPT_CXI_GET_RX_MATCH_MODE_OVERRIDE* where the argument is a pointer
+to a char buffer. The buffer must be large enough to hold one of the mode
+values "hardware", "software", or "hybrid" that are returned. The command will
+fail with -FI_EINVAL for a NULL buffer or unknown mode value.
+
+Command *FI_OPT_CXI_SET_RX_MATCH_MODE_OVERRIDE* where the argument is a pointer
+to a char buffer that is initialized to one of these mode values "hardware",
+"software", or "hybrid". This call overrides the default match mode setting at
+the domain level. By default the domain match mode is determined by the
+environment setting of FI_CXI_RX_MATCH_MODE. This option should be set prior to
+the creation of any endpoint for the domain. The command will fail with
+-FI_EINVAL for a NULL buffer or unknown mode value.
+
+Command *FI_OPT_CXI_GET_REQ_BUF_SIZE_OVERRIDE* where the argument is a pointer
+to size_t unsigned long. It will return the current domain level req_buf_size
+setting.
+
+Command *FI_OPT_CXI_SET_REQ_BUF_SIZE_OVERRIDE* where the argument is a pointer
+to size_t unsigned long. This call overrides the default req_buf_size setting at
+the domain level. By default the domain req_buf_size is determined by the
+environment setting of FI_CXI_REQ_BUF_SIZE. This option should be set prior to
+the creation of any endpoint for the domain. The command will fail with
+-FI_EINVAL for an illegal value of 0.
+
 ## CXI Domain Extensions
 
 CXI domain extensions have been named *FI_CXI_DOM_OPS_6*. The flags parameter
