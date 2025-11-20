@@ -695,14 +695,12 @@ void test_efa_rdm_ep_trigger_handshake(struct efa_resource **state)
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t peer_addr = 0;
 
-	g_efa_unit_test_mocks.efa_rdm_ope_post_send = &efa_mock_efa_rdm_ope_post_send_return_mock;
-
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	will_return_always(efa_mock_efa_rdm_ope_post_send_return_mock, FI_SUCCESS);
-
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return_always(efa_mock_efa_qp_post_send_return_mock, 0);
 	/* Create and register a fake peer */
 	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
 	raw_addr.qpn = 0;
@@ -738,6 +736,7 @@ void test_efa_rdm_ep_trigger_handshake(struct efa_resource **state)
 	assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
 
 	efa_rdm_txe_release(txe);
+	efa_rdm_ep->efa_outstanding_tx_ops = 0;
 }
 
 /**
