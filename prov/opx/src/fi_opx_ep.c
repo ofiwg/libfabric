@@ -1023,6 +1023,12 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				   opx_ep->tx->sdma_min_payload_bytes);
 	}
 
+	if (opx_ep->tx->sdma_min_payload_bytes < opx_ep->tx->rzv_min_payload_bytes) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_SDMA_MIN_PAYLOAD_BYTES(%d) will only impact RMA and atomic operations until the FI_OPX_RZV_MIN_PAYLOAD_BYTES(%d) value is hit.\n",
+			opx_ep->tx->sdma_min_payload_bytes, opx_ep->tx->rzv_min_payload_bytes);
+	}
+
 	int l_sdma_max_writevs_per_cycle;
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_writevs_per_cycle", &l_sdma_max_writevs_per_cycle);
 	if (rc != FI_SUCCESS) {
