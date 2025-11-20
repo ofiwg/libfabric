@@ -174,11 +174,7 @@ int efa_conn_rdm_insert_shm_av(struct efa_av *av, struct efa_conn *conn)
 void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 {
 	int err;
-	struct efa_rdm_peer *peer;
-	struct efa_rdm_ep *ep;
-	struct dlist_entry *entry, *tmp;
-	fi_addr_t fi_addr;
-	struct efa_rdm_ep_peer_map_entry **peer_map;
+	struct efa_conn_ep_peer_map_entry *peer_map_entry, *tmp;
 
 	assert(av->domain->info_type == EFA_INFO_RDM);
 
@@ -200,24 +196,13 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	}
 
 	assert(ofi_genlock_held(&av->domain->srx_lock));
-	dlist_foreach_safe (&av->util_av.ep_list, entry, tmp) {
-		ep = container_of(entry, struct efa_rdm_ep,
-				  base_ep.util_ep.av_entry);
-
-		if (conn->fi_addr != FI_ADDR_NOTAVAIL) {
-			peer_map = &ep->fi_addr_to_peer_map;
-			fi_addr = conn->fi_addr;
-		} else {
-			peer_map = &ep->fi_addr_to_peer_map_implicit;
-			fi_addr = conn->implicit_fi_addr;
-		}
-
-		peer = efa_rdm_ep_peer_map_lookup(peer_map, fi_addr);
-		if (peer) {
-			efa_rdm_peer_destruct(peer, ep);
-			efa_rdm_ep_peer_map_remove(peer_map, fi_addr);
-		}
+	HASH_ITER(hh, conn->ep_peer_map, peer_map_entry, tmp) {
+		dlist_remove(&peer_map_entry->peer.ep_peer_list_entry);
+		efa_rdm_peer_destruct(&peer_map_entry->peer, peer_map_entry->ep_ptr);
+		HASH_DEL(conn->ep_peer_map, peer_map_entry);
+		ofi_buf_free(peer_map_entry);
 	}
+	assert(HASH_CNT(hh, conn->ep_peer_map) == 0);
 }
 
 /**
@@ -465,4 +450,29 @@ void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
 	efa_conn_release_util_av(av, conn, release_from_implicit_av);
 
 	release_from_implicit_av ? av->used_implicit-- : av->used_explicit--;
+}
+
+void efa_conn_ep_peer_map_insert(struct efa_conn *conn, struct efa_conn_ep_peer_map_entry *map_entry)
+{
+	HASH_ADD_PTR(conn->ep_peer_map, ep_ptr, map_entry);
+}
+
+struct efa_rdm_peer *efa_conn_ep_peer_map_lookup(struct efa_conn *conn,
+						 struct efa_rdm_ep *ep)
+{
+	struct efa_conn_ep_peer_map_entry *map_entry;
+
+	HASH_FIND_PTR(conn->ep_peer_map, &ep, map_entry);
+
+	return map_entry ? &map_entry->peer : NULL;
+}
+
+void efa_conn_ep_peer_map_remove(struct efa_conn *conn, struct efa_rdm_ep *ep)
+{
+	struct efa_conn_ep_peer_map_entry *map_entry;
+
+	HASH_FIND_PTR(conn->ep_peer_map, &ep, map_entry);
+	assert(map_entry);
+	HASH_DELETE(hh, conn->ep_peer_map, map_entry);
+	ofi_buf_free(map_entry);
 }
