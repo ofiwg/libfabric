@@ -118,14 +118,11 @@ struct efa_rdm_ep {
 	/* list of pre-posted recv buffers */
 	struct dlist_entry rx_posted_buf_list;
 
-	/* Hashmap between fi_addr and efa_rdm_peer structs */
-	struct efa_rdm_ep_peer_map_entry *fi_addr_to_peer_map;
-
-	/* Hashmap between implicit peer id and efa_rdm_peer structs */
-	struct efa_rdm_ep_peer_map_entry *fi_addr_to_peer_map_implicit;
-
 	/* bufpool to hold the fi_addr->peer hashmap entries */
 	struct ofi_bufpool *peer_map_entry_pool;
+
+	/**< List of peers associated with this endpoint */
+	struct dlist_entry ep_peer_list;
 
 	/* buffer pool for peer reorder circular buffer */
 	struct ofi_bufpool *peer_robuf_pool;
@@ -555,27 +552,6 @@ bool efa_rdm_ep_support_unsolicited_write_recv(struct efa_rdm_ep *ep)
 {
 	return ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
 }
-
-struct efa_rdm_ep_peer_map_entry {
-	fi_addr_t addr;
-	struct efa_rdm_peer peer;
-	UT_hash_handle hndl;
-};
-
-int
-efa_rdm_ep_peer_map_insert(struct efa_rdm_ep_peer_map_entry **peer_map,
-			   fi_addr_t addr,
-			   struct efa_rdm_ep_peer_map_entry *map_entry);
-struct efa_rdm_peer *
-efa_rdm_ep_peer_map_lookup(struct efa_rdm_ep_peer_map_entry **peer_map,
-			   fi_addr_t addr);
-void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep_peer_map_entry **peer_map,
-				fi_addr_t addr);
-
-void efa_rdm_ep_peer_map_implicit_to_explicit(struct efa_rdm_ep *ep,
-					      struct efa_rdm_peer *peer,
-					      fi_addr_t implicit_fi_addr,
-					      fi_addr_t explicit_fi_addr);
 
 bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep);
 
