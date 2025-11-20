@@ -795,7 +795,7 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	dlist_foreach_safe(&efa_rdm_ep->txe_list, entry, tmp) {
 		txe = container_of(entry, struct efa_rdm_ope,
 					ep_entry);
-		EFA_WARN(FI_LOG_EP_CTRL,
+		EFA_INFO(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased txe: %p\n",
 			txe);
 		efa_rdm_txe_release(txe);
