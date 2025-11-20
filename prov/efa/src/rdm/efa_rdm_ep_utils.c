@@ -45,37 +45,6 @@ int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 	return efa_conn ? efa_conn->ah->ahn : -1;
 }
 
-inline int
-efa_rdm_ep_peer_map_insert(struct efa_rdm_ep_peer_map_entry **peer_map,
-			   fi_addr_t addr,
-			   struct efa_rdm_ep_peer_map_entry *map_entry)
-{
-	HASH_ADD(hndl, *peer_map, addr, sizeof(addr), map_entry);
-	return FI_SUCCESS;
-}
-
-inline struct efa_rdm_peer *
-efa_rdm_ep_peer_map_lookup(struct efa_rdm_ep_peer_map_entry **peer_map,
-			   fi_addr_t addr)
-{
-	struct efa_rdm_ep_peer_map_entry *map_entry;
-
-	HASH_FIND(hndl, *peer_map, &addr, sizeof(addr), map_entry);
-
-	return map_entry ? &map_entry->peer : NULL;
-}
-
-void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep_peer_map_entry **peer_map,
-				fi_addr_t addr)
-{
-	struct efa_rdm_ep_peer_map_entry *map_entry = NULL;
-
-	HASH_FIND(hndl, *peer_map, &addr, sizeof(addr), map_entry);
-	assert(map_entry);
-	HASH_DELETE(hndl, *peer_map, map_entry);
-	ofi_buf_free(map_entry);
-}
-
 /**
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
  * the explicit AV
@@ -87,16 +56,15 @@ void efa_rdm_ep_peer_map_remove(struct efa_rdm_ep_peer_map_entry **peer_map,
 struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
 	struct efa_conn *conn;
-	struct efa_rdm_ep_peer_map_entry *map_entry;
+	struct efa_conn_ep_peer_map_entry *map_entry;
 	struct efa_rdm_peer *peer;
-	int err;
 
 	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
 
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
-	peer = efa_rdm_ep_peer_map_lookup(&ep->fi_addr_to_peer_map, addr);
+	peer = efa_conn_ep_peer_map_lookup(conn, ep);
 	if (peer)
 		return peer;
 
@@ -109,14 +77,13 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 	}
 
 	memset(map_entry, 0, sizeof(*map_entry));
-
-	map_entry->addr = addr;
+	map_entry->ep_ptr = ep;
 
 	efa_rdm_peer_construct(&map_entry->peer, ep, conn);
 
-	err = efa_rdm_ep_peer_map_insert(&ep->fi_addr_to_peer_map, addr, map_entry);
-	if (err)
-		return NULL;
+	efa_conn_ep_peer_map_insert(conn, map_entry);
+
+	dlist_insert_tail(&map_entry->peer.ep_peer_list_entry, &ep->ep_peer_list);
 
 	return &map_entry->peer;
 }
@@ -133,8 +100,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 {
 	struct efa_conn *conn;
 	struct efa_rdm_peer *peer;
-	struct efa_rdm_ep_peer_map_entry *map_entry;
-	int err;
+	struct efa_conn_ep_peer_map_entry *map_entry;
 
 	assert(ofi_genlock_held(&ep->base_ep.domain->srx_lock));
 
@@ -143,7 +109,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
-	peer = efa_rdm_ep_peer_map_lookup(&ep->fi_addr_to_peer_map_implicit, addr);
+	peer = efa_conn_ep_peer_map_lookup(conn, ep);
 	if (peer)
 		goto out;
 
@@ -156,39 +122,20 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	}
 
 	memset(map_entry, 0, sizeof(*map_entry));
-	map_entry->addr = addr;
+	map_entry->ep_ptr = ep;
 
 	efa_rdm_peer_construct(&map_entry->peer, ep, conn);
 	peer = &map_entry->peer;
 
-	err = efa_rdm_ep_peer_map_insert(&ep->fi_addr_to_peer_map_implicit, addr, map_entry);
-	if (err)
-		return NULL;
+	efa_conn_ep_peer_map_insert(conn, map_entry);
+
+	dlist_insert_tail(&map_entry->peer.ep_peer_list_entry, &ep->ep_peer_list);
 
 out:
 	assert(peer);
 	/* Move to the front of the LRU list */
 	efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->conn);
 	return peer;
-}
-
-void efa_rdm_ep_peer_map_implicit_to_explicit(struct efa_rdm_ep *ep,
-					      struct efa_rdm_peer *peer,
-					      fi_addr_t implicit_fi_addr,
-					      fi_addr_t explicit_fi_addr)
-{
-	struct efa_rdm_ep_peer_map_entry *map_entry;
-
-	HASH_FIND(hndl, ep->fi_addr_to_peer_map_implicit, &implicit_fi_addr, sizeof(implicit_fi_addr), map_entry);
-	assert(map_entry);
-	assert(peer == &map_entry->peer);
-	assert(implicit_fi_addr == map_entry->addr);
-
-	HASH_DELETE(hndl, ep->fi_addr_to_peer_map_implicit, map_entry);
-	assert(map_entry);
-	map_entry->addr = explicit_fi_addr;
-
-	HASH_ADD(hndl, ep->fi_addr_to_peer_map, addr, sizeof(explicit_fi_addr), map_entry);
 }
 
 /**

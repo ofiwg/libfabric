@@ -262,8 +262,9 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->peer_map_entry_pool,
-				 sizeof(struct efa_rdm_ep_peer_map_entry),
-				 EFA_RDM_BUFPOOL_ALIGNMENT, 0, /* no limit to max_cnt */
+				 sizeof(struct efa_conn_ep_peer_map_entry),
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
+				 0, /* no limit to max_cnt */
 				 EFA_RDM_EP_MIN_PEER_POOL_SIZE,
 				 0);
 	if (ret)
@@ -646,6 +647,8 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		goto err_close_shm_ep;
 	}
 
+	dlist_init(&efa_rdm_ep->ep_peer_list);
+
 	*ep = &efa_rdm_ep->base_ep.util_ep.ep_fid;
 	(*ep)->msg = &efa_rdm_msg_ops;
 	(*ep)->rma = &efa_rdm_rma_ops;
@@ -762,6 +765,10 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct util_av_entry *util_av_entry;
+	struct efa_av_entry *av_entry;
+	struct efa_conn_ep_peer_map_entry *peer_map_entry;
 
 #if ENABLE_DEBUG
 	struct efa_rdm_pke *pkt_entry;
@@ -807,23 +814,33 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		efa_rdm_txe_release(txe);
 	}
 
-	/* Clean up any remaining peers in the hashmap before destroying buffer pools */
-	if (efa_rdm_ep->fi_addr_to_peer_map) {
-		struct efa_rdm_ep_peer_map_entry *map_entry, *map_tmp;
-		HASH_ITER(hndl, efa_rdm_ep->fi_addr_to_peer_map, map_entry, map_tmp) {
-			efa_rdm_peer_destruct(&map_entry->peer, efa_rdm_ep);
-			HASH_DELETE(hndl, efa_rdm_ep->fi_addr_to_peer_map, map_entry);
-			ofi_buf_free(map_entry);
-		}
-	}
+	/* Clean up any remaining peers before destroying buffer pools */
+	dlist_foreach_container_safe (&efa_rdm_ep->ep_peer_list,
+				      struct efa_rdm_peer, peer,
+				      ep_peer_list_entry, tmp) {
 
-	if (efa_rdm_ep->fi_addr_to_peer_map_implicit) {
-		struct efa_rdm_ep_peer_map_entry *map_entry, *map_tmp;
-		HASH_ITER(hndl, efa_rdm_ep->fi_addr_to_peer_map_implicit, map_entry, map_tmp) {
-			efa_rdm_peer_destruct(&map_entry->peer, efa_rdm_ep);
-			HASH_DELETE(hndl, efa_rdm_ep->fi_addr_to_peer_map_implicit, map_entry);
-			ofi_buf_free(map_entry);
+		if (peer->conn->fi_addr != FI_ADDR_UNSPEC) {
+			util_av_entry = ofi_bufpool_get_ibuf(
+				efa_rdm_ep->base_ep.av->util_av.av_entry_pool,
+				peer->conn->fi_addr);
+		} else {
+			assert(peer->conn->implicit_fi_addr != FI_ADDR_UNSPEC);
+
+			util_av_entry = ofi_bufpool_get_ibuf(
+				efa_rdm_ep->base_ep.av->util_av_implicit.av_entry_pool,
+				peer->conn->implicit_fi_addr);
 		}
+
+		dlist_remove(&peer->ep_peer_list_entry);
+
+		efa_rdm_peer_destruct(peer, efa_rdm_ep);
+
+		peer_map_entry = container_of(
+			peer, struct efa_conn_ep_peer_map_entry, peer);
+
+		av_entry = (struct efa_av_entry *) util_av_entry->data;
+		HASH_DEL(av_entry->conn.ep_peer_map, peer_map_entry);
+		ofi_buf_free(peer_map_entry);
 	}
 
 	if (efa_rdm_ep->ope_pool)
