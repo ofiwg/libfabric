@@ -1005,8 +1005,8 @@ The CXI provider checks for the following environment variables:
 *FI_CXI_RDZV_GET_MIN*
 :   Minimum rendezvous Get payload size. A Send with length less than or equal
     to *FI_CXI_RDZV_THRESHOLD* plus *FI_CXI_RDZV_GET_MIN* will be performed
-    using the eager protocol. Larger Sends will be performed using the
-    rendezvous protocol with *FI_CXI_RDZV_THRESHOLD* bytes of payload sent
+    using the eager protocol. Larger sends will be performed using the
+    rendezvous protocol with *FI_CXI_EAGER_SIZE* bytes of payload sent
     eagerly and the remainder of the payload read from the source using a Get.
     *FI_CXI_RDZV_THRESHOLD* plus *FI_CXI_RDZV_GET_MIN* must be less than or
     equal to *FI_CXI_OFLOW_BUF_SIZE*.
