@@ -19,6 +19,7 @@
 #include "efa_rdm_srx.h"
 #include "efa_rdm_cq.h"
 #include "efa_rdm_pke_nonreq.h"
+#include "efa_rdm_pke_rtw.h"
 
 struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 {
@@ -611,82 +612,36 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 }
 
 /**
- * @brief trigger a peer to send a handshake packet
+ * @brief send a RTW packet or a handshake packet
  *
- * This patch send a EAGER_RTW packet of 0 byte to a peer, which would
- * cause the peer to send a handshake packet back to the endpoint.
+ * This function can either:
+ * 1. Send an EAGER_RTW packet of 0 bytes to trigger the peer to send a handshake back
+ * 2. Send a handshake packet
  *
- * This function is used for any extra feature that does not have an
- * alternative.
- *
- * We do not send eager rtm packets here because the receiver might require
- * ordering and an extra eager rtm will interrupt the reorder
- * process.
- *
- * @param[in]	ep	The endpoint on which the packet for triggering handshake will be sent.
- * @param[in]	addr	The address of the peer.
+ * @param[in]	ep		The endpoint on which the packet will be sent
+ * @param[in]	peer		The peer to communicate with
+ * @param[in]	trigger_mode	If true, send EAGER_RTW to trigger handshake; if false, send handshake packet.
  *
  * @returns
  * return 0 for success.
  * return negative libfabric error code for error. Possible errors include:
  * -FI_EAGAIN	temporarily out of resource to send packet
  */
-ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer, bool trigger_mode)
 {
 	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pkt_entry;
 	struct fi_msg msg = {0};
 	ssize_t err;
 
 	assert(peer);
-	if ((peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ||
-	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
+
+	if (trigger_mode && ((peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ||
+			     (peer->flags & EFA_RDM_PEER_REQ_SENT)))
 		return 0;
 
 	msg.addr = peer->conn->fi_addr;
 
-	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
-
-	if (OFI_UNLIKELY(!txe)) {
-		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
-		return -FI_EAGAIN;
-	}
-
-	/* efa_rdm_ep_alloc_txe() joins ep->base_ep.util_ep.tx_op_flags and passed in flags,
-	 * reset to desired flags (remove things like FI_DELIVERY_COMPLETE, and FI_COMPLETION)
-	 */
-	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
-	txe->msg_id = -1;
-	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
-
-	efa_rdm_tracepoint(trigger_handshake_begin, 0, 0, txe->msg_id,
-			   (size_t) txe->cq_entry.op_context, txe->total_len);
-
-	err = efa_rdm_ope_post_send(txe, EFA_RDM_EAGER_RTW_PKT);
-
-	if (OFI_UNLIKELY(err))
-		return err;
-
-	return 0;
-}
-
-/** @brief Post a handshake packet to a peer.
- *
- * @param ep The endpoint on which the handshake packet is sent out.
- * @param peer The peer to which the handshake packet is posted.
- * @return 0 on success, fi_errno on error.
- */
-ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
-{
-	struct efa_rdm_ope *txe;
-	struct fi_msg msg = {0};
-	struct efa_rdm_pke *pkt_entry;
-	fi_addr_t addr;
-	ssize_t ret;
-
-	addr = peer->conn->fi_addr;
-	msg.addr = addr;
-
-	/* ofi_op_write is ignored in handshake path */
 	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
 
 	if (OFI_UNLIKELY(!txe)) {
@@ -710,18 +665,71 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 	pkt_entry->ope = txe;
 	pkt_entry->peer = peer;
 
-	efa_rdm_pke_init_handshake(pkt_entry, peer);
-
-	efa_rdm_tracepoint(post_handshake_begin, (size_t) pkt_entry,
-			   pkt_entry->pkt_size, txe->msg_id,
-			   (size_t) txe->cq_entry.op_context, txe->total_len);
-
-	ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
-	if (OFI_UNLIKELY(ret)) {
-		efa_rdm_pke_release_tx(pkt_entry);
-		efa_rdm_txe_release(txe);
+	if (trigger_mode) {
+		txe->msg_id = -1;
+		err = efa_rdm_pke_init_eager_rtw(pkt_entry, txe);
+		efa_rdm_tracepoint(trigger_handshake_begin, 0, 0, txe->msg_id,
+				   (size_t) txe->cq_entry.op_context, txe->total_len);
+	} else {
+		err = efa_rdm_pke_init_handshake(pkt_entry, peer);
+		efa_rdm_tracepoint(post_handshake_begin, (size_t) pkt_entry,
+				   pkt_entry->pkt_size, txe->msg_id,
+				   (size_t) txe->cq_entry.op_context, txe->total_len);
 	}
-	return ret;
+
+	if (OFI_UNLIKELY(err))
+		goto handle_err;
+
+	err = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
+	if (OFI_UNLIKELY(err))
+		goto handle_err;
+
+	if (trigger_mode)
+		peer->flags |= EFA_RDM_PEER_REQ_SENT;
+
+	return 0;
+
+handle_err:
+	efa_rdm_pke_release_tx(pkt_entry);
+	efa_rdm_txe_release(txe);
+	return err;
+}
+
+/**
+ * @brief trigger a peer to send a handshake packet
+ *
+ * This patch send a EAGER_RTW packet of 0 byte to a peer, which would
+ * cause the peer to send a handshake packet back to the endpoint.
+ *
+ * This function is used for any extra feature that does not have an
+ * alternative.
+ *
+ * We do not send eager rtm packets here because the receiver might require
+ * ordering and an extra eager rtm will interrupt the reorder
+ * process.
+ *
+ * @param[in]	ep	The endpoint on which the packet for triggering handshake will be sent.
+ * @param[in]	addr	The address of the peer.
+ *
+ * @returns
+ * return 0 for success.
+ * return negative libfabric error code for error. Possible errors include:
+ * -FI_EAGAIN	temporarily out of resource to send packet
+ */
+ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+{
+	return efa_rdm_ep_handshake_common(ep, peer, true);
+}
+
+/** @brief Post a handshake packet to a peer.
+ *
+ * @param ep The endpoint on which the handshake packet is sent out.
+ * @param peer The peer to which the handshake packet is posted.
+ * @return 0 on success, fi_errno on error.
+ */
+ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+{
+	return efa_rdm_ep_handshake_common(ep, peer, false);
 }
 
 /** @brief Post a handshake packet to a peer.
