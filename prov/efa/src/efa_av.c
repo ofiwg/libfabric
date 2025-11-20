@@ -341,12 +341,11 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 {
 	int err;
 	struct efa_ah *ah;
-	fi_addr_t shm_fi_addr;
-	struct efa_conn *conn;
+	struct efa_conn *implicit_conn, *explicit_conn;
 	struct efa_rdm_ep *ep;
-	struct efa_rdm_peer *peer;
 	struct dlist_entry *entry;
-	struct util_av_entry *util_av_entry;
+	struct util_av_entry *implicit_util_av_entry, *explicit_util_av_entry;
+	struct efa_conn_ep_peer_map_entry *map_entry, *tmp;
 	struct efa_av_entry *implicit_av_entry, *explicit_av_entry;
 	struct fid_peer_srx *peer_srx;
 
@@ -358,25 +357,59 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	assert(ofi_genlock_held(&av->util_av.lock));
 	assert(ofi_genlock_held(&av->util_av_implicit.lock));
 
-	util_av_entry =
+	/* Get implicit util AV entry and conn */
+	implicit_util_av_entry =
 	ofi_bufpool_get_ibuf(av->util_av_implicit.av_entry_pool, implicit_fi_addr);
 
-	implicit_av_entry = (struct efa_av_entry *) util_av_entry->data;
+	implicit_av_entry = (struct efa_av_entry *) implicit_util_av_entry->data;
 
 	assert(implicit_av_entry);
 	assert(efa_is_same_addr(
 		raw_addr, (struct efa_ep_addr *) implicit_av_entry->ep_addr));
 
-	conn = &implicit_av_entry->conn;
-	assert(conn->fi_addr == FI_ADDR_NOTAVAIL &&
-	       conn->implicit_fi_addr == implicit_fi_addr);
+	implicit_conn = &implicit_av_entry->conn;
+	assert(implicit_conn->fi_addr == FI_ADDR_NOTAVAIL &&
+	       implicit_conn->implicit_fi_addr == implicit_fi_addr);
 
-	ah = conn->ah;
-	assert(ah);
-	shm_fi_addr = implicit_av_entry->conn.shm_fi_addr;
+	ah = implicit_conn->ah;
 
+	/* Create explicit util AV entry and conn */
+	err = ofi_av_insert_addr(&av->util_av, raw_addr, fi_addr);
+	if (err) {
+		EFA_WARN(FI_LOG_AV,
+			 "ofi_av_insert_addr into explicit AV failed! Error "
+			 "message: %s\n",
+			 fi_strerror(err));
+		return err;
+	}
+
+	explicit_util_av_entry =
+		ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, *fi_addr);
+	explicit_av_entry = (struct efa_av_entry *) explicit_util_av_entry->data;
+	assert(efa_is_same_addr(
+		raw_addr, (struct efa_ep_addr *) explicit_av_entry->ep_addr));
+
+	/* Copy information from implicit conn to explicit conn */
+	explicit_conn = &explicit_av_entry->conn;
+	memset(explicit_conn, 0, sizeof(*explicit_conn));
+	explicit_conn->ep_addr = (struct efa_ep_addr *) explicit_av_entry->ep_addr;
+	assert(av->type == FI_AV_TABLE);
+	explicit_conn->ah = implicit_conn->ah;
+	explicit_conn->fi_addr = *fi_addr;
+	explicit_conn->shm_fi_addr = implicit_conn->shm_fi_addr;
+	explicit_conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
+	HASH_ITER(hh, implicit_conn->ep_peer_map, map_entry, tmp) {
+		HASH_DELETE(hh, implicit_conn->ep_peer_map, map_entry);
+		HASH_ADD_PTR(explicit_conn->ep_peer_map, ep_ptr, map_entry);
+		map_entry->peer.conn = explicit_conn;
+	}
+	assert(HASH_CNT(hh, implicit_conn->ep_peer_map) == 0);
+
+	/* Handle reverse AV and AV ref counts */
 	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
-				 &av->prv_reverse_av_implicit, conn);
+				 &av->prv_reverse_av_implicit, implicit_conn);
+
+	dlist_remove(&implicit_av_entry->conn.implicit_av_lru_entry);
 
 	err = ofi_av_remove_addr(&av->util_av_implicit, implicit_fi_addr);
 	if (err) {
@@ -387,54 +420,28 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
-	dlist_remove(&implicit_av_entry->conn.implicit_av_lru_entry);
-
-	assert(!dlist_empty(&conn->ah->implicit_conn_list));
-	dlist_remove(&conn->ah_implicit_conn_list_entry);
-	efa_ah_implicit_av_lru_ah_move(av->domain, conn->ah);
-
 	av->used_implicit--;
-	conn->ah->implicit_refcnt--;
-
-	err = ofi_av_insert_addr(&av->util_av, raw_addr, fi_addr);
-	if (err) {
-		EFA_WARN(FI_LOG_AV,
-			 "ofi_av_insert_addr into explicit AV failed! Error "
-			 "message: %s\n",
-			 fi_strerror(err));
-		return err;
-	}
-
-	util_av_entry =
-		ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, *fi_addr);
-	explicit_av_entry = (struct efa_av_entry *) util_av_entry->data;
-	assert(efa_is_same_addr(
-		raw_addr, (struct efa_ep_addr *) explicit_av_entry->ep_addr));
-
-	conn = &explicit_av_entry->conn;
-	memset(conn, 0, sizeof(*conn));
-	conn->ep_addr = (struct efa_ep_addr *) explicit_av_entry->ep_addr;
-	assert(av->type == FI_AV_TABLE);
-	conn->ah = ah;
-	conn->fi_addr = *fi_addr;
-	conn->shm_fi_addr = shm_fi_addr;
-	conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 
 	err = efa_av_reverse_av_add(av, &av->cur_reverse_av, &av->prv_reverse_av,
-				    conn);
+				    explicit_conn);
 	if (err)
 		return err;
 
 	av->used_explicit++;
-	conn->ah->explicit_refcnt++;
+
+	/* Handle AH LRU list and refcnt */
+	assert(!dlist_empty(&ah->implicit_conn_list));
+	dlist_remove(&implicit_conn->ah_implicit_conn_list_entry);
+	efa_ah_implicit_av_lru_ah_move(av->domain, ah);
+	ah->implicit_refcnt--;
+	ah->explicit_refcnt++;
 
 	EFA_INFO(FI_LOG_AV,
 		 "Peer with implicit fi_addr %" PRIu64
 		 " moved to explicit AV. Explicit fi_addr: %" PRIu64 "\n",
 		 implicit_fi_addr, *fi_addr);
 
-	/* Move peer from implicit peer map to explicit peer map for all
-	 * endpoints. Also call foreach_unspec_addr to move unexpected messages
+	/* Call foreach_unspec_addr to move unexpected messages
 	 * from the unspecified queue to the specified queues
 	 *
 	 * util_ep is bound to the explicit util_av, so the explicit util_av's
@@ -442,13 +449,6 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	ofi_genlock_lock(&av->util_av.ep_list_lock);
 	dlist_foreach(&av->util_av.ep_list, entry) {
 		ep = container_of(entry, struct efa_rdm_ep, base_ep.util_ep.av_entry);
-		peer = efa_rdm_ep_peer_map_lookup(&ep->fi_addr_to_peer_map_implicit, implicit_fi_addr);
-		if (peer) {
-			peer->conn = conn;
-			EFA_INFO(FI_LOG_AV, "Moving peer from implicit to explicit peer map for endpoint %p\n", ep);
-			efa_rdm_ep_peer_map_implicit_to_explicit(ep, peer, implicit_fi_addr, *fi_addr);
-		}
-
 		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 		peer_srx->owner_ops->foreach_unspec_addr(peer_srx, &efa_av_get_addr_from_peer_rx_entry);
 	}
@@ -800,8 +800,9 @@ static int efa_av_close(struct fid *fid)
 		if (av->shm_rdm_av) {
 			err = fi_close(&av->shm_rdm_av->fid);
 			if (OFI_UNLIKELY(err)) {
-				EFA_WARN(FI_LOG_AV, "Failed to close shm av: %s\n",
-					fi_strerror(err));
+				EFA_WARN(FI_LOG_AV,
+					 "Failed to close shm av: %s\n",
+					 fi_strerror(err));
 			}
 		}
 	}
