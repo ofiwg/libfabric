@@ -192,6 +192,9 @@ int ft_rocr_alloc(uint64_t device, void **buf, size_t size);
 int ft_rocr_free(void *buf);
 int ft_rocr_memset(uint64_t device, void *buf, int value, size_t size);
 int ft_rocr_memcpy(uint64_t device, void *dst, const void *src, size_t size);
+int ft_rocr_get_dmabuf_fd(void *buf, size_t len,
+			  int *fd, uint64_t *offset);
+int ft_rocr_put_dmabuf_fd(int fd);
 
 int ft_neuron_init(void);
 int ft_neuron_cleanup(void);
