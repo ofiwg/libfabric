@@ -19,7 +19,10 @@ jobs:
       run: cargo fmt --check
     - name: Build Rust binding
       run: |
-        cargo build --features vendored
+        cargo clean && cargo build --features vendored
     - name: Test Rust binding
       run: |
-        cargo test --features vendored
+        cargo clean && cargo test --features vendored
+    - name: Dry-run publish Rust binding
+      run: |
+        cargo clean && cargo publish --dry-run -p ofi-libfabric-sys --features vendored

@@ -2,9 +2,38 @@ use bindgen::callbacks::ItemInfo;
 use bindgen::callbacks::ItemKind;
 use bindgen::callbacks::ParseCallbacks;
 use std::env;
-use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::OnceLock;
+
+// Global variables for common directories.
+static CARGO_MANIFEST_DIR: OnceLock<PathBuf> = OnceLock::new();
+static CARGO_WORKSPACE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+fn get_cargo_manifest_dir() -> &'static PathBuf {
+    CARGO_MANIFEST_DIR.get_or_init(|| PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()))
+}
+
+// Use CARGO_MANIFEST_DIR to get absolute path to the crate, then navigate to libfabric root.
+// The conditional directory walking supports for both `cargo build` and `cargo publish` scenarios.
+//
+// For the case of cargo build:
+// manifest_dir = {your_libfabric_directory}/bindings/rust
+//
+// For the case of cargo publish:
+// manifest_dir = {your_libfabric_directory}/target/package/ofi-libfabric-sys-x.y.z
+fn get_cargo_workspace_dir() -> &'static PathBuf {
+    CARGO_WORKSPACE_DIR.get_or_init(|| {
+        let manifest_dir = get_cargo_manifest_dir();
+        manifest_dir
+            .ancestors()
+            .skip(2) // Skip the 0th (myself) and 1st ancestor directories.
+            .take(2) // Check for both 2nd and 3rd ancestor directories.
+            .find(|dir| dir.join("Cargo.toml").exists())
+            .unwrap_or_else(|| panic!("Could not find parent directory with Cargo.toml"))
+            .to_path_buf()
+    })
+}
 
 #[derive(Debug)]
 struct RenameFunctions;
@@ -37,14 +66,20 @@ fn build_libfabric(install_dir: &PathBuf) {
     // Else, you will receive the following error; = note: ld: cannot find -lfabric
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let libfabric_rsync_dir = out_dir.join("vendored");
-    let libfabric_par_dir = Path::new("../../../");
+    let cargo_manifest_dir = get_cargo_manifest_dir();
+    let cargo_workspace_dir = get_cargo_workspace_dir();
+
+    println!(
+        "cargo:warning=cargo_manifest_dir {}",
+        cargo_manifest_dir.display()
+    );
+    println!(
+        "cargo:warning=cargo_workspace_dir {}",
+        cargo_workspace_dir.display()
+    );
     println!(
         "cargo:warning=libfabric_rsync_dir {}",
         libfabric_rsync_dir.display()
-    );
-    println!(
-        "cargo:warning=libfabric_par_dir {}",
-        libfabric_par_dir.display()
     );
     println!("cargo:warning=install_dir {}", install_dir.display());
     println!("cargo:warning=out_dir {}", out_dir.display());
@@ -55,10 +90,7 @@ fn build_libfabric(install_dir: &PathBuf) {
         Command::new("rsync")
             .arg("-av")
             .arg("--exclude=vendored")
-            .arg(format!(
-                "{}/",
-                libfabric_par_dir.join("libfabric").display()
-            ))
+            .arg(format!("{}/", cargo_workspace_dir.display()))
             .arg(&libfabric_rsync_dir)
             .status()
             .expect("Failed to copy vendor directory");
@@ -133,24 +165,18 @@ fn main() {
             let install_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("install");
             build_libfabric(&install_dir);
 
-            // Return relevant paths.
-            let libfabric_par_dir = Path::new("../../../");
+            // Return relevant paths using global variables.
+            let libfabric_dir = get_cargo_workspace_dir();
+
             (
                 // Provide static link search path.
                 // Vendored option, thus should refer to the compiled library's installation path.
                 install_dir.join("lib"),
                 vec![
-                    libfabric_par_dir.join("libfabric"),
-                    libfabric_par_dir.join("libfabric").join("include"),
-                    libfabric_par_dir
-                        .join("libfabric")
-                        .join("include")
-                        .join("rdma"),
-                    libfabric_par_dir
-                        .join("libfabric")
-                        .join("include")
-                        .join("rdma")
-                        .join("providers"),
+                    libfabric_dir.clone(),
+                    libfabric_dir.join("include"),
+                    libfabric_dir.join("include").join("rdma"),
+                    libfabric_dir.join("include").join("rdma").join("providers"),
                 ],
             )
         }
@@ -189,8 +215,8 @@ fn main() {
     // The goal of the wrapper.[ch] is to create translation unit for "static inline" functions, such that they can be properly FFI'ed.
     // TODO: https://github.com/rust-lang/rust-bindgen/discussions/2405
     let mut builder = cc::Build::new();
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("failed to get current directory");
-    builder.file(format!("{manifest_dir}/wrapper.c"));
+    let cargo_manifest_dir = get_cargo_manifest_dir().display();
+    builder.file(format!("{cargo_manifest_dir}/wrapper.c"));
     for path in &include_paths {
         builder.include(format!("{}", path.display()));
     }
