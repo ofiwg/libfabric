@@ -270,7 +270,8 @@ av_null_fi_addr()
 	if (av_type != FI_AV_TABLE) {
 		ret = 0;
 		testret = SKIPPED;
-		sprintf(err_buf, "test not valid for AV type FI_AV_MAP");
+		sprintf(err_buf, "test not valid for AV type %s",
+			fi_tostr(&av_type, FI_TYPE_AV_TYPE));
 		goto out1;
 	}
 
@@ -449,7 +450,8 @@ av_goodbad_vector_sync_err()
 	if (av_type != FI_AV_TABLE) {
 		ret = 0;
 		testret = SKIPPED;
-		sprintf(err_buf, "test not valid for AV type FI_AV_MAP");
+		sprintf(err_buf, "test not valid for AV type %s",
+			fi_tostr(&av_type, FI_TYPE_AV_TYPE));
 		goto out;
 	}
 
@@ -832,19 +834,10 @@ int main(int argc, char **argv)
 	printf("Testing AVs on fabric %s\n", fi->fabric_attr->name);
 	failed = 0;
 
-	if (fi->domain_attr->av_type == FI_AV_UNSPEC ||
-	    fi->domain_attr->av_type == FI_AV_MAP) {
-		av_type = FI_AV_MAP;
-		printf("\nTesting with type = FI_AV_MAP\n");
-		failed += run_test_set();
-	}
-
-	if (fi->domain_attr->av_type == FI_AV_UNSPEC ||
-	    fi->domain_attr->av_type == FI_AV_TABLE) {
-		av_type = FI_AV_TABLE;
-		printf("\nTesting with type = FI_AV_TABLE\n");
-		failed += run_test_set();
-	}
+	av_type = FI_AV_TABLE;
+	printf("\nTesting with type = %s\n",
+	       fi_tostr(&av_type, FI_TYPE_AV_TYPE));
+	failed += run_test_set();
 
 	if (failed > 0) {
 		printf("\nSummary: %d tests failed\n", failed);
