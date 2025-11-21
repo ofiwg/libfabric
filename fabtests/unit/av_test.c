@@ -713,6 +713,116 @@ fail:
 	return TEST_RET_VAL(ret, testret);
 }
 
+static int
+av_lookup_bad(void)
+{
+	int testret, ret, i;
+	struct fid_av *av = NULL;
+	struct fi_av_attr attr = {0};
+	uint8_t addrbuf[4096];
+	uint8_t lookup_buf[4096];
+	size_t buflen, lookup_len;
+	fi_addr_t *fi_addr = NULL;
+
+	testret = FAIL;
+	fi_addr = calloc(num_good_addr, sizeof(*fi_addr));
+	if (!fi_addr) {
+		sprintf(err_buf, "calloc fi_addr failed");
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
+
+	attr.type = av_type;
+	attr.count = num_good_addr + 1;
+	ret = fi_av_open(domain, &attr, &av, NULL);
+	if (ret) {
+		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
+			fi_tostr(&av_type, FI_TYPE_AV_TYPE), ret,
+			fi_strerror(-ret));
+		goto fail;
+	}
+
+	for (i = 0; i < num_good_addr; i++)
+		fi_addr[i] = FI_ADDR_NOTAVAIL;
+
+	buflen = sizeof(addrbuf);
+	ret = av_create_address_list(good_address, 0, num_good_addr, addrbuf, 0,
+				     buflen);
+	if (ret < 0)
+		goto fail;
+
+	ret = fi_av_insert(av, addrbuf, num_good_addr, fi_addr, 0, NULL);
+	if (ret != num_good_addr) {
+		sprintf(err_buf, "fi_av_insert ret=%d, expected %d", ret,
+			num_good_addr);
+		goto fail;
+	}
+
+	for (i = 0; i < num_good_addr; i++) {
+		if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
+			sprintf(err_buf, "fi_addr[%d]=%ld, expected %d", i,
+				fi_addr[i], i);
+			goto fail;
+		}
+	}
+
+	/* case 1: lookup addr of non-inserted location in av open range */
+	memset(lookup_buf, 0, sizeof(lookup_buf));
+	lookup_len = sizeof(lookup_buf);
+	ret = fi_av_lookup(av, (fi_addr_t) num_good_addr, &lookup_buf,
+			   &lookup_len);
+	if (ret != -FI_EINVAL) {
+		sprintf(err_buf, "fi_av_lookup of non-inserted location "
+			"ret=%d, expected %d", ret, -FI_EINVAL);
+		goto fail;
+	}
+
+	/* case 2: lookup addr outside of av open range */
+	memset(lookup_buf, 0, sizeof(lookup_buf));
+	lookup_len = sizeof(lookup_buf);
+	ret = fi_av_lookup(av, (fi_addr_t) (num_good_addr + 32), &lookup_buf,
+			   &lookup_len);
+	if (ret != -FI_EINVAL) {
+		sprintf(err_buf, "fi_av_lookup addr outside of range ret=%d, "
+			"expected %d", ret, -FI_EINVAL);
+		goto fail;
+	}
+
+	/* case 3: lookup UINT_MAX*/
+	memset(lookup_buf, 0, sizeof(lookup_buf));
+	lookup_len = sizeof(lookup_buf);
+	ret = fi_av_lookup(av, (fi_addr_t) UINT64_MAX, &lookup_buf,
+			   &lookup_len);
+	if (ret != -FI_EINVAL) {
+		sprintf(err_buf, "fi_av_lookup of UINT64_MAX ret=%d, "
+			"expected %d", ret, -FI_EINVAL);
+		goto fail;
+	}
+
+	/* case 4: remove an addr and then lookup its location */
+	memset(lookup_buf, 0, sizeof(lookup_buf));
+	lookup_len = sizeof(lookup_buf);
+	ret = fi_av_remove(av, &fi_addr[0], 1, 0);
+	if (ret != FI_SUCCESS) {
+		sprintf(err_buf, "fi_av_remove ret=%d, %s", ret,
+			fi_strerror(-ret));
+		goto fail;
+	}
+	ret = fi_av_lookup(av, fi_addr[0], &lookup_buf, &lookup_len);
+	if (ret != -FI_EINVAL) {
+		sprintf(err_buf, "fi_av_lookup of removed addr ret=%d, "
+			"expected %d", ret, -FI_EINVAL);
+		goto fail;
+	}
+
+	testret = PASS;
+	ret = FI_SUCCESS;
+fail:
+	FT_CLOSE_FID(av);
+	free(fi_addr);
+	return TEST_RET_VAL(ret, testret);
+}
+
 struct test_entry test_array_good[] = {
 	TEST_ENTRY(av_open_close, "Test open and close AVs of varying sizes"),
 	TEST_ENTRY(av_good, "Test AV insert with good address"),
@@ -728,6 +838,9 @@ struct test_entry test_array_bad[] = {
 		   "Test AV insert of 1 good and 1 bad address"),
 	TEST_ENTRY(av_goodbad_vector_sync_err,
 		   "Test AV insert of 1 good, 1 bad address using FI_SYNC_ERR"),
+	TEST_ENTRY(av_lookup_bad,
+		   "Test lookup of address not in AV after inserting good "
+		   "addresses"),
 	{ NULL, "" }
 };
 
