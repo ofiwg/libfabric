@@ -322,7 +322,7 @@ static int rxd_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	rxd_av = container_of(av, struct rxd_av, util_av.av_fid);
 	dg_fiaddr = rxd_av_dg_addr(rxd_av, fi_addr);
 	if (dg_fiaddr == FI_ADDR_UNSPEC)
-		return -FI_ENODATA;
+		return -FI_EINVAL;
 
 	return fi_av_lookup(rxd_av->dg_av, dg_fiaddr, addr, addrlen);
 }
