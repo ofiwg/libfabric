@@ -357,6 +357,7 @@ struct fi_opx_debug_counters {
 			uint64_t alloc;
 			uint64_t alloc_enospc;
 			uint64_t free;
+			uint64_t keyset_grow;
 
 		} access_key;
 
@@ -752,6 +753,7 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.access_key.alloc);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.access_key.alloc_enospc);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.access_key.free);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.access_key.keyset_grow);
 
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.doorbell_ring.poll_many);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.doorbell_ring.reliability_timer_pop);

@@ -45,40 +45,108 @@
 typedef uintptr_t opx_hfisvc_keyset_t;
 typedef uint32_t  opx_hfisvc_key_t;
 
-#define OPX_HFISVC_KEYSET_SHIFT		  (10)
-#define OPX_HFISVC_KEYSET_SIZE		  (1 << OPX_HFISVC_KEYSET_SHIFT)
-#define OPX_HFISVC_KEYSET_BITMAP_SIZE_QWS (OPX_HFISVC_KEYSET_SIZE >> 6)
-#define OPX_HFISVC_KEY_INDEX_MASK	  ((1 << OPX_HFISVC_KEYSET_SHIFT) - 1)
+/*
+ * The maximum number of access_keys to allow.
+ */
+#ifndef OPX_HFISVC_KEYSET_MAX_KEYS
+#define OPX_HFISVC_KEYSET_MAX_KEYS (16 * 1024 * 1024)
+#endif
+
+/*
+ * Allocate 512 QWs (4KB, or 32,768 keys) per malloc.
+ */
+#define OPX_HFISVC_KEYSET_CHUNK_SIZE_QWS  (512)
+#define OPX_HFISVC_KEYSET_CHUNK_SIZE_KEYS (OPX_HFISVC_KEYSET_CHUNK_SIZE_QWS << 6)
+
+OPX_COMPILE_TIME_ASSERT(OPX_HFISVC_KEYSET_CHUNK_SIZE_KEYS <= OPX_HFISVC_KEYSET_MAX_KEYS,
+			"OPX_HFISVC_KEYSET_CHUNK_SIZE_KEYS must be <= OPX_HFISVC_KEYSET_MAX_KEYS!\n");
 
 /**
  * Key set used for vending keys to use with HFI service requests.
- * This uses a 128-byte bitmap to vend keys with values ranging from
- * 0-1023.
+ * This uses a bitmap of qws to vend keys with values ranging from
+ * 0-((bitmap_size_qws * 8) - 1).
  */
 struct opx_hfisvc_keyset {
-	struct opx_hfisvc_keyset *next;
-	uint32_t		  base_val;
-	int32_t			  num_free;
-	uint64_t		  bitmap[OPX_HFISVC_KEYSET_BITMAP_SIZE_QWS];
-} __attribute__((aligned(32)));
+	/* == CACHE LINE 0 == */
+	size_t	 size_in_bytes;
+	uint32_t bitmap_size_qws;
+	uint32_t keys_total;
+	int32_t	 keys_free;
+	uint32_t unused_dw;
+	uint64_t unused_qw[5];
+
+	/* == CACHE LINE 1 == */
+	uint64_t bitmap[];
+} __attribute__((__packed__)) __attribute__((aligned(64)));
+OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfisvc_keyset, bitmap) == FI_OPX_CACHE_LINE_SIZE,
+			"Offset of opx_hfisvc_keyset.bitmap should fall on first cacheline boundary!\n");
+
+__OPX_FORCE_INLINE__
+int opx_hfisvc_keyset_grow(struct opx_hfisvc_keyset **keyset)
+{
+	struct opx_hfisvc_keyset *current_keyset = *keyset;
+
+	if ((current_keyset->keys_total + OPX_HFISVC_KEYSET_CHUNK_SIZE_KEYS) > OPX_HFISVC_KEYSET_MAX_KEYS) {
+		OPX_HFISVC_DEBUG_LOG("HFISVC Unable to allocate additional keyspace, max keys (%u) reached.\n",
+				     OPX_HFISVC_KEYSET_MAX_KEYS);
+		return -FI_ENOMEM;
+	}
+
+	size_t new_size = current_keyset->size_in_bytes + (OPX_HFISVC_KEYSET_CHUNK_SIZE_QWS * sizeof(uint64_t));
+
+	struct opx_hfisvc_keyset *new_keyset;
+
+	if (posix_memalign((void **) &new_keyset, 64, new_size)) {
+		OPX_HFISVC_DEBUG_LOG(
+			"HFISVC Unable to allocate additional keyspace, memory allocation failed. Current allocation is %u total keys (%lu bytes).\n",
+			current_keyset->keys_total, current_keyset->size_in_bytes);
+		return -FI_ENOMEM;
+	}
+
+	new_keyset->size_in_bytes   = new_size;
+	new_keyset->keys_total	    = current_keyset->keys_total + OPX_HFISVC_KEYSET_CHUNK_SIZE_KEYS;
+	new_keyset->keys_free	    = current_keyset->keys_free + OPX_HFISVC_KEYSET_CHUNK_SIZE_KEYS;
+	new_keyset->bitmap_size_qws = current_keyset->bitmap_size_qws + OPX_HFISVC_KEYSET_CHUNK_SIZE_QWS;
+
+	int i;
+	for (i = 0; i < current_keyset->bitmap_size_qws; ++i) {
+		new_keyset->bitmap[i] = current_keyset->bitmap[i];
+	}
+	for (; i < new_keyset->bitmap_size_qws; ++i) {
+		new_keyset->bitmap[i] = 0ul;
+	}
+
+	OPX_HFISVC_DEBUG_LOG("HFISVC Keyset grew from %u keys (%lu bytes) to %u keys (%lu bytes)\n",
+			     current_keyset->keys_total, current_keyset->size_in_bytes, new_keyset->keys_total,
+			     new_keyset->size_in_bytes);
+
+	*keyset = new_keyset;
+
+	free(current_keyset);
+
+	return 0;
+}
 
 /**
  * Initialize the keyset
  */
 __OPX_FORCE_INLINE__
-int opx_hfisvc_keyset_init(uint32_t base_val, opx_hfisvc_keyset_t *keyset)
+int opx_hfisvc_keyset_init(opx_hfisvc_keyset_t *keyset)
 {
+	size_t keyset_mem_size =
+		sizeof(struct opx_hfisvc_keyset) + (OPX_HFISVC_KEYSET_CHUNK_SIZE_QWS * sizeof(uint64_t));
 	struct opx_hfisvc_keyset *new_keyset;
 
-	if (posix_memalign((void **) &new_keyset, 32, sizeof(struct opx_hfisvc_keyset))) {
+	if (posix_memalign((void **) &new_keyset, 64, keyset_mem_size)) {
 		return -ENOMEM;
 	}
 
-	new_keyset->next     = NULL;
-	new_keyset->base_val = base_val;
-	new_keyset->num_free = OPX_HFISVC_KEYSET_SIZE;
+	new_keyset->size_in_bytes   = keyset_mem_size;
+	new_keyset->keys_free	    = OPX_HFISVC_KEYSET_CHUNK_SIZE_KEYS;
+	new_keyset->keys_total	    = OPX_HFISVC_KEYSET_CHUNK_SIZE_KEYS;
+	new_keyset->bitmap_size_qws = OPX_HFISVC_KEYSET_CHUNK_SIZE_QWS;
 
-	for (int i = 0; i < OPX_HFISVC_KEYSET_BITMAP_SIZE_QWS; ++i) {
+	for (int i = 0; i < OPX_HFISVC_KEYSET_CHUNK_SIZE_QWS; ++i) {
 		new_keyset->bitmap[i] = 0ul;
 	}
 
@@ -94,36 +162,44 @@ int opx_hfisvc_keyset_init(uint32_t base_val, opx_hfisvc_keyset_t *keyset)
  *
  */
 __OPX_FORCE_INLINE__
-int opx_hfisvc_keyset_alloc_key(opx_hfisvc_keyset_t keyset, opx_hfisvc_key_t *key,
+int opx_hfisvc_keyset_alloc_key(opx_hfisvc_keyset_t *keyset, opx_hfisvc_key_t *key,
 				struct fi_opx_debug_counters *counters)
 {
-	struct opx_hfisvc_keyset *_keyset = (struct opx_hfisvc_keyset *) keyset;
+	struct opx_hfisvc_keyset *_keyset = (struct opx_hfisvc_keyset *) (*keyset);
 	assert(_keyset);
 	assert(key);
 
-	if (_keyset->num_free < 1) {
-		goto alloc_end;
+	if (_keyset->keys_free < 1) {
+		if (opx_hfisvc_keyset_grow(&_keyset) == 0) {
+			assert(_keyset->keys_free > 1);
+			FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.keyset_grow);
+			*keyset = (opx_hfisvc_keyset_t) _keyset;
+		} else {
+			goto alloc_end;
+		}
 	}
 
-	for (int i = 0; i < OPX_HFISVC_KEYSET_BITMAP_SIZE_QWS; i++) {
+	for (int i = 0; i < _keyset->bitmap_size_qws; i++) {
 		uint64_t inv = ~_keyset->bitmap[i];
 		if (inv) {
 			uint64_t bit_index = __builtin_ctzl(inv);
-			*key		   = (_keyset->base_val << OPX_HFISVC_KEYSET_SHIFT) | (i * 64ul + bit_index);
+			*key		   = (i * 64ul + bit_index);
 			_keyset->bitmap[i] |= (1ul << bit_index);
-			_keyset->num_free--;
+			_keyset->keys_free--;
 
 			FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.alloc);
 
 			return 0;
 		}
 	}
-
-	// TODO: Add FI_WARN about num_free being non-zero when zero keys are available.
+	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+		"HFISVC Keyset error: Keyset has %d keys free of %u keys total, but no available keys were found in bitmap, abort.\n",
+		_keyset->keys_free, _keyset->keys_total);
+	abort();
 
 alloc_end:
 	FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.alloc_enospc);
-	return -ENOSPC;
+	return -FI_ENOSPC;
 }
 
 /**
@@ -138,19 +214,16 @@ void opx_hfisvc_keyset_free_key(opx_hfisvc_keyset_t keyset, opx_hfisvc_key_t key
 	struct opx_hfisvc_keyset *_keyset = (struct opx_hfisvc_keyset *) keyset;
 	assert(_keyset);
 
-	// Assert the key belongs to this keyset
-	assert(((key >> OPX_HFISVC_KEYSET_SHIFT) & UINT32_MAX) == _keyset->base_val);
-
-	uint64_t key_index = key & OPX_HFISVC_KEY_INDEX_MASK;
+	uint64_t key_index = key >> 6;
 
 	OPX_HFISVC_DEBUG_LOG("Freeing key %u, key_index=%016lX, _keyset->bitmap[%lX]=%016lX\n", key, key_index,
-			     key_index >> 6, _keyset->bitmap[key_index >> 6]);
+			     key_index, _keyset->bitmap[key_index]);
 
 	// Assert that the key being freed is currently marked as being used.
-	assert(_keyset->bitmap[key_index >> 6] & (1ul << (key_index & 0x3Ful)));
+	assert(_keyset->bitmap[key_index] & (1ul << (key & 0x3Ful)));
 
-	_keyset->bitmap[key_index >> 6] &= ~(1ul << (key_index & 0x3Ful));
-	_keyset->num_free++;
+	_keyset->bitmap[key_index] &= ~(1ul << (key & 0x3Ful));
+	_keyset->keys_free++;
 }
 
 /**
@@ -161,7 +234,12 @@ void opx_hfisvc_keyset_free(opx_hfisvc_keyset_t keyset)
 {
 	struct opx_hfisvc_keyset *_keyset = (struct opx_hfisvc_keyset *) keyset;
 	assert(_keyset);
-	assert(_keyset->num_free == OPX_HFISVC_KEYSET_SIZE);
+	if (_keyset->keys_free < _keyset->keys_total) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+			"HFISVC Keyset error: Freeing the keyset while there are still %d of %u access keys still outstanding, abort.\n",
+			_keyset->keys_total - _keyset->keys_free, _keyset->keys_total);
+		abort();
+	}
 	free(_keyset);
 }
 
