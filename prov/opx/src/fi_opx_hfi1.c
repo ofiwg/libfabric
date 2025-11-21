@@ -5432,7 +5432,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	ssize_t				     rc		= FI_SUCCESS;
 	union fi_opx_hfi1_pio_state	     pio_state	= *tx->pio_state;
 
-	if (opx_hfisvc_keyset_alloc_key(opx_ep->domain->hfisvc.access_key_set, &access_key,
+	if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.access_key_set, &access_key,
 					FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
 		OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys)\n");
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);

@@ -663,7 +663,7 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 			abort();
 		}
 		OPX_HFISVC_DEBUG_LOG("Initializing hfisvc keyset\n");
-		ret = opx_hfisvc_keyset_init(0, &domain->hfisvc.access_key_set);
+		ret = opx_hfisvc_keyset_init(&domain->hfisvc.access_key_set);
 		if (ret) {
 			fprintf(stderr, "(%d) %s:%s():%d Failed initializing hfisvc keyset! rc=%d\n", getpid(),
 				__FILE__, __func__, __LINE__, ret);
