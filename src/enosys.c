@@ -763,3 +763,69 @@ ssize_t fi_coll_no_msg(struct fid_ep *ep, const struct fi_msg_collective *msg,
 {
 	return -FI_ENOSYS;
 }
+
+/*
+ * fi_ops_rpc
+ */
+
+ssize_t fi_no_rpc_req(struct fid_ep *ep, const void *req_buf, size_t req_len,
+		      void *req_desc, void *resp_buf, size_t resp_len,
+		      void *resp_desc, fi_addr_t dest_addr, int timeout,
+		      void *context)
+{
+	return -FI_ENOSYS;
+}
+
+ssize_t fi_no_rpc_reqv(struct fid_ep *ep, const struct iovec *req_iov,
+		       void **req_desc, size_t req_count, struct iovec *resp_iov,
+		       void **resp_desc, size_t resp_count, fi_addr_t dest_addr,
+		       int timeout, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+ssize_t fi_no_rpc_reqdata(struct fid_ep *ep, const void *req_buf,
+			  size_t req_len, void *req_desc, void *resp_buf,
+			  size_t resp_len, void *resp_desc, uint64_t data,
+			  fi_addr_t dest_addr, int timeout, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+ssize_t fi_no_rpc_reqmsg(struct fid_ep *ep, const struct fi_msg_rpc *msg,
+			 uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
+
+ssize_t fi_no_rpc_resp(struct fid_ep *ep, const void *buf, size_t len,
+		       void *desc, fi_addr_t dest_addr, uint64_t rpc_id,
+		       void *context)
+{
+	return -FI_ENOSYS;
+}
+
+ssize_t fi_no_rpc_respv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+		        size_t count, fi_addr_t dest_addr, uint64_t rpc_id,
+			void *context)
+{
+	return -FI_ENOSYS;
+}
+
+ssize_t fi_no_rpc_respdata(struct fid_ep *ep, const void *buf, size_t len,
+			   void *desc, uint64_t data, fi_addr_t dest_addr,
+			   uint64_t rpc_id, void *context)
+{
+	return -FI_ENOSYS;
+}
+
+ssize_t fi_no_rpc_respmsg(struct fid_ep *ep, const struct fi_msg_rpc_resp *msg,
+		          uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
+
+ssize_t fi_no_rpc_discard(struct fid_ep *ep, uint64_t rpc_id)
+{
+	return -FI_ENOSYS;
+}
