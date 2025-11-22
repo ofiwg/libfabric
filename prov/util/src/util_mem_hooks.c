@@ -480,6 +480,29 @@ static bool ofi_is_function_patched(struct ofi_intercept *intercept)
 }
 #endif
 
+static void *ofi_find_libc_symbol(const char *symbol)
+{
+	void *handle;
+	void *addr;
+
+	handle = dlopen("libc.so.6", RTLD_LAZY | RTLD_NOLOAD);
+	if (!handle) {
+		FI_DBG(&core_prov, FI_LOG_MR,
+		       "could not open libc.so.6\n");
+		return NULL;
+	}
+
+	addr = dlsym(handle, symbol);
+	dlclose(handle);
+
+	if (!addr) {
+		FI_DBG(&core_prov, FI_LOG_MR,
+		       "could not find symbol %s in libc.so.6\n", symbol);
+	}
+
+	return addr;
+}
+
 /*
  * This implementation intercepts syscalls by overwriting the beginning of
  * glibc's functions with a jump to our intercept function. After notifying the
@@ -494,14 +517,13 @@ static int ofi_intercept_symbol(struct ofi_intercept *intercept)
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "overwriting function %s\n", intercept->symbol);
 
-	func_addr = dlsym(RTLD_NEXT, intercept->symbol);
+	func_addr = ofi_find_libc_symbol(intercept->symbol);
 	if (!func_addr) {
 		func_addr = dlsym(RTLD_DEFAULT, intercept->symbol);
 		if (!func_addr) {
 			FI_DBG(&core_prov, FI_LOG_MR,
-			       "could not find symbol %s\n", intercept->symbol);
-			ret = -FI_ENOMEM;
-			return ret;
+			       "could not find symbol %s in any library\n", intercept->symbol);
+			return -FI_ENOENT;
 		}
 	}
 
