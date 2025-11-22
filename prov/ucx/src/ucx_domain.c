@@ -185,8 +185,8 @@ static int ucx_mr_control(struct fid *fid, int command, void *arg)
 	memcpy(raw_attr->raw_key, tmp, tmp_size);
 	*raw_attr->key_size = tmp_size;
 	ucp_rkey_buffer_release(tmp);
+	*raw_attr->base_addr = ucx_mr->base_addr;
 
-	/* TODO: should (*raw_attr->base_addr) be set? unused for now. */
 	return FI_SUCCESS;
 }
 
@@ -286,6 +286,7 @@ static int ucx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto out;
 	}
 
+	ucx_mr->base_addr = (uint64_t)(uintptr_t) attr->mr_iov->iov_base;
 	mr->mr_fid.key = mr->key = key;
 	mr->mr_fid.mem_desc = (void *)(uintptr_t) key;
 

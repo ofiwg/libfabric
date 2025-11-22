@@ -113,6 +113,7 @@ struct ucx_fabric {
 struct ucx_mr {
 	struct ofi_mr omr;
 	ucp_mem_h memh;
+	uint64_t base_addr;
 };
 
 #define FI_UCX_PKEY_SIGNATURE	(0x20230116ULL)
