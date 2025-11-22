@@ -346,7 +346,7 @@ static int util_queue_msg(struct fi_peer_rx_entry *rx_entry)
 
 	util_entry = container_of(rx_entry, struct util_rx_entry, peer_entry);
 	assert(util_entry->status == RX_ENTRY_UNEXP);
-	if (rx_entry->addr == FI_ADDR_UNSPEC) {
+	if (!srx_ctx->dir_recv || rx_entry->addr == FI_ADDR_UNSPEC) {
 		dlist_insert_tail(&util_entry->d_entry,
 				  &srx_ctx->unspec_unexp_msg_queue);
 	} else {
@@ -371,7 +371,7 @@ static int util_queue_tag(struct fi_peer_rx_entry *rx_entry)
 
 	util_entry = container_of(rx_entry, struct util_rx_entry, peer_entry);
 	assert(util_entry->status == RX_ENTRY_UNEXP);
-	if (rx_entry->addr == FI_ADDR_UNSPEC) {
+	if (!srx_ctx->dir_recv || rx_entry->addr == FI_ADDR_UNSPEC) {
 		dlist_insert_tail(&util_entry->d_entry,
 				  &srx_ctx->unspec_unexp_tag_queue);
 	} else {
