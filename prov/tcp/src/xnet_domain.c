@@ -171,13 +171,31 @@ xnet_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	return ret;
 }
 
-static int
-xnet_mplex_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
-		uint64_t flags, struct fid_mr **mr_fid)
+static int xnet_mr_map_insert(struct fid *fid, const struct fi_mr_attr *attr)
+{
+	struct util_domain *domain;
+	struct fi_mr_attr cur_abi_attr;
+	uint64_t key;
+	int ret = 0;
+
+	domain = container_of(fid, struct util_domain, domain_fid.fid);
+
+	ofi_mr_update_attr(domain->fabric->fabric_fid.api_version,
+			   domain->info_domain_caps, attr, &cur_abi_attr, 0);
+
+	ofi_genlock_lock(&domain->lock);
+
+	ret = ofi_mr_map_insert(&domain->mr_map, &cur_abi_attr, &key, NULL, 0);
+
+	ofi_genlock_unlock(&domain->lock);
+	return ret;
+}
+
+static int xnet_mplex_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+				 uint64_t flags, struct fid_mr **mr_fid)
 {
 	struct xnet_domain *domain;
 	struct fid_list_entry *item;
-	struct fid_mr *sub_mr_fid;
 	struct ofi_mr *mr;
 	int ret;
 
@@ -190,10 +208,13 @@ xnet_mplex_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr = container_of(*mr_fid, struct ofi_mr, mr_fid.fid);
 	mr->mr_fid.fid.ops = &xnet_mplex_mr_fi_ops;
 
+	if (!(attr->access & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
+		return 0;
+
 	ofi_genlock_lock(&domain->subdomain_list_lock);
-	dlist_foreach_container(&domain->subdomain_list,
-				struct fid_list_entry, item, entry) {
-		ret = xnet_mr_regattr(item->fid, attr, flags, &sub_mr_fid);
+	dlist_foreach_container (&domain->subdomain_list, struct fid_list_entry,
+				 item, entry) {
+		ret = xnet_mr_map_insert(item->fid, attr);
 		if (ret) {
 			FI_WARN(&xnet_prov, FI_LOG_MR,
 				"Failed to reg mr (%ld) from subdomain (%p)\n",
