@@ -175,7 +175,7 @@ int efa_user_info_check_domain_object(const struct fi_info *hints,
 	return 0;
 }
 
-#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+#if EFA_HAVE_NON_SYSTEM_HMEM
 /**
  * @brief determine if EFA provider should claim support of FI_HMEM in info
  * @param[in]	version		libfabric API version used by user
@@ -186,7 +186,7 @@ bool efa_user_info_should_support_hmem(int version)
 {
 	bool any_hmem, rdma_allowed;
 	char *extra_info = "";
-	int i;
+	enum fi_hmem_iface iface;
 
 	/* Note that the default behavior of EFA provider is different between
 	 * libfabric API version when CUDA is used as HMEM system.
@@ -220,12 +220,11 @@ bool efa_user_info_should_support_hmem(int version)
 	}
 
 	any_hmem = false;
-	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		enum fi_hmem_iface hmem_iface = efa_hmem_ifaces[i];
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
 		/* Note that .initialized doesn't necessarily indicate there are
 		   hardware devices available, only that the libraries are
 		   available. */
-		if (hmem_ops[hmem_iface].initialized) {
+		if (hmem_ops[iface].initialized) {
 			any_hmem = true;
 		}
 	}
