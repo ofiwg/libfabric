@@ -169,7 +169,7 @@ int rxd_av_insert_dg_addr(struct rxd_av *av, const void *addr,
 		goto nomem;
 	}
 
-	ret = ofi_rbmap_insert(&av->rbmap, (void *)addr, (void *)(*rxd_addr),
+	ret = ofi_rbmap_insert(&av->rbmap, (void *)addr, (void *)(uintptr_t)(*rxd_addr),
 			       NULL);
 	if (ret) {
 		assert(ret != -FI_EALREADY);
@@ -213,7 +213,7 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	for (; i < count; i++, addr = (uint8_t *) addr + av->dg_addrlen) {
 		node = ofi_rbmap_find(&av->rbmap, (void *) addr);
 		if (node) {
-			rxd_addr = (fi_addr_t) node->data;
+			rxd_addr = (fi_addr_t)(uintptr_t) node->data;
 		} else {
 			ret = rxd_av_insert_dg_addr(av, addr, &rxd_addr,
 						    flags, sync_err ?
@@ -351,7 +351,7 @@ static int rxd_av_close(struct fid *fid)
 		return ret;
 
 	while ((node = ofi_rbmap_get_root(&av->rbmap))) {
-		rxd_addr = (fi_addr_t) node->data;
+		rxd_addr = (fi_addr_t)(uintptr_t) node->data;
 		dg_addr = (intptr_t)ofi_idx_lookup(&av->rxdaddr_dg_idx,
 						   (int) rxd_addr);
 

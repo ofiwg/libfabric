@@ -959,7 +959,7 @@ monitor_shm_init(struct monitor_context *mon_ctx)
 	}
 
 
-	if (snprintf(mon_ctx->shm_name, PATH_MAX, "%s/%u_%u_%lu_%lu_%s",
+	if (snprintf(mon_ctx->shm_name, PATH_MAX, "%s/%u_%u_%" PRIu64 "_%lu_%s",
 		     outpath, getppid(), getpid(), monitor_get_id(),job_id,
 		     hprov->name) < 0) {
 		FI_WARN(hprov, FI_LOG_CORE, "Failed so format shm name!\n");
