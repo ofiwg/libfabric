@@ -282,7 +282,8 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->cma_cap_self = SMR_VMA_CAP_NA;
 
 	(*smr)->xpmem_cap_self = SMR_VMA_CAP_OFF;
-	if (xpmem && smr_env.use_xpmem) {
+	if (xpmem && smr_env.use_xpmem &&
+	    !(attr->flags & SMR_FLAG_HMEM_ENABLED)) {
 		(*smr)->xpmem_cap_self = SMR_VMA_CAP_ON;
 		(*smr)->xpmem_self = xpmem->pinfo;
 	}
