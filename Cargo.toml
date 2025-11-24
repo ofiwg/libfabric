@@ -15,7 +15,7 @@ resolver = "3"
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-description = "Lightweight Rust bindings for Libfabric - a communication API for high-performance parallel and distributed applications."
+description = "The official distribution of lightweight Rust bindings for Libfabric - a communication API for high-performance parallel and distributed applications, by the OFI Working Group."
 authors = [
     "Libfabric Developers <libfabric-users@lists.openfabrics.org>",
 ]
