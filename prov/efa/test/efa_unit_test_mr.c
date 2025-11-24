@@ -148,7 +148,7 @@ void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
 	struct fid_mr *mr = NULL;
 	struct fi_mr_attr mr_reg_attr = { 0 };
 	struct iovec iovec;
-	int err;
+	int err, baseline_ct, baseline_sz;
 
 	if (hmem_ops[FI_HMEM_CUDA].initialized &&
 	    g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
@@ -161,7 +161,9 @@ void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
 
 		efa_domain = container_of(resource->domain, struct efa_domain,
 					  util_domain.domain_fid);
-		test_efa_mr_impl(efa_domain, mr, 0, 0, false);
+		/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
+		baseline_ct = efa_domain->ibv_mr_reg_ct;
+		baseline_sz = efa_domain->ibv_mr_reg_sz;
 
 		err = ofi_cudaMalloc(&buf, mr_size);
 		assert_int_equal(err, 0);
@@ -178,10 +180,10 @@ void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
 		assert_int_equal(err, 0);
 
 		/* FI_MR_DMABUF flag was not set, so GDRCopy should be registered if available */
-		test_efa_mr_impl(efa_domain, mr, 1, mr_size, true);
+		test_efa_mr_impl(efa_domain, mr, baseline_ct + 1, baseline_sz + mr_size, true);
 
 		assert_int_equal(fi_close(&mr->fid), 0);
-		test_efa_mr_impl(efa_domain, NULL, 0, 0, false);
+		test_efa_mr_impl(efa_domain, NULL, baseline_ct, baseline_sz, false);
 
 		err = ofi_cudaFree(buf);
 		assert_int_equal(err, 0);
@@ -204,7 +206,7 @@ void test_efa_direct_mr_reg_no_gdrcopy(struct efa_resource **state)
 	struct fid_mr *mr = NULL;
 	struct fi_mr_attr mr_reg_attr = { 0 };
 	struct iovec iovec;
-	int err;
+	int err, baseline_ct, baseline_sz;
 
 	if (g_efa_hmem_info[FI_HMEM_CUDA].initialized &&
 	    g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
@@ -217,7 +219,9 @@ void test_efa_direct_mr_reg_no_gdrcopy(struct efa_resource **state)
 
 		efa_domain = container_of(resource->domain, struct efa_domain,
 					  util_domain.domain_fid);
-		test_efa_mr_impl(efa_domain, mr, 0, 0, false);
+		/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
+		baseline_ct = efa_domain->ibv_mr_reg_ct;
+		baseline_sz = efa_domain->ibv_mr_reg_sz;
 
 		err = ofi_cudaMalloc(&buf, mr_size);
 		assert_int_equal(err, 0);
@@ -234,10 +238,10 @@ void test_efa_direct_mr_reg_no_gdrcopy(struct efa_resource **state)
 		assert_int_equal(err, 0);
 
 		/* no GDRCopy in the efa-direct path */
-		test_efa_mr_impl(efa_domain, mr, 1, mr_size, false);
+		test_efa_mr_impl(efa_domain, mr, baseline_ct + 1, baseline_sz + mr_size, false);
 
 		assert_int_equal(fi_close(&mr->fid), 0);
-		test_efa_mr_impl(efa_domain, NULL, 0, 0, false);
+		test_efa_mr_impl(efa_domain, NULL, baseline_ct, baseline_sz, false);
 
 		err = ofi_cudaFree(buf);
 		assert_int_equal(err, 0);
