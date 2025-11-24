@@ -400,9 +400,16 @@ static inline int efa_data_path_direct_post_send(
 		return err;
 	}
 
+	/* This means we are starting from fresh after a db ring so we need a barrier */
+	if (!sq->num_wqe_pending)
+		mmio_wc_start();
+
 	/* when reaching the sq max_batch, ring the db */
-	if (sq->num_wqe_pending == sq->wq.max_batch)
+	if (sq->num_wqe_pending == sq->wq.max_batch) {
 		efa_data_path_direct_send_wr_ring_db(sq);
+		/* we will prepare more WQE after db ring, so we need a barrier */
+		mmio_wc_start();
+	}
 
 	/* Set work request ID */
 	qp->ibv_qp_ex->wr_id = wr_id;
@@ -481,12 +488,22 @@ static inline int efa_data_path_direct_post_read(
 	/* Validate SGE count for RDMA operations */
 	if (OFI_UNLIKELY(sge_count > EFA_IO_TX_DESC_NUM_RDMA_BUFS)) {
 		EFA_WARN(FI_LOG_EP_DATA, "EFA device doesn't support > %d iov for rdma operations\n", EFA_IO_TX_DESC_NUM_RDMA_BUFS);
+		/* ring db for earlier wqes if there is any */
+		if (sq->num_wqe_pending)
+			efa_data_path_direct_send_wr_ring_db(sq);
 		return EINVAL;
 	}
 
+	/* This means we are starting from fresh after a db ring so we need a barrier */
+	if (!sq->num_wqe_pending)
+		mmio_wc_start();
+
 	/* when reaching the sq max_batch, ring the db */
-	if (sq->num_wqe_pending == sq->wq.max_batch)
+	if (sq->num_wqe_pending == sq->wq.max_batch) {
 		efa_data_path_direct_send_wr_ring_db(sq);
+		/* we will prepare more WQE after db ring, so we need a barrier */
+		mmio_wc_start();
+	}
 
 	/* Set work request ID */
 	qp->ibv_qp_ex->wr_id = wr_id;
@@ -552,6 +569,16 @@ efa_data_path_direct_post_write(
 	struct efa_io_remote_mem_addr *remote_mem = &local_wqe.data.rdma_req.remote_mem;
 	int err;
 
+	/* Validate SGE count for RDMA operations */
+	if (OFI_UNLIKELY(sge_count > EFA_IO_TX_DESC_NUM_RDMA_BUFS)) {
+		EFA_WARN(FI_LOG_EP_DATA, "EFA device doesn't support > %d iov for rdma operations\n", EFA_IO_TX_DESC_NUM_RDMA_BUFS);
+		/* ring db for earlier wqes if there is any */
+		if (sq->num_wqe_pending) {
+			efa_data_path_direct_send_wr_ring_db(sq);
+		}
+		return EINVAL;
+	}
+
 	/* Validate queue space */
 	err = efa_post_send_validate(qp);
 	if (OFI_UNLIKELY(err)) {
@@ -564,12 +591,22 @@ efa_data_path_direct_post_write(
 	/* Validate SGE count for RDMA operations */
 	if (OFI_UNLIKELY(sge_count > EFA_IO_TX_DESC_NUM_RDMA_BUFS)) {
 		EFA_WARN(FI_LOG_EP_DATA, "EFA device doesn't support > %d iov for rdma operations\n", EFA_IO_TX_DESC_NUM_RDMA_BUFS);
+		/* ring db for earlier wqes if there is any */
+		if (sq->num_wqe_pending)
+			efa_data_path_direct_send_wr_ring_db(sq);
 		return EINVAL;
 	}
 
+	/* This means we are starting from fresh after a db ring so we need a barrier */
+	if (!sq->num_wqe_pending)
+		mmio_wc_start();
+
 	/* when reaching the sq max_batch, ring the db */
-	if (sq->num_wqe_pending == sq->wq.max_batch)
+	if (sq->num_wqe_pending == sq->wq.max_batch) {
 		efa_data_path_direct_send_wr_ring_db(sq);
+		/* we will prepare more WQE after db ring, so we need a barrier */
+		mmio_wc_start();
+	}
 
 	/* Set work request ID */
 	qp->ibv_qp_ex->wr_id = wr_id;

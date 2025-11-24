@@ -585,7 +585,6 @@ efa_data_path_direct_send_wr_ring_db(struct efa_data_path_direct_sq *sq)
 {
 	mmio_flush_writes();
 	efa_sq_ring_doorbell(sq, sq->wq.pc);
-	mmio_wc_start();
 	sq->num_wqe_pending = 0;
 }
 
