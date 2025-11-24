@@ -1,3 +1,7 @@
+# ofi-libfabric-sys
+
+The official distribution of lightweight Rust bindings for Libfabric - a communication API for high-performance parallel and distributed applications, by the OFI Working Group.
+
 ### Motivation
 
 Increasing number of HPC networking code is being written in Rust. Naturally, to
@@ -14,15 +18,19 @@ unit upon compilation.
 ### Build
 
 ```
+// Not strictly necessary for the build process, but necessary for running the built library.
+LD_LIBRARY_PATH={your_directory_containing_libfabric.so}
+
 // Clean the existing build.
 cargo clean
 
-// Build, using the Libfabric binary that is compiled on-the-fly.
-cargo build --features vendored
+// [Recommended] Build, using the already installed Libfabric.
+PKG_CONFIG_PATH={your_directory_containing_libfabric.pc} cargo build
 
-// Build, using the already installed Libfabric.
-// You may be required to set `PKG_CONFIG_PATH` env variable to point towards `libfabric.pkg` file.
-cargo build
+// [Only for library development] Build, using the Libfabric binary that is compiled on-the-fly.
+// The vendored option is not supported for library import scenario (imported under Cargo.toml).
+// Rather, it is meant for developers building the ofi-libfabric-sys library under the libfabric repo.
+cargo build --features vendored
 
 // Unit-tests.
 cargo test
@@ -37,6 +45,8 @@ Add the crate dependency under your Rust application's `Cargo.toml` file. Then;
 
 ```rust
 use ofi_libfabric_sys::bindgen as ffi;
+use std::ffi::CString;
+use std::ptr;
 
 fn test_get_info() {
     unsafe {
@@ -45,10 +55,10 @@ fn test_get_info() {
         assert_eq!(hints.is_null(), false);
 
         (*hints).caps = ffi::FI_MSG as u64;
-        (*hints).mode = ff::FI_CONTEXT;
+        (*hints).mode = ffi::FI_CONTEXT;
         (*(*hints).ep_attr).type_ = ffi::fi_ep_type_FI_EP_RDM;
         (*(*hints).domain_attr).mr_mode = ffi::FI_MR_LOCAL as i32;
-        let prov_name = CString::new("efa").unwrap();
+        let prov_name = CString::new("tcp").unwrap();
         (*(*hints).fabric_attr).prov_name = prov_name.into_raw() as *mut i8;
 
         // Get Fabric info based on the hints.
@@ -80,7 +90,7 @@ fn test_get_info() {
 
 - `build.rs`: The actual build script for the bindgen.
 - `src/lib.rs`: The generated binding is copy-pasted programmatically and
-  publicly exported under `bindings` namespace.
+  publicly exported under `bindgen` namespace.
 - `wrapper.[ch]`: Wrapper source files that simply calls the static inline
   functions. This way, an isolated translation unit for each static inline
   function is made, for which the Rust bindgen is able to link against it.
