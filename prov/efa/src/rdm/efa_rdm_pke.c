@@ -423,7 +423,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	int ret = 0, pkt_idx, iov_cnt;
 	bool use_inline;
 	uint64_t flags_in_loop;
-	uint16_t cq_data = 0;
+	uint64_t cq_data = 0;
 	uint32_t qpn, qkey;
 	uint64_t wr_id;
 
@@ -633,7 +633,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	int err = 0;
 	struct efa_ah *ah;
 	uint32_t qpn, qkey;
-	uint16_t cq_data = 0;
+	uint64_t cq_data = 0;
 	uint64_t wr_id;
 
 	ep = pkt_entry->ep;
