@@ -513,6 +513,11 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	int ret, retv, i;
 	enum fi_hmem_iface iface;
 
+	if (info->mode & FI_RX_CQ_DATA) {
+		EFA_WARN(FI_LOG_EP_CTRL, "FI_RX_CQ_DATA is not supported\n");
+		return -FI_EINVAL;
+	}
+
 	efa_rdm_ep = calloc(1, sizeof(*efa_rdm_ep));
 	if (!efa_rdm_ep)
 		return -FI_ENOMEM;
