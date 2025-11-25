@@ -212,8 +212,6 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 		opx_sim_ureg_store((uint64_t) bar, &_value, __func__, __LINE__); \
 	} while (false)
 
-#define OPX_HFI1_BAR_UREG_LOAD(bar) opx_sim_ureg_load((uint64_t) bar)
-
 #define OPX_TXE_PIO_SEND ((uint64_t) 0x2000000)
 
 #define OPX_JKR_RXE_PER_CONTEXT_OFFSET ((uint64_t) 0x1600000)
@@ -277,14 +275,6 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 	fi_opx_global.hfi_local_info.sim_rctxt_fd = fi_opx_global.hfi_local_info.sim_sctxt_fd = -1
 
 #if !defined(NDEBUG) && defined(OPX_DEBUG_VERBOSE)
-#define OPX_HFI1_BAR_UREG_LOAD(bar)                                                                                  \
-	({                                                                                                           \
-		volatile uint64_t _value = *(volatile uint64_t *) bar;                                               \
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s:%u FI_OPX_HFI1_BAR_LOAD: offset %#16.16lX\n",   \
-			     __func__, __LINE__, (uint64_t) (bar));                                                  \
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_HFI1_BAR_LOAD: value %#16.16lX\n", _value); \
-		_value;                                                                                              \
-	})
 
 #define OPX_HFI1_BAR_PIO_STORE(bar, value)                                                                          \
 	do {                                                                                                        \
@@ -306,10 +296,9 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 
 #else
 
-#define OPX_HFI1_BAR_PIO_STORE(bar, value)  *(volatile uint64_t *) bar = (uint64_t) value;
-#define OPX_HFI1_BAR_UREG_STORE(bar, value) *(volatile uint64_t *) bar = (uint64_t) value;
+#define OPX_HFI1_BAR_PIO_STORE(bar, value) *(volatile uint64_t *) bar = (uint64_t) value;
 
-#define OPX_HFI1_BAR_UREG_LOAD(bar) *(volatile uint64_t *) bar
+#define OPX_HFI1_BAR_UREG_STORE(bar, value) *(volatile uint64_t *) bar = (uint64_t) value;
 
 #endif
 
