@@ -64,8 +64,9 @@ static ssize_t ucx_write(struct fid_ep *ep, const void *buf, size_t len,
 		.context = context,
 		.data = 0,
 	};
+	uint64_t flags = u_ep->ep.tx_op_flags | FI_RMA | FI_WRITE;
 
-	return ucx_proc_rma_msg(ep, &msg, u_ep->ep.tx_op_flags, UCX_DO_WRITE);
+	return ucx_proc_rma_msg(ep, &msg, flags, UCX_DO_WRITE);
 }
 
 static ssize_t ucx_writev(struct fid_ep *ep, const struct iovec *iov,
@@ -91,9 +92,9 @@ static ssize_t ucx_writev(struct fid_ep *ep, const struct iovec *iov,
 			.context = context,
 			.data = 0,
 		};
+		uint64_t flags = u_ep->ep.tx_op_flags | FI_RMA | FI_WRITE;
 
-		return ucx_proc_rma_msg(ep, &msg, u_ep->ep.tx_op_flags,
-					UCX_DO_WRITE);
+		return ucx_proc_rma_msg(ep, &msg, flags, UCX_DO_WRITE);
 	}
 }
 
@@ -121,8 +122,9 @@ static ssize_t ucx_read(struct fid_ep *ep, void *buf, size_t len,
 		.context = context,
 		.data = 0,
 	};
+	uint64_t flags = u_ep->ep.tx_op_flags | FI_RMA | FI_READ;
 
-	return ucx_proc_rma_msg(ep, &msg, u_ep->ep.tx_op_flags, UCX_DO_READ);
+	return ucx_proc_rma_msg(ep, &msg, flags, UCX_DO_READ);
 }
 
 static ssize_t ucx_readv(struct fid_ep *ep, const struct iovec *iov,
@@ -148,9 +150,9 @@ static ssize_t ucx_readv(struct fid_ep *ep, const struct iovec *iov,
 			.context = context,
 			.data = 0,
 		};
+		uint64_t flags = u_ep->ep.tx_op_flags | FI_RMA | FI_READ;
 
-		return ucx_proc_rma_msg(ep, &msg, u_ep->ep.tx_op_flags,
-					UCX_DO_READ);
+		return ucx_proc_rma_msg(ep, &msg, flags, UCX_DO_READ);
 	}
 }
 
@@ -160,7 +162,8 @@ static ssize_t ucx_writemsg(struct fid_ep *ep,
 {
 	struct ucx_ep *u_ep = container_of(ep, struct ucx_ep, ep.ep_fid);
 
-	return ucx_proc_rma_msg(ep, msg, flags | u_ep->ep.tx_msg_flags, UCX_DO_WRITE);
+	flags |= (u_ep->ep.tx_msg_flags | FI_RMA | FI_WRITE);
+	return ucx_proc_rma_msg(ep, msg, flags, UCX_DO_WRITE);
 }
 
 static ssize_t ucx_readmsg(struct fid_ep *ep,
@@ -169,7 +172,8 @@ static ssize_t ucx_readmsg(struct fid_ep *ep,
 {
 	struct ucx_ep *u_ep = container_of(ep, struct ucx_ep, ep.ep_fid);
 
-	return ucx_proc_rma_msg(ep, msg, flags | u_ep->ep.tx_msg_flags, UCX_DO_READ);
+	flags |= (u_ep->ep.tx_msg_flags | FI_RMA | FI_READ);
+	return ucx_proc_rma_msg(ep, msg, flags, UCX_DO_READ);
 }
 
 void ucx_rma_callback(void *request, ucs_status_t status)
@@ -185,7 +189,7 @@ void ucx_rma_callback(void *request, ucs_status_t status)
 		if (ucx_req->completion.flags & FI_COMPLETION)
 			ofi_cq_write(ucx_req->ep->ep.tx_cq,
 				     ucx_req->completion.op_context,
-				     ucx_req->completion.flags,
+				     ucx_req->completion.flags & ~FI_COMPLETION,
 				     0, NULL, 0, 0);
 	} else {
 		FI_DBG( &ucx_prov,FI_LOG_CORE,
@@ -199,7 +203,7 @@ void ucx_rma_callback(void *request, ucs_status_t status)
 
 		ucx_write_error_completion(ucx_req->ep->ep.tx_cq,
 					   ucx_req->completion.op_context,
-					   ucx_req->completion.flags,
+					   ucx_req->completion.flags & ~FI_COMPLETION,
 					   status,
 					   -ucx_translate_errcode(status),
 					   0, ucx_req->completion.tag);
@@ -308,8 +312,8 @@ static ssize_t ucx_proc_rma_msg(struct fid_ep *ep,
 			ofi_ep_cntr_inc(&u_ep->ep, CNTR_RD);
 
 		if (flags & FI_COMPLETION)
-			ofi_cq_write(u_ep->ep.tx_cq, msg->context, flags,
-				     0, NULL, 0, 0);
+			ofi_cq_write(u_ep->ep.tx_cq, msg->context,
+				     flags & ~FI_COMPLETION, 0, NULL, 0, 0);
 		return FI_SUCCESS;
 	}
 
