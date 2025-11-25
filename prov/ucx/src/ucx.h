@@ -104,6 +104,7 @@ struct ucx_global_descriptor{
 	int ep_flush;
 	int enable_spawn;
 	int check_req_leak;
+	int single_thread;
 };
 
 struct ucx_fabric {

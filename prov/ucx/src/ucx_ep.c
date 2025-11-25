@@ -263,7 +263,6 @@ int ucx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ucs_status_t status = UCS_OK;
 	ucp_worker_params_t worker_params = {
 		.field_mask = UCP_WORKER_PARAM_FIELD_THREAD_MODE,
-		.thread_mode = UCS_THREAD_MODE_SINGLE,
 	};
 	void *addr_local = NULL;
 	size_t addr_len_local;
@@ -278,6 +277,13 @@ int ucx_ep_open(struct fid_domain *domain, struct fi_info *info,
 				       context, ucx_ep_progress);
 	if (ofi_status)
 		goto free_ep;
+
+	if (ucx_descriptor.single_thread)
+		worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
+	else if (info->domain_attr->threading == FI_THREAD_SAFE)
+		worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+	else
+		worker_params.thread_mode = UCS_THREAD_MODE_SERIALIZED;
 
 #if HAVE_DECL_UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK
 	if (!ucx_descriptor.check_req_leak) {
