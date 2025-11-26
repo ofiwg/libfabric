@@ -56,6 +56,9 @@ Threading
 *FI_UCX_CHECK_REQ_LEAK*
 : Check request leak (default: disabled).
 
+*FI_UCX_SINGLE_THREAD*
+: Only use a single thread for all UCX operations (default: disabled).
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
