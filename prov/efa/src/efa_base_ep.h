@@ -93,6 +93,7 @@ struct efa_base_ep {
 	/* Only used by RDM ep type */
 	struct efa_qp *user_recv_qp; /* Separate qp to receive pkts posted by users */
 	struct efa_recv_wr *user_recv_wr_vec;
+	bool use_unsolicited_write_recv;
 };
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);
