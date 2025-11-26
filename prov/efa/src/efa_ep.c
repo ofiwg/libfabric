@@ -171,6 +171,17 @@ static int efa_ep_setopt(fid_t fid, int level, int optname, const void *optval, 
 	/* no op as efa direct ep will not handshake with peers */
 	case FI_OPT_EFA_HOMOGENEOUS_PEERS:
 		break;
+	case FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		if (!(ep->info->mode & FI_RX_CQ_DATA) && !*(bool *)optval) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "FI_RX_CQ_DATA is required when unsolicited "
+				 "write recv is disabled.\n");
+			return -FI_EOPNOTSUPP;
+		}
+		ep->use_unsolicited_write_recv = *(bool *)optval;
+		break;
 	default:
 		EFA_INFO(FI_LOG_EP_CTRL, "Unknown / unsupported endpoint option\n");
 		return -FI_ENOPROTOOPT;
