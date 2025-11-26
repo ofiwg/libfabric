@@ -54,7 +54,8 @@ static int ucx_dom_control(struct fid *fid, int command, void *arg)
 	struct ucx_mr_pkey *pkey;
 	struct ucx_mr_rkey *rkey;
 	struct fi_mr_map_raw *map_raw;
-
+	struct dlist_entry *tmp;
+	
 	switch (command) {
 	case FI_MAP_RAW_MR:
 		map_raw = arg;
@@ -85,8 +86,8 @@ static int ucx_dom_control(struct fid *fid, int command, void *arg)
 		if (pkey->signature != FI_UCX_PKEY_SIGNATURE)
 			return -FI_EINVAL;
 
-		dlist_foreach_container(&pkey->rkey_list, struct ucx_mr_rkey,
-					rkey, entry) {
+		dlist_foreach_container_safe(&pkey->rkey_list, struct ucx_mr_rkey,
+					rkey, entry, tmp) {
 			FI_DBG(&ucx_prov,FI_LOG_MR,
 			       "UCX/RMA: removed key {%" PRIu64 ":%" PRIu64 "}\n",
 			       rkey->id.owner_addr, rkey->id.key);
