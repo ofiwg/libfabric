@@ -77,6 +77,7 @@ enum {
 	FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES, /* bool */
 	FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES, /* bool */
 	FI_OPT_EFA_HOMOGENEOUS_PEERS,   /* bool */
+	FI_OPT_EFA_CQ_FLOW_CONTROL,     /* bool */
 };
 
 struct fi_fid_export {
