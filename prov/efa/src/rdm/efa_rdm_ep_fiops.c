@@ -1753,6 +1753,11 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 			return -FI_EINVAL;
 		efa_rdm_ep->homogeneous_peers = *(bool *)optval;
 		break;
+	case FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		efa_rdm_ep->base_ep.use_unsolicited_write_recv = *(bool *)optval;
+		break;
 	default:
 		EFA_INFO(FI_LOG_EP_CTRL, "Unknown endpoint option\n");
 		return -FI_ENOPROTOOPT;

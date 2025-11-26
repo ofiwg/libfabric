@@ -179,6 +179,13 @@ provider for AWS Neuron or Habana SynapseAI.
   is kicked off, due to a current device limitation.
   The default value is false.
 
+*FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV - bool*
+: This option only applies to the fi_setopt() call.
+  It is used to disable unsolicited write recv for this endpoint, which can reduce
+  the likelihood of CQ overflow. The default value is true.
+  For efa-direct, FI_RX_CQ_DATA is required when FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV
+  is false, or it will return -FI_EOPNOTSUPP for the call to fi_setopt().
+
 # PROVIDER SPECIFIC DOMAIN OPS
 The efa provider exports extensions for operations
 that are not provided by the standard libfabric interface. These extensions
