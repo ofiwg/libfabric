@@ -1877,3 +1877,72 @@ void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data(struct efa_
 	/* When FI_RX_CQ_DATA is set, unsolicited write recv should be disabled */
 	assert_false(efa_base_ep->qp->unsolicited_write_recv_enabled);
 }
+
+/**
+ * @brief Test that unsolicited write recv is disabled when FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV is false
+ */
+void test_efa_rdm_ep_setopt_cq_flow_control(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	bool optval = false;
+	
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+		base_ep.util_ep.ep_fid);
+	assert_true(ep->base_ep.use_unsolicited_write_recv);
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+				   FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV, &optval,
+				   sizeof(optval)),
+			 FI_SUCCESS);
+	assert_false(ep->base_ep.use_unsolicited_write_recv);
+	assert_int_equal(fi_enable(resource->ep), 0);
+	assert_false(ep->base_ep.qp->unsolicited_write_recv_enabled);
+}
+
+/**
+ * @brief Test disabling FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV will fail without FI_RX_CQ_DATA in efa direct
+ */
+void test_efa_direct_ep_setopt_cq_flow_control_no_rx_cq_data(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_base_ep;
+	bool optval = false;
+	
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+				   FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV, &optval,
+				   sizeof(optval)),
+			 -FI_EOPNOTSUPP);
+	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	assert_true(efa_base_ep->use_unsolicited_write_recv);
+}
+
+/**
+ * @brief Test setting FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV with FI_RX_CQ_DATA will disable unsolicited write recv
+ */
+void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_base_ep;
+	bool optval = false;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(resource->hints);
+
+	resource->hints->mode |= FI_RX_CQ_DATA;
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 18),
+	                                            resource->hints, false, true);
+
+	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	assert_true(efa_base_ep->use_unsolicited_write_recv);
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+				   FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV, &optval,
+				   sizeof(optval)),
+			 FI_SUCCESS);
+	assert_false(efa_base_ep->use_unsolicited_write_recv);
+	assert_int_equal(fi_enable(resource->ep), 0);
+	assert_false(efa_base_ep->qp->unsolicited_write_recv_enabled);
+}
