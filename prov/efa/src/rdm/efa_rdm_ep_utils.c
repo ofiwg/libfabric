@@ -297,6 +297,18 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 
 	assert(rxe->iov_count > 0  && rxe->iov_count <= ep->base_ep.info->rx_attr->iov_limit);
 	assert(rxe->iov[0].iov_len >= ep->msg_prefix_size);
+
+	if (ep->user_rx_pkts_posted >= ep->efa_max_outstanding_rx_ops) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "RX CQ is full. Increase the CQ size or poll the cq "
+			 "before posting more recv."
+			 "user_rx_pkts_posted=%zu, "
+			 "efa_max_outstanding_rx_ops=%zu\n",
+			 ep->user_rx_pkts_posted,
+			 ep->efa_max_outstanding_rx_ops);
+		return -FI_EAGAIN;
+	}
+
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->user_rx_pkt_pool, EFA_RDM_PKE_FROM_USER_RX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
@@ -858,7 +870,17 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 	if (ep->efa_rx_pkts_to_post < MIN(efa_env.internal_rx_refill_threshold, efa_rdm_ep_get_rx_pool_size(ep)))
 		return 0;
 
-	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted <= ep->efa_max_outstanding_rx_ops);
+	if (ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted > ep->efa_max_outstanding_rx_ops) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "RX CQ is full. Increase the CQ size or poll the cq "
+			 "before posting more recv. efa_rx_pkts_to_post: %zu, "
+			 "efa_rx_pkts_posted: %zu, efa_max_outstanding_rx_ops: "
+			 "%zu\n",
+			 ep->efa_rx_pkts_to_post, ep->efa_rx_pkts_posted,
+			 ep->efa_max_outstanding_rx_ops);
+		return -FI_EAGAIN;
+	}
+
 	for (i = 0; i < ep->efa_rx_pkts_to_post; ++i) {
 		ep->pke_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
 					       EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -1026,8 +1048,12 @@ void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted + ep->efa_rx_pkts_held == efa_rdm_ep_get_rx_pool_size(ep));
 
 	err = efa_rdm_ep_bulk_post_internal_rx_pkts(ep);
-	if (err)
-		goto err_exit;
+	if (err) {
+		if (err != -FI_EAGAIN) {
+			goto err_exit;
+		}
+		return;
+	}
 
 	return;
 
