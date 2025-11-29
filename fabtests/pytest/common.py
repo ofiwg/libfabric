@@ -121,10 +121,32 @@ def wait_until_neuron_device_available(ip, device_id):
     raise RuntimeError("Error: neuron device {} is not available after {} tries".format(device_id, maxtry))
 
 
+@functools.lru_cache(10)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def num_rocr_devices(ip):
+    proc = run("ssh {} rocm-smi --alldevices".format(ip), shell=True,
+               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+               timeout=60, encoding="utf-8")
+
+    if has_ssh_connection_err_msg(proc.stderr):
+        raise SshConnectionError()
+
+    # Count lines that start with a digit (device number)
+    result = 0
+    lines = proc.stdout.split("\n")
+    for line in lines:
+        line = line.strip()
+        if line and line[0].isdigit():
+            result += 1
+
+    return result
+
+
 def num_hmem_devices(ip, hmem_type):
     function_table = {
         "cuda" : num_cuda_devices,
-        "neuron" : num_neuron_devices
+        "neuron" : num_neuron_devices,
+        "rocr": num_rocr_devices,
     }
 
     if hmem_type not in function_table:
@@ -139,6 +161,10 @@ def has_cuda(ip):
 
 def has_neuron(ip):
     return num_neuron_devices(ip) > 0
+
+
+def has_rocr(ip):
+    return num_rocr_devices(ip) > 0
 
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
@@ -444,7 +470,7 @@ class ClientServerTest:
         if host_memory_type == "host":
             return command, additional_env    # default addtional environment variable
 
-        assert host_memory_type == "cuda" or host_memory_type == "neuron"
+        assert host_memory_type in ["cuda", "neuron", "rocr"]
 
         if not has_hmem_support(self._cmdline_args, host_ip):
             pytest.skip("no hmem support")
@@ -464,7 +490,7 @@ class ClientServerTest:
         else:
             hmem_device_id = 0
 
-        if host_memory_type == "cuda":
+        if host_memory_type in ["cuda", "rocr"]:
             command += " -i {}".format(hmem_device_id)
         else:
             assert host_memory_type == "neuron"

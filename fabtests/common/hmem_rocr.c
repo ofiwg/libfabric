@@ -63,6 +63,9 @@ struct rocr_ops {
 	hsa_status_t (*hsa_memory_free)(void *ptr);
 	hsa_status_t (*hsa_amd_memory_fill)(void* ptr, uint32_t value,
 					    size_t count);
+	hsa_status_t (*hsa_amd_portable_export_dmabuf)(const void *ptr, size_t size,
+						       int *dmabuf, uint64_t *offset);
+	hsa_status_t (*hsa_amd_portable_close_dmabuf)(int dmabuf);
 };
 
 static struct rocr_ops rocr_ops;
@@ -199,6 +202,11 @@ int ft_rocr_init(void)
 		FT_ERR("Failed to find hsa_amd_memory_fill");
 		goto err_dlclose_rocr;
 	}
+
+	rocr_ops.hsa_amd_portable_export_dmabuf =
+		dlsym(rocr_handle, "hsa_amd_portable_export_dmabuf");
+	rocr_ops.hsa_amd_portable_close_dmabuf =
+		dlsym(rocr_handle, "hsa_amd_portable_close_dmabuf");
 
 	hsa_ret = rocr_ops.hsa_init();
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
@@ -343,6 +351,38 @@ int ft_rocr_memcpy(uint64_t device, void *dst, const void *src, size_t size)
 	return -FI_EIO;
 }
 
+int ft_rocr_get_dmabuf_fd(void *buf, size_t len,
+			  int *dmabuf_fd, uint64_t *dmabuf_offset)
+{
+	hsa_status_t hsa_ret;
+
+	if (!rocr_ops.hsa_amd_portable_export_dmabuf)
+		return -FI_EOPNOTSUPP;
+
+	hsa_ret = rocr_ops.hsa_amd_portable_export_dmabuf(buf, len,
+							  dmabuf_fd, dmabuf_offset);
+	if (hsa_ret == HSA_STATUS_SUCCESS)
+		return FI_SUCCESS;
+
+	ROCR_ERR(hsa_ret, "hsa_amd_portable_export_dmabuf failed");
+	return -FI_EIO;
+}
+
+int ft_rocr_put_dmabuf_fd(int fd)
+{
+	hsa_status_t hsa_ret;
+
+	if (!rocr_ops.hsa_amd_portable_close_dmabuf)
+		return -FI_EOPNOTSUPP;
+
+	hsa_ret = rocr_ops.hsa_amd_portable_close_dmabuf(fd);
+	if (hsa_ret == HSA_STATUS_SUCCESS)
+		return FI_SUCCESS;
+
+	ROCR_ERR(hsa_ret, "hsa_amd_portable_close_dmabuf failed");
+	return -FI_EIO;
+}
+
 #else
 
 int ft_rocr_init(void)
@@ -371,6 +411,17 @@ int ft_rocr_memset(uint64_t device, void *buf, int value, size_t size)
 }
 
 int ft_rocr_memcpy(uint64_t device, void *dst, const void *src, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_rocr_get_dmabuf_fd(void *buf, size_t len,
+			  int *dmabuf_fd, uint64_t *dmabuf_offset)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_rocr_put_dmabuf_fd(int fd)
 {
 	return -FI_ENOSYS;
 }

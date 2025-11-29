@@ -608,6 +608,7 @@ struct fi_mr_attr {
         int            ze
         int            neuron;
         int            synapseai;
+        int            rocr;
     } device;
     void               *hmem_data;
     size_t             page_size;
@@ -808,6 +809,9 @@ field is determined by the value specified through iface.
 
 *synapseai*
 : For FI_HMEM_SYNAPSEAI, the device identifier for Habana Gaudi hardware.
+
+*rocr*
+: For FI_HMEM_ROCR, the device index for an AMD GPU.
 
 ## hmem_data
 The hmem_data field is reserved for future use and must be null.
