@@ -99,6 +99,11 @@ static inline size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
 	return 0;
 }
 
+static inline int ofi_ifaddr_get_mtu(const struct ifaddrs *ifa)
+{
+	return -1;
+}
+
 static inline int ofi_hugepage_enabled(void)
 {
 	return 0;

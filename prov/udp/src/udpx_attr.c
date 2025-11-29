@@ -31,6 +31,7 @@
  */
 
 #include "udpx.h"
+#include "ofi_osd.h"
 
 #define UDPX_TX_CAPS (OFI_TX_MSG_CAPS | FI_MULTICAST)
 #define UDPX_RX_CAPS (FI_SOURCE | OFI_RX_MSG_CAPS)
@@ -38,7 +39,7 @@
 
 struct fi_tx_attr udpx_tx_attr = {
 	.caps = UDPX_TX_CAPS,
-	.inject_size = 1472,
+	.inject_size = UDPX_MAX_MSG_SIZE(UDPX_MTU),
 	.size = 1024,
 	.iov_limit = UDPX_IOV_LIMIT
 };
@@ -53,7 +54,7 @@ struct fi_ep_attr udpx_ep_attr = {
 	.type = FI_EP_DGRAM,
 	.protocol = FI_PROTO_UDP,
 	.protocol_version = 0,
-	.max_msg_size = 1472,
+	.max_msg_size = UDPX_MAX_MSG_SIZE(UDPX_MTU),
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1
 };
@@ -93,6 +94,69 @@ struct fi_info udpx_info = {
 
 struct util_prov udpx_util_prov = {
 	.prov = &udpx_prov,
-	.info = &udpx_info,
-	.flags = 0,
+	.info = NULL,
+        .flags = 0,
 };
+
+
+static int match_interface(struct slist_entry *entry, const void *infop)
+{
+	struct ofi_addr_list_entry *addr_entry;
+	const struct fi_info* info = infop;
+
+	addr_entry = container_of(entry, struct ofi_addr_list_entry, entry);
+	return strcmp(addr_entry->net_name, info->fabric_attr->name) == 0 &&
+	       strcmp(addr_entry->ifa_name, info->domain_attr->name) == 0;
+}
+
+static void set_mtu_from_addr_list(struct fi_info* info,
+				   struct slist *addr_list)
+{
+	struct ofi_addr_list_entry *addr_entry;
+	struct slist_entry *entry;
+	int max_msg_size;
+
+	entry = slist_find_first_match(addr_list, match_interface, info);
+	if (entry) {
+		addr_entry = container_of(entry,
+					  struct ofi_addr_list_entry,
+					  entry);
+		max_msg_size = UDPX_MAX_MSG_SIZE(addr_entry->mtu);
+		if (max_msg_size > 0) {
+			info->tx_attr->inject_size = max_msg_size;
+			info->ep_attr->max_msg_size = max_msg_size;
+		}
+	} else {
+		FI_DBG(&udpx_prov, FI_LOG_CORE,
+		       "Failed to match interface (%s, %s) to "
+		       "address for MTU size\n",
+		       info->fabric_attr->name, info->domain_attr->name);
+	}
+}
+
+void udpx_util_prov_init(uint32_t version)
+{
+
+	struct slist addr_list;
+	struct fi_info* cur;
+	struct fi_info* info;
+
+        if (udpx_util_prov.info == NULL) {
+		udpx_util_prov.info = &udpx_info;
+		info = fi_allocinfo();
+		ofi_ip_getinfo(&udpx_util_prov, version, NULL, NULL, 0, NULL,
+			       &info);
+		slist_init(&addr_list);
+		ofi_get_list_of_addr(&udpx_prov, "iface", &addr_list);
+		for (cur = info; cur; cur = cur->next)
+			set_mtu_from_addr_list(cur, &addr_list);
+		*(struct fi_info**)&udpx_util_prov.info = info;
+		ofi_free_list_of_addr(&addr_list);
+	}
+}
+
+void udpx_util_prov_fini()
+{
+	if (udpx_util_prov.info != NULL)
+		fi_freeinfo((struct fi_info*)udpx_util_prov.info);
+}

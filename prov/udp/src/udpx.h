@@ -63,11 +63,9 @@
 #ifndef _UDPX_H_
 #define _UDPX_H_
 
-
 extern struct fi_provider udpx_prov;
 extern struct util_prov udpx_util_prov;
 extern struct fi_info udpx_info;
-
 
 int udpx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context);
@@ -75,10 +73,12 @@ int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
 int udpx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);
-
+void udpx_util_prov_init(uint32_t version);
+void udpx_util_prov_fini();
 
 #define UDPX_FLAG_MULTI_RECV	1
 #define UDPX_IOV_LIMIT		4
+#define UDPX_MTU		1500
 
 struct udpx_ep_entry {
 	void			*context;
@@ -87,6 +87,10 @@ struct udpx_ep_entry {
 	uint8_t			flags;
 	uint8_t			resv[sizeof(size_t) - 2];
 };
+
+#define UDPX_UDP_HEADER_SIZE	8
+#define UDPX_IP_HEADER_SIZE	20
+#define UDPX_MAX_MSG_SIZE(mtu) ((mtu) - (UDPX_UDP_HEADER_SIZE + UDPX_IP_HEADER_SIZE))
 
 OFI_DECLARE_CIRQUE(struct udpx_ep_entry, udpx_rx_cirq);
 
