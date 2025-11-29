@@ -1,0 +1,63 @@
+name: Auto Release
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Extract version
+      id: version
+      run: |
+        VERSION=$(grep 'AC_INIT' configure.ac | sed 's/.*\[\([^]]*\)\].*/\1/' | head -1)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Build libfabric
+      run: |
+        ./autogen.sh
+        ./configure
+        make dist
+    
+    - name: Generate checksums
+      id: checksums
+      run: |
+        echo "sha256_sums<<EOF" >> $GITHUB_OUTPUT
+        sha256sum libfabric-*.tar.* >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        echo "md5_sums<<EOF" >> $GITHUB_OUTPUT
+        md5sum libfabric-*.tar.* >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: Libfabric ${{ steps.version.outputs.version }}
+        draft: true
+        body: |
+          The OpenFabrics Interfaces Working Group (OFIWG) and the libfabric open-source community are pleased to announce the release of version ${{ steps.version.outputs.version }} of libfabric. See NEWS.md for the list of features and enhancements that have been added since the last release. Installation instructions are available in the README.md file in the source tree or at the project's homepage.
+          
+          Download the distribution tarballs below to get started:
+          
+          **sha256 sums**
+          ```
+          ${{ steps.checksums.outputs.sha256_sums }}
+          ```
+          
+          **md5sums**
+          ```
+          ${{ steps.checksums.outputs.md5_sums }}
+          ```
+          
+          ${{ github.event.pull_request.body }}
+        files: |
+          libfabric-*.tar.gz
+          libfabric-*.tar.bz2
