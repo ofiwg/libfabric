@@ -423,6 +423,8 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	uint32_t imm_data = 0;
 	bool has_imm_data = false;
 
+	EFA_DBG(FI_LOG_CQ, "Processing receive completion for packet %p\n", pkt_entry);
+
 	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
 		assert(ep->user_rx_pkts_posted > 0);
 		ep->user_rx_pkts_posted--;
