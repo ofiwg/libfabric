@@ -937,6 +937,17 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 
 	efa_rdm_tracepoint(recv_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
+	if (ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted > ep->efa_max_outstanding_rx_ops) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "RX CQ is full. Increase the CQ size or poll the cq "
+			 "before posting more recv. efa_rx_pkts_to_post: %zu, "
+			 "efa_rx_pkts_posted: %zu, efa_max_outstanding_rx_ops: "
+			 "%zu\n",
+			 ep->efa_rx_pkts_to_post, ep->efa_rx_pkts_posted,
+			 ep->efa_max_outstanding_rx_ops);
+		return -FI_EAGAIN;
+	}
+
 	ret = efa_rdm_attempt_to_sync_memops_iov(ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
 	if (ret)
 		return ret;
