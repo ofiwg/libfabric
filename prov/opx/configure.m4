@@ -307,7 +307,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		])
 	])
 	CPPFLAGS=$save_CPPFLAGS
-	AS_IF([test $opx_happy -eq 0 ],
+	AS_IF([text x"$enable_opx" = x"yes" && test $opx_happy -eq 0 ],
 		[AC_MSG_ERROR([OPX failed to configure.])])
 
 	AC_SUBST(opx_CPPFLAGS)
