@@ -683,6 +683,7 @@ struct cxip_environment cxip_env = {
 	.force_dev_reg_copy = false,
 	.mr_target_ordering = MR_ORDER_DEFAULT,
 	.disable_cuda_sync_memops = false,
+	.enable_writedata = false,
 };
 
 static void cxip_env_init(void)
@@ -956,6 +957,12 @@ static void cxip_env_init(void)
 			&cxip_env.mr_match_events);
 	fi_param_get_bool(&cxip_prov, "mr_match_events",
 			  &cxip_env.mr_match_events);
+
+	fi_param_define(&cxip_prov, "enable_writedata", FI_PARAM_BOOL,
+			"Enable dual MR entries for FI_WRITEDATA support (default %d).",
+			cxip_env.enable_writedata);
+	fi_param_get_bool(&cxip_prov, "enable_writedata",
+			  &cxip_env.enable_writedata);
 
 	fi_param_define(&cxip_prov, "prov_key_cache", FI_PARAM_BOOL,
 			"Disable caching of FI_MR_PROV_KEY (default %lu).",
