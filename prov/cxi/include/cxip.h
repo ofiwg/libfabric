@@ -358,6 +358,7 @@ struct cxip_environment {
 	int force_dev_reg_copy;
 	enum cxip_mr_target_ordering mr_target_ordering;
 	int disable_cuda_sync_memops;
+	int enable_writedata;
 };
 
 extern struct cxip_environment cxip_env;
@@ -521,7 +522,8 @@ struct cxip_mr_key {
 			 * it repeated.
 			 */
 			uint64_t id     : 16;  /* Unique - 64K MR */
-			uint64_t seqnum : 44;  /* Sequence with random seed */
+			uint64_t seqnum : 43;  /* Sequence with random seed */
+			uint64_t sol_event : 1;  /* For FI_WRITEDATA dual entry */
 			uint64_t events : 1;   /* Requires event generation */
 			uint64_t unused3: 2;
 			uint64_t is_prov: 1;
@@ -699,7 +701,24 @@ union cxip_match_bits {
 	uint64_t raw;
 };
 #define CXIP_IS_PROV_MR_KEY_BIT (1ULL << 63)
-#define CXIP_KEY_MATCH_BITS(key) ((key) & ~CXIP_IS_PROV_MR_KEY_BIT)
+#define CXIP_SOL_NUM_MR_KEY_BIT (1ULL << 59)
+#define CXIP_EVENTS_MR_KEY_BIT  (1ULL << 60) /* 'events' field - request comm event generation */
+#define CXIP_KEY_MATCH_BITS(key) ((key) & ~(CXIP_IS_PROV_MR_KEY_BIT | CXIP_SOL_NUM_MR_KEY_BIT))
+
+static inline uint64_t cxip_key_set_writedata(uint64_t key)
+{
+	struct cxip_mr_key cxip_key = { .raw = key };
+
+	/* Provider keys only: non-cached provider keys support writedata.
+	 * Set sol_event (bit 59) for writedata LE match and events (bit 60)
+	 * for target comm event generation.
+	 */
+	if (cxip_key.is_prov && !cxip_key.cached) {
+		/* is_prov bit (63) masked out, preserving 60:59. */
+		return key | CXIP_SOL_NUM_MR_KEY_BIT | CXIP_EVENTS_MR_KEY_BIT;
+	}
+	return key;
+}
 
 /* libcxi Wrapper Structures */
 
@@ -907,6 +926,20 @@ struct cxip_domain {
 	struct fid_peer_srx *owner_srx;
 
 	uint32_t tclass;
+
+	/* CQ data sizes for remote CQ data support:
+	 * - msg_cq_data_size: for messaging operations (FI_REMOTE_CQ_DATA in msg ops)
+	 * - rma_cq_data_size: for RMA writedata operations (fi_writedata/fi_inject_writedata)
+	 * These are set separately to allow messaging to use remote CQ data without
+	 * forcing RMA to enable writedata support.
+	 */
+	size_t msg_cq_data_size;
+	size_t rma_cq_data_size;
+
+	/* Legacy cq_data_size field - now derived from msg_cq_data_size and rma_cq_data_size.
+	 * Set to non-zero if either messaging or RMA supports remote CQ data.
+	 */
+	size_t cq_data_size;
 
 	struct cxip_eq *eq; //unused
 	struct cxip_eq *mr_eq; //unused
@@ -2698,9 +2731,10 @@ struct cxip_mr {
 	struct fi_mr_attr attr;		// attributes
 	struct cxip_cntr *cntr;		// if bound to cntr
 
-	/* Indicates if FI_RMA_EVENT was specified at creation and
-	 * will be used to enable fi_writedata() and fi_inject_writedata()
-	 * support for this MR (TODO).
+	/* Indicates if FI_RMA_EVENT was specified at creation.
+	 * This enables remote counter events for this MR.
+	 * Note: fi_writedata() support is controlled by domain->rma_cq_data_size,
+	 * not by FI_RMA_EVENT or this flag.
 	 */
 	bool rma_events;
 
@@ -2720,9 +2754,12 @@ struct cxip_mr {
 	struct cxip_mr_util_ops *mr_util;
 	bool enabled;
 	struct cxip_pte *pte;
+	struct cxip_pte *writedata_pte;	// Second PTE for FI_WRITEDATA dual entry
 	enum cxip_mr_state mr_state;
+	enum cxip_mr_state writedata_mr_state; // State for writedata PTE
 	int64_t mr_id;			// Non-cached provider key uniqueness
 	struct cxip_ctrl_req req;
+	struct cxip_ctrl_req writedata_req; // Control req for writedata PTE
 	bool optimized;
 
 	void *buf;			// memory buffer VA
