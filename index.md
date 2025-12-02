@@ -29,7 +29,7 @@ The goal of libfabric is to define interfaces that enable a tight semantic map b
 
 Libfabric is designed to minimize the impedance mismatch between applications, including middleware such as MPI, SHMEM, data storage, and PGAS, and fabric communication hardware.  Its interfaces target high-bandwidth, low-latency NICs, with a goal to scale to tens of thousands of nodes.
 
-Libfabric targets support for the Linux, Free BSD, Windows, and OS X.  A reasonable effort is made to support all major, modern Linux distributions; however, validation is limited to the most recent 2-3 releases of Red Hat Enterprise Linux (RHEL) and SUSE Linux Enterprise Server (SLES).  Support for a particular operating system version or distribution is vendor specific.  The exceptions are the tcp and udp based socket providers are available on all platforms.
+Libfabric targets support for Linux, Free BSD, Windows, and macOS.  A reasonable effort is made to support all major, modern Linux distributions; however, validation is limited to the most recent 2-3 releases of Red Hat Enterprise Linux (RHEL) and SUSE Linux Enterprise Server (SLES).  Support for a particular operating system version or distribution is vendor specific.  The exceptions are the tcp and udp based socket providers are available on all platforms.
 
 Developer Resources
 ===================
