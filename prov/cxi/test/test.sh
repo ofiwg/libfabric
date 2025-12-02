@@ -153,6 +153,10 @@ unlimited_triggered_ops_test=(
 
 mr_cache_test=("./cxitest --verbose --tap=cxitest-mr_cache_test.tap --filter=\"mr_cache/*\" -j 1")
 
+writedata_rma_test=(
+	"FI_CXI_ENABLE_WRITEDATA=1 ./cxitest --verbose --filter=\"@(rma*|mr*)/*\" -j 1 --tap=cxitest-writedata-rma.tap"
+)
+
 long_test_suite=(
 	"basic_test"
 	"swget_test"
@@ -179,6 +183,7 @@ long_test_suite=(
 	"fork_safe_kdreg2_test"
 	"unlimited_triggered_ops_test"
 	"mr_cache_test"
+	"writedata_rma_test"
 )
 
 # ################################################################

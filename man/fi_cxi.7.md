@@ -1314,6 +1314,26 @@ The CXI provider checks for the following environment variables:
 :   Enable enforcement of triggered operation limit. Doing this can prevent
     fi_control(FI_QUEUE_WORK) deadlocking at the cost of performance.
 
+*FI_CXI_ENABLE_WRITEDATA*
+:   Controls provider support for the fi_writedata() and fi_inject_writedata() RMA
+    operations. When enabled and the domain attribute cq_data_size is non-zero,
+    the CXI provider implements handling to generate solicited RMA completions that
+    include immediate data; completions will include FI_REMOTE_CQ_DATA and will
+    report source information when FI_SOURCE is enabled (FI_SOURCE_ERR behavior is
+    followed on resolution failures).
+
+    Note that the CXI_RX_CQ_DATA capability is not required and writedata RMA
+    operations do not consume posted receive buffers on the target. The feature
+    is gated by domain/endpoint capabilities (for example, a non-zero
+    domain_attr->cq_data_size in the libfabric API) and endpoint support. Internally,
+    the combination of domain and endpoint cq_data_size sets rma_cq_data_size. Only
+    provider MR keys are supported.
+
+    This option is disabled by default; enable it only when applications require
+    immediate-data delivery on RMA completions or for controlled testing and
+    debugging. Application support for FI_MR_PROV_KEY mr_mode is required to use
+    this feature.
+
 *FI_CXI_MR_CACHE_EVENTS_DISABLE_POLL_NSECS*
 :   Max amount of time to poll when disabling an MR configured with MR match events.
 
