@@ -17155,8 +17155,10 @@ HFI selection logic.
 *FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
 :   Integer. The minimum length in bytes where SDMA will be used. For
     messages smaller than this threshold, the send will be completed
-    using PIO. Value must be between 64 and 2147483646. Defaults to
-    16385.
+    using PIO. Value must be between 64 and 2147483646. Defaults
+    to 16385. Note: This setting may only have an impact on RMA and
+    atomic operations unless FI_OPX_RZV_MIN_PAYLOAD_BYTES is also
+    adjusted.
 
 *FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE*
 :   Integer. The maximum number of times writev will be called during a
