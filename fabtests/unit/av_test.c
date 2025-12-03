@@ -817,12 +817,196 @@ fail:
 	return TEST_RET_VAL(ret, testret);
 }
 
+static int
+av_remove_good(void)
+{
+	int testret, ret, i;
+	struct fid_av *av = NULL;
+	struct fi_av_attr attr = {0};
+	uint8_t addrbuf[4096];
+	size_t buflen;
+	fi_addr_t *fi_addr = NULL;
+
+	testret = FAIL;
+
+	fi_addr = calloc(num_good_addr, sizeof(*fi_addr));
+	if (!fi_addr) {
+		sprintf(err_buf, "calloc fi_addr failed");
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
+
+	attr.type = av_type;
+	attr.count = num_good_addr;
+
+	ret = fi_av_open(domain, &attr, &av, NULL);
+	if (ret) {
+		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
+			fi_tostr(&av_type, FI_TYPE_AV_TYPE), ret,
+			fi_strerror(-ret));
+		goto fail;
+	}
+
+	for (i = 0; i < num_good_addr; i++)
+		fi_addr[i] = FI_ADDR_NOTAVAIL;
+
+	buflen = sizeof(addrbuf);
+	ret = av_create_address_list(good_address, 0, num_good_addr, addrbuf, 0,
+				     buflen);
+	if (ret < 0)
+		goto fail;
+
+	ret = fi_av_insert(av, addrbuf, num_good_addr, fi_addr, 0, NULL);
+	if (ret != num_good_addr) {
+		sprintf(err_buf, "fi_av_insert ret=%d, expected %d", ret,
+			num_good_addr);
+		goto fail;
+	}
+
+	for (i = 0; i < num_good_addr; i++) {
+		if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
+			sprintf(err_buf, "fi_addr[%d] expected %d, actual %ld",
+				i, i, fi_addr[i]);
+			goto fail;
+		}
+	}
+
+	for (i = 0; i < num_good_addr; i++) {
+		ret = fi_av_remove(av, &fi_addr[i], 1, 0);
+		if (ret) {
+			sprintf(err_buf, "fi_av_remove ret=%d, %s", ret,
+				fi_strerror(-ret));
+			goto fail;
+		}
+	}
+
+	testret = PASS;
+	ret = FI_SUCCESS;
+fail:
+	FT_CLOSE_FID(av);
+	free(fi_addr);
+	return TEST_RET_VAL(ret, testret);
+}
+
+static int av_remove_bad(void)
+{
+	int testret, ret, i;
+	struct fid_av *av = NULL;
+	struct fi_av_attr attr = {0};
+	uint8_t addrbuf[4096];
+	size_t buflen;
+	fi_addr_t *fi_addr = NULL;
+	fi_addr_t remove_addr;
+
+	testret = FAIL;
+	fi_addr = calloc(num_good_addr, sizeof(*fi_addr));
+	if (!fi_addr) {
+		sprintf(err_buf, "calloc fi_addr failed");
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
+
+	attr.type = av_type;
+	attr.count = num_good_addr + 1;
+
+	ret = fi_av_open(domain, &attr, &av, NULL);
+	if (ret) {
+		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
+			fi_tostr(&av_type, FI_TYPE_AV_TYPE), ret,
+			fi_strerror(-ret));
+		goto fail;
+	}
+
+	for (i = 0; i < num_good_addr; i++)
+		fi_addr[i] = FI_ADDR_NOTAVAIL;
+
+	buflen = sizeof(addrbuf);
+	ret = av_create_address_list(good_address, 0, num_good_addr, addrbuf, 0,
+				     buflen);
+	if (ret < 0)
+		goto fail;
+
+	ret = fi_av_insert(av, addrbuf, num_good_addr, fi_addr, 0, NULL);
+	if (ret != num_good_addr) {
+		sprintf(err_buf, "fi_av_insert ret=%d, exepected %d", ret,
+			num_good_addr);
+		goto fail;
+	}
+
+	for (i = 0; i < num_good_addr; i++) {
+		if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
+			sprintf(err_buf, "fi_addr[%d] expected %d, actual %ld",
+				i, i, fi_addr[i]);
+			goto fail;
+		}
+	}
+
+	/* Case 1: Remove num_good_addr + 1 */
+	remove_addr = (fi_addr_t) (num_good_addr + 1);
+	ret = fi_av_remove(av, &remove_addr, 1, 0);
+	if (ret != -FI_EINVAL) {
+		sprintf(err_buf, "fi_av_remove num_good_addr + 1 ret=%d, "
+			"expected %d", ret, -FI_EINVAL);
+		goto fail;
+	}
+
+	/* Case 2: Remove UINT64_MAX */
+	remove_addr = (fi_addr_t) UINT64_MAX;
+	ret = fi_av_remove(av, &remove_addr, 1, 0);
+	if (ret != -FI_EINVAL) {
+		sprintf(err_buf, "fi_av_remove UINT_MAX ret=%d, expected %d",
+			ret, -FI_EINVAL);
+		goto fail;
+	}
+
+	/* Case 3: Remove num_good_addr + 32 */
+	remove_addr = (fi_addr_t) (num_good_addr + 32);
+	ret = fi_av_remove(av, &remove_addr, 1, 0);
+	if (ret != -FI_EINVAL) {
+		sprintf(err_buf, "fi_av_remove num_good_addr + 32 ret=%d, "
+			"expected %d", ret, -FI_EINVAL);
+		goto fail;
+	}
+
+	/* Case 4: Remove fi_addr 0 twice */
+	ret = fi_av_remove(av, &fi_addr[0], 1, 0);
+	if (ret) {
+		sprintf(err_buf, "fi_av_remove ret=%d, %s", ret,
+			fi_strerror(-ret));
+		goto fail;
+	}
+
+	ret = fi_av_remove(av, &fi_addr[0], 1, 0);
+	if (ret != -FI_EINVAL) {
+		sprintf(err_buf, "fi_av_remove of already removed fi_addr[0] "
+			"ret=%d, expected %d", ret, -FI_EINVAL);
+		goto fail;
+	}
+
+	/* Case 5: Remove 0 through num_good_addr where 0 was already removed */
+	ret = fi_av_remove(av, fi_addr, num_good_addr, 0);
+	if (ret != -FI_EINVAL) {
+		sprintf(err_buf, "fi_av_remove of all addresses with "
+			"fi_addr[0] already removed ret=%d, expected %d",
+			ret, -FI_EINVAL);
+		goto fail;
+	}
+
+	testret = PASS;
+	ret = FI_SUCCESS;
+fail:
+	FT_CLOSE_FID(av);
+	free(fi_addr);
+	return TEST_RET_VAL(ret, testret);
+}
+
 struct test_entry test_array_good[] = {
 	TEST_ENTRY(av_open_close, "Test open and close AVs of varying sizes"),
 	TEST_ENTRY(av_good, "Test AV insert with good address"),
 	TEST_ENTRY(av_null_fi_addr, "Test AV insert without specifying fi_addr"),
 	TEST_ENTRY(av_insert_stages, "Test AV insert at various stages"),
 	TEST_ENTRY(av_lookup_good, "Test AV lookup with good address"),
+	TEST_ENTRY(av_remove_good, "Test AV remove with good address"),
 	{ NULL, "" }
 };
 
@@ -835,6 +1019,7 @@ struct test_entry test_array_bad[] = {
 	TEST_ENTRY(av_lookup_bad,
 		   "Test lookup of address not in AV after inserting good "
 		   "addresses"),
+	TEST_ENTRY(av_remove_bad, "Test AV remove with bad address"),
 	{ NULL, "" }
 };
 
