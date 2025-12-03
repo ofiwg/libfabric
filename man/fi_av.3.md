@@ -490,9 +490,11 @@ Supported flags are the same as for fi_av_insert.
 ## fi_av_remove
 
 fi_av_remove removes a set of addresses from an address vector.
-The corresponding fi_addr_t values are invalidated and may not
-be used in data transfer calls.  The behavior of operations in
-progress that reference the removed addresses is undefined.
+The corresponding fi_addr_t values are invalidated and may not be used in data
+transfer calls.  The behavior of operations in progress that reference the
+removed addresses is undefined. Requesting removal of a fi_addr that is unset
+or outside of the provider's address vector bounds will result in -FI_EINVAL
+being returned.
 
 Note that removing an address may not disable receiving data from the
 peer endpoint.  fi_av_close will automatically cleanup any associated
