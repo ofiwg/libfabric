@@ -343,10 +343,10 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 	struct util_av_entry *av_entry;
 
 	assert(ofi_genlock_held(&av->lock));
-	av_entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
-	if (!av_entry)
-		return -FI_ENOENT;
+	if (!ofi_bufpool_ibuf_is_valid(av->av_entry_pool, fi_addr))
+		return -FI_EINVAL;
 
+	av_entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
 	if (ofi_atomic_dec32(&av_entry->use_cnt))
 		return FI_SUCCESS;
 
@@ -884,7 +884,7 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 {
 	struct util_av *av;
 	ssize_t i;
-	int ret;
+	int ret, err;
 
 	av = container_of(av_fid, struct util_av, av_fid);
 	if (flags) {
@@ -898,6 +898,7 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	 * added -- i.e. fi_addr passed in here was also passed into insert.
 	 * Thus, we walk through the array backwards.
 	 */
+	err = FI_SUCCESS;
 	for (i = count - 1; i >= 0; i--) {
 		ofi_genlock_lock(&av->lock);
 		ret = ofi_av_remove_addr(av, fi_addr[i]);
@@ -906,9 +907,10 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			FI_WARN(av->prov, FI_LOG_AV,
 				"removal of fi_addr %"PRIu64" failed\n",
 				fi_addr[i]);
+			err = ret;
 		}
 	}
-	return 0;
+	return err;
 }
 
 bool ofi_ip_av_is_valid(struct fid_av *av_fid, fi_addr_t fi_addr)
