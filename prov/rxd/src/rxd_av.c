@@ -289,15 +289,16 @@ static int rxd_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 	for (i = 0; i < count; i++) {
 		rxd_addr = (intptr_t)ofi_idx_lookup(&av->fi_addr_idx,
 						    (int) RXD_IDX_OFFSET(fi_addr[i]));
-		if (!rxd_addr)
-			goto err;
+		if (!rxd_addr) {
+			ret = -FI_EINVAL;
+			continue;
+		}
 
 		ofi_idx_remove_ordered(&(av->fi_addr_idx),
 				       (int) RXD_IDX_OFFSET(fi_addr[i]));
 		ofi_idm_clear(&(av->rxdaddr_fi_idm), (int) rxd_addr);
 	}
 
-err:
 	if (ret)
 		FI_WARN(&rxd_prov, FI_LOG_AV, "Unable to remove address from AV\n");
 
