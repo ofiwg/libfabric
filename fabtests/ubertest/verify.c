@@ -104,6 +104,7 @@ int ft_verify_bufs()
 void ft_verify_comp(void *buf)
 {
 	struct fi_cq_err_entry *comp = (struct fi_cq_err_entry *) buf;
+	uint64_t op_flags;
 
 	switch (ft_rx_ctrl.cq_format) {
 	case FI_CQ_FORMAT_TAGGED:
@@ -122,10 +123,15 @@ void ft_verify_comp(void *buf)
 		}
 		/* fall through */
 	case FI_CQ_FORMAT_MSG:
+		op_flags = comp->flags & (FI_MSG | FI_TAGGED | FI_RMA |
+				FI_ATOMIC | FI_SEND | FI_RECV | FI_WRITE |
+				FI_READ | FI_REMOTE_WRITE | FI_REMOTE_READ);
 		if (((test_info.test_class & FI_MSG) &&
-		    (comp->flags != (FI_MSG | FI_RECV))) ||
+		    (op_flags != (FI_MSG | FI_RECV))) ||
 		    ((test_info.test_class & FI_TAGGED) &&
-		    (comp->flags != (FI_TAGGED | FI_RECV))))
+		    (op_flags != (FI_TAGGED | FI_RECV))) ||
+		    ((test_info.test_class & FI_WRITE) &&
+		    (op_flags != (FI_RMA | FI_REMOTE_WRITE))))
 			return;
 		if ((test_info.test_class & (FI_MSG | FI_TAGGED)) &&
 		    (comp->len != ft_tx_ctrl.msg_size))
