@@ -609,17 +609,11 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 	}
 
 	if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING) {
-		fprintf(stderr,
-			"(tx) [flow key: slid=%08x src_subctxt_rx=%04x dlid=%08x dst_subctxt_rx=%04x] inj ping %08lu..%08lu\n",
-			key->slid, key->src_subctxt_rx, key->dlid, key->dst_subctxt_rx, psn_start, psn_stop);
+		OPX_RELIABILITY_DEBUG_LOG(key, "inj ping %08lu..%08lu\n", psn_start, psn_stop);
 	} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK) {
-		fprintf(stderr,
-			"(rx) [flow key: slid=%08x src_subctxt_rx=%04x dlid=%08x dst_subctxt_rx=%04x] inj ack %08lu..%08lu\n",
-			key->slid, key->src_subctxt_rx, key->dlid, key->dst_subctxt_rx, psn_start, psn_stop);
+		OPX_RELIABILITY_DEBUG_LOG(key, "inj ack %08lu..%08lu\n", psn_start, psn_stop);
 	} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK) {
-		fprintf(stderr,
-			"(rx) [flow key: slid=%08x src_subctxt_rx=%04x dlid=%08x dst_subctxt_rx=%04x] inj nack %08lu..%08lu\n",
-			key->slid, key->src_subctxt_rx, key->dlid, key->dst_subctxt_rx, psn_start, psn_stop);
+		OPX_RELIABILITY_DEBUG_LOG(key, "inj nack %08lu..%08lu\n", psn_start, psn_stop);
 	} else {
 		fprintf(stderr, "%s:%s():%d bad opcode (%lu) .. abort\n", __FILE__, __func__, __LINE__, opcode);
 		abort();
@@ -1456,8 +1450,8 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 		key.dlid = (opx_lid_t) __le24_to_cpu(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 |
 						     replay->scb.scb_16B.hdr.lrh_16B.dlid);
 	}
-	key.src_subctxt_rx = (uint32_t) FI_OPX_HFI1_PACKET_ORIGIN_RX(OPX_REPLAY_HDR(replay));
-	key.dst_subctxt_rx = (uint32_t) (OPX_REPLAY_HDR(replay)->bth.subctxt_rx & OPX_BTH_SUBCTXT_RX_MASK);
+	key.src_subctxt_rx = (uint16_t) FI_OPX_HFI1_PACKET_ORIGIN_RX(OPX_REPLAY_HDR(replay));
+	key.dst_subctxt_rx = (uint16_t) (OPX_REPLAY_HDR(replay)->bth.subctxt_rx & OPX_BTH_SUBCTXT_RX_MASK);
 
 #endif
 
