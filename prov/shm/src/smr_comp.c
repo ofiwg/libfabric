@@ -75,6 +75,7 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 
 	flags &= ~FI_COMPLETION;
 
-	return ofi_peer_cq_write(ep->util_ep.rx_cq, context, flags, len, buf,
-				 data, tag, ep->region->map->peers[id].fiaddr);
+	return ofi_peer_cq_write(ep->util_ep.rx_cq, context,
+				 ofi_rx_cq_flags(op) | flags, len, buf, data,
+				 tag, ep->region->map->peers[id].fiaddr);
 }
