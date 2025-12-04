@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-08\-29" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2025\-12\-04" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -230,6 +230,15 @@ When set to true, the target side of a RMA operation must insert the
 initiator side\[cq]s address into AV before the RMA operation is kicked
 off, due to a current device limitation.
 The default value is false.
+.TP
+\f[I]FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV - bool\f[R]
+This option only applies to the fi_setopt() call.
+It is used to disable unsolicited write recv for this endpoint, which
+can reduce the likelihood of CQ overflow.
+The default value is true.
+For efa-direct, FI_RX_CQ_DATA is required when
+FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV is false, or it will return
+-FI_EOPNOTSUPP for the call to fi_setopt().
 .SH PROVIDER SPECIFIC DOMAIN OPS
 .PP
 The efa provider exports extensions for operations that are not provided
