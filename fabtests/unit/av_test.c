@@ -619,32 +619,24 @@ fail:
 static int
 av_lookup_good(void)
 {
-	int testret;
-	int ret;
-	int i, j, found, offset;
-	struct fid_av *av;
-	struct fi_av_attr attr;
+	int testret, ret, i, j, found, offset;
+	struct fid_av *av = NULL;
+	struct fi_av_attr attr = {0};
 	uint8_t addrbuf[4096];
-	size_t buflen;
 	uint8_t lookup_buf[4096];
-	size_t lookup_len;
-	fi_addr_t *fi_addr;
+	size_t buflen, lookup_len;
+	fi_addr_t *fi_addr = NULL;
 
 	testret = FAIL;
-
-	fi_addr = calloc(num_good_addr > 0 ? num_good_addr : 1,
-			 sizeof(fi_addr_t));
+	fi_addr = calloc(num_good_addr, sizeof(*fi_addr));
 	if (!fi_addr) {
-		sprintf(err_buf, "malloc fi_addr failed");
+		sprintf(err_buf, "calloc fi_addr failed");
 		ret = -FI_ENOMEM;
 		goto fail;
 	}
 
-	memset(&attr, 0, sizeof(attr));
 	attr.type = av_type;
 	attr.count = num_good_addr;
-
-	av = NULL;
 	ret = fi_av_open(domain, &attr, &av, NULL);
 	if (ret != 0) {
 		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
@@ -664,15 +656,16 @@ av_lookup_good(void)
 
 	ret = fi_av_insert(av, addrbuf, num_good_addr, fi_addr, 0, NULL);
 	if (ret != num_good_addr) {
-		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret,
-			fi_strerror(-ret));
+		sprintf(err_buf, "fi_av_insert ret=%d, expected %d", ret,
+			num_good_addr);
 		goto fail;
 	}
 
 	for (i = 0; i < num_good_addr; i++) {
 		if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
-			sprintf(err_buf, "fi_av_insert failed ret=%d, %s", ret,
-				fi_strerror(-ret));
+			sprintf(err_buf, "fi_addr[%d]=%ld, expected %d", i,
+				fi_addr[i], i);
+			goto fail;
 		}
 	}
 
@@ -681,7 +674,7 @@ av_lookup_good(void)
 		memset(lookup_buf, 0, sizeof(lookup_buf));
 		lookup_len = sizeof(lookup_buf);
 		ret = fi_av_lookup(av, fi_addr[i], &lookup_buf, &lookup_len);
-		if (ret != 0) {
+		if (ret) {
 			sprintf(err_buf, "fi_av_lookup ret=%d, %s", ret,
 				fi_strerror(-ret));
 			goto fail;
@@ -707,6 +700,7 @@ av_lookup_good(void)
 	}
 
 	testret = PASS;
+	ret = FI_SUCCESS;
 fail:
 	FT_CLOSE_FID(av);
 	free(fi_addr);
