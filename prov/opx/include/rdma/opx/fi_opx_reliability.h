@@ -45,12 +45,12 @@
 #include "rdma/opx/opx_tracer.h"
 
 #ifdef OPX_RELIABILITY_DEBUG
-#define OPX_RELIABILITY_DEBUG_LOG(key, fmt, ...)                                                                        \
-	do {                                                                                                            \
-		fprintf(stderr,                                                                                         \
-			"(%d) %s:%s():%d [flow key: slid=%08x src_subctxt_rx=%04x dlid=%08x dst_subctxt_rx=%04x] " fmt, \
-			getpid(), __FILE__, __func__, __LINE__, (key)->slid, (key)->src_subctxt_rx, (key)->dlid,        \
-			(key)->dst_subctxt_rx, ##__VA_ARGS__);                                                          \
+#define OPX_RELIABILITY_DEBUG_LOG(key, fmt, ...)                                                                          \
+	do {                                                                                                              \
+		fprintf(stderr,                                                                                           \
+			"(%d) %s:%s():%d [flow key: slid=%08x src_subctxt_rx=%04hx dlid=%08x dst_subctxt_rx=%04hx] " fmt, \
+			getpid(), __FILE__, __func__, __LINE__, (key)->slid, (key)->src_subctxt_rx, (key)->dlid,          \
+			(key)->dst_subctxt_rx, ##__VA_ARGS__);                                                            \
 	} while (0)
 #else
 #define OPX_RELIABILITY_DEBUG_LOG(key, fmt, ...)
@@ -785,7 +785,7 @@ fi_opx_reliability_create_rx_flow(struct fi_opx_reliability_service		  *service,
  *   and flow_ptr will be set to point to the RX flow
  */
 static inline unsigned fi_opx_reliability_rx_check(struct fi_opx_reliability_service *service, opx_lid_t slid,
-						   uint64_t src_origin_rx, uint32_t psn,
+						   uint16_t src_origin_rx, uint32_t psn,
 						   struct fi_opx_reliability_rx_flow **flow_ptr)
 {
 	struct fi_opx_reliability_rx_flow *flow;
