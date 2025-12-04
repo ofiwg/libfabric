@@ -950,7 +950,7 @@ static int xnet_handle_write(struct xnet_ep *ep)
 		return -FI_ENOMEM;
 
 	if (ep->cur_rx.hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA) {
-		rx_entry->cq_flags = (FI_COMPLETION | FI_REMOTE_WRITE |
+		rx_entry->cq_flags = (FI_COMPLETION | FI_RMA | FI_REMOTE_WRITE |
 				      FI_REMOTE_CQ_DATA);
 		rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr +
 			   sizeof(rx_entry->hdr.cq_data_hdr));
