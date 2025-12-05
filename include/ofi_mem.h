@@ -444,7 +444,8 @@ static inline bool ofi_bufpool_ibuf_is_valid(struct ofi_bufpool *pool, size_t in
 	void *buf;
 	size_t region_index = index / pool->attr.chunk_cnt;
 
-	assert(region_index < pool->region_cnt);
+	if (region_index >= pool->region_cnt)
+		return false;
 
 	buf = pool->region_table[region_index]->mem_region +
 		(index % pool->attr.chunk_cnt) * pool->entry_size;

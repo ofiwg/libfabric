@@ -246,6 +246,9 @@ void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *entry;
 
+	if (!ofi_bufpool_ibuf_is_valid(av->av_entry_pool, fi_addr))
+		return NULL;
+
 	entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
 	return entry->data;
 }
@@ -916,10 +919,13 @@ bool ofi_ip_av_is_valid(struct fid_av *av_fid, fi_addr_t fi_addr)
 int ofi_ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 		     void *addr, size_t *addrlen)
 {
-	struct util_av *av =
-		container_of(av_fid, struct util_av, av_fid);
+	struct util_av *av = container_of(av_fid, struct util_av, av_fid);
 	size_t av_addrlen;
-	void *av_addr = ofi_av_lookup_addr(av, fi_addr, &av_addrlen);
+	void *av_addr;
+
+	av_addr = ofi_av_lookup_addr(av, fi_addr, &av_addrlen);
+	if (!av_addr)
+		return -FI_EINVAL;
 
 	memcpy(addr, av_addr, MIN(*addrlen, av_addrlen));
 	*addrlen = av->addrlen;
