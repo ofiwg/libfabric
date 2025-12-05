@@ -599,6 +599,10 @@ int efa_get_user_info(uint32_t version, const char *node,
 		if (ret)
 			continue;
 
+		ret = efa_prov_info_compare_fabric_name(hints, prov_info);
+		if (ret)
+			continue;
+
 		ret = efa_prov_info_compare_domain_name(hints, prov_info);
 		if (ret)
 			continue;
@@ -620,10 +624,6 @@ int efa_get_user_info(uint32_t version, const char *node,
 		dupinfo->fabric_attr->api_version = version;
 
 		if (EFA_INFO_TYPE_IS_RDM(prov_info)) {
-			if (hints && hints->fabric_attr && hints->fabric_attr->name &&
-			    strcasecmp(hints->fabric_attr->name, EFA_FABRIC_NAME))
-				continue;
-
 			ret = efa_user_info_alter_rdm(version, dupinfo, hints);
 			if (ret) {
 				fi_freeinfo(dupinfo);
@@ -640,10 +640,6 @@ int efa_get_user_info(uint32_t version, const char *node,
 		}
 
 		if (EFA_INFO_TYPE_IS_DIRECT(prov_info)) {
-			if (hints && hints->fabric_attr && hints->fabric_attr->name &&
-			    strcasecmp(hints->fabric_attr->name, EFA_DIRECT_FABRIC_NAME))
-				continue;
-
 			ret = efa_user_info_alter_direct(version, dupinfo, hints);
 			if (ret) {
 				fi_freeinfo(dupinfo);
