@@ -289,15 +289,16 @@ static int rxd_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 	for (i = 0; i < count; i++) {
 		rxd_addr = (intptr_t)ofi_idx_lookup(&av->fi_addr_idx,
 						    (int) RXD_IDX_OFFSET(fi_addr[i]));
-		if (!rxd_addr)
-			goto err;
+		if (!rxd_addr) {
+			ret = -FI_EINVAL;
+			continue;
+		}
 
 		ofi_idx_remove_ordered(&(av->fi_addr_idx),
 				       (int) RXD_IDX_OFFSET(fi_addr[i]));
 		ofi_idm_clear(&(av->rxdaddr_fi_idm), (int) rxd_addr);
 	}
 
-err:
 	if (ret)
 		FI_WARN(&rxd_prov, FI_LOG_AV, "Unable to remove address from AV\n");
 
@@ -322,7 +323,7 @@ static int rxd_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	rxd_av = container_of(av, struct rxd_av, util_av.av_fid);
 	dg_fiaddr = rxd_av_dg_addr(rxd_av, fi_addr);
 	if (dg_fiaddr == FI_ADDR_UNSPEC)
-		return -FI_ENODATA;
+		return -FI_EINVAL;
 
 	return fi_av_lookup(rxd_av->dg_av, dg_fiaddr, addr, addrlen);
 }
