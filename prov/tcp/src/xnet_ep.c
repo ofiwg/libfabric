@@ -172,7 +172,7 @@ xnet_disable_keepalive(struct xnet_ep *ep)
 	FI_INFO(&xnet_prov, FI_LOG_EP_CTRL, "ep %p KEEPALIVE is disabled.\n", ep);
 }
 
-static int
+int
 xnet_enable_keepalive(struct xnet_ep *ep)
 {
 	int optval = 1;
@@ -361,16 +361,6 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	if (paramlen) {
 		memcpy(ep->cm_msg->data, param, paramlen);
 		ep->cm_msg->hdr.seg_size = htons((uint16_t) paramlen);
-	}
-
-	/* Enable keepalive to make sure the socket status can be reset in time
-	 * if the remote peer is restarted after it gets connreq but not replies.
-	 */
-	ret = xnet_enable_keepalive(ep);
-	if (ret) {
-		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "%p set tcp keepalive failure:%d\n",
-			ep, ret);
-		return ret;
 	}
 
 	ret = xnet_send_cm_msg(ep);
