@@ -1078,6 +1078,33 @@ struct fi_ops_tagged cxip_ep_tagged_no_rx_ops = {
 	.injectdata = cxip_tinjectdata,
 };
 
+/* Tagged ops with writedata disabled (cq_data_size == 0) */
+struct fi_ops_tagged cxip_ep_tagged_ops_no_writedata = {
+	.size = sizeof(struct fi_ops_tagged),
+	.recv = cxip_trecv,
+	.recvv = cxip_trecvv,
+	.recvmsg = cxip_trecvmsg,
+	.send = cxip_tsend,
+	.sendv = cxip_tsendv,
+	.sendmsg = cxip_tsendmsg,
+	.inject = cxip_tinject,
+	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
+};
+
+struct fi_ops_tagged cxip_ep_tagged_no_rx_ops_no_writedata = {
+	.size = sizeof(struct fi_ops_tagged),
+	.recv = fi_no_tagged_recv,
+	.recvv = fi_no_tagged_recvv,
+	.recvmsg = fi_no_tagged_recvmsg,
+	.send = cxip_tsend,
+	.sendv = cxip_tsendv,
+	.sendmsg = cxip_tsendmsg,
+	.inject = cxip_tinject,
+	.senddata = fi_no_tagged_senddata,
+	.injectdata = fi_no_tagged_injectdata,
+};
+
 static ssize_t cxip_recv(struct fid_ep *fid_ep, void *buf, size_t len,
 			 void *desc, fi_addr_t src_addr, void *context)
 {
@@ -1326,3 +1353,31 @@ struct fi_ops_msg cxip_ep_msg_no_rx_ops = {
 	.senddata = cxip_senddata,
 	.injectdata = cxip_injectdata,
 };
+
+/* Message ops with writedata disabled (cq_data_size == 0) */
+struct fi_ops_msg cxip_ep_msg_ops_no_writedata = {
+	.size = sizeof(struct fi_ops_msg),
+	.recv = cxip_recv,
+	.recvv = cxip_recvv,
+	.recvmsg = cxip_recvmsg,
+	.send = cxip_send,
+	.sendv = cxip_sendv,
+	.sendmsg = cxip_sendmsg,
+	.inject = cxip_inject,
+	.senddata = fi_no_msg_senddata,
+	.injectdata = fi_no_msg_injectdata,
+};
+
+struct fi_ops_msg cxip_ep_msg_no_rx_ops_no_writedata = {
+	.size = sizeof(struct fi_ops_msg),
+	.recv = fi_no_msg_recv,
+	.recvv = fi_no_msg_recvv,
+	.recvmsg = fi_no_msg_recvmsg,
+	.send = cxip_send,
+	.sendv = cxip_sendv,
+	.sendmsg = cxip_sendmsg,
+	.inject = cxip_inject,
+	.senddata = fi_no_msg_senddata,
+	.injectdata = fi_no_msg_injectdata,
+};
+
