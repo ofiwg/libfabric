@@ -762,3 +762,22 @@ int efa_prov_info_compare_pci_bus_id(const struct fi_info *hints,
 
 	return 0;
 }
+
+/*
+ * @brief Compare the fabric name specified via hints and match it with the
+ *		  fabric name in prov_info
+ *
+ * @param      info[in]        info object
+ * @param      hints[in]       hints from user's call to fi_getinfo()
+ *
+ * return      1 - If the names are different
+ *             0 - No difference, names match.
+ */
+int efa_prov_info_compare_fabric_name(const struct fi_info *hints,
+				      const struct fi_info *info)
+{
+	if (hints && hints->fabric_attr && hints->fabric_attr->name)
+		return strcmp(info->fabric_attr->name, hints->fabric_attr->name);
+
+	return 0;
+}
