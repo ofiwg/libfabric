@@ -37,19 +37,24 @@
 
 #include <sys/types.h>
 
+static ofi_mutex_t init_lock;
 
 static int udpx_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
 {
-	return ofi_ip_getinfo(&udpx_util_prov, version, node, service, flags,
-			      hints, info);
+	ofi_mutex_lock(&init_lock);
+	udpx_util_prov_init(version);
+	ofi_mutex_unlock(&init_lock);
+	return util_getinfo(&udpx_util_prov, version, node, service, flags,
+			    hints, info);
 }
 
 static void udpx_fini(void)
 {
-	/* yawn */
+	udpx_util_prov_fini();
 }
+
 
 struct fi_provider udpx_prov = {
 	.name = "udp",
@@ -65,5 +70,6 @@ UDP_INI
 	fi_param_define(&udpx_prov, "iface", FI_PARAM_STRING,
 			"Specify interface name");
 
+	ofi_mutex_init(&init_lock);
 	return &udpx_prov;
 }

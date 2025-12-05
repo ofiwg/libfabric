@@ -655,6 +655,7 @@ struct ofi_addr_list_entry {
 	char			ipstr[INET6_ADDRSTRLEN];
 	union ofi_sock_ip	ipaddr;
 	size_t			speed;
+	int			mtu;
 	char			net_name[OFI_ADDRSTRLEN];
 	char			ifa_name[OFI_ADDRSTRLEN];
 	uint64_t		comm_caps;
