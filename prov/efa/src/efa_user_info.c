@@ -105,10 +105,12 @@ int efa_user_info_check_fabric_object(const struct fi_info *hints,
 	}
 
 	util_fabric = container_of(hints->fabric_attr->fabric, struct util_fabric, fabric_fid);
-	fabric_attr.name = (char *)util_fabric->name;
 	fabric_attr.prov_name = (char *)util_fabric->prov->name;
 	fabric_attr.prov_version = util_fabric->prov->version;
 	fabric_attr.api_version = hints->fabric_attr->fabric->api_version;
+
+	if (strcmp(util_fabric->name, prov_info->fabric_attr->name))
+		return -FI_EINVAL;
 
 	ret = ofi_check_fabric_attr(efa_util_prov.prov, 
 				    prov_info->fabric_attr, 
@@ -147,6 +149,9 @@ int efa_user_info_check_domain_object(const struct fi_info *hints,
 
 	util_domain = container_of(hints->domain_attr->domain, struct util_domain, domain_fid);
 	util_fabric = util_domain->fabric;
+
+	if (strcmp(util_fabric->name, dupinfo->fabric_attr->name))
+		return -FI_EINVAL;
 
 	if (strcmp(util_domain->name, dupinfo->domain_attr->name))
 		return -FI_EINVAL;
@@ -593,6 +598,10 @@ int efa_get_user_info(uint32_t version, const char *node,
 		if (ret)
 			continue;
 
+		ret = efa_prov_info_compare_fabric_name(hints, prov_info);
+		if (ret)
+			continue;
+
 		ret = efa_prov_info_compare_domain_name(hints, prov_info);
 		if (ret)
 			continue;
@@ -614,10 +623,6 @@ int efa_get_user_info(uint32_t version, const char *node,
 		dupinfo->fabric_attr->api_version = version;
 
 		if (EFA_INFO_TYPE_IS_RDM(prov_info)) {
-			if (hints && hints->fabric_attr && hints->fabric_attr->name &&
-			    strcasecmp(hints->fabric_attr->name, EFA_FABRIC_NAME))
-				continue;
-
 			ret = efa_user_info_alter_rdm(version, dupinfo, hints);
 			if (ret) {
 				fi_freeinfo(dupinfo);
@@ -634,10 +639,6 @@ int efa_get_user_info(uint32_t version, const char *node,
 		}
 
 		if (EFA_INFO_TYPE_IS_DIRECT(prov_info)) {
-			if (hints && hints->fabric_attr && hints->fabric_attr->name &&
-			    strcasecmp(hints->fabric_attr->name, EFA_DIRECT_FABRIC_NAME))
-				continue;
-
 			ret = efa_user_info_alter_direct(version, dupinfo, hints);
 			if (ret) {
 				fi_freeinfo(dupinfo);

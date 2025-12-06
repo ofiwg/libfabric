@@ -845,15 +845,17 @@ static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
 	assert_int_equal(err, 0);
 	assert_non_null(info2);
 
+	util_domain = container_of(domain, struct util_domain, domain_fid);
 	if (expect_fabric_reuse) {
 		assert_ptr_equal(info2->fabric_attr->fabric, fabric);
+		assert_string_equal(info2->fabric_attr->name, util_domain->fabric->name);
 	} else {
 		assert_null(info2->fabric_attr->fabric);
 	}
 	
 	if (expect_domain_reuse) {
 		assert_ptr_equal(info2->domain_attr->domain, domain);
-		util_domain = container_of(domain, struct util_domain, domain_fid);
+		assert_string_equal(info2->fabric_attr->name, util_domain->fabric->name);
 		assert_true((util_domain->info_domain_caps &
 			     (hints1->caps | hints2->caps)) ==
 			    (hints1->caps | hints2->caps));
