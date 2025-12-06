@@ -191,6 +191,8 @@ void test_ibv_cq_ex_read_recover_forgotten_peer_ah();
 void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer();
 void test_ibv_cq_ex_read_ignore_removed_peer();
 void test_efa_rdm_cq_before_ep_enable();
+void test_efa_rdm_cq_sread_invalid_count();
+void test_efa_rdm_cq_sread_no_wait_obj();
 
 /* begin efa_unit_test_info.c */
 void test_info_open_ep_with_wrong_info();

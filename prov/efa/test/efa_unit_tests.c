@@ -53,6 +53,11 @@ static int efa_unit_test_mocks_teardown(void **state)
 	/* Reset the contents of g_efa_hmem_info from backup */
 	memcpy(g_efa_hmem_info, g_efa_hmem_info_backup, sizeof(g_efa_hmem_info));
 
+	/* Provide default mock return values for CQ operations during teardown */
+	if (g_efa_unit_test_mocks.efa_ibv_cq_start_poll) {
+		will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	}
+
 	efa_unit_test_resource_destruct(resource);
 
 	efa_ibv_ah_limit_cnt_reset();
@@ -226,6 +231,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_ibv_cq_ex_read_ignore_removed_peer, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_before_ep_enable, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_sread_invalid_count, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_sread_no_wait_obj, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_disabled_by_env, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_disabled_with_old_device, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_data_path_direct_enabled_with_new_device, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
