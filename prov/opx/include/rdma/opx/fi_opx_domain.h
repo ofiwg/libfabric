@@ -126,11 +126,11 @@ struct fi_opx_domain {
 		hfisvc_client_completion_queue_t mr_completion_queue;
 		opx_hfisvc_keyset_t		 access_key_set;
 		int64_t				 ref_cnt;
-		hfisvc_client_key_t		 key;
+		hfisvc_client_key_t		 client_key;
 		uint32_t			 padding;
 		void				*libhfi1verbs;
 		int (*initialize)(struct ibv_context *ctx);
-		int (*client_key)(struct ibv_context *ctx, hfisvc_client_key_t *key);
+		int (*get_client_key)(struct ibv_context *ctx, hfisvc_client_key_t *key);
 		int (*command_queue_open)(hfisvc_client_command_queue_t *command_queue, struct ibv_context *ctx);
 		int (*command_queue_close)(hfisvc_client_command_queue_t *command_queue);
 		int (*completion_queue_open)(hfisvc_client_completion_queue_t *completion_queue,
@@ -151,6 +151,9 @@ struct fi_opx_domain {
 	uint8_t use_hfisvc;
 	uint8_t padding[7];
 	int64_t ref_cnt;
+
+	struct slist	    deferred_work_queue;
+	struct ofi_bufpool *deferred_work_pool;
 };
 
 struct fi_opx_av {
@@ -175,12 +178,39 @@ struct fi_opx_av {
 	uint32_t	   table_count; /* table, not av, count */
 };
 
+/**
+ * Keeps track of the state of the MR with regards to HFI service.
+ *
+ * Each state indicates the following:
+ *
+ * NOT_REGISTERED      : The MR has not been registered with HFI service at all.
+ * PENDING_OPEN        : A request to register this MR with HFI service has been submitted, and we're waiting
+ *                       for a completion from HFI service to let us know it's done.
+ * PENDING_KEY_ALLOC   : This MR is registered with HFI service, but does not yet have an access_key assigned
+ *                       and registered with HFI service.
+ * PENDING_KEY_ENABLE  : An access_key has been assigned to this MR, and a request to enable DMA access for
+ *                       the key has been submitted to HFI service, and we're waiting for a completion from
+ *                       HFI service to let us know it's done.
+ * OPENED              : This MR is registered with HFI service, and may be used for DMA operations in HFI service
+ *                       using its access_key.
+ * PENDING_KEY_DISABLE : A request to deregister the access_key associated with this MR has been submitted to
+ *                       HFI service, and we're waiting for a completion from HFI service to let us know it's done.
+ * PENDING_DEREGISTER  : The access_key has been successfully deregistered from HFI service and freed, and now
+ *                       we need to deregister the MR from HFI service.
+ * PENDING_CLOSE       : A request to deregister this MR with HFI service has been submitted, and we're waiting
+ *                       for a completion from HFI service to let us know it's done.
+ * CLOSED              : The MR has been fully deregisterd with HFI service, and may be closed/freed.
+ */
 enum opx_mr_hfisvc_state {
-	OPX_MR_HFISVC_NOT_REGISTERED = 0,
-	OPX_MR_HFISVC_PENDING_OPEN,
-	OPX_MR_HFISVC_OPENED,
-	OPX_MR_HFISVC_PENDING_CLOSE,
-	OPX_MR_HFISVC_CLOSED,
+	OPX_MR_HFISVC_STATE_NOT_REGISTERED = 0,
+	OPX_MR_HFISVC_STATE_PENDING_OPEN,
+	OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC,
+	OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE,
+	OPX_MR_HFISVC_STATE_OPENED,
+	OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE,
+	OPX_MR_HFISVC_STATE_PENDING_DEREGISTER,
+	OPX_MR_HFISVC_STATE_PENDING_CLOSE,
+	OPX_MR_HFISVC_STATE_CLOSED,
 };
 
 struct fi_opx_mr {
@@ -223,6 +253,16 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, flags) == (FI_OPX_CACHE_LINE_
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, hh) == (FI_OPX_CACHE_LINE_SIZE * 4),
 			"Offset of fi_opx_mr->hh should start at cacheline 4!");
 
+struct opx_domain_deferred_work {
+	union {
+		struct slist_entry		 slist_entry;
+		struct opx_domain_deferred_work *next;
+	};
+	int (*work_fn)(struct opx_domain_deferred_work *work);
+	struct fi_opx_mr *opx_mr;
+	uint64_t	  unused;
+} __attribute__((__aligned__(32))) __attribute__((__packed__));
+
 static inline uint32_t fi_opx_domain_get_tx_max(struct fid_domain *domain)
 {
 	return 160;
@@ -233,7 +273,68 @@ static inline uint32_t fi_opx_domain_get_rx_max(struct fid_domain *domain)
 	return 160;
 }
 
+int opx_hfisvc_mr_deferred_open(struct opx_domain_deferred_work *work);
+int opx_hfisvc_mr_deferred_close(struct opx_domain_deferred_work *work);
+
 #if HAVE_HFISVC
+__OPX_FORCE_INLINE__
+int opx_domain_deferred_work_enqueue(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr,
+				     int (*work_fn)(struct opx_domain_deferred_work *work))
+{
+	struct opx_domain_deferred_work *work = ofi_buf_alloc(opx_domain->deferred_work_pool);
+	if (OFI_UNLIKELY(work == NULL)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "Error allocating deferred work for hfisvc mr open\n");
+		return -FI_ENOMEM;
+	}
+	work->next    = NULL;
+	work->opx_mr  = opx_mr;
+	work->work_fn = work_fn;
+
+	int ret = work_fn(work);
+	if (OFI_UNLIKELY(ret == FI_SUCCESS)) {
+		OPX_BUF_FREE(work);
+	} else {
+		slist_insert_tail((struct slist_entry *) work, &opx_domain->deferred_work_queue);
+	}
+
+	return FI_SUCCESS;
+}
+
+__OPX_FORCE_INLINE__
+int opx_domain_deferred_work_enqueue_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr)
+{
+	return opx_domain_deferred_work_enqueue(opx_domain, opx_mr, opx_hfisvc_mr_deferred_open);
+}
+
+__OPX_FORCE_INLINE__
+int opx_domain_deferred_work_enqueue_close(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr)
+{
+	return opx_domain_deferred_work_enqueue(opx_domain, opx_mr, opx_hfisvc_mr_deferred_close);
+}
+
+__OPX_FORCE_INLINE__
+void opx_domain_deferred_work_do(struct fi_opx_domain *opx_domain)
+{
+	struct opx_domain_deferred_work *prev_item = NULL;
+	struct opx_domain_deferred_work *work_item =
+		(struct opx_domain_deferred_work *) opx_domain->deferred_work_queue.head;
+
+	while (work_item) {
+		int ret = (work_item->work_fn)(work_item);
+
+		if (ret == FI_SUCCESS) {
+			struct opx_domain_deferred_work *next_item = work_item->next;
+			slist_remove(&opx_domain->deferred_work_queue, (struct slist_entry *) work_item,
+				     (struct slist_entry *) prev_item);
+			OPX_BUF_FREE(work_item);
+			work_item = next_item;
+		} else {
+			prev_item = work_item;
+			work_item = work_item->next;
+		}
+	}
+}
+
 __OPX_FORCE_INLINE__
 void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 {
@@ -254,16 +355,33 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 			struct fi_opx_mr  *opx_mr    = (struct fi_opx_mr *) hfisvc_out[i].app_context;
 			hfisvc_client_mr_t mr_handle = hfisvc_out[i].type_mr.mr;
 
-			if (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_OPEN) {
-				OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_OPEN -> OPENED\n",
+			if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_OPEN) {
+				OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_OPEN -> KEY_ALLOC\n",
 						     opx_mr);
 				opx_mr->hfisvc.mr_handle = mr_handle;
-				opx_mr->hfisvc.state	 = OPX_MR_HFISVC_OPENED;
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_CLOSE) {
+				opx_mr->hfisvc.state	 = OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC;
+			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE) {
+				OPX_HFISVC_DEBUG_LOG(
+					"MR State transition opx_mr=%p state=PENDING_KEY_ENABLE -> OPENED\n", opx_mr);
+				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPENED;
+			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE) {
+				opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set, opx_mr->hfisvc.access_key,
+							   NULL);
+				opx_mr->hfisvc.access_key = (uint32_t) -1;
+				OPX_HFISVC_DEBUG_LOG(
+					"MR State transition opx_mr=%p state=PENDING_KEY_DISABLE -> PENDING_DEREGISTER\n",
+					opx_mr);
+				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
+			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_DEREGISTER) {
+				OPX_HFISVC_DEBUG_LOG(
+					"MR State transition opx_mr=%p state=PENDING_DEREGISTER -> PENDING_CLOSE\n",
+					opx_mr);
+				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_CLOSE;
+			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_CLOSE) {
 				OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_CLOSE -> CLOSED\n",
 						     opx_mr);
 				assert(opx_mr->hfisvc.mr_handle == mr_handle);
-				opx_mr->hfisvc.state = OPX_MR_HFISVC_CLOSED;
+				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_CLOSED;
 			} else {
 				// TODO: FI_WARN, post some kind of error to the error queue
 				fprintf(stderr, "(%d) %s:%s():%d Got unexpected completion for opx_mr=%p state=%d\n",
@@ -274,7 +392,10 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 		n = (*opx_domain->hfisvc.cq_read)(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out,
 						  sizeof(struct hfisvc_client_cq_entry) * 64, 64);
 	}
+
+	opx_domain_deferred_work_do(opx_domain);
 }
+
 int opx_domain_hfisvc_init(struct fi_opx_domain *domain);
 #endif
 

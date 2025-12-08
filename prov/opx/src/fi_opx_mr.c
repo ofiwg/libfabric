@@ -47,79 +47,21 @@ static int fi_opx_close_mr(fid_t fid)
 	struct fi_opx_domain *opx_domain = opx_mr->domain;
 
 	// TODO: Debug counters
+	int ret = 0;
 #if HAVE_HFISVC
-#if 0
-	/* The MR was recently opened, and we need to wait for it to reach
-	   OPENED state before we can close it. Callers to fi_close() don't
-	   gracefully handle EAGAIN to retry later, so we need to busy-wait */
-	if (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_OPEN) {
-		uint64_t iter_count = 0;
-		while (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_OPEN && iter_count < OPX_MR_CLOSE_MAX_WAIT_ITERS) {
-			opx_domain_hfisvc_poll(opx_domain);
-			++iter_count;
-		}
-		if (OFI_UNLIKELY(opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_OPEN)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-				"Error: opx_mr=%p was PENDING_OPEN, but never got completion from HFI service to transition to fully OPENED state\n",
-				opx_mr);
-
-			// Returning any non-SUCCESS to the caller will most likely cause them to abort
-			return -FI_EBUSY;
-		}
-	}
-
-	if (opx_mr->hfisvc.state == OPX_MR_HFISVC_OPENED) {
-		struct hfisvc_client_completion completion = {
-			.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
-			.cq.handle	= opx_domain->hfisvc.mr_completion_queue,
-			.cq.app_context = (uint64_t) opx_mr,
-		};
-
-		OPX_HFISVC_DEBUG_LOG("Closing MR opx_mr=%p buf=%p-%p access_key=%u\n", opx_mr, opx_mr->iov.iov_base,
-				     (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len),
-				     opx_mr->hfisvc.access_key);
-
-		int ret = hfisvc_client_cmd_mr_close(opx_domain->hfisvc.mr_command_queue, completion, 0UL /* flags */,
-						     opx_mr->hfisvc.mr_handle);
+	if (opx_domain->use_hfisvc) {
+		ret = opx_domain_deferred_work_enqueue_close(opx_domain, opx_mr);
 		if (ret) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error closing opx_mr=%p buf=%p-%p access_key=%u\n",
-				opx_mr, opx_mr->iov.iov_base,
-				(void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len),
-				opx_mr->hfisvc.access_key);
-
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc close mr returned %d\n",
+				ret);
+			errno = -ret;
 			return ret;
 		}
-		opx_mr->hfisvc.state = OPX_MR_HFISVC_PENDING_CLOSE;
-		(*opx_ep->domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
-
-		uint64_t iter_count = 0;
-		while (opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_CLOSE &&
-		       iter_count < OPX_MR_CLOSE_MAX_WAIT_ITERS) {
-			opx_domain_hfisvc_poll(opx_domain);
-			++iter_count;
-		}
-		if (OFI_UNLIKELY(opx_mr->hfisvc.state == OPX_MR_HFISVC_PENDING_CLOSE)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-				"Error: opx_mr=%p was PENDING_CLOSE, but never got completion from HFI service to transition to fully CLOSED state\n",
-				opx_mr);
-			return -FI_EBUSY;
-		}
-
-		OPX_HFISVC_DEBUG_LOG("MR_CLOSED: Freeing access_key=%u for opx_mr=%p buf=%p-%p\n",
-				     opx_mr->hfisvc.access_key, opx_mr, opx_mr->iov.iov_base,
-				     (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len));
-
-		opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set, opx_mr->hfisvc.access_key, NULL);
-		opx_mr->hfisvc.state = OPX_MR_HFISVC_NOT_REGISTERED;
 	}
-
-	assert(opx_mr->hfisvc.state == OPX_MR_HFISVC_NOT_REGISTERED);
-#endif
 #endif
 
 	HASH_DEL(opx_domain->mr_hashmap, opx_mr);
 
-	int ret = 0;
 	if (opx_domain->mr_mode & OFI_MR_SCALABLE) {
 		ret = fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
 		if (ret) {
@@ -127,7 +69,11 @@ static int fi_opx_close_mr(fid_t fid)
 				"Attempted to decrement reference counter when counter value was already zero, freeing opx_mr and returning error");
 		}
 	}
-	free(opx_mr);
+
+	// If HFI service is being used, opx_mr will be freed by the deferred close
+	if (!opx_domain->use_hfisvc) {
+		free(opx_mr);
+	}
 	// opx_mr (the object passed in as fid) is now unusable
 	return ret;
 }
@@ -161,53 +107,6 @@ static struct fi_ops fi_opx_fi_ops = {.size	= sizeof(struct fi_ops),
 				      .bind	= fi_opx_bind_mr,
 				      .control	= fi_no_control,
 				      .ops_open = fi_no_ops_open};
-
-#ifdef HFISVC
-static inline int opx_mr_hfisvc_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr,
-				     const struct iovec *iov, enum fi_hmem_iface hmem_iface, uint64_t hmem_device,
-				     uint32_t access_key)
-{
-	opx_mr->hfisvc.access_key		   = access_key;
-	opx_mr->hfisvc.state			   = OPX_MR_HFISVC_PENDING_OPEN;
-	struct hfisvc_client_completion completion = {
-		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
-		.cq.handle	= opx_domain->hfisvc.mr_completion_queue,
-		.cq.app_context = (uint64_t) opx_mr,
-	};
-
-	struct hfisvc_client_hmem hmem;
-	hmem.iface = (enum hfisvc_client_hmem_iface) hmem_iface;
-	switch (hmem_iface) {
-	case FI_HMEM_CUDA:
-		hmem.device.cuda = (int) hmem_device;
-		break;
-	case FI_HMEM_ZE:
-		hmem.device.ze = (int) hmem_device;
-		break;
-	case FI_HMEM_ROCR:
-		hmem.device.rocr = (int) hmem_device;
-		break;
-	default:
-		hmem.device.reserved = 0UL;
-	};
-
-	OPX_HFISVC_DEBUG_LOG("Opening MR opx_mr=%p buf=%p-%p (%lu bytes) iface=%d access_key=%u\n", opx_mr,
-			     iov->iov_base, (void *) ((uintptr_t) iov->iov_base + iov->iov_len), iov->iov_len,
-			     hmem_iface, access_key);
-
-	int ret = hfisvc_client_cmd_mr_open(opx_domain->hfisvc.mr_command_queue, completion, 0UL /* flags */,
-					    iov->iov_len, iov->iov_base, hmem);
-	if (ret) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error opening opx_mr=%p buf=%p-%p iface=%d access_key=%u\n",
-			opx_mr, iov->iov_base, (void *) ((uintptr_t) iov->iov_base + iov->iov_len), hmem_iface,
-			opx_mr->hfisvc.access_key);
-		return ret;
-	}
-	(*opx_ep->domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
-
-	return 0;
-}
-#endif
 
 static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *iov, size_t count, uint64_t access,
 					 uint64_t offset, uint64_t requested_key, uint64_t flags, struct fid_mr **mr,
@@ -261,23 +160,6 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		return -errno;
 	}
 
-	__attribute__((__unused__)) uint32_t hfisvc_access_key = 0;
-#if HAVE_HFISVC
-#if 0
-	if (opx_domain->use_hfisvc) {
-		ret = opx_hfisvc_keyset_alloc_key(opx_domain->hfisvc.access_key_set, &hfisvc_access_key, NULL);
-		if (ret) {
-			OPX_HFISVC_DEBUG_LOG("Unable to allocate access_key for buf=%p-%p (EAGAIN)\n", iov->iov_base,
-					     (void *) ((uintptr_t) iov->iov_base + iov->iov_len));
-			errno = FI_EAGAIN;
-			return -errno;
-		}
-		OPX_HFISVC_DEBUG_LOG("Allocated access_key=%u for buf=%p-%p\n", hfisvc_access_key, iov->iov_base,
-				     (void *) ((uintptr_t) iov->iov_base + iov->iov_len));
-	}
-#endif
-#endif
-
 	struct fi_opx_mr			      *opx_mr;
 	__attribute__((__unused__)) uint64_t	       hmem_device = 0UL;
 	__attribute__((__unused__)) enum fi_hmem_iface hmem_iface  = FI_HMEM_SYSTEM;
@@ -309,32 +191,17 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 				}
 				opx_mr->attr.requested_key = opx_mr->mr_fid.key;
 #if HAVE_HFISVC
-#if 0
 				if (opx_domain->use_hfisvc) {
-					ret = opx_mr_hfisvc_open(opx_domain, opx_mr, iov, hmem_iface, hmem_device,
-								 hfisvc_access_key);
+					ret = opx_domain_deferred_work_enqueue_open(opx_domain, opx_mr);
 					if (ret) {
 						FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-							"Error opening hfisvc mr returned %d\n", ret);
-						OPX_HFISVC_DEBUG_LOG(
-							"Freeing access_key for buf=%p-%p access_key=%u (couldn't open hfisvc mr)\n",
-							iov->iov_base,
-							(void *) ((uintptr_t) iov->iov_base + iov->iov_len),
-							hfisvc_access_key);
-						opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set,
-									   hfisvc_access_key, NULL);
-						errno = FI_EFAULT;
-						return -errno;
+							"Error enqueuing deferred hfisvc open mr returned %d\n", ret);
+						errno = -ret;
+						return ret;
 					}
-					opx_mr->hfisvc.access_key = hfisvc_access_key;
-				} else {
-					opx_mr->hfisvc.access_key = (uint32_t) -1;
 				}
 #endif
 				opx_mr->hfisvc.access_key = (uint32_t) -1;
-#else
-				opx_mr->hfisvc.access_key = (uint32_t) -1;
-#endif
 
 #ifdef HAVE_CUDA
 				if (hmem_iface == FI_HMEM_CUDA) {
@@ -362,36 +229,9 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 
 	opx_mr = calloc(1, sizeof(*opx_mr));
 	if (!opx_mr) {
-#if HAVE_HFISVC
-#if 0
-		if (opx_domain->use_hfisvc) {
-			opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set, hfisvc_access_key, NULL);
-			OPX_HFISVC_DEBUG_LOG(
-				"Freeing access_key for buf=%p-%p access_key=%u (couldn't allocate opx_mr)\n",
-				iov->iov_base, (void *) ((uintptr_t) iov->iov_base + iov->iov_len), hfisvc_access_key);
-		}
-#endif
-#endif
 		errno = FI_ENOMEM;
 		return -errno;
 	}
-
-#if HAVE_HFISVC
-#if 0
-	if (opx_domain->use_hfisvc) {
-		ret = opx_mr_hfisvc_open(opx_domain, opx_mr, iov, hmem_iface, hmem_device, hfisvc_access_key);
-		if (ret) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error opening hfisvc mr returned %d\n", ret);
-			OPX_HFISVC_DEBUG_LOG(
-				"Freeing access_key for buf=%p-%p access_key=%u (couldn't open hfisvc mr)\n",
-				iov->iov_base, (void *) ((uintptr_t) iov->iov_base + iov->iov_len), hfisvc_access_key);
-			opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set, hfisvc_access_key, NULL);
-			errno = FI_EFAULT;
-			return -errno;
-		}
-	}
-#endif
-#endif
 
 #ifdef OPX_HMEM
 	switch (hmem_iface) {
@@ -437,6 +277,18 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
 	}
 	HASH_ADD(hh, opx_domain->mr_hashmap, mr_fid.key, sizeof(opx_mr->mr_fid.key), opx_mr);
+
+#if HAVE_HFISVC
+	if (opx_domain->use_hfisvc) {
+		ret = opx_domain_deferred_work_enqueue_open(opx_domain, opx_mr);
+		if (ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc open mr returned %d\n",
+				ret);
+			errno = -ret;
+			return ret;
+		}
+	}
+#endif
 
 	*mr = &opx_mr->mr_fid;
 

@@ -84,6 +84,21 @@ static int fi_opx_close_domain(fid_t fid)
 	opx_domain->hmem_domain = NULL;
 #endif
 
+	if (!slist_empty(&opx_domain->deferred_work_queue)) {
+		struct opx_domain_deferred_work *work_item =
+			(struct opx_domain_deferred_work *) slist_remove_head(&opx_domain->deferred_work_queue);
+
+		while (work_item) {
+			if (work_item->opx_mr && work_item->work_fn == opx_hfisvc_mr_deferred_close) {
+				free(work_item->opx_mr);
+			}
+			OPX_BUF_FREE(work_item);
+			work_item =
+				(struct opx_domain_deferred_work *) slist_remove_head(&opx_domain->deferred_work_queue);
+		}
+	}
+
+	ofi_bufpool_destroy(opx_domain->deferred_work_pool);
 #if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {
 		ret = fi_opx_ref_finalize(&opx_domain->hfisvc.ref_cnt, "hfisvc");
@@ -559,6 +574,10 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 		goto err;
 	}
 
+	slist_init(&opx_domain->deferred_work_queue);
+	ofi_bufpool_create(&opx_domain->deferred_work_pool, sizeof(struct opx_domain_deferred_work), 32, UINT_MAX, 2048,
+			   OFI_BUFPOOL_NO_ZERO);
+
 	fi_opx_ref_inc(&opx_fabric->ref_cnt, "fabric");
 
 	*dom = &opx_domain->domain_fid;
@@ -610,7 +629,7 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize found\n");
 
-		domain->hfisvc.client_key = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_key");
+		domain->hfisvc.get_client_key = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_key");
 		domain->hfisvc.command_queue_open =
 			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_open");
 		domain->hfisvc.command_queue_close =
@@ -625,7 +644,7 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 		domain->hfisvc.cmd_rdma_read_va = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_read_va");
 		domain->hfisvc.doorbell		= dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_doorbell");
 
-		assert(domain->hfisvc.client_key != NULL);
+		assert(domain->hfisvc.get_client_key != NULL);
 		assert(domain->hfisvc.command_queue_open != NULL);
 		assert(domain->hfisvc.command_queue_close != NULL);
 		assert(domain->hfisvc.completion_queue_open != NULL);
@@ -641,7 +660,7 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 				"[HFISVC] hfisvc_client_initialize failed, disable hfisvc\n");
 			return -FI_ENODEV;
 		}
-		ret = (*domain->hfisvc.client_key)(domain->hfisvc.ctx, &domain->hfisvc.key);
+		ret = (*domain->hfisvc.get_client_key)(domain->hfisvc.ctx, &domain->hfisvc.client_key);
 		if (ret) {
 			abort();
 		}
@@ -670,7 +689,7 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 			abort();
 		}
 		fi_opx_ref_init(&domain->hfisvc.ref_cnt, "hfisvc");
-		OPX_HFISVC_DEBUG_LOG("Initialized HFI service with client key %u\n", domain->hfisvc.key);
+		OPX_HFISVC_DEBUG_LOG("Initialized HFI service with client key %u\n", domain->hfisvc.client_key);
 		domain->use_hfisvc = 1;
 	}
 

@@ -5525,7 +5525,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 									 FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC) :
 				    ((tx_op_flags & FI_REMOTE_CQ_DATA) ? FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ :
 									 FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC));
-	const uint64_t niov_client_key = ((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.key;
+	const uint64_t niov_client_key = ((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.client_key;
 
 	const uint64_t		 pbc_dlid = OPX_PBC_DLID(addr.lid, OPX_HFI1_JKR);
 	volatile uint64_t *const scb	  = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
