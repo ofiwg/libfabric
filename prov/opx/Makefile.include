@@ -47,6 +47,7 @@ opx_files =									\
 		prov/opx/src/fi_opx_tid_domain.c				\
 		prov/opx/src/opx_hmem_domain.c					\
 		prov/opx/src/opx_hfisvc.c					\
+		prov/opx/src/opx_hfisvc_mr.c					\
 		prov/opx/src/opx_tracer.c					\
 		prov/opx/src/opx_ipc.c						\
 		prov/opx/src/opx_debug.c					\
