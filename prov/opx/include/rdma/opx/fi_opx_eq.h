@@ -38,6 +38,7 @@
 #include <stdint.h>
 #include <ofi_mem.h>
 #include "rdma/opx/fi_opx_internal.h"
+#include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/opx_hfisvc.h"
@@ -333,12 +334,10 @@ void opx_cq_hfisvc_poll_process_completion(struct fi_opx_cq *opx_cq, struct hfis
 		abort();
 	}
 }
-#endif
 
 __OPX_FORCE_INLINE__
 void opx_cq_hfisvc_poll(struct fi_opx_cq *opx_cq)
 {
-#if HAVE_HFISVC
 	if (!opx_cq->use_hfisvc) {
 		return;
 	}
@@ -353,8 +352,8 @@ void opx_cq_hfisvc_poll(struct fi_opx_cq *opx_cq)
 		n = (*opx_cq->domain->hfisvc.cq_read)(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out,
 						      sizeof(*hfisvc_out), 64);
 	}
-#endif
 }
+#endif
 
 static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size_t count,
 				       const enum fi_cq_format format)
@@ -368,9 +367,14 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 	ssize_t	  num_entries = 0;
 	uintptr_t output      = (uintptr_t) buf;
 
-	if (opx_cq->pending.head) {
-		opx_cq_hfisvc_poll(opx_cq);
+#if HAVE_HFISVC
+	if (opx_cq->domain->use_hfisvc) {
+		if (opx_cq->pending.head) {
+			opx_cq_hfisvc_poll(opx_cq);
+		}
+		opx_domain_hfisvc_poll(opx_cq->domain);
 	}
+#endif
 
 	/* examine each context in the pending completion queue and, if the
 	 * operation is complete, initialize the cq entry in the application
