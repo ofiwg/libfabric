@@ -176,9 +176,6 @@ static int ft_cuda_detect_memory_support(void)
     int dma_buf_attr = 0;
     int gdr_attr = 0;
     cuda_memory_support = FT_CUDA_NOT_INITIALIZED;
-    
-
-    FT_INFO("ft_cuda_detect_memory_support() called");
 
     cuda_ret = cuda_ops.cuDeviceGet(&dev, 0);
     if (cuda_ret != CUDA_SUCCESS) {
@@ -221,18 +218,11 @@ static int ft_cuda_detect_memory_support(void)
 
     dmabuf_supported = (dma_buf_attr == 1);
 
-    if (cc_major >= 10) {
-        // Blackwell or newer: nv-p2p deprecated
-        FT_INFO("Compute capability %d.%d: forcing gdr_supported=false due to Blackwell deprecation", cc_major, cc_minor);
+    // Blackwell or newer: nv-p2p deprecated
+    if (cc_major >= 10)
         gdr_supported = false;
-    } else {
+    else
         gdr_supported = (gdr_attr == 1);
-    }
-
-    FT_INFO("Compute capability %d.%d", cc_major, cc_minor);
-    FT_INFO("dmabuf_supported=%s", dmabuf_supported ? "true" : "false");
-    FT_INFO("GPU_DIRECT_RDMA_SUPPORTED raw=%d -> gdr_supported=%s",
-            gdr_attr, gdr_supported ? "true" : "false");
 
     // Final truth table
 	if (!gdr_supported && !dmabuf_supported)
@@ -244,11 +234,9 @@ static int ft_cuda_detect_memory_support(void)
 	else
 		cuda_memory_support = FT_CUDA_GDR_ONLY;
 
-    FT_INFO("cuda_memory_support=%s", get_cuda_memory_support_str(cuda_memory_support));
     return FI_SUCCESS;
 
 #else
-    FT_INFO("HAVE_CUDA_DMABUF not enabled, returning FT_CUDA_NOT_INITIALIZED");
     cuda_memory_support = FT_CUDA_NOT_INITIALIZED;
     return FI_SUCCESS;
 #endif
@@ -402,7 +390,7 @@ int ft_cuda_init(void)
     if (ret != FI_SUCCESS) {
 		goto err_dlclose_cuda;
 	}
-    
+
 
 	return FI_SUCCESS;
 
@@ -623,9 +611,6 @@ int ft_cuda_put_dmabuf_fd(int fd)
 
 enum ft_cuda_memory_support ft_cuda_memory_support(void)
 {
-    if (cuda_memory_support == FT_CUDA_NOT_INITIALIZED) {
-        FT_INFO("ft_cuda_memory_support() not called yet!");
-    }
     return cuda_memory_support;
 }
 
