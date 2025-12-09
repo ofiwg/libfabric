@@ -26,7 +26,6 @@ int main(int argc, char **argv)
     }
 
     enum ft_cuda_memory_support cuda_memory_support = ft_cuda_memory_support();
-    FT_INFO("dmabuf: ft_cuda_memory_support() -> %d", cuda_memory_support);
 
     ft_cuda_cleanup();
     return cuda_memory_support;
