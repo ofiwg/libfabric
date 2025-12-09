@@ -2118,18 +2118,6 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 	if (ret)
 		goto insert_lo;
 
-	if (iface) {
-		for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-			if (!strncmp(iface, ifa->ifa_name, strlen(iface) + 1))
-				break;
-		}
-		if (ifa == NULL) {
-			FI_INFO(prov, FI_LOG_CORE,
-				"Can't set filter to unknown interface: (%s)\n",
-				iface);
-			iface = NULL;
-		}
-	}
 	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr == NULL ||
 			!(ifa->ifa_flags & IFF_UP) ||
