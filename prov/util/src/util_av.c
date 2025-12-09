@@ -56,7 +56,8 @@ enum {
 };
 
 static int fi_get_src_sockaddr(const struct sockaddr *dest_addr, size_t dest_addrlen,
-			       struct sockaddr **src_addr, size_t *src_addrlen)
+			       struct sockaddr **src_addr, size_t *src_addrlen,
+			       uint32_t *addr_format)
 {
 	socklen_t len; /* needed for OS compatability */
 	int sock, ret;
@@ -86,9 +87,11 @@ static int fi_get_src_sockaddr(const struct sockaddr *dest_addr, size_t dest_add
 	switch ((*src_addr)->sa_family) {
 	case AF_INET:
 		((struct sockaddr_in *) (*src_addr))->sin_port = 0;
+		*addr_format = FI_SOCKADDR_IN;
 		break;
 	case AF_INET6:
 		((struct sockaddr_in6 *) (*src_addr))->sin6_port = 0;
+		*addr_format = FI_SOCKADDR_IN6;
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -152,18 +155,18 @@ void ofi_getnodename(uint16_t sa_family, char *buf, int buflen)
 	buf[buflen - 1] = '\0';
 }
 
-int ofi_get_src_addr(uint32_t addr_format,
+int ofi_get_src_addr(uint32_t *addr_format,
 		    const void *dest_addr, size_t dest_addrlen,
 		    void **src_addr, size_t *src_addrlen)
 {
-	switch (addr_format) {
+	switch (*addr_format) {
 	case FI_SOCKADDR:
 	case FI_SOCKADDR_IP:
 	case FI_SOCKADDR_IN:
 	case FI_SOCKADDR_IN6:
 		return fi_get_src_sockaddr(dest_addr, dest_addrlen,
 					   (struct sockaddr **) src_addr,
-					   src_addrlen);
+					   src_addrlen, addr_format);
 	default:
 		return -FI_ENOSYS;
 	}
