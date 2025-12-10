@@ -2119,18 +2119,17 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 		goto insert_lo;
 
 	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL ||
-			!(ifa->ifa_flags & IFF_UP) ||
-			!(ifa->ifa_flags & IFF_RUNNING) ||
-			(ifa->ifa_flags & IFF_LOOPBACK) ||
-			((ifa->ifa_addr->sa_family != AF_INET) &&
-			(ifa->ifa_addr->sa_family != AF_INET6)))
-			continue;
 		if (iface && strncmp(iface, ifa->ifa_name, strlen(iface) + 1)) {
 			FI_DBG(prov, FI_LOG_CORE,
 				"Skip (%s) interface\n", ifa->ifa_name);
 			continue;
 		}
+		if (ifa->ifa_addr == NULL || !(ifa->ifa_flags & IFF_UP) ||
+		    !(ifa->ifa_flags & IFF_RUNNING) ||
+		    (ifa->ifa_flags & IFF_LOOPBACK) ||
+		    ((ifa->ifa_addr->sa_family != AF_INET) &&
+		    (ifa->ifa_addr->sa_family != AF_INET6)))
+			continue;
 
 		addr_entry = calloc(1, sizeof(*addr_entry));
 		if (!addr_entry)
