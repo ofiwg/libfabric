@@ -257,3 +257,31 @@ err1:
 }
 
 #endif /* HAVE_ETHTOOL */
+
+int ofi_ifaddr_get_mtu(const struct ifaddrs *ifa)
+{
+	FILE *fp;
+        char *mtu_filename;
+        int mtu;
+
+	if (asprintf(&mtu_filename, "/sys/class/net/%s/mtu",
+		     ifa->ifa_name) == -1)
+		return 0;
+
+	fp = fopen(mtu_filename, "r");
+	if (!fp)
+		goto err1;
+
+	if (fscanf(fp, "%d", &mtu) != 1)
+		goto err2;
+
+        fclose(fp);
+	free(mtu_filename);
+
+	return mtu;
+ err2:
+	fclose(fp);
+ err1:
+	free(mtu_filename);
+	return 0;
+}

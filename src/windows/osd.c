@@ -477,6 +477,7 @@ int getifaddrs(struct ifaddrs **ifap)
 				(*addr6) = *(struct sockaddr_in6 *) pSockAddr;
 			}
 			fa->speed = aa->TransmitLinkSpeed;
+			fa->mtu = (int)aa->Mtu;
 			/* Generate fake Unix-like device names */
 			sprintf_s(fa->ad_name, sizeof(fa->ad_name), "eth%d", i++);
 		}
@@ -495,6 +496,11 @@ out:
 size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
 {
 	return ifa->speed;
+}
+
+int ofi_ifaddr_get_mtu(const struct ifaddrs *ifa)
+{
+  return ifa->mtu;
 }
 
 void freeifaddrs(struct ifaddrs *ifa)

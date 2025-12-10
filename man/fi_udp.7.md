@@ -41,9 +41,10 @@ receiving datagram messages over an unreliable endpoint.
 
 # LIMITATIONS
 
-The UDP provider has hard-coded maximums for supported queue sizes and data
-transfers.  These values are reflected in the related fabric attribute
-structures
+The UDP provider has a hard-coded maximum for supported queue sizes,
+which is reflected in the related fabric attribute structures. Maximum
+size of data transfers is limited by the MTU size of an interface, and
+is also reflected in the related fabric attribute structures.
 
 EPs must be bound to both RX and TX CQs.
 
@@ -53,7 +54,10 @@ No support for counters.
 
 # RUNTIME PARAMETERS
 
-No runtime parameters are currently defined.
+The UDP provider checks for the following environment variables -
+
+*FI_UDP_IFACE*
+: An string value that specifies the name of the interface.
 
 # SEE ALSO
 
