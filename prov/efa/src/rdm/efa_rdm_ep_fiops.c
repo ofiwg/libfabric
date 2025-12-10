@@ -772,6 +772,8 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased RX pkt_entry: %p\n",
 			pkt_entry);
+		/* Unlink the packet entries before releasing */
+		pkt_entry->next = NULL;
 		efa_rdm_pke_release_rx(pkt_entry);
 	}
 
