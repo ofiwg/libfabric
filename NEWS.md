@@ -108,7 +108,7 @@ v2.4.0, Mon December 15, 2025
 
 ## OPX ##
 
-- Don't fail the configure on error unless OPX was explicitly enabled
+- Don't fail configure when OPX unhappy
 - Add note to FI_OPX_SDMA_MIN_PAYLOAD_BYTES doc
 - Simplify uapi configuration
 - Unionize 9B and 16B packet SCB models in endpoint structs.
@@ -147,6 +147,7 @@ v2.4.0, Mon December 15, 2025
 
 ## PSM3 ##
 
+- Fix incorrect cq data forming during cq event creation
 - Fix integer overflow in psm3_ips_scbctrl_init()
 
 ## RXD ##
@@ -164,6 +165,7 @@ v2.4.0, Mon December 15, 2025
 
 ## TCP ##
 
+- Move keepalive to connect done
 - Add missing FI_RMA flag to writedata target completions
 
 ## UCX ##
