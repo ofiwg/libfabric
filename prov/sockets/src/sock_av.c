@@ -309,15 +309,20 @@ static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	ofi_mutex_lock(&_av->table_lock);
 	if (index >= _av->table_hdr->size || index < 0) {
 		SOCK_LOG_ERROR("requested address not inserted\n");
-		ofi_mutex_unlock(&_av->table_lock);
-		return -EINVAL;
+		goto inval;
 	}
 
 	av_addr = &_av->table[index];
+	if (!av_addr->valid)
+		goto inval;
+
 	memcpy(addr, &av_addr->addr, MIN(*addrlen, (size_t)_av->addrlen));
 	ofi_mutex_unlock(&_av->table_lock);
 	*addrlen = _av->addrlen;
 	return 0;
+inval:
+	ofi_mutex_unlock(&_av->table_lock);
+	return -FI_EINVAL;
 }
 
 static int _sock_av_insertsvc(struct fid_av *av, const char *node,
