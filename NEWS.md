@@ -147,6 +147,7 @@ v2.4.0, Mon December 15, 2025
 
 ## PSM3 ##
 
+- Fix incorrect cq data forming during cq event creation
 - Fix integer overflow in psm3_ips_scbctrl_init()
 
 ## RXD ##
@@ -164,6 +165,7 @@ v2.4.0, Mon December 15, 2025
 
 ## TCP ##
 
+- Move keepalive to connect done
 - Add missing FI_RMA flag to writedata target completions
 
 ## UCX ##
