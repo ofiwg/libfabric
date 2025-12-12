@@ -188,7 +188,6 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 
 void efa_cq_progress(struct util_cq *cq);
-
 int efa_cq_close(fid_t fid);
 
 const char *efa_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
@@ -258,5 +257,9 @@ int efa_cq_trywait(struct efa_cq *cq);
 int efa_cq_signal(struct fid_cq *cq_fid);
 int efa_poll_events(struct efa_cq *cq, int timeout);
 int efa_cq_control(struct fid *cq, int command, void *arg);
+int efa_cq_signal_init(struct efa_cq *cq);
+void efa_cq_signal_fini(struct efa_cq *cq);
+void efa_cq_ack_events(struct efa_cq *cq);
+int efa_cq_destroy_comp_channel(struct efa_cq *cq);
 
 #endif /* end of _EFA_CQ_H*/
