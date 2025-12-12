@@ -424,7 +424,7 @@ static int cxip_map_cache(struct cxip_domain *dom, struct ofi_mr_info *info,
 		    !cxip_env.disable_cuda_sync_memops) {
 			ret = cuda_set_sync_memops((void *) info->iov.iov_base);
 			if (ret)
-				CXIP_WARN("CUDA sysnc_memops %p returned %d\n",
+				CXIP_WARN("CUDA sync_memops %p returned %d\n",
 					  (void *) info->iov.iov_base, ret);
 		}
 		return FI_SUCCESS;
@@ -496,7 +496,7 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 	    !cxip_env.disable_cuda_sync_memops) {
 		ret = cuda_set_sync_memops((void *) uncached_md->md->va);
 		if (ret)
-			CXIP_WARN("CUDA sysnc_memops %p returned %d\n",
+			CXIP_WARN("CUDA sync_memops %p returned %d\n",
 				  (void *) uncached_md->md->va, ret);
 	}
 
