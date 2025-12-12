@@ -365,6 +365,84 @@ const char *efa_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 		: efa_strerror(prov_errno);
 }
 
+#if HAVE_EFA_CQ_NOTIFICATION
+int efa_cq_signal_init(struct efa_cq *cq)
+{
+	int ret;
+
+	if (cq->wait_obj == FI_WAIT_NONE || !cq->ibv_cq.channel)
+		return FI_SUCCESS;
+
+	ret = fd_signal_init(&cq->signal);
+	if (ret) {
+		EFA_WARN(FI_LOG_CQ, "Failed to initialize signal FD: %s (%d)\n",
+			 fi_strerror(-ret), -ret);
+		return ret;
+	}
+
+	ret = efa_ibv_req_notify_cq(&cq->ibv_cq, 0);
+	if (ret) {
+		ret = -errno;
+		EFA_WARN(FI_LOG_CQ, "ibv_req_notify_cq failed: %s (%d)\n",
+			 fi_strerror(ret), errno);
+		fd_signal_free(&cq->signal);
+		return ret;
+	}
+
+	ofi_atomic_initialize32(&cq->nevents, 0);
+
+	return FI_SUCCESS;
+}
+
+void efa_cq_ack_events(struct efa_cq *cq)
+{
+	struct ibv_cq *ibv_cq;
+
+	if (!cq->ibv_cq.ibv_cq_ex || !cq->ibv_cq.channel)
+		return;
+
+	ibv_cq = ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex);
+
+	if (ofi_atomic_get32(&cq->nevents))
+		ibv_ack_cq_events(ibv_cq, ofi_atomic_get32(&cq->nevents));
+}
+
+int efa_cq_destroy_comp_channel(struct efa_cq *cq)
+{
+	if (!cq->ibv_cq.channel)
+		return FI_SUCCESS;
+
+	if (ibv_destroy_comp_channel(cq->ibv_cq.channel)) {
+		EFA_WARN(FI_LOG_CQ, "Unable to destroy completion channel: %s\n",
+			 strerror(errno));
+		return -errno;
+	}
+
+	cq->ibv_cq.channel = NULL;
+	return FI_SUCCESS;
+}
+#else
+int efa_cq_signal_init(struct efa_cq *cq)
+{
+	return (cq->wait_obj == FI_WAIT_NONE) ? FI_SUCCESS : -FI_ENOSYS;
+}
+
+void efa_cq_ack_events(struct efa_cq *cq)
+{
+}
+
+int efa_cq_destroy_comp_channel(struct efa_cq *cq)
+{
+	return FI_SUCCESS;
+}
+#endif
+
+void efa_cq_signal_fini(struct efa_cq *cq)
+{
+	if (cq->wait_obj != FI_WAIT_NONE && cq->ibv_cq.channel)
+		fd_signal_free(&cq->signal);
+}
+
 /**
  * @brief Try to wait on CQ - check if ready for blocking
  *
@@ -812,11 +890,7 @@ int efa_cq_close(fid_t fid)
 	if (cq->ibv_cq.ibv_cq_ex) {
 		ibv_cq = ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex);
 
-#if HAVE_EFA_CQ_NOTIFICATION
-		/* Acknowledge any outstanding CQ events */
-		if (ofi_atomic_get32(&cq->nevents))
-			ibv_ack_cq_events(ibv_cq, ofi_atomic_get32(&cq->nevents));
-#endif
+		efa_cq_ack_events(cq);
 
 		ret = -ibv_destroy_cq(ibv_cq);
 		if (ret) {
@@ -827,23 +901,15 @@ int efa_cq_close(fid_t fid)
 		cq->ibv_cq.ibv_cq_ex = NULL;
 	}
 
-	if (cq->wait_obj != FI_WAIT_NONE)
-		fd_signal_free(&cq->signal);
+	efa_cq_signal_fini(cq);
 
 	ret = ofi_cq_cleanup(&cq->util_cq);
 	if (ret)
 		return ret;
 
-#if HAVE_EFA_CQ_NOTIFICATION
-	if (cq->ibv_cq.channel) {
-		ret = ibv_destroy_comp_channel(cq->ibv_cq.channel);
-		if (ret) {
-			EFA_WARN(FI_LOG_CQ, "Unable to destroy completion channel: %s\n",
-					 strerror(ret));
-			return -ret;
-		}
-	}
-#endif
+	ret = efa_cq_destroy_comp_channel(cq);
+	if (ret)
+		return ret;
 
 	if (cq->err_buf)
 		free(cq->err_buf);
@@ -1126,24 +1192,9 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		goto err_destroy_channel;
 	}
 
-	if (cq->ibv_cq.channel) {
-		err = fd_signal_init(&cq->signal);
-		if (err) {
-			EFA_WARN(FI_LOG_CQ, "Failed to initialize signal FD: %s\n",
-					 strerror(errno));
-			err = -errno;
-			goto err_destroy_ibv_cq;
-		}
-
-		err = efa_ibv_req_notify_cq(&cq->ibv_cq, 0);
-		if (err) {
-			EFA_WARN(FI_LOG_CQ,
-					 "ibv_req_notify_cq failed with %s\n", fi_strerror(-err));
-			goto err_free_signal;
-		}
-	}
-
-	ofi_atomic_initialize32(&cq->nevents, 0);
+	err = efa_cq_signal_init(cq);
+	if (err)
+		goto err_destroy_ibv_cq;
 
 	*cq_fid = &cq->util_cq.cq_fid;
 	(*cq_fid)->fid.fclass = FI_CLASS_CQ;
@@ -1154,19 +1205,11 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	return 0;
 
-err_free_signal:
-	if (cq->wait_obj != FI_WAIT_NONE)
-	 	fd_signal_free(&cq->signal);
 err_destroy_ibv_cq:
 	if (cq->ibv_cq.ibv_cq_ex)
 		ibv_destroy_cq(ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex));
 err_destroy_channel:
-#if HAVE_EFA_CQ_NOTIFICATION
-	if (cq->ibv_cq.channel) {
-		ibv_destroy_comp_channel(cq->ibv_cq.channel);
-		cq->ibv_cq.channel = NULL;
-	}
-#endif
+	efa_cq_destroy_comp_channel(cq);
 err_free_util_cq:
 	retv = ofi_cq_cleanup(&cq->util_cq);
 	if (retv)
