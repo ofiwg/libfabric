@@ -234,13 +234,14 @@ static int exchange_unexp_addr(void)
 		/*
 		 * Send two messages - first will be matched to FI_ADDR_UNSPEC
 		 * Second will be matched to directed receive after fi_av_insert
+		 * Message size is not important - so send 1 byte messages
 		 */
-		ret = ft_post_tx_buf(ep, remote_fi_addr, addrlen, 0, &tx_ctx,
+		ret = ft_post_tx_buf(ep, remote_fi_addr, 1, 0, &tx_ctx,
 				     tx_buf, mr_desc, ft_tag);
 		if (ret)
 			goto err;
 
-		ret = ft_post_tx_buf(ep, remote_fi_addr, addrlen, 0, &tx_ctx,
+		ret = ft_post_tx_buf(ep, remote_fi_addr, 1, 0, &tx_ctx,
 				     tx_buf, mr_desc, ft_tag);
 		if (ret)
 			goto err;
