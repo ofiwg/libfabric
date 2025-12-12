@@ -1024,6 +1024,7 @@
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_atomic.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_msg.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pke.h" />
+    <ClInclude Include="prov\efa\src\rdm\efa_rdm_peer.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pkt_type.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_req.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_rma.h" />
