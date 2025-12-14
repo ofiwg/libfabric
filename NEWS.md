@@ -25,6 +25,7 @@ v2.4.0, Mon December 15, 2025
 
 ## CXI ##
 
+- Bump provider support up to libfabric 2.4
 - Add domain rx match mode override
 - Set rendezvous eager size default to 2K
 - Change cuda dmabuf default to enabled
@@ -37,17 +38,14 @@ v2.4.0, Mon December 15, 2025
 - Fix validation of service id
 - Fix criterion test_sw tap files
 - Cxip_cmdq_cp_modify fix
-- Revert check cmdq_ack_counter before selecting cmdq
 - Fix RNR protocol send byte/error counting
 - Release TX credit when pending RNR retry
 - Update rocr test fine grained flags
-- Check cmdq_ack_counter before selecting cmdq
 - Fix DEVICE in fi_info_test
 - Introduce non-debug tracing
 - Reset timer on rx of ARM packet
 - Fix performance issue with close_mc()
 - Increase vni range in auth_key tests
-- Bump up FI_VERSION to 2.3
 - Support auth_key ranges
 - Fix use of hw_cps and memory leak
 
@@ -108,17 +106,67 @@ v2.4.0, Mon December 15, 2025
 - remove iov count failures
 - add wait object implementation
 
+## OPX ##
+
+- Don't fail configure when OPX unhappy
+- Add note to FI_OPX_SDMA_MIN_PAYLOAD_BYTES doc
+- Simplify uapi configuration
+- Unionize 9B and 16B packet SCB models in endpoint structs.
+- Support shared contexts in hfisvc bts
+- Fix replays for multi-packet eager
+- Don't retry forever in send rendezvous.
+- Don't ACK packets that were never received
+- Segfault in opx_hfi_rdma_context_open() on 2nd endpoint opened
+- Fix seg fault in finalize
+- Fix SDMA writev error when RDMA core functions are being used.
+- Add back accidentally removed opx_domain_hfisvc_poll()
+- Add missing function pointers for HFI service
+- Check uapi for hfisvc/HFI1 direct verbs
+- Rename hfisvc to opx-hfisvc
+- Move submodule to rdma core
+- Remove stx/srx support in OPX
+- Register MRs with HFI service
+- Ensure SDMA packet lengths are 8-byte multiples
+- Use HFI service by default if enabled in the driver.
+- fixup goto labels that need statements
+- Update hfisvc_client to 64-bit atomics
+- HFISVC: Fix replay payload
+- Disable HFI Service by default.
+- Disable use of HFI service when driver does not support it.
+- Update hfisvc_client to latest patch
+- Only open IPC cache if HMEM initialized and IPC enabled
+- Handle extended rx bits in common 9B code
+- Add IPC to 16B header path
+- Make sriov-alpha limitations CN5000-only
+- Remove cmake build for hfisvc_client library
+- Handle completion errors from HFI service
+- Fix setting of rc in deferred recv rts
+- Additional HFI Service support changes
+- HFI Service initial support
+- Asynchronous HMEM memcopy for IPC
+
 ## PSM3 ##
 
+- Fix incorrect cq data forming during cq event creation
 - Fix integer overflow in psm3_ips_scbctrl_init()
 
 ## RXD ##
 
 - Allow dg_addr to be 0
 
+## RXM ##
+
+- Prevent segfault on get addr if conn is NULL
+
 ## SHM ##
 
-- properly disable xpmem for FI_HMEM
+- Fix rx completion flags
+- Properly disable xpmem for FI_HMEM
+
+## TCP ##
+
+- Move keepalive to connect done
+- Add missing FI_RMA flag to writedata target completions
 
 ## UCX ##
 
@@ -132,11 +180,14 @@ v2.4.0, Mon December 15, 2025
 
 ## Util ##
 
+- Update logic for source and dir_recv
 - Handle signal interrupts in uffd memory monitor
 - Use kdreg2 instead of memhooks as default when available
 
 ## Fabtests ##
 
+- cq_data: Add full flag verification
+- ubertest: Verify CQ flags
 - cq_data: Fix the error propagation
 - multi_ep: fix fi_info usage
 - Add OOB finalize sync option
