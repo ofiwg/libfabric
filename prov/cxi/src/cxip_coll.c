@@ -1546,6 +1546,7 @@ static void _init_coll_data(struct cxip_coll_data *coll_data, int opcode,
 		break;
 	}
 	coll_data->initialized = true;
+	TRACE_DEBUG("_init_coll_data: coll_data/accum initialized\n");
 }
 
 /* reduce data into accumulator - can be used on uninitialized accumulator */
@@ -2024,11 +2025,10 @@ static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 	/* restore reduction object to usable state */
 	dlist_init(&reduction->tmout_link);
 	memset(&reduction->backup, 0, sizeof(reduction->backup));
-	reduction->accum.initialized = false;
+	memset(&reduction->accum, 0, sizeof(reduction->accum));
 	reduction->in_use = false;
 	reduction->completed = false;
 	reduction->pktsent = false;
-	reduction->accum.red_rc = CXIP_COLL_RC_SUCCESS;
 	reduction->op_inject_req = NULL;
 	reduction->rdma_get_sent = false;
 	reduction->rdma_get_completed = false;
