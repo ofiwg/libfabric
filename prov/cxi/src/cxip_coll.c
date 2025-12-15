@@ -1906,8 +1906,9 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 			rdma_get_pkt_p = ((struct red_pkt_64 *)mc_obj->root_rdma_get_data_p);
 			/* index into the base buffer */
 			copy_pntr = (uint8_t *)&rdma_get_pkt_p[red_id].pkt;
-			TRACE_JOIN("%s: rdma copy pkt red_id %d op %d seqno %d\n",
-				__func__, red_id, pkt->hdr.op, pkt->hdr.seqno);
+			TRACE_JOIN("%s: rdma copy pkt red_id %d op %d resno %d seqno %d\n",
+				   __func__, red_id, pkt->hdr.op, pkt->hdr.resno,
+				   pkt->hdr.seqno);
 			/* save a copy for the leaf in the rdma_get buffer */
 			memcpy(copy_pntr,pkt,sizeof(struct red_pkt));
 			_dump_red_pkt(pkt, "root rdma copy packet", "rdma");
@@ -2282,6 +2283,8 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 			return;
 		}
 
+		reduction->resno = pkt->hdr.resno;
+
 		/* capture packet information */
 		_unpack_red_data(&coll_data, pkt);
 #if ENABLE_DEBUG
@@ -2315,12 +2318,13 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 		reduction->completed = true;
 		_ts_red_clr(reduction);
 
-		TRACE_DEBUG("root final result, mc %x seqn %d red_id %d op %d\n",
-			mc_obj->mcast_addr, reduction->seqno, reduction->red_id,
-			reduction->accum.red_op);
+		TRACE_DEBUG("root final result, mc %x seqn %d resno %d red_id %d op %d\n",
+			mc_obj->mcast_addr, reduction->seqno, reduction->resno,
+			reduction->red_id, reduction->accum.red_op);
 
 		ret = cxip_coll_send_red_pkt(reduction, &reduction->accum,
-			!mc_obj->arm_disable, false, true);
+					     !mc_obj->arm_disable, false, true);
+
 		_set_arm_expires(reduction);
 
 		if (ret)
@@ -2369,7 +2373,7 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 {
 	struct cxip_coll_mc *mc_obj = reduction->mc_obj;
 	struct cxip_coll_data coll_data = {0};
-	int ret, red_id, rdma_read_stat, next_rdma_exp_seqn;
+	int ret, red_id, rdma_read_stat;
 	struct red_pkt_64 *get_pkt_64_p = NULL;
 	uint64_t leaf_contrib_ts_delta __attribute__((unused));
 	struct red_pkt *root_pkt = NULL;
@@ -2412,20 +2416,22 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 				root_pkt = (struct red_pkt *)&get_pkt_64_p[red_id].pkt;
 				TRACE_DEBUG("%s leaf_rdma_get pkt red_id %d red_op %d seqn %d\n",
 					__func__, root_pkt->hdr.cookie.red_id, root_pkt->hdr.op, root_pkt->hdr.seqno);
+
 				/* verify packet and make sure it is what we expected */
-				next_rdma_exp_seqn = reduction->seqno;
-				INCMOD(next_rdma_exp_seqn, CXIP_COLL_MOD_SEQNO);
-				if (next_rdma_exp_seqn != root_pkt->hdr.seqno) {
-					/* dont touch user data, make sure we have the correct seqn
+				if (root_pkt->hdr.resno != reduction->resno) {
+					/* dont touch user data, make sure we have the correct resno
 					 * log event only
 					 */
-					TRACE_DEBUG("%s leaf_rdma_get pkt seqn err! red_id %d red_op %d eseqn %d seqn %d\n",
+					TRACE_DEBUG("%s pkt seqn err! red_id %d red_op %d resno %d seqn %d, expected resno %d\n",
 						__func__, root_pkt->hdr.cookie.red_id, root_pkt->hdr.op,
-						reduction->seqno, root_pkt->hdr.seqno);
-					_clear_leaf_rget_state(reduction);	
+						root_pkt->hdr.resno, root_pkt->hdr.seqno, reduction->resno);
+					_clear_leaf_rget_state(reduction);
 					_ts_red_clr(reduction);
 					return;
 				}
+				TRACE_DEBUG("%s leaf_rdma_get received expected resno %d seqno %d\n",
+					    __func__, root_pkt->hdr.resno, root_pkt->hdr.seqno);
+
 				if (reduction->accum.red_op != root_pkt->hdr.op) {
 					/* dont touch user data, make sure we have the correct opcode
 					 * log event only
@@ -2433,7 +2439,7 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 					TRACE_DEBUG("%s leaf_rdma_get pkt opcode err! red_op %d pkt_op %d pkt_red_id %d\n",
 						__func__, reduction->accum.red_op, root_pkt->hdr.op,
 						root_pkt->hdr.cookie.red_id);
-					_clear_leaf_rget_state(reduction);	
+					_clear_leaf_rget_state(reduction);
 					_ts_red_clr(reduction);
 					return;
 				}
@@ -2515,9 +2521,6 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 
 	/* leaves lead with sending a packet */
 	if (!reduction->pktsent) {
-		TRACE_PKT("%s leaf preparing to send op %d red_id %d seqno %d\n",
-			__func__, reduction->accum.red_op, reduction->red_id, reduction->seqno);
-
 		_ts_red_clr(reduction);
 		if (!pkt && _need_to_arm(reduction)) {
 			TRACE_DEBUG("%s leaf waiting for arm op %d red_id %d seqno %d\n",
@@ -2527,14 +2530,17 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 
 		/* Don't send if nothing to send yet */
 		if (!reduction->accum.initialized) {
-			TRACE_DEBUG("%s accm not initialized op %d red_id %d seqno %d\n",
-				__func__, reduction->accum.red_op, reduction->red_id, reduction->seqno);
+			TRACE_DEBUG("%s accum not initialized red_id %d seqno %d\n",
+				__func__, reduction->red_id, reduction->seqno);
 			return;
 		}
 
 		reduction->leaf_contrib_start_us = ofi_gettime_us();
 		_ts_red_set(reduction, &reduction->mc_obj->leafexpires,
 		    &mc_obj->ep_obj->coll.leaf_rdma_get_list);
+
+		TRACE_PKT("%s leaf sending op %d red_id %d seqno %d\n",
+			  __func__, reduction->accum.red_op, reduction->red_id, reduction->seqno);
 
 		/* Send leaf data */
 		ret = cxip_coll_send_red_pkt(reduction, &reduction->accum,
@@ -2611,8 +2617,8 @@ void cxip_coll_progress_cq_poll(struct cxip_ep_obj *ep_obj)
 					      struct cxip_coll_reduction,
 					      tmout_link);
 	if (reduction && _tsexp(&reduction->tv_expires)) {
-		TRACE_DEBUG("progressing root red_id %d, seqno %d from hpc_progress\n",
-			    reduction->red_id, reduction->seqno);
+		TRACE_DEBUG("progressing root red_id %d seqno %d resno %d from hpc_progress\n",
+			    reduction->red_id, reduction->seqno, reduction->resno);
 		_progress_root(reduction, NULL, true);
 	}
 	reduction = dlist_first_entry_or_null(&ep_obj->coll.leaf_rdma_get_list,
@@ -2621,8 +2627,8 @@ void cxip_coll_progress_cq_poll(struct cxip_ep_obj *ep_obj)
 	if (reduction && _tsexp(&reduction->tv_expires)) {
 
 		TRACE_DEBUG("progressing leaf reduction addr %p\n",reduction);
-		TRACE_DEBUG("progressing leaf red_id %d, seqno %d from hpc_progress\n",
-			    reduction->red_id, reduction->seqno);
+		TRACE_DEBUG("progressing leaf red_id %d seqno %d resno %d from hpc_progress\n",
+			    reduction->red_id, reduction->seqno, reduction->resno);
 		_progress_leaf(reduction, NULL, true);
 	}
 
