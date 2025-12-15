@@ -200,7 +200,6 @@ static void cxip_coll_prod_trace_alloc(void)
 static void cxip_coll_handle_signal(int signum)
 {
 	cxip_coll_print_prod_trace();
-	_Exit(signum);
 }
 
 static void cxip_coll_install_sig_handler(void)
@@ -343,6 +342,9 @@ void cxip_coll_print_prod_trace(void)
 
 	current = cxip_coll_prod_trace_current;
 
+	write(fileno(cxip_coll_trace_fid), "---- start ----\n",
+	      strlen("---- start ----\n"));
+
 	for (i = 0; i < cxip_coll_prod_trace_max_idx; i++) {
 		idx = (current + i) % cxip_coll_prod_trace_max_idx;
 		if (cxip_coll_prod_trace_buffer[idx])
@@ -351,6 +353,9 @@ void cxip_coll_print_prod_trace(void)
 			      cxip_coll_prod_trace_buffer[idx],
 			      strlen(cxip_coll_prod_trace_buffer[idx]));
 	}
+
+	write(fileno(cxip_coll_trace_fid), "---- end ----\n",
+	      strlen("---- end ----\n"));
 
 	cxip_coll_trace_flush();
 }
