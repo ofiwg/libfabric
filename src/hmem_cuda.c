@@ -270,7 +270,7 @@ int cuda_set_sync_memops(void *ptr)
 	ofi_cuGetErrorName(cu_result, &cu_error_name);
 	ofi_cuGetErrorString(cu_result, &cu_error_str);
 	FI_WARN(&core_prov, FI_LOG_CORE,
-		"Failed to perform cuPointerSetAttribute: %s:%s\n",
+		"Failed to set CU_POINTER_ATTRIBUTE_SYNC_MEMOPS: %s:%s\n",
 		cu_error_name, cu_error_str);
 	return -FI_EINVAL;
 }
