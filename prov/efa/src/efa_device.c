@@ -47,6 +47,7 @@ int efa_device_construct_gid(struct efa_device *efa_device,
 			 errno);
 		return -errno;
 	}
+	EFA_INFO(FI_LOG_CORE, "Opened ibv device with ibv_ctx %p\n", efa_device->ibv_ctx);
 
 	memset(&efa_device->ibv_attr, 0, sizeof(efa_device->ibv_attr));
 	err = ibv_query_device(efa_device->ibv_ctx, &efa_device->ibv_attr);
@@ -88,6 +89,7 @@ int efa_device_construct_gid(struct efa_device *efa_device,
 	return 0;
 
 err_close:
+	EFA_INFO(FI_LOG_CORE, "Close ibv device for ibv_ctx %p\n", efa_device->ibv_ctx);
 	ibv_close_device(efa_device->ibv_ctx);
 	efa_device->ibv_ctx = NULL;
 
@@ -137,7 +139,7 @@ int efa_device_construct_data(struct efa_device *efa_device,
 	return 0;
 
 err_close:
-
+	EFA_INFO(FI_LOG_CORE, "Close ibv device for ibv_ctx %p\n", efa_device->ibv_ctx);
 	ibv_close_device(efa_device->ibv_ctx);
 	efa_device->ibv_ctx = NULL;
 
@@ -164,9 +166,10 @@ static void efa_device_destruct(struct efa_device *device)
 	int err;
 
 	if (device->ibv_ctx) {
+		EFA_INFO(FI_LOG_CORE, "Close ibv device for ibv_ctx %p\n", device->ibv_ctx);
 		err = ibv_close_device(device->ibv_ctx);
 		if (err)
-			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
+			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_close_device",
 			               err);
 	}
 
