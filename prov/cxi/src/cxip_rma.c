@@ -241,7 +241,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		 * when doing RMA commands to unoptimized MRs), a provider
 		 * bounce buffer is always needed to store the user payload.
 		 *
-		 * Always prefer user provider MR over internally mapping the
+		 * Always prefer user-provided MR over internally mapping the
 		 * buffer.
 		 */
 		if (flags & FI_INJECT) {
