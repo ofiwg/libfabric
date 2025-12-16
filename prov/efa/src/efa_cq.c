@@ -516,7 +516,7 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 {
 	struct efa_cq *cq;
 	ssize_t ret = 0;
-	ssize_t threshold, num_completions;
+	ssize_t threshold = 1, num_completions;
 	uint8_t *buffer;
 
 	buffer = buf;
@@ -532,8 +532,8 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		return -FI_EINVAL;
 	}
 
-	threshold = (cq->wait_cond == FI_CQ_COND_THRESHOLD) ?
-			    MIN((ssize_t) cond, count) : 1;
+	if (cq->wait_cond == FI_CQ_COND_THRESHOLD && cond)
+		threshold = MIN(*(ssize_t *) cond, count);
 
 	for (num_completions = 0; num_completions < threshold; ) {
 		if (efa_cq_trywait(cq) == FI_SUCCESS) {
