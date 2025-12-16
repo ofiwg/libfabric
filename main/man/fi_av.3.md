@@ -514,11 +514,12 @@ set when removing an authorization key fi_addr_t.
 
 This call returns the address stored in the address vector that
 corresponds to the given fi_addr.  The returned address is the same
-format as those stored by the AV.  On input, the addrlen parameter
-should indicate the size of the addr buffer.  If the actual address is
-larger than what can fit into the buffer, it will be truncated.  On
-output, addrlen is set to the size of the buffer needed to store the
-address, which may be larger than the input value.
+format as those stored by the AV.  Requesting lookup of a fi_addr that is unset
+or is outside of the provider's address vector bounds will result in -FI_EINVAL
+being returned. On input, the addrlen parameter should indicate the size of the
+addr buffer. If the actual address is larger than what can fit into the buffer,
+it will be truncated.  On output, addrlen is set to the size of the buffer
+needed to store the address, which may be larger than the input value.
 
 ## fi_rx_addr
 
