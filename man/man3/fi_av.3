@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_av" "3" "2025\-04\-09" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_av" "3" "2025\-12\-16" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -574,6 +574,9 @@ fi_addr_t.
 This call returns the address stored in the address vector that
 corresponds to the given fi_addr.
 The returned address is the same format as those stored by the AV.
+Requesting lookup of a fi_addr that is unset or is outside of the
+provider\[cq]s address vector bounds will result in -FI_EINVAL being
+returned.
 On input, the addrlen parameter should indicate the size of the addr
 buffer.
 If the actual address is larger than what can fit into the buffer, it
