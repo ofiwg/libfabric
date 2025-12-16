@@ -516,6 +516,7 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 {
 	struct efa_cq *cq;
 	ssize_t ret = 0;
+	uint64_t endtime = ofi_timeout_time(timeout);
 	ssize_t threshold = 1, num_completions;
 	uint8_t *buffer;
 
@@ -537,6 +538,8 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 
 	for (num_completions = 0; num_completions < threshold; ) {
 		if (efa_cq_trywait(cq) == FI_SUCCESS) {
+			if (ofi_adjust_timeout(endtime, &timeout))
+				return num_completions ? num_completions : -FI_EAGAIN;
 			/* CQ is empty, wait for events */
 			ret = efa_poll_events(cq, timeout);
 			if (ret)
