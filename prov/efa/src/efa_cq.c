@@ -519,6 +519,9 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	ssize_t threshold, num_completions;
 	uint8_t *buffer;
 
+	if (OFI_UNLIKELY(!buf || !count))
+		return -FI_EINVAL;
+
 	buffer = buf;
 	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
