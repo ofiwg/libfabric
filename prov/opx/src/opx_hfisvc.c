@@ -87,27 +87,59 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		const uint64_t sbuf_len	       = params->iovs[i].len;
 		const uint64_t sbuf_offset     = params->iovs[i].offset;
 
-		rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
-			opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid, sbuf_client_key, sbuf_len,
-			0ul /* immediate data */, sbuf_access_key, sbuf_offset, recv_buf);
+		if (context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+			struct fi_opx_mr *opx_mr = ((struct fi_opx_hmem_info *) context->hmem_info_qws)->dmabuf.opx_mr;
+			if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
+				rc = -FI_EAGAIN;
+				break;
+			}
+			rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
+				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid, sbuf_client_key,
+				sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset, opx_mr->hfisvc.mr_handle,
+				recv_buf - (uint8_t *) params->recv_buf);
+			if (rc != FI_SUCCESS) {
+				params->cur_iov	 = i;
+				params->recv_buf = (void *) recv_buf;
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.eagain_hfisvc);
+				OPX_HFISVC_DEBUG_LOG(
+					"[%d/%d] rdma_read failed with rc=%d context=%p recv-mr_handle=%u recv-offset=%lu sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
+					i + 1, niov, rc, context, (uint32_t) opx_mr->hfisvc.mr_handle,
+					recv_buf - (uint8_t *) params->recv_buf, sbuf_client_key, sbuf_access_key,
+					sbuf_len);
+				rc = -FI_EAGAIN;
+				break;
+			}
+			++read_count;
 
-		if (rc != FI_SUCCESS) {
-			params->cur_iov	 = i;
-			params->recv_buf = (void *) recv_buf;
-			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.eagain_hfisvc);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
+
 			OPX_HFISVC_DEBUG_LOG(
-				"[%d/%d] rdma_read failed with rc=%d context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
-				i + 1, niov, rc, context, recv_buf, sbuf_client_key, sbuf_access_key, sbuf_len);
-			rc = -FI_EAGAIN;
-			break;
+				"[%d/%d] Successfully issued rdma_read sbuf_lid=%u context=%p recv-mr_handle=%u recv-offset=%lu sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu params->rzv_comp=%lX\n",
+				i + 1, niov, sbuf_lid, context, (uint32_t) opx_mr->hfisvc.mr_handle,
+				recv_buf - (uint8_t *) params->recv_buf, sbuf_client_key, sbuf_access_key, sbuf_len,
+				params->rzv_comp);
+		} else {
+			rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
+				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid, sbuf_client_key,
+				sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset, recv_buf);
+			if (rc != FI_SUCCESS) {
+				params->cur_iov	 = i;
+				params->recv_buf = (void *) recv_buf;
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.eagain_hfisvc);
+				OPX_HFISVC_DEBUG_LOG(
+					"[%d/%d] rdma_read failed with rc=%d context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
+					i + 1, niov, rc, context, recv_buf, sbuf_client_key, sbuf_access_key, sbuf_len);
+				rc = -FI_EAGAIN;
+				break;
+			}
+			++read_count;
+
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
+
+			OPX_HFISVC_DEBUG_LOG(
+				"[%d/%d] Successfully issued rdma_read context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
+				i + 1, niov, context, recv_buf, sbuf_client_key, sbuf_access_key, sbuf_len);
 		}
-		++read_count;
-
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
-
-		OPX_HFISVC_DEBUG_LOG(
-			"[%d/%d] Successfully issued rdma_read context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
-			i + 1, niov, context, recv_buf, sbuf_client_key, sbuf_access_key, sbuf_len);
 		recv_buf += sbuf_len;
 	}
 
@@ -133,7 +165,7 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 int opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_context *context, const uint32_t niov,
 					 const uint32_t sbuf_client_key, const uint32_t sbuf_lid, const void *recv_buf,
-					 const union opx_hfisvc_iov *iovs)
+					 const union opx_hfisvc_iov *iovs, uintptr_t rzv_comp)
 {
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	if (OFI_UNLIKELY(work == NULL)) {
@@ -154,6 +186,7 @@ int opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_co
 	params->sbuf_client_key			  = sbuf_client_key;
 	params->sbuf_lid			  = sbuf_lid;
 	params->recv_buf			  = (void *) recv_buf;
+	params->rzv_comp			  = rzv_comp;
 
 	for (int i = 0; i < niov; ++i) {
 		params->iovs[i] = iovs[i];

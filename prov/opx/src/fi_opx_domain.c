@@ -84,6 +84,14 @@ static int fi_opx_close_domain(fid_t fid)
 	opx_domain->hmem_domain = NULL;
 #endif
 
+#if HAVE_HFISVC
+	if (opx_domain->use_hfisvc) {
+		while (opx_hfisvc_keyset_outstanding(opx_domain->hfisvc.access_key_set)) {
+			opx_domain_hfisvc_poll(opx_domain);
+		}
+	}
+#endif
+
 	if (!slist_empty(&opx_domain->deferred_work_queue)) {
 		struct opx_domain_deferred_work *work_item =
 			(struct opx_domain_deferred_work *) slist_remove_head(&opx_domain->deferred_work_queue);
@@ -461,6 +469,29 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 				OPX_HMEM_DEV_REG_THRESHOLD_MIN, OPX_HMEM_DEV_REG_THRESHOLD_MAX,
 				OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT, env_var_threshold);
 		}
+	}
+
+	opx_domain->hmem_domain->dmabuf_supported = 0;
+
+#if HAVE_HFISVC_DMABUF
+#if HAVE_CUDA
+	if (cuda_is_dmabuf_supported()) {
+		opx_domain->hmem_domain->dmabuf_supported = 1;
+	}
+#elif HAVE_ROCR
+	if (rocr_hmem_get_dmabuf_fd(NULL, 0, NULL, 0) != -FI_EOPNOTSUPP) {
+		opx_domain->hmem_domain->dmabuf_supported = 1;
+	}
+#endif
+#endif
+
+	int use_hfisvc = 1;
+	fi_param_get_bool(fi_opx_global.prov, "hfisvc", &use_hfisvc);
+	if (use_hfisvc && !opx_domain->hmem_domain->dmabuf_supported) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+			"FI_OPX_HFISVC is enabled in a HMEM build, but dma-buf support is not detected or is disabled by FI_HMEM_CUDA/ROCR_USE_DMABUF. Enable dma-buf support or re-run with FI_OPX_HFISVC disabled.\n");
+		errno = FI_EINVAL;
+		goto err;
 	}
 #endif
 

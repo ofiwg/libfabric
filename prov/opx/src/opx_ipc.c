@@ -58,7 +58,7 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 			opx_hmem_event_destroy(opx_ep->domain->hmem_domain->hmem_stream.type, &params->hmem_event);
 			ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, params->cache_entry);
 			params->context->byte_counter = 0;
-			params->context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
+			params->context->flags &= ~(FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 			slist_insert_tail((struct slist_entry *) params->context, opx_ep->rx->cq_completed_ptr);
 		} else if (status == OPX_HMEM_ERROR_NOT_READY) {
 			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "IPC-RECV-SEND-CTS");
