@@ -302,6 +302,23 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				hfisvc_happy=0
 				AC_MSG_WARN([hfisvc disabled without hfi direct verbs.])
 			])
+			AS_IF([test $hfisvc_happy -eq 1], [
+				AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+								[[#include <infiniband/hfisvc_client.h>]],
+								[[enum hfisvc_client_hmem_iface i = HFISVC_CLIENT_HMEM_IFACE_DMABUF]])],
+								[hfi1_dmabuf_found=1],
+								[hfi1_dmabuf_found=0]
+							)
+
+				AS_CASE([$hfi1_dmabuf_found],
+				[1], [
+					AC_MSG_NOTICE([hfisvc_client.h HFISVC DMABUF support defined, building HFISVC with DMABUF])
+				],
+				[
+					AC_MSG_WARN([HFISVC DMABUF support not defined, building HFISVC without DMABUF])
+				])
+				AC_DEFINE_UNQUOTED([HAVE_HFISVC_DMABUF], [$hfi1_dmabuf_found], [hfisvc dmabuf support availability])
+			])
 			AC_DEFINE_UNQUOTED(HAVE_HFI1_DIRECT_VERBS, [$hfi1dv_happy], [hfi1 direct verbs enabled])
 			AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$hfisvc_happy], [hfisvc support availability])
 		])

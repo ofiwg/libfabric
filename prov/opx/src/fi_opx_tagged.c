@@ -100,11 +100,17 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 	uint64_t		 hmem_handle;
 	enum fi_hmem_iface	 hmem_iface;
 	if (msg->desc && msg->desc[0]) {
-		hmem_iface		       = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device, &hmem_handle);
-		hmem_info->iface	       = hmem_iface;
-		hmem_info->device	       = hmem_device;
-		hmem_info->hmem_dev_reg_handle = hmem_handle;
-		hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
+		hmem_iface	 = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device, &hmem_handle);
+		hmem_info->iface = hmem_iface;
+		if (opx_ep->use_hfisvc && opx_ep->domain->hmem_domain->dmabuf_supported) {
+			hmem_info->dmabuf.opx_mr = ((struct fi_opx_mr *) msg->desc[0]);
+			context->flags		 = flags | FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
+		} else {
+			hmem_info->gpu.device	       = hmem_device;
+			hmem_info->hmem_dev_reg_handle = hmem_handle;
+			hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
+			context->flags		       = flags | FI_OPX_CQ_CONTEXT_HMEM;
+		}
 	} else {
 		hmem_iface		  = FI_HMEM_SYSTEM;
 		hmem_device		  = 0UL;
@@ -126,7 +132,6 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 #endif
 	if (hmem_iface != FI_HMEM_SYSTEM) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.posted_recv_tag);
-		flags |= FI_OPX_CQ_CONTEXT_HMEM;
 
 		context->byte_counter  = (uint64_t) -1;
 		context->msg.iov_count = msg->iov_count;
@@ -146,8 +151,8 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 			context->ignore = msg->ignore;
 		}
 
-		return fi_opx_ep_rx_process_context(opx_ep, FI_TAGGED, context, flags, OPX_HMEM_TRUE, lock_required,
-						    av_type, reliability, hfi1_type);
+		return fi_opx_ep_rx_process_context(opx_ep, FI_TAGGED, context, context->flags, OPX_HMEM_TRUE,
+						    lock_required, av_type, reliability, hfi1_type);
 	}
 #endif
 	if (msg->iov_count == 1) {

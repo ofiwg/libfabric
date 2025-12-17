@@ -575,6 +575,7 @@ struct opx_hfisvc_recv_rts_params {
 	uint32_t		sbuf_client_key;
 	uint32_t		sbuf_lid;
 
+	uintptr_t	     rzv_comp;
 	union opx_hfisvc_iov iovs[OPX_MAX_HFISVC_IOVS];
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
@@ -592,7 +593,7 @@ union fi_opx_hfi1_deferred_work {
 int  opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work);
 int  opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_context *context, const uint32_t niov,
 					  const uint32_t sbuf_client_key, const uint32_t sbuf_lid, const void *recv_buf,
-					  const union opx_hfisvc_iov *iovs);
+					  const union opx_hfisvc_iov *iovs, uintptr_t rzv_comp);
 int  opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work);
 void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr, const uint16_t origin_rx,
 			 const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
@@ -3044,7 +3045,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				 const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t dest_rx,
 				 const uint64_t caps, const enum ofi_reliability_kind reliability,
 				 const uint64_t do_cq_completion, const enum fi_hmem_iface hmem_iface,
-				 const uint64_t hmem_handle, const uint64_t hmem_device,
+				 const uint64_t hmem_device, const uint64_t hmem_handle, const struct fi_opx_mr *opx_mr,
 				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
 
 __OPX_FORCE_INLINE__
@@ -3054,7 +3055,8 @@ ssize_t opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_t l
 				    const uint64_t caps, const enum ofi_reliability_kind reliability,
 				    const uint64_t do_cq_completion, const enum fi_hmem_iface hmem_iface,
 				    const uint64_t hmem_device, const uint64_t hmem_handle,
-				    const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+				    const struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type,
+				    const bool ctx_sharing)
 {
 	if (hfi1_type & OPX_HFI1_WFR) {
 		return opx_hfi1_tx_send_rzv(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
@@ -3063,13 +3065,13 @@ ssize_t opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_t l
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		return opx_hfi1_tx_send_rzv_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
 						override_flags, tx_op_flags, dest_rx, caps, reliability,
-						do_cq_completion, hmem_iface, hmem_device, hmem_handle, OPX_HFI1_JKR,
-						ctx_sharing);
+						do_cq_completion, hmem_iface, hmem_device, hmem_handle, opx_mr,
+						OPX_HFI1_JKR, ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_CYR) {
 		return opx_hfi1_tx_send_rzv_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
 						override_flags, tx_op_flags, dest_rx, caps, reliability,
-						do_cq_completion, hmem_iface, hmem_device, hmem_handle, OPX_HFI1_CYR,
-						ctx_sharing);
+						do_cq_completion, hmem_iface, hmem_device, hmem_handle, opx_mr,
+						OPX_HFI1_CYR, ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_MIXED_9B) {
 		return opx_hfi1_tx_send_rzv(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
 					    tx_op_flags, dest_rx, caps, reliability, do_cq_completion, hmem_iface,

@@ -3149,7 +3149,8 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		opx_ep_complete_receive_operation(
 			ep, &claimed_pkt->hdr, (union fi_opx_hfi1_packet_payload *) &claimed_pkt->payload,
 			claimed_pkt->hdr.match.ofi_tag, context, claimed_pkt->hdr.bth.opcode, OPX_MULTI_RECV_FALSE,
-			is_shm, rx_op_flags & FI_OPX_CQ_CONTEXT_HMEM, lock_required, reliability, hfi1_type);
+			is_shm, rx_op_flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM), lock_required,
+			reliability, hfi1_type);
 
 		/* ... and prepend the claimed uepkt to the ue free list.
 		   claimed_pkt->next should have been set to NULL at the time we
@@ -3160,7 +3161,7 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 
 	} else if ((static_flags & FI_MSG) && (rx_op_flags & FI_MULTI_RECV)) {
 		/* TODO: HMEM not supported for multi-receive */
-		assert(!(rx_op_flags & FI_OPX_CQ_CONTEXT_HMEM));
+		assert(!(rx_op_flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)));
 
 		context->src_addr = fi_opx_ep_get_src_addr(opx_ep, av_type, context->src_addr);
 

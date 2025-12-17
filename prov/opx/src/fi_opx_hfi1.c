@@ -2547,7 +2547,7 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 		ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, entry);
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-DESTROY-HANDLE");
 		context->byte_counter = 0;
-		context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
+		context->flags &= ~(FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 		slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_completed_ptr);
 	}
 
@@ -5391,7 +5391,8 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 				   const uint32_t data, uint64_t bth_rx, uint64_t lrh_dlid_16B,
 				   const uint64_t do_cq_completion, void *user_context, union fi_opx_addr addr,
 				   const uint64_t caps, const enum fi_hmem_iface src_iface,
-				   const uint64_t src_device_id, uint64_t tx_op_flags)
+				   const uint64_t src_device_id, const struct fi_opx_mr *opx_mr, uint64_t tx_op_flags,
+				   const bool ctx_sharing)
 {
 #if HAVE_HFISVC
 	FI_DBG_TRACE(
@@ -5410,12 +5411,22 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	ssize_t				     rc		= FI_SUCCESS;
 	union fi_opx_hfi1_pio_state	     pio_state	= *tx->pio_state;
 
-	if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.access_key_set, &access_key,
-					FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
-		OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys)\n");
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
-		rc = -FI_EAGAIN;
-		goto err;
+	if (opx_mr && opx_mr->hfisvc.state > OPX_MR_HFISVC_STATE_NOT_REGISTERED) {
+		if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
+			OPX_HFISVC_DEBUG_LOG("EAGAIN (MR state not yet OPENED state=%d)\n", opx_mr->hfisvc.state);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_hfisvc);
+			opx_domain_hfisvc_poll(opx_ep->domain);
+			rc = -FI_EAGAIN;
+			goto err;
+		}
+	} else {
+		if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.access_key_set, &access_key,
+						FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
+			OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys)\n");
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
+			rc = -FI_EAGAIN;
+			goto err;
+		}
 	}
 
 	rzv_comp = (struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
@@ -5476,31 +5487,34 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		goto err;
 	}
 
-	rzv_comp->access_key = access_key;
+	if (access_key != (uint32_t) -1) {
+		rzv_comp->access_key			   = access_key;
+		struct hfisvc_client_completion completion = {
+			.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+			.cq.handle	= opx_ep->hfisvc.internal_completion_queue,
+			.cq.app_context = (uint64_t) rzv_comp,
+		};
+		rc = (*opx_ep->domain->hfisvc.cmd_dma_access_once_va)(
+			opx_ep->hfisvc.command_queue, completion, 0UL /* flags */, access_key, xfer_len, (void *) buf);
 
-	struct hfisvc_client_completion completion = {
-		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
-		.cq.handle	= opx_ep->hfisvc.internal_completion_queue,
-		.cq.app_context = (uint64_t) rzv_comp,
-	};
-	rc = (*opx_ep->domain->hfisvc.cmd_dma_access_once_va)(opx_ep->hfisvc.command_queue, completion, 0UL /* flags */,
-							      access_key, xfer_len, (void *) buf);
+		if (OFI_UNLIKELY(rc != 0)) {
+			OPX_HFISVC_DEBUG_LOG("EAGAIN (hfisvc_client queue returned %ld)\n", rc);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_hfisvc);
+			rc = -FI_EAGAIN;
+			goto err;
+		}
 
-	if (OFI_UNLIKELY(rc != 0)) {
-		OPX_HFISVC_DEBUG_LOG("EAGAIN (hfisvc_client queue returned %ld)\n", rc);
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_hfisvc);
-		rc = -FI_EAGAIN;
-		goto err;
+		OPX_HFISVC_DEBUG_LOG(
+			"HFISVC RZV Send RTS: Successfully registered DMA buf=%p len=%lu access_key=%u rzv_comp=%p context=%p\n",
+			buf, xfer_len, access_key, rzv_comp, context);
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.reg_dma_buf);
+
+		rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
+
+		assert(rc == 0);
+	} else {
+		rzv_comp->access_key = opx_mr->hfisvc.access_key;
 	}
-
-	OPX_HFISVC_DEBUG_LOG(
-		"HFISVC RZV Send RTS: Successfully registered DMA buf=%p len=%lu access_key=%u rzv_comp=%p context=%p\n",
-		buf, xfer_len, access_key, rzv_comp, context);
-	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.reg_dma_buf);
-
-	rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
-
-	assert(rc == 0);
 
 	// Put the context on the pending queue before we send out the RTS packet to ensure it's
 	// queued before the remote rdma_read completes.
@@ -5509,7 +5523,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	}
 
 	union opx_hfisvc_iov hfisvc_iov = {
-		.access_key  = access_key,
+		.access_key  = rzv_comp->access_key,
 		.len	     = xfer_len,
 		.hmem_iface  = src_iface,
 		.hmem_device = src_device_id,
@@ -5549,20 +5563,26 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 
 	volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_first, pio_state);
 
-	opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], tag, hfisvc_iov.qws[0], hfisvc_iov.qws[1],
-				  hfisvc_iov.qws[2], hfisvc_iov.qws[3], OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+	opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], tag, (uintptr_t) rzv_comp, hfisvc_iov.qws[0],
+				  hfisvc_iov.qws[1], hfisvc_iov.qws[2], hfisvc_iov.qws[3], OPX_JKR_16B_PAD_QWORD,
 				  OPX_JKR_16B_PAD_QWORD);
 
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+	uint64_t *payload = replay->payload;
+	payload[0]	  = (uintptr_t) rzv_comp;
+	for (int i = 0; i < (sizeof(union opx_hfisvc_iov) >> 3); i++) {
+		payload[i + 1] = hfisvc_iov.qws[i];
+	}
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay,
 							     OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_JKR);
 
 	tx->pio_state->qw0 = pio_state.qw0;
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(tx->pio_credits_addr);
-	OPX_HFISVC_DEBUG_LOG("Send RZV RTS SUCCESS\n");
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
+	OPX_HFISVC_DEBUG_LOG("Send RZV RTS SUCCESS with rzv_comp=%p\n", rzv_comp);
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.success);
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-HFI:%ld", tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -5603,7 +5623,8 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				 const uint64_t caps, const enum ofi_reliability_kind reliability,
 				 const uint64_t do_cq_completion, const enum fi_hmem_iface src_iface,
 				 const uint64_t src_device_id, const uint64_t src_handle,
-				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+				 const struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type,
+				 const bool ctx_sharing)
 {
 	// We should already have grabbed the lock prior to calling this function
 	assert(!lock_required);
@@ -5620,11 +5641,17 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	const uint64_t lrh_dlid_16B = addr.lid;
 
 #if HAVE_HFISVC
-	if (opx_ep->use_hfisvc && !is_shm && (src_iface == FI_HMEM_SYSTEM) && !OPX_IS_CTX_SHARING_ENABLED &&
+#ifdef OPX_HMEM
+	uint32_t dmabuf_supported = opx_ep->domain->hmem_domain->dmabuf_supported;
+#else
+	uint32_t dmabuf_supported = 0;
+#endif
+	if (opx_ep->use_hfisvc && !is_shm && (src_iface == FI_HMEM_SYSTEM || (opx_mr && dmabuf_supported)) &&
 	    (hfi1_type & OPX_HFI1_JKR) && !(caps & FI_MSG)) {
 		OPX_HFISVC_DEBUG_LOG("Sending RZV RTS HFI SVC\n");
 		return opx_hfi1_tx_rzv_rts_hfisvc(opx_ep, buf, len, tag, data, bth_rx, lrh_dlid_16B, do_cq_completion,
-						  user_context, addr, caps, src_iface, src_device_id, tx_op_flags);
+						  user_context, addr, caps, src_iface, src_device_id, opx_mr,
+						  tx_op_flags, ctx_sharing);
 	}
 #endif
 	OPX_HFISVC_DEBUG_LOG("Sending RZV RTS NORMAL\n");
