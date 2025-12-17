@@ -43,34 +43,49 @@ void opx_hfisvc_mr_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_
 		.cq.app_context = (uint64_t) opx_mr,
 	};
 
+	void			 *base;
+	size_t			  len;
 	struct hfisvc_client_hmem hmem;
-	switch (opx_mr->attr.iface) {
-	case FI_HMEM_CUDA:
-		hmem.iface	 = HFISVC_CLIENT_HMEM_IFACE_CUDA;
-		hmem.device.cuda = opx_mr->attr.device.cuda;
-		break;
-	case FI_HMEM_ROCR:
-		hmem.iface	     = HFISVC_CLIENT_HMEM_IFACE_ROCR;
-		hmem.device.reserved = opx_mr->attr.device.reserved;
-		break;
-	case FI_HMEM_ZE:
-		hmem.iface     = HFISVC_CLIENT_HMEM_IFACE_ZE;
-		hmem.device.ze = opx_mr->attr.device.ze;
-		break;
-	default:
-		hmem.iface	     = HFISVC_CLIENT_HMEM_IFACE_SYSTEM;
-		hmem.device.reserved = 0UL;
-	};
 
-	struct iovec *iov = &opx_mr->iov;
-	OPX_HFISVC_DEBUG_LOG("Opening MR opx_mr=%p buf=%p-%p (%lu bytes) iface=%d\n", opx_mr, iov->iov_base,
-			     (void *) ((uintptr_t) iov->iov_base + iov->iov_len), iov->iov_len, opx_mr->attr.iface);
+	if (opx_mr->dmabuf.fd != -1) {
+#if HAVE_HFISVC_DMABUF
+		hmem.iface = HFISVC_CLIENT_HMEM_IFACE_DMABUF;
+#endif
+		hmem.device.reserved = (int64_t) opx_mr->dmabuf.fd;
+		base		     = opx_mr->dmabuf.base_addr;
+		len		     = opx_mr->dmabuf.len + opx_mr->dmabuf.offset;
+	} else {
+		switch (opx_mr->attr.iface) {
+		case FI_HMEM_CUDA:
+			hmem.iface	 = HFISVC_CLIENT_HMEM_IFACE_CUDA;
+			hmem.device.cuda = opx_mr->attr.device.cuda;
+			break;
+		case FI_HMEM_ROCR:
+			hmem.iface	     = HFISVC_CLIENT_HMEM_IFACE_ROCR;
+			hmem.device.reserved = opx_mr->attr.device.reserved;
+			break;
+		case FI_HMEM_ZE:
+			hmem.iface     = HFISVC_CLIENT_HMEM_IFACE_ZE;
+			hmem.device.ze = opx_mr->attr.device.ze;
+			break;
+		default:
+			hmem.iface	     = HFISVC_CLIENT_HMEM_IFACE_SYSTEM;
+			hmem.device.reserved = 0UL;
+		};
+		base = opx_mr->iov.iov_base;
+		len  = opx_mr->iov.iov_len;
+	}
+
+	OPX_HFISVC_DEBUG_LOG(
+		"Opening MR opx_mr=%p hmem.iface-%d buf=%p-%p (%lu bytes offset=%lu) attr.iface=%d fd=%d\n", opx_mr,
+		hmem.iface, base, (void *) ((uintptr_t) base + len), len,
+		(opx_mr->dmabuf.fd == -1) ? 0 : opx_mr->dmabuf.offset, opx_mr->attr.iface, opx_mr->dmabuf.fd);
 
 	int ret = (opx_domain->hfisvc.cmd_mr_open)(opx_domain->hfisvc.mr_command_queue, completion, 0UL /* flags */,
-						   iov->iov_len, iov->iov_base, hmem);
+						   len, base, hmem);
 	if (ret) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error opening opx_mr=%p buf=%p-%p iface=%d\n", opx_mr,
-			iov->iov_base, (void *) ((uintptr_t) iov->iov_base + iov->iov_len), opx_mr->attr.iface);
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error opening opx_mr=%p buf=%p-%p iface=%d\n", opx_mr, base,
+			(void *) ((uintptr_t) base + len), opx_mr->attr.iface);
 	} else {
 		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
 		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=NOT_REGISTERED -> PENDING_OPEN\n", opx_mr);
@@ -87,8 +102,12 @@ int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_
 	int ret = opx_hfisvc_keyset_alloc_key(&opx_domain->hfisvc.access_key_set, &access_key, NULL);
 	if (ret) {
 		OPX_HFISVC_DEBUG_LOG("Unable to allocate access_key for mr=%p buf=%p-%p (EAGAIN)\n", opx_mr,
-				     opx_mr->iov.iov_base,
-				     (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len));
+
+				     (opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_base : opx_mr->dmabuf.base_addr,
+				     (opx_mr->dmabuf.fd == -1) ?
+					     (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len) :
+					     (void *) ((uintptr_t) opx_mr->dmabuf.base_addr + opx_mr->dmabuf.len +
+						       opx_mr->dmabuf.offset));
 		return -FI_EAGAIN;
 	}
 
@@ -104,14 +123,19 @@ int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_
 		.cq.app_context = (uint64_t) opx_mr,
 	};
 
-	ret = (opx_domain->hfisvc.cmd_dma_access_enable)(opx_domain->hfisvc.mr_command_queue, enable_completion,
-							 0UL /* flags */, access_key, opx_mr->iov.iov_len,
-							 opx_mr->hfisvc.mr_handle, 0UL, mr_notification);
+	ret = (opx_domain->hfisvc.cmd_dma_access_enable)(
+		opx_domain->hfisvc.mr_command_queue, enable_completion, 0UL /* flags */, access_key,
+		(opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_len : (opx_mr->dmabuf.len + opx_mr->dmabuf.offset),
+		opx_mr->hfisvc.mr_handle, 0UL, mr_notification);
 
 	if (ret) {
-		OPX_HFISVC_DEBUG_LOG("Error enabling access_key=%u for mr=%p buf=%p-%p (returned %d) (EAGAIN)\n",
-				     access_key, opx_mr, opx_mr->iov.iov_base,
-				     (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len), ret);
+		OPX_HFISVC_DEBUG_LOG(
+			"Error enabling access_key=%u for mr=%p buf=%p-%p (returned %d) (EAGAIN)\n", access_key, opx_mr,
+			(opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_base : opx_mr->dmabuf.base_addr,
+			(opx_mr->dmabuf.fd == -1) ? (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len) :
+						    (void *) ((uintptr_t) opx_mr->dmabuf.base_addr +
+							      opx_mr->dmabuf.len + opx_mr->dmabuf.offset),
+			ret);
 		opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set, access_key,
 					   NULL); // TODO: Debug counters parm
 		return -FI_EAGAIN;
@@ -119,7 +143,9 @@ int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_
 	(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
 	opx_mr->hfisvc.access_key = access_key;
 
-	OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_KEY_ALLOC -> PENDING_KEY_ENABLE\n", opx_mr);
+	OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p key=%u state=PENDING_KEY_ALLOC -> PENDING_KEY_ENABLE\n",
+			     opx_mr, opx_mr->hfisvc.access_key);
+
 	opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE;
 
 	return 0;
@@ -139,8 +165,13 @@ void opx_hfisvc_mr_disable_access_key(struct fi_opx_domain *opx_domain, struct f
 							      0UL /* flags */, opx_mr->hfisvc.access_key);
 	if (ret) {
 		OPX_HFISVC_DEBUG_LOG("Error disabling access_key=%u for mr=%p buf=%p-%p (returned %d) (EAGAIN)\n",
-				     opx_mr->hfisvc.access_key, opx_mr, opx_mr->iov.iov_base,
-				     (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len), ret);
+				     opx_mr->hfisvc.access_key, opx_mr,
+				     (opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_base : opx_mr->dmabuf.base_addr,
+				     (opx_mr->dmabuf.fd == -1) ?
+					     (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len) :
+					     (void *) ((uintptr_t) opx_mr->dmabuf.base_addr + opx_mr->dmabuf.len +
+						       opx_mr->dmabuf.offset),
+				     ret);
 	} else {
 		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
 		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=OPEN -> PENDING_KEY_DISABLE\n", opx_mr);
@@ -158,14 +189,20 @@ void opx_hfisvc_mr_deregister_mr(struct fi_opx_domain *opx_domain, struct fi_opx
 		.cq.app_context = (uint64_t) opx_mr,
 	};
 
-	OPX_HFISVC_DEBUG_LOG("Closing MR opx_mr=%p buf=%p-%p\n", opx_mr, opx_mr->iov.iov_base,
-			     (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len));
-
+	OPX_HFISVC_DEBUG_LOG(
+		"Closing MR opx_mr=%p buf=%p-%p\n", opx_mr,
+		(opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_base : opx_mr->dmabuf.base_addr,
+		(opx_mr->dmabuf.fd == -1) ?
+			(void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len) :
+			(void *) ((uintptr_t) opx_mr->dmabuf.base_addr + opx_mr->dmabuf.len + opx_mr->dmabuf.offset));
 	int ret = (*opx_domain->hfisvc.cmd_mr_close)(opx_domain->hfisvc.mr_command_queue, completion, 0UL /* flags */,
 						     opx_mr->hfisvc.mr_handle);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error closing opx_mr=%p buf=%p-%p\n", opx_mr,
-			opx_mr->iov.iov_base, (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len));
+			(opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_base : opx_mr->dmabuf.base_addr,
+			(opx_mr->dmabuf.fd == -1) ? (void *) ((uintptr_t) opx_mr->iov.iov_base + opx_mr->iov.iov_len) :
+						    (void *) ((uintptr_t) opx_mr->dmabuf.base_addr +
+							      opx_mr->dmabuf.len + opx_mr->dmabuf.offset));
 	} else {
 		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
 		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_DEREGISTER -> PENDING_CLOSE\n",

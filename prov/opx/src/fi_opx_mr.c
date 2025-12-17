@@ -59,6 +59,10 @@ static int fi_opx_close_mr(fid_t fid)
 		}
 	}
 #endif
+	if (opx_mr->dmabuf.fd != -1) {
+		ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
+		close(opx_mr->dmabuf.fd);
+	}
 
 	HASH_DEL(opx_domain->mr_hashmap, opx_mr);
 
@@ -72,6 +76,11 @@ static int fi_opx_close_mr(fid_t fid)
 
 	// If HFI service is being used, opx_mr will be freed by the deferred close
 	if (!opx_domain->use_hfisvc) {
+#ifndef NDEBUG
+		/* Intentionally setting opx_mr to non-valid value to allow easier debug of
+		 * an attempt to access the opx_mr after it's been deleted */
+		memset(opx_mr, 0xAA, sizeof(*opx_mr));
+#endif
 		free(opx_mr);
 	}
 	// opx_mr (the object passed in as fid) is now unusable
@@ -110,7 +119,7 @@ static struct fi_ops fi_opx_fi_ops = {.size	= sizeof(struct fi_ops),
 
 static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *iov, size_t count, uint64_t access,
 					 uint64_t offset, uint64_t requested_key, uint64_t flags, struct fid_mr **mr,
-					 void *context)
+					 void *context, const struct fi_mr_attr *attr)
 {
 	if (!iov) {
 		errno = FI_EINVAL;
@@ -154,7 +163,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	}
 
 	if ((flags & (FI_MR_LOCAL | FI_MR_RAW | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_MMU_NOTIFY |
-		      FI_MR_RMA_EVENT | FI_MR_ENDPOINT | FI_MR_HMEM)) != flags) {
+		      FI_MR_RMA_EVENT | FI_MR_ENDPOINT | FI_MR_HMEM | FI_MR_DMABUF)) != flags) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Unsupported flags specified, client requested %lu\n", flags);
 		errno = FI_EINVAL;
 		return -errno;
@@ -169,18 +178,18 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	uint64_t	hmem_unified;
 	hmem_iface = opx_hmem_get_ptr_iface(iov->iov_base, &hmem_device, &hmem_unified);
 
-	if ((hmem_iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) || hmem_iface == FI_HMEM_ROCR) {
+	if ((hmem_iface == FI_HMEM_CUDA || hmem_iface == FI_HMEM_ROCR) && (flags & FI_MR_DMABUF) == 0) {
 		struct ofi_mr_entry *entry;
 		struct ofi_mr_info   info = {.iface	   = hmem_iface,
 					     .device	   = hmem_device,
 					     .iov.iov_base = iov->iov_base,
 					     .iov.iov_len  = iov->iov_len,
 					     .flags	   = flags};
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-CACHE-SEARCH");
+		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "HMEM-CACHE-SEARCH");
 		if (!ofi_mr_cache_search(opx_domain->hmem_domain->hmem_cache, &info, &entry)) {
-			opx_mr	      = (struct fi_opx_mr *) entry->data;
+			memcpy(&opx_mr, entry->data, sizeof(struct fi_opx_mr *));
 			opx_mr->flags = flags;
-			/* Whenever we have a cache miss, we initalize the KEY to FI_KEY_NOTAVAIL.
+			/* Whenever we have a cache miss, we initialize the KEY to FI_KEY_NOTAVAIL.
 			 * Thus, we know a new entry was created if the key is not set. If the key is set,
 			 * we know it was a cache hit */
 			if (opx_mr->mr_fid.key == FI_KEY_NOTAVAIL) {
@@ -192,12 +201,38 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 				opx_mr->attr.requested_key = opx_mr->mr_fid.key;
 #if HAVE_HFISVC
 				if (opx_domain->use_hfisvc) {
-					ret = opx_domain_deferred_work_enqueue_open(opx_domain, opx_mr);
-					if (ret) {
-						FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-							"Error enqueuing deferred hfisvc open mr returned %d\n", ret);
-						errno = -ret;
-						return ret;
+					if (opx_domain->hmem_domain->dmabuf_supported) {
+						int	 fd;
+						uint64_t dmabuf_offset;
+						ret = ofi_hmem_get_dmabuf_fd(hmem_iface, iov->iov_base, iov->iov_len,
+									     &fd, &dmabuf_offset);
+						if (ret) {
+							FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+								"Error on ofi_hmem_get_dmabuf_fd returned %d\n", ret);
+							ofi_mr_cache_delete(opx_domain->hmem_domain->hmem_cache, entry);
+							errno = FI_EOPNOTSUPP;
+							return -errno;
+						}
+						FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_MR,
+						       "ofi_hmem_get_dmabuf_fd buf=%p, len=%lu, iface=%u, offset=%lu, fd=%d\n",
+						       iov->iov_base, iov->iov_len, hmem_iface, dmabuf_offset, fd);
+
+						opx_mr->dmabuf.fd	 = fd;
+						opx_mr->dmabuf.offset	 = dmabuf_offset;
+						opx_mr->dmabuf.len	 = iov->iov_len;
+						opx_mr->dmabuf.base_addr = iov->iov_base;
+						opx_mr->attr.iface	 = hmem_iface;
+						opx_mr->attr.dmabuf	 = &opx_mr->dmabuf;
+
+						ret = opx_domain_deferred_work_enqueue_open(opx_domain, opx_mr);
+						if (ret) {
+							FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+								"Error enqueuing deferred hfisvc open mr returned %d\n",
+								ret);
+							ofi_mr_cache_delete(opx_domain->hmem_domain->hmem_cache, entry);
+							errno = -ret;
+							return ret;
+						}
 					}
 				}
 #endif
@@ -220,10 +255,10 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 			}
 
 			*mr = &opx_mr->mr_fid;
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-CACHE-SEARCH");
+			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "HMEM-CACHE-SEARCH");
 			return 0;
 		}
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "GDRCOPY-CACHE-SEARCH");
+		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "HMEM-CACHE-SEARCH");
 	}
 #endif
 
@@ -264,14 +299,24 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		opx_mr->mr_fid.key = requested_key;
 	}
 
-	opx_mr->iov	       = *iov;
-	opx_mr->base_addr      = opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : iov->iov_base;
-	opx_mr->attr.mr_iov    = &opx_mr->iov;
-	opx_mr->attr.iov_count = FI_OPX_IOV_LIMIT;
-	opx_mr->attr.offset    = offset;
-	opx_mr->attr.access    = access;
-	opx_mr->flags	       = flags;
-	opx_mr->domain	       = opx_domain;
+	if (flags & FI_MR_DMABUF) {
+		assert(attr);
+		opx_mr->hmem_unified = 0;
+		opx_mr->attr.iface   = attr->iface;
+		opx_mr->attr.device  = attr->device;
+		opx_mr->dmabuf	     = *attr->dmabuf;
+		opx_mr->attr.dmabuf  = &opx_mr->dmabuf;
+	} else {
+		opx_mr->dmabuf.fd      = -1;
+		opx_mr->iov	       = *iov;
+		opx_mr->base_addr      = opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : iov->iov_base;
+		opx_mr->attr.mr_iov    = &opx_mr->iov;
+		opx_mr->attr.iov_count = FI_OPX_IOV_LIMIT;
+		opx_mr->attr.offset    = offset;
+	}
+	opx_mr->attr.access = access;
+	opx_mr->flags	    = flags;
+	opx_mr->domain	    = opx_domain;
 
 	if (opx_domain->mr_mode & OFI_MR_SCALABLE) {
 		fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
@@ -298,14 +343,15 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 static int fi_opx_mr_regv(struct fid *fid, const struct iovec *iov, size_t count, uint64_t access, uint64_t offset,
 			  uint64_t requested_key, uint64_t flags, struct fid_mr **mr, void *context)
 {
-	return fi_opx_mr_reg_internal(fid, iov, count, access, offset, requested_key, flags, mr, context);
+	return fi_opx_mr_reg_internal(fid, iov, count, access, offset, requested_key, flags, mr, context, NULL);
 }
 
 static int fi_opx_mr_reg(struct fid *fid, const void *buf, size_t len, uint64_t access, uint64_t offset,
 			 uint64_t requested_key, uint64_t flags, struct fid_mr **mr, void *context)
 {
 	const struct iovec iov = {.iov_base = (void *) buf, .iov_len = len};
-	return fi_opx_mr_reg_internal(fid, &iov, FI_OPX_IOV_LIMIT, access, offset, requested_key, flags, mr, context);
+	return fi_opx_mr_reg_internal(fid, &iov, FI_OPX_IOV_LIMIT, access, offset, requested_key, flags, mr, context,
+				      NULL);
 }
 
 static int fi_opx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr, uint64_t flags, struct fid_mr **mr)
@@ -315,7 +361,7 @@ static int fi_opx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr, uin
 		return -errno;
 	}
 	return fi_opx_mr_reg_internal(fid, attr->mr_iov, attr->iov_count, attr->access, attr->offset,
-				      attr->requested_key, flags, mr, attr->context);
+				      attr->requested_key, flags, mr, attr->context, attr);
 }
 
 int fi_opx_bind_ep_mr(struct fid_ep *ep, struct fid_mr *mr, uint64_t flags)

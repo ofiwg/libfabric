@@ -253,7 +253,7 @@ static inline int fi_opx_cq_enqueue_completed(struct fi_opx_cq *opx_cq, struct o
 
 static inline size_t fi_opx_cq_fill(uintptr_t output, struct opx_context *context, const enum fi_cq_format format)
 {
-	assert(!(context->flags & FI_OPX_CQ_CONTEXT_HMEM));
+	assert(!(context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)));
 	const uint64_t is_multi_recv = context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV;
 
 	size_t return_size;
@@ -391,7 +391,8 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 			if (byte_counter == 0) {
 				bool free_context;
 				if (context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV) {
-					assert(!(context->flags & FI_OPX_CQ_CONTEXT_HMEM));
+					assert(!(context->flags &
+						 (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)));
 
 					struct opx_context *multi_recv_context = context->multi_recv_context;
 					assert(multi_recv_context != NULL);
@@ -411,7 +412,7 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 				} else {
 					free_context = true;
 				}
-				context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
+				context->flags &= ~(FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 				output += fi_opx_cq_fill(output, context, format);
 				++num_entries;
 

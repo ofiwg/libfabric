@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
- * Copyright (C) 2024-2024 Cornelis Networks.
+ * Copyright (C) 2024-2025 Cornelis Networks.
  *
  * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
@@ -76,9 +76,9 @@
  *	info.iov.iov_base = iov.iov_base;
  *	info.iov.iov_len = iov.iov_len;
  *
- * The entry data is the OPX memory region (mr)
+ * The entry data is a pointer to the OPX memory region (mr)
  *
- *      struct opx_mr *opx_mr = (struct opx_mr *)entry->data;
+ *      struct opx_mr *opx_mr = *(struct opx_mr **)entry->data;
  *
  * The memory region (mr) has info for that mr that is
  * registered and unregistered
@@ -122,7 +122,7 @@
 static int opx_mr_cache_close(fid_t fid)
 {
 	struct fi_opx_mr    *opx_mr = (struct fi_opx_mr *) fid;
-	struct ofi_mr_entry *entry  = container_of(opx_mr, struct ofi_mr_entry, data);
+	struct ofi_mr_entry *entry  = opx_mr->cache_entry;
 	ofi_mr_cache_delete(opx_mr->domain->hmem_domain->hmem_cache, entry);
 
 	return 0;
@@ -378,9 +378,9 @@ int opx_hmem_cache_setup(struct ofi_mr_cache **cache, struct opx_hmem_domain *do
 
 	/* Set size of an OPX entry->data :
 	 * struct ofi_mr_entry *entry;
-	 * struct fi_opx_mr *opx_mr = (struct fi_opx_mr *)entry->data;
+	 * struct fi_opx_mr *opx_mr = *(struct fi_opx_mr **)entry->data;
 	 */
-	(*cache)->entry_data_size = sizeof(struct fi_opx_mr);
+	(*cache)->entry_data_size = sizeof(struct fi_opx_mr *);
 	(*cache)->add_region	  = opx_hmem_cache_add_region;
 	(*cache)->delete_region	  = opx_hmem_cache_delete_region;
 	FI_DBG(&fi_opx_provider, FI_LOG_MR, "cache %p, domain %p\n", *cache, domain);
@@ -430,8 +430,14 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 {
 	int		  err;
 	uint64_t	  access = FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE;
-	struct fi_opx_mr *opx_mr = (struct fi_opx_mr *) entry->data;
+	struct fi_opx_mr *opx_mr = calloc(1, sizeof(*opx_mr));
+	if (!opx_mr) {
+		errno = FI_ENOMEM;
+		return -errno;
+	}
+	memcpy(entry->data, &opx_mr, sizeof(struct fi_opx_mr *));
 
+	opx_mr->cache_entry		    = entry;
 	opx_mr->mr_fid.mem_desc		    = opx_mr;
 	opx_mr->mr_fid.fid.fclass	    = FI_CLASS_MR;
 	opx_mr->mr_fid.fid.context	    = NULL;
@@ -439,6 +445,7 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 	opx_mr->mr_fid.key		    = FI_KEY_NOTAVAIL;
 	opx_mr->iov			    = entry->info.iov;
 	opx_mr->attr.mr_iov		    = &opx_mr->iov;
+	opx_mr->dmabuf.fd		    = -1;
 	opx_mr->attr.iov_count		    = FI_OPX_IOV_LIMIT;
 	opx_mr->attr.offset		    = 0; // set in the normal path
 	opx_mr->attr.access		    = access;
@@ -448,9 +455,10 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 	opx_mr->attr.requested_key	    = 0;
 	struct opx_hmem_domain *hmem_domain = (struct opx_hmem_domain *) cache->domain;
 	opx_mr->domain			    = hmem_domain->opx_domain;
-	opx_mr->base_addr = hmem_domain->opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : entry->info.iov.iov_base;
+	opx_mr->base_addr    = hmem_domain->opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : entry->info.iov.iov_base;
+	opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_NOT_REGISTERED;
 
-	assert((opx_mr->attr.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) || opx_mr->attr.iface == FI_HMEM_ROCR);
+	assert(opx_mr->attr.iface == FI_HMEM_CUDA || opx_mr->attr.iface == FI_HMEM_ROCR);
 
 	(opx_mr->attr.iface == FI_HMEM_CUDA) ? (opx_mr->attr.device.cuda = entry->info.device) : (void) 0;
 
@@ -461,7 +469,7 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "HMEM-DEV-HANDLE-REGISTER");
 	err = ofi_hmem_dev_register(opx_mr->attr.iface, entry->info.iov.iov_base, entry->info.iov.iov_len,
-				    &opx_mr->hmem_dev_reg_handle);
+				    (uint64_t *) &opx_mr->attr.hmem_data);
 
 	if (OFI_UNLIKELY(err)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "HMEM-DEV-HANDLE-REGISTER");
@@ -469,7 +477,7 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 			"Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n", err,
 			entry->info.iov.iov_base, entry->info.iov.iov_len);
 		// When gdrcopy pin buf failed, fallback to cudaMemcpy and return without caching
-		opx_mr->hmem_dev_reg_handle = 0UL;
+		opx_mr->attr.hmem_data = 0UL;
 	} else {
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "HMEM-DEV-HANDLE-REGISTER");
 	}
@@ -492,7 +500,8 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 
 void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
-	struct fi_opx_mr *opx_mr = (struct fi_opx_mr *) entry->data;
+	struct fi_opx_mr *opx_mr;
+	memcpy(&opx_mr, entry->data, sizeof(struct fi_opx_mr *));
 
 	HASH_DEL(opx_mr->domain->mr_hashmap, opx_mr);
 
@@ -510,21 +519,44 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	assert((opx_mr->iov.iov_len == iov_len) && (opx_mr->iov.iov_base == iov_base));
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "ENTRY cache %p, entry %p, data %p, iov_base %p, iov_len %zu\n", cache,
 	       entry, opx_mr, iov_base, iov_len);
-	if (opx_mr->hmem_dev_reg_handle) {
+	if (opx_mr->attr.hmem_data) {
 		/* Hold the cache->lock across unregister call */
 		pthread_mutex_lock(&cache->lock);
 		assert(opx_mr->attr.iface == FI_HMEM_CUDA || opx_mr->attr.iface == FI_HMEM_ROCR);
 		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-DEV-UNREGISTER");
-		int err = ofi_hmem_dev_unregister(opx_mr->attr.iface, opx_mr->hmem_dev_reg_handle);
+		int err = ofi_hmem_dev_unregister(opx_mr->attr.iface, (uint64_t) opx_mr->attr.hmem_data);
 		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-DEV-UNREGISTER");
 		pthread_mutex_unlock(&cache->lock);
 		if (OFI_UNLIKELY(err)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-				"Unable to de-register device reg handle, hmem_dev_reg_handle=%lu\n",
-				opx_mr->hmem_dev_reg_handle);
+				"Unable to de-register device reg handle, hmem_handle=%lu\n",
+				(uint64_t) opx_mr->attr.hmem_data);
 		}
 	}
-	opx_mr->hmem_dev_reg_handle = 0UL;
+	opx_mr->attr.hmem_data = 0UL;
+
+#if HAVE_HFISVC
+	if (opx_mr->domain->use_hfisvc) {
+		if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
+			OPX_HFISVC_DEBUG_LOG("Closing cached mr opx_mr=%p (hfisvc.state=%d)\n", opx_mr,
+					     opx_mr->hfisvc.state);
+			opx_mr->hfisvc.state |= OPX_MR_HFISVC_STATE_CLOSE_ISSUED;
+			opx_domain_hfisvc_poll(opx_mr->domain);
+			opx_mr->hfisvc.state &= ~OPX_MR_HFISVC_STATE_CLOSE_ISSUED;
+		}
+
+		int ret = opx_domain_deferred_work_enqueue_close(opx_mr->domain, opx_mr);
+		if (ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc close mr returned %d\n",
+				ret);
+		}
+	}
+#endif
+
+	if (opx_mr->dmabuf.fd != -1) {
+		ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
+		close(opx_mr->dmabuf.fd);
+	}
 
 	if (opx_mr->domain->mr_mode & OFI_MR_SCALABLE) {
 		int ret = fi_opx_ref_dec(&opx_mr->domain->ref_cnt, "domain");
@@ -534,11 +566,15 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 		}
 	}
 
-/* Intentionally setting opx_mr to non-valid value to allow easier debug of
- * an attempt to access the opx_mr after it's been deleted */
+	// If HFI service is being used, opx_mr will be freed by the deferred close
+	if (!opx_mr->domain->use_hfisvc) {
 #ifndef NDEBUG
-	memset(opx_mr, 0xAA, sizeof(*opx_mr));
+		/* Intentionally setting opx_mr to non-valid value to allow easier debug of
+		 * an attempt to access the opx_mr after it's been deleted */
+		memset(opx_mr, 0xAA, sizeof(*opx_mr));
 #endif
+		free(opx_mr);
+	}
 }
 
 #endif

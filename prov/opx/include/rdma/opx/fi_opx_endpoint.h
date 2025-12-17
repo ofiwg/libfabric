@@ -937,7 +937,7 @@ void fi_opx_enqueue_completed(struct slist *queue, struct opx_context *context, 
 {
 	assert(!lock_required);
 	assert(context);
-	context->flags &= ~FI_OPX_CQ_CONTEXT_HMEM;
+	context->flags &= ~(FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 	slist_insert_tail((struct slist_entry *) context, queue);
 }
 
@@ -1065,7 +1065,6 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 	assert(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC);
 	assert(!lock_required);
 	assert(!is_multi_receive); // Multi recv not supported with HFISVC yet
-	assert(!is_hmem);	   // HMEM not supported with HFISVC yet
 
 	FI_DBG_TRACE(
 		fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1085,8 +1084,33 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 
 	uint64_t xfer_len = hdr->rzv_rts.message_length;
 
-	OPX_HFISVC_DEBUG_LOG("Matched HFISVC RTS packet, recv context=%p sbuf_client_key=%u xfer_len=%lu niov=%u\n",
-			     context, sbuf_key, xfer_len, niov);
+	OPX_HFISVC_DEBUG_LOG(
+		"Matched HFISVC RTS packet, recv context=%p sbuf_client_key=%u xfer_len=%lu niov=%u rzv_comp=%lX\n",
+		context, sbuf_key, xfer_len, niov, payload->rendezvous.hfisvc.rzv_comp_vaddr);
+
+	struct fi_opx_mr *opx_mr    = NULL;
+	uint64_t	  do_dmabuf = (uint64_t) (context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
+	if (do_dmabuf) {
+		opx_mr = ((struct fi_opx_hmem_info *) context->hmem_info_qws)->dmabuf.opx_mr;
+		if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
+			int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
+				opx_ep, context, niov, sbuf_key, lid, recv_buf, &payload->rendezvous.hfisvc.iovs[0],
+				payload->rendezvous.hfisvc.rzv_comp_vaddr);
+			if (OFI_UNLIKELY(deferred_rc)) {
+				fprintf(stderr,
+					"(%d) %s:%s():%d Error: Couldn't create deferred work to handle rendezvous receive (%d), aborting.\n",
+					getpid(), __FILE__, __func__, __LINE__, deferred_rc);
+				abort();
+			}
+			OPX_HFISVC_DEBUG_LOG("rdma_read deferred state=%d context=%p recv_buf=%p sbuf_key=%u\n",
+					     opx_mr->hfisvc.state, context, recv_buf, sbuf_key);
+
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.deferred);
+
+			slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
+			goto recv_rts_hfisvc_finish;
+		}
+	}
 
 	struct hfisvc_client_completion completion = {
 		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
@@ -1107,14 +1131,23 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
 			const uint64_t sbuf_len	       = payload->rendezvous.hfisvc.iovs[i].len;
 			const uint64_t sbuf_offset     = payload->rendezvous.hfisvc.iovs[i].offset;
-			int	       rc	       = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
-				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key, sbuf_len,
-				0ul /* immediate data */, sbuf_access_key, sbuf_offset, recv_buf);
-
+			int	       rc;
+			if (do_dmabuf) {
+				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
+					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+					sbuf_len, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
+					sbuf_offset, opx_mr->hfisvc.mr_handle,
+					(uint8_t *) recv_buf - (uint8_t *) context->buf);
+			} else {
+				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
+					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+					sbuf_len, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
+					sbuf_offset, recv_buf);
+			}
 			if (rc) {
 				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
 					opx_ep, context, niov - i, sbuf_key, lid, recv_buf,
-					&payload->rendezvous.hfisvc.iovs[i]);
+					&payload->rendezvous.hfisvc.iovs[i], payload->rendezvous.hfisvc.rzv_comp_vaddr);
 				if (OFI_UNLIKELY(deferred_rc)) {
 					fprintf(stderr,
 						"(%d) %s:%s():%d Error: Couldn't create deferred work to handle rendezvous receive (%d), aborting.\n",
@@ -1139,8 +1172,9 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			}
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
 			OPX_HFISVC_DEBUG_LOG(
-				"[%d/%d] Successfully issued rdma_read context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
-				i + 1, niov, context, recv_buf, sbuf_key, sbuf_access_key, sbuf_len);
+				"[%d/%d] Successfully issued rdma_read context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu rzv_comp=%lu\n",
+				i + 1, niov, context, recv_buf, sbuf_key, sbuf_access_key, sbuf_len,
+				payload->rendezvous.hfisvc.rzv_comp_vaddr);
 
 			recv_buf = (void *) ((uintptr_t) recv_buf + sbuf_len);
 		}
@@ -1156,17 +1190,26 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 		   fails, create a deferred work item to keep retrying. */
 		for (int i = 0; i < niov; ++i) {
 			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
-			int	       rc	       = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
-				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
-				1ul /* length */, 0ul /* immediate data */, sbuf_access_key, 0ul /* remote offset */,
-				&opx_trunc_scratch_buf);
+			int	       rc;
+			if (do_dmabuf) {
+				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
+					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+					1ul /* length */, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
+					0ul /* remote offset */, opx_mr->hfisvc.mr_handle, 0);
+			} else {
+				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
+					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+					1ul /* length */, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
+					0ul /* remote offset */, &opx_trunc_scratch_buf);
+			}
 			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
 				union opx_hfisvc_iov trunc_iov = payload->rendezvous.hfisvc.iovs[i];
 				trunc_iov.len		       = 1;
 
 				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
 					opx_ep, context, 1 /* niov */, sbuf_key, lid, &opx_trunc_scratch_buf,
-					(const union opx_hfisvc_iov *) &trunc_iov);
+					(const union opx_hfisvc_iov *) &trunc_iov,
+					payload->rendezvous.hfisvc.rzv_comp_vaddr);
 
 				if (OFI_UNLIKELY(deferred_rc)) {
 					fprintf(stderr,
@@ -1344,7 +1387,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			uint64_t	   hmem_handle;
 			if (is_hmem) { /* Branch should compile out */
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				rbuf_device			   = hmem_info->device;
+				rbuf_device			   = hmem_info->gpu.device;
 				rbuf_iface			   = hmem_info->iface;
 				hmem_handle			   = hmem_info->hmem_dev_reg_handle;
 				FI_OPX_DEBUG_COUNTERS_INC_COND(
@@ -1521,9 +1564,9 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		} else if (OFI_LIKELY(send_len <= recv_len)) {
 			if (is_hmem && send_len) {
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						 recv_buf, hdr->inject.app_data_u8, send_len,
-						 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
+						 hmem_info->hmem_dev_reg_handle, recv_buf, hdr->inject.app_data_u8,
+						 send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(
 					is_shm,
 					opx_ep->debug_counters.hmem.intranode
@@ -1715,9 +1758,9 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 
 			if (is_hmem) {
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						 context->buf, opx_ep->hmem_copy_buf, send_len,
-						 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
+						 hmem_info->hmem_dev_reg_handle, context->buf, opx_ep->hmem_copy_buf,
+						 send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(
 					is_shm,
 					opx_ep->debug_counters.hmem.intranode
@@ -1835,9 +1878,9 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 
 			if (is_hmem) {
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						 recv_buf, opx_ep->hmem_copy_buf, packet_payload_len,
-						 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
+						 hmem_info->hmem_dev_reg_handle, recv_buf, opx_ep->hmem_copy_buf,
+						 packet_payload_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 
 				/* MP Eager sends are never intranode */
 				FI_OPX_DEBUG_COUNTERS_INC(
@@ -1963,9 +2006,9 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			if (is_hmem) {
 				recv_buf = (void *) ((uint8_t *) context->buf + hdr->mp_eager_nth.payload_offset);
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						 recv_buf, opx_ep->hmem_copy_buf, send_len,
-						 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
+						 hmem_info->hmem_dev_reg_handle, recv_buf, opx_ep->hmem_copy_buf,
+						 send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 			}
 			/* fi_opx_hfi1_dump_packet_hdr(hdr, __func__, __LINE__);*/
 
@@ -2280,11 +2323,11 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 #endif
 		const uint64_t *sbuf_qws = (uint64_t *) &payload->byte[0];
 #ifdef OPX_HMEM
-		if (target_context->flags & FI_OPX_CQ_CONTEXT_HMEM) {
+		if (target_context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)) {
 			struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) target_context->hmem_info_qws;
 			assert(hmem_info->iface > FI_HMEM_SYSTEM);
-			opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle, rbuf_qws,
-					 sbuf_qws, bytes, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+			opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device, hmem_info->hmem_dev_reg_handle,
+					 rbuf_qws, sbuf_qws, bytes, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 		} else
 #endif
 		{
@@ -2354,12 +2397,13 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "TID REPLAY rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_context->byte_counter %p\n",
 			       (void *) rbuf_qws, (void *) sbuf_qws, bytes, bytes, &target_context->byte_counter);
-			if (target_context->flags & FI_OPX_CQ_CONTEXT_HMEM) {
+			if (target_context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)) {
 				struct fi_opx_hmem_info *hmem_info =
 					(struct fi_opx_hmem_info *) target_context->hmem_info_qws;
 				assert(hmem_info->iface > FI_HMEM_SYSTEM);
-				opx_copy_to_hmem(hmem_info->iface, hmem_info->device, hmem_info->hmem_dev_reg_handle,
-						 rbuf_qws, sbuf_qws, bytes, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
+						 hmem_info->hmem_dev_reg_handle, rbuf_qws, sbuf_qws, bytes,
+						 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 			} else {
 				memcpy(rbuf_qws, sbuf_qws, bytes);
 			}
@@ -2750,9 +2794,9 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep, struct opx_cont
 					      const enum ofi_reliability_kind reliability,
 					      const enum opx_hfi1_type	      hfi1_type)
 {
-	struct fi_opx_ep	     *opx_ep  = container_of(ep, struct fi_opx_ep, ep_fid);
-	const uint64_t		      is_hmem = context->flags & FI_OPX_CQ_CONTEXT_HMEM;
-	struct fi_opx_hfi1_ue_packet *uepkt   = opx_ep->rx->mp_egr_queue.ue.head;
+	struct fi_opx_ep *opx_ep	    = container_of(ep, struct fi_opx_ep, ep_fid);
+	const uint64_t	  is_hmem	    = context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
+	struct fi_opx_hfi1_ue_packet *uepkt = opx_ep->rx->mp_egr_queue.ue.head;
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(length);
 
@@ -2831,7 +2875,7 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep, const union o
 	/* Found a match. Remove from the match queue */
 	slist_remove(&opx_ep->rx->queue[kind].mq, (struct slist_entry *) context, (struct slist_entry *) prev);
 
-	uint64_t is_hmem = context->flags & FI_OPX_CQ_CONTEXT_HMEM;
+	uint64_t is_hmem = context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 
 	/* Copy this packet's payload to the context's buffer. */
 	opx_ep_complete_receive_operation(ep, hdr, payload, hdr->match.ofi_tag, context, opcode, OPX_MULTI_RECV_FALSE,
@@ -2906,7 +2950,8 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep, const union opx
 	opx_ep_complete_receive_operation(ep, hdr, payload, 0, /* OFI Tag, N/A for multi-packet eager nth */
 					  context,
 					  opcode, // FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH
-					  OPX_MULTI_RECV_FALSE, is_shm, context->flags & FI_OPX_CQ_CONTEXT_HMEM,
+					  OPX_MULTI_RECV_FALSE, is_shm,
+					  context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM),
 					  lock_required, reliability, hfi1_type);
 
 	if (!context->byte_counter) {
@@ -3023,9 +3068,10 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 
 		context->next = NULL;
 
-		opx_ep_complete_receive_operation(ep, hdr, payload, hdr->match.ofi_tag, context, opcode,
-						  OPX_MULTI_RECV_FALSE, is_shm, rx_op_flags & FI_OPX_CQ_CONTEXT_HMEM,
-						  lock_required, reliability, hfi1_type);
+		opx_ep_complete_receive_operation(
+			ep, hdr, payload, hdr->match.ofi_tag, context, opcode, OPX_MULTI_RECV_FALSE, is_shm,
+			rx_op_flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM), lock_required,
+			reliability, hfi1_type);
 
 		return;
 	}
@@ -3037,7 +3083,7 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 	const uint64_t recv_len = context->len;
 	const uint64_t send_len = fi_opx_hfi1_packet_hdr_message_length(hdr);
 
-	assert(!(context->flags & FI_OPX_CQ_CONTEXT_HMEM));
+	assert(!(context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)));
 	if (OFI_LIKELY(send_len <= recv_len)) {
 		opx_ep_complete_receive_operation(ep, hdr, payload, 0, context, opcode, OPX_MULTI_RECV_TRUE, is_shm,
 						  OPX_HMEM_FALSE, lock_required, reliability, hfi1_type);
@@ -3647,11 +3693,15 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 	if (hmem_iface != FI_HMEM_SYSTEM) {
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_MSG, opx_ep->debug_counters.hmem.posted_recv_msg);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.hmem.posted_recv_tag);
-		hmem_info->iface	       = hmem_iface;
-		hmem_info->device	       = hmem_device;
-		hmem_info->hmem_dev_reg_handle = hmem_handle;
-
-		context->flags |= FI_OPX_CQ_CONTEXT_HMEM;
+		hmem_info->iface = hmem_iface;
+		if (opx_ep->use_hfisvc && opx_ep->domain->hmem_domain->dmabuf_supported) {
+			hmem_info->dmabuf.opx_mr = (struct fi_opx_mr *) desc;
+			context->flags |= FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
+		} else {
+			hmem_info->gpu.device	       = hmem_device;
+			hmem_info->hmem_dev_reg_handle = hmem_handle;
+			context->flags |= FI_OPX_CQ_CONTEXT_HMEM;
+		}
 
 		fi_opx_ep_rx_process_context(opx_ep, static_flags, context,
 					     0, // rx_op_flags
@@ -3660,7 +3710,7 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 #endif
 	{
 		hmem_info->iface	       = FI_HMEM_SYSTEM;
-		hmem_info->device	       = 0UL;
+		hmem_info->gpu.device	       = 0UL;
 		hmem_info->hmem_dev_reg_handle = OPX_HMEM_NO_HANDLE;
 		fi_opx_ep_rx_process_context(opx_ep, static_flags, context,
 					     0, // rx_op_flags
@@ -3762,11 +3812,17 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 	enum fi_hmem_iface	 hmem_iface;
 	uint64_t		 hmem_handle;
 	if (msg->desc && msg->desc[0]) {
-		hmem_iface		       = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device, &hmem_handle);
-		hmem_info->iface	       = hmem_iface;
-		hmem_info->device	       = hmem_device;
-		hmem_info->hmem_dev_reg_handle = hmem_handle;
-		hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
+		hmem_iface	 = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device, &hmem_handle);
+		hmem_info->iface = hmem_iface;
+		if (opx_ep->use_hfisvc && opx_ep->domain->hmem_domain->dmabuf_supported) {
+			hmem_info->dmabuf.opx_mr = (struct fi_opx_mr *) msg->desc[0];
+			context->flags		 = flags | FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
+		} else {
+			hmem_info->gpu.device	       = hmem_device;
+			hmem_info->hmem_dev_reg_handle = hmem_handle;
+			hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
+			context->flags		       = flags | FI_OPX_CQ_CONTEXT_HMEM;
+		}
 	} else {
 		hmem_iface		  = FI_HMEM_SYSTEM;
 		hmem_device		  = 0UL;
@@ -3789,7 +3845,6 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 #endif
 	if (hmem_iface != FI_HMEM_SYSTEM) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.posted_recv_msg);
-		context->flags	       = flags | FI_OPX_CQ_CONTEXT_HMEM;
 		context->len	       = msg->msg_iov[0].iov_len;
 		context->buf	       = msg->msg_iov[0].iov_base;
 		context->byte_counter  = (uint64_t) -1;
@@ -4123,12 +4178,12 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 			   const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
 			   const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 			   const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device, const uint64_t hmem_handle,
-			   const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+			   const struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	if (is_contiguous) {
 		return OPX_FABRIC_TX_SEND_RZV(ep, buf, len, addr.fi, tag, context, data, lock_required, override_flags,
 					      tx_op_flags, addr.hfi1_subctxt_rx, caps, reliability, do_cq_completion,
-					      hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+					      hmem_iface, hmem_device, hmem_handle, opx_mr, hfi1_type, ctx_sharing);
 	}
 
 	return OPX_FABRIC_TX_SENDV_RZV(ep, local_iov, niov, total_len, addr.fi, tag, context, data, lock_required,
@@ -4246,7 +4301,8 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	rc = opx_ep_tx_send_rzv(ep, buf, len, addr, tag, context, local_iov, niov, total_len, data, lock_required,
 				is_contiguous, override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-				hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+				hmem_iface, hmem_device, hmem_handle, (const struct fi_opx_mr *) desc, hfi1_type,
+				ctx_sharing);
 
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== SEND (end)\n");
