@@ -69,6 +69,7 @@ struct opx_hmem_domain {
 	} hmem_stream;
 	uint32_t devreg_copy_from_threshold;
 	uint32_t devreg_copy_to_threshold;
+	uint32_t dmabuf_supported;
 };
 
 int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked);

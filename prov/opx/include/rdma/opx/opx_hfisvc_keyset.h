@@ -243,4 +243,17 @@ void opx_hfisvc_keyset_free(opx_hfisvc_keyset_t keyset)
 	free(_keyset);
 }
 
+/**
+ * Check for outstanding keys in the keyset.
+ */
+__OPX_FORCE_INLINE__
+int opx_hfisvc_keyset_outstanding(opx_hfisvc_keyset_t keyset)
+{
+	struct opx_hfisvc_keyset *_keyset = (struct opx_hfisvc_keyset *) keyset;
+	if (_keyset) {
+		return (_keyset->keys_total - _keyset->keys_free);
+	}
+	return 0;
+}
+
 #endif

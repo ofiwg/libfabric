@@ -64,7 +64,14 @@ enum opx_hmem_return_code {
 #endif
 
 struct fi_opx_hmem_info {
-	uint64_t	   device;
+	union {
+		struct {
+			uint64_t device;
+		} gpu;
+		struct {
+			struct fi_opx_mr *opx_mr;
+		} dmabuf;
+	};
 	uint64_t	   hmem_dev_reg_handle;
 	enum fi_hmem_iface iface;
 	uint8_t		   is_unified;
@@ -133,7 +140,7 @@ enum fi_hmem_iface opx_hmem_get_mr_iface(const struct fi_opx_mr *desc, uint64_t 
 		default:
 			*device = 0ul;
 		}
-		*handle = desc->hmem_dev_reg_handle;
+		*handle = (uint64_t) desc->attr.hmem_data;
 		return desc->attr.iface;
 	}
 #endif
