@@ -951,7 +951,7 @@ static void test_info_direct_rma_common(bool mock_unsolicited_write_recv,
 
 	/* Mock unsolicited write recv */
 	g_efa_unit_test_mocks.efa_device_support_unsolicited_write_recv = &efa_mock_efa_device_support_unsolicited_write_recv;
-	will_return_maybe(efa_mock_efa_device_support_unsolicited_write_recv, mock_unsolicited_write_recv);
+	will_return_uint_maybe(efa_mock_efa_device_support_unsolicited_write_recv, mock_unsolicited_write_recv);
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	assert_non_null(hints);

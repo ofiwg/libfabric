@@ -31,23 +31,17 @@ void efa_ibv_ah_limit_cnt_reset()
 }
 
 /**
- * @brief call real ibv_create_ah and mock()
- *
- * When combined with will_return_count(), this mock of ibv_create_ah() can be used to verify
- * number of times ibv_create_ah() is called.
+ * @brief call real ibv_create_ah and record the function call
  */
 struct ibv_ah *efa_mock_ibv_create_ah_check_mock(struct ibv_pd *pd, struct ibv_ah_attr *attr)
 {
-	mock();
+	function_called();
 
 	return  __real_ibv_create_ah(pd, attr);
 }
 
 /**
- * @brief call real ibv_create_ah and mock()
- *
- * When combined with will_return_count(), this mock of ibv_create_ah() can be used to verify
- * number of times ibv_create_ah() is called.
+ * @brief call real ibv_create_ah
  */
 struct ibv_ah *efa_mock_ibv_create_ah_dont_create_self_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
 {
@@ -61,10 +55,7 @@ struct ibv_ah *efa_mock_ibv_create_ah_dont_create_self_ah(struct ibv_pd *pd, str
 }
 
 /**
- * @brief call real ibv_destroy_ah and mock()
- *
- * When combined with will_return_count(), this mock of ibv_create_ah() can be used to verify
- * number of times ibv_create_ah() is called.
+ * @brief call real ibv_destroy_ah
  */
 int efa_mock_ibv_destroy_ah_dont_create_self_ah(struct ibv_ah *ibv_ah)
 {
@@ -127,7 +118,7 @@ void efa_ibv_submitted_wr_id_vec_clear()
 int efa_mock_efa_ibv_cq_start_poll_return_mock(struct efa_ibv_cq *ibv_cq,
 					struct ibv_poll_cq_attr *attr)
 {
-	return mock();
+	return mock_int();
 }
 
 static inline
@@ -151,7 +142,7 @@ int efa_mock_use_saved_send_wr(struct ibv_cq_ex *ibv_cqx, int status)
 int efa_mock_efa_ibv_cq_start_poll_use_saved_send_wr_with_mock_status(struct efa_ibv_cq *ibv_cq,
 							       struct ibv_poll_cq_attr *attr)
 {
-	return efa_mock_use_saved_send_wr(ibv_cq->ibv_cq_ex, mock());
+	return efa_mock_use_saved_send_wr(ibv_cq->ibv_cq_ex, mock_int());
 }
 
 int efa_mock_efa_ibv_cq_next_poll_return_mock(struct efa_ibv_cq *ibv_cq)
@@ -169,45 +160,45 @@ int efa_mock_efa_ibv_cq_next_poll_simulate_status_change(struct efa_ibv_cq *ibv_
 	struct ibv_cq_ex *ibv_cqx = ibv_cq->ibv_cq_ex;
 
 	/* Get status and context from mock parameters */
-	ibv_cqx->status = mock();
-	ibv_cqx->wr_id = (uintptr_t)mock();
+	ibv_cqx->status = mock_int();
+	ibv_cqx->wr_id = (uintptr_t)mock_ptr_type(struct efa_context *);
 
-	return mock();
+	return mock_int();
 }
 
 void efa_mock_efa_ibv_cq_end_poll_check_mock(struct efa_ibv_cq *ibv_cq)
 {
-	mock();
+	function_called();
 }
 
 enum ibv_wc_opcode efa_mock_efa_ibv_cq_wc_read_opcode_return_mock(struct efa_ibv_cq *current)
 {
-	return mock();
+	return mock_int();
 }
 
 uint32_t efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock(struct efa_ibv_cq *current)
 {
-	return mock();
+	return mock_uint();
 }
 
 uint32_t efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock(struct efa_ibv_cq *current)
 {
-	return mock();
+	return mock_uint();
 }
 
 uint32_t efa_mock_efa_ibv_cq_wc_read_wc_flags_return_mock(struct efa_ibv_cq *current)
 {
-	return mock();
+	return mock_uint();
 }
 
 uint32_t efa_mock_efa_ibv_cq_wc_read_imm_data_return_mock(struct efa_ibv_cq *current)
 {
-	return mock();
+	return mock_uint();
 }
 
 bool efa_mock_efa_ibv_cq_wc_is_unsolicited_return_mock(struct efa_ibv_cq *ibv_cq)
 {
-	return mock();
+	return mock_uint();
 }
 
 int g_ofi_copy_from_hmem_iov_call_counter;
@@ -222,12 +213,12 @@ ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
 
 int efa_mock_efa_rdm_pke_read_return_mock(struct efa_rdm_ope *ope)
 {
-	return mock();
+	return mock_int();
 }
 
 ssize_t efa_mock_efa_rdm_ope_post_send_return_mock(struct efa_rdm_ope *ope, int pkt_type)
 {
-	return mock();
+	return mock_int();
 }
 
 ssize_t efa_mock_efa_rdm_pke_proc_matched_rtm_no_op(struct efa_rdm_pke *pkt_entry)
@@ -237,13 +228,13 @@ ssize_t efa_mock_efa_rdm_pke_proc_matched_rtm_no_op(struct efa_rdm_pke *pkt_entr
 
 bool efa_mock_efa_device_support_unsolicited_write_recv()
 {
-	return mock();
+	return mock_uint();
 }
 
 int efa_mock_efa_qp_post_recv_return_mock(struct efa_qp *qp, struct ibv_recv_wr *wr,
 				struct ibv_recv_wr **bad_wr)
 {
-	return mock();
+	return mock_int();
 }
 
 static void efa_mock_efa_qp_post_save_wr_id(uintptr_t wr_id)
@@ -257,19 +248,19 @@ static void efa_mock_efa_qp_post_save_wr_id(uintptr_t wr_id)
 int efa_mock_efa_qp_post_send_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
 {
 	efa_mock_efa_qp_post_save_wr_id(wr_id);
-	return mock();
+	return mock_int();
 }
 
 int efa_mock_efa_qp_post_read_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
 {
 	efa_mock_efa_qp_post_save_wr_id(wr_id);
-	return mock();
+	return mock_int();
 }
 
 int efa_mock_efa_qp_post_write_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
 {
 	efa_mock_efa_qp_post_save_wr_id(wr_id);
-	return mock();
+	return mock_int();
 }
 
 int efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
@@ -298,7 +289,7 @@ int efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr(str
 	function_called();
 
 	efa_mock_efa_qp_post_save_wr_id(wr_id);
-	return mock();
+	return mock_int();
 }
 
 struct efa_unit_test_mocks g_efa_unit_test_mocks = {
@@ -502,29 +493,27 @@ struct ibv_cq_ex *__wrap_efadv_create_cq(struct ibv_context *ibvctx,
 
 uint32_t efa_mock_efa_ibv_cq_wc_read_src_qp_return_mock(struct efa_ibv_cq *current)
 {
-	return mock();
+	return mock_uint();
 }
 
 uint32_t efa_mock_efa_ibv_cq_wc_read_byte_len_return_mock(struct efa_ibv_cq *current)
 {
-	return mock();
+	return mock_uint();
 };
 
 uint32_t efa_mock_efa_ibv_cq_wc_read_slid_return_mock(struct efa_ibv_cq *current)
 {
-	return mock();
+	return mock_uint();
 }
 
 int efa_mock_efa_ibv_cq_wc_read_sgid_return_mock(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid)
 {
-	return mock();
+	return mock_int();
 }
 
 int efa_mock_efa_ibv_cq_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid)
 {
-	/* Make sure this mock is always called before ibv_next_poll */
-	expect_function_call(efa_mock_efa_ibv_cq_next_poll_check_function_called_and_return_mock);
-	memcpy(sgid->raw, (uint8_t *)mock(), sizeof(sgid->raw));
+	memcpy(sgid->raw, mock_ptr_type(uint8_t*), sizeof(sgid->raw));
 	/* Must return 0 for unknown AH */
 	return 0;
 };
@@ -532,7 +521,7 @@ int efa_mock_efa_ibv_cq_wc_read_sgid_return_zero_code_and_expect_next_poll_and_s
 int efa_mock_efa_ibv_cq_next_poll_check_function_called_and_return_mock(struct efa_ibv_cq *ibv_cq)
 {
 	function_called();
-	return mock();
+	return mock_int();
 };
 
 struct ibv_cq_ex *efa_mock_efadv_create_cq_with_ibv_create_cq_ex(struct ibv_context *ibvctx,
@@ -621,7 +610,7 @@ enum ibv_fork_status __wrap_ibv_is_fork_initialized(void)
 
 enum ibv_fork_status efa_mock_ibv_is_fork_initialized_return_mock(void)
 {
-	return mock();
+	return mock_int();
 }
 
 #if HAVE_EFADV_QUERY_MR
@@ -730,5 +719,5 @@ int efa_mock_ibv_req_notify_cq_return_mock(struct efa_ibv_cq *ibv_cq, int solici
 
 int efa_mock_ibv_get_cq_event_return_mock(struct efa_ibv_cq *ibv_cq, void **cq_context)
 {
-	return mock();
+	return mock_int();
 }

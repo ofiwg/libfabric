@@ -34,7 +34,7 @@ void test_efa_rnr_queue_and_resend_impl(struct efa_resource **state, uint32_t op
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	/* Add mock for efa_qp_post_send */
 	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
-	will_return_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
 	if (op == ofi_op_msg)

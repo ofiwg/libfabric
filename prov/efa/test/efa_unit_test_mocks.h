@@ -296,3 +296,42 @@ enum ibv_fork_status efa_mock_ibv_is_fork_initialized_return_mock(void);
 bool __real_efa_ibv_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq);
 
 #endif
+
+/* Macroses below are workaround for RHEL8. Can be deleted after EOL of RHEL8. */
+
+#if !defined(mock_int)
+#define mock_int mock
+#endif
+#if !defined(mock_uint)
+#define mock_uint mock
+#endif
+#if !defined(mock_ptr_type)
+#define mock_ptr_type(type) mock()
+#endif
+#if !defined(will_return_int)
+#define will_return_int(function, value) will_return(function, value)
+#endif
+#if !defined(will_return_int_maybe)
+#define will_return_int_maybe(function, value) will_return_maybe(function, value)
+#endif
+#if !defined(will_return_int_always)
+#define will_return_int_always(function, value) will_return_always(function, value)
+#endif
+#if !defined(will_return_uint)
+#define will_return_uint(function, value) will_return(function, value)
+#endif
+#if !defined(will_return_uint_maybe)
+#define will_return_uint_maybe(function, value) will_return_maybe(function, value)
+#endif
+#if !defined(will_return_uint_always)
+#define will_return_uint_always(function, value) will_return_always(function, value)
+#endif
+#if !defined(will_return_ptr)
+#define will_return_ptr(function, value) will_return(function, value)
+#endif
+#if !defined(will_return_ptr_maybe)
+#define will_return_ptr_maybe(function, value) will_return_maybe(function, value)
+#endif
+#if !defined(will_return_ptr_always)
+#define will_return_ptr_always(function, value) will_return_always(function, value)
+#endif
