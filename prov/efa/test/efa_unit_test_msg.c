@@ -112,7 +112,7 @@ static void test_efa_msg_send_prep(struct efa_resource *resource,
 	g_efa_unit_test_mocks.efa_qp_post_recv = &efa_mock_efa_qp_post_recv_return_mock;
 	/* Mock general QP post send function to save work request IDs */
 	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
-	will_return_always(efa_mock_efa_qp_post_send_return_mock, 0);
+	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
 }
 
 void test_efa_msg_fi_send(struct efa_resource **state)
