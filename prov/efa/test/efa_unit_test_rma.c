@@ -24,8 +24,8 @@ static void test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
 	/* Mock general QP post functions to save work request IDs */
 	g_efa_unit_test_mocks.efa_qp_post_read = &efa_mock_efa_qp_post_read_return_mock;
 	g_efa_unit_test_mocks.efa_qp_post_write = &efa_mock_efa_qp_post_write_return_mock;
-	will_return_maybe(efa_mock_efa_qp_post_read_return_mock, 0);
-	will_return_maybe(efa_mock_efa_qp_post_write_return_mock, 0);
+	will_return_int_maybe(efa_mock_efa_qp_post_read_return_mock, 0);
+	will_return_int_maybe(efa_mock_efa_qp_post_write_return_mock, 0);
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);

@@ -160,7 +160,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	/* Mock general QP post send function for handshake operations */
 	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr;
 	expect_function_call(efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr);
-	will_return(efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr, 0);
+	will_return_int(efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr, 0);
 
 	/* Setup CQ mocks */
 	g_efa_unit_test_mocks.efa_ibv_cq_end_poll = &efa_mock_efa_ibv_cq_end_poll_check_mock;
@@ -178,25 +178,25 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	expect_function_call(efa_mock_efa_ibv_cq_next_poll_check_function_called_and_return_mock);
 
 	/* Receive handshake packet */
-	will_return(efa_mock_efa_ibv_cq_end_poll_check_mock, NULL);
-	will_return(efa_mock_efa_ibv_cq_next_poll_check_function_called_and_return_mock, ENOENT);
-	will_return(efa_mock_efa_ibv_cq_wc_read_byte_len_return_mock, pkt_entry->pkt_size);
-	will_return(efa_mock_efa_ibv_cq_wc_read_opcode_return_mock, IBV_WC_RECV);
-	will_return(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
-	will_return(efa_mock_efa_ibv_cq_wc_read_wc_flags_return_mock, 0);
-	will_return(efa_mock_efa_ibv_cq_wc_read_slid_return_mock, efa_rdm_ep_get_peer_ahn(efa_rdm_ep, peer_addr));
-	will_return(efa_mock_efa_ibv_cq_wc_read_src_qp_return_mock, raw_addr.qpn);
-	will_return(efa_mock_efa_ibv_cq_start_poll_return_mock, IBV_WC_SUCCESS);
+	expect_function_call(efa_mock_efa_ibv_cq_end_poll_check_mock);
+	will_return_int(efa_mock_efa_ibv_cq_next_poll_check_function_called_and_return_mock, ENOENT);
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_byte_len_return_mock, pkt_entry->pkt_size);
+	will_return_int(efa_mock_efa_ibv_cq_wc_read_opcode_return_mock, IBV_WC_RECV);
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_wc_flags_return_mock, 0);
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_slid_return_mock, efa_rdm_ep_get_peer_ahn(efa_rdm_ep, peer_addr));
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_src_qp_return_mock, raw_addr.qpn);
+	will_return_int(efa_mock_efa_ibv_cq_start_poll_return_mock, IBV_WC_SUCCESS);
 
 	/**
 	 * Fire away handshake packet.
 	 * Because we don't care if it fails(there is no receiver!), mark it as failed to make mocking simpler.
 	 */
-	will_return(efa_mock_efa_ibv_cq_end_poll_check_mock, NULL);
-	will_return(efa_mock_efa_ibv_cq_wc_read_opcode_return_mock, IBV_WC_SEND);
-	will_return(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
-	will_return(efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock, FI_EFA_ERR_OTHER);
-	will_return(efa_mock_efa_ibv_cq_start_poll_return_mock, IBV_WC_SUCCESS);
+	expect_function_call(efa_mock_efa_ibv_cq_end_poll_check_mock);
+	will_return_int(efa_mock_efa_ibv_cq_wc_read_opcode_return_mock, IBV_WC_SEND);
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock, FI_EFA_ERR_OTHER);
+	will_return_int(efa_mock_efa_ibv_cq_start_poll_return_mock, IBV_WC_SUCCESS);
 
 	/* Progress the recv wr first to process the received handshake packet. */
 	cq_read_recv_ret = fi_cq_read(resource->cq, &cq_entry, 1);
@@ -224,7 +224,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	assert_int_equal(peer->device_version, 0xefa0);
 
 	/* reset the mocked cq before it's polled by ep close */
-	will_return_always(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	will_return_int_always(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
 }
@@ -700,7 +700,7 @@ void test_efa_rdm_ep_trigger_handshake(struct efa_resource **state)
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
-	will_return_always(efa_mock_efa_qp_post_send_return_mock, 0);
+	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
 	/* Create and register a fake peer */
 	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
 	raw_addr.qpn = 0;

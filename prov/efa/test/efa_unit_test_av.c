@@ -24,8 +24,7 @@ void test_av_insert_duplicate_raw_addr(struct efa_resource **state)
 	int err, num_addr;
 
 	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_check_mock;
-	/* the following will_return ensures ibv_create_ah is called exactly once */
-	will_return(efa_mock_ibv_create_ah_check_mock, 0);
+	expect_function_call(efa_mock_ibv_create_ah_check_mock);
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -60,8 +59,7 @@ void test_av_insert_duplicate_gid(struct efa_resource **state)
 	int err, num_addr;
 
 	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_check_mock;
-	/* the following will_return ensures ibv_create_ah is called exactly once */
-	will_return(efa_mock_ibv_create_ah_check_mock, 0);
+	expect_function_call(efa_mock_ibv_create_ah_check_mock);
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
