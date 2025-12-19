@@ -87,9 +87,6 @@ struct efa_rdm_pke {
 #if ENABLE_DEBUG
 	/** @brief entry to a linked list of posted buf list */
 	struct dlist_entry dbg_entry;
-
-	/**@brief Generation counter. It is incremented every time the packet is posted to rdma-core */
-	uint8_t gen;
 #endif
 	/** @brief pointer to #efa_rdm_ep */
 	struct efa_rdm_ep *ep;
@@ -183,6 +180,9 @@ struct efa_rdm_pke {
 	 */
 	size_t payload_size;
 
+	/**@brief Generation counter. It is incremented every time the packet is posted to rdma-core */
+	uint8_t gen;
+
 	/** @brief buffer that contains data that is going over wire
 	 *
 	 * @details
@@ -205,6 +205,8 @@ struct efa_rdm_pke {
 
 #if defined(static_assert)
 static_assert(sizeof (struct efa_rdm_pke) % EFA_RDM_PKE_ALIGNMENT == 0, "efa_rdm_pke alignment check");
+/* Checks if packet entry structure fits into two x86 cache lines */
+static_assert(sizeof (struct efa_rdm_pke) == EFA_RDM_PKE_ALIGNMENT, "efa_rdm_pke size check");
 #endif
 
 struct efa_rdm_ep;
