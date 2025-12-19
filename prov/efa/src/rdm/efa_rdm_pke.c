@@ -23,14 +23,6 @@
 #include "efa_rdm_tracepoint.h"
 #include "efa_rdm_pke_print.h"
 
-#if ENABLE_DEBUG
-static inline void efa_rdm_pke_increment_gen(struct efa_rdm_pke *pkt_entry)
-{
-	pkt_entry->gen++;
-	pkt_entry->gen &= (EFA_RDM_BUFPOOL_ALIGNMENT - 1);
-}
-#endif
-
 /**
  * @brief allocate a packet entry
  *
@@ -60,6 +52,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	efa_rdm_poison_mem_region(pkt_entry, pkt_pool->attr.size);
 	pkt_entry->gen = gen;
 #endif
+	pkt_entry->gen &= EFA_RDM_PACKET_GEN_MASK;
 	dlist_init(&pkt_entry->entry);
 
 #if ENABLE_DEBUG
@@ -401,6 +394,13 @@ void efa_rdm_pke_append(struct efa_rdm_pke *dst,
 	dst->next = src;
 }
 
+static inline uint64_t efa_rdm_pke_get_wr_id(struct efa_rdm_pke *pkt_entry)
+{
+	assert((uint64_t)pkt_entry->gen == ((uint64_t)pkt_entry->gen & EFA_RDM_PACKET_GEN_MASK));
+	assert((uint64_t)pkt_entry == ((uint64_t)pkt_entry & ~((uint64_t)EFA_RDM_PACKET_GEN_MASK)));
+	return (uint64_t) pkt_entry | (uint64_t) pkt_entry->gen;
+}
+
 /**
  * @brief send data over wire using rdma-core API
  *
@@ -489,11 +489,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 		if (pkt_idx != pkt_entry_cnt - 1)
 			flags_in_loop |= FI_MORE;
 
-		wr_id = (uintptr_t) pkt_entry;
-#if ENABLE_DEBUG
-		efa_rdm_pke_increment_gen(pkt_entry);
-		wr_id += pkt_entry->gen;
-#endif
+		wr_id = efa_rdm_pke_get_wr_id(pkt_entry);
 
 		ret = efa_qp_post_send(ep->base_ep.qp, sg_list,
 				       inline_data_list, iov_cnt, use_inline,
@@ -574,11 +570,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 	sge.length = len;
 	sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
 
-	wr_id = (uintptr_t) pkt_entry;
-#if ENABLE_DEBUG
-	efa_rdm_pke_increment_gen(pkt_entry);
-	wr_id += pkt_entry->gen;
-#endif
+	wr_id = efa_rdm_pke_get_wr_id(pkt_entry);
 
 	err = efa_qp_post_read(qp, &sge, 1, remote_key, remote_buf, wr_id, 0,
 			       ah, qpn, qkey);
@@ -664,11 +656,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		qkey = conn->ep_addr->qkey;
 	}
 
-	wr_id = (uintptr_t) pkt_entry;
-#if ENABLE_DEBUG
-	efa_rdm_pke_increment_gen(pkt_entry);
-	wr_id += pkt_entry->gen;
-#endif
+	wr_id = efa_rdm_pke_get_wr_id(pkt_entry);
 
 	if (txe->fi_flags & FI_REMOTE_CQ_DATA) {
 		/* assert that we are sending the entire buffer as a
@@ -721,12 +709,7 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 
 	for (i = 0; i < pke_cnt; ++i) {
 		recv_wr = &ep->base_ep.efa_recv_wr_vec[i];
-		recv_wr->wr.wr_id = (uintptr_t) pke_vec[i];
-
-#if ENABLE_DEBUG
-		efa_rdm_pke_increment_gen(pke_vec[i]);
-		recv_wr->wr.wr_id += pke_vec[i]->gen;
-#endif
+		recv_wr->wr.wr_id = efa_rdm_pke_get_wr_id(pke_vec[i]);
 
 		recv_wr->wr.num_sge = 1;
 		recv_wr->wr.sg_list = recv_wr->sge;
@@ -776,12 +759,7 @@ ssize_t efa_rdm_pke_user_recvv(struct efa_rdm_pke **pke_vec,
 
 	for (i = 0; i < pke_cnt; ++i) {
 		recv_wr = &ep->base_ep.user_recv_wr_vec[wr_index];
-		recv_wr->wr.wr_id = (uintptr_t) pke_vec[i];
-
-#if ENABLE_DEBUG
-		efa_rdm_pke_increment_gen(pke_vec[i]);
-		recv_wr->wr.wr_id += pke_vec[i]->gen;
-#endif
+		recv_wr->wr.wr_id = efa_rdm_pke_get_wr_id(pke_vec[i]);
 
 		recv_wr->wr.num_sge = 1;
 		recv_wr->wr.sg_list = recv_wr->sge;
