@@ -5524,12 +5524,19 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		fi_opx_ep_tx_cq_completion_rzv(&opx_ep->ep_fid, context, xfer_len, FI_OPX_LOCK_NOT_REQUIRED, tag, caps);
 	}
 
+	uint64_t sbuf_offset = 0UL;
+#if HAVE_HFISVC_DMABUF
+	if (opx_mr && opx_mr->dmabuf.fd != -1) {
+		sbuf_offset = opx_mr->dmabuf.offset;
+	}
+#endif
+
 	union opx_hfisvc_iov hfisvc_iov = {
 		.access_key  = rzv_comp->access_key,
 		.len	     = xfer_len,
 		.hmem_iface  = src_iface,
 		.hmem_device = src_device_id,
-		.offset	     = 0UL,
+		.offset	     = sbuf_offset,
 	};
 
 	const uint32_t niov    = 1;
