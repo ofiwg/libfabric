@@ -165,6 +165,11 @@ static struct fi_ops efa_rdm_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static inline void efa_rdm_cq_increment_pkt_entry_gen(struct efa_rdm_pke *pkt_entry)
+{
+	pkt_entry->gen++;
+	pkt_entry->gen &= EFA_RDM_PACKET_GEN_MASK;
+}
 
 /**
  * @brief handle rdma-core CQ completion resulted from IBV_WRITE_WITH_IMM
@@ -225,6 +230,7 @@ static void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 		 */
 		assert(pkt_entry);
 		ep->efa_rx_pkts_posted--;
+		efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 		efa_rdm_pke_release_rx(pkt_entry);
 	}
 }
@@ -689,13 +695,8 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
 	enum ibv_wc_status status = cq->ibv_cq_ex->status;
 	enum ibv_wc_opcode opcode = efa_ibv_cq_wc_read_opcode(cq);
-	struct efa_rdm_pke *pkt_entry = (struct efa_rdm_pke *) wr_id;
+	struct efa_rdm_pke *pkt_entry = efa_rdm_cq_get_pke_from_wr_id(cq, wr_id);
 	int prov_errno;
-
-#if ENABLE_DEBUG
-	if (!efa_cq_wc_is_unsolicited(cq))
-		pkt_entry = efa_rdm_cq_get_pke_from_wr_id(wr_id);
-#endif
 
 #if HAVE_LTTNG
 	efa_rdm_tracepoint(poll_cq, (size_t) wr_id);
@@ -728,6 +729,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 		case IBV_WC_RDMA_WRITE: /* fall through */
 		case IBV_WC_RDMA_READ:
 			efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
+			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			efa_rdm_pke_release_tx(pkt_entry);
 			break;
 		case IBV_WC_RECV: /* fall through */
@@ -739,6 +741,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 				assert(ep->efa_rx_pkts_posted > 0);
 				ep->efa_rx_pkts_posted--;
 			}
+			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			efa_rdm_pke_release_rx(pkt_entry);
 			break;
 		default:
@@ -762,12 +765,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
 	enum ibv_wc_status status = cq->ibv_cq_ex->status;
 	enum ibv_wc_opcode opcode = efa_ibv_cq_wc_read_opcode(cq);
-	struct efa_rdm_pke *pkt_entry = (struct efa_rdm_pke *) wr_id;
-
-#if ENABLE_DEBUG
-	if (!efa_cq_wc_is_unsolicited(cq))
-		pkt_entry = efa_rdm_cq_get_pke_from_wr_id(wr_id);
-#endif
+	struct efa_rdm_pke *pkt_entry = efa_rdm_cq_get_pke_from_wr_id(cq, wr_id);
 
 	int prov_errno;
 
@@ -789,6 +787,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 		case IBV_WC_RDMA_READ:
 			assert(pkt_entry);
 			efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno);
+			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			break;
 		case IBV_WC_RECV: /* fall through */
 		case IBV_WC_RECV_RDMA_WITH_IMM:
@@ -800,6 +799,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 			}
 			assert(pkt_entry);
 			efa_rdm_pke_handle_rx_error(pkt_entry, prov_errno);
+			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			break;
 		default:
 			EFA_WARN(FI_LOG_EP_CTRL, "Unhandled opcode: %d\n", opcode);
@@ -812,6 +812,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 			ep->send_comps++;
 #endif
 			efa_rdm_pke_handle_send_completion(pkt_entry);
+			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			break;
 		case IBV_WC_RECV:
 			/* efa_rdm_cq_handle_recv_completion does additional work to determine the source
@@ -820,10 +821,12 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 #if ENABLE_DEBUG
 			ep->recv_comps++;
 #endif
+			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			break;
 		case IBV_WC_RDMA_READ:
 		case IBV_WC_RDMA_WRITE:
 			efa_rdm_pke_handle_rma_completion(pkt_entry);
+			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
