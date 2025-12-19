@@ -52,11 +52,7 @@ void test_efa_rnr_queue_and_resend_impl(struct efa_resource **state, uint32_t op
 
 	wr_id = (uint64_t) g_ibv_submitted_wr_id_vec[0];
 
-	pkt_entry = (struct efa_rdm_pke *) wr_id;
-#if ENABLE_DEBUG
-	if (!efa_cq_wc_is_unsolicited(ibv_cq))
-		pkt_entry = efa_rdm_cq_get_pke_from_wr_id(wr_id);
-#endif
+	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(ibv_cq, wr_id);
 
 	pkt_entry->ope = txe;
 
