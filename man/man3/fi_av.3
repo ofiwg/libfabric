@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_av" "3" "2025\-12\-16" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_av" "3" "2025\-12\-19" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -551,6 +551,9 @@ The corresponding fi_addr_t values are invalidated and may not be used
 in data transfer calls.
 The behavior of operations in progress that reference the removed
 addresses is undefined.
+Requesting removal of a fi_addr that is unset or outside of the
+provider\[cq]s address vector bounds will result in -FI_EINVAL being
+returned.
 .PP
 Note that removing an address may not disable receiving data from the
 peer endpoint.
