@@ -468,7 +468,7 @@ int efa_poll_events(struct efa_cq *cq, int timeout)
 	if (fds[1].revents & POLLIN) {
 		EFA_INFO(FI_LOG_CQ, "efa_poll_events: signal FD triggered by fi_cq_signal\n");
 		fd_signal_reset(&cq->signal);
-		ret = -FI_EAGAIN;
+		ret = -FI_ECANCELED;
 		rc--;
 	}
 
@@ -538,11 +538,9 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 
 	for (num_completions = 0; num_completions < threshold; ) {
 		if (efa_cq_trywait(cq) == FI_SUCCESS) {
-			if (ofi_adjust_timeout(endtime, &timeout))
-				return num_completions ? num_completions : -FI_EAGAIN;
 			/* CQ is empty, wait for events */
 			ret = efa_poll_events(cq, timeout);
-			if (ret)
+			if (ret && ret != -FI_EAGAIN)
 				break;
 		} 
 		
@@ -555,6 +553,9 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		} else if (ret != -FI_EAGAIN) {
 			break;
 		}
+
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return num_completions ? num_completions : -FI_EAGAIN;
 	}
 
 	return num_completions ? num_completions : ret;
