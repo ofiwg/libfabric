@@ -47,7 +47,7 @@ _lnx_headers = \
 if HAVE_LNX_DL
 pkglib_LTLIBRARIES += liblnx-fi.la
 liblnx_fi_la_SOURCES = $(_lnx_files) $(_lnx_headers)
-liblnx_fi_la_CPPFLAGS = -I$(top_srcdir)/prov/lnx/include -I$(top_srcdir)/include
+liblnx_fi_la_CPPFLAGS = -I$(top_srcdir)/prov/lnx/include -I$(top_srcdir)/include -D_GNU_SOURCE
 liblnx_fi_la_LIBADD = $(linkback) $(lnx_LIBS)
 liblnx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
 liblnx_fi_la_DEPENDENCIES = $(linkback)
