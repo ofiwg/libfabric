@@ -375,7 +375,7 @@ void test_efa_rdm_cq_data_path_direct_enabled_with_new_device();
 void test_efa_cq_trywait_no_channel();
 void test_efa_cq_trywait_completions_available();
 void test_efa_cq_trywait_success();
-void test_efa_cq_sread_einval();
+void test_efa_cq_sread_enosys();
 void test_efa_cq_sread_eagain();
 void test_efa_cq_control_getwait_with_channel();
 void test_efa_cq_control_getwait_no_channel();

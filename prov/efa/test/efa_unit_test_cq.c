@@ -1717,11 +1717,11 @@ void test_efa_cq_trywait_success(struct efa_resource **state)
 }
 
 /**
- * @brief test fi_cq_sread() returns -FI_EINVAL when no completion channel is present
+ * @brief test fi_cq_sread() returns -FI_ENOSYS when no completion channel is present
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_cq_sread_einval(struct efa_resource **state)
+void test_efa_cq_sread_enosys(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1736,7 +1736,7 @@ void test_efa_cq_sread_einval(struct efa_resource **state)
 	assert_null(efa_cq->ibv_cq.channel);
 
 	ret = fi_cq_sread(resource->cq, &cq_entry, 1, NULL, 1);
-	assert_int_equal(ret, -FI_EINVAL);
+	assert_int_equal(ret, -FI_ENOSYS);
 }
 
 /**
