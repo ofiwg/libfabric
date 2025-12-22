@@ -1,0 +1,35 @@
+name: PR Character Safety Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  character-safety:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run PR character safety check
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+
+          cd .github/workflows/scripts
+          ./test_pr_character_safety.sh "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Upload scan results (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-character-safety-results
+          path: |
+            .github/workflows/scripts/changed_files.txt
+            .github/workflows/scripts/text_files.txt
+            .github/workflows/scripts/text_to_binary_files.txt
+            .github/workflows/scripts/pr_added_lines.txt
+            .github/workflows/scripts/hits.txt
