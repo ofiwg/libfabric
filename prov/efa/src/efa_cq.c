@@ -525,12 +525,12 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 
 	if (!cq->wait_obj) {
 		EFA_WARN(FI_LOG_CQ, "Cannot call fi_cq_sread with FI_WAIT_NONE\n");
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	}
 
 	if (!cq->ibv_cq.channel) {
 		EFA_WARN(FI_LOG_CQ, "No ibv_comp_channel associated with CQ\n");
-		return -FI_EINVAL;
+		return -FI_ENOSYS;
 	}
 
 	if (cq->wait_cond == FI_CQ_COND_THRESHOLD && cond)
