@@ -668,8 +668,6 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Completed cacheline 1\n");
-
 		volatile uint64_t *const scb2 = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 
 		opx_cacheline_store_qw_vol(scb2, key->qw_prefix, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
