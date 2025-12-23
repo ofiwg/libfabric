@@ -227,6 +227,8 @@ efa_qp_post_send(struct efa_qp *qp,
                  uint32_t qpn,
                  uint32_t qkey)
 {
+	EFA_DBG(FI_LOG_EP_DATA, "Posting WQE: qp=%p data_count=%ld use_inline=%d wr_id=0x%lx data=0x%lx flags=0x%lx qpn=%u qkey=0x%x\n",
+		qp, data_count, use_inline, wr_id, data, flags, qpn, qkey);
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (qp->data_path_direct_enabled)
 		return efa_data_path_direct_post_send(qp, sge_list, inline_data_list, data_count,
@@ -251,6 +253,8 @@ efa_qp_post_read(struct efa_qp *qp,
                  uint32_t qpn,
                  uint32_t qkey)
 {
+	EFA_DBG(FI_LOG_EP_DATA, "Posting WQE: qp=%p sge_count=%ld remote_key=%u remote_addr=0x%lx wr_id=0x%lx flags=0x%lx qpn=%u qkey=0x%x\n",
+		qp, sge_count, remote_key, remote_addr, wr_id, flags, qpn, qkey);
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (qp->data_path_direct_enabled)
 		return efa_data_path_direct_post_read(qp, sge_list, sge_count,
@@ -276,6 +280,8 @@ efa_qp_post_write(struct efa_qp *qp,
                   uint32_t qpn,
                   uint32_t qkey)
 {
+	EFA_DBG(FI_LOG_EP_DATA, "Posting WQE: qp=%p sge_count=%ld remote_key=%u remote_addr=0x%lx wr_id=0x%lx data=0x%lx flags=0x%lx qpn=%u qkey=0x%x\n",
+		qp, sge_count, remote_key, remote_addr, wr_id, data, flags, qpn, qkey);
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (qp->data_path_direct_enabled)
 		return efa_data_path_direct_post_write(qp, sge_list, sge_count,
@@ -488,18 +494,23 @@ static inline void efa_cq_start_poll(struct efa_ibv_cq *cq)
 	 * ibv_start_poll. EFA expects .comp_mask = 0, or otherwise returns EINVAL.
 	 */
 	cq->poll_err = efa_ibv_cq_start_poll(cq, &(struct ibv_poll_cq_attr){0});
-	if (!cq->poll_err)
+	if (!cq->poll_err) {
 		cq->poll_active = true;
-	else
+		EFA_DBG(FI_LOG_CQ, "Polled CQE: wr_id 0x%lx\n", cq->ibv_cq_ex->wr_id);
+	} else {
 		efa_cq_report_poll_err(cq);
+	}
 }
 
 static inline void efa_cq_next_poll(struct efa_ibv_cq *cq)
 {
 	assert(cq->poll_active);
 	cq->poll_err = efa_ibv_cq_next_poll(cq);
-	if (cq->poll_err)
+	if (cq->poll_err) {
 		efa_cq_report_poll_err(cq);
+		return;
+	}
+	EFA_DBG(FI_LOG_CQ, "Polled CQE: wr_id 0x%lx\n", cq->ibv_cq_ex->wr_id);
 }
 
 static inline void efa_cq_end_poll(struct efa_ibv_cq *cq)
