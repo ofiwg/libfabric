@@ -791,6 +791,8 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	int fi_ibv_access = 0;
 	uint64_t shm_flags;
 	int ret = 0;
+	bool device_support_rdma_read = false;
+	bool device_support_rdma_write = false;
 
 	efa_mr->ibv_mr = NULL;
 	efa_mr->shm_mr = NULL;
@@ -807,6 +809,29 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	ret = efa_mr_hmem_setup(efa_mr, &mr_attr, flags);
 	if (ret)
 		return ret;
+
+	device_support_rdma_read = efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+#if HAVE_CAPS_RDMA_WRITE
+	device_support_rdma_write = efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
+#endif
+	/* For efa-direct, fail registration if RDMA operations are requested 
+	 * but hardware doesn't support them */
+	if (efa_mr->domain->info_type == EFA_INFO_DIRECT) {
+		if ((mr_attr.access & (FI_READ | FI_REMOTE_READ)) &&
+		    !device_support_rdma_read) {
+			EFA_WARN(FI_LOG_MR, "FI_READ or FI_REMOTE_READ "
+					    "requested but hardware does not "
+					    "support RDMA read operations\n");
+			return -FI_EOPNOTSUPP;
+		}
+		if (mr_attr.access & (FI_WRITE | FI_REMOTE_WRITE) &&
+		    !device_support_rdma_write) {
+			EFA_WARN(FI_LOG_MR, "FI_WRITE or FI_REMOTE_WRITE "
+					    "requested but hardware does not "
+					    "support RDMA write operations\n");
+			return -FI_EOPNOTSUPP;
+		}
+	}
 
 	/* To support Emulated RMA path, if the access is not supported
 	 * by EFA, modify it to FI_SEND | FI_RECV
