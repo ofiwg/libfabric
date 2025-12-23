@@ -89,12 +89,16 @@ static inline void *efa_mr_get_shm_desc(struct efa_mr *efa_mr)
 	return efa_mr->shm_mr ? fi_mr_desc(efa_mr->shm_mr) : NULL;
 }
 #define EFA_MR_IOV_LIMIT 1
-#define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE)
+#define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_READ | FI_WRITE)
 
 /*
  * Multiplier to give some room in the device memory registration limits
  * to allow processes added to a running job to bootstrap.
  */
 #define EFA_MR_CACHE_LIMIT_MULT (.9)
+
+int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
+			     bool device_support_rdma_read,
+			     bool device_support_rdma_write);
 
 #endif
