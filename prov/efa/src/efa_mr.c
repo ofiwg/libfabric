@@ -784,14 +784,51 @@ static uint64_t efa_mr_non_p2p_keygen(void) {
 
 /*
  * Set ofi_access to FI_SEND | FI_RECV if not already set,
- * set the fi_ibv_access modes and do real registration (ibv_mr_reg)
+ * Convert ofi_access flags to ibv_access flags.
+ */
+int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
+			     bool device_support_rdma_read,
+			     bool device_support_rdma_write)
+{
+	int ibv_access = 0;
+
+	/* To support Emulated RMA path, if the access is not supported
+	 * by EFA, modify it to FI_SEND | FI_RECV
+	 */
+	if (!ofi_access || (ofi_access & ~EFA_MR_SUPPORTED_PERMISSIONS))
+		ofi_access = FI_SEND | FI_RECV;
+
+	if (ofi_access & FI_RECV)
+		ibv_access |= IBV_ACCESS_LOCAL_WRITE;
+
+	if (device_support_rdma_read) {
+		if (ofi_access & (FI_REMOTE_WRITE | FI_READ))
+			ibv_access |= IBV_ACCESS_LOCAL_WRITE;
+
+		if (ofi_access & (FI_REMOTE_READ | FI_SEND) ||
+		    (ofi_access & FI_WRITE && !device_support_rdma_write))
+			/* IBV_ACCESS_REMOTE_READ is needed for emulating
+			 * fi_send/fi_write with RDMA read */
+			ibv_access |= IBV_ACCESS_REMOTE_READ;
+	}
+
+	if (device_support_rdma_write && (ofi_access & FI_REMOTE_WRITE))
+		/* If IBV_ACCESS_REMOTE_WRITE is set, then
+		 * IBV_ACCESS_LOCAL_WRITE must be set too since remote write
+		 * should be allowed only if local write is allowed. */
+		ibv_access |= IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE;
+
+	return ibv_access;
+}
+
+/*
+ * Set the fi_ibv_access modes and do real registration (ibv_mr_reg)
  * Insert the key returned by ibv_mr_reg into efa mr_map and shm mr_map
  */
 static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *attr)
 {
-	uint64_t ofi_access, original_access;
+	uint64_t original_access;
 	struct fi_mr_attr mr_attr = {0};
-	int fi_ibv_access = 0;
 	uint64_t shm_flags;
 	int ret = 0;
 	bool device_support_rdma_read = false;
@@ -836,32 +873,6 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 		}
 	}
 
-	/* To support Emulated RMA path, if the access is not supported
-	 * by EFA, modify it to FI_SEND | FI_RECV
-	 */
-	ofi_access = mr_attr.access;
-	if (!ofi_access || (ofi_access & ~EFA_MR_SUPPORTED_PERMISSIONS))
-		ofi_access = FI_SEND | FI_RECV;
-
-	/* Local read access to an MR is enabled by default in verbs
-	 *
-	 * We need IBV_ACCESS_LOCAL_WRITE for two emulated cases
-	 * 1. When emulating fi_send with RMA read - ofi_access is set to FI_RECV
-	 * 2. When emulating fi_write with RMA read - ofi_access is set to FI_REMOTE_WRITE
-	 */
-	if (ofi_access & (FI_RECV | FI_REMOTE_WRITE))
-		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
-
-	if (efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
-		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
-	}
-
-#if HAVE_CAPS_RDMA_WRITE
-	if (efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE) {
-		fi_ibv_access |= IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
-	}
-#endif
-
 	if (efa_mr->domain->cache)
 		ofi_mr_cache_flush(efa_mr->domain->cache, false);
 
@@ -873,7 +884,12 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 		&& !g_efa_hmem_info[mr_attr.iface].p2p_supported_by_device) {
 		efa_mr->mr_fid.key = efa_mr_non_p2p_keygen();
 	} else {
-		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, &mr_attr, fi_ibv_access, flags);
+		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(
+			efa_mr, &mr_attr,
+			efa_mr_ofi_to_ibv_access(mr_attr.access,
+						 device_support_rdma_read,
+						 device_support_rdma_write),
+			flags);
 		if (!efa_mr->ibv_mr) {
 			EFA_WARN(FI_LOG_MR,
 				 "Unable to register MR of %zu bytes: %s, "
