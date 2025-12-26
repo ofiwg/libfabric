@@ -11188,6 +11188,12 @@ datatype or field value.
 *FI_TYPE_CQ_ERR_ENTRY*
 :   struct fi_cq_err_entry
 
+*FI_TYPE_WAIT_OBJ*
+:   enum fi_wait_obj
+
+*FI_TYPE_CQ_WAIT_COND*
+:   enum fi_cq_wait_cond
+
 fi_tostr() will return a pointer to an internal libfabric buffer that
 should not be modified, and will be overwritten the next time fi_tostr()
 is invoked. fi_tostr() is not thread safe.
@@ -16041,8 +16047,13 @@ The following features are supported:
 *Completion events*
 :   The provider supports *FI_CQ_FORMAT_CONTEXT*, *FI_CQ_FORMAT_MSG*,
     and *FI_CQ_FORMAT_DATA*. *FI_CQ_FORMAT_TAGGED* is supported on the
-    `efa` fabric of RDM endpoint. Wait objects are not currently
-    supported.
+    `efa` fabric of RDM endpoint.
+
+The `efa` and `efa-direct` fabrics for RDM endpoints support
+*FI_WAIT_UNSPEC* and *FI_WAIT_FD* wait objects for blocking CQ
+operations (*fi_cq_sread*).
+
+DGRAM endpoints do not support wait objects.
 
 *Modes*
 :   The provider requires the use of *FI_MSG_PREFIX* when running over
@@ -16074,8 +16085,13 @@ The following features are supported:
 
 ## Completion events
 
--   Synchronous CQ read is not supported.
--   Wait objects are not currently supported.
+-   DGRAM endpoints do not support synchronous CQ reads (*fi_cq_sread*)
+    or wait objects.
+-   *FI_WAIT_FD* is not supported for RDM endpoints with SHM transfers
+    enabled. Valid wait objects are *FI_WAIT_NONE* or *FI_WAIT_UNSPEC*.
+    Blocking read via *fi_cq_sread()* is supported and will wait on SHM
+    completions. When SHM transfers are disabled, *FI_WAIT_FD* wait
+    objects are supported.
 
 ## RMA operations
 
