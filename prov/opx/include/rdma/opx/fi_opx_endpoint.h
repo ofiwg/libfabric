@@ -3697,7 +3697,8 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.hmem.posted_recv_tag);
 		hmem_info->iface = hmem_iface;
 		if (opx_ep->use_hfisvc && opx_ep->domain->hmem_domain->dmabuf_supported) {
-			hmem_info->dmabuf.opx_mr = (struct fi_opx_mr *) desc;
+			hmem_info->dmabuf.opx_mr       = (struct fi_opx_mr *) desc;
+			hmem_info->hmem_dev_reg_handle = hmem_handle;
 			context->flags |= FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
 		} else {
 			hmem_info->gpu.device	       = hmem_device;
