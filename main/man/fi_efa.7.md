@@ -65,7 +65,12 @@ The following features are supported:
 *Completion events*
 : The provider supports *FI_CQ_FORMAT_CONTEXT*, *FI_CQ_FORMAT_MSG*, and
   *FI_CQ_FORMAT_DATA*. *FI_CQ_FORMAT_TAGGED* is supported on the `efa` fabric
-  of RDM endpoint. Wait objects are not currently supported.
+  of RDM endpoint.
+  
+  The `efa` and `efa-direct` fabrics for RDM endpoints support *FI_WAIT_UNSPEC*
+  and *FI_WAIT_FD* wait objects for blocking CQ operations (*fi_cq_sread*).
+  
+  DGRAM endpoints do not support wait objects.
 
 *Modes*
 : The provider requires the use of *FI_MSG_PREFIX* when running over
@@ -93,8 +98,11 @@ The following features are supported:
 # LIMITATIONS
 
 ## Completion events
-- Synchronous CQ read is not supported.
-- Wait objects are not currently supported.
+- DGRAM endpoints do not support synchronous CQ reads (*fi_cq_sread*) or wait objects.
+- *FI_WAIT_FD* is not supported for RDM endpoints with SHM transfers enabled.
+  Valid wait objects are *FI_WAIT_NONE* or *FI_WAIT_UNSPEC*. Blocking read via
+  *fi_cq_sread()* is supported and will wait on SHM completions. When SHM
+  transfers are disabled, *FI_WAIT_FD* wait objects are supported.
 
 ## RMA operations
 - Completion events for RMA targets (*FI_RMA_EVENT*) is not supported.
