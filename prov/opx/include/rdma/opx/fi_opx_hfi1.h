@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -106,7 +106,7 @@
 #if HAVE_CUDA
 #define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT (4096)
 #elif HAVE_ROCR
-#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT (256)
+#define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT (8192)
 #else
 #define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT (OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT + 1)
 #endif
@@ -190,7 +190,7 @@ static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS_TID <= OPX_HFI1_SDMA_MAX_PKTS_TID,
 #if HAVE_CUDA
 #define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT (4096)
 #elif HAVE_ROCR
-#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT (256)
+#define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT (8192)
 #else
 #define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT (16385)
 #endif
