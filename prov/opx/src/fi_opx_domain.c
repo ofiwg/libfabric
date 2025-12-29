@@ -484,15 +484,6 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	}
 #endif
 #endif
-
-	int use_hfisvc = 1;
-	fi_param_get_bool(fi_opx_global.prov, "hfisvc", &use_hfisvc);
-	if (use_hfisvc && !opx_domain->hmem_domain->dmabuf_supported) {
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-			"FI_OPX_HFISVC is enabled in a HMEM build, but dma-buf support is not detected or is disabled by FI_HMEM_CUDA/ROCR_USE_DMABUF. Enable dma-buf support or re-run with FI_OPX_HFISVC disabled.\n");
-		errno = FI_EINVAL;
-		goto err;
-	}
 #endif
 
 	/* fill in default domain attributes */
