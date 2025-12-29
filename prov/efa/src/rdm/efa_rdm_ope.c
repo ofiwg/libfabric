@@ -1784,7 +1784,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
 	ssize_t err;
-	size_t segment_offset;
+	int64_t segment_offset;
 	int pkt_entry_cnt, pkt_entry_cnt_allocated = 0, pkt_entry_data_size_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
 	int i;
 	uint64_t flags = 0;
@@ -1796,7 +1796,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 
 	ep = ope->ep;
 	assert(ep);
-	segment_offset = efa_rdm_pkt_type_contains_data(pkt_type) ? ope->bytes_sent : -1;
+	segment_offset = efa_rdm_pkt_type_contains_data(pkt_type) ? (int64_t) ope->bytes_sent : -1;
 	for (i = 0; i < pkt_entry_cnt; ++i) {
 		pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
