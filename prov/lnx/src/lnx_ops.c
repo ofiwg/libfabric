@@ -52,6 +52,21 @@
 #include "ofi_iov.h"
 #include "lnx.h"
 
+static int (*lnx_select_send_endpoints[LNX_MR_SELECTION_MAX])
+	(struct lnx_ep *lep, fi_addr_t lnx_addr,
+	 struct lnx_core_ep **cep_out, fi_addr_t *core_addr) =
+{
+	[LNX_MR_SELECTION_PER_MSG] = lnx_select_send_endpoints_msg,
+	[LNX_MR_SELECTION_PER_PEER] = lnx_select_send_endpoints_peer,
+};
+
+static void (*lnx_set_send_pair[LNX_MR_SELECTION_MAX])
+	(struct lnx_ep *lep, struct lnx_core_ep *cep, fi_addr_t addr) =
+{
+	[LNX_MR_SELECTION_PER_MSG] = lnx_set_send_pair_noop,
+	[LNX_MR_SELECTION_PER_PEER] = lnx_set_send_pair_peer,
+};
+
 int lnx_get_msg(struct fid_peer_srx *srx, struct fi_peer_match_attr *match,
 		struct fi_peer_rx_entry **entry)
 {
@@ -247,6 +262,8 @@ int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match_attr *match,
 	goto finalize;
 
 assign:
+	lnx_set_send_pair[lep->le_mr](lep, cep, addr);
+
 	cep->cep_t_stats.st_num_posted_recvs++;
 
 	rx_entry->rx_entry.addr = lnx_get_core_addr(cep, addr);
@@ -413,6 +430,8 @@ static int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *d
 			return rc;
 	}
 
+	lnx_set_send_pair[lep->le_mr](lep, cep, match_attr.lm_addr);
+
 	if (tagged)
 		rc = cep->cep_srx.peer_ops->start_tag(&rx_entry->rx_entry);
 	else
@@ -534,7 +553,7 @@ ssize_t lnx_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	if (!lep)
 		return -FI_ENOSYS;
 
-	rc = lnx_select_send_endpoints(lep, dest_addr, &cep, &core_addr);
+	rc = lnx_select_send_endpoints[lep->le_mr](lep, dest_addr, &cep, &core_addr);
 	if (rc)
 		return rc;
 
@@ -569,7 +588,7 @@ ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	if (!lep)
 		return -FI_ENOSYS;
 
-	rc = lnx_select_send_endpoints(lep, dest_addr, &cep, &core_addr);
+	rc = lnx_select_send_endpoints[lep->le_mr](lep, dest_addr, &cep, &core_addr);
 	if (rc)
 		return rc;
 
@@ -607,7 +626,7 @@ ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	if (!lep)
 		return -FI_ENOSYS;
 
-	rc = lnx_select_send_endpoints(lep, core_msg.addr, &cep, &core_msg.addr);
+	rc = lnx_select_send_endpoints[lep->le_mr](lep, core_msg.addr, &cep, &core_msg.addr);
 	if (rc)
 		return rc;
 
@@ -642,7 +661,7 @@ ssize_t lnx_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	if (!lep)
 		return -FI_ENOSYS;
 
-	rc = lnx_select_send_endpoints(lep, dest_addr, &cep, &core_addr);
+	rc = lnx_select_send_endpoints[lep->le_mr](lep, dest_addr, &cep, &core_addr);
 	if (rc)
 		return rc;
 
@@ -671,7 +690,7 @@ ssize_t lnx_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc
 	if (!lep)
 		return -FI_ENOSYS;
 
-	rc = lnx_select_send_endpoints(lep, dest_addr, &cep, &core_addr);
+	rc = lnx_select_send_endpoints[lep->le_mr](lep, dest_addr, &cep, &core_addr);
 	if (rc)
 		return rc;
 
@@ -706,7 +725,7 @@ ssize_t lnx_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	if (!lep)
 		return -FI_ENOSYS;
 
-	rc = lnx_select_send_endpoints(lep, dest_addr, &cep, &core_addr);
+	rc = lnx_select_send_endpoints[lep->le_mr](lep, dest_addr, &cep, &core_addr);
 	if (rc)
 		return rc;
 
