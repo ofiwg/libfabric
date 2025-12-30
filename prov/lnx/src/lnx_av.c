@@ -423,6 +423,7 @@ skip:
 						&lp->lp_addr, 1, 0);
 			return rc;
 		}
+
 		la = (struct lnx_address *) lea;
 	}
 

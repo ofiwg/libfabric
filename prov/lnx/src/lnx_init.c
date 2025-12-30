@@ -761,6 +761,11 @@ LNX_INI
 	struct ofi_bufpool_attr bp_attrs = {};
 	int ret;
 
+	fi_param_define(&lnx_prov, "multi_rail_selection", FI_PARAM_STRING,
+			"Specify which Multi-Rail endpoint selection "
+			"algorithm to use. One of: PER_MSG, PER_PEER. "
+			"Defaults to PER_PEER");
+
 	fi_param_define(&lnx_prov, "prov_links", FI_PARAM_STRING,
 			"Specify which providers LNX will link together. Format: "
 			"<prov 1>+<prov 2>+...+<prov N>. EX: shm+cxi");
