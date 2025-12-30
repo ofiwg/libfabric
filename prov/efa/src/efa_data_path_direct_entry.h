@@ -411,12 +411,9 @@ static inline int efa_data_path_direct_post_send(
 		mmio_wc_start();
 	}
 
-	/* Set work request ID */
-	qp->ibv_qp_ex->wr_id = wr_id;
-
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
-	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, qp->ibv_qp_ex->wr_id);
+	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, wr_id);
 
 	/* Set common control flags */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_SEND);
@@ -505,12 +502,9 @@ static inline int efa_data_path_direct_post_read(
 		mmio_wc_start();
 	}
 
-	/* Set work request ID */
-	qp->ibv_qp_ex->wr_id = wr_id;
-
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
-	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, qp->ibv_qp_ex->wr_id);
+	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, wr_id);
 
 	/* Set common control flags for RDMA READ */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_RDMA_READ);
@@ -608,12 +602,9 @@ efa_data_path_direct_post_write(
 		mmio_wc_start();
 	}
 
-	/* Set work request ID */
-	qp->ibv_qp_ex->wr_id = wr_id;
-
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
-	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, qp->ibv_qp_ex->wr_id);
+	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, wr_id);
 
 	/* Set common control flags for RDMA WRITE */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_RDMA_WRITE);
