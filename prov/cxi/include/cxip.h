@@ -1161,69 +1161,64 @@ struct cxip_ux_dump_state {
 };
 
 struct cxip_req_recv {
-	/* Receive parameters */
+	/* 8-byte aligned fields */
 	struct dlist_entry rxc_entry;
 	union {
 		struct cxip_rxc *rxc;
 		struct cxip_rxc_hpc *rxc_hpc;
 		struct cxip_rxc_rnr *rxc_rnr;
 	};
-
 	struct cxip_cntr *cntr;
-	void *recv_buf;			// local receive buffer
-	struct cxip_md *recv_md;	// local receive MD
-	bool hybrid_md;			// True if MD was provided
-	bool success_disable;
-	uint32_t ulen;			// User buffer length
-	bool tagged;
+	void *recv_buf;
+	struct cxip_md *recv_md;
 	uint64_t tag;
 	uint64_t ignore;
-	uint32_t match_id;
 	uint64_t flags;
-
-	/* FI_CLAIM work around to hold UX remote offsets for duration of
-	 * H/W UX entry matching and deletion. Array of 8-byte unexpected
-	 * headers remote offsets, and current remote offset used when
-	 * processing search results to match remote offsets.
-	 */
 	uint64_t *ule_offsets;
 	uint64_t ule_offset;
-	unsigned int num_ule_offsets;
-	unsigned int cur_ule_offsets;
-	bool offset_found;
-
-	/* UX list dump state */
 	struct cxip_ux_dump_state *ux_dump;
-
-	/* Control info */
-	int rc;				// DMA return code
-	uint32_t rlen;			// Send length
-	uint64_t oflow_start;		// Overflow buffer address
-	uint16_t vni;			// VNI operation came in on
-	uint32_t initiator;		// DMA initiator address
-	uint32_t rdzv_id;		// DMA initiator rendezvous ID
-	uint8_t rdzv_lac;		// Rendezvous source LAC
-	bool done_notify;		// Must send done notification
-	enum cxip_rdzv_proto rdzv_proto;
-	int rdzv_events;		// Processed rdzv event count
-	enum c_event_type rdzv_event_types[4];
-	uint32_t rdzv_initiator;	// Rendezvous initiator used for mrecvs
-	uint32_t rget_nic;
-	uint32_t rget_pid;
-	int multirecv_inflight;		// SW EP Multi-receives in progress
-	bool canceled;			// Request canceled?
-	bool unlinked;
-	bool multi_recv;
-	bool tgt_event;
+	uint64_t oflow_start;
 	uint64_t start_offset;
 	uint64_t mrecv_bytes;
 	uint64_t mrecv_unlink_bytes;
-	bool auto_unlinked;
-	bool hw_offloaded;
 	struct cxip_req *parent;
 	struct dlist_entry children;
 	uint64_t src_offset;
+
+	/* 4-byte aligned fields */
+	uint32_t ulen;
+	uint32_t match_id;
+	unsigned int num_ule_offsets;
+	unsigned int cur_ule_offsets;
+	int rc;
+	uint32_t rlen;
+	uint32_t initiator;
+	uint32_t rdzv_id;
+	enum cxip_rdzv_proto rdzv_proto;
+	int rdzv_events;
+	enum c_event_type rdzv_event_types[4];
+	uint32_t rdzv_initiator;
+	uint32_t rget_nic;
+	uint32_t rget_pid;
+	int multirecv_inflight;
+
+	/* 2-byte aligned fields */
+	uint16_t vni;
 	uint16_t rdzv_mlen;
+
+	/* 1-byte fields */
+	uint8_t rdzv_lac;
+	bool hybrid_md;
+	bool success_disable;
+	bool tagged;
+	bool offset_found;
+	bool done_notify;
+	bool canceled;
+	bool unlinked;
+	bool multi_recv;
+	bool tgt_event;
+	bool auto_unlinked;
+	bool hw_offloaded;
 };
 
 struct cxip_req_send {
