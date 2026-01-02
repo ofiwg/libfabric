@@ -327,6 +327,7 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin();
 void test_efa_rdm_peer_keep_pke_in_overflow_list();
 void test_efa_rdm_peer_append_overflow_pke_to_recvwin();
 void test_efa_rdm_peer_recvwin_queue_or_append_pke();
+void test_efa_rdm_peer_recvwin_queue_or_append_pke_ooo_copy();
 /* end of efa_unit_test_rdm_peer.c */
 
 /* begin of efa_unit_test_pke.c */

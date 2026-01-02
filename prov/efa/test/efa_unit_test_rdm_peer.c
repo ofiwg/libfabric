@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "efa_rdm_pke_utils.h"
 
 /**
  * @brief Test efa_rdm_peer_reorder_msg
@@ -329,11 +330,11 @@ void test_efa_rdm_peer_append_overflow_pke_to_recvwin(struct efa_resource **stat
 	efa_rdm_pke_release_rx(pkt_entry1);
 }
 
-void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
+void test_efa_rdm_peer_recvwin_queue_or_append_pke_impl(
+	struct efa_resource *resource, bool rx_ooo_copy)
 {
-	struct efa_resource *resource = *state;
 	struct efa_rdm_peer *peer;
-	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_pke *pkt_entry, *ooo_entry;
 	struct efa_ep_addr raw_addr;
 	size_t raw_addr_len = sizeof(raw_addr);
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -343,6 +344,9 @@ void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
 	uint32_t msg_id;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	if (!rx_ooo_copy)
+		efa_env.rx_copy_ooo = 0;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -370,11 +374,35 @@ void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
 	pkt_attr.connid = raw_addr.qkey;
 	efa_unit_test_eager_msgrtm_pkt_construct(pkt_entry, &pkt_attr);
 
-	ret = efa_rdm_peer_recvwin_queue_or_append_pke(pkt_entry, msg_id, (&peer->robuf));
+	ooo_entry = efa_rdm_pke_get_ooo_pke(pkt_entry);
+	ret = efa_rdm_peer_recvwin_queue_or_append_pke(ooo_entry, msg_id, (&peer->robuf));
 	assert_int_equal(ret, 1);
+	if (!rx_ooo_copy) {
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, 1);
+		assert_ptr_equal(ooo_entry, pkt_entry);
+	}
 
 #if ENABLE_DEBUG
-	/* The ooo pkt entry should be inserted to the rx_pkt_list */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->rx_pkt_list), 1);
+	if (rx_ooo_copy) {
+		/* The ooo pkt entry should be inserted to the rx_pkt_list */
+		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->rx_pkt_list), 1);
+	}
 #endif
+
+	if (!rx_ooo_copy)
+		efa_rdm_pke_release_rx(pkt_entry);
+}
+
+void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	test_efa_rdm_peer_recvwin_queue_or_append_pke_impl(resource, false);
+}
+
+void test_efa_rdm_peer_recvwin_queue_or_append_pke_ooo_copy(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	test_efa_rdm_peer_recvwin_queue_or_append_pke_impl(resource, true);
 }
