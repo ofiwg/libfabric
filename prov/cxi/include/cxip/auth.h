@@ -7,7 +7,6 @@
 #ifndef _CXIP_AUTH_H_
 #define _CXIP_AUTH_H_
 
-
 /* Function declarations */
 int cxip_check_auth_key_info(struct fi_info *info);
 

@@ -7,7 +7,6 @@
 #ifndef _CXIP_IOMM_H_
 #define _CXIP_IOMM_H_
 
-
 #include <stdint.h>
 
 /* Forward declarations */

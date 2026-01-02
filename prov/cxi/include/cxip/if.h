@@ -7,12 +7,11 @@
 #ifndef _CXIP_IF_H_
 #define _CXIP_IF_H_
 
-
-#include <stdint.h>
-#include <pthread.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
 #include <ofi_lock.h>
+#include <pthread.h>
+#include <stdint.h>
 
 /* Type definitions */
 struct cxip_if {

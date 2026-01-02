@@ -7,7 +7,6 @@
 #ifndef _CXIP_RDZV_PTE_H_
 #define _CXIP_RDZV_PTE_H_
 
-
 #include <ofi_atom.h>
 
 /* Forward declarations */

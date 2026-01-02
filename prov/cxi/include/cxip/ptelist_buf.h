@@ -7,11 +7,10 @@
 #ifndef _CXIP_PTELIST_BUF_H_
 #define _CXIP_PTELIST_BUF_H_
 
-
-#include <stddef.h>
-#include <stdbool.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
+#include <stdbool.h>
+#include <stddef.h>
 
 /* Forward declarations */
 struct cxip_md;
@@ -110,8 +109,7 @@ void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool);
 int cxip_ptelist_buf_replenish(struct cxip_ptelist_bufpool *pool,
 			       bool seq_restart);
 
-void cxip_ptelist_buf_link_err(struct cxip_ptelist_buf *buf,
-			       int rc_link_error);
+void cxip_ptelist_buf_link_err(struct cxip_ptelist_buf *buf, int rc_link_error);
 
 void cxip_ptelist_buf_unlink(struct cxip_ptelist_buf *buf);
 

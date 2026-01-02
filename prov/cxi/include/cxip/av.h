@@ -7,13 +7,12 @@
 #ifndef _CXIP_AV_H_
 #define _CXIP_AV_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <pthread.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
+#include <pthread.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_addr;
@@ -92,11 +91,11 @@ struct cxip_av {
 
 struct cxip_av_set {
 	struct fid_av_set av_set_fid;
-	struct cxip_av *cxi_av;		// associated AV
-	struct cxip_coll_mc *mc_obj;	// reference MC
-	fi_addr_t *fi_addr_ary;		// addresses in set
-	size_t fi_addr_cnt;		// count of addresses
-	struct cxip_comm_key comm_key;	// communication key
+	struct cxip_av *cxi_av; // associated AV
+	struct cxip_coll_mc *mc_obj; // reference MC
+	fi_addr_t *fi_addr_ary; // addresses in set
+	size_t fi_addr_cnt; // count of addresses
+	struct cxip_comm_key comm_key; // communication key
 	uint64_t flags;
 };
 
@@ -128,6 +127,6 @@ int cxip_av_bind_ep(struct cxip_av *av, struct cxip_ep *ep);
 void cxip_av_unbind_ep(struct cxip_av *av, struct cxip_ep *ep);
 
 int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
-	        struct fid_av_set **av_set_fid, void * context);
+		struct fid_av_set **av_set_fid, void *context);
 
 #endif /* _CXIP_AV_H_ */

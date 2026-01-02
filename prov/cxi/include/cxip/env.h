@@ -7,7 +7,6 @@
 #ifndef _CXIP_ENV_H_
 #define _CXIP_ENV_H_
 
-
 #include <stddef.h>
 
 /* Type definitions */
@@ -85,7 +84,7 @@ struct cxip_environment {
 	int telemetry_rgid;
 	int disable_hmem_dev_register;
 	int ze_hmem_supported;
-	enum cxip_rdzv_proto  rdzv_proto;
+	enum cxip_rdzv_proto rdzv_proto;
 	int disable_alt_read_cmdq;
 	int cntr_trig_cmdq;
 	int enable_trig_op_limit;

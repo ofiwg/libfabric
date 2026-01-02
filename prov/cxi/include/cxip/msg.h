@@ -7,12 +7,11 @@
 #ifndef _CXIP_MSG_H_
 #define _CXIP_MSG_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_md;
@@ -23,93 +22,89 @@ struct cxip_rxc_hpc;
 struct cxip_txc;
 
 /* Macros */
-#define CXIP_MSG_ORDER			(FI_ORDER_SAS | \
-					 FI_ORDER_WAW | \
-					 FI_ORDER_RMA_WAW | \
-					 FI_ORDER_RMA_RAR | \
-					 FI_ORDER_ATOMIC_WAW | \
-					 FI_ORDER_ATOMIC_WAR | \
-					 FI_ORDER_ATOMIC_RAW | \
-					 FI_ORDER_ATOMIC_RAR)
+#define CXIP_MSG_ORDER                                                       \
+	(FI_ORDER_SAS | FI_ORDER_WAW | FI_ORDER_RMA_WAW | FI_ORDER_RMA_RAR | \
+	 FI_ORDER_ATOMIC_WAW | FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_RAW |   \
+	 FI_ORDER_ATOMIC_RAR)
 
-#define CXIP_TAG_WIDTH		48
+#define CXIP_TAG_WIDTH 48
 
-#define CXIP_TAG_MASK		((1UL << CXIP_TAG_WIDTH) - 1)
+#define CXIP_TAG_MASK ((1UL << CXIP_TAG_WIDTH) - 1)
 
 /* Type definitions */
 union cxip_match_bits {
 	struct {
-		uint64_t tag        : CXIP_TAG_WIDTH; /* User tag value */
-		uint64_t tx_id      : CXIP_TX_ID_WIDTH; /* Prov. tracked ID */
-		uint64_t cq_data    : 1;  /* Header data is valid */
-		uint64_t tagged     : 1;  /* Tagged API */
-		uint64_t match_comp : 1;  /* Notify initiator on match */
-		uint64_t rdzv_done  : 1;  /* Notify initiator when rdzv done */
-		uint64_t le_type    : 1;
+		uint64_t tag : CXIP_TAG_WIDTH; /* User tag value */
+		uint64_t tx_id : CXIP_TX_ID_WIDTH; /* Prov. tracked ID */
+		uint64_t cq_data : 1; /* Header data is valid */
+		uint64_t tagged : 1; /* Tagged API */
+		uint64_t match_comp : 1; /* Notify initiator on match */
+		uint64_t rdzv_done : 1; /* Notify initiator when rdzv done */
+		uint64_t le_type : 1;
 	};
 	/* Rendezvous protocol request, overloads match_comp and rdzv_done
 	 * to specify requested protocol.
 	 */
 	struct {
-		uint64_t pad0       : 61;
+		uint64_t pad0 : 61;
 		uint64_t rdzv_proto : 2;
-		uint64_t pad1       : 1;
+		uint64_t pad1 : 1;
 	};
 	/* Split TX ID for rendezvous operations. */
 	struct {
-		uint64_t pad2       : (CXIP_TAG_WIDTH - 1); /* User tag value */
-		uint64_t coll_get   : 1; /* leaf rdma get */
+		uint64_t pad2 : (CXIP_TAG_WIDTH - 1); /* User tag value */
+		uint64_t coll_get : 1; /* leaf rdma get */
 		uint64_t rdzv_id_hi : CXIP_RDZV_ID_HIGH_WIDTH;
-		uint64_t rdzv_lac   : 4;  /* Rendezvous Get LAC */
+		uint64_t rdzv_lac : 4; /* Rendezvous Get LAC */
 	};
 	struct {
 		uint64_t rdzv_id_lo : CXIP_RDZV_ID_CMD_WIDTH;
 	};
 	/* Client/Server messaging match bits */
 	struct {
-		uint64_t rnr_tag     : CXIP_CS_TAG_WIDTH; /* User tag value */
-		uint64_t rnr_rsvd    : 6;		 /* Unused, set to 0 */
-		uint64_t rnr_cq_data : 1;		 /* Header data valid */
-		uint64_t rnr_tagged  : 1;		 /* Tagged API */
-		uint64_t rnr_vni     : CXIP_VNI_WIDTH;	 /* Source VNI */
+		uint64_t rnr_tag : CXIP_CS_TAG_WIDTH; /* User tag value */
+		uint64_t rnr_rsvd : 6; /* Unused, set to 0 */
+		uint64_t rnr_cq_data : 1; /* Header data valid */
+		uint64_t rnr_tagged : 1; /* Tagged API */
+		uint64_t rnr_vni : CXIP_VNI_WIDTH; /* Source VNI */
 	};
 	/* Control LE match bit format for notify/resume */
 	struct {
-		uint64_t txc_id       : 8;
-		uint64_t rxc_id       : 8;
-		uint64_t drops        : 16;
-		uint64_t pad3         : 29;
-		uint64_t ctrl_msg_type: 2;
+		uint64_t txc_id : 8;
+		uint64_t rxc_id : 8;
+		uint64_t drops : 16;
+		uint64_t pad3 : 29;
+		uint64_t ctrl_msg_type : 2;
 		uint64_t ctrl_le_type : 1;
 	};
 	/* Control LE match bit format for zbcollectives */
 	struct {
-		uint64_t zb_data       :61;
-		uint64_t zb_pad        : 3;
+		uint64_t zb_data : 61;
+		uint64_t zb_pad : 3;
 		/* shares ctrl_le_type == CXIP_CTRL_LE_TYPE_CTRL_MSG
 		 * shares ctrl_msg_type == CXIP_CTRL_MSG_ZB_BCAST
 		 */
 	};
 	/* Control LE match bit format for cached MR */
 	struct {
-		uint64_t mr_lac		: 3;
-		uint64_t mr_lac_off	: 58;
-		uint64_t mr_opt		: 1;
-		uint64_t mr_cached	: 1;
-		uint64_t mr_unused	: 1;
+		uint64_t mr_lac : 3;
+		uint64_t mr_lac_off : 58;
+		uint64_t mr_opt : 1;
+		uint64_t mr_cached : 1;
+		uint64_t mr_unused : 1;
 		/* shares ctrl_le_type == CXIP_CTRL_LE_TYPE_MR */
 	};
 	struct {
-		uint64_t mr_key		: 61;
-		uint64_t mr_pad		: 3;
+		uint64_t mr_key : 61;
+		uint64_t mr_pad : 3;
 		/* shares mr_opt
 		 * shares mr_cached == 0
 		 * shares ctrl_le_type == CXIP_CTRL_LE_TYPE_MR
 		 */
 	};
 	struct {
-		uint64_t unused2	: 63;
-		uint64_t is_prov	: 1;
+		uint64_t unused2 : 63;
+		uint64_t is_prov : 1;
 		/* Indicates provider generated key and shares ctrl_le_type ==
 		 * CXIP_CTRL_LE_TYPE_MR so it must be cleared before matching.
 		 */
@@ -120,9 +115,9 @@ union cxip_match_bits {
 struct cxip_ux_dump_state {
 	bool done;
 
-	size_t max_count;	/* Number entries/src_addr provided */
-	size_t ret_count;	/* Number of UX entries returned */
-	size_t ux_count;	/* Total UX entries available */
+	size_t max_count; /* Number entries/src_addr provided */
+	size_t ret_count; /* Number of UX entries returned */
+	size_t ux_count; /* Total UX entries available */
 
 	struct fi_cq_tagged_entry *entry;
 	fi_addr_t *src_addr;
@@ -134,14 +129,15 @@ struct cxip_ux_send {
 	struct cxip_rxc *rxc;
 	struct fi_peer_rx_entry *rx_entry;
 	union c_event put_ev;
-	bool claimed;			/* Reserved with FI_PEEK | FI_CLAIM */
+	bool claimed; /* Reserved with FI_PEEK | FI_CLAIM */
 };
 
 struct cxip_msg_counters {
 	/* Histogram counting the number of messages based on priority, buffer
 	 * type (HMEM), and message size.
 	 */
-	ofi_atomic32_t msg_count[CXIP_LIST_COUNTS][OFI_HMEM_MAX][CXIP_COUNTER_BUCKETS];
+	ofi_atomic32_t msg_count[CXIP_LIST_COUNTS][OFI_HMEM_MAX]
+				[CXIP_COUNTER_BUCKETS];
 };
 
 /* Function declarations */
@@ -153,9 +149,8 @@ int cxip_recv_cancel(struct cxip_req *req);
 
 void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event);
 
-fi_addr_t cxip_recv_req_src_addr(struct cxip_rxc *rxc,
-				 uint32_t init, uint16_t vni,
-				 bool force);
+fi_addr_t cxip_recv_req_src_addr(struct cxip_rxc *rxc, uint32_t init,
+				 uint16_t vni, bool force);
 
 int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 			struct cxip_md *md, struct cxip_req **cxip_req,

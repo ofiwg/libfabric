@@ -7,14 +7,13 @@
 #ifndef _CXIP_DOM_H_
 #define _CXIP_DOM_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <semaphore.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
 #include <ofi_lock.h>
+#include <semaphore.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_cmdq;
@@ -30,16 +29,16 @@ struct cxip_telemetry;
 /* Macros */
 #define CXIP_DOM_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM | FI_AV_USER_ID | FI_PEER)
 
-#define DOM_INFO(dom, fmt, ...) \
+#define DOM_INFO(dom, fmt, ...)                                        \
 	_CXIP_INFO(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%u:%u:%#x): " fmt "", \
-		   (dom)->iface->info->dev_id, (dom)->lni->lni->id, \
-		   (dom)->auth_key.svc_id, (dom)->auth_key.vni, \
+		   (dom)->iface->info->dev_id, (dom)->lni->lni->id,    \
+		   (dom)->auth_key.svc_id, (dom)->auth_key.vni,        \
 		   (dom)->nic_addr, ##__VA_ARGS__)
 
-#define DOM_WARN(dom, fmt, ...) \
+#define DOM_WARN(dom, fmt, ...)                                        \
 	_CXIP_WARN(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%u:%u:%#x): " fmt "", \
-		   (dom)->iface->info->dev_id, (dom)->lni->lni->id, \
-		   (dom)->auth_key.svc_id, (dom)->auth_key.vni, \
+		   (dom)->iface->info->dev_id, (dom)->lni->lni->id,    \
+		   (dom)->auth_key.svc_id, (dom)->auth_key.vni,        \
 		   (dom)->nic_addr, ##__VA_ARGS__)
 
 /* Type definitions */
@@ -59,8 +58,8 @@ struct cxip_domain {
 
 	uint32_t tclass;
 
-	struct cxip_eq *eq; //unused
-	struct cxip_eq *mr_eq; //unused
+	struct cxip_eq *eq; // unused
+	struct cxip_eq *mr_eq; // unused
 
 	/* Assigned NIC address */
 	uint32_t nic_addr;
@@ -170,7 +169,6 @@ struct cxip_domain {
 	enum cxip_ep_ptle_mode rx_match_mode;
 	bool msg_offload;
 	size_t req_buf_size;
-
 };
 
 /* Function declarations */
@@ -214,11 +212,9 @@ int cxip_domain_ctrl_id_alloc(struct cxip_domain *dom,
 void cxip_domain_ctrl_id_free(struct cxip_domain *dom,
 			      struct cxip_ctrl_req *req);
 
-int cxip_domain_prov_mr_id_alloc(struct cxip_domain *dom,
-				 struct cxip_mr *mr);
+int cxip_domain_prov_mr_id_alloc(struct cxip_domain *dom, struct cxip_mr *mr);
 
-void cxip_domain_prov_mr_id_free(struct cxip_domain *dom,
-				 struct cxip_mr *mr);
+void cxip_domain_prov_mr_id_free(struct cxip_domain *dom, struct cxip_mr *mr);
 
 int cxip_domain_dwq_emit_dma(struct cxip_domain *dom, uint16_t vni,
 			     enum cxi_traffic_class tc,

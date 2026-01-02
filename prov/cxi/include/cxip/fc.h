@@ -7,10 +7,9 @@
 #ifndef _CXIP_FC_H_
 #define _CXIP_FC_H_
 
-
-#include <stdint.h>
-#include <stdbool.h>
 #include <ofi_list.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_ep_obj;

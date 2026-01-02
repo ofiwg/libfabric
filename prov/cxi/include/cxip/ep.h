@@ -7,12 +7,11 @@
 #ifndef _CXIP_EP_H_
 #define _CXIP_EP_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_av;
@@ -26,34 +25,33 @@ struct cxip_rxc;
 struct cxip_txc;
 
 /* Macros */
-#define CXIP_EP_MAX_CTX_BITS		0
+#define CXIP_EP_MAX_CTX_BITS 0
 
-#define CXIP_EP_MAX_TX_CNT		(1 << CXIP_EP_MAX_CTX_BITS)
+#define CXIP_EP_MAX_TX_CNT (1 << CXIP_EP_MAX_CTX_BITS)
 
-#define CXIP_EP_MAX_RX_CNT		(1 << CXIP_EP_MAX_CTX_BITS)
+#define CXIP_EP_MAX_RX_CNT (1 << CXIP_EP_MAX_CTX_BITS)
 
-#define CXIP_EP_MAX_MSG_SZ		((1ULL << 32) - 1)
+#define CXIP_EP_MAX_MSG_SZ ((1ULL << 32) - 1)
 
-#define CXIP_EP_MIN_MULTI_RECV		64
+#define CXIP_EP_MIN_MULTI_RECV 64
 
-#define CXIP_EP_MAX_MULTI_RECV		((1 << 24) - 1)
+#define CXIP_EP_MAX_MULTI_RECV ((1 << 24) - 1)
 
-#define CXIP_EP_PRI_CAPS \
-	(FI_RMA | FI_ATOMICS | FI_TAGGED | FI_RECV | FI_SEND | \
-	 FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
-	 FI_DIRECTED_RECV | FI_MSG | FI_NAMED_RX_CTX | FI_HMEM | \
-	 FI_COLLECTIVE)
+#define CXIP_EP_PRI_CAPS                                                  \
+	(FI_RMA | FI_ATOMICS | FI_TAGGED | FI_RECV | FI_SEND | FI_READ |  \
+	 FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_DIRECTED_RECV | \
+	 FI_MSG | FI_NAMED_RX_CTX | FI_HMEM | FI_COLLECTIVE)
 
-#define CXIP_EP_SEC_CAPS \
-	(FI_SOURCE | FI_SOURCE_ERR | FI_LOCAL_COMM | \
-	 FI_REMOTE_COMM | FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER)
+#define CXIP_EP_SEC_CAPS                                              \
+	(FI_SOURCE | FI_SOURCE_ERR | FI_LOCAL_COMM | FI_REMOTE_COMM | \
+	 FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER)
 
 #define CXIP_EP_CAPS (CXIP_EP_PRI_CAPS | CXIP_EP_SEC_CAPS)
 
 #define CXIP_EP_CQ_FLAGS \
 	(FI_SEND | FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION)
 
-#define CXIP_EP_CNTR_FLAGS \
+#define CXIP_EP_CNTR_FLAGS                                         \
 	(FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | \
 	 FI_REMOTE_WRITE)
 

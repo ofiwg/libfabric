@@ -41,26 +41,26 @@ struct cxip_nic_attr {
  * TODO: The following should be integrated into the include/rdma/fi_ext.h
  * and are use for provider specific fi_control() operations.
  */
-#define FI_PROV_SPECIFIC_CXI	(0xccc << 16)
+#define FI_PROV_SPECIFIC_CXI (0xccc << 16)
 
 enum {
-	FI_OPT_CXI_SET_TCLASS = -FI_PROV_SPECIFIC_CXI,	/* uint32_t */
-	FI_OPT_CXI_SET_MSG_ORDER,			/* uint64_t */
+	FI_OPT_CXI_SET_TCLASS = -FI_PROV_SPECIFIC_CXI, /* uint32_t */
+	FI_OPT_CXI_SET_MSG_ORDER, /* uint64_t */
 
 	/* fid_nic control operation to refresh NIC attributes. */
 	FI_OPT_CXI_NIC_REFRESH_ATTR,
 
-	FI_OPT_CXI_SET_MR_MATCH_EVENTS,			/* bool */
-	FI_OPT_CXI_GET_MR_MATCH_EVENTS,			/* bool */
-	FI_OPT_CXI_SET_OPTIMIZED_MRS,			/* bool */
-	FI_OPT_CXI_GET_OPTIMIZED_MRS,			/* bool */
-	FI_OPT_CXI_SET_PROV_KEY_CACHE,			/* bool */
-	FI_OPT_CXI_GET_PROV_KEY_CACHE,			/* bool */
-	FI_OPT_CXI_SET_RNR_MAX_RETRY_TIME,		/* uint64_t */
-	FI_OPT_CXI_SET_RX_MATCH_MODE_OVERRIDE,		/* char string */
-	FI_OPT_CXI_GET_RX_MATCH_MODE_OVERRIDE,		/* char string */
-	FI_OPT_CXI_SET_REQ_BUF_SIZE_OVERRIDE,		/* size_t */
-	FI_OPT_CXI_GET_REQ_BUF_SIZE_OVERRIDE,		/* size_t */
+	FI_OPT_CXI_SET_MR_MATCH_EVENTS, /* bool */
+	FI_OPT_CXI_GET_MR_MATCH_EVENTS, /* bool */
+	FI_OPT_CXI_SET_OPTIMIZED_MRS, /* bool */
+	FI_OPT_CXI_GET_OPTIMIZED_MRS, /* bool */
+	FI_OPT_CXI_SET_PROV_KEY_CACHE, /* bool */
+	FI_OPT_CXI_GET_PROV_KEY_CACHE, /* bool */
+	FI_OPT_CXI_SET_RNR_MAX_RETRY_TIME, /* uint64_t */
+	FI_OPT_CXI_SET_RX_MATCH_MODE_OVERRIDE, /* char string */
+	FI_OPT_CXI_GET_RX_MATCH_MODE_OVERRIDE, /* char string */
+	FI_OPT_CXI_SET_REQ_BUF_SIZE_OVERRIDE, /* size_t */
+	FI_OPT_CXI_GET_REQ_BUF_SIZE_OVERRIDE, /* size_t */
 
 };
 
@@ -70,7 +70,7 @@ enum {
  * included here should map exactly to the value established in the
  * main branch (enum or define) and this CXI equivalent will exist forever.
  */
-#define FI_CXI_CNTR_EVENTS_BYTES	1	/* FI_CNTR_EVENTS_BYTES */
+#define FI_CXI_CNTR_EVENTS_BYTES 1 /* FI_CNTR_EVENTS_BYTES */
 
 /*
  * CXI provider specific counter flag to return current/cached counter value
@@ -79,14 +79,14 @@ enum {
  * the updated counter value. The normal behavior is to wait for a memory update
  * to complete (or to use the domain ops counter routines).
  */
-#define FI_CXI_CNTR_CACHED	(1ULL << 32)
+#define FI_CXI_CNTR_CACHED (1ULL << 32)
 
 /*
  * TODO: Set this to the upstream value prior to releasing software.
  * This flag returned in a completion and indicates that the message was
  * truncated and that the length indicates the truncated message length.
  */
-#define FI_CXI_TRUNC		(1ULL << 56)
+#define FI_CXI_TRUNC (1ULL << 56)
 
 /*
  * Execute a given libfabric atomic memory operation as a PCIe operation as
@@ -109,7 +109,7 @@ enum {
  * Note: This flag overloads FI_CXI_PCIE_AMO. Accelerated collectives do not
  * use FI_CXI_PCIE_AMO or FI_SOURCE.
  */
-#define	FI_CXI_PRE_REDUCED (1ULL << 57)
+#define FI_CXI_PRE_REDUCED (1ULL << 57)
 
 /*
  * Use CXI High Rate Puts (HRP). Increases message rate performance. Applies to
@@ -124,9 +124,9 @@ enum {
 #define FI_CXI_UNRELIABLE (1ULL << 61)
 
 /* Depreciated. */
-#define FI_CXI_WEAK_FENCE \
-	_Pragma ("GCC warning \"'FI_CXI_WEAK_FENCE' macro is deprecated\"") \
-	(1ULL << 63)
+#define FI_CXI_WEAK_FENCE                                                   \
+	_Pragma("GCC warning \"'FI_CXI_WEAK_FENCE' macro is deprecated\"")( \
+		1ULL << 63)
 
 /*
  * Used in conjunction with the deferred work queue API. If a deferred work
@@ -135,7 +135,7 @@ enum {
  * Note: Addition hardware resources will be used to ensure a counter writeback
  * occurs at the completion of the deferred work queue operation.
  */
-#define FI_CXI_CNTR_WB (1ULL << 62)
+#define FI_CXI_CNTR_WB	   (1ULL << 62)
 #define FI_CXI_COUNTER_OPS "cxi_counter_ops"
 
 struct fi_cxi_cntr_ops {
@@ -155,13 +155,13 @@ struct fi_cxi_cntr_ops {
 /* fi_cntr_read() equivalent but for the writeback buffer. */
 static inline uint64_t fi_cxi_cntr_wb_read(const void *wb_buf)
 {
-	return (*(uint64_t *)wb_buf) & FI_CXI_CNTR_SUCCESS_MAX;
+	return (*(uint64_t *) wb_buf) & FI_CXI_CNTR_SUCCESS_MAX;
 };
 
 /* fi_cntr_reader() equivalent but for the writeback buffer. */
 static inline uint64_t fi_cxi_cntr_wb_readerr(const void *wb_buf)
 {
-	return ((*(uint64_t *)wb_buf) >> 48) & FI_CXI_CNTR_FAILURE_MAX;
+	return ((*(uint64_t *) wb_buf) >> 48) & FI_CXI_CNTR_FAILURE_MAX;
 };
 
 /* Generate a counter success value which can be polled on. */
@@ -181,7 +181,7 @@ static inline int fi_cxi_cntr_add(void *cntr_mmio, uint64_t value)
 	if (value > FI_CXI_CNTR_SUCCESS_MAX)
 		return -FI_EINVAL;
 
-	*((uint64_t *)cntr_mmio) = value;
+	*((uint64_t *) cntr_mmio) = value;
 	return FI_SUCCESS;
 }
 
@@ -192,7 +192,7 @@ static inline int fi_cxi_cntr_adderr(void *cntr_mmio, uint64_t value)
 	if (value > FI_CXI_CNTR_FAILURE_MAX)
 		return -FI_EINVAL;
 
-	*((uint64_t *)cntr_mmio + 8) = value;
+	*((uint64_t *) cntr_mmio + 8) = value;
 	return FI_SUCCESS;
 }
 
@@ -203,7 +203,7 @@ static inline int fi_cxi_cntr_set(void *cntr_mmio, uint64_t value)
 	if (value > 0)
 		return -FI_EINVAL;
 
-	*((uint64_t *)cntr_mmio + 16) = 0;
+	*((uint64_t *) cntr_mmio + 16) = 0;
 	return FI_SUCCESS;
 }
 
@@ -214,7 +214,7 @@ static inline int fi_cxi_cntr_seterr(void *cntr_mmio, uint64_t value)
 	if (value > 0)
 		return -FI_EINVAL;
 
-	*((uint64_t *)cntr_mmio + 24) = 0;
+	*((uint64_t *) cntr_mmio + 24) = 0;
 	return FI_SUCCESS;
 }
 
@@ -227,7 +227,7 @@ static inline void *fi_cxi_get_cntr_add_addr(void *cntr_mmio)
 /* fi_cntr_adderr() equivalent but for the MMIO region. */
 static inline void *fi_cxi_get_cntr_adderr_addr(void *cntr_mmio)
 {
-	return (void *)((uint64_t *)cntr_mmio + 8);
+	return (void *) ((uint64_t *) cntr_mmio + 8);
 }
 
 /* fi_cntr_set() equivalent but for the MMIO region reset.
@@ -235,7 +235,7 @@ static inline void *fi_cxi_get_cntr_adderr_addr(void *cntr_mmio)
  */
 static inline void *fi_cxi_get_cntr_reset_addr(void *cntr_mmio)
 {
-	return (void *)((uint64_t *)cntr_mmio + 16);
+	return (void *) ((uint64_t *) cntr_mmio + 16);
 }
 
 /* fi_cntr_seterr() equivalent but for MMIO region reset.
@@ -243,7 +243,7 @@ static inline void *fi_cxi_get_cntr_reset_addr(void *cntr_mmio)
  */
 static inline void *fi_cxi_get_cntr_reseterr_addr(void *cntr_mmio)
 {
-	return (void *)((uint64_t *)cntr_mmio + 24);
+	return (void *) ((uint64_t *) cntr_mmio + 24);
 }
 
 #define FI_CXI_DOM_OPS_1 "dom_ops_v1"
@@ -256,7 +256,7 @@ static inline void *fi_cxi_get_cntr_reseterr_addr(void *cntr_mmio)
 /* v1 to v6 can use the same struct since they only appended a routine */
 struct fi_cxi_dom_ops {
 	int (*cntr_read)(struct fid *fid, unsigned int cntr, uint64_t *value,
-		      struct timespec *ts);
+			 struct timespec *ts);
 	int (*topology)(struct fid *fid, unsigned int *group_id,
 			unsigned int *switch_id, unsigned int *port_id);
 
@@ -419,23 +419,23 @@ enum cxip_coll_prov_errno {
 	 */
 	FI_CXI_ERRNO_RED_FIRST = 1024,
 	FI_CXI_ERRNO_RED_FLT_OVERFLOW = 1024,
-		/* double precision value overflow */
+	/* double precision value overflow */
 	FI_CXI_ERRNO_RED_FLT_INVALID = 1025,
-		/* double precision sNAN/inf value */
+	/* double precision sNAN/inf value */
 	FI_CXI_ERRNO_RED_INT_OVERFLOW = 1026,
-		/* reproducible sum overflow */
+	/* reproducible sum overflow */
 	FI_CXI_ERRNO_RED_CONTR_OVERFLOW = 1027,
-		/* reduction contribution overflow */
+	/* reduction contribution overflow */
 	FI_CXI_ERRNO_RED_OP_MISMATCH = 1028,
-		/* reduction opcode mismatch */
+	/* reduction opcode mismatch */
 	FI_CXI_ERRNO_RED_MC_FAILURE = 1029,
-		/* unused */
+	/* unused */
 	FI_CXI_COLL_RC_RDMA_FAILURE = 1030,
-		/* leaf rdma read error */
+	/* leaf rdma read error */
 	FI_CXI_COLL_RC_RDMA_DATA_FAILURE = 1031,
-		/* leaf rdma read data miscompare, unexpected packet data */
+	/* leaf rdma read data miscompare, unexpected packet data */
 	FI_CXI_ERRNO_RED_OTHER = 1032,
-		/* non-specific reduction error, fatal */
+	/* non-specific reduction error, fatal */
 	FI_CXI_ERRNO_RED_LAST = 1033,
 
 	/* collectives EQ join error codes
@@ -443,48 +443,48 @@ enum cxip_coll_prov_errno {
 	 */
 	FI_CXI_ERRNO_JOIN_FIRST = 2048,
 	FI_CXI_ERRNO_JOIN_MCAST_INUSE = 2048,
-		/* endpoint already using mcast address */
+	/* endpoint already using mcast address */
 	FI_CXI_ERRNO_JOIN_HWROOT_INUSE = 2049,
-		/* endpoint already serving as HWRoot */
+	/* endpoint already serving as HWRoot */
 	FI_CXI_ERRNO_JOIN_MCAST_INVALID = 2050,
-		/* mcast address from FM is invalid */
+	/* mcast address from FM is invalid */
 	FI_CXI_ERRNO_JOIN_HWROOT_INVALID = 2051,
-		/* HWRoot address from FM is invalid */
+	/* HWRoot address from FM is invalid */
 	FI_CXI_ERRNO_JOIN_CURL_FAILED = 2052,
-		/* libcurl initiation failed */
+	/* libcurl initiation failed */
 	FI_CXI_ERRNO_JOIN_CURL_TIMEOUT = 2053,
-		/* libcurl timed out */
+	/* libcurl timed out */
 	FI_CXI_ERRNO_JOIN_SERVER_ERR = 2054,
-		/* unhandled CURL response code */
+	/* unhandled CURL response code */
 	FI_CXI_ERRNO_JOIN_FAIL_PTE = 2055,
-		/* libfabric PTE allocation failed */
+	/* libfabric PTE allocation failed */
 	FI_CXI_ERRNO_JOIN_OTHER = 2056,
-		/* non-specific JOIN error, fatal */
+	/* non-specific JOIN error, fatal */
 	FI_CXI_ERRNO_JOIN_FAIL_RDMA = 2057,
-		/* root or leaf rdma init failure */
+	/* root or leaf rdma init failure */
 	FI_CXI_ERRNO_JOIN_LAST = FI_CXI_ERRNO_JOIN_FIRST + 43,
-		/* LAST is determined by the 43-bit error mask .
-		 * Result is the OR of all bits set by different endpoints.
-		 * This reserves space for all 43 bits for new errors.
-		 */
+	/* LAST is determined by the 43-bit error mask .
+	 * Result is the OR of all bits set by different endpoints.
+	 * This reserves space for all 43 bits for new errors.
+	 */
 };
 
-typedef unsigned int cxip_coll_op_t;	// CXI collective opcode
+typedef unsigned int cxip_coll_op_t; // CXI collective opcode
 
 struct cxip_coll_mcast_key {
-	uint32_t hwroot_idx;		// index of hwroot in av_set list
-	uint32_t mcast_addr;		// 13-bit multicast address id
+	uint32_t hwroot_idx; // index of hwroot in av_set list
+	uint32_t mcast_addr; // 13-bit multicast address id
 };
 
 struct cxip_coll_unicast_key {
-	uint32_t hwroot_idx;		// index of hwroot in av_set list
-	uint32_t mcast_addr;		// 13-bit simulated multcast address
+	uint32_t hwroot_idx; // index of hwroot in av_set list
+	uint32_t mcast_addr; // 13-bit simulated multcast address
 };
 
 struct cxip_coll_rank_key {
-	uint32_t hwroot_idx;		// index of hwroot in av_set list
-	uint32_t rank;			// rank of this object
-	bool rx_discard;		// clear to report RX events
+	uint32_t hwroot_idx; // index of hwroot in av_set list
+	uint32_t rank; // rank of this object
+	bool rx_discard; // clear to report RX events
 };
 
 struct cxip_comm_key {
@@ -515,8 +515,8 @@ struct cxip_comm_key {
  * overlap during initialization.
  */
 enum cxip_coll_op {
-	FI_CXI_MINMAXLOC = 32,	// FLT or INT
-	FI_CXI_REPSUM,		// FLT only
+	FI_CXI_MINMAXLOC = 32, // FLT or INT
+	FI_CXI_REPSUM, // FLT only
 	FI_CXI_OP_LAST
 };
 

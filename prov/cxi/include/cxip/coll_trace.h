@@ -7,16 +7,17 @@
 #ifndef _CXIP_COLL_TRACE_H_
 #define _CXIP_COLL_TRACE_H_
 
-
 /* Forward declarations */
 struct cxip_ep_obj;
 
 /* Macros */
-#define	cxip_coll_trace_attr	__attribute__((format(__printf__, 1, 2)))
+#define cxip_coll_trace_attr __attribute__((format(__printf__, 1, 2)))
 
-#define	CXIP_COLL_TRACE(mod, fmt, ...) \
-	do {if (cxip_coll_prod_trace_true()) \
-	    cxip_coll_prod_trace(fmt, ##__VA_ARGS__); } while (0)
+#define CXIP_COLL_TRACE(mod, fmt, ...)                            \
+	do {                                                      \
+		if (cxip_coll_prod_trace_true())                  \
+			cxip_coll_prod_trace(fmt, ##__VA_ARGS__); \
+	} while (0)
 
 /* Function declarations */
 int cxip_coll_trace_attr cxip_coll_trace(const char *fmt, ...);

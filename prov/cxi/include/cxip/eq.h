@@ -7,12 +7,11 @@
 #ifndef _CXIP_EQ_H_
 #define _CXIP_EQ_H_
 
-
 #include <ofi_list.h>
 #include <ofi_lock.h>
 
 /* Macros */
-#define CXIP_EQ_DEF_SZ			(1 << 8)
+#define CXIP_EQ_DEF_SZ (1 << 8)
 
 #define CXIP_EQ_MAP_FLAGS (CXI_MAP_WRITE | CXI_MAP_PIN)
 

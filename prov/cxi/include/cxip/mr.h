@@ -7,12 +7,11 @@
 #ifndef _CXIP_MR_H_
 #define _CXIP_MR_H_
 
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
 #include <ofi_lock.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_cntr;
@@ -46,17 +45,17 @@ struct cxip_mr_key {
 	union {
 		/* Provider generated standard cached */
 		struct {
-			uint64_t lac	: 3;
-			uint64_t lac_off: 58;
-			uint64_t opt	: 1;
-			uint64_t cached	: 1;
-			uint64_t unused1: 1;
+			uint64_t lac : 3;
+			uint64_t lac_off : 58;
+			uint64_t opt : 1;
+			uint64_t cached : 1;
+			uint64_t unused1 : 1;
 			/* shares CXIP_CTRL_LE_TYPE_MR */
 		};
 		/* Client or Provider non-cached */
 		struct {
-			uint64_t key	: 61;
-			uint64_t unused2: 3;
+			uint64_t key : 61;
+			uint64_t unused2 : 3;
 			/* Provider shares opt */
 			/* Provider shares cached == 0 */
 			/* Provider shares CXIP_CTRL_LE_TYPE_MR */
@@ -70,11 +69,11 @@ struct cxip_mr_key {
 			 * every micro-second, would take months before
 			 * it repeated.
 			 */
-			uint64_t id     : 16;  /* Unique - 64K MR */
-			uint64_t seqnum : 44;  /* Sequence with random seed */
-			uint64_t events : 1;   /* Requires event generation */
-			uint64_t unused3: 2;
-			uint64_t is_prov: 1;
+			uint64_t id : 16; /* Unique - 64K MR */
+			uint64_t seqnum : 44; /* Sequence with random seed */
+			uint64_t events : 1; /* Requires event generation */
+			uint64_t unused3 : 2;
+			uint64_t is_prov : 1;
 			/* Overloads CXIP_CTRL_LE_TYPE_MR and must be cleared
 			 * before appending MR LE or TX using in match bits.
 			 */
@@ -111,12 +110,12 @@ struct cxip_mr_domain {
 
 struct cxip_mr {
 	struct fid_mr mr_fid;
-	struct cxip_domain *domain;	// parent domain
-	struct cxip_ep *ep;		// endpoint for remote memory
-	uint64_t key;			// memory key
-	uint64_t flags;			// special flags
-	struct fi_mr_attr attr;		// attributes
-	struct cxip_cntr *cntr;		// if bound to cntr
+	struct cxip_domain *domain; // parent domain
+	struct cxip_ep *ep; // endpoint for remote memory
+	uint64_t key; // memory key
+	uint64_t flags; // special flags
+	struct fi_mr_attr attr; // attributes
+	struct cxip_cntr *cntr; // if bound to cntr
 
 	/* Indicates if FI_RMA_EVENT was specified at creation and
 	 * will be used to enable fi_writedata() and fi_inject_writedata()
@@ -132,8 +131,8 @@ struct cxip_mr {
 	 * libfabric MR cache.
 	 */
 	bool count_events;
-	ofi_atomic32_t  match_events;
-	ofi_atomic32_t  access_events;
+	ofi_atomic32_t match_events;
+	ofi_atomic32_t access_events;
 
 	ofi_spin_t lock;
 
@@ -141,21 +140,21 @@ struct cxip_mr {
 	bool enabled;
 	struct cxip_pte *pte;
 	enum cxip_mr_state mr_state;
-	int64_t mr_id;			// Non-cached provider key uniqueness
+	int64_t mr_id; // Non-cached provider key uniqueness
 	struct cxip_ctrl_req req;
 	bool optimized;
 
-	void *buf;			// memory buffer VA
-	uint64_t len;			// memory length
-	struct cxip_md *md;		// buffer IO descriptor
+	void *buf; // memory buffer VA
+	uint64_t len; // memory length
+	struct cxip_md *md; // buffer IO descriptor
 	struct dlist_entry ep_entry;
 
 	struct dlist_entry mr_domain_entry;
 };
 
 /* Function declarations */
-int cxip_generic_mr_key_to_ptl_idx(struct cxip_domain *dom,
-				   uint64_t key, bool write);
+int cxip_generic_mr_key_to_ptl_idx(struct cxip_domain *dom, uint64_t key,
+				   bool write);
 
 bool cxip_generic_is_mr_key_opt(uint64_t key);
 

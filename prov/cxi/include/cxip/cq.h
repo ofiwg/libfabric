@@ -7,17 +7,16 @@
 #ifndef _CXIP_CQ_H_
 #define _CXIP_CQ_H_
 
-
-#include <stddef.h>
-#include <stdbool.h>
 #include <ofi_list.h>
+#include <stdbool.h>
+#include <stddef.h>
 
 /* Forward declarations */
 struct cxip_domain;
 struct cxip_req;
 
 /* Macros */
-#define CXIP_CQ_DEF_SZ			131072U
+#define CXIP_CQ_DEF_SZ 131072U
 
 /* Type definitions */
 struct cxip_cq_eq {
@@ -62,9 +61,9 @@ int cxip_cq_req_complete(struct cxip_req *req);
 
 int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src);
 
-int cxip_cq_req_error(struct cxip_req *req, size_t olen,
-		      int err, int prov_errno, void *err_data,
-		      size_t err_data_size, fi_addr_t src_addr);
+int cxip_cq_req_error(struct cxip_req *req, size_t olen, int err,
+		      int prov_errno, void *err_data, size_t err_data_size,
+		      fi_addr_t src_addr);
 
 int cxip_cq_add_wait_fd(struct cxip_cq *cq, int wait_fd, int events);
 

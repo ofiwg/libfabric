@@ -7,9 +7,8 @@
 #ifndef _CXIP_PORTALS_TABLE_H_
 #define _CXIP_PORTALS_TABLE_H_
 
-
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_lni;

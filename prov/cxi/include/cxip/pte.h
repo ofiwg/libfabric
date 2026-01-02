@@ -7,11 +7,10 @@
 #ifndef _CXIP_PTE_H_
 #define _CXIP_PTE_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
 #include <ofi_list.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_cmdq;
@@ -21,12 +20,12 @@ struct cxip_if;
 struct cxip_portals_table;
 
 /* Macros */
-#define CXIP_PTE_IGNORE_DROPS		((1 << 24) - 1)
+#define CXIP_PTE_IGNORE_DROPS ((1 << 24) - 1)
 
 /* Type definitions */
 struct cxip_pte_map_entry {
-        struct dlist_entry entry;
-        struct cxil_pte_map *map;
+	struct dlist_entry entry;
+	struct cxil_pte_map *map;
 };
 
 struct cxip_pte {
@@ -50,15 +49,13 @@ int cxip_pte_set_state_wait(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
 			    enum c_ptlte_state new_state, uint32_t drop_count);
 
 int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
-		    unsigned int lac, enum c_ptl_list list,
-		    uint32_t buffer_id, uint64_t match_bits,
-		    uint64_t ignore_bits, uint32_t match_id,
-		    uint64_t min_free, uint32_t flags,
-		    struct cxip_cntr *cntr, struct cxip_cmdq *cmdq,
-		    bool ring);
+		    unsigned int lac, enum c_ptl_list list, uint32_t buffer_id,
+		    uint64_t match_bits, uint64_t ignore_bits,
+		    uint32_t match_id, uint64_t min_free, uint32_t flags,
+		    struct cxip_cntr *cntr, struct cxip_cmdq *cmdq, bool ring);
 
-int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
-		    int buffer_id, struct cxip_cmdq *cmdq);
+int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list, int buffer_id,
+		    struct cxip_cmdq *cmdq);
 
 int cxip_pte_map(struct cxip_pte *pte, uint64_t pid_idx, bool is_multicast);
 
