@@ -1314,21 +1314,13 @@ enum cxip_req_type {
  * and the callback function is called.
  */
 struct cxip_req {
-	/* Control info */
+	/* Control info - 8-byte aligned fields first */
 	struct dlist_entry evtq_entry;
 	void *req_ctx;
-	struct cxip_cq *cq;		// request CQ
-	struct cxip_evtq *evtq;		// request event queue
-	int req_id;			// fast lookup in index table
+	struct cxip_cq *cq;
+	struct cxip_evtq *evtq;
 	int (*cb)(struct cxip_req *req, const union c_event *evt);
-					// completion event callback
-	bool discard;
-
-	/* Triggered related fields. */
-	bool triggered;
-	uint64_t trig_thresh;
 	struct cxip_cntr *trig_cntr;
-
 	struct fi_peer_rx_entry *rx_entry;
 
 	/* CQ event fields, set according to fi_cq.3
@@ -1342,9 +1334,17 @@ struct cxip_req {
 	uint64_t data;
 	uint64_t tag;
 	fi_addr_t addr;
+	uint64_t trig_thresh;
+
+	/* 4-byte fields */
+	int req_id;
+	enum cxip_req_type type;
+
+	/* 1-byte fields */
+	bool discard;
+	bool triggered;
 
 	/* Request parameters */
-	enum cxip_req_type type;
 	union {
 		struct cxip_req_rma rma;
 		struct cxip_req_amo amo;
