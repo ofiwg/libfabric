@@ -208,6 +208,9 @@ AC_C_TYPEOF
 LT_INIT
 LT_OUTPUT
 
+dnl Make enable_static available as an automake conditional
+AM_CONDITIONAL([ENABLE_STATIC], [test x"$enable_static" = x"yes"])
+
 dnl dlopen support is optional
 AC_ARG_WITH([dlopen],
 	AS_HELP_STRING([--with-dlopen],
