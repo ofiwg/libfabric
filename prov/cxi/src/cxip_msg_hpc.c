@@ -112,7 +112,7 @@ match_put_event(struct cxip_rxc_hpc *rxc, struct cxip_req *req,
 	/* Not found, add mapping to hash bucket */
 	*matched = false;
 
-	def_ev = calloc(1, sizeof(*def_ev));
+	def_ev = ofi_buf_alloc(rxc->def_ev_pool);
 	if (!def_ev) {
 		RXC_WARN(rxc, "Failed allocate to memory\n");
 		return NULL;
@@ -138,7 +138,7 @@ static void free_put_event(struct cxip_rxc_hpc *rxc,
 			   struct cxip_deferred_event *def_ev)
 {
 	dlist_remove(&def_ev->rxc_entry);
-	free(def_ev);
+	ofi_buf_free(def_ev);
 }
 
 /*
@@ -1734,7 +1734,7 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 				"FC_RESUME to %#x:%u:%u successfully sent: retry_count=%u\n",
 				fc_drops->nic_addr, fc_drops->pid,
 				fc_drops->vni, fc_drops->retry_count);
-			free(fc_drops);
+			ofi_buf_free(fc_drops);
 			break;
 
 		/* This error occurs when the target's control event queue has
@@ -1784,7 +1784,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint32_t nic_addr,
 	struct cxip_fc_drops *fc_drops;
 	int ret;
 
-	fc_drops = calloc(1, sizeof(*fc_drops));
+	fc_drops = ofi_buf_alloc(rxc->fc_drops_pool);
 	if (!fc_drops) {
 		RXC_WARN(rxc, "Failed to allocate drops\n");
 		return -FI_ENOMEM;
@@ -2139,7 +2139,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_PUT_OVERFLOW:
 		assert(cxi_event_rc(event) == C_RC_OK);
 
-		ux_send = calloc(1, sizeof(*ux_send));
+		ux_send = ofi_buf_alloc(rxc->ux_send_pool);
 		if (!ux_send) {
 			RXC_WARN(rxc, "Failed allocate to memory\n");
 			return -FI_EAGAIN;
@@ -2153,7 +2153,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 			def_ev = match_put_event(rxc, req, event, &matched);
 			if (!matched) {
 				if (!def_ev) {
-					free(ux_send);
+					ofi_buf_free(ux_send);
 					return -FI_EAGAIN;
 				}
 
@@ -2604,7 +2604,7 @@ static int cxip_claim_onload_cb(struct cxip_req *req,
 	ofi_atomic_dec32(&rxc->orx_hw_ule_cnt);
 
 	/* FI_CLAIM UX message onloaded from hardware */
-	ux_send = calloc(1, sizeof(*ux_send));
+	ux_send = ofi_buf_alloc(rxc->ux_send_pool);
 	if (!ux_send) {
 		RXC_WARN(rxc, "Failed allocate UX memory\n");
 		return -FI_EAGAIN;
@@ -2622,7 +2622,7 @@ static int cxip_claim_onload_cb(struct cxip_req *req,
 			 * when the matching put is received.
 			 */
 			if (!def_ev) {
-				free(ux_send);
+				ofi_buf_free(ux_send);
 				return -FI_EAGAIN;
 			}
 			def_ev->ux_send = ux_send;
@@ -3827,6 +3827,25 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 {
 	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
 						base);
+	struct ofi_bufpool_attr def_ev_pool_attr = {
+		.size = sizeof(struct cxip_deferred_event),
+		.alignment = 8,
+		.chunk_cnt = 64,
+		.flags = OFI_BUFPOOL_NO_TRACK,
+	};
+	struct ofi_bufpool_attr ux_send_pool_attr = {
+		.size = sizeof(struct cxip_ux_send),
+		.alignment = 8,
+		.chunk_cnt = 64,
+		.flags = OFI_BUFPOOL_NO_TRACK,
+	};
+	struct ofi_bufpool_attr fc_drops_pool_attr = {
+		.size = sizeof(struct cxip_fc_drops),
+		.alignment = 8,
+		.chunk_cnt = 16,
+		.flags = OFI_BUFPOOL_NO_TRACK,
+	};
+	int ret;
 	int i;
 
 	assert(rxc->base.protocol == FI_PROTO_CXI);
@@ -3836,6 +3855,25 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 
 	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
 		dlist_init(&rxc->deferred_events.bh[i]);
+
+	ret = ofi_bufpool_create_attr(&def_ev_pool_attr, &rxc->def_ev_pool);
+	if (ret) {
+		CXIP_WARN("Failed to create def_ev_pool: %d\n", ret);
+		abort();
+	}
+
+	ret = ofi_bufpool_create_attr(&ux_send_pool_attr, &rxc->ux_send_pool);
+	if (ret) {
+		CXIP_WARN("Failed to create ux_send_pool: %d\n", ret);
+		abort();
+	}
+
+
+	ret = ofi_bufpool_create_attr(&fc_drops_pool_attr, &rxc->fc_drops_pool);
+	if (ret) {
+		CXIP_WARN("Failed to create fc_drops_pool: %d\n", ret);
+		abort();
+	}
 
 	dlist_init(&rxc->fc_drops);
 	dlist_init(&rxc->sw_ux_list);
@@ -3848,9 +3886,17 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 					cxip_env.cacheline_size - 1 : 0;
 }
 
-static void cxip_rxc_hpc_fini_struct(struct cxip_rxc *rxc)
+static void cxip_rxc_hpc_fini_struct(struct cxip_rxc *rxc_base)
 {
-	/* place holder */
+	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
+						base);
+
+	if (rxc->def_ev_pool)
+		ofi_bufpool_destroy(rxc->def_ev_pool);
+	if (rxc->ux_send_pool)
+		ofi_bufpool_destroy(rxc->ux_send_pool);
+	if (rxc->fc_drops_pool)
+		ofi_bufpool_destroy(rxc->fc_drops_pool);
 }
 
 static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
@@ -4053,7 +4099,7 @@ static void cxip_rxc_hpc_cleanup(struct cxip_rxc *rxc_base)
 		if (ux_send->req && ux_send->req->type == CXIP_REQ_RBUF)
 			cxip_req_buf_ux_free(ux_send);
 		else
-			free(ux_send);
+			ofi_buf_free(ux_send);
 
 		rxc->sw_ux_list_len--;
 	}
@@ -4070,7 +4116,7 @@ static void cxip_rxc_hpc_cleanup(struct cxip_rxc *rxc_base)
 		if (ux_send->req->type == CXIP_REQ_RBUF)
 			cxip_req_buf_ux_free(ux_send);
 		else
-			free(ux_send);
+			ofi_buf_free(ux_send);
 
 		rxc->sw_pending_ux_list_len--;
 	}
@@ -4088,7 +4134,7 @@ static void cxip_rxc_hpc_cleanup(struct cxip_rxc *rxc_base)
 				     struct cxip_fc_drops, fc_drops,
 				     rxc_entry, tmp) {
 		dlist_remove(&fc_drops->rxc_entry);
-		free(fc_drops);
+		ofi_buf_free(fc_drops);
 	}
 
 	if (rxc->num_fc_eq_full || rxc->num_fc_no_match ||
