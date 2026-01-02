@@ -77,22 +77,6 @@ static void *cuda_handle;
 static bool dmabuf_supported;
 static bool gdr_supported;
 static enum ft_cuda_memory_support cuda_memory_support = FT_CUDA_NOT_INITIALIZED;
-static const char* get_cuda_memory_support_str(enum ft_cuda_memory_support support) {
-    switch (support) {
-        case FT_CUDA_NOT_INITIALIZED:
-            return "NOT_INITIALIZED";
-        case FT_CUDA_NOT_SUPPORTED:
-            return "NOT_SUPPORTED";
-        case FT_CUDA_DMA_BUF_ONLY:
-            return "DMA_BUF_ONLY";
-        case FT_CUDA_GDR_ONLY:
-            return "GDR_ONLY";
-        case FT_CUDA_DMABUF_GDR_BOTH:
-            return "DMABUF_GDR_BOTH";
-        default:
-            return "INVALID";
-    }
-}
 
 /**
  * Since function names can get redefined in cuda.h/cuda_runtime.h files,
