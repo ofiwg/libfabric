@@ -1222,40 +1222,42 @@ struct cxip_req_recv {
 };
 
 struct cxip_req_send {
-	/* Send parameters */
+	/* 8-byte aligned fields */
 	union {
 		struct cxip_txc *txc;
 		struct cxip_txc_hpc *txc_hpc;
 		struct cxip_txc_rnr *txc_rnr;
 	};
 	struct cxip_cntr *cntr;
-	const void *buf;		// local send buffer
-	size_t len;			// request length
-	struct cxip_md *send_md;	// send buffer memory descriptor
-	struct cxip_addr caddr;
+	const void *buf;
+	size_t len;
+	struct cxip_md *send_md;
 	fi_addr_t dest_addr;
-	bool tagged;
-	bool hybrid_md;
-	bool success_disable;
-	uint32_t tclass;
 	uint64_t tag;
 	uint64_t data;
 	uint64_t flags;
 	void *ibuf;
-
-	/* Control info */
 	struct dlist_entry txc_entry;
 	struct cxip_fc_peer *fc_peer;
-	union {
-		int rdzv_id;		// SW RDZV ID for long messages
-		int tx_id;
-	};
-	int rc;				// DMA return code
-	int rdzv_send_events;		// Processed event count
 	uint64_t max_rnr_time;
 	uint64_t retry_rnr_time;
 	struct dlist_entry rnr_entry;
+
+	/* 4-byte aligned fields */
+	struct cxip_addr caddr;
+	uint32_t tclass;
+	union {
+		int rdzv_id;
+		int tx_id;
+	};
+	int rc;
+	int rdzv_send_events;
 	int retries;
+
+	/* 1-byte fields */
+	bool tagged;
+	bool hybrid_md;
+	bool success_disable;
 	bool canceled;
 };
 
