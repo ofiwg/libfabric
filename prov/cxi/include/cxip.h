@@ -2023,6 +2023,8 @@ struct cxip_rxc_hpc {
 	/* Defer events to wait for both put and put overflow */
 	struct def_event_ht deferred_events;
 	struct ofi_bufpool *def_ev_pool;
+	struct ofi_bufpool *ux_send_pool;
+	struct ofi_bufpool *fc_drops_pool;
 
 	/* Unexpected message handling */
 	struct cxip_ptelist_bufpool *req_list_bufpool;
