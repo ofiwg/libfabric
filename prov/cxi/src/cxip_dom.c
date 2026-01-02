@@ -389,8 +389,11 @@ int cxip_domain_prov_mr_id_alloc(struct cxip_domain *dom,
 	 */
 	key.events = mr->count_events || mr->rma_events || mr->cntr;
 
-	key.opt = dom->optimized_mrs &&
-			key.id < CXIP_PTL_IDX_PROV_MR_OPT_CNT;
+	/* Force unoptimized keys for RMA events (fi_writedata support).
+	 * Optimized MRs do not support header_data delivery in target events.
+	 */
+	key.opt = mr->rma_events || mr->domain->rma_cq_data_size ? false :
+			(dom->optimized_mrs && key.id < CXIP_PTL_IDX_PROV_MR_OPT_CNT);
 	mr->key = key.raw;
 	ofi_spin_unlock(&dom->ctrl_id_lock);
 
@@ -2005,6 +2008,32 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		cxi_domain->tclass = FI_TC_BEST_EFFORT;
 	}
 
+	/* Initialize CQ data sizes for messaging and RMA separately.
+	 * Both default to info->domain_attr->cq_data_size initially, but can be
+	 * controlled independently. This allows messaging to use remote CQ data
+	 * without forcing RMA writedata support.
+	 *
+	 * msg_cq_data_size: for FI_REMOTE_CQ_DATA in messaging operations
+	 * rma_cq_data_size: for fi_writedata/fi_inject_writedata operations
+	 */
+	cxi_domain->msg_cq_data_size = info->domain_attr->cq_data_size;
+
+	if (cxip_env.enable_writedata && info->domain_attr->cq_data_size) {
+		if (cxi_domain->util_domain.mr_mode & FI_MR_PROV_KEY) {
+			cxi_domain->rma_cq_data_size = info->domain_attr->cq_data_size;
+		} else {
+			CXIP_WARN("FI_MR_PROV_KEY required for RMA CQ data\n");
+			cxi_domain->rma_cq_data_size = 0;
+		}
+	} else {
+		cxi_domain->rma_cq_data_size = 0;
+	}
+
+	/* Legacy cq_data_size: non-zero if either msg or RMA supports CQ data */
+	cxi_domain->cq_data_size = cxi_domain->msg_cq_data_size ||
+				   cxi_domain->rma_cq_data_size ?
+				   info->domain_attr->cq_data_size : 0;
+
 	cxi_domain->av_user_id =
 		!!(cxi_domain->util_domain.info_domain_caps & FI_AV_USER_ID);
 	cxi_domain->auth_key_entry_max = info->domain_attr->max_ep_auth_key;
@@ -2069,6 +2098,27 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	cxi_domain->rx_match_mode = cxip_env.rx_match_mode;
 	cxi_domain->msg_offload = cxip_env.msg_offload;
 	cxi_domain->req_buf_size = cxip_env.req_buf_size;
+
+	/* Disable provider key caching and optimized MRs for writedata support.
+	 * Provider keys lack space for sol_event bit in cached encoding.
+	 * Optimized MRs don't support header_data in target events.
+	 * Writedata is only supported with provider keys.
+	 */
+	if (cxi_domain->rma_cq_data_size) {
+		bool disable_cache = cxi_domain->is_prov_key && cxi_domain->prov_key_cache;
+		bool disable_opt = cxi_domain->optimized_mrs;
+
+		if (disable_cache || disable_opt) {
+			CXIP_DBG("Disabling %s%s%s due to writedata support (rma_cq_data_size=%zu)\n",
+				 disable_cache ? "provider key cache" : "",
+				 (disable_cache && disable_opt) ? " and " : "",
+				 disable_opt ? "optimized MRs" : "",
+				 cxi_domain->rma_cq_data_size);
+		}
+
+		cxi_domain->prov_key_cache = false;
+		cxi_domain->optimized_mrs = false;
+	}
 	*dom = &cxi_domain->util_domain.domain_fid;
 
 	return 0;
