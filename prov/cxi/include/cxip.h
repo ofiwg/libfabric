@@ -10,11 +10,11 @@
 #ifndef _CXIP_PROV_H_
 #define _CXIP_PROV_H_
 
-#include <netinet/ether.h>
 #include "config.h"
+#include <netinet/ether.h>
 
-#include <pthread.h>
 #include <json-c/json.h>
+#include <pthread.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -31,28 +31,22 @@
 #include <ofi.h>
 #include <ofi_atom.h>
 #include <ofi_atomic.h>
-#include <ofi_mr.h>
 #include <ofi_enosys.h>
-#include <ofi_indexer.h>
-#include <ofi_rbuf.h>
-#include <ofi_lock.h>
-#include <ofi_list.h>
 #include <ofi_file.h>
-#include <ofi_osd.h>
-#include <ofi_util.h>
-#include <ofi_mem.h>
 #include <ofi_hmem.h>
+#include <ofi_indexer.h>
+#include <ofi_list.h>
+#include <ofi_lock.h>
+#include <ofi_mem.h>
+#include <ofi_mr.h>
+#include <ofi_osd.h>
+#include <ofi_rbuf.h>
+#include <ofi_util.h>
 #include <unistd.h>
 
-#include "libcxi/libcxi.h"
 #include "cxip_faults.h"
 #include "fi_cxi_ext.h"
-
-
-
-
-
-
+#include "libcxi/libcxi.h"
 
 /* Forward declarations for function pointer typedef parameters */
 struct cxip_zbcoll_obj;
@@ -84,6 +78,9 @@ extern bool cxip_coll_prod_trace_initialized;
 extern uint64_t cxip_coll_trace_mask;
 
 /* Split headers - types, macros, and function declarations */
+// clang-format off
+// These headers are order-specific due to circular dependencies, don't reorder them.
+// FIXME: make every header freestanding.
 #include "cxip/enums.h"
 #include "cxip/env.h"
 #include "cxip/cmdq.h"
@@ -125,6 +122,7 @@ extern uint64_t cxip_coll_trace_mask;
 #include "cxip/mr.h"
 #include "cxip/fc.h"
 #include "cxip/dom.h"
+// clang-format on
 
 /*
  * Inline function definitions
@@ -134,13 +132,13 @@ extern uint64_t cxip_coll_trace_mask;
  * to be fully defined first.
  */
 
-static inline bool cxip_software_pte_allowed(enum cxip_ep_ptle_mode rx_match_mode)
+static inline bool
+cxip_software_pte_allowed(enum cxip_ep_ptle_mode rx_match_mode)
 {
 	return rx_match_mode != CXIP_PTLTE_HARDWARE_MODE;
 }
 
-static inline
-uint64_t cxip_adjust_remote_offset(uint64_t *addr, uint64_t key)
+static inline uint64_t cxip_adjust_remote_offset(uint64_t *addr, uint64_t key)
 {
 	struct cxip_mr_key cxip_key = {
 		.raw = key,
@@ -230,15 +228,16 @@ static inline void cxip_msg_counters_init(struct cxip_msg_counters *cntrs)
 	for (i = 0; i < CXIP_LIST_COUNTS; i++) {
 		for (j = 0; j < OFI_HMEM_MAX; j++) {
 			for (k = 0; k < CXIP_COUNTER_BUCKETS; k++)
-				ofi_atomic_initialize32(&cntrs->msg_count[i][j][k], 0);
+				ofi_atomic_initialize32(
+					&cntrs->msg_count[i][j][k], 0);
 		}
 	}
 }
 
-static inline void
-cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
-			     enum c_ptl_list list, enum fi_hmem_iface buf_type,
-			     size_t msg_size)
+static inline void cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
+						enum c_ptl_list list,
+						enum fi_hmem_iface buf_type,
+						size_t msg_size)
 {
 	unsigned int bucket;
 
@@ -268,7 +267,8 @@ static inline void cxip_copy_to_md(struct cxip_md *md, void *dest,
 	ssize_t ret __attribute__((unused));
 	struct iovec iov;
 	bool dev_reg_copy = require_dev_reg_copy ||
-		(md->handle_valid && size <= cxip_env.safe_devmem_copy_threshold);
+			    (md->handle_valid &&
+			     size <= cxip_env.safe_devmem_copy_threshold);
 
 	/* Favor dev reg access instead of relying on HMEM copy functions. */
 	if (dev_reg_copy) {
@@ -279,9 +279,8 @@ static inline void cxip_copy_to_md(struct cxip_md *md, void *dest,
 		iov.iov_base = dest;
 		iov.iov_len = size;
 
-		ret = md->dom->hmem_ops.copy_to_hmem_iov(md->info.iface,
-							 md->info.device, &iov,
-							 1, 0, src, size);
+		ret = md->dom->hmem_ops.copy_to_hmem_iov(
+			md->info.iface, md->info.device, &iov, 1, 0, src, size);
 		assert(ret == size);
 	}
 }
@@ -293,38 +292,36 @@ static inline void cxip_copy_from_md(struct cxip_md *md, void *dest,
 	ssize_t ret __attribute__((unused));
 	struct iovec iov;
 	bool dev_reg_copy = require_dev_reg_copy ||
-		(md->handle_valid && size <= cxip_env.safe_devmem_copy_threshold);
+			    (md->handle_valid &&
+			     size <= cxip_env.safe_devmem_copy_threshold);
 
 	/* Favor dev reg access instead of relying on HMEM copy functions. */
 	if (dev_reg_copy) {
-		ret = ofi_hmem_dev_reg_copy_from_hmem(md->info.iface,
-						      md->handle,
-						      dest, src, size);
+		ret = ofi_hmem_dev_reg_copy_from_hmem(
+			md->info.iface, md->handle, dest, src, size);
 		assert(ret == FI_SUCCESS);
 	} else {
-		iov.iov_base = (void *)src;
+		iov.iov_base = (void *) src;
 		iov.iov_len = size;
 
-
-		ret = md->dom->hmem_ops.copy_from_hmem_iov(dest, size,
-							   md->info.iface,
-							   md->info.device,
-							   &iov, 1, 0);
+		ret = md->dom->hmem_ops.copy_from_hmem_iov(
+			dest, size, md->info.iface, md->info.device, &iov, 1,
+			0);
 		assert(ret == size);
 	}
 }
 
-static inline void
-cxip_ep_obj_copy_to_md(struct cxip_ep_obj *ep, struct cxip_md *md, void *dest,
-		       const void *src, size_t size)
+static inline void cxip_ep_obj_copy_to_md(struct cxip_ep_obj *ep,
+					  struct cxip_md *md, void *dest,
+					  const void *src, size_t size)
 {
 	cxip_copy_to_md(md, dest, src, size,
 			ep->require_dev_reg_copy[md->info.iface]);
 }
 
-static inline void
-cxip_ep_obj_copy_from_md(struct cxip_ep_obj *ep, struct cxip_md *md, void *dest,
-			 const void *src, size_t size)
+static inline void cxip_ep_obj_copy_from_md(struct cxip_ep_obj *ep,
+					    struct cxip_md *md, void *dest,
+					    const void *src, size_t size)
 {
 	cxip_copy_from_md(md, dest, src, size,
 			  ep->require_dev_reg_copy[md->info.iface]);
@@ -332,14 +329,14 @@ cxip_ep_obj_copy_from_md(struct cxip_ep_obj *ep, struct cxip_md *md, void *dest,
 
 static inline bool cxip_ep_obj_mr_relaxed_order(struct cxip_ep_obj *ep)
 {
-	if (cxip_env.mr_target_ordering ==  MR_ORDER_STRICT)
+	if (cxip_env.mr_target_ordering == MR_ORDER_STRICT)
 		return false;
 
-	if (cxip_env.mr_target_ordering ==  MR_ORDER_RELAXED)
+	if (cxip_env.mr_target_ordering == MR_ORDER_RELAXED)
 		return true;
 
 	if ((ep->rx_attr.msg_order & FI_ORDER_RMA_WAW) &&
-	     ep->ep_attr.max_order_waw_size != 0)
+	    ep->ep_attr.max_order_waw_size != 0)
 		return false;
 
 	if ((ep->rx_attr.msg_order & FI_ORDER_WAW) &&
@@ -437,7 +434,10 @@ static inline void _decompose_dbl(double d, int *sgn, int *exp,
 
 static inline void single_to_double_quote(char *str)
 {
-	do {if (*str == '\'') *str = '"';} while (*(++str));
+	do {
+		if (*str == '\'')
+			*str = '"';
+	} while (*(++str));
 }
 
 static inline bool cxip_cmdq_empty(struct cxip_cmdq *cmdq)
@@ -450,7 +450,7 @@ static inline bool cxip_cmdq_match(struct cxip_cmdq *cmdq, uint16_t vni,
 				   enum cxi_traffic_class_type tc_type)
 {
 	return (cmdq->cur_cp->vni == vni) && (cmdq->cur_cp->tc == tc) &&
-		(cmdq->cur_cp->tc_type == tc_type);
+	       (cmdq->cur_cp->tc_type == tc_type);
 }
 
 static inline bool cxip_cmdq_prev_match(struct cxip_cmdq *cmdq, uint16_t vni,
@@ -458,7 +458,7 @@ static inline bool cxip_cmdq_prev_match(struct cxip_cmdq *cmdq, uint16_t vni,
 					enum cxi_traffic_class_type tc_type)
 {
 	return (cmdq->prev_cp->vni == vni) && (cmdq->prev_cp->tc == tc) &&
-		(cmdq->prev_cp->tc_type == tc_type);
+	       (cmdq->prev_cp->tc_type == tc_type);
 }
 
 static inline struct fid_peer_srx *cxip_get_owner_srx(struct cxip_rxc *rxc)
@@ -501,24 +501,24 @@ static inline int cxip_no_discard(struct fi_peer_rx_entry *rx_entry)
 	return -FI_ENOSYS;
 }
 
-static inline void
-cxip_domain_add_txc(struct cxip_domain *dom, struct cxip_txc *txc)
+static inline void cxip_domain_add_txc(struct cxip_domain *dom,
+				       struct cxip_txc *txc)
 {
 	ofi_spin_lock(&dom->lock);
 	dlist_insert_tail(&txc->dom_entry, &dom->txc_list);
 	ofi_spin_unlock(&dom->lock);
 }
 
-static inline void
-cxip_domain_remove_txc(struct cxip_domain *dom, struct cxip_txc *txc)
+static inline void cxip_domain_remove_txc(struct cxip_domain *dom,
+					  struct cxip_txc *txc)
 {
 	ofi_spin_lock(&dom->lock);
 	dlist_remove(&txc->dom_entry);
 	ofi_spin_unlock(&dom->lock);
 }
 
-static inline void
-cxip_domain_add_cntr(struct cxip_domain *dom, struct cxip_cntr *cntr)
+static inline void cxip_domain_add_cntr(struct cxip_domain *dom,
+					struct cxip_cntr *cntr)
 {
 	ofi_spin_lock(&dom->lock);
 	dlist_insert_tail(&cntr->dom_entry, &dom->cntr_list);
@@ -526,8 +526,8 @@ cxip_domain_add_cntr(struct cxip_domain *dom, struct cxip_cntr *cntr)
 	ofi_spin_unlock(&dom->lock);
 }
 
-static inline void
-cxip_domain_remove_cntr(struct cxip_domain *dom, struct cxip_cntr *cntr)
+static inline void cxip_domain_remove_cntr(struct cxip_domain *dom,
+					   struct cxip_cntr *cntr)
 {
 	ofi_spin_lock(&dom->lock);
 	dlist_remove(&cntr->dom_entry);
@@ -535,8 +535,8 @@ cxip_domain_remove_cntr(struct cxip_domain *dom, struct cxip_cntr *cntr)
 	ofi_spin_unlock(&dom->lock);
 }
 
-static inline void
-cxip_domain_add_cq(struct cxip_domain *dom, struct cxip_cq *cq)
+static inline void cxip_domain_add_cq(struct cxip_domain *dom,
+				      struct cxip_cq *cq)
 {
 	ofi_spin_lock(&dom->lock);
 	dlist_insert_tail(&cq->dom_entry, &dom->cq_list);
@@ -544,8 +544,8 @@ cxip_domain_add_cq(struct cxip_domain *dom, struct cxip_cq *cq)
 	ofi_spin_unlock(&dom->lock);
 }
 
-static inline void
-cxip_domain_remove_cq(struct cxip_domain *dom, struct cxip_cq *cq)
+static inline void cxip_domain_remove_cq(struct cxip_domain *dom,
+					 struct cxip_cq *cq)
 {
 	ofi_spin_lock(&dom->lock);
 	dlist_remove(&cq->dom_entry);
@@ -553,9 +553,8 @@ cxip_domain_remove_cq(struct cxip_domain *dom, struct cxip_cq *cq)
 	ofi_spin_unlock(&dom->lock);
 }
 
-static inline
-struct cxip_ctrl_req *cxip_domain_ctrl_id_at(struct cxip_domain *dom,
-					     int buffer_id)
+static inline struct cxip_ctrl_req *
+cxip_domain_ctrl_id_at(struct cxip_domain *dom, int buffer_id)
 {
 	if (ofi_idx_is_valid(&dom->req_ids, buffer_id))
 		return ofi_idx_at(&dom->req_ids, buffer_id);
@@ -564,9 +563,8 @@ struct cxip_ctrl_req *cxip_domain_ctrl_id_at(struct cxip_domain *dom,
 
 static inline uint32_t cxip_mac_to_nic(struct ether_addr *mac)
 {
-	return mac->ether_addr_octet[5] |
-			(mac->ether_addr_octet[4] << 8) |
-			((mac->ether_addr_octet[3] & 0xF) << 16);
+	return mac->ether_addr_octet[5] | (mac->ether_addr_octet[4] << 8) |
+	       ((mac->ether_addr_octet[3] & 0xF) << 16);
 }
 
 static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
@@ -603,8 +601,7 @@ static inline int cxip_cacheline_size(void)
 
 	f = fopen(CXIP_SYSFS_CACHE_LINE_SIZE, "r");
 	if (!f) {
-		_CXIP_WARN(FI_LOG_CORE,
-			   "Error %d determining cacheline size\n",
+		_CXIP_WARN(FI_LOG_CORE, "Error %d determining cacheline size\n",
 			   errno);
 		cache_line_size = CXIP_DEFAULT_CACHE_LINE_SIZE;
 	} else {
@@ -621,9 +618,9 @@ static inline int cxip_cacheline_size(void)
 	return cache_line_size;
 }
 
-static inline int
-cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
-			void *dest, const void *hmem_src, size_t size)
+static inline int cxip_txc_copy_from_hmem(struct cxip_txc *txc,
+					  struct cxip_md *hmem_md, void *dest,
+					  const void *hmem_src, size_t size)
 {
 	enum fi_hmem_iface iface;
 	uint64_t device;
@@ -675,7 +672,7 @@ cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
 
 	/* Slow path HMEM copy path.*/
 	iface = ofi_get_hmem_iface(hmem_src, &device, &flags);
-	hmem_iov.iov_base = (void *)hmem_src;
+	hmem_iov.iov_base = (void *) hmem_src;
 	hmem_iov.iov_len = size;
 
 	ret = domain->hmem_ops.copy_from_hmem_iov(dest, size, iface, device,
@@ -696,9 +693,9 @@ cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
 	return FI_SUCCESS;
 }
 
-static inline
-int cxip_set_recv_match_id(struct cxip_rxc *rxc, fi_addr_t src_addr,
-			   bool auth_key, uint32_t *match_id, uint16_t *vni)
+static inline int cxip_set_recv_match_id(struct cxip_rxc *rxc,
+					 fi_addr_t src_addr, bool auth_key,
+					 uint32_t *match_id, uint16_t *vni)
 {
 	struct cxip_addr caddr;
 	int ret;
@@ -707,12 +704,11 @@ int cxip_set_recv_match_id(struct cxip_rxc *rxc, fi_addr_t src_addr,
 	 * in the LE for matching. If application AVs are symmetric, use
 	 * logical FI address for matching. Otherwise, use physical address.
 	 */
-	if (rxc->attr.caps & FI_DIRECTED_RECV &&
-	    src_addr != FI_ADDR_UNSPEC) {
+	if (rxc->attr.caps & FI_DIRECTED_RECV && src_addr != FI_ADDR_UNSPEC) {
 		if (rxc->ep_obj->av->symmetric) {
 			/* PID is not used for matching */
-			*match_id = CXI_MATCH_ID(rxc->pid_bits,
-						C_PID_ANY, src_addr);
+			*match_id = CXI_MATCH_ID(rxc->pid_bits, C_PID_ANY,
+						 src_addr);
 			*vni = rxc->ep_obj->auth_key.vni;
 		} else {
 			ret = cxip_av_lookup_addr(rxc->ep_obj->av, src_addr,
@@ -754,14 +750,16 @@ static inline void cxip_set_env_rx_match_mode(void)
 			"Enable/Disable low LE preemptive recv transitions.");
 	fi_param_get_bool(&cxip_prov, "hybrid_recv_preemptive",
 			  &cxip_env.hybrid_recv_preemptive);
-	fi_param_define(&cxip_prov, "hybrid_unexpected_msg_preemptive",
-			FI_PARAM_BOOL,
-			"Enable preemptive transition to software endpoint when number of hardware unexpected messages exceeds RX attribute size");
+	fi_param_define(
+		&cxip_prov, "hybrid_unexpected_msg_preemptive", FI_PARAM_BOOL,
+		"Enable preemptive transition to software endpoint when number "
+		"of hardware unexpected messages exceeds RX attribute size");
 	fi_param_get_bool(&cxip_prov, "hybrid_unexpected_msg_preemptive",
 			  &cxip_env.hybrid_unexpected_msg_preemptive);
-	fi_param_define(&cxip_prov, "hybrid_posted_recv_preemptive",
-			FI_PARAM_BOOL,
-			"Enable preemptive transition to software endpoint when number of posted receives exceeds RX attribute size");
+	fi_param_define(
+		&cxip_prov, "hybrid_posted_recv_preemptive", FI_PARAM_BOOL,
+		"Enable preemptive transition to software endpoint when number "
+		"of posted receives exceeds RX attribute size");
 	fi_param_get_bool(&cxip_prov, "hybrid_posted_recv_preemptive",
 			  &cxip_env.hybrid_posted_recv_preemptive);
 
@@ -776,8 +774,9 @@ static inline void cxip_set_env_rx_match_mode(void)
 			cxip_env.rx_match_mode = CXIP_PTLTE_HYBRID_MODE;
 			cxip_env.msg_offload = true;
 		} else {
-			_CXIP_WARN(FI_LOG_FABRIC, "Unrecognized rx_match_mode: %s\n",
-				  param_str);
+			_CXIP_WARN(FI_LOG_FABRIC,
+				   "Unrecognized rx_match_mode: %s\n",
+				   param_str);
 			cxip_env.rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
 			cxip_env.msg_offload = true;
 		}
@@ -786,24 +785,28 @@ static inline void cxip_set_env_rx_match_mode(void)
 	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
 	    cxip_env.hybrid_preemptive) {
 		cxip_env.hybrid_preemptive = false;
-		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignoring preemptive\n");
+		_CXIP_WARN(FI_LOG_FABRIC,
+			   "Not in hybrid mode, ignoring preemptive\n");
 	}
 
 	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
 	    cxip_env.hybrid_recv_preemptive) {
-		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignore LE  recv preemptive\n");
+		_CXIP_WARN(FI_LOG_FABRIC,
+			   "Not in hybrid mode, ignore LE  recv preemptive\n");
 		cxip_env.hybrid_recv_preemptive = 0;
 	}
 
 	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
 	    cxip_env.hybrid_posted_recv_preemptive) {
-		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignore hybrid_posted_recv_preemptive\n");
+		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignore "
+					  "hybrid_posted_recv_preemptive\n");
 		cxip_env.hybrid_posted_recv_preemptive = 0;
 	}
 
 	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
 	    cxip_env.hybrid_unexpected_msg_preemptive) {
-		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignore hybrid_unexpected_msg_preemptive\n");
+		_CXIP_WARN(FI_LOG_FABRIC, "Not in hybrid mode, ignore "
+					  "hybrid_unexpected_msg_preemptive\n");
 		cxip_env.hybrid_unexpected_msg_preemptive = 0;
 	}
 }

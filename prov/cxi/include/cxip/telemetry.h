@@ -7,7 +7,6 @@
 #ifndef _CXIP_TELEMETRY_H_
 #define _CXIP_TELEMETRY_H_
 
-
 #include <ofi_list.h>
 
 /* Forward declarations */

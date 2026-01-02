@@ -7,7 +7,6 @@
 #ifndef _CXIP_ADDR_H_
 #define _CXIP_ADDR_H_
 
-
 #include <stdint.h>
 
 /* Macros */
@@ -27,9 +26,9 @@
 
 /* Type definitions */
 struct cxip_addr {
-	uint32_t pid		: C_DFA_PID_BITS_MAX;
-	uint32_t nic		: C_DFA_NIC_BITS;
-	uint32_t pad		: 3;
+	uint32_t pid : C_DFA_PID_BITS_MAX;
+	uint32_t nic : C_DFA_NIC_BITS;
+	uint32_t pad : 3;
 	uint16_t vni;
 };
 

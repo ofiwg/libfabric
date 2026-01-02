@@ -7,7 +7,6 @@
 #ifndef _CXIP_ENUMS_H_
 #define _CXIP_ENUMS_H_
 
-
 /* All enum type definitions */
 /* Included first because many structs embed enum fields */
 
@@ -31,9 +30,9 @@ enum cxip_ep_ptle_mode {
 };
 
 enum cxip_rdzv_proto {
-	CXIP_RDZV_PROTO_DEFAULT,	/* unrestricted gets */
-	CXIP_RDZV_PROTO_ALT_READ,	/* restricted gets */
-	CXIP_RDZV_PROTO_ALT_WRITE,	/* restricted puts */
+	CXIP_RDZV_PROTO_DEFAULT, /* unrestricted gets */
+	CXIP_RDZV_PROTO_ALT_READ, /* restricted gets */
+	CXIP_RDZV_PROTO_ALT_WRITE, /* restricted puts */
 };
 
 enum cxip_mr_target_ordering {
@@ -50,17 +49,17 @@ enum cxip_mr_target_ordering {
 };
 
 enum cxip_le_type {
-	CXIP_LE_TYPE_RX = 0,	/* RX data LE */
-	CXIP_LE_TYPE_ZBP,	/* Zero-byte Put control message LE. Used to
-				 * exchange data in the EQ header_data and
-				 * match_bits fields. Unexpected headers are
-				 * disabled.
-				 */
+	CXIP_LE_TYPE_RX = 0, /* RX data LE */
+	CXIP_LE_TYPE_ZBP, /* Zero-byte Put control message LE. Used to
+			   * exchange data in the EQ header_data and
+			   * match_bits fields. Unexpected headers are
+			   * disabled.
+			   */
 };
 
 enum cxip_ctrl_le_type {
-	CXIP_CTRL_LE_TYPE_MR = 0,	/* Memory Region LE */
-	CXIP_CTRL_LE_TYPE_CTRL_MSG,	/* Control Message LE */
+	CXIP_CTRL_LE_TYPE_MR = 0, /* Memory Region LE */
+	CXIP_CTRL_LE_TYPE_CTRL_MSG, /* Control Message LE */
 };
 
 enum cxip_ctrl_msg_type {
@@ -259,18 +258,18 @@ enum cxip_coll_state {
 };
 
 typedef enum cxip_coll_rc {
-	CXIP_COLL_RC_SUCCESS = 0,		// good
-	CXIP_COLL_RC_FLT_INEXACT = 1,		// result was rounded
-	CXIP_COLL_RC_FLT_OVERFLOW = 3,		// result too large to represent
-	CXIP_COLL_RC_FLT_INVALID = 4,		// op was signalling NaN, or
-						// infinities subtracted
-	CXIP_COLL_RC_REP_INEXACT = 5,		// reproducible sum was rounded
-	CXIP_COLL_RC_INT_OVERFLOW = 6,		// reproducible sum overflow
-	CXIP_COLL_RC_CONTR_OVERFLOW = 7,	// too many contributions seen
-	CXIP_COLL_RC_OP_MISMATCH = 8,		// conflicting opcodes
-	CXIP_COLL_RC_TX_FAILURE = 9,		// internal send error
-	CXIP_COLL_RC_RDMA_FAILURE = 10,		// leaf rdma read error
-	CXIP_COLL_RC_RDMA_DATA_FAILURE = 11,	// leaf rdma read data misc
+	CXIP_COLL_RC_SUCCESS = 0, // good
+	CXIP_COLL_RC_FLT_INEXACT = 1, // result was rounded
+	CXIP_COLL_RC_FLT_OVERFLOW = 3, // result too large to represent
+	CXIP_COLL_RC_FLT_INVALID = 4, // op was signalling NaN, or
+				      // infinities subtracted
+	CXIP_COLL_RC_REP_INEXACT = 5, // reproducible sum was rounded
+	CXIP_COLL_RC_INT_OVERFLOW = 6, // reproducible sum overflow
+	CXIP_COLL_RC_CONTR_OVERFLOW = 7, // too many contributions seen
+	CXIP_COLL_RC_OP_MISMATCH = 8, // conflicting opcodes
+	CXIP_COLL_RC_TX_FAILURE = 9, // internal send error
+	CXIP_COLL_RC_RDMA_FAILURE = 10, // leaf rdma read error
+	CXIP_COLL_RC_RDMA_DATA_FAILURE = 11, // leaf rdma read data misc
 	CXIP_COLL_RC_MAX = 12
 } cxip_coll_rc_t;
 

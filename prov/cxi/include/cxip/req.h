@@ -7,11 +7,10 @@
 #ifndef _CXIP_REQ_H_
 #define _CXIP_REQ_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
 #include <ofi_list.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_cntr;
@@ -31,12 +30,12 @@ struct cxip_txc_rnr;
 struct cxip_ux_dump_state;
 
 /* Macros */
-#define CXIP_REQ_CLEANUP_TO		3000
+#define CXIP_REQ_CLEANUP_TO 3000
 
 /* Type definitions */
 struct cxip_req_rma {
 	struct cxip_txc *txc;
-	struct cxip_md *local_md;	// RMA target buffer
+	struct cxip_md *local_md; // RMA target buffer
 	void *ibuf;
 	struct cxip_cntr *cntr;
 	/* collectives leaf_rdma_get_callback context data */
@@ -68,11 +67,11 @@ struct cxip_req_recv {
 	};
 
 	struct cxip_cntr *cntr;
-	void *recv_buf;			// local receive buffer
-	struct cxip_md *recv_md;	// local receive MD
-	bool hybrid_md;			// True if MD was provided
+	void *recv_buf; // local receive buffer
+	struct cxip_md *recv_md; // local receive MD
+	bool hybrid_md; // True if MD was provided
 	bool success_disable;
-	uint32_t ulen;			// User buffer length
+	uint32_t ulen; // User buffer length
 	bool tagged;
 	uint64_t tag;
 	uint64_t ignore;
@@ -94,22 +93,22 @@ struct cxip_req_recv {
 	struct cxip_ux_dump_state *ux_dump;
 
 	/* Control info */
-	int rc;				// DMA return code
-	uint32_t rlen;			// Send length
-	uint64_t oflow_start;		// Overflow buffer address
-	uint16_t vni;			// VNI operation came in on
-	uint32_t initiator;		// DMA initiator address
-	uint32_t rdzv_id;		// DMA initiator rendezvous ID
-	uint8_t rdzv_lac;		// Rendezvous source LAC
-	bool done_notify;		// Must send done notification
+	int rc; // DMA return code
+	uint32_t rlen; // Send length
+	uint64_t oflow_start; // Overflow buffer address
+	uint16_t vni; // VNI operation came in on
+	uint32_t initiator; // DMA initiator address
+	uint32_t rdzv_id; // DMA initiator rendezvous ID
+	uint8_t rdzv_lac; // Rendezvous source LAC
+	bool done_notify; // Must send done notification
 	enum cxip_rdzv_proto rdzv_proto;
-	int rdzv_events;		// Processed rdzv event count
+	int rdzv_events; // Processed rdzv event count
 	enum c_event_type rdzv_event_types[4];
-	uint32_t rdzv_initiator;	// Rendezvous initiator used for mrecvs
+	uint32_t rdzv_initiator; // Rendezvous initiator used for mrecvs
 	uint32_t rget_nic;
 	uint32_t rget_pid;
-	int multirecv_inflight;		// SW EP Multi-receives in progress
-	bool canceled;			// Request canceled?
+	int multirecv_inflight; // SW EP Multi-receives in progress
+	bool canceled; // Request canceled?
 	bool unlinked;
 	bool multi_recv;
 	bool tgt_event;
@@ -132,9 +131,9 @@ struct cxip_req_send {
 		struct cxip_txc_rnr *txc_rnr;
 	};
 	struct cxip_cntr *cntr;
-	const void *buf;		// local send buffer
-	size_t len;			// request length
-	struct cxip_md *send_md;	// send buffer memory descriptor
+	const void *buf; // local send buffer
+	size_t len; // request length
+	struct cxip_md *send_md; // send buffer memory descriptor
 	struct cxip_addr caddr;
 	fi_addr_t dest_addr;
 	bool tagged;
@@ -150,11 +149,11 @@ struct cxip_req_send {
 	struct dlist_entry txc_entry;
 	struct cxip_fc_peer *fc_peer;
 	union {
-		int rdzv_id;		// SW RDZV ID for long messages
+		int rdzv_id; // SW RDZV ID for long messages
 		int tx_id;
 	};
-	int rc;				// DMA return code
-	int rdzv_send_events;		// Processed event count
+	int rc; // DMA return code
+	int rdzv_send_events; // Processed event count
 	uint64_t max_rnr_time;
 	uint64_t retry_rnr_time;
 	struct dlist_entry rnr_entry;
@@ -188,11 +187,11 @@ struct cxip_req {
 	/* Control info */
 	struct dlist_entry evtq_entry;
 	void *req_ctx;
-	struct cxip_cq *cq;		// request CQ
-	struct cxip_evtq *evtq;		// request event queue
-	int req_id;			// fast lookup in index table
+	struct cxip_cq *cq; // request CQ
+	struct cxip_evtq *evtq; // request event queue
+	int req_id; // fast lookup in index table
 	int (*cb)(struct cxip_req *req, const union c_event *evt);
-					// completion event callback
+	// completion event callback
 	bool discard;
 
 	/* Triggered related fields. */

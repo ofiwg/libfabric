@@ -7,7 +7,6 @@
 #ifndef _CXIP_INFO_H_
 #define _CXIP_INFO_H_
 
-
 /* Function declarations */
 const char *cxip_rdzv_proto_to_str(enum cxip_rdzv_proto proto);
 

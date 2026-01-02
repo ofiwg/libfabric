@@ -7,7 +7,6 @@
 #ifndef _CXIP_FABRIC_H_
 #define _CXIP_FABRIC_H_
 
-
 #include <ofi_atom.h>
 
 /* Type definitions */

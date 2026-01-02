@@ -7,12 +7,11 @@
 #ifndef _CXIP_RXC_H_
 #define _CXIP_RXC_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_cmdq;
@@ -28,36 +27,36 @@ struct cxip_req;
 /* Macros */
 #define RXC_RESERVED_FC_SLOTS 1
 
-#define RXC_BASE(rxc) ((struct cxip_rxc *)(void *)(rxc))
+#define RXC_BASE(rxc) ((struct cxip_rxc *) (void *) (rxc))
 
-#define RXC_DBG(rxc, fmt, ...) \
+#define RXC_DBG(rxc, fmt, ...)                                      \
 	_CXIP_DBG(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
-		  RXC_BASE(rxc)->ep_obj->src_addr.nic, \
-		  RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+		  RXC_BASE(rxc)->ep_obj->src_addr.nic,              \
+		  RXC_BASE(rxc)->ep_obj->src_addr.pid,              \
 		  RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 
-#define RXC_INFO(rxc, fmt, ...) \
+#define RXC_INFO(rxc, fmt, ...)                                      \
 	_CXIP_INFO(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
-		   RXC_BASE(rxc)->ep_obj->src_addr.nic, \
-		   RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+		   RXC_BASE(rxc)->ep_obj->src_addr.nic,              \
+		   RXC_BASE(rxc)->ep_obj->src_addr.pid,              \
 		   RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 
-#define RXC_WARN(rxc, fmt, ...) \
+#define RXC_WARN(rxc, fmt, ...)                                      \
 	_CXIP_WARN(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
-		   RXC_BASE(rxc)->ep_obj->src_addr.nic, \
-		   RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+		   RXC_BASE(rxc)->ep_obj->src_addr.nic,              \
+		   RXC_BASE(rxc)->ep_obj->src_addr.pid,              \
 		   RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 
-#define RXC_WARN_ONCE(rxc, fmt, ...) \
+#define RXC_WARN_ONCE(rxc, fmt, ...)                                      \
 	_CXIP_WARN_ONCE(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
-			RXC_BASE(rxc)->ep_obj->src_addr.nic, \
-			RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+			RXC_BASE(rxc)->ep_obj->src_addr.nic,              \
+			RXC_BASE(rxc)->ep_obj->src_addr.pid,              \
 			RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 
-#define RXC_FATAL(rxc, fmt, ...) \
+#define RXC_FATAL(rxc, fmt, ...)                            \
 	CXIP_FATAL("RXC (%#x:%u) PtlTE %u:[Fatal] " fmt "", \
-		   RXC_BASE(rxc)->ep_obj->src_addr.nic, \
-		   RXC_BASE(rxc)->ep_obj->src_addr.pid, \
+		   RXC_BASE(rxc)->ep_obj->src_addr.nic,     \
+		   RXC_BASE(rxc)->ep_obj->src_addr.pid,     \
 		   RXC_BASE(rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 
 /* Type definitions */
@@ -89,7 +88,7 @@ struct cxip_rxc {
 	bool trunc_ok;
 	bool sw_ep_only;
 	bool msg_offload;
-	uint8_t pid_bits;		// Zero without SEP
+	uint8_t pid_bits; // Zero without SEP
 	uint8_t recv_ptl_idx;
 
 	enum cxip_rxc_state state;

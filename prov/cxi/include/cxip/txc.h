@@ -7,12 +7,11 @@
 #ifndef _CXIP_TXC_H_
 #define _CXIP_TXC_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_cmdq;
@@ -26,30 +25,30 @@ struct cxip_rdzv_nomatch_pte;
 struct cxip_req;
 
 /* Macros */
-#define	CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC (1 << 0)
+#define CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC (1 << 0)
 
-#define TXC_BASE(txc) ((struct cxip_txc *)(void *)(txc))
+#define TXC_BASE(txc) ((struct cxip_txc *) (void *) (txc))
 
-#define TXC_DBG(txc, fmt, ...) \
+#define TXC_DBG(txc, fmt, ...)                             \
 	_CXIP_DBG(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
-		  TXC_BASE(txc)->ep_obj->src_addr.nic, \
+		  TXC_BASE(txc)->ep_obj->src_addr.nic,     \
 		  TXC_BASE(txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
 
-#define TXC_INFO(txc, fmt, ...) \
+#define TXC_INFO(txc, fmt, ...)                             \
 	_CXIP_INFO(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
-		   TXC_BASE(txc)->ep_obj->src_addr.nic, \
+		   TXC_BASE(txc)->ep_obj->src_addr.nic,     \
 		   TXC_BASE(txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
 
-#define TXC_WARN(txc, fmt, ...) \
+#define TXC_WARN(txc, fmt, ...)                             \
 	_CXIP_WARN(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
-		   TXC_BASE(txc)->ep_obj->src_addr.nic, \
+		   TXC_BASE(txc)->ep_obj->src_addr.nic,     \
 		   TXC_BASE(txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
 
 #define TXC_WARN_RET(txc, ret, fmt, ...) \
 	TXC_WARN(txc, "%d:%s: " fmt "", ret, fi_strerror(-ret), ##__VA_ARGS__)
 
-#define TXC_FATAL(txc, fmt, ...) \
-	CXIP_FATAL("TXC (%#x:%u):: " fmt "", \
+#define TXC_FATAL(txc, fmt, ...)                        \
+	CXIP_FATAL("TXC (%#x:%u):: " fmt "",            \
 		   TXC_BASE(txc)->ep_obj->src_addr.nic, \
 		   TXC_BASE(txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
 
@@ -76,7 +75,7 @@ struct cxip_txc {
 
 	uint32_t protocol;
 	bool enabled;
-	bool hrp_war_req;		// Non-fetching 32-bit HRP
+	bool hrp_war_req; // Non-fetching 32-bit HRP
 	bool hmem;
 	bool trunc_ok;
 
@@ -87,12 +86,12 @@ struct cxip_txc {
 
 	struct cxip_txc_ops ops;
 
-	struct cxip_ep_obj *ep_obj;	// parent EP object
-	struct cxip_domain *domain;	// parent domain
+	struct cxip_ep_obj *ep_obj; // parent EP object
+	struct cxip_domain *domain; // parent domain
 	uint8_t pid_bits;
 	uint8_t recv_ptl_idx;
 
-	struct fi_tx_attr attr;		// attributes
+	struct fi_tx_attr attr; // attributes
 	bool selective_completion;
 	uint32_t tclass;
 
@@ -102,8 +101,8 @@ struct cxip_txc {
 	/* Inject buffers for EP, protected by ep_obj->lock */
 	struct ofi_bufpool *ibuf_pool;
 
-	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
-	int otx_reqs;	// outstanding transmit requests
+	struct cxip_cmdq *tx_cmdq; // added during cxip_txc_enable()
+	int otx_reqs; // outstanding transmit requests
 
 	/* Queue of TX messages in flight for the context */
 	struct dlist_entry msg_queue;
@@ -130,7 +129,7 @@ struct cxip_txc_hpc {
 	struct indexer msg_rdzv_ids;
 	enum cxip_rdzv_proto rdzv_proto;
 
-	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
+	struct cxip_cmdq *rx_cmdq; // Target cmdq for Rendezvous buffers
 
 #if ENABLE_DEBUG
 	uint64_t force_err;
@@ -140,16 +139,15 @@ struct cxip_txc_hpc {
 
 	/* Match complete IDs */
 	struct indexer tx_ids;
-
 };
 
 struct cxip_txc_rnr {
 	/* Must remain first */
 	struct cxip_txc base;
 
-	uint64_t max_retry_wait_us;	/* Maximum time to retry any request */
-	ofi_atomic32_t time_wait_reqs;	/* Number of RNR time wait reqs */
-	uint64_t next_retry_wait_us;	/* Time of next retry in all queues */
+	uint64_t max_retry_wait_us; /* Maximum time to retry any request */
+	ofi_atomic32_t time_wait_reqs; /* Number of RNR time wait reqs */
+	uint64_t next_retry_wait_us; /* Time of next retry in all queues */
 	uint64_t total_retries;
 	uint64_t total_rnr_nacks;
 	bool hybrid_mr_desc;

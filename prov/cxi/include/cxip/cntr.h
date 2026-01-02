@@ -7,11 +7,10 @@
 #ifndef _CXIP_CNTR_H_
 #define _CXIP_CNTR_H_
 
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <ofi_list.h>
 #include <ofi_atom.h>
+#include <ofi_list.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_cmdq;
@@ -20,14 +19,14 @@ struct cxip_domain;
 /* Type definitions */
 struct cxip_cntr {
 	struct fid_cntr cntr_fid;
-	struct cxip_domain *domain;	// parent domain
+	struct cxip_domain *domain; // parent domain
 	ofi_atomic32_t ref;
-	struct fi_cntr_attr attr;	// copy of user or default attributes
+	struct fi_cntr_attr attr; // copy of user or default attributes
 	struct fid_wait *wait;
 	/* Contexts to which counter is bound */
 	struct dlist_entry ctx_list;
 
-        /* Triggered cmdq for bound counters */
+	/* Triggered cmdq for bound counters */
 	struct cxip_cmdq *trig_cmdq;
 
 	struct ofi_genlock lock;
@@ -43,7 +42,8 @@ struct cxip_cntr {
 	struct dlist_entry dom_entry;
 
 	/* Counter for number of operations which need progress. A separate lock
-	 * is needed since these functions may be called without counter lock held.
+	 * is needed since these functions may be called without counter lock
+	 * held.
 	 */
 	struct ofi_genlock progress_count_lock;
 	int progress_count;

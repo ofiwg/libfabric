@@ -7,17 +7,16 @@
 #ifndef _CXIP_REPSUM_H_
 #define _CXIP_REPSUM_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Type definitions */
 union cxip_dbl_bits {
 	struct {
-		uint64_t mantissa:52;
-		uint64_t exponent:11;
-		uint64_t sign:1;
+		uint64_t mantissa : 52;
+		uint64_t exponent : 11;
+		uint64_t sign : 1;
 	} __attribute__((__packed__));
 	double dval;
 	uint64_t ival;

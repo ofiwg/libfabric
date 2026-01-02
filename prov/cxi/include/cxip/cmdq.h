@@ -7,10 +7,9 @@
 #ifndef _CXIP_CMDQ_H_
 #define _CXIP_CMDQ_H_
 
-
-#include <stdint.h>
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_lni;

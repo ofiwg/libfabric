@@ -7,7 +7,6 @@
 #ifndef _CXIP_NIC_H_
 #define _CXIP_NIC_H_
 
-
 /* Forward declarations */
 struct cxip_if;
 

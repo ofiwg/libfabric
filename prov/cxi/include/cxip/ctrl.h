@@ -7,9 +7,8 @@
 #ifndef _CXIP_CTRL_H_
 #define _CXIP_CTRL_H_
 
-
-#include <stdint.h>
 #include <ofi_list.h>
+#include <stdint.h>
 
 /* Forward declarations */
 struct cxip_cmdq;

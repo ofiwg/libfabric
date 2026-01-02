@@ -7,7 +7,6 @@
 #ifndef _CXIP_MSG_HPC_H_
 #define _CXIP_MSG_HPC_H_
 
-
 #include <stddef.h>
 
 /* Forward declarations */

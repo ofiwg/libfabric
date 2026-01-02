@@ -7,10 +7,9 @@
 #ifndef _CXIP_EVTQ_H_
 #define _CXIP_EVTQ_H_
 
-
-#include <stddef.h>
-#include <stdbool.h>
 #include <ofi_list.h>
+#include <stdbool.h>
+#include <stddef.h>
 
 /* Forward declarations */
 struct cxip_cq;
@@ -53,15 +52,15 @@ void cxip_evtq_fini(struct cxip_evtq *eq);
 
 bool cxip_evtq_saturated(struct cxip_evtq *evtq);
 
-int cxip_evtq_req_cancel(struct cxip_evtq *evtq, void *req_ctx,
-			 void *op_ctx, bool match);
+int cxip_evtq_req_cancel(struct cxip_evtq *evtq, void *req_ctx, void *op_ctx,
+			 bool match);
 
 void cxip_evtq_req_discard(struct cxip_evtq *evtq, void *req_ctx);
 
 void cxip_evtq_flush_trig_reqs(struct cxip_evtq *evtq);
 
-struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq,
-				     int remap, void *req_ctx);
+struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq, int remap,
+				     void *req_ctx);
 
 void cxip_evtq_req_free(struct cxip_req *req);
 
