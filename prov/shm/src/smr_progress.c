@@ -218,7 +218,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 		if (resp->status == SMR_STATUS_BUSY)
 			break;
 
-		pending = (struct smr_tx_entry *) resp->msg_id;
+		pending = (struct smr_tx_entry *)(uintptr_t) resp->msg_id;
 		if (smr_progress_resp_entry(ep, resp, pending, &resp->status))
 			break;
 
@@ -1059,7 +1059,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd,
 		if (ret)
 			break;
 
-		iov[iov_count].iov_base = (void *) rma_cmd->rma.rma_iov[iov_count].addr;
+		iov[iov_count].iov_base = (void *)(uintptr_t) rma_cmd->rma.rma_iov[iov_count].addr;
 		iov[iov_count].iov_len = rma_cmd->rma.rma_iov[iov_count].len;
 	}
 	ofi_genlock_unlock(&domain->util_domain.lock);
@@ -1110,7 +1110,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd,
 				smr_rx_cq_flags(0, cmd->msg.hdr.op_flags),
 				0, -err);
 	} else {
-		ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
+		ret = smr_complete_rx(ep, (void *)(uintptr_t) cmd->msg.hdr.msg_id,
 				cmd->msg.hdr.op, smr_rx_cq_flags(0,
 				cmd->msg.hdr.op_flags), total_len,
 				iov_count ? iov[0].iov_base : NULL,
@@ -1153,7 +1153,7 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd,
 		if (ret)
 			break;
 
-		ioc[ioc_count].addr = (void *) rma_cmd->rma.rma_ioc[ioc_count].addr;
+		ioc[ioc_count].addr = (void *)(uintptr_t) rma_cmd->rma.rma_ioc[ioc_count].addr;
 		ioc[ioc_count].count = rma_cmd->rma.rma_ioc[ioc_count].count;
 	}
 	ofi_genlock_unlock(&domain->util_domain.lock);
