@@ -13,10 +13,29 @@
 
 /* Forward declarations */
 struct cxip_domain;
+struct cxip_evtq;
 struct cxip_req;
 
 /* Macros */
 #define CXIP_CQ_DEF_SZ 131072U
+#define CXIP_CQ_BATCH_MAX 64
+#define CXIP_CQ_BATCH_DEFAULT 32
+
+/*
+ * Completion batch entry - holds data needed for deferred CQ write.
+ * Used to batch multiple completions and write them with a single
+ * lock acquisition.
+ */
+struct cxip_cq_batch_entry {
+	struct cxip_cq *cq;
+	void *context;
+	uint64_t flags;
+	size_t data_len;
+	void *buf;
+	uint64_t data;
+	uint64_t tag;
+	fi_addr_t src_addr;
+};
 
 /* Type definitions */
 struct cxip_cq_eq {
@@ -81,5 +100,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 
 void cxip_cq_flush_trig_reqs(struct cxip_cq *cq);
+
+void cxip_cq_batch_flush(struct cxip_evtq *evtq);
 
 #endif /* _CXIP_CQ_H_ */

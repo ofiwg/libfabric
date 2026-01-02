@@ -25,12 +25,122 @@
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_CQ, __VA_ARGS__)
 
 /*
+ * cxip_cq_batch_add() - Add a completion to the batch.
+ *
+ * Returns true if the batch is now full and should be flushed.
+ */
+static inline bool cxip_cq_batch_add(struct cxip_evtq *evtq,
+				     struct cxip_cq *cq, void *context,
+				     uint64_t flags, size_t data_len,
+				     void *buf, uint64_t data, uint64_t tag,
+				     fi_addr_t src_addr)
+{
+	struct cxip_cq_batch_entry *entry;
+
+	entry = &evtq->cq_batch[evtq->cq_batch_count++];
+	entry->cq = cq;
+	entry->context = context;
+	entry->flags = flags;
+	entry->data_len = data_len;
+	entry->buf = buf;
+	entry->data = data;
+	entry->tag = tag;
+	entry->src_addr = src_addr;
+
+	return evtq->cq_batch_count >= evtq->cq_batch_size;
+}
+
+/*
+ * cxip_cq_batch_flush() - Flush all batched completions to their CQs.
+ *
+ * Writes all entries in the batch to the CQ, grouping by target CQ to
+ * minimize lock acquisitions. Called at end of progress or when batch is full.
+ */
+void cxip_cq_batch_flush(struct cxip_evtq *evtq)
+{
+	struct cxip_cq *current_cq = NULL;
+	struct util_cq *util_cq;
+	struct cxip_cq_batch_entry *entry;
+	unsigned int i;
+	unsigned int written = 0;
+
+	if (evtq->cq_batch_count == 0)
+		return;
+
+	for (i = 0; i < evtq->cq_batch_count; i++) {
+		entry = &evtq->cq_batch[i];
+
+		/* Switch CQ if needed - acquire lock for new CQ */
+		if (entry->cq != current_cq) {
+			if (current_cq) {
+				ofi_genlock_unlock(&current_cq->util_cq.cq_lock);
+				if (written > 0 && current_cq->util_cq.wait)
+					current_cq->util_cq.wait->signal(
+						current_cq->util_cq.wait);
+				written = 0;
+			}
+			current_cq = entry->cq;
+			ofi_genlock_lock(&current_cq->util_cq.cq_lock);
+		}
+
+		util_cq = &current_cq->util_cq;
+
+		/* Write entry to CQ circular buffer */
+		if (ofi_cirque_freecnt(util_cq->cirq) > 1) {
+			if (util_cq->src) {
+				ofi_cq_write_src_entry(util_cq, entry->context,
+						       entry->flags,
+						       entry->data_len,
+						       entry->buf, entry->data,
+						       entry->tag,
+						       entry->src_addr);
+			} else {
+				ofi_cq_write_entry(util_cq, entry->context,
+						   entry->flags,
+						   entry->data_len, entry->buf,
+						   entry->data, entry->tag);
+			}
+		} else {
+			ofi_cq_write_overflow(util_cq, entry->context,
+					      entry->flags, entry->data_len,
+					      entry->buf, entry->data,
+					      entry->tag, entry->src_addr);
+		}
+		written++;
+	}
+
+	/* Unlock final CQ and signal if we wrote entries */
+	if (current_cq) {
+		ofi_genlock_unlock(&current_cq->util_cq.cq_lock);
+		if (written > 0 && current_cq->util_cq.wait)
+			current_cq->util_cq.wait->signal(current_cq->util_cq.wait);
+	}
+
+	evtq->cq_batch_count = 0;
+}
+
+/*
  * cxip_cq_req_complete() - Generate a completion event for the request.
+ *
+ * If batching is active on this evtq, the completion is added to the batch
+ * instead of being written immediately.
  */
 int cxip_cq_req_complete(struct cxip_req *req)
 {
 	if (req->discard) {
 		CXIP_DBG("Event discarded: %p\n", req);
+		return FI_SUCCESS;
+	}
+
+	/* If batching is active, add to batch instead of immediate write */
+	if (req->evtq && req->evtq->cq_batching_active) {
+		if (cxip_cq_batch_add(req->evtq, req->cq,
+				      (void *)req->context, req->flags,
+				      req->data_len, (void *)req->buf,
+				      req->data, req->tag, FI_ADDR_NOTAVAIL)) {
+			/* Batch is full, flush it */
+			cxip_cq_batch_flush(req->evtq);
+		}
 		return FI_SUCCESS;
 	}
 
@@ -40,13 +150,28 @@ int cxip_cq_req_complete(struct cxip_req *req)
 }
 
 /*
- * cxip_cq_req_complete() - Generate a completion event with source address for
- * the request.
+ * cxip_cq_req_complete_addr() - Generate a completion event with source address
+ * for the request.
+ *
+ * If batching is active on this evtq, the completion is added to the batch
+ * instead of being written immediately.
  */
 int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src)
 {
 	if (req->discard) {
 		CXIP_DBG("Event discarded: %p\n", req);
+		return FI_SUCCESS;
+	}
+
+	/* If batching is active, add to batch instead of immediate write */
+	if (req->evtq && req->evtq->cq_batching_active) {
+		if (cxip_cq_batch_add(req->evtq, req->cq,
+				      (void *)req->context, req->flags,
+				      req->data_len, (void *)req->buf,
+				      req->data, req->tag, src)) {
+			/* Batch is full, flush it */
+			cxip_cq_batch_flush(req->evtq);
+		}
 		return FI_SUCCESS;
 	}
 
@@ -69,6 +194,9 @@ int proverr2errno(int err)
 
 /*
  * cxip_cq_req_error() - Generate an error event for the request.
+ *
+ * Flushes any batched completions first to preserve ordering, then
+ * writes the error immediately.
  */
 int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 		      int err, int prov_errno, void *err_data,
@@ -80,6 +208,10 @@ int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 		CXIP_DBG("Event discarded: %p\n", req);
 		return FI_SUCCESS;
 	}
+
+	/* Flush any batched completions to preserve ordering */
+	if (req->evtq && req->evtq->cq_batching_active)
+		cxip_cq_batch_flush(req->evtq);
 
 	err_entry.err = err;
 	err_entry.olen = olen;

@@ -61,6 +61,7 @@ struct cxip_environment {
 	size_t default_vni;
 
 	size_t eq_ack_batch_size;
+	size_t cq_batch_size;
 	int fc_retry_usec_delay;
 	int cntr_spin_before_yield;
 	size_t ctrl_rx_eq_max_size;

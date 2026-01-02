@@ -638,6 +638,7 @@ struct cxip_environment cxip_env = {
 	.cq_policy = CXI_CQ_UPDATE_LOW_FREQ_EMPTY,
 	.default_vni = 10,
 	.eq_ack_batch_size = 32,
+	.cq_batch_size = CXIP_CQ_BATCH_DEFAULT,
 	.req_buf_size = CXIP_REQ_BUF_SIZE,
 	.req_buf_min_posted = CXIP_REQ_BUF_MIN_POSTED,
 	.req_buf_max_cached = CXIP_REQ_BUF_MAX_CACHED,
@@ -1021,6 +1022,16 @@ static void cxip_env_init(void)
 
 	if (!cxip_env.eq_ack_batch_size)
 		cxip_env.eq_ack_batch_size = 1;
+
+	fi_param_define(&cxip_prov, "cq_batch_size", FI_PARAM_SIZE_T,
+			"Number of CQ completions to batch before writing to CQ (1 disables batching, max 64)");
+	fi_param_get_size_t(&cxip_prov, "cq_batch_size",
+			    &cxip_env.cq_batch_size);
+
+	if (!cxip_env.cq_batch_size)
+		cxip_env.cq_batch_size = 1;
+	if (cxip_env.cq_batch_size > CXIP_CQ_BATCH_MAX)
+		cxip_env.cq_batch_size = CXIP_CQ_BATCH_MAX;
 
 	fi_param_define(&cxip_prov, "msg_lossless", FI_PARAM_BOOL,
 			"Enable/Disable lossless message matching.");

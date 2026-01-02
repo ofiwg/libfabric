@@ -359,6 +359,11 @@ static struct cxip_req *cxip_evtq_event_req(struct cxip_evtq *evtq,
  * cxip_evtq_progress() - Progress the CXI hardware EQ specified
  *
  * Caller must hold ep_obj->lock.
+ *
+ * CQ completion batching: When enabled, completions are collected in a batch
+ * and written to the CQ with a single lock acquisition at the end of progress
+ * or when the batch is full. This reduces lock contention under high event
+ * rates.
  */
 void cxip_evtq_progress(struct cxip_evtq *evtq, bool internal)
 {
@@ -384,12 +389,18 @@ void cxip_evtq_progress(struct cxip_evtq *evtq, bool internal)
 		evtq->unacked_events = 0;
 	}
 
+	/* Enable CQ completion batching for this progress call */
+	evtq->cq_batching_active = true;
+	evtq->cq_batch_count = 0;
+
 	while ((event = cxi_eq_peek_event(evtq->eq))) {
 
 		/* State change events can be caused due to unacked events. When
 		 * a state change event occurs, always ack EQ.
 		 */
 		if (event->hdr.event_type == C_EVENT_STATE_CHANGE) {
+			/* Flush batch before state change handling */
+			cxip_cq_batch_flush(evtq);
 			cxi_eq_ack_events(evtq->eq);
 			evtq->unacked_events = 0;
 			cxip_pte_state_change(evtq->cq->domain->iface, event);
@@ -398,8 +409,11 @@ void cxip_evtq_progress(struct cxip_evtq *evtq, bool internal)
 			req = cxip_evtq_event_req(evtq, event);
 			if (req) {
 				ret = req->cb(req, event);
-				if (ret != FI_SUCCESS)
+				if (ret != FI_SUCCESS) {
+					/* Flush batch before breaking */
+					cxip_cq_batch_flush(evtq);
 					break;
+				}
 			}
 		}
 
@@ -410,7 +424,15 @@ void cxip_evtq_progress(struct cxip_evtq *evtq, bool internal)
 			cxi_eq_ack_events(evtq->eq);
 			evtq->unacked_events = 0;
 		}
+
+		/* Flush CQ batch if it has reached the configured size */
+		if (evtq->cq_batch_count >= evtq->cq_batch_size)
+			cxip_cq_batch_flush(evtq);
 	}
+
+	/* Final flush at end of progress and disable batching */
+	cxip_cq_batch_flush(evtq);
+	evtq->cq_batching_active = false;
 
 	if (cxi_eq_get_drops(evtq->eq)) {
 		CXIP_WARN("EQ %d dropped event, rsvd slots %u, free slots %u\n",
@@ -581,6 +603,11 @@ mmap_success:
 	/* Point back to the CQ bound to the TX or RX context */
 	evtq->cq = cq;
 	evtq->ack_batch_size = cq->ack_batch_size;
+
+	/* Initialize CQ completion batching state */
+	evtq->cq_batch_size = cxip_env.cq_batch_size;
+	evtq->cq_batch_count = 0;
+	evtq->cq_batching_active = false;
 
 	return FI_SUCCESS;
 

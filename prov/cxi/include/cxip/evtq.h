@@ -37,6 +37,16 @@ struct cxip_evtq {
 	struct ofi_bufpool *req_pool;
 	struct indexer req_table;
 	struct dlist_entry req_list;
+
+	/* CQ completion batching state.
+	 * When cq_batching_active is true, completions are added to
+	 * the batch array instead of being written immediately.
+	 * The batch is flushed at end of progress or when full.
+	 */
+	unsigned int cq_batch_size;
+	unsigned int cq_batch_count;
+	bool cq_batching_active;
+	struct cxip_cq_batch_entry cq_batch[CXIP_CQ_BATCH_MAX];
 };
 
 struct def_event_ht {
