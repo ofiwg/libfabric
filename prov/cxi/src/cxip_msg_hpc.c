@@ -112,7 +112,7 @@ match_put_event(struct cxip_rxc_hpc *rxc, struct cxip_req *req,
 	/* Not found, add mapping to hash bucket */
 	*matched = false;
 
-	def_ev = calloc(1, sizeof(*def_ev));
+	def_ev = ofi_buf_alloc(rxc->def_ev_pool);
 	if (!def_ev) {
 		RXC_WARN(rxc, "Failed allocate to memory\n");
 		return NULL;
@@ -138,7 +138,7 @@ static void free_put_event(struct cxip_rxc_hpc *rxc,
 			   struct cxip_deferred_event *def_ev)
 {
 	dlist_remove(&def_ev->rxc_entry);
-	free(def_ev);
+	ofi_buf_free(def_ev);
 }
 
 /*
@@ -3827,6 +3827,13 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 {
 	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
 						base);
+	struct ofi_bufpool_attr def_ev_pool_attr = {
+		.size = sizeof(struct cxip_deferred_event),
+		.alignment = 8,
+		.chunk_cnt = 64,
+		.flags = OFI_BUFPOOL_NO_TRACK,
+	};
+	int ret;
 	int i;
 
 	assert(rxc->base.protocol == FI_PROTO_CXI);
@@ -3836,6 +3843,12 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 
 	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
 		dlist_init(&rxc->deferred_events.bh[i]);
+
+	ret = ofi_bufpool_create_attr(&def_ev_pool_attr, &rxc->def_ev_pool);
+	if (ret) {
+		CXIP_WARN("Failed to create def_ev_pool: %d\n", ret);
+		abort();
+	}
 
 	dlist_init(&rxc->fc_drops);
 	dlist_init(&rxc->sw_ux_list);
@@ -3848,9 +3861,13 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 					cxip_env.cacheline_size - 1 : 0;
 }
 
-static void cxip_rxc_hpc_fini_struct(struct cxip_rxc *rxc)
+static void cxip_rxc_hpc_fini_struct(struct cxip_rxc *rxc_base)
 {
-	/* place holder */
+	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
+						base);
+
+	if (rxc->def_ev_pool)
+		ofi_bufpool_destroy(rxc->def_ev_pool);
 }
 
 static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)
