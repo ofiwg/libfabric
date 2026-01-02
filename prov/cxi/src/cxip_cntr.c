@@ -779,7 +779,6 @@ static int cxip_cntr_close(struct fid *fid)
 	}
 
 	ofi_genlock_destroy(&cntr->lock);
-	ofi_genlock_destroy(&cntr->progress_count_lock);
 
 	cxip_domain_remove_cntr(cntr->domain, cntr);
 
@@ -934,16 +933,15 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		memcpy(&_cntr->attr, attr, sizeof(cxip_cntr_attr));
 
 	ofi_atomic_initialize32(&_cntr->ref, 0);
+	ofi_atomic_initialize32(&_cntr->progress_count, 0);
 	dlist_init(&_cntr->ctx_list);
 
-	/* Allow FI_THREAD_DOMAIN optimizaiton */
+	/* Allow FI_THREAD_DOMAIN optimization */
 	if (dom->util_domain.threading == FI_THREAD_DOMAIN ||
 	    dom->util_domain.threading == FI_THREAD_COMPLETION) {
 		ofi_genlock_init(&_cntr->lock, OFI_LOCK_NONE);
-		ofi_genlock_init(&_cntr->progress_count_lock, OFI_LOCK_NONE);
 	} else {
 		ofi_genlock_init(&_cntr->lock, OFI_LOCK_SPINLOCK);
-		ofi_genlock_init(&_cntr->progress_count_lock, OFI_LOCK_SPINLOCK);
 	}
 
 	_cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
