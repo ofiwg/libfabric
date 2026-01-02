@@ -248,4 +248,6 @@ int efa_rdm_pke_get_available_copy_methods(struct efa_rdm_ep *ep,
 					   bool *restrict cuda_memcpy_available,
 					   bool *restrict gdrcopy_available);
 
+struct efa_rdm_pke *efa_rdm_pke_get_ooo_pke(struct efa_rdm_pke *pkt_entry);
+
 #endif
