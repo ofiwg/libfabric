@@ -34,8 +34,10 @@ bool cxip_evtq_saturated(struct cxip_evtq *evtq)
 	 */
 	if (evtq->eq->status->timestamp_sec >
 	    evtq->prev_eq_status.timestamp_sec ||
-	    evtq->eq->status->timestamp_ns >
-	    evtq->prev_eq_status.timestamp_ns) {
+	    (evtq->eq->status->timestamp_sec ==
+	     evtq->prev_eq_status.timestamp_sec &&
+	     evtq->eq->status->timestamp_ns >
+	     evtq->prev_eq_status.timestamp_ns)) {
 		evtq->eq_saturated = true;
 		return true;
 	}
