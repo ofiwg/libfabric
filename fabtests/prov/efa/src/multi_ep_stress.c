@@ -751,7 +751,9 @@ static void *run_sender_worker(void *arg)
 
 	cleanup:
 		// Cleanup endpoint before next cycle
+		pthread_mutex_lock(&ctx->status.mutex);
 		cleanup_endpoint(&ctx->common);
+		pthread_mutex_unlock(&ctx->status.mutex);
 
 		if (ret) {
 			goto out;
