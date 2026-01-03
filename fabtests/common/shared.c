@@ -276,7 +276,7 @@ static inline int ft_rma_write_target_allowed(uint64_t caps)
 uint64_t ft_info_to_mr_access(struct fi_info *info)
 {
 	uint64_t mr_access = 0;
-	if (info->domain_attr->mr_mode & FI_MR_LOCAL) {
+	if (ft_need_mr_reg(info)) {
 		if (info->caps & (FI_MSG | FI_TAGGED)) {
 			if (info->caps & FT_MSG_MR_ACCESS) {
 				mr_access |= info->caps & FT_MSG_MR_ACCESS;
