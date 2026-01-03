@@ -547,7 +547,7 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 			completed++;
 			continue;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			struct fi_cq_err_entry err_entry;
+			struct fi_cq_err_entry err_entry = {0};
 			if (topts.shared_cq)
 				pthread_mutex_lock(&shared_cq_lock);
 			fi_cq_readerr(cq, &err_entry, 0);
@@ -816,6 +816,14 @@ static int notify_endpoint_update(struct receiver_context *ctx)
 					// Interrupted by signal, retry
 					// immediately
 					continue;
+				} else if (errno == ECONNRESET || errno == EPIPE) {
+					// Connection reset by peer - sender exited early
+					// This is allowed, just skip this sender
+					if (topts.verbose)
+						printf("Receiver %d: Sender %d disconnected\n",
+						       ctx->worker_id, i);
+					ret = 0;
+					break;
 				} else {
 					// Real error
 					fprintf(stderr,
@@ -1596,7 +1604,6 @@ int main(int argc, char **argv)
 				      FI_MR_VIRT_ADDR | FI_MR_PROV_KEY |
 				      FI_MR_HMEM;
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->fabric_attr->prov_name = strdup("efa");
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];

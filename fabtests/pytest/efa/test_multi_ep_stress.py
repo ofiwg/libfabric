@@ -56,3 +56,9 @@ def test_multi_ep_stress_transient_client(cmdline_args):
     cmd = f"fi_efa_multi_ep_stress --sender-addr {cmdline_args.client_id} --sender-ep-cycles 5"
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
+
+@pytest.mark.unstable
+def test_multi_ep_stress_multi_and_transient_sender_receiver(cmdline_args):
+    cmd = f"fi_efa_multi_ep_stress --sender-addr {cmdline_args.client_id} --sender-workers 2 --receiver-workers 4 --sender-ep-cycle 10 --receiver-ep-cycle 20"
+    test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
+    test.run()
