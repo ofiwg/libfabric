@@ -816,6 +816,14 @@ static int notify_endpoint_update(struct receiver_context *ctx)
 					// Interrupted by signal, retry
 					// immediately
 					continue;
+				} else if (errno == ECONNRESET || errno == EPIPE) {
+					// Connection reset by peer - sender exited early
+					// This is allowed, just skip this sender
+					if (topts.verbose)
+						printf("Receiver %d: Sender %d disconnected\n",
+						       ctx->worker_id, i);
+					ret = 0;
+					break;
 				} else {
 					// Real error
 					fprintf(stderr,
