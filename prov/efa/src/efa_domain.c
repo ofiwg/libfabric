@@ -201,8 +201,8 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free;
 	}
 
-	efa_domain->ibv_mr_reg_ct = 0;
-	efa_domain->ibv_mr_reg_sz = 0;
+	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_ct, 0);
+	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_sz, 0);
 
 	efa_domain->ah_map = NULL;
 

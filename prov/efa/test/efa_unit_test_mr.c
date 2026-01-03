@@ -8,8 +8,8 @@ static void test_efa_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 {
 	struct efa_mr *efa_mr;
 
-	assert_int_equal(efa_domain->ibv_mr_reg_ct, mr_reg_count);
-	assert_int_equal(efa_domain->ibv_mr_reg_sz, mr_reg_size);
+	assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct), (int64_t)mr_reg_count);
+	assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz), (int64_t)mr_reg_size);
 
 	if (mr) {
 		efa_mr = container_of(mr, struct efa_mr, mr_fid);
@@ -39,8 +39,8 @@ void test_efa_rdm_mr_reg_host_memory(struct efa_resource **state)
 				  util_domain.domain_fid);
 
 	/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
-	baseline_ct = efa_domain->ibv_mr_reg_ct;
-	baseline_sz = efa_domain->ibv_mr_reg_sz;
+	baseline_ct = ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct);
+	baseline_sz = ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -77,8 +77,8 @@ void test_efa_rdm_mr_reg_host_memory_no_mr_local(struct efa_resource **state)
 				  util_domain.domain_fid);
 
 	/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
-	baseline_ct = efa_domain->ibv_mr_reg_ct;
-	baseline_sz = efa_domain->ibv_mr_reg_sz;
+	baseline_ct = ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct);
+	baseline_sz = ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -110,8 +110,8 @@ void test_efa_rdm_mr_reg_host_memory_overlapping_buffers(struct efa_resource **s
 				  util_domain.domain_fid);
 
 	/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
-	baseline_ct = efa_domain->ibv_mr_reg_ct;
-	baseline_sz = efa_domain->ibv_mr_reg_sz;
+	baseline_ct = ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct);
+	baseline_sz = ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -162,8 +162,8 @@ void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
 		efa_domain = container_of(resource->domain, struct efa_domain,
 					  util_domain.domain_fid);
 		/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
-		baseline_ct = efa_domain->ibv_mr_reg_ct;
-		baseline_sz = efa_domain->ibv_mr_reg_sz;
+		baseline_ct = ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct);
+		baseline_sz = ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz);
 
 		err = ofi_cudaMalloc(&buf, mr_size);
 		assert_int_equal(err, 0);
@@ -220,8 +220,8 @@ void test_efa_direct_mr_reg_no_gdrcopy(struct efa_resource **state)
 		efa_domain = container_of(resource->domain, struct efa_domain,
 					  util_domain.domain_fid);
 		/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
-		baseline_ct = efa_domain->ibv_mr_reg_ct;
-		baseline_sz = efa_domain->ibv_mr_reg_sz;
+		baseline_ct = ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct);
+		baseline_sz = ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz);
 
 		err = ofi_cudaMalloc(&buf, mr_size);
 		assert_int_equal(err, 0);
