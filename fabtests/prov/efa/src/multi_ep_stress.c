@@ -3,6 +3,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -816,6 +817,14 @@ static int notify_endpoint_update(struct receiver_context *ctx)
 					// Interrupted by signal, retry
 					// immediately
 					continue;
+				} else if (errno == ECONNRESET || errno == EPIPE) {
+					// Connection reset by peer - sender exited early
+					// This is allowed, just skip this sender
+					if (topts.verbose)
+						printf("Receiver %d: Sender %d disconnected\n",
+						       ctx->worker_id, i);
+					ret = 0;
+					break;
 				} else {
 					// Real error
 					fprintf(stderr,
@@ -1575,6 +1584,9 @@ static int parse_test_opts(int argc, char **argv)
 int main(int argc, char **argv)
 {
 	int ret;
+
+	// Ignore SIGPIPE to prevent process termination when senders disconnect
+	signal(SIGPIPE, SIG_IGN);
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
