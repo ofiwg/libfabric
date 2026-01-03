@@ -1596,7 +1596,6 @@ int main(int argc, char **argv)
 				      FI_MR_VIRT_ADDR | FI_MR_PROV_KEY |
 				      FI_MR_HMEM;
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->fabric_attr->prov_name = strdup("efa");
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
