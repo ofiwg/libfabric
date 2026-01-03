@@ -162,7 +162,18 @@ static int cxip_req_buf_process_ux(struct cxip_ptelist_buf *buf,
 				else
 					owner_srx->owner_ops->queue_msg(ux->rx_entry);
 			} else {
+				union cxip_match_bits ux_mb;
+
 				dlist_insert_tail(&ux->rxc_entry, &rxc->sw_ux_list);
+
+				/* Insert into bloom filter for accelerated matching */
+				if (rxc->sw_ux_bloom_enabled) {
+					ux_mb.raw = ux->put_ev.tgt_long.match_bits;
+					ofi_bloom_insert(&rxc->sw_ux_bloom,
+						cxip_ux_bloom_hash(ux_mb.tagged,
+								   ux_mb.tag));
+				}
+
 				RXC_DBG(buf->rxc, "rbuf=%p ux=%p sw_ux_list_len=%u\n",
 					buf, ux, buf->rxc->sw_ux_list_len);
 			}

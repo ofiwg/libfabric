@@ -180,6 +180,25 @@ bool tag_match(uint64_t init_mb, uint64_t mb, uint64_t ib);
 
 bool init_match(struct cxip_rxc *rxc, uint32_t init, uint32_t match_id);
 
+/*
+ * cxip_ux_bloom_hash() - Compute bloom filter hash for UX message.
+ *
+ * Creates a hash value from the tag and tagged flag. This is used
+ * for bloom filter insert/lookup to accelerate UX matching.
+ *
+ * The hash combines:
+ * - tagged flag (1 bit) in high position
+ * - tag value (48 bits)
+ *
+ * Note: We don't include initiator because receives often use
+ * FI_ADDR_UNSPEC. The bloom filter is just for quick rejection.
+ */
+static inline uint64_t cxip_ux_bloom_hash(bool tagged, uint64_t tag)
+{
+	/* Put tagged flag in bit 63, tag in bits 0-47 */
+	return ((uint64_t)tagged << 63) | (tag & CXIP_TAG_MASK);
+}
+
 uint32_t cxip_msg_match_id(struct cxip_txc *txc);
 
 void cxip_report_send_completion(struct cxip_req *req, bool sw_cntr);

@@ -2188,8 +2188,18 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		if (owner_srx) {
 			RXC_FATAL(rxc, "Software onloading is currently not supported in peer mode\n");
 		} else {
+			union cxip_match_bits ux_mb;
+
 			dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
 			rxc->sw_ux_list_len++;
+
+			/* Insert into bloom filter for accelerated matching */
+			if (rxc->sw_ux_bloom_enabled) {
+				ux_mb.raw = ux_send->put_ev.tgt_long.match_bits;
+				ofi_bloom_insert(&rxc->sw_ux_bloom,
+					cxip_ux_bloom_hash(ux_mb.tagged,
+							   ux_mb.tag));
+			}
 		}
 
 		RXC_DBG(rxc, "Onloaded Send: %p\n", ux_send);
@@ -2647,6 +2657,15 @@ static int cxip_claim_onload_cb(struct cxip_req *req,
 	 */
 	dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
 	rxc->sw_ux_list_len++;
+
+	/* Insert into bloom filter for accelerated matching */
+	if (rxc->sw_ux_bloom_enabled) {
+		union cxip_match_bits ux_mb;
+
+		ux_mb.raw = ux_send->put_ev.tgt_long.match_bits;
+		ofi_bloom_insert(&rxc->sw_ux_bloom,
+				 cxip_ux_bloom_hash(ux_mb.tagged, ux_mb.tag));
+	}
 
 	RXC_DBG(rxc, "FI_CLAIM Onload req: %p ux_send %p\n", req, ux_send);
 	cxip_rxc_hpc_recv_req_tgt_event(req, &ux_send->put_ev);
@@ -3316,6 +3335,16 @@ static int cxip_recv_sw_matcher(struct cxip_rxc_hpc *rxc, struct cxip_req *req,
 
 	/* TODO: Manage freeing of UX entries better. */
 	dlist_remove(&ux->rxc_entry);
+
+	/* Remove from bloom filter */
+	if (rxc->sw_ux_bloom_enabled) {
+		union cxip_match_bits ux_mb;
+
+		ux_mb.raw = ux->put_ev.tgt_long.match_bits;
+		ofi_bloom_remove(&rxc->sw_ux_bloom,
+				 cxip_ux_bloom_hash(ux_mb.tagged, ux_mb.tag));
+	}
+
 	if (ux->req && ux->req->type == CXIP_REQ_RBUF) {
 		cxip_req_buf_ux_free(ux);
 		rxc->sw_ux_list_len--;
@@ -3586,6 +3615,19 @@ int cxip_recv_req_sw_matcher(struct cxip_req *req)
 	if (dlist_empty(&rxc->sw_ux_list))
 		return -FI_ENOMSG;
 
+	/* Use bloom filter for quick rejection on exact-match receives.
+	 * For tagged receives with ignore == 0 (no wildcards), the bloom
+	 * filter can definitively say "no match exists" and we skip the
+	 * linear scan. Note: we don't check match_id because receives
+	 * commonly use FI_ADDR_UNSPEC.
+	 */
+	if (rxc->sw_ux_bloom_enabled && req->recv.ignore == 0) {
+		uint64_t hash = cxip_ux_bloom_hash(req->recv.tagged,
+						   req->recv.tag);
+		if (!ofi_bloom_may_contain(&rxc->sw_ux_bloom, hash))
+			return -FI_ENOMSG;
+	}
+
 	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
 				     ux_send, rxc_entry, tmp) {
 		/* Only match against unclaimed UX messages */
@@ -3842,15 +3884,32 @@ static void cxip_rxc_hpc_init_struct(struct cxip_rxc *rxc_base,
 	dlist_init(&rxc->sw_recv_queue);
 	dlist_init(&rxc->sw_pending_ux_list);
 
+	/* Initialize bloom filter for accelerated UX matching */
+	if (cxip_env.ux_bloom_filter_blocks > 0) {
+		if (ofi_bloom_init_sized(&rxc->sw_ux_bloom,
+					 cxip_env.ux_bloom_filter_blocks,
+					 OFI_BLOOM_DEFAULT_BITS_PER_INSERT) == 0)
+			rxc->sw_ux_bloom_enabled = true;
+		else
+			rxc->sw_ux_bloom_enabled = false;
+	} else {
+		rxc->sw_ux_bloom_enabled = false;
+	}
+
 	rxc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 	rxc->drop_count = rxc->base.ep_obj->asic_ver < CASSINI_2_0 ? -1 : 0;
 	rxc->rget_align_mask = cxip_env.rdzv_aligned_sw_rget ?
 					cxip_env.cacheline_size - 1 : 0;
 }
 
-static void cxip_rxc_hpc_fini_struct(struct cxip_rxc *rxc)
+static void cxip_rxc_hpc_fini_struct(struct cxip_rxc *rxc_base)
 {
-	/* place holder */
+	struct cxip_rxc_hpc *rxc = container_of(rxc_base, struct cxip_rxc_hpc,
+						base);
+
+	/* Free bloom filter resources */
+	if (rxc->sw_ux_bloom_enabled)
+		ofi_bloom_fini(&rxc->sw_ux_bloom);
 }
 
 static int cxip_rxc_hpc_msg_init(struct cxip_rxc *rxc_base)

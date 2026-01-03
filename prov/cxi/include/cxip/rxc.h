@@ -8,6 +8,7 @@
 #define _CXIP_RXC_H_
 
 #include <ofi_atom.h>
+#include <ofi_bloom.h>
 #include <ofi_list.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -183,6 +184,23 @@ struct cxip_rxc_hpc {
 	struct dlist_entry replay_queue;
 	struct dlist_entry sw_ux_list;
 	struct dlist_entry sw_pending_ux_list;
+
+	/* Bloom filter for accelerated UX matching.
+	 *
+	 * The bloom filter provides O(1) rejection of recv requests that
+	 * definitely have no matching unexpected message. This avoids
+	 * linear scans through sw_ux_list when there's no match.
+	 *
+	 * We use a single filter that hashes on the 48-bit tag value.
+	 * For exact-match receives (ignore == 0), we query the bloom filter
+	 * first. If it returns false, we know there's no match and skip
+	 * the linear scan.
+	 *
+	 * For wildcard receives (ignore != 0 or match_id == ANY), we fall
+	 * back to linear scan since bloom filters can't handle wildcards.
+	 */
+	struct ofi_bloom sw_ux_bloom;
+	bool sw_ux_bloom_enabled;
 
 	/* Flow control/software state change metrics */
 	int num_fc_eq_full;

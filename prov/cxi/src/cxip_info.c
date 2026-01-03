@@ -650,6 +650,7 @@ struct cxip_environment cxip_env = {
 	.hybrid_recv_preemptive = 0,
 	.hybrid_posted_recv_preemptive = 0,
 	.hybrid_unexpected_msg_preemptive = 0,
+	.ux_bloom_filter_blocks = 64,
 	.fc_retry_usec_delay = 1000,
 	.cntr_spin_before_yield = 1000,
 	.ctrl_rx_eq_max_size = 67108864,
@@ -1032,6 +1033,11 @@ static void cxip_env_init(void)
 		cxip_env.cq_batch_size = 1;
 	if (cxip_env.cq_batch_size > CXIP_CQ_BATCH_MAX)
 		cxip_env.cq_batch_size = CXIP_CQ_BATCH_MAX;
+
+	fi_param_define(&cxip_prov, "ux_bloom_filter_blocks", FI_PARAM_SIZE_T,
+			"Number of 64-byte blocks for UX bloom filter (0 disables, default 64)");
+	fi_param_get_size_t(&cxip_prov, "ux_bloom_filter_blocks",
+			    &cxip_env.ux_bloom_filter_blocks);
 
 	fi_param_define(&cxip_prov, "msg_lossless", FI_PARAM_BOOL,
 			"Enable/Disable lossless message matching.");

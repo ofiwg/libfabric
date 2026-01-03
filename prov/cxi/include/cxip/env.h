@@ -91,6 +91,7 @@ struct cxip_environment {
 	int enable_trig_op_limit;
 	int hybrid_posted_recv_preemptive;
 	int hybrid_unexpected_msg_preemptive;
+	size_t ux_bloom_filter_blocks;
 	size_t mr_cache_events_disable_poll_nsecs;
 	size_t mr_cache_events_disable_le_poll_nsecs;
 	int force_dev_reg_copy;
