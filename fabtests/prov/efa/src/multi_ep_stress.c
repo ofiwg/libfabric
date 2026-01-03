@@ -547,7 +547,7 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 			completed++;
 			continue;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			struct fi_cq_err_entry err_entry;
+			struct fi_cq_err_entry err_entry = {0};
 			if (topts.shared_cq)
 				pthread_mutex_lock(&shared_cq_lock);
 			fi_cq_readerr(cq, &err_entry, 0);
