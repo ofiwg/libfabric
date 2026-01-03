@@ -11,6 +11,7 @@
 #include "ofi_hmem.h"
 #include "ofi_util.h"
 #include "ofi_lock.h"
+#include "ofi_atom.h"
 
 enum efa_domain_info_type {
 	EFA_INFO_RDM,
@@ -35,9 +36,9 @@ struct efa_domain {
 	struct ofi_genlock	srx_lock; /* shared among peer providers */
 	struct efa_ah		*ah_map;
 	/* Total count of ibv memory registrations */
-	size_t ibv_mr_reg_ct;
+	ofi_atomic64_t ibv_mr_reg_ct;
 	/* Total size of memory registrations (in bytes) */
-	size_t ibv_mr_reg_sz;
+	ofi_atomic64_t ibv_mr_reg_sz;
 	/* info_type is used to distinguish between the rdm, dgram and
 	 * efa-direct paths */
 	enum efa_domain_info_type info_type;
