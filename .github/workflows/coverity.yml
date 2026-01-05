@@ -93,7 +93,7 @@ jobs:
             --form email=ofiwg@lists.openfabrics.org \
             --form file=@libfabric.tgz \
             --form version="main" \
-            --form description="`$PWD/install/bin/fi_info -l`" \
+            --form description="`$PWD/install/bin/fi_info --version`" \
             https://scan.coverity.com/builds?project=ofiwg%2Flibfabric
       - name: Upload build logs
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
