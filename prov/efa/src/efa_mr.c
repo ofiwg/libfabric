@@ -252,12 +252,11 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 	int ret = 0;
 	/* TODO
 	 * Since, access is not passed as a parameter to efa_mr_cache_entry_reg,
-	 * for now we will set access to all supported access modes i.e.
-	 * FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE. Once access
+	 * for now we will set access to all supported access modes. Once access
 	 * information is available this can be removed.
 	 * Issue: https://github.com/ofiwg/libfabric/issues/5677
 	 */
-	uint64_t access = FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE;
+	uint64_t access = EFA_MR_SUPPORTED_PERMISSIONS;
 	struct fi_mr_attr attr = {0};
 	struct efa_mr *efa_mr = (struct efa_mr *)entry->data;
 
