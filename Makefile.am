@@ -445,9 +445,6 @@ dummy_man_pages = \
         man/man3/fi_writev.3
 
 windows_files = \
-	Libfabric.Build.Default.props \
-	libfabric.def \
-	libfabric.vcxproj \
 	include/windows \
 	src/windows \
 	prov/verbs/include/windows \
