@@ -525,14 +525,14 @@ static int calculate_worker_distribution(int sender_id, int *num_peers,
 	return 0;
 }
 
-static int wait_for_comp(struct fid_cq *cq, int num_completions)
+static int wait_for_comp(struct fid_cq *cq, int num_completions, int64_t timeout_ns)
 {
 	struct fi_cq_data_entry comp;
 	int ret;
 	int completed = 0;
 	struct timespec a, b;
 
-	if (timeout >= 0)
+	if (timeout_ns >= 0)
 		clock_gettime(CLOCK_MONOTONIC, &a);
 
 	while (completed < num_completions) {
@@ -557,13 +557,14 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 			fprintf(stderr, "CQ read error: %s\n",
 				fi_cq_strerror(cq, err_entry.prov_errno,
 					       err_entry.err_data, NULL, 0));
-		} else if (timeout >= 0) {
+		} else if (timeout_ns >= 0) {
 			clock_gettime(CLOCK_MONOTONIC, &b);
-			if ((b.tv_sec - a.tv_sec) > timeout) {
+			int64_t elapsed_ns = (b.tv_sec - a.tv_sec) * 1000000000L + (b.tv_nsec - a.tv_nsec);
+			if (elapsed_ns > timeout_ns) {
 				fprintf(stderr,
-					"%ds timeout expired. Got %d "
+					"%.3fs timeout expired. Got %d "
 					"completions\n",
-					timeout, completed);
+					timeout_ns / 1000000000.0, completed);
 				return -FI_ENODATA;
 			}
 		}
@@ -730,7 +731,7 @@ static void *run_sender_worker(void *arg)
 			printf("Sender %d EP cycle %d: Waiting for "
 			       "completions\n",
 			       ctx->worker_id, cycle + 1);
-			ret = wait_for_comp(ctx->common.cq, pending_ops);
+			ret = wait_for_comp(ctx->common.cq, pending_ops, (int64_t)timeout * 1000000000L / topts.sender_ep_recycling);
 			if (ret) {
 				fprintf(stderr,
 					"Sender %d: completion failed: %s\n",
@@ -951,7 +952,7 @@ static void *run_receiver_worker(void *arg)
 
 			if (expected_completions > 0) {
 				ret = wait_for_comp(ctx->common.cq,
-						    expected_completions);
+						    expected_completions, (int64_t)timeout * 1000000000L / topts.receiver_ep_recycling);
 				if (ret) {
 					fprintf(stderr,
 						"Receiver %d: Receive "
