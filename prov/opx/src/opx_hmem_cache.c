@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
- * Copyright (C) 2024-2025 Cornelis Networks.
+ * Copyright (C) 2024-2026 Cornelis Networks.
  *
  * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
@@ -89,31 +89,41 @@
 #define OPX_HMEM_CACHE_MAX_SIZE	 134217728
 
 #ifndef NDEBUG
-#define OPX_DEBUG_EXIT(entryp)                                                                                         \
-	do {                                                                                                           \
-		const uint64_t entry_vaddr =                                                                           \
-			entryp ? (uint64_t) (((struct fi_opx_mr *) (entryp)->data)->iov.iov_base) : 0UL;               \
-		const uint64_t entry_length  = entryp ? ((struct fi_opx_mr *) (entryp)->data)->iov.iov_len : 0UL;      \
-		const int32_t  entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;          \
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_DEBUG_EXIT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", \
-		       entryp, entryp ? entryp->data : NULL, (void *) entry_vaddr,                                     \
-		       (void *) (entry_vaddr + entry_length), entry_length, entry_length, entry_use_cnt);              \
+#define OPX_DEBUG_EXIT(entryp)                                                                                            \
+	do {                                                                                                              \
+		struct fi_opx_mr *opx_mr = entryp ? (struct fi_opx_mr *) (entryp)->data : NULL;                           \
+		const uint64_t	  entry_vaddr =                                                                           \
+			   opx_mr ? ((opx_mr->dmabuf.fd == -1) ?                                                          \
+					     (uint64_t) (opx_mr->iov.iov_base) :                                          \
+					     (uint64_t) ((uint8_t *) opx_mr->dmabuf.base_addr + opx_mr->dmabuf.offset)) : \
+				    0UL;                                                                                  \
+		const uint64_t entry_length =                                                                             \
+			opx_mr ? ((opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_len : opx_mr->dmabuf.len) : 0UL;            \
+		const int32_t entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;              \
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_DEBUG_EXIT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n",    \
+		       entryp, entryp ? entryp->data : NULL, (void *) entry_vaddr,                                        \
+		       (void *) (entry_vaddr + entry_length), entry_length, entry_length, entry_use_cnt);                 \
 	} while (0)
 #else
 #define OPX_DEBUG_EXIT(entryp)
 #endif
 
 #ifndef NDEBUG
-#define OPX_DEBUG_ENTRY(entryp)                                                                                   \
-	do {                                                                                                      \
-		const uint64_t entry_vaddr =                                                                      \
-			entryp ? (uint64_t) (((struct fi_opx_mr *) (entryp)->data)->iov.iov_base) : 0UL;          \
-		const uint64_t entry_length  = entryp ? ((struct fi_opx_mr *) (entryp)->data)->iov.iov_len : 0UL; \
-		const int32_t  entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;     \
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,                                                             \
-		       "OPX_DEBUG_ENTRY (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", entryp,                  \
-		       entryp ? entryp->data : NULL, (void *) entry_vaddr, (void *) (entry_vaddr + entry_length), \
-		       entry_length, entry_length, entry_use_cnt);                                                \
+#define OPX_DEBUG_ENTRY(entryp)                                                                                           \
+	do {                                                                                                              \
+		struct fi_opx_mr *opx_mr = entryp ? (struct fi_opx_mr *) (entryp)->data : NULL;                           \
+		const uint64_t	  entry_vaddr =                                                                           \
+			   opx_mr ? ((opx_mr->dmabuf.fd == -1) ?                                                          \
+					     (uint64_t) (opx_mr->iov.iov_base) :                                          \
+					     (uint64_t) ((uint8_t *) opx_mr->dmabuf.base_addr + opx_mr->dmabuf.offset)) : \
+				    0UL;                                                                                  \
+		const uint64_t entry_length =                                                                             \
+			opx_mr ? ((opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_len : opx_mr->dmabuf.len) : 0UL;            \
+		const int32_t entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;              \
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR,                                                                     \
+		       "OPX_DEBUG_ENTRY (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", entryp,                          \
+		       entryp ? entryp->data : NULL, (void *) entry_vaddr, (void *) (entry_vaddr + entry_length),         \
+		       entry_length, entry_length, entry_use_cnt);                                                        \
 	} while (0)
 #else
 #define OPX_DEBUG_ENTRY(entryp)
@@ -445,7 +455,7 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 	opx_mr->mr_fid.key		    = FI_KEY_NOTAVAIL;
 	opx_mr->iov			    = entry->info.iov;
 	opx_mr->attr.mr_iov		    = &opx_mr->iov;
-	opx_mr->dmabuf.fd		    = -1;
+	opx_mr->dmabuf_fd		    = -1;
 	opx_mr->attr.iov_count		    = FI_OPX_IOV_LIMIT;
 	opx_mr->attr.offset		    = 0; // set in the normal path
 	opx_mr->attr.access		    = access;
@@ -516,7 +526,7 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	assert(entry->use_cnt == 0);
 
 	/* Is this region current?  deregister it */
-	assert((opx_mr->iov.iov_len == iov_len) && (opx_mr->iov.iov_base == iov_base));
+	assert(opx_mr->dmabuf_fd != -1 || ((opx_mr->iov.iov_len == iov_len) && (opx_mr->iov.iov_base == iov_base)));
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "ENTRY cache %p, entry %p, data %p, iov_base %p, iov_len %zu\n", cache,
 	       entry, opx_mr, iov_base, iov_len);
 	if (opx_mr->attr.hmem_data) {
