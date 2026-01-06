@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -100,17 +100,16 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 	uint64_t		 hmem_handle;
 	enum fi_hmem_iface	 hmem_iface;
 	if (msg->desc && msg->desc[0]) {
-		hmem_iface	 = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device, &hmem_handle);
-		hmem_info->iface = hmem_iface;
+		hmem_iface		       = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device, &hmem_handle);
+		hmem_info->iface	       = hmem_iface;
+		hmem_info->hmem_dev_reg_handle = hmem_handle;
+		hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
 		if (opx_ep->use_hfisvc && opx_ep->domain->hmem_domain->dmabuf_supported) {
-			hmem_info->dmabuf.opx_mr       = ((struct fi_opx_mr *) msg->desc[0]);
-			hmem_info->hmem_dev_reg_handle = hmem_handle;
-			context->flags		       = flags | FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
+			hmem_info->dmabuf.opx_mr = ((struct fi_opx_mr *) msg->desc[0]);
+			context->flags		 = flags | FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
 		} else {
-			hmem_info->gpu.device	       = hmem_device;
-			hmem_info->hmem_dev_reg_handle = hmem_handle;
-			hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
-			context->flags		       = flags | FI_OPX_CQ_CONTEXT_HMEM;
+			hmem_info->gpu.device = hmem_device;
+			context->flags	      = flags | FI_OPX_CQ_CONTEXT_HMEM;
 		}
 	} else {
 		hmem_iface		  = FI_HMEM_SYSTEM;
