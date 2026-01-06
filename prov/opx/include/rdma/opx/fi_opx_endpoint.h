@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1389,9 +1389,13 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			uint64_t	   hmem_handle;
 			if (is_hmem) { /* Branch should compile out */
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				rbuf_device			   = hmem_info->gpu.device;
 				rbuf_iface			   = hmem_info->iface;
 				hmem_handle			   = hmem_info->hmem_dev_reg_handle;
+				if (is_hmem & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+					rbuf_device = hmem_info->dmabuf.opx_mr->attr.device.reserved;
+				} else {
+					rbuf_device = hmem_info->gpu.device;
+				}
 				FI_OPX_DEBUG_COUNTERS_INC_COND(
 					is_shm,
 					opx_ep->debug_counters.hmem.intranode
@@ -1566,9 +1570,14 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		} else if (OFI_LIKELY(send_len <= recv_len)) {
 			if (is_hmem && send_len) {
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
-						 hmem_info->hmem_dev_reg_handle, recv_buf, hdr->inject.app_data_u8,
-						 send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				uint64_t		 device;
+				if (is_hmem & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+					device = hmem_info->dmabuf.opx_mr->attr.device.reserved;
+				} else {
+					device = hmem_info->gpu.device;
+				}
+				opx_copy_to_hmem(hmem_info->iface, device, hmem_info->hmem_dev_reg_handle, recv_buf,
+						 hdr->inject.app_data_u8, send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(
 					is_shm,
 					opx_ep->debug_counters.hmem.intranode
@@ -1760,9 +1769,14 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 
 			if (is_hmem) {
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
-						 hmem_info->hmem_dev_reg_handle, context->buf, opx_ep->hmem_copy_buf,
-						 send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				uint64_t		 device;
+				if (is_hmem & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+					device = hmem_info->dmabuf.opx_mr->attr.device.reserved;
+				} else {
+					device = hmem_info->gpu.device;
+				}
+				opx_copy_to_hmem(hmem_info->iface, device, hmem_info->hmem_dev_reg_handle, context->buf,
+						 opx_ep->hmem_copy_buf, send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(
 					is_shm,
 					opx_ep->debug_counters.hmem.intranode
@@ -1880,9 +1894,15 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 
 			if (is_hmem) {
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
-						 hmem_info->hmem_dev_reg_handle, recv_buf, opx_ep->hmem_copy_buf,
-						 packet_payload_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				uint64_t		 device;
+				if (is_hmem & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+					device = hmem_info->dmabuf.opx_mr->attr.device.reserved;
+				} else {
+					device = hmem_info->gpu.device;
+				}
+				opx_copy_to_hmem(hmem_info->iface, device, hmem_info->hmem_dev_reg_handle, recv_buf,
+						 opx_ep->hmem_copy_buf, packet_payload_len,
+						 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 
 				/* MP Eager sends are never intranode */
 				FI_OPX_DEBUG_COUNTERS_INC(
@@ -2008,9 +2028,14 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			if (is_hmem) {
 				recv_buf = (void *) ((uint8_t *) context->buf + hdr->mp_eager_nth.payload_offset);
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
-						 hmem_info->hmem_dev_reg_handle, recv_buf, opx_ep->hmem_copy_buf,
-						 send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				uint64_t		 device;
+				if (is_hmem & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+					device = hmem_info->dmabuf.opx_mr->attr.device.reserved;
+				} else {
+					device = hmem_info->gpu.device;
+				}
+				opx_copy_to_hmem(hmem_info->iface, device, hmem_info->hmem_dev_reg_handle, recv_buf,
+						 opx_ep->hmem_copy_buf, send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 			}
 			/* fi_opx_hfi1_dump_packet_hdr(hdr, __func__, __LINE__);*/
 
@@ -2325,11 +2350,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 #endif
 		const uint64_t *sbuf_qws = (uint64_t *) &payload->byte[0];
 #ifdef OPX_HMEM
-		if (target_context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)) {
+		if (target_context->flags & FI_OPX_CQ_CONTEXT_HMEM) {
 			struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) target_context->hmem_info_qws;
 			assert(hmem_info->iface > FI_HMEM_SYSTEM);
 			opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device, hmem_info->hmem_dev_reg_handle,
 					 rbuf_qws, sbuf_qws, bytes, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+		} else if (target_context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+			struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) target_context->hmem_info_qws;
+			assert(hmem_info->iface > FI_HMEM_SYSTEM);
+			opx_copy_to_hmem(hmem_info->iface, hmem_info->dmabuf.opx_mr->attr.device.reserved,
+					 hmem_info->hmem_dev_reg_handle, rbuf_qws, sbuf_qws, bytes,
+					 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 		} else
 #endif
 		{
@@ -2399,11 +2430,18 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "TID REPLAY rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_context->byte_counter %p\n",
 			       (void *) rbuf_qws, (void *) sbuf_qws, bytes, bytes, &target_context->byte_counter);
-			if (target_context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)) {
+			if (target_context->flags & FI_OPX_CQ_CONTEXT_HMEM) {
 				struct fi_opx_hmem_info *hmem_info =
 					(struct fi_opx_hmem_info *) target_context->hmem_info_qws;
 				assert(hmem_info->iface > FI_HMEM_SYSTEM);
 				opx_copy_to_hmem(hmem_info->iface, hmem_info->gpu.device,
+						 hmem_info->hmem_dev_reg_handle, rbuf_qws, sbuf_qws, bytes,
+						 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+			} else if (target_context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+				struct fi_opx_hmem_info *hmem_info =
+					(struct fi_opx_hmem_info *) target_context->hmem_info_qws;
+				assert(hmem_info->iface > FI_HMEM_SYSTEM);
+				opx_copy_to_hmem(hmem_info->iface, hmem_info->dmabuf.opx_mr->attr.device.reserved,
 						 hmem_info->hmem_dev_reg_handle, rbuf_qws, sbuf_qws, bytes,
 						 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 			} else {
@@ -3695,14 +3733,13 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 	if (hmem_iface != FI_HMEM_SYSTEM) {
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_MSG, opx_ep->debug_counters.hmem.posted_recv_msg);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.hmem.posted_recv_tag);
-		hmem_info->iface = hmem_iface;
+		hmem_info->iface	       = hmem_iface;
+		hmem_info->hmem_dev_reg_handle = hmem_handle;
 		if (opx_ep->use_hfisvc && opx_ep->domain->hmem_domain->dmabuf_supported) {
-			hmem_info->dmabuf.opx_mr       = (struct fi_opx_mr *) desc;
-			hmem_info->hmem_dev_reg_handle = hmem_handle;
+			hmem_info->dmabuf.opx_mr = (struct fi_opx_mr *) desc;
 			context->flags |= FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
 		} else {
-			hmem_info->gpu.device	       = hmem_device;
-			hmem_info->hmem_dev_reg_handle = hmem_handle;
+			hmem_info->gpu.device = hmem_device;
 			context->flags |= FI_OPX_CQ_CONTEXT_HMEM;
 		}
 
@@ -3815,16 +3852,16 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 	enum fi_hmem_iface	 hmem_iface;
 	uint64_t		 hmem_handle;
 	if (msg->desc && msg->desc[0]) {
-		hmem_iface	 = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device, &hmem_handle);
-		hmem_info->iface = hmem_iface;
+		hmem_iface		       = opx_hmem_get_mr_iface(msg->desc[0], &hmem_device, &hmem_handle);
+		hmem_info->iface	       = hmem_iface;
+		hmem_info->hmem_dev_reg_handle = hmem_handle;
+		hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
 		if (opx_ep->use_hfisvc && opx_ep->domain->hmem_domain->dmabuf_supported) {
 			hmem_info->dmabuf.opx_mr = (struct fi_opx_mr *) msg->desc[0];
 			context->flags		 = flags | FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
 		} else {
-			hmem_info->gpu.device	       = hmem_device;
-			hmem_info->hmem_dev_reg_handle = hmem_handle;
-			hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
-			context->flags		       = flags | FI_OPX_CQ_CONTEXT_HMEM;
+			hmem_info->gpu.device = hmem_device;
+			context->flags	      = flags | FI_OPX_CQ_CONTEXT_HMEM;
 		}
 	} else {
 		hmem_iface		  = FI_HMEM_SYSTEM;
