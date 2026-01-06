@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -226,8 +226,16 @@ struct fi_opx_mr {
 
 	/* == CACHE LINE 3 == */
 	union {
-		uint64_t	    reserved_qw[4];
-		struct iovec	    iov;
+		struct {
+			int	 dmabuf_fd;
+			uint32_t reserved_dw;
+			uint64_t reserved_qw[3];
+		};
+		struct {
+			uint32_t     reserved_fd;
+			uint32_t     unused_pad[3];
+			struct iovec iov;
+		};
 		struct fi_mr_dmabuf dmabuf;
 	};
 	struct {
@@ -251,8 +259,10 @@ struct fi_opx_mr {
 } __attribute__((__aligned__(FI_OPX_CACHE_LINE_SIZE))) __attribute__((__packed__));
 OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_mr) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Size of fi_opx_mr should be 5 cachelines!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, reserved_qw) == (FI_OPX_CACHE_LINE_SIZE * 3),
-			"Offset of fi_opx_mr->reserved_qw should start at cacheline 3!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, dmabuf_fd) == (FI_OPX_CACHE_LINE_SIZE * 3),
+			"Offset of fi_opx_mr->dmabuf_fd should start at cacheline 3!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, dmabuf_fd) == offsetof(struct fi_opx_mr, dmabuf.fd),
+			"Offset of fi_opx_mr->dmabuf_fd should start at the same point as fi_opx_mr->dmabuf.fd!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, hh) == (FI_OPX_CACHE_LINE_SIZE * 4),
 			"Offset of fi_opx_mr->hh should start at cacheline 4!");
 
@@ -359,9 +369,6 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 			hfisvc_client_mr_t mr_handle = hfisvc_out[i].type_mr.mr;
 
 			assert(hfisvc_out[i].status == HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS);
-			assert(hfisvc_out[i].type == HFI1_HFISVC_CQ_ENTRY_TYPE_MR ||
-			       (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPENED &&
-				hfisvc_out[i].type == HFI1_HFISVC_CQ_ENTRY_TYPE_NOTIFY));
 
 			if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_OPEN) {
 				OPX_HFISVC_DEBUG_LOG(
@@ -453,6 +460,7 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 					"(%d) %s:%s():%d Got unexpected completion for opx_mr=%p state=%d completion: type=%d status=%d\n",
 					getpid(), __FILE__, __func__, __LINE__, opx_mr, opx_mr->hfisvc.state,
 					hfisvc_out[i].type, hfisvc_out[i].status);
+				assert(0);
 			}
 		}
 		n = (*opx_domain->hfisvc.cq_read)(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out,
