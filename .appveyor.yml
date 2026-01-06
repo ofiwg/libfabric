@@ -1,36 +1,35 @@
 image:
-  - Visual Studio 2019
+  - Visual Studio 2022
 
-build:
-  project: libfabric.sln
+environment:
+  matrix:
+    - BUILD_CONFIG: Debug
+    - BUILD_CONFIG: Release
 
-configuration:
-  - Debug-v142
-  - Release-v142
-
-before_build:
+install:
+  # Download NetworkDirect DDK and EFA headers
   - ps: .appveyor.ps1 -Verbose
 
+before_build:
+  # Configure with CMake using the ci-windows preset
+  - cmake --preset ci-windows -DLIBFABRIC_BUILD_FABTESTS=ON
+
+build_script:
+  # Build libfabric and fabtests with specified configuration
+  - cmake --build build/ci-windows --config %BUILD_CONFIG% --parallel
+
 after_build:
-  - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
-
-before_test:
-  - cd fabtests
-  - msbuild fabtests.sln
-
-for:
-- matrix:
-    only:
-      - image: Visual Studio 2019
-        configuration: Debug-v142
-      - image: Visual Studio 2019
-        configuration: Release-v142
+  # Set PATH to include built library (for DLL loading)
+  - set PATH=%CD%\build\ci-windows\%BUILD_CONFIG%;%PATH%
 
 test_script:
-  - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -t unit tcp
-  - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -t functional tcp
-  - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -C "-I 10" -L "-I 10" -t standard tcp
-  - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -C "-I 10" -L "-I 10" -t multinode tcp
+  # Run fabtests using the CMake-built executables
+  # Note: For VS multi-config, executables are in build/<preset>/fabtests/<Config>/
+  - cd fabtests
+  - scripts\runfabtests.cmd -v -v -v -p %CD%\..\build\ci-windows\fabtests\%BUILD_CONFIG% -t unit tcp
+  - scripts\runfabtests.cmd -v -v -v -p %CD%\..\build\ci-windows\fabtests\%BUILD_CONFIG% -t functional tcp
+  - scripts\runfabtests.cmd -v -v -v -p %CD%\..\build\ci-windows\fabtests\%BUILD_CONFIG% -C "-I 10" -L "-I 10" -t standard tcp
+  - scripts\runfabtests.cmd -v -v -v -p %CD%\..\build\ci-windows\fabtests\%BUILD_CONFIG% -C "-I 10" -L "-I 10" -t multinode tcp
 
 skip_commits:
   files:
