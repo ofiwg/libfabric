@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2025 by Cornelis Networks.
+ * Copyright (C) 2021-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -107,17 +107,6 @@ static int opx_get_current_proc_core()
 		return -EINVAL;
 	}
 	return core_id;
-}
-
-static inline uint64_t fi_opx_hfi1_header_count_to_poll_mask(uint64_t rcvhdrq_cnt)
-{
-	/* For optimization, the fi_opx_hfi1_poll_once() function uses a mask to wrap around the end of the
-	** ring buffer.  To compute the mask, multiply the number of entries in the ring buffer by the sizeof
-	** one entry.  Since the count is 0-based, subtract 1 from the value of
-	** /sys/module/hfi1/parameters/rcvhdrcnt, which is set in the hfi1 module parms and
-	** will not change at runtime
-	*/
-	return (rcvhdrq_cnt - 1) * 32;
 }
 
 static void opx_hfi_setup_ctx_shring_grps(int hfi_unit_number, int *ctx_groups, int *ep_per_hfi_context,
@@ -1116,11 +1105,11 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	}
 	fi_opx_global.rcvhdrq_entry_dws = context->info.rxe.hdrq.elemsz;
 
-	context->info.rxe.hdrq.elemcnt	    = ctxt_info->rcvhdrq_cnt;
-	context->info.rxe.hdrq.elemlast	    = ((context->info.rxe.hdrq.elemcnt - 1) * context->info.rxe.hdrq.elemsz);
-	context->info.rxe.hdrq.rx_poll_mask = fi_opx_hfi1_header_count_to_poll_mask(ctxt_info->rcvhdrq_cnt);
-	context->info.rxe.hdrq.base_addr    = (uint32_t *) (uintptr_t) base_info->rcvhdr_bufbase;
-	context->info.rxe.hdrq.rhf_base	    = context->info.rxe.hdrq.base_addr + context->info.rxe.hdrq.rhf_off;
+	context->info.rxe.hdrq.elemcnt	 = ctxt_info->rcvhdrq_cnt;
+	context->info.rxe.hdrq.elemlast	 = ((context->info.rxe.hdrq.elemcnt - 1) * context->info.rxe.hdrq.elemsz);
+	context->info.rxe.hdrq.rx_unused = -1UL; // unused
+	context->info.rxe.hdrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvhdr_bufbase;
+	context->info.rxe.hdrq.rhf_base	 = context->info.rxe.hdrq.base_addr + context->info.rxe.hdrq.rhf_off;
 
 	context->info.rxe.egrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvegr_bufbase;
 	context->info.rxe.egrq.elemsz	 = ctxt_info->rcvegr_size;
