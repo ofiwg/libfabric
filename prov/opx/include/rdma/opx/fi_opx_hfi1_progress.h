@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -538,11 +538,21 @@ int opx_forward_shared_context(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, ui
 	struct opx_subcontext_ureg *sub_ureg = opx_ep->rx->shd_ctx.subcontext_ureg[subctxt];
 	struct opx_software_rx_q   *s_rx_q   = &opx_ep->rx->shd_ctx.soft_rx_qs[subctxt];
 
-	const uint64_t	   rhq_head	 = *(s_rx_q->rhq_head_reg);
-	const uint64_t	   rhq_tail	 = *(s_rx_q->rhq_tail_reg);
-	const uint64_t	   next_rhq_tail = (rhq_tail + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS) & hdrq_mask;
-	volatile uint32_t *rhf_ptr_dest	 = s_rx_q->rhf_base + rhq_tail;
-	uint64_t	   rhf_new	 = rhf_rcvd;
+	const uint64_t rhq_head = *(s_rx_q->rhq_head_reg);
+	const uint64_t rhq_tail = *(s_rx_q->rhq_tail_reg);
+	uint64_t       next_rhq_tail;
+	if (hdrq_mask != FI_OPX_HDRQ_MASK_RUNTIME) {
+		next_rhq_tail = (rhq_tail + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS) & hdrq_mask;
+	} else {
+		/* increment and wrap manually */
+		next_rhq_tail = rhq_tail + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
+		if (next_rhq_tail > opx_ep->hfi->info.rxe.hdrq.elemlast) {
+			next_rhq_tail = 0;
+		}
+	}
+
+	volatile uint32_t *rhf_ptr_dest = s_rx_q->rhf_base + rhq_tail;
+	uint64_t	   rhf_new	= rhf_rcvd;
 
 	// Drop packet if RHQ is full
 	if (next_rhq_tail == rhq_head) {
@@ -583,25 +593,36 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 {
 	struct fi_opx_ep *opx_ep       = container_of(ep, struct fi_opx_ep, ep_fid);
 	const uint8_t	  subctxt_self = opx_ep->rx->shd_ctx.subctxt;
-	const uint64_t	  local_hdrq_mask =
-		   (hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME) ? opx_ep->hfi->info.rxe.hdrq.rx_poll_mask : hdrq_mask;
-	uint64_t hdrq_offset;
-	uint64_t rhf_seq;
+	uint64_t	  hdrq_offset;
+	uint64_t	  rhf_seq;
 
-	if (ctx_sharing) {
-		hdrq_offset = opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head & local_hdrq_mask;
-		rhf_seq	    = opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq;
+	if (hdrq_mask != FI_OPX_HDRQ_MASK_RUNTIME) {
+		if (ctx_sharing) {
+			hdrq_offset = opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head & hdrq_mask;
+			rhf_seq	    = opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq;
+		} else {
+			hdrq_offset = opx_ep->rx->state.hdrq.head & hdrq_mask;
+			rhf_seq	    = opx_ep->rx->state.hdrq.rhf_seq;
+		}
+		assert(hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
 	} else {
-		hdrq_offset = opx_ep->rx->state.hdrq.head & local_hdrq_mask;
-		rhf_seq	    = opx_ep->rx->state.hdrq.rhf_seq;
+		if (ctx_sharing) {
+			hdrq_offset =
+				(opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head > opx_ep->hfi->info.rxe.hdrq.elemlast) ?
+					0 :
+					opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head;
+			rhf_seq = opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq;
+		} else {
+			hdrq_offset = (opx_ep->rx->state.hdrq.head > opx_ep->hfi->info.rxe.hdrq.elemlast) ?
+					      0 :
+					      opx_ep->rx->state.hdrq.head;
+			rhf_seq	    = opx_ep->rx->state.hdrq.rhf_seq;
+		}
 	}
-
-	assert(local_hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
-	volatile uint32_t *rhf_ptr = opx_ep->rx->hdrq.rhf_base + hdrq_offset;
-
-	const uint64_t rhf_rcvd = *((volatile uint64_t *) rhf_ptr);
-	opx_lid_t      slid;
-	opx_lid_t      dlid;
+	volatile uint32_t *rhf_ptr  = opx_ep->rx->hdrq.rhf_base + hdrq_offset;
+	const uint64_t	   rhf_rcvd = *((volatile uint64_t *) rhf_ptr);
+	opx_lid_t	   slid;
+	opx_lid_t	   dlid;
 
 	/* The software must look at the RHF.RcvSeq.
 	 * If it detects the next sequence number in the entry, the new header
@@ -676,7 +697,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 			if (subctxt_self != subctxt_dest) {
 				unsigned int ret_val = opx_forward_shared_context(
 					opx_ep, &rhf_seq, &hdrq_head_local, p_last_egrbfr_index, hdrq_offset, rhf_seq,
-					rhf_rcvd, hdr, subctxt_dest, local_hdrq_mask, hfi1_type);
+					rhf_rcvd, hdr, subctxt_dest, hdrq_mask, hfi1_type);
 				opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq = rhf_seq;
 				opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head	    = hdrq_head_local;
 				return ret_val;
@@ -925,10 +946,27 @@ __OPX_FORCE_INLINE__
 int opx_is_rhf_empty(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type,
 		     const bool ctx_sharing)
 {
-	const uint64_t local_hdrq_mask =
-		(hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME) ? opx_ep->hfi->info.rxe.hdrq.rx_poll_mask : hdrq_mask;
-	const uint64_t hdrq_offset = (ctx_sharing) ? (opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head & local_hdrq_mask) :
-						     (opx_ep->rx->state.hdrq.head & local_hdrq_mask);
+	uint64_t hdrq_offset;
+	if (hdrq_mask != FI_OPX_HDRQ_MASK_RUNTIME) {
+		if (ctx_sharing) {
+			hdrq_offset = opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head & hdrq_mask;
+		} else {
+			hdrq_offset = opx_ep->rx->state.hdrq.head & hdrq_mask;
+		}
+		assert(hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
+	} else {
+		if (ctx_sharing) {
+			hdrq_offset =
+				(opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head > opx_ep->hfi->info.rxe.hdrq.elemlast) ?
+					0 :
+					opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head;
+		} else {
+			hdrq_offset = (opx_ep->rx->state.hdrq.head > opx_ep->hfi->info.rxe.hdrq.elemlast) ?
+					      0 :
+					      opx_ep->rx->state.hdrq.head;
+		}
+	}
+
 	volatile uint32_t *rhf_ptr =
 		(ctx_sharing) ? opx_ep->rx->shd_ctx.rhf_base + hdrq_offset : opx_ep->rx->hdrq.rhf_base + hdrq_offset;
 	const uint64_t rhf_rcvd = *((volatile uint64_t *) rhf_ptr);
@@ -1024,14 +1062,17 @@ unsigned opx_process_soft_rx_q(struct fi_opx_ep *opx_ep, uint8_t subctxt, const 
 			       const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
 			       const enum opx_hfi1_type hfi1_type)
 {
-	const uint64_t local_hdrq_mask =
-		(hdrq_mask == FI_OPX_HDRQ_MASK_RUNTIME) ? opx_ep->hfi->info.rxe.hdrq.rx_poll_mask : hdrq_mask;
-	assert(local_hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
+	uint64_t hdrq_offset;
+	if (hdrq_mask != FI_OPX_HDRQ_MASK_RUNTIME) {
+		hdrq_offset = opx_ep->rx->shd_ctx.head & hdrq_mask;
+	} else {
+		hdrq_offset =
+			(opx_ep->rx->shd_ctx.head > opx_ep->hfi->info.rxe.hdrq.elemlast) ? 0 : opx_ep->rx->shd_ctx.head;
+	}
 
-	const uint64_t		 hdrq_offset = opx_ep->rx->shd_ctx.head & local_hdrq_mask;
-	const volatile uint32_t *rhf_ptr     = opx_ep->rx->shd_ctx.rhf_base + hdrq_offset;
-	const uint64_t		 rhf_rcvd    = *((volatile uint64_t *) rhf_ptr);
-	const uint64_t		 rhf_seq     = opx_ep->rx->shd_ctx.rhf_seq;
+	const volatile uint32_t *rhf_ptr  = opx_ep->rx->shd_ctx.rhf_base + hdrq_offset;
+	const uint64_t		 rhf_rcvd = *((volatile uint64_t *) rhf_ptr);
+	const uint64_t		 rhf_seq  = opx_ep->rx->shd_ctx.rhf_seq;
 
 	if (OPX_RHF_SEQ_MATCH(rhf_seq, rhf_rcvd, hfi1_type)) {
 		const uint32_t rhf_msb	       = rhf_rcvd >> 32;
