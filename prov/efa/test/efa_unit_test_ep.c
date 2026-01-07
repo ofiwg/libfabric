@@ -324,7 +324,7 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 /**
  * @brief When using LL128 protocol, test the packet allocated from read_copy_pkt_pool
  *  is 128 byte aligned.
- * 
+ *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
 void test_efa_rdm_read_copy_pkt_pool_128_alignment(struct efa_resource **state)
@@ -361,7 +361,7 @@ void test_efa_rdm_read_copy_pkt_pool_128_alignment(struct efa_resource **state)
 }
 
 /**
- * @brief When using LL128 protocol, the copy method is local read. 
+ * @brief When using LL128 protocol, the copy method is local read.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
@@ -378,7 +378,7 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
-	
+
 	/* p2p is available */
 	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
 	efa_rdm_ep->hmem_p2p_opt = FI_HMEM_P2P_ENABLED;
@@ -940,7 +940,7 @@ void test_efa_rdm_ep_setopt_homogeneous_peers(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
 	bool optval = true;
-	
+
 	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	ep = container_of(resource->ep, struct efa_rdm_ep,
@@ -1255,7 +1255,7 @@ void test_efa_rdm_ep_zcpy_recv_eagain(struct efa_resource **state)
 }
 
 /**
- * @brief when efa_rdm_ep_post_handshake_error failed due to pkt pool exhaustion, 
+ * @brief when efa_rdm_ep_post_handshake_error failed due to pkt pool exhaustion,
  * make sure both txe is cleaned
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
@@ -1450,7 +1450,7 @@ void test_efa_rdm_ep_default_sizes(struct efa_resource **state)
  * @brief Test the fi_endpoint API for efa_ep
  * for rdm ep type (because the dgram ep type should
  * have the same logic)
- * @param state 
+ * @param state
  */
 void test_efa_ep_open(struct efa_resource **state)
 {
@@ -1478,7 +1478,7 @@ void test_efa_ep_open(struct efa_resource **state)
  * @brief Test the fi_cancel API for efa_ep
  * (for rdm ep type because dgram logic should be the same)
  * It should return -FI_ENOSYS as device doesn't support it;
- * @param state 
+ * @param state
  */
 void test_efa_ep_cancel(struct efa_resource **state)
 {
@@ -1886,7 +1886,7 @@ void test_efa_rdm_ep_setopt_cq_flow_control(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
 	bool optval = false;
-	
+
 	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	ep = container_of(resource->ep, struct efa_rdm_ep,
@@ -1909,7 +1909,7 @@ void test_efa_direct_ep_setopt_cq_flow_control_no_rx_cq_data(struct efa_resource
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_base_ep;
 	bool optval = false;
-	
+
 	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
 				   FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV, &optval,
@@ -1945,4 +1945,94 @@ void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data(struct efa_resour
 	assert_false(efa_base_ep->use_unsolicited_write_recv);
 	assert_int_equal(fi_enable(resource->ep), 0);
 	assert_false(efa_base_ep->qp->unsolicited_write_recv_enabled);
+}
+
+void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep);
+
+/**
+ * @brief Test efa_rdm_ep_has_unfinished_send() with error completions
+ *
+ * This test verifies that error completions are handled correctly when
+ * checking for unfinished send operations. Specifically, it tests that
+ * efa_outstanding_tx_ops is properly decremented when error completions
+ * are processed during endpoint closing.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ep_has_unfinished_send_with_error_completion(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_cq *efa_rdm_cq;
+	struct efa_ibv_cq *ibv_cq;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_ope *txe;
+	fi_addr_t peer_addr = 0;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_peer *peer;
+
+	/* Disable shm to force using efa device */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cq = &efa_rdm_cq->efa_cq.ibv_cq;
+
+	/* Create and register a fake peer */
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	/* Allocate a packet entry for the test */
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+
+	/* Allocate a TX operation entry */
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+	pkt_entry->ope = txe;
+	pkt_entry->peer = peer;
+
+	/* Set up initial state: increment outstanding_tx_ops to simulate pending operation */
+	efa_rdm_ep->efa_outstanding_tx_ops = 1;
+
+	/* Verify that has_unfinished_send returns true when there are outstanding ops */
+	assert_true(efa_rdm_ep_has_unfinished_send(efa_rdm_ep));
+
+	/* Setup CQ mocks for error completion */
+	g_efa_unit_test_mocks.efa_ibv_cq_end_poll = &efa_mock_efa_ibv_cq_end_poll_check_mock;
+	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_opcode = &efa_mock_efa_ibv_cq_wc_read_opcode_return_mock;
+	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_qp_num = &efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock;
+	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_vendor_err = &efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock;
+	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
+	g_efa_unit_test_mocks.efa_ibv_cq_next_poll = &efa_mock_efa_ibv_cq_next_poll_return_mock;
+
+	/* Set up the work completion with error status */
+	ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
+	ibv_cq->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
+
+	/* Mock the CQ polling sequence - TX CQ first iteration */
+	will_return_int(efa_mock_efa_ibv_cq_start_poll_return_mock, IBV_WC_SUCCESS);
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
+	will_return_int(efa_mock_efa_ibv_cq_wc_read_opcode_return_mock, IBV_WC_RDMA_READ);
+	will_return_uint(efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+	expect_function_call(efa_mock_efa_ibv_cq_end_poll_check_mock);
+
+	/* RX CQ first iteration - no completions */
+	will_return_int(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+
+	/* Process the error completion using the closing endpoint path */
+	efa_rdm_ep_wait_send(efa_rdm_ep);
+
+	/* Verify that outstanding_tx_ops was decremented despite the error */
+	assert_int_equal(efa_rdm_ep->efa_outstanding_tx_ops, 0);
+
+	/* Verify that has_unfinished_send now returns false */
+	assert_false(efa_rdm_ep_has_unfinished_send(efa_rdm_ep));
 }
