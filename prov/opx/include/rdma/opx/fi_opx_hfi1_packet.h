@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -360,6 +360,8 @@ static inline const char *opx_hfi1_dput_opcode_to_string(uint8_t opcode)
 #define HFI_KHDR_SH_SHIFT      29
 #define HFI_KHDR_KVER_SHIFT    30
 #define HFI_KHDR_KVER_MASK     0x3
+
+#define OPX_PKT_HDR_PAYLOAD_ALIGNMENT (8)
 
 /* "Legacy" header with 9DWs of KDETH */
 struct fi_opx_hfi1_stl_packet_hdr_9B {
@@ -1115,7 +1117,7 @@ union opx_hfi1_packet_hdr {
 		uint64_t reserved_n[7]; /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) service; /* "reliability service" */
-} __attribute__((__packed__)) __attribute__((__aligned__(8)));
+} __attribute__((__packed__)) __attribute__((__aligned__(OPX_PKT_HDR_PAYLOAD_ALIGNMENT)));
 
 #define OPX_HDR_SLID_9B(_hdr) ((union opx_hfi1_packet_hdr *) _hdr)->lrh_9b.slid
 #define OPX_HDR_SLID_16B(_hdr)                                        \
@@ -1654,8 +1656,10 @@ union fi_opx_hfi1_packet_payload {
 
 		uint32_t tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 	} tid_cts;
-} __attribute__((__aligned__(32)));
+} __attribute__((__aligned__(OPX_PKT_HDR_PAYLOAD_ALIGNMENT)));
 
+static_assert(__alignof__(union fi_opx_hfi1_packet_payload) == __alignof__(union opx_hfi1_packet_hdr),
+	      "__alignof__(union fi_opx_hfi1_packet_payload) must be equal to __alignof__(union opx_hfi1_packet_hdr)!");
 static_assert(sizeof(union fi_opx_hfi1_packet_payload) <= OPX_HFI1_MAX_PKT_SIZE,
 	      "sizeof(union fi_opx_hfi1_packet_payload) must be <= OPX_HFI1_MAX_PKT_SIZE!");
 static_assert(
