@@ -468,7 +468,7 @@ struct fi_opx_hfi1_rxe_static {
 		uint32_t elemlast;
 		uint32_t elemcnt;
 
-		uint64_t rx_poll_mask;
+		uint64_t rx_unused;
 
 		uint32_t *rhf_base;
 
@@ -852,8 +852,8 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	       context->info.rxe.hdrq.elemlast);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.elemcnt         %#X\n",
 	       context->info.rxe.hdrq.elemcnt);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rx_poll_mask    %#lX\n",
-	       context->info.rxe.hdrq.rx_poll_mask);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rx_unused       %#lX\n",
+	       context->info.rxe.hdrq.rx_unused);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rhf_base        %p \n",
 	       context->info.rxe.hdrq.rhf_base);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context info.rxe.hdrq.rhe_base        %p \n",
