@@ -967,7 +967,6 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
  * @param[in]	efa_rdm_ep		endpoint
  * @return 	no return
  */
-static inline
 void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
 	struct efa_cq *tx_cq, *rx_cq;
