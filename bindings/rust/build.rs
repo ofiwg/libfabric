@@ -139,8 +139,8 @@ fn build_libfabric(install_dir: &PathBuf) {
 }
 
 fn main() {
-    #[cfg(not(target_os = "linux"))]
-    compile_error!("This binding is only compatible with Linux.");
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    compile_error!("This binding is only compatible with Linux and macOS.");
 
     // Link asan library.
     let asan = cfg!(feature = "asan");
