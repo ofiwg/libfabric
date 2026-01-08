@@ -122,6 +122,7 @@ struct common_context {
 	struct fid_ep *ep;
 	struct fid_cq *cq;
 	struct fid_av *av;
+	size_t num_peers;
 };
 
 // Sender context
@@ -167,10 +168,13 @@ static int setup_endpoint(struct common_context *ctx)
 	}
 
 	if (!topts.shared_cq) {
-		cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-		cq_attr.size = topts.msgs_per_endpoint;
+		struct fi_cq_attr attr = {
+			.wait_obj = FI_WAIT_NONE,
+			.format = FI_CQ_FORMAT_CONTEXT,
+			.size = topts.msgs_per_endpoint,
+		};
 
-		ret = fi_cq_open(domain, &cq_attr, &ctx->cq, NULL);
+		ret = fi_cq_open(domain, &attr, &ctx->cq, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
 			goto cleanup_ep;
@@ -178,7 +182,11 @@ static int setup_endpoint(struct common_context *ctx)
 	}
 
 	if (!topts.shared_av) {
-		int ret = fi_av_open(domain, &av_attr, &ctx->av, NULL);
+		struct fi_av_attr attr = {
+			.type = FI_AV_TABLE,
+			.count = ctx->num_peers,
+		};
+		ret = fi_av_open(domain, &attr, &ctx->av, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_av_open", ret);
 			goto cleanup_cq;
@@ -583,7 +591,7 @@ static void *run_sender_worker(void *arg)
 	if (topts.shared_av) {
 		ctx->common.av = shared_txav;
 	} else {
-		av_attr.count = ctx->num_peers;
+		ctx->common.num_peers = ctx->num_peers;
 	}
 
 	pthread_create(&notification_thread, NULL, notification_handler,
@@ -848,7 +856,7 @@ static void *run_receiver_worker(void *arg)
 	if (topts.shared_av) {
 		ctx->common.av = shared_rxav;
 	} else {
-		av_attr.count = ctx->num_senders;
+		ctx->common.num_peers = ctx->num_senders;
 	}
 
 	for (cycle = 0; cycle < topts.receiver_ep_recycling; cycle++) {
