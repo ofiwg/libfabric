@@ -45,7 +45,17 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 	opx_direct=0
 	hfi1dv_happy=0
 	hfisvc_happy=0
-	opx_CPPFLAGS="-I/usr/include/uapi"
+	
+	dnl If OPXS_KERNEL is set and a valid path then CPPFLAGS=-I${OPXS_KERNEL}/include/uapi
+	dnl Allow user to specify an alternate kernel headers prefix
+	AC_ARG_VAR([OPXS_KERNEL], [Kernel headers prefix; expects $OPXS_KERNEL/include/uapi])
+
+	UAPI_HOME="/usr/include/uapi"
+	if test -n "$OPXS_KERNEL" && test -d "$OPXS_KERNEL/include/uapi"; then
+		UAPI_HOME="$OPXS_KERNEL/include/uapi"
+	fi
+
+	opx_CPPFLAGS="-I$UAPI_HOME"
 	save_CPPFLAGS=$CPPFLAGS
 	CPPFLAGS="$CPPFLAGS $opx_CPPFLAGS"
 
@@ -194,23 +204,24 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			OPX_PRODUCTION_BUILD_OVERRIDE=${OPX_PRODUCTION_BUILD_OVERRIDE:-""}
 			AS_IF([test "x$OPX_PRODUCTION_BUILD_OVERRIDE" != "x"], [
 				AC_MSG_NOTICE([OPX_PRODUCTION_BUILD_OVERRIDE is set to $OPX_PRODUCTION_BUILD_OVERRIDE])
-			])
-			opx_hfi_version=$(/sbin/modinfo hfi1 -F version)
-			opx_hfi_version_sorted=$(echo -e "10.14.0.0\n$opx_hfi_version" | sort -V | tail -n 1)
-			opx_hfi_srcversion=$(/sbin/modinfo hfi1 -F srcversion)
-			opx_hfi_sys_srcversion=$(cat /sys/module/hfi1/srcversion)
-			AS_IF([ test -z $opx_hfi_version || test -z $opx_hfi_sys_srcversion ||
-				test $opx_hfi_srcversion != $opx_hfi_sys_srcversion ||
-				test $opx_hfi_version != $opx_hfi_version_sorted],[
+			],[
+				opx_hfi_version=$(/sbin/modinfo hfi1 -F version)
+				opx_hfi_version_sorted=$(echo -e "10.14.0.0\n$opx_hfi_version" | sort -V | tail -n 1)
+				opx_hfi_srcversion=$(/sbin/modinfo hfi1 -F srcversion)
+				opx_hfi_sys_srcversion=$(cat /sys/module/hfi1/srcversion)
+				AS_IF([ test -z "$opx_hfi_version" || test -z "$opx_hfi_sys_srcversion" ||
+					test "$opx_hfi_srcversion" != "$opx_hfi_sys_srcversion" ||
+					test "$opx_hfi_version" != "$opx_hfi_version_sorted"],[
 
-				opx_hfi_dev_override=$(echo $CPPFLAGS | grep -w "DOPX_DEV_OVERRIDE")
-				AS_IF([test "x$opx_hfi_dev_override" != "x" -o "x$OPX_PRODUCTION_BUILD_OVERRIDE" != "x"],[
-					AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... no, overridden])
-				],[
-					AC_MSG_WARN([hfi1 driver version is not GPU-compatible, the OPX provider could fail at runtime.])
+					opx_hfi_dev_override=$(echo $CPPFLAGS | grep -w "DOPX_DEV_OVERRIDE")
+					AS_IF([test "x$opx_hfi_dev_override" != "x"],[
+						AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... no, overridden])
+					],[
+						AC_MSG_WARN([hfi1 driver version is not GPU-compatible, the OPX provider could fail at runtime.])
+					])
+					],
+					[AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... yes])
 				])
-				],
-				[AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... yes])
 			])
 			AS_IF([test $opx_happy -eq 1],[
 				AC_MSG_NOTICE([Appending OPX_HMEM to opx_CPPFLAGS])
