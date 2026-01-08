@@ -975,7 +975,7 @@ int wrap_fi_profile_close(struct fid_profile *prof_fid)
 
 /* Static inline function declarations from fi_rma.h */
 
-ssize_t wrap_fi_read(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+ssize_t wrap_fi_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		     fi_addr_t src_addr, uint64_t addr, uint64_t key,
 		     void *context)
 {
