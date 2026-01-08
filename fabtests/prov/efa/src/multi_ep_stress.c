@@ -1,3 +1,4 @@
+#include <stdatomic.h>
 #include <arpa/inet.h>
 #include <getopt.h>
 #include <netdb.h>
@@ -113,7 +114,7 @@ struct ep_message {
 // Worker status tracking
 struct worker_status {
 	pthread_mutex_t mutex;
-	bool active;
+	atomic_flag *active;
 };
 
 // Common context structure
@@ -241,7 +242,7 @@ void *notification_handler(void *arg)
 {
 	struct sender_context *ctx = (struct sender_context *) arg;
 
-	while (ctx->status.active) {
+	while (atomic_flag_test_and_set(ctx->status.active)) {
 		for (int sock_idx = 0; sock_idx < ctx->num_peers; sock_idx++) {
 			if (ctx->control_socks[sock_idx] < 0)
 				continue;
@@ -374,6 +375,9 @@ void *notification_handler(void *arg)
 		// Sleep briefly before next polling cycle
 		usleep(10000); // 10ms
 	}
+
+	//Interrupt the sender thread
+	atomic_flag_clear(ctx->status.active);
 	return NULL;
 }
 
@@ -568,8 +572,10 @@ static void *run_sender_worker(void *arg)
 	int msg_per_ep_lifecyle =
 		topts.msgs_per_endpoint / topts.sender_ep_recycling;
 	pthread_t notification_thread;
+	atomic_flag active = ATOMIC_FLAG_INIT;
 
-	ctx->status.active = true;
+	ctx->status.active = &active;
+	atomic_flag_test_and_set(&active);
 
 	if (topts.shared_cq)
 		ctx->common.cq = shared_txcq;
@@ -611,8 +617,11 @@ static void *run_sender_worker(void *arg)
 		}
 		bool peers_ready = false;
 		int wait_attempts = 0;
-		while (!peers_ready && ctx->status.active &&
-		       wait_attempts < 100) {
+		while (!peers_ready && wait_attempts < 100) {
+			if (!atomic_flag_test_and_set(&active)) {
+				ret = -FI_ECANCELED;
+				goto out;
+			}
 			pthread_mutex_lock(&ctx->status.mutex);
 			peers_ready = true;
 			for (int i = 0; i < ctx->num_peers; i++) {
@@ -626,11 +635,6 @@ static void *run_sender_worker(void *arg)
 				usleep(100000); // 100ms sleep before checking again
 				wait_attempts++;
 			}
-		}
-
-		if (!ctx->status.active) {
-			ret = -FI_ECANCELED;
-			goto out;
 		}
 
 		if (!peers_ready) {
@@ -757,7 +761,8 @@ static void *run_sender_worker(void *arg)
 	       ctx->worker_id, total_ops);
 
 out:
-	ctx->status.active = false;
+	// Stop the notification thread
+	atomic_flag_clear(&active);
 
 	// Wait for notification thread to finish
 	pthread_join(notification_thread, NULL);
