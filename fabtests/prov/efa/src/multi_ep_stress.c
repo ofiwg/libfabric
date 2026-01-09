@@ -824,7 +824,6 @@ static int notify_endpoint_update(struct receiver_context *ctx)
 					if (topts.verbose)
 						printf("Receiver %d: Sender %d disconnected\n",
 						       ctx->worker_id, i);
-					ret = 0;
 					break;
 				} else {
 					// Real error
