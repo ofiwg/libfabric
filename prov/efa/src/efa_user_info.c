@@ -736,6 +736,41 @@ int efa_getinfo(uint32_t version, const char *node,
 		return err;
 	}
 
+	/* filter out duplicate fabric types */
+	if (info_list) {
+		struct fi_info *cur, *prev, *next;
+		int efa_count = 0, efa_direct_count = 0;
+		
+		/* Count fabric types first */
+		for (cur = info_list; cur; cur = cur->next) {
+			if (strcmp(cur->fabric_attr->name, "efa") == 0) efa_count++;
+			else if (strcmp(cur->fabric_attr->name, "efa-direct") == 0) efa_direct_count++;
+		}
+		
+		/* Remove efa entries if efa-direct is present */
+		if (efa_direct_count > 0 && efa_count > 0) {
+			prev = NULL;
+			cur = info_list;
+			while (cur) {
+				next = cur->next;
+				if (strcmp(cur->fabric_attr->name, "efa") == 0) {
+					/* Remove this efa entry */
+					if (prev) {
+						prev->next = next;
+					} else {
+						info_list = next;
+					}
+					/* Free current node */
+					cur->next = NULL;
+					fi_freeinfo(cur);
+				} else {
+					prev = cur;
+				}
+				cur = next;
+			}
+		}
+	}
+
 	*info = info_list;
 	return FI_SUCCESS;
 }
