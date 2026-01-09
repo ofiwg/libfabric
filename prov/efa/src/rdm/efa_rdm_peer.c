@@ -61,14 +61,6 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer_overflow_pke_list_entry *overflow_pke_list_entry;
-	/*
-	 * TODO: Add support for wait/signal until all pending messages have
-	 * been sent/received so we do not attempt to complete a data transfer
-	 * or internal transfer after the EP is shutdown.
-	 */
-	if ((peer->flags & EFA_RDM_PEER_REQ_SENT) &&
-	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
-		EFA_WARN_ONCE(FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
 
 	if (peer->robuf.pending)
 		efa_recvwin_free(&peer->robuf, true);
