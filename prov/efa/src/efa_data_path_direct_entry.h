@@ -157,7 +157,7 @@ static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 	data_path_direct->cur_qp =
 		efa_domain->qp_table[qpn & efa_domain->qp_table_sz_m1];
 
-	if (!data_path_direct->cur_qp) {
+	if (!data_path_direct->cur_qp || qpn != data_path_direct->cur_qp->qp_num) {
 		data_path_direct->cur_wq = NULL;
 		EFA_DBG(FI_LOG_CQ, "QP[%u] does not exist in QP table\n", qpn);
 		return EINVAL;
