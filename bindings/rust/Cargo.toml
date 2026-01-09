@@ -30,6 +30,7 @@ asan = []
 [build-dependencies]
 bindgen = "0.72.0"
 cc = "1.2.26"
+cmake = "0.1"
 walkdir = "2.3.2"
 pkg-config = "0.3.32"
 
