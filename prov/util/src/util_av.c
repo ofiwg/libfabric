@@ -301,7 +301,7 @@ int ofi_av_insert_addr_at(struct util_av *av, const void *addr, fi_addr_t fi_add
 	memcpy(entry->data, addr, av->addrlen);
 	ofi_atomic_initialize32(&entry->use_cnt, 1);
 	HASH_ADD(hh, av->hash, data, av->addrlen, entry);
-	FI_INFO(av->prov, FI_LOG_AV, "fi_addr: %" PRIu64 "\n",
+	FI_INFO(av->prov, FI_LOG_AV, "fi_addr: %zu\n",
 		ofi_buf_index(entry));
 	return 0;
 }
@@ -332,7 +332,7 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 		memcpy(entry->data, addr, av->addrlen);
 		ofi_atomic_initialize32(&entry->use_cnt, 1);
 		HASH_ADD(hh, av->hash, data, av->addrlen, entry);
-		FI_INFO(av->prov, FI_LOG_AV, "fi_addr: %" PRIu64 "\n",
+		FI_INFO(av->prov, FI_LOG_AV, "fi_addr: %zu\n",
 			ofi_buf_index(entry));
 	}
 	return 0;
