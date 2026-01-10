@@ -22,7 +22,7 @@
 
 #include "hmem.h"
 #include "shared.h"
-#include <pthread.h>
+#include "ft_random.h"
 
 #define MAX_WORKERS	64
 #define MAX_PEERS	MAX_WORKERS
@@ -581,6 +581,9 @@ static void *run_sender_worker(void *arg)
 		topts.msgs_per_endpoint / topts.sender_ep_recycling;
 	pthread_t notification_thread;
 	atomic_flag active = ATOMIC_FLAG_INIT;
+	struct random_data random_data;
+
+	ft_random_init_data(&random_data, topts.random_seed, ctx->worker_id);
 
 	ctx->status.active = &active;
 	atomic_flag_test_and_set(&active);
@@ -661,8 +664,7 @@ static void *run_sender_worker(void *arg)
 		}
 
 		// sleep random time up to 100ms to emulate the real workload
-		int sleep_time = rand() % 100000;
-		usleep(sleep_time);
+		int sleep_time = ft_random_sleep_ms(&random_data, 100);
 		printf("Sender %d: Sleeping for %d microseconds\n",
 		       ctx->worker_id, sleep_time);
 
@@ -725,7 +727,7 @@ static void *run_sender_worker(void *arg)
 		}
 
 		// Maybe wait for all operations to complete
-		if (rand() % 2) {
+		if (ft_random_get_bool(&random_data)) {
 			printf("Sender %d EP cycle %d: Waiting for "
 			       "completions\n",
 			       ctx->worker_id, cycle + 1);
@@ -849,6 +851,9 @@ static void *run_receiver_worker(void *arg)
 	int cycle = 0;
 	int msg_per_ep_lifecyle =
 		topts.msgs_per_endpoint / topts.receiver_ep_recycling;
+	struct random_data random_data;
+
+	ft_random_init_data(&random_data, topts.random_seed, ctx->worker_id);
 
 	if (topts.shared_cq)
 		ctx->common.cq = shared_rxcq;
@@ -876,8 +881,7 @@ static void *run_receiver_worker(void *arg)
 		}
 
 		// sleep random time up to 100ms to emulate the real workload
-		int sleep_time = rand() % 100000;
-		usleep(sleep_time);
+		int sleep_time = ft_random_sleep_ms(&random_data, 100);
 		printf("Receiver %d: Sleeping for %d microseconds\n",
 		       ctx->worker_id, sleep_time);
 
@@ -931,7 +935,7 @@ static void *run_receiver_worker(void *arg)
 			}
 		}
 
-		if (rand() % 2) {
+		if (ft_random_get_bool(&random_data)) {
 			printf("Receiver %d EP cycle %d: Waiting for "
 			       "completions\n",
 			       ctx->worker_id, cycle + 1);
@@ -1431,9 +1435,6 @@ static int run_test(void)
 		printf("Generated random seed: %ld\n", topts.random_seed);
 		printf("-------------------------\n\n");
 	}
-
-	/* Seed PRNG */
-	srand(topts.random_seed);
 
 	ret = ft_init_fabric();
 	if (ret)
