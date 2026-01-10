@@ -1,11 +1,71 @@
 import os
 import subprocess
 import functools
-import pytest
+import re
 from enum import IntEnum
+from collections import deque
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
 from retrying import retry
 
+
+@functools.lru_cache(2)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def parse_lspci_tree(server_id):
+    timeout = 60
+    result = subprocess.run([f'ssh {server_id}', 'lspci', '-tv'],
+            shell=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            encoding="utf-8", timeout=timeout)
+
+    if has_ssh_connection_err_msg(result.stderr):
+        raise SshConnectionError()
+
+    lines = result.stdout.strip().split('\n')
+
+    tree = {}
+    indent_stack = []
+
+    for line in lines:
+        indent = len(line) - len(line.lstrip(' '))
+
+        bridge_matches = list(re.finditer(r'([0-9a-f]{2}\.[0-9a-f])-\[([0-9a-f]{2,4})-[0-9a-f]+\]', line))
+
+        if bridge_matches:
+            while indent_stack and indent_stack[-1][0] >= indent:
+                indent_stack.pop()
+
+            for bridge_match in bridge_matches:
+                dev_func = bridge_match.group(1)
+                bus_start = bridge_match.group(2).zfill(2)
+                bridge_id = f'bridge_{bus_start}_{dev_func}'
+
+                parent = indent_stack[-1][1] if indent_stack else None
+                tree[bridge_id] = {'parent': parent, 'children': [], 'is_efa': False, 'slot': None}
+
+                if parent:
+                    if parent not in tree:
+                        tree[parent] = {'parent': None, 'children': [], 'is_efa': False, 'slot': None}
+                    tree[parent]['children'].append(bridge_id)
+
+                indent_stack.append((indent, bridge_id))
+
+        leaf_match = re.search(r'[+\\]-([0-9a-f]{2}\.[0-9a-f])-\[([0-9a-f]{2,4})\]----([0-9a-f]{2}\.[0-9a-f])', line)
+        if leaf_match:
+            slot = leaf_match.group(1)
+            bus = leaf_match.group(2).zfill(2)
+            dev_func = leaf_match.group(3)
+            bdf = f'0000:{bus}:{dev_func}'
+            is_efa = 'Elastic Fabric Adapter (EFA)' in line
+
+            parent = indent_stack[-1][1] if indent_stack else None
+            tree[bdf] = {'parent': parent, 'children': [], 'is_efa': is_efa, 'slot': slot}
+
+            if parent:
+                if parent not in tree:
+                    tree[parent] = {'parent': None, 'children': [], 'is_efa': False, 'slot': None}
+                tree[parent]['children'].append(bdf)
+
+    return tree
 
 class CudaMemorySupport(IntEnum):
     NOT_INITIALIZED = -1
@@ -41,19 +101,19 @@ def get_cuda_memory_support(cmdline_args, ip):
           + " -p " + cmdline_args.provider
     if cmdline_args.environments:
         cmd = cmdline_args.environments + " " + cmd
-    
+
     proc = subprocess.run("ssh {} {}".format(ip, cmd),
                stdout=subprocess.PIPE,
                stderr=subprocess.STDOUT,
                shell=True,
                universal_newlines=True)
-    
+
     if has_ssh_connection_err_msg(proc.stdout):
         raise SshConnectionError()
-    
+
     if proc.returncode < 0:
         return CudaMemorySupport.NOT_SUPPORTED
-    
+
     print(f"The ssh return is {proc}")
     rc = proc.returncode
     if rc not in (CudaMemorySupport.NOT_SUPPORTED,
@@ -178,41 +238,6 @@ def efa_retrieve_gid(hostname):
 
     return process.stdout.decode("utf-8").strip()
 
-@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
-def get_efa_domain_names(server_id):
-    timeout = 60
-    process_timed_out = False
-
-    # This command returns a list of EFA domain names and its related info
-    command = "ssh {} 'fi_info -p efa || /opt/amazon/efa/bin/fi_info -p efa'".format(server_id)
-    p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
- 
-    try:
-        p.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        p.terminate()
-        process_timed_out = True
-
-    assert not process_timed_out, "Process timed out"
-    
-    errors = p.stderr.readlines()
-    for error in errors:
-        error = error.strip()
-        if "fi_getinfo: -61" in error:
-            raise Exception("No EFA devices/domain names found")
-
-        if has_ssh_connection_err_msg(error):
-            raise SshConnectionError()
-
-    efa_domain_names = []
-    for line in p.stdout:
-        line = line.strip()
-        if 'domain' in line:
-            domain_name = line.split(': ')[1]
-            efa_domain_names.append(domain_name)
-
-    return efa_domain_names
-
 @functools.lru_cache(10)
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def get_efa_device_names(server_id):
@@ -242,20 +267,122 @@ def get_efa_device_names(server_id):
             devices.append(parts[1].replace("-rdm", ""))
     return devices
 
+@functools.lru_cache(16)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def get_gpu_bdf(server_id, gpu_index):
+    timeout = 60
 
-def get_efa_device_name_for_cuda_device(ip, cuda_device_id, num_cuda_devices):
+    result = subprocess.run(
+        [f'ssh {server_id}', 'nvidia-smi', '--query-gpu=pci.bus_id', '--format=csv,noheader', '--id', str(gpu_index)],
+            shell=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            encoding="utf-8", timeout=timeout)
+
+    if has_ssh_connection_err_msg(result.stderr):
+        raise SshConnectionError()
+
+    bdf_raw = result.stdout.strip().lower()
+    bdf_parts = bdf_raw.split(':')
+    domain = bdf_parts[0][-4:].zfill(4)
+    bus = bdf_parts[1].zfill(2)
+    dev_func = bdf_parts[2]
+    return f'{domain}:{bus}:{dev_func}'
+
+@functools.lru_cache(32)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def get_rdma_core_name_for_efa_nic(server_id, bdf):
+    timeout = 60
+    result = subprocess.run(
+        [f'ssh {server_id}', 'ls', f'/sys/bus/pci/devices/{bdf}/infiniband'],
+        shell=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        encoding="utf-8", timeout=timeout)
+
+    if has_ssh_connection_err_msg(result.stderr):
+        raise SshConnectionError()
+
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip().split()[0]
+    return None
+
+def get_closest_efa_nics_for_gpu(server_id, gpu_index, pcie_tree):
+    """
+    BFS traversal to find the closest EFA NICs for a given GPU
+    """
+    gpu_bdf = get_gpu_bdf(server_id, gpu_index)
+
+    if gpu_bdf not in pcie_tree:
+        return []
+
+    visited = set()
+    queue = deque([(gpu_bdf, 0)])
+    closest_distance = None
+    closest_efas = []
+
+    while queue:
+        node, distance = queue.popleft()
+
+        if node in visited:
+            continue
+        visited.add(node)
+
+        if closest_distance is not None and distance > closest_distance:
+            break
+
+        if node in pcie_tree:
+            if pcie_tree[node]['is_efa'] and node != gpu_bdf:
+                rdma_name = get_rdma_core_name_for_efa_nic(server_id, node)
+                if rdma_name:
+                    if closest_distance is None:
+                        closest_distance = distance
+                    if distance == closest_distance:
+                        closest_efas.append(rdma_name)
+
+            # Add parent
+            if pcie_tree[node]['parent'] and pcie_tree[node]['parent'] not in visited:
+                queue.append((pcie_tree[node]['parent'], distance + 1))
+
+            # Add children
+            for child in pcie_tree[node]['children']:
+                if child not in visited:
+                    queue.append((child, distance + 1))
+
+    return closest_efas
+
+def get_efa_device_name_for_hmem_device(ip, hmem_device_id, num_hmem_devices):
     # this function implemented a simple way to find the closest EFA device for a given
-    # cuda device. It assumes EFA devices names are in order (which is usually true but not always)
+    # hmem device. It assumes EFA devices names are in order (which is usually true but not always)
     #
-    # For example, one a system with 8 CUDA devies and 4 EFA devices, this function would
-    # for GPU 0 and 1, return EFA device 0
-    # for GPU 2 and 3, return EFA device 1
-    # for GPU 4 and 5, return EFA device 2
-    # for GPU 6 and 7, return EFA device 3
+    # For example, one a system with 8 accelerators and 4 EFA devices, this function would
+    # for accelerator 0 and 1, return EFA device 0
+    # for accelerator 2 and 3, return EFA device 1
+    # for accelerator 4 and 5, return EFA device 2
+    # for accelerator 6 and 7, return EFA device 3
     efa_devices = get_efa_device_names(ip)
     num_efa = len(efa_devices)
-    return efa_devices[(cuda_device_id * num_efa) // num_cuda_devices]
+    return efa_devices[(hmem_device_id * num_efa) // num_hmem_devices]
 
+@functools.lru_cache(10)
+def get_efa_device_name_for_cuda_device(ip, cuda_device_id, num_cuda_devices):
+    """
+    Traverse the PCIe hierarchy and find the closest EFA NIC for a given GPU
+    If the PCIe hierarchy traversal fails, fallback to a simple round robin
+    """
+    efa_devices = get_efa_device_names(ip)
+    num_efa = len(efa_devices)
+
+    pcie_tree = parse_lspci_tree(ip)
+    closest_nics = get_closest_efa_nics_for_gpu(ip, cuda_device_id, pcie_tree)
+
+    if not closest_nics:
+        return get_efa_device_name_for_hmem_device(ip, cuda_device_id, num_cuda_devices)
+
+    # Each GPU can use a different EFA NIC
+    if num_efa >= num_cuda_devices:
+        return closest_nics[0]
+
+    # Multiple GPUs share the same EFA NIC
+    return closest_nics[(cuda_device_id * num_efa) // num_cuda_devices]
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def support_cq_interrupts(hostname):
