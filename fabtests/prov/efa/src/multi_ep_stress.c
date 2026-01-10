@@ -26,15 +26,12 @@
 #define MAX_WORKERS	64
 #define MAX_PEERS	MAX_WORKERS
 #define MAX_EP_ADDR_LEN 256
-#define MAX_MESSAGES	1000
 
 // Message types
 #define MSG_TYPE_EP_UP	     1
 #define MSG_TYPE_EP_DOWN     2
 #define MSG_TYPE_EP_UPDATE   3
 #define MSG_TYPE_EP_TEARDOWN 4
-
-#define TEST_CQDATA 0xAAAA // Hardcoded CQ data for fi_writedata
 
 // Configuration structure
 struct test_opts {
@@ -93,19 +90,15 @@ static struct option test_long_opts[] = {
 	{"random-seed", required_argument, NULL, OPT_RANDOM_SEED},
 	{0, 0, 0, 0}};
 
-// Endpoint status
-enum ep_status { EP_INIT, EP_READY, EP_SENDING, EP_RECEIVING, EP_TEARDOWN };
-
 // RMA information
 struct rma_info {
 	uint64_t remote_addr;
 	uint64_t rkey;
-	size_t length;
 };
 
 // Endpoint metadata
 struct ep_info {
-	uint32_t worker_id;
+	int worker_id;
 	char ep_addr[MAX_EP_ADDR_LEN];
 	size_t addr_len;
 	struct rma_info rma;
@@ -121,9 +114,6 @@ struct ep_message {
 struct worker_status {
 	pthread_mutex_t mutex;
 	bool active;
-	enum ep_status ep_status;
-	uint64_t ep_generation;
-	bool poll_cq;
 };
 
 // Common context structure
@@ -147,8 +137,6 @@ struct sender_context {
 	int num_peers;
 	int *control_socks; // Array of control sockets for multiple receivers
 	struct worker_status status;
-	pthread_t notification_thread;
-	uint64_t total_sent;
 };
 
 // Receiver context
@@ -158,8 +146,6 @@ struct receiver_context {
 	void *rx_buf;
 	struct fid_mr *mr;
 	struct fi_context2 *rx_ctx;
-	struct worker_status status;
-	uint64_t total_received;
 	int *control_socks; // Array of control sockets for multiple senders
 	int num_senders; // Number of connected senders
 };
@@ -581,6 +567,7 @@ static void *run_sender_worker(void *arg)
 	uint64_t total_ops = 0;
 	int msg_per_ep_lifecyle =
 		topts.msgs_per_endpoint / topts.sender_ep_recycling;
+	pthread_t notification_thread;
 
 	ctx->status.active = true;
 
@@ -593,11 +580,10 @@ static void *run_sender_worker(void *arg)
 		av_attr.count = ctx->num_peers;
 	}
 
-	pthread_create(&ctx->notification_thread, NULL, notification_handler,
+	pthread_create(&notification_thread, NULL, notification_handler,
 		       ctx);
 
 	for (int cycle = 0; cycle < topts.sender_ep_recycling; cycle++) {
-		ctx->status.poll_cq = true; // rand() % 2;
 		printf("Sender %d: Starting EP cycle %d/%d\n", ctx->worker_id,
 		       cycle + 1, topts.sender_ep_recycling);
 
@@ -726,8 +712,8 @@ static void *run_sender_worker(void *arg)
 			}
 		}
 
-		// Wait for all operations to complete
-		if (ctx->status.poll_cq) {
+		// Maybe wait for all operations to complete
+		if (rand() % 2) {
 			printf("Sender %d EP cycle %d: Waiting for "
 			       "completions\n",
 			       ctx->worker_id, cycle + 1);
@@ -774,9 +760,7 @@ out:
 	ctx->status.active = false;
 
 	// Wait for notification thread to finish
-	if (ctx->notification_thread) {
-		pthread_join(ctx->notification_thread, NULL);
-	}
+	pthread_join(notification_thread, NULL);
 
 	return (void *) (intptr_t) ret;
 }
@@ -797,7 +781,6 @@ static int notify_endpoint_update(struct receiver_context *ctx)
 	// Fill RMA info
 	msg.info.rma.remote_addr = (uint64_t) ctx->rx_buf;
 	msg.info.rma.rkey = fi_mr_key(ctx->mr);
-	msg.info.rma.length = opts.transfer_size * topts.msgs_per_endpoint * ctx->num_senders;
 
 	// Send to all connected senders
 	for (int i = 0; i < ctx->num_senders; i++) {
@@ -853,7 +836,6 @@ static void *run_receiver_worker(void *arg)
 	int cycle = 0;
 	int msg_per_ep_lifecyle =
 		topts.msgs_per_endpoint / topts.receiver_ep_recycling;
-	ctx->status.active = true;
 
 	if (topts.shared_cq)
 		ctx->common.cq = shared_rxcq;
@@ -868,10 +850,6 @@ static void *run_receiver_worker(void *arg)
 		ret = setup_endpoint(&ctx->common);
 		if (ret)
 			break;
-
-		ctx->status.ep_generation++;
-		ctx->status.ep_status = EP_RECEIVING;
-		ctx->status.poll_cq = true; // rand() % 2;
 
 		// Notify sender of new endpoint
 		ret = notify_endpoint_update(ctx);
@@ -940,7 +918,7 @@ static void *run_receiver_worker(void *arg)
 			}
 		}
 
-		if (ctx->status.poll_cq) {
+		if (rand() % 2) {
 			printf("Receiver %d EP cycle %d: Waiting for "
 			       "completions\n",
 			       ctx->worker_id, cycle + 1);
@@ -960,7 +938,6 @@ static void *run_receiver_worker(void *arg)
 						ctx->worker_id);
 				} else {
 					completed = expected_completions;
-					ctx->total_received += completed;
 				}
 			}
 		} else {
@@ -982,7 +959,6 @@ static void *run_receiver_worker(void *arg)
 	}
 
 	printf("Receiver %d: Completed %d EP cycles\n", ctx->worker_id, cycle);
-	ctx->status.active = false;
 	return (void *) (intptr_t) ret;
 }
 
@@ -1289,7 +1265,6 @@ static int run_receiver(void)
 	// Initialize workers
 	for (int i = 0; i < topts.num_receiver_workers; i++) {
 		workers[i].worker_id = i;
-		pthread_mutex_init(&workers[i].status.mutex, NULL);
 
 		// Calculate number of senders this receiver talks to
 		if (topts.num_sender_workers <= topts.num_receiver_workers) {
@@ -1422,7 +1397,6 @@ out:
 			}
 			free(workers[i].rx_buf);
 			free(workers[i].rx_ctx);
-			pthread_mutex_destroy(&workers[i].status.mutex);
 		}
 	}
 	free(workers);
