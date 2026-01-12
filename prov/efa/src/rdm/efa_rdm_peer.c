@@ -140,6 +140,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 {
 	struct efa_rdm_robuf *robuf;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_pke *ooo_entry;
 	uint32_t msg_id;
 
 	assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type >= EFA_RDM_REQ_PKT_BEGIN);
@@ -184,7 +185,12 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 				return -FI_ENOMEM;
 			}
 
-			overflow_pke_list_entry->pkt_entry = pkt_entry;
+			ooo_entry = efa_rdm_pke_get_ooo_pke(pkt_entry);
+			if (!ooo_entry)
+				return -FI_ENOMEM;
+
+			overflow_pke_list_entry->pkt_entry = ooo_entry;
+
 			dlist_insert_head(&overflow_pke_list_entry->entry, &peer->overflow_pke_list);
 
 			EFA_DBG(FI_LOG_EP_CTRL,
@@ -196,7 +202,11 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 		}
 	}
 
-	return efa_rdm_peer_recvwin_queue_or_append_pke(pkt_entry, msg_id, robuf);
+	ooo_entry = efa_rdm_pke_get_ooo_pke(pkt_entry);
+	if (!ooo_entry)
+		return -FI_ENOMEM;
+
+	return efa_rdm_peer_recvwin_queue_or_append_pke(ooo_entry, msg_id, robuf);
 }
 
 /**
@@ -205,37 +215,18 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
  * same msg_id already exists in the receive window, append this pkt_entry to
  * the existing packet entry.
  *
- * @param[in]		pkt_entry	packet entry, will be released if successfully queued
+ * @param[in]		ooo_entry	ooo packet entry
  * @param[in]		msg_id		msg id of the pkt_entry
  * @param[in, out]	robuf		receive window of the peer
  *
  * @returns
  * 1 when the packet entry is queued successfully.
- * -FI_ENOMEM if running out of memory while allocating rx_pkt_entry for OOO msg.
  */
-int efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_rdm_pke *pkt_entry,
+int efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_rdm_pke *ooo_entry,
 					     uint32_t msg_id,
 					     struct efa_rdm_robuf *robuf)
 {
-	struct efa_rdm_pke *ooo_entry;
 	struct efa_rdm_pke *cur_ooo_entry;
-	if (OFI_LIKELY(efa_env.rx_copy_ooo)) {
-		assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL);
-		ooo_entry = efa_rdm_pke_clone(pkt_entry, pkt_entry->ep->rx_ooo_pkt_pool, EFA_RDM_PKE_FROM_OOO_POOL);
-#if ENABLE_DEBUG
-		/* ooo pkt is also rx pkt, insert it to rx pkt list so we can track it and clean up during ep close */
-		dlist_insert_tail(&ooo_entry->dbg_entry, &ooo_entry->ep->rx_pkt_list);
-#endif
-
-		if (OFI_UNLIKELY(!ooo_entry)) {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				"Unable to allocate rx_pkt_entry for OOO msg\n");
-			return -FI_ENOMEM;
-		}
-		efa_rdm_pke_release_rx(pkt_entry);
-	} else {
-		ooo_entry = pkt_entry;
-	}
 
 	cur_ooo_entry = *ofi_recvwin_get_msg(robuf, msg_id);
 	if (cur_ooo_entry) {
@@ -263,7 +254,6 @@ void efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_rdm_peer *peer)
 	struct efa_rdm_pke *overflow_pkt_entry;
 	struct dlist_entry *tmp;
 	uint32_t msg_id;
-	int ret;
 
 	if (dlist_empty(&peer->overflow_pke_list)) {
 		return;
@@ -275,16 +265,11 @@ void efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_rdm_peer *peer)
 		overflow_pke_list_entry, entry, tmp) {
 		overflow_pkt_entry = overflow_pke_list_entry->pkt_entry;
 		msg_id = efa_rdm_pke_get_rtm_msg_id(overflow_pkt_entry);
+
 		if (ofi_recvwin_id_valid((&peer->robuf), msg_id)) {
-			ret = efa_rdm_peer_recvwin_queue_or_append_pke(
+			efa_rdm_peer_recvwin_queue_or_append_pke(
 				overflow_pkt_entry, msg_id, (&peer->robuf));
-			if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
-				/* running out of memory while copy packet */
-				efa_base_ep_write_eq_error(
-					&(overflow_pkt_entry->ep->base_ep),
-					FI_ENOBUFS, FI_EFA_ERR_OOM);
-				return;
-			}
+
 			dlist_remove(&overflow_pke_list_entry->entry);
 			ofi_buf_free(overflow_pke_list_entry);
 			EFA_DBG(FI_LOG_EP_CTRL,
