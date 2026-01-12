@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "efa_rdm_pke_utils.h"
 
 /**
  * @brief Test efa_rdm_peer_reorder_msg
@@ -333,7 +334,7 @@ void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_peer *peer;
-	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_pke *pkt_entry, *ooo_entry;
 	struct efa_ep_addr raw_addr;
 	size_t raw_addr_len = sizeof(raw_addr);
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -370,7 +371,9 @@ void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
 	pkt_attr.connid = raw_addr.qkey;
 	efa_unit_test_eager_msgrtm_pkt_construct(pkt_entry, &pkt_attr);
 
-	ret = efa_rdm_peer_recvwin_queue_or_append_pke(pkt_entry, msg_id, (&peer->robuf));
+	ooo_entry = efa_rdm_pke_get_ooo_pke(pkt_entry);
+
+	ret = efa_rdm_peer_recvwin_queue_or_append_pke(ooo_entry, msg_id, (&peer->robuf));
 	assert_int_equal(ret, 1);
 
 #if ENABLE_DEBUG
