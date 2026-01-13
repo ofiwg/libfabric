@@ -864,7 +864,7 @@ static void *run_receiver_worker(void *arg)
 				"for cycle %d: %d\n",
 				ctx->worker_id, cycle + 1, ret);
 			cleanup_endpoint(&ctx->common);
-			continue;
+			goto out;
 		}
 
 		// sleep random time up to 100ms to emulate the real workload
@@ -961,7 +961,7 @@ static void *run_receiver_worker(void *arg)
 			usleep(1000);
 		}
 	}
-
+out:
 	printf("Receiver %d: Completed %d EP cycles\n", ctx->worker_id, cycle);
 	return (void *) (intptr_t) ret;
 }
