@@ -831,3 +831,32 @@ int ofi_hmem_put_dmabuf_fd(enum fi_hmem_iface iface, int fd)
 {
 	return hmem_ops[iface].put_dmabuf_fd(fd);
 }
+
+/**
+ * @brief Check if DMABUF is enabled for a specific HMEM interface
+ *
+ * This function checks the environment variables to determine if DMABUF
+ * should be used for the specified HMEM interface.
+ *
+ * @param[in] iface The HMEM interface to check
+ * @return true if DMABUF is enabled for the interface, false otherwise
+ */
+bool ofi_hmem_is_dmabuf_env_var_enabled(enum fi_hmem_iface iface)
+{
+	switch (iface) {
+	case FI_HMEM_SYSTEM:
+		return false;
+	case FI_HMEM_CUDA:
+		return cuda_is_dmabuf_requested();
+	case FI_HMEM_NEURON:
+		return neuron_is_dmabuf_requested();
+	case FI_HMEM_SYNAPSEAI:
+		return synapseai_is_dmabuf_requested();
+	case FI_HMEM_ROCR:
+		return rocr_is_dmabuf_requested();
+	case FI_HMEM_ZE:
+		return ze_is_dmabuf_requested();
+	default:
+		return false;
+	}
+}
