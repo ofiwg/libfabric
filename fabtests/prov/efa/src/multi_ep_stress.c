@@ -28,12 +28,6 @@
 #define MAX_PEERS	MAX_WORKERS
 #define MAX_EP_ADDR_LEN 256
 
-// Message types
-#define MSG_TYPE_EP_UP	     1
-#define MSG_TYPE_EP_DOWN     2
-#define MSG_TYPE_EP_UPDATE   3
-#define MSG_TYPE_EP_TEARDOWN 4
-
 // Configuration structure
 struct test_opts {
 	int num_sender_workers;
@@ -105,16 +99,10 @@ struct ep_info {
 	struct rma_info rma;
 };
 
-// Message structure for endpoint updates
-struct ep_message {
-	int msg_type;
-	struct ep_info info;
-};
-
 // Worker status tracking
 struct worker_status {
-	pthread_mutex_t mutex;
-	atomic_flag *active;
+       pthread_mutex_t mutex;
+       atomic_flag *active;
 };
 
 // Common context structure
@@ -254,7 +242,7 @@ void *notification_handler(void *arg)
 		for (int sock_idx = 0; sock_idx < ctx->num_peers; sock_idx++) {
 			if (ctx->control_socks[sock_idx] < 0)
 				continue;
-			struct ep_message msg;
+			struct ep_info msg;
 			size_t bytes_received = 0;
 
 			while (bytes_received < sizeof(msg)) {
@@ -299,7 +287,7 @@ void *notification_handler(void *arg)
 				// worker ID
 				int worker_idx = -1;
 				for (int i = 0; i < ctx->num_peers; i++) {
-					if (ctx->peer_ids[i] == msg.info.worker_id) {
+					if (ctx->peer_ids[i] == msg.worker_id) {
 						worker_idx = i;
 						break;
 					}
@@ -309,48 +297,48 @@ void *notification_handler(void *arg)
 				    worker_idx < ctx->num_peers) {
 					if (!ctx->peer_ep_addrs[worker_idx]) {
 						ctx->peer_ep_addrs [worker_idx] = malloc(
-							msg.info.addr_len);
+							msg.addr_len);
 					}
 					if (ctx->peer_ep_addrs[worker_idx]) {
 						memcpy(ctx->peer_ep_addrs[worker_idx],
-						       msg.info.ep_addr,
-						       msg.info.addr_len);
+						       msg.ep_addr,
+						       msg.addr_len);
 					}
 
 					fi_addr_t fi_addr;
 					if (ctx->common.av) {
 						int ret = fi_av_insert(
 							ctx->common.av,
-							msg.info.ep_addr, 1,
+							msg.ep_addr, 1,
 							&fi_addr, 0, NULL);
 						if (ret == 1) {
 							ctx->peer_addrs[worker_idx] = fi_addr;
 							memcpy(&ctx->peer_rma_info[worker_idx],
-							       &msg.info.rma,
+							       &msg.rma,
 							       sizeof(struct rma_info));
 							if (topts.verbose) {
 								printf("Sender %d: Updated EP for receiver %d (fi_addr=%lu)\n",
 								       ctx->worker_id,
-								       msg.info.worker_id,
+								       msg.worker_id,
 								       fi_addr);
 							}
 						} else {
 							if (topts.verbose) {
 								printf("Sender %d: Failed to insert address for receiver %d ret=%d\n",
 								       ctx->worker_id,
-								       msg.info.worker_id,
+								       msg.worker_id,
 								       ret);
 							}
 						}
 					} else {
 						printf("Sender %d: No valid AV to insert address for receiver %d\n",
 						       ctx->worker_id,
-						       msg.info.worker_id);
+						       msg.worker_id);
 					}
 				} else if (topts.verbose) {
 					printf("Sender %d: Ignoring notification from receiver %d (not assigned)\n",
 					       ctx->worker_id,
-					       msg.info.worker_id);
+					       msg.worker_id);
 				}
 
 				pthread_mutex_unlock(&ctx->status.mutex);
@@ -782,20 +770,19 @@ out:
 
 static int notify_endpoint_update(struct receiver_context *ctx)
 {
-	struct ep_message msg;
-	msg.msg_type = MSG_TYPE_EP_UPDATE;
-	msg.info.worker_id = ctx->worker_id;
+	struct ep_info msg = {0};
+	msg.worker_id = ctx->worker_id;
 
 	// Get endpoint address
-	msg.info.addr_len = MAX_EP_ADDR_LEN;
-	int ret = fi_getname(&ctx->common.ep->fid, msg.info.ep_addr,
-			     &msg.info.addr_len);
+	msg.addr_len = MAX_EP_ADDR_LEN;
+	int ret = fi_getname(&ctx->common.ep->fid, msg.ep_addr,
+			     &msg.addr_len);
 	if (ret)
 		return ret;
 
 	// Fill RMA info
-	msg.info.rma.remote_addr = (uint64_t) ctx->rx_buf;
-	msg.info.rma.rkey = fi_mr_key(ctx->mr);
+	msg.rma.remote_addr = (uint64_t) ctx->rx_buf;
+	msg.rma.rkey = fi_mr_key(ctx->mr);
 
 	// Send to all connected senders
 	for (int i = 0; i < ctx->num_senders; i++) {
