@@ -503,7 +503,11 @@ class ClientServerTest:
 
         if self._cmdline_args.provider == "efa":
             import efa.efa_common
-            efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, hmem_device_id, num_hmem)
+            if host_memory_type == "cuda":
+                efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, hmem_device_id, num_hmem)
+            else:
+                # TODO: Implement topology aware EFA device selection for other accelerators
+                efa_device = efa.efa_common.get_efa_device_name_for_hmem_device(host_ip, hmem_device_id, num_hmem)
             command += " -d {}-rdm".format(efa_device)
 
         return command, additional_env
