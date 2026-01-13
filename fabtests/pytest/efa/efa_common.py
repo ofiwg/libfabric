@@ -180,41 +180,6 @@ def efa_retrieve_gid(hostname):
 
     return process.stdout.decode("utf-8").strip()
 
-@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
-def get_efa_domain_names(server_id):
-    timeout = 60
-    process_timed_out = False
-
-    # This command returns a list of EFA domain names and its related info
-    command = "ssh {} 'fi_info -p efa || /opt/amazon/efa/bin/fi_info -p efa'".format(server_id)
-    p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
- 
-    try:
-        p.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        p.terminate()
-        process_timed_out = True
-
-    assert not process_timed_out, "Process timed out"
-    
-    errors = p.stderr.readlines()
-    for error in errors:
-        error = error.strip()
-        if "fi_getinfo: -61" in error:
-            raise Exception("No EFA devices/domain names found")
-
-        if has_ssh_connection_err_msg(error):
-            raise SshConnectionError()
-
-    efa_domain_names = []
-    for line in p.stdout:
-        line = line.strip()
-        if 'domain' in line:
-            domain_name = line.split(': ')[1]
-            efa_domain_names.append(domain_name)
-
-    return efa_domain_names
-
 @functools.lru_cache(10)
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def get_efa_device_names(server_id):
