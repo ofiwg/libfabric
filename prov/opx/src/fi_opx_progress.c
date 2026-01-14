@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2025 Cornelis Networks.
+ * Copyright (C) 2022-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,6 +31,7 @@
  */
 
 #include "rdma/opx/fi_opx_progress.h"
+#include "rdma/opx/opx_tracer.h"
 #include <sys/eventfd.h>
 #include <poll.h>
 #include <unistd.h>
@@ -144,7 +145,9 @@ void *opx_progress_func(void *args)
 	ssize_t			    read_rc;
 
 	while (1) {
+		OPX_TRACE_PROGRESS_BEGIN(OPX_TRACE_EVENT_PROGRESS_POLL, 0, 0);
 		if (!cq->cq_fid.ops || cq->progress.ep_count == 0) {
+			OPX_TRACE_PROGRESS_INSTANT(OPX_TRACE_EVENT_PROGRESS_IDLE, OPX_PROGRESS_CQ_WAIT_USEC, 0);
 			usleep(OPX_PROGRESS_CQ_WAIT_USEC);
 			read_rc = read(event_fd, &event_buf, sizeof(event_buf));
 			if (read_rc != -1) {
@@ -176,12 +179,15 @@ void *opx_progress_func(void *args)
 
 			break;
 		} else {
+			OPX_TRACE_PROGRESS_BEGIN(OPX_TRACE_EVENT_PROGRESS_WORK, 0, 0);
 			fi_opx_lock(&cq->lock);
 			fi_opx_cq_poll_inline(&cq->cq_fid, NULL, 0, NULL, FI_CQ_FORMAT_UNSPEC, FI_OPX_LOCK_REQUIRED,
 					      OFI_RELIABILITY_KIND_ONLOAD, FI_OPX_HDRQ_MASK_RUNTIME, 0UL,
 					      OPX_SW_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
 			fi_opx_unlock(&cq->lock);
+			OPX_TRACE_PROGRESS_END_SUCCESS(OPX_TRACE_EVENT_PROGRESS_WORK, 0, 0);
 		}
+		OPX_TRACE_PROGRESS_END_SUCCESS(OPX_TRACE_EVENT_PROGRESS_POLL, 0, 0);
 	}
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_CQ, "Auto progress thread terminating, stopping thread\n");

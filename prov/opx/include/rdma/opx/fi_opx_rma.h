@@ -70,7 +70,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 			const int lock_required, const uint64_t caps, const enum ofi_reliability_kind reliability,
 			const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "READV_INTERNAL");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_READV_INTERNAL, iov->len, 0);
 
 	union fi_opx_hfi1_deferred_work *work =
 		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
@@ -158,7 +158,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
 		OPX_BUF_FREE(work);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "READV_INTERNAL");
+		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READV_INTERNAL, iov->len, 0);
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
@@ -167,7 +167,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	assert(work->work_elem.slist_entry.next == NULL);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "READV_INTERNAL");
+	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READV_INTERNAL, iov->len, 0);
 }
 
 __OPX_FORCE_INLINE__
@@ -178,7 +178,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 			const uint64_t caps, const enum ofi_reliability_kind reliability,
 			const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITE_INTERNAL");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_WRITE_INTERNAL, iov->len, 0);
 	assert(niov == 1); // TODO, support something ... bigger
 	assert(op == FI_NOOP || op < OFI_ATOMIC_OP_LAST);
 	assert(dt == FI_VOID || dt < OFI_DATATYPE_LAST);
@@ -295,13 +295,13 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	if (rc == FI_SUCCESS) {
 		assert(work->work_elem.complete);
 		OPX_BUF_FREE(work);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITE_INTERNAL");
+		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITE_INTERNAL, iov->len, 0);
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
 	if (work->work_elem.work_type == OPX_WORK_TYPE_LAST) {
 		slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITE_INTERNAL");
+		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITE_INTERNAL, iov->len, 0);
 		return;
 	}
 	/* We weren't able to complete the write on the first try. If this was an inject,
@@ -321,7 +321,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[work->work_elem.work_type]);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITE_INTERNAL");
+	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITE_INTERNAL, iov->len, 0);
 }
 
 __OPX_FORCE_INLINE__

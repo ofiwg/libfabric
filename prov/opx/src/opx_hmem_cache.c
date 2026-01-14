@@ -211,12 +211,12 @@ static int opx_hmem_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data
 __OPX_FORCE_INLINE__
 int opx_hmem_cache_init(struct util_domain *domain, struct ofi_mem_monitor **monitors, struct ofi_mr_cache *cache)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-CACHE-INIT");
+	OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_CACHE_INIT, 0, 0);
 	int ret;
 
 	assert(cache->add_region && cache->delete_region);
 	if (!cache_params.max_cnt || !cache_params.max_size) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "GDRCOPY-CACHE-INIT");
+		OPX_TRACE_HMEM_END_ERROR(OPX_TRACE_EVENT_HMEM_CACHE_INIT, 0, 0);
 		return -FI_ENOSPC;
 	}
 
@@ -252,12 +252,12 @@ int opx_hmem_cache_init(struct util_domain *domain, struct ofi_mem_monitor **mon
 		goto del;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-CACHE-INIT");
+	OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_CACHE_INIT, 0, 0);
 	return 0;
 del:
 	ofi_monitors_del_cache(cache);
 destroy:
-	OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "GDRCOPY-CACHE-INIT");
+	OPX_TRACE_HMEM_END_ERROR(OPX_TRACE_EVENT_HMEM_CACHE_INIT, 0, 0);
 	ofi_rbmap_cleanup(&cache->tree);
 	ofi_atomic_dec32(&cache->domain->ref);
 	pthread_mutex_destroy(&cache->lock);
@@ -477,19 +477,19 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 	 */
 	ofi_mr_cache_flush(cache, false);
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "HMEM-DEV-HANDLE-REGISTER");
+	OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_DEV_REGISTER, 0, 0);
 	err = ofi_hmem_dev_register(opx_mr->attr.iface, entry->info.iov.iov_base, entry->info.iov.iov_len,
 				    (uint64_t *) &opx_mr->attr.hmem_data);
 
 	if (OFI_UNLIKELY(err)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "HMEM-DEV-HANDLE-REGISTER");
+		OPX_TRACE_HMEM_END_ERROR(OPX_TRACE_EVENT_HMEM_DEV_REGISTER, 0, 0);
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 			"Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n", err,
 			entry->info.iov.iov_base, entry->info.iov.iov_len);
 		// When gdrcopy pin buf failed, fallback to cudaMemcpy and return without caching
 		opx_mr->attr.hmem_data = 0UL;
 	} else {
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "HMEM-DEV-HANDLE-REGISTER");
+		OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_DEV_REGISTER, 0, 0);
 	}
 
 	opx_mr->mr_fid.mem_desc = opx_mr;
@@ -533,9 +533,9 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 		/* Hold the cache->lock across unregister call */
 		pthread_mutex_lock(&cache->lock);
 		assert(opx_mr->attr.iface == FI_HMEM_CUDA || opx_mr->attr.iface == FI_HMEM_ROCR);
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-DEV-UNREGISTER");
+		OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_DEV_UNREGISTER, 0, 0);
 		int err = ofi_hmem_dev_unregister(opx_mr->attr.iface, (uint64_t) opx_mr->attr.hmem_data);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-DEV-UNREGISTER");
+		OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_DEV_UNREGISTER, 0, 0);
 		pthread_mutex_unlock(&cache->lock);
 		if (OFI_UNLIKELY(err)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR,

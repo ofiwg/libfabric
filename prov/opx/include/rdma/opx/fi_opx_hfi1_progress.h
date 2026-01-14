@@ -926,7 +926,7 @@ void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
 				       sdma_end_ns);
 		hfi->info.sdma.queued_entries[hfi->info.sdma.done_index] = NULL;
 
-		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_COMPLETE_%hu", hfi->info.sdma.done_index);
+		OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_HW_INFLIGHT, hfi->info.sdma.done_index, 0);
 
 		assert(entry->status == COMPLETE || entry->status == FREE ||
 		       (entry->status == ERROR &&
@@ -988,6 +988,8 @@ bool opx_handle_events_shared(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask
 	bool	 ret	= false;
 
 	if (opx_shared_rx_context_try_lock(opx_ep->rx->shd_ctx.hwcontext_ctrl) != 0) {
+		OPX_TRACE_LOCK_INSTANT(OPX_TRACE_EVENT_LOCK_CONTENTION, (uint64_t) opx_ep->rx->shd_ctx.hwcontext_ctrl,
+				       0);
 		return false;
 	}
 	OPX_SHD_CTX_PIO_LOCK(OPX_CTX_SHARING_ON, opx_ep->tx);
@@ -1201,6 +1203,9 @@ void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliab
 								hfi1_type, OPX_CTX_SHARING_ON);
 			} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
 			opx_shared_rx_context_unlock(opx_ep->rx->shd_ctx.hwcontext_ctrl);
+		} else {
+			OPX_TRACE_LOCK_INSTANT(OPX_TRACE_EVENT_LOCK_CONTENTION,
+					       (uint64_t) opx_ep->rx->shd_ctx.hwcontext_ctrl, 0);
 		}
 	} else {
 		do {

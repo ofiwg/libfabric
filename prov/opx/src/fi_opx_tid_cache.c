@@ -52,6 +52,7 @@
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/fi_opx_endpoint.h"
+#include "rdma/opx/opx_tracer.h"
 #include "fi_opx_tid.h"
 #include "fi_opx_tid_cache.h"
 #include <ofi_iov.h>
@@ -186,6 +187,7 @@ int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length, enum fi_hme
 							    flags);
 
 	if (ret) { // ERROR, no TIDs were registered
+
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_update_fail);
 		return ret;
 	}
@@ -729,6 +731,7 @@ enum opx_tid_cache_entry_status opx_tid_cache_find(struct fi_opx_ep *opx_ep, con
 	*entry				      = opx_mr_rbt_find(&cache->tree, info);
 	const struct opx_tid_mr *const opx_mr = (*entry) ? (struct opx_tid_mr *) (*entry)->data : NULL;
 	if (!*entry) {
+		OPX_TRACE_TID_INSTANT(OPX_TRACE_EVENT_TID_CACHE_MISS, (uint64_t) info->iov.iov_base, info->iov.iov_len);
 		ret = OPX_TID_CACHE_ENTRY_NOT_FOUND;
 	} else if (OFI_UNLIKELY(opx_mr->opx_ep != opx_ep)) {
 		/* In use by an endpoint other than the requestor */
@@ -750,6 +753,7 @@ enum opx_tid_cache_entry_status opx_tid_cache_find(struct fi_opx_ep *opx_ep, con
 		ret			     = OPX_TID_CACHE_ENTRY_IN_USE;
 
 	} else if (ofi_iov_within(&info->iov, &(*entry)->info.iov)) {
+		OPX_TRACE_TID_INSTANT(OPX_TRACE_EVENT_TID_CACHE_HIT, (uint64_t) info->iov.iov_base, info->iov.iov_len);
 		ret = OPX_TID_CACHE_ENTRY_FOUND;
 	} else if (info->iov.iov_base >= (*entry)->info.iov.iov_base) {
 		// The search IOV starts within the range of the cached IOV, and

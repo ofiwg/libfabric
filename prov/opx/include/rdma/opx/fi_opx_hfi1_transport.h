@@ -111,6 +111,7 @@ ssize_t fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep, void *user_context,
 		abort();
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== TX CQ COMPLETION QUEUED\n");
+	OPX_TRACE_PIO_INSTANT(OPX_TRACE_EVENT_PIO_COMPLETE, len, tag);
 	slist_insert_tail((struct slist_entry *) context, opx_ep->tx->cq_completed_ptr);
 
 	return FI_SUCCESS;
@@ -668,7 +669,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, un
 	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== INJECT, SHM (begin)\n");
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-INJECT-SHM");
+		OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_INJECT_SHM, len, tag);
 		uint64_t			 pos;
 		ssize_t				 rc;
 		union opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -743,14 +744,14 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, un
 
 		opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-INJECT-SHM");
+		OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_INJECT_SHM, len, tag);
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== INJECT, SHM (end)\n");
 		return FI_SUCCESS;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== INJECT, HFI (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-INJECT-HFI");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_INJECT_HFI, len, tag);
 
 	/* first check for sufficient credits to inject the entire packet */
 	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
@@ -777,7 +778,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, un
 	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, dest_addr.lid, dest_addr.hfi1_subctxt_rx,
 					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-INJECT-HFI");
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_INJECT_HFI, len, tag);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
@@ -881,7 +882,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, un
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
 							     hfi1_type);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-INJECT-HFI");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_INJECT_HFI, len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== INJECT, HFI (end)\n");
 
 	return FI_SUCCESS;
@@ -990,7 +991,7 @@ ssize_t opx_hfi1_tx_sendv_egr_shm(struct fid_ep *ep, const struct iovec *iov, si
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== SENDV, SHM -- EAGER (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-EAGER-SHM");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, 0, 0);
 	uint64_t			 pos;
 	ssize_t				 rc;
 	union opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -1079,7 +1080,7 @@ ssize_t opx_hfi1_tx_sendv_egr_shm(struct fid_ep *ep, const struct iovec *iov, si
 		rc = FI_SUCCESS;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-SHM");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, 0, 0);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== SENDV, SHM -- EAGER (end)\n");
 	return rc;
@@ -1131,7 +1132,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	const uint64_t bth_subctxt_rx = ((uint64_t) dest_addr.hfi1_subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- EAGER (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-EAGER-HFI");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
 
 	// Even though we're using the reliability service to pack this buffer
 	// we still want to make sure it will have enough credits available to send
@@ -1239,7 +1240,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 		rc = FI_SUCCESS;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-HFI");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- EAGER (end)\n");
 
@@ -1263,7 +1264,7 @@ ssize_t opx_hfi1_tx_sendv_egr_shm_16B(struct fid_ep *ep, const struct iovec *iov
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== SENDV 16B, SHM -- EAGER (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-EAGER-SHM");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, 0, 0);
 	uint64_t			 pos;
 	ssize_t				 rc;
 	union opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -1359,7 +1360,7 @@ ssize_t opx_hfi1_tx_sendv_egr_shm_16B(struct fid_ep *ep, const struct iovec *iov
 		rc = FI_SUCCESS;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-SHM");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, 0, 0);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== SENDV 16B, SHM -- EAGER (end)\n");
 	return rc;
@@ -1419,7 +1420,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV 16B, HFI -- EAGER (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-EAGER-HFI");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
 
 	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
 
@@ -1534,7 +1535,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 		rc = FI_SUCCESS;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-EAGER-HFI");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV 16B, HFI -- EAGER (end)\n");
 
@@ -1596,7 +1597,7 @@ ssize_t opx_hfi1_tx_send_egr_shm(struct fid_ep *ep, const void *buf, size_t len,
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, SHM -- EAGER (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-SHM");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_EAGER_SHM, len, tag);
 	uint64_t			 pos;
 	ssize_t				 rc;
 	union opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -1604,7 +1605,7 @@ ssize_t opx_hfi1_tx_send_egr_shm(struct fid_ep *ep, const void *buf, size_t len,
 		opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-EAGER-SHM");
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_SHM, len, tag);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== SEND, SHM -- EAGER (end) - No packet available.\n");
 		return rc;
@@ -1655,7 +1656,7 @@ ssize_t opx_hfi1_tx_send_egr_shm(struct fid_ep *ep, const void *buf, size_t len,
 	} else {
 		rc = FI_SUCCESS;
 	}
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-SHM");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_EAGER_SHM, len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, SHM -- EAGER (end)\n");
 
@@ -1687,7 +1688,7 @@ ssize_t opx_hfi1_tx_send_egr_shm_16B(struct fid_ep *ep, const void *buf, size_t 
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND 16B, SHM -- EAGER (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-SHM");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_EAGER_SHM, len, tag);
 	uint64_t			 pos;
 	ssize_t				 rc;
 	union opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -1695,7 +1696,7 @@ ssize_t opx_hfi1_tx_send_egr_shm_16B(struct fid_ep *ep, const void *buf, size_t 
 		opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-EAGER-SHM");
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_SHM, len, tag);
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND 16B, SHM -- EAGER (end) - No packet available.\n");
@@ -1753,7 +1754,7 @@ ssize_t opx_hfi1_tx_send_egr_shm_16B(struct fid_ep *ep, const void *buf, size_t 
 	} else {
 		rc = FI_SUCCESS;
 	}
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-SHM");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_EAGER_SHM, len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND 16B, SHM -- EAGER (end)\n");
 
@@ -2022,7 +2023,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, uni
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- EAGER (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-HFI");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 
 	/* first check for sufficient credits to inject the entire packet */
 	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
@@ -2032,8 +2033,10 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, uni
 					full_block_credits_needed + /* PIO full blocks -- payload */
 					(payload_qws_tail > 0);	    /* PIO partial block -- 1 credit */
 
+	OPX_TRACE_PIO_BEGIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
+		OPX_TRACE_PIO_END_ENOBUFS(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_ENOBUFS (end)\n");
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_ENOBUFS;
@@ -2046,6 +2049,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, uni
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, dest_addr.lid,
 					    dest_addr.hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
+		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_EAGAIN (end)\n");
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
@@ -2096,6 +2100,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, uni
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
+	OPX_TRACE_PIO_END_SUCCESS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, dest_addr, replay, psn_ptr, xfer_bytes_tail, buf,
 						  payload_qws_total, reliability, hfi1_type);
@@ -2107,7 +2112,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, uni
 		rc = FI_SUCCESS;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-HFI");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- EAGER (end)\n");
 
@@ -2171,7 +2176,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND 16B, HFI -- EAGER (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-EAGER-HFI");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 
 	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
 
@@ -2182,8 +2187,10 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 					full_block_credits_needed +   /* PIO full blocks -- kdeth9/payload/tail */
 					(tail_partial_block_qws > 0); /* PIO partial block -- 1 credit */
 
+	OPX_TRACE_PIO_BEGIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
+		OPX_TRACE_PIO_END_ENOBUFS(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_ENOBUFS;
 	}
@@ -2195,6 +2202,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, dest_addr.lid,
 					    dest_addr.hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
+		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
@@ -2267,6 +2275,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
+	OPX_TRACE_PIO_END_SUCCESS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, dest_addr, replay, psn_ptr, xfer_bytes_tail, buf,
 						  payload_qws_total, reliability, hfi1_type);
@@ -2278,7 +2287,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 		rc = FI_SUCCESS;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-EAGER-HFI");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND 16B, HFI -- EAGER (end)\n");
 
@@ -2515,7 +2524,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep, void **bu
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER FIRST (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-MP-EAGER-FIRST-HFI");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_MP_EAGER_FIRST_HFI, 0, 0);
 
 	const uint16_t chunk_credits  = opx_ep->tx->mp_eager_chunk_size >> 6;
 	const uint16_t credits_needed = chunk_credits + ((hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ? 1 : 2);
@@ -2526,7 +2535,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep, void **bu
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < credits_needed)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-		OPX_TRACER_TRACE(OPX_TRACER_END_ENOBUFS, "SEND-MP-EAGER-FIRST-HFI");
+		OPX_TRACE_TX_END_ENOBUFS(OPX_TRACE_EVENT_TX_MP_EAGER_FIRST_HFI, 0, 0);
 		return -FI_ENOBUFS;
 	}
 
@@ -2539,7 +2548,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep, void **bu
 	if (OFI_UNLIKELY(psn == -1)) {
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-MP-EAGER-FIRST-HFI");
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_MP_EAGER_FIRST_HFI, 0, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -2640,9 +2649,10 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(struct fi_opx_ep *opx_ep, void **bu
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 
-	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr, 0, buf_ptr, payload_qws_total,
-						  reliability, hfi1_type);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-MP-EAGER-FIRST-HFI");
+	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr, 0,
+						  (uint64_t *) buf_ptr + OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS,
+						  payload_qws_total, reliability, hfi1_type);
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_FIRST_HFI, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER FIRST (end)\n");
 
@@ -2663,7 +2673,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, const void *buf
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER NTH (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-MP-EAGER-NTH");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 
 	size_t xfer_bytes_tail = len & 0x07UL;
 
@@ -2687,7 +2697,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, const void *buf
 		FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < total_credits_needed)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-		OPX_TRACER_TRACE(OPX_TRACER_END_ENOBUFS, "SEND-MP-EAGER-NTH");
+		OPX_TRACE_TX_END_ENOBUFS(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 		return -FI_ENOBUFS;
 	}
 
@@ -2699,7 +2709,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, const void *buf
 					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-MP-EAGER-NTH");
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -2777,7 +2787,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, const void *buf
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
 							     hfi1_type);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-MP-EAGER-NTH");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER NTH (end)\n");
 
@@ -2796,7 +2806,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, const void 
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND 16B, HFI -- MULTI-PACKET EAGER NTH (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-MP-EAGER-NTH");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 
 	size_t xfer_bytes_tail = len & 0x07UL;
 
@@ -2837,7 +2847,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, const void 
 		FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < total_credits_needed)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-		OPX_TRACER_TRACE(OPX_TRACER_END_ENOBUFS, "SEND-MP-EAGER-NTH");
+		OPX_TRACE_TX_END_ENOBUFS(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 		return -FI_ENOBUFS;
 	}
 
@@ -2849,7 +2859,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, const void 
 					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-MP-EAGER-NTH");
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -2953,7 +2963,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, const void 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
 							     hfi1_type);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-MP-EAGER-NTH");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER NTH (end)\n");
 

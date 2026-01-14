@@ -1,6 +1,6 @@
 dnl
 dnl Copyright (C) 2016 by Argonne National Laboratory.
-dnl Copyright (C) 2021-2025 by Cornelis Networks.
+dnl Copyright (C) 2021-2026 by Cornelis Networks.
 dnl
 dnl This software is available to you under a choice of one of two
 dnl licenses.  You may choose to be licensed under the terms of the GNU
@@ -332,6 +332,111 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			])
 			AC_DEFINE_UNQUOTED(HAVE_HFI1_DIRECT_VERBS, [$hfi1dv_happy], [hfi1 direct verbs enabled])
 			AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$hfisvc_happy], [hfisvc support availability])
+
+			dnl OPX Tracer configuration
+			AC_ARG_ENABLE([opx-tracer],
+				[AS_HELP_STRING([--enable-opx-tracer=SUBSYSTEMS],
+					[Enable OPX tracer for specified subsystems (comma-separated):
+					 TX,RX,RELI,SDMA,PIO,CQ,MR,TID,PROGRESS,HMEM,ATOMIC,RMA,LOCK,all
+					 Prefix with ^ to exclude (e.g., all,^RELI for all except reliability)
+					 INTERNAL category is automatically enabled if any subsystem is enabled
+					 @<:@default=no@:>@])],
+				[opx_tracer_subsystems=$enableval],
+				[opx_tracer_subsystems=no])
+
+			AS_IF([test "x$opx_tracer_subsystems" != "xno"], [
+				AC_MSG_NOTICE([OPX Tracer enabled for: $opx_tracer_subsystems])
+				opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_ENABLED"
+
+				dnl Initialize category enable flags (0=disabled, 1=enabled)
+				opx_tracer_TX=0
+				opx_tracer_RX=0
+				opx_tracer_RELI=0
+				opx_tracer_SDMA=0
+				opx_tracer_PIO=0
+				opx_tracer_CQ=0
+				opx_tracer_MR=0
+				opx_tracer_TID=0
+				opx_tracer_PROGRESS=0
+				opx_tracer_HMEM=0
+				opx_tracer_ATOMIC=0
+				opx_tracer_RMA=0
+				opx_tracer_LOCK=0
+
+				dnl Parse comma-separated list (two passes: enables first, then excludes)
+				opx_tracer_save_IFS="$IFS"
+				IFS=","
+
+				dnl First pass: process 'all' and positive enables
+				for opx_tracer_cat in $opx_tracer_subsystems; do
+					AS_CASE([$opx_tracer_cat],
+						[all], [
+							opx_tracer_TX=1
+							opx_tracer_RX=1
+							opx_tracer_RELI=1
+							opx_tracer_SDMA=1
+							opx_tracer_PIO=1
+							opx_tracer_CQ=1
+							opx_tracer_MR=1
+							opx_tracer_TID=1
+							opx_tracer_PROGRESS=1
+							opx_tracer_HMEM=1
+							opx_tracer_ATOMIC=1
+							opx_tracer_RMA=1
+							opx_tracer_LOCK=1
+						],
+						[TX], [opx_tracer_TX=1],
+						[RX], [opx_tracer_RX=1],
+						[RELI], [opx_tracer_RELI=1],
+						[SDMA], [opx_tracer_SDMA=1],
+						[PIO], [opx_tracer_PIO=1],
+						[CQ], [opx_tracer_CQ=1],
+						[MR], [opx_tracer_MR=1],
+						[TID], [opx_tracer_TID=1],
+						[PROGRESS], [opx_tracer_PROGRESS=1],
+						[HMEM], [opx_tracer_HMEM=1],
+						[ATOMIC], [opx_tracer_ATOMIC=1],
+						[RMA], [opx_tracer_RMA=1],
+						[LOCK], [opx_tracer_LOCK=1],
+						[^*], [dnl Skip exclusions in first pass],
+						[AC_MSG_WARN([Unknown OPX tracer subsystem: $opx_tracer_cat])])
+				done
+
+				dnl Second pass: process exclusions (^CAT)
+				for opx_tracer_cat in $opx_tracer_subsystems; do
+					AS_CASE([$opx_tracer_cat],
+						[^TX], [opx_tracer_TX=0],
+						[^RX], [opx_tracer_RX=0],
+						[^RELI], [opx_tracer_RELI=0],
+						[^SDMA], [opx_tracer_SDMA=0],
+						[^PIO], [opx_tracer_PIO=0],
+						[^CQ], [opx_tracer_CQ=0],
+						[^MR], [opx_tracer_MR=0],
+						[^TID], [opx_tracer_TID=0],
+						[^PROGRESS], [opx_tracer_PROGRESS=0],
+						[^HMEM], [opx_tracer_HMEM=0],
+						[^ATOMIC], [opx_tracer_ATOMIC=0],
+						[^RMA], [opx_tracer_RMA=0],
+						[^LOCK], [opx_tracer_LOCK=0])
+				done
+
+				IFS="$opx_tracer_save_IFS"
+
+				dnl Add CPPFLAGS for enabled categories
+				AS_IF([test "$opx_tracer_TX" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_TX"])
+				AS_IF([test "$opx_tracer_RX" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_RX"])
+				AS_IF([test "$opx_tracer_RELI" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_RELI"])
+				AS_IF([test "$opx_tracer_SDMA" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_SDMA"])
+				AS_IF([test "$opx_tracer_PIO" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_PIO"])
+				AS_IF([test "$opx_tracer_CQ" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_CQ"])
+				AS_IF([test "$opx_tracer_MR" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_MR"])
+				AS_IF([test "$opx_tracer_TID" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_TID"])
+				AS_IF([test "$opx_tracer_PROGRESS" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_PROGRESS"])
+				AS_IF([test "$opx_tracer_HMEM" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_HMEM"])
+				AS_IF([test "$opx_tracer_ATOMIC" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_ATOMIC"])
+				AS_IF([test "$opx_tracer_RMA" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_RMA"])
+				AS_IF([test "$opx_tracer_LOCK" = "1"], [opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_TRACER_LOCK"])
+			])
 		])
 	])
 	CPPFLAGS=$save_CPPFLAGS

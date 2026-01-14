@@ -42,6 +42,7 @@
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/opx_hfisvc.h"
+#include "rdma/opx/opx_tracer.h"
 
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
@@ -246,6 +247,7 @@ static inline int fi_opx_cq_enqueue_completed(struct fi_opx_cq *opx_cq, struct o
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "=================== MANUAL PROGRESS COMPLETION CQ ENQUEUED\n");
 
+	OPX_TRACE_CQ_INSTANT(OPX_TRACE_EVENT_CQ_COMPLETE, context->len, context->tag);
 	slist_insert_tail((struct slist_entry *) context, &opx_cq->completed);
 
 	return 0;
@@ -463,6 +465,7 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 						       const uint64_t hdrq_mask, const uint64_t caps,
 						       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
+	OPX_TRACE_CQ_BEGIN(OPX_TRACE_EVENT_CQ_POLL, count, 0);
 	ssize_t num_entries = 0;
 
 	struct fi_opx_cq *opx_cq = (struct fi_opx_cq *) cq;
@@ -477,6 +480,7 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 	if (OFI_UNLIKELY(buf == NULL && count > 0)) {
 		errno = FI_EINVAL;
 		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Invalid buffer and count combination\n");
+		OPX_TRACE_CQ_END_ERROR(OPX_TRACE_EVENT_CQ_POLL, 0, (uint64_t) FI_EINVAL);
 		return -errno;
 	}
 
@@ -537,6 +541,7 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 
 	// This is meant for auto progress to just access the rx_polls and exit
 	if (count == 0 && buf == NULL) {
+		OPX_TRACE_CQ_END_SUCCESS(OPX_TRACE_EVENT_CQ_POLL, 0, 0);
 		return 0;
 	}
 
@@ -546,6 +551,7 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 
 	/* check for "all empty" and return */
 	if (0 == (tmp_eh | tmp_ph | tmp_ch)) {
+		OPX_TRACE_CQ_END_EAGAIN(OPX_TRACE_EVENT_CQ_POLL, 0, 0);
 		errno = FI_EAGAIN;
 		return -errno;
 	}
@@ -568,16 +574,19 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 			opx_cq->completed.tail = NULL;
 		}
 
+		OPX_TRACE_CQ_END_SUCCESS(OPX_TRACE_EVENT_CQ_POLL, (uint64_t) num_entries, 0);
 		return num_entries;
 	}
 
 	num_entries = fi_opx_cq_poll_noinline(opx_cq, buf, count, format);
 
 	if (num_entries == 0) {
+		OPX_TRACE_CQ_END_EAGAIN(OPX_TRACE_EVENT_CQ_POLL, 0, 0);
 		errno = FI_EAGAIN;
 		return -errno;
 	}
 
+	OPX_TRACE_CQ_END_SUCCESS(OPX_TRACE_EVENT_CQ_POLL, (uint64_t) num_entries, 0);
 	return num_entries;
 }
 
@@ -587,8 +596,21 @@ ssize_t fi_opx_cq_read_generic_non_locking(struct fid_cq *cq, void *buf, size_t 
 					   const uint64_t caps, const enum opx_hfi1_type hfi1_type,
 					   const bool ctx_sharing)
 {
-	return fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask,
-				     caps, hfi1_type, ctx_sharing);
+	OPX_TRACE_CQ_BEGIN(OPX_TRACE_EVENT_CQ_READ, count, 0);
+	ssize_t ret = fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_NOT_REQUIRED, reliability,
+					    hdrq_mask, caps, hfi1_type, ctx_sharing);
+	// Emit appropriate trace based on return value:
+	// ret > 0: success (number of entries read)
+	// ret == -FI_EAGAIN: no entries available (not an error)
+	// ret < 0 (other): error
+	if (ret >= 0) {
+		OPX_TRACE_CQ_END_SUCCESS(OPX_TRACE_EVENT_CQ_READ, (uint64_t) ret, 0);
+	} else if (ret == -FI_EAGAIN) {
+		OPX_TRACE_CQ_END_EAGAIN(OPX_TRACE_EVENT_CQ_READ, 0, 0);
+	} else {
+		OPX_TRACE_CQ_END_ERROR(OPX_TRACE_EVENT_CQ_READ, (uint64_t) (-ret), 0);
+	}
+	return ret;
 }
 
 __OPX_FORCE_INLINE__
@@ -596,12 +618,24 @@ ssize_t fi_opx_cq_read_generic_locking(struct fid_cq *cq, void *buf, size_t coun
 				       const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
 				       const uint64_t caps, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
+	OPX_TRACE_CQ_BEGIN(OPX_TRACE_EVENT_CQ_READ, count, 0);
 	int ret;
 	fi_opx_lock(&((struct fi_opx_cq *) cq)->lock);
 	ret = fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_REQUIRED, reliability, hdrq_mask, caps,
 				    hfi1_type, ctx_sharing);
 	fi_opx_unlock(&((struct fi_opx_cq *) cq)->lock);
 
+	// Emit appropriate trace based on return value:
+	// ret > 0: success (number of entries read)
+	// ret == -FI_EAGAIN: no entries available (not an error)
+	// ret < 0 (other): error
+	if (ret >= 0) {
+		OPX_TRACE_CQ_END_SUCCESS(OPX_TRACE_EVENT_CQ_READ, (uint64_t) ret, 0);
+	} else if (ret == -FI_EAGAIN) {
+		OPX_TRACE_CQ_END_EAGAIN(OPX_TRACE_EVENT_CQ_READ, 0, 0);
+	} else {
+		OPX_TRACE_CQ_END_ERROR(OPX_TRACE_EVENT_CQ_READ, (uint64_t) (-ret), 0);
+	}
 	return ret;
 }
 

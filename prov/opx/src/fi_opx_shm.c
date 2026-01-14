@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 #include <ofi.h>
+#include <ofi_mr.h>
 #include <stdio.h>
 #include <signal.h>
 

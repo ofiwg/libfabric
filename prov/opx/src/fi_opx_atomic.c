@@ -35,6 +35,7 @@
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_rma.h"
 #include "rdma/opx/fi_opx.h"
+#include "rdma/opx/opx_tracer.h"
 #include <ofi_enosys.h>
 #include <complex.h>
 
@@ -269,6 +270,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 	}
 
 	if (is_fetch) {
+		OPX_TRACE_ATOMIC_BEGIN(is_compare ? OPX_TRACE_EVENT_ATOMIC_CSWAP : OPX_TRACE_EVENT_ATOMIC_FETCH, addr,
+				       buf_len);
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== ATOMIC %s (begin)\n", is_compare ? "CAS" : "FETCH");
 		cc->cntr = opx_ep->read_cntr;
@@ -316,6 +319,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 		}
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC %s (end)\n",
 			 is_compare ? "CAS" : "FETCH");
+		OPX_TRACE_ATOMIC_END_SUCCESS(is_compare ? OPX_TRACE_EVENT_ATOMIC_CSWAP : OPX_TRACE_EVENT_ATOMIC_FETCH,
+					     addr, buf_len);
 
 		return count;
 	} else if (OFI_UNLIKELY(is_compare)) {
@@ -323,6 +328,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 		abort();
 	}
 
+	OPX_TRACE_ATOMIC_BEGIN(OPX_TRACE_EVENT_ATOMIC_WRITE, addr, buf_len);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC WRITE (begin)\n");
 	cc->cntr = opx_ep->write_cntr;
 	struct fi_opx_hmem_iov buf_iov;
@@ -332,6 +338,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 	opx_write_internal(opx_ep, &buf_iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
 			   opx_ep->tx->op_flags, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC WRITE (end)\n");
+	OPX_TRACE_ATOMIC_END_SUCCESS(OPX_TRACE_EVENT_ATOMIC_WRITE, addr, buf_len);
 
 	return count;
 }

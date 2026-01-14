@@ -104,6 +104,7 @@ enum fi_hmem_iface opx_hmem_get_ptr_iface(const void *ptr, uint64_t *device, uin
 		*is_unified = is_managed;
 		if (mem_type == CU_MEMORYTYPE_DEVICE && !is_managed) {
 			*device = device_ordinal;
+			OPX_TRACE_HMEM_INSTANT(OPX_TRACE_EVENT_HMEM_DETECT, (uint64_t) FI_HMEM_CUDA, *device);
 			return FI_HMEM_CUDA;
 		} else {
 			*device = 0UL;
@@ -116,6 +117,7 @@ enum fi_hmem_iface opx_hmem_get_ptr_iface(const void *ptr, uint64_t *device, uin
 #else
 	*is_unified		 = 0UL;
 	enum fi_hmem_iface iface = ofi_get_hmem_iface(ptr, device, NULL);
+	OPX_TRACE_HMEM_INSTANT_COND(iface != FI_HMEM_SYSTEM, OPX_TRACE_EVENT_HMEM_DETECT, (uint64_t) iface, *device);
 	return iface;
 #endif
 #endif
@@ -163,19 +165,19 @@ int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_ha
 
 	assert(hmem_handle == OPX_HMEM_NO_HANDLE || threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-TO-HMEM");
+	OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_COPY_TO, len, 0);
 	switch (iface) {
 #if HAVE_CUDA
 	case FI_HMEM_CUDA:
 		if ((hmem_handle != 0) && (len <= threshold)) {
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-TO-DEV");
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_GDRCOPY_TO_DEV, len, 0);
 			cuda_gdrcopy_to_dev(hmem_handle, dest, src, len);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-TO-DEV");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_GDRCOPY_TO_DEV, len, 0);
 			ret = 0;
 		} else {
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "CUDAMEMCPY-TO-HMEM");
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_CUDAMEMCPY_TO, len, 0);
 			ret = (int) ofi_cudaMemcpy(dest, src, len, cudaMemcpyHostToDevice);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "CUDAMEMCPY-TO-HMEM");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_CUDAMEMCPY_TO, len, 0);
 		}
 		break;
 #endif
@@ -184,26 +186,26 @@ int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_ha
 	case FI_HMEM_ROCR:
 		if ((hmem_handle != 0) && (len <= threshold)) {
 			/* Perform a device registered copy */
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "AMD-DEV-REG-COPY-TO-DEV");
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_AMD_DEV_REG_TO, len, 0);
 			ret = rocr_dev_reg_copy_to_hmem(hmem_handle, dest, src, len);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "AMD-DEV-REG-COPY-TO-DEV");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_AMD_DEV_REG_TO, len, 0);
 		} else {
 			/* Perform standard rocr_memcopy*/
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "AMD-ROCR-MEMCOPY-TO-HMEM");
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_AMD_ROCR_TO, len, 0);
 			ret = rocr_copy_to_dev(device, dest, src, len);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "AMD-ROCR-MEMCOPY-TO-HMEM");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_AMD_ROCR_TO, len, 0);
 		}
 		break;
 #endif
 
 	default:
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "OFI-COPY-TO-HMEM");
+		OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_OFI_COPY_TO, len, 0);
 		ret = ofi_copy_to_hmem(iface, device, dest, src, len);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "OFI-COPY-TO-HMEM");
+		OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_OFI_COPY_TO, len, 0);
 		break;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "COPY-TO-HMEM");
+	OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_COPY_TO, len, (uint64_t) ret);
 	return ret;
 }
 
@@ -221,19 +223,19 @@ int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_
 
 	assert(hmem_handle == OPX_HMEM_NO_HANDLE || threshold != OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "COPY-FROM-HMEM");
+	OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_COPY_FROM, len, 0);
 	switch (iface) {
 #if HAVE_CUDA
 	case FI_HMEM_CUDA:
 		if ((hmem_handle != 0) && (len <= threshold)) {
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "GDRCOPY-FROM-DEV");
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_GDRCOPY_FROM_DEV, len, 0);
 			cuda_gdrcopy_from_dev(hmem_handle, dest, src, len);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "GDRCOPY-FROM-DEV");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_GDRCOPY_FROM_DEV, len, 0);
 			ret = 0;
 		} else {
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "CUDAMEMCPY-FROM-HMEM");
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_CUDAMEMCPY_FROM, len, 0);
 			ret = (int) ofi_cudaMemcpy(dest, src, len, cudaMemcpyDeviceToHost);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "CUDAMEMCPY-FROM-HMEM");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_CUDAMEMCPY_FROM, len, 0);
 		}
 		break;
 #endif
@@ -242,26 +244,26 @@ int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_
 	case FI_HMEM_ROCR:
 		if ((hmem_handle != 0) && (len <= threshold)) {
 			/* Perform a device registered copy */
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "AMD-DEV-REG-COPY-FROM-DEV");
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_AMD_DEV_REG_FROM, len, 0);
 			ret = rocr_dev_reg_copy_from_hmem(hmem_handle, dest, src, len);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "AMD-DEV-REG-COPY-FROM-DEV");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_AMD_DEV_REG_FROM, len, 0);
 		} else {
 			/* Perform standard rocr_memcopy*/
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "AMD-ROCR-MEMCOPY-FROM-HMEM");
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_AMD_ROCR_FROM, len, 0);
 			ret = rocr_copy_from_dev(device, dest, src, len);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "AMD-ROCR-MEMCOPY-FROM-HMEM");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_AMD_ROCR_FROM, len, 0);
 		}
 		break;
 #endif
 
 	default:
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "OFI-COPY-FROM-HMEM");
+		OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_OFI_COPY_FROM, len, 0);
 		ret = ofi_copy_from_hmem(iface, device, dest, src, len);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "OFI-COPY-FROM-HMEM");
+		OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_OFI_COPY_FROM, len, 0);
 		break;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "COPY-FROM-HMEM");
+	OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_COPY_FROM, len, (uint64_t) ret);
 	return ret;
 }
 

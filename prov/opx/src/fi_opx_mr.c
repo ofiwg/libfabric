@@ -36,6 +36,7 @@
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_hmem.h"
+#include "rdma/opx/opx_tracer.h"
 
 #include <ofi_enosys.h>
 
@@ -46,7 +47,8 @@ static int fi_opx_close_mr(fid_t fid)
 	struct fi_opx_mr     *opx_mr	 = (struct fi_opx_mr *) fid;
 	struct fi_opx_domain *opx_domain = opx_mr->domain;
 
-	// TODO: Debug counters
+	OPX_TRACE_MR_BEGIN(OPX_TRACE_EVENT_MR_DEREG, (uint64_t) opx_mr->iov.iov_base, opx_mr->iov.iov_len);
+
 	int ret = 0;
 #if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {
@@ -54,6 +56,7 @@ static int fi_opx_close_mr(fid_t fid)
 		if (ret) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc close mr returned %d\n",
 				ret);
+			OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_DEREG, (uint64_t) (-ret), 0);
 			errno = -ret;
 			return ret;
 		}
@@ -84,6 +87,13 @@ static int fi_opx_close_mr(fid_t fid)
 		free(opx_mr);
 	}
 	// opx_mr (the object passed in as fid) is now unusable
+#ifdef OPX_TRACER_ENABLED
+	if (ret) {
+		OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_DEREG, (uint64_t) (-ret), 0);
+	} else {
+		OPX_TRACE_MR_END_SUCCESS(OPX_TRACE_EVENT_MR_DEREG, 0, 0);
+	}
+#endif
 	return ret;
 }
 
@@ -173,6 +183,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	__attribute__((__unused__)) uint64_t	       hmem_device = 0UL;
 	__attribute__((__unused__)) enum fi_hmem_iface hmem_iface  = FI_HMEM_SYSTEM;
 
+	OPX_TRACE_MR_BEGIN(OPX_TRACE_EVENT_MR_REG, (uint64_t) iov->iov_base, iov->iov_len);
+
 #ifdef OPX_HMEM
 	static uint64_t OPX_CUDA_MR_KEYGEN = 0;
 	uint64_t	hmem_unified;
@@ -185,7 +197,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					     .iov.iov_base = iov->iov_base,
 					     .iov.iov_len  = iov->iov_len,
 					     .flags	   = flags};
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "HMEM-CACHE-SEARCH");
+		OPX_TRACE_MR_BEGIN(OPX_TRACE_EVENT_MR_CACHE_SEARCH, 0, 0);
 		if (!ofi_mr_cache_search(opx_domain->hmem_domain->hmem_cache, &info, &entry)) {
 			memcpy(&opx_mr, entry->data, sizeof(struct fi_opx_mr *));
 			opx_mr->flags = flags;
@@ -193,6 +205,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 			 * Thus, we know a new entry was created if the key is not set. If the key is set,
 			 * we know it was a cache hit */
 			if (opx_mr->mr_fid.key == FI_KEY_NOTAVAIL) {
+				OPX_TRACE_MR_INSTANT(OPX_TRACE_EVENT_MR_CACHE_MISS, (uint64_t) iov->iov_base,
+						     iov->iov_len);
 				if (opx_domain->mr_mode & FI_MR_PROV_KEY) {
 					opx_mr->mr_fid.key = OPX_CUDA_MR_KEYGEN++;
 				} else {
@@ -205,6 +219,9 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 						errno = FI_EINVAL;
 						FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 							"FI_OPX_HFISVC is enabled in a HMEM build, but dma-buf support is not detected or is disabled by FI_HMEM_CUDA/ROCR_USE_DMABUF. Enable dma-buf support or re-run with FI_OPX_HFISVC disabled.\n");
+						OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_CACHE_SEARCH,
+								       (uint64_t) FI_EINVAL, 0);
+						OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) FI_EINVAL, 0);
 						return -errno;
 					}
 					size_t	  size;
@@ -226,6 +243,10 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 						FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 							"Error on ofi_hmem_get_dmabuf_fd returned %d\n", ret);
 						ofi_mr_cache_delete(opx_domain->hmem_domain->hmem_cache, entry);
+						OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_CACHE_SEARCH,
+								       (uint64_t) FI_EOPNOTSUPP, 0);
+						OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) FI_EOPNOTSUPP,
+								       0);
 						errno = FI_EOPNOTSUPP;
 						return -errno;
 					}
@@ -246,6 +267,9 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 						FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 							"Error enqueuing deferred hfisvc open mr returned %d\n", ret);
 						ofi_mr_cache_delete(opx_domain->hmem_domain->hmem_cache, entry);
+						OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_CACHE_SEARCH,
+								       (uint64_t) (-ret), 0);
+						OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) (-ret), 0);
 						errno = -ret;
 						return ret;
 					}
@@ -267,18 +291,23 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					fi_opx_ref_inc(&opx_mr->domain->ref_cnt, "domain");
 				}
 				HASH_ADD(hh, opx_domain->mr_hashmap, mr_fid.key, sizeof(opx_mr->mr_fid.key), opx_mr);
+			} else {
+				OPX_TRACE_MR_INSTANT(OPX_TRACE_EVENT_MR_CACHE_HIT, (uint64_t) iov->iov_base,
+						     iov->iov_len);
 			}
 
 			*mr = &opx_mr->mr_fid;
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "HMEM-CACHE-SEARCH");
+			OPX_TRACE_MR_END_SUCCESS(OPX_TRACE_EVENT_MR_CACHE_SEARCH, 0, 0);
+			OPX_TRACE_MR_END_SUCCESS(OPX_TRACE_EVENT_MR_REG, 0, 0);
 			return 0;
 		}
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "HMEM-CACHE-SEARCH");
+		OPX_TRACE_MR_END_EAGAIN(OPX_TRACE_EVENT_MR_CACHE_SEARCH, 0, 0);
 	}
 #endif
 
 	opx_mr = calloc(1, sizeof(*opx_mr));
 	if (!opx_mr) {
+		OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) FI_ENOMEM, 0);
 		errno = FI_ENOMEM;
 		return -errno;
 	}
@@ -342,6 +371,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		if (ret) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc open mr returned %d\n",
 				ret);
+			OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) (-ret), 0);
 			errno = -ret;
 			return ret;
 		}
@@ -350,6 +380,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 
 	*mr = &opx_mr->mr_fid;
 
+	OPX_TRACE_MR_END_SUCCESS(OPX_TRACE_EVENT_MR_REG, 0, 0);
 	return 0;
 }
 
