@@ -51,7 +51,12 @@ impl ParseCallbacks for RenameFunctions {
         match item_info.kind {
             ItemKind::Function => {
                 if item_info.name.starts_with("wrap_") {
-                    return Some(String::from(item_info.name));
+                    // On macOS, C symbols get an underscore prefix as part of the ABI so we need to link against that instead
+                    return Some(if cfg!(target_os = "macos") {
+                        format!("_{}", item_info.name)
+                    } else {
+                        item_info.name.to_string()
+                    });
                 }
                 None
             }
@@ -139,8 +144,8 @@ fn build_libfabric(install_dir: &PathBuf) {
 }
 
 fn main() {
-    #[cfg(not(target_os = "linux"))]
-    compile_error!("This binding is only compatible with Linux.");
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    compile_error!("This binding is only compatible with Linux and macOS.");
 
     // Link asan library.
     let asan = cfg!(feature = "asan");
