@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 by Cornelis Networks.
+ * Copyright (C) 2021-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -641,6 +641,9 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs not found\n");
 			return -FI_ENODEV;
 		}
+		pthread_mutex_lock(&opx_rdma_ops.lock);
+		fi_opx_ref_inc(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
+		pthread_mutex_unlock(&opx_rdma_ops.lock);
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs found\n");
 
 		domain->hfisvc.initialize = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_initialize");

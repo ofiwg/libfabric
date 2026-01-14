@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024-2025 Cornelis Networks.
+ * Copyright (C) 2024-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -108,8 +108,9 @@ int32_t opx_hfi1_wrapper_update_tid(struct fi_opx_hfi1_context *context, uint64_
 struct opx_rdma_ops_struct {
 	/* static flags */
 
-	bool hfi1_direct_verbs_enabled; /* run-time check based on dlopen() */
-	bool one_time_setup;		/* one time setup is done */
+	bool		hfi1_direct_verbs_enabled; /* run-time check based on dlopen() */
+	pthread_mutex_t lock;			   /* for dlopen/close */
+	int64_t		ref_cnt;		   /* non-zero indicates dlopen of libverbs is done */
 
 	/* dlopen libraries */
 
