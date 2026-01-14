@@ -21,9 +21,6 @@
 #include "fi_tagged.h"
 #include "fi_trigger.h"
 
-/* Proprietary helper function declarations. */
-fid_t get_fid_ptr(void *ptr);
-
 /* Static inline function declarations from fi_prov.h */
 int wrap_fi_param_get_str(struct fi_provider *provider, const char *param_name,
 			  char **value);
