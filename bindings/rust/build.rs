@@ -246,6 +246,15 @@ fn main() {
         .wrap_static_fns(false)
         .derive_default(true)
         .derive_debug(true)
+        // only export libfabric symbols and delegate the rest to the libc crate
+        .allowlist_item("fi_.*")
+        .allowlist_item("FI_.*")
+        .allowlist_item("wrap_fi_.*")
+        .allowlist_item("OFI_.*")
+        .blocklist_type("iovec")
+        .blocklist_type("pollfd")
+        .blocklist_type("pthread_.*")
+        .raw_line("use libc::*;\n")
         .generate()
         .expect("Unable to generate bindings");
 
