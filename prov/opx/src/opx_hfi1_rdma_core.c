@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024-2025 by Cornelis Networks.
+ * Copyright (C) 2024-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -91,7 +91,8 @@ int32_t opx_hfi_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, 
 struct opx_rdma_ops_struct opx_rdma_ops = {
 	/* static initial values */
 	.hfi1_direct_verbs_enabled = true,
-	.one_time_setup		   = false,
+	.lock			   = PTHREAD_MUTEX_INITIALIZER,
+	.ref_cnt		   = 0,
 	.libhfi1verbs		   = NULL,
 	.libibverbs		   = NULL};
 
@@ -134,12 +135,18 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] HAVE_HFI1_DIRECT_VERBS %u \n",
 		     opx_rdma_ops.hfi1_direct_verbs_enabled);
-	if (opx_rdma_ops.one_time_setup) {
+
+	pthread_mutex_lock(&opx_rdma_ops.lock);
+
+	if (opx_rdma_ops.libhfi1verbs != NULL) {
+		fi_opx_ref_inc(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
+		pthread_mutex_unlock(&opx_rdma_ops.lock);
 		return opx_rdma_ops.hfi1_direct_verbs_enabled;
 	}
-	opx_rdma_ops.one_time_setup = true;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] one time initialization\n");
+
+	fi_opx_ref_init(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
 
 	/* Set old tid functions until/unless we pass and enable the new support */
 	opx_fn_hfi1_free_tid   = opx_hfi_free_tid;
@@ -150,6 +157,7 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 	if (!opx_rdma_ops.libhfi1verbs) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Could not dlopen libhfi1verbs.\n");
 		opx_rdma_ops.hfi1_direct_verbs_enabled = false;
+		pthread_mutex_unlock(&opx_rdma_ops.lock);
 		return opx_rdma_ops.hfi1_direct_verbs_enabled;
 	}
 
@@ -159,6 +167,7 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 		opx_rdma_ops.hfi1_direct_verbs_enabled = false;
 		dlclose(opx_rdma_ops.libhfi1verbs);
 		opx_rdma_ops.libhfi1verbs = NULL;
+		pthread_mutex_unlock(&opx_rdma_ops.lock);
 		return opx_rdma_ops.hfi1_direct_verbs_enabled;
 	}
 	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI-DIRECT] libibverbs found\n");
@@ -179,7 +188,9 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 	OPX_HFI1_RDMA_OP_DLSYM(opx_rdma_ops.libhfi1verbs, hfi1_ack_event);
 	OPX_HFI1_RDMA_OP_DLSYM(opx_rdma_ops.libhfi1verbs, hfi1_ctxt_reset);
 
-	if (!opx_rdma_ops.hfi1_direct_verbs_enabled) {
+	if (opx_rdma_ops.hfi1_direct_verbs_enabled) {
+		fi_opx_ref_inc(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
+	} else {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Could not setup HFI1 Direct Verbs.\n");
 		dlclose(opx_rdma_ops.libhfi1verbs);
 		opx_rdma_ops.libhfi1verbs = NULL;
@@ -192,6 +203,8 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 		opx_fn_hfi1_update_tid = opx_hfi1_rdma_update_tid;
 		opx_fn_hfi1_free_tid   = opx_hfi1_rdma_free_tid;
 	}
+
+	pthread_mutex_unlock(&opx_rdma_ops.lock);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] HAVE_HFI1_DIRECT_VERBS %u \n",
 		     opx_rdma_ops.hfi1_direct_verbs_enabled);
@@ -712,6 +725,10 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 	/* ignore errors */
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Close context %p and libraries\n", ibv_context);
+	pthread_mutex_lock(&opx_rdma_ops.lock);
+	fi_opx_ref_dec(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
+	assert(opx_rdma_ops.ref_cnt > 0);
+	pthread_mutex_unlock(&opx_rdma_ops.lock);
 	if (opx_rdma_ops.libibverbs && ibv_context) {
 		OPX_HFI1_RDMA_FN(ibv_close_device)((struct ibv_context *) ibv_context);
 	}
@@ -719,6 +736,14 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 
 void opx_hfi1_rdma_lib_close()
 {
+	pthread_mutex_lock(&opx_rdma_ops.lock);
+	fi_opx_ref_dec(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
+	if (opx_rdma_ops.ref_cnt) {
+		assert(opx_rdma_ops.ref_cnt > 0);
+		pthread_mutex_unlock(&opx_rdma_ops.lock);
+		return;
+	}
+	fi_opx_ref_finalize(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
 	if (opx_rdma_ops.libhfi1verbs) {
 		dlclose(opx_rdma_ops.libhfi1verbs);
 	}
@@ -728,8 +753,7 @@ void opx_hfi1_rdma_lib_close()
 		dlclose(opx_rdma_ops.libibverbs);
 	}
 	opx_rdma_ops.libibverbs = NULL;
-
-	opx_rdma_ops.one_time_setup = false;
+	pthread_mutex_unlock(&opx_rdma_ops.lock);
 }
 
 #else /* HAVE_HFI1_DIRECT_VERBS */
