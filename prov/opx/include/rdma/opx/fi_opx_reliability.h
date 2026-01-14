@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -869,7 +869,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 					     union fi_opx_reliability_tx_psn **psn_ptr, uint32_t psns_to_get,
 					     uint32_t bytes_per_packet)
 {
-	OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "GET_PSNS");
+	OPX_TRACE_SDMA_BEGIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get, 0);
 	assert(psns_to_get && psns_to_get <= MAX(OPX_HFI1_SDMA_MAX_PKTS_TID, OPX_HFI1_SDMA_MAX_PKTS));
 
 	const union fi_opx_reliability_service_flow_key key = {
@@ -882,7 +882,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 	if (OFI_UNLIKELY(!itr)) {
 		*psn_ptr = opx_reliability_create_tx_flow(service, &key);
 		if (OFI_UNLIKELY((*psn_ptr) == NULL)) {
-			OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_PSN_THROTTLE");
+			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_TX_FLOW_CREATE_FAIL, 0, 0);
 			return -1;
 		}
 	} else {
@@ -897,14 +897,14 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 	 * a threshold, return an error.
 	 */
 	if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
-		OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_PSN_THROTTLE");
+		OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, 0);
 		return -1;
 	}
 	if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_nacks(ep);
-		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_NACKS, "GET_PSNS");
+		OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, 0);
 		return -1;
 	}
 	uint32_t max_outstanding = service->max_outstanding_bytes;
@@ -912,12 +912,12 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_maxo(ep);
-		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_EAGAIN_SDMA_PSNS_MAX_OUT, "GET_PSNS");
+		OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, 0);
 		return -1;
 	}
 
 	const uint32_t bytes_avail = max_outstanding - (*psn_ptr)->psn.bytes_outstanding;
-	OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "GET_PSNS");
+	OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get, 0);
 	return MIN(bytes_avail / bytes_per_packet, psns_to_get);
 }
 

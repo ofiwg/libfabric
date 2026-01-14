@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -690,7 +690,7 @@ void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t
 					      const opx_lid_t slid, const enum opx_hfi1_type hfi1_type,
 					      const bool ctx_sharing)
 {
-	OPX_TRACER_TRACE_RELI(OPX_TRACER_BEGIN, "RX_RELI_SEND_PRE_ACKS");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_SEND_PRE_ACKS, 0, 0);
 
 	const union fi_opx_reliability_service_flow_key key = {
 		.slid		= slid,
@@ -703,7 +703,7 @@ void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t
 	rc = fi_opx_hfi1_tx_reliability_inject(ep, &key, slid, key.src_subctxt_rx, psn_start, psn_count,
 					       FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK, hfi1_type, ctx_sharing);
 	INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_ACKS_SENT, key, psn_start, psn_count);
-	OPX_TRACER_TRACE_RELI(OPX_TRACER_END_SUCCESS, "RX_RELI_SEND_PRE_ACKS");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_SEND_PRE_ACKS, 0, 0);
 }
 
 /**
@@ -718,7 +718,7 @@ ssize_t fi_opx_hfi1_rx_reliability_ping_response(struct fid_ep					 *ep,
 						 uint64_t psn_start, uint64_t psn_stop, const opx_lid_t slid,
 						 const uint64_t rx, const uint64_t opcode)
 {
-	OPX_TRACER_TRACE_RELI(OPX_TRACER_BEGIN, "RX_RELI_PING_RESPONSE");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_PING_RESPONSE, 0, 0);
 	assert(psn_stop >= psn_start);
 	uint64_t psn_count = (psn_stop - psn_start) + 1;
 	ssize_t	 rc;
@@ -731,12 +731,17 @@ ssize_t fi_opx_hfi1_rx_reliability_ping_response(struct fid_ep					 *ep,
 		INC_PING_STAT_COND(rc == FI_SUCCESS,
 				   opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK ? ACKS_SENT : NACKS_SENT, *key,
 				   psn_start_24, psn_count_24);
+		OPX_TRACE_RELI_INSTANT_COND(rc == FI_SUCCESS,
+					    (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK) ?
+						    OPX_TRACE_EVENT_RELI_ACK_SEND :
+						    OPX_TRACE_EVENT_RELI_NACK_SEND,
+					    psn_start_24, psn_count_24);
 
 		psn_count -= psn_count_24;
 		psn_start += psn_count_24;
 	} while (psn_count > 0 && rc == FI_SUCCESS);
 
-	OPX_TRACER_TRACE_RELI(OPX_TRACER_END_SUCCESS, "RX_RELI_PING_RESPONSE");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_PING_RESPONSE, 0, 0);
 	return rc;
 }
 
@@ -744,7 +749,7 @@ void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 				     const union fi_opx_reliability_service_flow_key *key, uint64_t psn_count,
 				     uint64_t psn_start, const opx_lid_t slid, const uint16_t subctxt_rx)
 {
-	OPX_TRACER_TRACE_RELI(OPX_TRACER_BEGIN, "RX_RELI_PING");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 
 	OPX_RELIABILITY_DEBUG_LOG(key, "(rx) rcv ping %08lu..%08lu\n", psn_start, psn_start + psn_count - 1);
 
@@ -761,7 +766,8 @@ void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, OPX_SW_HFI1_TYPE,
 						       OPX_IS_CTX_SHARING_ENABLED);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, NACKS_SENT, *key, 0, 1);
-		OPX_TRACER_TRACE_RELI(OPX_TRACER_END_ERROR, "RX_RELI_PING");
+		OPX_TRACE_RELI_INSTANT_COND(rc == FI_SUCCESS, OPX_TRACE_EVENT_RELI_NACK_SEND, 0, 1);
+		OPX_TRACE_RELI_END_ERROR(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 		return;
 	}
 
@@ -777,7 +783,8 @@ void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, OPX_SW_HFI1_TYPE,
 						       OPX_IS_CTX_SHARING_ENABLED);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, NACKS_SENT, *key, 0, 1);
-		OPX_TRACER_TRACE_RELI(OPX_TRACER_END_ERROR, "RX_RELI_PING");
+		OPX_TRACE_RELI_INSTANT_COND(rc == FI_SUCCESS, OPX_TRACE_EVENT_RELI_NACK_SEND, 0, 1);
+		OPX_TRACE_RELI_END_ERROR(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 		return;
 	}
 
@@ -866,7 +873,7 @@ void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 		 * from the range.
 		 */
 		if (OFI_LIKELY(flow->uepkt == NULL) || rc != FI_SUCCESS) {
-			OPX_TRACER_TRACE_RELI(OPX_TRACER_END_ERROR, "RX_RELI_PING");
+			OPX_TRACE_RELI_END_ERROR(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 			return;
 		}
 	}
@@ -900,7 +907,7 @@ void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 			rc = fi_opx_hfi1_rx_reliability_ping_response(ep, key, first_uepkt_psn, last_uepkt_psn, slid,
 								      subctxt_rx, FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK);
 			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
-				OPX_TRACER_TRACE_RELI(OPX_TRACER_END_ERROR, "RX_RELI_PING");
+				OPX_TRACE_RELI_END_ERROR(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 				return;
 			}
 		}
@@ -925,7 +932,7 @@ void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 		}
 	}
 
-	OPX_TRACER_TRACE_RELI(OPX_TRACER_END_SUCCESS, "RX_RELI_PING");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 }
 
 #ifdef OPX_RELIABILITY_DEBUG
@@ -1001,7 +1008,7 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 				    const union fi_opx_reliability_service_flow_key *key, const uint64_t psn_count,
 				    const uint64_t psn_start)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RX_ACK");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_ACK_RECV, 0, 0);
 #ifdef OPX_DEBUG_COUNTERS_SDMA
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 #endif
@@ -1032,7 +1039,7 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 		 * do nothing and return
 		 */
 		INC_PING_STAT(ACKS_IGNORED, *key, psn_start, psn_count);
-		OPX_TRACER_TRACE(OPX_TRACER_END_ACK_IGNORED, "RX_ACK");
+		OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_ACK_RECV, 0, 0);
 		return;
 	}
 
@@ -1131,7 +1138,7 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 
 		} while (tmp != head);
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RX_ACK");
+		OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_ACK_RECV, 0, 0);
 		return;
 	}
 
@@ -1163,7 +1170,7 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 		}
 #endif
 		INC_PING_STAT(ACKS_IGNORED, *key, psn_start, psn_count);
-		OPX_TRACER_TRACE(OPX_TRACER_END_ACK_IGNORED, "RX_ACK");
+		OPX_TRACE_RELI_END_IGNORED(OPX_TRACE_EVENT_RELI_ACK_RECV, 0, 0);
 		return;
 	}
 
@@ -1193,7 +1200,7 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 		}
 #endif
 		INC_PING_STAT(ACKS_IGNORED, *key, psn_start, psn_count);
-		OPX_TRACER_TRACE(OPX_TRACER_END_ACK_IGNORED, "RX_ACK");
+		OPX_TRACE_RELI_END_IGNORED(OPX_TRACE_EVENT_RELI_ACK_RECV, 0, 0);
 		return;
 	}
 
@@ -1293,12 +1300,12 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 	} while (tmp != halt);
 
 	assert((*value_ptr == NULL) || (*value_ptr)->next != NULL);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RX_ACK");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_ACK_RECV, 0, 0);
 }
 
 ssize_t fi_opx_reliability_sdma_replay_complete(union fi_opx_reliability_deferred_work *work)
 {
-	OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "SDMA_RELI_REPLAY_COMPLETE");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_SDMA_REPLAY_COMPLETE, 0, 0);
 	struct fi_opx_reliability_tx_sdma_replay_params *params = &work->sdma_replay;
 	struct fi_opx_ep				*opx_ep = (struct fi_opx_ep *) params->opx_ep;
 
@@ -1344,13 +1351,13 @@ ssize_t fi_opx_reliability_sdma_replay_complete(union fi_opx_reliability_deferre
 	}
 
 	if (!slist_empty(&params->sdma_reqs)) {
-		OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_EAGAIN, "SDMA_RELI_REPLAY_COMPLETE");
+		OPX_TRACE_RELI_END_EAGAIN(OPX_TRACE_EVENT_RELI_SDMA_REPLAY_COMPLETE, 0, 0);
 		return -FI_EAGAIN;
 	}
 
 	OPX_RELIABILITY_DEBUG_LOG(params->flow_key, "(tx) SDMA Replay Complete - END - return FI_SUCCESS\n");
 
-	OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_RELI_REPLAY_COMPLETE");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_SDMA_REPLAY_COMPLETE, 0, 0);
 	return FI_SUCCESS;
 }
 
@@ -1359,7 +1366,7 @@ ssize_t fi_opx_reliability_service_do_replay_sdma(struct fid_ep *ep, struct fi_o
 						  struct fi_opx_reliability_tx_replay *end_replay, uint32_t num_replays,
 						  const union fi_opx_reliability_service_flow_key *flow_key)
 {
-	OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "SDMA_RELI_DO_REPLAY");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_SDMA_REPLAY, 0, 0);
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	union fi_opx_reliability_deferred_work *work = ofi_buf_alloc(service->rx.work_pending_pool);
@@ -1429,7 +1436,7 @@ ssize_t fi_opx_reliability_service_do_replay_sdma(struct fid_ep *ep, struct fi_o
 
 	OPX_RELIABILITY_DEBUG_LOG(flow_key, "(tx) Queued %d replays/packets for sending via SDMA\n", replayed);
 
-	OPX_TRACER_TRACE_SDMA(OPX_TRACER_END_SUCCESS, "SDMA_RELI_DO_REPLAY");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_SDMA_REPLAY, 0, 0);
 	return replayed;
 }
 
@@ -1674,7 +1681,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 
 ssize_t fi_opx_reliability_pio_replay(union fi_opx_reliability_deferred_work *work)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RELI_PIO_REPLAY");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_PIO_REPLAY, 0, 0);
 	struct fi_opx_reliability_tx_pio_replay_params *params = &work->pio_replay;
 	struct fi_opx_ep			       *opx_ep = (struct fi_opx_ep *) params->opx_ep;
 
@@ -1700,7 +1707,7 @@ ssize_t fi_opx_reliability_pio_replay(union fi_opx_reliability_deferred_work *wo
 			params->replays[i]	   = NULL;
 		} else {
 			params->start_index = i;
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "RELI_PIO_REPLAY");
+			OPX_TRACE_RELI_END_EAGAIN(OPX_TRACE_EVENT_RELI_PIO_REPLAY, 0, 0);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			return -FI_EAGAIN;
 		}
@@ -1708,7 +1715,7 @@ ssize_t fi_opx_reliability_pio_replay(union fi_opx_reliability_deferred_work *wo
 
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RELI_PIO_REPLAY");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_PIO_REPLAY, 0, 0);
 	return FI_SUCCESS;
 }
 
@@ -1716,7 +1723,7 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 				     const union fi_opx_reliability_service_flow_key *key, const uint64_t psn_count,
 				     const uint64_t psn_start)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RELI_RX_NACK");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_NACK_RECV, 0, 0);
 	assert(psn_count > 0);
 	const uint64_t psn_stop = psn_start + psn_count - 1;
 
@@ -1751,7 +1758,7 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 		OPX_RELIABILITY_DEBUG_LOG(key, "(tx) rcv nack %08lu..%08lu No Unack'd replays in queue, ignoring\n",
 					  psn_start, psn_stop);
 		INC_PING_STAT(NACKS_IGNORED, *key, psn_start, psn_count);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RELI_RX_NACK");
+		OPX_TRACE_RELI_END_IGNORED(OPX_TRACE_EVENT_RELI_NACK_RECV, 0, 0);
 		return;
 	}
 
@@ -1782,7 +1789,7 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 			"(tx) rcv nack %lu..%lu No Unack'd, unpinned replays in range, ignoring (start->psn == %u, start->pinned == %d\n",
 			psn_start, psn_stop, start_psn, start->pinned);
 		INC_PING_STAT(NACKS_IGNORED, *key, psn_start, psn_count);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RELI_RX_NACK");
+		OPX_TRACE_RELI_END_IGNORED(OPX_TRACE_EVENT_RELI_NACK_RECV, 0, 0);
 		return;
 	}
 
@@ -1920,7 +1927,7 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 		slist_insert_tail(&work->work_elem.slist_entry, &service->rx.work_pending);
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RELI_RX_NACK");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_NACK_RECV, 0, 0);
 }
 
 enum opx_reliability_ping_result {
@@ -1933,14 +1940,14 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_reliability_send_ping(struct fid_ep *ep, struct fi_opx_reliability_service *service, RbtIterator itr,
 				     const union fi_opx_reliability_service_flow_key *key)
 {
-	OPX_TRACER_TRACE_RELI(OPX_TRACER_BEGIN, "RELI_SEND_PING");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 	struct fi_opx_reliability_tx_replay **value_ptr = (struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(
 		service->tx.tx_flow_outstanding_pkts_rbtree, itr);
 
 	struct fi_opx_reliability_tx_replay *head = *value_ptr;
 
 	if (OFI_UNLIKELY(head == NULL)) {
-		OPX_TRACER_TRACE_RELI(OPX_TRACER_END_ERROR, "RELI_SEND_PING");
+		OPX_TRACE_RELI_END_ERROR(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 		return OPX_RELIABILITY_PING_NO_REPLAYS;
 	}
 
@@ -1971,7 +1978,7 @@ ssize_t fi_opx_reliability_send_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 
 	INC_PING_STAT_COND(rc == FI_SUCCESS, PINGS_SENT, *key, psn_start, psn_count);
 
-	OPX_TRACER_TRACE_RELI(OPX_TRACER_END_SUCCESS, "RELI_SEND_PING");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 
 	if (rc) {
 		return OPX_RELIABILITY_PING_NO_CREDITS;
@@ -2082,7 +2089,7 @@ void fi_reliability_service_ping_remote(struct fid_ep *ep, struct fi_opx_reliabi
 
 void fi_opx_reliability_service_process_pending(struct fi_opx_reliability_service *service)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RELI_PROCESS_PENDING");
+	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_PROCESS_PENDING, 0, 0);
 	assert(!slist_empty(&service->rx.work_pending));
 
 	union fi_opx_reliability_deferred_work *work =
@@ -2096,7 +2103,7 @@ void fi_opx_reliability_service_process_pending(struct fi_opx_reliability_servic
 		slist_insert_head(&work->work_elem.slist_entry, &service->rx.work_pending);
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RELI_PROCESS_PENDING");
+	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_PROCESS_PENDING, 0, 0);
 }
 
 void fi_opx_reliability_model_init_9B(struct fi_opx_reliability_service *service, struct fi_opx_hfi1_context *hfi1)

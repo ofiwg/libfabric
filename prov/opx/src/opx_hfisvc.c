@@ -63,7 +63,7 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		"===================================== RECV -- RENDEZVOUS RTS HFISVC (deferred) (begin) context %p\n",
 		params->context);
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS-HFISVC");
+	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_HFISVC_RZV_RTS, 0, 0);
 
 	struct fi_opx_ep   *opx_ep	    = params->opx_ep;
 	struct opx_context *context	    = params->context;
@@ -154,7 +154,8 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		"===================================== RECV -- RENDEZVOUS RTS HFISVC (deferred) (end) context %p\n",
 		params->context);
 
-	OPX_TRACER_TRACE(rc ? OPX_TRACER_END_EAGAIN : OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-HFISVC");
+	OPX_TRACE_RX_END(OPX_TRACE_EVENT_HFISVC_RZV_RTS,
+			 rc ? OPX_TRACE_STATUS_END_EAGAIN : OPX_TRACE_STATUS_END_SUCCESS, 0, 0);
 
 	return rc;
 #else

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025-2025 by Cornelis Networks.
+ * Copyright (C) 2025-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -42,7 +42,7 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 	struct fi_opx_ep		  *opx_ep = params->opx_ep;
 	const uint64_t			   bth_rx = ((uint64_t) params->origin_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-RECV-SEND-CTS");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 
 	//  If we have an asynchrous HMEM Copy, see if it is complete first
 	if (params->context->byte_counter != 0) {
@@ -61,10 +61,10 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 			params->context->flags &= ~(FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 			slist_insert_tail((struct slist_entry *) params->context, opx_ep->rx->cq_completed_ptr);
 		} else if (status == OPX_HMEM_ERROR_NOT_READY) {
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "IPC-RECV-SEND-CTS");
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 			return -FI_EAGAIN;
 		} else {
-			OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "IPC-RECV-SEND-CTS");
+			OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 			opx_hmem_event_destroy(opx_ep->domain->hmem_domain->hmem_stream.type, &params->hmem_event);
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"FATAL ERROR, opx_hmem_event_query failed. Abort\n");
@@ -76,7 +76,7 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 	ssize_t	 rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "IPC-RECV-SEND-CTS");
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -85,7 +85,7 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 		params->u32_extended_rx, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "IPC-RECV-SEND-CTS");
+		OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 		return rc;
 	}
 
@@ -118,7 +118,7 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 	}
 
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-RECV-SEND-CTS");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 	return FI_SUCCESS;
 }
 
