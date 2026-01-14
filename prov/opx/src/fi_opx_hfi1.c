@@ -1513,7 +1513,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, SHM -- RENDEZVOUS RTS (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS-SHM");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	uint64_t pos;
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
@@ -1521,6 +1521,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -1529,6 +1530,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 		params->u32_extended_rx, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 		return rc;
 	}
 
@@ -1552,7 +1554,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-SHM");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, SHM -- RENDEZVOUS RTS (end)\n");
 
@@ -1568,7 +1570,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_shm_16B(union fi_opx_hfi1_deferred_work *work)
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV 16B, SHM -- RENDEZVOUS RTS (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS-SHM");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	uint64_t pos;
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
@@ -1576,6 +1578,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_shm_16B(union fi_opx_hfi1_deferred_work *work)
 	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->origin_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -1584,6 +1587,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_shm_16B(union fi_opx_hfi1_deferred_work *work)
 		params->u32_extended_rx, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 		return rc;
 	}
 
@@ -1612,7 +1616,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_shm_16B(union fi_opx_hfi1_deferred_work *work)
 
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-SHM");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV 16B, SHM -- RENDEZVOUS RTS (end)\n");
 
@@ -1630,7 +1634,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (begin) (params=%p rzv_comp=%p context=%p)\n",
 	       params->tid_info.npairs ? "EXPECTED TID" : "EAGER", params, params->rzv_comp, params->rzv_comp->context);
 	assert(params->rzv_comp->context->byte_counter >= params->dput_iov[0].bytes);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	const uint64_t tid_payload =
 		params->tid_info.npairs ? ((params->tid_info.npairs + 4) * sizeof(params->tidpairs[0])) : 0;
 	const uint64_t payload_bytes = (params->niov * sizeof(union opx_hfi1_dput_iov)) + tid_payload;
@@ -1663,6 +1667,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 			       params->tid_info.npairs ? "EXPECTED TID" : "EAGER", params, params->rzv_comp,
 			       params->rzv_comp->context);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 			return -FI_EAGAIN;
 		}
 	}
@@ -1679,6 +1684,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		       params->tid_info.npairs ? "EXPECTED TID" : "EAGER", params, params->rzv_comp,
 		       params->rzv_comp->context);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -1730,7 +1736,7 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
 							     OPX_SW_HFI1_TYPE);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (end) (params=%p rzv_comp=%p context=%p)\n",
 	       params->tid_info.npairs ? "EXPECTED TID" : "EAGER", params, params->rzv_comp, params->rzv_comp->context);
@@ -1748,7 +1754,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 	       "===================================== RECV 16B, HFI -- RENDEZVOUS %s RTS (begin) (params=%p rzv_comp=%p context=%p)\n",
 	       params->tid_info.npairs ? "EXPECTED TID" : "EAGER", params, params->rzv_comp, params->rzv_comp->context);
 	assert(params->rzv_comp->context->byte_counter >= params->dput_iov[0].bytes);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	const uint64_t tid_payload =
 		params->tid_info.npairs ? ((params->tid_info.npairs + 4) * sizeof(params->tidpairs[0])) : 0;
 	const uint64_t payload_bytes = (params->niov * sizeof(union opx_hfi1_dput_iov)) + tid_payload;
@@ -1860,7 +1866,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
 							     OPX_HFI1_JKR);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-CTS-HFI:%p", params->rzv_comp);
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (end) (params=%p rzv_comp=%p context=%p)\n",
 	       params->tid_info.npairs ? "EXPECTED TID" : "EAGER", params, params->rzv_comp, params->rzv_comp->context);
@@ -2610,7 +2616,11 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 			    const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
 			    const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS-HFI:%ld", hdr->qw_9B[6]);
+	/*
+	 * Note: RX_RZV_RTS tracing is done in the caller (fi_opx_endpoint.h) where
+	 * the correct slid_len and tag values are available. This function is called
+	 * after the BEGIN trace, so we only emit END traces here.
+	 */
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
@@ -2728,7 +2738,10 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
 		OPX_BUF_FREE(work);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-HFI:%ld", hdr->qw_9B[6]);
+		/*
+		 * Note: RX_RZV_RTS END trace is emitted in the caller (fi_opx_endpoint.h)
+		 * where the correct slid_len and tag values are available.
+		 */
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_SUCCESS\n");
 		return;
 	}
@@ -2736,7 +2749,10 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
-	OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "RECV-RZV-RTS-HFI:%ld", hdr->qw_9B[6]);
+	/*
+	 * Note: RX_RZV_RTS END trace is emitted in the caller (fi_opx_endpoint.h)
+	 * where the correct slid_len and tag values are available.
+	 */
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 }
 
@@ -2746,7 +2762,7 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 			 const uint64_t niov, const uint64_t is_hmem, struct opx_context *const context,
 			 const uint64_t xfer_len, const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-IPC-RTS-HFI");
+	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 
 	assert(payload->rendezvous.ipc.ipc_info.iface != FI_HMEM_SYSTEM);
 
@@ -2754,7 +2770,7 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	struct ofi_mr_entry *entry;
 	struct ipc_info	    *ipc_info = (struct ipc_info *) &payload->rendezvous.ipc.ipc_info;
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-RECV-OPEN-HANDLE");
+	OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
 	int ret = ofi_ipc_cache_search(opx_ep->domain->hmem_domain->ipc_cache, origin_rx, ipc_info, &entry);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2762,11 +2778,11 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 		abort();
 	}
 	device_ptr = (char *) (uintptr_t) entry->info.mapped_addr + (uintptr_t) ipc_info->offset;
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-RECV-OPEN-HANDLE");
+	OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
 
 	/* Most modern GPUs have support for Unified Virtual Addressing (UVA).
 	   This allows us to use generic cudaMemcpy for DtoH and DtoD */
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-P2P-DIRECT-COPY");
+	OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_COPY, 0, 0);
 	union opx_hmem_event *event = NULL;
 	if (!is_hmem) {
 		ret = ofi_copy_from_hmem(ipc_info->iface, ipc_info->device, context->buf, device_ptr, xfer_len);
@@ -2788,11 +2804,11 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 			abort();
 		}
 	}
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-P2P-DIRECT-COPY");
+	OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_COPY, 0, 0);
 	if (event == NULL) {
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-DESTROY-HANDLE");
+		OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_DEV_UNREGISTER, 0, 0);
 		ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, entry);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-DESTROY-HANDLE");
+		OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_DEV_UNREGISTER, 0, 0);
 		context->byte_counter = 0;
 		context->flags &= ~(FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 		slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_completed_ptr);
@@ -2834,7 +2850,7 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
 		OPX_BUF_FREE(work);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-IPC-RTS-HFI");
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_SUCCESS\n");
 		return;
 	}
@@ -2842,7 +2858,7 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-IPC-RTS-HFI");
+	OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 }
 #endif
@@ -2968,7 +2984,7 @@ int opx_hfi1_rx_rma_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, SHM -- RMA RTS (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RMA-RTS-SHM");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 	uint64_t pos;
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
@@ -2977,6 +2993,7 @@ int opx_hfi1_rx_rma_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 		fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -2986,6 +3003,7 @@ int opx_hfi1_rx_rma_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 		params->u32_extended_rx, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 		return rc;
 	}
 
@@ -3027,7 +3045,7 @@ int opx_hfi1_rx_rma_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RMA-RTS-SHM");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, SHM -- RMA RTS (end)\n");
 
@@ -3047,7 +3065,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	       "===================================== RECV, HFI -- RMA RTS (begin) (params=%p rma_req=%p context=%p)\n",
 	       params, params->rma_req, params->rma_req->context);
 	assert(params->rma_req->context->byte_counter >= params->dput_iov[0].bytes);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RMA-CTS-HFI:%p", params->rma_req);
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 	const uint64_t payload_bytes = (params->niov * sizeof(union opx_hfi1_dput_iov));
 
 	OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
@@ -3066,7 +3084,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
 		if (total_credits_available < total_credits_needed) {
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RMA-CTS-HFI:%p", params->rma_req);
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "===================================== RECV, HFI -- RMA RTS (EAGAIN credits) (params=%p rzv_comp=%p context=%p)\n",
 			       params, params->rma_req, params->rma_req->context);
@@ -3082,7 +3100,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, params->slid, params->origin_rx,
 					    &psn_ptr, &replay, params->reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RMA-CTS-HFI:%p", params->rma_req);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RMA RTS (EAGAIN psn/replay) (params=%p rzv_comp=%p context=%p)\n",
 		       params, params->rma_req, params->rma_req->context);
@@ -3165,7 +3183,7 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
 							     hfi1_type);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RMA-CTS-HFI:%p", params->rma_req);
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RMA RTS (end) (params=%p rma_req=%p context=%p)\n",
 	       params, params->rma_req, params->rma_req->context);
@@ -3179,7 +3197,12 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 			 const union opx_hfi1_dput_iov *src_iovs, const unsigned is_shm,
 			 const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RMA-RTS-HFI:%ld", hdr->qw_9B[6]);
+	/*
+	 * Note: RMA RTS uses OPX_TRACE_EVENT_RX_RMA_RTS (not RX_RZV_RTS) because
+	 * it has different argument semantics. RMA RTS doesn't have len/tag for
+	 * flow event correlation - it uses memory keys and RMA request pointers.
+	 */
+	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_RMA_RTS, 0, 0);
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
 	struct opx_hfi1_rma_rts_params *params = &work->rma_rts;
@@ -3257,7 +3280,7 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
 		OPX_BUF_FREE(work);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RMA-RTS-HFI:%ld", hdr->qw_9B[6]);
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_RMA_RTS, 0, 0);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_SUCCESS\n");
 		return;
 	}
@@ -3265,7 +3288,7 @@ void opx_hfi1_rx_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
-	OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "RECV-RMA-RTS-HFI:%ld", hdr->qw_9B[6]);
+	OPX_TRACE_RX_END_EAGAIN(OPX_TRACE_EVENT_RX_RMA_RTS, 0, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 }
 
@@ -3280,7 +3303,11 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 	       "===================================== SEND, HFI -- RMA RTS (begin) (params=%p origin_rma_req=%p cc=%p)\n",
 	       params, params->origin_rma_req, params->origin_rma_req->cc);
 	assert(params->origin_rma_req->cc->byte_counter >= params->dput_iov[0].bytes);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RMA-RTS-HFI:%p", params->origin_rma_req);
+	/*
+	 * Note: TX_RMA_RTS uses different arg format than TX_RZV_RTS.
+	 * RMA RTS doesn't have len/tag for flow event correlation.
+	 */
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RMA_RTS, 0, 0);
 
 	const uint64_t payload_bytes = (params->niov * sizeof(union opx_hfi1_dput_iov));
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "payload_bytes = %ld\n", payload_bytes);
@@ -3303,7 +3330,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "===================================== SEND, HFI -- RMA RTS (EAGAIN credits) (params=%p origin_rma_req=%p cc=%p)\n",
 			       params, params->origin_rma_req, params->origin_rma_req->cc);
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RMA-RTS-HFI:%p", params->origin_rma_req);
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RMA_RTS, 0, 0);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			return -FI_EAGAIN;
 		}
@@ -3319,7 +3346,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== SEND, HFI -- RMA RTS (EAGAIN psn/replay) (params=%p origin_rma_req=%p cc=%p) opcode=%d\n",
 		       params, params->origin_rma_req, params->origin_rma_req->cc, params->opcode);
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RMA-RTS-HFI:%p", params->origin_rma_req);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RMA_RTS, 0, 0);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
@@ -3415,7 +3442,7 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 								     params->reliability, OPX_HFI1_CYR);
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RMA-RTS-HFI:%p", params->origin_rma_req);
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RMA_RTS, 0, 0);
 	FI_DBG_TRACE(
 		fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND, HFI -- RMA RTS (end) (params=%p origin_rma_req=%p cc=%p)\n",
@@ -3435,7 +3462,7 @@ int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work)
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, SHM -- RENDEZVOUS RMA (begin) context %p\n", NULL);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RMA-SHM");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RMA_RTS, 0, 0);
 
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy origin_subctxt_rx field.  Use u32_extended field.
@@ -3501,7 +3528,7 @@ int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work)
 
 	opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-SHM");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RMA_RTS, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, SHM -- RENDEZVOUS RTS (end) context %p\n", NULL);
 
@@ -3573,7 +3600,7 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND DPUT, %s opcode %d -- (begin)\n",
 		     is_shm ? "SHM" : "HFI", opcode);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-%s", is_shm ? "SHM" : "HFI");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_DATA, is_shm, 0);
 
 	for (i = params->cur_iov; i < niov; ++i) {
 		uint8_t *sbuf =
@@ -3815,7 +3842,7 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 					       params->bytes_sent, params->u32_extended_rx, hfi1_type);
 		}
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-%s", is_shm ? "SHM" : "HFI");
+		OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_DATA, is_shm, 0);
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND DPUT, %s finished IOV=%d bytes_sent=%ld -- (end)\n",
@@ -3948,8 +3975,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "%p:===================================== SEND DPUT SDMA, opcode %X -- (begin)\n", params, opcode);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-SDMA:%p:%ld", (void *) target_byte_counter_vaddr,
-			 dput_iov[params->cur_iov].bytes);
+	OPX_TRACE_SDMA_BEGIN(OPX_TRACE_EVENT_SDMA_DPUT, target_byte_counter_vaddr, dput_iov[params->cur_iov].bytes);
 
 	for (i = params->cur_iov; i < niov; ++i) {
 		uint8_t *sbuf =
@@ -3962,8 +3988,8 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 				       "%p:===================================== SEND DPUT SDMA QUEUE FULL FI_EAGAIN\n",
 				       params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p",
-						 (void *) target_byte_counter_vaddr);
+				OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT,
+							  (uint64_t) target_byte_counter_vaddr, 0);
 				return -FI_EAGAIN;
 			}
 			if (!params->sdma_we) {
@@ -3980,8 +4006,8 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					       "%p:===================================== SEND DPUT SDMA, !WE FI_EAGAIN\n",
 					       params);
-					OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p",
-							 (void *) target_byte_counter_vaddr);
+					OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT,
+								  (uint64_t) target_byte_counter_vaddr, 0);
 					return -FI_EAGAIN;
 				}
 				assert(params->sdma_we->total_payload == 0);
@@ -4033,8 +4059,8 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 				       "%p:===================================== SEND DPUT SDMA, !PSN FI_EAGAIN\n",
 				       params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p",
-						 (void *) target_byte_counter_vaddr);
+				OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT,
+							  (uint64_t) target_byte_counter_vaddr, 0);
 				return -FI_EAGAIN;
 			}
 
@@ -4148,8 +4174,8 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 				       "%p:===================================== SEND DPUT SDMA, !REPLAY FI_EAGAIN\n",
 				       params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-DPUT-SDMA:%p",
-						 (void *) target_byte_counter_vaddr);
+				OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT,
+							  (uint64_t) target_byte_counter_vaddr, 0);
 				return -FI_EAGAIN;
 			}
 
@@ -4171,7 +4197,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 		params->bytes_sent = 0;
 		params->cur_iov++;
 	} /* for niov */
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-SDMA:%p", (void *) target_byte_counter_vaddr);
+	OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_DPUT, target_byte_counter_vaddr, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "%p:===================================== SEND DPUT SDMA, exit (end)\n", params);
 
@@ -4266,7 +4292,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "%p:===================================== SEND DPUT SDMA TID, opcode %X -- (begin)\n", params, opcode);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-DPUT-SDMA-TID");
+	OPX_TRACE_SDMA_BEGIN(OPX_TRACE_EVENT_SDMA_DPUT, 0, 0);
 
 	for (i = params->cur_iov; i < niov; ++i) {
 		uint32_t *tidpairs = (uint32_t *) params->tid_iov.iov_base;
@@ -4323,7 +4349,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 				       "%p:===================================== SEND DPUT SDMA QUEUE FULL FI_EAGAIN\n",
 				       params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN_SDMA_QUEUE_FULL, "SEND-DPUT-SDMA-TID");
+				OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT, 1, 0);
 				return -FI_EAGAIN;
 			}
 			if (!params->sdma_we) {
@@ -4340,7 +4366,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 					       "%p:===================================== SEND DPUT SDMA TID, !WE FI_EAGAIN\n",
 					       params);
-					OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN_SDMA_NO_WE, "SEND-DPUT-SDMA-TID");
+					OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT, 2, 0);
 					return -FI_EAGAIN;
 				}
 				assert(params->sdma_we->total_payload == 0);
@@ -4369,8 +4395,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 				       "%p:===================================== SEND DPUT SDMA TID, !PSN FI_EAGAIN\n",
 				       params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN_SDMA_PSNS, "SEND-DPUT-SDMA-TID:%d:%ld",
-						 psns_avail, packet_count);
+				OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT, psns_avail, packet_count);
 				return -FI_EAGAIN;
 			}
 #ifndef OPX_RELIABILITY_TEST /* defining this will force reliability replay of some packets */
@@ -4544,7 +4569,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 				       "%p:===================================== SEND DPUT SDMA TID, !REPLAY FI_EAGAIN\n",
 				       params);
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN_SDMA_REPLAY_BUFFER, "SEND-DPUT-SDMA-TID");
+				OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT, 3, 0);
 				return -FI_EAGAIN;
 			}
 
@@ -4572,7 +4597,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 		params->bytes_sent = 0;
 		params->cur_iov++;
 	} /* for niov */
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-DPUT-SDMA-TID");
+	OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_DPUT, 0, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "%p:===================================== SEND DPUT SDMA TID, exit (end)\n", params);
 
@@ -4834,7 +4859,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 			"===================================== SENDV, SHM -- RENDEZVOUS RTS Noncontig (begin) context %p\n",
 			user_context);
 
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-RZV-RTS-NONCONTIG-SHM");
+		OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_RTS, total_len, tag);
 		uint64_t			 pos;
 		ssize_t				 rc;
 		union opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -4842,6 +4867,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 			opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
 		if (!hdr) {
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, total_len, tag);
 			return rc;
 		}
 
@@ -4937,7 +4963,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 			fi_opx_ep_tx_cq_completion_rzv(ep, context, total_len, lock_required, tag, caps);
 		}
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-RZV-RTS-NONCONTIG-SHM");
+		OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_RTS, total_len, tag);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== SENDV, SHM -- RENDEZVOUS RTS (end) context %p\n",
 			     user_context);
@@ -4947,7 +4973,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- RENDEZVOUS RTS (begin) context %p\n",
 		     user_context);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SENDV-RZV-RTS-HFI");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_RTS, total_len, tag);
 
 	OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
@@ -4964,6 +4990,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 		if (total_credits_available < total_credits_needed) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, total_len, tag);
 			return -FI_EAGAIN;
 		}
 	}
@@ -5141,7 +5168,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 	if (OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_completion_rzv(ep, context, total_len, lock_required, tag, caps);
 	}
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SENDV-RZV-RTS-HFI");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_RTS, total_len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SENDV, HFI -- RENDEZVOUS RTS (end) context %p\n", context);
 
@@ -5159,7 +5186,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- RENDEZVOUS RTS HFISVC (begin) context %p\n",
 		     user_context);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-HFI:%ld", tag);
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_RTS, xfer_len, tag);
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.attempt);
 	struct fi_opx_ep_tx *tx = opx_ep->tx;
 
@@ -5402,7 +5429,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
 	OPX_HFISVC_DEBUG_LOG("Send RZV RTS SUCCESS with rzv_comp=%p\n", rzv_comp);
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.success);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-HFI:%ld", tag);
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_RTS, xfer_len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND HFI -- RENDEZVOUS RTS HFISVC (end) context %p\n",
 		     user_context);
@@ -5430,7 +5457,7 @@ err:
 		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[0].access_key_set, access_key,
 					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 	}
-	OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
+	OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, xfer_len, tag);
 	return rc;
 #else
 	return FI_SUCCESS;
@@ -5527,7 +5554,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== SEND, SHM -- RENDEZVOUS RTS (begin) context %p\n",
 			     user_context);
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-SHM");
+		OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 		uint64_t			 pos;
 		ssize_t				 rc;
 		union opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -5536,7 +5563,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 
 		if (!hdr) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "return %zd\n", rc);
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-SHM");
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 			return rc;
 		}
 
@@ -5546,7 +5573,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 			context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 			if (OFI_UNLIKELY(context == NULL)) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-SHM");
+				OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 				return -FI_ENOMEM;
 			}
 			context->err_entry.err	      = 0;
@@ -5597,11 +5624,10 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 			payload->rendezvous.ipc.ipc_info.offset =
 				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
 
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
-			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr,
-						  payload->rendezvous.ipc.ipc_info.base_length,
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
+			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
 						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-SENDER-CREATE-HANDLE");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
 
 			if (ret) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -5632,7 +5658,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 				fi_opx_ep_tx_cq_completion_rzv(ep, context, len, lock_required, tag, caps);
 			}
 
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-SHM");
+			OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 			FI_DBG_TRACE(
 				fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== SEND, SHM -- RENDEZVOUS RTS (end) context %p\n",
@@ -5697,7 +5723,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 			fi_opx_ep_tx_cq_completion_rzv(ep, context, len, lock_required, tag, caps);
 		}
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-SHM");
+		OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== SEND, SHM -- RENDEZVOUS RTS (end) context %p\n",
 			     user_context);
@@ -5707,7 +5733,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- RENDEZVOUS RTS (begin) context %p\n",
 		     user_context);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-HFI:%ld", tag);
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 
 	/*
 	 * While the bulk of the payload data will be sent via SDMA once we
@@ -5729,7 +5755,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 									total_credits_needed);
 		if (total_credits_available < total_credits_needed) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			return -FI_EAGAIN;
 		}
@@ -5742,7 +5768,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 		if (OFI_UNLIKELY(context == NULL)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			return -FI_ENOMEM;
 		}
@@ -5768,7 +5794,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 		}
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
@@ -5923,7 +5949,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 		fi_opx_ep_tx_cq_completion_rzv(ep, context, len, lock_required, tag, caps);
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-HFI:%ld", tag);
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- RENDEZVOUS RTS (end) context %p\n",
 		     user_context);
@@ -6043,7 +6069,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND 16B, SHM -- RENDEZVOUS RTS (begin) context %p\n",
 			user_context);
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-SHM");
+		OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 		uint64_t			 pos;
 		ssize_t				 rc;
 		union opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
@@ -6052,7 +6078,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 		if (!hdr) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "return %zd\n", rc);
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-SHM");
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 			return rc;
 		}
 
@@ -6062,7 +6088,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 			if (OFI_UNLIKELY(context == NULL)) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
-				OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-SHM");
+				OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 				return -FI_ENOMEM;
 			}
 			context->err_entry.err	      = 0;
@@ -6109,11 +6135,10 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			payload->rendezvous.ipc.ipc_info.offset =
 				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
 
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
-			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr,
-						  payload->rendezvous.ipc.ipc_info.base_length,
+			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
+			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
 						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-SENDER-CREATE-HANDLE");
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
 
 			if (ret) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -6150,7 +6175,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				fi_opx_ep_tx_cq_completion_rzv(ep, context, len, lock_required, tag, caps);
 			}
 
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-SHM");
+			OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 			FI_DBG_TRACE(
 				fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== SEND, SHM -- RENDEZVOUS RTS (end) context %p\n",
@@ -6218,7 +6243,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 		opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-SHM");
+		OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== SEND 16B, SHM -- RENDEZVOUS RTS (end) context %p\n",
 			     user_context);
@@ -6231,7 +6256,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND 16B, HFI -- RENDEZVOUS RTS (begin) context %p\n",
 		     user_context);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND-RZV-RTS-HFI:%ld", tag);
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 
 	/*
 	 * While the bulk of the payload data will be sent via SDMA once we
@@ -6251,7 +6276,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 									total_credits_needed);
 		if (total_credits_available < total_credits_needed) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			return -FI_EAGAIN;
 		}
@@ -6263,7 +6288,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 		context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 		if (OFI_UNLIKELY(context == NULL)) {
 			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
 			return -FI_ENOMEM;
@@ -6289,7 +6314,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			OPX_BUF_FREE(context);
 		}
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
@@ -6498,7 +6523,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 		fi_opx_ep_tx_cq_completion_rzv(ep, context, len, lock_required, tag, caps);
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND-RZV-RTS-HFI:%ld", tag);
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_RTS, len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND 16B, HFI -- RENDEZVOUS RTS (end) context %p\n",
 		     user_context);

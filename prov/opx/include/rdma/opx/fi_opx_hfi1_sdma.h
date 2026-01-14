@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2025 by Cornelis Networks.
+ * Copyright (C) 2022-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -382,7 +382,7 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 		if (sdma_we) {
 			++(*reqs_used);
 			assert(sdma_we->next == NULL);
-			OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_IDLE_WE");
+			OPX_TRACE_SDMA_INSTANT(OPX_TRACE_EVENT_SDMA_GET_IDLE_WE, 0, 0);
 			return sdma_we;
 		}
 	}
@@ -403,14 +403,14 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 			sdma_we->psn_ptr	   = NULL;
 			sdma_we->first_ack_time_ns = 0;
 			++sdma_we->bounce_buf.use_count;
-			OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_REUSED_WE");
+			OPX_TRACE_SDMA_INSTANT(OPX_TRACE_EVENT_SDMA_GET_REUSED_WE, 0, 0);
 			return sdma_we;
 		}
 		prev	= sdma_we;
 		sdma_we = sdma_we->next;
 	}
 
-	OPX_TRACER_TRACE_SDMA(OPX_TRACER_INSTANT, "GET_NO_WE");
+	OPX_TRACE_SDMA_INSTANT(OPX_TRACE_EVENT_SDMA_GET_NO_WE, 0, 0);
 	return NULL;
 }
 
