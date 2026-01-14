@@ -445,10 +445,10 @@ void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
 	if (release_from_implicit_av)
 		dlist_remove(&conn->ah_implicit_conn_list_entry);
 
-	efa_ah_release_unsafe(av->domain, conn->ah, release_from_implicit_av);
-
 	efa_conn_release_util_av(av, conn, release_from_implicit_av);
 
+	release_from_implicit_av ? conn->ah->implicit_refcnt-- :
+				   conn->ah->explicit_refcnt--;
 	release_from_implicit_av ? av->used_implicit-- : av->used_explicit--;
 }
 

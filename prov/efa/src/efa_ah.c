@@ -8,6 +8,8 @@
 #include "efa_conn.h"
 #include <infiniband/efadv.h>
 
+void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
+
 /**
  * @brief Move the AH to the end of the LRU list to indicate that it is the
  * most recently used entry
@@ -62,6 +64,11 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
 		       conn_to_release->fi_addr == FI_ADDR_NOTAVAIL);
 
 		efa_conn_release_ah_unsafe(conn_to_release->av, conn_to_release, true);
+	}
+
+	if (ah_to_release->implicit_refcnt == 0 &&
+	    ah_to_release->explicit_refcnt == 0) {
+		efa_ah_destroy_ah(domain, ah_to_release);
 	}
 
 	return FI_SUCCESS;
@@ -157,38 +164,21 @@ err_free_efa_ah:
 	return NULL;
 }
 
-/**
- * @brief release an efa_ah object without acquiring the util domain lock
- *
- * @param[in]	domain	efa_domain
- * @param[in]	ah	efa_ah object pointer
- */
-void efa_ah_release_unsafe(struct efa_domain *domain, struct efa_ah *ah,
-			   bool release_from_implicit_av)
+void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah)
 {
 	int err;
-	assert(ofi_genlock_held(&domain->util_domain.lock));
-#if ENABLE_DEBUG
-	struct efa_ah *tmp;
 
-	HASH_FIND(hh, domain->ah_map, ah->gid, EFA_GID_LEN, tmp);
-	assert(tmp == ah);
-#endif
-	assert((release_from_implicit_av && ah->implicit_refcnt > 0) ||
-	       (!release_from_implicit_av && ah->explicit_refcnt > 0));
+	assert(ah->implicit_refcnt == 0 && ah->explicit_refcnt == 0);
+	assert(dlist_empty(&ah->implicit_conn_list));
 
-	release_from_implicit_av ? ah->implicit_refcnt-- : ah->explicit_refcnt--;
+	EFA_INFO(FI_LOG_AV, "Destroying AH for ahn %d\n", ah->ahn);
+	dlist_remove(&ah->domain_lru_ah_list_entry);
+	HASH_DEL(domain->ah_map, ah);
 
-	if (ah->implicit_refcnt == 0 && ah->explicit_refcnt == 0) {
-		assert(dlist_empty(&ah->implicit_conn_list));
-		EFA_INFO(FI_LOG_AV, "Destroying AH for ahn %d\n", ah->ahn);
-		dlist_remove(&ah->domain_lru_ah_list_entry);
-		HASH_DEL(domain->ah_map, ah);
-		err = ibv_destroy_ah(ah->ibv_ah);
-		if (err)
-			EFA_WARN(FI_LOG_AV, "ibv_destroy_ah failed! err=%d\n", err);
-		free(ah);
-	}
+	err = ibv_destroy_ah(ah->ibv_ah);
+	if (err)
+		EFA_WARN(FI_LOG_AV, "ibv_destroy_ah failed! err=%d\n", err);
+	free(ah);
 }
 
 /**
@@ -201,6 +191,20 @@ void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
 		    bool release_from_implicit_av)
 {
 	ofi_genlock_lock(&domain->util_domain.lock);
-	efa_ah_release_unsafe(domain, ah, release_from_implicit_av);
+#if ENABLE_DEBUG
+	struct efa_ah *tmp;
+
+	HASH_FIND(hh, domain->ah_map, ah->gid, EFA_GID_LEN, tmp);
+	assert(tmp == ah);
+#endif
+	assert((release_from_implicit_av && ah->implicit_refcnt > 0) ||
+	       (!release_from_implicit_av && ah->explicit_refcnt > 0));
+
+	release_from_implicit_av ? ah->implicit_refcnt-- :
+				   ah->explicit_refcnt--;
+
+	if (ah->implicit_refcnt == 0 && ah->explicit_refcnt == 0) {
+		efa_ah_destroy_ah(domain, ah);
+	}
 	ofi_genlock_unlock(&domain->util_domain.lock);
 }
