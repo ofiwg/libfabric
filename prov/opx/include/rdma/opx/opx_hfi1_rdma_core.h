@@ -34,6 +34,7 @@
 
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_compiler.h"
+#include "rdma/opx/opx_tracer.h"
 
 /* Wrapper functions to select between
  *
@@ -87,7 +88,14 @@ int32_t opx_hfi1_wrapper_free_tid(struct fi_opx_hfi1_context *context, uint64_t 
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] context %p, tidlist %#lX, tidcnt %u\n", context,
 		     tidlist, tidcnt);
-	return (*opx_fn_hfi1_free_tid)(context, tidlist, tidcnt);
+	OPX_TRACE_TID_BEGIN(OPX_TRACE_EVENT_TID_FREE, tidlist, (uint64_t) tidcnt);
+	int32_t ret = (*opx_fn_hfi1_free_tid)(context, tidlist, tidcnt);
+	if (OFI_LIKELY(ret == 0)) {
+		OPX_TRACE_TID_END_SUCCESS(OPX_TRACE_EVENT_TID_FREE, tidlist, (uint64_t) tidcnt);
+	} else {
+		OPX_TRACE_TID_END_ERROR(OPX_TRACE_EVENT_TID_FREE, (uint64_t) ret, (uint64_t) tidcnt);
+	}
+	return ret;
 }
 
 /* Register/update tid */
@@ -98,7 +106,14 @@ int32_t opx_hfi1_wrapper_update_tid(struct fi_opx_hfi1_context *context, uint64_
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "[HFI1-DIRECT] context %p, vaddr %#lX, length %u, tidlist %#lX, tidcnt %u, flags %#X\n", context,
 		     vaddr, *length, tidlist, *tidcnt, flags);
-	return (*opx_fn_hfi1_update_tid)(context, vaddr, length, tidlist, tidcnt, flags);
+	OPX_TRACE_TID_BEGIN(OPX_TRACE_EVENT_TID_UPDATE, vaddr, (uint64_t) *length);
+	int32_t ret = (*opx_fn_hfi1_update_tid)(context, vaddr, length, tidlist, tidcnt, flags);
+	if (OFI_LIKELY(ret == 0)) {
+		OPX_TRACE_TID_END_SUCCESS(OPX_TRACE_EVENT_TID_UPDATE, vaddr, (uint64_t) *tidcnt);
+	} else {
+		OPX_TRACE_TID_END_ERROR(OPX_TRACE_EVENT_TID_UPDATE, (uint64_t) ret, vaddr);
+	}
+	return ret;
 }
 
 #if HAVE_HFI1_DIRECT_VERBS

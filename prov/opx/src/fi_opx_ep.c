@@ -44,6 +44,7 @@
 #include "rdma/opx/fi_opx_match.h"
 #include "rdma/opx/opx_hfisvc.h"
 #include "rdma/opx/opx_debug.h"
+#include "rdma/opx/opx_tracer.h"
 
 #include <ofi_enosys.h>
 
@@ -1300,6 +1301,10 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 	opx_ep->rx->self.hfi1_subctxt_rx = subctxt_rx;
 	opx_ep->rx->self.hfi1_unit	 = (uint8_t) hfi1->hfi_unit;
 	opx_ep->rx->shd_ctx.subctxt	 = hfi1->subctxt;
+
+#ifdef OPX_TRACER_ENABLED
+	opx_trace_set_self_lid(hfi1->lid);
+#endif
 
 	/* Initialize hash table used to lookup info on any HFI units on the node */
 	/* Assert multi-endpoint globally uses the same hfi/lid */
@@ -3724,6 +3729,7 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
 			     struct fi_opx_extended_addr *peers_ext)
 {
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_CONNECT, (uint64_t) count, 0);
 	int	n;
 	ssize_t rc	    = FI_SUCCESS;
 	opx_ep->rx->av_addr = opx_ep->av->table_addr;
@@ -3737,6 +3743,7 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 				fi_opx_global.hfi_local_info.multi_lid,
 				opx_lid_is_shm(fi_opx_global.hfi_local_info.lid));
 			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+				OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_TX_CONNECT, (uint64_t) (-rc), (uint64_t) n);
 				return rc;
 			}
 		}
@@ -3779,10 +3786,16 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 
 		rc = FI_OPX_FABRIC_TX_CONNECT(opx_ep, peers[n].fi);
 		if (OFI_UNLIKELY(rc)) {
+			OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_TX_CONNECT, (uint64_t) (-rc), (uint64_t) n);
 			break;
 		}
 	}
 
+#ifdef OPX_TRACER_ENABLED
+	if (OFI_LIKELY(rc == FI_SUCCESS)) {
+		OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_CONNECT, (uint64_t) count, 0);
+	}
+#endif
 	return rc;
 }
 

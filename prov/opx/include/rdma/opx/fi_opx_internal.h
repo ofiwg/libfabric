@@ -132,10 +132,10 @@ static inline int fi_opx_threading_lock_required(const enum fi_threading threadi
 static inline void fi_opx_lock_if_required(ofi_spin_t *lock, const int required)
 {
 	if (required) {
-		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_BEGIN, "LOCK");
+		OPX_TRACE_LOCK_BEGIN(OPX_TRACE_EVENT_LOCK_ACQUIRE, (uint64_t) lock, 0);
 		ofi_spin_lock(lock);
-		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_END_SUCCESS, "LOCK");
-		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_BEGIN, "LOCK-HELD");
+		OPX_TRACE_LOCK_END_SUCCESS(OPX_TRACE_EVENT_LOCK_ACQUIRE, (uint64_t) lock, 0);
+		OPX_TRACE_LOCK_BEGIN(OPX_TRACE_EVENT_LOCK_HELD, (uint64_t) lock, 0);
 	}
 }
 
@@ -147,10 +147,10 @@ static inline void fi_opx_lock(ofi_spin_t *lock)
 static inline void fi_opx_unlock_if_required(ofi_spin_t *lock, const int required)
 {
 	if (required) {
-		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_END_SUCCESS, "LOCK-HELD");
-		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_BEGIN, "UNLOCK");
+		OPX_TRACE_LOCK_END_SUCCESS(OPX_TRACE_EVENT_LOCK_HELD, (uint64_t) lock, 0);
+		OPX_TRACE_LOCK_BEGIN(OPX_TRACE_EVENT_LOCK_RELEASE, (uint64_t) lock, 0);
 		ofi_spin_unlock(lock);
-		OPX_TRACER_TRACE_LOCK_IF_REQUIRED(OPX_TRACER_END_SUCCESS, "UNLOCK");
+		OPX_TRACE_LOCK_END_SUCCESS(OPX_TRACE_EVENT_LOCK_RELEASE, (uint64_t) lock, 0);
 	}
 }
 

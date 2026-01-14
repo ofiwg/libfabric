@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2025 by Cornelis Networks.
+ * Copyright (C) 2022-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,6 +33,7 @@
 #include <assert.h>
 #include <string.h>
 #include "rdma/opx/fi_opx_hfi1_sdma.h"
+#include "rdma/opx/opx_tracer.h"
 
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
 {
@@ -138,6 +139,7 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, int writev_rc, struct iovec *iovs, const int num_iovs,
 				    const char *file, const char *func, const int line)
 {
+	OPX_TRACE_SDMA_INSTANT(OPX_TRACE_EVENT_SDMA_ERROR, (uint64_t) errno, (uint64_t) writev_rc);
 	const pid_t pid = getpid();
 
 	if (errno == ECOMM || errno == EINTR || errno == EFAULT) {
@@ -303,6 +305,8 @@ void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep)
 		assert(request->fill_index != OPX_SDMA_FILL_INDEX_INVALID);
 		assert(*request->comp_state == OPX_SDMA_COMP_QUEUED);
 		if (OFI_UNLIKELY(request->comp_entry.status == ERROR)) {
+			OPX_TRACE_SDMA_INSTANT(OPX_TRACE_EVENT_SDMA_ERROR, (uint64_t) request->comp_entry.errcode,
+					       (uint64_t) request->fill_index);
 			FI_DBG_TRACE(
 				fi_opx_global.prov, FI_LOG_EP_DATA,
 				"===================================== SDMA Request (%p) -- Found error in queued entry, status=%d, error=%d\n",
@@ -412,9 +416,15 @@ int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep, struct iovec *iovecs, int iov
 
 	OPX_COUNTERS_TIME_NS(writev_start_ns, &opx_ep->debug_counters);
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITEV");
+	OPX_TRACE_SDMA_BEGIN(OPX_TRACE_EVENT_SDMA_WRITEV, (uint64_t) iovs_used, 0);
 	ssize_t writev_rc = writev(opx_ep->hfi->fd_cdev, iovecs, iovs_used);
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITEV");
+#ifdef OPX_TRACER_ENABLED
+	if (OFI_LIKELY(writev_rc >= 0)) {
+		OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_WRITEV, (uint64_t) writev_rc, (uint64_t) iovs_used);
+	} else {
+		OPX_TRACE_SDMA_END_ERROR(OPX_TRACE_EVENT_SDMA_WRITEV, (uint64_t) (-writev_rc), (uint64_t) iovs_used);
+	}
+#endif
 
 	OPX_COUNTERS_TIME_NS(writev_end_ns, &opx_ep->debug_counters);
 	OPX_COUNTERS_STORE_VAL(writev_time_ns, writev_end_ns - writev_start_ns);
@@ -479,7 +489,7 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep)
 		struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&request->header_vec, request->set_meminfo);
 		req_info->comp_idx	       = fill_index;
 		request->fill_index	       = fill_index;
-		OPX_TRACER_TRACE_SDMA(OPX_TRACER_BEGIN, "SDMA_COMPLETE_%hu", fill_index);
+		OPX_TRACE_SDMA_BEGIN(OPX_TRACE_EVENT_SDMA_HW_INFLIGHT, fill_index, 0);
 
 		assert(opx_ep->hfi->info.sdma.queued_entries[fill_index] == NULL);
 		request->comp_entry.status  = QUEUED;

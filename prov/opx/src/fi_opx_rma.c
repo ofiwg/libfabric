@@ -140,7 +140,7 @@ int fi_opx_do_readv_internal_shm(union fi_opx_hfi1_deferred_work *work)
 
 int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "DO_READV");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
 	struct fi_opx_hfi1_rx_readv_params *params    = &work->readv;
 	struct fi_opx_ep		   *opx_ep    = params->opx_ep;
 	const enum opx_hfi1_type	    hfi1_type = OPX_SW_HFI1_TYPE;
@@ -152,7 +152,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	const int credits_needed    = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ? 2 : 3;
 	ssize_t	  credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, credits_needed);
 	if (OFI_UNLIKELY(credits_available < 0)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "DO_READV");
+		OPX_TRACE_RMA_END_EAGAIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
@@ -167,7 +167,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 					    &psn_ptr, &replay, params->reliability, hfi1_type);
 
 	if (OFI_UNLIKELY(psn == -1)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "DO_READV");
+		OPX_TRACE_RMA_END_EAGAIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 		return -FI_EAGAIN;
 	}
@@ -254,7 +254,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
 							     OPX_SW_HFI1_TYPE);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "DO_READV");
+	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
 	return FI_SUCCESS;
 }
 
@@ -263,20 +263,20 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 				     uint64_t addr_offset, uint64_t key, int lock_required, const uint64_t caps,
 				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "INJECT_WRITE");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_INJECT_WRITE, 0, 0);
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 #ifndef NDEBUG
 	int ret = 0;
 	ret	= fi_opx_check_rma(opx_ep);
 	if (ret) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "INJECT_WRITE");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_INJECT_WRITE, 0, 0);
 		return ret;
 	}
 #endif
 
 	if (lock_required) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "INJECT_WRITE");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_INJECT_WRITE, 0, 0);
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
@@ -301,7 +301,7 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 			   opx_ep->tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability,
 			   hfi1_type);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "INJECT_WRITE");
+	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_INJECT_WRITE, 0, 0);
 	return 0;
 }
 
@@ -330,20 +330,20 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		     const uint64_t tx_op_flags, const uint64_t caps, const enum ofi_reliability_kind reliability,
 		     const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITE");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_WRITE, 0, 0);
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 #ifndef NDEBUG
 	int ret = 0;
 	ret	= fi_opx_check_rma(opx_ep);
 	if (ret) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITE");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITE, 0, 0);
 		return ret;
 	}
 #endif
 
 	if (lock_required) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITE");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITE, 0, 0);
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
@@ -358,7 +358,7 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq,
 					     FI_RMA | FI_WRITE | (op_flags & FI_REMOTE_CQ_DATA),
 					     &context) != FI_SUCCESS)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITE");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITE, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -368,7 +368,7 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 			OPX_BUF_FREE(context);
 		}
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITE");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITE, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -386,7 +386,7 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	opx_write_internal(opx_ep, &iov, 1, data, opx_dst_addr, addr_offset, key, cc, FI_VOID, FI_NOOP, op_flags,
 			   is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITE");
+	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITE, 0, 0);
 	return 0;
 }
 
@@ -412,7 +412,7 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 			       int lock_required, const uint64_t caps, const enum ofi_reliability_kind reliability,
 			       const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITEV_INTERNAL");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_WRITEV, 0, 0);
 	struct fi_opx_ep *opx_ep;
 	opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -420,13 +420,13 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 	int ret = 0;
 	ret	= fi_opx_check_rma(opx_ep);
 	if (ret) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEV_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITEV, 0, 0);
 		return ret;
 	}
 #endif
 
 	if (lock_required) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEV_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITEV, 0, 0);
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
@@ -437,7 +437,7 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_WRITE, &context) != FI_SUCCESS)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEV_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITEV, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -447,7 +447,7 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 			OPX_BUF_FREE(context);
 		}
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEV_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITEV, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -482,7 +482,7 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 		addr_offset += iov[index].iov_len;
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITEV_INTERNAL");
+	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITEV, 0, 0);
 	return 0;
 }
 
@@ -551,7 +551,7 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 				 const uint64_t caps, const enum ofi_reliability_kind reliability,
 				 const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "WRITEMSG_INTERAL");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_WRITEMSG, 0, 0);
 	struct fi_opx_ep *opx_ep;
 	opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -559,13 +559,13 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	int ret = 0;
 	ret	= fi_opx_check_rma(opx_ep);
 	if (ret) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEMSG_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITEMSG, 0, 0);
 		return ret;
 	}
 #endif
 
 	if (lock_required) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEMSG_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITEMSG, 0, 0);
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
@@ -579,7 +579,7 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq,
 					     (FI_RMA | FI_WRITE | (flags & FI_REMOTE_CQ_DATA)),
 					     &context) != FI_SUCCESS)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEMSG_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITEMSG, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -589,7 +589,7 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 			OPX_BUF_FREE(context);
 		}
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "WRITEMSG_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITEMSG, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -657,7 +657,7 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 		}
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "WRITEMSG_INTERNAL");
+	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITEMSG, 0, 0);
 	return 0;
 }
 
@@ -682,20 +682,20 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 			     const uint64_t caps, const enum ofi_reliability_kind reliability,
 			     const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "READ");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 #ifndef NDEBUG
 	int ret = 0;
 	ret	= fi_opx_check_rma(opx_ep);
 	if (ret) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READ");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 		return ret;
 	}
 #endif
 
 	if (lock_required) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READ");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
@@ -719,7 +719,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_READ, &context) != FI_SUCCESS)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READ");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -729,7 +729,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 			OPX_BUF_FREE(context);
 		}
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READ");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -745,7 +745,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 			   opx_ep->tx->cq, opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
 			   lock_required, caps, reliability, hfi1_type);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "READ");
+	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 	return FI_SUCCESS;
 }
 
@@ -770,20 +770,20 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 		     uint64_t addr_offset, uint64_t key, void *user_context, int lock_required, const uint64_t caps,
 		     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "READV");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 #ifndef NDEBUG
 	int ret = 0;
 	ret	= fi_opx_check_rma(opx_ep);
 	if (ret) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READV");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 		return ret;
 	}
 #endif
 
 	if (lock_required) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READV");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
@@ -794,7 +794,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_READ, &context) != FI_SUCCESS)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READV");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -810,7 +810,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 			OPX_BUF_FREE(context);
 		}
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READV");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -874,7 +874,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 			   opx_ep->tx->cq, opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
 			   lock_required, caps, reliability, hfi1_type);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "READV");
+	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 	return 0;
 }
 
@@ -899,20 +899,20 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 				const uint64_t caps, const enum ofi_reliability_kind reliability,
 				const enum opx_hfi1_type hfi1_type)
 {
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "READMSG_INTERNAL");
+	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 #ifndef NDEBUG
 	int ret = 0;
 	ret	= fi_opx_check_rma(opx_ep);
 	if (ret) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READMSG_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 		return ret;
 	}
 #endif
 
 	if (lock_required) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READMSG_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
@@ -924,7 +924,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	struct fi_opx_cq   *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq, FI_RMA | FI_READ, &context) != FI_SUCCESS)) {
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READMSG_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -954,7 +954,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			OPX_BUF_FREE(context);
 		}
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READMSG_INTERNAL");
+		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -1017,7 +1017,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 							   cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
 							   lock_required, caps, reliability, hfi1_type);
 
-					OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "READMSG_INTERNAL");
+					OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 					return 0;
 
 				} else {
@@ -1068,7 +1068,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	} /* end while */
 
 	/* should never get here */
-	OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "READMSG_INTERNAL");
+	OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Fatal -FI_EPERM\n");
 	abort();
 

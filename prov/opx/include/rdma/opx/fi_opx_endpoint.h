@@ -1083,8 +1083,6 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 		"===================================== RECV -- RENDEZVOUS RTS HFISVC (%X) (begin) context %p is_multi_recv (%lu)\n",
 		opcode, context, is_multi_receive);
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS-HFISVC");
-
 	const uint64_t		   ofi_data = hdr->match.ofi_data;
 	uint64_t		   recv_len = context->len;
 	void			  *recv_buf = context->buf;
@@ -1098,6 +1096,11 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				     __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 
 	uint64_t xfer_len = hdr->rzv_rts.message_length;
+
+#ifdef OPX_TRACER_ENABLED
+	const uint64_t trace_slid_len = OPX_TRACE_PACK_SLID_LEN(lid, xfer_len);
+	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_RZV_RTS_HFISVC, trace_slid_len, origin_tag);
+#endif
 
 	OPX_HFISVC_DEBUG_LOG(
 		"Matched HFISVC RTS packet, recv context=%p lid %#x, sbuf_client_key=%u xfer_len=%lu niov=%u rzv_comp=%lX\n",
@@ -1242,10 +1245,12 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 
 	++opx_ep->hfisvc.rdma_read_count[0];
 recv_rts_hfisvc_finish:
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-HFISVC");
+#ifdef OPX_TRACER_ENABLED
+	OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_RZV_RTS_HFISVC, trace_slid_len, origin_tag);
+#endif
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== RECV -- RENDEZVOUS RTS HFISVC (end) context %p\n", context);
-#endif
+#endif /* OPX_HFISVC */
 }
 
 __OPX_FORCE_INLINE__
@@ -1264,8 +1269,6 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 		"===================================== RECV -- RENDEZVOUS RTS (%X) (begin) context %p is_multi_recv (%lu)\n",
 		opcode, context, is_multi_receive);
 
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-RTS");
-
 	const uint64_t		   ofi_data	= hdr->match.ofi_data;
 	const uint64_t		   recv_len	= context->len;
 	void			  *recv_buf	= context->buf;
@@ -1273,6 +1276,11 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 	const uint64_t		   xfer_len	= hdr->rendezvous.message_length;
 	const uint64_t		   niov		= hdr->rendezvous.niov;
 	const uint64_t		   is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
+
+#ifdef OPX_TRACER_ENABLED
+	const uint64_t trace_slid_len = OPX_TRACE_PACK_SLID_LEN(OPX_TRACE_GET_SLID(hdr, hfi1_type), xfer_len);
+	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_RZV_RTS, trace_slid_len, origin_tag);
+#endif
 
 #ifdef OPX_HMEM
 	const uint64_t is_ipc = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_IPC;
@@ -1388,7 +1396,9 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			if (is_ipc) {
 				opx_hfi1_rx_ipc_rts(opx_ep, hdr, payload, origin_rx, niov, is_hmem, context, xfer_len,
 						    u32_ext_rx, hfi1_type);
-				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS");
+#ifdef OPX_TRACER_ENABLED
+				OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_RZV_RTS, trace_slid_len, origin_tag);
+#endif
 				FI_DBG_TRACE(
 					fi_opx_global.prov, FI_LOG_EP_DATA,
 					"===================================== RECV -- RENDEZVOUS RTS (end) context %p\n",
@@ -1501,7 +1511,9 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 						u32_ext_rx, hfi1_type);
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS");
+#ifdef OPX_TRACER_ENABLED
+	OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_RZV_RTS, trace_slid_len, origin_tag);
+#endif
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== RECV -- RENDEZVOUS RTS (end) context %p\n", context);
 }
@@ -1539,10 +1551,14 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 	if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== RECV -- INJECT (begin)\n");
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-INJECT");
 
 		const uint64_t ofi_data = hdr->match.ofi_data;
 		const uint64_t send_len = OPX_BTH_INJECT_MSG_LENGTH(hdr->inject.subctxt_message_length);
+
+#ifdef OPX_TRACER_ENABLED
+		const uint64_t trace_slid_len = OPX_TRACE_PACK_SLID_LEN(OPX_TRACE_GET_SLID(hdr, hfi1_type), send_len);
+		OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_INJECT, trace_slid_len, origin_tag);
+#endif
 
 		if (is_multi_receive) { /* branch should compile out */
 
@@ -1695,18 +1711,24 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			slist_insert_tail((struct slist_entry *) context, rx->cq_err_ptr);
 		}
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-INJECT");
+#ifdef OPX_TRACER_ENABLED
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_INJECT, trace_slid_len, origin_tag);
+#endif
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== RECV -- INJECT (end)\n");
 
 	} else if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== RECV -- EAGER (begin)\n");
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-EAGER");
 
 		const uint64_t ofi_data	       = hdr->match.ofi_data;
 		uint8_t	       xfer_bytes_tail = OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->send.subctxt_xfer_bytes_tail);
 		const uint64_t send_len	       = xfer_bytes_tail + hdr->send.payload_qws_total * sizeof(uint64_t);
+
+#ifdef OPX_TRACER_ENABLED
+		const uint64_t trace_slid_len = OPX_TRACE_PACK_SLID_LEN(OPX_TRACE_GET_SLID(hdr, hfi1_type), send_len);
+		OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_EAGER, trace_slid_len, origin_tag);
+#endif
 
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "hdr->send.subctxt_xfer_bytes_tail = %u, hdr->send.payload_qws_total = %u, send_len = %lu\n",
@@ -1850,14 +1872,15 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			slist_insert_tail((struct slist_entry *) context, rx->cq_err_ptr);
 		}
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-EAGER");
+#ifdef OPX_TRACER_ENABLED
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_EAGER, trace_slid_len, origin_tag);
+#endif
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== RECV -- EAGER (end)\n");
 
 	} else if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== RECV -- MULTI PACKET EAGER FIRST (begin)\n");
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-MP-EAGER-FIRST");
 
 		const uint64_t ofi_data = hdr->match.ofi_data;
 
@@ -1869,6 +1892,8 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		}
 		const uint64_t packet_payload_len = (payload_qws_total << 3);
 		const uint64_t payload_total_len  = hdr->mp_eager_first.payload_bytes_total;
+
+		OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_MP_EAGER_FIRST, payload_total_len, origin_tag);
 
 		assert(packet_payload_len < payload_total_len);
 
@@ -1951,7 +1976,7 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		}
 #endif
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-MP-EAGER-FIRST");
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_MP_EAGER_FIRST, payload_total_len, origin_tag);
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER FIRST byte counter %lu (end)\n",
@@ -1960,7 +1985,6 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== RECV -- MULTI PACKET EAGER NTH (begin)\n");
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-MP-EAGER-NTH");
 
 		uint64_t payload_qws_total;
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
@@ -1971,6 +1995,8 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 		const uint64_t send_len = OPX_BTH_SEND_XFER_BYTES_TAIL(hdr->mp_eager_nth.subctxt_xfer_bytes_tail) +
 					  (payload_qws_total << 3);
 		const uint64_t xfer_len = send_len + hdr->mp_eager_nth.payload_offset;
+
+		OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_MP_EAGER_NTH, send_len, hdr->mp_eager_nth.payload_offset);
 
 		assert(xfer_len <= context->len);
 
@@ -2073,7 +2099,7 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			abort();
 		}
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-MP-EAGER-NTH");
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_MP_EAGER_NTH, send_len, hdr->mp_eager_nth.payload_offset);
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- MULTI PACKET EAGER NTH byte counter %lu (end)\n",
@@ -2159,7 +2185,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 		const uintptr_t			     target_context_vaddr = hdr->cts.target.vaddr.target_context_vaddr;
 		const uint32_t			     niov		  = hdr->cts.target.vaddr.niov;
 		uint64_t *origin_byte_counter = (uint64_t *) hdr->cts.target.vaddr.origin_byte_counter_vaddr;
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-CTS-HFI:%p", (void *) target_context_vaddr);
+		OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_RZV_CTS_HFI, (uint64_t) target_context_vaddr, 0);
 		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, hdr, (const void *const) payload, 0, origin_rx, niov, dput_iov, NULL,
 					 (const uint8_t)(FI_NOOP - 1), (const uint8_t)(FI_VOID - 1),
 					 (uintptr_t) NULL, /* No RMA Request */
@@ -2167,7 +2193,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 					 is_shm,      /* compile-time constant expression */
 					 reliability, /* compile-time constant expression */
 					 u32_ext_rx, hfi1_type);
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-CTS-HFI:%p", (void *) target_context_vaddr);
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_RZV_CTS_HFI, (uint64_t) target_context_vaddr, 0);
 	} break;
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG: {
 		const union opx_hfi1_dput_iov *const dput_iov		  = payload->cts.iov;
@@ -2244,7 +2270,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 	case FI_OPX_HFI_DPUT_OPCODE_IPC: {
 		uint64_t *origin_byte_counter = (uint64_t *) hdr->cts.target.vaddr.origin_byte_counter_vaddr;
 		*origin_byte_counter	      = 0;
-		OPX_TRACER_TRACE(OPX_TRACER_INSTANT, "IPC-SEND-PROCESS-CTS");
+		OPX_TRACE_RX_INSTANT(OPX_TRACE_EVENT_IPC_SEND_PROCESS_CTS, 0, 0);
 	} break;
 #endif
 	default:
@@ -2264,7 +2290,7 @@ void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep *opx_ep, const union o
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== RECV -- RMA RTS (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RMA-RTS");
+	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_RMA_RTS, 0, 0);
 
 	struct fi_opx_ep_rx *const rx = opx_ep->rx;
 	assert(payload != NULL);
@@ -2279,7 +2305,7 @@ void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep *opx_ep, const union o
 			hdr->rma_rts.key);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== RECV -- RMA RTS - failed (end)\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "RECV-RMA-RTS");
+		OPX_TRACE_RX_END_ERROR(OPX_TRACE_EVENT_RX_RMA_RTS, 0, 0);
 		assert(0);
 		return;
 	}
@@ -2314,7 +2340,7 @@ void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep *opx_ep, const union o
 		slist_insert_tail((struct slist_entry *) context, rx->cq_completed_ptr);
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RMA-RTS");
+	OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_RMA_RTS, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== RECV -- RMA RTS (end) context %p\n", context);
 }
@@ -2338,7 +2364,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG: {
 		struct fi_opx_rzv_completion *rzv_comp =
 			(struct fi_opx_rzv_completion *) (hdr->dput.target.rzv.completion_vaddr);
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RECV-RZV-DATA-HFI-DPUT:%p", rzv_comp);
+		OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_RZV_DATA_HFI_DPUT, (uint64_t) rzv_comp, 0);
 		struct opx_context *target_context = rzv_comp->context;
 		assert(target_context);
 		uint64_t *rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.rzv.rbuf);
@@ -2398,10 +2424,10 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			OPX_BUF_FREE(rzv_comp);
 		}
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-DATA-HFI-DPUT:%p", rzv_comp);
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_RZV_DATA_HFI_DPUT, (uint64_t) rzv_comp, 0);
 	} break;
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_TID: {
-		OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "RX_PROCESS_HEADER_RZV_TID");
+		OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_RZV_TID, 0, 0);
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_rcv_pkts);
 		struct fi_opx_rzv_completion *rzv_comp =
 			(struct fi_opx_rzv_completion *) (hdr->dput.target.rzv.completion_vaddr);
@@ -2497,7 +2523,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			OPX_BUF_FREE(rzv_comp);
 		}
 
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RX_PROCESS_HEADER_RZV_TID");
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_RZV_TID, 0, 0);
 	} break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT: {
 		assert(payload != NULL);
@@ -3282,7 +3308,7 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 	for (enum opx_work_type work_type = OPX_WORK_TYPE_PIO; work_type < OPX_WORK_TYPE_LAST; ++work_type) {
 		const uintptr_t work_pending = (const uintptr_t) opx_ep->tx->work_pending[work_type].head;
 		if (work_pending) {
-			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "DO-DEFERRED-WORK-%s", OPX_WORK_TYPE_STR[work_type]);
+			OPX_TRACE_PROGRESS_BEGIN(OPX_TRACE_EVENT_PROGRESS_DEFERRED_WORK, work_type, 0);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				     "===================================== POLL WORK PENDING type %d <start \n",
 				     work_type);
@@ -3310,7 +3336,7 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 							  &opx_ep->tx->work_pending[work->work_elem.work_type]);
 				}
 			}
-			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "DO-DEFERRED-WORK-%s", OPX_WORK_TYPE_STR[work_type]);
+			OPX_TRACE_PROGRESS_END_SUCCESS(OPX_TRACE_EVENT_PROGRESS_DEFERRED_WORK, work_type, 0);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				     "===================================== POLL WORK PENDING type %d %u done>\n",
 				     work_type, rc);
@@ -3703,11 +3729,12 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== POST RECV: context = %p\n", user_context);
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "POST-RECV");
+	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_POST_RECV, len, tag);
 
 	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 	if (OFI_UNLIKELY(context == NULL)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+		OPX_TRACE_RX_END_ERROR(OPX_TRACE_EVENT_RX_POST_RECV, (uint64_t) FI_ENOMEM, 0);
 		return -FI_ENOMEM;
 	}
 
@@ -3763,7 +3790,7 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 					     OPX_HMEM_FALSE, lock_required, reliability, hfi1_type);
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECV");
+	OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_POST_RECV, len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== POST RECV RETURN\n");
 
 	return 0;
@@ -3786,7 +3813,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 						    const enum opx_hfi1_type	    hfi1_type)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== POST RECVMSG\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "POST-RECVMSG");
+	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_POST_RECVMSG, 0, 0);
 	FI_OPX_DEBUG_COUNTERS_INC_COND(!(flags & FI_MULTI_RECV), opx_ep->debug_counters.recv.posted_recv_msg);
 	FI_OPX_DEBUG_COUNTERS_INC_COND((flags & FI_MULTI_RECV), opx_ep->debug_counters.recv.posted_multi_recv);
 	assert(!lock_required);
@@ -3794,7 +3821,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 	if (OFI_UNLIKELY(context == NULL)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "POST-RECVMSG");
+		OPX_TRACE_RX_END_ERROR(OPX_TRACE_EVENT_RX_POST_RECVMSG, 0, 0);
 		return -FI_ENOMEM;
 	}
 	context->next		      = NULL;
@@ -3828,7 +3855,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 							  reliability, hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== POST RECVMSG RETURN\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_POST_RECVMSG, 0, 0);
 		return rc;
 
 	} else if (msg->iov_count == 0) {
@@ -3847,7 +3874,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 							  reliability, hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== POST RECVMSG RETURN\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_POST_RECVMSG, 0, 0);
 		return rc;
 	}
 
@@ -3904,7 +3931,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 							  lock_required, reliability, hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== POST RECVMSG (HMEM) RETURN\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_POST_RECVMSG, 0, 0);
 		return rc;
 	}
 #endif
@@ -3922,7 +3949,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 							  reliability, hfi1_type);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== POST RECVMSG RETURN\n");
-		OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
+		OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_POST_RECVMSG, 0, 0);
 		return rc;
 	}
 
@@ -3940,7 +3967,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 						  reliability, hfi1_type);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== POST RECVMSG RETURN\n");
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "POST-RECVMSG");
+	OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_POST_RECVMSG, 0, 0);
 	return rc;
 }
 
@@ -4245,7 +4272,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 						 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== SEND (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "SEND");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 
 	uint64_t	   hmem_device;
 	uint64_t	   hmem_handle;
@@ -4272,7 +4299,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 	if (opx_ep->daos_info.do_resynch_remote_ep) {
 		rc = fi_opx_reliability_do_remote_ep_resynch(ep, addr, context, caps);
 		if (OFI_UNLIKELY(rc == -FI_EAGAIN)) {
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 			return rc;
 		}
 	}
@@ -4300,12 +4327,12 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 						      caps, reliability, do_cq_completion, hmem_iface, hmem_device,
 						      hmem_handle, hfi1_type, ctx_sharing);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
-				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
+				OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					     "===================================== SEND (end)\n");
 				return FI_SUCCESS;
 			}
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				     "===================================== SEND -- FI_EAGAIN (Eager) len=%lu\n",
 				     total_len);
@@ -4322,12 +4349,12 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 							 do_cq_completion, FI_HMEM_SYSTEM, 0ul, OPX_HMEM_NO_HANDLE,
 							 hfi1_type, ctx_sharing);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
-				OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
+				OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					     "===================================== SEND (end)\n");
 				return FI_SUCCESS;
 			}
-			OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND");
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				     "===================================== SEND -- FI_EAGAIN (MP Eager) len=%lu\n",
 				     total_len);
@@ -4341,7 +4368,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 				hmem_iface, hmem_device, hmem_handle, (const struct fi_opx_mr *) desc, hfi1_type,
 				ctx_sharing);
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "SEND");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== SEND (end)\n");
 
 	return rc;
@@ -4394,7 +4421,7 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== INJECT (begin)\n");
-	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "INJECT");
+	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_INJECT, 0, 0);
 
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -4414,7 +4441,7 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 				  ctx_sharing);
 	}
 
-	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "INJECT");
+	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_INJECT, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== INJECT (end)\n");
 
 	return rc;
