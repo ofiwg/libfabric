@@ -344,21 +344,24 @@ class ClientServerTest:
                  warmup_iteration_type=None,
                  completion_type="queue",
                  fabric=None,
-                 additional_env=''):
+                 additional_env='',
+                 might_fail=False):
 
         self._cmdline_args = cmdline_args
         self._timeout = timeout or cmdline_args.timeout
-        self._server_base_command, server_additonal_environment = self.prepare_base_command("server", executable, iteration_type,
-                                                              completion_semantic, prefix_type,
-                                                              datacheck_type, message_size,
-                                                              memory_type, warmup_iteration_type,
-                                                              completion_type, fabric, additional_env)
-        self._client_base_command, client_additonal_environment = self.prepare_base_command("client", executable, iteration_type,
-                                                              completion_semantic, prefix_type,
-                                                              datacheck_type, message_size,
-                                                              memory_type, warmup_iteration_type,
-                                                              completion_type, fabric, additional_env)
+        self._server_parameters = {}
+        self._client_parameters = {}
+        args = {k: v for k, v in locals().items() if k not in ['self', 'timeout', 'cmdline_args']}
+        for name, value in args.items():
+            if isinstance(value, dict) and {"server", "client"}.issubset(value):
+                self._server_parameters[name] = value["server"]
+                self._client_parameters[name] = value["client"]
+            else:
+                self._server_parameters[name] = value
+                self._client_parameters[name] = value
 
+        self._server_base_command, server_additonal_environment = self.prepare_base_command("server", **self._server_parameters)
+        self._client_base_command, client_additonal_environment = self.prepare_base_command("client", **self._client_parameters)
 
         self._server_command = self._cmdline_args.populate_command(self._server_base_command, "server", self._timeout, server_additonal_environment)
         self._client_command = self._cmdline_args.populate_command(self._client_base_command, "client", self._timeout, client_additonal_environment)
@@ -373,7 +376,8 @@ class ClientServerTest:
                              warmup_iteration_type=None,
                              completion_type="queue",
                              fabric=None,
-                             additional_env=''):
+                             additional_env='',
+                             might_fail=False):
         if executable == "fi_ubertest":
             return "fi_ubertest", additional_env
 
@@ -581,7 +585,13 @@ class ClientServerTest:
         if server_timed_out:
             raise RuntimeError("Server timed out")
 
-        check_returncode_list([server_process.returncode, client_returncode],
+        list_to_check_return_code = []
+        if not self._server_parameters['might_fail']:
+            list_to_check_return_code.append(server_process.returncode)
+        if not self._client_parameters['might_fail']:
+            list_to_check_return_code.append(client_returncode)
+
+        check_returncode_list(list_to_check_return_code,
                               self._cmdline_args.strict_fabtests_mode)
 
 
