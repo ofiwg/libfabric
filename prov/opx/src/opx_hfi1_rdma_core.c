@@ -725,21 +725,19 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 	/* ignore errors */
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Close context %p and libraries\n", ibv_context);
-	pthread_mutex_lock(&opx_rdma_ops.lock);
-	fi_opx_ref_dec(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
-	assert(opx_rdma_ops.ref_cnt > 0);
-	pthread_mutex_unlock(&opx_rdma_ops.lock);
 	if (opx_rdma_ops.libibverbs && ibv_context) {
 		OPX_HFI1_RDMA_FN(ibv_close_device)((struct ibv_context *) ibv_context);
 	}
+	opx_hfi1_rdma_lib_close();
 }
 
 void opx_hfi1_rdma_lib_close()
 {
 	pthread_mutex_lock(&opx_rdma_ops.lock);
-	fi_opx_ref_dec(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
 	if (opx_rdma_ops.ref_cnt) {
-		assert(opx_rdma_ops.ref_cnt > 0);
+		fi_opx_ref_dec(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
+	}
+	if (opx_rdma_ops.ref_cnt) {
 		pthread_mutex_unlock(&opx_rdma_ops.lock);
 		return;
 	}
