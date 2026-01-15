@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -43,6 +43,7 @@
 
 #include "rdma/opx/opx_tracer.h"
 #include "rdma/opx/fi_opx_hfi1.h"
+#include "rdma/opx/fi_opx_addr.h"
 
 #define FI_OPX_CACHE_LINE_SIZE (64)
 
@@ -63,8 +64,8 @@ struct opx_context {
 	void		   *buf; /* fi_cq_data_entry::buf (unused for tagged cq's and non-multi-receive message cq's) */
 
 	union {
-		uint64_t  data;	    /* fi_cq_data_entry::data; only used _after_ a message is matched */
-		fi_addr_t src_addr; /* only used _before_ a message is matched ('FI_DIRECTED_RECEIVE') */
+		uint64_t	  data;	    /* fi_cq_data_entry::data; only used _after_ a message is matched */
+		union fi_opx_addr src_addr; /* only used _before_ a message is matched ('FI_DIRECTED_RECEIVE') */
 	};
 
 	uint64_t tag; /* fi_cq_tagged_entry::tag */
