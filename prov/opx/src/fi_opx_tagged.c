@@ -151,7 +151,7 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 		}
 
 		return fi_opx_ep_rx_process_context(opx_ep, FI_TAGGED, context, context->flags, OPX_HMEM_TRUE,
-						    lock_required, av_type, reliability, hfi1_type);
+						    lock_required, reliability, hfi1_type);
 	}
 #endif
 	if (msg->iov_count == 1) {
