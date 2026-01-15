@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022-2025 Cornelis Networks.
+ * Copyright (C) 2022-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -157,8 +157,8 @@ struct fi_opx_cq {
 	} hfisvc;
 #endif
 
-	int64_t	   ref_cnt;
-	ofi_spin_t lock;
+	ofi_atomic64_t ref_cnt;
+	ofi_spin_t     lock;
 };
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_cq, pending) == (FI_OPX_CACHE_LINE_SIZE * 1),
 			"struct fi_opx_cq.pending should start at cacheline 1!\n");

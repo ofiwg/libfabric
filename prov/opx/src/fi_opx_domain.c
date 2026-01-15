@@ -584,7 +584,8 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 
 	opx_domain->use_hfisvc = 0;
 #if HAVE_HFISVC
-	opx_domain->hfisvc.ref_cnt = OPX_DOMAIN_HFISVC_NOT_INITIALIZED;
+	fi_opx_ref_init(&opx_domain->hfisvc.ref_cnt, "hfisvc");
+	ofi_atomic_set64(&opx_domain->hfisvc.ref_cnt, OPX_DOMAIN_HFISVC_NOT_INITIALIZED);
 #endif
 
 	opx_domain->rx_count = 0;
@@ -632,94 +633,112 @@ extern struct opx_rdma_ops_struct opx_rdma_ops;
 
 int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 {
-	if (domain->hfisvc.ref_cnt == OPX_DOMAIN_HFISVC_NOT_INITIALIZED) {
-		// Driver support but library/apis not found
-		// dlopen is done - once - in hfi1dv rdma-core and copied to hfisvc
+	int rc = FI_SUCCESS;
 
-		domain->hfisvc.libhfi1verbs = opx_rdma_ops.libhfi1verbs;
-		if (domain->hfisvc.libhfi1verbs == NULL) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs not found\n");
-			return -FI_ENODEV;
-		}
-		pthread_mutex_lock(&opx_rdma_ops.lock);
-		fi_opx_ref_inc(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
-		pthread_mutex_unlock(&opx_rdma_ops.lock);
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs found\n");
+	pthread_mutex_lock(&opx_rdma_ops.lock);
 
-		domain->hfisvc.initialize = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_initialize");
-		if (domain->hfisvc.initialize == NULL) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize not found\n");
-			return -FI_ENODEV;
-		}
-
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize found\n");
-
-		domain->hfisvc.get_client_key = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_key");
-		domain->hfisvc.command_queue_open =
-			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_open");
-		domain->hfisvc.command_queue_close =
-			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_close");
-		domain->hfisvc.completion_queue_open =
-			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_completion_queue_open");
-		domain->hfisvc.completion_queue_close =
-			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_completion_queue_close");
-		domain->hfisvc.cq_read = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cq_read");
-		domain->hfisvc.cmd_dma_access_once_va =
-			dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_once_va");
-		domain->hfisvc.cmd_rdma_read_va = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_read_va");
-		domain->hfisvc.doorbell		= dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_doorbell");
-
-		assert(domain->hfisvc.get_client_key != NULL);
-		assert(domain->hfisvc.command_queue_open != NULL);
-		assert(domain->hfisvc.command_queue_close != NULL);
-		assert(domain->hfisvc.completion_queue_open != NULL);
-		assert(domain->hfisvc.completion_queue_close != NULL);
-		assert(domain->hfisvc.cq_read != NULL);
-		assert(domain->hfisvc.cmd_dma_access_once_va != NULL);
-		assert(domain->hfisvc.cmd_rdma_read_va != NULL);
-		assert(domain->hfisvc.doorbell != NULL);
-
-		int ret = (*domain->hfisvc.initialize)(domain->hfisvc.ctx);
-		if (ret) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-				"[HFISVC] hfisvc_client_initialize failed, disable hfisvc\n");
-			return -FI_ENODEV;
-		}
-		ret = (*domain->hfisvc.get_client_key)(domain->hfisvc.ctx, &domain->hfisvc.client_key);
-		if (ret) {
-			abort();
-		}
-		OPX_HFISVC_DEBUG_LOG("Creating new domain mr command queue\n");
-		ret = (*domain->hfisvc.command_queue_open)(&domain->hfisvc.mr_command_queue, domain->hfisvc.ctx);
-
-		if (ret) {
-			fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr command queue! rc=%d\n", getpid(),
-				__FILE__, __func__, __LINE__, ret);
-			abort();
-		}
-
-		OPX_HFISVC_DEBUG_LOG("Creating new domain mr completion queue\n");
-		ret = (*domain->hfisvc.completion_queue_open)(&domain->hfisvc.mr_completion_queue, domain->hfisvc.ctx);
-
-		if (ret) {
-			fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr completion queue! rc=%d\n", getpid(),
-				__FILE__, __func__, __LINE__, ret);
-			abort();
-		}
-		OPX_HFISVC_DEBUG_LOG("Initializing hfisvc keyset\n");
-		ret = opx_hfisvc_keyset_init(&domain->hfisvc.access_key_set);
-		if (ret) {
-			fprintf(stderr, "(%d) %s:%s():%d Failed initializing hfisvc keyset! rc=%d\n", getpid(),
-				__FILE__, __func__, __LINE__, ret);
-			abort();
-		}
-		fi_opx_ref_init(&domain->hfisvc.ref_cnt, "hfisvc");
-		OPX_HFISVC_DEBUG_LOG("Initialized HFI service with client key %u\n", domain->hfisvc.client_key);
-		domain->use_hfisvc = 1;
+	if (ofi_atomic_get64(&domain->hfisvc.ref_cnt) != OPX_DOMAIN_HFISVC_NOT_INITIALIZED) {
+		fi_opx_ref_inc(&domain->hfisvc.ref_cnt, "hfisvc");
+		goto done;
 	}
 
-	fi_opx_ref_inc(&domain->hfisvc.ref_cnt, "hfisvc");
+	// Driver support but library/apis not found
+	// dlopen is done - once - in hfi1dv rdma-core and copied to hfisvc
 
-	return 0;
+	domain->hfisvc.libhfi1verbs = opx_rdma_ops.libhfi1verbs;
+	if (domain->hfisvc.libhfi1verbs == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs not found\n");
+		rc = -FI_ENODEV;
+		goto done;
+	}
+
+	fi_opx_ref_inc(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
+
+	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs found\n");
+
+	domain->hfisvc.initialize = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_initialize");
+	if (domain->hfisvc.initialize == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize not found\n");
+		rc = -FI_ENODEV;
+		goto done;
+	}
+
+	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize found\n");
+
+	domain->hfisvc.get_client_key	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_key");
+	domain->hfisvc.command_queue_open  = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_open");
+	domain->hfisvc.command_queue_close = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_close");
+	domain->hfisvc.completion_queue_open =
+		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_completion_queue_open");
+	domain->hfisvc.completion_queue_close =
+		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_completion_queue_close");
+	domain->hfisvc.cq_read = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cq_read");
+	domain->hfisvc.cmd_dma_access_once_va =
+		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_once_va");
+	domain->hfisvc.cmd_dma_access_once = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_once");
+	domain->hfisvc.cmd_rdma_read	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_read");
+	domain->hfisvc.cmd_rdma_read_va	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_read_va");
+	domain->hfisvc.cmd_rdma_write	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_write");
+	domain->hfisvc.cmd_mr_open	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_mr_open");
+	domain->hfisvc.cmd_mr_close	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_mr_close");
+	domain->hfisvc.cmd_dma_access_enable =
+		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_enable");
+	domain->hfisvc.cmd_dma_access_disable =
+		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_disable");
+	domain->hfisvc.doorbell = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_doorbell");
+
+	assert(domain->hfisvc.get_client_key != NULL);
+	assert(domain->hfisvc.command_queue_open != NULL);
+	assert(domain->hfisvc.command_queue_close != NULL);
+	assert(domain->hfisvc.completion_queue_open != NULL);
+	assert(domain->hfisvc.completion_queue_close != NULL);
+	assert(domain->hfisvc.cq_read != NULL);
+	assert(domain->hfisvc.cmd_dma_access_once_va != NULL);
+	assert(domain->hfisvc.cmd_rdma_read_va != NULL);
+	assert(domain->hfisvc.doorbell != NULL);
+
+	int ret = (*domain->hfisvc.initialize)(domain->hfisvc.ctx);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+			"[HFISVC] hfisvc_client_initialize failed, disable hfisvc\n");
+		rc = -FI_ENODEV;
+		goto done;
+	}
+	ret = (*domain->hfisvc.get_client_key)(domain->hfisvc.ctx, &domain->hfisvc.client_key);
+	if (ret) {
+		abort();
+	}
+	OPX_HFISVC_DEBUG_LOG("Creating new domain mr command queue\n");
+	ret = (*domain->hfisvc.command_queue_open)(&domain->hfisvc.mr_command_queue, domain->hfisvc.ctx);
+
+	if (ret) {
+		fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr command queue! ret=%d\n", getpid(), __FILE__,
+			__func__, __LINE__, ret);
+		abort();
+	}
+
+	OPX_HFISVC_DEBUG_LOG("Creating new domain mr completion queue\n");
+	ret = (*domain->hfisvc.completion_queue_open)(&domain->hfisvc.mr_completion_queue, domain->hfisvc.ctx);
+
+	if (ret) {
+		fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr completion queue! ret=%d\n", getpid(),
+			__FILE__, __func__, __LINE__, ret);
+		abort();
+	}
+	OPX_HFISVC_DEBUG_LOG("Initializing hfisvc keyset\n");
+	ret = opx_hfisvc_keyset_init(&domain->hfisvc.access_key_set);
+	if (ret) {
+		fprintf(stderr, "(%d) %s:%s():%d Failed initializing hfisvc keyset! ret=%d\n", getpid(), __FILE__,
+			__func__, __LINE__, ret);
+		abort();
+	}
+	ofi_atomic_set64(&domain->hfisvc.ref_cnt, 1);
+	OPX_HFISVC_DEBUG_LOG("Initialized HFI service with client key %u\n", domain->hfisvc.client_key);
+	domain->use_hfisvc = 1;
+
+done:
+	pthread_mutex_unlock(&opx_rdma_ops.lock);
+
+	return rc;
 }
 #endif
