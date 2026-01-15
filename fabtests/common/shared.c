@@ -4532,6 +4532,8 @@ void ft_longopts_usage()
 		"threading model: safe|completion|domain (default:domain)");
 	FT_PRINT_OPTS_USAGE("--no-rx-cq-data",
 		"Do not request FI_RX_CQ_DATA in hints for writedata/sendata tests");
+	FT_PRINT_OPTS_USAGE("--expect-error",
+		"Expect specific error code");
 }
 
 int debug_assert;
@@ -4547,6 +4549,7 @@ struct option long_opts[] = {
 	{"use-fi-more", no_argument, NULL, LONG_OPT_USE_FI_MORE},
 	{"threading", required_argument, NULL, LONG_OPT_THREADING},
 	{"no-rx-cq-data", no_argument, NULL, LONG_OPT_NO_RX_CQ_DATA},
+	{"expect-error", required_argument, NULL, LONG_OPT_EXPECT_ERROR},
 	{NULL, 0, NULL, 0},
 };
 
@@ -4609,6 +4612,9 @@ int ft_parse_long_opts(int op, char *optarg)
 		return 0;
 	case LONG_OPT_NO_RX_CQ_DATA:
 		allow_rx_cq_data = false;
+		return 0;
+	case LONG_OPT_EXPECT_ERROR:
+		opts.expect_error = atoi(optarg);
 		return 0;
 	default:
 		return EXIT_FAILURE;
