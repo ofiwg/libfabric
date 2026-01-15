@@ -92,7 +92,6 @@ struct opx_rdma_ops_struct opx_rdma_ops = {
 	/* static initial values */
 	.hfi1_direct_verbs_enabled = true,
 	.lock			   = PTHREAD_MUTEX_INITIALIZER,
-	.ref_cnt		   = 0,
 	.libhfi1verbs		   = NULL,
 	.libibverbs		   = NULL};
 
@@ -734,10 +733,10 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 void opx_hfi1_rdma_lib_close()
 {
 	pthread_mutex_lock(&opx_rdma_ops.lock);
-	if (opx_rdma_ops.ref_cnt) {
+	if (ofi_atomic_get64(&opx_rdma_ops.ref_cnt)) {
 		fi_opx_ref_dec(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
 	}
-	if (opx_rdma_ops.ref_cnt) {
+	if (ofi_atomic_get64(&opx_rdma_ops.ref_cnt)) {
 		pthread_mutex_unlock(&opx_rdma_ops.lock);
 		return;
 	}

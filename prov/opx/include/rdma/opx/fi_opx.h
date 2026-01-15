@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 by Cornelis Networks.
+ * Copyright (C) 2021-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,6 +47,7 @@
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
 #include <ofi_lock.h>
+#include <ofi_atom.h>
 #include <uthash.h>
 #include <ofi_list.h>
 #include <opa_byteorder.h>
@@ -363,25 +364,26 @@ static inline void always_assert(bool val, char *msg)
 	}
 }
 
-static inline void fi_opx_ref_init(int64_t *ref, char *name)
+static inline void fi_opx_ref_init(ofi_atomic64_t *ref, char *name)
 {
-	*ref = 0;
+	ofi_atomic_initialize64(ref, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "initializing ref count for (%s) to (%d)\n", name, 0);
 
 	return;
 }
 
-static inline void fi_opx_ref_inc(int64_t *ref, char *name)
+static inline void fi_opx_ref_inc(ofi_atomic64_t *ref, char *name)
 {
-	(*ref) += 1;
+	int64_t new_value = ofi_atomic_inc64(ref);
 	FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "Incrementing ref count for (%s). New value is (%ld)\n", name,
-	       (*ref));
+	       new_value);
+	(void) new_value; /* suppress unused variable warning */
 	return;
 }
 
-static inline int fi_opx_ref_dec(int64_t *ref, char *name)
+static inline int fi_opx_ref_dec(ofi_atomic64_t *ref, char *name)
 {
-	int64_t value = --(*ref);
+	int64_t value = ofi_atomic_dec64(ref);
 	if (value < 0) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "decrement ref for (%s) (ref_cnt %ld < 0)\n", name, value);
 
@@ -391,9 +393,9 @@ static inline int fi_opx_ref_dec(int64_t *ref, char *name)
 	return 0;
 }
 
-static inline int fi_opx_ref_finalize(int64_t *ref, char *name)
+static inline int fi_opx_ref_finalize(ofi_atomic64_t *ref, char *name)
 {
-	int64_t value = *ref;
+	int64_t value = ofi_atomic_get64(ref);
 	if (value != 0) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "error ref for (%s) (ref_cnt %ld != 0)\n", name, value);
 		errno = FI_EBUSY;

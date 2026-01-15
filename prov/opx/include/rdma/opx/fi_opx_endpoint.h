@@ -271,7 +271,7 @@ struct fi_opx_ep_tx {
 	/* == CACHE LINE 12, 13+ == */
 
 	struct slist	      work_pending[OPX_WORK_TYPE_LAST];
-	int64_t		      ref_cnt;
+	ofi_atomic64_t	      ref_cnt;
 	struct opx_spio_ctrl *spio_ctrl;
 	// struct opx_shm_tx is very large and should go last!
 	struct opx_shm_tx shm;
@@ -425,7 +425,7 @@ struct fi_opx_ep_rx {
 
 	struct opx_shm_rx shm;
 	void		 *mem;
-	int64_t		  ref_cnt;
+	ofi_atomic64_t	  ref_cnt;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, queue) == FI_OPX_CACHE_LINE_SIZE,
@@ -606,7 +606,7 @@ struct fi_opx_sep {
 	struct fi_opx_ep_tx	     *tx[FI_OPX_ADDR_SEP_RX_MAX];
 	struct fi_opx_ep_rx	     *rx[FI_OPX_ADDR_SEP_RX_MAX];
 
-	int64_t ref_cnt;
+	ofi_atomic64_t ref_cnt;
 
 } __attribute((aligned(L2_CACHE_LINE_SIZE)));
 
