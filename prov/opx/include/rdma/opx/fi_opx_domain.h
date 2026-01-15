@@ -40,6 +40,7 @@
 #include <uthash.h>
 
 #include "rdma/fi_domain.h"
+#include "ofi_atom.h"
 
 #include "rdma/opx/fi_opx_reliability.h"
 
@@ -66,7 +67,7 @@ struct opx_hmem_fabric;
 struct fi_opx_fabric {
 	struct fid_fabric fabric_fid;
 
-	int64_t		       ref_cnt;
+	ofi_atomic64_t	       ref_cnt;
 	struct opx_tid_fabric *tid_fabric;
 #ifdef OPX_HMEM
 	struct opx_hmem_fabric *hmem_fabric;
@@ -125,7 +126,7 @@ struct fi_opx_domain {
 		 */
 		hfisvc_client_completion_queue_t mr_completion_queue;
 		opx_hfisvc_keyset_t		 access_key_set;
-		int64_t				 ref_cnt;
+		ofi_atomic64_t			 ref_cnt;
 		hfisvc_client_key_t		 client_key;
 		uint32_t			 padding;
 		void				*libhfi1verbs;
@@ -171,9 +172,9 @@ struct fi_opx_domain {
 		int (*doorbell)(struct ibv_context *ctx);
 	} hfisvc;
 #endif
-	uint8_t use_hfisvc;
-	uint8_t padding[7];
-	int64_t ref_cnt;
+	uint8_t	       use_hfisvc;
+	uint8_t	       padding[7];
+	ofi_atomic64_t ref_cnt;
 
 	struct slist	    deferred_work_queue;
 	struct ofi_bufpool *deferred_work_pool;
@@ -185,7 +186,7 @@ struct fi_opx_av {
 	struct fid_av	      av_fid; /* 32 bytes */
 	struct fi_opx_domain *domain;
 	void		     *map_addr;
-	int64_t		      ref_cnt;
+	ofi_atomic64_t	      ref_cnt;
 	uint32_t	      addr_count;
 	enum fi_av_type	      type;
 	unsigned	      ep_tx_count;

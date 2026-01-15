@@ -110,7 +110,7 @@ struct opx_rdma_ops_struct {
 
 	bool		hfi1_direct_verbs_enabled; /* run-time check based on dlopen() */
 	pthread_mutex_t lock;			   /* for dlopen/close */
-	int64_t		ref_cnt;		   /* non-zero indicates dlopen of libverbs is done */
+	ofi_atomic64_t	ref_cnt;		   /* non-zero indicates dlopen of libverbs is done */
 
 	/* dlopen libraries */
 

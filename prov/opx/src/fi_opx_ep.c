@@ -518,7 +518,7 @@ static int fi_opx_close_ep(fid_t fid)
 			errno = -ret;
 			goto err_unlock;
 		}
-		if (opx_ep->tx->cq && (opx_ep->tx->cq->ref_cnt == 0)) {
+		if (opx_ep->tx->cq && (ofi_atomic_get64(&opx_ep->tx->cq->ref_cnt) == 0)) {
 			if (opx_ep->tx->work_pending_pool) {
 				ofi_bufpool_destroy(opx_ep->tx->work_pending_pool);
 			}
@@ -529,7 +529,7 @@ static int fi_opx_close_ep(fid_t fid)
 				ofi_bufpool_destroy(opx_ep->tx->rma_request_pool);
 			}
 		}
-		if (opx_ep->tx->ref_cnt == 0) {
+		if (ofi_atomic_get64(&opx_ep->tx->ref_cnt) == 0) {
 			if (opx_ep->tx->sdma_work_pool) {
 				ofi_bufpool_destroy(opx_ep->tx->sdma_work_pool);
 			}
@@ -546,7 +546,7 @@ static int fi_opx_close_ep(fid_t fid)
 			errno = -ret;
 			goto err_unlock;
 		}
-		if (opx_ep->rx->ref_cnt == 0) {
+		if (ofi_atomic_get64(&opx_ep->rx->ref_cnt) == 0) {
 			if (opx_ep->rx->ue_packet_pool) {
 				ofi_bufpool_destroy(opx_ep->rx->ue_packet_pool);
 				opx_ep->rx->ue_packet_pool = NULL;
@@ -661,7 +661,7 @@ static int fi_opx_close_ep(fid_t fid)
 		opx_hfi1_rdma_context_close(opx_ep->hfi->ibv_context);
 #endif
 
-		if (opx_ep->hfi->ref_cnt == 0) {
+		if (ofi_atomic_get64(&opx_ep->hfi->ref_cnt) == 0) {
 			// free memory allocated for _hfi_ctrl struct in opx_hfi_userinit_internal function in
 			// opa_proto.c
 			if (opx_ep->hfi->ctrl) {
@@ -1853,8 +1853,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"Opened hfi %p, HFI type %s, unit %u, port %u, ref_cnt %#lX, rcv ctxt %u, send ctxt %u, subctxt %u, subctxt_cnt %u\n",
 		opx_ep->hfi, OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE), opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port,
-		opx_ep->hfi->ref_cnt, opx_ep->hfi->ctrl->ctxt_info.ctxt, opx_ep->hfi->ctrl->ctxt_info.send_ctxt,
-		opx_ep->hfi->ctrl->ctxt_info.subctxt, opx_ep->hfi->subctxt_cnt);
+		(long) ofi_atomic_get64(&opx_ep->hfi->ref_cnt), opx_ep->hfi->ctrl->ctxt_info.ctxt,
+		opx_ep->hfi->ctrl->ctxt_info.send_ctxt, opx_ep->hfi->ctrl->ctxt_info.subctxt, opx_ep->hfi->subctxt_cnt);
 
 	if (OPX_SW_HFI1_TYPE & OPX_HFI1_JKR || OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is CN5000\n");

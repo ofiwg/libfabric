@@ -592,7 +592,7 @@ struct fi_opx_hfi1_context {
 		int rank_inst;
 	} daos_info;
 
-	int64_t		   ref_cnt;
+	ofi_atomic64_t	   ref_cnt;
 	size_t		   status_lasterr;
 	time_t		   network_lost_time;
 	uint64_t	   status_check_next_usec;
@@ -902,7 +902,8 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	       context->daos_info.rank);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context daos_info.rank_inst           %#X  \n",
 	       context->daos_info.rank_inst);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ref_cnt                       %#lX \n", context->ref_cnt);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context ref_cnt                       %#lX \n",
+	       (long unsigned int) ofi_atomic_get64(&context->ref_cnt));
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context subctxt_cnt                   %#X  \n",
 	       context->subctxt_cnt);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context subctxt                  	  %#X  \n", context->subctxt);
