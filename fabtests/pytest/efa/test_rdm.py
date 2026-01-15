@@ -293,3 +293,19 @@ def test_implicit_av_limited_av_size_unexpected_path(cmdline_args, msg_size):
     efa_run_client_server_test(cmdline_args, test_cmd, "short",
                                "transmit_complete", "host_to_host", "all", fabric="efa",
                                additional_env=additional_env, timeout=15)
+
+@pytest.mark.functional
+def test_rmd_tagged_pingpong_truncate_error(cmdline_args, completion_semantic):
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("client hits an assertion in debug mode in case of intra-node")
+    executable = {"server": "fi_rdm_tagged_pingpong --timeout 1",
+                  "client": "fi_rdm_tagged_pingpong --expect-error 265"}
+    message_size = {"server": 2000001,
+                    "client": 2000000}
+    might_fail = {"server": True,
+                  "client": False}
+
+    efa_run_client_server_test(cmdline_args, executable, "short",
+                               completion_semantic, "host_to_host",
+                               message_size=message_size, fabric="efa",
+                               timeout=15, might_fail=might_fail)
