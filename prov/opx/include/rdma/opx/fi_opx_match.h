@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2025 Cornelis Networks.
+ * Copyright (C) 2023-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -176,11 +176,11 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_ue_hash_remove(struct fi_opx_hfi1_ue_
 __OPX_FORCE_INLINE__
 uint64_t fi_opx_match_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint16_t origin_rx,
 			     const uint64_t target_tag, const uint64_t ignore_bits,
-			     const union fi_opx_addr src_opx_addr, const fi_addr_t ctx_src_addr)
+			     const union fi_opx_addr src_opx_addr, const union fi_opx_addr ctx_src_addr)
 {
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore_bits;
 	const uint64_t answer			 = (origin_tag_and_not_ignore == target_tag) &&
-				((ctx_src_addr == FI_ADDR_UNSPEC) ||
+				((ctx_src_addr.fi == FI_ADDR_UNSPEC) ||
 				 ((origin_lid == src_opx_addr.lid) && (origin_rx == src_opx_addr.hfi1_subctxt_rx)));
 	return answer;
 }
@@ -189,7 +189,7 @@ __OPX_FORCE_INLINE__
 struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt_linear(struct fi_opx_match_ue_hash *ue_hash,
 							     const uint64_t target_tag, const uint64_t ignore_bits,
 							     const union fi_opx_addr	   src_opx_addr,
-							     const fi_addr_t		   ctx_src_addr,
+							     const union fi_opx_addr	   ctx_src_addr,
 							     struct fi_opx_debug_counters *debug_counters)
 {
 	struct fi_opx_hfi1_ue_packet *uepkt = ue_hash->ue.head;
@@ -213,7 +213,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt_by_tag(struct fi_opx_match
 							     const uint64_t hash_index, const uint64_t target_tag,
 							     const uint64_t		   ignore_bits,
 							     const union fi_opx_addr	   src_opx_addr,
-							     const fi_addr_t		   ctx_src_addr,
+							     const union fi_opx_addr	   ctx_src_addr,
 							     struct fi_opx_debug_counters *debug_counters)
 {
 	struct fi_opx_hfi1_ue_packet *uepkt = ue_hash->tag_ht[hash_index].head;
@@ -240,7 +240,8 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt(struct fi_opx_match_ue_has
 		return NULL;
 	}
 
-	const union fi_opx_addr src_opx_addr = {.fi = context->src_addr};
+	const union fi_opx_addr	       src_opx_addr    = context->src_addr;
+	static const union fi_opx_addr OPX_ADDR_UNSPEC = {.fi = FI_ADDR_UNSPEC};
 
 	const uint64_t ignore_bits = context->ignore;
 	const uint64_t target_tag  = context->tag & ~ignore_bits;
@@ -252,7 +253,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt(struct fi_opx_match_ue_has
 						      context->src_addr, debug_counters);
 	}
 
-	return fi_opx_match_find_uepkt_linear(ue_hash, target_tag, ignore_bits, src_opx_addr, FI_ADDR_UNSPEC,
+	return fi_opx_match_find_uepkt_linear(ue_hash, target_tag, ignore_bits, src_opx_addr, OPX_ADDR_UNSPEC,
 					      debug_counters);
 }
 
