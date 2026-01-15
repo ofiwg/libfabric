@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -99,12 +99,13 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 		return -errno;
 	}
 
-	uint32_t       n, i, t;
-	fi_addr_t     *input	   = (fi_addr_t *) addr;
-	const unsigned ep_tx_count = opx_av->ep_tx_count;
+	uint32_t	   n, i, t;
+	union fi_opx_addr *input       = (union fi_opx_addr *) addr;
+	const unsigned	   ep_tx_count = opx_av->ep_tx_count;
 
 	switch (opx_av->type) {
 	case FI_AV_TABLE:
+	case FI_AV_MAP:
 		/* The address table is internal and the application uses a
 		 * 'monotonically increasing integer' to index the table and
 		 * retrieve the actual internal address
@@ -144,53 +145,31 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 				if (fi_addr != NULL) {
 					fi_addr[n] = t;
 				}
-				opx_addr[t].fi = input[n];
+				opx_addr[t].fi = input[n].fi;
 			}
-			for (i = 0; i < ep_tx_count; ++i) {
-				fi_opx_ep_tx_connect(opx_av->ep_tx[i], (opx_av->addr_count + count), opx_addr, NULL);
-			}
-		}
-		break;
-	case FI_AV_MAP:
-		/* The address map is maintained by the application ('fi_addr') and
-		 * the provider must fill in the map with the actual network
-		 * address of each .
-		 */
-		if (!input) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_EINOSYS\n");
-			errno = FI_ENOSYS;
-			return -errno;
-		} else if (opx_av->table_addr != NULL) {
-			fprintf(stderr, "%s:%s():%d abort\n", __FILE__, __func__, __LINE__);
-			abort();
-		} else {
-			union fi_opx_addr	    *output	= (union fi_opx_addr *) fi_addr;
+
 			struct fi_opx_extended_addr *output_ext = NULL;
-			ssize_t			     rc;
-
-			if (opx_av->ep_tx[0] == NULL || !opx_av->ep_tx[0]->daos_info.hfi_rank_enabled) {
-				for (n = 0; n < count; ++n) {
-					output[n].fi = input[n];
-				}
-			} else {
-				struct fi_opx_extended_addr *input = (struct fi_opx_extended_addr *) addr;
-
+			if ((opx_av->type == FI_AV_MAP) &&
+			    (opx_av->ep_tx[0] == NULL || !opx_av->ep_tx[0]->daos_info.hfi_rank_enabled)) {
+				struct fi_opx_extended_addr *input_ext = (struct fi_opx_extended_addr *) addr;
 				if (posix_memalign((void **) &output_ext, 32 /*sizeof(struct fi_opx_extended_addr)*/,
 						   sizeof(struct fi_opx_extended_addr) * count)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
 					errno = FI_ENOMEM;
 					return -errno;
 				}
-
-				for (n = 0; n < count; ++n) {
-					output[n].fi		= input[n].addr.fi;
-					output_ext[n].rank	= input[n].rank;
-					output_ext[n].rank_inst = input[n].rank_inst;
+				for (i = 0; i < count; ++i) {
+					output_ext[i].rank	= input_ext[i].rank;
+					output_ext[i].rank_inst = input_ext[i].rank_inst;
 				}
 			}
 
+			size_t	base_count = (opx_av->type == FI_AV_TABLE) ? opx_av->addr_count : 0;
+			ssize_t rc;
+
 			for (i = 0; i < ep_tx_count; ++i) {
-				rc = fi_opx_ep_tx_connect(opx_av->ep_tx[i], count, output, output_ext);
+				rc = fi_opx_ep_tx_connect(opx_av->ep_tx[i], count + base_count,
+							  &opx_addr[opx_av->addr_count], output_ext);
 				if (OFI_UNLIKELY(rc)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_EAGAIN\n");
 					errno = -rc;
@@ -208,6 +187,7 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 			}
 		}
 		break;
+
 	default:
 		FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_EINVAL\n");
 		errno = FI_EINVAL;
@@ -325,13 +305,8 @@ static int fi_opx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr, si
 
 	struct fi_opx_av *opx_av = container_of(av, struct fi_opx_av, av_fid);
 
-	if (opx_av->type == FI_AV_MAP) {
-		memcpy(addr, (void *) &fi_addr, MIN(sizeof(fi_addr_t), *addrlen));
-
-	} else {
-		assert(opx_av->table_addr != NULL);
-		memcpy(addr, (void *) &opx_av->table_addr[fi_addr], MIN(sizeof(union fi_opx_addr), *addrlen));
-	}
+	assert(opx_av->table_addr != NULL);
+	memcpy(addr, (void *) &opx_av->table_addr[fi_addr], MIN(sizeof(union fi_opx_addr), *addrlen));
 
 	*addrlen = sizeof(union fi_opx_addr);
 
@@ -448,21 +423,13 @@ int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_a
 		goto err;
 	}
 
-	if ((attr->type == FI_AV_TABLE) && (OPX_AV != FI_AV_MAP)) {
+	if ((attr->type == FI_AV_TABLE) || (attr->type == FI_AV_MAP)) {
 		/* allocate the av object now, allocate the address table at av_insert */
 		opx_av = calloc(1, sizeof(*opx_av));
 		if (!opx_av) {
 			errno = FI_ENOMEM;
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "AV error\n");
 			pof = 4;
-			goto err;
-		}
-	} else if ((attr->type == FI_AV_MAP) && (OPX_AV != FI_AV_TABLE)) {
-		opx_av = calloc(1, sizeof(*opx_av));
-		if (!opx_av) {
-			errno = FI_ENOMEM;
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "AV error\n");
-			pof = 5;
 			goto err;
 		}
 	} else if (attr->type == FI_AV_UNSPEC) {
@@ -481,6 +448,8 @@ int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_a
 		pof   = 7;
 		goto err;
 	}
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "AV attr->type = %d\n", attr->type);
 
 	opx_av->av_fid.fid.fclass  = FI_CLASS_AV;
 	opx_av->av_fid.fid.context = context;
