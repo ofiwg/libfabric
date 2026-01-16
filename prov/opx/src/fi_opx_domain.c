@@ -509,7 +509,7 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 
 	opx_domain->fabric = opx_fabric;
 
-	fi_opx_ref_init(&opx_domain->ref_cnt, "domain");
+	fi_opx_ref_init(&opx_domain->ref_cnt, 0, "domain");
 
 	opx_domain->domain_fid.fid.fclass  = FI_CLASS_DOMAIN;
 	opx_domain->domain_fid.fid.context = context;
@@ -584,8 +584,7 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 
 	opx_domain->use_hfisvc = 0;
 #if HAVE_HFISVC
-	fi_opx_ref_init(&opx_domain->hfisvc.ref_cnt, "hfisvc");
-	ofi_atomic_set64(&opx_domain->hfisvc.ref_cnt, OPX_DOMAIN_HFISVC_NOT_INITIALIZED);
+	fi_opx_ref_init(&opx_domain->hfisvc.ref_cnt, OPX_DOMAIN_HFISVC_NOT_INITIALIZED, "hfisvc");
 #endif
 
 	opx_domain->rx_count = 0;
