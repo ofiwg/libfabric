@@ -364,10 +364,10 @@ static inline void always_assert(bool val, char *msg)
 	}
 }
 
-static inline void fi_opx_ref_init(ofi_atomic64_t *ref, char *name)
+static inline void fi_opx_ref_init(ofi_atomic64_t *ref, int64_t value, char *name)
 {
-	ofi_atomic_initialize64(ref, 0);
-	FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "initializing ref count for (%s) to (%d)\n", name, 0);
+	ofi_atomic_initialize64(ref, value);
+	FI_DBG(fi_opx_global.prov, FI_LOG_FABRIC, "initializing ref count for (%s) to (%ld)\n", name, value);
 
 	return;
 }

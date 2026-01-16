@@ -457,7 +457,8 @@ int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_a
 	opx_av->av_fid.ops	   = &fi_opx_av_ops;
 
 	opx_av->domain = (struct fi_opx_domain *) dom;
-	opx_av->type   = attr->type;
+	fi_opx_ref_init(&opx_av->ref_cnt, 0, "address vector");
+	opx_av->type = attr->type;
 
 	opx_av->ep_tx_count = 0;
 	unsigned i, ep_tx_max = sizeof(opx_av->ep_tx) / sizeof(struct fi_opx_ep *);

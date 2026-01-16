@@ -1915,7 +1915,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		(struct fi_opx_ep_tx *) (((uintptr_t) mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
 	memset(opx_ep->tx, 0, sizeof(struct fi_opx_ep_tx));
 	opx_ep->tx->mem = mem;
-	fi_opx_ref_inc(&opx_ep->tx->ref_cnt, "tx context");
+	fi_opx_ref_init(&opx_ep->tx->ref_cnt, 1, "tx context");
 
 	mem = malloc(sizeof(struct fi_opx_ep_rx) + FI_OPX_CACHE_LINE_SIZE);
 	if (!mem) {
@@ -1927,7 +1927,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		(struct fi_opx_ep_rx *) (((uintptr_t) mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
 	memset(opx_ep->rx, 0, sizeof(struct fi_opx_ep_rx));
 	opx_ep->rx->mem = mem;
-	fi_opx_ref_inc(&opx_ep->rx->ref_cnt, "rx context");
+	fi_opx_ref_init(&opx_ep->rx->ref_cnt, 1, "rx context");
 
 	opx_ep->threading = (uint32_t) opx_domain->threading;
 	opx_ep->av_type	  = (uint32_t) opx_ep->av->type;
