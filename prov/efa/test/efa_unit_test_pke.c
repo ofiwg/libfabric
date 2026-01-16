@@ -368,3 +368,60 @@ void test_efa_rdm_pke_flag_tracking(struct efa_resource **state)
 }
 
 
+/**
+ * @brief Test efa_rdm_pke_proc_matched_eager_rtm doesn't free pkt_entry on error 
+ * because it is handled by the caller.
+ * 
+ *
+ * @param state
+ */
+void test_efa_rdm_pke_proc_matched_eager_rtm_error(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_mr *efa_mr;
+	char buf[16];
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	pkt_entry->payload_size = 1024;
+
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
+	base_hdr->type = EFA_RDM_EAGER_MSGRTM_PKT;
+
+	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_msg);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->internal_flags = 0;
+	rxe->iov_count = 1;
+	rxe->iov[0].iov_base = buf;
+	rxe->iov[0].iov_len = sizeof buf;
+	rxe->cq_entry.len = 1024;
+	rxe->total_len = 1024;
+
+	/* Mock efa_rdm_pke_copy_payload_to_ope failure with no available copy methods for CUDA */
+	efa_mr = calloc(1, sizeof(struct efa_mr));
+	assert_non_null(efa_mr);
+	efa_mr->peer.iface = FI_HMEM_CUDA;
+	efa_mr->peer.flags = 0;
+	rxe->desc[0] = efa_mr;
+	efa_rdm_ep->use_device_rdma = false;
+	efa_rdm_ep->cuda_api_permitted = false;
+	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = false;
+	pkt_entry->ope = rxe;
+
+	err = efa_rdm_pke_proc_matched_eager_rtm(pkt_entry);
+	assert_int_not_equal(err, 0);
+
+	/* Verify there is no double free */
+	efa_rdm_pke_release_rx(pkt_entry);
+	free(efa_mr);
+	efa_rdm_rxe_release(rxe);
+}
