@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 by Cornelis Networks.
+ * Copyright (C) 2021-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -392,6 +392,7 @@ int fi_opx_cq_open(struct fid_domain *dom, struct fi_cq_attr *attr, struct fid_c
 
 	fi_opx_ref_inc(&opx_cq->domain->ref_cnt, "domain");
 
+	fi_opx_ref_init(&opx_cq->ref_cnt, 0, "completion queue");
 	ofi_spin_init(&opx_cq->lock);
 
 	*cq = &opx_cq->cq_fid;
