@@ -82,6 +82,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.ofi_cudaMalloc = __real_ofi_cudaMalloc,
 #endif
 		.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
+		.efa_rdm_pke_copy_payload_to_ope = __real_efa_rdm_pke_copy_payload_to_ope,
 		.efa_rdm_pke_read = __real_efa_rdm_pke_read,
 		.efa_rdm_pke_proc_matched_rtm = __real_efa_rdm_pke_proc_matched_rtm,
 		.efa_rdm_ope_post_send = __real_efa_rdm_ope_post_send,
@@ -345,6 +346,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_get_unexp, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_flag_tracking, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_proc_matched_eager_rtm_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end of efa_unit_test_pke.c */
 
 		/* begin efa_unit_test_domain.c */
