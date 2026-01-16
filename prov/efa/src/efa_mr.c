@@ -815,7 +815,6 @@ int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
  */
 static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *attr)
 {
-	uint64_t original_access;
 	struct fi_mr_attr mr_attr = {0};
 	uint64_t shm_flags;
 	int64_t reg_sz, reg_ct;
@@ -923,11 +922,6 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	efa_mr->inserted_to_mr_map = true;
 
 	if (efa_mr->domain->shm_domain) {
-		/* We need to add FI_REMOTE_READ to allow for Read implemented
-		* message protocols.
-		*/
-		original_access = mr_attr.access;
-		mr_attr.access |= FI_REMOTE_READ;
 		/* Inherit peer.flags with addtional feature bits such as gdrcopy handle switch */
 		shm_flags = efa_mr->peer.flags;
 		if (mr_attr.iface != FI_HMEM_SYSTEM) {
@@ -940,7 +934,6 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 		ret = fi_mr_regattr(efa_mr->domain->shm_domain, &mr_attr,
 				    shm_flags, &efa_mr->shm_mr);
 
-		mr_attr.access = original_access;
 		if (ret) {
 			EFA_WARN(FI_LOG_MR,
 				 "Unable to register shm MR. errno: %d "
