@@ -308,18 +308,6 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct ofi_mr_info info = {0};
 	int ret;
 
-	/*
-	 * dmabuf reg currently doesn't support caching because there is no memory monitor for
-	 * the dmabuf region yet.
-	 */
-	if (attr->iface == FI_HMEM_NEURON || attr->iface == FI_HMEM_SYNAPSEAI || (flags & FI_MR_DMABUF))
-		flags |= OFI_MR_NOCACHE;
-
-	if (flags & OFI_MR_NOCACHE) {
-		ret = efa_mr_regattr(fid, attr, flags, mr_fid);
-		return ret;
-	}
-
 	if (attr->iov_count > EFA_MR_IOV_LIMIT) {
 		EFA_WARN(FI_LOG_MR, "iov count > %d not supported\n",
 			 EFA_MR_IOV_LIMIT);
@@ -983,14 +971,6 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	/*
 	 * Notes supported memory registration flags:
 	 *
-	 * OFI_MR_NOCACHE:
-	 * when MR cache is enabled, application's call to fi_mr_regattr
-	 * was directed to efa_mr_cache_regattr(). If OFI_MR_NOCACHE
-	 * was specified, efa_mr_cache_regattr() will call this
-	 * function directly (bypassing MR cache), therefore
-	 * this function does not do anything special for this flag
-	 * other than allow it.
-	 *
 	 * FI_HMEM_DEVICE_ONLY:
 	 * This flag is used by some provider that need to distinguish
 	 * whether a device memory can be accessed from device only, or
@@ -1005,7 +985,7 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	 * usable for domains opened with FI_HMEM capability support.
 	 * This flag is introduced since Libfabric 1.20.
 	 */
-	supported_flags = OFI_MR_NOCACHE | FI_HMEM_DEVICE_ONLY;
+	supported_flags = FI_HMEM_DEVICE_ONLY;
 
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
