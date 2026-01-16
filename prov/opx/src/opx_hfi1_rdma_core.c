@@ -145,7 +145,7 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] one time initialization\n");
 
-	fi_opx_ref_init(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
+	fi_opx_ref_init(&opx_rdma_ops.ref_cnt, 0, "opx_rdma_ops");
 
 	/* Set old tid functions until/unless we pass and enable the new support */
 	opx_fn_hfi1_free_tid   = opx_hfi_free_tid;

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2023-2025 Cornelis Networks.
+ * Copyright (C) 2023-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -213,7 +213,7 @@ int fi_opx_scalable_ep(struct fid_domain *domain, struct fi_info *info, struct f
 		goto err;
 	}
 
-	fi_opx_ref_init(&opx_sep->ref_cnt, "scalable endpoint");
+	fi_opx_ref_init(&opx_sep->ref_cnt, 0, "scalable endpoint");
 	fi_opx_ref_inc(&opx_sep->domain->ref_cnt, "domain");
 
 	*sep = &opx_sep->ep_fid;

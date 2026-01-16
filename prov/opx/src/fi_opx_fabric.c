@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2024 Cornelis Networks.
+ * Copyright (C) 2021-2024, 2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -185,7 +185,7 @@ int fi_opx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 	/* work around for imported psm2 source that wants to set thread affinity */
 	setenv("FI_OPX_NO_CPUAFFINITY", "", 0);
 
-	fi_opx_ref_init(&opx_fabric->ref_cnt, "fabric");
+	fi_opx_ref_init(&opx_fabric->ref_cnt, 0, "fabric");
 
 	opx_register_shm_handler();
 
