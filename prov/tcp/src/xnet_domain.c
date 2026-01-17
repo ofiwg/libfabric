@@ -196,7 +196,7 @@ xnet_mplex_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		ret = xnet_mr_regattr(item->fid, attr, flags, &sub_mr_fid);
 		if (ret) {
 			FI_WARN(&xnet_prov, FI_LOG_MR,
-				"Failed to reg mr (%ld) from subdomain (%p)\n",
+				"Failed to reg mr (%" PRIu64 ") from subdomain (%p)\n",
 				mr->key, item->fid);
 
 			xnet_subdomains_mr_close(domain, mr->key);
