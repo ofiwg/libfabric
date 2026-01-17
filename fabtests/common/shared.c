@@ -2915,9 +2915,9 @@ int ft_get_tx_comp(uint64_t total)
 	int ret;
 
 	if (opts.options & FT_OPT_TX_CQ) {
-		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, total, -1);
+		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, total, timeout);
 	} else if (txcntr) {
-		ret = ft_get_cntr_comp(txcntr, total, -1);
+		ret = ft_get_cntr_comp(txcntr, total, timeout);
 	} else {
 		FT_ERR("Trying to get a TX completion when no TX CQ or counter were opened");
 		ret = -FI_EOTHER;
