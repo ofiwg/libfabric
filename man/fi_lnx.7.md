@@ -155,6 +155,21 @@ The *LNX* provider checks for the following environment variables:
   On a system with four cxi domains, the last example is equivalent to:
      - shm+cxi:cxi0,cxi1,cxi2,cxi3
 
+*FI_LNX_MULTI_RAIL_SELECTION*
+: This environment variable is used to specify the multi-rail selection
+  policy LNX will use. LNX selects a local endpoint and a remote peer
+  address when sending messages. There are currently two supported methods.
+  1) PER_MSG: This policy round robins over the local endpoint and remote
+     peer addresses per message sent. This policy doesn't support send after
+     send capability, as sent messages can arrive in a different order.
+  2) PER_PEER: This policy round robins per peer. On the first message sent
+     to the peer a local endpoint and a peer address are selected and
+     henceforth used for all messages to that peer. The local endpoints
+     are round robined over per peer. This policy ensures messages sent
+     are received in the same order.
+  The environment variable can be set to one of PER_MSG or PER_PEER. If the
+  environment variable is not set the policy defaults to PER_PEER.
+
 *FI_LNX_DISABLE_SHM*
 : By default this environment variable is set to 0. However, the user can
   set it to one and then the SHM provider will not be used. This can be
