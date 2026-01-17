@@ -1,3 +1,4 @@
+#include <stdatomic.h>
 #include <arpa/inet.h>
 #include <getopt.h>
 #include <netdb.h>
@@ -21,20 +22,11 @@
 
 #include "hmem.h"
 #include "shared.h"
-#include <pthread.h>
+#include "ft_random.h"
 
 #define MAX_WORKERS	64
 #define MAX_PEERS	MAX_WORKERS
 #define MAX_EP_ADDR_LEN 256
-#define MAX_MESSAGES	1000
-
-// Message types
-#define MSG_TYPE_EP_UP	     1
-#define MSG_TYPE_EP_DOWN     2
-#define MSG_TYPE_EP_UPDATE   3
-#define MSG_TYPE_EP_TEARDOWN 4
-
-#define TEST_CQDATA 0xAAAA // Hardcoded CQ data for fi_writedata
 
 // Configuration structure
 struct test_opts {
@@ -93,37 +85,24 @@ static struct option test_long_opts[] = {
 	{"random-seed", required_argument, NULL, OPT_RANDOM_SEED},
 	{0, 0, 0, 0}};
 
-// Endpoint status
-enum ep_status { EP_INIT, EP_READY, EP_SENDING, EP_RECEIVING, EP_TEARDOWN };
-
 // RMA information
 struct rma_info {
 	uint64_t remote_addr;
 	uint64_t rkey;
-	size_t length;
 };
 
 // Endpoint metadata
 struct ep_info {
-	uint32_t worker_id;
+	int worker_id;
 	char ep_addr[MAX_EP_ADDR_LEN];
 	size_t addr_len;
 	struct rma_info rma;
 };
 
-// Message structure for endpoint updates
-struct ep_message {
-	int msg_type;
-	struct ep_info info;
-};
-
 // Worker status tracking
 struct worker_status {
-	pthread_mutex_t mutex;
-	bool active;
-	enum ep_status ep_status;
-	uint64_t ep_generation;
-	bool poll_cq;
+       pthread_mutex_t mutex;
+       atomic_flag *active;
 };
 
 // Common context structure
@@ -131,6 +110,7 @@ struct common_context {
 	struct fid_ep *ep;
 	struct fid_cq *cq;
 	struct fid_av *av;
+	size_t num_peers;
 };
 
 // Sender context
@@ -147,8 +127,6 @@ struct sender_context {
 	int num_peers;
 	int *control_socks; // Array of control sockets for multiple receivers
 	struct worker_status status;
-	pthread_t notification_thread;
-	uint64_t total_sent;
 };
 
 // Receiver context
@@ -158,8 +136,6 @@ struct receiver_context {
 	void *rx_buf;
 	struct fid_mr *mr;
 	struct fi_context2 *rx_ctx;
-	struct worker_status status;
-	uint64_t total_received;
 	int *control_socks; // Array of control sockets for multiple senders
 	int num_senders; // Number of connected senders
 };
@@ -180,10 +156,13 @@ static int setup_endpoint(struct common_context *ctx)
 	}
 
 	if (!topts.shared_cq) {
-		cq_attr.format = FI_CQ_FORMAT_CONTEXT;
-		cq_attr.size = topts.msgs_per_endpoint;
+		struct fi_cq_attr attr = {
+			.wait_obj = FI_WAIT_NONE,
+			.format = FI_CQ_FORMAT_CONTEXT,
+			.size = topts.msgs_per_endpoint,
+		};
 
-		ret = fi_cq_open(domain, &cq_attr, &ctx->cq, NULL);
+		ret = fi_cq_open(domain, &attr, &ctx->cq, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
 			goto cleanup_ep;
@@ -191,7 +170,11 @@ static int setup_endpoint(struct common_context *ctx)
 	}
 
 	if (!topts.shared_av) {
-		int ret = fi_av_open(domain, &av_attr, &ctx->av, NULL);
+		struct fi_av_attr attr = {
+			.type = FI_AV_TABLE,
+			.count = ctx->num_peers,
+		};
+		ret = fi_av_open(domain, &attr, &ctx->av, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_av_open", ret);
 			goto cleanup_cq;
@@ -255,11 +238,11 @@ void *notification_handler(void *arg)
 {
 	struct sender_context *ctx = (struct sender_context *) arg;
 
-	while (ctx->status.active) {
+	while (atomic_flag_test_and_set(ctx->status.active)) {
 		for (int sock_idx = 0; sock_idx < ctx->num_peers; sock_idx++) {
 			if (ctx->control_socks[sock_idx] < 0)
 				continue;
-			struct ep_message msg;
+			struct ep_info msg;
 			size_t bytes_received = 0;
 
 			while (bytes_received < sizeof(msg)) {
@@ -304,7 +287,7 @@ void *notification_handler(void *arg)
 				// worker ID
 				int worker_idx = -1;
 				for (int i = 0; i < ctx->num_peers; i++) {
-					if (ctx->peer_ids[i] == msg.info.worker_id) {
+					if (ctx->peer_ids[i] == msg.worker_id) {
 						worker_idx = i;
 						break;
 					}
@@ -314,48 +297,48 @@ void *notification_handler(void *arg)
 				    worker_idx < ctx->num_peers) {
 					if (!ctx->peer_ep_addrs[worker_idx]) {
 						ctx->peer_ep_addrs [worker_idx] = malloc(
-							msg.info.addr_len);
+							msg.addr_len);
 					}
 					if (ctx->peer_ep_addrs[worker_idx]) {
 						memcpy(ctx->peer_ep_addrs[worker_idx],
-						       msg.info.ep_addr,
-						       msg.info.addr_len);
+						       msg.ep_addr,
+						       msg.addr_len);
 					}
 
 					fi_addr_t fi_addr;
 					if (ctx->common.av) {
 						int ret = fi_av_insert(
 							ctx->common.av,
-							msg.info.ep_addr, 1,
+							msg.ep_addr, 1,
 							&fi_addr, 0, NULL);
 						if (ret == 1) {
 							ctx->peer_addrs[worker_idx] = fi_addr;
 							memcpy(&ctx->peer_rma_info[worker_idx],
-							       &msg.info.rma,
+							       &msg.rma,
 							       sizeof(struct rma_info));
 							if (topts.verbose) {
 								printf("Sender %d: Updated EP for receiver %d (fi_addr=%lu)\n",
 								       ctx->worker_id,
-								       msg.info.worker_id,
+								       msg.worker_id,
 								       fi_addr);
 							}
 						} else {
 							if (topts.verbose) {
 								printf("Sender %d: Failed to insert address for receiver %d ret=%d\n",
 								       ctx->worker_id,
-								       msg.info.worker_id,
+								       msg.worker_id,
 								       ret);
 							}
 						}
 					} else {
 						printf("Sender %d: No valid AV to insert address for receiver %d\n",
 						       ctx->worker_id,
-						       msg.info.worker_id);
+						       msg.worker_id);
 					}
 				} else if (topts.verbose) {
 					printf("Sender %d: Ignoring notification from receiver %d (not assigned)\n",
 					       ctx->worker_id,
-					       msg.info.worker_id);
+					       msg.worker_id);
 				}
 
 				pthread_mutex_unlock(&ctx->status.mutex);
@@ -388,6 +371,9 @@ void *notification_handler(void *arg)
 		// Sleep briefly before next polling cycle
 		usleep(10000); // 10ms
 	}
+
+	//Interrupt the sender thread
+	atomic_flag_clear(ctx->status.active);
 	return NULL;
 }
 
@@ -581,8 +567,14 @@ static void *run_sender_worker(void *arg)
 	uint64_t total_ops = 0;
 	int msg_per_ep_lifecyle =
 		topts.msgs_per_endpoint / topts.sender_ep_recycling;
+	pthread_t notification_thread;
+	atomic_flag active = ATOMIC_FLAG_INIT;
+	struct random_data random_data;
 
-	ctx->status.active = true;
+	ft_random_init_data(&random_data, topts.random_seed, ctx->worker_id);
+
+	ctx->status.active = &active;
+	atomic_flag_test_and_set(&active);
 
 	if (topts.shared_cq)
 		ctx->common.cq = shared_txcq;
@@ -590,14 +582,13 @@ static void *run_sender_worker(void *arg)
 	if (topts.shared_av) {
 		ctx->common.av = shared_txav;
 	} else {
-		av_attr.count = ctx->num_peers;
+		ctx->common.num_peers = ctx->num_peers;
 	}
 
-	pthread_create(&ctx->notification_thread, NULL, notification_handler,
+	pthread_create(&notification_thread, NULL, notification_handler,
 		       ctx);
 
 	for (int cycle = 0; cycle < topts.sender_ep_recycling; cycle++) {
-		ctx->status.poll_cq = true; // rand() % 2;
 		printf("Sender %d: Starting EP cycle %d/%d\n", ctx->worker_id,
 		       cycle + 1, topts.sender_ep_recycling);
 
@@ -625,8 +616,11 @@ static void *run_sender_worker(void *arg)
 		}
 		bool peers_ready = false;
 		int wait_attempts = 0;
-		while (!peers_ready && ctx->status.active &&
-		       wait_attempts < 100) {
+		while (!peers_ready && wait_attempts < 100) {
+			if (!atomic_flag_test_and_set(&active)) {
+				ret = -FI_ECANCELED;
+				goto out;
+			}
 			pthread_mutex_lock(&ctx->status.mutex);
 			peers_ready = true;
 			for (int i = 0; i < ctx->num_peers; i++) {
@@ -640,11 +634,6 @@ static void *run_sender_worker(void *arg)
 				usleep(100000); // 100ms sleep before checking again
 				wait_attempts++;
 			}
-		}
-
-		if (!ctx->status.active) {
-			ret = -FI_ECANCELED;
-			goto out;
 		}
 
 		if (!peers_ready) {
@@ -663,8 +652,7 @@ static void *run_sender_worker(void *arg)
 		}
 
 		// sleep random time up to 100ms to emulate the real workload
-		int sleep_time = rand() % 100000;
-		usleep(sleep_time);
+		int sleep_time = ft_random_sleep_ms(&random_data, 100);
 		printf("Sender %d: Sleeping for %d microseconds\n",
 		       ctx->worker_id, sleep_time);
 
@@ -726,8 +714,8 @@ static void *run_sender_worker(void *arg)
 			}
 		}
 
-		// Wait for all operations to complete
-		if (ctx->status.poll_cq) {
+		// Maybe wait for all operations to complete
+		if (ft_random_get_bool(&random_data)) {
 			printf("Sender %d EP cycle %d: Waiting for "
 			       "completions\n",
 			       ctx->worker_id, cycle + 1);
@@ -771,33 +759,30 @@ static void *run_sender_worker(void *arg)
 	       ctx->worker_id, total_ops);
 
 out:
-	ctx->status.active = false;
+	// Stop the notification thread
+	atomic_flag_clear(&active);
 
 	// Wait for notification thread to finish
-	if (ctx->notification_thread) {
-		pthread_join(ctx->notification_thread, NULL);
-	}
+	pthread_join(notification_thread, NULL);
 
 	return (void *) (intptr_t) ret;
 }
 
 static int notify_endpoint_update(struct receiver_context *ctx)
 {
-	struct ep_message msg;
-	msg.msg_type = MSG_TYPE_EP_UPDATE;
-	msg.info.worker_id = ctx->worker_id;
+	struct ep_info msg = {0};
+	msg.worker_id = ctx->worker_id;
 
 	// Get endpoint address
-	msg.info.addr_len = MAX_EP_ADDR_LEN;
-	int ret = fi_getname(&ctx->common.ep->fid, msg.info.ep_addr,
-			     &msg.info.addr_len);
+	msg.addr_len = MAX_EP_ADDR_LEN;
+	int ret = fi_getname(&ctx->common.ep->fid, msg.ep_addr,
+			     &msg.addr_len);
 	if (ret)
 		return ret;
 
 	// Fill RMA info
-	msg.info.rma.remote_addr = (uint64_t) ctx->rx_buf;
-	msg.info.rma.rkey = fi_mr_key(ctx->mr);
-	msg.info.rma.length = opts.transfer_size * topts.msgs_per_endpoint * ctx->num_senders;
+	msg.rma.remote_addr = (uint64_t) ctx->rx_buf;
+	msg.rma.rkey = fi_mr_key(ctx->mr);
 
 	// Send to all connected senders
 	for (int i = 0; i < ctx->num_senders; i++) {
@@ -853,7 +838,9 @@ static void *run_receiver_worker(void *arg)
 	int cycle = 0;
 	int msg_per_ep_lifecyle =
 		topts.msgs_per_endpoint / topts.receiver_ep_recycling;
-	ctx->status.active = true;
+	struct random_data random_data;
+
+	ft_random_init_data(&random_data, topts.random_seed, ctx->worker_id);
 
 	if (topts.shared_cq)
 		ctx->common.cq = shared_rxcq;
@@ -861,17 +848,13 @@ static void *run_receiver_worker(void *arg)
 	if (topts.shared_av) {
 		ctx->common.av = shared_rxav;
 	} else {
-		av_attr.count = ctx->num_senders;
+		ctx->common.num_peers = ctx->num_senders;
 	}
 
 	for (cycle = 0; cycle < topts.receiver_ep_recycling; cycle++) {
 		ret = setup_endpoint(&ctx->common);
 		if (ret)
 			break;
-
-		ctx->status.ep_generation++;
-		ctx->status.ep_status = EP_RECEIVING;
-		ctx->status.poll_cq = true; // rand() % 2;
 
 		// Notify sender of new endpoint
 		ret = notify_endpoint_update(ctx);
@@ -881,12 +864,11 @@ static void *run_receiver_worker(void *arg)
 				"for cycle %d: %d\n",
 				ctx->worker_id, cycle + 1, ret);
 			cleanup_endpoint(&ctx->common);
-			continue;
+			goto out;
 		}
 
 		// sleep random time up to 100ms to emulate the real workload
-		int sleep_time = rand() % 100000;
-		usleep(sleep_time);
+		int sleep_time = ft_random_sleep_ms(&random_data, 100);
 		printf("Receiver %d: Sleeping for %d microseconds\n",
 		       ctx->worker_id, sleep_time);
 
@@ -940,7 +922,7 @@ static void *run_receiver_worker(void *arg)
 			}
 		}
 
-		if (ctx->status.poll_cq) {
+		if (ft_random_get_bool(&random_data)) {
 			printf("Receiver %d EP cycle %d: Waiting for "
 			       "completions\n",
 			       ctx->worker_id, cycle + 1);
@@ -960,7 +942,6 @@ static void *run_receiver_worker(void *arg)
 						ctx->worker_id);
 				} else {
 					completed = expected_completions;
-					ctx->total_received += completed;
 				}
 			}
 		} else {
@@ -980,9 +961,8 @@ static void *run_receiver_worker(void *arg)
 			usleep(1000);
 		}
 	}
-
+out:
 	printf("Receiver %d: Completed %d EP cycles\n", ctx->worker_id, cycle);
-	ctx->status.active = false;
 	return (void *) (intptr_t) ret;
 }
 
@@ -1289,7 +1269,6 @@ static int run_receiver(void)
 	// Initialize workers
 	for (int i = 0; i < topts.num_receiver_workers; i++) {
 		workers[i].worker_id = i;
-		pthread_mutex_init(&workers[i].status.mutex, NULL);
 
 		// Calculate number of senders this receiver talks to
 		if (topts.num_sender_workers <= topts.num_receiver_workers) {
@@ -1422,7 +1401,6 @@ out:
 			}
 			free(workers[i].rx_buf);
 			free(workers[i].rx_ctx);
-			pthread_mutex_destroy(&workers[i].status.mutex);
 		}
 	}
 	free(workers);
@@ -1444,9 +1422,6 @@ static int run_test(void)
 		printf("Generated random seed: %ld\n", topts.random_seed);
 		printf("-------------------------\n\n");
 	}
-
-	/* Seed PRNG */
-	srand(topts.random_seed);
 
 	ret = ft_init_fabric();
 	if (ret)

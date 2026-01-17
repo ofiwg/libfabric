@@ -301,6 +301,11 @@ dnl Check for 128-bit integer support
 AC_CHECK_TYPE([__int128],
 	[AC_DEFINE(HAVE___INT128, 1, [Set to 1 to use 128-bit ints])])
 
+dnl Check for random_r function
+AC_CHECK_FUNC([random_r], [have_random_r=1], [have_random_r=0])
+AC_DEFINE_UNQUOTED([HAVE_RANDOM_R], [$have_random_r],
+		   [Defined to 1 if random_r is available])
+
 AC_CONFIG_FILES([Makefile fabtests.spec])
 
 AC_OUTPUT
