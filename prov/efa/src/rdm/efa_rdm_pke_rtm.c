@@ -673,10 +673,10 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
 	/*
 	 * On success, efa_rdm_pke_copy_data_to_ope will write rx completion,
 	 * release pkt_entry and rxe
+	 * 
+	 * On error, pkt_entry and rxe are released by caller.
 	 */
 	err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
-	if (err)
-		efa_rdm_pke_release_rx(pkt_entry);
 
 	return err;
 }
@@ -926,7 +926,13 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 
 		err = efa_rdm_pke_copy_payload_to_ope(cur, rxe);
 		if (err) {
-			efa_rdm_pke_release_rx(cur);
+			/* On error,
+			 * If this is the first packet (cur == pkt_entry), caller will release it
+			 * If this is NOT the first packet, we release it here
+			 */
+			if (cur != pkt_entry) {
+				efa_rdm_pke_release_rx(cur);
+			}
 			ret = err;
 		}
 
