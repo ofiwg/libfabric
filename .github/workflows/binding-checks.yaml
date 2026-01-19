@@ -15,7 +15,7 @@ jobs:
       run:
         working-directory: ./bindings/rust
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v4.3.1
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: brew install autoconf automake libtool
