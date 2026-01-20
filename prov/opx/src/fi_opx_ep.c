@@ -1848,7 +1848,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 	opx_ep->hfi->hfi1_type = OPX_SW_HFI1_TYPE;
 	FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "Mixed OPA100 network %s with local HFI type %s.\n",
-		(OPX_SW_HFI1_TYPE > OPX_HFI1_WFR) ? "disabled" : "enabled", OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE));
+		(OPX_SW_HFI1_TYPE != OPX_HFI1_MIXED_9B) ? "disabled" : "enabled",
+		OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"Opened hfi %p, HFI type %s, unit %u, port %u, ref_cnt %#lX, rcv ctxt %u, send ctxt %u, subctxt %u, subctxt_cnt %u\n",
