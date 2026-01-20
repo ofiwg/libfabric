@@ -276,7 +276,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		}
 		efa_domain->internal_buf_mr_regv = efa_mr_cache_regv;
 	} else {
-		efa_domain->internal_buf_mr_regv = fi_mr_regv;
+		efa_domain->internal_buf_mr_regv = efa_mr_internal_regv;
 	}
 	efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
 
