@@ -19,6 +19,17 @@ int efa_mr_cache_enable	= EFA_DEF_MR_CACHE_ENABLE;
 size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
 
+#define EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context) \
+	{ \
+		.mr_iov = (iov), \
+		.iov_count = (count), \
+		.access = (access), \
+		.offset = (offset), \
+		.requested_key = (requested_key), \
+		.context = (context), \
+		.iface = FI_HMEM_SYSTEM, \
+	}
+
 /*
  * Initial values for internal keygen functions to generate MR keys
  * (efa_mr->mr_fid.key)
@@ -359,16 +370,7 @@ int efa_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 		      uint64_t requested_key, uint64_t flags,
 		      struct fid_mr **mr, void *context)
 {
-	struct fi_mr_attr attr = {0};
-
-	attr.mr_iov = iov;
-	attr.iov_count = count;
-	attr.access = access;
-	attr.offset = offset;
-	attr.requested_key = requested_key;
-	attr.context = context;
-	attr.iface = FI_HMEM_SYSTEM;
-	attr.hmem_data = NULL;
+	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context);
 
 	return efa_mr_cache_regattr(&domain_fid->fid, &attr, flags, mr);
 }
@@ -861,6 +863,54 @@ int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
 	return ibv_access;
 }
 
+/**
+ * @brief Register a memory region and for efa internal usage
+ * This function is only used internally by the EFA provider to register
+ * a memory region to EFA device when the mr cache is NOT availble
+ *
+ * @param[in]	fid		domain fid
+ * @param[in]	iov		iovec to be registered
+ * @param[in]	access		access flags for MR
+ * @param[in]	flags		MR flags
+ * @param[out]	mr_fid		MR descriptor fids
+ *
+ * @return FI_SUCCESS or negative FI error code
+ */
+int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
+		      size_t count, uint64_t access, uint64_t offset,
+		      uint64_t requested_key, uint64_t flags,
+		      struct fid_mr **mr, void *context)
+{
+	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context);
+	struct efa_mr *efa_mr;
+	struct efa_domain *domain;
+	int ret;
+	*mr = NULL;
+
+	domain = container_of(domain_fid, struct efa_domain,
+			      util_domain.domain_fid);
+	efa_mr = calloc(1, sizeof(*efa_mr));
+	if (!efa_mr) {
+		EFA_WARN(FI_LOG_MR, "Unable to initialize MR\n");
+		return -FI_ENOMEM;
+	}
+
+	efa_mr->domain = domain;
+	efa_mr->mr_fid.fid.fclass = FI_CLASS_MR;
+	efa_mr->mr_fid.fid.context = attr.context;
+	efa_mr->mr_fid.fid.ops = &efa_mr_ops;
+
+	ret = efa_mr_reg_impl(efa_mr, flags, &attr);
+	if (ret) {
+		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
+			fi_strerror(-ret));
+		free(efa_mr);
+		return ret;
+	}
+	*mr = &efa_mr->mr_fid;
+	return 0;
+}
+
 /*
  * Set the fi_ibv_access modes and do real registration (ibv_mr_reg)
  * Insert the key returned by ibv_mr_reg into efa mr_map and shm mr_map
@@ -1097,15 +1147,7 @@ static int efa_mr_regv(struct fid *fid, const struct iovec *iov,
 		       size_t count, uint64_t access, uint64_t offset, uint64_t requested_key,
 		       uint64_t flags, struct fid_mr **mr_fid, void *context)
 {
-	struct fi_mr_attr attr = {0};
-
-	attr.mr_iov = iov;
-	attr.iov_count = count;
-	attr.access = access;
-	attr.offset = offset;
-	attr.requested_key = requested_key;
-	attr.context = context;
-	attr.iface = FI_HMEM_SYSTEM;
+	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context);
 
 	return efa_mr_regattr(fid, &attr, flags, mr_fid);
 }
