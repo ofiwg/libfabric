@@ -10,7 +10,7 @@
 
 static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr_fid);
-static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *attr);
+static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_attr *mr_attr);
 static int efa_mr_dereg_impl(struct efa_mr *efa_mr);
 
 
@@ -284,7 +284,7 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 	else if (attr.iface == FI_HMEM_SYNAPSEAI)
 		attr.device.synapseai = entry->info.device;
 
-	ret = efa_mr_reg_impl(efa_mr, 0, (const void *)&attr);
+	ret = efa_mr_reg_impl(efa_mr, 0, &attr);
 	return ret;
 }
 
@@ -414,17 +414,6 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 		efa_mr->inserted_to_mr_map = false;
 	}
 
-	if (efa_mr->shm_mr) {
-		err = fi_close(&efa_mr->shm_mr->fid);
-		if (err) {
-			EFA_WARN(FI_LOG_MR,
-				"Unable to close shm MR\n");
-			ret = err;
-		}
-
-		efa_mr->shm_mr = NULL;
-	}
-
 	if (efa_mr->peer.iface == FI_HMEM_CUDA &&
 	    (efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
 		assert(efa_mr->peer.hmem_data);
@@ -446,9 +435,20 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 static int efa_mr_close(fid_t fid)
 {
 	struct efa_mr *efa_mr;
-	int ret;
+	int ret, err;
 
 	efa_mr = container_of(fid, struct efa_mr, mr_fid.fid);
+
+	if (efa_mr->shm_mr) {
+		err = fi_close(&efa_mr->shm_mr->fid);
+		if (err) {
+			EFA_WARN(FI_LOG_MR,
+				"Unable to close shm MR\n");
+			ret = err;
+		}
+		efa_mr->shm_mr = NULL;
+	}
+
 	ret = efa_mr_dereg_impl(efa_mr);
 	if (ret)
 		EFA_WARN(FI_LOG_MR, "Unable to close MR\n");
@@ -813,10 +813,8 @@ int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
  * Set the fi_ibv_access modes and do real registration (ibv_mr_reg)
  * Insert the key returned by ibv_mr_reg into efa mr_map and shm mr_map
  */
-static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *attr)
+static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_attr *mr_attr)
 {
-	struct fi_mr_attr mr_attr = {0};
-	uint64_t shm_flags;
 	int64_t reg_sz, reg_ct;
 	int ret = 0;
 	bool device_support_rdma_read = false;
@@ -829,12 +827,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	efa_mr->mr_fid.key = FI_KEY_NOTAVAIL;
 	efa_mr->needs_sync = false;
 
-	ofi_mr_update_attr(
-		efa_mr->domain->util_domain.fabric->fabric_fid.api_version,
-		efa_mr->domain->util_domain.info_domain_caps,
-		(const struct fi_mr_attr *) attr, &mr_attr, flags);
-
-	ret = efa_mr_hmem_setup(efa_mr, &mr_attr, flags);
+	ret = efa_mr_hmem_setup(efa_mr, mr_attr, flags);
 	if (ret)
 		return ret;
 
@@ -845,14 +838,14 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	/* For efa-direct, fail registration if RDMA operations are requested 
 	 * but hardware doesn't support them */
 	if (efa_mr->domain->info_type == EFA_INFO_DIRECT) {
-		if ((mr_attr.access & (FI_READ | FI_REMOTE_READ)) &&
+		if ((mr_attr->access & (FI_READ | FI_REMOTE_READ)) &&
 		    !device_support_rdma_read) {
 			EFA_WARN(FI_LOG_MR, "FI_READ or FI_REMOTE_READ "
 					    "requested but hardware does not "
 					    "support RDMA read operations\n");
 			return -FI_EOPNOTSUPP;
 		}
-		if (mr_attr.access & (FI_WRITE | FI_REMOTE_WRITE) &&
+		if (mr_attr->access & (FI_WRITE | FI_REMOTE_WRITE) &&
 		    !device_support_rdma_write) {
 			EFA_WARN(FI_LOG_MR, "FI_WRITE or FI_REMOTE_WRITE "
 					    "requested but hardware does not "
@@ -868,13 +861,13 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	 * For FI_HMEM_CUDA iface when p2p is unavailable, skip ibv_reg_mr() and
 	 * generate proprietary mr_fid key.
 	 */
-	if ((mr_attr.iface == FI_HMEM_CUDA || mr_attr.iface == FI_HMEM_ROCR)
-		&& !g_efa_hmem_info[mr_attr.iface].p2p_supported_by_device) {
+	if ((mr_attr->iface == FI_HMEM_CUDA || mr_attr->iface == FI_HMEM_ROCR)
+		&& !g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device) {
 		efa_mr->mr_fid.key = efa_mr_non_p2p_keygen();
 	} else {
 		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(
-			efa_mr, &mr_attr,
-			efa_mr_ofi_to_ibv_access(mr_attr.access,
+			efa_mr, (struct fi_mr_attr *)mr_attr,
+			efa_mr_ofi_to_ibv_access(mr_attr->access,
 						 device_support_rdma_read,
 						 device_support_rdma_write),
 			flags);
@@ -884,8 +877,8 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 				 "flags %ld, ibv pd: %p, total mr "
 				 "reg size %zd, mr reg count %zd\n",
 				 (flags & FI_MR_DMABUF) ?
-					 mr_attr.dmabuf->len :
-					 mr_attr.mr_iov->iov_len,
+					 mr_attr->dmabuf->len :
+					 mr_attr->mr_iov->iov_len,
 				 fi_strerror(-errno), flags,
 				 efa_mr->domain->ibv_pd,
 				 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_sz),
@@ -913,41 +906,13 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	efa_mr->mr_fid.mem_desc = efa_mr;
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 
-	ret = efa_mr_update_domain_mr_map(efa_mr, &mr_attr, flags);
+	ret = efa_mr_update_domain_mr_map(efa_mr, (struct fi_mr_attr *)mr_attr, flags);
 	if (ret) {
 		efa_mr_dereg_impl(efa_mr);
 		return ret;
 	}
 
 	efa_mr->inserted_to_mr_map = true;
-
-	if (efa_mr->domain->shm_domain) {
-		/* Inherit peer.flags with addtional feature bits such as gdrcopy handle switch */
-		shm_flags = efa_mr->peer.flags;
-		if (mr_attr.iface != FI_HMEM_SYSTEM) {
-			/* shm provider need the flag to turn on IPC support */
-			shm_flags |= FI_HMEM_DEVICE_ONLY;
-		}
-
-		mr_attr.hmem_data = efa_mr->peer.hmem_data;
-
-		ret = fi_mr_regattr(efa_mr->domain->shm_domain, &mr_attr,
-				    shm_flags, &efa_mr->shm_mr);
-
-		if (ret) {
-			EFA_WARN(FI_LOG_MR,
-				 "Unable to register shm MR. errno: %d "
-				 "err_msg: (%s) key: %ld buf: %p len: %zu "
-				 "flags %ld\n",
-				 ret, fi_strerror(-ret), efa_mr->mr_fid.key,
-				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_base :
-						  NULL,
-				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_len : 0,
-				 flags);
-			efa_mr_dereg_impl(efa_mr);
-			return ret;
-		}
-	}
 
 	return 0;
 }
@@ -960,6 +925,7 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	uint64_t supported_flags;
 	int ret = 0;
 	uint32_t api_version;
+	struct fi_mr_attr mr_attr = {0};
 
 	/*
 	 * Notes supported memory registration flags:
@@ -1025,9 +991,46 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	efa_mr->mr_fid.fid.context = attr->context;
 	efa_mr->mr_fid.fid.ops = &efa_mr_ops;
 
-	ret = efa_mr_reg_impl(efa_mr, flags, (const void *)attr);
+	/* Update attr for ABI compatibility */
+	ofi_mr_update_attr(
+		efa_mr->domain->util_domain.fabric->fabric_fid.api_version,
+		efa_mr->domain->util_domain.info_domain_caps,
+		attr, &mr_attr, flags);
+
+	ret = efa_mr_reg_impl(efa_mr, flags, &mr_attr);
 	if (ret)
 		goto err;
+
+	if (efa_mr->domain->shm_domain) {
+		uint64_t shm_flags;
+
+		/* Inherit peer.flags with addtional feature bits such as gdrcopy handle switch */
+		shm_flags = efa_mr->peer.flags;
+		if (mr_attr.iface != FI_HMEM_SYSTEM) {
+			/* shm provider need the flag to turn on IPC support */
+			shm_flags |= FI_HMEM_DEVICE_ONLY;
+		}
+
+		mr_attr.hmem_data = efa_mr->peer.hmem_data;
+
+		ret = fi_mr_regattr(efa_mr->domain->shm_domain, &mr_attr,
+				    shm_flags, &efa_mr->shm_mr);
+
+		if (ret) {
+			EFA_WARN(FI_LOG_MR,
+				 "Unable to register shm MR. errno: %d "
+				 "err_msg: (%s) key: %ld buf: %p len: %zu "
+				 "flags %ld\n",
+				 ret, fi_strerror(-ret), efa_mr->mr_fid.key,
+				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_base :
+						  NULL,
+				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_len : 0,
+				 flags);
+			efa_mr_dereg_impl(efa_mr);
+			free(efa_mr);
+			return ret;
+		}
+	}
 
 	*mr_fid = &efa_mr->mr_fid;
 	return 0;
