@@ -444,6 +444,7 @@ void test_efa_mr_ofi_to_ibv_access_write_not_supported();
 void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported();
 void test_efa_mr_ofi_to_ibv_access_all_flags_supported();
 void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported();
+void test_efa_mr_internal_regv_no_shm_mr();
 /* end efa_unit_test_mr.c */
 
 /* begin efa_unit_test_rdm_rma.c */
