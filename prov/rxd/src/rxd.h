@@ -252,6 +252,7 @@ struct rxd_x_entry {
 	uint16_t tx_id;
 	uint16_t rx_id;
 	uint64_t bytes_done;
+	uint64_t fetch_bytes;
 	uint64_t next_seg_no;
 	uint64_t start_seq;
 	uint64_t offset;

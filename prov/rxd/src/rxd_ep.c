@@ -339,6 +339,7 @@ struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 	tx_entry->peer = addr;
 	tx_entry->flags = flags;
 	tx_entry->bytes_done = 0;
+	tx_entry->fetch_bytes = 0;
 	tx_entry->offset = 0;
 	tx_entry->next_seg_no = 0;
 	tx_entry->iov_count = (uint8_t) iov_count;
