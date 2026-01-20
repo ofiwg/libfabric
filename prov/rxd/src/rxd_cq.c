@@ -187,6 +187,7 @@ void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 			       ep->rx_prefix_size);
 
 	x_entry->bytes_done += done;
+	x_entry->fetch_bytes += done;
 	x_entry->next_seg_no++;
 
 	if (x_entry->next_seg_no < x_entry->num_segs) {
@@ -292,7 +293,10 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 				break;
 		}
 
-		if (tx_entry->bytes_done == tx_entry->cq_entry.len) {
+		if (tx_entry->bytes_done == tx_entry->cq_entry.len &&
+		    ((tx_entry->op != RXD_ATOMIC_FETCH &&
+		    tx_entry->op != RXD_ATOMIC_COMPARE) ||
+		    tx_entry->fetch_bytes == tx_entry->cq_entry.len)) {
 			if (ofi_before(tx_entry->start_seq + (tx_entry->num_segs - 1),
 			    head_seq)) {
 				if (tx_entry->op == RXD_DATA_READ) {
@@ -535,16 +539,17 @@ static struct rxd_x_entry *rxd_match_rx(struct rxd_ep *ep,
 	if (rx_entry->flags & RXD_MULTI_RECV) {
 		dup_entry = rxd_progress_multi_recv(ep, rx_entry, total_size);
 		if (!dup_entry)
-			goto out;
+			return NULL;
 
 		dup_entry->start_seq = base->seq_no;
 		dlist_init(&dup_entry->entry);
-		return dup_entry;
+		rx_entry = dup_entry;
+		goto out;
 	}
 
 out:
-	dlist_remove(&rx_entry->entry);
 	rx_entry->cq_entry.len = MIN(rx_entry->cq_entry.len, total_size);
+	dlist_insert_tail(&rx_entry->entry, &(rxd_peer(ep, base->peer)->rx_list));
 	return rx_entry;
 }
 
@@ -629,6 +634,7 @@ static struct rxd_x_entry *rxd_rma_rx_entry_init(struct rxd_ep *ep,
 
 	rx_entry->start_seq = base_hdr->seq_no;
 
+	dlist_insert_tail(&rx_entry->entry, &(rxd_peer(ep, base_hdr->peer)->rx_list));
 	return rx_entry;
 }
 
@@ -883,8 +889,6 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 	rx_entry->num_segs = sar_hdr->num_segs;
 	rx_entry->next_seg_no++;
 	rx_entry->start_seq = base_hdr->seq_no;
-
-	dlist_insert_tail(&rx_entry->entry, &(rxd_peer(ep, base_hdr->peer)->rx_list));
 }
 
 static struct rxd_x_entry *rxd_get_data_x_entry(struct rxd_ep *ep,
