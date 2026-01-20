@@ -451,3 +451,38 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(struct efa_resource *
 	ibv_access = efa_mr_ofi_to_ibv_access(all_flags, false, false);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE);
 }
+/**
+ * @brief Test efa_mr_internal_regv does not create shm MR
+ *
+ * This test verifies that efa_mr_internal_regv only creates EFA MR
+ * and does not create a corresponding SHM MR, even when SHM domain exists.
+ */
+void test_efa_mr_internal_regv_no_shm_mr(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	size_t mr_size = 64;
+	void *buf;
+	struct fid_mr *mr = NULL;
+	struct efa_mr *efa_mr;
+	struct iovec iov;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	buf = malloc(mr_size);
+	assert_non_null(buf);
+
+	iov.iov_base = buf;
+	iov.iov_len = mr_size;
+
+	assert_int_equal(efa_mr_internal_regv(resource->domain, &iov, 1,
+					      FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL),
+			 0);
+	assert_non_null(mr);
+
+	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+	/* Verify that shm_mr is NULL even if shm_domain exists */
+	assert_null(efa_mr->shm_mr);
+
+	assert_int_equal(fi_close(&mr->fid), 0);
+	free(buf);
+}

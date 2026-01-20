@@ -61,6 +61,11 @@ int efa_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 		      uint64_t requested_key, uint64_t flags,
 		      struct fid_mr **mr_fid, void *context);
 
+int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
+		      size_t count, uint64_t access, uint64_t offset,
+		      uint64_t requested_key, uint64_t flags,
+		      struct fid_mr **mr_fid, void *context);
+
 static inline bool efa_mr_is_cuda(struct efa_mr *efa_mr)
 {
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA) : false;
