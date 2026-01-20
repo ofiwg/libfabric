@@ -56,10 +56,8 @@ def test_rma_bw_range_no_inject(cmdline_args, rma_operation_type, rma_bw_complet
 # This test is run in serial mode because it takes a lot of memory
 @pytest.mark.serial
 @pytest.mark.functional
-# TODO Add "writedata", "write" back in when EFA firmware bug is fixed
-# TODO enable efa-direct test after fixing fabtests to post recv within device max msg size.
-@pytest.mark.parametrize("operation_type", ["read"])
-def test_rma_bw_1G(cmdline_args, operation_type, rma_bw_completion_semantic):
+@pytest.mark.parametrize("operation_type", ["read", "write", "writedata"])
+def test_rma_bw_1G(cmdline_args, operation_type, rma_bw_completion_semantic, rma_fabric):
     # Default window size is 64 resulting in 128GB being registered, which
     # exceeds max number of registered host pages
     timeout = max(540, cmdline_args.timeout)
@@ -67,7 +65,7 @@ def test_rma_bw_1G(cmdline_args, operation_type, rma_bw_completion_semantic):
     command = command + " -o " + operation_type
     efa_run_client_server_test(cmdline_args, command, 2,
                                completion_semantic=rma_bw_completion_semantic, message_size=1073741824,
-                               memory_type="host_to_host", warmup_iteration_type=0, timeout=timeout, fabric="efa")
+                               memory_type="host_to_host", warmup_iteration_type=0, timeout=timeout, fabric=rma_fabric)
 
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["writedata", "write"])
