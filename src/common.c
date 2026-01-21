@@ -1458,7 +1458,13 @@ int ofi_bsock_async_done(const struct fi_provider *prov,
 		return -errno;
 	}
 
-	assert(!(msg.msg_flags & MSG_CTRUNC));
+	if (msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC)) {
+		FI_WARN(prov, FI_LOG_EP_DATA,
+			"Truncated message on MSG_ERRQUEUE (flags: 0x%x, ctrl len: %zu, received len: %zu)\n",
+			msg.msg_flags, sizeof(ctrl), msg.msg_controllen);
+		return -FI_EINVAL;
+	}
+
 	cmsg = CMSG_FIRSTHDR(&msg);
 	if ((cmsg->cmsg_level != SOL_IP && cmsg->cmsg_type != IP_RECVERR) &&
 	    (cmsg->cmsg_level != SOL_IPV6 && cmsg->cmsg_type != IPV6_RECVERR)) {
