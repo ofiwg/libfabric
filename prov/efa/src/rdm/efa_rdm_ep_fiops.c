@@ -29,7 +29,7 @@ struct efa_rdm_cq *efa_rdm_ep_get_rx_rdm_cq(struct efa_rdm_ep *ep)
 }
 
 static
-int efa_rdm_pke_pool_mr_reg_handler(struct ofi_bufpool_region *region)
+int efa_rdm_pke_pool_alloc_handler(struct ofi_bufpool_region *region)
 {
 	size_t ret;
 	struct fid_mr *mr;
@@ -47,11 +47,17 @@ int efa_rdm_pke_pool_mr_reg_handler(struct ofi_bufpool_region *region)
 			&mr, NULL);
 
 	region->context = mr;
+
+#ifdef ENABLE_EFA_POISONING
+	/* Poison the entire pool on allocation */
+	efa_rdm_poison_mem_region(region->alloc_region, region->pool->alloc_size);
+#endif
+
 	return ret;
 }
 
 static
-void efa_rdm_pke_pool_mr_dereg_handler(struct ofi_bufpool_region *region)
+void efa_rdm_pke_pool_free_handler(struct ofi_bufpool_region *region)
 {
 	ssize_t ret;
 
@@ -116,8 +122,8 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 		.alignment = alignment,
 		.max_cnt = max_cnt,
 		.chunk_cnt = chunk_cnt,
-		.alloc_fn = need_mr ? efa_rdm_pke_pool_mr_reg_handler : NULL,
-		.free_fn = need_mr ? efa_rdm_pke_pool_mr_dereg_handler : NULL,
+		.alloc_fn = need_mr ? efa_rdm_pke_pool_alloc_handler : NULL,
+		.free_fn = need_mr ? efa_rdm_pke_pool_free_handler : NULL,
 		.init_fn = NULL,
 		.context = efa_rdm_ep_domain(ep),
 		.flags = flags,

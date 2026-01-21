@@ -45,13 +45,6 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	if (!pkt_entry)
 		return NULL;
 
-#ifdef ENABLE_EFA_POISONING
-	/* Restore pkt_entry->gen after poisoning. Otherwise, all pkts will have
-	 * the same gen when poisoning is enabled. */
-	uint8_t gen = pkt_entry->gen;
-	efa_rdm_poison_mem_region(pkt_entry, pkt_pool->attr.size);
-	pkt_entry->gen = gen;
-#endif
 	pkt_entry->gen &= EFA_RDM_PACKET_GEN_MASK;
 	dlist_init(&pkt_entry->entry);
 
@@ -100,7 +93,11 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 void efa_rdm_pke_release(struct efa_rdm_pke *pkt_entry)
 {
 #ifdef ENABLE_EFA_POISONING
+	/* Restore pkt_entry->gen after poisoning. Otherwise, all pkts will have
+	 * the same gen when poisoning is enabled. */
+	uint8_t gen = pkt_entry->gen;
 	efa_rdm_poison_mem_region(pkt_entry, ofi_buf_pool(pkt_entry)->attr.size);
+	pkt_entry->gen = gen;
 #endif
 	pkt_entry->flags = 0;
 	ofi_buf_free(pkt_entry);
