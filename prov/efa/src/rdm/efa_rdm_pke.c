@@ -46,17 +46,33 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 		return NULL;
 
 #ifdef ENABLE_EFA_POISONING
-	/* Restore pkt_entry->gen after poisoning. Otherwise, all pkts will have
-	 * the same gen when poisoning is enabled. */
+	/* Preserve gen and debug_info across poisoning to maintain packet history */
 	uint8_t gen = pkt_entry->gen;
+#if ENABLE_DEBUG
+	struct efa_rdm_pke_debug_info_buffer *debug_info = pkt_entry->debug_info;
+#endif
 	efa_rdm_poison_mem_region(pkt_entry, pkt_pool->attr.size);
 	pkt_entry->gen = gen;
+#if ENABLE_DEBUG
+	pkt_entry->debug_info = debug_info;
+#endif
 #endif
 	pkt_entry->gen &= EFA_RDM_PACKET_GEN_MASK;
 	dlist_init(&pkt_entry->entry);
 
 #if ENABLE_DEBUG
 	dlist_init(&pkt_entry->dbg_entry);
+	/* Allocate debug info if not already allocated */
+	if (!pkt_entry->debug_info) {
+		pkt_entry->debug_info = ofi_buf_alloc(ep->pke_debug_info_pool);
+		if (!pkt_entry->debug_info) {
+			ofi_buf_free(pkt_entry);
+			return NULL;
+		}
+		pkt_entry->debug_info->counter = 0;
+		memset(pkt_entry->debug_info->entries, 0, 
+		       sizeof(pkt_entry->debug_info->entries));
+	}
 #endif
 	/* Initialize necessary fields in pkt_entry.
 	 * The memory region allocated by ofi_buf_alloc_ex is not initalized.
@@ -100,7 +116,16 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 void efa_rdm_pke_release(struct efa_rdm_pke *pkt_entry)
 {
 #ifdef ENABLE_EFA_POISONING
+	/* Preserve gen and debug_info pointer across poisoning to maintain packet history */
+	uint8_t gen = pkt_entry->gen;
+#if ENABLE_DEBUG
+	struct efa_rdm_pke_debug_info_buffer *debug_info = pkt_entry->debug_info;
+#endif
 	efa_rdm_poison_mem_region(pkt_entry, ofi_buf_pool(pkt_entry)->attr.size);
+	pkt_entry->gen = gen;
+#if ENABLE_DEBUG
+	pkt_entry->debug_info = debug_info;
+#endif
 #endif
 	pkt_entry->flags = 0;
 	ofi_buf_free(pkt_entry);
@@ -711,6 +736,15 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 		recv_wr = &ep->base_ep.efa_recv_wr_vec[i];
 		recv_wr->wr.wr_id = efa_rdm_pke_get_wr_id(pke_vec[i]);
 
+#if ENABLE_DEBUG
+		/* Record RECV_POST event */
+		efa_rdm_pke_record_debug_info(pke_vec[i],
+		                               ep->base_ep.qp->qp_num,
+		                               ep->base_ep.qp->qkey,
+		                               pke_vec[i]->gen,
+		                               EFA_RDM_PKE_DEBUG_EVENT_RECV_POST);
+#endif
+
 		recv_wr->wr.num_sge = 1;
 		recv_wr->wr.sg_list = recv_wr->sge;
 		recv_wr->wr.sg_list[0].length = pke_vec[i]->pkt_size;
@@ -790,3 +824,50 @@ ssize_t efa_rdm_pke_user_recvv(struct efa_rdm_pke **pke_vec,
 
 	return err;
 }
+
+
+#if ENABLE_DEBUG
+/* Compile-time assertion that debug_info gen field can hold all possible gen values */
+_Static_assert(EFA_RDM_PKE_DEBUG_GEN_MASK >= EFA_RDM_PACKET_GEN_MASK, 
+               "DEBUG_GEN_BITS insufficient to hold EFA_RDM_PACKET_GEN_MASK");
+
+/**
+ * @brief Print debug info history for packet entry
+ *
+ * @param pkt_entry Packet entry
+ */
+void efa_rdm_pke_print_debug_info(struct efa_rdm_pke *pkt_entry)
+{
+	static const char *event_str[] = {
+		"SEND_POST",
+		"SEND_COMPLETION",
+		"RECV_POST",
+		"RECV_COMPLETION",
+		"READ_POST",
+		"READ_COMPLETION",
+		"WRITE_POST",
+		"WRITE_COMPLETION",
+		"RECV_RDMA_WITH_IMM"
+	};
+	int i, count;
+	int start_idx;
+
+	if (!pkt_entry->debug_info)
+		return;
+
+	count = MIN(EFA_RDM_PKE_DEBUG_INFO_SIZE, pkt_entry->debug_info->counter);
+	start_idx = (pkt_entry->debug_info->counter >= EFA_RDM_PKE_DEBUG_INFO_SIZE) ?
+	                (pkt_entry->debug_info->counter % EFA_RDM_PKE_DEBUG_INFO_SIZE) : 0;
+
+	for (i = 0; i < count; i++) {
+		int idx = (start_idx + i) % EFA_RDM_PKE_DEBUG_INFO_SIZE;
+		struct efa_rdm_pke_debug_info *info = &pkt_entry->debug_info->entries[idx];
+		uint8_t event = EFA_RDM_PKE_DEBUG_INFO_GET_EVENT(info);
+		EFA_WARN(FI_LOG_EP_DATA,
+		         "    [%d] counter=%u gen=%u qpn=%u qkey=%u (%s)\n",
+		         i, info->counter, EFA_RDM_PKE_DEBUG_INFO_GET_GEN(info),
+		         EFA_RDM_PKE_DEBUG_INFO_GET_QPN(info), info->qkey,
+		         event < EFA_RDM_PKE_DEBUG_EVENT_TYPE_COUNT ? event_str[event] : "UNKNOWN");
+	}
+}
+#endif
