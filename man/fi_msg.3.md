@@ -163,7 +163,8 @@ struct fi_msg {
 The send inject call is an optimized version of fi_send with the
 following characteristics.  The data buffer is available for reuse
 immediately on return from the call, and no CQ entry will be written
-if the transfer completes successfully.
+if the transfer completes successfully. If the transfer fails, an
+error entry will be written to the CQ.
 
 Conceptually, this means that the fi_inject function behaves as if
 the FI_INJECT transfer flag were set, selective completions are enabled,
