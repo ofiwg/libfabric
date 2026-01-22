@@ -135,6 +135,10 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 					 errno);
 				goto err_free_efa_ah;
 			}
+		} else {
+			EFA_WARN(FI_LOG_AV,
+				 "ibv_create_ah failed! errno: %d\n", errno);
+			goto err_free_efa_ah;
 		}
 	}
 
