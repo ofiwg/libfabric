@@ -1186,38 +1186,49 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
  * pointer to NULL so it won't be used later.
  *
  * @param efa_rdm_ep pointer to efa_rdm_ep.
+ * return 0 on success, negative integer on error
  */
-static void efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
+int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 {
-	int ret;
+	int ret, retv = 0;
 	struct efa_domain *efa_domain;
 	struct efa_av *efa_av;
 	struct efa_rdm_cq *efa_rdm_cq;
 
 
-	(void) efa_rdm_ep_close_shm_ep_resources(efa_rdm_ep);
+	ret = efa_rdm_ep_close_shm_ep_resources(efa_rdm_ep);
+	if (ret) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm ep resources: %s\n", fi_strerror(-ret));
+		retv = ret;
+	}
 
 	efa_av = efa_rdm_ep->base_ep.av;
 	if (efa_av->shm_rdm_av) {
 		ret = fi_close(&efa_av->shm_rdm_av->fid);
-		if (ret)
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm av\n");
+		if (ret) {
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm av: %s\n", fi_strerror(-ret));
+			retv = ret;
+		}
 		efa_av->shm_rdm_av = NULL;
 	}
 
 	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);
 	if (efa_rdm_cq->shm_cq) {
 		ret = fi_close(&efa_rdm_cq->shm_cq->fid);
-		if (ret)
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm cq\n");
+		if (ret) {
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm cq: %s\n", fi_strerror(-ret));
+			retv = ret;
+		}
 		efa_rdm_cq->shm_cq = NULL;
 	}
 
 	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, efa_cq.util_cq);
 	if (efa_rdm_cq->shm_cq) {
 		ret = fi_close(&efa_rdm_cq->shm_cq->fid);
-		if (ret)
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm cq\n");
+		if (ret) {
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm cq: %s\n", fi_strerror(-ret));
+			retv = ret;
+		}
 		efa_rdm_cq->shm_cq = NULL;
 	}
 
@@ -1225,17 +1236,23 @@ static void efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 
 	if (efa_domain->shm_domain) {
 		ret = fi_close(&efa_domain->shm_domain->fid);
-		if (ret)
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm domain\n");
+		if (ret) {
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm domain: %s\n", fi_strerror(-ret));
+			retv = ret;
+		}
 		efa_domain->shm_domain = NULL;
 	}
 
 	if (efa_domain->fabric->shm_fabric) {
 		ret = fi_close(&efa_domain->fabric->shm_fabric->fid);
-		if (ret)
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm fabric\n");
+		if (ret) {
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm fabric: %s\n", fi_strerror(-ret));
+			retv = ret;
+		}
 		efa_domain->fabric->shm_fabric = NULL;
 	}
+
+	return retv;
 }
 
 /**
@@ -1279,7 +1296,7 @@ void efa_rdm_ep_update_shm(struct efa_rdm_ep *ep)
 	}
 
 	if (!use_shm)
-		efa_rdm_ep_close_shm_resources(ep);
+		(void) efa_rdm_ep_close_shm_resources(ep);
 }
 
 static inline
@@ -1457,7 +1474,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 	return ret;
 
 err_close_shm:
-	efa_rdm_ep_close_shm_ep_resources(ep);
+	(void) efa_rdm_ep_close_shm_ep_resources(ep);
 	ofi_genlock_unlock(srx_ctx->lock);
 err_destroy_qp:
 	efa_base_ep_destruct_qp(&ep->base_ep);
