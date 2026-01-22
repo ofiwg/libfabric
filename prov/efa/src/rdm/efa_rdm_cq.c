@@ -372,7 +372,10 @@ efa_rdm_cq_lookup_raw_addr(struct efa_rdm_pke *pke,
 
 out:
 	inet_ntop(AF_INET6, efa_ep_addr->raw, gid_str_cdesc, INET6_ADDRSTRLEN);
-	EFA_WARN(FI_LOG_AV,
+	/* The EFA device may not be able to provide the AHN if the packet
+	 * arrived immediately after the AH creation. So this behavior is
+	 * expected at application startup. */
+	EFA_INFO(FI_LOG_AV,
 		 "Recovered fi_addr for peer:[QPN]:[QKey] = "
 		 "[%s]:[%" PRIu16 "]:[%" PRIu32 "] fi_addr: %" PRIu64
 		 " implicit AV: %s\n",
