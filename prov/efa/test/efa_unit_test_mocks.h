@@ -37,6 +37,9 @@ int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_at
 struct efa_ah *__real_efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 			    bool insert_implicit_av);
 
+struct efa_ah *efa_mock_efa_ah_alloc_return_null(struct efa_domain *domain, const uint8_t *gid,
+			    bool insert_implicit_av);
+
 struct efa_ah *efa_mock_efa_ah_alloc_dont_create_self_ah(struct efa_domain *domain, const uint8_t *gid,
 			    bool insert_implicit_av);
 
