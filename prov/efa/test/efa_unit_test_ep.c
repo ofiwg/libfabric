@@ -921,6 +921,59 @@ void test_efa_rdm_ep_getopt_oversized_optlen(struct efa_resource **state)
 	test_efa_rdm_ep_getopt(state, 16, FI_SUCCESS);
 }
 
+void test_efa_rdm_ep_close_shm_resource_happy(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+
+	/* shm resources will be constructed by this call */
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_non_null(ep->shm_ep);
+	/* shm resource close should be happy */
+	assert_int_equal(efa_rdm_ep_close_shm_resources(ep), 0);
+
+	assert_null(ep->shm_ep);
+}
+
+void test_efa_rdm_ep_close_shm_resource_unhappy(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	size_t mr_size = 64;
+	void *buf;
+	struct fid_mr *mr = NULL;
+	struct efa_mr *efa_mr;
+
+	buf = malloc(mr_size);
+	assert_non_null(buf);
+
+	/* shm resources will be constructed by this call */
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_non_null(ep->shm_ep);
+
+	/* Now we register an efa mr, which should also register a shm mr */
+	assert_int_equal(fi_mr_reg(resource->domain, buf, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL),
+			 0);
+	assert_non_null(mr);
+	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+	assert_non_null(efa_mr->shm_mr);
+
+	/* shm resource close should return EBUSY because shm mr was referencing the shm domain */
+	assert_int_equal(efa_rdm_ep_close_shm_resources(ep), -FI_EBUSY);
+	/* but we clean the ep as best effort, this pointer should be still null */
+	assert_null(ep->shm_ep);
+
+	assert_int_equal(fi_close(&mr->fid), 0);
+}
+
 void test_efa_rdm_ep_setopt_shared_memory_permitted(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;

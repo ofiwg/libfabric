@@ -156,6 +156,8 @@ void test_efa_rdm_ep_setopt_shared_memory_permitted();
 void test_efa_rdm_ep_setopt_homogeneous_peers();
 void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_good();
 void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad();
+void test_efa_rdm_ep_close_shm_resource_happy();
+void test_efa_rdm_ep_close_shm_resource_unhappy();
 void test_efa_rdm_ep_user_zcpy_rx_disabled();
 void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_disabled();
 void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas();
