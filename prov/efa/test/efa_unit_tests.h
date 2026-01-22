@@ -418,6 +418,8 @@ void test_efa_ep_lock_type_no_op();
 void test_efa_ep_lock_type_mutex();
 void test_efa_rdm_ep_shm_ep_different_info();
 void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data();
+void test_efa_base_ep_enable_ah_alloc_failure();
+void test_efa_rdm_ep_enable_ah_alloc_failure();
 void test_efa_rdm_ep_setopt_cq_flow_control();
 void test_efa_direct_ep_setopt_cq_flow_control_no_rx_cq_data();
 void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data();

@@ -64,6 +64,12 @@ int efa_mock_ibv_destroy_ah_dont_create_self_ah(struct ibv_ah *ibv_ah)
 	return  __real_ibv_destroy_ah(ibv_ah);
 }
 
+struct efa_ah *efa_mock_efa_ah_alloc_return_null(struct efa_domain *domain, const uint8_t *gid,
+			    bool insert_implicit_av)
+{
+	return NULL;
+}
+
 struct efa_ah *efa_mock_efa_ah_alloc_dont_create_self_ah(struct efa_domain *domain, const uint8_t *gid,
 			    bool insert_implicit_av)
 {
