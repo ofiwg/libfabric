@@ -54,6 +54,18 @@ static inline void efa_base_ep_unlock_cq(struct efa_base_ep *base_ep)
 
 int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 {
+	/*
+	 * Acquire the lock to prevent race conditions when CQ polling accesses the qp_table
+	 * and the qp resource
+	 */
+	efa_base_ep_lock_cq(base_ep);
+	efa_base_ep_destruct_qp_unsafe(base_ep);
+	efa_base_ep_unlock_cq(base_ep);
+	return 0;
+}
+
+int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
+{
 	struct efa_domain *domain;
 	struct efa_qp *qp = base_ep->qp;
 	struct efa_qp *user_recv_qp = base_ep->user_recv_qp;
@@ -61,11 +73,12 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 	struct efa_cq *tx_cq, *rx_cq;
 	int err;
 
-	/*
-	 * Acquire the lock to prevent race conditions when CQ polling accesses the qp_table
-	 * and the qp resource
-	 */
-	efa_base_ep_lock_cq(base_ep);
+	tx_cq = efa_base_ep_get_tx_cq(base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(base_ep);
+
+	assert(!tx_cq || ofi_genlock_held(&tx_cq->util_cq.ep_list_lock));
+	assert(!rx_cq || ofi_genlock_held(&rx_cq->util_cq.ep_list_lock));
+
 	if (qp) {
 		domain = qp->base_ep->domain;
 		qp_num = qp->qp_num;
@@ -82,10 +95,6 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 		base_ep->user_recv_qp = NULL;
 	}
 
-	/* Flush the cq to poll out all stale cqes for the destroyed qp */
-	tx_cq = efa_base_ep_get_tx_cq(base_ep);
-	rx_cq = efa_base_ep_get_rx_cq(base_ep);
-
 	if (tx_cq) {
 		err = 0;
 		while (err != ENOENT) {
@@ -99,8 +108,6 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 			err = rx_cq->poll_ibv_cq(-1, &rx_cq->ibv_cq);
 		}
 	}
-
-	efa_base_ep_unlock_cq(base_ep);
 
 	return 0;
 }
@@ -397,6 +404,9 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 {
 	int err;
 
+	assert(!efa_base_ep_get_tx_cq(base_ep) || ofi_genlock_held(&efa_base_ep_get_tx_cq(base_ep)->util_cq.ep_list_lock));
+	assert(!efa_base_ep_get_rx_cq(base_ep) || ofi_genlock_held(&efa_base_ep_get_rx_cq(base_ep)->util_cq.ep_list_lock));
+
 	qp->qkey = (base_ep->util_ep.type == FI_EP_DGRAM) ?
 			   EFA_DGRAM_CONNID :
 			   efa_generate_rdm_connid();
@@ -447,7 +457,7 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep)
 
 	err = efa_base_ep_enable_qp(base_ep, base_ep->qp);
 	if (err) {
-		efa_base_ep_destruct_qp(base_ep);
+		efa_base_ep_destruct_qp_unsafe(base_ep);
 		return err;
 	}
 
@@ -456,7 +466,7 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep)
 	if (base_ep->user_recv_qp) {
 		err = efa_base_ep_enable_qp(base_ep, base_ep->user_recv_qp);
 		if (err) {
-			efa_base_ep_destruct_qp(base_ep);
+			efa_base_ep_destruct_qp_unsafe(base_ep);
 			return err;
 		}
 	}
@@ -470,7 +480,7 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep)
 	if (err) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "Endpoint cannot create ah for its own address\n");
-		efa_base_ep_destruct_qp(base_ep);
+		efa_base_ep_destruct_qp_unsafe(base_ep);
 	}
 
 	return err;

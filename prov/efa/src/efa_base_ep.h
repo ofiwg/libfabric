@@ -122,6 +122,8 @@ void efa_base_ep_close_util_ep(struct efa_base_ep *base_ep);
 
 int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep);
 
+int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep);
+
 bool efa_qp_support_op_in_order_aligned_128_bytes(struct efa_qp *qp,
 						       enum ibv_wr_opcode op);
 
