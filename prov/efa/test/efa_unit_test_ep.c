@@ -155,7 +155,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	pkt_attr.connid = include_connid ? raw_addr.qkey : 0;
 	pkt_attr.host_id = g_efa_unit_test_mocks.peer_host_id;
 	pkt_attr.device_version = 0xefa0;
-	efa_unit_test_handshake_pkt_construct(pkt_entry, &pkt_attr);
+	efa_unit_test_construct_handshake_pkt_for_receive(pkt_entry, &pkt_attr);
 
 	/* Mock general QP post send function for handshake operations */
 	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr;

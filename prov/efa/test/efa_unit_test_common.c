@@ -355,12 +355,13 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
  * @brief Construct EFA_RDM_HANDSHAKE_PKT
  *
  * This will append any optional handshake packet fields (see EFA RDM protocol
- * spec) iff they are non-zero in attr
+ * spec) iff they are non-zero in attr. This function is used to create a mock 
+ * handshake packet to test the receive path handling of the packet.
  *
  * @param[in,out]	pkt_entry	Packet entry. Must be non-NULL.
  * @param[in]		attr		Packet attributes.
  */
-void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr)
+void efa_unit_test_construct_handshake_pkt_for_receive(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr)
 {
 
 	int nex = (EFA_RDM_NUM_EXTRA_FEATURE_OR_REQUEST - 1) / 64 + 1;
@@ -370,6 +371,7 @@ void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct
 	handshake_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	handshake_hdr->nextra_p3 = nex + 3;
 	handshake_hdr->flags = 0;
+	memset(handshake_hdr->extra_info, 0, nex * sizeof(uint64_t));
 
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_handshake_hdr) + nex * sizeof(uint64_t);
 

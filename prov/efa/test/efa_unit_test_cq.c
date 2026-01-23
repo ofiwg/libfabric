@@ -321,7 +321,7 @@ void test_rdm_cq_handshake_bad_send_status_impl(struct efa_resource **state, int
 	pkt_attr.connid = raw_addr.qkey;
 	pkt_attr.host_id = 0x8765432187654321;
 	pkt_attr.device_version = 0xefa0;
-	efa_unit_test_handshake_pkt_construct(pkt_entry, &pkt_attr);
+	efa_unit_test_construct_handshake_pkt_for_receive(pkt_entry, &pkt_attr);
 
 	/* Setup CQ */
 	g_efa_unit_test_mocks.efa_ibv_cq_end_poll = &efa_mock_efa_ibv_cq_end_poll_check_mock;
