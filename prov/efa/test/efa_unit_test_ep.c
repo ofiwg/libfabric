@@ -174,7 +174,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_vendor_err = &efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
 	ibv_cq->ibv_cq_ex->status = IBV_WC_SUCCESS;
-	ibv_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
 	expect_function_call(efa_mock_efa_ibv_cq_next_poll_check_function_called_and_return_mock);
 
 	/* Receive handshake packet */

@@ -329,7 +329,7 @@ void test_rdm_cq_handshake_bad_send_status_impl(struct efa_resource **state, int
 	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_qp_num = &efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_vendor_err = &efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
-	ibv_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
 
 	/* Mock cq to simulate the send comp error */
 	expect_function_call(efa_mock_efa_ibv_cq_end_poll_check_mock);
@@ -340,7 +340,7 @@ void test_rdm_cq_handshake_bad_send_status_impl(struct efa_resource **state, int
 
 	efa_rdm_ep->efa_outstanding_tx_ops = 1;
 	ibv_cq->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
-	ibv_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
 
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	/* HANDSHAKE packet does not generate completion entry or error*/
@@ -471,7 +471,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	/* the recv error will not populate to application cq because it's an EFA internal error and
 	 * and not related to any application recv. Currently we can only read the error from eq.
 	 */
-	ibv_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
 	ibv_cq->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
 
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
@@ -566,7 +566,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 		struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert_non_null(pkt_entry);
 		efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
-		ibv_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+		ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
 	}
 #else
 	/*
@@ -576,7 +576,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
-	ibv_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
 #endif
 	/* the recv rdma with imm will not populate to application cq because it's an EFA internal error and
 	 * and not related to any application operations. Currently we can only read the error from eq.
@@ -893,7 +893,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	efa_unit_test_eager_msgrtm_pkt_construct(pkt_entry, &pkt_attr);
 
 	/* Setup CQ */
-	ibv_cqx->wr_id = (uintptr_t)pkt_entry;
+	ibv_cqx->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
 	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_next_poll = &efa_mock_efa_ibv_cq_next_poll_check_function_called_and_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_end_poll = &efa_mock_efa_ibv_cq_end_poll_check_mock;
