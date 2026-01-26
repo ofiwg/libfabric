@@ -210,6 +210,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		msg->context, msg->addr, flags, FI_RMA | FI_WRITE);
 
 	/* Prepare SGE list */
+	assert(msg->iov_count > 0);
 	for (i = 0; i < msg->iov_count; ++i) {
 		sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
 		sge_list[i].length = msg->msg_iov[i].iov_len;
