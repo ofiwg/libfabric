@@ -1382,7 +1382,11 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 
 	ep = ope->ep;
 
-	assert(ope->iov_count > 0 && ope->iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->iov_limit);
+	/*
+	 * Allow local iov count to be equal to 0 b/c bounce buffer's pre-registered buff/desc
+	 * will be passed to rdma-core
+	 */
+	assert((ope->iov_count == 0 && ope->bytes_read_total_len == 0) || ope->iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->iov_limit);
 	assert(ope->rma_iov_count > 0 && ope->rma_iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->rma_iov_limit);
 
 	if (ope->bytes_read_total_len == 0) {
@@ -1527,7 +1531,11 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 	ep = ope->ep;
 
-	assert(ope->iov_count > 0 && ope->iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->iov_limit);
+	/*
+	 * Allow local iov count to be equal to 0 b/c bounce buffer's pre-registered buff/desc
+	 * will be passed to rdma-core
+	 */
+	assert((ope->iov_count == 0 && ope->bytes_write_total_len == 0) || ope->iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->iov_limit);
 	assert(ope->rma_iov_count > 0 && ope->rma_iov_count <= efa_rdm_ep_domain(ep)->info->tx_attr->rma_iov_limit);
 
 	if (ope->bytes_write_total_len == 0) {
