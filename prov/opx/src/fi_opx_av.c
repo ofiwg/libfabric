@@ -167,9 +167,11 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 			size_t	base_count = (opx_av->type == FI_AV_TABLE) ? opx_av->addr_count : 0;
 			ssize_t rc;
 
+			size_t opx_addr_idx = (opx_av->type == FI_AV_TABLE) ? 0 : opx_av->addr_count;
+
 			for (i = 0; i < ep_tx_count; ++i) {
-				rc = fi_opx_ep_tx_connect(opx_av->ep_tx[i], count + base_count,
-							  &opx_addr[opx_av->addr_count], output_ext);
+				rc = fi_opx_ep_tx_connect(opx_av->ep_tx[i], count + base_count, &opx_addr[opx_addr_idx],
+							  output_ext);
 				if (OFI_UNLIKELY(rc)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_EAGAIN\n");
 					errno = -rc;
