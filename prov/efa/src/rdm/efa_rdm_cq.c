@@ -230,6 +230,14 @@ static void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 		 */
 		assert(pkt_entry);
 		ep->efa_rx_pkts_posted--;
+#if ENABLE_DEBUG
+		/* Record RECV_RDMA_WITH_IMM event */
+		efa_rdm_pke_record_debug_info(pkt_entry,
+		                               ep->base_ep.qp->qp_num,
+		                               ep->base_ep.qp->qkey,
+		                               pkt_entry->gen,
+		                               EFA_RDM_PKE_DEBUG_EVENT_RECV_RDMA_WITH_IMM);
+#endif
 		efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 		efa_rdm_pke_release_rx(pkt_entry);
 	}
@@ -523,6 +531,15 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 	struct efa_rdm_base_hdr *base_hdr;
 	uint32_t imm_data = 0;
 	bool has_imm_data = false;
+
+#if ENABLE_DEBUG
+	/* Record RECV_COMPLETION event */
+	efa_rdm_pke_record_debug_info(pkt_entry,
+	                               ep->base_ep.qp->qp_num,
+	                               ep->base_ep.qp->qkey,
+	                               pkt_entry->gen,
+	                               EFA_RDM_PKE_DEBUG_EVENT_RECV_COMPLETION);
+#endif
 
 	EFA_DBG(FI_LOG_CQ, "Processing receive completion for packet %p\n", pkt_entry);
 
