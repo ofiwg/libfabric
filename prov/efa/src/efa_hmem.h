@@ -31,33 +31,15 @@ static const enum fi_hmem_iface efa_hmem_ifaces[] = {
 	FI_HMEM_SYNAPSEAI
 };
 
-enum efa_dmabuf_support {
-	EFA_DMABUF_NOT_SUPPORTED,
-	EFA_DMABUF_SUPPORTED,
-	EFA_DMABUF_ASSUMED
-};
-
 struct efa_hmem_info {
 	bool initialized; 	/* do we support it at all */
 	bool p2p_supported_by_device;	/* do we support p2p with this device */
-	bool dmabuf_fallback_enabled;
-	enum efa_dmabuf_support dmabuf_supported_by_device;	/* do we support dmabuf with this device */
 
 	size_t max_medium_msg_size;
 	size_t runt_size;
 	size_t min_read_msg_size;
 	size_t min_read_write_size;
 };
-
-#define DMABUF_IS_SUPPORTED(info) \
-	((info)->dmabuf_supported_by_device == EFA_DMABUF_SUPPORTED || \
-	 (info)->dmabuf_supported_by_device == EFA_DMABUF_ASSUMED)
-
-#define DMABUF_IS_NOT_SUPPORTED(info) \
-	((info)->dmabuf_supported_by_device == EFA_DMABUF_NOT_SUPPORTED)
-
-#define DMABUF_IS_ASSUMED(info) \
-	((info)->dmabuf_supported_by_device == EFA_DMABUF_ASSUMED)
 
 extern struct efa_hmem_info	g_efa_hmem_info[OFI_HMEM_MAX];
 
