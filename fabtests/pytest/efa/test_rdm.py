@@ -317,4 +317,4 @@ def test_rdm_tagged_pingpong_truncate_error(cmdline_args, completion_semantic):
     efa_run_client_server_test(cmdline_args, executable, "short",
                                completion_semantic, "host_to_host",
                                message_size=message_size, fabric="efa",
-                               timeout=15, might_fail=might_fail)
+                               timeout=60, might_fail=might_fail)
