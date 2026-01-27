@@ -85,11 +85,12 @@ communicate with each other.
 ### 1.1 Why is the EFA RDM communication protocol needed?
 
 The reason we need an EFA RDM communication protocol is to support features that the
-EFA device does not directly support. Currently, the EFA device supports the following
+EFA device does not directly support. Currently, the latest EFA device supports the following
 two types of communication:
 
  1. send/receive a message up to the EFA device's Maximum Transmission Unit (MTU) size.
  2. RDMA read of a memory buffer up to 1GB (if both endpoints' software stacks support RDMA read).
+ 3. RDMA write of a memory buffer up to 1GB (if both endpoints' software stacks support RDMA write).
 
 Additionally, for send/receive, the EFA device does not guarantee ordered delivery; e.g. when a
 sender sends multiple messages to a receiver, the receiver may receive the packets in an order
