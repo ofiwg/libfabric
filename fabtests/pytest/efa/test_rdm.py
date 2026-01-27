@@ -304,7 +304,7 @@ def test_implicit_av_limited_av_size_unexpected_path(cmdline_args, msg_size):
                                additional_env=additional_env, timeout=15)
 
 @pytest.mark.functional
-def test_rmd_tagged_pingpong_truncate_error(cmdline_args, completion_semantic):
+def test_rdm_tagged_pingpong_truncate_error(cmdline_args, completion_semantic):
     if cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("client hits an assertion in debug mode in case of intra-node")
     executable = {"server": "fi_rdm_tagged_pingpong --timeout 1",
