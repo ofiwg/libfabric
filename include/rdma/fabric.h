@@ -460,6 +460,8 @@ struct fi_domain_attr {
 	uint32_t		tclass;
 	size_t			max_ep_auth_key;
 	uint32_t		max_group_id;
+	uint64_t		max_cntr_value;
+	uint64_t		max_err_cntr_value;
 };
 
 struct fi_fabric_attr {

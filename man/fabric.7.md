@@ -455,6 +455,14 @@ Added new fields to the following attributes:
 *fi_domain_attr*
 : Added max_group_id
 
+## ABI 1.9
+
+ABI version starting with libfabric 2.5. Added new fields to the following attributes:
+
+*fi_domain_attr*
+: Added max_cntr_value, max_err_cntr_value
+
+
 # SEE ALSO
 
 [`fi_info`(1)](fi_info.1.html),
