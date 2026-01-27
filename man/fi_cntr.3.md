@@ -229,10 +229,34 @@ control commands are usable with a counter:
 
 The fi_cntr_read call returns the current value of the counter.
 
+Applications must manage counter values that approach the limit defined by
+the domain attribute `max_cntr_value`. This value, which defaults to
+UINT64_MAX but may be lower due to provider limitations, defines the maximum
+value returned by fi_cntr_read().
+
+When a counter reaches its maximum value and additional operations complete,
+the counter behavior will be undefined. Applications that need to track the
+total number of operations beyond the provider's counter limits are
+responsible for detecting and handling this condition by resetting counters
+with `fi_cntr_set` before they reach the maximum, or it could result in
+incorrect values.
+
 ## fi_cntr_readerr
 
 The read error call returns the number of operations that completed in
 error and were unable to update the counter.
+
+Applications must manage error counter values that approach the limit
+defined by the domain attribute `max_err_cntr_value`. This value, which
+defaults to UINT64_MAX but may be lower due to provider limitations,
+defines the maximum value returned by fi_cntr_readerr().
+
+When an error counter reaches its maximum value and additional error
+operations complete, the counter behavior will be undefined. Applications
+that need to track the total number of error operations beyond the
+provider's counter limits are responsible for detecting and handling this
+condition by resetting the error counters with `fi_cntr_set` before they
+reach the maximum, or it could result in incorrect values.
 
 ## fi_cntr_add
 
