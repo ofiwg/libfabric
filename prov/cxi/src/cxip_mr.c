@@ -65,6 +65,187 @@ static void cxip_ep_mr_remove(struct cxip_mr *mr)
 	dlist_remove(&mr->ep_entry);
 }
 
+
+/*
+ * cxip_mr_handle_remote_write() - Handle remote write with immediate data.
+ *
+ * Processes PUT events containing immediate data (from fi_writedata) and
+ * generates completion entries to the target endpoint's receive CQ.
+ *
+ * The completion is written with FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA
+ * flags to indicate a remote RMA write with immediate data.
+ */
+static int cxip_mr_handle_remote_write(struct cxip_mr *mr,
+				       const union c_event *event,
+				       uint64_t remote_cq_data)
+{
+	struct cxip_ep *ep;
+	struct cxip_rxc *rxc;
+	fi_addr_t src_addr = FI_ADDR_NOTAVAIL;
+	uint64_t flags;
+	size_t len;
+	void *buf;
+	int ret;
+	uint32_t initiator;
+	uint16_t vni;
+	struct cxip_addr addr;
+
+	if (!mr->ep) {
+		CXIP_DBG("MR not bound to endpoint, skipping completion\n");
+		return FI_SUCCESS;
+	}
+
+	ep = mr->ep;
+	rxc = ep->ep_obj->rxc;
+
+	if (!rxc || !rxc->recv_cq) {
+		CXIP_DBG("No receive CQ bound, skipping completion\n");
+		return FI_SUCCESS;
+	}
+
+	/* Build completion entry with immediate data */
+	flags = FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA;
+	len = event->tgt_long.mlength;
+	buf = (void *)((uintptr_t)mr->buf + event->tgt_long.start);
+
+	/* Extract initiator and VNI from event for source address resolution */
+	initiator = event->tgt_long.initiator.initiator.process;
+	vni = event->tgt_long.vni;
+
+	/* Resolve source address if FI_SOURCE capability is enabled */
+	if (rxc->attr.caps & FI_SOURCE) {
+		src_addr = cxip_recv_req_src_addr(rxc, initiator, vni, false);
+
+		/* Generate normal completion if address resolved OR FI_SOURCE_ERR not set.
+		 * Only generate error if BOTH address failed AND FI_SOURCE_ERR is set.
+		 * This matches the semantic in recv_req_event_success().
+		 */
+		if (src_addr != FI_ADDR_NOTAVAIL ||
+		    !(rxc->attr.caps & FI_SOURCE_ERR)) {
+			ret = ofi_peer_cq_write(&rxc->recv_cq->util_cq,
+						(void *)(uintptr_t)mr->mr_fid.fid.context,
+						flags, len, buf, remote_cq_data, 0, src_addr);
+			if (ret != FI_SUCCESS)
+				CXIP_WARN("Failed to submit remote write completion: %d\n", ret);
+			return ret;
+		}
+
+		addr.nic = CXI_MATCH_ID_EP(rxc->pid_bits, initiator);
+		addr.pid = CXI_MATCH_ID_PID(rxc->pid_bits, initiator);
+
+		src_addr = cxip_av_lookup_auth_key_fi_addr(rxc->ep_obj->av, vni);
+
+		struct fi_cq_err_entry err_entry = {};
+		err_entry.err = FI_EADDRNOTAVAIL;
+		err_entry.err_data = &addr;
+		err_entry.err_data_size = sizeof(addr);
+		err_entry.op_context = (void *)(uintptr_t)mr->mr_fid.fid.context;
+		err_entry.src_addr = src_addr;
+		err_entry.flags = flags;
+		err_entry.len = len;
+		err_entry.buf = buf;
+
+		ret = ofi_peer_cq_write_error(&rxc->recv_cq->util_cq, &err_entry);
+
+		return ret;
+	}
+
+	/* FI_SOURCE not enabled - use FI_ADDR_NOTAVAIL */
+	ret = ofi_peer_cq_write(&rxc->recv_cq->util_cq,
+				(void *)(uintptr_t)mr->mr_fid.fid.context,
+				flags, len, buf, remote_cq_data, 0, src_addr);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to submit remote write completion: %d\n", ret);
+		return ret;
+	}
+
+	CXIP_DBG("Generated remote write completion: data=0x%" PRIx64 " len=%zu\n",
+		 remote_cq_data, len);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_mr_sol_event_cb() - Callback for solicited event (writedata) LE.
+ *
+ * For standard MRs with writedata support enabled, two separate request IDs
+ * and callbacks are used:
+ *   - mr->req with cxip_mr_cb() handles regular RMA operations
+ *   - mr->writedata_req with cxip_mr_sol_event_cb() handles writedata operations
+ *
+ * This callback is invoked for the second LE that handles writedata operations
+ * (with sol_event match bit set). When a PUT event is received with status OK
+ * (C_RC_OK), the solicited event completion is processed by generating a
+ * completion entry with immediate data to the target endpoint's receive CQ.
+ */
+static int cxip_mr_sol_event_cb(struct cxip_ctrl_req *req, const union c_event *event)
+{
+	struct cxip_mr *mr = req->mr.mr;
+	int evt_rc = cxi_event_rc(event);
+	int ret;
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_ACK:
+		/* Ignore command completion ACKs */
+		break;
+
+	case C_EVENT_LINK:
+		assert(mr->writedata_mr_state == CXIP_MR_DISABLED);
+
+		if (evt_rc == C_RC_OK) {
+			mr->writedata_mr_state = CXIP_MR_LINKED;
+			CXIP_DBG("MR writedata PTE linked: %p\n", mr);
+			break;
+		}
+
+		mr->writedata_mr_state = CXIP_MR_LINK_ERR;
+		CXIP_WARN("MR writedata PTE link: %p failed %d\n", mr, evt_rc);
+		break;
+
+	case C_EVENT_UNLINK:
+		assert(evt_rc == C_RC_OK);
+		assert(mr->writedata_mr_state == CXIP_MR_LINKED);
+		mr->writedata_mr_state = CXIP_MR_UNLINKED;
+		CXIP_DBG("MR writedata PTE unlinked: %p\n", mr);
+		break;
+
+	case C_EVENT_PUT:
+		/* Count access events if MR event counting is enabled */
+		if (mr->count_events)
+			ofi_atomic_inc32(&mr->access_events);
+
+		/* Solicited event: process writedata completion only if status is OK */
+		if (evt_rc == C_RC_OK) {
+			/* Extract immediate data from event header_data field */
+			uint64_t imm = event->tgt_long.header_data;
+
+			ret = cxip_mr_handle_remote_write(mr, event, imm);
+			if (ret != FI_SUCCESS)
+				CXIP_WARN("Failed to handle solicited event: %d\n", ret);
+		} else {
+			CXIP_WARN("Solicited event PUT failed: %s\n", cxi_rc_to_str(evt_rc));
+		}
+		break;
+
+	case C_EVENT_MATCH:
+		/* Count match events if MR event counting is enabled */
+		if (mr->count_events)
+			ofi_atomic_inc32(&mr->match_events);
+
+		/* Match events can occur on writedata LE, just track them */
+		if (evt_rc != C_RC_OK)
+			CXIP_WARN(CXIP_UNEXPECTED_EVENT,
+				  cxi_event_to_str(event), cxi_rc_to_str(evt_rc));
+		break;
+
+	default:
+		CXIP_WARN(CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event), cxi_rc_to_str(evt_rc));
+	}
+
+	return FI_SUCCESS;
+}
+
 /*
  * cxip_mr_cb() - Process MR LE events.
  */
@@ -83,6 +264,10 @@ int cxip_mr_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	}
 
 	mr = req->mr.mr;
+
+	/* This callback handles the regular (non-writedata) LE.
+	 * Writedata events are handled by cxip_mr_sol_event_cb.
+	 */
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
@@ -109,7 +294,8 @@ int cxip_mr_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		CXIP_DBG("MR PTE unlinked: %p\n", mr);
 		break;
 	case C_EVENT_MATCH:
-		ofi_atomic_inc32(&mr->match_events);
+		if (mr->count_events)
+			ofi_atomic_inc32(&mr->match_events);
 
 		if (evt_rc != C_RC_OK)
 			goto log_err;
@@ -123,8 +309,6 @@ int cxip_mr_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 		if (evt_rc != C_RC_OK)
 			goto log_err;
-
-		/* TODO handle fi_writedata/fi_inject_writedata */
 		break;
 	default:
 log_err:
@@ -171,7 +355,10 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	};
 	uint32_t le_flags;
 
+	mr->req.ep_obj = ep_obj;
 	mr->req.cb = cxip_mr_cb;
+	mr->req.mr.mr = mr;
+	CXIP_DBG("Standard MR callback registered: mr=%p rma_events=%d\n", mr, mr->rma_events);
 
 	le_flags = C_LE_UNRESTRICTED_BODY_RO;
 	if (mr->attr.access & FI_REMOTE_WRITE)
@@ -181,26 +368,102 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	if (mr->cntr)
 		le_flags |= C_LE_EVENT_CT_COMM;
 
-	/* TODO: to support fi_writedata(), we will want to leave
-	 * success events enabled for mr->rma_events true too.
+	/* For dual entry mode, create two LEs with separate request IDs:
+	 * 1. mr->req with cxip_mr_cb handles regular RMA operations
+	 * 2. mr->writedata_req with cxip_mr_sol_event_cb handles writedata operations
+	 * Each request has its own callback for independent event processing.
 	 */
-	if (!mr->count_events)
-		le_flags |= C_LE_EVENT_SUCCESS_DISABLE;
+	if (mr->domain->rma_cq_data_size) {
+		uint32_t regular_le_flags;
+		uint32_t writedata_le_flags;
+		uint64_t writedata_key_raw;
+		struct cxip_mr_key writedata_key;
 
-	ret = cxip_pte_append(ep_obj->ctrl.pte,
-			      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
-			      mr->len, mr->len ? mr->md->md->lac : 0,
-			      C_PTL_LIST_PRIORITY, mr->req.req_id,
-			      key.key, 0, CXI_MATCH_ID_ANY,
-			      0, le_flags, mr->cntr, ep_obj->ctrl.tgq, true);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to write Append command: %d\n", ret);
-		return ret;
+		/* Initialize writedata state */
+		mr->writedata_mr_state = CXIP_MR_DISABLED;
+
+		/* First LE: for regular operations, disable success events
+		 * only if MR event counting is not enabled
+		 */
+		regular_le_flags = le_flags;
+		if (!mr->count_events)
+			regular_le_flags |= C_LE_EVENT_SUCCESS_DISABLE | C_LE_EVENT_COMM_DISABLE;
+
+		ret = cxip_pte_append(ep_obj->ctrl.pte,
+				      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
+				      mr->len, mr->len ? mr->md->md->lac : 0,
+				      C_PTL_LIST_PRIORITY, mr->req.req_id,
+				      key.key, 0, CXI_MATCH_ID_ANY,
+				      0, regular_le_flags, mr->cntr, ep_obj->ctrl.tgq, true);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Failed to write Append command for regular LE: %d\n", ret);
+			return ret;
+		}
+
+		ret = cxip_mr_wait_append(ep_obj, mr);
+		if (ret)
+			return ret;
+
+		/* Second LE: for writedata operations with dedicated callback.
+		 * This uses a separate request ID (writedata_req) so each case has
+		 * its own callback for independent event handling.
+		 */
+		writedata_le_flags = le_flags;
+		/* Enable communication events for writedata */
+		CXIP_DBG("MR enabling writedata events: mr=%p\n", mr);
+
+		/* Use writedata_req for the second LE with dedicated callback */
+		mr->writedata_req.cb = cxip_mr_sol_event_cb;
+		mr->writedata_req.mr.mr = mr;
+		writedata_key_raw = cxip_key_set_writedata(key.raw);
+		writedata_key.raw = writedata_key_raw;
+
+		ret = cxip_pte_append(ep_obj->ctrl.pte,
+				      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
+				      mr->len, mr->len ? mr->md->md->lac : 0,
+				      C_PTL_LIST_PRIORITY, mr->writedata_req.req_id,
+				      writedata_key.key, 0, CXI_MATCH_ID_ANY,
+				      0, writedata_le_flags, mr->cntr, ep_obj->ctrl.tgq, true);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Failed to write Append command for writedata LE: %d\n", ret);
+			return ret;
+		}
+
+		/* Wait for writedata LE to link */
+		do {
+			sched_yield();
+			cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
+		} while (mr->writedata_mr_state != CXIP_MR_LINKED &&
+			 mr->writedata_mr_state != CXIP_MR_LINK_ERR);
+
+		if (mr->writedata_mr_state == CXIP_MR_LINK_ERR)
+			return -FI_ENOSPC;
+	} else {
+		/* Original single LE logic */
+		/* Enable communication events for RMA events; leave success events enabled */
+		if (mr->rma_events) {
+			CXIP_DBG("MR enabling RMA events: mr=%p le_flags=0x%x\n", mr, le_flags);
+		}
+
+		/* Enable success events when counters are not requested */
+		if (!mr->count_events)
+			le_flags |= C_LE_EVENT_SUCCESS_DISABLE;
+
+		ret = cxip_pte_append(ep_obj->ctrl.pte,
+				      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
+				      mr->len, mr->len ? mr->md->md->lac : 0,
+				      C_PTL_LIST_PRIORITY, mr->req.req_id,
+				      key.key, 0, CXI_MATCH_ID_ANY,
+				      0, le_flags, mr->cntr, ep_obj->ctrl.tgq, true);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Failed to write Append command: %d\n", ret);
+			return ret;
+		}
+
+		ret = cxip_mr_wait_append(ep_obj, mr);
+		if (ret)
+			return ret;
 	}
-
-	ret = cxip_mr_wait_append(ep_obj, mr);
-	if (ret)
-		return ret;
 
 	mr->enabled = true;
 
@@ -253,6 +516,20 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 		sched_yield();
 		cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
 	} while (mr->mr_state != CXIP_MR_UNLINKED);
+
+	/* For dual entry, also unlink the writedata LE */
+	if (mr->domain->rma_cq_data_size) {
+		ret = cxip_pte_unlink(ep_obj->ctrl.pte, C_PTL_LIST_PRIORITY,
+				      mr->writedata_req.req_id, ep_obj->ctrl.tgq);
+		if (ret != FI_SUCCESS)
+			CXIP_FATAL("Unable to queue writedata unlink command: %d\n", ret);
+
+		/* Wait for writedata LE to be unlinked */
+		do {
+			sched_yield();
+			cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
+		} while (mr->writedata_req.mr.mr->mr_state != CXIP_MR_UNLINKED);
+	}
 
 	if (mr->count_events) {
 		count_events_disabled = cxip_mr_disable_check_count_events(mr, cxip_env.mr_cache_events_disable_poll_nsecs);
@@ -323,6 +600,8 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 
 	target_relaxed_order = cxip_ep_obj_mr_relaxed_order(ep_obj);
 	mr->req.cb = cxip_mr_cb;
+	CXIP_DBG("Optimized MR callback registered: mr=%p rma_events=%d\n",
+		 mr, mr->rma_events);
 
 	ret = cxip_pte_alloc_nomap(ep_obj->ptable, ep_obj->ctrl.tgt_evtq,
 				   &opts, cxip_mr_opt_pte_cb, mr, &mr->pte);
@@ -857,8 +1136,8 @@ static int cxip_prov_cache_init_mr_key(struct cxip_mr *mr,
 	key.lac_off = mr->len ? CXI_VA_TO_IOVA(md, mr->buf) : 0;
 	mr->key = key.raw;
 
-	CXIP_DBG("Init cached MR key 0x%016lX, lac: %d, off:0x%016lX\n",
-		 key.raw, key.lac, (uint64_t)key.lac_off);
+	CXIP_DBG("Init cached MR key 0x%016lX, lac: %d, off:0x%016lX, rma_events: %d, opt: %d\n",
+		 key.raw, key.lac, (uint64_t)key.lac_off, mr->rma_events, key.opt);
 
 	return FI_SUCCESS;
 }
@@ -1137,8 +1416,9 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	if (!mr->domain->is_prov_key)
 		mr->mr_util = &cxip_client_key_mr_util_ops;
 	else if (mr->md && mr->md->cached && mr->domain->prov_key_cache &&
-		 !mr->cntr && !mr->count_events && !mr->rma_events)
-		mr->mr_util = &cxip_prov_key_cache_mr_util_ops;
+		 !mr->cntr && !mr->count_events && !mr->rma_events &&
+		 !mr->domain->rma_cq_data_size)
+		 mr->mr_util = &cxip_prov_key_cache_mr_util_ops;
 	else
 		mr->mr_util = &cxip_prov_key_mr_util_ops;
 
@@ -1355,6 +1635,8 @@ static struct fi_ops cxip_mr_fi_ops = {
 static void cxip_mr_fini(struct cxip_mr *mr)
 {
 	cxip_domain_ctrl_id_free(mr->domain, &mr->req);
+	if (mr->domain->rma_cq_data_size)
+		cxip_domain_ctrl_id_free(mr->domain, &mr->writedata_req);
 	cxip_domain_prov_mr_id_free(mr->domain, mr);
 }
 
@@ -1396,8 +1678,21 @@ static int cxip_mr_init(struct cxip_mr *mr, struct cxip_domain *dom,
 			ofi_spin_destroy(&mr->lock);
 			return -FI_ENOSPC;
 		}
+
+		/* Allocate second buffer ID for writedata dual entry if enabled */
+		if (dom->rma_cq_data_size) {
+			ret = cxip_domain_ctrl_id_alloc(dom, &mr->writedata_req);
+			if (ret) {
+				CXIP_WARN("Failed to allocate writedata MR buffer ID: %d\n", ret);
+				cxip_domain_ctrl_id_free(dom, &mr->req);
+				ofi_spin_destroy(&mr->lock);
+				return -FI_ENOSPC;
+			}
+			mr->writedata_req.mr.mr = mr;
+		}
 	} else {
 		mr->req.req_id = -1;
+		mr->writedata_req.req_id = -1;
 	}
 
 	mr->mr_id = -1;
