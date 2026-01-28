@@ -541,6 +541,10 @@ ofi_tostr_domain_attr(char *buf, size_t len, const struct fi_domain_attr *attr,
 		     attr->max_err_data);
 	ofi_strncatf(buf, len, "%s%smr_cnt: %zu\n", prefix, TAB, attr->mr_cnt);
 	ofi_strncatf(buf, len, "%s%stclass: 0x%x\n", prefix, TAB, attr->tclass);
+	ofi_strncatf(buf, len, "%s%smax_ep_auth_key: %zu\n", prefix, TAB,
+		     attr->max_ep_auth_key);
+	ofi_strncatf(buf, len, "%s%smax_group_id: %u\n", prefix, TAB,
+		     attr->max_group_id);
 	ofi_strncatf(buf, len, "%s%smax_cntr_value: %lu\n", prefix, TAB,
 		     attr->max_cntr_value);
 	ofi_strncatf(buf, len, "%s%smax_err_cntr_value: %lu\n", prefix, TAB,
