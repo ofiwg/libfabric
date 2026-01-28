@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -59,7 +59,7 @@ static int fi_opx_close_mr(fid_t fid)
 		}
 	}
 #endif
-	if (opx_mr->dmabuf.fd != -1) {
+	if (opx_mr->dmabuf_internal) {
 		ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
 		close(opx_mr->dmabuf.fd);
 	}
@@ -222,6 +222,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					       "ofi_hmem_get_dmabuf_fd buf=%p, len=%lu, iface=%u, offset=%lu, fd=%d\n",
 					       iov->iov_base, iov->iov_len, hmem_iface, dmabuf_offset, fd);
 
+					opx_mr->dmabuf_internal	 = 1;
 					opx_mr->dmabuf.fd	 = fd;
 					opx_mr->dmabuf.offset	 = dmabuf_offset;
 					opx_mr->dmabuf.len	 = iov->iov_len;
@@ -290,8 +291,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	opx_mr->attr.iface   = (enum fi_hmem_iface) hmem_iface;
 	opx_mr->hmem_unified = hmem_unified ? 1 : 0;
 #else
-	opx_mr->attr.iface   = FI_HMEM_SYSTEM;
-	opx_mr->hmem_unified = 0;
+	opx_mr->attr.iface = FI_HMEM_SYSTEM;
 #endif
 
 	opx_mr->mr_fid.mem_desc	   = opx_mr;
@@ -304,11 +304,10 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 
 	if (flags & FI_MR_DMABUF) {
 		assert(attr);
-		opx_mr->hmem_unified = 0;
-		opx_mr->attr.iface   = attr->iface;
-		opx_mr->attr.device  = attr->device;
-		opx_mr->dmabuf	     = *attr->dmabuf;
-		opx_mr->attr.dmabuf  = &opx_mr->dmabuf;
+		opx_mr->attr.iface  = attr->iface;
+		opx_mr->attr.device = attr->device;
+		opx_mr->dmabuf	    = *attr->dmabuf;
+		opx_mr->attr.dmabuf = &opx_mr->dmabuf;
 	} else {
 		opx_mr->dmabuf.fd      = -1;
 		opx_mr->iov	       = *iov;
