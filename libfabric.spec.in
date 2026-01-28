@@ -1,6 +1,3 @@
-%{!?configopts: %global configopts LDFLAGS=-Wl,--build-id}
-
-
 # Define install_modulefile to 1 if you want this RPM to install a modulefile.
 %{!?install_modulefile: %define install_modulefile 0}
 
@@ -20,6 +17,8 @@ License: GPLv2 or BSD
 Url: http://www.github.com/ofiwg/libfabric
 Source: http://www.github.org/ofiwg/%{name}/releases/download/v{%version}/%{name}-%{version}.tar.bz2
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
+BuildRequires: cmake >= 3.16
+BuildRequires: ninja-build
 %if 0%{?suse_version} >= 1
 Provides: libfabric1 = %{version}-%{release}
 %endif
@@ -40,8 +39,12 @@ Development files for the libfabric library.
 %setup -q -n %{name}-%{version}
 
 %build
-%configure %{configopts}
-make %{?_smp_mflags}
+cmake -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=%{_prefix} \
+  -DCMAKE_INSTALL_LIBDIR=%{_libdir} \
+  %{?_cmake_opts}
+cmake --build build %{?_smp_mflags}
 
 %install
 rm -rf %{buildroot}
@@ -78,9 +81,7 @@ EOF
 %endif
 %endif
 
-%make_install installdirs
-# remove unpackaged files from the buildroot
-rm -f %{buildroot}%{_libdir}/*.la
+DESTDIR=%{buildroot} cmake --install build
 %if 0%{?_version_symbolic_link:1}
 %{__ln_s} %{version} %{buildroot}/%{_version_symbolic_link}
 %endif
@@ -109,6 +110,7 @@ rm -rf %{buildroot}
 %{_libdir}/libfabric*.so
 %{_libdir}/*.a
 %{_libdir}/pkgconfig/libfabric.pc
+%{_libdir}/cmake/Libfabric/
 %if %{install_modulefile}
 %{modulefile_path}/%{name}/%{version}
 %if %{install_default_module_version}
