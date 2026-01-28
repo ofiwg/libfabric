@@ -1081,8 +1081,8 @@ int rocr_hmem_init(void)
 		"Threshold for switching to hsa memcpy for device-to-host"
 		"  copies. (Default 16384");
 
-	fi_param_define(NULL, "hmem_rocr_use_dmabuf", FI_PARAM_INT,
-			"Use dma-buf for sharing buffer with hardware. (default:0)");
+	fi_param_define(NULL, "hmem_rocr_use_dmabuf", FI_PARAM_BOOL,
+			"Use dma-buf for sharing buffer with hardware. (default: true)");
 
 	ret = rocr_hmem_dl_init();
 	if (ret != FI_SUCCESS)
@@ -1257,14 +1257,20 @@ int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 	return FI_SUCCESS;
 }
 
+bool rocr_is_dmabuf_requested(void)
+{
+	int use_dmabuf = 1;
+
+	fi_param_get_int(NULL, "hmem_rocr_use_dmabuf", &use_dmabuf);
+	return use_dmabuf;
+}
+
 static bool rocr_is_dmabuf_supported(void)
 {
 	hsa_status_t hsa_ret;
-	int use_dmabuf = 0;
 	bool dmabuf_support = false, dmabuf_kernel = false;
 
-	fi_param_get_int(NULL, "hmem_rocr_use_dmabuf", &use_dmabuf);
-	if (!use_dmabuf)
+	if (!rocr_is_dmabuf_requested())
 		goto out;
 
 	/* HSA_AMD_SYSTEM_INFO_DMABUF_SUPPORTED = 0x204, we use the number
@@ -1509,6 +1515,11 @@ void *rocr_alloc(size_t size)
 void rocr_free(void *ptr)
 {
 	return;
+}
+
+bool rocr_is_dmabuf_requested(void)
+{
+	return false;
 }
 
 #endif /* HAVE_ROCR */
