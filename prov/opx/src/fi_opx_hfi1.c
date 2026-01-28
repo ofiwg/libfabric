@@ -4492,13 +4492,6 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 			return NULL;
 		}
 		assert(rc == -FI_EAGAIN);
-		if (params->work_elem.work_type == OPX_WORK_TYPE_LAST) {
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				     "===================================== CTS FI_EAGAIN queued low priority %u\n",
-				     params->work_elem.complete);
-			slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
-			return NULL;
-		}
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== CTS FI_EAGAIN queued %u, payload_bytes_to_copy %zu\n",
