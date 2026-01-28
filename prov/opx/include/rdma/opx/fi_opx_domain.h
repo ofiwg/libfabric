@@ -251,7 +251,8 @@ struct fi_opx_mr {
 		uint32_t		 padding;
 	} hfisvc;
 	uint8_t		     hmem_unified;
-	uint8_t		     unused[7];
+	uint8_t		     dmabuf_internal; /* 1 if OPX created dmabuf fd and must close it */
+	uint8_t		     unused[6];
 	struct ofi_mr_entry *cache_entry;
 
 	/* == CACHE LINE 4 == */
