@@ -95,6 +95,7 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 		}
 	}
 
+	tx_entry->fetch_bytes = 0;
 	tx_entry->pkt->pkt_size = rxd_pkt_size(ep, base_hdr, ptr);
 
 	return tx_entry;
