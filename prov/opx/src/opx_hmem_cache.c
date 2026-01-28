@@ -447,22 +447,20 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 	}
 	memcpy(entry->data, &opx_mr, sizeof(struct fi_opx_mr *));
 
-	opx_mr->cache_entry		    = entry;
-	opx_mr->mr_fid.mem_desc		    = opx_mr;
-	opx_mr->mr_fid.fid.fclass	    = FI_CLASS_MR;
-	opx_mr->mr_fid.fid.context	    = NULL;
-	opx_mr->mr_fid.fid.ops		    = &opx_mr_cache_ops;
-	opx_mr->mr_fid.key		    = FI_KEY_NOTAVAIL;
-	opx_mr->iov			    = entry->info.iov;
-	opx_mr->attr.mr_iov		    = &opx_mr->iov;
-	opx_mr->dmabuf_fd		    = -1;
-	opx_mr->attr.iov_count		    = FI_OPX_IOV_LIMIT;
-	opx_mr->attr.offset		    = 0; // set in the normal path
+	opx_mr->cache_entry	   = entry;
+	opx_mr->mr_fid.mem_desc	   = opx_mr;
+	opx_mr->mr_fid.fid.fclass  = FI_CLASS_MR;
+	opx_mr->mr_fid.fid.context = NULL;
+	opx_mr->mr_fid.fid.ops	   = &opx_mr_cache_ops;
+	opx_mr->mr_fid.key	   = FI_KEY_NOTAVAIL;
+	opx_mr->iov		   = entry->info.iov;
+	opx_mr->attr.mr_iov	   = &opx_mr->iov;
+	opx_mr->dmabuf_fd	   = -1;
+	opx_mr->attr.iov_count	   = FI_OPX_IOV_LIMIT;
+	// opx_mr->attr.offset is set in the normal path
 	opx_mr->attr.access		    = access;
 	opx_mr->attr.iface		    = entry->info.iface;
-	opx_mr->hmem_unified		    = 0;
 	opx_mr->flags			    = entry->info.flags;
-	opx_mr->attr.requested_key	    = 0;
 	struct opx_hmem_domain *hmem_domain = (struct opx_hmem_domain *) cache->domain;
 	opx_mr->domain			    = hmem_domain->opx_domain;
 	opx_mr->base_addr    = hmem_domain->opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : entry->info.iov.iov_base;
@@ -563,7 +561,7 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	}
 #endif
 
-	if (opx_mr->dmabuf.fd != -1) {
+	if (opx_mr->dmabuf_internal) {
 		ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
 		close(opx_mr->dmabuf.fd);
 	}
