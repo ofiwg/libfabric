@@ -195,6 +195,8 @@ fi_info:
         max_err_data: 0
         mr_cnt: 0
         tclass: 0x0
+        max_ep_auth_key: 0
+        max_group_id: 0
         max_cntr_value: 18446744073709551615
         max_err_cntr_value: 18446744073709551615
     fi_fabric_attr:
