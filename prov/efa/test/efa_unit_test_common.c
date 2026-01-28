@@ -370,6 +370,7 @@ void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct
 	handshake_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	handshake_hdr->nextra_p3 = nex + 3;
 	handshake_hdr->flags = 0;
+	memset(handshake_hdr->extra_info, 0, nex * sizeof(uint64_t));
 
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_handshake_hdr) + nex * sizeof(uint64_t);
 
