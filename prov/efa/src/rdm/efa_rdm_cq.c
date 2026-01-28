@@ -624,11 +624,12 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 
 
 /**
- * @brief Get the vendor error code for an endpoint's CQ
+ * @brief Get the vendor error code for an endpoint's CQ and mark unresponsive peers
  *
  * This function is essentially a wrapper for `ibv_cq->read_vendor_err()`; making
  * a best-effort attempt to promote the error code to a proprietary EFA
- * provider error code.
+ * provider error code. Additionally, it marks peers as unresponsive by setting
+ * the EFA_RDM_PEER_UNRESP flag when unresponsive or unreachable errors occur.
  *
  * @param[in]	ibv_cq_ex	IBV CQ
  * @param[in]	peer	efa_rdm_peer struct of sender
@@ -643,7 +644,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
  * RDMA Core error codes (#EFA_IO_COMP_STATUSES) for the sake of more accurate
  * error reporting
  */
-static int efa_rdm_cq_get_prov_errno(struct efa_ibv_cq *ibv_cq, struct efa_rdm_peer *peer) {
+static int efa_rdm_cq_process_prov_errno(struct efa_ibv_cq *ibv_cq, struct efa_rdm_peer *peer) {
 	uint32_t vendor_err = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
 
 	if (OFI_UNLIKELY(!peer)) {
@@ -655,8 +656,17 @@ static int efa_rdm_cq_get_prov_errno(struct efa_ibv_cq *ibv_cq, struct efa_rdm_p
 		vendor_err = (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ?
 			     FI_EFA_ERR_ESTABLISHED_RECV_UNRESP :
 			     FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP;
+	} /* fall through */
+	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE:
+		if (!(peer->flags & EFA_RDM_PEER_UNRESP)) {
+			peer->flags |= EFA_RDM_PEER_UNRESP;
+			EFA_RDM_GET_PEER_ADDR_STR(peer->ep, peer, peer_addr_str);
+			EFA_WARN(
+				FI_LOG_EP_CTRL,
+				"The peer of address %s becomes unresponsive\n",
+				peer_addr_str);
+		}
 		break;
-	}
 	default:
 		break;
 	}
@@ -710,7 +720,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 
 	if (!efa_cq_wc_is_unsolicited(cq)) {
 		if (OFI_UNLIKELY(status != IBV_WC_SUCCESS)) {
-			prov_errno = efa_rdm_cq_get_prov_errno(cq, pkt_entry->peer);
+			prov_errno = efa_rdm_cq_process_prov_errno(cq, pkt_entry->peer);
 			if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR &&
 				ep->handle_resource_management == FI_RM_ENABLED) {
 				switch(efa_rdm_pkt_type_of(pkt_entry)) {
@@ -780,7 +790,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 #endif
 
 	if (OFI_UNLIKELY(status != IBV_WC_SUCCESS)) {
-		prov_errno = efa_rdm_cq_get_prov_errno(cq, pkt_entry ? pkt_entry->peer : NULL);
+		prov_errno = efa_rdm_cq_process_prov_errno(cq, pkt_entry ? pkt_entry->peer : NULL);
 		switch (opcode) {
 		case IBV_WC_SEND: /* fall through */
 		case IBV_WC_RDMA_WRITE: /* fall through */

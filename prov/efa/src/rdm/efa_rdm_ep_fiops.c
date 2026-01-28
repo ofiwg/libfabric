@@ -341,6 +341,7 @@ void efa_rdm_ep_init_linked_lists(struct efa_rdm_ep *ep)
 #endif
 	dlist_init(&ep->rxe_list);
 	dlist_init(&ep->txe_list);
+	dlist_init(&ep->ope_posted_ack_list);
 }
 
 /**
@@ -877,34 +878,30 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		ofi_bufpool_destroy(efa_rdm_ep->peer_robuf_pool);
 }
 
-/*
- * @brief determine whether an endpoint has unfinished send
+/**
+ * @brief check if endpoint should wait for send operations to complete
  *
- * Unfinished send includes queued ctrl packets, queued
- * RNR packets and inflight TX packets.
+ * This function checks if there are any operations in the ope_posted_ack_list
+ * that are from responsive peers. If all remaining operations are from unresponsive
+ * peers, the endpoint should not wait for them to complete.
  *
- * @param[in]  efa_rdm_ep      endpoint
- * @return     a boolean
+ * @param[in]	efa_rdm_ep	endpoint
+ * @return	true if should wait, false otherwise
  */
-bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
+static
+bool efa_rdm_ep_close_should_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
-	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *ope;
-	/* Only flush the opes queued due to rnr and ctrl */
-	uint64_t queued_ope_flags = EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_RNR;
+	struct dlist_entry *entry;
 
-	if (efa_rdm_ep->efa_outstanding_tx_ops > 0)
-		return true;
-
-	dlist_foreach_safe(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list, entry, tmp) {
-		ope = container_of(entry, struct efa_rdm_ope,
-					queued_entry);
-		if (ope->ep == efa_rdm_ep && (ope->internal_flags & queued_ope_flags)) {
+	dlist_foreach(&efa_rdm_ep->ope_posted_ack_list, entry) {
+		ope = container_of(entry, struct efa_rdm_ope, ack_list_entry);
+		if (ope->peer && !(ope->peer->flags & EFA_RDM_PEER_UNRESP)) {
 			return true;
 		}
 	}
 
-    return false;
+	return false;
 }
 
 static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
@@ -953,7 +950,8 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
  * @brief wait for send to finish
  *
  * Wait for queued packet to be sent, and inflight send to
- * complete.
+ * complete. Only polls CQ when there are operations with
+ * posted RECEIPT or EOR packets from responsive peers.
  *
  * @param[in]	efa_rdm_ep		endpoint
  * @return 	no return
@@ -967,7 +965,7 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 	tx_cq = efa_base_ep_get_tx_cq(&efa_rdm_ep->base_ep);
 	rx_cq = efa_base_ep_get_rx_cq(&efa_rdm_ep->base_ep);
 
-	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
+	while (efa_rdm_ep_close_should_wait_send(efa_rdm_ep)) {
 		/* poll cq until empty */
 		if (tx_cq)
 			efa_rdm_cq_poll_ibv_cq_closing_ep(&tx_cq->ibv_cq, efa_rdm_ep);
