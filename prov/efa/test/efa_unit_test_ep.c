@@ -2045,19 +2045,15 @@ void test_efa_rdm_ep_enable_ah_alloc_failure(struct efa_resource **state)
 	assert_int_equal(ret, -FI_EINVAL);
 }
 
-void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep);
-
 /**
- * @brief Test efa_rdm_ep_has_unfinished_send() with error completions
+ * @brief Test efa_outstanding_tx_ops with error completions
  *
- * This test verifies that error completions are handled correctly when
- * checking for unfinished send operations. Specifically, it tests that
+ * This test verifies that
  * efa_outstanding_tx_ops is properly decremented when error completions
- * are processed during endpoint closing.
- *
+ * are processed during the cq poll
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ep_has_unfinished_send_with_error_completion(struct efa_resource **state)
+void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -2100,9 +2096,6 @@ void test_efa_rdm_ep_has_unfinished_send_with_error_completion(struct efa_resour
 	/* Set up initial state: increment outstanding_tx_ops to simulate pending operation */
 	efa_rdm_ep->efa_outstanding_tx_ops = 1;
 
-	/* Verify that has_unfinished_send returns true when there are outstanding ops */
-	assert_true(efa_rdm_ep_has_unfinished_send(efa_rdm_ep));
-
 	/* Setup CQ mocks for error completion */
 	g_efa_unit_test_mocks.efa_ibv_cq_end_poll = &efa_mock_efa_ibv_cq_end_poll_check_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_opcode = &efa_mock_efa_ibv_cq_wc_read_opcode_return_mock;
@@ -2122,15 +2115,9 @@ void test_efa_rdm_ep_has_unfinished_send_with_error_completion(struct efa_resour
 	will_return_uint(efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
 	expect_function_call(efa_mock_efa_ibv_cq_end_poll_check_mock);
 
-	/* RX CQ first iteration - no completions */
-	will_return_int(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
-
-	/* Process the error completion using the closing endpoint path */
-	efa_rdm_ep_wait_send(efa_rdm_ep);
+	/* Process the error completion using the cq poll */
+	(void) fi_cq_read(resource->cq, NULL, 0);
 
 	/* Verify that outstanding_tx_ops was decremented despite the error */
 	assert_int_equal(efa_rdm_ep->efa_outstanding_tx_ops, 0);
-
-	/* Verify that has_unfinished_send now returns false */
-	assert_false(efa_rdm_ep_has_unfinished_send(efa_rdm_ep));
 }

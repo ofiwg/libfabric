@@ -776,3 +776,294 @@ void test_efa_rdm_rxe_handle_error_duplicate_prevention(struct efa_resource **st
 	efa_rdm_rxe_release(rxe);
 }
 
+
+/**
+ * @brief Common helper for testing RECEIPT/EOR packet tracking functionality
+ *
+ * This helper function sets up the test environment and mocks for testing
+ * RECEIPT or EOR packet posting, tracking in ope_posted_ack_list, and
+ * completion handling with various return codes and error conditions.
+ *
+ * @param[in] resource Test resource structure
+ * @param[in] pkt_type Packet type (EFA_RDM_RECEIPT_PKT or EFA_RDM_EOR_PKT)
+ * @param[in] post_return_code Return code for packet posting
+ * @param[in] ibv_cq_status IBV completion queue status
+ * @param[in] vendor_err Vendor-specific error code
+ * @param[out] rxe_allocated Pointer to allocated RX operation entry
+ */
+static void test_efa_rdm_ope_ack_packet_tracking_common(
+	struct efa_resource *resource,
+	int pkt_type,
+	int post_return_code,
+	int ibv_cq_status,
+	int vendor_err,
+	struct efa_rdm_ope **rxe_allocated)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_ope *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* List should be initially empty */
+	assert_true(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
+
+	/* Allocate rx entry */
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_tagged);
+	assert_non_null(rxe);
+
+	/* Mock efa_qp_post_send to return success */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return(efa_mock_efa_qp_post_send_return_mock, post_return_code);
+
+	assert_int_equal(efa_rdm_ope_post_send_or_queue(rxe, pkt_type), -post_return_code);;
+	if (!post_return_code) {
+		/* Mock cq ops to simulate the send completion of the posted wr */
+		g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_use_saved_send_wr_with_mock_status;
+		g_efa_unit_test_mocks.efa_ibv_cq_next_poll = &efa_mock_efa_ibv_cq_next_poll_return_mock;
+		g_efa_unit_test_mocks.efa_ibv_cq_end_poll = &efa_mock_efa_ibv_cq_end_poll_check_mock;
+		g_efa_unit_test_mocks.efa_ibv_cq_wc_read_opcode = &efa_mock_efa_ibv_cq_wc_read_opcode_return_mock;
+		g_efa_unit_test_mocks.efa_ibv_cq_wc_read_qp_num = &efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock;
+		g_efa_unit_test_mocks.efa_ibv_cq_wc_read_vendor_err = &efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock;
+
+		will_return_int(efa_mock_efa_ibv_cq_start_poll_use_saved_send_wr_with_mock_status, ibv_cq_status);
+		expect_function_call(efa_mock_efa_ibv_cq_end_poll_check_mock);
+		will_return_int(efa_mock_efa_ibv_cq_wc_read_opcode_return_mock, IBV_WC_SEND);
+		will_return_uint(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
+		will_return_int_maybe(efa_mock_efa_ibv_cq_next_poll_return_mock, ENOENT);
+		will_return_uint_maybe(efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock, vendor_err);
+	}
+
+	*rxe_allocated = rxe;
+}
+
+/**
+ * @brief Test RECEIPT/EOR packet tracking via CQ read
+ *
+ * This test verifies that RECEIPT or EOR packets are correctly added to
+ * ope_posted_ack_list when posted and properly removed when completed
+ * via fi_cq_read with successful completion status.
+ *
+ * @param[in] state Test resource state
+ * @param[in] pkt_type Packet type (EFA_RDM_RECEIPT_PKT or EFA_RDM_EOR_PKT)
+ */
+static
+void test_efa_rdm_ope_receit_eor_packet_tracking_cq_read_common(struct efa_resource **state, int pkt_type)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_ep *efa_rdm_ep;
+
+	test_efa_rdm_ope_ack_packet_tracking_common(resource, pkt_type, 0, IBV_WC_SUCCESS, 0, &rxe);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* It should post a RECEIPT packet and add the rxe to the list */
+	assert_false(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
+
+	/* Poll the cq via cq read */
+	(void) fi_cq_read(resource->cq, NULL, 0);
+
+	/* The cq poll should remove the rxe from the list */
+	assert_true(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
+}
+
+/**
+ * @brief Test packet tracking via wait_send with successful completion
+ *
+ * This test verifies that RECEIPT or EOR packets are correctly added to
+ * ope_posted_ack_list when posted and properly removed when completed
+ * via efa_rdm_ep_wait_send with successful completion status.
+ */
+static
+void test_efa_rdm_ope_ack_packet_tracking_wait_send_common(struct efa_resource **state, int pkt_type)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_ep *efa_rdm_ep;
+
+	test_efa_rdm_ope_ack_packet_tracking_common(resource, pkt_type, 0, IBV_WC_SUCCESS, 0, &rxe);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* It should post a RECEIPT packet and add the rxe to the list */
+	assert_false(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
+
+	/* Poll the cq via wait_send */
+	efa_rdm_ep_wait_send(efa_rdm_ep);
+
+	/* The cq poll should remove the rxe from the list */
+	assert_true(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
+}
+
+/**
+ * @brief Test that failed packet posting does not add to ope_posted_ack_list
+ *
+ * This test verifies that when RECEIPT or EOR packet posting fails,
+ * the operation is not added to the ope_posted_ack_list, ensuring
+ * proper list management during error conditions.
+ */
+static
+void test_efa_rdm_ope_ack_packet_failed_posting_common(struct efa_resource **state, int pkt_type)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_ope *rxe;
+
+	test_efa_rdm_ope_ack_packet_tracking_common(resource, pkt_type, -FI_EINVAL, IBV_WC_SUCCESS, 0, &rxe);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* should NOT add to list due to failure */
+	assert_true(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
+}
+
+/**
+ * @brief Test packet tracking with unresponsive peer during wait_send
+ *
+ * This test verifies that wait_send does not wait for operations from
+ * unresponsive peers. It simulates a peer becoming unresponsive and
+ * verifies that subsequent wait_send calls skip operations from that peer.
+ */
+static
+void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(struct efa_resource **state, int pkt_type)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_ope *rxe, *rxe2;
+
+	test_efa_rdm_ope_ack_packet_tracking_common(resource, pkt_type, 0, IBV_WC_GENERAL_ERR, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, &rxe);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/*
+	 * Call the 1st efa_rdm_ep_wait_send.
+	 * It will first poll the cq and mark the peer as EFA_RDM_PEER_UNRESP
+	 * Then it will not try to poll the cq again because of the peer becomes
+	 * unresponsive. See logic in efa_rdm_ep_close_should_wait_send()
+	 */
+	efa_rdm_ep_wait_send(efa_rdm_ep);
+	assert_true(!!(rxe->peer->flags & EFA_RDM_PEER_UNRESP));
+
+	/* Now posting another ctrl packet against the same unresponsive peer */
+	rxe2 = efa_rdm_ep_alloc_rxe(efa_rdm_ep, rxe->peer, ofi_op_tagged);
+	assert_non_null(rxe2);
+	will_return(efa_mock_efa_qp_post_send_return_mock, 0);
+	assert_int_equal(efa_rdm_ope_post_send_or_queue(rxe2, pkt_type), 0);
+
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_posted_ack_list), 1);
+
+	/* Simulate the case where we are NOT getting more unresponsive error for this peer */
+	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
+	will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+
+	/* Kick off the second wait_send, which should NOT try to progress more because of the unresp peer */
+	efa_rdm_ep_wait_send(efa_rdm_ep);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_posted_ack_list), 1);
+}
+
+
+/**
+ * @brief Test RECEIPT packet tracking via CQ read
+ *
+ * Verifies that RECEIPT packets are correctly added to and removed from
+ * ope_posted_ack_list when posted and completed via fi_cq_read.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ope_receipt_packet_tracking_cq_read(struct efa_resource **state)
+{
+	test_efa_rdm_ope_receit_eor_packet_tracking_cq_read_common(state, EFA_RDM_RECEIPT_PKT);
+}
+
+/**
+ * @brief Test RECEIPT packet tracking via wait_send
+ *
+ * Verifies that RECEIPT packets are correctly added to and removed from
+ * ope_posted_ack_list when posted and completed via efa_rdm_ep_wait_send.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ope_receipt_packet_tracking_wait_send(struct efa_resource **state)
+{
+	test_efa_rdm_ope_ack_packet_tracking_wait_send_common(state, EFA_RDM_RECEIPT_PKT);
+}
+
+/**
+ * @brief Test failed RECEIPT packet posting
+ *
+ * Verifies that failed RECEIPT packet posting does not add operations
+ * to the ope_posted_ack_list.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ope_receipt_packet_failed_posting(struct efa_resource **state)
+{
+	test_efa_rdm_ope_ack_packet_failed_posting_common(state, EFA_RDM_RECEIPT_PKT);
+}
+
+/**
+ * @brief Test RECEIPT packet tracking with unresponsive peer
+ *
+ * Verifies that wait_send skips operations from unresponsive peers,
+ * preventing indefinite blocking during endpoint closure.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ope_receipt_packet_tracking_unresponsive_wait_send(struct efa_resource **state)
+{
+	test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(state, EFA_RDM_RECEIPT_PKT);
+}
+
+/**
+ * @brief Test EOR packet tracking via CQ read
+ *
+ * Verifies that EOR packets are correctly added to and removed from
+ * ope_posted_ack_list when posted and completed via fi_cq_read.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ope_eor_packet_tracking_cq_read(struct efa_resource **state)
+{
+	test_efa_rdm_ope_receit_eor_packet_tracking_cq_read_common(state, EFA_RDM_EOR_PKT);
+}
+
+/**
+ * @brief Test EOR packet tracking via wait_send
+ *
+ * Verifies that EOR packets are correctly added to and removed from
+ * ope_posted_ack_list when posted and completed via efa_rdm_ep_wait_send.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ope_eor_packet_tracking_wait_send(struct efa_resource **state)
+{
+	test_efa_rdm_ope_ack_packet_tracking_wait_send_common(state, EFA_RDM_EOR_PKT);
+}
+
+/**
+ * @brief Test failed EOR packet posting
+ *
+ * Verifies that failed EOR packet posting does not add operations
+ * to the ope_posted_ack_list.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ope_eor_packet_failed_posting(struct efa_resource **state)
+{
+	test_efa_rdm_ope_ack_packet_failed_posting_common(state, EFA_RDM_EOR_PKT);
+}
+
+/**
+ * @brief Test EOR packet tracking with unresponsive peer
+ *
+ * Verifies that wait_send skips operations from unresponsive peers,
+ * preventing indefinite blocking during endpoint closure.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ope_eor_packet_tracking_unresponsive_wait_send(struct efa_resource **state)
+{
+	test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(state, EFA_RDM_EOR_PKT);
+}
