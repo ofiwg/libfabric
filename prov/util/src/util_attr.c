@@ -1276,6 +1276,12 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 	}
 
 	attr->caps = ofi_get_caps(info_caps, hints ? hints->caps : 0, attr->caps);
+	
+	if (attr->max_cntr_value == 0)
+		attr->max_cntr_value = UINT64_MAX;
+	if (attr->max_err_cntr_value == 0)
+		attr->max_err_cntr_value = UINT64_MAX;
+
 	if (!hints)
 		return;
 
