@@ -183,7 +183,7 @@ ssize_t ofi_recvmsg_tcp(SOCKET fd, struct msghdr *msg, int flags);
  * Fallback: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/spinlock.3.html
  */
 
-#if __MAC_OS_X_VERSION_MIN_REQUIRED > 101100
+#if MAC_OS_X_VERSION_MIN_REQUIRED > 101100
 
 #include <os/lock.h>
 
