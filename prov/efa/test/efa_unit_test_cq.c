@@ -172,8 +172,6 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	assert_non_null(strstr(strerror, host_id_str));
 	efa_unit_test_buff_destruct(&send_buff);
 
-	/* reset the mocked cq before it's polled by ep close */
-	will_return_int_always(efa_mock_efa_ibv_cq_start_poll_use_saved_send_wr_with_mock_status, ENOENT);
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
 }
