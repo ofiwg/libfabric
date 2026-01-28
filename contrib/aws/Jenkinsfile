@@ -185,7 +185,7 @@ pipeline {
                     def libfabric_tests = "test_efa_ut test_fabtests_functional test_fork_support test_backward_compatibility 'test_fabtests_performance and lttng'"
                     def one_sided_tests = "'test_imb and not collective'"
                     def libfabric_and_onesided_tests = "${libfabric_tests} ${one_sided_tests}"
-                    def efa_direct_tests = "'test_fabtests_functional and efa-direct'"
+                    def efa_direct_tests = "test_efa_ut 'test_fabtests_functional and efa-direct'"
                     def nccl_functional_tests = "test_ofi_nccl_functional_tests"
 
                     def efa_provider = "--test-libfabric-provider efa"
