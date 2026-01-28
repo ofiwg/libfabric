@@ -54,10 +54,17 @@ AS_IF([test x"$enable_debug" != x"no"],
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG], [$dbg],
 	[defined to 1 if configured with --enable-debug])
 
+AC_CHECK_SIZEOF([void *])
+
 AC_ARG_ENABLE([efa],
 	[AS_HELP_STRING([--enable-efa],
 		[Enable efa provider specific tests - default YES])],
 	[], [enable_efa=yes])
+
+AS_IF([test x"$enable_efa" = x"yes"],
+      [AS_IF([test "$linux" -eq 0 -o "$ac_cv_sizeof_void_p" -ne 8],
+             [enable_efa=no
+             AC_MSG_NOTICE([EFA fabtests are disabled: require 64-bit Linux])])])
 
 AM_CONDITIONAL([ENABLE_EFA], [test x"$enable_efa" = x"yes"])
 
