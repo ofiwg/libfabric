@@ -229,10 +229,36 @@ control commands are usable with a counter:
 
 The fi_cntr_read call returns the current value of the counter.
 
+Applications must handle counter wraparound that occurs when counter values
+exceed the limit defined by the domain attribute `max_cntr_value`. This
+value, which defaults to UINT64_MAX but may be lower due to provider
+limitations, defines the maximum value returned by fi_cntr_read()
+before wraparound occurs.
+
+When a counter reaches its maximum value and additional operations complete,
+the counter will wrap around to zero and continue incrementing from that
+point. Applications that need to track the total number of operations
+beyond the provider's counter limits are responsible for detecting and
+handling this wraparound behavior by resetting counters before they reach
+the maximum, or it could result in incorrect value.
+
 ## fi_cntr_readerr
 
 The read error call returns the number of operations that completed in
 error and were unable to update the counter.
+
+Applications must handle counter wraparound that occurs when error counter
+values exceed the limit defined by the domain attribute `max_err_cntr_value`.
+This value, which defaults to UINT64_MAX but may be lower due to provider
+limitations, defines the maximum value returned by fi_cntr_readerr()
+before wraparound occurs.
+
+When an error counter reaches its maximum value and additional error operations
+complete, the counter will wrap around to zero and continue incrementing from
+that point. Applications that need to track the total number of error operations
+beyond the provider's counter limits are responsible for detecting and handling
+this wraparound behavior by resetting the error counters before they reach the
+maximum, or it could result in incorrect value.
 
 ## fi_cntr_add
 
