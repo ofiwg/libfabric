@@ -371,6 +371,14 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
 		peer->efa_outstanding_tx_ops++;
 
 	ope->efa_outstanding_tx_ops++;
+	switch (efa_rdm_pkt_type_of(pkt_entry)) {
+	case EFA_RDM_RECEIPT_PKT:
+	case EFA_RDM_EOR_PKT:
+		assert(ope->type == EFA_RDM_RXE);
+		dlist_insert_tail(&ope->ack_list_entry, &ope->ep->ope_posted_ack_list);
+	default:
+		break;
+	}
 #if ENABLE_DEBUG
 	ep->efa_total_posted_tx_ops++;
 #endif
@@ -433,8 +441,17 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
 	if (pkt_entry->peer)
 		pkt_entry->peer->efa_outstanding_tx_ops--;
 
-	if (ope)
+	if (ope) {
 		ope->efa_outstanding_tx_ops--;
+		switch(efa_rdm_pkt_type_of(pkt_entry)) {
+		case EFA_RDM_RECEIPT_PKT:
+		case EFA_RDM_EOR_PKT:
+			assert(ope->type == EFA_RDM_RXE);
+			dlist_remove(&ope->ack_list_entry);
+		default:
+			break;
+		}
+	}
 }
 
 /* @brief Queue a packet that encountered RNR error and setup RNR backoff

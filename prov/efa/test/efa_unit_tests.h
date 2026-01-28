@@ -38,6 +38,7 @@ struct efa_resource {
 	struct fid_cq *cq;
 };
 
+/* common functions in efa_unit_test_common.c */
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *fabric_name);
 struct fi_info *efa_unit_test_alloc_hints_hmem(enum fi_ep_type ep_type, char *fabric_name);
 
@@ -109,6 +110,8 @@ struct efa_rdm_ope *efa_unit_test_alloc_txe(struct efa_resource *resource, uint3
 
 struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint32_t op);
 
+/* end of common functions in efa_unit_test_common.c */
+
 /* test cases */
 
 /* begin efa_unit_test_av.c */
@@ -171,7 +174,7 @@ void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size();
 void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size();
 void test_efa_rdm_ep_support_unsolicited_write_recv();
 void test_efa_rdm_ep_default_sizes();
-void test_efa_rdm_ep_has_unfinished_send_with_error_completion();
+void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion();
 void test_dgram_cq_read_empty_cq();
 void test_ibv_cq_ex_read_empty_cq();
 void test_ibv_cq_ex_read_failed_poll();
@@ -278,6 +281,15 @@ void test_efa_rdm_txe_handle_error_queue_flags_cleanup();
 void test_efa_rdm_rxe_handle_error_queue_flags_cleanup();
 void test_efa_rdm_txe_handle_error_duplicate_prevention();
 void test_efa_rdm_rxe_handle_error_duplicate_prevention();
+void test_efa_rdm_ope_receipt_packet_tracking_cq_read();
+void test_efa_rdm_ope_receipt_packet_tracking_wait_send();
+void test_efa_rdm_ope_receipt_packet_failed_posting();
+void test_efa_rdm_ope_receipt_packet_tracking_unresponsive_wait_send();
+void test_efa_rdm_ope_eor_packet_tracking_cq_read();
+void test_efa_rdm_ope_eor_packet_tracking_wait_send();
+void test_efa_rdm_ope_eor_packet_failed_posting();
+void test_efa_rdm_ope_eor_packet_tracking_unresponsive_wait_send();
+
 
 /* end of efa_unit_test_ope.c */
 void test_efa_rdm_msg_send_to_local_peer_with_null_desc();
