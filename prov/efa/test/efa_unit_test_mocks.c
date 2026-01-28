@@ -132,9 +132,6 @@ int efa_mock_use_saved_send_wr(struct ibv_cq_ex *ibv_cqx, int status)
 {
 	int i;
 
-	if (g_ibv_submitted_wr_id_cnt == 0)
-		return ENOENT;
-
 	ibv_cqx->wr_id = (uintptr_t)g_ibv_submitted_wr_id_vec[0];
 	ibv_cqx->status = status;
 
@@ -148,6 +145,8 @@ int efa_mock_use_saved_send_wr(struct ibv_cq_ex *ibv_cqx, int status)
 int efa_mock_efa_ibv_cq_start_poll_use_saved_send_wr_with_mock_status(struct efa_ibv_cq *ibv_cq,
 							       struct ibv_poll_cq_attr *attr)
 {
+	if (g_ibv_submitted_wr_id_cnt == 0)
+		return ENOENT;
 	return efa_mock_use_saved_send_wr(ibv_cq->ibv_cq_ex, mock_int());
 }
 
@@ -158,6 +157,8 @@ int efa_mock_efa_ibv_cq_next_poll_return_mock(struct efa_ibv_cq *ibv_cq)
 
 int efa_mock_efa_ibv_cq_next_poll_use_saved_send_wr_with_mock_status(struct efa_ibv_cq *ibv_cq)
 {
+	if (g_ibv_submitted_wr_id_cnt == 0)
+		return ENOENT;
 	return efa_mock_use_saved_send_wr(ibv_cq->ibv_cq_ex, mock());
 }
 
