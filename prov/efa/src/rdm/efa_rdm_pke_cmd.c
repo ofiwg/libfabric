@@ -453,15 +453,8 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 					break;
 				default:
 				{
-					char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
-					size_t buflen=0;
-
-					memset(&ep_addr_str, 0, sizeof(ep_addr_str));
-					memset(&peer_addr_str, 0, sizeof(peer_addr_str));
-					buflen = sizeof(ep_addr_str);
-					efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &buflen);
-					buflen = sizeof(peer_addr_str);
-					efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, pkt_entry->peer->conn->fi_addr, peer_addr_str, &buflen);
+					EFA_RDM_GET_EP_ADDR_STR(ep, ep_addr_str);
+					EFA_RDM_GET_PEER_ADDR_STR(ep, pkt_entry->peer, peer_addr_str);
 					EFA_WARN(FI_LOG_CQ,
 						"While sending a handshake packet, an error occurred."
 						"  Our address: %s, peer address: %s\n",
