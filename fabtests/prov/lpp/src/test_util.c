@@ -400,14 +400,14 @@ void util_validate_cq_entry(struct rank_info *ri,
 		container_of(entry_context, struct context, fi_context);
 
 	if (context_val != 0) {
-		INSIST_EQ(ri, cp->context_val, context_val, "%lx");
+		INSIST_EQ(ri, cp->context_val, context_val, "%" PRIx64);
 	}
 
 	char *flags_str = fi_tostr_safe(&flags, FI_TYPE_CAPS);
 	char *entry_flags_str = fi_tostr_safe(&entry_flags, FI_TYPE_CAPS);
 	if (flags != 0 && entry_flags != flags) {
 		ERRORX(ri,
-		       "CQ entry requires flags 0x%lx (%s), but instead has 0x%lx (%s)",
+		       "CQ entry requires flags 0x%" PRIx64 " (%s), but instead has 0x%" PRIx64 " (%s)",
 		       flags, flags_str, entry_flags, entry_flags_str);
 	}
 	free(flags_str);
@@ -415,7 +415,7 @@ void util_validate_cq_entry(struct rank_info *ri,
 
 	if (flags & FI_REMOTE_CQ_DATA && tentry->data != data){
 		ERRORX(ri,
-		       "FI_REMOTE_CQ_DATA not properly set, expected: 0x%lx, got 0x%lx",
+		       "FI_REMOTE_CQ_DATA not properly set, expected: 0x%" PRIx64 ", got 0x%" PRIx64,
 		       data, tentry->data);
 	}
 
@@ -429,11 +429,11 @@ void util_validate_cq_entry(struct rank_info *ri,
 		struct mr_info *mr_info = &ri->mr_info[cp->mr_idx];
 		INSIST_EQ(ri, mr_info->valid, 1, "%d");
 
-		if ((uint64_t)tentry->buf != (uint64_t)mr_info->uaddr + buf_offset) {
+		if ((uint64_t)(uintptr_t)tentry->buf != (uint64_t)(uintptr_t)mr_info->uaddr + buf_offset) {
 			ERRORX(ri,
-			       "MULTI_RECV completion  entry 'buf' is 0x%lx, but should be 0x%lx",
-			       (uint64_t)tentry->buf,
-			       (uint64_t)mr_info->uaddr + buf_offset);
+			       "MULTI_RECV completion  entry 'buf' is 0x%" PRIx64 ", but should be 0x%" PRIx64,
+			       (uint64_t)(uintptr_t)tentry->buf,
+			       (uint64_t)(uintptr_t)mr_info->uaddr + buf_offset);
 		}
 	}
 }
@@ -458,7 +458,7 @@ static void wait_cq_common(struct rank_info *ri, struct fid_cq *cq,
 		if (expect_empty) {
 			if (nread != -FI_EAGAIN) {
 				ERRORX(ri,
-				       "Expected empty CQ, but found an entry (nread == %ld %s)",
+				       "Expected empty CQ, but found an entry (nread == %zd %s)",
 				       nread,
 				       nread < 0 ? fi_strerror(labs(nread)) :
 						   "");
@@ -468,7 +468,7 @@ static void wait_cq_common(struct rank_info *ri, struct fid_cq *cq,
 		}
 		waited_ms += 10;
 		if (waited_ms >= 1000 * max_wait_s) {
-			ERRORX(ri, "timed out waiting on CQ after %lus",
+			ERRORX(ri, "timed out waiting on CQ after %" PRIu64 "s",
 			       max_wait_s);
 		}
 	} while (nread == -FI_EAGAIN);
@@ -555,7 +555,7 @@ void util_wait_cntr_many(struct rank_info *ri,
 			uint64_t errval = fi_cntr_readerr(cntr);
 			if (errval != 0) {
 				ERRORX(ri,
-				       "Error counter for cntr %zu is %lu\n", i,
+				       "Error counter for cntr %zu is %" PRIu64 "\n", i,
 				       errval);
 			}
 			if (val >= desired_val) {
@@ -568,7 +568,7 @@ void util_wait_cntr_many(struct rank_info *ri,
 			waited_ms += 10;
 			if (waited_ms >= 1000 * max_wait_s) {
 				ERRORX(ri,
-				       "timed out waiting on cntrs after %lus (n_params: %zu, finished 0x%lx)",
+				       "timed out waiting on cntrs after %" PRIu64 "s (n_params: %zu, finished 0x%" PRIx64 ")",
 				       max_wait_s, n_params, finished);
 			}
 		} else {
@@ -641,7 +641,7 @@ static void verify_buf(struct rank_info *ri, volatile void *uaddr,
 		expected_c = (uint8_t)expected_buf;
 		if (buf[i] != expected_c) {
 			ERRORX(ri,
-			       "buffer invalid at byte %ld (original byte was %x; we found %x, but expected %x)",
+			       "buffer invalid at byte %zu (original byte was %x; we found %x, but expected %x)",
 			       i + offset, orig_c, buf[i], expected_c);
 		}
 	}
@@ -659,7 +659,7 @@ void util_verify_buf(struct rank_info *ri, struct verify_buf_params *params)
 
 	INSIST(ri, mr_info->valid);
 	INSIST(ri, params->offset + params->length <
-			   (uint64_t)mr_info->uaddr + mr_info->length);
+			   (uint64_t)(uintptr_t)mr_info->uaddr + mr_info->length);
 
 	if(mr_info->hmem_iface == FI_HMEM_SYSTEM){
 		vbuf = mr_info->uaddr;
@@ -756,10 +756,10 @@ struct context *get_ctx(struct rank_info *ri, uint64_t context_val,
 
 		val = tsearch((void*)cp, &ri->context_tree_root, context_compare);
 		if (val == NULL) {
-			ERRORX(ri, "rank %ld: failed to tsearch insert context",
+			ERRORX(ri, "rank %" PRIu64 ": failed to tsearch insert context",
 			       ri->rank);
 		} else if (*(struct context**)val != cp) {
-			ERRORX(ri, "rank %ld: duplicate context in tree", ri->rank);
+			ERRORX(ri, "rank %" PRIu64 ": duplicate context in tree", ri->rank);
 		}
 	}
 

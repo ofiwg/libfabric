@@ -71,7 +71,9 @@ static inline void lnx_dump_core_ep_stats(struct lnx_core_ep *cep)
 
 	tstats = &cep->cep_t_stats;
 
-	FI_TRACE(&lnx_prov, FI_LOG_DOMAIN, "%s,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld\n",
+	FI_TRACE(&lnx_prov, FI_LOG_DOMAIN, "%s,%" PRIu64 ",%" PRIu64
+			",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%"
+			PRIu64 ",%" PRIu64 "\n",
 		 cep->cep_domain->cd_info->domain_attr->name,
 		 tstats->st_num_tsend, tstats->st_num_tsendv,
 		 tstats->st_num_tsendmsg, tstats->st_num_tsenddata,
@@ -92,11 +94,11 @@ lnx_dump_srx_queue_stats(struct lnx_ep *lep)
 	}
 
 	FI_TRACE(&lnx_prov, FI_LOG_DOMAIN,
-		 "RECVQ,-,-,-,-,-,-,-,-,%lu,%lu\n",
+		 "RECVQ,-,-,-,-,-,-,-,-,%" PRIu64 ",%" PRIu64 "\n",
 		 lep->le_srq.lps_trecv.lqp_recvq.lq_max,
 		 lep->le_srq.lps_trecv.lqp_recvq.lq_rolling_avg);
 	FI_TRACE(&lnx_prov, FI_LOG_DOMAIN,
-		 "UNEXQ,-,-,-,-,-,-,-,-,%lu,%lu\n",
+		 "UNEXQ,-,-,-,-,-,-,-,-,%" PRIu64 ",%" PRIu64 "\n",
 		 lep->le_srq.lps_trecv.lqp_unexq.lq_max,
 		 lep->le_srq.lps_trecv.lqp_unexq.lq_rolling_avg);
 }

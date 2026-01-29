@@ -37,6 +37,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <inttypes.h>
 
 #define RED_CODE "\033[1;31m"
 #define RESET_CODE "\033[0m"
@@ -55,8 +56,8 @@
 #define debug(fmt, ...) debugln(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
 #define debugt(ri, msg)                                                        \
-	debugln(__FILE__, __LINE__, "[rank:%ld node:%c iter:%ld test:%s] %s",  \
-		(ri)->rank, my_node_name, (ri)->iteration,                     \
+	debugln(__FILE__, __LINE__, "[rank:%" PRId64 " node:%c iter:%" PRId64 " test:%s] %s",  \
+		(int64_t)(ri)->rank, my_node_name, (int64_t)(ri)->iteration,                     \
 		(ri)->cur_test_name, msg)
 
 // Like errx() from err.h.
@@ -81,16 +82,16 @@
 #define ERRORX(ri, fmt, ...)                                                   \
 	do {                                                                   \
 		debug_dump_trace((ri));                                        \
-		errorx("[rank:%ld node:%c iter:%ld] " fmt, ri->rank,           \
-		       my_node_name, ri->iteration, ##__VA_ARGS__)             \
+		errorx("[rank:%" PRId64 " node:%c iter:%" PRId64 "] " fmt, (int64_t)(ri)->rank,           \
+		       my_node_name, (int64_t)(ri)->iteration, ##__VA_ARGS__)             \
 	} while (0)
 
 // Like error(), but with context about the current rank.
 #define ERROR(ri, fmt, ...)                                                    \
 	do {                                                                   \
 		debug_dump_trace((ri));                                        \
-		error("[rank:%ld node:%c iter:%ld] " fmt, ri->rank,            \
-		      my_node_name, ri->iteration, ##__VA_ARGS__)              \
+		error("[rank:%" PRId64 " node:%c iter:%" PRId64 "] " fmt, (int64_t)ri->rank,            \
+		      my_node_name, (int64_t)ri->iteration, ##__VA_ARGS__)              \
 	} while (0)
 
 #define INSIST(ri, condition)                                                  \
