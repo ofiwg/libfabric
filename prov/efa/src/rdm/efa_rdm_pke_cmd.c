@@ -539,6 +539,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ep *ep;
 
 	ep = pkt_entry->ep;
+
+	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
 	/*
 	 * For a send completion, pkt_entry->peer can be NULL in 3 situations:
 	 * 1. the pkt_entry is used for a local read operation
@@ -549,7 +551,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	if (!pkt_entry->peer &&
 	    !(pkt_entry->flags & EFA_RDM_PKE_LOCAL_READ)) {
 		EFA_WARN(FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
-		efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
 		efa_rdm_pke_release_tx(pkt_entry);
 		return;
 	}
@@ -557,7 +558,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* These pkts are eager pkts withour hdrs */
 	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
 		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
-		efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
 		efa_rdm_pke_release_tx(pkt_entry);
 		return;
 	}
@@ -667,8 +667,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		return;
 	}
-
-	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
 	efa_rdm_pke_release_tx(pkt_entry);
 }
 
