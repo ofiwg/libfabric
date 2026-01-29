@@ -471,3 +471,32 @@ void test_efa_domain_open_ops_get_mr_lkey(struct efa_resource **state)
     assert_int_equal(ret, FI_SUCCESS);
     assert_true(lkey == mr.ibv_mr->lkey);
 }
+
+void test_efa_domain_mr_cache_enabled(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	struct fi_info *hints;
+	int saved_mr_cache_enable = efa_mr_cache_enable;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	hints->domain_attr->mr_mode |= FI_MR_LOCAL;
+	efa_mr_cache_enable = 1;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14), hints, true, true);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert_non_null(efa_domain->cache);
+	efa_mr_cache_enable = saved_mr_cache_enable;
+}
+
+void test_efa_domain_mr_cache_disabled(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	int saved_mr_cache_enable = efa_mr_cache_enable;
+
+	efa_mr_cache_enable = 0;
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert_null(efa_domain->cache);
+	efa_mr_cache_enable = saved_mr_cache_enable;
+}

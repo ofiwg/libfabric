@@ -262,13 +262,12 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 	/*
-	 * Open the MR cache if application did not set FI_MR_LOCAL
-	 * and the cache is enabled
+	 * Open the MR cache if the cache is enabled
 	 * 
 	 * Explicit memory registrations from external application
 	 * should never go in the MR cache
 	 */
-	if (!efa_domain->mr_local && efa_mr_cache_enable) {
+	if (efa_mr_cache_enable) {
 		err = efa_mr_cache_open(&efa_domain->cache, efa_domain);
 		if (err) {
 			ret = err;
