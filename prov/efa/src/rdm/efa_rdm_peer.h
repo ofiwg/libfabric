@@ -22,6 +22,7 @@
  * Progress engine will retry sending handshake.
  */
 #define EFA_RDM_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
+#define EFA_RDM_PEER_UNRESP                BIT_ULL(6) /**< peer is unresponsive and we should not wait for completions */
 
 
 OFI_DECL_RECVWIN_BUF(struct efa_rdm_pke*, efa_rdm_robuf, uint32_t);
@@ -267,5 +268,10 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
 
 int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
+
+/* Macro for getting peer address string */
+#define EFA_RDM_GET_PEER_ADDR_STR(ep, peer, peer_addr_str) \
+	char peer_addr_str[OFI_ADDRSTRLEN] = {0}; \
+	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->conn->fi_addr, peer_addr_str, &(size_t){sizeof peer_addr_str});
 
 #endif /* EFA_RDM_PEER_H */

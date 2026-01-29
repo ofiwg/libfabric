@@ -198,6 +198,9 @@ struct efa_rdm_ep {
 	size_t ope_queued_before_handshake_cnt;
 	bool homogeneous_peers; /* peers always support the same capabilities in extra_info as this ep */
 	struct fi_info *shm_info;	/* fi_info used to create shm_ep */
+
+	/* track operations with posted packets to ack a remote */
+	struct dlist_entry ope_posted_ack_list;
 };
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
@@ -534,5 +537,12 @@ bool efa_rdm_ep_support_unsolicited_write_recv(struct efa_rdm_ep *ep)
 bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep);
 
 int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep);
+
+void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep);
+
+/* Macro for getting local endpoint address string */
+#define EFA_RDM_GET_EP_ADDR_STR(ep, ep_addr_str) \
+	char ep_addr_str[OFI_ADDRSTRLEN] = {0}; \
+	efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &(size_t){sizeof ep_addr_str});
 
 #endif

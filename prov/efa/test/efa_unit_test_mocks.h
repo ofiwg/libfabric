@@ -96,6 +96,7 @@ ssize_t __real_efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type);
 
 ssize_t efa_mock_efa_rdm_ope_post_send_return_mock(struct efa_rdm_ope *ope, int pkt_type);
 
+
 /* EFA data path ops real functions */
 int __real_efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad);
 int __real_efa_qp_post_send(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
