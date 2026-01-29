@@ -828,8 +828,8 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 	/*
 	 * Send data packets until window or data queue is exhausted.
 	 */
-	dlist_foreach_container(&domain->ope_longcts_send_list, struct efa_rdm_ope,
-				ope, entry) {
+	dlist_foreach_container_safe(&domain->ope_longcts_send_list, struct efa_rdm_ope,
+				ope, entry, tmp) {
 		peer = ope->peer;
 		assert(peer);
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
