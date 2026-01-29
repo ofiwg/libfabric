@@ -838,6 +838,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 			break;
 		case IBV_WC_RDMA_READ:
 		case IBV_WC_RDMA_WRITE:
+			efa_rdm_ep_record_tx_op_completed(pkt_entry->ep, pkt_entry);
 			efa_rdm_pke_handle_rma_completion(pkt_entry);
 			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			break;
