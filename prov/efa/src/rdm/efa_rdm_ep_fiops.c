@@ -136,9 +136,11 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 {
 	int ret;
+	uint64_t tx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
 	uint64_t rx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
 
 #if ENABLE_DEBUG
+	tx_pkt_pool_base_flags &= ~OFI_BUFPOOL_NO_TRACK;
 	rx_pkt_pool_base_flags &= ~OFI_BUFPOOL_NO_TRACK;
 #endif
 
@@ -148,7 +150,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		efa_rdm_ep_get_tx_pool_size(ep),
 		efa_rdm_ep_get_tx_pool_size(ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
-		0,
+		tx_pkt_pool_base_flags,
 		&ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
