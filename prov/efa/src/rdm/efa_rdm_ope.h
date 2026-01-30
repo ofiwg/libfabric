@@ -51,8 +51,7 @@ struct efa_rdm_atomic_ex {
 	struct iovec comp_iov[EFA_RDM_IOV_LIMIT];
 	int comp_iov_count;
 	void *result_desc[EFA_RDM_IOV_LIMIT];
-	/* compare_desc does not require persistence b/c it is only used to send the RTA */
-	void **compare_desc;
+	void *compare_desc[EFA_RDM_IOV_LIMIT];
 };
 
 /**
