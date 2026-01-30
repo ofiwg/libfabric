@@ -1067,3 +1067,112 @@ void test_efa_rdm_ope_eor_packet_tracking_unresponsive_wait_send(struct efa_reso
 {
 	test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(state, EFA_RDM_EOR_PKT);
 }
+
+/**
+ * @brief Test that atomic_ex.compare_desc array is properly copied
+ * and persists after the caller's stack frame is destroyed
+ *
+ * This test verifies the compare_desc fix where compare_desc was a
+ * pointer to stack memory that became dangling.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_efa_rdm_atomic_compare_desc_persistence(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff, result_buff, compare_buff;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t addr;
+	uint64_t operand = 0x1234567890ABCDEF;
+	uint64_t compare = 0;
+	void *desc_array[1];
+	void *result_desc_array[1];
+	int ret;
+	struct fi_ioc ioc = {0};
+	struct fi_ioc compare_ioc = {0};
+	struct fi_ioc result_ioc = {0};
+	struct fi_rma_ioc rma_ioc = {0};
+	struct fi_msg_atomic msg = {0};
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+
+	/* disable shm to force using efa device to send */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	/* Setup peer address */
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	/* Set peer flags to simulate handshake state */
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer->flags = EFA_RDM_PEER_REQ_SENT;
+	peer->is_local = false;
+
+	/* Setup buffers */
+	efa_unit_test_buff_construct(&send_buff, resource, sizeof(uint64_t));
+	efa_unit_test_buff_construct(&result_buff, resource, sizeof(uint64_t));
+	efa_unit_test_buff_construct(&compare_buff, resource, sizeof(uint64_t));
+
+	memcpy(send_buff.buff, &operand, sizeof(uint64_t));
+	memcpy(compare_buff.buff, &compare, sizeof(uint64_t));
+
+	/* Create desc array on stack */
+	desc_array[0] = fi_mr_desc(send_buff.mr);
+	result_desc_array[0] = fi_mr_desc(result_buff.mr);
+	void *compare_desc_array[1];
+	compare_desc_array[0] = fi_mr_desc(compare_buff.mr);
+	void *original_desc_value = compare_desc_array[0];
+
+	/* Setup atomic message with FI_DELIVERY_COMPLETE to force queuing */
+	ioc.addr = send_buff.buff;
+	ioc.count = 1;
+	compare_ioc.addr = compare_buff.buff;
+	compare_ioc.count = 1;
+	result_ioc.addr = result_buff.buff;
+	result_ioc.count = 1;
+
+	msg.msg_iov = &ioc;
+	msg.desc = desc_array;
+	msg.iov_count = 1;
+	msg.addr = addr;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.datatype = FI_UINT64;
+	msg.op = FI_CSWAP;
+
+	/*
+	 * Call fi_compare_atomicmsg with FI_DELIVERY_COMPLETE.
+	 * This forces the operation to be queued when handshake is not complete.
+	 * The old buggy code would store a pointer to compare_desc_array,
+	 * which becomes dangling when this function returns.
+	 * The fix copies the array contents into txe->atomic_ex.compare_desc[].
+	 */
+	ret = fi_compare_atomicmsg(resource->ep, &msg, &compare_ioc, compare_desc_array, 1,
+				   &result_ioc, result_desc_array, 1, FI_DELIVERY_COMPLETE);
+
+	/* Operation should succeed (queued) */
+	assert_int_equal(ret, 0);
+
+	/* Destroy stack array to simulate function return */
+	compare_desc_array[0] = (void *)(uintptr_t)0xDEADBEEF;
+	
+	/* Retrieve queued txe from ope_queued_list */
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	assert_false(dlist_empty(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list));
+	txe = container_of(efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list.next,
+			   struct efa_rdm_ope, queued_entry);
+	
+	/* Verify compare_desc was copied, not just pointer stored */
+	assert_ptr_equal(txe->atomic_ex.compare_desc[0], original_desc_value);
+
+	efa_unit_test_buff_destruct(&send_buff);
+	efa_unit_test_buff_destruct(&result_buff);
+	efa_unit_test_buff_destruct(&compare_buff);
+}
