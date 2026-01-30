@@ -1,6 +1,6 @@
 CC=gcc
 NVCC=nvcc
-NVCC_FLAGS=-G -arch=sm_90
+NVCC_FLAGS=-G -gencode arch=compute_90,code=sm_90 -gencode arch=compute_100,code=sm_100
 CFLAGS=-pthread
 CUDA_FLAGS=-Xcompiler -fPIC
 CUDA_INCLUDES=-I/usr/local/cuda/include
