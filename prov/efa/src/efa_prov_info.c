@@ -534,11 +534,11 @@ err_free:
 /**
  * @brief allocate an prov_info object that matches the functionality of EFA RDM endpoint
  *
- * EFA RDM endpoint implemented mulitple additional functionalities over rdma-core
+ * EFA RDM endpoint implemented multiple additional functionalities over rdma-core
  * SRD QP. The added functionalities
  * include:
  *
- * tag matching, orderred send/receive, message segmentation,
+ * tag matching, ordered send/receive, message segmentation,
  * emulated RMA/atomic emulation, multi recv.
  *
  * This function allocates a prov_info object the matches EFA RDM endpoint's functionality.
