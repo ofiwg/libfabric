@@ -733,23 +733,23 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 void opx_hfi1_rdma_lib_close()
 {
 	pthread_mutex_lock(&opx_rdma_ops.lock);
-	if (ofi_atomic_get64(&opx_rdma_ops.ref_cnt)) {
-		fi_opx_ref_dec(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
-	}
-	if (ofi_atomic_get64(&opx_rdma_ops.ref_cnt)) {
-		pthread_mutex_unlock(&opx_rdma_ops.lock);
-		return;
-	}
-	fi_opx_ref_finalize(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
 	if (opx_rdma_ops.libhfi1verbs) {
+		if (ofi_atomic_get64(&opx_rdma_ops.ref_cnt)) {
+			fi_opx_ref_dec(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
+		}
+		if (ofi_atomic_get64(&opx_rdma_ops.ref_cnt)) {
+			pthread_mutex_unlock(&opx_rdma_ops.lock);
+			return;
+		}
+		fi_opx_ref_finalize(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
 		dlclose(opx_rdma_ops.libhfi1verbs);
-	}
-	opx_rdma_ops.libhfi1verbs = NULL;
+		opx_rdma_ops.libhfi1verbs = NULL;
 
-	if (opx_rdma_ops.libibverbs) {
-		dlclose(opx_rdma_ops.libibverbs);
+		if (opx_rdma_ops.libibverbs) {
+			dlclose(opx_rdma_ops.libibverbs);
+		}
+		opx_rdma_ops.libibverbs = NULL;
 	}
-	opx_rdma_ops.libibverbs = NULL;
 	pthread_mutex_unlock(&opx_rdma_ops.lock);
 }
 
