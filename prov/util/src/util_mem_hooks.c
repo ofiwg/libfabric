@@ -63,6 +63,10 @@
 static int ofi_memhooks_start(struct ofi_mem_monitor *monitor);
 static void ofi_memhooks_stop(struct ofi_mem_monitor *monitor);
 
+/* Global synchronization for thread-safe patching operations */
+static pthread_mutex_t ofi_memhooks_lock = PTHREAD_MUTEX_INITIALIZER;
+static int ofi_memhooks_ref_count = 0;
+
 struct ofi_memhooks memhooks = {
 	.monitor.iface = FI_HMEM_SYSTEM,
 	.monitor.init = ofi_monitor_init,
@@ -692,47 +696,63 @@ static bool ofi_memhooks_valid(struct ofi_mem_monitor *monitor,
 
 static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
 {
-	int i, ret;
+	int i, ret = 0;
 
-	if (memhooks_monitor->subscribe == ofi_memhooks_subscribe)
-		return 0;
+	pthread_mutex_lock(&ofi_memhooks_lock);
 
-	memhooks_monitor->subscribe = ofi_memhooks_subscribe;
-	memhooks_monitor->unsubscribe = ofi_memhooks_unsubscribe;
-	memhooks_monitor->valid = ofi_memhooks_valid;
-	dlist_init(&memhooks.intercept_list);
+	/* First caller installs patches */
+	if (++ofi_memhooks_ref_count == 1) {
+		if (!symbols_intercepted) {
+			memhooks_monitor->subscribe = ofi_memhooks_subscribe;
+			memhooks_monitor->unsubscribe = ofi_memhooks_unsubscribe;
+			memhooks_monitor->valid = ofi_memhooks_valid;
+			dlist_init(&memhooks.intercept_list);
 
-	for (i = 0; i < OFI_INTERCEPT_MAX; ++i)
-		dlist_init(&intercepts[i].dl_intercept_list);
+			for (i = 0; i < OFI_INTERCEPT_MAX; ++i)
+				dlist_init(&intercepts[i].dl_intercept_list);
 
-	for (i = 0; i < OFI_INTERCEPT_MAX; ++i) {
-		ret = ofi_intercept_symbol(&intercepts[i]);
-		if (ret != 0) {
-			FI_DBG(&core_prov, FI_LOG_MR,
-				"intercept %s failed %d %s\n", intercepts[i].symbol,
-					ret, fi_strerror(ret));
-			goto err_intercept_failed;
+			for (i = 0; i < OFI_INTERCEPT_MAX; ++i) {
+				ret = ofi_intercept_symbol(&intercepts[i]);
+				if (ret != 0) {
+					FI_DBG(&core_prov, FI_LOG_MR,
+						"intercept %s failed %d %s\n", intercepts[i].symbol,
+						ret, fi_strerror(ret));
+					while (--i >= 0)
+						ofi_remove_patch(&intercepts[i]);
+					ofi_memhooks_ref_count--;
+					memhooks_monitor->subscribe = NULL;
+					memhooks_monitor->unsubscribe = NULL;
+					goto out;
+				}
+			}
+			if (ret == 0) {
+				symbols_intercepted = true;
+			}
+		}
+	} else {
+		/* Subsequent callers just verify setup is complete */
+		if (!symbols_intercepted) {
+			ofi_memhooks_ref_count--;
+			ret = -FI_EAGAIN;
 		}
 	}
 
-	symbols_intercepted = true;
-
-	return 0;
-
-err_intercept_failed:
-	while (--i >= 0)
-		ofi_remove_patch(&intercepts[i]);
-	memhooks_monitor->subscribe = NULL;
-	memhooks_monitor->unsubscribe = NULL;
-
+out:
+	pthread_mutex_unlock(&ofi_memhooks_lock);
 	return ret;
 }
 
 static void ofi_memhooks_stop(struct ofi_mem_monitor *monitor)
 {
-	ofi_restore_intercepts();
-	memhooks_monitor->subscribe = NULL;
-	memhooks_monitor->unsubscribe = NULL;
+	pthread_mutex_lock(&ofi_memhooks_lock);
+	/* Last caller restores patches */
+	if (--ofi_memhooks_ref_count == 0 && symbols_intercepted) {
+		ofi_restore_intercepts();
+		memhooks_monitor->subscribe = NULL;
+		memhooks_monitor->unsubscribe = NULL;
+		symbols_intercepted = false;
+	}
+	pthread_mutex_unlock(&ofi_memhooks_lock);
 }
 
 void ofi_memhooks_atfork_handler(void)
