@@ -430,11 +430,13 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	av->used_explicit++;
 
 	/* Handle AH LRU list and refcnt */
+	ofi_genlock_lock(&av->domain->util_domain.lock);
 	assert(!dlist_empty(&ah->implicit_conn_list));
 	dlist_remove(&implicit_conn->ah_implicit_conn_list_entry);
 	efa_ah_implicit_av_lru_ah_move(av->domain, ah);
 	ah->implicit_refcnt--;
 	ah->explicit_refcnt++;
+	ofi_genlock_unlock(&av->domain->util_domain.lock);
 
 	EFA_INFO(FI_LOG_AV,
 		 "Peer with implicit fi_addr %" PRIu64
