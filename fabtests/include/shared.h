@@ -51,6 +51,14 @@
 
 #include "ofi_atomic.h"
 
+#ifdef __GNUC__
+    #define FT_LIKELY(x)   __builtin_expect(!!(x), 1)
+    #define FT_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#else
+    #define FT_LIKELY(x)   (x)
+    #define FT_UNLIKELY(x) (x)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
