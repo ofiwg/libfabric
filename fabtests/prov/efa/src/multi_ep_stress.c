@@ -35,6 +35,7 @@ struct test_opts {
 	int sender_ep_recycling;
 	/* Number of times for receiver to recycle endpoints */
 	int receiver_ep_recycling;
+	bool remove_av;
 	bool shared_av;
 	bool shared_cq;
 	enum { OP_MSG_UNTAGGED = 0, OP_MSG_TAGGED, OP_RMA_WRITEDATA } op_type;
@@ -49,6 +50,7 @@ static struct test_opts topts = {
 	.msgs_per_sender = 1000,
 	.sender_ep_recycling = 1, // Default to 1 recycling for sender
 	.receiver_ep_recycling = 1, // Default to 1 recycling for receiver
+	.remove_av = false, // Default: do not remove old AV
 	.shared_av = false, // Default: 1 AV per EP
 	.shared_cq = false, // Default: 1 CQ per EP
 	.op_type = OP_MSG_UNTAGGED,
@@ -61,6 +63,7 @@ enum {
 	OPT_MSGS_PER_EP,
 	OPT_SENDER_EP_CYCLES,
 	OPT_RECEIVER_EP_CYCLES,
+	OPT_REMOVE_AV,
 	OPT_SHARED_AV,
 	OPT_SHARED_CQ,
 	OPT_OP_TYPE,
@@ -73,6 +76,7 @@ static struct option test_long_opts[] = {
 	{"msgs-per-ep", required_argument, NULL, OPT_MSGS_PER_EP},
 	{"sender-ep-cycles", required_argument, NULL, OPT_SENDER_EP_CYCLES},
 	{"receiver-ep-cycles", required_argument, NULL, OPT_RECEIVER_EP_CYCLES},
+	{"remove-av", no_argument, NULL, OPT_REMOVE_AV},
 	{"shared-av", no_argument, NULL, OPT_SHARED_AV},
 	{"shared-cq", no_argument, NULL, OPT_SHARED_CQ},
 	{"op-type", required_argument, NULL, OPT_OP_TYPE},
@@ -571,10 +575,12 @@ static void *run_sender_worker(void *arg)
 				assert(msg.info.worker_id == ctx->worker_id);
 				printf("Sender %u: received an update for peer %u\n",
 						ctx->worker_id, msg.info.peer_idx);
-				ret = fi_av_remove(ctx->av, &fi_addr[msg.info.peer_idx], 1, 0);
-				if (ret) {
-					FT_PRINTERR("fi_av_remove", ret);
-					goto out;
+				if (topts.remove_av) {
+					ret = fi_av_remove(ctx->av, &fi_addr[msg.info.peer_idx], 1, 0);
+					if (ret) {
+						FT_PRINTERR("fi_av_remove", ret);
+						goto out;
+					}
 				}
 				memcpy(ep_addr[msg.info.peer_idx], msg.info.ep_addr, MAX_EP_ADDR_LEN);
 				memcpy(&peer_rma[msg.info.peer_idx], &msg.info.rma, sizeof(struct rma_info));
@@ -1298,6 +1304,9 @@ static int parse_test_opts(int argc, char **argv)
 						"at least 1\n");
 				return -1;
 			}
+			break;
+		case OPT_REMOVE_AV:
+			topts.remove_av = true;
 			break;
 		case OPT_SHARED_AV:
 			topts.shared_av = true;
