@@ -163,6 +163,15 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 			EFA_WARN(FI_LOG_EP_CTRL,
 			       "Error: message id has already been processed. received: %" PRIu32 " expected: %"
 			       PRIu32 "\n", msg_id, ofi_recvwin_next_exp_id(robuf));
+
+#if ENABLE_DEBUG
+			/* Print debug info on duplicate message */
+			EFA_WARN(FI_LOG_EP_CTRL,
+			         "  pkt_entry=%p gen=%u\n"
+			         "  Debug info history:\n",
+			         pkt_entry, pkt_entry->gen);
+			efa_rdm_pke_print_debug_info(pkt_entry);
+#endif
 			return -FI_EALREADY;
 		} else {
 			/* Current receive window size is too small to hold incoming messages.
