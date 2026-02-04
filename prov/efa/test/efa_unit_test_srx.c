@@ -105,7 +105,7 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke);
 	efa_rdm_ep->efa_rx_pkts_posted =
-		efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+		efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	/* Create a fake peer */
 	/* TODO: peer must be constructed by CQ read path */

@@ -92,7 +92,7 @@ void test_efa_rdm_pke_release_rx_list(struct efa_resource **state)
     /* Fake a rx pkt entry */
     pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
     assert_non_null(pke);
-    efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+    efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
     /* link multiple pkes to this pke */
     for (i = 1; i < 10; i++) {
@@ -133,7 +133,7 @@ void test_efa_rdm_pke_alloc_rta_rxe(struct efa_resource **state)
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke);
 	efa_rdm_ep->efa_rx_pkts_posted =
-		efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+		efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	/* Create and register a fake peer */
 	assert_int_equal(
@@ -175,7 +175,7 @@ void test_efa_rdm_pke_alloc_rtw_rxe(struct efa_resource **state)
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke);
 	efa_rdm_ep->efa_rx_pkts_posted =
-		efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+		efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	/* Create and register a fake peer */
 	assert_int_equal(
@@ -224,7 +224,7 @@ void test_efa_rdm_pke_alloc_rtr_rxe(struct efa_resource **state)
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke);
 	efa_rdm_ep->efa_rx_pkts_posted =
-		efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+		efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	/* Create and register a fake peer */
 	assert_int_equal(
@@ -265,7 +265,7 @@ void test_efa_rdm_pke_get_unexp(struct efa_resource **state)
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	unexp_pkt_entry = efa_rdm_pke_get_unexp(&pkt_entry);
 	assert_non_null(unexp_pkt_entry);
