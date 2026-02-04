@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2025 by Cornelis Networks.
+ * Copyright (C) 2023-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -428,6 +428,31 @@ void opx_hmem_warn_trace(enum fi_hmem_iface iface, char *string, int result)
 }
 
 /**
+ * @brief Wait for the oustanding GPU operations on the stream to complete
+ *
+ * @param stream The opx stream to be synchronized
+ */
+__OPX_FORCE_INLINE__
+void opx_hmem_stream_synchronize(enum fi_hmem_iface iface, union opx_hmem_stream *stream)
+{
+	int result = OPX_HMEM_ERROR;
+#if HAVE_CUDA
+	if (iface == FI_HMEM_CUDA) {
+		result = cuStreamSynchronize(stream->cu_stream);
+	}
+#endif
+#if HAVE_ROCR
+	if (iface == FI_HMEM_ROCR) {
+		result = hipStreamSynchronize(stream->hip_stream);
+	}
+#endif
+	if (result) {
+		opx_hmem_warn_trace(iface, "Error synchronizing the stream", result);
+		abort();
+	}
+}
+
+/**
  * @brief Create a stream for GPU operations to complete
  *
  * @param stream Pointer to the opx stream that was created
@@ -470,6 +495,7 @@ __OPX_FORCE_INLINE__
 void opx_hmem_stream_destroy(enum fi_hmem_iface iface, union opx_hmem_stream *stream)
 {
 	if (stream) {
+		opx_hmem_stream_synchronize(iface, stream);
 #if HAVE_CUDA
 		if (iface == FI_HMEM_CUDA) {
 			cuStreamDestroy(stream->cu_stream);
@@ -481,31 +507,6 @@ void opx_hmem_stream_destroy(enum fi_hmem_iface iface, union opx_hmem_stream *st
 		}
 #endif
 		free(stream);
-	}
-}
-
-/**
- * @brief Wait for the oustanding GPU operations on the stream to complete
- *
- * @param stream The opx stream to be synchronized
- */
-__OPX_FORCE_INLINE__
-void opx_hmem_stream_synchronize(enum fi_hmem_iface iface, union opx_hmem_stream *stream)
-{
-	int result = OPX_HMEM_ERROR;
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		result = cuStreamSynchronize(stream->cu_stream);
-	}
-#endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		result = hipStreamSynchronize(stream->hip_stream);
-	}
-#endif
-	if (result) {
-		opx_hmem_warn_trace(iface, "Error synchronizing the stream", result);
-		abort();
 	}
 }
 
