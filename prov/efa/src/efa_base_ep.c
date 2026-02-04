@@ -134,9 +134,6 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 
 	fi_freeinfo(base_ep->info);
 
-	if (base_ep->self_ah)
-		efa_ah_release(base_ep->domain, base_ep->self_ah, false);
-
 	err = efa_base_ep_destruct_qp(base_ep);
 
 	if (base_ep->efa_recv_wr_vec)
@@ -423,20 +420,6 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 	return err;
 }
 
-/* efa_base_ep_create_self_ah() create an address handler for
- * an EP's own address. The address handler is used by
- * an EP to read from itself. It is used to
- * copy data from host memory to GPU memory.
- */
-static inline
-int efa_base_ep_create_self_ah(struct efa_base_ep *base_ep, struct ibv_pd *ibv_pd)
-{
-
-	base_ep->self_ah = efa_ah_alloc(base_ep->domain, base_ep->src_addr.raw, false);
-
-	return base_ep->self_ah ? 0 : -FI_EINVAL;
-}
-
 void efa_qp_destruct(struct efa_qp *qp)
 {
 	int err;
@@ -475,13 +458,6 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep)
 	base_ep->src_addr.qpn = base_ep->qp->qp_num;
 	base_ep->src_addr.pad = 0;
 	base_ep->src_addr.qkey = base_ep->qp->qkey;
-
-	err = efa_base_ep_create_self_ah(base_ep, base_ep->domain->ibv_pd);
-	if (err) {
-		EFA_WARN(FI_LOG_EP_CTRL,
-			 "Endpoint cannot create ah for its own address\n");
-		efa_base_ep_destruct_qp_unsafe(base_ep);
-	}
 
 	return err;
 }

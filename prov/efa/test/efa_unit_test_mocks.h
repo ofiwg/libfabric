@@ -25,7 +25,7 @@ int __real_ibv_destroy_ah(struct ibv_ah *ibv_ah);
 
 struct ibv_ah *efa_mock_ibv_create_ah_check_mock(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
-struct ibv_ah *efa_mock_ibv_create_ah_mock_enomem(struct ibv_pd *pd, struct ibv_ah_attr *attr);
+struct ibv_ah *efa_mock_ibv_create_ah_return_null(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
 struct ibv_ah *efa_mock_ibv_create_ah_dont_create_self_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
