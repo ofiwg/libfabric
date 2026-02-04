@@ -117,8 +117,10 @@ struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint3
 /* begin efa_unit_test_av.c */
 void test_av_insert_duplicate_raw_addr();
 void test_av_insert_duplicate_gid();
-void test_efa_ah_cnt_one_av();
-void test_efa_ah_cnt_multi_av();
+void test_efa_ah_cnt_one_av_efa();
+void test_efa_ah_cnt_one_av_efa_direct();
+void test_efa_ah_cnt_multi_av_efa();
+void test_efa_ah_cnt_multi_av_efa_direct();
 void test_av_multiple_ep_efa();
 void test_av_multiple_ep_efa_direct();
 void test_av_reinsertion();
@@ -430,8 +432,8 @@ void test_efa_ep_lock_type_no_op();
 void test_efa_ep_lock_type_mutex();
 void test_efa_rdm_ep_shm_ep_different_info();
 void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data();
-void test_efa_base_ep_enable_ah_alloc_failure();
 void test_efa_rdm_ep_enable_ah_alloc_failure();
+void test_efa_rdm_ep_ibv_create_ah_failure();
 void test_efa_rdm_ep_setopt_cq_flow_control();
 void test_efa_direct_ep_setopt_cq_flow_control_no_rx_cq_data();
 void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data();

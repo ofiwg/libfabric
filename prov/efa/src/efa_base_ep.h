@@ -76,7 +76,6 @@ struct efa_base_ep {
 	struct fi_info *info;
 	size_t rnr_retry;
 	struct efa_ep_addr src_addr;
-	struct efa_ah *self_ah;
 
 	bool util_ep_initialized;
 	bool efa_qp_enabled;

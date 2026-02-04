@@ -2001,30 +2001,6 @@ void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data(struct efa_resour
 }
 
 /**
- * @brief Test fi_enable failure when efa_ah_alloc returns NULL
- *
- * This test verifies that when efa_ah_alloc fails (returns NULL),
- * the fi_enable call properly returns -FI_EINVAL.
- *
- * @param[in] state cmocka state variable
- */
-void test_efa_base_ep_enable_ah_alloc_failure(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-	int ret;
-
-	/* Construct endpoint but don't enable it yet */
-	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-	/* Mock efa_ah_alloc to return NULL to simulate failure */
-	g_efa_unit_test_mocks.efa_ah_alloc = &efa_mock_efa_ah_alloc_return_null;
-
-	/* Attempt to enable the endpoint - should fail with -FI_EINVAL */
-	ret = fi_enable(resource->ep);
-	assert_int_equal(ret, -FI_EINVAL);
-}
-
-/**
  * @brief Test fi_enable failure when efa_ah_alloc returns NULL for RDM fabric
  *
  * @param[in] state cmocka state variable
@@ -2039,6 +2015,27 @@ void test_efa_rdm_ep_enable_ah_alloc_failure(struct efa_resource **state)
 
 	/* Mock efa_ah_alloc to return NULL to simulate failure */
 	g_efa_unit_test_mocks.efa_ah_alloc = &efa_mock_efa_ah_alloc_return_null;
+
+	/* Attempt to enable the endpoint - should fail with -FI_EINVAL */
+	ret = fi_enable(resource->ep);
+	assert_int_equal(ret, -FI_EINVAL);
+}
+
+/**
+ * @brief Test fi_enable failure when ibv_create_ah returns NULL for RDM fabric
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_ep_ibv_create_ah_failure(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	int ret;
+
+	/* Construct endpoint but don't enable it yet */
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	/* Mock ibv_create_ah to return NULL to simulate failure */
+	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_return_null;
 
 	/* Attempt to enable the endpoint - should fail with -FI_EINVAL */
 	ret = fi_enable(resource->ep);
