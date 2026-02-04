@@ -555,7 +555,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 
 	if (txe->peer == NULL) {
 		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_READ;
-		ah = ep->base_ep.self_ah;
+		ah = ep->self_ah;
 		qpn = qp->qp_num;
 		qkey = qp->qkey;
 	} else {
@@ -645,7 +645,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	self_comm = (txe->peer == NULL);
 	if (self_comm) {
 		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_WRITE;
-		ah = ep->base_ep.self_ah;
+		ah = ep->self_ah;
 		qpn = qp->qp_num;
 		qkey = qp->qkey;
 	} else {

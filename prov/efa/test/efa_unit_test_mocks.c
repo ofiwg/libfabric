@@ -55,6 +55,15 @@ struct ibv_ah *efa_mock_ibv_create_ah_dont_create_self_ah(struct ibv_pd *pd, str
 }
 
 /**
+ * @brief fail with error and return NULL
+ */
+struct ibv_ah *efa_mock_ibv_create_ah_return_null(struct ibv_pd *pd, struct ibv_ah_attr *attr)
+{
+	errno = ETIME;
+	return NULL;
+}
+
+/**
  * @brief call real ibv_destroy_ah
  */
 int efa_mock_ibv_destroy_ah_dont_create_self_ah(struct ibv_ah *ibv_ah)
