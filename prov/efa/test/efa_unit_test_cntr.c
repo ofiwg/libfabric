@@ -157,7 +157,7 @@ void test_efa_rdm_cntr_post_initial_rx_pkts(struct efa_resource **state)
 	assert_int_equal(cnt, 0);
 
 	/* At this time, rx pool size number of rx pkts are posted */
-	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, efa_rdm_ep_get_rx_pool_size(efa_rdm_ep));
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep));
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 0);
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, 0);
 
