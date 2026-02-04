@@ -53,9 +53,9 @@ void efa_mock_efa_ah_release_dont_create_self_ah(struct efa_domain *domain,
 int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 					    uint32_t inlen);
 
-extern void *g_ibv_submitted_wr_id_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
-
+extern void **g_ibv_submitted_wr_id_vec;
 extern int g_ibv_submitted_wr_id_cnt;
+extern int g_ibv_submitted_wr_id_capacity;
 
 void efa_ibv_ah_limit_cnt_reset();
 
