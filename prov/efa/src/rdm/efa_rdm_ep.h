@@ -131,6 +131,8 @@ struct efa_rdm_ep {
 	struct ofi_bufpool *peer_robuf_pool;
 
 #if ENABLE_DEBUG
+	/* buffer pool for packet debug info */
+	struct ofi_bufpool *pke_debug_info_pool;
 	/* tx/rx_entries waiting to receive data in
          * long CTS msg/read/write protocols */
 	struct dlist_entry ope_recv_list;
