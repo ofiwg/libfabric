@@ -153,8 +153,8 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	ret = efa_rdm_ep_create_pke_pool(
 		ep,
 		true, /* need memory registration */
-		efa_rdm_ep_get_tx_pool_size(ep),
-		efa_rdm_ep_get_tx_pool_size(ep), /* max count==chunk_cnt means pool is not allowed to grow */
+		efa_base_ep_get_tx_pool_size(&ep->base_ep),
+		efa_base_ep_get_tx_pool_size(&ep->base_ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
 		tx_pkt_pool_base_flags,
 		&ep->efa_tx_pkt_pool);
@@ -298,7 +298,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 sizeof(struct efa_rdm_pke_debug_info_buffer),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit to max_cnt */
-				 efa_rdm_ep_get_tx_pool_size(ep) + efa_base_ep_get_rx_pool_size(&ep->base_ep),
+				 efa_base_ep_get_tx_pool_size(&ep->base_ep) + efa_base_ep_get_rx_pool_size(&ep->base_ep),
 				 OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		goto err_free;
@@ -669,6 +669,22 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		goto err_close_shm_ep;
 	}
 
+	efa_rdm_ep->send_pkt_entry_vec = calloc(sizeof(struct efa_rdm_pke *), efa_base_ep_get_tx_pool_size(&efa_rdm_ep->base_ep));
+	if (!efa_rdm_ep->send_pkt_entry_vec) {
+		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for efa_rdm_ep->send_pkt_entry_vec!\n");
+		ret = -FI_ENOMEM;
+		goto err_free_pke_vec;
+	}
+
+	efa_rdm_ep->send_pkt_entry_size_vec = calloc(sizeof(int), efa_base_ep_get_tx_pool_size(&efa_rdm_ep->base_ep));
+	if (!efa_rdm_ep->send_pkt_entry_size_vec) {
+		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for efa_rdm_ep->send_pkt_entry_size_vec!\n");
+		ret = -FI_ENOMEM;
+		goto err_free_send_pkt_entry_vec;
+	}
+
+	dlist_init(&efa_rdm_ep->ep_peer_list);
+
 	dlist_init(&efa_rdm_ep->ep_peer_list);
 
 	*ep = &efa_rdm_ep->base_ep.util_ep.ep_fid;
@@ -681,6 +697,10 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	(*ep)->cm = &efa_rdm_ep_cm_ops;
 	return 0;
 
+err_free_send_pkt_entry_vec:
+	free(efa_rdm_ep->send_pkt_entry_vec);
+err_free_pke_vec:
+	free(efa_rdm_ep->pke_vec);
 err_close_shm_ep:
 	if (efa_rdm_ep->shm_ep) {
 		retv = fi_close(&efa_rdm_ep->shm_ep->fid);
@@ -1164,6 +1184,10 @@ static int efa_rdm_ep_close(struct fid *fid)
 
 	if (efa_rdm_ep->pke_vec)
 		free(efa_rdm_ep->pke_vec);
+	if (efa_rdm_ep->send_pkt_entry_vec)
+		free(efa_rdm_ep->send_pkt_entry_vec);
+	if (efa_rdm_ep->send_pkt_entry_size_vec)
+		free(efa_rdm_ep->send_pkt_entry_size_vec);
 
 	ofi_genlock_unlock(&domain->srx_lock);
 

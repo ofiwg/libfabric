@@ -492,7 +492,7 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 		*pkt_entry_cnt = (ope->window - 1) / ope->ep->max_data_payload_size + 1;
 		if (*pkt_entry_cnt > available_tx_pkts)
 			*pkt_entry_cnt = available_tx_pkts;
-		assert(*pkt_entry_cnt > 0 && *pkt_entry_cnt <= EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND);
+		assert(*pkt_entry_cnt > 0 && *pkt_entry_cnt <= efa_base_ep_get_tx_pool_size(&ope->ep->base_ep));
 		for (i = 0; i < *pkt_entry_cnt - 1; ++i)
 			pkt_entry_data_size_vec[i] = ope->ep->max_data_payload_size;
 
@@ -1791,42 +1791,42 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 {
 	struct efa_rdm_ep *ep;
-	struct efa_rdm_pke *pkt_entry_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
 	ssize_t err;
 	int64_t segment_offset;
-	int pkt_entry_cnt, pkt_entry_cnt_allocated = 0, pkt_entry_data_size_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+	int pkt_entry_cnt, pkt_entry_cnt_allocated = 0;
 	int i;
 	uint64_t flags = 0;
 
-	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type, &pkt_entry_cnt, pkt_entry_data_size_vec);
-	if (err)
-		return err;
-	assert(pkt_entry_cnt <= EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND);
-
 	ep = ope->ep;
 	assert(ep);
+
+	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type, &pkt_entry_cnt, ep->send_pkt_entry_size_vec);
+	if (err)
+		return err;
+	assert(pkt_entry_cnt <= efa_base_ep_get_tx_pool_size(&ep->base_ep));
+
 	segment_offset = efa_rdm_pkt_type_contains_data(pkt_type) ? (int64_t) ope->bytes_sent : -1;
 	for (i = 0; i < pkt_entry_cnt; ++i) {
-		pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		ep->send_pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
-		if (OFI_UNLIKELY(!pkt_entry_vec[i])) {
+		if (OFI_UNLIKELY(!ep->send_pkt_entry_vec[i])) {
 			err = -FI_EAGAIN;
 			goto handle_err;
 		}
 
 		pkt_entry_cnt_allocated++;
 
-		err = efa_rdm_pke_fill_data(pkt_entry_vec[i],
+		err = efa_rdm_pke_fill_data(ep->send_pkt_entry_vec[i],
 					    pkt_type,
 					    ope,
 					    segment_offset,
-					    pkt_entry_data_size_vec[i]);
+					    ep->send_pkt_entry_size_vec[i]);
 		if (err)
 			goto handle_err;
 
 		if (segment_offset != -1 && pkt_entry_cnt > 1) {
-			assert(pkt_entry_data_size_vec[i] > 0);
-			segment_offset += pkt_entry_data_size_vec[i];
+			assert(ep->send_pkt_entry_size_vec[i] > 0);
+			segment_offset += ep->send_pkt_entry_size_vec[i];
 		}
 	}
 
@@ -1846,19 +1846,19 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	if (ope->fi_flags & FI_MORE && efa_rdm_pkt_type_is_eager(pkt_type))
 		flags |= FI_MORE;
 
-	err = efa_rdm_pke_sendv(pkt_entry_vec, pkt_entry_cnt, flags);
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec, pkt_entry_cnt, flags);
 	if (err)
 		goto handle_err;
 
 	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
 	for (i = 0; i < pkt_entry_cnt; ++i)
-		efa_rdm_pke_handle_sent(pkt_entry_vec[i], pkt_type, ope->peer);
+		efa_rdm_pke_handle_sent(ep->send_pkt_entry_vec[i], pkt_type, ope->peer);
 
 	return FI_SUCCESS;
 
 handle_err:
 	for (i = 0; i < pkt_entry_cnt_allocated; ++i)
-		efa_rdm_pke_release_tx(pkt_entry_vec[i]);
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 
 	return efa_rdm_ope_post_send_fallback(ope, pkt_type, err);
 }

@@ -118,6 +118,14 @@ void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 	if (ret)
 		goto err;
 
+	/* Allocate wr_id vector based on actual tx pool size */
+	if (!g_ibv_submitted_wr_id_vec) {
+		struct efa_base_ep *base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+		g_ibv_submitted_wr_id_capacity = efa_base_ep_get_tx_pool_size(base_ep);
+		g_ibv_submitted_wr_id_vec = calloc(g_ibv_submitted_wr_id_capacity, sizeof(void *));
+		assert(g_ibv_submitted_wr_id_vec);
+	}
+
 	ret = fi_eq_open(resource->fabric, &eq_attr, &resource->eq, NULL);
 	if (ret)
 		goto err;
@@ -262,6 +270,12 @@ void efa_unit_test_resource_destruct(struct efa_resource *resource)
 		assert_int_equal(fi_close(&resource->ep->fid), 0);
 	}
 
+	if (g_ibv_submitted_wr_id_vec) {
+		free(g_ibv_submitted_wr_id_vec);
+		g_ibv_submitted_wr_id_vec = NULL;
+		g_ibv_submitted_wr_id_capacity = 0;
+	}
+
 	if (resource->eq) {
 		assert_int_equal(fi_close(&resource->eq->fid), 0);
 	}
@@ -355,7 +369,7 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
  * @brief Construct EFA_RDM_HANDSHAKE_PKT
  *
  * This will append any optional handshake packet fields (see EFA RDM protocol
- * spec) iff they are non-zero in attr. This function is used to create a mock 
+ * spec) if they are non-zero in attr. This function is used to create a mock
  * handshake packet to test the receive path handling of the packet.
  *
  * @param[in,out]	pkt_entry	Packet entry. Must be non-NULL.
