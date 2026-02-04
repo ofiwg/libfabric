@@ -477,6 +477,7 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 static void *run_sender_worker(void *arg)
 {
 	struct worker_context *ctx = (struct worker_context*) arg;
+	struct ep_message msg;
 	int ret;
 	struct random_data random_data;
 	const uint64_t total_ops = ctx->num_peers * topts.msgs_per_sender;
@@ -495,7 +496,6 @@ static void *run_sender_worker(void *arg)
 	if (topts.verbose)
 		printf("Sender %u: Waiting for peer addresses\n", ctx->worker_id);
 	for (size_t i = 0; i < ctx->num_peers; i++) {
-		struct ep_message msg;
 		ret = ep_message_queue_pop(ctx->control_queue, &msg); // blocks
 		if (ret) {
 			FT_PRINTERR("ep_message_queue_pop", ret);
@@ -568,9 +568,14 @@ static void *run_sender_worker(void *arg)
 
 		// Apply all pending AV updates
 		while (true) {
-			struct ep_message msg;
 			ret = ep_message_queue_try_pop(ctx->control_queue, &msg);
 			if (ret == 0) {
+				if (msg.type == EP_MESSAGE_TYPE_TERMINATOR) {
+					printf("Sender %u: recevied terminator message before completing all ops. "
+							"Current cycle: %d, total ops: %lu\n",
+							ctx->worker_id, cycle, total_ops);
+					goto out;
+				}
 				assert(msg.type == EP_MESSAGE_TYPE_UPDATE);
 				assert(msg.info.worker_id == ctx->worker_id);
 				printf("Sender %u: received an update for peer %u\n",
@@ -702,8 +707,16 @@ static void *run_sender_worker(void *arg)
 		}
 	}
 
-	printf("Sender %d: All cycles completed, total ops=%lu\n",
+	printf("Sender %d: All cycles completed, total ops: %lu\n",
 	       ctx->worker_id, total_ops);
+
+	do {
+		ret = ep_message_queue_pop(ctx->control_queue, &msg); // blocks
+		if (ret) {
+			FT_PRINTERR("ep_message_queue_pop", ret);
+			goto out;
+		}
+	} while (msg.type != EP_MESSAGE_TYPE_TERMINATOR);
 
 out:
 	if (ret) {
@@ -1030,6 +1043,16 @@ static int run_sender(void)
 		if (msg.type == EP_MESSAGE_TYPE_TERMINATOR)
 			break;
 		ret = ep_message_queue_push(workers[msg.info.worker_id].control_queue, &msg);
+		if (ret) {
+			FT_PRINTERR("ep_message_queue_push", ret);
+			goto out;
+		}
+	}
+
+	// Terminate workers
+	for (int i = 0; i < topts.num_sender_workers; i++) {
+		assert(msg.type == EP_MESSAGE_TYPE_TERMINATOR);
+		ret = ep_message_queue_push(workers[i].control_queue, &msg);
 		if (ret) {
 			FT_PRINTERR("ep_message_queue_push", ret);
 			goto out;
