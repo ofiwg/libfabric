@@ -168,8 +168,8 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	ret = efa_rdm_ep_create_pke_pool(
 		ep,
 		true, /* need memory registration */
-		efa_rdm_ep_get_rx_pool_size(ep),
-		efa_rdm_ep_get_rx_pool_size(ep), /* max count==chunk_cnt means pool is not allowed to grow */
+		efa_base_ep_get_rx_pool_size(&ep->base_ep),
+		efa_base_ep_get_rx_pool_size(&ep->base_ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
 		rx_pkt_pool_base_flags,
 		&ep->efa_rx_pkt_pool);
@@ -298,7 +298,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 sizeof(struct efa_rdm_pke_debug_info_buffer),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit to max_cnt */
-				 efa_rdm_ep_get_tx_pool_size(ep) + efa_rdm_ep_get_rx_pool_size(ep),
+				 efa_rdm_ep_get_tx_pool_size(ep) + efa_base_ep_get_rx_pool_size(&ep->base_ep),
 				 OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		goto err_free;
@@ -662,7 +662,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->write_in_order_aligned_128_bytes = false;
 	efa_rdm_ep->homogeneous_peers = false;
 
-	efa_rdm_ep->pke_vec = calloc(sizeof(struct efa_rdm_pke *), EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV);
+	efa_rdm_ep->pke_vec = calloc(sizeof(struct efa_rdm_pke *), efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep));
 	if (!efa_rdm_ep->pke_vec) {
 		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for efa_rdm_ep->pke_vec!\n");
 		ret = -FI_ENOMEM;

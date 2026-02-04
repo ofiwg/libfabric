@@ -39,7 +39,6 @@ struct efa_rdm_ep_queued_copy {
  * The value was from EFA device's attribute (device->efa_attr.max_sq_wr)
  */
 #define EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND (4096)
-#define EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV (8192)
 
 #define EFA_RDM_EP_MIN_PEER_POOL_SIZE (1024)
 
@@ -234,11 +233,6 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
-
-static inline size_t efa_rdm_ep_get_rx_pool_size(struct efa_rdm_ep *ep)
-{
-	return MIN(ep->efa_max_outstanding_rx_ops, ep->base_ep.info->rx_attr->size);
-}
 
 static inline size_t efa_rdm_ep_get_tx_pool_size(struct efa_rdm_ep *ep)
 {
