@@ -292,6 +292,18 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
+#if ENABLE_DEBUG
+	/* Create debug info pool - one buffer per packet entry */
+	ret = ofi_bufpool_create(&ep->pke_debug_info_pool,
+				 sizeof(struct efa_rdm_pke_debug_info_buffer),
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
+				 0, /* no limit to max_cnt */
+				 efa_rdm_ep_get_tx_pool_size(ep) + efa_rdm_ep_get_rx_pool_size(ep),
+				 OFI_BUFPOOL_NO_TRACK);
+	if (ret)
+		goto err_free;
+#endif
+
 	return 0;
 
 err_free:
@@ -330,6 +342,11 @@ err_free:
 
 	if (ep->peer_robuf_pool)
 		ofi_bufpool_destroy(ep->peer_robuf_pool);
+
+#if ENABLE_DEBUG
+	if (ep->pke_debug_info_pool)
+		ofi_bufpool_destroy(ep->pke_debug_info_pool);
+#endif
 
 	return ret;
 }
@@ -889,6 +906,11 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 
 	if (efa_rdm_ep->peer_robuf_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->peer_robuf_pool);
+
+#if ENABLE_DEBUG
+	if (efa_rdm_ep->pke_debug_info_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->pke_debug_info_pool);
+#endif
 }
 
 /**
