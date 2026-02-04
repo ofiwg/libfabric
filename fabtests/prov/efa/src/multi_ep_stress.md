@@ -160,6 +160,7 @@ The test stresses the provider through:
 | `--msgs-per-ep` | Total messages per sender | 1000 |
 | `--sender-ep-cycles` | Sender endpoint recycle count | 1 |
 | `--receiver-ep-cycles` | Receiver endpoint recycle count | 1 |
+| `--remove-av` | Remove old AV if AV update received | off |
 | `--shared-av` | Use shared address vector | off |
 | `--shared-cq` | Use shared completion queue | off |
 | `--op-type` | Operation type (untagged/tagged/writedata) | untagged |
