@@ -5036,7 +5036,8 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
 
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
-			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
+			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr,
+						  payload->rendezvous.ipc.ipc_info.base_length,
 						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
 			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-SENDER-CREATE-HANDLE");
 
@@ -5505,7 +5506,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	uint64_t sbuf_offset = 0UL;
 #if HAVE_HFISVC_DMABUF
 	if (opx_mr && opx_mr->dmabuf.fd != -1) {
-		sbuf_offset = opx_mr->dmabuf.offset;
+		sbuf_offset = opx_mr_dmabuf_local_offset(opx_mr, buf);
 	}
 #endif
 
@@ -5783,7 +5784,8 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
 
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "IPC-SENDER-CREATE-HANDLE");
-			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
+			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr,
+						  payload->rendezvous.ipc.ipc_info.base_length,
 						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
 			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "IPC-SENDER-CREATE-HANDLE");
 

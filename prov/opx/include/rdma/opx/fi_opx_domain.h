@@ -268,6 +268,13 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, dmabuf_fd) == offsetof(struct
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, hh) == (FI_OPX_CACHE_LINE_SIZE * 4),
 			"Offset of fi_opx_mr->hh should start at cacheline 4!");
 
+static inline uint64_t opx_mr_dmabuf_local_offset(const struct fi_opx_mr *opx_mr, const void *buf)
+{
+	assert((uintptr_t) (buf) >= (uintptr_t) (opx_mr->dmabuf.base_addr));
+	uint64_t buf_offset_from_base = (uint64_t) ((uintptr_t) buf - (uintptr_t) opx_mr->dmabuf.base_addr);
+	return opx_mr->dmabuf.offset + buf_offset_from_base;
+}
+
 struct opx_domain_deferred_work {
 	union {
 		struct slist_entry		 slist_entry;
