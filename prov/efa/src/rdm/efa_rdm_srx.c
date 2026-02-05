@@ -45,7 +45,7 @@ void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
  * the peer_rxe that matches a received message.
  *
  * @param[in] peer_rxe the rxe to be progressed.
- * @return int 0 on success, a negative integer on failure.
+ * @return int 0 unconditionally
  */
 static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 {
@@ -80,7 +80,7 @@ static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 		efa_rdm_rxe_release(rxe);
 	}
 
-	return ret;
+	return 0;
 }
 
 /**

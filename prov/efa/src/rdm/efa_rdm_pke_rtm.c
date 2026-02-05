@@ -1206,8 +1206,9 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
 	err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
-
-	efa_rdm_pke_release_rx(pkt_entry);
+	if (OFI_LIKELY(!err)) {
+		efa_rdm_pke_release_rx(pkt_entry);
+	}
 	return err;
 }
 

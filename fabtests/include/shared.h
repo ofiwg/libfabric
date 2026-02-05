@@ -79,13 +79,6 @@ extern "C" {
 #define OFI_MR_DEPRECATED	(0x3) /* FI_MR_BASIC | FI_MR_SCALABLE */
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 
-/* exit codes must be 0-255 */
-static inline int ft_exit_code(int ret)
-{
-	int absret = ret < 0 ? -ret : ret;
-	return absret > 255 ? EXIT_FAILURE : absret;
-}
-
 #define ft_sa_family(addr) (((struct sockaddr *)(addr))->sa_family)
 
 struct test_size_param {
@@ -221,6 +214,7 @@ struct ft_opts {
 	enum fi_hmem_iface iface;
 	uint64_t device;
 	enum fi_threading threading;
+	int expect_error;
 
 	char **argv;
 };
@@ -332,7 +326,8 @@ extern char default_port[8];
 		.device = 0, \
 		.argc = argc, .argv = argv, \
 		.address_format = FI_FORMAT_UNSPEC, \
-		.threading = FI_THREAD_DOMAIN \
+		.threading = FI_THREAD_DOMAIN, \
+		.expect_error = 0, \
 	}
 
 #define FT_STR_LEN 32
@@ -679,6 +674,7 @@ enum {
 	LONG_OPT_USE_FI_MORE,
 	LONG_OPT_THREADING,
 	LONG_OPT_NO_RX_CQ_DATA,
+	LONG_OPT_EXPECT_ERROR,
 };
 
 extern int debug_assert;
@@ -852,5 +848,17 @@ static inline void *ft_get_page_end(const void *addr, size_t page_size)
 	default: return -FI_EOPNOTSUPP;				\
 	}
 
+/* exit codes must be 0-255 */
+static inline int ft_exit_code(int ret)
+{
+	int absret = ret < 0 ? -ret : ret;
+	if (opts.expect_error) {
+		if (absret == opts.expect_error)
+			return EXIT_SUCCESS;
+		else if (absret == 0)
+			return EXIT_FAILURE;
+	}
+	return absret > 255 ? EXIT_FAILURE : absret;
+}
 
 #endif /* _SHARED_H_ */
