@@ -1,8 +1,4 @@
-#include <stdatomic.h>
-#include <arpa/inet.h>
 #include <getopt.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
