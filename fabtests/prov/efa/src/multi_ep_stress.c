@@ -482,55 +482,26 @@ static void *run_sender_worker(void *arg)
 	struct random_data random_data;
 	const uint64_t total_ops = ctx->num_peers * topts.msgs_per_sender;
 	const uint64_t msg_per_ep_lifecyle = total_ops / topts.sender_ep_recycling;
-	char ep_addr[ctx->num_peers][MAX_EP_ADDR_LEN];
-	fi_addr_t fi_addr[ctx->num_peers];
-	struct rma_info peer_rma[ctx->num_peers];
-	size_t transferred_bytes[ctx->num_peers];
-	bool is_initialized[ctx->num_peers];
-
-	for (size_t i = 0; i < ctx->num_peers; i++)
-		is_initialized[i] = false;
-
-	ft_random_init_data(&random_data, topts.random_seed, ctx->worker_id);
-
-	if (topts.verbose)
-		printf("Sender %u: Waiting for peer addresses\n", ctx->worker_id);
-	for (size_t i = 0; i < ctx->num_peers; i++) {
-		ret = ep_message_queue_pop(ctx->control_queue, &msg); // blocks
-		if (ret) {
-			FT_PRINTERR("ep_message_queue_pop", ret);
-			goto out;
-		}
-		assert(msg.type == EP_MESSAGE_TYPE_UPDATE);
-		assert(msg.info.worker_id == ctx->worker_id);
-		if (is_initialized[msg.info.peer_idx]) {
-			sched_yield();
-			ret = ep_message_queue_push(ctx->control_queue, &msg);
-			if (ret) {
-				FT_PRINTERR("ep_message_queue_push", ret);
-				goto out;
-			}
-			continue;
-		}
-
-		printf("\tSender %u: Initializing address for peer %u\n",
-				ctx->worker_id, msg.info.peer_idx);
-		memcpy(ep_addr[msg.info.peer_idx], msg.info.ep_addr, MAX_EP_ADDR_LEN);
-		memcpy(&peer_rma[msg.info.peer_idx], &msg.info.rma, sizeof(struct rma_info));
-		transferred_bytes[msg.info.peer_idx] = 0;
-		is_initialized[msg.info.peer_idx] = true;
-	}
-	if (topts.verbose)
-		printf("Sender %u: All peer addresses received\n", ctx->worker_id);
-
 	uint64_t ops_posted = 0, ops_completed = 0;
 	int cycle = 0;
 	uint16_t peer_idx = 0;
 	uint64_t ops_total_in_this_cycle = 0, ops_posted_in_this_cycle = 0;
 	uint64_t ops_completed_in_this_cycle = 0;
+	char ep_addr[ctx->num_peers][MAX_EP_ADDR_LEN];
+	size_t ops_posted_for_peer[ctx->num_peers];
+	size_t transferred_bytes[ctx->num_peers];
+	struct rma_info peer_rma[ctx->num_peers];
+	fi_addr_t fi_addr[ctx->num_peers];
+
+	ft_random_init_data(&random_data, topts.random_seed, ctx->worker_id);
+	memset(ep_addr, 0, sizeof(ep_addr));
+	memset(ops_posted_for_peer, 0, sizeof(ops_posted_for_peer));
+
+	bool should_reset_cycle = true;
 	while(ops_posted < total_ops) {
-		if (ops_posted_in_this_cycle == ops_total_in_this_cycle) {
+		if (should_reset_cycle) {
 			// Start a new endpoint cycle
+			should_reset_cycle = false;
 			ops_posted_in_this_cycle = 0;
 			ops_completed_in_this_cycle = 0;
 			if (ops_posted + msg_per_ep_lifecyle > total_ops - msg_per_ep_lifecyle)
@@ -550,8 +521,11 @@ static void *run_sender_worker(void *arg)
 					ctx->worker_id);
 				goto out;
 			}
+			// Restore AV from cache
 			for (int i = 0; i < ctx->num_peers; i++) {
 				fi_addr[i] = FI_ADDR_UNSPEC;
+				if (ep_addr[i][0] == 0)
+					continue;
 				ret = fi_av_insert(ctx->av, &ep_addr[i], 1, &fi_addr[i], 0, NULL);
 				if (ret != 1) {
 					FT_PRINTERR("fi_av_insert", ret);
@@ -580,7 +554,8 @@ static void *run_sender_worker(void *arg)
 				assert(msg.info.worker_id == ctx->worker_id);
 				printf("Sender %u: received an update for peer %u\n",
 						ctx->worker_id, msg.info.peer_idx);
-				if (topts.remove_av) {
+				if (topts.remove_av
+					&& fi_addr[msg.info.peer_idx] != FI_ADDR_UNSPEC) {
 					ret = fi_av_remove(ctx->av, &fi_addr[msg.info.peer_idx], 1, 0);
 					if (ret) {
 						FT_PRINTERR("fi_av_remove", ret);
@@ -610,6 +585,15 @@ static void *run_sender_worker(void *arg)
 				ret = 0;
 				break;
 			}
+		}
+
+		// Skip not ready yet and completed already peers
+		if (fi_addr[peer_idx] == FI_ADDR_UNSPEC
+			|| ops_posted_for_peer[peer_idx] == topts.msgs_per_sender) {
+			if (++peer_idx == ctx->num_peers)
+				peer_idx = 0;
+			sched_yield();
+			continue;
 		}
 
 		// Post one operation
@@ -678,11 +662,13 @@ static void *run_sender_worker(void *arg)
 		// Increment loop counters
 		ops_posted++;
 		ops_posted_in_this_cycle++;
+		ops_posted_for_peer[peer_idx]++;
 		transferred_bytes[peer_idx] += opts.transfer_size;
 		if (++peer_idx == ctx->num_peers)
 			peer_idx = 0;
 
 		 if (ops_posted_in_this_cycle == ops_total_in_this_cycle) {
+			should_reset_cycle = true;
 			// Maybe wait for all operations to complete
 			if (ft_random_get_bool(&random_data)) {
 				printf("Sender %u EP cycle %d: Waiting for "
