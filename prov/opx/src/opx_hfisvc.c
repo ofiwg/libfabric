@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 Cornelis Networks.
+ * Copyright (C) 2025-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -93,19 +93,19 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				rc = -FI_EAGAIN;
 				break;
 			}
-			rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
-				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid, sbuf_client_key,
-				sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset, opx_mr->hfisvc.mr_handle,
-				recv_buf - (uint8_t *) params->recv_buf);
+			uint64_t local_offset = opx_mr_dmabuf_local_offset(opx_mr, recv_buf);
+			rc		      = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
+				   opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid, sbuf_client_key,
+				   sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset, opx_mr->hfisvc.mr_handle,
+				   local_offset);
 			if (rc != FI_SUCCESS) {
 				params->cur_iov	 = i;
 				params->recv_buf = (void *) recv_buf;
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.eagain_hfisvc);
 				OPX_HFISVC_DEBUG_LOG(
 					"[%d/%d] rdma_read failed with rc=%d context=%p recv-mr_handle=%u recv-offset=%lu sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
-					i + 1, niov, rc, context, (uint32_t) opx_mr->hfisvc.mr_handle,
-					recv_buf - (uint8_t *) params->recv_buf, sbuf_client_key, sbuf_access_key,
-					sbuf_len);
+					i + 1, niov, rc, context, (uint32_t) opx_mr->hfisvc.mr_handle, local_offset,
+					sbuf_client_key, sbuf_access_key, sbuf_len);
 				rc = -FI_EAGAIN;
 				break;
 			}
@@ -115,9 +115,8 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 			OPX_HFISVC_DEBUG_LOG(
 				"[%d/%d] Successfully issued rdma_read sbuf_lid=%u context=%p recv-mr_handle=%u recv-offset=%lu sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu params->rzv_comp=%lX\n",
-				i + 1, niov, sbuf_lid, context, (uint32_t) opx_mr->hfisvc.mr_handle,
-				recv_buf - (uint8_t *) params->recv_buf, sbuf_client_key, sbuf_access_key, sbuf_len,
-				params->rzv_comp);
+				i + 1, niov, sbuf_lid, context, (uint32_t) opx_mr->hfisvc.mr_handle, local_offset,
+				sbuf_client_key, sbuf_access_key, sbuf_len, params->rzv_comp);
 		} else {
 			rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
 				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid, sbuf_client_key,

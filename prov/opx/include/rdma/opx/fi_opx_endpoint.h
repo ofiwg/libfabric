@@ -1119,13 +1119,11 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			const uint64_t sbuf_offset     = payload->rendezvous.hfisvc.iovs[i].offset;
 			int	       rc;
 			if (do_dmabuf) {
-				uint64_t local_offset =
-					opx_mr->dmabuf.offset + ((uint8_t *) recv_buf - (uint8_t *) context->buf);
-
 				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
 					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
 					sbuf_len, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
-					sbuf_offset, opx_mr->hfisvc.mr_handle, local_offset);
+					sbuf_offset, opx_mr->hfisvc.mr_handle,
+					opx_mr_dmabuf_local_offset(opx_mr, recv_buf));
 			} else {
 				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
 					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,

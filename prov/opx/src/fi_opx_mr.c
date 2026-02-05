@@ -207,9 +207,20 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 							"FI_OPX_HFISVC is enabled in a HMEM build, but dma-buf support is not detected or is disabled by FI_HMEM_CUDA/ROCR_USE_DMABUF. Enable dma-buf support or re-run with FI_OPX_HFISVC disabled.\n");
 						return -errno;
 					}
-					int	 fd;
-					uint64_t dmabuf_offset;
-					ret = ofi_hmem_get_dmabuf_fd(hmem_iface, iov->iov_base, iov->iov_len, &fd,
+					size_t	  size;
+					uintptr_t base;
+					int	  fd;
+					uint64_t  dmabuf_offset;
+					ret = ofi_hmem_get_base_addr(hmem_iface, iov->iov_base, iov->iov_len,
+								     (void *) &base, &size);
+					if (ret) {
+						FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+							"Error on ofi_hmem_get_base_addr returned %d\n", ret);
+						ofi_mr_cache_delete(opx_domain->hmem_domain->hmem_cache, entry);
+						errno = FI_EOPNOTSUPP;
+						return -errno;
+					}
+					ret = ofi_hmem_get_dmabuf_fd(hmem_iface, (void *) base, size, &fd,
 								     &dmabuf_offset);
 					if (ret) {
 						FI_WARN(fi_opx_global.prov, FI_LOG_MR,
@@ -225,8 +236,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					opx_mr->dmabuf_internal	 = 1;
 					opx_mr->dmabuf.fd	 = fd;
 					opx_mr->dmabuf.offset	 = dmabuf_offset;
-					opx_mr->dmabuf.len	 = iov->iov_len;
-					opx_mr->dmabuf.base_addr = iov->iov_base;
+					opx_mr->dmabuf.len	 = size;
+					opx_mr->dmabuf.base_addr = (void *) base;
 					opx_mr->attr.iface	 = hmem_iface;
 					opx_mr->attr.dmabuf	 = &opx_mr->dmabuf;
 
