@@ -109,8 +109,7 @@ For each receiver worker thread:
    - Post receive operations (for msg operations)
    - For RMA writedata, skip posting (writes are one-sided)
 3. **Cycle completion**:
-   - For RMA: always wait for completions
-   - For messaging: randomly decide whether to wait
+   - Randomly decide whether to wait for all completions or proceed immediately
    - Destroy endpoint and start next cycle
 4. **Termination**: Send terminator message to control thread
 
