@@ -866,8 +866,7 @@ static void *run_receiver_worker(void *arg)
 		ops_posted_in_this_cycle++;
 
 		if (ops_posted_in_this_cycle == ops_total_in_this_cycle) {
-			if ((topts.op_type == OP_RMA_WRITEDATA) ||
-				ft_random_get_bool(&random_data)) {
+			if (ft_random_get_bool(&random_data)) {
 				printf("Receiver %u EP cycle %d: Waiting for "
 					"completions\n",
 					ctx->worker_id, cycle);
