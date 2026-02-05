@@ -105,12 +105,16 @@ int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
 			if (cache_params.monitor) {
 				EFA_WARN(FI_LOG_DOMAIN,
 					 "Memhooks monitor requested via FI_MR_CACHE_MONITOR, but memhooks failed to\n"
-					 "install.  No working monitor availale.\n");
+					 "install.  No working monitor available.\n");
 				return -FI_ENOSYS;
 			}
 			EFA_INFO(FI_LOG_DOMAIN,
 				 "Detected potential memhooks monitor conflict. Switching to UFFD.\n");
 			memory_monitors[FI_HMEM_SYSTEM] = uffd_monitor;
+		} else if (err == 0) {
+			/* Every start needs to be followed by a stop.
+			 * ofi_mr_cache_init will start it again properly. */
+			memhooks_monitor->stop(memhooks_monitor);
 		}
 	} else if (default_monitor == NULL) {
 		/* TODO: Fail if we don't find a system monitor.  This
