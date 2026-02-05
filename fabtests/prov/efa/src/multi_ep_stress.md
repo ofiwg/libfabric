@@ -82,16 +82,15 @@ Thread-safe random functions allow to re-run tests with the same random choises.
 
 For each sender worker thread:
 
-1. **Wait for peer addresses**: Block until all receiver endpoint addresses arrive via control queue
 2. **Enter EP cycle loop**:
    - Create new endpoint with CQ/AV
-   - Insert all peer addresses into AV
+   - Insert all cached peer addresses into AV
    - Random sleep (0-100ms) to simulate real workload
 3. **Message posting loop**:
    - Check for pending AV updates from receivers
    - Post send/write operation to next peer (round-robin)
    - Handle `-FI_EAGAIN` by draining completions
-   - Track operations posted/completed per cycle
+   - Track operations posted/completed per cycle and per peer
 4. **Cycle completion**:
    - Randomly decide whether to wait for all completions or proceed immediately
    - Destroy endpoint and start next cycle
