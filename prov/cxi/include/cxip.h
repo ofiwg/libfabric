@@ -1161,106 +1161,103 @@ struct cxip_ux_dump_state {
 };
 
 struct cxip_req_recv {
-	/* Receive parameters */
+	/* 8-byte aligned fields */
 	struct dlist_entry rxc_entry;
 	union {
 		struct cxip_rxc *rxc;
 		struct cxip_rxc_hpc *rxc_hpc;
 		struct cxip_rxc_rnr *rxc_rnr;
 	};
-
 	struct cxip_cntr *cntr;
-	void *recv_buf;			// local receive buffer
-	struct cxip_md *recv_md;	// local receive MD
-	bool hybrid_md;			// True if MD was provided
-	bool success_disable;
-	uint32_t ulen;			// User buffer length
-	bool tagged;
+	void *recv_buf;
+	struct cxip_md *recv_md;
 	uint64_t tag;
 	uint64_t ignore;
-	uint32_t match_id;
 	uint64_t flags;
-
-	/* FI_CLAIM work around to hold UX remote offsets for duration of
-	 * H/W UX entry matching and deletion. Array of 8-byte unexpected
-	 * headers remote offsets, and current remote offset used when
-	 * processing search results to match remote offsets.
-	 */
 	uint64_t *ule_offsets;
 	uint64_t ule_offset;
-	unsigned int num_ule_offsets;
-	unsigned int cur_ule_offsets;
-	bool offset_found;
-
-	/* UX list dump state */
 	struct cxip_ux_dump_state *ux_dump;
-
-	/* Control info */
-	int rc;				// DMA return code
-	uint32_t rlen;			// Send length
-	uint64_t oflow_start;		// Overflow buffer address
-	uint16_t vni;			// VNI operation came in on
-	uint32_t initiator;		// DMA initiator address
-	uint32_t rdzv_id;		// DMA initiator rendezvous ID
-	uint8_t rdzv_lac;		// Rendezvous source LAC
-	bool done_notify;		// Must send done notification
-	enum cxip_rdzv_proto rdzv_proto;
-	int rdzv_events;		// Processed rdzv event count
-	enum c_event_type rdzv_event_types[4];
-	uint32_t rdzv_initiator;	// Rendezvous initiator used for mrecvs
-	uint32_t rget_nic;
-	uint32_t rget_pid;
-	int multirecv_inflight;		// SW EP Multi-receives in progress
-	bool canceled;			// Request canceled?
-	bool unlinked;
-	bool multi_recv;
-	bool tgt_event;
+	uint64_t oflow_start;
 	uint64_t start_offset;
 	uint64_t mrecv_bytes;
 	uint64_t mrecv_unlink_bytes;
-	bool auto_unlinked;
-	bool hw_offloaded;
 	struct cxip_req *parent;
 	struct dlist_entry children;
 	uint64_t src_offset;
+
+	/* 4-byte aligned fields */
+	uint32_t ulen;
+	uint32_t match_id;
+	unsigned int num_ule_offsets;
+	unsigned int cur_ule_offsets;
+	int rc;
+	uint32_t rlen;
+	uint32_t initiator;
+	uint32_t rdzv_id;
+	enum cxip_rdzv_proto rdzv_proto;
+	int rdzv_events;
+	enum c_event_type rdzv_event_types[4];
+	uint32_t rdzv_initiator;
+	uint32_t rget_nic;
+	uint32_t rget_pid;
+	int multirecv_inflight;
+
+	/* 2-byte aligned fields */
+	uint16_t vni;
 	uint16_t rdzv_mlen;
+
+	/* 1-byte fields */
+	uint8_t rdzv_lac;
+	bool hybrid_md;
+	bool success_disable;
+	bool tagged;
+	bool offset_found;
+	bool done_notify;
+	bool canceled;
+	bool unlinked;
+	bool multi_recv;
+	bool tgt_event;
+	bool auto_unlinked;
+	bool hw_offloaded;
 };
 
 struct cxip_req_send {
-	/* Send parameters */
+	/* 8-byte aligned fields */
 	union {
 		struct cxip_txc *txc;
 		struct cxip_txc_hpc *txc_hpc;
 		struct cxip_txc_rnr *txc_rnr;
 	};
 	struct cxip_cntr *cntr;
-	const void *buf;		// local send buffer
-	size_t len;			// request length
-	struct cxip_md *send_md;	// send buffer memory descriptor
-	struct cxip_addr caddr;
+	const void *buf;
+	size_t len;
+	struct cxip_md *send_md;
 	fi_addr_t dest_addr;
-	bool tagged;
-	bool hybrid_md;
-	bool success_disable;
-	uint32_t tclass;
 	uint64_t tag;
 	uint64_t data;
 	uint64_t flags;
 	void *ibuf;
-
-	/* Control info */
 	struct dlist_entry txc_entry;
 	struct cxip_fc_peer *fc_peer;
-	union {
-		int rdzv_id;		// SW RDZV ID for long messages
-		int tx_id;
-	};
-	int rc;				// DMA return code
-	int rdzv_send_events;		// Processed event count
 	uint64_t max_rnr_time;
 	uint64_t retry_rnr_time;
 	struct dlist_entry rnr_entry;
+
+	/* 4-byte aligned fields */
+	struct cxip_addr caddr;
+	uint32_t tclass;
+	union {
+		int rdzv_id;
+		int tx_id;
+	};
+	int rc;
+	int rdzv_send_events;
 	int retries;
+
+	/* 1-byte fields */
+	bool tagged;
+	bool hybrid_md;
+	bool success_disable;
 	bool canceled;
 };
 
@@ -1314,21 +1311,13 @@ enum cxip_req_type {
  * and the callback function is called.
  */
 struct cxip_req {
-	/* Control info */
+	/* Control info - 8-byte aligned fields first */
 	struct dlist_entry evtq_entry;
 	void *req_ctx;
-	struct cxip_cq *cq;		// request CQ
-	struct cxip_evtq *evtq;		// request event queue
-	int req_id;			// fast lookup in index table
+	struct cxip_cq *cq;
+	struct cxip_evtq *evtq;
 	int (*cb)(struct cxip_req *req, const union c_event *evt);
-					// completion event callback
-	bool discard;
-
-	/* Triggered related fields. */
-	bool triggered;
-	uint64_t trig_thresh;
 	struct cxip_cntr *trig_cntr;
-
 	struct fi_peer_rx_entry *rx_entry;
 
 	/* CQ event fields, set according to fi_cq.3
@@ -1342,9 +1331,17 @@ struct cxip_req {
 	uint64_t data;
 	uint64_t tag;
 	fi_addr_t addr;
+	uint64_t trig_thresh;
+
+	/* 4-byte fields */
+	int req_id;
+	enum cxip_req_type type;
+
+	/* 1-byte fields */
+	bool discard;
+	bool triggered;
 
 	/* Request parameters */
-	enum cxip_req_type type;
 	union {
 		struct cxip_req_rma rma;
 		struct cxip_req_amo amo;
