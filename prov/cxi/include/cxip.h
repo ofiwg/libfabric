@@ -1506,38 +1506,24 @@ struct cxip_cntr {
 
 	struct dlist_entry dom_entry;
 
-	/* Counter for number of operations which need progress. A separate lock
-	 * is needed since these functions may be called without counter lock held.
-	 */
-	struct ofi_genlock progress_count_lock;
-	int progress_count;
+	/* Counter for number of operations which need progress. */
+	ofi_atomic32_t progress_count;
 };
 
 static inline void cxip_cntr_progress_inc(struct cxip_cntr *cntr)
 {
-	ofi_genlock_lock(&cntr->progress_count_lock);
-	assert(cntr->progress_count >= 0);
-	cntr->progress_count++;
-	ofi_genlock_unlock(&cntr->progress_count_lock);
+	ofi_atomic_inc32(&cntr->progress_count);
 }
 
 static inline void cxip_cntr_progress_dec(struct cxip_cntr *cntr)
 {
-	ofi_genlock_lock(&cntr->progress_count_lock);
-	cntr->progress_count--;
-	assert(cntr->progress_count >= 0);
-	ofi_genlock_unlock(&cntr->progress_count_lock);
+	int32_t val = ofi_atomic_dec32(&cntr->progress_count);
+	assert(val >= 0);
 }
 
 static inline unsigned int cxip_cntr_progress_get(struct cxip_cntr *cntr)
 {
-	unsigned int count;
-
-	ofi_genlock_lock(&cntr->progress_count_lock);
-	count = cntr->progress_count;
-	ofi_genlock_unlock(&cntr->progress_count_lock);
-
-	return count;
+	return ofi_atomic_get32(&cntr->progress_count);
 }
 
 struct cxip_ux_send {
