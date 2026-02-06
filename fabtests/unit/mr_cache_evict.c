@@ -141,7 +141,7 @@ out:
  */
 static void sbrk_free(void *ptr)
 {
-	void *cur_brk = (void *) ((uint64_t) ptr + mr_buf_size);
+	void *cur_brk = (void *) ((char *) ptr + mr_buf_size);
 	void *rewind_brk = ptr;
 
 	FT_DEBUG("Resetting program break from %p to %p", cur_brk, rewind_brk);
@@ -190,7 +190,7 @@ static void *sbrk_alloc(void)
 
 static void brk_free(void *ptr)
 {
-	void *cur_brk = (void *) ((uint64_t) ptr + mr_buf_size);
+	void *cur_brk = (void *) ((char *) ptr + mr_buf_size);
 	void *rewind_brk = ptr;
 	int ret;
 
@@ -409,7 +409,7 @@ static void *mem_alloc(enum alloc_type type)
 					 fi_strerror(-ret));
 		}
 
-		FT_DEBUG("Memory allocated: va=%p size=%lu phys_addr=0x%lx",
+		FT_DEBUG("Memory allocated: va=%p size=%zu phys_addr=0x%" PRIx64,
 			 ptr, mr_buf_size, phys_addr);
 	}
 
@@ -579,7 +579,7 @@ static int mr_cache_test(enum alloc_type type)
 		goto cleanup;
 	}
 
-	FT_DEBUG("Initial MR registration time: %ld nsecs", mr_reg_time);
+	FT_DEBUG("Initial MR registration time: %" PRId64 " nsecs", mr_reg_time);
 
 	/* Perform another allocation using the same buffer. This should hit the
 	 * MR cache.
@@ -590,7 +590,7 @@ static int mr_cache_test(enum alloc_type type)
 		goto cleanup;
 	}
 
-	FT_DEBUG("Cached MR registration time: %ld nsecs", cached_mr_reg_time);
+	FT_DEBUG("Cached MR registration time: %" PRId64 " nsecs", cached_mr_reg_time);
 
 	/* If cached allocation is not within the expected duration, assume the
 	 * provider does not support MR caching.
@@ -634,7 +634,7 @@ static int mr_cache_test(enum alloc_type type)
 		goto cleanup;
 	}
 
-	FT_DEBUG("Reallocated MR registration time: %ld nsecs",
+	FT_DEBUG("Reallocated MR registration time: %" PRId64 " nsecs",
 		 realloc_mr_reg_time);
 
 	if (realloc_mr_reg_time <= CACHE_TIME_MAX_VALUE(mr_reg_time)) {

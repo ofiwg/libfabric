@@ -38,6 +38,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <inttypes.h>
 
 #include <rdma/fi_errno.h>
 #include "ofi_util.h"
@@ -188,7 +189,7 @@ int lnx_queue_tag(struct fi_peer_rx_entry *entry)
 
 	rx_entry = container_of(entry, struct lnx_rx_entry, rx_entry);
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-		"addr = %lx tag = %lx ignore = 0 found\n",
+		"addr = %" PRIx64 " tag = %" PRIx64 " ignore = 0 found\n",
 		entry->addr, entry->tag);
 
 	lnx_insert_rx_entry(&lnx_srq->lps_trecv.lqp_unexq, rx_entry);
@@ -219,14 +220,14 @@ int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match_attr *match,
 					  &match_attr);
 	if (rx_entry) {
 		FI_DBG(&lnx_prov, FI_LOG_CORE,
-		       "addr = %lx tag = %lx ignore = 0 found\n",
+		       "addr = %" PRIx64 " tag = %" PRIx64 " ignore = 0 found\n",
 		       match_attr.lm_addr, tag);
 
 		goto assign;
 	}
 
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-	       "addr = %lx tag = %lx ignore = 0 not found\n",
+	       "addr = %" PRIx64 " tag = %" PRIx64 " ignore = 0 not found\n",
 	       match_attr.lm_addr, tag);
 
 	rx_entry = get_rx_entry(lep, NULL, NULL, 0, addr, tag, 0, NULL,
@@ -300,7 +301,7 @@ lnx_peek(struct lnx_ep *lep, struct lnx_match_attr *match_attr, void *context,
 					match_attr);
 	if (!rx_entry) {
 		FI_DBG(&lnx_prov, FI_LOG_CORE,
-			"PEEK addr=%lx tag=%lx ignore=%lx\n",
+			"PEEK addr=%" PRIx64 " tag=%" PRIx64 " ignore=%" PRIx64 "\n",
 			match_attr->lm_addr, match_attr->lm_tag,
 			match_attr->lm_ignore);
 		return ofi_cq_write_error_peek(lep->le_ep.rx_cq,
@@ -377,7 +378,7 @@ static int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *d
 						&match_attr);
 		if (!rx_entry) {
 			FI_DBG(&lnx_prov, FI_LOG_CORE,
-			"addr=%lx tag=%lx ignore=%lx buf=%p len=%lx not found\n",
+			"addr=%" PRIx64 " tag=%" PRIx64 " ignore=%" PRIx64 " buf=%p len=%zu not found\n",
 			addr, tag, ignore, iov->iov_base, iov->iov_len);
 
 			goto nomatch;
@@ -385,7 +386,7 @@ static int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *d
 	}
 
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-	       "addr=%lx tag=%lx ignore=%lx buf=%p len=%lx found\n",
+	       "addr=%" PRIx64 " tag=%" PRIx64 " ignore=%" PRIx64 " buf=%p len=%zu found\n",
 	       addr, tag, ignore, iov->iov_base, iov->iov_len);
 
 	/* match is found in the unexpected queue. call into the core
@@ -416,7 +417,7 @@ static int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *d
 		 * rx_entry. So keep it on the queue
 		 */
 		FI_DBG(&lnx_prov, FI_LOG_CORE,
-		       "addr = %lx tag = %lx ignore = %lx start_tag() in progress\n",
+		       "addr = %" PRIx64 " tag = %" PRIx64 " ignore = %" PRIx64 " start_tag() in progress\n",
 		       addr, tag, ignore);
 
 		goto insert_recvq;
@@ -425,7 +426,7 @@ static int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *d
 	}
 
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-	       "addr = %lx tag = %lx ignore = %lx start_tag() success\n",
+	       "addr = %" PRIx64 " tag = %" PRIx64 " ignore = %" PRIx64 " start_tag() success\n",
 	       addr, tag, ignore);
 
 	return 0;
@@ -532,7 +533,7 @@ ssize_t lnx_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		return rc;
 
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-	       "sending to %lx tag %lx buf %p len %ld\n",
+	       "sending to %" PRIx64 " tag %" PRIx64 " buf %p len %zu\n",
 	       core_addr, tag, buf, len);
 
 	if (desc) {
@@ -567,7 +568,7 @@ ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		return rc;
 
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-	       "sending to %lx tag %lx buf %p len %ld\n",
+	       "sending to %" PRIx64 " tag %" PRIx64 " buf %p len %zu\n",
 	       core_addr, tag, iov->iov_base, iov->iov_len);
 
 	if (desc && *desc) {
@@ -605,7 +606,7 @@ ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 		return rc;
 
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-	       "sending to %lx tag %lx\n",
+	       "sending to %" PRIx64 " tag %" PRIx64 "\n",
 	       core_msg.addr, core_msg.tag);
 
 	if (core_msg.desc && *core_msg.desc) {
@@ -640,7 +641,7 @@ ssize_t lnx_tinject(struct fid_ep *ep, const void *buf, size_t len,
 		return rc;
 
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-	       "sending to %lx tag %lx buf %p len %ld\n",
+	       "sending to %" PRIx64 " tag %" PRIx64 " buf %p len %zu\n",
 	       core_addr, tag, buf, len);
 
 	rc = fi_tinject(cep->cep_ep, buf, len, core_addr, tag);
@@ -669,7 +670,7 @@ ssize_t lnx_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc
 		return rc;
 
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-	       "sending to %lx tag %lx buf %p len %ld\n",
+	       "sending to %" PRIx64 " tag %" PRIx64 " buf %p len %zu\n",
 	       core_addr, tag, buf, len);
 
 	if (desc) {
@@ -704,7 +705,7 @@ ssize_t lnx_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 		return rc;
 
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
-	       "sending to %lx tag %lx buf %p len %ld\n",
+	       "sending to %" PRIx64 " tag %" PRIx64 " buf %p len %zu\n",
 	       core_addr, tag, buf, len);
 
 	rc = fi_tinjectdata(cep->cep_ep, buf, len, data, core_addr, tag);

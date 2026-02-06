@@ -50,7 +50,7 @@ int run_simple_atomic_write(struct rank_info *ri)
 			.count = count,
 		};
 		struct fi_rma_ioc rma_iov = {
-			.addr = (uint64_t)pri->mr_info[0].uaddr,
+			.addr = (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 			.count = count,
 			.key = pri->mr_info[0].key,
 		};
@@ -102,7 +102,7 @@ int run_simple_atomic_write2(struct rank_info *ri)
 		INSIST_FI_EQ(ri,
 			     fi_atomic(ri->ep_info[0].fid, ri->mr_info[0].uaddr,
 				       count, NULL, pri->ep_info[0].fi_addr,
-				       (uint64_t)pri->mr_info[0].uaddr,
+				       (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				       pri->mr_info[0].key, FI_UINT16,
 				       FI_ATOMIC_WRITE,
 				       get_ctx_simple(ri, context)),
@@ -168,7 +168,7 @@ int run_simple_atomic_fetch_write(struct rank_info *ri)
 			.count = count,
 		};
 		struct fi_rma_ioc rma_iov = {
-			.addr = (uint64_t)pri->mr_info[0].uaddr,
+			.addr = (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 			.count = count,
 			.key = pri->mr_info[0].key,
 		};
@@ -258,7 +258,7 @@ int run_simple_atomic_fetch_write2(struct rank_info *ri)
 					     ri->mr_info[0].uaddr, count, NULL,
 					     ri->mr_info[1].uaddr, NULL,
 					     pri->ep_info[0].fi_addr,
-					     (uint64_t)pri->mr_info[0].uaddr,
+					     (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 					     pri->mr_info[0].key, FI_UINT16,
 					     FI_ATOMIC_WRITE,
 					     get_ctx_simple(ri, context)),
@@ -302,7 +302,7 @@ int run_simple_atomic_fetch_read(struct rank_info *ri)
 
 	if (my_node == NODE_A) {
 		struct fi_rma_ioc rma_iov = {
-			.addr = (uint64_t)pri->mr_info[0].uaddr,
+			.addr = (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 			.count = count,
 			.key = pri->mr_info[0].key,
 		};
@@ -363,7 +363,7 @@ int run_simple_atomic_fetch_read2(struct rank_info *ri)
 			     fi_fetch_atomic(ri->ep_info[0].fid, NULL, count,
 					     NULL, ri->mr_info[0].uaddr, NULL,
 					     pri->ep_info[0].fi_addr,
-					     (uint64_t)pri->mr_info[0].uaddr,
+					     (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 					     pri->mr_info[0].key, FI_UINT16,
 					     FI_ATOMIC_READ,
 					     get_ctx_simple(ri, context)),
@@ -437,7 +437,7 @@ int run_simple_atomic_cswap(struct rank_info *ri)
 			.count = count,
 		};
 		struct fi_rma_ioc rma_iov = {
-			.addr = (uint64_t)pri->mr_info[0].uaddr,
+			.addr = (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 			.count = count,
 			.key = pri->mr_info[0].key,
 		};
@@ -541,7 +541,7 @@ int run_simple_atomic_cswap2(struct rank_info *ri)
 				     count, NULL, ri->mr_info[1].uaddr, NULL,
 				     ri->mr_info[2].uaddr, NULL,
 				     pri->ep_info[0].fi_addr,
-				     (uint64_t)pri->mr_info[0].uaddr,
+				     (uint64_t)(uintptr_t)pri->mr_info[0].uaddr,
 				     pri->mr_info[0].key, FI_UINT8, FI_CSWAP,
 				     get_ctx_simple(ri, context)),
 			     0);
