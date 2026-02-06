@@ -381,6 +381,24 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
 	}
 #if ENABLE_DEBUG
 	ep->efa_total_posted_tx_ops++;
+	/* Record post event based on operation type */
+	int event_type;
+	switch (ope->op) {
+	case ofi_op_read_req:
+		event_type = EFA_RDM_PKE_DEBUG_EVENT_READ_POST;
+		break;
+	case ofi_op_write:
+		event_type = EFA_RDM_PKE_DEBUG_EVENT_WRITE_POST;
+		break;
+	default:
+		event_type = EFA_RDM_PKE_DEBUG_EVENT_SEND_POST;
+		break;
+	}
+	efa_rdm_pke_record_debug_info(pkt_entry,
+	                               ep->base_ep.qp->qp_num,
+	                               ep->base_ep.qp->qkey,
+	                               pkt_entry->gen,
+	                               event_type);
 #endif
 }
 
@@ -420,6 +438,31 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
 void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *ope = NULL;
+
+#if ENABLE_DEBUG
+	/*
+	 * Record completion event based on operation type.
+	 * Note: qp_num is truncated to 10 bits, gen to 6 bits.
+	 */
+	int event_type = EFA_RDM_PKE_DEBUG_EVENT_SEND_COMPLETION;
+	if (pkt_entry->ope) {
+		switch (pkt_entry->ope->op) {
+		case ofi_op_read_req:
+			event_type = EFA_RDM_PKE_DEBUG_EVENT_READ_COMPLETION;
+			break;
+		case ofi_op_write:
+			event_type = EFA_RDM_PKE_DEBUG_EVENT_WRITE_COMPLETION;
+			break;
+		default:
+			break;
+		}
+	}
+	efa_rdm_pke_record_debug_info(pkt_entry,
+	                               ep->base_ep.qp->qp_num,
+	                               ep->base_ep.qp->qkey,
+	                               pkt_entry->gen,
+	                               event_type);
+#endif
 
 	ope = pkt_entry->ope;
 	/*
