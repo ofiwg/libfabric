@@ -44,7 +44,7 @@ void test_efa_rdm_peer_reorder_msg_impl(struct efa_resource *resource,
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	pkt_attr.msg_id = msg_id;
 	pkt_attr.connid = raw_addr.qkey;
@@ -194,7 +194,7 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin_impl(
 	*pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(*pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	pkt_attr.msg_id = msg_id;
 	pkt_attr.connid = raw_addr.qkey;
@@ -267,7 +267,7 @@ void alloc_pke_in_overflow_list(struct efa_rdm_ep *efa_rdm_ep,
 	*pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
 				       EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(*pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	pkt_attr.msg_id = msg_id;
 	pkt_attr.connid = raw_addr.qkey;
@@ -363,7 +363,7 @@ void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	/* Not the expected msg id is 0, use 3 as a valid ooo msg id */
 	msg_id = 3;
