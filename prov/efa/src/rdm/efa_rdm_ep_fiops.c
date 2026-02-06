@@ -1110,6 +1110,10 @@ static int efa_rdm_ep_close(struct fid *fid)
 	 * The QP destroy and op entries clean up must be in the same lock,
 	 * otherwise there can be race condition that efa_domain_progress_rdm_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
+	 *
+	 * Destroying the self AH also requires the SRX lock
+	 * Destroying the self AH modifies the AH refcnts which can also
+	 * modified in the CQ read path by implicit-to-explicit AV entry conversion
 	 */
 	ofi_genlock_lock(&domain->srx_lock);
 
@@ -1118,6 +1122,9 @@ static int efa_rdm_ep_close(struct fid *fid)
 	efa_base_ep_close_util_ep(&efa_rdm_ep->base_ep);
 
 	efa_base_ep_remove_cntr_ibv_cq_poll_list(&efa_rdm_ep->base_ep);
+
+	if (efa_rdm_ep->self_ah)
+		efa_ah_release(efa_rdm_ep->base_ep.domain, efa_rdm_ep->self_ah, false);
 
 	efa_rdm_ep_deregister_ibv_cqs(efa_rdm_ep);
 
@@ -1359,6 +1366,20 @@ int efa_rdm_ep_register_ibv_cqs(struct efa_rdm_ep *ep)
 	return FI_SUCCESS;
 }
 
+/* efa_rdm_ep_create_self_ah() create an address handler for
+ * an EP's own address. The address handler is used by
+ * an EP to read from itself. It is used to
+ * copy data from host memory to GPU memory.
+ */
+static inline
+int efa_rdm_ep_create_self_ah(struct efa_rdm_ep *rdm_ep)
+{
+
+	rdm_ep->self_ah = efa_ah_alloc(rdm_ep->base_ep.domain, rdm_ep->base_ep.src_addr.raw, false);
+
+	return rdm_ep->self_ah ? 0 : -FI_EINVAL;
+}
+
 /**
  * @brief implement the fi_enable() API for EFA RDM endpoint
  * @param[in,out]	fid	Endpoint to enable
@@ -1409,6 +1430,16 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		}
 
 		ret = efa_base_ep_create_and_enable_qp(&ep->base_ep, create_user_recv_qp);
+		if (ret)
+			return ret;
+
+		/* Acquire the SRX lock before creating self AH
+		 * Creating the self AH modifies the AH refcnts which can also
+		 * modified in the CQ read path by implicit-to-explicit AV entry
+		 * conversion */
+		ofi_genlock_lock(&ep->base_ep.domain->srx_lock);
+		ret = efa_rdm_ep_create_self_ah(ep);
+		ofi_genlock_unlock(&ep->base_ep.domain->srx_lock);
 		if (ret)
 			return ret;
 
