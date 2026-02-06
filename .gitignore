@@ -96,3 +96,7 @@ prov/efa/docs/doxygen/latex
 # Clang's compilation database file and directory.
 /.cache
 /compile_commands.json
+
+# Rust
+/target
+/Cargo.lock
