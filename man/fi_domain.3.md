@@ -211,6 +211,8 @@ struct fi_domain_attr {
 	uint32_t              tclass;
 	size_t                max_ep_auth_key;
 	uint32_t              max_group_id;
+	uint64_t              max_cntr_value;
+	uint64_t              max_err_cntr_value;
 };
 ```
 
@@ -815,6 +817,41 @@ support for peer groups by setting this to a non-zero value.  Providers that
 cannot meet the requested max_group_id will fail fi_getinfo().  On output,
 providers may return a value higher than that requested by the application.
 
+## Maximum Counter Value (max_cntr_value)
+
+The maximum value returned by fi_cntr_read. While counters use uint64_t,
+the full range may not be supported due to hardware limitations. This
+field allows providers to advertise their specific limits.
+The default value is UINT64_MAX, which indicates the full counter range.
+A value of 0 means the provider does not set the limit and should be treated
+the same as the default value.
+
+Applications may provide a non-zero max_cntr_value as input to fi_getinfo
+to request a minimum supported counter range. If the provider cannot satisfy
+the requested range, it should return -FI_ENODATA. The provider may return
+a value larger than the one requested.
+
+Applications must manage counter values that approach this limit. See
+[`fi_cntr`(3)](fi_cntr.3.html) for details on counter limit handling
+responsibilities.
+
+## Maximum Error Counter Value (max_err_cntr_value)
+
+The maximum value returned by fi_cntr_readerr. Similar to max_cntr_value,
+this addresses provider-specific limitations for error counter ranges.
+The default value is UINT64_MAX, which indicates the full counter range.
+A value of 0 means the provider does not set the limit and should be treated
+the same as the default value.
+
+Applications may provide a non-zero max_err_cntr_value as input to fi_getinfo
+to request a minimum supported error counter range. If the provider cannot
+satisfy the requested range, it should return -FI_ENODATA. The provider may
+return a value larger than the one requested.
+
+Applications must manage error counter values that approach this limit.
+See [`fi_cntr`(3)](fi_cntr.3.html) for details on counter limit handling
+responsibilities.
+
 # RETURN VALUE
 
 Returns 0 on success. On error, a negative value corresponding to fabric
@@ -847,3 +884,4 @@ installed provider(s).
 [`fi_eq`(3)](fi_eq.3.html),
 [`fi_mr`(3)](fi_mr.3.html)
 [`fi_peer`(3)](fi_peer.3.html)
+[`fi_cntr`(3)](fi_cntr.3.html)
