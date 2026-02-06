@@ -46,10 +46,11 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 
 	memcpy(txe->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
 	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
-	if (msg->desc)
+	if (msg->desc) {
 		memcpy(txe->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
-	else
-		memset(txe->desc, 0, sizeof(txe->desc));
+	} else {
+		memset(txe->desc, 0, sizeof(*txe->desc) * msg->iov_count);
+	}
 
 	/* cq_entry on completion */
 	txe->cq_entry.op_context = msg->context;
