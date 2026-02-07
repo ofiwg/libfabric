@@ -31,6 +31,8 @@ struct efa_domain {
 	size_t			qp_table_sz_m1;
 	size_t			mtu_size;
 	size_t			addrlen;
+	/* Random state to generate QKEY */
+	uint32_t		connid_random_state;
 	bool 			mr_local;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 	struct ofi_genlock	srx_lock; /* shared among peer providers */
