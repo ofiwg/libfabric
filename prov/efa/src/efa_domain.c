@@ -306,6 +306,13 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops;
 	}
 
+	/* generate inital seed using common function */
+	efa_domain->connid_random_state = ofi_generate_seed();
+	/* make sure each domain has unique seed */
+	efa_domain->connid_random_state ^= (uint32_t)(uintptr_t)efa_domain;
+	/* QKEY is 31 bit wide */
+	efa_domain->connid_random_state &= 0x7fffffff;
+
 #ifndef _WIN32
 	err = efa_fork_support_install_fork_handler();
 	if (err) {

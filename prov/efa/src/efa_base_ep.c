@@ -148,27 +148,16 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 	return err;
 }
 
-static int efa_generate_rdm_connid(void)
+static int efa_generate_rdm_connid(struct efa_domain* domain)
 {
-	struct timeval tv;
-	uint32_t val;
-	int err;
-
-	err = gettimeofday(&tv, NULL);
-	if (err) {
-		EFA_WARN(FI_LOG_EP_CTRL, "Cannot gettimeofday, err=%d.\n", err);
-		return 0;
-	}
-
-	/* tv_usec is in range [0,1,000,000), shift it by 12 to [0,4,096,000,000 */
-	val = (tv.tv_usec << 12) + tv.tv_sec;
-
-	val = ofi_xorshift_random(val);
-
+	ofi_genlock_lock(&domain->util_domain.lock);
+	do {
+		ofi_xorshift_random_r(&domain->connid_random_state);
+	} while(domain->connid_random_state > 0x7fffffff);
 	/* 0x80000000 and up is privileged Q Key range. */
-	val &= 0x7fffffff;
+	ofi_genlock_unlock(&domain->util_domain.lock);
 
-	return val;
+	return domain->connid_random_state;
 }
 
 static int efa_base_ep_modify_qp_state(struct efa_base_ep *base_ep,
@@ -409,7 +398,7 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 
 	qp->qkey = (base_ep->util_ep.type == FI_EP_DGRAM) ?
 			   EFA_DGRAM_CONNID :
-			   efa_generate_rdm_connid();
+			   efa_generate_rdm_connid(base_ep->domain);
 	err = efa_base_ep_modify_qp_rst2rts(base_ep, qp);
 	if (err)
 		return err;
