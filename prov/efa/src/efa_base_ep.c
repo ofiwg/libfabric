@@ -150,14 +150,14 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 
 static int efa_generate_rdm_connid(struct efa_domain* domain)
 {
+	int ret;
+
 	ofi_genlock_lock(&domain->util_domain.lock);
-	do {
-		ofi_xorshift_random_r(&domain->connid_random_state);
-	} while(domain->connid_random_state > 0x7fffffff);
 	/* 0x80000000 and up is privileged Q Key range. */
+	ret = (int)ofi_lfsr31_r(&domain->connid_random_state);
 	ofi_genlock_unlock(&domain->util_domain.lock);
 
-	return domain->connid_random_state;
+	return ret;
 }
 
 static int efa_base_ep_modify_qp_state(struct efa_base_ep *base_ep,
