@@ -535,6 +535,29 @@ static inline uint32_t ofi_xorshift_random_r(uint32_t *seed)
 	return *seed = ofi_xorshift_random(*seed);
 }
 
+/**
+ * ofi_lfsr31_r - 31-bit Fibonacci Linear Feedback Shift Register
+ * @val: pointer to LFSR state (must be non-zero, range 1 to 0x7FFFFFFF)
+ *
+ * Generates a maximal-length pseudo-random sequence with period 2^31-1.
+ * Uses primitive polynomial x^31 + x^3 + 1 (trinomial for efficiency).
+ *
+ * Each value from 1 to 2,147,483,647 appears exactly once before the
+ * sequence repeats, ensuring no duplicates within the full period.
+ *
+ * Primitive polynomial from:
+ * "Error Correction Coding: Mathematical Methods and Algorithms"
+ * by Todd K. Moon (Wiley, 2005), Table of Primitive Polynomials
+ * https://web.eecs.utk.edu/~jplank/plank/papers/CS-07-593/primitive-polynomial-table.txt
+ *
+ * Returns: current state value (range 1 to 0x7FFFFFFF)
+ */
+static inline uint32_t ofi_lfsr31_r(uint32_t *val) {
+	uint32_t bit = ((*val >> 30) ^ (*val >> 2)) & 1;
+	*val = ((*val << 1) | bit) & 0x7FFFFFFF;
+	return *val;
+}
+
 uint32_t ofi_generate_seed(void);
 
 size_t ofi_vrb_speed(uint8_t speed, uint8_t width);
