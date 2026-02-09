@@ -367,15 +367,6 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 	ssize_t	  num_entries = 0;
 	uintptr_t output      = (uintptr_t) buf;
 
-#if HAVE_HFISVC
-	if (opx_cq->domain->use_hfisvc) {
-		if (opx_cq->pending.head) {
-			opx_cq_hfisvc_poll(opx_cq);
-		}
-		opx_domain_hfisvc_poll(opx_cq->domain);
-	}
-#endif
-
 	/* examine each context in the pending completion queue and, if the
 	 * operation is complete, initialize the cq entry in the application
 	 * buffer and remove the context from the queue. */
@@ -534,6 +525,15 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 			}
 		}
 	}
+
+#if HAVE_HFISVC
+	if (opx_cq->domain->use_hfisvc) {
+		if (opx_cq->pending.head) {
+			opx_cq_hfisvc_poll(opx_cq);
+		}
+		opx_domain_hfisvc_poll(opx_cq->domain);
+	}
+#endif
 
 	// This is meant for auto progress to just access the rx_polls and exit
 	if (count == 0 && buf == NULL) {
