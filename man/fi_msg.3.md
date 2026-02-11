@@ -55,20 +55,21 @@ ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 : Fabric endpoint on which to initiate send or post receive buffer.
 
 *buf*
-: Data buffer to send or receive.
+: Data buffer to send or receive. For 0-byte operations, buf may be ignored.
 
 *len*
 : Length of data buffer to send or receive, specified in bytes.  Valid
   transfers are from 0 bytes up to the endpoint's max_msg_size.
 
 *iov*
-: Vectored data buffer.
+: Vectored data buffer. For 0-byte operations, iov may be ignored.
 
 *count*
-: Count of vectored data entries.
+: Count of vectored data entries. For 0-byte operations, count may be 0.
 
 *desc*
-: Descriptor associated with the data buffer.  See [`fi_mr`(3)](fi_mr.3.html).
+: Descriptor associated with the data buffer. For 0-byte operations, desc
+  may be ignored even for FI_MR_LOCAL. See [`fi_mr`(3)](fi_mr.3.html).
 
 *data*
 : Remote CQ data to transfer with the sent message.
@@ -157,6 +158,8 @@ struct fi_msg {
 	uint64_t           data;     /* optional message data */
 };
 ```
+
+For 0-byte operations, msg_iov, desc (including FI_MR_LOCAL) and iov_count may be ignored.
 
 ## fi_inject
 
