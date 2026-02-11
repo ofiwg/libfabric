@@ -87,8 +87,8 @@ struct rma_info {
 
 // Endpoint metadata
 struct ep_info {
-	uint16_t worker_id;
-	uint16_t peer_idx;
+	uint16_t worker_id; // destination - worker ID on sender side
+	uint16_t peer_idx;  // source - index of receiver worker in sender's peer_ids table
 	char ep_addr[MAX_EP_ADDR_LEN];
 	struct rma_info rma;
 };
@@ -102,7 +102,7 @@ struct ep_message {
 	struct ep_info info;
 };
 
-// Multy producer single consumer thread-safe queue
+// Multi-producer single consumer thread-safe queue
 struct ep_message_queue {
 	struct ep_message *messages;
 	pthread_mutex_t mutex;
@@ -424,8 +424,7 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 		ret = pthread_mutex_timedlock(&shared_cq_lock, &b);
 		if (ret == ETIMEDOUT) {
 			fprintf(stderr,
-				"%ds timeout expired "
-				"while waiting for shared CQ lock\n",
+				"%ds timeout expired while waiting for shared CQ lock\n",
 				timeout);
 			return 0;
 		}
@@ -588,6 +587,10 @@ static void *run_sender_worker(void *arg)
 			|| ops_posted_for_peer[peer_idx] == topts.msgs_per_sender) {
 			if (++peer_idx == ctx->num_peers)
 				peer_idx = 0;
+			// Relinquish current CPU core to break busy-wait loop
+			// on the current thread. Main thread will be scheduled
+			// before current thread, therefore it would likely push
+			// an update to worker's control queue if the one was pending.
 			sched_yield();
 			continue;
 		}
@@ -692,6 +695,8 @@ static void *run_sender_worker(void *arg)
 	printf("Sender %d: All cycles completed, total ops: %lu\n",
 	       ctx->worker_id, total_ops);
 
+	// Some updates might have arrived too late to be applied.
+	// Draining such messages from control queue until terminator.
 	do {
 		ret = ep_message_queue_pop(ctx->control_queue, &msg); // blocks
 		if (ret) {
@@ -865,7 +870,7 @@ static void *run_receiver_worker(void *arg)
 	}
 out:
 	printf("Receiver %d: Completed %d EP cycles\n", ctx->worker_id, cycle);
-	const struct ep_message terminator = {0};
+	const struct ep_message terminator = { .type = EP_MESSAGE_TYPE_TERMINATOR };
 	ep_message_queue_push(ctx->control_queue, &terminator);
 
 	if (ret) {
@@ -1014,6 +1019,9 @@ static int run_sender(void)
 	// Dispatch control messages from OOB channel to worker's control channels
 	struct ep_message msg;
 	while (true) {
+		// ft_sock_recv blocks until the complete message recived.
+		// It returns 0 on suceess and -FI_ENOTCONN if socket
+		// had been closed by peer.
 		ret = ft_sock_recv(oob_sock, (void*)&msg, sizeof(msg));
 		if (ret) {
 			FT_PRINTERR("ft_sock_recv", ret);
@@ -1029,6 +1037,9 @@ static int run_sender(void)
 			goto out;
 		}
 	}
+	// On the happy path we exit this loop because of terminator message
+	// recived on OOB channnel. That means all reciver's workers has
+	// completed all cycles and no one is listening anymore.
 
 	// Terminate workers
 	for (int i = 0; i < topts.num_sender_workers; i++) {
@@ -1169,7 +1180,7 @@ static int run_receiver(void)
 			}
 		}
 	}
-	struct ep_message terminator = {0};
+	struct ep_message terminator = { .type = EP_MESSAGE_TYPE_TERMINATOR };
 	ret = ft_sock_send(oob_sock, &terminator, sizeof(terminator));
 	if (ret) {
 		FT_PRINTERR("ft_sock_send", ret);
