@@ -3484,6 +3484,14 @@ Added new fields to the following attributes:
 *fi_domain_attr*
 :   Added max_group_id
 
+## ABI 1.9
+
+ABI version starting with libfabric 2.5. Added new fields to the
+following attributes:
+
+*fi_domain_attr*
+:   Added max_cntr_value, max_err_cntr_value
+
 # SEE ALSO
 
 [`fi_info`(1)](fi_info.1.html), [`fi_provider`(7)](fi_provider.7.html),
@@ -5930,10 +5938,35 @@ commands are usable with a counter:
 
 The fi_cntr_read call returns the current value of the counter.
 
+Applications must manage counter values that approach the limit defined
+by the domain attribute `max_cntr_value`. This value, which defaults to
+UINT64_MAX but may be lower due to provider limitations, defines the
+maximum value returned by fi_cntr_read().
+
+When a counter reaches its maximum value and additional operations
+complete, the counter behavior will be undefined. Applications that need
+to track the total number of operations beyond the provider's counter
+limits are responsible for detecting and handling this condition by
+resetting counters with `fi_cntr_set` before they reach the maximum, or
+it could result in incorrect values.
+
 ## fi_cntr_readerr
 
 The read error call returns the number of operations that completed in
 error and were unable to update the counter.
+
+Applications must manage error counter values that approach the limit
+defined by the domain attribute `max_err_cntr_value`. This value, which
+defaults to UINT64_MAX but may be lower due to provider limitations,
+defines the maximum value returned by fi_cntr_readerr().
+
+When an error counter reaches its maximum value and additional error
+operations complete, the counter behavior will be undefined.
+Applications that need to track the total number of error operations
+beyond the provider's counter limits are responsible for detecting and
+handling this condition by resetting the error counters with
+`fi_cntr_set` before they reach the maximum, or it could result in
+incorrect values.
 
 ## fi_cntr_add
 
@@ -7864,6 +7897,8 @@ struct fi_domain_attr {
     uint32_t              tclass;
     size_t                max_ep_auth_key;
     uint32_t              max_group_id;
+    uint64_t              max_cntr_value;
+    uint64_t              max_err_cntr_value;
 };
 ```
 
@@ -8503,6 +8538,42 @@ a non-zero value. Providers that cannot meet the requested max_group_id
 will fail fi_getinfo(). On output, providers may return a value higher
 than that requested by the application.
 
+## Maximum Counter Value (max_cntr_value)
+
+The maximum value returned by fi_cntr_read. While counters use uint64_t,
+the full range may not be supported due to hardware limitations. This
+field allows providers to advertise their specific limits. The default
+value is UINT64_MAX, which indicates the full counter range. A value of
+0 means the provider does not set the limit and should be treated the
+same as the default value.
+
+Applications may provide a non-zero max_cntr_value as input to
+fi_getinfo to request a minimum supported counter range. If the provider
+cannot satisfy the requested range, it should return -FI_ENODATA. The
+provider may return a value larger than the one requested.
+
+Applications must manage counter values that approach this limit. See
+[`fi_cntr`(3)](fi_cntr.3.html) for details on counter limit handling
+responsibilities.
+
+## Maximum Error Counter Value (max_err_cntr_value)
+
+The maximum value returned by fi_cntr_readerr. Similar to
+max_cntr_value, this addresses provider-specific limitations for error
+counter ranges. The default value is UINT64_MAX, which indicates the
+full counter range. A value of 0 means the provider does not set the
+limit and should be treated the same as the default value.
+
+Applications may provide a non-zero max_err_cntr_value as input to
+fi_getinfo to request a minimum supported error counter range. If the
+provider cannot satisfy the requested range, it should return
+-FI_ENODATA. The provider may return a value larger than the one
+requested.
+
+Applications must manage error counter values that approach this limit.
+See [`fi_cntr`(3)](fi_cntr.3.html) for details on counter limit handling
+responsibilities.
+
 # RETURN VALUE
 
 Returns 0 on success. On error, a negative value corresponding to fabric
@@ -8529,7 +8600,7 @@ appropriately for the installed provider(s).
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html), [`fi_av`(3)](fi_av.3.html),
 [`fi_eq`(3)](fi_eq.3.html), [`fi_mr`(3)](fi_mr.3.html)
-[`fi_peer`(3)](fi_peer.3.html)
+[`fi_peer`(3)](fi_peer.3.html) [`fi_cntr`(3)](fi_cntr.3.html)
 
 {% include JB/setup %}
 
@@ -19544,6 +19615,10 @@ To see the full fi_info structure, specify the `-v` option.
             max_err_data: 0
             mr_cnt: 0
             tclass: 0x0
+            max_ep_auth_key: 0
+            max_group_id: 0
+            max_cntr_value: 18446744073709551615
+            max_err_cntr_value: 18446744073709551615
         fi_fabric_attr:
             name: IB-0xfe80000000000000
             prov_name: verbs;ofi_rxd
