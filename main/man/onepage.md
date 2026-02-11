@@ -7075,13 +7075,13 @@ debugging purposes. See field details below for more information on the
 use of err_data and err_data_size.
 
 Note that error completions are generated for all operations, including
-those for which a completion was not requested (e.g. an endpoint is
-configured with FI_SELECTIVE_COMPLETION, but the request did not have
-the FI_COMPLETION flag set). In such cases, providers will return as
-much information as made available by the underlying software and
-hardware about the failure, other fields will be set to NULL or 0. This
-includes the op_context value, which may not have been provided or was
-ignored on input as part of the transfer.
+those for which a completion was not requested (e.g. inject transfers or
+when an endpoint is configured with FI_SELECTIVE_COMPLETION, but the
+request did not have the FI_COMPLETION flag set). In such cases,
+providers will return as much information as made available by the
+underlying software and hardware about the failure, other fields will be
+set to NULL or 0. This includes the op_context value, which may not have
+been provided or was ignored on input as part of the transfer.
 
 Notable completion error codes are given below.
 
@@ -12284,7 +12284,8 @@ struct fi_msg {
 The send inject call is an optimized version of fi_send with the
 following characteristics. The data buffer is available for reuse
 immediately on return from the call, and no CQ entry will be written if
-the transfer completes successfully.
+the transfer completes successfully. If the transfer fails, an error
+entry will be written to the CQ.
 
 Conceptually, this means that the fi_inject function behaves as if the
 FI_INJECT transfer flag were set, selective completions are enabled, and
