@@ -102,6 +102,13 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 		base_ep->user_recv_qp = NULL;
 	}
 
+	/* Drain the CQ after destroying the QP
+	 *
+	 * If 	(1) the CQ is not drained
+	 * 		(2) there are CQEs in the CQ that were
+	 * 			meant for the destroyed QP and
+	 * 		(3) a new QP is created with the same QPN,
+	 * the new CQEs will be considered valid CQEs for the new QP */
 	if (tx_cq) {
 		err = 0;
 		while (err != ENOENT) {
