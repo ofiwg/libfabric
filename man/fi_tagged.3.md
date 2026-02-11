@@ -57,17 +57,17 @@ ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 : Fabric endpoint on which to initiate tagged communication operation.
 
 *buf*
-: Data buffer to send or receive.
+: Data buffer to send or receive. For 0-byte operations, buf may be ignored.
 
 *len*
 : Length of data buffer to send or receive, specified in bytes.  Valid
   transfers are from 0 bytes up to the endpoint's max_msg_size.
 
 *iov*
-: Vectored data buffer.
+: Vectored data buffer. For 0-byte operations, iov may be ignored.
 
 *count*
-: Count of vectored data entries.
+: Count of vectored data entries. For 0-byte operations, count may be 0.
 
 *tag*
 : Tag associated with the message.
@@ -76,8 +76,8 @@ ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 : Mask of bits to ignore applied to the tag for receive operations.
 
 *desc*
-: Memory descriptor associated with the data buffer.
-  See [`fi_mr`(3)](fi_mr.3.html).
+: Memory descriptor associated with the data buffer. For 0-byte operations,
+  desc may be ignored even for FI_MR_LOCAL. See [`fi_mr`(3)](fi_mr.3.html).
 
 *data*
 : Remote CQ data to transfer with the sent data.
@@ -190,6 +190,8 @@ struct fi_msg_tagged {
 	uint64_t           data;     /* optional immediate data */
 };
 ```
+
+For 0-byte operations, msg_iov, desc (including FI_MR_LOCAL) and iov_count may be ignored.
 
 ## fi_tinject
 
