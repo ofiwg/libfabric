@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_msg" "3" "2024\-12\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_msg" "3" "2026\-02\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -177,6 +177,7 @@ following characteristics.
 The data buffer is available for reuse immediately on return from the
 call, and no CQ entry will be written if the transfer completes
 successfully.
+If the transfer fails, an error entry will be written to the CQ.
 .PP
 Conceptually, this means that the fi_inject function behaves as if the
 FI_INJECT transfer flag were set, selective completions are enabled, and
