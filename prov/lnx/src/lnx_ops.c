@@ -284,6 +284,7 @@ lnx_discard(struct lnx_ep *lep, struct lnx_rx_entry *rx_entry, void *context)
 			  rx_entry->rx_entry.cq_data,
 			  rx_entry->rx_entry.tag);
 
+	dlist_remove(&rx_entry->entry);
 	lnx_free_entry(&rx_entry->rx_entry);
 
 	return rc;
@@ -315,12 +316,17 @@ lnx_peek(struct lnx_ep *lep, struct lnx_match_attr *match_attr, void *context,
 			  rx_entry->rx_entry.tag);
 
 	if (flags & FI_DISCARD) {
+		rc = rx_entry->rx_cep->cep_srx.peer_ops->discard_tag(
+							&rx_entry->rx_entry);
+		dlist_remove(&rx_entry->entry);
 		lnx_free_entry(&rx_entry->rx_entry);
 		goto out;
 	}
 
-	if (flags & FI_CLAIM)
+	if (flags & FI_CLAIM) {
+		dlist_remove(&rx_entry->entry);
 		((struct fi_context *)context)->internal[0] = rx_entry;
+	}
 
 out:
 	return rc;
