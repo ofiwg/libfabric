@@ -154,61 +154,61 @@ static int ft_cuda_pointer_set_attribute(void *buf)
 static int ft_cuda_detect_memory_support(void)
 {
 #if HAVE_CUDA_DMABUF
-    CUresult cuda_ret;
-    CUdevice dev;
-    int cc_major = 0, cc_minor = 0;
-    int dma_buf_attr = 0;
-    int gdr_attr = 0;
-    cuda_memory_support = FT_CUDA_NOT_INITIALIZED;
+	CUresult cuda_ret;
+	CUdevice dev;
+	int cc_major = 0, cc_minor = 0;
+	int dma_buf_attr = 0;
+	int gdr_attr = 0;
+	cuda_memory_support = FT_CUDA_NOT_INITIALIZED;
 
-    cuda_ret = cuda_ops.cuDeviceGet(&dev, 0);
-    if (cuda_ret != CUDA_SUCCESS) {
-        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGet");
-        cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
-        return -FI_EIO;
-    }
+	cuda_ret = cuda_ops.cuDeviceGet(&dev, 0);
+	if (cuda_ret != CUDA_SUCCESS) {
+		ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGet");
+		cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
+		return -FI_EIO;
+	}
 
-    cuda_ret = cuda_ops.cuDeviceGetAttribute(&cc_major,
-        CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev);
-    if (cuda_ret != CUDA_SUCCESS) {
-        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(CC_MAJOR)");
-        cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
-        return -FI_EIO;
-    }
+	cuda_ret = cuda_ops.cuDeviceGetAttribute(&cc_major,
+		CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev);
+	if (cuda_ret != CUDA_SUCCESS) {
+		ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(CC_MAJOR)");
+		cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
+		return -FI_EIO;
+	}
 
-    cuda_ret = cuda_ops.cuDeviceGetAttribute(&cc_minor,
-        CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, dev);
-    if (cuda_ret != CUDA_SUCCESS) {
-        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(CC_MINOR)");
-        cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
-        return -FI_EIO;
-    }
+	cuda_ret = cuda_ops.cuDeviceGetAttribute(&cc_minor,
+		CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, dev);
+	if (cuda_ret != CUDA_SUCCESS) {
+		ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(CC_MINOR)");
+		cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
+		return -FI_EIO;
+	}
 
-    cuda_ret = cuda_ops.cuDeviceGetAttribute(&dma_buf_attr,
-        CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, dev);
-    if (cuda_ret != CUDA_SUCCESS) {
-        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(DMA_BUF_SUPPORTED)");
-        cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
-        return -FI_EIO;
-    }
+	cuda_ret = cuda_ops.cuDeviceGetAttribute(&dma_buf_attr,
+		CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, dev);
+	if (cuda_ret != CUDA_SUCCESS) {
+		ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(DMA_BUF_SUPPORTED)");
+		cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
+		return -FI_EIO;
+	}
 
-    cuda_ret = cuda_ops.cuDeviceGetAttribute(&gdr_attr,
-        CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED, dev);
-    if (cuda_ret != CUDA_SUCCESS) {
-        ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(GPU_DIRECT_RDMA_SUPPORTED)");
-        cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
-        return -FI_EIO;
-    }
+	cuda_ret = cuda_ops.cuDeviceGetAttribute(&gdr_attr,
+		CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED, dev);
+	if (cuda_ret != CUDA_SUCCESS) {
+		ft_cuda_driver_api_print_error(cuda_ret, "cuDeviceGetAttribute(GPU_DIRECT_RDMA_SUPPORTED)");
+		cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
+		return -FI_EIO;
+	}
 
-    dmabuf_supported = (dma_buf_attr == 1);
+	dmabuf_supported = (dma_buf_attr == 1);
 
-    // Blackwell or newer: nv-p2p deprecated
-    if (cc_major >= 10)
-        gdr_supported = false;
-    else
-        gdr_supported = (gdr_attr == 1);
+	// Blackwell or newer: nv-p2p deprecated
+	if (cc_major >= 10)
+		gdr_supported = false;
+	else
+		gdr_supported = (gdr_attr == 1);
 
-    // Final truth table
+	// Final truth table
 	if (!gdr_supported && !dmabuf_supported)
 		cuda_memory_support = FT_CUDA_NOT_SUPPORTED;
 	else if (gdr_supported && dmabuf_supported)
@@ -218,14 +218,13 @@ static int ft_cuda_detect_memory_support(void)
 	else
 		cuda_memory_support = FT_CUDA_GDR_ONLY;
 
-    return FI_SUCCESS;
+	return FI_SUCCESS;
 
 #else
-    cuda_memory_support = FT_CUDA_NOT_INITIALIZED;
-    return FI_SUCCESS;
+	cuda_memory_support = FT_CUDA_NOT_INITIALIZED;
+	return FI_SUCCESS;
 #endif
 }
-
 
 int ft_cuda_init(void)
 {
@@ -370,8 +369,8 @@ int ft_cuda_init(void)
 		goto err_dlclose_cuda;
 	}
 
-    ret = ft_cuda_detect_memory_support();
-    if (ret != FI_SUCCESS) {
+	ret = ft_cuda_detect_memory_support();
+	if (ret != FI_SUCCESS) {
 		goto err_dlclose_cuda;
 	}
 
@@ -595,7 +594,7 @@ int ft_cuda_put_dmabuf_fd(int fd)
 
 enum ft_cuda_memory_support ft_cuda_memory_support(void)
 {
-    return cuda_memory_support;
+	return cuda_memory_support;
 }
 
 #else
