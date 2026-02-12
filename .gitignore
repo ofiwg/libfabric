@@ -78,6 +78,7 @@ fabtests/benchmarks/fi_*
 fabtests/component/sock_test
 fabtests/component/dmabuf-rdma/xe_*
 fabtests/component/dmabuf-rdma/fi_*
+fabtests/component/dmabuf-rdma/cuda_*
 fabtests/functional/fi_*
 fabtests/unit/fi_*
 fabtests/multinode/fi_*

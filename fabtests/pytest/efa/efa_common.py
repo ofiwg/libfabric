@@ -133,7 +133,7 @@ def get_cuda_memory_support(cmdline_args, ip):
     """
     binpath = cmdline_args.binpath or ""
     cmd = "timeout " + str(cmdline_args.timeout) \
-          + " " + os.path.join(binpath, "check_cuda_dmabuf") \
+          + " " + os.path.join(binpath, "cuda_check_dmabuf") \
           + " -p " + cmdline_args.provider
     if cmdline_args.environments:
         cmd = cmdline_args.environments + " " + cmd

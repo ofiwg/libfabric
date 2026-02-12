@@ -69,8 +69,8 @@ bin_PROGRAMS = \
 	multinode/fi_multinode	\
 	multinode/fi_multinode_coll \
 	component/sock_test \
-	regression/sighandler_test \
-	common/check_cuda_dmabuf
+	component/dmabuf-rdma/cuda_check_dmabuf \
+	regression/sighandler_test
 
 if HAVE_ZE_DEVEL
 if HAVE_VERBS_DEVEL
@@ -543,6 +543,14 @@ component_sock_test_LDADD = libfabtests.la
 component_sock_test_CFLAGS = \
 	$(AM_CFLAGS)
 
+component_dmabuf_rdma_cuda_check_dmabuf_SOURCES = \
+	component/dmabuf-rdma/check_cuda_dmabuf.c
+
+component_dmabuf_rdma_cuda_check_dmabuf_LDADD = libfabtests.la
+
+component_dmabuf_rdma_cuda_check_dmabuf_CFLAGS = \
+	$(AM_CFLAGS)
+
 if HAVE_ZE_DEVEL
 if HAVE_VERBS_DEVEL
 component_dmabuf_rdma_xe_rdmabw_SOURCES = \
@@ -622,14 +630,6 @@ regression_sighandler_test_SOURCES = \
 regression_sighandler_test_LDADD = libfabtests.la
 
 regression_sighandler_test_CFLAGS = \
-	$(AM_CFLAGS)
-
-common_check_cuda_dmabuf_SOURCES = \
-	common/check_cuda_dmabuf.c
-
-common_check_cuda_dmabuf_LDADD = libfabtests.la
-
-common_check_cuda_dmabuf_CFLAGS = \
 	$(AM_CFLAGS)
 
 real_man_pages = \
