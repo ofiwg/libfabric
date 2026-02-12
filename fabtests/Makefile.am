@@ -64,12 +64,12 @@ bin_PROGRAMS = \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
 	unit/fi_setopt_test \
+	unit/fi_check_hmem \
 	ubertest/fi_ubertest	\
 	multinode/fi_multinode	\
 	multinode/fi_multinode_coll \
 	component/sock_test \
 	regression/sighandler_test \
-	common/check_hmem \
 	common/check_cuda_dmabuf
 
 if HAVE_ZE_DEVEL
@@ -487,6 +487,14 @@ unit_fi_setopt_test_SOURCES = \
 	$(unit_srcs)
 unit_fi_setopt_test_LDADD = libfabtests.la
 
+unit_fi_check_hmem_SOURCES = \
+	unit/check_hmem.c
+
+unit_fi_check_hmem_LDADD = libfabtests.la
+
+unit_fi_check_hmem_CFLAGS = \
+	$(AM_CFLAGS)
+
 ubertest_fi_ubertest_SOURCES = \
 	ubertest/fabtest.h \
 	ubertest/uber.c \
@@ -614,14 +622,6 @@ regression_sighandler_test_SOURCES = \
 regression_sighandler_test_LDADD = libfabtests.la
 
 regression_sighandler_test_CFLAGS = \
-	$(AM_CFLAGS)
-
-common_check_hmem_SOURCES = \
-	common/check_hmem.c
-
-common_check_hmem_LDADD = libfabtests.la
-
-common_checK_hmem_CFLAGS = \
 	$(AM_CFLAGS)
 
 common_check_cuda_dmabuf_SOURCES = \
