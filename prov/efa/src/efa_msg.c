@@ -214,16 +214,18 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	struct ibv_sge sg_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
 	size_t len, i;
+	size_t iov_count = msg->iov_count;
 	bool use_inline;
 	int ret = 0;
 	uintptr_t wr_id;
 
 	efa_tracepoint(send_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
+	len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
+
 	EFA_DBG(FI_LOG_EP_DATA,
 		"total len: %zu, addr: %lu, context: %lx, flags: %lx\n",
-		ofi_total_iov_len(msg->msg_iov, msg->iov_count),
-		msg->addr, (size_t) msg->context, flags);
+		len, msg->addr, (size_t) msg->context, flags);
 
 	dump_msg(msg, "send");
 
@@ -231,8 +233,6 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	assert(conn && conn->ep_addr);
 
 	assert(msg->iov_count <= base_ep->info->tx_attr->iov_limit);
-
-	len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 
 	if (qp->ibv_qp->qp_type == IBV_QPT_UD) {
 		assert(msg->msg_iov[0].iov_len >= base_ep->info->ep_attr->msg_prefix_size);
@@ -251,6 +251,13 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		msg->context, msg->addr, flags, FI_SEND | FI_MSG,
 		use_inline ? NULL : msg->desc,
 		msg->iov_count);
+
+	/* Handle 0-byte send with inline path and 0 SGEs */
+	if (len == 0) {
+		iov_count = 0;
+		use_inline = true;
+		goto post;
+	}
 
 	if (use_inline) {
 		/* Prepare inline data list */
@@ -287,8 +294,9 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		}
 	}
 
+post:
 	/* Use consolidated send function */
-	ret = efa_qp_post_send(qp, sg_list, inline_data_list, msg->iov_count,
+	ret = efa_qp_post_send(qp, sg_list, inline_data_list, iov_count,
 			       use_inline, wr_id, msg->data, flags,
 			       conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
 	if (OFI_UNLIKELY(ret)) {
