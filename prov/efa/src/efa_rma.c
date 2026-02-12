@@ -346,6 +346,89 @@ ssize_t efa_rma_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	return efa_rma_post_write(base_ep, &msg, FI_REMOTE_CQ_DATA | efa_tx_flags(base_ep));
 }
 
+ssize_t efa_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t len,
+			      fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+{
+	struct efa_base_ep *base_ep;
+	struct efa_domain *domain;
+	struct ibv_sge sge;
+	struct efa_conn *conn;
+	uintptr_t wr_id;
+	int err;
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	domain = base_ep->domain;
+	err = efa_rma_check_cap(base_ep);
+	if (err)
+		return err;
+
+	/* Only support 0-byte inject for efa-direct */
+	if (len != 0)
+		return -FI_ENOSYS;
+
+	ofi_genlock_lock(&base_ep->util_ep.lock);
+
+	wr_id = (uintptr_t) efa_fill_context(NULL, dest_addr, FI_INJECT, FI_RMA | FI_WRITE);
+
+	sge.addr = (uint64_t)domain->zero_byte_bounce_buf;
+	sge.length = 0;
+	sge.lkey = domain->zero_byte_bounce_buf_mr->ibv_mr->lkey;
+
+	conn = efa_av_addr_to_conn(base_ep->av, dest_addr);
+	assert(conn && conn->ep_addr);
+
+	err = efa_qp_post_write(base_ep->qp, &sge, 1, key, addr,
+				wr_id, 0, 0, conn->ah, conn->ep_addr->qpn,
+				conn->ep_addr->qkey);
+	if (OFI_UNLIKELY(err))
+		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
+
+	ofi_genlock_unlock(&base_ep->util_ep.lock);
+	return err;
+}
+
+static ssize_t efa_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
+					 uint64_t data, fi_addr_t dest_addr,
+					 uint64_t addr, uint64_t key)
+{
+	struct efa_base_ep *base_ep;
+	struct efa_domain *domain;
+	struct efa_conn *conn;
+	struct ibv_sge sge;
+	uintptr_t wr_id;
+	int err;
+
+	base_ep = container_of(ep, struct efa_base_ep, util_ep.ep_fid);
+	domain = base_ep->domain;
+	err = efa_rma_check_cap(base_ep);
+	if (err)
+		return err;
+
+	/* Only support 0-byte inject for efa-direct */
+	if (len != 0)
+		return -FI_ENOSYS;
+
+	ofi_genlock_lock(&base_ep->util_ep.lock);
+
+	wr_id = (uintptr_t) efa_fill_context(NULL, dest_addr, FI_INJECT | FI_REMOTE_CQ_DATA, FI_RMA | FI_WRITE);
+
+	sge.addr = (uint64_t)domain->zero_byte_bounce_buf;
+	sge.length = 0;
+	sge.lkey = domain->zero_byte_bounce_buf_mr->ibv_mr->lkey;
+
+	conn = efa_av_addr_to_conn(base_ep->av, dest_addr);
+	assert(conn && conn->ep_addr);
+
+	err = efa_qp_post_write(base_ep->qp, &sge, 1, key, addr,
+				wr_id, data, IBV_SEND_INLINE, conn->ah, conn->ep_addr->qpn,
+				conn->ep_addr->qkey);
+	if (OFI_UNLIKELY(err))
+		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
+
+	ofi_genlock_unlock(&base_ep->util_ep.lock);
+	return err;
+}
+
 struct fi_ops_rma efa_dgram_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = fi_no_rma_read,
@@ -367,7 +450,7 @@ struct fi_ops_rma efa_rma_ops = {
 	.write = efa_rma_write,
 	.writev = efa_rma_writev,
 	.writemsg = efa_rma_writemsg,
-	.inject = fi_no_rma_inject,
+	.inject = efa_rma_inject_write,
 	.writedata = efa_rma_writedata,
-	.injectdata = fi_no_rma_injectdata,
+	.injectdata = efa_rma_inject_writedata,
 };
