@@ -189,7 +189,9 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 					 const struct fi_msg_rma *msg,
 					 uint64_t flags)
 {
+	struct efa_domain *domain = base_ep->domain;
 	struct efa_conn *conn;
+	size_t iov_count = msg->iov_count;
 #ifndef _WIN32
 	struct ibv_sge sge_list[msg->iov_count];
 #else
@@ -200,6 +202,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 #endif
 	uintptr_t wr_id;
 	int i, err = 0;
+	size_t total_len;
 
 	if (flags & FI_INJECT) {
 		EFA_WARN(FI_LOG_EP_DATA,
@@ -209,10 +212,11 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 
 	efa_tracepoint(write_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
+	total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
+
 	EFA_DBG(FI_LOG_EP_DATA,
 		"total len: %zu, addr: %lu, context: %lx, flags: %lx\n",
-		ofi_total_iov_len(msg->msg_iov, msg->iov_count),
-		msg->addr, (size_t) msg->context, flags);
+		total_len, msg->addr, (size_t) msg->context, flags);
 
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
@@ -220,25 +224,33 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	wr_id = (uintptr_t) efa_fill_context(
 		msg->context, msg->addr, flags, FI_RMA | FI_WRITE);
 
-	/* Prepare SGE list */
-	for (i = 0; i < msg->iov_count; ++i) {
-		sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
-		sge_list[i].length = msg->msg_iov[i].iov_len;
-		if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				 "EFA direct requires FI_MR_LOCAL but "
-				 "application does not provide a valid desc\n");
-			err = -FI_EINVAL;
-			goto out_err;
+	/* Handle 0-byte write with bounce buffer */
+	if (total_len == 0) {
+		sge_list[0].addr = (uint64_t)domain->zero_byte_bounce_buf;
+		sge_list[0].length = 0;
+		sge_list[0].lkey = domain->zero_byte_bounce_buf_mr->ibv_mr->lkey;
+		iov_count = 1;
+	} else {
+		/* Prepare SGE list */
+		for (i = 0; i < msg->iov_count; ++i) {
+			sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
+			sge_list[i].length = msg->msg_iov[i].iov_len;
+			if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
+				EFA_WARN(FI_LOG_EP_CTRL,
+					 "EFA direct requires FI_MR_LOCAL but "
+					 "application does not provide a valid desc\n");
+				err = -FI_EINVAL;
+				goto out_err;
+			}
+			sge_list[i].lkey = ((struct efa_mr *)msg->desc[i])->ibv_mr->lkey;
 		}
-		sge_list[i].lkey = ((struct efa_mr *)msg->desc[i])->ibv_mr->lkey;
 	}
 
 	conn = efa_av_addr_to_conn(base_ep->av, msg->addr);
 	assert(conn && conn->ep_addr);
 
 	/* Use consolidated RDMA write function */
-	err = efa_qp_post_write(base_ep->qp, sge_list, msg->iov_count,
+	err = efa_qp_post_write(base_ep->qp, sge_list, iov_count,
 				msg->rma_iov[0].key, msg->rma_iov[0].addr,
 				wr_id, msg->data, flags,
 				conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
