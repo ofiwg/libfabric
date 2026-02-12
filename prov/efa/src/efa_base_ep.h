@@ -157,4 +157,14 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_re
 void efa_ep_addr_print(char *prefix, struct efa_ep_addr *addr);
 #endif
 
+static inline size_t efa_base_ep_get_rx_pool_size(struct efa_base_ep *base_ep)
+{
+	return MIN(base_ep->domain->device->rdm_info->rx_attr->size, base_ep->info->rx_attr->size);
+}
+
+static inline size_t efa_base_ep_get_tx_pool_size(struct efa_base_ep *base_ep)
+{
+	return MIN(base_ep->domain->device->rdm_info->tx_attr->size, base_ep->info->tx_attr->size);
+}
+
 #endif

@@ -859,13 +859,13 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 	int i, err;
 
 	/**
-	 * When efa_env.internal_rx_refill_threshold > efa_rdm_ep_get_rx_pool_size(ep),
+	 * When efa_env.internal_rx_refill_threshold > efa_base_ep_get_rx_pool_size(&ep->base_ep),
 	 * we should always refill when the pool is empty.
 	 */
-	if (ep->efa_rx_pkts_to_post < MIN(efa_env.internal_rx_refill_threshold, efa_rdm_ep_get_rx_pool_size(ep)))
+	if (ep->efa_rx_pkts_to_post < MIN(efa_env.internal_rx_refill_threshold, efa_base_ep_get_rx_pool_size(&ep->base_ep)))
 		return 0;
 
-	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted <= ep->efa_max_outstanding_rx_ops);
+	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted <= efa_base_ep_get_rx_pool_size(&ep->base_ep));
 	for (i = 0; i < ep->efa_rx_pkts_to_post; ++i) {
 		ep->pke_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
 					       EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -1027,10 +1027,10 @@ void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 		if (err)
 			goto err_exit;
 
-		ep->efa_rx_pkts_to_post = efa_rdm_ep_get_rx_pool_size(ep);
+		ep->efa_rx_pkts_to_post = efa_base_ep_get_rx_pool_size(&ep->base_ep);
 	}
 
-	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted + ep->efa_rx_pkts_held == efa_rdm_ep_get_rx_pool_size(ep));
+	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted + ep->efa_rx_pkts_held == efa_base_ep_get_rx_pool_size(&ep->base_ep));
 
 	err = efa_rdm_ep_bulk_post_internal_rx_pkts(ep);
 	if (err)

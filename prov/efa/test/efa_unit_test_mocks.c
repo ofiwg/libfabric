@@ -120,13 +120,16 @@ int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibv_ctx,
 /**
  * @brief a list of work requests request's WR ID
  */
-void *g_ibv_submitted_wr_id_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+void **g_ibv_submitted_wr_id_vec = NULL;
 int g_ibv_submitted_wr_id_cnt = 0;
+int g_ibv_submitted_wr_id_capacity = 0;
 
 void efa_ibv_submitted_wr_id_vec_clear()
 {
-	memset(g_ibv_submitted_wr_id_vec, 0,
-	       g_ibv_submitted_wr_id_cnt * sizeof(void *));
+	if (g_ibv_submitted_wr_id_vec) {
+		memset(g_ibv_submitted_wr_id_vec, 0,
+		       g_ibv_submitted_wr_id_capacity * sizeof(void *));
+	}
 	g_ibv_submitted_wr_id_cnt = 0;
 }
 
@@ -260,7 +263,7 @@ int efa_mock_efa_qp_post_recv_return_mock(struct efa_qp *qp, struct ibv_recv_wr 
 
 static void efa_mock_efa_qp_post_save_wr_id(uintptr_t wr_id)
 {
-	if (g_ibv_submitted_wr_id_cnt < EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND) {
+	if (g_ibv_submitted_wr_id_cnt < g_ibv_submitted_wr_id_capacity) {
 		g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)wr_id;
 		g_ibv_submitted_wr_id_cnt++;
 	}
@@ -734,7 +737,7 @@ int efa_mock_efadv_query_cq(struct ibv_cq *ibvcq, struct efadv_cq_attr *attr, ui
 	return 0;
 }
 #endif /* HAVE_EFADV_QUERY_CQ */
- 
+
 int efa_mock_ibv_req_notify_cq_return_mock(struct efa_ibv_cq *ibv_cq, int solicited_only)
 {
 	return 0;
