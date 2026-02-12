@@ -3,6 +3,7 @@
 
 #include "efa_unit_tests.h"
 #include "efa_cq.h"
+
 /**
  * @brief Verify the info type in struct efa_domain for efa RDM path
  *
@@ -31,6 +32,122 @@ void test_efa_domain_info_type_efa_direct(struct efa_resource **state)
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
 	assert_true(efa_domain->info_type == EFA_INFO_DIRECT);
+}
+
+/**
+ * @brief Verify bounce buffer is allocated for efa-direct domain
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_direct_has_bounce_buffer(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+
+	if (efa_domain->info->caps & FI_RMA) {
+		assert_non_null(efa_domain->zero_byte_bounce_buf);
+		assert_non_null(efa_domain->zero_byte_bounce_buf_mr);
+		assert_non_null(efa_domain->zero_byte_bounce_buf_mr->ibv_mr);
+	} else {
+		assert_null(efa_domain->zero_byte_bounce_buf);
+		assert_null(efa_domain->zero_byte_bounce_buf_mr);
+	}
+}
+
+/**
+ * @brief Verify bounce buffer is NOT allocated for efa RDM domain
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_rdm_no_bounce_buffer(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert_null(efa_domain->zero_byte_bounce_buf);
+	assert_null(efa_domain->zero_byte_bounce_buf_mr);
+}
+
+/* Internal structures from libibverbs/driver.h - needed to access MR access flags */
+enum ibv_mr_type {
+	IBV_MR_TYPE_MR,
+	IBV_MR_TYPE_NULL_MR,
+	IBV_MR_TYPE_IMPORTED_MR,
+	IBV_MR_TYPE_DMABUF_MR,
+};
+
+struct verbs_mr {
+	struct ibv_mr ibv_mr;
+	enum ibv_mr_type mr_type;
+	int access;
+};
+
+/**
+ * @brief Verify bounce buffer is NOT allocated when FI_RMA is not requested
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_no_bounce_buffer_without_fi_rma_cap_requested(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	struct fi_info *hints, *info;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	hints->caps &= ~FI_RMA;
+	assert_int_equal(fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &info), 0);
+
+	/* Remove FI_RMA from the returned info as well */
+	info->caps &= ~FI_RMA;
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14), info, true, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert_null(efa_domain->zero_byte_bounce_buf);
+	assert_null(efa_domain->zero_byte_bounce_buf_mr);
+
+	fi_freeinfo(hints);
+	fi_freeinfo(info);
+}
+
+/**
+ * @brief Verify bounce buffer registered successfully with RDMA read and write capability
+ *        assuming platform support of rdma-read/rdma-write
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_bounce_buffer_with_rdma(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	struct verbs_mr *vmr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+
+	if (!(efa_domain->info->caps & FI_RMA)) {
+		assert_null(efa_domain->zero_byte_bounce_buf);
+		assert_null(efa_domain->zero_byte_bounce_buf_mr);
+		return;
+	}
+
+	assert_non_null(efa_domain->zero_byte_bounce_buf);
+	assert_non_null(efa_domain->zero_byte_bounce_buf_mr);
+	assert_non_null(efa_domain->zero_byte_bounce_buf_mr->ibv_mr);
+
+	/* Verify MR access flags - with RDMA read and write */
+	vmr = container_of(efa_domain->zero_byte_bounce_buf_mr->ibv_mr, struct verbs_mr, ibv_mr);
+
+	/* IBV_ACCESS_LOCAL_WRITE is always set for FI_RECV */
+	assert_true(vmr->access & IBV_ACCESS_LOCAL_WRITE);
+	/* FI_SEND with RDMA_READ support sets REMOTE_READ for both efa/efa-direct */
+	/* Remote Write never requested as this isn't a target buffer*/
+	assert_false(vmr->access & IBV_ACCESS_REMOTE_WRITE);
 }
 
 /* test fi_open_ops with a wrong name */
