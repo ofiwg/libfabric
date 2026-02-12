@@ -284,6 +284,41 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	} else {
 		assert(efa_domain->info_type == EFA_INFO_DIRECT || efa_domain->info_type == EFA_INFO_DGRAM);
 		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops;
+
+		/* Allocate and register bounce buffer for 0-byte inject (efa-direct only) */
+		if (efa_domain->info_type == EFA_INFO_DIRECT) {
+			struct iovec iov;
+			struct fid_mr *mr_fid;
+			uint64_t mr_flags;
+
+			efa_domain->zero_byte_bounce_buf = malloc(4096);
+			if (!efa_domain->zero_byte_bounce_buf) {
+				EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate zero-byte bounce buffer\n");
+				err = -FI_ENOMEM;
+				goto err_free;
+			}
+
+			/* Only request MR permissions that the device supports */
+			mr_flags = FI_SEND | FI_RECV;
+			if (efa_domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)
+				mr_flags |= FI_READ;
+#if HAVE_CAPS_RDMA_WRITE
+			if (efa_domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE)
+				mr_flags |= FI_WRITE;
+#endif
+
+			iov.iov_base = efa_domain->zero_byte_bounce_buf;
+			iov.iov_len = 4096;
+			err = efa_mr_internal_regv(&efa_domain->util_domain.domain_fid,
+						   &iov, 1, mr_flags, 0, 0, 0, &mr_fid, NULL);
+			if (err) {
+				EFA_WARN(FI_LOG_DOMAIN, "Failed to register zero-byte bounce buffer: %d\n", err);
+				free(efa_domain->zero_byte_bounce_buf);
+				efa_domain->zero_byte_bounce_buf = NULL;
+				goto err_free;
+			}
+			efa_domain->zero_byte_bounce_buf_mr = container_of(mr_fid, struct efa_mr, mr_fid);
+		}
 	}
 
 #ifndef _WIN32
@@ -349,6 +384,18 @@ static int efa_domain_close(fid_t fid)
 		}
 	}
 	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+
+	if (efa_domain->zero_byte_bounce_buf_mr) {
+		ret = fi_close(&efa_domain->zero_byte_bounce_buf_mr->mr_fid.fid);
+		if (ret)
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to close zero-byte bounce buffer MR: %d\n", ret);
+		efa_domain->zero_byte_bounce_buf_mr = NULL;
+	}
+
+	if (efa_domain->zero_byte_bounce_buf) {
+		free(efa_domain->zero_byte_bounce_buf);
+		efa_domain->zero_byte_bounce_buf = NULL;
+	}
 
 	if (efa_domain->ibv_pd) {
 		ret = ibv_dealloc_pd(efa_domain->ibv_pd);
