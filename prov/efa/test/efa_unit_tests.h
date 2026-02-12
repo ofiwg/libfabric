@@ -267,7 +267,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory();
 void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128();
 void test_efa_rdm_ope_prepare_to_post_send_cuda_memory();
 void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128();
-void test_efa_rdm_ope_post_write_0_byte();
+void test_efa_rdm_ope_post_write_0_byte_no_shm();
 void test_efa_rdm_rxe_post_local_read_or_queue_unhappy();
 void test_efa_rdm_rxe_post_local_read_or_queue_happy();
 void test_efa_rdm_txe_handle_error_write_cq();
@@ -316,6 +316,10 @@ void test_efa_rdm_pke_get_available_copy_methods_align128();
 
 /* begin efa_unit_test_domain.c */
 void test_efa_domain_info_type_efa_direct();
+void test_efa_domain_direct_has_bounce_buffer();
+void test_efa_domain_rdm_no_bounce_buffer();
+void test_efa_domain_bounce_buffer_no_rdma();
+void test_efa_domain_bounce_buffer_with_rdma();
 void test_efa_domain_info_type_efa_rdm();
 void test_efa_domain_open_ops_wrong_name();
 void test_efa_domain_open_ops_mr_query();
@@ -380,6 +384,42 @@ void test_efa_rma_writedata();
 void test_efa_rma_inject_write();
 void test_efa_rma_inject_writedata();
 void test_efa_rma_writemsg_with_inject();
+void test_efa_rma_read_0_byte();
+void test_efa_rma_readv_0_byte();
+void test_efa_rma_readmsg_0_byte();
+void test_efa_rma_write_0_byte();
+void test_efa_rma_writev_0_byte();
+void test_efa_rma_writemsg_0_byte();
+void test_efa_rma_writedata_0_byte();
+void test_efa_rma_inject_write_0_byte();
+void test_efa_rma_inject_writedata_0_byte();
+void test_efa_msg_send_0_byte();
+void test_efa_msg_sendv_0_byte();
+void test_efa_msg_sendmsg_0_byte();
+void test_efa_msg_senddata_0_byte();
+void test_efa_msg_inject_0_byte();
+void test_efa_msg_injectdata_0_byte();
+void test_efa_rdm_msg_send_0_byte_no_shm();
+void test_efa_rdm_msg_sendv_0_byte_no_shm();
+void test_efa_rdm_msg_sendmsg_0_byte_no_shm();
+void test_efa_rdm_msg_senddata_0_byte_no_shm();
+void test_efa_rdm_msg_inject_0_byte_no_shm();
+void test_efa_rdm_msg_injectdata_0_byte_no_shm();
+void test_efa_rdm_tagged_send_0_byte_no_shm();
+void test_efa_rdm_tagged_sendv_0_byte_no_shm();
+void test_efa_rdm_tagged_sendmsg_0_byte_no_shm();
+void test_efa_rdm_tagged_senddata_0_byte_no_shm();
+void test_efa_rdm_tagged_inject_0_byte_no_shm();
+void test_efa_rdm_tagged_injectdata_0_byte_no_shm();
+void test_efa_rdm_rma_read_0_byte_no_shm();
+void test_efa_rdm_rma_readv_0_byte_no_shm();
+void test_efa_rdm_rma_readmsg_0_byte_no_shm();
+void test_efa_rdm_rma_write_0_byte_no_shm();
+void test_efa_rdm_rma_writev_0_byte_no_shm();
+void test_efa_rdm_rma_writemsg_0_byte_no_shm();
+void test_efa_rdm_rma_writedata_0_byte_no_shm();
+void test_efa_rdm_rma_inject_write_0_byte_no_shm();
+void test_efa_rdm_rma_inject_writedata_0_byte_no_shm();
 void test_efa_cq_read_no_completion();
 void test_efa_cq_read_send_success();
 void test_efa_cq_read_senddata_success();
@@ -490,4 +530,7 @@ int efa_unit_test_get_dlist_length(struct dlist_entry *head)
 
 	return i;
 }
+
+void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr);
+
 #endif
