@@ -171,7 +171,7 @@ def has_rocr(ip):
 def has_hmem_support(cmdline_args, ip):
     binpath = cmdline_args.binpath or ""
     cmd = "timeout " + str(cmdline_args.timeout) \
-          + " " + os.path.join(binpath, "check_hmem") \
+          + " " + os.path.join(binpath, "fi_check_hmem") \
           + " " + "-p " + cmdline_args.provider
     if cmdline_args.environments:
         cmd = cmdline_args.environments + " " + cmd
