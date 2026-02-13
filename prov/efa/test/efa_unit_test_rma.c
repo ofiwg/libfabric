@@ -292,3 +292,161 @@ void test_efa_rma_writemsg_with_inject(struct efa_resource **state)
 
 	efa_unit_test_buff_destruct(&local_buff);
 }
+
+/* 0-byte RMA tests */
+void test_efa_rma_read_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t src_addr;
+	int ret;
+	uint64_t remote_addr = 0x87654321;
+	uint64_t remote_key = 123456;
+
+	test_efa_rma_prep(resource, &src_addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_read(resource->ep, NULL, 0, NULL, src_addr, remote_addr, remote_key, NULL);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_rma_readv_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct iovec iov = {0};
+	fi_addr_t src_addr;
+	int ret;
+	uint64_t remote_addr = 0x87654321;
+	uint64_t remote_key = 123456;
+
+	test_efa_rma_prep(resource, &src_addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_readv(resource->ep, &iov, NULL, 0, src_addr, remote_addr, remote_key, NULL);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_rma_readmsg_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct iovec iov = {0};
+	struct fi_msg_rma msg = {0};
+	struct fi_rma_iov rma_iov = {0};
+	fi_addr_t src_addr;
+	int ret;
+
+	test_efa_rma_prep(resource, &src_addr);
+
+	rma_iov.addr = 0x87654321;
+	rma_iov.key = 123456;
+	efa_unit_test_construct_msg_rma(&msg, &iov, NULL, 0, src_addr, &rma_iov, 1, NULL, 0);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_readmsg(resource->ep, &msg, 0);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_rma_write_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t dest_addr;
+	int ret;
+	uint64_t remote_addr = 0x87654321;
+	uint64_t remote_key = 123456;
+
+	test_efa_rma_prep(resource, &dest_addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_write(resource->ep, NULL, 0, NULL, dest_addr, remote_addr, remote_key, NULL);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_rma_writev_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct iovec iov = {0};
+	fi_addr_t dest_addr;
+	int ret;
+	uint64_t remote_addr = 0x87654321;
+	uint64_t remote_key = 123456;
+
+	test_efa_rma_prep(resource, &dest_addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_writev(resource->ep, &iov, NULL, 0, dest_addr, remote_addr, remote_key, NULL);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_rma_writemsg_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct iovec iov = {0};
+	struct fi_msg_rma msg = {0};
+	struct fi_rma_iov rma_iov = {0};
+	fi_addr_t dest_addr;
+	int ret;
+
+	test_efa_rma_prep(resource, &dest_addr);
+
+	rma_iov.addr = 0x87654321;
+	rma_iov.key = 123456;
+	efa_unit_test_construct_msg_rma(&msg, &iov, NULL, 0, dest_addr, &rma_iov, 1, NULL, 0);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_writemsg(resource->ep, &msg, 0);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_rma_writedata_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t dest_addr;
+	int ret;
+	uint64_t remote_addr = 0x87654321;
+	uint64_t remote_key = 123456;
+
+	test_efa_rma_prep(resource, &dest_addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_writedata(resource->ep, NULL, 0, NULL, 0, dest_addr, remote_addr, remote_key, NULL);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_rma_inject_write_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t dest_addr;
+	int ret;
+	uint64_t remote_addr = 0x87654321;
+	uint64_t remote_key = 123456;
+
+	test_efa_rma_prep(resource, &dest_addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_inject_write(resource->ep, NULL, 0, dest_addr, remote_addr, remote_key);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_rma_inject_writedata_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t dest_addr;
+	int ret;
+	uint64_t remote_addr = 0x87654321;
+	uint64_t remote_key = 123456;
+
+	test_efa_rma_prep(resource, &dest_addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_inject_writedata(resource->ep, NULL, 0, 0, dest_addr, remote_addr, remote_key);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+

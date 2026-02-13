@@ -59,14 +59,10 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->cq_entry.buf = OFI_LIKELY(txe->cq_entry.len > 0) ? txe->iov[0].iov_base : NULL;
 
 	/*
-	 * txe->iov_count is 0 only when posting handshake packets
+	 * Don't consume the prefix header if iov_count is 0.
 	 *
-	 * It's a bit silly to allocate extra header before the contents
-	 * of the handshake packet and then consume that here. So instead
-	 * just don't consume the prefix header if iov_count is 0.
-	 *
-	 * A send or RMA or atomic call from the application cannot have
-	 * iov_count 0, so this is safe.
+	 * iov_count is 0 when posting handshake packets or when
+	 * the application sends 0-byte messages.
 	 */
 	if (txe->iov_count && ep->base_ep.info->mode & FI_MSG_PREFIX) {
 		ofi_consume_iov_desc(txe->iov, txe->desc, &txe->iov_count, ep->msg_prefix_size);
@@ -1349,7 +1345,7 @@ void efa_rdm_ope_prepare_to_post_write(struct efa_rdm_ope *ope)
 	{
 		size_t remote_iov_len;
 		remote_iov_len = ofi_total_rma_iov_len(ope->rma_iov, ope->rma_iov_count);
-		assert( local_iov_len == remote_iov_len );
+		assert(local_iov_len == 0 || local_iov_len == remote_iov_len);
 	}
 #endif
 
@@ -1405,9 +1401,9 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 
 		efa_rdm_pke_init_read_context(pkt_entry, ope, ofi_buf_index(ope), 0);
 		err = efa_rdm_pke_read(pkt_entry,
-					 ope->iov[0].iov_base,
+					 pkt_entry->wiredata,
 					 0,
-					 ope->desc[0],
+					 fi_mr_desc(pkt_entry->mr),
 					 ope->rma_iov[0].addr,
 					 ope->rma_iov[0].key);
 		if (err)
