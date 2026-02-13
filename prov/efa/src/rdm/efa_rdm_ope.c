@@ -59,14 +59,10 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->cq_entry.buf = OFI_LIKELY(txe->cq_entry.len > 0) ? txe->iov[0].iov_base : NULL;
 
 	/*
-	 * txe->iov_count is 0 only when posting handshake packets
+	 * Don't consume the prefix header if iov_count is 0.
 	 *
-	 * It's a bit silly to allocate extra header before the contents
-	 * of the handshake packet and then consume that here. So instead
-	 * just don't consume the prefix header if iov_count is 0.
-	 *
-	 * A send or RMA or atomic call from the application cannot have
-	 * iov_count 0, so this is safe.
+	 * iov_count is 0 when posting handshake packets or when
+	 * the application sends 0-byte messages.
 	 */
 	if (txe->iov_count && ep->base_ep.info->mode & FI_MSG_PREFIX) {
 		ofi_consume_iov_desc(txe->iov, txe->desc, &txe->iov_count, ep->msg_prefix_size);
