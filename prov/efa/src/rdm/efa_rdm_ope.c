@@ -1345,7 +1345,7 @@ void efa_rdm_ope_prepare_to_post_write(struct efa_rdm_ope *ope)
 	{
 		size_t remote_iov_len;
 		remote_iov_len = ofi_total_rma_iov_len(ope->rma_iov, ope->rma_iov_count);
-		assert( local_iov_len == remote_iov_len );
+		assert(local_iov_len == 0 || local_iov_len == remote_iov_len);
 	}
 #endif
 
