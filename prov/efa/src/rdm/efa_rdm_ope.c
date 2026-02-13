@@ -1405,9 +1405,9 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 
 		efa_rdm_pke_init_read_context(pkt_entry, ope, ofi_buf_index(ope), 0);
 		err = efa_rdm_pke_read(pkt_entry,
-					 ope->iov[0].iov_base,
+					 pkt_entry->wiredata,
 					 0,
-					 ope->desc[0],
+					 fi_mr_desc(pkt_entry->mr),
 					 ope->rma_iov[0].addr,
 					 ope->rma_iov[0].key);
 		if (err)
