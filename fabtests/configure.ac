@@ -258,7 +258,9 @@ AC_CHECK_HEADER([rdma/fabric.h], [],
     [AC_MSG_ERROR([<rdma/fabric.h> not found.  fabtests requires libfabric.])])
 
 AC_ARG_WITH([ze],
-            AS_HELP_STRING([--with-ze], [Use non-default ZE location - default NO]),
+            AS_HELP_STRING([--with-ze], [Enable Level-Zero (Ze) support and fail if not found.
+                                         Optional=<Path to where the Level-Zero libraries and
+                                         headers are installed.>]),
             AS_IF([test x"$withval" != x"no"],
 		  [CPPFLAGS="-I$withval/include $CPPFLAGS"
 		   LDFLAGS="-L$withval/$lib $LDFLAGS"]))
