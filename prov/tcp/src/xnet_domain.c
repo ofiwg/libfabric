@@ -67,7 +67,7 @@ static void xnet_subdomains_mr_close(struct xnet_domain *domain, uint64_t mr_key
 		ret = ofi_mr_map_remove(&subdomain->util_domain.mr_map, mr_key);
 		ofi_genlock_unlock(&subdomain->util_domain.lock);
 
-		if (!ret)
+		if (!ret || (mr_key == FI_KEY_NOTAVAIL))
 			ofi_atomic_dec32(&subdomain->util_domain.ref);
 	}
 }
