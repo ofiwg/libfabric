@@ -60,8 +60,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 		"total len: %zu, addr: %lu, context: %lx, flags: %lx\n",
 		total_len, msg->addr, (size_t) msg->context, flags);
 
-	assert(msg->iov_count > 0 &&
-	       msg->iov_count <= base_ep->domain->info->tx_attr->iov_limit);
+	assert(msg->iov_count <= base_ep->domain->info->tx_attr->iov_limit);
 	assert(msg->rma_iov_count > 0 &&
 	       msg->rma_iov_count <= base_ep->domain->info->tx_attr->rma_iov_limit);
 	assert(total_len <= base_ep->domain->device->max_rdma_size);
