@@ -89,41 +89,43 @@
 #define OPX_HMEM_CACHE_MAX_SIZE	 134217728
 
 #ifndef NDEBUG
-#define OPX_DEBUG_EXIT(entryp)                                                                                            \
-	do {                                                                                                              \
-		struct fi_opx_mr *opx_mr = entryp ? (struct fi_opx_mr *) (entryp)->data : NULL;                           \
-		const uint64_t	  entry_vaddr =                                                                           \
-			   opx_mr ? ((opx_mr->dmabuf.fd == -1) ?                                                          \
-					     (uint64_t) (opx_mr->iov.iov_base) :                                          \
-					     (uint64_t) ((uint8_t *) opx_mr->dmabuf.base_addr + opx_mr->dmabuf.offset)) : \
-				    0UL;                                                                                  \
-		const uint64_t entry_length =                                                                             \
-			opx_mr ? ((opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_len : opx_mr->dmabuf.len) : 0UL;            \
-		const int32_t entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;              \
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_DEBUG_EXIT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n",    \
-		       entryp, entryp ? entryp->data : NULL, (void *) entry_vaddr,                                        \
-		       (void *) (entry_vaddr + entry_length), entry_length, entry_length, entry_use_cnt);                 \
+#define OPX_DEBUG_EXIT(entryp)                                                                                         \
+	do {                                                                                                           \
+		struct fi_opx_mr *opx_mr = entryp ? (struct fi_opx_mr *) (entryp)->data : NULL;                        \
+		const uint64_t	  entry_vaddr =                                                                        \
+			   opx_mr ? ((opx_mr->dmabuf.fd == -1) ? (uint64_t) (opx_mr->iov.iov_base) :                   \
+								 (uint64_t) ((uint8_t *) opx_mr->dmabuf.base_addr)) :  \
+				    0UL;                                                                               \
+		const uint64_t entry_length =                                                                          \
+			opx_mr ? ((opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_len :                                    \
+							      opx_mr->dmabuf.len + opx_mr->dmabuf.offset) :            \
+				 0UL;                                                                                  \
+		const int32_t entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;           \
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_DEBUG_EXIT (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", \
+		       entryp, entryp ? entryp->data : NULL, (void *) entry_vaddr,                                     \
+		       (void *) (entry_vaddr + entry_length), entry_length, entry_length, entry_use_cnt);              \
 	} while (0)
 #else
 #define OPX_DEBUG_EXIT(entryp)
 #endif
 
 #ifndef NDEBUG
-#define OPX_DEBUG_ENTRY(entryp)                                                                                           \
-	do {                                                                                                              \
-		struct fi_opx_mr *opx_mr = entryp ? (struct fi_opx_mr *) (entryp)->data : NULL;                           \
-		const uint64_t	  entry_vaddr =                                                                           \
-			   opx_mr ? ((opx_mr->dmabuf.fd == -1) ?                                                          \
-					     (uint64_t) (opx_mr->iov.iov_base) :                                          \
-					     (uint64_t) ((uint8_t *) opx_mr->dmabuf.base_addr + opx_mr->dmabuf.offset)) : \
-				    0UL;                                                                                  \
-		const uint64_t entry_length =                                                                             \
-			opx_mr ? ((opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_len : opx_mr->dmabuf.len) : 0UL;            \
-		const int32_t entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;              \
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,                                                                     \
-		       "OPX_DEBUG_ENTRY (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", entryp,                          \
-		       entryp ? entryp->data : NULL, (void *) entry_vaddr, (void *) (entry_vaddr + entry_length),         \
-		       entry_length, entry_length, entry_use_cnt);                                                        \
+#define OPX_DEBUG_ENTRY(entryp)                                                                                       \
+	do {                                                                                                          \
+		struct fi_opx_mr *opx_mr = entryp ? (struct fi_opx_mr *) (entryp)->data : NULL;                       \
+		const uint64_t	  entry_vaddr =                                                                       \
+			   opx_mr ? ((opx_mr->dmabuf.fd == -1) ? (uint64_t) (opx_mr->iov.iov_base) :                  \
+								 (uint64_t) ((uint8_t *) opx_mr->dmabuf.base_addr)) : \
+				    0UL;                                                                              \
+		const uint64_t entry_length =                                                                         \
+			opx_mr ? ((opx_mr->dmabuf.fd == -1) ? opx_mr->iov.iov_len :                                   \
+							      opx_mr->dmabuf.len + opx_mr->dmabuf.offset) :           \
+				 0UL;                                                                                 \
+		const int32_t entry_use_cnt = entryp ? ((struct ofi_mr_entry *) (entryp))->use_cnt : 0X0BAD;          \
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR,                                                                 \
+		       "OPX_DEBUG_ENTRY (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", entryp,                      \
+		       entryp ? entryp->data : NULL, (void *) entry_vaddr, (void *) (entry_vaddr + entry_length),     \
+		       entry_length, entry_length, entry_use_cnt);                                                    \
 	} while (0)
 #else
 #define OPX_DEBUG_ENTRY(entryp)
