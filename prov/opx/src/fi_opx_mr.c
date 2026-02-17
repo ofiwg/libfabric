@@ -237,7 +237,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					opx_mr->dmabuf.fd	 = fd;
 					opx_mr->dmabuf.offset	 = dmabuf_offset;
 					opx_mr->dmabuf.len	 = size;
-					opx_mr->dmabuf.base_addr = (void *) base;
+					opx_mr->dmabuf.base_addr = (void *) ((uintptr_t) base - dmabuf_offset);
 					opx_mr->attr.iface	 = hmem_iface;
 					opx_mr->attr.dmabuf	 = &opx_mr->dmabuf;
 
