@@ -155,7 +155,7 @@ static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 
 	qpn = data_path_direct->cur_cqe->qp_num;
 	data_path_direct->cur_qp =
-		efa_domain->qp_table[qpn & efa_domain->qp_table_sz_m1];
+		efa_domain->device->qp_table[qpn & efa_domain->device->qp_table_sz_m1];
 
 	if (!data_path_direct->cur_qp) {
 		data_path_direct->cur_wq = NULL;

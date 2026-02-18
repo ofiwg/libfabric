@@ -101,19 +101,6 @@ static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
 	return 0;
 }
 
-static int efa_domain_init_qp_table(struct efa_domain *efa_domain)
-{
-	size_t qp_table_size;
-
-	qp_table_size = roundup_power_of_two(efa_domain->device->ibv_attr.max_qp);
-	efa_domain->qp_table_sz_m1 = qp_table_size - 1;
-	efa_domain->qp_table = calloc(qp_table_size, sizeof(*efa_domain->qp_table));
-	if (!efa_domain->qp_table)
-		return -FI_ENOMEM;
-
-	return 0;
-}
-
 static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *info)
 {
 	struct fi_info *shm_info = NULL;
@@ -254,13 +241,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	*domain_fid = &efa_domain->util_domain.domain_fid;
 
-	err = efa_domain_init_qp_table(efa_domain);
-	if (err) {
-		ret = err;
-		EFA_WARN(FI_LOG_DOMAIN, "Failed to init qp table. err: %d\n", ret);
-		goto err_free;
-	}
-
 	/*
 	 * Open the MR cache if application did not set FI_MR_LOCAL
 	 * and the cache is enabled
@@ -391,7 +371,6 @@ static int efa_domain_close(fid_t fid)
 		fi_freeinfo(efa_domain->info);
 
 	ofi_genlock_destroy(&efa_domain->srx_lock);
-	free(efa_domain->qp_table);
 	free(efa_domain);
 	return 0;
 }
