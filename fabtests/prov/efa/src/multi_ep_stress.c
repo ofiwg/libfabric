@@ -234,8 +234,10 @@ int context_pool_init(struct context_pool *pool, size_t capacity, size_t buffer_
 }
 
 void context_pool_destroy(struct context_pool *pool) {
+	int ret;
 	if (pool->mr) {
-		fi_close(&pool->mr->fid);
+		ret = fi_close(&pool->mr->fid);
+		assert(ret == FI_SUCCESS);
 		pool->mr = NULL;
 	}
 	free(pool->buffers);
@@ -268,16 +270,20 @@ int context_pool_alloc_buffers(struct context_pool *pool, size_t count, void **b
 // Cleanup fabric resorsces for a worker
 static void cleanup_endpoint(struct worker_context *ctx)
 {
+	int ret;
 	if (ctx->ep) {
-		fi_close(&ctx->ep->fid);
+		ret = fi_close(&ctx->ep->fid);
+		assert(ret == FI_SUCCESS);
 		ctx->ep = NULL;
 	}
 	if (!topts.shared_av && ctx->av) {
-		fi_close(&ctx->av->fid);
+		ret = fi_close(&ctx->av->fid);
+		assert(ret == FI_SUCCESS);
 		ctx->av = NULL;
 	}
 	if (!topts.shared_cq && ctx->cq) {
-		fi_close(&ctx->cq->fid);
+		ret = fi_close(&ctx->cq->fid);
+		assert(ret == FI_SUCCESS);
 		ctx->cq = NULL;
 	}
 }
@@ -935,11 +941,14 @@ static int setup_shared_resources(size_t num_workers, size_t max_peers)
 
 static void cleanup_shared_resources(void)
 {
+	int ret;
 	if (shared_av) {
-		fi_close(&shared_av->fid);
+		ret = fi_close(&shared_av->fid);
+		assert(ret == FI_SUCCESS);
 	}
 	if (shared_cq) {
-		fi_close(&shared_cq->fid);
+		ret = fi_close(&shared_cq->fid);
+		assert(ret == FI_SUCCESS);
 	}
 }
 
