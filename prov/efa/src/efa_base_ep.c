@@ -55,12 +55,18 @@ static inline void efa_base_ep_unlock_cq(struct efa_base_ep *base_ep)
 int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 {
 	/*
-	 * Acquire the lock to prevent race conditions when CQ polling accesses the qp_table
-	 * and the qp resource
+	 * Two locks are required for QP table thread safety:
+	 * 1. Device lock: protects concurrent EP enable/close operations
+	 *    from multiple threads (QP numbers are allocated per device)
+	 * 2. CQ lock: protects race between CQ polling and QP creation/destruction
+	 *
+	 * Lock ordering: device lock -> CQ locks -> QP operations
 	 */
+	ofi_genlock_lock(&base_ep->domain->device->qp_table_lock);
 	efa_base_ep_lock_cq(base_ep);
 	efa_base_ep_destruct_qp_unsafe(base_ep);
 	efa_base_ep_unlock_cq(base_ep);
+	ofi_genlock_unlock(&base_ep->domain->device->qp_table_lock);
 	return 0;
 }
 
@@ -78,12 +84,13 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 
 	assert(!tx_cq || ofi_genlock_held(&tx_cq->util_cq.ep_list_lock));
 	assert(!rx_cq || ofi_genlock_held(&rx_cq->util_cq.ep_list_lock));
+	assert(ofi_genlock_held(&base_ep->domain->device->qp_table_lock));
 
 	if (qp) {
 		domain = qp->base_ep->domain;
 		qp_num = qp->qp_num;
 		efa_qp_destruct(qp);
-		domain->qp_table[qp_num & domain->qp_table_sz_m1] = NULL;
+		domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1] = NULL;
 		base_ep->qp = NULL;
 	}
 
@@ -91,7 +98,7 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 		domain = user_recv_qp->base_ep->domain;
 		qp_num = user_recv_qp->qp_num;
 		efa_qp_destruct(user_recv_qp);
-		domain->qp_table[qp_num & domain->qp_table_sz_m1] = NULL;
+		domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1] = NULL;
 		base_ep->user_recv_qp = NULL;
 	}
 
@@ -413,9 +420,9 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 
 	qp->qp_num = qp->ibv_qp->qp_num;
 
-	base_ep->domain->qp_table[qp->qp_num & base_ep->domain->qp_table_sz_m1] = qp;
+	base_ep->domain->device->qp_table[qp->qp_num & base_ep->domain->device->qp_table_sz_m1] = qp;
 	
-	EFA_INFO(FI_LOG_EP_CTRL, "QP enabled! qp_n: %d qkey: %d\n", qp->qp_num, qp->qkey);
+	EFA_INFO(FI_LOG_EP_CTRL, "QP enabled! qp_n: %d qkey: %d, domain_name: %s, efa_domain: %p\n", qp->qp_num, qp->qkey, base_ep->domain->util_domain.name, base_ep->domain);
 
 	return err;
 }
@@ -423,6 +430,8 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 void efa_qp_destruct(struct efa_qp *qp)
 {
 	int err;
+
+	EFA_INFO(FI_LOG_EP_CTRL, "Destroying QP with qp_n: %d qkey: %d, domain_name: %s, efa_domain: %p\n", qp->qp_num, qp->qkey, qp->base_ep->domain->util_domain.name, qp->base_ep->domain);
 
 	err = -ibv_destroy_qp(qp->ibv_qp);
 	if (err)
@@ -470,15 +479,14 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 {
 	int err;
 
+	base_ep->domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
+
 	err = ofi_endpoint_init(domain_fid, &efa_util_prov, info, &base_ep->util_ep,
 				context, progress);
 	if (err)
 		return err;
 
 	base_ep->util_ep_initialized = true;
-
-	base_ep->domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
-
 	base_ep->info = fi_dupinfo(info);
 	if (!base_ep->info) {
 		EFA_WARN(FI_LOG_EP_CTRL, "fi_dupinfo() failed for base_ep->info!\n");
@@ -848,7 +856,15 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_re
 	scq = txcq ? txcq : rxcq;
 	rcq = rxcq ? rxcq : txcq;
 
-	/* Acquire the lock to prevent race conditions when CQ polling accesses the qp_table */
+	/*
+	 * Two locks are required for QP table thread safety:
+	 * 1. Device lock: protects concurrent EP enable/close operations
+	 *    from multiple threads (QP numbers are allocated per device)
+	 * 2. CQ lock: protects race between CQ polling and QP creation/destruction
+	 *
+	 * Lock ordering: device lock -> CQ locks -> QP operations
+	 */
+	ofi_genlock_lock(&ep->domain->device->qp_table_lock);
 	efa_base_ep_lock_cq(ep);
 	err = efa_base_ep_create_qp(ep, &scq->ibv_cq, &rcq->ibv_cq, create_user_recv_qp);
 	if (err)
@@ -858,6 +874,7 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_re
 
 out:
 	efa_base_ep_unlock_cq(ep);
+	ofi_genlock_unlock(&ep->domain->device->qp_table_lock);
 	return err;
 }
 

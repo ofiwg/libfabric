@@ -292,7 +292,7 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	efa_cq_start_poll(ibv_cq);
 
 	while (efa_cq_wc_available(ibv_cq)) {
-		base_ep = efa_domain->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->qp_table_sz_m1]->base_ep;
+		base_ep = efa_domain->device->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->device->qp_table_sz_m1]->base_ep;
 		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
 		if (ibv_cq->ibv_cq_ex->status) {
 			prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
@@ -680,7 +680,7 @@ static inline fi_addr_t efa_cq_get_src_addr(struct efa_ibv_cq *ibv_cq, int opcod
 	case IBV_WC_RECV_RDMA_WITH_IMM:
 		efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
 		efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
-		base_ep = efa_domain->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->qp_table_sz_m1]->base_ep;
+		base_ep = efa_domain->device->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->device->qp_table_sz_m1]->base_ep;
 		if (!(base_ep->util_ep.caps & FI_SOURCE))
 			return FI_ADDR_NOTAVAIL;
 		return efa_av_reverse_lookup(base_ep->av,
@@ -717,7 +717,7 @@ static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq
 {
 	struct efa_cq *efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
 	struct efa_domain *efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
-	struct efa_base_ep *base_ep = efa_domain->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->qp_table_sz_m1]->base_ep;
+	struct efa_base_ep *base_ep = efa_domain->device->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->device->qp_table_sz_m1]->base_ep;
 	int opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
 	int prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
 	fi_addr_t addr;
