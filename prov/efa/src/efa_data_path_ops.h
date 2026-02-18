@@ -473,7 +473,7 @@ static inline void efa_cq_report_poll_err(struct efa_ibv_cq *cq)
 	int err = cq->poll_err;
 
 	if (err && err != ENOENT)
-		EFA_INFO(FI_LOG_CQ, "Ignoring CQ entries from destroyed queue pair");
+		EFA_INFO(FI_LOG_CQ, "Ignoring CQ entries from destroyed queue pair\n");
 }
 
 static inline void efa_cq_start_poll(struct efa_ibv_cq *cq)
