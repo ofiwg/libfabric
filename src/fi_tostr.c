@@ -483,7 +483,7 @@ ofi_tostr_domain_attr(char *buf, size_t len, const struct fi_domain_attr *attr,
 
 	ofi_strncatf(buf, len, "%sfi_domain_attr:\n", prefix);
 
-	ofi_strncatf(buf, len, "%s%sdomain: 0x%x\n", prefix, TAB, attr->domain);
+	ofi_strncatf(buf, len, "%s%sdomain: %p\n", prefix, TAB, (void *)attr->domain);
 
 	ofi_strncatf(buf, len, "%s%sname: %s\n", prefix, TAB, attr->name);
 	ofi_strncatf(buf, len, "%s%sthreading: ", prefix, TAB);
