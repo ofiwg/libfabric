@@ -19,6 +19,7 @@
 #include <rdma/fi_errno.h>
 #include <infiniband/verbs.h>
 
+#include "ofi_util.h"
 #include "efa.h"
 #include "efa_device.h"
 #include "efa_prov_info.h"
@@ -110,8 +111,19 @@ int efa_device_construct_data(struct efa_device *efa_device,
 			 struct ibv_device *ibv_device)
 {
 	int err;
+	size_t qp_table_size;
 
 	assert(efa_device->ibv_ctx);
+
+	/* Initialize QP table */
+	efa_device->qp_table = NULL;
+	qp_table_size = roundup_power_of_two(efa_device->ibv_attr.max_qp);
+	efa_device->qp_table_sz_m1 = qp_table_size - 1;
+	efa_device->qp_table = calloc(qp_table_size, sizeof(*efa_device->qp_table));
+	if (!efa_device->qp_table) {
+		err = -FI_ENOMEM;
+		goto err_close;
+	}
 
 #if HAVE_RDMA_SIZE
 	efa_device->max_rdma_size = efa_device->efa_attr.max_rdma_size;
@@ -136,9 +148,19 @@ int efa_device_construct_data(struct efa_device *efa_device,
 		goto err_close;
 	}
 
+	/* Initialize QP table lock */
+	err = ofi_genlock_init(&efa_device->qp_table_lock, OFI_LOCK_MUTEX);
+	if (err)
+		goto err_close;
+
 	return 0;
 
 err_close:
+	if (efa_device->qp_table) {
+		free(efa_device->qp_table);
+		efa_device->qp_table = NULL;
+	}
+
 	EFA_INFO(FI_LOG_CORE, "Close ibv device for ibv_ctx %p\n", efa_device->ibv_ctx);
 	ibv_close_device(efa_device->ibv_ctx);
 	efa_device->ibv_ctx = NULL;
@@ -164,6 +186,11 @@ err_close:
 static void efa_device_destruct(struct efa_device *device)
 {
 	int err;
+
+	if (device->qp_table) {
+		free(device->qp_table);
+		device->qp_table = NULL;
+	}
 
 	if (device->ibv_ctx) {
 		EFA_INFO(FI_LOG_CORE, "Close ibv device for ibv_ctx %p\n", device->ibv_ctx);
@@ -315,8 +342,10 @@ void efa_device_list_finalize(void)
 	int i;
 
 	if (g_efa_selected_device_list) {
-		for (i = 0; i < g_efa_selected_device_cnt; i++)
+		for (i = 0; i < g_efa_selected_device_cnt; i++) {
+			ofi_genlock_destroy(&g_efa_selected_device_list[i].qp_table_lock);
 			efa_device_destruct(&g_efa_selected_device_list[i]);
+		}
 
 		free(g_efa_selected_device_list);
 		g_efa_selected_device_list = NULL;

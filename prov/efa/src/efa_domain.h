@@ -27,8 +27,6 @@ struct efa_domain {
 	struct fi_info		*info;
 	struct efa_fabric	*fabric;
 	struct ofi_mr_cache	*cache;
-	struct efa_qp		**qp_table;
-	size_t			qp_table_sz_m1;
 	size_t			mtu_size;
 	size_t			addrlen;
 	bool 			mr_local;
