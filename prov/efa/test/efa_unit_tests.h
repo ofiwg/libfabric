@@ -292,6 +292,8 @@ void test_efa_rdm_ope_eor_packet_tracking_wait_send();
 void test_efa_rdm_ope_eor_packet_failed_posting();
 void test_efa_rdm_ope_eor_packet_tracking_unresponsive_wait_send();
 void test_efa_rdm_atomic_compare_desc_persistence();
+void test_efa_rdm_txe_dc_send_first();
+void test_efa_rdm_txe_dc_receipt_first();
 
 
 /* end of efa_unit_test_ope.c */

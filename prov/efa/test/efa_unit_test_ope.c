@@ -2,6 +2,8 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "rdm/efa_rdm_pke_cmd.h"
+#include "rdm/efa_rdm_pke_nonreq.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
 
@@ -1175,4 +1177,98 @@ void test_efa_rdm_atomic_compare_desc_persistence(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&send_buff);
 	efa_unit_test_buff_destruct(&result_buff);
 	efa_unit_test_buff_destruct(&compare_buff);
+}
+/**
+ * @brief Common helper for DC packet TXE release testing
+ *
+ * Sets up test environment and packet entries for DC packet testing.
+ * Tests the specified completion order and verifies TXE release behavior.
+ *
+ * @param[in] resource Test resource structure
+ * @param[in] send_first If true, send completion happens first; if false, receipt first
+ */
+static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bool send_first)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *dc_pkt_entry, *receipt_pkt_entry;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Allocate TXE and set up for DC operation */
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	txe->efa_outstanding_tx_ops = 1;
+
+	/* Create fake DC packet entry */
+	dc_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(dc_pkt_entry);
+	dc_pkt_entry->ope = txe;
+	dc_pkt_entry->ep = efa_rdm_ep;
+	dc_pkt_entry->peer = txe->peer;
+	/* Set DC packet type in wiredata */
+	struct efa_rdm_base_hdr *base_hdr = (struct efa_rdm_base_hdr *)dc_pkt_entry->wiredata;
+	base_hdr->type = EFA_RDM_DC_EAGER_MSGRTM_PKT;
+
+	/* Create fake receipt packet entry */
+	receipt_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(receipt_pkt_entry);
+	receipt_pkt_entry->ope = txe;
+	receipt_pkt_entry->ep = efa_rdm_ep;
+
+	/* Verify TXE is not ready for release initially */
+	assert_false(efa_rdm_txe_dc_ready_for_release(txe));
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+
+	if (send_first) {
+		/* Send completion first - should not release TXE yet */
+		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
+		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
+
+		/* Receipt handling - should now release TXE */
+		efa_rdm_pke_handle_receipt_recv(receipt_pkt_entry);
+	} else {
+		/* Receipt handling first - should not release TXE yet */
+		efa_rdm_pke_handle_receipt_recv(receipt_pkt_entry);
+		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+		assert_true(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED);
+		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
+
+		/* Send completion - should now release TXE */
+		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
+	}
+
+	/* Verify TXE is released */
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 0);
+}
+
+/**
+ * @brief Test DC packet TXE release with send completion first
+ *
+ * This test verifies the DC (Delivery Complete) TXE release logic when
+ * send completion arrives before receipt acknowledgment.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_txe_dc_send_first(struct efa_resource **state)
+{
+	test_efa_rdm_txe_dc_release_common(*state, true);
+}
+
+/**
+ * @brief Test DC packet TXE release with receipt completion first
+ *
+ * This test verifies the race condition fix where receipt acknowledgment
+ * arrives before send completion. The TXE should only be released when
+ * both conditions are met, regardless of order.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_txe_dc_receipt_first(struct efa_resource **state)
+{
+	test_efa_rdm_txe_dc_release_common(*state, false);
 }
