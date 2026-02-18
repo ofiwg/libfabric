@@ -1963,7 +1963,7 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	}
 }
 
-int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint16_t flag)
+int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag)
 {
 	int ret = 0;
 

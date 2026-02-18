@@ -783,7 +783,16 @@ void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	efa_rdm_ope_handle_send_completed(txe);
+	/* Write send completion immediately to preserve DC semantics */
+	efa_rdm_txe_report_completion(txe);
+
+	/* Set receipt received flag for DC operations */
+	txe->internal_flags |= EFA_RDM_TXE_RECEIPT_RECEIVED;
+
+	/* Only release txe if both conditions are met */
+	if (efa_rdm_txe_dc_ready_for_release(txe))
+		efa_rdm_txe_release(txe);
+
 	efa_rdm_pke_release_rx(pkt_entry);
 }
 
