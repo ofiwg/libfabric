@@ -701,7 +701,7 @@ static int efa_rdm_cq_match_ep(struct dlist_entry *item, const void *ep)
 
 static inline struct efa_rdm_ep *efa_rdm_cq_get_rdm_ep(struct efa_ibv_cq *cq, struct efa_domain *efa_domain)
 {
-	struct efa_base_ep *base_ep = efa_domain->qp_table[efa_ibv_cq_wc_read_qp_num(cq) & efa_domain->qp_table_sz_m1]->base_ep;
+	struct efa_base_ep *base_ep = efa_domain->device->qp_table[efa_ibv_cq_wc_read_qp_num(cq) & efa_domain->device->qp_table_sz_m1]->base_ep;
 	return container_of(base_ep, struct efa_rdm_ep, base_ep);
 }
 
