@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
  * Copyright (c) 2018 Intel Corp, Inc.  All rights reserved.
+ * Copyright (C) 2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -67,6 +68,16 @@ static void ofi_rbnode_free(struct ofi_rbmap *map, struct ofi_rbnode *node)
 {
 	node->right = map->free_list ? map->free_list : NULL;
 	map->free_list = node;
+}
+
+struct ofi_rbnode *ofi_rbnode_new(struct ofi_rbmap *map)
+{
+	return ofi_rbnode_alloc(map);
+}
+
+void ofi_rbnode_del(struct ofi_rbmap *map, struct ofi_rbnode *node)
+{
+	ofi_rbnode_free(map, node);
 }
 
 void ofi_rbmap_init(struct ofi_rbmap *map,
@@ -231,8 +242,9 @@ ofi_insert_rebalance(struct ofi_rbmap *map, struct ofi_rbnode *x)
 	map->root->color = BLACK;
 }
 
-int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data,
-		     struct ofi_rbnode **ret_node)
+static inline int ofi_rbmap_insert_common(struct ofi_rbmap *map, void *key, void *data,
+				   struct ofi_rbnode **ret_node,
+				   struct ofi_rbnode *prealloc)
 {
 	struct ofi_rbnode *current, *parent, *node;
 	int ret;
@@ -252,9 +264,13 @@ int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data,
 		current = (ret < 0) ? current->left : current->right;
 	}
 
-	node = ofi_rbnode_alloc(map);
-	if (!node)
-		return -FI_ENOMEM;
+	if (prealloc) {
+		node = prealloc;
+	} else {
+		node = ofi_rbnode_alloc(map);
+		if (!node)
+			return -FI_ENOMEM;
+	}
 
 	node->parent = parent;
 	node->left = &map->sentinel;
@@ -275,6 +291,19 @@ int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data,
 	if (ret_node)
 		*ret_node = node;
 	return 0;
+}
+
+int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data,
+		     struct ofi_rbnode **ret_node)
+{
+	return ofi_rbmap_insert_common(map, key, data, ret_node, NULL);
+}
+
+int ofi_rbmap_insert_at(struct ofi_rbmap *map, void *key, void *data,
+			struct ofi_rbnode **ret_node,
+			struct ofi_rbnode *prealloc)
+{
+	return ofi_rbmap_insert_common(map, key, data, ret_node, prealloc);
 }
 
 static void ofi_delete_rebalance(struct ofi_rbmap *map, struct ofi_rbnode *node)

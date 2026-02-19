@@ -1,7 +1,8 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
  * Copyright (c) 2018 Intel Corp, Inc.  All rights reserved.
- *
+ * Copyright (C) 2026 Cornelis Networks.
+ * 
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
  * General Public License (GPL) Version 2, available from the file
@@ -92,9 +93,15 @@ struct ofi_rbnode *ofi_rbmap_search(struct ofi_rbmap *map, void *key,
 		int (*compare)(struct ofi_rbmap *map, void *key, void *data));
 int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data,
 		struct ofi_rbnode **node);
+int ofi_rbmap_insert_at(struct ofi_rbmap *map, void *key, void *data,
+		struct ofi_rbnode **ret_node,
+		struct ofi_rbnode *prealloc);
 void ofi_rbmap_delete(struct ofi_rbmap *map, struct ofi_rbnode *node);
 int ofi_rbmap_find_delete(struct ofi_rbmap *map, void *key);
 int ofi_rbmap_empty(struct ofi_rbmap *map);
+
+struct ofi_rbnode *ofi_rbnode_new(struct ofi_rbmap *map);
+void ofi_rbnode_del(struct ofi_rbmap *map, struct ofi_rbnode *node);
 
 
 #endif /* OFI_TREE_H_ */
