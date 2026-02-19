@@ -982,7 +982,7 @@ static int run_sender(void)
 
 		ret = ep_message_queue_init(&channels[i]);
 		if (ret)
-			return ret;
+			goto out;
 
 		worker->worker_id = i;
 		worker->control_queue = &channels[i];
