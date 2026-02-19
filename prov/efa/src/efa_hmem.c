@@ -284,6 +284,23 @@ static inline void efa_hmem_info_check_p2p_support_rocr(struct efa_hmem_info *in
 }
 
 /**
+ * @brief Disable dmabuf if the environment variable is not enabled
+ *
+ * @param[in,out]  info        HMEM info struct to update
+ * @param[in]      iface       HMEM interface
+ */
+static void
+efa_hmem_info_disable_dmabuf_if_env_unset(struct efa_hmem_info *info,
+					  enum fi_hmem_iface iface)
+{
+	if (!ofi_hmem_is_dmabuf_env_var_enabled(iface)) {
+		info->dmabuf_supported_by_device = EFA_DMABUF_NOT_SUPPORTED;
+		EFA_INFO(FI_LOG_CORE, "%s DMABUF disabled by environment variable\n",
+			 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+	}
+}
+
+/**
  * @brief Initialize the efa_hmem_info state for iface
  *
  * @param[in]      iface       HMEM interface
@@ -299,15 +316,8 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 		return;
 	}
 
-	if ((iface == FI_HMEM_SYNAPSEAI || iface == FI_HMEM_NEURON) &&
-	    !efa_device_support_rdma_read()) {
-		EFA_WARN(FI_LOG_CORE,
-			 "No EFA RDMA read support, transfers using %s will fail.\n",
-			 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
-		return;
-	}
-
 	info->initialized = true;
+	info->p2p_supported_by_device = false;
 	info->dmabuf_fallback_enabled = false;
 #if HAVE_EFA_DMABUF_MR
 	info->dmabuf_supported_by_device = EFA_DMABUF_ASSUMED;
@@ -315,38 +325,71 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 	info->dmabuf_supported_by_device = EFA_DMABUF_NOT_SUPPORTED;
 #endif /* HAVE_EFA_DMABUF_MR */
 
-	if (iface == FI_HMEM_SYNAPSEAI || iface == FI_HMEM_SYSTEM ||
-	    iface == FI_HMEM_NEURON) {
-		/* It is not recommended to allocate neuron buffs this
-		 * early in initialization, so we must skip the explicit
-		 * check to see if p2p will work. Instead, assume it works.
-		 * and set fallback to true
-		 */
-		if (iface == FI_HMEM_NEURON)
-			info->dmabuf_fallback_enabled = true;
-
-		info->p2p_supported_by_device = true;
-
-		if (!ofi_hmem_is_dmabuf_env_var_enabled(iface)) {
-			info->dmabuf_supported_by_device = EFA_DMABUF_NOT_SUPPORTED;
-			EFA_INFO(FI_LOG_CORE, "%s DMABUF disabled by environment variable\n",
+	switch (iface) {
+	case FI_HMEM_NEURON:
+		if (ofi_hmem_p2p_disabled()) {
+			EFA_WARN(FI_LOG_CORE,
+				"%s requires p2p, unset FI_HMEM_DISABLE_P2P\n",
+				fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			info->initialized = false;
+			return;
+		}
+		if (!efa_device_support_rdma_read()) {
+			EFA_WARN(FI_LOG_CORE,
+				 "No EFA RDMA read support, transfers using %s will fail.\n",
 				 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			info->initialized = false;
+			return;
 		}
-	} else if (ofi_hmem_p2p_disabled()) {
-		info->p2p_supported_by_device = false;
-	} else {
-		switch (iface) {
-		case FI_HMEM_CUDA:
-			efa_hmem_info_check_p2p_support_cuda(info);
-			break;
-		case FI_HMEM_ROCR:
-			efa_hmem_info_check_p2p_support_rocr(info);
-			break;
-		default:
-			break;
+		info->p2p_supported_by_device = true;
+		info->dmabuf_fallback_enabled = true;
+		efa_hmem_info_disable_dmabuf_if_env_unset(info, iface);
+		break;
+
+	case FI_HMEM_SYNAPSEAI:
+		if (ofi_hmem_p2p_disabled()) {
+			EFA_WARN(FI_LOG_CORE,
+				 "%s requires p2p, unset FI_HMEM_DISABLE_P2P\n",
+				 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			info->initialized = false;
+			return;
 		}
+		if (!efa_device_support_rdma_read()) {
+			EFA_WARN(FI_LOG_CORE,
+				 "No EFA RDMA read support, transfers using %s will fail.\n",
+				 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			info->initialized = false;
+			return;
+		}
+		info->p2p_supported_by_device = true;
+		efa_hmem_info_disable_dmabuf_if_env_unset(info, iface);
+		break;
+
+	case FI_HMEM_SYSTEM:
+		info->p2p_supported_by_device = true;
+		efa_hmem_info_disable_dmabuf_if_env_unset(info, iface);
+		break;
+
+	case FI_HMEM_CUDA:
+		if (ofi_hmem_p2p_disabled())
+			break;
+		efa_hmem_info_check_p2p_support_cuda(info);
 		if (!info->p2p_supported_by_device)
-			EFA_INFO(FI_LOG_CORE, "%s P2P support is not available.\n", fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			EFA_INFO(FI_LOG_CORE, "%s P2P support is not available.\n",
+				 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+		break;
+
+	case FI_HMEM_ROCR:
+		if (ofi_hmem_p2p_disabled())
+			break;
+		efa_hmem_info_check_p2p_support_rocr(info);
+		if (!info->p2p_supported_by_device)
+			EFA_INFO(FI_LOG_CORE, "%s P2P support is not available.\n",
+				 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+		break;
+
+	default:
+		break;
 	}
 
 	efa_hmem_info_init_protocol_thresholds(iface);
