@@ -47,9 +47,87 @@ void test_efa_hmem_info_p2p_dmabuf_assumed_neuron()
 }
 #endif /* HAVE_NEURON */
 
+#if HAVE_NEURON
+/**
+ * @brief Verify that Neuron is not initialized when p2p is disabled.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_hmem_info_p2p_disabled_neuron(struct efa_resource **state)
+{
+        int ret;
+        struct efa_resource *resource = *state;
+        bool neuron_initialized_orig;
+
+        ofi_hmem_disable_p2p = 1;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+        assert_non_null(resource->hints);
+
+        ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, resource->hints, &resource->info);
+        assert_int_equal(ret, 0);
+
+        neuron_initialized_orig = hmem_ops[FI_HMEM_NEURON].initialized;
+        hmem_ops[FI_HMEM_NEURON].initialized = true;
+
+        ret = efa_hmem_info_initialize();
+
+        /* recover the modified global variables before doing check */
+        ofi_hmem_disable_p2p = 0;
+        hmem_ops[FI_HMEM_NEURON].initialized = neuron_initialized_orig;
+
+        assert_int_equal(ret, 0);
+        assert_false(g_efa_hmem_info[FI_HMEM_NEURON].initialized);
+}
+#else
+void test_efa_hmem_info_p2p_disabled_neuron()
+{
+        skip();
+}
+#endif /* HAVE_NEURON */
+
+#if HAVE_SYNAPSEAI
+/**
+ * @brief Verify that SynapseAI is not initialized when p2p is disabled.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_hmem_info_p2p_disabled_synapse(struct efa_resource **state)
+{
+        int ret;
+        struct efa_resource *resource = *state;
+        bool synapse_initialized_orig;
+
+        ofi_hmem_disable_p2p = 1;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+        assert_non_null(resource->hints);
+
+        ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, resource->hints, &resource->info);
+        assert_int_equal(ret, 0);
+
+        synapse_initialized_orig = hmem_ops[FI_HMEM_SYNAPSEAI].initialized;
+        hmem_ops[FI_HMEM_SYNAPSEAI].initialized = true;
+
+        ret = efa_hmem_info_initialize();
+
+        /* recover the modified global variables before doing check */
+        ofi_hmem_disable_p2p = 0;
+        hmem_ops[FI_HMEM_SYNAPSEAI].initialized = synapse_initialized_orig;
+
+        assert_int_equal(ret, 0);
+        assert_false(g_efa_hmem_info[FI_HMEM_SYNAPSEAI].initialized);
+}
+#else
+void test_efa_hmem_info_p2p_disabled_synapse()
+{
+        skip();
+}
+#endif /* HAVE_SYNAPSEAI */
+
 #if HAVE_CUDA
 /**
- * @brief Verify when p2p is disabled, we don't check p2p support with ofi_cudaMalloc. 
+ * @brief Verify when p2p is disabled, we don't check p2p support with ofi_cudaMalloc.
  * Just leave p2p_supported_by_device to false for cuda.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
