@@ -1087,10 +1087,10 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EINVAL;
 	}
 
-	if (!ofi_hmem_is_initialized(attr->iface)) {
+	if (attr->iface >= OFI_HMEM_MAX || !g_efa_hmem_info[attr->iface].initialized) {
 		EFA_WARN(FI_LOG_MR,
-			"Cannot register memory for uninitialized iface (%s)\n",
-			fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
+			 "Cannot register memory for uninitialized iface (%s)\n",
+			 fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
 		return -FI_ENOSYS;
 	}
 
