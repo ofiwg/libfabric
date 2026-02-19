@@ -61,6 +61,9 @@ struct efa_domain {
 				    uint64_t access, uint64_t offset,
 				    uint64_t requested_key, uint64_t flags,
 				    struct fid_mr **mr_fid, void *context);
+	/* Bounce buffer for 0-byte inject operations (efa-direct only) */
+	void *zero_byte_bounce_buf;
+	struct efa_mr *zero_byte_bounce_buf_mr;
 };
 
 extern struct dlist_entry g_efa_domain_list;
