@@ -1,4 +1,5 @@
 #include <getopt.h>
+#include <limits.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,7 +37,7 @@ struct test_opts {
 	bool shared_cq;
 	enum { OP_MSG_UNTAGGED = 0, OP_MSG_TAGGED, OP_RMA_WRITEDATA } op_type;
 	bool verbose;
-	time_t random_seed;
+	unsigned int random_seed;
 };
 
 // Global variables
@@ -1232,14 +1233,14 @@ static int run_test(void)
 {
 	int ret;
 
-	if (topts.random_seed != -1) {
+	if (topts.random_seed) {
 		printf("-------------------------\n");
-		printf("Using provided random seed: %ld\n", topts.random_seed);
+		printf("Using provided random seed: %u\n", topts.random_seed);
 		printf("-------------------------\n\n");
 	} else {
-		topts.random_seed = time(NULL);
+		topts.random_seed = (unsigned int)time(NULL);
 		printf("-------------------------\n");
-		printf("Generated random seed: %ld\n", topts.random_seed);
+		printf("Generated random seed: %u\n", topts.random_seed);
 		printf("-------------------------\n\n");
 	}
 
@@ -1283,8 +1284,9 @@ static void print_test_usage(void)
 static int parse_test_opts(int argc, char **argv)
 {
 	int op;
+	long long seed;
 
-	topts.random_seed = -1;
+	topts.random_seed = 0;
 
 	while ((op = getopt_long(argc, argv, "hAQ" ADDR_OPTS INFO_OPTS CS_OPTS,
 				 test_long_opts, NULL)) != -1) {
@@ -1353,7 +1355,12 @@ static int parse_test_opts(int argc, char **argv)
 			}
 			break;
 		case OPT_RANDOM_SEED:
-			topts.random_seed = atol(optarg);
+			seed = atoll(optarg);
+			if (seed <= 0 || seed > UINT_MAX) {
+				fprintf(stderr, "random seed must be non-zero unsigned integer\n");
+				return -1;
+			}
+			topts.random_seed = (unsigned int)seed;
 			break;
 		case '?':
 		case 'h':
