@@ -439,7 +439,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	 */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 	ibv_cq = &efa_rdm_cq->efa_cq.ibv_cq;
@@ -563,7 +563,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 		ibv_cq->unsolicited_write_recv_enabled = false;
 		struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert_non_null(pkt_entry);
-		efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+		efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 		ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
 	}
 #else
@@ -573,7 +573,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	ibv_cq->unsolicited_write_recv_enabled = false;
 	struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 	ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
 #endif
 	/* the recv rdma with imm will not populate to application cq because it's an EFA internal error and
@@ -780,7 +780,7 @@ void test_efa_rdm_cq_post_initial_rx_pkts(struct efa_resource **state)
 	fi_cq_read(resource->cq, NULL, 0);
 
 	/* At this time, rx pool size number of rx pkts are posted */
-	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, efa_rdm_ep_get_rx_pool_size(efa_rdm_ep));
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep));
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, 0);
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, 0);
 
@@ -883,7 +883,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	 */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
-	efa_rdm_ep->efa_rx_pkts_posted = efa_rdm_ep_get_rx_pool_size(efa_rdm_ep);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
 	pkt_attr.msg_id = 0;
 	pkt_attr.connid = raw_addr.qkey;

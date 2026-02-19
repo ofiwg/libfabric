@@ -74,6 +74,7 @@ fabtests/config
 fabtests/ubertest/fabtest
 fabtests/ubertest/fi_ubertest
 fabtests/common/check_hmem
+fabtests/common/check_cuda_dmabuf
 fabtests/regression/sighandler_test
 fabtests/benchmarks/fi_*
 fabtests/component/sock_test
