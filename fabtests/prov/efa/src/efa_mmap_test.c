@@ -75,7 +75,11 @@ static int setup_mmap_buffer(int prot, uint64_t access)
 	}
 
 	/* Initialize buffer with test data */
-	ft_fill_buf(mmap_buf, opts.transfer_size);
+	ret = ft_fill_buf(mmap_buf, opts.transfer_size);
+	if (ret != FI_SUCCESS) {
+		FT_PRINTERR("ft_fill_buf", ret);
+		return ret;
+	}
 
 	/* Set desired protection */
 	if (mprotect(mmap_buf, opts.transfer_size, prot) < 0) {
@@ -98,12 +102,15 @@ static int setup_mmap_buffer(int prot, uint64_t access)
 
 static void cleanup_mmap_buffer(void)
 {
+	int ret;
 	if (mmap_mr) {
-		fi_close(&mmap_mr->fid);
+		ret = fi_close(&mmap_mr->fid);
+		assert(ret == FI_SUCCESS);
 		mmap_mr = NULL;
 	}
 	if (mmap_buf) {
-		munmap(mmap_buf, opts.transfer_size);
+		ret = munmap(mmap_buf, opts.transfer_size);
+		assert(ret == 0);
 		mmap_buf = NULL;
 	}
 }
