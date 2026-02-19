@@ -47,10 +47,10 @@ struct random_data {
 };
 #endif
 
-static inline void ft_random_init_data(struct random_data *restrict random_data, int seed, int salt)
+static inline void ft_random_init_data(struct random_data *restrict random_data, unsigned int seed, unsigned int salt)
 {
 #if !HAVE_RANDOM_R
-	random_data->seed = (unsigned int)seed ^ (unsigned int)salt;
+	random_data->seed = seed ^ salt;
 #else
 	static _Thread_local char random_state[FABTESTS_RANDOM_STATE_SIZE];
 	random_data->state = NULL;
