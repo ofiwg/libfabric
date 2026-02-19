@@ -1,0 +1,40 @@
+@PACKAGE_INIT@
+
+# =============================================================================
+# LibfabricConfig.cmake
+# CMake package configuration file for libfabric
+#
+# This file is included when find_package(Libfabric) is called.
+#
+# Imported Targets:
+#   Libfabric::fabric        - The shared libfabric library
+#   Libfabric::fabric_static - The static libfabric library
+#
+# Result Variables:
+#   Libfabric_FOUND          - True if libfabric was found
+#   Libfabric_VERSION        - Version string
+#   Libfabric_INCLUDE_DIRS   - Include directories
+#   Libfabric_LIBRARIES      - Libraries to link
+# =============================================================================
+
+include(CMakeFindDependencyMacro)
+
+# Required dependencies
+find_dependency(Threads)
+
+# Import targets
+include("${CMAKE_CURRENT_LIST_DIR}/LibfabricTargets.cmake")
+
+# Set result variables for backwards compatibility
+set(Libfabric_FOUND TRUE)
+set(Libfabric_VERSION "@PROJECT_VERSION@")
+
+get_target_property(Libfabric_INCLUDE_DIRS Libfabric::fabric INTERFACE_INCLUDE_DIRECTORIES)
+
+if(TARGET Libfabric::fabric)
+  set(Libfabric_LIBRARIES Libfabric::fabric)
+else()
+  set(Libfabric_LIBRARIES Libfabric::fabric_static)
+endif()
+
+check_required_components(Libfabric)

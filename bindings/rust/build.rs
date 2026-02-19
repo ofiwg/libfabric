@@ -3,7 +3,6 @@ use bindgen::callbacks::ItemKind;
 use bindgen::callbacks::ParseCallbacks;
 use std::env;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::OnceLock;
 
 // Global variables for common directories.
@@ -65,12 +64,10 @@ impl ParseCallbacks for RenameFunctions {
     }
 }
 
-fn build_libfabric(install_dir: &PathBuf) {
+fn build_libfabric() -> PathBuf {
     // Build the libfabric.so on the fly, such that its symbols can be accessed during the Rust binding compilation.
     // This way, the libfabric.so library can later be dynamically linked during run-time.
     // Else, you will receive the following error; = note: ld: cannot find -lfabric
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let libfabric_rsync_dir = out_dir.join("vendored");
     let cargo_manifest_dir = get_cargo_manifest_dir();
     let cargo_workspace_dir = get_cargo_workspace_dir();
 
@@ -82,65 +79,27 @@ fn build_libfabric(install_dir: &PathBuf) {
         "cargo:warning=cargo_workspace_dir {}",
         cargo_workspace_dir.display()
     );
-    println!(
-        "cargo:warning=libfabric_rsync_dir {}",
-        libfabric_rsync_dir.display()
-    );
-    println!("cargo:warning=install_dir {}", install_dir.display());
-    println!("cargo:warning=out_dir {}", out_dir.display());
 
-    // Rsync the libfabric codebase into OUT_DIR, as the compilation process should never modify the source directory.
-    if !libfabric_rsync_dir.exists() {
-        println!("cargo:warning=Running rsync as part of libfabric compilation.");
-        Command::new("rsync")
-            .arg("-av")
-            .arg("--exclude=vendored")
-            .arg(format!("{}/", cargo_workspace_dir.display()))
-            .arg(&libfabric_rsync_dir)
-            .status()
-            .expect("Failed to copy vendor directory");
-    }
-
-    // Run autogen.
-    println!("cargo:warning=Running autogen.sh as part of libfabric compilation.");
-    assert!(
-        Command::new("sh")
-            .current_dir(&libfabric_rsync_dir)
-            .arg("autogen.sh")
-            .status()
-            .unwrap()
-            .success()
-    );
-
-    // Run configure.
+    // Use the cmake crate to build libfabric.
+    // The cmake crate handles:
+    // - Creating a build directory in OUT_DIR
+    // - Running cmake configure
+    // - Running cmake --build
+    // - Running cmake --install
     //
     // Note that the binary is compiled on-the-fly to extract relevant header files under the compilation folder.
     // The arguments provided for such compilation is not important, as the Libfabric API interface stays the same.
     // During run-time, a separate user compiled library should be dynamically loaded via exporting the 'LD_LIBRARY_PATH' environment variable.
-    println!("cargo:warning=Running configure as part of libfabric compilation.");
-    assert!(
-        Command::new("sh")
-            .current_dir(&libfabric_rsync_dir)
-            .arg("configure")
-            .arg(format!("--prefix={}", install_dir.display()))
-            .status()
-            .unwrap()
-            .success()
-    );
-
-    // Run make install.
-    println!("cargo:warning=Running make install as part of libfabric compilation.");
-    assert!(
-        Command::new("make")
-            .current_dir(&libfabric_rsync_dir)
-            .arg("-j")
-            .arg("install")
-            .status()
-            .unwrap()
-            .success()
-    );
+    println!("cargo:warning=Building libfabric with CMake.");
+    let dst = cmake::Config::new(cargo_workspace_dir)
+        .define("BUILD_SHARED_LIBS", "ON")
+        .define("LIBFABRIC_BUILD_FABTESTS", "OFF")
+        .build();
 
     println!("cargo:warning=Libfabric successfully compiled.");
+    println!("cargo:warning=CMake install dir: {}", dst.display());
+
+    dst
 }
 
 fn main() {
@@ -167,21 +126,20 @@ fn main() {
     let (lib_path, include_paths) = match vendored {
         true => {
             // Vendored option, build the libfabric based on the available source code.
-            let install_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("install");
-            build_libfabric(&install_dir);
+            // The cmake crate returns the installation directory.
+            let install_dir = build_libfabric();
 
-            // Return relevant paths using global variables.
-            let libfabric_dir = get_cargo_workspace_dir();
+            // CMake installs headers to <prefix>/include and libraries to <prefix>/lib
+            let include_dir = install_dir.join("include");
 
             (
-                // Provide static link search path.
+                // Provide library search path.
                 // Vendored option, thus should refer to the compiled library's installation path.
                 install_dir.join("lib"),
                 vec![
-                    libfabric_dir.clone(),
-                    libfabric_dir.join("include"),
-                    libfabric_dir.join("include").join("rdma"),
-                    libfabric_dir.join("include").join("rdma").join("providers"),
+                    include_dir.clone(),
+                    include_dir.join("rdma"),
+                    include_dir.join("rdma").join("providers"),
                 ],
             )
         }
