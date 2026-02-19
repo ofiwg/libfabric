@@ -630,6 +630,7 @@ static void *run_sender_worker(void *arg)
 						fi_ctx);
 				break;
 			case OP_RMA_WRITEDATA:
+				// coverity[uninit_use : FALSE]
 				ret = fi_writedata(ctx->ep,
 							buffer,
 							opts.transfer_size,
@@ -669,6 +670,7 @@ static void *run_sender_worker(void *arg)
 		ops_posted++;
 		ops_posted_in_this_cycle++;
 		ops_posted_for_peer[peer_idx]++;
+		// coverity[uninit_use : FALSE]
 		transferred_bytes[peer_idx] += opts.transfer_size;
 		if (++peer_idx == ctx->num_peers)
 			peer_idx = 0;
