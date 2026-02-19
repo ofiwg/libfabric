@@ -554,6 +554,13 @@ static void *run_sender_worker(void *arg)
 				}
 				assert(msg.type == EP_MESSAGE_TYPE_UPDATE);
 				assert(msg.info.worker_id == ctx->worker_id);
+				if (FT_UNLIKELY(msg.info.peer_idx >= ctx->num_peers)) {
+					fprintf(stderr, "Sender %u: unexpected peer index: %u",
+							ctx->worker_id, msg.info.peer_idx);
+					ret = -1;
+					goto out;
+				}
+
 				printf("Sender %u: received an update for peer %u\n",
 						ctx->worker_id, msg.info.peer_idx);
 				if (topts.remove_av
@@ -1043,6 +1050,12 @@ static int run_sender(void)
 				msg.type, msg.info.worker_id, msg.info.peer_idx);
 		if (msg.type == EP_MESSAGE_TYPE_TERMINATOR)
 			break;
+		if (FT_UNLIKELY(msg.info.worker_id >= topts.num_sender_workers)) {
+			fprintf(stderr, "Unexpected worker ID: %u",
+					msg.info.worker_id);
+			ret = -1;
+			goto out;
+		}
 		ret = ep_message_queue_push(workers[msg.info.worker_id].control_queue, &msg);
 		if (ret) {
 			FT_PRINTERR("ep_message_queue_push", ret);
