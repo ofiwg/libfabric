@@ -175,6 +175,10 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
     if "cuda" in memory_type:
         timeout = max(1000, timeout)
 
+    # For host only test, we do not need to initialize non-system hmem ifaces
+    if memory_type == "host_to_host":
+        additional_env += ' FI_HMEM=system'
+
     test = ClientServerTest(cmdline_args, executable, iteration_type,
                             completion_semantic=completion_semantic,
                             datacheck_type="with_datacheck",
