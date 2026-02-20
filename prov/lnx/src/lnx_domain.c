@@ -76,11 +76,9 @@ static int lnx_domain_close(struct fid *fid)
 	for (i = 0; i < domain->ld_num_doms; i++) {
 		cd = &domain->ld_core_domains[i];
 
-		if (cd->cd_domain) {
-			rc = fi_close(&cd->cd_domain->fid);
-			if (rc)
-				frc = rc;
-		}
+		rc = fi_close(&cd->cd_domain->fid);
+		if (rc)
+			frc = rc;
 	}
 
 	ofi_bufpool_destroy(domain->ld_mem_reg_bp);
@@ -180,9 +178,10 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
 
 			rc = fi_domain(cf->cf_fabric, cd->cd_info,
 				       &cd->cd_domain, context);
-			if (rc)
+			if (rc){
+				lnx_domain->ld_num_doms--;
 				return rc;
-
+			}
 			cd->cd_fabric = cf;
 		}
 	}
