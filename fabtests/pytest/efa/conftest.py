@@ -147,11 +147,6 @@ def cuda_memory_type_validation(cmdline_args):
         pytest.fail("CUDA memory support never initialized")
     
     do_dmabuf = cmdline_args.do_dmabuf_reg_for_hmem
-    if (do_dmabuf is None and 
-        cuda_support == CudaMemorySupport.DMA_BUF_ONLY):
-        error = "User specified CUDA without dmabuf but hardware only supports DMA_BUF_ONLY"
-        print(f"CUDA validation failed: {error}")
-        pytest.skip(error)
     
     print(f"Correctly defined dma buf mode {do_dmabuf} and return {cuda_support}!")
     
