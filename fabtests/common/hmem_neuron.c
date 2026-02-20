@@ -53,12 +53,40 @@ struct neuron_ops {
 	void *(*nrt_tensor_get_va)(const nrt_tensor_t *tensor);
 	NRT_STATUS (*nrt_tensor_read)(const nrt_tensor_t *tensor, void *buf, size_t offset, size_t size);
 	NRT_STATUS (*nrt_tensor_write)(nrt_tensor_t *tensor, const void *buf, size_t offset, size_t size);
-	NRT_STATUS (*nrt_get_dmabuf_fd)(uint64_t va, uint64_t size, int* fd);
+	NRT_STATUS (*nrt_get_dmabuf_fd)(uint64_t va, uint64_t size, int* fd, uint64_t *offset);
 	NRT_STATUS (*nrt_init)(nrt_framework_type_t framework, const char *fw_version, const char *fal_version);
 };
 
-static void *neuron_handle = NULL;
+struct neuron_ops_internal {
+	NRT_STATUS (*nrt_get_dmabuf_fd)(uint64_t va, uint64_t size, int* fd);
+} neuron_ops_internal;
+
+static void *neuron_handle;
 static struct neuron_ops neuron_ops;
+
+NRT_STATUS nrt_get_dmabuf_fd_proxy(uint64_t va, uint64_t size, int* fd, uint64_t *offset) {
+	*offset = 0;
+	return neuron_ops_internal.nrt_get_dmabuf_fd(va, size, fd);
+}
+
+static void ft_setup_nrt_get_dmabuf_fd(void)
+{
+	neuron_ops.nrt_get_dmabuf_fd = dlsym(neuron_handle, "nrt_get_dmabuf_fd_v2");
+	if (neuron_ops.nrt_get_dmabuf_fd)
+		return;
+
+	FI_INFO(&core_prov, FI_LOG_CORE,
+		"Failed to find nrt_get_dmabuf_fd_v2, falling back to nrt_get_dmabuf_fd");
+
+	neuron_ops_internal.nrt_get_dmabuf_fd = dlsym(neuron_handle, "nrt_get_dmabuf_fd");
+	if (!neuron_ops_internal.nrt_get_dmabuf_fd) {
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"Failed to find nrt_get_dmabuf_fd, "
+			"dmabuf feature will not be used for Neuron devices\n");
+		return;
+	}
+	neuron_ops.nrt_get_dmabuf_fd = &nrt_get_dmabuf_fd_proxy;
+}
 
 /*
  * List to lookup the handle based on the pointer. Not optimal, but probably
@@ -123,11 +151,7 @@ int ft_neuron_init(void)
 		goto err;
 	}
 
-	neuron_ops.nrt_get_dmabuf_fd = dlsym(neuron_handle, "nrt_get_dmabuf_fd");
-	if (!neuron_ops.nrt_get_dmabuf_fd) {
-		FT_INFO("Failed to find nrt_get_dmabuf_fd, "
-			"dmabuf feature will not be used for Neuron devices\n");
-	}
+	ft_setup_nrt_get_dmabuf_fd();
 
 	dlist_init(&neuron_alloc_list);
 
@@ -345,18 +369,9 @@ int ft_neuron_get_dmabuf_fd(void *addr, size_t size, int *fd,
 			 uint64_t *offset)
 {
 	int ret = NRT_SUCCESS;
-	struct neuron_allocation *region;
-
-	/*
-	 * The assumption is that nrt_get_dmabuf_fd() would fail for
-	 * any addr that is not the starting address of the dma-buf
-	 * object. Otherwise we need a low level op to get the base
-	 * address of the dma-buf object.
-	 */
-	*offset = ft_neuron_find_region(addr, &region);
 
 	if (neuron_ops.nrt_get_dmabuf_fd) {
-		ret = neuron_ops.nrt_get_dmabuf_fd((uintptr_t)region->ptr, size, fd);
+		ret = neuron_ops.nrt_get_dmabuf_fd((uint64_t)addr, size, fd, offset);
 		if (ret != NRT_SUCCESS) {
 			FT_WARN("failed to get dmabuf fd\n");
 			return -FI_EIO;
