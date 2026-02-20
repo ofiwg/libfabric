@@ -48,7 +48,7 @@ typedef int64_t xpmem_segid_t;
 #endif /* HAVE_XPMEM */
 
 struct ofi_xpmem_client {
-	uint8_t cap;
+	bool avail;
 	xpmem_apid_t apid;
 	uintptr_t addr_max;
 };

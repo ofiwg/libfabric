@@ -248,7 +248,7 @@ def test_implicit_av(cmdline_args, unexpected_path, msg_size):
     if not os.path.exists(os.path.join(binpath, "fi_efa_implicit_av_test")):
         pytest.skip("implicit AV test not found")
 
-    if (cmdline_args.server_id == cmdline_args.client_id) and unexpected_path and msg_size > 1024:
+    if (cmdline_args.server_id == cmdline_args.client_id) and unexpected_path and msg_size >= 1024:
         pytest.skip("SHM provider will use CMA protocol needs test modifications")
 
     test_cmd = f"fi_efa_implicit_av_test -L -c 5 -S {msg_size}"
