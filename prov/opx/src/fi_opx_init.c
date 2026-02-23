@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -488,19 +488,20 @@ err:
 }
 
 /* Be careful not to initialze here AND in OPX_INI */
-struct fi_opx_global_data fi_opx_global = {.opx_hfi1_type_strings = {[OPX_HFI1_UNDEF]	 = "OPX_HFI1_UNDEF",
-								     [OPX_HFI1_MIXED_9B] = "CN5000|CN6000-OPA100-mixed",
-								     [OPX_HFI1_WFR]	 = "OPA100",
-								     [3]		 = "ERROR",
-								     [OPX_HFI1_JKR]	 = "CN5000",
-								     [5]		 = "ERROR",
-								     [6]		 = "ERROR",
-								     [7]		 = "ERROR",
-								     [OPX_HFI1_CYR]	 = "CN6000",
-								     [9]		 = "ERROR",
-								     [10]		 = "ERROR",
-								     [11]		 = "ERROR",
-								     [OPX_HFI1_CNX000]	 = "CN5000|CN6000"}};
+struct fi_opx_global_data fi_opx_global = {
+	.opx_hfi1_type_strings = {[OPX_HFI1_UNDEF]    = "OPX_HFI1_UNDEF",
+				  [OPX_HFI1_MIXED_9B] = "CN5000|CN6000-OPA100-interop",
+				  [OPX_HFI1_WFR]      = "OPA100",
+				  [3]		      = "ERROR",
+				  [OPX_HFI1_JKR]      = "CN5000",
+				  [5]		      = "ERROR",
+				  [6]		      = "ERROR",
+				  [7]		      = "ERROR",
+				  [OPX_HFI1_CYR]      = "CN6000",
+				  [9]		      = "ERROR",
+				  [10]		      = "ERROR",
+				  [11]		      = "ERROR",
+				  [OPX_HFI1_CNX000]   = "CN5000|CN6000"}};
 
 /* ROUTE CONTROL table for each packet type */
 int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
@@ -944,13 +945,10 @@ OPX_INI
 #endif
 	fi_param_define(
 		&fi_opx_provider, "route_control", FI_PARAM_STRING,
-		"Specify the route control for each packet type. The format is <inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>. Each value can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. If Token ID (TID) is enabled the out-of-order route controls are disabled. Default is \"%d:%d:%d:%d:%d:%d\" on OPA100 and \"%d:%d:%d:%d:%d:%d\" on CN5000",
-		OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_IN_ORDER_0,
-		OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0, OPX_RC_OUT_OF_ORDER_0,
-		OPX_RC_OUT_OF_ORDER_0, OPX_RC_IN_ORDER_0, OPX_RC_OUT_OF_ORDER_0);
+		"Specify the route control for each packet type. The format is <inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>. Each value can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. If Token ID (TID) is enabled then <rendezvous data packet value> must use in-order route controls. Default is `0:0:0:0:0:0` in-order route controls.");
 	fi_param_define(
-		&fi_opx_provider, "mixed_network", FI_PARAM_BOOL,
-		"Indicates that the network requires OPA100 support. Set to 0 if OPA100 support is not needed. Default is 1.");
+		&fi_opx_provider, "opa100_interop", FI_PARAM_BOOL,
+		"Indicates that the job requires OPA100 support. Set to 1 if OPA100 support is needed with CN5000 or CN6000. Default is 0.");
 	fi_param_define(&fi_opx_provider, "context_sharing", FI_PARAM_BOOL,
 			"Enables context sharing in OPX. Defaults to FALSE (1 HFI context per endpoint).");
 	fi_param_define(
@@ -974,8 +972,7 @@ OPX_INI
 		"Enable guards around OPX/HFI mmaps. When enabled, this will cause a segfault when mmapped memory is illegally accessed through buffer overruns or underruns.  Default is false.");
 
 	fi_param_define(&fi_opx_provider, "hfisvc", FI_PARAM_BOOL,
-			"Indicates that HFI Service should be used for bulk transfers if available. Default is %s.",
-			OPX_HFISVC_ENABLED_DEFAULT ? "true" : "false");
+			"Indicates that HFI Service should be used for bulk transfers if available. Default is false.");
 
 	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);

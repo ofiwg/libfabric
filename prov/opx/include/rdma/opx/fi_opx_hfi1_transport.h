@@ -3034,7 +3034,8 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, uni
 			     const uint64_t tx_op_flags, const uint64_t dest_rx, const uint64_t caps,
 			     const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 			     const enum fi_hmem_iface hmem_iface, const uint64_t hmem_handle,
-			     const uint64_t hmem_device, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
+			     const uint64_t hmem_device, const struct fi_opx_mr *opx_mr,
+			     const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
 
 ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len, union fi_opx_addr dest_addr,
 				 uint64_t tag, void *user_context, const uint32_t data, int lock_required,
@@ -3057,7 +3058,7 @@ ssize_t opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_t l
 	if (hfi1_type & OPX_HFI1_WFR) {
 		return opx_hfi1_tx_send_rzv(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
 					    tx_op_flags, dest_rx, caps, reliability, do_cq_completion, hmem_iface,
-					    hmem_device, hmem_handle, OPX_HFI1_WFR, ctx_sharing);
+					    hmem_device, hmem_handle, opx_mr, OPX_HFI1_WFR, ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		return opx_hfi1_tx_send_rzv_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
 						override_flags, tx_op_flags, dest_rx, caps, reliability,
@@ -3071,7 +3072,7 @@ ssize_t opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_t l
 	} else if (hfi1_type & OPX_HFI1_MIXED_9B) {
 		return opx_hfi1_tx_send_rzv(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
 					    tx_op_flags, dest_rx, caps, reliability, do_cq_completion, hmem_iface,
-					    hmem_device, hmem_handle, OPX_HFI1_MIXED_9B, ctx_sharing);
+					    hmem_device, hmem_handle, opx_mr, OPX_HFI1_MIXED_9B, ctx_sharing);
 	}
 	abort();
 	return (ssize_t) -1L;
