@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
- * Copyright (c) 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2020,2026 Hewlett Packard Enterprise Development LP
  */
 
 #include <stdio.h>
@@ -11,6 +11,10 @@
 
 #include "cxip.h"
 #include "cxip_test_common.h"
+
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_MR, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_MR, __VA_ARGS__)
+#define CXIP_INFO(...) _CXIP_INFO(FI_LOG_MR, __VA_ARGS__)
 
 TestSuite(mr, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
@@ -113,6 +117,45 @@ Test(mr, std_mrs, .timeout = 600, .disabled = true)
 	 */
 	for (i = 0; i < mrs; i++)
 		mr_destroy(&std_mrs[i]);
+}
+/* Test append restart sequence is working properly */
+Test(mr, std_mrs_restart, .timeout = 600, .disabled = false)
+{
+	int std_mr_cnt = 16*1024;
+	int mrs = 0;
+	struct mem_region std_mrs[std_mr_cnt];
+	int i, test_loop, max_loop = 2, mrs_limit[2];
+	int ret;
+	uint64_t key;
+
+	for (test_loop = 0; test_loop < max_loop; test_loop++) {
+		memset(std_mrs, 0, sizeof(std_mrs));
+		for (i = 0, mrs = 0; i < std_mr_cnt; i++) {
+			mrs++;
+			key = i + 200;
+			ret = mr_create(8, FI_REMOTE_WRITE, 0, &key, &std_mrs[i]);
+			if (ret) {
+				CXIP_WARN("Created %d mr's in loop %d\n", mrs, test_loop);
+				mrs_limit[test_loop] = mrs;
+				break;
+			}
+		}
+		CXIP_WARN("Destroying %d mr's in loop %d\n", mrs, test_loop);
+		for (i = 0; i < mrs; i++)
+			mr_destroy(&std_mrs[i]);
+
+	}
+	/* These are HW resources so it is difficult
+	 * to determine what the resource state is between loops.
+	 * the important thing is once the max is hit on the first pass,
+	 * the second pass is allowed to create at least 1 memory region
+	 * and append the LE without hitting the no space/ENOMEM error
+	 * after restart sequence is set.
+	 */
+	cr_assert(mrs_limit[1] >= 2, "Failed to append on second loop %d %d %d\n",
+			ret, mrs_limit[0], mrs_limit[1]);
+	CXIP_WARN("Passed second append loop %d %d %d\n", ret, mrs_limit[0], mrs_limit[1]);
+
 }
 
 Test(mr, opt_mr_recycle, .timeout = 600, .disabled = false)
