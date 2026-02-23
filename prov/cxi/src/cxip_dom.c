@@ -2092,6 +2092,13 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		cxi_domain->prov_key_seqnum = ofi_xorshift_random(seed);
 	}
 
+	/* 
+	 * It's possible the owner provider decides to turn off
+	 * hardware offload in cxi. If that happens we need to update the
+	 * rx_match_mode.
+	 */
+	cxip_set_env_rx_match_mode();
+
 	cxi_domain->mr_match_events = cxip_env.mr_match_events;
 	cxi_domain->optimized_mrs = cxip_env.optimized_mrs;
 	cxi_domain->prov_key_cache = cxip_env.prov_key_cache;
