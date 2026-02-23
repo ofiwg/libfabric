@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 Cornelis Networks.
+ * Copyright (C) 2025-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,8 +38,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <assert.h>
-
-#define OPX_HFISVC_ENABLED_DEFAULT (1)
 
 extern int opx_hfisvc_log_enabled;
 

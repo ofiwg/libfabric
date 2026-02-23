@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(C) 2021-2025 Cornelis Networks.
+  Copyright(C) 2021-2026 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -23,7 +23,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2025 Cornelis Networks.
+  Copyright(c) 2021-2026 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -683,7 +683,7 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	assert(internal->context.hfi1_type &
 	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_MIXED_9B is determined later */
 
-	/* Need the global set early, may be changed later on mixed networks */
+	/* Need the global set early, may be changed later on interop networks */
 	if (OPX_SW_HFI1_TYPE == OPX_HFI1_UNDEF) {
 		OPX_SW_HFI1_TYPE = internal->context.hfi1_type;
 		OPX_HW_HFI1_TYPE = internal->context.hfi1_type;
