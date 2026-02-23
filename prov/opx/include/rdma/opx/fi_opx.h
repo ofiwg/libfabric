@@ -127,7 +127,7 @@ typedef uint32_t opx_lid_t; /* only 3 bytes of lid is used */
 /* hfi1 type for bit logic */
 enum opx_hfi1_type {
 	OPX_HFI1_UNDEF	  = 0, // undefined
-	OPX_HFI1_MIXED_9B = 1, // CN5000+ built for mixed network. Internal use
+	OPX_HFI1_MIXED_9B = 1, // CN5000+ built for interop network. Internal use
 	OPX_HFI1_WFR	  = 2, // Omni-path (all generations)
 	OPX_HFI1_JKR	  = 4, // CN5000 (initial generation)
 	OPX_HFI1_CYR	  = 8  // CN6000 (initial generation)
@@ -142,7 +142,7 @@ enum opx_hfi1_packet_type {
 	OPX_HFI1_MP_EAGER	  = 2, // MP Eager eager packets
 	OPX_HFI1_DPUT		  = 3, // DPUT  packets
 	OPX_HFI1_RZV_CTRL	  = 4, // Rendezvous RTS/CTS control packets
-	OPX_HFI1_RZV_DATA	  = 5, // Rendezvoud data packets
+	OPX_HFI1_RZV_DATA	  = 5, // Rendezvous data packets
 	OPX_HFI1_NUM_PACKET_TYPES = 6
 };
 

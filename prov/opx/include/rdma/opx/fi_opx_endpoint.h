@@ -1047,7 +1047,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				   const enum opx_hfi1_type hfi1_type)
 {
 #if HAVE_HFISVC
-	assert(hfi1_type & OPX_HFI1_JKR);
+	assert(!(hfi1_type & OPX_HFI1_WFR));
 	assert(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC);
 	assert(!lock_required);
 	assert(!is_multi_receive); // Multi recv not supported with HFISVC yet
@@ -1066,13 +1066,16 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 
 	const hfisvc_client_key_t sbuf_key = (hfisvc_client_key_t) hdr->rzv_rts.sbuf_client_key;
 	const uint32_t		  niov	   = hdr->rzv_rts.niov;
-	const uint32_t		  lid	   = (uint32_t) __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+
+	const uint32_t lid = (uint32_t) (hfi1_type & OPX_HFI1_MIXED_9B) ?
+				     __be16_to_cpu24((__be16) hdr->lrh_9B.slid) :
+				     __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
 
 	uint64_t xfer_len = hdr->rzv_rts.message_length;
 
 	OPX_HFISVC_DEBUG_LOG(
-		"Matched HFISVC RTS packet, recv context=%p sbuf_client_key=%u xfer_len=%lu niov=%u rzv_comp=%lX\n",
-		context, sbuf_key, xfer_len, niov, payload->rendezvous.hfisvc.rzv_comp_vaddr);
+		"Matched HFISVC RTS packet, recv context=%p lid %#x, sbuf_client_key=%u xfer_len=%lu niov=%u rzv_comp=%lX\n",
+		context, lid, sbuf_key, xfer_len, niov, payload->rendezvous.hfisvc.rzv_comp_vaddr);
 
 	struct fi_opx_mr *opx_mr    = NULL;
 	uint64_t	  do_dmabuf = (uint64_t) (context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM);

@@ -310,19 +310,19 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   The default threshold is 8192.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
-*FI_OPX_MIXED_NETWORK*
+*FI_OPX_OPA100_INTEROP*
 : Boolean (1/0, on/off, true/false, yes/no). Indicates that the job requires OPA100
-  support. Set to 0 if OPA100 support is not needed. Default is 1.
+  support. Set to 1 if OPA100 support is needed with CN5000 or CN6000. Default is 0.
 
 *FI_OPX_ROUTE_CONTROL*
 : Integer. Specify the route control for each packet type. The format is
   - `<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>`.
 
   Each value can range from 0-7. 0-3 is used for in-order and
-  4-7 is used for out-of-order. If Token ID (TID) is enabled
-  the out-of-order route controls are disabled.
+  4-7 is used for out-of-order. If Token ID (TID) is enabled then
+  `<rendezvous data packet value>` must use in-order route controls.
 
-  Default is `0:0:0:0:0:0 ` on OPA100 and  `4:4:4:4:0:4 ` on CN5000.
+  Default is in-order (`0:0:0:0:0:0`) route controls.
 
 *FI_OPX_SHM_ENABLE*
 : Boolean (1/0, on/off, true/false, yes/no). Enables shm across all ports and hfi units
