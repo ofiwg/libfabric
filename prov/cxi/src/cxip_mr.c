@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
  *
  * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2018,2020-2023 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2018,2020-2023,2026 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -360,7 +360,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	mr->req.mr.mr = mr;
 	CXIP_DBG("Standard MR callback registered: mr=%p rma_events=%d\n", mr, mr->rma_events);
 
-	le_flags = C_LE_UNRESTRICTED_BODY_RO;
+	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_RESTART_SEQ;
 	if (mr->attr.access & FI_REMOTE_WRITE)
 		le_flags |= C_LE_OP_PUT;
 	if (mr->attr.access & FI_REMOTE_READ)
@@ -718,6 +718,7 @@ static void cxip_mr_prov_opt_to_std(struct cxip_mr *mr)
 
 	key.opt = false;
 	mr->mr_fid.key = key.raw;
+	mr->mr_state = CXIP_MR_DISABLED;
 	mr->optimized = false;
 }
 
