@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024-2025 Cornelis Networks.
+ * Copyright (C) 2024-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -164,7 +164,7 @@ uint32_t opx_pbc_jkr_l2type(unsigned _type)
      to be 0 for during 9B packet routing.
 
      However MYR static configuration can be used outside OPX so that
-     all RC options are available on mixed (9B) CN5000 networks
+     all RC options are available on interop (9B) CN5000 networks
 
  */
 #define OPX_RC_MASK  0b111
@@ -201,15 +201,18 @@ static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type, en
 #define OPX_ROUTE_CONTROL_VALUE(_hfi1_type, _pkt_type) opx_route_control[_pkt_type]
 #endif
 
-static inline void opx_set_route_control_value(const bool disabled)
+static inline void opx_set_route_control_value(const bool rzv_data_disabled /* by TID */)
 {
 	assert(OPX_SW_HFI1_TYPE != OPX_HFI1_UNDEF);
 
-	/* HFI specific default (except OPX_HFI1_RZV_CTRL which always defaults to OPX_RC_IN_ORDER_0) */
-	const int default_route_control = ((OPX_SW_HFI1_TYPE & (OPX_HFI1_CNX000 | OPX_HFI1_MIXED_9B)) ?
-						   OPX_CHECK_OUT_OF_ORDER(disabled, OPX_RC_OUT_OF_ORDER_0) :
-						   OPX_RC_IN_ORDER_0);
-	char	 *env_route_control;
+	/* Always default to OPX_RC_IN_ORDER_0.
+	 * OPX supports user selection of OPX_RC_OUT_OF_ORDER_* except that RZV DATA with TID must
+	 * always be OPX_RC_IN_ORDER_*.
+	 * HFISVC will take over RZV DATA and presumably allow both.
+	 * With HFISVC enabled, independently, OPX_RC_OUT_OF_ORDER_0 will be allowed but not
+	 * recommended for PIO. */
+
+	char *env_route_control;
 
 	if (fi_param_get_str(fi_opx_global.prov, "route_control", &env_route_control) == FI_SUCCESS) {
 		char *env_string	       = NULL;
@@ -220,26 +223,28 @@ static inline void opx_set_route_control_value(const bool disabled)
 				int route_control_value = atoi(next_route_control_value);
 				if ((route_control_value >= OPX_RC_IN_ORDER_0) &&
 				    (route_control_value <= OPX_RC_OUT_OF_ORDER_3)) {
-					opx_route_control[i] = OPX_CHECK_OUT_OF_ORDER(disabled, route_control_value);
-					if (route_control_value !=
-					    OPX_CHECK_OUT_OF_ORDER(disabled, route_control_value)) {
+					if ((i == OPX_HFI1_RZV_DATA) &&
+					    (route_control_value !=
+					     OPX_CHECK_OUT_OF_ORDER(rzv_data_disabled, route_control_value))) {
 						/* Only warn when overriding an explicit user choice */
 						FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-							"TID enabled, out_of_order RC is not allowed.\n");
+							"TID is enabled, rendezvous data may not use out_of_order route control.\n");
+						opx_route_control[i] = OPX_RC_IN_ORDER_0;
+					} else {
+						opx_route_control[i] = route_control_value;
 					}
 					FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s route control set to %d.\n",
 						 OPX_HFI1_PACKET_STR[i], opx_route_control[i]);
 
 				} else {
-					opx_route_control[i] =
-						(i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 : default_route_control;
+					opx_route_control[i] = OPX_RC_IN_ORDER_0;
+					/* Always warn when overriding an explicit user choice */
 					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"%s route control %d not allowed, defaulting to %d.\n",
+						"%s unknown route control %d, defaulting to %d.\n",
 						OPX_HFI1_PACKET_STR[i], route_control_value, opx_route_control[i]);
 				}
 			} else {
-				opx_route_control[i] =
-					(i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 : default_route_control;
+				opx_route_control[i] = OPX_RC_IN_ORDER_0;
 				FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s route control defaulting to %d.\n",
 					 OPX_HFI1_PACKET_STR[i], opx_route_control[i]);
 			}
@@ -247,7 +252,7 @@ static inline void opx_set_route_control_value(const bool disabled)
 		}
 	} else {
 		for (int i = 0; i < OPX_HFI1_NUM_PACKET_TYPES; ++i) {
-			opx_route_control[i] = (i == OPX_HFI1_RZV_CTRL) ? OPX_RC_IN_ORDER_0 : default_route_control;
+			opx_route_control[i] = OPX_RC_IN_ORDER_0;
 		}
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "All packet types using %s default route control values.\n",

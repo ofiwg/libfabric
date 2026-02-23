@@ -1835,38 +1835,91 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Global OPX packet size %u\n", OPX_HFI1_PKT_SIZE);
 
-	/* The global was set early (userinit), may be changed now on mixed networks */
-	if (!(OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
-		int mixed_network;
-		if (fi_param_get_bool(fi_opx_global.prov, "mixed_network", &mixed_network) == FI_SUCCESS) {
-			if (mixed_network) {
-				OPX_SW_HFI1_TYPE = OPX_HFI1_MIXED_9B;
+	/* Intentionally undocumented environment variables, convention is _FI_OPX_feature_
+	   for internal use only*/
+
+	/* _FI_OPX_HEADER_SIZE_ */
+	int   header_size = 9;
+	char *envstr_hz	  = getenv("_FI_OPX_HEADER_SIZE_");
+	if (envstr_hz != NULL) {
+		header_size = atoi(envstr_hz);
+		if ((header_size != 9) && (header_size != 16)) {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"_FI_OPX_HEADER_SIZE_=%s is invalid. Must be 9 or 16.\n", envstr_hz);
+			errno = FI_EOPNOTSUPP;
+			goto err;
+		}
+		if (header_size == 16) {
+			if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+					"_FI_OPX_HEADER_SIZE_=16 is invalid on local HFI type %s.\n",
+					OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
+				errno = FI_EOPNOTSUPP;
+				goto err;
 			}
-		} else { // default is mixed
-			OPX_SW_HFI1_TYPE = OPX_HFI1_MIXED_9B;
 		}
 	}
+	if ((header_size == 9) && !(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR)) {
+		OPX_SW_HFI1_TYPE = OPX_HFI1_MIXED_9B;
+	}
+
+	/* The global was set early (userinit), may be changed now on OPA100/CN5000/CN6000 interop networks.
+	 * OPA100 interop defaults to off unless explicitly set.
+	 *
+	 * At this point, we have processed environment variables FI_OPX_HFISVC and _FI_OPX_HEADER_SIZE_.
+	 * Those defaults are currently appropriate for OPA100 interop so if the defaults have changed, the
+	 * user is attempting to do something conflicting and unsupported and OPX will error out. */
+	int opa100_interop = 0;
+	if (!(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR)) {
+		if (fi_param_get_bool(fi_opx_global.prov, "opa100_interop", &opa100_interop) == FI_SUCCESS) {
+			if (opa100_interop) {
+				/* User cannot manually enable HFISVC or 16B headers.  These do not default
+				   so the user set them AND set interop so we fail here.  */
+#if HAVE_HFISVC
+				if (opx_ep->use_hfisvc) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+						"Cannot enable OPA100 Interop with HFISVC on local HFI type %s.\n",
+						OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
+					errno = FI_EOPNOTSUPP;
+					goto err;
+				}
+#endif
+				if (!(OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B)) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+						"Cannot enable OPA100 Interop and use 16B headers on local HFI type %s.\n",
+						OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
+					errno = FI_EOPNOTSUPP;
+					goto err;
+				}
+			}
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "OPA100 Interop is %s with local HFI type %s.\n",
+				opa100_interop ? "enabled" : "disabled", OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
+		}
+	}
+
+	FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "SW HFI type %s is being used for local HFI type %s.\n",
+		OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE), OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
+
 	opx_ep->hfi->hfi1_type = OPX_SW_HFI1_TYPE;
-	FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "Mixed OPA100 network %s with local HFI type %s.\n",
-		(OPX_SW_HFI1_TYPE != OPX_HFI1_MIXED_9B) ? "disabled" : "enabled",
-		OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"Opened hfi %p, HFI type %s, unit %u, port %u, ref_cnt %#lX, rcv ctxt %u, send ctxt %u, subctxt %u, subctxt_cnt %u\n",
-		opx_ep->hfi, OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE), opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port,
-		(long) ofi_atomic_get64(&opx_ep->hfi->ref_cnt), opx_ep->hfi->ctrl->ctxt_info.ctxt,
-		opx_ep->hfi->ctrl->ctxt_info.send_ctxt, opx_ep->hfi->ctrl->ctxt_info.subctxt, opx_ep->hfi->subctxt_cnt);
+		"Opened hfi %p, HFI type %s(%s), unit %u, port %u, ref_cnt %#lX, rcv ctxt %u, send ctxt %u, subctxt %u, subctxt_cnt %u\n",
+		opx_ep->hfi, OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE), OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE),
+		opx_ep->hfi->hfi_unit, opx_ep->hfi->hfi_port, (long) ofi_atomic_get64(&opx_ep->hfi->ref_cnt),
+		opx_ep->hfi->ctrl->ctxt_info.ctxt, opx_ep->hfi->ctrl->ctxt_info.send_ctxt,
+		opx_ep->hfi->ctrl->ctxt_info.subctxt, opx_ep->hfi->subctxt_cnt);
 
-	if (OPX_SW_HFI1_TYPE & OPX_HFI1_JKR || OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+	if (OPX_HW_HFI1_TYPE & OPX_HFI1_JKR) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is CN5000\n");
-	} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_CYR) {
+	} else if (OPX_HW_HFI1_TYPE & OPX_HFI1_CYR) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is CN6000\n");
 	} else {
+		assert(OPX_HW_HFI1_TYPE == OPX_HFI1_WFR);
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is OPA100\n");
 	}
 
 	/* Set route_control after hfi1 type is selected and before any models are initialized
-	 * Note that "out of order" route control will be disabled if tid is enabled
+	 * Note that "out of order" route control rzv data will be disabled if tid is enabled
 	 */
 	opx_set_route_control_value(opx_ep->use_expected_tid_rzv);
 
@@ -2944,34 +2997,42 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 
 #if HAVE_HFISVC
 	int drv_bulksvc_enabled = opx_hfi_drv_bulksvc_enabled();
-	if ((!drv_bulksvc_enabled) && (getenv("_FI_OPX_FORCE_BULKSVC"))) {
-		drv_bulksvc_enabled = 1;
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] _FI_OPX_FORCE_BULKSVC\n");
-	}
 
-	int use_hfisvc;
+	/* FI_OPX_HFISVC */
+	int use_hfisvc	   = 0;
+	opx_ep->use_hfisvc = false;
 	if (fi_param_get_bool(fi_opx_global.prov, "hfisvc", &use_hfisvc) == FI_SUCCESS) {
 		if (use_hfisvc) {
+			if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+					"Cannot enable HFISVC on local HFI type %s.\n",
+					OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
+				errno = FI_EOPNOTSUPP;
+				goto err;
+			}
 			if (!drv_bulksvc_enabled) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 					"FI_OPX_HFISVC is enabled, but the hfi1 driver module either does not support it or the use_bulksvc parameter is not enabled. Work with your system administrator to enable this performance feature, or re-run without enabling FI_OPX_HFISVC.\n");
 				errno = FI_EOPNOTSUPP;
 				goto err;
 			}
+			/* quick sanity check, interop is processed later.  We will handle defaults
+			 * for the user but if the user MANUALLY sets incompatible env vars we fail it.
+			   They've manually set FI_OPX_HFISVC, check FI_OPX_OPA100_INTEROP here */
+			if (!(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR)) {
+				int opa100_interop = 0;
+				if (fi_param_get_bool(fi_opx_global.prov, "opa100_interop", &opa100_interop) ==
+				    FI_SUCCESS) {
+					if (opa100_interop) {
+						FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+							"Cannot enable HFISVC with OPA100 Interop.\n");
+						errno = FI_EOPNOTSUPP;
+						goto err;
+					}
+				}
+			}
 			opx_ep->use_hfisvc = true;
-		} else {
-			opx_ep->use_hfisvc = false;
 		}
-	} else if (OPX_HFISVC_ENABLED_DEFAULT) {
-		if (!drv_bulksvc_enabled) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-				"The currently active hfi1 module does not have use_bulksvc turned on. OPX will run with degraded performance.\n");
-			opx_ep->use_hfisvc = false;
-		} else {
-			opx_ep->use_hfisvc = true;
-		}
-	} else {
-		opx_ep->use_hfisvc = false;
 	}
 #else
 	opx_ep->use_hfisvc = false;
