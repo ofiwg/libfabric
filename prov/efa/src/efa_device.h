@@ -27,6 +27,7 @@ struct efa_device {
 	uint8_t			*qp_gen_table;
 	size_t			qp_table_sz_m1;
 	struct ofi_genlock		qp_table_lock;
+	int				urandom_fd;
 };
 
 int efa_device_list_initialize(void);
