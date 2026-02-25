@@ -2,6 +2,9 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include <sys/time.h>
+#ifndef _WIN32
+#include <sys/random.h>
+#endif
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_cq.h"
@@ -188,22 +191,52 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 	return err;
 }
 
-static int efa_generate_rdm_connid(void)
+#ifdef _WIN32
+static int efa_read_random(struct efa_device *device, uint32_t *val)
 {
-	struct timeval tv;
-	uint32_t val;
-	int err;
-
-	err = gettimeofday(&tv, NULL);
-	if (err) {
-		EFA_WARN(FI_LOG_EP_CTRL, "Cannot gettimeofday, err=%d.\n", err);
+   return rand_s(val);
+}
+#else
+static int efa_read_random(struct efa_device *device, uint32_t *val)
+{
+	/*
+	 * GRND_INSECURE  is the best option
+	 * for non-blocking random number generation.
+	 * See:
+	 * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=75551dbf112c992bc6c99a972990b3f272247e23
+	 * https://lwn.net/Articles/884875/
+	 *
+	 * However, GRND_INSECURE is only available on kernels 5.10+
+	 * So we first try getrandom with GRND_NONBLOCK and we read directly
+	 * from /dev/urandom if getrandom fails with EAGAIN or ENOSYS
+	 */
+	if (getrandom(val, sizeof(*val), GRND_NONBLOCK) == sizeof(*val))
 		return 0;
+
+	if (errno != EAGAIN && errno != ENOSYS)
+		return -FI_EIO;
+
+	assert(ofi_genlock_held(&device->qp_table_lock));
+
+	if (device->urandom_fd >= 0 &&
+	    read(device->urandom_fd, val, sizeof(*val)) == sizeof(*val))
+		return 0;
+
+	return -FI_EIO;
+}
+#endif
+
+static uint32_t efa_generate_rdm_connid(struct efa_device *device)
+{
+	uint32_t val;
+
+	if (efa_read_random(device, &val)) {
+		struct timeval tv;
+
+		EFA_WARN(FI_LOG_EP_CTRL, "Failed to generate random QKEY. Falling back to pid and timestamp.\n");
+		gettimeofday(&tv, NULL);
+		val = (uint32_t) ((tv.tv_sec << 16) | (getpid() & 0xffff));
 	}
-
-	/* tv_usec is in range [0,1,000,000), shift it by 12 to [0,4,096,000,000 */
-	val = (tv.tv_usec << 12) + tv.tv_sec;
-
-	val = ofi_xorshift_random(val);
 
 	/* 0x80000000 and up is privileged Q Key range. */
 	val &= 0x7fffffff;
@@ -449,7 +482,7 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 
 	qp->qkey = (base_ep->util_ep.type == FI_EP_DGRAM) ?
 			   EFA_DGRAM_CONNID :
-			   efa_generate_rdm_connid();
+			   efa_generate_rdm_connid(base_ep->domain->device);
 	err = efa_base_ep_modify_qp_rst2rts(base_ep, qp);
 	if (err)
 		return err;
