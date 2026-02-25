@@ -159,22 +159,54 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 	return err;
 }
 
-static int efa_generate_rdm_connid(void)
+static int efa_generate_rdm_connid(struct efa_device *device)
 {
 	struct timeval tv;
 	uint32_t val;
 	int err;
 
-	err = gettimeofday(&tv, NULL);
+	assert(ofi_genlock_held(&device->qp_table_lock));
+
+#ifdef _WIN32
+	err = rand_s(&val);
 	if (err) {
-		EFA_WARN(FI_LOG_EP_CTRL, "Cannot gettimeofday, err=%d.\n", err);
-		return 0;
+		EFA_WARN(FI_LOG_EP_CTRL, "Unable to generate random number for QKEY. Using existing value.\n");
+	}
+#else
+	if (device->rand_seed == 0) {
+		gettimeofday(&tv, NULL);
+
+		/* The purpose of QKEY is to stop packets that were meant for an
+		 * already destroyed endpoint from being delivered to a new
+		 * endpoint with the same QPN
+
+		 * We need to consider several parameters
+		 * (a) QPN reuse within a process and across processes
+		 * (b) If a timestamp is used in the seed: identical seeds
+		 * at different times caused by wraparound in the finite
+		 * resolution of the timestamp.
+		 *
+		 * To protect against QPN reuse within a process, rand_r is used
+		 * with a device level seed. The repetition period of rand_r
+		 * is very large (2^26 in my test), so a QKEY will not be
+		 * repeated for many QPNs. The rand_r sequence does not depend on
+		 * timestamp, so this is true no matter the amount of time that
+		 * has passed between QP create calls.
+		 *
+		 * To protect against QPN reuse across processes, the seed uses the
+		 * PID and timestamp. The Linux kernel allocated PIDs in a
+		 * sequential fashion. So PID reuse is very unlikely with rapid
+		 * process creation and destruction. If a process that has been
+		 * running for a long time is destroyed and recreated, it is
+		 * more likely to acquire the same PID because other PIDs have
+		 * already been allocated. To protect against that, the upper bits
+		 * of the seed are set to the timestamp in seconds. */
+
+		device->rand_seed = (unsigned int) ((tv.tv_sec << 16) | (getpid() & 0xffff));
 	}
 
-	/* tv_usec is in range [0,1,000,000), shift it by 12 to [0,4,096,000,000 */
-	val = (tv.tv_usec << 12) + tv.tv_sec;
-
-	val = ofi_xorshift_random(val);
+	val = (uint32_t) rand_r(&device->rand_seed);
+#endif /* _WIN_32 */
 
 	/* 0x80000000 and up is privileged Q Key range. */
 	val &= 0x7fffffff;
@@ -420,7 +452,7 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 
 	qp->qkey = (base_ep->util_ep.type == FI_EP_DGRAM) ?
 			   EFA_DGRAM_CONNID :
-			   efa_generate_rdm_connid();
+			   efa_generate_rdm_connid(base_ep->domain->device);
 	err = efa_base_ep_modify_qp_rst2rts(base_ep, qp);
 	if (err)
 		return err;
