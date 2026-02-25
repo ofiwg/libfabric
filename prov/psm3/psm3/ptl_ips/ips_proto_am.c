@@ -328,7 +328,7 @@ psm3_ips_am_short_request(psm2_epaddr_t epaddr,
 		     void *completion_ctxt)
 {
 	struct ips_proto_am *proto_am = &epaddr->proto->proto_am;
-	psm2_error_t err;
+	psm2_error_t err = PSM2_OK;
 	ips_scb_t *scb;
 	ips_epaddr_t *ipsaddr;
 	int pad_bytes = calculate_pad_bytes(len);
@@ -343,7 +343,7 @@ psm3_ips_am_short_request(psm2_epaddr_t epaddr,
 		    ((nargs - IPS_AM_HDR_NARGS) << 3) : 0;
 
 		/* len + pad_bytes + overflow_args */
-		PSMI_BLOCKUNTIL(epaddr->ptlctl->ep,
+		PSMI_BLOCKUNTIL_TO(epaddr->ptlctl->ep, epaddr->proto->epinfo.ep_timeout_ack,
 				err,
 				((scb = psm3_ips_scbctrl_alloc(
 				      &proto_am->scbc_request,
@@ -351,11 +351,13 @@ psm3_ips_am_short_request(psm2_epaddr_t epaddr,
 				      len + pad_bytes + arg_sz,
 				      IPS_SCB_FLAG_ADD_BUFFER)) != NULL));
 	} else {
-		PSMI_BLOCKUNTIL(epaddr->ptlctl->ep,
+		PSMI_BLOCKUNTIL_TO(epaddr->ptlctl->ep, epaddr->proto->epinfo.ep_timeout_ack,
 				err,
 				((scb = psm3_ips_scbctrl_alloc_tiny(
 				      &proto_am->scbc_request, 0)) != NULL));
 	}
+	if (err > PSM2_OK_NO_PROGRESS)
+		return err;
 
 	psmi_assert_always(scb != NULL);
 	ips_am_scb_init(scb, handler, nargs, pad_bytes, true,

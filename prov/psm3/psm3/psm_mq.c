@@ -59,6 +59,7 @@
 #include "psm2_hal.h"
 #include "psm_mq_internal.h"
 #include "ips_proto_params.h"
+#include "ips_proto.h"
 
 /*
  * Functions to manipulate the expected queue in mq_ep.
