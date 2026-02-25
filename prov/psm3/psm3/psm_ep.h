@@ -262,8 +262,9 @@ struct psm2_epaddr {
 /*
  * Users of BLOCKUNTIL should check the value of err upon return
  */
-#define PSMI_BLOCKUNTIL(ep, err, cond)	do {				\
+#define PSMI_BLOCKUNTIL_TO(ep, timeout, err, cond)	do {		\
 	int spin_cnt = 0;						\
+	uint64_t block_start = get_cycles();				\
 	PSMI_PROFILE_BLOCK();						\
 	while (!(cond)) {						\
 		err = psm3_poll_internal(ep, 1, 0);			\
@@ -271,6 +272,11 @@ struct psm2_epaddr {
 			PSMI_PROFILE_REBLOCK(1);			\
 			if (++spin_cnt == (ep)->yield_spin_cnt) {	\
 				spin_cnt = 0;				\
+				if (timeout && !psm3_cycles_left(block_start,	\
+					timeout)) {			\
+					err = PSM2_EP_NO_RESOURCES;	\
+					break;				\
+				}					\
 				PSMI_YIELD((ep)->mq->progress_lock);	\
 			}						\
 		}							\
@@ -283,6 +289,8 @@ struct psm2_epaddr {
 	}								\
 	PSMI_PROFILE_UNBLOCK();						\
 } while (0)
+
+#define PSMI_BLOCKUNTIL(ep, err, cond) PSMI_BLOCKUNTIL_TO(ep, 0, err, cond)
 
 void psm3_ep_init(void);
 void psm3_ep_fini(void);
