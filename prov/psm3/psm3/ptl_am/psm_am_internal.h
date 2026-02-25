@@ -158,7 +158,7 @@ psm3_amsh_short_request(ptl_t *ptl, psm2_epaddr_t epaddr,
 			psm2_handler_t handler, psm2_amarg_t *args, int nargs,
 			const void *src, size_t len, int flags);
 
-void
+int
 psm3_amsh_short_reply(amsh_am_token_t *tok,
 		      psm2_handler_t handler, psm2_amarg_t *args, int nargs,
 		      const void *src, size_t len, int flags);
@@ -168,7 +168,7 @@ psm3_amsh_long_request(ptl_t *ptl, psm2_epaddr_t epaddr,
 		       psm2_handler_t handler, psm2_amarg_t *args, int nargs,
 		       const void *src, size_t len, void *dest, int flags);
 
-void
+int
 psm3_amsh_long_reply(amsh_am_token_t *tok,
 		     psm2_handler_t handler, psm2_amarg_t *args, int nargs,
 		     const void *src, size_t len, void *dest, int flags);

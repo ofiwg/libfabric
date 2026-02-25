@@ -67,7 +67,7 @@ PSMI_NEVER_INLINE(ips_scb_t *
 {
 	ips_scb_t *scb = NULL;
 	psmi_assert(npkts > 0);
-	psm2_error_t err;
+	psm2_error_t err = PSM2_OK;
 
 	proto->stats.scb_egr_unavail_cnt++;
 
