@@ -361,7 +361,7 @@ efa_rdm_cq_lookup_raw_addr(struct efa_rdm_pke *pke,
 				     (void *) efa_ep_addr);
 	if (addr != FI_ADDR_NOTAVAIL) {
 		implicit = false;
-		peer = efa_rdm_ep_get_peer(ep, addr);
+		peer = efa_rdm_ep_get_peer_explicit(ep, addr);
 		assert(peer);
 		goto out;
 	}
@@ -446,7 +446,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 			"Peer with gid %d and qpn %d found in explicit AV with "
 			"fi_addr %ld\n",
 			gid, qpn, explicit_fi_addr);
-		peer = efa_rdm_ep_get_peer(ep, explicit_fi_addr);
+		peer = efa_rdm_ep_get_peer_explicit(ep, explicit_fi_addr);
 		goto out;
 	}
 
