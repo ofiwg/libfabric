@@ -45,9 +45,10 @@ int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 	return efa_conn ? efa_conn->ah->ahn : -1;
 }
 
+
 /**
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
- * the explicit AV
+ * the explicit AV, this function is a thread-safe version of efa_rdm_ep_get_peer_explicit
  *
  * @param[in]		ep		endpoint
  * @param[in]		addr 		libfabric address
@@ -55,9 +56,29 @@ int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
  */
 struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
+	struct efa_rdm_peer *peer;
+	ofi_genlock_lock(&ep->base_ep.domain->srx_lock);
+	peer = efa_rdm_ep_get_peer_explicit(ep, addr);
+	ofi_genlock_unlock(&ep->base_ep.domain->srx_lock);
+	return peer;
+}
+
+
+/**
+ * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
+ * the explicit AV, this function must be called inside an SRX lock
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		addr 		libfabric address
+ * @returns pointer to #efa_rdm_peer
+ */
+struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr)
+{
 	struct efa_conn *conn;
 	struct efa_conn_ep_peer_map_entry *map_entry;
 	struct efa_rdm_peer *peer;
+
+	assert(ofi_genlock_held(&ep->base_ep.domain->srx_lock));
 
 	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
 
