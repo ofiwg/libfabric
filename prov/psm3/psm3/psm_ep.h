@@ -264,9 +264,15 @@ struct psm2_epaddr {
  */
 #define PSMI_BLOCKUNTIL(ep, err, cond)	do {				\
 	int spin_cnt = 0;						\
+	uint64_t _t_start = get_cycles();				\
 	PSMI_PROFILE_BLOCK();						\
 	while (!(cond)) {						\
 		err = psm3_poll_internal(ep, 1, 0);			\
+		if (!psm3_cycles_left(_t_start,				\
+		    PSMI_MIN_EP_CONNECT_TIMEOUT)) {			\
+			err = PSM2_EP_NO_RESOURCES;			\
+			break;						\
+		}							\
 		if (err == PSM2_OK_NO_PROGRESS) {			\
 			PSMI_PROFILE_REBLOCK(1);			\
 			if (++spin_cnt == (ep)->yield_spin_cnt) {	\
