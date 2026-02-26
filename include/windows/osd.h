@@ -31,6 +31,7 @@
 #include <malloc.h>
 #include <errno.h>
 #include <complex.h>
+#include <fcntl.h>
 #include "pthread.h"
 
 #include <sys/uio.h>
@@ -688,6 +689,36 @@ static inline char* strsep(char **stringp, const char *delim)
 	}
 
 	return ptr;
+}
+
+static inline int ofi_close(int fd)
+{
+	return _close(fd);
+}
+
+static inline int ofi_open(const char* path, int flags, ...)
+{
+	// _open takes a variadic argument 'int pmode', but not a va_list
+	// extract and pass pmode if required, as indicated by flag _O_CREAT
+	va_list args;
+	int fd;
+	int pmode;
+
+	if ((flags & _O_CREAT) != 0) {
+		va_start(args, flags);
+		pmode = va_arg(args, int);
+		fd = _open(path, flags, pmode);
+		va_end(args);
+	} else {
+		fd = _open(path, flags);
+	}
+
+	return fd;
+}
+
+static inline FILE* ofi_fdopen(int fd, const char* mode)
+{
+	return _fdopen(fd, mode);
 }
 
 #define __attribute__(x)
