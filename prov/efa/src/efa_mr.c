@@ -491,18 +491,18 @@ struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
 
 #endif
 
-static inline void efa_mark_dmabuf_fail(struct efa_hmem_info *i)
+static inline void efa_mark_dmabuf_fail(struct efa_hmem_info *i, enum fi_hmem_iface iface)
 {
 	if (DMABUF_IS_NOT_SUPPORTED(i)) {
 		return;
 	} else if (DMABUF_IS_ASSUMED(i)) {
 		EFA_INFO(FI_LOG_MR,
 			 "assumed dmabuf support for %s was incorrect\n",
-			 fi_tostr(i, FI_TYPE_HMEM_IFACE));
+			 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 	} else {
 		EFA_WARN(FI_LOG_MR,
 			 "Explicit dmabuf support for %s was incorrect\n",
-			 fi_tostr(i, FI_TYPE_HMEM_IFACE));
+			 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 	}
 	i->dmabuf_supported_by_device = EFA_DMABUF_NOT_SUPPORTED;
 }
@@ -553,7 +553,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 			access);
 
 		if (!dmabuf_mr)  {
-			efa_mark_dmabuf_fail(p_info);
+			efa_mark_dmabuf_fail(p_info, efa_mr->peer.iface);
 		} else {
 			p_info->dmabuf_supported_by_device = EFA_DMABUF_SUPPORTED;
 		}
@@ -586,7 +586,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 			(void) ofi_hmem_put_dmabuf_fd(efa_mr->peer.iface, dmabuf_fd);
 
 			if (!dmabuf_mr) {
-				efa_mark_dmabuf_fail(p_info);
+				efa_mark_dmabuf_fail(p_info, efa_mr->peer.iface);
 				if (p_info->dmabuf_fallback_enabled) {
 					return ibv_reg_mr(efa_mr->domain->ibv_pd,
 						  	  (void *)mr_attr->mr_iov->iov_base,
@@ -604,7 +604,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 				 "Unable to get dmabuf fd for %s device buffer, "
 				 "Fall back to ibv_reg_mr\n",
 				 fi_tostr(&efa_mr->peer.iface, FI_TYPE_HMEM_IFACE));
-			efa_mark_dmabuf_fail(p_info);
+			efa_mark_dmabuf_fail(p_info, efa_mr->peer.iface);
 			return ibv_reg_mr(efa_mr->domain->ibv_pd,
 					  (void *)mr_attr->mr_iov->iov_base,
 					  mr_attr->mr_iov->iov_len, access);
