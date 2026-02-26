@@ -171,8 +171,8 @@ interfaces are defined by libfabric.
 
 # LOGGING INTERFACE
 
-Logging can be controlled using the FI_LOG_LEVEL, FI_LOG_PROV, and
-FI_LOG_SUBSYS environment variables.
+Logging can be controlled using the FI_LOG_LEVEL, FI_LOG_LOCATION,
+FI_LOG_LOCATION_MODE, FI_LOG_PROV, and FI_LOG_SUBSYS environment variables.
 
 *FI_LOG_LEVEL*
 : FI_LOG_LEVEL controls the amount of logging data that is output.  The
@@ -193,6 +193,20 @@ FI_LOG_SUBSYS environment variables.
 : Debug is high traffic and is likely to impact application performance.
   Debug output is only available if the library has been compiled with
   debugging enabled.
+
+*FI_LOG_LOCATION*
+: FI_LOG_LOCATION controls the location of the log output. Possible options are
+  `stdout`, `stderr`, as well as a path to a file or a directory. The default
+  location is `stderr`.
+  If set to a file path, then the specified file will be created and used. The
+  file pointed to by the setting must not exist prior to launching libfabric.
+  If set to a directory path, then a new file `ofi_<pid>.log` in the specified
+  directory will be used.
+  Log files use the file mode specified via *FI_LOG_LOCATION_MODE*.
+
+*FI_LOG_LOCATION_MODE*
+: FI_LOG_LOCATION_MODE controls the mode of the log file if *FI_LOG_LOCATION* is
+  set to a file or directory. The default is `0600`.
 
 *FI_LOG_PROV*
 : The FI_LOG_PROV environment variable enables or disables logging from
