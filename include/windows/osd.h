@@ -276,6 +276,7 @@ do						\
 #define __PRI64_PREFIX "ll"
 
 #define HOST_NAME_MAX 256
+#define PATH_MAX MAX_PATH
 
 #define MIN min
 #define MAX max
@@ -290,6 +291,7 @@ do						\
 #define access(path, mode) _access(path, mode)
 #define F_OK 0
 
+typedef uint32_t mode_t;
 typedef int pid_t;
 #define getpid (int)GetCurrentProcessId
 
