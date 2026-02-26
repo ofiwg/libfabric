@@ -279,7 +279,10 @@ insert:
 	dlist_init(&e->entry);
 	e->fi = info;
 
-	dlist_insert_tail(&e->entry, head);
+	if(!strncmp(e->fi->fabric_attr->prov_name, "shm", 3))
+		dlist_insert_head(&e->entry, head);
+	else
+		dlist_insert_tail(&e->entry, head);
 
 	return 0;
 }

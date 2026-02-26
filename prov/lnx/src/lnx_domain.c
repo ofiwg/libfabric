@@ -76,11 +76,9 @@ static int lnx_domain_close(struct fid *fid)
 	for (i = 0; i < domain->ld_num_doms; i++) {
 		cd = &domain->ld_core_domains[i];
 
-		if (cd->cd_domain) {
-			rc = fi_close(&cd->cd_domain->fid);
-			if (rc)
-				frc = rc;
-		}
+		rc = fi_close(&cd->cd_domain->fid);
+		if (rc)
+			frc = rc;
 	}
 
 	ofi_bufpool_destroy(domain->ld_mem_reg_bp);
@@ -113,24 +111,16 @@ static struct fi_ops_mr lnx_mr_ops = {
 static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
 				void *context, struct lnx_domain *lnx_domain)
 {
-	int rc, i, num_shm_dom = 0, inter_dom_start;
+	int rc, i;
 	char *prov_name;
-	bool local;
 	struct fi_info *itr;
 	struct lnx_core_fabric *cf;
 	struct lnx_core_domain *cd;
 
 	for (i = 0; i < lnx_fab->lf_num_fabs; i++) {
 		cf = &lnx_fab->lf_core_fabrics[i];
-		local = false;
-		prov_name = cf->cf_info->fabric_attr->name;
-		if (!strcmp(prov_name, "shm"))
-			local = true;
-		for (itr = cf->cf_info; itr; itr = itr->next) {
-			if (local)
-				num_shm_dom++;
+		for (itr = cf->cf_info; itr; itr = itr->next)
 			lnx_domain->ld_num_doms++;
-		}
 	}
 
 	if (lnx_domain->ld_num_doms >= LNX_MAX_LOCAL_EPS) {
@@ -140,17 +130,16 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
 		return -FI_E2BIG;
 	}
 
-	inter_dom_start = num_shm_dom;
-
 	lnx_domain->ld_core_domains = calloc(sizeof(*lnx_domain->ld_core_domains),
 					     lnx_domain->ld_num_doms);
 	if (!lnx_domain->ld_core_domains)
 		return -FI_ENOMEM;
 
+	lnx_domain->ld_num_doms = 0;
+
 	for (i = 0; i < lnx_fab->lf_num_fabs; i++) {
 		cf = &lnx_fab->lf_core_fabrics[i];
 
-		local = false;
 		prov_name = cf->cf_info->fabric_attr->name;
 		/* special case for CXI provider. We need to turn off tag
 		 * matching HW offload if we're going to support shared
@@ -158,23 +147,15 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
 		 */
 		if (strstr(prov_name, "cxi"))
 			setenv("FI_CXI_RX_MATCH_MODE", "software", 1);
-		else if (!strcmp(prov_name, "shm"))
-			local = true;
 
 		for (itr = cf->cf_info; itr; itr = itr->next) {
-			/* keep the shm domain at the head of the list.
+			/* The shm domain should now already be at the head of the list.
 			 * This will cause all the other shm constructs to
 			 * be the head of their respective lists, ex: av.
 			 * The purpose is to optimize the shm path for
 			 * local peers.
 			 */
-			if (local) {
-				num_shm_dom--;
-				cd = &lnx_domain->ld_core_domains[num_shm_dom];
-			} else {
-				cd = &lnx_domain->ld_core_domains[inter_dom_start];
-				inter_dom_start++;
-			}
+			cd = &lnx_domain->ld_core_domains[lnx_domain->ld_num_doms];
 
 			cd->cd_info = itr;
 
@@ -183,6 +164,7 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
 			if (rc)
 				return rc;
 
+			lnx_domain->ld_num_doms++;
 			cd->cd_fabric = cf;
 		}
 	}
