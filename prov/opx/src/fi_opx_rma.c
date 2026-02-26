@@ -226,11 +226,21 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-		opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], params->key, params->dput_iov.qw[0],
-					  params->dput_iov.qw[1], params->dput_iov.qw[2], params->dput_iov.qw[3],
-					  params->dput_iov.qw[4], params->dput_iov.qw[5], 0UL);
+		opx_cacheline_store_qw_vol(scb_payload, params->key, params->dput_iov.qw[0], params->dput_iov.qw[1],
+					   params->dput_iov.qw[2], params->dput_iov.qw[3], params->dput_iov.qw[4],
+					   params->dput_iov.qw[5], 0UL);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+		replay->scb.qws[8]	 = params->key;
+		uint64_t *replay_payload = replay->payload;
+		replay_payload[0]	 = params->dput_iov.qw[0];
+		replay_payload[1]	 = params->dput_iov.qw[1];
+		replay_payload[2]	 = params->dput_iov.qw[2];
+		replay_payload[3]	 = params->dput_iov.qw[3];
+		replay_payload[4]	 = params->dput_iov.qw[4];
+		replay_payload[5]	 = params->dput_iov.qw[5];
+		replay_payload[6]	 = 0UL;
 
 		scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 		opx_cacheline_store_qw_vol(scb_payload, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL);
