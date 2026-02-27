@@ -5027,11 +5027,17 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	}
 
 	uint64_t sbuf_offset = 0UL;
+	if (opx_mr && opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPENED) {
 #if HAVE_HFISVC_DMABUF
-	if (opx_mr && opx_mr->dmabuf.fd != -1) {
-		sbuf_offset = opx_mr_dmabuf_local_offset(opx_mr, buf);
-	}
+		if (opx_mr->dmabuf.fd != -1) {
+			sbuf_offset = opx_mr_dmabuf_local_offset(opx_mr, buf);
+		} else
 #endif
+		{
+			assert((uintptr_t) buf >= (uintptr_t) opx_mr->iov.iov_base);
+			sbuf_offset = (uint64_t) ((uintptr_t) buf - (uintptr_t) opx_mr->iov.iov_base);
+		}
+	}
 
 	union opx_hfisvc_iov hfisvc_iov = {
 		.access_key  = rzv_comp->access_key,
