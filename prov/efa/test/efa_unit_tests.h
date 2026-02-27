@@ -416,7 +416,7 @@ void test_efa_cq_readerr_return_value_provider_buffer();
 void test_efa_cq_readfrom_start_poll_error();
 void test_efa_cq_readfrom_util_cq_entries();
 void test_efa_cq_readerr_util_cq_error();
-void test_efa_cq_poll_active_no_restart();
+void test_efa_cq_poll_ep_close_bypass_path();
 void test_efa_cq_read_mixed_success_error();
 void test_efa_ep_open();
 void test_efa_ep_cancel();
