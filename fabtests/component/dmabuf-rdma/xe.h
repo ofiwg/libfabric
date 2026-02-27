@@ -30,6 +30,7 @@
 #define _DMABUF_RDMA_TESTS_XE_H_
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "hmem.h"
 #include "level_zero/ze_api.h"
 
@@ -56,32 +57,45 @@ struct xe_buf {
 	ze_device_handle_t	dev;
 	ze_memory_type_t	type;
 	int			location;
+	int			fd;
+	ze_ipc_mem_handle_t	ipc_handle;
+};
+
+struct gpu {
+	int dev_num;
+	int subdev_num;
+	ze_device_handle_t device;
+	ze_command_list_handle_t cmdl;
 };
 
 /*
- * Initialize GPU devices specified in the string of comma separated numbers.
- * Returns the number of GPU device successfully initialized.
+ * Initialize GPU device.
  */
-int	xe_init(char *gpu_dev_nums, int enable_multi_gpu);
+int	xe_init(struct gpu *gpu);
 
 /*
- * Get the device number for the ith successfully initialized GPU.
+ * Cleanup GPU resources
  */
-int	xe_get_dev_num(int i);
+void xe_cleanup_gpu(struct gpu *gpu);
 
 /*
- * Alloctaed a buffer from specified location, on the speficied GPU if
- * applicable. The xe_buf output is optional, can pass in NULL if the
- * information is not needed.
+ * Cleanup generic XE resources
  */
-void	*xe_alloc_buf(size_t page_size, size_t size, int where, int gpu,
-		      struct xe_buf *xe_buf);
+void	xe_cleanup(void);
 
 /*
  * Get the dma-buf fd associated with the buffer allocated with the oneAPI L0
  * functions. Return -1 if it's not a dma-buf object.
  */
 int	xe_get_buf_fd(void *buf);
+
+/*
+ * Alloctaed a buffer from specified location, on the speficied GPU if
+ * applicable. The xe_buf output is optional, can pass in NULL if the
+ * information is not needed.
+ */
+void	*xe_alloc_buf(size_t page_size, size_t size, int where, struct gpu *gpu,
+		      struct xe_buf *xe_buf);
 
 /*
  * Show the fields of the xe_buf structure.
@@ -91,18 +105,23 @@ void	xe_show_buf(struct xe_buf *buf);
 /*
  * Free the buffer allocated with xe_alloc_buf.
  */
-void	xe_free_buf(void *buf, int where);
+void	xe_free_buf(struct xe_buf *xe_buf);
 
 /*
  * Like memset(). Use oneAPI L0 to access device memory.
  */
-void	xe_set_buf(void *buf, char c, size_t size, int location, int gpu);
+void	xe_set_buf(void *buf, char c, size_t size, int location,
+		   struct gpu *gpu);
 
 /*
  * Like memcpy(). Use oneAPI L0 to access device memory.
  */
-void	xe_copy_buf(void *dst, void *src, size_t size, int gpu);
+void	xe_copy_buf(void *dst, void *src, size_t size, struct gpu *gpu);
 
+/*
+ * Show the initialized GPU resources.
+ */
+void	show_xe_resources(struct gpu *gpu);
 
 #endif /* _DMABUF_RDMA_TESTS_XE_H_ */
 
