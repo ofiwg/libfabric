@@ -123,7 +123,7 @@ static int reg_mr(void)
 	int mr_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
 			      IBV_ACCESS_REMOTE_WRITE;
 
-	if (use_dmabuf_reg || buf_location == MALLOC) {
+	if (buf_location == MALLOC) {
 		printf("Calling ibv_reg_mr(buf=%p, size=%zd)\n", buf, buf_size);
 		CHECK_NULL((mr = ibv_reg_mr(pd, buf, buf_size, mr_access_flags)));
 	} else {
@@ -155,7 +155,6 @@ static void usage(char *prog)
 	printf("\t-m <location>    Where to allocate the buffer, can be 'malloc', 'host','device' or 'shared', default: malloc\n");
 	printf("\t-d <card_num>    Use the GPU device specified by <card_num>, default: 0\n");
 	printf("\t-S <buf_size>    Set the size of the buffer to allocate, default: 65536\n");
-	printf("\t-R               Use dmabuf_reg (plug-in for MOFED peer-mem)\n");
 	printf("\t-h               Print this message\n");
 }
 
@@ -179,9 +178,6 @@ int main(int argc, char *argv[])
 			else if (strcasecmp(optarg, "shared") == 0)
 				buf_location = SHARED;
 			break;
-		case 'R':
-			use_dmabuf_reg = 1;
-			break;
 		case 'S':
 			buf_size = atol(optarg);
 			break;
@@ -191,9 +187,6 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
-
-	if (use_dmabuf_reg)
-		dmabuf_reg_open();
 
 	if (buf_location != MALLOC)
 		xe_init(gpu_dev_nums, 0);
@@ -205,9 +198,6 @@ int main(int argc, char *argv[])
 	dereg_mr();
 	free_ib();
 	free_buf();
-
-	if (use_dmabuf_reg)
-		dmabuf_reg_close();
 
 	return 0;
 }

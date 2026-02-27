@@ -50,8 +50,6 @@ struct gpu {
 	ze_command_list_handle_t cmdl;
 };
 
-int use_dmabuf_reg;
-
 static int num_gpus;
 static struct gpu gpus[MAX_GPUS];
 static ze_driver_handle_t gpu_driver;
@@ -241,10 +239,6 @@ void *xe_alloc_buf(size_t page_size, size_t size, int where, int gpu,
 						      &alloc_props, &alloc_dev));
 		EXIT_ON_ERROR(libze_ops.zeMemGetAddressRange(gpu_context, buf, &alloc_base,
 						   &alloc_size));
-		if (use_dmabuf_reg)
-			EXIT_ON_ERROR(dmabuf_reg_add((uintptr_t)alloc_base,
-						     alloc_size,
-						     xe_get_buf_fd(buf)));
 	}
 
 	if (xe_buf) {
@@ -262,13 +256,10 @@ void *xe_alloc_buf(size_t page_size, size_t size, int where, int gpu,
 
 void xe_free_buf(void *buf, int where)
 {
-	if (where == MALLOC) {
+	if (where == MALLOC)
 		free(buf);
-	} else {
-		if (use_dmabuf_reg)
-			dmabuf_reg_remove((uint64_t)buf);
+	else
 		CHECK_ERROR(libze_ops.zeMemFree(gpu_context, buf));
-	}
 err_out:
 	return;
 }
