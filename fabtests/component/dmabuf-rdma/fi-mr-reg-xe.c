@@ -234,7 +234,6 @@ static void usage(char *prog)
 	printf("\t-p <prov_name>   Use the OFI provider named as <prov_name>, default: the first one\n");
 	printf("\t-D <domain_name> Open OFI domain named as <domain_name>, default: automatic\n");
 	printf("\t-S <size>        Set the buffer size, default: 65536\n");
-	printf("\t-R               Enable dmabuf_reg (plug-in for MOFED peer-memory)\n");
 	printf("\t-h               Print this message\n");
 }
 
@@ -243,7 +242,7 @@ int main(int argc, char *argv[])
 	char *gpu_dev_nums = NULL;
 	int c;
 
-	while ((c = getopt(argc, argv, "d:D:e:p:m:RS:h")) != -1) {
+	while ((c = getopt(argc, argv, "d:D:e:p:m:S:h")) != -1) {
 		switch (c) {
 		case 'd':
 			gpu_dev_nums = strdup(optarg);
@@ -274,9 +273,6 @@ int main(int argc, char *argv[])
 			else
 				printf("Invalid buffer location %s, use default\n", optarg);
 			break;
-		case 'R':
-			use_dmabuf_reg = 1;
-			break;
 		case 'S':
 			buf_size = atoi(optarg);
 			break;
@@ -286,9 +282,6 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
-
-	if (use_dmabuf_reg)
-		dmabuf_reg_open();
 
 	if (buf_location != MALLOC)
 		xe_init(gpu_dev_nums, 0);
@@ -304,10 +297,6 @@ int main(int argc, char *argv[])
 		dereg_dmabuf_mr();
 	finalize_ofi();
 	free_buf();
-
-	if (use_dmabuf_reg)
-		dmabuf_reg_close();
-
 	return 0;
 }
 
