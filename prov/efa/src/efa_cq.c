@@ -78,7 +78,7 @@ static inline void efa_cq_write_error_data(struct efa_cq *efa_cq, struct efa_bas
 	char *err_msg;
 	int err = to_fi_errno(prov_errno);
 
-	EFA_WARN(FI_LOG_CQ, "Encountered error during CQ polling. err: %s (%d), prov_errno: %s (%d)\n",
+	EFA_INFO(FI_LOG_CQ, "Encountered error during CQ polling. err: %s (%d), prov_errno: %s (%d)\n",
 			fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
 	efa_show_help(prov_errno);
 
