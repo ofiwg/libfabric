@@ -78,9 +78,8 @@ static inline void efa_cq_write_error_data(struct efa_cq *efa_cq, struct efa_bas
 	char *err_msg;
 	int err = to_fi_errno(prov_errno);
 
-	EFA_WARN(FI_LOG_CQ, "Encountered error during CQ polling. err: %s (%d), prov_errno: %s (%d)\n",
+	EFA_INFO(FI_LOG_CQ, "Encountered error during CQ polling. err: %s (%d), prov_errno: %s (%d)\n",
 			fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
-	efa_show_help(prov_errno);
 
 	if (buf->err_data_size > 0 && FI_VERSION_GE(efa_cq->util_cq.domain->fabric->fabric_fid.api_version, FI_VERSION(1, 5))) {
 		err_msg = (char *)buf->err_data;
