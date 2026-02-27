@@ -9,6 +9,7 @@ dnl Copyright (c) 2025 VDURA, Inc. All rights reserved.
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
+
 AC_PREREQ([2.60])
 AC_INIT([libfabric], [2.3.1], [ofiwg@lists.openfabrics.org])
 AC_CONFIG_SRCDIR([src/fabric.c])
