@@ -2163,14 +2163,16 @@ void test_efa_cq_readerr_util_cq_error(struct efa_resource **state)
 }
 /**
  * @brief Test that efa_cq_start_poll doesn't restart polling when poll is already active
+ * and handles destroyed QPs gracefully in util CQ bypass code path
  *
  * This test verifies that efa_cq_start_poll prevents CQE index shifting
- * when efa_cq_start_poll is called while poll is already active.
+ * when efa_cq_start_poll is called while poll is already active, and that
+ * the fix properly handles destroyed QPs during CQ polling.
  *
- * Scenario: fi_cq_read hits completion error -> ep close calls efa_cq_poll_ibv_cq
- * -> efa_cq_start_poll should return early -> error written to util_cq -> fi_cq_readerr retrieves it
+ * Scenario: fi_cq_read hits completion error -> fi_close(ep) destroys QP and 
+ * calls efa_cq_poll_ibv_cq -> should handle NULL base_ep gracefully
  */
-void test_efa_cq_poll_active_no_restart(struct efa_resource **state)
+void test_efa_cq_poll_ep_close_bypass_path(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -2193,19 +2195,14 @@ void test_efa_cq_poll_active_no_restart(struct efa_resource **state)
 	assert_int_equal(ret, -FI_EAVAIL);
 	assert_true(efa_cq->ibv_cq.poll_active);
 
-	/* Simulate ep close calling efa_cq_poll_ibv_cq which calls efa_cq_start_poll again */
-	/* This should NOT restart polling due to poll_active being true */
-	efa_cq_progress(&efa_cq->util_cq);
-
-	/* Error should now be in util_cq, retrievable via fi_cq_readerr */
-	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
-	assert_int_equal(ret, 1);
-	assert_int_equal(cq_err_entry.prov_errno, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE);
-
-	/* Reset mocks */
-	will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	/* fi_close(ep) will destroy the QP and call efa_cq_poll_ibv_cq to drain CQ */
+	/* The fix should handle NULL base_ep gracefully when polling stale CQEs */
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
+
+	/* Since the EP is closed, the completion err should be aborted and readerr should return EAGAIN */
+	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
+	assert_int_equal(ret, -FI_EAGAIN);
 }
 /**
  * @brief Test mixed successful and error CQEs handling
@@ -2430,3 +2427,4 @@ void test_efa_rdm_cq_sread_with_cqe(struct efa_resource **state)
 	assert_int_equal(cq_entry.len, write_entry.len);
 	assert_int_equal(cq_entry.data, write_entry.data);
 }
+
