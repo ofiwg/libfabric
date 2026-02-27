@@ -292,7 +292,26 @@ int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	efa_cq_start_poll(ibv_cq);
 
 	while (efa_cq_wc_available(ibv_cq)) {
-		base_ep = efa_domain->device->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->device->qp_table_sz_m1]->base_ep;
+		base_ep = efa_ibv_cq_get_base_ep_from_cur_cqe(ibv_cq, efa_domain);
+		/* This can only happen in the following steps
+		 * 1. fi_cq_read returned EAVAIL
+		 * 2. fi_cq_readerr was not called to read that cq err entry,
+		 * and then device cq remains at an active state
+		 * 3. fi_close(ep) destroy the qp -> set qp_table[qpn] to NULL
+		 * 4. fi_close(ep) calls efa_cq_poll_ibv_cq to drain the cq,
+		 * which skipped that efa_cq_start_poll because it is already in
+		 * a poll active status, and the NULL check of qp table in
+		 * efa_ibv_cq_start_poll didn't happen. Then efa_cq_wc_available is
+		 * true and start to access the cqe from the destroyed qp
+		 * Today this "device cq staying at active state" can only
+		 * happen for the util cq bypass code path
+		 */
+		if (!base_ep) {
+			/* Ignore the cq error from a destroyed QP */
+			efa_cq_next_poll(ibv_cq);
+			continue;
+		}
+		assert(base_ep);
 		opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
 		if (ibv_cq->ibv_cq_ex->status) {
 			prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
@@ -680,7 +699,8 @@ static inline fi_addr_t efa_cq_get_src_addr(struct efa_ibv_cq *ibv_cq, int opcod
 	case IBV_WC_RECV_RDMA_WITH_IMM:
 		efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
 		efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
-		base_ep = efa_domain->device->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->device->qp_table_sz_m1]->base_ep;
+		base_ep = efa_ibv_cq_get_base_ep_from_cur_cqe(ibv_cq, efa_domain);
+		assert(base_ep);
 		if (!(base_ep->util_ep.caps & FI_SOURCE))
 			return FI_ADDR_NOTAVAIL;
 		return efa_av_reverse_lookup(base_ep->av,
@@ -717,11 +737,12 @@ static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq
 {
 	struct efa_cq *efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
 	struct efa_domain *efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
-	struct efa_base_ep *base_ep = efa_domain->device->qp_table[efa_ibv_cq_wc_read_qp_num(ibv_cq) & efa_domain->device->qp_table_sz_m1]->base_ep;
+	struct efa_base_ep *base_ep = efa_ibv_cq_get_base_ep_from_cur_cqe(ibv_cq, efa_domain);
 	int opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
 	int prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
 	fi_addr_t addr;
 
+	assert(base_ep);
 	/* Use the most informative entry that efa-direct support to construct cq entry for general usage */
 	efa_cq_read_data_entry(ibv_cq, buf, opcode);
 	buf->err = to_fi_errno(prov_errno);
