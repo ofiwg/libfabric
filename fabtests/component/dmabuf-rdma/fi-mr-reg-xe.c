@@ -71,7 +71,7 @@ static struct fid_domain	*domain;
 static struct fid_ep		*ep;
 static struct fid_av		*av;
 static struct fid_cq		*cq;
-static struct fid_mr		*mr, *dmabuf_mr;
+static struct fid_mr		*mr;
 
 static void	*buf;
 static size_t	buf_size = 65536;
@@ -171,44 +171,10 @@ err_out:
 	return;
 }
 
-void reg_dmabuf_mr(void)
-{
-	struct fi_mr_dmabuf dmabuf = {
-		.fd = xe_get_buf_fd(buf),
-		.offset = 0,
-		.len = buf_size,
-		.base_addr = NULL,
-	};
-	struct fi_mr_attr mr_attr = {
-		.dmabuf = &dmabuf,
-		.access = FI_REMOTE_READ | FI_REMOTE_WRITE,
-		.requested_key = 2,
-	};
-
-	CHECK_ERROR(fi_mr_regattr(domain, &mr_attr, FI_MR_DMABUF, &dmabuf_mr));
-
-	if (fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
-		CHECK_ERROR(fi_mr_bind(dmabuf_mr, &ep->fid, 0));
-		CHECK_ERROR(fi_mr_enable(dmabuf_mr));
-	}
-
-	printf("mr %p, buf %p, rkey 0x%lx, len %zd\n",
-		dmabuf_mr, buf, fi_mr_key(dmabuf_mr), buf_size);
-
-err_out:
-	return;
-}
-
 void dereg_mr(void)
 {
 	if (mr)
 		fi_close(&mr->fid);
-}
-
-void dereg_dmabuf_mr(void)
-{
-	if (dmabuf_mr)
-		fi_close(&dmabuf_mr->fid);
 }
 
 static void finalize_ofi(void)
@@ -234,7 +200,6 @@ static void usage(char *prog)
 	printf("\t-p <prov_name>   Use the OFI provider named as <prov_name>, default: the first one\n");
 	printf("\t-D <domain_name> Open OFI domain named as <domain_name>, default: automatic\n");
 	printf("\t-S <size>        Set the buffer size, default: 65536\n");
-	printf("\t-R               Enable dmabuf_reg (plug-in for MOFED peer-memory)\n");
 	printf("\t-h               Print this message\n");
 }
 
@@ -243,7 +208,7 @@ int main(int argc, char *argv[])
 	char *gpu_dev_nums = NULL;
 	int c;
 
-	while ((c = getopt(argc, argv, "d:D:e:p:m:RS:h")) != -1) {
+	while ((c = getopt(argc, argv, "d:D:e:p:m:S:h")) != -1) {
 		switch (c) {
 		case 'd':
 			gpu_dev_nums = strdup(optarg);
@@ -274,9 +239,6 @@ int main(int argc, char *argv[])
 			else
 				printf("Invalid buffer location %s, use default\n", optarg);
 			break;
-		case 'R':
-			use_dmabuf_reg = 1;
-			break;
 		case 'S':
 			buf_size = atoi(optarg);
 			break;
@@ -287,27 +249,16 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (use_dmabuf_reg)
-		dmabuf_reg_open();
-
 	if (buf_location != MALLOC)
 		xe_init(gpu_dev_nums, 0);
 
 	init_buf();
 	init_ofi();
 	reg_mr();
-	if (buf_location != MALLOC)
-		reg_dmabuf_mr();
 
 	dereg_mr();
-	if (buf_location != MALLOC)
-		dereg_dmabuf_mr();
 	finalize_ofi();
 	free_buf();
-
-	if (use_dmabuf_reg)
-		dmabuf_reg_close();
-
 	return 0;
 }
 
