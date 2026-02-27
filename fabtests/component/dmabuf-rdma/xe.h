@@ -104,15 +104,5 @@ void	xe_set_buf(void *buf, char c, size_t size, int location, int gpu);
 void	xe_copy_buf(void *dst, void *src, size_t size, int gpu);
 
 
-/*
- * Registry for MOFED peer-mem plug-in
- */
-int	dmabuf_reg_open(void);
-void	dmabuf_reg_close(void);
-int	dmabuf_reg_add(uint64_t base, uint64_t size, int fd);
-void	dmabuf_reg_remove(uint64_t addr);
-
-extern int	use_dmabuf_reg;
-
 #endif /* _DMABUF_RDMA_TESTS_XE_H_ */
 

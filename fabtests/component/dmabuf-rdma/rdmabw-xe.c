@@ -289,7 +289,7 @@ static struct ibv_mr *reg_mr(struct ibv_pd *pd, void *buf, uint64_t size,
 			      IBV_ACCESS_REMOTE_WRITE;
 	int odp_flag = use_odp ? IBV_ACCESS_ON_DEMAND : 0;
 
-	if (where == MALLOC || use_dmabuf_reg)
+	if (where == MALLOC)
 		return ibv_reg_mr(pd, buf, size, mr_access_flags | odp_flag);
 	else
 		return ibv_reg_dmabuf_mr(pd,
@@ -697,7 +697,6 @@ static void usage(char *prog_name)
 	printf("\t-B <block_size>  Set the block size for proxying, default: maximum message size\n");
 	printf("\t-O               Use on-demand paging flag (host memory only)\n");
 	printf("\t-r               Reverse the direction of data movement (server initates RDMA ops)\n");
-	printf("\t-R               Enable dmabuf_reg (plug-in for MOFED peer-memory)\n");
 	printf("\t-s               Sync with send/recv at the end\n");
 	printf("\t-i               Use inline send\n");
 	printf("\t-v               Verify the data (for read test only)\n");
@@ -723,7 +722,7 @@ int main(int argc, char *argv[])
 	int bidir = 0;
 	int msg_size = 0;
 
-	while ((c = getopt(argc, argv, "b:d:D:g:m:M:n:t:PB:OrRsS:ihv2")) != -1) {
+	while ((c = getopt(argc, argv, "b:d:D:g:m:M:n:t:PB:OrsS:ihv2")) != -1) {
 		switch (c) {
 		case 'b':
 			batch = atoi(optarg);
@@ -790,9 +789,6 @@ int main(int argc, char *argv[])
 		case 'r':
 			reverse = 1;
 			break;
-		case 'R':
-			use_dmabuf_reg = 1;
-			break;
 		case 's':
 			use_sync_ib = 1;
 			break;
@@ -825,9 +821,6 @@ int main(int argc, char *argv[])
 	}
 
 	initiator = (!reverse && server_name) || (reverse && !server_name);
-
-	if (use_dmabuf_reg && dmabuf_reg_open())
-		exit(-1);
 
 	/* multi-GPU test doesn't make sense if buffers are on the host */
 	enable_multi_gpu = buf_location != MALLOC && buf_location != HOST;
@@ -867,9 +860,6 @@ int main(int argc, char *argv[])
 
 	free_ib();
 	free_buf();
-
-	if (use_dmabuf_reg)
-		dmabuf_reg_close();
 
 	close(sockfd);
 

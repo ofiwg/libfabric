@@ -1075,7 +1075,6 @@ static void usage(char *prog)
 	printf("\t-P               Proxy device buffer through host buffer (for write and send only), default: off\n");
 	printf("\t-B <block_size>  Set the block size for proxying, default: maximum message size\n");
 	printf("\t-r               Reverse the direction of data movement (server initates RDMA ops)\n");
-	printf("\t-R               Enable dmabuf_reg (plug-in for MOFED peer-memory)\n");
 	printf("\t-s               Sync with send/recv at the end\n");
 	printf("\t-2               Run the test in both direction (for 'read' and 'write' only)\n");
 	printf("\t-x <num_recv>    Prepost <num_recv> recieves (for 'send' only)\n");
@@ -1156,7 +1155,7 @@ int main(int argc, char *argv[])
 	char *s;
 	int loc1 = MALLOC, loc2 = MALLOC;
 
-	while ((c = getopt(argc, argv, "2b:d:D:e:p:m:M:n:t:gPB:rRsS:x:hv")) != -1) {
+	while ((c = getopt(argc, argv, "2b:d:D:e:p:m:M:n:t:gPB:rsS:x:hv")) != -1) {
 		switch (c) {
 		case '2':
 			bidir = 1;
@@ -1217,9 +1216,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'r':
 			reverse = 1;
-			break;
-		case 'R':
-			use_dmabuf_reg = 1;
 			break;
 		case 's':
 			use_sync_ofi = 1;
@@ -1288,9 +1284,6 @@ int main(int argc, char *argv[])
 
 	initiator = (!reverse && server_name) || (reverse && !server_name);
 
-	if (use_dmabuf_reg)
-		dmabuf_reg_open();
-
 	/* multi-GPU test doesn't make sense if buffers are on the host */
 	enable_multi_gpu = buf_location != MALLOC && buf_location != HOST;
 	num_gpus = xe_init(gpu_dev_nums, enable_multi_gpu);
@@ -1346,9 +1339,6 @@ int main(int argc, char *argv[])
 
 	finalize_ofi();
 	free_buf();
-
-	if (use_dmabuf_reg)
-		dmabuf_reg_close();
 
 	close(sockfd);
 
