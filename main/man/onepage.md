@@ -18410,11 +18410,6 @@ attribute structures.
 
 The *shm* provider checks for the following environment variables:
 
-*FI_SHM_SAR_THRESHOLD*
-:   Maximum message size to use segmentation protocol before switching
-    to mmap (only valid when CMA is not available). Default: SIZE_MAX
-    (18446744073709551615)
-
 *FI_SHM_TX_SIZE*
 :   Maximum number of outstanding tx operations. Default 1024
 
@@ -18438,6 +18433,14 @@ The *shm* provider checks for the following environment variables:
     copy performance improves when buffers are divided into smaller
     chunks. This environment variable is provided to fine tune
     performance on different systems. Default 262144
+
+*FI_SHM_BUFFER_THRESHOLD*
+:   When to start requesting forced unexpected messaging buffering. When
+    this threshold is reached, the sender will notify the receiver to
+    force buffering of the entire message if it is unexpected. If the
+    message is matched when received, it has no effect. Requesting
+    unexpected message buffering allows shm to support unlimited
+    unexpected messaging (memory permitting). Default: 1
 
 # SEE ALSO
 
