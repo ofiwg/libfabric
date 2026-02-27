@@ -521,4 +521,11 @@ static inline void efa_cq_end_poll(struct efa_ibv_cq *cq)
 	cq->poll_err = 0;
 }
 
+static inline struct efa_base_ep *efa_ibv_cq_get_base_ep_from_cur_cqe(struct efa_ibv_cq *cq, struct efa_domain *efa_domain)
+{
+	struct efa_qp *qp = efa_domain->device->qp_table[efa_ibv_cq_wc_read_qp_num(cq) & efa_domain->device->qp_table_sz_m1];
+
+	return qp ? qp->base_ep : NULL;
+}
+
 #endif /* EFA_DATA_PATH_OPS_H */
