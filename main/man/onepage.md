@@ -12176,20 +12176,23 @@ ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 :   Fabric endpoint on which to initiate send or post receive buffer.
 
 *buf*
-:   Data buffer to send or receive.
+:   Data buffer to send or receive. For 0-byte operations, buf may be
+    ignored.
 
 *len*
 :   Length of data buffer to send or receive, specified in bytes. Valid
     transfers are from 0 bytes up to the endpoint's max_msg_size.
 
 *iov*
-:   Vectored data buffer.
+:   Vectored data buffer. For 0-byte operations, iov may be ignored.
 
 *count*
-:   Count of vectored data entries.
+:   Count of vectored data entries. For 0-byte operations, count may be
+    0.
 
 *desc*
-:   Descriptor associated with the data buffer. See
+:   Descriptor associated with the data buffer. For 0-byte operations,
+    desc may be ignored even for FI_MR_LOCAL. See
     [`fi_mr`(3)](fi_mr.3.html).
 
 *data*
@@ -12278,6 +12281,9 @@ struct fi_msg {
     uint64_t           data;     /* optional message data */
 };
 ```
+
+For 0-byte operations, msg_iov, desc (including FI_MR_LOCAL) and
+iov_count may be ignored.
 
 ## fi_inject
 
@@ -15210,17 +15216,18 @@ ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 *buf*
 :   Local data buffer to read into (read target) or write from (write
-    source)
+    source). For 0-byte operations, buf may be ignored.
 
 *len*
 :   Length of data to read or write, specified in bytes. Valid transfers
     are from 0 bytes up to the endpoint's max_msg_size.
 
 *iov*
-:   Vectored data buffer.
+:   Vectored data buffer. For 0-byte operations, iov may be ignored.
 
 *count*
-:   Count of vectored data entries.
+:   Count of vectored data entries. For 0-byte operations, count may be
+    0.
 
 *addr*
 :   Address of remote memory to access. This will be the virtual address
@@ -15231,7 +15238,8 @@ ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 :   Protection key associated with the remote memory.
 
 *desc*
-:   Descriptor associated with the local data buffer See
+:   Descriptor associated with the local data buffer. For 0-byte
+    operations, desc may be ignored even for FI_MR_LOCAL. See
     [`fi_mr`(3)](fi_mr.3.html).
 
 *data*
@@ -15324,6 +15332,9 @@ struct fi_rma_iov {
     uint64_t           key;          /* access key */
 };
 ```
+
+For 0-byte operations, msg_iov, desc (including FI_MR_LOCAL), and
+iov_count may be ignored.
 
 ## fi_inject_write
 
@@ -15494,17 +15505,19 @@ ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 :   Fabric endpoint on which to initiate tagged communication operation.
 
 *buf*
-:   Data buffer to send or receive.
+:   Data buffer to send or receive. For 0-byte operations, buf may be
+    ignored.
 
 *len*
 :   Length of data buffer to send or receive, specified in bytes. Valid
     transfers are from 0 bytes up to the endpoint's max_msg_size.
 
 *iov*
-:   Vectored data buffer.
+:   Vectored data buffer. For 0-byte operations, iov may be ignored.
 
 *count*
-:   Count of vectored data entries.
+:   Count of vectored data entries. For 0-byte operations, count may be
+    0.
 
 *tag*
 :   Tag associated with the message.
@@ -15513,7 +15526,8 @@ ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 :   Mask of bits to ignore applied to the tag for receive operations.
 
 *desc*
-:   Memory descriptor associated with the data buffer. See
+:   Memory descriptor associated with the data buffer. For 0-byte
+    operations, desc may be ignored even for FI_MR_LOCAL. See
     [`fi_mr`(3)](fi_mr.3.html).
 
 *data*
@@ -15626,6 +15640,9 @@ struct fi_msg_tagged {
     uint64_t           data;     /* optional immediate data */
 };
 ```
+
+For 0-byte operations, msg_iov, desc (including FI_MR_LOCAL) and
+iov_count may be ignored.
 
 ## fi_tinject
 
