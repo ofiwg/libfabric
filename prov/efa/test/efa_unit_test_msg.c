@@ -248,3 +248,95 @@ void test_efa_msg_fi_injectdata(struct efa_resource **state)
 
 	efa_unit_test_buff_destruct(&send_buff);
 }
+
+/* 0-byte MSG tests */
+void test_efa_msg_send_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t addr;
+	int ret;
+
+	test_efa_msg_send_prep(resource, &addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_send(resource->ep, NULL, 0, NULL, addr, NULL);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_msg_sendv_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t addr;
+	struct iovec iov = {0};
+	int ret;
+
+	test_efa_msg_send_prep(resource, &addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_sendv(resource->ep, &iov, NULL, 0, addr, NULL);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_msg_sendmsg_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t addr;
+	struct iovec iov = {0};
+	struct fi_msg msg = {0};
+	int ret;
+
+	test_efa_msg_send_prep(resource, &addr);
+
+	efa_unit_test_construct_msg(&msg, &iov, 0, addr, NULL, 0, NULL);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_sendmsg(resource->ep, &msg, 0);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_msg_senddata_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t addr;
+	int ret;
+	uint64_t data = 0x1234567890ABCDEF;
+
+	test_efa_msg_send_prep(resource, &addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_senddata(resource->ep, NULL, 0, NULL, data, addr, NULL);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_msg_inject_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t addr;
+	int ret;
+
+	test_efa_msg_send_prep(resource, &addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_inject(resource->ep, NULL, 0, addr);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+void test_efa_msg_injectdata_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t addr;
+	int ret;
+	uint64_t data = 0x1234567890ABCDEF;
+
+	test_efa_msg_send_prep(resource, &addr);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_injectdata(resource->ep, NULL, 0, data, addr);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
