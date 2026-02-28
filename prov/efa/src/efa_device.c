@@ -201,6 +201,16 @@ static void efa_device_destruct(struct efa_device *device)
 	}
 
 	device->ibv_ctx = NULL;
+
+	if (device->rdm_info) {
+		fi_freeinfo(device->rdm_info);
+		device->rdm_info = NULL;
+	}
+
+	if (device->dgram_info) {
+		fi_freeinfo(device->dgram_info);
+		device->dgram_info = NULL;
+	}
 }
 
 /*
