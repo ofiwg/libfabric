@@ -73,6 +73,60 @@ static void efa_cq_read_data_entry(struct efa_ibv_cq *cq, void *buf, int opcode)
 	}
 }
 
+static inline void efa_cq_write_error_data(struct efa_cq *efa_cq, struct efa_base_ep *base_ep, fi_addr_t addr, int prov_errno, struct fi_cq_err_entry *buf)
+{
+	char *err_msg;
+	int err = to_fi_errno(prov_errno);
+
+	EFA_INFO(FI_LOG_CQ, "Encountered error during CQ polling. err: %s (%d), prov_errno: %s (%d)\n",
+			fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
+
+	if (buf->err_data_size > 0 && FI_VERSION_GE(efa_cq->util_cq.domain->fabric->fabric_fid.api_version, FI_VERSION(1, 5))) {
+		err_msg = (char *)buf->err_data;
+	} else {
+		err_msg = efa_cq->err_buf;
+	}
+
+	if (efa_write_error_msg(base_ep, addr, prov_errno, err_msg, &buf->err_data_size) != 0) {
+		buf->err_data_size = 0;
+	} else if (err_msg == efa_cq->err_buf) {
+		buf->err_data = err_msg;
+	}
+}
+
+static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq_err_entry *buf)
+{
+	struct efa_cq *efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
+	struct efa_domain *efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
+	struct efa_base_ep *base_ep = efa_ibv_cq_get_base_ep_from_cur_cqe(ibv_cq, efa_domain);
+	int opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
+	int prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
+	fi_addr_t addr;
+
+	assert(base_ep);
+	/* Use the most informative entry that efa-direct support to construct cq entry for general usage */
+	efa_cq_read_data_entry(ibv_cq, buf, opcode);
+	buf->err = to_fi_errno(prov_errno);
+	buf->prov_errno = prov_errno;
+
+	switch (opcode) {
+	case IBV_WC_SEND: /* fall through */
+	case IBV_WC_RDMA_WRITE: /* fall through */
+	case IBV_WC_RDMA_READ:
+		addr = ibv_cq->ibv_cq_ex->wr_id ? ((struct efa_context *)ibv_cq->ibv_cq_ex->wr_id)->addr : FI_ADDR_NOTAVAIL;
+		break;
+	case IBV_WC_RECV: /* fall through */
+	case IBV_WC_RECV_RDMA_WITH_IMM:
+		addr = efa_av_reverse_lookup(base_ep->av, efa_ibv_cq_wc_read_slid(ibv_cq), efa_ibv_cq_wc_read_src_qp(ibv_cq));
+		break;
+	default:
+		addr = FI_ADDR_NOTAVAIL;
+		break;
+	}
+
+	efa_cq_write_error_data(efa_cq, base_ep, addr, prov_errno, buf);
+}
+
 /**
  * @brief handle the situation that a TX/RX operation encountered error
  *
@@ -96,40 +150,14 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 				int prov_errno, bool is_tx)
 {
 	struct fi_cq_err_entry err_entry;
-	fi_addr_t addr;
-	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 	int write_cq_err;
-	struct ibv_cq_ex *ibv_cq_ex = cq->ibv_cq_ex;
 
 	memset(&err_entry, 0, sizeof(err_entry));
-	/* Use the most informative entry that efa-direct support to construct cq entry for general usage */
-	efa_cq_read_data_entry(cq, &err_entry, efa_ibv_cq_wc_read_opcode(cq));
-	err_entry.err = err;
-	err_entry.prov_errno = prov_errno;
-
-	if (is_tx)
-		addr = ibv_cq_ex->wr_id ? ((struct efa_context *)ibv_cq_ex->wr_id)->addr : FI_ADDR_NOTAVAIL;
-	else
-		addr = efa_av_reverse_lookup(base_ep->av,
-					     efa_ibv_cq_wc_read_slid(cq),
-					     efa_ibv_cq_wc_read_src_qp(cq));
-
-	if (OFI_UNLIKELY(efa_write_error_msg(base_ep, addr, prov_errno,
-					     err_msg,
-					     &err_entry.err_data_size))) {
-		err_entry.err_data_size = 0;
-	} else {
-		err_entry.err_data = err_msg;
-	}
-
-	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n",
-		err_entry.err,
-		err_entry.err_data
-			? (const char *) err_entry.err_data
-			: efa_strerror(err_entry.prov_errno),
-		err_entry.prov_errno);
-
-	efa_show_help(err_entry.prov_errno);
+	/* This will use efa_cq->err_buf (because we set
+	 * err_entry->err_data_size as 0) to store the err_data which will be
+	 * copied to util_cq in the subsequent ofi_cq_write_error
+	 */
+	efa_cq_fill_err_entry(cq, &err_entry);
 
 	efa_cntr_report_error(&base_ep->util_ep, err_entry.flags);
 	write_cq_err = ofi_cq_write_error(is_tx ? base_ep->util_ep.tx_cq :
@@ -711,61 +739,6 @@ static inline fi_addr_t efa_cq_get_src_addr(struct efa_ibv_cq *ibv_cq, int opcod
 	}
 }
 
-static inline void efa_cq_write_error_data(struct efa_cq *efa_cq, struct efa_base_ep *base_ep, fi_addr_t addr, int prov_errno, struct fi_cq_err_entry *buf)
-{
-	char *err_msg;
-	int err = to_fi_errno(prov_errno);
-
-	EFA_WARN(FI_LOG_CQ, "Encountered error during CQ polling. err: %s (%d), prov_errno: %s (%d)\n",
-			fi_strerror(err), err, efa_strerror(prov_errno), prov_errno);
-	efa_show_help(prov_errno);
-
-	if (buf->err_data_size > 0 && FI_VERSION_GE(efa_cq->util_cq.domain->fabric->fabric_fid.api_version, FI_VERSION(1, 5))) {
-		err_msg = (char *)buf->err_data;
-	} else {
-		err_msg = efa_cq->err_buf;
-	}
-
-	if (efa_write_error_msg(base_ep, addr, prov_errno, err_msg, &buf->err_data_size) != 0) {
-		buf->err_data_size = 0;
-	} else if (err_msg == efa_cq->err_buf) {
-		buf->err_data = err_msg;
-	}
-}
-
-static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq_err_entry *buf)
-{
-	struct efa_cq *efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
-	struct efa_domain *efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
-	struct efa_base_ep *base_ep = efa_ibv_cq_get_base_ep_from_cur_cqe(ibv_cq, efa_domain);
-	int opcode = efa_ibv_cq_wc_read_opcode(ibv_cq);
-	int prov_errno = efa_ibv_cq_wc_read_vendor_err(ibv_cq);
-	fi_addr_t addr;
-
-	assert(base_ep);
-	/* Use the most informative entry that efa-direct support to construct cq entry for general usage */
-	efa_cq_read_data_entry(ibv_cq, buf, opcode);
-	buf->err = to_fi_errno(prov_errno);
-	buf->prov_errno = prov_errno;
-
-	switch (opcode) {
-	case IBV_WC_SEND: /* fall through */
-	case IBV_WC_RDMA_WRITE: /* fall through */
-	case IBV_WC_RDMA_READ:
-		addr = ibv_cq->ibv_cq_ex->wr_id ? ((struct efa_context *)ibv_cq->ibv_cq_ex->wr_id)->addr : FI_ADDR_NOTAVAIL;
-		break;
-	case IBV_WC_RECV: /* fall through */
-	case IBV_WC_RECV_RDMA_WITH_IMM:
-		addr = efa_av_reverse_lookup(base_ep->av, efa_ibv_cq_wc_read_slid(ibv_cq), efa_ibv_cq_wc_read_src_qp(ibv_cq));
-		break;
-	default:
-		addr = FI_ADDR_NOTAVAIL;
-		break;
-	}
-
-	efa_cq_write_error_data(efa_cq, base_ep, addr, prov_errno, buf);
-}
-
 static
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			fi_addr_t *src_addr)
@@ -1197,7 +1170,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	cq->wait_cond = attr->wait_cond;
 
-	/* This buffer is only used by efa-direct cq on the util cq bypass path */
+	/* A persistent error data buffer that stages the cq_err_entry.err_data */
 	cq->err_buf = malloc(EFA_ERROR_MSG_BUFFER_LENGTH);
 	if (!cq->err_buf) {
 		EFA_WARN(FI_LOG_CQ, "Failed to allocate memory for err_data buf in CQ\n");
