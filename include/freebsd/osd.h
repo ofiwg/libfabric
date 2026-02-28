@@ -77,6 +77,26 @@ static inline size_t ofi_ifaddr_get_speed(struct ifaddrs *ifa)
 	return 0;
 }
 
+static inline int ofi_open(const char* path, int flags, ...)
+{
+	// open takes a variadic argument 'mode_t mode', but not a va_list
+	// extract and pass mode if required, as indicated by flag O_CREAT
+	va_list args;
+	int fd;
+	mode_t mode;
+
+	if ((flags & O_CREAT) != 0) {
+		va_start(args, flags);
+		mode = (mode_t)va_arg(args, int);
+		fd = open(path, flags, mode);
+		va_end(args);
+	} else {
+		fd = open(path, flags);
+	}
+
+	return fd;
+}
+
 static inline ssize_t ofi_process_vm_readv(pid_t pid,
 			const struct iovec *local_iov,
 			unsigned long liovcnt,

@@ -31,6 +31,7 @@
 #include <malloc.h>
 #include <errno.h>
 #include <complex.h>
+#include <fcntl.h>
 #include "pthread.h"
 
 #include <sys/uio.h>
@@ -275,6 +276,7 @@ do						\
 #define __PRI64_PREFIX "ll"
 
 #define HOST_NAME_MAX 256
+#define PATH_MAX MAX_PATH
 
 #define MIN min
 #define MAX max
@@ -289,6 +291,7 @@ do						\
 #define access(path, mode) _access(path, mode)
 #define F_OK 0
 
+typedef uint32_t mode_t;
 typedef int pid_t;
 #define getpid (int)GetCurrentProcessId
 
@@ -688,6 +691,36 @@ static inline char* strsep(char **stringp, const char *delim)
 	}
 
 	return ptr;
+}
+
+static inline int ofi_close(int fd)
+{
+	return _close(fd);
+}
+
+static inline int ofi_open(const char* path, int flags, ...)
+{
+	// _open takes a variadic argument 'int pmode', but not a va_list
+	// extract and pass pmode if required, as indicated by flag _O_CREAT
+	va_list args;
+	int fd;
+	int pmode;
+
+	if ((flags & _O_CREAT) != 0) {
+		va_start(args, flags);
+		pmode = va_arg(args, int);
+		fd = _open(path, flags, pmode);
+		va_end(args);
+	} else {
+		fd = _open(path, flags);
+	}
+
+	return fd;
+}
+
+static inline FILE* ofi_fdopen(int fd, const char* mode)
+{
+	return _fdopen(fd, mode);
 }
 
 #define __attribute__(x)
