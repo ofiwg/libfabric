@@ -1,0 +1,184 @@
+# SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only
+# cmake-format configuration for libfabric
+# See: https://cmake-format.readthedocs.io/en/latest/configuration.html
+
+# Format settings
+format:
+  line_width: 80
+  tab_size: 2
+  separate_ctrl_name_with_space: false
+  separate_fn_name_with_space: false
+  dangle_parens: true
+  dangle_align: prefix
+  max_pargs_hwrap: 6
+  min_prefix_chars: 4
+  max_prefix_chars: 10
+  max_lines_hwrap: 2
+  line_ending: unix
+  command_case: lower
+  keyword_case: upper
+  always_wrap: []
+  enable_sort: true
+  autosort: false
+
+# Markup settings for comments
+markup:
+  bullet_char: '*'
+  enum_char: '.'
+  enable_markup: true
+  first_comment_is_literal: true
+  literal_comment_pattern: null
+  fence_pattern: ^\s*([`~]{3}[`~]*)(.*)$
+  ruler_pattern: ^\s*[^\w\s]{3}.*[^\w\s]{3}$
+  explicit_trailing_pattern: '#<'
+  hashruler_min_length: 10
+  canonicalize_hashrulers: true
+
+# Lint settings
+lint:
+  disabled_codes: []
+  function_pattern: '[0-9a-z_]+'
+  global_var_pattern: '[A-Z][0-9A-Z_]+'
+  internal_var_pattern: '_[A-Z][0-9A-Z_]+'
+  keyword_pattern: '[A-Z][0-9A-Z_]+'
+  local_var_pattern: '[a-z][a-z0-9_]+'
+  macro_pattern: '[0-9a-z_]+'
+  public_var_pattern: '[A-Z][0-9A-Z_]+'
+  private_var_pattern: '_[0-9a-z_]+'
+  max_conditionals_custom_parser: 2
+  min_statement_spacing: 1
+  max_statement_spacing: 2
+
+# Additional keywords for custom commands
+parse:
+  additional_commands:
+    # libfabric_add_provider - register a provider with the build system
+    libfabric_add_provider:
+      flags:
+        - LINUX_ONLY
+        - FREEBSD_ONLY
+        - MACOS_ONLY
+        - X86_64_ONLY
+        - AARCH64_ONLY
+      kwargs:
+        NAME: 1
+        SOURCES: '+'
+        HEADERS: '+'
+        INCLUDE_DIRS: '+'
+        COMPILE_DEFINITIONS: '+'
+        COMPILE_OPTIONS: '+'
+        LINK_LIBRARIES: '+'
+        DEPENDS: '+'
+        CONDITION: 1
+
+    # libfabric_add_hook_provider - register a hook provider
+    libfabric_add_hook_provider:
+      flags:
+        - LINUX_ONLY
+      kwargs:
+        NAME: 1
+        SOURCES: '+'
+        HEADERS: '+'
+        INCLUDE_DIRS: '+'
+        COMPILE_DEFINITIONS: '+'
+        LINK_LIBRARIES: '+'
+        DEPENDS: '+'
+        CONDITION: 1
+
+    # libfabric_add_utility - add a utility executable
+    libfabric_add_utility:
+      kwargs:
+        NAME: 1
+        SOURCES: '+'
+        INCLUDE_DIRS: '+'
+        CONDITION: 1
+
+    # libfabric_check_and_set_flag - check compiler flag
+    libfabric_check_and_set_flag:
+      pargs: 2
+
+    # libfabric_set_visibility - set visibility for a target
+    libfabric_set_visibility:
+      pargs: 1
+
+    # libfabric_find_pkgconfig - find a library via pkg-config
+    libfabric_find_pkgconfig:
+      pargs:
+        nargs: '2+'
+
+    # Atomic check functions
+    libfabric_check_c11_atomics:
+      pargs: 1
+
+    libfabric_check_c11_atomic_least_types:
+      pargs: 1
+
+    libfabric_check_builtin_atomics:
+      pargs: 1
+
+    libfabric_check_builtin_mm_atomics:
+      pargs: 1
+
+    libfabric_check_int128_atomics:
+      pargs: 1
+
+    # Other check functions
+    libfabric_check_cpuid:
+      pargs: 1
+
+    libfabric_check_symver_support:
+      pargs: 1
+
+    libfabric_check_alias_attribute:
+      pargs: 1
+
+    libfabric_check_ethtool:
+      pargs: 1
+
+    libfabric_check_linux_perf_rdpmc:
+      pargs: 1
+
+    libfabric_check_pthread_spin:
+      pargs: 1
+
+    libfabric_check_getifaddrs:
+      pargs: 1
+
+    # Configuration functions (no arguments)
+    libfabric_configure_sanitizers:
+      pargs: 0
+
+    libfabric_configure_picky_warnings:
+      pargs: 0
+
+    libfabric_generate_config:
+      pargs: 0
+
+    libfabric_add_pkgconfig:
+      pargs: 0
+
+    libfabric_print_provider_summary:
+      pargs: 0
+
+    libfabric_install_man_pages:
+      pargs: 0
+
+    # Getter functions
+    libfabric_get_provider_link_libraries:
+      pargs: 1
+
+    libfabric_get_provider_object_libs:
+      pargs: 1
+
+    # Feature summary functions (from LibfabricFeatureSummary.cmake)
+    libfabric_set_package_info:
+      pargs: 0
+
+    libfabric_print_feature_summary:
+      pargs: 0
+
+# Encoding settings
+encode:
+  emit_byteorder_mark: false
+  input_encoding: utf-8
+  output_encoding: utf-8

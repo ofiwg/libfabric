@@ -1,0 +1,213 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "default",
+      "displayName": "Debug",
+      "description": "Debug build with full debugging symbols",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "default",
+      "displayName": "Release",
+      "description": "Optimized release build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "relwithdebinfo",
+      "inherits": "default",
+      "displayName": "Release with Debug Info",
+      "description": "Optimized build with debugging symbols",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "asan",
+      "inherits": "debug",
+      "displayName": "Debug + AddressSanitizer",
+      "description": "Debug build with AddressSanitizer enabled",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-fsanitize=address -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address"
+      }
+    },
+    {
+      "name": "tsan",
+      "inherits": "debug",
+      "displayName": "Debug + ThreadSanitizer",
+      "description": "Debug build with ThreadSanitizer enabled",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-fsanitize=thread",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=thread"
+      }
+    },
+    {
+      "name": "ubsan",
+      "inherits": "debug",
+      "displayName": "Debug + UndefinedBehaviorSanitizer",
+      "description": "Debug build with UndefinedBehaviorSanitizer enabled",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-fsanitize=undefined",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=undefined",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=undefined"
+      }
+    },
+    {
+      "name": "minimal",
+      "inherits": "release",
+      "displayName": "Minimal (tcp, sockets only)",
+      "description": "Minimal build with only tcp and sockets providers",
+      "cacheVariables": {
+        "LIBFABRIC_PROVIDER_VERBS": "OFF",
+        "LIBFABRIC_PROVIDER_EFA": "OFF",
+        "LIBFABRIC_PROVIDER_PSM2": "OFF",
+        "LIBFABRIC_PROVIDER_PSM3": "OFF",
+        "LIBFABRIC_PROVIDER_OPX": "OFF",
+        "LIBFABRIC_PROVIDER_CXI": "OFF",
+        "LIBFABRIC_PROVIDER_UCX": "OFF",
+        "LIBFABRIC_PROVIDER_USNIC": "OFF",
+        "LIBFABRIC_PROVIDER_LPP": "OFF",
+        "LIBFABRIC_PROVIDER_SHM": "OFF",
+        "LIBFABRIC_PROVIDER_SM2": "OFF",
+        "LIBFABRIC_PROVIDER_LNX": "OFF",
+        "LIBFABRIC_PROVIDER_RXM": "OFF",
+        "LIBFABRIC_PROVIDER_RXD": "OFF",
+        "LIBFABRIC_PROVIDER_MRAIL": "OFF",
+        "LIBFABRIC_PROVIDER_UDP": "OFF"
+      }
+    },
+    {
+      "name": "embedded",
+      "inherits": "release",
+      "displayName": "Embedded Mode",
+      "description": "Build for embedding (no symbol versioning)",
+      "cacheVariables": {
+        "LIBFABRIC_EMBEDDED": "ON"
+      }
+    },
+    {
+      "name": "static",
+      "inherits": "release",
+      "displayName": "Static Library Only",
+      "description": "Build only the static library",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "OFF"
+      }
+    },
+    {
+      "name": "ci-linux",
+      "inherits": "release",
+      "displayName": "CI Linux Build",
+      "description": "Build configuration for Linux CI",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install"
+      }
+    },
+    {
+      "name": "ci-macos",
+      "inherits": "release",
+      "displayName": "CI macOS Build",
+      "description": "Build configuration for macOS CI",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install",
+        "LIBFABRIC_PROVIDER_VERBS": "OFF",
+        "LIBFABRIC_PROVIDER_EFA": "OFF",
+        "LIBFABRIC_PROVIDER_PSM2": "OFF",
+        "LIBFABRIC_PROVIDER_PSM3": "OFF",
+        "LIBFABRIC_PROVIDER_OPX": "OFF",
+        "LIBFABRIC_PROVIDER_CXI": "OFF",
+        "LIBFABRIC_PROVIDER_UCX": "OFF",
+        "LIBFABRIC_PROVIDER_USNIC": "OFF",
+        "LIBFABRIC_PROVIDER_LPP": "OFF",
+        "LIBFABRIC_PROVIDER_SHM": "OFF",
+        "LIBFABRIC_PROVIDER_SM2": "OFF",
+        "LIBFABRIC_PROVIDER_LNX": "OFF"
+      }
+    },
+    {
+      "name": "ci-windows",
+      "displayName": "CI Windows Build",
+      "description": "Build configuration for Windows CI",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "LIBFABRIC_PROVIDER_VERBS": "OFF",
+        "LIBFABRIC_PROVIDER_EFA": "OFF",
+        "LIBFABRIC_PROVIDER_PSM2": "OFF",
+        "LIBFABRIC_PROVIDER_PSM3": "OFF",
+        "LIBFABRIC_PROVIDER_OPX": "OFF",
+        "LIBFABRIC_PROVIDER_CXI": "OFF",
+        "LIBFABRIC_PROVIDER_UCX": "OFF",
+        "LIBFABRIC_PROVIDER_USNIC": "OFF",
+        "LIBFABRIC_PROVIDER_LPP": "OFF",
+        "LIBFABRIC_PROVIDER_SHM": "OFF",
+        "LIBFABRIC_PROVIDER_SM2": "OFF",
+        "LIBFABRIC_PROVIDER_LNX": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "relwithdebinfo",
+      "configurePreset": "relwithdebinfo"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan"
+    },
+    {
+      "name": "minimal",
+      "configurePreset": "minimal"
+    },
+    {
+      "name": "ci-linux",
+      "configurePreset": "ci-linux"
+    },
+    {
+      "name": "ci-macos",
+      "configurePreset": "ci-macos"
+    },
+    {
+      "name": "ci-windows",
+      "configurePreset": "ci-windows",
+      "configuration": "Release"
+    }
+  ]
+}
