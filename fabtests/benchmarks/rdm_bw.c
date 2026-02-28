@@ -47,6 +47,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_BW;
+	opts.options |= FT_OPT_NO_PREPOSTED_AUX_RX;
 
 	hints = fi_allocinfo();
 	if (!hints)
