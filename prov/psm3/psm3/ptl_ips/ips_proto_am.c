@@ -328,7 +328,7 @@ psm3_ips_am_short_request(psm2_epaddr_t epaddr,
 		     void *completion_ctxt)
 {
 	struct ips_proto_am *proto_am = &epaddr->proto->proto_am;
-	psm2_error_t err;
+	psm2_error_t err = PSM2_OK;
 	ips_scb_t *scb;
 	ips_epaddr_t *ipsaddr;
 	int pad_bytes = calculate_pad_bytes(len);
@@ -356,6 +356,8 @@ psm3_ips_am_short_request(psm2_epaddr_t epaddr,
 				((scb = psm3_ips_scbctrl_alloc_tiny(
 				      &proto_am->scbc_request, 0)) != NULL));
 	}
+	if (err == PSM2_EP_NO_RESOURCES)
+		return err;
 
 	psmi_assert_always(scb != NULL);
 	ips_am_scb_init(scb, handler, nargs, pad_bytes, true,
