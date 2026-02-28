@@ -310,6 +310,8 @@ int efa_device_list_initialize(void)
 			goto err_free;
 		}
 
+		cur_device.rand_seed = 0;
+
 		memcpy(&g_efa_selected_device_list[g_efa_selected_device_cnt], &cur_device, sizeof(struct efa_device));
 		g_efa_selected_device_cnt++;
 	}
