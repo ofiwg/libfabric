@@ -67,16 +67,18 @@ static struct ibv_context	*context;
 static struct ibv_pd		*pd;
 static struct ibv_mr		*mr;
 
-static void	*buf;
-static int	buf_fd;
-static size_t	buf_size = 65536;
-static int	buf_location = MALLOC;
+static struct xe_buf		xe_buf;
+static size_t			buf_size = 65536;
+static int			buf_location = MALLOC;
+
+static struct gpu gpu;
 
 static void init_buf(void)
 {
+	void *buf;
 	int page_size = sysconf(_SC_PAGESIZE);
 
-	buf = xe_alloc_buf(page_size, buf_size, buf_location, 0, NULL);
+	buf = xe_alloc_buf(page_size, buf_size, buf_location, &gpu, &xe_buf);
 	if (!buf) {
 		fprintf(stderr, "Couldn't allocate work buf.\n");
 		exit(-1);
@@ -85,7 +87,7 @@ static void init_buf(void)
 
 static void free_buf(void)
 {
-	xe_free_buf(buf, buf_location);
+	xe_free_buf(&xe_buf);
 }
 
 static void free_ib(void)
@@ -123,15 +125,17 @@ static int reg_mr(void)
 	int mr_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
 			      IBV_ACCESS_REMOTE_WRITE;
 
-	if (use_dmabuf_reg || buf_location == MALLOC) {
-		printf("Calling ibv_reg_mr(buf=%p, size=%zd)\n", buf, buf_size);
-		CHECK_NULL((mr = ibv_reg_mr(pd, buf, buf_size, mr_access_flags)));
+	if (xe_buf.location == MALLOC) {
+		printf("Calling ibv_reg_mr(buf=%p, size=%zd)\n", xe_buf.buf,
+		       xe_buf.size);
+		CHECK_NULL((mr = ibv_reg_mr(pd, xe_buf.buf, buf_size,
+			    mr_access_flags)));
 	} else {
-		buf_fd = xe_get_buf_fd(buf);
 		printf("Calling ibv_reg_dmabuf_mr(buf=%p, size=%zd, fd=%d)\n",
-			buf, buf_size, buf_fd);
-		CHECK_NULL((mr = ibv_reg_dmabuf_mr(pd, 0, buf_size,
-						   (uint64_t)buf, buf_fd,
+		       xe_buf.buf, xe_buf.size, xe_buf.fd);
+		CHECK_NULL((mr = ibv_reg_dmabuf_mr(pd, 0, xe_buf.size,
+						   (uint64_t)xe_buf.buf,
+						   xe_buf.fd,
 						   mr_access_flags)));
 	}
 
@@ -152,17 +156,22 @@ static void usage(char *prog)
 {
 	printf("Usage: %s [options]\n", prog);
 	printf("Options:\n");
-	printf("\t-m <location>    Where to allocate the buffer, can be 'malloc', 'host','device' or 'shared', default: malloc\n");
-	printf("\t-d <card_num>    Use the GPU device specified by <card_num>, default: 0\n");
-	printf("\t-S <buf_size>    Set the size of the buffer to allocate, default: 65536\n");
-	printf("\t-R               Use dmabuf_reg (plug-in for MOFED peer-mem)\n");
+	printf("\t-m <location>    Where to allocate the buffer, can be "
+				   "'malloc', 'host','device' or 'shared', "
+				   "default: malloc\n");
+	printf("\t-d <card_num>    Use the GPU device specified by <card_num>, "
+				   "default: 0\n");
+	printf("\t-S <buf_size>    Set the size of the buffer to allocate, "
+				   "default: 65536\n");
 	printf("\t-h               Print this message\n");
 }
 
 int main(int argc, char *argv[])
 {
-	char *gpu_dev_nums = NULL;
 	int c;
+	char *gpu_dev_nums = NULL;
+	char *subdev_str;
+	char *saveptr;
 
 	while ((c = getopt(argc, argv, "d:m:RS:h")) != -1) {
 		switch (c) {
@@ -179,9 +188,6 @@ int main(int argc, char *argv[])
 			else if (strcasecmp(optarg, "shared") == 0)
 				buf_location = SHARED;
 			break;
-		case 'R':
-			use_dmabuf_reg = 1;
-			break;
 		case 'S':
 			buf_size = atol(optarg);
 			break;
@@ -192,22 +198,29 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (use_dmabuf_reg)
-		dmabuf_reg_open();
+	if (buf_location != MALLOC) {
+		gpu.dev_num = 0;
+		gpu.subdev_num = -1;
+		gpu.dev_num = atoi(strtok_r(gpu_dev_nums, ".", &saveptr));
+		subdev_str = strtok_r(NULL, "\0", &saveptr);
+		if (subdev_str)
+			gpu.subdev_num = atoi(subdev_str + 1);
 
-	if (buf_location != MALLOC)
-		xe_init(gpu_dev_nums, 0);
+		CHECK_ERROR(xe_init(&gpu));
+	}
 
 	init_buf();
 	init_ib();
 	reg_mr();
 
+err_out:
 	dereg_mr();
 	free_ib();
 	free_buf();
-
-	if (use_dmabuf_reg)
-		dmabuf_reg_close();
+	if (buf_location != MALLOC) {
+		xe_cleanup_gpu(&gpu);
+		xe_cleanup();
+	}
 
 	return 0;
 }

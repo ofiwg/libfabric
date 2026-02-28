@@ -47,8 +47,8 @@
 			   FI_READ | FI_WRITE | FI_REMOTE_READ |	\
 			   FI_REMOTE_WRITE | FI_HMEM)
 
-size_t rxm_msg_tx_size;
-size_t rxm_msg_rx_size;
+size_t rxm_msg_tx_size = 0;
+size_t rxm_msg_rx_size = 0;
 size_t rxm_def_rx_size = 2048;
 size_t rxm_def_tx_size = 2048;
 

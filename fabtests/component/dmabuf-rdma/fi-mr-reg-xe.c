@@ -52,199 +52,101 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
+#include <assert.h>
+#include <getopt.h>
+#include <arpa/inet.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
+#include <rdma/fi_cm.h>
+#include <rdma/fi_tagged.h>
+#include <rdma/fi_rma.h>
+#include <rdma/fi_atomic.h>
+#include <rdma/fi_errno.h>
+#include <level_zero/ze_api.h>
+#include "shared.h"
 #include "util.h"
 #include "xe.h"
+#include "ofi_ctx_pool.h"
 
-static int	ep_type = FI_EP_RDM;
-static char	*prov_name;
-static char	*domain_name;
-
-static struct fi_info		*fi;
-static struct fid_fabric	*fabric;
-static struct fid_eq		*eq;
-static struct fid_domain	*domain;
-static struct fid_ep		*ep;
-static struct fid_av		*av;
-static struct fid_cq		*cq;
-static struct fid_mr		*mr, *dmabuf_mr;
-
-static void	*buf;
-static size_t	buf_size = 65536;
-static int 	buf_location = MALLOC;
-
-static void init_buf(void)
+static void set_default_options(void)
 {
-	int page_size = sysconf(_SC_PAGESIZE);
-
-	buf = xe_alloc_buf(page_size, buf_size, buf_location, 0, NULL);
-	if (!buf) {
-		fprintf(stderr, "Couldn't allocate work buf.\n");
-		exit(-1);
-	}
+	options.max_ranks = 1;
+	options.num_mappings = 0;
+	peers = calloc(options.max_ranks, sizeof(struct business_card));
 }
 
-static void free_buf(void)
+static void parse_mapping(char *gpu_dev_num, char *domain_name)
 {
-	xe_free_buf(buf, buf_location);
-}
+	char *s;
+	char *saveptr;
 
-static void init_ofi(void)
-{
-	struct fi_info *hints;
-	struct fi_cq_attr cq_attr = {};
-	struct fi_av_attr av_attr = {};
-	struct fi_eq_attr eq_attr = {};
-	int version;
+	if (!gpu_dev_num || !domain_name)
+		return;
 
-	EXIT_ON_NULL((hints = fi_allocinfo()));
-
-	hints->caps = FI_HMEM;
-	hints->ep_attr->type = ep_type;
-	if (prov_name)
-		hints->fabric_attr->prov_name = strdup(prov_name);
-	hints->domain_attr->mr_mode = (FI_MR_ALLOCATED | FI_MR_PROV_KEY |
-				       FI_MR_VIRT_ADDR | FI_MR_LOCAL |
-				       FI_MR_HMEM | FI_MR_ENDPOINT);
-	if (domain_name)
-		hints->domain_attr->name = strdup(domain_name);
-
-	version = FI_VERSION(1, 12);
-
-	if (ep_type == FI_EP_RDM)
-		EXIT_ON_ERROR(fi_getinfo(version, NULL, NULL, 0, hints, &fi));
+	options.num_mappings = 1;
+	nics[0].mapping.domain_name = domain_name;
+	s = strtok_r(gpu_dev_num, ".", &saveptr);
+	nics[0].mapping.gpu.dev_num = atoi(s);
+	s = strtok_r(NULL, "\0", &saveptr);
+	if (s)
+		nics[0].mapping.gpu.subdev_num = atoi(s);
 	else
-		EXIT_ON_ERROR(fi_getinfo(version, "localhost", "12345", 0,
-					 hints, &fi));
-
-	fi_freeinfo(hints);
-
-	printf("Using OFI device: %s (%s)\n", fi->fabric_attr->prov_name,
-		fi->domain_attr->name);
-
-	EXIT_ON_ERROR(fi_fabric(fi->fabric_attr, &fabric, NULL));
-	EXIT_ON_ERROR(fi_domain(fabric, fi, &domain, NULL));
-	EXIT_ON_ERROR(fi_endpoint(domain, fi, &ep, NULL));
-	EXIT_ON_ERROR(fi_cq_open(domain, &cq_attr, &cq, NULL));
-	if (ep_type == FI_EP_RDM) {
-		EXIT_ON_ERROR(fi_av_open(domain, &av_attr, &av, NULL));
-		EXIT_ON_ERROR(fi_ep_bind(ep, (fid_t)av, 0));
-	} else {
-		EXIT_ON_ERROR(fi_eq_open(fabric, &eq_attr, &eq, NULL));
-		EXIT_ON_ERROR(fi_ep_bind(ep, (fid_t)eq, 0));
-	}
-	EXIT_ON_ERROR(fi_ep_bind(ep, (fid_t)cq, (FI_TRANSMIT | FI_RECV |
-						 FI_SELECTIVE_COMPLETION)));
-	EXIT_ON_ERROR(fi_enable(ep));
+		nics[0].mapping.gpu.subdev_num = -1;
 }
 
-void reg_mr(void)
+static void print_opts()
 {
-	struct iovec iov = {
-		.iov_base = buf,
-		.iov_len = buf_size,
-	};
-	struct fi_mr_attr mr_attr = {
-		.mr_iov = &iov,
-		.iov_count = 1,
-		.access = FI_REMOTE_READ | FI_REMOTE_WRITE,
-		.requested_key = 1,
-		.iface = buf_location == MALLOC ? FI_HMEM_SYSTEM : FI_HMEM_ZE,
-		.device.ze = xe_get_dev_num(0),
-	};
+	size_t len = 16;
+	char *str = malloc(len);
 
-	CHECK_ERROR(fi_mr_regattr(domain, &mr_attr, 0, &mr));
-
-	if (fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
-		CHECK_ERROR(fi_mr_bind(mr, (fid_t)ep, 0));
-		CHECK_ERROR(fi_mr_enable(mr));
-	}
-
-	printf("mr %p, buf %p, rkey 0x%lx, len %zd\n",
-		mr, buf, fi_mr_key(mr), buf_size);
-
-err_out:
-	return;
-}
-
-void reg_dmabuf_mr(void)
-{
-	struct fi_mr_dmabuf dmabuf = {
-		.fd = xe_get_buf_fd(buf),
-		.offset = 0,
-		.len = buf_size,
-		.base_addr = NULL,
-	};
-	struct fi_mr_attr mr_attr = {
-		.dmabuf = &dmabuf,
-		.access = FI_REMOTE_READ | FI_REMOTE_WRITE,
-		.requested_key = 2,
-	};
-
-	CHECK_ERROR(fi_mr_regattr(domain, &mr_attr, FI_MR_DMABUF, &dmabuf_mr));
-
-	if (fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
-		CHECK_ERROR(fi_mr_bind(dmabuf_mr, &ep->fid, 0));
-		CHECK_ERROR(fi_mr_enable(dmabuf_mr));
-	}
-
-	printf("mr %p, buf %p, rkey 0x%lx, len %zd\n",
-		dmabuf_mr, buf, fi_mr_key(dmabuf_mr), buf_size);
-
-err_out:
-	return;
-}
-
-void dereg_mr(void)
-{
-	if (mr)
-		fi_close(&mr->fid);
-}
-
-void dereg_dmabuf_mr(void)
-{
-	if (dmabuf_mr)
-		fi_close(&dmabuf_mr->fid);
-}
-
-static void finalize_ofi(void)
-{
-	fi_close((fid_t)ep);
-	if (ep_type == FI_EP_RDM)
-		fi_close((fid_t)av);
-	fi_close((fid_t)cq);
-	fi_close((fid_t)domain);
-	if (ep_type == FI_EP_MSG)
-		fi_close((fid_t)eq);
-	fi_close((fid_t)fabric);
-	fi_freeinfo(fi);
+	printf("\nOPTIONS:\n");
+	printf("\tDomain: %s\n", nics[0].mapping.domain_name);
+	printf("\tGPU: %d", nics[0].mapping.gpu.dev_num);
+	if (nics[0].mapping.gpu.subdev_num > 0)
+		printf(".%d", nics[0].mapping.gpu.subdev_num);
+	printf("\n");
+	printf("\tEndpoint type: %s\n", options.ep_type == FI_EP_RDM ? "RDM" :
+	       "MSG");
+	buf_location_str(options.loc1, str, len);
+	printf("\tBuffer location: %s\n", str);
+	printf("\tProvider name: %s\n", options.prov_name ? options.prov_name :
+	       "default");
+	printf("\tBuffer size: %zd\n", options.msg_size);
+	free(str);
 }
 
 static void usage(char *prog)
 {
 	printf("Usage: %s [options]\n", prog);
 	printf("Options:\n");
-	printf("\t-m <location>    Where to allocate the buffer, can be 'malloc', 'host', 'device' or 'shared', default: malloc\n");
-	printf("\t-d <x>[.<y>]     Use the GPU device <x>, optionally subdevice <y>, default: 0\n");
-	printf("\t-e <ep_type>     Set the endpoint type, can be 'rdm' or 'msg', default: rdm\n");
-	printf("\t-p <prov_name>   Use the OFI provider named as <prov_name>, default: the first one\n");
-	printf("\t-D <domain_name> Open OFI domain named as <domain_name>, default: automatic\n");
+	printf("\t-D <domain_name> Open OFI domain named as <domain_name>, "
+				   "default: automatic\n");
+	printf("\t-d <x>[.<y>]     Use the GPU device <x>, optionally "
+				   "subdevice <y>, default: 0\n");
+	printf("\t-e <ep_type>     Set the endpoint type, can be 'rdm' or "
+				   "'msg', default: rdm\n");
+	printf("\t-m <location>    Where to allocate the buffer, can be "
+				   "'malloc', 'host', 'device' or 'shared', "
+				   "default: malloc\n");
+	printf("\t-p <prov_name>   Use the OFI provider named as <prov_name>, "
+				   "default: the first one\n");
 	printf("\t-S <size>        Set the buffer size, default: 65536\n");
-	printf("\t-R               Enable dmabuf_reg (plug-in for MOFED peer-memory)\n");
 	printf("\t-h               Print this message\n");
 }
 
-int main(int argc, char *argv[])
+static void parse_opts(int argc, char **argv)
 {
+	int op;
 	char *gpu_dev_nums = NULL;
-	int c;
+	char *domain_name = NULL;
 
-	while ((c = getopt(argc, argv, "d:D:e:p:m:RS:h")) != -1) {
-		switch (c) {
+	while ((op = getopt(argc, argv, "d:D:e:p:m:S:h")) != -1) {
+		switch (op) {
 		case 'd':
 			gpu_dev_nums = strdup(optarg);
 			break;
@@ -253,32 +155,31 @@ int main(int argc, char *argv[])
 			break;
 		case 'e':
 			if (!strcmp(optarg, "rdm"))
-				ep_type = FI_EP_RDM;
+				options.ep_type = FI_EP_RDM;
 			else if (!strcmp(optarg, "msg"))
-				ep_type = FI_EP_MSG;
+				options.ep_type = FI_EP_MSG;
 			else
-				printf("Invalid ep type %s, use default\n", optarg);
+				printf("Invalid ep type %s, use default\n",
+				       optarg);
 			break;
 		case 'p':
-			prov_name = strdup(optarg);
+			options.prov_name = strdup(optarg);
 			break;
 		case 'm':
 			if (!strcmp(optarg, "malloc"))
-				buf_location = MALLOC;
+				options.buf_location = MALLOC;
 			else if (!strcmp(optarg, "host"))
-				buf_location = HOST;
+				options.buf_location = HOST;
 			else if (!strcmp(optarg, "device"))
-				buf_location = DEVICE;
+				options.buf_location = DEVICE;
 			else if (!strcmp(optarg, "shared"))
-				buf_location = SHARED;
+				options.buf_location = SHARED;
 			else
-				printf("Invalid buffer location %s, use default\n", optarg);
-			break;
-		case 'R':
-			use_dmabuf_reg = 1;
+				printf("Invalid buffer location %s, use "
+				       "default\n", optarg);
 			break;
 		case 'S':
-			buf_size = atoi(optarg);
+			options.msg_size = atoi(optarg);
 			break;
 		default:
 			usage(argv[0]);
@@ -287,27 +188,46 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (use_dmabuf_reg)
-		dmabuf_reg_open();
-
-	if (buf_location != MALLOC)
-		xe_init(gpu_dev_nums, 0);
-
-	init_buf();
-	init_ofi();
-	reg_mr();
-	if (buf_location != MALLOC)
-		reg_dmabuf_mr();
-
-	dereg_mr();
-	if (buf_location != MALLOC)
-		dereg_dmabuf_mr();
-	finalize_ofi();
-	free_buf();
-
-	if (use_dmabuf_reg)
-		dmabuf_reg_close();
-
-	return 0;
+	parse_mapping(gpu_dev_nums, domain_name);
 }
 
+int main(int argc, char *argv[])
+{
+	int i;
+
+	set_default_options();
+	parse_opts(argc, argv);
+
+	if (options.verbose)
+		print_opts();
+
+	for (i = 0; i < options.num_mappings; i++) {
+		if (options.verbose)
+			printf("Init NIC %s with GPU %d<.%d>.\n",
+			       nics[i].mapping.domain_name,
+			       nics[i].mapping.gpu.dev_num,
+			       nics[i].mapping.gpu.subdev_num);
+
+		if(xe_init(&nics[i].mapping.gpu))
+			goto err_out;
+
+		if (options.verbose)
+			show_xe_resources(&nics[i].mapping.gpu);
+	}
+
+
+	CHECK_ERROR(init_ofi());
+
+	if (options.verbose)
+		print_nic_info();
+err_out:
+	finalize_ofi();
+	free_buf();
+	for (i = 0; i < options.num_mappings; i++)
+		xe_cleanup_gpu(&nics[i].mapping.gpu);
+
+	xe_cleanup();
+	if (peers)
+		free(peers);
+        return 0;
+}

@@ -120,7 +120,7 @@ struct nic {
 
 static struct ibv_device	**dev_list;
 static struct nic		nics[MAX_NICS];
-static int			num_nics;
+static int			num_nics = 1;
 static int			gid_idx = -1;
 static int			mtu = IBV_MTU_4096;
 
@@ -129,16 +129,17 @@ struct buf {
 	struct ibv_mr		*mrs[MAX_NICS];
 };
 
-static int			num_gpus;
+static int			num_gpus = 1;
 static struct buf		bufs[MAX_GPUS];
 static struct buf		proxy_buf;
 static int			buf_location = MALLOC;
-static int			use_proxy;
+static int			use_proxy = 0;
 static int			proxy_block = MAX_SIZE;
-static int			use_sync_ib;
-static int			use_inline_send;
-static int			use_odp;
-static int			verify;
+static int			use_sync_ib = 0;
+static int			use_inline_send = 0;
+static int			use_odp = 0;
+static int			verify = 0;
+static struct gpu		gpus[MAX_GPUS];
 
 static void init_buf(size_t buf_size, char c)
 {
@@ -147,17 +148,18 @@ static void init_buf(size_t buf_size, char c)
 	void *buf;
 
 	for (i = 0; i < num_gpus; i++) {
-		buf = xe_alloc_buf(page_size, buf_size, buf_location, i,
+		buf = xe_alloc_buf(page_size, buf_size, buf_location, &gpus[i],
 				   &bufs[i].xe_buf);
 		if (!buf) {
 			fprintf(stderr, "Couldn't allocate work buf.\n");
 			exit(-1);
 		}
-		xe_set_buf(buf, c, buf_size, buf_location, i);
+		xe_set_buf(buf, c, buf_size, buf_location, &gpus[i]);
 	}
 
 	if (buf_location == DEVICE && use_proxy) {
-		if (!xe_alloc_buf(page_size, buf_size, HOST, 0, &proxy_buf.xe_buf)) {
+		if (!xe_alloc_buf(page_size, buf_size, HOST, &gpus[0],
+				  &proxy_buf.xe_buf)) {
 			fprintf(stderr, "Couldn't allocate proxy buf.\n");
 			exit(-1);
 		}
@@ -176,7 +178,7 @@ static void check_buf(size_t size, char c, int gpu)
 		return;
 	}
 
-	xe_copy_buf(bounce_buf, bufs[gpu].xe_buf.buf, size, gpu);
+	xe_copy_buf(bounce_buf, bufs[gpu].xe_buf.buf, size, &gpus[gpu]);
 
 	for (i = 0; i < size; i++)
 		if (bounce_buf[i] != c) {
@@ -199,10 +201,10 @@ static void free_buf(void)
 	int i;
 
 	for (i = 0; i < num_gpus; i++)
-		xe_free_buf(bufs[i].xe_buf.buf, bufs[i].xe_buf.location);
+		xe_free_buf(&bufs[i].xe_buf);
 
 	if (use_proxy)
-		xe_free_buf(proxy_buf.xe_buf.buf, proxy_buf.xe_buf.location);
+		xe_free_buf(&proxy_buf.xe_buf);
 }
 
 /*
@@ -276,26 +278,30 @@ static void free_ib(void)
 		for (j = 0; j < num_gpus; j++)
 			if (bufs[j].mrs[i])
 				ibv_dereg_mr(bufs[j].mrs[i]);
-		ibv_dealloc_pd(nics[i].pd);
-		ibv_close_device(nics[i].context);
+		if (nics[i].pd)
+			ibv_dealloc_pd(nics[i].pd);
+		if (nics[i].context)
+			ibv_close_device(nics[i].context);
 	}
-	ibv_free_device_list(dev_list);
+	if (dev_list && *dev_list)
+		ibv_free_device_list(dev_list);
 }
 
-static struct ibv_mr *reg_mr(struct ibv_pd *pd, void *buf, uint64_t size,
-			     void *base, int where)
+static struct ibv_mr *reg_mr(struct ibv_pd *pd, struct xe_buf *buf)
 {
 	int mr_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
 			      IBV_ACCESS_REMOTE_WRITE;
 	int odp_flag = use_odp ? IBV_ACCESS_ON_DEMAND : 0;
 
-	if (where == MALLOC || use_dmabuf_reg)
-		return ibv_reg_mr(pd, buf, size, mr_access_flags | odp_flag);
+	if (buf->location == MALLOC)
+		return ibv_reg_mr(pd, buf->buf, buf->size,
+				  mr_access_flags | odp_flag);
 	else
 		return ibv_reg_dmabuf_mr(pd,
-					 (uint64_t)((char *)buf - (char *)base),
-					 size, (uint64_t)buf, /* iova */
-					 xe_get_buf_fd(buf), mr_access_flags);
+					 (uint64_t)((char *)buf->buf -
+					 (char *)buf->base),
+					 buf->size, (uint64_t)buf->buf,
+					 /* iova */buf->fd, mr_access_flags);
 }
 
 static int init_nic(int nic, char *ibdev_name, int ib_port)
@@ -333,17 +339,10 @@ static int init_nic(int nic, char *ibdev_name, int ib_port)
 	CHECK_NULL((context = ibv_open_device(dev)));
 	CHECK_NULL((pd = ibv_alloc_pd(context)));
 	for (i = 0; i < num_gpus; i++)
-		CHECK_NULL((bufs[i].mrs[nic] =
-				reg_mr(pd, bufs[i].xe_buf.buf,
-				       bufs[i].xe_buf.size,
-				       bufs[i].xe_buf.base,
-				       bufs[i].xe_buf.location)));
+		CHECK_NULL((bufs[i].mrs[nic] = reg_mr(pd, &bufs[i].xe_buf)));
 	if (proxy_buf.xe_buf.buf)
-		CHECK_NULL((proxy_buf.mrs[nic] =
-				reg_mr(pd, proxy_buf.xe_buf.buf,
-				       proxy_buf.xe_buf.size,
-				       proxy_buf.xe_buf.base,
-				       proxy_buf.xe_buf.location)));
+		CHECK_NULL((proxy_buf.mrs[nic] = reg_mr(pd,
+							&proxy_buf.xe_buf)));
 	CHECK_NULL((cq = ibv_create_cq(context, TX_DEPTH + RX_DEPTH, NULL,
 				       NULL, 0)));
 
@@ -525,7 +524,7 @@ static int post_proxy_write(int nic, int gpu, int rgpu, size_t size, int idx,
 
 		xe_copy_buf((char *)proxy_buf.xe_buf.buf + offset + sent,
 			    (char *)bufs[gpu].xe_buf.buf + offset + sent,
-			    block_size, gpu);
+			    block_size, &gpus[gpu]);
 
 		ret = ibv_post_send(nics[nic].qp, &wr, &bad_wr);
 		if (ret)
@@ -637,7 +636,7 @@ void run_rdma_test(int test_type, int size, int iters, int batch,
 	for (i = completed = pending = 0; i < iters || completed < iters;) {
 		while (i < iters && pending < TX_DEPTH) {
 			nic = i % num_nics;
-			gpu = i % num_gpus;
+			gpu = i % (num_gpus > 0 ? num_gpus : 1);
 			rgpu = i % peer.num_gpus;
 			signaled = ((i / num_nics) % batch) == batch -1 ||
 				   i >= iters - num_nics;
@@ -697,7 +696,6 @@ static void usage(char *prog_name)
 	printf("\t-B <block_size>  Set the block size for proxying, default: maximum message size\n");
 	printf("\t-O               Use on-demand paging flag (host memory only)\n");
 	printf("\t-r               Reverse the direction of data movement (server initates RDMA ops)\n");
-	printf("\t-R               Enable dmabuf_reg (plug-in for MOFED peer-memory)\n");
 	printf("\t-s               Sync with send/recv at the end\n");
 	printf("\t-i               Use inline send\n");
 	printf("\t-v               Verify the data (for read test only)\n");
@@ -705,12 +703,33 @@ static void usage(char *prog_name)
 	printf("\t-h               Print this message\n");
 }
 
+static void parse_devnums(char *gpu_dev_nums)
+{
+	char *saveptr, *token, *subtoken;
+
+	gpus[0].dev_num = 0;
+	gpus[0].subdev_num = -1;
+	if (!gpu_dev_nums)
+		return;
+
+	token = strtok_r(gpu_dev_nums, ",", &saveptr);
+	while (token && num_gpus < MAX_GPUS) {
+		gpus[num_gpus].dev_num = atoi(token);
+		subtoken = strchr(token, '.');
+		if (subtoken)
+			gpus[num_gpus].subdev_num = atoi(subtoken + 1);
+		else
+			gpus[num_gpus].subdev_num = -1;
+		num_gpus++;
+		token = strtok_r(NULL, ",", &saveptr);
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	char *server_name = NULL;
 	char *ibdev_names = NULL;
 	char *gpu_dev_nums = NULL;
-	int enable_multi_gpu;
 	unsigned int port = 12345;
 	int test_type = READ;
 	int iters = 1000;
@@ -719,11 +738,12 @@ int main(int argc, char *argv[])
 	int sockfd;
 	int size;
 	int c;
+	int i;
 	int initiator;
 	int bidir = 0;
 	int msg_size = 0;
 
-	while ((c = getopt(argc, argv, "b:d:D:g:m:M:n:t:PB:OrRsS:ihv2")) != -1) {
+	while ((c = getopt(argc, argv, "b:d:D:g:m:M:n:t:PB:OrsS:ihv2")) != -1) {
 		switch (c) {
 		case 'b':
 			batch = atoi(optarg);
@@ -790,9 +810,6 @@ int main(int argc, char *argv[])
 		case 'r':
 			reverse = 1;
 			break;
-		case 'R':
-			use_dmabuf_reg = 1;
-			break;
 		case 's':
 			use_sync_ib = 1;
 			break;
@@ -826,12 +843,9 @@ int main(int argc, char *argv[])
 
 	initiator = (!reverse && server_name) || (reverse && !server_name);
 
-	if (use_dmabuf_reg && dmabuf_reg_open())
-		exit(-1);
-
-	/* multi-GPU test doesn't make sense if buffers are on the host */
-	enable_multi_gpu = buf_location != MALLOC && buf_location != HOST;
-	num_gpus = xe_init(gpu_dev_nums, enable_multi_gpu);
+	parse_devnums(gpu_dev_nums);
+	for (i = 0; i < num_gpus; i++)
+		CHECK_ERROR(xe_init(&gpus[i]));
 
 	init_buf(MAX_SIZE * batch, initiator ? 'A' : 'a');
 	init_ib(ibdev_names, sockfd);
@@ -865,14 +879,14 @@ int main(int argc, char *argv[])
 	if (use_sync_ib)
 		sync_ib(4);
 
+err_out:
 	free_ib();
 	free_buf();
 
-	if (use_dmabuf_reg)
-		dmabuf_reg_close();
-
 	close(sockfd);
-
+	for (i = 0; num_gpus > 0 && i < num_gpus; i++)
+		xe_cleanup_gpu(&gpus[i]);
+	xe_cleanup();
 	return 0;
 }
 
