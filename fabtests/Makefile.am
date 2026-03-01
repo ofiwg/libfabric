@@ -244,6 +244,7 @@ libfabtests_la_SOURCES = \
 	include/ft_list.h \
 	include/hmem.h \
 	include/jsmn.h \
+	include/ft_random.h \
 	include/unix/osd.h \
 	include/ft_osd.h
 
