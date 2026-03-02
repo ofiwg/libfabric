@@ -93,7 +93,8 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 	wr->num_sge = msg->iov_count;
 	wr->sg_list = base_ep->efa_recv_wr_vec[wr_index].sge;
 	wr->wr_id = (uintptr_t) efa_fill_context(msg->context, msg->addr, flags,
-						 FI_RECV | FI_MSG);
+						 FI_RECV | FI_MSG,
+						 msg->desc, msg->iov_count);
 
 	for (i = 0; i < msg->iov_count; i++) {
 		addr = (uintptr_t)msg->msg_iov[i].iov_base;
@@ -132,6 +133,15 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 		 * So, we do the conversion here.
 		 */
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
+		base_ep->recv_wr_index = 0;
+		goto out;
+	}
+	for (i = 0; i < base_ep->recv_wr_index; i++) {
+		wr = &base_ep->efa_recv_wr_vec[i].wr;
+		if (wr->wr_id) {
+			struct efa_context *ctx = (struct efa_context *)wr->wr_id;
+			efa_mr_ref_inc(ctx->desc, ctx->iov_count);
+		}
 	}
 
 	base_ep->recv_wr_index = 0;
@@ -148,6 +158,14 @@ out_err:
 			EFA_WARN(FI_LOG_EP_DATA,
 				 "Encountered error %ld when ibv_post_recv on error handling path\n",
 				 post_recv_err);
+		} else {
+			for (i = 0; i < base_ep->recv_wr_index; i++) {
+				wr = &base_ep->efa_recv_wr_vec[i].wr;
+				if (wr->wr_id) {
+					struct efa_context *ctx = (struct efa_context *)wr->wr_id;
+					efa_mr_ref_inc(ctx->desc, ctx->iov_count);
+				}
+			}
 		}
 	}
 
@@ -225,13 +243,14 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
-	/* Prepare work request ID */
-	wr_id = (uintptr_t) efa_fill_context(
-		msg->context, msg->addr, flags, FI_SEND | FI_MSG);
-
 	/* Determine if we should use inline data */
 	use_inline = (len <= base_ep->domain->device->efa_attr.inline_buf_size &&
 		      (!msg->desc || !efa_mr_is_hmem(msg->desc[0])));
+	/* Prepare work request ID */
+	wr_id = (uintptr_t) efa_fill_context(
+		msg->context, msg->addr, flags, FI_SEND | FI_MSG,
+		use_inline ? NULL : msg->desc,
+		msg->iov_count);
 
 	if (use_inline) {
 		/* Prepare inline data list */
@@ -272,8 +291,13 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	ret = efa_qp_post_send(qp, sg_list, inline_data_list, msg->iov_count,
 			       use_inline, wr_id, msg->data, flags,
 			       conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
-	if (OFI_UNLIKELY(ret))
+	if (OFI_UNLIKELY(ret)) {
 		ret = (ret == ENOMEM) ? -FI_EAGAIN : -ret;
+		goto out_err;
+	}
+
+	if (!use_inline && wr_id)
+		efa_mr_ref_inc(msg->desc, msg->iov_count);
 
 	efa_tracepoint(post_send, wr_id, (uintptr_t)msg->context);
 
