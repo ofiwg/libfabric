@@ -153,6 +153,7 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 	struct fi_cq_err_entry err_entry;
 	int write_cq_err;
 	struct efa_cq *efa_cq = container_of(cq, struct efa_cq, ibv_cq);
+	struct efa_context *efa_context;
 
 	memset(&err_entry, 0, sizeof(err_entry));
 	/* This will use efa_cq->err_buf (because we set
@@ -169,6 +170,10 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 			"Error when writing error cq entry\n");
 		efa_base_ep_write_eq_error(base_ep, err, prov_errno);
 	}
+	if (cq->ibv_cq_ex->wr_id) {
+		efa_context = (struct efa_context *)cq->ibv_cq_ex->wr_id;
+		efa_mr_ref_dec(efa_context->desc, efa_context->iov_count);
+	}
 }
 
 /**
@@ -183,6 +188,7 @@ static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
 					struct fi_cq_tagged_entry *cq_entry)
 {
 	struct util_cq *tx_cq = base_ep->util_ep.tx_cq;
+	struct efa_context *efa_context;
 	int ret = 0;
 	struct ibv_cq_ex *ibv_cq_ex = ibv_cq->ibv_cq_ex;
 
@@ -208,7 +214,11 @@ static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
 			 fi_strerror(-ret));
 		efa_cq_handle_error(base_ep, ibv_cq, -ret,
 				    FI_EFA_ERR_WRITE_SEND_COMP);
+		return;
 	}
+
+	efa_context = (struct efa_context *)ibv_cq_ex->wr_id;
+	efa_mr_ref_dec(efa_context->desc, efa_context->iov_count);
 }
 
 /**
@@ -224,6 +234,7 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 {
 	struct util_cq *rx_cq = base_ep->util_ep.rx_cq;
 	struct ibv_cq_ex *ibv_cq_ex = ibv_cq->ibv_cq_ex;
+	struct efa_context *efa_context;
 
 	fi_addr_t src_addr;
 	int ret = 0;
@@ -253,7 +264,11 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 			 fi_strerror(-ret));
 		efa_cq_handle_error(base_ep, ibv_cq, -ret,
 				    FI_EFA_ERR_WRITE_RECV_COMP);
+		return;
 	}
+
+	efa_context = (struct efa_context *)ibv_cq_ex->wr_id;
+	efa_mr_ref_dec(efa_context->desc, efa_context->iov_count);
 }
 
 /**
@@ -765,6 +780,10 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		if ((!efa_cq_wc_is_unsolicited(ibv_cq) && ibv_cq->ibv_cq_ex->wr_id ) || opcode == IBV_WC_RECV_RDMA_WITH_IMM) {
 			efa_tracepoint(handle_completion, ibv_cq->ibv_cq_ex->wr_id, opcode);
 			efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size), opcode);
+			if (ibv_cq->ibv_cq_ex->wr_id) {
+				struct efa_context *efa_context = (struct efa_context *)ibv_cq->ibv_cq_ex->wr_id;
+				efa_mr_ref_dec(efa_context->desc, efa_context->iov_count);
+			}
 			if (src_addr)
 				src_addr[num_cqe] = efa_cq_get_src_addr(ibv_cq, opcode);
 			num_cqe++;
