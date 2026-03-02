@@ -1122,6 +1122,7 @@ void test_efa_cq_read_send_success(struct efa_resource **state)
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_SEND | FI_MSG;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_SEND, IBV_WC_SUCCESS, 0,
 			 efa_context, 0, false);
@@ -1152,6 +1153,7 @@ void test_efa_cq_read_senddata_success(struct efa_resource **state)
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_SEND | FI_MSG | FI_REMOTE_CQ_DATA;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_SEND, IBV_WC_SUCCESS, 0,
 			 efa_context, IBV_WC_WITH_IMM, false);
@@ -1182,6 +1184,7 @@ void test_efa_cq_read_recv_success(struct efa_resource **state)
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_RECV | FI_MSG;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_RECV, IBV_WC_SUCCESS, 0,
 			 efa_context, 0, false);
@@ -1212,6 +1215,7 @@ void test_efa_cq_read_write_success(struct efa_resource **state)
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_WRITE | FI_RMA;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_SEND, IBV_WC_SUCCESS, 0,
 			 efa_context, 0, false);
@@ -1242,6 +1246,7 @@ void test_efa_cq_read_writedata_success(struct efa_resource **state)
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_WRITE | FI_RMA | FI_REMOTE_CQ_DATA;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_RDMA_WRITE, IBV_WC_SUCCESS, 0,
 			 efa_context, IBV_WC_WITH_IMM, false);
@@ -1272,6 +1277,7 @@ void test_efa_cq_read_read_success(struct efa_resource **state)
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_READ | FI_RMA;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_RDMA_READ, IBV_WC_SUCCESS, 0,
 			 efa_context, 0, false);
@@ -1352,6 +1358,7 @@ void test_efa_cq_read_send_failure(struct efa_resource **state)
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_SEND | FI_MSG;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_SEND, IBV_WC_GENERAL_ERR,
 			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, (struct efa_context *) &ctx, 0, false);
@@ -1386,6 +1393,7 @@ void test_efa_cq_read_recv_failure(struct efa_resource **state)
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_RECV | FI_MSG;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_RECV, IBV_WC_GENERAL_ERR,
 			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, (struct efa_context *) &ctx, 0, false);
@@ -1970,6 +1978,7 @@ static void test_efa_cq_readerr_common(struct efa_resource *resource, bool user_
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_SEND | FI_MSG;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_SEND, IBV_WC_GENERAL_ERR,
 				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, efa_context, 0, false);
@@ -2184,6 +2193,7 @@ void test_efa_cq_poll_ep_close_bypass_path(struct efa_resource **state)
 
 	efa_context = (struct efa_context *) &ctx;
 	efa_context->completion_flags = FI_SEND | FI_MSG;
+	efa_context->iov_count = 0;
 
 	test_efa_cq_read_prep(resource, IBV_WC_SEND, IBV_WC_GENERAL_ERR,
 			      EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, efa_context, 0, false);
@@ -2244,12 +2254,15 @@ void test_efa_cq_read_mixed_success_error(struct efa_resource **state)
 	efa_context1 = (struct efa_context *) &ctx1;
 	efa_context1->completion_flags = FI_SEND | FI_MSG;
 	efa_context1->addr = addr;
+	efa_context1->iov_count = 0;
 	efa_context2 = (struct efa_context *) &ctx2;
 	efa_context2->completion_flags = FI_SEND | FI_MSG;
 	efa_context2->addr = addr;
+	efa_context2->iov_count = 0;
 	efa_context3 = (struct efa_context *) &ctx3;
 	efa_context3->completion_flags = FI_SEND | FI_MSG;
 	efa_context3->addr = addr;
+	efa_context3->iov_count = 0;
 
 	/* Setup mocks - need custom mock to simulate status changes */
 	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
