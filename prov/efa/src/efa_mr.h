@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include <ofi_mr.h>
+#include <ofi_atom.h>
 
 /*
  * Descriptor returned for FI_HMEM peer memory registrations
@@ -28,6 +29,10 @@ struct efa_mr {
 	struct efa_mr_peer	peer;
 	bool			inserted_to_mr_map;
 	bool 			needs_sync;
+	ofi_atomic32_t ref;
+	/* Count of outstanding operations referencing this MR.
+	 * Incremented when an operation references the MR,
+	 * decremented when the operation completes. */
 };
 
 extern int efa_mr_cache_enable;
@@ -105,5 +110,26 @@ static inline void *efa_mr_get_shm_desc(struct efa_mr *efa_mr)
 int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
 			     bool device_support_rdma_read,
 			     bool device_support_rdma_write);
+
+/**
+ * @brief Increment the reference count of MRs (when tracking is enabled)
+ *
+ * This function should be called when an operation starts referencing the MRs.
+ *
+ * @param[in]	desc	Array of MR descriptors (void pointers to efa_mr)
+ * @param[in]	count	Number of descriptors in the array
+ */
+void efa_mr_ref_inc(void **desc, size_t count);
+
+/**
+ * @brief Decrement the reference count of MRs (when tracking is enabled)
+ *
+ * This function should be called when an operation completes and no longer
+ * references the MRs.
+ *
+ * @param[in]	desc	Array of MR descriptors (void pointers to efa_mr)
+ * @param[in]	count	Number of descriptors in the array
+ */
+void efa_mr_ref_dec(void **desc, size_t count);
 
 #endif
