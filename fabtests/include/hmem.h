@@ -205,6 +205,19 @@ int ft_rocr_get_dmabuf_fd(void *buf, size_t len,
 			  int *fd, uint64_t *offset);
 int ft_rocr_put_dmabuf_fd(int fd);
 
+enum NEURON_OP {
+	NRT_TENSOR_ALLOCATE = 0,
+	NRT_TENSOR_FREE,
+	NRT_TENSOR_GET_VA,
+	NRT_TENSOR_READ,
+	NRT_TENSOR_WRITE,
+	NRT_MEMCPY_TO_DEVICE,
+	NRT_GET_DMABUF_FD,
+	NRT_GET_TOTAL_NC_COUNT,
+	NRT_INIT,
+	NRT_NEURON_OP_NUMBER_MAX
+};
+
 int ft_neuron_init(void);
 int ft_neuron_cleanup(void);
 int ft_neuron_alloc(uint64_t device, void **buf, size_t size);
@@ -214,6 +227,7 @@ int ft_neuron_memcpy_to_hmem(uint64_t device, void *dst, const void *src, size_t
 int ft_neuron_memcpy_from_hmem(uint64_t device, void *dst, const void *src, size_t size);
 int ft_neuron_get_dmabuf_fd(void *addr, size_t size, int *fd, uint64_t *offset);
 int ft_neuron_put_dmabuf_fd(int fd);
+int ft_nrt_get_op_version(enum NEURON_OP op);
 
 int ft_synapseai_init(void);
 int ft_synapseai_cleanup(void);
