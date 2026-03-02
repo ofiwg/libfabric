@@ -374,7 +374,7 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	if (create_user_recv_qp) {
 		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass, tx_cq->unsolicited_write_recv_enabled);
 		if (ret) {
-			efa_base_ep_destruct_qp(base_ep);
+			efa_base_ep_destruct_qp_unsafe(base_ep);
 			return ret;
 		}
 		base_ep->user_recv_qp->base_ep = base_ep;
@@ -386,13 +386,13 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	if (tx_cq->data_path_direct_enabled) {
 		ret = efa_data_path_direct_qp_initialize(base_ep->qp);
 		if (ret) {
-			efa_base_ep_destruct_qp(base_ep);
+			efa_base_ep_destruct_qp_unsafe(base_ep);
 			return ret;
 		}
 		if (create_user_recv_qp) {
 			ret = efa_data_path_direct_qp_initialize(base_ep->user_recv_qp);
 			if (ret) {
-				efa_base_ep_destruct_qp(base_ep);
+				efa_base_ep_destruct_qp_unsafe(base_ep);
 				return ret;
 			}
 		}
