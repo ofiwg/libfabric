@@ -196,6 +196,8 @@ ssize_t efa_rdm_rma_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep, struct efa_rd
 	}
 
 	err = efa_rdm_rma_post_read(efa_rdm_ep, txe);
+	if (!err)
+		efa_mr_ref_inc(msg->desc, msg->iov_count);
 
 out:
 	if (OFI_UNLIKELY(err && txe))
@@ -441,6 +443,8 @@ static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep
 	err = efa_rdm_rma_post_write(efa_rdm_ep, txe);
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_txe_release(txe);
+	} else {
+		efa_mr_ref_inc(msg->desc, msg->iov_count);
 	}
 out:
 	ofi_genlock_unlock(srx_ctx->lock);
