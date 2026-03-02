@@ -250,6 +250,7 @@ unit_tests=(
 
 regression_tests=(
 	"sighandler_test"
+	"sighandler_chain_test"
 )
 
 complex_tests=(
