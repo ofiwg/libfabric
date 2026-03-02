@@ -251,6 +251,19 @@ int ze_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 			  uint64_t *offset);
 bool ze_is_dmabuf_requested(void);
 
+enum NEURON_OP {
+	NRT_TENSOR_ALLOCATE = 0,
+	NRT_TENSOR_FREE,
+	NRT_TENSOR_GET_VA,
+	NRT_TENSOR_READ,
+	NRT_TENSOR_WRITE,
+	NRT_MEMCPY_TO_DEVICE,
+	NRT_GET_DMABUF_FD,
+	NRT_GET_TOTAL_NC_COUNT,
+	NRT_INIT,
+	NRT_NEURON_OP_NUMBER_MAX
+};
+
 int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
 int neuron_host_register(void *ptr, size_t size);
@@ -263,6 +276,7 @@ int neuron_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
 			 uint64_t *offset);
 int neuron_put_dmabuf_fd(int fd);
 bool neuron_is_dmabuf_requested(void);
+int neuron_get_op_version(enum NEURON_OP op);
 
 int synapseai_init(void);
 int synapseai_cleanup(void);

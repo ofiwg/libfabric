@@ -59,6 +59,7 @@ struct neuron_ops {
 
 struct neuron_ops_internal {
 	NRT_STATUS (*nrt_get_dmabuf_fd)(uint64_t va, uint64_t size, int* fd);
+	int op_version[NRT_NEURON_OP_NUMBER_MAX];
 } neuron_ops_internal;
 
 static void *neuron_handle;
@@ -69,11 +70,21 @@ static NRT_STATUS ft_nrt_get_dmabuf_fd_proxy(uint64_t va, uint64_t size, int* fd
 	return neuron_ops_internal.nrt_get_dmabuf_fd(va, size, fd);
 }
 
+int ft_nrt_get_op_version(enum NEURON_OP op)
+{
+	if (op >= NRT_NEURON_OP_NUMBER_MAX)
+		return -FI_EINVAL;
+
+	return neuron_ops_internal.op_version[op];
+}
+
 static void ft_setup_nrt_get_dmabuf_fd(void)
 {
 	neuron_ops.nrt_get_dmabuf_fd = dlsym(neuron_handle, "nrt_get_dmabuf_fd_v2");
-	if (neuron_ops.nrt_get_dmabuf_fd)
+	if (neuron_ops.nrt_get_dmabuf_fd) {
+		neuron_ops_internal.op_version[NRT_GET_DMABUF_FD] = 2;
 		return;
+	}
 
 	neuron_ops_internal.nrt_get_dmabuf_fd = dlsym(neuron_handle, "nrt_get_dmabuf_fd");
 	if (!neuron_ops_internal.nrt_get_dmabuf_fd) {
@@ -81,6 +92,7 @@ static void ft_setup_nrt_get_dmabuf_fd(void)
 		       "dmabuf feature will not be used for Neuron devices\n");
 		return;
 	}
+	neuron_ops_internal.op_version[NRT_GET_DMABUF_FD] = 1;
 	neuron_ops.nrt_get_dmabuf_fd = &ft_nrt_get_dmabuf_fd_proxy;
 }
 
@@ -105,6 +117,8 @@ int ft_neuron_init(void)
 	if (neuron_handle)
 		return FI_SUCCESS;
 
+	memset(&neuron_ops_internal, 0, sizeof(neuron_ops_internal));
+
 	neuron_handle = dlopen("libnrt.so.1", RTLD_NOW);
 	if (!neuron_handle) {
 		FT_ERR("Failed to dlopen libnrt.so.1\n");
@@ -116,36 +130,42 @@ int ft_neuron_init(void)
 		FT_ERR("Failed to find nrt_tensor_allocate\n");
 		goto err;
 	}
+	neuron_ops_internal.op_version[NRT_TENSOR_ALLOCATE] = 1;
 
 	neuron_ops.nrt_tensor_free = dlsym(neuron_handle, "nrt_tensor_free");
 	if (!neuron_ops.nrt_tensor_free) {
 		FT_ERR("Failed to find nrt_tensor_free\n");
 		goto err;
 	}
+	neuron_ops_internal.op_version[NRT_TENSOR_FREE] = 1;
 
 	neuron_ops.nrt_tensor_get_va = dlsym(neuron_handle, "nrt_tensor_get_va");
 	if (!neuron_ops.nrt_tensor_get_va) {
 		FT_ERR("Failed to find nrt_tensor_get_va\n");
 		goto err;
 	}
+	neuron_ops_internal.op_version[NRT_TENSOR_GET_VA] = 1;
 
 	neuron_ops.nrt_tensor_read = dlsym(neuron_handle, "nrt_tensor_read");
 	if (!neuron_ops.nrt_tensor_read) {
 		FT_ERR("Failed to find nrt_tensor_read\n");
 		goto err;
 	}
+	neuron_ops_internal.op_version[NRT_TENSOR_READ] = 1;
 
 	neuron_ops.nrt_tensor_write = dlsym(neuron_handle, "nrt_tensor_write");
 	if (!neuron_ops.nrt_tensor_write) {
 		FT_ERR("Failed to find nrt_tensor_write\n");
 		goto err;
 	}
+	neuron_ops_internal.op_version[NRT_TENSOR_WRITE] = 1;
 
 	neuron_ops.nrt_init = dlsym(neuron_handle, "nrt_init");
 	if (!neuron_ops.nrt_init) {
 		FT_ERR("Failed to find nrt_init\n");
 		goto err;
 	}
+	neuron_ops_internal.op_version[NRT_INIT] = 1;
 
 	ft_setup_nrt_get_dmabuf_fd();
 
@@ -434,5 +454,10 @@ int ft_neuron_get_dmabuf_fd(void *addr, size_t size, int *fd,
 int ft_neuron_put_dmabuf_fd(int fd)
 {
 	return -FI_ENOSYS;
+}
+
+int ft_nrt_get_op_version(enum NEURON_OP op)
+{
+       return 0;
 }
 #endif /*_HAVE_NEURON_H */
