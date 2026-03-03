@@ -36,6 +36,9 @@
 
 #include "config.h"
 
+#include <stdio.h>
+#include <fcntl.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <complex.h>
@@ -115,6 +118,16 @@ int ofi_unmap_anon_pages(void *memptr, size_t size);
 static inline int ofi_memalign(void **memptr, size_t alignment, size_t size)
 {
 	return posix_memalign(memptr, alignment, size);
+}
+
+static inline int ofi_close(int fd)
+{
+	return close(fd);
+}
+
+static inline FILE* ofi_fdopen(int fd, const char* mode)
+{
+	return fdopen(fd, mode);
 }
 
 static inline void ofi_freealign(void *memptr)
