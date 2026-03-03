@@ -95,7 +95,8 @@
 	_(nvmlShutdown)
 
 static struct {
-	int   device_count;
+	int   device_count;                 /* Exposed CUDA device count - can be modified by CUDA_VISIBLE_DEVICES */
+	unsigned int  nvml_device_count;    /* NVML device count - cannot be modified by CUDA_VISIBLE_DEVICES */
 	bool  p2p_access_supported;
 	bool  use_gdrcopy;
 	bool  use_ipc;
@@ -105,6 +106,7 @@ static struct {
 	void *nvml_handle;
 } cuda_attr = {
 	.device_count         = -1,
+	.nvml_device_count    = 0,
 	.p2p_access_supported = false,
 	.use_gdrcopy          = false,
 	.use_ipc              = false,
@@ -535,8 +537,6 @@ static int cuda_hmem_verify_devices(void)
 {
 	nvmlReturn_t nvml_ret;
         cudaError_t cuda_ret;
-	unsigned int nvml_device_count = 0;
-
 	/* Check w/ nvmlDeviceGetCount_v2() first, to avoid more expensive
 	 * call to cudaGetDeviceCount() when possible.
 	 */
@@ -550,7 +550,7 @@ static int cuda_hmem_verify_devices(void)
 			return -FI_ENOSYS;
 
 		/* Verify NVIDIA devices are present on the host. */
-		nvml_ret = ofi_nvmlDeviceGetCount_v2(&nvml_device_count);
+		nvml_ret = ofi_nvmlDeviceGetCount_v2(&cuda_attr.nvml_device_count);
 		if (nvml_ret != NVML_SUCCESS) {
 			ofi_nvmlShutdown();
 			return -FI_ENOSYS;
@@ -565,8 +565,8 @@ static int cuda_hmem_verify_devices(void)
 			return -FI_ENOSYS;
 
 		FI_INFO(&core_prov, FI_LOG_CORE,
-			"Number of NVIDIA devices detected: %u\n",
-			nvml_device_count);
+			"Number of NVIDIA devices detected with NVML: %u\n",
+			cuda_attr.nvml_device_count);
 	} else {
 		FI_INFO(&core_prov, FI_LOG_CORE,
 			"Skipping check for NVIDIA devices with NVML routines\n");
@@ -575,7 +575,7 @@ static int cuda_hmem_verify_devices(void)
         /* If NVIDIA devices are present, now perform more expensive check
          * for actual GPUs.
          */
-        if (!cuda_attr.nvml_handle || nvml_device_count > 0) {
+        if (!cuda_attr.nvml_handle || cuda_attr.nvml_device_count > 0) {
                 /* Verify CUDA compute-capable devices are present on the host. */
                 cuda_ret = ofi_cudaGetDeviceCount(&cuda_attr.device_count);
                 switch (cuda_ret) {
@@ -827,7 +827,7 @@ int cuda_hmem_init(void)
 	 * - cudaMemcpy() is available
 	 */
 	cuda_attr.use_ipc =
-		cuda_attr.p2p_access_supported || cuda_attr.device_count == 1;
+		cuda_attr.p2p_access_supported || cuda_attr.nvml_device_count == 1;
 
 	return FI_SUCCESS;
 
