@@ -119,7 +119,6 @@ struct rxd_domain {
 	ssize_t max_inline_rma;
 	ssize_t max_inline_atom;
 	ssize_t max_seg_sz;
-	struct ofi_mr_map mr_map;//TODO use util_domain mr_map instead
 };
 
 struct rxd_peer {

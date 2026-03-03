@@ -66,7 +66,6 @@ static int rxd_domain_close(fid_t fid)
 	if (ret)
 		return ret;
 
-	ofi_mr_map_close(&rxd_domain->mr_map);
 	free(rxd_domain);
 	return 0;
 }
@@ -85,18 +84,6 @@ static struct fi_ops_mr rxd_mr_ops = {
 	.regv = ofi_mr_regv,
 	.regattr = ofi_mr_regattr,
 };
-
-int rxd_mr_verify(struct rxd_domain *rxd_domain, ssize_t len,
-		  uintptr_t *io_addr, uint64_t key, uint64_t access)
-{
-	int ret;
-
-	ofi_genlock_lock(&rxd_domain->util_domain.lock);
-	ret = ofi_mr_map_verify(&rxd_domain->mr_map, io_addr, len,
-				key, access, NULL);
-	ofi_genlock_unlock(&rxd_domain->util_domain.lock);
-	return ret;
-}
 
 int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context)
@@ -143,21 +130,12 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err3;
 	}
 
-	ret = ofi_mr_map_init(&rxd_prov, info->domain_attr->mr_mode,
-			      &rxd_domain->mr_map);
-	if (ret)
-		goto err4;
-
 	*domain = &rxd_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxd_domain_fi_ops;
 	(*domain)->ops = &rxd_domain_ops;
 	(*domain)->mr = &rxd_mr_ops;
 	fi_freeinfo(dg_info);
 	return 0;
-err4:
-	if (ofi_domain_close(&rxd_domain->util_domain))
-		FI_WARN(&rxd_prov, FI_LOG_DOMAIN,
-			"ofi_domain_close failed");
 err3:
 	fi_close(&rxd_domain->dg_domain->fid);
 err2:
