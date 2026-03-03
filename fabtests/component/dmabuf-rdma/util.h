@@ -29,6 +29,12 @@
 #ifndef _DMABUF_RDMA_TESTS_UTIL_H_
 #define _DMABUF_RDMA_TESTS_UTIL_H_
 
+#include <stdbool.h>
+#include <unistd.h>
+#include <stdint.h>
+
+#define MAX_CLIENTS	8
+
 #define EXIT_ON_ERROR(stmt) \
 	do { \
 		int err = (stmt); \
@@ -87,6 +93,10 @@
 		} \
 	} while (0)
 
+
+extern int		client_sockets[MAX_CLIENTS];
+extern int		num_client_connections;
+
 /*
  * Get the wall time since the first call (in microsecodns).
  * Can be used for performance calculation.
@@ -106,9 +116,41 @@ int	connect_tcp(char *host, int port);
 void	sync_tcp(int sockfd);
 
 /*
+ * Send data to socket.
+ */
+int	send_to_socket(int sockfd, size_t size, void *data);
+
+/*
+ * Receive data from socket.
+ */
+int	recv_from_socket(int sockfd, size_t size, void *data);
+
+/*
  * Exchange information over the socket. Can be used as a barrier.
  */
 int	exchange_info(int sockfd, size_t size, void *me, void *peer);
+
+/*
+ * Perform a barrier synchronization across all clients.
+ */
+void sync_barrier(int max_ranks, int my_rank, int my_fd, bool client,
+		  bool verbose);
+
+/*
+ * Start the client and connect to the server.
+ */
+int start_client(char *server_name, unsigned int port, bool verbose,
+		 int *sockfd);
+
+/*
+ * Start the server and wait for clients to connect.
+ */
+int start_server(int max_ranks, unsigned int port, bool verbose, int *sockfd);
+
+/*
+ * Clean up server sockets.
+ */
+void cleanup_sockets(void);
 
 #endif /* _DMABUF_RDMA_TESTS_UTIL_H_ */
 
