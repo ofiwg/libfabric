@@ -494,6 +494,7 @@ static void rxm_handle_seg_data(struct rxm_rx_buf *rx_buf)
 
 	proto_info = rx_buf->proto_info;
 	dlist_insert_tail(&rx_buf->unexp_entry, &proto_info->sar.pkt_list);
+	rxm_replace_rx_buf(rx_buf);
 
 	if ((rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_LAST))
 		dlist_remove(&proto_info->sar.entry);
