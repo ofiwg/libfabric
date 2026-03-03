@@ -177,8 +177,9 @@ static ssize_t smr_generic_atomic(
 	uint16_t smr_flags = 0;
 	int64_t tx_id, rx_id, pos;
 	int proto;
-	ssize_t ret = -FI_EAGAIN;
+	ssize_t ret;
 	size_t total_len;
+	uint64_t atomic_flags;
 
 	assert(count <= SMR_IOV_LIMIT);
 	assert(result_count <= SMR_IOV_LIMIT);
@@ -189,12 +190,29 @@ static ssize_t smr_generic_atomic(
 	if (tx_id < 0)
 		return -FI_EAGAIN;
 
+	if (op == ofi_op_atomic_fetch)
+		atomic_flags = FI_FETCH_ATOMIC;
+	else if (op == ofi_op_atomic_compare)
+		atomic_flags = FI_COMPARE_ATOMIC;
+	else
+		atomic_flags = 0;
+
+	ret = ofi_atomic_valid(&smr_prov, datatype, atomic_op, atomic_flags);
+	if (ret) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"atomic operation not supported for datatype %d and "
+			"op %d\n", datatype, atomic_op);
+		return ret;
+	}
+
 	rx_id = smr_peer_data(ep->region)[tx_id].id;
 	peer_smr = smr_peer_region(ep, tx_id);
 
 	ofi_genlock_lock(&ep->util_ep.lock);
-	if (smr_peer_data(ep->region)[tx_id].sar_status)
+	if (smr_peer_data(ep->region)[tx_id].sar_status) {
+		ret = -FI_EAGAIN;
 		goto unlock;
+	}
 
 	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
 	if (ret == -FI_ENOENT) {
@@ -351,7 +369,7 @@ static ssize_t smr_atomic_inject(
 	struct iovec iov;
 	struct fi_rma_ioc rma_ioc;
 	int64_t id, peer_id, pos;
-	ssize_t ret = -FI_EAGAIN;
+	ssize_t ret;
 	size_t total_len;
 	int proto;
 
@@ -361,12 +379,22 @@ static ssize_t smr_atomic_inject(
 	if (id < 0)
 		return -FI_EAGAIN;
 
+	ret = ofi_atomic_valid(&smr_prov, datatype, op, 0);
+	if (ret) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"atomic operation not supported for datatype %d and "
+			"op %d\n", datatype, op);
+		return ret;
+	}
+
 	peer_id = smr_peer_data(ep->region)[id].id;
 	peer_smr = smr_peer_region(ep, id);
 
 	ofi_genlock_lock(&ep->util_ep.lock);
-	if (smr_peer_data(ep->region)[id].sar_status)
+	if (smr_peer_data(ep->region)[id].sar_status) {
+		ret = -FI_EAGAIN;
 		goto unlock;
+	}
 
 	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
 	if (ret == -FI_ENOENT) {
