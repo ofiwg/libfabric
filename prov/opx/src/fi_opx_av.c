@@ -150,7 +150,7 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 
 			struct fi_opx_extended_addr *output_ext = NULL;
 			if ((opx_av->type == FI_AV_MAP) &&
-			    (opx_av->ep_tx[0] == NULL || !opx_av->ep_tx[0]->daos_info.hfi_rank_enabled)) {
+			    (opx_av->ep_tx[0] != NULL && opx_av->ep_tx[0]->daos_info.hfi_rank_enabled)) {
 				struct fi_opx_extended_addr *input_ext = (struct fi_opx_extended_addr *) addr;
 				if (posix_memalign((void **) &output_ext, 32 /*sizeof(struct fi_opx_extended_addr)*/,
 						   sizeof(struct fi_opx_extended_addr) * count)) {
