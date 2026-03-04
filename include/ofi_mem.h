@@ -481,6 +481,7 @@ static inline void ofi_buf_free(void *buf)
 
 int ofi_ibuf_is_lower(struct dlist_entry *item, const void *arg);
 int ofi_ibufpool_region_is_lower(struct dlist_entry *item, const void *arg);
+bool ofi_bufpool_contains(struct ofi_bufpool *pool, void *buf);
 
 static inline void ofi_ibuf_free(void *buf)
 {

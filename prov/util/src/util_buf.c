@@ -319,3 +319,21 @@ int ofi_ibufpool_region_is_lower(struct dlist_entry *item, const void *arg)
 
 	return reg1->index < reg2->index;
 }
+
+/* Check if buf points to a valid entry start within the pool's regions */
+bool ofi_bufpool_contains(struct ofi_bufpool *pool, void *buf)
+{
+	struct ofi_bufpool_region *region;
+	ptrdiff_t offset;
+	size_t i;
+
+	for (i = 0; i < pool->region_cnt; i++) {
+		region = pool->region_table[i];
+		if ((char *)buf >= region->mem_region &&
+		    (char *)buf < region->mem_region + pool->region_size) {
+			offset = (char *)buf - region->mem_region;
+			return (offset % pool->entry_size) == 0;
+		}
+	}
+	return false;
+}
