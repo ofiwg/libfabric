@@ -1522,10 +1522,10 @@ int opx_tid_get_tids_for_remaining_range(struct fi_opx_ep *opx_ep, struct fi_opx
 	struct opx_tid_addr_block next_tid_block = {};
 
 	int ret_and_val = -1;
-	int ret;
+	int ret		= FI_SUCCESS;
 
 	while (target_range_end < cur_addr_range_end &&
-	       (ret = opx_tid_get_tids_for_range(opx_ep, &next_addr_range, &next_tid_block) == FI_SUCCESS)) {
+	       ((ret = opx_tid_get_tids_for_range(opx_ep, &next_addr_range, &next_tid_block)) == FI_SUCCESS)) {
 		// If we got at least one FI_SUCCESS, then we want to ultimately
 		// return FI_SUCCESS, even if we get a subsequent failure.
 		ret_and_val = 0;
@@ -1570,8 +1570,11 @@ int opx_register_for_rzv(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov *cur_a
 	}
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.reg_for_rzv_get_remaining);
-	return opx_tid_get_tids_for_remaining_range(opx_ep, cur_addr_range, tid_addr_block, cur_addr_range_end,
-						    target_end);
+	/* We have successfully gotten the initial tids so that's our return.  We can try
+	   for more tids and they will be added to the tid addr block but an EAGAIN here should
+	   not be returned on partial success */
+	opx_tid_get_tids_for_remaining_range(opx_ep, cur_addr_range, tid_addr_block, cur_addr_range_end, target_end);
+	return ret;
 }
 
 int opx_tid_cache_flush_all(struct ofi_mr_cache *cache, const bool flush_lru, const bool flush_all)
