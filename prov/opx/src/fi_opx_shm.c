@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2025 by Cornelis Networks.
+ * Copyright (C) 2021-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -62,6 +62,14 @@ int opx_shm_match(struct dlist_entry *item, const void *arg)
 static void opx_shm_signal(int signum, siginfo_t *info, void *ucontext)
 {
 	struct opx_shm_tx *tx_entry;
+
+	/* If we abnormally exited holding the memory monitor lock, we
+	 * want to unlock if we can so we don't hang in flush.
+	 * If it's still locked in another thread we can't flush/cleanup,
+	 * so do our best and free storage */
+	if (pthread_mutex_trylock(&mm_lock) == 0) {
+		pthread_mutex_unlock(&mm_lock);
+	}
 
 	while (!dlist_empty(&shm_tx_list)) {
 		dlist_pop_front(&shm_tx_list, struct opx_shm_tx, tx_entry, list_entry);

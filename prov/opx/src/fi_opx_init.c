@@ -715,8 +715,10 @@ static void fi_opx_fini()
 	 * want to unlock if we can so we don't hang in flush.
 	 * If it's still locked in another thread we can't flush/cleanup,
 	 * so do our best and free storage */
-	pthread_mutex_trylock(&mm_lock);
-	int locked = pthread_mutex_unlock(&mm_lock); /* rc 0 is unlocked */
+	int locked = 1;
+	if (pthread_mutex_trylock(&mm_lock) == 0) {
+		locked = pthread_mutex_unlock(&mm_lock); /* rc 0 is unlocked */
+	}
 
 	struct dlist_entry    *tmp;
 	struct opx_tid_domain *tid_domain;
