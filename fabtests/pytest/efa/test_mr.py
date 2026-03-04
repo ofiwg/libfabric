@@ -37,3 +37,17 @@ def test_mr_hmem(cmdline_args, hmem_type, fabric):
         failing_warn_msgs=["Unable to add MR to map"],
     )
     test.run()
+
+
+@pytest.mark.unit
+@pytest.mark.neuron_memory
+def test_efa_mr_hmem(cmdline_args):
+    if not has_neuron(cmdline_args.server_id):
+        pytest.skip("no neuron device")
+
+    cmdline_args_copy = copy.copy(cmdline_args)
+
+    test_command = "fi_efa_mr_test -D neuron -f efa-direct"
+
+    test = UnitTest(cmdline_args_copy, test_command)
+    test.run()
