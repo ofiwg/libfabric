@@ -101,5 +101,5 @@ void efa_show_help(enum efa_errno err) {
 	default:
 		return;
 	}
-	EFA_WARN(FI_LOG_CQ, "%s\n", help);
+	EFA_INFO(FI_LOG_CQ, "%s\n", help);
 }
