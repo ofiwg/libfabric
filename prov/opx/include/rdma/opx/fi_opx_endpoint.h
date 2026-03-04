@@ -2462,9 +2462,10 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			const uint64_t tid_length = rzv_comp->tid_length;
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "tid vaddr>buf [%p - %p] tid len %lu/%#lX\n",
 			       (void *) tid_vaddr, (void *) (tid_vaddr + tid_length), tid_length, tid_length);
-			target_context->byte_counter -= rzv_comp->bytes_accumulated;
 
 			opx_deregister_for_rzv(opx_ep, tid_vaddr, tid_length);
+
+			target_context->byte_counter -= rzv_comp->bytes_accumulated;
 
 			/* free the rendezvous completion structure */
 			OPX_BUF_FREE(rzv_comp);
