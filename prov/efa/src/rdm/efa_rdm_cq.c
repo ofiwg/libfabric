@@ -229,6 +229,19 @@ static void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 		 * packet now.
 		 */
 		assert(pkt_entry);
+#if ENABLE_DEBUG
+		if (ofi_bufpool_contains(ep->efa_rx_pkt_pool, pkt_entry)) {
+			assert(pkt_entry->alloc_type ==
+			       EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		} else if (ofi_bufpool_contains(ep->user_rx_pkt_pool,
+						pkt_entry)) {
+			assert(pkt_entry->alloc_type ==
+			       EFA_RDM_PKE_FROM_USER_RX_POOL);
+		} else {
+			assert(0 && "Received invalid pkt_entry that does not "
+				    "belong to any pool");
+		}
+#endif
 		ep->efa_rx_pkts_posted--;
 #if ENABLE_DEBUG
 		/* Record RECV_RDMA_WITH_IMM event */
@@ -747,6 +760,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 				switch(efa_rdm_pkt_type_of(pkt_entry)) {
 				case EFA_RDM_RECEIPT_PKT:
 				case EFA_RDM_EOR_PKT:
+					assert(ofi_bufpool_contains(ep->efa_tx_pkt_pool, pkt_entry));
 					efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
 					efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
 					return status;
@@ -759,12 +773,26 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 		case IBV_WC_SEND: /* fall through */
 		case IBV_WC_RDMA_WRITE: /* fall through */
 		case IBV_WC_RDMA_READ:
+			assert(ofi_bufpool_contains(ep->efa_tx_pkt_pool, pkt_entry));
 			efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
 			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			efa_rdm_pke_release_tx(pkt_entry);
 			break;
 		case IBV_WC_RECV: /* fall through */
 		case IBV_WC_RECV_RDMA_WITH_IMM:
+#if ENABLE_DEBUG
+		if (ofi_bufpool_contains(ep->efa_rx_pkt_pool, pkt_entry)) {
+			assert(pkt_entry->alloc_type ==
+			       EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		} else if (ofi_bufpool_contains(ep->user_rx_pkt_pool,
+						pkt_entry)) {
+			assert(pkt_entry->alloc_type ==
+			       EFA_RDM_PKE_FROM_USER_RX_POOL);
+		} else {
+			assert(0 && "Received invalid pkt_entry that does not "
+				    "belong to any pool");
+		}
+#endif
 			if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL) {
 				assert(ep->user_rx_pkts_posted > 0);
 				ep->user_rx_pkts_posted--;
@@ -817,6 +845,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 		case IBV_WC_RDMA_WRITE: /* fall through */
 		case IBV_WC_RDMA_READ:
 			assert(pkt_entry);
+			assert(ofi_bufpool_contains(ep->efa_tx_pkt_pool, pkt_entry));
 			efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno);
 			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			break;
@@ -829,6 +858,19 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 				break;
 			}
 			assert(pkt_entry);
+#if ENABLE_DEBUG
+		if (ofi_bufpool_contains(ep->efa_rx_pkt_pool, pkt_entry)) {
+			assert(pkt_entry->alloc_type ==
+			       EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		} else if (ofi_bufpool_contains(ep->user_rx_pkt_pool,
+						pkt_entry)) {
+			assert(pkt_entry->alloc_type ==
+			       EFA_RDM_PKE_FROM_USER_RX_POOL);
+		} else {
+			assert(0 && "Received invalid pkt_entry that does not "
+				    "belong to any pool");
+		}
+#endif
 			efa_rdm_pke_handle_rx_error(pkt_entry, prov_errno);
 			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			break;
@@ -839,6 +881,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 	} else {
 		switch (opcode) {
 		case IBV_WC_SEND:
+			assert(ofi_bufpool_contains(ep->efa_tx_pkt_pool, pkt_entry));
 #if ENABLE_DEBUG
 			ep->send_comps++;
 #endif
@@ -846,6 +889,19 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
 			break;
 		case IBV_WC_RECV:
+#if ENABLE_DEBUG
+		if (ofi_bufpool_contains(ep->efa_rx_pkt_pool, pkt_entry)) {
+			assert(pkt_entry->alloc_type ==
+			       EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		} else if (ofi_bufpool_contains(ep->user_rx_pkt_pool,
+						pkt_entry)) {
+			assert(pkt_entry->alloc_type ==
+			       EFA_RDM_PKE_FROM_USER_RX_POOL);
+		} else {
+			assert(0 && "Received invalid pkt_entry that does not "
+				    "belong to any pool");
+		}
+#endif
 			/* efa_rdm_cq_handle_recv_completion does additional work to determine the source
 			 * address and the peer struct. So do not try to identify the peer here. */
 			efa_rdm_cq_handle_recv_completion(cq, pkt_entry, ep);
@@ -856,6 +912,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 			break;
 		case IBV_WC_RDMA_READ:
 		case IBV_WC_RDMA_WRITE:
+			assert(ofi_bufpool_contains(ep->efa_tx_pkt_pool, pkt_entry));
 			efa_rdm_ep_record_tx_op_completed(pkt_entry->ep, pkt_entry);
 			efa_rdm_pke_handle_rma_completion(pkt_entry);
 			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
