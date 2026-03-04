@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
- * Copyright (C) 2022-2024 Cornelis Networks.
+ * Copyright (C) 2022-2026 Cornelis Networks.
  *
  * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
@@ -633,7 +633,11 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 	}
 
 	OPX_DEBUG_ENTRY(info);
-	/* drop the mm lock across alloc/register */
+	/* drop the mm lock across alloc/register and rbnode pre-allocation
+	 * to avoid deadlock: malloc() can trigger madvise() which OPAL
+	 * intercepts, calling back into ofi_import_monitor_notify() which
+	 * needs mm_lock.
+	 */
 	pthread_mutex_unlock(&mm_lock);
 	struct opx_mr_tid_info *tid_info;
 	int			ret = opx_mr_entry_alloc_init(cache, info, opx_ep, entry, &tid_info);
@@ -648,17 +652,21 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 	ret			      = opx_register_tid_region_retryable(cache, (uint64_t) info->iov.iov_base,
 									  MIN(info->iov.iov_len, register_max_len), info->iface, info->device,
 									  opx_ep, tid_info);
+	if (ret) {
+		/* Failed, tid_info->ninfo will be zero */
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "opx_register_tid_region failed with return code %d (%s)\n", ret,
+		       strerror(ret));
+		goto error;
+	}
+
+	struct ofi_rbnode *rbnode = ofi_rbnode_new(&cache->tree);
+	if (OFI_UNLIKELY(!rbnode)) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "Failed to alloc rbnode, return -FI_ENOMEM\n");
+		goto error;
+	}
 
 	/* re-acquire mm_lock */
 	pthread_mutex_lock(&mm_lock);
-
-	if (ret) {
-		/* Failed, tid_info->ninfo will be zero */
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
-		       "opx_register_tid_region failed with return code %d (%s), FREE node %p\n", ret, strerror(ret),
-		       (*entry)->node);
-		goto error;
-	}
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
 	       "NEW vaddr [%#lx - %#lx] length %lu, tid vaddr [%#lx - %#lx] , tid length %lu\n",
@@ -669,11 +677,12 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 	(*entry)->info.iov.iov_base = (void *) tid_info->tid_vaddr;
 	(*entry)->info.iov.iov_len  = tid_info->tid_length;
 
-	ret = ofi_rbmap_insert(&cache->tree, (void *) &(*entry)->info, (void *) *entry, &(*entry)->node);
+	ret = ofi_rbmap_insert_at(&cache->tree, (void *) &(*entry)->info, (void *) *entry, &(*entry)->node, rbnode);
 
 	if (OFI_UNLIKELY(ret)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "ofi_rbmap_insert returned %d (%s) %p\n", ret, strerror(ret),
 		       (*entry)->node);
+		ofi_rbnode_del(&cache->tree, rbnode);
 		goto error;
 	}
 	cache->cached_cnt++;
@@ -682,9 +691,8 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 	ret = ofi_monitor_subscribe(monitor, info->iov.iov_base, info->iov.iov_len, &(*entry)->hmem_info);
 	if (OFI_UNLIKELY(ret)) {
 		opx_mr_uncache_entry_storage(cache, *entry);
-		cache->uncached_cnt++;
-		cache->uncached_size += (*entry)->info.iov.iov_len;
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "MONITOR SUBSCRIBE FAILED UNCACHED ERROR\n");
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "MONITOR SUBSCRIBE FAILED UNCACHED ERROR  %d (%s)\n", ret,
+			strerror(ret));
 		goto error;
 	}
 	OPX_DEBUG_EXIT((*entry), OPX_TID_CACHE_ENTRY_FOUND);
@@ -696,7 +704,7 @@ error:
 	       (char *) info->iov.iov_base + info->iov.iov_len, info->iov.iov_len, info->iov.iov_len);
 	tid_info->npairs = 0; /* error == no tid pairs */
 	OPX_DEBUG_EXIT((*entry), OPX_TID_CACHE_ENTRY_NOT_FOUND);
-	return ret; // TODO - handle case for free
+	return ret; // entry freed by caller
 }
 
 __OPX_FORCE_INLINE__
