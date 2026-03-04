@@ -1004,6 +1004,7 @@ static int smr_unexp_ipc(struct smr_ep *ep, struct smr_cmd_ctx *cmd_ctx,
 {
 	struct smr_unexp_buf *buf;
 	size_t bytes = 0;
+	size_t total_size;
 	struct iovec iov;
 	int ret = FI_SUCCESS;;
 
@@ -1016,7 +1017,9 @@ static int smr_unexp_ipc(struct smr_ep *ep, struct smr_cmd_ctx *cmd_ctx,
 	memcpy(&cmd_ctx->cmd_cpy, cmd,
 		sizeof(cmd->hdr) + sizeof(cmd->data));
 
-	while (bytes < cmd_ctx->cmd->hdr.size) {
+	total_size = cmd_ctx->cmd->hdr.size;
+
+	while (bytes < total_size) {
 		buf = ofi_buf_alloc(ep->unexp_buf_pool);
 		if (!buf) {
 			ret = -FI_ENOMEM;
@@ -1026,20 +1029,25 @@ static int smr_unexp_ipc(struct smr_ep *ep, struct smr_cmd_ctx *cmd_ctx,
 		iov.iov_base = buf->buf;
 		iov.iov_len = SMR_SAR_SIZE;
 
-		cmd->hdr.size = MIN(cmd_ctx->cmd->hdr.size - bytes,
-				    SMR_SAR_SIZE);
+		cmd_ctx->cmd->hdr.size = MIN(total_size - bytes, SMR_SAR_SIZE);
+		cmd_ctx->cmd->data.ipc_info.offset = cmd->data.ipc_info.offset + bytes;
+
 		ret = smr_progress_ipc(ep, cmd_ctx->cmd, NULL, NULL, &iov, 1);
 		if (ret) {
 			ofi_buf_free(buf);
 			goto out;
 		}
 
-		bytes += cmd->hdr.size;
+		bytes += cmd_ctx->cmd->hdr.size;
 		ofi_consume_iov(cmd->data.iov, &cmd->data.iov_count,
 				SMR_SAR_SIZE);
 
 		slist_insert_tail(&buf->entry, &cmd_ctx->buf_list);
 	}
+
+	/* Restore original total size */
+	cmd_ctx->cmd->hdr.size = total_size;
+
 out:
 	cmd->hdr.status = ret;
 	smr_return_cmd(ep, cmd);
