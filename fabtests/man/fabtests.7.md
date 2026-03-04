@@ -155,7 +155,10 @@ features of libfabric.
 ## Benchmarks
 
 The client and the server exchange messages in either a ping-pong manner,
-for pingpong named tests, or transfer messages one-way, for bw named tests.
+for pingpong named tests, or bandwidth-focused transfers, for bw named
+tests. Most bw tests transfer messages one-way. One exception is *fi_rma_bw*:
+its read and write modes are bidirectional, while writedata mode
+is unidirectional from client to server.
 These tests can transfer various messages sizes, with controls over which
 features are used by the test, and report performance numbers.  The tests
 are structured based on the benchmarks provided by OSU MPI.  They are not
@@ -185,7 +188,10 @@ given provider or system may achieve.
 : Tagged message latency test for reliable-datagram (RDM) endpoints.
 
 *fi_rma_bw*
-: An RMA read and write bandwidth test for reliable (MSG and RDM) endpoints.
+: An RMA read, write and writedata bandwidth test for reliable (MSG and RDM) 
+  endpoints.
+  Read and write modes are bidirectional by default.
+  Writedata mode is unidirectional from client to server.
 
 *fi_rma_pingpong*
 : An RMA write and writedata latency test for reliable-datagram (RDM) endpoints.
