@@ -59,6 +59,7 @@
 #include "psm2_hal.h"
 #include "psm_mq_internal.h"
 #include "ips_proto_params.h"
+#include "ips_proto.h"
 
 /*
  * Functions to manipulate the expected queue in mq_ep.
@@ -716,7 +717,7 @@ psm3_mq_wait_inner(psm2_mq_req_t *ireq, void *status,
 			return err;
 		}
 
-		PSMI_BLOCKUNTIL(mq->ep, err, req->state == MQ_STATE_COMPLETE);
+		PSMI_BLOCKUNTIL(mq->ep, mq->ep->epaddr->proto->epinfo.ep_timeout_ack, err, req->state == MQ_STATE_COMPLETE);
 
 		if (err > PSM2_OK_NO_PROGRESS)
 			goto fail_with_lock;

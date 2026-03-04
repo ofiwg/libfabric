@@ -67,11 +67,11 @@ PSMI_NEVER_INLINE(ips_scb_t *
 {
 	ips_scb_t *scb = NULL;
 	psmi_assert(npkts > 0);
-	psm2_error_t err;
+	psm2_error_t err = PSM2_OK;
 
 	proto->stats.scb_egr_unavail_cnt++;
 
-	PSMI_BLOCKUNTIL(proto->ep, err,
+	PSMI_BLOCKUNTIL(proto->ep, err, proto->epinfo.ep_timeout_ack,
 		(NULL != (scb = (istiny
 			? psm3_ips_scbctrl_alloc_tiny(&proto->scbc_egr, flags)
 			: psm3_ips_scbctrl_alloc(&proto->scbc_egr, npkts, len, flags)))));
@@ -1207,7 +1207,7 @@ psm3_ips_proto_mq_send(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags,
 				 * or, payload is larger than bounce buffer,
 				 * or, can't allocate bounce buffer,
 				 * send from user buffer till complete */
-				PSMI_BLOCKUNTIL(mq->ep, err,
+				PSMI_BLOCKUNTIL(mq->ep, mq->ep->epaddr->proto->epinfo.ep_timeout_ack, err,
 					ips_scb_buffer(scb) != (void*)user_buffer);
 				if (err > PSM2_OK_NO_PROGRESS)
 					return err;
@@ -1246,7 +1246,7 @@ psm3_ips_proto_mq_send(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags,
 		psm2_mq_req_t req;
 
 		/* Block until we can get a req */
-		PSMI_BLOCKUNTIL(mq->ep, err,
+		PSMI_BLOCKUNTIL(mq->ep, mq->ep->epaddr->proto->epinfo.ep_timeout_ack, err,
 				(req =
 				 psm3_mq_req_alloc(mq, MQE_TYPE_SEND)));
 		if (err > PSM2_OK_NO_PROGRESS)
@@ -1316,7 +1316,7 @@ psm3_ips_proto_mq_send(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags,
 		psm2_mq_req_t req;
 do_rendezvous:
 		/* Block until we can get a req */
-		PSMI_BLOCKUNTIL(mq->ep, err,
+		PSMI_BLOCKUNTIL(mq->ep, mq->ep->epaddr->proto->epinfo.ep_timeout_ack, err,
 				(req = psm3_mq_req_alloc(mq, MQE_TYPE_SEND)));
 		if (err > PSM2_OK_NO_PROGRESS)
 			return err;
