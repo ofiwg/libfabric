@@ -71,6 +71,18 @@ cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags);
 cudaError_t ofi_cudaHostUnregister(void *ptr);
 cudaError_t ofi_cudaMalloc(void **ptr, size_t size);
 cudaError_t ofi_cudaFree(void *ptr);
+CUresult ofi_cuStreamCreate(CUstream *phStream, unsigned int flags);
+CUresult ofi_cuStreamDestroy(CUstream hStream);
+CUresult ofi_cuStreamSynchronize(CUstream hStream);
+CUresult ofi_cuEventCreate(CUevent *phEvent, unsigned int flags);
+CUresult ofi_cuEventDestroy(CUevent hEvent);
+CUresult ofi_cuEventRecord(CUevent hEvent, CUstream hStream);
+CUresult ofi_cuEventSynchronize(CUevent hEvent);
+CUresult ofi_cuEventQuery(CUevent hEvent);
+CUresult ofi_cuMemcpyDtoDAsync(CUdeviceptr dstDevice, CUdeviceptr srcDevice,
+			       size_t byte_count, CUstream hStream);
+cudaError_t ofi_cudaHostAlloc(void **pHost, size_t size, unsigned int flags);
+cudaError_t ofi_cudaFreeHost(void *ptr);
 
 #endif /* HAVE_CUDA */
 

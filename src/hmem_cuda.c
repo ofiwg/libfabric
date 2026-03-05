@@ -71,6 +71,15 @@
 	_(cuMemGetAddressRange)		\
 	_(cuDeviceGetAttribute)		\
 	_(cuDeviceGet)			\
+	_(cuStreamCreate)		\
+	_(cuStreamDestroy)		\
+	_(cuStreamSynchronize)		\
+	_(cuEventCreate)		\
+	_(cuEventDestroy)		\
+	_(cuEventRecord)		\
+	_(cuEventSynchronize)		\
+	_(cuEventQuery)			\
+	_(cuMemcpyDtoDAsync)		\
 	CUDA_DRIVER_DMABUF_FUNCS_DEF(_)
 
 #define CUDA_RUNTIME_FUNCS_DEF(_)	\
@@ -87,7 +96,9 @@
 	_(cudaSetDevice)		\
 	_(cudaIpcOpenMemHandle)		\
 	_(cudaIpcGetMemHandle)		\
-	_(cudaIpcCloseMemHandle)
+	_(cudaIpcCloseMemHandle)	\
+	_(cudaHostAlloc)		\
+	_(cudaFreeHost)
 
 #define NVML_FUNCS_DEF(_)	        \
 	_(nvmlInit_v2)                  \
@@ -164,6 +175,18 @@ static struct {
 	nvmlReturn_t (*nvmlInit_v2)(void);
 	nvmlReturn_t (*nvmlDeviceGetCount_v2)(unsigned int *deviceCount);
 	nvmlReturn_t (*nvmlShutdown)(void);
+	CUresult (*cuStreamCreate)(CUstream *phStream, unsigned int flags);
+	CUresult (*cuStreamDestroy)(CUstream hStream);
+	CUresult (*cuStreamSynchronize)(CUstream hStream);
+	CUresult (*cuEventCreate)(CUevent *phEvent, unsigned int flags);
+	CUresult (*cuEventDestroy)(CUevent hEvent);
+	CUresult (*cuEventRecord)(CUevent hEvent, CUstream hStream);
+	CUresult (*cuEventSynchronize)(CUevent hEvent);
+	CUresult (*cuEventQuery)(CUevent hEvent);
+	CUresult (*cuMemcpyDtoDAsync)(CUdeviceptr dstDevice, CUdeviceptr srcDevice,
+				      size_t byte_count, CUstream hStream);
+	cudaError_t (*cudaHostAlloc)(void **pHost, size_t size, unsigned int flags);
+	cudaError_t (*cudaFreeHost)(void *ptr);
 } cuda_ops
 #if !ENABLE_CUDA_DLOPEN
 #define CUDA_OPS_INIT(sym) .sym = sym,
@@ -326,6 +349,62 @@ cudaError_t ofi_cudaMalloc(void **ptr, size_t size)
 cudaError_t ofi_cudaFree(void *ptr)
 {
 	return cuda_ops.cudaFree(ptr);
+}
+
+CUresult ofi_cuStreamCreate(CUstream *phStream, unsigned int flags)
+{
+	return cuda_ops.cuStreamCreate(phStream, flags);
+}
+
+CUresult ofi_cuStreamDestroy(CUstream hStream)
+{
+	return cuda_ops.cuStreamDestroy(hStream);
+}
+
+CUresult ofi_cuStreamSynchronize(CUstream hStream)
+{
+	return cuda_ops.cuStreamSynchronize(hStream);
+}
+
+CUresult ofi_cuEventCreate(CUevent *phEvent, unsigned int flags)
+{
+	return cuda_ops.cuEventCreate(phEvent, flags);
+}
+
+CUresult ofi_cuEventDestroy(CUevent hEvent)
+{
+	return cuda_ops.cuEventDestroy(hEvent);
+}
+
+CUresult ofi_cuEventRecord(CUevent hEvent, CUstream hStream)
+{
+	return cuda_ops.cuEventRecord(hEvent, hStream);
+}
+
+CUresult ofi_cuEventSynchronize(CUevent hEvent)
+{
+	return cuda_ops.cuEventSynchronize(hEvent);
+}
+
+CUresult ofi_cuEventQuery(CUevent hEvent)
+{
+	return cuda_ops.cuEventQuery(hEvent);
+}
+
+CUresult ofi_cuMemcpyDtoDAsync(CUdeviceptr dstDevice, CUdeviceptr srcDevice,
+			       size_t byte_count, CUstream hStream)
+{
+	return cuda_ops.cuMemcpyDtoDAsync(dstDevice, srcDevice, byte_count, hStream);
+}
+
+cudaError_t ofi_cudaHostAlloc(void **pHost, size_t size, unsigned int flags)
+{
+	return cuda_ops.cudaHostAlloc(pHost, size, flags);
+}
+
+cudaError_t ofi_cudaFreeHost(void *ptr)
+{
+	return cuda_ops.cudaFreeHost(ptr);
 }
 
 int cuda_copy_to_dev(uint64_t device, void *dst, const void *src, size_t size)
