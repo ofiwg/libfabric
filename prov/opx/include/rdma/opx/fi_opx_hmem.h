@@ -98,7 +98,7 @@ enum fi_hmem_iface opx_hmem_get_ptr_iface(const void *ptr, uint64_t *device, uin
 		CU_POINTER_ATTRIBUTE_MEMORY_TYPE, CU_POINTER_ATTRIBUTE_IS_MANAGED, CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL};
 
 	CUresult cuda_rc =
-		cuPointerGetAttributes(ARRAY_SIZE(cuda_attributes), cuda_attributes, data, (CUdeviceptr) ptr);
+		ofi_cuPointerGetAttributes(ARRAY_SIZE(cuda_attributes), cuda_attributes, data, (CUdeviceptr) ptr);
 
 	if (cuda_rc == CUDA_SUCCESS) {
 		*is_unified = is_managed;
@@ -174,7 +174,7 @@ int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_ha
 			ret = 0;
 		} else {
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "CUDAMEMCPY-TO-HMEM");
-			ret = (int) cudaMemcpy(dest, src, len, cudaMemcpyHostToDevice);
+			ret = (int) ofi_cudaMemcpy(dest, src, len, cudaMemcpyHostToDevice);
 			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "CUDAMEMCPY-TO-HMEM");
 		}
 		break;
@@ -232,7 +232,7 @@ int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_
 			ret = 0;
 		} else {
 			OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "CUDAMEMCPY-FROM-HMEM");
-			ret = (int) cudaMemcpy(dest, src, len, cudaMemcpyDeviceToHost);
+			ret = (int) ofi_cudaMemcpy(dest, src, len, cudaMemcpyDeviceToHost);
 			OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "CUDAMEMCPY-FROM-HMEM");
 		}
 		break;
@@ -388,7 +388,7 @@ void opx_hmem_dbg_trace(enum fi_hmem_iface iface, char *string, int result)
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
 		const char *error_string = NULL;
-		cuGetErrorString(result, &error_string);
+		ofi_cuGetErrorString(result, &error_string);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s CUresult=%d (%s)\n", string, result,
 			     error_string ? error_string : "unknown error");
 		return;
@@ -411,7 +411,7 @@ void opx_hmem_warn_trace(enum fi_hmem_iface iface, char *string, int result)
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
 		const char *error_string = NULL;
-		cuGetErrorString(result, &error_string);
+		ofi_cuGetErrorString(result, &error_string);
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "%s CUresult=%d (%s)\n", string, result,
 			error_string ? error_string : "unknown error");
 		return;
@@ -438,7 +438,7 @@ void opx_hmem_stream_synchronize(enum fi_hmem_iface iface, union opx_hmem_stream
 	int result = OPX_HMEM_ERROR;
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
-		result = cuStreamSynchronize(stream->cu_stream);
+		result = ofi_cuStreamSynchronize(stream->cu_stream);
 	}
 #endif
 #if HAVE_ROCR
@@ -469,7 +469,7 @@ int opx_hmem_stream_create(enum fi_hmem_iface iface, union opx_hmem_stream **str
 	}
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
-		result = cuStreamCreate(&new_stream->cu_stream, CU_STREAM_DEFAULT);
+		result = ofi_cuStreamCreate(&new_stream->cu_stream, CU_STREAM_DEFAULT);
 	}
 #endif
 #if HAVE_ROCR
@@ -498,7 +498,7 @@ void opx_hmem_stream_destroy(enum fi_hmem_iface iface, union opx_hmem_stream *st
 		opx_hmem_stream_synchronize(iface, stream);
 #if HAVE_CUDA
 		if (iface == FI_HMEM_CUDA) {
-			cuStreamDestroy(stream->cu_stream);
+			ofi_cuStreamDestroy(stream->cu_stream);
 		}
 #endif
 #if HAVE_ROCR
@@ -529,7 +529,7 @@ int opx_hmem_event_create(enum fi_hmem_iface iface, struct opx_hmem_domain *doma
 	}
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
-		result = cuEventCreate(&new_event->cu_event, CU_EVENT_DEFAULT);
+		result = ofi_cuEventCreate(&new_event->cu_event, CU_EVENT_DEFAULT);
 	}
 #endif
 #if HAVE_ROCR
@@ -558,7 +558,7 @@ void opx_hmem_event_destroy(enum fi_hmem_iface iface, union opx_hmem_event **eve
 	if (*event) {
 #if HAVE_CUDA
 		if (iface == FI_HMEM_CUDA) {
-			cuEventDestroy((*event)->cu_event);
+			ofi_cuEventDestroy((*event)->cu_event);
 		}
 #endif
 #if HAVE_ROCR
@@ -584,7 +584,7 @@ int opx_hmem_event_record(enum fi_hmem_iface iface, union opx_hmem_event *event,
 	int result = OPX_HMEM_ERROR;
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
-		result = cuEventRecord(event->cu_event, stream->cu_stream);
+		result = ofi_cuEventRecord(event->cu_event, stream->cu_stream);
 	}
 #endif
 #if HAVE_ROCR
@@ -611,7 +611,7 @@ int opx_hmem_event_synchronize(enum fi_hmem_iface iface, union opx_hmem_event **
 	int result = OPX_HMEM_ERROR;
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
-		result = cuEventSynchronize((*event)->cu_event);
+		result = ofi_cuEventSynchronize((*event)->cu_event);
 		opx_hmem_event_destroy(FI_HMEM_CUDA, event);
 	}
 #endif
@@ -640,7 +640,7 @@ enum opx_hmem_return_code opx_hmem_event_query(enum fi_hmem_iface iface, union o
 {
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
-		CUresult result = cuEventQuery(event->cu_event);
+		CUresult result = ofi_cuEventQuery(event->cu_event);
 		if (result == CUDA_SUCCESS) {
 			return OPX_HMEM_SUCCESS;
 		} else if (result == CUDA_ERROR_NOT_READY) {
@@ -682,7 +682,7 @@ int opx_hmem_memcpy_async_DtoD(enum fi_hmem_iface iface, void *dst, const void *
 	int result = OPX_HMEM_ERROR;
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
-		result = cuMemcpyDtoDAsync((CUdeviceptr) dst, (CUdeviceptr) src, size, stream->cu_stream);
+		result = ofi_cuMemcpyDtoDAsync((CUdeviceptr) dst, (CUdeviceptr) src, size, stream->cu_stream);
 	}
 #endif
 #if HAVE_ROCR
