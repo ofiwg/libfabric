@@ -1591,33 +1591,36 @@ amsh_poll_internal(ptl_t *ptl, int replyonly)
  * Users of AMSH_POLL_UNTIL should check the value of err upon return
  */
 #ifdef PSM_PROFILE
-#define AMSH_POLL_UNTIL(ptl, isreply, cond) \
+#define AMSH_POLL_UNTIL(ptl, isreply, cond, err) \
 	do {								\
+		uint64_t t_start = get_cycles();			\
 		PSMI_PROFILE_BLOCK();					\
 		while (!(cond)) {					\
 			PSMI_PROFILE_REBLOCK(				\
 				amsh_poll_internal(ptl, isreply) ==	\
 					PSM2_OK_NO_PROGRESS);		\
+			if (!psm3_cycles_left(t_start,			\
+				     PSMI_MIN_EP_CONNECT_TIMEOUT)) {	\
+				err = PSM2_EP_NO_RESOURCES;		\
+				break;					\
+			}						\
 		}							\
 		PSMI_PROFILE_UNBLOCK();					\
 	} while (0)
 #else
-#define AMSH_POLL_UNTIL(ptl, isreply, cond)			\
+#define AMSH_POLL_UNTIL(ptl, isreply, cond, err)		\
 	do {							\
+		uint64_t t_start = get_cycles();		\
 		while (!(cond)) {				\
 			amsh_poll_internal(ptl, isreply);	\
+			if (!psm3_cycles_left(t_start,		\
+				PSMI_MIN_EP_CONNECT_TIMEOUT)) {	\
+				err = PSM2_EP_NO_RESOURCES;	\
+				break;				\
+			}					\
 		}						\
 	} while (0)
 #endif
-
-#define AMSH_CHECK_PEER_PID(ptl, destidx, err)				\
-	do {								\
-		int peer_pid = (ptl)->am_ep[(destidx)].pid;		\
-		if (kill(peer_pid, 0) != 0 && errno == ESRCH) {		\
-			err = PSM2_EP_NO_DEVICE;			\
-			_HFI_INFO("Peer Pid (%d) not found\n", peer_pid);\
-		}							\
-	} while (0)
 
 static psm2_error_t amsh_poll(ptl_t *ptl, int replyonly, bool force)
 {
@@ -1636,12 +1639,11 @@ am_send_pkt_short(ptl_t *ptl, uint32_t destidx, uint32_t returnidx,
 	int copy_nargs;
 	psm2_error_t res = PSM2_OK_NO_PROGRESS;
 
-	AMSH_CHECK_PEER_PID((struct ptl_am *) ptl, destidx, res);
-	if (res > PSM2_OK_NO_PROGRESS)
-		return res;
 	AMSH_POLL_UNTIL(ptl, isreply,
 			(pkt =
-			 am_ctl_getslot_pkt(ptl, destidx, isreply)) != NULL);
+			 am_ctl_getslot_pkt(ptl, destidx, isreply)) != NULL, res);
+	if (res != PSM2_OK_NO_PROGRESS)
+		return res;
 
 	/* got a free pkt... fill it in */
 	pkt->bulkidx = bulkidx;
@@ -1737,14 +1739,13 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 			psmi_assert(src != NULL || nargs > NSHORT_ARGS);
 			type = AMFMT_SHORT;
 
-			AMSH_CHECK_PEER_PID(ptl, destidx, res);
-			if (res > PSM2_OK_NO_PROGRESS)
-				return res;
 			AMSH_POLL_UNTIL(ptl_gen, is_reply,
 					(bulkpkt =
 					 am_ctl_getslot_long(ptl_gen, destidx,
 							     is_reply)) !=
-					NULL);
+					NULL, res);
+			if (res != PSM2_OK_NO_PROGRESS)
+				break;
 
 			bulkidx = bulkpkt->idx;
 			bulkpkt->len = len;
@@ -1782,15 +1783,14 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 				  (uint32_t) len, hidx);
 			while (bytes_left) {
 				bytes_this = min(bytes_left, mtu);
-				AMSH_CHECK_PEER_PID(ptl, destidx, res);
-				if (res > PSM2_OK_NO_PROGRESS)
-					return res;
 				AMSH_POLL_UNTIL(ptl_gen, is_reply,
 						(bulkpkt =
 						 am_ctl_getslot_long(ptl_gen,
 								     destidx,
 								     is_reply))
-						!= NULL);
+						!= NULL, res);
+				if (res != PSM2_OK_NO_PROGRESS)
+					break;
 				bytes_left -= bytes_this;
 				if (bytes_left == 0)
 					type = AMFMT_LONG_END;
