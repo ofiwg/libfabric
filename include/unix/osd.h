@@ -70,8 +70,6 @@
 #define OFI_UNUSED UNREFERENCED_PARAMETER
 #endif
 
-#define OFI_KEEPALIVE	TCP_KEEPIDLE
-
 #define OFI_SOCK_TRY_SND_RCV_AGAIN(err)		\
 	(((err) == EAGAIN)	||		\
 	 ((err) == EWOULDBLOCK))
