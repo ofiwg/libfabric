@@ -298,10 +298,12 @@ void efa_unit_test_resource_destruct(struct efa_resource *resource)
 
 	if (resource->info) {
 		fi_freeinfo(resource->info);
+		resource->info = NULL;
 	}
 
 	if (resource->hints) {
 		fi_freeinfo(resource->hints);
+		resource->hints = NULL;
 	}
 }
 
