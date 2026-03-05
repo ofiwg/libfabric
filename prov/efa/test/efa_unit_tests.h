@@ -258,6 +258,12 @@ void test_info_direct_msg_only_small_max_msg_size_success();
 void test_info_direct_msg_only_large_max_msg_size_fail();
 void test_info_direct_msg_rma_large_max_msg_size_success();
 void test_info_direct_msg_rma_too_large_max_msg_size_fail();
+void test_info_direct_inject_size_no_hint();
+void test_info_direct_inject_size_small();
+void test_info_direct_inject_size_wide_wqe();
+void test_info_direct_inject_size_exceeds_max();
+void test_ep_getopt_inject_size_regular_wqe();
+void test_ep_getopt_inject_size_wide_wqe();
 /* end efa_unit_test_info.c */
 
 void test_efa_srx_min_multi_recv_size();

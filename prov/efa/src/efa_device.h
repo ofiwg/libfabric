@@ -54,6 +54,8 @@ bool efa_device_support_rdma_read(void);
 
 bool efa_device_support_rdma_write(void);
 
+bool efa_device_support_wide_wqe(void);
+
 bool efa_device_support_unsolicited_write_recv(void);
 
 bool efa_device_support_cq_with_ext_mem_dmabuf(void);
