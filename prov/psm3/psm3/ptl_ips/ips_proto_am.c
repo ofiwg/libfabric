@@ -356,7 +356,7 @@ psm3_ips_am_short_request(psm2_epaddr_t epaddr,
 				((scb = psm3_ips_scbctrl_alloc_tiny(
 				      &proto_am->scbc_request, 0)) != NULL));
 	}
-	if (err == PSM2_EP_NO_RESOURCES)
+	if (err > PSM2_OK_NO_PROGRESS)
 		return err;
 
 	psmi_assert_always(scb != NULL);

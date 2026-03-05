@@ -268,7 +268,8 @@ struct psm2_epaddr {
 	PSMI_PROFILE_BLOCK();						\
 	while (!(cond)) {						\
 		err = psm3_poll_internal(ep, 1, 0);			\
-		if (!psm3_cycles_left(_t_start, timeout)) {		\
+		if (timeout < INT64_MAX &&				\
+		    !psm3_cycles_left(_t_start, timeout)) {		\
 			err = PSM2_EP_NO_RESOURCES;			\
 			break;						\
 		}							\

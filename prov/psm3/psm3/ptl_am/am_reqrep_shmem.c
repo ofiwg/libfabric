@@ -1039,8 +1039,7 @@ amsh_ep_connreq_poll(ptl_t *ptl_gen, struct am_ptl_connection_req *req)
 							req->args, 6, NULL, 0,
 							0);
 				if (err > PSM2_OK_NO_PROGRESS)
-					psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-							  "Disconnect error");
+					return err;
 				((am_epaddr_t *) epaddr)->cstate_outgoing =
 					AMSH_CSTATE_OUTGOING_DISC_REQUESTED;
 				/**
@@ -1186,8 +1185,7 @@ amsh_ep_connreq_poll(ptl_t *ptl_gen, struct am_ptl_connection_req *req)
 							req->args, 6, NULL, 0,
 							0);
 				if (err > PSM2_OK_NO_PROGRESS)
-					psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-							  "Connection error");
+					return err;
 				_HFI_CONNDBG("epaddr=%p, epid=%s at shmidx=%d\n",
 						   epaddr, psm3_epid_fmt_internal(epid, 0), shmidx);
 			}
