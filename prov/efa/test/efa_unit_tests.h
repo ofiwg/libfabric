@@ -258,6 +258,12 @@ void test_info_max_cntr_value_api_ge_2_5_within_hw_range(void **state);
 void test_info_max_cntr_value_api_ge_2_5_hint_within_hw_range(void **state);
 void test_info_max_cntr_value_api_ge_2_5_above_hw_range(void **state);
 void test_info_rdm_max_cntr_value_api_ge_2_5_within_hw_range(void **state);
+void test_info_direct_inject_size_no_hint(void **state);
+void test_info_direct_inject_size_small(void **state);
+void test_info_direct_inject_size_wide_wqe(void **state);
+void test_info_direct_inject_size_exceeds_max(void **state);
+void test_ep_getopt_inject_size_regular_wqe(void **state);
+void test_ep_getopt_inject_size_wide_wqe(void **state);
 /* end efa_unit_test_info.c */
 
 void test_efa_srx_min_multi_recv_size(void **state);
