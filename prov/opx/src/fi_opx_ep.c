@@ -675,7 +675,7 @@ static int fi_opx_close_ep(fid_t fid)
 
 	if (opx_ep->hmem_copy_buf) {
 #if HAVE_CUDA
-		cudaFreeHost(opx_ep->hmem_copy_buf);
+		ofi_cudaFreeHost(opx_ep->hmem_copy_buf);
 #else
 		free(opx_ep->hmem_copy_buf);
 #endif
@@ -2042,11 +2042,12 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 #ifdef OPX_HMEM
 #if HAVE_CUDA
 	opx_ep->hmem_copy_buf = NULL;
-	cudaError_t cuda_rc =
-		cudaHostAlloc((void **) &opx_ep->hmem_copy_buf, OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX, cudaHostAllocDefault);
+	cudaError_t cuda_rc   = ofi_cudaHostAlloc((void **) &opx_ep->hmem_copy_buf, OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX,
+						  cudaHostAllocDefault);
 	if (cuda_rc != cudaSuccess) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_CORE,
-			"Failed allocating HMEM bounce buf with cudaHostAlloc(), returned cudaError %d.\n", cuda_rc);
+			"Failed allocating HMEM bounce buf with ofi_cudaHostAlloc(), returned cudaError %d.\n",
+			cuda_rc);
 		errno = FI_ENOMEM;
 		goto err;
 	}
