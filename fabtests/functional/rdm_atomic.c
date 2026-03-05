@@ -466,13 +466,15 @@ static int alloc_ep_res(struct fi_info *fi)
 	int ret;
 	int mr_local = !!(fi->domain_attr->mr_mode & FI_MR_LOCAL);
 
-	ret = ft_hmem_alloc(opts.iface, opts.device, &result, buf_size);
+	ret = ft_hmem_alloc(opts.iface, opts.device, &result,
+			    opts.transfer_size);
 	if (ret) {
 		perror("hmem allocation error");
 		return -1;
 	}
 
-	ret = ft_hmem_alloc(opts.iface, opts.device, &compare, buf_size);
+	ret = ft_hmem_alloc(opts.iface, opts.device, &compare,
+			    opts.transfer_size);
 	if (ret) {
 		perror("hmem allocation error");
 		return -1;
@@ -483,7 +485,7 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 
 	// registers local data buffer that stores results
-	ret = ft_reg_mr(fi, result, buf_size,
+	ret = ft_reg_mr(fi, result, opts.transfer_size,
 			(mr_local ? FI_READ : 0) | FI_REMOTE_WRITE,
 			 get_mr_key(), opts.iface, opts.device, &mr_result, NULL);
 	if (ret) {
@@ -492,7 +494,7 @@ static int alloc_ep_res(struct fi_info *fi)
 	}
 
 	// registers local data buffer that contains comparison data
-	ret = ft_reg_mr(fi, compare, buf_size,
+	ret = ft_reg_mr(fi, compare, opts.transfer_size,
 			(mr_local ? FI_WRITE : 0) | FI_REMOTE_READ,
 			 get_mr_key(), opts.iface, opts.device, &mr_compare, NULL);
 	if (ret) {
@@ -534,6 +536,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
+	opts.options |= FT_OPT_SIZE;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -593,7 +596,8 @@ int main(int argc, char **argv)
 	hints->caps = FI_MSG | FI_ATOMICS;
 	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
-
+	opts.window_size = 1;
+	opts.transfer_size = 1024;
 	ret = run();
 
 	free_res();
