@@ -1054,3 +1054,152 @@ void test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_support
 {
 	test_info_direct_rma_common(true, true, false, 0, 4, false, true);
 }
+
+/**
+ * @brief Test inject_size hint with no hint (default behavior)
+ * Should return default 32-byte inject size
+ */
+void test_info_direct_inject_size_no_hint(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_device *device = &g_efa_selected_device_list[0];
+	struct fi_info **info = &resource->info;
+	int err;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, NULL, info);
+	assert_int_equal(err, 0);
+	assert_non_null(*info);
+	assert_int_equal((*info)->tx_attr->inject_size, 32);
+	assert_int_equal((*info)->tx_attr->inject_size, device->efa_attr.inline_buf_size);
+}
+
+/**
+ * @brief Test inject_size hint with small size (<=32 bytes)
+ * Should return requested inject size with normal TX queue depth
+ */
+void test_info_direct_inject_size_small(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_device *device = &g_efa_selected_device_list[0];
+	struct fi_info *hints = resource->hints, **info = &resource->info;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	hints->tx_attr->inject_size = 16;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, info);
+	assert_int_equal(err, 0);
+	assert_non_null(*info);
+	assert_int_equal((*info)->tx_attr->inject_size, 16);
+	assert_int_equal(device->efa_attr.inline_buf_size, 32);
+}
+
+/**
+ * @brief Test inject_size hint with wide WQE size (>32 bytes, <=max_inline_buf_size)
+ * Should enable wide WQE and reduce TX queue depth by half
+ */
+void test_info_direct_inject_size_wide_wqe(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_info *hints = resource->hints, **info = &resource->info;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	hints->tx_attr->inject_size = 64;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, info);
+	if (err) {
+		/*
+		 * fi_getinfo with inject_size > inline_buf_size checks
+		 * inline_buf_size_ex from device attributes. If the device
+		 * firmware does not advertise wide WQE support (inline_buf_size_ex == 0),
+		 * fi_getinfo returns -FI_ENODATA.
+		 */
+		skip();
+	}
+	assert_int_equal(err, 0);
+	assert_int_equal((*info)->tx_attr->inject_size, 64);
+}
+
+/**
+ * @brief Test inject_size hint exceeding device capability
+ * Should fail with -FI_ENODATA
+ */
+void test_info_direct_inject_size_exceeds_max(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_info *hints = resource->hints, **info = &resource->info;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	hints->tx_attr->inject_size = INT_MAX;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, info);
+	assert_int_equal(err, -FI_ENODATA);
+}
+
+/**
+ * @brief Test fi_getopt returns correct inject sizes for regular WQE
+ * Should return MSG inject size only, RMA inject disabled
+ */
+void test_ep_getopt_inject_size_regular_wqe(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_info *hints = resource->hints;
+	size_t inject_msg_size, inject_rma_size, sz;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	hints->tx_attr->inject_size = 32;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 18),
+	                                            hints, true, true);
+	sz = sizeof inject_msg_size;
+	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
+			&inject_msg_size, &sz), 0);
+	sz = sizeof inject_msg_size;
+	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+			&inject_rma_size, &sz), 0);
+
+	assert_int_equal(inject_msg_size, 32);
+	assert_int_equal(inject_rma_size, 0);
+}
+
+/**
+ * @brief Test fi_getopt returns correct inject sizes for wide WQE
+ * Should return both MSG and RMA inject sizes
+ */
+void test_ep_getopt_inject_size_wide_wqe(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_info *hints = resource->hints, **info = &resource->info;
+	size_t inject_msg_size, inject_rma_size, sz;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	hints->tx_attr->inject_size = 33;
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, info);
+	if (err) {
+		/*
+		 * fi_getinfo with inject_size > inline_buf_size checks
+		 * inline_buf_size_ex from device attributes. If the device
+		 * firmware does not advertise wide WQE support (inline_buf_size_ex == 0),
+		 * fi_getinfo returns -FI_ENODATA.
+		 */
+		skip();
+	}
+	err = fi_fabric(resource->info->fabric_attr, &resource->fabric, NULL);
+	assert_int_equal(err, 0);
+	err = fi_domain(resource->fabric, resource->info, &resource->domain, NULL);
+	assert_int_equal(err, 0);
+	err = fi_endpoint(resource->domain, resource->info, &resource->ep, NULL);
+	assert_int_equal(err, 0);
+
+	sz = sizeof inject_msg_size;
+	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
+			&inject_msg_size, &sz), 0);
+	sz = sizeof inject_msg_size;
+	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+			&inject_rma_size, &sz), 0);
+
+	assert_int_equal(inject_msg_size, 33);
+	assert_int_equal(inject_rma_size, 33);
+}
