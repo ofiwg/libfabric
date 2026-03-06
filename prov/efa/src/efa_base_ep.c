@@ -296,6 +296,11 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
 		if (use_unsolicited_write_recv)
 			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
 #endif
+#if HAVE_INLINE_BUF_SIZE_EX
+		if (init_attr_ex->cap.max_inline_data >
+		    g_efa_selected_device_list[0].efa_attr.inline_buf_size)
+			efa_attr.flags |= EFADV_QP_FLAGS_INLINE_WRITE;
+#endif
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
 #if HAVE_EFADV_SL
 		efa_attr.sl = EFA_QP_DEFAULT_SERVICE_LEVEL;
@@ -370,7 +375,9 @@ void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
 	attr_ex->cap.max_send_sge = device_info->tx_attr->iov_limit;
 	attr_ex->cap.max_recv_wr = efa_base_ep_get_rx_pool_size(ep);
 	attr_ex->cap.max_recv_sge = device_info->rx_attr->iov_limit;
-	attr_ex->cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
+	attr_ex->cap.max_inline_data = EFA_INFO_TYPE_IS_DIRECT(ep->info) ?
+		ep->info->tx_attr->inject_size :
+		ep->domain->device->efa_attr.inline_buf_size;
 
 	EFA_INFO(FI_LOG_EP_CTRL,
 		 "QP cap max_send_wr=%u max_recv_wr=%u max_send_sge=%u "
