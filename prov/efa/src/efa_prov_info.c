@@ -239,7 +239,11 @@ void efa_prov_info_set_tx_rx_attr(struct fi_info *prov_info,
 	prov_info->tx_attr->mode |= FI_CONTEXT2;
 	prov_info->rx_attr->mode |= FI_CONTEXT2;
 
+#if HAVE_INLINE_BUF_SIZE_EX
+	prov_info->tx_attr->inject_size = device->efa_attr.inline_buf_size_ex;
+#else
 	prov_info->tx_attr->inject_size = device->efa_attr.inline_buf_size;
+#endif
 	prov_info->tx_attr->iov_limit = device->efa_attr.max_sq_sge;
 	prov_info->tx_attr->size = rounddown_power_of_two(device->efa_attr.max_sq_wr);
 	prov_info->rx_attr->iov_limit = device->efa_attr.max_rq_sge;
