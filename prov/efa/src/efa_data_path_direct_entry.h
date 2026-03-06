@@ -387,7 +387,7 @@ static inline int efa_data_path_direct_post_send(
 		uint32_t qkey)
 {
 	struct efa_data_path_direct_sq *sq = &qp->data_path_direct_qp.sq;
-	struct efa_io_tx_wqe local_wqe = {0}; /* Stack variable - can be in registers */
+	struct efa_io_tx_wqe_128 local_wqe = {0};
 	struct efa_io_tx_meta_desc *meta_desc = &local_wqe.meta;
 	int err = 0;
 
@@ -468,7 +468,7 @@ static inline int efa_data_path_direct_post_read(
 		uint32_t qkey)
 {
 	struct efa_data_path_direct_sq *sq = &qp->data_path_direct_qp.sq;
-	struct efa_io_tx_wqe local_wqe = {0}; /* Stack variable - can be in registers */
+	struct efa_io_tx_wqe_128 local_wqe = {0};
 	struct efa_io_tx_meta_desc *meta_desc = &local_wqe.meta;
 	struct efa_io_remote_mem_addr *remote_mem = &local_wqe.data.rdma_req.remote_mem;
 	int err;
@@ -558,7 +558,7 @@ efa_data_path_direct_post_write(
 		uint32_t qkey)
 {
 	struct efa_data_path_direct_sq *sq = &qp->data_path_direct_qp.sq;
-	struct efa_io_tx_wqe local_wqe = {0}; /* Stack variable - can be in registers */
+	struct efa_io_tx_wqe_128 local_wqe = {0};
 	struct efa_io_tx_meta_desc *meta_desc = &local_wqe.meta;
 	struct efa_io_remote_mem_addr *remote_mem = &local_wqe.data.rdma_req.remote_mem;
 	int err;
