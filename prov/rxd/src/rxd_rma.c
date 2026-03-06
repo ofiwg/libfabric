@@ -38,8 +38,8 @@
 
 static struct rxd_x_entry *rxd_tx_entry_init_rma(struct rxd_ep *ep, fi_addr_t addr,
 				uint32_t op, const struct iovec *iov, size_t iov_count,
-				uint64_t data, uint32_t flags, void *context,
-				const struct fi_rma_iov *rma_iov, size_t rma_count)
+			void **desc, uint64_t data, uint32_t flags, void *context,
+			const struct fi_rma_iov *rma_iov, size_t rma_count)
 {
 	struct rxd_x_entry *tx_entry;
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
@@ -48,7 +48,8 @@ static struct rxd_x_entry *rxd_tx_entry_init_rma(struct rxd_ep *ep, fi_addr_t ad
 	void *ptr;
 
 	tx_entry = rxd_tx_entry_init_common(ep, addr, op, iov, iov_count, 0,
-					    data, flags, context, &base_hdr, &ptr);
+					    data, flags, context, desc,
+					    &base_hdr, &ptr);
 	if (!tx_entry)
 		return NULL;
 
@@ -110,7 +111,7 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 		goto out;
 
 	tx_entry = rxd_tx_entry_init_rma(rxd_ep, rxd_addr, op, iov, iov_count,
-					 data, rxd_flags, context, rma_iov,
+					 NULL, data, rxd_flags, context, rma_iov,
 					 rma_count);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -161,7 +162,7 @@ rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 
 	tx_entry = rxd_tx_entry_init_rma(rxd_ep, rxd_addr, op, iov, iov_count,
-					 data, rxd_flags, context, rma_iov,
+					 desc, data, rxd_flags, context, rma_iov,
 					 rma_count);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;

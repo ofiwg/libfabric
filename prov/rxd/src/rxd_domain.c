@@ -78,11 +78,232 @@ static struct fi_ops rxd_domain_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static void rxd_mr_remove_map_entry(struct rxd_mr *mr)
+{
+	ofi_genlock_lock(&mr->domain->util_domain.lock);
+	(void) ofi_mr_map_remove(&mr->domain->util_domain.mr_map,
+				 mr->mr_fid.key);
+	ofi_genlock_unlock(&mr->domain->util_domain.lock);
+}
+
+static int rxd_mr_add_map_entry(struct util_domain *domain,
+				struct fi_mr_attr *dg_attr,
+				struct rxd_mr *rxd_mr,
+				uint64_t flags)
+{
+	uint64_t temp_key;
+	int ret;
+
+	dg_attr->requested_key = rxd_mr->mr_fid.key;
+
+	ofi_genlock_lock(&domain->lock);
+	ret = ofi_mr_map_insert(&domain->mr_map, dg_attr, &temp_key, rxd_mr, flags);
+	if (OFI_UNLIKELY(ret)) {
+		FI_WARN(&rxd_prov, FI_LOG_DOMAIN,
+			"MR map insert for atomic verification failed %d\n",
+			ret);
+	} else {
+		assert(rxd_mr->mr_fid.key == temp_key);
+	}
+	ofi_genlock_unlock(&domain->lock);
+
+	return ret;
+}
+
+static int rxd_mr_close(fid_t fid)
+{
+	struct rxd_mr *rxd_mr;
+	int ret;
+
+	rxd_mr = container_of(fid, struct rxd_mr, mr_fid.fid);
+
+	// Unlike RXM (which offloads RMA to the underlying MSG provider), 
+	// RXD implements its own RMA protocol over datagrams and calls rxd_verify_iov 
+	// on the server side for every incoming WRITE/READ_REQ. 
+	// Without the map entry, verification always returns -FI_EACCES
+	//if (rxd_mr->domain->util_domain.info_domain_caps & FI_ATOMIC)
+		rxd_mr_remove_map_entry(rxd_mr);
+
+	ret = fi_close(&rxd_mr->dg_mr->fid);
+	if (ret)
+		FI_WARN(&rxd_prov, FI_LOG_DOMAIN, "Unable to close MSG MR\n");
+
+	ofi_atomic_dec32(&rxd_mr->domain->util_domain.ref);
+	free(rxd_mr);
+	return ret;
+}
+
+static struct fi_ops rxd_mr_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = rxd_mr_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+static void rxd_mr_init(struct rxd_mr *rxd_mr, struct rxd_domain *domain,
+			void *context)
+{
+	rxd_mr->mr_fid.fid.fclass = FI_CLASS_MR;
+	rxd_mr->mr_fid.fid.context = context;
+	rxd_mr->mr_fid.fid.ops = &rxd_mr_fi_ops;
+	rxd_mr->mr_fid.mem_desc = rxd_mr;
+	rxd_mr->mr_fid.key = fi_mr_key(rxd_mr->dg_mr);
+	rxd_mr->domain = domain;
+	// rxd_mr->hmem_flags = 0x0;
+	// rxd_mr->hmem_handle = NULL;
+	ofi_atomic_inc32(&domain->util_domain.ref);
+}
+
+static int rxd_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+			  uint64_t flags, struct fid_mr **mr)
+{
+	struct rxd_domain *rxd_domain;
+	struct fi_mr_attr dg_attr = *attr;
+	struct rxd_mr *rxd_mr;
+	int ret;
+
+	rxd_domain = container_of(fid, struct rxd_domain,
+				  util_domain.domain_fid.fid);
+
+	// if (!ofi_hmem_is_initialized(attr->iface)) {
+	// 	FI_WARN(&rxd_prov, FI_LOG_MR,
+	// 		"Cannot register memory for uninitialized iface\n");
+	// 	return -FI_ENOSYS;
+	// }
+
+	rxd_mr = calloc(1, sizeof(*rxd_mr));
+	if (!rxd_mr)
+		return -FI_ENOMEM;
+
+	ofi_mr_update_attr(
+		rxd_domain->util_domain.fabric->fabric_fid.api_version,
+		rxd_domain->util_domain.info_domain_caps, attr, &dg_attr,
+		flags);
+
+	// if ((flags & FI_HMEM_HOST_ALLOC) && (attr->iface == FI_HMEM_ZE))
+	// 	dg_attr.device.ze = -1;
+
+	// dg_attr.access = rxd_mr_get_msg_access(rxd_domain, attr->access);
+
+	ret = fi_mr_regattr(rxd_domain->dg_domain, &dg_attr, flags,
+			    &rxd_mr->dg_mr);
+	if (ret) {
+		FI_WARN(&rxd_prov, FI_LOG_DOMAIN,
+			"Unable to register MSG MR\n");
+		goto err;
+	}
+	rxd_mr_init(rxd_mr, rxd_domain, attr->context);
+	// ofi_mutex_init(&rxd_mr->amo_lock);
+	// rxd_mr->iface = dg_attr.iface;
+	// rxd_mr->device = dg_attr.device.reserved;
+	*mr = &rxd_mr->mr_fid;
+
+	// gdrerr = ofi_hmem_dev_register(rxd_mr->iface, attr->mr_iov->iov_base,
+	// 			       attr->mr_iov->iov_len,
+	// 			       (uint64_t *) &rxd_mr->hmem_handle);
+	// if (gdrerr) {
+	// 	rxd_mr->hmem_flags = 0x0;
+	// 	rxd_mr->hmem_handle = NULL;
+	// } else {
+	// 	rxd_mr->hmem_flags = OFI_HMEM_DATA_DEV_REG_HANDLE;
+	// }
+
+	// Unlike RXM (which offloads RMA to the underlying MSG provider),
+	// RXD implements its own RMA protocol over datagrams and calls
+	// rxd_verify_iov on the server side for every incoming WRITE/READ_REQ.
+	// Without the map entry, verification always returns -FI_EACCES
+	// if (rxd_domain->util_domain.info_domain_caps & FI_ATOMIC) {
+	ret = rxd_mr_add_map_entry(&rxd_domain->util_domain, &dg_attr, rxd_mr,
+				   flags);
+	if (ret)
+		goto map_err;
+	//}
+
+	FI_INFO(&rxd_prov, FI_LOG_DOMAIN, "mr_regattr\n");
+	return 0;
+
+map_err:
+	fi_close(&rxd_mr->mr_fid.fid);
+	return ret;
+err:
+	free(rxd_mr);
+	return ret;
+}
+
+static int rxd_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
+		       uint64_t access, uint64_t offset, uint64_t requested_key,
+		       uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct rxd_domain *rxd_domain;
+	struct rxd_mr *rxd_mr;
+	int ret;
+	struct fi_mr_attr dg_attr = {
+		.mr_iov = iov,
+		.iov_count = count,
+		.access = access,
+		.offset = offset,
+		.requested_key = requested_key,
+		.context = context,
+	};
+
+	rxd_domain = container_of(fid, struct rxd_domain,
+				  util_domain.domain_fid.fid);
+
+	rxd_mr = calloc(1, sizeof(*rxd_mr));
+	if (!rxd_mr)
+		return -FI_ENOMEM;
+
+	// access = rxd_mr_get_msg_access(rxd_domain, access);
+
+	ret = fi_mr_regv(rxd_domain->dg_domain, iov, count, access, offset,
+			 requested_key, flags, &rxd_mr->dg_mr, context);
+	if (ret) {
+		FI_WARN(&rxd_prov, FI_LOG_DOMAIN,
+			"Unable to register MSG MR\n");
+		goto err;
+	}
+	rxd_mr_init(rxd_mr, rxd_domain, context);
+	ofi_atomic_inc32(&rxd_domain->util_domain.ref);
+	*mr = &rxd_mr->mr_fid;
+
+	// Unlike RXM (which offloads RMA to the underlying MSG provider),
+	// RXD implements its own RMA protocol over datagrams and calls
+	// rxd_verify_iov on the server side for every incoming WRITE/READ_REQ.
+	// Without the map entry, verification always returns -FI_EACCES
+	// if (rxd_domain->util_domain.info_domain_caps & FI_ATOMIC) {
+	ret = rxd_mr_add_map_entry(&rxd_domain->util_domain, &dg_attr, rxd_mr,
+				   flags);
+	if (ret)
+		goto map_err;
+	//}
+
+	return 0;
+map_err:
+	fi_close(&rxd_mr->mr_fid.fid);
+	return ret;
+err:
+	free(rxd_mr);
+	return ret;
+}
+
+static int rxd_mr_reg(struct fid *fid, const void *buf, size_t len,
+		      uint64_t access, uint64_t offset, uint64_t requested_key,
+		      uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct iovec iov;
+
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	return rxd_mr_regv(fid, &iov, 1, access, offset, requested_key, flags,
+			   mr, context);
+}
+
 static struct fi_ops_mr rxd_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
-	.reg = ofi_mr_reg,
-	.regv = ofi_mr_regv,
-	.regattr = ofi_mr_regattr,
+	.reg = rxd_mr_reg,
+	.regv = rxd_mr_regv,
+	.regattr = rxd_mr_regattr,
 };
 
 int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,

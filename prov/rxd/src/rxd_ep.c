@@ -46,6 +46,7 @@ struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep)
 		return NULL;
 
 	pkt_entry->flags = 0;
+	pkt_entry->user_iov.iov_len = 0;
 
 	return pkt_entry;
 }
@@ -285,11 +286,44 @@ uint64_t rxd_get_retry_time(uint64_t start, int retry_cnt)
 	return start + rxd_get_timeout(retry_cnt);
 }
 
+/*
+ * Find the base pointer and underlying dg-domain MR descriptor for a
+ * contiguous seg_size region at byte offset |offset| within |iov|.
+ * Returns NULL (fall back to copy) if the segment spans an iov boundary
+ * or if a required MR descriptor is missing.
+ */
+static void *rxd_iov_buf_and_desc(struct rxd_ep *ep,
+				   const struct iovec *iov, size_t iov_count,
+				   void **desc, size_t offset, size_t seg_size,
+				   void **out_desc)
+{
+	size_t i;
+
+	for (i = 0; i < iov_count; i++) {
+		if (offset < iov[i].iov_len) {
+			if (offset + seg_size > iov[i].iov_len)
+				return NULL;
+			if (ep->do_local_mr) {
+				if (!desc || !desc[i])
+					return NULL;
+				*out_desc = fi_mr_desc(
+					((struct rxd_mr *)desc[i])->dg_mr);
+			} else {
+				*out_desc = NULL;
+			}
+			return (char *)iov[i].iov_base + offset;
+		}
+		offset -= iov[i].iov_len;
+	}
+	return NULL;
+}
+
 void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 		       struct rxd_pkt_entry *pkt_entry)
 {
 	struct rxd_data_pkt *data_pkt = (struct rxd_data_pkt *) (pkt_entry->pkt);
 	uint32_t seg_size;
+	void *seg_buf, *seg_desc;
 
 	seg_size = (uint32_t) (tx_entry->cq_entry.len - tx_entry->bytes_done);
 	seg_size = (uint32_t) MIN(rxd_ep_domain(ep)->max_seg_sz, seg_size);
@@ -304,22 +338,35 @@ void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 	data_pkt->ext_hdr.tx_id = tx_entry->tx_id;
 	data_pkt->ext_hdr.seg_no = tx_entry->next_seg_no++;
 	data_pkt->base_hdr.peer = (uint32_t) rxd_peer(ep, tx_entry->peer)->peer_addr;
-
-	pkt_entry->pkt_size = ofi_copy_from_iov(data_pkt->msg, seg_size,
-						tx_entry->iov,
-						tx_entry->iov_count,
-						tx_entry->bytes_done);
 	pkt_entry->peer = tx_entry->peer;
 
-	tx_entry->bytes_done += pkt_entry->pkt_size;
+	seg_buf = rxd_iov_buf_and_desc(ep, tx_entry->iov, tx_entry->iov_count,
+				       tx_entry->desc, tx_entry->bytes_done,
+				       seg_size, &seg_desc);
+	if (seg_buf) {
+		/* Zero-copy: header stays in pkt buffer, user data as second iov */
+		pkt_entry->pkt_size = sizeof(*data_pkt) + ep->tx_prefix_size;
+		pkt_entry->user_iov.iov_base = seg_buf;
+		pkt_entry->user_iov.iov_len = seg_size;
+		pkt_entry->user_desc = seg_desc;
+	} else {
+		/* Copy path: data copied into pkt buffer trailing the header */
+		pkt_entry->user_iov.iov_len = 0;
+		pkt_entry->user_desc = NULL;
+		pkt_entry->pkt_size = ofi_copy_from_iov(data_pkt->msg, seg_size,
+							tx_entry->iov,
+							tx_entry->iov_count,
+							tx_entry->bytes_done);
+		pkt_entry->pkt_size += sizeof(*data_pkt) + ep->tx_prefix_size;
+	}
 
-	pkt_entry->pkt_size += sizeof(*data_pkt) + ep->tx_prefix_size;
+	tx_entry->bytes_done += seg_size;
 }
 
 struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 			uint32_t op, const struct iovec *iov, size_t iov_count,
 			uint64_t tag, uint64_t data, uint32_t flags, void *context,
-			struct rxd_base_hdr **base_hdr, void **ptr)
+			void **desc, struct rxd_base_hdr **base_hdr, void **ptr)
 {
 	struct rxd_x_entry *tx_entry;
 
@@ -343,6 +390,10 @@ struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 	tx_entry->next_seg_no = 0;
 	tx_entry->iov_count = (uint8_t) iov_count;
 	memcpy(&tx_entry->iov[0], iov, sizeof(*iov) * iov_count);
+	if (desc)
+		memcpy(tx_entry->desc, desc, sizeof(*desc) * iov_count);
+	else
+		memset(tx_entry->desc, 0, sizeof(tx_entry->desc));
 
 	tx_entry->cq_entry.op_context = context;
 	tx_entry->cq_entry.len = ofi_total_iov_len(iov, iov_count);
@@ -417,9 +468,20 @@ ssize_t rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 
 	dg_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(ep)->rxdaddr_dg_idx),
 					    (int)pkt_entry->peer);
-	ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
-		      pkt_entry->pkt_size, pkt_entry->desc, dg_addr,
-		      &pkt_entry->context);
+	if (pkt_entry->user_iov.iov_len) {
+		struct iovec iov[2] = {
+			{ .iov_base = rxd_pkt_start(pkt_entry),
+			  .iov_len  = pkt_entry->pkt_size },
+			pkt_entry->user_iov,
+		};
+		void *desc[2] = { pkt_entry->desc, pkt_entry->user_desc };
+		ret = fi_sendv(ep->dg_ep, iov, desc, 2, dg_addr,
+			       &pkt_entry->context);
+	} else {
+		ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
+			      pkt_entry->pkt_size, pkt_entry->desc, dg_addr,
+			      &pkt_entry->context);
+	}
 	if (ret) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "error sending packet: %d (%s)\n",
 			(int) ret, fi_strerror((int) -ret));

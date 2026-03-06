@@ -171,6 +171,18 @@ struct rxd_cq {
 	rxd_cq_write_fn write_fn;
 };
 
+struct rxd_mr {
+	struct fid_mr mr_fid;
+	struct fid_mr *dg_mr;
+	struct rxd_domain *domain;
+	// TODO: check hmem support
+	// enum fi_hmem_iface iface;
+	// uint64_t device;
+	// void *hmem_handle;
+	// uint64_t hmem_flags;
+	ofi_mutex_t amo_lock;
+};
+
 enum rxd_pool_type {
 	RXD_BUF_POOL_RX,
 	RXD_BUF_POOL_TX,
@@ -264,6 +276,7 @@ struct rxd_x_entry {
 
 	struct iovec iov[RXD_IOV_LIMIT];
 	struct iovec res_iov[RXD_IOV_LIMIT];
+	void *desc[RXD_IOV_LIMIT];
 
 	struct fi_cq_tagged_entry cq_entry;
 
@@ -308,6 +321,8 @@ struct rxd_pkt_entry {
 	void *desc;
 	fi_addr_t peer;
 	void *pkt;
+	struct iovec user_iov;
+	void *user_desc;
 };
 
 struct rxd_unexp_msg {
@@ -467,7 +482,7 @@ static inline void rxd_check_init_cq_data(void **ptr, struct rxd_x_entry *tx_ent
 struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 			uint32_t op, const struct iovec *iov, size_t iov_count,
 			uint64_t tag, uint64_t data, uint32_t flags, void *context,
-			struct rxd_base_hdr **base_hdr, void **ptr);
+			void **desc, struct rxd_base_hdr **base_hdr, void **ptr);
 struct rxd_x_entry *rxd_rx_entry_init(struct rxd_ep *ep,
 			const struct iovec *iov, size_t iov_count, uint64_t tag,
 			uint64_t ignore, void *context, fi_addr_t addr,

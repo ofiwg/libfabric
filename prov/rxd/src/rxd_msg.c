@@ -316,7 +316,8 @@ static struct rxd_x_entry *rxd_tx_entry_init_msg(struct rxd_ep *ep, fi_addr_t ad
 	void *ptr;
 
 	tx_entry = rxd_tx_entry_init_common(ep, addr, op, iov, iov_count,
-					    tag, data, flags, context, &base_hdr, &ptr);
+					    tag, data, flags, context, NULL,
+					    &base_hdr, &ptr);
 	if (!tx_entry)
 		return NULL;
 
