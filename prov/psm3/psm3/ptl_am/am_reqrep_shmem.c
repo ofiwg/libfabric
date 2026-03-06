@@ -1592,33 +1592,43 @@ amsh_poll_internal(ptl_t *ptl, int replyonly)
  */
 #ifdef PSM_PROFILE
 #define AMSH_POLL_UNTIL(ptl, isreply, cond, err) \
-	do {								\
-		uint64_t t_start = get_cycles();			\
-		PSMI_PROFILE_BLOCK();					\
-		while (!(cond)) {					\
-			PSMI_PROFILE_REBLOCK(				\
-				amsh_poll_internal(ptl, isreply) ==	\
-					PSM2_OK_NO_PROGRESS);		\
-			if (!psm3_cycles_left(t_start,			\
-				     PSMI_MIN_EP_CONNECT_TIMEOUT)) {	\
-				err = PSM2_EP_NO_RESOURCES;		\
-				break;					\
-			}						\
-		}							\
-		PSMI_PROFILE_UNBLOCK();					\
+	do {									\
+		int spin_cnt = 0;						\
+		uint64_t block_start = get_cycles();				\
+		PSMI_PROFILE_BLOCK();						\
+		while (!(cond)) {						\
+			PSMI_PROFILE_REBLOCK(					\
+				amsh_poll_internal(ptl, isreply) ==		\
+					PSM2_OK_NO_PROGRESS);			\
+			if (++spin_cnt ==					\
+				((struct ptl_am *)(ptl))->ep->yield_spin_cnt) {	\
+				spin_cnt = 0;					\
+				if (!psm3_cycles_left(block_start,		\
+					PSMI_MIN_EP_CONNECT_TIMEOUT)) {		\
+					err = PSM2_EP_NO_RESOURCES;		\
+					break;					\
+				}						\
+			}							\
+		}								\
+		PSMI_PROFILE_UNBLOCK();						\
 	} while (0)
 #else
-#define AMSH_POLL_UNTIL(ptl, isreply, cond, err)		\
-	do {							\
-		uint64_t t_start = get_cycles();		\
-		while (!(cond)) {				\
-			amsh_poll_internal(ptl, isreply);	\
-			if (!psm3_cycles_left(t_start,		\
-				PSMI_MIN_EP_CONNECT_TIMEOUT)) {	\
-				err = PSM2_EP_NO_RESOURCES;	\
-				break;				\
-			}					\
-		}						\
+#define AMSH_POLL_UNTIL(ptl, isreply, cond, err)				\
+	do {									\
+		int spin_cnt = 0;						\
+		uint64_t block_start = get_cycles();				\
+		while (!(cond)) {						\
+			amsh_poll_internal(ptl, isreply);			\
+			if (++spin_cnt ==					\
+				((struct ptl_am *)(ptl))->ep->yield_spin_cnt) {	\
+				spin_cnt = 0;					\
+				if (!psm3_cycles_left(block_start,		\
+					PSMI_MIN_EP_CONNECT_TIMEOUT)) {		\
+					err = PSM2_EP_NO_RESOURCES;		\
+					break;					\
+				}						\
+			}							\
+		}								\
 	} while (0)
 #endif
 
