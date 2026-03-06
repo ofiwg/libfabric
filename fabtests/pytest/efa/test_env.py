@@ -33,8 +33,8 @@ def test_fork_huge_page_both_set(cmdline_args):
     process = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if is_ibv_fork_support_needed():
         assert process.returncode != 0
-        err_msg = process.stderr.decode("utf-8")
-        assert "The usage of huge page is incompatible with rdma-core's fork support" in err_msg
-        assert "Your application will now abort" in err_msg
+        output = process.stdout.decode("utf-8") + process.stderr.decode("utf-8")
+        assert "The usage of huge page is incompatible with rdma-core's fork support" in output
+        assert "Your application will now abort" in output
     else:
         assert process.returncode == 0
