@@ -946,7 +946,7 @@ void test_efa_rdm_ep_close_shm_resource_unhappy(struct efa_resource **state)
 	size_t mr_size = 64;
 	void *buf;
 	struct fid_mr *mr = NULL;
-	struct efa_mr *efa_mr;
+	struct efa_rdm_mr *efa_rdm_mr;
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -963,8 +963,8 @@ void test_efa_rdm_ep_close_shm_resource_unhappy(struct efa_resource **state)
 				   FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL),
 			 0);
 	assert_non_null(mr);
-	efa_mr = container_of(mr, struct efa_mr, mr_fid);
-	assert_non_null(efa_mr->shm_mr);
+	efa_rdm_mr = container_of(mr, struct efa_rdm_mr, efa_mr.mr_fid);
+	assert_non_null(efa_rdm_mr->shm_mr);
 
 	/* shm resource close should return EBUSY because shm mr was referencing the shm domain */
 	assert_int_equal(efa_rdm_ep_close_shm_resources(ep), -FI_EBUSY);
