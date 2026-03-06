@@ -1050,7 +1050,7 @@ the caps field is 0 on input to fi_getinfo(3), the applicable
 capability bits from the fi_info structure will be used.
 
 The following capabilities apply to the transmit attributes: FI_MSG,
-FI_RMA, FI_TAGGED, FI_ATOMIC, FI_READ, FI_WRITE, FI_SEND, FI_HMEM,
+FI_RMA, FI_TAGGED, FI_RPC, FI_ATOMIC, FI_READ, FI_WRITE, FI_SEND, FI_HMEM,
 FI_TRIGGER, FI_FENCE, FI_MULTICAST, FI_RMA_PMEM, FI_NAMED_RX_CTX,
 FI_COLLECTIVE, and FI_XPU.
 
