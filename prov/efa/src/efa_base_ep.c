@@ -321,7 +321,9 @@ void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
 	attr_ex->cap.max_send_sge = info->tx_attr->iov_limit;
 	attr_ex->cap.max_recv_wr = info->rx_attr->size;
 	attr_ex->cap.max_recv_sge = info->rx_attr->iov_limit;
-	attr_ex->cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
+	attr_ex->cap.max_inline_data = EFA_INFO_TYPE_IS_DIRECT(ep->info) ?
+		ep->info->tx_attr->inject_size :
+		ep->domain->device->efa_attr.inline_buf_size;
 	attr_ex->pd = ep->domain->ibv_pd;
 	attr_ex->qp_context = ep;
 	attr_ex->sq_sig_all = 1;
