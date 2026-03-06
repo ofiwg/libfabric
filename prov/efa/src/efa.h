@@ -129,9 +129,13 @@ struct efa_fabric {
 struct efa_context {
 	uint64_t completion_flags;
 	fi_addr_t addr;
+	void *desc[EFA_RDM_IOV_LIMIT];
+	size_t iov_count;
 };
 
 #if defined(static_assert)
+static_assert(EFA_RDM_IOV_LIMIT < 5,
+	      "EFA_RDM_IOV_LIMIT must be less than 5 to fit in fi_context2");
 static_assert(sizeof(struct efa_context) <= sizeof(struct fi_context2),
 	      "efa_context must not be larger than fi_context2");
 #endif
@@ -179,20 +183,36 @@ static_assert(sizeof(struct efa_context) <= sizeof(struct fi_context2),
  * @param addr              Peer address associated with the operation.
  * @param flags             Operation flags (e.g., FI_COMPLETION).
  * @param completion_flags  Completion flags reported in the cq entry.
+ * @param desc              Array of MR descriptors (can be NULL).
+ * @param iov_count         Number of IOVs/descriptors.
  * @return A pointer to an initialized EFA context structure,
  *  or NULL if context is invalid or FI_COMPLETION is not set.
  */
 static inline struct efa_context *efa_fill_context(const void *context,
 						   fi_addr_t addr,
 						   uint64_t flags,
-						   uint64_t completion_flags)
+						   uint64_t completion_flags,
+						   void **desc,
+						   size_t iov_count)
 {
+	size_t i;
+
 	if (!context || !(flags & FI_COMPLETION))
 		return NULL;
 
 	struct efa_context *efa_context = (struct efa_context *) context;
 	efa_context->completion_flags = completion_flags;
 	efa_context->addr = addr;
+
+	if (desc) {
+		assert(iov_count <= EFA_RDM_IOV_LIMIT);
+		for (i = 0; i < iov_count; i++) {
+			efa_context->desc[i] = desc[i];
+		}
+		efa_context->iov_count = iov_count;
+	} else {
+		efa_context->iov_count = 0;
+	}
 
 	return efa_context;
 }
