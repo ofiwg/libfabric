@@ -266,7 +266,7 @@ int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	(*smr)->flags = attr->flags;
 
 	if (xpmem && smr_env.use_xpmem &&
-	    !(attr->flags & SMR_FLAG_XPMEM_ENABLED)) {
+	    attr->flags & SMR_FLAG_XPMEM_ENABLED) {
 		smr_set_vma_cap(&(*smr)->self_vma_caps, FI_SHM_P2P_XPMEM, true);
 		(*smr)->xpmem_self = xpmem->pinfo;
 	}
