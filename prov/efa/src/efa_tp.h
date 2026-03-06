@@ -63,7 +63,7 @@ static inline void efa_rdm_tracepoint_wr_id_post_write(const void *wr_id)
 
 #if HAVE_EFA_DATA_PATH_DIRECT
 
-static inline uint32_t efa_get_wqe_length(const struct efa_io_tx_wqe *wqe)
+static inline uint32_t efa_get_wqe_length(const struct efa_io_tx_wqe_128 *wqe)
 {
 	enum efa_io_send_op_type op_type;
 	uint32_t length = 0;
@@ -86,7 +86,7 @@ static inline uint32_t efa_get_wqe_length(const struct efa_io_tx_wqe *wqe)
 static inline void efa_data_path_direct_tracepoint_post_send(
 		const struct efa_qp *qp,
 		const struct efa_data_path_direct_sq *sq,
-		const struct efa_io_tx_wqe *wqe)
+		const struct efa_io_tx_wqe_128 *wqe)
 {
 	uint32_t wrid_idx = wqe->meta.req_id & ~sq->wq.gen_mask;
 

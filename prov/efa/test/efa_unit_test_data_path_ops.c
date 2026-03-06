@@ -37,6 +37,7 @@ int efa_qp_post_read(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t s
 }
 
 int efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count,
+		      const struct ibv_data_buf *inline_data_list, bool use_inline,
 		      uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id,
 		      uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
 {

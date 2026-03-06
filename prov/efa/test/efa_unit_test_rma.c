@@ -14,7 +14,9 @@ extern struct fi_ops_rma efa_rma_ops;
  * fails with FI_RMA hints, then constructs the resource without FI_RMA
  * so callers can test the -FI_EOPNOTSUPP error path.
  */
-static bool test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
+static bool test_efa_rma_prep_with_inject_size(struct efa_resource *resource,
+					       fi_addr_t *addr,
+					       size_t inject_size)
 {
 	struct efa_ep_addr raw_addr;
 	size_t raw_addr_len = sizeof(raw_addr);
@@ -23,6 +25,9 @@ static bool test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
 
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	assert_non_null(resource->hints);
+
+	if (inject_size)
+		resource->hints->tx_attr->inject_size = inject_size;
 
 	fi_rma_supported = efa_device_support_rdma_read() && efa_device_support_rdma_write();
 
@@ -63,6 +68,11 @@ static bool test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
 	assert_int_equal(ret, 1);
 
 	return fi_rma_supported;
+}
+
+static bool test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
+{
+	return test_efa_rma_prep_with_inject_size(resource, addr, 0);
 }
 
 void test_efa_rma_read(struct efa_resource **state)
@@ -273,6 +283,47 @@ void test_efa_rma_writemsg(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
+void test_efa_rma_writemsg_with_wide_wqe_inject(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff local_buff;
+	struct iovec iov;
+	struct fi_msg_rma msg = {0};
+	struct fi_rma_iov rma_iov;
+	fi_addr_t dest_addr;
+	size_t inject_rma_size, sz;
+	int ret;
+
+	bool fi_rma_supported = test_efa_rma_prep_with_inject_size(resource, &dest_addr, 42);
+
+	if (!fi_rma_supported)
+		skip();
+
+	sz = sizeof inject_rma_size;
+	ret = fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+			&inject_rma_size, &sz);
+	if (ret || !inject_rma_size) {
+		/* Firmware does not support inline RDMA write */
+		skip();
+	}
+	efa_unit_test_buff_construct(&local_buff, resource, 32 /* buff_size */);
+
+	iov.iov_base = local_buff.buff;
+	iov.iov_len = local_buff.size;
+	rma_iov.len = local_buff.size;
+	rma_iov.addr = 0x87654321;
+	rma_iov.key = 123456;
+	efa_unit_test_construct_msg_rma(&msg, &iov, NULL, 1, dest_addr, &rma_iov,
+					1, NULL, 0);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_writemsg(resource->ep, &msg, FI_INJECT);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+
+	efa_unit_test_buff_destruct(&local_buff);
+}
+
 void test_efa_rma_writedata(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
@@ -310,11 +361,12 @@ void test_efa_rma_inject_write(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
 	fi_addr_t dest_addr;
+	size_t inject_rma_size, sz;
 	int ret;
 	uint64_t remote_addr = 0x87654321;
 	uint64_t remote_key = 123456;
 
-	bool fi_rma_supported = test_efa_rma_prep(resource, &dest_addr);
+	bool fi_rma_supported = test_efa_rma_prep_with_inject_size(resource, &dest_addr, 42);
 
 	if (!fi_rma_supported) {
 		ret = fi_inject_write(resource->ep, NULL, 0, dest_addr, remote_addr, remote_key);
@@ -322,11 +374,21 @@ void test_efa_rma_inject_write(struct efa_resource **state)
 		return;
 	}
 
+	sz = sizeof inject_rma_size;
+	ret = fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+			&inject_rma_size, &sz);
+	if (ret || !inject_rma_size) {
+		/* Firmware does not support inline RDMA write */
+		skip();
+	}
+
 	efa_unit_test_buff_construct(&local_buff, resource, 32 /* buff_size */);
 
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	ret = fi_inject_write(resource->ep, local_buff.buff, local_buff.size,
 			      dest_addr, remote_addr, remote_key);
-	assert_int_equal(ret, -FI_ENOSYS);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
 	efa_unit_test_buff_destruct(&local_buff);
 }
@@ -336,11 +398,12 @@ void test_efa_rma_inject_writedata(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
 	fi_addr_t dest_addr;
+	size_t inject_rma_size, sz;
 	int ret;
 	uint64_t remote_addr = 0x87654321;
 	uint64_t remote_key = 123456;
 
-	bool fi_rma_supported = test_efa_rma_prep(resource, &dest_addr);
+	bool fi_rma_supported = test_efa_rma_prep_with_inject_size(resource, &dest_addr, 42);
 
 	if (!fi_rma_supported) {
 		ret = fi_inject_writedata(resource->ep, NULL, 0, 0, dest_addr, remote_addr, remote_key);
@@ -348,12 +411,22 @@ void test_efa_rma_inject_writedata(struct efa_resource **state)
 		return;
 	}
 
+	sz = sizeof inject_rma_size;
+	ret = fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+			&inject_rma_size, &sz);
+	if (ret || !inject_rma_size) {
+		/* Firmware does not support inline RDMA write */
+		skip();
+	}
+
 	efa_unit_test_buff_construct(&local_buff, resource, 32 /* buff_size */);
 
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	ret = fi_inject_writedata(resource->ep, local_buff.buff,
 				  local_buff.size, 0, dest_addr, remote_addr,
 				  remote_key);
-	assert_int_equal(ret, -FI_ENOSYS);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
 	efa_unit_test_buff_destruct(&local_buff);
 }
@@ -366,10 +439,10 @@ void test_efa_rma_writemsg_with_inject(struct efa_resource **state)
 	struct fi_msg_rma msg = {0};
 	struct fi_rma_iov rma_iov;
 	fi_addr_t dest_addr;
-	void *desc;
+	size_t inject_rma_size, sz;
 	int ret;
 
-	bool fi_rma_supported = test_efa_rma_prep(resource, &dest_addr);
+	bool fi_rma_supported = test_efa_rma_prep_with_inject_size(resource, &dest_addr, 42);
 
 	if (!fi_rma_supported) {
 		efa_unit_test_construct_msg_rma(&msg, &iov, NULL, 0, dest_addr, &rma_iov, 1, NULL, 0);
@@ -378,19 +451,28 @@ void test_efa_rma_writemsg_with_inject(struct efa_resource **state)
 		return;
 	}
 
-	efa_unit_test_buff_construct(&local_buff, resource, 4096 /* buff_size */);
+	sz = sizeof inject_rma_size;
+	ret = fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
+			&inject_rma_size, &sz);
+	if (ret || !inject_rma_size) {
+		/* Firmware does not support inline RDMA write */
+		skip();
+	}
+
+	efa_unit_test_buff_construct(&local_buff, resource, 32 /* buff_size */);
 
 	iov.iov_base = local_buff.buff;
 	iov.iov_len = local_buff.size;
-	desc = fi_mr_desc(local_buff.mr);
 	rma_iov.len = local_buff.size;
 	rma_iov.addr = 0x87654321;
 	rma_iov.key = 123456;
-	efa_unit_test_construct_msg_rma(&msg, &iov, &desc, 1, dest_addr, &rma_iov,
+	efa_unit_test_construct_msg_rma(&msg, &iov, NULL, 1, dest_addr, &rma_iov,
 					1, NULL, 0);
 
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	ret = fi_writemsg(resource->ep, &msg, FI_INJECT);
-	assert_int_equal(ret, -FI_ENOSYS);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
 	efa_unit_test_buff_destruct(&local_buff);
 }

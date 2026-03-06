@@ -45,7 +45,7 @@ static void test_efa_data_path_direct_multiple_sge_fail_impl(struct efa_resource
 	if (fi_opcode == FI_READ) {
 		ret = efa_data_path_direct_post_read(qp, sge_list, 2, 123456, 0x87654321, 0, 0, NULL, 0, 0);
 	} else {
-		ret = efa_data_path_direct_post_write(qp, sge_list, 2, 123456, 0x87654321, 0, 0, 0, NULL, 0, 0);
+		ret = efa_data_path_direct_post_write(qp, sge_list, 2, NULL, false, 123456, 0x87654321, 0, 0, 0, NULL, 0, 0);
 	}
 	assert_int_equal(ret, EINVAL);
 
