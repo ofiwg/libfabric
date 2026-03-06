@@ -216,6 +216,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_ibv_get_cq_event=1],
 			[have_ibv_get_cq_event=0],
 			[[#include <infiniband/verbs.h>]])
+
+		AC_CHECK_MEMBER([struct efadv_device_attr.inline_buf_size_ex],
+			[have_inline_buf_size_ex=1],
+			[have_inline_buf_size_ex=0],
+			[[#include <infiniband/efadv.h>]])
 	])
 
 	AC_DEFINE_UNQUOTED([HAVE_RDMA_SIZE],
@@ -263,6 +268,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_CQ_ATTR_DB],
 		[$have_efadv_cq_attr_db],
 		[Indicates if efadv_cq_attr struct has doorbell field])
+	AC_DEFINE_UNQUOTED([HAVE_INLINE_BUF_SIZE_EX],
+		[$have_inline_buf_size_ex],
+		[Indicates if efadv_device_attr has inline_buf_size_ex field for wide WQE])
 	AS_IF([test "$have_efadv_query_qp_wqs" = "1" -a "$have_efadv_query_cq" = "1"],
 		[have_efa_data_path_direct=1],
 		[have_efa_data_path_direct=0])

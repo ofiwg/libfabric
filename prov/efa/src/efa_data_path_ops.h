@@ -43,10 +43,12 @@ int efa_qp_post_read(struct efa_qp *qp, const struct ibv_sge *sge_list,
 		      uint64_t remote_addr, uintptr_t wr_id, uint64_t flags,
 		      struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
 int efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list,
-		       size_t sge_count, uint32_t remote_key,
-		       uint64_t remote_addr, uintptr_t wr_id, uint64_t data,
-		       uint64_t flags, struct efa_ah *ah, uint32_t qpn,
-		       uint32_t qkey);
+		       size_t sge_count,
+		       const struct ibv_data_buf *inline_data_list,
+		       bool use_inline,
+		       uint32_t remote_key, uint64_t remote_addr,
+		       uintptr_t wr_id, uint64_t data, uint64_t flags,
+		       struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
 int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
 int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq);
 enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq);
@@ -271,6 +273,8 @@ static inline int
 efa_qp_post_write(struct efa_qp *qp,
                   const struct ibv_sge *sge_list,
                   size_t sge_count,
+                  const struct ibv_data_buf *inline_data_list,
+                  bool use_inline,
                   uint32_t remote_key,
                   uint64_t remote_addr,
                   uintptr_t wr_id,
@@ -285,6 +289,7 @@ efa_qp_post_write(struct efa_qp *qp,
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (qp->data_path_direct_enabled)
 		return efa_data_path_direct_post_write(qp, sge_list, sge_count,
+					 inline_data_list, use_inline,
 					 remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey);
 #endif
 	return efa_ibv_post_write(qp, sge_list, sge_count,
