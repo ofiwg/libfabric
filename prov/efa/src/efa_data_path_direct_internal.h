@@ -562,7 +562,7 @@ EFA_ALWAYS_INLINE void
 efa_data_path_direct_send_wr_post(
 		struct efa_qp *qp,
 		struct efa_data_path_direct_sq *sq,
-		struct efa_io_tx_wqe *wqe)
+		struct efa_io_tx_wqe_128 *wqe)
 {
 	uint32_t sq_desc_idx;
 	uint64_t *src, *dst;
@@ -570,11 +570,15 @@ efa_data_path_direct_send_wr_post(
 	/* Calculate target address in write-combined memory */
 	sq_desc_idx = sq->wq.pc & sq->wq.desc_mask;
 	src = (uint64_t *)wqe;
-	dst = (uint64_t *)((struct efa_io_tx_wqe *)sq->desc + sq_desc_idx);
+	dst = (uint64_t *)((uint8_t *)sq->desc + sq_desc_idx * sq->wq.wqe_size);
 
-	/* Copy 64-byte WQE using 8 uint64_t stores */
-	for (int i = 0; i < 8; i++)
-		dst[i] = src[i];
+	/*
+	 * Use memcpy to copy the WQE to write-combined memory.
+	 * The wqe_size is either 64 or 128 bytes depending on whether
+	 * wide WQE is enabled. memcpy handles both sizes and the compiler
+	 * optimizes it for aligned power-of-two sizes.
+	 */
+	memcpy((void *)dst, (void *)src, sq->wq.wqe_size);
 
 #if HAVE_LTTNG
 	efa_data_path_direct_tracepoint_post_send(qp, sq, &wqe->meta);
@@ -612,7 +616,7 @@ EFA_ALWAYS_INLINE void efa_data_path_direct_set_ud_addr(struct efa_io_tx_meta_de
  * @param num_buf Number of data buffers
  * @param buf_list Array of data buffers
  */
-EFA_ALWAYS_INLINE void efa_data_path_direct_set_inline_data(struct efa_io_tx_wqe *wqe,
+EFA_ALWAYS_INLINE void efa_data_path_direct_set_inline_data(struct efa_io_tx_wqe_128 *wqe,
                                                             size_t num_buf,
                                                             const struct ibv_data_buf *buf_list)
 {
