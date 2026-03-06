@@ -132,10 +132,10 @@ static int efa_ep_setopt(fid_t fid, int level, int optname, const void *optval, 
 		EFA_EP_SETOPT_THRESHOLD(MAX_RMA_SIZE, ep->max_rma_size, (size_t) ep->domain->device->max_rdma_size)
 		break;
 	case FI_OPT_INJECT_MSG_SIZE:
-		EFA_EP_SETOPT_THRESHOLD(INJECT_MSG_SIZE, ep->inject_msg_size, (size_t) ep->domain->device->efa_attr.inline_buf_size)
+		EFA_EP_SETOPT_THRESHOLD(INJECT_MSG_SIZE, ep->inject_msg_size, (size_t) ep->info->tx_attr->inject_size)
 		break;
 	case FI_OPT_INJECT_RMA_SIZE:
-		EFA_EP_SETOPT_THRESHOLD(INJECT_RMA_SIZE, ep->inject_rma_size, (size_t) 0)
+		EFA_EP_SETOPT_THRESHOLD(INJECT_RMA_SIZE, ep->inject_rma_size, ep->inject_rma_size)
 		break;
 	/* no op as efa direct ep will not use cuda api and shm in data transfer */
 	case FI_OPT_CUDA_API_PERMITTED: /* fall through */
