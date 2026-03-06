@@ -239,9 +239,29 @@ void efa_prov_info_set_tx_rx_attr(struct fi_info *prov_info,
 	prov_info->tx_attr->mode |= FI_CONTEXT2;
 	prov_info->rx_attr->mode |= FI_CONTEXT2;
 
-	prov_info->tx_attr->inject_size = device->efa_attr.inline_buf_size;
+	prov_info->tx_attr->inject_size =
+#if HAVE_INLINE_BUF_SIZE_EX
+		device->efa_attr.inline_buf_size_ex ?
+			device->efa_attr.inline_buf_size_ex :
+#endif
+		device->efa_attr.inline_buf_size;
 	prov_info->tx_attr->iov_limit = device->efa_attr.max_sq_sge;
+#if HAVE_INLINE_BUF_SIZE_EX
+	{
+		struct efadv_sq_depth_attr sq_attr = {0};
+		int max_sq_depth;
+
+		sq_attr.max_inline_data = device->efa_attr.inline_buf_size;
+		max_sq_depth = efadv_get_max_sq_depth(device->ibv_ctx,
+						      &sq_attr,
+						      sizeof(sq_attr));
+		prov_info->tx_attr->size = max_sq_depth > 0 ?
+			max_sq_depth :
+			rounddown_power_of_two(device->efa_attr.max_sq_wr);
+	}
+#else
 	prov_info->tx_attr->size = rounddown_power_of_two(device->efa_attr.max_sq_wr);
+#endif
 	prov_info->rx_attr->iov_limit = device->efa_attr.max_rq_sge;
 	prov_info->rx_attr->size = rounddown_power_of_two(device->efa_attr.max_rq_wr / prov_info->rx_attr->iov_limit);
 
