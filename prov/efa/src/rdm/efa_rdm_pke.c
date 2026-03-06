@@ -710,7 +710,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	sge.length = len;
 	sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
 
-	err = efa_qp_post_write(qp, &sge, 1, remote_key, remote_buf, wr_id,
+	err = efa_qp_post_write(qp, &sge, 1, NULL, false, remote_key, remote_buf, wr_id,
 				cq_data, txe->fi_flags, ah, qpn, qkey);
 
 #if ENABLE_DEBUG
