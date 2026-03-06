@@ -119,7 +119,8 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context);
 
 int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
-		   uint32_t tclass, bool enable_unsolicited_write_recv);
+		   uint32_t tclass, bool enable_unsolicited_write_recv,
+		   bool use_inline_write);
 
 void efa_qp_destruct(struct efa_qp *qp);
 
