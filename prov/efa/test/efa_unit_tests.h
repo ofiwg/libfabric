@@ -398,6 +398,7 @@ void test_efa_rma_writedata();
 void test_efa_rma_inject_write();
 void test_efa_rma_inject_writedata();
 void test_efa_rma_writemsg_with_inject();
+void test_efa_rma_writemsg_with_wide_wqe_inject();
 void test_efa_rma_read_0_byte();
 void test_efa_rma_readv_0_byte();
 void test_efa_rma_readmsg_0_byte();
