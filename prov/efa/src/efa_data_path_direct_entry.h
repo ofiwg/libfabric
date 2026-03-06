@@ -578,6 +578,8 @@ efa_data_path_direct_post_write(
 		struct efa_qp *qp,
 		const struct ibv_sge *sge_list,
 		size_t sge_count,
+		const struct ibv_data_buf *inline_data_list,
+		bool use_inline,
 		uint32_t remote_key,
 		uint64_t remote_addr,
 		uintptr_t wr_id,
@@ -644,10 +646,18 @@ efa_data_path_direct_post_write(
 
 	/* Set remote memory information */
 	efa_send_wr_set_rdma_addr(remote_mem, remote_key, remote_addr);
-	remote_mem->length = efa_sge_total_bytes(sge_list, sge_count);
 
-	/* Set local SGE list - caller has prepared sge_list */
-	efa_data_path_direct_set_sgl(local_wqe.data.rdma_req.local_mem, meta_desc, sge_list, sge_count);
+	if (use_inline) {
+		assert(sge_count == 1);
+		memcpy(local_wqe.data.rdma_req.inline_data,
+		       inline_data_list[0].addr, inline_data_list[0].length);
+		remote_mem->length = inline_data_list[0].length;
+		EFA_SET(&meta_desc->ctrl1, EFA_IO_TX_META_DESC_INLINE_MSG, 1);
+		meta_desc->length = inline_data_list[0].length;
+	} else {
+		remote_mem->length = efa_sge_total_bytes(sge_list, sge_count);
+		efa_data_path_direct_set_sgl(local_wqe.data.rdma_req.local_mem, meta_desc, sge_list, sge_count);
+	}
 
 	efa_data_path_direct_send_wr_post(qp, sq, &local_wqe);
 
