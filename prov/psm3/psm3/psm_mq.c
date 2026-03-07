@@ -717,7 +717,7 @@ psm3_mq_wait_inner(psm2_mq_req_t *ireq, void *status,
 			return err;
 		}
 
-		PSMI_BLOCKUNTIL_TO(mq->ep, mq->ep->epaddr->proto->epinfo.ep_timeout_ack, err, req->state == MQ_STATE_COMPLETE);
+		PSMI_BLOCKUNTIL(mq->ep, err, req->state == MQ_STATE_COMPLETE);
 
 		if (err > PSM2_OK_NO_PROGRESS)
 			goto fail_with_lock;
