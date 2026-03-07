@@ -343,7 +343,7 @@ psm3_ips_am_short_request(psm2_epaddr_t epaddr,
 		    ((nargs - IPS_AM_HDR_NARGS) << 3) : 0;
 
 		/* len + pad_bytes + overflow_args */
-		PSMI_BLOCKUNTIL(epaddr->ptlctl->ep, epaddr->proto->epinfo.ep_timeout_ack,
+		PSMI_BLOCKUNTIL_TO(epaddr->ptlctl->ep, epaddr->proto->epinfo.ep_timeout_ack,
 				err,
 				((scb = psm3_ips_scbctrl_alloc(
 				      &proto_am->scbc_request,
@@ -351,7 +351,7 @@ psm3_ips_am_short_request(psm2_epaddr_t epaddr,
 				      len + pad_bytes + arg_sz,
 				      IPS_SCB_FLAG_ADD_BUFFER)) != NULL));
 	} else {
-		PSMI_BLOCKUNTIL(epaddr->ptlctl->ep, epaddr->proto->epinfo.ep_timeout_ack,
+		PSMI_BLOCKUNTIL_TO(epaddr->ptlctl->ep, epaddr->proto->epinfo.ep_timeout_ack,
 				err,
 				((scb = psm3_ips_scbctrl_alloc_tiny(
 				      &proto_am->scbc_request, 0)) != NULL));

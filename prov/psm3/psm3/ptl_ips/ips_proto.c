@@ -964,7 +964,7 @@ psm3_ips_proto_disconnect_all(struct ips_proto *proto, int force,
 		uint64_t t_grace_interval_start = get_cycles();
 		int num_disconnect_requests = proto->num_disconnect_requests;
 		PSMI_BLOCKUNTIL(
-			proto->ep, proto->epinfo.ep_timeout_ack, err,
+			proto->ep, err,
 			proto->num_connected_incoming == 0 ||
 			(!psm3_cycles_left(t_start, timeout_in) &&
 			 (!psm3_cycles_left(t_grace_interval_start,

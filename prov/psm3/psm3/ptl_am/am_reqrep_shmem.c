@@ -2592,7 +2592,7 @@ amsh_conn_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			if (err > PSM2_OK_NO_PROGRESS)
 				psm3_handle_error(PSMI_EP_NORETURN, err,
 								  "Fatal error "
-								  "in connecting to shm segment");
+								  "in disconnecting from shm segment");
 			/**
 			* Only munmap if we have nothing more to
 			* communicate with the other node, i.e. we are
