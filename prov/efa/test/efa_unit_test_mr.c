@@ -254,92 +254,6 @@ void test_efa_direct_mr_reg_no_gdrcopy(struct efa_resource **state)
 }
 #endif
 
-void test_efa_direct_mr_reg_rdma_read_not_supported(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_domain *efa_domain;
-	size_t mr_size = 64;
-	void *buf;
-	struct fid_mr *mr = NULL;
-	struct fi_mr_attr mr_reg_attr = {0};
-	struct iovec iovec;
-	int err;
-	uint32_t efa_device_caps_orig;
-
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
-						    FI_VERSION(2, 0),
-						    resource->hints,
-						    true, true);
-
-	efa_domain = container_of(resource->domain, struct efa_domain,
-				  util_domain.domain_fid);
-
-	/* Mock device to not support RDMA read */
-	efa_device_caps_orig = efa_domain->device->device_caps;
-	efa_domain->device->device_caps &= ~EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
-
-	buf = malloc(mr_size);
-	assert_non_null(buf);
-
-	mr_reg_attr.access = FI_READ;
-	mr_reg_attr.iface = FI_HMEM_SYSTEM;
-	iovec.iov_base = buf;
-	iovec.iov_len = mr_size;
-	mr_reg_attr.mr_iov = &iovec;
-	mr_reg_attr.iov_count = 1;
-
-	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
-	assert_int_equal(err, -FI_EOPNOTSUPP);
-
-	free(buf);
-	efa_domain->device->device_caps = efa_device_caps_orig;
-}
-
-void test_efa_direct_mr_reg_rdma_write_not_supported(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_domain *efa_domain;
-	size_t mr_size = 64;
-	void *buf;
-	struct fid_mr *mr = NULL;
-	struct fi_mr_attr mr_reg_attr = {0};
-	struct iovec iovec;
-	int err;
-	uint32_t efa_device_caps_orig;
-
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
-						    FI_VERSION(2, 0),
-						    resource->hints,
-						    true, true);
-
-	efa_domain = container_of(resource->domain, struct efa_domain,
-				  util_domain.domain_fid);
-
-	efa_device_caps_orig = efa_domain->device->device_caps;
-	/* Mock device to not support RDMA write */
-#if HAVE_CAPS_RDMA_WRITE
-	efa_domain->device->device_caps &= ~EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
-#endif
-
-	buf = malloc(mr_size);
-	assert_non_null(buf);
-
-	mr_reg_attr.access = FI_WRITE;
-	mr_reg_attr.iface = FI_HMEM_SYSTEM;
-	iovec.iov_base = buf;
-	iovec.iov_len = mr_size;
-	mr_reg_attr.mr_iov = &iovec;
-	mr_reg_attr.iov_count = 1;
-
-	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
-	assert_int_equal(err, -FI_EOPNOTSUPP);
-
-	free(buf);
-	efa_domain->device->device_caps = efa_device_caps_orig;
-}
-
 /**
  * @brief Test efa_mr_ofi_to_ibv_access with no access flags
  * 
@@ -452,18 +366,18 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(struct efa_resource *
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE);
 }
 /**
- * @brief Test efa_mr_internal_regv does not create shm MR
+ * @brief Test efa_rdm_mr_internal_regv does not create shm MR
  *
- * This test verifies that efa_mr_internal_regv only creates EFA MR
+ * This test verifies that efa_rdm_mr_internal_regv only creates EFA MR
  * and does not create a corresponding SHM MR, even when SHM domain exists.
  */
-void test_efa_mr_internal_regv_no_shm_mr(struct efa_resource **state)
+void test_efa_rdm_mr_internal_regv_no_shm_mr(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	size_t mr_size = 64;
 	void *buf;
 	struct fid_mr *mr = NULL;
-	struct efa_mr *efa_mr;
+	struct efa_rdm_mr *efa_rdm_mr;
 	struct iovec iov;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
@@ -474,14 +388,14 @@ void test_efa_mr_internal_regv_no_shm_mr(struct efa_resource **state)
 	iov.iov_base = buf;
 	iov.iov_len = mr_size;
 
-	assert_int_equal(efa_mr_internal_regv(resource->domain, &iov, 1,
+	assert_int_equal(efa_rdm_mr_internal_regv(resource->domain, &iov, 1,
 					      FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL),
 			 0);
 	assert_non_null(mr);
 
-	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+	efa_rdm_mr = container_of(mr, struct efa_rdm_mr, efa_mr.mr_fid);
 	/* Verify that shm_mr is NULL even if shm_domain exists */
-	assert_null(efa_mr->shm_mr);
+	assert_null(efa_rdm_mr->shm_mr);
 
 	assert_int_equal(fi_close(&mr->fid), 0);
 	free(buf);

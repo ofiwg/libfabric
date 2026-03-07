@@ -911,6 +911,7 @@
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pkt_type.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_rma.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_cq.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_mr.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_peer.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_srx.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_util.c" />

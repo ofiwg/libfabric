@@ -93,7 +93,7 @@ void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
 	for (i = 0; i < numdesc; ++i) {
 		efa_mr = efa_desc[i];
 		if (efa_mr)
-			shm_desc[i] = fi_mr_desc(efa_mr->shm_mr);
+			shm_desc[i] = fi_mr_desc(((struct efa_rdm_mr *)efa_mr)->shm_mr);
 	}
 }
 
