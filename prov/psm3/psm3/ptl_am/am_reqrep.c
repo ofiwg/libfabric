@@ -66,6 +66,7 @@ psm3_amsh_am_short_request(psm2_epaddr_t epaddr,
 			   void *completion_ctxt)
 {
 	psm2_amarg_t req_args[NSHORT_ARGS + NBULK_ARGS];
+	psm2_error_t res;
 
 	/* All sends are synchronous. Ignore PSM2_AM_FLAG_ASYNC.
 	 * Treat PSM2_AM_FLAG_NOREPLY as "advisory". This was mainly
@@ -82,13 +83,13 @@ psm3_amsh_am_short_request(psm2_epaddr_t epaddr,
 	req_args[0].u32w0 = (uint32_t) handler;
 	psm3_mq_mtucpy((void *)&req_args[1], (const void *)args,
 		       (nargs * sizeof(psm2_amarg_t)));
-	psm3_amsh_short_request(epaddr->ptlctl->ptl, epaddr, am_handler_hidx,
+	res = psm3_amsh_short_request(epaddr->ptlctl->ptl, epaddr, am_handler_hidx,
 				req_args, nargs + 1, src, len, 0);
 
 	if (completion_fn)
 		completion_fn(completion_ctxt);
 
-	return PSM2_OK;
+	return (res == PSM2_OK_NO_PROGRESS) ? PSM2_OK : res;
 }
 
 psm2_error_t
@@ -99,6 +100,7 @@ psm3_amsh_am_short_reply(psm2_am_token_t tok,
 			 void *completion_ctxt)
 {
 	psm2_amarg_t rep_args[NSHORT_ARGS + NBULK_ARGS];
+	psm2_error_t res;
 
 	/* For now less than NSHORT_ARGS+NBULK_ARGS-1. We use the first arg to carry
 	 * the handler index.
@@ -108,11 +110,11 @@ psm3_amsh_am_short_reply(psm2_am_token_t tok,
 	psm3_mq_mtucpy((void *)&rep_args[1], (const void *)args,
 		       (nargs * sizeof(psm2_amarg_t)));
 
-	psm3_amsh_short_reply((amsh_am_token_t *) tok, am_handler_hidx,
+	res = psm3_amsh_short_reply((amsh_am_token_t *) tok, am_handler_hidx,
 			      rep_args, nargs + 1, src, len, 0);
 
 	if (completion_fn)
 		completion_fn(completion_ctxt);
 
-	return PSM2_OK;
+	return (res == PSM2_OK_NO_PROGRESS) ? PSM2_OK : res;
 }
