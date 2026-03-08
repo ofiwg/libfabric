@@ -472,6 +472,26 @@ ssize_t rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 
 	dg_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(ep)->rxdaddr_dg_idx),
 					    (int)pkt_entry->peer);
+
+	/*
+	 * ACK and CTS are small fire-and-forget control packets. fi_inject
+	 * sends synchronously, copies the buffer, and generates no TX CQ
+	 * entry, so we can free the packet entry immediately.
+	 */
+	if (rxd_pkt_type(pkt_entry) == RXD_ACK ||
+	    rxd_pkt_type(pkt_entry) == RXD_CTS) {
+		ret = fi_inject(ep->dg_ep, rxd_pkt_start(pkt_entry),
+				pkt_entry->pkt_size, dg_addr);
+		if (ret) {
+			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+				"error injecting ctrl packet: %d (%s)\n",
+				(int) ret, fi_strerror((int) -ret));
+			return ret;
+		}
+		rxd_remove_free_pkt_entry(pkt_entry);
+		return 0;
+	}
+
 	if (pkt_entry->user_iov.iov_len) {
 		struct iovec iov[2] = {
 			{ .iov_base = rxd_pkt_start(pkt_entry),
