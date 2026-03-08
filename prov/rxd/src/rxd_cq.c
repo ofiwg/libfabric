@@ -59,7 +59,7 @@ static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	util_ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
 	ep = container_of(util_ep, struct rxd_ep, util_ep);
 
-	str = fi_cq_strerror(ep->dg_cq, prov_errno, err_data, buf, len);
+	str = fi_cq_strerror(ep->dg_rx_cq, prov_errno, err_data, buf, len);
 	ofi_genlock_unlock(&cq->util_cq.ep_list_lock);
 	return str;
 }
@@ -1196,19 +1196,19 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	ofi_buf_free(pkt_entry);
 }
 
-void rxd_handle_error(struct rxd_ep *ep)
+void rxd_handle_error(struct rxd_ep *ep, struct fid_cq *cq)
 {
 	struct fi_cq_err_entry err = {0};
 	ssize_t ret;
 
-	ret = fi_cq_readerr(ep->dg_cq, &err, 0);
+	ret = fi_cq_readerr(cq, &err, 0);
 	if (ret < 0) {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
 			"Error reading CQ: %s\n", fi_strerror((int) -ret));
 	} else {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
 			"Received %s error from core provider: %s\n",
-			err.flags & FI_SEND ? "tx" : "rx", fi_strerror(-err.err));
+			cq == ep->dg_tx_cq ? "tx" : "rx", fi_strerror(-err.err));
 	}
 }
 

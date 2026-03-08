@@ -253,7 +253,11 @@ static int rxd_ep_enable(struct rxd_ep *ep)
 	size_t i;
 	int ret;
 
-	ret = fi_ep_bind(ep->dg_ep, &ep->dg_cq->fid, FI_TRANSMIT | FI_RECV);
+	ret = fi_ep_bind(ep->dg_ep, &ep->dg_tx_cq->fid, FI_TRANSMIT);
+	if (ret)
+		return ret;
+
+	ret = fi_ep_bind(ep->dg_ep, &ep->dg_rx_cq->fid, FI_RECV);
 	if (ret)
 		return ret;
 
@@ -738,8 +742,14 @@ static int rxd_ep_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	if (ep->dg_cq) {
-		ret = fi_close(&ep->dg_cq->fid);
+	if (ep->dg_rx_cq) {
+		ret = fi_close(&ep->dg_rx_cq->fid);
+		if (ret)
+			return ret;
+	}
+
+	if (ep->dg_tx_cq) {
+		ret = fi_close(&ep->dg_tx_cq->fid);
 		if (ret)
 			return ret;
 	}
@@ -769,7 +779,7 @@ static int rxd_ep_trywait(void *arg)
 {
 	struct rxd_fabric *rxd_fabric;
 	struct rxd_ep *rxd_ep = (struct rxd_ep *) arg;
-	struct fid *fids[1] = {&rxd_ep->dg_cq->fid};
+	struct fid *fids[1] = {&rxd_ep->dg_rx_cq->fid};
 
 	rxd_fabric = container_of(rxd_ep->util_ep.domain->fabric,
 				  struct rxd_fabric, util_fabric);
@@ -781,35 +791,55 @@ static int rxd_dg_cq_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
 {
 	struct rxd_domain *rxd_domain;
 	struct fi_cq_attr cq_attr = {0};
+	bool tx_newly_opened = false;
 	int ret;
 
 	assert((wait_obj == FI_WAIT_NONE) || (wait_obj == FI_WAIT_FD));
 
-	cq_attr.size = rxd_ep->tx_size + rxd_ep->rx_size;
-	cq_attr.format = FI_CQ_FORMAT_MSG;
-	cq_attr.wait_obj = wait_obj;
-
 	rxd_domain = container_of(rxd_ep->util_ep.domain, struct rxd_domain,
 				  util_domain);
 
-	ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr, &rxd_ep->dg_cq, rxd_ep);
-	if (ret)
-		return ret;
+	/* TX CQ: no wait object needed, open once */
+	if (!rxd_ep->dg_tx_cq) {
+		cq_attr.size = rxd_ep->tx_size;
+		cq_attr.format = FI_CQ_FORMAT_MSG;
+		cq_attr.wait_obj = FI_WAIT_NONE;
+		ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr,
+				 &rxd_ep->dg_tx_cq, rxd_ep);
+		if (ret)
+			return ret;
+		tx_newly_opened = true;
+	}
 
-	if (wait_obj == FI_WAIT_FD && (!rxd_ep->dg_cq_fd)) {
-		ret = fi_control(&rxd_ep->dg_cq->fid, FI_GETWAIT,
+	/* RX CQ: carries the wait FD for event notification */
+	cq_attr.size = rxd_ep->rx_size;
+	cq_attr.format = FI_CQ_FORMAT_MSG;
+	cq_attr.wait_obj = wait_obj;
+	ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr,
+			 &rxd_ep->dg_rx_cq, rxd_ep);
+	if (ret)
+		goto err_close_tx;
+
+	if (wait_obj == FI_WAIT_FD && !rxd_ep->dg_cq_fd) {
+		ret = fi_control(&rxd_ep->dg_rx_cq->fid, FI_GETWAIT,
 				 &rxd_ep->dg_cq_fd);
 		if (ret) {
 			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
-				"Unable to get dg CQ fd\n");
-			goto err;
+				"Unable to get dg RX CQ fd\n");
+			goto err_close_rx;
 		}
 	}
 
 	return 0;
-err:
-	fi_close(&rxd_ep->dg_cq->fid);
-	rxd_ep->dg_cq = NULL;
+
+err_close_rx:
+	fi_close(&rxd_ep->dg_rx_cq->fid);
+	rxd_ep->dg_rx_cq = NULL;
+err_close_tx:
+	if (tx_newly_opened) {
+		fi_close(&rxd_ep->dg_tx_cq->fid);
+		rxd_ep->dg_tx_cq = NULL;
+	}
 	return ret;
 }
 
@@ -840,7 +870,7 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
-		if (!ep->dg_cq) {
+		if (!ep->dg_rx_cq) {
 			ret = rxd_dg_cq_open(ep, cq->wait ? FI_WAIT_FD : FI_WAIT_NONE);
 			if (ret)
 				return ret;
@@ -860,19 +890,19 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
-		if (!ep->dg_cq) {
+		if (!ep->dg_rx_cq) {
 			ret = rxd_dg_cq_open(ep, cntr->wait ? FI_WAIT_FD : FI_WAIT_NONE);
 		} else if (!ep->dg_cq_fd && cntr->wait) {
-			/* Reopen CQ with WAIT fd set */
-			ret = fi_close(&ep->dg_cq->fid);
+			/* Reopen RX CQ with WAIT fd set */
+			ret = fi_close(&ep->dg_rx_cq->fid);
 			if (ret) {
 				FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
-					"Unable to close dg CQ: %s\n",
+					"Unable to close dg RX CQ: %s\n",
 					fi_strerror(-ret));
 				return ret;
 			}
 
-			ep->dg_cq = NULL;
+			ep->dg_rx_cq = NULL;
 			ret = rxd_dg_cq_open(ep, FI_WAIT_FD);
 		}
 		if (ret)
@@ -1011,31 +1041,40 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 void rxd_ep_progress(struct util_ep *util_ep)
 {
 	struct rxd_peer *peer;
-	struct fi_cq_msg_entry cq_entry;
+	struct fi_cq_msg_entry cq_entries[RXD_CQ_BATCH_SZ];
 	struct dlist_entry *tmp;
 	struct rxd_ep *ep;
 	ssize_t ret;
-	int i;
+	int i, j;
 
 	ep = container_of(util_ep, struct rxd_ep, util_ep);
 
 	ofi_genlock_lock(&ep->util_ep.lock);
-	for(ret = 1, i = 0;
-	    ret > 0 && (!rxd_env.spin_count || i < rxd_env.spin_count);
-	    i++) {
-		ret = fi_cq_read(ep->dg_cq, &cq_entry, 1);
-		if (ret == -FI_EAGAIN)
-			break;
 
+	/* RX first: incoming ACKs free TX window slots */
+	for (i = 0; !rxd_env.spin_count || i < rxd_env.spin_count; i++) {
+		ret = fi_cq_read(ep->dg_rx_cq, cq_entries, RXD_CQ_BATCH_SZ);
 		if (ret == -FI_EAVAIL) {
-			rxd_handle_error(ep);
+			rxd_handle_error(ep, ep->dg_rx_cq);
 			continue;
 		}
+		if (ret <= 0)
+			break;
+		for (j = 0; j < ret; j++)
+			rxd_handle_recv_comp(ep, &cq_entries[j]);
+	}
 
-		if (cq_entry.flags & FI_RECV)
-			rxd_handle_recv_comp(ep, &cq_entry);
-		else
-			rxd_handle_send_comp(ep, &cq_entry);
+	/* TX: drain send completions */
+	for (i = 0; !rxd_env.spin_count || i < rxd_env.spin_count; i++) {
+		ret = fi_cq_read(ep->dg_tx_cq, cq_entries, RXD_CQ_BATCH_SZ);
+		if (ret == -FI_EAVAIL) {
+			rxd_handle_error(ep, ep->dg_tx_cq);
+			continue;
+		}
+		if (ret <= 0)
+			break;
+		for (j = 0; j < ret; j++)
+			rxd_handle_send_comp(ep, &cq_entries[j]);
 	}
 
 	if (!rxd_env.retry)
