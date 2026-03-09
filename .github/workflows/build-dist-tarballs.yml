@@ -13,6 +13,9 @@ on:
         type: boolean
         default: true
     outputs:
+      source_sha:
+        description: Exact commit SHA checked out for the build
+        value: ${{ jobs.build.outputs.source_sha }}
       version:
         description: Resolved release version
         value: ${{ jobs.build.outputs.version }}
@@ -34,6 +37,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       sha512_sums: ${{ steps.checksums.outputs.sha512_sums }}
@@ -44,6 +48,11 @@ jobs:
       with:
         ref: ${{ inputs.source_ref }}
         fetch-depth: 0
+
+    - name: Capture source SHA
+      id: source
+      run: |
+        echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
     - name: Resolve version
       id: version
