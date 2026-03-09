@@ -444,6 +444,10 @@ void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data();
 /* begin efa_unit_test_data_path_direct.c */
 void test_efa_data_path_direct_rdma_read_multiple_sge_fail();
 void test_efa_data_path_direct_rdma_write_multiple_sge_fail();
+void test_efa_data_path_direct_qp_gen_initialization();
+void test_efa_data_path_direct_dev_req_id_roundtrip();
+void test_efa_data_path_direct_stale_completion_detected();
+void test_efa_data_path_direct_qp_gen_increments_across_qps();
 /* end efa_unit_test_data_path_direct.c */
 
 
