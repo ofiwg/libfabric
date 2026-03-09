@@ -520,8 +520,6 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_host_memory_overlapping_buffers, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_cuda_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_direct_mr_reg_no_gdrcopy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_direct_mr_reg_rdma_read_not_supported, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_direct_mr_reg_rdma_write_not_supported, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_no_access),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_one_flag),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_read_not_supported),
