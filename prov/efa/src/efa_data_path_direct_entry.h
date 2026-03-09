@@ -79,7 +79,7 @@ static inline int efa_data_path_direct_post_recv(struct efa_qp *qp,
 			goto ring_db;
 		}
 
-		req_id = efa_wq_get_next_wrid_idx(wq, wr->wr_id);
+		req_id = efa_wq_get_dev_req_id(wq, wr->wr_id);
 		wq->wqe_posted++;
 
 		/* Default init of the rx buffer */
@@ -125,6 +125,34 @@ ring_db:
 
 
 /**
+ * @brief Check if a completion has a valid QP generation
+ *
+ * Compares the generation bits in the CQE's req_id against the current
+ * QP's work queue generation. Returns true if the completion's generation
+ * matches the current QP.
+ *
+ * @param cqe Pointer to the completion queue entry
+ * @param qp Pointer to the current EFA queue pair
+ * @return true if the completion's generation matches the QP
+ */
+static inline bool
+efa_data_path_direct_is_valid_wrid_qp_gen(struct efa_io_cdesc_common *cqe,
+					  struct efa_qp *qp)
+{
+	struct efa_data_path_direct_wq *cur_wq;
+
+	if (EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_Q_TYPE) == EFA_IO_SEND_QUEUE) {
+		cur_wq = &qp->data_path_direct_qp.sq.wq;
+	} else {
+		if (EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_UNSOLICITED))
+			return true;
+		cur_wq = &qp->data_path_direct_qp.rq.wq;
+	}
+
+	return (cqe->req_id & cur_wq->gen_mask) == cur_wq->shifted_gen;
+}
+
+/**
  * @brief Start polling for completion queue entries
  *
  * Initiates completion queue polling by retrieving the next available
@@ -157,9 +185,11 @@ static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 	data_path_direct->cur_qp =
 		efa_domain->device->qp_table[qpn & efa_domain->device->qp_table_sz_m1];
 
-	if (!data_path_direct->cur_qp || qpn != data_path_direct->cur_qp->qp_num) {
+	if (!data_path_direct->cur_qp || qpn != data_path_direct->cur_qp->qp_num ||
+	    !efa_data_path_direct_is_valid_wrid_qp_gen(data_path_direct->cur_cqe,
+						       data_path_direct->cur_qp)) {
 		data_path_direct->cur_wq = NULL;
-		EFA_DBG(FI_LOG_CQ, "QP[%u] does not exist in QP table\n", qpn);
+		EFA_INFO(FI_LOG_CQ, "Dropping CQE for QP[%u]: stale or invalid\n", qpn);
 		return EINVAL;
 	}
 
@@ -203,7 +233,7 @@ static inline int efa_data_path_direct_next_poll(struct efa_ibv_cq *ibv_cq)
 	assert(cqe);
 
 	if (ibv_cq->data_path_direct.cur_wq)
-		efa_wq_put_wrid_idx(ibv_cq->data_path_direct.cur_wq, cqe->req_id);
+		efa_wq_put_dev_req_id(ibv_cq->data_path_direct.cur_wq, cqe->req_id);
 	return efa_data_path_direct_start_poll(ibv_cq, NULL);
 }
 
@@ -228,7 +258,7 @@ static inline void efa_data_path_direct_end_poll(struct efa_ibv_cq *ibv_cq)
 
 	if (cqe) {
 		if (ibv_cq->data_path_direct.cur_wq)
-			efa_wq_put_wrid_idx(ibv_cq->data_path_direct.cur_wq,
+			efa_wq_put_dev_req_id(ibv_cq->data_path_direct.cur_wq,
 				    cqe->req_id);
 #if HAVE_EFADV_CQ_ATTR_DB
 		if (ibv_cq->data_path_direct.db)
@@ -413,7 +443,7 @@ static inline int efa_data_path_direct_post_send(
 
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
-	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, wr_id);
+	meta_desc->req_id = efa_wq_get_dev_req_id(&sq->wq, wr_id);
 
 	/* Set common control flags */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_SEND);
@@ -504,7 +534,7 @@ static inline int efa_data_path_direct_post_read(
 
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
-	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, wr_id);
+	meta_desc->req_id = efa_wq_get_dev_req_id(&sq->wq, wr_id);
 
 	/* Set common control flags for RDMA READ */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_RDMA_READ);
@@ -604,7 +634,7 @@ efa_data_path_direct_post_write(
 
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
-	meta_desc->req_id = efa_wq_get_next_wrid_idx(&sq->wq, wr_id);
+	meta_desc->req_id = efa_wq_get_dev_req_id(&sq->wq, wr_id);
 
 	/* Set common control flags for RDMA WRITE */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_RDMA_WRITE);
