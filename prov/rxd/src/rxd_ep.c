@@ -310,8 +310,7 @@ static void *rxd_iov_buf_and_desc(struct rxd_ep *ep,
 			if (ep->do_local_mr) {
 				if (!desc || !desc[i])
 					return NULL;
-				*out_desc = fi_mr_desc(
-					((struct rxd_mr *)desc[i])->dg_mr);
+				*out_desc = desc[i]; /* already the dg-level descriptor */
 			} else {
 				*out_desc = NULL;
 			}
@@ -354,6 +353,7 @@ void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 		pkt_entry->user_iov.iov_len = seg_size;
 		pkt_entry->user_desc = seg_desc;
 	} else {
+		FI_INFO(&rxd_prov, FI_LOG_EP_DATA, "copy-path!\n");
 		/* Copy path: data copied into pkt buffer trailing the header */
 		pkt_entry->user_iov.iov_len = 0;
 		pkt_entry->user_desc = NULL;
@@ -365,6 +365,33 @@ void rxd_init_data_pkt(struct rxd_ep *ep, struct rxd_x_entry *tx_entry,
 	}
 
 	tx_entry->bytes_done += seg_size;
+}
+
+static void rxd_tx_entry_init_mr_desc(struct rxd_ep *ep,
+				    struct rxd_x_entry *tx_entry,
+				    const struct iovec *iov, size_t iov_count,
+				    void **desc)
+{
+	size_t i;
+
+	if (!ep->do_local_mr)
+		return;
+
+	for (i = 0; i < iov_count; i++) {
+		if (desc && desc[i]) {
+			/* user already registered buffer */
+			tx_entry->desc[i] = fi_mr_desc(
+				((struct rxd_mr *)desc[i])->dg_mr);
+		} else {
+			/* register internally */
+			int ret = fi_mr_reg(rxd_ep_domain(ep)->dg_domain,
+					    iov[i].iov_base, iov[i].iov_len,
+					    FI_SEND, 0, 0, 0,
+					    &tx_entry->dg_mr_internal[i], NULL);
+			tx_entry->desc[i] = ret ? NULL :
+				fi_mr_desc(tx_entry->dg_mr_internal[i]);
+		}
+	}
 }
 
 struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
@@ -394,10 +421,7 @@ struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 	tx_entry->next_seg_no = 0;
 	tx_entry->iov_count = (uint8_t) iov_count;
 	memcpy(&tx_entry->iov[0], iov, sizeof(*iov) * iov_count);
-	if (desc)
-		memcpy(tx_entry->desc, desc, sizeof(*desc) * iov_count);
-	else
-		memset(tx_entry->desc, 0, sizeof(tx_entry->desc));
+	rxd_tx_entry_init_mr_desc(ep, tx_entry, iov, iov_count, desc);
 
 	tx_entry->cq_entry.op_context = context;
 	tx_entry->cq_entry.len = ofi_total_iov_len(iov, iov_count);
@@ -420,6 +444,13 @@ struct rxd_x_entry *rxd_tx_entry_init_common(struct rxd_ep *ep, fi_addr_t addr,
 
 void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 {
+	int i;
+	for (i = 0; i < RXD_IOV_LIMIT; i++) {
+		if (tx_entry->dg_mr_internal[i]) {
+			fi_close(&tx_entry->dg_mr_internal[i]->fid);
+			tx_entry->dg_mr_internal[i] = NULL;
+		}
+	}
 	tx_entry->op <= RXD_TAGGED ? ep->tx_msg_avail++ : ep->tx_rma_avail++;
 	tx_entry->op = RXD_NO_OP;
 	dlist_remove(&tx_entry->entry);

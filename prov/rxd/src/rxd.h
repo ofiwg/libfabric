@@ -279,6 +279,7 @@ struct rxd_x_entry {
 	struct iovec iov[RXD_IOV_LIMIT];
 	struct iovec res_iov[RXD_IOV_LIMIT];
 	void *desc[RXD_IOV_LIMIT];
+	struct fid_mr *dg_mr_internal[RXD_IOV_LIMIT];
 
 	struct fi_cq_tagged_entry cq_entry;
 
@@ -502,7 +503,7 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 			       size_t iov_count, fi_addr_t addr, uint64_t tag,
 			       uint64_t data, void *context, uint32_t op,
-			       uint32_t rxd_flags);
+			       uint32_t rxd_flags, void **desc);
 ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 			      size_t iov_count, fi_addr_t addr, uint64_t tag,
 			      uint64_t data, uint32_t op, uint32_t rxd_flags);
