@@ -1,0 +1,104 @@
+name: Build Dist Tarballs
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Git ref to build from
+        required: true
+        type: string
+      build_fabtests:
+        description: Build fabtests tarballs
+        required: false
+        type: boolean
+        default: true
+    outputs:
+      version:
+        description: Resolved release version
+        value: ${{ jobs.build.outputs.version }}
+      tag:
+        description: Resolved release tag (v-prefixed)
+        value: ${{ jobs.build.outputs.tag }}
+      sha512_sums:
+        description: sha512 checksum lines for built tarballs
+        value: ${{ jobs.build.outputs.sha512_sums }}
+      md5_sums:
+        description: md5 checksum lines for built tarballs
+        value: ${{ jobs.build.outputs.md5_sums }}
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      sha512_sums: ${{ steps.checksums.outputs.sha512_sums }}
+      md5_sums: ${{ steps.checksums.outputs.md5_sums }}
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v6.0.2
+      with:
+        ref: ${{ inputs.source_ref }}
+        fetch-depth: 0
+
+    - name: Resolve version
+      id: version
+      run: |
+        RELEASE_VERSION=$(grep 'AC_INIT' configure.ac | sed 's/.*\[libfabric\], \[\([^]]*\)\].*/\1/')
+        TAG="v${RELEASE_VERSION}"
+        echo "version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+        echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+        echo "Resolved version=${RELEASE_VERSION} tag=${TAG}"
+
+    - name: Build libfabric
+      run: |
+        set -euxo pipefail
+        ./autogen.sh
+        ./configure --prefix="$PWD/install"
+        make
+        if [ "${{ inputs.build_fabtests }}" = "true" ]; then
+          make install
+        fi
+        make dist
+
+    - name: Build fabtests
+      if: ${{ inputs.build_fabtests }}
+      run: |
+        set -euxo pipefail
+        cd fabtests
+        ./autogen.sh
+        ./configure --with-libfabric="$PWD/../install"
+        make dist
+
+    - name: Generate checksums
+      id: checksums
+      run: |
+        files=(libfabric-*.tar.*)
+        if [ "${{ inputs.build_fabtests }}" = "true" ]; then
+          files+=(fabtests/fabtests-*.tar.*)
+        fi
+        echo "sha512_sums<<EOF" >> "$GITHUB_OUTPUT"
+        sha512sum "${files[@]}" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+        echo "md5_sums<<EOF" >> "$GITHUB_OUTPUT"
+        md5sum "${files[@]}" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+
+    - name: Collect release artifacts
+      run: |
+        mkdir -p release-artifacts
+        cp libfabric-*.tar.* release-artifacts/
+        if [ "${{ inputs.build_fabtests }}" = "true" ]; then
+          cp fabtests/fabtests-*.tar.* release-artifacts/
+        fi
+
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v6
+      with:
+        name: release-artifacts
+        path: release-artifacts/*
+        if-no-files-found: error
