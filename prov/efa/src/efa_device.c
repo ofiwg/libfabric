@@ -124,6 +124,11 @@ int efa_device_construct_data(struct efa_device *efa_device,
 		err = -FI_ENOMEM;
 		goto err_close;
 	}
+	efa_device->qp_gen_table = calloc(qp_table_size, sizeof(*efa_device->qp_gen_table));
+	if (!efa_device->qp_gen_table) {
+		err = -FI_ENOMEM;
+		goto err_close;
+	}
 
 #if HAVE_RDMA_SIZE
 	efa_device->max_rdma_size = efa_device->efa_attr.max_rdma_size;
@@ -160,6 +165,10 @@ err_close:
 		free(efa_device->qp_table);
 		efa_device->qp_table = NULL;
 	}
+	if (efa_device->qp_gen_table) {
+		free(efa_device->qp_gen_table);
+		efa_device->qp_gen_table = NULL;
+	}
 
 	EFA_INFO(FI_LOG_CORE, "Close ibv device for ibv_ctx %p\n", efa_device->ibv_ctx);
 	ibv_close_device(efa_device->ibv_ctx);
@@ -190,6 +199,10 @@ static void efa_device_destruct(struct efa_device *device)
 	if (device->qp_table) {
 		free(device->qp_table);
 		device->qp_table = NULL;
+	}
+	if (device->qp_gen_table) {
+		free(device->qp_gen_table);
+		device->qp_gen_table = NULL;
 	}
 
 	if (device->ibv_ctx) {

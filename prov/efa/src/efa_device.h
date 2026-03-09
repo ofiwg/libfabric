@@ -24,6 +24,7 @@ struct efa_device {
 	struct fi_info		*dgram_info;
 	/* QP table and lock for device-level QP management */
 	struct efa_qp		**qp_table;
+	uint8_t			*qp_gen_table;
 	size_t			qp_table_sz_m1;
 	struct ofi_genlock		qp_table_lock;
 };

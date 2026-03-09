@@ -145,7 +145,7 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 
 	if (base_ep->efa_recv_wr_vec)
 		free(base_ep->efa_recv_wr_vec);
-	
+
 	if (base_ep->user_recv_wr_vec)
 		free(base_ep->user_recv_wr_vec);
 
@@ -358,7 +358,7 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 		use_unsolicited_write_recv =
 			tx_cq->unsolicited_write_recv_enabled && !(base_ep->info->mode & FI_RX_CQ_DATA);
 	} else {
-		/* RDM full protocol doesn't support FI_RX_CQ_DATA. 
+		/* RDM full protocol doesn't support FI_RX_CQ_DATA.
 		 * Set FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV to false to disable unsolicited write recv. */
 		use_unsolicited_write_recv =
 			tx_cq->unsolicited_write_recv_enabled && base_ep->use_unsolicited_write_recv;
@@ -420,8 +420,23 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 
 	qp->qp_num = qp->ibv_qp->qp_num;
 
+#if HAVE_EFA_DATA_PATH_DIRECT
+	if (qp->data_path_direct_enabled) {
+		struct efa_data_path_direct_wq *sq_wq = &qp->data_path_direct_qp.sq.wq;
+		struct efa_data_path_direct_wq *rq_wq = &qp->data_path_direct_qp.rq.wq;
+
+		assert(ofi_genlock_held(&base_ep->domain->device->qp_table_lock));
+		qp->data_path_direct_qp.gen = ++base_ep->domain->device->qp_gen_table[qp->qp_num & base_ep->domain->device->qp_table_sz_m1];
+
+		sq_wq->gen_mask = ~sq_wq->desc_mask;
+		sq_wq->shifted_gen = qp->data_path_direct_qp.gen << __builtin_ctz(sq_wq->desc_mask + 1);
+		rq_wq->gen_mask = ~rq_wq->desc_mask;
+		rq_wq->shifted_gen = qp->data_path_direct_qp.gen << __builtin_ctz(rq_wq->desc_mask + 1);
+	}
+#endif
+
 	base_ep->domain->device->qp_table[qp->qp_num & base_ep->domain->device->qp_table_sz_m1] = qp;
-	
+
 	EFA_INFO(FI_LOG_EP_CTRL, "QP enabled! qp_n: %d qkey: %d, domain_name: %s, efa_domain: %p\n", qp->qp_num, qp->qkey, base_ep->domain->util_domain.name, base_ep->domain);
 
 	return err;
