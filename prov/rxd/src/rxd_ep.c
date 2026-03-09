@@ -1092,7 +1092,7 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 void rxd_ep_progress(struct util_ep *util_ep)
 {
 	struct rxd_peer *peer;
-	struct fi_cq_msg_entry cq_entries[RXD_CQ_BATCH_SZ];
+	struct fi_cq_msg_entry cq_entries[rxd_env.cq_batch_sz];
 	struct dlist_entry *tmp;
 	struct rxd_ep *ep;
 	ssize_t ret;
@@ -1104,7 +1104,7 @@ void rxd_ep_progress(struct util_ep *util_ep)
 
 	/* RX first: incoming ACKs free TX window slots */
 	for (i = 0; !rxd_env.spin_count || i < rxd_env.spin_count; i++) {
-		ret = fi_cq_read(ep->dg_rx_cq, cq_entries, RXD_CQ_BATCH_SZ);
+		ret = fi_cq_read(ep->dg_rx_cq, cq_entries, rxd_env.cq_batch_sz);
 		if (ret == -FI_EAVAIL) {
 			rxd_handle_error(ep, ep->dg_rx_cq);
 			continue;
@@ -1117,7 +1117,7 @@ void rxd_ep_progress(struct util_ep *util_ep)
 
 	/* TX: drain send completions */
 	for (i = 0; !rxd_env.spin_count || i < rxd_env.spin_count; i++) {
-		ret = fi_cq_read(ep->dg_tx_cq, cq_entries, RXD_CQ_BATCH_SZ);
+		ret = fi_cq_read(ep->dg_tx_cq, cq_entries, rxd_env.cq_batch_sz);
 		if (ret == -FI_EAVAIL) {
 			rxd_handle_error(ep, ep->dg_tx_cq);
 			continue;

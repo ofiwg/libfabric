@@ -72,7 +72,6 @@
 #define RXD_RX_POOL_CHUNK_CNT	1024
 #define RXD_MAX_PENDING		128
 #define RXD_MAX_PKT_RETRY	50
-#define RXD_CQ_BATCH_SZ		16
 #define RXD_ADDR_INVALID	0
 
 #define RXD_PKT_IN_USE		(1 << 0)
@@ -94,6 +93,7 @@ struct rxd_env {
 	int max_peers;
 	int max_unacked;
 	int rescan;
+	int cq_batch_sz;
 };
 
 extern struct rxd_env rxd_env;

@@ -44,6 +44,7 @@ struct rxd_env rxd_env = {
 	.max_peers	= 1024,
 	.max_unacked	= 128,
 	.rescan		= -1,
+	.cq_batch_sz	= 16,
 };
 
 char *rxd_pkt_type_str[] = {
@@ -57,6 +58,7 @@ static void rxd_init_env(void)
 	fi_param_get_int(&rxd_prov, "max_peers", &rxd_env.max_peers);
 	fi_param_get_int(&rxd_prov, "max_unacked", &rxd_env.max_unacked);
 	fi_param_get_bool(&rxd_prov, "rescan", &rxd_env.rescan);
+	fi_param_get_int(&rxd_prov, "cq_batch_sz", &rxd_env.cq_batch_sz);
 }
 
 void rxd_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
@@ -157,6 +159,8 @@ RXD_INI
 			"Force or disable rescanning for network interface changes. "
 			"Setting this to true will force rescanning on each fi_getinfo() invocation; "
 			"setting it to false will disable rescanning. (default: unset)");
+	fi_param_define(&rxd_prov, "cq_batch_sz", FI_PARAM_INT,
+			"Number of CQ entries to read per polling iteration (default: 16)");
 
 	rxd_init_env();
 
