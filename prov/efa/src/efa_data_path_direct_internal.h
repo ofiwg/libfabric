@@ -105,6 +105,23 @@ efa_wq_get_next_wrid_idx(struct efa_data_path_direct_wq *wq, uint64_t wr_id)
 }
 
 /**
+ * @brief Allocate a device request ID with QP generation tag
+ *
+ * Wraps efa_wq_get_next_wrid_idx to produce a device-level request ID
+ * that includes the QP generation in the upper bits. This allows stale
+ * completions from destroyed QPs to be detected during CQ polling.
+ *
+ * @param wq Pointer to the work queue structure
+ * @param wr_id Work request ID to associate with the allocated index
+ * @return Device request ID combining wrid index and generation bits
+ */
+EFA_ALWAYS_INLINE uint32_t
+efa_wq_get_dev_req_id(struct efa_data_path_direct_wq *wq, uint64_t wr_id)
+{
+	return efa_wq_get_next_wrid_idx(wq, wr_id) | wq->shifted_gen;
+}
+
+/**
  * @brief Convert EFA hardware completion status to IBV work completion status
  *
  * Translates EFA-specific completion status codes to standard InfiniBand
@@ -263,26 +280,26 @@ efa_data_path_direct_process_ex_cqe(struct efa_ibv_cq *ibv_cq,
 	struct efa_io_cdesc_common *cqe = ibv_cq->data_path_direct.cur_cqe;
 	uint32_t wrid_idx;
 
-	wrid_idx = cqe->req_id;
-
 	/* Handle send queue completions */
 	if (EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_Q_TYPE) ==
 	    EFA_IO_SEND_QUEUE) {
 		ibv_cq->data_path_direct.cur_wq =
 			&qp->data_path_direct_qp.sq.wq;
+		wrid_idx = cqe->req_id & ~ibv_cq->data_path_direct.cur_wq->gen_mask;
 		ibvcqx->wr_id = ibv_cq->data_path_direct.cur_wq->wrid[wrid_idx];
 		ibvcqx->status = to_ibv_status(cqe->status);
 	} else {
 		/* Handle receive queue completions */
 		/* Unsolicited receives don't have associated work requests */
-		ibv_cq->data_path_direct.cur_wq =
-			EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_UNSOLICITED) ?
-				NULL :
+		if (EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_UNSOLICITED)) {
+			ibv_cq->data_path_direct.cur_wq = NULL;
+			ibvcqx->wr_id = 0;
+		} else {
+			ibv_cq->data_path_direct.cur_wq =
 				&qp->data_path_direct_qp.rq.wq;
-		ibvcqx->wr_id =
-			EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_UNSOLICITED) ?
-				0 :
-				ibv_cq->data_path_direct.cur_wq->wrid[wrid_idx];
+			wrid_idx = cqe->req_id & ~ibv_cq->data_path_direct.cur_wq->gen_mask;
+			ibvcqx->wr_id = ibv_cq->data_path_direct.cur_wq->wrid[wrid_idx];
+		}
 		ibvcqx->status = to_ibv_status(cqe->status);
 	}
 
@@ -309,6 +326,21 @@ EFA_ALWAYS_INLINE void efa_wq_put_wrid_idx(struct efa_data_path_direct_wq *wq,
 	wq->wrid_idx_pool[wq->wrid_idx_pool_next] = wrid_idx; /* Return index */
 	wq->wqe_completed++; /* Update completion counter */
 	ofi_genlock_unlock(wq->wqlock);
+}
+
+/**
+ * @brief Return a device request ID to the free pool, stripping generation bits
+ *
+ * Masks off the QP generation bits from the device request ID before
+ * returning the underlying wrid index to the free pool.
+ *
+ * @param wq Pointer to the work queue structure
+ * @param dev_req_id Device request ID including generation bits
+ */
+EFA_ALWAYS_INLINE void efa_wq_put_dev_req_id(struct efa_data_path_direct_wq *wq,
+					     uint32_t dev_req_id)
+{
+	efa_wq_put_wrid_idx(wq, dev_req_id & ~wq->gen_mask);
 }
 
 /**
