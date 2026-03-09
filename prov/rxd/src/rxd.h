@@ -88,7 +88,6 @@
 #define RXD_IDX_OFFSET(x)	(x + 1)
 
 struct rxd_env {
-	int spin_count;
 	int retry;
 	int max_peers;
 	int max_unacked;
@@ -324,8 +323,11 @@ struct rxd_pkt_entry {
 	void *desc;
 	fi_addr_t peer;
 	void *pkt;
-	struct iovec user_iov;
-	void *user_desc;
+	fi_addr_t dg_addr;
+	ssize_t (*send_pkt_cb)(struct rxd_ep *ep,
+			       struct rxd_pkt_entry *pkt_entry);
+	struct iovec zc_iov[2];
+	void *zc_desc[2];
 };
 
 struct rxd_unexp_msg {
@@ -452,6 +454,8 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer);
 struct rxd_pkt_entry *rxd_get_tx_pkt(struct rxd_ep *ep);
 struct rxd_x_entry *rxd_get_tx_entry(struct rxd_ep *ep, uint32_t op);
 struct rxd_x_entry *rxd_get_rx_entry(struct rxd_ep *ep, uint32_t op);
+ssize_t rxd_ep_send_pkt_inject(struct rxd_ep *ep,
+				      struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry);
 ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry);
 void rxd_insert_unacked(struct rxd_ep *ep, fi_addr_t peer,

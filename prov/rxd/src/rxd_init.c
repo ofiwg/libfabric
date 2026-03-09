@@ -39,7 +39,6 @@
 #include "rxd.h"
 
 struct rxd_env rxd_env = {
-	.spin_count	= 1000,
 	.retry		= 1,
 	.max_peers	= 1024,
 	.max_unacked	= 128,
@@ -53,7 +52,6 @@ char *rxd_pkt_type_str[] = {
 
 static void rxd_init_env(void)
 {
-	fi_param_get_int(&rxd_prov, "spin_count", &rxd_env.spin_count);
 	fi_param_get_bool(&rxd_prov, "retry", &rxd_env.retry);
 	fi_param_get_int(&rxd_prov, "max_peers", &rxd_env.max_peers);
 	fi_param_get_int(&rxd_prov, "max_unacked", &rxd_env.max_unacked);
@@ -147,8 +145,6 @@ struct fi_provider rxd_prov = {
 
 RXD_INI
 {
-	fi_param_define(&rxd_prov, "spin_count", FI_PARAM_INT,
-			"Number of iterations to receive packets (0 - infinite)");
 	fi_param_define(&rxd_prov, "retry", FI_PARAM_BOOL,
 			"Toggle packet retrying (default: yes)");
 	fi_param_define(&rxd_prov, "max_peers", FI_PARAM_INT,
