@@ -246,6 +246,9 @@ struct efa_rdm_pke {
 	/**@brief Generation counter. It is incremented every time the packet is posted to rdma-core */
 	uint8_t gen;
 
+	/**@brief Callback function called in TX and RX paths */
+	void (*handle_pke)(struct efa_rdm_pke *pkt_entry);
+
 #if ENABLE_DEBUG
 	struct efa_rdm_pke_debug_info_buffer *debug_info; /**< Pointer to debug info buffer */
 #endif

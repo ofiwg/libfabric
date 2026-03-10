@@ -842,8 +842,36 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 #if ENABLE_DEBUG
 			ep->send_comps++;
 #endif
-			efa_rdm_pke_handle_send_completion(pkt_entry);
-			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
+			if (pkt_entry->handle_pke) {
+				efa_rdm_ep_record_tx_op_completed(pkt_entry->ep,
+								  pkt_entry);
+				/*
+				 * For a send completion, pkt_entry->peer can be
+				 * NULL in 3 situations:
+				 * 1. the pkt_entry is used for a local read
+				 * operation
+				 * 2. a new peer with same gid+qpn was inserted
+				 * to av, thus the peer was removed from AV.
+				 * 3. application removed the peer's address
+				 * from av. In 1, we should proceed. For 2 and
+				 * 3, the send completion should be ignored.
+				 */
+				if (!pkt_entry->peer &&
+				    !(pkt_entry->flags &
+				      EFA_RDM_PKE_LOCAL_READ)) {
+					EFA_WARN(
+						FI_LOG_CQ,
+						"ignoring send completion of a "
+						"packet to a removed peer.\n");
+					efa_rdm_pke_release_tx(pkt_entry);
+				} else {
+					pkt_entry->handle_pke(pkt_entry);
+				}
+				efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
+			} else {
+				efa_rdm_pke_handle_send_completion(pkt_entry);
+				efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
+			}
 			break;
 		case IBV_WC_RECV:
 			/* efa_rdm_cq_handle_recv_completion does additional work to determine the source
