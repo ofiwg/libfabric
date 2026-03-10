@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2026 ETH Zurich. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -175,11 +176,6 @@ struct rxd_mr {
 	struct fid_mr mr_fid;
 	struct fid_mr *dg_mr;
 	struct rxd_domain *domain;
-	// TODO: check hmem support
-	// enum fi_hmem_iface iface;
-	// uint64_t device;
-	// void *hmem_handle;
-	// uint64_t hmem_flags;
 	ofi_mutex_t amo_lock;
 };
 

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2026 ETH Zurich. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -472,7 +473,6 @@ static ssize_t rxd_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 {
 	struct rxd_ep *ep;
 	struct iovec iov;
-	void *_desc[1] = { desc };
 
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 
@@ -481,7 +481,7 @@ static ssize_t rxd_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	return rxd_ep_generic_sendmsg(ep, &iov, 1, dest_addr, 0,
 				      0, context, RXD_MSG,
-				      ep->tx_flags, desc ? _desc : NULL);
+				      ep->tx_flags, &desc);
 }
 
 static ssize_t rxd_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -505,7 +505,6 @@ static ssize_t rxd_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 {
 	struct rxd_ep *ep;
 	struct iovec iov;
-	void *_desc[1] = { desc };
 
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 
@@ -514,7 +513,7 @@ static ssize_t rxd_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 
 	return rxd_ep_generic_sendmsg(ep, &iov, 1, dest_addr, 0, data, context,
 				      RXD_MSG, ep->tx_flags |
-				      RXD_REMOTE_CQ_DATA, desc ? _desc : NULL);
+				      RXD_REMOTE_CQ_DATA, &desc);
 }
 
 static ssize_t rxd_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2026 ETH Zurich. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,11 +40,11 @@
 #include "rxd.h"
 
 struct rxd_env rxd_env = {
-	.retry		= 1,
-	.max_peers	= 1024,
-	.max_unacked	= 128,
-	.rescan		= -1,
-	.cq_batch_sz	= 16,
+	.retry = 1,
+	.max_peers = 1024,
+	.max_unacked = 128,
+	.rescan = -1,
+	.cq_batch_sz = 16,
 };
 
 char *rxd_pkt_type_str[] = {

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016-2017 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2026 ETH Zurich. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -117,12 +118,7 @@ static int rxd_mr_close(fid_t fid)
 
 	rxd_mr = container_of(fid, struct rxd_mr, mr_fid.fid);
 
-	// Unlike RXM (which offloads RMA to the underlying MSG provider), 
-	// RXD implements its own RMA protocol over datagrams and calls rxd_verify_iov 
-	// on the server side for every incoming WRITE/READ_REQ. 
-	// Without the map entry, verification always returns -FI_EACCES
-	//if (rxd_mr->domain->util_domain.info_domain_caps & FI_ATOMIC)
-		rxd_mr_remove_map_entry(rxd_mr);
+	rxd_mr_remove_map_entry(rxd_mr);
 
 	ret = fi_close(&rxd_mr->dg_mr->fid);
 	if (ret)
@@ -150,8 +146,6 @@ static void rxd_mr_init(struct rxd_mr *rxd_mr, struct rxd_domain *domain,
 	rxd_mr->mr_fid.mem_desc = rxd_mr;
 	rxd_mr->mr_fid.key = fi_mr_key(rxd_mr->dg_mr);
 	rxd_mr->domain = domain;
-	// rxd_mr->hmem_flags = 0x0;
-	// rxd_mr->hmem_handle = NULL;
 	ofi_atomic_inc32(&domain->util_domain.ref);
 }
 
@@ -166,12 +160,6 @@ static int rxd_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	rxd_domain = container_of(fid, struct rxd_domain,
 				  util_domain.domain_fid.fid);
 
-	// if (!ofi_hmem_is_initialized(attr->iface)) {
-	// 	FI_WARN(&rxd_prov, FI_LOG_MR,
-	// 		"Cannot register memory for uninitialized iface\n");
-	// 	return -FI_ENOSYS;
-	// }
-
 	rxd_mr = calloc(1, sizeof(*rxd_mr));
 	if (!rxd_mr)
 		return -FI_ENOMEM;
@@ -181,11 +169,6 @@ static int rxd_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		rxd_domain->util_domain.info_domain_caps, attr, &dg_attr,
 		flags);
 
-	// if ((flags & FI_HMEM_HOST_ALLOC) && (attr->iface == FI_HMEM_ZE))
-	// 	dg_attr.device.ze = -1;
-
-	// dg_attr.access = rxd_mr_get_msg_access(rxd_domain, attr->access);
-
 	ret = fi_mr_regattr(rxd_domain->dg_domain, &dg_attr, flags,
 			    &rxd_mr->dg_mr);
 	if (ret) {
@@ -194,31 +177,12 @@ static int rxd_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto err;
 	}
 	rxd_mr_init(rxd_mr, rxd_domain, attr->context);
-	// ofi_mutex_init(&rxd_mr->amo_lock);
-	// rxd_mr->iface = dg_attr.iface;
-	// rxd_mr->device = dg_attr.device.reserved;
 	*mr = &rxd_mr->mr_fid;
 
-	// gdrerr = ofi_hmem_dev_register(rxd_mr->iface, attr->mr_iov->iov_base,
-	// 			       attr->mr_iov->iov_len,
-	// 			       (uint64_t *) &rxd_mr->hmem_handle);
-	// if (gdrerr) {
-	// 	rxd_mr->hmem_flags = 0x0;
-	// 	rxd_mr->hmem_handle = NULL;
-	// } else {
-	// 	rxd_mr->hmem_flags = OFI_HMEM_DATA_DEV_REG_HANDLE;
-	// }
-
-	// Unlike RXM (which offloads RMA to the underlying MSG provider),
-	// RXD implements its own RMA protocol over datagrams and calls
-	// rxd_verify_iov on the server side for every incoming WRITE/READ_REQ.
-	// Without the map entry, verification always returns -FI_EACCES
-	// if (rxd_domain->util_domain.info_domain_caps & FI_ATOMIC) {
 	ret = rxd_mr_add_map_entry(&rxd_domain->util_domain, &dg_attr, rxd_mr,
 				   flags);
 	if (ret)
 		goto map_err;
-	//}
 
 	FI_INFO(&rxd_prov, FI_LOG_DOMAIN, "mr_regattr\n");
 	return 0;
@@ -254,8 +218,6 @@ static int rxd_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 	if (!rxd_mr)
 		return -FI_ENOMEM;
 
-	// access = rxd_mr_get_msg_access(rxd_domain, access);
-
 	ret = fi_mr_regv(rxd_domain->dg_domain, iov, count, access, offset,
 			 requested_key, flags, &rxd_mr->dg_mr, context);
 	if (ret) {
@@ -267,16 +229,10 @@ static int rxd_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 	ofi_atomic_inc32(&rxd_domain->util_domain.ref);
 	*mr = &rxd_mr->mr_fid;
 
-	// Unlike RXM (which offloads RMA to the underlying MSG provider),
-	// RXD implements its own RMA protocol over datagrams and calls
-	// rxd_verify_iov on the server side for every incoming WRITE/READ_REQ.
-	// Without the map entry, verification always returns -FI_EACCES
-	// if (rxd_domain->util_domain.info_domain_caps & FI_ATOMIC) {
 	ret = rxd_mr_add_map_entry(&rxd_domain->util_domain, &dg_attr, rxd_mr,
 				   flags);
 	if (ret)
 		goto map_err;
-	//}
 
 	return 0;
 map_err:

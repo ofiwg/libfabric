@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2026 ETH Zurich. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -516,8 +517,8 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 	struct rxd_pkt_entry *pkt_entry;
 	struct rxd_data_pkt *data;
 
-	fi_addr_t dg_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(ep)->rxdaddr_dg_idx),
-					    (int)tx_entry->peer);
+	fi_addr_t dg_addr = (intptr_t) ofi_idx_lookup(
+		&(rxd_ep_av(ep)->rxdaddr_dg_idx), (int) tx_entry->peer);
 
 	while (tx_entry->bytes_done != tx_entry->cq_entry.len) {
 		if (rxd_peer(ep, tx_entry->peer)->unacked_cnt >=
@@ -688,8 +689,8 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 
 	ack = (struct rxd_ack_pkt *) (pkt_entry->pkt);
 	pkt_entry->pkt_size = sizeof(*ack) + rxd_ep->tx_prefix_size;
-	pkt_entry->dg_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->rxdaddr_dg_idx),
-					    (int)peer);
+	pkt_entry->dg_addr = (intptr_t) ofi_idx_lookup(
+		&(rxd_ep_av(rxd_ep)->rxdaddr_dg_idx), (int) peer);
 	pkt_entry->send_pkt_cb = &rxd_ep_send_pkt_no_cqe;
 
 	ack->base_hdr.version = RXD_PROTOCOL_VERSION;
@@ -841,11 +842,10 @@ static int rxd_ep_trywait(void *arg)
 	return fi_trywait(rxd_fabric->dg_fabric, fids, 1);
 }
 
-static int rxd_dg_cq_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
+static int rxd_dg_cqs_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
 {
 	struct rxd_domain *rxd_domain;
 	struct fi_cq_attr cq_attr = {0};
-	bool tx_newly_opened = false;
 	int ret;
 
 	assert((wait_obj == FI_WAIT_NONE) || (wait_obj == FI_WAIT_FD));
@@ -853,24 +853,19 @@ static int rxd_dg_cq_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
 	rxd_domain = container_of(rxd_ep->util_ep.domain, struct rxd_domain,
 				  util_domain);
 
-	/* TX CQ: no wait object needed, open once */
-	if (!rxd_ep->dg_tx_cq) {
-		cq_attr.size = rxd_ep->tx_size;
-		cq_attr.format = FI_CQ_FORMAT_MSG;
-		cq_attr.wait_obj = FI_WAIT_NONE;
-		ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr,
-				 &rxd_ep->dg_tx_cq, rxd_ep);
-		if (ret)
-			return ret;
-		tx_newly_opened = true;
-	}
+	cq_attr.size = rxd_ep->tx_size;
+	cq_attr.format = FI_CQ_FORMAT_MSG;
+	cq_attr.wait_obj = FI_WAIT_NONE;
+	ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr, &rxd_ep->dg_tx_cq,
+			 rxd_ep);
+	if (ret)
+		return ret;
 
-	/* RX CQ: carries the wait FD for event notification */
 	cq_attr.size = rxd_ep->rx_size;
 	cq_attr.format = FI_CQ_FORMAT_MSG;
 	cq_attr.wait_obj = wait_obj;
-	ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr,
-			 &rxd_ep->dg_rx_cq, rxd_ep);
+	ret = fi_cq_open(rxd_domain->dg_domain, &cq_attr, &rxd_ep->dg_rx_cq,
+			 rxd_ep);
 	if (ret)
 		goto err_close_tx;
 
@@ -879,7 +874,7 @@ static int rxd_dg_cq_open(struct rxd_ep *rxd_ep, enum fi_wait_obj wait_obj)
 				 &rxd_ep->dg_cq_fd);
 		if (ret) {
 			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
-				"Unable to get dg RX CQ fd\n");
+				"Unable to get dg rx cq fd\n");
 			goto err_close_rx;
 		}
 	}
@@ -890,10 +885,8 @@ err_close_rx:
 	fi_close(&rxd_ep->dg_rx_cq->fid);
 	rxd_ep->dg_rx_cq = NULL;
 err_close_tx:
-	if (tx_newly_opened) {
-		fi_close(&rxd_ep->dg_tx_cq->fid);
-		rxd_ep->dg_tx_cq = NULL;
-	}
+	fi_close(&rxd_ep->dg_tx_cq->fid);
+	rxd_ep->dg_tx_cq = NULL;
 	return ret;
 }
 
@@ -925,7 +918,7 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 
 		if (!ep->dg_rx_cq) {
-			ret = rxd_dg_cq_open(ep, cq->wait ? FI_WAIT_FD : FI_WAIT_NONE);
+			ret = rxd_dg_cqs_open(ep, cq->wait ? FI_WAIT_FD : FI_WAIT_NONE);
 			if (ret)
 				return ret;
 		}
@@ -945,7 +938,7 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 
 		if (!ep->dg_rx_cq) {
-			ret = rxd_dg_cq_open(ep, cntr->wait ? FI_WAIT_FD : FI_WAIT_NONE);
+			ret = rxd_dg_cqs_open(ep, cntr->wait ? FI_WAIT_FD : FI_WAIT_NONE);
 		} else if (!ep->dg_cq_fd && cntr->wait) {
 			/* Reopen RX CQ with WAIT fd set */
 			ret = fi_close(&ep->dg_rx_cq->fid);
@@ -957,7 +950,7 @@ static int rxd_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			}
 
 			ep->dg_rx_cq = NULL;
-			ret = rxd_dg_cq_open(ep, FI_WAIT_FD);
+			ret = rxd_dg_cqs_open(ep, FI_WAIT_FD);
 		}
 		if (ret)
 			return ret;
