@@ -603,6 +603,17 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
 
+	/*
+	 * Check if the pke is from a protocol that has migrated to the
+	 * refactored code path
+	 *
+	 * TODO: remove this check once every protocol is migrated.
+	 */
+	if (pkt_entry->handle_pke) {
+		pkt_entry->handle_pke(pkt_entry);
+		return;
+	}
+
 	/* These pkts are eager pkts withour hdrs */
 	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
 		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
