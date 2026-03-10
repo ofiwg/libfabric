@@ -47,6 +47,8 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->efa_outstanding_tx_ops = 0;
 	dlist_init(&txe->queued_pkts);
 
+	txe->proto = NULL;
+
 	memcpy(txe->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
 	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
 	if (msg->desc) {

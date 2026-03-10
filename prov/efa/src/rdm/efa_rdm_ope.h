@@ -72,6 +72,7 @@ struct efa_rdm_ope {
 
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
+	struct efa_rdm_proto *proto; /**< protocol used by the refactored send path; NULL in the old code path */
 
 	uint32_t tx_id;
 	uint32_t rx_id;
