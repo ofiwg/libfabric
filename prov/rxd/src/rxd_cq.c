@@ -355,7 +355,7 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 	pkt_entry->peer = peer;
 	pkt_entry->dg_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->rxdaddr_dg_idx),
 					    (int)peer);
-	pkt_entry->send_pkt_cb = &rxd_ep_send_pkt_inject;
+	pkt_entry->send_pkt_cb = &rxd_ep_send_pkt_no_cqe;
 
 	cts->base_hdr.version = RXD_PROTOCOL_VERSION;
 	cts->base_hdr.type = RXD_CTS;

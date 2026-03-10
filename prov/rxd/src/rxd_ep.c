@@ -289,7 +289,7 @@ uint64_t rxd_get_retry_time(uint64_t start, int retry_cnt)
 	return start + rxd_get_timeout(retry_cnt);
 }
 
-ssize_t rxd_ep_send_pkt_inject(struct rxd_ep *ep,
+ssize_t rxd_ep_send_pkt_no_cqe(struct rxd_ep *ep,
 				      struct rxd_pkt_entry *pkt_entry)
 {
 	ssize_t ret = fi_inject(ep->dg_ep, rxd_pkt_start(pkt_entry),
@@ -307,6 +307,7 @@ ssize_t rxd_ep_send_pkt_inject(struct rxd_ep *ep,
 static ssize_t rxd_ep_send_pkt_bulk(struct rxd_ep *ep,
 				    struct rxd_pkt_entry *pkt_entry)
 {
+	pkt_entry->timestamp = ofi_gettime_ms();
 	ssize_t ret =
 		fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
 			pkt_entry->pkt_size, pkt_entry->desc, pkt_entry->dg_addr,
@@ -324,6 +325,7 @@ static ssize_t rxd_ep_send_pkt_bulk(struct rxd_ep *ep,
 static ssize_t rxd_ep_send_pkt_iov(struct rxd_ep *ep,
 				   struct rxd_pkt_entry *pkt_entry)
 {
+	pkt_entry->timestamp = ofi_gettime_ms();
 	ssize_t ret =
 		fi_sendv(ep->dg_ep, pkt_entry->zc_iov, pkt_entry->zc_desc,
 			 2, pkt_entry->dg_addr, &pkt_entry->context);
@@ -339,7 +341,6 @@ static ssize_t rxd_ep_send_pkt_iov(struct rxd_ep *ep,
 
 ssize_t rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
-	pkt_entry->timestamp = ofi_gettime_ms();
 	return pkt_entry->send_pkt_cb(ep, pkt_entry);
 }
 
@@ -689,7 +690,7 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 	pkt_entry->pkt_size = sizeof(*ack) + rxd_ep->tx_prefix_size;
 	pkt_entry->dg_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->rxdaddr_dg_idx),
 					    (int)peer);
-	pkt_entry->send_pkt_cb = &rxd_ep_send_pkt_inject;
+	pkt_entry->send_pkt_cb = &rxd_ep_send_pkt_no_cqe;
 
 	ack->base_hdr.version = RXD_PROTOCOL_VERSION;
 	ack->base_hdr.type = RXD_ACK;
@@ -1066,11 +1067,13 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 	ssize_t ret;
 	int retry = 0;
 
-	current = ofi_gettime_ms();
 	if (peer->retry_cnt > RXD_MAX_PKT_RETRY) {
 		rxd_peer_timeout(ep, peer);
 		return;
 	}
+
+	if (!dlist_empty(&peer->unacked))
+		current = ofi_gettime_ms();
 
 	dlist_foreach_container(&peer->unacked, struct rxd_pkt_entry,
 				pkt_entry, d_entry) {
