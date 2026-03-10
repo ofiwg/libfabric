@@ -603,6 +603,25 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
 
+	/*
+	 * A protocol migrated to the refactored code path stores its send
+	 * completion handler on the packet entry, so no packet type lookup is
+	 * needed. The pkt_type switch below serves the protocols that have not
+	 * been migrated yet.
+	 *
+	 * The callback owns the packet entry from here on: it may release the
+	 * entry and even synchronously repost that buffer as a new work
+	 * request, so pkt_entry must not be touched after it returns. This is
+	 * why efa_rdm_cq_process_wc() bumps pkt_entry->gen before calling this
+	 * function.
+	 *
+	 * TODO: remove this check once every protocol is migrated.
+	 */
+	if (pkt_entry->handle_pke) {
+		pkt_entry->handle_pke(pkt_entry);
+		return;
+	}
+
 	/* These pkts are eager pkts withour hdrs */
 	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
 		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
