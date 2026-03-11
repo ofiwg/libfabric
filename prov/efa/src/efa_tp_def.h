@@ -263,7 +263,7 @@ LTTNG_UST_TRACEPOINT_ENUM(efa, hmem_iface,
 
 #define HMEM_DEV_REG_COPY_FIELDS \
 	HMEM_COMMON_FIELDS \
-	lttng_ust_field_integer_hex(void *, handle, efa_mr->hmem_data)
+	lttng_ust_field_integer_hex(void *, handle, ((struct efa_rdm_mr *)efa_mr)->hmem_data)
 
 
 LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_TP_PROV, hmem_copy,

@@ -197,7 +197,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
 	int err;
 	struct iovec mr_iov = {0};
-	efa_mr->flags = flags;
+	efa_rdm_mr->flags = flags;
 
 	if (attr->iface == FI_HMEM_SYSTEM) {
 		efa_mr->iface = FI_HMEM_SYSTEM;
@@ -227,8 +227,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	}
 
 	efa_mr->device = 0;
-	efa_mr->flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
-	efa_mr->hmem_data = NULL;
+	efa_rdm_mr->flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
+	efa_rdm_mr->hmem_data = NULL;
 	if (efa_mr->iface == FI_HMEM_CUDA) {
 		efa_rdm_mr->needs_sync = true;
 		efa_mr->device = attr->device.cuda;
@@ -237,15 +237,15 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		if (efa_mr->domain->info_type == EFA_INFO_RDM && !(flags & FI_MR_DMABUF) && cuda_is_gdrcopy_enabled()) {
 			mr_iov = *attr->mr_iov;
 			err = ofi_hmem_dev_register(FI_HMEM_CUDA, mr_iov.iov_base, mr_iov.iov_len,
-						    (uint64_t *)&efa_mr->hmem_data);
-			efa_mr->flags |= OFI_HMEM_DATA_DEV_REG_HANDLE;
+						    (uint64_t *)&efa_rdm_mr->hmem_data);
+			efa_rdm_mr->flags |= OFI_HMEM_DATA_DEV_REG_HANDLE;
 			if (err) {
 				EFA_WARN(FI_LOG_MR,
 				         "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
 				         err, mr_iov.iov_base, mr_iov.iov_len);
 				/* When gdrcopy pin buf failed, fallback to cudaMemcpy */
-				efa_mr->hmem_data = NULL;
-				efa_mr->flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
+				efa_rdm_mr->hmem_data = NULL;
+				efa_rdm_mr->flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
 			}
 		}
 	} else if (attr->iface == FI_HMEM_ROCR) {
@@ -425,16 +425,16 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 	}
 
 	if (efa_mr->iface == FI_HMEM_CUDA &&
-	    (efa_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-		assert(efa_mr->hmem_data);
-		err = ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_mr->hmem_data);
+	    (efa_rdm_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
+		assert(efa_rdm_mr->hmem_data);
+		err = ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_rdm_mr->hmem_data);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
 				"Unable to de-register cuda handle\n");
 			ret = err;
 		}
 
-		efa_mr->hmem_data = NULL;
+		efa_rdm_mr->hmem_data = NULL;
 	}
 
 	efa_mr->mr_fid.mem_desc = NULL;
@@ -649,7 +649,6 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 static inline
 int efa_mr_is_cuda_memory_freed(struct efa_mr *efa_mr, bool *freed)
 {
-	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
 	int err;
 	uint64_t buffer_id;
 
@@ -669,7 +668,7 @@ int efa_mr_is_cuda_memory_freed(struct efa_mr *efa_mr, bool *freed)
 		/* Buffer ID mismatch means the original buffer was freed, and a new buffer has been
 		 * allocated with the same address
 		 */
-		*freed = (buffer_id != efa_rdm_mr->entry->hmem_info.cuda_id);
+		*freed = (buffer_id != ((struct efa_rdm_mr *)efa_mr)->entry->hmem_info.cuda_id);
 		return 0;
 	}
 
@@ -992,9 +991,9 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 				 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_sz),
 				 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_ct));
 			if (efa_mr->iface == FI_HMEM_CUDA &&
-			    (efa_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-				assert(efa_mr->hmem_data);
-				ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_mr->hmem_data);
+			    (efa_rdm_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
+				assert(efa_rdm_mr->hmem_data);
+				ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_rdm_mr->hmem_data);
 			}
 
 			return -errno;
@@ -1117,13 +1116,13 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		uint64_t shm_flags;
 
 		/* Inherit flags with additional feature bits such as gdrcopy handle switch */
-		shm_flags = efa_mr->flags;
+		shm_flags = efa_rdm_mr->flags;
 		if (mr_attr.iface != FI_HMEM_SYSTEM) {
 			/* shm provider need the flag to turn on IPC support */
 			shm_flags |= FI_HMEM_DEVICE_ONLY;
 		}
 
-		mr_attr.hmem_data = efa_mr->hmem_data;
+		mr_attr.hmem_data = efa_rdm_mr->hmem_data;
 
 		ret = fi_mr_regattr(efa_mr->domain->shm_domain, &mr_attr,
 				    shm_flags, &efa_rdm_mr->shm_mr);

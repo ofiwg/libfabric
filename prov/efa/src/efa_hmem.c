@@ -487,6 +487,7 @@ int efa_hmem_info_initialize()
 int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size)
 {
 	struct efa_mr *efa_mr = (struct efa_mr *)desc;
+	struct efa_rdm_mr *efa_rdm_mr;
 	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
 	uint64_t device = 0;
 	uint64_t flags = 0;
@@ -495,8 +496,9 @@ int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size)
 	if (efa_mr) {
 		iface = efa_mr->iface;
 		device = efa_mr->device;
-		flags = efa_mr->flags;
-		hmem_data = efa_mr->hmem_data;
+		efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
+		flags = efa_rdm_mr->flags;
+		hmem_data = efa_rdm_mr->hmem_data;
 	}
 
 	if (flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
@@ -528,6 +530,7 @@ int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size)
 int efa_copy_to_hmem(void *desc, void *dest, const void *src, size_t size)
 {
 	struct efa_mr *efa_mr = (struct efa_mr *)desc;
+	struct efa_rdm_mr *efa_rdm_mr;
 	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
 	uint64_t device = 0;
 	uint64_t flags = 0;
@@ -536,8 +539,9 @@ int efa_copy_to_hmem(void *desc, void *dest, const void *src, size_t size)
 	if (efa_mr) {
 		iface = efa_mr->iface;
 		device = efa_mr->device;
-		flags = efa_mr->flags;
-		hmem_data = efa_mr->hmem_data;
+		efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
+		flags = efa_rdm_mr->flags;
+		hmem_data = efa_rdm_mr->hmem_data;
 	}
 
 	if (flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {

@@ -15,8 +15,6 @@ struct efa_mr {
 	/* HMEM interface fields */
 	enum fi_hmem_iface	iface;
 	uint64_t		device;
-	uint64_t		flags;
-	void			*hmem_data;
 	/* Count of outstanding operations referencing this MR.
 	 * Incremented when an operation references the MR,
 	 * decremented when the operation completes. */
@@ -31,6 +29,10 @@ struct efa_rdm_mr {
 	struct fid_mr		*shm_mr;
 	bool			inserted_to_mr_map;
 	bool 			needs_sync;
+	/* RDM-specific HMEM data handle */
+	void			*hmem_data;
+	/* RDM-specific flags */
+	uint64_t			flags;
 };
 
 /* Compile-time assertion to ensure safe casting between efa_mr and efa_rdm_mr */
