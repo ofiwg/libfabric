@@ -369,12 +369,12 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
 {
 	int ret;
 	struct efa_rdm_ep *efa_rdm_ep;
-	struct efa_mr efa_mr;
+	struct efa_rdm_mr efa_rdm_mr;
 	struct efa_resource *resource = *state;
 	bool local_read_available, gdrcopy_available, cuda_memcpy_available;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-	efa_mr.peer.iface = FI_HMEM_CUDA;
+	efa_rdm_mr.efa_mr.iface = FI_HMEM_CUDA;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
@@ -390,7 +390,7 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
 		EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 
 	ret = efa_rdm_pke_get_available_copy_methods(
-		efa_rdm_ep, &efa_mr, &local_read_available,
+		efa_rdm_ep, &efa_rdm_mr, &local_read_available,
 		&cuda_memcpy_available, &gdrcopy_available);
 
 	efa_rdm_ep_domain(efa_rdm_ep)->device->device_caps = caps;
