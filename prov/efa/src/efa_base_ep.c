@@ -321,7 +321,9 @@ void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
 	attr_ex->cap.max_send_sge = info->tx_attr->iov_limit;
 	attr_ex->cap.max_recv_wr = info->rx_attr->size;
 	attr_ex->cap.max_recv_sge = info->rx_attr->iov_limit;
-	attr_ex->cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
+	attr_ex->cap.max_inline_data = EFA_INFO_TYPE_IS_DIRECT(ep->info) ?
+		ep->info->tx_attr->inject_size :
+		ep->domain->device->efa_attr.inline_buf_size;
 	attr_ex->pd = ep->domain->ibv_pd;
 	attr_ex->qp_context = ep;
 	attr_ex->sq_sig_all = 1;
@@ -516,10 +518,11 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	/* Use device's native limit as the default value of base ep*/
 	base_ep->max_msg_size = (size_t) base_ep->domain->device->ibv_port_attr.max_msg_sz;
 	base_ep->max_rma_size = (size_t) base_ep->domain->device->max_rdma_size;
-	base_ep->inject_msg_size = (size_t) base_ep->domain->device->efa_attr.inline_buf_size;
-	/* TODO: update inject_rma_size to inline size after firmware
-	 * supports inline rdma write */
-	base_ep->inject_rma_size = 0;
+	base_ep->inject_msg_size = info->tx_attr->inject_size;
+	if (info->tx_attr->inject_size > base_ep->domain->device->efa_attr.inline_buf_size)
+		base_ep->inject_rma_size = info->tx_attr->inject_size;
+	else
+		base_ep->inject_rma_size = 0;
 	base_ep->use_unsolicited_write_recv = true;
 	return 0;
 }
