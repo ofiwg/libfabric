@@ -251,7 +251,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rdm;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
       <C99Support>true</C99Support>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <UseMSVC>false</UseMSVC>
@@ -357,7 +357,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rdm;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <SDLCheck>true</SDLCheck>
       <C99Support>true</C99Support>
@@ -911,6 +911,7 @@
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pkt_type.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_rma.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_cq.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_mr.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_peer.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_srx.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_util.c" />
@@ -1026,10 +1027,11 @@
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pke.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_peer.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pkt_type.h" />
-    <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_req.h" />
+    <ClInclude Include="prov\efa\src\rdm\efa_rdm_pkt_type_req.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_rma.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_srx.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_util.h" />
+    <ClInclude Include="prov\efa\src\rdm\efa_rdm_mr.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="libfabric.def" />
