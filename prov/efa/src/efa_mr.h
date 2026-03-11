@@ -22,18 +22,26 @@ struct efa_mr {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*ibv_mr;
 	struct efa_domain	*domain;
+	struct efa_mr_peer	peer;
+	/* Count of outstanding operations referencing this MR.
+	 * Incremented when an operation references the MR,
+	 * decremented when the operation completes. */
+	ofi_atomic32_t ref;
+};
+
+struct efa_rdm_mr {
+	struct efa_mr		efa_mr;
 	/* Used only in MR cache */
 	struct ofi_mr_entry	*entry;
 	/* Used only in rdm */
 	struct fid_mr		*shm_mr;
-	struct efa_mr_peer	peer;
 	bool			inserted_to_mr_map;
 	bool 			needs_sync;
-	ofi_atomic32_t ref;
-	/* Count of outstanding operations referencing this MR.
-	 * Incremented when an operation references the MR,
-	 * decremented when the operation completes. */
 };
+
+/* Compile-time assertion to ensure safe casting between efa_mr and efa_rdm_mr */
+_Static_assert(offsetof(struct efa_rdm_mr, efa_mr) == 0,
+               "efa_mr must be the first member of efa_rdm_mr for safe casting");
 
 extern int efa_mr_cache_enable;
 extern size_t efa_mr_max_cached_count;

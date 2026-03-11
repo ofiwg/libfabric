@@ -467,15 +467,15 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep,
 static inline int efa_rdm_attempt_to_sync_memops_iov(struct efa_rdm_ep *ep, struct iovec *iov, void **desc, int num_desc)
 {
 	int err = 0, i;
-	struct efa_mr *efa_mr;
+	struct efa_rdm_mr *efa_rdm_mr;
 
 	if (!desc)
 		return err;
 
 	if (OFI_UNLIKELY(ep->cuda_api_permitted)) {
 		for (i = 0; i < num_desc; i++) {
-			efa_mr = (struct efa_mr *) desc[i];
-			if (efa_mr && efa_mr->needs_sync) {
+			efa_rdm_mr = (struct efa_rdm_mr *) desc[i];
+			if (efa_rdm_mr && efa_rdm_mr->needs_sync) {
 				err = cuda_set_sync_memops(iov[i].iov_base);
 				if (err) {
 					EFA_WARN(FI_LOG_MR,
@@ -484,7 +484,7 @@ static inline int efa_rdm_attempt_to_sync_memops_iov(struct efa_rdm_ep *ep, stru
 						 iov[i].iov_base);
 					return err;
 				}
-				efa_mr->needs_sync = false;
+				efa_rdm_mr->needs_sync = false;
 			}
 		}
 	}
@@ -495,15 +495,15 @@ static inline int efa_rdm_attempt_to_sync_memops_iov(struct efa_rdm_ep *ep, stru
 static inline int efa_rdm_attempt_to_sync_memops_ioc(struct efa_rdm_ep *ep, struct fi_ioc *ioc, void **desc, int num_desc)
 {
 	int err = 0, i;
-	struct efa_mr *efa_mr;
+	struct efa_rdm_mr *efa_rdm_mr;
 
 	if (!desc)
 		return err;
 
 	if (OFI_UNLIKELY(ep->cuda_api_permitted)) {
 		for (i = 0; i < num_desc; i++) {
-			efa_mr = (struct efa_mr *) desc[i];
-			if (efa_mr && efa_mr->needs_sync) {
+			efa_rdm_mr = (struct efa_rdm_mr *) desc[i];
+			if (efa_rdm_mr && efa_rdm_mr->needs_sync) {
 				err = cuda_set_sync_memops(ioc[i].addr);
 				if (err) {
 					EFA_WARN(FI_LOG_MR,
@@ -512,7 +512,7 @@ static inline int efa_rdm_attempt_to_sync_memops_ioc(struct efa_rdm_ep *ep, stru
 						 ioc[i].addr);
 					return err;
 				}
-				efa_mr->needs_sync = false;
+				efa_rdm_mr->needs_sync = false;
 			}
 		}
 	}

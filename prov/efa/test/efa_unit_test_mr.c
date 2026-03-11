@@ -395,7 +395,7 @@ void test_efa_mr_internal_regv_no_shm_mr(struct efa_resource **state)
 
 	efa_mr = container_of(mr, struct efa_mr, mr_fid);
 	/* Verify that shm_mr is NULL even if shm_domain exists */
-	assert_null(efa_mr->shm_mr);
+	assert_null(((struct efa_rdm_mr *)efa_mr)->shm_mr);
 
 	assert_int_equal(fi_close(&mr->fid), 0);
 	free(buf);
