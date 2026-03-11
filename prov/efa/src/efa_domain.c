@@ -122,9 +122,6 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 						    efa_domain);
 		if (err)
 			return err;
-		efa_domain->internal_buf_mr_regv = efa_rdm_mr_cache_regv;
-	} else {
-		efa_domain->internal_buf_mr_regv = efa_rdm_mr_internal_regv;
 	}
 	efa_domain->util_domain.domain_fid.mr = &efa_rdm_domain_mr_ops;
 

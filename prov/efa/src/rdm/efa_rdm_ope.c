@@ -298,7 +298,7 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 				 ope->iov[i].iov_base, ope->iov[i].iov_len, access);
 
 		domain = efa_rdm_ep_domain(ope->ep);
-		err = domain->internal_buf_mr_regv(
+		err = efa_rdm_mr_cache_regv(
 			&domain->util_domain.domain_fid, ope->iov + i, 1,
 			access, 0, 0, 0, &ope->mr[i], NULL);
 
