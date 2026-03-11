@@ -566,6 +566,175 @@ void test_efa_domain_open_ops_cq_open_ext(struct efa_resource **state)
 #endif
 }
 
+/**
+ * @brief Verify that EFA RDM domains use the correct MR operations
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_rdm_mr_ops(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+
+	/* RDM domains should use efa_rdm_domain_mr_ops */
+	assert_ptr_equal(efa_domain->util_domain.domain_fid.mr, &efa_rdm_domain_mr_ops);
+	assert_int_equal(efa_domain->info_type, EFA_INFO_RDM);
+}
+
+/**
+ * @brief Verify that EFA direct domains use the correct MR operations
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_direct_mr_ops(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+
+	/* EFA-direct domains should use efa_domain_mr_ops */
+	assert_ptr_equal(efa_domain->util_domain.domain_fid.mr, &efa_domain_mr_ops);
+	assert_int_equal(efa_domain->info_type, EFA_INFO_DIRECT);
+}
+
+/**
+ * @brief Verify that DGRAM domains use the correct MR operations
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_dgram_mr_ops(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_DGRAM, EFA_FABRIC_NAME);
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+
+	/* DGRAM domains should use efa_domain_mr_ops (core EFA MR operations) */
+	assert_ptr_equal(efa_domain->util_domain.domain_fid.mr, &efa_domain_mr_ops);
+	assert_int_equal(efa_domain->info_type, EFA_INFO_DGRAM);
+}
+
+/**
+ * @brief Common helper function to validate MR cache configuration for RDM domains
+ *
+ * @param efa_domain EFA RDM domain to test
+ * @param cache_expected Whether MR cache should be enabled
+ */
+static void test_efa_rdm_domain_mr_cache_common(struct efa_domain *efa_domain, bool cache_expected)
+{
+	struct ofi_mr_cache *cache = efa_domain->cache;
+
+	/* This helper is only for RDM domains */
+	assert_int_equal(efa_domain->info_type, EFA_INFO_RDM);
+
+	if (cache_expected) {
+		/* Test Case: MR cache should be available */
+		assert_non_null(cache);
+		assert_true(efa_is_cache_available(efa_domain));
+
+		/* Validate entry_data_size is correct for efa_rdm_mr */
+		assert_int_equal(cache->entry_data_size, sizeof(struct efa_rdm_mr));
+
+		/* Validate add_region function pointer */
+		assert_ptr_equal(cache->add_region, efa_rdm_mr_cache_entry_reg);
+
+		/* Validate delete_region function pointer */
+		assert_ptr_equal(cache->delete_region, efa_rdm_mr_cache_entry_dereg);
+	} else {
+		/* Test Case: MR cache should be disabled for RDM */
+		assert_null(cache);
+		assert_false(efa_is_cache_available(efa_domain));
+	}
+}
+
+/**
+ * @brief Test MR cache happy path: no FI_MR_LOCAL, cache enabled
+ *
+ * This test validates that when the application doesn't request FI_MR_LOCAL
+ * and efa_mr_cache_enable is true, the MR cache is properly initialized
+ * and configured with correct function pointers and data structures.
+ */
+void test_efa_domain_mr_cache_enabled(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	struct fi_info *hints;
+
+	/* Create hints without FI_MR_LOCAL to enable cache */
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	hints->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0), hints, true, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+
+	/* Validate cache is enabled and properly configured */
+	test_efa_rdm_domain_mr_cache_common(efa_domain, true);
+}
+
+/**
+ * @brief Test MR cache disabled path: FI_MR_LOCAL requested
+ *
+ * This test validates that when the application requests FI_MR_LOCAL,
+ * the MR cache is disabled and the domain uses direct MR registration.
+ */
+void test_efa_domain_mr_cache_disabled_with_mr_local(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	struct fi_info *hints;
+
+	/* Create hints with FI_MR_LOCAL to disable cache */
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	hints->domain_attr->mr_mode |= FI_MR_LOCAL;
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0), hints, true, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+
+	/* Validate cache is disabled */
+	test_efa_rdm_domain_mr_cache_common(efa_domain, false);
+}
+
+/**
+ * @brief Test MR cache disabled path: EFA-direct fabric
+ *
+ * This test validates that when EFA-direct fabric is used,
+ * the MR cache is disabled regardless of FI_MR_LOCAL setting.
+ */
+void test_efa_domain_mr_cache_disabled_with_efa_direct(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	struct fi_info *hints;
+
+	/* Create hints for EFA-direct fabric */
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0), hints, true, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+
+	/* EFA-direct specific validations */
+	assert_int_equal(efa_domain->info_type, EFA_INFO_DIRECT);
+
+	/* Cache should be disabled for EFA-direct */
+	assert_null(efa_domain->cache);
+	assert_false(efa_is_cache_available(efa_domain));
+}
+
 void test_efa_domain_open_ops_get_mr_lkey(struct efa_resource **state)
 {
     int ret;

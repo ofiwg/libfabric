@@ -45,7 +45,7 @@ extern size_t efa_mr_max_cached_size;
 
 struct efa_domain;
 
-int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain);
+int efa_rdm_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain);
 
 #define EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context) \
 	{ \
@@ -59,12 +59,13 @@ int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain);
 	}
 
 extern struct fi_ops_mr efa_domain_mr_ops;
+extern struct fi_ops_mr efa_rdm_domain_mr_ops;
 extern struct fi_ops_mr efa_domain_mr_cache_ops;
 
-int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
+int efa_rdm_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 			   struct ofi_mr_entry *entry);
 
-void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
+void efa_rdm_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry);
 
 int efa_mr_validate_regattr(struct fid *fid, const struct fi_mr_attr *attr, uint64_t flags);
@@ -78,12 +79,12 @@ static inline bool efa_mr_is_hmem(struct efa_mr *efa_mr)
 		efa_mr->iface == FI_HMEM_SYNAPSEAI);
 }
 
-int efa_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
+int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 		      size_t count, uint64_t access, uint64_t offset,
 		      uint64_t requested_key, uint64_t flags,
 		      struct fid_mr **mr_fid, void *context);
 
-int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
+int efa_rdm_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 		      size_t count, uint64_t access, uint64_t offset,
 		      uint64_t requested_key, uint64_t flags,
 		      struct fid_mr **mr_fid, void *context);
