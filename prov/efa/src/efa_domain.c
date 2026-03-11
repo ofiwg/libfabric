@@ -108,6 +108,25 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 
 	assert(EFA_INFO_TYPE_IS_RDM(info));
 
+	/*
+	 * Open the MR cache if application did not set FI_MR_LOCAL
+	 * and the cache is enabled
+	 *
+	 * Explicit memory registrations from external application
+	 * should never go in the MR cache
+	 */
+	efa_domain->cache = NULL;
+	if (!efa_domain->mr_local && efa_mr_cache_enable) {
+		err = efa_rdm_mr_cache_open(&efa_domain->cache,
+						    efa_domain);
+		if (err)
+			return err;
+		efa_domain->internal_buf_mr_regv = efa_rdm_mr_cache_regv;
+	} else {
+		efa_domain->internal_buf_mr_regv = efa_rdm_mr_internal_regv;
+	}
+	efa_domain->util_domain.domain_fid.mr = &efa_rdm_domain_mr_ops;
+
 	efa_shm_info_create(info, &shm_info);
 	if (shm_info && !efa_domain->fabric->shm_fabric) {
 		err = fi_fabric(shm_info->fabric_attr,
@@ -241,25 +260,12 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	*domain_fid = &efa_domain->util_domain.domain_fid;
 
-	/*
-	 * Open the MR cache if application did not set FI_MR_LOCAL
-	 * and the cache is enabled
-	 * 
-	 * Explicit memory registrations from external application
-	 * should never go in the MR cache
+	/**
+	 * TODO: After separating efa_domain's core functionality
+	 * and efa-rdm specific functionality, we should remove
+	 * such fabric branching and assign the fields for each
+	 * fabric individually
 	 */
-	if (!efa_domain->mr_local && efa_mr_cache_enable) {
-		err = efa_mr_cache_open(&efa_domain->cache, efa_domain);
-		if (err) {
-			ret = err;
-			goto err_free;
-		}
-		efa_domain->internal_buf_mr_regv = efa_mr_cache_regv;
-	} else {
-		efa_domain->internal_buf_mr_regv = efa_mr_internal_regv;
-	}
-	efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
-
 	if (EFA_INFO_TYPE_IS_RDM(info)) {
 		efa_domain->info_type = EFA_INFO_RDM;
 	} else if (EFA_INFO_TYPE_IS_DIRECT(info)) {
@@ -286,6 +292,8 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	} else {
 		assert(efa_domain->info_type == EFA_INFO_DIRECT || efa_domain->info_type == EFA_INFO_DGRAM);
 		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops;
+		efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
+		efa_domain->cache = NULL;
 
 		/* Allocate and register bounce buffer for 0-byte rma operations (efa-direct only) */
 		if (efa_domain->info_type == EFA_INFO_DIRECT && info->caps & FI_RMA) {
@@ -307,7 +315,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 			iov.iov_base = efa_domain->zero_byte_bounce_buf;
 			iov.iov_len = page_size;
-			err = efa_mr_internal_regv(&efa_domain->util_domain.domain_fid,
+			err = fi_mr_regv(&efa_domain->util_domain.domain_fid,
 						   &iov, 1, mr_flags, 0, 0, 0, &mr_fid, NULL);
 			if (err) {
 				EFA_WARN(FI_LOG_DOMAIN, "Failed to register zero-byte bounce buffer: %d\n", err);

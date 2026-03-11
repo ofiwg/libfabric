@@ -386,6 +386,12 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_query_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_cq_open_ext, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_get_mr_lkey, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_rdm_mr_ops, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_direct_mr_ops, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_dgram_mr_ops, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_enabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_disabled_with_mr_local, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_disabled_with_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_domain.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -521,9 +527,13 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_host_memory_no_mr_local, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_host_memory_overlapping_buffers, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_reg_cuda_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_direct_mr_reg_no_gdrcopy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_direct_mr_reg_cuda_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_direct_mr_reg_rdma_read_not_supported, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_direct_mr_reg_rdma_write_not_supported, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_mr_validate_regattr_invalid_iov_count, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_mr_validate_regattr_uninitialized_iface, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_structure_casting, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test(test_efa_mr_attr_init_system_macro),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_no_access),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_one_flag),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_read_not_supported),
@@ -531,10 +541,10 @@ int main(void)
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_all_flags_supported),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_all_flags_not_supported),
-		cmocka_unit_test_setup_teardown(test_efa_mr_internal_regv_no_shm_mr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_mr_close_warn_outstanding_direct_ope, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_mr_close_warn_outstanding_direct_ope_multi_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_mr_close_warn_outstanding_rdm_txe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_internal_regv_no_shm_mr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_mr.c */
 
 		/* begin efa_unit_test_rdm_rma.c */
