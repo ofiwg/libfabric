@@ -374,7 +374,7 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
 	bool local_read_available, gdrcopy_available, cuda_memcpy_available;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-	efa_mr.peer.iface = FI_HMEM_CUDA;
+	efa_mr.iface = FI_HMEM_CUDA;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
