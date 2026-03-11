@@ -452,7 +452,10 @@ static int efa_mr_close(fid_t fid)
 		efa_mr->shm_mr = NULL;
 	}
 
-	ref = ofi_atomic_get32(&efa_mr->ref);
+	ref = ofi_atomic_dec32(&efa_mr->ref);
+	EFA_DBG(FI_LOG_MR, "MR %p (key: %ld) close called, ref decremented to %d\n",
+		efa_mr, efa_mr->mr_fid.key, ref);
+	assert(ref >= 0);
 	if (ref > 0)
 		EFA_WARN(FI_LOG_MR,
 			 "fi_close called on MR %p (key: %ld) with %d "
@@ -464,7 +467,16 @@ static int efa_mr_close(fid_t fid)
 	ret = efa_mr_dereg_impl(efa_mr);
 	if (ret)
 		EFA_WARN(FI_LOG_MR, "Unable to close MR\n");
-	free(efa_mr);
+
+	/*
+	 * MR will only be freed when ref reaches 0,
+	 * which happens when both:
+	 * 1. fi_close(mr) has been called
+	 * 2. All in-flight operations have completed (via efa_mr_ref_dec)
+	 */
+	if (ref == 0)
+		free(efa_mr);
+
 	return ret;
 }
 
@@ -1026,7 +1038,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 
 	efa_mr->inserted_to_mr_map = true;
 
-	ofi_atomic_initialize32(&efa_mr->ref, 0);
+	ofi_atomic_initialize32(&efa_mr->ref, 1);
 
 	return 0;
 }
@@ -1214,7 +1226,8 @@ void efa_mr_ref_inc(void **desc, size_t count)
  * @brief Decrement the reference count of MRs (when tracking is enabled)
  *
  * This function should be called when an operation completes and no longer
- * references the MRs.
+ * references the MRs. If fi_close(mr) has been called and the reference 
+ * count reaches 0, the MR will be freed (only for non-cached MRs).
  *
  * @param[in]	desc	Array of MR descriptors (void pointers to efa_mr)
  * @param[in]	count	Number of descriptors in the array
@@ -1223,6 +1236,7 @@ void efa_mr_ref_dec(void **desc, size_t count)
 {
 	size_t i;
 	struct efa_mr *mr;
+	int32_t ref;
 
 	if (!desc)
 		return;
@@ -1230,10 +1244,16 @@ void efa_mr_ref_dec(void **desc, size_t count)
 	for (i = 0; i < count; i++) {
 		if (desc[i]) {
 			mr = desc[i];
-			ofi_atomic_dec32(&mr->ref);
+			ref = ofi_atomic_dec32(&mr->ref);
 			EFA_DBG(FI_LOG_MR,
 				"MR %p (key: %ld) ref decremented to %d\n", mr,
-				mr->mr_fid.key, ofi_atomic_get32(&mr->ref));
+				mr->mr_fid.key, ref);
+			assert(ref >= 0);
+			if (ref == 0 && !mr->entry) {
+				/* Only free non-cached MRs */
+				free(mr);
+				desc[i] = NULL;
+			}
 		}
 	}
 }
