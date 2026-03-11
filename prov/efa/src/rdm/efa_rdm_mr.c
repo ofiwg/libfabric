@@ -552,13 +552,18 @@ int efa_rdm_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 	attr.context = NULL;
 	attr.iface = entry->info.iface;
 
-	if (attr.iface == FI_HMEM_CUDA)
-		attr.device.cuda = entry->info.device;
-	else if (attr.iface == FI_HMEM_NEURON)
-		attr.device.neuron = entry->info.device;
-	else if (attr.iface == FI_HMEM_SYNAPSEAI)
-		attr.device.synapseai = entry->info.device;
-
+	/**
+	 * EFA proivider requires FI_MR_HMEM so all non-system memory must be registered
+	 * before it can be passed to any local operations.
+	 * Historically, this function support non-system ifaces when EFA provider
+	 * put explicit hmem memory registration into cache (and Libfabric has hmem
+	 * (e.g. cuda) monitors to intercept invalidated hmem memories). Such explicit mr caching
+	 * behavior has been removed (because it violates the security rule) and EFA
+	 * provider today only cache implicit memory registration which is always system
+	 * memory. If in the future EFA provider can cache non-system memory, this assertion
+	 * should be removed and the attr.device should be populated as entry->info.device.
+	 */
+	assert(attr.iface == FI_HMEM_SYSTEM);
 	/* Safe cast: MR cache allocates full efa_rdm_mr structure (entry_data_size) */
 	ret = efa_rdm_mr_reg_impl((struct efa_rdm_mr *)efa_mr, 0, &attr);
 	return ret;
@@ -576,70 +581,40 @@ void efa_rdm_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 		EFA_WARN(FI_LOG_MR, "Unable to dereg mr: %d\n", ret);
 }
 
-static int efa_rdm_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
-				     uint64_t flags, struct fid_mr **mr_fid)
-{
-	struct efa_domain *domain;
-	struct efa_rdm_mr *efa_rdm_mr;
-	struct ofi_mr_entry *entry;
-	struct ofi_mr_info info = {0};
-	int ret;
-
-	if (attr->iov_count > EFA_MR_IOV_LIMIT) {
-		EFA_WARN(FI_LOG_MR, "iov count > %d not supported\n",
-			 EFA_MR_IOV_LIMIT);
-		return -FI_EINVAL;
-	}
-
-	if (!ofi_hmem_is_initialized(attr->iface)) {
-		EFA_WARN(FI_LOG_MR,
-			"Cannot register memory for uninitialized iface (%s)\n",
-			fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
-		return -FI_ENOSYS;
-	}
-
-	domain = container_of(fid, struct efa_domain,
-			      util_domain.domain_fid.fid);
-
-	assert(attr->iov_count > 0 && attr->iov_count <= domain->info->domain_attr->mr_iov_limit);
-	ofi_mr_info_get_iov_from_mr_attr(&info, attr, flags);
-	info.iface = attr->iface;
-	info.device = attr->device.reserved;
-	ret = ofi_mr_cache_search(domain->cache, &info, &entry);
-	if (OFI_UNLIKELY(ret))
-		return ret;
-
-	/* Safe cast: MR cache allocates full efa_rdm_mr structure (entry_data_size) */
-	efa_rdm_mr = (struct efa_rdm_mr *)entry->data;
-	efa_rdm_mr->entry = entry;
-
-	*mr_fid = &efa_rdm_mr->efa_mr.mr_fid;
-	return 0;
-}
-
 int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 			  size_t count, uint64_t access, uint64_t offset,
 			  uint64_t requested_key, uint64_t flags,
 			  struct fid_mr **mr, void *context)
 {
 	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context);
-
-	return efa_rdm_mr_cache_regattr(&domain_fid->fid, &attr, flags, mr);
-}
-
-int efa_rdm_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
-			     size_t count, uint64_t access, uint64_t offset,
-			     uint64_t requested_key, uint64_t flags,
-			     struct fid_mr **mr_fid, void *context)
-{
-	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context);
-	struct efa_rdm_mr *efa_rdm_mr;
 	struct efa_domain *domain;
+	struct efa_rdm_mr *efa_rdm_mr;
+	struct ofi_mr_entry *entry;
+	struct ofi_mr_info info = {0};
 	int ret;
-	*mr_fid = NULL;
 
-	domain = container_of(domain_fid, struct efa_domain,
-			      util_domain.domain_fid);
+	domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
+
+	/* If cache is available, use it */
+	if (domain->cache) {
+		ofi_mr_info_get_iov_from_mr_attr(&info, &attr, flags);
+		info.iface = attr.iface;
+		info.device = attr.device.reserved;
+		ret = ofi_mr_cache_search(domain->cache, &info, &entry);
+		if (OFI_UNLIKELY(ret))
+			return ret;
+
+		/* Safe cast: MR cache allocates full efa_rdm_mr structure (entry_data_size) */
+		efa_rdm_mr = (struct efa_rdm_mr *)entry->data;
+		efa_rdm_mr->entry = entry;
+
+		*mr = &efa_rdm_mr->efa_mr.mr_fid;
+		return 0;
+	}
+
+	/* No cache available - inline internal registration */
+	*mr = NULL;
+
 	efa_rdm_mr = calloc(1, sizeof(*efa_rdm_mr));
 	if (!efa_rdm_mr) {
 		EFA_WARN(FI_LOG_MR, "Unable to initialize MR\n");
@@ -658,7 +633,7 @@ int efa_rdm_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *
 		free(efa_rdm_mr);
 		return ret;
 	}
-	*mr_fid = &efa_rdm_mr->efa_mr.mr_fid;
+	*mr = &efa_rdm_mr->efa_mr.mr_fid;
 	return 0;
 }
 
