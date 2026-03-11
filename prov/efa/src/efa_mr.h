@@ -91,13 +91,6 @@ static inline bool efa_mr_is_rocr(struct efa_mr *efa_mr)
 	return efa_mr && efa_mr->peer.iface == FI_HMEM_ROCR;
 }
 
-static inline void *efa_mr_get_shm_desc(struct efa_mr *efa_mr)
-{
-	if (!efa_mr)
-		return NULL;
-
-	return efa_mr->shm_mr ? fi_mr_desc(efa_mr->shm_mr) : NULL;
-}
 #define EFA_MR_IOV_LIMIT 1
 #define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_READ | FI_WRITE)
 
