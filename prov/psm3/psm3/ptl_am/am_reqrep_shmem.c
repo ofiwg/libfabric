@@ -1561,76 +1561,43 @@ amsh_poll_internal_inner(ptl_t *ptl_gen, int replyonly,
 	}
 
 	err = PSM3_GPU_SHM_DEV_FDS_POLL((struct ptl_am *)ptl_gen, err);
-
-	if (is_internal) {
-		if (err == PSM2_OK)	/* some progress, no yields */
-			ptl->zero_polls = 0;
-		else if (++ptl->zero_polls == AMSH_ZERO_POLLS_BEFORE_YIELD) {
-			/* no progress for AMSH_ZERO_POLLS_BEFORE_YIELD */
-			sched_yield();
-			ptl->zero_polls = 0;
-		}
-
-		if (++ptl->amsh_only_polls == AMSH_POLLS_BEFORE_PSM_POLL) {
-			psm3_poll_internal(ptl->ep, 0, 0);
-			ptl->amsh_only_polls = 0;
-		}
-	}
 	return err;		/* if we actually did something */
-}
-
-/* non-inlined version */
-static
-psm2_error_t
-amsh_poll_internal(ptl_t *ptl, int replyonly)
-{
-	return amsh_poll_internal_inner(ptl, replyonly, 1);
 }
 
 /*
  * Users of AMSH_POLL_UNTIL should check the value of err upon return
  */
-#ifdef PSM_PROFILE
-#define AMSH_POLL_UNTIL(ptl, isreply, cond, err) \
-	do {									\
-		int spin_cnt = 0;						\
-		uint64_t block_start = get_cycles();				\
-		PSMI_PROFILE_BLOCK();						\
-		while (!(cond)) {						\
-			PSMI_PROFILE_REBLOCK(					\
-				amsh_poll_internal(ptl, isreply) ==		\
-					PSM2_OK_NO_PROGRESS);			\
-			if (++spin_cnt ==					\
-				((struct ptl_am *)(ptl))->ep->yield_spin_cnt) {	\
-				spin_cnt = 0;					\
-				if (!psm3_cycles_left(block_start,		\
-					PSMI_MIN_EP_CONNECT_TIMEOUT)) {		\
-					err = PSM2_EP_NO_RESOURCES;		\
-					break;					\
-				}						\
-			}							\
-		}								\
-		PSMI_PROFILE_UNBLOCK();						\
+#define AMSH_POLL_UNTIL(ptl, isreply, cond, err)									\
+	do {														\
+		uint64_t block_start = get_cycles();									\
+		struct ptl_am *ptlam = (struct ptl_am *)ptl;								\
+		ptlam->zero_polls = 0;											\
+		ptlam->amsh_only_polls = 0;										\
+		PSMI_PROFILE_BLOCK();											\
+		while (!(cond)) {											\
+			err = amsh_poll(ptl, isreply, 0);								\
+			if (err == PSM2_OK) {									\
+				PSMI_PROFILE_REBLOCK(0);								\
+				ptlam->zero_polls = 0;									\
+				block_start = get_cycles();								\
+			} else if (err == PSM2_OK_NO_PROGRESS) {								\
+				PSMI_PROFILE_REBLOCK(1);								\
+				if (++ptlam->zero_polls == AMSH_ZERO_POLLS_BEFORE_YIELD) {				\
+						ptlam->zero_polls = 0;							\
+						if (!psm3_cycles_left(block_start, PSMI_MIN_EP_CONNECT_TIMEOUT)) {	\
+							err = PSM2_EP_NO_RESOURCES;					\
+							break;								\
+					}										\
+						sched_yield();								\
+				}											\
+			}												\
+			if (++ptlam->amsh_only_polls == AMSH_POLLS_BEFORE_PSM_POLL) {					\
+				psm3_poll_internal(ptlam->ep, 0, 0);							\
+				ptlam->amsh_only_polls = 0;								\
+			}												\
+		}													\
+		PSMI_PROFILE_UNBLOCK();											\
 	} while (0)
-#else
-#define AMSH_POLL_UNTIL(ptl, isreply, cond, err)				\
-	do {									\
-		int spin_cnt = 0;						\
-		uint64_t block_start = get_cycles();				\
-		while (!(cond)) {						\
-			amsh_poll_internal(ptl, isreply);			\
-			if (++spin_cnt ==					\
-				((struct ptl_am *)(ptl))->ep->yield_spin_cnt) {	\
-				spin_cnt = 0;					\
-				if (!psm3_cycles_left(block_start,		\
-					PSMI_MIN_EP_CONNECT_TIMEOUT)) {		\
-					err = PSM2_EP_NO_RESOURCES;		\
-					break;					\
-				}						\
-			}							\
-		}								\
-	} while (0)
-#endif
 
 static psm2_error_t amsh_poll(ptl_t *ptl, int replyonly, bool force)
 {
@@ -1652,7 +1619,7 @@ am_send_pkt_short(ptl_t *ptl, uint32_t destidx, uint32_t returnidx,
 	AMSH_POLL_UNTIL(ptl, isreply,
 			(pkt =
 			 am_ctl_getslot_pkt(ptl, destidx, isreply)) != NULL, res);
-	if (res != PSM2_OK_NO_PROGRESS)
+	if (res > PSM2_OK_NO_PROGRESS)
 		return res;
 
 	/* got a free pkt... fill it in */
@@ -1754,7 +1721,7 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 					 am_ctl_getslot_long(ptl_gen, destidx,
 							     is_reply)) !=
 					NULL, res);
-			if (res != PSM2_OK_NO_PROGRESS)
+			if (res > PSM2_OK_NO_PROGRESS)
 				break;
 
 			bulkidx = bulkpkt->idx;
@@ -1799,7 +1766,7 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 								     destidx,
 								     is_reply))
 						!= NULL, res);
-				if (res != PSM2_OK_NO_PROGRESS)
+				if (res > PSM2_OK_NO_PROGRESS)
 					break;
 				bytes_left -= bytes_this;
 				if (bytes_left == 0)
