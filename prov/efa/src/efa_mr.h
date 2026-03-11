@@ -47,6 +47,17 @@ struct efa_domain;
 
 int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain);
 
+#define EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context) \
+	{ \
+		.mr_iov = (iov), \
+		.iov_count = (count), \
+		.access = (access), \
+		.offset = (offset), \
+		.requested_key = (requested_key), \
+		.context = (context), \
+		.iface = FI_HMEM_SYSTEM, \
+	}
+
 extern struct fi_ops_mr efa_domain_mr_ops;
 extern struct fi_ops_mr efa_domain_mr_cache_ops;
 
