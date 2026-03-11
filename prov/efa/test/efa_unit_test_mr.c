@@ -464,7 +464,7 @@ void test_efa_mr_internal_regv_no_shm_mr(struct efa_resource **state)
 	size_t mr_size = 64;
 	void *buf;
 	struct fid_mr *mr = NULL;
-	struct efa_mr *efa_mr;
+	struct efa_rdm_mr *efa_rdm_mr;
 	struct iovec iov;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
@@ -480,9 +480,9 @@ void test_efa_mr_internal_regv_no_shm_mr(struct efa_resource **state)
 			 0);
 	assert_non_null(mr);
 
-	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+	efa_rdm_mr = container_of(mr, struct efa_rdm_mr, efa_mr.mr_fid);
 	/* Verify that shm_mr is NULL even if shm_domain exists */
-	assert_null(efa_mr->shm_mr);
+	assert_null(efa_rdm_mr->shm_mr);
 
 	assert_int_equal(fi_close(&mr->fid), 0);
 	free(buf);

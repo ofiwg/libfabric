@@ -88,12 +88,12 @@ bool efa_rdm_get_use_device_rdma(uint32_t fabric_api_version)
 void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
 {
 	int i;
-	struct efa_mr *efa_mr;
+	struct efa_rdm_mr *efa_rdm_mr;
 
 	for (i = 0; i < numdesc; ++i) {
-		efa_mr = efa_desc[i];
-		if (efa_mr)
-			shm_desc[i] = fi_mr_desc(efa_mr->shm_mr);
+		efa_rdm_mr = efa_desc[i];
+		if (efa_rdm_mr)
+			shm_desc[i] = fi_mr_desc(efa_rdm_mr->shm_mr);
 	}
 }
 
