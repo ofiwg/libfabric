@@ -246,24 +246,24 @@ LTTNG_UST_TRACEPOINT_ENUM(efa, hmem_iface,
 )
 
 #define HMEM_COPY_ARGS \
-	struct efa_mr_peer *, peer, \
+	struct efa_mr *, efa_mr, \
 	void *, dest, \
 	const void *, src, \
 	size_t, size
 
 #define HMEM_COMMON_FIELDS \
-	lttng_ust_field_enum(efa, hmem_iface, int, iface, peer->iface) \
+	lttng_ust_field_enum(efa, hmem_iface, int, iface, efa_mr->iface) \
 	lttng_ust_field_integer_hex(void *, dest, dest) \
 	lttng_ust_field_integer_hex(void *, src, src) \
 	lttng_ust_field_integer(size_t, size, size)
 
 #define HMEM_COPY_FIELDS \
 	HMEM_COMMON_FIELDS \
-	lttng_ust_field_integer(uint64_t, device, peer->device)
+	lttng_ust_field_integer(uint64_t, device, efa_mr->device)
 
 #define HMEM_DEV_REG_COPY_FIELDS \
 	HMEM_COMMON_FIELDS \
-	lttng_ust_field_integer_hex(void *, handle, peer->hmem_data)
+	lttng_ust_field_integer_hex(void *, handle, efa_mr->hmem_data)
 
 
 LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_TP_PROV, hmem_copy,

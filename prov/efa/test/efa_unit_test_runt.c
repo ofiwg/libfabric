@@ -42,7 +42,7 @@ void test_efa_rdm_peer_get_runt_size_impl(
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	peer->num_runt_bytes_in_flight = peer_num_runt_bytes_in_flight;
 
-	mock_mr.peer.iface = iface;
+	mock_mr.iface = iface;
 
 	memset(&mock_txe, 0, sizeof(mock_txe));
 	mock_txe.total_len = total_len;
@@ -310,7 +310,7 @@ void test_efa_rdm_peer_select_readbase_rtm_impl(
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	peer->num_runt_bytes_in_flight = peer_num_runt_bytes_in_flight;
 
-	mock_mr.peer.iface = iface;
+	mock_mr.iface = iface;
 
 	memset(&mock_txe, 0, sizeof(mock_txe));
 	mock_txe.total_len = total_len;

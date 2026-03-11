@@ -15,10 +15,10 @@ static void test_efa_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 		efa_mr = container_of(mr, struct efa_mr, mr_fid);
 		if (cuda_is_gdrcopy_enabled()) {
 			if (gdrcopy_flag)
-				assert_true(efa_mr->peer.flags &
+				assert_true(efa_mr->flags &
 					    OFI_HMEM_DATA_DEV_REG_HANDLE);
 			else
-				assert_false(efa_mr->peer.flags &
+				assert_false(efa_mr->flags &
 					     OFI_HMEM_DATA_DEV_REG_HANDLE);
 		}
 	}

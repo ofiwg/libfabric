@@ -8,21 +8,15 @@
 #include <ofi_mr.h>
 #include <ofi_atom.h>
 
-/*
- * Descriptor returned for FI_HMEM peer memory registrations
- */
-struct efa_mr_peer {
-	enum fi_hmem_iface  iface;
-	uint64_t			device;
-	uint64_t            flags;
-	void                *hmem_data;
-};
-
 struct efa_mr {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*ibv_mr;
 	struct efa_domain	*domain;
-	struct efa_mr_peer	peer;
+	/* HMEM interface fields */
+	enum fi_hmem_iface	iface;
+	uint64_t		device;
+	uint64_t		flags;
+	void			*hmem_data;
 	/* Count of outstanding operations referencing this MR.
 	 * Incremented when an operation references the MR,
 	 * decremented when the operation completes. */
@@ -63,10 +57,10 @@ void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 static inline bool efa_mr_is_hmem(struct efa_mr *efa_mr)
 {
 	return efa_mr && (
-		efa_mr->peer.iface == FI_HMEM_CUDA ||
-		efa_mr->peer.iface == FI_HMEM_ROCR ||
-		efa_mr->peer.iface == FI_HMEM_NEURON ||
-		efa_mr->peer.iface == FI_HMEM_SYNAPSEAI);
+		efa_mr->iface == FI_HMEM_CUDA ||
+		efa_mr->iface == FI_HMEM_ROCR ||
+		efa_mr->iface == FI_HMEM_NEURON ||
+		efa_mr->iface == FI_HMEM_SYNAPSEAI);
 }
 
 int efa_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
@@ -81,22 +75,22 @@ int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 
 static inline bool efa_mr_is_cuda(struct efa_mr *efa_mr)
 {
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA) : false;
+	return efa_mr ? (efa_mr->iface == FI_HMEM_CUDA) : false;
 }
 
 static inline bool efa_mr_is_neuron(struct efa_mr *efa_mr)
 {
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_NEURON) : false;
+	return efa_mr ? (efa_mr->iface == FI_HMEM_NEURON) : false;
 }
 
 static inline bool efa_mr_is_synapseai(struct efa_mr *efa_mr)
 {
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_SYNAPSEAI) : false;
+	return efa_mr ? (efa_mr->iface == FI_HMEM_SYNAPSEAI) : false;
 }
 
 static inline bool efa_mr_is_rocr(struct efa_mr *efa_mr)
 {
-	return efa_mr && efa_mr->peer.iface == FI_HMEM_ROCR;
+	return efa_mr && efa_mr->iface == FI_HMEM_ROCR;
 }
 
 #define EFA_MR_IOV_LIMIT 1

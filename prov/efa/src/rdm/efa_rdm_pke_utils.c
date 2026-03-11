@@ -136,20 +136,20 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 
 		rxe = pkt_entry->ope;
 		desc = rxe->desc[0];
-		assert(desc && desc->peer.iface != FI_HMEM_SYSTEM);
+		assert(desc && desc->iface != FI_HMEM_SYSTEM);
 
 		efa_rdm_tracepoint(rx_pke_blocking_copy_payload_begin, (size_t) pkt_entry, pkt_entry->payload_size, rxe->msg_id, (size_t) rxe->cq_entry.op_context, rxe->total_len);
-		if (desc->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
-			assert(desc->peer.hmem_data);
+		if (desc->flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
+			assert(desc->hmem_data);
 			bytes_copied[i] = ofi_dev_reg_copy_to_hmem_iov(
-								desc->peer.iface,
-								(uint64_t)desc->peer.hmem_data,
+								desc->iface,
+								(uint64_t)desc->hmem_data,
 								rxe->iov, rxe->iov_count,
 								segment_offset + ep->msg_prefix_size,
 								data, pkt_entry->payload_size);
 		} else {
-			bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface,
-			                                       desc->peer.device,
+			bytes_copied[i] = ofi_copy_to_hmem_iov(desc->iface,
+			                                       desc->device,
 			                                       rxe->iov, rxe->iov_count,
 			                                       segment_offset + ep->msg_prefix_size,
 			                                       data, pkt_entry->payload_size);
@@ -259,7 +259,7 @@ int efa_rdm_pke_get_available_copy_methods(struct efa_rdm_ep *ep,
 	mr_p2p_available = ret;
 	*local_read_available = mr_p2p_available && efa_rdm_ep_support_rdma_read(ep);
 	*cuda_memcpy_available = ep->cuda_api_permitted;
-	*gdrcopy_available = efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE;
+	*gdrcopy_available = efa_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE;
 
 	/* For in-order aligned send/recv, only allow local read to be used to copy data */
 	if (ep->sendrecv_in_order_aligned_128_bytes) {
@@ -353,9 +353,9 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 		 * to achieve best latency.
 		 */
 		if (rxe->bytes_copied + pke->payload_size == rxe->total_len) {
-			assert(desc->peer.hmem_data);
+			assert(desc->hmem_data);
 			efa_rdm_tracepoint(rx_pke_blocking_copy_payload_begin, (size_t) pke, pke->payload_size, rxe->msg_id, (size_t) rxe->cq_entry.op_context, rxe->total_len);
-			ofi_dev_reg_copy_to_hmem_iov(FI_HMEM_CUDA, (uint64_t)desc->peer.hmem_data,
+			ofi_dev_reg_copy_to_hmem_iov(FI_HMEM_CUDA, (uint64_t)desc->hmem_data,
 			                             rxe->iov, rxe->iov_count,
 			                             segment_offset + ep->msg_prefix_size,
 			                             pke->payload, pke->payload_size);
@@ -466,7 +466,7 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 	if (efa_mr_is_hmem(desc))
 		return efa_rdm_pke_queued_copy_payload_to_hmem(pke, ope);
 
-	assert( !desc || desc->peer.iface == FI_HMEM_SYSTEM);
+	assert( !desc || desc->iface == FI_HMEM_SYSTEM);
 	efa_rdm_tracepoint(rx_pke_blocking_copy_payload_begin, (size_t) pke, pke->payload_size, ope->msg_id, (size_t) ope->cq_entry.op_context, ope->total_len);
 	bytes_copied = ofi_copy_to_iov(ope->iov, ope->iov_count,
 				       segment_offset + ep->msg_prefix_size,
