@@ -40,6 +40,7 @@
 #include "rdma/opx/fi_opx_hmem.h"
 #include "ofi_prov.h"
 #include "opa_service.h"
+#include "rdma/opx/fi_opx_sysfs.h"
 #include "rdma/opx/fi_opx_hfi1_version.h"
 #include "rdma/opx/fi_opx_hfi1_sdma.h"
 
@@ -179,8 +180,10 @@ err:
 	return -errno;
 }
 
-static int fi_opx_fillinfo(struct fi_info *fi, const char *node, const char *service, const struct fi_info *hints,
-			   uint64_t flags, enum fi_progress progress)
+static int opx_getinfo_set_pci_attr(int hfi, struct fi_info *info);
+
+static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const char *service,
+			   const struct fi_info *hints, uint64_t flags, enum fi_progress progress)
 {
 	int		   ret;
 	union fi_opx_addr *addr;
@@ -439,8 +442,14 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node, const char *ser
 		}
 	}
 
-	fi->nic			    = ofi_nic_dup(NULL);
-	fi->nic->bus_attr->bus_type = FI_BUS_PCI;
+	fi->nic = ofi_nic_dup(NULL);
+	if (!fi->nic) {
+		errno = FI_ENOMEM;
+		goto err;
+	}
+	if (opx_getinfo_set_pci_attr(hfi, fi) == 0) {
+		fi->nic->bus_attr->bus_type = FI_BUS_PCI;
+	}
 
 	return FI_SUCCESS;
 
@@ -525,6 +534,22 @@ static int opx_getinfo_set_domain_name(const int hfi, struct fi_info *info)
 	return FI_SUCCESS;
 }
 
+/* Populate PCI bus attributes in fi_info from sysfs. Returns 0 on success. */
+static int opx_getinfo_set_pci_attr(int hfi, struct fi_info *info)
+{
+	if (!info->nic || !info->nic->bus_attr) {
+		return -1;
+	}
+
+	if (opx_sysfs_unit_get_pci_attr(hfi, &info->nic->bus_attr->attr.pci) != 0) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to read PCI BDF for HFI unit %d: %s\n", hfi,
+			strerror(errno));
+		return -1;
+	}
+
+	return 0;
+}
+
 static int opx_getinfo_dup_global(int hfi, struct fi_info **info, struct fi_info **info_tail)
 {
 	struct fi_info *global_info = fi_opx_global.info;
@@ -579,7 +604,7 @@ static int opx_getinfo_alloc_and_fill(const int hfi, const char *node, const cha
 		return -FI_ENOMEM;
 	}
 
-	int ret = fi_opx_fillinfo(result_info, node, service, hints, flags, progress);
+	int ret = fi_opx_fillinfo(hfi, result_info, node, service, hints, flags, progress);
 	if (ret != FI_SUCCESS) {
 		goto err;
 	}

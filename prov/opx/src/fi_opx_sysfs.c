@@ -52,7 +52,7 @@
 */
 
 /* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
-/* Copyright (c) 2021-2024 Cornelis Networks.                      */
+/* Copyright (c) 2021-2026 Cornelis Networks.                      */
 
 /* This file contains a simple sysfs interface used by the low level
    hfi protocol code. */
@@ -69,8 +69,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <limits.h>
 
 #include "opa_service.h"
+#include "rdma/opx/fi_opx_sysfs.h"
 
 static char  *sysfs_path;
 static size_t sysfs_path_len;
@@ -659,4 +661,66 @@ bail:
 	free(data);
 	errno = saved_errno;
 	return ret;
+}
+
+/* Resolve PCI BDF for a given HFI unit from the sysfs device symlink.
+ * Returns 0 on success, -1 on failure (errno is set). */
+int opx_sysfs_unit_get_pci_attr(uint32_t unit, struct fi_pci_attr *pci_attr)
+{
+	char	 sym_path[1024];
+	char	 real_path[PATH_MAX];
+	char	*dbdf;
+	uint16_t domain;
+	uint8_t	 bus, dev, func;
+	int	 saved_errno;
+	int	 len, pos;
+	int	 ret;
+
+	if (!pci_attr) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	/* Strip trailing unit number to get the class path base. */
+	snprintf(sym_path, sizeof(sym_path), "%s", opx_sysfs_path());
+	len = pos = opx_sysfs_path_len() - 1;
+	while (pos > 0 && isdigit(sym_path[pos])) {
+		pos--;
+	}
+	if (pos) {
+		sym_path[++pos] = '\0';
+	} else {
+		pos = len;
+	}
+	snprintf(sym_path + pos, sizeof(sym_path) - pos, "%u/device", unit);
+
+	if (!realpath(sym_path, real_path)) {
+		saved_errno = errno;
+		_HFI_DBG("Failed to resolve device symlink '%s': %s\n", sym_path, strerror(saved_errno));
+		errno = saved_errno;
+		return -1;
+	}
+
+	/* Parse DBDF from the last component of the resolved path. */
+	dbdf = strrchr(real_path, '/');
+	if (!dbdf) {
+		_HFI_DBG("No '/' in resolved device path '%s'\n", real_path);
+		errno = EINVAL;
+		return -1;
+	}
+	dbdf++;
+
+	ret = sscanf(dbdf, "%hx:%hhx:%hhx.%hhx", &domain, &bus, &dev, &func);
+	if (ret != 4) {
+		_HFI_DBG("Failed to parse PCI BDF from '%s'\n", dbdf);
+		errno = EINVAL;
+		return -1;
+	}
+
+	pci_attr->domain_id   = domain;
+	pci_attr->bus_id      = bus;
+	pci_attr->device_id   = dev;
+	pci_attr->function_id = func;
+
+	return 0;
 }
