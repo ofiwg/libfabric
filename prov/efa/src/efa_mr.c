@@ -12,6 +12,8 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr_fid);
 static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_attr *mr_attr);
 static int efa_mr_dereg_impl(struct efa_mr *efa_mr);
+static int efa_rdm_mr_reg_impl(struct efa_rdm_mr *efa_mr, uint64_t flags, const struct fi_mr_attr *mr_attr);
+static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_mr);
 
 
 /* Common validation for MR registration attributes */
@@ -120,7 +122,7 @@ size_t efa_mr_max_cached_size;
  * @param domain	The EFA domain where cache will be used.
  * @return 0 on success, fi_errno on failure.
  */
-int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
+int efa_rdm_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
 {
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = default_monitor,
@@ -210,8 +212,8 @@ int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
 	cache_params.max_cnt = efa_mr_max_cached_count;
 	cache_params.max_size = efa_mr_max_cached_size;
 	(*cache)->entry_data_size = sizeof(struct efa_rdm_mr);
-	(*cache)->add_region = efa_mr_cache_entry_reg;
-	(*cache)->delete_region = efa_mr_cache_entry_dereg;
+	(*cache)->add_region = efa_rdm_mr_cache_entry_reg;
+	(*cache)->delete_region = efa_rdm_mr_cache_entry_dereg;
 	err = ofi_mr_cache_init(&domain->util_domain, memory_monitors,
 				*cache);
 	if (err) {
@@ -227,7 +229,7 @@ int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
 	return 0;
 }
 
-static int efa_mr_cache_close(fid_t fid)
+static int efa_rdm_mr_cache_close(fid_t fid)
 {
 	struct efa_rdm_mr *efa_rdm_mr = container_of(fid, struct efa_rdm_mr,
 					       efa_mr.mr_fid.fid);
@@ -237,9 +239,9 @@ static int efa_mr_cache_close(fid_t fid)
 	return 0;
 }
 
-static struct fi_ops efa_mr_cache_ops = {
+static struct fi_ops efa_rdm_mr_cache_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = efa_mr_cache_close,
+	.close = efa_rdm_mr_cache_close,
 	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
@@ -262,11 +264,6 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
                              const struct fi_mr_attr *attr,
 							 uint64_t flags)
 {
-	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
-	int err;
-	struct iovec mr_iov = {0};
-	efa_rdm_mr->flags = flags;
-
 	if (attr->iface == FI_HMEM_SYSTEM) {
 		efa_mr->iface = FI_HMEM_SYSTEM;
 		return FI_SUCCESS;
@@ -294,23 +291,42 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		efa_mr->iface = FI_HMEM_SYSTEM;
 	}
 
-	efa_rdm_mr->device = 0;
-	efa_rdm_mr->flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
-	efa_rdm_mr->hmem_data = NULL;
-	if (efa_mr->iface == FI_HMEM_CUDA) {
-		efa_rdm_mr->needs_sync = true;
-		efa_rdm_mr->device = attr->device.cuda;
+	return FI_SUCCESS;
+}
 
-		/* Only attempt GDRCopy registrations for efa rdm path */
-		if (efa_mr->domain->info_type == EFA_INFO_RDM && !(flags & FI_MR_DMABUF) && cuda_is_gdrcopy_enabled()) {
-			mr_iov = *attr->mr_iov;
-			err = ofi_hmem_dev_register(FI_HMEM_CUDA, mr_iov.iov_base, mr_iov.iov_len,
-						    (uint64_t *)&efa_rdm_mr->hmem_data);
+/**
+ * @brief Populate efa_rdm_mr struct's hmem fields
+ *
+ * Update the efa_rdm_mr structure based on the attributes requested by the user.
+ *
+ * @param[in]	efa_rdm_mr	efa_rdm_mr structure to be updated
+ * @param[in]	attr	a copy of fi_mr_attr updated from the user's registration call
+ * @param[in]	flags   MR flags
+ *
+ */
+static void efa_rdm_mr_hmem_setup(struct efa_rdm_mr *efa_rdm_mr,
+                             const struct fi_mr_attr *attr,
+							 uint64_t flags)
+{
+	efa_rdm_mr->needs_sync = false;
+	efa_rdm_mr->hmem_data = NULL;
+	efa_rdm_mr->flags = flags;
+	efa_rdm_mr->device = 0;
+
+	/* RDM-specific: GDRCopy registration for CUDA */
+	if (attr->iface == FI_HMEM_CUDA) {
+		efa_rdm_mr->device = attr->device.cuda;
+		efa_rdm_mr->needs_sync = true;
+
+		if (!(flags & FI_MR_DMABUF) && cuda_is_gdrcopy_enabled()) {
+			struct iovec mr_iov = *attr->mr_iov;
+			int err = ofi_hmem_dev_register(FI_HMEM_CUDA, mr_iov.iov_base, mr_iov.iov_len,
+							(uint64_t *)&efa_rdm_mr->hmem_data);
 			efa_rdm_mr->flags |= OFI_HMEM_DATA_DEV_REG_HANDLE;
 			if (err) {
 				EFA_WARN(FI_LOG_MR,
-				         "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
-				         err, mr_iov.iov_base, mr_iov.iov_len);
+					 "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
+					 err, mr_iov.iov_base, mr_iov.iov_len);
 				/* When gdrcopy pin buf failed, fallback to cudaMemcpy */
 				efa_rdm_mr->hmem_data = NULL;
 				efa_rdm_mr->flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
@@ -323,17 +339,14 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	} else if (attr->iface == FI_HMEM_SYNAPSEAI) {
 		efa_rdm_mr->device = attr->device.synapseai;
 	}
-
-	return FI_SUCCESS;
 }
 
-
-int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
+int efa_rdm_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 			   struct ofi_mr_entry *entry)
 {
 	int ret = 0;
 	/* TODO
-	 * Since, access is not passed as a parameter to efa_mr_cache_entry_reg,
+	 * Since, access is not passed as a parameter to efa_rdm_mr_cache_entry_reg,
 	 * for now we will set access to all supported access modes. Once access
 	 * information is available this can be removed.
 	 * Issue: https://github.com/ofiwg/libfabric/issues/5677
@@ -345,7 +358,7 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 
 	efa_mr->domain = container_of(cache->domain, struct efa_domain,
 					util_domain);
-	efa_mr->mr_fid.fid.ops = &efa_mr_cache_ops;
+	efa_mr->mr_fid.fid.ops = &efa_rdm_mr_cache_ops;
 	efa_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	efa_mr->mr_fid.fid.context = NULL;
 
@@ -367,23 +380,25 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 	else if (attr.iface == FI_HMEM_SYNAPSEAI)
 		attr.device.synapseai = entry->info.device;
 
-	ret = efa_mr_reg_impl(efa_mr, 0, &attr);
+	/* Safe cast: MR cache allocates full efa_rdm_mr structure (entry_data_size) */
+	ret = efa_rdm_mr_reg_impl((struct efa_rdm_mr *)efa_mr, 0, &attr);
 	return ret;
 }
 
-void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
+void efa_rdm_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry)
 {
 	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)entry->data;
 	struct efa_mr *efa_mr = &efa_rdm_mr->efa_mr;
 	int ret;
 
-	ret = efa_mr_dereg_impl(efa_mr);
+	/* Safe cast: MR cache allocates full efa_rdm_mr structure (entry_data_size) */
+	ret = efa_rdm_mr_dereg_impl((struct efa_rdm_mr *)efa_mr);
 	if (ret)
 		EFA_WARN(FI_LOG_MR, "Unable to dereg mr: %d\n", ret);
 }
 
-static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+static int efa_rdm_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 				uint64_t flags, struct fid_mr **mr_fid)
 {
 	struct efa_domain *domain;
@@ -440,26 +455,23 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
  *
  * @return FI_SUCCESS or negative FI error code
  */
-int efa_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
+int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 		      size_t count, uint64_t access, uint64_t offset,
 		      uint64_t requested_key, uint64_t flags,
 		      struct fid_mr **mr, void *context)
 {
 	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context);
 
-	return efa_mr_cache_regattr(&domain_fid->fid, &attr, flags, mr);
+	return efa_rdm_mr_cache_regattr(&domain_fid->fid, &attr, flags, mr);
 }
 
 static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 {
-	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
-	struct efa_domain *efa_domain;
 	int ret = 0;
 	int err;
 	size_t ibv_mr_size;
 	int64_t reg_ct, reg_sz;
 
-	efa_domain = efa_mr->domain;
 	if (efa_mr->ibv_mr) {
 		ibv_mr_size = efa_mr->ibv_mr->length;
 		err = -ibv_dereg_mr(efa_mr->ibv_mr);
@@ -477,34 +489,6 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 
 	efa_mr->ibv_mr = NULL;
 
-	if (efa_rdm_mr->inserted_to_mr_map) {
-		ofi_genlock_lock(&efa_domain->util_domain.lock);
-		err = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
-					efa_mr->mr_fid.key);
-		ofi_genlock_unlock(&efa_domain->util_domain.lock);
-
-		if (err) {
-			EFA_WARN(FI_LOG_MR,
-				"Unable to remove MR entry from util map (%s)\n",
-				fi_strerror(-err));
-			ret = err;
-		}
-		efa_rdm_mr->inserted_to_mr_map = false;
-	}
-
-	if (efa_mr->iface == FI_HMEM_CUDA &&
-	    (efa_rdm_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-		assert(efa_rdm_mr->hmem_data);
-		err = ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_rdm_mr->hmem_data);
-		if (err) {
-			EFA_WARN(FI_LOG_MR,
-				"Unable to de-register cuda handle\n");
-			ret = err;
-		}
-
-		efa_rdm_mr->hmem_data = NULL;
-	}
-
 	efa_mr->mr_fid.mem_desc = NULL;
 	efa_mr->mr_fid.key = FI_KEY_NOTAVAIL;
 	return ret;
@@ -512,27 +496,15 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 
 static int efa_mr_close(fid_t fid)
 {
-	struct efa_rdm_mr *efa_rdm_mr;
 	struct efa_mr *efa_mr;
-	int ret, err;
+	int ret;
 
-	efa_rdm_mr = container_of(fid, struct efa_rdm_mr, efa_mr.mr_fid.fid);
-	efa_mr = &efa_rdm_mr->efa_mr;
-
-	if (efa_rdm_mr->shm_mr) {
-		err = fi_close(&efa_rdm_mr->shm_mr->fid);
-		if (err) {
-			EFA_WARN(FI_LOG_MR,
-				"Unable to close shm MR\n");
-			ret = err;
-		}
-		efa_rdm_mr->shm_mr = NULL;
-	}
+	efa_mr = container_of(fid, struct efa_mr, mr_fid.fid);
 
 	ret = efa_mr_dereg_impl(efa_mr);
 	if (ret)
-		EFA_WARN(FI_LOG_MR, "Unable to close MR\n");
-	free(efa_rdm_mr);
+		EFA_WARN(FI_LOG_MR, "Unable to close efa MR, %s\n", fi_strerror(ret));
+	free(efa_mr);
 	return ret;
 }
 
@@ -705,13 +677,13 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 
 #if HAVE_CUDA
 static inline
-int efa_mr_is_cuda_memory_freed(struct efa_mr *efa_mr, bool *freed)
+int efa_rdm_mr_is_cuda_memory_freed(struct efa_rdm_mr *efa_rdm_mr, bool *freed)
 {
 	int err;
 	uint64_t buffer_id;
 
 	err = ofi_cuPointerGetAttribute(&buffer_id, CU_POINTER_ATTRIBUTE_BUFFER_ID,
-					(CUdeviceptr)efa_mr->ibv_mr->addr);
+					(CUdeviceptr)efa_rdm_mr->efa_mr.ibv_mr->addr);
 
 	if (err == CUDA_ERROR_INVALID_VALUE) {
 		/* According to CUDA document, the return code of ofi_cuPointerGetAttribute() being CUDA_ERROR_INVALID_VALUE
@@ -726,7 +698,7 @@ int efa_mr_is_cuda_memory_freed(struct efa_mr *efa_mr, bool *freed)
 		/* Buffer ID mismatch means the original buffer was freed, and a new buffer has been
 		 * allocated with the same address
 		 */
-		*freed = (buffer_id != ((struct efa_rdm_mr *)efa_mr)->entry->hmem_info.cuda_id);
+		*freed = (buffer_id != efa_rdm_mr->entry->hmem_info.cuda_id);
 		return 0;
 	}
 
@@ -748,13 +720,14 @@ int efa_mr_is_cuda_memory_freed(struct efa_mr *efa_mr, bool *freed)
  * 		negative libfabric error code on failure.
  */
 static
-int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr,
+int efa_rdm_mr_update_domain_mr_map(struct efa_rdm_mr *efa_rdm_mr, struct fi_mr_attr *mr_attr,
 				uint64_t flags)
 {
 	struct fid_mr *existing_mr_fid;
 	struct efa_mr *existing_mr;
 	bool cuda_memory_freed;
 	int err;
+	struct efa_mr *efa_mr = &efa_rdm_mr->efa_mr;
 
 	mr_attr->requested_key = efa_mr->mr_fid.key;
 	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
@@ -809,7 +782,7 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
 		return -FI_ENOKEY;
 	}
 
-	err = efa_mr_is_cuda_memory_freed(existing_mr, &cuda_memory_freed);
+	err = efa_rdm_mr_is_cuda_memory_freed((struct efa_rdm_mr *)existing_mr, &cuda_memory_freed);
 	if (err)
 		return err;
 
@@ -865,10 +838,11 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
 }
 #else /* HAVE_CUDA */
 static
-int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr,
+int efa_rdm_mr_update_domain_mr_map(struct efa_mr *efa_rdm_mr, struct fi_mr_attr *mr_attr,
 				uint64_t flags)
 {
 	int err;
+	struct efa_mr *efa_mr = &efa_rdm_mr->efa_mr;
 
 	mr_attr->requested_key = efa_mr->mr_fid.key;
 	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
@@ -897,7 +871,7 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
  * efa_mr->mr_fid.key. The key must be larger than UINT32_MAX to avoid potential
  * collisions with keys returned by ibv_reg_mr() for standard MR registrations.
  */
-static uint64_t efa_mr_non_p2p_keygen(void) {
+static uint64_t efa_rdm_mr_non_p2p_keygen(void) {
 	static uint64_t NON_P2P_MR_KEYGEN = NON_P2P_MR_KEYGEN_INIT;
 	return NON_P2P_MR_KEYGEN++;
 }
@@ -954,7 +928,7 @@ int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
  *
  * @return FI_SUCCESS or negative FI error code
  */
-int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
+int efa_rdm_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 		      size_t count, uint64_t access, uint64_t offset,
 		      uint64_t requested_key, uint64_t flags,
 		      struct fid_mr **mr, void *context)
@@ -997,18 +971,14 @@ int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
  */
 static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_attr *mr_attr)
 {
-	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
 	int64_t reg_sz, reg_ct;
 	int ret = 0;
 	bool device_support_rdma_read = false;
 	bool device_support_rdma_write = false;
 
 	efa_mr->ibv_mr = NULL;
-	efa_rdm_mr->shm_mr = NULL;
-	efa_rdm_mr->inserted_to_mr_map = false;
 	efa_mr->mr_fid.mem_desc = NULL;
 	efa_mr->mr_fid.key = FI_KEY_NOTAVAIL;
-	efa_rdm_mr->needs_sync = false;
 
 	ret = efa_mr_hmem_setup(efa_mr, mr_attr, flags);
 	if (ret)
@@ -1019,75 +989,49 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 	device_support_rdma_write = efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
 #endif
 
-	if (efa_mr->domain->cache)
-		ofi_mr_cache_flush(efa_mr->domain->cache, false);
-
-	/*
-	 * For FI_HMEM_CUDA iface when p2p is unavailable, skip ibv_reg_mr() and
-	 * generate proprietary mr_fid key.
-	 */
-	if ((mr_attr->iface == FI_HMEM_CUDA || mr_attr->iface == FI_HMEM_ROCR)
-		&& !g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device) {
-		efa_mr->mr_fid.key = efa_mr_non_p2p_keygen();
-	} else {
-		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(
-			efa_mr, (struct fi_mr_attr *)mr_attr,
-			efa_mr_ofi_to_ibv_access(mr_attr->access,
-						 device_support_rdma_read,
-						 device_support_rdma_write),
-			flags);
-		if (!efa_mr->ibv_mr) {
-			EFA_WARN(FI_LOG_MR,
-				 "Unable to register MR of %zu bytes: %s, "
-				 "flags %ld, ibv pd: %p, total mr "
-				 "reg size %zd, mr reg count %zd\n",
-				 (flags & FI_MR_DMABUF) ?
-					 mr_attr->dmabuf->len :
-					 mr_attr->mr_iov->iov_len,
-				 fi_strerror(-errno), flags,
-				 efa_mr->domain->ibv_pd,
-				 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_sz),
-				 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_ct));
-			if (efa_mr->iface == FI_HMEM_CUDA &&
-			    (efa_rdm_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-				assert(efa_rdm_mr->hmem_data);
-				ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_rdm_mr->hmem_data);
-			}
-
-			return -errno;
-		}
-		reg_ct = ofi_atomic_inc64(&efa_mr->domain->ibv_mr_reg_ct);
-		reg_sz = ofi_atomic_add64(&efa_mr->domain->ibv_mr_reg_sz, efa_mr->ibv_mr->length);
-		EFA_INFO(FI_LOG_MR,
-			 "Registered memory at %p of size %zu"
-			 "flags %ld for ibv pd %p, "
-			 "total mr reg size %zd, mr reg count %zd\n",
-			 efa_mr->ibv_mr->addr, efa_mr->ibv_mr->length,
-			 flags, efa_mr->domain->ibv_pd,
-			 reg_sz,
-			 reg_ct);
-		efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
+	efa_mr->ibv_mr = efa_mr_reg_ibv_mr(
+		efa_mr, (struct fi_mr_attr *)mr_attr,
+		efa_mr_ofi_to_ibv_access(mr_attr->access,
+					 device_support_rdma_read,
+					 device_support_rdma_write),
+		flags);
+	if (!efa_mr->ibv_mr) {
+		EFA_WARN(FI_LOG_MR,
+			 "Unable to register MR of %zu bytes: %s, "
+			 "flags %ld, ibv pd: %p, total mr "
+			 "reg size %zd, mr reg count %zd\n",
+			 (flags & FI_MR_DMABUF) ?
+				 mr_attr->dmabuf->len :
+				 mr_attr->mr_iov->iov_len,
+			 fi_strerror(-errno), flags,
+			 efa_mr->domain->ibv_pd,
+			 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_sz),
+			 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_ct));
+		return -errno;
 	}
+	reg_ct = ofi_atomic_inc64(&efa_mr->domain->ibv_mr_reg_ct);
+	reg_sz = ofi_atomic_add64(&efa_mr->domain->ibv_mr_reg_sz, efa_mr->ibv_mr->length);
+	EFA_INFO(FI_LOG_MR,
+		 "Registered memory at %p of size %zu"
+		 "flags %ld for ibv pd %p, "
+		 "total mr reg size %zd, mr reg count %zd\n",
+		 efa_mr->ibv_mr->addr, efa_mr->ibv_mr->length,
+		 flags, efa_mr->domain->ibv_pd,
+		 reg_sz,
+		 reg_ct);
+	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	efa_mr->mr_fid.mem_desc = efa_mr;
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
-
-	ret = efa_mr_update_domain_mr_map(efa_mr, (struct fi_mr_attr *)mr_attr, flags);
-	if (ret) {
-		efa_mr_dereg_impl(efa_mr);
-		return ret;
-	}
-
-	efa_rdm_mr->inserted_to_mr_map = true;
 
 	return 0;
 }
 
+/* Core EFA MR registration - basic ibv_mr_reg/dereg operations */
 static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr_fid)
 {
 	struct efa_domain *domain;
-	struct efa_rdm_mr *efa_rdm_mr = NULL;
-	struct efa_mr *efa_mr;
+	struct efa_mr *efa_mr = NULL;
 	int ret = 0;
 	struct fi_mr_attr mr_attr = {0};
 
@@ -1097,13 +1041,12 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
 
-	efa_rdm_mr = calloc(1, sizeof(*efa_rdm_mr));
-	if (!efa_rdm_mr) {
+	efa_mr = calloc(1, sizeof(*efa_mr));
+	if (!efa_mr) {
 		EFA_WARN(FI_LOG_MR, "Unable to initialize md\n");
 		return -FI_ENOMEM;
 	}
 
-	efa_mr = &efa_rdm_mr->efa_mr;
 	efa_mr->domain = domain;
 	efa_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	efa_mr->mr_fid.fid.context = attr->context;
@@ -1119,43 +1062,11 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (ret)
 		goto err;
 
-	if (efa_mr->domain->shm_domain) {
-		uint64_t shm_flags;
-
-		/* Inherit flags with additional feature bits such as gdrcopy handle switch */
-		shm_flags = efa_rdm_mr->flags;
-		if (mr_attr.iface != FI_HMEM_SYSTEM) {
-			/* shm provider need the flag to turn on IPC support */
-			shm_flags |= FI_HMEM_DEVICE_ONLY;
-		}
-
-		mr_attr.hmem_data = efa_rdm_mr->hmem_data;
-
-		ret = fi_mr_regattr(efa_mr->domain->shm_domain, &mr_attr,
-				    shm_flags, &efa_rdm_mr->shm_mr);
-
-		if (ret) {
-			EFA_WARN(FI_LOG_MR,
-				 "Unable to register shm MR. errno: %d "
-				 "err_msg: (%s) key: %ld buf: %p len: %zu "
-				 "flags %ld\n",
-				 ret, fi_strerror(-ret), efa_mr->mr_fid.key,
-				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_base :
-						  NULL,
-				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_len : 0,
-				 flags);
-			efa_mr_dereg_impl(efa_mr);
-			free(efa_rdm_mr);
-			return ret;
-		}
-	}
-
 	*mr_fid = &efa_mr->mr_fid;
 	return 0;
 err:
-	EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
-			fi_strerror(-ret));
-	free(efa_rdm_mr);
+	EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n", fi_strerror(-ret));
+	free(efa_mr);
 	return ret;
 }
 
@@ -1185,4 +1096,232 @@ struct fi_ops_mr efa_domain_mr_ops = {
 	.reg = efa_mr_reg,
 	.regv = efa_mr_regv,
 	.regattr = efa_mr_regattr,
+};
+
+/* RDM MR deregistration implementation */
+static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_rdm_mr)
+{
+	struct efa_domain *efa_domain;
+	int ret = 0;
+	int err;
+
+	if (efa_rdm_mr->shm_mr) {
+		ret = fi_close(&efa_rdm_mr->shm_mr->fid);
+		if (ret)
+			return ret;
+		efa_rdm_mr->shm_mr = NULL;
+	}
+
+	if (efa_rdm_mr->inserted_to_mr_map) {
+		efa_domain = efa_rdm_mr->efa_mr.domain;
+		ofi_genlock_lock(&efa_domain->util_domain.lock);
+		err = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
+					efa_rdm_mr->efa_mr.mr_fid.key);
+		ofi_genlock_unlock(&efa_domain->util_domain.lock);
+
+		if (err) {
+			EFA_WARN(FI_LOG_MR,
+				"Unable to remove MR entry from util map (%s)\n",
+				fi_strerror(-err));
+			ret = err;
+		}
+		efa_rdm_mr->inserted_to_mr_map = false;
+	}
+
+	/* RDM-specific: GDRCopy cleanup */
+	if (efa_rdm_mr->efa_mr.iface == FI_HMEM_CUDA &&
+	    (efa_rdm_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
+		assert(efa_rdm_mr->hmem_data);
+		int err = ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_rdm_mr->hmem_data);
+		if (err) {
+			EFA_WARN(FI_LOG_MR, "Unable to de-register cuda handle\n");
+			ret = err;
+		}
+		efa_rdm_mr->hmem_data = NULL;
+	}
+
+	return efa_mr_dereg_impl(&efa_rdm_mr->efa_mr);
+}
+
+/* RDM MR registration implementation - wraps core EFA MR registration */
+static int efa_rdm_mr_reg_impl(struct efa_rdm_mr *efa_rdm_mr, uint64_t flags,
+			       const struct fi_mr_attr *mr_attr)
+{
+	int ret;
+
+	/* RDM-specific: MR cache flush */
+	if (efa_rdm_mr->efa_mr.domain->cache)
+		ofi_mr_cache_flush(efa_rdm_mr->efa_mr.domain->cache, false);
+
+	/*
+	 * For cuda and rocr iface when p2p is unavailable, skip ibv_reg_mr() and
+	 * generate proprietary mr_fid key.
+	 */
+	if ((mr_attr->iface == FI_HMEM_CUDA || mr_attr->iface == FI_HMEM_ROCR)
+		&& !g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device) {
+		efa_rdm_mr->efa_mr.mr_fid.key = efa_rdm_mr_non_p2p_keygen();
+	} else {
+		/* base mr registration (ibv mr), must be called the first before RDM specific fields are setup */
+		ret = efa_mr_reg_impl(&efa_rdm_mr->efa_mr, flags, mr_attr);
+		if (ret)
+			return ret;
+	}
+
+	/* Initialize RDM-specific fields */
+	efa_rdm_mr->inserted_to_mr_map = false;
+	efa_rdm_mr->shm_mr = NULL;
+	efa_rdm_mr->entry = NULL;
+
+	/* RDM specific mr hmem setup */
+	efa_rdm_mr_hmem_setup(efa_rdm_mr, mr_attr, flags);
+	/* RDM-specific: Update domain MR map */
+	assert(efa_rdm_mr->efa_mr.mr_fid.key != FI_KEY_NOTAVAIL);
+	ret = efa_rdm_mr_update_domain_mr_map(efa_rdm_mr, (struct fi_mr_attr *)mr_attr, flags);
+	if (ret) {
+		ret = efa_rdm_mr_dereg_impl(efa_rdm_mr);
+		return ret;
+	}
+
+	efa_rdm_mr->inserted_to_mr_map = true;
+
+	return 0;
+}
+
+/* RDM MR close operation */
+static int efa_rdm_mr_close(fid_t fid)
+{
+	struct efa_rdm_mr *efa_rdm_mr;
+	int ret, err;
+
+	efa_rdm_mr = container_of(fid, struct efa_rdm_mr, efa_mr.mr_fid.fid);
+
+	if (efa_rdm_mr->shm_mr) {
+		err = fi_close(&efa_rdm_mr->shm_mr->fid);
+		if (err) {
+			EFA_WARN(FI_LOG_MR,
+				"Unable to close shm MR: %s\n", fi_strerror(err));
+			ret = err;
+		}
+		efa_rdm_mr->shm_mr = NULL;
+	}
+
+	ret = efa_rdm_mr_dereg_impl(efa_rdm_mr);
+	if (ret)
+		EFA_WARN(FI_LOG_MR, "Unable to close efa MR: %s\n", fi_strerror(ret));
+
+	free(efa_rdm_mr);
+	return 0;
+}
+
+static struct fi_ops efa_rdm_mr_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = efa_rdm_mr_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+/* RDM MR registration - handles SHM integration and advanced features */
+static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+			      uint64_t flags, struct fid_mr **mr_fid)
+{
+	struct efa_domain *domain;
+	struct efa_rdm_mr *efa_rdm_mr;
+	int ret;
+	struct fi_mr_attr mr_attr = {0};
+
+	ret = efa_mr_validate_regattr(fid, attr, flags);
+	if (ret)
+		return ret;
+
+	domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
+
+	efa_rdm_mr = calloc(1, sizeof(*efa_rdm_mr));
+	if (!efa_rdm_mr) {
+		EFA_WARN(FI_LOG_MR, "Unable to initialize MR\n");
+		return -FI_ENOMEM;
+	}
+
+	efa_rdm_mr->efa_mr.domain = domain;
+	efa_rdm_mr->efa_mr.mr_fid.fid.fclass = FI_CLASS_MR;
+	efa_rdm_mr->efa_mr.mr_fid.fid.context = attr->context;
+	efa_rdm_mr->efa_mr.mr_fid.fid.ops = &efa_rdm_mr_ops;
+
+	/* Update attr for ABI compatibility */
+	ofi_mr_update_attr(domain->util_domain.fabric->fabric_fid.api_version,
+			    domain->util_domain.info_domain_caps,
+			    attr, &mr_attr, flags);
+
+	ret = efa_rdm_mr_reg_impl(efa_rdm_mr, flags, &mr_attr);
+	if (ret) {
+		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
+			 fi_strerror(-ret));
+		free(efa_rdm_mr);
+		return ret;
+	}
+
+	/* RDM-specific: SHM MR registration */
+	if (domain->shm_domain) {
+		uint64_t shm_flags = efa_rdm_mr->flags;
+		struct fi_mr_attr shm_attr = mr_attr;
+
+		if (mr_attr.iface != FI_HMEM_SYSTEM)
+			shm_flags |= FI_HMEM_DEVICE_ONLY;
+
+		shm_attr.hmem_data = efa_rdm_mr->hmem_data;
+		ret = fi_mr_regattr(efa_rdm_mr->efa_mr.domain->shm_domain,
+				    &shm_attr, shm_flags,
+				    &efa_rdm_mr->shm_mr);
+		if (ret) {
+			EFA_WARN(FI_LOG_MR,
+				 "Unable to register shm MR. errno: %d "
+				 "err_msg: (%s) key: %ld buf: %p len: %zu "
+				 "flags %ld\n",
+				 ret, fi_strerror(-ret), efa_rdm_mr->efa_mr.mr_fid.key,
+				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_base :
+						  NULL,
+				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_len : 0,
+				 flags);
+			efa_rdm_mr_dereg_impl(efa_rdm_mr);
+			free(efa_rdm_mr);
+			return ret;
+		}
+	}
+
+	*mr_fid = &efa_rdm_mr->efa_mr.mr_fid;
+	return 0;
+}
+
+static int efa_rdm_mr_regv(struct fid *fid, const struct iovec *iov,
+			   size_t count, uint64_t access, uint64_t offset,
+			   uint64_t requested_key, uint64_t flags,
+			   struct fid_mr **mr_fid, void *context)
+{
+	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(iov, count, access,
+							  offset,
+							  requested_key,
+							  context);
+
+	return efa_rdm_mr_regattr(fid, &attr, flags, mr_fid);
+}
+
+static int efa_rdm_mr_reg(struct fid *fid, const void *buf, size_t len,
+			  uint64_t access, uint64_t offset,
+			  uint64_t requested_key, uint64_t flags,
+			  struct fid_mr **mr_fid, void *context)
+{
+	struct iovec iov = {.iov_base = (void *)buf, .iov_len = len};
+	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(&iov, 1, access,
+							  offset,
+							  requested_key,
+							  context);
+
+	return efa_rdm_mr_regattr(fid, &attr, flags, mr_fid);
+}
+
+struct fi_ops_mr efa_rdm_domain_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.reg = efa_rdm_mr_reg,
+	.regv = efa_rdm_mr_regv,
+	.regattr = efa_rdm_mr_regattr,
 };

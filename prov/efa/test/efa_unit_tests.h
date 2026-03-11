@@ -336,6 +336,12 @@ void test_efa_domain_open_ops_query_qp_wqs();
 void test_efa_domain_open_ops_query_cq();
 void test_efa_domain_open_ops_cq_open_ext();
 void test_efa_domain_open_ops_get_mr_lkey();
+void test_efa_domain_rdm_mr_ops();
+void test_efa_domain_direct_mr_ops();
+void test_efa_domain_dgram_mr_ops();
+void test_efa_domain_mr_cache_enabled();
+void test_efa_domain_mr_cache_disabled_with_mr_local();
+void test_efa_domain_mr_cache_disabled_with_efa_direct();
 /* end efa_unit_test_domain.c */
 
 void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
@@ -506,9 +512,13 @@ void test_efa_rdm_mr_reg_host_memory();
 void test_efa_rdm_mr_reg_host_memory_no_mr_local();
 void test_efa_rdm_mr_reg_host_memory_overlapping_buffers();
 void test_efa_rdm_mr_reg_cuda_memory();
-void test_efa_direct_mr_reg_no_gdrcopy();
 void test_efa_direct_mr_reg_fi_read_support_status();
 void test_efa_direct_mr_reg_fi_write_support_status();
+void test_efa_direct_mr_reg_cuda_memory();
+void test_efa_mr_validate_regattr_invalid_iov_count();
+void test_efa_mr_validate_regattr_uninitialized_iface();
+void test_efa_rdm_mr_structure_casting();
+void test_efa_mr_attr_init_system_macro();
 void test_efa_mr_ofi_to_ibv_access_no_access();
 void test_efa_mr_ofi_to_ibv_access_one_flag();
 void test_efa_mr_ofi_to_ibv_access_read_not_supported();
@@ -516,7 +526,7 @@ void test_efa_mr_ofi_to_ibv_access_write_not_supported();
 void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported();
 void test_efa_mr_ofi_to_ibv_access_all_flags_supported();
 void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported();
-void test_efa_mr_internal_regv_no_shm_mr();
+void test_efa_rdm_mr_internal_regv_no_shm_mr();
 /* end efa_unit_test_mr.c */
 
 /* begin efa_unit_test_rdm_rma.c */
