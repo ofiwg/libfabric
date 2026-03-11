@@ -108,4 +108,47 @@ efa_rdm_proto_handle_tx_pkes_posted_no_op(struct efa_rdm_ep *ep,
 	return;
 };
 
+/**
+ * @brief Pick the REQ packet type a protocol uses for an operation.
+ *
+ * The tagged and delivery-complete variants of a REQ packet type are laid out
+ * at fixed offsets from the base type, so a protocol only records the base
+ * types and derives the rest.
+ *
+ * @param[in] proto	protocol that will carry the operation
+ * @param[in] op	operation type (ofi_op_msg or ofi_op_tagged)
+ * @param[in] flags	effective operation flags, as returned by
+ *			efa_rdm_msg_get_tx_flags()
+ * @param[in] peer	peer the operation is addressed to
+ */
+static inline int efa_rdm_proto_req_pkt_type(struct efa_rdm_proto *proto,
+					     uint32_t op, uint64_t flags,
+					     struct efa_rdm_peer *peer)
+{
+	bool tagged = (op == ofi_op_tagged);
+	bool delivery_complete_requested;
+
+	/*
+	 * An injected send completes as soon as the buffer is reusable, and a
+	 * headerless send has nowhere to put the DC send_id, so neither can use
+	 * the delivery complete variant.
+	 */
+	if (flags & FI_INJECT ||
+	    efa_rdm_peer_expects_zero_hdr_data_transfer(peer))
+		delivery_complete_requested = false;
+	else
+		delivery_complete_requested = flags & FI_DELIVERY_COMPLETE;
+
+	/*
+	 * For performance consideration, this code assumes the tagged rtm
+	 * packet type id is always the correspondent message rtm packet type
+	 * id + 1, thus the assertions here.
+	 */
+	assert(proto->req_pkt_type_tagged == proto->req_pkt_type + 1);
+	assert(proto->req_pkt_type_tagged_dc == proto->req_pkt_type_dc + 1);
+
+	return delivery_complete_requested ? proto->req_pkt_type_dc + tagged :
+					     proto->req_pkt_type + tagged;
+}
+
 #endif /* _EFA_RDM_PROTO_H */
