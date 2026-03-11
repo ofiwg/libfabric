@@ -11,6 +11,7 @@
 #include "efa_cntr.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_atomic.h"
+#include "efa_rdm_mr.h"
 
 
 struct dlist_entry g_efa_domain_list;
