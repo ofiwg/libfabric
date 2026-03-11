@@ -14,6 +14,9 @@
 
 #define EFA_RDM_TP_PROV efa_rdm
 
+/* efa_rdm_hmem tracepoints subset */
+#include "efa_rdm_hmem_tracepoint_def.h"
+
 /* Pre-defined tracepoints */
 
 #define X_ENTRY_ARGS \

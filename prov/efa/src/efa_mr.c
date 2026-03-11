@@ -208,16 +208,16 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
 	int err;
 	struct iovec mr_iov = {0};
-	efa_mr->peer.flags = flags;
+	efa_rdm_mr->flags = flags;
 
 	if (attr->iface == FI_HMEM_SYSTEM) {
-		efa_mr->peer.iface = FI_HMEM_SYSTEM;
+		efa_mr->iface = FI_HMEM_SYSTEM;
 		return FI_SUCCESS;
 	}
 
 	if (efa_mr->domain->util_domain.info_domain_caps & FI_HMEM) {
 		if (g_efa_hmem_info[attr->iface].initialized) {
-			efa_mr->peer.iface = attr->iface;
+			efa_mr->iface = attr->iface;
 		} else {
 			EFA_WARN(FI_LOG_MR,
 				"%s is not initialized\n",
@@ -234,37 +234,37 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		EFA_WARN_ONCE(FI_LOG_MR,
 		             "FI_HMEM support is disabled, assuming FI_HMEM_SYSTEM instead of %s\n",
 		             fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
-		efa_mr->peer.iface = FI_HMEM_SYSTEM;
+		efa_mr->iface = FI_HMEM_SYSTEM;
 	}
 
-	efa_mr->peer.device = 0;
-	efa_mr->peer.flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
-	efa_mr->peer.hmem_data = NULL;
-	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
+	efa_rdm_mr->device = 0;
+	efa_rdm_mr->flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
+	efa_rdm_mr->hmem_data = NULL;
+	if (efa_mr->iface == FI_HMEM_CUDA) {
 		efa_rdm_mr->needs_sync = true;
-		efa_mr->peer.device = attr->device.cuda;
+		efa_rdm_mr->device = attr->device.cuda;
 
 		/* Only attempt GDRCopy registrations for efa rdm path */
 		if (efa_mr->domain->info_type == EFA_INFO_RDM && !(flags & FI_MR_DMABUF) && cuda_is_gdrcopy_enabled()) {
 			mr_iov = *attr->mr_iov;
 			err = ofi_hmem_dev_register(FI_HMEM_CUDA, mr_iov.iov_base, mr_iov.iov_len,
-						    (uint64_t *)&efa_mr->peer.hmem_data);
-			efa_mr->peer.flags |= OFI_HMEM_DATA_DEV_REG_HANDLE;
+						    (uint64_t *)&efa_rdm_mr->hmem_data);
+			efa_rdm_mr->flags |= OFI_HMEM_DATA_DEV_REG_HANDLE;
 			if (err) {
 				EFA_WARN(FI_LOG_MR,
 				         "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
 				         err, mr_iov.iov_base, mr_iov.iov_len);
 				/* When gdrcopy pin buf failed, fallback to cudaMemcpy */
-				efa_mr->peer.hmem_data = NULL;
-				efa_mr->peer.flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
+				efa_rdm_mr->hmem_data = NULL;
+				efa_rdm_mr->flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
 			}
 		}
 	} else if (attr->iface == FI_HMEM_ROCR) {
-		efa_mr->peer.device = attr->device.rocr;
+		efa_rdm_mr->device = attr->device.rocr;
 	} else if (attr->iface == FI_HMEM_NEURON) {
-		efa_mr->peer.device = attr->device.neuron;
+		efa_rdm_mr->device = attr->device.neuron;
 	} else if (attr->iface == FI_HMEM_SYNAPSEAI) {
-		efa_mr->peer.device = attr->device.synapseai;
+		efa_rdm_mr->device = attr->device.synapseai;
 	}
 
 	return FI_SUCCESS;
@@ -435,17 +435,17 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 		efa_rdm_mr->inserted_to_mr_map = false;
 	}
 
-	if (efa_mr->peer.iface == FI_HMEM_CUDA &&
-	    (efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-		assert(efa_mr->peer.hmem_data);
-		err = ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_mr->peer.hmem_data);
+	if (efa_mr->iface == FI_HMEM_CUDA &&
+	    (efa_rdm_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
+		assert(efa_rdm_mr->hmem_data);
+		err = ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_rdm_mr->hmem_data);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
 				"Unable to de-register cuda handle\n");
 			ret = err;
 		}
 
-		efa_mr->peer.hmem_data = NULL;
+		efa_rdm_mr->hmem_data = NULL;
 	}
 
 	efa_mr->mr_fid.mem_desc = NULL;
@@ -629,7 +629,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 					 struct fi_mr_attr *mr_attr,
 					 int access, const uint64_t flags)
 {
-	struct efa_hmem_info *p_info = &g_efa_hmem_info[efa_mr->peer.iface];
+	struct efa_hmem_info *p_info = &g_efa_hmem_info[efa_mr->iface];
 	struct ibv_mr *dmabuf_mr;
 	uint64_t offset;
 	int dmabuf_fd;
@@ -644,7 +644,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 		if (DMABUF_IS_NOT_SUPPORTED(p_info)) {
 			EFA_WARN(FI_LOG_MR,
 				 "Requested FI_MR_DMABUF, but dmabuf not supported for iface=%d\n",
-				 efa_mr->peer.iface);
+				 efa_mr->iface);
 			return NULL;
 		}
 
@@ -662,7 +662,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 			access);
 
 		if (!dmabuf_mr)  {
-			efa_mark_dmabuf_fail(p_info, efa_mr->peer.iface);
+			efa_mark_dmabuf_fail(p_info, efa_mr->iface);
 		} else {
 			p_info->dmabuf_supported_by_device = EFA_DMABUF_SUPPORTED;
 		}
@@ -673,7 +673,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 	/* Implicit VA path with dmabuf-first */
 	if (DMABUF_IS_SUPPORTED(p_info)) {
 		ret = ofi_hmem_get_dmabuf_fd(
-			efa_mr->peer.iface,
+			efa_mr->iface,
 			mr_attr->mr_iov->iov_base,
 			(uint64_t) mr_attr->mr_iov->iov_len,
 			&dmabuf_fd, &offset);
@@ -692,10 +692,10 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 			/* Close the dmabuf file descriptor - it's no longer needed
 			 * after registration
 			 */
-			(void) ofi_hmem_put_dmabuf_fd(efa_mr->peer.iface, dmabuf_fd);
+			(void) ofi_hmem_put_dmabuf_fd(efa_mr->iface, dmabuf_fd);
 
 			if (!dmabuf_mr) {
-				efa_mark_dmabuf_fail(p_info, efa_mr->peer.iface);
+				efa_mark_dmabuf_fail(p_info, efa_mr->iface);
 				if (p_info->dmabuf_fallback_enabled) {
 					return ibv_reg_mr(efa_mr->domain->ibv_pd,
 						  	  (void *)mr_attr->mr_iov->iov_base,
@@ -712,8 +712,8 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 			EFA_INFO(FI_LOG_MR,
 				 "Unable to get dmabuf fd for %s device buffer, "
 				 "Fall back to ibv_reg_mr\n",
-				 fi_tostr(&efa_mr->peer.iface, FI_TYPE_HMEM_IFACE));
-			efa_mark_dmabuf_fail(p_info, efa_mr->peer.iface);
+				 fi_tostr(&efa_mr->iface, FI_TYPE_HMEM_IFACE));
+			efa_mark_dmabuf_fail(p_info, efa_mr->iface);
 			return ibv_reg_mr(efa_mr->domain->ibv_pd,
 					  (void *)mr_attr->mr_iov->iov_base,
 					  mr_attr->mr_iov->iov_len, access);
@@ -722,7 +722,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 		/* get fd failed, no fallback */
 		EFA_WARN(FI_LOG_MR,
 			 "ofi_hmem_get_dmabuf_fd failed for iface=%d: ret=%d (%s)\n",
-			 efa_mr->peer.iface, ret, fi_strerror(-ret));
+			 efa_mr->iface, ret, fi_strerror(-ret));
 		p_info->dmabuf_supported_by_device = EFA_DMABUF_NOT_SUPPORTED;
 
 		return NULL;
@@ -831,12 +831,12 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
 	assert(existing_mr_fid);
 	existing_mr = container_of(existing_mr_fid, struct efa_mr, mr_fid);
 
-	if (existing_mr->peer.iface != FI_HMEM_CUDA) {
+	if (existing_mr->iface != FI_HMEM_CUDA) {
 		/* no way we can recover from this situation, return error code */
 		EFA_WARN(FI_LOG_DOMAIN, "key %ld already assigned to buffer: %p hmem_iface: %s length: %ld\n",
 			 existing_mr->mr_fid.key,
 			 existing_mr->ibv_mr->addr,
-			 fi_tostr(&existing_mr->peer.iface, FI_TYPE_HMEM_IFACE),
+			 fi_tostr(&existing_mr->iface, FI_TYPE_HMEM_IFACE),
 			 existing_mr->ibv_mr->length);
 		return -FI_ENOKEY;
 	}
@@ -1098,10 +1098,10 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 				 efa_mr->domain->ibv_pd,
 				 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_sz),
 				 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_ct));
-			if (efa_mr->peer.iface == FI_HMEM_CUDA &&
-			    (efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
-				assert(efa_mr->peer.hmem_data);
-				ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_mr->peer.hmem_data);
+			if (efa_mr->iface == FI_HMEM_CUDA &&
+			    (efa_rdm_mr->flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
+				assert(efa_rdm_mr->hmem_data);
+				ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_rdm_mr->hmem_data);
 			}
 
 			return -errno;
@@ -1222,14 +1222,14 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (efa_mr->domain->shm_domain) {
 		uint64_t shm_flags;
 
-		/* Inherit peer.flags with addtional feature bits such as gdrcopy handle switch */
-		shm_flags = efa_mr->peer.flags;
+		/* Inherit flags with additional feature bits such as gdrcopy handle switch */
+		shm_flags = efa_rdm_mr->flags;
 		if (mr_attr.iface != FI_HMEM_SYSTEM) {
 			/* shm provider need the flag to turn on IPC support */
 			shm_flags |= FI_HMEM_DEVICE_ONLY;
 		}
 
-		mr_attr.hmem_data = efa_mr->peer.hmem_data;
+		mr_attr.hmem_data = efa_rdm_mr->hmem_data;
 
 		ret = fi_mr_regattr(efa_mr->domain->shm_domain, &mr_attr,
 				    shm_flags, &efa_rdm_mr->shm_mr);

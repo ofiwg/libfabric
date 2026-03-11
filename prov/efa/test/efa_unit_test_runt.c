@@ -24,7 +24,7 @@ void test_efa_rdm_peer_get_runt_size_impl(
 	size_t raw_addr_len = sizeof(raw_addr);
 	struct efa_rdm_peer *peer;
 	fi_addr_t addr;
-	struct efa_mr mock_mr;
+	struct efa_rdm_mr mock_mr;
 	struct efa_rdm_ope mock_txe;
 	size_t runt_size;
 	int ret;
@@ -42,7 +42,7 @@ void test_efa_rdm_peer_get_runt_size_impl(
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	peer->num_runt_bytes_in_flight = peer_num_runt_bytes_in_flight;
 
-	mock_mr.peer.iface = iface;
+	mock_mr.efa_mr.iface = iface;
 
 	memset(&mock_txe, 0, sizeof(mock_txe));
 	mock_txe.total_len = total_len;
@@ -292,7 +292,7 @@ void test_efa_rdm_peer_select_readbase_rtm_impl(
 	size_t raw_addr_len = sizeof(raw_addr);
 	struct efa_rdm_peer *peer;
 	fi_addr_t addr;
-	struct efa_mr mock_mr;
+	struct efa_rdm_mr mock_mr;
 	struct efa_rdm_ope mock_txe;
 	int readbase_rtm;
 	int ret;
@@ -310,7 +310,7 @@ void test_efa_rdm_peer_select_readbase_rtm_impl(
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	peer->num_runt_bytes_in_flight = peer_num_runt_bytes_in_flight;
 
-	mock_mr.peer.iface = iface;
+	mock_mr.efa_mr.iface = iface;
 
 	memset(&mock_txe, 0, sizeof(mock_txe));
 	mock_txe.total_len = total_len;

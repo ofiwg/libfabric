@@ -7,27 +7,23 @@
 #include <stdbool.h>
 #include <ofi_mr.h>
 
-/*
- * Descriptor returned for FI_HMEM peer memory registrations
- */
-struct efa_mr_peer {
-	enum fi_hmem_iface  iface;
-	uint64_t			device;
-	uint64_t            flags;
-	void                *hmem_data;
-};
-
 struct efa_mr {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*ibv_mr;
 	struct efa_domain	*domain;
-	struct efa_mr_peer	peer;
+	/* HMEM interface fields */
+	enum fi_hmem_iface	iface;
 };
 
 struct efa_rdm_mr {
 	struct efa_mr		efa_mr;
 	bool			inserted_to_mr_map;
 	bool 			needs_sync;
+	/* RDM-specific HMEM data handle */
+	void			*hmem_data;
+	/* RDM-specific flags */
+	uint64_t		flags;
+	uint64_t		device;
 	/* Used only in MR cache */
 	struct ofi_mr_entry	*entry;
 	/* Used only in rdm */
@@ -58,10 +54,10 @@ void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 static inline bool efa_mr_is_hmem(struct efa_mr *efa_mr)
 {
 	return efa_mr && (
-		efa_mr->peer.iface == FI_HMEM_CUDA ||
-		efa_mr->peer.iface == FI_HMEM_ROCR ||
-		efa_mr->peer.iface == FI_HMEM_NEURON ||
-		efa_mr->peer.iface == FI_HMEM_SYNAPSEAI);
+		efa_mr->iface == FI_HMEM_CUDA ||
+		efa_mr->iface == FI_HMEM_ROCR ||
+		efa_mr->iface == FI_HMEM_NEURON ||
+		efa_mr->iface == FI_HMEM_SYNAPSEAI);
 }
 
 int efa_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
@@ -76,22 +72,22 @@ int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 
 static inline bool efa_mr_is_cuda(struct efa_mr *efa_mr)
 {
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA) : false;
+	return efa_mr ? (efa_mr->iface == FI_HMEM_CUDA) : false;
 }
 
 static inline bool efa_mr_is_neuron(struct efa_mr *efa_mr)
 {
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_NEURON) : false;
+	return efa_mr ? (efa_mr->iface == FI_HMEM_NEURON) : false;
 }
 
 static inline bool efa_mr_is_synapseai(struct efa_mr *efa_mr)
 {
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_SYNAPSEAI) : false;
+	return efa_mr ? (efa_mr->iface == FI_HMEM_SYNAPSEAI) : false;
 }
 
 static inline bool efa_mr_is_rocr(struct efa_mr *efa_mr)
 {
-	return efa_mr && efa_mr->peer.iface == FI_HMEM_ROCR;
+	return efa_mr && efa_mr->iface == FI_HMEM_ROCR;
 }
 
 #define EFA_MR_IOV_LIMIT 1
