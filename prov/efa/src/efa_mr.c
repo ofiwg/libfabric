@@ -14,6 +14,85 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 static int efa_mr_dereg_impl(struct efa_mr *efa_mr);
 
 
+/* Common validation for MR registration attributes */
+int efa_mr_validate_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+				   uint64_t flags)
+{
+	struct efa_domain *domain;
+	uint64_t supported_flags;
+	uint32_t api_version;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		EFA_WARN(FI_LOG_MR, "Unsupported domain. requested"
+			 "[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
+			 fid->fclass, (uint64_t) FI_CLASS_DOMAIN);
+		return -FI_EINVAL;
+	}
+
+	domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
+
+	/*
+	 * Notes supported memory registration flags:
+	 *
+	 * FI_HMEM_DEVICE_ONLY:
+	 * This flag is used by some provider that need to distinguish
+	 * whether a device memory can be accessed from device only, or
+	 * can be access from host. EFA provider considers all device memory
+	 * to be accessed by device only. Therefore, this function claim
+	 * support of this flag, but do not save it in efa_mr.
+	 *
+	 * FI_MR_DMABUF:
+	 * This flag indicates that the memory region to registered is
+	 * a DMA-buf backed region. When set, the region is specified through
+	 * the dmabuf field of the fi_mr_attr structure. This flag is only
+	 * usable for domains opened with FI_HMEM capability support.
+	 * This flag is introduced since Libfabric 1.20.
+	 */
+	supported_flags = FI_HMEM_DEVICE_ONLY;
+	api_version = domain->util_domain.fabric->fabric_fid.api_version;
+
+	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)))
+		supported_flags |= FI_MR_DMABUF;
+
+	if (flags & (~supported_flags)) {
+		EFA_WARN(FI_LOG_MR, "Unsupported flag type. requested"
+			 "[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
+			 flags, supported_flags);
+		return -FI_EBADFLAGS;
+	}
+
+	if (attr->iov_count > EFA_MR_IOV_LIMIT) {
+		EFA_WARN(FI_LOG_MR, "iov count > %d not supported\n",
+			 EFA_MR_IOV_LIMIT);
+		return -FI_EINVAL;
+	}
+
+	if (attr->iface >= OFI_HMEM_MAX || !g_efa_hmem_info[attr->iface].initialized) {
+		EFA_WARN(FI_LOG_MR,
+			 "Cannot register memory for uninitialized iface (%s)\n",
+			 fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
+		return -FI_ENOSYS;
+	}
+
+	/* Checking the access flags with provider's capabilities */
+	if ((attr->access & (FI_READ | FI_REMOTE_READ)) &&
+		!(domain->info->tx_attr->caps & FI_READ)) {
+		EFA_WARN(FI_LOG_MR, "FI_READ or FI_REMOTE_READ "
+					"requested but info doesn't support "
+					"READ operations\n");
+		return -FI_EOPNOTSUPP;
+	}
+	if ((attr->access & (FI_WRITE | FI_REMOTE_WRITE)) &&
+		!(domain->info->tx_attr->caps & FI_WRITE)) {
+		EFA_WARN(FI_LOG_MR, "FI_WRITE or FI_REMOTE_WRITE "
+					"requested but info doesn't support "
+					"WRITE operations\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 #define EFA_DEF_MR_CACHE_ENABLE 1
 int efa_mr_cache_enable	= EFA_DEF_MR_CACHE_ENABLE;
 size_t efa_mr_max_cached_count;
@@ -1020,79 +1099,14 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct efa_domain *domain;
 	struct efa_rdm_mr *efa_rdm_mr = NULL;
 	struct efa_mr *efa_mr;
-	uint64_t supported_flags;
 	int ret = 0;
-	uint32_t api_version;
 	struct fi_mr_attr mr_attr = {0};
 
-	/*
-	 * Notes supported memory registration flags:
-	 *
-	 * FI_HMEM_DEVICE_ONLY:
-	 * This flag is used by some provider that need to distinguish
-	 * whether a device memory can be accessed from device only, or
-	 * can be access from host. EFA provider considers all device memory
-	 * to be accessed by device only. Therefore, this function claim
-	 * support of this flag, but do not save it in efa_mr.
-	 *
-	 * FI_MR_DMABUF:
-	 * This flag indicates that the memory region to registered is
-	 * a DMA-buf backed region. When set, the region is specified through
-	 * the dmabuf field of the fi_mr_attr structure. This flag is only
-	 * usable for domains opened with FI_HMEM capability support.
-	 * This flag is introduced since Libfabric 1.20.
-	 */
-	supported_flags = FI_HMEM_DEVICE_ONLY;
+	ret = efa_mr_validate_regattr(fid, attr, flags);
+	if (ret)
+		return ret;
 
-	domain = container_of(fid, struct efa_domain,
-			      util_domain.domain_fid.fid);
-	api_version = domain->util_domain.fabric->fabric_fid.api_version;
-
-	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)))
-		supported_flags |= FI_MR_DMABUF;
-
-	if (flags & (~supported_flags)) {
-		EFA_WARN(FI_LOG_MR, "Unsupported flag type. requested"
-			 "[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
-			 flags, supported_flags);
-		return -FI_EBADFLAGS;
-	}
-
-	if (fid->fclass != FI_CLASS_DOMAIN) {
-		EFA_WARN(FI_LOG_MR, "Unsupported domain. requested"
-			 "[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
-			 fid->fclass, (uint64_t) FI_CLASS_DOMAIN);
-		return -FI_EINVAL;
-	}
-
-	if (attr->iov_count > EFA_MR_IOV_LIMIT) {
-		EFA_WARN(FI_LOG_MR, "iov count > %d not supported\n",
-			 EFA_MR_IOV_LIMIT);
-		return -FI_EINVAL;
-	}
-
-	if (attr->iface >= OFI_HMEM_MAX || !g_efa_hmem_info[attr->iface].initialized) {
-		EFA_WARN(FI_LOG_MR,
-			 "Cannot register memory for uninitialized iface (%s)\n",
-			 fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
-		return -FI_ENOSYS;
-	}
-
-	/* Checking the access flags with provider's capabilities */
-	if ((attr->access & (FI_READ | FI_REMOTE_READ)) &&
-		!(domain->info->tx_attr->caps & FI_READ)) {
-		EFA_WARN(FI_LOG_MR, "FI_READ or FI_REMOTE_READ "
-					"requested but info doesn't support "
-					"READ operations\n");
-		return -FI_EOPNOTSUPP;
-	}
-	if ((attr->access & (FI_WRITE | FI_REMOTE_WRITE)) &&
-		!(domain->info->tx_attr->caps & FI_WRITE)) {
-		EFA_WARN(FI_LOG_MR, "FI_WRITE or FI_REMOTE_WRITE "
-					"requested but info doesn't support "
-					"WRITE operations\n");
-		return -FI_EOPNOTSUPP;
-	}
+	domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
 
 	efa_rdm_mr = calloc(1, sizeof(*efa_rdm_mr));
 	if (!efa_rdm_mr) {
