@@ -519,10 +519,18 @@ void test_efa_mr_ofi_to_ibv_access_write_not_supported();
 void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported();
 void test_efa_mr_ofi_to_ibv_access_all_flags_supported();
 void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported();
-void test_efa_rdm_mr_internal_regv_no_shm_mr();
 void test_efa_mr_close_warn_outstanding_direct_ope();
 void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep();
 void test_efa_mr_close_warn_outstanding_rdm_txe();
+void test_efa_rdm_mr_cache_regv_no_cache();
+void test_efa_rdm_mr_cache_regv_with_cache();
+void test_efa_rdm_mr_cache_regv_cache_hit();
+void test_efa_rdm_mr_cache_encapsulation_smaller();
+void test_efa_rdm_mr_cache_non_overlapping();
+void test_efa_rdm_mr_cache_lru_behavior();
+void test_efa_rdm_mr_cache_flush_behavior();
+void test_efa_rdm_mr_cache_reference_counting();
+
 /* end efa_unit_test_mr.c */
 
 /* begin efa_unit_test_rdm_rma.c */
