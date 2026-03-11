@@ -176,6 +176,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 		dlist_remove(&rxe->peer_entry);
 
 	dlist_remove(&rxe->ep_entry);
+	dlist_remove_init(&rxe->ack_list_entry);
 
 	/**
 	 * Make sure the entry is removed

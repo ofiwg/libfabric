@@ -842,11 +842,33 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	}
 #endif
 
+	/*
+	 * Release rxe entries in ope_posted_ack_list before rxe_list.
+	 * These are rxe entries that have posted EOR/RECEIPT packets
+	 * and are waiting for send completion. For these entries,
+	 * efa_rdm_rxe_report_completion() has already been called,
+	 * which already called efa_mr_ref_dec(). So we should NOT
+	 * call efa_mr_ref_dec() again for these entries.
+	 */
+	dlist_foreach_safe(&efa_rdm_ep->ope_posted_ack_list, entry, tmp) {
+		rxe = container_of(entry, struct efa_rdm_ope, ack_list_entry);
+		EFA_INFO(FI_LOG_EP_CTRL,
+			"Closing ep with rxe waiting for EOR/RECEIPT completion\n");
+		dlist_remove(&rxe->ack_list_entry);
+		efa_rdm_rxe_release(rxe);
+	}
+
 	dlist_foreach_safe(&efa_rdm_ep->rxe_list, entry, tmp) {
 		rxe = container_of(entry, struct efa_rdm_ope,
 					ep_entry);
 		EFA_INFO(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased rxe\n");
+		/*
+		 * efa_rdm_rxe_handle_error() already called efa_mr_ref_dec()
+		 * for rxe in err state
+		 */
+		if (rxe->state != EFA_RDM_OPE_ERR)
+			efa_mr_ref_dec(rxe->desc, rxe->iov_count);
 		efa_rdm_rxe_release(rxe);
 	}
 
@@ -856,6 +878,12 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		EFA_INFO(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased txe: %p\n",
 			txe);
+		/*
+		 * efa_rdm_txe_handle_error() already called efa_mr_ref_dec()
+		 * for txe in err state
+		 */
+		if (txe->state != EFA_RDM_OPE_ERR)
+			efa_mr_ref_dec(txe->desc, txe->iov_count);
 		efa_rdm_txe_release(txe);
 	}
 

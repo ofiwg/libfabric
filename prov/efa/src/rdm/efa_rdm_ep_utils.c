@@ -188,6 +188,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, struct efa_rdm_p
 	memset(rxe->mr, 0, sizeof(*rxe->mr) * EFA_RDM_IOV_LIMIT);
 
 	dlist_init(&rxe->queued_pkts);
+	dlist_init(&rxe->ack_list_entry);
 
 	rxe->state = EFA_RDM_RXE_INIT;
 	if (peer) {
