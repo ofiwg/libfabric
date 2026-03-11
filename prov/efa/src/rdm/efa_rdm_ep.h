@@ -280,10 +280,10 @@ int efa_rdm_ep_use_p2p(struct efa_rdm_ep *efa_rdm_ep, struct efa_mr *efa_mr)
 	 * P2P is always available for host memory (Unregistered buffer will be
 	 * regarded as host memory as EFA provider requires FI_MR_HMEM)
 	 */
-	if (!efa_mr || efa_mr->peer.iface == FI_HMEM_SYSTEM)
+	if (!efa_mr || efa_mr->iface == FI_HMEM_SYSTEM)
 		return 1;
 
-	if (g_efa_hmem_info[efa_mr->peer.iface].p2p_supported_by_device)
+	if (g_efa_hmem_info[efa_mr->iface].p2p_supported_by_device)
 		return (efa_rdm_ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
 
 	if (efa_rdm_ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {

@@ -222,7 +222,7 @@ int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 	for (i = 0; i < iov_count; ++i) {
 		/* Get hmem_iface from MR */
 		efa_mr = (struct efa_mr*) ofi_mr_map_get(&pkt_entry->ep->base_ep.util_ep.domain->mr_map, (rta_hdr->rma_iov + i)->key);
-		hmem_iface = efa_mr->peer.iface;
+		hmem_iface = efa_mr->iface;
 
 		if (hmem_iface == FI_HMEM_SYSTEM) {
 			ofi_atomic_write_handlers[op][dt](iov[i].iov_base,
@@ -398,7 +398,7 @@ int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 	offset = 0;
 	for (i = 0; i < rxe->iov_count; ++i) {
 		efa_mr = (struct efa_mr*) ofi_mr_map_get(&ep->base_ep.util_ep.domain->mr_map, (efa_rdm_pke_get_rta_hdr(pkt_entry)->rma_iov + i)->key);
-		hmem_iface = efa_mr->peer.iface;
+		hmem_iface = efa_mr->iface;
 		if (hmem_iface == FI_HMEM_SYSTEM) {
 			ofi_atomic_readwrite_handlers[op][dt](rxe->iov[i].iov_base,
 			                                      data + offset,
@@ -532,7 +532,7 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 	offset = 0;
 	for (i = 0; i < rxe->iov_count; ++i) {
 		efa_mr = (struct efa_mr*) ofi_mr_map_get(&ep->base_ep.util_ep.domain->mr_map, (efa_rdm_pke_get_rta_hdr(pkt_entry)->rma_iov + i)->key);
-		hmem_iface = efa_mr->peer.iface;
+		hmem_iface = efa_mr->iface;
 
 		if (hmem_iface == FI_HMEM_SYSTEM) {
 			ofi_atomic_swap_handler(op, dt, rxe->iov[i].iov_base,

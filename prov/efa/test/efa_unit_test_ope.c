@@ -15,7 +15,7 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 						int *expected_pkt_entry_data_size_vec)
 {
 	struct efa_ep_addr raw_addr;
-	struct efa_mr mock_mr;
+	struct efa_rdm_mr mock_mr;
 	struct efa_rdm_ope mock_txe;
 	struct efa_rdm_peer mock_peer;
 	size_t raw_addr_len = sizeof(raw_addr);
@@ -30,7 +30,7 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
 
-	mock_mr.peer.iface = iface;
+	mock_mr.efa_mr.iface = iface;
 
 	struct efa_rdm_ep *efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
@@ -335,7 +335,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	pkt_entry->payload = pkt_entry->wiredata;
 
 	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_tagged);
-	cuda_mr.peer.iface = FI_HMEM_CUDA;
+	cuda_mr.iface = FI_HMEM_CUDA;
 
 	rxe->desc[0] = &cuda_mr;
 	rxe->iov_count = 1;

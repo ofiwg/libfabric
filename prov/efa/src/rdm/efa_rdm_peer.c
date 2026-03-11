@@ -336,7 +336,7 @@ size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer,
 	size_t memory_alignment;
 	int iface;
 
-	iface = ope->desc[0] ? ((struct efa_mr*) ope->desc[0])->peer.iface : FI_HMEM_SYSTEM;
+	iface = ope->desc[0] ? ((struct efa_mr*) ope->desc[0])->iface : FI_HMEM_SYSTEM;
 
 	if (g_efa_hmem_info[iface].runt_size < peer->num_runt_bytes_in_flight)
 		return 0;
