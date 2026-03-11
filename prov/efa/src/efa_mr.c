@@ -141,7 +141,7 @@ int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
 	 */
 	cache_params.max_cnt = efa_mr_max_cached_count;
 	cache_params.max_size = efa_mr_max_cached_size;
-	(*cache)->entry_data_size = sizeof(struct efa_mr);
+	(*cache)->entry_data_size = sizeof(struct efa_rdm_mr);
 	(*cache)->add_region = efa_mr_cache_entry_reg;
 	(*cache)->delete_region = efa_mr_cache_entry_dereg;
 	err = ofi_mr_cache_init(&domain->util_domain, memory_monitors,
@@ -161,10 +161,10 @@ int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
 
 static int efa_mr_cache_close(fid_t fid)
 {
-	struct efa_mr *efa_mr = container_of(fid, struct efa_mr,
-					       mr_fid.fid);
+	struct efa_rdm_mr *efa_rdm_mr = container_of(fid, struct efa_rdm_mr,
+					       efa_mr.mr_fid.fid);
 
-	ofi_mr_cache_delete(efa_mr->domain->cache, efa_mr->entry);
+	ofi_mr_cache_delete(efa_rdm_mr->efa_mr.domain->cache, efa_rdm_mr->entry);
 
 	return 0;
 }
@@ -194,6 +194,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
                              const struct fi_mr_attr *attr,
 							 uint64_t flags)
 {
+	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
 	int err;
 	struct iovec mr_iov = {0};
 	efa_mr->peer.flags = flags;
@@ -229,7 +230,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	efa_mr->peer.flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
 	efa_mr->peer.hmem_data = NULL;
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
-		efa_mr->needs_sync = true;
+		efa_rdm_mr->needs_sync = true;
 		efa_mr->peer.device = attr->device.cuda;
 
 		/* Only attempt GDRCopy registrations for efa rdm path */
@@ -271,13 +272,16 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 	 */
 	uint64_t access = EFA_MR_SUPPORTED_PERMISSIONS;
 	struct fi_mr_attr attr = {0};
-	struct efa_mr *efa_mr = (struct efa_mr *)entry->data;
+	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)entry->data;
+	struct efa_mr *efa_mr = &efa_rdm_mr->efa_mr;
 
 	efa_mr->domain = container_of(cache->domain, struct efa_domain,
 					util_domain);
 	efa_mr->mr_fid.fid.ops = &efa_mr_cache_ops;
 	efa_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	efa_mr->mr_fid.fid.context = NULL;
+
+	efa_rdm_mr->entry = entry;
 
 	attr.mr_iov = &entry->info.iov;
 	/* ofi_mr_info only stores one iov */
@@ -302,7 +306,8 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry)
 {
-	struct efa_mr *efa_mr = (struct efa_mr *)entry->data;
+	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)entry->data;
+	struct efa_mr *efa_mr = &efa_rdm_mr->efa_mr;
 	int ret;
 
 	ret = efa_mr_dereg_impl(efa_mr);
@@ -314,6 +319,7 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 				uint64_t flags, struct fid_mr **mr_fid)
 {
 	struct efa_domain *domain;
+	struct efa_rdm_mr *efa_rdm_mr;
 	struct efa_mr *efa_mr;
 	struct ofi_mr_entry *entry;
 	struct ofi_mr_info info = {0};
@@ -343,8 +349,9 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	efa_mr = (struct efa_mr *)entry->data;
-	efa_mr->entry = entry;
+	efa_rdm_mr = (struct efa_rdm_mr *)entry->data;
+	efa_mr = &efa_rdm_mr->efa_mr;
+	efa_rdm_mr->entry = entry;
 
 	*mr_fid = &efa_mr->mr_fid;
 	return 0;
@@ -377,6 +384,7 @@ int efa_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 
 static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 {
+	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
 	struct efa_domain *efa_domain;
 	int ret = 0;
 	int err;
@@ -401,7 +409,7 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 
 	efa_mr->ibv_mr = NULL;
 
-	if (efa_mr->inserted_to_mr_map) {
+	if (efa_rdm_mr->inserted_to_mr_map) {
 		ofi_genlock_lock(&efa_domain->util_domain.lock);
 		err = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
 					efa_mr->mr_fid.key);
@@ -413,7 +421,7 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 				fi_strerror(-err));
 			ret = err;
 		}
-		efa_mr->inserted_to_mr_map = false;
+		efa_rdm_mr->inserted_to_mr_map = false;
 	}
 
 	if (efa_mr->peer.iface == FI_HMEM_CUDA &&
@@ -436,25 +444,27 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 
 static int efa_mr_close(fid_t fid)
 {
+	struct efa_rdm_mr *efa_rdm_mr;
 	struct efa_mr *efa_mr;
 	int ret, err;
 
-	efa_mr = container_of(fid, struct efa_mr, mr_fid.fid);
+	efa_rdm_mr = container_of(fid, struct efa_rdm_mr, efa_mr.mr_fid.fid);
+	efa_mr = &efa_rdm_mr->efa_mr;
 
-	if (efa_mr->shm_mr) {
-		err = fi_close(&efa_mr->shm_mr->fid);
+	if (efa_rdm_mr->shm_mr) {
+		err = fi_close(&efa_rdm_mr->shm_mr->fid);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
 				"Unable to close shm MR\n");
 			ret = err;
 		}
-		efa_mr->shm_mr = NULL;
+		efa_rdm_mr->shm_mr = NULL;
 	}
 
 	ret = efa_mr_dereg_impl(efa_mr);
 	if (ret)
 		EFA_WARN(FI_LOG_MR, "Unable to close MR\n");
-	free(efa_mr);
+	free(efa_rdm_mr);
 	return ret;
 }
 
@@ -629,6 +639,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 static inline
 int efa_mr_is_cuda_memory_freed(struct efa_mr *efa_mr, bool *freed)
 {
+	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
 	int err;
 	uint64_t buffer_id;
 
@@ -648,7 +659,7 @@ int efa_mr_is_cuda_memory_freed(struct efa_mr *efa_mr, bool *freed)
 		/* Buffer ID mismatch means the original buffer was freed, and a new buffer has been
 		 * allocated with the same address
 		 */
-		*freed = (buffer_id != efa_mr->entry->hmem_info.cuda_id);
+		*freed = (buffer_id != efa_rdm_mr->entry->hmem_info.cuda_id);
 		return 0;
 	}
 
@@ -882,6 +893,7 @@ int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 		      struct fid_mr **mr, void *context)
 {
 	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context);
+	struct efa_rdm_mr *efa_rdm_mr;
 	struct efa_mr *efa_mr;
 	struct efa_domain *domain;
 	int ret;
@@ -889,12 +901,13 @@ int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 
 	domain = container_of(domain_fid, struct efa_domain,
 			      util_domain.domain_fid);
-	efa_mr = calloc(1, sizeof(*efa_mr));
-	if (!efa_mr) {
+	efa_rdm_mr = calloc(1, sizeof(*efa_rdm_mr));
+	if (!efa_rdm_mr) {
 		EFA_WARN(FI_LOG_MR, "Unable to initialize MR\n");
 		return -FI_ENOMEM;
 	}
 
+	efa_mr = &efa_rdm_mr->efa_mr;
 	efa_mr->domain = domain;
 	efa_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	efa_mr->mr_fid.fid.context = attr.context;
@@ -904,7 +917,7 @@ int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
 	if (ret) {
 		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
 			fi_strerror(-ret));
-		free(efa_mr);
+		free(efa_rdm_mr);
 		return ret;
 	}
 	*mr = &efa_mr->mr_fid;
@@ -917,17 +930,18 @@ int efa_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
  */
 static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_attr *mr_attr)
 {
+	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)efa_mr;
 	int64_t reg_sz, reg_ct;
 	int ret = 0;
 	bool device_support_rdma_read = false;
 	bool device_support_rdma_write = false;
 
 	efa_mr->ibv_mr = NULL;
-	efa_mr->shm_mr = NULL;
-	efa_mr->inserted_to_mr_map = false;
+	efa_rdm_mr->shm_mr = NULL;
+	efa_rdm_mr->inserted_to_mr_map = false;
 	efa_mr->mr_fid.mem_desc = NULL;
 	efa_mr->mr_fid.key = FI_KEY_NOTAVAIL;
-	efa_mr->needs_sync = false;
+	efa_rdm_mr->needs_sync = false;
 
 	ret = efa_mr_hmem_setup(efa_mr, mr_attr, flags);
 	if (ret)
@@ -996,7 +1010,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 		return ret;
 	}
 
-	efa_mr->inserted_to_mr_map = true;
+	efa_rdm_mr->inserted_to_mr_map = true;
 
 	return 0;
 }
@@ -1005,7 +1019,8 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr_fid)
 {
 	struct efa_domain *domain;
-	struct efa_mr *efa_mr = NULL;
+	struct efa_rdm_mr *efa_rdm_mr = NULL;
+	struct efa_mr *efa_mr;
 	uint64_t supported_flags;
 	int ret = 0;
 	uint32_t api_version;
@@ -1080,12 +1095,13 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EOPNOTSUPP;
 	}
 
-	efa_mr = calloc(1, sizeof(*efa_mr));
-	if (!efa_mr) {
+	efa_rdm_mr = calloc(1, sizeof(*efa_rdm_mr));
+	if (!efa_rdm_mr) {
 		EFA_WARN(FI_LOG_MR, "Unable to initialize md\n");
 		return -FI_ENOMEM;
 	}
 
+	efa_mr = &efa_rdm_mr->efa_mr;
 	efa_mr->domain = domain;
 	efa_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	efa_mr->mr_fid.fid.context = attr->context;
@@ -1114,7 +1130,7 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		mr_attr.hmem_data = efa_mr->peer.hmem_data;
 
 		ret = fi_mr_regattr(efa_mr->domain->shm_domain, &mr_attr,
-				    shm_flags, &efa_mr->shm_mr);
+				    shm_flags, &efa_rdm_mr->shm_mr);
 
 		if (ret) {
 			EFA_WARN(FI_LOG_MR,
@@ -1127,7 +1143,7 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 				 mr_attr.mr_iov ? mr_attr.mr_iov->iov_len : 0,
 				 flags);
 			efa_mr_dereg_impl(efa_mr);
-			free(efa_mr);
+			free(efa_rdm_mr);
 			return ret;
 		}
 	}
@@ -1137,7 +1153,7 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 err:
 	EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
 			fi_strerror(-ret));
-	free(efa_mr);
+	free(efa_rdm_mr);
 	return ret;
 }
 
