@@ -11,8 +11,68 @@
 #define _EFA_RDM_TP_DEF_H
 
 #include <lttng/tracepoint.h>
+#include "efa_mr.h"
 
 #define EFA_RDM_TP_PROV efa_rdm
+
+/* HMEM copy tracepoints */
+LTTNG_UST_TRACEPOINT_ENUM(efa_rdm, hmem_iface,
+    LTTNG_UST_TP_ENUM_VALUES(
+        lttng_ust_field_enum_value("FI_HMEM_SYSTEM", FI_HMEM_SYSTEM)
+        lttng_ust_field_enum_value("FI_HMEM_CUDA", FI_HMEM_CUDA)
+        lttng_ust_field_enum_value("FI_HMEM_ROCR", FI_HMEM_ROCR)
+        lttng_ust_field_enum_value("FI_HMEM_NEURON", FI_HMEM_NEURON)
+        lttng_ust_field_enum_value("FI_HMEM_SYNAPSEAI", FI_HMEM_SYNAPSEAI)
+    )
+)
+
+#define HMEM_COPY_ARGS \
+	struct efa_rdm_mr *, efa_rdm_mr, \
+	void *, dest, \
+	const void *, src, \
+	size_t, size
+
+#define HMEM_COMMON_FIELDS \
+	lttng_ust_field_enum(efa_rdm, hmem_iface, int, iface, efa_rdm_mr->efa_mr.iface) \
+	lttng_ust_field_integer_hex(void *, dest, dest) \
+	lttng_ust_field_integer_hex(void *, src, src) \
+	lttng_ust_field_integer(size_t, size, size)
+
+#define HMEM_COPY_FIELDS \
+	HMEM_COMMON_FIELDS \
+	lttng_ust_field_integer(uint64_t, device, efa_rdm_mr->efa_mr.device)
+
+#define HMEM_DEV_REG_COPY_FIELDS \
+	HMEM_COMMON_FIELDS \
+	lttng_ust_field_integer_hex(void *, handle, efa_rdm_mr->hmem_data)
+
+LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_RDM_TP_PROV, hmem_copy,
+	LTTNG_UST_TP_ARGS(HMEM_COPY_ARGS),
+	LTTNG_UST_TP_FIELDS(HMEM_COPY_FIELDS))
+
+LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_RDM_TP_PROV, hmem_dev_reg_copy,
+	LTTNG_UST_TP_ARGS(HMEM_COPY_ARGS),
+	LTTNG_UST_TP_FIELDS(HMEM_DEV_REG_COPY_FIELDS))
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, hmem_copy, EFA_RDM_TP_PROV,
+	copy_to_hmem,
+	LTTNG_UST_TP_ARGS(HMEM_COPY_ARGS))
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, copy_to_hmem, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, hmem_copy, EFA_RDM_TP_PROV,
+	copy_from_hmem,
+	LTTNG_UST_TP_ARGS(HMEM_COPY_ARGS))
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, copy_from_hmem, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, hmem_dev_reg_copy, EFA_RDM_TP_PROV,
+	dev_reg_copy_to_hmem,
+	LTTNG_UST_TP_ARGS(HMEM_COPY_ARGS))
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, dev_reg_copy_to_hmem, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_RDM_TP_PROV, hmem_dev_reg_copy, EFA_RDM_TP_PROV,
+	dev_reg_copy_from_hmem,
+	LTTNG_UST_TP_ARGS(HMEM_COPY_ARGS))
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, dev_reg_copy_from_hmem, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
 
 /* Pre-defined tracepoints */
 
