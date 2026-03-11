@@ -55,12 +55,6 @@ struct efa_domain {
 	struct dlist_entry handshake_queued_peer_list;
 	/* LRU list of AH entries in this domain */
 	struct dlist_entry ah_lru_list;
-	/* Function pointer for internal buffer memory registration */
-	int (*internal_buf_mr_regv)(struct fid_domain *domain_fid,
-				    const struct iovec *iov, size_t count,
-				    uint64_t access, uint64_t offset,
-				    uint64_t requested_key, uint64_t flags,
-				    struct fid_mr **mr_fid, void *context);
 	/* Bounce buffer for 0-byte inject operations (efa-direct only) */
 	void *zero_byte_bounce_buf;
 	struct efa_mr *zero_byte_bounce_buf_mr;
