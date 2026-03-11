@@ -94,17 +94,6 @@ int efa_mr_cache_enable	= 1;
 size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
 
-#define EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context) \
-	{ \
-		.mr_iov = (iov), \
-		.iov_count = (count), \
-		.access = (access), \
-		.offset = (offset), \
-		.requested_key = (requested_key), \
-		.context = (context), \
-		.iface = FI_HMEM_SYSTEM, \
-	}
-
 /*
  * Initial values for internal keygen functions to generate MR keys
  * (efa_mr->mr_fid.key)
