@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include <ofi_mr.h>
+#include "efa_base_ep.h"
 
 struct efa_mr {
 	struct fid_mr		mr_fid;
@@ -15,32 +16,9 @@ struct efa_mr {
 	enum fi_hmem_iface	iface;
 };
 
-struct efa_rdm_mr {
-	struct efa_mr		efa_mr;
-	bool			inserted_to_mr_map;
-	bool 			needs_sync;
-	/* RDM-specific HMEM data handle */
-	void			*hmem_data;
-	/* RDM-specific flags */
-	uint64_t		flags;
-	uint64_t		device;
-	/* Used only in MR cache */
-	struct ofi_mr_entry	*entry;
-	/* Used only in rdm */
-	struct fid_mr		*shm_mr;
-};
-
-/* Compile-time assertion to ensure safe casting between efa_mr and efa_rdm_mr */
-_Static_assert(offsetof(struct efa_rdm_mr, efa_mr) == 0,
-               "efa_mr must be the first member of efa_rdm_mr for safe casting");
-
-extern int efa_mr_cache_enable;
-extern size_t efa_mr_max_cached_count;
-extern size_t efa_mr_max_cached_size;
-
-struct efa_domain;
-
-int efa_rdm_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain);
+int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_attr *mr_attr);
+int efa_mr_dereg_impl(struct efa_mr *efa_mr);
+int efa_mr_validate_regattr(struct fid *fid, const struct fi_mr_attr *attr, uint64_t flags);
 
 #define EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context) \
 	{                                                                              \
@@ -53,15 +31,9 @@ int efa_rdm_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain
 		.iface = FI_HMEM_SYSTEM,                                                   \
 	}
 
+struct efa_domain;
+
 extern struct fi_ops_mr efa_domain_mr_ops;
-extern struct fi_ops_mr efa_rdm_domain_mr_ops;
-extern struct fi_ops_mr efa_domain_mr_cache_ops;
-
-int efa_rdm_mr_cache_entry_reg(struct ofi_mr_cache *cache,
-			   struct ofi_mr_entry *entry);
-
-void efa_rdm_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
-			      struct ofi_mr_entry *entry);
 
 int efa_mr_regattr_validate(struct fid *fid, const struct fi_mr_attr *attr, uint64_t flags);
 
@@ -73,16 +45,6 @@ static inline bool efa_mr_is_hmem(struct efa_mr *efa_mr)
 		efa_mr->iface == FI_HMEM_NEURON ||
 		efa_mr->iface == FI_HMEM_SYNAPSEAI);
 }
-
-int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
-		      size_t count, uint64_t access, uint64_t offset,
-		      uint64_t requested_key, uint64_t flags,
-		      struct fid_mr **mr_fid, void *context);
-
-int efa_rdm_mr_internal_regv(struct fid_domain *domain_fid, const struct iovec *iov,
-		      size_t count, uint64_t access, uint64_t offset,
-		      uint64_t requested_key, uint64_t flags,
-		      struct fid_mr **mr_fid, void *context);
 
 static inline bool efa_mr_is_cuda(struct efa_mr *efa_mr)
 {
@@ -107,14 +69,26 @@ static inline bool efa_mr_is_rocr(struct efa_mr *efa_mr)
 #define EFA_MR_IOV_LIMIT 1
 #define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_READ | FI_WRITE)
 
-/*
- * Multiplier to give some room in the device memory registration limits
- * to allow processes added to a running job to bootstrap.
- */
-#define EFA_MR_CACHE_LIMIT_MULT (.9)
-
 int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
 			     bool device_support_rdma_read,
 			     bool device_support_rdma_write);
 
+/**
+ * @brief Warn about MR descriptor references in an in-flight operation
+ *
+ * This helper function iterates through an operation's descriptor array and
+ * clears any references to the specified MR that is being closed. It logs a
+ * warning when such references are found, as this indicates the MR is being
+ * closed while operations are still in flight.
+ *
+ * @param[in,out] desc      The descriptor array
+ * @param[in]     iov_count Number of IOVs in the operation
+ * @param[in]     cq_entry  CQ entry with diagnostic info for the warning
+ * @param[in]     efa_mr    The MR being closed
+ * @param[in]     base_ep   The base ep
+ */
+void efa_mr_close_warn_inflight_ope(void **desc, size_t iov_count,
+					       struct fi_cq_tagged_entry *cq_entry,
+					       struct efa_mr *efa_mr,
+					       struct efa_base_ep *base_ep);
 #endif
