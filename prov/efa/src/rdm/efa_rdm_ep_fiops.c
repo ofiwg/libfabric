@@ -14,6 +14,7 @@
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_cntr.h"
+#include "efa_rdm_mr.h"
 
 
 static inline
