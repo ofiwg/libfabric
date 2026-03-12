@@ -12,7 +12,7 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 						size_t total_len,
 						int expected_ret,
 						int expected_pkt_entry_cnt,
-						int *expected_pkt_entry_data_size_vec)
+						size_t *expected_pkt_entry_data_size_vec)
 {
 	struct efa_ep_addr raw_addr;
 	struct efa_rdm_mr mock_mr;
@@ -20,7 +20,8 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 	struct efa_rdm_peer mock_peer;
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t addr;
-	int pkt_entry_cnt, pkt_entry_data_size_vec[1024];
+	size_t pkt_entry_cnt;
+	size_t pkt_entry_data_size_vec[1024];
 	int i, err, ret;
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -93,7 +94,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory(struct efa_resource **sta
 	struct efa_resource *resource = *state;
 	size_t msg_length;
 	int expected_pkt_entry_cnt;
-	int expected_pkt_entry_data_size_vec[1024];
+	size_t expected_pkt_entry_data_size_vec[1024];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -142,7 +143,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128(struct efa_resou
 	struct efa_rdm_ep *efa_rdm_ep;
 	size_t msg_length;
 	int expected_pkt_entry_cnt;
-	int expected_pkt_entry_data_size_vec[1024];
+	size_t expected_pkt_entry_data_size_vec[1024];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -191,7 +192,7 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory(struct efa_resource **sta
 	struct efa_resource *resource = *state;
 	size_t msg_length;
 	int expected_pkt_entry_cnt;
-	int expected_pkt_entry_data_size_vec[1024];
+	size_t expected_pkt_entry_data_size_vec[1024];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -216,7 +217,7 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(struct efa_resou
 	struct efa_rdm_ep *efa_rdm_ep;
 	size_t msg_length;
 	int expected_pkt_entry_cnt;
-	int expected_pkt_entry_data_size_vec[1024];
+	size_t expected_pkt_entry_data_size_vec[1024];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
