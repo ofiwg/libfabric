@@ -29,10 +29,12 @@ struct efa_mr {
 	struct efa_mr_peer	peer;
 	bool			inserted_to_mr_map;
 	bool 			needs_sync;
-	ofi_atomic32_t ref;
 	/* Count of outstanding operations referencing this MR.
 	 * Incremented when an operation references the MR,
-	 * decremented when the operation completes. */
+	 * decremented when the operation completes.
+	 * Aligned to its own cache line to avoid false sharing. */
+	ofi_atomic32_t ref __attribute__((aligned(64)));
+	char ref_pad[64 - sizeof(ofi_atomic32_t)];
 };
 
 extern int efa_mr_cache_enable;
