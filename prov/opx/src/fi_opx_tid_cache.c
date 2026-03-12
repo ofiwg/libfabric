@@ -56,6 +56,7 @@
 #include "fi_opx_tid_cache.h"
 #include <ofi_iov.h>
 
+#ifndef NDEBUG
 static const char *OPX_TID_CACHE_ENTRY_STATUS[] = {
 	[OPX_TID_CACHE_ENTRY_NOT_FOUND]	    = "OPX_TID_CACHE_ENTRY_NOT_FOUND",
 	[OPX_TID_CACHE_ENTRY_FOUND]	    = "OPX_TID_CACHE_ENTRY_FOUND",
@@ -63,7 +64,6 @@ static const char *OPX_TID_CACHE_ENTRY_STATUS[] = {
 	[OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT] = "OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT",
 	[OPX_TID_CACHE_ENTRY_IN_USE]	    = "OPX_TID_CACHE_ENTRY_IN_USE"};
 
-#ifndef NDEBUG
 #define OPX_DEBUG_UCNT(entryp)                                                                                         \
 	do {                                                                                                           \
 		const uint64_t entry_vaddr =                                                                           \
@@ -294,9 +294,9 @@ void opx_tid_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entry
 __OPX_FORCE_INLINE__
 int opx_tid_inc_use_cnt(struct ofi_mr_entry *entry)
 {
-#ifdef OPX_TID_DEBUG_USECNT
-	fprintf(stderr, "(%d) %s:%s():%d [%p-%p/%lu] Entry %p Incrementing use_cnt %d -> %d\n", getpid(), __FILE__,
-		__func__, __LINE__, entry->info.iov.iov_base,
+#ifdef OPX_TID_DETAILED_DEBUG_USECNT
+	fprintf(stderr, "USECNT: (%d) %s:%s():%d [%p-%p/%lu] Entry %p Incrementing use_cnt %d -> %d\n", getpid(),
+		__FILE__, __func__, __LINE__, entry->info.iov.iov_base,
 		(void *) ((uintptr_t) entry->info.iov.iov_base + entry->info.iov.iov_len), entry->info.iov.iov_len,
 		entry, entry->use_cnt, entry->use_cnt + 1);
 #endif
@@ -317,7 +317,6 @@ int opx_tid_inc_use_cnt(struct ofi_mr_entry *entry)
 __OPX_FORCE_INLINE__
 int opx_tid_dec_use_cnt(struct ofi_mr_entry *entry)
 {
-#ifdef OPX_TID_DEBUG_USECNT
 	if (entry->use_cnt == 0) {
 		fprintf(stderr,
 			"(%d) %s:%s():%d [%p-%p/%lu] Entry %p Decrementing use_cnt %d -> %d, ERROR, Negative use_cnt!\n",
@@ -326,6 +325,7 @@ int opx_tid_dec_use_cnt(struct ofi_mr_entry *entry)
 			entry->info.iov.iov_len, entry, entry->use_cnt, entry->use_cnt - 1);
 		abort();
 	}
+#ifdef OPX_TID_DETAILED_DEBUG_USECNT
 	fprintf(stderr, "(%d) %s:%s():%d [%p-%p/%lu] Entry %p Decrementing use_cnt %d -> %d\n", getpid(), __FILE__,
 		__func__, __LINE__, entry->info.iov.iov_base,
 		(void *) ((uintptr_t) entry->info.iov.iov_base + entry->info.iov.iov_len), entry->info.iov.iov_len,
@@ -500,7 +500,16 @@ void opx_mr_uncache_entry_storage(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	 * we remain subscribed. This may result in extra
 	 * notification events, but is harmless to correct operation.
 	 */
-
+	if (entry->use_cnt > 0) {
+#ifdef OPX_TID_DEBUG_USECNT
+		fprintf(stderr,
+#else
+		FI_WARN(cache->domain->prov, FI_LOG_MR,
+#endif
+			"USECNT: Uncache Entry (%p) [%p - %p] %zd use_cnt %d notify %zd, cached %zd\n", entry,
+			entry->info.iov.iov_base, (char *) entry->info.iov.iov_base + entry->info.iov.iov_len,
+			entry->info.iov.iov_len, entry->use_cnt, cache->notify_cnt, cache->cached_cnt);
+	}
 	ofi_rbmap_delete(&cache->tree, entry->node);
 	entry->node = NULL;
 
@@ -847,6 +856,7 @@ enum opx_tid_cache_entry_status opx_tid_cache_build_overlap_chain(struct fi_opx_
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_cache_overlap_left);
 			assert(cur_entry->info.iov.iov_base <= find_info.iov.iov_base);
 			result->entries[result->entry_count++] = cur_entry;
+			opx_tid_inc_use_cnt(cur_entry);
 			overlap_bytes	       = (ssize_t) cur_entry_end - (uintptr_t) find_info.iov.iov_base;
 			find_info.iov.iov_base = (void *) ((uintptr_t) find_info.iov.iov_base + overlap_bytes);
 		} else {
@@ -856,12 +866,17 @@ enum opx_tid_cache_entry_status opx_tid_cache_build_overlap_chain(struct fi_opx_
 			uintptr_t find_info_end = (uintptr_t) find_info.iov.iov_base + find_info.iov.iov_len;
 			if (OFI_UNLIKELY(find_info_end > cur_entry_end)) {
 				// Disregard any right overlap entries we found previously
-				right_overlap[0]      = cur_entry;
-				right_entries	      = 1;
+				for (uint32_t j = 0; j < right_entries; j++) {
+					opx_tid_dec_use_cnt(right_overlap[j]);
+				}
+				right_overlap[0] = cur_entry;
+				right_entries	 = 1;
+				opx_tid_inc_use_cnt(cur_entry);
 				find_info.iov.iov_len = cur_entry_end - (uintptr_t) find_info.iov.iov_base;
 				overlap_bytes	      = cur_entry->info.iov.iov_len;
 			} else {
 				right_overlap[right_entries++] = cur_entry;
+				opx_tid_inc_use_cnt(cur_entry);
 				overlap_bytes = (ssize_t) find_info_end - (uintptr_t) cur_entry->info.iov.iov_base;
 			}
 		}
@@ -882,12 +897,19 @@ enum opx_tid_cache_entry_status opx_tid_cache_build_overlap_chain(struct fi_opx_
 
 	if (OFI_UNLIKELY(find == OPX_TID_CACHE_ENTRY_IN_USE)) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_cache_found_entry_in_use);
+		for (uint32_t i = 0; i < result->entry_count; i++) {
+			opx_tid_dec_use_cnt(result->entries[i]);
+		}
+		for (uint32_t i = 0; i < right_entries; i++) {
+			opx_tid_dec_use_cnt(right_overlap[i]);
+		}
 		return OPX_TID_CACHE_ENTRY_IN_USE;
 	}
 
 	if (find == OPX_TID_CACHE_ENTRY_FOUND) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_cache_hit);
 		result->entries[result->entry_count++] = cur_entry;
+		opx_tid_inc_use_cnt(cur_entry);
 
 		// We need to copy in the right entries in reverse order, because
 		// the lower the index in the right_overlap array, the further
@@ -914,6 +936,7 @@ enum opx_tid_cache_entry_status opx_tid_cache_build_overlap_chain(struct fi_opx_
 
 	if (rc == FI_SUCCESS) {
 		result->entries[result->entry_count++] = cur_entry;
+		opx_tid_inc_use_cnt(cur_entry);
 	}
 
 	// If we only found right overlap entries, and we failed to create
@@ -921,6 +944,9 @@ enum opx_tid_cache_entry_status opx_tid_cache_build_overlap_chain(struct fi_opx_
 	// then we can't proceed.
 	if (result->entry_count == 0) {
 		assert(right_entries > 0);
+		for (uint32_t i = 0; i < right_entries; i++) {
+			opx_tid_dec_use_cnt(right_overlap[i]);
+		}
 		return OPX_TID_CACHE_ENTRY_NOT_FOUND;
 	}
 
@@ -937,6 +963,10 @@ enum opx_tid_cache_entry_status opx_tid_cache_build_overlap_chain(struct fi_opx_
 
 		result_range_end =
 			((uintptr_t) right_overlap[0]->info.iov.iov_base + right_overlap[0]->info.iov.iov_len);
+	} else {
+		for (uint32_t i = 0; i < right_entries; i++) {
+			opx_tid_dec_use_cnt(right_overlap[i]);
+		}
 	}
 
 	size_t total_len      = result_range_end - (uintptr_t) result->range.iov_base;
@@ -950,8 +980,6 @@ void opx_tid_cache_combine_chain_entries(struct opx_tid_cache_chain *overlap_cha
 					 struct fi_opx_hmem_iov	    *cur_addr_range,
 					 struct opx_tid_addr_block  *tid_addr_block)
 {
-	opx_tid_inc_use_cnt(overlap_chain->entries[0]);
-
 	struct opx_mr_tid_info *cached_tid_entry = &((struct opx_tid_mr *) overlap_chain->entries[0]->data)->tid_info;
 
 	opx_tid_set_offset_and_copy_pairs(cur_addr_range->buf, cur_addr_range->len, cached_tid_entry, tid_addr_block);
@@ -965,8 +993,6 @@ void opx_tid_cache_combine_chain_entries(struct opx_tid_cache_chain *overlap_cha
 		cached_tid_entry = &((struct opx_tid_mr *) overlap_chain->entries[i]->data)->tid_info;
 		assert(cached_tid_entry->tid_length != 0);
 		assert(cached_tid_entry->npairs != 0);
-
-		opx_tid_inc_use_cnt(overlap_chain->entries[i]);
 
 		uint32_t cur_npairs = tid_addr_block->npairs;
 		for (int j = 0; j < cached_tid_entry->npairs; j++) {
@@ -1051,16 +1077,16 @@ void opx_tid_cache_dump_entry(struct ofi_rbnode *root, struct ofi_mr_entry *entr
 				 "has no",
 		root->parent, root->left, root->right, root->color ? "RED" : "BLACK", entry);
 
-	fprintf(stderr, "(%d) %s:%s():%d Key: %p-%p (%lu bytes)\n", getpid(), __FILE__, __func__, __LINE__,
+	fprintf(stderr, "(%d) %s:%s():%d Key: [%p - %p] (%lu bytes)\n", getpid(), __FILE__, __func__, __LINE__,
 		entry->info.iov.iov_base, (void *) ((uintptr_t) entry->info.iov.iov_base + entry->info.iov.iov_len),
 		entry->info.iov.iov_len);
 
 	fprintf(stderr, "(%d) %s:%s():%d Use count: %d\n", getpid(), __FILE__, __func__, __LINE__, entry->use_cnt);
 	struct opx_mr_tid_info *tid_info = &((struct opx_tid_mr *) entry->data)->tid_info;
 
-	fprintf(stderr, "(%d) %s:%s():%d Tid Info vaddr: %p-%p (%lu bytes)\n", getpid(), __FILE__, __func__, __LINE__,
-		(void *) tid_info->tid_vaddr, (void *) ((uintptr_t) tid_info->tid_vaddr + tid_info->tid_length),
-		tid_info->tid_length);
+	fprintf(stderr, "(%d) %s:%s():%d Tid Info vaddr: [%p - %p] (%lu bytes)\n", getpid(), __FILE__, __func__,
+		__LINE__, (void *) tid_info->tid_vaddr,
+		(void *) ((uintptr_t) tid_info->tid_vaddr + tid_info->tid_length), tid_info->tid_length);
 
 	fprintf(stderr, "(%d) %s:%s():%d Tid Info ninfo=%u\n", getpid(), __FILE__, __func__, __LINE__, tid_info->ninfo);
 	for (int i = 0; i < tid_info->ninfo; ++i) {
@@ -1287,11 +1313,14 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr, 
 
 	pthread_mutex_lock(&mm_lock);
 
-	uintptr_t tid_end	   = (uintptr_t) (tid_vaddr + tid_length);
-	ssize_t	  remaining_length = tid_length;
+	// Todo - use page size table
+	uintptr_t tid_start = tid_vaddr & -((int64_t) OPX_HFI1_TID_PAGESIZE);
+	uintptr_t tid_end = (tid_vaddr + tid_length + (OPX_HFI1_TID_PAGESIZE - 1)) & -((int64_t) OPX_HFI1_TID_PAGESIZE);
+
+	ssize_t remaining_length = tid_end - tid_start;
 	/* Just find (one page) from left to right and close */
-	info.iov.iov_base = (void *) tid_vaddr;
-	info.iov.iov_len  = 1;
+	info.iov.iov_base = (void *) tid_start;
+	info.iov.iov_len  = MIN(remaining_length, OPX_HFI1_TID_PAGESIZE);
 
 	while (remaining_length) {
 		enum opx_tid_cache_entry_status find = opx_tid_cache_find(opx_ep, &info, &entry);
@@ -1316,28 +1345,33 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr, 
 		const struct opx_mr_tid_info *const found_tid_entry =
 			entry ? &((struct opx_tid_mr *) entry->data)->tid_info : NULL;
 		if (OFI_UNLIKELY(find == OPX_TID_CACHE_ENTRY_NOT_FOUND || !found_tid_entry)) {
+#ifdef OPX_TID_DEBUG_USECNT
 			fprintf(stderr,
-				"Assert find ret=%u %s : ncache_entries %u, entry %p, found_tid_entry %p, remaining_length %lu/%#lX, iov base %p, iov len %lu/%#lX\n",
-				find, OPX_TID_CACHE_ENTRY_STATUS[find], ncache_entries, entry, found_tid_entry,
-				remaining_length, remaining_length, info.iov.iov_base, info.iov.iov_len,
-				info.iov.iov_len);
-			fprintf(stderr, "Assert dereg iov [%p - %p] %lu/%#lX\n", (char *) tid_vaddr,
-				(char *) (tid_vaddr) + (uint64_t) tid_length, (uint64_t) tid_length,
-				(uint64_t) tid_length);
-			if (found_tid_entry) {
-				fprintf(stderr, "Assert found? iov [%p - %p] %lu/%#lX\n",
-					(char *) found_tid_entry->tid_vaddr,
-					(char *) (found_tid_entry->tid_vaddr + found_tid_entry->tid_length),
-					found_tid_entry->tid_length, found_tid_entry->tid_length);
-			}
-			abort();
+#else
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+#endif
+				"USECNT: Entry not found during deregister (likely removed by memory monitor notification): "
+				"ncache_entries %u, remaining_length %lu, iov base %p, iov len %lu\n",
+				ncache_entries, remaining_length, info.iov.iov_base, info.iov.iov_len);
+#ifdef OPX_TID_DEBUG_USECNT
+			fprintf(stderr,
+#else
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+#endif
+				"USECNT: Rendezvous iov [%p - %p] %lu\n", (char *) tid_vaddr,
+				(char *) (tid_vaddr) + (uint64_t) tid_length, (uint64_t) tid_length);
+
+			info.iov.iov_base = (void *) ((uintptr_t) info.iov.iov_base + OPX_HFI1_TID_PAGESIZE);
+			remaining_length -= OPX_HFI1_TID_PAGESIZE;
+			info.iov.iov_len = MIN(remaining_length, OPX_HFI1_TID_PAGESIZE);
+			continue;
 		}
 		/* How much of this entry did we use (handle leading overlap) */
 		uintptr_t found_entry_end = found_tid_entry->tid_vaddr + found_tid_entry->tid_length;
 		ssize_t	  adj;
-#ifdef OPX_TID_DEBUG_USECNT
+#ifdef OPX_TID_DETAILED_DEBUG_USECNT
 		fprintf(stderr,
-			"(%d) %s:%s():%d [%p-%p (%lu bytes)] find result=%d (%s), find_info=%p-%p (%lu bytes), found entry %p %p-%p (%lu bytes), use cnt=%d, remaining_length=%ld\n",
+			"USECNT: (%d) %s:%s():%d [%p - %p (%lu bytes)] find result=%d (%s), find_info=%p - %p (%lu bytes), found entry %p %p - %p (%lu bytes), use cnt=%d, remaining_length=%ld\n",
 			getpid(), __FILE__, __func__, __LINE__, (void *) tid_vaddr, (void *) (tid_vaddr + tid_length),
 			tid_length, find, OPX_TID_CACHE_ENTRY_STATUS[find], info.iov.iov_base,
 			(void *) ((uintptr_t) info.iov.iov_base + info.iov.iov_len), info.iov.iov_len, entry,
@@ -1350,8 +1384,6 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr, 
 			assert(adj == remaining_length || info.iov.iov_base == (void *) found_entry_end);
 		} else {
 			assert(find == OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT);
-			// Since we were only looking for a 1-byte long key, if we get an
-			// overlap right, it must mean the entry starts at the same address
 			assert(found_tid_entry->tid_vaddr == (uintptr_t) info.iov.iov_base);
 
 			adj = MIN(tid_end, found_entry_end) - found_tid_entry->tid_vaddr;
@@ -1621,7 +1653,19 @@ int opx_tid_cache_flush_all(struct ofi_mr_cache *cache, const bool flush_lru, co
 		       entry->data, entry->info.iov.iov_base,
 		       (char *) entry->info.iov.iov_base + entry->info.iov.iov_len, entry->info.iov.iov_len,
 		       entry->info.iov.iov_len, entry->use_cnt);
-		assert(entry->use_cnt == 0);
+		if (entry->use_cnt != 0) {
+#ifdef OPX_TID_DEBUG_USECNT
+			fprintf(stderr,
+#else
+			FI_WARN(cache->domain->prov, FI_LOG_MR,
+#endif
+				"USECNT: opx_tid_cache_flush_all pop lru (%p/%p) [%p - %p] (len: %zu) use_cnt %d != 0\n",
+				entry, entry->data, entry->info.iov.iov_base,
+				(char *) entry->info.iov.iov_base + entry->info.iov.iov_len, entry->info.iov.iov_len,
+				entry->use_cnt);
+			dlist_insert_tail(&entry->list_entry, &cache->lru_list);
+			break;
+		}
 		dlist_init(&entry->list_entry);
 		opx_mr_uncache_entry_storage(cache, entry);
 		dlist_insert_tail(&entry->list_entry, &free_list);
@@ -1635,11 +1679,14 @@ int opx_tid_cache_flush_all(struct ofi_mr_cache *cache, const bool flush_lru, co
 	/* Free dead and selected lru entries */
 	while (!dlist_empty(&free_list)) {
 		dlist_pop_front(&free_list, struct ofi_mr_entry, entry, list_entry);
-		FI_DBG(cache->domain->prov, FI_LOG_MR,
-		       "OPX_DEBUG_ENTRY flush free (%p/%p) [%p - %p] (len: %zu,%#lX) use_cnt %x\n", entry,
-		       entry ? entry->data : NULL, entry->info.iov.iov_base,
-		       (char *) entry->info.iov.iov_base + entry->info.iov.iov_len, entry->info.iov.iov_len,
-		       entry->info.iov.iov_len, entry->use_cnt);
+		if (entry->use_cnt != 0) {
+			fprintf(stderr,
+				"opx_tid_cache_flush_all pop free list (%p/%p) [%p - %p] (len: %zu) use_cnt %d != 0\n",
+				entry, entry ? entry->data : NULL, entry->info.iov.iov_base,
+				(char *) entry->info.iov.iov_base + entry->info.iov.iov_len, entry->info.iov.iov_len,
+				entry->use_cnt);
+			abort();
+		}
 		opx_cache_free_entry(cache, entry);
 		++freed_entries;
 	}
