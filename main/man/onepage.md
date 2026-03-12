@@ -16175,13 +16175,11 @@ DGRAM endpoints do not support wait objects.
     *FI_EP_DGRAM* endpoint only supports *FI_MR_LOCAL*.
 
 *Progress*
-:   RDM and DGRAM endpoints support *FI_PROGRESS_MANUAL*. EFA
-    erroneously claims the support for *FI_PROGRESS_AUTO*, despite not
-    properly supporting automatic progress. Unfortunately, some
-    Libfabric consumers also ask for *FI_PROGRESS_AUTO* when they only
-    require *FI_PROGRESS_MANUAL*, and fixing this bug would break those
-    applications. This will be fixed in a future version of the EFA
-    provider by adding proper support for *FI_PROGRESS_AUTO*.
+:   The *FI_EP_RDM* endpoint in the `efa` fabric supports
+    *FI_PROGRESS_MANUAL*. The *FI_EP_RDM* and *FI_EP_DGRAM* endpoints in
+    the `efa-direct` fabric support *FI_PROGRESS_AUTO*. See
+    [efa_fabric_comparison](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_fabric_comparison.md)
+    for a detailed comparison of `efa` vs `efa-direct` fabrics.
 
 *Threading*
 :   Both RDM and DGRAM endpoints supports *FI_THREAD_SAFE*.
