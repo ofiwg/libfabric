@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-12\-26" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-03\-12" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -117,15 +117,12 @@ The \f[V]efa-direct\f[R] fabric of \f[I]FI_EP_RDM\f[R] endpint and the
 \f[I]FI_EP_DGRAM\f[R] endpoint only supports \f[I]FI_MR_LOCAL\f[R].
 .TP
 \f[I]Progress\f[R]
-RDM and DGRAM endpoints support \f[I]FI_PROGRESS_MANUAL\f[R].
-EFA erroneously claims the support for \f[I]FI_PROGRESS_AUTO\f[R],
-despite not properly supporting automatic progress.
-Unfortunately, some Libfabric consumers also ask for
-\f[I]FI_PROGRESS_AUTO\f[R] when they only require
-\f[I]FI_PROGRESS_MANUAL\f[R], and fixing this bug would break those
-applications.
-This will be fixed in a future version of the EFA provider by adding
-proper support for \f[I]FI_PROGRESS_AUTO\f[R].
+The \f[I]FI_EP_RDM\f[R] endpoint in the \f[V]efa\f[R] fabric supports
+\f[I]FI_PROGRESS_MANUAL\f[R].
+The \f[I]FI_EP_RDM\f[R] and \f[I]FI_EP_DGRAM\f[R] endpoints in the
+\f[V]efa-direct\f[R] fabric support \f[I]FI_PROGRESS_AUTO\f[R].
+See efa_fabric_comparison for a detailed comparison of \f[V]efa\f[R] vs
+\f[V]efa-direct\f[R] fabrics.
 .TP
 \f[I]Threading\f[R]
 Both RDM and DGRAM endpoints supports \f[I]FI_THREAD_SAFE\f[R].
