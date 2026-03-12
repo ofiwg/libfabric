@@ -194,7 +194,8 @@ struct efa_rdm_ep {
 	struct efa_rdm_pke **pke_vec;
 	/* Work arrays for efa_rdm_ope_post_send to avoid stack allocation */
 	struct efa_rdm_pke **send_pkt_entry_vec;
-	int *send_pkt_entry_size_vec;
+	int *send_pkt_entry_data_sizes;
+	int send_pkt_entry_vec_size;
 	struct dlist_entry entry;
 	/* the count of opes queued before handshake is made with their peers */
 	size_t ope_queued_before_handshake_cnt;
