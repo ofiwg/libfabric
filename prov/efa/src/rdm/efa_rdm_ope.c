@@ -12,7 +12,6 @@
 #include "efa_rdm_tracepoint.h"
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_pkt_type.h"
-#include "efa_mr.h"
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   struct efa_rdm_ep *ep,
@@ -679,7 +678,6 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 			"Error writing error cq entry when handling RX error\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
-	efa_mr_ref_dec(rxe->desc, rxe->iov_count);
 }
 
 /**
@@ -804,7 +802,6 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 			"Error writing error cq entry when handling TX error\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
-	efa_mr_ref_dec(txe->desc, txe->iov_count);
 }
 
 /**
@@ -841,8 +838,6 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 			 " receiving buffer size: %zu\n",
 			 rxe->peer->conn->fi_addr, rxe->peer->conn->implicit_fi_addr, rxe->rx_id, rxe->msg_id, rxe->cq_entry.tag,
 			 rxe->total_len, rxe->cq_entry.len);
-
-		efa_mr_ref_dec(rxe->desc, rxe->iov_count);
 
 		ret = ofi_cq_write_error_trunc(ep->base_ep.util_ep.rx_cq,
 					       rxe->cq_entry.op_context,
@@ -913,7 +908,6 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 	}
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, rxe->cq_entry.flags);
-	efa_mr_ref_dec(rxe->desc, rxe->iov_count);
 }
 
 /**
@@ -1014,7 +1008,6 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 
 	efa_cntr_report_tx_completion(&txe->ep->base_ep.util_ep, txe->cq_entry.flags);
 	txe->fi_flags |= EFA_RDM_TXE_NO_COMPLETION;
-	efa_mr_ref_dec(txe->desc, txe->iov_count);
 	return;
 }
 
@@ -1067,7 +1060,6 @@ void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope)
 		} else {
 			if (!(ope->fi_flags & EFA_RDM_TXE_NO_COUNTER))
 				efa_cntr_report_tx_completion(&ep->base_ep.util_ep, ope->cq_entry.flags);
-			efa_mr_ref_dec(ope->desc, ope->iov_count);
 		}
 
 	} else {
@@ -1146,7 +1138,6 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 			efa_rdm_txe_report_completion(txe);
 		} else {
 			efa_cntr_report_tx_completion(&txe->ep->base_ep.util_ep, txe->cq_entry.flags);
-			efa_mr_ref_dec(txe->desc, txe->iov_count);
 		}
 	} else {
 		assert(ope->type == EFA_RDM_RXE);

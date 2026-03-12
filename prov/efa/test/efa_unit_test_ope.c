@@ -336,7 +336,6 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 
 	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_tagged);
 	cuda_mr.peer.iface = FI_HMEM_CUDA;
-	ofi_atomic_initialize32(&cuda_mr.ref, 0);
 
 	rxe->desc[0] = &cuda_mr;
 	rxe->iov_count = 1;
