@@ -69,8 +69,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 
 	/* Prepare work request ID */
 	wr_id = (uintptr_t) efa_fill_context(
-		msg->context, msg->addr, flags, FI_RMA | FI_READ,
-		msg->desc, msg->iov_count);
+		msg->context, msg->addr, flags, FI_RMA | FI_READ);
 
 	/* Handle 0-byte read with bounce buffer */
 	if (total_len == 0) {
@@ -104,13 +103,8 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 			       msg->rma_iov[0].key, msg->rma_iov[0].addr,
 			       wr_id, flags,
 			       conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
-	if (OFI_UNLIKELY(err)) {
+	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
-		goto out_err;
-	}
-
-	if (wr_id)
-		efa_mr_ref_inc(msg->desc, msg->iov_count);
 
 	efa_tracepoint(post_read, wr_id, (uintptr_t)msg->context);
 
@@ -224,8 +218,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 
 	/* Prepare work request ID */
 	wr_id = (uintptr_t) efa_fill_context(
-		msg->context, msg->addr, flags, FI_RMA | FI_WRITE,
-		msg->desc, msg->iov_count);
+		msg->context, msg->addr, flags, FI_RMA | FI_WRITE);
 
 	/* Handle 0-byte write with bounce buffer */
 	if (total_len == 0) {
@@ -257,13 +250,8 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 				msg->rma_iov[0].key, msg->rma_iov[0].addr,
 				wr_id, msg->data, flags,
 				conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
-	if (OFI_UNLIKELY(err)) {
+	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
-		goto out_err;
-	}
-
-	if (wr_id)
-		efa_mr_ref_inc(msg->desc, msg->iov_count);
 
 	efa_tracepoint(post_write, wr_id, (uintptr_t)msg->context);
 
@@ -377,7 +365,7 @@ ssize_t efa_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
-	wr_id = (uintptr_t) efa_fill_context(NULL, dest_addr, FI_INJECT, FI_RMA | FI_WRITE, NULL, 0);
+	wr_id = (uintptr_t) efa_fill_context(NULL, dest_addr, FI_INJECT, FI_RMA | FI_WRITE);
 
 	sge.addr = (uint64_t)domain->zero_byte_bounce_buf;
 	sge.length = 0;
@@ -419,7 +407,7 @@ static ssize_t efa_rma_inject_writedata(struct fid_ep *ep, const void *buf, size
 
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
-	wr_id = (uintptr_t) efa_fill_context(NULL, dest_addr, FI_INJECT | FI_REMOTE_CQ_DATA, FI_RMA | FI_WRITE, NULL, 0);
+	wr_id = (uintptr_t) efa_fill_context(NULL, dest_addr, FI_INJECT | FI_REMOTE_CQ_DATA, FI_RMA | FI_WRITE);
 
 	sge.addr = (uint64_t)domain->zero_byte_bounce_buf;
 	sge.length = 0;
