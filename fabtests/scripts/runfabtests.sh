@@ -553,6 +553,7 @@ function cs_test {
 	        sleep 2
 	    fi
 	    kill -9 $s_pid 2> /dev/null
+	    cleanup
 	fi
 
 	wait $s_pid
