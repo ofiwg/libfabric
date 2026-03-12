@@ -593,12 +593,10 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 		txe = context_pkt_entry->ope;
 		txe->bytes_write_completed += rma_context_pkt->seg_size;
 		if (txe->bytes_write_completed == txe->bytes_write_total_len) {
-			if (txe->fi_flags & FI_COMPLETION) {
+			if (txe->fi_flags & FI_COMPLETION)
 				efa_rdm_txe_report_completion(txe);
-			} else {
+			else
 				efa_cntr_report_tx_completion(&context_pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
-				efa_mr_ref_dec(txe->desc, txe->iov_count);
-			}
 			efa_rdm_txe_release(txe);
 		}
 		break;
@@ -858,12 +856,10 @@ void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	if (txe->fi_flags & FI_COMPLETION) {
+	if (txe->fi_flags & FI_COMPLETION)
 		efa_rdm_txe_report_completion(txe);
-	} else {
+	else
 		efa_cntr_report_tx_completion(&pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
-		efa_mr_ref_dec(txe->desc, txe->iov_count);
-	}
 
 	efa_rdm_txe_release(txe);
 	efa_rdm_pke_release_rx(pkt_entry);

@@ -19,7 +19,6 @@
 #include "efa_rdm_pke_req.h"
 
 #include "efa_rdm_tracepoint.h"
-#include "efa_mr.h"
 
 /**
  * This file define the msg ops functions.
@@ -201,8 +200,6 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_txe_release(txe);
 		peer->next_msg_id--;
-	} else {
-		efa_mr_ref_inc(msg->desc, msg->iov_count);
 	}
 
 out:
@@ -957,18 +954,9 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		ret = efa_rdm_ep_post_user_recv_buf(ep, rxe, flags);
 		if (OFI_UNLIKELY(ret))
 			efa_rdm_rxe_release(rxe);
-		else
-			efa_mr_ref_inc(msg->desc, msg->iov_count);
+
 		ofi_genlock_unlock(srx_ctx->lock);
 	} else if (op == ofi_op_tagged) {
-		/**
-		 *   MR refcount is NOT incremented here. Instead, it is deferred to
-		 *   efa_rdm_srx_update_rxe() when the buffer is actually matched.
-		 *   This is because a recv posted with FI_ADDR_UNSPEC can be consumed
-		 *   by either EFA or SHM provider. The refcount is only taken when
-		 *   EFA claims the buffer (via expected or unexpected message match).
-		 *
-		 */
 		ret = util_srx_generic_trecv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
 					     msg->iov_count, msg->addr, msg->context,
 					     tag, ignore, flags);
@@ -976,6 +964,7 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		ret = util_srx_generic_recv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
 				            msg->iov_count, msg->addr, msg->context, flags);
 	}
+
 out:
 	efa_perfset_end(ep, perf_efa_recv);
 	return ret;

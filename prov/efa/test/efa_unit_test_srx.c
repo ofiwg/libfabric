@@ -88,7 +88,7 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
 	struct efa_rdm_peer peer;
 	struct efa_unit_test_eager_rtm_pkt_attr pke_attr = {.msg_id = 0,
 							    .connid = 0x1234};
-	void *desc = NULL;
+	void *desc;
 	struct iovec iov;
 
 	g_efa_unit_test_mocks.efa_rdm_pke_proc_matched_rtm =
