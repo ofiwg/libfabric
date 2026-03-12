@@ -2198,6 +2198,19 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			}
 			opx_ep->init_tx_cq->use_hfisvc = 1;
 		}
+
+		if (opx_ep->init_rx_cq &&
+		    opx_ep->init_rx_cq != opx_ep->init_tx_cq &&
+		    opx_ep->init_rx_cq->use_hfisvc != 1) {
+			int rc = (*opx_domain->hfisvc.completion_queue_open)(
+				&opx_ep->init_rx_cq->hfisvc.completion_queue, opx_domain->hfisvc.ctx);
+			if (rc) {
+				fprintf(stderr, "(%d) %s:%s():%d Failed creating RX CQ completion queue, rc=%d\n",
+					getpid(), __FILE__, __func__, __LINE__, rc);
+				abort();
+			}
+			opx_ep->init_rx_cq->use_hfisvc = 1;
+		}
 	}
 done:
 #endif
