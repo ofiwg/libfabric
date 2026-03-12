@@ -291,15 +291,20 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			struct fid_mr *mr_fid;
 			uint64_t mr_flags = FI_READ | FI_WRITE;
 
-			err = ofi_memalign(&efa_domain->zero_byte_bounce_buf, ofi_get_page_size(), ofi_get_page_size());
+			size_t page_size = ofi_get_page_size();
+			if (page_size <= 0) {
+				EFA_WARN(FI_LOG_DOMAIN, "Failed to get page size\n");
+				goto err_free;
+			}
+
+			err = ofi_memalign(&efa_domain->zero_byte_bounce_buf, page_size, page_size);
 			if (err) {
 				EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate zero-byte bounce buffer\n");
-				err = -FI_ENOMEM;
 				goto err_free;
 			}
 
 			iov.iov_base = efa_domain->zero_byte_bounce_buf;
-			iov.iov_len = ofi_get_page_size();
+			iov.iov_len = page_size;
 			err = efa_mr_internal_regv(&efa_domain->util_domain.domain_fid,
 						   &iov, 1, mr_flags, 0, 0, 0, &mr_fid, NULL);
 			if (err) {
