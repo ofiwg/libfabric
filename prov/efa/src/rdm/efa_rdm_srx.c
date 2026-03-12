@@ -8,7 +8,6 @@
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_tracepoint.h"
-#include "efa_mr.h"
 
 /**
  * @brief update an rxe for a peer rx entry.
@@ -32,17 +31,11 @@ void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
 		rxe->cq_entry.buf = peer_rxe->iov[0].iov_base;
 	}
 
-	if (peer_rxe->desc) {
+	if (peer_rxe->desc)
 		memcpy(&rxe->desc[0], peer_rxe->desc,
 			sizeof(*peer_rxe->desc) * peer_rxe->count);
-		/*
-		 * Take MR refcount when EFA claims the buffer.
-		 * See efa_rdm_msg_generic_recv() for the full explanation.
-		 */
-		efa_mr_ref_inc((void **)rxe->desc, rxe->iov_count);
-	} else {
+	else
 		memset(&rxe->desc[0], 0, sizeof(rxe->desc));
-	}
 
 	rxe->cq_entry.op_context = peer_rxe->context;
 	rxe->peer_rxe = peer_rxe;
