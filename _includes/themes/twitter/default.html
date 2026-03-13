@@ -31,6 +31,13 @@
     <link href="{{ BASE_PATH }}{{ site.JB.atom_path }}" type="application/atom+xml" rel="alternate" title="Sitewide ATOM Feed">
     <link href="{{ BASE_PATH }}{{ site.JB.rss_path }}" type="application/rss+xml" rel="alternate" title="Sitewide RSS Feed">
 
+    <!-- canonical page link -->
+    <link rel="canonical"
+	  href="https://ofiwg.github.io/libfabric/main/man/{{ page.title
+				| replace: '(', '.'
+				| replace: ')', ''
+				| replace: 'Libfabric man pages', 'index'
+				| replace: 'All-in-one Man Page', 'onepage' }}.html">
   </head>
 
   <body>
