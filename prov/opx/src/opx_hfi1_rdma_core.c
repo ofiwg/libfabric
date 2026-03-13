@@ -682,8 +682,8 @@ int32_t opx_hfi1_rdma_update_tid(struct fi_opx_hfi1_context *context, uint64_t v
 
 	int ret = OPX_HFI1_RDMA_FN(hfi1_tid_update)(ibv_context, &cmd, &rsp);
 	if (ret) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi_unit %d ret %d, err %d %s\n",
-			context->hfi_unit, ret, errno, strerror(errno));
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] hfi_unit %d ret %d, err %d %s\n",
+			     context->hfi_unit, ret, errno, strerror(errno));
 	} else {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "[HFI1-DIRECT] hfi_unit %d success, length %d, tidcnt %d\n", context->hfi_unit, rsp.length,

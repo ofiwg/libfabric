@@ -985,7 +985,7 @@ void opx_tid_cache_combine_chain_entries(struct opx_tid_cache_chain *overlap_cha
 	opx_tid_set_offset_and_copy_pairs(cur_addr_range->buf, cur_addr_range->len, cached_tid_entry, tid_addr_block);
 
 	uintptr_t target_iov_end = (uintptr_t) tid_addr_block->target_iov.iov_base + tid_addr_block->target_iov.iov_len;
-	uintptr_t overlap_range_end = (uintptr_t) overlap_chain->range.iov_base + +overlap_chain->range.iov_len;
+	uintptr_t overlap_range_end = (uintptr_t) overlap_chain->range.iov_base + overlap_chain->range.iov_len;
 
 	tid_addr_block->target_iov.iov_len += overlap_range_end - target_iov_end;
 
@@ -1336,8 +1336,8 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr, 
 				OPX_TID_CACHE_DEBUG_FPRINTF(
 					"## %s:%u OPX_TID_CACHE_DEBUG OPX_ENTRY_IN_USE.  Closing a region for a different endpoint\n",
 					__func__, __LINE__);
+				onetime = 0;
 			}
-			onetime = 0;
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 				"OPX_ENTRY_IN_USE in %s.  Closing a region for a different endpoint\n", __func__);
 			find = OPX_TID_CACHE_ENTRY_FOUND;
@@ -1345,22 +1345,17 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr, 
 		const struct opx_mr_tid_info *const found_tid_entry =
 			entry ? &((struct opx_tid_mr *) entry->data)->tid_info : NULL;
 		if (OFI_UNLIKELY(find == OPX_TID_CACHE_ENTRY_NOT_FOUND || !found_tid_entry)) {
-#ifdef OPX_TID_DEBUG_USECNT
-			fprintf(stderr,
-#else
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-#endif
-				"USECNT: Entry not found during deregister (likely removed by memory monitor notification): "
-				"ncache_entries %u, remaining_length %lu, iov base %p, iov len %lu\n",
-				ncache_entries, remaining_length, info.iov.iov_base, info.iov.iov_len);
-#ifdef OPX_TID_DEBUG_USECNT
-			fprintf(stderr,
-#else
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-#endif
-				"USECNT: Rendezvous iov [%p - %p] %lu\n", (char *) tid_vaddr,
-				(char *) (tid_vaddr) + (uint64_t) tid_length, (uint64_t) tid_length);
-
+			static int onetime = 1;
+			if (onetime) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+					"Entry not found during deregister (likely removed by memory monitor notification): "
+					"ncache_entries %u, remaining_length %lu, iov base %p, iov len %lu\n",
+					ncache_entries, remaining_length, info.iov.iov_base, info.iov.iov_len);
+				FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Rendezvous iov [%p - %p] %lu\n",
+					(char *) tid_vaddr, (char *) (tid_vaddr) + (uint64_t) tid_length,
+					(uint64_t) tid_length);
+				onetime = 0;
+			}
 			info.iov.iov_base = (void *) ((uintptr_t) info.iov.iov_base + OPX_HFI1_TID_PAGESIZE);
 			remaining_length -= OPX_HFI1_TID_PAGESIZE;
 			info.iov.iov_len = MIN(remaining_length, OPX_HFI1_TID_PAGESIZE);
