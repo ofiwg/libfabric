@@ -135,6 +135,12 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 {
 	int err;
 
+	if (efa_env.track_mr && base_ep->efa_qp_enabled) {
+		ofi_genlock_lock(&base_ep->domain->util_domain.lock);
+		dlist_remove(&base_ep->base_ep_entry);
+		ofi_genlock_unlock(&base_ep->domain->util_domain.lock);
+	}
+
 	/* We need to free the util_ep first to avoid race conditions
 	 * with other threads progressing the cq. */
 	efa_base_ep_close_util_ep(base_ep);
@@ -482,6 +488,12 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep)
 	base_ep->src_addr.qpn = base_ep->qp->qp_num;
 	base_ep->src_addr.pad = 0;
 	base_ep->src_addr.qkey = base_ep->qp->qkey;
+
+	if (efa_env.track_mr) {
+		ofi_genlock_lock(&base_ep->domain->util_domain.lock);
+		dlist_insert_tail(&base_ep->base_ep_entry, &base_ep->domain->base_ep_list);
+		ofi_genlock_unlock(&base_ep->domain->util_domain.lock);
+	}
 
 	return err;
 }
