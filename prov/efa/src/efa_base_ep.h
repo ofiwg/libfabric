@@ -96,6 +96,9 @@ struct efa_base_ep {
 
 	/* entry for efa_domain->base_ep_list */
 	struct dlist_entry base_ep_entry;
+	/* Only used by EFA direct */
+	struct ofi_bufpool *efa_direct_ope_pool;	/**< pool for efa_direct_ope */
+	struct dlist_entry efa_direct_ope_list;	/**< list of outstanding ops */
 };
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);

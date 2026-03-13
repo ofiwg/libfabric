@@ -1029,6 +1029,8 @@ static void test_efa_cq_read_prep(struct efa_resource *resource,
 	struct efa_cq *efa_cq;
 	struct efa_base_ep *base_ep;
 	fi_addr_t addr;
+	struct efa_context *efa_ctx = ctx;
+	struct efa_direct_ope *direct_ope = NULL;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
@@ -1046,8 +1048,16 @@ static void test_efa_cq_read_prep(struct efa_resource *resource,
 	ibv_cq = &efa_cq->ibv_cq;
 	ibv_cqx = ibv_cq->ibv_cq_ex;
 
+	if (efa_env.track_mr && ctx) {
+		direct_ope = ofi_buf_alloc(base_ep->efa_direct_ope_pool);
+		assert_non_null(direct_ope);
+		direct_ope->context = ctx;
+		dlist_insert_tail(&direct_ope->entry, &base_ep->efa_direct_ope_list);
+	}
+
 	/* Make wr_id as 0 for unsolicited write recv as a stress test */
-	ibv_cqx->wr_id = is_unsolicited_write_recv ? 0 : (uintptr_t) ctx;
+	ibv_cqx->wr_id = is_unsolicited_write_recv ? 0 :
+			  (efa_env.track_mr && direct_ope) ? (uintptr_t) direct_ope : (uintptr_t) efa_ctx;
 	ibv_cq->unsolicited_write_recv_enabled = is_unsolicited_write_recv;
 	ibv_cqx->status = status;
 
@@ -2221,6 +2231,7 @@ void test_efa_cq_read_mixed_success_error(struct efa_resource **state)
 	struct fi_cq_err_entry cq_err_entry = {0};
 	struct efa_base_ep *base_ep;
 	struct ibv_cq_ex *ibv_cqx;
+	struct efa_direct_ope *direct_ope1, *direct_ope2, *direct_ope3;
 	ssize_t ret;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
@@ -2251,6 +2262,24 @@ void test_efa_cq_read_mixed_success_error(struct efa_resource **state)
 	efa_context3->completion_flags = FI_SEND | FI_MSG;
 	efa_context3->addr = addr;
 
+	/* Allocate direct_ope entries when track_mr is enabled */
+	if (efa_env.track_mr) {
+		direct_ope1 = ofi_buf_alloc(base_ep->efa_direct_ope_pool);
+		assert_non_null(direct_ope1);
+		direct_ope1->context = efa_context1;
+		dlist_insert_tail(&direct_ope1->entry, &base_ep->efa_direct_ope_list);
+
+		direct_ope2 = ofi_buf_alloc(base_ep->efa_direct_ope_pool);
+		assert_non_null(direct_ope2);
+		direct_ope2->context = efa_context2;
+		dlist_insert_tail(&direct_ope2->entry, &base_ep->efa_direct_ope_list);
+
+		direct_ope3 = ofi_buf_alloc(base_ep->efa_direct_ope_pool);
+		assert_non_null(direct_ope3);
+		direct_ope3->context = efa_context3;
+		dlist_insert_tail(&direct_ope3->entry, &base_ep->efa_direct_ope_list);
+	}
+
 	/* Setup mocks - need custom mock to simulate status changes */
 	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_next_poll = &efa_mock_efa_ibv_cq_next_poll_simulate_status_change;
@@ -2262,7 +2291,7 @@ void test_efa_cq_read_mixed_success_error(struct efa_resource **state)
 	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_byte_len = &efa_mock_efa_ibv_cq_wc_read_byte_len_return_mock;
 
 	/* Setup initial state: CQE1 (success) */
-	ibv_cqx->wr_id = (uintptr_t)efa_context1;
+	ibv_cqx->wr_id = efa_env.track_mr ? (uintptr_t)direct_ope1 : (uintptr_t)efa_context1;
 	ibv_cqx->status = IBV_WC_SUCCESS;
 
 	/* Mock sequence for first fi_cq_read call */
@@ -2274,14 +2303,16 @@ void test_efa_cq_read_mixed_success_error(struct efa_resource **state)
 	will_return_uint_maybe(efa_mock_efa_ibv_cq_wc_read_byte_len_return_mock, 1024);
 
 	/* CQE1 reads using common mocks */
-	/* Move to CQE2, set status to success, set wr_id to context2 */
+	/* Move to CQE2, set status to success, set wr_id */
 	will_return_int(efa_mock_efa_ibv_cq_next_poll_simulate_status_change, IBV_WC_SUCCESS);
-	will_return_ptr(efa_mock_efa_ibv_cq_next_poll_simulate_status_change, efa_context2);
+	will_return_ptr(efa_mock_efa_ibv_cq_next_poll_simulate_status_change,
+			efa_env.track_mr ? (void *)direct_ope2 : (void *)efa_context2);
 	will_return_int(efa_mock_efa_ibv_cq_next_poll_simulate_status_change, 0);
 	/* CQE2 reads using common mocks */
-	/* Move to CQE3, set status to error, set wr_id to context3 */
+	/* Move to CQE3, set status to error, set wr_id */
 	will_return_int(efa_mock_efa_ibv_cq_next_poll_simulate_status_change, IBV_WC_GENERAL_ERR);
-	will_return_ptr(efa_mock_efa_ibv_cq_next_poll_simulate_status_change, efa_context3);
+	will_return_ptr(efa_mock_efa_ibv_cq_next_poll_simulate_status_change,
+			efa_env.track_mr ? (void *)direct_ope3 : (void *)efa_context3);
 	will_return_int(efa_mock_efa_ibv_cq_next_poll_simulate_status_change, 0);
 	expect_function_call(efa_mock_efa_ibv_cq_end_poll_check_mock);
 

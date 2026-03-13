@@ -892,6 +892,7 @@
     <ClCompile Include="prov\efa\src\efa_rma.c" />
     <ClCompile Include="prov\efa\src\efa_cq.c" />
     <ClCompile Include="prov\efa\src\efa_ep.c" />
+    <ClCompile Include="prov\efa\src\efa_direct_ope.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_ope.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_rxe_map.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_atomic.c" />
