@@ -983,6 +983,7 @@ AS_IF([test ! -z "$CC" && ( test "x${CC%% *}" = "xicc" || test "x${CC%% *}" = "x
       ])
 AS_IF([test ! -z "$PSM_CPPFLAGS"], [CPPFLAGS="$CPPFLAGS $PSM_CPPFLAGS"], [])
 AS_IF([test ! -z "$PSM_CFLAGS"], [CFLAGS="$CFLAGS $PSM_CFLAGS"], [])
+AS_IF([test ! -z "$PSM_LDFLAGS"], [LDFLAGS="$LDFLAGS $PSM_LDFLAGS"], [])
 
 dnl Workaround for including fabric.c
 AC_DEFINE([HOOK_NOOP_INIT], NULL, [Ignore HOOK_NOOP_INIT])
