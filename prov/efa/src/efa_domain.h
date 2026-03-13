@@ -64,6 +64,8 @@ struct efa_domain {
 	/* Bounce buffer for 0-byte inject operations (efa-direct only) */
 	void *zero_byte_bounce_buf;
 	struct efa_mr *zero_byte_bounce_buf_mr;
+	/* list of enabled efa_base_ep in this domain */
+	struct dlist_entry base_ep_list;
 };
 
 extern struct dlist_entry g_efa_domain_list;
