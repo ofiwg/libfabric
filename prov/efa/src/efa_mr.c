@@ -73,6 +73,22 @@ int efa_mr_regattr_validate(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOSYS;
 	}
 
+	/* Checking the access flags with provider's capabilities */
+	if ((attr->access & (FI_READ | FI_REMOTE_READ)) &&
+		!(domain->info->tx_attr->caps & FI_READ)) {
+		EFA_WARN(FI_LOG_MR, "FI_READ or FI_REMOTE_READ "
+					"requested but info doesn't support "
+					"READ operations\n");
+		return -FI_EOPNOTSUPP;
+	}
+	if ((attr->access & (FI_WRITE | FI_REMOTE_WRITE)) &&
+		!(domain->info->tx_attr->caps & FI_WRITE)) {
+		EFA_WARN(FI_LOG_MR, "FI_WRITE or FI_REMOTE_WRITE "
+					"requested but info doesn't support "
+					"WRITE operations\n");
+		return -FI_EOPNOTSUPP;
+	}
+
 	return 0;
 }
 
@@ -501,37 +517,12 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct efa_mr *efa_mr = NULL;
 	int ret = 0;
 	struct fi_mr_attr mr_attr = {0};
-	bool device_support_rdma_read = false;
-	bool device_support_rdma_write = false;
 
 	ret = efa_mr_regattr_validate(fid, attr, flags);
 	if (ret)
 		return ret;
 
 	domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
-
-	device_support_rdma_read = domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
-#if HAVE_CAPS_RDMA_WRITE
-	device_support_rdma_write = domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
-#endif
-
-	/* For efa-direct, fail registration if RDMA operations are requested 
-	 * but hardware doesn't support them
-	 */
-	if ((attr->access & (FI_READ | FI_REMOTE_READ)) &&
-		!device_support_rdma_read) {
-		EFA_WARN(FI_LOG_MR, "FI_READ or FI_REMOTE_READ "
-					"requested but hardware does not "
-					"support RDMA read operations\n");
-		return -FI_EOPNOTSUPP;
-	}
-	if (attr->access & (FI_WRITE | FI_REMOTE_WRITE) &&
-		!device_support_rdma_write) {
-		EFA_WARN(FI_LOG_MR, "FI_WRITE or FI_REMOTE_WRITE "
-					"requested but hardware does not "
-					"support RDMA write operations\n");
-		return -FI_EOPNOTSUPP;
-	}
 
 	efa_mr = calloc(1, sizeof(*efa_mr));
 	if (!efa_mr) {

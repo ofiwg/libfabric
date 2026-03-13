@@ -281,30 +281,19 @@ void test_efa_direct_mr_reg_cuda_memory(struct efa_resource **state)
 }
 #endif
 
-void test_efa_direct_mr_reg_rdma_read_not_supported(struct efa_resource **state)
+void test_efa_direct_mr_reg_fi_read_support_status(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
-	struct efa_domain *efa_domain;
 	size_t mr_size = 64;
 	void *buf;
 	struct fid_mr *mr = NULL;
 	struct fi_mr_attr mr_reg_attr = {0};
 	struct iovec iovec;
 	int err;
-	uint32_t efa_device_caps_orig;
+	fi_addr_t fi_addr;
+	bool fi_rma_supported;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
-						    FI_VERSION(2, 0),
-						    resource->hints,
-						    true, true);
-
-	efa_domain = container_of(resource->domain, struct efa_domain,
-				  util_domain.domain_fid);
-
-	/* Mock device to not support RDMA read */
-	efa_device_caps_orig = efa_domain->device->device_caps;
-	efa_domain->device->device_caps &= ~EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+	fi_rma_supported = test_efa_rma_prep(resource, &fi_addr);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -317,38 +306,27 @@ void test_efa_direct_mr_reg_rdma_read_not_supported(struct efa_resource **state)
 	mr_reg_attr.iov_count = 1;
 
 	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
-	assert_int_equal(err, -FI_EOPNOTSUPP);
+	assert_int_equal(err, fi_rma_supported ? FI_SUCCESS : -FI_EOPNOTSUPP);
+
+	if (!err)
+		(void) fi_close(&mr->fid);
 
 	free(buf);
-	efa_domain->device->device_caps = efa_device_caps_orig;
 }
 
-void test_efa_direct_mr_reg_rdma_write_not_supported(struct efa_resource **state)
+void test_efa_direct_mr_reg_fi_write_support_status(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
-	struct efa_domain *efa_domain;
 	size_t mr_size = 64;
 	void *buf;
 	struct fid_mr *mr = NULL;
 	struct fi_mr_attr mr_reg_attr = {0};
 	struct iovec iovec;
 	int err;
-	uint32_t efa_device_caps_orig;
+	fi_addr_t fi_addr;
+	bool fi_rma_supported;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
-						    FI_VERSION(2, 0),
-						    resource->hints,
-						    true, true);
-
-	efa_domain = container_of(resource->domain, struct efa_domain,
-				  util_domain.domain_fid);
-
-	efa_device_caps_orig = efa_domain->device->device_caps;
-	/* Mock device to not support RDMA write */
-#if HAVE_CAPS_RDMA_WRITE
-	efa_domain->device->device_caps &= ~EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
-#endif
+	fi_rma_supported = test_efa_rma_prep(resource, &fi_addr);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -361,10 +339,12 @@ void test_efa_direct_mr_reg_rdma_write_not_supported(struct efa_resource **state
 	mr_reg_attr.iov_count = 1;
 
 	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
-	assert_int_equal(err, -FI_EOPNOTSUPP);
+	assert_int_equal(err, fi_rma_supported ? FI_SUCCESS : -FI_EOPNOTSUPP);
+
+	if (!err)
+		(void) fi_close(&mr->fid);
 
 	free(buf);
-	efa_domain->device->device_caps = efa_device_caps_orig;
 }
 
 void test_efa_mr_validate_regattr_invalid_iov_count(struct efa_resource **state)
