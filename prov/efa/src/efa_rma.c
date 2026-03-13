@@ -44,6 +44,8 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	uintptr_t wr_id;
 	int i, err = 0;
 	size_t total_len;
+	struct efa_context *efa_ctx;
+	struct efa_direct_ope *direct_ope;
 
 	efa_tracepoint(read_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
@@ -61,8 +63,21 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
 	/* Prepare work request ID */
-	wr_id = (uintptr_t) efa_fill_context(
-		msg->context, msg->addr, flags, FI_RMA | FI_READ);
+	efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
+						       FI_RMA | FI_READ);
+	if (efa_env.track_mr && efa_ctx) {
+		direct_ope = efa_direct_ope_alloc(
+			base_ep, efa_ctx, NULL, msg);
+		if (!direct_ope) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "Failed to allocate direct TX operation entry for MR tracking\n");
+			err = -FI_EAGAIN;
+			goto out_err;
+		}
+		wr_id = (uintptr_t) direct_ope;
+	} else {
+		wr_id = (uintptr_t) efa_ctx;
+	}
 
 	/* Handle 0-byte read with bounce buffer */
 	if (total_len == 0) {
@@ -188,6 +203,8 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	uintptr_t wr_id;
 	int i, err = 0;
 	size_t total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
+	struct efa_context *efa_ctx;
+	struct efa_direct_ope *direct_ope;
 
 	if (flags & FI_INJECT && total_len > base_ep->inject_rma_size) {
 		EFA_WARN(FI_LOG_EP_DATA,
@@ -203,8 +220,21 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
 	/* Prepare work request ID */
-	wr_id = (uintptr_t) efa_fill_context(
-		msg->context, msg->addr, flags, FI_RMA | FI_WRITE);
+	efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
+						       FI_RMA | FI_WRITE);
+	if (efa_env.track_mr && efa_ctx) {
+		direct_ope = efa_direct_ope_alloc(
+			base_ep, efa_ctx, NULL, msg);
+		if (!direct_ope) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "Failed to allocate direct TX operation entry for MR tracking\n");
+			err = -FI_EAGAIN;
+			goto out_err;
+		}
+		wr_id = (uintptr_t) direct_ope;
+	} else {
+		wr_id = (uintptr_t) efa_ctx;
+	}
 
 	/* Handle 0-byte write with bounce buffer */
 	if (total_len == 0) {
