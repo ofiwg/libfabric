@@ -195,6 +195,7 @@ struct rxd_ep {
 	struct fid_ep *dg_ep;
 	struct fid_cq *dg_tx_cq;
 	struct fid_cq *dg_rx_cq;
+	struct fi_cq_msg_entry *dg_cqes;
 
 	size_t rx_size;
 	size_t tx_size;

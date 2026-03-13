@@ -707,6 +707,7 @@ void rxd_ep_send_ack(struct rxd_ep *rxd_ep, fi_addr_t peer)
 
 static void rxd_ep_free_res(struct rxd_ep *ep)
 {
+	free(ep->dg_cqes);
 	if (ep->tx_pkt_pool.pool)
 		ofi_bufpool_destroy(ep->tx_pkt_pool.pool);
 
@@ -1065,22 +1066,22 @@ static void rxd_progress_pkt_list(struct rxd_ep *ep, struct rxd_peer *peer)
 		return;
 	}
 
-	if (!dlist_empty(&peer->unacked))
+	if (!dlist_empty(&peer->unacked)) {
 		current = ofi_gettime_ms();
-
-	dlist_foreach_container(&peer->unacked, struct rxd_pkt_entry,
-				pkt_entry, d_entry) {
-		if (pkt_entry->flags & (RXD_PKT_IN_USE | RXD_PKT_ACKED) ||
-		    current < rxd_get_retry_time(pkt_entry->timestamp,
-						 (uint8_t) peer->retry_cnt))
-			break;
-		retry = 1;
-		ret = rxd_ep_send_pkt(ep, pkt_entry);
-		if (ret)
-			break;
+		dlist_foreach_container(&peer->unacked, struct rxd_pkt_entry,
+					pkt_entry, d_entry) {
+			if (pkt_entry->flags & (RXD_PKT_IN_USE | RXD_PKT_ACKED) ||
+				current < rxd_get_retry_time(pkt_entry->timestamp,
+							(uint8_t) peer->retry_cnt))
+				break;
+			retry = 1;
+			ret = rxd_ep_send_pkt(ep, pkt_entry);
+			if (ret)
+				break;
+		}
+		if (retry)
+			peer->retry_cnt++;
 	}
-	if (retry)
-		peer->retry_cnt++;
 
 	if (!dlist_empty(&peer->unacked))
 		ep->next_retry = ep->next_retry == -1 ? peer->retry_cnt :
@@ -1091,15 +1092,14 @@ void rxd_ep_dg_cq_progress(struct rxd_ep *ep, struct fid_cq *dg_cq_fid,
 			   void (*handle_comp_cb)(struct rxd_ep *ep,
 						  struct fi_cq_msg_entry *comp))
 {
-	struct fi_cq_msg_entry cqes[rxd_env.cq_batch_sz];
 	ssize_t ret;
 	int i;
 
-	ret = fi_cq_read(dg_cq_fid, &cqes, rxd_env.cq_batch_sz);
+	ret = fi_cq_read(dg_cq_fid, ep->dg_cqes, rxd_env.cq_batch_sz);
 	if (ret == -FI_EAVAIL)
 		rxd_handle_error(ep, dg_cq_fid);
 	for (i = 0; i < ret; ++i)
-		handle_comp_cb(ep, &cqes[i]);
+		handle_comp_cb(ep, &ep->dg_cqes[i]);
 }
 
 void rxd_ep_progress(struct util_ep *util_ep)
@@ -1248,6 +1248,10 @@ static int rxd_entry_pool_create(struct rxd_ep *ep,
 int rxd_ep_init_res(struct rxd_ep *ep, struct fi_info *fi_info)
 {
 	int ret;
+
+	ep->dg_cqes = calloc(rxd_env.cq_batch_sz, sizeof(*ep->dg_cqes));
+	if (!ep->dg_cqes)
+		return -FI_ENOMEM;
 
 	ret = rxd_pkt_pool_create(ep, RXD_TX_POOL_CHUNK_CNT,
 				  &ep->tx_pkt_pool, RXD_BUF_POOL_TX);

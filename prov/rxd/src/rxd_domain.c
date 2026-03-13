@@ -81,6 +81,9 @@ static struct fi_ops rxd_domain_fi_ops = {
 
 static void rxd_mr_remove_map_entry(struct rxd_mr *mr)
 {
+	if (mr->mr_fid.key == FI_KEY_NOTAVAIL)
+		return;
+
 	ofi_genlock_lock(&mr->domain->util_domain.lock);
 	(void) ofi_mr_map_remove(&mr->domain->util_domain.mr_map,
 				 mr->mr_fid.key);
@@ -95,8 +98,6 @@ static int rxd_mr_add_map_entry(struct util_domain *domain,
 	uint64_t temp_key;
 	int ret;
 
-	dg_attr->requested_key = rxd_mr->mr_fid.key;
-
 	ofi_genlock_lock(&domain->lock);
 	ret = ofi_mr_map_insert(&domain->mr_map, dg_attr, &temp_key, rxd_mr, flags);
 	if (OFI_UNLIKELY(ret)) {
@@ -104,7 +105,7 @@ static int rxd_mr_add_map_entry(struct util_domain *domain,
 			"MR map insert for atomic verification failed %d\n",
 			ret);
 	} else {
-		assert(rxd_mr->mr_fid.key == temp_key);
+		rxd_mr->mr_fid.key = temp_key;
 	}
 	ofi_genlock_unlock(&domain->lock);
 
@@ -144,7 +145,7 @@ static void rxd_mr_init(struct rxd_mr *rxd_mr, struct rxd_domain *domain,
 	rxd_mr->mr_fid.fid.context = context;
 	rxd_mr->mr_fid.fid.ops = &rxd_mr_fi_ops;
 	rxd_mr->mr_fid.mem_desc = rxd_mr;
-	rxd_mr->mr_fid.key = fi_mr_key(rxd_mr->dg_mr);
+	rxd_mr->mr_fid.key = FI_KEY_NOTAVAIL;
 	rxd_mr->domain = domain;
 	ofi_atomic_inc32(&domain->util_domain.ref);
 }
@@ -179,10 +180,12 @@ static int rxd_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	rxd_mr_init(rxd_mr, rxd_domain, attr->context);
 	*mr = &rxd_mr->mr_fid;
 
-	ret = rxd_mr_add_map_entry(&rxd_domain->util_domain, &dg_attr, rxd_mr,
-				   flags);
-	if (ret)
-		goto map_err;
+	if (dg_attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)) {
+		ret = rxd_mr_add_map_entry(&rxd_domain->util_domain, &dg_attr,
+					   rxd_mr, flags);
+		if (ret)
+			goto map_err;
+	}
 
 	FI_INFO(&rxd_prov, FI_LOG_DOMAIN, "mr_regattr\n");
 	return 0;
@@ -226,13 +229,14 @@ static int rxd_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 		goto err;
 	}
 	rxd_mr_init(rxd_mr, rxd_domain, context);
-	ofi_atomic_inc32(&rxd_domain->util_domain.ref);
 	*mr = &rxd_mr->mr_fid;
 
-	ret = rxd_mr_add_map_entry(&rxd_domain->util_domain, &dg_attr, rxd_mr,
-				   flags);
-	if (ret)
-		goto map_err;
+	if (access & (FI_REMOTE_READ | FI_REMOTE_WRITE)) {
+		ret = rxd_mr_add_map_entry(&rxd_domain->util_domain, &dg_attr,
+					   rxd_mr, flags);
+		if (ret)
+			goto map_err;
+	}
 
 	return 0;
 map_err:
