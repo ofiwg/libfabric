@@ -486,3 +486,175 @@ void test_efa_mr_internal_regv_no_shm_mr(struct efa_resource **state)
 	assert_int_equal(fi_close(&mr->fid), 0);
 	free(buf);
 }
+
+/**
+ * @brief Test that closing an MR with outstanding direct operations prints
+ * warning and clears the desc reference.
+ *
+ * When FI_EFA_TRACK_MR is enabled and an MR is closed while a direct
+ * operation still references it, efa_mr_close will warn and clear the desc entry.
+ */
+void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_direct_ope *direct_ope;
+	struct fid_mr *mr = NULL;
+	struct efa_mr *efa_mr;
+	size_t mr_size = 64;
+	void *buf;
+	int saved_track_mr;
+
+	saved_track_mr = efa_env.track_mr;
+	efa_env.track_mr = 1;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep,
+			       util_ep.ep_fid);
+
+	buf = malloc(mr_size);
+	assert_non_null(buf);
+
+	assert_int_equal(fi_mr_reg(resource->domain, buf, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL), 0);
+	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+
+	/* Simulate an outstanding direct operation referencing this MR */
+	direct_ope = ofi_buf_alloc(base_ep->efa_direct_ope_pool);
+	assert_non_null(direct_ope);
+	direct_ope->iov_count = 1;
+	direct_ope->desc[0] = efa_mr;
+	dlist_insert_tail(&direct_ope->entry, &base_ep->efa_direct_ope_list);
+
+	/* Close MR while operation is outstanding */
+	assert_int_equal(fi_close(&mr->fid), 0);
+
+	/* Verify desc was cleared */
+	assert_null(direct_ope->desc[0]);
+
+	/* Clean up the outstanding ope */
+	dlist_remove(&direct_ope->entry);
+	ofi_buf_free(direct_ope);
+
+	free(buf);
+	efa_env.track_mr = saved_track_mr;
+}
+
+/**
+ * @brief Test MR close with outstanding direct operations on multiple EPs
+ *
+ * Two EPs share one MR. Each EP has an in-flight direct operation referencing
+ * the MR. Closing the MR should warn and clear desc on both EPs.
+ */
+void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep1, *base_ep2;
+	struct efa_direct_ope *direct_ope1, *direct_ope2;
+	struct fid_ep *ep2;
+	struct fid_mr *mr = NULL;
+	struct efa_mr *efa_mr;
+	size_t mr_size = 64;
+	void *buf;
+	int saved_track_mr;
+
+	saved_track_mr = efa_env.track_mr;
+	efa_env.track_mr = 1;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	base_ep1 = container_of(resource->ep, struct efa_base_ep,
+				util_ep.ep_fid);
+
+	/* Create and enable a second EP on the same domain and CQ */
+	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep2, NULL), 0);
+	assert_int_equal(fi_ep_bind(ep2, &resource->cq->fid, FI_SEND | FI_RECV), 0);
+	assert_int_equal(fi_enable(ep2), 0);
+	base_ep2 = container_of(ep2, struct efa_base_ep, util_ep.ep_fid);
+
+	buf = malloc(mr_size);
+	assert_non_null(buf);
+
+	assert_int_equal(fi_mr_reg(resource->domain, buf, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL), 0);
+	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+
+	/* Simulate outstanding direct operations on both EPs referencing the same MR */
+	direct_ope1 = ofi_buf_alloc(base_ep1->efa_direct_ope_pool);
+	assert_non_null(direct_ope1);
+	direct_ope1->iov_count = 1;
+	direct_ope1->desc[0] = efa_mr;
+	dlist_insert_tail(&direct_ope1->entry, &base_ep1->efa_direct_ope_list);
+
+	direct_ope2 = ofi_buf_alloc(base_ep2->efa_direct_ope_pool);
+	assert_non_null(direct_ope2);
+	direct_ope2->iov_count = 1;
+	direct_ope2->desc[0] = efa_mr;
+	dlist_insert_tail(&direct_ope2->entry, &base_ep2->efa_direct_ope_list);
+
+	/* Close MR while operations are outstanding on both EPs */
+	assert_int_equal(fi_close(&mr->fid), 0);
+
+	/* Verify desc was cleared on both EPs */
+	assert_null(direct_ope1->desc[0]);
+	assert_null(direct_ope2->desc[0]);
+
+	/* Clean up */
+	dlist_remove(&direct_ope1->entry);
+	ofi_buf_free(direct_ope1);
+	dlist_remove(&direct_ope2->entry);
+	ofi_buf_free(direct_ope2);
+
+	assert_int_equal(fi_close(&ep2->fid), 0);
+	free(buf);
+	efa_env.track_mr = saved_track_mr;
+}
+
+/**
+ * @brief Test that closing an MR with outstanding RDM txe prints
+ * warning and clears the desc reference.
+ *
+ * When FI_EFA_TRACK_MR is enabled and an MR is closed while an RDM
+ * TX operation still references it, efa_mr_close will warn and clear the desc entry.
+ */
+void test_efa_mr_close_warn_outstanding_rdm_txe(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+	struct fid_mr *mr = NULL;
+	struct efa_mr *efa_mr;
+	size_t mr_size = 64;
+	void *buf;
+	int saved_track_mr;
+
+	saved_track_mr = efa_env.track_mr;
+	efa_env.track_mr = 1;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	buf = malloc(mr_size);
+	assert_non_null(buf);
+
+	assert_int_equal(fi_mr_reg(resource->domain, buf, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL), 0);
+	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+
+	/* Allocate a txe and set its desc to reference the MR */
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->iov_count = 1;
+	txe->desc[0] = efa_mr;
+
+	/* Close MR while txe is outstanding */
+	assert_int_equal(fi_close(&mr->fid), 0);
+
+	/* Verify desc was cleared */
+	assert_null(txe->desc[0]);
+
+	/* Clean up the txe */
+	efa_rdm_txe_release(txe);
+
+	free(buf);
+	efa_env.track_mr = saved_track_mr;
+}
