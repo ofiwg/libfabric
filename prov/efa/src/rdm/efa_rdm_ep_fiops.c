@@ -14,6 +14,7 @@
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_cntr.h"
+#include "efa_rdm_mr.h"
 
 
 static inline
@@ -39,7 +40,7 @@ int efa_rdm_pke_pool_alloc_handler(struct ofi_bufpool_region *region)
 		.iov_len = region->pool->alloc_size,
 	};
 
-	ret = domain->internal_buf_mr_regv(&domain->util_domain.domain_fid, &iov, 1, FI_SEND | FI_RECV, 0, 0, 0,
+	ret = efa_rdm_mr_cache_regv(&domain->util_domain.domain_fid, &iov, 1, FI_SEND | FI_RECV, 0, 0, 0,
 			&mr, NULL);
 
 	region->context = mr;

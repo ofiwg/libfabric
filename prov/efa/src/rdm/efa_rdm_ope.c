@@ -12,7 +12,7 @@
 #include "efa_rdm_tracepoint.h"
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_pkt_type.h"
-#include "efa_mr.h"
+#include "efa_rdm_mr.h"
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   struct efa_rdm_ep *ep,
@@ -294,7 +294,7 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 				 ope->iov[i].iov_base, ope->iov[i].iov_len, access);
 
 		domain = efa_rdm_ep_domain(ope->ep);
-		err = domain->internal_buf_mr_regv(
+		err = efa_rdm_mr_cache_regv(
 			&domain->util_domain.domain_fid, ope->iov + i, 1,
 			access, 0, 0, 0, &ope->mr[i], NULL);
 
@@ -499,7 +499,7 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 		single_pkt_entry_max_data_size = efa_rdm_txe_max_req_data_capacity(ep, ope, pkt_type);
 		assert(single_pkt_entry_max_data_size);
 
-		iface = ope->desc[0] ? ((struct efa_mr*) ope->desc[0])->peer.iface : FI_HMEM_SYSTEM;
+		iface = ope->desc[0] ? ((struct efa_mr*) ope->desc[0])->iface : FI_HMEM_SYSTEM;
 		memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
 
 		*pkt_entry_cnt = (total_pkt_entry_data_size - 1) / single_pkt_entry_max_data_size + 1;
