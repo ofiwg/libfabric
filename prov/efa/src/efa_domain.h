@@ -126,4 +126,16 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain);
 
+static inline void efa_domain_ope_list_lock(struct efa_domain *domain)
+{
+	if (efa_env.track_mr)
+		ofi_genlock_lock(&domain->util_domain.lock);
+}
+
+static inline void efa_domain_ope_list_unlock(struct efa_domain *domain)
+{
+	if (efa_env.track_mr)
+		ofi_genlock_unlock(&domain->util_domain.lock);
+}
+
 #endif
