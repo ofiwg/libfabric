@@ -19,6 +19,8 @@
 #include "efa_rdm_pke_req.h"
 
 #include "efa_rdm_tracepoint.h"
+#include "efa_mr.h"
+#include "efa_rdm_proto.h"
 
 /**
  * This file define the msg ops functions.
@@ -162,6 +164,8 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 	ssize_t err;
 	struct efa_rdm_ope *txe;
 	struct util_srx_ctx *srx_ctx;
+	struct efa_rdm_proto *proto;
+	uint64_t pke_send_flags = 0;
 
 	efa_rdm_tracepoint(send_begin_msg_context,
 		    (size_t) msg->context, (size_t) msg->addr);
@@ -178,6 +182,62 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 		goto out;
 	}
 
+	/* First try to use the refactored code path */
+	err = efa_rdm_proto_select_send_protocol(&proto, ep, peer, msg, op, flags);
+	if (err)
+		goto out;
+
+	/* If a protocol is found, use it. Otherwise, fall back to the old code
+	 * path */
+	if (proto) {
+		err = proto->construct_pkes(ep, peer, msg, op, tag, flags, &txe);
+		if (err)
+			goto out;
+
+		assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
+		assert(ep->send_pkt_entry_vec_size <= efa_base_ep_get_tx_pool_size(&ep->base_ep));
+
+		/*
+		 * It is required to get receiver's user recv QP through handshake
+		 * if sender supports this feature.
+		 */
+		if ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) &&
+		    !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+			return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
+		}
+
+
+		/**
+		 * We currently respect FI_MORE only for eager pkt type because
+		 * For non-eager REQ packets, we already send multiple pkts that contain
+		 * data and make the firmware saturated, there is no meaning to queue
+		 * pkts in this case.
+		 */
+		if (flags & FI_MORE && ep->send_pkt_entry_vec_size == 1) {
+			pke_send_flags |= FI_MORE;
+		}
+
+
+		EFA_DBG(FI_LOG_EP_DATA,
+			"peer: %" PRIu64
+			": size %lu tag: %lx op: %x flags: %lx msg_id: %" PRIu32 "\n",
+			peer->conn->fi_addr, txe->total_len, tag, op, flags, txe->msg_id);
+
+		efa_rdm_tracepoint(send_begin, txe->msg_id,
+			    (size_t) txe->cq_entry.op_context, txe->total_len);
+
+
+		err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
+					ep->send_pkt_entry_vec_size,
+					pke_send_flags);
+		if (err)
+			goto out;
+
+		err = proto->send_pkes_posted(ep, txe);
+		goto out;
+	}
+
+	/* Fallback to the old code path */
 	txe = efa_rdm_ep_alloc_txe(ep, peer, msg, op, tag, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
