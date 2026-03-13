@@ -278,7 +278,10 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 	
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps |= FI_MSG | FI_RMA;
+	hints->caps |= FI_MSG;
+	if (opts.rma_op == FT_RMA_WRITEDATA)
+		hints->caps |= FI_RMA;
+	hints->mode |= FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	
 	ret = run();
