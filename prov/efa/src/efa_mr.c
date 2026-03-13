@@ -937,24 +937,6 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 #if HAVE_CAPS_RDMA_WRITE
 	device_support_rdma_write = efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
 #endif
-	/* For efa-direct, fail registration if RDMA operations are requested 
-	 * but hardware doesn't support them */
-	if (efa_mr->domain->info_type == EFA_INFO_DIRECT) {
-		if ((mr_attr->access & (FI_READ | FI_REMOTE_READ)) &&
-		    !device_support_rdma_read) {
-			EFA_WARN(FI_LOG_MR, "FI_READ or FI_REMOTE_READ "
-					    "requested but hardware does not "
-					    "support RDMA read operations\n");
-			return -FI_EOPNOTSUPP;
-		}
-		if (mr_attr->access & (FI_WRITE | FI_REMOTE_WRITE) &&
-		    !device_support_rdma_write) {
-			EFA_WARN(FI_LOG_MR, "FI_WRITE or FI_REMOTE_WRITE "
-					    "requested but hardware does not "
-					    "support RDMA write operations\n");
-			return -FI_EOPNOTSUPP;
-		}
-	}
 
 	if (efa_mr->domain->cache)
 		ofi_mr_cache_flush(efa_mr->domain->cache, false);
@@ -1080,6 +1062,22 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			 "Cannot register memory for uninitialized iface (%s)\n",
 			 fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
 		return -FI_ENOSYS;
+	}
+
+	/* Checking the access flags with provider's capabilities */
+	if ((attr->access & (FI_READ | FI_REMOTE_READ)) &&
+		!(domain->info->tx_attr->caps & FI_READ)) {
+		EFA_WARN(FI_LOG_MR, "FI_READ or FI_REMOTE_READ "
+					"requested but info doesn't support "
+					"READ operations\n");
+		return -FI_EOPNOTSUPP;
+	}
+	if ((attr->access & (FI_WRITE | FI_REMOTE_WRITE)) &&
+		!(domain->info->tx_attr->caps & FI_WRITE)) {
+		EFA_WARN(FI_LOG_MR, "FI_WRITE or FI_REMOTE_WRITE "
+					"requested but info doesn't support "
+					"WRITE operations\n");
+		return -FI_EOPNOTSUPP;
 	}
 
 	efa_mr = calloc(1, sizeof(*efa_mr));

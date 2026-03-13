@@ -75,6 +75,8 @@ void efa_unit_test_construct_msg_rma(struct fi_msg_rma *msg, struct iovec *iov,
 
 void new_temp_file(char *template, size_t len);
 
+bool test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr);
+
 struct efa_unit_test_buff {
 	uint8_t *buff;
 	size_t  size;
@@ -505,8 +507,8 @@ void test_efa_rdm_mr_reg_host_memory_no_mr_local();
 void test_efa_rdm_mr_reg_host_memory_overlapping_buffers();
 void test_efa_rdm_mr_reg_cuda_memory();
 void test_efa_direct_mr_reg_no_gdrcopy();
-void test_efa_direct_mr_reg_rdma_read_not_supported();
-void test_efa_direct_mr_reg_rdma_write_not_supported();
+void test_efa_direct_mr_reg_fi_read_support_status();
+void test_efa_direct_mr_reg_fi_write_support_status();
 void test_efa_mr_ofi_to_ibv_access_no_access();
 void test_efa_mr_ofi_to_ibv_access_one_flag();
 void test_efa_mr_ofi_to_ibv_access_read_not_supported();

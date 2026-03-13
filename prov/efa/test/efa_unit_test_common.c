@@ -465,3 +465,61 @@ void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE | EFA_RDM_EXTRA_FEATURE_RDMA_READ | EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
 }
+
+/**
+ * @return true if device supports FI_RMA, false otherwise.
+ *
+ * When FI_RMA is not supported, this function verifies that fi_getinfo
+ * fails with FI_RMA hints, then constructs the resource without FI_RMA
+ * so callers can test the -FI_EOPNOTSUPP error path.
+ */
+bool test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
+{
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	bool fi_rma_supported;
+	int ret;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(resource->hints);
+
+	fi_rma_supported = efa_device_support_rdma_read() && efa_device_support_rdma_write();
+
+	if (fi_rma_supported) {
+		resource->hints->caps |= FI_RMA;
+		resource->hints->mode |= FI_RX_CQ_DATA;
+	} else {
+		/* Verify fi_getinfo rejects FI_RMA on non-RDMA platforms */
+		struct fi_info *hints_rma, *info_rma = NULL;
+
+		hints_rma = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+		assert_non_null(hints_rma);
+		hints_rma->caps |= FI_RMA;
+		hints_rma->mode |= FI_RX_CQ_DATA;
+		ret = fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0ULL, hints_rma, &info_rma);
+		assert_int_not_equal(ret, 0);
+		fi_freeinfo(hints_rma);
+	}
+
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0),
+						    resource->hints, true, true);
+
+	/* Set up the mock operations */
+	g_efa_unit_test_mocks.efa_qp_post_recv = &efa_mock_efa_qp_post_recv_return_mock;
+	/* Mock general QP post functions to save work request IDs */
+	g_efa_unit_test_mocks.efa_qp_post_read = &efa_mock_efa_qp_post_read_return_mock;
+	g_efa_unit_test_mocks.efa_qp_post_write = &efa_mock_efa_qp_post_write_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_read_return_mock, 0);
+	will_return_int_maybe(efa_mock_efa_qp_post_write_return_mock, 0);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, addr, 0 /* flags */,
+			   NULL /* context */);
+	assert_int_equal(ret, 1);
+
+	return fi_rma_supported;
+}
