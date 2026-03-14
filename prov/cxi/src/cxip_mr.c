@@ -1668,8 +1668,14 @@ static int cxip_mr_init(struct cxip_mr *mr, struct cxip_domain *dom,
 	mr->rma_events = flags & FI_RMA_EVENT;
 
 	/* Support length 1 IOV only for now */
-	mr->buf = mr->attr.mr_iov[0].iov_base;
-	mr->len = mr->attr.mr_iov[0].iov_len;
+	if (flags & FI_MR_DMABUF) {
+		mr->buf = (void *)((uintptr_t)attr->dmabuf->base_addr +
+				   attr->dmabuf->offset);
+		mr->len = attr->dmabuf->len;
+	} else {
+		mr->buf = mr->attr.mr_iov[0].iov_base;
+		mr->len = mr->attr.mr_iov[0].iov_len;
+	}
 
 	/* Allocate unique MR buffer ID if remote access MR */
 	if (mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)) {
