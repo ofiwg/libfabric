@@ -27,6 +27,7 @@
  */
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -36,6 +37,10 @@
 #include <sys/time.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include "util.h"
+
+int client_sockets[MAX_CLIENTS];
+int num_client_connections = 0;
 
 double when(void)
 {
@@ -126,6 +131,24 @@ void sync_tcp(int sockfd)
 	(void)! read(sockfd, &dummy2, sizeof dummy2);
 }
 
+int send_to_socket(int sockfd, size_t size, void *data)
+{
+	if (write(sockfd, data, size) != size) {
+		fprintf(stderr, "Failed to send data to socket\n");
+		return -1;
+	}
+	return 0;
+}
+
+int recv_from_socket(int sockfd, size_t size, void *data)
+{
+	if (recv(sockfd, data, size, MSG_WAITALL) != size) {
+		fprintf(stderr, "Failed to receive data from socket\n");
+		return -1;
+	}
+	return 0;
+}
+
 int exchange_info(int sockfd, size_t size, void *me, void *peer)
 {
 	if (write(sockfd, me, size) != size) {
@@ -141,3 +164,98 @@ int exchange_info(int sockfd, size_t size, void *me, void *peer)
 	return 0;
 }
 
+
+void sync_barrier(int max_ranks, int my_rank, int my_fd, bool client,
+		  bool verbose)
+{
+	int k;
+	if (!client) {
+		for (k = 0; k < max_ranks; k++) {
+			if (k == my_rank)
+				continue;
+
+			if (verbose)
+				printf("Server: Waiting for client %d "
+				       "completion signal...\n", k + 1);
+			sync_tcp(client_sockets[k]);
+		}
+	} else {
+		sync_tcp(my_fd);
+	}
+}
+
+int start_client(char *server_name, unsigned int port, bool verbose,
+		 int *sockfd)
+{
+	*sockfd = connect_tcp(server_name, port);
+	if (*sockfd < 0)
+		return -1;
+
+	if (verbose)
+		printf("Client: Connected to server %s:%d\n",
+			server_name, port);
+	return 0;
+}
+
+int start_server(int max_ranks, unsigned int port, bool verbose, int *sockfd)
+{
+	int i;
+	int reuse = 1;
+	struct sockaddr_in server_addr, client_addr;
+	socklen_t client_len = sizeof(client_addr);
+
+	if ((client_sockets[0] = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		return -1;
+
+	if (setsockopt(client_sockets[0], SOL_SOCKET, SO_REUSEADDR, &reuse,
+	    sizeof(int)))
+		return -1;
+
+	memset(&server_addr, 0, sizeof(server_addr));
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	server_addr.sin_port = htons(port);
+
+	if (bind(client_sockets[0], (struct sockaddr*) &server_addr,
+	    sizeof(server_addr)) < 0)
+		return -1;
+
+	if (listen(client_sockets[0], max_ranks) < 0)
+		return -1;
+
+	if (verbose)
+		printf("Server: Waiting for %d clients to connect on "
+			"port %d...\n", max_ranks - 1, port);
+
+	for (i = 1; i < max_ranks; i++) {
+		if (verbose)
+			printf("Server: Accepting client %d...\n",
+				i + 1);
+		client_sockets[i] = accept(client_sockets[0],
+					   (struct sockaddr*) &client_addr,
+					   &client_len);
+		if (client_sockets[i] < 0)
+			return -1;
+
+		num_client_connections++;
+		if (verbose)
+			printf("Server: Client %d connected from %s\n",
+			       i, inet_ntoa(client_addr.sin_addr));
+	}
+
+	if (verbose)
+		printf("Server: All %d clients connected\n",
+			num_client_connections);
+
+	*sockfd = client_sockets[0];
+	return 0;
+}
+
+void cleanup_sockets(void)
+{
+	int i;
+	for (i = 0; i < MAX_CLIENTS; i++) {
+		if (client_sockets[i] > 0)
+			close(client_sockets[i]);
+	}
+}
