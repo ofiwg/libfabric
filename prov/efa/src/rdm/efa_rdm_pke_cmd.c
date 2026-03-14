@@ -603,6 +603,11 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	 * needed. The pkt_type switch below serves the protocols that have not
 	 * been migrated yet.
 	 *
+	 * This check must come before the headerless (zero hdr) handling below:
+	 * a refactored eager packet sent to the peer's dedicated receive QP has
+	 * both the callback and EFA_RDM_PKE_SEND_TO_USER_RECV_QP set, and the
+	 * callback is what owns its completion.
+	 *
 	 * The callback owns the packet entry from here on: it may release the
 	 * entry and even synchronously repost that buffer as a new work
 	 * request, so pkt_entry must not be touched after it returns. This is
@@ -613,13 +618,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	 */
 	if (pkt_entry->handle_pke) {
 		pkt_entry->handle_pke(pkt_entry);
-		return;
-	}
-
-	/* These pkts are eager pkts withour hdrs */
-	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
-		efa_rdm_pke_release_tx(pkt_entry);
 		return;
 	}
 
@@ -657,7 +655,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
@@ -729,6 +727,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
+	/*
+	 * The DC eager packet types are unreachable here: the eager protocol
+	 * moved to the refactored code path, and its packets carry a
+	 * handle_pke callback that returns before this switch. They stay
+	 * listed so the fetch/compare atomic types above keep falling through
+	 * to the shared DC release code below.
+	 */
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:

@@ -66,11 +66,27 @@ struct efa_rdm_proto efa_rdm_proto_eager = {
  *
  * Reports the CQ completion, releases the TXE, and releases the
  * TX packet entry.
+ *
+ * A peer-aborting txe (the application closed the source MR mid-transfer)
+ * is completed exactly once by the peer-abort drain helper, so it must never
+ * be routed into the success path. The caller already ran
+ * efa_rdm_ep_record_tx_op_completed(), so txe->efa_outstanding_tx_ops is
+ * decremented and the drain helper can observe the txe as drained. Release
+ * the packet entry first so its buffer is available for the PEER_ERROR_PKT
+ * the drain helper may post.
  */
 void efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
-	return;
+	struct efa_rdm_ope *txe;
+
+	txe = pkt_entry->ope;
+	assert(txe);
+	assert(txe->total_len == pkt_entry->payload_size);
+
+	efa_rdm_ope_handle_send_completed(txe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
 }
 
 /**
@@ -78,11 +94,25 @@ void efa_rdm_proto_eager_handle_rtm_send_completion(
  *
  * Only releases the TXE when both all send completions have arrived
  * (efa_outstanding_tx_ops == 0) and the receipt packet has been received.
+ *
+ * The peer-abort check must come first: an aborting DC transfer never
+ * receives its RECEIPT, so efa_rdm_txe_with_remote_ack_ready_for_release()
+ * stays false forever and the txe would leak. See the non-DC callback above
+ * for why the packet entry is released before driving the drain helper.
  */
 void efa_rdm_proto_eager_handle_rtm_dc_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
-	return;
+	struct efa_rdm_ope *txe;
+
+	txe = pkt_entry->ope;
+	assert(txe);
+	assert(txe->total_len == pkt_entry->payload_size);
+
+	if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
+		efa_rdm_txe_release(txe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
 }
 
 /**

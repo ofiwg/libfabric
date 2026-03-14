@@ -12,6 +12,7 @@
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_protocol.h"
+#include "rdm/efa_rdm_proto_eager.h"
 
 int efa_test_rtm_read_nack_missing_rxe(struct fid_ep *ep, fi_addr_t peer_addr,
 				       int tagged, ssize_t *ret)
@@ -510,6 +511,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer *peer;
+	bool eager_released_pkt_entry = false;
 	static char buf[EFA_TEST_RTM_LONG_LEN];
 
 	memset(out, 0, sizeof(*out));
@@ -592,7 +594,16 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 
 	switch (family) {
 	case EFA_TEST_RTM_FAM_EAGER:
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
+		/*
+		 * The eager protocol moved to the refactored code path, where
+		 * the send completion handler lives on the packet entry. It
+		 * releases the packet entry itself, unlike the handlers below,
+		 * so remember not to release it again.
+		 */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_eager_handle_rtm_send_completion;
+		eager_released_pkt_entry = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_MEDIUM:
 		efa_rdm_pke_handle_medium_rtm_send_completion(pkt_entry);
@@ -616,9 +627,10 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	out->num_runt_bytes_in_flight = peer->num_runt_bytes_in_flight;
 	if (out->txe_on_ope_list) {
 		out->bytes_acked = txe->bytes_acked;
-		efa_rdm_pke_release_tx(pkt_entry);
+		if (!eager_released_pkt_entry)
+			efa_rdm_pke_release_tx(pkt_entry);
 		efa_rdm_txe_release(txe);
-	} else {
+	} else if (!eager_released_pkt_entry) {
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
 }
