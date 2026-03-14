@@ -2,6 +2,7 @@ import builtins
 import os
 import re
 import shlex
+import subprocess
 
 import yaml
 
@@ -38,7 +39,22 @@ def pytest_addoption(parser):
                              help=option_helpmsg, default=option_default)
 
 # base ssh command
-bssh = "ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o BatchMode=yes"
+bssh = "ssh -tt -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o BatchMode=yes"
+
+@pytest.fixture(autouse=True, scope="session")
+def cleanup_remote_processes(request):
+    yield
+    server_id = request.config.getoption("--server-id")
+    client_id = request.config.getoption("--client-id")
+    binpath = request.config.getoption("--binpath")
+    if binpath:
+        for host in {server_id, client_id}:
+            subprocess.run(
+                f"ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 {host}"
+                f" pkill -9 -f {shlex.quote(binpath)}",
+                shell=True, timeout=10,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
 
 class CmdlineArgs:
 
@@ -131,7 +147,7 @@ class CmdlineArgs:
 
         host_id = self.client_id if host_type == "client" else self.server_id
 
-        command = f"timeout {timeout} /bin/bash --login -c {shlex.quote(command)}"
+        command = f"timeout {timeout} /bin/bash -c {shlex.quote(command)}"
         command = f"{bssh} {host_id} {shlex.quote(command)}"
 
         return command
