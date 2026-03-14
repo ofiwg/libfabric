@@ -49,6 +49,16 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_proto **proto,
 				       uint64_t flags);
 
 
+/* Eager protocol */
+extern struct efa_rdm_proto efa_rdm_proto_eager;
+
+int efa_rdm_proto_eager_construct_pkes(struct efa_rdm_ep *ep,
+				       struct efa_rdm_peer *peer,
+				       const struct fi_msg *msg, uint32_t op,
+				       uint64_t tag, uint64_t flags,
+				       struct efa_rdm_ope **txe);
+
+
 /* Utility funcions */
 static inline int efa_rdm_proto_send_pkes_posted_no_op(struct efa_rdm_ep *ep,
 						       struct efa_rdm_ope *txe)
