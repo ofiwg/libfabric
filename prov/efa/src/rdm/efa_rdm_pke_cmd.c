@@ -93,12 +93,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_receipt(pkt_entry, ope);
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_eager_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_eager_tagrtm(pkt_entry, ope);
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
@@ -175,12 +171,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_compare_rta(pkt_entry, ope);
 		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_dc_eager_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_dc_eager_tagrtm(pkt_entry, ope);
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
@@ -268,7 +260,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		/* nothing to do */
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
@@ -312,8 +304,10 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
+		assert(0 && "Eager protocol moved to refactored code path");
+		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
-		/* nothing to do for DC EAGER RTM/RTW */
+		/* nothing to do for DC EAGER RTW */
 		break;
 	case EFA_RDM_CTSDATA_PKT:
 		efa_rdm_pke_handle_ctsdata_sent(pkt_entry);
