@@ -5,7 +5,75 @@
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
+#include "rdm/efa_rdm_proto_eager.h"
 
+/**
+ * @brief Build an eager RTM TX packet the way the send path does.
+ *
+ * The eager protocol allocates its own packet entry and publishes it in
+ * ep->send_pkt_entry_vec, so the packet comes back from there rather than
+ * being allocated here. Protocol selection is what fills in
+ * txe->req_pkt_type, which construct_tx_pkes() writes into the packet
+ * header, so run it rather than setting up a subset of the TXE by hand.
+ *
+ * A peer is inserted at address 0, matching what the callers remove.
+ *
+ * @param[in]	resource	test resource with an already constructed ep
+ * @param[out]	txe_out		the TXE the packet was built from
+ * @returns the packet entry, owned by the endpoint's TX pool
+ */
+static struct efa_rdm_pke *
+efa_unit_test_construct_eager_rtm_pke(struct efa_resource *resource,
+				      struct efa_rdm_ope **txe_out)
+{
+	static char buf[16];
+	struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = sizeof(buf)
+	};
+	struct fi_msg msg = {0};
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_rdm_ope *txe;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* Create and register a fake peer */
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	assert_non_null(peer);
+
+	msg.addr = peer_addr;
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+	efa_rdm_txe_construct(txe, ep, peer, &msg, ofi_op_msg, 0, 0);
+
+	efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0, txe,
+					   &proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_eager);
+
+	assert_int_equal(efa_rdm_proto_eager_construct_tx_pkes(
+				 ep, peer, &msg, ofi_op_msg, 0, 0, 0, txe),
+			 0);
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+
+	*txe_out = txe;
+	return ep->send_pkt_entry_vec[0];
+}
 
 /**
  * @brief Test that efa_rdm_pke_handle_send_completion does not crash
@@ -29,16 +97,14 @@ void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state)
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	/* Use test utility to allocate txe (also inserts a peer at addr 0) */
-	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
-	assert_non_null(txe);
-
-	/* Allocate and init a TX pkt_entry */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	/*
+	 * Build the TX pkt_entry through the eager protocol, which allocates it
+	 * and hands it back in ep->send_pkt_entry_vec. Also inserts a peer at
+	 * addr 0.
+	 */
+	pkt_entry = efa_unit_test_construct_eager_rtm_pke(resource, &txe);
 	assert_non_null(pkt_entry);
-
-	err = efa_rdm_pke_init_eager_msgrtm(pkt_entry, txe);
-	assert_int_equal(err, 0);
+	assert_non_null(txe);
 
 	/* Simulate device submission */
 	efa_rdm_ep_record_tx_op_submitted(efa_rdm_ep, pkt_entry);
@@ -79,16 +145,14 @@ void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state)
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	/* Use test utility to allocate txe (also inserts a peer at addr 0) */
-	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
-	assert_non_null(txe);
-
-	/* Allocate and init a TX pkt_entry */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	/*
+	 * Build the TX pkt_entry through the eager protocol, which allocates it
+	 * and hands it back in ep->send_pkt_entry_vec. Also inserts a peer at
+	 * addr 0.
+	 */
+	pkt_entry = efa_unit_test_construct_eager_rtm_pke(resource, &txe);
 	assert_non_null(pkt_entry);
-
-	err = efa_rdm_pke_init_eager_msgrtm(pkt_entry, txe);
-	assert_int_equal(err, 0);
+	assert_non_null(txe);
 
 	/* Simulate device submission */
 	efa_rdm_ep_record_tx_op_submitted(efa_rdm_ep, pkt_entry);
