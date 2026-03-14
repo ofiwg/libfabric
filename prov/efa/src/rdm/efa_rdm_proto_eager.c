@@ -62,10 +62,32 @@ struct efa_rdm_proto efa_rdm_proto_eager = {
 /* TX path callbacks - one callback for each packet type that this protocol uses
  */
 
+/**
+ * @brief Handle the send completion of an eager RTM packet.
+ *
+ * A transmit complete send is done once the device reports the send, so it
+ * reports the completion and releases the TXE here. A delivery complete send
+ * must also wait for the peer's RECEIPT, so it only releases the TXE here if
+ * that RECEIPT already arrived; otherwise
+ * efa_rdm_pke_handle_receipt_recv() reports the completion and releases it.
+ */
 void efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
-	return;
+	struct efa_rdm_ope *txe;
+
+	txe = pkt_entry->ope;
+	assert(txe);
+	assert(txe->total_len == pkt_entry->payload_size);
+
+	if (txe->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED) {
+		if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
+			efa_rdm_txe_release(txe);
+	} else {
+		efa_rdm_ope_handle_send_completed(txe);
+	}
+
+	efa_rdm_pke_release_tx(pkt_entry);
 }
 
 /**
