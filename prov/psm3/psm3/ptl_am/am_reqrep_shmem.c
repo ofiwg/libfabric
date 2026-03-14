@@ -1034,10 +1034,12 @@ amsh_ep_connreq_poll(ptl_t *ptl_gen, struct am_ptl_connection_req *req)
 					req->args[3].u64w0 = 0;
 				req->args[4].u64w0 = psm3_epid_w1(ptl->epid);
 				req->args[5].u64w0 = psm3_epid_w2(ptl->epid);
-				psm3_amsh_short_request(ptl_gen, epaddr,
+				err = psm3_amsh_short_request(ptl_gen, epaddr,
 							amsh_conn_handler_hidx,
 							req->args, 6, NULL, 0,
 							0);
+				if (err > PSM2_OK_NO_PROGRESS)
+					return err;
 				((am_epaddr_t *) epaddr)->cstate_outgoing =
 					AMSH_CSTATE_OUTGOING_DISC_REQUESTED;
 				/**
@@ -1178,10 +1180,12 @@ amsh_ep_connreq_poll(ptl_t *ptl_gen, struct am_ptl_connection_req *req)
 				req->args[4].u64w0 = psm3_epid_w1(ptl->epid);
 				req->args[5].u64w0 = psm3_epid_w2(ptl->epid);
 				req->epid_mask[i] = AMSH_CMASK_POSTREQ;
-				psm3_amsh_short_request(ptl_gen, epaddr,
+				err = psm3_amsh_short_request(ptl_gen, epaddr,
 							amsh_conn_handler_hidx,
 							req->args, 6, NULL, 0,
 							0);
+				if (err > PSM2_OK_NO_PROGRESS)
+					return err;
 				_HFI_CONNDBG("epaddr=%p, epid=%s at shmidx=%d\n",
 						   epaddr, psm3_epid_fmt_internal(epid, 0), shmidx);
 			}
@@ -1557,51 +1561,42 @@ amsh_poll_internal_inner(ptl_t *ptl_gen, int replyonly,
 	}
 
 	err = PSM3_GPU_SHM_DEV_FDS_POLL((struct ptl_am *)ptl_gen, err);
-
-	if (is_internal) {
-		if (err == PSM2_OK)	/* some progress, no yields */
-			ptl->zero_polls = 0;
-		else if (++ptl->zero_polls == AMSH_ZERO_POLLS_BEFORE_YIELD) {
-			/* no progress for AMSH_ZERO_POLLS_BEFORE_YIELD */
-			sched_yield();
-			ptl->zero_polls = 0;
-		}
-
-		if (++ptl->amsh_only_polls == AMSH_POLLS_BEFORE_PSM_POLL) {
-			psm3_poll_internal(ptl->ep, 0, 0);
-			ptl->amsh_only_polls = 0;
-		}
-	}
 	return err;		/* if we actually did something */
 }
 
-/* non-inlined version */
-static
-psm2_error_t
-amsh_poll_internal(ptl_t *ptl, int replyonly)
-{
-	return amsh_poll_internal_inner(ptl, replyonly, 1);
-}
-
-#ifdef PSM_PROFILE
-#define AMSH_POLL_UNTIL(ptl, isreply, cond) \
-	do {								\
-		PSMI_PROFILE_BLOCK();					\
-		while (!(cond)) {					\
-			PSMI_PROFILE_REBLOCK(				\
-				amsh_poll_internal(ptl, isreply) ==	\
-					PSM2_OK_NO_PROGRESS);		\
-		}							\
-		PSMI_PROFILE_UNBLOCK();					\
+/*
+ * Users of AMSH_POLL_UNTIL should check the value of err upon return
+ */
+#define AMSH_POLL_UNTIL(ptl, isreply, cond, err)									\
+	do {														\
+		uint64_t block_start = get_cycles();									\
+		struct ptl_am *ptlam = (struct ptl_am *)ptl;								\
+		ptlam->zero_polls = 0;											\
+		ptlam->amsh_only_polls = 0;										\
+		PSMI_PROFILE_BLOCK();											\
+		while (!(cond)) {											\
+			err = amsh_poll(ptl, isreply, 0);								\
+			if (err == PSM2_OK) {									\
+				PSMI_PROFILE_REBLOCK(0);								\
+				ptlam->zero_polls = 0;									\
+			} else if (err == PSM2_OK_NO_PROGRESS) {								\
+				PSMI_PROFILE_REBLOCK(1);								\
+				if (++ptlam->zero_polls == AMSH_ZERO_POLLS_BEFORE_YIELD) {				\
+						ptlam->zero_polls = 0;							\
+						if (!psm3_cycles_left(block_start, PSMI_MIN_EP_CONNECT_TIMEOUT)) {	\
+							err = PSM2_EP_NO_RESOURCES;					\
+							break;								\
+					}										\
+						sched_yield();								\
+				}											\
+			}												\
+			if (++ptlam->amsh_only_polls == AMSH_POLLS_BEFORE_PSM_POLL) {					\
+				psm3_poll_internal(ptlam->ep, 0, 0);							\
+				ptlam->amsh_only_polls = 0;								\
+			}												\
+		}													\
+		PSMI_PROFILE_UNBLOCK();											\
 	} while (0)
-#else
-#define AMSH_POLL_UNTIL(ptl, isreply, cond)			\
-	do {							\
-		while (!(cond)) {				\
-			amsh_poll_internal(ptl, isreply);	\
-		}						\
-	} while (0)
-#endif
 
 static psm2_error_t amsh_poll(ptl_t *ptl, int replyonly, bool force)
 {
@@ -1609,7 +1604,7 @@ static psm2_error_t amsh_poll(ptl_t *ptl, int replyonly, bool force)
 }
 
 PSMI_ALWAYS_INLINE(
-void
+psm2_error_t
 am_send_pkt_short(ptl_t *ptl, uint32_t destidx, uint32_t returnidx,
 		  uint32_t bulkidx, uint16_t fmt, uint16_t nargs,
 		  uint16_t handleridx, psm2_amarg_t *args,
@@ -1618,10 +1613,13 @@ am_send_pkt_short(ptl_t *ptl, uint32_t destidx, uint32_t returnidx,
 	int i;
 	volatile am_pkt_short_t *pkt;
 	int copy_nargs;
+	psm2_error_t res = PSM2_OK_NO_PROGRESS;
 
 	AMSH_POLL_UNTIL(ptl, isreply,
 			(pkt =
-			 am_ctl_getslot_pkt(ptl, destidx, isreply)) != NULL);
+			 am_ctl_getslot_pkt(ptl, destidx, isreply)) != NULL, res);
+	if (res > PSM2_OK_NO_PROGRESS)
+		return res;
 
 	/* got a free pkt... fill it in */
 	pkt->bulkidx = bulkidx;
@@ -1651,6 +1649,7 @@ am_send_pkt_short(ptl_t *ptl, uint32_t destidx, uint32_t returnidx,
 		  pkt->flag, pkt->nargs, src, (int)len, (int)handleridx,
 		  src != NULL ? *((uint32_t *) src) : 0);
 	QMARKREADY(pkt);
+	return res;
 }
 
 #define amsh_shm_copy_short psm3_mq_mtucpy
@@ -1694,6 +1693,7 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 	int returnidx = ((am_epaddr_t *) epaddr)->return_shmidx;
 	int is_reply = AM_IS_REPLY(amtype);
 	volatile am_pkt_bulk_t *bulkpkt;
+	int res = PSM2_OK_NO_PROGRESS;
 
 	_HFI_VDBG("%s epaddr=%s, shmidx=%d, type=%d\n",
 		  is_reply ? "reply" : "request",
@@ -1719,7 +1719,9 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 					(bulkpkt =
 					 am_ctl_getslot_long(ptl_gen, destidx,
 							     is_reply)) !=
-					NULL);
+					NULL, res);
+			if (res > PSM2_OK_NO_PROGRESS)
+				break;
 
 			bulkidx = bulkpkt->idx;
 			bulkpkt->len = len;
@@ -1734,7 +1736,7 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 					    (uint32_t) len);
 			QMARKREADY(bulkpkt);
 		}
-		am_send_pkt_short(ptl_gen, destidx, returnidx, bulkidx, type,
+		res = am_send_pkt_short(ptl_gen, destidx, returnidx, bulkidx, type,
 				  nargs, hidx, args, src, len, is_reply);
 		break;
 
@@ -1762,7 +1764,9 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 						 am_ctl_getslot_long(ptl_gen,
 								     destidx,
 								     is_reply))
-						!= NULL);
+						!= NULL, res);
+				if (res > PSM2_OK_NO_PROGRESS)
+					break;
 				bytes_left -= bytes_this;
 				if (bytes_left == 0)
 					type = AMFMT_LONG_END;
@@ -1777,9 +1781,11 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 						(uintptr_t) dst);
 				bulkpkt->len = bytes_this;
 				QMARKREADY(bulkpkt);
-				am_send_pkt_short(ptl_gen, destidx, returnidx,
+				res = am_send_pkt_short(ptl_gen, destidx, returnidx,
 						  bulkidx, type, nargs, hidx,
 						  args, NULL, 0, is_reply);
+				if (res != PSM2_OK_NO_PROGRESS)
+					break;
 				src_this += bytes_this;
 				dst_this += bytes_this;
 			}
@@ -1788,7 +1794,8 @@ psm3_amsh_generic_inner(uint32_t amtype, ptl_t *ptl_gen, psm2_epaddr_t epaddr,
 	default:
 		break;
 	}
-	return 1;
+	psmi_assert(res < PSM2_ERROR_LAST); //!!!!
+	return res;
 }
 
 /* A generic version that's not inlined */
@@ -1819,24 +1826,22 @@ psm3_amsh_long_request(ptl_t *ptl, psm2_epaddr_t epaddr,
 				       args, nargs, src, len, dest, flags);
 }
 
-void
+int
 psm3_amsh_short_reply(amsh_am_token_t *tok,
 		      psm2_handler_t handler, psm2_amarg_t *args, int nargs,
 		      const void *src, size_t len, int flags)
 {
-	psm3_amsh_generic_inner(AMREPLY_SHORT, tok->ptl, tok->tok.epaddr_incoming,
+	return psm3_amsh_generic_inner(AMREPLY_SHORT, tok->ptl, tok->tok.epaddr_incoming,
 				handler, args, nargs, src, len, NULL, flags);
-	return;
 }
 
-void
+int
 psm3_amsh_long_reply(amsh_am_token_t *tok,
 		     psm2_handler_t handler, psm2_amarg_t *args, int nargs,
 		     const void *src, size_t len, void *dest, int flags)
 {
-	psm3_amsh_generic_inner(AMREPLY_LONG, tok->ptl, tok->tok.epaddr_incoming,
+	return psm3_amsh_generic_inner(AMREPLY_LONG, tok->ptl, tok->tok.epaddr_incoming,
 				handler, args, nargs, src, len, dest, flags);
-	return;
 }
 
 void psm3_am_reqq_init(ptl_t *ptl_gen)
@@ -1860,16 +1865,21 @@ psm2_error_t psm3_am_reqq_drain(ptl_t *ptl_gen)
 	ptl->psmi_am_reqq_fifo.lastp = &ptl->psmi_am_reqq_fifo.first;
 
 	while ((req = reqn) != NULL) {
-		err = PSM2_OK;
 		reqn = req->next;
 		_HFI_VDBG
 		    ("push of reqq=%p epaddr=%s localreq=%p remotereq=%p\n",
 		     req, psm3_epaddr_get_hostname(req->epaddr->epid, 0),
 		     (void *)(uintptr_t) req->args[1].u64w0,
 		     (void *)(uintptr_t) req->args[0].u64w0);
-		psm3_amsh_generic(req->amtype, req->ptl, req->epaddr,
+		err = psm3_amsh_generic(req->amtype, req->ptl, req->epaddr,
 				  req->handler, req->args, req->nargs, req->src,
 				  req->len, req->dest, req->amflags);
+		if (err > PSM2_OK_NO_PROGRESS)
+		{
+			/* remember last unprocessed request */
+			ptl->psmi_am_reqq_fifo.first = req;
+			return err;
+		}
 		if (req->flags & AM_FLAG_SRC_TEMP)
 			psmi_free(req->src);
 		psmi_free(req);
@@ -2082,8 +2092,10 @@ amsh_mq_rndv(ptl_t *ptl, psm2_mq_t mq, psm2_mq_req_t req,
 		psm3_am_reqq_add(AMREQUEST_SHORT, ptl, epaddr, mq_handler_hidx,
 					args, 5, NULL, 0, NULL, 0);
 	} else {
-		psm3_amsh_short_request(ptl, epaddr, mq_handler_hidx,
+		err = psm3_amsh_short_request(ptl, epaddr, mq_handler_hidx,
 					args, 5, NULL, 0, 0);
+		if (err > PSM2_OK_NO_PROGRESS)
+			return err;
 	}
 
 	mq->stats.tx_num++;
@@ -2136,8 +2148,12 @@ amsh_mq_send_inner_eager(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 					epaddr, handler, args, 3, (void *)ubuf,
 					bytes_this, NULL, 0);
 		} else {
-			psm3_amsh_short_request(ptl, epaddr,
+			psm2_error_t err;
+			err = psm3_amsh_short_request(ptl, epaddr,
 						handler, args, 3, ubuf, bytes_this, 0);
+			if (err > PSM2_OK_NO_PROGRESS)
+				psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+								  "mq send error");
 		}
 
 		ubuf = (void *)((uint8_t *)ubuf + bytes_this);
@@ -2261,6 +2277,7 @@ amsh_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags_user,
 	      uint32_t len, void *context, psm2_mq_req_t *req_o)
 {
 	psm2_mq_req_t req = psm3_mq_req_alloc(mq, MQE_TYPE_SEND);
+	psm2_error_t err;
 	if_pf(req == NULL)
 	    return PSM2_NO_MEMORY;
 
@@ -2274,7 +2291,9 @@ amsh_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags_user,
 		  psm3_epaddr_get_name(epaddr->epid, 1), ubuf, len,
 		  tag->tag[0], tag->tag[1], tag->tag[2]);
 
-	amsh_mq_send_inner(mq, req, epaddr, flags_user, flags_internal, tag, ubuf, len);
+	err = amsh_mq_send_inner(mq, req, epaddr, flags_user, flags_internal, tag, ubuf, len);
+	if (err > PSM2_OK_NO_PROGRESS)
+		return err;
 
 	*req_o = req;
 	return PSM2_OK;
@@ -2290,9 +2309,7 @@ amsh_mq_send(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags,
 		  psm3_epaddr_get_name(epaddr->epid, 1), ubuf, len,
 		  tag->tag[0], tag->tag[1], tag->tag[2]);
 
-	amsh_mq_send_inner(mq, NULL, epaddr, flags, PSMI_REQ_FLAG_NORMAL, tag, ubuf, len);
-
-	return PSM2_OK;
+	return amsh_mq_send_inner(mq, NULL, epaddr, flags, PSMI_REQ_FLAG_NORMAL, tag, ubuf, len);
 }
 
 /* kassist-related handling */
@@ -2484,8 +2501,12 @@ amsh_conn_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			AMSH_CSTATE_INCOMING_ESTABLISHED;
 		((am_epaddr_t *) epaddr)->return_shmidx = return_shmidx;
 		tok->tok.epaddr_incoming = epaddr;	/* adjust token */
-		psm3_amsh_short_reply(tok, amsh_conn_handler_hidx,
-				      args, narg, NULL, 0, 0);
+		err = psm3_amsh_short_reply(tok, amsh_conn_handler_hidx,
+									args, narg, NULL, 0, 0);
+		if (err > PSM2_OK_NO_PROGRESS)
+			psm3_handle_error(PSMI_EP_NORETURN, err,
+							  "Fatal error "
+							  "in connecting to shm segment");
 		break;
 
 	case PSMI_AM_CONN_REP:
@@ -2532,8 +2553,12 @@ amsh_conn_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			is_valid = 1;
 
 		if (is_valid) {
-			psm3_amsh_short_reply(tok, amsh_conn_handler_hidx,
+			err = psm3_amsh_short_reply(tok, amsh_conn_handler_hidx,
 					      args, narg, NULL, 0, 0);
+			if (err > PSM2_OK_NO_PROGRESS)
+				psm3_handle_error(PSMI_EP_NORETURN, err,
+								  "Fatal error "
+								  "in disconnecting from shm segment");
 			/**
 			* Only munmap if we have nothing more to
 			* communicate with the other node, i.e. we are
