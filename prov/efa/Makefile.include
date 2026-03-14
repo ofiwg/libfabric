@@ -77,7 +77,8 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_tracepoint_def.c \
 	prov/efa/src/rdm/efa_rdm_srx.c \
 	prov/efa/src/rdm/efa_rdm_util.c \
-	prov/efa/src/rdm/efa_rdm_proto.c
+	prov/efa/src/rdm/efa_rdm_proto.c \
+	prov/efa/src/rdm/efa_rdm_proto_eager.c
 
 if ENABLE_EFA_UNIT_TEST
 _efa_files += prov/efa/test/efa_unit_test_data_path_ops.c

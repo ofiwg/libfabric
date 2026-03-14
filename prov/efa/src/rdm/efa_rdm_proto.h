@@ -48,7 +48,6 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_proto **proto,
 				       const struct fi_msg *msg, uint32_t op,
 				       uint64_t flags);
 
-
 /* Utility funcions */
 static inline int efa_rdm_proto_send_pkes_posted_no_op(struct efa_rdm_ep *ep,
 						       struct efa_rdm_ope *txe)
