@@ -42,7 +42,30 @@ struct efa_rdm_proto efa_rdm_proto_eager = {
 void efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
-	return;
+	struct efa_rdm_ope *txe;
+
+	txe = pkt_entry->ope;
+	assert(txe);
+	assert(txe->total_len == pkt_entry->payload_size);
+
+	efa_rdm_ope_handle_send_completed(txe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+void efa_rdm_proto_eager_handle_rtm_dc_send_completion(
+	struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_ope *txe;
+
+	txe = pkt_entry->ope;
+	assert(txe);
+	assert(txe->total_len == pkt_entry->payload_size);
+
+	if (efa_rdm_txe_dc_ready_for_release(txe))
+		efa_rdm_txe_release(txe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
 }
 
 int efa_rdm_proto_eager_construct_txe(struct efa_rdm_ope **txe,
@@ -116,6 +139,7 @@ int efa_rdm_proto_eager_construct_pkes(struct efa_rdm_ep *ep,
 
 	pkt_entry->ope = new_txe;
 	pkt_entry->peer = peer;
+	pkt_entry->callback = &efa_rdm_proto_eager_handle_rtm_send_completion;
 
 	if (efa_both_support_zero_hdr_data_transfer(ep, peer)) {
 		/* zero hdr transfer only happens for eager msg (non-tagged) pkt */
@@ -144,9 +168,8 @@ int efa_rdm_proto_eager_construct_pkes(struct efa_rdm_ep *ep,
 		new_txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 		dc_base_hdr = (struct efa_rdm_dc_eager_rtm_base_hdr *) pkt_entry->wiredata;
 		dc_base_hdr->send_id = new_txe->tx_id;
+		pkt_entry->callback = &efa_rdm_proto_eager_handle_rtm_dc_send_completion;
 	}
-
-	pkt_entry->callback = &efa_rdm_proto_eager_handle_rtm_send_completion;
 
 	// Set ep->send_pkt_entry_vec and related fields
 	ep->send_pkt_entry_vec[0] = pkt_entry;

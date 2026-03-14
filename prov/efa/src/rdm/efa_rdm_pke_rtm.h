@@ -146,8 +146,6 @@ struct efa_rdm_runtread_rtm_base_hdr *efa_rdm_pke_get_runtread_rtm_base_hdr(stru
 	return (struct efa_rdm_runtread_rtm_base_hdr *)pke->wiredata;
 }
 
-void efa_rdm_pke_handle_eager_rtm_send_completion(struct efa_rdm_pke *pkt_entry);
-
 ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_init_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
