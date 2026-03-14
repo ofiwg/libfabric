@@ -120,7 +120,7 @@ int connect_tcp(char *host, int port)
 
 void sync_tcp(int sockfd)
 {
-	int dummy1, dummy2;
+	int dummy1 = 1, dummy2;
 
 	(void)! write(sockfd, &dummy1, sizeof dummy1);
 	(void)! read(sockfd, &dummy2, sizeof dummy2);
