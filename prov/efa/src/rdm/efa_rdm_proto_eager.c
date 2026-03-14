@@ -61,7 +61,30 @@ struct efa_rdm_proto efa_rdm_proto_eager = {
 void efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
-	return;
+	struct efa_rdm_ope *txe;
+
+	txe = pkt_entry->ope;
+	assert(txe);
+	assert(txe->total_len == pkt_entry->payload_size);
+
+	efa_rdm_ope_handle_send_completed(txe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+void efa_rdm_proto_eager_handle_rtm_dc_send_completion(
+	struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_ope *txe;
+
+	txe = pkt_entry->ope;
+	assert(txe);
+	assert(txe->total_len == pkt_entry->payload_size);
+
+	if (efa_rdm_txe_dc_ready_for_release(txe))
+		efa_rdm_txe_release(txe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
 }
 
 int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,

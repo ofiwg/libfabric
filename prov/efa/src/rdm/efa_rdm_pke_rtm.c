@@ -534,24 +534,6 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
- * @brief handle the event that an EAGER RTM has send completed
- *
- * @details
- * This function applies to EAGER_MSGRTM and EAGER_TAGRTM, it
- * does not apply to DC_EAGER_MSGRTM and DC_EAGER_TAGRTM
- *
- * @param[in,out]	pkt_entry	EAGER_MSGRTM or EAGER_TAGRTM packet entry
- */
-void efa_rdm_pke_handle_eager_rtm_send_completion(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *txe;
-
-	txe = pkt_entry->ope;
-	assert(txe->total_len == pkt_entry->payload_size);
-	efa_rdm_ope_handle_send_completed(txe);
-}
-
-/**
  * @brief process a matched eager rtm packet entry
  *
  * @details
