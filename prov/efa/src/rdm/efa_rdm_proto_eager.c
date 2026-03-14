@@ -61,10 +61,45 @@ struct efa_rdm_proto efa_rdm_proto_eager = {
 
 /* TX path callbacks - one callback for each packet type that this protocol uses
  */
+/**
+ * @brief Handle send completion for a non-DC eager RTM packet.
+ *
+ * Reports the CQ completion, releases the TXE, and releases the
+ * TX packet entry.
+ */
 void efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
-	return;
+	struct efa_rdm_ope *txe;
+
+	txe = pkt_entry->ope;
+	assert(txe);
+	assert(txe->total_len == pkt_entry->payload_size);
+
+	efa_rdm_ope_handle_send_completed(txe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+/**
+ * @brief Handle send completion for a DC eager RTM packet.
+ *
+ * Only releases the TXE when both all send completions have arrived
+ * (efa_outstanding_tx_ops == 0) and the receipt packet has been received.
+ */
+void efa_rdm_proto_eager_handle_rtm_dc_send_completion(
+	struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_ope *txe;
+
+	txe = pkt_entry->ope;
+	assert(txe);
+	assert(txe->total_len == pkt_entry->payload_size);
+
+	if (efa_rdm_txe_dc_ready_for_release(txe))
+		efa_rdm_txe_release(txe);
+
+	efa_rdm_pke_release_tx(pkt_entry);
 }
 
 /**
