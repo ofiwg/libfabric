@@ -1107,16 +1107,10 @@ void test_info_direct_inject_size_wide_wqe(struct efa_resource **state)
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	hints->tx_attr->inject_size = 64;
 
-	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, info);
-	if (err) {
-		/*
-		 * fi_getinfo with inject_size > inline_buf_size checks
-		 * inline_buf_size_ex from device attributes. If the device
-		 * firmware does not advertise wide WQE support (inline_buf_size_ex == 0),
-		 * fi_getinfo returns -FI_ENODATA.
-		 */
+	if (!efa_device_support_wide_wqe())
 		skip();
-	}
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, info);
 	assert_int_equal(err, 0);
 	assert_int_equal((*info)->tx_attr->inject_size, 64);
 }
@@ -1176,16 +1170,12 @@ void test_ep_getopt_inject_size_wide_wqe(struct efa_resource **state)
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	hints->tx_attr->inject_size = 33;
-	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, info);
-	if (err) {
-		/*
-		 * fi_getinfo with inject_size > inline_buf_size checks
-		 * inline_buf_size_ex from device attributes. If the device
-		 * firmware does not advertise wide WQE support (inline_buf_size_ex == 0),
-		 * fi_getinfo returns -FI_ENODATA.
-		 */
+
+	if (!efa_device_support_wide_wqe())
 		skip();
-	}
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, info);
+	assert_int_equal(err, 0);
 	err = fi_fabric(resource->info->fabric_attr, &resource->fabric, NULL);
 	assert_int_equal(err, 0);
 	err = fi_domain(resource->fabric, resource->info, &resource->domain, NULL);
