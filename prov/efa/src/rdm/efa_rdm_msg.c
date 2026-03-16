@@ -118,15 +118,6 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 
 	assert(txe->peer);
 
-	/*
-	 * It is required to get receiver's user recv QP through handshake
-	 * if sender supports this feature.
-	 */
-	if ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) &&
-	    !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
-	}
-
 	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
 	if (err < 0)
 		return err;
@@ -181,6 +172,16 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 	txe = efa_rdm_ep_alloc_txe(ep, peer, msg, op, tag, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
+		goto out;
+	}
+
+	/*
+	 * It is required to get receiver's user recv QP through handshake
+	 * if sender supports this feature.
+	 */
+	if ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) &&
+	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		err = efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 		goto out;
 	}
 
