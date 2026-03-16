@@ -6,6 +6,7 @@
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_srx.h"
+#include "rdm/efa_rdm_proto_eager.h"
 #include "ofi_util.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
@@ -1560,6 +1561,15 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		struct efa_rdm_ctsdata_hdr *ctsdata_hdr = efa_rdm_pke_get_ctsdata_hdr(req_pkt_entry);
 		ctsdata_hdr->seg_length = 0;
 	}
+	/*
+	 * The eager protocol was migrated to the refactored code path, where
+	 * the send completion handler lives on the packet entry instead of
+	 * being looked up by packet type.
+	 */
+	if (pkt_type == EFA_RDM_DC_EAGER_MSGRTM_PKT ||
+	    pkt_type == EFA_RDM_DC_EAGER_TAGRTM_PKT)
+		req_pkt_entry->handle_pke =
+			&efa_rdm_proto_eager_handle_rtm_dc_send_completion;
 
 	/* Create response packet entry (not needed for RTR which uses efa_rdm_ope_handle_recv_completed) */
 	if (pkt_type != EFA_RDM_SHORT_RTR_PKT && pkt_type != EFA_RDM_LONGCTS_RTR_PKT) {
