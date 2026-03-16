@@ -628,7 +628,10 @@ struct fi_opx_plane_info {
 };
 
 int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
-				int max_planes);
+				const int max_planes);
+
+int fi_opx_hfi1_discover_same_plane(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
+				    const int max_planes);
 
 struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uuid_t unique_job_key, uint32_t hfi_unit);
 

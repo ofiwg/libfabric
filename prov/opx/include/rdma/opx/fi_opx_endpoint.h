@@ -918,22 +918,25 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 
 #ifdef IS_MATCH_DEBUG
 	fprintf(stderr,
-		"%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx, src_addr.lid = 0x%x src_addr.hfi1_subctxt_rx = 0x%x\n",
-		__FILE__, __func__, __LINE__, context, context->src_addr, context->ignore, context->tag,
-		src_addr.planes[tx_index].lid, src_addr.planes[tx_index].hfi1_subctxt_rx);
+		"%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx\n",
+		__FILE__, __func__, __LINE__, context, context->src_addr, context->ignore, context->tag);
+	fprintf(stderr,
+		"%s:%s():%d src_addr.tx_index = %u, src_addr.planes[tx_index=%u].lid = 0x%x src_addr.planes[PRIMARY].lid = 0x%x src_addr.planes[PRIMARY].hfi1_subctxt_rx = 0x%x\n",
+		__FILE__, __func__, __LINE__, src_addr.tx_index, tx_index, src_addr.planes[tx_index].lid,
+		src_addr.planes[OPX_PRIMARY_PLANE].lid, src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
 	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		fprintf(stderr,
-			"%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_rx = 0x%x\n",
+			"%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_rx = 0x%x primary_lid = 0x%x\n",
 			__FILE__, __func__, __LINE__, __be16_to_cpu24((__be16) hdr->lrh_9B.slid),
 			__be16_to_cpu24((__be16) hdr->lrh_9B.slid), hdr->match.origin_rx, hdr->match.origin_rx, slid,
-			hdr->reliability.origin_rx);
+			hdr->reliability.origin_rx, primary_lid);
 	} else {
 		fprintf(stderr,
-			"%s:%s():%d hdr->match.slid = 0x%x (%u), hdr->match.origin_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_rx = 0x%x\n",
+			"%s:%s():%d hdr->match.slid = 0x%x (%u), hdr->match.origin_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_rx = 0x%x primary_lid = 0x%x\n",
 			__FILE__, __func__, __LINE__,
 			__le24_to_cpu((opx_lid_t) ((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid))),
 			__le24_to_cpu((opx_lid_t) ((hdr->lrh_16B.slid20 << 20) | (hdr->lrh_16B.slid))),
-			hdr->match.origin_rx, hdr->match.origin_rx, slid, hdr->reliability.origin_rx);
+			hdr->match.origin_rx, hdr->match.origin_rx, slid, hdr->reliability.origin_rx, primary_lid);
 	}
 	fprintf(stderr,
 		"%s:%s():%d hdr->match.ofi_tag = 0x%016lx, target_tag_and_not_ignore = 0x%016lx, origin_tag_and_not_ignore = 0x%016lx, FI_ADDR_UNSPEC = 0x%08lx\n",
@@ -1112,12 +1115,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 	void			  *recv_buf = context->buf;
 	struct fi_opx_ep_rx *const rx	    = opx_ep->rx;
 
-	const hfisvc_client_key_t sbuf_key = (hfisvc_client_key_t) hdr->rzv_rts.sbuf_client_key;
-	const uint32_t		  niov	   = hdr->rzv_rts.niov;
-
-	const uint32_t lid = (uint32_t) (hfi1_type & OPX_HFI1_MIXED_9B) ?
-				     __be16_to_cpu24((__be16) hdr->lrh_9B.slid) :
-				     __le24_to_cpu(hdr->lrh_16B.slid20 << 20 | hdr->lrh_16B.slid);
+	const uint32_t niov = hdr->rzv_rts.niov;
 
 	uint64_t xfer_len = hdr->rzv_rts.message_length;
 
@@ -1127,17 +1125,16 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 #endif
 
 	OPX_HFISVC_DEBUG_LOG(
-		"Matched HFISVC RTS packet, recv context=%p lid %#x, sbuf_client_key=%u xfer_len=%lu niov=%u rzv_comp=%lX\n",
-		context, lid, sbuf_key, xfer_len, niov, payload->rendezvous.hfisvc.rzv_comp_vaddr);
+		"Matched HFISVC RTS packet, recv context=%p lid %#x, sbuf_client_key=%u xfer_len=%lu niov=%u\n",
+		context, lid, sbuf_key, xfer_len, niov);
 
 	struct fi_opx_mr *opx_mr    = NULL;
 	uint64_t	  do_dmabuf = (uint64_t) (context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 	if (do_dmabuf) {
 		opx_mr = ((struct fi_opx_hmem_info *) context->hmem_info_qws)->dmabuf.opx_mr;
 		if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
-			int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
-				opx_ep, context, niov, sbuf_key, lid, recv_buf, &payload->rendezvous.hfisvc.iovs[0],
-				payload->rendezvous.hfisvc.rzv_comp_vaddr);
+			int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(opx_ep, context, niov, recv_buf,
+									       &payload->rendezvous.hfisvc.iovs[0]);
 			if (OFI_UNLIKELY(deferred_rc)) {
 				fprintf(stderr,
 					"(%d) %s:%s():%d Error: Couldn't create deferred work to handle rendezvous receive (%d), aborting.\n",
@@ -1154,14 +1151,8 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 		}
 	}
 
-	struct hfisvc_client_completion completion = {
-		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
-		.cq.app_context = (uint64_t) context,
-		.cq.handle	= *opx_ep->hfisvc.cq_completion_queue,
-	};
-
 	if (OFI_LIKELY(xfer_len <= recv_len)) {
-		context->byte_counter = xfer_len;
+		context->byte_counter = niov;
 		context->len	      = xfer_len;
 		context->data	      = ofi_data;
 		context->tag	      = origin_tag;
@@ -1169,27 +1160,71 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 		context->flags |= FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
 				  FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
 
+		OPX_HFISVC_DEBUG_LOG("STRIPE-RECV: Matched RTS with niov=%u xfer_len=%lu context=%p byte_counter=%lu\n",
+				     niov, xfer_len, context, context->byte_counter);
+
 		for (int i = 0; i < niov; ++i) {
+			const uint8_t plane_idx = OPX_LID_PLANE_GET_IDX(payload->rendezvous.hfisvc.iovs[i].sender_lid);
+			const opx_lid_t sbuf_lid_masked =
+				OPX_LID_PLANE_GET_LID(payload->rendezvous.hfisvc.iovs[i].sender_lid);
 			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
+			const uint32_t sbuf_client_key = payload->rendezvous.hfisvc.iovs[i].client_key;
 			const uint64_t sbuf_len	       = payload->rendezvous.hfisvc.iovs[i].len;
 			const uint64_t sbuf_offset     = payload->rendezvous.hfisvc.iovs[i].offset;
-			int	       rc;
+
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "STRIPE-RECV: [IOV %d/%d] sbuf_lid_masked=%u plane_idx=%u sbuf_client_key=%u sbuf_access_key=%u sbuf_len=%lu sbuf_offset=%lu\n",
+			       i + 1, niov, sbuf_lid_masked, plane_idx, sbuf_client_key, sbuf_access_key, sbuf_len,
+			       sbuf_offset);
+
+			struct fi_opx_rzv_completion *recv_rzv_comp =
+				(struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+			if (OFI_UNLIKELY(recv_rzv_comp == NULL)) {
+				OPX_HFISVC_DEBUG_LOG("ENOMEM (recv_rzv_comp)\n");
+				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
+					opx_ep, context, niov - i, recv_buf, &payload->rendezvous.hfisvc.iovs[i]);
+				if (OFI_UNLIKELY(deferred_rc)) {
+					fprintf(stderr,
+						"(%d) %s:%s():%d Error: Couldn't create deferred work to handle rendezvous receive (%d), aborting.\n",
+						getpid(), __FILE__, __func__, __LINE__, deferred_rc);
+					abort();
+				}
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.deferred);
+				opx_ep->hfisvc.rdma_read_count[plane_idx] += i;
+				slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
+				goto recv_rts_hfisvc_finish;
+			}
+			recv_rzv_comp->context	  = context;
+			recv_rzv_comp->access_key = (uint32_t) -1;
+
+			struct hfisvc_client_completion completion = {
+				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.cq.app_context = (uint64_t) recv_rzv_comp,
+				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
+			};
+
+			const uintptr_t sender_rzv_comp = payload->rendezvous.hfisvc.iovs[i].rzv_comp_vaddr;
+
+			int rc;
 			if (do_dmabuf) {
 				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
-					opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, lid, sbuf_key,
-					sbuf_len, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
+					opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */,
+					sbuf_lid_masked, sbuf_client_key, sbuf_len, sender_rzv_comp, sbuf_access_key,
 					sbuf_offset, opx_mr->hfisvc.mr_handle,
 					opx_mr_dmabuf_local_offset(opx_mr, recv_buf));
 			} else {
 				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
-					opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, lid, sbuf_key,
-					sbuf_len, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
+					opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */,
+					sbuf_lid_masked, sbuf_client_key, sbuf_len, sender_rzv_comp, sbuf_access_key,
 					sbuf_offset, recv_buf);
 			}
 			if (rc) {
+				/* Free recv_rzv_comp that was allocated for this IOV but
+				 * never submitted — the deferred path will allocate its own. */
+				OPX_BUF_FREE(recv_rzv_comp);
+
 				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
-					opx_ep, context, niov - i, sbuf_key, lid, recv_buf,
-					&payload->rendezvous.hfisvc.iovs[i], payload->rendezvous.hfisvc.rzv_comp_vaddr);
+					opx_ep, context, niov - i, recv_buf, &payload->rendezvous.hfisvc.iovs[i]);
 				if (OFI_UNLIKELY(deferred_rc)) {
 					fprintf(stderr,
 						"(%d) %s:%s():%d Error: Couldn't create deferred work to handle rendezvous receive (%d), aborting.\n",
@@ -1198,7 +1233,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				}
 				OPX_HFISVC_DEBUG_LOG(
 					"[%d/%d] rdma_read failed with rc=%d context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
-					i + 1, niov, rc, context, recv_buf, sbuf_key, sbuf_access_key, sbuf_len);
+					i + 1, niov, rc, context, recv_buf, sbuf_client_key, sbuf_access_key, sbuf_len);
 
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.deferred);
 
@@ -1207,16 +1242,16 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				// but only by 1 down below right before recv_rts_hfisvc_finish is that for the
 				// case of i=0, we don't want to actually increment the count. Always incrementing
 				// by 'i' here is just more performant/less branchy than doing '+= i ? 1 : 0'
-				opx_ep->hfisvc.rdma_read_count[0] += i;
+				opx_ep->hfisvc.rdma_read_count[plane_idx] += i;
 				slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 
 				goto recv_rts_hfisvc_finish;
 			}
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
 			OPX_HFISVC_DEBUG_LOG(
-				"[%d/%d] Successfully issued rdma_read context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu rzv_comp=%lu\n",
-				i + 1, niov, context, recv_buf, sbuf_key, sbuf_access_key, sbuf_len,
-				payload->rendezvous.hfisvc.rzv_comp_vaddr);
+				"STRIPE-RECV: [IOV %d/%d] Issued RDMA read on plane %d: context=%p recv_buf=%p sbuf_lid=%u sbuf_client_key=%u sbuf_access_key=%u sbuf_len=%lu sender_rzv_comp=%p recv_rzv_comp=%p byte_counter=%lu\n",
+				i + 1, niov, plane_idx, context, recv_buf, sbuf_lid_masked, sbuf_client_key,
+				sbuf_access_key, sbuf_len, sender_rzv_comp, recv_rzv_comp, context->byte_counter);
 
 			recv_buf = (void *) ((uintptr_t) recv_buf + sbuf_len);
 		}
@@ -1226,32 +1261,70 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 		OPX_HFISVC_DEBUG_LOG("Truncation for client_key %u! xfer_len=%lu recv_len=%lu\n", sbuf_key, xfer_len,
 				     recv_len);
 
+		context->byte_counter = niov;
+
 		/* Iterate through the IOVs, issuing a 1-byte rdma_read of each
 		   sbuf info a scratch buffer so that the sender will receive a
 		   completion for each and free the access key. If the rdma_read
 		   fails, create a deferred work item to keep retrying. */
 		for (int i = 0; i < niov; ++i) {
+			const uint8_t plane_idx = OPX_LID_PLANE_GET_IDX(payload->rendezvous.hfisvc.iovs[i].sender_lid);
+			const opx_lid_t sbuf_lid_masked =
+				OPX_LID_PLANE_GET_LID(payload->rendezvous.hfisvc.iovs[i].sender_lid);
 			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
-			int	       rc;
-			if (do_dmabuf) {
-				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
-					opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, lid, sbuf_key,
-					1ul /* length */, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
-					0ul /* remote offset */, opx_mr->hfisvc.mr_handle, 0);
-			} else {
-				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
-					opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, lid, sbuf_key,
-					1ul /* length */, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
-					0ul /* remote offset */, &opx_trunc_scratch_buf);
-			}
-			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+			const uint32_t sbuf_client_key = payload->rendezvous.hfisvc.iovs[i].client_key;
+
+			struct fi_opx_rzv_completion *recv_rzv_comp =
+				(struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+			if (OFI_UNLIKELY(recv_rzv_comp == NULL)) {
+				OPX_HFISVC_DEBUG_LOG("ENOMEM (recv_rzv_comp in truncation)\n");
 				union opx_hfisvc_iov trunc_iov = payload->rendezvous.hfisvc.iovs[i];
 				trunc_iov.len		       = 1;
 
 				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
-					opx_ep, context, 1 /* niov */, sbuf_key, lid, &opx_trunc_scratch_buf,
-					(const union opx_hfisvc_iov *) &trunc_iov,
-					payload->rendezvous.hfisvc.rzv_comp_vaddr);
+					opx_ep, context, niov, &opx_trunc_scratch_buf,
+					(const union opx_hfisvc_iov *) &trunc_iov);
+
+				if (OFI_UNLIKELY(deferred_rc)) {
+					fprintf(stderr,
+						"(%d) %s:%s():%d Error: Couldn't create deferred work to handle truncated rendezvous receive (%d), aborting.\n",
+						getpid(), __FILE__, __func__, __LINE__, deferred_rc);
+					abort();
+				}
+				continue;
+			}
+			recv_rzv_comp->context	  = context;
+			recv_rzv_comp->access_key = (uint32_t) -1;
+
+			struct hfisvc_client_completion completion = {
+				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.cq.app_context = (uint64_t) recv_rzv_comp,
+				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
+			};
+
+			const uintptr_t sender_rzv_comp = payload->rendezvous.hfisvc.iovs[i].rzv_comp_vaddr;
+
+			int rc;
+			if (do_dmabuf) {
+				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
+					opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */,
+					sbuf_lid_masked, sbuf_client_key, 1ul /* length */, sender_rzv_comp,
+					sbuf_access_key, 0ul /* remote offset */, opx_mr->hfisvc.mr_handle, 0);
+			} else {
+				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
+					opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */,
+					sbuf_lid_masked, sbuf_client_key, 1ul /* length */, sender_rzv_comp,
+					sbuf_access_key, 0ul /* remote offset */, &opx_trunc_scratch_buf);
+			}
+			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+				OPX_BUF_FREE(recv_rzv_comp);
+
+				union opx_hfisvc_iov trunc_iov = payload->rendezvous.hfisvc.iovs[i];
+				trunc_iov.len		       = 1;
+
+				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
+					opx_ep, context, niov, &opx_trunc_scratch_buf,
+					(const union opx_hfisvc_iov *) &trunc_iov);
 
 				if (OFI_UNLIKELY(deferred_rc)) {
 					fprintf(stderr,
@@ -1267,7 +1340,10 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 						  recv_buf);
 	}
 
-	++opx_ep->hfisvc.rdma_read_count[0];
+	for (int i = 0; i < niov; ++i) {
+		const uint8_t plane_idx = OPX_LID_PLANE_GET_IDX(payload->rendezvous.hfisvc.iovs[i].sender_lid);
+		++opx_ep->hfisvc.rdma_read_count[plane_idx];
+	}
 recv_rts_hfisvc_finish:
 #ifdef OPX_TRACER_ENABLED
 	OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_RZV_RTS_HFISVC, trace_slid_len, origin_tag);
@@ -3394,7 +3470,7 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"Enqueuing completion error from HFI Service with status %d\n", hfisvc_entry->status);
 			context->err_entry.flags	 = context->flags;
-			context->err_entry.len		 = context->byte_counter;
+			context->err_entry.len		 = context->len;
 			context->err_entry.buf		 = context->buf;
 			context->err_entry.data		 = context->data;
 			context->err_entry.tag		 = context->tag;
@@ -3409,28 +3485,26 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 	} else {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.internal_completion.success);
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.completed);
-		// TODO: Use the completion's xfer_len when that becomes available
-		// const uint64_t completion_len = hfisvc_out[i].xfer_len;
-		uint64_t completion_len = 0;
 
 		if (context) {
-			completion_len = rzv_comp->context->byte_counter;
 			OPX_HFISVC_DEBUG_LOG(
-				"HFISVC Internal completion with context: rzv_comp=%p access_key=%u xfer_len=%lu context=%p byte_counter=%lu -> %lu\n",
-				rzv_comp, rzv_comp->access_key, completion_len, rzv_comp->context,
-				rzv_comp->context->byte_counter, rzv_comp->context->byte_counter - completion_len);
+				"STRIPE-COMPLETION: plane %d: rzv_comp=%p access_key=%d context=%p byte_counter=%lu -> %lu (will_free_key=%d)\n",
+				ctx_idx, rzv_comp, (int32_t) rzv_comp->access_key, rzv_comp->context,
+				rzv_comp->context->byte_counter, rzv_comp->context->byte_counter - 1,
+				(int32_t) rzv_comp->access_key >= 0);
 
-			assert(completion_len <= rzv_comp->context->byte_counter);
-			rzv_comp->context->byte_counter -= completion_len;
+			assert(rzv_comp->context->byte_counter > 0);
+			rzv_comp->context->byte_counter -= 1;
 		} else {
-			OPX_HFISVC_DEBUG_LOG(
-				"HFISVC Internal completion without context: rzv_comp=%p access_key=%u xfer_len=%lu\n",
-				rzv_comp, rzv_comp->access_key, completion_len);
+			OPX_HFISVC_DEBUG_LOG("STRIPE-COMPLETION: plane %d: rzv_comp=%p access_key=%d (no context)\n",
+					     ctx_idx, rzv_comp, (int32_t) rzv_comp->access_key);
 		}
 	}
 
-	opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[ctx_idx].access_key_set, rzv_comp->access_key,
-				   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+	if ((int32_t) rzv_comp->access_key >= 0) {
+		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[ctx_idx].access_key_set, rzv_comp->access_key,
+					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+	}
 	OPX_BUF_FREE(rzv_comp);
 }
 #endif

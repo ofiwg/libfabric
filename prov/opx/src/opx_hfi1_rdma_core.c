@@ -901,6 +901,25 @@ int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t
 	return ((*fd_cdev) < 0);
 }
 
+int opx_hfi1_wrapper_verbs_context_open(const int unit, const int port, void **ibv_context, int *fd_verbs)
+{
+	if (!opx_hfi1_rdma_op_initialize(false)) {
+		return -1;
+	}
+
+	void *tmp_ibv_context = NULL;
+	int   verbs_fd	      = opx_hfi1_rdma_context_open(unit, port, 0, false, NULL, &tmp_ibv_context);
+
+	if (verbs_fd < 0) {
+		return -1;
+	}
+
+	*ibv_context = tmp_ibv_context;
+	*fd_verbs    = verbs_fd;
+
+	return verbs_fd;
+}
+
 static int opx_get_current_proc_core()
 {
 	int core_id;

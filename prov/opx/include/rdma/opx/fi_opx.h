@@ -129,6 +129,8 @@ typedef uint32_t opx_lid_t; /* only 3 bytes of lid is used */
 /* The lid is masked for irrelevant dispersive routing bits (OPX_LID_PATH_MASK) */
 #define OPX_LID_PLANE_KEY(lid, plane_idx) \
 	((lid & ~OPX_LID_PATH_MASK) | ((opx_lid_t) (plane_idx) << OPX_LID_PLANE_SHIFT))
+#define OPX_LID_PLANE_GET_LID(encoded) ((opx_lid_t) (encoded) & 0x00FFFFFF)
+#define OPX_LID_PLANE_GET_IDX(encoded) ((uint8_t) ((encoded) >> OPX_LID_PLANE_SHIFT))
 
 /* hfi1 type for bit logic */
 enum opx_hfi1_type {

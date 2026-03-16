@@ -65,40 +65,60 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_HFISVC_RZV_RTS, 0, 0);
 
-	struct fi_opx_ep   *opx_ep	    = params->opx_ep;
-	struct opx_context *context	    = params->context;
-	const uint32_t	    niov	    = params->niov;
-	uint32_t	    cur_iov	    = params->cur_iov;
-	uint32_t	    sbuf_lid	    = params->sbuf_lid;
-	uint32_t	    sbuf_client_key = params->sbuf_client_key;
-	uint8_t		   *recv_buf	    = (uint8_t *) params->recv_buf;
-
-	struct hfisvc_client_completion completion = {
-		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
-		.cq.app_context = (uint64_t) context,
-		.cq.handle	= *opx_ep->hfisvc.cq_completion_queue,
-	};
+	struct fi_opx_ep   *opx_ep   = params->opx_ep;
+	struct opx_context *context  = params->context;
+	const uint32_t	    niov     = params->niov;
+	uint32_t	    cur_iov  = params->cur_iov;
+	uint8_t		   *recv_buf = (uint8_t *) params->recv_buf;
 
 	int rc	       = FI_SUCCESS;
 	int read_count = 0;
 
+	int plane_read_count[OPX_MAX_TX_CONTEXTS] = {0};
 	for (int i = cur_iov; i < niov; ++i) {
+		/* Extract plane index from sender LID and mask LID for API calls */
+		const uint8_t	plane_idx	= OPX_LID_PLANE_GET_IDX(params->iovs[i].sender_lid);
+		const opx_lid_t sbuf_lid_masked = OPX_LID_PLANE_GET_LID(params->iovs[i].sender_lid);
+
 		const uint32_t sbuf_access_key = params->iovs[i].access_key;
+		const uint32_t sbuf_client_key = params->iovs[i].client_key;
 		const uint64_t sbuf_len	       = params->iovs[i].len;
 		const uint64_t sbuf_offset     = params->iovs[i].offset;
+
+		struct fi_opx_rzv_completion *recv_rzv_comp =
+			(struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+		if (OFI_UNLIKELY(recv_rzv_comp == NULL)) {
+			OPX_HFISVC_DEBUG_LOG("ENOMEM (recv_rzv_comp in deferred)\n");
+			params->cur_iov	 = i;
+			params->recv_buf = (void *) recv_buf;
+			rc		 = -FI_EAGAIN;
+			break;
+		}
+		recv_rzv_comp->context	  = context;
+		recv_rzv_comp->access_key = (uint32_t) -1;
+
+		struct hfisvc_client_completion completion = {
+			.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+			.cq.app_context = (uint64_t) recv_rzv_comp,
+			.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
+		};
+
+		const uintptr_t sender_rzv_comp = params->iovs[i].rzv_comp_vaddr;
 
 		if (context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
 			struct fi_opx_mr *opx_mr = ((struct fi_opx_hmem_info *) context->hmem_info_qws)->dmabuf.opx_mr;
 			if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
+				OPX_BUF_FREE(recv_rzv_comp);
 				rc = -FI_EAGAIN;
 				break;
 			}
 			uint64_t local_offset = opx_mr_dmabuf_local_offset(opx_mr, recv_buf);
 			rc		      = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
-				   opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, sbuf_lid,
-				   sbuf_client_key, sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset,
+				   opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */, sbuf_lid_masked,
+				   sbuf_client_key, sbuf_len, sender_rzv_comp, sbuf_access_key, sbuf_offset,
 				   opx_mr->hfisvc.mr_handle, local_offset);
 			if (rc != FI_SUCCESS) {
+				OPX_BUF_FREE(recv_rzv_comp);
 				params->cur_iov	 = i;
 				params->recv_buf = (void *) recv_buf;
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.eagain_hfisvc);
@@ -110,18 +130,20 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				break;
 			}
 			++read_count;
+			++plane_read_count[plane_idx];
 
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
 
 			OPX_HFISVC_DEBUG_LOG(
-				"[%d/%d] Successfully issued rdma_read sbuf_lid=%u context=%p recv-mr_handle=%u recv-offset=%lu sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu params->rzv_comp=%lX\n",
-				i + 1, niov, sbuf_lid, context, (uint32_t) opx_mr->hfisvc.mr_handle, local_offset,
-				sbuf_client_key, sbuf_access_key, sbuf_len, params->rzv_comp);
+				"[%d/%d] Successfully issued rdma_read sbuf_lid=%u context=%p recv-mr_handle=%u recv-offset=%lu sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu sender_rzv_comp=%lX\n",
+				i + 1, niov, sbuf_lid_iov, context, (uint32_t) opx_mr->hfisvc.mr_handle, local_offset,
+				sbuf_client_key, sbuf_access_key, sbuf_len, sender_rzv_comp);
 		} else {
 			rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
-				opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, sbuf_lid,
-				sbuf_client_key, sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset, recv_buf);
+				opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */, sbuf_lid_masked,
+				sbuf_client_key, sbuf_len, sender_rzv_comp, sbuf_access_key, sbuf_offset, recv_buf);
 			if (rc != FI_SUCCESS) {
+				OPX_BUF_FREE(recv_rzv_comp);
 				params->cur_iov	 = i;
 				params->recv_buf = (void *) recv_buf;
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.eagain_hfisvc);
@@ -132,21 +154,25 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				break;
 			}
 			++read_count;
+			++plane_read_count[plane_idx];
 
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.rdma_read);
 
 			OPX_HFISVC_DEBUG_LOG(
-				"[%d/%d] Successfully issued rdma_read context=%p recv_buf=%p sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu\n",
-				i + 1, niov, context, recv_buf, sbuf_client_key, sbuf_access_key, sbuf_len);
+				"STRIPE-RECV-DEFERRED: [IOV %d/%d] Issued RDMA read on plane %d: context=%p recv_buf=%p sbuf_lid=%u sbuf_client_key=%u sbuf_access_key=%u sbuf_len=%lu recv_rzv_comp=%p\n",
+				i + 1, niov, i, context, recv_buf, sbuf_lid_iov, sbuf_client_key, sbuf_access_key,
+				sbuf_len, recv_rzv_comp);
 		}
 		recv_buf += sbuf_len;
 	}
 
-	if (read_count) {
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.doorbell_ring.deferred_work);
-		__attribute__((unused)) int doorbell_rc =
-			(*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[0].ctx);
-		assert(doorbell_rc == 0);
+	for (int i = 0; i < OPX_MAX_TX_CONTEXTS; ++i) {
+		if (plane_read_count[i] > 0) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.doorbell_ring.deferred_work);
+			__attribute__((unused)) int doorbell_rc =
+				(*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[i].ctx);
+			assert(doorbell_rc == 0);
+		}
 	}
 
 	FI_DBG_TRACE(
@@ -164,8 +190,7 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 }
 
 int opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_context *context, const uint32_t niov,
-					 const uint32_t sbuf_client_key, const uint32_t sbuf_lid, const void *recv_buf,
-					 const union opx_hfisvc_iov *iovs, uintptr_t rzv_comp)
+					 const void *recv_buf, const union opx_hfisvc_iov *iovs)
 {
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	if (OFI_UNLIKELY(work == NULL)) {
@@ -183,10 +208,7 @@ int opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_co
 	params->context				  = context;
 	params->niov				  = niov;
 	params->cur_iov				  = 0;
-	params->sbuf_client_key			  = sbuf_client_key;
-	params->sbuf_lid			  = sbuf_lid;
 	params->recv_buf			  = (void *) recv_buf;
-	params->rzv_comp			  = rzv_comp;
 
 	for (int i = 0; i < niov; ++i) {
 		params->iovs[i] = iovs[i];

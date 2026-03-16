@@ -284,7 +284,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, uint64_t *p_rh
 	if (!OPX_RHF_IS_USE_EGR_BUF(rhf, hfi1_type)) {
 		/* no payload */
 		fi_opx_reliability_rx_exception(opx_ep->reli_service, flow, slid, pkt_origin_rx, psn, &opx_ep->ep_fid,
-						hdr, NULL, hfi1_type, opcode, ctx_sharing, dlid, primary_slid);
+						hdr, NULL, hfi1_type, opcode, ctx_sharing, primary_slid, dlid);
 
 	} else {
 		/* has payload */
@@ -298,7 +298,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, uint64_t *p_rh
 		assert(payload != NULL);
 
 		fi_opx_reliability_rx_exception(opx_ep->reli_service, flow, slid, pkt_origin_rx, psn, &opx_ep->ep_fid,
-						hdr, payload, hfi1_type, opcode, ctx_sharing, dlid, primary_slid);
+						hdr, payload, hfi1_type, opcode, ctx_sharing, primary_slid, dlid);
 
 		uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {

@@ -2526,8 +2526,8 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 				     struct fi_opx_reliability_rx_flow *flow, opx_lid_t slid, uint64_t src_origin_rx,
 				     uint32_t psn, struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const enum opx_hfi1_type hfi1_type,
-				     const uint8_t opcode, const bool ctx_sharing, const opx_lid_t dlid,
-				     const opx_lid_t primary_slid)
+				     const uint8_t opcode, const bool ctx_sharing, const opx_lid_t primary_slid,
+				     const opx_lid_t dlid)
 {
 	uint64_t next_psn = flow->next_psn;
 

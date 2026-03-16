@@ -289,7 +289,7 @@ static inline const char *opx_hfi1_bth_opcode_to_string(uint16_t opcode)
  *
  * QW[4] bit layout (dput/RZV_DATA):
  *   [31:0]   = reserved_4 (kdeth.jkey + kdeth.hcrc)
- *   [55:32]  = primary_lid[23:0]  (24 contiguous bits in dput.unused0[3])
+ *   [55:32]  = primary_lid[23:0]  (24 contiguous bits in dput.primary_lid)
  *   [63:56]  = tx_index (8 bits, only bit 56 used)
  */
 
@@ -1040,8 +1040,8 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[4] KDETH/SW */
 		uint32_t reserved_4;
-		uint8_t	 unused0[3];
-		uint8_t	 tx_index;
+		uint32_t primary_lid : 24; /* primary LID for dput packets */
+		uint32_t tx_index : 8;
 
 		/* QW[5,6,7] KDETH/SW */
 		union {
@@ -1537,17 +1537,20 @@ static inline uintptr_t fi_opx_dput_rbuf_in(const uintptr_t rbuf_out)
 }
 
 union opx_hfisvc_iov {
-	uint64_t qws[4];
+	uint64_t qws[6];
 	struct {
 		uint64_t	   len;
 		uint64_t	   offset;
 		uint64_t	   hmem_device;
 		enum fi_hmem_iface hmem_iface;
 		uint32_t	   access_key;
+		uint32_t	   client_key;
+		uint32_t	   sender_lid; /* Upper 8 bits encode plane_idx via OPX_LID_PLANE_KEY() */
+		uintptr_t	   rzv_comp_vaddr;
 	};
 } __attribute__((__packed__));
 
-#define OPX_MAX_HFISVC_IOVS ((OPX_HFI1_MAX_PKT_SIZE - sizeof(uintptr_t)) / sizeof(union opx_hfisvc_iov))
+#define OPX_MAX_HFISVC_IOVS (OPX_HFI1_MAX_PKT_SIZE / sizeof(union opx_hfisvc_iov))
 
 struct fi_opx_hmem_iov {
 	uintptr_t	   buf;
@@ -1659,7 +1662,6 @@ union fi_opx_hfi1_packet_payload {
 		} ipc;
 
 		struct {
-			uintptr_t	     rzv_comp_vaddr; // struct fi_opx_rzv_completion * - imm_data for notify
 			union opx_hfisvc_iov iovs[OPX_MAX_HFISVC_IOVS];
 		} hfisvc;
 	} rendezvous;
