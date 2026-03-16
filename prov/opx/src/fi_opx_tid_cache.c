@@ -317,15 +317,17 @@ int opx_tid_inc_use_cnt(struct ofi_mr_entry *entry)
 __OPX_FORCE_INLINE__
 int opx_tid_dec_use_cnt(struct ofi_mr_entry *entry)
 {
+#ifdef OPX_TID_DETAILED_DEBUG_USECNT
 	if (entry->use_cnt == 0) {
 		fprintf(stderr,
 			"(%d) %s:%s():%d [%p-%p/%lu] Entry %p Decrementing use_cnt %d -> %d, ERROR, Negative use_cnt!\n",
 			getpid(), __FILE__, __func__, __LINE__, entry->info.iov.iov_base,
 			(void *) ((uintptr_t) entry->info.iov.iov_base + entry->info.iov.iov_len),
 			entry->info.iov.iov_len, entry, entry->use_cnt, entry->use_cnt - 1);
+#ifdef OPX_TID_DETAILED_DEBUG_ABORT_USECNT
 		abort();
+#endif
 	}
-#ifdef OPX_TID_DETAILED_DEBUG_USECNT
 	fprintf(stderr, "(%d) %s:%s():%d [%p-%p/%lu] Entry %p Decrementing use_cnt %d -> %d\n", getpid(), __FILE__,
 		__func__, __LINE__, entry->info.iov.iov_base,
 		(void *) ((uintptr_t) entry->info.iov.iov_base + entry->info.iov.iov_len), entry->info.iov.iov_len,
