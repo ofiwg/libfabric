@@ -56,6 +56,8 @@ int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t
 				  const enum opx_hfi1_type hfi1_type, void **ibv_context, unsigned int *user_version,
 				  int *fd_cdev, int *fd_verbs);
 
+int opx_hfi1_wrapper_verbs_context_open(const int unit, const int port, void **ibv_context, int *fd_verbs);
+
 /* Initialize the context with hfi1 direct or cdev */
 struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd, struct fi_opx_hfi1_context_internal *internal, int unit, int port);
 
