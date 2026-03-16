@@ -36,6 +36,7 @@ void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state)
 	/* Allocate and init a TX pkt_entry */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
+	efa_unit_test_set_pke_handler(pkt_entry);
 
 	/*
 	 * The eager protocol moved to the refactored code path, so build the

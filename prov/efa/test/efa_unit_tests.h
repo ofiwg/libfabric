@@ -18,6 +18,7 @@
 #include "efa.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_unit_test_mocks.h"
+#include "efa_rdm_proto_eager.h"
 
 /**
  * Maximum value of hardware completion counters on the EFA device.
@@ -112,6 +113,8 @@ void efa_unit_test_construct_handshake_pkt_for_receive(struct efa_rdm_pke *pkt_e
 struct efa_rdm_ope *efa_unit_test_alloc_txe(struct efa_resource *resource, uint32_t op);
 
 struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint32_t op);
+
+void efa_unit_test_set_pke_handler(struct efa_rdm_pke *pkt_entry);
 
 /* end of common functions in efa_unit_test_common.c */
 

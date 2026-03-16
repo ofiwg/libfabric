@@ -489,3 +489,24 @@ void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE | EFA_RDM_EXTRA_FEATURE_RDMA_READ | EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
 }
+
+/**
+ * @brief Set the handle_pke function for a TX packet after a protocol
+ * 	      is moved to the refactored code path
+ */
+void efa_unit_test_set_pke_handler(struct efa_rdm_pke *pkt_entry) {
+	struct efa_rdm_base_hdr *base_hdr;
+
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
+
+	switch (base_hdr->type) {
+		case EFA_RDM_EAGER_MSGRTM_PKT:
+		case EFA_RDM_EAGER_TAGRTM_PKT:
+		case EFA_RDM_DC_EAGER_MSGRTM_PKT:
+		case EFA_RDM_DC_EAGER_TAGRTM_PKT:
+			pkt_entry->handle_pke = &efa_rdm_proto_eager_handle_rtm_send_completion;
+			break;
+		default:
+			pkt_entry->handle_pke = NULL;
+	}
+}
