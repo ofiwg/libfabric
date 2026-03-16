@@ -420,10 +420,10 @@ int smr_select_proto(void **desc, size_t iov_count, bool vma_avail,
 	}
 
 	if (op == ofi_op_read_req) {
-		if (total_len <= SMR_INJECT_SIZE)
-			return smr_proto_inject;
 		if (use_ipc)
 			return smr_proto_ipc;
+		if (total_len <= SMR_INJECT_SIZE)
+			return smr_proto_inject;
 		if (vma_avail && FI_HMEM_SYSTEM == iface)
 			return smr_proto_iov;
 		return smr_proto_sar;
@@ -433,15 +433,15 @@ int smr_select_proto(void **desc, size_t iov_count, bool vma_avail,
 		return total_len <= SMR_MSG_DATA_LEN ? smr_proto_inline :
 						       smr_proto_inject;
 
+	if (use_ipc && !(op_flags & FI_INJECT))
+		return smr_proto_ipc;
+
 	if (op_flags & FI_INJECT || total_len <= SMR_INJECT_SIZE) {
 		if (op_flags & FI_DELIVERY_COMPLETE)
 			return smr_proto_inject;
 		return total_len <= SMR_MSG_DATA_LEN ?
 				smr_proto_inline : smr_proto_inject;
 	}
-
-	if (use_ipc)
-		return smr_proto_ipc;
 
 	return vma_avail ? smr_proto_iov: smr_proto_sar;
 }
