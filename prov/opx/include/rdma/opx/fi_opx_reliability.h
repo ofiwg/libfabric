@@ -854,8 +854,8 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 				     struct fi_opx_reliability_rx_flow *flow, opx_lid_t slid, uint64_t origin_rx,
 				     uint32_t psn, struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const enum opx_hfi1_type hfi1_type,
-				     const uint8_t opcode, const bool ctx_sharing, const opx_lid_t dlid,
-				     const opx_lid_t primary_slid);
+				     const uint8_t opcode, const bool ctx_sharing, const opx_lid_t primary_slid,
+				     const opx_lid_t dlid);
 
 ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_reliability_service_flow_key *key,
 					  const opx_lid_t dlid, const uint64_t reliability_rx, const uint64_t psn_start,

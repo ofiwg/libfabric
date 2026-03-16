@@ -69,7 +69,8 @@ struct fi_opx_hfisvc_ctx {
 	struct ibv_context *ctx;
 	opx_hfisvc_keyset_t access_key_set;
 	hfisvc_client_key_t client_key;
-	uint32_t	    padding;
+	opx_lid_t	    lid;
+	int		    fd_verbs;
 };
 #endif
 
@@ -422,20 +423,13 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 					(struct opx_hfisvc_rzv_completion_tmp *) hfisvc_out[i].type_notify.imm_data;
 
 				struct opx_context *context = rzv_comp->context;
-				// TODO: Once hfisvc_client provides xfer_len in completion, we'll know how much to
-				//       decrement from the context->byte_counter. Until then, just zero out
-				//       context->byte_counter
-				// uint64_t completed_len = hfisvc_out[i].type_default.xfer_len;
-				uint64_t completed_len = context->byte_counter;
-				assert(completed_len <= context->byte_counter);
 				OPX_HFISVC_DEBUG_LOG(
-					"Got completion entry for context=%p completed_len=%lu byte_counter=%lu -> %lu\n",
-					context, completed_len, context->byte_counter,
-					context->byte_counter - completed_len);
+					"STRIPE-MR-NOTIFY: MR notify completion for opx_mr=%p rzv_comp=%p context=%p byte_counter=%lu -> %lu\n",
+					opx_mr, rzv_comp, context, context->byte_counter, context->byte_counter - 1);
 
-				context->byte_counter -= completed_len;
+				assert(context->byte_counter > 0);
+				context->byte_counter -= 1;
 
-				/* free the rendezvous completion structure */
 				OPX_BUF_FREE(rzv_comp);
 			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE) {
 				opx_hfisvc_keyset_free_key(opx_domain->hfisvc.ctxs[0].access_key_set,

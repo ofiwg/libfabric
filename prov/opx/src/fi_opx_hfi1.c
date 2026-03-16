@@ -1199,43 +1199,21 @@ ctxt_open_err:
 }
 
 /* Multi-plane support: discover additional planes by scanning HFI units and ports */
-int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
-				int max_planes)
+struct plane_candidate {
+	uint32_t hfi_unit;
+	uint32_t hfi_port;
+	uint64_t gid_hi;
+	int	 numa_dist;
+	int	 free_ctxts;
+};
+
+static int discover_plane_candidates(const uint64_t primary_gid_hi, const uint32_t primary_unit,
+				     const uint32_t primary_port, struct plane_candidate *candidates,
+				     const int max_candidates)
 {
-	const uint64_t primary_gid_hi = primary_hfi->gid_hi;
-	const uint32_t primary_unit   = primary_hfi->hfi_unit;
-	const uint32_t primary_port   = primary_hfi->hfi_port;
-	const int      hfi_count      = opx_hfi_get_num_units();
-	const int      numa_node_id   = opx_get_current_proc_location();
-	int	       dirfd	      = -1;
-
-	FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
-	       "Discovering additional planes for primary HFI unit %d port %d with GID hi 0x%016lx\n", primary_unit,
-	       primary_port, primary_gid_hi);
-	FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
-	       "Scanning up to %d HFI units and ports for additional planes (max_planes=%d)\n", hfi_count, max_planes);
-
-	struct plane_candidate {
-		uint32_t hfi_unit;
-		uint32_t hfi_port;
-		uint64_t gid_hi;
-		int	 numa_dist;
-		int	 free_ctxts;
-	} candidates[OPX_MAX_HFIS * OPX_MAX_PORT];
-	int num_candidates = 0;
-
-	if (hfi_count > 1) {
-		if ((dirfd = open(OPX_CLASS_DIR_PATH, O_RDONLY)) == -1) {
-			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
-				"Failed to open %s for flock: %s (continuing without lock)\n", OPX_CLASS_DIR_PATH,
-				strerror(errno));
-		} else if (flock(dirfd, LOCK_EX) == -1) {
-			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
-				"Flock exclusive lock failure: %s (continuing without lock)\n", strerror(errno));
-			close(dirfd);
-			dirfd = -1;
-		}
-	}
+	const int hfi_count	 = opx_hfi_get_num_units();
+	const int numa_node_id	 = opx_get_current_proc_location();
+	int	  num_candidates = 0;
 
 	for (int unit = 0; unit < hfi_count; unit++) {
 		int num_ports = opx_hfi_get_num_ports(unit);
@@ -1263,17 +1241,14 @@ int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct 
 				continue;
 			}
 
-			if (gid_hi == primary_gid_hi) {
-				continue;
-			}
-
 			int hfi_n = opx_hfi_sysfs_unit_read_node_s64(unit);
 			int hfi_d = numa_distance(hfi_n, numa_node_id);
 			int hfi_f = opx_hfi_get_num_free_contexts(unit);
 
 			FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
-			       "Candidate plane: unit=%d port=%d gid_hi=0x%016lx numa_node=%d numa_dist=%d free_ctxts=%d\n",
-			       unit, port, gid_hi, hfi_n, hfi_d, hfi_f);
+			       "%s candidate: unit=%d port=%d gid_hi=0x%016lx numa_node=%d numa_dist=%d free_ctxts=%d\n",
+			       (gid_hi == primary_gid_hi) ? "Same-plane" : "Different-plane", unit, port, gid_hi, hfi_n,
+			       hfi_d, hfi_f);
 
 			candidates[num_candidates].hfi_unit   = unit;
 			candidates[num_candidates].hfi_port   = port;
@@ -1282,16 +1257,50 @@ int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct 
 			candidates[num_candidates].free_ctxts = hfi_f;
 			num_candidates++;
 
-			if (num_candidates >= OPX_MAX_HFIS * OPX_MAX_PORT) {
+			if (num_candidates >= max_candidates) {
 				FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
-					"Reached maximum candidate limit (%d), stopping enumeration\n",
-					OPX_MAX_HFIS * OPX_MAX_PORT);
-				goto done_collecting;
+					"Reached maximum candidate limit (%d), stopping enumeration\n", max_candidates);
+				return num_candidates;
 			}
 		}
 	}
 
-done_collecting:
+	return num_candidates;
+}
+
+int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
+				const int max_planes)
+{
+	const uint64_t primary_gid_hi = primary_hfi->gid_hi;
+	const uint32_t primary_unit   = primary_hfi->hfi_unit;
+	const uint32_t primary_port   = primary_hfi->hfi_port;
+	const int      hfi_count      = opx_hfi_get_num_units();
+	int	       dirfd	      = -1;
+
+	FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+	       "Discovering different-plane HFI for primary unit %d port %d with GID hi 0x%016lx\n", primary_unit,
+	       primary_port, primary_gid_hi);
+	FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+	       "Scanning up to %d HFI units and ports for different-plane candidates (max_planes=%d)\n", hfi_count,
+	       max_planes);
+
+	if (hfi_count > 1) {
+		if ((dirfd = open(OPX_CLASS_DIR_PATH, O_RDONLY)) == -1) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+				"Failed to open %s for flock: %s (continuing without lock)\n", OPX_CLASS_DIR_PATH,
+				strerror(errno));
+		} else if (flock(dirfd, LOCK_EX) == -1) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+				"Flock exclusive lock failure: %s (continuing without lock)\n", strerror(errno));
+			close(dirfd);
+			dirfd = -1;
+		}
+	}
+
+	struct plane_candidate candidates[OPX_MAX_HFIS * OPX_MAX_PORT];
+	int num_candidates = discover_plane_candidates(primary_gid_hi, primary_unit, primary_port, candidates,
+						       OPX_MAX_HFIS * OPX_MAX_PORT);
+
 	if (dirfd != -1) {
 		if (flock(dirfd, LOCK_UN) == -1) {
 			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL, "Flock unlock failure: %s\n", strerror(errno));
@@ -1300,7 +1309,14 @@ done_collecting:
 	}
 
 	int num_planes = 0;
+
 	for (int i = 0; i < num_candidates && num_planes < max_planes; i++) {
+		const bool is_same_plane = (candidates[i].gid_hi == primary_gid_hi);
+
+		if (is_same_plane) {
+			continue;
+		}
+
 		bool already_selected = false;
 		for (int p = 0; p < num_planes; p++) {
 			if (planes[p].gid_hi == candidates[i].gid_hi) {
@@ -1329,7 +1345,94 @@ done_collecting:
 		planes[num_planes].gid_hi   = candidates[best].gid_hi;
 
 		FI_INFO(&fi_opx_provider, FI_LOG_EP_CTRL,
-			"Selected plane %d: hfi_unit=%d hfi_port=%d gid_hi=0x%016lx numa_dist=%d free_ctxts=%d\n",
+			"Selected different-plane plane %d: hfi_unit=%d hfi_port=%d gid_hi=0x%016lx numa_dist=%d free_ctxts=%d\n",
+			num_planes, candidates[best].hfi_unit, candidates[best].hfi_port, candidates[best].gid_hi,
+			candidates[best].numa_dist, candidates[best].free_ctxts);
+
+		num_planes++;
+	}
+
+	return num_planes;
+}
+
+int fi_opx_hfi1_discover_same_plane(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
+				    const int max_planes)
+{
+	const uint64_t primary_gid_hi = primary_hfi->gid_hi;
+	const uint32_t primary_unit   = primary_hfi->hfi_unit;
+	const uint32_t primary_port   = primary_hfi->hfi_port;
+	const int      hfi_count      = opx_hfi_get_num_units();
+	int	       dirfd	      = -1;
+
+	FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+	       "Discovering same-plane HFI for primary unit %d port %d with GID hi 0x%016lx\n", primary_unit,
+	       primary_port, primary_gid_hi);
+	FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+	       "Scanning up to %d HFI units and ports for same-plane candidates (max_planes=%d)\n", hfi_count,
+	       max_planes);
+
+	if (hfi_count > 1) {
+		if ((dirfd = open(OPX_CLASS_DIR_PATH, O_RDONLY)) == -1) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+				"Failed to open %s for flock: %s (continuing without lock)\n", OPX_CLASS_DIR_PATH,
+				strerror(errno));
+		} else if (flock(dirfd, LOCK_EX) == -1) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+				"Flock exclusive lock failure: %s (continuing without lock)\n", strerror(errno));
+			close(dirfd);
+			dirfd = -1;
+		}
+	}
+
+	struct plane_candidate candidates[OPX_MAX_HFIS * OPX_MAX_PORT];
+	int num_candidates = discover_plane_candidates(primary_gid_hi, primary_unit, primary_port, candidates,
+						       OPX_MAX_HFIS * OPX_MAX_PORT);
+
+	if (dirfd != -1) {
+		if (flock(dirfd, LOCK_UN) == -1) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL, "Flock unlock failure: %s\n", strerror(errno));
+		}
+		close(dirfd);
+	}
+
+	int num_planes = 0;
+
+	for (int i = 0; i < num_candidates && num_planes < max_planes; i++) {
+		const bool is_same_plane = (candidates[i].gid_hi == primary_gid_hi);
+
+		if (!is_same_plane) {
+			continue;
+		}
+
+		bool already_selected = false;
+		for (int p = 0; p < num_planes; p++) {
+			if (planes[p].gid_hi == candidates[i].gid_hi) {
+				already_selected = true;
+				break;
+			}
+		}
+		if (already_selected) {
+			continue;
+		}
+
+		int best = i;
+		for (int j = i + 1; j < num_candidates; j++) {
+			if (candidates[j].gid_hi != candidates[i].gid_hi) {
+				continue;
+			}
+			if (candidates[j].numa_dist < candidates[best].numa_dist ||
+			    (candidates[j].numa_dist == candidates[best].numa_dist &&
+			     candidates[j].free_ctxts > candidates[best].free_ctxts)) {
+				best = j;
+			}
+		}
+
+		planes[num_planes].hfi_unit = candidates[best].hfi_unit;
+		planes[num_planes].hfi_port = candidates[best].hfi_port;
+		planes[num_planes].gid_hi   = candidates[best].gid_hi;
+
+		FI_INFO(&fi_opx_provider, FI_LOG_EP_CTRL,
+			"Selected same-plane plane %d: hfi_unit=%d hfi_port=%d gid_hi=0x%016lx numa_dist=%d free_ctxts=%d\n",
 			num_planes, candidates[best].hfi_unit, candidates[best].hfi_port, candidates[best].gid_hi,
 			candidates[best].numa_dist, candidates[best].free_ctxts);
 
@@ -5395,12 +5498,24 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	struct fi_opx_ep_tx *tx	       = FI_OPX_EP_TX(opx_ep, addr);
 	const int	     plane_idx = addr.tx_index;
 
-	uint32_t			     access_key = (uint32_t) -1;
-	struct fi_opx_rzv_completion	    *rzv_comp	= NULL;
-	struct opx_context		    *context	= NULL;
-	struct fi_opx_reliability_tx_replay *replay	= NULL;
-	union fi_opx_reliability_tx_psn	    *psn_ptr	= NULL;
-	ssize_t				     rc		= FI_SUCCESS;
+	/* Use hfisvc.num_ctxs instead of num_tx_contexts: for single-plane
+	 * striping, num_tx_contexts stays 1 but hfisvc.num_ctxs will be 2.
+	 * For dual-plane, both are 2. This function is already inside
+	 * #if HAVE_HFISVC, so the #else is defensive only. */
+#if HAVE_HFISVC
+	const uint8_t do_stripe = ((opx_ep->domain->hfisvc.num_ctxs > 1) && !opx_mr) ? 1 : 0;
+#else
+	const uint8_t do_stripe = 0;
+#endif
+
+	uint32_t			     access_key	  = (uint32_t) -1;
+	uint32_t			     access_key_1 = (uint32_t) -1;
+	struct fi_opx_rzv_completion	    *rzv_comp	  = NULL;
+	struct fi_opx_rzv_completion	    *rzv_comp_1	  = NULL;
+	struct opx_context		    *context	  = NULL;
+	struct fi_opx_reliability_tx_replay *replay	  = NULL;
+	union fi_opx_reliability_tx_psn	    *psn_ptr	  = NULL;
+	ssize_t				     rc		  = FI_SUCCESS;
 
 	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, tx);
 	union fi_opx_hfi1_pio_state pio_state = *tx->pio_state;
@@ -5414,8 +5529,23 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 			goto err;
 		}
 	} else {
-		if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.ctxs[plane_idx].access_key_set, &access_key,
-						FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
+		if (do_stripe) {
+			if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.ctxs[0].access_key_set, &access_key,
+							FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
+				OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys on plane 0)\n");
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
+				rc = -FI_EAGAIN;
+				goto err;
+			}
+			if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.ctxs[1].access_key_set, &access_key_1,
+							FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
+				OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys on plane 1)\n");
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
+				rc = -FI_EAGAIN;
+				goto err;
+			}
+		} else if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.ctxs[plane_idx].access_key_set,
+						       &access_key, FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
 			OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys)\n");
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
 			rc = -FI_EAGAIN;
@@ -5431,7 +5561,18 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		goto err;
 	}
 
-	const uint16_t credits_needed = 2;
+	if (do_stripe) {
+		rzv_comp_1 = (struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+		if (OFI_UNLIKELY(rzv_comp_1 == NULL)) {
+			OPX_HFISVC_DEBUG_LOG("ENOMEM (rzv_comp_1)\n");
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.enomem_completion);
+			rc = -FI_ENOMEM;
+			goto err;
+		}
+	}
+
+	const uint16_t credits_needed =
+		2 + do_stripe; /* 1 for RTS header, 1 for rendezvous metadata, 1 more if striping */
 
 	uint16_t credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &tx->force_credit_return, credits_needed);
 	if (OFI_UNLIKELY(credits_available < credits_needed)) {
@@ -5462,7 +5603,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		context->err_entry.err	      = 0;
 		context->err_entry.op_context = user_context;
 		context->next		      = NULL;
-		context->byte_counter	      = xfer_len;
+		context->byte_counter	      = 1 + do_stripe;
 	} else {
 		context = NULL;
 	}
@@ -5481,32 +5622,101 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	}
 	replay->tx_index = addr.tx_index;
 
-	if (access_key != (uint32_t) -1) {
-		rzv_comp->access_key			   = access_key;
-		struct hfisvc_client_completion completion = {
-			.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
-			.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
-			.cq.app_context = (uint64_t) rzv_comp,
-		};
-		rc = (*opx_ep->domain->hfisvc.cmd_dma_access_once_va)(opx_ep->hfisvc.command_queues[plane_idx],
-								      completion, 0UL /* flags */, access_key, xfer_len,
-								      (void *) buf);
-
-		if (OFI_UNLIKELY(rc != 0)) {
-			OPX_HFISVC_DEBUG_LOG("EAGAIN (hfisvc_client queue returned %ld)\n", rc);
-			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_hfisvc);
-			rc = -FI_EAGAIN;
-			goto err;
+	size_t half_len	 = 0;
+	size_t remainder = 0;
+	if (do_stripe) {
+		half_len		 = xfer_len >> 1;
+		size_t page_aligned_half = half_len & ~((size_t) PAGE_SIZE - 1);
+		if (page_aligned_half == 0) {
+			OPX_HFISVC_DEBUG_LOG(
+				"STRIPE: xfer_len=%lu too small for page alignment, using midpoint split half_len=%lu\n",
+				xfer_len, half_len);
+		} else {
+			half_len = page_aligned_half;
+			OPX_HFISVC_DEBUG_LOG("STRIPE: xfer_len=%lu page-aligned split half_len=%lu\n", xfer_len,
+					     half_len);
 		}
+		remainder	    = xfer_len - half_len;
+		rzv_comp_1->context = context;
+	}
 
-		OPX_HFISVC_DEBUG_LOG(
-			"HFISVC RZV Send RTS: Successfully registered DMA buf=%p len=%lu access_key=%u rzv_comp=%p context=%p\n",
-			buf, xfer_len, access_key, rzv_comp, context);
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.reg_dma_buf);
+	if (access_key != (uint32_t) -1) {
+		if (do_stripe) {
+			rzv_comp->access_key   = access_key;
+			rzv_comp_1->access_key = access_key_1;
 
-		rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[plane_idx].ctx);
+			struct hfisvc_client_completion completion_0 = {
+				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[0],
+				.cq.app_context = (uint64_t) rzv_comp,
+			};
 
-		assert(rc == 0);
+			rc = (*opx_ep->domain->hfisvc.cmd_dma_access_once_va)(opx_ep->hfisvc.command_queues[0],
+									      completion_0, 0UL /* flags */, access_key,
+									      half_len, (void *) buf);
+			if (OFI_UNLIKELY(rc != 0)) {
+				OPX_HFISVC_DEBUG_LOG("EAGAIN (hfisvc_client queue 0 returned %ld)\n", rc);
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_hfisvc);
+				rc = -FI_EAGAIN;
+				goto err;
+			}
+
+			struct hfisvc_client_completion completion_1 = {
+				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[1],
+				.cq.app_context = (uint64_t) rzv_comp_1,
+			};
+			rc = (*opx_ep->domain->hfisvc.cmd_dma_access_once_va)(
+				opx_ep->hfisvc.command_queues[1], completion_1, 0UL /* flags */, access_key_1,
+				remainder, (void *) ((uintptr_t) buf + half_len));
+			if (OFI_UNLIKELY(rc != 0)) {
+				OPX_HFISVC_DEBUG_LOG("EAGAIN (hfisvc_client queue 1 returned %ld)\n", rc);
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_hfisvc);
+				rc = -FI_EAGAIN;
+				goto err;
+			}
+
+			/* Both commands submitted successfully — now ring doorbells
+			 * to kick hardware. From this point, completions are in-flight
+			 * and rzv_comp/rzv_comp_1/context must not be freed by us. */
+			rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[0].ctx);
+			assert(rc == 0);
+
+			rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[1].ctx);
+			assert(rc == 0);
+
+			OPX_HFISVC_DEBUG_LOG(
+				"STRIPE: Registered DMA on 2 planes: buf=%p xfer_len=%lu half_len=%lu remainder=%lu plane0_key=%u plane1_key=%u rzv_comp_0=%p rzv_comp_1=%p context=%p byte_counter=%lu\n",
+				buf, xfer_len, half_len, remainder, access_key, access_key_1, rzv_comp, rzv_comp_1,
+				context, context ? context->byte_counter : 0);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.reg_dma_buf);
+		} else {
+			rzv_comp->access_key			   = access_key;
+			struct hfisvc_client_completion completion = {
+				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
+				.cq.app_context = (uint64_t) rzv_comp,
+			};
+			rc = (*opx_ep->domain->hfisvc.cmd_dma_access_once_va)(opx_ep->hfisvc.command_queues[plane_idx],
+									      completion, 0UL /* flags */, access_key,
+									      xfer_len, (void *) buf);
+
+			if (OFI_UNLIKELY(rc != 0)) {
+				OPX_HFISVC_DEBUG_LOG("EAGAIN (hfisvc_client queue returned %ld)\n", rc);
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_hfisvc);
+				rc = -FI_EAGAIN;
+				goto err;
+			}
+
+			OPX_HFISVC_DEBUG_LOG(
+				"HFISVC RZV Send RTS: Successfully registered DMA buf=%p len=%lu access_key=%u rzv_comp=%p context=%p\n",
+				buf, xfer_len, access_key, rzv_comp, context);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.reg_dma_buf);
+
+			rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[plane_idx].ctx);
+
+			assert(rc == 0);
+		}
 	} else {
 		rzv_comp->access_key = opx_mr->hfisvc.access_key;
 	}
@@ -5530,19 +5740,50 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		}
 	}
 
-	union opx_hfisvc_iov hfisvc_iov = {
-		.access_key  = rzv_comp->access_key,
-		.len	     = xfer_len,
-		.hmem_iface  = src_iface,
-		.hmem_device = src_device_id,
-		.offset	     = sbuf_offset,
-	};
+	union opx_hfisvc_iov hfisvc_iovs[2] = {0};
+	const uint32_t	     niov	    = 1 + do_stripe;
 
-	const uint32_t niov = 1;
+	if (do_stripe) {
+		/* IOV array order must match DMA registration order:
+		 * IOV[0] = first half (plane 0's buffer)
+		 * IOV[1] = second half (plane 1's buffer)
+		 * This ensures receiver writes data in correct order to recv_buf */
+		hfisvc_iovs[0].len	      = half_len;
+		hfisvc_iovs[0].offset	      = 0;
+		hfisvc_iovs[0].hmem_device    = src_device_id;
+		hfisvc_iovs[0].hmem_iface     = src_iface;
+		hfisvc_iovs[0].access_key     = access_key;
+		hfisvc_iovs[0].client_key     = opx_ep->domain->hfisvc.ctxs[0].client_key;
+		hfisvc_iovs[0].sender_lid     = OPX_LID_PLANE_KEY(opx_ep->domain->hfisvc.ctxs[0].lid, plane_idx);
+		hfisvc_iovs[0].rzv_comp_vaddr = (uintptr_t) rzv_comp;
+
+		hfisvc_iovs[1].len	      = remainder;
+		hfisvc_iovs[1].offset	      = 0;
+		hfisvc_iovs[1].hmem_device    = src_device_id;
+		hfisvc_iovs[1].hmem_iface     = src_iface;
+		hfisvc_iovs[1].access_key     = access_key_1;
+		hfisvc_iovs[1].client_key     = opx_ep->domain->hfisvc.ctxs[1].client_key;
+		hfisvc_iovs[1].sender_lid     = OPX_LID_PLANE_KEY(opx_ep->domain->hfisvc.ctxs[1].lid, 1 - plane_idx);
+		hfisvc_iovs[1].rzv_comp_vaddr = (uintptr_t) rzv_comp_1;
+
+		OPX_HFISVC_DEBUG_LOG(
+			"STRIPE-SEND: tx_index=%d IOV[0]=plane0 len=%lu key=%u rzv_comp=%p, IOV[1]=plane1 len=%lu key=%u rzv_comp=%p\n",
+			plane_idx, hfisvc_iovs[0].len, hfisvc_iovs[0].access_key, rzv_comp, hfisvc_iovs[1].len,
+			hfisvc_iovs[1].access_key, rzv_comp_1);
+	} else {
+		hfisvc_iovs[0].len	      = xfer_len;
+		hfisvc_iovs[0].offset	      = sbuf_offset;
+		hfisvc_iovs[0].hmem_device    = src_device_id;
+		hfisvc_iovs[0].hmem_iface     = src_iface;
+		hfisvc_iovs[0].access_key     = rzv_comp->access_key;
+		hfisvc_iovs[0].client_key     = opx_ep->domain->hfisvc.ctxs[plane_idx].client_key;
+		hfisvc_iovs[0].sender_lid     = OPX_LID_PLANE_KEY(tx->hfi->lid, plane_idx);
+		hfisvc_iovs[0].rzv_comp_vaddr = (uintptr_t) rzv_comp;
+	}
 	assert(!(hfi1_type & OPX_HFI1_WFR));
 	if (hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_CYR)) {
-		const uint64_t pbc_dws = 2 /* pbc */ + 30 /* 16B rzv_rts **magic** number */;
-		const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
+		const uint64_t pbc_dws = 2 + 30 + (do_stripe << 4);
+		const uint16_t lrh_qws = (pbc_dws - 2) >> 1;
 		const uint64_t opcode =
 			(uint64_t) ((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							       FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC_CQ :
@@ -5577,19 +5818,24 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_first, pio_state);
 
-		opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], tag, (uintptr_t) rzv_comp,
-					  hfisvc_iov.qws[0], hfisvc_iov.qws[1], hfisvc_iov.qws[2], hfisvc_iov.qws[3],
-					  OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD);
+		opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], tag, hfisvc_iovs[0].qws[0],
+					  hfisvc_iovs[0].qws[1], hfisvc_iovs[0].qws[2], hfisvc_iovs[0].qws[3],
+					  hfisvc_iovs[0].qws[4], hfisvc_iovs[0].qws[5], hfisvc_iovs[1].qws[0]);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+		if (do_stripe) {
+			volatile uint64_t *scb_payload_2 = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_first, pio_state);
+			opx_cacheline_store_qw_vol(scb_payload_2, hfisvc_iovs[1].qws[1], hfisvc_iovs[1].qws[2],
+						   hfisvc_iovs[1].qws[3], hfisvc_iovs[1].qws[4], hfisvc_iovs[1].qws[5],
+						   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD);
+			FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+		}
 	} else {
 		assert(hfi1_type & OPX_HFI1_MIXED_9B);
-		const uint64_t pbc_dws =
-			2 /* pbc */ + 30 /* 16B rzv_rts **magic** number */ - 2 /*16B LRH*/ - 2 /* 16B ICRC*/;
-		const uint16_t lrh_dws = __cpu_to_be16(
-			pbc_dws - 2 +
-			1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
-		const uint64_t pbc_dlid = OPX_PBC_DLID(addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
+		const uint64_t pbc_dws	= 2 + 30 - 2 - 2 + (do_stripe << 4);
+		const uint16_t lrh_dws	= __cpu_to_be16(pbc_dws - 2 + 1);
+		const uint64_t pbc_dlid = OPX_PBC_DLID(addr.planes[0].lid, hfi1_type);
 		const uint64_t opcode =
 			(uint64_t) ((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							       FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS_HFISVC_CQ :
@@ -5614,18 +5860,32 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_first, pio_state);
 
-		opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], (uintptr_t) rzv_comp, hfisvc_iov.qws[0],
-					  hfisvc_iov.qws[1], hfisvc_iov.qws[2], hfisvc_iov.qws[3], 0UL /* unused */,
-					  0UL /* unused */, 0UL /* unused */);
+		opx_cacheline_copy_qw_vol(scb_payload, &replay->scb.qws[8], hfisvc_iovs[0].qws[0],
+					  hfisvc_iovs[0].qws[1], hfisvc_iovs[0].qws[2], hfisvc_iovs[0].qws[3],
+					  hfisvc_iovs[0].qws[4], hfisvc_iovs[0].qws[5], hfisvc_iovs[1].qws[0],
+					  hfisvc_iovs[1].qws[1]);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+		if (do_stripe) {
+			volatile uint64_t *scb_payload_2 = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_first, pio_state);
+			opx_cacheline_store_qw_vol(scb_payload_2, hfisvc_iovs[1].qws[2], hfisvc_iovs[1].qws[3],
+						   hfisvc_iovs[1].qws[4], hfisvc_iovs[1].qws[5], 0UL /* unused */,
+						   0UL /* unused */, 0, 0);
+			FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+		}
 	}
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(tx);
-	uint64_t *payload = replay->payload;
-	payload[0]	  = (uintptr_t) rzv_comp;
-	for (int i = 0; i < (sizeof(union opx_hfisvc_iov) >> 3); i++) {
-		payload[i + 1] = hfisvc_iov.qws[i];
+	uint64_t    *payload	= replay->payload;
+	const size_t qws_in_iov = sizeof(union opx_hfisvc_iov) >> 3;
+	for (int i = 0; i < qws_in_iov; i++) {
+		payload[i] = hfisvc_iovs[0].qws[i];
+	}
+	if (do_stripe) {
+		for (int i = 0; i < qws_in_iov; i++) {
+			payload[i + qws_in_iov] = hfisvc_iovs[1].qws[i];
+		}
 	}
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay,
@@ -5648,7 +5908,6 @@ err:
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, tx);
 
 	if (replay) {
-		// If we successfully allocated a replay, we should also have a PSN
 		assert(psn_ptr != NULL);
 		assert(psn >= 0 && psn <= MAX_PSN);
 		fi_opx_reliability_tx_return_psn(psn_ptr, (uint32_t) psn);
@@ -5660,8 +5919,20 @@ err:
 	if (rzv_comp) {
 		OPX_BUF_FREE(rzv_comp);
 	}
+	if (rzv_comp_1) {
+		OPX_BUF_FREE(rzv_comp_1);
+	}
 	if ((int32_t) access_key >= 0) {
-		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[plane_idx].access_key_set, access_key,
+		if (do_stripe) {
+			opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[0].access_key_set, access_key,
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+		} else {
+			opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[plane_idx].access_key_set, access_key,
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+		}
+	}
+	if ((int32_t) access_key_1 >= 0) {
+		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[1].access_key_set, access_key_1,
 					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 	}
 	OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, xfer_len, tag);
@@ -6010,6 +6281,8 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 		return -FI_EAGAIN;
 	}
+
+	replay->tx_index = dest_addr.tx_index;
 
 	FI_OPX_DEBUG_COUNTERS_INC_COND(
 		src_iface != FI_HMEM_SYSTEM,
@@ -6536,6 +6809,8 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 		return -FI_EAGAIN;
 	}
+
+	replay->tx_index = dest_addr.tx_index;
 
 	FI_OPX_DEBUG_COUNTERS_INC_COND(
 		src_iface != FI_HMEM_SYSTEM,

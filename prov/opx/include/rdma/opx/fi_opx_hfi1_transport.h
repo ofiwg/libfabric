@@ -577,9 +577,6 @@ struct opx_hfisvc_recv_rts_params {
 	void		       *recv_buf;
 	uint32_t		niov;
 	uint32_t		cur_iov;
-	uint32_t		sbuf_client_key;
-	uint32_t		sbuf_lid;
-	uintptr_t		rzv_comp;
 	union opx_hfisvc_iov	iovs[OPX_MAX_HFISVC_IOVS];
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
@@ -596,8 +593,7 @@ union fi_opx_hfi1_deferred_work {
 
 int  opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work);
 int  opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_context *context, const uint32_t niov,
-					  const uint32_t sbuf_client_key, const uint32_t sbuf_lid, const void *recv_buf,
-					  const union opx_hfisvc_iov *iovs, uintptr_t rzv_comp);
+					  const void *recv_buf, const union opx_hfisvc_iov *iovs);
 int  opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work);
 void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr, const uint16_t origin_rx,
 			 const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
