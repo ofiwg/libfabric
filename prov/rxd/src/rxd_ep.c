@@ -498,6 +498,7 @@ void rxd_tx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 			tx_entry->dg_mr_internal[i] = NULL;
 		}
 	}
+	memset(tx_entry->desc, 0, sizeof(tx_entry->desc));
 	tx_entry->op <= RXD_TAGGED ? ep->tx_msg_avail++ : ep->tx_rma_avail++;
 	tx_entry->op = RXD_NO_OP;
 	dlist_remove(&tx_entry->entry);
@@ -1095,11 +1096,17 @@ void rxd_ep_dg_cq_progress(struct rxd_ep *ep, struct fid_cq *dg_cq_fid,
 	ssize_t ret;
 	int i;
 
-	ret = fi_cq_read(dg_cq_fid, ep->dg_cqes, rxd_env.cq_batch_sz);
-	if (ret == -FI_EAVAIL)
-		rxd_handle_error(ep, dg_cq_fid);
-	for (i = 0; i < ret; ++i)
-		handle_comp_cb(ep, &ep->dg_cqes[i]);
+	do {
+		ret = fi_cq_read(dg_cq_fid, ep->dg_cqes, rxd_env.cq_batch_sz);
+		if (ret == -FI_EAVAIL) {
+			rxd_handle_error(ep, dg_cq_fid);
+			continue;
+		}
+		if (ret <= 0)
+			break;
+		for (i = 0; i < ret; ++i)
+			handle_comp_cb(ep, &ep->dg_cqes[i]);
+	} while (1);
 }
 
 void rxd_ep_progress(struct util_ep *util_ep)

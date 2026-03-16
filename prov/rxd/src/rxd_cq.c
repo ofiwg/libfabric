@@ -86,6 +86,7 @@ void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
 	rx_entry->op <= RXD_TAGGED ? ep->rx_msg_avail++ : ep->rx_rma_avail++;
 	rx_entry->op = RXD_NO_OP;
+	memset(rx_entry->desc, 0, sizeof(rx_entry->desc));
 	dlist_remove(&rx_entry->entry);
 	ofi_ibuf_free(rx_entry);
 }
