@@ -52,6 +52,7 @@
 */
 
 /* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+/* Copyright (c) 2026 Cornelis Networks  */
 
 #ifndef _HFI_i386_SYSDEP_H
 #define _HFI_i386_SYSDEP_H
@@ -156,15 +157,5 @@ typedef struct {
 
 #define ips_atomic_set(v, i)		  (((v)->counter) = (i))
 #define ips_atomic_cmpxchg(p, oval, nval) ips_cmpxchg((volatile uint32_t *) &((p)->counter), oval, nval)
-
-#if 0
-static __inline__ int32_t
-ips_cmpxchg(volatile int32_t *p, int32_t old_value, int32_t new_value)
-{
-	asm volatile ("lock cmpxchg %2, %0" :
-		      "+m" (*p), "+a"(old_value) : "r"(new_value) : "memory");
-	return old_value;
-}
-#endif
 
 #endif /* _HFI_i386_SYSDEP_H */
