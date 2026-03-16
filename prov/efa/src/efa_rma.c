@@ -40,14 +40,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	struct efa_mr *efa_mr;
 	struct efa_conn *conn;
 	size_t iov_count = msg->iov_count;
-#ifndef _WIN32
-	struct ibv_sge sge_list[msg->iov_count];
-#else
-	/* MSVC compiler does not support array declarations with runtime size, so hardcode
-	 * the expected iov_limit/max_sq_sge from the lower-level efa provider.
-	 */
-	struct ibv_sge sge_list[EFA_DEV_ATTR_MAX_WR_SGE];
-#endif
+	struct ibv_sge sge_list[2];  /* efa device support up to 2 iov */
 	uintptr_t wr_id;
 	int i, err = 0;
 	size_t total_len;
@@ -191,14 +184,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	struct efa_domain *domain = base_ep->domain;
 	struct efa_conn *conn;
 	size_t iov_count = msg->iov_count;
-#ifndef _WIN32
-	struct ibv_sge sge_list[msg->iov_count];
-#else
-	/* MSVC compiler does not support array declarations with runtime size, so hardcode
-	 * the expected iov_limit/max_sq_sge from the lower-level efa provider.
-	 */
-	struct ibv_sge sge_list[EFA_DEV_ATTR_MAX_WR_SGE];
-#endif
+	struct ibv_sge sge_list[2];  /* efa device support up to 2 iov */
 	uintptr_t wr_id;
 	int i, err = 0;
 	size_t total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
