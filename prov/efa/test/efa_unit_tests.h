@@ -17,6 +17,21 @@
 #include "stdio.h"
 #include "efa.h"
 #include "efa_unit_test_mocks.h"
+#include "efa_rdm_pke_cmd.h"
+
+/*
+ * TODO: Remove this utility once all protocols are migrated to the
+ * refactored code path with callbacks. At that point, all PKEs will
+ * have a callback set and we can call pkt_entry->callback directly.
+ */
+static inline void efa_unit_test_pke_handle_send_completion(
+	struct efa_rdm_pke *pkt_entry)
+{
+	if (pkt_entry->callback)
+		pkt_entry->callback(pkt_entry);
+	else
+		efa_rdm_pke_handle_send_completion(pkt_entry);
+}
 
 extern int g_ibv_ah_limit;
 extern int g_ibv_ah_cnt;
