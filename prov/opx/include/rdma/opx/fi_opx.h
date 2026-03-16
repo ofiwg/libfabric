@@ -338,30 +338,12 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192    = 0X000000000003FFE0UL;
    our "optimal" configuration */
 #define FI_OPX_SUPPORTED_CAPS (FI_OPX_DEFAULT_CAPS)
 
-#if 0
-/*
- * Use these when other FI_PROGRESS_* models are implemented.
- */
-#ifndef OPX_PROGRESS
-#define OPX_PROGRESS FI_PROGRESS_UNSPEC
-#endif
-
-#define IS_PROGRESS_MANUAL(domain_ptr)           \
-	((OPX_PROGRESS == FI_PROGRESS_MANUAL) || \
-	 ((OPX_PROGRESS == FI_PROGRESS_UNSPEC) && ((domain_ptr)->data_progress == FI_PROGRESS_MANUAL)))
-
-#define IS_PROGRESS_AUTO(domain_ptr)           \
-	((OPX_PROGRESS == FI_PROGRESS_AUTO) || \
-	 ((OPX_PROGRESS == FI_PROGRESS_UNSPEC) && ((domain_ptr)->data_progress == FI_PROGRESS_AUTO)))
-#else
-
 #ifndef OPX_PROGRESS
 #define OPX_PROGRESS FI_PROGRESS_UNSPEC
 #endif
 
 #define IS_PROGRESS_MANUAL(domain_ptr) (1)
 #define IS_PROGRESS_AUTO(domain_ptr)   (0)
-#endif
 
 static inline void always_assert(bool val, char *msg)
 {
