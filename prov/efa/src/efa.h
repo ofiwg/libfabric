@@ -93,21 +93,6 @@
 #define EFA_DEFAULT_INTRA_MAX_GDRCOPY_FROM_DEV_SIZE (3072)
 
 /*
- * The default memory alignment
- */
-#define EFA_RDM_DEFAULT_MEMORY_ALIGNMENT (8)
-
-/*
- * The CUDA memory alignment
- */
-#define EFA_RDM_CUDA_MEMORY_ALIGNMENT (64)
-
-/*
- * The alignment to support in-order aligned ops.
- */
-#define EFA_RDM_IN_ORDER_ALIGNMENT (128)
-
-/*
  * Set alignment to x86 cache line size.
  */
 #define EFA_RDM_BUFPOOL_ALIGNMENT	(64)
