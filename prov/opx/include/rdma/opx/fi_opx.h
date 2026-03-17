@@ -175,6 +175,8 @@ static const char *const OPX_HFI1_PACKET_STR[] = {
 #define OPX_MAX_HFIS (16)
 OPX_COMPILE_TIME_ASSERT((OPX_MAX_HFIS & 3) == 0, "OPX_MAX_HFIS must be a multiple of 4!\n");
 
+#define OPX_MAX_TX_CONTEXTS (2)
+
 struct opx_hfi_local_entry {
 	uint32_t instance;
 	uint8_t	 hfi_unit;

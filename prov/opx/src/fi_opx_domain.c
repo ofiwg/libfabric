@@ -86,8 +86,11 @@ static int fi_opx_close_domain(fid_t fid)
 
 #if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {
-		while (opx_hfisvc_keyset_outstanding(opx_domain->hfisvc.access_key_set)) {
-			opx_domain_hfisvc_poll(opx_domain);
+		/* Drain outstanding access keys for all contexts */
+		for (int i = 0; i < opx_domain->hfisvc.num_ctxs; i++) {
+			while (opx_hfisvc_keyset_outstanding(opx_domain->hfisvc.ctxs[i].access_key_set)) {
+				opx_domain_hfisvc_poll(opx_domain);
+			}
 		}
 	}
 #endif
@@ -114,11 +117,31 @@ static int fi_opx_close_domain(fid_t fid)
 			return ret;
 		}
 
-		opx_hfisvc_keyset_free(opx_domain->hfisvc.access_key_set);
+		/* Close domain-level MR queues */
+		ret = (*opx_domain->hfisvc.completion_queue_close)(&opx_domain->hfisvc.mr_completion_queue);
+		if (ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"[HFISVC] Failed closing domain MR completion queue, ret=%d\n", ret);
+		}
 
-		/* Close HFISVC context, the endpoint should already be closed */
-		assert(opx_domain->hfisvc.ctx != NULL);
-		opx_hfi1_rdma_context_close(opx_domain->hfisvc.ctx);
+		ret = (*opx_domain->hfisvc.command_queue_close)(&opx_domain->hfisvc.mr_command_queue);
+		if (ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"[HFISVC] Failed closing domain MR command queue, ret=%d\n", ret);
+		}
+
+		/* Close all hfisvc contexts */
+		for (int i = 0; i < opx_domain->hfisvc.num_ctxs; i++) {
+			if (opx_domain->hfisvc.ctxs[i].ctx == NULL) {
+				continue;
+			}
+
+			FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Closing context %d\n", i);
+
+			opx_hfisvc_keyset_free(opx_domain->hfisvc.ctxs[i].access_key_set);
+			opx_hfi1_rdma_context_close(opx_domain->hfisvc.ctxs[i].ctx);
+			opx_domain->hfisvc.ctxs[i].ctx = NULL;
+		}
 	}
 #endif
 
@@ -630,6 +653,44 @@ err:
 
 extern struct opx_rdma_ops_struct opx_rdma_ops;
 
+int opx_domain_hfisvc_init_ctx(struct fi_opx_domain *domain, int ctx_index)
+{
+	assert(ctx_index >= 0 && ctx_index < OPX_MAX_TX_CONTEXTS);
+	assert(domain->hfisvc.ctxs[ctx_index].ctx != NULL);
+
+	int ret;
+
+	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Initializing context %d\n", ctx_index);
+
+	ret = (*domain->hfisvc.initialize)(domain->hfisvc.ctxs[ctx_index].ctx);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+			"[HFISVC] hfisvc_client_initialize failed for ctx %d, ret=%d\n", ctx_index, ret);
+		return -FI_ENODEV;
+	}
+
+	ret = (*domain->hfisvc.get_client_key)(domain->hfisvc.ctxs[ctx_index].ctx,
+					       &domain->hfisvc.ctxs[ctx_index].client_key);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] get_client_key failed for ctx %d, ret=%d\n",
+			ctx_index, ret);
+		return -FI_ENODEV;
+	}
+
+	OPX_HFISVC_DEBUG_LOG("Initializing hfisvc keyset for ctx %d\n", ctx_index);
+	ret = opx_hfisvc_keyset_init(&domain->hfisvc.ctxs[ctx_index].access_key_set);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Failed initializing keyset for ctx %d, ret=%d\n",
+			ctx_index, ret);
+		return -FI_ENODEV;
+	}
+
+	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Initialized context %d with client key %u\n", ctx_index,
+		domain->hfisvc.ctxs[ctx_index].client_key);
+
+	return FI_SUCCESS;
+}
+
 int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 {
 	int rc = FI_SUCCESS;
@@ -696,43 +757,37 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 	assert(domain->hfisvc.cmd_rdma_read_va != NULL);
 	assert(domain->hfisvc.doorbell != NULL);
 
-	int ret = (*domain->hfisvc.initialize)(domain->hfisvc.ctx);
+	/* Open domain-level MR command/completion queues on primary context */
+	OPX_HFISVC_DEBUG_LOG("Creating domain MR command queue\n");
+	int ret = (*domain->hfisvc.command_queue_open)(&domain->hfisvc.mr_command_queue, domain->hfisvc.ctxs[0].ctx);
 	if (ret) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-			"[HFISVC] hfisvc_client_initialize failed, disable hfisvc\n");
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Failed creating domain MR command queue, ret=%d\n",
+			ret);
 		rc = -FI_ENODEV;
 		goto done;
 	}
-	ret = (*domain->hfisvc.get_client_key)(domain->hfisvc.ctx, &domain->hfisvc.client_key);
-	if (ret) {
-		abort();
-	}
-	OPX_HFISVC_DEBUG_LOG("Creating new domain mr command queue\n");
-	ret = (*domain->hfisvc.command_queue_open)(&domain->hfisvc.mr_command_queue, domain->hfisvc.ctx);
 
+	OPX_HFISVC_DEBUG_LOG("Creating domain MR completion queue\n");
+	ret = (*domain->hfisvc.completion_queue_open)(&domain->hfisvc.mr_completion_queue, domain->hfisvc.ctxs[0].ctx);
 	if (ret) {
-		fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr command queue! ret=%d\n", getpid(), __FILE__,
-			__func__, __LINE__, ret);
-		abort();
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+			"[HFISVC] Failed creating domain MR completion queue, ret=%d\n", ret);
+		(*domain->hfisvc.command_queue_close)(&domain->hfisvc.mr_command_queue);
+		rc = -FI_ENODEV;
+		goto done;
 	}
 
-	OPX_HFISVC_DEBUG_LOG("Creating new domain mr completion queue\n");
-	ret = (*domain->hfisvc.completion_queue_open)(&domain->hfisvc.mr_completion_queue, domain->hfisvc.ctx);
+	/* Initialize the primary context (ctxs[0]) */
+	ret = opx_domain_hfisvc_init_ctx(domain, 0);
+	if (ret) {
+		(*domain->hfisvc.completion_queue_close)(&domain->hfisvc.mr_completion_queue);
+		(*domain->hfisvc.command_queue_close)(&domain->hfisvc.mr_command_queue);
+		rc = ret;
+		goto done;
+	}
 
-	if (ret) {
-		fprintf(stderr, "(%d) %s:%s():%d Failed creating domain mr completion queue! ret=%d\n", getpid(),
-			__FILE__, __func__, __LINE__, ret);
-		abort();
-	}
-	OPX_HFISVC_DEBUG_LOG("Initializing hfisvc keyset\n");
-	ret = opx_hfisvc_keyset_init(&domain->hfisvc.access_key_set);
-	if (ret) {
-		fprintf(stderr, "(%d) %s:%s():%d Failed initializing hfisvc keyset! ret=%d\n", getpid(), __FILE__,
-			__func__, __LINE__, ret);
-		abort();
-	}
+	domain->hfisvc.num_ctxs = 1;
 	ofi_atomic_set64(&domain->hfisvc.ref_cnt, 1);
-	OPX_HFISVC_DEBUG_LOG("Initialized HFI service with client key %u\n", domain->hfisvc.client_key);
 	domain->use_hfisvc = 1;
 
 done:
