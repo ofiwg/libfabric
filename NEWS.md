@@ -53,6 +53,7 @@ v2.5.0, Fri March 20, 2026
 
 ## CXI ##
 
+- cxip_mr_init uses wrong length field from DMABUF structure
 - Fix hang in MPI when using cxi with lnx
 - Fix append sequence for standard MR
 - Add cxi unit tests and update man/fi_cxi.7
@@ -67,6 +68,7 @@ v2.5.0, Fri March 20, 2026
 
 ## EFA ##
 
+- Fix zero-length VLA stack overflow in RMA paths
 - Fix 0 byte send/read/write support
 - Clean up efa_hmem_info_init_iface()
 - Fix error path deadlock in efa_base_ep_create_qp
@@ -175,6 +177,10 @@ v2.5.0, Fri March 20, 2026
 - Fix MP Eager replays for 9B headers
 - Fix mismatched alignment attribute between packet header & payload unions.
 
+## PSM3 ##
+
+- Update psm3 to match IEFS 12.1.0.1 release
+
 ## RXD ##
 
 - Fix atomic fetch/compare path
@@ -187,6 +193,7 @@ v2.5.0, Fri March 20, 2026
 
 ## SHM ##
 
+- Always prefer IPC over bouncing through shm
 - Fix shm not utilizing XPMEM when requested
 - Validate application input for atomic ops
 - Fix smr_unexp_ipc chunking for large buffered messages
@@ -219,6 +226,7 @@ v2.5.0, Fri March 20, 2026
 
 ## Fabtests ##
 
+- dmabuf-rdma: Fix uninitialized variable warning
 - hmem: Add way to query neuron ops version
 - hmem: Use neuron nrt_get_dmabuf_fd_v2 if available
 - Add fabtests for getting dmabuf fd
