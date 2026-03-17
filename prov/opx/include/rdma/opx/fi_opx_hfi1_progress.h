@@ -1168,7 +1168,10 @@ void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliab
 	unsigned	      packets	      = 0;
 
 #if HAVE_HFISVC
-	uint32_t start_rdma_read_count = opx_ep->hfisvc.rdma_read_count;
+	uint32_t start_rdma_read_count[OPX_MAX_TX_CONTEXTS];
+	for (int i = 0; i < opx_ep->hfisvc.num_queues; i++) {
+		start_rdma_read_count[i] = opx_ep->hfisvc.rdma_read_count[i];
+	}
 #endif
 
 	if (ctx_sharing) {
@@ -1207,15 +1210,13 @@ void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliab
 	}
 
 #if HAVE_HFISVC
-	if (opx_ep->hfisvc.rdma_read_count != start_rdma_read_count) {
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.doorbell_ring.poll_many);
-		OPX_HFISVC_DEBUG_LOG(
-			"Rang doorbell because start_rdma_read_count=%u and opx_ep->hfisvc.rdma_read_count=%u\n",
-			start_rdma_read_count, opx_ep->hfisvc.rdma_read_count);
-		int rc __attribute__((unused));
-		rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
-
-		assert(rc == 0);
+	for (int i = 0; i < opx_ep->hfisvc.num_queues; i++) {
+		if (opx_ep->hfisvc.rdma_read_count[i] != start_rdma_read_count[i]) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.doorbell_ring.poll_many);
+			int rc __attribute__((unused));
+			rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[i].ctx);
+			assert(rc == 0);
+		}
 	}
 #endif
 }
@@ -1277,7 +1278,7 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 				FI_OPX_DEBUG_COUNTERS_INC(
 					opx_ep->debug_counters.hfisvc.doorbell_ring.reliability_timer_pop);
 				int rc __attribute__((unused));
-				rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
+				rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[0].ctx);
 				assert(rc == 0);
 			}
 #endif

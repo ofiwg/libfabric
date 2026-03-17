@@ -619,6 +619,17 @@ struct fi_opx_hfi1_context_internal {
 	struct _hfi_ctrl	 *ctrl;
 };
 
+struct fi_opx_plane_info {
+	uint32_t hfi_unit;
+	uint32_t hfi_port;
+	uint64_t gid_hi;
+};
+
+int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
+				int max_planes);
+
+struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uuid_t unique_job_key, uint32_t hfi_unit);
+
 #ifdef NDEBUG
 #define FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(credits_addr)
 #else

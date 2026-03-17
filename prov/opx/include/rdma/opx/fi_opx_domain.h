@@ -64,6 +64,15 @@ struct fi_opx_ep; /* forward declaration */
 struct opx_tid_fabric;
 struct opx_hmem_fabric;
 
+#if HAVE_HFISVC
+struct fi_opx_hfisvc_ctx {
+	struct ibv_context *ctx;
+	opx_hfisvc_keyset_t access_key_set;
+	hfisvc_client_key_t client_key;
+	uint32_t	    padding;
+};
+#endif
+
 struct fi_opx_fabric {
 	struct fid_fabric fabric_fid;
 
@@ -113,7 +122,8 @@ struct fi_opx_domain {
 
 #if HAVE_HFISVC
 	struct {
-		struct ibv_context *ctx;
+		struct fi_opx_hfisvc_ctx ctxs[OPX_MAX_TX_CONTEXTS];
+		int			 num_ctxs;
 		/**
 		 * @brief Command queue used by the domain for issuing commands to the
 		 * hfisvc where we are opening/closing hfisvc memory regions.
@@ -125,10 +135,7 @@ struct fi_opx_domain {
 		 * hfisvc where we are opening/closing hfisvc memory regions.
 		 */
 		hfisvc_client_completion_queue_t mr_completion_queue;
-		opx_hfisvc_keyset_t		 access_key_set;
 		ofi_atomic64_t			 ref_cnt;
-		hfisvc_client_key_t		 client_key;
-		uint32_t			 padding;
 		void				*libhfi1verbs;
 		int (*initialize)(struct ibv_context *ctx);
 		int (*get_client_key)(struct ibv_context *ctx, hfisvc_client_key_t *key);
@@ -360,6 +367,7 @@ __OPX_FORCE_INLINE__
 void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 {
 	struct hfisvc_client_cq_entry hfisvc_out[64];
+
 	size_t n = (*opx_domain->hfisvc.cq_read)(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out,
 						 sizeof(struct hfisvc_client_cq_entry) * 64, 64);
 	while (n > 0) {
@@ -430,8 +438,8 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 				/* free the rendezvous completion structure */
 				OPX_BUF_FREE(rzv_comp);
 			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE) {
-				opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set, opx_mr->hfisvc.access_key,
-							   NULL);
+				opx_hfisvc_keyset_free_key(opx_domain->hfisvc.ctxs[0].access_key_set,
+							   opx_mr->hfisvc.access_key, NULL);
 				opx_mr->hfisvc.access_key = (uint32_t) -1;
 				OPX_HFISVC_DEBUG_LOG(
 					"MR State transition opx_mr=%p state=PENDING_KEY_DISABLE -> PENDING_DEREGISTER\n",
@@ -479,6 +487,7 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 }
 
 int opx_domain_hfisvc_init(struct fi_opx_domain *domain);
+int opx_domain_hfisvc_init_ctx(struct fi_opx_domain *domain, int ctx_index);
 #endif
 
 #ifdef __cplusplus

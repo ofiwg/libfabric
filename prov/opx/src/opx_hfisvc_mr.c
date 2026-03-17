@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 Cornelis Networks.
+ * Copyright (C) 2025-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -87,7 +87,7 @@ void opx_hfisvc_mr_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error opening opx_mr=%p buf=%p-%p iface=%d\n", opx_mr, base,
 			(void *) ((uintptr_t) base + len), opx_mr->attr.iface);
 	} else {
-		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
+		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx);
 		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=NOT_REGISTERED -> PENDING_OPEN\n", opx_mr);
 		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_OPEN;
 	}
@@ -99,7 +99,7 @@ int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_
 
 	uint32_t access_key;
 	// TODO: Figure out how to pass in counters
-	int ret = opx_hfisvc_keyset_alloc_key(&opx_domain->hfisvc.access_key_set, &access_key, NULL);
+	int ret = opx_hfisvc_keyset_alloc_key(&opx_domain->hfisvc.ctxs[0].access_key_set, &access_key, NULL);
 	if (ret) {
 		OPX_HFISVC_DEBUG_LOG("Unable to allocate access_key for mr=%p buf=%p-%p (EAGAIN)\n", opx_mr,
 
@@ -136,11 +136,11 @@ int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_
 						    (void *) ((uintptr_t) opx_mr->dmabuf.base_addr +
 							      opx_mr->dmabuf.len + opx_mr->dmabuf.offset),
 			ret);
-		opx_hfisvc_keyset_free_key(opx_domain->hfisvc.access_key_set, access_key,
+		opx_hfisvc_keyset_free_key(opx_domain->hfisvc.ctxs[0].access_key_set, access_key,
 					   NULL); // TODO: Debug counters parm
 		return -FI_EAGAIN;
 	}
-	(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
+	(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx);
 	opx_mr->hfisvc.access_key = access_key;
 
 	OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p key=%u state=PENDING_KEY_ALLOC -> PENDING_KEY_ENABLE\n",
@@ -173,7 +173,7 @@ void opx_hfisvc_mr_disable_access_key(struct fi_opx_domain *opx_domain, struct f
 						       opx_mr->dmabuf.offset),
 				     ret);
 	} else {
-		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
+		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx);
 		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=OPEN -> PENDING_KEY_DISABLE\n", opx_mr);
 		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE;
 	}
@@ -204,7 +204,7 @@ void opx_hfisvc_mr_deregister_mr(struct fi_opx_domain *opx_domain, struct fi_opx
 						    (void *) ((uintptr_t) opx_mr->dmabuf.base_addr +
 							      opx_mr->dmabuf.len + opx_mr->dmabuf.offset));
 	} else {
-		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctx);
+		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx);
 		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_DEREGISTER -> PENDING_CLOSE\n",
 				     opx_mr);
 		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_CLOSE;

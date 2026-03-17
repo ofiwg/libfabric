@@ -574,9 +574,8 @@ struct opx_hfisvc_recv_rts_params {
 	uint32_t		cur_iov;
 	uint32_t		sbuf_client_key;
 	uint32_t		sbuf_lid;
-
-	uintptr_t	     rzv_comp;
-	union opx_hfisvc_iov iovs[OPX_MAX_HFISVC_IOVS];
+	uintptr_t		rzv_comp;
+	union opx_hfisvc_iov	iovs[OPX_MAX_HFISVC_IOVS];
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 union fi_opx_hfi1_deferred_work {
