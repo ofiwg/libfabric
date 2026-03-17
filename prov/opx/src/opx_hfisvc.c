@@ -95,9 +95,9 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 			}
 			uint64_t local_offset = opx_mr_dmabuf_local_offset(opx_mr, recv_buf);
 			rc		      = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
-				   opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid, sbuf_client_key,
-				   sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset, opx_mr->hfisvc.mr_handle,
-				   local_offset);
+				   opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, sbuf_lid,
+				   sbuf_client_key, sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset,
+				   opx_mr->hfisvc.mr_handle, local_offset);
 			if (rc != FI_SUCCESS) {
 				params->cur_iov	 = i;
 				params->recv_buf = (void *) recv_buf;
@@ -119,8 +119,8 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				sbuf_client_key, sbuf_access_key, sbuf_len, params->rzv_comp);
 		} else {
 			rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
-				opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, sbuf_lid, sbuf_client_key,
-				sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset, recv_buf);
+				opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, sbuf_lid,
+				sbuf_client_key, sbuf_len, params->rzv_comp, sbuf_access_key, sbuf_offset, recv_buf);
 			if (rc != FI_SUCCESS) {
 				params->cur_iov	 = i;
 				params->recv_buf = (void *) recv_buf;
@@ -145,7 +145,7 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 	if (read_count) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.doorbell_ring.deferred_work);
 		__attribute__((unused)) int doorbell_rc =
-			(*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
+			(*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[0].ctx);
 		assert(doorbell_rc == 0);
 	}
 

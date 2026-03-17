@@ -512,34 +512,45 @@ static int fi_opx_close_ep(fid_t fid)
 		opx_ep->rx_info = NULL;
 	}
 
-	if (opx_ep->tx) {
-		ret = fi_opx_ref_dec(&opx_ep->tx->ref_cnt, "tx");
-		if (ret) { // Error
+	/* Teardown all TX contexts (primary at index 0, secondary at 1..N).
+	 * opx_ep->tx is an alias for tx_contexts[0], so a single loop handles both. */
+	for (int i = 0; i < opx_ep->num_tx_contexts; i++) {
+		struct fi_opx_ep_tx *cur_tx = opx_ep->tx_contexts[i];
+		if (!cur_tx) {
+			continue;
+		}
+
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Cleaning up tx context %d\n", i);
+
+		ret = fi_opx_ref_dec(&cur_tx->ref_cnt, "tx context");
+		if (ret) {
 			errno = -ret;
 			goto err_unlock;
 		}
-		if (opx_ep->tx->cq && (ofi_atomic_get64(&opx_ep->tx->cq->ref_cnt) == 0)) {
-			if (opx_ep->tx->work_pending_pool) {
-				ofi_bufpool_destroy(opx_ep->tx->work_pending_pool);
+		if (cur_tx->cq && (ofi_atomic_get64(&cur_tx->cq->ref_cnt) == 0)) {
+			if (cur_tx->work_pending_pool) {
+				ofi_bufpool_destroy(cur_tx->work_pending_pool);
 			}
-			if (opx_ep->tx->rma_payload_pool) {
-				ofi_bufpool_destroy(opx_ep->tx->rma_payload_pool);
+			if (cur_tx->rma_payload_pool) {
+				ofi_bufpool_destroy(cur_tx->rma_payload_pool);
 			}
-			if (opx_ep->tx->rma_request_pool) {
-				ofi_bufpool_destroy(opx_ep->tx->rma_request_pool);
+			if (cur_tx->rma_request_pool) {
+				ofi_bufpool_destroy(cur_tx->rma_request_pool);
 			}
 		}
-		if (ofi_atomic_get64(&opx_ep->tx->ref_cnt) == 0) {
-			if (opx_ep->tx->sdma_work_pool) {
-				ofi_bufpool_destroy(opx_ep->tx->sdma_work_pool);
+		if (ofi_atomic_get64(&cur_tx->ref_cnt) == 0) {
+			if (cur_tx->sdma_work_pool) {
+				ofi_bufpool_destroy(cur_tx->sdma_work_pool);
 			}
-			if (opx_ep->tx->sdma_request_pool) {
-				ofi_bufpool_destroy(opx_ep->tx->sdma_request_pool);
+			if (cur_tx->sdma_request_pool) {
+				ofi_bufpool_destroy(cur_tx->sdma_request_pool);
 			}
-			free(opx_ep->tx->mem);
+			free(cur_tx->mem);
 		}
-		opx_ep->tx = NULL;
+		opx_ep->tx_contexts[i] = NULL;
 	}
+	opx_ep->tx = NULL;
+
 	if (opx_ep->rx) {
 		ret = fi_opx_ref_dec(&opx_ep->rx->ref_cnt, "rx");
 		if (ret) { // Error
@@ -645,16 +656,20 @@ static int fi_opx_close_ep(fid_t fid)
 	// free memory allocated for fi_opx_hfi1_context struct in fi_opx_hfi1_context_open function in fi_opx_hfi1.c
 	if (opx_ep->hfi) {
 		ret = fi_opx_ref_dec(&opx_ep->hfi->ref_cnt, "HFI context");
-		if (ret) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI context in use\n");
-			return ret; // Error
+		if (ret) { // Error
+			errno = -ret;
+			goto err_unlock;
 		}
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI context not in use\n");
-
-		/* Close HFI1 Direct Verbs context, but HFISVC shares ONE endpoint context
-		   with the domain.  Let the domain close it */
 #if HAVE_HFISVC
-		if (opx_ep->domain->hfisvc.ctx != opx_ep->hfi->ibv_context) {
+		/* Check if this ibv_context is shared with any hfisvc context */
+		bool is_hfisvc_ctx = false;
+		for (int i = 0; i < opx_ep->domain->hfisvc.num_ctxs; i++) {
+			if (opx_ep->domain->hfisvc.ctxs[i].ctx == opx_ep->hfi->ibv_context) {
+				is_hfisvc_ctx = true;
+				break;
+			}
+		}
+		if (!is_hfisvc_ctx) {
 			opx_hfi1_rdma_context_close(opx_ep->hfi->ibv_context);
 		}
 #else
@@ -662,8 +677,7 @@ static int fi_opx_close_ep(fid_t fid)
 #endif
 
 		if (ofi_atomic_get64(&opx_ep->hfi->ref_cnt) == 0) {
-			// free memory allocated for _hfi_ctrl struct in opx_hfi_userinit_internal function in
-			// opa_proto.c
+			// Free the HFI context
 			if (opx_ep->hfi->ctrl) {
 				free(opx_ep->hfi->ctrl);
 				opx_ep->hfi->ctrl = NULL;
@@ -671,6 +685,40 @@ static int fi_opx_close_ep(fid_t fid)
 			free(opx_ep->hfi);
 		}
 		opx_ep->hfi = NULL;
+	}
+
+	/* Multi-plane: Teardown secondary HFI contexts */
+	for (int i = 1; i < opx_ep->num_tx_contexts; i++) {
+		struct fi_opx_hfi1_context *sec_hfi = opx_ep->hfi_contexts[i];
+		if (sec_hfi) {
+			ret = fi_opx_ref_dec(&sec_hfi->ref_cnt, "HFI context");
+			if (ret) {
+				errno = -ret;
+				goto err_unlock;
+			}
+#if HAVE_HFISVC
+			/* Check if this ibv_context is shared with any hfisvc context */
+			bool is_hfisvc_ctx = false;
+			for (int j = 0; j < opx_ep->domain->hfisvc.num_ctxs; j++) {
+				if (opx_ep->domain->hfisvc.ctxs[j].ctx == sec_hfi->ibv_context) {
+					is_hfisvc_ctx = true;
+					break;
+				}
+			}
+			if (!is_hfisvc_ctx) {
+				opx_hfi1_rdma_context_close(sec_hfi->ibv_context);
+			}
+#else
+			opx_hfi1_rdma_context_close(sec_hfi->ibv_context);
+#endif
+			if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
+				if (sec_hfi->ctrl) {
+					free(sec_hfi->ctrl);
+				}
+				free(sec_hfi);
+			}
+			opx_ep->hfi_contexts[i] = NULL;
+		}
 	}
 
 	if (opx_ep->hmem_copy_buf) {
@@ -684,15 +732,18 @@ static int fi_opx_close_ep(fid_t fid)
 
 #if HAVE_HFISVC
 	if (opx_ep->use_hfisvc) {
-		ret = (*opx_ep->domain->hfisvc.completion_queue_close)(&opx_ep->hfisvc.internal_completion_queue);
-		if (ret) {
-			errno = -ret;
-			goto err_unlock;
-		}
-		ret = (*opx_ep->domain->hfisvc.command_queue_close)(&opx_ep->hfisvc.command_queue);
-		if (ret) {
-			errno = -ret;
-			goto err_unlock;
+		for (int i = 0; i < opx_ep->hfisvc.num_queues; i++) {
+			ret = (*opx_ep->domain->hfisvc.completion_queue_close)(
+				&opx_ep->hfisvc.internal_completion_queues[i]);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+					"Failed closing EP completion queue for ctx %d, ret=%d\n", i, ret);
+			}
+			ret = (*opx_ep->domain->hfisvc.command_queue_close)(&opx_ep->hfisvc.command_queues[i]);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+					"Failed closing EP command queue for ctx %d, ret=%d\n", i, ret);
+			}
 		}
 	}
 #endif
@@ -800,14 +851,15 @@ err:
 	return -errno;
 }
 
-static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx_domain)
+static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx_domain, struct fi_opx_ep_tx *tx,
+			     struct fi_opx_hfi1_context *hfi)
 {
 	OPX_LOG(FI_LOG_INFO, FI_LOG_EP_DATA, "==== TX init.  Calculating optimal Tx send thresholds\n");
 
 	assert(opx_ep);
 	assert(opx_domain);
-
-	struct fi_opx_hfi1_context *hfi = opx_ep->hfi;
+	assert(tx);
+	assert(hfi);
 
 	/*
 	 * The 'state' fields will change after every tx operation and
@@ -818,8 +870,8 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	 * is kept in the struct fi_opx_hfi1_context memory.
 	 */
 	if (OPX_IS_CTX_SHARING_ENABLED) {
-		opx_ep->tx->spio_ctrl		= opx_ep->hfi->spio_ctrl;
-		struct opx_spio_ctrl *spio_ctrl = opx_ep->tx->spio_ctrl;
+		tx->spio_ctrl			= hfi->spio_ctrl;
+		struct opx_spio_ctrl *spio_ctrl = tx->spio_ctrl;
 
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Setting up shared PIO state for context sharing.\n");
 
@@ -827,7 +879,7 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 		 * Subctxt 0 in context sharing group is responsible for initializing the shared
 		 * PIO state and synchronization spin lock.
 		 */
-		if (opx_ep->hfi->subctxt == 0) {
+		if (hfi->subctxt == 0) {
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Initializing context sharing PIO lock.\n");
 			if (pthread_spin_init(&spio_ctrl->spio_ctrl_lock, PTHREAD_PROCESS_SHARED) != 0) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -843,23 +895,21 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 			spio_ctrl->pio = hfi->state.pio;
 		}
 
-		opx_ep->tx->pio_state = &spio_ctrl->pio;
+		tx->pio_state = &spio_ctrl->pio;
 	} else {
-		opx_ep->tx->pio_state = &hfi->state.pio;
+		tx->pio_state = &hfi->state.pio;
 	}
 
 	/* the 'info' fields do not change; the values can be safely copied */
-	opx_ep->tx->pio_scb_sop_first = hfi->info.pio.scb_sop_first;
-	opx_ep->tx->pio_scb_first     = hfi->info.pio.scb_first;
-	opx_ep->tx->pio_credits_addr  = hfi->info.pio.credits_addr;
+	tx->pio_scb_sop_first = hfi->info.pio.scb_sop_first;
+	tx->pio_scb_first     = hfi->info.pio.scb_first;
+	tx->pio_credits_addr  = hfi->info.pio.credits_addr;
 
 	/* initialize the models */
 	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		fi_opx_ep_tx_model_init(hfi, &opx_ep->tx->inject_9B, &opx_ep->tx->send_9B, &opx_ep->tx->send_mp_9B,
-					&opx_ep->tx->rzv_9B);
+		fi_opx_ep_tx_model_init(hfi, &tx->inject_9B, &tx->send_9B, &tx->send_mp_9B, &tx->rzv_9B);
 	} else {
-		fi_opx_ep_tx_model_init_16B(hfi, &opx_ep->tx->inject_16B, &opx_ep->tx->send_16B,
-					    &opx_ep->tx->send_mp_16B, &opx_ep->tx->rzv_16B);
+		fi_opx_ep_tx_model_init_16B(hfi, &tx->inject_16B, &tx->send_16B, &tx->send_mp_16B, &tx->rzv_16B);
 	}
 
 	// Retrieve the parameter for RZV min message length
@@ -880,7 +930,7 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_RZV_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
 				   l_rzv_min_payload_bytes);
 	}
-	opx_ep->tx->rzv_min_payload_bytes = l_rzv_min_payload_bytes;
+	tx->rzv_min_payload_bytes = l_rzv_min_payload_bytes;
 
 	/* Now that we know how many PIO Tx send credits we have, calculate the threshold to switch from EAGER send to
 	 * RTS/CTS With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit
@@ -892,10 +942,10 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	assert(l_pio_max_eager_tx_bytes < ((2 << 15) - 1)); // Make sure the value won't wrap a uint16_t
 	assert(l_pio_max_eager_tx_bytes != 0);
 	assert((l_pio_max_eager_tx_bytes & 0x3f) == 0); // Make sure the value is 64 byte aligned
-	opx_ep->tx->pio_max_eager_tx_bytes = l_pio_max_eager_tx_bytes;
+	tx->pio_max_eager_tx_bytes = l_pio_max_eager_tx_bytes;
 
 	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Credits_total is %d, so set pio_max_eager_tx_bytes to %d \n",
-			   hfi->state.pio.credits_total, opx_ep->tx->pio_max_eager_tx_bytes);
+			   hfi->state.pio.credits_total, tx->pio_max_eager_tx_bytes);
 
 	/* Similar logic to l_pio_max_eager_tx_bytes, calculate l_pio_flow_eager_tx_bytes to be an 'optimal' value for
 	 * PIO credit count that respects the HFI credit return threshold.  The threshold is default 33%, so multiply
@@ -914,9 +964,9 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	assert(l_pio_flow_eager_tx_bytes <=
 	       l_pio_max_eager_tx_bytes); // On credit constrained systems, max is bigger than flow
 
-	opx_ep->tx->pio_flow_eager_tx_bytes = l_pio_flow_eager_tx_bytes;
+	tx->pio_flow_eager_tx_bytes = l_pio_flow_eager_tx_bytes;
 
-	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Set pio_flow_eager_tx_bytes to %d \n", opx_ep->tx->pio_flow_eager_tx_bytes);
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Set pio_flow_eager_tx_bytes to %d \n", tx->pio_flow_eager_tx_bytes);
 
 	// Set the multi-packet eager max message length
 	int l_mp_eager_disable;
@@ -939,23 +989,22 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 
 	if (l_mp_eager_disable == OPX_MP_EGR_DISABLE_SET) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager is disabled.\n");
-		opx_ep->tx->mp_eager_max_payload_bytes = 0;
-		opx_ep->tx->mp_eager_min_payload_bytes = UINT16_MAX;
-		opx_ep->tx->mp_eager_chunk_size	       = UINT16_MAX;
+		tx->mp_eager_max_payload_bytes = 0;
+		tx->mp_eager_min_payload_bytes = UINT16_MAX;
+		tx->mp_eager_chunk_size	       = UINT16_MAX;
 	} else {
 		uint16_t max_chunk_size = (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? OPX_MP_EGR_MAX_CHUNK_SIZE_WFR :
 									      OPX_MP_EGR_MAX_CHUNK_SIZE_CN5K;
 
-		opx_ep->tx->mp_eager_max_payload_bytes = l_rzv_min_payload_bytes - 1;
-		opx_ep->tx->mp_eager_min_payload_bytes = l_pio_flow_eager_tx_bytes + 1;
-		opx_ep->tx->mp_eager_chunk_size	       = MIN(l_pio_flow_eager_tx_bytes, max_chunk_size);
+		tx->mp_eager_max_payload_bytes = l_rzv_min_payload_bytes - 1;
+		tx->mp_eager_min_payload_bytes = l_pio_flow_eager_tx_bytes + 1;
+		tx->mp_eager_chunk_size	       = MIN(l_pio_flow_eager_tx_bytes, max_chunk_size);
 
 		// Chunk size needs to be a multiple of 64
-		assert((opx_ep->tx->mp_eager_chunk_size & 0x3F) == 0);
+		assert((tx->mp_eager_chunk_size & 0x3F) == 0);
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager range is %hu-%u.\n",
-				   opx_ep->tx->mp_eager_min_payload_bytes, opx_ep->tx->mp_eager_max_payload_bytes);
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager chunk-size is %hu.\n",
-				   opx_ep->tx->mp_eager_chunk_size);
+				   tx->mp_eager_min_payload_bytes, tx->mp_eager_max_payload_bytes);
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager chunk-size is %hu.\n", tx->mp_eager_chunk_size);
 	}
 
 	/* Set SDMA bounce buffer threshold.  Any messages larger than this value in bytes will not be copied to
@@ -969,64 +1018,59 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				      &l_sdma_bounce_buf_threshold);
 	}
 	if (rc != FI_SUCCESS) {
-		opx_ep->tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
+		tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
 				   "FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD not set.  Using default setting of %d\n",
-				   opx_ep->tx->sdma_bounce_buf_threshold);
+				   tx->sdma_bounce_buf_threshold);
 	} else if (l_sdma_bounce_buf_threshold < OPX_SDMA_BOUNCE_BUF_MIN ||
 		   l_sdma_bounce_buf_threshold > (OPX_SDMA_BOUNCE_BUF_MAX)) {
-		opx_ep->tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
+		tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD was set but is outside of min/max thresholds (%d-%d).  Using default setting of %d\n",
-			OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, opx_ep->tx->sdma_bounce_buf_threshold);
+			OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, tx->sdma_bounce_buf_threshold);
 	} else {
-		opx_ep->tx->sdma_bounce_buf_threshold = l_sdma_bounce_buf_threshold;
+		tx->sdma_bounce_buf_threshold = l_sdma_bounce_buf_threshold;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD was specified.  Set to %d\n",
-				   opx_ep->tx->sdma_bounce_buf_threshold);
+				   tx->sdma_bounce_buf_threshold);
 	}
 
-	opx_ep->tx->force_credit_return = 0;
-
-	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
-		opx_shm_tx_init(&opx_ep->tx->shm, fi_opx_global.prov, opx_ep->hfi->daos_info.rank,
-				opx_ep->hfi->daos_info.rank_inst);
-	}
+	tx->force_credit_return = 0;
 
 	int sdma_disable;
 	if (fi_param_get_bool(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
-		opx_ep->tx->use_sdma = !sdma_disable;
+		tx->use_sdma = !sdma_disable;
 		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA, "sdma_disable parm specified as %s.\n",
 			sdma_disable ? "TRUE" : "FALSE");
 	} else {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_DISABLE not specified; using SDMA\n");
-		opx_ep->tx->use_sdma = 1;
+		tx->use_sdma = 1;
 	}
 
 	// Set the SDMA minimum message length
 	int l_sdma_min_payload_bytes;
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_min_payload_bytes", &l_sdma_min_payload_bytes);
 	if (rc != FI_SUCCESS) {
-		opx_ep->tx->sdma_min_payload_bytes = FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
+		tx->sdma_min_payload_bytes = FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
 				   "FI_OPX_SDMA_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
-				   opx_ep->tx->sdma_min_payload_bytes);
+				   tx->sdma_min_payload_bytes);
 	} else if (l_sdma_min_payload_bytes < FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN ||
 		   l_sdma_min_payload_bytes > FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX) {
-		opx_ep->tx->sdma_min_payload_bytes = FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
+		tx->sdma_min_payload_bytes = FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_SDMA_MIN_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
 			FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX,
 			FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
 	} else {
-		opx_ep->tx->sdma_min_payload_bytes = l_sdma_min_payload_bytes;
+		tx->sdma_min_payload_bytes = l_sdma_min_payload_bytes;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
-				   opx_ep->tx->sdma_min_payload_bytes);
+				   tx->sdma_min_payload_bytes);
 	}
 
-	if (opx_ep->tx->sdma_min_payload_bytes < opx_ep->tx->rzv_min_payload_bytes) {
+	if (tx->sdma_min_payload_bytes < tx->rzv_min_payload_bytes) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"FI_OPX_SDMA_MIN_PAYLOAD_BYTES(%d) will only impact RMA and atomic operations until the FI_OPX_RZV_MIN_PAYLOAD_BYTES(%d) value is hit.\n",
-			opx_ep->tx->sdma_min_payload_bytes, opx_ep->tx->rzv_min_payload_bytes);
+			tx->sdma_min_payload_bytes, tx->rzv_min_payload_bytes);
 	}
 
 	int l_sdma_max_writevs_per_cycle;
@@ -1035,16 +1079,16 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
 				   "FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE not set. Using default setting of %d\n",
 				   OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE);
-		opx_ep->tx->sdma_max_writevs_per_cycle = OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE;
+		tx->sdma_max_writevs_per_cycle = OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE;
 	} else if (l_sdma_max_writevs_per_cycle < 1 || l_sdma_max_writevs_per_cycle > OPX_SDMA_MAX_WRITEVS_PER_CYCLE) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
 			1, OPX_SDMA_MAX_WRITEVS_PER_CYCLE, OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE);
-		opx_ep->tx->sdma_max_writevs_per_cycle = OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE;
+		tx->sdma_max_writevs_per_cycle = OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE;
 	} else {
-		opx_ep->tx->sdma_max_writevs_per_cycle = l_sdma_max_writevs_per_cycle;
+		tx->sdma_max_writevs_per_cycle = l_sdma_max_writevs_per_cycle;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE was specified. Set to %d\n",
-				   opx_ep->tx->sdma_max_writevs_per_cycle);
+				   tx->sdma_max_writevs_per_cycle);
 	}
 
 	int l_sdma_max_iovs_per_writev;
@@ -1053,16 +1097,16 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
 				   "FI_OPX_SDMA_MAX_IOVS_PER_WRITEV not set. Using default setting of %d\n",
 				   OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE);
-		opx_ep->tx->sdma_max_iovs_per_writev = OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE;
+		tx->sdma_max_iovs_per_writev = OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE;
 	} else if (l_sdma_max_iovs_per_writev < 3 || l_sdma_max_iovs_per_writev > OPX_SDMA_HFI_MAX_IOVS_PER_WRITE) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_SDMA_MAX_IOVS_PER_WRITEV was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
 			3, OPX_SDMA_HFI_MAX_IOVS_PER_WRITE, OPX_SDMA_HFI_MAX_IOVS_PER_WRITE);
-		opx_ep->tx->sdma_max_iovs_per_writev = OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE;
+		tx->sdma_max_iovs_per_writev = OPX_SDMA_HFI_DEFAULT_IOVS_PER_WRITE;
 	} else {
-		opx_ep->tx->sdma_max_iovs_per_writev = l_sdma_max_iovs_per_writev;
+		tx->sdma_max_iovs_per_writev = l_sdma_max_iovs_per_writev;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_IOVS_PER_WRITEV was specified. Set to %d\n",
-				   opx_ep->tx->sdma_max_iovs_per_writev);
+				   tx->sdma_max_iovs_per_writev);
 	}
 
 	int l_sdma_max_pkts_tid;
@@ -1070,16 +1114,16 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	if (rc != FI_SUCCESS) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS_TID not set. Using default setting of %d\n",
 				   OPX_HFI1_SDMA_DEFAULT_PKTS_TID);
-		opx_ep->tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PKTS_TID;
+		tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PKTS_TID;
 	} else if (l_sdma_max_pkts_tid < 1 || l_sdma_max_pkts_tid > OPX_HFI1_SDMA_MAX_PKTS_TID) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_SDMA_MAX_PKTS_TID was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
 			1, OPX_HFI1_SDMA_MAX_PKTS_TID, OPX_HFI1_SDMA_DEFAULT_PKTS_TID);
-		opx_ep->tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PKTS_TID;
+		tx->sdma_max_pkts_tid = OPX_HFI1_SDMA_DEFAULT_PKTS_TID;
 	} else {
-		opx_ep->tx->sdma_max_pkts_tid = l_sdma_max_pkts_tid;
+		tx->sdma_max_pkts_tid = l_sdma_max_pkts_tid;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS_TID was specified. Set to %d\n",
-				   opx_ep->tx->sdma_max_pkts_tid);
+				   tx->sdma_max_pkts_tid);
 	}
 
 	int l_sdma_max_pkts;
@@ -1087,69 +1131,68 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	if (rc != FI_SUCCESS) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS not set. Using default setting of %d\n",
 				   OPX_HFI1_SDMA_DEFAULT_PKTS);
-		opx_ep->tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PKTS;
+		tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PKTS;
 	} else if (l_sdma_max_pkts < 1 || l_sdma_max_pkts > OPX_HFI1_SDMA_MAX_PKTS) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_SDMA_MAX_PKTS was set but is outside min/max thresholds (%d-%d). Using default setting of %d\n",
 			1, OPX_HFI1_SDMA_MAX_PKTS, OPX_HFI1_SDMA_DEFAULT_PKTS);
-		opx_ep->tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PKTS;
+		tx->sdma_max_pkts = OPX_HFI1_SDMA_DEFAULT_PKTS;
 	} else {
-		opx_ep->tx->sdma_max_pkts = l_sdma_max_pkts;
+		tx->sdma_max_pkts = l_sdma_max_pkts;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_MAX_PKTS was specified. Set to %d\n",
-				   opx_ep->tx->sdma_max_pkts);
+				   tx->sdma_max_pkts);
 	}
 
 	int l_tid_min_payload_bytes;
 	rc = fi_param_get_int(fi_opx_global.prov, "tid_min_payload_bytes", &l_tid_min_payload_bytes);
 	if (rc != FI_SUCCESS) {
-		opx_ep->tx->tid_min_payload_bytes = OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT;
+		tx->tid_min_payload_bytes = OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
 				   "FI_OPX_TID_MIN_PAYLOAD_BYTES not set. Using default setting of %d\n",
-				   opx_ep->tx->tid_min_payload_bytes);
+				   tx->tid_min_payload_bytes);
 	} else if (l_tid_min_payload_bytes < OPX_TID_MIN_PAYLOAD_BYTES_MIN) {
-		opx_ep->tx->tid_min_payload_bytes = OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT;
+		tx->tid_min_payload_bytes = OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_TID_MIN_PAYLOAD_BYTES was set but is less than minimum allowed (%lu). Using default setting of %d\n",
 			OPX_TID_MIN_PAYLOAD_BYTES_MIN, OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT);
 	} else {
-		opx_ep->tx->tid_min_payload_bytes = l_tid_min_payload_bytes;
+		tx->tid_min_payload_bytes = l_tid_min_payload_bytes;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_TID_MIN_PAYLOAD_BYTES was specified. Set to %d\n",
-				   opx_ep->tx->tid_min_payload_bytes);
+				   tx->tid_min_payload_bytes);
 	}
 
 	for (unsigned int i = OPX_WORK_TYPE_SDMA; i < OPX_WORK_TYPE_LAST; i++) {
-		slist_init(&opx_ep->tx->work_pending[i]);
+		slist_init(&tx->work_pending[i]);
 	}
 
-	slist_init(&opx_ep->tx->work_pending_completion);
+	slist_init(&tx->work_pending_completion);
 
 	// Initialize the SDMA request queue
-	slist_init(&opx_ep->tx->sdma_request_queue.list);
-	opx_ep->tx->sdma_request_queue.num_reqs = 0;
-	opx_ep->tx->sdma_request_queue.num_iovs = 0;
-	opx_ep->tx->sdma_request_queue.max_iovs =
-		opx_ep->tx->sdma_max_iovs_per_writev * opx_ep->tx->sdma_max_writevs_per_cycle;
-	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
+	slist_init(&tx->sdma_request_queue.list);
+	tx->sdma_request_queue.num_reqs	   = 0;
+	tx->sdma_request_queue.num_iovs	   = 0;
+	tx->sdma_request_queue.max_iovs	   = tx->sdma_max_iovs_per_writev * tx->sdma_max_writevs_per_cycle;
+	tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
 
-	slist_init(&opx_ep->tx->sdma_pending_queue);
-	ofi_bufpool_create(&opx_ep->tx->work_pending_pool, sizeof(union fi_opx_hfi1_deferred_work), L2_CACHE_LINE_SIZE,
+	slist_init(&tx->sdma_pending_queue);
+	ofi_bufpool_create(&tx->work_pending_pool, sizeof(union fi_opx_hfi1_deferred_work), L2_CACHE_LINE_SIZE,
 			   UINT_MAX, 2048, OFI_BUFPOOL_NO_ZERO);
 
-	ofi_bufpool_create(&opx_ep->tx->rma_payload_pool, sizeof(union fi_opx_hfi1_packet_payload), 0, UINT_MAX, 16,
+	ofi_bufpool_create(&tx->rma_payload_pool, sizeof(union fi_opx_hfi1_packet_payload), 0, UINT_MAX, 16,
 			   OFI_BUFPOOL_NO_ZERO);
 
-	ofi_bufpool_create(&opx_ep->tx->rma_request_pool, sizeof(struct fi_opx_rma_request), 0, UINT_MAX, 16,
+	ofi_bufpool_create(&tx->rma_request_pool, sizeof(struct fi_opx_rma_request), 0, UINT_MAX, 16,
 			   OFI_BUFPOOL_NO_ZERO);
 
-	if (opx_ep->tx->use_sdma) {
-		ofi_bufpool_create(&opx_ep->tx->sdma_work_pool, sizeof(struct fi_opx_hfi1_sdma_work_entry),
+	if (tx->use_sdma) {
+		ofi_bufpool_create(&tx->sdma_work_pool, sizeof(struct fi_opx_hfi1_sdma_work_entry),
 				   FI_OPX_CACHE_LINE_SIZE, FI_OPX_HFI1_SDMA_MAX_WE, FI_OPX_HFI1_SDMA_MAX_WE,
 				   OFI_BUFPOOL_NO_ZERO);
-		ofi_bufpool_create(&opx_ep->tx->sdma_request_pool, sizeof(struct opx_sdma_request),
-				   FI_OPX_CACHE_LINE_SIZE, UINT_MAX, FI_OPX_HFI1_SDMA_MAX_WE, OFI_BUFPOOL_NO_ZERO);
+		ofi_bufpool_create(&tx->sdma_request_pool, sizeof(struct opx_sdma_request), FI_OPX_CACHE_LINE_SIZE,
+				   UINT_MAX, FI_OPX_HFI1_SDMA_MAX_WE, OFI_BUFPOOL_NO_ZERO);
 	} else {
-		opx_ep->tx->sdma_work_pool    = NULL;
-		opx_ep->tx->sdma_request_pool = NULL;
+		tx->sdma_work_pool    = NULL;
+		tx->sdma_request_pool = NULL;
 	}
 
 	OPX_LOG(FI_LOG_INFO, FI_LOG_EP_DATA, "==== TX init finished\n");
@@ -1971,6 +2014,13 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	opx_ep->tx->mem = mem;
 	fi_opx_ref_init(&opx_ep->tx->ref_cnt, 1, "tx context");
 
+	/* Multi-plane: Initialize primary TX context arrays */
+	opx_ep->tx_contexts[0]	= opx_ep->tx;
+	opx_ep->hfi_contexts[0] = opx_ep->hfi;
+	opx_ep->tx->hfi		= opx_ep->hfi;
+	opx_ep->tx->gid_hi	= opx_ep->hfi->gid_hi;
+	opx_ep->num_tx_contexts = 1;
+
 	mem = malloc(sizeof(struct fi_opx_ep_rx) + FI_OPX_CACHE_LINE_SIZE);
 	if (!mem) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "no memory for rx");
@@ -2124,7 +2174,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			goto unlock;
 		}
 
-		if (fi_opx_ep_tx_init(opx_ep, opx_domain)) {
+		if (fi_opx_ep_tx_init(opx_ep, opx_domain, opx_ep->tx, opx_ep->hfi)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Error during tx context initialization\n");
 			errno = FI_ENOENT;
 			goto unlock;
@@ -2146,11 +2196,16 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	if (!tx_is_init && (opx_ep->ep_fid.fid.fclass == FI_CLASS_TX_CTX || opx_ep->ep_fid.fid.fclass == FI_CLASS_EP)) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
 		       "Force enabling TX contexts for communication despite caps not being set\n");
-		if (fi_opx_ep_tx_init(opx_ep, opx_domain)) {
+		if (fi_opx_ep_tx_init(opx_ep, opx_domain, opx_ep->tx, opx_ep->hfi)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Error during tx context initialization.\n");
 			errno = FI_ENOENT;
 			goto unlock;
 		}
+	}
+
+	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
+		opx_shm_tx_init(&opx_ep->tx->shm, fi_opx_global.prov, opx_ep->hfi->daos_info.rank,
+				opx_ep->hfi->daos_info.rank_inst);
 	}
 
 #if HAVE_HFISVC
@@ -2160,9 +2215,9 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		opx_hfisvc_log_enabled = 0;
 	}
 	if (opx_ep->use_hfisvc) {
-		if (opx_domain->hfisvc.ctx == NULL) {
+		if (opx_domain->hfisvc.ctxs[0].ctx == NULL) {
 			assert(opx_ep->hfi->ibv_context != NULL);
-			opx_domain->hfisvc.ctx = opx_ep->hfi->ibv_context;
+			opx_domain->hfisvc.ctxs[0].ctx = opx_ep->hfi->ibv_context;
 		}
 		int ret;
 		if ((ret = opx_domain_hfisvc_init(opx_domain)) != FI_SUCCESS) {
@@ -2176,22 +2231,26 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			}
 		}
 
-		OPX_HFISVC_DEBUG_LOG("Attempting to create new command queue...\n");
-		if ((*opx_domain->hfisvc.command_queue_open)(&opx_ep->hfisvc.command_queue, opx_domain->hfisvc.ctx)) {
+		OPX_HFISVC_DEBUG_LOG("Creating endpoint command/completion queues for primary plane...\n");
+		if ((*opx_domain->hfisvc.command_queue_open)(&opx_ep->hfisvc.command_queues[0],
+							     opx_domain->hfisvc.ctxs[0].ctx)) {
+			fprintf(stderr, "(%d) %s:%s():%d Failed creating EP command queue for ctx 0!\n", getpid(),
+				__FILE__, __func__, __LINE__);
 			abort();
 		}
 
-		OPX_HFISVC_DEBUG_LOG("Attempting to create new completion queue...\n");
-		if ((*opx_domain->hfisvc.completion_queue_open)(&opx_ep->hfisvc.internal_completion_queue,
-								opx_domain->hfisvc.ctx)) {
-			fprintf(stderr, "(%d) %s:%s():%d Failed creating TX completion queue!\n", getpid(), __FILE__,
-				__func__, __LINE__);
+		if ((*opx_domain->hfisvc.completion_queue_open)(&opx_ep->hfisvc.internal_completion_queues[0],
+								opx_domain->hfisvc.ctxs[0].ctx)) {
+			fprintf(stderr, "(%d) %s:%s():%d Failed creating EP completion queue for ctx 0!\n", getpid(),
+				__FILE__, __func__, __LINE__);
 			abort();
 		}
+
+		opx_ep->hfisvc.num_queues = 1;
 
 		if (opx_ep->init_tx_cq->use_hfisvc != 1) {
 			int rc = (*opx_domain->hfisvc.completion_queue_open)(
-				&opx_ep->init_tx_cq->hfisvc.completion_queue, opx_domain->hfisvc.ctx);
+				&opx_ep->init_tx_cq->hfisvc.completion_queue, opx_domain->hfisvc.ctxs[0].ctx);
 			if (rc) {
 				fprintf(stderr, "(%d) %s:%s():%d Failed creating CQ completion queue, rc=%d\n",
 					getpid(), __FILE__, __func__, __LINE__, rc);
@@ -2203,7 +2262,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		if (opx_ep->init_rx_cq && opx_ep->init_rx_cq != opx_ep->init_tx_cq &&
 		    opx_ep->init_rx_cq->use_hfisvc != 1) {
 			int rc = (*opx_domain->hfisvc.completion_queue_open)(
-				&opx_ep->init_rx_cq->hfisvc.completion_queue, opx_domain->hfisvc.ctx);
+				&opx_ep->init_rx_cq->hfisvc.completion_queue, opx_domain->hfisvc.ctxs[0].ctx);
 			if (rc) {
 				fprintf(stderr, "(%d) %s:%s():%d Failed creating RX CQ completion queue, rc=%d\n",
 					getpid(), __FILE__, __func__, __LINE__, rc);
@@ -2214,6 +2273,143 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 done:
 #endif
+	/* _FI_OPX_DUAL_PLANE_ENABLE_ */
+	int   _dual_plane_enable_ = 0;
+	char *envstr_dpe	  = getenv("_FI_OPX_DUAL_PLANE_ENABLE_");
+	if (envstr_dpe != NULL) {
+		_dual_plane_enable_ = atoi(envstr_dpe);
+		if (_dual_plane_enable_ && (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+				"_FI_OPX_DUAL_PLANE_ENABLE_ is invalid on local HFI type %s.\n",
+				OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
+			errno = FI_EOPNOTSUPP;
+			goto err;
+		}
+	}
+
+	if (_dual_plane_enable_) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
+		       "Discovering additional HFI planes for multi-plane support (max %d total contexts)\n",
+		       OPX_MAX_TX_CONTEXTS);
+	} else {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"Dual plane support is disabled (_FI_OPX_DUAL_PLANE_ENABLE_=0)\n");
+	}
+
+	struct fi_opx_plane_info planes[OPX_MAX_TX_CONTEXTS - 1];
+	int			 num_extra =
+		     _dual_plane_enable_ ? fi_opx_hfi1_discover_planes(opx_ep->hfi, planes, OPX_MAX_TX_CONTEXTS - 1) : 0;
+
+	for (int i = 0; i < num_extra; i++) {
+		/* Open HFI context for secondary plane */
+		struct fi_opx_hfi1_context *sec_hfi =
+			fi_opx_hfi1_context_open_unit(&opx_ep->ep_fid, opx_domain->unique_job_key, planes[i].hfi_unit);
+		if (!sec_hfi) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Failed to open secondary HFI context on unit %d, continuing with single plane\n",
+				planes[i].hfi_unit);
+			continue;
+		}
+
+		fi_opx_ref_inc(&sec_hfi->ref_cnt, "HFI context");
+
+		/* Allocate secondary TX context */
+		void *sec_mem = malloc(sizeof(struct fi_opx_ep_tx) + FI_OPX_CACHE_LINE_SIZE);
+		if (!sec_mem) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Failed to allocate secondary TX context, continuing with single plane\n");
+			fi_opx_ref_dec(&sec_hfi->ref_cnt, "HFI context");
+			if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
+				free(sec_hfi->ctrl);
+				free(sec_hfi);
+			}
+			continue;
+		}
+
+		struct fi_opx_ep_tx *sec_tx = (struct fi_opx_ep_tx *) (((uintptr_t) sec_mem + FI_OPX_CACHE_LINE_SIZE) &
+								       ~(FI_OPX_CACHE_LINE_SIZE - 1));
+		memset(sec_tx, 0, sizeof(struct fi_opx_ep_tx));
+		sec_tx->mem = sec_mem;
+		fi_opx_ref_init(&sec_tx->ref_cnt, 1, "tx context");
+		sec_tx->hfi    = sec_hfi;
+		sec_tx->gid_hi = planes[i].gid_hi;
+
+		/* Copy shared fields from primary TX context */
+		sec_tx->cq		 = opx_ep->tx->cq;
+		sec_tx->cq_completed_ptr = opx_ep->tx->cq_completed_ptr;
+		sec_tx->cq_err_ptr	 = opx_ep->tx->cq_err_ptr;
+		sec_tx->cq_pending_ptr	 = opx_ep->tx->cq_pending_ptr;
+		sec_tx->av_addr		 = opx_ep->tx->av_addr;
+		sec_tx->op_flags	 = opx_ep->tx->op_flags;
+		sec_tx->caps		 = opx_ep->tx->caps;
+		sec_tx->mode		 = opx_ep->tx->mode;
+		sec_tx->cq_bind_flags	 = opx_ep->tx->cq_bind_flags;
+		sec_tx->do_cq_completion = opx_ep->tx->do_cq_completion;
+
+		/* Initialize secondary TX context */
+		if (fi_opx_ep_tx_init(opx_ep, opx_domain, sec_tx, sec_hfi)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Failed to initialize secondary TX context, continuing with single plane\n");
+			free(sec_mem);
+			fi_opx_ref_dec(&sec_hfi->ref_cnt, "HFI context");
+			if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
+				free(sec_hfi->ctrl);
+				free(sec_hfi);
+			}
+			continue;
+		}
+
+#if HAVE_HFISVC
+		/* Initialize hfisvc for secondary plane */
+		if (opx_ep->use_hfisvc && opx_domain->hfisvc.num_ctxs < OPX_MAX_TX_CONTEXTS) {
+			assert(sec_hfi->ibv_context != NULL);
+			opx_domain->hfisvc.ctxs[opx_domain->hfisvc.num_ctxs].ctx = sec_hfi->ibv_context;
+
+			int ret = opx_domain_hfisvc_init_ctx(opx_domain, opx_domain->hfisvc.num_ctxs);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+					"Failed to initialize hfisvc for secondary plane (ctx %d), continuing without hfisvc on this plane\n",
+					opx_domain->hfisvc.num_ctxs);
+			} else {
+				int ctx_idx = opx_domain->hfisvc.num_ctxs;
+				opx_domain->hfisvc.num_ctxs++;
+
+				/* Open endpoint command/completion queues for secondary plane */
+				if ((*opx_domain->hfisvc.command_queue_open)(&opx_ep->hfisvc.command_queues[ctx_idx],
+									     opx_domain->hfisvc.ctxs[ctx_idx].ctx)) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+						"Failed creating EP command queue for ctx %d\n", ctx_idx);
+				} else if ((*opx_domain->hfisvc.completion_queue_open)(
+						   &opx_ep->hfisvc.internal_completion_queues[ctx_idx],
+						   opx_domain->hfisvc.ctxs[ctx_idx].ctx)) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+						"Failed creating EP completion queue for ctx %d\n", ctx_idx);
+					(*opx_domain->hfisvc.command_queue_close)(
+						&opx_ep->hfisvc.command_queues[ctx_idx]);
+				} else {
+					opx_ep->hfisvc.num_queues++;
+					FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
+						"Initialized hfisvc context %d for secondary plane: hfi_unit=%d client_key=%u\n",
+						ctx_idx, sec_hfi->hfi_unit,
+						opx_domain->hfisvc.ctxs[ctx_idx].client_key);
+				}
+			}
+		}
+#endif
+
+		/* Register secondary context */
+		opx_ep->tx_contexts[opx_ep->num_tx_contexts]  = sec_tx;
+		opx_ep->hfi_contexts[opx_ep->num_tx_contexts] = sec_hfi;
+		opx_ep->num_tx_contexts++;
+
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"Initialized secondary TX context %d: hfi_unit=%d gid_hi=0x%016lx\n",
+			opx_ep->num_tx_contexts - 1, sec_hfi->hfi_unit, sec_tx->gid_hi);
+	}
+
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "Endpoint enabled with %d TX context(s)\n",
+		opx_ep->num_tx_contexts);
+
 	/* Unlock */
 	fi_opx_unlock(&opx_ep->lock);
 	if (rx_cq_lock_held) {

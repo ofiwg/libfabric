@@ -273,9 +273,13 @@ struct fi_opx_ep_tx {
 	struct slist	      work_pending[OPX_WORK_TYPE_LAST];
 	ofi_atomic64_t	      ref_cnt;
 	struct opx_spio_ctrl *spio_ctrl;
-	// struct opx_shm_tx is very large and should go last!
+	/* struct opx_shm_tx is very large and should go last! */
 	struct opx_shm_tx shm;
 	void		 *mem;
+
+	/* Multi-plane support: HFI context and plane identifier for this TX context */
+	struct fi_opx_hfi1_context *hfi;
+	uint64_t		    gid_hi;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, inject_9B) == (FI_OPX_CACHE_LINE_SIZE * 1),
@@ -509,11 +513,15 @@ struct fi_opx_ep {
 	uint32_t	av_type;
 	uint32_t	mr_mode;
 	enum fi_ep_type type;
-	uint64_t	unused_cacheline3[3];
+
+	/* Multi-plane support: arrays of TX contexts */
+	struct fi_opx_ep_tx *tx_contexts[OPX_MAX_TX_CONTEXTS];
+	uint16_t	     num_tx_contexts;
+	uint16_t	     unused_cl3_1;
+	uint32_t	     unused_cl3_pad;
 
 	/* == CACHE LINE 4 == */
-	// Only used for initialization
-	// free these flags
+	/* Init-only fields: fi_info, CQ/counter bindings */
 	struct fi_info	   *common_info;
 	struct fi_info	   *tx_info;
 	struct fi_info	   *rx_info;
@@ -524,32 +532,24 @@ struct fi_opx_ep {
 	uint64_t	    rx_cq_bflags;
 
 	/* == CACHE LINE 5 == */
-	struct fi_opx_cntr	  *init_send_cntr;
-	struct fi_opx_cntr	  *init_recv_cntr;
-	uint64_t		   tx_cq_bflags;
-	struct fi_opx_ep_daos_info daos_info; /* 18 bytes */
-	bool			   is_tx_cq_bound;
-	bool			   is_rx_cq_bound;
-	bool			   use_expected_tid_rzv;
-	bool			   use_hfisvc;
-	uint8_t			   unused_cacheline5[2];
-	enum fi_hmem_iface	   use_gpu_ipc;
-	ofi_spin_t		   lock; /* lock size varies based on ENABLE_DEBUG*/
-
-	/* == CACHE LINE 6 == */
+	/* hfisvc is placed first so its offset is fixed regardless of
+	   ofi_spin_t size (which varies between DEBUG and RELEASE builds).
+	   Sized to exactly 64 bytes (one cacheline). */
 #if HAVE_HFISVC
 	struct {
 		/**
-		 * @brief Command queue used by this endpoint to submit commands to the hfisvc
+		 * @brief Command queues used by this endpoint to submit commands to the hfisvc
+		 * (one per plane for dual-plane support)
 		 */
-		hfisvc_client_command_queue_t command_queue;
+		hfisvc_client_command_queue_t command_queues[OPX_MAX_TX_CONTEXTS];
 
 		/**
-		 * @brief Completion queue used by the endpoint for handling completions from the
+		 * @brief Completion queues used by the endpoint for handling completions from the
 		 * hfisvc where we need to do additional work. For example, we may need to free certain
 		 * resources before sending a completion up to the user/middleware.
+		 * (one per plane for dual-plane support)
 		 */
-		hfisvc_client_completion_queue_t internal_completion_queue;
+		hfisvc_client_completion_queue_t internal_completion_queues[OPX_MAX_TX_CONTEXTS];
 
 		/**
 		 * @brief Pointer to the CQ's hfisvc completion queue. Use this completion queue
@@ -558,14 +558,36 @@ struct fi_opx_ep {
 		 */
 		hfisvc_client_completion_queue_t *cq_completion_queue;
 
-		uint32_t rdma_read_count;
-		uint32_t unused_dw;
-
-		uint64_t unused_qws[4];
+		uint32_t rdma_read_count[OPX_MAX_TX_CONTEXTS];
+		uint32_t num_queues;
+		uint32_t unused_pad;
+		uint64_t unused_qw;
 	} hfisvc;
+#else
+	/* Placeholder to maintain cacheline alignment when hfisvc is disabled */
+	uint8_t unused_cl5[FI_OPX_CACHE_LINE_SIZE];
 #endif
 
-	/* == CACHE LINE 7 (if ENABLE_DEBUG) == */
+	/* == CACHE LINE 6 == */
+	/* Hot-path scalars: accessed on every poll, send, recv, or match. */
+	struct fi_opx_ep_daos_info daos_info; /* 18 bytes */
+	bool			   use_expected_tid_rzv;
+	bool			   use_hfisvc;
+	enum fi_hmem_iface	   use_gpu_ipc;
+	ofi_spin_t		   lock; /* lock size varies based on ENABLE_DEBUG */
+
+	/* Init-only fields (cold): set during bind/enable, never on hot path */
+	struct fi_opx_cntr *init_send_cntr;
+	struct fi_opx_cntr *init_recv_cntr;
+	uint64_t	    tx_cq_bflags;
+	bool		    is_tx_cq_bound;
+	bool		    is_rx_cq_bound;
+	uint8_t		    unused_cl6[6];
+
+	/* Multi-plane: secondary HFI contexts (init/teardown only, not hot-path) */
+	struct fi_opx_hfi1_context *hfi_contexts[OPX_MAX_TX_CONTEXTS];
+
+	/* == CACHE LINE 7+ == */
 #ifdef FLIGHT_RECORDER_ENABLE
 	struct flight_recorder *fr;
 #endif
@@ -580,11 +602,15 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, recv_cntr) == (FI_OPX_CACHE_L
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, hfi) == (FI_OPX_CACHE_LINE_SIZE * 3),
 			"Offset of fi_opx_ep->hfi should start at cacheline 3!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, common_info) == (FI_OPX_CACHE_LINE_SIZE * 4),
-			"Offset of fi_opx_ep->hfi should start at cacheline 4!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, init_send_cntr) == (FI_OPX_CACHE_LINE_SIZE * 5),
-			"Offset of fi_opx_ep->init_send_cntr should start at cacheline 5!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, lock) == ((FI_OPX_CACHE_LINE_SIZE * 5) + 52),
-			"Offset of fi_opx_ep->lock should start before cacheline 6!");
+			"Offset of fi_opx_ep->common_info should start at cacheline 4!");
+#if HAVE_HFISVC
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, hfisvc) == (FI_OPX_CACHE_LINE_SIZE * 5),
+			"Offset of fi_opx_ep->hfisvc should start at cacheline 5!");
+OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_ep *) 0)->hfisvc) == FI_OPX_CACHE_LINE_SIZE,
+			"fi_opx_ep->hfisvc must be exactly one cacheline!");
+#endif
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, daos_info) == (FI_OPX_CACHE_LINE_SIZE * 6),
+			"Offset of fi_opx_ep->daos_info should start at cacheline 6!");
 
 /*
  * A 'scalable endpoint' may not be directly specified in a data movement
@@ -1123,13 +1149,13 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			int	       rc;
 			if (do_dmabuf) {
 				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
-					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+					opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, lid, sbuf_key,
 					sbuf_len, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
 					sbuf_offset, opx_mr->hfisvc.mr_handle,
 					opx_mr_dmabuf_local_offset(opx_mr, recv_buf));
 			} else {
 				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
-					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+					opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, lid, sbuf_key,
 					sbuf_len, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
 					sbuf_offset, recv_buf);
 			}
@@ -1154,7 +1180,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				// but only by 1 down below right before recv_rts_hfisvc_finish is that for the
 				// case of i=0, we don't want to actually increment the count. Always incrementing
 				// by 'i' here is just more performant/less branchy than doing '+= i ? 1 : 0'
-				opx_ep->hfisvc.rdma_read_count += i;
+				opx_ep->hfisvc.rdma_read_count[0] += i;
 				slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 
 				goto recv_rts_hfisvc_finish;
@@ -1182,12 +1208,12 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			int	       rc;
 			if (do_dmabuf) {
 				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read)(
-					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+					opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, lid, sbuf_key,
 					1ul /* length */, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
 					0ul /* remote offset */, opx_mr->hfisvc.mr_handle, 0);
 			} else {
 				rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
-					opx_ep->hfisvc.command_queue, completion, 0ul /* flags */, lid, sbuf_key,
+					opx_ep->hfisvc.command_queues[0], completion, 0ul /* flags */, lid, sbuf_key,
 					1ul /* length */, payload->rendezvous.hfisvc.rzv_comp_vaddr, sbuf_access_key,
 					0ul /* remote offset */, &opx_trunc_scratch_buf);
 			}
@@ -1214,7 +1240,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 						  recv_buf);
 	}
 
-	++opx_ep->hfisvc.rdma_read_count;
+	++opx_ep->hfisvc.rdma_read_count[0];
 recv_rts_hfisvc_finish:
 	OPX_TRACER_TRACE(OPX_TRACER_END_SUCCESS, "RECV-RZV-RTS-HFISVC");
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2087,7 +2113,7 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_shm, struct fi_opx_ep *o
 	uint32_t segment_index = OPX_SHM_SEGMENT_INDEX(hfi1_unit, rx_id);
 #endif
 
-	struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(&(opx_ep->tx->shm), segment_index);
+	struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(&opx_ep->tx->shm, segment_index);
 
 	if (OFI_LIKELY((shm_info != NULL) && (shm_info->fifo_segment != NULL))) {
 		/* Connection already established */
@@ -3296,7 +3322,8 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 
 #if HAVE_HFISVC
 __OPX_FORCE_INLINE__
-void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struct hfisvc_client_cq_entry *hfisvc_entry)
+void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struct hfisvc_client_cq_entry *hfisvc_entry,
+						 int ctx_idx)
 {
 	struct fi_opx_rzv_completion *rzv_comp = (struct fi_opx_rzv_completion *) hfisvc_entry->app_context;
 	assert(rzv_comp);
@@ -3345,7 +3372,7 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 		}
 	}
 
-	opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.access_key_set, rzv_comp->access_key,
+	opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[ctx_idx].access_key_set, rzv_comp->access_key,
 				   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 	OPX_BUF_FREE(rzv_comp);
 }
@@ -3361,14 +3388,16 @@ void opx_ep_hfisvc_poll_internal_queue(struct fi_opx_ep *opx_ep)
 
 	struct hfisvc_client_cq_entry hfisvc_out[64];
 
-	size_t n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */,
-						     hfisvc_out, sizeof(*hfisvc_out), 64);
-	while (n > 0) {
-		for (size_t i = 0; i < n; ++i) {
-			opx_ep_hfisvc_poll_proc_internal_completion(opx_ep, &hfisvc_out[i]);
+	for (int ctx_idx = 0; ctx_idx < opx_ep->hfisvc.num_queues; ctx_idx++) {
+		size_t n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queues[ctx_idx],
+							     0ul /* flags */, hfisvc_out, sizeof(*hfisvc_out), 64);
+		while (n > 0) {
+			for (size_t i = 0; i < n; ++i) {
+				opx_ep_hfisvc_poll_proc_internal_completion(opx_ep, &hfisvc_out[i], ctx_idx);
+			}
+			n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queues[ctx_idx],
+							      0ul /* flags */, hfisvc_out, sizeof(*hfisvc_out), 64);
 		}
-		n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queue, 0ul /* flags */,
-						      hfisvc_out, sizeof(*hfisvc_out), 64);
 	}
 #endif
 }
@@ -3599,7 +3628,10 @@ int fi_opx_ep_rx_process_context(struct fi_opx_ep *opx_ep, const uint64_t static
 				 const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
 {
 #if HAVE_HFISVC
-	uint32_t start_rdma_read_count = opx_ep->hfisvc.rdma_read_count;
+	uint32_t start_rdma_read_count[OPX_MAX_TX_CONTEXTS];
+	for (int i = 0; i < opx_ep->hfisvc.num_queues; i++) {
+		start_rdma_read_count[i] = opx_ep->hfisvc.rdma_read_count[i];
+	}
 #endif
 	int rc;
 
@@ -3624,14 +3656,15 @@ int fi_opx_ep_rx_process_context(struct fi_opx_ep *opx_ep, const uint64_t static
 	}
 
 #if HAVE_HFISVC
-	if (opx_ep->hfisvc.rdma_read_count != start_rdma_read_count) {
-		OPX_HFISVC_DEBUG_LOG(
-			"Rang doorbell because start_rdma_read_count=%u and opx_ep->hfisvc.rdma_read_count=%u\n",
-			start_rdma_read_count, opx_ep->hfisvc.rdma_read_count);
-		int doorbell_rc __attribute__((unused));
-		doorbell_rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
-
-		assert(doorbell_rc == 0);
+	for (int i = 0; i < opx_ep->hfisvc.num_queues; i++) {
+		if (opx_ep->hfisvc.rdma_read_count[i] != start_rdma_read_count[i]) {
+			OPX_HFISVC_DEBUG_LOG(
+				"Rang doorbell because start_rdma_read_count=%u and opx_ep->hfisvc.rdma_read_count=%u for plane %d\n",
+				start_rdma_read_count[i], opx_ep->hfisvc.rdma_read_count[i], i);
+			int doorbell_rc __attribute__((unused));
+			doorbell_rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[i].ctx);
+			assert(doorbell_rc == 0);
+		}
 	}
 #endif
 

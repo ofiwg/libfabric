@@ -438,6 +438,8 @@ void fi_opx_init_hfi_lookup(bool sriov)
 		for (int port = OPX_MIN_PORT; port <= num_ports; port++) {
 			opx_lid_t lid = opx_hfi_get_port_lid(hfi_unit, port);
 			if (lid > 0) {
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+				       "Adding HFI unit %d port %d LID 0x%x to SHM table\n", hfi_unit, port, lid);
 				process_hfi_lookup(hfi_unit, lid);
 			} else {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -486,6 +488,288 @@ static void opx_define_ctx_sharing_shared_memory(struct fi_opx_hfi1_context *con
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "spio_ctrl = %p\n", context->spio_ctrl);
 
 	return;
+}
+
+/*
+ * Common helper to populate an HFI context after the device has been opened
+ * and the ctrl structure has been initialized via opx_open_hfi_and_context().
+ *
+ * This function initializes all context fields from the ctrl/base_info/ctxt_info,
+ * including SL/SC/VL/PKEY, PIO/SDMA/RXE state, GID, LID, TID flows, etc.
+ *
+ * Parameters:
+ *   context  - The context to populate (already has ibv_context set by opx_open_hfi_and_context)
+ *   internal - The internal context structure (contains user_info for pkey setting)
+ *   ctrl     - The HFI ctrl structure from opx_open_hfi_and_context
+ *   fd_cdev  - The cdev file descriptor (needed for error cleanup on pkey failure)
+ *   fd_verbs - The verbs file descriptor (needed for error cleanup on pkey failure)
+ *   hfi_context_rank      - DAOS rank (-1 if not applicable)
+ *   hfi_context_rank_inst - DAOS rank instance (-1 if not applicable)
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+static int opx_hfi1_context_populate(struct fi_opx_hfi1_context *context, struct fi_opx_hfi1_context_internal *internal,
+				     struct _hfi_ctrl *ctrl, int fd_cdev, int fd_verbs, int hfi_context_rank,
+				     int hfi_context_rank_inst)
+{
+	int rc __attribute__((unused));
+
+	/* Basic identity fields */
+	context->hfi_unit = ctrl->__hfi_unit;
+	context->hfi_port = ctrl->__hfi_port;
+
+	opx_lid_t lid = opx_hfi_get_port_lid(ctrl->__hfi_unit, ctrl->__hfi_port);
+	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "lid = %d ctrl->__hfi_unit %u, ctrl->__hfi_port %u\n", lid,
+		     ctrl->__hfi_unit, ctrl->__hfi_port);
+	assert(lid > 0);
+	context->lid = lid;
+
+	/* GID */
+	uint64_t gid_hi, gid_lo;
+	rc = opx_hfi_get_port_gid(ctrl->__hfi_unit, ctrl->__hfi_port, &gid_hi, &gid_lo);
+	FI_DBG(&fi_opx_provider, FI_LOG_FABRIC,
+	       "opx_hfi_get_port_gid returned %d for HFI unit %u port %u gid_hi 0x%016lx gid_lo 0x%016lx\n", rc,
+	       ctrl->__hfi_unit, ctrl->__hfi_port, gid_hi, gid_lo);
+	if (rc == -1) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error: Unable to read GID for HFI unit %u port %u\n",
+			ctrl->__hfi_unit, ctrl->__hfi_port);
+		return -1;
+	}
+	context->gid_hi = gid_hi;
+	context->gid_lo = gid_lo;
+
+	/* DAOS info */
+#ifdef OPX_DAOS
+	context->daos_info.rank	     = hfi_context_rank;
+	context->daos_info.rank_inst = hfi_context_rank_inst;
+#else
+	context->daos_info.rank	     = 0;
+	context->daos_info.rank_inst = 0;
+#endif
+
+	/* Service Level / Service Class / Virtual Lane */
+	int user_sl = -1;
+	if (fi_param_get_int(fi_opx_global.prov, "sl", &user_sl) == FI_SUCCESS) {
+		if ((user_sl >= 0) && (user_sl <= 31)) {
+			context->sl = user_sl;
+			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+				"Detected user specified ENV FI_OPX_SL, so set the service level to %d\n", user_sl);
+		} else {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"Error: User specified an env FI_OPX_SL.  Valid data is an positive integer 0 - 31 (Default is 0).  User specified %d.  Using default value of %d instead\n",
+				user_sl, FI_OPX_HFI1_SL_DEFAULT);
+			context->sl = FI_OPX_HFI1_SL_DEFAULT;
+		}
+	} else {
+		context->sl = FI_OPX_HFI1_SL_DEFAULT;
+	}
+
+	rc = opx_hfi_get_port_sl2sc(ctrl->__hfi_unit, ctrl->__hfi_port, context->sl);
+	if (rc < 0) {
+		context->sc = FI_OPX_HFI1_SC_DEFAULT;
+	} else {
+		context->sc = rc;
+	}
+
+	rc = opx_hfi_get_port_sc2vl(ctrl->__hfi_unit, ctrl->__hfi_port, context->sc);
+	if (rc < 0) {
+		context->vl = FI_OPX_HFI1_VL_DEFAULT;
+	} else {
+		context->vl = rc;
+	}
+
+	if (context->sc == FI_OPX_HFI1_SC_ADMIN || context->vl == FI_OPX_HFI1_VL_ADMIN) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+			"Detected user set ENV FI_OPX_SL of %ld, which has translated to admin-level Service class (SC=%ld) and/or admin-level Virtual Lane(VL=%ld), which is invalid for user traffic.  Using default values instead\n",
+			context->sl, context->sc, context->vl);
+		context->sl = FI_OPX_HFI1_SL_DEFAULT;
+		context->sc = FI_OPX_HFI1_SC_DEFAULT;
+		context->vl = FI_OPX_HFI1_VL_DEFAULT;
+	}
+
+	if (context->vl > 7) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"VL is > 7, this may not be supported.  SL=%ld SC=%ld VL=%ld\n", context->sl, context->sc,
+			context->vl);
+	}
+
+	context->mtu = opx_hfi_get_port_vl2mtu(ctrl->__hfi_unit, ctrl->__hfi_port, context->vl);
+	assert(context->mtu >= 0);
+
+	/* Partition Key */
+	int user_pkey = -1;
+	if (fi_param_get_int(fi_opx_global.prov, "pkey", &user_pkey) == FI_SUCCESS) {
+		if (user_pkey < 0) {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"Detected user specified FI_OPX_PKEY of %d (0x%x), which is an invalid value.\n",
+				user_pkey, user_pkey);
+			return -1;
+		}
+		rc = opx_hfi1_wrapper_set_pkey(internal, user_pkey);
+		if (rc) {
+			fprintf(stderr,
+				"Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set. This pkey is likely not registered/valid.\n",
+				user_pkey);
+			return -1;
+		} else {
+			context->pkey = user_pkey;
+			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+				"Detected user specified ENV FI_OPX_PKEY, so set partition key to 0x%x\n", user_pkey);
+		}
+	} else {
+		int default_pkey = opx_hfi_get_port_index2pkey(context->hfi_unit, context->hfi_port, 0);
+		if (default_pkey < 0) {
+			fprintf(stderr,
+				"Unable to get default Pkey. Please specify a different Pkey using FI_OPX_PKEY\n");
+			return -1;
+		}
+		rc = opx_hfi1_wrapper_set_pkey(internal, default_pkey);
+		if (rc) {
+			fprintf(stderr,
+				"Error in setting default Pkey %#x. Please specify a different Pkey using FI_OPX_PKEY\n",
+				default_pkey);
+			return -1;
+		} else {
+			context->pkey = default_pkey;
+		}
+	}
+
+	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Service Level: SL=%ld SC=%ld VL=%ld PKEY=0x%lx MTU=%d\n", context->sl,
+		context->sc, context->vl, context->pkey, context->mtu);
+
+	/*
+	 * Initialize the hfi tx context
+	 */
+	const struct hfi1_base_info *base_info = &ctrl->base_info;
+	const struct hfi1_ctxt_info *ctxt_info = &ctrl->ctxt_info;
+
+	context->bthqp	   = (uint8_t) base_info->bthqp;
+	context->jkey	   = base_info->jkey;
+	context->send_ctxt = ctxt_info->send_ctxt;
+
+	/*
+	 * Initialize context sharing values
+	 */
+	context->subctxt_cnt		  = internal->user_info.subctxt_cnt;
+	context->subctxt		  = ctxt_info->subctxt;
+	fi_opx_global.ctx_sharing_enabled = context->subctxt_cnt > 0 ? OPX_CTX_SHARING_ON : OPX_CTX_SHARING_OFF;
+	context->hfi1_frozen_count	  = 0;
+
+	FI_DBG(&fi_opx_provider, FI_LOG_FABRIC, "subctxt %u, subctxt_cnt %u, subctxt_id %u\n", context->subctxt,
+	       context->subctxt_cnt, internal->user_info.subctxt_id);
+
+	/* Define the layout of context sharing shared memory regions */
+	opx_define_ctx_sharing_shared_memory(context);
+
+	/* PIO state */
+	OPX_OPEN_BAR(context->hfi_unit, ctrl->ctxt_info.ctxt, ctxt_info->send_ctxt);
+	context->info.pio.scb_sop_first =
+		OPX_HFI1_INIT_PIO_SOP(context->send_ctxt, (volatile uint64_t *) (ptrdiff_t) base_info->pio_bufbase_sop);
+	context->info.pio.scb_first =
+		OPX_HFI1_INIT_PIO(context->send_ctxt, (volatile uint64_t *) (ptrdiff_t) base_info->pio_bufbase);
+	context->info.pio.credits_addr = (volatile uint64_t *) (ptrdiff_t) base_info->sc_credits_addr;
+	context->credits_addr_copy     = context->info.pio.credits_addr;
+
+	const uint64_t credit_return	       = *(context->info.pio.credits_addr);
+	context->state.pio.free_counter_shadow = (uint16_t) (credit_return & 0x00000000000007FFul);
+	context->state.pio.fill_counter	       = 0;
+	context->state.pio.scb_head_index      = 0;
+	context->state.pio.credits_total       = ctxt_info->credits;
+
+	/* SL2SC and SC2VL lookup tables */
+	uint8_t i;
+	for (i = 0; i < 32; ++i) {
+		rc = opx_hfi_get_port_sl2sc(ctrl->__hfi_unit, ctrl->__hfi_port, i);
+		if (rc < 0) {
+			context->sl2sc[i] = FI_OPX_HFI1_SC_DEFAULT;
+		} else {
+			context->sl2sc[i] = rc;
+		}
+
+		rc = opx_hfi_get_port_sc2vl(ctrl->__hfi_unit, ctrl->__hfi_port, i);
+		if (rc < 0) {
+			context->sc2vl[i] = FI_OPX_HFI1_VL_DEFAULT;
+		} else {
+			context->sc2vl[i] = rc;
+		}
+	}
+
+	/* SDMA state */
+	// TODO: There is a bug in the driver that does not properly handle all
+	//       queue entries in use at once. As a temporary workaround, pretend
+	//       there is one less entry than there actually is.
+	context->info.sdma.queue_size	     = ctxt_info->sdma_ring_size - 1;
+	context->info.sdma.available_counter = context->info.sdma.queue_size;
+	context->info.sdma.fill_index	     = 0;
+	context->info.sdma.done_index	     = 0;
+	context->info.sdma.completion_queue  = (struct hfi1_sdma_comp_entry *) base_info->sdma_comp_bufbase;
+	assert(context->info.sdma.queue_size <= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX);
+	memset(context->info.sdma.queued_entries, 0, sizeof(context->info.sdma.queued_entries));
+
+	/* RXE state */
+	context->info.rxe.id	       = ctrl->ctxt_info.ctxt;
+	context->info.rxe.hdrq.rhf_off = (ctxt_info->rcvhdrq_entsize - 8) >> BYTE2DWORD_SHIFT;
+
+	/* Hardware registers */
+	volatile uint64_t *uregbase =
+		OPX_HFI1_INIT_UREGS(ctrl->ctxt_info.ctxt, (volatile uint64_t *) (uintptr_t) base_info->user_regbase);
+	context->info.rxe.hdrq.head_register = (volatile uint64_t *) &uregbase[ur_rcvhdrhead];
+	context->info.rxe.egrq.head_register = (volatile uint64_t *) &uregbase[ur_rcvegrindexhead];
+	volatile uint64_t *tidflowtable	     = (volatile uint64_t *) &uregbase[ur_rcvtidflowtable];
+
+	/* TID flows aren't cleared between jobs, do it now. */
+	for (int j = 0; j < 32; ++j) {
+		OPX_HFI1_BAR_UREG_STORE(&tidflowtable[j], 0UL);
+	}
+	assert(ctrl->__hfi_tidexpcnt <= OPX_MAX_TID_COUNT);
+	context->runtime_flags = ctxt_info->runtime_flags;
+
+	/* OPX relies on RHF.SeqNum, not the RcvHdrTail */
+	assert(!(context->runtime_flags & HFI1_CAP_DMA_RTAIL));
+
+	context->info.rxe.hdrq.elemsz = ctxt_info->rcvhdrq_entsize >> BYTE2DWORD_SHIFT;
+	if (context->info.rxe.hdrq.elemsz < FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_CORE, "Invalid hdrq_entsize %u (%lu is min)\n",
+			context->info.rxe.hdrq.elemsz, FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN);
+		abort();
+	}
+	fi_opx_global.rcvhdrq_entry_dws = context->info.rxe.hdrq.elemsz;
+
+	context->info.rxe.hdrq.elemcnt	 = ctxt_info->rcvhdrq_cnt;
+	context->info.rxe.hdrq.elemlast	 = ((context->info.rxe.hdrq.elemcnt - 1) * context->info.rxe.hdrq.elemsz);
+	context->info.rxe.hdrq.rx_unused = -1UL;
+	context->info.rxe.hdrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvhdr_bufbase;
+	context->info.rxe.hdrq.rhf_base	 = context->info.rxe.hdrq.base_addr + context->info.rxe.hdrq.rhf_off;
+
+	context->info.rxe.egrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvegr_bufbase;
+	context->info.rxe.egrq.elemsz	 = ctxt_info->rcvegr_size;
+	context->info.rxe.egrq.size	 = ctxt_info->rcvegr_size * ctxt_info->egrtids;
+
+	/* Reference count and status */
+	fi_opx_ref_init(&context->ref_cnt, 0, "HFI context");
+
+	context->status_lasterr		     = 0;
+	context->status_check_next_usec	     = 0;
+	context->link_down_wait_time_max_sec = OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT;
+
+	int link_down_wait_time_max_sec;
+	if (fi_param_get_int(fi_opx_global.prov, "link_down_wait_time_max_sec", &link_down_wait_time_max_sec) ==
+	    FI_SUCCESS) {
+		if (link_down_wait_time_max_sec > 0) {
+			context->link_down_wait_time_max_sec = link_down_wait_time_max_sec;
+		} else {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"Error: Invalid link_down_wait_time_max_sec value %d.  Using default value of %f instead\n",
+				link_down_wait_time_max_sec, OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT);
+		}
+	}
+
+	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n",
+		context->hfi_unit, context->hfi_port, context->lid, context->jkey);
+
+	opx_print_context(context);
+
+	return 0;
 }
 
 /*
@@ -640,7 +924,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 
 		if (!use_default_logic) {
 			if (!matched) {
-				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "No HFI selectors matched.\n");
+				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "No HFI selectors matched. Core id = %d\n",
+					core_id);
 				goto ctxt_open_err;
 			}
 
@@ -880,262 +1165,235 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	internal->ctrl	  = ctrl; /* memory was allocated during opx_open_hfi_and_context() -> opx_hfi_userinit() */
 	context->ctrl	  = ctrl; /* TODO? move required fields ctrl -> context? */
 
-	opx_lid_t lid = 0;
-	lid	      = opx_hfi_get_port_lid(ctrl->__hfi_unit, ctrl->__hfi_port);
-	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "lid = %d ctrl->__hfi_unit %u, ctrl->__hfi_port %u\n", lid,
-		     ctrl->__hfi_unit, ctrl->__hfi_port);
-
-	assert(lid > 0);
-
-	uint64_t gid_hi, gid_lo;
-	int	 rc __attribute__((unused)) = -1;
-	rc = opx_hfi_get_port_gid(ctrl->__hfi_unit, ctrl->__hfi_port, &gid_hi, &gid_lo);
-	assert(rc != -1);
-
-	context->hfi_unit	     = ctrl->__hfi_unit;
-	context->hfi_port	     = ctrl->__hfi_port;
-	context->lid		     = lid;
-	context->gid_hi		     = gid_hi;
-	context->gid_lo		     = gid_lo;
-	context->daos_info.rank	     = hfi_context_rank;
-	context->daos_info.rank_inst = hfi_context_rank_inst;
-
-	// If a user wants an HPC job ran on a non-default Service Level,
-	// they set FI_OPX_SL to the deseried SL with will then determine the SC and VL
-	int user_sl = -1;
-	if (fi_param_get_int(fi_opx_global.prov, "sl", &user_sl) == FI_SUCCESS) {
-		if ((user_sl >= 0) && (user_sl <= 31)) {
-			context->sl = user_sl;
-			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
-				"Detected user specfied ENV FI_OPX_SL, so set the service level to %d\n", user_sl);
-		} else {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-				"Error: User specfied an env FI_OPX_SL.  Valid data is an positive integer 0 - 31 (Default is 0).  User specified %d.  Using default value of %d instead\n",
-				user_sl, FI_OPX_HFI1_SL_DEFAULT);
-			context->sl = FI_OPX_HFI1_SL_DEFAULT;
+	/* Use the shared helper to populate all context fields (SL/SC/VL/PKEY, PIO, SDMA, RXE, etc.) */
+	if (opx_hfi1_context_populate(context, internal, ctrl, fd_cdev, fd_verbs, hfi_context_rank,
+				      hfi_context_rank_inst) != 0) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Failed to populate HFI context for unit %d\n",
+			hfi_unit_number);
+		if (fd_cdev >= 0) {
+			opx_hfi_context_close(fd_cdev, fd_verbs);
 		}
-	} else {
-		context->sl = FI_OPX_HFI1_SL_DEFAULT;
+		goto ctxt_open_err;
 	}
 
-	rc = opx_hfi_get_port_sl2sc(ctrl->__hfi_unit, ctrl->__hfi_port, context->sl);
-	if (rc < 0) {
-		context->sc = FI_OPX_HFI1_SC_DEFAULT;
-	} else {
-		context->sc = rc;
+	return context;
+
+ctxt_open_err:
+	free(internal);
+	return NULL;
+}
+
+/* Multi-plane support: discover additional planes by scanning HFI units and ports */
+int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
+				int max_planes)
+{
+	const uint64_t primary_gid_hi = primary_hfi->gid_hi;
+	const uint32_t primary_unit   = primary_hfi->hfi_unit;
+	const uint32_t primary_port   = primary_hfi->hfi_port;
+	const int      hfi_count      = opx_hfi_get_num_units();
+	const int      numa_node_id   = opx_get_current_proc_location();
+	int	       dirfd	      = -1;
+
+	FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+	       "Discovering additional planes for primary HFI unit %d port %d with GID hi 0x%016lx\n", primary_unit,
+	       primary_port, primary_gid_hi);
+	FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+	       "Scanning up to %d HFI units and ports for additional planes (max_planes=%d)\n", hfi_count, max_planes);
+
+	struct plane_candidate {
+		uint32_t hfi_unit;
+		uint32_t hfi_port;
+		uint64_t gid_hi;
+		int	 numa_dist;
+		int	 free_ctxts;
+	} candidates[OPX_MAX_HFIS * OPX_MAX_PORT];
+	int num_candidates = 0;
+
+	if (hfi_count > 1) {
+		if ((dirfd = open(OPX_CLASS_DIR_PATH, O_RDONLY)) == -1) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+				"Failed to open %s for flock: %s (continuing without lock)\n", OPX_CLASS_DIR_PATH,
+				strerror(errno));
+		} else if (flock(dirfd, LOCK_EX) == -1) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+				"Flock exclusive lock failure: %s (continuing without lock)\n", strerror(errno));
+			close(dirfd);
+			dirfd = -1;
+		}
 	}
 
-	rc = opx_hfi_get_port_sc2vl(ctrl->__hfi_unit, ctrl->__hfi_port, context->sc);
-	if (rc < 0) {
-		context->vl = FI_OPX_HFI1_VL_DEFAULT;
-	} else {
-		context->vl = rc;
+	for (int unit = 0; unit < hfi_count; unit++) {
+		int num_ports = opx_hfi_get_num_ports(unit);
+		FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL, "HFI unit %d has %d port%s\n", unit, num_ports,
+		       (num_ports == 1) ? "" : "s");
+		for (int port = OPX_MIN_PORT; port <= num_ports; port++) {
+			if (!opx_hfi_get_unit_port_active(unit, port)) {
+				FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+				       "Skipping HFI unit %d port %d because it is not active\n", unit, port);
+				continue;
+			}
+
+			if (unit == primary_unit && port == primary_port) {
+				FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+				       "Skipping HFI unit %d port %d because it is the primary plane\n", unit, port);
+				continue;
+			}
+
+			uint64_t gid_hi, gid_lo;
+			int	 rc = opx_hfi_get_port_gid(unit, port, &gid_hi, &gid_lo);
+			if (rc == -1) {
+				FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+				       "Skipping HFI unit %d port %d because GID could not be read (rc=%d)\n", unit,
+				       port, rc);
+				continue;
+			}
+
+			if (gid_hi == primary_gid_hi) {
+				continue;
+			}
+
+			int hfi_n = opx_hfi_sysfs_unit_read_node_s64(unit);
+			int hfi_d = numa_distance(hfi_n, numa_node_id);
+			int hfi_f = opx_hfi_get_num_free_contexts(unit);
+
+			FI_DBG(&fi_opx_provider, FI_LOG_EP_CTRL,
+			       "Candidate plane: unit=%d port=%d gid_hi=0x%016lx numa_node=%d numa_dist=%d free_ctxts=%d\n",
+			       unit, port, gid_hi, hfi_n, hfi_d, hfi_f);
+
+			candidates[num_candidates].hfi_unit   = unit;
+			candidates[num_candidates].hfi_port   = port;
+			candidates[num_candidates].gid_hi     = gid_hi;
+			candidates[num_candidates].numa_dist  = hfi_d;
+			candidates[num_candidates].free_ctxts = hfi_f;
+			num_candidates++;
+
+			if (num_candidates >= OPX_MAX_HFIS * OPX_MAX_PORT) {
+				FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+					"Reached maximum candidate limit (%d), stopping enumeration\n",
+					OPX_MAX_HFIS * OPX_MAX_PORT);
+				goto done_collecting;
+			}
+		}
 	}
 
-	if (context->sc == FI_OPX_HFI1_SC_ADMIN || context->vl == FI_OPX_HFI1_VL_ADMIN) {
+done_collecting:
+	if (dirfd != -1) {
+		if (flock(dirfd, LOCK_UN) == -1) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL, "Flock unlock failure: %s\n", strerror(errno));
+		}
+		close(dirfd);
+	}
+
+	int num_planes = 0;
+	for (int i = 0; i < num_candidates && num_planes < max_planes; i++) {
+		bool already_selected = false;
+		for (int p = 0; p < num_planes; p++) {
+			if (planes[p].gid_hi == candidates[i].gid_hi) {
+				already_selected = true;
+				break;
+			}
+		}
+		if (already_selected) {
+			continue;
+		}
+
+		int best = i;
+		for (int j = i + 1; j < num_candidates; j++) {
+			if (candidates[j].gid_hi != candidates[i].gid_hi) {
+				continue;
+			}
+			if (candidates[j].numa_dist < candidates[best].numa_dist ||
+			    (candidates[j].numa_dist == candidates[best].numa_dist &&
+			     candidates[j].free_ctxts > candidates[best].free_ctxts)) {
+				best = j;
+			}
+		}
+
+		planes[num_planes].hfi_unit = candidates[best].hfi_unit;
+		planes[num_planes].hfi_port = candidates[best].hfi_port;
+		planes[num_planes].gid_hi   = candidates[best].gid_hi;
+
+		FI_INFO(&fi_opx_provider, FI_LOG_EP_CTRL,
+			"Selected plane %d: hfi_unit=%d hfi_port=%d gid_hi=0x%016lx numa_dist=%d free_ctxts=%d\n",
+			num_planes, candidates[best].hfi_unit, candidates[best].hfi_port, candidates[best].gid_hi,
+			candidates[best].numa_dist, candidates[best].free_ctxts);
+
+		num_planes++;
+	}
+
+	return num_planes;
+}
+
+/*
+ * Multi-plane support: open HFI context on a specific unit.
+ *
+ * This is a simplified variant of fi_opx_hfi1_context_open() that opens a
+ * context on a specific HFI unit (bypassing the NUMA-based selection logic).
+ * It reuses opx_open_hfi_and_context() for device open (which creates the
+ * ibv_context) and opx_hfi1_context_populate() for all context field
+ * initialization (SL/SC/VL/PKEY, PIO, SDMA, RXE, GID, etc.).
+ *
+ * Secondary plane contexts do not carry DAOS rank info (rank=-1, rank_inst=-1).
+ */
+struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uuid_t unique_job_key, uint32_t hfi_unit)
+{
+	int		  fd_cdev  = -1;
+	int		  fd_verbs = -1;
+	struct _hfi_ctrl *ctrl	   = NULL;
+
+	struct fi_opx_hfi1_context_internal *internal = calloc(1, sizeof(struct fi_opx_hfi1_context_internal));
+	if (!internal) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-			"Detected user set ENV FI_OPX_SL of %ld, which has translated to admin-level Service class (SC=%ld) and/or admin-level Virtual Lane(VL=%ld), which is invalid for user traffic.  Using default values instead\n",
-			context->sl, context->sc, context->vl);
-		context->sl = FI_OPX_HFI1_SL_DEFAULT;
-		context->sc = FI_OPX_HFI1_SC_DEFAULT;
-		context->vl = FI_OPX_HFI1_VL_DEFAULT;
+			"Error: Memory allocation failure for fi_opx_hfi_context_internal.\n");
+		return NULL;
 	}
 
-	if (context->vl > 7) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"VL is > 7, this may not be supported.  SL=%ld SC=%ld VL=%ld\n", context->sl, context->sc,
-			context->vl);
+	struct fi_opx_hfi1_context *context = &internal->context;
+	context->fd_cdev		    = -1;
+	context->fd_verbs		    = -1;
+	internal->ctrl			    = NULL;
+
+	/* Verify the specified HFI unit is active */
+	if (!opx_hfi_get_unit_active(hfi_unit)) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error: HFI unit %d is not active\n", hfi_unit);
+		goto ctxt_open_err;
 	}
-
-	context->mtu = opx_hfi_get_port_vl2mtu(ctrl->__hfi_unit, ctrl->__hfi_port, context->vl);
-	assert(context->mtu >= 0);
-
-	// If a user wants an HPC job ran on a non-default Partition key,
-	// they set FI_OPX_PKEY env to specify it (Same behavior as PSM2_PKEY)
-	int user_pkey = -1;
-	if (fi_param_get_int(fi_opx_global.prov, "pkey", &user_pkey) == FI_SUCCESS) {
-		if (user_pkey < 0) {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-				"Detected user specified FI_OPX_PKEY of %d (0x%x), which is an invalid value.\n",
-				user_pkey, user_pkey);
-			if (fd_cdev >= 0) {
-				opx_hfi_context_close(fd_cdev, fd_verbs);
-			}
-			goto ctxt_open_err;
-		}
-		rc = opx_hfi1_wrapper_set_pkey(internal, user_pkey);
-		if (rc) {
-			fprintf(stderr,
-				"Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set. This pkey is likely not registered/valid.\n",
-				user_pkey);
-			if (fd_cdev >= 0) {
-				opx_hfi_context_close(fd_cdev, fd_verbs);
-			}
-			goto ctxt_open_err;
-		} else {
-			context->pkey = user_pkey;
-			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
-				"Detected user specfied ENV FI_OPX_PKEY, so set partition key to 0x%x\n", user_pkey);
-		}
-	} else {
-		int default_pkey = opx_hfi_get_port_index2pkey(context->hfi_unit, context->hfi_port, 0);
-		if (default_pkey < 0) {
-			fprintf(stderr,
-				"Unable to get default Pkey. Please specify a different Pkey using FI_OPX_PKEY\n");
-			if (fd_cdev >= 0) {
-				opx_hfi_context_close(fd_cdev, fd_verbs);
-			}
-			goto ctxt_open_err;
-		}
-		rc = opx_hfi1_wrapper_set_pkey(internal, default_pkey);
-		if (rc) {
-			fprintf(stderr,
-				"Error in setting default Pkey %#x. Please specify a different Pkey using FI_OPX_PKEY\n",
-				default_pkey);
-			if (fd_cdev >= 0) {
-				opx_hfi_context_close(fd_cdev, fd_verbs);
-			}
-			goto ctxt_open_err;
-		} else {
-			context->pkey = default_pkey;
-		}
-	}
-
-	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Service Level: SL=%ld SC=%ld VL=%ld PKEY=0x%lx MTU=%d\n", context->sl,
-		context->sc, context->vl, context->pkey, context->mtu);
 
 	/*
-	 * Initialize the hfi tx context
+	 * Open the HFI device and create the ibv_context.
+	 * opx_open_hfi_and_context() calls opx_hfi1_wrapper_context_open() which
+	 * creates the ibv_context via opx_hfi1_rdma_context_open(), then calls
+	 * opx_hfi1_wrapper_userinit() to initialize the user context.
 	 */
+	if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit, &fd_cdev, &fd_verbs) != 0) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error: Unable to open HFI unit %d\n", hfi_unit);
+		goto ctxt_open_err;
+	}
 
-	const struct hfi1_base_info *base_info = &ctrl->base_info;
-	const struct hfi1_ctxt_info *ctxt_info = &ctrl->ctxt_info;
-
-	context->bthqp	   = (uint8_t) base_info->bthqp;
-	context->jkey	   = base_info->jkey;
-	context->send_ctxt = ctxt_info->send_ctxt;
+	internal->ctrl	  = ctrl;
+	context->ctrl	  = ctrl;
+	context->fd_cdev  = fd_cdev;
+	context->fd_verbs = fd_verbs;
 
 	/*
-	 * Initialize context sharing values
+	 * Use the shared helper to populate all context fields.
+	 * This includes SL/SC/VL/PKEY, PIO/SDMA/RXE state, GID, LID,
+	 * TID flow clearing, context sharing setup, etc.
+	 * Secondary plane contexts do not carry DAOS rank info.
 	 */
-	context->subctxt_cnt		  = internal->user_info.subctxt_cnt;
-	context->subctxt		  = ctxt_info->subctxt;
-	fi_opx_global.ctx_sharing_enabled = context->subctxt_cnt > 0 ? OPX_CTX_SHARING_ON : OPX_CTX_SHARING_OFF;
-	context->hfi1_frozen_count	  = 0;
-
-	FI_DBG(&fi_opx_provider, FI_LOG_FABRIC, "subctxt %u, subctxt_cnt %u, subctxt_id %u\n", context->subctxt,
-	       context->subctxt_cnt, internal->user_info.subctxt_id);
-
-	// Define the layout of context sharing shared memory regions
-	opx_define_ctx_sharing_shared_memory(context);
-
-	OPX_OPEN_BAR(context->hfi_unit, ctrl->ctxt_info.ctxt, ctxt_info->send_ctxt);
-	context->info.pio.scb_sop_first =
-		OPX_HFI1_INIT_PIO_SOP(context->send_ctxt, (volatile uint64_t *) (ptrdiff_t) base_info->pio_bufbase_sop);
-	context->info.pio.scb_first =
-		OPX_HFI1_INIT_PIO(context->send_ctxt, (volatile uint64_t *) (ptrdiff_t) base_info->pio_bufbase);
-	context->info.pio.credits_addr = (volatile uint64_t *) (ptrdiff_t) base_info->sc_credits_addr;
-	context->credits_addr_copy     = context->info.pio.credits_addr;
-
-	const uint64_t credit_return	       = *(context->info.pio.credits_addr);
-	context->state.pio.free_counter_shadow = (uint16_t) (credit_return & 0x00000000000007FFul);
-	context->state.pio.fill_counter	       = 0;
-	context->state.pio.scb_head_index      = 0;
-	context->state.pio.credits_total = ctxt_info->credits; /* yeah, yeah .. THIS field is static, but there was an
-								  unused halfword at this spot, so .... */
-
-	/* move to domain ? */
-	uint8_t i;
-	for (i = 0; i < 32; ++i) {
-		rc = opx_hfi_get_port_sl2sc(ctrl->__hfi_unit, ctrl->__hfi_port, i);
-
-		if (rc < 0) {
-			context->sl2sc[i] = FI_OPX_HFI1_SC_DEFAULT;
-		} else {
-			context->sl2sc[i] = rc;
+	if (opx_hfi1_context_populate(context, internal, ctrl, fd_cdev, fd_verbs, -1 /* hfi_context_rank */,
+				      -1 /* hfi_context_rank_inst */) != 0) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Failed to populate HFI context for secondary plane unit %d\n",
+			hfi_unit);
+		if (fd_cdev >= 0) {
+			opx_hfi_context_close(fd_cdev, fd_verbs);
 		}
-
-		rc = opx_hfi_get_port_sc2vl(ctrl->__hfi_unit, ctrl->__hfi_port, i);
-		if (rc < 0) {
-			context->sc2vl[i] = FI_OPX_HFI1_VL_DEFAULT;
-		}
-		context->sc2vl[i] = rc;
+		goto ctxt_open_err;
 	}
 
-	// TODO: There is a bug in the driver that does not properly handle all
-	//       queue entries in use at once. As a temporary workaround, pretend
-	//       there is one less entry than there actually is.
-	context->info.sdma.queue_size	     = ctxt_info->sdma_ring_size - 1;
-	context->info.sdma.available_counter = context->info.sdma.queue_size;
-	context->info.sdma.fill_index	     = 0;
-	context->info.sdma.done_index	     = 0;
-	context->info.sdma.completion_queue  = (struct hfi1_sdma_comp_entry *) base_info->sdma_comp_bufbase;
-	assert(context->info.sdma.queue_size <= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX);
-	memset(context->info.sdma.queued_entries, 0, sizeof(context->info.sdma.queued_entries));
-
-	/*
-	 * initialize the hfi rx context
-	 */
-
-	context->info.rxe.id	       = ctrl->ctxt_info.ctxt;
-	context->info.rxe.hdrq.rhf_off = (ctxt_info->rcvhdrq_entsize - 8) >> BYTE2DWORD_SHIFT;
-
-	/* hardware registers */
-	volatile uint64_t *uregbase =
-		OPX_HFI1_INIT_UREGS(ctrl->ctxt_info.ctxt, (volatile uint64_t *) (uintptr_t) base_info->user_regbase);
-	context->info.rxe.hdrq.head_register = (volatile uint64_t *) &uregbase[ur_rcvhdrhead];
-	context->info.rxe.egrq.head_register = (volatile uint64_t *) &uregbase[ur_rcvegrindexhead];
-	volatile uint64_t *tidflowtable	     = (volatile uint64_t *) &uregbase[ur_rcvtidflowtable];
-
-	/* TID flows aren't cleared between jobs, do it now. */
-	for (int i = 0; i < 32; ++i) {
-		OPX_HFI1_BAR_UREG_STORE(&tidflowtable[i], 0UL);
-	}
-	assert(ctrl->__hfi_tidexpcnt <= OPX_MAX_TID_COUNT);
-	context->runtime_flags = ctxt_info->runtime_flags;
-
-	/* OPX relies on RHF.SeqNum, not the RcvHdrTail */
-	assert(!(context->runtime_flags & HFI1_CAP_DMA_RTAIL));
-
-	context->info.rxe.hdrq.elemsz = ctxt_info->rcvhdrq_entsize >> BYTE2DWORD_SHIFT;
-	if (context->info.rxe.hdrq.elemsz < FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CORE, "Invalid hdrq_entsize %u (%lu is min)\n",
-			context->info.rxe.hdrq.elemsz, FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN);
-		abort();
-	}
-	fi_opx_global.rcvhdrq_entry_dws = context->info.rxe.hdrq.elemsz;
-
-	context->info.rxe.hdrq.elemcnt	 = ctxt_info->rcvhdrq_cnt;
-	context->info.rxe.hdrq.elemlast	 = ((context->info.rxe.hdrq.elemcnt - 1) * context->info.rxe.hdrq.elemsz);
-	context->info.rxe.hdrq.rx_unused = -1UL; // unused
-	context->info.rxe.hdrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvhdr_bufbase;
-	context->info.rxe.hdrq.rhf_base	 = context->info.rxe.hdrq.base_addr + context->info.rxe.hdrq.rhf_off;
-
-	context->info.rxe.egrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvegr_bufbase;
-	context->info.rxe.egrq.elemsz	 = ctxt_info->rcvegr_size;
-	context->info.rxe.egrq.size	 = ctxt_info->rcvegr_size * ctxt_info->egrtids;
-
-	fi_opx_ref_init(&context->ref_cnt, 0, "HFI context");
-	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n",
-		context->hfi_unit, context->hfi_port, context->lid, context->jkey);
-
-	context->status_lasterr		     = 0;
-	context->status_check_next_usec	     = 0;
-	context->link_down_wait_time_max_sec = OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT;
-
-	int link_down_wait_time_max_sec;
-	if (fi_param_get_int(fi_opx_global.prov, "link_down_wait_time_max_sec", &link_down_wait_time_max_sec) ==
-	    FI_SUCCESS) {
-		if (link_down_wait_time_max_sec > 0) {
-			context->link_down_wait_time_max_sec = link_down_wait_time_max_sec;
-		} else {
-			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
-				"Error: Invalid link_down_wait_time_max_sec value %d.  Using default value of %f instead\n",
-				link_down_wait_time_max_sec, OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT);
-		}
-	}
-
-	opx_print_context(context);
+	FI_INFO(&fi_opx_provider, FI_LOG_EP_CTRL,
+		"Opened secondary HFI context: unit=%d port=%d lid=0x%04x gid_hi=0x%016lx\n", context->hfi_unit,
+		context->hfi_port, context->lid, context->gid_hi);
 
 	return context;
 
@@ -4924,7 +5182,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 			goto err;
 		}
 	} else {
-		if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.access_key_set, &access_key,
+		if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.ctxs[0].access_key_set, &access_key,
 						FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
 			OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys)\n");
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
@@ -4995,11 +5253,12 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		rzv_comp->access_key			   = access_key;
 		struct hfisvc_client_completion completion = {
 			.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
-			.cq.handle	= opx_ep->hfisvc.internal_completion_queue,
+			.cq.handle	= opx_ep->hfisvc.internal_completion_queues[0],
 			.cq.app_context = (uint64_t) rzv_comp,
 		};
-		rc = (*opx_ep->domain->hfisvc.cmd_dma_access_once_va)(
-			opx_ep->hfisvc.command_queue, completion, 0UL /* flags */, access_key, xfer_len, (void *) buf);
+		rc = (*opx_ep->domain->hfisvc.cmd_dma_access_once_va)(opx_ep->hfisvc.command_queues[0], completion,
+								      0UL /* flags */, access_key, xfer_len,
+								      (void *) buf);
 
 		if (OFI_UNLIKELY(rc != 0)) {
 			OPX_HFISVC_DEBUG_LOG("EAGAIN (hfisvc_client queue returned %ld)\n", rc);
@@ -5013,7 +5272,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 			buf, xfer_len, access_key, rzv_comp, context);
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.reg_dma_buf);
 
-		rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctx);
+		rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[0].ctx);
 
 		assert(rc == 0);
 	} else {
@@ -5059,7 +5318,8 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 						      ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							       FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ :
 							       FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC));
-		const uint64_t niov_client_key = ((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.client_key;
+		const uint64_t niov_client_key =
+			((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.ctxs[0].client_key;
 
 		const uint64_t		 pbc_dlid = OPX_PBC_DLID(addr.lid, hfi1_type);
 		volatile uint64_t *const scb	  = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
@@ -5104,7 +5364,8 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 						      ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							       FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ :
 							       FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC));
-		const uint64_t niov_client_key = ((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.client_key;
+		const uint64_t niov_client_key =
+			((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.ctxs[0].client_key;
 
 		volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
 		opx_cacheline_copy_qw_vol(
@@ -5166,7 +5427,7 @@ err:
 		OPX_BUF_FREE(rzv_comp);
 	}
 	if ((int32_t) access_key >= 0) {
-		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.access_key_set, access_key,
+		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[0].access_key_set, access_key,
 					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 	}
 	OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "SEND-RZV-RTS-HFI:%ld", tag);

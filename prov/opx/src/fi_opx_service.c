@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2025 Cornelis Networks.
+  Copyright(c) 2021-2026 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -23,7 +23,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2025 Cornelis Networks.
+  Copyright(c) 2021-2026 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -451,6 +451,17 @@ int opx_hfi_get_unit_active(int unit)
 	if (p <= OPX_MAX_PORT) {
 		return 1;
 	}
+
+	return (rv > 0);
+}
+
+/* Given a unit number and port number, returns 1 if the unit and port are active.
+   returns 0 if the unit and port are not active or if the unit is not found */
+int opx_hfi_get_unit_port_active(int unit, int port)
+{
+	int rv;
+
+	rv = opx_hfi_get_port_lid(unit, port);
 
 	return (rv > 0);
 }
