@@ -93,6 +93,8 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 		EFA_WARN(FI_LOG_CQ, "invalid operation type\n");
 		assert(0);
 	}
+
+	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
 }
 
 void efa_rdm_txe_release(struct efa_rdm_ope *txe)

@@ -179,11 +179,19 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 		goto out;
 	}
 
-	txe = efa_rdm_ep_alloc_txe(ep, peer, msg, op, tag, flags);
+	txe = ofi_buf_alloc(ep->ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		goto out;
 	}
+
+	efa_rdm_txe_construct(txe, ep, peer, msg, op, flags);
+	if (op == ofi_op_tagged) {
+		txe->cq_entry.tag = tag;
+		txe->tag = tag;
+	}
+
+	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
 
 	/*
 	 * It is required to get receiver's user recv QP through handshake
@@ -194,8 +202,6 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 		err = efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 		goto out;
 	}
-
-	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
 
 	txe->msg_id = peer->next_msg_id++;
 

@@ -318,31 +318,6 @@ err_free:
 
 
 /* create a new txe */
-struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
-					 struct efa_rdm_peer *peer,
-					 const struct fi_msg *msg,
-					 uint32_t op,
-					 uint64_t tag,
-					 uint64_t flags)
-{
-	struct efa_rdm_ope *txe;
-
-	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
-	if (OFI_UNLIKELY(!txe)) {
-		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
-		return NULL;
-	}
-
-	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, msg, op, flags);
-	if (op == ofi_op_tagged) {
-		txe->cq_entry.tag = tag;
-		txe->tag = tag;
-	}
-
-	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
-	return txe;
-}
-
 /**
  * @brief record the event that a TX op has been submitted
  *
@@ -670,14 +645,16 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 
 	msg.addr = peer->conn->fi_addr;
 
-	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
-
+	txe = ofi_buf_alloc(ep->ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;
 	}
 
-	/* efa_rdm_ep_alloc_txe() joins ep->base_ep.util_ep.tx_op_flags and passed in flags,
+	efa_rdm_txe_construct(txe, ep, peer, &msg, ofi_op_write, 0);
+
+	/*
+	 * efa_rdm_txe_construct() joins ep->base_ep.util_ep.tx_op_flags and passed in flags,
 	 * reset to desired flags (remove things like FI_DELIVERY_COMPLETE, and FI_COMPLETION)
 	 */
 	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
