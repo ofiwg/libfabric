@@ -42,7 +42,7 @@
 extern "C" {
 #endif
 
-#define SMR_VERSION	9
+#define SMR_VERSION	10
 
 struct smr_env {
 	int	disable_cma;
@@ -59,13 +59,13 @@ extern struct smr_env smr_env;
 #define SMR_FLAG_XPMEM_ENABLED	(1 << 2)
 
 /* SMR_CMD_SIZE refers to the total bytes dedicated for use in shm headers and
- * data. The entire atomic queue entry will be cache aligned (512) but this also
+ * data. The entire atomic queue entry will be cache aligned (384) but this also
  * includes the cmd aq header (16) + cmd entry ptr (8)
- * 512 (total entry size) - 16 (aq header) - 8 (entry ptr) = 488
+ * 384 (total entry size) - 16 (aq header) - 8 (entry ptr) = 360
  * This maximizes the inline payload. Increasing this value will increase the
- * atomic queue entry to 576 bytes.
+ * atomic queue entry to 448 bytes.
  */
-#define SMR_CMD_SIZE		488
+#define SMR_CMD_SIZE		360
 
 /* reserves 0-255 for defined ops and room for new ops
  * 256 and beyond reserved for ctrl ops
