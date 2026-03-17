@@ -1315,7 +1315,7 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 	assert(pkt_entry_copy->mr);
 	txe->local_read_pkt_entry = pkt_entry_copy;
 	/* pkt from read-copy pool only stores actual application data in wiredata */
-	assert(ofi_is_addr_aligned((void *)pkt_entry_copy->wiredata, EFA_RDM_IN_ORDER_ALIGNMENT));
+	assert(ofi_is_addr_aligned((void *)pkt_entry_copy->wiredata, EFA_RDM_EP_IN_ORDER_ALIGNMENT));
 	txe->rma_iov[0].addr = (uint64_t)pkt_entry_copy->wiredata;
 	txe->rma_iov[0].key = fi_mr_key(pkt_entry_copy->mr);
 	return 0;
