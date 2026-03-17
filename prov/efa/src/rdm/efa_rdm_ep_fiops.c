@@ -220,7 +220,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			true, /* need memory registration */
 			efa_env.readcopy_pool_size,
 			efa_env.readcopy_pool_size, /* max_cnt==chunk_cnt means pool is not allowed to grow */
-			EFA_RDM_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
+			EFA_RDM_EP_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
 			0,
 			&ep->rx_readcopy_pkt_pool);
 		if (ret)

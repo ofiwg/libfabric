@@ -120,9 +120,9 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 		if (data_size + segment_offset < txe->total_len) {
 			if (efa_mr_is_cuda(txe->desc[0])) {
 				if (txe->ep->sendrecv_in_order_aligned_128_bytes)
-					data_size &= ~(EFA_RDM_IN_ORDER_ALIGNMENT - 1);
+					data_size &= ~(EFA_RDM_EP_IN_ORDER_ALIGNMENT - 1);
 				else
-					data_size &= ~(EFA_RDM_CUDA_MEMORY_ALIGNMENT -1);
+					data_size &= ~(EFA_RDM_EP_CUDA_MEMORY_ALIGNMENT -1);
 			}
 		}
 	}
