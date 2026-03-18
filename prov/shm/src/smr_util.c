@@ -152,6 +152,8 @@ static int smr_retry_map(const char *name, int *fd)
 	if (old_shm == MAP_FAILED)
 		goto err;
 
+	assert((uintptr_t) old_shm % SMR_PREFETCH_SZ == 0);
+
         /* No backwards compatibility for now. */
 	if (old_shm->version != SMR_VERSION) {
 		munmap(old_shm, sizeof(*old_shm));
@@ -247,6 +249,7 @@ int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 		goto remove;
 	}
 
+	assert((uintptr_t) mapped_addr % SMR_PREFETCH_SZ == 0);
 	close(fd);
 
 	if (attr->flags & SMR_FLAG_HMEM_ENABLED) {
