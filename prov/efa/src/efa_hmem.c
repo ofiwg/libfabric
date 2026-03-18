@@ -4,6 +4,7 @@
 #include "efa.h"
 #include "efa_hmem.h"
 #include "efa_mr.h"
+#include "rdm/efa_rdm_tracepoint.h"
 #include "efa_tp.h"
 #include "rdm/efa_rdm_pkt_type.h"
 
@@ -486,26 +487,27 @@ int efa_hmem_info_initialize()
  */
 int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size)
 {
-	struct efa_mr_peer peer = { .iface = FI_HMEM_SYSTEM };
+	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)desc;
+	enum fi_hmem_iface iface = efa_rdm_mr ? efa_rdm_mr->efa_mr.iface : FI_HMEM_SYSTEM;
+	uint64_t device = efa_rdm_mr ? efa_rdm_mr->device : 0;
+	uint64_t flags = efa_rdm_mr ? efa_rdm_mr->flags : 0;
 
-	if (desc)
-		peer = ((struct efa_mr *) desc)->peer;
-
-	if (peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
-		assert(peer.hmem_data);
-		switch (peer.iface) {
+	if (flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
+		assert(efa_rdm_mr);
+		assert(efa_rdm_mr->hmem_data);
+		switch (iface) {
 		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
 		case FI_HMEM_CUDA:
 		case FI_HMEM_ROCR:
-			efa_tracepoint(dev_reg_copy_from_hmem, &peer, dest, src, size);
-			return ofi_hmem_dev_reg_copy_from_hmem(peer.iface, (uint64_t) peer.hmem_data, dest, src, size);
+			efa_rdm_tracepoint(dev_reg_copy_from_hmem, efa_rdm_mr, dest, src, size);
+			return ofi_hmem_dev_reg_copy_from_hmem(iface, (uint64_t)efa_rdm_mr->hmem_data, dest, src, size);
 		default:
 			break;
 		}
 	}
 
-	efa_tracepoint(copy_from_hmem, &peer, dest, src, size);
-	return ofi_copy_from_hmem(peer.iface, peer.device, dest, src, size);
+	efa_rdm_tracepoint(copy_from_hmem, efa_rdm_mr, dest, src, size);
+	return ofi_copy_from_hmem(iface, device, dest, src, size);
 };
 
 /**
@@ -519,26 +521,27 @@ int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size)
  */
 int efa_copy_to_hmem(void *desc, void *dest, const void *src, size_t size)
 {
-	struct efa_mr_peer peer = { .iface = FI_HMEM_SYSTEM };
+	struct efa_rdm_mr *efa_rdm_mr = (struct efa_rdm_mr *)desc;
+	enum fi_hmem_iface iface = efa_rdm_mr ? efa_rdm_mr->efa_mr.iface : FI_HMEM_SYSTEM;
+	uint64_t device = efa_rdm_mr ? efa_rdm_mr->device : 0;
+	uint64_t flags = efa_rdm_mr ? efa_rdm_mr->flags : 0;
 
-	if (desc)
-		peer = ((struct efa_mr *) desc)->peer;
-
-	if (peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
-		assert(peer.hmem_data);
-		switch (peer.iface) {
+	if (flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
+		assert(efa_rdm_mr);
+		assert(efa_rdm_mr->hmem_data);
+		switch (iface) {
 		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
 		case FI_HMEM_CUDA:
 		case FI_HMEM_ROCR:
-			efa_tracepoint(dev_reg_copy_to_hmem, &peer, dest, src, size);
-			return ofi_hmem_dev_reg_copy_to_hmem(peer.iface, (uint64_t) peer.hmem_data, dest, src, size);
+			efa_rdm_tracepoint(dev_reg_copy_to_hmem, efa_rdm_mr, dest, src, size);
+			return ofi_hmem_dev_reg_copy_to_hmem(iface, (uint64_t)efa_rdm_mr->hmem_data, dest, src, size);
 		default:
 			break;
 		}
 	}
 
-	efa_tracepoint(copy_to_hmem, &peer, dest, src, size);
-	return ofi_copy_to_hmem(peer.iface, peer.device, dest, src, size);
+	efa_rdm_tracepoint(copy_to_hmem, efa_rdm_mr, dest, src, size);
+	return ofi_copy_to_hmem(iface, device, dest, src, size);
 };
 
 /**

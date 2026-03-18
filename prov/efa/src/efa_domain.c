@@ -11,6 +11,7 @@
 #include "efa_cntr.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_atomic.h"
+#include "efa_rdm_mr.h"
 
 
 struct dlist_entry g_efa_domain_list;
@@ -241,27 +242,34 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	*domain_fid = &efa_domain->util_domain.domain_fid;
 
-	/*
-	 * Open the MR cache if application did not set FI_MR_LOCAL
-	 * and the cache is enabled
-	 * 
-	 * Explicit memory registrations from external application
-	 * should never go in the MR cache
+	/**
+	 * Using base mr (efa-direct) ops and no cache by default
+	 * TODO: After separating efa_domain's core functionality
+	 * and efa-rdm specific functionality, we should remove
+	 * such fabric branching and assign the fields for each
+	 * fabric individually
 	 */
-	if (!efa_domain->mr_local && efa_mr_cache_enable) {
-		err = efa_mr_cache_open(&efa_domain->cache, efa_domain);
-		if (err) {
-			ret = err;
-			goto err_free;
-		}
-		efa_domain->internal_buf_mr_regv = efa_mr_cache_regv;
-	} else {
-		efa_domain->internal_buf_mr_regv = efa_mr_internal_regv;
-	}
 	efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
+	efa_domain->cache = NULL;
 
 	if (EFA_INFO_TYPE_IS_RDM(info)) {
+		/*
+		 * Open the MR cache if application did not set FI_MR_LOCAL
+		 * and the cache is enabled
+		 *
+		 * Explicit memory registrations from external application
+		 * should never go in the MR cache
+		 */
+		if (!efa_domain->mr_local && efa_mr_cache_enable) {
+			err = efa_rdm_mr_cache_open(&efa_domain->cache,
+						    efa_domain);
+			if (err) {
+				ret = err;
+				goto err_free;
+			}
+		}
 		efa_domain->info_type = EFA_INFO_RDM;
+		efa_domain->util_domain.domain_fid.mr = &efa_rdm_domain_mr_ops;
 	} else if (EFA_INFO_TYPE_IS_DIRECT(info)) {
 		efa_domain->info_type = EFA_INFO_DIRECT;
 	} else {
@@ -300,7 +308,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 			iov.iov_base = efa_domain->zero_byte_bounce_buf;
 			iov.iov_len = ofi_get_page_size();
-			err = efa_mr_internal_regv(&efa_domain->util_domain.domain_fid,
+			err = fi_mr_regv(&efa_domain->util_domain.domain_fid,
 						   &iov, 1, mr_flags, 0, 0, 0, &mr_fid, NULL);
 			if (err) {
 				EFA_WARN(FI_LOG_DOMAIN, "Failed to register zero-byte bounce buffer: %d\n", err);
