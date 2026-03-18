@@ -74,7 +74,6 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	memcpy(txe->rma_iov, msg_rma->rma_iov,
 	       sizeof(struct fi_rma_iov) * msg_rma->rma_iov_count);
 
-	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
 	return txe;
 }
 

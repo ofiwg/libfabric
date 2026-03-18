@@ -118,15 +118,6 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 
 	assert(txe->peer);
 
-	/*
-	 * It is required to get receiver's user recv QP through handshake
-	 * if sender supports this feature.
-	 */
-	if ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) &&
-	    !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
-	}
-
 	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
 	if (err < 0)
 		return err;
@@ -162,6 +153,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 	ssize_t err;
 	struct efa_rdm_ope *txe;
 	struct util_srx_ctx *srx_ctx;
+	int available_tx_pkts;
 
 	efa_rdm_tracepoint(send_begin_msg_context,
 		    (size_t) msg->context, (size_t) msg->addr);
@@ -178,13 +170,38 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 		goto out;
 	}
 
-	txe = efa_rdm_ep_alloc_txe(ep, peer, msg, op, tag, flags);
+	// Handle case when there are no TX packets available
+	available_tx_pkts = ep->efa_max_outstanding_tx_ops -
+			ep->efa_outstanding_tx_ops - ep->efa_rnr_queued_pkt_cnt;
+
+	if (OFI_UNLIKELY(available_tx_pkts == 0)) {
+		err = -FI_EAGAIN;
+		goto out;
+	}
+
+	txe = ofi_buf_alloc(ep->ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		goto out;
 	}
 
+	efa_rdm_txe_construct(txe, ep, peer, msg, op, flags);
+	if (op == ofi_op_tagged) {
+		txe->cq_entry.tag = tag;
+		txe->tag = tag;
+	}
+
 	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
+
+	/*
+	 * It is required to get receiver's user recv QP through handshake
+	 * if sender supports this feature.
+	 */
+	if ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) &&
+	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		err = efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
+		goto out;
+	}
 
 	txe->msg_id = peer->next_msg_id++;
 

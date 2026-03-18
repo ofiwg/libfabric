@@ -28,6 +28,21 @@ struct efa_rdm_ep_queued_copy {
 
 #define EFA_RDM_MAX_QUEUED_COPY (8)
 
+/*
+ * The default memory alignment
+ */
+#define EFA_RDM_DEFAULT_MEMORY_ALIGNMENT (8)
+
+/*
+ * The CUDA memory alignment
+ */
+#define EFA_RDM_CUDA_MEMORY_ALIGNMENT (64)
+
+/*
+ * The alignment to support in-order aligned ops.
+ */
+#define EFA_RDM_IN_ORDER_ALIGNMENT (128)
+
 /**
  * Max number of opes queued before handshake is made
  * with their peers. This cnt is per EP.
@@ -194,7 +209,8 @@ struct efa_rdm_ep {
 	struct efa_rdm_pke **pke_vec;
 	/* Work arrays for efa_rdm_ope_post_send to avoid stack allocation */
 	struct efa_rdm_pke **send_pkt_entry_vec;
-	int *send_pkt_entry_size_vec;
+	int *send_pkt_entry_data_sizes;
+	int send_pkt_entry_vec_size;
 	struct dlist_entry entry;
 	/* the count of opes queued before handshake is made with their peers */
 	size_t ope_queued_before_handshake_cnt;
@@ -218,13 +234,6 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 
 int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr);
 struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr);
-
-struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
-					 struct efa_rdm_peer *peer,
-					 const struct fi_msg *msg,
-					 uint32_t op,
-					 uint64_t tag,
-					 uint64_t flags);
 
 struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 					   struct efa_rdm_peer *peer, uint32_t op);
@@ -252,7 +261,26 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				    struct dlist_entry *pkts);
 
-size_t efa_rdm_ep_get_memory_alignment(struct efa_rdm_ep *ep, enum fi_hmem_iface iface);
+/**
+ * @brief Get memory alignment for given ep and hmem iface
+ *
+ * @param ep efa rdm ep
+ * @param iface hmem iface
+ * @return size_t the memory alignment
+ */
+static inline
+size_t efa_rdm_ep_get_memory_alignment(struct efa_rdm_ep *ep, enum fi_hmem_iface iface)
+{
+	size_t memory_alignment = EFA_RDM_DEFAULT_MEMORY_ALIGNMENT;
+
+	if (ep->sendrecv_in_order_aligned_128_bytes) {
+		memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
+	} else if (iface == FI_HMEM_CUDA) {
+		memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
+	}
+
+	return memory_alignment;
+}
 
 static inline
 struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
