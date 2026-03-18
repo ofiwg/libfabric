@@ -79,6 +79,55 @@ Test(mr, invalid_client_rkey)
 		cr_assert_eq(ret, FI_SUCCESS, "fi_close failed: %d", ret);
 	}
 }
+Test(mr, buf_attr)
+{
+	int ret;
+	struct fi_mr_attr attr = {};
+	struct iovec iov = {};
+	struct fi_mr_dmabuf dbuf = {};
+	struct fid_mr *mr1, *mr2;
+	struct cxip_mr *mr_cxip;
+	uint64_t addr1 = 0, addr2 = 0;
+	uint32_t len1 = 0, len2 = 0, data1 = 0, data2 = 0;
+
+	/* test iov addr/len */
+	iov.iov_len = sizeof(data1);
+	iov.iov_base = (void *)&data1;
+	addr1 = (uint64_t)&data1;
+	len1 = sizeof(data1);
+	attr.mr_iov = &iov;
+	attr.iov_count = 1;
+	attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE;
+	attr.requested_key = 0x123;
+	ret = fi_mr_regattr(cxit_domain, &attr, 0, &mr1);
+	mr_cxip = (struct cxip_mr *)mr1->mem_desc;
+	addr2 = (uint64_t)mr_cxip->buf;
+	len2 = mr_cxip->len;
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_regattr failed mr1: %d", ret);
+	cr_assert_eq(addr1, addr2, "address mismatch failed mr1: %lx %lx", addr1, addr2);
+	cr_assert_eq(len1, len2, "length mismatch failed mr1: %d %d", len1, len2);
+	ret = fi_close(&mr1->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_close failed mr1: %d", ret);
+	/* test dmabuf addr/len */
+	/* first clear out iov len/base */
+	iov.iov_len = 0;
+	iov.iov_base = NULL;
+	dbuf.base_addr = &data2;
+	dbuf.len = sizeof(data2);
+	dbuf.offset = 0;
+	addr1 = (uint64_t)&data2;
+	len1 = sizeof(data2);
+	attr.dmabuf = &dbuf;
+	ret = fi_mr_regattr(cxit_domain, &attr, FI_MR_DMABUF, &mr2);
+	mr_cxip = (struct cxip_mr *)mr2->mem_desc;
+	addr2 = (uint64_t)mr_cxip->buf;
+	len2 = mr_cxip->len;
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_regattr failed mr2: %d", ret);
+	cr_assert_eq(addr1, addr2, "address mismatch failed mr2: %lx %lx", addr1, addr2);
+	cr_assert_eq(len1, len2, "length mismatch failed mr2: %d %d", len1, len2);
+	ret = fi_close(&mr2->fid);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_close failed mr2: %d", ret);
+}
 
 Test(mr, std_mrs, .timeout = 600, .disabled = true)
 {
