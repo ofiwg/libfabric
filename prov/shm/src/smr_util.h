@@ -223,34 +223,48 @@ struct smr_peer {
 };
 
 #define SMR_MAX_PEERS	256
+#define SMR_PREFETCH_SZ	128
 
 struct smr_region {
-	uint8_t			version;
-	uint8_t			resv;
-	uint16_t		flags;
-	uint8_t			self_vma_caps;
-	uint8_t			peer_vma_caps;
+	union {
+		struct {
+			uint8_t			version;
+			uint8_t			resv;
+			uint16_t		flags;
+			uint8_t			self_vma_caps;
+			uint8_t			peer_vma_caps;
 
-	uint16_t		max_sar_buf_per_peer;
-	struct ofi_xpmem_pinfo	xpmem_self;
-	struct ofi_xpmem_pinfo	xpmem_peer;
+			uint16_t		max_sar_buf_per_peer;
+			struct ofi_xpmem_pinfo	xpmem_self;
+			struct ofi_xpmem_pinfo	xpmem_peer;
 
-	int			pid;
-	int			resv2;
+			int			pid;
+			int			resv2;
 
-	uintptr_t		base_addr;
+			uintptr_t		base_addr;
 
-	size_t			total_size;
+			size_t			total_size;
+		};
+		uint8_t		pad[SMR_PREFETCH_SZ];
+	};
 
-	/* offsets from start of smr_region */
-	size_t			cmd_queue_offset;
-	size_t			cmd_stack_offset;
-	size_t			inject_pool_offset;
-	size_t			ret_queue_offset;
-	size_t			sar_pool_offset;
-	size_t			peer_data_offset;
-	size_t			name_offset;
+	struct {
+		/* offsets from start of smr_region */
+		size_t			cmd_queue_offset;
+		size_t			cmd_stack_offset;
+		size_t			inject_pool_offset;
+		size_t			ret_queue_offset;
+		size_t			sar_pool_offset;
+		size_t			peer_data_offset;
+		size_t			name_offset;
+	} __attribute__ ((aligned(64)));
 };
+
+#ifdef static_assert
+static_assert(sizeof(struct smr_region) % SMR_PREFETCH_SZ == 64,
+	      "smr_region offsets need to be 128-byte sector aligned "
+	      "to maximize prefetching of command queue with offsets");
+#endif
 
 static inline void smr_set_vma_cap(uint8_t *vma_cap, uint8_t type, bool avail)
 {

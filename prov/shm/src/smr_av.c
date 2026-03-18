@@ -134,6 +134,8 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 		goto out;
 	}
 
+	assert((uintptr_t) peer % SMR_PREFETCH_SZ == 0);
+
 	if (!peer->pid) {
 		FI_WARN(&smr_prov, FI_LOG_AV, "peer not initialized\n");
 		munmap(peer, sizeof(*peer));
@@ -146,6 +148,8 @@ int smr_map_to_region(struct smr_map *map, int64_t id)
 
 	peer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	peer_buf->region = peer;
+
+	assert((uintptr_t) peer % SMR_PREFETCH_SZ == 0);
 
 	if (map->flags & SMR_FLAG_HMEM_ENABLED) {
 		ret = ofi_hmem_host_register(peer, peer->total_size);
