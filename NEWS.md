@@ -6,11 +6,18 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v2.5.0, Sun March 15, 2026
+v2.5.0, Fri March 20, 2026
 ==========================
 
 ## Core ##
 
+- hmem: Add way to query neuron ops version
+- hmem: Use neuron nrt_get_dmabuf_fd_v2 if available
+- log: Add log_location parameter to allow log redirection to file
+- include/windows: Add definitions for PATH_MAX and mode_t
+- include/osd: Add 'ofi_open', 'ofi_fdopen, and 'ofi_close'
+- include/unix/osd.h: Remove duplicated OFI_KEEPALIVE definition
+- hmem: Use NVML device count when deciding to use IPC
 - man: Clarify parameter behavior for 0 byte ops
 - include/ofi_atomic_queue: Add entry init function
 - include/ofi_atomic_queue: Fix create function
@@ -46,6 +53,7 @@ v2.5.0, Sun March 15, 2026
 
 ## CXI ##
 
+- cxip_mr_init uses wrong length field from DMABUF structure
 - Fix hang in MPI when using cxi with lnx
 - Fix append sequence for standard MR
 - Add cxi unit tests and update man/fi_cxi.7
@@ -60,6 +68,14 @@ v2.5.0, Sun March 15, 2026
 
 ## EFA ##
 
+- Fix zero-length VLA stack overflow in RMA paths
+- Fix 0 byte send/read/write support
+- Clean up efa_hmem_info_init_iface()
+- Fix error path deadlock in efa_base_ep_create_qp
+- Add QP generation to data path direct request ID
+- Adjust the log level and location of efa_show_help
+- Adjust the log level for efa-direct's cq err_data
+- Refactor and clean up the efa_cq_handle_error
 - Fix print messages during mr reg
 - Fix memory leak on EFA device destruction
 - Add null check for base_ep in CQ polling to handle destroyed QPs
@@ -155,14 +171,32 @@ v2.5.0, Sun March 15, 2026
 - Fix ld_core_domains cleanup on init fail
 - FI_CLAIM and FI_DISCARD fixes
 
+## OPX ##
+
+- Fix CTS replay payload for RMA GET
+- Fix MP Eager replays for 9B headers
+- Fix mismatched alignment attribute between packet header & payload unions.
+
+## PSM3 ##
+
+- Update psm3 to match IEFS 12.1.0.1 release
+
 ## RXD ##
 
 - Fix atomic fetch/compare path
 - Enforce AV Removal Behavior
 - Enforce AV Lookup Behavior
 
+## RXM ##
+
+- Replace rx_buf in unexp sar path sooner
+
 ## SHM ##
 
+- Always prefer IPC over bouncing through shm
+- Fix shm not utilizing XPMEM when requested
+- Validate application input for atomic ops
+- Fix smr_unexp_ipc chunking for large buffered messages
 - Add unexpected message buffering on demand when needed
 - New shm architecture
 - Cleanup headers and copyrights
@@ -192,6 +226,12 @@ v2.5.0, Sun March 15, 2026
 
 ## Fabtests ##
 
+- dmabuf-rdma: Fix uninitialized variable warning
+- hmem: Add way to query neuron ops version
+- hmem: Use neuron nrt_get_dmabuf_fd_v2 if available
+- Add fabtests for getting dmabuf fd
+- Fix benchmark documentation
+- Reduce memory footprint of rdm_atomic
 - Add missing "ft_random.h" to source package
 - efa_implicit_av_test: Skip shm test for inject sizes
 - efa: Remove the skip for dmabuf_only
