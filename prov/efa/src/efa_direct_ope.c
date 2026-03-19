@@ -1,6 +1,14 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+/*
+ * This file implements the EFA direct operation entry (ope) pool management.
+ * Direct operation entries are used to track outstanding data transfer operations
+ * (send, receive, and RMA) and their associated memory descriptors when memory
+ * region tracking is enabled (efa_env.track_mr). The pool provides efficient
+ * allocation and release of these entries during data transfer operations.
+ */
+
 #include "efa.h"
 #include "efa_direct_ope.h"
 
