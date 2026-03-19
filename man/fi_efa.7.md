@@ -542,6 +542,13 @@ the refill will be skipped.
 : Use the direct data path implementation that bypasses rdma-core on data path, including the CQ polling and TX/RX submissions, when it's available.
 Setting this variable as 0 will disable this feature (Default: true).
 
+*FI_EFA_TRACK_MR*
+
+: Enable tracking of memory registrations to detect if any outstanding operations
+still reference an MR when it is closed. When enabled, the provider will print
+a warning message if an MR is closed while TX or RX operations still reference it.
+This is useful for debugging memory registration issues. (Default: false).
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
