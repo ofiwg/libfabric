@@ -37,6 +37,7 @@
 #include "ofi_file.h"
 
 #include "efa_base_ep.h"
+#include "efa_direct_ope.h"
 #include "efa_mr.h"
 #include "efa_env.h"
 #include "efa_shm.h"

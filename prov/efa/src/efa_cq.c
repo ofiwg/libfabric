@@ -33,21 +33,45 @@ static inline uint64_t efa_cq_opcode_to_fi_flags(enum ibv_wc_opcode opcode) {
 	}
 }
 
+static inline void efa_cq_direct_ope_release(struct efa_cq *efa_cq,
+					      struct efa_ibv_cq *ibv_cq)
+{
+	struct efa_domain *efa_domain;
+	struct efa_base_ep *base_ep;
+
+	if (efa_env.track_mr && ibv_cq->ibv_cq_ex->wr_id) {
+		efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
+		base_ep = efa_ibv_cq_get_base_ep_from_cur_cqe(ibv_cq, efa_domain);
+		efa_direct_ope_release(base_ep,
+			(struct efa_direct_ope *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id);
+	}
+}
+
 static void efa_cq_read_context_entry(struct efa_ibv_cq *ibv_cq, void *buf, int opcode)
 {
 	struct fi_cq_entry *entry = buf;
 
-	entry->op_context = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
+	if (efa_env.track_mr && ibv_cq->ibv_cq_ex->wr_id)
+		entry->op_context = ((struct efa_direct_ope *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id)->context;
+	else
+		entry->op_context = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
 }
 
 static inline
 void efa_cq_read_entry_common(struct efa_ibv_cq *cq, struct fi_cq_msg_entry *entry, int opcode)
 {
 	struct ibv_cq_ex *ibv_cqx = cq->ibv_cq_ex;
+	struct efa_direct_ope *direct_ope;
 
 	if (!efa_cq_wc_is_unsolicited(cq) && ibv_cqx->wr_id) {
-		entry->op_context = (void *)ibv_cqx->wr_id;
-		entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode): ((struct efa_context *) ibv_cqx->wr_id)->completion_flags;
+		if (efa_env.track_mr) {
+			direct_ope = (struct efa_direct_ope *)(uintptr_t)ibv_cqx->wr_id;
+			entry->op_context = direct_ope->context;
+			entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode) : direct_ope->context->completion_flags;
+		} else {
+			entry->op_context = (void *)ibv_cqx->wr_id;
+			entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode): ((struct efa_context *) ibv_cqx->wr_id)->completion_flags;
+		}
 	} else {
 		entry->op_context = NULL;
 		entry->flags = efa_cq_opcode_to_fi_flags(opcode);
@@ -114,7 +138,13 @@ static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq
 	case IBV_WC_SEND: /* fall through */
 	case IBV_WC_RDMA_WRITE: /* fall through */
 	case IBV_WC_RDMA_READ:
-		addr = ibv_cq->ibv_cq_ex->wr_id ? ((struct efa_context *)ibv_cq->ibv_cq_ex->wr_id)->addr : FI_ADDR_NOTAVAIL;
+		if (!ibv_cq->ibv_cq_ex->wr_id) {
+			addr = FI_ADDR_NOTAVAIL;
+		} else if (efa_env.track_mr) {
+			addr = ((struct efa_direct_ope *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id)->context->addr;
+		} else {
+			addr = ((struct efa_context *)ibv_cq->ibv_cq_ex->wr_id)->addr;
+		}
 		break;
 	case IBV_WC_RECV: /* fall through */
 	case IBV_WC_RECV_RDMA_WITH_IMM:
@@ -140,11 +170,12 @@ static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq
  *
  * 3. print warning message with self and peer's raw address
  *
+ * 4. complete ope if mr tracking is enabled
+ *
  * @param[in]	base_ep     efa_base_ep
  * @param[in]	efa_cq      EFA CQ containing the extended ibv cq
  * @param[in]	err         positive libfabric error code
  * @param[in]	prov_errno  positive EFA provider specific error code
- * @param[in]	is_tx       if the error is for TX or RX operation
  */
 static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 				struct efa_ibv_cq *cq, int err,
@@ -160,6 +191,10 @@ static void efa_cq_handle_error(struct efa_base_ep *base_ep,
 	 * copied to util_cq in the subsequent ofi_cq_write_error
 	 */
 	efa_cq_fill_err_entry(cq, &err_entry);
+
+	if (efa_env.track_mr && cq->ibv_cq_ex->wr_id)
+		efa_direct_ope_release(base_ep,
+			(struct efa_direct_ope *)(uintptr_t)cq->ibv_cq_ex->wr_id);
 
 	efa_cntr_report_error(&base_ep->util_ep, err_entry.flags);
 	write_cq_err = ofi_cq_write_error(&efa_cq->util_cq, &err_entry);
@@ -191,6 +226,10 @@ static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
 		return;
 
 	efa_tracepoint(handle_tx_completion, ibv_cq_ex->wr_id);
+
+	if (efa_env.track_mr)
+		efa_direct_ope_release(base_ep,
+			(struct efa_direct_ope *)(uintptr_t)ibv_cq_ex->wr_id);
 
 	/* TX completions should not send peer address to util_cq */
 	if (base_ep->util_ep.caps & FI_SOURCE)
@@ -224,7 +263,6 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 {
 	struct util_cq *rx_cq = base_ep->util_ep.rx_cq;
 	struct ibv_cq_ex *ibv_cq_ex = ibv_cq->ibv_cq_ex;
-
 	fi_addr_t src_addr;
 	int ret = 0;
 
@@ -233,6 +271,10 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 		return;
 
 	efa_tracepoint(handle_rx_completion, ibv_cq_ex->wr_id);
+
+	if (efa_env.track_mr)
+		efa_direct_ope_release(base_ep,
+			(struct efa_direct_ope *)(uintptr_t)ibv_cq_ex->wr_id);
 
 	if (base_ep->util_ep.caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup(base_ep->av,
@@ -767,6 +809,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size), opcode);
 			if (src_addr)
 				src_addr[num_cqe] = efa_cq_get_src_addr(ibv_cq, opcode);
+			efa_cq_direct_ope_release(efa_cq, ibv_cq);
 			num_cqe++;
 		}
 
@@ -813,6 +856,9 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	 */
 	assert(ibv_cq->ibv_cq_ex->status);
 	efa_cq_fill_err_entry(ibv_cq, buf);
+
+	efa_cq_direct_ope_release(efa_cq, ibv_cq);
+
 	efa_cq_end_poll(ibv_cq);
 	ret = 1;
 
