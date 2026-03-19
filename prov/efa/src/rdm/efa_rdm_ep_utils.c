@@ -179,7 +179,9 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, struct efa_rdm_p
 	}
 
 	rxe->ep = ep;
+	efa_domain_ope_list_lock(efa_rdm_ep_domain(ep));
 	dlist_insert_tail(&rxe->ep_entry, &ep->rxe_list);
+	efa_domain_ope_list_unlock(efa_rdm_ep_domain(ep));
 	rxe->type = EFA_RDM_RXE;
 	rxe->internal_flags = 0;
 	rxe->fi_flags = 0;
@@ -339,7 +341,9 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		txe->tag = tag;
 	}
 
+	efa_domain_ope_list_lock(efa_rdm_ep_domain(efa_rdm_ep));
 	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
+	efa_domain_ope_list_unlock(efa_rdm_ep_domain(efa_rdm_ep));
 	return txe;
 }
 
