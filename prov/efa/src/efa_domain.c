@@ -270,6 +270,8 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 	dlist_init(&efa_domain->ah_lru_list);
+	if (efa_env.track_mr)
+		dlist_init(&efa_domain->base_ep_list);
 
 	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid;
 	if (efa_domain->info_type == EFA_INFO_RDM) {
