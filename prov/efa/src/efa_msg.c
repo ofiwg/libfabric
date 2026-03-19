@@ -51,6 +51,8 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 	struct efa_qp *qp = base_ep->qp;
 	struct ibv_recv_wr *bad_wr;
 	struct ibv_recv_wr *wr;
+	struct efa_context *efa_ctx;
+	struct efa_direct_ope *direct_ope;
 	uintptr_t addr;
 	ssize_t err, post_recv_err;
 	size_t i, wr_index;
@@ -92,8 +94,20 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 	wr = &base_ep->efa_recv_wr_vec[wr_index].wr;
 	wr->num_sge = msg->iov_count;
 	wr->sg_list = base_ep->efa_recv_wr_vec[wr_index].sge;
-	wr->wr_id = (uintptr_t) efa_fill_context(msg->context, msg->addr, flags,
-						 FI_RECV | FI_MSG);
+	efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
+				   FI_RECV | FI_MSG);
+	if (efa_env.track_mr && efa_ctx) {
+		direct_ope = efa_direct_ope_alloc(base_ep, efa_ctx, msg, NULL);
+		if (!direct_ope) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "Failed to allocate direct RX operation entry for MR tracking\n");
+			err = -FI_EAGAIN;
+			goto out_err;
+		}
+		wr->wr_id = (uintptr_t) direct_ope;
+	} else {
+		wr->wr_id = (uintptr_t) efa_ctx;
+	}
 
 	for (i = 0; i < msg->iov_count; i++) {
 		addr = (uintptr_t)msg->msg_iov[i].iov_base;
@@ -195,6 +209,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	struct efa_conn *conn;
 	struct ibv_sge sg_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
+	struct efa_context *efa_ctx;
+	struct efa_direct_ope *direct_ope;
 	size_t len, i;
 	size_t iov_count = msg->iov_count;
 	bool use_inline;
@@ -226,8 +242,20 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
 	/* Prepare work request ID */
-	wr_id = (uintptr_t) efa_fill_context(
-		msg->context, msg->addr, flags, FI_SEND | FI_MSG);
+	efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
+				   FI_SEND | FI_MSG);
+	if (efa_env.track_mr && efa_ctx) {
+		direct_ope = efa_direct_ope_alloc(base_ep, efa_ctx, msg, NULL);
+		if (!direct_ope) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "Failed to allocate direct TX operation entry for MR tracking\n");
+			ret = -FI_EAGAIN;
+			goto out_err;
+		}
+		wr_id = (uintptr_t) direct_ope;
+	} else {
+		wr_id = (uintptr_t) efa_ctx;
+	}
 
 	/* Determine if we should use inline data */
 	use_inline = (len <= base_ep->domain->device->efa_attr.inline_buf_size &&
