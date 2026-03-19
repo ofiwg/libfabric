@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2025\-12\-26" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-03\-19" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -686,6 +686,14 @@ Use the direct data path implementation that bypasses rdma-core on data
 path, including the CQ polling and TX/RX submissions, when it\[cq]s
 available.
 Setting this variable as 0 will disable this feature (Default: true).
+.TP
+\f[I]FI_EFA_TRACK_MR\f[R]
+Enable tracking of memory registrations to detect if any outstanding
+operations still reference an MR when it is closed.
+When enabled, the provider will print a warning message if an MR is
+closed while TX or RX operations still reference it.
+This is useful for debugging memory registration issues.
+(Default: false).
 .SH SEE ALSO
 .PP
 \f[V]fabric\f[R](7), \f[V]fi_provider\f[R](7), \f[V]fi_getinfo\f[R](3)
