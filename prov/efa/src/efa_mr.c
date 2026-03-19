@@ -4,6 +4,8 @@
 #include "config.h"
 #include <ofi_util.h>
 #include "efa.h"
+#include "rdm/efa_rdm_ep.h"
+#include "rdm/efa_rdm_ope.h"
 #if HAVE_CUDA
 #include <cuda.h>
 #endif
@@ -434,12 +436,100 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 	return ret;
 }
 
+/**
+ * @brief Warn about MR descriptor references in an in-flight operation
+ *
+ * This helper function iterates through an operation's descriptor array and
+ * clears any references to the specified MR that is being closed. It logs a
+ * warning when such references are found, as this indicates the MR is being
+ * closed while operations are still in flight.
+ *
+ * @param[in,out] desc      The descriptor array
+ * @param[in]     iov_count Number of IOVs in the operation
+ * @param[in]     cq_entry  CQ entry with diagnostic info for the warning
+ * @param[in]     efa_mr    The MR being closed
+ * @param[in]     base_ep   The base ep
+ */
+static inline void efa_mr_close_warn_inflight_ope(void **desc, size_t iov_count,
+					       struct fi_cq_tagged_entry *cq_entry,
+					       struct efa_mr *efa_mr,
+					       struct efa_base_ep *base_ep)
+{
+	size_t i;
+	char ep_addr_str[OFI_ADDRSTRLEN] = {0};
+	size_t ep_addr_strlen = sizeof(ep_addr_str);
+
+	for (i = 0; i < iov_count; i++) {
+		if (desc[i] == efa_mr) {
+			efa_base_ep_raw_addr_str(base_ep, ep_addr_str, &ep_addr_strlen);
+			EFA_WARN(FI_LOG_MR,
+				 "MR %p (key: %ld) on EP %s is being closed "
+				 "while an operation is still in flight: "
+				 "context=%p, flags=%s, len=%zu, "
+				 "buf=%p, data=%lx, tag=%lx.\n",
+				 efa_mr, efa_mr->mr_fid.key,
+				 ep_addr_str,
+				 cq_entry->op_context,
+				 fi_tostr(&cq_entry->flags, FI_TYPE_CAPS),
+				 cq_entry->len, cq_entry->buf,
+				 cq_entry->data, cq_entry->tag);
+			desc[i] = NULL;
+		}
+	}
+}
+
+/**
+ * @brief Check all in-flight operations for references to a closing MR
+ *
+ * Iterates across all endpoints in the domain and warns about any
+ * in-flight operations that still reference the MR being closed.
+ *
+ * @param[in] efa_mr	The MR being closed
+ */
+static void efa_mr_close_check_inflight_ope(struct efa_mr *efa_mr)
+{
+	struct efa_domain *efa_domain = efa_mr->domain;
+	struct efa_base_ep *base_ep;
+	struct dlist_entry *tmp;
+
+	ofi_genlock_lock(&efa_domain->util_domain.lock);
+	dlist_foreach_container(&efa_domain->base_ep_list, struct efa_base_ep,
+				base_ep, base_ep_entry) {
+		if (efa_domain->info_type == EFA_INFO_RDM) {
+			struct efa_rdm_ep *rdm_ep;
+			struct efa_rdm_ope *ope;
+			rdm_ep = container_of(base_ep, struct efa_rdm_ep, base_ep);
+			dlist_foreach_container_safe (
+				&rdm_ep->txe_list, struct efa_rdm_ope,
+				ope, ep_entry, tmp) {
+				efa_mr_close_warn_inflight_ope(ope->desc, ope->iov_count, &ope->cq_entry, efa_mr, base_ep);
+			}
+			dlist_foreach_container_safe (
+				&rdm_ep->rxe_list, struct efa_rdm_ope,
+				ope, ep_entry, tmp) {
+				efa_mr_close_warn_inflight_ope(ope->desc, ope->iov_count, &ope->cq_entry, efa_mr, base_ep);
+			}
+		} else if (efa_domain->info_type == EFA_INFO_DIRECT) {
+			struct efa_direct_ope *direct_ope;
+			dlist_foreach_container_safe (
+				&base_ep->efa_direct_ope_list,
+				struct efa_direct_ope, direct_ope,
+				entry, tmp) {
+				efa_mr_close_warn_inflight_ope(direct_ope->desc, direct_ope->iov_count, &direct_ope->cq_entry, efa_mr, base_ep);
+			}
+		}
+	}
+	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+}
+
 static int efa_mr_close(fid_t fid)
 {
 	struct efa_mr *efa_mr;
 	int ret, err;
 
 	efa_mr = container_of(fid, struct efa_mr, mr_fid.fid);
+	if (efa_env.track_mr)
+		efa_mr_close_check_inflight_ope(efa_mr);
 
 	if (efa_mr->shm_mr) {
 		err = fi_close(&efa_mr->shm_mr->fid);

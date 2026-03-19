@@ -530,6 +530,9 @@ int main(void)
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_all_flags_supported),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_all_flags_not_supported),
 		cmocka_unit_test_setup_teardown(test_efa_mr_internal_regv_no_shm_mr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_mr_close_warn_outstanding_direct_ope, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_mr_close_warn_outstanding_direct_ope_multi_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_mr_close_warn_outstanding_rdm_txe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_mr.c */
 
 		/* begin efa_unit_test_rdm_rma.c */
