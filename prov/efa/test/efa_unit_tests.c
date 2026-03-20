@@ -458,6 +458,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_cq_readfrom_util_cq_entries, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_readerr_util_cq_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_poll_ep_close_bypass_path, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_cq_next_poll_stale_cur_wq_segv_on_ep_close, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_read_mixed_success_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_open, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_cancel, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
