@@ -559,9 +559,7 @@ component_dmabuf_rdma_xe_rdmabw_SOURCES = \
 	component/dmabuf-rdma/util.c \
 	component/dmabuf-rdma/util.h \
 	component/dmabuf-rdma/xe.c \
-	component/dmabuf-rdma/xe.h \
-	component/dmabuf-rdma/dmabuf_reg.c \
-	component/dmabuf-rdma/dmabuf_reg.h
+	component/dmabuf-rdma/xe.h
 
 component_dmabuf_rdma_xe_rdmabw_LDADD = libfabtests.la
 
@@ -573,9 +571,7 @@ component_dmabuf_rdma_xe_mr_reg_SOURCES = \
 	component/dmabuf-rdma/mr-reg-xe.c \
 	component/dmabuf-rdma/util.h \
 	component/dmabuf-rdma/xe.c \
-	component/dmabuf-rdma/xe.h \
-	component/dmabuf-rdma/dmabuf_reg.c \
-	component/dmabuf-rdma/dmabuf_reg.h
+	component/dmabuf-rdma/xe.h
 
 component_dmabuf_rdma_xe_mr_reg_LDADD = libfabtests.la
 
@@ -591,8 +587,8 @@ component_dmabuf_rdma_fi_xe_rdmabw_SOURCES = \
 	component/dmabuf-rdma/util.h \
 	component/dmabuf-rdma/xe.c \
 	component/dmabuf-rdma/xe.h \
-	component/dmabuf-rdma/dmabuf_reg.c \
-	component/dmabuf-rdma/dmabuf_reg.h
+	component/dmabuf-rdma/shared.c \
+	component/dmabuf-rdma/shared.h
 
 component_dmabuf_rdma_fi_xe_rdmabw_LDADD = libfabtests.la
 
@@ -602,11 +598,12 @@ component_dmabuf_rdma_fi_xe_rdmabw_CFLAGS = \
 
 component_dmabuf_rdma_fi_xe_mr_reg_SOURCES = \
 	component/dmabuf-rdma/fi-mr-reg-xe.c \
+	component/dmabuf-rdma/util.c \
 	component/dmabuf-rdma/util.h \
 	component/dmabuf-rdma/xe.c \
 	component/dmabuf-rdma/xe.h \
-	component/dmabuf-rdma/dmabuf_reg.c \
-	component/dmabuf-rdma/dmabuf_reg.h
+	component/dmabuf-rdma/shared.c \
+	component/dmabuf-rdma/shared.h
 
 component_dmabuf_rdma_fi_xe_mr_reg_LDADD = libfabtests.la
 
@@ -617,7 +614,9 @@ component_dmabuf_rdma_fi_xe_mr_reg_CFLAGS = \
 component_dmabuf_rdma_xe_memcopy_SOURCES = \
 	component/dmabuf-rdma/memcopy-xe.c \
 	component/dmabuf-rdma/util.c \
-	component/dmabuf-rdma/util.h
+	component/dmabuf-rdma/util.h \
+	component/dmabuf-rdma/xe.c \
+	component/dmabuf-rdma/xe.h
 
 component_dmabuf_rdma_xe_memcopy_LDADD = libfabtests.la
 
