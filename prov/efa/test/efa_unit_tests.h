@@ -254,6 +254,12 @@ void test_info_direct_rma_with_rx_cq_data_when_no_unsolicited_write_recv();
 void test_info_direct_rma_without_rx_cq_data_when_no_unsolicited_write_recv();
 void test_info_direct_no_rma_no_rx_cq_data_when_no_unsolicited_write_recv();
 void test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_supported();
+void test_info_direct_inject_size_no_hint();
+void test_info_direct_inject_size_small();
+void test_info_direct_inject_size_wide_wqe();
+void test_info_direct_inject_size_exceeds_max();
+void test_ep_getopt_inject_size_regular_wqe();
+void test_ep_getopt_inject_size_wide_wqe();
 /* end efa_unit_test_info.c */
 
 void test_efa_srx_min_multi_recv_size();
@@ -386,6 +392,7 @@ void test_efa_rma_writedata();
 void test_efa_rma_inject_write();
 void test_efa_rma_inject_writedata();
 void test_efa_rma_writemsg_with_inject();
+void test_efa_rma_writemsg_with_wide_wqe_inject();
 void test_efa_rma_read_0_byte();
 void test_efa_rma_readv_0_byte();
 void test_efa_rma_readmsg_0_byte();
