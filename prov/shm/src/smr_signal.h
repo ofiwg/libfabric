@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
  * Copyright (c) Intel Corporation.
+ * Copyright (c) Perplexity AI.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -52,16 +53,28 @@ static void smr_handle_signal(int signum, siginfo_t *info, void *ucontext)
 	}
 	pthread_mutex_unlock(&ep_list_lock);
 
-	/* Register the original signum handler, SIG_DFL or otherwise */
-	ret = sigaction(signum, &old_action[signum], NULL);
-	if (ret)
-		return;
-
-	/* call the original handler */
-	if (old_action[signum].sa_flags & SA_SIGINFO)
+	if (old_action[signum].sa_flags & SA_SIGINFO) {
 		old_action[signum].sa_sigaction(signum, info, ucontext);
-	else
-		raise(signum);
+	} else if (old_action[signum].sa_handler != SIG_IGN &&
+		   old_action[signum].sa_handler != SIG_DFL) {
+		old_action[signum].sa_handler(signum);
+	} else if (old_action[signum].sa_handler == SIG_DFL) {
+		/*
+		 * Restore SIG_DFL and re-raise only if we are still the
+		 * outermost handler; otherwise, an outer handler is calling
+		 * us via chaining and we should just return.
+		 */
+		struct sigaction current;
+
+		ret = sigaction(signum, NULL, &current);
+		if (ret)
+			return;
+
+		if (current.sa_sigaction == smr_handle_signal) {
+			sigaction(signum, &old_action[signum], NULL);
+			raise(signum);
+		}
+	}
 }
 
 static inline void smr_reg_sig_handler(int signum)
