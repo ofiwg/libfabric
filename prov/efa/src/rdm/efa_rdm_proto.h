@@ -93,4 +93,8 @@ efa_rdm_proto_handle_tx_pkes_posted_no_op(struct efa_rdm_ep *ep,
 	return;
 };
 
+void efa_rdm_proto_txe_fill(struct efa_rdm_ope *txe, struct efa_rdm_ep *ep,
+			    struct efa_rdm_peer *peer, const struct fi_msg *msg,
+			    uint32_t op, uint64_t tag, uint64_t flags);
+
 #endif /* _EFA_RDM_PROTO_H */
