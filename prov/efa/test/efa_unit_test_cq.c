@@ -2204,6 +2204,69 @@ void test_efa_cq_poll_ep_close_bypass_path(struct efa_resource **state)
 	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
 	assert_int_equal(ret, -FI_EAGAIN);
 }
+
+/**
+ * @brief Reproduce the SEGV: EAVAIL → no readerr → fi_close dereferences stale cur_wq
+ *
+ * End-to-end reproduction using the mock framework:
+ * 1. fi_cq_read returns -FI_EAVAIL (error CQE), leaving poll_active=true
+ * 2. Set cur_wq to point into the QP (simulating what process_ex_cqe leaves behind)
+ * 3. fi_close(ep) destroys the QP (freeing cur_wq's target), then drains the CQ
+ * 4. The drain's next_poll mock reads cur_wq->wrid_idx_pool_next → SEGV if dangling
+ *
+ * Without the fix: SEGV/SIGBUS (cur_wq points to freed QP memory)
+ * With the fix (NULLing cur_wq after consumption): passes
+ */
+void test_efa_cq_next_poll_stale_cur_wq_segv_on_ep_close(struct efa_resource **state)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	struct efa_ibv_cq *ibv_cq;
+	struct efa_base_ep *base_ep;
+	struct efa_context *efa_context;
+	struct fi_context2 ctx;
+	struct fi_cq_data_entry cq_entry;
+	ssize_t ret;
+
+	efa_context = (struct efa_context *) &ctx;
+	efa_context->completion_flags = FI_SEND | FI_MSG;
+
+	/* Set up an error CQE so fi_cq_read returns -FI_EAVAIL */
+	test_efa_cq_read_prep(resource, IBV_WC_SEND, IBV_WC_GENERAL_ERR,
+			      EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, efa_context, 0, false);
+
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+	ibv_cq = &efa_cq->ibv_cq;
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAVAIL);
+	assert_true(ibv_cq->poll_active);
+
+	/*
+	 * Simulate what the real data-path-direct poll cycle leaves behind:
+	 * process_ex_cqe sets cur_wq pointing into the QP's work queue.
+	 * The mock CQ path doesn't do this, so set it manually.
+	 */
+	ibv_cq->data_path_direct.cur_wq = &base_ep->qp->data_path_direct_qp.sq.wq;
+	ibv_cq->data_path_direct.cur_qp = base_ep->qp;
+
+	/*
+	 * Install a next_poll mock that reads cur_wq->wrid_idx_pool_next,
+	 * exactly like the real efa_data_path_direct_next_poll.
+	 * If cur_wq is dangling after QP destruction, this will SEGV.
+	 */
+	g_efa_unit_test_mocks.efa_ibv_cq_next_poll = &efa_mock_efa_ibv_cq_next_poll_access_cur_wq;
+
+	/* fi_close destroys QP first, then drains CQ → triggers the access */
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+#else
+	skip();
+#endif
+}
+
 /**
  * @brief Test mixed successful and error CQEs handling
  *
