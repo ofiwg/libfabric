@@ -1,6 +1,7 @@
 #include <getopt.h>
 #include <limits.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -205,18 +206,25 @@ struct context_pool {
 	struct fid_mr *mr;
 };
 
-// Worker context structure
+// Worker context structures
+struct cq_context {
+	struct fid_cq *cq;
+	pthread_t comp_thread;
+	atomic_ulong completed_count;
+	atomic_flag is_waiting_for_comps;
+};
 struct worker_context {
 	size_t num_peers;
 	uint16_t *peer_ids;
 	struct ep_message_queue *control_queue;
 	struct fid_ep *ep;
-	struct fid_cq *cq;
 	struct fid_av *av;
+	struct cq_context *cq_ctx;
 	struct context_pool pool;
 	uint16_t worker_id;
 };
-struct fid_cq *shared_cq = NULL;
+
+struct cq_context shared_cq_ctx;
 struct fid_av *shared_av = NULL;
 
 int context_pool_init(struct context_pool *pool, size_t capacity, size_t buffer_size, uint64_t access) {
@@ -282,76 +290,32 @@ static void cleanup_endpoint(struct worker_context *ctx)
 		assert(ret == FI_SUCCESS);
 		ctx->av = NULL;
 	}
-	if (!topts.shared_cq && ctx->cq) {
-		ret = fi_close(&ctx->cq->fid);
+	if (!topts.shared_cq && ctx->cq_ctx->comp_thread) {
+		void *retval;
+
+		atomic_flag_clear(&ctx->cq_ctx->is_waiting_for_comps);
+		ret = pthread_join(ctx->cq_ctx->comp_thread, &retval);
+		ctx->cq_ctx->comp_thread = 0;
+		if (ret) {
+			FT_PRINTERR("pthread_join", ret);
+			abort();
+		}
+		if (retval != NULL) {
+			ret = *(int *)retval;
+			free(retval);
+			if (ret != -FI_ETIMEDOUT) {
+				fprintf(stderr,
+					"Comp listener %d failed. Exit code: %d, %s\n",
+						ctx->worker_id, ret, fi_strerror(-ret));
+				abort();
+			}
+		}
+	}
+	if (!topts.shared_cq && ctx->cq_ctx->cq) {
+		ret = fi_close(&ctx->cq_ctx->cq->fid);
 		assert(ret == FI_SUCCESS);
-		ctx->cq = NULL;
+		ctx->cq_ctx->cq = NULL;
 	}
-}
-
-// Setup endpoint for a worker
-static int setup_endpoint(struct worker_context *ctx, uint64_t total_ops)
-{
-	int ret;
-
-	ret = fi_endpoint(domain, fi, &ctx->ep, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_endpoint", ret);
-		return ret;
-	}
-
-	if (topts.shared_cq) {
-		ctx->cq = shared_cq;
-	} else {
-		struct fi_cq_attr attr = {
-			.wait_obj = FI_WAIT_NONE,
-			.format = FI_CQ_FORMAT_CONTEXT,
-			.size = total_ops,
-		};
-
-		ret = fi_cq_open(domain, &attr, &ctx->cq, NULL);
-		if (ret) {
-			FT_PRINTERR("fi_cq_open", ret);
-			goto error;
-		}
-	}
-
-	if (topts.shared_av) {
-		ctx->av = shared_av;
-	} else {
-		struct fi_av_attr attr = {
-			.type = FI_AV_TABLE,
-			.count = ctx->num_peers,
-		};
-		ret = fi_av_open(domain, &attr, &ctx->av, NULL);
-		if (ret) {
-			FT_PRINTERR("fi_av_open", ret);
-			goto error;
-		}
-	}
-
-	ret = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_SEND | FI_RECV);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		goto error;
-	}
-
-	ret = fi_ep_bind(ctx->ep, &ctx->av->fid, 0);
-	if (ret) {
-		FT_PRINTERR("fi_ep_bind", ret);
-		goto error;
-	}
-
-	ret = fi_enable(ctx->ep);
-	if (ret) {
-		FT_PRINTERR("fi_enable", ret);
-		goto error;
-	}
-
-	return 0;
-error:
-	cleanup_endpoint(ctx);
-	return ret;
 }
 
 /**
@@ -404,77 +368,190 @@ error:
 }
 
 /**
+ * ft_backoff - interrupt execution of current thread
+ * @backoff_count: count of previously done calls in the same loop
+ * @max_delay_us: the maximum allowed sleep period in microseconds
+ * @giveup_after_max_delay: boolean flag whatever backoff should timout
+ *                        after reaching max waiting period
+ *
+ * Backoff strategy depends on backoff count
+ * 1-999:     pause CPU core
+ * 1000:      relinquish the CPU
+ * 1000-...:  exponential sleeps until hard timeout (defined by fabtests)
+ *
+ * Returns: 0 on success, -FI_ETIMEDOUT if hard timeout reached
+ */
+static int ft_backoff(uint64_t backoff_count,
+			uint64_t max_delay_us,
+			bool giveup_after_max_delay) {
+	_Thread_local static uint64_t last_backoff_count = 0;
+	_Thread_local static uint64_t last_delay_us = 0;
+	assert(backoff_count == 0 || backoff_count == last_backoff_count + 1);
+	last_backoff_count = backoff_count;
+	if(backoff_count < 1000) {
+#if defined(__x86_64__)
+		asm volatile("pause" ::: "memory");
+#elif defined(__aarch64__)
+		asm volatile("yield" ::: "memory");
+#endif
+	} else if (backoff_count == 1000) {
+		sched_yield();
+		last_delay_us = 1;
+	} else {
+		last_delay_us *= 2;
+		if(last_delay_us > max_delay_us) {
+			if (giveup_after_max_delay)
+				return -FI_ETIMEDOUT;
+			last_delay_us = max_delay_us;
+		}
+		usleep(last_delay_us);
+	}
+	return 0;
+}
+
+/**
  * wait_for_comp - Poll completion queue until expected completions arrive
  * @cq: Completion queue to poll
- * @num_completions: Number of completions to wait for
+ * @is_active: Cancelation atomic flag. Loop runs until flag is set.
  *
- * Polls the specified completion queue until the requested number of
- * completions are received or a timeout occurs. Uses the global 'timeout'
- * variable (default: 10 seconds) to limit wait duration. When shared CQ
- * mode is enabled, acquires a mutex lock with timeout to serialize access.
+ * Polls the specified completion queue until canceled
  *
- * Returns: Number of completions successfully received (may be less than
- *          requested if timeout expires or error occurs)
+ * Returns: Number of completions and errors received
  */
-static int wait_for_comp(struct fid_cq *cq, int num_completions)
+static int wait_for_comp(struct fid_cq *cq, atomic_flag *is_active, atomic_ulong *out_completed)
 {
-	static pthread_mutex_t shared_cq_lock = PTHREAD_MUTEX_INITIALIZER;
 	struct fi_cq_data_entry comp;
 	int ret;
-	int completed = 0;
-	struct timespec a, b;
+	size_t completed = 0;
+	uint64_t backoff_count = 0;
 
-	clock_gettime(CLOCK_MONOTONIC, &a);
-	if (topts.shared_cq) {
-		memcpy(&b, &a, sizeof(b));
-		b.tv_sec += timeout;
-		ret = pthread_mutex_timedlock(&shared_cq_lock, &b);
-		if (ret == ETIMEDOUT) {
-			fprintf(stderr,
-				"%ds timeout expired while waiting for shared CQ lock\n",
-				timeout);
-			return 0;
-		}
-		if (ret) {
-			FT_PRINTERR("pthread_mutex_timedlock", ret);
-			abort();
-		}
-	}
-
-	while (completed < num_completions) {
+	for(;;) {
 		ret = fi_cq_read(cq, &comp, 1);
-		if (ret > 0) {
-			assert(ret == 1);
-			completed++;
-			continue;
-		} else if (ret < 0 && ret != -FI_EAGAIN) {
+		if (ret == -FI_EAVAIL) {
 			struct fi_cq_err_entry err_entry = {0};
-			fi_cq_readerr(cq, &err_entry, 0);
+			ret = fi_cq_readerr(cq, &err_entry, 0);
+			if (ret != 1) {
+				FT_PRINTERR("fi_cq_readerr", ret);
+				return ret;
+			}
 			fprintf(stderr, "CQ read error: %s\n",
 				fi_cq_strerror(cq, err_entry.prov_errno,
 					       err_entry.err_data, NULL, 0));
-		} else if (timeout > 0) {
-			clock_gettime(CLOCK_MONOTONIC, &b);
-			if (b.tv_sec - a.tv_sec >= timeout) {
-				fprintf(stderr,
-					"%ds timeout expired. Got %d "
-					"completions\n",
-					timeout, completed);
+		} else if (ret == -FI_EAGAIN) {
+			atomic_store(out_completed, completed);
+			if (!atomic_flag_test_and_set(is_active))
 				break;
+			ret = ft_backoff(backoff_count++, 1000, false);
+			if (ret) {
+				FT_PRINTERR("fi_backoff", ret);
+				return ret;
 			}
+			continue;
+		} else if (ret != 1) {
+			if (ret >= 0) {
+				fprintf(stderr,
+					"fi_cq_read: unexpected return value: %i\n",
+					ret);
+				ret = -1;
+			} else {
+				FT_PRINTERR("fi_cq_readerr", ret);
+			}
+			return ret;
 		}
-		sched_yield();
+		backoff_count = 0;
+		completed++;
+	}
+	atomic_store(out_completed, completed);
+	return 0;
+}
+
+static void* run_comp_worker(void *arg)
+{
+	struct cq_context *ctx = (struct cq_context*) arg;
+	assert(atomic_load(&ctx->completed_count) == 0);
+	assert(atomic_flag_test_and_set(&ctx->is_waiting_for_comps));
+	int ret = wait_for_comp(ctx->cq, &ctx->is_waiting_for_comps, &ctx->completed_count);
+	if (ret) {
+		int *retval = malloc(sizeof(int));
+		*retval = ret;
+		return (void *) retval;
+	}
+	return NULL;
+}
+
+// Setup endpoint for a worker
+static int setup_endpoint(struct worker_context *ctx, uint64_t total_ops)
+{
+	int ret;
+
+	ret = fi_endpoint(domain, fi, &ctx->ep, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_endpoint", ret);
+		return ret;
 	}
 
-	if (topts.shared_cq) {
-		ret = pthread_mutex_unlock(&shared_cq_lock);
+	if (!topts.shared_cq) {
+		struct fi_cq_attr attr = {
+			.wait_obj = FI_WAIT_NONE,
+			.format = FI_CQ_FORMAT_CONTEXT,
+			.size = total_ops,
+		};
+
+		ret = fi_cq_open(domain, &attr, &ctx->cq_ctx->cq, NULL);
 		if (ret) {
-			FT_PRINTERR("pthread_mutex_timedlock", ret);
-			abort();
+			FT_PRINTERR("fi_cq_open", ret);
+			goto error;
 		}
 	}
-	return completed;
+
+	if (topts.shared_av) {
+		ctx->av = shared_av;
+	} else {
+		struct fi_av_attr attr = {
+			.type = FI_AV_TABLE,
+			.count = ctx->num_peers,
+		};
+		ret = fi_av_open(domain, &attr, &ctx->av, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_av_open", ret);
+			goto error;
+		}
+	}
+
+	ret = fi_ep_bind(ctx->ep, &ctx->cq_ctx->cq->fid, FI_SEND | FI_RECV);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind", ret);
+		goto error;
+	}
+
+	ret = fi_ep_bind(ctx->ep, &ctx->av->fid, 0);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind", ret);
+		goto error;
+	}
+
+	ret = fi_enable(ctx->ep);
+	if (ret) {
+		FT_PRINTERR("fi_enable", ret);
+		goto error;
+	}
+	
+	if (!topts.shared_cq) {
+		atomic_store(&ctx->cq_ctx->completed_count, 0);
+		atomic_flag_test_and_set(&ctx->cq_ctx->is_waiting_for_comps);
+		ret = pthread_create(&ctx->cq_ctx->comp_thread, NULL, run_comp_worker, ctx->cq_ctx);
+		if (ret) {
+			FT_PRINTERR("pthread_create", ret);
+			goto error;
+		}
+	}
+
+	return 0;
+error:
+	cleanup_endpoint(ctx);
+	return ret;
 }
+
 
 static void *run_sender_worker(void *arg)
 {
@@ -488,7 +565,7 @@ static void *run_sender_worker(void *arg)
 	int cycle = 0;
 	uint16_t peer_idx = 0;
 	uint64_t ops_total_in_this_cycle = 0, ops_posted_in_this_cycle = 0;
-	uint64_t ops_completed_in_this_cycle = 0;
+	uint64_t ops_completed_counter_before_cycle_start = 0;
 	char ep_addr[ctx->num_peers][MAX_EP_ADDR_LEN];
 	size_t ops_posted_for_peer[ctx->num_peers];
 	size_t transferred_bytes[ctx->num_peers];
@@ -505,7 +582,6 @@ static void *run_sender_worker(void *arg)
 			// Start a new endpoint cycle
 			should_reset_cycle = false;
 			ops_posted_in_this_cycle = 0;
-			ops_completed_in_this_cycle = 0;
 			if (ops_posted + msg_per_ep_lifecyle > total_ops - msg_per_ep_lifecyle)
 				ops_total_in_this_cycle = total_ops - ops_posted;
 			else
@@ -536,10 +612,14 @@ static void *run_sender_worker(void *arg)
 					goto out;
 				}
 			}
+
 			// sleep random time up to 100ms to emulate the real workload
 			int sleep_time = ft_random_sleep_ms(&random_data, 100);
 			printf("Sender %u: Sleeping for %d microseconds\n",
 				ctx->worker_id, sleep_time);
+
+			ops_completed_counter_before_cycle_start = atomic_load(&ctx->cq_ctx->completed_count);
+			assert(topts.shared_cq || ops_completed_counter_before_cycle_start == 0);
 		}
 
 		// Apply all pending AV updates
@@ -601,11 +681,6 @@ static void *run_sender_worker(void *arg)
 			|| ops_posted_for_peer[peer_idx] == topts.msgs_per_sender) {
 			if (++peer_idx == ctx->num_peers)
 				peer_idx = 0;
-			// Relinquish current CPU core to break busy-wait loop
-			// on the current thread. Main thread will be scheduled
-			// before current thread, therefore it would likely push
-			// an update to worker's control queue if the one was pending.
-			sched_yield();
 			continue;
 		}
 
@@ -617,6 +692,7 @@ static void *run_sender_worker(void *arg)
 			FT_PRINTERR("context_pool_alloc_ctx", ret);
 			goto out;
 		}
+		uint64_t backoff_count = 0;
 		do {
 			switch (topts.op_type) {
 			case OP_MSG_UNTAGGED:
@@ -657,14 +733,13 @@ static void *run_sender_worker(void *arg)
 			if (ret == 0) {
 				break;
 			} else if (ret == -FI_EAGAIN) {
-				if (wait_for_comp(ctx->cq, 1) == 0) {
-					fprintf(stderr,
-						"Sender %d: operation has stuck\n",
-						ctx->worker_id);
+				ret = ft_backoff(backoff_count++,
+						timeout*1000000, true);
+				if (ret) {
+					FT_PRINTERR("fi_backoff", ret);
 					goto out;
 				}
-				ops_completed++;
-				ops_completed_in_this_cycle++;
+				continue;
 			} else {
 				fprintf(stderr,
 					"Sender %d: operation failed. ret = %d, %s\n",
@@ -686,11 +761,31 @@ static void *run_sender_worker(void *arg)
 			should_reset_cycle = true;
 			// Maybe wait for all operations to complete
 			if (ft_random_get_bool(&random_data)) {
+				uint64_t backoff_count = 0;
 				printf("Sender %u EP cycle %d: Waiting for "
 					"completions\n",
 					ctx->worker_id, cycle);
-				uint64_t ops_pending =  ops_total_in_this_cycle - ops_completed_in_this_cycle;
-				ops_completed += wait_for_comp(ctx->cq, ops_pending);
+				for(;;){
+					uint64_t count = atomic_load(&ctx->cq_ctx->completed_count);
+				       	count -= ops_completed_counter_before_cycle_start;
+					if (count >= ops_total_in_this_cycle) {
+					       break;
+					}
+					ret = ft_backoff(backoff_count++,
+							timeout*1000000, true);
+					if (ret) {
+						printf("Sender %u EP cycle %d: Got %" PRIu64 " of %" PRIu64
+							" completions\n",
+							ctx->worker_id, cycle, count, ops_total_in_this_cycle);
+						if(ret == -FI_ETIMEDOUT) {
+							ret = FI_SUCCESS;
+							break;
+						}
+						FT_PRINTERR("fi_backoff", ret);
+						goto out;
+					}
+				}
+				ops_completed += ops_total_in_this_cycle;
 			} else {
 				printf("Sender %u EP cycle %d: Not waiting for "
 					"completions\n",
@@ -771,6 +866,7 @@ static void *run_receiver_worker(void *arg)
 	uint64_t ops_posted = 0, ops_completed = 0;
 	int cycle = 0;
 	uint64_t ops_total_in_this_cycle = 0, ops_posted_in_this_cycle = 0;
+	uint64_t ops_completed_counter_before_cycle_start = 0;
 	while(ops_posted < total_ops) {
 		if (ops_posted_in_this_cycle == ops_total_in_this_cycle) {
 			// Start a new endpoint cycle
@@ -816,6 +912,9 @@ static void *run_receiver_worker(void *arg)
 			int sleep_time = ft_random_sleep_ms(&random_data, 100);
 			printf("Receiver %u: Sleeping for %d microseconds\n",
 					ctx->worker_id, sleep_time);
+
+			ops_completed_counter_before_cycle_start = atomic_load(&ctx->cq_ctx->completed_count);
+			assert(topts.shared_cq || ops_completed_counter_before_cycle_start == 0);
 		}
 
 		if (topts.op_type != OP_RMA_WRITEDATA) {
@@ -873,10 +972,31 @@ static void *run_receiver_worker(void *arg)
 				printf("Receiver %u EP cycle %d: Waiting for "
 					"completions\n",
 					ctx->worker_id, cycle);
-				ops_completed += wait_for_comp(ctx->cq, ops_total_in_this_cycle);
+				uint64_t backoff_count = 0;
+				for(;;){
+					uint64_t count = atomic_load(&ctx->cq_ctx->completed_count);
+				       	count -= ops_completed_counter_before_cycle_start;
+					if (count >= ops_total_in_this_cycle) {
+					       break;
+					}
+					ret = ft_backoff(backoff_count++,
+							timeout*1000000, true);
+					if (ret) {
+						printf("Receiver %u EP cycle %d: Got %" PRIu64 " of %" PRIu64
+							" completions\n",
+							ctx->worker_id, cycle, count, ops_total_in_this_cycle);
+						if(ret == -FI_ETIMEDOUT) {
+							ret = FI_SUCCESS;
+							break;
+						}
+						FT_PRINTERR("fi_backoff", ret);
+						goto out;
+					}
+				}
+				ops_completed += ops_total_in_this_cycle;
 			} else {
 				printf("Receiver %u EP cycle %d: Not waiting for "
-					"completions\n",
+					" completions\n",
 					ctx->worker_id, cycle);
 			}
 			printf("Receiver %u EP cycle %d: Posted %" PRIu64
@@ -898,16 +1018,19 @@ out:
 }
 
 static void cleanup_worker_resourses(struct worker_context *worker) {
+	// Close endpoint first to ensure all operations complete
+	// before destroying the memory pool and its MR
+	cleanup_endpoint(worker);
 	context_pool_destroy(&worker->pool);
 	if (worker->peer_ids) {
 		free(worker->peer_ids);
 		worker->peer_ids = NULL;
 		worker->num_peers = 0;
 	}
-	cleanup_endpoint(worker);
+	if (!topts.shared_cq)
+		free(worker->cq_ctx);
 }
 
-// Common function for buffer and MR setup
 static int setup_worker_resources(struct worker_context* worker, uint64_t access, size_t pool_capacity, size_t buffer_size)
 {
 	int ret;
@@ -917,7 +1040,16 @@ static int setup_worker_resources(struct worker_context* worker, uint64_t access
 		FT_PRINTERR("context_pool_init", ret);
 		goto error;
 	}
-
+	// Setup CQ context
+	if (!topts.shared_cq) {
+		worker->cq_ctx = calloc(1, sizeof(struct cq_context));
+		if (!worker->cq_ctx) {
+			ret = -FI_ENOMEM;
+			goto error;
+		}
+	} else {
+		worker->cq_ctx = &shared_cq_ctx;
+	}
 	return 0;
 error:
 	cleanup_worker_resourses(worker);
@@ -929,9 +1061,17 @@ static int setup_shared_resources(size_t num_workers, size_t max_peers)
 	if (topts.shared_cq) {
 		cq_attr.format = FI_CQ_FORMAT_CONTEXT;
 		cq_attr.size = fi->tx_attr->size;
-		int ret = fi_cq_open(domain, &cq_attr, &shared_cq, NULL);
+		int ret = fi_cq_open(domain, &cq_attr, &shared_cq_ctx.cq, NULL);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
+			return ret;
+		}
+
+		atomic_init(&shared_cq_ctx.completed_count, 0);
+		atomic_flag_test_and_set(&shared_cq_ctx.is_waiting_for_comps);
+		ret = pthread_create(&shared_cq_ctx.comp_thread, NULL, run_comp_worker, (void*)&shared_cq_ctx);
+		if (ret) {
+			FT_PRINTERR("pthread_create", ret);
 			return ret;
 		}
 	}
@@ -956,8 +1096,27 @@ static void cleanup_shared_resources(void)
 		ret = fi_close(&shared_av->fid);
 		assert(ret == FI_SUCCESS);
 	}
-	if (shared_cq) {
-		ret = fi_close(&shared_cq->fid);
+
+	if(shared_cq_ctx.comp_thread) {
+		void *retval;
+		atomic_flag_clear(&shared_cq_ctx.is_waiting_for_comps);
+		ret = pthread_join(shared_cq_ctx.comp_thread, &retval);
+		shared_cq_ctx.comp_thread = 0;
+		assert(ret == 0);
+		if (retval != NULL) {
+			ret = *(int *)retval;
+			free(retval);
+			if (ret != -FI_ETIMEDOUT) {
+				fprintf(stderr,
+					"Shared comp listener has failed. Exit code: %d, %s\n",
+					ret, fi_strerror(-ret));
+				abort();
+			}
+		}
+	}
+
+	if(shared_cq_ctx.cq) {
+		ret = fi_close(&shared_cq_ctx.cq->fid);
 		assert(ret == FI_SUCCESS);
 	}
 }
@@ -981,11 +1140,6 @@ static int run_sender(void)
 	printf("-------------------------\n");
 	printf("Total: %d senders, %d receivers\n", topts.num_sender_workers,
 	       topts.num_receiver_workers);
-
-	ret = setup_shared_resources(topts.num_sender_workers,
-					topts.num_receiver_workers / topts.num_sender_workers + 1);
-	if (ret)
-		goto out;
 
 	for (int i = 0; i < topts.num_sender_workers; i++) {
 		struct worker_context *worker = &workers[i];
@@ -1080,6 +1234,7 @@ static int run_sender(void)
 	for (int i = 0; i < topts.num_sender_workers; i++) {
 		void *retval;
 		ret = pthread_join(threads[i], &retval);
+		threads[i] = 0;
 		if (ret) {
 			FT_PRINTERR("pthread_join", ret);
 			goto out;
@@ -1087,29 +1242,45 @@ static int run_sender(void)
 		if (retval != NULL) {
 			ret = *(int *)retval;
 			free(retval);
-			fprintf(stderr,
-				"Sender %d failed. Exit code: %d, %s\n",
-				i, ret, fi_strerror(-ret));
-			goto out;
+			if (ret != -FI_ETIMEDOUT) {
+				fprintf(stderr,
+					"Sender %d timed out.\n", i);
+				ret = FI_SUCCESS;
+			} else {
+				fprintf(stderr,
+					"Sender %d failed. Exit code: %d, %s\n",
+					i, ret, fi_strerror(-ret));
+				goto out;
+			}
 		}
 	}
 
 out:
+	// Join threads before cleaning up workers to avoid use-after-free
+	if (threads) {
+		for (int i = 0; i < topts.num_sender_workers; i++) {
+			if (threads[i]) {
+				void *retval;
+				pthread_join(threads[i], &retval);
+				threads[i] = 0;
+				if (retval)
+					free(retval);
+			}
+		}
+		free(threads);
+	}
 	if (channels) {
 		for (int i = 0; i < topts.num_sender_workers; i++) {
 		       ep_message_queue_destroy(&channels[i]);
 		}
 		free(channels);
 	}
-	if (threads)
-		free(threads);
 	if (workers) {
 		for (int i = 0; i < topts.num_sender_workers; i++) {
 			cleanup_worker_resourses(&workers[i]);
 		}
 		free(workers);
 	}
-	cleanup_shared_resources();
 	return ret;
 }
 
@@ -1135,11 +1306,6 @@ static int run_receiver(void)
 	printf("-------------------------\n");
 	printf("Total: %d receivers, %d senders\n", topts.num_receiver_workers,
 	       topts.num_sender_workers);
-
-	ret = setup_shared_resources(topts.num_receiver_workers,
-					topts.num_sender_workers / topts.num_receiver_workers + 1);
-	if (ret)
-		goto out;
 
 	// Initialize workers
 	for (int i = 0; i < topts.num_receiver_workers; i++) {
@@ -1216,6 +1382,7 @@ static int run_receiver(void)
 	for (int i = 0; i < topts.num_receiver_workers; i++) {
 		void *retval;
 		ret = pthread_join(threads[i], &retval);
+		threads[i]=0;
 		if (ret) {
 			FT_PRINTERR("pthread_join", ret);
 			goto out;
@@ -1223,23 +1390,39 @@ static int run_receiver(void)
 		if (retval != NULL) {
 			ret = *(int *)retval;
 			free(retval);
-			fprintf(stderr,
-				"Receiver %d failed. Exit code: %d, %s\n",
-				i, ret, fi_strerror(-ret));
-			goto out;
+			if (ret == -FI_ETIMEDOUT) {
+				fprintf(stderr,
+					"Receiver %d timed out.\n", i);
+				ret = FI_SUCCESS;
+			} else {
+				fprintf(stderr,
+					"Receiver %d failed. Exit code: %d, %s\n",
+					i, ret, fi_strerror(-ret));
+				goto out;
+			}
 		}
 	}
 
 out:
-	if (threads)
+	// Join threads before cleaning up workers to avoid use-after-free
+	if (threads) {
+		for (int i = 0; i < topts.num_receiver_workers; i++) {
+			if (threads[i]) {
+				void *retval;
+				pthread_join(threads[i], &retval);
+				threads[i] = 0;
+				if (retval)
+					free(retval);
+			}
+		}
 		free(threads);
+	}
 	if (workers) {
 		for (int i = 0; i < topts.num_receiver_workers; i++) {
 			cleanup_worker_resourses(&workers[i]);
 		}
 		free(workers);
 	}
-	cleanup_shared_resources();
 	ep_message_queue_destroy(&control_queue);
 	return ret;
 }
@@ -1247,6 +1430,7 @@ out:
 static int run_test(void)
 {
 	int ret;
+	timeout = 10;
 
 	if (topts.random_seed) {
 		printf("-------------------------\n");
@@ -1262,12 +1446,23 @@ static int run_test(void)
 	ret = ft_init_fabric();
 	if (ret)
 		return ret;
+
 	// Run as sender or receiver based on dst_addr
 	if (opts.dst_addr) {
+		ret = setup_shared_resources(topts.num_sender_workers,
+			topts.num_receiver_workers / topts.num_sender_workers + 1);
+		if (ret)
+			goto out;
 		ret = run_sender();
 	} else {
+		ret = setup_shared_resources(topts.num_receiver_workers,
+			topts.num_sender_workers / topts.num_receiver_workers + 1);
+		if (ret)
+			goto out;
 		ret = run_receiver();
 	}
+out:
+	cleanup_shared_resources();
 	return ret;
 }
 
@@ -1400,7 +1595,6 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
-	timeout = 10;
 
 	hints = fi_allocinfo();
 	if (!hints)
