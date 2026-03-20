@@ -4,6 +4,7 @@
 #include "efa.h"
 #include "efa_rdm_proto.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_medium.h"
 
 #define EFA_RDM_MAX_PROTO 8
 
@@ -13,6 +14,7 @@
  */
 struct efa_rdm_proto *efa_rdm_protocols [EFA_RDM_MAX_PROTO] = {
 	&efa_rdm_proto_eager,
+	&efa_rdm_proto_medium,
 	NULL,	/* Sentinel used to stop iteration */
 };
 
@@ -22,10 +24,6 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 				       uint64_t flags, struct efa_rdm_ope *txe,
 				       struct efa_rdm_proto **proto)
 {
-	/* TODO: Handle memory registration of user buffers.
-	 * If MR fails, switch to a different protocol.
-	 */
-
 	struct efa_rdm_proto *selected_proto;
 	int req_pkt_type, iface, err, use_p2p;
 	uint16_t header_flags = 0;
@@ -41,6 +39,18 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	assert(tagged == 0 || tagged == 1);
 
 	txe->total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
+
+	/* TODO: These fields are copied to the txe because the current
+	 * implementation of efa_rdm_ope_try_fill_desc relies on it. Eliminate
+	 * unncessary copies wherever possible. */
+	txe->ep = ep;
+	txe->iov_count = msg->iov_count;
+	memcpy(txe->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
+	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
+	if (msg->desc)
+		memcpy(txe->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
+	else
+		memset(txe->desc, 0, sizeof(*txe->desc) * msg->iov_count);
 
 	iface = (msg->desc && msg->desc[0]) ? ((struct efa_mr*) msg->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 
@@ -86,6 +96,12 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		 * registering the application buffers.
 		 * TODO: Move function to efa_rdm_proto.c
 		 */
+		if (selected_proto != &efa_rdm_proto_eager) {
+			// Try to register buffer if MR cache is available
+			if (efa_is_cache_available(efa_rdm_ep_domain(ep)))
+				efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
+		}
+
 		if (selected_proto->can_use_protocol_for_send(txe, req_pkt_type,
 							      header_flags, iface)) {
 			*proto = selected_proto;
