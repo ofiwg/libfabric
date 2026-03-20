@@ -182,6 +182,30 @@ int efa_mock_efa_ibv_cq_next_poll_simulate_status_change(struct efa_ibv_cq *ibv_
 	return mock_int();
 }
 
+/**
+ * @brief Mock next_poll that accesses cur_wq like the real data-path-direct impl.
+ *
+ * Reproduces the behavior of efa_data_path_direct_next_poll: if cur_wq is
+ * non-NULL, it reads cur_wq->wrid_idx_pool_next. This will crash (SEGV/SIGBUS)
+ * if cur_wq is a dangling pointer into a freed QP.
+ */
+int efa_mock_efa_ibv_cq_next_poll_access_cur_wq(struct efa_ibv_cq *ibv_cq)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	if (ibv_cq->data_path_direct.cur_wq) {
+		/*
+		 * This is the access that crashes in the real code path:
+		 * efa_wq_put_wrid_idx dereferences cur_wq to read
+		 * wrid_idx_pool_next and write to wrid_idx_pool[].
+		 * A volatile read is enough to trigger the fault.
+		 */
+		volatile uint16_t dummy = ibv_cq->data_path_direct.cur_wq->wrid_idx_pool_next;
+		(void)dummy;
+	}
+#endif
+	return ENOENT;
+}
+
 void efa_mock_efa_ibv_cq_end_poll_check_mock(struct efa_ibv_cq *ibv_cq)
 {
 	function_called();

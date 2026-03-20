@@ -130,6 +130,7 @@ int efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr(str
 int efa_mock_efa_qp_post_read_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
 int efa_mock_efa_qp_post_write_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
 int efa_mock_efa_ibv_cq_start_poll_return_mock(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
+int efa_mock_efa_ibv_cq_next_poll_access_cur_wq(struct efa_ibv_cq *ibv_cq);
 int efa_mock_efa_ibv_cq_next_poll_return_mock(struct efa_ibv_cq *ibv_cq);
 int efa_mock_efa_ibv_cq_next_poll_simulate_status_change(struct efa_ibv_cq *ibv_cq);
 enum ibv_wc_opcode efa_mock_efa_ibv_cq_wc_read_opcode_return_mock(struct efa_ibv_cq *ibv_cq);
