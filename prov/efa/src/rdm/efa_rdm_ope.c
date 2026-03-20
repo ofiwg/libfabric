@@ -1780,20 +1780,20 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	struct efa_rdm_ep *ep;
 	ssize_t err;
 	int64_t segment_offset;
-	int pkt_entry_cnt, pkt_entry_cnt_allocated = 0;
+	int pkt_entry_cnt_allocated = 0;
 	int i;
 	uint64_t flags = 0;
 
 	ep = ope->ep;
 	assert(ep);
 
-	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type, &pkt_entry_cnt, ep->send_pkt_entry_size_vec);
+	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type, &ep->send_pkt_entry_vec_size, ep->send_pkt_entry_data_sizes);
 	if (err)
 		return err;
-	assert(pkt_entry_cnt <= efa_base_ep_get_tx_pool_size(&ep->base_ep));
+	assert(ep->send_pkt_entry_vec_size <= efa_base_ep_get_tx_pool_size(&ep->base_ep));
 
 	segment_offset = efa_rdm_pkt_type_contains_data(pkt_type) ? (int64_t) ope->bytes_sent : -1;
-	for (i = 0; i < pkt_entry_cnt; ++i) {
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i) {
 		ep->send_pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!ep->send_pkt_entry_vec[i])) {
@@ -1807,17 +1807,17 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 					    pkt_type,
 					    ope,
 					    segment_offset,
-					    ep->send_pkt_entry_size_vec[i]);
+					    ep->send_pkt_entry_data_sizes[i]);
 		if (err)
 			goto handle_err;
 
-		if (segment_offset != -1 && pkt_entry_cnt > 1) {
-			assert(ep->send_pkt_entry_size_vec[i] > 0);
-			segment_offset += ep->send_pkt_entry_size_vec[i];
+		if (segment_offset != -1 && ep->send_pkt_entry_vec_size > 1) {
+			assert(ep->send_pkt_entry_data_sizes[i] > 0);
+			segment_offset += ep->send_pkt_entry_data_sizes[i];
 		}
 	}
 
-	assert(pkt_entry_cnt == pkt_entry_cnt_allocated);
+	assert(ep->send_pkt_entry_vec_size == pkt_entry_cnt_allocated);
 
 	/**
 	 * We currently respect FI_MORE only for eager pkt type because
@@ -1833,12 +1833,12 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	if (ope->fi_flags & FI_MORE && efa_rdm_pkt_type_is_eager(pkt_type))
 		flags |= FI_MORE;
 
-	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec, pkt_entry_cnt, flags);
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec, ep->send_pkt_entry_vec_size, flags);
 	if (err)
 		goto handle_err;
 
 	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
-	for (i = 0; i < pkt_entry_cnt; ++i)
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
 		efa_rdm_pke_handle_sent(ep->send_pkt_entry_vec[i], pkt_type, ope->peer);
 
 	return FI_SUCCESS;

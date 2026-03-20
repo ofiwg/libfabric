@@ -679,9 +679,9 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		goto err_free_pke_vec;
 	}
 
-	efa_rdm_ep->send_pkt_entry_size_vec = calloc(sizeof(int), efa_base_ep_get_tx_pool_size(&efa_rdm_ep->base_ep));
-	if (!efa_rdm_ep->send_pkt_entry_size_vec) {
-		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for efa_rdm_ep->send_pkt_entry_size_vec!\n");
+	efa_rdm_ep->send_pkt_entry_data_sizes = calloc(sizeof(int), efa_base_ep_get_tx_pool_size(&efa_rdm_ep->base_ep));
+	if (!efa_rdm_ep->send_pkt_entry_data_sizes) {
+		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for efa_rdm_ep->send_pkt_entry_data_sizes!\n");
 		ret = -FI_ENOMEM;
 		goto err_free_send_pkt_entry_vec;
 	}
@@ -1189,8 +1189,8 @@ static int efa_rdm_ep_close(struct fid *fid)
 		free(efa_rdm_ep->pke_vec);
 	if (efa_rdm_ep->send_pkt_entry_vec)
 		free(efa_rdm_ep->send_pkt_entry_vec);
-	if (efa_rdm_ep->send_pkt_entry_size_vec)
-		free(efa_rdm_ep->send_pkt_entry_size_vec);
+	if (efa_rdm_ep->send_pkt_entry_data_sizes)
+		free(efa_rdm_ep->send_pkt_entry_data_sizes);
 
 	ofi_genlock_unlock(&domain->srx_lock);
 

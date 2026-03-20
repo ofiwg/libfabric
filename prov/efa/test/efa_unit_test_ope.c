@@ -4,6 +4,7 @@
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
+#include "rdm/efa_rdm_proto_eager.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
 
@@ -1213,6 +1214,7 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 	/* Set DC packet type in wiredata */
 	struct efa_rdm_base_hdr *base_hdr = (struct efa_rdm_base_hdr *)dc_pkt_entry->wiredata;
 	base_hdr->type = EFA_RDM_DC_EAGER_MSGRTM_PKT;
+	dc_pkt_entry->callback = &efa_rdm_proto_eager_handle_rtm_dc_send_completion;
 
 	/* Create fake receipt packet entry */
 	receipt_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -1226,7 +1228,8 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 
 	if (send_first) {
 		/* Send completion first - should not release TXE yet */
-		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
+		efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, dc_pkt_entry);
+		efa_unit_test_pke_handle_send_completion(dc_pkt_entry);
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
 		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
 
@@ -1240,7 +1243,8 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
 
 		/* Send completion - should now release TXE */
-		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
+		efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, dc_pkt_entry);
+		efa_unit_test_pke_handle_send_completion(dc_pkt_entry);
 	}
 
 	/* Verify TXE is released */
