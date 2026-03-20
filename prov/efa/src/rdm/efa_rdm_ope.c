@@ -15,15 +15,13 @@
 #include "efa_rdm_mr.h"
 #include "efa_rdm_cq.h"
 
-void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
-			   struct efa_rdm_ep *ep,
-			   struct efa_rdm_peer *peer,
-			   const struct fi_msg *msg,
-			   uint32_t op, uint64_t fi_flags,
-			   uint32_t internal_flags)
+void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
+				  struct efa_rdm_ep *ep,
+				  struct efa_rdm_peer *peer,
+				  const struct fi_msg *msg,
+				  uint32_t op, uint64_t fi_flags,
+				  uint32_t internal_flags)
 {
-	uint64_t tx_op_flags;
-
 	txe->ep = ep;
 	txe->type = EFA_RDM_TXE;
 	txe->op = op;
@@ -51,14 +49,6 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->proto = NULL;
 
 	memcpy(txe->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
-	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
-	efa_rdm_mr_gen_init_ope_desc(txe);
-	if (msg->desc) {
-		memcpy(txe->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
-		efa_rdm_mr_gen_capture_in_ope_desc(txe);
-	} else {
-		memset(txe->desc, 0, sizeof(*txe->desc) * msg->iov_count);
-	}
 
 	/* cq_entry on completion */
 	txe->cq_entry.op_context = msg->context;
@@ -68,12 +58,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->total_len = ofi_total_iov_len(txe->iov, txe->iov_count);
 
 	/* set flags */
-	assert(ep->base_ep.util_ep.tx_msg_flags == 0 ||
-	       ep->base_ep.util_ep.tx_msg_flags == FI_COMPLETION);
-	tx_op_flags = ep->base_ep.util_ep.tx_op_flags;
-	if (ep->base_ep.util_ep.tx_msg_flags == 0)
-		tx_op_flags &= ~FI_COMPLETION;
-	txe->fi_flags = fi_flags | tx_op_flags;
+	txe->fi_flags = efa_rdm_msg_get_tx_flags(ep, fi_flags);
 	txe->bytes_runt = 0;
 	txe->local_read_pkt_entry = NULL;
 	dlist_init(&txe->entry);
@@ -106,6 +91,26 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	efa_rdm_domain_ope_list_lock(efa_rdm_ep_rdm_domain(ep));
 	dlist_insert_tail(&txe->ep_entry, &ep->base_ep.ope_list);
 	efa_rdm_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(ep));
+}
+
+void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
+			   struct efa_rdm_ep *ep,
+			   struct efa_rdm_peer *peer,
+			   const struct fi_msg *msg,
+			   uint32_t op, uint64_t fi_flags,
+			   uint32_t internal_flags)
+{
+	efa_rdm_txe_construct_common(txe, ep, peer, msg, op, fi_flags,
+				     internal_flags);
+
+	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
+	efa_rdm_mr_gen_init_ope_desc(txe);
+	if (msg->desc) {
+		memcpy(txe->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
+		efa_rdm_mr_gen_capture_in_ope_desc(txe);
+	} else {
+		memset(txe->desc, 0, sizeof(*txe->desc) * msg->iov_count);
+	}
 }
 
 void efa_rdm_txe_release(struct efa_rdm_ope *txe)
@@ -2406,6 +2411,8 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	switch (ope->op) {
 	case ofi_op_msg: /* fall through */
 	case ofi_op_tagged:
+		if (ope->proto)
+			return efa_rdm_msg_post_rtm_proto(ope->ep, ope, ope->proto);
 		return efa_rdm_msg_post_rtm(ope->ep, ope);
 	case ofi_op_write:
 		return efa_rdm_rma_post_write(ope->ep, ope);

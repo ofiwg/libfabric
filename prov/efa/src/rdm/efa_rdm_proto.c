@@ -4,6 +4,7 @@
 #include "efa_rdm_proto.h"
 #include "efa.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_msg.h"
 
 /* List of supported protocols.
  * The protocols listed here will be tried in the order they're listed.
@@ -26,6 +27,14 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	struct efa_rdm_proto *selected_proto;
 	int req_pkt_type, iface;
 	uint16_t header_flags = 0;
+	uint64_t effective_flags;
+
+	/*
+	 * Resolve the endpoint's tx_op_flags now: an endpoint-level
+	 * FI_DELIVERY_COMPLETE must steer protocol selection just as a
+	 * per-operation flag does.
+	 */
+	effective_flags = efa_rdm_msg_get_tx_flags(ep, flags);
 
 	txe->ep = ep;
 	txe->iov_count = msg->iov_count;
@@ -64,8 +73,8 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
 		selected_proto = efa_rdm_protocols[i];
 
-		req_pkt_type = efa_rdm_proto_req_pkt_type(selected_proto, op,
-							  flags, peer);
+		req_pkt_type = efa_rdm_proto_req_pkt_type(
+			selected_proto, op, effective_flags, peer);
 
 		/* All protocols other than the eager protocol can benefit from
 		 * registering the application buffers.
@@ -74,7 +83,6 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		if (selected_proto->can_use_protocol_for_send(
 			    txe, req_pkt_type, header_flags, iface)) {
 			*proto = selected_proto;
-			txe->proto = selected_proto;
 			return FI_SUCCESS;
 		}
 	}
@@ -86,6 +94,37 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	 * which is a legal application call.
 	 */
 	*proto = NULL;
-	txe->proto = NULL;
 	return FI_SUCCESS;
+}
+
+/* Utility funcions */
+
+void efa_rdm_proto_txe_fill(struct efa_rdm_ope *txe, struct efa_rdm_ep *ep,
+			    struct efa_rdm_peer *peer, const struct fi_msg *msg,
+			    uint32_t op, uint64_t tag, uint64_t flags,
+			    uint32_t internal_flags,
+			    struct efa_rdm_proto *proto)
+{
+	/*
+	 * txe->mr, txe->desc and the MR generation snapshot were already
+	 * populated by efa_rdm_proto_select_send_protocol(), which needs them
+	 * to decide whether a protocol can be used, so use the construct
+	 * helper that leaves them alone.
+	 */
+	efa_rdm_txe_construct_common(txe, ep, peer, msg, op, flags,
+				     internal_flags);
+
+	/*
+	 * efa_rdm_txe_construct_common() clears txe->proto, so set it here
+	 * after the reset. This must be the only place that assigns
+	 * txe->proto during the fresh-send path — the pre-handshake repost
+	 * path (efa_rdm_ope_repost_ope_queued_before_handshake) relies on
+	 * txe->proto staying valid to choose the refactored send path.
+	 */
+	txe->proto = proto;
+
+	if (op == ofi_op_tagged) {
+		txe->cq_entry.tag = tag;
+		txe->tag = tag;
+	}
 }
