@@ -271,6 +271,7 @@ class WaitableProcess:
         except Exception as e:
             exception = e
             self.process.terminate()
+            self.process.kill()
 
         if (self.output_file):
             self.output_file.close()
@@ -594,6 +595,7 @@ class ClientServerTest:
             print("Client error: {}".format(e))
             # Clean up server if client is terminated unexpectedly
             server_process.terminate()
+            server_process.kill()
 
         server_output = ""
         server_timed_out = False
@@ -602,6 +604,7 @@ class ClientServerTest:
                 timeout=self._timeout + SERVER_RESTART_DELAY_MS/1000)
         except TimeoutExpired:
             server_process.terminate()
+            server_process.kill()
             server_timed_out = True
 
         if has_ssh_connection_err_msg(server_output):
