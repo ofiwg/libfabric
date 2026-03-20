@@ -96,6 +96,7 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 	struct ptl_am *ptl = (struct ptl_am *)(epaddr->ptlctl->ptl);
 	int cma_succeed = 0;
 	int pid = 0, gpu_ipc_send_completion = 0;
+	psm2_error_t err = PSM2_OK;
 
 	PSM2_LOG_MSG("entering.");
 	psmi_assert((tok != NULL && was_posted)
@@ -198,10 +199,13 @@ send_cts:
 		psm3_am_reqq_add(AMREQUEST_SHORT, tok->ptl,
 				 tok->tok.epaddr_incoming, mq_handler_rtsmatch_hidx,
 				 args, 5, NULL, 0, NULL, 0);
-	} else
-		psm3_amsh_short_request((struct ptl *)ptl, epaddr, mq_handler_rtsmatch_hidx,
+	} else {
+		err = psm3_amsh_short_request((struct ptl *)ptl, epaddr, mq_handler_rtsmatch_hidx,
 					args, 5, NULL, 0, 0);
-
+		if (err > PSM2_OK_NO_PROGRESS)
+			psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR, "RTS handle error");
+	}
+	
 	req->mq->stats.rx_user_num++;
 	req->mq->stats.rx_user_bytes += req->req_data.recv_msglen;
 	req->mq->stats.rx_shm_num++;
@@ -328,6 +332,7 @@ psm3_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			    size_t len)
 {
 	amsh_am_token_t *tok = (amsh_am_token_t *) toki;
+	psm2_error_t err;
 
 	psmi_assert(toki != NULL);
 
@@ -381,13 +386,19 @@ psm3_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			psmi_assert_always(nbytes == msglen);
 
 			/* Send response that PUT is complete */
-			psm3_amsh_short_reply(tok, mq_handler_rtsdone_hidx,
-					      rarg, 1, NULL, 0, 0);
+			err = psm3_amsh_short_reply(tok, mq_handler_rtsdone_hidx,
+										rarg, 1, NULL, 0, 0);
+			if (err > PSM2_OK_NO_PROGRESS)
+				psm3_handle_error(PSMI_EP_NORETURN, err,
+								  "Failed to handle CTS");
 		} else {
 			/* Only transfer if peer didn't do GET and we didn't do PUT */
 no_kassist:
-			psm3_amsh_long_reply(tok, mq_handler_rtsdone_hidx, rarg,
+			err = psm3_amsh_long_reply(tok, mq_handler_rtsdone_hidx, rarg,
 					     1, sreq->req_data.buf, msglen, dest, 0);
+			if (err > PSM2_OK_NO_PROGRESS)
+				psm3_handle_error(PSMI_EP_NORETURN, err,
+								  "Failed to handle CTS");
 		}
 	}
 	sreq->mq->stats.tx_shm_bytes += sreq->req_data.send_msglen;
