@@ -334,6 +334,7 @@ int efa_device_list_initialize(void)
 		}
 
 		memcpy(&g_efa_selected_device_list[g_efa_selected_device_cnt], &cur_device, sizeof(struct efa_device));
+		g_efa_selected_device_list[g_efa_selected_device_cnt].urandom_fd = open("/dev/urandom", O_RDONLY);
 		g_efa_selected_device_cnt++;
 	}
 
@@ -367,6 +368,8 @@ void efa_device_list_finalize(void)
 	if (g_efa_selected_device_list) {
 		for (i = 0; i < g_efa_selected_device_cnt; i++) {
 			ofi_genlock_destroy(&g_efa_selected_device_list[i].qp_table_lock);
+			if (g_efa_selected_device_list[i].urandom_fd >= 0)
+				close(g_efa_selected_device_list[i].urandom_fd);
 			efa_device_destruct(&g_efa_selected_device_list[i]);
 		}
 
