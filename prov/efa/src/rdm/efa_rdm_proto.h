@@ -107,4 +107,15 @@ efa_rdm_proto_handle_tx_pkes_posted_no_op(struct efa_rdm_ep *ep,
 	return;
 };
 
+/**
+ * @brief Initialize a TXE for use by the new protocol interface.
+ *
+ * Similar to efa_rdm_txe_construct but does not set mr, desc, or
+ * total_len since those are already populated by
+ * efa_rdm_proto_select_send_protocol.
+ */
+void efa_rdm_proto_txe_fill(struct efa_rdm_ope *txe, struct efa_rdm_ep *ep,
+			    struct efa_rdm_peer *peer, const struct fi_msg *msg,
+			    uint32_t op, uint64_t tag, uint64_t flags);
+
 #endif /* _EFA_RDM_PROTO_H */
