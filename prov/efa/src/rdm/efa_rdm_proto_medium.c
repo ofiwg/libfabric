@@ -27,11 +27,11 @@
  * https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#medium-message-featuresubprotocol
  */
 
-
 static bool efa_rdm_proto_medium_can_use_for_send(struct efa_rdm_ope *txe,
+						  struct efa_rdm_peer *peer,
 						  int req_pkt_type,
 						  uint16_t header_flags,
-						  int iface)
+						  int iface, bool use_p2p)
 {
 	return txe->total_len <= g_efa_hmem_info[iface].max_medium_msg_size;
 }

@@ -28,9 +28,10 @@
  */
 
 static bool efa_rdm_proto_longcts_can_use_for_send(struct efa_rdm_ope *txe,
+						   struct efa_rdm_peer *peer,
 						   int req_pkt_type,
 						   uint16_t header_flags,
-						   int iface)
+						   int iface, bool use_p2p)
 {
 	// Long CTS is always usable
 	return true;
