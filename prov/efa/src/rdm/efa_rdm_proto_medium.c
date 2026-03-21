@@ -24,7 +24,7 @@
 
 /*
  * Description of the protocol
- * https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#eager-message-featuresubprotocol
+ * https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#medium-message-featuresubprotocol
  */
 
 
@@ -37,6 +37,7 @@ static bool efa_rdm_proto_medium_can_use_for_send(struct efa_rdm_ope *txe,
 }
 
 struct efa_rdm_proto efa_rdm_proto_medium = {
+	.name = "MEDIUM",
 	.can_use_protocol_for_send = &efa_rdm_proto_medium_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_medium_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_MEDIUM_MSGRTM_PKT,

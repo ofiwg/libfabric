@@ -36,6 +36,8 @@
  * selected.
  */
 struct efa_rdm_proto {
+	char name[32];
+
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
