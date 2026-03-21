@@ -6,6 +6,7 @@
 #include "efa_rdm_proto_eager.h"
 #include "efa_rdm_proto_medium.h"
 #include "efa_rdm_proto_longcts.h"
+#include "efa_rdm_proto_runtread.h"
 #include "efa_rdm_proto_longread.h"
 
 #define EFA_RDM_MAX_PROTO 8
@@ -17,6 +18,7 @@
 struct efa_rdm_proto *efa_rdm_protocols [EFA_RDM_MAX_PROTO] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
+	&efa_rdm_proto_runtread,
 	&efa_rdm_proto_longread,
 	/* Long CTS should be the last protocol because it can always be used */
 	&efa_rdm_proto_longcts,

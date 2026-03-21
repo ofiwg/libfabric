@@ -108,12 +108,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
 		assert(0 && "Long read protocol moved to refactored code path");
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_runtread_msgrtm(pkt_entry, ope, data_offset, data_size);
-		break;
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_runtread_tagrtm(pkt_entry, ope, data_offset, data_size);
+		assert(0 && "Runt read protocol moved to refactored code path");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -239,7 +235,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_runtread_rtm_sent(pkt_entry, peer);
+		assert(0 && "Long read protocol moved to refactored code path");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		/* nothing to do when EAGER RTW is sent */
@@ -556,7 +552,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
+		assert(0 && "Runt read protocol moved to refactored code path");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
