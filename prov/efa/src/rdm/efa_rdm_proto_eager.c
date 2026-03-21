@@ -32,9 +32,10 @@
  * accounting for the request header size.
  */
 static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_ope *txe,
+						 struct efa_rdm_peer *peer,
 						 int req_pkt_type,
 						 uint16_t header_flags,
-						 int iface)
+						 int iface, bool use_p2p)
 {
 	size_t max_data_offset, max_rtm_data_capacity;
 

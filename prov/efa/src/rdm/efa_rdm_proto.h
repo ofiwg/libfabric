@@ -44,8 +44,10 @@ struct efa_rdm_proto {
 	 * send operation.
 	 */
 	bool (*can_use_protocol_for_send)(struct efa_rdm_ope *txe,
+					  struct efa_rdm_peer *peer,
 					  int req_pkt_type,
-					  uint16_t header_flags, int iface);
+					  uint16_t header_flags, int iface,
+					  bool use_p2p);
 
 	/* This function will allocate the pkes that need to be sent for a given
 	 * TX operation. At the end of this function, ep->send_pkt_entry_vec

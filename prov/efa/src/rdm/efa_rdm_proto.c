@@ -116,7 +116,8 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		}
 
 		if (selected_proto->can_use_protocol_for_send(
-			    txe, req_pkt_type, header_flags, iface)) {
+			    txe, peer, req_pkt_type, header_flags, iface,
+			    use_p2p)) {
 			*proto = selected_proto;
 			EFA_INFO(FI_LOG_EP_DATA, "Selected protocol: %s\n",
 				 selected_proto->name);
