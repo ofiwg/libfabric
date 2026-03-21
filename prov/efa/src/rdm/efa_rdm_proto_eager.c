@@ -50,6 +50,7 @@ static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_ope *txe,
 }
 
 struct efa_rdm_proto efa_rdm_proto_eager = {
+	.name = "EAGER",
 	.can_use_protocol_for_send = &efa_rdm_proto_eager_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_eager_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_EAGER_MSGRTM_PKT,
