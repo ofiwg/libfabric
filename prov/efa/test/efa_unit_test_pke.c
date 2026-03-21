@@ -3,75 +3,52 @@
 #include "rdm/efa_rdm_pke_rta.h"
 #include "rdm/efa_rdm_pke_rtw.h"
 #include "rdm/efa_rdm_pke_utils.h"
+#include "rdm/efa_rdm_proto_longcts.h"
 
 
 /**
- * @brief When handling a long cts rtm as read nack fallback,
- * efa_rdm_pke_handle_longcts_rtm_send_completion shouldn't touch
- * txe and write send completion.
+ * @brief When handling a long CTS RTM send completion for a READ NACK
+ * fallback packet (zero payload), the callback should return early
+ * without touching the TXE or writing a CQ completion.
+ *
+ * This tests the READ NACK handling in
+ * efa_rdm_proto_longcts_handle_rtm_send_completion.
  */
-void test_efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_resource **state)
+void test_efa_rdm_pke_handle_longcts_rtm_send_completion(
+	struct efa_resource **state)
 {
-    struct efa_resource *resource = *state;
-    struct efa_rdm_pke *pkt_entry;
-    struct efa_rdm_ep *efa_rdm_ep;
-    struct efa_rdm_peer *peer;
-    struct fi_msg msg = {0};
-    char buf[16];
-	struct iovec iov = {
-        .iov_base = buf,
-        .iov_len = sizeof buf
-    };
-    struct efa_ep_addr raw_addr = {0};
-    size_t raw_addr_len = sizeof(struct efa_ep_addr);
-    fi_addr_t peer_addr;
-    int err, numaddr;
-    struct efa_rdm_ope *txe;
+	struct efa_resource *resource = *state;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 
-    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
-    efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
 
-    /* create a fake peer */
-    err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
-    assert_int_equal(err, 0);
-    raw_addr.qpn = 1;
-    raw_addr.qkey = 0x1234;
-    numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
-    assert_int_equal(numaddr, 1);
-    peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
-    assert_non_null(peer);
+	/* Allocate a TX packet entry and set up as a zero-payload
+	 * long CTS RTM with READ_NACK flag */
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
 
-    /* Construct a txe with read nack flag added */
-    msg.addr = peer_addr;
-    msg.iov_count = 1;
-    msg.msg_iov = &iov;
-    msg.desc = NULL;
-    txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
-    assert_non_null(txe);
-    efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0);
-    txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
+	pkt_entry->payload_size = 0;
+	pkt_entry->ep = efa_rdm_ep;
+	pkt_entry->ope = NULL; /* TXE already released by CTSDATA completions */
 
-    /* construct a fallback long cts rtm pkt */
-    pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
-    assert_non_null(pkt_entry);
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(pkt_entry);
+	rtm_hdr->type = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	rtm_hdr->flags = EFA_RDM_REQ_READ_NACK;
 
-    err = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, txe);
-    assert_int_equal(err, 0);
+	/* Call the new send completion callback.
+	 * It should return early without dereferencing the NULL ope. */
+	efa_rdm_proto_longcts_handle_rtm_send_completion(pkt_entry);
 
-    assert_int_equal(pkt_entry->payload_size, 0);
+	/* CQ should be empty - no send completion written */
+	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
 
-    /* Mimic the case when CTSDATA pkts have completed all data and released the txe */
-    txe->bytes_acked = txe->total_len;
-    txe->bytes_sent = txe->total_len;
-    efa_rdm_txe_release(txe);
-
-    efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
-
-    /* CQ should be empty as send completion shouldn't be written */
-    assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
-
-    efa_rdm_pke_release_tx(pkt_entry);
+	efa_rdm_pke_release_tx(pkt_entry);
 }
 
 /**
