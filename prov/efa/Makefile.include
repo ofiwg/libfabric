@@ -81,7 +81,8 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_proto.c \
 	prov/efa/src/rdm/efa_rdm_proto_eager.c \
 	prov/efa/src/rdm/efa_rdm_proto_medium.c \
-	prov/efa/src/rdm/efa_rdm_proto_longcts.c
+	prov/efa/src/rdm/efa_rdm_proto_longcts.c \
+	prov/efa/src/rdm/efa_rdm_proto_longread.c
 
 if ENABLE_EFA_UNIT_TEST
 _efa_files += prov/efa/test/efa_unit_test_data_path_ops.c
@@ -145,7 +146,8 @@ _efa_headers = \
 	prov/efa/src/rdm/efa_rdm_proto.h \
 	prov/efa/src/rdm/efa_rdm_proto_eager.h \
 	prov/efa/src/rdm/efa_rdm_proto_medium.h \
-	prov/efa/src/rdm/efa_rdm_proto_longcts.h
+	prov/efa/src/rdm/efa_rdm_proto_longcts.h \
+	prov/efa/src/rdm/efa_rdm_proto_longread.h
 
 if HAVE_LTTNG
 efa_LDFLAGS += -llttng-ust
