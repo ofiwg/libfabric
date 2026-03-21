@@ -4,6 +4,7 @@
 #include "efa_rdm_proto.h"
 #include "efa.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_longcts.h"
 #include "efa_rdm_proto_medium.h"
 
 /* We have total of 5 protocols in the EFA provider. Use a slightly larger
@@ -17,6 +18,8 @@
 struct efa_rdm_proto *efa_rdm_protocols[EFA_RDM_MAX_PROTO] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
+	/* Long CTS should be the last protocol because it can always be used */
+	&efa_rdm_proto_longcts,
 	NULL, /* Sentinel used to stop iteration */
 };
 
@@ -115,6 +118,8 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		if (selected_proto->can_use_protocol_for_send(
 			    txe, req_pkt_type, header_flags, iface)) {
 			*proto = selected_proto;
+			EFA_INFO(FI_LOG_EP_DATA, "Selected protocol: %s\n",
+				 selected_proto->name);
 			return FI_SUCCESS;
 		}
 	}

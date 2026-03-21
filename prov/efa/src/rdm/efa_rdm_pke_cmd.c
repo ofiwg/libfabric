@@ -101,22 +101,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		assert(0 && "Medium protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 		assert(data_offset == -1 && data_size == -1);
@@ -175,22 +161,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		assert(0 && "Medium protocol moved to refactored code path");
 		break;
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS tagged RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -264,7 +236,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -581,7 +553,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -620,13 +592,12 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		assert(0 && "Eager and medium protocols moved to refactored "
-			    "code path");
+	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
+	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
+		assert(0 && "Protocols moved to refactored code path");
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
 	case EFA_RDM_DC_WRITE_RTA_PKT:
-	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
 		/* For DC packets, use efa_outstanding_tx_ops to track TX completions
 		 * instead of bytes_acked to avoid issues with unset payload_size.

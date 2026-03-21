@@ -150,22 +150,6 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry);
 
-ssize_t efa_rdm_pke_init_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
-					struct efa_rdm_ope *txe);
-
-ssize_t efa_rdm_pke_init_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
-					struct efa_rdm_ope *txe);
-
-ssize_t efa_rdm_pke_init_dc_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
-					   struct efa_rdm_ope *txe);
-
-ssize_t efa_rdm_pke_init_dc_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
-					   struct efa_rdm_ope *txe);
-
-void efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_rdm_pke *pkt_entry);
-
-void efa_rdm_pke_handle_longcts_rtm_sent(struct efa_rdm_pke *pkt_entry);
-
 ssize_t efa_rdm_pke_init_longread_msgrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe);
 
