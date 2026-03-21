@@ -5,6 +5,7 @@
 #include "efa.h"
 #include "efa_rdm_proto_eager.h"
 #include "efa_rdm_proto_longcts.h"
+#include "efa_rdm_proto_longread.h"
 #include "efa_rdm_proto_medium.h"
 
 /* We have total of 5 protocols in the EFA provider. Use a slightly larger
@@ -18,6 +19,7 @@
 struct efa_rdm_proto *efa_rdm_protocols[EFA_RDM_MAX_PROTO] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
+	&efa_rdm_proto_longread,
 	/* Long CTS should be the last protocol because it can always be used */
 	&efa_rdm_proto_longcts,
 	NULL, /* Sentinel used to stop iteration */
@@ -33,6 +35,7 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	int req_pkt_type, iface, err, use_p2p;
 	uint16_t header_flags = 0;
 	bool tagged, delivery_complete_requested, mr_attempted = false;
+	uint64_t mr_access_flags;
 
 	if (flags & FI_INJECT ||
 	    efa_both_support_zero_hdr_data_transfer(ep, peer))
@@ -110,8 +113,14 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		 */
 		if (!mr_attempted && selected_proto != &efa_rdm_proto_eager) {
 			// Try to register buffer if MR cache is available
-			if (efa_is_cache_available(efa_rdm_ep_domain(ep)))
-				efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
+			mr_access_flags = FI_SEND;
+			if (use_p2p)
+				mr_access_flags |= FI_REMOTE_READ;
+
+			if (efa_is_cache_available(efa_rdm_ep_domain(ep))) {
+				efa_rdm_ope_try_fill_desc(txe, 0,
+							  mr_access_flags);
+			}
 			mr_attempted = true;
 		}
 
