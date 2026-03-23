@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_tagged" "3" "2026\-02\-27" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_tagged" "3" "2026\-03\-23" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -280,6 +280,9 @@ Indicates that the user has additional requests that will immediately be
 posted after the current call returns.
 Use of this flag may improve performance by enabling the provider to
 optimize its access to the fabric hardware.
+Providers that utilize delayed start optimizations for communication
+calls with FI_MORE flag set must ensure that all previously delayed
+calls be flushed when an error is returned from a new call.
 .TP
 \f[I]FI_INJECT\f[R]
 Applies to fi_tsendmsg.
