@@ -262,4 +262,21 @@ void efa_cq_signal_fini(struct efa_cq *cq);
 void efa_cq_ack_events(struct efa_cq *cq);
 int efa_cq_destroy_comp_channel(struct efa_cq *cq);
 
+/**
+ * @brief Invalidate stale cur_wq pointer on a CQ if it references the given QP
+ *
+ * When a QP is about to be destroyed, any CQ that has cur_wq pointing into
+ * that QP's work queue must be invalidated to prevent use-after-free during
+ * the subsequent CQ drain.
+ */
+static inline void efa_cq_invalidate_cur_wq(struct efa_cq *cq, struct efa_qp *qp)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	if (cq && cq->ibv_cq.data_path_direct_enabled &&
+	    cq->ibv_cq.data_path_direct.cur_wq &&
+	    cq->ibv_cq.data_path_direct.cur_qp == qp)
+		cq->ibv_cq.data_path_direct.cur_wq = NULL;
+#endif
+}
+
 #endif /* end of _EFA_CQ_H*/
