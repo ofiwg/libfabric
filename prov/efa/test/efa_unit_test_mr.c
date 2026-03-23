@@ -72,6 +72,7 @@ void test_efa_rdm_mr_reg_host_memory_no_mr_local(struct efa_resource **state)
 
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
 						 FI_VERSION(2, 0), hints, true, true);
+	fi_freeinfo(hints);
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
@@ -342,26 +343,26 @@ void test_efa_direct_mr_reg_rdma_write_not_supported(struct efa_resource **state
 
 /**
  * @brief Test efa_mr_ofi_to_ibv_access with no access flags
- * 
- * When no access flags are provided, the function should default to 
+ *
+ * When no access flags are provided, the function should default to
  * FI_SEND | FI_RECV and return IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ.
  */
 void test_efa_mr_ofi_to_ibv_access_no_access(struct efa_resource **state)
 {
 	int ibv_access;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(0, true, true);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ);
 }
 
 /**
  * @brief Test efa_mr_ofi_to_ibv_access with one flag when rdma read and write are available
- * 
+ *
  */
 void test_efa_mr_ofi_to_ibv_access_one_flag(struct efa_resource **state)
 {
 	int ibv_access;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(FI_SEND, true, true);
 	assert_int_equal(ibv_access, IBV_ACCESS_REMOTE_READ);
 
@@ -387,7 +388,7 @@ void test_efa_mr_ofi_to_ibv_access_one_flag(struct efa_resource **state)
 void test_efa_mr_ofi_to_ibv_access_read_not_supported(struct efa_resource **state)
 {
 	int ibv_access;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(FI_READ, false, false);
 	assert_int_equal(ibv_access, 0);
 
@@ -397,7 +398,7 @@ void test_efa_mr_ofi_to_ibv_access_read_not_supported(struct efa_resource **stat
 
 /**
  * @brief Test efa_mr_ofi_to_ibv_access when RDMA write not supported
- * 
+ *
  * When device doesn't support RDMA write, emulate with RDMA read
  */
 void test_efa_mr_ofi_to_ibv_access_write_not_supported(struct efa_resource **state)
@@ -421,21 +422,21 @@ void test_efa_mr_ofi_to_ibv_access_write_not_supported(struct efa_resource **sta
 void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported(struct efa_resource **state)
 {
 	int ibv_access;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_READ | FI_REMOTE_WRITE, true, false);
 	assert_int_equal(ibv_access, IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);
 }
 
 /**
  * @brief Test efa_mr_ofi_to_ibv_access with all access flags combined
- * 
+ *
  * Test all OFI access flags together with full device support.
  */
 void test_efa_mr_ofi_to_ibv_access_all_flags_supported(struct efa_resource **state)
 {
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(all_flags, true, true);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
 }
@@ -447,7 +448,7 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(struct efa_resource *
 {
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(all_flags, false, false);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE);
 }
