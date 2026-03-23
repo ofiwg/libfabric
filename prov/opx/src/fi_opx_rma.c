@@ -79,13 +79,14 @@ int fi_opx_do_readv_internal_shm(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_readv_params *params = &work->readv;
 	struct fi_opx_ep		   *opx_ep = params->opx_ep;
+	struct fi_opx_ep_tx		   *opx_tx = FI_OPX_EP_TX(opx_ep, params->opx_target_addr);
 
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy u8_rx field.  Use the dest_rx field
 	 * which can support the larger values.
 	 */
 	ssize_t rc = fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->dest_subctxt_rx,
-						   params->opx_target_addr.hfi1_unit);
+						   params->opx_target_addr.planes[OPX_PRIMARY_PLANE].hfi1_unit);
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
 	}
@@ -93,9 +94,9 @@ int fi_opx_do_readv_internal_shm(union fi_opx_hfi1_deferred_work *work)
 	uint64_t pos;
 	/* DAOS support - rank_inst field has been depricated and will be phased out.
 	 * The value is always zero.*/
-	union opx_hfi1_packet_hdr *hdr =
-		opx_shm_tx_next(&opx_ep->tx->shm, params->opx_target_addr.hfi1_unit, params->dest_subctxt_rx, &pos,
-				opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx, 0, &rc);
+	union opx_hfi1_packet_hdr *hdr = opx_shm_tx_next(
+		opx_tx->shm, params->opx_target_addr.planes[OPX_PRIMARY_PLANE].hfi1_unit, params->dest_subctxt_rx, &pos,
+		opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx, 0, &rc);
 	if (OFI_UNLIKELY(hdr == NULL)) {
 		return rc;
 	}
@@ -133,7 +134,7 @@ int fi_opx_do_readv_internal_shm(union fi_opx_hfi1_deferred_work *work)
 
 	tx_payload->cts.iov[0] = params->dput_iov;
 
-	opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
+	opx_shm_tx_advance(opx_tx->shm, (void *) hdr, pos);
 
 	return FI_SUCCESS;
 }
@@ -143,17 +144,18 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
 	struct fi_opx_hfi1_rx_readv_params *params    = &work->readv;
 	struct fi_opx_ep		   *opx_ep    = params->opx_ep;
+	struct fi_opx_ep_tx		   *opx_tx    = FI_OPX_EP_TX(opx_ep, params->opx_target_addr);
 	const enum opx_hfi1_type	    hfi1_type = OPX_SW_HFI1_TYPE;
 
-	OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
+	OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
-	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
+	union fi_opx_hfi1_pio_state pio_state = *opx_tx->pio_state;
 
 	const int credits_needed    = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ? 2 : 3;
-	ssize_t	  credits_available = fi_opx_hfi1_tx_check_credits(opx_ep, &pio_state, credits_needed);
+	ssize_t	  credits_available = fi_opx_hfi1_tx_check_credits(opx_tx, &pio_state, credits_needed);
 	if (OFI_UNLIKELY(credits_available < 0)) {
 		OPX_TRACE_RMA_END_EAGAIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
-		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
+		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 		return -FI_EAGAIN;
 	}
 
@@ -161,23 +163,24 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	const union fi_opx_addr addr = params->opx_target_addr;
+	const struct fi_opx_addr addr = params->opx_target_addr;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.lid, addr.hfi1_subctxt_rx,
-					    &psn_ptr, &replay, params->reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.planes[OPX_PRIMARY_PLANE].lid,
+					    addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay,
+					    params->reliability, hfi1_type);
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_RMA_END_EAGAIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
-		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
+		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 		return -FI_EAGAIN;
 	}
 
-	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
+	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_sop_first, pio_state);
 
 	uint64_t niov	       = params->niov << 48;
 	uint64_t op64	       = params->op << 40;
 	uint64_t dt64	       = params->dt << 32;
-	uint64_t credit_return = OPX_PBC_CR(opx_ep->tx->force_credit_return, hfi1_type);
+	uint64_t credit_return = OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type);
 	assert(FI_OPX_HFI_DPUT_OPCODE_GET == params->opcode); // double check packet type
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
@@ -194,10 +197,10 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
-		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_tx);
 
 		/* write the CTS payload "send control block"  */
-		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, pio_state);
 		opx_cacheline_copy_qw_vol(scb_payload, replay->payload, params->dput_iov.qw[0], params->dput_iov.qw[1],
 					  params->dput_iov.qw[2], params->dput_iov.qw[3], params->dput_iov.qw[4],
 					  params->dput_iov.qw[5], 0, 0);
@@ -223,9 +226,9 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
-		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_tx);
 
-		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, pio_state);
 		opx_cacheline_store_qw_vol(scb_payload, params->key, params->dput_iov.qw[0], params->dput_iov.qw[1],
 					   params->dput_iov.qw[2], params->dput_iov.qw[3], params->dput_iov.qw[4],
 					   params->dput_iov.qw[5], 0UL);
@@ -242,14 +245,14 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 		replay_payload[5]	 = params->dput_iov.qw[5];
 		replay_payload[6]	 = 0UL;
 
-		scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+		scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, pio_state);
 		opx_cacheline_store_qw_vol(scb_payload, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL);
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	}
 
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
-	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_tx->pio_credits_addr);
+	opx_tx->pio_state->qw0 = pio_state.qw0;
+	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
 							     OPX_SW_HFI1_TYPE);
@@ -282,7 +285,8 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	}
 
 	assert(dst_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, dst_addr);
+	const struct fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, dst_addr);
+	struct fi_opx_ep_tx	*opx_tx	      = FI_OPX_EP_TX(opx_ep, opx_dst_addr);
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->next			     = NULL;
@@ -298,8 +302,7 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	const uint64_t	       is_hmem = opx_hmem_iov_init(buf, len, NULL, &iov, &handle);
 
 	opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr_offset, key, cc, FI_VOID, FI_NOOP,
-			   opx_ep->tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability,
-			   hfi1_type);
+			   opx_tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_INJECT_WRITE, 0, 0);
 	return 0;
@@ -349,11 +352,12 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	}
 
 	assert(dst_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, dst_addr);
-	const uint64_t		op_flags     = opx_ep->tx->op_flags | (tx_op_flags & FI_REMOTE_CQ_DATA);
+	const struct fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, dst_addr);
+	struct fi_opx_ep_tx	*opx_tx	      = FI_OPX_EP_TX(opx_ep, opx_dst_addr);
+	const uint64_t		 op_flags     = opx_tx->op_flags | (tx_op_flags & FI_REMOTE_CQ_DATA);
 
 	struct fi_opx_cq *cq =
-		(op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE | FI_REMOTE_CQ_DATA)) ? opx_ep->tx->cq : NULL;
+		(op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE | FI_REMOTE_CQ_DATA)) ? opx_tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq,
 					     FI_RMA | FI_WRITE | (op_flags & FI_REMOTE_CQ_DATA),
@@ -432,9 +436,10 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 	}
 
 	assert(dst_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, dst_addr);
+	const struct fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, dst_addr);
+	struct fi_opx_ep_tx	*opx_tx	      = FI_OPX_EP_TX(opx_ep, opx_dst_addr);
 
-	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->tx->cq : NULL;
+	struct fi_opx_cq   *cq = (opx_tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_WRITE, &context) != FI_SUCCESS)) {
 		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_WRITEV, 0, 0);
@@ -503,7 +508,7 @@ inline ssize_t fi_opx_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const union fi_opx_addr dst_addr)
+void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const struct fi_opx_addr dst_addr)
 {
 #ifdef OPX_DAOS
 	if (opx_ep->daos_info.av_rank_hashmap) {
@@ -513,26 +518,28 @@ void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const union fi_opx_a
 		int				found	    = 0;
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Get av_rank_hashmap - (DLID:0x%x fi:%08lx)\n",
-			     dst_addr.lid, dst_addr.fi);
+			     dst_addr.planes[OPX_PRIMARY_PLANE].lid, (uint64_t) &dst_addr);
 
 		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank)
 		{
 			if (cur_av_rank) {
-				union fi_opx_addr addr;
+				struct fi_opx_addr addr;
 				addr = cur_av_rank->fi_addr;
 
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					     "Get av_rank_hashmap[%d] = rank:%d, LID:0x%x, fi:%08lx.\n", i++,
-					     cur_av_rank->key.rank, addr.lid, addr.fi);
+					     cur_av_rank->key.rank, addr.planes[OPX_PRIMARY_PLANE].lid,
+					     (uint64_t) &addr);
 
-				if (addr.fi == dst_addr.fi) {
+				if (memcmp(&addr, &dst_addr, sizeof(addr)) == 0) {
 					found			    = 1;
 					opx_ep->daos_info.rank	    = cur_av_rank->key.rank;
 					opx_ep->daos_info.rank_inst = cur_av_rank->key.rank_inst;
 
 					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 						     "Get av_rank_hashmap[%d] = rank:%d, LID:0x%x fi:%08lx - Found.\n",
-						     (i - 1), opx_ep->daos_info.rank, addr.lid, addr.fi);
+						     (i - 1), opx_ep->daos_info.rank,
+						     addr.planes[OPX_PRIMARY_PLANE].lid, (uint64_t) &addr);
 					break;
 				}
 			}
@@ -571,10 +578,11 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	}
 
 	assert(msg->addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
+	const struct fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
 	fi_opx_get_daos_av_addr_rank(opx_ep, opx_dst_addr);
+	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, opx_dst_addr);
 
-	struct fi_opx_cq   *cq = (flags & (FI_COMPLETION | FI_REMOTE_CQ_DATA)) ? opx_ep->tx->cq : NULL;
+	struct fi_opx_cq   *cq = (flags & (FI_COMPLETION | FI_REMOTE_CQ_DATA)) ? opx_tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq,
 					     (FI_RMA | FI_WRITE | (flags & FI_REMOTE_CQ_DATA)),
@@ -713,10 +721,11 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	struct fi_opx_hmem_iov iov = {.buf = (uintptr_t) buf, .len = len, .iface = hmem_iface, .device = hmem_device};
 
 	assert(src_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(opx_ep, src_addr);
+	const struct fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(opx_ep, src_addr);
 	fi_opx_get_daos_av_addr_rank(opx_ep, opx_addr);
+	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, opx_addr);
 
-	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->tx->cq : NULL;
+	struct fi_opx_cq   *cq = (opx_tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_READ, &context) != FI_SUCCESS)) {
 		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READ, 0, 0);
@@ -741,9 +750,9 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	opx_readv_internal(opx_ep, &iov, 1, &hmem_handle, opx_addr, &addr_offset, &key, opx_ep->tx->op_flags,
-			   opx_ep->tx->cq, opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
-			   lock_required, caps, reliability, hfi1_type);
+	opx_readv_internal(opx_ep, &iov, 1, &hmem_handle, opx_addr, &addr_offset, &key, opx_tx->op_flags, opx_tx->cq,
+			   opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps,
+			   reliability, hfi1_type);
 
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 	return FI_SUCCESS;
@@ -789,16 +798,17 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 	}
 
 	assert(src_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(opx_ep, src_addr);
+	const struct fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(opx_ep, src_addr);
+	struct fi_opx_ep_tx	*opx_tx	  = FI_OPX_EP_TX(opx_ep, opx_addr);
 
-	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->tx->cq : NULL;
+	struct fi_opx_cq   *cq = (opx_tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_RMA | FI_READ, &context) != FI_SUCCESS)) {
 		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 		return -FI_ENOMEM;
 	}
 
-	const uint64_t tx_op_flags = opx_ep->tx->op_flags;
+	const uint64_t tx_op_flags = opx_tx->op_flags;
 
 	uint64_t addr_v[8] = {addr_offset, addr_offset, addr_offset, addr_offset,
 			      addr_offset, addr_offset, addr_offset, addr_offset};
@@ -871,7 +881,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 		hmem_iovs[i].device = hmem_device;
 	}
 	opx_readv_internal(opx_ep, hmem_iovs, partial_ndesc, hmem_handle, opx_addr, addr_v, key_v, tx_op_flags,
-			   opx_ep->tx->cq, opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
+			   opx_tx->cq, opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
 			   lock_required, caps, reliability, hfi1_type);
 
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READV, 0, 0);
@@ -918,10 +928,11 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	}
 
 	assert(msg->addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_src_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
+	const struct fi_opx_addr opx_src_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
 	fi_opx_get_daos_av_addr_rank(opx_ep, opx_src_addr);
+	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, opx_src_addr);
 
-	struct fi_opx_cq   *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->tx->cq : NULL;
+	struct fi_opx_cq   *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_tx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, msg->context, cq, FI_RMA | FI_READ, &context) != FI_SUCCESS)) {
 		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);

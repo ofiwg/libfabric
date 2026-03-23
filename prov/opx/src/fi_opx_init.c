@@ -57,11 +57,24 @@
 #include "fi_opx_tid_cache.h"
 #include "opx_hmem_cache.h"
 
-union fi_opx_addr opx_default_addr = {
-	.hfi1_subctxt_rx = 0xffff,
-	.hfi1_unit	 = 0xff,
-	.lid		 = 0xffffff,
-	.unused		 = 0xff,
+struct fi_opx_addr opx_default_addr = {
+	.planes[OPX_PRIMARY_PLANE] =
+		{
+			.hfi1_unit	 = 0xff,
+			.unused		 = 0xff,
+			.hfi1_subctxt_rx = 0xffff,
+			.lid		 = 0xffffff,
+			.gid_hi		 = 0xffffffffffffffffUL,
+		},
+	.planes[1] =
+		{
+			.hfi1_unit	 = 0xff,
+			.unused		 = 0xff,
+			.hfi1_subctxt_rx = 0xffff,
+			.lid		 = 0xffffff,
+			.gid_hi		 = 0xffffffffffffffffUL,
+		},
+	.tx_index = OPX_PRIMARY_PLANE,
 };
 
 static int fi_opx_init;
@@ -185,10 +198,10 @@ static int opx_getinfo_set_pci_attr(int hfi, struct fi_info *info);
 static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const char *service,
 			   const struct fi_info *hints, uint64_t flags, enum fi_progress progress)
 {
-	int		   ret;
-	union fi_opx_addr *addr;
-	uint32_t	   fmt;
-	size_t		   len;
+	int		    ret;
+	struct fi_opx_addr *addr;
+	uint32_t	    fmt;
+	size_t		    len;
 
 	if (!fi) {
 		goto err;
@@ -230,11 +243,11 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 		if (!ofi_str_toaddr(node, &fmt, (void **) &addr, &len) && fmt == FI_ADDR_OPX) {
 			if (flags & FI_SOURCE) {
 				fi->src_addr	= addr;
-				fi->src_addrlen = sizeof(union fi_opx_addr);
+				fi->src_addrlen = sizeof(struct fi_opx_addr);
 				FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC, "'%s' is taken as src_addr.\n", node);
 			} else {
 				fi->dest_addr	 = addr;
-				fi->dest_addrlen = sizeof(union fi_opx_addr);
+				fi->dest_addrlen = sizeof(struct fi_opx_addr);
 				FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC, "'%s' is taken as dest_addr.\n", node);
 			}
 			node = NULL;
@@ -257,7 +270,7 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "Failed to alloc memory.\n");
 				goto err;
 			}
-			fi->src_addrlen = sizeof(union fi_opx_addr);
+			fi->src_addrlen = sizeof(struct fi_opx_addr);
 		}
 	}
 
@@ -267,7 +280,7 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "Failed to alloc memory.\n");
 			goto err;
 		}
-		fi->src_addrlen = sizeof(union fi_opx_addr);
+		fi->src_addrlen = sizeof(struct fi_opx_addr);
 	}
 
 	if ((hints != NULL) && (hints->dest_addr != NULL) &&
@@ -297,7 +310,7 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "Failed to alloc memory.\n");
 				goto err;
 			}
-			fi->dest_addrlen = sizeof(union fi_opx_addr);
+			fi->dest_addrlen = sizeof(struct fi_opx_addr);
 		}
 	}
 
