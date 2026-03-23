@@ -192,7 +192,7 @@ err_close:
  *
  * @param	device[in,out]		pointer to an efa_device struct
  */
-static void efa_device_destruct(struct efa_device *device)
+void efa_device_destruct(struct efa_device *device)
 {
 	int err;
 
