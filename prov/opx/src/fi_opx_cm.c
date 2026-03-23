@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -55,7 +55,7 @@ int fi_opx_getname(fid_t fid, void *addr, size_t *addrlen)
 		opx_ep = container_of(fid, struct fi_opx_ep, ep_fid);
 
 		if (!opx_ep->daos_info.hfi_rank_enabled) {
-			*addrlen = sizeof(union fi_opx_addr);
+			*addrlen = sizeof(struct fi_opx_addr);
 			if (len > 0) {
 				if (!addr) {
 					errno = FI_EINVAL;
@@ -73,7 +73,7 @@ int fi_opx_getname(fid_t fid, void *addr, size_t *addrlen)
 				}
 
 				struct fi_opx_extended_addr *ext_addr = (struct fi_opx_extended_addr *) addr;
-				memcpy(&ext_addr->addr, (void *) &opx_ep->rx->self, sizeof(union fi_opx_addr));
+				memcpy(&ext_addr->addr, (void *) &opx_ep->rx->self, sizeof(struct fi_opx_addr));
 				ext_addr->rank	    = opx_ep->hfi->daos_info.rank;
 				ext_addr->rank_inst = opx_ep->hfi->daos_info.rank_inst;
 			}
@@ -85,7 +85,7 @@ int fi_opx_getname(fid_t fid, void *addr, size_t *addrlen)
 		}
 	} break;
 	case FI_CLASS_SEP:
-		*addrlen = sizeof(union fi_opx_addr);
+		*addrlen = sizeof(struct fi_opx_addr);
 		if (len > 0) {
 			if (!addr) {
 				errno = FI_EINVAL;
@@ -103,15 +103,18 @@ int fi_opx_getname(fid_t fid, void *addr, size_t *addrlen)
 				return -errno;
 			}
 
-			union fi_opx_addr tmp;
-			tmp.raw64b	    = 0;
-			tmp.lid		    = htons(opx_sep->ep[i]->hfi->lid);
-			tmp.hfi1_subctxt_rx = opx_sep->ep[i]->rx->self.hfi1_subctxt_rx;
-			tmp.hfi1_unit	    = opx_sep->ep[i]->rx->self.hfi1_unit;
+			struct fi_opx_addr tmp		  = {0};
+			tmp.planes[OPX_PRIMARY_PLANE].lid = htons(opx_sep->ep[i]->hfi->lid);
+			tmp.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx =
+				opx_sep->ep[i]->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx;
+			tmp.planes[OPX_PRIMARY_PLANE].hfi1_unit =
+				opx_sep->ep[i]->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_unit;
+			tmp.planes[OPX_PRIMARY_PLANE].gid_hi = opx_sep->ep[i]->hfi->gid_hi;
+			tmp.tx_index			     = OPX_PRIMARY_PLANE;
 			memcpy(addr, (void *) &tmp, MIN(len, *addrlen));
 		}
 
-		if (len < sizeof(union fi_opx_addr)) {
+		if (len < sizeof(struct fi_opx_addr)) {
 			errno = FI_ETOOSMALL;
 			return -errno;
 		}

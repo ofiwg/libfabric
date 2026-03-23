@@ -80,7 +80,7 @@ static int fi_opx_close_av(fid_t fid)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "av closed\n");
 	return 0;
 }
-ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
+ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, struct fi_opx_addr *peers,
 			     struct fi_opx_extended_addr *peers_ext);
 /*
  * The 'addr' is a representation of the address - not a string
@@ -99,9 +99,9 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 		return -errno;
 	}
 
-	uint32_t	   n, i, t;
-	union fi_opx_addr *input       = (union fi_opx_addr *) addr;
-	const unsigned	   ep_tx_count = opx_av->ep_tx_count;
+	uint32_t	    n, i, t;
+	struct fi_opx_addr *input	= (struct fi_opx_addr *) addr;
+	const unsigned	    ep_tx_count = opx_av->ep_tx_count;
 
 	switch (opx_av->type) {
 	case FI_AV_TABLE:
@@ -117,42 +117,77 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 		} else {
 			if (opx_av->table_addr == NULL) {
 				opx_av->table_count = count;
-				if (posix_memalign((void **) &opx_av->table_addr, sizeof(union fi_opx_addr),
-						   sizeof(union fi_opx_addr) * opx_av->table_count)) {
+				if (posix_memalign((void **) &opx_av->table_addr, FI_OPX_CACHE_LINE_SIZE,
+						   sizeof(struct fi_opx_addr) * opx_av->table_count)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
 					errno = FI_ENOMEM;
 					return -errno;
 				}
 			}
 			if ((count + opx_av->addr_count) > opx_av->table_count) {
-				union fi_opx_addr *opx_addr = opx_av->table_addr;
+				struct fi_opx_addr *opx_addr = opx_av->table_addr;
 				assert(opx_addr != NULL);   /* realloc - can't be null */
 				assert(opx_av->addr_count); /* relloc - can't be zero */
 				opx_av->table_count = count + opx_av->table_count;
-				if (posix_memalign((void **) &opx_av->table_addr, sizeof(union fi_opx_addr),
-						   sizeof(union fi_opx_addr) * opx_av->table_count)) {
+				if (posix_memalign((void **) &opx_av->table_addr, FI_OPX_CACHE_LINE_SIZE,
+						   sizeof(struct fi_opx_addr) * opx_av->table_count)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
 					errno = FI_ENOMEM;
 					return -errno;
 				}
-				memcpy(opx_av->table_addr, opx_addr, sizeof(union fi_opx_addr) * opx_av->addr_count);
+				memcpy(opx_av->table_addr, opx_addr, sizeof(struct fi_opx_addr) * opx_av->addr_count);
 				free(opx_addr);
 				opx_addr = NULL;
 			}
-			union fi_opx_addr *opx_addr = opx_av->table_addr;
+			struct fi_opx_addr *opx_addr = opx_av->table_addr;
 			/* append <count> to table, starting at <addr_count> */
+			for (int i = 0; i < count; i++) {
+				FI_DBG(fi_opx_global.prov, FI_LOG_AV,
+				       "Adding address to AV table: lid %u, hfi_unit %u, hfi1_subctxt_rx %u\n",
+				       input[i].planes[OPX_PRIMARY_PLANE].lid,
+				       input[i].planes[OPX_PRIMARY_PLANE].hfi1_unit,
+				       input[i].planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
+			}
+
 			for (n = 0, t = opx_av->addr_count; n < count; ++n, ++t) {
 				if (fi_addr != NULL) {
 					fi_addr[n] = t;
 				}
-				opx_addr[t].fi = input[n].fi;
+				memcpy(&opx_addr[t], &input[n], sizeof(struct fi_opx_addr));
+
+				/* Match remote peer's RX plane gid_hi to a local TX context */
+				int matched = 0;
+				if (opx_av->ep_tx[0] != NULL) {
+					struct fi_opx_ep *ep = opx_av->ep_tx[0];
+					for (int j = 0; j < ep->num_tx_contexts; j++) {
+						if (ep->tx_contexts[j]->gid_hi ==
+						    input[n].planes[OPX_PRIMARY_PLANE].gid_hi) {
+							opx_addr[t].tx_index = j;
+							matched		     = 1;
+							FI_DBG(fi_opx_global.prov, FI_LOG_AV,
+							       "Matched remote gid_hi 0x%016lx to local TX context %d\n",
+							       input[n].planes[OPX_PRIMARY_PLANE].gid_hi, j);
+							break;
+						}
+					}
+					if (!matched) {
+						FI_WARN(fi_opx_global.prov, FI_LOG_AV,
+							"No local TX context matches remote peer gid_hi 0x%016lx (lid 0x%x)\n",
+							input[n].planes[OPX_PRIMARY_PLANE].gid_hi,
+							input[n].planes[OPX_PRIMARY_PLANE].lid);
+						errno = FI_EINVAL;
+						return -errno;
+					}
+				} else {
+					opx_addr[t].tx_index = OPX_PRIMARY_PLANE;
+				}
 			}
 
 			struct fi_opx_extended_addr *output_ext = NULL;
 			if ((opx_av->type == FI_AV_MAP) &&
 			    (opx_av->ep_tx[0] != NULL && opx_av->ep_tx[0]->daos_info.hfi_rank_enabled)) {
 				struct fi_opx_extended_addr *input_ext = (struct fi_opx_extended_addr *) addr;
-				if (posix_memalign((void **) &output_ext, 32 /*sizeof(struct fi_opx_extended_addr)*/,
+				if (posix_memalign((void **) &output_ext, FI_OPX_CACHE_LINE_SIZE,
 						   sizeof(struct fi_opx_extended_addr) * count)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
 					errno = FI_ENOMEM;
@@ -308,9 +343,9 @@ static int fi_opx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr, si
 	struct fi_opx_av *opx_av = container_of(av, struct fi_opx_av, av_fid);
 
 	assert(opx_av->table_addr != NULL);
-	memcpy(addr, (void *) &opx_av->table_addr[fi_addr], MIN(sizeof(union fi_opx_addr), *addrlen));
+	memcpy(addr, (void *) &opx_av->table_addr[fi_addr], MIN(sizeof(struct fi_opx_addr), *addrlen));
 
-	*addrlen = sizeof(union fi_opx_addr);
+	*addrlen = sizeof(struct fi_opx_addr);
 
 	return 0;
 }
@@ -327,16 +362,18 @@ static const char *fi_opx_av_straddr(struct fid_av *av, const void *addr, char *
 	int		  n;
 
 	if (opx_av->ep_tx[0] == NULL || !opx_av->ep_tx[0]->daos_info.hfi_rank_enabled) {
-		union fi_opx_addr *opx_addr = (union fi_opx_addr *) addr;
+		struct fi_opx_addr *opx_addr = (struct fi_opx_addr *) addr;
 		/* Parse address with standard address format */
-		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%04x.%02x", opx_addr->lid, opx_addr->hfi1_subctxt_rx,
-				 opx_addr->hfi1_unit);
+		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%04x.%02x", opx_addr->planes[OPX_PRIMARY_PLANE].lid,
+				 opx_addr->planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+				 opx_addr->planes[OPX_PRIMARY_PLANE].hfi1_unit);
 	} else {
 		struct fi_opx_extended_addr *opx_addr = (struct fi_opx_extended_addr *) addr;
 		/* Parse address with extended address format - FI_ADDRESS.inst:rank*/
-		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%04x.%02x.%04x:%d", opx_addr->addr.lid,
-				 opx_addr->addr.hfi1_subctxt_rx, opx_addr->addr.hfi1_unit, opx_addr->rank_inst,
-				 opx_addr->rank);
+		n = 1 +
+		    snprintf(tmp, sizeof(tmp), "%08x.%04x.%02x.%04x:%d", opx_addr->addr.planes[OPX_PRIMARY_PLANE].lid,
+			     opx_addr->addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+			     opx_addr->addr.planes[OPX_PRIMARY_PLANE].hfi1_unit, opx_addr->rank_inst, opx_addr->rank);
 	}
 
 	memcpy(buf, tmp, MIN(n, *len));
