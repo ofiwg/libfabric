@@ -1192,6 +1192,7 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_pke *dc_pkt_entry, *receipt_pkt_entry;
+	struct efa_rdm_receipt_hdr *receipt_hdr;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -1218,6 +1219,9 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 	assert_non_null(receipt_pkt_entry);
 	receipt_pkt_entry->ope = txe;
 	receipt_pkt_entry->ep = efa_rdm_ep;
+	/* Set tx_id so efa_rdm_pke_handle_receipt_recv can look up the txe */
+	receipt_hdr = efa_rdm_pke_get_receipt_hdr(receipt_pkt_entry);
+	receipt_hdr->tx_id = txe->tx_id;
 
 	/* Verify TXE is not ready for release initially */
 	assert_false(efa_rdm_txe_dc_ready_for_release(txe));
