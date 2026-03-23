@@ -651,12 +651,16 @@ int efa_get_user_info(uint32_t version, const char *node,
 		/* On input to fi_getinfo, a user may set this to an opened
 		 * fabric/domain instance to restrict output to the given fabric/domain. */
 		ret = efa_user_info_check_fabric_object(hints, dupinfo, prov_info);
-		if (ret)
+		if (ret) {
+			fi_freeinfo(dupinfo);
 			continue;
+		}
 
 		ret = efa_user_info_check_domain_object(hints, dupinfo);
-		if (ret)
+		if (ret) {
+			fi_freeinfo(dupinfo);
 			continue;
+		}
 
 		if (!dupinfo->fabric_attr->fabric && !dupinfo->domain_attr->domain)
 			util_lookup_existing_fabric_domain(&efa_util_prov, hints, &dupinfo);
