@@ -204,11 +204,12 @@ OPX_COMPILE_TIME_ASSERT(!(sizeof(struct fi_opx_hfi1_sdma_replay_work_entry) & 7)
 
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc);
 void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc);
-void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, int writev_rc, struct iovec *iovs, const int num_iovs,
+void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_context *hfi,
+				    struct fi_opx_ep_tx *opx_tx, int writev_rc, struct iovec *iovs, const int num_iovs,
 				    const char *file, const char *func, const int line);
 int  fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *work);
-void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep);
-void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep);
+void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx);
+void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx);
 
 __OPX_FORCE_INLINE__
 bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep, uint64_t total_bytes, const uint32_t opcode,
@@ -224,14 +225,15 @@ bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep, uint64_t total_bytes, c
 }
 
 __OPX_FORCE_INLINE__
-uint64_t fi_opx_hfi1_sdma_queue_has_room(struct fi_opx_ep *opx_ep, const uint64_t iovs_needed)
+uint64_t fi_opx_hfi1_sdma_queue_has_room(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx,
+					 const uint64_t iovs_needed)
 {
-	if (opx_ep->tx->sdma_request_queue.num_reqs >= opx_ep->tx->sdma_request_queue.slots_avail) {
+	if (opx_tx->sdma_request_queue.num_reqs >= opx_tx->sdma_request_queue.slots_avail) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_fill_index);
 		return 0;
 	}
 
-	if ((opx_ep->tx->sdma_request_queue.num_iovs + iovs_needed) > opx_ep->tx->sdma_request_queue.max_iovs) {
+	if ((opx_tx->sdma_request_queue.num_iovs + iovs_needed) > opx_tx->sdma_request_queue.max_iovs) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_iov_limit);
 		return 0;
 	}

@@ -109,7 +109,7 @@ void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work *work_state
 
 __OPX_FORCE_INLINE__
 void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, const struct fi_opx_hmem_iov *buf_iov,
-			       const union fi_opx_addr opx_dst_addr, const uint64_t addr_offset, const uint64_t key,
+			       const struct fi_opx_addr opx_dst_addr, const uint64_t addr_offset, const uint64_t key,
 			       const struct fi_opx_hmem_iov *fetch_iov, const struct fi_opx_hmem_iov *compare_iov,
 			       const uint64_t tx_op_flags, const struct fi_opx_cq *opx_cq,
 			       const struct fi_opx_cntr *opx_cntr, struct fi_opx_completion_counter *cc,
@@ -117,6 +117,8 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 			       const enum ofi_reliability_kind reliability, const uint64_t is_hmem,
 			       const uint64_t is_shm, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
+	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, opx_dst_addr);
+
 	if (tx_op_flags & FI_INJECT) {
 		assert((tx_op_flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)) !=
 		       (FI_COMPLETION | FI_TRANSMIT_COMPLETE));
@@ -128,7 +130,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	assert(fetch_iov);
 	assert(fetch_iov->buf);
 	union fi_opx_hfi1_deferred_work *work =
-		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
+		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_tx->work_pending_pool);
 	assert(work);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 
@@ -138,20 +140,20 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	params->work_elem.complete	    = false;
 	params->opx_ep			    = opx_ep;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(opx_dst_addr.lid);
+		params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid);
 	} else {
-		params->lrh_dlid = opx_dst_addr.lid;
+		params->lrh_dlid = opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid;
 	}
-	params->pbc_dlid	   = OPX_PBC_DLID(opx_dst_addr.lid, hfi1_type);
-	params->slid		   = opx_dst_addr.lid;
-	params->dt		   = dt == FI_VOID ? FI_VOID - 1 : dt;
-	params->op		   = op == FI_NOOP ? FI_NOOP - 1 : op;
-	params->origin_rx	   = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
-	params->key		   = key;
-	params->niov		   = 1;
-	params->iov[0].bytes	   = buf_iov->len;
-	params->iov[0].rbuf	   = addr_offset;
-	params->iov[0].sbuf	   = buf_iov->buf;
+	params->pbc_dlid     = OPX_PBC_DLID(opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
+	params->slid	     = opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid;
+	params->dt	     = dt == FI_VOID ? FI_VOID - 1 : dt;
+	params->op	     = op == FI_NOOP ? FI_NOOP - 1 : op;
+	params->origin_rx    = opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx; // dest_rx, also used for bth_rx
+	params->key	     = key;
+	params->niov	     = 1;
+	params->iov[0].bytes = buf_iov->len;
+	params->iov[0].rbuf  = addr_offset;
+	params->iov[0].sbuf  = buf_iov->buf;
 	params->iov[0].rbuf_iface  = FI_HMEM_SYSTEM;
 	params->iov[0].sbuf_iface  = buf_iov->iface;
 	params->iov[0].rbuf_device = 0;
@@ -169,8 +171,10 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	params->origin_byte_counter	= NULL;
 	params->payload_bytes_for_iovec = sizeof(struct fi_opx_hfi1_dput_fetch);
 	params->fetch_vaddr		= (void *) fetch_iov->buf;
-	params->target_hfi_unit		= opx_dst_addr.hfi1_unit;
-	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_shm, opx_dst_addr.hfi1_subctxt_rx);
+	params->target_hfi_unit		= opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_unit;
+	params->tx_index		= opx_dst_addr.tx_index;
+	params->u32_extended_rx		= fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_shm,
+									opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
 
 	if (compare_iov) {
 		params->compare_vaddr = (void *) compare_iov->buf;
@@ -182,7 +186,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 		params->compare_iov.device = 0ul;
 	}
 
-	struct fi_opx_rma_request *rma_request = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
+	struct fi_opx_rma_request *rma_request = ofi_buf_alloc(opx_tx->rma_request_pool);
 	assert(rma_request != NULL);
 	rma_request->cc			  = cc;
 	rma_request->hmem_iface		  = fetch_iov->iface;
@@ -202,7 +206,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 	}
 	assert(rc == -FI_EAGAIN);
 	if (params->work_elem.work_type == OPX_WORK_TYPE_LAST) {
-		slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+		slist_insert_tail(&work->work_elem.slist_entry, &opx_tx->work_pending_completion);
 		return;
 	}
 
@@ -235,18 +239,20 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
-	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_tx->work_pending[params->work_elem.work_type]);
 }
 
 __OPX_FORCE_INLINE__
 size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t count,
-			      const union fi_opx_addr opx_dst_addr, uint64_t addr, uint64_t key,
+			      const struct fi_opx_addr opx_dst_addr, uint64_t addr, uint64_t key,
 			      enum fi_datatype datatype, enum fi_op op, struct fi_opx_completion_counter *cc,
 			      const unsigned is_fetch, const void *fetch_vaddr, const unsigned is_compare,
 			      const void *compare_vaddr, const uint64_t tx_op_flags, const int lock_required,
 			      const uint64_t caps, const enum ofi_reliability_kind reliability,
 			      const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
+	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, opx_dst_addr);
+
 	assert((is_fetch == 0) || (is_fetch == 1));
 	assert((is_compare == 0) || (is_compare == 1));
 
@@ -261,7 +267,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 		opx_hmem_iov_init(fetch_vaddr, buf_len, NULL, &fetch_iov, &hmem_handle);
 
 		cc->cntr = opx_ep->read_cntr;
-		opx_readv_internal(opx_ep, &fetch_iov, 1, &hmem_handle, opx_dst_addr, &addr, &key, opx_ep->tx->op_flags,
+		opx_readv_internal(opx_ep, &fetch_iov, 1, &hmem_handle, opx_dst_addr, &addr, &key, opx_tx->op_flags,
 				   opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype, op, FI_OPX_HFI_DPUT_OPCODE_GET,
 				   lock_required, caps, reliability, hfi1_type);
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -296,7 +302,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 						       opx_ep->debug_counters.hmem.rma_atomic_fetch_hfi);
 
 			fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH, &buf_iov, opx_dst_addr,
-						  addr, key, &fetch_iov, NULL, opx_ep->tx->op_flags, opx_ep->rx->cq,
+						  addr, key, &fetch_iov, NULL, opx_tx->op_flags, opx_ep->rx->cq,
 						  opx_ep->read_cntr, cc, datatype, op, lock_required, caps, reliability,
 						  is_hmem, is_shm, hfi1_type, ctx_sharing);
 
@@ -312,10 +318,9 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 						       opx_ep->debug_counters.hmem.rma_atomic_cmp_fetch_hfi);
 
 			fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH, &buf_iov,
-						  opx_dst_addr, addr, key, &fetch_iov, &compare_iov,
-						  opx_ep->tx->op_flags, opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype,
-						  op, lock_required, caps, reliability, is_hmem, is_shm, hfi1_type,
-						  ctx_sharing);
+						  opx_dst_addr, addr, key, &fetch_iov, &compare_iov, opx_tx->op_flags,
+						  opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype, op, lock_required,
+						  caps, reliability, is_hmem, is_shm, hfi1_type, ctx_sharing);
 		}
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC %s (end)\n",
 			 is_compare ? "CAS" : "FETCH");
@@ -336,7 +341,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 	uint64_t	       is_hmem = opx_hmem_iov_init(buf, buf_len, NULL, &buf_iov, &handle);
 
 	opx_write_internal(opx_ep, &buf_iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
-			   opx_ep->tx->op_flags, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
+			   opx_tx->op_flags, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC WRITE (end)\n");
 	OPX_TRACE_ATOMIC_END_SUCCESS(OPX_TRACE_EVENT_ATOMIC_WRITE, addr, buf_len);
 
@@ -357,9 +362,10 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 		abort();
 	}
 
-	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(opx_ep, dst_addr);
+	const struct fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(opx_ep, dst_addr);
+	struct fi_opx_ep_tx	*opx_tx	  = FI_OPX_EP_TX(opx_ep, opx_addr);
 
-	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
+	struct fi_opx_cq   *cq = (opx_tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_ATOMIC | FI_WRITE, &context) != FI_SUCCESS)) {
 		return -FI_ENOMEM;
@@ -383,7 +389,7 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 
 	size_t xfer __attribute__((unused));
 	xfer = fi_opx_atomic_internal(opx_ep, buf, count, opx_addr, addr, key, datatype, op, cc, 0, NULL, 0, NULL,
-				      opx_ep->tx->op_flags, lock_required, caps, reliability, hfi1_type, ctx_sharing);
+				      opx_tx->op_flags, lock_required, caps, reliability, hfi1_type, ctx_sharing);
 	assert(xfer == count);
 
 	return 0;
@@ -412,7 +418,7 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep, const struct fi_msg_at
 	}
 
 	assert(msg->addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
+	const struct fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
 
 	struct fi_opx_cq   *cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
 	struct opx_context *context;
@@ -510,7 +516,7 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	}
 
 	assert(msg->addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
+	const struct fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
 
 	const size_t dtsize = sizeofdt(datatype);
 
@@ -660,7 +666,7 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	}
 
 	assert(msg->addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
+	const struct fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, msg->addr);
 
 	const size_t dtsize = sizeofdt(datatype);
 
@@ -784,9 +790,10 @@ ssize_t fi_opx_fetch_compare_atomic_generic(struct fid_ep *ep, const void *buf, 
 		abort();
 	}
 
-	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
+	const struct fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
+	struct fi_opx_ep_tx	*opx_tx	  = FI_OPX_EP_TX(opx_ep, opx_addr);
 
-	struct fi_opx_cq *cq = (opx_ep->tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
+	struct fi_opx_cq   *cq = (opx_tx->op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
 	struct opx_context *context;
 	if (OFI_UNLIKELY(opx_rma_get_context(opx_ep, user_context, cq, FI_ATOMIC | FI_WRITE, &context) != FI_SUCCESS)) {
 		return -FI_ENOMEM;
@@ -810,7 +817,7 @@ ssize_t fi_opx_fetch_compare_atomic_generic(struct fid_ep *ep, const void *buf, 
 
 	size_t xfer __attribute__((unused));
 	xfer = fi_opx_atomic_internal(opx_ep, buf, count, opx_addr, addr, key, datatype, op, cc, 1, result,
-				      compare != NULL, compare, opx_ep->tx->op_flags, lock_required, caps, reliability,
+				      compare != NULL, compare, opx_tx->op_flags, lock_required, caps, reliability,
 				      hfi1_type, ctx_sharing);
 	assert(xfer == count);
 
@@ -858,7 +865,8 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 		abort();
 	}
 	assert(dest_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
+	const struct fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
+	struct fi_opx_ep_tx	*opx_tx	      = FI_OPX_EP_TX(opx_ep, opx_dst_addr);
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	if (OFI_UNLIKELY(cc == NULL)) {
@@ -883,8 +891,7 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 		(const uint64_t) opx_hmem_iov_init(buf, count * sizeofdt(datatype), NULL, &iov, &handle);
 
 	opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
-			   opx_ep->tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability,
-			   hfi1_type);
+			   opx_tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		 "===================================== ATOMIC INJECT WRITE (end)\n");

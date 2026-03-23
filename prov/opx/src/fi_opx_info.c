@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -110,8 +110,8 @@ void fi_opx_set_info(struct fi_info *fi, enum fi_progress progress)
 	fi->mode = FI_OPX_DEFAULT_MODE;
 
 	fi->addr_format	 = FI_ADDR_OPX;
-	fi->src_addrlen	 = sizeof(union fi_opx_addr);
-	fi->dest_addrlen = sizeof(union fi_opx_addr);
+	fi->src_addrlen	 = sizeof(struct fi_opx_addr);
+	fi->dest_addrlen = sizeof(struct fi_opx_addr);
 	fi->dest_addr	 = NULL;
 	fi->src_addr	 = mem_dup(&opx_default_addr, sizeof(opx_default_addr));
 	fi->next	 = NULL;

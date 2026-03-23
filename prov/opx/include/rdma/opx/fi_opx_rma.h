@@ -63,7 +63,7 @@ int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work);
 
 __OPX_FORCE_INLINE__
 void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *iov, const size_t niov,
-			const uint64_t *hmem_handle, const union fi_opx_addr opx_target_addr,
+			const uint64_t *hmem_handle, const struct fi_opx_addr opx_target_addr,
 			const uint64_t *addr_offset, const uint64_t *key, const uint64_t tx_op_flags,
 			const struct fi_opx_cq *opx_cq, const struct fi_opx_cntr *opx_cntr,
 			struct fi_opx_completion_counter *cc, enum fi_datatype dt, enum fi_op op, const uint32_t opcode,
@@ -71,9 +71,10 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 			const enum opx_hfi1_type hfi1_type)
 {
 	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_READV_INTERNAL, iov->len, 0);
+	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, opx_target_addr);
 
 	union fi_opx_hfi1_deferred_work *work =
-		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
+		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_tx->work_pending_pool);
 	assert(work != NULL);
 	struct fi_opx_hfi1_rx_readv_params *params = &work->readv;
 	params->opx_ep				   = opx_ep;
@@ -85,9 +86,9 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	params->opx_target_addr = opx_target_addr;
 	params->key		= (key == NULL) ? -1 : *key;
 	params->cc		= cc;
-	params->dest_subctxt_rx = opx_target_addr.hfi1_subctxt_rx;
+	params->dest_subctxt_rx = opx_target_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx;
 	params->bth_subctxt_rx	= params->dest_subctxt_rx << OPX_BTH_SUBCTXT_RX_SHIFT;
-	params->pbc_dlid	= OPX_PBC_DLID(opx_target_addr.lid, hfi1_type);
+	params->pbc_dlid	= OPX_PBC_DLID(opx_target_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		params->pbc_dws = 2 + /* pbc */
 				  2 + /* lrh */
@@ -97,7 +98,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->lrh_dws =
 			htons(params->pbc_dws - 2 +
 			      1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
-		params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(opx_target_addr.lid);
+		params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(opx_target_addr.planes[OPX_PRIMARY_PLANE].lid);
 	} else {
 		params->pbc_dws = 2 +			       /* pbc */
 				  4 +			       /* lrh uncompressed */
@@ -106,7 +107,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 				  16 +			       /* one "struct opx_hfi1_dput_iov" */
 				  2;			       /* ICRC/tail */
 		params->lrh_dws	 = (params->pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
-		params->lrh_dlid = opx_target_addr.lid;
+		params->lrh_dlid = opx_target_addr.planes[OPX_PRIMARY_PLANE].lid;
 	}
 	params->is_shm	    = fi_opx_hfi1_tx_is_shm(opx_ep, opx_target_addr, caps);
 	params->reliability = reliability;
@@ -128,7 +129,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	params->dput_iov.sbuf_device = 0;		   // TBD by remote node
 	params->dput_iov.sbuf_handle = OPX_HMEM_NO_HANDLE; // TBD by remote node
 
-	params->rma_request = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
+	params->rma_request = ofi_buf_alloc(opx_tx->rma_request_pool);
 	assert(params->rma_request != NULL);
 	params->rma_request->cc		 = cc;
 	params->rma_request->hmem_iface	 = iov->iface;
@@ -165,41 +166,43 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
-	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[params->work_elem.work_type]);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_tx->work_pending[params->work_elem.work_type]);
 
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READV_INTERNAL, iov->len, 0);
 }
 
 __OPX_FORCE_INLINE__
 void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *iov, const size_t niov,
-			const uint64_t data, const union fi_opx_addr opx_dst_addr, uint64_t addr_offset,
+			const uint64_t data, const struct fi_opx_addr opx_dst_addr, uint64_t addr_offset,
 			const uint64_t key, struct fi_opx_completion_counter *cc, enum fi_datatype dt, enum fi_op op,
 			const uint64_t tx_op_flags, const uint64_t is_hmem, const uint64_t handle, int lock_required,
 			const uint64_t caps, const enum ofi_reliability_kind reliability,
 			const enum opx_hfi1_type hfi1_type)
 {
 	OPX_TRACE_RMA_BEGIN(OPX_TRACE_EVENT_RMA_WRITE_INTERNAL, iov->len, 0);
+	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, opx_dst_addr);
 	assert(niov == 1); // TODO, support something ... bigger
 	assert(op == FI_NOOP || op < OFI_ATOMIC_OP_LAST);
 	assert(dt == FI_VOID || dt < OFI_DATATYPE_LAST);
 
 	union fi_opx_hfi1_deferred_work *work =
-		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
+		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_tx->work_pending_pool);
 	assert(work != NULL);
-	const uint64_t is_shm	       = fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr, caps);
-	uint32_t       u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, opx_dst_addr.hfi1_subctxt_rx);
+	const uint64_t is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr, caps);
+	uint32_t       u32_extended_rx =
+		fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
 
 	uint64_t lrh_dlid;
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(opx_dst_addr.lid);
+		lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid);
 	} else {
-		lrh_dlid = opx_dst_addr.lid;
+		lrh_dlid = opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid;
 	}
-	uint64_t slid	  = opx_dst_addr.lid;
-	uint64_t pbc_dlid = OPX_PBC_DLID(opx_dst_addr.lid, hfi1_type);
+	uint64_t slid	  = opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid;
+	uint64_t pbc_dlid = OPX_PBC_DLID(opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 
 	if (tx_op_flags & FI_REMOTE_CQ_DATA) {
-		struct fi_opx_rma_request *rma_req = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
+		struct fi_opx_rma_request *rma_req = ofi_buf_alloc(opx_tx->rma_request_pool);
 		assert(rma_req != NULL);
 
 		struct opx_hfi1_rma_rts_params *params = &work->rma_rts;
@@ -239,12 +242,13 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 
 		params->u32_extended_rx = u32_extended_rx;
 		params->reliability	= reliability;
-		params->dest_rx		= opx_dst_addr.hfi1_subctxt_rx;
+		params->dest_rx		= opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx;
 		params->is_shm		= is_shm;
 		params->opcode		= FI_OPX_HFI_BTH_OPCODE_RMA_RTS;
 		params->dt		= dt == FI_VOID ? FI_VOID - 1 : dt;
 		params->op		= op == FI_NOOP ? FI_NOOP - 1 : op;
-		params->target_hfi_unit = opx_dst_addr.hfi1_unit;
+		params->target_hfi_unit = opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_unit;
+		params->tx_index	= opx_dst_addr.tx_index;
 
 	} else { // else we don't have CQ_DATA and can just send the DPUT PUT
 
@@ -258,7 +262,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->lrh_dlid		    = lrh_dlid;
 		params->pbc_dlid		    = pbc_dlid;
 		params->slid			    = slid;
-		params->origin_rx		    = opx_dst_addr.hfi1_subctxt_rx;
+		params->origin_rx		    = opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx;
 		params->dt			    = dt == FI_VOID ? FI_VOID - 1 : dt;
 		params->op			    = op == FI_NOOP ? FI_NOOP - 1 : op;
 		params->key			    = key;
@@ -276,15 +280,17 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->dput_iov		    = &params->iov[0];
 		params->opcode			    = FI_OPX_HFI_DPUT_OPCODE_PUT;
 		params->is_shm			    = is_shm;
-		params->origin_rx		    = opx_dst_addr.hfi1_subctxt_rx; // dest_rx, also used for bth_rx
-		params->u32_extended_rx		    = u32_extended_rx;		    // dest_rx, also used for bth_rx
-		params->reliability		    = reliability;
-		params->cur_iov			    = 0;
-		params->bytes_sent		    = 0;
-		params->src_base_addr		    = NULL;
-		params->origin_byte_counter	    = NULL;
-		params->payload_bytes_for_iovec	    = 0;
-		params->target_hfi_unit		    = opx_dst_addr.hfi1_unit;
+		params->origin_rx =
+			opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx; // dest_rx, also used for bth_rx
+		params->u32_extended_rx		= u32_extended_rx;		// dest_rx, also used for bth_rx
+		params->reliability		= reliability;
+		params->cur_iov			= 0;
+		params->bytes_sent		= 0;
+		params->src_base_addr		= NULL;
+		params->origin_byte_counter	= NULL;
+		params->payload_bytes_for_iovec = 0;
+		params->target_hfi_unit		= opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_unit;
+		params->tx_index		= opx_dst_addr.tx_index;
 
 		fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem, hfi1_type);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_shm, opx_ep->debug_counters.hmem.rma_write_intranode);
@@ -300,7 +306,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	}
 	assert(rc == -FI_EAGAIN);
 	if (work->work_elem.work_type == OPX_WORK_TYPE_LAST) {
-		slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+		slist_insert_tail(&work->work_elem.slist_entry, &opx_tx->work_pending_completion);
 		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITE_INTERNAL, iov->len, 0);
 		return;
 	}
@@ -320,7 +326,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
-	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[work->work_elem.work_type]);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_tx->work_pending[work->work_elem.work_type]);
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITE_INTERNAL, iov->len, 0);
 }
 

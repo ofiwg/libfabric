@@ -81,7 +81,7 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 	}
 
 	union opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
-		&opx_ep->tx->shm, params->target_hfi_unit, params->origin_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
+		&opx_ep->shm, params->target_hfi_unit, params->origin_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
 		params->u32_extended_rx, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
@@ -117,7 +117,7 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 		hdr->qw_9B[6] = 0;
 	}
 
-	opx_shm_tx_advance(&opx_ep->tx->shm, (void *) hdr, pos);
+	opx_shm_tx_advance(&opx_ep->shm, (void *) hdr, pos);
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 	return FI_SUCCESS;
 }

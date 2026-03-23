@@ -80,6 +80,7 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 /* #define IS_MATCH_DEBUG */
 
 #define FI_OPX_EP_AV_ADDR(ep, addr) ep->tx->av_addr[addr]
+#define FI_OPX_EP_TX(opx_ep, addr)  (opx_ep->tx_contexts[(addr).tx_index])
 
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
@@ -237,14 +238,14 @@ struct fi_opx_ep_tx {
 
 	/* == CACHE LINE 9 == */
 
-	union fi_opx_addr *av_addr; /* only FI_ADDR_TABLE */
-	uint64_t	   op_flags;
-	uint64_t	   caps;
-	uint64_t	   mode;
-	uint64_t	   cq_bind_flags;
-	struct slist	  *cq_err_ptr;
-	struct fi_opx_cq  *cq;
-	struct slist	  *cq_pending_ptr; /* only rendezvous (typically) */
+	struct fi_opx_addr *av_addr; /* only FI_ADDR_TABLE */
+	uint64_t	    op_flags;
+	uint64_t	    caps;
+	uint64_t	    mode;
+	uint64_t	    cq_bind_flags;
+	struct slist	   *cq_err_ptr;
+	struct fi_opx_cq   *cq;
+	struct slist	   *cq_pending_ptr; /* only rendezvous (typically) */
 
 	/* == CACHE LINE 10 == */
 
@@ -273,9 +274,8 @@ struct fi_opx_ep_tx {
 	struct slist	      work_pending[OPX_WORK_TYPE_LAST];
 	ofi_atomic64_t	      ref_cnt;
 	struct opx_spio_ctrl *spio_ctrl;
-	/* struct opx_shm_tx is very large and should go last! */
-	struct opx_shm_tx shm;
-	void		 *mem;
+	struct opx_shm_tx    *shm;
+	void		     *mem;
 
 	/* Multi-plane support: HFI context and plane identifier for this TX context */
 	struct fi_opx_hfi1_context *hfi;
@@ -314,9 +314,9 @@ struct fi_opx_ep_rx {
 	 * NOTE: This cacheline is used when a thread is INITIATING
 	 * receive operations
 	 */
-	uint64_t	   op_flags;
-	union fi_opx_addr *av_addr;
-	uint64_t	   unused_cacheline_0[6];
+	uint64_t	    op_flags;
+	struct fi_opx_addr *av_addr;
+	uint64_t	    unused_cacheline_0[6];
 
 	/*
 	 * NOTE: The following 2 cachelines are shared between the application-facing
@@ -422,14 +422,15 @@ struct fi_opx_ep_rx {
 	uint64_t caps;
 	uint64_t mode;
 	// This is the endpoint's fabric address
-	union fi_opx_addr self;
+	struct fi_opx_addr self;
 
 	struct slist	 *cq_err_ptr;
 	struct fi_opx_cq *cq;
 
 	struct opx_shm_rx shm;
 	void		 *mem;
-	ofi_atomic64_t	  ref_cnt;
+
+	ofi_atomic64_t ref_cnt;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, queue) == FI_OPX_CACHE_LINE_SIZE,
@@ -587,6 +588,8 @@ struct fi_opx_ep {
 	/* Multi-plane: secondary HFI contexts (init/teardown only, not hot-path) */
 	struct fi_opx_hfi1_context *hfi_contexts[OPX_MAX_TX_CONTEXTS];
 
+	struct opx_shm_tx shm;
+
 	/* == CACHE LINE 7+ == */
 #ifdef FLIGHT_RECORDER_ENABLE
 	struct flight_recorder *fr;
@@ -711,21 +714,21 @@ void fi_opx_ep_rx_append_ue_egr(struct fi_opx_ep_rx *const rx, const union opx_h
  */
 
 __OPX_FORCE_INLINE__
-void fi_opx_ep_clear_credit_return(struct fi_opx_ep *opx_ep)
+void fi_opx_ep_clear_credit_return_tx(struct fi_opx_ep_tx *opx_tx)
 {
-	if (OFI_UNLIKELY(opx_ep->tx->force_credit_return)) {
+	if (OFI_UNLIKELY(opx_tx->force_credit_return)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "======================================= Forced a credit return\n");
-		opx_ep->tx->force_credit_return = 0;
+		opx_tx->force_credit_return = 0;
 	}
 }
 
-#define FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep) fi_opx_ep_clear_credit_return(opx_ep)
+#define FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_tx) fi_opx_ep_clear_credit_return_tx(opx_tx)
 
 #include "rdma/opx/fi_opx_fabric_transport.h"
 
 #ifdef OPX_DAOS_DEBUG
-static void fi_opx_dump_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const union fi_opx_addr find_addr,
+static void fi_opx_dump_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const struct fi_opx_addr find_addr,
 					  const char *title)
 {
 	if (opx_ep->daos_info.av_rank_hashmap) {
@@ -735,32 +738,32 @@ static void fi_opx_dump_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const union 
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "%s Dump av_rank_hashmap (rank:%d LID:0x%x fi_addr:0x%08lx)\n", title,
-			     opx_ep->daos_info.rank, find_addr.lid, find_addr.fi);
+			     opx_ep->daos_info.rank, find_addr.planes[OPX_PRIMARY_PLANE].lid, (uint64_t) &find_addr);
 
 		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank)
 		{
 			if (cur_av_rank) {
-				union fi_opx_addr addr;
-				addr.fi = cur_av_rank->fi_addr;
+				struct fi_opx_addr addr;
+				addr = opx_ep->rx->av_addr[cur_av_rank->fi_addr];
 
-				if ((addr.lid == find_addr.lid) && (cur_av_rank->key.rank == opx_ep->daos_info.rank)) {
+				if ((addr.planes[OPX_PRIMARY_PLANE].lid == find_addr.planes[OPX_PRIMARY_PLANE].lid) &&
+				    (cur_av_rank->key.rank == opx_ep->daos_info.rank)) {
 					found = 1;
-					FI_DBG_TRACE(
-						fi_opx_global.prov, FI_LOG_EP_DATA,
-						"Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi_addr:0x%08lx - Found.\n",
-						i++, cur_av_rank->key.rank, addr.lid, addr.fi);
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+						     "Dump av_rank_hashmap[%d] = rank:%d LID:0x%x - Found.\n", i++,
+						     cur_av_rank->key.rank, addr.planes[OPX_PRIMARY_PLANE].lid);
 				} else {
 					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-						     "Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi:0x%08lx.\n", i++,
-						     cur_av_rank->key.rank, addr.lid, addr.fi);
+						     "Dump av_rank_hashmap[%d] = rank:%d LID:0x%x - Not found.\n", i++,
+						     cur_av_rank->key.rank, addr.planes[OPX_PRIMARY_PLANE].lid);
 				}
 			}
 		}
 
 		if (!found) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				     "Dump av_rank_hashmap - rank:%d LID:0x%x fi_addr:0x%08lx - Not found.\n",
-				     opx_ep->daos_info.rank, find_addr.lid, find_addr.fi);
+				     "Dump av_rank_hashmap - rank:%d LID:0x%x - Not found.\n", opx_ep->daos_info.rank,
+				     find_addr.planes[OPX_PRIMARY_PLANE].lid);
 		}
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s Dump av_rank_hashmap (completed)\n\n", title);
 	}
@@ -789,11 +792,11 @@ static struct fi_opx_daos_av_rank *fi_opx_get_daos_av_rank(struct fi_opx_ep *opx
 
 #ifdef IS_MATCH_DEBUG
 	if (av_rank) {
-		union fi_opx_addr addr;
+		struct fi_opx_addr addr;
 
-		addr.fi = av_rank->fi_addr;
+		addr = opx_ep->rx->av_addr[av_rank->fi_addr];
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Found AV rank - rank:%d, LID:0x%x, fi_addr:%08lx.\n",
-			     av_rank->key.rank, addr.lid, addr.fi);
+			     av_rank->key.rank, addr.planes[OPX_PRIMARY_PLANE].lid, av_rank->fi_addr);
 	} else if (opx_ep->daos_info.av_rank_hashmap) {
 		struct fi_opx_daos_av_rank *cur_av_rank = NULL;
 		struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
@@ -805,12 +808,13 @@ static struct fi_opx_daos_av_rank *fi_opx_get_daos_av_rank(struct fi_opx_ep *opx
 		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank)
 		{
 			if (cur_av_rank) {
-				union fi_opx_addr addr;
-				addr.fi = cur_av_rank->fi_addr;
+				struct fi_opx_addr addr;
+				addr = opx_ep->rx->av_addr[cur_av_rank->fi_addr];
 
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					     "GET Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi_addr:0x%08lx\n", i++,
-					     cur_av_rank->key.rank, addr.lid, addr.fi);
+					     cur_av_rank->key.rank, addr.planes[OPX_PRIMARY_PLANE].lid,
+					     cur_av_rank->fi_addr);
 
 				if (cur_av_rank->key.rank == key.rank) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -830,14 +834,20 @@ static struct fi_opx_daos_av_rank *fi_opx_get_daos_av_rank(struct fi_opx_ep *opx
 __OPX_FORCE_INLINE__
 uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint16_t origin_rx,
 				      const uint64_t ignore, const uint64_t target_tag_and_not_ignore,
-				      const uint64_t any_addr, const union fi_opx_addr src_addr,
-				      struct fi_opx_ep *opx_ep, uint32_t rank, uint32_t rank_inst,
-				      const unsigned is_shm)
+				      const uint64_t any_addr, const fi_addr_t src_addr_idx, struct fi_opx_ep *opx_ep,
+				      uint32_t rank, uint32_t rank_inst, const unsigned is_shm)
 {
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
 
+	if (any_addr) {
+		return (origin_tag_and_not_ignore == target_tag_and_not_ignore);
+	}
+
+	const struct fi_opx_addr src_addr = opx_ep->rx->av_addr[src_addr_idx];
+
 	return (origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
-	       ((any_addr) || ((origin_lid == src_addr.lid) && (origin_rx == src_addr.hfi1_subctxt_rx))
+	       ((origin_lid == src_addr.planes[OPX_PRIMARY_PLANE].lid) &&
+			(origin_rx == src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
 #ifdef OPX_DAOS
 		|| (opx_ep->daos_info.hfi_rank_enabled && is_shm && fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst))
 #endif
@@ -858,7 +868,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *o
 
 	const uint64_t ignore			 = context->ignore;
 	const uint64_t target_tag_and_not_ignore = context->tag & ~ignore;
-	const uint64_t any_addr			 = (context->src_addr.fi == FI_ADDR_UNSPEC);
+	const uint64_t any_addr			 = (context->src_addr == FI_ADDR_UNSPEC);
 
 	while (uepkt &&
 	       !fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->subctxt_rx, ignore,
@@ -884,10 +894,16 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 	const uint64_t target_tag_and_not_ignore = target_tag & ~ignore;
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
 
+	if (context->src_addr == FI_ADDR_UNSPEC) {
+		return (origin_tag_and_not_ignore == target_tag_and_not_ignore);
+	}
+
+	const struct fi_opx_addr src_addr = opx_ep->rx->av_addr[context->src_addr];
+
 	const uint64_t answer =
 		((origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
-		 ((context->src_addr.fi == FI_ADDR_UNSPEC) ||
-		  ((slid == context->src_addr.lid) && (hdr->reliability.origin_rx == context->src_addr.hfi1_subctxt_rx))
+		 ((slid == src_addr.planes[OPX_PRIMARY_PLANE].lid) &&
+			  (hdr->reliability.origin_rx == src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
 #ifdef OPX_DAOS
 		  || (opx_ep->daos_info.hfi_rank_enabled && is_shm && fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst))
 #endif
@@ -895,8 +911,9 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 
 #ifdef IS_MATCH_DEBUG
 	fprintf(stderr,
-		"%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx, src_addr.fi = 0x%08lx\n",
-		__FILE__, __func__, __LINE__, context, context->src_addr, context->ignore, context->tag, src_addr.fi);
+		"%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx, src_addr.lid = 0x%x src_addr.hfi1_subctxt_rx = 0x%x\n",
+		__FILE__, __func__, __LINE__, context, context->src_addr, context->ignore, context->tag,
+		src_addr.planes[OPX_PRIMARY_PLANE].lid, src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
 	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		fprintf(stderr,
 			"%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_rx = 0x%x\n",
@@ -2139,7 +2156,7 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_shm, struct fi_opx_ep *o
 	uint32_t segment_index = OPX_SHM_SEGMENT_INDEX(hfi1_unit, rx_id);
 #endif
 
-	struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(&opx_ep->tx->shm, segment_index);
+	struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(&opx_ep->shm, segment_index);
 
 	if (OFI_LIKELY((shm_info != NULL) && (shm_info->fifo_segment != NULL))) {
 		/* Connection already established */
@@ -2159,8 +2176,8 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_shm, struct fi_opx_ep *o
 	snprintf(buffer, sizeof(buffer), OPX_SHM_FILE_NAME_PREFIX_FORMAT, opx_ep->domain->unique_job_key_str, hfi1_unit,
 		 inst);
 
-	return opx_shm_tx_connect(&opx_ep->tx->shm, (const char *const) buffer, segment_index, rx_id,
-				  FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
+	return opx_shm_tx_connect(&opx_ep->shm, (const char *const) buffer, segment_index, rx_id, FI_OPX_SHM_FIFO_SIZE,
+				  FI_OPX_SHM_PACKET_SIZE);
 }
 
 __OPX_FORCE_INLINE__
@@ -3213,107 +3230,77 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 
 #include "rdma/opx/fi_opx_fabric_progress.h"
 
-void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep);
-void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep);
+void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx);
+void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx);
 
 __OPX_FORCE_INLINE__
 void fi_opx_ep_do_pending_sdma_work(struct fi_opx_ep *opx_ep)
 {
-	/* Process pending (sent) SDMA requests to maximize free slots for new requests */
-	if (!slist_empty(&opx_ep->tx->sdma_pending_queue)) {
-		fi_opx_hfi1_poll_sdma_completion(opx_ep);
-		opx_hfi1_sdma_process_pending(opx_ep);
-	} else {
-		/* If no SDMA requests were pending, then the SDMA completion
-		   queue should also not have any outstanding requests */
-		assert(opx_ep->hfi->info.sdma.done_index == opx_ep->hfi->info.sdma.fill_index);
-	}
+	for (int tx_idx = 0; tx_idx < opx_ep->num_tx_contexts; tx_idx++) {
+		struct fi_opx_ep_tx *opx_tx = opx_ep->tx_contexts[tx_idx];
+		assert(opx_tx);
 
-	struct opx_sdma_queue		*sdma_queue	= &opx_ep->tx->sdma_request_queue;
-	struct slist_entry		*sdma_work_prev = NULL;
-	union fi_opx_hfi1_deferred_work *sdma_work =
-		(union fi_opx_hfi1_deferred_work *) opx_ep->tx->work_pending[OPX_WORK_TYPE_SDMA].head;
-
-	uint16_t iovs_left = sdma_queue->max_iovs - sdma_queue->num_iovs;
-	/* Make a single pass through the SDMA work queue, trying each work item
-	   and queuing up SDMA requests. Non-TID work items require a minimum of
-	   2 IOV slots, and TID work items require 3. */
-	while (sdma_work && (sdma_queue->num_reqs < sdma_queue->slots_avail) && (iovs_left > 1)) {
-		struct slist_entry *sdma_work_next = sdma_work->work_elem.slist_entry.next;
-
-		if (OFI_UNLIKELY(iovs_left < 3) && sdma_work->dput.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
-			sdma_work_prev = &sdma_work->work_elem.slist_entry;
-			sdma_work      = (union fi_opx_hfi1_deferred_work *) sdma_work_next;
-			continue;
-		}
-
-		int rc = sdma_work->work_elem.work_fn(sdma_work);
-		if (rc == FI_SUCCESS) {
-			if (sdma_work->work_elem.completion_action) {
-				sdma_work->work_elem.completion_action(sdma_work);
-			}
-			if (sdma_work->work_elem.payload_copy) {
-				OPX_BUF_FREE(sdma_work->work_elem.payload_copy);
-			}
-			slist_remove(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SDMA], &sdma_work->work_elem.slist_entry,
-				     sdma_work_prev);
-			OPX_BUF_FREE(sdma_work);
-		} else if (sdma_work->work_elem.work_type == OPX_WORK_TYPE_LAST) {
-			slist_remove(&opx_ep->tx->work_pending[OPX_WORK_TYPE_SDMA], &sdma_work->work_elem.slist_entry,
-				     sdma_work_prev);
-			/* Move this to the pending completion queue,
-				since there's nothing left to do but wait */
-			slist_insert_tail(&sdma_work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+		if (!slist_empty(&opx_tx->sdma_pending_queue)) {
+			fi_opx_hfi1_poll_sdma_completion(opx_ep, opx_tx);
+			opx_hfi1_sdma_process_pending(opx_ep, opx_tx);
 		} else {
-			sdma_work_prev = &sdma_work->work_elem.slist_entry;
+			assert(opx_tx->hfi->info.sdma.done_index == opx_tx->hfi->info.sdma.fill_index);
 		}
-		sdma_work = (union fi_opx_hfi1_deferred_work *) sdma_work_next;
-		iovs_left = sdma_queue->max_iovs - sdma_queue->num_iovs;
-	}
 
-	/* Process new SDMA requests to egress */
-	if (!slist_empty(&opx_ep->tx->sdma_request_queue.list)) {
-		opx_hfi1_sdma_process_requests(opx_ep);
+		struct opx_sdma_queue		*sdma_queue	= &opx_tx->sdma_request_queue;
+		struct slist_entry		*sdma_work_prev = NULL;
+		union fi_opx_hfi1_deferred_work *sdma_work =
+			(union fi_opx_hfi1_deferred_work *) opx_tx->work_pending[OPX_WORK_TYPE_SDMA].head;
+
+		uint16_t iovs_left = sdma_queue->max_iovs - sdma_queue->num_iovs;
+		while (sdma_work && (sdma_queue->num_reqs < sdma_queue->slots_avail) && (iovs_left > 1)) {
+			struct slist_entry *sdma_work_next = sdma_work->work_elem.slist_entry.next;
+
+			if (OFI_UNLIKELY(iovs_left < 3) && sdma_work->dput.opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) {
+				sdma_work_prev = &sdma_work->work_elem.slist_entry;
+				sdma_work      = (union fi_opx_hfi1_deferred_work *) sdma_work_next;
+				continue;
+			}
+
+			int rc = sdma_work->work_elem.work_fn(sdma_work);
+			if (rc == FI_SUCCESS) {
+				if (sdma_work->work_elem.completion_action) {
+					sdma_work->work_elem.completion_action(sdma_work);
+				}
+				if (sdma_work->work_elem.payload_copy) {
+					OPX_BUF_FREE(sdma_work->work_elem.payload_copy);
+				}
+				slist_remove(&opx_tx->work_pending[OPX_WORK_TYPE_SDMA],
+					     &sdma_work->work_elem.slist_entry, sdma_work_prev);
+				OPX_BUF_FREE(sdma_work);
+			} else if (sdma_work->work_elem.work_type == OPX_WORK_TYPE_LAST) {
+				slist_remove(&opx_tx->work_pending[OPX_WORK_TYPE_SDMA],
+					     &sdma_work->work_elem.slist_entry, sdma_work_prev);
+				slist_insert_tail(&sdma_work->work_elem.slist_entry, &opx_tx->work_pending_completion);
+			} else {
+				sdma_work_prev = &sdma_work->work_elem.slist_entry;
+			}
+			sdma_work = (union fi_opx_hfi1_deferred_work *) sdma_work_next;
+			iovs_left = sdma_queue->max_iovs - sdma_queue->num_iovs;
+		}
+
+		if (!slist_empty(&opx_tx->sdma_request_queue.list)) {
+			opx_hfi1_sdma_process_requests(opx_ep, opx_tx);
+		}
 	}
 }
 
 __OPX_FORCE_INLINE__
 void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 {
-	/* Clean up all the pending completion work, but stop as soon as we
-	   encounter one that isn't done (and requeue that one) */
-	uintptr_t work_pending_completion = (uintptr_t) opx_ep->tx->work_pending_completion.head;
-	while (work_pending_completion) {
-		union fi_opx_hfi1_deferred_work *work =
-			(union fi_opx_hfi1_deferred_work *) slist_remove_head(&opx_ep->tx->work_pending_completion);
-		work->work_elem.slist_entry.next = NULL;
-		int rc				 = work->work_elem.work_fn(work);
-		if (rc == FI_SUCCESS) {
-			if (work->work_elem.completion_action) {
-				work->work_elem.completion_action(work);
-			}
-			if (work->work_elem.payload_copy) {
-				OPX_BUF_FREE(work->work_elem.payload_copy);
-			}
-			OPX_BUF_FREE(work);
-			work_pending_completion = (uintptr_t) opx_ep->tx->work_pending_completion.head;
-		} else {
-			assert(work->work_elem.slist_entry.next == NULL);
-			slist_insert_head(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
-			work_pending_completion = 0;
-		}
-	}
+	for (int tx_idx = 0; tx_idx < opx_ep->num_tx_contexts; tx_idx++) {
+		struct fi_opx_ep_tx *opx_tx = opx_ep->tx_contexts[tx_idx];
+		assert(opx_tx);
 
-	/* Note that SDMA work is not included in this loop, as it is done separately */
-	for (enum opx_work_type work_type = OPX_WORK_TYPE_PIO; work_type < OPX_WORK_TYPE_LAST; ++work_type) {
-		const uintptr_t work_pending = (const uintptr_t) opx_ep->tx->work_pending[work_type].head;
-		if (work_pending) {
-			OPX_TRACE_PROGRESS_BEGIN(OPX_TRACE_EVENT_PROGRESS_DEFERRED_WORK, work_type, 0);
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				     "===================================== POLL WORK PENDING type %d <start \n",
-				     work_type);
-			union fi_opx_hfi1_deferred_work *work = (union fi_opx_hfi1_deferred_work *) slist_remove_head(
-				&opx_ep->tx->work_pending[work_type]);
+		uintptr_t work_pending_completion = (uintptr_t) opx_tx->work_pending_completion.head;
+		while (work_pending_completion) {
+			union fi_opx_hfi1_deferred_work *work =
+				(union fi_opx_hfi1_deferred_work *) slist_remove_head(&opx_tx->work_pending_completion);
 			work->work_elem.slist_entry.next = NULL;
 			int rc				 = work->work_elem.work_fn(work);
 			if (rc == FI_SUCCESS) {
@@ -3324,22 +3311,51 @@ void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
 					OPX_BUF_FREE(work->work_elem.payload_copy);
 				}
 				OPX_BUF_FREE(work);
+				work_pending_completion = (uintptr_t) opx_tx->work_pending_completion.head;
 			} else {
 				assert(work->work_elem.slist_entry.next == NULL);
-				if (work->work_elem.work_type == OPX_WORK_TYPE_LAST) {
-					/* Move this to the pending completion queue,
-					   since there's nothing left to do but wait */
-					slist_insert_tail(&work->work_elem.slist_entry,
-							  &opx_ep->tx->work_pending_completion);
-				} else {
-					slist_insert_head(&work->work_elem.slist_entry,
-							  &opx_ep->tx->work_pending[work->work_elem.work_type]);
-				}
+				slist_insert_head(&work->work_elem.slist_entry, &opx_tx->work_pending_completion);
+				work_pending_completion = 0;
 			}
-			OPX_TRACE_PROGRESS_END_SUCCESS(OPX_TRACE_EVENT_PROGRESS_DEFERRED_WORK, work_type, 0);
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				     "===================================== POLL WORK PENDING type %d %u done>\n",
-				     work_type, rc);
+		}
+
+		for (enum opx_work_type work_type = OPX_WORK_TYPE_PIO; work_type < OPX_WORK_TYPE_LAST; ++work_type) {
+			const uintptr_t work_pending = (const uintptr_t) opx_tx->work_pending[work_type].head;
+			if (work_pending) {
+				OPX_TRACE_PROGRESS_BEGIN(OPX_TRACE_EVENT_PROGRESS_DEFERRED_WORK, work_type, 0);
+				FI_DBG_TRACE(
+					fi_opx_global.prov, FI_LOG_EP_DATA,
+					"===================================== POLL WORK PENDING type %d <start \n",
+					work_type);
+				union fi_opx_hfi1_deferred_work *work =
+					(union fi_opx_hfi1_deferred_work *) slist_remove_head(
+						&opx_tx->work_pending[work_type]);
+				work->work_elem.slist_entry.next = NULL;
+				int rc				 = work->work_elem.work_fn(work);
+				if (rc == FI_SUCCESS) {
+					if (work->work_elem.completion_action) {
+						work->work_elem.completion_action(work);
+					}
+					if (work->work_elem.payload_copy) {
+						OPX_BUF_FREE(work->work_elem.payload_copy);
+					}
+					OPX_BUF_FREE(work);
+				} else {
+					assert(work->work_elem.slist_entry.next == NULL);
+					if (work->work_elem.work_type == OPX_WORK_TYPE_LAST) {
+						slist_insert_tail(&work->work_elem.slist_entry,
+								  &opx_tx->work_pending_completion);
+					} else {
+						slist_insert_head(&work->work_elem.slist_entry,
+								  &opx_tx->work_pending[work->work_elem.work_type]);
+					}
+				}
+				OPX_TRACE_PROGRESS_END_SUCCESS(OPX_TRACE_EVENT_PROGRESS_DEFERRED_WORK, work_type, 0);
+				FI_DBG_TRACE(
+					fi_opx_global.prov, FI_LOG_EP_DATA,
+					"===================================== POLL WORK PENDING type %d %u done>\n",
+					work_type, rc);
+			}
 		}
 	}
 
@@ -3547,7 +3563,7 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const u
 #ifndef FI_OPX_MATCH_HASH_DISABLE
 	if (!uepkt && kind == FI_OPX_KIND_TAG) {
 		from_hash_queue = true;
-		uepkt		= fi_opx_match_find_uepkt(opx_ep->rx->match_ue_tag_hash, context,
+		uepkt		= fi_opx_match_find_uepkt(opx_ep->rx->match_ue_tag_hash, context, opx_ep->rx->av_addr,
 							  FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 	}
 #endif
@@ -3697,13 +3713,6 @@ int fi_opx_ep_rx_process_context(struct fi_opx_ep *opx_ep, const uint64_t static
 	return rc;
 }
 
-__OPX_FORCE_INLINE__
-union fi_opx_addr fi_opx_ep_get_src_addr(struct fi_opx_ep *opx_ep, const fi_addr_t msg_addr)
-{
-	static const union fi_opx_addr OPX_ADDR_UNSPEC = {.fi = FI_ADDR_UNSPEC};
-	return OFI_LIKELY(msg_addr != FI_ADDR_UNSPEC) ? opx_ep->rx->av_addr[msg_addr] : OPX_ADDR_UNSPEC;
-}
-
 /*
  * =========================== Application-facing ===========================
  */
@@ -3741,9 +3750,8 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "process context (check unexpected queue, append match queue)\n");
 
-	const uint64_t		       rx_op_flags     = opx_ep->rx->op_flags;
-	uint64_t		       rx_caps	       = opx_ep->rx->caps;
-	static const union fi_opx_addr OPX_ADDR_UNSPEC = {.fi = FI_ADDR_UNSPEC};
+	const uint64_t rx_op_flags = opx_ep->rx->op_flags;
+	uint64_t       rx_caps	   = opx_ep->rx->caps;
 
 	context->next		      = NULL;
 	context->err_entry.err	      = 0;
@@ -3751,10 +3759,10 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 	context->flags		      = rx_op_flags;
 	context->len		      = len;
 	context->buf		      = buf;
-	context->src_addr = (rx_caps & FI_DIRECTED_RECV) ? fi_opx_ep_get_src_addr(opx_ep, src_addr) : OPX_ADDR_UNSPEC;
-	context->tag	  = tag;
-	context->ignore	  = ignore;
-	context->byte_counter = (uint64_t) -1;
+	context->src_addr	      = (rx_caps & FI_DIRECTED_RECV) ? src_addr : FI_ADDR_UNSPEC;
+	context->tag		      = tag;
+	context->ignore		      = ignore;
+	context->byte_counter	      = (uint64_t) -1;
 
 	struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &context->hmem_info_qws[0];
 	hmem_info->is_unified		   = desc ? ((struct fi_opx_mr *) desc)->hmem_unified : 0;
@@ -3844,7 +3852,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 		context->flags		  = FI_MULTI_RECV;
 		context->len		  = len - sizeof(struct opx_context);
 		context->buf		  = (void *) ((uintptr_t) base + sizeof(struct opx_context));
-		context->src_addr	  = fi_opx_ep_get_src_addr(opx_ep, msg->addr);
+		context->src_addr	  = msg->addr;
 		context->byte_counter	  = 0;
 		context->ignore		  = (uint64_t) -1;
 		context->hmem_info_qws[0] = 0ul;
@@ -3862,7 +3870,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 		context->flags		  = flags;
 		context->len		  = 0;
 		context->buf		  = NULL;
-		context->src_addr	  = fi_opx_ep_get_src_addr(opx_ep, msg->addr);
+		context->src_addr	  = msg->addr;
 		context->tag		  = 0;
 		context->ignore		  = (uint64_t) -1;
 		context->byte_counter	  = (uint64_t) -1;
@@ -3921,7 +3929,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 		context->len	       = msg->msg_iov[0].iov_len;
 		context->buf	       = msg->msg_iov[0].iov_base;
 		context->byte_counter  = (uint64_t) -1;
-		context->src_addr      = fi_opx_ep_get_src_addr(opx_ep, msg->addr);
+		context->src_addr      = msg->addr;
 		context->tag	       = 0;
 		context->ignore	       = (uint64_t) -1;
 		context->msg.iov_count = msg->iov_count;
@@ -3940,7 +3948,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 		context->flags	      = flags;
 		context->len	      = msg->msg_iov[0].iov_len;
 		context->buf	      = msg->msg_iov[0].iov_base;
-		context->src_addr     = fi_opx_ep_get_src_addr(opx_ep, msg->addr);
+		context->src_addr     = msg->addr;
 		context->tag	      = 0;
 		context->ignore	      = (uint64_t) -1;
 		context->byte_counter = (uint64_t) -1;
@@ -3957,7 +3965,7 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 
 	context->flags	       = flags;
 	context->byte_counter  = (uint64_t) -1;
-	context->src_addr      = fi_opx_ep_get_src_addr(opx_ep, msg->addr);
+	context->src_addr      = msg->addr;
 	context->tag	       = 0;
 	context->ignore	       = (uint64_t) -1;
 	context->msg.iov_count = msg->iov_count;
@@ -4012,10 +4020,9 @@ uint64_t fi_opx_ep_tx_do_cq_completion(struct fi_opx_ep *opx_ep, const unsigned 
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_ep_tx_cq_completion_rzv(struct fid_ep *ep, void *context, const size_t len, const int lock_required,
-				    const uint64_t tag, const uint64_t caps)
+void fi_opx_ep_tx_cq_completion_rzv(struct fi_opx_ep_tx *opx_tx, void *context, const size_t len,
+				    const int lock_required, const uint64_t tag, const uint64_t caps)
 {
-	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	assert(context);
 	assert(((uintptr_t) context & 0x07ull) == 0); /* must be 8 byte aligned */
 	struct opx_context *opx_context = (struct opx_context *) context;
@@ -4034,14 +4041,15 @@ void fi_opx_ep_tx_cq_completion_rzv(struct fid_ep *ep, void *context, const size
 		"cq_pending context=%p context->err_entry.op_context=%p context->tag=%016lX context->data=%016lX context->len=%lu\n",
 		opx_context, opx_context->err_entry.op_context, opx_context->tag, opx_context->data, opx_context->len);
 
-	slist_insert_tail((struct slist_entry *) opx_context, opx_ep->tx->cq_pending_ptr);
+	slist_insert_tail((struct slist_entry *) opx_context, opx_tx->cq_pending_ptr);
 }
 
 __OPX_FORCE_INLINE__
-ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, uint8_t **buf_ptr, uint32_t *payload_offset,
-					  ssize_t *payload_remaining, const uint32_t mp_egr_id, const size_t chunk_size,
-					  const uint64_t pbc_dlid, const uint64_t bth_rx, const uint64_t lrh_dlid,
-					  const union fi_opx_addr addr, const enum ofi_reliability_kind reliability,
+ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, uint8_t **buf_ptr,
+					  uint32_t *payload_offset, ssize_t *payload_remaining,
+					  const uint32_t mp_egr_id, const size_t chunk_size, const uint64_t pbc_dlid,
+					  const uint64_t bth_rx, const uint64_t lrh_dlid, const struct fi_opx_addr addr,
+					  const enum ofi_reliability_kind reliability,
 					  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	ssize_t	 remaining = *payload_remaining;
@@ -4051,17 +4059,17 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, uint8_t **bu
 
 	while (remaining >= chunk_size) {
 		if (hfi1_type == OPX_HFI1_WFR) {
-			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, chunk_size, mp_egr_id,
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, chunk_size, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
 							    reliability, OPX_HFI1_WFR, ctx_sharing);
 		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
-			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, chunk_size, mp_egr_id,
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, chunk_size, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
 							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing);
 		} else {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
-				opx_ep, (void *) buf, offset, chunk_size, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid, addr,
-				FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
+				opx_ep, opx_tx, (void *) buf, offset, chunk_size, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid,
+				addr, FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
 		}
 
 		if (rc != FI_SUCCESS) {
@@ -4076,17 +4084,17 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, uint8_t **bu
 
 	if (remaining > 0) {
 		if (hfi1_type == OPX_HFI1_WFR) {
-			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, remaining, mp_egr_id,
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, remaining, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
 							    reliability, OPX_HFI1_WFR, ctx_sharing);
 		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
-			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, (void *) buf, offset, remaining, mp_egr_id,
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, remaining, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
 							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing);
 		} else {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
-				opx_ep, (void *) buf, offset, remaining, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid, addr,
-				FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
+				opx_ep, opx_tx, (void *) buf, offset, remaining, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid,
+				addr, FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
 		}
 		if (rc != FI_SUCCESS) {
 			goto mp_egr_eagain;
@@ -4106,7 +4114,7 @@ mp_egr_eagain:
 }
 
 __OPX_FORCE_INLINE__
-ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t len, union fi_opx_addr dest_addr,
+ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr,
 				    uint64_t tag, void *context, const uint32_t data, int lock_required,
 				    const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
 				    const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
@@ -4114,16 +4122,18 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 				    const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type,
 				    const bool ctx_sharing)
 {
-	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
 
 	assert(!fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps));
-	assert(len > opx_ep->tx->mp_eager_chunk_size);
+	assert(len > opx_tx->mp_eager_chunk_size);
 
-	const uint64_t bth_subctxt_rx = ((uint64_t) dest_addr.hfi1_subctxt_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
-	const uint64_t lrh_dlid	      = hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B) ?
-						FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(dest_addr.lid) :
-						dest_addr.lid;
-	const uint64_t pbc_dlid	      = OPX_PBC_DLID(dest_addr.lid, hfi1_type);
+	const uint64_t bth_subctxt_rx = ((uint64_t) dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
+					<< OPX_BTH_SUBCTXT_RX_SHIFT;
+	const uint64_t lrh_dlid = hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B) ?
+					  FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(dest_addr.planes[OPX_PRIMARY_PLANE].lid) :
+					  dest_addr.planes[OPX_PRIMARY_PLANE].lid;
+	const uint64_t pbc_dlid = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 
 	/* Write the first packet */
 	uint32_t first_packet_psn;
@@ -4134,8 +4144,8 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	uint8_t *buf_bytes_ptr = (uint8_t *) buf;
 	ssize_t	 rc;
 	rc = opx_hfi1_tx_send_mp_egr_first_common(
-		opx_ep, (void **) &buf_bytes_ptr, len, opx_ep->hmem_copy_buf, pbc_dlid, bth_subctxt_rx, lrh_dlid,
-		dest_addr, tag, data, lock_required, tx_op_flags, caps, reliability, &first_packet_psn,
+		opx_ep, opx_tx, (void **) &buf_bytes_ptr, len, opx_ep->hmem_copy_buf, pbc_dlid, bth_subctxt_rx,
+		lrh_dlid, dest_addr, tag, data, lock_required, tx_op_flags, caps, reliability, &first_packet_psn,
 		&payload_bytes_sent, hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 
 	if (rc != FI_SUCCESS) {
@@ -4153,7 +4163,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_first_packets);
 
 	/* The first packet was successful. We're now committed to finishing this */
-	const size_t chunk_size	       = opx_ep->tx->mp_eager_chunk_size;
+	const size_t chunk_size	       = opx_tx->mp_eager_chunk_size;
 	ssize_t	     payload_remaining = len - payload_bytes_sent;
 	uint32_t     payload_offset    = payload_bytes_sent;
 	buf_bytes_ptr += payload_bytes_sent;
@@ -4162,7 +4172,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER SEND REMAINING (%zu)\n",
 		     payload_remaining);
 
-	rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, &buf_bytes_ptr, &payload_offset, &payload_remaining,
+	rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, opx_tx, &buf_bytes_ptr, &payload_offset, &payload_remaining,
 					       first_packet_psn, chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid,
 					       dest_addr, reliability, hfi1_type, ctx_sharing);
 
@@ -4174,15 +4184,15 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 
 		fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
 
-		OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_ep->tx);
-		union fi_opx_hfi1_pio_state pio_state = {.qw0 = opx_ep->tx->pio_state->qw0};
-		fi_opx_update_credits(&pio_state, opx_ep->tx->pio_credits_addr);
-		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
-		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
+		OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_tx);
+		union fi_opx_hfi1_pio_state pio_state = {.qw0 = opx_tx->pio_state->qw0};
+		fi_opx_update_credits(&pio_state, opx_tx->pio_credits_addr);
+		opx_tx->pio_state->qw0 = pio_state.qw0;
+		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 
-		rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, &buf_bytes_ptr, &payload_offset, &payload_remaining,
-						       first_packet_psn, chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid,
-						       dest_addr, reliability, hfi1_type, ctx_sharing);
+		rc = opx_hfi1_tx_send_mp_egr_remaining(
+			opx_ep, opx_tx, &buf_bytes_ptr, &payload_offset, &payload_remaining, first_packet_psn,
+			chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid, dest_addr, reliability, hfi1_type, ctx_sharing);
 	}
 
 	if (OFI_LIKELY(do_cq_completion)) {
@@ -4199,7 +4209,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 #endif
 
 __OPX_FORCE_INLINE__
-ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len, const union fi_opx_addr addr,
+ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len, const struct fi_opx_addr addr,
 				 uint64_t tag, void *context, const struct iovec *local_iov, size_t niov,
 				 size_t total_len, const uint32_t data, const int lock_required,
 				 const unsigned is_contiguous, const unsigned override_flags,
@@ -4245,7 +4255,7 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 __OPX_FORCE_INLINE__
-ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const union fi_opx_addr addr, uint64_t tag,
+ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const struct fi_opx_addr addr, uint64_t tag,
 			   void *context, const struct iovec *local_iov, size_t niov, size_t total_len,
 			   const uint32_t data, const int lock_required, const unsigned is_contiguous,
 			   const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
@@ -4255,13 +4265,15 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 {
 	if (is_contiguous) {
 		return OPX_FABRIC_TX_SEND_RZV(ep, buf, len, addr, tag, context, data, lock_required, override_flags,
-					      tx_op_flags, addr.hfi1_subctxt_rx, caps, reliability, do_cq_completion,
-					      hmem_iface, hmem_device, hmem_handle, opx_mr, hfi1_type, ctx_sharing);
+					      tx_op_flags, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, caps,
+					      reliability, do_cq_completion, hmem_iface, hmem_device, hmem_handle,
+					      opx_mr, hfi1_type, ctx_sharing);
 	}
 
 	return OPX_FABRIC_TX_SENDV_RZV(ep, local_iov, niov, total_len, addr, tag, context, data, lock_required,
-				       override_flags, tx_op_flags, addr.hfi1_subctxt_rx, caps, reliability,
-				       do_cq_completion, hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+				       override_flags, tx_op_flags, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+				       caps, reliability, do_cq_completion, hmem_iface, hmem_device, hmem_handle,
+				       hfi1_type, ctx_sharing);
 }
 
 static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *buf, size_t len, void *desc,
@@ -4287,7 +4299,8 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	assert(dest_addr != FI_ADDR_UNSPEC);
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
-	const union fi_opx_addr addr = FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
+	const struct fi_opx_addr addr	= FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
+	struct fi_opx_ep_tx	*opx_tx = FI_OPX_EP_TX(opx_ep, addr);
 
 	ssize_t rc = 0;
 
@@ -4320,8 +4333,8 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	const uint64_t do_cq_completion = fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
 
-	if (total_len < opx_ep->tx->rzv_min_payload_bytes) {
-		if (total_len <= opx_ep->tx->pio_flow_eager_tx_bytes) {
+	if (total_len < opx_tx->rzv_min_payload_bytes) {
+		if (total_len <= opx_tx->pio_flow_eager_tx_bytes) {
 			rc = opx_ep_tx_send_try_eager(ep, buf, len, addr, tag, context, local_iov, niov, total_len,
 						      data, lock_required, is_contiguous, override_flags, tx_op_flags,
 						      caps, reliability, do_cq_completion, hmem_iface, hmem_device,
@@ -4341,9 +4354,9 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 		}
 
 		/* If hmem_iface != FI_HMEM_SYSTEM, we skip MP EGR because RZV yields better performance for devices */
-		if (total_len <= opx_ep->tx->mp_eager_max_payload_bytes && is_contiguous &&
+		if (total_len <= opx_tx->mp_eager_max_payload_bytes && is_contiguous &&
 		    !fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps) && (caps & FI_TAGGED) && hmem_iface == FI_HMEM_SYSTEM) {
-			assert(total_len >= opx_ep->tx->mp_eager_min_payload_bytes);
+			assert(total_len >= opx_tx->mp_eager_min_payload_bytes);
 			rc = opx_hfi1_tx_send_try_mp_egr(ep, buf, len, addr, tag, context, data, lock_required,
 							 override_flags, tx_op_flags, caps, reliability,
 							 do_cq_completion, FI_HMEM_SYSTEM, 0ul, OPX_HMEM_NO_HANDLE,
@@ -4427,7 +4440,7 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 
 	assert(dest_addr != FI_ADDR_UNSPEC);
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
-	const union fi_opx_addr addr = FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
+	const struct fi_opx_addr addr = FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
 
 	const ssize_t rc = FI_OPX_FABRIC_TX_INJECT(ep, buf, len, addr, tag, data, lock_required, tx_op_flags, caps,
 						   reliability, hfi1_type, ctx_sharing);

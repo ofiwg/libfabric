@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021,2025 Cornelis Networks.
+ * Copyright (C) 2021,2025-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,6 +41,6 @@
 
 ssize_t fi_opx_check_tx_rctxt(struct fi_opx_ep *opx_ep, fi_addr_t peer);
 
-ssize_t fi_opx_hfi1_tx_connect(struct fi_opx_ep *opx_ep, fi_addr_t peer);
+ssize_t fi_opx_hfi1_tx_connect(struct fi_opx_ep *opx_ep, struct fi_opx_addr peer);
 
 #endif /* _FI_PROV_OPX_HFI1_FABRIC_H_ */

@@ -1176,7 +1176,7 @@ struct fi_opx_reliability_resynch_flow {
 ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep, const uint64_t key, const opx_lid_t dlid,
 						     const uint64_t reliability_rx, const uint64_t opcode);
 
-ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, union fi_opx_addr dest_addr, void *context,
+ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, struct fi_opx_addr dest_addr, void *context,
 						const uint64_t caps);
 
 void fi_opx_hfi1_rx_reliability_resynch(struct fid_ep *ep, struct fi_opx_reliability_service *service,

@@ -56,6 +56,8 @@
 
 #include "rdma/opx/opx_hfi1_rdma_core.h"
 
+struct fi_opx_ep_tx;
+
 #if defined(__SSE2__) || (defined(_MSC_VER) && (defined(_M_X64) || defined(_M_AMD64)))
 #define OPX_HAS_SSE2
 #include <x86intrin.h> // For SIMD instructions
@@ -711,10 +713,10 @@ void fi_opx_consume_credits(union fi_opx_hfi1_pio_state *pio_state, size_t count
 
 /* SIMD version (preferred, fastest) */
 __OPX_FORCE_INLINE__
-int opx_local_lid_index(opx_lid_t lid)
+int opx_local_lid_index(opx_lid_t lid_plane_key)
 {
 	// Create a 4-element vector populated with the lid we're looking for
-	__m128i target = _mm_set1_epi32(lid);
+	__m128i target = _mm_set1_epi32(lid_plane_key);
 
 	// Iterate through the array of lids, examining 4 entries at once. Since
 	// we know unused entries are zero, and lids will be non-zero, it's safe
@@ -736,22 +738,22 @@ int opx_local_lid_index(opx_lid_t lid)
 
 /* Loop unrolled version */
 __OPX_FORCE_INLINE__
-int opx_local_lid_index(opx_lid_t lid)
+int opx_local_lid_index(opx_lid_t lid_plane_key)
 {
 	// Iterate through the array of lids, examining 4 entries at once. Since
 	// we know unused entries are zero, and lids will be non-zero, it's safe
 	// to include unused entries beyond local_lids_size in our comparison
 	for (int i = 0; i < fi_opx_global.hfi_local_info.local_lids_size; i += 4) {
-		if (fi_opx_global.hfi_local_info.local_lid_ids[i] == lid) {
+		if (fi_opx_global.hfi_local_info.local_lid_ids[i] == lid_plane_key) {
 			return i;
 		}
-		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 1] == lid) {
+		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 1] == lid_plane_key) {
 			return i + 1;
 		}
-		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 2] == lid) {
+		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 2] == lid_plane_key) {
 			return i + 2;
 		}
-		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 3] == lid) {
+		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 3] == lid_plane_key) {
 			return i + 3;
 		}
 	}
@@ -761,9 +763,9 @@ int opx_local_lid_index(opx_lid_t lid)
 #endif
 
 __OPX_FORCE_INLINE__
-struct opx_hfi_local_entry *fi_opx_hfi1_get_lid_local(opx_lid_t lid)
+struct opx_hfi_local_entry *fi_opx_hfi1_get_lid_local(opx_lid_t lid_plane_key)
 {
-	int lid_index = opx_local_lid_index(lid);
+	int lid_index = opx_local_lid_index(lid_plane_key);
 
 	// We should only ever be calling this function for lids that are shm
 	assert(lid_index != -1);
@@ -772,25 +774,31 @@ struct opx_hfi_local_entry *fi_opx_hfi1_get_lid_local(opx_lid_t lid)
 }
 
 __OPX_FORCE_INLINE__
-bool opx_lid_is_shm(opx_lid_t lid)
+bool opx_lid_is_shm(opx_lid_t lid_plane_key)
 {
-	return (opx_local_lid_index(lid) != -1);
+	return (opx_local_lid_index(lid_plane_key) != -1);
 }
 
 __OPX_FORCE_INLINE__
-int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid)
+int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid, uint8_t plane_idx)
 {
-	return ((fi_opx_global.hfi_local_info.lid == lid) ? fi_opx_global.hfi_local_info.hfi_unit :
-							    fi_opx_hfi1_get_lid_local(lid)->hfi_unit);
+	/* Self-lid comparison uses the raw lid (no plane bits). */
+	if (fi_opx_global.hfi_local_info.lid == lid) {
+		return fi_opx_global.hfi_local_info.hfi_unit;
+	}
+
+	/* The local_lid_ids table stores OPX_LID_PLANE_KEY values,
+	 * so construct the proper key for the lookup. */
+	return fi_opx_hfi1_get_lid_local(OPX_LID_PLANE_KEY(lid, plane_idx))->hfi_unit;
 }
 
 struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key);
 
 int init_hfi1_rxe_state(struct fi_opx_hfi1_context *context, struct fi_opx_hfi1_rxe_state *rxe_state);
 
-void opx_remove_self_lid(const int hfi_unit, const opx_lid_t lid);
+void opx_remove_self_lid(const int hfi_unit, const opx_lid_t lid, uint8_t plane_idx);
 
-void fi_opx_init_hfi_lookup(bool sriov);
+void fi_opx_init_hfi_lookup(bool sriov, uint64_t self_gid_hi, uint8_t self_plane_idx);
 
 /*
  * Shared memory transport
@@ -920,14 +928,14 @@ void opx_print_context(struct fi_opx_hfi1_context *context)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "Context subctxt                  	  %#X  \n", context->subctxt);
 }
 
-void opx_reset_context(struct fi_opx_ep *opx_ep, uint64_t events, const enum opx_hfi1_type hfi1_type,
-		       const bool ctx_sharing);
+void opx_reset_context(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_context *hfi, struct fi_opx_ep_tx *opx_tx,
+		       uint64_t events, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
 
 void opx_link_down_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep,
-					  const bool ctx_sharing);
+					  struct fi_opx_ep_tx *opx_tx, const bool ctx_sharing);
 
 void opx_link_up_update_pio_credit_addr(struct fi_opx_hfi1_context *context, struct fi_opx_ep *opx_ep,
-					const bool ctx_sharing);
+					struct fi_opx_ep_tx *opx_tx, const bool ctx_sharing);
 
 #define OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC 250000 /* 250 ms*/
 
@@ -970,7 +978,7 @@ uint64_t opx_get_hw_status_jkr(struct fi_opx_hfi1_context *context)
 
 __OPX_FORCE_INLINE__
 size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context, const enum opx_hfi1_type hfi1_type,
-				   struct fi_opx_ep *opx_ep, const bool ctx_sharing)
+				   struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const bool ctx_sharing)
 {
 	size_t	 err	= FI_SUCCESS;
 	uint64_t status = (hfi1_type & OPX_HFI1_WFR) ? opx_get_hw_status_wfr(context) : opx_get_hw_status_jkr(context);
@@ -986,7 +994,7 @@ size_t fi_opx_context_check_status(struct fi_opx_hfi1_context *context, const en
 		if (err != context->status_lasterr) {
 			context->network_lost_time = time(NULL);
 			/* Point the pio credit addr to a dummy pointer */
-			opx_link_down_update_pio_credit_addr(context, opx_ep, ctx_sharing);
+			opx_link_down_update_pio_credit_addr(context, opx_ep, opx_tx, ctx_sharing);
 		} else {
 			time_t now = time(NULL);
 

@@ -67,7 +67,7 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 		return -FI_ENOMEM;
 	}
 	context->next		      = NULL;
-	context->src_addr	      = fi_opx_ep_get_src_addr(opx_ep, msg->addr);
+	context->src_addr	      = msg->addr;
 	context->flags		      = flags;
 	context->err_entry.err	      = 0;
 	context->err_entry.op_context = msg->context;

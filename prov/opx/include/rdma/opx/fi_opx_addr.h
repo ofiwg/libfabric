@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021,2024-2025 Cornelis Networks.
+ * Copyright (C) 2021,2024-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,6 +39,10 @@
 
 #include "rdma/fabric.h" /* only for 'fi_addr_t' ... which is a typedef to uint64_t */
 
+/* Index constants for the planes[] array in struct fi_opx_addr.
+ * OPX_PRIMARY_PLANE is the default / first fabric plane. */
+#define OPX_PRIMARY_PLANE 0
+
 /* Get macro for subctxt/rx from combined field.
  * WFR and JKR: bits 10:8 is subctxt and 7:0 is rx id
  * CYR: bits 10:9 is subctxt and 8:0 is rx id */
@@ -48,11 +52,7 @@
 #define OPX_HFI1_RX(_subctxt_rx, _hfi1_type) \
 	(OPX_IS_EXTENDED_RX(_hfi1_type) ? (0x1ff & __be16_to_cpu(_subctxt_rx)) : (0xff & __be16_to_cpu(_subctxt_rx)))
 
-union fi_opx_addr {
-	fi_addr_t fi;
-	uint64_t  raw64b;
-	uint32_t  raw32b[2];
-	uint8_t	  raw8b[8];
+struct fi_opx_addr {
 	struct {
 		uint8_t	 hfi1_unit;
 		uint8_t	 unused;
@@ -60,30 +60,37 @@ union fi_opx_addr {
 					   * WFR and JKR: bits 10:8 is subctxt and 7:0 is rx id
 					   * CYR: bits 10:9 is subctxt and 8:0 is rx id */
 		opx_lid_t lid;		  /* fabric-scoped node identifier */
-	} __attribute__((__packed__));
+		uint64_t  gid_hi;	  /* GID high 64 bits (identifies fabric plane) */
+	} __attribute__((__packed__)) planes[OPX_MAX_TX_CONTEXTS];
+	uint8_t			      tx_index;
+	uint8_t			      unused2[7];
 } __attribute__((__packed__));
 
 struct fi_opx_extended_addr {
-	union fi_opx_addr addr;
-	uint32_t	  rank;
-	uint32_t	  rank_inst;
+	struct fi_opx_addr addr;
+	uint32_t	   rank;
+	uint32_t	   rank_inst;
 } __attribute__((__packed__));
 
-extern union fi_opx_addr opx_default_addr;
+extern struct fi_opx_addr opx_default_addr;
 
-static inline void fi_opx_addr_dump(char *prefix, const union fi_opx_addr *const addr)
+static inline void fi_opx_addr_dump(char *prefix, const struct fi_opx_addr *const addr)
 {
-	fprintf(stderr, "%s [%p]: %08x %08x\n", prefix, addr, addr->raw32b[0], addr->raw32b[1]);
-	fprintf(stderr, "%s opx addr dump at %p (0x%016lx)\n", prefix, (void *) addr, addr->raw64b);
-	fprintf(stderr, "%s   .raw8b[8] = { %02x %02x %02x %02x  %02x %02x %02x %02x }\n", prefix, addr->raw8b[0],
-		addr->raw8b[1], addr->raw8b[2], addr->raw8b[3], addr->raw8b[4], addr->raw8b[5], addr->raw8b[6],
-		addr->raw8b[7]);
-
-	fprintf(stderr, "%s   .hfi1_subctxt_rx ............................... %u\n", prefix, addr->hfi1_subctxt_rx);
-	fprintf(stderr, "%s   .hfi1_unit ..................................... %u\n", prefix, addr->hfi1_unit);
-	fprintf(stderr, "%s   .lid ........................................... %d (le: %#x, be16: %#x)\n", prefix,
-		addr->lid, __cpu_to_le24(addr->lid), __cpu24_to_be16(addr->lid));
-
+	fprintf(stderr, "%s opx addr dump at %p\n", prefix, (void *) addr);
+	fprintf(stderr, "%s   .tx_index ...................................... %u\n", prefix, addr->tx_index);
+	for (int i = 0; i < OPX_MAX_TX_CONTEXTS; i++) {
+		fprintf(stderr, "%s   .planes[%d].hfi1_unit ........................... %u\n", prefix, i,
+			addr->planes[i].hfi1_unit);
+		fprintf(stderr, "%s   .planes[%d].unused .............................. %u\n", prefix, i,
+			addr->planes[i].unused);
+		fprintf(stderr, "%s   .planes[%d].hfi1_subctxt_rx ..................... %u\n", prefix, i,
+			addr->planes[i].hfi1_subctxt_rx);
+		fprintf(stderr, "%s   .planes[%d].lid ................................. %d (le: %#x, be16: %#x)\n",
+			prefix, i, addr->planes[i].lid, __cpu_to_le24(addr->planes[i].lid),
+			__cpu24_to_be16(addr->planes[i].lid));
+		fprintf(stderr, "%s   .planes[%d].gid_hi .............................. 0x%016lx\n", prefix, i,
+			addr->planes[i].gid_hi);
+	}
 	fflush(stderr);
 }
 
