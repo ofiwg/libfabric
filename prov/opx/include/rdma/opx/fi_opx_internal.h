@@ -64,8 +64,8 @@ struct opx_context {
 	void		   *buf; /* fi_cq_data_entry::buf (unused for tagged cq's and non-multi-receive message cq's) */
 
 	union {
-		uint64_t	  data;	    /* fi_cq_data_entry::data; only used _after_ a message is matched */
-		union fi_opx_addr src_addr; /* only used _before_ a message is matched ('FI_DIRECTED_RECEIVE') */
+		uint64_t  data;	    /* fi_cq_data_entry::data; only used _after_ a message is matched */
+		fi_addr_t src_addr; /* only used _before_ a message is matched ('FI_DIRECTED_RECEIVE') */
 	};
 
 	uint64_t tag; /* fi_cq_tagged_entry::tag */

@@ -86,14 +86,15 @@ enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep)
 	return retVal;
 }
 
-ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
+ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, struct fi_opx_addr *peers,
 			     struct fi_opx_extended_addr *peers_ext);
 
 __OPX_FORCE_INLINE__
 enum ofi_reliability_app_kind fi_opx_select_app_reliability(struct fi_opx_ep *opx_ep)
 {
 	return ((opx_ep->common_info && opx_ep->common_info->src_addr &&
-		 ((union fi_opx_addr *) (opx_ep->common_info->src_addr))->hfi1_unit != opx_default_addr.hfi1_unit) ?
+		 ((struct fi_opx_addr *) (opx_ep->common_info->src_addr))->planes[OPX_PRIMARY_PLANE].hfi1_unit !=
+			 opx_default_addr.planes[OPX_PRIMARY_PLANE].hfi1_unit) ?
 			OFI_RELIABILITY_APP_KIND_DAOS :
 			OFI_RELIABILITY_APP_KIND_MPI);
 }
@@ -432,9 +433,9 @@ static int fi_opx_close_ep(fid_t fid)
 	if (opx_ep->tx &&
 	    ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0))) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
-		       "Cleaning up endpoint's tx shared memory (%p)\n", &opx_ep->tx->shm);
-		dlist_remove_first_match(&shm_tx_list, opx_shm_match, (void *) &opx_ep->tx->shm);
-		opx_shm_tx_fini(&opx_ep->tx->shm);
+		       "Cleaning up endpoint's tx shared memory (%p)\n", &opx_ep->shm);
+		dlist_remove_first_match(&shm_tx_list, opx_shm_match, (void *) &opx_ep->shm);
+		opx_shm_tx_fini(&opx_ep->shm);
 	}
 
 	if (opx_ep->rx &&
@@ -1296,11 +1297,12 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 				      __cpu_to_be16(hfi1->subctxt << 9 | hfi1->info.rxe.id);
 
 	// Initialize this endpoint's fi_opx_addr
-	opx_ep->rx->self.raw64b		 = 0;
-	opx_ep->rx->self.lid		 = hfi1->lid;
-	opx_ep->rx->self.hfi1_subctxt_rx = subctxt_rx;
-	opx_ep->rx->self.hfi1_unit	 = (uint8_t) hfi1->hfi_unit;
-	opx_ep->rx->shd_ctx.subctxt	 = hfi1->subctxt;
+	opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid		   = hfi1->lid;
+	opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx = subctxt_rx;
+	opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_unit	   = (uint8_t) hfi1->hfi_unit;
+	opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].gid_hi	   = hfi1->gid_hi;
+	opx_ep->rx->self.tx_index				   = OPX_PRIMARY_PLANE;
+	opx_ep->rx->shd_ctx.subctxt				   = hfi1->subctxt;
 
 #ifdef OPX_TRACER_ENABLED
 	opx_trace_set_self_lid(hfi1->lid);
@@ -1329,7 +1331,7 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 	       fi_opx_global.hfi_local_info.sriov, fi_opx_global.hfi_local_info.lid,
 	       fi_opx_global.hfi_local_info.pbc_lid, fi_opx_global.hfi_local_info.min_rctxt,
 	       fi_opx_global.hfi_local_info.max_rctxt);
-	fi_opx_init_hfi_lookup(fi_opx_global.hfi_local_info.sriov);
+	fi_opx_init_hfi_lookup(fi_opx_global.hfi_local_info.sriov, hfi1->gid_hi, 0);
 
 	// Initialize context sharing structures if context sharing is in use
 	if (OPX_IS_CTX_SHARING_ENABLED) {
@@ -2024,6 +2026,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	opx_ep->hfi_contexts[0] = opx_ep->hfi;
 	opx_ep->tx->hfi		= opx_ep->hfi;
 	opx_ep->tx->gid_hi	= opx_ep->hfi->gid_hi;
+	opx_ep->tx->shm		= NULL;
 	opx_ep->num_tx_contexts = 1;
 
 	mem = malloc(sizeof(struct fi_opx_ep_rx) + FI_OPX_CACHE_LINE_SIZE);
@@ -2209,8 +2212,9 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
-		opx_shm_tx_init(&opx_ep->tx->shm, fi_opx_global.prov, opx_ep->hfi->daos_info.rank,
+		opx_shm_tx_init(&opx_ep->shm, fi_opx_global.prov, opx_ep->hfi->daos_info.rank,
 				opx_ep->hfi->daos_info.rank_inst);
+		opx_ep->tx->shm = &opx_ep->shm;
 	}
 
 #if HAVE_HFISVC
@@ -2288,6 +2292,12 @@ done:
 				"_FI_OPX_DUAL_PLANE_ENABLE_ is invalid on local HFI type %s.\n",
 				OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
 			errno = FI_EOPNOTSUPP;
+			goto err;
+		}
+		if (_dual_plane_enable_ && fi_opx_global.ctx_sharing_enabled) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+				"Dual plane mode (_FI_OPX_DUAL_PLANE_ENABLE_=1) is not supported with context sharing (FI_OPX_CONTEXT_SHARING=1). Disable context sharing to use dual plane.\n");
+			errno = FI_EINVAL;
 			goto err;
 		}
 	}
@@ -2405,6 +2415,15 @@ done:
 		/* Register secondary context */
 		opx_ep->tx_contexts[opx_ep->num_tx_contexts]  = sec_tx;
 		opx_ep->hfi_contexts[opx_ep->num_tx_contexts] = sec_hfi;
+		sec_tx->shm				      = &opx_ep->shm;
+
+		/* Populate secondary plane in rx->self */
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].hfi1_unit	 = (uint8_t) sec_hfi->hfi_unit;
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].unused		 = 0;
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].hfi1_subctxt_rx = 0;
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].lid		 = sec_hfi->lid;
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].gid_hi		 = sec_tx->gid_hi;
+
 		opx_ep->num_tx_contexts++;
 
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
@@ -3319,8 +3338,8 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 #ifndef FI_OPX_MATCH_HASH_DISABLE
 		if (!uepkt && kind == FI_OPX_KIND_TAG) {
 			from_hash_queue = true;
-			uepkt		= fi_opx_match_find_uepkt(opx_ep->rx->match_ue_tag_hash, context,
-								  FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+			uepkt = fi_opx_match_find_uepkt(opx_ep->rx->match_ue_tag_hash, context, opx_ep->rx->av_addr,
+							FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 		}
 #endif
 
@@ -3416,7 +3435,7 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_searches);
 		FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(found_packet);
 
-		const uint64_t any_addr = (context->src_addr.fi == FI_ADDR_UNSPEC);
+		const uint64_t any_addr = (context->src_addr == FI_ADDR_UNSPEC);
 
 		while (uepkt != NULL) {
 			const unsigned is_shm = uepkt->is_shm;
@@ -3683,22 +3702,21 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 			HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank)
 			{
 				if (cur_av_rank) {
-					union fi_opx_addr cur_av_addr;
-					cur_av_addr.fi = cur_av_rank->fi_addr;
+					fi_addr_t cur_av_addr = cur_av_rank->fi_addr;
 
-					if (cur_av_addr.fi == addr) {
+					if (cur_av_addr == addr) {
 						found = 1;
 						cur_av_rank->updated++;
 						cur_av_rank->key.rank = opx_ep->daos_info.rank;
 						FI_DBG_TRACE(
 							fi_opx_global.prov, FI_LOG_EP_DATA,
 							"Update av_rank_hashmap[%d] = rank:%d fi_addr:0x%08lx - updated again %d.\n",
-							i, cur_av_rank->key.rank, cur_av_addr.fi, cur_av_rank->updated);
+							i, cur_av_rank->key.rank, cur_av_addr, cur_av_rank->updated);
 						break;
 					} else {
 						FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 							     "Update av_rank_hashmap[%d] = rank:%d fi_addr:0x%08lx\n",
-							     i++, cur_av_rank->key.rank, cur_av_addr.fi);
+							     i++, cur_av_rank->key.rank, cur_av_addr);
 					}
 				}
 			}
@@ -3721,12 +3739,12 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 	}
 
 #ifdef OPX_DAOS_DEBUG
-	union fi_opx_addr find_addr = {.fi = addr};
+	struct fi_opx_addr find_addr = opx_ep->av->table_addr[addr];
 	(void) fi_opx_dump_daos_av_addr_rank(opx_ep, find_addr, "UPDATE");
 #endif
 }
 
-ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
+ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, struct fi_opx_addr *peers,
 			     struct fi_opx_extended_addr *peers_ext)
 {
 	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_CONNECT, (uint64_t) count, 0);
@@ -3734,10 +3752,15 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 	ssize_t rc	    = FI_SUCCESS;
 	opx_ep->rx->av_addr = opx_ep->av->table_addr;
 	opx_ep->tx->av_addr = opx_ep->av->table_addr;
+	for (int i = 1; i < opx_ep->num_tx_contexts; i++) {
+		if (opx_ep->tx_contexts[i]) {
+			opx_ep->tx_contexts[i]->av_addr = opx_ep->av->table_addr;
+		}
+	}
 	if (fi_opx_global.hfi_local_info.sriov) {
 		/* Check rctxt ranges for sr-iov*/
 		for (n = 0; n < count; ++n) {
-			rc = fi_opx_check_tx_rctxt(opx_ep, peers[n].fi);
+			rc = fi_opx_check_tx_rctxt(opx_ep, n);
 			FI_INFO(fi_opx_global.prov, FI_LOG_AV, "lid:%u multi-vm %u, multi-lid %u, SHM %u\n",
 				fi_opx_global.hfi_local_info.lid, fi_opx_global.hfi_local_info.multi_vm,
 				fi_opx_global.hfi_local_info.multi_lid,
@@ -3749,7 +3772,7 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 		}
 		if (fi_opx_global.hfi_local_info.multi_vm) {
 			/* Multi-vm (self) jobs will need loopback to self so disable SHM */
-			opx_remove_self_lid(fi_opx_global.hfi_local_info.hfi_unit, fi_opx_global.hfi_local_info.lid);
+			opx_remove_self_lid(fi_opx_global.hfi_local_info.hfi_unit, fi_opx_global.hfi_local_info.lid, 0);
 			/* assert JKR/sr-iov(alpha) can't mix loopback and other lids across vms */
 			assert(!(OPX_HW_HFI1_TYPE & OPX_HFI1_JKR) || !fi_opx_global.hfi_local_info.multi_lid);
 			assert(!(OPX_HW_HFI1_TYPE & OPX_HFI1_WFR)); /* not supported */
@@ -3759,15 +3782,15 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 			opx_lid_is_shm(fi_opx_global.hfi_local_info.lid));
 	}
 	for (n = 0; n < count; ++n) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_AV, "opx_ep %p, opx_ep->tx %p, peer %#lX\n", opx_ep, opx_ep->tx,
-		       peers[n].fi);
+		FI_DBG(fi_opx_global.prov, FI_LOG_AV, "opx_ep %p, opx_ep->tx %p, peer index %d\n", opx_ep, opx_ep->tx,
+		       n);
 		/*
 		 * DAOS Persistent Address Support:
 		 * No Context Resource Management Framework is supported by OPX to enable
 		 * acquiring a context with attributes that exactly match the specified
 		 * source address.
 		 *
-		 * Therefore, the source address is treated as an ‘opaque’ ID, so preserve
+		 * Therefore, the source address is treated as an 'opaque' ID, so preserve
 		 * the rank data associated with the source address, which maps to the
 		 * appropriate HFI and HFI port.
 		 */
@@ -3778,13 +3801,13 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_op
 			/* DAOS often starts and stops EPs using the same source address, so
 			 * save rank information associated with this AV.
 			 */
-			fi_opx_update_daos_av_rank(opx_ep, peers[n].fi);
+			fi_opx_update_daos_av_rank(opx_ep, n);
 
 			FI_INFO(fi_opx_global.prov, FI_LOG_AV, "    DAOS: rank %d, rank_inst %d\n",
 				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst);
 		}
 
-		rc = FI_OPX_FABRIC_TX_CONNECT(opx_ep, peers[n].fi);
+		rc = FI_OPX_FABRIC_TX_CONNECT(opx_ep, peers[n]);
 		if (OFI_UNLIKELY(rc)) {
 			OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_TX_CONNECT, (uint64_t) (-rc), (uint64_t) n);
 			break;

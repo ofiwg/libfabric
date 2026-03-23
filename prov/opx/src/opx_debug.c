@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 Cornelis Networks.
+ * Copyright (C) 2025-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -235,8 +235,9 @@ static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 	}
 
 	char output_filename[1024];
-	sprintf(output_filename, "%s-%u-%06X-%04X.out", hostname, my_pid, opx_ep->rx->self.lid,
-		opx_ep->rx->self.hfi1_subctxt_rx);
+	sprintf(output_filename, "%s-%u-%06X-%04X.out", hostname, my_pid,
+		opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
 
 	FILE *output = fopen(output_filename, "w");
 
@@ -379,10 +380,12 @@ static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 		opx_ep->tx->sdma_request_queue.max_iovs);
 
 	fprintf(output, "(%d) ------------------------- Reliability -----------------\n", my_pid);
-	fprintf(output, "(%d) opx_ep->rx->self.lid                   : %04X\n", my_pid, opx_ep->rx->self.lid);
-	fprintf(output, "(%d) opx_ep->rx->self.hfi1_subctxt_rx       : %04X\n", my_pid,
-		opx_ep->rx->self.hfi1_subctxt_rx);
-	fprintf(output, "(%d) opx_ep->rx->self.hfi1_unit             : %02X\n", my_pid, opx_ep->rx->self.hfi1_unit);
+	fprintf(output, "(%d) opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid                   : %04X\n", my_pid,
+		opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid);
+	fprintf(output, "(%d) opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx       : %04X\n", my_pid,
+		opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
+	fprintf(output, "(%d) opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_unit             : %02X\n", my_pid,
+		opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_unit);
 
 	opx_debug_dump_rx_flow(opx_ep, my_pid, output);
 	opx_debug_dump_tx_flow(opx_ep, my_pid, output);

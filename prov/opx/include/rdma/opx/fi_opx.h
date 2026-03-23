@@ -124,6 +124,9 @@ struct fi_opx_daos_hfi_rank {
 
 typedef uint32_t opx_lid_t; /* only 3 bytes of lid is used */
 
+#define OPX_LID_PLANE_SHIFT		  24
+#define OPX_LID_PLANE_KEY(lid, plane_idx) ((lid) | ((opx_lid_t) (plane_idx) << OPX_LID_PLANE_SHIFT))
+
 /* hfi1 type for bit logic */
 enum opx_hfi1_type {
 	OPX_HFI1_UNDEF	  = 0, // undefined
@@ -176,6 +179,8 @@ static const char *const OPX_HFI1_PACKET_STR[] = {
 OPX_COMPILE_TIME_ASSERT((OPX_MAX_HFIS & 3) == 0, "OPX_MAX_HFIS must be a multiple of 4!\n");
 
 #define OPX_MAX_TX_CONTEXTS (2)
+OPX_COMPILE_TIME_ASSERT(OPX_MAX_TX_CONTEXTS <= (1 << (31 - OPX_LID_PLANE_SHIFT)),
+			"OPX_LID_PLANE_KEY: not enough bits for plane index");
 
 struct opx_hfi_local_entry {
 	uint32_t instance;

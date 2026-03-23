@@ -805,7 +805,7 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 		} else {
 			dlid = (opx_lid_t) __le24_to_cpu((hdr->lrh_16B.dlid20 << 20) | (hdr->lrh_16B.dlid));
 		}
-		assert(dlid == opx_ep->rx->self.lid);
+		assert(dlid == opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid);
 #endif
 
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
@@ -815,7 +815,8 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 		}
 
 #ifndef OPX_DAOS
-		assert((hdr->bth.subctxt_rx & OPX_BTH_SUBCTXT_RX_MASK) == opx_ep->rx->self.hfi1_subctxt_rx);
+		assert((hdr->bth.subctxt_rx & OPX_BTH_SUBCTXT_RX_MASK) ==
+		       opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
 #else
 		uint32_t origin_reliability_subctxt_rx;
 
@@ -901,10 +902,10 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
+void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== SDMA POLL BEGIN\n");
-	struct fi_opx_hfi1_context *hfi	       = opx_ep->hfi;
+	struct fi_opx_hfi1_context *hfi	       = opx_tx->hfi;
 	uint16_t		    queue_size = hfi->info.sdma.queue_size;
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(sdma_end_ns);
@@ -937,8 +938,8 @@ void fi_opx_hfi1_poll_sdma_completion(struct fi_opx_ep *opx_ep)
 			assert(hfi->info.sdma.available_counter == queue_size);
 		}
 	}
-	assert(hfi->info.sdma.available_counter >= opx_ep->tx->sdma_request_queue.slots_avail);
-	opx_ep->tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
+	assert(hfi->info.sdma.available_counter >= opx_tx->sdma_request_queue.slots_avail);
+	opx_tx->sdma_request_queue.slots_avail = hfi->info.sdma.available_counter;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== SDMA POLL COMPLETE\n");
 }
 
@@ -984,15 +985,16 @@ int opx_is_rhf_empty(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const e
 __OPX_FORCE_INLINE__
 bool opx_handle_events_shared(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
 {
-	uint64_t events = *(uint64_t *) (opx_ep->hfi->ctrl->base_info.events_bufbase);
-	bool	 ret	= false;
+	struct fi_opx_ep_tx *opx_tx = opx_ep->tx_contexts[OPX_PRIMARY_PLANE];
+	uint64_t	     events = *(uint64_t *) (opx_ep->hfi->ctrl->base_info.events_bufbase);
+	bool		     ret    = false;
 
 	if (opx_shared_rx_context_try_lock(opx_ep->rx->shd_ctx.hwcontext_ctrl) != 0) {
 		OPX_TRACE_LOCK_INSTANT(OPX_TRACE_EVENT_LOCK_CONTENTION, (uint64_t) opx_ep->rx->shd_ctx.hwcontext_ctrl,
 				       0);
 		return false;
 	}
-	OPX_SHD_CTX_PIO_LOCK(OPX_CTX_SHARING_ON, opx_ep->tx);
+	OPX_SHD_CTX_PIO_LOCK(OPX_CTX_SHARING_ON, opx_tx);
 
 	/* If the local hfi1_frozen_count is same as the shared  hfi1_frozen_count, then this is the
 		first process to reach this handling. */
@@ -1009,8 +1011,8 @@ bool opx_handle_events_shared(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "Context frozen: Resetting context for send_ctxt %d subctxt %d\n",
 			       opx_ep->hfi->send_ctxt, opx_ep->hfi->subctxt);
-			opx_reset_context(opx_ep, events, hfi1_type, OPX_CTX_SHARING_ON);
-			int ret = opx_hfi1_wrapper_ack_events(opx_ep->hfi, events);
+			opx_reset_context(opx_ep, opx_tx->hfi, opx_tx, events, hfi1_type, OPX_CTX_SHARING_ON);
+			int ret = opx_hfi1_wrapper_ack_events(opx_tx->hfi, events);
 			if (ret) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ack event failed: %s\n", strerror(errno));
 			}
@@ -1022,29 +1024,32 @@ bool opx_handle_events_shared(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "Context has already been reset send_ctxt %d subctxt %d\n", opx_ep->hfi->send_ctxt,
 			       opx_ep->hfi->subctxt);
-			opx_link_up_update_pio_credit_addr(opx_ep->hfi, opx_ep, OPX_CTX_SHARING_ON);
+			opx_link_up_update_pio_credit_addr(opx_tx->hfi, opx_ep, opx_tx, OPX_CTX_SHARING_ON);
 			ret = true;
 		}
 	}
 	opx_shared_rx_context_unlock(opx_ep->rx->shd_ctx.hwcontext_ctrl);
-	OPX_SHD_CTX_PIO_UNLOCK(OPX_CTX_SHARING_ON, opx_ep->tx);
+	OPX_SHD_CTX_PIO_UNLOCK(OPX_CTX_SHARING_ON, opx_tx);
 	return ret;
 }
 
 __OPX_FORCE_INLINE__
-bool opx_handle_events(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
+bool opx_handle_events(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_context *hfi, struct fi_opx_ep_tx *opx_tx,
+		       int tx_idx, const uint64_t hdrq_mask, const enum opx_hfi1_type hfi1_type)
 {
-	uint64_t events = *(uint64_t *) (opx_ep->hfi->ctrl->base_info.events_bufbase);
+	uint64_t events = *(uint64_t *) (hfi->ctrl->base_info.events_bufbase);
 	/* In WFR, on a link down, driver/HW always enters a SPC freeze state. It always triggers a
-		HFI1_EVENT_FROZEN. Hence, HFI1_EVENT_LINKDOWN can be ignored In JKR, there is no freeze event because
-		there are two ports. If one port is down, the other still functions. Hence, handle
-		HFI1_EVENT_LINKDOWN. */
+	   HFI1_EVENT_FROZEN. Hence, HFI1_EVENT_LINKDOWN can be ignored. In JKR, there is no freeze event
+	   because there are two ports. If one port is down, the other still functions. Hence, handle
+	   HFI1_EVENT_LINKDOWN. */
 	if (events & HFI1_EVENT_FROZEN || (events & HFI1_EVENT_LINKDOWN && !(hfi1_type & OPX_HFI1_WFR))) {
-		/* reset context only if RHF queue is empty */
-		if (opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type, OPX_CTX_SHARING_OFF)) {
-			opx_reset_context(opx_ep, events, hfi1_type, OPX_CTX_SHARING_OFF);
-			int ret = opx_hfi1_wrapper_ack_events(opx_ep->hfi, events);
-			if (ret) {
+		/* RHF empty check only for primary plane (tx_idx == OPX_PRIMARY_PLANE) since RX is on primary only.
+		   Secondary planes are TX-only, so skip the RHF check. */
+		if (tx_idx != OPX_PRIMARY_PLANE ||
+		    opx_is_rhf_empty(opx_ep, hdrq_mask, hfi1_type, OPX_CTX_SHARING_OFF)) {
+			opx_reset_context(opx_ep, hfi, opx_tx, events, hfi1_type, OPX_CTX_SHARING_OFF);
+			int rc = opx_hfi1_wrapper_ack_events(hfi, events);
+			if (rc) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ack event failed: %s\n", strerror(errno));
 			}
 			return true;
@@ -1248,25 +1253,32 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 		union fi_opx_timer_stamp	  *timestamp = &service->timestamp;
 		uint64_t			   compare   = fi_opx_timer_now(timestamp, timer);
 
-		struct fi_opx_hfi1_context *context = opx_ep->hfi;
+		for (int tx_idx = 0; tx_idx < opx_ep->num_tx_contexts; tx_idx++) {
+			struct fi_opx_hfi1_context *context = opx_ep->hfi_contexts[tx_idx];
+			struct fi_opx_ep_tx	   *opx_tx  = opx_ep->tx_contexts[tx_idx];
+			if (!context || !opx_tx) {
+				continue;
+			}
 
-		if (OFI_UNLIKELY(compare > context->status_check_next_usec)) {
-			int err = fi_opx_context_check_status(context, hfi1_type, opx_ep, ctx_sharing);
+			if (OFI_UNLIKELY(compare > context->status_check_next_usec)) {
+				int err = fi_opx_context_check_status(context, hfi1_type, opx_ep, opx_tx, ctx_sharing);
 
-			if (context->status_lasterr != FI_SUCCESS && err == FI_SUCCESS) {
-				if (ctx_sharing) {
-					if (opx_handle_events_shared(opx_ep, hdrq_mask, hfi1_type)) {
-						context->status_lasterr = FI_SUCCESS; /* clear error */
-					}
-				} else {
-					if (opx_handle_events(opx_ep, hdrq_mask, hfi1_type)) {
-						context->status_lasterr = FI_SUCCESS; /* clear error */
+				if (context->status_lasterr != FI_SUCCESS && err == FI_SUCCESS) {
+					if (ctx_sharing) {
+						if (opx_handle_events_shared(opx_ep, hdrq_mask, hfi1_type)) {
+							context->status_lasterr = FI_SUCCESS;
+						}
+					} else {
+						if (opx_handle_events(opx_ep, context, opx_tx, tx_idx, hdrq_mask,
+								      hfi1_type)) {
+							context->status_lasterr = FI_SUCCESS;
+						}
 					}
 				}
+				compare				= fi_opx_timer_now(timestamp, timer);
+				context->status_check_next_usec = fi_opx_timer_next_event_usec(
+					timer, timestamp, OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC);
 			}
-			compare = fi_opx_timer_now(timestamp, timer);
-			context->status_check_next_usec =
-				fi_opx_timer_next_event_usec(timer, timestamp, OPX_CONTEXT_STATUS_CHECK_INTERVAL_USEC);
 		}
 
 		// TODO: There needs to be feedback from the replay buffer pool into this following if as well
@@ -1279,12 +1291,26 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 
 #if HAVE_HFISVC
 #ifdef OPX_HFISVC_RELIABILITY_DOORBELL
-			if (opx_ep->use_hfisvc && (opx_ep->tx->cq_pending_ptr || opx_ep->rx->cq_pending_ptr)) {
-				FI_OPX_DEBUG_COUNTERS_INC(
-					opx_ep->debug_counters.hfisvc.doorbell_ring.reliability_timer_pop);
-				int rc __attribute__((unused));
-				rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[0].ctx);
-				assert(rc == 0);
+			if (opx_ep->use_hfisvc) {
+				/* Ring doorbell once per context that has pending completions.
+				 * RX pending lives on the primary plane context, TX pending
+				 * lives on each tx_contexts[tx_idx]. Check both and ring
+				 * the doorbell at most once per context index. */
+				for (int tx_idx = 0; tx_idx < opx_ep->num_tx_contexts; tx_idx++) {
+					bool has_pending =
+						(tx_idx == OPX_PRIMARY_PLANE && opx_ep->rx->cq_pending_ptr != NULL) ||
+						(opx_ep->tx_contexts[tx_idx] &&
+						 opx_ep->tx_contexts[tx_idx]->cq_pending_ptr);
+
+					if (has_pending) {
+						FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.doorbell_ring
+										  .reliability_timer_pop);
+						int rc __attribute__((unused));
+						rc = (*opx_ep->domain->hfisvc.doorbell)(
+							opx_ep->domain->hfisvc.ctxs[tx_idx].ctx);
+						assert(rc == 0);
+					}
+				}
 			}
 #endif
 #endif
