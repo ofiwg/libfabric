@@ -70,23 +70,6 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 	return 0;
 }
 
-/**
- * @brief Invalidate stale cur_wq pointer on a CQ if it references the given QP
- *
- * When a QP is about to be destroyed, any CQ that has cur_wq pointing into
- * that QP's work queue must be invalidated to prevent use-after-free during
- * the subsequent CQ drain.
- */
-static inline void efa_cq_invalidate_cur_wq(struct efa_cq *cq, struct efa_qp *qp)
-{
-#if HAVE_EFA_DATA_PATH_DIRECT
-	if (cq && cq->ibv_cq.data_path_direct_enabled &&
-	    cq->ibv_cq.data_path_direct.cur_wq &&
-	    cq->ibv_cq.data_path_direct.cur_qp == qp)
-		cq->ibv_cq.data_path_direct.cur_wq = NULL;
-#endif
-}
-
 int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 {
 	struct efa_domain *domain;
