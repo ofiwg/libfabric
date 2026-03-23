@@ -72,6 +72,7 @@ void test_efa_rdm_mr_reg_host_memory_no_mr_local(struct efa_resource **state)
 
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
 						 FI_VERSION(2, 0), hints, true, true);
+	fi_freeinfo(hints);
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
@@ -538,6 +539,12 @@ void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
 	ofi_buf_free(direct_ope);
 
 	free(buf);
+
+	/* Close ep before restoring track_mr so efa_ep_close sees track_mr=1
+	 * and destroys the direct ope pool. */
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+
 	efa_env.track_mr = saved_track_mr;
 }
 
@@ -608,6 +615,12 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource 
 
 	assert_int_equal(fi_close(&ep2->fid), 0);
 	free(buf);
+
+	/* Close ep before restoring track_mr so efa_ep_close sees track_mr=1
+	 * and destroys the direct ope pool. */
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+
 	efa_env.track_mr = saved_track_mr;
 }
 
