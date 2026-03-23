@@ -4357,7 +4357,10 @@ with atomic message calls.
 :   Indicates that the user has additional requests that will
     immediately be posted after the current call returns. Use of this
     flag may improve performance by enabling the provider to optimize
-    its access to the fabric hardware.
+    its access to the fabric hardware. Providers that utilize delayed
+    start optimizations for communication calls with FI_MORE flag set
+    must ensure that all previously delayed calls be flushed when an
+    error is returned from a new call.
 
 *FI_INJECT*
 :   Indicates that the control of constant data buffers should be
@@ -12380,7 +12383,10 @@ fi_sendmsg.
 :   Indicates that the user has additional requests that will
     immediately be posted after the current call returns. Use of this
     flag may improve performance by enabling the provider to optimize
-    its access to the fabric hardware.
+    its access to the fabric hardware. Providers that utilize delayed
+    start optimizations for communication calls with FI_MORE flag set
+    must ensure that all previously delayed calls be flushed when an
+    error is returned from a new call.
 
 *FI_INJECT*
 :   Applies to fi_sendmsg. Indicates that the outbound data buffer
@@ -15410,7 +15416,10 @@ list of flags are usable with fi_readmsg and/or fi_writemsg.
 :   Indicates that the user has additional requests that will
     immediately be posted after the current call returns. Use of this
     flag may improve performance by enabling the provider to optimize
-    its access to the fabric hardware.
+    its access to the fabric hardware. Providers that utilize delayed
+    start optimizations for communication calls with FI_MORE flag set
+    must ensure that all previously delayed calls be flushed when an
+    error is returned from a new call.
 
 *FI_INJECT*
 :   Applies to fi_writemsg. Indicates that the outbound data buffer
@@ -15722,7 +15731,10 @@ following list of flags are usable with fi_trecvmsg and/or fi_tsendmsg.
 :   Indicates that the user has additional requests that will
     immediately be posted after the current call returns. Use of this
     flag may improve performance by enabling the provider to optimize
-    its access to the fabric hardware.
+    its access to the fabric hardware. Providers that utilize delayed
+    start optimizations for communication calls with FI_MORE flag set
+    must ensure that all previously delayed calls be flushed when an
+    error is returned from a new call.
 
 *FI_INJECT*
 :   Applies to fi_tsendmsg. Indicates that the outbound data buffer
