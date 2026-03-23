@@ -153,8 +153,12 @@ static void efa_ah_cnt_av_impl(struct efa_resource **state, bool efa_fabric, boo
 	}
 
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), efa_fabric ? 1 : 0);
-	assert_int_equal(efa_ah->explicit_refcnt, efa_fabric ? 1 : 0);
-	assert_int_equal(efa_ah->implicit_refcnt, 0);
+	if (efa_fabric) {
+		/* efa_ah is still alive because self-AH holds a reference */
+		assert_int_equal(efa_ah->explicit_refcnt, 1);
+		assert_int_equal(efa_ah->implicit_refcnt, 0);
+	}
+	/* else: efa_ah has been freed, do not dereference */
 
 	/* ah map should be empty now after closing ep which destroys the self ah for efa fabric */
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
