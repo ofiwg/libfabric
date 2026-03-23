@@ -63,7 +63,7 @@ def test_rma_bw_1G(cmdline_args, operation_type, rma_bw_completion_semantic):
     # Default window size is 64 resulting in 128GB being registered, which
     # exceeds max number of registered host pages
     timeout = max(540, cmdline_args.timeout)
-    command = "fi_rma_bw -e rdm -W 1"
+    command = "fi_rma_bw -e rdm -W 1 -I 1 -w 0"
     command = command + " -o " + operation_type
     efa_run_client_server_test(cmdline_args, command, 2,
                                completion_semantic=rma_bw_completion_semantic, message_size=1073741824,

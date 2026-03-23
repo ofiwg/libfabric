@@ -136,9 +136,7 @@ def test_rdm_tagged_peek(cmdline_args):
 @pytest.mark.serial
 @pytest.mark.functional
 def test_rdm_pingpong_1G(cmdline_args, completion_semantic):
-    # Default window size is 64 resulting in 128GB being registered, which
-    # exceeds max number of registered host pages
-    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong -W 1", 2,
+    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong -I 1 -w 0", 2,
                                completion_semantic=completion_semantic, message_size=1073741824,
                                memory_type="host_to_host", warmup_iteration_type=0, fabric="efa")
 
