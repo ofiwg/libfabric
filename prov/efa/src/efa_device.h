@@ -33,6 +33,8 @@ int efa_device_list_initialize(void);
 
 void efa_device_list_finalize(void);
 
+void efa_device_destruct(struct efa_device *device);
+
 extern struct efa_device *g_efa_selected_device_list;
 
 extern int g_efa_selected_device_cnt;

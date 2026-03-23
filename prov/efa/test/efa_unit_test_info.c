@@ -43,6 +43,9 @@ void test_info_open_ep_with_wrong_info()
 
 	err = fi_close(&fabric->fid);
 	assert_int_equal(err, 0);
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
 }
 
 /**
@@ -70,6 +73,9 @@ void test_info_rdm_attributes()
 		assert_true(info->caps | FI_HMEM);
 #endif
 	}
+
+	fi_freeinfo(info_head);
+	fi_freeinfo(hints);
 }
 
 /**
@@ -91,6 +97,9 @@ void test_info_dgram_attributes()
 		assert_true(!strcmp(info->fabric_attr->name, EFA_FABRIC_NAME));
 		assert_true(strstr(info->domain_attr->name, "dgrm"));
 	}
+
+	fi_freeinfo(info_head);
+	fi_freeinfo(hints);
 }
 
 /**
@@ -498,6 +507,8 @@ void test_info_check_shm_info_hmem()
 
 	hints->caps &= ~FI_HMEM;
 	test_info_check_shm_info_from_hints(hints);
+
+	fi_freeinfo(hints);
 }
 
 void test_info_check_shm_info_op_flags()
@@ -513,6 +524,8 @@ void test_info_check_shm_info_op_flags()
 	hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
 	hints->rx_attr->op_flags |= FI_MULTI_RECV;
 	test_info_check_shm_info_from_hints(hints);
+
+	fi_freeinfo(hints);
 }
 
 void test_info_check_shm_info_threading()
@@ -523,6 +536,8 @@ void test_info_check_shm_info_threading()
 
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 	test_info_check_shm_info_from_hints(hints);
+
+	fi_freeinfo(hints);
 }
 
 /**
@@ -606,6 +621,7 @@ void check_no_hmem_support_when_not_requested(char *fabric_name)
 	assert_non_null(info);
 	assert_false(info->caps & FI_HMEM);
 	fi_freeinfo(info);
+	fi_freeinfo(hints);
 }
 
 /**
@@ -632,6 +648,7 @@ void test_info_direct_unsupported()
 	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
 	assert_int_equal(err, 0);
 	assert_non_null(info);
+	fi_freeinfo(info);
 
 	hints->caps |= FI_ATOMIC;
 	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
@@ -644,6 +661,8 @@ void test_info_direct_unsupported()
 	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
 	assert_int_equal(err, -FI_ENODATA);
 	assert_null(info);
+
+	fi_freeinfo(hints);
 }
 
 /**
@@ -680,6 +699,9 @@ void test_info_direct_ordering()
 	assert_true(efa_returned);
 	assert_true(efa_returned_after_efa_direct);
 	assert_false(efa_direct_returned_after_efa);
+
+	fi_freeinfo(info_head);
+	fi_freeinfo(hints);
 }
 
 /**
@@ -722,6 +744,7 @@ void test_use_device_rdma( const int env_val,
 		/* cannot test USE_DEVICE_RDMA=1, hardware
 		   doesn't support it, and will abort() */
 		fi_freeinfo(info);
+		fi_freeinfo(hints);
 		skip();
 		return;
 	}
@@ -759,6 +782,7 @@ void test_use_device_rdma( const int env_val,
 	assert_int_equal(fi_close(&domain->fid), 0);
 	assert_int_equal(fi_close(&fabric->fid), 0);
 	fi_freeinfo(info);
+	fi_freeinfo(hints);
 
 	return;
 }

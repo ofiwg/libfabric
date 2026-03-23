@@ -972,6 +972,7 @@ void test_efa_rdm_ep_close_shm_resource_unhappy(struct efa_resource **state)
 	assert_null(ep->shm_ep);
 
 	assert_int_equal(fi_close(&mr->fid), 0);
+	free(buf);
 }
 
 void test_efa_rdm_ep_setopt_shared_memory_permitted(struct efa_resource **state)
