@@ -410,6 +410,7 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.ibv_set_err_comp_cntr = __real_ibv_set_err_comp_cntr,
 	.ibv_read_comp_cntr = __real_ibv_read_comp_cntr,
 	.ibv_read_err_comp_cntr = __real_ibv_read_err_comp_cntr,
+	.ibv_qp_attach_comp_cntr = __real_ibv_qp_attach_comp_cntr,
 #endif
 };
 
