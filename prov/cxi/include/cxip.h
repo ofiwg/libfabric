@@ -109,6 +109,7 @@
 
 #define CXIP_AMO_MAX_IOV		1
 #define CXIP_EQ_DEF_SZ			(1 << 8)
+#define CXIP_MAX_RX_EQ_SIZE		67108864U
 #define CXIP_CQ_DEF_SZ			131072U
 #define CXIP_REMOTE_CQ_DATA_SZ		8
 
