@@ -250,7 +250,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free;
 	}
 
-	efa_domain->info = fi_dupinfo(EFA_EP_TYPE_IS_RDM(info) ? efa_domain->device->rdm_info : efa_domain->device->dgram_info);
+	/*
+	 * Duplicate the fi_info passed to domain creation to preserve the exact
+	 * capabilities and configuration requested by the application.
+	 */
+	efa_domain->info = fi_dupinfo(info);
 	if (!efa_domain->info) {
 		ret = -FI_ENOMEM;
 		goto err_free;

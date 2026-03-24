@@ -764,3 +764,56 @@ void test_efa_domain_open_ops_get_mr_lkey(struct efa_resource **state)
     assert_int_equal(ret, FI_SUCCESS);
     assert_true(lkey == mr.ibv_mr->lkey);
 }
+
+/**
+ * @brief Helper function to test that efa_domain->info correctly duplicates the passed info parameter
+ *
+ * This helper verifies that efa_domain->info->caps matches the capabilities
+ * that were passed to efa_domain_open().
+ *
+ * @param[in]	resource	struct efa_resource that is managed by the framework
+ * @param[in]	fabric_name	name of the fabric to test (EFA_FABRIC_NAME or EFA_DIRECT_FABRIC_NAME)
+ */
+static void test_efa_domain_info_duplicates_passed_info_helper(struct efa_resource *resource, char *fabric_name)
+{
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, fabric_name);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+
+	/* Verify that efa_domain->info matches the resource->info */
+	assert_non_null(efa_domain->info);
+	assert_int_equal(efa_domain->info->caps, resource->info->caps);
+	assert_int_equal(efa_domain->info->tx_attr->caps, resource->info->tx_attr->caps);
+	assert_int_equal(efa_domain->info->rx_attr->caps, resource->info->rx_attr->caps);
+}
+
+/**
+ * @brief Test that efa_domain->info correctly duplicates the passed info parameter for EFA
+ *
+ * This test verifies that efa_domain->info->caps matches the capabilities
+ * that were passed to efa_domain_open().
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_info_duplicates_passed_info_efa(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	test_efa_domain_info_duplicates_passed_info_helper(resource, EFA_FABRIC_NAME);
+}
+
+/**
+ * @brief Test that efa_domain->info correctly duplicates the passed info parameter for EFA-direct
+ *
+ * This test verifies that efa_domain->info->caps matches the capabilities
+ * that were passed to efa_domain_open().
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_domain_info_duplicates_passed_info_efa_direct(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	test_efa_domain_info_duplicates_passed_info_helper(resource, EFA_DIRECT_FABRIC_NAME);
+}

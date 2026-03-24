@@ -24,6 +24,7 @@ struct efa_domain {
 	struct fid_domain	*shm_domain;
 	struct efa_device	*device;
 	struct ibv_pd		*ibv_pd;
+	/* Duplicate of fi_info passed to domain creation */
 	struct fi_info		*info;
 	struct efa_fabric	*fabric;
 	struct ofi_mr_cache	*cache;

@@ -334,6 +334,8 @@ void test_efa_domain_dgram_mr_ops();
 void test_efa_domain_mr_cache_enabled();
 void test_efa_domain_mr_cache_disabled_with_mr_local();
 void test_efa_domain_mr_cache_disabled_with_efa_direct();
+void test_efa_domain_info_duplicates_passed_info_efa();
+void test_efa_domain_info_duplicates_passed_info_efa_direct();
 /* end efa_unit_test_domain.c */
 
 void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
