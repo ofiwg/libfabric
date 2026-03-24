@@ -2682,8 +2682,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 
-	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr, 0,
-						  (uint64_t *) buf_ptr + OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS,
+	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr, 0, (uint64_t *) buf_ptr,
 						  payload_qws_total, reliability, hfi1_type);
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_FIRST_HFI, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
