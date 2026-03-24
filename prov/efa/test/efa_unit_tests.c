@@ -132,6 +132,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.ibv_set_err_comp_cntr = __real_ibv_set_err_comp_cntr,
 		.ibv_read_comp_cntr = __real_ibv_read_comp_cntr,
 		.ibv_read_err_comp_cntr = __real_ibv_read_err_comp_cntr,
+		.ibv_qp_attach_comp_cntr = __real_ibv_qp_attach_comp_cntr,
 #endif
 	};
 
@@ -443,6 +444,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_seterr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_read, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_readerr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_bind_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_bind_ep_attach_fail, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end of efa_unit_test_cntr.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_reorder_expected_msg_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

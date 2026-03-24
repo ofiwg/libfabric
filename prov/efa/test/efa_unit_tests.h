@@ -372,6 +372,8 @@ void test_efa_hw_cntr_set();
 void test_efa_hw_cntr_seterr();
 void test_efa_hw_cntr_read();
 void test_efa_hw_cntr_readerr();
+void test_efa_hw_cntr_bind_ep();
+void test_efa_hw_cntr_bind_ep_attach_fail();
 /* begin of efa_unit_test_rdm_peer.c */
 void test_efa_rdm_peer_reorder_expected_msg_id();
 void test_efa_rdm_peer_reorder_smaller_msg_id();

@@ -251,7 +251,8 @@ prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=efadv_create_comp_cntr \
 					-Wl,--wrap=ibv_set_comp_cntr \
 					-Wl,--wrap=ibv_set_err_comp_cntr \
 					-Wl,--wrap=ibv_read_comp_cntr \
-					-Wl,--wrap=ibv_read_err_comp_cntr
+					-Wl,--wrap=ibv_read_err_comp_cntr \
+					-Wl,--wrap=ibv_qp_attach_comp_cntr
 endif HAVE_EFADV_CREATE_COMP_CNTR
 
 prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)

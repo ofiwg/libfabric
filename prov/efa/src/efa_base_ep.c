@@ -435,6 +435,64 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	return 0;
 }
 
+/**
+ * @brief Map ofi_cntr_index to ibv_comp_cntr_attach_op bit
+ */
+#if HAVE_EFADV_CREATE_COMP_CNTR
+static const uint32_t efa_cntr_index_to_ibv_op[] = {
+	[CNTR_TX]     = IBV_COMP_CNTR_ATTACH_OP_SEND,
+	[CNTR_RX]     = IBV_COMP_CNTR_ATTACH_OP_RECV,
+	[CNTR_RD]     = IBV_COMP_CNTR_ATTACH_OP_RDMA_READ,
+	[CNTR_WR]     = IBV_COMP_CNTR_ATTACH_OP_RDMA_WRITE,
+	[CNTR_REM_RD] = IBV_COMP_CNTR_ATTACH_OP_REMOTE_RDMA_READ,
+	[CNTR_REM_WR] = IBV_COMP_CNTR_ATTACH_OP_REMOTE_RDMA_WRITE,
+};
+
+/**
+ * @brief Attach hardware completion counters to a QP
+ *
+ * Walk ep->util_ep.cntrs[] and call ibv_qp_attach_comp_cntr for each
+ * bound hw counter. Must be called when QP is in RESET or INIT state.
+ *
+ * @param base_ep	efa_base_ep with bound counters
+ * @param qp		the QP to attach counters to
+ * @return 0 on success, negative errno on failure
+ */
+static int efa_base_ep_attach_comp_cntrs(struct efa_base_ep *base_ep,
+					 struct efa_qp *qp)
+{
+	struct util_cntr *util_cntr;
+	struct efa_cntr *efa_cntr;
+	struct ibv_comp_cntr_attach_attr attr;
+	int i, err;
+
+	for (i = 0; i < CNTR_CNT; i++) {
+		util_cntr = base_ep->util_ep.cntrs[i];
+		if (!util_cntr)
+			continue;
+
+		efa_cntr = container_of(util_cntr, struct efa_cntr, util_cntr);
+		if (!efa_cntr->ibv_comp_cntr)
+			continue;
+		attr = (struct ibv_comp_cntr_attach_attr){
+			.comp_mask = 0,
+			.op_mask = efa_cntr_index_to_ibv_op[i],
+		};
+
+		err = ibv_qp_attach_comp_cntr(qp->ibv_qp, efa_cntr->ibv_comp_cntr, &attr);
+		if (err) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "ibv_qp_attach_comp_cntr failed with op_mask "
+				 "%u: %s(%d)\n",
+				 attr.op_mask, strerror(err), err);
+			return -err;
+		}
+	}
+
+	return 0;
+}
+#endif /* HAVE_EFADV_CREATE_COMP_CNTR */
+
 static
 int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 {
@@ -442,6 +500,15 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 
 	assert(!efa_base_ep_get_tx_cq(base_ep) || ofi_genlock_held(&efa_base_ep_get_tx_cq(base_ep)->util_cq.ep_list_lock));
 	assert(!efa_base_ep_get_rx_cq(base_ep) || ofi_genlock_held(&efa_base_ep_get_rx_cq(base_ep)->util_cq.ep_list_lock));
+
+#if HAVE_EFADV_CREATE_COMP_CNTR
+	/* Attach hw counters while QP is in RESET state */
+	if (EFA_INFO_TYPE_IS_DIRECT(base_ep->info)) {
+		err = efa_base_ep_attach_comp_cntrs(base_ep, qp);
+		if (err)
+			return err;
+	}
+#endif
 
 	qp->qkey = (base_ep->util_ep.type == FI_EP_DGRAM) ?
 			   EFA_DGRAM_CONNID :
