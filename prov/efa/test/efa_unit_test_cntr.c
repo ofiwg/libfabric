@@ -337,8 +337,14 @@ void test_efa_hw_cntr_open_ibv_fail(struct efa_resource **state)
 
 /**
  * @brief Helper to open a hardware counter
+ *
+ * @param[in]  resource     Test resource
+ * @param[in]  enable_ep    If true, construct resource with EP enabled;
+ *                          if false, leave EP not enabled.
+ * @return opened counter fid
  */
-static struct fid_cntr *test_efa_hw_cntr_open(struct efa_resource *resource)
+static struct fid_cntr *test_efa_hw_cntr_open(struct efa_resource *resource,
+					      bool enable_ep)
 {
 	struct fi_cntr_attr attr = {0};
 	struct efadv_comp_cntr_init_attr cc_attr = {0};
@@ -347,7 +353,10 @@ static struct fid_cntr *test_efa_hw_cntr_open(struct efa_resource *resource)
 	struct fid_cntr *cntr_fid = NULL;
 	int ret;
 
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	if (enable_ep)
+		efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	else
+		efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
@@ -377,7 +386,7 @@ void test_efa_hw_cntr_add(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
 
-	cntr_fid = test_efa_hw_cntr_open(resource);
+	cntr_fid = test_efa_hw_cntr_open(resource, true);
 	g_efa_unit_test_mocks.ibv_inc_comp_cntr = efa_mock_ibv_inc_comp_cntr_return_mock;
 
 	assert_int_equal(fi_cntr_add(cntr_fid, 1), FI_SUCCESS);
@@ -393,7 +402,7 @@ void test_efa_hw_cntr_adderr(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
 
-	cntr_fid = test_efa_hw_cntr_open(resource);
+	cntr_fid = test_efa_hw_cntr_open(resource, true);
 	g_efa_unit_test_mocks.ibv_inc_err_comp_cntr = efa_mock_ibv_inc_err_comp_cntr_return_mock;
 
 	assert_int_equal(fi_cntr_adderr(cntr_fid, 1), FI_SUCCESS);
@@ -409,7 +418,7 @@ void test_efa_hw_cntr_set(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
 
-	cntr_fid = test_efa_hw_cntr_open(resource);
+	cntr_fid = test_efa_hw_cntr_open(resource, true);
 	g_efa_unit_test_mocks.ibv_set_comp_cntr = efa_mock_ibv_set_comp_cntr_return_mock;
 
 	assert_int_equal(fi_cntr_set(cntr_fid, 1), FI_SUCCESS);
@@ -425,7 +434,7 @@ void test_efa_hw_cntr_seterr(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
 
-	cntr_fid = test_efa_hw_cntr_open(resource);
+	cntr_fid = test_efa_hw_cntr_open(resource, true);
 	g_efa_unit_test_mocks.ibv_set_err_comp_cntr = efa_mock_ibv_set_err_comp_cntr_return_mock;
 
 	assert_int_equal(fi_cntr_seterr(cntr_fid, 1), FI_SUCCESS);
@@ -441,7 +450,7 @@ void test_efa_hw_cntr_read(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
 
-	cntr_fid = test_efa_hw_cntr_open(resource);
+	cntr_fid = test_efa_hw_cntr_open(resource, true);
 	g_efa_unit_test_mocks.ibv_read_comp_cntr = efa_mock_ibv_read_comp_cntr_return_mock;
 
 	will_return(efa_mock_ibv_read_comp_cntr_return_mock, 100);
@@ -458,11 +467,63 @@ void test_efa_hw_cntr_readerr(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
 
-	cntr_fid = test_efa_hw_cntr_open(resource);
+	cntr_fid = test_efa_hw_cntr_open(resource, true);
 	g_efa_unit_test_mocks.ibv_read_err_comp_cntr = efa_mock_ibv_read_err_comp_cntr_return_mock;
 
 	will_return(efa_mock_ibv_read_err_comp_cntr_return_mock, 100);
 	assert_int_equal(fi_cntr_readerr(cntr_fid), 100);
+
+	fi_close(&cntr_fid->fid);
+}
+
+/**
+ * @brief Verify fi_enable succeeds when ibv_qp_attach_comp_cntr returns 0
+ */
+void test_efa_hw_cntr_bind_ep(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid = NULL;
+	int ret;
+
+	cntr_fid = test_efa_hw_cntr_open(resource, false);
+	g_efa_unit_test_mocks.ibv_qp_attach_comp_cntr = efa_mock_ibv_qp_attach_comp_cntr_return_mock;
+	/* ibv_qp_attach_comp_cntr is deferred to fi_enable when qp is created */
+	ret = fi_ep_bind(resource->ep, &cntr_fid->fid, FI_SEND);
+	assert_int_equal(ret, 0);
+
+	ret = fi_enable(resource->ep);
+	assert_int_equal(ret, 0);
+
+	struct efa_base_ep *base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	assert_true(base_ep->efa_qp_enabled);
+
+	fi_close(&resource->ep->fid);
+	resource->ep = NULL;
+
+	fi_close(&cntr_fid->fid);
+}
+
+/**
+ * @brief Verify fi_enable fails when ibv_qp_attach_comp_cntr returns
+ *        -ENOTSUP for a counter bound with FI_REMOTE_READ.
+ */
+void test_efa_hw_cntr_bind_ep_attach_fail(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid = NULL;
+	int ret;
+
+	cntr_fid = test_efa_hw_cntr_open(resource, false);
+	g_efa_unit_test_mocks.ibv_qp_attach_comp_cntr = efa_mock_ibv_qp_attach_comp_cntr_return_enotsup;
+
+	ret = fi_ep_bind(resource->ep, &cntr_fid->fid, FI_REMOTE_READ);
+	assert_int_equal(ret, 0);
+
+	ret = fi_enable(resource->ep);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
+
+	fi_close(&resource->ep->fid);
+	resource->ep = NULL;
 
 	fi_close(&cntr_fid->fid);
 }
@@ -476,4 +537,6 @@ void test_efa_hw_cntr_set(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_seterr(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_read(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_readerr(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_bind_ep(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_bind_ep_attach_fail(struct efa_resource **state) { skip(); }
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */
