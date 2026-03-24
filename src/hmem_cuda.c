@@ -624,8 +624,15 @@ static int cuda_hmem_detect_p2p_access_support(void)
 	CUdevice dev, peer;
 	int can_access_peer = 1;
 
-	if (cuda_attr.device_count <= 1)
+	/* cuda_hmem_verify_devices will return -FI_ENOSYS if no CUDA devices
+	 * are available. If we got here, there must be at least one CUDA
+	 * device. */
+	assert(cuda_attr.device_count >= 1);
+
+	if (cuda_attr.device_count == 1) {
+		cuda_attr.p2p_access_supported = true;
 		return FI_SUCCESS;
+	}
 
 	/*
 	 * CUDA API always enumerates available devices contiguously starting
