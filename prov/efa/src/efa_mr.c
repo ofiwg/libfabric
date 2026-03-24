@@ -14,8 +14,17 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 static int efa_mr_dereg_impl(struct efa_mr *efa_mr);
 
 
-#define EFA_DEF_MR_CACHE_ENABLE 1
-int efa_mr_cache_enable	= EFA_DEF_MR_CACHE_ENABLE;
+/*
+ * Disable MR cache by default under ASAN. The memhooks monitor is
+ * incompatible with ASAN, and userfaultfd may not be available on
+ * all systems. Without a working monitor, efa_mr_cache_open fails.
+ * Can be overridden at runtime with FI_EFA_MR_CACHE_ENABLE=1.
+ */
+#ifdef ENABLE_ASAN
+int efa_mr_cache_enable	= 0;
+#else
+int efa_mr_cache_enable	= 1;
+#endif
 size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
 
