@@ -651,7 +651,7 @@ struct cxip_environment cxip_env = {
 	.hybrid_unexpected_msg_preemptive = 0,
 	.fc_retry_usec_delay = 1000,
 	.cntr_spin_before_yield = 1000,
-	.ctrl_rx_eq_max_size = 67108864,
+	.ctrl_rx_eq_max_size = CXIP_MAX_RX_EQ_SIZE,
 	.default_cq_size = CXIP_CQ_DEF_SZ,
 	.default_tx_size = CXIP_DEFAULT_TX_SIZE,
 	.default_rx_size = CXIP_DEFAULT_RX_SIZE,
@@ -1113,6 +1113,11 @@ static void cxip_env_init(void)
 			cxip_env.ctrl_rx_eq_max_size);
 	fi_param_get_size_t(&cxip_prov, "ctrl_rx_eq_max_size",
 			    &cxip_env.ctrl_rx_eq_max_size);
+	if (cxip_env.ctrl_rx_eq_max_size == 0) {
+		cxip_env.ctrl_rx_eq_max_size = CXIP_MAX_RX_EQ_SIZE; 
+		CXIP_WARN("ctrl_rx_eq_max_size invalid. Setting to default %lu\n",
+			  cxip_env.ctrl_rx_eq_max_size);
+	}
 
 	fi_param_define(&cxip_prov, "default_cq_size", FI_PARAM_SIZE_T,
 			"Default provider CQ size (default: %lu).",
