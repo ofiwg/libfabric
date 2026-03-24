@@ -35,6 +35,12 @@ void efa_device_list_finalize(void);
 
 void efa_device_destruct(struct efa_device *device);
 
+int efa_device_construct_gid(struct efa_device *efa_device,
+			     struct ibv_device *ibv_device);
+
+int efa_device_construct_data(struct efa_device *efa_device,
+			      struct ibv_device *ibv_device);
+
 extern struct efa_device *g_efa_selected_device_list;
 
 extern int g_efa_selected_device_cnt;
