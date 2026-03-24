@@ -1857,53 +1857,6 @@ handle_err:
 	for (i = 0; i < pkt_entry_cnt_allocated; ++i)
 		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 
-	return efa_rdm_ope_post_send_fallback(ope, pkt_type, err);
-}
-
-/**
- * @brief Fallback to a different message type if a packet send fails.
- *
- * Currently, this function is only used in the read nack protocol. If a long read or
- * runting read RTM packet fails to send because of a memory registration failure, it
- * will send a long CTS RTM packet.
- *
- * @param[in]   ope            pointer to efa_rdm_ope. (either a txe or an rxe)
- * @param[in]   pkt_type       packet type that failed to send
- * @param[in]   err		       error code of the original failure
- * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
- *             -FI_EAGAIN      temporarily  out of resource
- */
-ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
-					   int pkt_type, ssize_t err)
-{
-	bool delivery_complete_requested = ope->fi_flags & FI_DELIVERY_COMPLETE;
-
-	if (err == -FI_ENOMR) {
-		/* Long read and runting read protocols could fail because of a
-		 * lack of memory registrations. In that case, we retry with
-		 * long CTS protocol
-		 */
-		switch (pkt_type) {
-		case EFA_RDM_LONGREAD_MSGRTM_PKT:
-		case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-			EFA_INFO(FI_LOG_EP_CTRL,
-				 "Sender fallback to long CTS untagged "
-				 "protocol because memory registration limit "
-				 "was reached on the sender\n");
-			return efa_rdm_ope_post_send_or_queue(
-				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_MSGRTM_PKT : EFA_RDM_LONGCTS_MSGRTM_PKT);
-		case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-			EFA_INFO(FI_LOG_EP_CTRL,
-				 "Sender fallback to long CTS tagged protocol "
-				 "because memory registration limit was "
-				 "reached on the sender\n");
-			return efa_rdm_ope_post_send_or_queue(
-				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_TAGRTM_PKT : EFA_RDM_LONGCTS_TAGRTM_PKT);
-		default:
-			return err;
-		}
-	}
 	return err;
 }
 
