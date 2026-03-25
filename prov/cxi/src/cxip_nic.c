@@ -178,7 +178,7 @@ static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
 	struct cxil_svc_list *svc_list;
 	uid_t uid;
 	gid_t gid;
-	unsigned int cur_netns, netns;
+	unsigned int cur_netns;
 	int i;
 	int j;
 	struct cxi_svc_desc *desc;
@@ -233,10 +233,16 @@ static int cxip_nic_get_best_rgroup_vni(struct cxip_if *nic_if,
 				found_gid = i;
 		}
 
+#ifdef CXI_HAVE_SVC_GET_NETNS
 		/* Check if service ID created with netns type and matching with current Network Namespace ID */
-		if (cur_netns && found_netns == -1)
-			if (!cxil_svc_get_netns(nic_if->dev, desc->svc_id, &netns) && (netns == cur_netns))
+		if (cur_netns && found_netns == -1) {
+			unsigned int netns;
+
+			if (!cxil_svc_get_netns(nic_if->dev, desc->svc_id, &netns) &&
+			    (netns == cur_netns))
 				found_netns = i;
+		}
+#endif /* CXI_HAVE_SVC_GET_NETNS */
 	}
 
 	/* The service ID matching with the netns is prioritized over service ID with uid or gid. */
