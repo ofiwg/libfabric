@@ -1229,7 +1229,8 @@ The CXI provider checks for the following environment variables:
     Default receive event queue size is based on FI_UNIVERSE_SIZE. Increasing the
     receive event queue size can help prevent side-band/control messages from
     being dropped and retried but at the cost of additional memory usage. Size is
-    always aligned up to a 4KiB boundary.
+    always aligned up to a 4KiB boundary and a size of 0 will force it back
+    to the default max size of 64MB.
 
 *FI_CXI_DEFAULT_CQ_SIZE*
 :   Change the provider default completion queue size expressed in entries. This
