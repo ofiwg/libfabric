@@ -66,6 +66,9 @@ struct vrb_gl_data vrb_gl_data = {
 		.prefer_xrc		= 0,
 		.xrcd_filename		= "/tmp/verbs_xrcd",
 	},
+
+	.nic_affinity_policy	= "none",
+	.affinity_device	= NULL,
 };
 
 struct vrb_dev_preset {
@@ -766,11 +769,51 @@ static int vrb_read_params(void)
 		return -FI_EINVAL;
 	}
 
+	/* NIC affinity parameters */
+	if (vrb_get_param_str("nic_affinity_policy",
+			      "NIC affinity policy for ordering NICs in fi_getinfo results. "
+			      "(Default: 'none').",
+			      &vrb_gl_data.nic_affinity_policy)) {
+		VRB_WARN(FI_LOG_CORE, "Invalid value of nic_affinity_policy\n");
+		return -FI_EINVAL;
+	}
+
+	if (vrb_get_param_str("affinity_device",
+			      "PCI address of device for NIC affinity. ",
+			      &vrb_gl_data.affinity_device)) {
+		VRB_WARN(FI_LOG_CORE, "Invalid value of affinity_device\n");
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int vrb_nic_affinity_init(void)
+{
+	vrb_gl_data.nic_affinity_handler = NULL;
+
+	if (!vrb_gl_data.nic_affinity_policy) {
+		VRB_INFO(FI_LOG_CORE, "NIC affinity policy not set, "
+			 "using default 'none' (no reordering)\n");
+		return FI_SUCCESS;
+	}
+
+	if (!strcmp(vrb_gl_data.nic_affinity_policy, "none")) {
+		VRB_INFO(FI_LOG_CORE, "NIC affinity policy 'none': "
+			 "no reordering\n");
+	} else {
+		VRB_WARN(FI_LOG_CORE, "Invalid NIC affinity policy '%s', "
+			 "falling back to 'none'.\n",
+			 vrb_gl_data.nic_affinity_policy);
+	}
+
 	return FI_SUCCESS;
 }
 
 int vrb_init()
 {
+	int ret;
+
 	if (vrb_os_ini()) {
 		FI_WARN(&vrb_prov, FI_LOG_FABRIC,
 			"failed in OS specific device initialization\n");
@@ -784,6 +827,13 @@ int vrb_init()
 
 	if (vrb_read_params()) {
 		VRB_INFO(FI_LOG_FABRIC, "failed to read parameters\n");
+		return -FI_ENODATA;
+	}
+
+	/* Initialize NIC affinity. */
+	ret = vrb_nic_affinity_init();
+	if (ret) {
+		VRB_INFO(FI_LOG_FABRIC, "failed to initialize NIC affinity\n");
 		return -FI_ENODATA;
 	}
 

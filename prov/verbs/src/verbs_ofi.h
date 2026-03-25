@@ -176,6 +176,9 @@ extern ofi_mutex_t vrb_info_mutex;
 extern ofi_mutex_t vrb_init_mutex;
 extern struct dlist_entry vrb_devs;
 
+typedef int (*vrb_nic_affinity_handler_t)(struct fi_info **info,
+	const struct fi_pci_attr *device_pci);
+
 extern struct vrb_gl_data {
 	int	def_tx_size;
 	int	def_rx_size;
@@ -210,6 +213,10 @@ extern struct vrb_gl_data {
 
 	bool	peer_mem_support;
 	bool	dmabuf_support;
+
+	vrb_nic_affinity_handler_t	nic_affinity_handler;
+	char	*nic_affinity_policy;
+	char	*affinity_device;
 } vrb_gl_data;
 
 struct verbs_addr {
@@ -1133,6 +1140,7 @@ void vrb_prof_init();
 #endif
 
 int vrb_prof_create(vrb_profile_t **prof);
+
 
 
 #endif /* VERBS_OFI_H */

@@ -1967,6 +1967,39 @@ void vrb_devs_free(struct dlist_entry *verbs_devs)
 	}
 }
 
+#define VRB_PCI_ADDR_COMPONENTS 4
+#define VRB_PCI_DOMAIN_MAX 0xFFFF  /* 16 bits */
+#define VRB_PCI_BUS_MAX 0xFF       /* 8 bits */
+#define VRB_PCI_DEVICE_MAX 0x1F    /* 5 bits */
+#define VRB_PCI_FUNCTION_MAX 0x7   /* 3 bits */
+
+static int vrb_parse_pci_address(const char *pci_str, struct fi_pci_attr *pci_attr)
+{
+	unsigned int domain;
+	unsigned int bus;
+	unsigned int device;
+	unsigned int function;
+	int ret;
+
+	ret = sscanf(pci_str, "%x:%x:%x.%x", &domain, &bus, &device, &function);
+	if (ret != VRB_PCI_ADDR_COMPONENTS ||
+	    domain > VRB_PCI_DOMAIN_MAX || bus > VRB_PCI_BUS_MAX ||
+	    device > VRB_PCI_DEVICE_MAX || function > VRB_PCI_FUNCTION_MAX) {
+		VRB_WARN(FI_LOG_CORE,
+			 "Invalid PCI address format: '%s' "
+			 "(expected xxxx:xx:xx.x with valid ranges)\n",
+			 pci_str);
+		return -FI_EINVAL;
+	}
+
+	pci_attr->domain_id = (uint16_t)domain;
+	pci_attr->bus_id = (uint8_t)bus;
+	pci_attr->device_id = (uint8_t)device;
+	pci_attr->function_id = (uint8_t)function;
+
+	return FI_SUCCESS;
+}
+
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info)
@@ -1974,6 +2007,7 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 	static bool init_done = false;
 	struct dlist_entry tmp_devs;
 	struct fi_info *tmp_info = NULL;
+	struct fi_pci_attr device_pci;
 	int ret;
 
 	vrb_prof_func_start(__func__);
@@ -2029,6 +2063,24 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 
 	if (hints)
 		vrb_filter_info_by_addr_format(info, hints->addr_format);
+
+	/* Apply NIC affinity reordering policy */
+	if (*info && vrb_gl_data.nic_affinity_handler && vrb_gl_data.affinity_device) {
+		ret = vrb_parse_pci_address(vrb_gl_data.affinity_device, &device_pci);
+		if (ret) {
+			VRB_WARN(FI_LOG_CORE,
+				 "Failed to parse FI_VERBS_AFFINITY_DEVICE, list unchanged\n");
+			ret = 0;
+		} else {
+			ret = vrb_gl_data.nic_affinity_handler(info, &device_pci);
+			if (ret) {
+				VRB_WARN(FI_LOG_CORE,
+					 "NIC affinity handler failed: %s (%d)\n",
+					 fi_strerror(-ret), ret);
+				ret = 0;
+			}
+		}
+	}
 out:
 	vrb_prof_func_end(__func__);
 	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV)
