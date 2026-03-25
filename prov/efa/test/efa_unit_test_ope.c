@@ -599,8 +599,9 @@ void test_efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_resource **state)
 	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep, NULL), 0);
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	txe = efa_rdm_ep_alloc_txe(efa_rdm_ep, NULL, &msg, ofi_op_msg, 0, 0);
+	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
 	assert_non_null(txe);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, NULL, &msg, ofi_op_msg, 0);
 
 	/* Use ooo rx pkt because it doesn't have mr so a read_copy pkt clone is enforced. */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->rx_ooo_pkt_pool, EFA_RDM_PKE_FROM_OOO_POOL);
