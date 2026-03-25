@@ -187,10 +187,16 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		goto out;
 	}
 
-	txe = efa_rdm_ep_alloc_txe(ep, peer, msg, op, tag, flags);
+	txe = ofi_buf_alloc(ep->ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		goto out;
+	}
+
+	efa_rdm_txe_construct(txe, ep, peer, msg, op, flags);
+	if (op == ofi_op_tagged) {
+		txe->cq_entry.tag = tag;
+		txe->tag = tag;
 	}
 
 	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
