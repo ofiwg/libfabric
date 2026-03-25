@@ -548,4 +548,10 @@ fi_addr_t efa_rdm_ep_get_explicit_shm_fi_addr(struct efa_rdm_ep *ep, fi_addr_t a
 	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
 	return conn ? conn->shm_fi_addr : FI_ADDR_NOTAVAIL;
 }
+
+static inline size_t efa_rdm_ep_get_available_tx_pkts(struct efa_rdm_ep *ep)
+{
+	return ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops -
+	       ep->efa_rnr_queued_pkt_cnt;
+}
 #endif
