@@ -2282,6 +2282,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 done:
 #endif
+{
 	/* _FI_OPX_DUAL_PLANE_ENABLE_ */
 	int   _dual_plane_enable_ = 0;
 	char *envstr_dpe	  = getenv("_FI_OPX_DUAL_PLANE_ENABLE_");
@@ -2433,7 +2434,7 @@ done:
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "Endpoint enabled with %d TX context(s)\n",
 		opx_ep->num_tx_contexts);
-
+}
 	/* Unlock */
 	fi_opx_unlock(&opx_ep->lock);
 	if (rx_cq_lock_held) {
