@@ -19,6 +19,9 @@
 #include "efa_rdm_pke_req.h"
 
 #include "efa_rdm_tracepoint.h"
+#include "efa_mr.h"
+#include "efa_rdm_proto.h"
+#include "efa_rdm_proto_eager.h"
 
 /**
  * This file define the msg ops functions.
@@ -45,60 +48,11 @@
  */
 int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *txe, int use_p2p)
 {
-	/*
-	 * For performance consideration, this function assume the tagged rtm packet type id is
-	 * always the correspondent message rtm packet type id + 1, thus the assertion here.
-	 */
-	assert(EFA_RDM_EAGER_MSGRTM_PKT + 1 == EFA_RDM_EAGER_TAGRTM_PKT);
-	assert(EFA_RDM_MEDIUM_MSGRTM_PKT + 1 == EFA_RDM_MEDIUM_TAGRTM_PKT);
-	assert(EFA_RDM_LONGCTS_MSGRTM_PKT + 1 == EFA_RDM_LONGCTS_TAGRTM_PKT);
-	assert(EFA_RDM_LONGREAD_MSGRTM_PKT + 1 == EFA_RDM_LONGREAD_TAGRTM_PKT);
-	assert(EFA_RDM_DC_EAGER_MSGRTM_PKT + 1 == EFA_RDM_DC_EAGER_TAGRTM_PKT);
-	assert(EFA_RDM_DC_MEDIUM_MSGRTM_PKT + 1 == EFA_RDM_DC_MEDIUM_TAGRTM_PKT);
-	assert(EFA_RDM_DC_LONGCTS_MSGRTM_PKT + 1 == EFA_RDM_DC_LONGCTS_TAGRTM_PKT);
+	// Only zero copy path should arrive here
+	assert(efa_rdm_ep->extra_info[0] &
+	       EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
 
-	int tagged;
-	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm, iface;
-	size_t eager_rtm_max_data_size;
-	bool delivery_complete_requested;
-
-	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
-	tagged = (txe->op == ofi_op_tagged);
-	assert(tagged == 0 || tagged == 1);
-
-	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
-
-	if (txe->fi_flags & FI_INJECT || efa_both_support_zero_hdr_data_transfer(efa_rdm_ep, txe->peer))
-		delivery_complete_requested = false;
-	else
-		delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
-
-	eager_rtm = (delivery_complete_requested) ? EFA_RDM_DC_EAGER_MSGRTM_PKT + tagged
-						  : EFA_RDM_EAGER_MSGRTM_PKT + tagged;
-
-	medium_rtm = (delivery_complete_requested) ? EFA_RDM_DC_MEDIUM_MSGRTM_PKT + tagged
-						   :  EFA_RDM_MEDIUM_MSGRTM_PKT + tagged;
-
-	longcts_rtm = (delivery_complete_requested) ? EFA_RDM_DC_LONGCTS_MSGRTM_PKT + tagged
-						    : EFA_RDM_LONGCTS_MSGRTM_PKT + tagged;
-
-	eager_rtm_max_data_size = efa_rdm_txe_max_req_data_capacity(efa_rdm_ep, txe, eager_rtm);
-
-	readbase_rtm = efa_rdm_peer_select_readbase_rtm(txe->peer, efa_rdm_ep, txe);
-
-	if (use_p2p &&
-	    txe->total_len >= g_efa_hmem_info[iface].min_read_msg_size &&
-	    efa_rdm_interop_rdma_read(efa_rdm_ep, txe->peer) &&
-	    (txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(efa_rdm_ep))))
-		return readbase_rtm;
-
-	if (txe->total_len <= eager_rtm_max_data_size)
-		return eager_rtm;
-
-	if (txe->total_len <= g_efa_hmem_info[iface].max_medium_msg_size)
-		return medium_rtm;
-
-	return longcts_rtm;
+	return EFA_RDM_DC_EAGER_MSGRTM_PKT;
 }
 
 /**
@@ -134,24 +88,9 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	use_p2p = err;
 
 	rtm_type = efa_rdm_msg_select_rtm(ep, txe, use_p2p);
-	assert(rtm_type >= EFA_RDM_REQ_PKT_BEGIN);
+	assert(rtm_type == EFA_RDM_EAGER_MSGRTM_PKT);
 
-	if (rtm_type < EFA_RDM_EXTRA_REQ_PKT_BEGIN) {
-		/* rtm requires only baseline feature, which peer should always support. */
-		return efa_rdm_ope_post_send(txe, rtm_type);
-	}
-
-	/*
-	 * rtm_type requires an extra feature, which peer might not support.
-	 *
-	 * Check handshake packet from peer to verify support status.
-	 */
-	if (!ep->homogeneous_peers && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
-		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
-
-	if (!ep->homogeneous_peers && !efa_rdm_pkt_type_is_supported_by_peer(rtm_type, txe->peer))
-		return -FI_EOPNOTSUPP;
-
+	/* rtm requires only baseline feature, which peer should always support */
 	return efa_rdm_ope_post_send(txe, rtm_type);
 }
 
@@ -162,6 +101,9 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 	ssize_t err;
 	struct efa_rdm_ope *txe;
 	struct util_srx_ctx *srx_ctx;
+	int available_tx_pkts;
+	struct efa_rdm_proto *proto;
+	uint64_t pke_send_flags = 0;
 
 	efa_rdm_tracepoint(send_begin_msg_context,
 		    (size_t) msg->context, (size_t) msg->addr);
@@ -178,10 +120,83 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 		goto out;
 	}
 
-	txe = efa_rdm_ep_alloc_txe(ep, peer, msg, op, tag, flags);
+	// Handle case when there are no TX packets available
+	available_tx_pkts = ep->efa_max_outstanding_tx_ops -
+			ep->efa_outstanding_tx_ops - ep->efa_rnr_queued_pkt_cnt;
+
+	if (OFI_UNLIKELY(available_tx_pkts == 0)) {
+		err = -FI_EAGAIN;
+		goto out;
+	}
+
+	txe = ofi_buf_alloc(ep->ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		goto out;
+	}
+
+	/* First try to use the refactored code path */
+	err = efa_rdm_proto_select_send_protocol(ep, peer, msg, op, flags, txe,
+						 &proto);
+	if (err)
+		goto out;
+
+	/* The refactored code path does not support the zero copy path */
+	if (ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP)
+		proto = NULL;
+
+	/* If a protocol is found, use it. Otherwise, fall back to the old code
+	 * path */
+	if (proto) {
+		err = proto->construct_tx_pkes(ep, peer, msg, op, tag, flags,
+					       txe);
+		if (err)
+			goto out;
+
+		assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
+		assert(ep->send_pkt_entry_vec_size <=
+		       efa_base_ep_get_tx_pool_size(&ep->base_ep));
+
+		/**
+		 * We currently respect FI_MORE only for eager pkt type because
+		 * For non-eager REQ packets, we already send multiple pkts that
+		 * contain data and make the firmware saturated, there is no
+		 * meaning to queue pkts in this case.
+		 */
+		if (flags & FI_MORE && proto == &efa_rdm_proto_eager) {
+			pke_send_flags |= FI_MORE;
+		}
+
+		EFA_DBG(FI_LOG_EP_DATA,
+			"peer: %" PRIu64
+			": size %lu tag: %lx op: %x flags: %lx msg_id: %" PRIu32
+			"\n",
+			peer->conn->fi_addr, txe->total_len, tag, op, flags,
+			txe->msg_id);
+
+		efa_rdm_tracepoint(send_begin, txe->msg_id,
+				   (size_t) txe->cq_entry.op_context,
+				   txe->total_len);
+
+		err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
+					ep->send_pkt_entry_vec_size,
+					pke_send_flags);
+		if (err)
+			goto out;
+
+		peer->flags |= EFA_RDM_PEER_REQ_SENT;
+
+		proto->handle_tx_pkes_posted(ep, txe);
+		goto out;
+	}
+
+	/* Fallback to the old code path for zero copy receive */
+	assert(ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
+
+	efa_rdm_txe_construct(txe, ep, peer, msg, op, flags);
+	if (op == ofi_op_tagged) {
+		txe->cq_entry.tag = tag;
+		txe->tag = tag;
 	}
 
 	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);

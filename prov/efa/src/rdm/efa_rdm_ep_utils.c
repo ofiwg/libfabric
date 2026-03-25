@@ -319,34 +319,6 @@ err_free:
 
 
 
-/* create a new txe */
-struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
-					 struct efa_rdm_peer *peer,
-					 const struct fi_msg *msg,
-					 uint32_t op,
-					 uint64_t tag,
-					 uint64_t flags)
-{
-	struct efa_rdm_ope *txe;
-
-	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
-	if (OFI_UNLIKELY(!txe)) {
-		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
-		return NULL;
-	}
-
-	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, msg, op, flags);
-	if (op == ofi_op_tagged) {
-		txe->cq_entry.tag = tag;
-		txe->tag = tag;
-	}
-
-	efa_domain_ope_list_lock(efa_rdm_ep_domain(efa_rdm_ep));
-	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
-	efa_domain_ope_list_unlock(efa_rdm_ep_domain(efa_rdm_ep));
-	return txe;
-}
-
 /**
  * @brief record the event that a TX op has been submitted
  *
@@ -674,14 +646,16 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 
 	msg.addr = peer->conn->fi_addr;
 
-	txe = efa_rdm_ep_alloc_txe(ep, peer, &msg, ofi_op_write, 0, 0);
-
+	txe = ofi_buf_alloc(ep->ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;
 	}
 
-	/* efa_rdm_ep_alloc_txe() joins ep->base_ep.util_ep.tx_op_flags and passed in flags,
+	efa_rdm_txe_construct(txe, ep, peer, &msg, ofi_op_write, 0);
+
+	/*
+	 * efa_rdm_txe_construct() joins ep->base_ep.util_ep.tx_op_flags and passed in flags,
 	 * reset to desired flags (remove things like FI_DELIVERY_COMPLETE, and FI_COMPLETION)
 	 */
 	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
@@ -1066,26 +1040,6 @@ void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 err_exit:
 
 	efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST);
-}
-
-/**
- * @brief Get memory alignment for given ep and hmem iface
- *
- * @param ep efa rdm ep
- * @param iface hmem iface
- * @return size_t the memory alignment
- */
-size_t efa_rdm_ep_get_memory_alignment(struct efa_rdm_ep *ep, enum fi_hmem_iface iface)
-{
-	size_t memory_alignment = EFA_RDM_DEFAULT_MEMORY_ALIGNMENT;
-
-	if (ep->sendrecv_in_order_aligned_128_bytes) {
-		memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
-	} else if (iface == FI_HMEM_CUDA) {
-		memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
-	}
-
-	return memory_alignment;
 }
 
 /**

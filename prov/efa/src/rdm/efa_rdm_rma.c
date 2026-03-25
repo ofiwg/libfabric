@@ -74,9 +74,6 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	memcpy(txe->rma_iov, msg_rma->rma_iov,
 	       sizeof(struct fi_rma_iov) * msg_rma->rma_iov_count);
 
-	efa_domain_ope_list_lock(efa_rdm_ep_domain(efa_rdm_ep));
-	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
-	efa_domain_ope_list_unlock(efa_rdm_ep_domain(efa_rdm_ep));
 	return txe;
 }
 
