@@ -371,27 +371,43 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
  * @param tx_cq tx cq
  * @param rx_cq rx cq
  */
-static inline
 void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
 						struct ibv_qp_init_attr_ex *attr_ex,
 						struct ibv_cq_ex *tx_cq,
 						struct ibv_cq_ex *rx_cq)
 {
-	struct fi_info *info;
+	struct fi_info *device_info;
 
 	if (ep->info->ep_attr->type == FI_EP_RDM) {
 		attr_ex->qp_type = IBV_QPT_DRIVER;
-		info = ep->domain->device->rdm_info;
+		device_info = ep->domain->device->rdm_info;
 	} else {
 		assert(ep->info->ep_attr->type == FI_EP_DGRAM);
 		attr_ex->qp_type = IBV_QPT_UD;
-		info = ep->domain->device->dgram_info;
+		device_info = ep->domain->device->dgram_info;
 	}
-	attr_ex->cap.max_send_wr = info->tx_attr->size;
-	attr_ex->cap.max_send_sge = info->tx_attr->iov_limit;
-	attr_ex->cap.max_recv_wr = info->rx_attr->size;
-	attr_ex->cap.max_recv_sge = info->rx_attr->iov_limit;
+
+	/*
+	 * Use efa_base_ep_get_tx/rx_pool_size to ensure
+	 * 1. Respect user-requested tx/rx size when smaller than device limit.
+	 * 2. Prevent exceeding device limits - while fi_getinfo/ofi_endpoint_init
+	 *  validate against the efa/efa-direct fabric's limits, but MIN is used for safety.
+	 * We are still using the device limits for iov limits because efa fabric can use
+	 * more iov for pkt header which is not counted in user's requested limits.
+	 */
+	attr_ex->cap.max_send_wr = efa_base_ep_get_tx_pool_size(ep);
+	attr_ex->cap.max_send_sge = device_info->tx_attr->iov_limit;
+	attr_ex->cap.max_recv_wr = efa_base_ep_get_rx_pool_size(ep);
+	attr_ex->cap.max_recv_sge = device_info->rx_attr->iov_limit;
 	attr_ex->cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
+
+	EFA_INFO(FI_LOG_EP_CTRL,
+		 "QP cap max_send_wr=%u max_recv_wr=%u max_send_sge=%u "
+		 "max_recv_sge=%u max_inline_data=%u\n",
+		 attr_ex->cap.max_send_wr, attr_ex->cap.max_recv_wr,
+		 attr_ex->cap.max_send_sge, attr_ex->cap.max_recv_sge,
+		 attr_ex->cap.max_inline_data);
+
 	attr_ex->pd = ep->domain->ibv_pd;
 	attr_ex->qp_context = ep;
 	attr_ex->sq_sig_all = 1;

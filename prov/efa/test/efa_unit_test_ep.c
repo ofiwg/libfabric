@@ -2139,3 +2139,135 @@ void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion(struct
 	/* Verify that outstanding_tx_ops was decremented despite the error */
 	assert_int_equal(efa_rdm_ep->efa_outstanding_tx_ops, 0);
 }
+
+/**
+ * @brief Common helper function to test efa_base_ep_construct_ibv_qp_init_attr_ex
+ *
+ * @param[in] resource Test resource
+ * @param[in] fabric_name Fabric name (EFA_FABRIC_NAME or EFA_DIRECT_FABRIC_NAME)
+ */
+static void test_efa_base_ep_construct_ibv_qp_init_attr_ex_use_requested_limits(
+	struct efa_resource *resource,
+	char *fabric_name)
+{
+	struct efa_base_ep *efa_base_ep;
+	struct ibv_qp_init_attr_ex attr_ex = {0};
+	struct efa_cq *efa_cq;
+	/* Use values that are within device limits */
+	const uint32_t tx_size = 256;
+	const uint32_t rx_size = 512;
+
+	/* Create hints with specific values */
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, fabric_name);
+	assert_non_null(resource->hints);
+	resource->hints->tx_attr->size = tx_size;
+	resource->hints->rx_attr->size = rx_size;
+
+	/* Construct endpoint with the specific hints */
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+	                                            resource->hints, false, true);
+
+	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+
+	/* Verify that base_ep->info contains the hint values */
+	assert_int_equal(efa_base_ep->info->tx_attr->size, tx_size);
+	assert_int_equal(efa_base_ep->info->rx_attr->size, rx_size);
+
+	/* Call the function under test */
+	efa_base_ep_construct_ibv_qp_init_attr_ex(efa_base_ep, &attr_ex, 
+							  efa_cq->ibv_cq.ibv_cq_ex, efa_cq->ibv_cq.ibv_cq_ex);
+
+	/* Since requested values are within device limits, QP attrs should match requested values */
+	assert_int_equal(attr_ex.cap.max_send_wr, tx_size);
+	assert_int_equal(attr_ex.cap.max_recv_wr, rx_size);
+
+	/* Verify other fields are set correctly */
+	assert_int_equal(attr_ex.qp_type, IBV_QPT_DRIVER);
+	assert_int_equal(attr_ex.cap.max_inline_data, efa_base_ep->domain->device->efa_attr.inline_buf_size);
+	assert_ptr_equal(attr_ex.pd, efa_base_ep->domain->ibv_pd);
+	assert_ptr_equal(attr_ex.qp_context, efa_base_ep);
+	assert_int_equal(attr_ex.sq_sig_all, 1);
+	assert_ptr_equal(attr_ex.send_cq, ibv_cq_ex_to_cq(efa_cq->ibv_cq.ibv_cq_ex));
+	assert_ptr_equal(attr_ex.recv_cq, ibv_cq_ex_to_cq(efa_cq->ibv_cq.ibv_cq_ex));
+}
+
+/**
+ * @brief Test efa_base_ep_construct_ibv_qp_init_attr_ex with EFA-direct fabric
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_direct_use_requested_limits(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	test_efa_base_ep_construct_ibv_qp_init_attr_ex_use_requested_limits(resource, EFA_DIRECT_FABRIC_NAME);
+}
+
+/**
+ * @brief Test efa_base_ep_construct_ibv_qp_init_attr_ex with EFA fabric
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_requested_limits(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	test_efa_base_ep_construct_ibv_qp_init_attr_ex_use_requested_limits(resource, EFA_FABRIC_NAME);
+}
+
+/**
+ * @brief Test efa_base_ep_construct_ibv_qp_init_attr_ex with EFA fabric when user doesn't request smaller limits
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_device_limits(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_base_ep;
+	struct ibv_qp_init_attr_ex attr_ex = {0};
+	struct efa_cq *efa_cq;
+	struct fi_info *device_info;
+
+	/* Create hints without specifying tx/rx sizes - will use fabric defaults */
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(resource->hints);
+	/* Don't set tx_attr->size, tx_attr->iov_limit, rx_attr->size, rx_attr->iov_limit
+	 * so they will use fabric defaults which can be larger than device limits */
+
+	/* Construct endpoint with the default hints */
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+	                                            resource->hints, false, true);
+
+	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+
+	/* Get device info for comparison */
+	device_info = efa_base_ep->domain->device->rdm_info;
+
+	/* Verify that base_ep->info contains fabric default values (same as resource->info) */
+	assert_int_equal(efa_base_ep->info->tx_attr->size, resource->info->tx_attr->size);
+	assert_int_equal(efa_base_ep->info->tx_attr->iov_limit, resource->info->tx_attr->iov_limit);
+	assert_int_equal(efa_base_ep->info->rx_attr->size, resource->info->rx_attr->size);
+	assert_int_equal(efa_base_ep->info->rx_attr->iov_limit, resource->info->rx_attr->iov_limit);
+
+	/* Call the function under test */
+	efa_base_ep_construct_ibv_qp_init_attr_ex(efa_base_ep, &attr_ex, 
+							  efa_cq->ibv_cq.ibv_cq_ex, efa_cq->ibv_cq.ibv_cq_ex);
+
+	/* Since EFA fabric limits can be equal or larger than device limits,
+	 * QP attrs should use device limits (the smaller of the two) */
+	assert_int_equal(attr_ex.cap.max_send_wr, device_info->tx_attr->size);
+	assert_int_equal(attr_ex.cap.max_send_sge, device_info->tx_attr->iov_limit);
+	assert_int_equal(attr_ex.cap.max_recv_wr, device_info->rx_attr->size);
+	assert_int_equal(attr_ex.cap.max_recv_sge, device_info->rx_attr->iov_limit);
+
+	/* Verify other fields are set correctly */
+	assert_int_equal(attr_ex.qp_type, IBV_QPT_DRIVER);
+	assert_int_equal(attr_ex.cap.max_inline_data, efa_base_ep->domain->device->efa_attr.inline_buf_size);
+	assert_ptr_equal(attr_ex.pd, efa_base_ep->domain->ibv_pd);
+	assert_ptr_equal(attr_ex.qp_context, efa_base_ep);
+	assert_int_equal(attr_ex.sq_sig_all, 1);
+	assert_ptr_equal(attr_ex.send_cq, ibv_cq_ex_to_cq(efa_cq->ibv_cq.ibv_cq_ex));
+	assert_ptr_equal(attr_ex.recv_cq, ibv_cq_ex_to_cq(efa_cq->ibv_cq.ibv_cq_ex));
+}
