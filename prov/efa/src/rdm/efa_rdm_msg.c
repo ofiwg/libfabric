@@ -162,6 +162,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	ssize_t err;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
+	size_t available_tx_pkts;
 
 	efa_rdm_tracepoint(send_begin_msg_context,
 		    (size_t) msg->context, (size_t) msg->addr);
@@ -173,6 +174,13 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 
 	peer = efa_rdm_ep_get_peer_explicit(ep, msg->addr);
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
+		err = -FI_EAGAIN;
+		goto out;
+	}
+
+	// Handle case when there are no TX packets available
+	available_tx_pkts = efa_rdm_ep_get_available_tx_pkts(ep);
+	if (OFI_UNLIKELY(available_tx_pkts == 0)) {
 		err = -FI_EAGAIN;
 		goto out;
 	}
