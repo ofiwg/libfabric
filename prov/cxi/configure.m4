@@ -147,6 +147,13 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 				[#include "libcxi/libcxi.h"]
 			)
 
+			AC_CHECK_DECL([cxil_svc_get_netns],
+				[AC_DEFINE([CXI_HAVE_SVC_GET_NETNS],[1],
+				    [Whether libcxi.h has cxil_svc_get_netns() support])],
+				[],
+				[#include "libcxi/libcxi.h"]
+			)
+
 			CPPFLAGS=$cxi_configure_save_CPPFLAGS
 			cxi_CPPFLAGS="$cxi_CPPFLAGS $libcurl_CPPFLAGS"
 			cxi_LDFLAGS="$cxi_LDFLAGS $libcurl_LDFLAGS"
