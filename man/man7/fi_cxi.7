@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cxi" "7" "2026\-02\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cxi" "7" "2026\-03\-25" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -1479,7 +1479,8 @@ Default receive event queue size is based on FI_UNIVERSE_SIZE.
 Increasing the receive event queue size can help prevent
 side-band/control messages from being dropped and retried but at the
 cost of additional memory usage.
-Size is always aligned up to a 4KiB boundary.
+Size is always aligned up to a 4KiB boundary and a size of 0 will force
+it back to the default max size of 64MB.
 .TP
 \f[I]FI_CXI_DEFAULT_CQ_SIZE\f[R]
 Change the provider default completion queue size expressed in entries.
