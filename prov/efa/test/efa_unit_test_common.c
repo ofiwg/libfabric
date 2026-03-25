@@ -403,6 +403,7 @@ struct efa_rdm_ope *efa_unit_test_alloc_txe(struct efa_resource *resource, uint3
 	struct efa_rdm_peer *peer;
 	struct fi_msg msg = {0};
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_ope *txe;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -415,7 +416,12 @@ struct efa_rdm_ope *efa_unit_test_alloc_txe(struct efa_resource *resource, uint3
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
 
-	return efa_rdm_ep_alloc_txe(efa_rdm_ep, peer, &msg, op, 0, 0);
+	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
+	if (!txe)
+		return NULL;
+
+	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, 0);
+	return txe;
 }
 
 struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint32_t op)
