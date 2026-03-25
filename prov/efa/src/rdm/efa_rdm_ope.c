@@ -467,15 +467,13 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
 	size_t single_pkt_entry_data_size;
 	size_t single_pkt_entry_max_data_size;
 	int i, memory_alignment, remainder, iface;
-	int available_tx_pkts;
+	size_t available_tx_pkts;
 
 	ep = ope->ep;
 	assert(ep->efa_max_outstanding_tx_ops >=
 	       ep->efa_outstanding_tx_ops + ep->efa_rnr_queued_pkt_cnt);
 
-	available_tx_pkts = ep->efa_max_outstanding_tx_ops
-		- ep->efa_outstanding_tx_ops
-		- ep->efa_rnr_queued_pkt_cnt;
+	available_tx_pkts = efa_rdm_ep_get_available_tx_pkts(ep);
 
 	if (available_tx_pkts == 0)
 		return -FI_EAGAIN;
