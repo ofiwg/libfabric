@@ -504,9 +504,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
 	struct efa_mr *efa_mr;
 	size_t mr_size = 64;
 	void *buf;
-	int saved_track_mr;
 
-	saved_track_mr = efa_env.track_mr;
 	efa_env.track_mr = 1;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
@@ -544,8 +542,6 @@ void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
 	 * and destroys the direct ope pool. */
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
-
-	efa_env.track_mr = saved_track_mr;
 }
 
 /**
@@ -564,9 +560,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource 
 	struct efa_mr *efa_mr;
 	size_t mr_size = 64;
 	void *buf;
-	int saved_track_mr;
 
-	saved_track_mr = efa_env.track_mr;
 	efa_env.track_mr = 1;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
@@ -620,8 +614,6 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource 
 	 * and destroys the direct ope pool. */
 	assert_int_equal(fi_close(&resource->ep->fid), 0);
 	resource->ep = NULL;
-
-	efa_env.track_mr = saved_track_mr;
 }
 
 /**
@@ -639,9 +631,7 @@ void test_efa_mr_close_warn_outstanding_rdm_txe(struct efa_resource **state)
 	struct efa_mr *efa_mr;
 	size_t mr_size = 64;
 	void *buf;
-	int saved_track_mr;
 
-	saved_track_mr = efa_env.track_mr;
 	efa_env.track_mr = 1;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
@@ -669,5 +659,4 @@ void test_efa_mr_close_warn_outstanding_rdm_txe(struct efa_resource **state)
 	efa_rdm_txe_release(txe);
 
 	free(buf);
-	efa_env.track_mr = saved_track_mr;
 }
