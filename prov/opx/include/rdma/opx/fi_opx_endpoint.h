@@ -208,7 +208,7 @@ struct fi_opx_ep_tx {
 	uint8_t		   do_cq_completion;
 	uint8_t		   force_credit_return;
 	uint8_t		   use_sdma;
-	uint8_t		   unused_cacheline1_1;
+	uint8_t		   delivery_complete;
 
 	struct {
 		/* == CACHE LINE 1,2 == */
@@ -4050,7 +4050,8 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, struct fi_op
 					  const uint32_t mp_egr_id, const size_t chunk_size, const uint64_t pbc_dlid,
 					  const uint64_t bth_rx, const uint64_t lrh_dlid, const struct fi_opx_addr addr,
 					  const enum ofi_reliability_kind reliability,
-					  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+					  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing,
+					  struct fi_opx_completion_counter *cc, uint64_t cc_value)
 {
 	ssize_t	 remaining = *payload_remaining;
 	uint32_t offset	   = *payload_offset;
@@ -4058,18 +4059,25 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, struct fi_op
 	ssize_t	 rc;
 
 	while (remaining >= chunk_size) {
+		const int			  is_last      = (remaining - chunk_size == 0);
+		struct fi_opx_completion_counter *pkt_cc       = is_last ? cc : NULL;
+		uint64_t			  pkt_cc_value = is_last ? cc_value : 0;
+
 		if (hfi1_type == OPX_HFI1_WFR) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, chunk_size, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_WFR, ctx_sharing);
+							    reliability, OPX_HFI1_WFR, ctx_sharing, pkt_cc,
+							    pkt_cc_value);
 		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, chunk_size, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing);
+							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing, pkt_cc,
+							    pkt_cc_value);
 		} else {
-			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
-				opx_ep, opx_tx, (void *) buf, offset, chunk_size, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid,
-				addr, FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
+			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(opx_ep, opx_tx, (void *) buf, offset, chunk_size,
+								mp_egr_id, pbc_dlid, bth_rx, lrh_dlid, addr,
+								FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR,
+								ctx_sharing, pkt_cc, pkt_cc_value);
 		}
 
 		if (rc != FI_SUCCESS) {
@@ -4086,15 +4094,15 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, struct fi_op
 		if (hfi1_type == OPX_HFI1_WFR) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, remaining, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_WFR, ctx_sharing);
+							    reliability, OPX_HFI1_WFR, ctx_sharing, cc, cc_value);
 		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, remaining, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing);
+							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing, cc, cc_value);
 		} else {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
 				opx_ep, opx_tx, (void *) buf, offset, remaining, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid,
-				addr, FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
+				addr, FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing, cc, cc_value);
 		}
 		if (rc != FI_SUCCESS) {
 			goto mp_egr_eagain;
@@ -4141,12 +4149,14 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER (begin)\n");
 
-	uint8_t *buf_bytes_ptr = (uint8_t *) buf;
-	ssize_t	 rc;
-	rc = opx_hfi1_tx_send_mp_egr_first_common(
-		opx_ep, opx_tx, (void **) &buf_bytes_ptr, len, opx_ep->hmem_copy_buf, pbc_dlid, bth_subctxt_rx,
-		lrh_dlid, dest_addr, tag, data, lock_required, tx_op_flags, caps, reliability, &first_packet_psn,
-		&payload_bytes_sent, hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+	struct fi_opx_completion_counter *dc_cc		= NULL;
+	uint8_t				 *buf_bytes_ptr = (uint8_t *) buf;
+	ssize_t				  rc;
+	rc = opx_hfi1_tx_send_mp_egr_first_common(opx_ep, opx_tx, (void **) &buf_bytes_ptr, len, opx_ep->hmem_copy_buf,
+						  pbc_dlid, bth_subctxt_rx, lrh_dlid, dest_addr, tag, data,
+						  lock_required, tx_op_flags, caps, reliability, &first_packet_psn,
+						  &payload_bytes_sent, hmem_iface, hmem_device, hmem_handle, hfi1_type,
+						  ctx_sharing, context, do_cq_completion, &dc_cc);
 
 	if (rc != FI_SUCCESS) {
 		FI_OPX_DEBUG_COUNTERS_INC_COND(rc == -FI_ENOBUFS,
@@ -4156,7 +4166,6 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== SEND, HFI -- MULTI-PACKET EAGER EAGAIN (%s)\n",
 			     (rc == -FI_ENOBUFS) ? "credits" : "reliability");
-
 		return rc;
 	}
 
@@ -4174,7 +4183,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 
 	rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, opx_tx, &buf_bytes_ptr, &payload_offset, &payload_remaining,
 					       first_packet_psn, chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid,
-					       dest_addr, reliability, hfi1_type, ctx_sharing);
+					       dest_addr, reliability, hfi1_type, ctx_sharing, dc_cc, dc_cc ? len : 0);
 
 	while (rc != FI_SUCCESS) {
 		FI_OPX_DEBUG_COUNTERS_INC_COND(rc == -FI_ENOBUFS,
@@ -4190,12 +4199,13 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 		opx_tx->pio_state->qw0 = pio_state.qw0;
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 
-		rc = opx_hfi1_tx_send_mp_egr_remaining(
-			opx_ep, opx_tx, &buf_bytes_ptr, &payload_offset, &payload_remaining, first_packet_psn,
-			chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid, dest_addr, reliability, hfi1_type, ctx_sharing);
+		rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, opx_tx, &buf_bytes_ptr, &payload_offset,
+						       &payload_remaining, first_packet_psn, chunk_size, pbc_dlid,
+						       bth_subctxt_rx, lrh_dlid, dest_addr, reliability, hfi1_type,
+						       ctx_sharing, dc_cc, dc_cc ? len : 0);
 	}
 
-	if (OFI_LIKELY(do_cq_completion)) {
+	if (!dc_cc && OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required, tag, caps);
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
