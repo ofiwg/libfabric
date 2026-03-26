@@ -1792,6 +1792,8 @@ static void fi_opx_apply_bind_flags(struct fi_opx_ep *opx_ep)
 
 		opx_ep->tx->do_cq_completion = ((cq_flags & selective_completion) == selective_completion) ||
 					       ((cq_flags & (FI_SELECTIVE_COMPLETION | FI_TRANSMIT)) == FI_TRANSMIT);
+
+		opx_ep->tx->delivery_complete = (opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE) ? 1 : 0;
 	}
 	if (opx_ep->rx_cq_bflags & FI_RECV) {
 		fi_opx_ref_inc(&opx_ep->init_rx_cq->ref_cnt, "rx completion queue");
@@ -2093,9 +2095,10 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	opx_ep->tx->cq_completed_ptr = NULL;
 	opx_ep->tx->cq_err_ptr	     = NULL;
 
-	opx_ep->tx->cq		     = NULL;
-	opx_ep->tx->cq_bind_flags    = 0;
-	opx_ep->tx->do_cq_completion = 0;
+	opx_ep->tx->cq		      = NULL;
+	opx_ep->tx->cq_bind_flags     = 0;
+	opx_ep->tx->do_cq_completion  = 0;
+	opx_ep->tx->delivery_complete = 0;
 
 #ifdef OPX_HMEM
 #if HAVE_CUDA
@@ -2780,6 +2783,13 @@ int fi_opx_check_tx_attr(struct fi_tx_attr *tx_attr, uint64_t hinted_caps)
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
 		       "The tx_attr capabilities (0x%016lx) must be a subset of those requested of the associated endpoint (0x%016lx)\n",
 		       tx_attr->caps, hinted_caps);
+		goto err;
+	}
+
+	if (tx_attr->op_flags & ~(FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE | FI_COMPLETION |
+				  FI_INJECT | FI_REMOTE_CQ_DATA)) {
+		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA, "Unsupported tx_attr op_flags (0x%016lx)\n",
+		       tx_attr->op_flags);
 		goto err;
 	}
 

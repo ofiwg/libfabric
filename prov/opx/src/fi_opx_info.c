@@ -48,7 +48,7 @@ void fi_opx_set_info(struct fi_info *fi, enum fi_progress progress)
 					    .inject_size   = FI_OPX_HFI1_PACKET_IMM,
 					    .size	   = SIZE_MAX,
 					    .iov_limit	   = SIZE_MAX,
-					    .rma_iov_limit = 0};
+					    .rma_iov_limit = 1};
 
 	*fi->rx_attr = (struct fi_rx_attr) {.caps      = FI_OPX_DEFAULT_RX_CAPS,
 					    .mode      = FI_OPX_DEFAULT_MODE,
@@ -87,8 +87,8 @@ void fi_opx_set_info(struct fi_info *fi, enum fi_progress progress)
 		.tx_ctx_cnt	  = 160, /* TODO ppn */
 		.rx_ctx_cnt	  = 160, /* TODO ppn */
 
-		.max_ep_tx_ctx	= 160,
-		.max_ep_rx_ctx	= 160,
+		.max_ep_tx_ctx	= 1,
+		.max_ep_rx_ctx	= 1,
 		.max_ep_stx_ctx = 0,
 		.max_ep_srx_ctx = 0,
 		.cntr_cnt	= 0,
