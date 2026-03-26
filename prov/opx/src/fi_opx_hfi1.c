@@ -5678,17 +5678,18 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
 
 			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
-			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
+			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr,
+						  payload->rendezvous.ipc.ipc_info.base_length,
 						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
-			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
-
 			if (ret) {
+				OPX_TRACE_HMEM_END_ERROR(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"Failed to create IPC handle for Device. Falling back to non-IPC case."
 					"Error code: %d\n",
 					ret);
 				goto non_ipc;
 			}
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
 
 			const uint16_t lrh_dws =
 				__cpu_to_be16(2 + /* lhr */
@@ -6190,17 +6191,18 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				(uint64_t) buf - (uint64_t) payload->rendezvous.ipc.ipc_info.base_addr;
 
 			OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
-			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr, len,
+			ret = ofi_hmem_get_handle(src_iface, (void *) payload->rendezvous.ipc.ipc_info.base_addr,
+						  payload->rendezvous.ipc.ipc_info.base_length,
 						  (void **) &payload->rendezvous.ipc.ipc_info.ipc_handle);
-			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
-
 			if (ret) {
+				OPX_TRACE_HMEM_END_ERROR(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"Failed to create IPC handle for Device. Falling back to non-IPC case."
 					"Error code: %d\n",
 					ret);
 				goto non_ipc;
 			}
+			OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_REG, 0, 0);
 
 			const uint16_t lrh_qws =
 				8 + /* 2 lhr + 1.5 bth + 4.5 kdeth from "RcvHdrSize[i].HdrSize" CSR*/
