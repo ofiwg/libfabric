@@ -37,6 +37,7 @@
 struct dlist_entry ep_name_list;
 DEFINE_LIST(ep_name_list);
 pthread_mutex_t ep_list_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t inject_pool_lock = PTHREAD_MUTEX_INITIALIZER;
 
 void smr_cleanup(void)
 {
@@ -106,8 +107,9 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 		sizeof(struct smr_cmd_queue_entry) * rx_size;
 	inject_pool_offset = cmd_stack_offset +
 		freestack_size(sizeof(struct smr_cmd), tx_size);
-	ret_queue_offset = inject_pool_offset + sizeof(struct smr_inject_buf) *
-		tx_size;
+	ret_queue_offset = inject_pool_offset +
+			   freestack_size(sizeof(struct smr_inject_buf),
+			   rx_size);
 	ret_queue_offset = ofi_get_aligned_size(ret_queue_offset, 64);
 	sar_pool_offset = ret_queue_offset + sizeof(struct smr_return_queue) +
 		sizeof(struct smr_return_queue_entry) * tx_size;
@@ -287,6 +289,8 @@ int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	(*smr)->max_sar_buf_per_peer = SMR_BUF_BATCH_MAX;
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size, smr_cmd_init);
+	smr_freestack_init(smr_inject_pool(*smr), rx_size,
+			   sizeof(struct smr_inject_buf));
 	smr_return_queue_init(smr_return_queue(*smr), tx_size, NULL);
 
 	smr_freestack_init(smr_cmd_stack(*smr), tx_size,
@@ -318,6 +322,10 @@ close:
 
 void smr_free(struct smr_region *smr)
 {
+	/*
+	 * TODO: Figure out if we should cleanup resources in the smr before
+	 * unlinking and unmapping.
+	 */
 	if (smr->flags & SMR_FLAG_HMEM_ENABLED)
 		(void) ofi_hmem_host_unregister(smr);
 	shm_unlink(smr_name(smr));

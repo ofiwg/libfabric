@@ -42,6 +42,7 @@
 #include <ofi.h>
 #include <ofi_list.h>
 #include <ofi_osd.h>
+#include <pthread.h>
 
 #ifdef INCLUDE_VALGRIND
 #   include <valgrind/memcheck.h>
@@ -217,6 +218,7 @@ void dummy ## name (void) /* work-around global ; scope */
 #define SMR_FREESTACK_EMPTY	(-1)
 
 struct smr_freestack {
+	pthread_spinlock_t	lock;
 	uint64_t		entry_base_offset;
 	size_t			object_size;
 	size_t			size;
@@ -245,9 +247,11 @@ static inline long freestack_size(int elem_size, int num_elements)
 static inline void smr_freestack_push_by_index(struct smr_freestack *fs,
 		int16_t entry_index)
 {
+	pthread_spin_lock(&fs->lock);
 	fs->entry_next[entry_index] = fs->top;
 	fs->top = entry_index;
 	fs->free++;
+	pthread_spin_unlock(&fs->lock);
 }
 
 /* Push by entry_offset */
@@ -278,6 +282,7 @@ static inline void smr_freestack_init(struct smr_freestack *fs, size_t elem_coun
 		size_t fs_object_size)
 {
 	ssize_t i, next_aligned_addr;
+	pthread_spin_init(&fs->lock, PTHREAD_PROCESS_SHARED);
 	assert(elem_count == roundup_power_of_two(elem_count));
 	fs->size = elem_count;
 	fs->free = 0;
@@ -308,10 +313,12 @@ static inline int smr_freestack_pop_by_index(struct smr_freestack *fs)
 {
 	int entry_index;
 
+	pthread_spin_lock(&fs->lock);
 	entry_index = fs->top;
 	fs->top = fs->entry_next[entry_index];
 	fs->entry_next[entry_index] = -1;
 	fs->free--;
+	pthread_spin_unlock(&fs->lock);
 
 	return entry_index;
 }

@@ -74,6 +74,7 @@ extern struct smr_env smr_env;
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
 #define SMR_BUFFER_RECV		(1 << 1)
+#define SMR_RETURN_CMD		(1 << 2)
 
 enum {
 	smr_proto_inline,	/* inline payload */
@@ -119,7 +120,7 @@ struct smr_cmd_hdr {
 	int16_t			tx_id;
 	uint8_t			op;
 	uint8_t			proto;
-	uint8_t			op_flags;
+	uint8_t			smr_flags;
 	uint8_t			resv[1];
 };
 
@@ -145,6 +146,7 @@ struct smr_cmd_rma {
 struct smr_cmd_data {
 	union {
 		uint8_t			msg[SMR_MSG_DATA_LEN];
+		uint64_t		inject_buf_index;
 		struct {
 			size_t		iov_count;
 			struct iovec	iov[SMR_IOV_LIMIT];
@@ -314,9 +316,9 @@ static inline struct smr_freestack *smr_cmd_stack(struct smr_region *smr)
 {
 	return (struct smr_freestack *) ((char *) smr + smr->cmd_stack_offset);
 }
-static inline struct smr_inject_buf *smr_inject_pool(struct smr_region *smr)
+static inline struct smr_freestack *smr_inject_pool(struct smr_region *smr)
 {
-	return (struct smr_inject_buf *)
+	return (struct smr_freestack *)
 			((char *) smr + smr->inject_pool_offset);
 }
 static inline struct smr_return_queue *smr_return_queue(struct smr_region *smr)
@@ -337,11 +339,9 @@ static inline const char *smr_name(struct smr_region *smr)
 	return (const char *) smr + smr->name_offset;
 }
 
-static inline struct smr_inject_buf *smr_get_inject_buf(struct smr_region *smr,
-							struct smr_cmd *cmd)
+static inline struct smr_inject_buf *smr_get_inject_buf(struct smr_region *smr)
 {
-	return &smr_inject_pool(smr)[smr_freestack_get_index(smr_cmd_stack(smr),
-							     (char *) cmd)];
+	return smr_freestack_pop(smr_inject_pool(smr));
 }
 
 struct smr_attr {
