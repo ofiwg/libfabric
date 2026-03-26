@@ -477,6 +477,109 @@ void test_efa_hw_cntr_readerr(struct efa_resource **state)
 }
 
 /**
+ * @brief Helper to open a hardware counter with a specific wait_obj.
+ */
+static int test_efa_hw_cntr_open_with_wait_obj(struct efa_resource *resource,
+					       enum fi_wait_obj wait_obj,
+					       struct fid_cntr **cntr_fid)
+{
+	struct fi_efa_ops_gda *efa_gda_ops;
+	struct fi_cntr_attr attr = {0};
+	struct fi_efa_comp_cntr_init_attr efa_attr = {0};
+	struct efa_domain *efa_domain;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0,
+			  (void **)&efa_gda_ops, NULL);
+	assert_int_equal(ret, 0);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	g_efa_unit_test_mocks.efadv_create_comp_cntr = efa_mock_efadv_create_comp_cntr_return_mock;
+	g_efa_unit_test_mocks.ibv_destroy_comp_cntr = efa_mock_ibv_destroy_comp_cntr_return_mock;
+
+	attr.events = FI_CNTR_EVENTS_COMP;
+	attr.wait_obj = wait_obj;
+	return efa_gda_ops->cntr_open_ext(resource->domain, &attr,
+					  cntr_fid, NULL, &efa_attr);
+}
+
+/**
+ * @brief Test efa_hw_cntr_wait returns success when counter already meets threshold
+ */
+void test_efa_hw_cntr_wait_success(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid = NULL;
+	int ret;
+
+	ret = test_efa_hw_cntr_open_with_wait_obj(resource, FI_WAIT_UNSPEC, &cntr_fid);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	g_efa_unit_test_mocks.ibv_read_comp_cntr = efa_mock_ibv_read_comp_cntr_return_mock;
+	g_efa_unit_test_mocks.ibv_read_err_comp_cntr = efa_mock_ibv_read_err_comp_cntr_return_mock;
+
+	/* efa_hw_cntr_wait reads err counter once, then reads comp counter */
+	will_return(efa_mock_ibv_read_err_comp_cntr_return_mock, 0);
+	will_return(efa_mock_ibv_read_comp_cntr_return_mock, 10);
+
+	ret = fi_cntr_wait(cntr_fid, 10, 1000);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	fi_close(&cntr_fid->fid);
+}
+
+/**
+ * @brief Test efa_hw_cntr_wait returns -FI_EINVAL when wait_obj is FI_WAIT_NONE
+ */
+void test_efa_hw_cntr_wait_returns_einval_with_wait_none(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid = NULL;
+	int ret;
+
+	ret = test_efa_hw_cntr_open_with_wait_obj(resource, FI_WAIT_NONE, &cntr_fid);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	ret = fi_cntr_wait(cntr_fid, 10, 1000);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	fi_close(&cntr_fid->fid);
+}
+
+/**
+ * @brief Test cntr_open_ext returns -FI_EOPNOTSUPP when wait_obj is FI_WAIT_FD
+ * GPU cannot do a blocking wait because system FDs are only accessible to CPU.
+ */
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid = NULL;
+	int ret;
+
+	ret = test_efa_hw_cntr_open_with_wait_obj(resource, FI_WAIT_FD, &cntr_fid);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
+}
+
+/**
+ * @brief Test cntr_open_ext returns -FI_EOPNOTSUPP when wait_obj is FI_WAIT_YIELD
+ */
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid = NULL;
+	int ret;
+
+	ret = test_efa_hw_cntr_open_with_wait_obj(resource, FI_WAIT_YIELD, &cntr_fid);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
+}
+
+/**
  * @brief Verify fi_enable succeeds when ibv_qp_attach_comp_cntr returns 0
  */
 void test_efa_hw_cntr_bind_ep(struct efa_resource **state)
@@ -539,4 +642,8 @@ void test_efa_hw_cntr_read(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_readerr(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_bind_ep(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_bind_ep_attach_fail(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_wait_success(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_wait_returns_einval_with_wait_none(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield(struct efa_resource **state) { skip(); }
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */

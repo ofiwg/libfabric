@@ -36,6 +36,15 @@ uint64_t efa_hw_cntr_read(struct fid_cntr *cntr_fid);
 /* Read the current hardware error counter value */
 uint64_t efa_hw_cntr_readerr(struct fid_cntr *cntr_fid);
 
+/* Wait until the hardware completion counter reaches threshold or timeout.
+ * Polls with exponential backoff (up to 5 attempts or infinite when timeout is -1).
+ * Returns FI_SUCCESS when counter >= threshold, -FI_EAVAIL if the error
+ * counter changes, -FI_ETIMEDOUT on timeout, -FI_EINVAL if the counter
+ * was configured with FI_WAIT_NONE, or -FI_EOPNOTSUPP if the counter
+ * memory is on device (DMABUF) without a host mapping.
+ */
+int efa_hw_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold,
+		     int timeout);
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */
 
 #endif /* _EFA_HW_CNTR_H_ */
