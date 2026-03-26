@@ -17,6 +17,8 @@ struct efa_cntr {
 	bool comp_use_device_mem;
 	/* Whether error counter memory is on device (DMABUF) without host mapping */
 	bool err_use_device_mem;
+	/* Wait object type from fi_cntr_attr */
+	enum fi_wait_obj wait_obj;
 };
 
 int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,

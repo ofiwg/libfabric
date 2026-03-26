@@ -23,7 +23,7 @@ struct fi_ops_cntr efa_hw_cntr_ops = {
 	.adderr = efa_hw_cntr_adderr,
 	.set = efa_hw_cntr_set,
 	.seterr = efa_hw_cntr_seterr,
-	.wait = fi_no_cntr_wait,
+	.wait = efa_hw_cntr_wait,
 };
 
 static int efa_hw_cntr_check_attr(struct efa_domain *efa_domain,
@@ -250,5 +250,56 @@ uint64_t efa_hw_cntr_readerr(struct fid_cntr *cntr_fid)
 		return 0;
 	}
 	return value;
+}
+
+int efa_hw_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
+{
+	struct efa_cntr *cntr;
+	uint64_t start, errcnt;
+	int ret = -FI_ETIMEDOUT;
+	int numtry = 5;
+	int tryid = 0;
+	int waitim = 1;
+	static const int waitim_max = 1000; /* cap at 1ms */
+
+	cntr = container_of(cntr_fid, struct efa_cntr, util_cntr.cntr_fid);
+	if (cntr->comp_use_device_mem || cntr->err_use_device_mem) {
+		EFA_WARN(FI_LOG_CNTR,
+			 "fi_cntr_wait not supported for counters in device "
+			 "memory\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (cntr->wait_obj == FI_WAIT_NONE) {
+		EFA_WARN(FI_LOG_CNTR,
+			 "Invalid to call fi_cntr_wait with FI_WAIT_NONE\n");
+		return -FI_EINVAL;
+	}
+
+	errcnt = efa_hw_cntr_readerr(cntr_fid);
+	start = (timeout >= 0) ? ofi_gettime_ms() : 0;
+	for (tryid = 0; tryid < numtry; ++tryid) {
+		if (threshold <= efa_hw_cntr_read(cntr_fid)) {
+			ret = FI_SUCCESS;
+			break;
+		}
+		if (errcnt != efa_hw_cntr_readerr(cntr_fid)) {
+			ret = -FI_EAVAIL;
+			break;
+		}
+		if (timeout >= 0) {
+			timeout -= (int) (ofi_gettime_ms() - start);
+			if (timeout <= 0) {
+				ret = -FI_ETIMEDOUT;
+				break;
+			}
+		} else {
+			tryid = 0;
+		}
+		usleep(waitim);
+		if (waitim < waitim_max)
+			waitim *= 2;
+	}
+	return ret;
 }
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */

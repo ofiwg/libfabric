@@ -446,6 +446,10 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_readerr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_bind_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_bind_ep_attach_fail, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_wait_success, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_wait_returns_einval_with_wait_none, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end of efa_unit_test_cntr.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_reorder_expected_msg_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

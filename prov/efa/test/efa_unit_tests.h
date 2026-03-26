@@ -374,6 +374,10 @@ void test_efa_hw_cntr_read();
 void test_efa_hw_cntr_readerr();
 void test_efa_hw_cntr_bind_ep();
 void test_efa_hw_cntr_bind_ep_attach_fail();
+void test_efa_hw_cntr_wait_success();
+void test_efa_hw_cntr_wait_returns_einval_with_wait_none();
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd();
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield();
 /* begin of efa_unit_test_rdm_peer.c */
 void test_efa_rdm_peer_reorder_expected_msg_id();
 void test_efa_rdm_peer_reorder_smaller_msg_id();

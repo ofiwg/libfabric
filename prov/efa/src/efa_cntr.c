@@ -12,10 +12,11 @@ int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 {
 	struct util_cntr *cntr;
 	uint64_t start, errcnt;
-	int ret;
+	int ret = -FI_ETIMEDOUT;
 	int numtry = 5;
 	int tryid = 0;
 	int waitim = 1;
+	static const int waitim_max = 1000; /* cap at 1ms */
 	struct efa_domain *domain;
 
 	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
@@ -45,13 +46,16 @@ int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 				ret = -FI_ETIMEDOUT;
 				goto unlock;
 			}
+		} else {
+			tryid = 0;
 		}
 
 		ret = ofi_wait(&cntr->wait->wait_fid, waitim);
 		if (ret == -FI_ETIMEDOUT)
 			ret = 0;
 
-		waitim *= 2;
+		if (waitim < waitim_max)
+			waitim *= 2;
 	}
 
 unlock:
