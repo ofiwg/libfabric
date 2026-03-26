@@ -225,9 +225,8 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->tx_ctx_cnt       = tx_ctx_cnt;
 	attr->rx_ctx_cnt       = rx_ctx_cnt;
 
-	// For now, keep these 1-1
-	attr->max_ep_tx_ctx = FI_OPX_ADDR_SEP_RX_MAX;
-	attr->max_ep_rx_ctx = FI_OPX_ADDR_SEP_RX_MAX;
+	attr->max_ep_tx_ctx = 1;
+	attr->max_ep_rx_ctx = 1;
 
 	attr->max_ep_stx_ctx = 0;
 	attr->max_ep_srx_ctx = 0;
@@ -254,14 +253,6 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 	domain_attr->data_progress = progress;
 
 #ifdef OPX_ENABLED
-	/* Set the data progress mode to the option used in the configure.
-	 * Ignore any setting by the application.
-	 */
-
-	/* Set the mr_mode to the option used in the configure.
-	 * Ignore any setting by the application - the checkinfo should have verified
-	 * it was set to the same setting.
-	 */
 	domain_attr->mr_mode = OPX_MR;
 #endif
 
@@ -270,10 +261,14 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 #endif
 
 	if (hints) {
-		if (hints->mr_mode & FI_MR_VIRT_ADDR) {
+		const int modern_mr_bits = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_ENDPOINT;
+
+		if (hints->mr_mode & modern_mr_bits) {
+			domain_attr->mr_mode &= ~(OFI_MR_BASIC | OFI_MR_SCALABLE);
+
 			FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN,
-				"Application requests FI_MR_VIRT_ADDR, OPX is turning on that mr_mode bit\n");
-			domain_attr->mr_mode |= FI_MR_VIRT_ADDR;
+				"Application hints modern mr_mode 0x%x, returning mr_mode 0x%x (no requirements)\n",
+				hints->mr_mode, domain_attr->mr_mode);
 		}
 
 		if (hints->domain) {
@@ -348,10 +343,6 @@ int fi_opx_check_domain_attr(struct fi_domain_attr *attr)
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(attr->threading))) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "incorrect threading level\n");
 		goto err;
-	}
-
-	if (attr->mr_mode == OFI_MR_UNSPEC) {
-		attr->mr_mode = FI_OPX_BASE_MR_MODE;
 	}
 
 	if (attr->mr_key_size) {
