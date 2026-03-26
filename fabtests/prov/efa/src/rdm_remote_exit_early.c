@@ -82,6 +82,21 @@ static int run()
 			goto out;
 		}
 	} else {
+		/*
+		 * Two syncs are needed to guarantee the handshake is
+		 * fully processed on both sides. The first sync triggers
+		 * the handshake exchange, but the handshake packet may
+		 * not be processed before ft_sync_inband returns. The
+		 * second sync ensures both sides have polled the CQ
+		 * enough to process the peer's handshake, so the sender
+		 * selects the longread protocol for large messages.
+		 */
+		ret = ft_sync_inband(true);
+		if (ret) {
+			FT_PRINTERR("ft_sync_inband", -ret);
+			goto out;
+		}
+
 		ret = ft_sync_inband(false);
 		if (ret) {
 			FT_PRINTERR("ft_sync_inband", -ret);
