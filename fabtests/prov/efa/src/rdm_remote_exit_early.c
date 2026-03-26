@@ -39,9 +39,11 @@
 #include <rdma/fi_ext.h>
 
 static bool post_rx = false;
+static bool homogeneous_peers = true;
 
 enum {
 	LONG_OPT_POST_RX,
+	LONG_OPT_HETEROGENEOUS_PEERS,
 };
 
 static int run()
@@ -57,6 +59,14 @@ static int run()
 
 	/* Bind eq to ep so it can write eq error for EFA_RDM_OPE_INTERNAL */
 	FT_EP_BIND(ep, eq, 0);
+
+	ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT,
+			FI_OPT_EFA_HOMOGENEOUS_PEERS,
+			&homogeneous_peers, sizeof homogeneous_peers);
+	if (ret) {
+		FT_PRINTERR("fi_setopt(FI_OPT_EFA_HOMOGENEOUS_PEERS)", ret);
+		goto out;
+	}
 
 	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_EMULATED_READ,
 			&use_emulated_read, &(size_t) {sizeof use_emulated_read});
@@ -228,6 +238,7 @@ int main(int argc, char **argv)
 	int lopt_idx = 0;
 	struct option long_opts[] = {
 		{"post-rx", no_argument, NULL, LONG_OPT_POST_RX},
+		{"heterogeneous-peers", no_argument, NULL, LONG_OPT_HETEROGENEOUS_PEERS},
 		{0, 0, 0, 0}
 	};
 	while ((op = getopt_long(argc, argv, ADDR_OPTS INFO_OPTS CS_OPTS API_OPTS,
@@ -244,6 +255,9 @@ int main(int argc, char **argv)
 		case LONG_OPT_POST_RX:
 			post_rx = true;
 			break;
+		case LONG_OPT_HETEROGENEOUS_PEERS:
+			homogeneous_peers = false;
+			break;
 		case '?':
 		case 'h':
 			ft_usage(argv[0], "RDM remote exit early test");
@@ -251,6 +265,9 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE( "--post-rx",
 					    "Receiver posts fi_recv. "
 						"By default receiver does not post receive.\n");
+			FT_PRINT_OPTS_USAGE( "--heterogeneous-peers",
+					    "Disable homogeneous peers assumption. "
+						"Use when testing across different instance types.\n");
 			return EXIT_FAILURE;
 		}
 	}
