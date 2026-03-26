@@ -88,10 +88,9 @@ def test_rdm_tagged_bw_small_tx_rx(cmdline_args, completion_semantic, memory_typ
                                fabric="efa")
 
 @pytest.mark.functional
-def test_rdm_tagged_bw_small_tx_rx(cmdline_args, completion_semantic, memory_type, completion_type):
+def test_rdm_tagged_bw_small_recv_window(cmdline_args, completion_semantic, memory_type, completion_type):
     cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.append_environ("FI_EFA_RECVWIN_SIZE=1")
-    # Use a window size larger than tx/rx size
     efa_run_client_server_test(cmdline_args_copy, "fi_rdm_tagged_bw -W 128", "short",
                                completion_semantic, memory_type, "all", completion_type=completion_type,
                                fabric="efa")
