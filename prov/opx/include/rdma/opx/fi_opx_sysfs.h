@@ -50,6 +50,7 @@ int	    opx_sysfs_unit_write(uint32_t unit, const char *attr, const void *data, 
 int	    opx_sysfs_read_s64(const char *attr, int64_t *valp, int base);
 int	    opx_sysfs_unit_read_s64(uint32_t unit, const char *attr, int64_t *valp, int base);
 int64_t	    opx_hfi_sysfs_unit_read_node_s64(uint32_t unit);
+int	    opx_sysfs_port_read_s32(uint32_t unit, uint32_t port, const char *attr, int32_t *valp, int base);
 int	    opx_sysfs_port_read_s64(uint32_t unit, uint32_t port, const char *attr, int64_t *valp, int base);
 int	    opx_sysfs_unit_get_pci_attr(uint32_t unit, struct fi_pci_attr *pci_attr);
 #endif /* _FI_PROV_OPX_SYSFS_H_ */

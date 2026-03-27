@@ -151,6 +151,14 @@ int opx_hfi_get_port_gid(int, int, uint64_t *hi, uint64_t *lo);
 /* Returns an int, so -1 indicates an error.  0 */
 int opx_hfi_get_port_lmc(int unit, int port);
 
+/* Returns an int, so 0 is no mask or error */
+int opx_hfi_get_port_lid_mask(int unit, int port);
+
+/* Returns an int, so 0 is no mask or error */
+int opx_hfi_get_port_lid_path_mask(int unit, int port);
+
+int opx_hfi_get_port_neighbor_type(int unit, int port, uint8_t *neighbor_type);
+
 /* Given the unit number, return an error, or the corresponding link rate
    for the port */
 /* Returns an int, so -1 indicates an error. */

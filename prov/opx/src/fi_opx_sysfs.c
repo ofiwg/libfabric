@@ -632,6 +632,39 @@ bail:
 	return ret;
 }
 
+int opx_sysfs_port_read_s32(uint32_t unit, uint32_t port, const char *attr, int32_t *valp, int base)
+{
+	char *data, *end;
+	int   saved_errno;
+	long  val;
+	int   ret;
+
+	ret	    = opx_sysfs_port_read(unit, port, attr, &data);
+	saved_errno = errno;
+
+	if (ret == -1) {
+		goto bail;
+	}
+
+	val = strtol(data, &end, base);
+	assert(val <= UINT_MAX);
+
+	saved_errno = errno;
+
+	if (!*data || !(*end == '\0' || isspace(*end))) {
+		ret = -1;
+		goto bail;
+	}
+
+	*valp = val;
+	ret   = 0;
+
+bail:
+	free(data);
+	errno = saved_errno;
+	return ret;
+}
+
 int opx_sysfs_port_read_s64(uint32_t unit, uint32_t port, const char *attr, int64_t *valp, int base)
 {
 	char	 *data, *end;

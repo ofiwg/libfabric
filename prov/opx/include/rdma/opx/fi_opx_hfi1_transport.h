@@ -653,9 +653,31 @@ uint64_t fi_opx_hfi1_tx_is_shm(struct fi_opx_ep *opx_ep, const struct fi_opx_add
 {
 	/* If (exclusively FI_LOCAL_COMM) OR (FI_LOCAL_COMM is on AND
 	   the destination lid selected SHM) */
-	return (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||
-		(((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
-		 (opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index)))));
+	if ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "%ld\n",
+		       (long) opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index)));
+		return opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
+	}
+
+	if ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) != (FI_LOCAL_COMM | FI_REMOTE_COMM)) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "%ld\n", 0L);
+		return 0;
+	}
+
+	if (fi_opx_global.hfi_local_info.sriov) {
+#ifndef NDEBUG
+		enum opx_sriov_route route =
+			opx_sriov_route_classify(fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE],
+						 addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "%u %u\n", (route == OPX_SRIOV_ROUTE_SHM),
+		       opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index)));
+#endif
+		return opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
+	}
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "%ld\n",
+	       (long) (opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index))));
+	return opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
 }
 
 __OPX_FORCE_INLINE__

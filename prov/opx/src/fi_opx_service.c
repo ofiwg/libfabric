@@ -66,6 +66,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <strings.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -620,6 +621,87 @@ int opx_hfi_get_port_lmc(int unit, int port)
 	}
 
 	return ret;
+}
+
+int opx_hfi_get_port_lid_mask(int unit, int port)
+{
+	int	ret;
+	int32_t val;
+
+	ret = opx_sysfs_port_read_s32(unit, port, "lid_mask", &val, 0);
+
+	if (ret == -1) {
+		_HFI_INFO("Failed to get LID mask for unit %u:%u: %s\n", unit, port, strerror(errno));
+		ret = 0;
+	} else {
+		ret = val;
+	}
+
+	return ret;
+}
+
+int opx_hfi_get_port_lid_path_mask(int unit, int port)
+{
+	int	ret;
+	int32_t val;
+
+	ret = opx_sysfs_port_read_s32(unit, port, "lid_path_mask", &val, 0);
+
+	if (ret == -1) {
+		_HFI_INFO("Failed to get LID path mask for unit %u:%u: %s\n", unit, port, strerror(errno));
+		ret = 0;
+	} else {
+		ret = val;
+	}
+
+	return ret;
+}
+
+int opx_hfi_get_port_neighbor_type(int unit, int port, uint8_t *neighbor_type)
+{
+	if (!neighbor_type) {
+		errno = EINVAL;
+		_HFI_DBG("%ld\n", -1L);
+		return -1;
+	}
+
+	char *value = NULL;
+	int   ret   = opx_sysfs_port_read(unit, port, "neighbor_type", &value);
+
+	if (ret == -1) {
+		_HFI_DBG("Failed to get neighbor_type for unit %u:%u: %s\n", unit, port, strerror(errno));
+		free(value);
+		return -1;
+	}
+
+	if (!value) {
+		_HFI_DBG("neighbor_type read returned NULL for unit %u:%u\n", unit, port);
+		free(value);
+		return -1;
+	}
+
+	char *trimmed = value;
+	while (*trimmed && isspace((unsigned char) *trimmed)) {
+		++trimmed;
+	}
+	char *end = trimmed + strlen(trimmed);
+	while (end > trimmed && isspace((unsigned char) end[-1])) {
+		--end;
+	}
+	*end = '\0';
+
+	if (!strcasecmp(trimmed, "switch")) {
+		*neighbor_type = OPX_NEIGHBOR_SWITCH;
+	} else if (!strcasecmp(trimmed, "hfi")) {
+		*neighbor_type = OPX_NEIGHBOR_HFI;
+	} else {
+		_HFI_DBG("Unknown neighbor_type '%s' for unit %u:%u, defaulting to unknown\n", trimmed, unit, port);
+		*neighbor_type = OPX_NEIGHBOR_UNKNOWN;
+	}
+
+	free(value);
+	_HFI_INFO("%ld neighbor %d\n", 0L, *neighbor_type);
+	return 0;
 }
 
 /* Given the unit number, return an error, or the corresponding link rate
