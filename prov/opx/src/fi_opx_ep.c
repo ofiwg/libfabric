@@ -1431,7 +1431,7 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	return 0;
 }
 
-static inline bool opx_check_sriov(int unit, int port_index, int *min_rctxt, int *max_rctxt)
+static inline bool opx_check_sriov(int unit, int port_index)
 {
 	bool is_sriov = false;
 
@@ -1465,15 +1465,8 @@ static inline bool opx_check_sriov(int unit, int port_index, int *min_rctxt, int
 				is_sriov = true;
 				assert(!(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR));
 			}
-			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov true: %s %d : unit %d, port %d\n", label,
+			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "SR-IOV true: %s %d : unit %d, port %d\n", label,
 				val1, unit, port_index);
-			continue;
-		} else if (!strncmp(label, "rctxt", 5) || !strncmp(label, port_rctxt, strlen(port_rctxt))) {
-			*min_rctxt = val1;
-			*max_rctxt = -val2;
-			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "%s %u-%u : unit %d, port %d\n", label, *min_rctxt,
-				*max_rctxt, unit, port_index);
-			assert(*max_rctxt > *min_rctxt);
 			continue;
 		}
 	}
@@ -1481,6 +1474,30 @@ static inline bool opx_check_sriov(int unit, int port_index, int *min_rctxt, int
 	free(line);
 	fclose(fd);
 	return is_sriov;
+}
+
+static void opx_init_lid_masks(int unit, int port)
+{
+	fi_opx_global.hfi_local_info.lid_mask	   = (opx_lid_t) opx_hfi_get_port_lid_mask(unit, port);
+	fi_opx_global.hfi_local_info.lid_path_mask = (opx_lid_t) opx_hfi_get_port_lid_path_mask(unit, port);
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "lid_mask %#x, lid_path_mask %#x, lid %#x/%#x, base_lid %#x\n",
+	       fi_opx_global.hfi_local_info.lid_mask, fi_opx_global.hfi_local_info.lid_path_mask,
+	       fi_opx_global.hfi_local_info.lid[0],
+	       fi_opx_global.hfi_local_info.lid[0] & fi_opx_global.hfi_local_info.lid_path_mask,
+	       fi_opx_global.hfi_local_info.lid[0] & fi_opx_global.hfi_local_info.lid_mask);
+}
+
+static void opx_init_neighbor_type(int unit, int port)
+{
+	uint8_t neighbor_type = OPX_NEIGHBOR_UNKNOWN;
+	if (opx_hfi_get_port_neighbor_type(unit, port, &neighbor_type) == 0) {
+		fi_opx_global.hfi_local_info.neighbor_type = neighbor_type;
+	} else {
+		fi_opx_global.hfi_local_info.neighbor_type = OPX_NEIGHBOR_UNKNOWN;
+	}
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "neighbor_type %d (unit %u port %u)\n",
+	       fi_opx_global.hfi_local_info.neighbor_type, unit, port);
 }
 
 static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
@@ -1555,20 +1572,16 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 	fi_opx_global.hfi_local_info.pbc_lid[1]	 = -1UL;
 	fi_opx_global.hfi_local_info.lid[1]	 = (opx_lid_t) 0;
 	fi_opx_global.hfi_local_info.hfi_unit[1] = (uint8_t) -1U;
-	/* Check if JKR/sr-iov(alpha) is enabled (or forced for unsupported testing)*/
-	{
-		int32_t tmp_min_rctxt = -1;
-		int32_t tmp_max_rctxt = -1;
-		fi_opx_global.hfi_local_info.sriov =
-			opx_check_sriov(hfi1->hfi_unit, (hfi1->hfi_port - 1), &tmp_min_rctxt, &tmp_max_rctxt);
-		fi_opx_global.hfi_local_info.min_rctxt = tmp_min_rctxt;
-		fi_opx_global.hfi_local_info.max_rctxt = tmp_max_rctxt;
-	}
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "sr-iov %u, lid %#x (PBC %#lX) rctxt %d-%d\n",
+	/* Check if JKR/SR-IOV(alpha) is enabled (or forced for unsupported testing)*/
+	fi_opx_global.hfi_local_info.sriov = opx_check_sriov(hfi1->hfi_unit, (hfi1->hfi_port - 1));
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SR-IOV %u, lid %#x (PBC %#lX)\n",
 	       fi_opx_global.hfi_local_info.sriov, fi_opx_global.hfi_local_info.lid[0],
-	       fi_opx_global.hfi_local_info.pbc_lid[0], fi_opx_global.hfi_local_info.min_rctxt,
-	       fi_opx_global.hfi_local_info.max_rctxt);
-	fi_opx_init_hfi_lookup(fi_opx_global.hfi_local_info.sriov, hfi1->gid_hi, 0);
+	       fi_opx_global.hfi_local_info.pbc_lid[0]);
+
+	opx_init_lid_masks(hfi1->hfi_unit, hfi1->hfi_port);
+	opx_init_neighbor_type(hfi1->hfi_unit, hfi1->hfi_port);
+
+	fi_opx_init_hfi_lookup(hfi1->gid_hi, 0);
 
 	// Initialize context sharing structures if context sharing is in use
 	if (OPX_IS_CTX_SHARING_ENABLED) {
@@ -3873,28 +3886,20 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, struct fi_o
 		}
 	}
 	if (fi_opx_global.hfi_local_info.sriov) {
-		/* Check rctxt ranges for sr-iov*/
+		/* Check for SR-IOV loopback*/
 		for (n = 0; n < count; ++n) {
 			rc = fi_opx_check_tx_rctxt(opx_ep, n);
-			FI_INFO(fi_opx_global.prov, FI_LOG_AV, "lid:%u multi-vm %u, multi-lid %u, SHM %u\n",
-				fi_opx_global.hfi_local_info.lid[0], fi_opx_global.hfi_local_info.multi_vm,
-				fi_opx_global.hfi_local_info.multi_lid,
+			FI_INFO(fi_opx_global.prov, FI_LOG_AV, "lid:%u port_loopback %u, multi-hfi %u, SHM %u\n",
+				fi_opx_global.hfi_local_info.lid[0], fi_opx_global.hfi_local_info.port_loopback,
+				fi_opx_global.hfi_local_info.multi_hfi,
 				opx_lid_is_shm(OPX_LID_PLANE_KEY(fi_opx_global.hfi_local_info.lid[0], 0)));
 			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
 				OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_TX_CONNECT, (uint64_t) (-rc), (uint64_t) n);
 				return rc;
 			}
 		}
-		if (fi_opx_global.hfi_local_info.multi_vm) {
-			/* Multi-vm (self) jobs will need loopback to self so disable SHM */
-			opx_remove_self_lid(fi_opx_global.hfi_local_info.hfi_unit[0],
-					    fi_opx_global.hfi_local_info.lid[0], 0);
-			/* assert JKR/sr-iov(alpha) can't mix loopback and other lids across vms */
-			assert(!(OPX_HW_HFI1_TYPE & OPX_HFI1_JKR) || !fi_opx_global.hfi_local_info.multi_lid);
-			assert(!(OPX_HW_HFI1_TYPE & OPX_HFI1_WFR)); /* not supported */
-		}
-		FI_INFO(fi_opx_global.prov, FI_LOG_AV, "multi-vm %u, multi-lid %u, SHM %u\n",
-			fi_opx_global.hfi_local_info.multi_vm, fi_opx_global.hfi_local_info.multi_lid,
+		FI_INFO(fi_opx_global.prov, FI_LOG_AV, "port_loopback %u, multi-hfi %u, SHM %u\n",
+			fi_opx_global.hfi_local_info.port_loopback, fi_opx_global.hfi_local_info.multi_hfi,
 			opx_lid_is_shm(OPX_LID_PLANE_KEY(fi_opx_global.hfi_local_info.lid[0], 0)));
 	}
 	for (n = 0; n < count; ++n) {

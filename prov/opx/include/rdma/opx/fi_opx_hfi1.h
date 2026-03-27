@@ -776,6 +776,8 @@ struct opx_hfi_local_entry *fi_opx_hfi1_get_lid_local(opx_lid_t lid_plane_key)
 __OPX_FORCE_INLINE__
 bool opx_lid_is_shm(opx_lid_t lid_plane_key)
 {
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "lid plane key %#x is_shm %u\n", lid_plane_key,
+	       (opx_local_lid_index(lid_plane_key) != -1));
 	return (opx_local_lid_index(lid_plane_key) != -1);
 }
 
@@ -789,13 +791,66 @@ int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid, uint8_t plane_idx)
 	return fi_opx_hfi1_get_lid_local(OPX_LID_PLANE_KEY(lid, plane_idx))->hfi_unit;
 }
 
+__OPX_FORCE_INLINE__
+enum opx_sriov_route opx_sriov_route_classify(opx_lid_t slid, opx_lid_t dlid, uint8_t tx_index)
+{
+	/* WFR does not support SRIOV — this function should never be called for WFR. */
+	assert(!(fi_opx_global.hfi_local_info.hw_type & OPX_HFI1_WFR));
+
+	/* Same lid (masked for irrelevant dispersive routing bits) == same HFI and same VF. */
+	if ((slid & ~OPX_LID_PATH_MASK) == (dlid & ~OPX_LID_PATH_MASK)) {
+		/* We always insert an entry for self, can't be disabled */
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "OPX_SRIOV_ROUTE_SHM slid %#x/%#x, dlid %#x/%#x\n", slid,
+		       slid & ~OPX_LID_PATH_MASK, dlid, dlid & ~OPX_LID_PATH_MASK);
+		assert(opx_lid_is_shm(OPX_LID_PLANE_KEY(dlid, tx_index)));
+		return OPX_SRIOV_ROUTE_SHM;
+	}
+
+	/* A lid match to an HFI in this VF, already using SHM */
+	if (opx_lid_is_shm(OPX_LID_PLANE_KEY(dlid, tx_index))) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "OPX_SRIOV_ROUTE_SHM (different HFI) slid %#x, dlid %#x\n",
+		       slid, dlid);
+		return OPX_SRIOV_ROUTE_SHM;
+	}
+
+	/* If not a base lid match (same HFI) in any VF, use fabric for routing */
+	if ((slid & OPX_LID_MASK) != (dlid & OPX_LID_MASK)) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "OPX_SRIOV_ROUTE_FABRIC slid %#x/%#x, dlid %#x/%#x\n", slid,
+		       slid & OPX_LID_MASK, dlid, dlid & OPX_LID_MASK);
+		return OPX_SRIOV_ROUTE_FABRIC;
+	}
+
+	/* Same HFI (base LIDs match) and different VF, route depends on hardware and neighbor type */
+	if (fi_opx_global.hfi_local_info.hw_type & OPX_HFI1_CYR) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "OPX_SRIOV_ROUTE_PORT_LOOPBACK slid %#x, dlid %#x\n", slid,
+		       dlid);
+		return OPX_SRIOV_ROUTE_PORT_LOOPBACK; // full CYR port loopback
+	}
+
+	if (fi_opx_global.hfi_local_info.hw_type & OPX_HFI1_JKR) {
+		if (fi_opx_global.hfi_local_info.neighbor_type == OPX_NEIGHBOR_SWITCH) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			       "OPX_SRIOV_ROUTE_FABRIC_HAIRPIN slid %#x, dlid %#x\n", slid, dlid);
+			return OPX_SRIOV_ROUTE_FABRIC_HAIRPIN; // JKR hairpin loopback on the fabric
+		}
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "OPX_SRIOV_ROUTE_ALPHA_LOOPBACK slid %#x, dlid %#x\n", slid,
+		       dlid);
+		return OPX_SRIOV_ROUTE_ALPHA_LOOPBACK; // limited JKR port loopback
+	}
+
+	/* All supported hw_types are handled above; unreachable. */
+	FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL, "assert(0) OPX_SRIOV_ROUTE_ALPHA_LOOPBACK slid %#x, dlid %#x\n",
+		slid, dlid);
+
+	assert(0);
+	return OPX_SRIOV_ROUTE_ALPHA_LOOPBACK;
+}
+
 struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key);
 
 int init_hfi1_rxe_state(struct fi_opx_hfi1_context *context, struct fi_opx_hfi1_rxe_state *rxe_state);
 
-void opx_remove_self_lid(const int hfi_unit, const opx_lid_t lid, uint8_t plane_idx);
-
-void fi_opx_init_hfi_lookup(bool sriov, uint64_t self_gid_hi, uint8_t self_plane_idx);
+void fi_opx_init_hfi_lookup(uint64_t self_gid_hi, uint8_t self_plane_idx);
 
 void process_hfi_lookup(const int hfi_unit, const opx_lid_t lid, uint64_t gid_hi, uint8_t plane_idx);
 
