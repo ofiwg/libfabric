@@ -505,6 +505,7 @@ void test_efa_rdm_mr_reg_host_memory();
 void test_efa_rdm_mr_reg_host_memory_no_mr_local();
 void test_efa_rdm_mr_reg_host_memory_overlapping_buffers();
 void test_efa_rdm_mr_reg_cuda_memory();
+void test_efa_rdm_mr_reg_cuda_memory_non_p2p();
 void test_efa_direct_mr_reg_cuda_memory();
 void test_efa_direct_mr_reg_rdma_read_not_supported();
 void test_efa_direct_mr_reg_rdma_write_not_supported();

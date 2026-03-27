@@ -497,7 +497,11 @@ static int efa_rdm_mr_reg_impl(struct efa_rdm_mr *efa_rdm_mr, uint64_t flags,
 	 */
 	if ((mr_attr->iface == FI_HMEM_CUDA || mr_attr->iface == FI_HMEM_ROCR)
 		&& !g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device) {
+		ret = efa_mr_hmem_setup(&efa_rdm_mr->efa_mr, mr_attr, flags);
+		if (ret)
+			return ret;
 		efa_rdm_mr->efa_mr.mr_fid.key = efa_rdm_mr_non_p2p_keygen();
+		efa_rdm_mr->efa_mr.mr_fid.mem_desc = &efa_rdm_mr->efa_mr;
 	} else {
 		/* base mr registration (ibv mr), must be called the first before RDM specific fields are setup */
 		ret = efa_mr_reg_impl(&efa_rdm_mr->efa_mr, flags, mr_attr);
