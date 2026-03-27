@@ -385,34 +385,13 @@ void process_hfi_lookup(const int hfi_unit, const opx_lid_t lid, uint64_t gid_hi
 		fi_opx_global.hfi_local_info.local_lid_entries[new_index].hfi_unit = hfi_unit;
 		fi_opx_global.hfi_local_info.local_lid_ids[new_index]		   = lid_plane_key;
 
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			     "HFI %u LID 0x%x gid_hi 0x%016lx plane %u entry created (key 0x%x).\n", hfi_unit, lid,
-			     gid_hi, plane_idx, lid_plane_key);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		       "HFI %u LID 0x%x/0x%x gid_hi 0x%016lx plane %u entry created (key 0x%x).\n", hfi_unit, lid,
+		       (lid & ~OPX_LID_PATH_MASK), gid_hi, plane_idx, lid_plane_key);
 	}
 }
 
-/* Remove "self" lid from shm and therefore use loopback */
-void opx_remove_self_lid(const int hfi_unit, const opx_lid_t lid, uint8_t plane_idx)
-{
-	assert(fi_opx_global.hfi_local_info.sriov);
-	assert(fi_opx_global.hfi_local_info.local_lids_size <= 1);
-	opx_lid_t lid_plane_key = OPX_LID_PLANE_KEY(lid, plane_idx);
-	int	  lid_index	= opx_local_lid_index(lid_plane_key);
-	/* Only used in sr-iov which only had one (self/my) lid */
-	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI %u LID[%d] 0x%x plane %u entry removed.\n", hfi_unit,
-		lid_index, lid, plane_idx);
-	assert(lid_index <= 0);
-	if (lid_index == -1) {
-		/* Duplicate calls, already removed */
-		return;
-	}
-	assert(fi_opx_global.hfi_local_info.local_lid_entries[lid_index].hfi_unit == hfi_unit);
-	fi_opx_global.hfi_local_info.local_lids_size--;
-	fi_opx_global.hfi_local_info.local_lid_entries[lid_index].hfi_unit = 0;
-	fi_opx_global.hfi_local_info.local_lid_ids[lid_index]		   = 0;
-}
-
-void fi_opx_init_hfi_lookup(bool sriov, uint64_t self_gid_hi, uint8_t self_plane_idx)
+void fi_opx_init_hfi_lookup(uint64_t self_gid_hi, uint8_t self_plane_idx)
 {
 	int hfi_unit  = 0;
 	int hfi_units = MIN(opx_hfi_get_num_units(), OPX_MAX_HFIS);
@@ -426,12 +405,6 @@ void fi_opx_init_hfi_lookup(bool sriov, uint64_t self_gid_hi, uint8_t self_plane
 	if (fi_param_get_bool(fi_opx_global.prov, "shm_enable", &shm_enable_env) != FI_SUCCESS) {
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "shm_enable param not specified\n");
 		shm_enable_env = OPX_SHM_ENABLE_DEFAULT;
-	}
-	if (sriov) {
-		/* sr-iov will initially enable shm for "my" lid only, as-if the env was set, so fake it here.
-		 * later checks may completely disable shm and thus enable self loopback later */
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "SR-IOV overrides FI_OPX_SHM_ENABLE always disables SHM\n");
-		shm_enable_env = OPX_SHM_ENABLE_OFF;
 	}
 
 	/* Always insert an entry for self */
@@ -1472,33 +1445,50 @@ ssize_t fi_opx_check_tx_rctxt(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
 		const struct fi_opx_addr addr = opx_ep->av->table_addr[peer];
 
-		if ((addr.planes[OPX_PRIMARY_PLANE].lid != fi_opx_global.hfi_local_info.lid[0])) {
-			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "multi-lid %u != %u, rx %u:%u, %u-%u\n",
-			       fi_opx_global.hfi_local_info.lid[0], addr.planes[OPX_PRIMARY_PLANE].lid,
-			       OPX_HFI1_SUBCTXT(addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, OPX_SW_HFI1_TYPE),
-			       OPX_HFI1_RX(addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, OPX_SW_HFI1_TYPE),
-			       fi_opx_global.hfi_local_info.min_rctxt, fi_opx_global.hfi_local_info.max_rctxt);
-			fi_opx_global.hfi_local_info.multi_lid = true;
-		} else {
-			if ((OPX_HFI1_RX(addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, OPX_SW_HFI1_TYPE) >
-			     fi_opx_global.hfi_local_info.max_rctxt) ||
-			    (OPX_HFI1_RX(addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, OPX_SW_HFI1_TYPE) <
-			     fi_opx_global.hfi_local_info.min_rctxt)) {
-				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "multi-vm lid %u == %u, rx %u:%u, %u-%u\n",
-				       fi_opx_global.hfi_local_info.lid[0], addr.planes[OPX_PRIMARY_PLANE].lid,
-				       OPX_HFI1_SUBCTXT(addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
-							OPX_SW_HFI1_TYPE),
-				       OPX_HFI1_RX(addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, OPX_SW_HFI1_TYPE),
-				       fi_opx_global.hfi_local_info.min_rctxt, fi_opx_global.hfi_local_info.max_rctxt);
-				fi_opx_global.hfi_local_info.multi_vm = true;
-				assert(fi_opx_global.hfi_local_info.sriov);
-			}
+		/* Use neighbor routing to determine loopback/sriov limitations */
+		enum opx_sriov_route route =
+			opx_sriov_route_classify(fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE],
+						 addr.planes[addr.tx_index].lid, addr.tx_index);
+		if (route == OPX_SRIOV_ROUTE_SHM) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "self SHM %u, %u\n",
+			       fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE], addr.planes[addr.tx_index].lid);
+		} else if (route == OPX_SRIOV_ROUTE_FABRIC) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "fabric %u, %u\n",
+			       fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE], addr.planes[addr.tx_index].lid);
+			fi_opx_global.hfi_local_info.multi_hfi = true;
+		} else if (route == OPX_SRIOV_ROUTE_FABRIC_HAIRPIN) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "fabric hairpin %u, %u\n",
+			       fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE], addr.planes[addr.tx_index].lid);
+			fi_opx_global.hfi_local_info.hairpin_loopback = true;
+		} else if (route == OPX_SRIOV_ROUTE_PORT_LOOPBACK) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "port loopback %u, %u\n",
+			       fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE], addr.planes[addr.tx_index].lid);
+			fi_opx_global.hfi_local_info.port_loopback = true;
+		} else if (route == OPX_SRIOV_ROUTE_ALPHA_LOOPBACK) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "alpha loopback %u, %u\n",
+			       fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE], addr.planes[addr.tx_index].lid);
+			fi_opx_global.hfi_local_info.port_loopback = true;
 		}
-		/* JKR/sr-iov(alpha) limitation: Fail if self (rctxt check) is multi-VM and multi-lid */
-		if ((OPX_HW_HFI1_TYPE & OPX_HFI1_JKR) && fi_opx_global.hfi_local_info.multi_vm &&
-		    fi_opx_global.hfi_local_info.multi_lid) {
+
+		if (fi_opx_global.hfi_local_info.port_loopback && fi_opx_global.hfi_local_info.hairpin_loopback) {
+			/* Shouldn't happen */
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"Shared lids across VMs with other lids are not supported on CN5000. \n");
+				"Cross-VF route loopback via hairpin AND port is unexpected (neighbor_type=%d, port_loopback=%u, multi_hfi=%u, lid=%#x peer_lid=%#x).\n",
+				fi_opx_global.hfi_local_info.neighbor_type, fi_opx_global.hfi_local_info.port_loopback,
+				fi_opx_global.hfi_local_info.multi_hfi,
+				fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE], addr.planes[addr.tx_index].lid);
+			assert(!(fi_opx_global.hfi_local_info.port_loopback &&
+				 fi_opx_global.hfi_local_info.hairpin_loopback));
+			rc = -FI_EINVAL;
+		}
+		if ((fi_opx_global.hfi_local_info.hw_type & OPX_HFI1_JKR) &&
+		    (fi_opx_global.hfi_local_info.port_loopback && fi_opx_global.hfi_local_info.multi_hfi)) {
+			/* JKR (CN5000) cannot loopback and cross hfi's (non-loopback inter-VF) */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Cross-VF route unsupported without a switch on CN5000 SR-IOV (alpha) (neighbor_type=%d, port_loopback=%u, multi_hfi=%u, lid=%#x peer_lid=%#x)\n",
+				fi_opx_global.hfi_local_info.neighbor_type, fi_opx_global.hfi_local_info.port_loopback,
+				fi_opx_global.hfi_local_info.multi_hfi,
+				fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE], addr.planes[addr.tx_index].lid);
 			rc = -FI_EINVAL;
 		}
 	} else {
@@ -3080,7 +3070,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->u32_extended_rx = u32_extended_rx;
 	params->bytes_to_fence	= hdr->dput.target.fence.bytes_to_fence;
 	params->cc		= (struct fi_opx_completion_counter *) hdr->dput.target.fence.completion_counter;
-	// Assumes shm but will need loopback/shm for sriov.  Both slid/dlid == my lid?
+
 	assert(opx_lid_is_shm(OPX_LID_PLANE_KEY(slid, params->tx_index)));
 	params->target_hfi_unit = fi_opx_hfi1_get_lid_local_unit(slid, params->tx_index);
 
