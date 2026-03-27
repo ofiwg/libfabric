@@ -768,6 +768,8 @@ void test_ah_lru_eviction_impl(bool explicit)
 	}
 
 	if (num_nic < 2) {
+		fi_freeinfo(info);
+		fi_freeinfo(hints);
 		return;
 	}
 

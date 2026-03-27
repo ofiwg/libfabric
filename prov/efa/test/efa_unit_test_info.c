@@ -1039,8 +1039,10 @@ void test_info_direct_null_hints_return_rma_and_rx_cq_data()
 		assert_true(info->caps & FI_RMA);
 		assert_true(info->tx_attr->caps & OFI_TX_RMA_CAPS);
 		assert_true(info->rx_attr->caps & OFI_RX_RMA_CAPS);
-		fi_freeinfo(info);
 	}
+
+	if (!err)
+		fi_freeinfo(info);
 }
 
 /**
