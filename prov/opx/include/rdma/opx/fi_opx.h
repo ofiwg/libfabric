@@ -124,8 +124,11 @@ struct fi_opx_daos_hfi_rank {
 
 typedef uint32_t opx_lid_t; /* only 3 bytes of lid is used */
 
-#define OPX_LID_PLANE_SHIFT		  24
-#define OPX_LID_PLANE_KEY(lid, plane_idx) ((lid) | ((opx_lid_t) (plane_idx) << OPX_LID_PLANE_SHIFT))
+#define OPX_LID_PLANE_SHIFT 24
+
+/* The lid is masked for irrelevant dispersive routing bits (OPX_LID_PATH_MASK) */
+#define OPX_LID_PLANE_KEY(lid, plane_idx) \
+	((lid & ~OPX_LID_PATH_MASK) | ((opx_lid_t) (plane_idx) << OPX_LID_PLANE_SHIFT))
 
 /* hfi1 type for bit logic */
 enum opx_hfi1_type {
@@ -137,6 +140,26 @@ enum opx_hfi1_type {
 };
 /* Post WFR 16B support - CN5000, CN6000 - unless they need to be differentiated */
 #define OPX_HFI1_CNX000 (OPX_HFI1_JKR | OPX_HFI1_CYR)
+
+/*
+ * Neighbor type as seen by this HFI port.
+ * Used by the SRIOV route classifier.
+ */
+#define OPX_NEIGHBOR_UNKNOWN 0
+#define OPX_NEIGHBOR_SWITCH  1
+#define OPX_NEIGHBOR_HFI     2
+
+/*
+ * Route classification result for SRIOV traffic.
+ * Returned by opx_sriov_route_classify() to direct the TX path.
+ */
+enum opx_sriov_route {
+	OPX_SRIOV_ROUTE_SHM	       = 0,
+	OPX_SRIOV_ROUTE_FABRIC	       = 1,
+	OPX_SRIOV_ROUTE_FABRIC_HAIRPIN = 2,
+	OPX_SRIOV_ROUTE_PORT_LOOPBACK  = 3,
+	OPX_SRIOV_ROUTE_ALPHA_LOOPBACK = 4,
+};
 
 /* Arbitrary packet "types" that can be differentiated as needed (route control) */
 enum opx_hfi1_packet_type {
@@ -177,6 +200,7 @@ static const char *const OPX_HFI1_PACKET_STR[] = {
 
 #define OPX_MAX_HFIS (16)
 OPX_COMPILE_TIME_ASSERT((OPX_MAX_HFIS & 3) == 0, "OPX_MAX_HFIS must be a multiple of 4!\n");
+OPX_COMPILE_TIME_ASSERT(sizeof(opx_lid_t) == sizeof(uint32_t), "opx_lid_t must remain 32-bit");
 
 #define OPX_MAX_TX_CONTEXTS (2)
 OPX_COMPILE_TIME_ASSERT(OPX_MAX_TX_CONTEXTS <= (1 << (31 - OPX_LID_PLANE_SHIFT)),
@@ -190,20 +214,23 @@ struct opx_hfi_local_entry {
 
 struct opx_hfi_local_info {
 	/* == CACHE LINE 0 == */
-	uint32_t	   local_lids_size;
 	enum opx_hfi1_type sw_type;	 // SW defined hfi1 type, including "mixed networks"
+	enum opx_hfi1_type hw_type;	 // HW hfi1 type before "mixed_network" changes
 	int		   sim_sctxt_fd; // simulator send context BAR resource fd
 	int		   sim_rctxt_fd; // simulator recv context BAR resource fd
 	uint64_t	   pbc_lid[OPX_MAX_TX_CONTEXTS];
-	opx_lid_t	   lid[OPX_MAX_TX_CONTEXTS]; // per-plane LID
-	int32_t		   min_rctxt;
-	int32_t		   max_rctxt;
+	opx_lid_t	   lid[OPX_MAX_TX_CONTEXTS];	  // per-plane LID
 	uint8_t		   hfi_unit[OPX_MAX_TX_CONTEXTS]; // per-plane HFI unit
 	bool		   sriov;
-	bool		   multi_vm;  // self lid is used across VMs
-	bool		   multi_lid; // job has multiple lids
-	enum opx_hfi1_type hw_type;   // HW hfi1 type before "mixed_network" changes
-	uint8_t		   unused_bytes[7];
+	bool		   port_loopback;    // same hfi is used across VMs, use port loopback
+	bool		   hairpin_loopback; // same hfi is used across VMs, use switch hairpin
+	bool		   multi_hfi;	     // job has multiple hfi's
+	uint8_t		   neighbor_type;
+	uint8_t		   unused8;
+	opx_lid_t	   lid_path_mask;
+	opx_lid_t	   lid_mask;
+	uint32_t	   local_lids_size;
+	uint32_t	   unused32;
 
 	/* == CACHE LINE 1 == */
 	opx_lid_t local_lid_ids[OPX_MAX_HFIS];
@@ -217,6 +244,9 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi_local_info, local_lid_entries) =
 			"Offset of opx_hfi_local_info->local_lid_entries should start at cacheline 2!");
 OPX_COMPILE_TIME_ASSERT(sizeof(struct opx_hfi_local_info) == (FI_OPX_CACHE_LINE_SIZE * 4),
 			"Size of opx_hfi_local_info should be 4 cachelines!");
+
+#define OPX_LID_PATH_MASK fi_opx_global.hfi_local_info.lid_path_mask // sysfs: mask dispersive routing/path bits bits
+#define OPX_LID_MASK	  fi_opx_global.hfi_local_info.lid_mask	     // sysfs: mask "base" lid
 
 #ifdef OPX_SIM
 /* Build L8SIM support */
