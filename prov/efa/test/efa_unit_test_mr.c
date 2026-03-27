@@ -1356,3 +1356,97 @@ void test_efa_rdm_mr_cache_reference_counting(struct efa_resource **state)
 	free(buf);
 #endif
 }
+
+#if HAVE_CUDA
+/**
+ * @brief Test RDM MR registration for CUDA memory in non-p2p path
+ *
+ * This test verifies that when p2p is not supported, the non-p2p path
+ * properly initializes the MR structure, including the mem_desc field
+ * and iface field. It uses fi_mr_desc to verify the descriptor is correct.
+ */
+void test_efa_rdm_mr_reg_cuda_memory_non_p2p(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+	size_t mr_size = 64;
+	void *buf;
+	struct fid_mr *mr = NULL;
+	struct fi_mr_attr mr_reg_attr = { 0 };
+	struct iovec iovec;
+	struct efa_rdm_mr *efa_rdm_mr;
+	void *desc;
+	int err, baseline_ct, baseline_sz;
+
+	if (!g_efa_hmem_info[FI_HMEM_CUDA].initialized) {
+		skip();
+		return;
+	}
+
+	resource->hints = efa_unit_test_alloc_hints_hmem(
+		FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0),
+						    resource->hints,
+						    true, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+
+	/* Mock p2p as not supported to force non-p2p path */
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = false;
+
+	/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
+	baseline_ct = ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct);
+	baseline_sz = ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz);
+
+	err = ofi_cudaMalloc(&buf, mr_size);
+	assert_int_equal(err, 0);
+	assert_non_null(buf);
+
+	mr_reg_attr.access = FI_SEND | FI_RECV;
+	mr_reg_attr.iface = FI_HMEM_CUDA;
+	iovec.iov_base = buf;
+	iovec.iov_len = mr_size;
+	mr_reg_attr.mr_iov = &iovec;
+	mr_reg_attr.iov_count = 1;
+
+	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
+	assert_int_equal(err, 0);
+	assert_non_null(mr);
+
+	/* Verify this is an RDM MR */
+	efa_rdm_mr = container_of(mr, struct efa_rdm_mr, efa_mr.mr_fid);
+	assert_non_null(efa_rdm_mr);
+
+	/* Test fi_mr_desc returns the correct descriptor */
+	desc = fi_mr_desc(mr);
+	assert_non_null(desc);
+	assert_ptr_equal(desc, &efa_rdm_mr->efa_mr);
+
+	/* Verify iface is properly set (second bug fix) */
+	assert_int_equal(efa_rdm_mr->efa_mr.iface, FI_HMEM_CUDA);
+
+	/* Verify key is set (non-p2p path should generate proprietary key) */
+	assert_true(fi_mr_key(mr) != FI_KEY_NOTAVAIL);
+	assert_true(fi_mr_key(mr) > UINT32_MAX); /* Non-p2p keys should be > UINT32_MAX */
+
+	/* Since we're in non-p2p path, no ibv_mr should be registered */
+	assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct), baseline_ct);
+	assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz), baseline_sz);
+
+	/* Verify RDM-specific fields are properly initialized */
+	assert_true(efa_rdm_mr->inserted_to_mr_map);
+	assert_true(efa_rdm_mr->needs_sync); /* CUDA memory should need sync */
+
+	/* Cleanup */
+	assert_int_equal(fi_close(&mr->fid), 0);
+	err = ofi_cudaFree(buf);
+	assert_int_equal(err, 0);
+}
+#else
+void test_efa_rdm_mr_reg_cuda_memory_non_p2p(struct efa_resource **state)
+{
+	skip();
+}
+#endif

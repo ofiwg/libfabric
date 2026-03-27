@@ -89,9 +89,9 @@ int efa_mr_regattr_validate(struct fid *fid, const struct fi_mr_attr *attr,
  *
  * @return FI_SUCCESS or negative FI error code
  */
-static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
-                             const struct fi_mr_attr *attr,
-							 uint64_t flags)
+int efa_mr_hmem_setup(struct efa_mr *efa_mr,
+		       const struct fi_mr_attr *attr,
+		       uint64_t flags)
 {
 	if (attr->iface == FI_HMEM_SYSTEM) {
 		efa_mr->iface = FI_HMEM_SYSTEM;

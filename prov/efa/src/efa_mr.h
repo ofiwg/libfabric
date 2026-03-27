@@ -18,6 +18,7 @@ struct efa_mr {
 
 int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_attr *mr_attr);
 int efa_mr_dereg_impl(struct efa_mr *efa_mr);
+int efa_mr_hmem_setup(struct efa_mr *efa_mr, const struct fi_mr_attr *attr, uint64_t flags);
 int efa_mr_validate_regattr(struct fid *fid, const struct fi_mr_attr *attr, uint64_t flags);
 
 #define EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context) \
