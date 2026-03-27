@@ -238,6 +238,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_HMEM;
+	hints->mode = FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	ret = setup();
