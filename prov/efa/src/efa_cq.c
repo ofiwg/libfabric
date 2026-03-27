@@ -1232,6 +1232,7 @@ err_destroy_ibv_cq:
 		ibv_destroy_cq(ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex));
 err_destroy_channel:
 	efa_cq_destroy_comp_channel(cq);
+	free(cq->err_buf);
 err_free_util_cq:
 	retv = ofi_cq_cleanup(&cq->util_cq);
 	if (retv)
