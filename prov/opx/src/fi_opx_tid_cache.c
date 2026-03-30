@@ -753,20 +753,75 @@ enum opx_tid_cache_entry_status opx_tid_cache_find(struct fi_opx_ep *opx_ep, con
 		ret			     = OPX_TID_CACHE_ENTRY_IN_USE;
 
 	} else if (ofi_iov_within(&info->iov, &(*entry)->info.iov)) {
-		OPX_TRACE_TID_INSTANT(OPX_TRACE_EVENT_TID_CACHE_HIT, (uint64_t) info->iov.iov_base, info->iov.iov_len);
-		ret = OPX_TID_CACHE_ENTRY_FOUND;
+		/* Validate memory mapping via monitor->valid() for idle
+		 * entries (use_cnt == 0) before reuse, matching the
+		 * pattern in ofi_mr_cache_search(). Monitors like kdreg2
+		 * do real page-change detection here.
+		 */
+		struct ofi_mem_monitor *monitor = cache->monitors[info->iface];
+		if ((*entry)->use_cnt == 0 && monitor && !monitor->valid(monitor, info, *entry)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_MR,
+			       "monitor->valid() failed for entry [%p - %p] (len: %zu), "
+			       "moving to dead list\n",
+			       (*entry)->info.iov.iov_base,
+			       (char *) (*entry)->info.iov.iov_base + (*entry)->info.iov.iov_len,
+			       (*entry)->info.iov.iov_len);
+			dlist_remove_init(&(*entry)->list_entry);
+			opx_mr_uncache_entry_storage(cache, *entry);
+			dlist_insert_tail(&(*entry)->list_entry, &cache->dead_region_list);
+			*entry = NULL;
+			OPX_TRACE_TID_INSTANT(OPX_TRACE_EVENT_TID_CACHE_MISS, (uint64_t) info->iov.iov_base,
+					      info->iov.iov_len);
+			ret = OPX_TID_CACHE_ENTRY_NOT_FOUND;
+		} else {
+			OPX_TRACE_TID_INSTANT(OPX_TRACE_EVENT_TID_CACHE_HIT, (uint64_t) info->iov.iov_base,
+					      info->iov.iov_len);
+			ret = OPX_TID_CACHE_ENTRY_FOUND;
+		}
 	} else if (info->iov.iov_base >= (*entry)->info.iov.iov_base) {
 		// The search IOV starts within the range of the cached IOV, and
 		// the end of the search IOV is after the end of the cached IOV
 		assert(info->iov.iov_base <= ofi_iov_end(&(*entry)->info.iov));
 		assert(ofi_iov_end(&info->iov) > ofi_iov_end(&(*entry)->info.iov));
-		ret = OPX_TID_CACHE_ENTRY_OVERLAP_LEFT;
+
+		struct ofi_mem_monitor *monitor_l = cache->monitors[info->iface];
+		if ((*entry)->use_cnt == 0 && monitor_l && !monitor_l->valid(monitor_l, &(*entry)->info, *entry)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_MR,
+			       "monitor->valid() failed for overlap_left entry [%p - %p] (len: %zu), "
+			       "moving to dead list\n",
+			       (*entry)->info.iov.iov_base,
+			       (char *) (*entry)->info.iov.iov_base + (*entry)->info.iov.iov_len,
+			       (*entry)->info.iov.iov_len);
+			dlist_remove_init(&(*entry)->list_entry);
+			opx_mr_uncache_entry_storage(cache, *entry);
+			dlist_insert_tail(&(*entry)->list_entry, &cache->dead_region_list);
+			*entry = NULL;
+			ret    = OPX_TID_CACHE_ENTRY_NOT_FOUND;
+		} else {
+			ret = OPX_TID_CACHE_ENTRY_OVERLAP_LEFT;
+		}
 	} else {
 		// The search IOV starts before the range of the cached IOV,
 		// and ends at some point after the start of the cached IOV.
 		assert(info->iov.iov_base < (*entry)->info.iov.iov_base);
 		assert(ofi_iov_end(&info->iov) > (*entry)->info.iov.iov_base);
-		ret = OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT;
+
+		struct ofi_mem_monitor *monitor_r = cache->monitors[info->iface];
+		if ((*entry)->use_cnt == 0 && monitor_r && !monitor_r->valid(monitor_r, &(*entry)->info, *entry)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_MR,
+			       "monitor->valid() failed for overlap_right entry [%p - %p] (len: %zu), "
+			       "moving to dead list\n",
+			       (*entry)->info.iov.iov_base,
+			       (char *) (*entry)->info.iov.iov_base + (*entry)->info.iov.iov_len,
+			       (*entry)->info.iov.iov_len);
+			dlist_remove_init(&(*entry)->list_entry);
+			opx_mr_uncache_entry_storage(cache, *entry);
+			dlist_insert_tail(&(*entry)->list_entry, &cache->dead_region_list);
+			*entry = NULL;
+			ret    = OPX_TID_CACHE_ENTRY_NOT_FOUND;
+		} else {
+			ret = OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT;
+		}
 	}
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_MR, "INFO [%p - %p] (len: %zu/%#lX) ENTRY(%p/%p) ENDPOINT(mr:%p, input:%p)\n",
