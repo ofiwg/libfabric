@@ -69,6 +69,7 @@ struct vrb_gl_data vrb_gl_data = {
 
 	.nic_affinity_policy	= "none",
 	.affinity_device	= NULL,
+	.nic_affinity_config	= NULL,
 };
 
 struct vrb_dev_preset {
@@ -777,11 +778,16 @@ static int vrb_read_params(void)
 		VRB_WARN(FI_LOG_CORE, "Invalid value of nic_affinity_policy\n");
 		return -FI_EINVAL;
 	}
-
 	if (vrb_get_param_str("affinity_device",
 			      "PCI address of device for NIC affinity. ",
 			      &vrb_gl_data.affinity_device)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of affinity_device\n");
+		return -FI_EINVAL;
+	}
+	if (vrb_get_param_str("nic_affinity_config",
+			      "Path to NIC affinity configuration file for 'manual' policy. ",
+			      &vrb_gl_data.nic_affinity_config)) {
+		VRB_WARN(FI_LOG_CORE, "Invalid value of nic_affinity_config\n");
 		return -FI_EINVAL;
 	}
 
@@ -801,9 +807,12 @@ static int vrb_nic_affinity_init(void)
 	if (!strcmp(vrb_gl_data.nic_affinity_policy, "none")) {
 		VRB_INFO(FI_LOG_CORE, "NIC affinity policy 'none': "
 			 "no reordering\n");
+	} else if (!strcmp(vrb_gl_data.nic_affinity_policy, "manual")) {
+		VRB_INFO(FI_LOG_CORE, "NIC affinity policy 'manual' enabled\n");
+		vrb_gl_data.nic_affinity_handler = vrb_nic_affinity_manual;
 	} else {
 		VRB_WARN(FI_LOG_CORE, "Invalid NIC affinity policy '%s', "
-			 "falling back to 'none'.\n",
+			 "falling back to 'none'. Valid values: none, manual\n",
 			 vrb_gl_data.nic_affinity_policy);
 	}
 
