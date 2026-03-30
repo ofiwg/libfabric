@@ -2000,6 +2000,135 @@ static int vrb_parse_pci_address(const char *pci_str, struct fi_pci_attr *pci_at
 	return FI_SUCCESS;
 }
 
+static bool vrb_pci_addr_equal(const struct fi_pci_attr *a, const struct fi_pci_attr *b)
+{
+	return a->domain_id == b->domain_id &&
+	       a->bus_id == b->bus_id &&
+	       a->device_id == b->device_id &&
+	       a->function_id == b->function_id;
+}
+
+#define VRB_MAX_CONFIG_LINE_LEN 30
+
+static int vrb_parse_manual_affinity_config(const struct fi_pci_attr *device_pci,
+					    char *nic_name, size_t nic_name_len)
+{
+	FILE *fp;
+	char line[VRB_MAX_CONFIG_LINE_LEN];
+	char pci_str[VRB_MAX_CONFIG_LINE_LEN];
+	char nic[VRB_MAX_CONFIG_LINE_LEN];
+	struct fi_pci_attr pci_attr;
+	int ret;
+
+	if (NULL == vrb_gl_data.nic_affinity_config) {
+		VRB_WARN(FI_LOG_CORE, "FI_VERBS_NIC_AFFINITY_CONFIG not set\n");
+		return -FI_ENODATA;
+	}
+
+	fp = fopen(vrb_gl_data.nic_affinity_config, "r");
+	if (!fp) {
+		VRB_WARN(FI_LOG_CORE, "Failed to open config file: %s\n",
+			 vrb_gl_data.nic_affinity_config);
+		return -FI_ENOENT;
+	}
+
+	while (fgets(line, sizeof(line), fp)) {
+		/* Skip comments and empty lines */
+		if (line[0] == '#' || line[0] == '\n') continue;
+
+		ret = sscanf(line, "%s %s", pci_str, nic);
+		if (ret != 2) {
+			VRB_WARN(FI_LOG_CORE, "Malformed config line (expected "
+				 "'<pci_address> <nic_name>'): %s", line);
+			continue;
+		}
+
+		ret = vrb_parse_pci_address(pci_str, &pci_attr);
+		if (ret) {
+			VRB_WARN(FI_LOG_CORE, "Invalid PCI address format '%s' "
+				 "(expected xxxx:xx:xx.x), skipping line: %s",
+				 pci_str, line);
+			continue;
+		}
+
+		if (vrb_pci_addr_equal(&pci_attr, device_pci)) {
+			fclose(fp);
+			snprintf(nic_name, nic_name_len, "%s", nic);
+			VRB_INFO(FI_LOG_CORE, "Found mapping: %04x:%02x:%02x.%x -> %s\n",
+				 device_pci->domain_id, device_pci->bus_id,
+				 device_pci->device_id, device_pci->function_id,
+				 nic_name);
+			return FI_SUCCESS;
+		}
+	}
+
+	fclose(fp);
+	VRB_WARN(FI_LOG_CORE, "No mapping found for device %04x:%02x:%02x.%x in config\n",
+		device_pci->domain_id, device_pci->bus_id,
+		device_pci->device_id, device_pci->function_id);
+	return -FI_ENODATA;
+}
+
+int vrb_nic_affinity_manual(struct fi_info **info, const struct fi_pci_attr *device_pci)
+{
+	char target_nic[VRB_MAX_CONFIG_LINE_LEN];
+	struct fi_info *cur;
+	struct fi_info *prev;
+	struct fi_info *next;
+	struct fi_info *target_head;
+	struct fi_info *target_tail;
+	int ret;
+
+	target_head = NULL;
+	target_tail = NULL;
+
+	ret = vrb_parse_manual_affinity_config(device_pci, target_nic,
+		sizeof(target_nic));
+	if (ret)
+		return FI_SUCCESS;
+
+	VRB_DBG(FI_LOG_CORE, "Manual policy: device %04x:%02x:%02x.%x -> NIC %s\n",
+		device_pci->domain_id, device_pci->bus_id,
+		device_pci->device_id, device_pci->function_id, target_nic);
+
+	prev = NULL;
+	cur = *info;
+	while (cur) {
+		next = cur->next;
+		if (cur->nic && cur->nic->device_attr && cur->nic->device_attr->name &&
+		    !strncmp(cur->nic->device_attr->name, target_nic, VRB_MAX_CONFIG_LINE_LEN)) {
+			if (prev)
+				prev->next = next;
+			else
+				*info = next;
+
+			cur->next = NULL;
+			if (!target_head) {
+				target_head = cur;
+				target_tail = cur;
+			} else {
+				target_tail->next = cur;
+				target_tail = cur;
+			}
+
+			cur = next;
+		} else {
+			prev = cur;
+			cur = next;
+		}
+	}
+
+	if (target_head) {
+		target_tail->next = *info;
+		*info = target_head;
+		VRB_DBG(FI_LOG_CORE, "Moved fi_info entries for NIC %s to front of list\n", target_nic);
+	} else {
+		VRB_DBG(FI_LOG_CORE, "Target NIC %s not found in provider list, list unchanged\n", target_nic);
+	}
+
+	return FI_SUCCESS;
+}
+
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info)
