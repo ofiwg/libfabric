@@ -45,8 +45,6 @@
 #include "rdma/opx/opx_tracer.h"
 
 union opx_hmem_event;
-struct fi_opx_completion_counter;
-void fi_opx_hit_zero(struct fi_opx_completion_counter *cc);
 
 /*
  * ==== NOTE_COMPLETION_TYPES ====
@@ -68,23 +66,13 @@ void fi_opx_hit_zero(struct fi_opx_completion_counter *cc);
  * disconnect' so it is not critical for this completion type
  * to have good performance at this time.
  *
- * FI_DELIVERY_COMPLETE generates a completion event only after
- * the send has been "processed by the destination endpoint(s)".
+ * FI_DELIVERY_COMPLETE is not supposed to generate a completion
+ * event until the send has been "processed by the destination
+ * endpoint(s)". The reliability protocol has nothing to do with
+ * that acknowledgement.
  *
- * For RMA/atomic operations, OPX already provides delivery-complete
- * semantics via the completion_counter + reliability ACK mechanism:
- * the CQ entry is deferred until the remote side ACKs receipt.
- *
- * For MSG/Tagged sends, when FI_DELIVERY_COMPLETE is set in
- * tx->op_flags, the eager send paths use
- * replay_register_with_update() to defer the CQ entry until the
- * reliability ACK arrives, instead of the immediate
- * fi_opx_ep_tx_cq_inject_completion(). SHM eager sends generate
- * the CQ entry immediately since the data is already visible to
- * the receiver upon return from opx_shm_tx_advance().
- *
- * When FI_DELIVERY_COMPLETE is NOT requested (the common case),
- * OPX uses FI_INJECT_COMPLETE for zero additional overhead.
+ * OPX supports FI_DELIVERY_COMPLETE when required but will use
+ * FI_INJECT_COMPLETE when possible.
  */
 
 // Function for performing FI_INJECT_COMPLETIONs.
@@ -126,46 +114,6 @@ ssize_t fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep, void *user_context,
 	OPX_TRACE_PIO_INSTANT(OPX_TRACE_EVENT_PIO_COMPLETE, len, tag);
 	slist_insert_tail((struct slist_entry *) context, opx_ep->tx->cq_completed_ptr);
 
-	return FI_SUCCESS;
-}
-
-__OPX_FORCE_INLINE__
-ssize_t fi_opx_ep_tx_dc_alloc(struct fi_opx_ep *opx_ep, void *user_context, const size_t len, const uint64_t tag,
-			      const uint64_t caps, struct fi_opx_completion_counter **cc_out)
-{
-	struct fi_opx_completion_counter *cc =
-		(struct fi_opx_completion_counter *) ofi_buf_alloc(opx_ep->rma_counter_pool);
-	if (OFI_UNLIKELY(cc == NULL)) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory (cc).\n");
-		*cc_out = NULL;
-		return -FI_ENOMEM;
-	}
-
-	struct opx_context *context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
-	if (OFI_UNLIKELY(context == NULL)) {
-		OPX_BUF_FREE(cc);
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory (context).\n");
-		*cc_out = NULL;
-		return -FI_ENOMEM;
-	}
-
-	context->err_entry.err	      = 0;
-	context->err_entry.op_context = user_context;
-	context->flags		      = FI_SEND | (caps & (FI_TAGGED | FI_MSG));
-	context->len		      = len;
-	context->buf		      = NULL;
-	context->tag		      = tag;
-	context->next		      = NULL;
-
-	cc->next	       = NULL;
-	cc->initial_byte_count = len;
-	cc->byte_counter       = len;
-	cc->cntr	       = NULL;
-	cc->cq		       = opx_ep->tx->cq;
-	cc->context	       = context;
-	cc->hit_zero	       = fi_opx_hit_zero;
-
-	*cc_out = cc;
 	return FI_SUCCESS;
 }
 
@@ -1220,18 +1168,6 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 		return -FI_EAGAIN;
 	}
 
-	struct fi_opx_completion_counter *dc_cc = NULL;
-	if (OFI_LIKELY(do_cq_completion) && OFI_UNLIKELY(opx_ep->tx->delivery_complete)) {
-		ssize_t dc_rc = fi_opx_ep_tx_dc_alloc(opx_ep, context, total_len, tag, caps, &dc_cc);
-		if (OFI_UNLIKELY(dc_rc != FI_SUCCESS)) {
-			fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, replay);
-			fi_opx_reliability_tx_return_psn(psn_ptr, psn);
-			OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
-			return dc_rc;
-		}
-	}
-
 #ifdef OPX_HMEM
 	size_t	     hmem_niov = 1;
 	struct iovec hmem_iov;
@@ -1298,8 +1234,8 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 						   &iov_base_offset)) { /* In/Out:  start offset, returns offset */
 	} // copy until done
 
-	fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, psn_ptr, replay, dc_cc,
-							       dc_cc ? total_len : 0, reliability, hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
+							     hfi1_type);
 
 	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 
@@ -1308,7 +1244,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 
 	ssize_t rc;
-	if (!dc_cc && OFI_LIKELY(do_cq_completion)) {
+	if (OFI_LIKELY(do_cq_completion)) {
 		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, total_len, lock_required, tag, caps);
 	} else {
 		rc = FI_SUCCESS;
@@ -1525,18 +1461,6 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 		return -FI_EAGAIN;
 	}
 
-	struct fi_opx_completion_counter *dc_cc = NULL;
-	if (OFI_LIKELY(do_cq_completion) && OFI_UNLIKELY(opx_ep->tx->delivery_complete)) {
-		ssize_t dc_rc = fi_opx_ep_tx_dc_alloc(opx_ep, context, total_len, tag, caps, &dc_cc);
-		if (OFI_UNLIKELY(dc_rc != FI_SUCCESS)) {
-			fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, replay);
-			fi_opx_reliability_tx_return_psn(psn_ptr, psn);
-			OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
-			return dc_rc;
-		}
-	}
-
 #ifdef OPX_HMEM
 	size_t	     hmem_niov = 1;
 	struct iovec hmem_iov;
@@ -1610,8 +1534,8 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 						   &iov_base_offset)) { /* In/Out:  start offset, returns offset */
 	} // copy until done
 
-	fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, psn_ptr, replay, dc_cc,
-							       dc_cc ? total_len : 0, reliability, hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
+							     hfi1_type);
 
 	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 
@@ -1620,7 +1544,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 
 	ssize_t rc;
-	if (!dc_cc && OFI_LIKELY(do_cq_completion)) {
+	if (OFI_LIKELY(do_cq_completion)) {
 		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, total_len, lock_required, tag, caps);
 	} else {
 		rc = FI_SUCCESS;
@@ -2051,7 +1975,6 @@ void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep, const s
 					       struct fi_opx_reliability_tx_replay *replay,
 					       union fi_opx_reliability_tx_psn *psn_ptr, const ssize_t xfer_bytes_tail,
 					       const void *buf, const size_t payload_qws_total,
-					       struct fi_opx_completion_counter *cc, uint64_t cc_value,
 					       const enum ofi_reliability_kind reliability,
 					       const enum opx_hfi1_type	       hfi1_type)
 {
@@ -2070,8 +1993,8 @@ void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep, const s
 		payload_qws[i] = buf_qws[i];
 	}
 
-	fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, psn_ptr, replay, cc, cc_value,
-							       reliability, hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
+							     hfi1_type);
 }
 
 __OPX_FORCE_INLINE__
@@ -2157,20 +2080,6 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 		return -FI_EAGAIN;
 	}
 
-	struct fi_opx_completion_counter *dc_cc = NULL;
-	if (OFI_LIKELY(do_cq_completion) && OFI_UNLIKELY(opx_ep->tx->delivery_complete)) {
-		ssize_t dc_rc = fi_opx_ep_tx_dc_alloc(opx_ep, context, len, tag, caps, &dc_cc);
-		if (OFI_UNLIKELY(dc_rc != FI_SUCCESS)) {
-			fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, replay);
-			fi_opx_reliability_tx_return_psn(psn_ptr, psn);
-			OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
-			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_EAGAIN (end)\n");
-			OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_HFI, 0, 0);
-			return dc_rc;
-		}
-	}
-
 #ifdef OPX_HMEM
 	if (iface != FI_HMEM_SYSTEM) {
 		opx_copy_from_hmem(iface, hmem_device, hmem_handle, opx_ep->hmem_copy_buf, buf, len,
@@ -2221,10 +2130,10 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 	OPX_TRACE_PIO_END_SUCCESS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, dest_addr, replay, psn_ptr, xfer_bytes_tail, buf,
-						  payload_qws_total, dc_cc, dc_cc ? len : 0, reliability, hfi1_type);
+						  payload_qws_total, reliability, hfi1_type);
 
 	ssize_t rc;
-	if (!dc_cc && OFI_LIKELY(do_cq_completion)) {
+	if (OFI_LIKELY(do_cq_completion)) {
 		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required, tag, caps);
 	} else {
 		rc = FI_SUCCESS;
@@ -2328,19 +2237,6 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EAGAIN;
 	}
 
-	struct fi_opx_completion_counter *dc_cc = NULL;
-	if (OFI_LIKELY(do_cq_completion) && OFI_UNLIKELY(opx_ep->tx->delivery_complete)) {
-		ssize_t dc_rc = fi_opx_ep_tx_dc_alloc(opx_ep, context, len, tag, caps, &dc_cc);
-		if (OFI_UNLIKELY(dc_rc != FI_SUCCESS)) {
-			fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, replay);
-			fi_opx_reliability_tx_return_psn(psn_ptr, psn);
-			OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
-			OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_HFI, 0, 0);
-			return dc_rc;
-		}
-	}
-
 #ifdef OPX_HMEM
 	if (iface != FI_HMEM_SYSTEM) {
 		opx_copy_from_hmem(iface, hmem_device, hmem_handle, opx_ep->hmem_copy_buf, buf, len,
@@ -2414,10 +2310,10 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 	OPX_TRACE_PIO_END_SUCCESS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, dest_addr, replay, psn_ptr, xfer_bytes_tail, buf,
-						  payload_qws_total, dc_cc, dc_cc ? len : 0, reliability, hfi1_type);
+						  payload_qws_total, reliability, hfi1_type);
 
 	ssize_t rc;
-	if (!dc_cc && OFI_LIKELY(do_cq_completion)) {
+	if (OFI_LIKELY(do_cq_completion)) {
 		rc = fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required, tag, caps);
 	} else {
 		rc = FI_SUCCESS;
@@ -2653,8 +2549,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(
 	const struct fi_opx_addr addr, uint64_t tag, const uint32_t data, int lock_required, const uint64_t tx_op_flags,
 	const uint64_t caps, const enum ofi_reliability_kind reliability, uint32_t *psn_out, size_t *payload_bytes_sent,
 	const enum fi_hmem_iface iface, const uint64_t hmem_device, const uint64_t hmem_handle,
-	const enum opx_hfi1_type hfi1_type, const bool ctx_sharing, void *context, const uint64_t do_cq_completion,
-	struct fi_opx_completion_counter **dc_cc_out)
+	const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	assert(lock_required == 0);
 
@@ -2689,20 +2584,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(
 		return -FI_EAGAIN;
 	}
 
-	struct fi_opx_completion_counter *dc_cc = NULL;
-	if (OFI_LIKELY(do_cq_completion) && OFI_UNLIKELY(opx_ep->tx->delivery_complete)) {
-		ssize_t dc_rc = fi_opx_ep_tx_dc_alloc(opx_ep, context, payload_bytes_total, tag, caps, &dc_cc);
-		if (OFI_UNLIKELY(dc_rc != FI_SUCCESS)) {
-			fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, replay);
-			fi_opx_reliability_tx_return_psn(psn_ptr, psn);
-			OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_ep->tx);
-			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_MP_EAGER_FIRST_HFI, 0, 0);
-			return dc_rc;
-		}
-	}
-
-	*psn_out   = psn; /* This will be the UID used in the remaining packets */
-	*dc_cc_out = dc_cc;
+	*psn_out = psn; /* This will be the UID used in the remaining packets */
 
 #ifdef OPX_HMEM
 	/* If the source buf resides in GPU memory, copy the entire payload to
@@ -2800,8 +2682,8 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 
-	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr, 0, buf_ptr, payload_qws_total, NULL, 0,
-						  reliability, hfi1_type);
+	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, psn_ptr, 0, (uint64_t *) buf_ptr,
+						  payload_qws_total, reliability, hfi1_type);
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_FIRST_HFI, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER FIRST (end)\n");
@@ -2817,7 +2699,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, struct fi_opx_e
 				       const uint64_t pbc_dlid, const uint64_t bth_subctxt_rx,
 				       const uint64_t lrh_dlid_9B, const struct fi_opx_addr addr, int lock_required,
 				       const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
-				       const bool ctx_sharing, struct fi_opx_completion_counter *cc, uint64_t cc_value)
+				       const bool ctx_sharing)
 {
 	assert(lock_required == 0);
 
@@ -2935,8 +2817,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, struct fi_opx_e
 	/* update the hfi txe state */
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
-	fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, psn_ptr, replay, cc, cc_value,
-							       reliability, hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
+							     hfi1_type);
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2951,8 +2833,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, struct fi_o
 					   const uint64_t pbc_dlid, const uint64_t bth_subctxt_rx,
 					   const uint64_t lrh_dlid_16B, const struct fi_opx_addr addr,
 					   int lock_required, const enum ofi_reliability_kind reliability,
-					   const enum opx_hfi1_type hfi1_type, const bool ctx_sharing,
-					   struct fi_opx_completion_counter *cc, uint64_t cc_value)
+					   const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	assert(lock_required == 0);
 
@@ -3113,8 +2994,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, struct fi_o
 
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 
-	fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, psn_ptr, replay, cc, cc_value,
-							       reliability, hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, reliability,
+							     hfi1_type);
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
