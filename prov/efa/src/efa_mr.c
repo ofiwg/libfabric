@@ -134,8 +134,8 @@ int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 		ibv_mr_size = efa_mr->ibv_mr->length;
 		err = -ibv_dereg_mr(efa_mr->ibv_mr);
 		if (err) {
-			EFA_WARN(FI_LOG_MR,
-				"Unable to deregister memory registration\n");
+			EFA_WARN_ERRNO(FI_LOG_MR,
+				"ibv_dereg_mr failed", -err);
 			ret = err;
 		} else {
 			reg_ct = ofi_atomic_dec64(&efa_mr->domain->ibv_mr_reg_ct);
@@ -219,7 +219,7 @@ static int efa_mr_close(fid_t fid)
 
 	ret = efa_mr_dereg_impl(efa_mr);
 	if (ret)
-		EFA_WARN(FI_LOG_MR, "Unable to close efa MR, %s\n", fi_strerror(ret));
+		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to close efa_mr", -ret);
 	free(efa_mr);
 	return ret;
 }
@@ -557,7 +557,7 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	*mr_fid = &efa_mr->mr_fid;
 	return 0;
 err:
-	EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n", fi_strerror(-ret));
+	EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to register efa_mr", -ret);
 	free(efa_mr);
 	return ret;
 }

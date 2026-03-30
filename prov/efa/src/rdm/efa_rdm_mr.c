@@ -156,8 +156,8 @@ int efa_rdm_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain
 	err = ofi_mr_cache_init(&domain->util_domain, memory_monitors,
 				*cache);
 	if (err) {
-		EFA_WARN(FI_LOG_DOMAIN, "EFA MR cache init failed: %s\n",
-		         fi_strerror(err));
+		EFA_WARN_FI_ERRNO(FI_LOG_DOMAIN, "EFA MR cache init failed",
+		         -err);
 		free(*cache);
 		*cache = NULL;
 		return -err;
@@ -411,9 +411,9 @@ static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_rdm_mr)
 		ofi_genlock_unlock(&efa_domain->util_domain.lock);
 
 		if (err) {
-			EFA_WARN(FI_LOG_MR,
-				"Unable to remove MR entry from util map (%s)\n",
-				fi_strerror(-err));
+			EFA_WARN_FI_ERRNO(FI_LOG_MR,
+				"Unable to remove MR entry from util map",
+				-err);
 			ret = err;
 		}
 		efa_rdm_mr->inserted_to_mr_map = false;
@@ -425,7 +425,7 @@ static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_rdm_mr)
 		assert(efa_rdm_mr->hmem_data);
 		int err = ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_rdm_mr->hmem_data);
 		if (err) {
-			EFA_WARN(FI_LOG_MR, "Unable to de-register cuda handle\n");
+			EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to de-register cuda handle", -err);
 			ret = err;
 		}
 		efa_rdm_mr->hmem_data = NULL;
@@ -433,7 +433,7 @@ static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_rdm_mr)
 
 	err = efa_mr_dereg_impl(&efa_rdm_mr->efa_mr);
 	if (err) {
-		EFA_WARN(FI_LOG_MR, "Unable to de-register efa core mr\n");
+		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to de-register efa_mr", -err);
 		ret = err;
 	}
 
@@ -582,8 +582,8 @@ static int efa_rdm_mr_close(fid_t fid)
 	if (efa_rdm_mr->shm_mr) {
 		err = fi_close(&efa_rdm_mr->shm_mr->fid);
 		if (err) {
-			EFA_WARN(FI_LOG_MR,
-				"Unable to close shm MR: %s\n", fi_strerror(err));
+			EFA_WARN_FI_ERRNO(FI_LOG_MR,
+				"Unable to close shm MR", -err);
 			ret = err;
 		}
 		efa_rdm_mr->shm_mr = NULL;
@@ -591,7 +591,7 @@ static int efa_rdm_mr_close(fid_t fid)
 
 	ret = efa_rdm_mr_dereg_impl(efa_rdm_mr);
 	if (ret)
-		EFA_WARN(FI_LOG_MR, "Unable to close efa MR: %s\n", fi_strerror(ret));
+		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to close efa_rdm_mr", -ret);
 
 	free(efa_rdm_mr);
 	return ret;
@@ -660,7 +660,7 @@ void efa_rdm_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 	/* Safe cast: MR cache allocates full efa_rdm_mr structure (entry_data_size) */
 	ret = efa_rdm_mr_dereg_impl((struct efa_rdm_mr *)efa_mr);
 	if (ret)
-		EFA_WARN(FI_LOG_MR, "Unable to dereg mr: %d\n", ret);
+		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to dereg efa_rdm_mr", -ret);
 }
 
 int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov,
@@ -710,8 +710,8 @@ int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov
 
 	ret = efa_rdm_mr_reg_impl(efa_rdm_mr, flags, &attr);
 	if (ret) {
-		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
-			fi_strerror(-ret));
+		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to register efa_rdm_mr",
+			-ret);
 		free(efa_rdm_mr);
 		return ret;
 	}
@@ -753,8 +753,8 @@ static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	ret = efa_rdm_mr_reg_impl(efa_rdm_mr, flags, &mr_attr);
 	if (ret) {
-		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
-			 fi_strerror(-ret));
+		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to register efa_rdm_mr",
+			-ret);
 		free(efa_rdm_mr);
 		return ret;
 	}
