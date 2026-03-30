@@ -59,7 +59,7 @@ static void usage(char *name)
 int main(int argc, char **argv)
 {
 	unsigned long i;
-	int op, ret = 0;
+	int op, ret = 0, cleanup_ret;
 	unsigned long num_domains = 1;
 	char *ptr;
 
@@ -129,6 +129,6 @@ int main(int argc, char **argv)
 
 	free(domain_vec);
 out:
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

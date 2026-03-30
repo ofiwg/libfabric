@@ -83,7 +83,7 @@ static int multi_setup_fabric(int argc, char **argv)
 {
 	char my_name[FT_MAX_CTRL_MSG];
 	size_t len;
-	int i, ret;
+	int i, ret, cleanup_ret;
 	struct fi_rma_iov remote;
 
 	hints->ep_attr->type = FI_EP_RDM;
@@ -202,8 +202,8 @@ static int multi_setup_fabric(int argc, char **argv)
 
 	return 0;
 err:
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }
 
 int multi_msg_recv(void)
@@ -506,7 +506,7 @@ static void pm_job_free_res(void)
 
 int multinode_run_tests(int argc, char **argv)
 {
-	int ret = FI_SUCCESS;
+	int ret = FI_SUCCESS, cleanup_ret;
 	int i;
 
 	ret = multi_setup_fabric(argc, argv);
@@ -556,6 +556,6 @@ int multinode_run_tests(int argc, char **argv)
 	}
 out:
 	pm_job_free_res();
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

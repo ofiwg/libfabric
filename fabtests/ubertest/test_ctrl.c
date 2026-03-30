@@ -1006,8 +1006,10 @@ static int ft_run_unit(void)
 	return fail;
 }
 
-void ft_cleanup(void)
+int ft_cleanup(void)
 {
+	int cleanup_ret;
+
 	if (ft_mr_ctrl.mr && (test_info.mr_mode & FI_MR_RAW))
 		fi_mr_unmap_key(domain, ft_mr_ctrl.peer_mr_key);
 
@@ -1022,8 +1024,9 @@ void ft_cleanup(void)
 	ft_cleanup_mr_control(&ft_mr_ctrl);
 	ft_cleanup_atomic_control(&ft_atom_ctrl);
 	ft_cleanup_random();
-	ft_free_res();
+	cleanup_ret = ft_free_res();
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
+	return cleanup_ret;
 }
 
 static int ft_exchange_mr_addr_key(void)
