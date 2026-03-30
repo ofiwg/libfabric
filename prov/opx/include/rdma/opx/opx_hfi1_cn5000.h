@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024-2025 Cornelis Networks.
+ * Copyright (C) 2024-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -85,7 +85,9 @@ int opx_select_port_index(int unit)
 		port_index = port - 1; /* User selected port */
 	}
 	/* Whatever we got from user or OPX_PORT_NUM_ANY better work now. */
-	assert(opx_hfi_get_port_lid(unit, port) > 0);
+	if (!(opx_hfi_get_port_lid(unit, port) > 0)) {
+		return -1;
+	}
 
 	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "[HFI1-DIRECT] port index %d, pid %d\n", port_index, getpid());
 
