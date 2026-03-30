@@ -614,7 +614,7 @@ int (*ctrl_op[op_last])(struct rpc_ctrl *ctrl) = {
 
 static int run_child(void)
 {
-	int i, j, ret;
+	int i, j, ret, cleanup_ret;
 
 	printf("(%d-?) running\n", myid);
 	ret = ft_init_fabric();
@@ -643,8 +643,8 @@ static int run_child(void)
 	}
 
 free:
-	ft_free_res();
-	return ret;
+	cleanup_ret = ft_free_res();
+	return ret ? ret : cleanup_ret;
 }
 
 static bool get_uint64_val(const char *js, jsmntok_t *t, uint64_t *val)
@@ -1236,7 +1236,7 @@ static void *process_rpcs(void *context)
 static int run_server(void)
 {
 	pthread_t thread[rpc_threads];
-	int i, ret;
+	int i, ret, cleanup_ret;
 
 	printf("Starting rpc stress server\n");
 	opts.options |= FT_OPT_CQ_SHARED;
@@ -1257,8 +1257,8 @@ static int run_server(void)
 	while (i-- > 0)
 		pthread_join(thread[i], NULL);
 
-	ft_free_res();
-	return ret;
+	cleanup_ret = ft_free_res();
+	return ret ? ret : cleanup_ret;
 }
 
 int main(int argc, char **argv)

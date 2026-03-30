@@ -36,7 +36,7 @@ static int run(int (*pingpong_func)(void))
 
 int main(int argc, char **argv)
 {
-	int op, ret, err, mr_reg_limit;
+	int op, ret, err, mr_reg_limit, cleanup_ret;
 	size_t registered;
 	size_t alloced;
 	void **buffers = NULL;
@@ -142,7 +142,7 @@ out:
 	}
 
 	ft_finalize();
-	ft_free_res();
+	cleanup_ret = ft_free_res();
 
-	return ft_exit_code(ret);
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }
