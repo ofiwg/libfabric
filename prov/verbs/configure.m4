@@ -42,6 +42,16 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 				[verbs_rdmacm_ex_happy=1],
 				[verbs_rdmacm_ex_happy=0])
 
+	       FI_CHECK_PACKAGE([verbs_hwloc],
+				[hwloc.h],
+				[hwloc],
+				[],
+				[],
+				[],
+				[],
+				[verbs_hwloc_happy=1],
+				[verbs_hwloc_happy=0])
+
 	      ])
 
 	AC_CHECK_HEADERS([asm/types.h])
@@ -95,6 +105,15 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([VERBS_HAVE_DMABUF_MR],[$VERBS_HAVE_DMABUF_MR],
 		[Whether infiniband/verbs.h has ibv_reg_dmabuf_mr() support or not])
 
+	#See if we have hwloc support (optional, for NIC-GPU affinity)
+	AS_IF([test $verbs_hwloc_happy -eq 1],[
+		AC_DEFINE([HAVE_HWLOC], [1], [Define to 1 if hwloc is available])
+		],[
+		verbs_hwloc_CPPFLAGS=""
+		verbs_hwloc_LDFLAGS=""
+		verbs_hwloc_LIBS=""
+		])
+
 	CPPFLAGS=$fi_verbs_configure_save_CPPFLAGS
 
 	# Technically, verbs_ibverbs_CPPFLAGS and
@@ -102,9 +121,9 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	# unlikely that they ever will be.  So only list
 	# verbs_ibverbs_CPPFLAGS here.  Same with verbs_*_LDFLAGS,
 	# below.
-	verbs_CPPFLAGS=$verbs_ibverbs_CPPFLAGS
-	verbs_LDFLAGS=$verbs_ibverbs_LDFLAGS
-	verbs_LIBS="$verbs_rdmacm_LIBS $verbs_ibverbs_LIBS"
+	verbs_CPPFLAGS="$verbs_ibverbs_CPPFLAGS $verbs_hwloc_CPPFLAGS"
+	verbs_LDFLAGS="$verbs_ibverbs_LDFLAGS $verbs_hwloc_LDFLAGS"
+	verbs_LIBS="$verbs_rdmacm_LIBS $verbs_ibverbs_LIBS $verbs_hwloc_LIBS"
 	AC_SUBST(verbs_CPPFLAGS)
 	AC_SUBST(verbs_LDFLAGS)
 	AC_SUBST(verbs_LIBS)
