@@ -424,6 +424,26 @@ bool efa_device_support_rdma_write(void)
 #endif
 
 /**
+ * @brief check whether efa device supports wide WQE (128-byte)
+ *
+ * @return a boolean indicating wide WQE support
+ */
+#if HAVE_INLINE_BUF_SIZE_EX
+bool efa_device_support_wide_wqe(void)
+{
+	assert(g_efa_selected_device_cnt > 0);
+
+	return g_efa_selected_device_list[0].efa_attr.inline_buf_size_ex >
+	       g_efa_selected_device_list[0].efa_attr.inline_buf_size;
+}
+#else
+bool efa_device_support_wide_wqe(void)
+{
+	return false;
+}
+#endif
+
+/**
  * @brief check whether efa device support unsolicited write recv
  *
  * @return a boolean indicating unsolicited write recv
