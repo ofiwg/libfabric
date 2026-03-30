@@ -550,30 +550,41 @@ static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
 	*set_tx += ft_tx_prefix_size();
 }
 
-void ft_free_host_bufs(void)
+int ft_free_host_bufs(void)
 {
-	int ret;
+	int ret, first_err = 0;
 
 	if (dev_host_buf) {
 		ret = ft_hmem_free_host(opts.iface, dev_host_buf);
-		if (ret)
+		if (ret) {
 			FT_PRINTERR("ft_hmem_free_host", ret);
+			if (!first_err)
+				first_err = ret;
+		}
 		dev_host_buf = NULL;
 	}
 
 	if (dev_host_res) {
 		ret = ft_hmem_free_host(opts.iface, dev_host_res);
-		if (ret)
+		if (ret) {
 			FT_PRINTERR("ft_hmem_free_host", ret);
+			if (!first_err)
+				first_err = ret;
+		}
 		dev_host_res = NULL;
 	}
 
 	if (dev_host_comp) {
 		ret = ft_hmem_free_host(opts.iface, dev_host_comp);
-		if (ret)
+		if (ret) {
 			FT_PRINTERR("ft_hmem_free_host", ret);
+			if (!first_err)
+				first_err = ret;
+		}
 		dev_host_comp = NULL;
 	}
+
+	return first_err;
 }
 
 /*
@@ -1868,52 +1879,67 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 	return ft_sync();
 }
 
-static void ft_cleanup_mr_array(struct ft_context *ctx_arr, char **mr_bufs)
+static int ft_cleanup_mr_array(struct ft_context *ctx_arr, char **mr_bufs)
 {
-	int i, ret;
+	int i, ret, first_err = 0;
 
 	if (!mr_bufs)
-		return;
+		return 0;
 
 	for (i = 0; i < opts.window_size; i++) {
-		FT_CLOSE_FID(ctx_arr[i].mr);
+		FT_CLOSE_FID_RET(ctx_arr[i].mr, ret);
+		if (ret && !first_err)
+			first_err = ret;
 		ret = ft_hmem_free(opts.iface, mr_bufs[i]);
-		if (ret)
+		if (ret) {
 			FT_PRINTERR("ft_hmem_free", ret);
+			if (!first_err)
+				first_err = ret;
+		}
 	}
+	return first_err;
 }
 
-void ft_close_fids(void)
+int ft_close_fids(void)
 {
-	FT_CLOSE_FID(mc);
-	FT_CLOSE_FID(alias_ep);
+	int ret, first_err = 0;
+
+#define FT_TRACK_CLOSE(fd) \
+	do { FT_CLOSE_FID_RET(fd, ret); if (ret && !first_err) first_err = ret; } while (0)
+
+	FT_TRACK_CLOSE(mc);
+	FT_TRACK_CLOSE(alias_ep);
 	if (fi && fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
 		if (mr != &no_mr) {
-			FT_CLOSE_FID(mr);
+			FT_TRACK_CLOSE(mr);
 			mr = &no_mr;
 		}
 	}
-	FT_CLOSE_FID(ep);
-	FT_CLOSE_FID(pep);
+	FT_TRACK_CLOSE(ep);
+	FT_TRACK_CLOSE(pep);
 	if (opts.options & FT_OPT_CQ_SHARED) {
-		FT_CLOSE_FID(txcq);
+		FT_TRACK_CLOSE(txcq);
 	} else {
-		FT_CLOSE_FID(rxcq);
-		FT_CLOSE_FID(txcq);
+		FT_TRACK_CLOSE(rxcq);
+		FT_TRACK_CLOSE(txcq);
 	}
-	FT_CLOSE_FID(rxcntr);
-	FT_CLOSE_FID(txcntr);
-	FT_CLOSE_FID(rma_cntr);
-	FT_CLOSE_FID(pollset);
+	FT_TRACK_CLOSE(rxcntr);
+	FT_TRACK_CLOSE(txcntr);
+	FT_TRACK_CLOSE(rma_cntr);
+	FT_TRACK_CLOSE(pollset);
 	if (mr != &no_mr)
-		FT_CLOSE_FID(mr);
-	FT_CLOSE_FID(av);
-	FT_CLOSE_FID(srx);
-	FT_CLOSE_FID(stx);
-	FT_CLOSE_FID(domain);
-	FT_CLOSE_FID(eq);
-	FT_CLOSE_FID(waitset);
-	FT_CLOSE_FID(fabric);
+		FT_TRACK_CLOSE(mr);
+	FT_TRACK_CLOSE(av);
+	FT_TRACK_CLOSE(srx);
+	FT_TRACK_CLOSE(stx);
+	FT_TRACK_CLOSE(domain);
+	FT_TRACK_CLOSE(eq);
+	FT_TRACK_CLOSE(waitset);
+	FT_TRACK_CLOSE(fabric);
+
+#undef FT_TRACK_CLOSE
+
+	return first_err;
 }
 
 /* We need to free any data that we allocated before freeing the
@@ -1951,28 +1977,39 @@ void ft_freehints(struct fi_info *hints)
 	fi_freeinfo(hints);
 }
 
-void ft_free_res(void)
+int ft_free_res(void)
 {
-	int ret;
+	int ret, first_err = 0;
 
-	ft_cleanup_mr_array(tx_ctx_arr, tx_mr_bufs);
-	ft_cleanup_mr_array(rx_ctx_arr, rx_mr_bufs);
+	ret = ft_cleanup_mr_array(tx_ctx_arr, tx_mr_bufs);
+	if (ret && !first_err)
+		first_err = ret;
+	ret = ft_cleanup_mr_array(rx_ctx_arr, rx_mr_bufs);
+	if (ret && !first_err)
+		first_err = ret;
 
 	free(tx_ctx_arr);
 	free(rx_ctx_arr);
 	tx_ctx_arr = NULL;
 	rx_ctx_arr = NULL;
 
-	ft_close_fids();
+	ret = ft_close_fids();
+	if (ret && !first_err)
+		first_err = ret;
 	free(user_test_sizes);
 	if (buf) {
 		ret = ft_hmem_free(opts.iface, buf);
-		if (ret)
+		if (ret) {
 			FT_PRINTERR("ft_hmem_free", ret);
+			if (!first_err)
+				first_err = ret;
+		}
 		buf = rx_buf = tx_buf = NULL;
 		buf_size = rx_size = tx_size = tx_mr_size = rx_mr_size = 0;
 	}
-	ft_free_host_bufs();
+	ret = ft_free_host_bufs();
+	if (ret && !first_err)
+		first_err = ret;
 
 	if (fi_pep) {
 		fi_freeinfo(fi_pep);
@@ -1988,8 +2025,13 @@ void ft_free_res(void)
 	}
 
 	ret = ft_hmem_cleanup(opts.iface);
-	if (ret)
+	if (ret) {
 		FT_PRINTERR("ft_hmem_cleanup", ret);
+		if (!first_err)
+			first_err = ret;
+	}
+
+	return first_err;
 }
 
 static int dupaddr(void **dst_addr, size_t *dst_addrlen,
