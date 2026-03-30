@@ -1792,8 +1792,6 @@ static void fi_opx_apply_bind_flags(struct fi_opx_ep *opx_ep)
 
 		opx_ep->tx->do_cq_completion = ((cq_flags & selective_completion) == selective_completion) ||
 					       ((cq_flags & (FI_SELECTIVE_COMPLETION | FI_TRANSMIT)) == FI_TRANSMIT);
-
-		opx_ep->tx->delivery_complete = (opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE) ? 1 : 0;
 	}
 	if (opx_ep->rx_cq_bflags & FI_RECV) {
 		fi_opx_ref_inc(&opx_ep->init_rx_cq->ref_cnt, "rx completion queue");
@@ -2095,10 +2093,9 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	opx_ep->tx->cq_completed_ptr = NULL;
 	opx_ep->tx->cq_err_ptr	     = NULL;
 
-	opx_ep->tx->cq		      = NULL;
-	opx_ep->tx->cq_bind_flags     = 0;
-	opx_ep->tx->do_cq_completion  = 0;
-	opx_ep->tx->delivery_complete = 0;
+	opx_ep->tx->cq		     = NULL;
+	opx_ep->tx->cq_bind_flags    = 0;
+	opx_ep->tx->do_cq_completion = 0;
 
 #ifdef OPX_HMEM
 #if HAVE_CUDA
