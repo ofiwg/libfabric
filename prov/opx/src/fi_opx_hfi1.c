@@ -162,7 +162,11 @@ static void opx_hfi_setup_ctx_shring_grps(int hfi_unit_number, int *ctx_groups, 
 static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_context_internal *internal,
 				    uuid_t unique_job_key, int hfi_unit_number, int *fd_cdev, int *fd_verbs)
 {
-	int	     port = opx_select_port_index(hfi_unit_number) + 1;
+	int port = opx_select_port_index(hfi_unit_number) + 1;
+	if (port <= 0) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to select an HFI port on unit %d.\n", hfi_unit_number);
+		return -1;
+	}
 	unsigned int user_version;
 	void	    *ibv_context;
 	if (opx_hfi1_wrapper_context_open(hfi_unit_number, port, 0, OPX_SW_HFI1_TYPE, &ibv_context, &user_version,
