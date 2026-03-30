@@ -1243,6 +1243,8 @@ int opx_tid_cache_setup(struct ofi_mr_cache **cache, struct opx_tid_domain *doma
 		return -FI_ENOSYS;
 	} else if (default_monitor == uffd_monitor) {
 		FI_DBG(&fi_opx_provider, FI_LOG_MR, "uffd_monitor\n");
+	} else if (default_monitor == kdreg2_monitor) {
+		FI_DBG(&fi_opx_provider, FI_LOG_MR, "kdreg2_monitor\n");
 	} else {
 		if (default_monitor == cuda_monitor) {
 			FI_WARN(&fi_opx_provider, FI_LOG_MR, "cuda_monitor is unsupported in opx\n");
