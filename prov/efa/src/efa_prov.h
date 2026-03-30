@@ -15,6 +15,9 @@ extern struct util_prov efa_util_prov;
 	EFA_INFO(subsys, fn ": %s(%d)\n", strerror(errno), errno)
 #define EFA_WARN_ERRNO(subsys, fn, errno) \
 	EFA_WARN(subsys, fn ": %s(%d)\n", strerror(errno), errno)
+/* Separate error log that recognizes libfabric errors */
+#define EFA_WARN_FI_ERRNO(subsys, fn, errno) \
+	EFA_WARN(subsys, fn ": %s(%d)\n", fi_strerror(errno), errno)
 #define EFA_DBG(subsys, ...) FI_DBG(&efa_prov, subsys, __VA_ARGS__)
 
 static inline
