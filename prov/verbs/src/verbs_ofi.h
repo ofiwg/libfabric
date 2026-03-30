@@ -1144,6 +1144,8 @@ int vrb_prof_create(vrb_profile_t **prof);
 
 /* NIC affinity policy handlers */
 int vrb_nic_affinity_manual(struct fi_info **info, const struct fi_pci_attr *device_pci);
-
+#ifdef HAVE_HWLOC
+int vrb_nic_affinity_auto(struct fi_info **info, const struct fi_pci_attr *device_pci);
+#endif
 
 #endif /* VERBS_OFI_H */

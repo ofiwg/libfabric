@@ -810,9 +810,17 @@ static int vrb_nic_affinity_init(void)
 	} else if (!strcmp(vrb_gl_data.nic_affinity_policy, "manual")) {
 		VRB_INFO(FI_LOG_CORE, "NIC affinity policy 'manual' enabled\n");
 		vrb_gl_data.nic_affinity_handler = vrb_nic_affinity_manual;
+	} else if (!strcmp(vrb_gl_data.nic_affinity_policy, "auto")) {
+#ifdef HAVE_HWLOC
+		VRB_INFO(FI_LOG_CORE, "NIC affinity policy 'auto' enabled\n");
+		vrb_gl_data.nic_affinity_handler = vrb_nic_affinity_auto;
+#else
+		VRB_WARN(FI_LOG_CORE, "NIC affinity policy 'auto' requested but hwloc "
+			"support not available, falling back to 'none'\n");
+#endif
 	} else {
 		VRB_WARN(FI_LOG_CORE, "Invalid NIC affinity policy '%s', "
-			 "falling back to 'none'. Valid values: none, manual\n",
+			 "falling back to 'none'. Valid values: none, manual, auto\n",
 			 vrb_gl_data.nic_affinity_policy);
 	}
 
