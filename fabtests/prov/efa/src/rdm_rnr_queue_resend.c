@@ -320,7 +320,7 @@ static int rnr_queue_resend_test(int req_pkt, enum fi_op atomic_op)
 
 static int run(int req_pkt, enum fi_op atomic_op)
 {
-	int ret;
+	int ret, cleanup_ret;
 
 	ret = ft_efa_rnr_init_fabric();
 	if (ret) {
@@ -348,8 +348,8 @@ static int run(int req_pkt, enum fi_op atomic_op)
 
 out:
 	free_atomic_res();
-	ft_free_res();
-	return ret;
+	cleanup_ret = ft_free_res();
+	return ret ? ret : cleanup_ret;
 }
 
 static void print_opts_usage(char *name, char *desc)

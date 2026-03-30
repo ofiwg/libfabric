@@ -199,7 +199,7 @@ static void usage(char *name)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, cleanup_ret;
 
 	opts = INIT_OPTS;
 	opts.transfer_size = DEFAULT_BUF_SIZE;
@@ -248,7 +248,7 @@ int main(int argc, char **argv)
 	ret = run_tests();
 
 out:
-	ft_free_res();
+	cleanup_ret = ft_free_res();
 	fi_freeinfo(hints);
-	return ft_exit_code(ret);
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

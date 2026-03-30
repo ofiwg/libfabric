@@ -48,7 +48,7 @@ enum {
 
 static int run()
 {
-	int ret;
+	int ret, cleanup_ret;
 	bool use_emulated_read;
 
 	ret = ft_init_fabric();
@@ -218,9 +218,9 @@ static int run()
 	}
 
 out:
-	ft_free_res();
+	cleanup_ret = ft_free_res();
 
-	return ret;
+	return ret ? ret : cleanup_ret;
 }
 
 int main(int argc, char **argv)

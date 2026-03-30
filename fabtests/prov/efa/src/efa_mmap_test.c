@@ -177,7 +177,7 @@ static int run_test(void)
 
 static int run(void)
 {
-	int ret;
+	int ret, cleanup_ret;
 
 	ret = ft_init();
 	if (ret)
@@ -211,8 +211,8 @@ static int run(void)
 
 	ret = run_test();
 
-	ft_free_res();
-	return ret;
+	cleanup_ret = ft_free_res();
+	return ret ? ret : cleanup_ret;
 }
 
 int main(int argc, char **argv)

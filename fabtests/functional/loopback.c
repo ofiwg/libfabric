@@ -79,7 +79,7 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, cleanup_ret;
 
 	opts = INIT_OPTS;
 
@@ -107,6 +107,6 @@ int main(int argc, char **argv)
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	ret = run();
 
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

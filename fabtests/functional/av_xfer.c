@@ -40,7 +40,7 @@ static struct fi_info *base_hints;
 
 static int av_removal_test(void)
 {
-	int ret;
+	int ret, cleanup_ret;
 
 	fprintf(stdout, "AV address removal: ");
 	hints = fi_dupinfo(base_hints);
@@ -118,13 +118,13 @@ out:
 	 * application. */
 	fi_freeinfo(hints);
 	hints = NULL;
-	ft_free_res();
-	return ret;
+	cleanup_ret = ft_free_res();
+	return ret ? ret : cleanup_ret;
 }
 
 static int av_reinsert_test(void)
 {
-	int ret;
+	int ret, cleanup_ret;
 
 	fprintf(stdout, "AV re-insertion address: ");
 	hints = fi_dupinfo(base_hints);
@@ -186,8 +186,8 @@ out:
 	 * application. */
 	fi_freeinfo(hints);
 	hints = NULL;
-	ft_free_res();
-	return ret;
+	cleanup_ret = ft_free_res();
+	return ret ? ret : cleanup_ret;
 }
 
 /*

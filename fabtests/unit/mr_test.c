@@ -295,7 +295,7 @@ static void usage(char *name)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, cleanup_ret;
 	int failed = 0;
 
 	buf = NULL;
@@ -368,6 +368,8 @@ int main(int argc, char **argv)
 	}
 
 out:
-	ft_free_res();
-	return ret ? ft_exit_code(ret) : (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
+	cleanup_ret = ft_free_res();
+	return ret ? ft_exit_code(ret) :
+		cleanup_ret ? ft_exit_code(cleanup_ret) :
+			(failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

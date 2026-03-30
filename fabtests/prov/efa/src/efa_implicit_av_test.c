@@ -403,7 +403,7 @@ cleanup_server:
 
 int main(int argc, char **argv)
 {
-	int i, op, ret;
+	int i, op, ret, cleanup_ret;
 
 	opts = INIT_OPTS;
 	opts.transfer_size = 64;
@@ -487,6 +487,6 @@ int main(int argc, char **argv)
 			return ret;
 	}
 
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

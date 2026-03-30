@@ -560,7 +560,7 @@ static int run(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, cleanup_ret;
 	int option_index = 0;
 	int use_stx = 1, use_srx = 1;
 
@@ -629,9 +629,9 @@ int main(int argc, char **argv)
 	ret = run();
 
 	FT_CLOSEV_FID(ep_array, ep_cnt);
-	ft_free_res();
+	cleanup_ret = ft_free_res();
 	free(addr_array);
 	free(ep_array);
 	fi_freeinfo(fi_dup);
-	return ft_exit_code(ret);
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

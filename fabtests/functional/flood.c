@@ -236,7 +236,7 @@ out:
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, cleanup_ret;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_ALLOC_MULT_MR;
@@ -299,7 +299,7 @@ int main(int argc, char **argv)
 
 	ret = run();
 
-	ft_free_res();
+	cleanup_ret = ft_free_res();
 
-	return ft_exit_code(ret);
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

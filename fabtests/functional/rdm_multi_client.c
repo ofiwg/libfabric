@@ -186,7 +186,7 @@ static void print_opts_usage(char *name, char *desc)
 
 int main(int argc, char **argv)
 {
-	int op, ret, i;
+	int op, ret, i, cleanup_ret;
 	struct fi_info *save;
 	bool address_reuse = false;
 
@@ -239,7 +239,7 @@ int main(int argc, char **argv)
 			// application and the library, which Windows doesn't like.
 			save = hints;
 			hints = NULL;
-			ft_free_res();
+			cleanup_ret = ft_free_res();
 			hints = save;
 		}
 	} else {
@@ -248,6 +248,6 @@ int main(int argc, char **argv)
 			FT_PRINTERR("run_server", -ret);
 	}
 out:
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

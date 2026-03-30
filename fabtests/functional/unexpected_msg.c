@@ -323,7 +323,7 @@ static int run_test(void)
 int main(int argc, char **argv)
 {
 	int op;
-	int ret;
+	int ret, cleanup_ret;
 
 	opts = INIT_OPTS;
 	opts.iterations = 600; // Change default from 1000.
@@ -380,6 +380,6 @@ int main(int argc, char **argv)
 
 	ret = run_test();
 
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

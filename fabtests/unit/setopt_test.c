@@ -128,7 +128,7 @@ int main(int argc, char **argv)
 		TEST_ENTRY(NULL, ""),
 	};
 
-	int failed;
+	int failed, cleanup_ret;
 
 	hints = fi_allocinfo();
 	if (!hints) {
@@ -162,6 +162,7 @@ int main(int argc, char **argv)
 		printf("Summary: all tests passed\n");
 	}
 
-	ft_free_res();
-	return (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
+	cleanup_ret = ft_free_res();
+	return cleanup_ret ? ft_exit_code(cleanup_ret) :
+		(failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

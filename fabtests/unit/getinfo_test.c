@@ -861,7 +861,7 @@ static int set_prov(char *prov_name)
 
 int main(int argc, char **argv)
 {
-	int failed;
+	int failed, cleanup_ret;
 	int op;
 	size_t len;
 	const char *util_name;
@@ -964,6 +964,7 @@ int main(int argc, char **argv)
 		printf("\nSummary: all tests passed\n");
 	}
 
-	ft_free_res();
-	return (failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
+	cleanup_ret = ft_free_res();
+	return cleanup_ret ? ft_exit_code(cleanup_ret) :
+		(failed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
