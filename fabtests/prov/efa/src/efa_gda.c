@@ -327,7 +327,7 @@ static int run()
 
 int main(int argc, char **argv)
 {
-	int op, ret, i;
+	int op, ret, i, cleanup_ret;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_OOB_SYNC;
@@ -447,8 +447,8 @@ int main(int argc, char **argv)
 	if (rxcq_ext)
 		fi_close(&rxcq_ext->fid);
 
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }
 
 #endif /* HAVE_EFAGDA */

@@ -1396,7 +1396,7 @@ static int parse_test_opts(int argc, char **argv)
 // Main function
 int main(int argc, char **argv)
 {
-	int ret;
+	int ret, cleanup_ret;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
@@ -1436,6 +1436,6 @@ int main(int argc, char **argv)
 out:
 	ft_sync_oob();
 	ft_close_oob();
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

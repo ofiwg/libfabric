@@ -532,7 +532,7 @@ static int multinode_setup_fabric(int argc, char **argv)
 {
 	char my_name[FT_MAX_CTRL_MSG];
 	size_t len;
-	int err;
+	int err, cleanup_ret;
 
 	setup_hints();
 
@@ -594,8 +594,8 @@ static int multinode_setup_fabric(int argc, char **argv)
 	return 0;
 
 errout:
-	ft_free_res();
-	return ft_exit_code(err);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(err ? err : cleanup_ret);
 }
 
 static void pm_job_free_res(void)
@@ -607,7 +607,7 @@ static void pm_job_free_res(void)
 int multinode_run_tests(int argc, char **argv)
 {
 	struct coll_test *test;
-	int ret = FI_SUCCESS;
+	int ret = FI_SUCCESS, cleanup_ret;
 
 	ret = multinode_setup_fabric(argc, argv);
 	if (ret)
@@ -654,6 +654,6 @@ out:
 		printf("passed\n");
 
 	pm_job_free_res();
-	ft_free_res();
-	return ft_exit_code(ret);
+	cleanup_ret = ft_free_res();
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

@@ -390,7 +390,7 @@ static int run_test(void)
 
 int main(int argc, char **argv)
 {
-	int op, ret;
+	int op, ret, cleanup_ret;
 
 	domain_cnt = 2;
 	opts = INIT_OPTS;
@@ -435,7 +435,7 @@ int main(int argc, char **argv)
 
 	if (domain_res_array)
 		free_domain_res();
-	ft_free_res();
+	cleanup_ret = ft_free_res();
 
-	return ft_exit_code(ret);
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }

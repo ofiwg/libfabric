@@ -198,7 +198,7 @@ static int rnr_read_cq_error(void)
 
 static int run()
 {
-	int ret;
+	int ret, cleanup_ret;
 
 	ret = ft_efa_rnr_init_fabric();
 	if (ret) {
@@ -232,9 +232,9 @@ static int run()
 		FT_PRINTERR("ft_close_oob", -ret);
 		return ret;
 	}
-	ft_free_res();
+	cleanup_ret = ft_free_res();
 
-	return 0;
+	return cleanup_ret;
 }
 
 
