@@ -431,7 +431,13 @@ static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_rdm_mr)
 		efa_rdm_mr->hmem_data = NULL;
 	}
 
-	return efa_mr_dereg_impl(&efa_rdm_mr->efa_mr);
+	err = efa_mr_dereg_impl(&efa_rdm_mr->efa_mr);
+	if (err) {
+		EFA_WARN(FI_LOG_MR, "Unable to de-register efa core mr\n");
+		ret = err;
+	}
+
+	return ret;
 }
 
 /**
@@ -588,7 +594,7 @@ static int efa_rdm_mr_close(fid_t fid)
 		EFA_WARN(FI_LOG_MR, "Unable to close efa MR: %s\n", fi_strerror(ret));
 
 	free(efa_rdm_mr);
-	return 0;
+	return ret;
 }
 
 static struct fi_ops efa_rdm_mr_ops = {
