@@ -11,13 +11,7 @@ def test_mr_host(cmdline_args):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(
-    "hmem_type",
-    [
-        pytest.param("cuda", marks=pytest.mark.cuda_memory),
-        pytest.param("neuron", marks=pytest.mark.neuron_memory),
-    ],
-)
+@pytest.mark.short
 def test_mr_hmem(cmdline_args, hmem_type, fabric):
     if hmem_type == "cuda" and not has_cuda(cmdline_args.server_id):
         pytest.skip("no cuda device")
@@ -40,14 +34,21 @@ def test_mr_hmem(cmdline_args, hmem_type, fabric):
 
 
 @pytest.mark.unit
-@pytest.mark.neuron_memory
-def test_efa_mr_hmem(cmdline_args):
+@pytest.mark.short
+def test_efa_mr_hmem(cmdline_args, hmem_type, fabric):
+    if hmem_type != "neuron":
+        pytest.skip("test only applies to neuron")
     if not has_neuron(cmdline_args.server_id):
         pytest.skip("no neuron device")
+    if not cmdline_args.do_dmabuf_reg_for_hmem:
+        pytest.skip("This test tests neuron get_dmabuf_fd_vX and needs dmabuf to be enabled and working to test these apis")
 
     cmdline_args_copy = copy.copy(cmdline_args)
 
-    test_command = "fi_efa_mr_test -D neuron -f efa-direct"
+    test_command = f"fi_efa_mr_test -D neuron -f {fabric}"
+
+    if cmdline_args.do_dmabuf_reg_for_hmem:
+        test_command += " -R"
 
     test = UnitTest(cmdline_args_copy, test_command)
     test.run()
