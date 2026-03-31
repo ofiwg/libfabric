@@ -498,12 +498,10 @@ int opx_mr_entry_alloc_init(struct ofi_mr_cache *cache, const struct ofi_mr_info
 __OPX_FORCE_INLINE__
 void opx_mr_uncache_entry_storage(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
+	enum fi_hmem_iface	iface	= entry->info.iface;
+	struct ofi_mem_monitor *monitor = cache->monitors[iface];
+
 	OPX_DEBUG_ENTRY2(entry, OPX_TID_CACHE_ENTRY_FOUND);
-	/* Without subscription context, we might unsubscribe from
-	 * an address range in use by another region. As a result,
-	 * we remain subscribed. This may result in extra
-	 * notification events, but is harmless to correct operation.
-	 */
 	if (entry->use_cnt > 0) {
 #ifdef OPX_TID_DEBUG_USECNT
 		fprintf(stderr,
@@ -516,6 +514,8 @@ void opx_mr_uncache_entry_storage(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	}
 	ofi_rbmap_delete(&cache->tree, entry->node);
 	entry->node = NULL;
+
+	ofi_monitor_unsubscribe(monitor, entry->info.iov.iov_base, entry->info.iov.iov_len, &entry->hmem_info);
 
 	cache->cached_cnt--;
 	cache->cached_size -= entry->info.iov.iov_len;
