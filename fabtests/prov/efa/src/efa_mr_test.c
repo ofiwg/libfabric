@@ -203,13 +203,12 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.transfer_size = DEFAULT_BUF_SIZE;
-	opts.options |= FT_OPT_REG_DMABUF_MR;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" HMEM_OPTS CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parseinfo(op, optarg, hints, &opts);
