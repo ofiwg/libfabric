@@ -6,6 +6,60 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v2.5.1, Fri April 10, 2026
+=========================
+
+## Core ##
+
+- man: Fix typo in fi_cntr_readerr
+- hmem: Enable CUDA p2p support if there is only one GPU visible
+- configure.ac: define sanitizer macros and disable memhooks under ASAN
+
+## CXI ##
+
+- Fix build failure with older libcxi
+
+## EFA ##
+
+- fix use-after-free in efa_mr_dereg_impl info log
+- Set qp->base_ep in efa_qp_create
+- Return error if efa_mr_reg_ibv_mr returns NULL
+- Print iface string in the efa_mr_reg_ibv_mr log
+- Correctly remove txe from longcts_send list on receipt recv completion
+- fix err_buf memory leak in efa_cq_open error path
+- fix fi_info memory leaks in unit tests
+- Use getrandom/urandom for QKEY generation
+- Explain why the CQ has to be drained after QP destruction
+- move efa_device function declarations to efa_device.h
+- disable MR cache by default under ASAN
+- remove redundant efa_env.track_mr save/restore
+- fix fi_info leak in efa_get_user_info
+- fix memory leaks in unit tests
+- initialize receipt header tx_id in DC release test
+- fix use-after-free in efa_ah_cnt_av_impl
+- fix use-after-free of cur_wq during EP close CQ drain
+- warn when MR is closed with outstanding operations
+- Add ope pool for efa direct if FI_EFA_TRACK_MR
+- Track ep in a domain list if FI_EFA_TRACK_MR
+- Add env var FI_EFA_TRACK_MR for debugging MR issues
+
+## SHM ##
+
+- pad region header to move offsets into same cache sector as queue
+- reduce cmd entry from 512 bytes to 384 for better inline performance
+
+## Util ##
+
+- free err_data in util_peer_cq_cleanup
+
+## Fabtests ##
+
+- efa: treat server timeout as success in rdm_remote_exit_early
+- efa: Re-enable 1G RMA write/writedata tests in PR CI
+- efa: test_remote_exit_early: CLI argument --heterogeneous-peers
+- efa: fix race in rdm_remote_exit_early handshake processing
+- efa: Do not run fi_efa_mr_test if no dmabuf support
+
 v2.5.0, Fri March 20, 2026
 ==========================
 
