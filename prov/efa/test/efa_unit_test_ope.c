@@ -1188,7 +1188,17 @@ void test_efa_rdm_atomic_compare_desc_persistence(struct efa_resource **state)
  * @param[in] resource Test resource structure
  * @param[in] send_first If true, send completion happens first; if false, receipt first
  */
-static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bool send_first)
+/**
+ * @brief Common helper for DC packet TXE release testing
+ *
+ * Sets up test environment and packet entries for DC packet testing.
+ * Tests the specified completion order and verifies TXE release behavior.
+ *
+ * @param[in] resource Test resource structure
+ * @param[in] send_first If true, send completion happens first; if false, receipt first
+ * @param[in] txe_in_send_state If true, TXE is in EFA_RDM_OPE_SEND state; if false, different state
+ */
+static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bool send_first, bool txe_in_send_state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_ope *txe;
@@ -1204,6 +1214,17 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 	assert_non_null(txe);
 	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	txe->efa_outstanding_tx_ops = 1;
+
+	if (txe_in_send_state) {
+		/* Add TXE to ope_longcts_send_list to simulate active longcts send */
+		txe->state = EFA_RDM_OPE_SEND;
+		dlist_insert_tail(&txe->entry, &efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list);
+		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
+	} else {
+		/* TXE is not in SEND state (e.g., non-long-cts TXE) */
+		txe->state = EFA_RDM_TXE_REQ;
+		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
+	}
 
 	/* Create fake DC packet entry */
 	dc_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
@@ -1233,15 +1254,32 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
 		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
+		if (txe_in_send_state) {
+			/* TXE should still be in ope_longcts_send_list */
+			assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
+			assert_int_equal(txe->state, EFA_RDM_OPE_SEND);
+		} else {
+			/* Non-long-cts TXE should not be in the list */
+			assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
+			assert_int_equal(txe->state, EFA_RDM_TXE_REQ);
+		}
 
-		/* Receipt handling - should now release TXE */
+		/* Receipt handling - should set flag and release TXE */
 		efa_rdm_pke_handle_receipt_recv(receipt_pkt_entry);
+		if (txe_in_send_state) {
+			/* Should remove from list */
+			assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
+		}
 	} else {
-		/* Receipt handling first - should not release TXE yet */
+		/* Receipt handling first - should set flag but not release TXE yet */
 		efa_rdm_pke_handle_receipt_recv(receipt_pkt_entry);
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
 		assert_true(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED);
 		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
+		if (txe_in_send_state) {
+			/* TXE should be removed from ope_longcts_send_list immediately */
+			assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
+		}
 
 		/* Send completion - should now release TXE */
 		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
@@ -1252,20 +1290,20 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 }
 
 /**
- * @brief Test DC packet TXE release with send completion first
+ * @brief Test DC packet TXE release with send completion first (TXE in SEND state)
  *
  * This test verifies the DC (Delivery Complete) TXE release logic when
- * send completion arrives before receipt acknowledgment.
+ * send completion arrives before receipt acknowledgment for long-cts TXEs.
  *
  * @param[in] state cmocka state variable
  */
 void test_efa_rdm_txe_dc_send_first(struct efa_resource **state)
 {
-	test_efa_rdm_txe_dc_release_common(*state, true);
+	test_efa_rdm_txe_dc_release_common(*state, true, true);
 }
 
 /**
- * @brief Test DC packet TXE release with receipt completion first
+ * @brief Test DC packet TXE release with receipt completion first (TXE in SEND state)
  *
  * This test verifies the race condition fix where receipt acknowledgment
  * arrives before send completion. The TXE should only be released when
@@ -1275,7 +1313,33 @@ void test_efa_rdm_txe_dc_send_first(struct efa_resource **state)
  */
 void test_efa_rdm_txe_dc_receipt_first(struct efa_resource **state)
 {
-	test_efa_rdm_txe_dc_release_common(*state, false);
+	test_efa_rdm_txe_dc_release_common(*state, false, true);
+}
+
+/**
+ * @brief Test DC packet TXE release with send completion first (TXE not in SEND state)
+ *
+ * This test verifies the DC TXE release logic for non-long-cts TXEs when
+ * send completion arrives before receipt acknowledgment.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_txe_dc_send_first_non_longcts(struct efa_resource **state)
+{
+	test_efa_rdm_txe_dc_release_common(*state, true, false);
+}
+
+/**
+ * @brief Test DC packet TXE release with receipt completion first (TXE not in SEND state)
+ *
+ * This test verifies the bug fix where non-long-cts TXEs get the
+ * EFA_RDM_TXE_RECEIPT_RECEIVED flag set, allowing proper release.
+ *
+ * @param[in] state cmocka state variable
+ */
+void test_efa_rdm_txe_dc_receipt_first_non_longcts(struct efa_resource **state)
+{
+	test_efa_rdm_txe_dc_release_common(*state, false, false);
 }
 
 /* RDM MSG 0-byte tests */

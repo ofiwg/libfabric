@@ -127,8 +127,11 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	 * Make sure the entry is removed
 	 * from ope_longcts_list when the ope
 	 * is released for whatever reasons.
+	 * Skip removal if receipt was already processed
+	 * (which would have already removed it from the list).
 	 */
-	if (txe->state == EFA_RDM_OPE_SEND)
+	if (txe->state == EFA_RDM_OPE_SEND && 
+	    !(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED))
 		dlist_remove(&txe->entry);
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
@@ -729,7 +732,8 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	case EFA_RDM_TXE_REQ:
 		break;
 	case EFA_RDM_OPE_SEND:
-		dlist_remove(&txe->entry);
+		if (!(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED))
+			dlist_remove(&txe->entry);
 		break;
 	case EFA_RDM_OPE_ERR:
 		/* Already progressed, no-op */
