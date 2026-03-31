@@ -76,8 +76,9 @@ def test_rdm_tagged_bw_no_inject_range(cmdline_args, completion_semantic, inject
     efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw -j 0", "short",
                                completion_semantic, "host_to_host", inject_message_size, fabric="efa")
 
+# Testing both power-2 and non-power-2 sizes
 @pytest.mark.functional
-@pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"]])
+@pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=43", "FI_EFA_RX_SIZE=51"]])
 def test_rdm_tagged_bw_small_tx_rx(cmdline_args, completion_semantic, memory_type, completion_type, env_vars):
     cmdline_args_copy = copy.copy(cmdline_args)
     for env_var in env_vars:
