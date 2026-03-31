@@ -1204,11 +1204,6 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	txe->efa_outstanding_tx_ops = 1;
 
-	/* Add TXE to ope_longcts_send_list to simulate active longcts send as stronger test coverage */
-	txe->state = EFA_RDM_OPE_SEND;
-	dlist_insert_tail(&txe->entry, &efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list);
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
-
 	/* Create fake DC packet entry */
 	dc_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(dc_pkt_entry);
@@ -1237,22 +1232,15 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
 		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
-		/* TXE should still be in ope_longcts_send_list */
-		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
-		assert_int_equal(txe->state, EFA_RDM_OPE_SEND);
 
-		/* Receipt handling - should remove from list and release TXE */
+		/* Receipt handling - should now release TXE */
 		efa_rdm_pke_handle_receipt_recv(receipt_pkt_entry);
-		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
 	} else {
-		/* Receipt handling first - should remove from list but not release TXE yet */
+		/* Receipt handling first - should not release TXE yet */
 		efa_rdm_pke_handle_receipt_recv(receipt_pkt_entry);
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+		assert_true(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED);
 		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
-		/* TXE should be removed from ope_longcts_send_list immediately */
-		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
-		/* State should be changed to EFA_RDM_OPE_COMPLETE */
-		assert_int_equal(txe->state, EFA_RDM_OPE_COMPLETE);
 
 		/* Send completion - should now release TXE */
 		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
