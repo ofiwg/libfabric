@@ -368,6 +368,8 @@ void test_efa_rdm_pke_flag_tracking();
 void test_efa_rdm_pke_proc_matched_eager_rtm_error();
 void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error();
 void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error();
+void test_efa_rdm_pke_sendv_mr_closed_returns_ecanceled();
+void test_efa_rdm_pke_write_mr_closed_returns_ecanceled();
 /* end of efa_unit_test_pke.c */
 
 void test_efa_msg_fi_recv();

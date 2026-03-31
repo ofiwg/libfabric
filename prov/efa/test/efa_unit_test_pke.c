@@ -3,6 +3,7 @@
 #include "rdm/efa_rdm_pke_rta.h"
 #include "rdm/efa_rdm_pke_rtw.h"
 #include "rdm/efa_rdm_pke_utils.h"
+#include "rdm/efa_rdm_pke_nonreq.h"
 
 
 /**
@@ -550,4 +551,127 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(struct efa_res
 	 */
 	efa_rdm_pke_release_rx(pkt_entry);
 	efa_rdm_rxe_release(rxe);
+}
+
+/**
+ * @brief Verify efa_rdm_pke_sendv returns -FI_ECANCELED when MR is closed
+ * (ibv_mr set to NULL) while a send operation was queued.
+ */
+void test_efa_rdm_pke_sendv_mr_closed_returns_ecanceled(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_ope *txe;
+	struct efa_mr mock_mr = {0};
+	struct fi_msg msg = {0};
+	char buf[16];
+	struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = sizeof buf
+	};
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	int err, numaddr;
+	ssize_t ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(numaddr, 1);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	msg.addr = peer_addr;
+	msg.iov_count = 1;
+	msg.msg_iov = &iov;
+	msg.desc = NULL;
+	txe = efa_rdm_ep_alloc_txe(efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
+	assert_non_null(txe);
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	pkt_entry->ope = txe;
+	pkt_entry->peer = peer;
+
+	/* Simulate MR closed: ibv_mr is NULL */
+	mock_mr.ibv_mr = NULL;
+	pkt_entry->mr = (struct fid_mr *)&mock_mr;
+
+	ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
+	assert_int_equal(ret, -FI_ECANCELED);
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	efa_rdm_txe_release(txe);
+}
+
+/**
+ * @brief Verify efa_rdm_pke_write returns -FI_ECANCELED when MR is closed
+ * (ibv_mr set to NULL) while a write operation was queued.
+ */
+void test_efa_rdm_pke_write_mr_closed_returns_ecanceled(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_rma_context_pkt *rma_context_pkt;
+	struct efa_mr mock_mr = {0};
+	struct fi_msg msg = {0};
+	char buf[16];
+	struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = sizeof buf
+	};
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	int err, numaddr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(numaddr, 1);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	msg.addr = peer_addr;
+	msg.iov_count = 1;
+	msg.msg_iov = &iov;
+	msg.desc = NULL;
+	txe = efa_rdm_ep_alloc_txe(efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
+	assert_non_null(txe);
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	pkt_entry->ope = txe;
+	pkt_entry->peer = peer;
+
+	/* Set up rma_context_pkt in wiredata with a closed MR (ibv_mr = NULL) */
+	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
+	mock_mr.ibv_mr = NULL;
+	rma_context_pkt->desc = &mock_mr;
+	rma_context_pkt->local_buf = buf;
+	rma_context_pkt->seg_size = sizeof buf;
+
+	err = efa_rdm_pke_write(pkt_entry);
+	assert_int_equal(err, -FI_ECANCELED);
+
+	efa_rdm_pke_release_tx(pkt_entry);
+	efa_rdm_txe_release(txe);
 }
