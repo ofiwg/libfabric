@@ -931,6 +931,9 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 						 device_support_rdma_write),
 			flags);
 		if (!efa_mr->ibv_mr) {
+			/* error path that doesn't call ibv_reg doesn't set errno */
+			if (!errno)
+				errno = ENOTSUP;
 			EFA_WARN(FI_LOG_MR,
 				 "Unable to register MR of %zu bytes: %s, "
 				 "flags %ld, ibv pd: %p, total mr "
@@ -938,7 +941,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct f
 				 (flags & FI_MR_DMABUF) ?
 					 mr_attr->dmabuf->len :
 					 mr_attr->mr_iov->iov_len,
-				 fi_strerror(-errno), flags,
+				 strerror(errno), flags,
 				 efa_mr->domain->ibv_pd,
 				 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_sz),
 				 ofi_atomic_get64(&efa_mr->domain->ibv_mr_reg_ct));
