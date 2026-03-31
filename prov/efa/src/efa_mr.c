@@ -633,8 +633,8 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 		}
 		if (DMABUF_IS_NOT_SUPPORTED(p_info)) {
 			EFA_WARN(FI_LOG_MR,
-				 "Requested FI_MR_DMABUF, but dmabuf not supported for iface=%d\n",
-				 efa_mr->peer.iface);
+				 "Requested FI_MR_DMABUF, but dmabuf not supported for %s\n",
+				 fi_tostr(&efa_mr->peer.iface, FI_TYPE_HMEM_IFACE));
 			return NULL;
 		}
 
@@ -711,8 +711,8 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 		
 		/* get fd failed, no fallback */
 		EFA_WARN(FI_LOG_MR,
-			 "ofi_hmem_get_dmabuf_fd failed for iface=%d: ret=%d (%s)\n",
-			 efa_mr->peer.iface, ret, fi_strerror(-ret));
+			 "ofi_hmem_get_dmabuf_fd failed for %s: ret=%d (%s)\n",
+			 fi_tostr(&efa_mr->peer.iface, FI_TYPE_HMEM_IFACE), ret, fi_strerror(-ret));
 		p_info->dmabuf_supported_by_device = EFA_DMABUF_NOT_SUPPORTED;
 
 		return NULL;
