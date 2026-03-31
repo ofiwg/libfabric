@@ -485,6 +485,13 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 		pkt_entry = pkt_entry_vec[pkt_idx];
 		assert(pkt_entry->peer == peer);
 
+		if ((pkt_entry->mr && !((struct efa_mr *)pkt_entry->mr)->ibv_mr) ||
+		    (pkt_entry->payload_mr && !((struct efa_mr *)pkt_entry->payload_mr)->ibv_mr)) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "MR closed while send operation was queued\n");
+			return -FI_ECANCELED;
+		}
+
 		use_inline = (pkt_entry->pkt_size <= efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size &&
 	            !efa_mr_is_hmem((struct efa_mr *)pkt_entry->payload_mr));
 
@@ -681,7 +688,11 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	remote_buf = rma_context_pkt->remote_buf;
 	remote_key = rma_context_pkt->remote_key;
 
-	assert(((struct efa_mr *)desc)->ibv_mr);
+	if (!desc || !((struct efa_mr *)desc)->ibv_mr) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "MR closed while write operation was queued\n");
+		return -FI_ECANCELED;
+	}
 
 	self_comm = (txe->peer == NULL);
 	if (self_comm) {
