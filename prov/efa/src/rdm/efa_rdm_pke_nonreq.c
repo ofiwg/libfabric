@@ -786,11 +786,8 @@ void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 	/* Write send completion immediately to preserve DC semantics */
 	efa_rdm_txe_report_completion(txe);
 
-	/* Remove from ope_longcts_send_list since operation is complete */
-	if (txe->state == EFA_RDM_OPE_SEND) {
-		dlist_remove(&txe->entry);
-		txe->state = EFA_RDM_OPE_COMPLETE;
-	}
+	/* Set receipt received flag for DC operations */
+	txe->internal_flags |= EFA_RDM_TXE_RECEIPT_RECEIVED;
 
 	/* Only release txe if both conditions are met */
 	if (efa_rdm_txe_dc_ready_for_release(txe))
