@@ -164,33 +164,15 @@ static int run()
 
 			ft_stop();
 			if ((end.tv_sec - start.tv_sec) > timeout) {
-				if (post_rx) {
-					if (use_emulated_read || opts.transfer_size < 1048576) {
-						/*
-						 * RDMA read is not available. If long CTS is used and
-						 * sender exits before sending CTS data, receiver is
-						 * expected to timeout after sending the CTS packet
-						 * without getting a cq entry or cq error.
-						 */
-						printf("server timeout\n");
-						ret = 0;
-					} else {
-						/*
-						 * RDMA read is available.
-						 * When server posts a recv, it is expected
-						 * to get a cq entry or cq error.
-						 */
-						fprintf(stderr, "%ds timeout expired\n", timeout);
-						ret = -FI_ENODATA;
-					}
-				} else {
-					/*
-					 * If no recv is posted, it should just
-					 * poll some cq in the timeout range and exit.
-					 */
-					printf("server polls cq and exits\n");
-					ret = 0;
-				}
+				/*
+				 * Timeout is a valid outcome. The client's
+				 * RTM may never be transmitted if the QP is
+				 * destroyed before the device sends it. Also,
+				 * if long-CTS is used instead of longread,
+				 * no CQ error is expected on timeout.
+				 */
+				printf("%ds server timeout expired\n", timeout);
+				ret = 0;
 				goto out;
 			}
 
