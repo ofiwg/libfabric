@@ -31,6 +31,7 @@
  * SOFTWARE.
  */
 #include <ofi.h>
+#include <ofi_mr.h>
 
 #include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/fi_opx.h"
@@ -356,11 +357,11 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	} else {
 		opx_mr->dmabuf.fd      = -1;
 		opx_mr->iov	       = *iov;
-		opx_mr->base_addr      = opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : iov->iov_base;
 		opx_mr->attr.mr_iov    = &opx_mr->iov;
 		opx_mr->attr.iov_count = FI_OPX_IOV_LIMIT;
 		opx_mr->attr.offset    = offset;
 	}
+	opx_mr->base_addr   = opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : iov->iov_base;
 	opx_mr->attr.access = access;
 	opx_mr->flags	    = flags;
 	opx_mr->domain	    = opx_domain;
@@ -409,8 +410,26 @@ static int fi_opx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr, uin
 		errno = FI_EINVAL;
 		return -errno;
 	}
-	return fi_opx_mr_reg_internal(fid, attr->mr_iov, attr->iov_count, attr->access, attr->offset,
-				      attr->requested_key, flags, mr, attr->context, attr);
+
+	const struct iovec *iov;
+	struct iovec	    dmabuf_iov[FI_OPX_IOV_LIMIT];
+	if (flags & FI_MR_DMABUF) {
+		if (!attr->dmabuf || attr->iov_count == 0 || attr->iov_count > FI_OPX_IOV_LIMIT) {
+			errno = FI_EINVAL;
+			return -errno;
+		}
+		ofi_mr_get_iov_from_dmabuf(dmabuf_iov, attr->dmabuf, attr->iov_count);
+		iov = dmabuf_iov;
+	} else {
+		if (!attr->mr_iov || attr->iov_count == 0 || attr->iov_count > FI_OPX_IOV_LIMIT) {
+			errno = FI_EINVAL;
+			return -errno;
+		}
+		iov = attr->mr_iov;
+	}
+
+	return fi_opx_mr_reg_internal(fid, iov, attr->iov_count, attr->access, attr->offset, attr->requested_key, flags,
+				      mr, attr->context, attr);
 }
 
 int fi_opx_bind_ep_mr(struct fid_ep *ep, struct fid_mr *mr, uint64_t flags)
