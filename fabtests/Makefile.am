@@ -30,6 +30,7 @@ bin_PROGRAMS = \
 	functional/fi_rdm_shared_av \
 	functional/fi_cm_data \
 	functional/fi_multi_mr \
+	functional/fi_mr_abort \
 	functional/fi_rdm_multi_domain \
 	functional/fi_multi_ep \
 	functional/fi_recv_cancel \
@@ -176,6 +177,7 @@ nobase_dist_config_DATA = \
 	pytest/efa/conftest.py \
 	pytest/efa/efa_common.py \
 	pytest/efa/test_flood_peer.py \
+	pytest/efa/test_mr_abort.py \
 	pytest/efa/test_from_default.py \
 	pytest/efa/test_av.py \
 	pytest/efa/test_cq.py \
@@ -333,6 +335,10 @@ functional_fi_multi_ep_LDADD = libfabtests.la
 functional_fi_multi_mr_SOURCES = \
 	functional/multi_mr.c
 functional_fi_multi_mr_LDADD = libfabtests.la
+
+functional_fi_mr_abort_SOURCES = \
+	functional/mr_abort.c
+functional_fi_mr_abort_LDADD = libfabtests.la
 
 functional_fi_unexpected_msg_SOURCES = \
 	functional/unexpected_msg.c
