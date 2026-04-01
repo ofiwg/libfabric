@@ -313,6 +313,7 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
 	(*qp)->ibv_qp_ex = ibv_qp_to_qp_ex((*qp)->ibv_qp);
 	/* Initialize it explicitly for safety */
 	(*qp)->data_path_direct_enabled = false;
+	(*qp)->base_ep = init_attr_ex->qp_context;
 	return FI_SUCCESS;
 }
 
@@ -392,15 +393,12 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	if (ret)
 		return ret;
 
-	base_ep->qp->base_ep = base_ep;
-
 	if (create_user_recv_qp) {
 		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass, tx_cq->unsolicited_write_recv_enabled);
 		if (ret) {
 			efa_base_ep_destruct_qp(base_ep);
 			return ret;
 		}
-		base_ep->user_recv_qp->base_ep = base_ep;
 	}
 
 #if HAVE_EFA_DATA_PATH_DIRECT
