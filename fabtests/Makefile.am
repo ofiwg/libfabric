@@ -30,6 +30,7 @@ bin_PROGRAMS = \
 	functional/fi_rdm_shared_av \
 	functional/fi_cm_data \
 	functional/fi_multi_mr \
+	functional/fi_mr_abort \
 	functional/fi_rdm_multi_domain \
 	functional/fi_multi_ep \
 	functional/fi_recv_cancel \
@@ -334,6 +335,10 @@ functional_fi_multi_ep_LDADD = libfabtests.la
 functional_fi_multi_mr_SOURCES = \
 	functional/multi_mr.c
 functional_fi_multi_mr_LDADD = libfabtests.la
+
+functional_fi_mr_abort_SOURCES = \
+	functional/mr_abort.c
+functional_fi_mr_abort_LDADD = libfabtests.la
 
 functional_fi_unexpected_msg_SOURCES = \
 	functional/unexpected_msg.c
