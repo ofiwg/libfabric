@@ -129,6 +129,13 @@ memory_type_list_all = memory_type_list_bi_dir + [
     pytest.param("rocr_to_host", marks=pytest.mark.rocr_memory),
 ]
 
+memory_type_list_symm = [
+    pytest.param("host_to_host"),
+    pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+    pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
+]
+
 hmem_type_list = [
     pytest.param("cuda", marks=pytest.mark.cuda_memory),
     pytest.param("neuron", marks=pytest.mark.neuron_memory),
@@ -144,6 +151,10 @@ def memory_type(request):
 
 @pytest.fixture(scope="module", params=memory_type_list_bi_dir)
 def memory_type_bi_dir(request):
+    return request.param
+
+@pytest.fixture(scope="module", params=memory_type_list_symm)
+def memory_type_symm(request):
     return request.param
 
 @pytest.fixture(scope="module", params=["read", "writedata", "write"])
