@@ -177,6 +177,7 @@ nobase_dist_config_DATA = \
 	pytest/efa/conftest.py \
 	pytest/efa/efa_common.py \
 	pytest/efa/test_flood_peer.py \
+	pytest/efa/test_mr_abort.py \
 	pytest/efa/test_from_default.py \
 	pytest/efa/test_av.py \
 	pytest/efa/test_cq.py \
