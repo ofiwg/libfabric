@@ -84,6 +84,7 @@ fabtests/functional/fi_*
 fabtests/unit/fi_*
 fabtests/multinode/fi_*
 fabtests/prov/efa/src/fi_efa*
+fabtests/prov/efa/src/fi_mr_abort
 fabtests/prov/lpp/src/lpp_regression
 fabtests/prov/verbs/src/fi_*
 pingpong/fi_*
