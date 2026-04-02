@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cntr" "3" "2026\-02\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cntr" "3" "2026\-04\-02" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -280,8 +280,8 @@ operations complete, the counter behavior will be undefined.
 Applications that need to track the total number of error operations
 beyond the provider\[cq]s counter limits are responsible for detecting
 and handling this condition by resetting the error counters with
-\f[V]fi_cntr_set\f[R] before they reach the maximum, or it could result
-in incorrect values.
+\f[V]fi_cntr_seterr\f[R] before they reach the maximum, or it could
+result in incorrect values.
 .SS fi_cntr_add
 .PP
 This adds the user-specified value to the counter.
