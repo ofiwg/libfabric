@@ -404,7 +404,7 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 			reg_ct = ofi_atomic_dec64(&efa_mr->domain->ibv_mr_reg_ct);
 			reg_sz = ofi_atomic_sub64(&efa_mr->domain->ibv_mr_reg_sz, ibv_mr_size);
 			EFA_INFO(FI_LOG_MR, "Deregistered memory of size %zu for ibv pd %p, total mr reg size %zd, mr reg count %zd\n",
-				 efa_mr->ibv_mr->length, efa_mr->domain->ibv_pd, reg_sz, reg_ct);
+				 ibv_mr_size, efa_mr->domain->ibv_pd, reg_sz, reg_ct);
 		}
 	}
 
