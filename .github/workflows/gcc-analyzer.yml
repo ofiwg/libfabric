@@ -1,0 +1,67 @@
+name: GCC Analyzer
+on: [push, pull_request]
+permissions: {}
+env:
+  APT_PACKAGES: >-
+    abi-compliance-checker
+    abi-dumper
+    build-essential
+    debhelper
+    fakeroot
+    gcc
+    git
+    liblttng-ust-dev
+    libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev
+    libnuma-dev
+    libudev-dev
+    uuid-dev
+    make
+    ninja-build
+    pandoc
+    pkg-config
+    python-is-python3
+    rpm
+    sparse
+    valgrind
+    wget
+  OFI_PROVIDER_FLAGS: >-
+    --enable-efa=$PWD/rdma-core/build
+    --enable-mrail
+    --enable-psm3=$PWD/rdma-core/build
+    --enable-rxd
+    --enable-rxm
+    --enable-shm
+    --enable-tcp
+    --enable-udp
+    --enable-usnic
+    --enable-verbs=$PWD/rdma-core/build
+    --enable-lpp
+  RDMA_CORE_PATH: '$PWD/rdma-core/build'
+  RDMA_CORE_VERSION: v35.0
+jobs:
+  gcc-analyzer:
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.APT_PACKAGES }}
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v4.3.1
+      - name: GCC -fanalyzer
+        run: |
+          set -x
+          git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
+          pushd rdma-core; bash build.sh; popd
+          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
+          ./autogen.sh
+          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} --with-lttng
+          make -j 2 AM_CFLAGS="-Wall -Werror -fanalyzer"
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: gcc-analyzer-config.log
+          path: config.log
