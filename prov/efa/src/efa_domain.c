@@ -299,7 +299,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			struct fid_mr *mr_fid;
 			uint64_t mr_flags = FI_READ | FI_WRITE;
 
-			size_t page_size = ofi_get_page_size();
+			long page_size = ofi_get_page_size();
 			if (page_size <= 0) {
 				EFA_WARN(FI_LOG_DOMAIN, "Failed to get page size\n");
 				goto err_free;
