@@ -573,7 +573,7 @@ static void efa_rdm_mr_close_check_inflight_ope(struct efa_mr *efa_mr)
 static int efa_rdm_mr_close(fid_t fid)
 {
 	struct efa_rdm_mr *efa_rdm_mr;
-	int ret, err;
+	int ret = 0, err;
 
 	efa_rdm_mr = container_of(fid, struct efa_rdm_mr, efa_mr.mr_fid.fid);
 	if (efa_env.track_mr)
@@ -589,9 +589,11 @@ static int efa_rdm_mr_close(fid_t fid)
 		efa_rdm_mr->shm_mr = NULL;
 	}
 
-	ret = efa_rdm_mr_dereg_impl(efa_rdm_mr);
-	if (ret)
-		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to close efa_rdm_mr", -ret);
+	err = efa_rdm_mr_dereg_impl(efa_rdm_mr);
+	if (err) {
+		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to close efa_rdm_mr", -err);
+		ret = ret ? ret : err;
+	}
 
 	free(efa_rdm_mr);
 	return ret;
