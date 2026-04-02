@@ -5984,7 +5984,7 @@ operations complete, the counter behavior will be undefined.
 Applications that need to track the total number of error operations
 beyond the provider's counter limits are responsible for detecting and
 handling this condition by resetting the error counters with
-`fi_cntr_set` before they reach the maximum, or it could result in
+`fi_cntr_seterr` before they reach the maximum, or it could result in
 incorrect values.
 
 ## fi_cntr_add
