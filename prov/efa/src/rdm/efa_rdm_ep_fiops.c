@@ -1051,13 +1051,13 @@ void efa_rdm_ep_deregister_ibv_cqs(struct efa_rdm_ep *ep)
 	if (tx_cq && !ofi_atomic_get32(&tx_cq->efa_cq.util_cq.ref)) {
 		efa_ibv_cq_poll_list_remove(&tx_cq->ibv_cq_poll_list, &tx_cq->efa_cq.util_cq.ep_list_lock, &tx_cq->efa_cq.ibv_cq);
 		efa_rdm_cq_wait_del_ibv_cq(tx_cq, &tx_cq->efa_cq.ibv_cq);
-		if (rx_cq) {
+		if (rx_cq && rx_cq != tx_cq) {
 			efa_ibv_cq_poll_list_remove(&rx_cq->ibv_cq_poll_list, &rx_cq->efa_cq.util_cq.ep_list_lock, &tx_cq->efa_cq.ibv_cq);
 			efa_rdm_cq_wait_del_ibv_cq(rx_cq, &tx_cq->efa_cq.ibv_cq);
 		}
 	}
 
-	if (rx_cq && !ofi_atomic_get32(&rx_cq->efa_cq.util_cq.ref)) {
+	if (rx_cq && rx_cq != tx_cq && !ofi_atomic_get32(&rx_cq->efa_cq.util_cq.ref)) {
 		efa_ibv_cq_poll_list_remove(&rx_cq->ibv_cq_poll_list, &rx_cq->efa_cq.util_cq.ep_list_lock, &rx_cq->efa_cq.ibv_cq);
 		efa_rdm_cq_wait_del_ibv_cq(rx_cq, &rx_cq->efa_cq.ibv_cq);
 		if (tx_cq) {
