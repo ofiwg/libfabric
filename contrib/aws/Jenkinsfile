@@ -98,6 +98,107 @@ def get_cluster_name(build_tag, os, instance_type) {
     return cluster_name
 }
 
+/*
+ * Paths that should NOT trigger PR CI testing. An exclude list is used instead
+ * of an include list so that new paths trigger CI by default. At worst this
+ * results in extra testing on non-relevant code, but avoids missing coverage
+ * on relevant code which is much worse.
+ * Current implicit include list (paths NOT excluded):
+ *   Providers: prov/coll/, prov/efa/, prov/hook/, prov/mrail/, prov/rxd/, prov/rxm/,
+ *              prov/shm/, prov/sm2/, prov/sockets/, prov/tcp/, prov/udp/, prov/util/
+ *   Core:      src/, include/
+ *   Tests:     fabtests/
+ *   CI:        contrib/aws/
+ *   Build:     Makefile.am, configure.ac, autogen.sh, config/
+ *   Windows:   libfabric.vcxproj, libfabric.sln, Libfabric.Build.Default.props,
+ *              libfabric.def, *.vcxproj.filters, strerror.vcxproj, pingpong.vcxproj,
+ *              info.vcxproj, libfabric.pc.in, libfabric.map.in, libfabric.spec.in
+ */
+@Field def ci_skip_paths = [
+    // Documentation
+    "man/",
+    "docs/",
+    "NEWS.md",
+    "AUTHORS",
+    "CONTRIBUTORS",
+    "COPYING",
+    "README",
+    "README.md",
+    "SECURITY.md",
+    // CI configs not related to AWS PR CI
+    ".github/",
+    ".gitignore",
+    ".gitattributes",
+    ".mailmap",
+    ".clang-format",
+    ".appveyor.yml",
+    ".appveyor.ps1",
+    ".travis.yml",
+    // Providers excluded from AWS CI (unlisted providers will trigger CI)
+    "prov/cxi/",
+    "prov/lnx/",
+    "prov/lpp/",
+    "prov/opx/",
+    "prov/psm2/",
+    "prov/psm3/",
+    "prov/ucx/",
+    "prov/usnic/",
+    "prov/verbs/",
+    // Other non-CI-relevant paths
+    "bindings/",  // Bindings have a Github action test
+    "Cargo.toml",
+    "examples/",
+    "util/",
+    "contrib/cray/",
+    "contrib/intel/",
+    "contrib/man2pdf/",
+    "contrib/buildrpm/",
+]
+
+def check_for_relevant_changes() {
+    sh "git fetch origin ${env.CHANGE_TARGET}:refs/remotes/origin/${env.CHANGE_TARGET} --no-tags --no-recurse-submodules"
+    def all_changes = sh(
+        script: "git diff --name-only origin/${env.CHANGE_TARGET}...HEAD",
+        returnStdout: true
+    ).trim()
+    if (!all_changes) {
+        echo "No changes detected, skipping tests."
+        env.SKIP_TESTS = 'true'
+        return
+    }
+    def relevant = all_changes.split('\n').findAll { file ->
+        !ci_skip_paths.any { path -> file.startsWith(path) }
+    }
+    if (relevant) {
+        echo "Relevant changes detected:\n${relevant.join('\n')}"
+    } else {
+        echo "No relevant changes found in monitored paths. All changes:\n${all_changes}"
+        currentBuild.result = 'SUCCESS'
+        env.SKIP_TESTS = 'true'
+    }
+}
+
+def post_build_actions() {
+    if (env.SKIP_TESTS == 'true') {
+        return
+    }
+    sh "rm -rf \$PWD/outputs && cp -r ${portafiducia_path}/tests/outputs/ \${PWD}/outputs"
+    sh 'find outputs -name "*.xml" | xargs du -shc'
+    junit testResults: 'outputs/**/*.xml', keepLongStdio: false
+    archiveArtifacts artifacts: 'outputs/**/*.*'
+    // Try To Cleanup Resources
+    def regions = ["us-east-1", "eu-north-1", "us-west-2"]
+    def cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
+    regions.each { region ->
+        sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
+    }
+    // Windows Cluster, has a different name
+    sh """
+        . ${venv_path}/bin/activate
+        ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
+    """
+}
+
 def get_single_node_windows_test_stage_with_lock(stage_name, lock_label) {
     /*
      * Get Windows Stage
@@ -161,7 +262,15 @@ pipeline {
                 checkout scm
             }
         }
+        stage("Check for relevant changes") {
+            steps {
+                script {
+                    check_for_relevant_changes()
+                }
+            }
+        }
         stage("Download and extract PortaFiducia") {
+            when { not { environment name: 'SKIP_TESTS', value: 'true' } }
             steps {
                 script {
                     download_and_extract_portafiducia(portafiducia_path)
@@ -169,6 +278,7 @@ pipeline {
             }
         }
         stage("Install PortaFiducia") {
+            when { not { environment name: 'SKIP_TESTS', value: 'true' } }
             steps {
                 script {
                     install_porta_fiducia()
@@ -177,6 +287,7 @@ pipeline {
             }
         }
         stage("Test EFA provider") {
+            when { not { environment name: 'SKIP_TESTS', value: 'true' } }
             steps {
                 script {
                     def stages = [:]
@@ -281,22 +392,8 @@ pipeline {
     }
     post {
         always {
-            sh "rm -rf \$PWD/outputs && cp -r ${portafiducia_path}/tests/outputs/ \${PWD}/outputs"
-            sh 'find outputs -name "*.xml" | xargs du -shc'
-            junit testResults: 'outputs/**/*.xml', keepLongStdio: false
-            archiveArtifacts artifacts: 'outputs/**/*.*'
             script {
-                // Try To Cleanup Resources
-                def regions = ["us-east-1", "eu-north-1", "us-west-2"]
-                def cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
-                regions.each { region ->
-                    sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
-                }
-                // Windows Cluster, has a different name
-                sh """
-                    . ${venv_path}/bin/activate
-                    ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
-                """
+                post_build_actions()
             }
         }
         cleanup {
