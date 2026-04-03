@@ -186,7 +186,7 @@ static void print_opts_usage(char *name, char *desc)
 
 int main(int argc, char **argv)
 {
-	int op, ret, i, cleanup_ret;
+	int op, i, ret = 0, cleanup_ret = 0;
 	struct fi_info *save;
 	bool address_reuse = false;
 
@@ -232,6 +232,7 @@ int main(int argc, char **argv)
 			ret = run_client(i, address_reuse);
 			if (ret) {
 				FT_PRINTERR("run_client", -ret);
+				(void) ft_free_res();
 				goto out;
 			}
 			// Reuse hints for each iteration without using fi_dupinfo
@@ -246,8 +247,9 @@ int main(int argc, char **argv)
 		ret = run_server();
 		if (ret)
 			FT_PRINTERR("run_server", -ret);
+
+		cleanup_ret = ft_free_res();
 	}
 out:
-	cleanup_ret = ft_free_res();
 	return ft_exit_code(ret ? ret : cleanup_ret);
 }
