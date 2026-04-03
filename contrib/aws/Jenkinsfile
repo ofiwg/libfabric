@@ -8,6 +8,8 @@ milestone(buildNumber)
 
 import groovy.transform.Field
 @Field boolean build_ok = true
+@Field def venv_path = "/tmp/venv"
+@Field def portafiducia_path = "/tmp/PortaFiducia"
 
 
 def get_portafiducia_download_path() {
@@ -34,13 +36,13 @@ def install_porta_fiducia() {
     /*
      * Install PortaFiducia in a (new) virtual environment.
      */
-    sh '''
-        python3 -m venv venv
-        . venv/bin/activate
+    sh """
+        python3 -m venv ${venv_path}
+        . ${venv_path}/bin/activate
         pip install --upgrade pip
         pip install --upgrade awscli
-        pip install -e PortaFiducia
-    '''
+        pip install -e ${portafiducia_path}
+    """
 }
 
 def kill_all_clusters(instance_type, region) {
@@ -48,7 +50,7 @@ def kill_all_clusters(instance_type, region) {
         script: "echo ${instance_type.take(10)} | tr -d '.\\n'",
         returnStdout: true
     )
-    sh ". venv/bin/activate; ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name \'*${instance_type_without_period}*\' --region ${region} || true"
+    sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name \'*${instance_type_without_period}*\' --region ${region} || true"
 }
 
 def run_test_orchestrator_once(run_name, build_tag, os, instance_type, instance_count, region, addl_args) {
@@ -62,7 +64,7 @@ def run_test_orchestrator_once(run_name, build_tag, os, instance_type, instance_
 
     def cluster_name = get_cluster_name(build_tag, os, instance_type)
     def args = "--os ${os} --instance-type ${instance_type} --instance-count ${instance_count} --region ${region} --cluster-name ${cluster_name} ${addl_args} --junit-xml outputs/${cluster_name}.xml"
-    sh ". venv/bin/activate; cd PortaFiducia/tests && ./test_orchestrator.py ${args}"
+    sh ". ${venv_path}/bin/activate; cd ${portafiducia_path}/tests && ./test_orchestrator.py ${args}"
 }
 
 def get_random_string(len) {
@@ -104,8 +106,8 @@ def get_single_node_windows_test_stage_with_lock(stage_name, lock_label) {
         stage("${stage_name}") {
             lock(label: lock_label, quantity: 1) {
                 sh """
-                    . venv/bin/activate;
-                    cd PortaFiducia/scripts;
+                    . ${venv_path}/bin/activate;
+                    cd ${portafiducia_path}/scripts;
                     export PULL_REQUEST_ID=${env.CHANGE_ID};
                     env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py --odcr cr-0cdbaaac459287611 --ci public --s3-bucket-name libfabric-ci-windows-prod-test-output --pull-request-id ${env.CHANGE_ID};
                 """
@@ -162,7 +164,7 @@ pipeline {
         stage("Download and extract PortaFiducia") {
             steps {
                 script {
-                    download_and_extract_portafiducia('PortaFiducia')
+                    download_and_extract_portafiducia(portafiducia_path)
                 }
             }
         }
@@ -279,20 +281,21 @@ pipeline {
     }
     post {
         always {
-            sh 'find PortaFiducia/tests/outputs -name "*.xml" | xargs du -shc'
-            junit testResults: 'PortaFiducia/tests/outputs/**/*.xml', keepLongStdio: false
-            archiveArtifacts artifacts: 'PortaFiducia/tests/outputs/**/*.*'
+            sh "rm -rf \$PWD/outputs && cp -r ${portafiducia_path}/tests/outputs/ \${PWD}/outputs"
+            sh 'find outputs -name "*.xml" | xargs du -shc'
+            junit testResults: 'outputs/**/*.xml', keepLongStdio: false
+            archiveArtifacts artifacts: 'outputs/**/*.*'
             script {
                 // Try To Cleanup Resources
                 def regions = ["us-east-1", "eu-north-1", "us-west-2"]
                 def cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
                 regions.each { region ->
-                    sh ". venv/bin/activate; ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
+                    sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
                 }
                 // Windows Cluster, has a different name
                 sh """
-                    . venv/bin/activate
-                    ./PortaFiducia/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
+                    . ${venv_path}/bin/activate
+                    ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
                 """
             }
         }
