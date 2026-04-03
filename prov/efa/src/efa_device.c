@@ -488,6 +488,8 @@ static char *get_sysfs_path(void)
 
 	if (env) {
 		sysfs_path = strndup(env, IBV_SYSFS_PATH_MAX);
+		if (!sysfs_path)
+			return NULL;
 		len = strlen(sysfs_path);
 		while (len > 0 && sysfs_path[len - 1] == '/') {
 			--len;
