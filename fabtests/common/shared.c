@@ -1079,6 +1079,14 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 		hints->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
+	/**
+	 * Provider may not satisfy the tested max message size.
+	 * Make hints request such max size to allow early
+	 * checking in fi_getinfo.
+	 */
+	hints->ep_attr->max_msg_size = opts.options & FT_OPT_SIZE ?
+		  opts.transfer_size : test_size[TEST_CNT - 1].size;
+
 	/* ft_cqdata_opcodes enum start from 1, 0 means no cq data */
 	if (opts.cqdata_op && allow_rx_cq_data)
 		hints->mode |= FI_RX_CQ_DATA;
