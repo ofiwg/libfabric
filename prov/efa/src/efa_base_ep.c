@@ -899,7 +899,7 @@ void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
 			if (tx_cq && !ofi_atomic_get32(&tx_cq->util_cq.ref))
 				efa_ibv_cq_poll_list_remove(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &tx_cq->ibv_cq);
 
-			if (rx_cq && !ofi_atomic_get32(&rx_cq->util_cq.ref))
+			if (rx_cq && rx_cq != tx_cq && !ofi_atomic_get32(&rx_cq->util_cq.ref))
 				efa_ibv_cq_poll_list_remove(&efa_cntr->ibv_cq_poll_list, &efa_cntr->util_cntr.ep_list_lock, &rx_cq->ibv_cq);
 		}
 	}
