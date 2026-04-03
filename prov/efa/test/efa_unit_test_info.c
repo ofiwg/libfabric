@@ -1080,3 +1080,113 @@ void test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_support
 {
 	test_info_direct_rma_common(true, true, false, 0, 4, false, true);
 }
+
+/**
+ * @brief Test that efa-direct succeeds when hints request FI_MSG only with small max_msg_size
+ */
+void test_info_direct_msg_only_small_max_msg_size_success()
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+
+	/* Request FI_MSG only with small max_msg_size (within device MSG limit) */
+	hints->caps = FI_MSG; /* Explicitly set to FI_MSG only */
+	hints->ep_attr->max_msg_size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz - 1;
+
+	/* Should succeed */
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+	assert_int_equal(info->ep_attr->max_msg_size, g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz);
+	fi_freeinfo(info);
+
+	fi_freeinfo(hints);
+}
+
+/**
+ * @brief Test that efa-direct fails when hints request FI_MSG only with large max_msg_size
+ */
+void test_info_direct_msg_only_large_max_msg_size_fail()
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+
+	/* Request FI_MSG only with large max_msg_size (exceeds device MSG limit) */
+	hints->caps = FI_MSG; /* Explicitly set to FI_MSG only */
+	hints->ep_attr->max_msg_size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz + 1;
+
+	/* Should fail with -FI_ENODATA */
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info);
+	assert_int_equal(err, -FI_ENODATA);
+	assert_null(info);
+
+	fi_freeinfo(hints);
+}
+
+/**
+ * @brief Test that efa-direct succeeds when hints request FI_MSG+FI_RMA with large max_msg_size
+ */
+void test_info_direct_msg_rma_large_max_msg_size_success()
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	/* Skip test if RDMA read or write not supported */
+	if (!efa_device_support_rdma_read() || !efa_device_support_rdma_write()) {
+		skip();
+		return;
+	}
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+
+	/* Request FI_MSG + FI_RMA with large max_msg_size (> 8KB but within device RDMA limit) */
+	hints->caps = FI_MSG | FI_RMA;
+	hints->mode |= FI_RX_CQ_DATA; /* Support FI_RX_CQ_DATA for RMA */
+	hints->ep_attr->max_msg_size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz + 1024; /* > 8KB */
+
+	/* Should succeed */
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+	assert_int_equal(info->ep_attr->max_msg_size, g_efa_selected_device_list[0].max_rdma_size);
+	fi_freeinfo(info);
+
+	fi_freeinfo(hints);
+}
+
+/**
+ * @brief Test that efa-direct fails when hints request FI_MSG+FI_RMA with too large max_msg_size
+ */
+void test_info_direct_msg_rma_too_large_max_msg_size_fail()
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	/* Skip test if RDMA read or write not supported */
+	if (!efa_device_support_rdma_read() || !efa_device_support_rdma_write()) {
+		skip();
+		return;
+	}
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+
+	/* Request FI_MSG + FI_RMA with too large max_msg_size (> device RDMA limit) */
+	hints->caps = FI_MSG | FI_RMA;
+	hints->mode |= FI_RX_CQ_DATA; /* Support FI_RX_CQ_DATA for RMA */
+	hints->ep_attr->max_msg_size = g_efa_selected_device_list[0].max_rdma_size + 1;
+
+	/* Should fail with -FI_ENODATA */
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info);
+	assert_int_equal(err, -FI_ENODATA);
+	assert_null(info);
+
+	fi_freeinfo(hints);
+}

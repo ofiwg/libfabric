@@ -520,8 +520,19 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		/* When user doesn't request FI_RMA, the max_msg_size should be returned
 		 * as the MSG only as RMA will not be used.
 		 */
-		if (!(hints->caps & FI_RMA))
+		if (!(hints->caps & FI_RMA)) {
+			/**
+			 * If users only request FI_MSG, and requests a max msg size > the device's
+			 * max MSG size (MTU ~ 8KB), efa-direct should fail the fi_getinfo because
+			 * it cannot meet the requested max_msg_size.
+			 */
+			if (hints->ep_attr && hints->ep_attr->max_msg_size > g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz) {
+				EFA_INFO(FI_LOG_CORE, "Requested max_msg_size %zu exceeds device max MSG size %u\n",
+					 hints->ep_attr->max_msg_size, g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz);
+				return -FI_ENODATA;
+			}
 			info->ep_attr->max_msg_size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz;
+		}
 	}
 
 	/* Print a warning and use FI_AV_TABLE if the app requests FI_AV_MAP */
