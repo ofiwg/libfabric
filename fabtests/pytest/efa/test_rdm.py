@@ -11,6 +11,15 @@ def test_rdm_efa(cmdline_args, completion_semantic, fabric):
     test = ClientServerTest(cmdline_args, "fi_rdm", completion_semantic=completion_semantic, fabric=fabric)
     test.run()
 
+# Test rdm bw with 1M msg size, without specifying fabric.
+# It should skip efa-direct and choose efa fabric as the
+# former one doesn't support 1M msg size for FI_MSG
+@pytest.mark.functional
+def test_rdm_bw_efa_msg_1M(cmdline_args, completion_semantic):
+    from common import ClientServerTest
+    test = ClientServerTest(cmdline_args, "fi_rdm_bw -S 1048576", completion_semantic=completion_semantic, fabric=None)
+    test.run()
+
 # This test skips efa-direct because it requests FI_ORDER_SAS
 @pytest.mark.functional
 def test_rdm_bw_functional_efa(cmdline_args, completion_semantic):
