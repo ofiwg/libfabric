@@ -251,6 +251,10 @@ void test_info_direct_rma_with_rx_cq_data_when_no_unsolicited_write_recv();
 void test_info_direct_rma_without_rx_cq_data_when_no_unsolicited_write_recv();
 void test_info_direct_no_rma_no_rx_cq_data_when_no_unsolicited_write_recv();
 void test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_supported();
+void test_info_direct_msg_only_small_max_msg_size_success();
+void test_info_direct_msg_only_large_max_msg_size_fail();
+void test_info_direct_msg_rma_large_max_msg_size_success();
+void test_info_direct_msg_rma_too_large_max_msg_size_fail();
 /* end efa_unit_test_info.c */
 
 void test_efa_srx_min_multi_recv_size();
