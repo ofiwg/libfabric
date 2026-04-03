@@ -25,6 +25,15 @@ memory_type_list_all = memory_type_list_bi_dir + [
     pytest.param("rocr_to_host", marks=pytest.mark.rocr_memory),
 ]
 
+hmem_type_list = [
+    pytest.param("cuda", marks=pytest.mark.cuda_memory),
+    pytest.param("neuron", marks=pytest.mark.neuron_memory),
+]
+
+@pytest.fixture(scope="module", params=hmem_type_list)
+def hmem_type(request):
+    return request.param
+
 @pytest.fixture(scope="module", params=memory_type_list_all)
 def memory_type(request):
     return request.param
