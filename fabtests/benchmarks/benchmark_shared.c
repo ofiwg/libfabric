@@ -214,8 +214,10 @@ int pingpong(void)
 		return ret;
 	}
 
-	if (inject_size_set)
-		inject_size = opts.inject_size;
+	if (inject_size_set && inject_size < opts.inject_size) {
+		FT_ERR("Provider does not support inject size %zu (max size %zu)", opts.inject_size, inject_size);
+		return -FI_EINVAL;
+	}
 
 	if (opts.options & FT_OPT_ENABLE_HMEM)
 		inject_size = 0;
@@ -305,8 +307,10 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		return ret;
 	}
 
-	if (inject_size_set)
-		inject_size = opts.inject_size;
+	if (inject_size_set && inject_size < opts.inject_size) {
+		FT_ERR("Provider does not support inject size %zu (max size %zu)", opts.inject_size, inject_size);
+		return -FI_EINVAL;
+	}
 
 	if (ft_check_opts(FT_OPT_ENABLE_HMEM))
 		inject_size = 0;
@@ -400,8 +404,10 @@ int rma_tx_completion(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		return ret;
 	}
 
-	if (inject_size_set)
-		inject_size = opts.inject_size;
+	if (inject_size_set && inject_size < opts.inject_size) {
+		FT_ERR("Provider does not support inject size %zu (max size %zu)", opts.inject_size, inject_size);
+		return -FI_EINVAL;
+	}
 
 	if (ft_check_opts(FT_OPT_ENABLE_HMEM))
 		inject_size = 0;
@@ -529,8 +535,10 @@ int bandwidth(void)
 		return ret;
 	}
 
-	if (inject_size_set)
-		inject_size = opts.inject_size;
+	if (inject_size_set && inject_size < opts.inject_size) {
+		FT_ERR("Provider does not support inject size %zu (max size %zu)", opts.inject_size, inject_size);
+		return -FI_EINVAL;
+	}
 
 	if (opts.options & FT_OPT_ENABLE_HMEM)
 		inject_size = 0;
@@ -671,8 +679,10 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		return ret;
 	}
 
-	if (inject_size_set)
-		inject_size = opts.inject_size;
+	if (inject_size_set && inject_size < opts.inject_size) {
+		FT_ERR("Provider does not support inject size %zu (max size %zu)", opts.inject_size, inject_size);
+		return -FI_EINVAL;
+	}
 
 	if (ft_check_opts(FT_OPT_ENABLE_HMEM))
 		inject_size = 0;
