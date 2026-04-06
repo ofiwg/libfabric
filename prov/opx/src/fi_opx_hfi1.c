@@ -1823,6 +1823,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 			       params->tid_info.npairs ? "EXPECTED TID" : "EAGER", params, params->rzv_comp,
 			       params->rzv_comp->context);
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
+			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 			return -FI_EAGAIN;
 		}
 	}
@@ -1839,6 +1840,7 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 		       params->tid_info.npairs ? "EXPECTED TID" : "EAGER", params, params->rzv_comp,
 		       params->rzv_comp->context);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -3524,6 +3526,7 @@ int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work)
 		fi_opx_shm_dynamic_tx_connect(OPX_SHM_TRUE, opx_ep, params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RMA_RTS, 0, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -3533,6 +3536,7 @@ int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work)
 		params->u32_extended_rx, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
+		OPX_TRACE_TX_END_RC(OPX_TRACE_EVENT_TX_RMA_RTS, rc, 0, 0);
 		return rc;
 	}
 
@@ -3711,6 +3715,7 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 							opx_ep->daos_info.rank_inst, &rc);
 
 				if (!hdr) {
+					OPX_TRACE_TX_END_RC(OPX_TRACE_EVENT_TX_RZV_DATA, rc, is_shm, 0);
 					return rc;
 				}
 
@@ -4934,6 +4939,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 			context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 			if (OFI_UNLIKELY(context == NULL)) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+				OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_TX_RZV_RTS, total_len, tag);
 				return -FI_ENOMEM;
 			}
 			context->err_entry.err	      = 0;
@@ -5061,6 +5067,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
 			opx_tx->pio_state->qw0 = pio_state.qw0;
 			OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
+			OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_TX_RZV_RTS, total_len, tag);
 			return -FI_ENOMEM;
 		}
 		context->err_entry.err	      = 0;
@@ -5087,6 +5094,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		opx_tx->pio_state->qw0 = pio_state.qw0;
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, total_len, tag);
 		return -FI_EAGAIN;
 	}
 
