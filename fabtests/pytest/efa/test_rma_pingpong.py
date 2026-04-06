@@ -40,3 +40,13 @@ def test_rma_pingpong_range_no_inject(cmdline_args, operation_type, rma_bw_compl
     command = command + " -o " + operation_type
     efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
                                 memory_type_bi_dir, rma_pingpong_message_size, fabric=rma_fabric)
+
+
+@pytest.mark.functional
+@pytest.mark.parametrize("operation_type", ["writedata"])
+@pytest.mark.parametrize("inject_size", [64])
+def test_rma_pingpong_wide_wqe(cmdline_args, operation_type, inject_size):
+    """Test RMA pingpong with wide WQE inject."""
+    command = "fi_rma_pingpong -e rdm -E -o {} -j {} -S {} --expect-error 61".format(operation_type, inject_size, inject_size)
+    efa_run_client_server_test(cmdline_args, command, "short", "delivery_complete","host_to_host", "all", fabric="efa-direct")
+    pytest.xfail("fi_info is expected to return FI_ENODATA on hardware without wide WQE support. Remove --expect-error and this line once FW deployed")
