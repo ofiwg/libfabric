@@ -35,6 +35,7 @@
 #ifdef OPX_TRACER_ENABLED
 
 #include "rdma/opx/opx_tracer_internal.h"
+#include <rdma/fi_errno.h>
 
 /*
  * Helper macro to extract SLID from packet header for flow event correlation.
@@ -104,6 +105,18 @@
 #define OPX_TRACE_END_IGNORED(cat, event_id, arg0, arg1) \
 	OPX_TRACE_END(cat, event_id, OPX_TRACE_STATUS_END_IGNORED, arg0, arg1)
 
+#define OPX_TRACE_END_RC(cat, event_id, rc, arg0, arg1)                   \
+	do {                                                              \
+		if ((rc) == FI_SUCCESS || (rc) == 0)                      \
+			OPX_TRACE_END_SUCCESS(cat, event_id, arg0, arg1); \
+		else if ((rc) == -FI_EAGAIN)                              \
+			OPX_TRACE_END_EAGAIN(cat, event_id, arg0, arg1);  \
+		else if ((rc) == -FI_ENOBUFS)                             \
+			OPX_TRACE_END_ENOBUFS(cat, event_id, arg0, arg1); \
+		else                                                      \
+			OPX_TRACE_END_ERROR(cat, event_id, arg0, arg1);   \
+	} while (0)
+
 #define OPX_TRACE_BEGIN_COND(cond, cat, event_id, arg0, arg1)       \
 	do {                                                        \
 		if (cond) {                                         \
@@ -133,6 +146,7 @@
 #define OPX_TRACE_TX_END_EAGAIN(event_id, arg0, arg1)  OPX_TRACE_END_EAGAIN(OPX_TRACE_CAT_TX, event_id, arg0, arg1)
 #define OPX_TRACE_TX_END_ERROR(event_id, arg0, arg1)   OPX_TRACE_END_ERROR(OPX_TRACE_CAT_TX, event_id, arg0, arg1)
 #define OPX_TRACE_TX_END_ENOBUFS(event_id, arg0, arg1) OPX_TRACE_END_ENOBUFS(OPX_TRACE_CAT_TX, event_id, arg0, arg1)
+#define OPX_TRACE_TX_END_RC(event_id, rc, arg0, arg1)  OPX_TRACE_END_RC(OPX_TRACE_CAT_TX, event_id, rc, arg0, arg1)
 #define OPX_TRACE_TX_INSTANT(event_id, arg0, arg1)     OPX_TRACE_INSTANT(OPX_TRACE_CAT_TX, event_id, arg0, arg1)
 #define OPX_TRACE_TX_INSTANT_COND(cond, event_id, arg0, arg1) \
 	OPX_TRACE_INSTANT_COND(cond, OPX_TRACE_CAT_TX, event_id, arg0, arg1)
@@ -143,6 +157,7 @@
 #define OPX_TRACE_TX_END_EAGAIN(event_id, arg0, arg1)
 #define OPX_TRACE_TX_END_ERROR(event_id, arg0, arg1)
 #define OPX_TRACE_TX_END_ENOBUFS(event_id, arg0, arg1)
+#define OPX_TRACE_TX_END_RC(event_id, rc, arg0, arg1)
 #define OPX_TRACE_TX_INSTANT(event_id, arg0, arg1)
 #define OPX_TRACE_TX_INSTANT_COND(cond, event_id, arg0, arg1)
 #endif
@@ -382,6 +397,7 @@
 #define OPX_TRACE_END_ERROR(cat, event_id, arg0, arg1)
 #define OPX_TRACE_END_ENOBUFS(cat, event_id, arg0, arg1)
 #define OPX_TRACE_END_IGNORED(cat, event_id, arg0, arg1)
+#define OPX_TRACE_END_RC(cat, event_id, rc, arg0, arg1)
 #define OPX_TRACE_BEGIN_COND(cond, cat, event_id, arg0, arg1)
 #define OPX_TRACE_END_COND(cond, cat, event_id, status, arg0, arg1)
 #define OPX_TRACE_INSTANT_COND(cond, cat, event_id, arg0, arg1)
@@ -392,6 +408,7 @@
 #define OPX_TRACE_TX_END_EAGAIN(event_id, arg0, arg1)
 #define OPX_TRACE_TX_END_ERROR(event_id, arg0, arg1)
 #define OPX_TRACE_TX_END_ENOBUFS(event_id, arg0, arg1)
+#define OPX_TRACE_TX_END_RC(event_id, rc, arg0, arg1)
 #define OPX_TRACE_TX_INSTANT(event_id, arg0, arg1)
 #define OPX_TRACE_TX_INSTANT_COND(cond, event_id, arg0, arg1)
 

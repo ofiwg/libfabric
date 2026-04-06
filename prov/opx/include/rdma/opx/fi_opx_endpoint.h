@@ -4452,8 +4452,7 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type,
 				  ctx_sharing);
 	}
-
-	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_INJECT, 0, 0);
+	OPX_TRACE_TX_END_RC(OPX_TRACE_EVENT_TX_INJECT, rc, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== INJECT (end)\n");
 
 	return rc;
