@@ -1365,15 +1365,15 @@ int ft_init_fabric(void)
 	if (ret)
 		return ret;
 
+	ret = ft_getinfo(hints, &fi);
+	if (ret)
+		return ret;
+
 	if (oob_sock >= 0 && opts.dst_addr) {
 		ret = ft_sock_sync(oob_sock, 0);
 		if (ret)
 			return ret;
 	}
-
-	ret = ft_getinfo(hints, &fi);
-	if (ret)
-		return ret;
 
 	ret = ft_open_fabric_res();
 	if (ret)
