@@ -684,6 +684,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 			opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
 		if (!hdr) {
+			OPX_TRACE_TX_END_RC(OPX_TRACE_EVENT_TX_INJECT_SHM, rc, len, tag);
 			return rc;
 		}
 
@@ -774,6 +775,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 		    credits_needed) {
 			opx_tx->pio_state->qw0 = pio_state.qw0;
 			OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+			OPX_TRACE_TX_END_ENOBUFS(OPX_TRACE_EVENT_TX_INJECT_HFI, len, tag);
 			return -FI_EAGAIN;
 		}
 	}
@@ -1007,6 +1009,7 @@ ssize_t opx_hfi1_tx_sendv_egr_shm(struct fid_ep *ep, const struct iovec *iov, si
 		&pos, opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
+		OPX_TRACE_TX_END_RC(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, rc, 0, 0);
 		return rc;
 	}
 
@@ -1154,6 +1157,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_tx, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+		OPX_TRACE_TX_END_ENOBUFS(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
 		return -FI_ENOBUFS;
 	}
 
@@ -1165,6 +1169,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 					    reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -1284,6 +1289,7 @@ ssize_t opx_hfi1_tx_sendv_egr_shm_16B(struct fid_ep *ep, const struct iovec *iov
 		&pos, opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
 	if (!hdr) {
+		OPX_TRACE_TX_END_RC(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, rc, 0, 0);
 		return rc;
 	}
 
@@ -1446,6 +1452,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_tx, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+		OPX_TRACE_TX_END_ENOBUFS(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
 		return -FI_ENOBUFS;
 	}
 
@@ -1458,6 +1465,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 					    reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
 		return -FI_EAGAIN;
 	}
 
@@ -2060,9 +2068,10 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 	OPX_TRACE_PIO_BEGIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_tx, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
-		OPX_TRACE_PIO_END_ENOBUFS(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
+		OPX_TRACE_PIO_END_ENOBUFS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_ENOBUFS (end)\n");
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+		OPX_TRACE_TX_END_ENOBUFS(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 		return -FI_ENOBUFS;
 	}
 
@@ -2074,9 +2083,10 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 		&opx_ep->ep_fid, opx_ep->reli_service, dest_addr.planes[OPX_PRIMARY_PLANE].lid,
 		dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
-		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
+		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_EAGAIN (end)\n");
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 		return -FI_EAGAIN;
 	}
 
@@ -2219,8 +2229,9 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 	OPX_TRACE_PIO_BEGIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 	ssize_t total_credits_available = fi_opx_hfi1_tx_check_credits(opx_tx, &pio_state, total_credits_needed);
 	if (OFI_UNLIKELY(total_credits_available < 0)) {
-		OPX_TRACE_PIO_END_ENOBUFS(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
+		OPX_TRACE_PIO_END_ENOBUFS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+		OPX_TRACE_TX_END_ENOBUFS(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 		return -FI_ENOBUFS;
 	}
 
@@ -2232,8 +2243,9 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 		&opx_ep->ep_fid, opx_ep->reli_service, dest_addr.planes[OPX_PRIMARY_PLANE].lid,
 		dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
-		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, 0, 0);
+		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 		return -FI_EAGAIN;
 	}
 
