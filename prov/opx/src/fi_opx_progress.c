@@ -155,8 +155,10 @@ void *opx_progress_func(void *args)
 				assert(event_buf == OPX_PROGRESS_EVENT_TERMINATE);
 				FI_DBG(fi_opx_global.prov, FI_LOG_CQ,
 				       "Auto progress thread received terminate signal\n");
+				OPX_TRACE_PROGRESS_END_SUCCESS(OPX_TRACE_EVENT_PROGRESS_POLL, 0, 0);
 				break;
 			}
+			OPX_TRACE_PROGRESS_END_SUCCESS(OPX_TRACE_EVENT_PROGRESS_POLL, 0, 0);
 			continue;
 		}
 
@@ -168,6 +170,7 @@ void *opx_progress_func(void *args)
 			FI_WARN(fi_opx_global.prov, FI_LOG_CQ,
 				"Auto progress thread poll error: errno %d (%s), stopping thread\n", errno,
 				strerror(errno));
+			OPX_TRACE_PROGRESS_END_ERROR(OPX_TRACE_EVENT_PROGRESS_POLL, 0, 0);
 			break;
 		} else if (OFI_UNLIKELY((poll_fds[poll_fd_count - 1].revents & POLLIN) != 0)) {
 			/* Parent thread signalled terminate, time to exit */
@@ -177,6 +180,7 @@ void *opx_progress_func(void *args)
 
 			FI_DBG(fi_opx_global.prov, FI_LOG_CQ, "Auto progress thread received terminate signal\n");
 
+			OPX_TRACE_PROGRESS_END_SUCCESS(OPX_TRACE_EVENT_PROGRESS_POLL, 0, 0);
 			break;
 		} else {
 			OPX_TRACE_PROGRESS_BEGIN(OPX_TRACE_EVENT_PROGRESS_WORK, 0, 0);
