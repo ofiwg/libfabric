@@ -631,12 +631,6 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 			EFA_WARN(FI_LOG_MR, "FI_MR_DMABUF set but mr_attr->dmabuf == NULL\n");
 			return NULL;
 		}
-		if (DMABUF_IS_NOT_SUPPORTED(p_info)) {
-			EFA_WARN(FI_LOG_MR,
-				 "Requested FI_MR_DMABUF, but dmabuf not supported for %s\n",
-				 fi_tostr(&efa_mr->peer.iface, FI_TYPE_HMEM_IFACE));
-			return NULL;
-		}
 
 		EFA_INFO(FI_LOG_MR,
 			 "FI_MR_DMABUF: fd=%d offset=%lu len=%zu\n",
@@ -651,11 +645,11 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 			mr_attr->dmabuf->fd,
 			access);
 
-		if (!dmabuf_mr)  {
-			efa_mark_dmabuf_fail(p_info, efa_mr->peer.iface);
-		} else {
-			p_info->dmabuf_supported_by_device = EFA_DMABUF_SUPPORTED;
-		}
+		if (!dmabuf_mr)
+			EFA_WARN(FI_LOG_MR,
+				 "Could not register dmabuf fd=%d offset=%lu len=%zu\n",
+				 mr_attr->dmabuf->fd, mr_attr->dmabuf->offset,
+				 mr_attr->dmabuf->len);
 
 		return dmabuf_mr;
 	}
