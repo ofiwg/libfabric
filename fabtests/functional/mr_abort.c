@@ -511,7 +511,7 @@ static int flush_rxcq(void)
 {
 	struct fi_cq_data_entry wc;
 	struct fi_cq_err_entry wc_err;
-	int ret;
+	int ret, count = 0;
 
 	for (;;) {
 		ret = fi_cq_read(rxcq, &wc, 1);
@@ -524,7 +524,10 @@ static int flush_rxcq(void)
 		} else if (ret <= 0) {
 			break;
 		}
+		count++;
 	}
+	if (count)
+		printf("  [server] flush_rxcq drained %d entries\n", count);
 	return 0;
 }
 
@@ -630,6 +633,8 @@ static int run_fill_abort_client(int iter)
 		return ret;
 	total_posted += i;
 
+	printf("[client] posted=%d mrs=%d\n", total_posted, mrs_used);
+
 	if (total_posted == 0) {
 		FT_ERR("could not post any operations");
 		return -FI_EINVAL;
@@ -656,9 +661,11 @@ static int run_fill_abort_client(int iter)
 			FT_ERR("MR close: %d/%d failed", close_failures, mrs_used);
 			return -FI_EOTHER;
 		}
+		printf("[client] MRs closed\n");
 	}
 
 	/* Drain CQ */
+	printf("[client] draining txcq, expecting %d completions\n", total_posted);
 	if (close_side == CLOSE_TARGET) {
 		struct expected_err target_errs[] = {
 			{ .err = FI_EINVAL, .prov_errno = 7 },  /* remote MR invalid */
