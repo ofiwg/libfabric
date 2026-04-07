@@ -103,14 +103,13 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 
 	/* Align cmd_queue offset to cache line */
 	cmd_queue_offset = ofi_get_aligned_size(sizeof(struct smr_region), 64);
-	cmd_stack_offset = cmd_queue_offset + sizeof(struct smr_cmd_queue) +
-		sizeof(struct smr_cmd_queue_entry) * rx_size;
-	inject_pool_offset = cmd_stack_offset +
-		freestack_size(sizeof(struct smr_cmd), tx_size);
-	ret_queue_offset = inject_pool_offset +
+	inject_pool_offset = cmd_queue_offset + sizeof(struct smr_cmd_queue) +
+			     sizeof(struct smr_cmd_queue_entry) * rx_size;
+	cmd_stack_offset = inject_pool_offset +
 			   freestack_size(sizeof(struct smr_inject_buf),
-			   rx_size);
-	ret_queue_offset = ofi_get_aligned_size(ret_queue_offset, 64);
+					  rx_size);
+	ret_queue_offset = ofi_get_aligned_size(cmd_stack_offset +
+			   freestack_size(sizeof(struct smr_cmd), tx_size), 64);
 	sar_pool_offset = ret_queue_offset + sizeof(struct smr_return_queue) +
 		sizeof(struct smr_return_queue_entry) * tx_size;
 	peer_data_offset = sar_pool_offset +
