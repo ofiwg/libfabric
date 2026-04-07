@@ -255,8 +255,8 @@ struct smr_region {
 	struct {
 		/* offsets from start of smr_region */
 		size_t			cmd_queue_offset;
-		size_t			cmd_stack_offset;
 		size_t			inject_pool_offset;
+		size_t			cmd_stack_offset;
 		size_t			ret_queue_offset;
 		size_t			sar_pool_offset;
 		size_t			peer_data_offset;
