@@ -585,7 +585,9 @@ static int run_test(void)
 		for (i = 0; i < TEST_CNT; i++) {
 			if (!ft_use_size(i, opts.sizes_enabled))
 				continue;
+
 			xfer_size = test_size[i].size;
+			ft_sync_oob();
 			ret = run_size();
 			if (ret)
 				return ret;
