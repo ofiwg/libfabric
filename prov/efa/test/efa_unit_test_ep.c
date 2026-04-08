@@ -649,7 +649,8 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	 */
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
-	peer->is_local = false;
+	/* Do not use shm in this unit test because we are testing efa rma path */
+	peer->conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	assert_false(efa_rdm_ep->homogeneous_peers);
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
@@ -2214,6 +2215,71 @@ void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_requested_limits(str
 	struct efa_resource *resource = *state;
 
 	test_efa_base_ep_construct_ibv_qp_init_attr_ex_use_requested_limits(resource, EFA_FABRIC_NAME);
+}
+
+/**
+ * @brief Test efa_rdm_ep_get_explicit_shm_fi_addr with valid peer having same GID
+ *
+ * @param[in] state struct efa_resource managed by the framework
+ */
+void test_efa_rdm_ep_get_explicit_shm_fi_addr(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	fi_addr_t shm_addr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Create and register a fake peer with same GID (local peer) */
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	/* Test with valid peer address that has same GID */
+	shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, peer_addr);
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+
+	/* Verify the function returns a valid shm_fi_addr */
+	assert_int_not_equal(shm_addr, FI_ADDR_NOTAVAIL);
+}
+
+/**
+ * @brief Test efa_rdm_ep_get_explicit_shm_fi_addr without shm resources
+ *
+ * @param[in] state struct efa_resource managed by the framework
+ */
+void test_efa_rdm_ep_get_explicit_shm_fi_addr_no_shm(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	fi_addr_t shm_addr;
+
+	/* Construct without shm resources */
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Create and register a fake peer */
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	/* Test the function returns FI_ADDR_NOTAVAIL when no shm resources */
+	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, peer_addr);
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	assert_int_equal(shm_addr, FI_ADDR_NOTAVAIL);
 }
 
 /**
