@@ -171,6 +171,8 @@ void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size();
 void test_efa_rdm_ep_support_unsolicited_write_recv();
 void test_efa_rdm_ep_default_sizes();
 void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion();
+void test_efa_rdm_ep_get_explicit_shm_fi_addr();
+void test_efa_rdm_ep_get_explicit_shm_fi_addr_no_shm();
 void test_dgram_cq_read_empty_cq();
 void test_ibv_cq_ex_read_empty_cq();
 void test_ibv_cq_ex_read_failed_poll();
