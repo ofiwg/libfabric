@@ -969,10 +969,10 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 		 fi_opx_global.hfi_local_info.sim_rctxt_fd);
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sim_sctxt_fd            = %d\n",
 		 fi_opx_global.hfi_local_info.sim_sctxt_fd);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.lid                     = %d\n",
-		 fi_opx_global.hfi_local_info.lid);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.hfi_unit                = %d\n",
-		 fi_opx_global.hfi_local_info.hfi_unit);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.lid[0]                   = %d\n",
+		 fi_opx_global.hfi_local_info.lid[0]);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.hfi_unit[0]             = %d\n",
+		 fi_opx_global.hfi_local_info.hfi_unit[0]);
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sriov                   = %d\n",
 		 fi_opx_global.hfi_local_info.sriov);
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.multi_vm                = %d\n",

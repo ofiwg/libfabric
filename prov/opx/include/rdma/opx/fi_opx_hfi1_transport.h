@@ -525,7 +525,7 @@ struct opx_hfi1_rx_ipc_rts_params {
 	uint32_t	      u32_extended_rx;
 	uint16_t	      origin_rx;
 	uint8_t		      target_hfi_unit;
-	uint8_t		      unused[1];
+	uint8_t		      tx_index;
 	struct opx_context   *context;
 	struct ofi_mr_entry  *cache_entry;
 	union opx_hmem_event *hmem_event;
@@ -717,7 +717,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 						 ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ :
 							  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT));
-			hdr->qw_9B[2] = opx_tx->inject_9B.hdr.qw_9B[2];
+			hdr->qw_9B[2] = opx_tx->inject_9B.hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(dest_addr.tx_index);
 
 			hdr->qw_9B[3] = opx_tx->inject_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32);
 
@@ -742,7 +742,8 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 							   (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ :
 							   (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT));
 
-			hdr->qw_16B[3] = opx_tx->inject_16B.hdr.qw_16B[3];
+			hdr->qw_16B[3] =
+				opx_tx->inject_16B.hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(dest_addr.tx_index);
 			hdr->qw_16B[4] = opx_tx->inject_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32),
 			hdr->qw_16B[5] = 0;
 			hdr->qw_16B[6] = 0;
@@ -784,9 +785,10 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, dest_addr.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay,
-					    reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+					    dest_addr.planes[OPX_PRIMARY_PLANE].lid,
+					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, dest_addr.tx_index,
+					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_INJECT_HFI, len, tag);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
@@ -794,6 +796,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		return -FI_EAGAIN;
 	}
+	replay->tx_index = dest_addr.tx_index;
 
 	if (lock_required) {
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
@@ -823,22 +826,22 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 	opx_copy_double_qw(local_temp, (const uint8_t *) buf, len);
 	const uint64_t pbc_dlid = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		opx_cacheline_copy_qw_vol(scb, replay->scb.qws,
-					  opx_tx->inject_9B.qw0 | OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) |
-						  pbc_dlid | OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
-					  opx_tx->inject_9B.hdr.qw_9B[0] | lrh_dlid_9B,
-					  opx_tx->inject_9B.hdr.qw_9B[1] | bth_subctxt_rx | (len << 51) |
-						  ((caps & FI_MSG) ? /* compile-time constant expression */
-							   ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
-								    (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ :
-								    (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) :
-							   ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
-								    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ :
-								    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)),
+		opx_cacheline_copy_qw_vol(
+			scb, replay->scb.qws,
+			opx_tx->inject_9B.qw0 | OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
+				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, dest_addr.tx_index),
+			opx_tx->inject_9B.hdr.qw_9B[0] | lrh_dlid_9B,
+			opx_tx->inject_9B.hdr.qw_9B[1] | bth_subctxt_rx | (len << 51) |
+				((caps & FI_MSG) ? /* compile-time constant expression */
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
+						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_INJECT_CQ :
+						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) :
+					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
+						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ :
+						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)),
 
-					  opx_tx->inject_9B.hdr.qw_9B[2] | psn,
-					  opx_tx->inject_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32), local_temp[0],
-					  local_temp[1], tag);
+			opx_tx->inject_9B.hdr.qw_9B[2] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(dest_addr.tx_index),
+			opx_tx->inject_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32), local_temp[0], local_temp[1], tag);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	} else {
@@ -847,7 +850,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 		opx_cacheline_copy_qw_vol(
 			scb, replay->scb.qws,
 			opx_tx->inject_16B.qw0 | OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, dest_addr.tx_index),
 			opx_tx->inject_16B.hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
 							    << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
 			opx_tx->inject_16B.hdr.qw_16B[1] |
@@ -863,7 +866,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT_CQ :
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)),
 
-			opx_tx->inject_16B.hdr.qw_16B[3] | psn,
+			opx_tx->inject_16B.hdr.qw_16B[3] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(dest_addr.tx_index),
 			opx_tx->inject_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32), local_temp[0], local_temp[1]);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -1049,7 +1052,7 @@ ssize_t opx_hfi1_tx_sendv_egr_shm(struct fid_ep *ep, const struct iovec *iov, si
 									(uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
 				   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
 									(uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
-	hdr->qw_9B[2] = opx_tx->send_9B.hdr.qw_9B[2];
+	hdr->qw_9B[2] = opx_tx->send_9B.hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(addr->tx_index);
 	hdr->qw_9B[3] = opx_tx->send_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32);
 	hdr->qw_9B[4] = opx_tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
 	/* Fill QW 5 from the iovec */
@@ -1164,9 +1167,10 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	struct fi_opx_reliability_tx_replay *replay;
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int64_t				     psn;
-	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, dest_addr.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay,
-					    reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+					    dest_addr.planes[OPX_PRIMARY_PLANE].lid,
+					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, dest_addr.tx_index,
+					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
@@ -1203,7 +1207,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	const uint64_t pbc_dlid = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 	replay->scb.scb_9B.qw0	= opx_tx->send_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				 OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				 OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type);
+				 OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, dest_addr.tx_index);
 	replay->scb.scb_9B.hdr.qw_9B[0] = opx_tx->send_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32);
 	replay->scb.scb_9B.hdr.qw_9B[1] =
 		opx_tx->send_9B.hdr.qw_9B[1] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
@@ -1211,7 +1215,8 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 									(uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
 				   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
 									(uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
-	replay->scb.scb_9B.hdr.qw_9B[2] = opx_tx->send_9B.hdr.qw_9B[2] | psn;
+	replay->scb.scb_9B.hdr.qw_9B[2] =
+		opx_tx->send_9B.hdr.qw_9B[2] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(dest_addr.tx_index);
 	replay->scb.scb_9B.hdr.qw_9B[3] = opx_tx->send_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32);
 	replay->scb.scb_9B.hdr.qw_9B[4] = opx_tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
 	if (xfer_bytes_tail) {
@@ -1228,6 +1233,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 		assert(tail_len == 0);
 	}
 	replay->scb.scb_9B.hdr.qw_9B[6] = tag;
+	replay->tx_index		= dest_addr.tx_index;
 
 	remain		  = total_len - xfer_bytes_tail;
 	uint64_t *payload = replay->payload;
@@ -1335,7 +1341,7 @@ ssize_t opx_hfi1_tx_sendv_egr_shm_16B(struct fid_ep *ep, const struct iovec *iov
 								       (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
 				  ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
 								       (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
-	hdr->qw_16B[3] = opx_tx->send_16B.hdr.qw_16B[3];
+	hdr->qw_16B[3] = opx_tx->send_16B.hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(addr->tx_index);
 	hdr->qw_16B[4] = opx_tx->send_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32);
 	hdr->qw_16B[5] = opx_tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48);
 
@@ -1460,9 +1466,10 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, dest_addr.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay,
-					    reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+					    dest_addr.planes[OPX_PRIMARY_PLANE].lid,
+					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, dest_addr.tx_index,
+					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
@@ -1499,7 +1506,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 
 	replay->scb.scb_16B.qw0 = opx_tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type);
+				  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, dest_addr.tx_index);
 	replay->scb.scb_16B.hdr.qw_16B[0] =
 		opx_tx->send_16B.hdr.qw_16B[0] |
 		((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -1514,7 +1521,8 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 									(uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
 				   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
 									(uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
-	replay->scb.scb_16B.hdr.qw_16B[3] = opx_tx->send_16B.hdr.qw_16B[3] | psn;
+	replay->scb.scb_16B.hdr.qw_16B[3] =
+		opx_tx->send_16B.hdr.qw_16B[3] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(dest_addr.tx_index);
 	replay->scb.scb_16B.hdr.qw_16B[4] = opx_tx->send_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32);
 	replay->scb.scb_16B.hdr.qw_16B[5] = opx_tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48);
 	if (xfer_bytes_tail) {
@@ -1531,6 +1539,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 		assert(tail_len == 0);
 	}
 	replay->scb.scb_16B.hdr.qw_16B[7] = tag;
+	replay->tx_index		  = dest_addr.tx_index;
 
 	remain		  = total_len - xfer_bytes_tail;
 	uint64_t *payload = replay->payload;
@@ -1655,7 +1664,7 @@ ssize_t opx_hfi1_tx_send_egr_shm(struct fid_ep *ep, const void *buf, size_t len,
 								      (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
 				 ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
 								      (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
-	hdr->qw_9B[2] = opx_tx->send_9B.hdr.qw_9B[2];
+	hdr->qw_9B[2] = opx_tx->send_9B.hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(dest_addr.tx_index);
 	hdr->qw_9B[3] = opx_tx->send_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32);
 	hdr->qw_9B[4] = opx_tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
 
@@ -1756,7 +1765,7 @@ ssize_t opx_hfi1_tx_send_egr_shm_16B(struct fid_ep *ep, const void *buf, size_t 
 								       (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
 				  ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
 								       (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
-	hdr->qw_16B[3] = opx_tx->send_16B.hdr.qw_16B[3];
+	hdr->qw_16B[3] = opx_tx->send_16B.hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(dest_addr.tx_index);
 	hdr->qw_16B[4] = opx_tx->send_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32);
 	hdr->qw_16B[5] = opx_tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48);
 
@@ -1797,7 +1806,7 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(
 	const uint16_t lrh_packet_length, /* 9B dws, 16B qws and little/big-endian as required */
 	const uint64_t pbc_dlid, const uint64_t pbc_dws, const ssize_t len, const ssize_t xfer_bytes_tail,
 	const size_t payload_qws_total, const uint32_t psn, const uint32_t data, const uint64_t tag,
-	const uint64_t tx_op_flags, const uint64_t caps, const enum opx_hfi1_type hfi1_type)
+	const uint64_t tx_op_flags, const uint64_t caps, const enum opx_hfi1_type hfi1_type, const uint8_t tx_index)
 {
 	/*
 	 * Write the 'start of packet' (hw+sw header) 'send control block'
@@ -1819,7 +1828,7 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(
 			scb, local_storage,
 			opx_tx->send_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
 			opx_tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_packet_length << 32),
 
 			opx_tx->send_9B.hdr.qw_9B[1] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
@@ -1829,14 +1838,15 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(
 						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)),
-			opx_tx->send_9B.hdr.qw_9B[2] | psn, opx_tx->send_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32),
+			opx_tx->send_9B.hdr.qw_9B[2] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
+			opx_tx->send_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32),
 			opx_tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48), tail_bytes, tag);
 
 	} else {
 		opx_cacheline_copy_qw_vol(scb, local_storage,
 					  opx_tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
 					  opx_tx->send_16B.hdr.qw_16B[0] |
 						  ((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -1855,7 +1865,7 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(
 								    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
 								    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER)),
 
-					  opx_tx->send_16B.hdr.qw_16B[3] | psn,
+					  opx_tx->send_16B.hdr.qw_16B[3] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
 					  opx_tx->send_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32),
 					  opx_tx->send_16B.hdr.qw_16B[5] | (payload_qws_total << 48), tail_bytes);
 	}
@@ -2080,8 +2090,9 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 	int32_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(
-		&opx_ep->ep_fid, opx_ep->reli_service, dest_addr.planes[OPX_PRIMARY_PLANE].lid,
-		dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+		dest_addr.tx_index, &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_EAGAIN (end)\n");
@@ -2089,6 +2100,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 		return -FI_EAGAIN;
 	}
+	replay->tx_index = dest_addr.tx_index;
 
 #ifdef OPX_HMEM
 	if (iface != FI_HMEM_SYSTEM) {
@@ -2106,7 +2118,8 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 #endif
 		fi_opx_hfi1_tx_egr_write_packet_header(opx_ep, opx_tx, &pio_state, replay->scb.qws, buf, bth_subctxt_rx,
 						       lrh_dlid_9B, lrh_dws, pbc_dlid, pbc_dws, len, xfer_bytes_tail,
-						       payload_qws_total, psn, data, tag, tx_op_flags, caps, hfi1_type);
+						       payload_qws_total, psn, data, tag, tx_op_flags, caps, hfi1_type,
+						       dest_addr.tx_index);
 
 	uint64_t *buf_qws = (uint64_t *) ((uintptr_t) buf + xfer_bytes_tail);
 
@@ -2237,17 +2250,19 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	struct fi_opx_reliability_tx_replay *replay;
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
-	int32_t				     psn;
+	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(
-		&opx_ep->ep_fid, opx_ep->reli_service, dest_addr.planes[OPX_PRIMARY_PLANE].lid,
-		dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+					    dest_addr.planes[OPX_PRIMARY_PLANE].lid,
+					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, dest_addr.tx_index,
+					    &psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
 		return -FI_EAGAIN;
 	}
+	replay->tx_index = dest_addr.tx_index;
 
 #ifdef OPX_HMEM
 	if (iface != FI_HMEM_SYSTEM) {
@@ -2265,7 +2280,8 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 #endif
 		fi_opx_hfi1_tx_egr_write_packet_header(opx_ep, opx_tx, &pio_state, replay->scb.qws, buf, bth_subctxt_rx,
 						       lrh_dlid_16B, lrh_qws, pbc_dlid, pbc_dws, len, xfer_bytes_tail,
-						       payload_qws_total, psn, data, tag, tx_op_flags, caps, hfi1_type);
+						       payload_qws_total, psn, data, tag, tx_op_flags, caps, hfi1_type,
+						       dest_addr.tx_index);
 
 	uint64_t *buf_qws = (uint64_t *) ((uintptr_t) buf + xfer_bytes_tail);
 
@@ -2377,7 +2393,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
 	uint64_t *local_storage, const void *buf, const uint64_t bth_subctxt_rx, const uint64_t lrh_dlid,
 	const uint16_t lrh_dws, const uint64_t pbc_dlid, const uint64_t pbc_dws, const uint64_t payload_bytes_total,
 	const uint32_t psn, const uint32_t data, const uint64_t tag, const uint64_t tx_op_flags, const uint64_t caps,
-	const enum opx_hfi1_type hfi1_type)
+	const enum opx_hfi1_type hfi1_type, const uint8_t tx_index)
 {
 	/*
 	 * Write the 'start of packet' (hw+sw header) 'send control block'
@@ -2393,7 +2409,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
 			scb, local_storage,
 			opx_tx->send_mp_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
 			opx_tx->send_mp_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
 			opx_tx->send_mp_9B.hdr.qw_9B[1] | bth_subctxt_rx |
 				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
@@ -2402,14 +2418,14 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
 						   ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ :
 							    (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST)),
-			opx_tx->send_mp_9B.hdr.qw_9B[2] | psn,
+			opx_tx->send_mp_9B.hdr.qw_9B[2] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
 			opx_tx->send_mp_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32), payload_bytes_total, 0UL, tag);
 	} else {
 		opx_cacheline_copy_qw_vol(
 			scb, local_storage,
 			opx_tx->send_mp_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
 			opx_tx->send_mp_16B.hdr.qw_16B[0] |
 				((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				 << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -2426,7 +2442,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
 					 ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST_CQ :
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST)),
-			opx_tx->send_mp_16B.hdr.qw_16B[3] | psn,
+			opx_tx->send_mp_16B.hdr.qw_16B[3] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
 			opx_tx->send_mp_16B.hdr.qw_16B[4] | (((uint64_t) data) << 32), payload_bytes_total, 0UL);
 	}
 
@@ -2442,14 +2458,12 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
  * there will be at least some payload data.
  */
 __OPX_FORCE_INLINE__
-ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx,
-						      union fi_opx_hfi1_pio_state *pio_state, uint64_t *local_storage,
-						      const void *buf, const uint64_t bth_subctxt_rx,
-						      const uint64_t lrh_dlid, const uint16_t lrh_dws,
-						      const uint64_t pbc_dlid, const uint64_t pbc_dws,
-						      const ssize_t xfer_bytes_tail, const uint64_t tail_bytes,
-						      const uint32_t payload_offset, const uint32_t psn,
-						      const uint32_t mp_egr_uid, const enum opx_hfi1_type hfi1_type)
+ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(
+	struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, union fi_opx_hfi1_pio_state *pio_state,
+	uint64_t *local_storage, const void *buf, const uint64_t bth_subctxt_rx, const uint64_t lrh_dlid,
+	const uint16_t lrh_dws, const uint64_t pbc_dlid, const uint64_t pbc_dws, const ssize_t xfer_bytes_tail,
+	const uint64_t tail_bytes, const uint32_t payload_offset, const uint32_t psn, const uint32_t mp_egr_uid,
+	const enum opx_hfi1_type hfi1_type, const uint8_t tx_index)
 {
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_sop_first, *pio_state);
 
@@ -2457,17 +2471,18 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(struct fi_opx_ep *opx_ep, 
 		opx_cacheline_copy_qw_vol(scb, local_storage,
 					  opx_tx->send_mp_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
 					  opx_tx->send_mp_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
 					  opx_tx->send_mp_9B.hdr.qw_9B[1] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
-					  opx_tx->send_mp_9B.hdr.qw_9B[2] | psn, opx_tx->send_mp_9B.hdr.qw_9B[3],
-					  tail_bytes, 0UL, (((uint64_t) mp_egr_uid) << 32) | payload_offset);
+					  opx_tx->send_mp_9B.hdr.qw_9B[2] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
+					  opx_tx->send_mp_9B.hdr.qw_9B[3], tail_bytes, 0UL,
+					  (((uint64_t) mp_egr_uid) << 32) | payload_offset);
 	} else {
 		opx_cacheline_copy_qw_vol(scb, local_storage,
 					  opx_tx->send_mp_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
 					  opx_tx->send_mp_16B.hdr.qw_16B[0] |
 						  ((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -2478,8 +2493,9 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(struct fi_opx_ep *opx_ep, 
 						  (uint64_t) (bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
 					  opx_tx->send_mp_16B.hdr.qw_16B[2] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
-					  opx_tx->send_mp_16B.hdr.qw_16B[3] | psn, opx_tx->send_mp_16B.hdr.qw_16B[4],
-					  tail_bytes, 0UL);
+					  opx_tx->send_mp_16B.hdr.qw_16B[3] | psn |
+						  FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
+					  opx_tx->send_mp_16B.hdr.qw_16B[4], tail_bytes, 0UL);
 	}
 
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);
@@ -2498,7 +2514,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 	uint64_t *local_storage, const void *buf, const uint64_t bth_subctxt_rx, const uint64_t lrh_dlid,
 	const uint16_t lrh_dws, const uint64_t pbc_dlid, const uint64_t pbc_dws, const ssize_t xfer_bytes_tail,
 	const uint64_t tail_bytes, const uint32_t payload_offset, const uint32_t psn, const uint32_t mp_egr_uid,
-	const enum opx_hfi1_type hfi1_type)
+	const enum opx_hfi1_type hfi1_type, const uint8_t tx_index)
 {
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_sop_first, *pio_state);
 
@@ -2506,12 +2522,13 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 		opx_cacheline_copy_qw_vol(scb, local_storage,
 					  opx_tx->send_mp_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
 					  opx_tx->send_mp_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
 					  opx_tx->send_mp_9B.hdr.qw_9B[1] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
-					  opx_tx->send_mp_9B.hdr.qw_9B[2] | psn, opx_tx->send_mp_9B.hdr.qw_9B[3],
-					  tail_bytes, 0UL, (((uint64_t) mp_egr_uid) << 32) | payload_offset);
+					  opx_tx->send_mp_9B.hdr.qw_9B[2] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
+					  opx_tx->send_mp_9B.hdr.qw_9B[3], tail_bytes, 0UL,
+					  (((uint64_t) mp_egr_uid) << 32) | payload_offset);
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);
 		FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_tx);
 
@@ -2521,7 +2538,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 		opx_cacheline_copy_qw_vol(scb, local_storage,
 					  opx_tx->send_mp_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
 					  opx_tx->send_mp_16B.hdr.qw_16B[0] |
 						  ((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -2532,8 +2549,9 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 						  (uint64_t) (bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
 					  opx_tx->send_mp_16B.hdr.qw_16B[2] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
-					  opx_tx->send_mp_16B.hdr.qw_16B[3] | psn, opx_tx->send_mp_16B.hdr.qw_16B[4],
-					  tail_bytes, 0UL);
+					  opx_tx->send_mp_16B.hdr.qw_16B[3] | psn |
+						  FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
+					  opx_tx->send_mp_16B.hdr.qw_16B[4], tail_bytes, 0UL);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);
 
@@ -2586,15 +2604,17 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.planes[OPX_PRIMARY_PLANE].lid,
-					    addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay,
-					    reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
+		&psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		opx_tx->pio_state->qw0 = pio_state.qw0;
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_MP_EAGER_FIRST_HFI, 0, 0);
 		return -FI_EAGAIN;
 	}
+	replay->tx_index = addr.tx_index;
 
 	*psn_out = psn; /* This will be the UID used in the remaining packets */
 
@@ -2639,9 +2659,10 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(
 #ifndef NDEBUG
 	unsigned credits_consumed =
 #endif
-		fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
-			opx_ep, opx_tx, &pio_state, replay->scb.qws, buf_ptr, bth_subctxt_rx, lrh_dlid, lrh_dws,
-			pbc_dlid, pbc_dws, payload_bytes_total, psn, data, tag, tx_op_flags, caps, hfi1_type);
+		fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(opx_ep, opx_tx, &pio_state, replay->scb.qws, buf_ptr,
+								  bth_subctxt_rx, lrh_dlid, lrh_dws, pbc_dlid, pbc_dws,
+								  payload_bytes_total, psn, data, tag, tx_op_flags,
+								  caps, hfi1_type, addr.tx_index);
 
 	uint64_t *buf_qws = (uint64_t *) buf_ptr;
 
@@ -2749,15 +2770,17 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, struct fi_opx_e
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.planes[OPX_PRIMARY_PLANE].lid,
-					    addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay,
-					    reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
+		&psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 		return -FI_EAGAIN;
 	}
 
+	replay->tx_index = addr.tx_index;
 	uint64_t tail_bytes;
 
 	if (xfer_bytes_tail) {
@@ -2777,16 +2800,16 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, struct fi_opx_e
 			fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 				opx_ep, opx_tx, &pio_state, replay->scb.qws, buf, bth_subctxt_rx, lrh_dlid_9B, lrh_dws,
 				pbc_dlid, pbc_dws, xfer_bytes_tail, tail_bytes, payload_offset, psn, mp_egr_uid,
-				hfi1_type);
+				hfi1_type, addr.tx_index);
 
 	} else {
 #ifndef NDEBUG
 		credits_consumed =
 #endif
-			fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(opx_ep, opx_tx, &pio_state, replay->scb.qws, buf,
-								      bth_subctxt_rx, lrh_dlid_9B, lrh_dws, pbc_dlid,
-								      pbc_dws, xfer_bytes_tail, tail_bytes,
-								      payload_offset, psn, mp_egr_uid, hfi1_type);
+			fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(
+				opx_ep, opx_tx, &pio_state, replay->scb.qws, buf, bth_subctxt_rx, lrh_dlid_9B, lrh_dws,
+				pbc_dlid, pbc_dws, xfer_bytes_tail, tail_bytes, payload_offset, psn, mp_egr_uid,
+				hfi1_type, addr.tx_index);
 
 		uint64_t *buf_qws = (uint64_t *) buf;
 
@@ -2900,15 +2923,17 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, struct fi_o
 	union fi_opx_reliability_tx_psn	    *psn_ptr;
 	int32_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.planes[OPX_PRIMARY_PLANE].lid,
-					    addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay,
-					    reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
+		&psn_ptr, &replay, reliability, hfi1_type);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 		return -FI_EAGAIN;
 	}
 
+	replay->tx_index = addr.tx_index;
 	uint64_t tail_bytes;
 
 	if (xfer_bytes_tail) {
@@ -2928,15 +2953,15 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, struct fi_o
 			fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 				opx_ep, opx_tx, &pio_state, replay->scb.qws, buf, bth_subctxt_rx, lrh_dlid_16B, lrh_qws,
 				pbc_dlid, pbc_dws, xfer_bytes_tail, tail_bytes, payload_offset, psn, mp_egr_uid,
-				hfi1_type);
+				hfi1_type, addr.tx_index);
 	} else {
 #ifndef NDEBUG
 		credits_consumed =
 #endif
-			fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(opx_ep, opx_tx, &pio_state, replay->scb.qws, buf,
-								      bth_subctxt_rx, lrh_dlid_16B, lrh_qws, pbc_dlid,
-								      pbc_dws, xfer_bytes_tail, tail_bytes,
-								      payload_offset, psn, mp_egr_uid, hfi1_type);
+			fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(
+				opx_ep, opx_tx, &pio_state, replay->scb.qws, buf, bth_subctxt_rx, lrh_dlid_16B, lrh_qws,
+				pbc_dlid, pbc_dws, xfer_bytes_tail, tail_bytes, payload_offset, psn, mp_egr_uid,
+				hfi1_type, addr.tx_index);
 
 		uint64_t *buf_qws = (uint64_t *) buf;
 
@@ -3019,17 +3044,15 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, struct fi_o
 static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep, const uint8_t dest_hfi_unit, const uint64_t dest_rx,
 					  const uint64_t lrh_dlid, struct fi_opx_completion_counter *cc,
 					  const uint64_t bytes_to_sync, const uint32_t dest_extended_rx,
-					  enum opx_hfi1_type hfi1_type)
+					  enum opx_hfi1_type hfi1_type, const uint8_t tx_index)
 {
 	const uint64_t bth_rx = dest_rx << OPX_BTH_SUBCTXT_RX_SHIFT;
 	uint64_t       pos;
 	ssize_t	       rc;
-	/* DAOS support - rank_inst field has been depricated and will be phased out.
-	 * The value is always zero. */
+
 	union opx_hfi1_packet_hdr *hdr = opx_shm_tx_next(&opx_ep->shm, dest_hfi_unit, dest_rx, &pos,
 							 opx_ep->daos_info.hfi_rank_enabled, dest_extended_rx, 0, &rc);
-	/* Potential infinite loop, unable to return result to application */
-	while (OFI_UNLIKELY(hdr == NULL)) { // TODO: Verify that all callers of this function can tolderate a NULL rc
+	while (OFI_UNLIKELY(hdr == NULL)) {
 		fi_opx_shm_poll_many(&opx_ep->ep_fid, FI_OPX_LOCK_NOT_REQUIRED, OPX_SW_HFI1_TYPE);
 		hdr = opx_shm_tx_next(&opx_ep->shm, dest_hfi_unit, dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
 				      dest_extended_rx, 0, &rc);
@@ -3041,35 +3064,37 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep, const uint8_
 					 3 + /* bth */
 					 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 					 (0 << 4);
-		const uint16_t lrh_dws = __cpu_to_be16(
-			pbc_dws - 2 +
-			1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
-		hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32);
-		hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
-		hdr->qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2];
-		hdr->qw_9B[3] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[3];
-		hdr->qw_9B[4] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
+		const uint16_t lrh_dws = __cpu_to_be16(pbc_dws - 2 + 1);
+		hdr->qw_9B[0] =
+			opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32);
+		hdr->qw_9B[1] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[1] | bth_rx;
+		hdr->qw_9B[2] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index);
+		hdr->qw_9B[3] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[3];
+		hdr->qw_9B[4] =
+			opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[4] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
 		hdr->qw_9B[5] = (uintptr_t) cc;
 		hdr->qw_9B[6] = bytes_to_sync;
 	} else {
-		const uint64_t pbc_dws = 2 +		     /* pbc */
-					 4 +		     /* lrh uncompressed */
-					 3 +		     /* bth */
-					 9 +		     /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-					 2;		     /* ICRC/tail */
-		const uint16_t lrh_dws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
+		const uint64_t pbc_dws = 2 + /* pbc */
+					 4 + /* lrh uncompressed */
+					 3 + /* bth */
+					 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+					 2;  /* ICRC/tail */
+		const uint16_t lrh_dws = (pbc_dws - 2) >> 1;
 		hdr->qw_16B[0] =
-			opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[0] |
 			((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 			((uint64_t) lrh_dws << 20);
-		hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
+		hdr->qw_16B[1] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[1] |
 				 ((uint64_t) ((lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 					      OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 				 (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
-		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx;
-		hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
-		hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
-		hdr->qw_16B[5] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
+		hdr->qw_16B[2] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[2] | bth_rx;
+		hdr->qw_16B[3] =
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index);
+		hdr->qw_16B[4] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[4];
+		hdr->qw_16B[5] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[5] | FI_OPX_HFI_DPUT_OPCODE_FENCE |
+				 (0ULL << 32);
 		hdr->qw_16B[6] = (uintptr_t) cc;
 		hdr->qw_16B[7] = bytes_to_sync;
 	}
