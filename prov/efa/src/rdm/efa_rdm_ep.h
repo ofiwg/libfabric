@@ -538,4 +538,13 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep);
 	char ep_addr_str[OFI_ADDRSTRLEN] = {0}; \
 	efa_base_ep_raw_addr_str(&ep->base_ep, ep_addr_str, &(size_t){sizeof ep_addr_str});
 
+static inline
+fi_addr_t efa_rdm_ep_get_explicit_shm_fi_addr(struct efa_rdm_ep *ep, fi_addr_t addr)
+{
+	struct efa_conn *conn;
+
+	assert(ofi_genlock_held(&ep->base_ep.domain->srx_lock));
+	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
+	return conn ? conn->shm_fi_addr : FI_ADDR_NOTAVAIL;
+}
 #endif
