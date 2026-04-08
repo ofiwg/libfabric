@@ -644,11 +644,13 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 
 	ofi_genlock_lock(&av->util_av.lock);
 	conn = efa_av_addr_to_conn(av, fi_addr);
-	ofi_genlock_unlock(&av->util_av.lock);
-	if (!conn)
+	if (!conn) {
+		ofi_genlock_unlock(&av->util_av.lock);
 		return -FI_EINVAL;
+	}
 
 	memcpy(addr, (void *)conn->ep_addr, MIN(EFA_EP_ADDR_LEN, *addrlen));
+	ofi_genlock_unlock(&av->util_av.lock);
 	if (*addrlen > EFA_EP_ADDR_LEN)
 		*addrlen = EFA_EP_ADDR_LEN;
 	return 0;
