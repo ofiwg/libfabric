@@ -92,27 +92,30 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 	/* Note that we do not set stl.hdr.lrh.pktlen here (usually lrh_dws << 32),
 	   because this is intranode and since it's a CTS packet, lrh.pktlen
 	   isn't used/needed */
+	const uint8_t tx_index = params->tx_index;
 	if (hfi1_type & OPX_HFI1_CNX000) {
-		hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
+		hdr->qw_16B[0] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[0] |
 				 ((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				  << OPX_LRH_JKR_16B_DLID_SHIFT_16B);
-		hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
+		hdr->qw_16B[1] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[1] |
 				 ((uint64_t) ((params->lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 					      OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 				 (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B);
-		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | bth_rx;
-		hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
-		hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
-		hdr->qw_16B[5] =
-			opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | (params->niov << 48) | FI_OPX_HFI_DPUT_OPCODE_IPC;
+		hdr->qw_16B[2] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[2] | bth_rx;
+		hdr->qw_16B[3] =
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index);
+		hdr->qw_16B[4] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[4];
+		hdr->qw_16B[5] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[5] | (params->niov << 48) |
+				 FI_OPX_HFI_DPUT_OPCODE_IPC;
 		hdr->qw_16B[6] = params->origin_byte_counter_vaddr;
 		hdr->qw_16B[7] = 0;
 	} else {
-		hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | params->lrh_dlid;
-		hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | bth_rx;
-		hdr->qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2];
-		hdr->qw_9B[3] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[3];
-		hdr->qw_9B[4] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | (params->niov << 48) | FI_OPX_HFI_DPUT_OPCODE_IPC;
+		hdr->qw_9B[0] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[0] | params->lrh_dlid;
+		hdr->qw_9B[1] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[1] | bth_rx;
+		hdr->qw_9B[2] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index);
+		hdr->qw_9B[3] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[3];
+		hdr->qw_9B[4] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[4] | (params->niov << 48) |
+				FI_OPX_HFI_DPUT_OPCODE_IPC;
 		hdr->qw_9B[5] = params->origin_byte_counter_vaddr;
 		hdr->qw_9B[6] = 0;
 	}
