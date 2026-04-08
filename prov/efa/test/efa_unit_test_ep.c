@@ -262,12 +262,17 @@ void test_efa_rdm_ep_handshake_receive_without_peer_host_id_and_do_not_send_loca
 void test_efa_rdm_ep_tx_pkt_pool_flags(struct efa_resource **state) {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
+	uint64_t flags = OFI_BUFPOOL_NONSHARED | OFI_BUFPOOL_NO_TRACK;
+
+#if ENABLE_DEBUG
+	flags &= ~OFI_BUFPOOL_NO_TRACK;
+#endif
 
 	efa_env.huge_page_setting = EFA_ENV_HUGE_PAGE_DISABLED;
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, OFI_BUFPOOL_NONSHARED);
+	assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, flags);
 }
 
 /**
@@ -280,7 +285,7 @@ void test_efa_rdm_ep_rx_pkt_pool_flags(struct efa_resource **state) {
 	struct efa_rdm_ep *efa_rdm_ep;
 	uint64_t flags = OFI_BUFPOOL_NONSHARED | OFI_BUFPOOL_NO_TRACK;
 
-#ifdef ENABLE_DEBUG
+#if ENABLE_DEBUG
 	flags &= ~OFI_BUFPOOL_NO_TRACK;
 #endif
 
@@ -288,7 +293,7 @@ void test_efa_rdm_ep_rx_pkt_pool_flags(struct efa_resource **state) {
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, flags);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, flags);
 }
 
 /**
@@ -304,6 +309,11 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	struct fid_ep *ep;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
+	uint64_t flags = OFI_BUFPOOL_NONSHARED | OFI_BUFPOOL_NO_TRACK;
+
+#if ENABLE_DEBUG
+	flags &= ~OFI_BUFPOOL_NO_TRACK;
+#endif
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -311,7 +321,7 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
 	assert_int_equal(ret, 0);
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, OFI_BUFPOOL_NONSHARED);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, flags);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
