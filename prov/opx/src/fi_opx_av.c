@@ -178,6 +178,34 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 						errno = FI_EINVAL;
 						return -errno;
 					}
+
+					/*
+					 * For dual-plane (tx_index == 1), reject the insert if the
+					 * forward path (self->peer) and reverse path (peer->self)
+					 * disagree on SHM vs PIO transport. One being SHM while
+					 * the other is PIO is an unsupported asymmetric configuration.
+					 */
+					if (opx_addr[t].tx_index == 1) {
+						int fwd_is_shm = opx_lid_is_shm(
+							OPX_LID_PLANE_KEY(input[n].planes[OPX_PRIMARY_PLANE].lid, 1));
+						int rev_is_shm = opx_lid_is_shm(OPX_LID_PLANE_KEY(
+							input[n].planes[opx_addr[t].tx_index].lid, 0));
+
+						if (fwd_is_shm != rev_is_shm) {
+							/* Future: Add a env variable to select secondary plane and
+							 * add it to the log message */
+							FI_WARN(fi_opx_global.prov, FI_LOG_AV,
+								"Asymmetric SHM/PIO on dual-plane tx_index 1: "
+								"forward(peer primary lid 0x%x) is_shm=%d, "
+								"reverse(peer plane[%d] lid 0x%x) is_shm=%d. "
+								"Ensure SHM is enabled (FI_OPX_SHM_ENABLE=1) \n",
+								input[n].planes[OPX_PRIMARY_PLANE].lid, fwd_is_shm,
+								opx_addr[t].tx_index,
+								input[n].planes[opx_addr[t].tx_index].lid, rev_is_shm);
+							errno = FI_EINVAL;
+							return -errno;
+						}
+					}
 				} else {
 					opx_addr[t].tx_index = OPX_PRIMARY_PLANE;
 				}

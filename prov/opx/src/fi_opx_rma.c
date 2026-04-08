@@ -80,6 +80,8 @@ int fi_opx_do_readv_internal_shm(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_hfi1_rx_readv_params *params = &work->readv;
 	struct fi_opx_ep		   *opx_ep = params->opx_ep;
 	struct fi_opx_ep_tx		   *opx_tx = FI_OPX_EP_TX(opx_ep, params->opx_target_addr);
+	/* C89: declare tx_index at top of block for array indexing */
+	const uint8_t tx_index = params->opx_target_addr.tx_index;
 
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy u8_rx field.  Use the dest_rx field
@@ -106,26 +108,30 @@ int fi_opx_do_readv_internal_shm(union fi_opx_hfi1_deferred_work *work)
 	assert(FI_OPX_HFI_DPUT_OPCODE_GET == params->opcode); // double check packet type
 	assert(params->dt == (FI_VOID - 1) || params->dt < FI_DATATYPE_LAST);
 	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		hdr->qw_9B[0] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | params->lrh_dlid | (params->lrh_dws << 32);
-		hdr->qw_9B[1] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_subctxt_rx;
-		hdr->qw_9B[2] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[2];
-		hdr->qw_9B[3] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[3];
-		hdr->qw_9B[4] = opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | (params->opcode) | dt64 | op64 | niov;
+		hdr->qw_9B[0] =
+			opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[0] | params->lrh_dlid | (params->lrh_dws << 32);
+		hdr->qw_9B[1] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[1] | params->bth_subctxt_rx;
+		hdr->qw_9B[2] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index);
+		hdr->qw_9B[3] = opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[3];
+		hdr->qw_9B[4] =
+			opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[4] | (params->opcode) | dt64 | op64 | niov;
 		hdr->qw_9B[5] = (uintptr_t) params->rma_request;
 		hdr->qw_9B[6] = params->key;
 	} else {
-		hdr->qw_16B[0] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
+		hdr->qw_16B[0] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[0] |
 				 ((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				  << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 				 ((uint64_t) params->lrh_dws << 20);
-		hdr->qw_16B[1] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
+		hdr->qw_16B[1] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[1] |
 				 ((uint64_t) ((params->lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 					      OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
 				  (uint64_t) (params->bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B));
-		hdr->qw_16B[2] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | params->bth_subctxt_rx;
-		hdr->qw_16B[3] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[3];
-		hdr->qw_16B[4] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[4];
-		hdr->qw_16B[5] = opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov;
+		hdr->qw_16B[2] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[2] | params->bth_subctxt_rx;
+		hdr->qw_16B[3] =
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index);
+		hdr->qw_16B[4] = opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[4];
+		hdr->qw_16B[5] =
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov;
 		hdr->qw_16B[6] = (uintptr_t) params->rma_request;
 		hdr->qw_16B[7] = params->key;
 	}
@@ -146,6 +152,8 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep		   *opx_ep    = params->opx_ep;
 	struct fi_opx_ep_tx		   *opx_tx    = FI_OPX_EP_TX(opx_ep, params->opx_target_addr);
 	const enum opx_hfi1_type	    hfi1_type = OPX_SW_HFI1_TYPE;
+	/* C89: declare tx_index at top of block for array indexing */
+	const uint8_t tx_index = params->opx_target_addr.tx_index;
 
 	OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
@@ -165,15 +173,17 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	const struct fi_opx_addr addr = params->opx_target_addr;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service, addr.planes[OPX_PRIMARY_PLANE].lid,
-					    addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, &psn_ptr, &replay,
-					    params->reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
+		&psn_ptr, &replay, params->reliability, hfi1_type);
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_RMA_END_EAGAIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 		return -FI_EAGAIN;
 	}
+	replay->tx_index = addr.tx_index;
 
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_sop_first, pio_state);
 
@@ -186,12 +196,15 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		opx_cacheline_copy_qw_vol(
 			scb, replay->scb.qws,
-			opx_ep->rx->tx.cts_9B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) | credit_return |
-				params->pbc_dlid | OPX_PBC_LOOPBACK(params->pbc_dlid, hfi1_type),
-			opx_ep->rx->tx.cts_9B.hdr.qw_9B[0] | params->lrh_dlid | (params->lrh_dws << 32),
-			opx_ep->rx->tx.cts_9B.hdr.qw_9B[1] | params->bth_subctxt_rx,
-			opx_ep->rx->tx.cts_9B.hdr.qw_9B[2] | psn, opx_ep->rx->tx.cts_9B.hdr.qw_9B[3],
-			opx_ep->rx->tx.cts_9B.hdr.qw_9B[4] | params->opcode | dt64 | op64 | niov,
+			opx_ep->rx->tx.cts[tx_index].cts_9B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
+				credit_return | params->pbc_dlid |
+				OPX_PBC_LOOPBACK(params->pbc_dlid, hfi1_type, params->opx_target_addr.tx_index),
+			opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[0] | params->lrh_dlid | (params->lrh_dws << 32),
+			opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[1] | params->bth_subctxt_rx,
+			opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[2] | psn |
+				FI_OPX_PKT_TX_INDEX_TO_QW3(params->opx_target_addr.tx_index),
+			opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[3],
+			opx_ep->rx->tx.cts[tx_index].cts_9B.hdr.qw_9B[4] | params->opcode | dt64 | op64 | niov,
 			(uintptr_t) params->rma_request,
 			params->key); // key
 		/* consume one credit for the packet header */
@@ -209,19 +222,22 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	} else {
 		opx_cacheline_copy_qw_vol(
 			scb, replay->scb.qws,
-			opx_ep->rx->tx.cts_16B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) | credit_return |
-				params->pbc_dlid | OPX_PBC_LOOPBACK(params->pbc_dlid, hfi1_type),
-			opx_ep->rx->tx.cts_16B.hdr.qw_16B[0] |
+			opx_ep->rx->tx.cts[tx_index].cts_16B.qw0 | OPX_PBC_LEN(params->pbc_dws, hfi1_type) |
+				credit_return | params->pbc_dlid |
+				OPX_PBC_LOOPBACK(params->pbc_dlid, hfi1_type, params->opx_target_addr.tx_index),
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[0] |
 				((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				 << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 				((uint64_t) params->lrh_dws << 20),
-			opx_ep->rx->tx.cts_16B.hdr.qw_16B[1] |
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[1] |
 				((uint64_t) ((params->lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 					     OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 				(uint64_t) (params->bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
-			opx_ep->rx->tx.cts_16B.hdr.qw_16B[2] | params->bth_subctxt_rx,
-			opx_ep->rx->tx.cts_16B.hdr.qw_16B[3] | psn, opx_ep->rx->tx.cts_16B.hdr.qw_16B[4],
-			opx_ep->rx->tx.cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov,
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[2] | params->bth_subctxt_rx,
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[3] | psn |
+				FI_OPX_PKT_TX_INDEX_TO_QW3(params->opx_target_addr.tx_index),
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[4],
+			opx_ep->rx->tx.cts[tx_index].cts_16B.hdr.qw_16B[5] | params->opcode | dt64 | op64 | niov,
 			(uintptr_t) params->rma_request);
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -546,8 +562,9 @@ void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep, const struct fi_opx_
 		}
 
 		if (!found) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Dest addr %08lx not found in av_rank_hashmap.\n",
-				dst_addr.fi);
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Dest addr LID 0x%x not found in av_rank_hashmap.\n",
+				dst_addr.planes[OPX_PRIMARY_PLANE].lid);
 		}
 	}
 #endif

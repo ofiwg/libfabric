@@ -285,36 +285,37 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode(struct fid_ep				    *ep,
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_sop_first, pio_state);
 
 	if ((hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {
-		struct fi_opx_hfi1_txe_scb_9B model_9B = opx_ep->reli_service->ping_model_9B;
+		struct fi_opx_hfi1_txe_scb_9B model_9B = opx_ep->reli_service->ping_model_9B[0];
 		model_9B.hdr.ud.opcode		       = opcode;
 		model_9B.hdr.service.key_dw_suffix     = key->dw_suffix;
 		const uint64_t pbc_dlid		       = OPX_PBC_DLID(dlid, hfi1_type);
 
 		opx_cacheline_store_qw_vol(scb,
 					   model_9B.qw0 | OPX_PBC_CR(0x1, hfi1_type) | pbc_dlid |
-						   OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
+						   OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, OPX_PRIMARY_PLANE),
 					   model_9B.hdr.qw_9B[0] | lrh_dlid_9B, model_9B.hdr.qw_9B[1] | bth_rx,
 					   model_9B.hdr.qw_9B[2], model_9B.hdr.qw_9B[3], 0UL, 0UL, key->qw_prefix);
 
 		/* consume one credit for the packet header */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	} else {
-		struct fi_opx_hfi1_txe_scb_16B model_16B = opx_ep->reli_service->ping_model_16B;
+		struct fi_opx_hfi1_txe_scb_16B model_16B = opx_ep->reli_service->ping_model_16B[0];
 		model_16B.hdr.ud.opcode			 = opcode;
 		model_16B.hdr.service.key_dw_suffix	 = key->dw_suffix;
 		const uint64_t pbc_dlid			 = OPX_PBC_DLID(dlid, hfi1_type);
 
-		opx_cacheline_store_qw_vol(
-			scb,
-			model_16B.qw0 | OPX_PBC_CR(1, hfi1_type) | pbc_dlid | OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
-			model_16B.hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
-						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
-			model_16B.hdr.qw_16B[1] |
-				((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
-				 OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
-				bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B,
-			model_16B.hdr.qw_16B[2] | bth_subctxt_rx, model_16B.hdr.qw_16B[3], model_16B.hdr.qw_16B[4], 0UL,
-			0UL);
+		opx_cacheline_store_qw_vol(scb,
+					   model_16B.qw0 | OPX_PBC_CR(1, hfi1_type) | pbc_dlid |
+						   OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, OPX_PRIMARY_PLANE),
+					   model_16B.hdr.qw_16B[0] |
+						   ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
+						    << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
+					   model_16B.hdr.qw_16B[1] |
+						   ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+						    OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
+						   bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B,
+					   model_16B.hdr.qw_16B[2] | bth_subctxt_rx, model_16B.hdr.qw_16B[3],
+					   model_16B.hdr.qw_16B[4], 0UL, 0UL);
 
 		/* consume one credit for the packet header first cacheline */
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -381,8 +382,9 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 					  const uint64_t psn_count, const uint64_t opcode,
 					  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
-	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	struct fi_opx_ep_tx *opx_tx = opx_ep->tx_contexts[OPX_PRIMARY_PLANE];
+	struct fi_opx_ep    *opx_ep   = container_of(ep, struct fi_opx_ep, ep_fid);
+	uint8_t		     tx_index = OPX_RELIABILITY_DECODE_TX_INDEX(key->slid);
+	struct fi_opx_ep_tx *opx_tx   = opx_ep->tx_contexts[tx_index];
 
 	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_tx);
 
@@ -469,16 +471,19 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 		const uint64_t				   lrh_dlid_9B = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(dlid);
 		const struct fi_opx_hfi1_txe_scb_9B *const model =
 			opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING ?
-				&opx_ep->reli_service->ping_model_9B :
-				(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK ? &opx_ep->reli_service->ack_model_9B :
-										  &opx_ep->reli_service->nack_model_9B);
+				&opx_ep->reli_service->ping_model_9B[tx_index] :
+				(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK ?
+					 &opx_ep->reli_service->ack_model_9B[tx_index] :
+					 &opx_ep->reli_service->nack_model_9B[tx_index]);
 		const uint64_t pbc_dlid = OPX_PBC_DLID(dlid, hfi1_type);
 
-		opx_cacheline_store_qw_vol(
-			scb, model->qw0 | OPX_PBC_CR(0x1, hfi1_type) | pbc_dlid | OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
-			model->hdr.qw_9B[0] | lrh_dlid_9B, model->hdr.qw_9B[1] | bth_rx, model->hdr.qw_9B[2],
-			model->hdr.qw_9B[3] | key_dw_suffix, psn_count_24, psn_start_24,
-			key->qw_prefix); /* service.key */
+		opx_cacheline_store_qw_vol(scb,
+					   model->qw0 | OPX_PBC_CR(0x1, hfi1_type) | pbc_dlid |
+						   OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+					   model->hdr.qw_9B[0] | lrh_dlid_9B, model->hdr.qw_9B[1] | bth_rx,
+					   model->hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
+					   model->hdr.qw_9B[3] | key_dw_suffix, psn_count_24, psn_start_24,
+					   key->qw_prefix); /* service.key */
 
 		// fi_opx_hfi1_dump_stl_packet_hdr((struct fi_opx_hfi1_stl_packet_hdr_9B *)&tmp[1], __func__, __LINE__);
 
@@ -488,23 +493,25 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 		const uint64_t				    lrh_dlid_16B = dlid;
 		const struct fi_opx_hfi1_txe_scb_16B *const model_16B =
 			opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING ?
-				&opx_ep->reli_service->ping_model_16B :
+				&opx_ep->reli_service->ping_model_16B[tx_index] :
 				(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK ?
-					 &opx_ep->reli_service->ack_model_16B :
-					 &opx_ep->reli_service->nack_model_16B);
+					 &opx_ep->reli_service->ack_model_16B[tx_index] :
+					 &opx_ep->reli_service->nack_model_16B[tx_index]);
 		const uint64_t pbc_dlid = OPX_PBC_DLID(dlid, hfi1_type);
 
-		opx_cacheline_store_qw_vol(
-			scb,
-			model_16B->qw0 | OPX_PBC_CR(1, hfi1_type) | pbc_dlid | OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type),
-			model_16B->hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
+		opx_cacheline_store_qw_vol(scb,
+					   model_16B->qw0 | OPX_PBC_CR(1, hfi1_type) | pbc_dlid |
+						   OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+					   model_16B->hdr.qw_16B[0] |
+						   ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						    << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
-			model_16B->hdr.qw_16B[1] |
-				((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
-				 OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
-				(uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
-			model_16B->hdr.qw_16B[2] | bth_rx, model_16B->hdr.qw_16B[3],
-			model_16B->hdr.qw_16B[4] | key_dw_suffix, psn_count_24, psn_start_24);
+					   model_16B->hdr.qw_16B[1] |
+						   ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+						    OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
+						   (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
+					   model_16B->hdr.qw_16B[2] | bth_rx,
+					   model_16B->hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
+					   model_16B->hdr.qw_16B[4] | key_dw_suffix, psn_count_24, psn_start_24);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
@@ -516,7 +523,6 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 	}
-
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_tx->pio_credits_addr);
 	/* save the updated txe state */
 	opx_tx->pio_state->qw0 = pio_state.qw0;
@@ -527,20 +533,21 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t dlid,
 					      const uint16_t reliability_subctxt_rx, const uint64_t psn_start,
 					      const uint64_t psn_count, const union opx_hfi1_packet_hdr *const hdr,
-					      const opx_lid_t slid, const enum opx_hfi1_type hfi1_type,
+					      const opx_lid_t slid, const uint8_t tx_index,
+					      const opx_lid_t primary_slid, const enum opx_hfi1_type hfi1_type,
 					      const bool ctx_sharing)
 {
 	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_SEND_PRE_ACKS, 0, 0);
 
 	const union fi_opx_reliability_service_flow_key key = {
-		.slid		= slid,
+		.slid		= OPX_RELIABILITY_ENCODE_LID_TX(primary_slid, tx_index),
 		.src_subctxt_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr),
-		.dlid		= dlid,
+		.dlid		= OPX_RELIABILITY_ENCODE_LID_TX(dlid, tx_index),
 		.dst_subctxt_rx = reliability_subctxt_rx,
 	};
 
 	ssize_t rc __attribute__((unused));
-	rc = fi_opx_hfi1_tx_reliability_inject(ep, &key, slid, key.src_subctxt_rx, psn_start, psn_count,
+	rc = fi_opx_hfi1_tx_reliability_inject(ep, &key, primary_slid, key.src_subctxt_rx, psn_start, psn_count,
 					       FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK, hfi1_type, ctx_sharing);
 	INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_ACKS_SENT, key, psn_start, psn_count);
 	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_SEND_PRE_ACKS, 0, 0);
@@ -1334,7 +1341,8 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 		}
 	}
 
-	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
+	struct fi_opx_ep_tx	   *opx_tx    = opx_ep->tx_contexts[replay->tx_index];
+	union fi_opx_hfi1_pio_state pio_state = *opx_tx->pio_state;
 
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	const uint16_t credits_needed	    = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ? 1 : 2;
@@ -1344,13 +1352,13 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 					      last_partial_block;      /* last partial block  */
 	uint16_t total_credits_available = FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state);
 	if (total_credits_available < total_credits_needed) {
-		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
+		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_tx->pio_credits_addr);
 		total_credits_available = FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state);
 		if (total_credits_available < total_credits_needed) {
 			OPX_RELIABILITY_DEBUG_LOG(&key, "(tx) packet psn=%08u Couldn't do replay (no credits)\n",
 						  (uint32_t) FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(replay)));
 
-			opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+			opx_tx->pio_state->qw0 = pio_state.qw0;
 
 			return -FI_EAGAIN;
 		}
@@ -1395,7 +1403,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 		buf_qws = replay->payload;
 	}
 
-	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
+	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_sop_first, pio_state);
 	opx_cacheline_store_block_vol(scb, replay->scb.qws);
 
 	/* consume one credit for the packet header */
@@ -1406,7 +1414,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 #endif
 
 	if (hfi1_type & OPX_HFI1_CNX000) {
-		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, pio_state);
 
 		// spill from 1st cacheline (SOP)
 		OPX_HFI1_BAR_PIO_STORE(&scb_payload[0], replay->scb.scb_16B.hdr.qw_16B[7]); // header
@@ -1439,7 +1447,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 	}
 	/* Copy full blocks of payload */
 	while (payload_credits_needed) {
-		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, pio_state);
 
 		const uint16_t contiguous_scb_until_wrap =
 			(uint16_t) (pio_state.credits_total - pio_state.scb_head_index);
@@ -1469,7 +1477,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 		int16_t payload_tail_bytes = (payload_bytes_to_copy & 0x3Ful); /* not icrc/pad */
 
 		/* We have a credit so we don't have to worry about this wrapping on one block */
-		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, pio_state);
 
 		uint16_t i = 0;
 		for (; payload_tail_bytes >= 8; payload_tail_bytes -= 8) {
@@ -1511,10 +1519,10 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 	assert(consumed_credits == total_credits_needed);
 #endif
 
-	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_tx->pio_credits_addr);
 
 	/* save the updated txe state */
-	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+	opx_tx->pio_state->qw0 = pio_state.qw0;
 
 	return FI_SUCCESS;
 }
@@ -1524,12 +1532,14 @@ ssize_t fi_opx_reliability_pio_replay(union fi_opx_reliability_deferred_work *wo
 	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_PIO_REPLAY, 0, 0);
 	struct fi_opx_reliability_tx_pio_replay_params *params = &work->pio_replay;
 	struct fi_opx_ep			       *opx_ep = (struct fi_opx_ep *) params->opx_ep;
-	struct fi_opx_ep_tx			       *opx_tx = opx_ep->tx_contexts[OPX_PRIMARY_PLANE];
-
 	OPX_RELIABILITY_DEBUG_LOG(params->flow_key,
 				  "(tx) Executing deferred PIO Replay (%p) with start_index=%u, num_replay=%u\n",
 				  params, params->start_index, params->num_replays);
 
+	uint8_t		     tx_index = (params->num_replays > 0 && params->replays[params->start_index]) ?
+						params->replays[params->start_index]->tx_index :
+						0;
+	struct fi_opx_ep_tx *opx_tx   = opx_ep->tx_contexts[tx_index];
 	OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
 	for (int i = params->start_index; i < params->num_replays; ++i) {
@@ -1680,7 +1690,6 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 	struct fi_opx_reliability_tx_pio_replay_params *params	       = NULL;
 	bool						queing_replays = false;
 	struct fi_opx_ep			       *opx_ep	       = container_of(ep, struct fi_opx_ep, ep_fid);
-	struct fi_opx_ep_tx			       *opx_tx	       = opx_ep->tx_contexts[OPX_PRIMARY_PLANE];
 
 	/* We'll attempt to send each replay on the spot as long as sending the replay
 	   succeeds. As soon as replaying fails, we'll queue the failed replay and
@@ -1705,6 +1714,12 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_rzv);
 				}
 #endif
+				/* Use the replay's tx_index to lock the correct TX context.
+				   fi_opx_reliability_service_do_replay internally uses
+				   opx_ep->tx_contexts[replay->tx_index], so the PIO lock
+				   must protect the same TX context to avoid a race condition
+				   in dual-plane mode. */
+				struct fi_opx_ep_tx *opx_tx = opx_ep->tx_contexts[replay->tx_index];
 				OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
 				if (fi_opx_reliability_service_do_replay(opx_ep, service, replay) != FI_SUCCESS) {
@@ -1782,41 +1797,43 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_reliability_send_ping(struct fid_ep *ep, struct fi_opx_reliability_service *service, RbtIterator itr,
 				     const union fi_opx_reliability_service_flow_key *key)
 {
+	struct fi_opx_reliability_tx_replay **value_ptr;
+	struct fi_opx_reliability_tx_replay  *head;
+	uint64_t			      rx;
+	uint64_t			      psn_start;
+	uint64_t			      psn_stop;
+	uint64_t			      psn_count;
+	ssize_t				      rc;
+	opx_lid_t			      primary_dlid;
+
 	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_PING, 0, 0);
-	struct fi_opx_reliability_tx_replay **value_ptr = (struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(
+	value_ptr = (struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(
 		service->tx.tx_flow_outstanding_pkts_rbtree, itr);
 
-	struct fi_opx_reliability_tx_replay *head = *value_ptr;
+	head = *value_ptr;
 
 	if (OFI_UNLIKELY(head == NULL)) {
 		OPX_TRACE_RELI_END_ERROR(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 		return OPX_RELIABILITY_PING_NO_REPLAYS;
 	}
 
-	opx_lid_t dlid;
-	/* Inlined but called from non-inlined functions with no const hfi1 type, so just use the runtime check */
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		dlid = (opx_lid_t) __be16_to_cpu24((__be16) head->scb.scb_9B.hdr.lrh_9B.dlid);
-	} else {
-		dlid = (opx_lid_t) __le24_to_cpu(head->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 |
-						 head->scb.scb_16B.hdr.lrh_16B.dlid);
-	}
+	rx = (uint64_t) head->target_reliability_subctxt_rx;
 
-	const uint64_t rx = (uint64_t) head->target_reliability_subctxt_rx;
+	primary_dlid = OPX_RELIABILITY_DECODE_LID(key->dlid);
 
-	// psn_start will always be 24-bit max number here
-	uint64_t psn_start = FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(head));
-	uint64_t psn_stop  = FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(head->prev));
+	/* psn_start will always be 24-bit max number here */
+	psn_start = FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(head));
+	psn_stop  = FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(head->prev));
 
-	// if the PSN of the tail is less than the PSN of the head, the
-	// PSN has rolled over. In that case, truncate the ping range
-	// to avoid rollover confusion.
-	uint64_t psn_count = ((psn_start > psn_stop) ? MAX_PSN : psn_stop) - psn_start + 1;
+	/* if the PSN of the tail is less than the PSN of the head, the
+	 * PSN has rolled over. In that case, truncate the ping range
+	 * to avoid rollover confusion.
+	 */
+	psn_count = ((psn_start > psn_stop) ? MAX_PSN : psn_stop) - psn_start + 1;
 
-	// Send one ping to cover the entire replay range.
-	ssize_t rc = fi_opx_hfi1_tx_reliability_inject(ep, key, dlid, rx, psn_start, psn_count,
-						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING, OPX_SW_HFI1_TYPE,
-						       OPX_IS_CTX_SHARING_ENABLED);
+	rc = fi_opx_hfi1_tx_reliability_inject(ep, key, primary_dlid, rx, psn_start, psn_count,
+					       FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING, OPX_SW_HFI1_TYPE,
+					       OPX_IS_CTX_SHARING_ENABLED);
 
 	INC_PING_STAT_COND(rc == FI_SUCCESS, PINGS_SENT, *key, psn_start, psn_count);
 
@@ -1948,7 +1965,8 @@ void fi_opx_reliability_service_process_pending(struct fi_opx_reliability_servic
 	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_PROCESS_PENDING, 0, 0);
 }
 
-void fi_opx_reliability_model_init_9B(struct fi_opx_reliability_service *service, struct fi_opx_hfi1_context *hfi1)
+static void fi_opx_reliability_model_init_9B(struct fi_opx_reliability_service *service,
+					     struct fi_opx_hfi1_context *hfi1, unsigned tx_index, opx_lid_t primary_lid)
 {
 	/* 'ping' pio send model */
 	{
@@ -1962,41 +1980,46 @@ void fi_opx_reliability_model_init_9B(struct fi_opx_reliability_service *service
 		enum opx_hfi1_type __attribute__((unused)) hfi1_type =
 			(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? OPX_HFI1_WFR : OPX_HFI1_MIXED_9B;
 
-		service->ping_model_9B.qw0 =
+		service->ping_model_9B[tx_index].qw0 =
 			OPX_PBC_LEN(pbc_dws, hfi1_type) | OPX_PBC_VL(hfi1->vl, hfi1_type) |
 			OPX_PBC_SC(hfi1->sc, hfi1_type) | OPX_PBC_L2TYPE(OPX_PBC_JKR_L2TYPE_9B, hfi1_type) |
 			OPX_PBC_L2COMPRESSED(0, hfi1_type) | OPX_PBC_PORTIDX(hfi1->hfi_port, hfi1_type) |
 			OPX_PBC_SCTXT(hfi1->send_ctxt, hfi1_type);
 
 		/* LRH */
-		service->ping_model_9B.hdr.lrh_9B.flags =
+		service->ping_model_9B[tx_index].hdr.lrh_9B.flags =
 			htons(FI_OPX_HFI1_LRH_BTH | ((hfi1->sl & FI_OPX_HFI1_LRH_SL_MASK) << FI_OPX_HFI1_LRH_SL_SHIFT) |
 			      ((hfi1->sc & FI_OPX_HFI1_LRH_SC_MASK) << FI_OPX_HFI1_LRH_SC_SHIFT));
 
-		service->ping_model_9B.hdr.lrh_9B.dlid = 0; /* set at runtime */
-		service->ping_model_9B.hdr.lrh_9B.pktlen =
+		service->ping_model_9B[tx_index].hdr.lrh_9B.dlid = 0; /* set at runtime */
+		service->ping_model_9B[tx_index].hdr.lrh_9B.pktlen =
 			htons(pbc_dws - 2 +
 			      1); /* (BE: LRH DW) does not include pbc (8 bytes), but does include icrc (4 bytes) */
-		service->ping_model_9B.hdr.lrh_9B.slid = htons(hfi1->lid);
+		service->ping_model_9B[tx_index].hdr.lrh_9B.slid = htons(hfi1->lid);
 
 		/* BTH */
-		service->ping_model_9B.hdr.bth.opcode	  = FI_OPX_HFI_BTH_OPCODE_UD;
-		service->ping_model_9B.hdr.bth.bth_1	  = 0;
-		service->ping_model_9B.hdr.bth.pkey	  = htons(hfi1->pkey);
-		service->ping_model_9B.hdr.bth.ecn	  = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_INJECT)) |
-								       OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
-		service->ping_model_9B.hdr.bth.qp	  = hfi1->bthqp;
-		service->ping_model_9B.hdr.bth.subctxt_rx = 0; /* set at runtime */
+		service->ping_model_9B[tx_index].hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_UD;
+		service->ping_model_9B[tx_index].hdr.bth.bth_1	= 0;
+		service->ping_model_9B[tx_index].hdr.bth.pkey	= htons(hfi1->pkey);
+		service->ping_model_9B[tx_index].hdr.bth.ecn =
+			(uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_INJECT)) |
+				   OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+		service->ping_model_9B[tx_index].hdr.bth.qp	    = hfi1->bthqp;
+		service->ping_model_9B[tx_index].hdr.bth.subctxt_rx = 0; /* set at runtime */
 
 		/* KDETH */
-		service->ping_model_9B.hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION
-								  << FI_OPX_HFI1_KDETH_VERSION_SHIFT;
-		service->ping_model_9B.hdr.kdeth.jkey	= hfi1->jkey;
-		service->ping_model_9B.hdr.kdeth.hcrc	= 0;
-		service->ping_model_9B.hdr.kdeth.unused = 0;
+		service->ping_model_9B[tx_index].hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION
+									    << FI_OPX_HFI1_KDETH_VERSION_SHIFT;
+		service->ping_model_9B[tx_index].hdr.kdeth.jkey	  = hfi1->jkey;
+		service->ping_model_9B[tx_index].hdr.kdeth.hcrc	  = 0;
+		service->ping_model_9B[tx_index].hdr.kdeth.unused = 0;
+
+		/* Bake primary_lid into QW[3] spare bits so reliability
+		 * responses can be routed back to the sender's primary plane */
+		service->ping_model_9B[tx_index].hdr.qw_9B[2] |= FI_OPX_PKT_PRIMARY_LID_TO_QW3(primary_lid);
 
 		/* reliability service */
-		union opx_hfi1_packet_hdr *hdr = &service->ping_model_9B.hdr;
+		union opx_hfi1_packet_hdr *hdr = &service->ping_model_9B[tx_index].hdr;
 
 		hdr->ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING;
 
@@ -2009,20 +2032,22 @@ void fi_opx_reliability_model_init_9B(struct fi_opx_reliability_service *service
 		OPX_DEBUG_PRINT_HDR((hdr), hfi1_type);
 
 		/* 'ack' pio send model */
-		service->ack_model_9B		    = service->ping_model_9B;
-		service->ack_model_9B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK;
+		service->ack_model_9B[tx_index]		      = service->ping_model_9B[tx_index];
+		service->ack_model_9B[tx_index].hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK;
 
-		OPX_DEBUG_PRINT_HDR((&(service->ack_model_9B.hdr)), hfi1_type);
+		OPX_DEBUG_PRINT_HDR((&(service->ack_model_9B[tx_index].hdr)), hfi1_type);
 
 		/* 'nack' pio send model */
-		service->nack_model_9B		     = service->ping_model_9B;
-		service->nack_model_9B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK;
+		service->nack_model_9B[tx_index]	       = service->ping_model_9B[tx_index];
+		service->nack_model_9B[tx_index].hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK;
 
-		OPX_DEBUG_PRINT_HDR((&(service->nack_model_9B.hdr)), hfi1_type);
+		OPX_DEBUG_PRINT_HDR((&(service->nack_model_9B[tx_index].hdr)), hfi1_type);
 	}
 }
 
-void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service *service, struct fi_opx_hfi1_context *hfi1)
+static void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service *service,
+					      struct fi_opx_hfi1_context *hfi1, unsigned tx_index,
+					      opx_lid_t primary_lid)
 {
 	/* Ping model */
 	/* PBC */
@@ -2035,50 +2060,53 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service *servic
 	/* Setup the 16B models whether or not they'll be used */
 	enum opx_hfi1_type __attribute__((unused)) hfi1_type = OPX_HFI1_CYR;
 
-	service->ping_model_16B.qw0 = OPX_PBC_LEN(pbc_dws, hfi1_type) | OPX_PBC_VL(hfi1->vl, hfi1_type) |
-				      OPX_PBC_SC(hfi1->sc, hfi1_type) |
-				      OPX_PBC_L2TYPE(OPX_PBC_JKR_L2TYPE_16B, hfi1_type) |
-				      OPX_PBC_L2COMPRESSED(0, hfi1_type) | OPX_PBC_PORTIDX(hfi1->hfi_port, hfi1_type) |
-				      OPX_PBC_SCTXT(hfi1->send_ctxt, hfi1_type) | OPX_PBC_JKR_INSERT_NON9B_ICRC;
+	service->ping_model_16B[tx_index].qw0 =
+		OPX_PBC_LEN(pbc_dws, hfi1_type) | OPX_PBC_VL(hfi1->vl, hfi1_type) | OPX_PBC_SC(hfi1->sc, hfi1_type) |
+		OPX_PBC_L2TYPE(OPX_PBC_JKR_L2TYPE_16B, hfi1_type) | OPX_PBC_L2COMPRESSED(0, hfi1_type) |
+		OPX_PBC_PORTIDX(hfi1->hfi_port, hfi1_type) | OPX_PBC_SCTXT(hfi1->send_ctxt, hfi1_type) |
+		OPX_PBC_JKR_INSERT_NON9B_ICRC;
 
 	/* LRH */
 	/* (LRH QW) does not include pbc (8 bytes) */
 	const uint32_t packetLength = (pbc_dws - 2) * 4;
 	const uint32_t lrh_qws	    = (packetLength >> 3) + ((packetLength & 0x07u) != 0);
 
-	service->ping_model_16B.hdr.lrh_16B.qw[0]   = 0UL;
-	service->ping_model_16B.hdr.lrh_16B.qw[1]   = 0UL;
-	service->ping_model_16B.hdr.lrh_16B.pktlen  = lrh_qws;
-	service->ping_model_16B.hdr.lrh_16B.sc	    = hfi1->sc;
-	service->ping_model_16B.hdr.lrh_16B.entropy = hfi1->ctrl->ctxt_info.send_ctxt;
-	service->ping_model_16B.hdr.lrh_16B.lt	    = 0; // need to add env variable to change
-	service->ping_model_16B.hdr.lrh_16B.l2	    = OPX_PBC_JKR_L2TYPE_16B;
-	service->ping_model_16B.hdr.lrh_16B.l4	    = 9;
-	service->ping_model_16B.hdr.lrh_16B.rc	    = OPX_LRH_JKR_16B_RC(OPX_HFI1_INJECT);
-	service->ping_model_16B.hdr.lrh_16B.cspec   = OPX_BTH_CSPEC_DEFAULT; /*NOT BTH CSPEC*/
-	service->ping_model_16B.hdr.lrh_16B.pkey    = hfi1->pkey;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.qw[0]   = 0UL;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.qw[1]   = 0UL;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.pktlen  = lrh_qws;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.sc      = hfi1->sc;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.entropy = hfi1->ctrl->ctxt_info.send_ctxt;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.lt      = 0; // need to add env variable to change
+	service->ping_model_16B[tx_index].hdr.lrh_16B.l2      = OPX_PBC_JKR_L2TYPE_16B;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.l4      = 9;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.rc      = OPX_LRH_JKR_16B_RC(OPX_HFI1_INJECT);
+	service->ping_model_16B[tx_index].hdr.lrh_16B.cspec   = OPX_BTH_CSPEC_DEFAULT; /*NOT BTH CSPEC*/
+	service->ping_model_16B[tx_index].hdr.lrh_16B.pkey    = hfi1->pkey;
 
-	service->ping_model_16B.hdr.lrh_16B.slid   = hfi1->lid & 0xFFFFF;
-	service->ping_model_16B.hdr.lrh_16B.slid20 = (hfi1->lid) >> 20;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.slid   = hfi1->lid & 0xFFFFF;
+	service->ping_model_16B[tx_index].hdr.lrh_16B.slid20 = (hfi1->lid) >> 20;
 
 	/* BTH */
-	service->ping_model_16B.hdr.bth.opcode	   = FI_OPX_HFI_BTH_OPCODE_UD;
-	service->ping_model_16B.hdr.bth.bth_1	   = 0;
-	service->ping_model_16B.hdr.bth.pkey	   = hfi1->pkey;
-	service->ping_model_16B.hdr.bth.ecn	   = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_INJECT)) |
-								OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
-	service->ping_model_16B.hdr.bth.qp	   = hfi1->bthqp;
-	service->ping_model_16B.hdr.bth.subctxt_rx = 0; /* set at runtime */
-	service->ping_model_16B.hdr.bth.psn	   = 0;
+	service->ping_model_16B[tx_index].hdr.bth.opcode = FI_OPX_HFI_BTH_OPCODE_UD;
+	service->ping_model_16B[tx_index].hdr.bth.bth_1	 = 0;
+	service->ping_model_16B[tx_index].hdr.bth.pkey	 = hfi1->pkey;
+	service->ping_model_16B[tx_index].hdr.bth.ecn	 = (uint8_t) ((OPX_BTH_RC2_VAL(hfi1_type, OPX_HFI1_INJECT)) |
+								      OPX_BTH_CSPEC(OPX_BTH_CSPEC_DEFAULT, hfi1_type));
+	service->ping_model_16B[tx_index].hdr.bth.qp	 = hfi1->bthqp;
+	service->ping_model_16B[tx_index].hdr.bth.subctxt_rx = 0; /* set at runtime */
+	service->ping_model_16B[tx_index].hdr.bth.psn	     = 0;
 
 	/* KDETH */
-	service->ping_model_16B.hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION << FI_OPX_HFI1_KDETH_VERSION_SHIFT;
-	service->ping_model_16B.hdr.kdeth.jkey		 = hfi1->jkey;
-	service->ping_model_16B.hdr.kdeth.hcrc		 = 0;
-	service->ping_model_16B.hdr.kdeth.unused	 = 0;
+	service->ping_model_16B[tx_index].hdr.kdeth.offset_ver_tid = FI_OPX_HFI1_KDETH_VERSION
+								     << FI_OPX_HFI1_KDETH_VERSION_SHIFT;
+	service->ping_model_16B[tx_index].hdr.kdeth.jkey   = hfi1->jkey;
+	service->ping_model_16B[tx_index].hdr.kdeth.hcrc   = 0;
+	service->ping_model_16B[tx_index].hdr.kdeth.unused = 0;
+
+	service->ping_model_16B[tx_index].hdr.qw_16B[3] |= FI_OPX_PKT_PRIMARY_LID_TO_QW3(primary_lid);
 
 	/* reliability service */
-	union opx_hfi1_packet_hdr *hdr = &service->ping_model_16B.hdr;
+	union opx_hfi1_packet_hdr *hdr = &service->ping_model_16B[tx_index].hdr;
 
 	hdr->ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING;
 
@@ -2091,16 +2119,23 @@ void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service *servic
 	OPX_DEBUG_PRINT_HDR((hdr), hfi1_type);
 
 	/* 'ack' pio send model */
-	service->ack_model_16B		     = service->ping_model_16B;
-	service->ack_model_16B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK;
+	service->ack_model_16B[tx_index]	       = service->ping_model_16B[tx_index];
+	service->ack_model_16B[tx_index].hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK;
 
-	OPX_DEBUG_PRINT_HDR((&(service->ack_model_16B.hdr)), hfi1_type);
+	OPX_DEBUG_PRINT_HDR((&(service->ack_model_16B[tx_index].hdr)), hfi1_type);
 
 	/* 'nack' pio send model */
-	service->nack_model_16B		      = service->ping_model_16B;
-	service->nack_model_16B.hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK;
+	service->nack_model_16B[tx_index]		= service->ping_model_16B[tx_index];
+	service->nack_model_16B[tx_index].hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK;
 
-	OPX_DEBUG_PRINT_HDR((&(service->nack_model_16B.hdr)), hfi1_type);
+	OPX_DEBUG_PRINT_HDR((&(service->nack_model_16B[tx_index].hdr)), hfi1_type);
+}
+
+void fi_opx_reliability_model_init_plane(struct fi_opx_reliability_service *service, struct fi_opx_hfi1_context *hfi1,
+					 unsigned tx_index, opx_lid_t primary_lid)
+{
+	fi_opx_reliability_model_init_9B(service, hfi1, tx_index, primary_lid);
+	fi_opx_reliability_model_init_16B(service, hfi1, tx_index, primary_lid);
 }
 
 void fi_opx_reliability_service_init(struct fi_opx_reliability_service *service, struct fi_opx_hfi1_context *hfi1,
@@ -2350,8 +2385,8 @@ void fi_opx_reliability_service_init(struct fi_opx_reliability_service *service,
 
 	slist_init(&service->rx.work_pending);
 
-	fi_opx_reliability_model_init_16B(service, hfi1);
-	fi_opx_reliability_model_init_9B(service, hfi1);
+	fi_opx_reliability_model_init_16B(service, hfi1, 0, hfi1->lid);
+	fi_opx_reliability_model_init_9B(service, hfi1, 0, hfi1->lid);
 
 #ifdef OPX_DAOS
 	service->flow_rbtree_resynch = rbtNew(fi_opx_reliability_compare);
@@ -2491,7 +2526,8 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 				     struct fi_opx_reliability_rx_flow *flow, opx_lid_t slid, uint64_t src_origin_rx,
 				     uint32_t psn, struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const enum opx_hfi1_type hfi1_type,
-				     const uint8_t opcode, const bool ctx_sharing)
+				     const uint8_t opcode, const bool ctx_sharing, const opx_lid_t dlid,
+				     const opx_lid_t primary_slid)
 {
 	uint64_t next_psn = flow->next_psn;
 
@@ -2509,10 +2545,11 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 		service->process_fn(ep, hdr, payload);
 
 		if (!(psn & service->preemptive_ack_rate_mask) && psn) {
-			fi_opx_hfi1_rx_reliability_send_pre_acks(ep, service->lid, service->subctxt_rx,
-								 psn - service->preemptive_ack_rate + 1, /* psn_start */
-								 service->preemptive_ack_rate,		 /* psn_count */
-								 hdr, slid, hfi1_type, ctx_sharing);
+			uint8_t tx_idx = FI_OPX_HFI1_PACKET_TX_INDEX(hdr);
+			fi_opx_hfi1_rx_reliability_send_pre_acks(
+				ep, dlid, service->subctxt_rx, psn - service->preemptive_ack_rate + 1, /* psn_start */
+				service->preemptive_ack_rate,					       /* psn_count */
+				hdr, slid, tx_idx, primary_slid, hfi1_type, ctx_sharing);
 		}
 
 		next_psn += 1;
@@ -2530,11 +2567,12 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 
 			psn = next_psn & MAX_PSN;
 			if (!(psn & service->preemptive_ack_rate_mask) && psn) {
-				fi_opx_hfi1_rx_reliability_send_pre_acks(ep, service->lid, service->subctxt_rx,
-									 psn - service->preemptive_ack_rate +
-										 1,		       /* psn_start */
-									 service->preemptive_ack_rate, /* psn_count */
-									 hdr, slid, hfi1_type, ctx_sharing);
+				uint8_t tx_idx = FI_OPX_HFI1_PACKET_TX_INDEX(&uepkt->hdr);
+				fi_opx_hfi1_rx_reliability_send_pre_acks(
+					ep, dlid, service->subctxt_rx,
+					psn - service->preemptive_ack_rate + 1, /* psn_start */
+					service->preemptive_ack_rate,		/* psn_count */
+					&uepkt->hdr, slid, tx_idx, primary_slid, hfi1_type, ctx_sharing);
 			}
 
 			++next_psn;
@@ -2584,9 +2622,8 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 		 * NOTE: We'll do this regardless of what preemptive ack rate is set to for the normal flow.
 		 */
 		ssize_t rc __attribute__((unused));
-		rc = fi_opx_hfi1_tx_reliability_inject(ep, flow->key, flow->key->slid, src_origin_rx,
-						       psn, /* psn_start */
-						       1,   /* psn_count */
+		rc = fi_opx_hfi1_tx_reliability_inject(ep, flow->key, primary_slid, src_origin_rx, psn, /* psn_start */
+						       1,						/* psn_count */
 						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK, hfi1_type, ctx_sharing);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_ACKS_SENT, *(flow->key), psn, 1);
 
@@ -2619,9 +2656,8 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 
 #ifdef OPX_RELIABILITY_ENABLE_PRE_NACK
 		uint64_t nack_count = MIN(psn_64 - next_psn, OPX_RELIABILITY_RX_MAX_PRE_NACK);
-		rc = fi_opx_hfi1_tx_reliability_inject(ep, flow->key, flow->key->slid, src_origin_rx, next_psn,
-						       nack_count, FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, hfi1_type,
-						       ctx_sharing, ctx_sharing);
+		rc = fi_opx_hfi1_tx_reliability_inject(ep, flow->key, primary_slid, src_origin_rx, next_psn, nack_count,
+						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, hfi1_type, ctx_sharing);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, *(flow->key), next_psn, nack_count);
 #endif
 
@@ -2677,8 +2713,8 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 
 		if (nack_count) {
 			rc = fi_opx_hfi1_tx_reliability_inject(
-				ep, flow->key, flow->key->slid, src_origin_rx, nack_start_psn, nack_count,
-				FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, hfi1_type, ctx_sharing, ctx_sharing);
+				ep, flow->key, primary_slid, src_origin_rx, nack_start_psn, nack_count,
+				FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK, hfi1_type, ctx_sharing);
 
 			INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, *(flow->key), next_psn, nack_count);
 		}

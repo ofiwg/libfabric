@@ -259,6 +259,72 @@ static inline const char *opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? ntohl((packet_hdr)->bth.psn) & 0x00FFFFFF : \
 									(packet_hdr)->reliability.psn)
 
+/* Bounds-validated tx_index extraction: asserts raw field < OPX_MAX_TX_CONTEXTS in debug builds */
+#define FI_OPX_HFI1_PACKET_TX_INDEX(packet_hdr)                                                   \
+	({                                                                                        \
+		uint8_t _tx_idx = (((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? \
+					   (packet_hdr)->dput.tx_index :                          \
+					   (packet_hdr)->reliability.tx_index) &                  \
+				  (OPX_MAX_TX_CONTEXTS - 1);                                      \
+		assert(_tx_idx < OPX_MAX_TX_CONTEXTS);                                            \
+		_tx_idx;                                                                          \
+	})
+
+/*
+ * Primary LID encoding in packet headers for dual-plane reliability.
+ *
+ * The sender's primary-plane LID (up to 24 bits) is packed into spare
+ * bits of QW[3] (for non-dput packets) or QW[4] (for dput/RZV_DATA).
+ *
+ * QW[3] bit layout (non-dput):
+ *   [23:0]   = PSN (24 bits)
+ *   [24]     = tx_index (1 bit used of 8-bit field)
+ *   [31:25]  = primary_lid[6:0]   (7 bits from tx_index spare)
+ *   [34:32]  = origin_rx[2:0]     (3 bits used)
+ *   [39:35]  = primary_lid[11:7]  (5 bits from origin_rx spare [7:3])
+ *   [47:40]  = origin_rx[15:8]    (8 bits used, mask 0xFF07)
+ *   [49:48]  = spare
+ *   [61:50]  = primary_lid[23:12] (12 bits from reserved_1 spare)
+ *   [63:62]  = KVER (must preserve 01)
+ *
+ * QW[4] bit layout (dput/RZV_DATA):
+ *   [31:0]   = reserved_4 (kdeth.jkey + kdeth.hcrc)
+ *   [55:32]  = primary_lid[23:0]  (24 contiguous bits in dput.unused0[3])
+ *   [63:56]  = tx_index (8 bits, only bit 56 used)
+ */
+
+/* TX: Build primary_lid contribution to QW[3] (non-dput packets).
+ * Splits 24-bit LID across 3 spare regions in QW[3]. */
+#define FI_OPX_PKT_PRIMARY_LID_TO_QW3(primary_lid)                                   \
+	((((uint64_t) ((primary_lid) & 0x7F)) << 25) |	       /* [6:0]->[31:25]  */ \
+	 (((uint64_t) (((primary_lid) >> 7) & 0x1F)) << 35) |  /* [11:7]->[39:35] */ \
+	 (((uint64_t) (((primary_lid) >> 12) & 0xFFF)) << 50)) /* [23:12]->[61:50] */
+
+/* RX: Extract primary_lid from QW[3] (non-dput packets). */
+#define FI_OPX_PKT_QW3_TO_PRIMARY_LID(qw3)                                   \
+	((opx_lid_t) ((((qw3) >> 25) & 0x7F) |	      /* [31:25]->[6:0]   */ \
+		      ((((qw3) >> 35) & 0x1F) << 7) | /* [39:35]->[11:7]  */ \
+		      ((((qw3) >> 50) & 0xFFF) << 12) /* [61:50]->[23:12] */ \
+		      ))
+
+/* TX: Build tx_index contribution to QW[3] (1 bit only, bit 24). */
+#define FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index) ((uint64_t) ((tx_index) & 0x1) << 24)
+
+/* TX: Build primary_lid contribution to QW[4] for dput (24 contiguous bits). */
+#define FI_OPX_PKT_PRIMARY_LID_TO_QW4(primary_lid) (((uint64_t) ((primary_lid) & 0xFFFFFF)) << 32)
+
+/* RX: Extract primary_lid from QW[4] for dput. */
+#define FI_OPX_PKT_QW4_TO_PRIMARY_LID(qw4) ((opx_lid_t) (((qw4) >> 32) & 0xFFFFFF))
+
+/* Unified RX accessor: extract sender's primary LID from any packet type.
+ * Uses qw_16B[] which has no index offset for both 9B and 16B formats:
+ *   qw_16B[3] = QW[3], qw_16B[4] = QW[4]
+ *   qw_9B[2]  = QW[3], qw_9B[3]  = QW[4]  (offset by 1) */
+#define FI_OPX_HFI1_PACKET_PRIMARY_LID(packet_hdr)                        \
+	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ?   \
+		 FI_OPX_PKT_QW4_TO_PRIMARY_LID((packet_hdr)->qw_16B[4]) : \
+		 FI_OPX_PKT_QW3_TO_PRIMARY_LID((packet_hdr)->qw_16B[3]))
+
 #define FI_OPX_HFI_UD_OPCODE_MASK (0xf0)
 
 #define FI_OPX_HFI_UD_OPCODE_FIRST_INVALID	     (0x00)
@@ -706,7 +772,7 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[3] BTH/KDETH (psn,offset_ver_tid)*/
 		uint32_t psn : 24;
-		uint32_t psn_reserved : 8;
+		uint32_t tx_index : 8;
 		uint16_t origin_rx;
 		uint16_t reserved_1;
 
@@ -974,7 +1040,8 @@ union opx_hfi1_packet_hdr {
 
 		/* QW[4] KDETH/SW */
 		uint32_t reserved_4;
-		uint8_t	 unused1[4];
+		uint8_t	 unused0[3];
+		uint8_t	 tx_index;
 
 		/* QW[5,6,7] KDETH/SW */
 		union {
@@ -1676,7 +1743,7 @@ struct fi_opx_hfi1_ue_packet {
 	uint16_t  subctxt_rx;
 	uint8_t	  is_shm;
 
-	uint8_t unused;
+	uint8_t tx_index;
 
 	/* == CACHE LINE 1, 2 == */
 	uint64_t		  recv_time_ns;

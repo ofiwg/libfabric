@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024-2025 Cornelis Networks.
+ * Copyright (C) 2024-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -77,22 +77,25 @@
 	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_L2COMPRESSED(_c) : OPX_PBC_JKR_L2COMPRESSED(_c))
 
 #ifndef NDEBUG
-#define OPX_PBC_LOOPBACK(_pbc_lid, _hfi1_type)                                                                         \
+#define OPX_PBC_LOOPBACK(_pbc_lid, _hfi1_type, _tx_index)                                                              \
 	({                                                                                                             \
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,                                                             \
 		       "OPX_PBC_LOOPBACK %s:%u:%s pbc_lid %#llX/%#llX == slid %#llX LOOPBACK MASK %#llX\n", __func__,  \
 		       fi_opx_global.hfi_local_info.sriov, OPX_HFI1_TYPE_STRING(_hfi1_type), (long long int) _pbc_lid, \
-		       (long long int) fi_opx_global.hfi_local_info.pbc_lid,                                           \
-		       (long long int) fi_opx_global.hfi_local_info.lid,                                               \
-		       (long long int) ((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) :                \
-								      OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid)));        \
-		assert((_pbc_lid != fi_opx_global.hfi_local_info.pbc_lid) || fi_opx_global.hfi_local_info.sriov);      \
+		       (long long int) fi_opx_global.hfi_local_info.pbc_lid[_tx_index],                                \
+		       (long long int) fi_opx_global.hfi_local_info.lid[0],                                            \
+		       (long long int) ((_hfi1_type & OPX_HFI1_WFR) ?                                                  \
+						OPX_PBC_WFR_PORTIDX(_hfi1_type) :                                      \
+						OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid, _tx_index)));                   \
+		assert((_pbc_lid != fi_opx_global.hfi_local_info.pbc_lid[_tx_index]) ||                                \
+		       fi_opx_global.hfi_local_info.sriov);                                                            \
 		((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) :                                       \
-					       OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid));                                \
+					       OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid, _tx_index));                     \
 	})
 #else
-#define OPX_PBC_LOOPBACK(_pbc_lid, _hfi1_type) \
-	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) : OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid))
+#define OPX_PBC_LOOPBACK(_pbc_lid, _hfi1_type, _tx_index)                \
+	((_hfi1_type & OPX_HFI1_WFR) ? OPX_PBC_WFR_PORTIDX(_hfi1_type) : \
+				       OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid, _tx_index))
 #endif
 
 #define OPX_PBC_PORTIDX(_pidx, _hfi1_type) \

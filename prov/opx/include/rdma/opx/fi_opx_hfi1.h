@@ -782,13 +782,10 @@ bool opx_lid_is_shm(opx_lid_t lid_plane_key)
 __OPX_FORCE_INLINE__
 int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid, uint8_t plane_idx)
 {
-	/* Self-lid comparison uses the raw lid (no plane bits). */
-	if (fi_opx_global.hfi_local_info.lid == lid) {
-		return fi_opx_global.hfi_local_info.hfi_unit;
+	if (fi_opx_global.hfi_local_info.lid[plane_idx] == lid) {
+		return fi_opx_global.hfi_local_info.hfi_unit[plane_idx];
 	}
 
-	/* The local_lid_ids table stores OPX_LID_PLANE_KEY values,
-	 * so construct the proper key for the lookup. */
 	return fi_opx_hfi1_get_lid_local(OPX_LID_PLANE_KEY(lid, plane_idx))->hfi_unit;
 }
 
@@ -799,6 +796,8 @@ int init_hfi1_rxe_state(struct fi_opx_hfi1_context *context, struct fi_opx_hfi1_
 void opx_remove_self_lid(const int hfi_unit, const opx_lid_t lid, uint8_t plane_idx);
 
 void fi_opx_init_hfi_lookup(bool sriov, uint64_t self_gid_hi, uint8_t self_plane_idx);
+
+void process_hfi_lookup(const int hfi_unit, const opx_lid_t lid, uint64_t gid_hi, uint8_t plane_idx);
 
 /*
  * Shared memory transport

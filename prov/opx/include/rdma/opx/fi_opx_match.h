@@ -174,14 +174,20 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_ue_hash_remove(struct fi_opx_hfi1_ue_
 }
 
 __OPX_FORCE_INLINE__
-uint64_t fi_opx_match_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint16_t origin_rx,
-			     const uint64_t target_tag, const uint64_t ignore_bits,
-			     const struct fi_opx_addr src_opx_addr, const fi_addr_t ctx_src_addr)
+uint64_t fi_opx_match_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const opx_lid_t primary_lid,
+			     const uint16_t origin_rx, const uint8_t tx_index, const uint64_t target_tag,
+			     const uint64_t ignore_bits, const struct fi_opx_addr src_opx_addr,
+			     const fi_addr_t ctx_src_addr)
 {
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore_bits;
-	const uint64_t answer			 = (origin_tag_and_not_ignore == target_tag) &&
+	/* Match both the primary plane LID and the sending-plane LID.
+	 * For single-plane, primary_lid == origin_lid and tx_index == 0.
+	 * For dual-plane cross-plane sends, origin_lid is the secondary
+	 * plane LID while primary_lid identifies the sender. */
+	const uint64_t answer = (origin_tag_and_not_ignore == target_tag) &&
 				((ctx_src_addr == FI_ADDR_UNSPEC) ||
-				 ((origin_lid == src_opx_addr.planes[OPX_PRIMARY_PLANE].lid) &&
+				 ((primary_lid == src_opx_addr.planes[OPX_PRIMARY_PLANE].lid) &&
+				  (origin_lid == src_opx_addr.planes[tx_index].lid) &&
 				  (origin_rx == src_opx_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)));
 	return answer;
 }
@@ -198,8 +204,9 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt_linear(struct fi_opx_match
 
 	FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_linear_searches);
 
-	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->subctxt_rx, target_tag, ignore_bits,
-					     src_opx_addr, ctx_src_addr)) {
+	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, FI_OPX_HFI1_PACKET_PRIMARY_LID(&uepkt->hdr),
+					     uepkt->subctxt_rx, uepkt->tx_index, target_tag, ignore_bits, src_opx_addr,
+					     ctx_src_addr)) {
 		FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_linear_misses);
 		uepkt = uepkt->next;
 	}
@@ -221,8 +228,9 @@ struct fi_opx_hfi1_ue_packet *fi_opx_match_find_uepkt_by_tag(struct fi_opx_match
 
 	FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_tag_searches);
 
-	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, uepkt->subctxt_rx, target_tag, ignore_bits,
-					     src_opx_addr, ctx_src_addr)) {
+	while (uepkt && !fi_opx_match_packet(uepkt->tag, uepkt->lid, FI_OPX_HFI1_PACKET_PRIMARY_LID(&uepkt->hdr),
+					     uepkt->subctxt_rx, uepkt->tx_index, target_tag, ignore_bits, src_opx_addr,
+					     ctx_src_addr)) {
 		FI_OPX_DEBUG_COUNTERS_INC(debug_counters->match.ue_hash_tag_misses);
 		uepkt = uepkt->tag_ht.next;
 	}

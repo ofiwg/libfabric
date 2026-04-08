@@ -116,8 +116,8 @@
 #define OPX_PBC_JKR_L2COMPRESSED(_c) OPX_PBC_JKR_UNUSED /* unused until 16B headers are optimized */
 #define OPX_PBC_JKR_PORTIDX(_pidx) \
 	(((OPX_JKR_PHYS_PORT_TO_INDEX(_pidx)) & OPX_PBC_JKR_PORT_MASK) << OPX_PBC_JKR_PORT_SHIFT)
-#define OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid)                                \
-	((_pbc_lid == fi_opx_global.hfi_local_info.pbc_lid) ?                 \
+#define OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid, _tx_index)                     \
+	((_pbc_lid == fi_opx_global.hfi_local_info.pbc_lid[_tx_index]) ?      \
 		 (OPX_PBC_JKR_PORT_LOOPBACK_MASK << OPX_PBC_JKR_PORT_SHIFT) : \
 		 0)
 #define OPX_PBC_JKR_INSERT_NON9B_ICRC (1 << 24)

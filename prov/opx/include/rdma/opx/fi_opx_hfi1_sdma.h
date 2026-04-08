@@ -173,10 +173,11 @@ struct fi_opx_hfi1_sdma_work_entry {
 	opx_lid_t dlid;
 
 	uint16_t subctxt_rx;
+	uint8_t	 tx_index;
 	bool	 in_use;
 	bool	 use_bounce_buf;
 	bool	 pending_bounce_buf;
-	uint8_t	 unused_byte_padding[3];
+	uint8_t	 unused_byte_padding[2];
 
 	uint64_t first_ack_time_ns;
 
@@ -487,12 +488,14 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 				  union opx_hfi1_txe_scb_union *source_scb, struct iovec *iovs, const uint16_t num_iovs,
 				  const uint16_t num_packets, const uint16_t frag_size, const uint16_t req_control_bits,
 				  const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
-				  const uint64_t last_packet_bytes, const uint32_t kdeth, const uint8_t is_sdma_we)
+				  const uint64_t last_packet_bytes, const uint32_t kdeth, const uint8_t is_sdma_we,
+				  const uint8_t tx_index)
 {
 	assert(!(frag_size & 0x3F)); // frag_size should be multiple of 64
 	assert(num_iovs <= FI_OPX_HFI1_SDMA_WE_IOVS && num_iovs > 0);
 
-	struct opx_sdma_request *request = (struct opx_sdma_request *) ofi_buf_alloc(opx_ep->tx->sdma_request_pool);
+	struct fi_opx_ep_tx	*opx_tx	 = opx_ep->tx_contexts[tx_index];
+	struct opx_sdma_request *request = (struct opx_sdma_request *) ofi_buf_alloc(opx_tx->sdma_request_pool);
 
 	if (OFI_UNLIKELY(request == NULL)) {
 		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA, "ERROR allocating opx_sdma_request!\n");
@@ -538,9 +541,9 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 		request->iovecs[i + 1] = iovs[i];
 	}
 
-	slist_insert_tail((struct slist_entry *) request, &opx_ep->tx->sdma_request_queue.list);
-	++opx_ep->tx->sdma_request_queue.num_reqs;
-	opx_ep->tx->sdma_request_queue.num_iovs += request->num_iovs;
+	slist_insert_tail((struct slist_entry *) request, &opx_tx->sdma_request_queue.list);
+	++opx_tx->sdma_request_queue.num_reqs;
+	opx_tx->sdma_request_queue.num_iovs += request->num_iovs;
 
 	*requester_comp_state = OPX_SDMA_COMP_PENDING_WRITEV;
 
@@ -564,8 +567,8 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sd
 		FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, replay->hmem_iface, replay->hmem_device,
 		replay->scb.scb_9B.hdr.dput.target.bytes, // last packet bytes
 		0,					  // kdeth tid info unused for replays
-		0					  // Not an SDMA WE
-	);
+		0,					  // Not an SDMA WE
+		replay->tx_index);
 }
 
 __OPX_FORCE_INLINE__
@@ -592,8 +595,9 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 	   the send we're about to do, we shouldn't need to check the
 	   returned PSN here before proceeding */
 	int32_t psn;
-	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, opx_ep->reli_service, we->dlid, we->subctxt_rx,
-					     &we->psn_ptr, we->num_packets);
+	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, opx_ep->reli_service,
+					     opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, we->dlid, we->subctxt_rx,
+					     we->tx_index, &we->psn_ptr, we->num_packets);
 
 	uint32_t fragsize = 0;
 	for (int i = 0; i < we->num_packets; ++i) {
@@ -634,8 +638,9 @@ void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdm
 				      OPX_SDMA_NONTID_DATA_IOV_COUNT, we->num_packets, fragsize,
 				      FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, we->hmem.iface, we->hmem.device,
 				      last_packet_bytes,
-				      0,  // kdeth tid info unused
-				      1); // This is an SDMA work entry
+				      0, // kdeth tid info unused
+				      1, // This is an SDMA work entry
+				      we->tx_index);
 }
 
 __OPX_FORCE_INLINE__
@@ -677,7 +682,8 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 				      OPX_SDMA_TID_DATA_IOV_COUNT, we->num_packets, fragsize,
 				      FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS, we->hmem.iface, we->hmem.device,
 				      last_packet_bytes, kdeth,
-				      1); // This is an SDMA work entry
+				      1, // This is an SDMA work entry
+				      we->tx_index);
 }
 
 __OPX_FORCE_INLINE__
