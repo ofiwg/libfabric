@@ -53,6 +53,7 @@
 #include "opx_shm.h"
 #include "fi_opx_tid_cache.h"
 #include "rdma/opx/opx_ipc.h"
+#include "uthash.h"
 
 void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 
@@ -366,7 +367,7 @@ struct fi_opx_ep_rx {
 		volatile uint64_t *head_register;
 	} egrq __attribute__((__packed__));
 
-	/* == CACHE LINE 5 - 12 == */
+	/* == CACHE LINE 5 - 20 == */
 
 	/*
 	 * NOTE: These cachelines are shared between the application-facing
@@ -379,22 +380,22 @@ struct fi_opx_ep_rx {
 		union {
 			struct fi_opx_hfi1_txe_scb_9B  dput_9B;
 			struct fi_opx_hfi1_txe_scb_16B dput_16B;
-		};
+		} dput[OPX_MAX_TX_CONTEXTS];
 		union {
 			struct fi_opx_hfi1_txe_scb_9B  rzv_dput_9B;
 			struct fi_opx_hfi1_txe_scb_16B rzv_dput_16B;
-		};
+		} rzv_dput[OPX_MAX_TX_CONTEXTS];
 		union {
 			struct fi_opx_hfi1_txe_scb_9B  cts_9B;
 			struct fi_opx_hfi1_txe_scb_16B cts_16B;
-		};
+		} cts[OPX_MAX_TX_CONTEXTS];
 		union {
 			struct fi_opx_hfi1_txe_scb_9B  rma_rts_9B;
 			struct fi_opx_hfi1_txe_scb_16B rma_rts_16B;
-		};
+		} rma_rts[OPX_MAX_TX_CONTEXTS];
 	} tx;
 
-	/* == CACHE LINE 13 == */
+	/* == CACHE LINE 21 == */
 	struct {
 		struct opx_hwcontext_ctrl *hwcontext_ctrl;
 		// Head index into endpoint's software rx RHQ
@@ -415,7 +416,7 @@ struct fi_opx_ep_rx {
 	} shd_ctx;
 
 	/* -- non-critical -- */
-	/* == CACHE LINE 23 == */
+	/* == CACHE LINE 31 == */
 	uint64_t	      min_multi_recv;
 	struct fi_opx_domain *domain;
 
@@ -431,6 +432,7 @@ struct fi_opx_ep_rx {
 	void		 *mem;
 
 	ofi_atomic64_t ref_cnt;
+
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, queue) == FI_OPX_CACHE_LINE_SIZE,
@@ -441,10 +443,10 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, state) == (FI_OPX_CACHE_LI
 			"Offset of fi_opx_ep_rx->queue should start at cacheline 4!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, tx) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Offset of fi_opx_ep_rx->tx should start at cacheline 5!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, shd_ctx) == (FI_OPX_CACHE_LINE_SIZE * 13),
-			"Offset of fi_opx_ep_rx->shd_ctx should start at cacheline 13!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, min_multi_recv) == (FI_OPX_CACHE_LINE_SIZE * 23),
-			"Offset of fi_opx_ep_rx->min_multi_recv should start at cacheline 23!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, shd_ctx) == (FI_OPX_CACHE_LINE_SIZE * 21),
+			"Offset of fi_opx_ep_rx->shd_ctx should start at cacheline 21!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, min_multi_recv) == (FI_OPX_CACHE_LINE_SIZE * 31),
+			"Offset of fi_opx_ep_rx->min_multi_recv should start at cacheline 31!");
 
 struct fi_opx_daos_av_rank_key {
 	uint32_t rank;
@@ -682,13 +684,13 @@ void fi_opx_ep_rx_process_header_tag(struct fid_ep *ep, const union opx_hfi1_pac
 				     const uint8_t *const payload, const size_t payload_bytes, const uint8_t opcode,
 				     const unsigned is_shm, const int lock_required,
 				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hf1_type,
-				     opx_lid_t slid);
+				     opx_lid_t slid, const uint8_t tx_index);
 
 void fi_opx_ep_rx_process_header_msg(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 				     const uint8_t *const payload, const size_t payload_bytes, const uint8_t opcode,
 				     const unsigned is_shm, const int lock_required,
 				     const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hf1_type,
-				     opx_lid_t slid);
+				     opx_lid_t slid, const uint8_t tx_index);
 
 void fi_opx_ep_rx_reliability_process_packet(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 					     const uint8_t *const payload);
@@ -835,7 +837,8 @@ __OPX_FORCE_INLINE__
 uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag, const opx_lid_t origin_lid, const uint16_t origin_rx,
 				      const uint64_t ignore, const uint64_t target_tag_and_not_ignore,
 				      const uint64_t any_addr, const fi_addr_t src_addr_idx, struct fi_opx_ep *opx_ep,
-				      uint32_t rank, uint32_t rank_inst, const unsigned is_shm)
+				      uint32_t rank, uint32_t rank_inst, const unsigned is_shm, uint8_t tx_index,
+				      const opx_lid_t primary_lid)
 {
 	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
 
@@ -846,8 +849,10 @@ uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag, const opx_lid_t
 	const struct fi_opx_addr src_addr = opx_ep->rx->av_addr[src_addr_idx];
 
 	return (origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
-	       ((origin_lid == src_addr.planes[OPX_PRIMARY_PLANE].lid) &&
-			(origin_rx == src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
+	       ((origin_lid == src_addr.planes[tx_index].lid) &&
+			(primary_lid == src_addr.planes[OPX_PRIMARY_PLANE].lid) &&
+			(origin_rx == src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx) &&
+			(tx_index == src_addr.tx_index)
 #ifdef OPX_DAOS
 		|| (opx_ep->daos_info.hfi_rank_enabled && is_shm && fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst))
 #endif
@@ -870,10 +875,10 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *o
 	const uint64_t target_tag_and_not_ignore = context->tag & ~ignore;
 	const uint64_t any_addr			 = (context->src_addr == FI_ADDR_UNSPEC);
 
-	while (uepkt &&
-	       !fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->subctxt_rx, ignore,
-					     target_tag_and_not_ignore, any_addr, context->src_addr, opx_ep,
-					     uepkt->daos_info.rank, uepkt->daos_info.rank_inst, uepkt->is_shm)) {
+	while (uepkt && !fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->lid, uepkt->subctxt_rx, ignore,
+						      target_tag_and_not_ignore, any_addr, context->src_addr, opx_ep,
+						      uepkt->daos_info.rank, uepkt->daos_info.rank_inst, uepkt->is_shm,
+						      uepkt->tx_index, FI_OPX_HFI1_PACKET_PRIMARY_LID(&uepkt->hdr))) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_misses);
 		uepkt = uepkt->next;
 	}
@@ -886,7 +891,8 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *o
 
 __OPX_FORCE_INLINE__
 uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr, struct opx_context *context,
-		  uint32_t rank, uint32_t rank_inst, unsigned is_shm, const opx_lid_t slid)
+		  uint32_t rank, uint32_t rank_inst, unsigned is_shm, const opx_lid_t slid, uint8_t tx_index,
+		  const opx_lid_t primary_lid)
 {
 	const uint64_t ignore			 = context->ignore;
 	const uint64_t target_tag		 = context->tag;
@@ -902,7 +908,8 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 
 	const uint64_t answer =
 		((origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
-		 ((slid == src_addr.planes[OPX_PRIMARY_PLANE].lid) &&
+		 ((slid == src_addr.planes[tx_index].lid) && (primary_lid == src_addr.planes[OPX_PRIMARY_PLANE].lid) &&
+			  (tx_index == src_addr.tx_index) &&
 			  (hdr->reliability.origin_rx == src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
 #ifdef OPX_DAOS
 		  || (opx_ep->daos_info.hfi_rank_enabled && is_shm && fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst))
@@ -913,7 +920,7 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 	fprintf(stderr,
 		"%s:%s():%d context = %p, context->src_addr = 0x%016lx, context->ignore = 0x%016lx, context->tag = 0x%016lx, src_addr.lid = 0x%x src_addr.hfi1_subctxt_rx = 0x%x\n",
 		__FILE__, __func__, __LINE__, context, context->src_addr, context->ignore, context->tag,
-		src_addr.planes[OPX_PRIMARY_PLANE].lid, src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
+		src_addr.planes[tx_index].lid, src_addr.planes[tx_index].hfi1_subctxt_rx);
 	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		fprintf(stderr,
 			"%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_rx = 0x%x\n",
@@ -2928,7 +2935,8 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep, const union o
 						const size_t payload_bytes, const uint64_t static_flags,
 						const uint8_t opcode, const unsigned is_shm, const int lock_required,
 						const enum ofi_reliability_kind reliability,
-						const enum opx_hfi1_type hfi1_type, const opx_lid_t slid)
+						const enum opx_hfi1_type hfi1_type, const opx_lid_t slid,
+						const uint8_t tx_index)
 {
 	struct fi_opx_ep *opx_ep    = container_of(ep, struct fi_opx_ep, ep_fid);
 	const uint16_t	  origin_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
@@ -2943,8 +2951,10 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep, const union o
 	struct opx_context *context = (struct opx_context *) opx_ep->rx->queue[kind].mq.head;
 	struct opx_context *prev    = NULL;
 
-	while (context &&
-	       !is_match(opx_ep, hdr, context, opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, is_shm, slid)) {
+	const opx_lid_t primary_lid = FI_OPX_HFI1_PACKET_PRIMARY_LID(hdr);
+
+	while (context && !is_match(opx_ep, hdr, context, opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, is_shm,
+				    slid, tx_index, primary_lid)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "context = %p\n", context);
 		prev	= context;
 		context = context->next;
@@ -3070,7 +3080,8 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 					       const size_t payload_bytes, const uint64_t static_flags,
 					       const uint8_t opcode, const unsigned is_shm, const int lock_required,
 					       const enum ofi_reliability_kind reliability,
-					       const enum opx_hfi1_type hfi1_type, const opx_lid_t slid)
+					       const enum opx_hfi1_type hfi1_type, const opx_lid_t slid,
+					       const uint8_t tx_index)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -3080,7 +3091,8 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 		return;
 	} else if (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(opcode) == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST) {
 		fi_opx_ep_rx_process_header_mp_eager_first(ep, hdr, payload, payload_bytes, static_flags, opcode,
-							   is_shm, lock_required, reliability, hfi1_type, slid);
+							   is_shm, lock_required, reliability, hfi1_type, slid,
+							   tx_index);
 
 		return;
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH) {
@@ -3099,8 +3111,11 @@ static inline void fi_opx_ep_rx_process_header(struct fid_ep *ep, const union op
 	struct opx_context *context = (struct opx_context *) opx_ep->rx->queue[kind].mq.head;
 	struct opx_context *prev    = NULL;
 
+	const opx_lid_t primary_lid = FI_OPX_HFI1_PACKET_PRIMARY_LID(hdr);
+
 	while (OFI_LIKELY(context != NULL) &&
-	       !is_match(opx_ep, hdr, context, opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, is_shm, slid)) {
+	       !is_match(opx_ep, hdr, context, opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, is_shm, slid,
+			 tx_index, primary_lid)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "context = %p\n", context);
 		prev	= context;
 		context = context->next;

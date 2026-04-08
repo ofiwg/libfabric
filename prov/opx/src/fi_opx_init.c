@@ -861,8 +861,10 @@ OPX_INI
 	fi_opx_global.hfi_local_info.hw_type	     = OPX_HFI1_UNDEF;
 	fi_opx_global.hfi_local_info.sim_rctxt_fd    = -1;
 	fi_opx_global.hfi_local_info.sim_sctxt_fd    = -1;
-	fi_opx_global.hfi_local_info.lid	     = (opx_lid_t) 0;
-	fi_opx_global.hfi_local_info.hfi_unit	     = (uint8_t) -1U;
+	fi_opx_global.hfi_local_info.lid[0]	     = (opx_lid_t) 0;
+	fi_opx_global.hfi_local_info.lid[1]	     = (opx_lid_t) 0;
+	fi_opx_global.hfi_local_info.hfi_unit[0]     = (uint8_t) -1U;
+	fi_opx_global.hfi_local_info.hfi_unit[1]     = (uint8_t) -1U;
 	fi_opx_global.hfi_local_info.sriov	     = false;
 	fi_opx_global.hfi_local_info.multi_vm	     = false;
 	fi_opx_global.hfi_local_info.multi_lid	     = false;
