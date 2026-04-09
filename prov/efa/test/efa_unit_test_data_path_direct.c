@@ -231,7 +231,7 @@ void test_efa_data_path_direct_qp_gen_increments_across_qps(struct efa_resource 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 
-	assert_int_equal(base_ep->qp->data_path_direct_qp.gen, first_gen + 1);
+	assert_int_equal(base_ep->qp->data_path_direct_qp.gen, (uint8_t) (first_gen + 1));
 #else
 	skip();
 #endif
