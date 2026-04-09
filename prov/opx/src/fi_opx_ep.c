@@ -3718,7 +3718,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_append_ue(struct fi_opx_ep_rx *const	
 
 	uepkt->tag	  = hdr->match.ofi_tag;
 	uepkt->lid	  = slid;
-	uepkt->subctxt_rx = hdr->reliability.origin_rx;
+	uepkt->subctxt_rx = FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr);
 	uepkt->tx_index	  = FI_OPX_HFI1_PACKET_TX_INDEX(hdr);
 
 #ifdef OPX_DAOS
