@@ -155,5 +155,5 @@ int main(int argc, char **argv)
 	ret = run();
 
 	cleanup_ret = ft_free_res();
-	return -(ret ? ret : cleanup_ret);
+	return ft_exit_code(ret ? ret : cleanup_ret);
 }
