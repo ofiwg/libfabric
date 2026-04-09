@@ -109,29 +109,16 @@ int ofi_genlock_init(struct ofi_genlock *lock,
 	switch (lock->lock_type) {
 	case OFI_LOCK_SPINLOCK:
 		ret = ofi_spin_init(&lock->base.spinlock);
-		lock->lock = (ofi_genlock_lockop_t) ofi_spin_lock_op;
-		lock->unlock = (ofi_genlock_lockop_t) ofi_spin_unlock_op;
-		lock->held = (ofi_genlock_lockheld_t) ofi_spin_held_op;
 		break;
 	case OFI_LOCK_MUTEX:
 		ret = ofi_mutex_init(&lock->base.mutex);
-		lock->lock = (ofi_genlock_lockop_t) ofi_mutex_lock_op;
-		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_op;
-		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
 		break;
 	case OFI_LOCK_NOOP:
 		/* Use mutex for debug no-op support */
 		ret = ofi_mutex_init(&lock->base.mutex);
-		lock->lock = (ofi_genlock_lockop_t) ofi_mutex_lock_noop;
-		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_noop;
-		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
 		break;
 	case OFI_LOCK_NONE:
 		ret = 0;
-		lock->base.nolock = NULL;
-		lock->lock = (ofi_genlock_lockop_t) ofi_nolock_lock_op;
-		lock->unlock = (ofi_genlock_lockop_t) ofi_nolock_unlock_op;
-		lock->held = (ofi_genlock_lockheld_t) ofi_nolock_held_op;
 		break;
 	default:
 		ret = -FI_EINVAL;
