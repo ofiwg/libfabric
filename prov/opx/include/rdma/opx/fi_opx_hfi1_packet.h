@@ -253,7 +253,7 @@ static inline const char *opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 #define FI_OPX_HFI1_PACKET_ORIGIN_RX(packet_hdr)                                          \
 	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ?                   \
 		 ((packet_hdr)->dput.target.opcode_origin_rx & OPX_BTH_SUBCTXT_RX_MASK) : \
-		 (packet_hdr)->reliability.origin_rx)
+		 ((packet_hdr)->reliability.origin_rx & OPX_BTH_SUBCTXT_RX_MASK))
 
 #define FI_OPX_HFI1_PACKET_PSN(packet_hdr)                                                                          \
 	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? ntohl((packet_hdr)->bth.psn) & 0x00FFFFFF : \
