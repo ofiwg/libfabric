@@ -329,24 +329,6 @@ static inline int ofi_mutex_held_op(ofi_mutex_t *lock)
 	return ofi_mutex_held(lock);
 }
 
-static inline void ofi_nolock_lock_op(void *nolock)
-{
-	(void) nolock;
-}
-
-static inline void ofi_nolock_unlock_op(void *nolock)
-{
-	(void) nolock;
-}
-
-/* No way to verify, so return true to pass all asserts.
- * User should provide their own checks higher-up.
- */
-static inline int ofi_nolock_held_op(void *nolock)
-{
-	return 1;
-}
-
 
 /*
  * Generic lock abstraction
@@ -359,20 +341,12 @@ enum ofi_lock_type {
 	OFI_LOCK_NONE,
 };
 
-typedef int  (*ofi_genlock_lockheld_t)(void *baselock);
-typedef void (*ofi_genlock_lockop_t)(void *baselock);
-
 struct ofi_genlock {
 	enum ofi_lock_type	lock_type;
 	union {
 		ofi_mutex_t	mutex;
 		ofi_spin_t	spinlock;
-		void		*nolock;
 	} base;
-
-	ofi_genlock_lockheld_t	held;
-	ofi_genlock_lockop_t	lock;
-	ofi_genlock_lockop_t	unlock;
 };
 
 int ofi_genlock_init(struct ofi_genlock *lock,
@@ -381,17 +355,55 @@ void ofi_genlock_destroy(struct ofi_genlock *lock);
 
 static inline int ofi_genlock_held(struct ofi_genlock *lock)
 {
-	return lock->held(&lock->base);
+	switch (lock->lock_type) {
+	case OFI_LOCK_SPINLOCK:
+		return ofi_spin_held_op(&lock->base.spinlock);
+	case OFI_LOCK_MUTEX:
+	case OFI_LOCK_NOOP:
+		/* Use mutex for debug no-op support */
+		return ofi_mutex_held_op(&lock->base.mutex);
+	case OFI_LOCK_NONE:
+	default:
+		return 1;
+	}
 }
 
 static inline void ofi_genlock_lock(struct ofi_genlock *lock)
 {
-	lock->lock(&lock->base);
+	switch (lock->lock_type) {
+	case OFI_LOCK_SPINLOCK:
+		ofi_spin_lock_op(&lock->base.spinlock);
+		break;
+	case OFI_LOCK_MUTEX:
+		ofi_mutex_lock_op(&lock->base.mutex);
+		break;
+	case OFI_LOCK_NOOP:
+		/* Use mutex for debug no-op support */
+		ofi_mutex_lock_noop(&lock->base.mutex);
+		break;
+	case OFI_LOCK_NONE:
+	default:
+		break;
+	}
 }
 
 static inline void ofi_genlock_unlock(struct ofi_genlock *lock)
 {
-	lock->unlock(&lock->base);
+	switch (lock->lock_type) {
+	case OFI_LOCK_SPINLOCK:
+		ofi_spin_unlock_op(&lock->base.spinlock);
+		break;
+	case OFI_LOCK_MUTEX:
+		ofi_mutex_unlock_op(&lock->base.mutex);
+		break;
+	case OFI_LOCK_NOOP:
+		/* Use mutex for debug no-op support */
+		ofi_mutex_unlock_noop(&lock->base.mutex);
+		break;
+	case OFI_LOCK_NONE:
+	default:
+		break;
+	}
 }
 
 #ifdef __cplusplus
