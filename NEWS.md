@@ -6,9 +6,8 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v2.5.1, Fri April 10, 2026
+v2.5.1, Mon April 13, 2026
 =========================
-
 ## Core ##
 
 - man: Fix typo in fi_cntr_readerr
@@ -21,6 +20,8 @@ v2.5.1, Fri April 10, 2026
 
 ## EFA ##
 
+- Skip dmabuf supported check for explicit mr call
+- fix pkt pool flag assertions for non-debug builds
 - fix use-after-free in efa_mr_dereg_impl info log
 - Set qp->base_ep in efa_qp_create
 - Return error if efa_mr_reg_ibv_mr returns NULL
@@ -54,6 +55,8 @@ v2.5.1, Fri April 10, 2026
 
 ## Fabtests ##
 
+- efa: parametrize efa mr test over efa and efa-direct
+- efa: Remove test skip and add FI_CONTEXT2
 - efa: treat server timeout as success in rdm_remote_exit_early
 - efa: Re-enable 1G RMA write/writedata tests in PR CI
 - efa: test_remote_exit_early: CLI argument --heterogeneous-peers
