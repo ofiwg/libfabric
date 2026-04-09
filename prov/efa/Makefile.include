@@ -123,6 +123,7 @@ _efa_headers = \
 	prov/efa/src/efa_mmio.h \
 	prov/efa/src/rdm/efa_rdm_peer.h	\
 	prov/efa/src/rdm/efa_rdm_domain.h \
+	prov/efa/src/rdm/efa_rdm_av.h \
 	prov/efa/src/rdm/efa_rdm_cq.h \
 	prov/efa/src/rdm/efa_rdm_cntr.h \
 	prov/efa/src/rdm/efa_rdm_ep.h \
