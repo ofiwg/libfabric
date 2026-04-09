@@ -910,7 +910,7 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 		((origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
 		 ((slid == src_addr.planes[tx_index].lid) && (primary_lid == src_addr.planes[OPX_PRIMARY_PLANE].lid) &&
 			  (tx_index == src_addr.tx_index) &&
-			  (hdr->reliability.origin_rx == src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
+			  (FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr) == src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
 #ifdef OPX_DAOS
 		  || (opx_ep->daos_info.hfi_rank_enabled && is_shm && fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst))
 #endif
@@ -2889,7 +2889,7 @@ __OPX_FORCE_INLINE__
 uint64_t fi_opx_mp_egr_id_from_nth_packet(const union opx_hfi1_packet_hdr *hdr, const opx_lid_t slid)
 {
 	return ((((uint64_t) hdr->mp_eager_nth.mp_egr_uid) << 40) | ((uint64_t) slid << 16) |
-		(uint64_t) hdr->reliability.origin_rx);
+		(uint64_t) FI_OPX_HFI1_PACKET_ORIGIN_RX(hdr));
 }
 
 __OPX_FORCE_INLINE__
