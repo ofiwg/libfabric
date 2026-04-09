@@ -52,6 +52,7 @@
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_peer.h"
+#include "rdm/efa_proto_av.h"
 #include "rdm/efa_rdm_util.h"
 #include "fi_ext_efa.h"
 

@@ -874,6 +874,7 @@
     <ClCompile Include="prov\efa\src\efa_av.c" />
     <ClCompile Include="prov\efa\src\efa_ah.c" />
     <ClCompile Include="prov\efa\src\efa_conn.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_proto_av.c" />
     <ClCompile Include="prov\efa\src\efa_hmem.c" />
     <ClCompile Include="prov\efa\src\efa_device.c" />
     <ClCompile Include="prov\efa\src\efa_domain.c" />
@@ -1018,6 +1019,7 @@
     <ClInclude Include="prov\efa\src\efa_av.h" />
     <ClInclude Include="prov\efa\src\efa_ah.h" />
     <ClInclude Include="prov\efa\src\efa_conn.h" />
+    <ClInclude Include="prov\efa\src\rdm\efa_proto_av.h" />
     <ClInclude Include="prov\efa\src\efa_base_ep.h" />
     <ClInclude Include="prov\efa\src\efa_cntr.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_ep.h" />
