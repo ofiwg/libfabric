@@ -120,6 +120,7 @@ static struct efa_rdm_peer *test_av_get_peer_from_implicit_av(struct efa_resourc
 	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
 
 	err = efa_proto_av_insert_one(container_of(av, struct efa_proto_av, efa_av), &raw_addr, &implicit_fi_addr, 0, NULL, true, true);
+	assert_int_equal(err, 0);
 
 	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
 
@@ -667,6 +668,375 @@ void test_ah_lru_eviction_implicit_av_insert(struct efa_resource **state)
 }
 
 /**
+ * @brief Test proto AV explicit reverse lookup returns correct fi_addr
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_proto_reverse_lookup_explicit(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t fi_addr, lookup_addr;
+	struct efa_av *av;
+	struct efa_proto_av *proto_av;
+	struct efa_rdm_ep *efa_rdm_ep;
+	uint32_t ahn;
+	int num_addr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	proto_av = container_of(av, struct efa_proto_av, efa_av);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	ahn = efa_rdm_ep->self_ah->ahn;
+
+	/* Reverse lookup on empty AV should return NOTAVAIL */
+	lookup_addr = efa_proto_av_reverse_lookup(proto_av, ahn, 42, NULL);
+	assert_int_equal(lookup_addr, FI_ADDR_NOTAVAIL);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 42;
+	raw_addr.qkey = 0x5678;
+
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
+	assert_int_equal(num_addr, 1);
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
+
+	/* Reverse lookup should find the entry */
+	lookup_addr = efa_proto_av_reverse_lookup(proto_av, ahn, 42, NULL);
+	assert_int_equal(lookup_addr, fi_addr);
+
+	/* Lookup with wrong QPN should return NOTAVAIL */
+	lookup_addr = efa_proto_av_reverse_lookup(proto_av, ahn, 99, NULL);
+	assert_int_equal(lookup_addr, FI_ADDR_NOTAVAIL);
+
+	/* After remove, reverse lookup should return FI_ADDR_NOTAVAIL */
+	fi_av_remove(resource->av, &fi_addr, 1, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
+	lookup_addr = efa_proto_av_reverse_lookup(proto_av, ahn, 42, NULL);
+	assert_int_equal(lookup_addr, FI_ADDR_NOTAVAIL);
+}
+
+/**
+ * @brief Test that proto AV addr_to_entry returns NULL after entry is removed
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_proto_addr_to_entry_after_remove(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t fi_addr;
+	struct efa_av *av;
+	struct efa_proto_av *proto_av;
+	struct efa_proto_av_entry *entry;
+	int num_addr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	proto_av = container_of(av, struct efa_proto_av, efa_av);
+
+	/* addr_to_entry on empty AV should return NULL */
+	entry = efa_proto_av_addr_to_entry(proto_av, 0);
+	assert_null(entry);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 99;
+	raw_addr.qkey = 0x9999;
+
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
+	assert_int_equal(num_addr, 1);
+
+	/* Entry should be found with correct fields */
+	entry = efa_proto_av_addr_to_entry(proto_av, fi_addr);
+	assert_non_null(entry);
+	assert_non_null(entry->ah);
+	assert_int_equal(entry->fi_addr, fi_addr);
+	assert_int_equal(entry->implicit_fi_addr, FI_ADDR_NOTAVAIL);
+	assert_int_equal(efa_proto_av_entry_ep_addr(entry)->qpn, 99);
+	assert_int_equal(efa_proto_av_entry_ep_addr(entry)->qkey, 0x9999);
+
+	/* Remove and verify entry is no longer valid */
+	fi_av_remove(resource->av, &fi_addr, 1, 0);
+	entry = efa_proto_av_addr_to_entry(proto_av, fi_addr);
+	assert_null(entry);
+}
+
+/**
+ * @brief Test proto AV insert/remove with peer creation via get_peer
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_proto_insert_remove_with_peer(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t fi_addr;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer, *peer2;
+	struct efa_av *av;
+	struct efa_proto_av *proto_av;
+	struct efa_proto_av_entry *entry;
+	int num_addr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	proto_av = container_of(av, struct efa_proto_av, efa_av);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 55;
+	raw_addr.qkey = 0x5555;
+
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
+	assert_int_equal(num_addr, 1);
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
+
+	/* Create peer via get_peer */
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
+	assert_non_null(peer);
+	assert_non_null(peer->av_entry);
+	assert_int_equal(peer->av_entry->fi_addr, fi_addr);
+	assert_int_equal(peer->av_entry->implicit_fi_addr, FI_ADDR_NOTAVAIL);
+	assert_int_equal(efa_proto_av_entry_ep_addr(peer->av_entry)->qpn, 55);
+	assert_int_equal(efa_proto_av_entry_ep_addr(peer->av_entry)->qkey, 0x5555);
+	assert_ptr_equal(peer->ep, efa_rdm_ep);
+
+	/* Peer map lookup should find the same peer */
+	peer2 = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
+	assert_ptr_equal(peer2, peer);
+
+	/* Verify peer map on the entry itself */
+	entry = efa_proto_av_addr_to_entry(proto_av, fi_addr);
+	assert_non_null(entry);
+	assert_ptr_equal(efa_proto_av_entry_ep_peer_map_lookup(entry, efa_rdm_ep), peer);
+
+	/* Remove — peer is destroyed during av_remove */
+	fi_av_remove(resource->av, &fi_addr, 1, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
+}
+
+/**
+ * @brief Test proto AV implicit insert followed by explicit insert of same addr
+ * verifies the peer's av_entry pointer is updated to the explicit entry
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_implicit_to_explicit_peer_updated(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *implicit_peer, *explicit_peer;
+	struct efa_av *av;
+	struct efa_proto_av *proto_av;
+	fi_addr_t implicit_fi_addr, explicit_fi_addr;
+	struct efa_ah *ah_before;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	proto_av = container_of(av, struct efa_proto_av, efa_av);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Insert implicit peer */
+	implicit_peer = test_av_get_peer_from_implicit_av(resource);
+	assert_non_null(implicit_peer);
+	implicit_fi_addr = implicit_peer->av_entry->implicit_fi_addr;
+	assert_int_equal(implicit_peer->av_entry->fi_addr, FI_ADDR_NOTAVAIL);
+	assert_int_not_equal(implicit_fi_addr, FI_ADDR_NOTAVAIL);
+	test_av_verify_av_hash_cnt(av, 0, 0, 1, 0);
+
+	/* Remember the AH — it should be reused after migration */
+	ah_before = implicit_peer->av_entry->ah;
+	assert_non_null(ah_before);
+
+	/* Now insert explicitly with the same address */
+	struct efa_ep_addr raw_addr;
+	memcpy(&raw_addr, implicit_peer->av_entry->ep_addr, EFA_EP_ADDR_LEN);
+
+	err = fi_av_insert(resource->av, &raw_addr, 1, &explicit_fi_addr, 0, NULL);
+	assert_int_equal(err, 1);
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
+
+	/* Implicit entry should be gone */
+	assert_null(efa_proto_av_addr_to_entry_implicit(proto_av, implicit_fi_addr));
+
+	/* Get peer via explicit addr — should be the same peer with updated av_entry */
+	explicit_peer = efa_rdm_ep_get_peer(efa_rdm_ep, explicit_fi_addr);
+	assert_non_null(explicit_peer);
+	assert_ptr_equal(explicit_peer, implicit_peer);
+	assert_int_equal(explicit_peer->av_entry->fi_addr, explicit_fi_addr);
+	assert_int_equal(explicit_peer->av_entry->implicit_fi_addr, FI_ADDR_NOTAVAIL);
+
+	/* AH should be the same object (reused, not reallocated) */
+	assert_ptr_equal(explicit_peer->av_entry->ah, ah_before);
+
+	fi_av_remove(resource->av, &explicit_fi_addr, 1, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
+}
+
+/**
+ * @brief Test proto AV batch insert of multiple addresses in one fi_av_insert call
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_proto_batch_insert(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addrs[3] = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t fi_addrs[3];
+	struct efa_av *av;
+	struct efa_proto_av *proto_av;
+	struct efa_proto_av_entry *entry;
+	int num_addr, i;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	proto_av = container_of(av, struct efa_proto_av, efa_av);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addrs[0], &raw_addr_len), 0);
+	memcpy(&raw_addrs[1], &raw_addrs[0], sizeof(struct efa_ep_addr));
+	memcpy(&raw_addrs[2], &raw_addrs[0], sizeof(struct efa_ep_addr));
+	raw_addrs[0].qpn = 10; raw_addrs[0].qkey = 0x1000;
+	raw_addrs[1].qpn = 11; raw_addrs[1].qkey = 0x1001;
+	raw_addrs[2].qpn = 12; raw_addrs[2].qkey = 0x1002;
+
+	num_addr = fi_av_insert(resource->av, raw_addrs, 3, fi_addrs, 0, NULL);
+	assert_int_equal(num_addr, 3);
+
+	/* All three should have distinct fi_addrs */
+	assert_int_not_equal(fi_addrs[0], fi_addrs[1]);
+	assert_int_not_equal(fi_addrs[1], fi_addrs[2]);
+	assert_int_not_equal(fi_addrs[0], fi_addrs[2]);
+
+	test_av_verify_av_hash_cnt(av, 3, 0, 0, 0);
+
+	/* Verify each entry is accessible with correct QPN */
+	for (i = 0; i < 3; i++) {
+		entry = efa_proto_av_addr_to_entry(proto_av, fi_addrs[i]);
+		assert_non_null(entry);
+		assert_non_null(entry->ah);
+		assert_int_equal(entry->fi_addr, fi_addrs[i]);
+		assert_int_equal(efa_proto_av_entry_ep_addr(entry)->qpn, 10 + i);
+		assert_int_equal(efa_proto_av_entry_ep_addr(entry)->qkey, 0x1000 + i);
+	}
+
+	/* Remove one at a time and verify counts */
+	fi_av_remove(resource->av, &fi_addrs[0], 1, 0);
+	test_av_verify_av_hash_cnt(av, 2, 0, 0, 0);
+	assert_null(efa_proto_av_addr_to_entry(proto_av, fi_addrs[0]));
+
+	fi_av_remove(resource->av, &fi_addrs[1], 1, 0);
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
+
+	fi_av_remove(resource->av, &fi_addrs[2], 1, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
+}
+
+/**
+ * @brief Test proto AV remove of non-existent address returns error
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_proto_remove_nonexistent(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	fi_addr_t bad_addr = 9999;
+	fi_addr_t notavail = FI_ADDR_NOTAVAIL;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	/* Remove with out-of-range fi_addr */
+	err = fi_av_remove(resource->av, &bad_addr, 1, 0);
+	assert_int_not_equal(err, 0);
+
+	/* Remove with FI_ADDR_NOTAVAIL */
+	err = fi_av_remove(resource->av, &notavail, 1, 0);
+	assert_int_not_equal(err, 0);
+}
+
+/**
+ * @brief Test proto AV prv_reverse_av path: insert two addresses with same GID
+ * but different QPN/QKEY, remove the first, insert a new one with the same QPN
+ * as the first but different QKEY. The old entry should be in prv_reverse_av.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_proto_prv_reverse_av(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr1 = {0}, raw_addr2 = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t fi_addr1, fi_addr2;
+	struct efa_av *av;
+	struct efa_proto_av *proto_av;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_proto_av_entry *entry1, *entry2;
+	fi_addr_t lookup_addr;
+	uint32_t ahn;
+	int num_addr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	proto_av = container_of(av, struct efa_proto_av, efa_av);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	ahn = efa_rdm_ep->self_ah->ahn;
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr1, &raw_addr_len), 0);
+	memcpy(&raw_addr2, &raw_addr1, sizeof(struct efa_ep_addr));
+
+	/* Insert first address with qpn=20, qkey=0xAAAA */
+	raw_addr1.qpn = 20;
+	raw_addr1.qkey = 0xAAAA;
+	num_addr = fi_av_insert(resource->av, &raw_addr1, 1, &fi_addr1, 0, NULL);
+	assert_int_equal(num_addr, 1);
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
+
+	/* Verify first entry */
+	entry1 = efa_proto_av_addr_to_entry(proto_av, fi_addr1);
+	assert_non_null(entry1);
+	assert_int_equal(efa_proto_av_entry_ep_addr(entry1)->qkey, 0xAAAA);
+
+	/* Reverse lookup should find first entry */
+	lookup_addr = efa_proto_av_reverse_lookup(proto_av, ahn, 20, NULL);
+	assert_int_equal(lookup_addr, fi_addr1);
+
+	/* Insert second address with same qpn=20 but different qkey=0xBBBB.
+	 * This simulates QPN reuse — the first entry moves to prv_reverse_av */
+	raw_addr2.qpn = 20;
+	raw_addr2.qkey = 0xBBBB;
+	num_addr = fi_av_insert(resource->av, &raw_addr2, 1, &fi_addr2, 0, NULL);
+	assert_int_equal(num_addr, 1);
+	assert_int_not_equal(fi_addr1, fi_addr2);
+
+	/* cur_reverse_av has 1 entry (the latest), prv_reverse_av has 1 (the old) */
+	test_av_verify_av_hash_cnt(av, 1, 1, 0, 0);
+
+	/* Verify second entry */
+	entry2 = efa_proto_av_addr_to_entry(proto_av, fi_addr2);
+	assert_non_null(entry2);
+	assert_int_equal(efa_proto_av_entry_ep_addr(entry2)->qkey, 0xBBBB);
+
+	/* Both entries should share the same AH (same GID) */
+	assert_ptr_equal(entry1->ah, entry2->ah);
+
+	/* Reverse lookup without connid should return the current (latest) entry */
+	lookup_addr = efa_proto_av_reverse_lookup(proto_av, ahn, 20, NULL);
+	assert_int_equal(lookup_addr, fi_addr2);
+
+	/* Remove in reverse order: current entry first, then previous */
+	fi_av_remove(resource->av, &fi_addr2, 1, 0);
+	test_av_verify_av_hash_cnt(av, 0, 1, 0, 0);
+
+	fi_av_remove(resource->av, &fi_addr1, 1, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
+}
+
+/**
  * @brief Insert two peers that collide on (AHN, QPN) but differ in QKEY, then
  * remove the first-inserted peer before the second. This reproduces the bug
  * in efa_av_reverse_av_remove() where the code blindly deletes the
@@ -738,4 +1108,129 @@ void test_av_reverse_av_remove_qpn_collision(struct efa_resource **state)
 	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
 	assert_int_equal(efa_proto_av_reverse_lookup(proto_av, ahn, 100, NULL),
 			 FI_ADDR_NOTAVAIL);
+}
+
+/**
+ * @brief Inserting an all-zero GID into the protocol AV must be rejected.
+ *
+ * efa_av_is_valid_address() returns 0 for all-zero GIDs. fi_av_insert
+ * should skip the bad address and return 0 (no address inserted), and
+ * the output fi_addr should be FI_ADDR_NOTAVAIL.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_proto_insert_invalid_address(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr zero_addr = {0};
+	fi_addr_t fi_addr = 0;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	zero_addr.qpn = 5;
+	zero_addr.qkey = 0x1234;
+	/* zero_addr.raw is left all-zero */
+
+	err = fi_av_insert(resource->av, &zero_addr, 1, &fi_addr, 0, NULL);
+	assert_int_equal(err, 0);
+	assert_int_equal(fi_addr, FI_ADDR_NOTAVAIL);
+}
+
+/**
+ * @brief With implicit_av_size set to 0 (unbounded mode), the implicit AV
+ * never evicts entries.
+ *
+ * Insert several implicit peers and verify all remain in the LRU list and
+ * util_av, and evicted_peers_hashset stays empty.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_implicit_av_unbounded(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_proto_av *proto_av;
+	struct efa_av *av;
+	const int num_peers = 10;
+	int i;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	proto_av = container_of(av, struct efa_proto_av, efa_av);
+
+	/* Disable the eviction limit */
+	proto_av->implicit_av_size = 0;
+
+	for (i = 0; i < num_peers; i++)
+		test_av_get_peer_from_implicit_av(resource);
+
+	/* All peers should still be in the implicit AV */
+	assert_int_equal(HASH_CNT(hh, proto_av->util_av_implicit.hash), num_peers);
+	/* No peer should have been evicted */
+	assert_int_equal(HASH_CNT(hh, proto_av->evicted_peers_hashset), 0);
+}
+
+/**
+ * @brief efa_proto_av_open rejects attr->name and attr->flags (both unsupported)
+ *
+ * Ensures the early-return error paths in efa_proto_av_open are exercised.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_proto_open_unsupported_attrs(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_av_attr av_attr = {0};
+	struct fid_av *av = NULL;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	/* attr->name is not supported */
+	av_attr.name = "foo";
+	err = fi_av_open(resource->domain, &av_attr, &av, NULL);
+	assert_int_equal(err, -FI_ENOSYS);
+	assert_null(av);
+	av_attr.name = NULL;
+
+	/* attr->flags is not supported */
+	av_attr.flags = 1;
+	err = fi_av_open(resource->domain, &av_attr, &av, NULL);
+	assert_int_equal(err, -FI_ENOSYS);
+	assert_null(av);
+}
+
+/**
+ * @brief efa_proto_av_implicit_av_lru_entry_move on a single-element list
+ *
+ * Insert exactly one implicit peer; the LRU list has exactly one node.
+ * Call efa_proto_av_implicit_av_lru_entry_move on it — this exercises the
+ * dlist_entry_in_list assertion on the smallest non-empty list.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_implicit_av_lru_move_single(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer *peer;
+	struct efa_proto_av *proto_av;
+	struct efa_av *av;
+	struct efa_rdm_ep *efa_rdm_ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	proto_av = container_of(av, struct efa_proto_av, efa_av);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+
+	peer = test_av_get_peer_from_implicit_av(resource);
+	assert_non_null(peer);
+
+	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	efa_proto_av_implicit_av_lru_entry_move(proto_av, peer->av_entry);
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+
+	/* Still exactly one entry in the LRU list */
+	test_av_implicit_av_verify_lru_list_first_last_elements(
+		av, peer->av_entry, peer->av_entry);
 }
