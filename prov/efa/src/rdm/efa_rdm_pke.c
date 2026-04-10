@@ -479,7 +479,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
 
-	conn = pkt_entry_vec[0]->peer->conn;
+	av_entry = pkt_entry_vec[0]->peer->av_entry;
 	assert(av_entry && efa_proto_av_entry_ep_addr(av_entry));
 
 	for (pkt_idx = 0; pkt_idx < pkt_entry_cnt; ++pkt_idx) {
@@ -601,7 +601,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 		qpn = qp->qp_num;
 		qkey = qp->qkey;
 	} else {
-		conn = pkt_entry->peer->conn;
+		av_entry = pkt_entry->peer->av_entry;
 		assert(av_entry && efa_proto_av_entry_ep_addr(av_entry));
 		ah = av_entry->ah;
 		qpn = efa_proto_av_entry_ep_addr(av_entry)->qpn;
@@ -691,7 +691,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		qpn = qp->qp_num;
 		qkey = qp->qkey;
 	} else {
-		conn = pkt_entry->peer->conn;
+		av_entry = pkt_entry->peer->av_entry;
 		assert(av_entry && efa_proto_av_entry_ep_addr(av_entry));
 		ah = av_entry->ah;
 		qpn = efa_proto_av_entry_ep_addr(av_entry)->qpn;

@@ -36,7 +36,6 @@ _efa_files = \
 	prov/efa/src/efa_shm.c \
 	prov/efa/src/efa_av.c \
 	prov/efa/src/efa_ah.c \
-	prov/efa/src/efa_conn.c \
 	prov/efa/src/efa_domain.c \
 	prov/efa/src/efa_fabric.c \
 	prov/efa/src/efa_mr.c \
@@ -89,7 +88,6 @@ _efa_headers = \
 	prov/efa/src/efa.h \
 	prov/efa/src/efa_av.h \
 	prov/efa/src/efa_ah.h \
-	prov/efa/src/efa_conn.h \
 	prov/efa/src/efa_mr.h \
 	prov/efa/src/efa_shm.h \
 	prov/efa/src/efa_hmem.h \
@@ -159,6 +157,7 @@ nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_test_domain.c \
 	prov/efa/test/efa_unit_test_ep.c \
 	prov/efa/test/efa_unit_test_av.c \
+	prov/efa/test/efa_unit_test_proto_av.c \
 	prov/efa/test/efa_unit_test_cq.c \
 	prov/efa/test/efa_unit_test_cntr.c \
 	prov/efa/test/efa_unit_test_device.c \
