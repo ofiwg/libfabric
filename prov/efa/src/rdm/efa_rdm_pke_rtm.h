@@ -148,30 +148,6 @@ struct efa_rdm_runtread_rtm_base_hdr *efa_rdm_pke_get_runtread_rtm_base_hdr(stru
 
 ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry);
 
-ssize_t efa_rdm_pke_init_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
-				       struct efa_rdm_ope *txe,
-				       size_t data_offset,
-				       int data_size);
-
-ssize_t efa_rdm_pke_init_medium_tagrtm(struct efa_rdm_pke *pkt_entry,
-				       struct efa_rdm_ope *txe,
-				       size_t data_offset,
-				       int data_size);
-
-ssize_t efa_rdm_pke_init_dc_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
-				      struct efa_rdm_ope *txe,
-				      size_t data_offset,
-				      int data_size);
-
-ssize_t efa_rdm_pke_init_dc_medium_tagrtm(struct efa_rdm_pke *pkt_entry,
-					  struct efa_rdm_ope *txe,
-					  size_t data_offset,
-					  int data_size);
-
-void efa_rdm_pke_handle_medium_rtm_sent(struct efa_rdm_pke *pkt_entry);
-
-void efa_rdm_pke_handle_medium_rtm_send_completion(struct efa_rdm_pke *pkt_entry);
-
 ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_init_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
