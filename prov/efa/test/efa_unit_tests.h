@@ -117,6 +117,9 @@ void test_efa_ah_cnt_multi_av_efa();
 void test_efa_ah_cnt_multi_av_efa_direct();
 void test_av_multiple_ep_efa();
 void test_av_multiple_ep_efa_direct();
+/* end efa_unit_test_av.c */
+
+/* begin efa_unit_test_proto_av.c */
 void test_av_reinsertion();
 void test_av_implicit();
 void test_av_implicit_to_explicit();
@@ -125,7 +128,7 @@ void test_av_implicit_av_lru_eviction();
 void test_ah_refcnt();
 void test_ah_lru_eviction_explicit_av_insert();
 void test_ah_lru_eviction_implicit_av_insert();
-/* end efa_unit_test_av.c */
+/* end efa_unit_test_proto_av.c */
 
 void test_efa_device_construct_error_handling();
 void test_efa_rdm_ep_ignore_missing_host_id_file();
