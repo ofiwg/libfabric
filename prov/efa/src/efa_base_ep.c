@@ -741,11 +741,11 @@ const char *efa_base_ep_raw_addr_str(struct efa_base_ep *base_ep, char *buf, siz
 struct efa_ep_addr *efa_base_ep_get_peer_raw_addr(struct efa_base_ep *base_ep, fi_addr_t addr)
 {
 	struct efa_av *efa_av;
-	struct efa_conn *efa_conn;
+	struct efa_av_entry *av_entry;
 
 	efa_av = base_ep->av;
-	efa_conn = efa_av_addr_to_conn(efa_av, addr);
-	return efa_conn ? efa_conn->ep_addr : NULL;
+	av_entry = efa_av_addr_to_entry(efa_av, addr);
+	return av_entry ? efa_av_entry_ep_addr(av_entry) : NULL;
 }
 
 /**

@@ -31,9 +31,33 @@ struct efa_ep_addr_hashable {
 /* util_av implementation requires the first element of efa_av_entry to be
  * ep_addr */
 struct efa_av_entry {
-	uint8_t			ep_addr[EFA_EP_ADDR_LEN];
+	uint8_t			ep_addr[EFA_EP_ADDR_LEN]; /* must be first (util_av) */
 	struct efa_conn		conn;
 };
+
+/**
+ * @brief typed accessor for the ep_addr field of an AV entry
+ *
+ * @param[in]	entry	AV entry
+ * @return	pointer to the efa_ep_addr embedded in the entry
+ */
+static inline struct efa_ep_addr *efa_av_entry_ep_addr(struct efa_av_entry *entry)
+{
+	return (struct efa_ep_addr *)entry->ep_addr;
+}
+
+/**
+ * @brief check if an efa_ep_addr has a non-zero GID
+ *
+ * @param[in]	addr	address to check
+ * @return	non-zero if valid, 0 if all-zeros
+ */
+static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
+{
+	struct efa_ep_addr all_zeros = { 0 };
+
+	return memcmp(addr->raw, all_zeros.raw, sizeof(addr->raw));
+}
 
 struct efa_cur_reverse_av_key {
 	uint16_t ahn;
@@ -95,6 +119,8 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
 struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av,
 					      fi_addr_t fi_addr);
+
+struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr);
 
 fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn,
 				    uint16_t qpn, struct efa_rdm_pke *pkt_entry);

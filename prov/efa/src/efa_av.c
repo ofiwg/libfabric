@@ -45,6 +45,21 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 }
 
 /**
+ * @brief find efa_av_entry using fi_addr in the explicit AV
+ *
+ * @param[in]	av	efa av
+ * @param[in]	fi_addr	libfabric address
+ * @return	if address is valid, return pointer to efa_av_entry
+ * 		otherwise, return NULL
+ */
+struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
+{
+	struct efa_conn *conn = efa_av_addr_to_conn_impl(&av->util_av, fi_addr);
+
+	return conn ? container_of(conn, struct efa_av_entry, conn) : NULL;
+}
+
+/**
  * @brief find efa_conn struct using fi_addr in the implicit AV
  *
  * @param[in]	av	efa av

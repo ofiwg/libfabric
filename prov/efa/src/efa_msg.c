@@ -206,7 +206,7 @@ static ssize_t efa_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void
 static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct efa_qp *qp = base_ep->qp;
-	struct efa_conn *conn;
+	struct efa_av_entry *av_entry;
 	struct ibv_sge sg_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
 	struct efa_context *efa_ctx;
@@ -227,8 +227,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 
 	dump_msg(msg, "send");
 
-	conn = efa_av_addr_to_conn(base_ep->av, msg->addr);
-	assert(conn && conn->ep_addr);
+	av_entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
+	assert(av_entry && efa_av_entry_ep_addr(av_entry));
 
 	assert(msg->iov_count <= base_ep->info->tx_attr->iov_limit);
 
@@ -307,7 +307,7 @@ post:
 	/* Use consolidated send function */
 	ret = efa_qp_post_send(qp, sg_list, inline_data_list, iov_count,
 			       use_inline, wr_id, msg->data, flags,
-			       conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
+			       av_entry->ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(ret))
 		ret = (ret == ENOMEM) ? -FI_EAGAIN : -ret;
 

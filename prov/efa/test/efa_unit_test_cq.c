@@ -1084,7 +1084,7 @@ static void test_efa_cq_read_prep(struct efa_resource *resource,
     will_return_uint_maybe(efa_mock_efa_ibv_cq_wc_read_imm_data_return_mock, 0x1);
     will_return_uint_maybe(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, base_ep->qp->qp_num);
     will_return_uint_maybe(efa_mock_efa_ibv_cq_wc_read_byte_len_return_mock, 4096);
-    will_return_uint_maybe(efa_mock_efa_ibv_cq_wc_read_slid_return_mock, efa_av_addr_to_conn(base_ep->av, addr)->ah->ahn);
+    will_return_uint_maybe(efa_mock_efa_ibv_cq_wc_read_slid_return_mock, efa_av_addr_to_entry(base_ep->av, addr)->ah->ahn);
     will_return_uint_maybe(efa_mock_efa_ibv_cq_wc_read_src_qp_return_mock, raw_addr.qpn);
 
 
