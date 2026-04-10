@@ -10,6 +10,7 @@
 
 #include "efa.h"
 #include "efa_av.h"
+#include "rdm/efa_proto_av.h"
 #include "efa_data_path_ops.h"
 #include "efa_tp.h"
 
@@ -190,8 +191,8 @@ void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 		EFA_DBG(FI_LOG_EP_DATA,
 			"reset backoff timer for peer fi_addr: %" PRIu64
 			" implicit fi_addr: %" PRIu64 "\n",
-			pkt_entry->peer->conn->fi_addr,
-			pkt_entry->peer->conn->implicit_fi_addr);
+			pkt_entry->peer->av_entry->fi_addr,
+			pkt_entry->peer->av_entry->implicit_fi_addr);
 	}
 
 	efa_rdm_pke_release(pkt_entry);
@@ -455,7 +456,7 @@ static inline uint64_t efa_rdm_pke_get_wr_id(struct efa_rdm_pke *pkt_entry)
 ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 			  int pkt_entry_cnt, uint64_t flags)
 {
-	struct efa_conn *conn;
+	struct efa_proto_av_entry *av_entry;
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer *peer;
@@ -479,7 +480,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 		return -FI_EAGAIN;
 
 	conn = pkt_entry_vec[0]->peer->conn;
-	assert(conn && conn->ep_addr);
+	assert(av_entry && efa_proto_av_entry_ep_addr(av_entry));
 
 	for (pkt_idx = 0; pkt_idx < pkt_entry_cnt; ++pkt_idx) {
 		pkt_entry = pkt_entry_vec[pkt_idx];
@@ -522,8 +523,8 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 			qpn = peer->user_recv_qp.qpn;
 			qkey = peer->user_recv_qp.qkey;
 		} else {
-			qpn = conn->ep_addr->qpn;
-			qkey = conn->ep_addr->qkey;
+			qpn = efa_proto_av_entry_ep_addr(av_entry)->qpn;
+			qkey = efa_proto_av_entry_ep_addr(av_entry)->qkey;
 		}
 
 		/* This will make efa_qp_post_send not ring the doorbell until the last itertion of the loop */
@@ -534,7 +535,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 
 		ret = efa_qp_post_send(ep->base_ep.qp, sg_list,
 				       inline_data_list, iov_cnt, use_inline,
-				       wr_id, cq_data, flags_in_loop, conn->ah,
+				       wr_id, cq_data, flags_in_loop, av_entry->ah,
 				       qpn, qkey);
 
 		if (OFI_UNLIKELY(ret))
@@ -581,7 +582,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 {
 	struct efa_rdm_ep *ep;
 	struct efa_qp *qp;
-	struct efa_conn *conn;
+	struct efa_proto_av_entry *av_entry;
 	struct ibv_sge sge;
 	struct efa_rdm_ope *txe;
 	int err = 0;
@@ -601,10 +602,10 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 		qkey = qp->qkey;
 	} else {
 		conn = pkt_entry->peer->conn;
-		assert(conn && conn->ep_addr);
-		ah = conn->ah;
-		qpn = conn->ep_addr->qpn;
-		qkey = conn->ep_addr->qkey;
+		assert(av_entry && efa_proto_av_entry_ep_addr(av_entry));
+		ah = av_entry->ah;
+		qpn = efa_proto_av_entry_ep_addr(av_entry)->qpn;
+		qkey = efa_proto_av_entry_ep_addr(av_entry)->qkey;
 	}
 
 	sge.addr = (uint64_t)local_buf;
@@ -653,7 +654,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_qp *qp;
-	struct efa_conn *conn;
+	struct efa_proto_av_entry *av_entry;
 	struct ibv_sge sge;
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 	struct efa_rdm_ope *txe;
@@ -691,10 +692,10 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 		qkey = qp->qkey;
 	} else {
 		conn = pkt_entry->peer->conn;
-		assert(conn && conn->ep_addr);
-		ah = conn->ah;
-		qpn = conn->ep_addr->qpn;
-		qkey = conn->ep_addr->qkey;
+		assert(av_entry && efa_proto_av_entry_ep_addr(av_entry));
+		ah = av_entry->ah;
+		qpn = efa_proto_av_entry_ep_addr(av_entry)->qpn;
+		qkey = efa_proto_av_entry_ep_addr(av_entry)->qkey;
 	}
 
 	wr_id = efa_rdm_pke_get_wr_id(pkt_entry);

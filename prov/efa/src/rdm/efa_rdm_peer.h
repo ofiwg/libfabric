@@ -9,6 +9,8 @@
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_rxe_map.h"
 
+struct efa_proto_av_entry;
+
 #define EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE	(16)
 
 #define EFA_RDM_PEER_REQ_SENT BIT_ULL(0) /**< A REQ packet has been sent to the peer (peer should send a handshake back) */
@@ -90,7 +92,7 @@ struct efa_rdm_peer {
 	bool is_self;			/**< flag indicating whether the peer is the endpoint itself */
 	bool is_local;			/**< flag indicating wehther the peer is local (on the same instance) */
 	uint32_t device_version;	/**< EFA device version */
-	struct efa_conn *conn;		/**< pointer to efa_conn struct in the av entry */
+	struct efa_proto_av_entry *av_entry;		/**< pointer to efa_proto_av_entry in the av entry */
 	uint64_t host_id; 		/* Optional peer host id. Default 0 */
 	/**
 	 * @brief reorder buffer
@@ -251,9 +253,8 @@ bool efa_rdm_peer_need_connid(struct efa_rdm_peer *peer)
 	       (peer->extra_info[0] & EFA_RDM_EXTRA_REQUEST_CONNID_HEADER);
 }
 
-struct efa_conn;
 
-void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn);
+void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_proto_av_entry *av_entry);
 
 void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
 
@@ -272,6 +273,6 @@ int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_e
 /* Macro for getting peer address string */
 #define EFA_RDM_GET_PEER_ADDR_STR(ep, peer, peer_addr_str) \
 	char peer_addr_str[OFI_ADDRSTRLEN] = {0}; \
-	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->conn->fi_addr, peer_addr_str, &(size_t){sizeof peer_addr_str});
+	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->av_entry->fi_addr, peer_addr_str, &(size_t){sizeof peer_addr_str});
 
 #endif /* EFA_RDM_PEER_H */

@@ -104,8 +104,8 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	EFA_INFO(FI_LOG_CQ,
 		 "HANDSHAKE received from peer with explicit fi_addr %" PRIu64
 		 " implicit fi_addr %" PRIu64 "\n",
-		 pkt_entry->peer->conn->fi_addr,
-		 pkt_entry->peer->conn->implicit_fi_addr);
+		 pkt_entry->peer->av_entry->fi_addr,
+		 pkt_entry->peer->av_entry->implicit_fi_addr);
 
 	handshake_pkt = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
 
