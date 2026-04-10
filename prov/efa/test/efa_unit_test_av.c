@@ -241,3 +241,83 @@ void test_av_multiple_ep_efa(struct efa_resource **state)
 void test_av_multiple_ep_efa_direct(struct efa_resource **state)
 {
 	return test_av_multiple_ep_impl(state, EFA_DIRECT_FABRIC_NAME);
+}
+
+/**
+ * @brief Test base AV (efa-direct) insert, lookup, remove cycle
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_insert_remove_lookup_efa_direct(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr = {0}, raw_addr_out = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t fi_addr;
+	struct efa_av *av;
+	struct efa_av_entry *entry;
+	int err, num_addr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 7;
+	raw_addr.qkey = 0xABCD;
+
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
+	assert_int_equal(num_addr, 1);
+	assert_int_equal(fi_addr, 0);
+	assert_int_equal(av->used, 1);
+
+	/* Verify entry is accessible and fields are correct */
+	entry = efa_av_addr_to_entry(av, fi_addr);
+	assert_non_null(entry);
+	assert_non_null(entry->ah);
+	assert_int_equal(entry->fi_addr, fi_addr);
+	assert_int_equal(efa_av_entry_ep_addr(entry)->qpn, 7);
+	assert_int_equal(efa_av_entry_ep_addr(entry)->qkey, 0xABCD);
+
+	/* Lookup should return the same address */
+	raw_addr_len = sizeof(raw_addr_out);
+	err = fi_av_lookup(resource->av, fi_addr, &raw_addr_out, &raw_addr_len);
+	assert_int_equal(err, 0);
+	assert_int_equal(raw_addr_out.qpn, 7);
+	assert_int_equal(raw_addr_out.qkey, 0xABCD);
+	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_out), 1);
+
+	/* Remove and verify */
+	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
+	assert_int_equal(err, 0);
+	assert_int_equal(av->used, 0);
+
+	/* Entry should be NULL after remove */
+	entry = efa_av_addr_to_entry(av, fi_addr);
+	assert_null(entry);
+
+	/* Lookup should fail after remove */
+	err = fi_av_lookup(resource->av, fi_addr, &raw_addr_out, &raw_addr_len);
+	assert_int_not_equal(err, 0);
+}
+
+/**
+ * @brief Test base AV (efa-direct) addr_to_entry returns NULL for invalid fi_addr
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_base_addr_to_entry_invalid(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_av *av;
+	struct efa_av_entry *entry;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+
+	entry = efa_av_addr_to_entry(av, FI_ADDR_NOTAVAIL);
+	assert_null(entry);
+
+	entry = efa_av_addr_to_entry(av, FI_ADDR_UNSPEC);
+	assert_null(entry);
+}
