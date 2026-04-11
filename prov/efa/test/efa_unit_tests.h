@@ -593,5 +593,8 @@ void test_proto_select_eager_has_priority_over_medium();
 void test_proto_select_eager_for_zero_len_msg();
 void test_proto_select_longread_over_longcts_with_p2p();
 void test_proto_select_runtread_over_longread();
+void test_proto_eager_construct_pkes_single_pke();
+void test_proto_eager_send_completion_releases_txe();
+void test_proto_eager_assigns_msg_id();
 
 #endif
