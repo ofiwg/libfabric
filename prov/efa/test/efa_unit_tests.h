@@ -599,5 +599,6 @@ void test_proto_eager_assigns_msg_id();
 void test_proto_medium_construct_pkes_multi_pke();
 void test_proto_medium_send_completion_tracks_bytes_acked();
 void test_proto_longcts_construct_pkes_single_rtm();
+void test_proto_longread_construct_pkes_has_read_iovs();
 
 #endif

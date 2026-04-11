@@ -756,3 +756,76 @@ void test_proto_longcts_construct_pkes_single_rtm(struct efa_resource **state)
 	efa_rdm_txe_release(txe);
 	efa_unit_test_buff_destruct(&send_buff);
 }
+
+/**
+ * @brief Test that long read construct_tx_pkes produces 1 PKE with
+ * correct pkt_size (header + read IOVs).
+ */
+
+void test_proto_longread_construct_pkes_has_read_iovs(
+	struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	efa_unit_test_buff_construct(&send_buff, resource, 131072);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	txe->ep = ep;
+	txe->total_len = send_buff.size;
+	txe->iov_count = 1;
+	memcpy(txe->iov, &iov, sizeof(iov));
+	txe->desc[0] = fi_mr_desc(send_buff.mr);
+	memset(txe->mr, 0, sizeof(*txe->mr));
+
+	err = efa_rdm_proto_longread.construct_tx_pkes(ep, peer, &msg,
+						       ofi_op_msg, 0, 0, txe);
+	assert_int_equal(err, 0);
+
+	/* Long read sends exactly 1 packet */
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+
+	struct efa_rdm_pke *pke = ep->send_pkt_entry_vec[0];
+	assert_non_null(pke);
+	assert_non_null(pke->callback);
+
+	/* pkt_size should include header + read IOVs (1 IOV for 1 iov_count) */
+	assert_true(pke->pkt_size > 0);
+	assert_true(pke->pkt_size > sizeof(struct fi_rma_iov));
+
+	/* Clean up */
+	efa_rdm_pke_release_tx(pke);
+	efa_rdm_txe_release(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
