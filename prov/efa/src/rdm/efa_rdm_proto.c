@@ -83,10 +83,6 @@ void efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		req_pkt_type = efa_rdm_proto_req_pkt_type(
 			selected_proto, op, effective_flags, peer);
 
-		/* All protocols other than the eager protocol can benefit from
-		 * registering the application buffers.
-		 * TODO: Move function to efa_rdm_proto.c
-		 */
 		if (selected_proto->can_use_protocol_for_send(
 			    txe, req_pkt_type, header_flags, iface)) {
 			*proto = selected_proto;
