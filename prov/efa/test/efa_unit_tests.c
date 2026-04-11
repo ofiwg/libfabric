@@ -590,6 +590,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_proto_medium_send_completion_tracks_bytes_acked, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_longcts_construct_pkes_single_rtm, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_longread_construct_pkes_has_read_iovs, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_runtread_construct_pkes_has_runt_and_read_iovs, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		/* end efa_unit_test_proto.c */
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);

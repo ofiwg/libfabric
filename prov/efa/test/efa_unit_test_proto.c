@@ -829,3 +829,84 @@ void test_proto_longread_construct_pkes_has_read_iovs(
 	efa_rdm_txe_release(txe);
 	efa_unit_test_buff_destruct(&send_buff);
 }
+
+/**
+ * @brief Test that runt read construct_tx_pkes produces multiple PKEs
+ * with runt data and includes RDMA read IOVs in the packet headers.
+ */
+void test_proto_runtread_construct_pkes_has_runt_and_read_iovs(
+	struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	void *desc;
+	int err, i;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	/* 2MB message to trigger runt read */
+	efa_unit_test_buff_construct(&send_buff, resource, 2 * 1024 * 1024);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	desc = fi_mr_desc(send_buff.mr);
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0, &desc);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	txe->ep = ep;
+	txe->total_len = send_buff.size;
+	txe->iov_count = 1;
+	memcpy(txe->iov, &iov, sizeof(iov));
+	txe->desc[0] = desc;
+	memset(txe->mr, 0, sizeof(*txe->mr));
+
+	/* Set up runt size so the protocol can compute bytes_runt */
+	g_efa_hmem_info[FI_HMEM_SYSTEM].runt_size = EFA_DEFAULT_RUNT_SIZE;
+
+	err = efa_rdm_proto_runtread.construct_tx_pkes(
+		ep, peer, &msg, ofi_op_msg, 0, 0, txe);
+	assert_int_equal(err, 0);
+
+	/* Runt read should produce multiple PKEs for the runt portion */
+	assert_true(ep->send_pkt_entry_vec_size >= 1);
+
+	/* Each PKE should have a callback and correct TXE */
+	for (i = 0; i < ep->send_pkt_entry_vec_size; i++) {
+		assert_non_null(ep->send_pkt_entry_vec[i]);
+		assert_non_null(ep->send_pkt_entry_vec[i]->callback);
+		assert_ptr_equal(ep->send_pkt_entry_vec[i]->ope, txe);
+	}
+
+	/* bytes_runt should be set */
+	assert_true(txe->bytes_runt > 0);
+	assert_true(txe->bytes_runt < txe->total_len);
+
+	/* Clean up */
+	for (i = 0; i < ep->send_pkt_entry_vec_size; i++)
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+	efa_rdm_txe_release(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
