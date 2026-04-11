@@ -590,6 +590,14 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rma_partial_post_retry_no_double_free, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rma_partial_post_retry_no_double_free_read, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_rdm_rma.c */
+
+		/* begin efa_unit_test_proto.c */
+		cmocka_unit_test_setup_teardown(test_proto_select_eager_for_small_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_select_eager_for_zero_len_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_eager_construct_pkes_single_pke, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_eager_construct_pkes_zero_copy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_eager_send_completion_releases_txe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_eager_assigns_msg_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
