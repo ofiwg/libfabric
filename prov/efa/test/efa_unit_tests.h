@@ -596,5 +596,7 @@ void test_proto_select_runtread_over_longread();
 void test_proto_eager_construct_pkes_single_pke();
 void test_proto_eager_send_completion_releases_txe();
 void test_proto_eager_assigns_msg_id();
+void test_proto_medium_construct_pkes_multi_pke();
+void test_proto_medium_send_completion_tracks_bytes_acked();
 
 #endif

@@ -547,3 +547,143 @@ void test_proto_eager_assigns_msg_id(struct efa_resource **state)
 
 	efa_unit_test_buff_destruct(&send_buff);
 }
+
+/**
+ * @brief Test that medium construct_tx_pkes produces multiple PKEs for a
+ * message that requires segmentation (16KB = 2 packets at ~8KB MTU).
+ */
+void test_proto_medium_construct_pkes_multi_pke(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err, i;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	efa_unit_test_buff_construct(&send_buff, resource, 16384);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	void *desc = fi_mr_desc(send_buff.mr);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    &desc);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	txe->ep = ep;
+	txe->total_len = send_buff.size;
+	txe->iov_count = 1;
+	memcpy(txe->iov, &iov, sizeof(iov));
+	txe->desc[0] = fi_mr_desc(send_buff.mr);
+	memset(txe->mr, 0, sizeof(*txe->mr));
+
+	err = efa_rdm_proto_medium.construct_tx_pkes(ep, peer, &msg, ofi_op_msg,
+						     0, 0, txe);
+	assert_int_equal(err, 0);
+
+	/* 16KB should require at least 2 packets */
+	assert_true(ep->send_pkt_entry_vec_size >= 2);
+
+	/* Each PKE should have a callback and correct TXE */
+	for (i = 0; i < ep->send_pkt_entry_vec_size; i++) {
+		assert_non_null(ep->send_pkt_entry_vec[i]);
+		assert_non_null(ep->send_pkt_entry_vec[i]->callback);
+		assert_ptr_equal(ep->send_pkt_entry_vec[i]->ope, txe);
+	}
+
+	/* Clean up */
+	for (i = 0; i < ep->send_pkt_entry_vec_size; i++)
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+	efa_rdm_txe_release(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief Test that medium send completion tracks bytes_acked and only
+ * releases TXE when all bytes are acked.
+ */
+void test_proto_medium_send_completion_tracks_bytes_acked(
+	struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err, i;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	efa_unit_test_buff_construct(&send_buff, resource, 16384);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		&efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	err = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->txe_list), 1);
+
+	txe = container_of(ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+	assert_true(ep->send_pkt_entry_vec_size >= 2);
+
+	/* Complete first PKE - TXE should NOT be released yet */
+	struct efa_rdm_pke *first_pke = ep->send_pkt_entry_vec[0];
+	efa_rdm_ep_record_tx_op_completed(ep, first_pke);
+	first_pke->callback(first_pke);
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->txe_list), 1);
+
+	/* Complete remaining PKEs */
+	for (i = 1; i < ep->send_pkt_entry_vec_size; i++) {
+		struct efa_rdm_pke *pke = ep->send_pkt_entry_vec[i];
+		efa_rdm_ep_record_tx_op_completed(ep, pke);
+		pke->callback(pke);
+	}
+
+	/* Now TXE should be released */
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->txe_list), 0);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}

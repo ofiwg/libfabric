@@ -586,6 +586,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_proto_eager_construct_pkes_single_pke, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_eager_send_completion_releases_txe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_eager_assigns_msg_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_medium_construct_pkes_multi_pke, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_medium_send_completion_tracks_bytes_acked, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
