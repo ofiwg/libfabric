@@ -574,6 +574,15 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_single_iovs_with_rdma_support, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rma_should_write_using_rdma_unsolicited_write_recv_not_match, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_rdm_rma.c */
+
+		/* begin efa_unit_test_proto.c */
+		cmocka_unit_test_setup_teardown(test_proto_select_eager_for_small_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_select_medium_for_mid_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_select_longcts_for_large_msg_no_p2p, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_select_eager_has_priority_over_medium, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_select_eager_for_zero_len_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_select_longread_over_longcts_with_p2p, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_select_runtread_over_longread, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);

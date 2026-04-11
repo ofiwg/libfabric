@@ -1,0 +1,373 @@
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All
+ * rights reserved. */
+
+#include "efa_unit_tests.h"
+#include "rdm/efa_rdm_proto.h"
+#include "rdm/efa_rdm_proto_eager.h"
+#include "rdm/efa_rdm_proto_longcts.h"
+#include "rdm/efa_rdm_proto_longread.h"
+#include "rdm/efa_rdm_proto_medium.h"
+#include "rdm/efa_rdm_proto_runtread.h"
+
+/* Tests from efa_unit_test_proto_select.c */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All
+ * rights reserved. */
+
+
+/**
+ * @brief Helper to set up an endpoint, peer, and TXE for protocol selection
+ * tests.
+ *
+ * Returns the efa_rdm_ep. Caller must provide a peer_addr output and a
+ * pre-allocated txe pointer output.
+ */
+static struct efa_rdm_ep *setup_proto_select_test(struct efa_resource *resource,
+						  fi_addr_t *peer_addr)
+{
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_ep *ep;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, peer_addr, 0, NULL),
+		1);
+
+	return ep;
+}
+
+/**
+ * @brief Test that eager protocol is selected for small messages.
+ */
+void test_proto_select_eager_for_small_msg(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_select_test(resource, &peer_addr);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	iov.iov_base = NULL;
+	iov.iov_len = 64; /* Small message, fits in eager */
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0, NULL);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_non_null(proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_eager);
+
+	ofi_buf_free(txe);
+}
+
+/**
+ * @brief Test that medium protocol is selected for messages between eager
+ * capacity and 64KB.
+ */
+void test_proto_select_medium_for_mid_msg(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_select_test(resource, &peer_addr);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	/* 16KB - too large for eager, fits in medium */
+	iov.iov_base = NULL;
+	iov.iov_len = 16384;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0, NULL);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_non_null(proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_medium);
+
+	ofi_buf_free(txe);
+}
+
+/**
+ * @brief Test that long CTS is selected for large messages when no p2p
+ * or no registered memory is available.
+ */
+void test_proto_select_longcts_for_large_msg_no_p2p(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_select_test(resource, &peer_addr);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	/* 128KB - too large for medium, no desc so no read-based protocols */
+	iov.iov_base = NULL;
+	iov.iov_len = 131072;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0, NULL);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_non_null(proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_longcts);
+
+	ofi_buf_free(txe);
+}
+
+/**
+ * @brief Test that eager is selected before medium for messages that fit
+ * in eager (protocol priority ordering).
+ */
+void test_proto_select_eager_has_priority_over_medium(
+	struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_select_test(resource, &peer_addr);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	/* 1 byte - fits in both eager and medium, eager should win */
+	iov.iov_base = NULL;
+	iov.iov_len = 1;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0, NULL);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_ptr_equal(proto, &efa_rdm_proto_eager);
+
+	ofi_buf_free(txe);
+}
+
+/**
+ * @brief Test that zero-length messages select eager protocol.
+ */
+void test_proto_select_eager_for_zero_len_msg(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_select_test(resource, &peer_addr);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	iov.iov_base = NULL;
+	iov.iov_len = 0;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0, NULL);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_ptr_equal(proto, &efa_rdm_proto_eager);
+
+	ofi_buf_free(txe);
+}
+
+/**
+ * @brief Test that long read protocol is selected over long CTS when
+ * p2p is available, memory is registered, and peer supports RDMA read.
+ */
+void test_proto_select_longread_over_longcts_with_p2p(
+	struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_unit_test_buff send_buff;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	void *desc;
+	int err;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	/* 2MB - above min_read_msg_size (1MB default) */
+	efa_unit_test_buff_construct(&send_buff, resource, 2 * 1024 * 1024);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1,
+				      &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	/* Enable RDMA read support on peer */
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_READ;
+	peer->device_version =
+		efa_rdm_ep_domain(ep)->device->ibv_attr.vendor_part_id;
+
+	/* Enable RDMA read on the endpoint and device */
+	ep->use_device_rdma = true;
+	efa_rdm_ep_domain(ep)->device->device_caps |=
+		EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+
+	desc = fi_mr_desc(send_buff.mr);
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0, &desc);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg,
+						 0, txe, &proto);
+	assert_int_equal(err, 0);
+	assert_non_null(proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_longread);
+
+	/* Clean up MRs that select_send_protocol may have registered */
+	for (int i = 0; i < txe->iov_count; i++) {
+		if (txe->mr[i])
+			fi_close(&txe->mr[i]->fid);
+	}
+	ofi_buf_free(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief Test that runt read protocol is selected over long read and
+ * long CTS when conditions are met: p2p available, memory registered,
+ * peer supports RDMA read, no reads in flight, and runt is allowed.
+ *
+ * Runt read has higher priority than long read in the protocol list.
+ */
+void test_proto_select_runtread_over_longread(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_unit_test_buff send_buff;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	void *desc;
+	int err;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	/* 2MB - above min_read_msg_size */
+	efa_unit_test_buff_construct(&send_buff, resource, 2 * 1024 * 1024);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1,
+				      &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_READ;
+	peer->device_version =
+		efa_rdm_ep_domain(ep)->device->ibv_attr.vendor_part_id;
+	/* Runt read requires no reads in flight and runt allowed */
+	efa_rdm_ep_domain(ep)->num_read_msg_in_flight = 0;
+	/* Set runt_size > num_runt_bytes_in_flight for system memory */
+	g_efa_hmem_info[FI_HMEM_SYSTEM].runt_size = 1000;
+	peer->num_runt_bytes_in_flight = 2000;
+
+	/* Enable RDMA read on the endpoint and device */
+	ep->use_device_rdma = true;
+	efa_rdm_ep_domain(ep)->device->device_caps |=
+		EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+
+	desc = fi_mr_desc(send_buff.mr);
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0, &desc);
+
+	txe = ofi_buf_alloc(ep->ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg,
+						 0, txe, &proto);
+	assert_int_equal(err, 0);
+	assert_non_null(proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_runtread);
+
+	for (int i = 0; i < txe->iov_count; i++) {
+		if (txe->mr[i])
+			fi_close(&txe->mr[i]->fid);
+	}
+	ofi_buf_free(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+

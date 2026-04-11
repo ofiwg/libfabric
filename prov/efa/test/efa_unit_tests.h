@@ -585,4 +585,13 @@ int efa_unit_test_get_dlist_length(struct dlist_entry *head)
 
 void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr);
 
+/* Protocol TX path tests */
+void test_proto_select_eager_for_small_msg();
+void test_proto_select_medium_for_mid_msg();
+void test_proto_select_longcts_for_large_msg_no_p2p();
+void test_proto_select_eager_has_priority_over_medium();
+void test_proto_select_eager_for_zero_len_msg();
+void test_proto_select_longread_over_longcts_with_p2p();
+void test_proto_select_runtread_over_longread();
+
 #endif
