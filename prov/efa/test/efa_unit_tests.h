@@ -14,8 +14,9 @@
 #include <stddef.h>
 #include <setjmp.h>
 #include <cmocka.h>
-#include "stdio.h"
+#include <stdio.h>
 #include "efa.h"
+#include "efa_rdm_pke_cmd.h"
 #include "efa_unit_test_mocks.h"
 
 /**
@@ -759,7 +760,6 @@ void test_efa_rdm_rma_should_read_using_rdma_homogeneous_with_p2p(void **state);
 void test_efa_rdm_rma_should_write_using_rdma_peer_p2p_false_returns_false(void **state);
 void test_efa_rdm_rma_should_write_using_rdma_self_no_p2p(void **state);
 /* end efa_unit_test_rdm_rma.c */
-
 static inline
 void efa_unit_test_set_hw_cntr_max_values(struct efa_domain *efa_domain)
 {
@@ -774,11 +774,9 @@ int efa_unit_test_get_dlist_length(struct dlist_entry *head)
 {
 	int i = 0;
 	struct dlist_entry *item;
-
 	dlist_foreach(head, item) {
 		i++;
 	}
-
 	return i;
 }
 
@@ -822,5 +820,14 @@ struct efa_rdm_ope *efa_unit_test_get_first_ope(struct efa_rdm_ep *ep,
 }
 
 void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr);
-
+/* Protocol TX path tests */
+void test_proto_select_eager_for_small_msg(void **state);
+void test_proto_select_eager_for_zero_len_msg(void **state);
+void test_proto_eager_construct_pkes_single_pke(void **state);
+void test_proto_eager_construct_pkes_zero_copy(void **state);
+void test_proto_eager_send_completion_releases_txe(void **state);
+void test_proto_eager_assigns_msg_id(void **state);
+void test_proto_eager_send_completion_peer_abort(void **state);
+void test_proto_eager_queued_before_handshake_survives_mr_gen_check(void **state);
+void test_proto_eager_construct_pkes_failure_rolls_back_msg_id(void **state);
 #endif
