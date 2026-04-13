@@ -369,7 +369,8 @@ static ssize_t efa_ep_msg_inject(struct fid_ep *ep_fid, const void *buf, size_t 
 	struct fi_msg msg;
 	struct iovec iov;
 
-	assert(len <= base_ep->domain->device->efa_attr.inline_buf_size);
+	/* For non-dgram endpoints, msg_prefix_size is 0 */
+	assert(len <= base_ep->domain->device->efa_attr.inline_buf_size + base_ep->info->ep_attr->msg_prefix_size);
 
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, NULL, 1, dest_addr, NULL, 0);
@@ -385,7 +386,8 @@ static ssize_t efa_ep_msg_injectdata(struct fid_ep *ep_fid, const void *buf,
 	struct fi_msg msg;
 	struct iovec iov;
 
-	assert(len <= base_ep->domain->device->efa_attr.inline_buf_size);
+	/* For non-dgram endpoints, msg_prefix_size is 0 */
+	assert(len <= base_ep->domain->device->efa_attr.inline_buf_size + base_ep->info->ep_attr->msg_prefix_size);
 
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, NULL, 1, dest_addr, NULL, data);
