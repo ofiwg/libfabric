@@ -74,6 +74,26 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
 	return FI_SUCCESS;
 }
 
+static void efa_ah_warn_create_einval(struct efa_domain *domain, const uint8_t *gid)
+{
+	char remote_gid_str[INET6_ADDRSTRLEN] = {0};
+	char local_gid_str[INET6_ADDRSTRLEN] = {0};
+
+	if (!inet_ntop(AF_INET6, gid, remote_gid_str, INET6_ADDRSTRLEN))
+		snprintf(remote_gid_str, sizeof(remote_gid_str), "(unable to convert GID to string)");
+	if (!inet_ntop(AF_INET6, domain->device->ibv_gid.raw, local_gid_str, INET6_ADDRSTRLEN))
+		snprintf(local_gid_str, sizeof(local_gid_str), "(unable to convert GID to string)");
+
+	EFA_WARN(FI_LOG_AV,
+		 "ibv_create_ah failed with EINVAL. "
+		 "Local GID: %s, remote GID: %s. "
+		 "Possible causes: "
+		 "1) Remote GID is in a different availability zone (cross-AZ communication is not enabled). "
+		 "2) Remote GID is invalid. "
+		 "3) Protection domain %p is invalid.\n",
+		 local_gid_str, remote_gid_str, domain->ibv_pd);
+}
+
 /**
  * @brief allocate an ibv_ah object from GID.
  * This function use a hash map to store GID to ibv_ah map,
@@ -129,15 +149,22 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 
 			efa_ah->ibv_ah = ibv_create_ah(ibv_pd, &ibv_ah_attr);
 			if (!efa_ah->ibv_ah) {
-				EFA_WARN(FI_LOG_AV,
-					 "ibv_create_ah failed for implicit AV "
-					 "insertion! errno: %d\n",
-					 errno);
+				if (errno == EINVAL) {
+					efa_ah_warn_create_einval(domain, gid);
+				} else {
+					EFA_WARN(FI_LOG_AV,
+						 "ibv_create_ah failed for implicit AV "
+						 "insertion! errno: %d\n",
+						 errno);
+				}
 				goto err_free_efa_ah;
 			}
+		} else if (errno == EINVAL) {
+			efa_ah_warn_create_einval(domain, gid);
+			goto err_free_efa_ah;
 		} else {
 			EFA_WARN(FI_LOG_AV,
-				 "ibv_create_ah failed! errno: %d\n", errno);
+				 "ibv_create_ah failed! errno: %s\n", strerror(errno));
 			goto err_free_efa_ah;
 		}
 	}
