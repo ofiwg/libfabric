@@ -8,6 +8,7 @@
 #include "config.h"
 #include "efa.h"
 #include "efa_av.h"
+#include "rdm/efa_proto_av.h"
 #include "efa_cntr.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_atomic.h"
@@ -45,7 +46,7 @@ static struct fi_ops_domain efa_domain_ops = {
 
 static struct fi_ops_domain efa_domain_ops_rdm = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = efa_av_open,
+	.av_open = efa_proto_av_open,
 	.cq_open = efa_rdm_cq_open,
 	.endpoint = efa_rdm_ep_open,
 	.scalable_ep = fi_no_scalable_ep,
@@ -496,11 +497,11 @@ static int efa_domain_query_addr(struct fid_ep *ep_fid, fi_addr_t addr,
 {
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	struct efa_av_entry *av_entry = efa_av_addr_to_entry(base_ep->av, addr);
-	if (!av_entry || !av_entry->conn.ah || !efa_av_entry_ep_addr(av_entry)) {
+	if (!av_entry || !av_entry->ah || !efa_av_entry_ep_addr(av_entry)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "Failed to find connection for addr %lu\n", addr);
 		return -FI_EINVAL;
 	}
-	*ahn = av_entry->conn.ah->ahn;
+	*ahn = av_entry->ah->ahn;
 	*remote_qpn = efa_av_entry_ep_addr(av_entry)->qpn;
 	*remote_qkey = efa_av_entry_ep_addr(av_entry)->qkey;
 

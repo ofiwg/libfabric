@@ -6,6 +6,7 @@
 #include "efa_data_path_ops.h"
 #include "ofi_util.h"
 #include "efa_av.h"
+#include "rdm/efa_proto_av.h"
 #include "efa_cntr.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
@@ -190,17 +191,15 @@ static void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 	struct util_cq *target_cq;
 	int ret;
 	fi_addr_t src_addr;
-	struct efa_av *efa_av;
 	uint32_t imm_data = efa_ibv_cq_wc_read_imm_data(ibv_cq);
 	uint32_t len = efa_ibv_cq_wc_read_byte_len(ibv_cq);
 
 	target_cq = ep->base_ep.util_ep.rx_cq;
-	efa_av = ep->base_ep.av;
 
 	if (ep->base_ep.util_ep.caps & FI_SOURCE) {
 
 		/* Only check the explicit AV when writing completions */
-		src_addr = efa_av_reverse_lookup_rdm(efa_av,
+		src_addr = efa_proto_av_reverse_lookup(ep->proto_av,
 						efa_ibv_cq_wc_read_slid(ibv_cq),
 						efa_ibv_cq_wc_read_src_qp(ibv_cq),
 						NULL);
@@ -367,7 +366,7 @@ efa_rdm_cq_lookup_raw_addr(struct efa_rdm_pke *pke,
 	}
 
 	/* Next check implicit AV */
-	addr = ofi_av_lookup_fi_addr(&ep->base_ep.av->util_av_implicit,
+	addr = ofi_av_lookup_fi_addr(&ep->proto_av->util_av_implicit,
 				     (void *) efa_ep_addr);
 	if (addr != FI_ADDR_NOTAVAIL) {
 		implicit = true;
@@ -407,7 +406,6 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 				  struct efa_ibv_cq *efa_ibv_cq,
 				  struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_av *efa_av = ep->base_ep.av;
 	fi_addr_t explicit_fi_addr, implicit_fi_addr;
 	struct efa_ep_addr efa_ep_addr = {0};
 	struct efa_ep_addr_hashable *efa_ep_addr_hashable = NULL;
@@ -439,7 +437,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	 * behavior is fixed
 	 */
 	explicit_fi_addr =
-		efa_av_reverse_lookup_rdm(efa_av, gid, qpn, pkt_entry);
+		efa_proto_av_reverse_lookup(ep->proto_av, gid, qpn, pkt_entry);
 
 	if (explicit_fi_addr != FI_ADDR_NOTAVAIL) {
 		EFA_DBG(FI_LOG_CQ,
@@ -451,7 +449,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	}
 
 	implicit_fi_addr =
-		efa_av_reverse_lookup_rdm_implicit(efa_av, gid, qpn, pkt_entry);
+		efa_proto_av_reverse_lookup_implicit(ep->proto_av, gid, qpn, pkt_entry);
 
 	if (implicit_fi_addr != FI_ADDR_NOTAVAIL) {
 		EFA_DBG(FI_LOG_CQ,
@@ -479,7 +477,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	 * TODO: continue communication with peer by saving the previous state
 	 * and restoring it
 	 */
-	HASH_FIND(hh, ep->base_ep.av->evicted_peers_hashset, &efa_ep_addr,
+	HASH_FIND(hh, ep->proto_av->evicted_peers_hashset, &efa_ep_addr,
 		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
 	if (OFI_UNLIKELY(!!efa_ep_addr_hashable)) {
 		EFA_WARN(FI_LOG_CQ, "Received packet from peer already evicted "
@@ -500,7 +498,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	 * not local or shm is disabled for transmission. We shouldn't insert
 	 * in to shm av in this case.
 	 */
-	ret = efa_av_insert_one(ep->base_ep.av, &efa_ep_addr, &implicit_fi_addr,
+	ret = efa_proto_av_insert_one(ep->proto_av, &efa_ep_addr, &implicit_fi_addr,
 				0, NULL, false, true);
 	if (OFI_UNLIKELY(ret != 0)) {
 		efa_base_ep_write_eq_error(&ep->base_ep, ret,

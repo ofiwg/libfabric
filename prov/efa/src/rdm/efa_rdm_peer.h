@@ -253,6 +253,7 @@ bool efa_rdm_peer_need_connid(struct efa_rdm_peer *peer)
 	       (peer->extra_info[0] & EFA_RDM_EXTRA_REQUEST_CONNID_HEADER);
 }
 
+struct efa_proto_av_entry;
 
 void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_proto_av_entry *av_entry);
 

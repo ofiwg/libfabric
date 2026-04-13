@@ -318,6 +318,7 @@ out:
 void efa_proto_av_implicit_av_lru_entry_move(struct efa_proto_av *av,
 					     struct efa_proto_av_entry *entry)
 {
+	assert(ofi_genlock_held(&av->efa_av.domain->srx_lock));
 	assert(av->implicit_av_size == 0 ||
 	       HASH_CNT(hh, av->util_av_implicit.hash) <= av->implicit_av_size);
 	assert(dlist_entry_in_list(&av->implicit_av_lru_list,
@@ -881,7 +882,7 @@ int efa_proto_av_insert_one(struct efa_proto_av *av, struct efa_ep_addr *addr,
 	fi_addr_t implicit_fi_addr;
 	int ret = 0;
 
-	if (!efa_proto_av_is_valid_address(addr)) {
+	if (!efa_av_is_valid_address(addr)) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert bad addr\n");
 		*fi_addr = FI_ADDR_NOTAVAIL;
 		return -FI_EADDRNOTAVAIL;

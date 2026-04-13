@@ -5,10 +5,7 @@
 #define EFA_AV_H
 
 #include <infiniband/verbs.h>
-#include "rdm/efa_rdm_protocol.h"
-#include "rdm/efa_rdm_peer.h"
 #include "efa_ah.h"
-#include "efa_conn.h"
 
 #define EFA_MIN_AV_SIZE (16384)
 #define EFA_SHM_MAX_AV_COUNT       (256)
@@ -28,12 +25,105 @@ struct efa_ep_addr_hashable {
 
 #define EFA_EP_ADDR_LEN sizeof(struct efa_ep_addr)
 
-/* util_av implementation requires the first element of efa_av_entry to be
- * ep_addr */
+/**
+ * @brief Base AV entry (efa-direct)
+ *
+ * pahole:
+ *   size: 48, cachelines: 1, members: 3
+ *   ep_addr[32]  off=0   — TX hot (qpn@+16, qkey@+20)
+ *   ah*          off=32  — TX hot
+ *   fi_addr      off=40  — RX hot
+ */
 struct efa_av_entry {
-	uint8_t			ep_addr[EFA_EP_ADDR_LEN]; /* must be first (util_av) */
-	struct efa_conn		conn;
+	uint8_t			ep_addr[EFA_EP_ADDR_LEN]; /*     0    32  must be first (util_av) */
+	struct efa_ah		*ah;                       /*    32     8 */
+	fi_addr_t		fi_addr;                   /*    40     8 */
 };
+
+/* pahole: size: 4, no holes */
+struct efa_cur_reverse_av_key {
+	uint16_t ahn;
+	uint16_t qpn;
+};
+
+/**
+ * @brief Reverse AV entry keyed by (AHN, QPN) — points to current peer
+ *
+ * pahole: size: 72, cachelines: 2 (4-byte hole after key)
+ */
+struct efa_cur_reverse_av {
+	struct efa_cur_reverse_av_key key;              /*     0     4 */
+	/* 4-byte hole */
+	struct efa_av_entry *av_entry;                  /*     8     8 */
+	UT_hash_handle hh;                              /*    16    56 */
+};
+
+/* pahole: size: 8, no holes */
+struct efa_prv_reverse_av_key {
+	uint16_t ahn;
+	uint16_t qpn;
+	uint32_t connid;
+};
+
+/**
+ * @brief Reverse AV entry keyed by (AHN, QPN, connid) — points to previous peer
+ *
+ * pahole: size: 72, cachelines: 2
+ */
+struct efa_prv_reverse_av {
+	struct efa_prv_reverse_av_key key;              /*     0     8 */
+	struct efa_av_entry *av_entry;                  /*     8     8 */
+	UT_hash_handle hh;                              /*    16    56 */
+};
+
+/**
+ * @brief Base AV — contains only what efa-direct needs
+ *
+ * pahole:
+ *   size: 320, cachelines: 5
+ *   domain*          off=0    — cacheline 0
+ *   used             off=8
+ *   type             off=16
+ *   (4-byte hole)    off=20
+ *   cur_reverse_av*  off=24   — RX hot: reverse lookup hash head
+ *   prv_reverse_av*  off=32   — RX hot: QPN reuse fallback hash head
+ *   util_av          off=40   — 280 bytes (contains bufpool, locks, ep_list)
+ */
+struct efa_av {
+	struct efa_domain *domain;                      /*     0     8 */
+	size_t used;                                    /*     8     8 */
+	enum fi_av_type type;                           /*    16     4 */
+	/* 4-byte hole */
+	/* cur_reverse_av is a map from (ahn + qpn) to current (latest) efa_av_entry.
+	 * prv_reverse_av is a map from (ahn + qpn + connid) to all previous efa_av_entries.
+	 * cur_reverse_av is faster to search because its key size is smaller.
+	 */
+	struct efa_cur_reverse_av *cur_reverse_av;      /*    24     8 */
+	struct efa_prv_reverse_av *prv_reverse_av;      /*    32     8 */
+	struct util_av util_av;                         /*    40   280 */
+};
+
+int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		struct fid_av **av_fid, void *context);
+
+int efa_av_init_util_av(struct efa_domain *efa_domain,
+			struct fi_av_attr *attr,
+			struct util_av *util_av,
+			void *context,
+			size_t context_len);
+
+struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr);
+
+fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn);
+
+int efa_av_reverse_av_add(struct efa_av *av,
+			  struct efa_cur_reverse_av **cur_reverse_av,
+			  struct efa_prv_reverse_av **prv_reverse_av,
+			  struct efa_av_entry *av_entry);
+
+void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
+			      struct efa_prv_reverse_av **prv_reverse_av,
+			      struct efa_av_entry *av_entry);
 
 /**
  * @brief typed accessor for the ep_addr field of an AV entry
@@ -58,89 +148,5 @@ static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
 
 	return memcmp(addr->raw, all_zeros.raw, sizeof(addr->raw));
 }
-
-struct efa_cur_reverse_av_key {
-	uint16_t ahn;
-	uint16_t qpn;
-};
-
-struct efa_cur_reverse_av {
-	struct efa_cur_reverse_av_key key;
-	struct efa_conn *conn;
-	UT_hash_handle hh;
-};
-
-struct efa_prv_reverse_av_key {
-	uint16_t ahn;
-	uint16_t qpn;
-	uint32_t connid;
-};
-
-struct efa_prv_reverse_av {
-	struct efa_prv_reverse_av_key key;
-	struct efa_conn *conn;
-	UT_hash_handle hh;
-};
-
-struct efa_av {
-	struct fid_av *shm_rdm_av;
-	struct efa_domain *domain;
-	size_t used_explicit;
-	size_t used_implicit;
-	size_t shm_used;
-	enum fi_av_type type;
-	/* cur_reverse_av is a map from (ahn + qpn) to current (latest) efa_conn.
-	 * prv_reverse_av is a map from (ahn + qpn + connid) to all previous efa_conns.
-	 * cur_reverse_av is faster to search because its key size is smaller
-	 */
-	struct efa_cur_reverse_av *cur_reverse_av;
-	struct efa_prv_reverse_av *prv_reverse_av;
-	struct util_av util_av;
-
-	/* implicit AV is used when receiving messages from peers not explicity
-	 * inserted by the application
-	 */
-	struct util_av util_av_implicit;
-	struct efa_cur_reverse_av *cur_reverse_av_implicit;
-	struct efa_prv_reverse_av *prv_reverse_av_implicit;
-
-	size_t implicit_av_size;
-	struct dlist_entry implicit_av_lru_list;
-	struct efa_ep_addr_hashable *evicted_peers_hashset;
-};
-
-int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		struct fid_av **av_fid, void *context);
-
-int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
-		      fi_addr_t *fi_addr, uint64_t flags, void *context,
-		      bool insert_shm_av, bool insert_implicit_av);
-
-struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
-struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av,
-					      fi_addr_t fi_addr);
-
-struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr);
-
-fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn,
-				    uint16_t qpn, struct efa_rdm_pke *pkt_entry);
-
-fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
-					     uint16_t qpn,
-					     struct efa_rdm_pke *pkt_entry);
-
-fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn);
-
-int efa_av_reverse_av_add(struct efa_av *av,
-			  struct efa_cur_reverse_av **cur_reverse_av,
-			  struct efa_prv_reverse_av **prv_reverse_av,
-			  struct efa_conn *conn);
-
-void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
-				    struct efa_prv_reverse_av **prv_reverse_av,
-				    struct efa_conn *conn);
-
-void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
-					struct efa_conn *conn);
 
 #endif

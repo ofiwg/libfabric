@@ -39,6 +39,7 @@ struct efa_rdm_ep_queued_copy {
 
 struct efa_rdm_ep {
 	struct efa_base_ep base_ep;
+	struct efa_proto_av *proto_av; /* set during fi_ep_bind, avoids container_of on hot path */
 
 	/* self_ah necessary for local reads when application does not insert
 	 * its own address into the AV */

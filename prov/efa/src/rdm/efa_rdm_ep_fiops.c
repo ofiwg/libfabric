@@ -3,6 +3,7 @@
 
 #include "efa.h"
 #include "efa_av.h"
+#include "rdm/efa_proto_av.h"
 #include "efa_rdm_ep.h"
 #include "efa_rdm_cq.h"
 #include "efa_rdm_srx.h"
@@ -267,7 +268,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->peer_map_entry_pool,
-				 sizeof(struct efa_conn_ep_peer_map_entry),
+				 sizeof(struct efa_proto_av_entry_ep_peer_map_entry),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit to max_cnt */
 				 EFA_RDM_EP_MIN_PEER_POOL_SIZE,
@@ -750,10 +751,12 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
+		efa_rdm_ep->proto_av = container_of(av, struct efa_proto_av, efa_av);
+
 		/* Bind shm provider endpoint & shm av */
 		if (efa_rdm_ep->shm_ep) {
-			assert(av->shm_rdm_av);
-			ret = fi_ep_bind(efa_rdm_ep->shm_ep, &av->shm_rdm_av->fid, flags);
+			assert(efa_rdm_ep->proto_av->shm_rdm_av);
+			ret = fi_ep_bind(efa_rdm_ep->shm_ep, &efa_rdm_ep->proto_av->shm_rdm_av->fid, flags);
 			if (ret)
 				return ret;
 		}
@@ -812,9 +815,9 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
-	struct util_av_entry *util_av_entry;
-	struct efa_av_entry *av_entry;
-	struct efa_conn_ep_peer_map_entry *peer_map_entry;
+	struct efa_proto_av_entry *proto_entry;
+	struct efa_proto_av_entry_ep_peer_map_entry *pm_entry;
+
 
 #if ENABLE_DEBUG
 	struct efa_rdm_pke *pkt_entry;
@@ -866,27 +869,23 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 				      ep_peer_list_entry, tmp) {
 
 		if (peer->av_entry->fi_addr != FI_ADDR_UNSPEC) {
-			util_av_entry = ofi_bufpool_get_ibuf(
-				efa_rdm_ep->base_ep.av->util_av.av_entry_pool,
-				peer->av_entry->fi_addr);
+			proto_entry = efa_proto_av_addr_to_entry(
+				efa_rdm_ep->proto_av, peer->av_entry->fi_addr);
 		} else {
 			assert(peer->av_entry->implicit_fi_addr != FI_ADDR_UNSPEC);
 
-			util_av_entry = ofi_bufpool_get_ibuf(
-				efa_rdm_ep->base_ep.av->util_av_implicit.av_entry_pool,
-				peer->av_entry->implicit_fi_addr);
+			proto_entry = efa_proto_av_addr_to_entry_implicit(
+				efa_rdm_ep->proto_av, peer->av_entry->implicit_fi_addr);
 		}
 
 		dlist_remove(&peer->ep_peer_list_entry);
 
 		efa_rdm_peer_destruct(peer, efa_rdm_ep);
 
-		peer_map_entry = container_of(
-			peer, struct efa_conn_ep_peer_map_entry, peer);
-
-		av_entry = (struct efa_av_entry *) util_av_entry->data;
-		HASH_DEL(av_entry->conn.ep_peer_map, peer_map_entry);
-		ofi_buf_free(peer_map_entry);
+		pm_entry = container_of(
+			peer, struct efa_proto_av_entry_ep_peer_map_entry, peer);
+		HASH_DEL(proto_entry->ep_peer_map, pm_entry);
+		ofi_buf_free(pm_entry);
 	}
 
 	if (efa_rdm_ep->ope_pool)
@@ -1255,7 +1254,6 @@ int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 {
 	int ret, retv = 0;
 	struct efa_domain *efa_domain;
-	struct efa_av *efa_av;
 	struct efa_rdm_cq *efa_rdm_cq;
 
 
@@ -1265,14 +1263,13 @@ int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 		retv = ret;
 	}
 
-	efa_av = efa_rdm_ep->base_ep.av;
-	if (efa_av->shm_rdm_av) {
-		ret = fi_close(&efa_av->shm_rdm_av->fid);
+	if (efa_rdm_ep->proto_av->shm_rdm_av) {
+		ret = fi_close(&efa_rdm_ep->proto_av->shm_rdm_av->fid);
 		if (ret) {
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm av: %s\n", fi_strerror(-ret));
 			retv = ret;
 		}
-		efa_av->shm_rdm_av = NULL;
+		efa_rdm_ep->proto_av->shm_rdm_av = NULL;
 	}
 
 	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);
