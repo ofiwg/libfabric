@@ -1157,7 +1157,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	}
 
 	/* Restrict outstanding success event requests to queue size */
-	if (cxip_txc_otx_reqs_get(txc) > txc->attr.size) {
+	if (cxip_txc_otx_reqs_get(txc) >= txc->attr.size) {
 		ret = -FI_EAGAIN;
 		goto free_req;
 	}
