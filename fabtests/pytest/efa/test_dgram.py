@@ -16,23 +16,17 @@ def test_dgram_pingpong(cmdline_args, iteration_type):
     cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.strict_fabtests_mode = False
 
-    server_tx_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "tx_bytes")
     client_tx_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "tx_bytes")
-    server_rx_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "rx_bytes")
-    client_rx_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "rx_bytes")
 
     # efa's dgram endpoint requires prefix therefore must always test with prefix mode on
     test = ClientServerTest(cmdline_args_copy, "fi_dgram_pingpong", iteration_type,
                             prefix_type="with_prefix")
     test.run()
 
-    server_tx_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "tx_bytes")
     client_tx_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "tx_bytes")
-    server_rx_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "rx_bytes")
-    client_rx_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "rx_bytes")
 
-    # verify there is EFA traffic
-    assert server_tx_bytes_before_test < server_tx_bytes_after_test
+    # Verify EFA dgram endpoint was picked up by checking client tx_bytes.
+    # Client initiates the ping, so tx must progress if EFA was used.
+    # We don't check rx/server counters because UD is unreliable —
+    # if first packet was dropped, counters won't progress.
     assert client_tx_bytes_before_test < client_tx_bytes_after_test
-    assert server_rx_bytes_before_test < server_rx_bytes_after_test
-    assert client_rx_bytes_before_test < client_rx_bytes_after_test
