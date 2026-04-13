@@ -35,6 +35,19 @@ struct efa_av_entry {
 	struct efa_conn		conn;
 };
 
+/**
+ * @brief check if an efa_ep_addr has a non-zero GID
+ *
+ * @param[in]	addr	address to check
+ * @return	non-zero if valid, 0 if all-zeros
+ */
+static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
+{
+	struct efa_ep_addr all_zeros = { 0 };
+
+	return memcmp(addr->raw, all_zeros.raw, sizeof(addr->raw));
+}
+
 struct efa_cur_reverse_av_key {
 	uint16_t ahn;
 	uint16_t qpn;
