@@ -576,6 +576,106 @@ void efa_proto_av_entry_release_ah_unsafe(struct efa_proto_av *av,
 	release_from_implicit_av ? av->used_implicit-- : av->efa_av.used--;
 }
 
+/* ---- AH alloc with eviction ---- */
+
+/**
+ * @brief Evict the least recently used AH that has no explicit AV entries.
+ *
+ * Finds the LRU AH with only implicit references, releases all its
+ * implicit AV entries, and destroys the AH. Called when ibv_create_ah
+ * fails with ENOMEM.
+ *
+ * Caller must hold srx_lock. This function acquires util_domain.lock.
+ *
+ * @param[in]	domain	efa domain
+ * @return	0 on success, -FI_ENOMEM if no AH is available to evict
+ */
+static int efa_proto_ah_evict(struct efa_domain *domain)
+{
+	struct efa_proto_av_entry *entry_to_release;
+	struct efa_ah *ah_tmp, *ah_to_release = NULL;
+	struct dlist_entry *tmp;
+
+	assert(ofi_genlock_held(&domain->srx_lock));
+
+	ofi_genlock_lock(&domain->util_domain.lock);
+
+	dlist_foreach_container(&domain->ah_lru_list, struct efa_ah, ah_tmp,
+				domain_lru_ah_list_entry) {
+		if (ah_tmp->explicit_refcnt == 0) {
+			ah_to_release = ah_tmp;
+			break;
+		}
+	}
+
+	if (!ah_to_release) {
+		ofi_genlock_unlock(&domain->util_domain.lock);
+		EFA_WARN(FI_LOG_AV,
+			 "AH creation for implicit AV entry failed with ENOMEM "
+			 "but no AH entries available to evict\n");
+		return -FI_ENOMEM;
+	}
+
+	assert(ah_to_release->implicit_refcnt > 0);
+
+	dlist_foreach_container_safe(&ah_to_release->implicit_conn_list,
+				     struct efa_proto_av_entry, entry_to_release,
+				     ah_implicit_conn_list_entry, tmp) {
+
+		assert(entry_to_release->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
+		       entry_to_release->fi_addr == FI_ADDR_NOTAVAIL);
+
+		efa_proto_av_entry_release_ah_unsafe(entry_to_release->av,
+						     entry_to_release, true);
+	}
+
+	if (ah_to_release->implicit_refcnt == 0 &&
+	    ah_to_release->explicit_refcnt == 0) {
+		efa_ah_destroy_ah(domain, ah_to_release);
+	}
+
+	ofi_genlock_unlock(&domain->util_domain.lock);
+
+	return FI_SUCCESS;
+}
+
+/**
+ * @brief Allocate an AH with eviction retry for protocol AV.
+ *
+ * Wraps efa_ah_alloc with ENOMEM handling: if ibv_create_ah fails due
+ * to too many AH entries, evicts an AH with only implicit references
+ * and retries.
+ *
+ * @param[in]	domain		efa domain
+ * @param[in]	gid		GID
+ * @param[in]	insert_implicit_av	whether this is for an implicit AV entry
+ * @return	pointer to efa_ah on success, NULL on failure
+ */
+static struct efa_ah *efa_proto_ah_alloc(struct efa_domain *domain,
+					 const uint8_t *gid,
+					 bool insert_implicit_av)
+{
+	struct efa_ah *ah;
+	int err;
+
+	ah = efa_ah_alloc(domain, gid, insert_implicit_av);
+	if (ah)
+		return ah;
+
+	if (errno != FI_ENOMEM)
+		return NULL;
+
+	EFA_INFO(FI_LOG_AV,
+		 "ibv_create_ah failed with ENOMEM. "
+		 "Attempting to evict AH entry\n");
+
+	err = efa_proto_ah_evict(domain);
+	if (err)
+		return NULL;
+
+	return efa_ah_alloc(domain, gid, insert_implicit_av);
+}
+
 /* ---- Entry alloc ---- */
 
 /**
@@ -647,7 +747,7 @@ struct efa_proto_av_entry *efa_proto_av_entry_alloc(
 		entry->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 	}
 
-	entry->ah = efa_ah_alloc(av->efa_av.domain, raw_addr->raw, insert_implicit_av);
+	entry->ah = efa_proto_ah_alloc(av->efa_av.domain, raw_addr->raw, insert_implicit_av);
 	if (!entry->ah)
 		goto err_release;
 

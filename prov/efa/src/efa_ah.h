@@ -36,4 +36,6 @@ void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
 void efa_ah_release_unsafe(struct efa_domain *domain, struct efa_ah *ah,
 			   bool release_from_implicit_av);
 
+void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
+
 #endif
