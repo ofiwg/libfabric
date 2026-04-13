@@ -189,13 +189,6 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 	return FI_ADDR_NOTAVAIL;
 }
 
-static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
-{
-	struct efa_ep_addr all_zeros = { 0 };
-
-	return memcmp(addr->raw, all_zeros.raw, sizeof(addr->raw));
-}
-
 /**
  * @brief Move the conn to the front of the LRU list to indicate that it is the
  * most recently used entry
