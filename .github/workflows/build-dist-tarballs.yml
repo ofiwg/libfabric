@@ -106,7 +106,7 @@ jobs:
         fi
 
     - name: Upload release artifacts
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@v7.0.1
       with:
         name: release-artifacts
         path: release-artifacts/*
