@@ -824,7 +824,7 @@ static inline void ofi_addr_set_port(struct sockaddr *addr, uint16_t port)
 		break;
     case AF_IB:
 		sib = (struct ofi_sockaddr_ib *)addr;
-		sib->sib_sid = htonll(((uint64_t)OFI_RDMA_PS_IB << 16) + ntohs(port));
+		sib->sib_sid = htonll(((uint64_t)OFI_RDMA_PS_IB << 16) + port);
 		sib->sib_sid_mask = htonll(OFI_IB_IP_PS_MASK | OFI_IB_IP_PORT_MASK);
 		break;
 	default:
