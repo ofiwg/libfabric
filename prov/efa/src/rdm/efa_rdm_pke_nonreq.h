@@ -114,7 +114,6 @@ struct efa_rdm_handshake_opt_user_recv_qp_hdr *efa_rdm_pke_get_handshake_opt_use
 	return (struct efa_rdm_handshake_opt_user_recv_qp_hdr *) (pke->wiredata + offset);
 }
 
-
 ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_peer *peer);
 

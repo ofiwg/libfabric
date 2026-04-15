@@ -122,6 +122,7 @@ struct efa_rdm_peer {
 	 * only valid when (extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) is non-zero
 	 */
 	struct efa_rdm_peer_user_recv_qp user_recv_qp;
+
 	struct efa_rdm_rxe_map rxe_map; 	/**< Hashmap used to match received mulreq packets with RX entries */
 };
 

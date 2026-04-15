@@ -339,7 +339,7 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 
 	ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 
-	err = efa_base_ep_create_and_enable_qp(ep, false);
+	err = efa_base_ep_create_and_enable_qp(ep);
 	if (err)
 		return err;
 

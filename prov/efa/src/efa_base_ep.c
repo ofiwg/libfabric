@@ -77,7 +77,6 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 {
 	struct efa_domain *domain;
 	struct efa_qp *qp = base_ep->qp;
-	struct efa_qp *user_recv_qp = base_ep->user_recv_qp;
 	uint32_t qp_num;
 	struct efa_cq *tx_cq, *rx_cq;
 	int err;
@@ -98,17 +97,6 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 		efa_qp_destruct(qp);
 		domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1] = NULL;
 		base_ep->qp = NULL;
-	}
-
-	if (user_recv_qp) {
-		domain = user_recv_qp->base_ep->domain;
-		qp_num = user_recv_qp->qp_num;
-		efa_cq_invalidate_cur_wq(tx_cq, user_recv_qp);
-		if (rx_cq != tx_cq)
-			efa_cq_invalidate_cur_wq(rx_cq, user_recv_qp);
-		efa_qp_destruct(user_recv_qp);
-		domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1] = NULL;
-		base_ep->user_recv_qp = NULL;
 	}
 
 	/* Drain the CQ after destroying the QP
@@ -167,9 +155,6 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 
 	if (base_ep->efa_recv_wr_vec)
 		free(base_ep->efa_recv_wr_vec);
-
-	if (base_ep->user_recv_wr_vec)
-		free(base_ep->user_recv_wr_vec);
 
 	return err;
 }
@@ -403,15 +388,12 @@ void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
  * @brief Create the IBV QP that backs the base ep
  *
  * @param base_ep efa_base_ep
- * @param create_user_recv_qp whether to create the user_recv_qp. This boolean
- * is only true for the zero copy recv mode in the efa-rdm endpoint
  *
  * @return int 0 on success, negative integer on failure
  */
 static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 				  struct efa_ibv_cq *tx_cq,
-				  struct efa_ibv_cq *rx_cq,
-				  bool create_user_recv_qp)
+				  struct efa_ibv_cq *rx_cq)
 {
 	int ret;
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
@@ -438,14 +420,6 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	if (ret)
 		return ret;
 
-	if (create_user_recv_qp) {
-		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass, tx_cq->unsolicited_write_recv_enabled);
-		if (ret) {
-			efa_base_ep_destruct_qp_unsafe(base_ep);
-			return ret;
-		}
-	}
-
 #if HAVE_EFA_DATA_PATH_DIRECT
 	/* Only enable direct QP when direct CQ is enabled */
 	assert(tx_cq->data_path_direct_enabled == rx_cq->data_path_direct_enabled);
@@ -455,14 +429,6 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 			efa_base_ep_destruct_qp_unsafe(base_ep);
 			return ret;
 		}
-		if (create_user_recv_qp) {
-			ret = efa_data_path_direct_qp_initialize(base_ep->user_recv_qp);
-			if (ret) {
-				efa_base_ep_destruct_qp_unsafe(base_ep);
-				return ret;
-			}
-		}
-
 	}
 #endif
 
@@ -536,14 +502,6 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep)
 
 	base_ep->efa_qp_enabled = true;
 
-	if (base_ep->user_recv_qp) {
-		err = efa_base_ep_enable_qp(base_ep, base_ep->user_recv_qp);
-		if (err) {
-			efa_base_ep_destruct_qp_unsafe(base_ep);
-			return err;
-		}
-	}
-
 	memcpy(base_ep->src_addr.raw, base_ep->domain->device->ibv_gid.raw, EFA_GID_LEN);
 	base_ep->src_addr.qpn = base_ep->qp->qp_num;
 	base_ep->src_addr.pad = 0;
@@ -590,15 +548,9 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for base_ep->efa_recv_wr_vec!\n");
 		return -FI_ENOMEM;
 	}
-	base_ep->user_recv_wr_vec = calloc(sizeof(struct efa_recv_wr), efa_base_ep_get_rx_pool_size(base_ep));
-	if (!base_ep->user_recv_wr_vec) {
-		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for base_ep->user_recv_wr_vec!\n");
-		return -FI_ENOMEM;
-	}
 	base_ep->recv_wr_index = 0;
 	base_ep->efa_qp_enabled = false;
 	base_ep->qp = NULL;
-	base_ep->user_recv_qp = NULL;
 
 	/* Use device's native limit as the default value of base ep*/
 	base_ep->max_msg_size = (size_t) base_ep->domain->device->ibv_port_attr.max_msg_sz;
@@ -909,12 +861,10 @@ void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
  * @brief Create and enable the IBV QP that backs the EP
  *
  * @param ep efa_base_ep
- * @param create_user_recv_qp whether to create the user_recv_qp. This boolean
- * is only true for the zero copy recv mode in the efa-rdm endpoint
  *
  * @return int 0 on success, negative integer on failure
  */
-int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_recv_qp)
+int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep)
 {
 	struct efa_cq *scq, *rcq, *txcq, *rxcq;
 	int err;
@@ -953,7 +903,7 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_re
 	 */
 	ofi_genlock_lock(&ep->domain->device->qp_table_lock);
 	efa_base_ep_lock_cq(ep);
-	err = efa_base_ep_create_qp(ep, &scq->ibv_cq, &rcq->ibv_cq, create_user_recv_qp);
+	err = efa_base_ep_create_qp(ep, &scq->ibv_cq, &rcq->ibv_cq);
 	if (err)
 		goto out;
 

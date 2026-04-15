@@ -80,11 +80,15 @@ struct efa_rdm_ep {
 	size_t inject_tagged_size;	/**< #FI_OPT_INJECT_TAGGED_SIZE */
 	size_t inject_atomic_size;	/**< #FI_OPT_INJECT_ATOMIC_SIZE */
 
-	/* Endpoint's capability to support zero-copy rx */
-	bool use_zcpy_rx;
-
 	/* Application requested resource management support */
 	int handle_resource_management;
+
+	/**
+	 * Whether an old peer with the same EP configuration could have
+	 * use_zcpy_rx=1. Used to enforce handshake before sending, so we
+	 * can discover the peer's user_recv_qp for backwards compatibility.
+	 */
+	bool peer_may_have_zcpy_rx;
 
 	/* rx/tx queue size of core provider */
 	size_t efa_max_outstanding_rx_ops;
@@ -105,7 +109,6 @@ struct efa_rdm_ep {
 	/* buffer pool for send & recv */
 	struct ofi_bufpool *efa_tx_pkt_pool;
 	struct ofi_bufpool *efa_rx_pkt_pool;
-	struct ofi_bufpool *user_rx_pkt_pool;
 
 	/* staging area for unexpected and out-of-order packets */
 	struct ofi_bufpool *rx_unexp_pkt_pool;
@@ -178,11 +181,6 @@ struct efa_rdm_ep {
 	 */
 	size_t efa_rx_pkts_held;
 
-	/*
-	 * number of RX pkts posted by user (for zero-copy recv)
-	 */
-	size_t user_rx_pkts_posted;
-
 	/* number of outstanding tx ops on efa device */
 	size_t efa_outstanding_tx_ops;
 
@@ -251,9 +249,6 @@ static inline int efa_rdm_ep_need_sas(struct efa_rdm_ep *ep)
 /* Initialization functions */
 int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		    struct fid_ep **ep, void *context);
-
-int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe,
-			      uint64_t flags);
 
 struct efa_rdm_peer;
 
@@ -431,19 +426,19 @@ bool efa_both_support_rdma_write(struct efa_rdm_ep *ep, struct efa_rdm_peer *pee
 }
 
 /**
- * @brief determine if both peers support zero hdr data transfer
+ * @brief determine if the peer expects zero-copy data transfer
  *
- * This function can only return true if a handshake packet has already been
- * exchanged, and the peer set the EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP flag.
- * @params[in]		ep		Endpoint for communication with peer
+ * This is used for backwards compatibility with older peers that have
+ * zero-copy receive enabled. When the peer advertises USER_RECV_QP,
+ * we must send headerless eager RTM packets to the peer's user_recv_qp.
+ *
  * @params[in]		peer		An EFA peer
- * @return		boolean		both self and peer support RDMA read
+ * @return		boolean		peer expects zero-copy data transfer
  */
 static inline
-bool efa_both_support_zero_hdr_data_transfer(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+bool efa_rdm_peer_expects_zero_hdr_data_transfer(struct efa_rdm_peer *peer)
 {
-	return ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) &&
-		(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP));
+	return (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
 }
 
 /**

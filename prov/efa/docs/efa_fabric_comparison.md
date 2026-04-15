@@ -57,7 +57,6 @@ In an expected message workflow (A receive buffer is posted before the message a
 - On device completion, searches internal queue to find matching Rx buffer
 - Copies data from packet entry to matched user buffer.
 - **Exceptions**:
-  - For "zero-copy receive" mode of efa fabric, the user buffer can be posted directly to the device during fi_recv
   - For rdma-read based protocols of efa fabric, the user buffer can be posted to device to rdma-read the data from sender buffer
   - See efa_rdm_protocol_v4.md for details.
 
