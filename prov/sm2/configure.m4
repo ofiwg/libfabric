@@ -13,7 +13,7 @@ AC_DEFUN([FI_SM2_CONFIGURE],[
 	cma_happy=0
 	atomics_happy=0
 
-	AS_IF([test x"$enable_shm" != x"no"],
+	AS_IF([test x"$enable_sm2" != x"no"],
 	      [
 	       # check if CMA support are present
 	       AS_IF([test x$linux = x1 && test x$host_cpu = xx86_64],
@@ -23,7 +23,7 @@ AC_DEFUN([FI_SM2_CONFIGURE],[
 				    [cma_happy=0])]
 	       )
 
-	       # check if SHM support are present
+	       # check if shm_open is present (POSIX shared memory API)
 	       AC_CHECK_FUNC([shm_open],
 			     [sm2_happy=1],
 			     [sm2_happy=0])
