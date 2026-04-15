@@ -112,7 +112,7 @@ static void test_efa_msg_send_prep(struct efa_resource *resource,
 	g_efa_unit_test_mocks.efa_qp_post_recv = &efa_mock_efa_qp_post_recv_return_mock;
 	/* Mock general QP post send function to save work request IDs */
 	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
-	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
 }
 
 void test_efa_msg_fi_send(struct efa_resource **state)
@@ -357,4 +357,101 @@ void test_efa_msg_send_0_byte_with_inject_flag(struct efa_resource **state)
 	ret = fi_sendmsg(resource->ep, &msg, FI_INJECT);
 	assert_int_equal(ret, 0);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+}
+
+/**
+ * @brief Verify that fi_sendmsg with FI_INJECT and HMEM desc returns -FI_EOPNOTSUPP
+ */
+void test_efa_msg_sendmsg_inject_with_hmem_fails(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_mr *efa_mr;
+	struct iovec iov;
+	void *desc;
+	int ret;
+	fi_addr_t addr;
+	struct fi_msg msg = {0};
+
+	test_efa_msg_send_prep(resource, &addr);
+	efa_unit_test_buff_construct(&send_buff, resource, 32);
+
+	desc = fi_mr_desc(send_buff.mr);
+	efa_mr = (struct efa_mr *)desc;
+	efa_mr->iface = FI_HMEM_CUDA;
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+
+	efa_unit_test_construct_msg(&msg, &iov, 1, addr, NULL, 0, &desc);
+
+	ret = fi_sendmsg(resource->ep, &msg, FI_INJECT);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief Verify that fi_sendmsg with FI_INJECT and message larger than
+ * inline_buf_size returns -FI_EOPNOTSUPP
+ */
+void test_efa_msg_sendmsg_inject_with_large_msg_fails(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_base_ep *base_ep;
+	struct iovec iov;
+	void *desc;
+	int ret;
+	fi_addr_t addr;
+	struct fi_msg msg = {0};
+	size_t buf_size;
+
+	test_efa_msg_send_prep(resource, &addr);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	buf_size = base_ep->domain->device->efa_attr.inline_buf_size +
+		   base_ep->info->ep_attr->msg_prefix_size + 1;
+
+	efa_unit_test_buff_construct(&send_buff, resource, buf_size);
+
+	desc = fi_mr_desc(send_buff.mr);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+
+	efa_unit_test_construct_msg(&msg, &iov, 1, addr, NULL, 0, &desc);
+
+	ret = fi_sendmsg(resource->ep, &msg, FI_INJECT);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief Verify that fi_inject with message larger than
+ * inline_buf_size returns -FI_EOPNOTSUPP
+ */
+void test_efa_msg_inject_with_large_msg_fails(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_unit_test_buff send_buff;
+	fi_addr_t addr;
+	size_t buf_size;
+	int ret;
+
+	test_efa_msg_send_prep(resource, &addr);
+	efa_unit_test_buff_construct(&send_buff, resource, 32);
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	buf_size = base_ep->domain->device->efa_attr.inline_buf_size +
+		   base_ep->info->ep_attr->msg_prefix_size + 1;
+
+	ret = fi_inject(resource->ep, send_buff.buff, buf_size, addr);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+
+	efa_unit_test_buff_destruct(&send_buff);
 }
