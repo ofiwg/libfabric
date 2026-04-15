@@ -51,10 +51,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 {
 	int ret = 0;
 
-
-	if (efa_both_support_zero_hdr_data_transfer(pkt_entry->ep, ope->peer)) {
-		/* zero hdr transfer only happens for eager msg (non-tagged) pkt */
-		assert(pkt_type == EFA_RDM_EAGER_MSGRTM_PKT);
+	if (efa_rdm_peer_expects_zero_hdr_data_transfer(ope->peer) &&
+	    pkt_type == EFA_RDM_EAGER_MSGRTM_PKT) {
 		pkt_entry->flags |= EFA_RDM_PKE_SEND_TO_USER_RECV_QP | EFA_RDM_PKE_HAS_NO_BASE_HDR;
 	}
 

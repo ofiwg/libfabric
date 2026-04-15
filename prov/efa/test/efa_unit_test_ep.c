@@ -4,6 +4,7 @@
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_cq.h"
 #include "efa_rdm_pke_utils.h"
+#include "efa_rdm_pke_nonreq.h"
 #include "efa_data_path_direct_entry.h"
 
 /**
@@ -170,7 +171,6 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_slid = &efa_mock_efa_ibv_cq_wc_read_slid_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_src_qp = &efa_mock_efa_ibv_cq_wc_read_src_qp_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_qp_num = &efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock;
-	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_wc_flags = &efa_mock_efa_ibv_cq_wc_read_wc_flags_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_wc_read_vendor_err = &efa_mock_efa_ibv_cq_wc_read_vendor_err_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
 	ibv_cq->ibv_cq_ex->status = IBV_WC_SUCCESS;
@@ -183,7 +183,6 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	will_return_uint(efa_mock_efa_ibv_cq_wc_read_byte_len_return_mock, pkt_entry->pkt_size);
 	will_return_int(efa_mock_efa_ibv_cq_wc_read_opcode_return_mock, IBV_WC_RECV);
 	will_return_uint(efa_mock_efa_ibv_cq_wc_read_qp_num_return_mock, efa_rdm_ep->base_ep.qp->qp_num);
-	will_return_uint(efa_mock_efa_ibv_cq_wc_read_wc_flags_return_mock, 0);
 	will_return_uint(efa_mock_efa_ibv_cq_wc_read_slid_return_mock, efa_rdm_ep_get_peer_ahn(efa_rdm_ep, peer_addr));
 	will_return_uint(efa_mock_efa_ibv_cq_wc_read_src_qp_return_mock, raw_addr.qpn);
 	will_return_int(efa_mock_efa_ibv_cq_start_poll_return_mock, IBV_WC_SUCCESS);
@@ -1076,252 +1075,215 @@ void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(struct efa_resourc
 
 #endif
 
-static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
-                                             bool cuda_p2p_disabled,
-                                             bool cuda_p2p_supported,
-                                             bool expected_use_zcpy_rx)
+/**
+ * @brief [Backwards compat] Verify that when zero-copy conditions are met,
+ * the endpoint sets peer_may_have_zcpy_rx but does NOT create a user_recv_qp
+ * or set the USER_RECV_QP flag in extra_info.
+ *
+ * This ensures the new code does not advertise zero-copy receive support
+ * (which would cause old peers to send headerless packets to us), while
+ * still being aware that old peers might have zero-copy enabled.
+ */
+void test_efa_rdm_ep_zcpy_recv_not_created_but_peer_flag_set(struct efa_resource **state)
 {
+	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
 	size_t max_msg_size = 1000;
-	size_t inject_msg_size = 0;
-	size_t inject_rma_size = 0;
 	bool shm_permitted = false;
-	ofi_hmem_disable_p2p = cuda_p2p_disabled;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(resource->hints);
+
+	resource->hints->mode = FI_MSG_PREFIX;
+	resource->hints->caps = FI_MSG;
 
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
 	                                            resource->hints, false, true);
 
-	/* System memory P2P should always be enabled */
-	assert_true(g_efa_hmem_info[FI_HMEM_SYSTEM].initialized);
-	assert_true(g_efa_hmem_info[FI_HMEM_SYSTEM].p2p_supported_by_device);
-
-	/**
-	 * We want to be able to run this test on any platform:
-	 * 1. Fake CUDA support.
-	 * 2. Disable all other hmem ifaces.
-	 */
-	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
-	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = cuda_p2p_supported;
-
-	g_efa_hmem_info[FI_HMEM_NEURON].initialized = false;
-	g_efa_hmem_info[FI_HMEM_SYNAPSEAI].initialized = false;
-
 	ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	if (cuda_p2p_supported)
-		ep->hmem_p2p_opt = FI_HMEM_P2P_ENABLED;
-
-	/* Set sufficiently small max_msg_size */
 	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_MAX_MSG_SIZE,
 			&max_msg_size, sizeof max_msg_size), 0);
 
-	/* Disable shm */
 	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_SHARED_MEMORY_PERMITTED,
 			&shm_permitted, sizeof shm_permitted), 0);
 
-	assert_true(ep->base_ep.max_msg_size == max_msg_size);
-
-	/* Enable EP */
 	assert_int_equal(fi_enable(resource->ep), 0);
 
-	assert_true(ep->use_zcpy_rx == expected_use_zcpy_rx);
+	/* New code must NOT set USER_RECV_QP in extra_info (old peers would send zcpy to us) */
+	assert_false(ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
 
-	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
-			&inject_msg_size, &(size_t){sizeof inject_msg_size}), 0);
-	assert_int_equal(ep->base_ep.inject_msg_size, inject_msg_size);
-
-	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
-			&inject_rma_size, &(size_t){sizeof inject_rma_size}), 0);
-	assert_int_equal(ep->base_ep.inject_rma_size, inject_rma_size);
-
-	if (expected_use_zcpy_rx) {
-		assert_int_equal(inject_msg_size, efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
-		assert_int_equal(inject_rma_size, efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
-	} else {
-		assert_int_equal(inject_msg_size, resource->info->tx_attr->inject_size);
-		assert_int_equal(inject_rma_size, resource->info->tx_attr->inject_size);
-	}
-	/* restore global variable */
-	ofi_hmem_disable_p2p = 0;
+	/* But must know that old peers could have zcpy enabled */
+	assert_true(ep->peer_may_have_zcpy_rx);
 }
 
 /**
- * @brief Verify zcpy_rx is enabled when the following requirements are met:
- * 1. app doesn't require FI_ORDER_SAS in tx or rx's msg_order
- * 2. app uses FI_MSG_PREFIX mode
- * 3. app's max msg size is smaller than mtu_size - prefix_size
- * 4. app doesn't use FI_DIRECTED_RECV, FI_TAGGED, FI_ATOMIC capability
+ * @brief [Backwards compat] Verify that peer_may_have_zcpy_rx is false
+ * when SAS ordering is requested (which disables zcpy on old code too).
  */
-void test_efa_rdm_ep_user_zcpy_rx_disabled(struct efa_resource **state)
+void test_efa_rdm_ep_zcpy_compat_disabled_by_sas(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	size_t max_msg_size = 1000;
+	bool shm_permitted = false;
 
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(resource->hints);
 
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
-
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, true);
-}
-
-/**
- * @brief Verify zcpy_rx is enabled for host-only workloads even when
- *        HMEM P2P is globally disabled, since host memory doesn't use P2P
- */
-void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_disabled(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
-	assert_non_null(resource->hints);
-
-	resource->hints->mode = FI_MSG_PREFIX;
-	resource->hints->caps = FI_MSG;
-
-	/* Global HMEM P2P disable doesn't affect host-only workloads */
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true, false, true);
-}
-
-/**
- * @brief When sas is requested for either tx or rx. zcpy will be disabled
- */
-void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
-	assert_non_null(resource->hints);
-
 	resource->hints->tx_attr->msg_order = FI_ORDER_SAS;
 	resource->hints->rx_attr->msg_order = FI_ORDER_SAS;
-	resource->hints->mode = FI_MSG_PREFIX;
-	resource->hints->caps = FI_MSG;
 
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, false);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(1, 14),
+	                                            resource->hints, false, true);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_MAX_MSG_SIZE,
+			&max_msg_size, sizeof max_msg_size), 0);
+
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_SHARED_MEMORY_PERMITTED,
+			&shm_permitted, sizeof shm_permitted), 0);
+
+	assert_int_equal(fi_enable(resource->ep), 0);
+
+	assert_false(ep->peer_may_have_zcpy_rx);
 }
 
 /**
- * @brief Verify zcpy_rx is enabled even if CUDA P2P is not supported,
- *        as long as FI_HMEM is not requested (host-only workload)
+ * @brief [Backwards compat] Verify that when a handshake is received from an
+ * old peer that has USER_RECV_QP enabled, the new code correctly parses the
+ * peer's user_recv_qp qpn and qkey from the handshake packet.
+ *
+ * This ensures the new code can send headerless packets to old peers that
+ * have zero-copy receive enabled.
  */
-void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy(struct efa_resource **state)
+void test_efa_rdm_ep_handshake_receive_peer_user_recv_qp(struct efa_resource **state)
 {
+	fi_addr_t peer_addr = 0;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_peer *peer;
 	struct efa_resource *resource = *state;
-
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
-	assert_non_null(resource->hints);
-
-	resource->hints->mode = FI_MSG_PREFIX;
-	resource->hints->caps = FI_MSG;
-
-	/* With the fix, zcpy_rx should be enabled for host-only workloads
-	 * even when CUDA P2P is not supported */
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, false, true);
-}
-
-/**
- * @brief Verify zcpy_rx is disabled if FI_MR_LOCAL is not set
- */
-void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_no_mr_local(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
-	assert_non_null(resource->hints);
-
-	resource->hints->caps = FI_MSG;
-	resource->hints->domain_attr->mr_mode &= ~FI_MR_LOCAL;
-
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, false);
-}
-
-void test_efa_rdm_ep_close_discard_posted_recv(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-	char buf[16];
-
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-
-	/* Post recv and then close ep */
-	assert_int_equal(fi_recv(resource->ep, (void *) buf, 16, NULL, FI_ADDR_UNSPEC, NULL), 0);
-
-	assert_int_equal(fi_close(&resource->ep->fid), 0);
-
-	/* CQ should be empty and no err entry */
-	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
-
-	/* Reset to NULL to avoid test reaper closing again */
-	resource->ep = NULL;
-}
-
-void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-	struct fi_context cancel_context = {0};
-	struct efa_unit_test_buff recv_buff;
-
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
-	assert_non_null(resource->hints);
-
-	resource->hints->caps = FI_MSG;
-
-	/* enable zero-copy recv mode in ep */
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, true);
-
-	/* Construct a recv buffer with mr */
-	efa_unit_test_buff_construct(&recv_buff, resource, 16);
-
-	assert_int_equal(fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), FI_ADDR_UNSPEC, &cancel_context), 0);
-
-	assert_int_equal(fi_cancel((struct fid *)resource->ep, &cancel_context), -FI_EOPNOTSUPP);
-
-	/**
-	 * the buf is still posted to rdma-core, so unregistering mr can
-	 * return non-zero. Currently ignore this failure.
-	 */
-	(void) fi_close(&recv_buff.mr->fid);
-	free(recv_buff.buff);
-}
-
-/**
- * @brief When user posts more than rx size fi_recv, we should return eagain and make sure
- * there is no rx entry leaked
- */
-void test_efa_rdm_ep_zcpy_recv_eagain(struct efa_resource **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_unit_test_buff recv_buff;
-	int i;
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_handshake_hdr *handshake_hdr;
+	struct efa_rdm_handshake_opt_user_recv_qp_hdr *user_recv_qp_hdr;
+	int nex;
+	uint32_t expected_qpn = 42;
+	uint32_t expected_qkey = 0xABCD;
 
-	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
-	assert_non_null(resource->hints);
-
-	resource->hints->caps = FI_MSG;
-
-	/* enable zero-copy recv mode in ep */
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, true);
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	/* Construct a recv buffer with mr */
-	efa_unit_test_buff_construct(&recv_buff, resource, 16);
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	for (i = 0; i < efa_rdm_ep->base_ep.info->rx_attr->size; i++)
-		assert_int_equal(fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), FI_ADDR_UNSPEC, NULL), 0);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
 
-	/* we should have rx number of rx entry before and after the extra recv post */
-	assert_true(efa_unit_test_get_dlist_length(&efa_rdm_ep->rxe_list) == efa_rdm_ep->base_ep.info->rx_attr->size);
-	assert_int_equal(fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), FI_ADDR_UNSPEC, NULL), -FI_EAGAIN);
-	assert_true(efa_unit_test_get_dlist_length(&efa_rdm_ep->rxe_list) == efa_rdm_ep->base_ep.info->rx_attr->size);
+	/* Construct a handshake packet that mimics an old peer with zcpy enabled */
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
-	/**
-	 * the buf is still posted to rdma-core, so unregistering mr can
-	 * return non-zero. Currently ignore this failure.
-	 */
-	(void) fi_close(&recv_buff.mr->fid);
-	free(recv_buff.buff);
+	nex = (EFA_RDM_NUM_EXTRA_FEATURE_OR_REQUEST - 1) / 64 + 1;
+	handshake_hdr = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
+	handshake_hdr->type = EFA_RDM_HANDSHAKE_PKT;
+	handshake_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	handshake_hdr->nextra_p3 = nex + 3;
+	handshake_hdr->flags = 0;
+	memset(handshake_hdr->extra_info, 0, nex * sizeof(uint64_t));
+	/* Old peer advertises USER_RECV_QP */
+	handshake_hdr->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_handshake_hdr) + nex * sizeof(uint64_t);
+
+	/* Append connid header (always present) */
+	{
+		struct efa_rdm_handshake_opt_connid_hdr *connid_hdr =
+			(struct efa_rdm_handshake_opt_connid_hdr *)(pkt_entry->wiredata + pkt_entry->pkt_size);
+		connid_hdr->connid = 0x1234;
+		handshake_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
+		pkt_entry->pkt_size += sizeof(*connid_hdr);
+	}
+
+	/* Append device_version header */
+	{
+		struct efa_rdm_handshake_opt_device_version_hdr *dv_hdr =
+			(struct efa_rdm_handshake_opt_device_version_hdr *)(pkt_entry->wiredata + pkt_entry->pkt_size);
+		dv_hdr->device_version = 0xefa1;
+		handshake_hdr->flags |= EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR;
+		pkt_entry->pkt_size += sizeof(*dv_hdr);
+	}
+
+	/* Append user_recv_qp header (as old peer would) */
+	user_recv_qp_hdr = (struct efa_rdm_handshake_opt_user_recv_qp_hdr *)(pkt_entry->wiredata + pkt_entry->pkt_size);
+	user_recv_qp_hdr->qpn = expected_qpn;
+	user_recv_qp_hdr->qkey = expected_qkey;
+	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_USER_RECV_QP_HDR;
+	pkt_entry->pkt_size += sizeof(*user_recv_qp_hdr);
+
+	pkt_entry->peer = peer;
+
+	/* Process the handshake */
+	efa_rdm_pke_handle_handshake_recv(pkt_entry);
+
+	/* Verify peer's user_recv_qp was parsed correctly */
+	assert_true(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
+	assert_int_equal(peer->user_recv_qp.qpn, expected_qpn);
+	assert_int_equal(peer->user_recv_qp.qkey, expected_qkey);
+	assert_true(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+}
+
+/**
+ * @brief [Backwards compat] Verify that when a handshake is received from a
+ * new peer (no USER_RECV_QP), the peer's user_recv_qp is NOT populated and
+ * efa_rdm_peer_expects_zero_hdr_data_transfer returns false.
+ */
+void test_efa_rdm_ep_handshake_receive_peer_no_user_recv_qp(struct efa_resource **state)
+{
+	fi_addr_t peer_addr = 0;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_peer *peer;
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
+
+	pkt_attr.connid = 0x1234;
+	pkt_attr.device_version = 0xefa1;
+	efa_unit_test_construct_handshake_pkt_for_receive(pkt_entry, &pkt_attr);
+
+	pkt_entry->peer = peer;
+	efa_rdm_pke_handle_handshake_recv(pkt_entry);
+
+	/* New peer should NOT have USER_RECV_QP */
+	assert_false(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
+	assert_false(efa_rdm_peer_expects_zero_hdr_data_transfer(peer));
+	assert_int_equal(peer->user_recv_qp.qpn, 0);
+	assert_int_equal(peer->user_recv_qp.qkey, 0);
 }
 
 /**
@@ -1749,8 +1711,6 @@ void test_efa_ep_bind_and_enable(struct efa_resource **state)
 	efa_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 
 	assert_true(efa_ep->efa_qp_enabled);
-	/* we shouldn't have user recv qp for efa-direct */
-	assert_true(efa_ep->user_recv_qp == NULL);
 }
 
 #if HAVE_EFA_DATA_PATH_DIRECT
@@ -1793,9 +1753,6 @@ void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_impl(struct efa_r
 	assert_int_equal(fi_enable(ep), 0);
 
 	assert_true(efa_ep->qp->data_path_direct_enabled == data_path_direct_enabled);
-
-	if (efa_ep->user_recv_qp)
-		assert_true(efa_ep->qp->data_path_direct_enabled == data_path_direct_enabled);
 
 	assert_int_equal(fi_close(&ep->fid), 0);
 

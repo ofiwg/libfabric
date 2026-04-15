@@ -89,9 +89,6 @@ struct efa_base_ep {
 	size_t inject_msg_size;		/**< #FI_OPT_INJECT_MSG_SIZE */
 	size_t inject_rma_size;		/**< #FI_OPT_INJECT_RMA_SIZE */
 
-	/* Only used by RDM ep type */
-	struct efa_qp *user_recv_qp; /* Separate qp to receive pkts posted by users */
-	struct efa_recv_wr *user_recv_wr_vec;
 	bool use_unsolicited_write_recv;
 
 	/* entry for efa_domain->base_ep_list */
@@ -157,7 +154,7 @@ int efa_base_ep_insert_cntr_ibv_cq_poll_list(struct efa_base_ep *ep);
 
 void efa_base_ep_remove_cntr_ibv_cq_poll_list(struct efa_base_ep *ep);
 
-int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep, bool create_user_recv_qp);
+int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep);
 
 void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
 						struct ibv_qp_init_attr_ex *attr_ex,

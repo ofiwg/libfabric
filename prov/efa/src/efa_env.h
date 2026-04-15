@@ -18,7 +18,6 @@ struct efa_env {
 	int tx_min_credits;
 	int tx_queue_size;
 	int use_zcpy_rx;
-	int zcpy_rx_seed;
 	int enable_shm_transfer;
 	int shm_av_size;
 	int recvwin_size;

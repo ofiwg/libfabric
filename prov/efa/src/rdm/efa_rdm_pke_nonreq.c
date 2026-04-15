@@ -30,7 +30,6 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_handshake_opt_connid_hdr *connid_hdr;
 	struct efa_rdm_handshake_opt_host_id_hdr *host_id_hdr;
 	struct efa_rdm_handshake_opt_device_version_hdr *device_version_hdr;
-	struct efa_rdm_handshake_opt_user_recv_qp_hdr *user_recv_qp_hdr;
 
 	handshake_hdr = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
 	handshake_hdr->type = EFA_RDM_HANDSHAKE_PKT;
@@ -76,16 +75,6 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR;
 	pkt_entry->pkt_size += sizeof (struct efa_rdm_handshake_opt_device_version_hdr);
 
-	/* Include the user recv qp information (qpn and qkey) */
-	if (pkt_entry->ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) {
-		user_recv_qp_hdr = (struct efa_rdm_handshake_opt_user_recv_qp_hdr *) (pkt_entry->wiredata + pkt_entry->pkt_size);
-		assert(pkt_entry->ep->base_ep.user_recv_qp);
-		user_recv_qp_hdr->qpn = pkt_entry->ep->base_ep.user_recv_qp->qp_num;
-		user_recv_qp_hdr->qkey = pkt_entry->ep->base_ep.user_recv_qp->qkey;
-		handshake_hdr->flags |= EFA_RDM_HANDSHAKE_USER_RECV_QP_HDR;
-		pkt_entry->pkt_size += sizeof (struct efa_rdm_handshake_opt_user_recv_qp_hdr);
-	}
-
 	pkt_entry->peer = peer;
 	return 0;
 }
@@ -117,6 +106,20 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 		   (handshake_pkt->nextra_p3 - 3) * sizeof(uint64_t));
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 
+	if (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) {
+		EFA_WARN(FI_LOG_CQ,
+			 "Peer requested zero-copy receive via USER_RECV_QP "
+			 "which has been deprecated in newer Libfabric "
+			 "versions. Communication will continue. Consider "
+			 "upgrading peer to a newer Libfabric version.\n");
+		if (handshake_pkt->flags & EFA_RDM_HANDSHAKE_USER_RECV_QP_HDR) {
+			struct efa_rdm_handshake_opt_user_recv_qp_hdr *user_recv_qp_hdr;
+			user_recv_qp_hdr = efa_rdm_pke_get_handshake_opt_user_recv_qp_ptr(pkt_entry);
+			peer->user_recv_qp.qpn = user_recv_qp_hdr->qpn;
+			peer->user_recv_qp.qkey = user_recv_qp_hdr->qkey;
+		}
+	}
+
 	host_id_ptr = efa_rdm_pke_get_handshake_opt_host_id_ptr(pkt_entry);
 	if (host_id_ptr) {
 		peer->host_id = *host_id_ptr;
@@ -125,13 +128,6 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 
 	peer->device_version = efa_rdm_pke_get_handshake_opt_device_version(pkt_entry);
 	EFA_INFO(FI_LOG_CQ, "Received peer EFA device version: 0x%x\n", peer->device_version);
-
-	if (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) {
-		struct efa_rdm_handshake_opt_user_recv_qp_hdr *user_recv_qp_hdr;
-		user_recv_qp_hdr = efa_rdm_pke_get_handshake_opt_user_recv_qp_ptr(pkt_entry);
-		peer->user_recv_qp.qpn = user_recv_qp_hdr->qpn;
-		peer->user_recv_qp.qkey = user_recv_qp_hdr->qkey;
-	}
 
 	efa_rdm_pke_release_rx(pkt_entry);
 }

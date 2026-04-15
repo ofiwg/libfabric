@@ -99,8 +99,7 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
 	if (OFI_UNLIKELY(!cur_entry))
 		return NULL;
 
-	if (!pkt_entry ||
-	    (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_RX_POOL)) {
+	if (!pkt_entry) {
 		/**
 		 * There is no packet entry to extract connid from when we get
 		 * an IBV_WC_RECV_RDMA_WITH_IMM completion from rdma-core. Or

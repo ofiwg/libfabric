@@ -177,15 +177,6 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
-	ret = ofi_bufpool_create(&ep->user_rx_pkt_pool,
-			sizeof(struct efa_rdm_pke),
-			EFA_RDM_BUFPOOL_ALIGNMENT,
-			ep->base_ep.info->rx_attr->size,
-			ep->base_ep.info->rx_attr->size, /* max count==chunk_cnt means pool is not allowed to grow */
-			rx_pkt_pool_base_flags);
-	if (ret)
-		goto err_free;
-
 	if (efa_env.rx_copy_unexp) {
 		ret = efa_rdm_ep_create_pke_pool(
 			ep,
@@ -329,9 +320,6 @@ err_free:
 	if (efa_env.rx_copy_unexp && ep->rx_unexp_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_unexp_pkt_pool);
 
-	if (ep->user_rx_pkt_pool)
-		ofi_bufpool_destroy(ep->user_rx_pkt_pool);
-
 	if (ep->efa_rx_pkt_pool)
 		ofi_bufpool_destroy(ep->efa_rx_pkt_pool);
 
@@ -426,89 +414,6 @@ static struct fi_ops efa_rdm_ep_base_ops = {
 	.control = efa_rdm_ep_ctrl,
 	.ops_open = fi_no_ops_open,
 };
-
-/**
- * @brief set the "use_zcpy_rx" flag in an EFA RDM endpoint.
- * called by efa_rdm_ep_open()
- *
- * @param[in,out] ep EFA RDM endpoint
- */
-static inline
-void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
-{
-	enum fi_hmem_iface iface;
-	uint64_t unsupported_caps = FI_DIRECTED_RECV | FI_TAGGED | FI_ATOMIC;
-
-	ep->use_zcpy_rx = true;
-
-	/* User requests to turn off zcpy recv */
-	if (!efa_env.use_zcpy_rx) {
-		EFA_INFO(FI_LOG_EP_CTRL, "User disables zero-copy receive protocol via environment\n");
-		ep->use_zcpy_rx = false;
-		goto out;
-	}
-
-	/* Unsupported capabilities */
-	if (ep->base_ep.util_ep.caps & unsupported_caps) {
-		EFA_INFO(FI_LOG_EP_CTRL, "Unsupported capabilities, zero-copy receive protocol will be disabled\n");
-		ep->use_zcpy_rx = false;
-		goto out;
-	}
-
-	/* Max msg size is too large, turn off zcpy recv */
-	if (ep->base_ep.max_msg_size > ep->mtu_size - ep->base_ep.info->ep_attr->msg_prefix_size) {
-		EFA_INFO(FI_LOG_EP_CTRL,
-			 "max_msg_size (%zu) is greater than the mtu size limit: %zu. "
-			 "Zero-copy receive protocol will be disabled.\n",
-			 ep->base_ep.max_msg_size,
-			 ep->mtu_size - ep->base_ep.info->ep_attr->msg_prefix_size);
-		ep->use_zcpy_rx = false;
-		goto out;
-	}
-
-	/* If app needs sas ordering, turn off zcpy recv */
-	if (efa_rdm_ep_need_sas(ep)) {
-		EFA_INFO(FI_LOG_EP_CTRL, "FI_ORDER_SAS is requested, zero-copy receive protocol will be disabled\n");
-		ep->use_zcpy_rx = false;
-		goto out;
-	}
-
-	/* FI_MR_LOCAL is not set, turn off zcpy recv */
-	if (!ep->base_ep.domain->mr_local) {
-		EFA_INFO(FI_LOG_EP_CTRL, "FI_MR_LOCAL mode bit is not set, zero-copy receive protocol will be disabled\n");
-		ep->use_zcpy_rx = false;
-		goto out;
-	}
-
-	if (ep->shm_ep) {
-		EFA_INFO(FI_LOG_EP_CTRL, "Libfabric SHM is not turned off, zero-copy receive protocol will be disabled\n");
-		ep->use_zcpy_rx = false;
-		goto out;
-	}
-
-	/* Zero-copy receive requires P2P support. Disable it if any initialized HMEM iface does not support P2P. */
-	/* Only check HMEM P2P support if the application is actually using HMEM capabilities. */
-	if (ep->base_ep.util_ep.caps & FI_HMEM) {
-		EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
-			if (g_efa_hmem_info[iface].initialized &&
-			    (ofi_hmem_p2p_disabled() ||
-			    ep->hmem_p2p_opt == FI_HMEM_P2P_DISABLED ||
-			    !g_efa_hmem_info[iface].p2p_supported_by_device)) {
-				EFA_INFO(FI_LOG_EP_CTRL,
-				         "%s does not support P2P, zero-copy receive "
-				         "protocol will be disabled\n",
-				         fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
-				ep->use_zcpy_rx = false;
-				goto out;
-			}
-		}
-	}
-
-out:
-	EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->use_zcpy_rx = %d\n",
-		 ep->use_zcpy_rx);
-	return;
-}
 
 /**
  * @brief progress engine for the EFA RDM endpoint
@@ -917,9 +822,6 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	if (efa_rdm_ep->rx_unexp_pkt_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->rx_unexp_pkt_pool);
 
-	if (efa_rdm_ep->user_rx_pkt_pool)
-		ofi_bufpool_destroy(efa_rdm_ep->user_rx_pkt_pool);
-
 	if (efa_rdm_ep->efa_rx_pkt_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->efa_rx_pkt_pool);
 
@@ -1230,20 +1132,37 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 	if (ep->base_ep.qp->unsolicited_write_recv_enabled)
 		ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
 
-	if (ep->use_zcpy_rx) {
-		/*
-		 * When zcpy rx is enabled, an extra QP is created to
-		 * post rx pkts from user recv buffer directly.
-		 */
-		ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
-	}
-
 	ep->extra_info[0] |= EFA_RDM_EXTRA_REQUEST_CONNID_HEADER;
 
 	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RUNT;
 
 	/* READ_NACK feature introduced in libfabric 1.20 */
 	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_READ_NACK;
+
+	/*
+	 * For backwards compatibility with older peers that may have zero-copy
+	 * receive enabled: evaluate whether an old peer with the same
+	 * configuration would have use_zcpy_rx=1. If so, we must enforce
+	 * handshake before sending to discover the peer's capabilities.
+	 *
+	 * Note that old peers evaluate their own attributes and unilaterally
+	 * decide to use the zero-copy mode. And an old peer that has decided
+	 * to use zero-copy mode will reject data packets sent to it's control
+	 * QP. The handshake is necessary to determine if the old peer has
+	 * fallen into the zero-copy mode and to retrieve the old peer's user
+	 * recv QP information.
+	 *
+	 * Note: we do NOT set EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP in
+	 * extra_info because we don't have a user_recv_qp. Setting it would
+	 * cause old peers to send zero-copy packets to us, which we can't handle.
+	 */
+	ep->peer_may_have_zcpy_rx =
+		efa_env.use_zcpy_rx &&
+		!(ep->base_ep.util_ep.caps & (FI_DIRECTED_RECV | FI_TAGGED | FI_ATOMIC)) &&
+		ep->base_ep.max_msg_size <= ep->mtu_size - ep->base_ep.info->ep_attr->msg_prefix_size &&
+		!efa_rdm_ep_need_sas(ep) &&
+		ep->base_ep.domain->mr_local &&
+		!ep->shm_ep;
 }
 
 /**
@@ -1449,7 +1368,6 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 	struct fi_peer_srx_context peer_srx_context = {0};
 	struct fi_rx_attr peer_srx_attr = {0};
 	struct util_srx_ctx *srx_ctx;
-	bool create_user_recv_qp = false;
 
 	switch (command) {
 	case FI_ENABLE:
@@ -1465,25 +1383,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 
 		efa_rdm_ep_update_shm(ep);
 
-		efa_rdm_ep_set_use_zcpy_rx(ep);
-
-		/* In zero-copy mode, update inject_size to the size of the inline data
-		 * buffer of the NIC, unless the user already requested a smaller size
-		 *
-		 * TODO: Distinguish between inline data sizes for RDMA {send,write}
-		 * when supported
-		 */
-		if (ep->use_zcpy_rx) {
-			ep->base_ep.inject_msg_size =
-				MIN(ep->base_ep.inject_msg_size,
-				    efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
-			ep->base_ep.inject_rma_size =
-				MIN(ep->base_ep.inject_rma_size,
-				    efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size);
-			create_user_recv_qp = true;
-		}
-
-		ret = efa_base_ep_create_and_enable_qp(&ep->base_ep, create_user_recv_qp);
+		ret = efa_base_ep_create_and_enable_qp(&ep->base_ep);
 		if (ret)
 			return ret;
 
@@ -1587,11 +1487,6 @@ ssize_t efa_rdm_ep_cancel(fid_t fid_ep, void *context)
 	struct efa_rdm_ep *ep;
 
 	ep = container_of(fid_ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	if (ep->use_zcpy_rx) {
-		EFA_WARN(FI_LOG_EP_CTRL, "fi_cancel is not supported in zero-copy receive mode.\n");
-		return -FI_EOPNOTSUPP;
-	}
-
 	return ep->peer_srx_ep->ops->cancel(&ep->peer_srx_ep->fid, context);
 }
 
