@@ -290,6 +290,20 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		}
 	} else {
 		use_inline = false;
+		if (flags & FI_INJECT) {
+			if (!len_fits_inline)
+				EFA_WARN(FI_LOG_EP_DATA,
+					 "FI_INJECT is requested but message "
+					 "size of %zu exceeds efa-direct "
+					 "inject_msg_size of %zu.\n", len,
+					 base_ep->inject_msg_size);
+			if (is_hmem)
+				EFA_WARN(FI_LOG_EP_DATA,
+					 "FI_INJECT is not supported for "
+					 "FI_HMEM memory.\n");
+			ret = -FI_EOPNOTSUPP;
+			goto out_err;
+		}
 		/* Prepare SGE list */
 		for (i = 0; i < msg->iov_count; i++) {
 			/* Set TX buffer desc from SGE */
@@ -378,9 +392,6 @@ static ssize_t efa_ep_msg_inject(struct fid_ep *ep_fid, const void *buf, size_t 
 	struct fi_msg msg;
 	struct iovec iov;
 
-	/* For non-dgram endpoints, msg_prefix_size is 0 */
-	assert(len <= base_ep->domain->device->efa_attr.inline_buf_size + base_ep->info->ep_attr->msg_prefix_size);
-
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, NULL, 1, dest_addr, NULL, 0);
 
@@ -394,9 +405,6 @@ static ssize_t efa_ep_msg_injectdata(struct fid_ep *ep_fid, const void *buf,
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 	struct iovec iov;
-
-	/* For non-dgram endpoints, msg_prefix_size is 0 */
-	assert(len <= base_ep->domain->device->efa_attr.inline_buf_size + base_ep->info->ep_attr->msg_prefix_size);
 
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, NULL, 1, dest_addr, NULL, data);
