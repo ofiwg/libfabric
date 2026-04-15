@@ -64,8 +64,12 @@ def test_efa_device_selection(cmdline_args, fabric, selection_approach):
             client_tx_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "tx_bytes", client_device_name)
 
             # Verify EFA traffic
-            assert server_tx_bytes_before_test < server_tx_bytes_after_test
             assert client_tx_bytes_before_test < client_tx_bytes_after_test
+
+            # For dgram (UD), skip server check — if the first packet is
+            # dropped, server counters won't progress.
+            if suffix != "dgrm":
+                assert server_tx_bytes_before_test < server_tx_bytes_after_test
 
 # Verify that fi_getinfo does not return any info objects when FI_EFA_IFACE is set to an invalid value
 @pytest.mark.functional
