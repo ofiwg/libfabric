@@ -82,16 +82,6 @@ def message_size(request):
 def inject_message_size(request):
     return request.param
 
-
-@pytest.fixture(scope="module", params=["r:0,4,32",
-                                        "r:0,1024,8192",])
-def zcpy_recv_message_size(request):
-    return request.param
-
-@pytest.fixture(scope="module")
-def zcpy_recv_max_msg_size(request):
-    return 8192
-
 @pytest.fixture(scope="module", params=["r:0,4,32",
                                         "r:0,1024,8192",])
 def direct_message_size(request):

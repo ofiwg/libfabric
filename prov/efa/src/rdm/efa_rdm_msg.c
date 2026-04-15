@@ -68,7 +68,7 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->iface : FI_HMEM_SYSTEM;
 
-	if (txe->fi_flags & FI_INJECT || efa_both_support_zero_hdr_data_transfer(efa_rdm_ep, txe->peer))
+	if (txe->fi_flags & FI_INJECT || efa_rdm_peer_expects_zero_hdr_data_transfer(txe->peer))
 		delivery_complete_requested = false;
 	else
 		delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
@@ -119,10 +119,11 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	assert(txe->peer);
 
 	/*
-	 * It is required to get receiver's user recv QP through handshake
-	 * if sender supports this feature.
+	 * For backwards compatibility: if an old peer could have zero-copy
+	 * receive enabled, we must complete handshake before sending so we
+	 * can discover the peer's user_recv_qp and route packets accordingly.
 	 */
-	if ((ep->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP) &&
+	if (ep->peer_may_have_zcpy_rx &&
 	    !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 	}
@@ -683,62 +684,6 @@ ssize_t efa_rdm_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t l
  */
 
 /**
- * @brief allocate an rxe for a fi_msg in the zero-copy path.
- *        This function is used by two sided operation only.
- *
- * @param[in] ep	end point
- * @param[in] msg	fi_msg contains iov,iov_count,context for ths operation
- * @param[in] op	operation type (ofi_op_msg or ofi_op_tagged)
- * @param[in] flags	flags application used to call fi_recv/fi_trecv functions
- * @param[in] tag	tag (used only if op is ofi_op_tagged)
- * @param[in] ignore	ignore mask (used only if op is ofi_op_tagged)
- * @return		if allocation succeeded, return pointer to rxe
- * 			if allocation failed, return NULL
- */
-struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_zcpy(struct efa_rdm_ep *ep,
-					    const struct fi_msg *msg,
-					    uint32_t op, uint64_t flags,
-					    uint64_t tag, uint64_t ignore)
-{
-	struct efa_rdm_ope *rxe;
-	struct efa_rdm_peer *peer;
-
-	if (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV)
-		peer = efa_rdm_ep_get_peer(ep, msg->addr);
-	else
-		peer = NULL;
-
-	rxe = efa_rdm_ep_alloc_rxe(ep, peer, op);
-	if (!rxe)
-		return NULL;
-
-	rxe->fi_flags = flags;
-	if (op == ofi_op_tagged) {
-		rxe->tag = tag;
-		rxe->cq_entry.tag = tag;
-		rxe->ignore = ignore;
-	}
-
-	/* Handle case where we're allocating an unexpected rxe */
-	rxe->iov_count = msg->iov_count;
-	if (rxe->iov_count) {
-		assert(msg->msg_iov);
-		memcpy(rxe->iov, msg->msg_iov, sizeof(*rxe->iov) * msg->iov_count);
-		rxe->cq_entry.len = ofi_total_iov_len(rxe->iov, rxe->iov_count);
-		rxe->cq_entry.buf = msg->msg_iov[0].iov_base;
-	}
-
-	if (msg->desc)
-		memcpy(&rxe->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
-	else
-		memset(&rxe->desc[0], 0, sizeof(rxe->desc));
-
-	rxe->cq_entry.op_context = msg->context;
-
-	return rxe;
-}
-
-/**
  * @brief allocate a RX entry for an unexpected RTM
  *
  * unexpected RTM is an RTM that was received before
@@ -1001,8 +946,6 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 			     uint64_t flags)
 {
 	ssize_t ret = 0;
-	struct efa_rdm_ope *rxe;
-	struct util_srx_ctx *srx_ctx;
 
 	assert(msg->iov_count <= ep->base_ep.info->rx_attr->iov_limit);
 
@@ -1020,22 +963,7 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	if (ret)
 		return ret;
 
-	if (ep->use_zcpy_rx) {
-		srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
-		ofi_genlock_lock(srx_ctx->lock);
-		rxe = efa_rdm_msg_alloc_rxe_zcpy(ep, msg, op, flags, tag, ignore);
-		if (OFI_UNLIKELY(!rxe)) {
-			ret = -FI_EAGAIN;
-			ofi_genlock_unlock(srx_ctx->lock);
-			goto out;
-		}
-
-		ret = efa_rdm_ep_post_user_recv_buf(ep, rxe, flags);
-		if (OFI_UNLIKELY(ret))
-			efa_rdm_rxe_release(rxe);
-
-		ofi_genlock_unlock(srx_ctx->lock);
-	} else if (op == ofi_op_tagged) {
+	if (op == ofi_op_tagged) {
 		ret = util_srx_generic_trecv(ep->peer_srx_ep, msg->msg_iov, msg->desc,
 					     msg->iov_count, msg->addr, msg->context,
 					     tag, ignore, flags);
@@ -1044,7 +972,6 @@ ssize_t efa_rdm_msg_generic_recv(struct efa_rdm_ep *ep, const struct fi_msg *msg
 				            msg->iov_count, msg->addr, msg->context, flags);
 	}
 
-out:
 	efa_perfset_end(ep, perf_efa_recv);
 	return ret;
 }
