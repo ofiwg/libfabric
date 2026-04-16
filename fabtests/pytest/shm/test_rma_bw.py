@@ -3,6 +3,7 @@ from shm.shm_common import shm_run_client_server_test
 from common import perf_progress_model_cli
 
 
+@pytest.mark.pr_ci
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),

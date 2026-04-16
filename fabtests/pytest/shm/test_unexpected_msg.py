@@ -5,6 +5,7 @@ SHM_DEFAULT_MAX_INJECT_SIZE = 4096
 SHM_DEFAULT_RX_SIZE = 1024
 
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 @pytest.mark.parametrize("msg_size", [1, 512, 9000]) # cover various switch points of shm protocols
 @pytest.mark.parametrize("msg_count", [1, 1024, 2048]) # below and above shm's default rx size
