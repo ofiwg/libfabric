@@ -15,6 +15,7 @@ def test_dgram(cmdline_args):
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_dgram_pingpong(cmdline_args, iteration_type, prefix_type):
     from common import ClientServerTest
     test = ClientServerTest(cmdline_args, "fi_dgram_pingpong", iteration_type,

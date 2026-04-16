@@ -1,5 +1,6 @@
 import pytest
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 @pytest.mark.parametrize("endpoint_type", ["msg", "rdm"])
 def test_unexpected_msg(cmdline_args, endpoint_type):
