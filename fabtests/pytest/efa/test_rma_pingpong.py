@@ -10,6 +10,7 @@ def rma_pingpong_message_size(request):
     return request.param
 
 
+@pytest.mark.pr_ci
 @pytest.mark.parametrize("operation_type", ["writedata"])
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),

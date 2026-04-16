@@ -5,6 +5,7 @@ import pytest
 import copy
 
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_rdm_efa(cmdline_args, completion_semantic, fabric):
     from common import ClientServerTest
@@ -21,6 +22,7 @@ def test_rdm_bw_efa_msg_1M(cmdline_args, completion_semantic):
     test.run()
 
 # This test skips efa-direct because it requests FI_ORDER_SAS
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_rdm_bw_functional_efa(cmdline_args, completion_semantic):
     from common import ClientServerTest
@@ -30,6 +32,7 @@ def test_rdm_bw_functional_efa(cmdline_args, completion_semantic):
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic,
                       memory_type_bi_dir, completion_type, direct_message_size, fabric):
     command = "fi_rdm_pingpong"  + " " + perf_progress_model_cli
@@ -54,6 +57,7 @@ def test_rdm_pingpong_no_inject_range(cmdline_args, completion_semantic, inject_
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rdm_tagged_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type_bi_dir, completion_type):
     command = "fi_rdm_tagged_pingpong"  + " " + perf_progress_model_cli
     efa_run_client_server_test(cmdline_args, command, iteration_type,
@@ -114,6 +118,7 @@ def test_rdm_tagged_bw_use_fi_more(cmdline_args, completion_semantic, memory_typ
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rdm_atomic(cmdline_args, iteration_type, completion_semantic, memory_type):
     from copy import copy
 
@@ -131,6 +136,7 @@ def test_rdm_atomic(cmdline_args, iteration_type, completion_semantic, memory_ty
                             memory_type=memory_type, timeout=1800, fabric="efa")
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_rdm_tagged_peek(cmdline_args):
     from copy import copy
@@ -178,6 +184,7 @@ def test_rdm_bw_zcpy_recv_use_fi_more(cmdline_args, memory_type, zcpy_recv_max_m
     efa_run_client_server_test(cmdline_args_copy, f"fi_rdm_bw --use-fi-more --max-msg-size {zcpy_recv_max_msg_size}",
                                "short", "transmit_complete", memory_type, zcpy_recv_message_size, fabric="efa")
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 @pytest.mark.parametrize("comp_method", ["sread", "fd"])
 def test_rdm_pingpong_sread(cmdline_args, completion_semantic, memory_type_bi_dir,
@@ -212,6 +219,7 @@ def test_mr_exhaustion_rdm_pingpong(cmdline_args, completion_semantic):
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rdm_pingpong_no_mr_local(cmdline_args, iteration_type, completion_semantic,
                       memory_type_bi_dir, completion_type, mr_cache):
     command = "fi_rdm_pingpong -M mr_local"  + " " + perf_progress_model_cli
@@ -229,6 +237,7 @@ def test_rdm_pingpong_no_mr_local(cmdline_args, iteration_type, completion_seman
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rma_pingpong_no_mr_local(cmdline_args, iteration_type, completion_semantic,
                       memory_type_bi_dir, mr_cache):
     command = "fi_rma_pingpong -o writedata -M mr_local"  + " " + perf_progress_model_cli
@@ -243,6 +252,7 @@ def test_rma_pingpong_no_mr_local(cmdline_args, iteration_type, completion_seman
                                additional_env=additional_env)
 
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 @pytest.mark.serial
 @pytest.mark.parametrize("unexpected_path", [True, False])
@@ -266,6 +276,7 @@ def test_implicit_av(cmdline_args, unexpected_path, msg_size):
     efa_run_client_server_test(cmdline_args, test_cmd, "short",
                                "transmit_complete", "host_to_host", "all", fabric="efa")
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 @pytest.mark.serial
 # TODO: Add test with larger message size that uses the long read protocol after

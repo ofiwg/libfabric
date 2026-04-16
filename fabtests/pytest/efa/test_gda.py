@@ -3,6 +3,7 @@ import pytest
 from common import ClientServerTest, has_cuda
 
 
+@pytest.mark.pr_ci
 @pytest.mark.short
 @pytest.mark.functional
 @pytest.mark.cuda_memory
