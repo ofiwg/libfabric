@@ -1367,9 +1367,9 @@ int all_to_all(size_t size)
 
 	printf("%10zd (x %4d) %10.2lf us/xfer %12.2lf MB/s\n", size,
 		options.iters,
-		(stop - start) / (options.iters * options.max_ranks),
-		((long)size * options.iters * options.max_ranks * 2) /
-		(stop - start));
+		(stop - start) / (options.iters * (options.max_ranks - 1)),
+		((long)size * options.iters * ((options.max_ranks - 1) +
+		(options.max_ranks - 1))) / (stop - start));
 
 	return 0;
 
