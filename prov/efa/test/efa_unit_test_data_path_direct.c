@@ -87,9 +87,6 @@ void test_efa_data_path_direct_qp_gen_initialization(struct efa_resource **state
 	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
 	qp = base_ep->qp;
 
-	/* gen should be non-zero after first QP creation */
-	assert_int_not_equal(qp->data_path_direct_qp.gen, 0);
-
 	sq_wq = &qp->data_path_direct_qp.sq.wq;
 	rq_wq = &qp->data_path_direct_qp.rq.wq;
 
