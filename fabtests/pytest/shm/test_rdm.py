@@ -7,6 +7,7 @@ from shm.shm_common import shm_run_client_server_test
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type, completion_type):
     command = "fi_rdm_pingpong" + " " + perf_progress_model_cli
     shm_run_client_server_test(cmdline_args, command, iteration_type,
@@ -16,6 +17,7 @@ def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic, memory_
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rdm_tagged_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type, completion_type):
     command = "fi_rdm_tagged_pingpong" + " " + perf_progress_model_cli
     shm_run_client_server_test(cmdline_args, command, iteration_type,
@@ -30,6 +32,7 @@ def test_rdm_tagged_bw(cmdline_args, iteration_type, completion_semantic, memory
     shm_run_client_server_test(cmdline_args, command, iteration_type,
                                completion_semantic, memory_type, completion_type=completion_type)
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_rdm_tagged_peek(cmdline_args):
     from copy import copy
