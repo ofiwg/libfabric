@@ -7,6 +7,84 @@ from collections import deque
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
 from retrying import retry
 
+MAX_EFA_DIRECT_MSG_SIZE = 8192
+
+# All message sizes to be run on efa-direct.
+EFA_DIRECT_ALL_REPLACEMENT = "l:0,4,8,12,16,20,24,28,32,1024,2048,3072,4096,5120,6144,7168,8192"
+
+# All message sizes to be run on efa-direct for RMA tests (no 0-byte).
+EFA_DIRECT_RMA_ALL_REPLACEMENT = "l:4,8,12,16,20,24,28,32,1024,2048,3072,4096,5120,6144,7168,8192"
+
+# EFA-specific message size lists for @pytest.mark.message_sizes decorator.
+# Generic (shared) size lists live in fabtests/pytest/common.py.
+DIRECT_SIZES = ["r:0,4,32", "r:0,1024,8192"]
+REMOTE_EXIT_SIZES = [65536, 131072, 1048576]
+DGRAM_PR_CI = ["l:16,128,8192"]
+
+
+def trim_message_sizes_to_range(message_sizes, min_size, max_size):
+    """
+    Trim a message_sizes string so all values fall within [min_size, max_size].
+    Handles "l:size1,size2,..." and "r:start,step,end". Does not handle "all".
+    Raises ValueError if the format is unrecognized or nothing remains after trimming.
+    """
+    s = str(message_sizes)
+
+    if s.startswith("l:"):
+        sizes = [int(x) for x in s[2:].split(",")]
+        filtered = [x for x in sizes if min_size <= x <= max_size]
+        if not filtered:
+            raise ValueError(f"All sizes in '{message_sizes}' fall outside [{min_size}, {max_size}]")
+        return "l:" + ",".join(str(x) for x in filtered)
+
+    if s.startswith("r:"):
+        parts = s[2:].split(",")
+        if len(parts) != 3:
+            raise ValueError(f"Range format '{message_sizes}' must be 'r:start,step,end'")
+        start, step, end = int(parts[0]), int(parts[1]), int(parts[2])
+        start = max(start, min_size)
+        end = min(end, max_size)
+        if start > max_size:
+            raise ValueError(f"Range start {start} exceeds {max_size}")
+        return f"r:{start},{step},{end}"
+
+    raise ValueError(f"Unrecognized message size format: '{message_sizes}'. Expected 'l:size1,size2,...' or 'r:start,step,end'.")
+
+
+def trim_to_efa_direct_message_sizes(message_sizes):
+    """
+    Return message_sizes trimmed for efa-direct (capped at MAX_EFA_DIRECT_MSG_SIZE).
+    """
+    if message_sizes == "all":
+        return EFA_DIRECT_ALL_REPLACEMENT
+    return trim_message_sizes_to_range(message_sizes, 0, MAX_EFA_DIRECT_MSG_SIZE)
+
+
+def trim_to_efa_direct_rma_message_sizes(message_sizes):
+    """
+    Same as trim_to_efa_direct_message_sizes but for RMA tests. RMA cannot
+    send 0-byte messages, so the minimum size is 1.
+    """
+    if message_sizes == "all":
+        return EFA_DIRECT_RMA_ALL_REPLACEMENT
+    return trim_message_sizes_to_range(message_sizes, 1, MAX_EFA_DIRECT_MSG_SIZE)
+
+
+def trim_message_sizes(message_sizes, fabric, *, is_rma):
+    """
+    Outer dispatcher. Returns message_sizes unchanged for non-efa-direct
+    fabrics; routes to the RMA-specific trimmer when is_rma is True.
+    is_rma is keyword-only so call sites always read as is_rma=True/False.
+
+    TODO: turn `fabric` into a decorator so test parameter selection logic
+    can move up and be centralized in one place.
+    """
+    if fabric != "efa-direct":
+        return message_sizes
+    if is_rma:
+        return trim_to_efa_direct_rma_message_sizes(message_sizes)
+    return trim_to_efa_direct_message_sizes(message_sizes)
+
 
 @functools.lru_cache(2)
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
