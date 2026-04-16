@@ -1,24 +1,29 @@
-from efa.efa_common import efa_run_client_server_test
-from common import perf_progress_model_cli, ClientServerTest
+from efa.efa_common import efa_run_client_server_test, trim_to_efa_direct_message_sizes
+from common import (perf_progress_model_cli, ClientServerTest,
+                    PERF_SIZES, PERF_PR_CI, RANGE_SIZES, INJECT_SIZES)
 import pytest
 import copy
 
 
 @pytest.mark.pr_ci
+@pytest.mark.message_sizes(default=PERF_SIZES, pr_ci=PERF_PR_CI)
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
-def test_rma_bw(cmdline_args, iteration_type, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, direct_rma_size, rma_fabric, rx_cq_data_cli):
+def test_rma_bw(cmdline_args, iteration_type, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, rma_fabric, rx_cq_data_cli, message_sizes):
     command = "fi_rma_bw -e rdm"
     command = command + " -o " + rma_operation_type + " " + perf_progress_model_cli + rx_cq_data_cli
     # rma_bw test with data verification takes longer to finish
     timeout = max(540, cmdline_args.timeout)
+    if rma_fabric == "efa-direct":
+        message_sizes = trim_to_efa_direct_message_sizes(message_sizes)
     efa_run_client_server_test(cmdline_args, command, iteration_type, rma_bw_completion_semantic,
-                               rma_bw_memory_type, direct_rma_size if rma_fabric == "efa-direct" else "all",
+                               rma_bw_memory_type, message_sizes,
                                timeout=timeout, fabric=rma_fabric)
 
+@pytest.mark.message_sizes(default=PERF_SIZES, pr_ci=PERF_PR_CI)
 @pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"]])
-def test_rma_bw_small_tx_rx(cmdline_args, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, env_vars, direct_rma_size, rma_fabric):
+def test_rma_bw_small_tx_rx(cmdline_args, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, env_vars, rma_fabric, message_sizes):
     cmdline_args_copy = copy.copy(cmdline_args)
     for env_var in env_vars:
         cmdline_args_copy.append_environ(env_var)
@@ -27,23 +32,29 @@ def test_rma_bw_small_tx_rx(cmdline_args, rma_operation_type, rma_bw_completion_
     command = command + " -o " + rma_operation_type + " " + perf_progress_model_cli
     # rma_bw test with data verification takes longer to finish
     timeout = max(540, cmdline_args_copy.timeout)
+    if rma_fabric == "efa-direct":
+        message_sizes = trim_to_efa_direct_message_sizes(message_sizes)
     efa_run_client_server_test(cmdline_args_copy, command, "short", rma_bw_completion_semantic,
-                               rma_bw_memory_type, direct_rma_size if rma_fabric == "efa-direct" else "all",
+                               rma_bw_memory_type, message_sizes,
                                timeout=timeout, fabric=rma_fabric)
 
+@pytest.mark.message_sizes(default=RANGE_SIZES)
 @pytest.mark.functional
-def test_rma_bw_range(cmdline_args, rma_operation_type, rma_bw_completion_semantic, message_size, direct_rma_size, rma_bw_memory_type, rma_fabric):
+def test_rma_bw_range(cmdline_args, rma_operation_type, rma_bw_completion_semantic, message_sizes, rma_bw_memory_type, rma_fabric):
     command = "fi_rma_bw -e rdm"
     command = command + " -o " + rma_operation_type
     # rma_bw test with data verification takes longer to finish
     timeout = max(1080, cmdline_args.timeout)
+    if rma_fabric == "efa-direct":
+        message_sizes = trim_to_efa_direct_message_sizes(message_sizes)
     efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
-                               rma_bw_memory_type, direct_rma_size if rma_fabric == "efa-direct" else message_size,
+                               rma_bw_memory_type, message_sizes,
                                timeout=timeout, fabric=rma_fabric)
 
 
+@pytest.mark.message_sizes(default=INJECT_SIZES)
 @pytest.mark.functional
-def test_rma_bw_range_no_inject(cmdline_args, rma_operation_type, rma_bw_completion_semantic, inject_message_size, rma_fabric):
+def test_rma_bw_range_no_inject(cmdline_args, rma_operation_type, rma_bw_completion_semantic, message_sizes, rma_fabric):
     if rma_fabric == "efa-direct":
         pytest.skip("Duplicate test. efa-direct has inject size = 0")
     command = "fi_rma_bw -e rdm -j 0"
@@ -51,7 +62,7 @@ def test_rma_bw_range_no_inject(cmdline_args, rma_operation_type, rma_bw_complet
     # rma_bw test with data verification takes longer to finish
     timeout = max(540, cmdline_args.timeout)
     efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
-                                "host_to_host", inject_message_size, timeout=timeout, fabric=rma_fabric)
+                                "host_to_host", message_sizes, timeout=timeout, fabric=rma_fabric)
 
 
 # This test is run in serial mode because it takes a lot of memory
@@ -91,27 +102,31 @@ def test_rma_bw_large(cmdline_args, operation_type, rma_bw_completion_semantic, 
                                completion_semantic=rma_bw_completion_semantic, message_size=67108864,
                                memory_type="host_to_host", warmup_iteration_type=0, timeout=timeout, fabric=rma_fabric)
 
+@pytest.mark.message_sizes(default=INJECT_SIZES)
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["writedata", "write"])
 @pytest.mark.parametrize("iteration_type",
                          ["5", # smaller than max batch wqe cnt (16)
                           "48", # larger than max batch wqe cnt
                           "128"]) # larger than window size (64)
-def test_rma_bw_use_fi_more(cmdline_args, operation_type, iteration_type, rma_bw_completion_semantic, inject_message_size, direct_rma_size, rma_fabric):
+def test_rma_bw_use_fi_more(cmdline_args, operation_type, iteration_type, rma_bw_completion_semantic, message_sizes, rma_fabric):
     command = "fi_rma_bw -e rdm -j 0 --use-fi-more"
     command = command + " -o " + operation_type
     # rma_bw test with data verification takes longer to finish
     timeout = max(540, cmdline_args.timeout)
+    if rma_fabric == "efa-direct":
+        message_sizes = trim_to_efa_direct_message_sizes(message_sizes)
     efa_run_client_server_test(cmdline_args, command, iteration_type, rma_bw_completion_semantic,
-                               "host_to_host", direct_rma_size if rma_fabric == "efa-direct" else inject_message_size,
+                               "host_to_host", message_sizes,
                                timeout=timeout, fabric=rma_fabric)
 
 
+@pytest.mark.message_sizes(default=PERF_SIZES, pr_ci=PERF_PR_CI)
 @pytest.mark.functional
 @pytest.mark.parametrize("comp_method", ["sread", "fd"])
 def test_rma_bw_sread(cmdline_args, rma_operation_type, rma_bw_completion_semantic,
-                      direct_rma_size, rma_bw_memory_type, support_sread, comp_method,
-                      rma_fabric):
+                      rma_bw_memory_type, support_sread, comp_method,
+                      rma_fabric, message_sizes):
     if not support_sread:
         pytest.skip("sread not supported by efa device.")
     additional_env = ''
@@ -123,6 +138,8 @@ def test_rma_bw_sread(cmdline_args, rma_operation_type, rma_bw_completion_semant
     command = command + " -o " + rma_operation_type
     # rma_bw test with data verification takes longer to finish
     timeout = max(1080, cmdline_args.timeout)
+    if rma_fabric == "efa-direct":
+        message_sizes = trim_to_efa_direct_message_sizes(message_sizes)
     efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
-                               rma_bw_memory_type, direct_rma_size if rma_fabric == "efa-direct" else "all",
+                               rma_bw_memory_type, message_sizes,
                                timeout=timeout, fabric=rma_fabric, additional_env=additional_env)

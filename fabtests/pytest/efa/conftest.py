@@ -1,11 +1,31 @@
 import pytest
 import time
+from common import test_selected_by_marker
 from efa_common import (
     has_rdma, 
     support_cq_interrupts,
     CudaMemorySupport,
     get_cuda_memory_support,
 )
+
+# Message size lists are defined in efa_common.py and imported by test files directly.
+# The pytest_generate_tests hook reads them from the @pytest.mark.message_sizes decorator.
+
+
+def pytest_generate_tests(metafunc):
+    if "message_sizes" not in metafunc.fixturenames:
+        return
+
+    marker = next(metafunc.definition.iter_markers("message_sizes"), None)
+    if marker is None:
+        return
+
+    test_markers = {m.name for m in metafunc.definition.iter_markers()}
+    is_pr_ci = test_selected_by_marker(metafunc.config, test_markers, "pr_ci")
+    default = marker.kwargs["default"]
+    pr_ci = marker.kwargs.get("pr_ci", default)
+
+    metafunc.parametrize("message_sizes", pr_ci if is_pr_ci else default)
 
 # The memory types for bi-directional tests.
 memory_type_list_bi_dir = [
@@ -67,41 +87,9 @@ def rma_bw_completion_semantic(cmdline_args, completion_semantic, rma_operation_
     return completion_semantic
 
 
-@pytest.fixture(scope="module", params=["r:0,4,64",
-                                        "r:4048,4,4148",
-                                        "r:8000,4,9000",
-                                        "r:17000,4,18000",
-                                        "r:0,4096,1048576"])
-def message_size(request):
-    return request.param
-
-
-@pytest.fixture(scope="module", params=["r:0,4,64",
-                                        "r:4048,4,4148",
-                                        "r:8000,4,9000",])
-def inject_message_size(request):
-    return request.param
-
-
-@pytest.fixture(scope="module", params=["r:0,4,32",
-                                        "r:0,1024,8192",])
-def zcpy_recv_message_size(request):
-    return request.param
-
 @pytest.fixture(scope="module")
 def zcpy_recv_max_msg_size(request):
     return 8192
-
-@pytest.fixture(scope="module", params=["r:0,4,32",
-                                        "r:0,1024,8192",])
-def direct_message_size(request):
-    return request.param
-
-# TODO: Include 0 byte test when we support 0 byte rma inject
-@pytest.fixture(scope="module", params=["r:1,4,32",
-                                        "r:1,1024,8192",])
-def direct_rma_size(request):
-    return request.param
 
 @pytest.fixture(scope="module", params=["efa", "efa-direct"])
 def fabric(request):
