@@ -329,6 +329,78 @@ void test_av_reinsertion(struct efa_resource **state)
 }
 
 /**
+ * @brief Insert two peers that collide on (AHN, QPN) but differ in QKEY, then
+ * remove the first-inserted peer before the second. This reproduces the bug
+ * in efa_av_reverse_av_remove() where the code blindly deletes the
+ * cur_reverse_av entry matching (ahn, qpn) even though that entry belongs to
+ * a different (newer) conn. Removing the surviving second peer afterwards
+ * then hits a NULL prv_reverse_av_entry and SEGVs.
+ *
+ * @param[in]	state	struct efa_resource that is managed by the framework
+ */
+void test_av_reverse_av_remove_qpn_collision(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t fi_addr1, fi_addr2;
+	struct efa_av *av;
+	struct efa_rdm_ep *efa_rdm_ep;
+	uint32_t ahn;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+	ahn = efa_rdm_ep->self_ah->ahn;
+
+	/* Insert peer1: same GID as self, qpn=100, qkey=0xAAAA */
+	raw_addr.qpn = 100;
+	raw_addr.qkey = 0xAAAA;
+	err = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr1, 0, NULL);
+	assert_int_equal(err, 1);
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
+	/* cur_reverse_av (ahn, 100) -> conn1 (fi_addr1) */
+	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
+			 fi_addr1);
+
+	/* Insert peer2: same GID and qpn, different qkey. This pushes peer1's
+	 * reverse-AV entry from cur_reverse_av into prv_reverse_av. */
+	raw_addr.qpn = 100;
+	raw_addr.qkey = 0xBBBB;
+	err = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr2, 0, NULL);
+	assert_int_equal(err, 1);
+	assert_int_not_equal(fi_addr1, fi_addr2);
+	test_av_verify_av_hash_cnt(av, 1, 1, 0, 0);
+	/* cur_reverse_av (ahn, 100) now points to conn2 (fi_addr2); peer1 is
+	 * in prv_reverse_av keyed by its own qkey. */
+	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
+			 fi_addr2);
+
+	/* Remove peer1 first. Without the fix this would incorrectly delete
+	 * peer2's cur_reverse_av entry and leave peer1's prv entry orphaned. */
+	err = fi_av_remove(resource->av, &fi_addr1, 1, 0);
+	assert_int_equal(err, 0);
+	/* peer1's prv entry is gone; peer2's cur entry must still be intact. */
+	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
+	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
+			 fi_addr2);
+
+	/* Remove peer2. Without the fix this hits a NULL prv_reverse_av_entry
+	 * in efa_av_reverse_av_remove() -> SEGV / assertion failure. */
+	err = fi_av_remove(resource->av, &fi_addr2, 1, 0);
+	assert_int_equal(err, 0);
+	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
+	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
+			 FI_ADDR_NOTAVAIL);
+}
+
+/**
  * @brief Generate a peer with random QPN and QKEY and insert it into the implicit AV
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
