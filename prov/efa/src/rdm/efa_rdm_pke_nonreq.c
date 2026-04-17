@@ -589,10 +589,12 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 		txe = context_pkt_entry->ope;
 		txe->bytes_write_completed += rma_context_pkt->seg_size;
 		if (txe->bytes_write_completed == txe->bytes_write_total_len) {
-			if (txe->fi_flags & FI_COMPLETION)
-				efa_rdm_txe_report_completion(txe);
-			else
-				efa_cntr_report_tx_completion(&context_pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
+			if (!(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION)) {
+				if (txe->fi_flags & FI_COMPLETION)
+					efa_rdm_txe_report_completion(txe);
+				else
+					efa_cntr_report_tx_completion(&context_pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
+			}
 			efa_rdm_txe_release(txe);
 		}
 		break;
