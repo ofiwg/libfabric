@@ -53,6 +53,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <dlfcn.h>
+#include <limits.h>
+#include <libgen.h>
 
 #include "fi_opx_tid_cache.h"
 #include "opx_hmem_cache.h"
@@ -193,7 +195,8 @@ err:
 	return -errno;
 }
 
-static int opx_getinfo_set_pci_attr(int hfi, struct fi_info *info);
+static int opx_nic_alloc(int hfi_unit, struct fid_nic **fid_nic_out);
+static int opx_getinfo_set_nic(int hfi, struct fi_info *info);
 
 static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const char *service,
 			   const struct fi_info *hints, uint64_t flags, enum fi_progress progress)
@@ -455,13 +458,8 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 		}
 	}
 
-	fi->nic = ofi_nic_dup(NULL);
-	if (!fi->nic) {
-		errno = FI_ENOMEM;
+	if (opx_getinfo_set_nic(hfi, fi) != FI_SUCCESS) {
 		goto err;
-	}
-	if (opx_getinfo_set_pci_attr(hfi, fi) == 0) {
-		fi->nic->bus_attr->bus_type = FI_BUS_PCI;
 	}
 
 	return FI_SUCCESS;
@@ -528,6 +526,187 @@ struct fi_opx_global_data fi_opx_global = {
 /* ROUTE CONTROL table for each packet type */
 int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
 
+/*
+ * opx_get_first_active_port - Return the first ACTIVE port on the given HFI
+ * unit, or -1 if none of its ports is active.
+ *
+ * Mirrors the verbs provider's vrb_get_device_attrs(), which loops port_num
+ * over [1, phys_port_cnt] and stops at the first IBV_PORT_ACTIVE.
+ */
+static int opx_get_first_active_port(int hfi_unit)
+{
+	const int num_ports = opx_hfi_get_num_ports(hfi_unit);
+	for (int port = OPX_MIN_PORT; port <= num_ports; port++) {
+		if (opx_hfi_get_port_active(hfi_unit, port) == 1) {
+			return port;
+		}
+	}
+	return -1;
+}
+
+/*
+ * opx_nic_alloc - Allocate and populate a fid_nic for the given HFI unit.
+ *
+ * Reads device attributes from sysfs (/sys/class/infiniband/hfi1_N/) and
+ * populates the standard libfabric fid_nic structure with:
+ *   - device_attr: name, vendor_id, device_id, device_version, driver
+ *   - bus_attr:    PCI domain/bus/device/function (FI_BUS_PCI)
+ *   - link_attr:   LID address, MTU, speed, link state, network type
+ *
+ * Multi-port HFIs are reported as a single fi_info per unit; link_attr is
+ * populated from the first ACTIVE port (matching the verbs provider's
+ * vrb_get_device_attrs() behavior). If no port is active the link state
+ * is reported as FI_LINK_DOWN with the address/mtu/speed fields left
+ * NULL/0 -- the OPX sysfs `rate` file otherwise reports the configured
+ * maximum even on a down link, which would yield a misleading
+ * fi_link_attr.
+ *
+ * Modeled after cxip_nic_alloc() in prov/cxi/src/cxip_nic.c.
+ * Non-fatal: if any sysfs read fails the field is left as NULL/0.
+ */
+static int opx_nic_alloc(int hfi_unit, struct fid_nic **fid_nic_out)
+{
+	struct fid_nic *nic = NULL;
+	char		sysfs_dev_path[PATH_MAX];
+	char		buf[256];
+
+	/* Allocate base fid_nic with all sub-structs zeroed */
+	nic = ofi_nic_dup(NULL);
+	if (!nic) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "Failed to allocate fid_nic for HFI unit %d\n", hfi_unit);
+		return -FI_ENOMEM;
+	}
+
+	/*
+	 * Build the base sysfs device path:
+	 *   /sys/class/infiniband/hfi1_<unit>/device
+	 * OPX_CLASS_DIR_PATH is defined in opa_service.h as
+	 * "/sys/class/infiniband".
+	 */
+	snprintf(sysfs_dev_path, sizeof(sysfs_dev_path), "%s/hfi1_%d/device", OPX_CLASS_DIR_PATH, hfi_unit);
+
+	/* ---- device_attr->name ---- */
+	/* Use the canonical hfi1_N device name */
+	snprintf(buf, sizeof(buf), "hfi1_%d", hfi_unit);
+	nic->device_attr->name = strdup(buf);
+
+	/* ---- device_attr->vendor_id ---- */
+	{
+		char  vendor_path[PATH_MAX];
+		FILE *fp;
+		if (snprintf(vendor_path, sizeof(vendor_path), "%s/vendor", sysfs_dev_path) <
+		    (int) sizeof(vendor_path)) {
+			fp = fopen(vendor_path, "r");
+			if (fp) {
+				if (fgets(buf, sizeof(buf), fp)) {
+					/* sysfs returns "0x1175\n" style strings */
+					buf[strcspn(buf, "\n")]	    = '\0';
+					nic->device_attr->vendor_id = strdup(buf);
+				}
+				fclose(fp);
+			}
+		}
+	}
+
+	/* ---- device_attr->device_id ---- */
+	{
+		char  device_path[PATH_MAX];
+		FILE *fp;
+		if (snprintf(device_path, sizeof(device_path), "%s/device", sysfs_dev_path) <
+		    (int) sizeof(device_path)) {
+			fp = fopen(device_path, "r");
+			if (fp) {
+				if (fgets(buf, sizeof(buf), fp)) {
+					buf[strcspn(buf, "\n")]	    = '\0';
+					nic->device_attr->device_id = strdup(buf);
+				}
+				fclose(fp);
+			}
+		}
+	}
+
+	/* ---- device_attr->device_version ---- */
+	{
+		char  rev_path[PATH_MAX];
+		FILE *fp;
+		if (snprintf(rev_path, sizeof(rev_path), "%s/revision", sysfs_dev_path) < (int) sizeof(rev_path)) {
+			fp = fopen(rev_path, "r");
+			if (fp) {
+				if (fgets(buf, sizeof(buf), fp)) {
+					buf[strcspn(buf, "\n")]		 = '\0';
+					nic->device_attr->device_version = strdup(buf);
+				}
+				fclose(fp);
+			}
+		}
+	}
+
+	/* ---- device_attr->driver ---- */
+	/*
+	 * The driver symlink at <dev_path>/driver points to the driver
+	 * directory; the basename of the resolved path is the driver name.
+	 */
+	{
+		char driver_link[PATH_MAX];
+		char resolved[PATH_MAX];
+		if (snprintf(driver_link, sizeof(driver_link), "%s/driver", sysfs_dev_path) <
+		    (int) sizeof(driver_link)) {
+			if (realpath(driver_link, resolved)) {
+				nic->device_attr->driver = strdup(basename(resolved));
+			}
+		}
+	}
+
+	/* ---- bus_attr: PCI domain/bus/device/function ---- */
+	/*
+	 * Resolve the device symlink to get the PCI address string in the
+	 * form DDDD:BB:DD.F, then parse it.
+	 */
+	if (opx_sysfs_unit_get_pci_attr(hfi_unit, &nic->bus_attr->attr.pci) == 0) {
+		nic->bus_attr->bus_type = FI_BUS_PCI;
+	}
+
+	/*
+	 * Pick the first ACTIVE port and report its link attributes.
+	 * Matches verbs' vrb_get_device_attrs() which uses the first
+	 * IBV_PORT_ACTIVE port for nic->link_attr. If no port is active
+	 * we still emit FI_LINK_DOWN but leave address/mtu/speed unset:
+	 * the OPX sysfs `rate` file reports the configured maximum even
+	 * on a down link, which would otherwise yield a misleading
+	 * fi_link_attr.
+	 */
+	const int active_port = opx_get_first_active_port(hfi_unit);
+	nic->link_attr->state = (active_port > 0) ? FI_LINK_UP : FI_LINK_DOWN;
+
+	if (active_port > 0) {
+		/* ---- link_attr: address (LID as hex string) ---- */
+		int lid = opx_hfi_get_port_lid(hfi_unit, active_port);
+		if (lid > 0) {
+			snprintf(buf, sizeof(buf), "0x%x", (unsigned int) lid);
+			nic->link_attr->address = strdup(buf);
+		}
+
+		/* ---- link_attr: MTU (VL 0 default data VL) ---- */
+		int mtu = opx_hfi_get_port_vl2mtu(hfi_unit, active_port, 0);
+		if (mtu > 0) {
+			nic->link_attr->mtu = (size_t) mtu;
+		}
+
+		/* ---- link_attr: speed (Gb/s -> bits/sec) ---- */
+		int rate_gbps = opx_hfi_get_port_rate(hfi_unit, active_port);
+		if (rate_gbps > 0) {
+			/* Convert Gb/s to bits/sec to match fi_link_attr convention */
+			nic->link_attr->speed = (size_t) rate_gbps * 1000UL * 1000UL * 1000UL;
+		}
+	}
+
+	/* ---- link_attr: network_type ---- */
+	nic->link_attr->network_type = strdup("OmniPath");
+
+	*fid_nic_out = nic;
+	return 0;
+}
+
 static int opx_getinfo_set_domain_name(const int hfi, struct fi_info *info)
 {
 	assert(info);
@@ -538,7 +717,7 @@ static int opx_getinfo_set_domain_name(const int hfi, struct fi_info *info)
 	   accommodate any 4-byte (decimal) value */
 	char domain_name[sizeof(FI_OPX_DOMAIN_NAME_PREFIX) + 16];
 
-	sprintf(domain_name, "%s%d", FI_OPX_DOMAIN_NAME_PREFIX, hfi);
+	snprintf(domain_name, sizeof(domain_name), "%s%d", FI_OPX_DOMAIN_NAME_PREFIX, hfi);
 	free(info->domain_attr->name);
 	if ((info->domain_attr->name = strdup(domain_name)) == NULL) {
 		return -FI_ENOMEM;
@@ -547,20 +726,24 @@ static int opx_getinfo_set_domain_name(const int hfi, struct fi_info *info)
 	return FI_SUCCESS;
 }
 
-/* Populate PCI bus attributes in fi_info from sysfs. Returns 0 on success. */
-static int opx_getinfo_set_pci_attr(int hfi, struct fi_info *info)
+static int opx_getinfo_set_nic(int hfi, struct fi_info *info)
 {
-	if (!info->nic || !info->nic->bus_attr) {
-		return -1;
+	struct fid_nic *nic;
+	int		ret;
+
+	ret = opx_nic_alloc(hfi, &nic);
+	if (ret) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to populate NIC attributes for HFI unit %d: %s\n", hfi,
+			fi_strerror(-ret));
+		return ret;
 	}
 
-	if (opx_sysfs_unit_get_pci_attr(hfi, &info->nic->bus_attr->attr.pci) != 0) {
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to read PCI BDF for HFI unit %d: %s\n", hfi,
-			strerror(errno));
-		return -1;
+	if (info->nic) {
+		fi_close(&info->nic->fid);
 	}
 
-	return 0;
+	info->nic = nic;
+	return FI_SUCCESS;
 }
 
 static int opx_getinfo_dup_global(int hfi, struct fi_info **info, struct fi_info **info_tail)
@@ -568,15 +751,23 @@ static int opx_getinfo_dup_global(int hfi, struct fi_info **info, struct fi_info
 	struct fi_info *global_info = fi_opx_global.info;
 	struct fi_info *result_head = NULL;
 	struct fi_info *result_tail = NULL;
+	int		ret	    = -FI_ENOMEM;
+
 	while (global_info) {
 		struct fi_info *global_dup = fi_dupinfo(global_info);
 		if (!global_dup) {
-			goto err_no_mem;
+			goto err;
 		}
-		if (opx_getinfo_set_domain_name(hfi, global_dup) != FI_SUCCESS) {
-			// Free global_dup here because it is not yet in the result list
+		ret = opx_getinfo_set_domain_name(hfi, global_dup);
+		if (ret != FI_SUCCESS) {
 			fi_freeinfo(global_dup);
-			goto err_no_mem;
+			goto err;
+		}
+
+		ret = opx_getinfo_set_nic(hfi, global_dup);
+		if (ret != FI_SUCCESS) {
+			fi_freeinfo(global_dup);
+			goto err;
 		}
 
 		if (!result_head) {
@@ -595,7 +786,7 @@ static int opx_getinfo_dup_global(int hfi, struct fi_info **info, struct fi_info
 
 	return FI_SUCCESS;
 
-err_no_mem:
+err:
 	while (result_head) {
 		struct fi_info *next = result_head->next;
 		fi_freeinfo(result_head);
@@ -605,7 +796,7 @@ err_no_mem:
 	(*info)	     = NULL;
 	(*info_tail) = NULL;
 
-	return -FI_ENOMEM;
+	return ret;
 }
 
 static int opx_getinfo_alloc_and_fill(const int hfi, const char *node, const char *service, const uint64_t flags,
@@ -731,6 +922,17 @@ static int fi_opx_getinfo(uint32_t version, const char *node, const char *servic
 			continue;
 		}
 
+		if (hints && hints->nic && hints->nic->bus_attr && hints->nic->bus_attr->bus_type == FI_BUS_PCI &&
+		    cur->nic && cur->nic->bus_attr) {
+			struct fi_pci_attr *h = &hints->nic->bus_attr->attr.pci;
+			struct fi_pci_attr *c = &cur->nic->bus_attr->attr.pci;
+			if (h->domain_id != c->domain_id || h->bus_id != c->bus_id || h->device_id != c->device_id ||
+			    h->function_id != c->function_id) {
+				fi_freeinfo(cur);
+				continue;
+			}
+		}
+
 		FI_LOG(fi_opx_global.prov, FI_LOG_TRACE, FI_LOG_FABRIC, "Successfully got getinfo for HFI %d\n", i);
 
 		if (!*info) {
@@ -740,6 +942,10 @@ static int fi_opx_getinfo(uint32_t version, const char *node, const char *servic
 		}
 
 		tail = cur_tail;
+	}
+
+	if (!*info) {
+		return -FI_ENODATA;
 	}
 
 	return 0;
