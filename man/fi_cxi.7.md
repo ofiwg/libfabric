@@ -1130,6 +1130,11 @@ The CXI provider checks for the following environment variables:
     message should be retried. A value of 0 will return an error completion
     on the first RNR ack status.
 
+*FI_CXI_RNR_APPEND_RETRY_TIMEOUT_US*
+:   When using the endpoint FI_PROTO_CXI_RNR protocol, this setting is used to
+    control the maximum time to retry appending a recv buffer to the LE. It
+    defaults to 200ms and if set to 0, will disable the retry mechanism.
+
 *FI_CXI_EQ_ACK_BATCH_SIZE*
 :   Number of EQ events to process before writing an acknowledgement to HW.
     Batching ACKs amortizes the cost of event acknowledgement over multiple

@@ -684,6 +684,7 @@ struct cxip_environment cxip_env = {
 	.mr_target_ordering = MR_ORDER_DEFAULT,
 	.disable_cuda_sync_memops = false,
 	.enable_writedata = false,
+	.rnr_append_retry_timeout_us = CXIP_RNR_APPEND_RETRY_TIMEOUT_US,
 };
 
 static void cxip_env_init(void)
@@ -732,6 +733,11 @@ static void cxip_env_init(void)
 		CXIP_INFO("Invalid RNR timeout, using (%d us)\n",
 			  cxip_env.rnr_max_timeout_us);
 	}
+	fi_param_define(&cxip_prov, "rnr_append_retry_timeout_us", FI_PARAM_INT,
+			"RNR append retry time micro-seconds (default: %d).",
+			cxip_env.rnr_append_retry_timeout_us);
+	fi_param_get_int(&cxip_prov, "rnr_append_retry_timeout_us",
+			 &cxip_env.rnr_append_retry_timeout_us);
 
 	fi_param_define(&cxip_prov, "enable_trig_op_limit", FI_PARAM_BOOL,
 			"Enable enforcement of triggered operation limit. "

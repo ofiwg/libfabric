@@ -360,6 +360,7 @@ struct cxip_environment {
 	enum cxip_mr_target_ordering mr_target_ordering;
 	int disable_cuda_sync_memops;
 	int enable_writedata;
+	int rnr_append_retry_timeout_us;
 };
 
 extern struct cxip_environment cxip_env;
@@ -1258,6 +1259,9 @@ struct cxip_req_recv {
 	struct dlist_entry children;
 	uint64_t src_offset;
 	uint16_t rdzv_mlen;
+	uint64_t rnr_append_retry_ts_us;
+	uint64_t rnr_append_retry_timeout_us;
+	uint64_t rnr_append_retry_attempts;
 };
 
 struct cxip_req_send {
@@ -2103,6 +2107,7 @@ struct cxip_rxc_rnr {
 	/* Used when success events are not required */
 	struct cxip_req *req_selective_comp_msg;
 	struct cxip_req *req_selective_comp_tag;
+	ofi_atomic64_t total_append_retries;
 };
 
 static inline void cxip_copy_to_md(struct cxip_md *md, void *dest,
@@ -2422,6 +2427,8 @@ struct cxip_txc_hpc {
  */
 #define CXIP_RNR_TIMEOUT_US	500000
 #define CXIP_NUM_RNR_WAIT_QUEUE	5
+/* per recv req append retry timeout */
+#define CXIP_RNR_APPEND_RETRY_TIMEOUT_US 200000
 
 struct cxip_txc_rnr {
 	/* Must remain first */

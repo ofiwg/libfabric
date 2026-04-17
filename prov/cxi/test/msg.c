@@ -13,6 +13,8 @@
 
 #include "cxip.h"
 #include "cxip_test_common.h"
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_DATA, __VA_ARGS__)
 
 /* Test basic send/recv - expected or unexpected*/
 static void ping(bool ux)
@@ -2423,7 +2425,113 @@ Test(rnr_msg, multi_recv_retries)
 	free(send_buf);
 	free(recv_buf);
 }
+Test(rnr_msg, append_oflow, .timeout = 600, .disabled = false)
+{
+	int ret, recv_post_count = 15724;
+	int posted = 0, canceled = 0, req_overflow = 6;
+	uint8_t *recv_buf;
+	int recv_len = 64;
+	struct fi_cq_tagged_entry rx_cqe;
+	struct fi_cq_err_entry err_cqe = {};
+	struct fi_context *ctxt;
+	int recv_post_total = (recv_post_count + req_overflow);
+	uint64_t retry_attempts_start, retry_attempts_end;
+	size_t optlen = sizeof(retry_attempts_start);
 
+	ctxt = calloc(recv_post_total, sizeof(struct fi_context));
+	recv_buf = aligned_alloc(s_page_size, recv_len);
+	cr_assert(recv_buf);
+	cr_assert(ctxt);
+	memset(recv_buf, 0, recv_len);
+	memset(&err_cqe, 0, sizeof(err_cqe));
+
+	/* get the retry count before we start */
+	ret = fi_getopt(&cxit_ep->fid, FI_OPT_ENDPOINT,
+			FI_OPT_CXI_GET_RNR_APPEND_RETRY_ATTEMPTS,
+			&retry_attempts_start, &optlen);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getopt failed to get start attempts %d", ret);
+	CXIP_WARN("retry_attempts_start %ld\n", retry_attempts_start);
+
+	/* we know that the next append after 15724 will fail, post n
+	 * req_overflow to trigger a post retry in recv_cb.
+	 *
+	 * fi_recv should not fail unless the hw is not accepting commands
+	 * and that will result in FI_EAGAIN. these are posted and the only
+	 * way you know the result is the status of the link and unlink
+	 * commands in recv_cb
+	 */
+	for (posted = 0; posted < recv_post_total; posted++) {
+		ret = fi_recv(cxit_ep, recv_buf, recv_len, NULL,
+			      FI_ADDR_UNSPEC, &ctxt[posted]);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+		/* progress only */
+		fi_cq_read(cxit_rx_cq, NULL, 0);
+	}
+	/* at this point we should have n req_overflow waiting for a free slot*/
+	CXIP_WARN("fi_recv posted count %d trig retry at 15725\n", posted);
+	CXIP_WARN("Cancelling %d recv reqs\n", req_overflow);
+	/* cancel requests to stop retries */
+	for (canceled = 0; canceled < req_overflow; canceled++) {
+		ret = fi_cancel(&cxit_ep->fid, &ctxt[canceled]);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_cancel failed %d", ret);
+		/* Get cancelled entry */
+		do {
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			/* wait for the available cancel error */
+			if (ret == -FI_EAVAIL) {
+				break;
+			}
+			cr_assert_eq(ret, -FI_EAGAIN, "unexpected event %d", ret);
+			/* progress only */
+			fi_cq_read(cxit_rx_cq, NULL, 0);
+		} while (1);
+		ret = fi_cq_readerr(cxit_rx_cq, &err_cqe, 0);
+		cr_assert_eq(ret, 1, "Did not get completion with error\n");
+		cr_assert(err_cqe.op_context == &ctxt[canceled], "Error CQE context mismatch\n");
+		cr_assert(err_cqe.err == FI_ECANCELED, "Did not get expected cancel error, %d\n", err_cqe.err);
+		err_cqe.err = 0;
+		/* progress only */
+		fi_cq_read(cxit_rx_cq, NULL, 0);
+	}
+	/* check retry attempt counter, should be non-zero
+	 * the only way we know if the retries succeded is
+	 * we dont timeout and hit the fatal assert in
+	 * cxip_rnr_recv_cb().
+	 */
+	CXIP_WARN("Calling fi_getopt()\n");
+	ret = fi_getopt(&cxit_ep->fid, FI_OPT_ENDPOINT,
+			FI_OPT_CXI_GET_RNR_APPEND_RETRY_ATTEMPTS,
+			&retry_attempts_end, &optlen);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getopt failed to get end attempts %d", ret);
+	cr_assert_neq(retry_attempts_start, retry_attempts_end, "retry attempts unchanged %ld\n", retry_attempts_end);
+
+	/* now cancel the remaining recv posts that pushed us to the ceiling */
+	CXIP_WARN("Cancelling remaining recv reqs %d\n", (recv_post_total - req_overflow));
+	for (canceled = req_overflow; canceled < recv_post_total; canceled++) {
+		ret = fi_cancel(&cxit_ep->fid, &ctxt[canceled]);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_cancel failed %d", ret);
+		/* Get cancelled entry */
+		do {
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			/* wait for the available cancel error */
+			if (ret == -FI_EAVAIL) {
+				break;
+			}
+			cr_assert_eq(ret, -FI_EAGAIN, "unexpected event %d", ret);
+			/* progress only */
+			fi_cq_read(cxit_rx_cq, NULL, 0);
+		} while (1);
+		ret = fi_cq_readerr(cxit_rx_cq, &err_cqe, 0);
+		cr_assert_eq(ret, 1, "Did not get completion with error\n");
+		cr_assert(err_cqe.op_context == &ctxt[canceled], "Error CQE context mismatch\n");
+		cr_assert(err_cqe.err == FI_ECANCELED, "Did not get expected cancel error, %d\n", err_cqe.err);
+		err_cqe.err = 0;
+		/* progress only */
+		fi_cq_read(cxit_rx_cq, NULL, 0);
+	}
+	free(ctxt);
+	free(recv_buf);
+}
 
 /* Verify that FI_AV_USER_ID is returned from fi_cq_readfrom(). */
 Test(msg, av_user_id_domain_cap)

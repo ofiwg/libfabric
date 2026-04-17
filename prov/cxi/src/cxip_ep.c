@@ -1308,6 +1308,8 @@ struct fi_ops cxip_ep_fi_ops = {
 int cxip_ep_getopt_priv(struct cxip_ep *ep, int level, int optname,
 			void *optval, size_t *optlen)
 {
+	struct cxip_rxc_rnr *rxc_rnr;
+
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
@@ -1331,6 +1333,24 @@ int cxip_ep_getopt_priv(struct cxip_ep *ep, int level, int optname,
 		*(bool *)optval =
 			!ep->ep_obj->require_dev_reg_copy[FI_HMEM_CUDA];
 		break;
+
+	case FI_OPT_CXI_GET_RNR_APPEND_RETRY_ATTEMPTS:
+		if (!optval || !optlen)
+			return -FI_EINVAL;
+		if (*optlen < sizeof(u_int64_t))
+			return -FI_ETOOSMALL;
+		if (ep->ep_obj->protocol != FI_PROTO_CXI_RNR) {
+			CXIP_WARN("Not FI_PROTO_CXI_RNR EP\n");
+			return -FI_EINVAL;
+		}
+
+		rxc_rnr = container_of(ep->ep_obj->rxc, struct cxip_rxc_rnr,
+				       base);
+		*(u_int64_t *)optval = ofi_atomic_get64(&rxc_rnr->total_append_retries);
+		CXIP_WARN("rxc_rnr total append retry count %ld\n",
+			ofi_atomic_get64(&rxc_rnr->total_append_retries));
+		break;
+
 	default:
 		return -FI_ENOPROTOOPT;
 	}

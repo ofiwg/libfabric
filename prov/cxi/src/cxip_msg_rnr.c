@@ -192,18 +192,38 @@ static ssize_t cxip_rnr_recv_req(struct cxip_req *req, struct cxip_cntr *cntr,
  */
 static int cxip_rnr_recv_cb(struct cxip_req *req, const union c_event *event)
 {
+	int event_rc = cxi_tgt_event_rc(event), ret;
 	struct cxip_rxc_rnr *rxc = req->recv.rxc_rnr;
-
+	uint64_t ts_delta_us;
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 		/* Success events are disabled */
-		assert(cxi_tgt_event_rc(event) != C_RC_OK);
+		ts_delta_us = (ofi_gettime_us() - req->recv.rnr_append_retry_ts_us);
+		if (ts_delta_us < req->recv.rnr_append_retry_timeout_us) {
+			ret = cxip_rnr_recv_req(req, req->recv.cntr, true);
+			if(ret) {
+				RXC_WARN(rxc, "Failed to post append command: %d req_id:%d\n",
+				ret, req->req_id);
+			}
+			/* per request count */
+			req->recv.rnr_append_retry_attempts++;
+			/* track aggregate so application can access via fi_getopt
+			 * application can monitor this value to see if they are constantly hitting the
+			 * LE resource limit and adjust their receive posting strategy accordingly.
+			 */
+			ofi_atomic_inc64(&rxc->total_append_retries);
+		} else {
+			RXC_WARN(rxc, "cxip_rnr_recv_cb fatal error append retries %ld etype %d erc %d\n",
+				req->recv.rnr_append_retry_attempts, event->hdr.event_type, event_rc);
+			RXC_WARN(rxc, "ts_delta_us:%ld \n", ts_delta_us);
+			assert(cxi_tgt_event_rc(event) != C_RC_OK);
+			/* Failure to link a receive buffer is a fatal operation and
+			* indicates that FI_PROTO_CXI and portals flow-control is
+			* required.
+			*/
+			RXC_FATAL(rxc, APPEND_LE_FATAL);
+		}
 
-		/* Failure to link a receive buffer is a fatal operation and
-		 * indicates that FI_PROTO_CXI and portals flow-control is
-		 * required.
-		 */
-		RXC_FATAL(rxc, APPEND_LE_FATAL);
 		break;
 
 	case C_EVENT_UNLINK:
@@ -301,6 +321,8 @@ static void cxip_rxc_rnr_init_struct(struct cxip_rxc *rxc_base,
 
 	/* Overrides */
 	rxc->base.recv_ptl_idx = CXIP_PTL_IDX_RNR_RXQ;
+
+	ofi_atomic_initialize64(&rxc->total_append_retries, 0);
 }
 
 static void cxip_rxc_rnr_fini_struct(struct cxip_rxc *rxc)
@@ -543,6 +565,18 @@ cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len, void *desc,
 	recv_req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
 
 	if (!(recv_req->recv.flags & (FI_PEEK | FI_CLAIM))) {
+		/* When an append failure occurs, the per-list append-disabled
+		 * flag is set. This prevents subsequent appends to that list
+		 * from being accepted until RESTART_SEQ is used in the append
+		 * command. A successful append clears the append-disabled flag.
+		 * Failure to link a receive buffer is a fatal operation see
+		 * cxip_rnr_recv_cb() so we retry to prevent this fatal
+		 * error in the callback, it is time bound and will ultimately 
+		 * fatally fail once it hits the timeout.
+		 */
+		recv_req->recv.rnr_append_retry_attempts = 0;
+		recv_req->recv.rnr_append_retry_timeout_us = cxip_env.rnr_append_retry_timeout_us;
+		recv_req->recv.rnr_append_retry_ts_us = ofi_gettime_us();
 		ret = cxip_rnr_recv_req(recv_req, cntr, false);
 		if (ret) {
 			RXC_WARN(rxc, "Receive append failed: %d %s\n",

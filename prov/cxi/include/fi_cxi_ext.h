@@ -61,6 +61,7 @@ enum {
 	FI_OPT_CXI_GET_RX_MATCH_MODE_OVERRIDE,		/* char string */
 	FI_OPT_CXI_SET_REQ_BUF_SIZE_OVERRIDE,		/* size_t */
 	FI_OPT_CXI_GET_REQ_BUF_SIZE_OVERRIDE,		/* size_t */
+	FI_OPT_CXI_GET_RNR_APPEND_RETRY_ATTEMPTS,       /* uint64_t */
 
 };
 
