@@ -455,7 +455,20 @@ static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep
 
 	err = efa_rdm_rma_post_write(efa_rdm_ep, txe);
 	if (OFI_UNLIKELY(err)) {
-		efa_rdm_txe_release(txe);
+		if (txe->efa_outstanding_tx_ops == 0) {
+			efa_rdm_txe_release(txe);
+		} else {
+			/*
+			 * Some segments are in flight. Clamp the target length
+			 * so the final in-flight completion releases the txe
+			 * via efa_rdm_pke_handle_rma_completion(). Suppress the
+			 * application-visible completion: we are returning an
+			 * error to the caller, so the completion handler must
+			 * not write a CQ entry or bump the counter for this op.
+			 */
+			txe->bytes_write_total_len = txe->bytes_write_submitted;
+			txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
+		}
 	}
 out:
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
