@@ -148,6 +148,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_av_multiple_ep_efa, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_multiple_ep_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_reinsertion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_av_reverse_av_remove_qpn_collision, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_implicit, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_implicit_to_explicit, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_implicit_av_lru_insertion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

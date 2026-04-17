@@ -307,7 +307,7 @@ void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 	cur_key.qpn = conn->ep_addr->qpn;
 	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key),
 		  cur_reverse_av_entry);
-	if (cur_reverse_av_entry) {
+	if (cur_reverse_av_entry && cur_reverse_av_entry->conn == conn) {
 		HASH_DEL(*cur_reverse_av, cur_reverse_av_entry);
 		free(cur_reverse_av_entry);
 	} else {
@@ -317,7 +317,8 @@ void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 		prv_key.connid = conn->ep_addr->qkey;
 		HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key),
 			  prv_reverse_av_entry);
-		assert(prv_reverse_av_entry);
+		assert(prv_reverse_av_entry &&
+		       prv_reverse_av_entry->conn == conn);
 		HASH_DEL(*prv_reverse_av, prv_reverse_av_entry);
 		free(prv_reverse_av_entry);
 	}
