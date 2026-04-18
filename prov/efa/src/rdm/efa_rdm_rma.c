@@ -373,25 +373,10 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	}
 
 	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
-	if (delivery_complete_requested) {
-		/*
-		 * Because delivery complete is defined as an extra
-		 * feature, the receiver might not support it.
-		 *
-		 * The sender cannot send with FI_DELIVERY_COMPLETE
-		 * if the peer is not able to handle it.
-		 *
-		 * handshake is already made now since we enforce
-		 * handshake for write earlier.
-		 */
-
-		if (!ep->homogeneous_peers && !(txe->peer->is_self) && !efa_rdm_peer_support_delivery_complete(txe->peer))
-			return -FI_EOPNOTSUPP;
-
+	if (delivery_complete_requested)
 		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_DC_EAGER_RTW_PKT);
-	} else {
+	else
 		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_EAGER_RTW_PKT);
-	}
 
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->iface : FI_HMEM_SYSTEM;
 
