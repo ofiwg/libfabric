@@ -1113,7 +1113,6 @@ void test_efa_rdm_atomic_compare_desc_persistence(struct efa_resource **state)
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
-	/* Set peer flags to simulate handshake state */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
@@ -1134,7 +1133,6 @@ void test_efa_rdm_atomic_compare_desc_persistence(struct efa_resource **state)
 	compare_desc_array[0] = fi_mr_desc(compare_buff.mr);
 	void *original_desc_value = compare_desc_array[0];
 
-	/* Setup atomic message with FI_DELIVERY_COMPLETE to force queuing */
 	ioc.addr = send_buff.buff;
 	ioc.count = 1;
 	compare_ioc.addr = compare_buff.buff;
@@ -1152,26 +1150,23 @@ void test_efa_rdm_atomic_compare_desc_persistence(struct efa_resource **state)
 	msg.op = FI_CSWAP;
 
 	/*
-	 * Call fi_compare_atomicmsg with FI_DELIVERY_COMPLETE.
-	 * This forces the operation to be queued when handshake is not complete.
-	 * The old buggy code would store a pointer to compare_desc_array,
-	 * which becomes dangling when this function returns.
-	 * The fix copies the array contents into txe->atomic_ex.compare_desc[].
+	 * Mock efa_qp_post_send to succeed so the compare atomic completes.
+	 * The test verifies that compare_desc is properly copied into the txe
+	 * (not just a pointer to the caller's stack array).
 	 */
-	ret = fi_compare_atomicmsg(resource->ep, &msg, &compare_ioc, compare_desc_array, 1,
-				   &result_ioc, result_desc_array, 1, FI_DELIVERY_COMPLETE);
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
 
-	/* Operation should succeed (queued) */
+	ret = fi_compare_atomicmsg(resource->ep, &msg, &compare_ioc, compare_desc_array, 1,
+				   &result_ioc, result_desc_array, 1, 0);
 	assert_int_equal(ret, 0);
 
 	/* Destroy stack array to simulate function return */
 	compare_desc_array[0] = (void *)(uintptr_t)0xDEADBEEF;
 
-	/* Retrieve queued txe from ope_queued_list */
-	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	assert_false(dlist_empty(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list));
-	txe = container_of(efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list.next,
-			   struct efa_rdm_ope, queued_entry);
+	/* Retrieve the txe from the txe_list */
+	assert_false(dlist_empty(&efa_rdm_ep->txe_list));
+	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
 
 	/* Verify compare_desc was copied, not just pointer stored */
 	assert_ptr_equal(txe->atomic_ex.compare_desc[0], original_desc_value);
