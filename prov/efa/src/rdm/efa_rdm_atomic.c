@@ -103,27 +103,6 @@ ssize_t efa_rdm_atomic_post_atomic(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm
 	};
 
 	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
-	if (delivery_complete_requested && !(txe->peer->is_local)) {
-		/*
-		 * Because delivery complete is defined as an extra
-		 * feature, the receiver might not support it.
-		 * The sender cannot send with FI_DELIVERY_COMPLETE
-		 * if the peer is not able to handle it.
-		 * If the sender does not know whether the peer
-		 * can handle it, it needs to trigger
-		 * a handshake packet from the peer.
-		 * The handshake packet contains
-		 * the information whether the peer
-		 * support it or not.
-		 */
-		if (!efa_rdm_ep->homogeneous_peers) {
-			if (!(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
-				return efa_rdm_ep_enforce_handshake_for_txe(efa_rdm_ep, txe);
-
-			if (!(txe->peer->is_self) && !efa_rdm_peer_support_delivery_complete(txe->peer))
-				return -FI_EOPNOTSUPP;
-		}
-	}
 
 	if (delivery_complete_requested && txe->op == ofi_op_atomic) {
 		return efa_rdm_ope_post_send(txe, EFA_RDM_DC_WRITE_RTA_PKT);
