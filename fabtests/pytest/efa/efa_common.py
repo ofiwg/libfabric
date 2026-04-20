@@ -240,13 +240,20 @@ def has_rdma(cmdline_args, operation):
     operation: rdma operation name, allowed values are read and write
     return: a boolean
     """
+    return _has_rdma_cached(cmdline_args.server_id, cmdline_args.client_id,
+                            cmdline_args.binpath, cmdline_args.timeout,
+                            cmdline_args.environments, operation)
+
+
+@functools.lru_cache(maxsize=None)
+def _has_rdma_cached(server_id, client_id, binpath, timeout, environments, operation):
     assert operation in ["read", "write", "writedata"]
-    binpath = cmdline_args.binpath or ""
-    cmd = "timeout " + str(cmdline_args.timeout) \
+    binpath = binpath or ""
+    cmd = "timeout " + str(timeout) \
           + " " + os.path.join(binpath, f"fi_efa_rdma_checker -o {operation}")
-    if cmdline_args.environments:
-        cmd = cmdline_args.environments + " " + cmd
-    server_proc = subprocess.run("ssh {} {}".format(cmdline_args.server_id, cmd),
+    if environments:
+        cmd = environments + " " + cmd
+    server_proc = subprocess.run("ssh {} {}".format(server_id, cmd),
                stdout=subprocess.PIPE,
                stderr=subprocess.STDOUT,
                shell=True,
@@ -254,7 +261,7 @@ def has_rdma(cmdline_args, operation):
     if has_ssh_connection_err_msg(server_proc.stdout):
         raise SshConnectionError()
 
-    client_proc = subprocess.run("ssh {} {}".format(cmdline_args.client_id, cmd),
+    client_proc = subprocess.run("ssh {} {}".format(client_id, cmd),
                stdout=subprocess.PIPE,
                stderr=subprocess.STDOUT,
                shell=True,
