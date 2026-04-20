@@ -49,7 +49,7 @@ void test_efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_resource **s
     msg.desc = NULL;
     txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
     assert_non_null(txe);
-    efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0);
+    efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
     txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 
     /* construct a fallback long cts rtm pkt */
@@ -325,7 +325,7 @@ void test_efa_rdm_pke_flag_tracking(struct efa_resource **state)
 	msg.desc = NULL;
 	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
 	assert_non_null(txe);
-	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
 
 	/* Allocate a packet entry */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);

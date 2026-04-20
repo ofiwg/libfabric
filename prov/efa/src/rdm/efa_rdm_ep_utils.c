@@ -583,15 +583,14 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 		return -FI_EAGAIN;
 	}
 
-	efa_rdm_txe_construct(txe, ep, peer, &msg, ofi_op_write, 0);
+	efa_rdm_txe_construct(txe, ep, peer, &msg, ofi_op_write, 0,
+			      EFA_RDM_OPE_INTERNAL | EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER);
 
-	/*
-	 * efa_rdm_txe_construct() joins ep->base_ep.util_ep.tx_op_flags and
-	 * passed in flags, reset to desired flags (remove things like
-	 * FI_DELIVERY_COMPLETE, and FI_COMPLETION)
+	/* efa_rdm_txe_construct() joins ep->base_ep.util_ep.tx_op_flags with the
+	 * passed-in flags into fi_flags; reset fi_flags to 0 so handshake txe
+	 * carries no libfabric flags (FI_DELIVERY_COMPLETE, FI_COMPLETION, ...).
 	 */
-	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
-	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+	txe->fi_flags = 0;
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry)) {

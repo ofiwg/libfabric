@@ -40,7 +40,8 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		      	 struct efa_rdm_peer *peer,
 			 const struct fi_msg_atomic *msg_atomic,
 			 const struct efa_rdm_atomic_ex *atomic_ex,
-			 uint32_t op, uint64_t flags)
+			 uint32_t op, uint64_t fi_flags,
+			 uint32_t internal_flags)
 {
 	struct efa_rdm_ope *txe;
 	struct fi_msg msg;
@@ -65,7 +66,7 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	msg.iov_count = msg_atomic->iov_count;
 	msg.data = msg_atomic->data;
 	msg.desc = msg_atomic->desc;
-	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, flags);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, fi_flags, internal_flags);
 
 	assert(msg_atomic->rma_iov_count > 0);
 	assert(msg_atomic->rma_iov);
@@ -120,7 +121,8 @@ static
 ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 			       const struct fi_msg_atomic *msg,
 			       const struct efa_rdm_atomic_ex *atomic_ex,
-			       uint32_t op, uint64_t flags)
+			       uint32_t op, uint64_t fi_flags,
+			       uint32_t internal_flags)
 {
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
@@ -139,7 +141,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 		goto out;
 	}
 
-	txe = efa_rdm_atomic_alloc_txe(efa_rdm_ep, peer, msg, atomic_ex, op, flags);
+	txe = efa_rdm_atomic_alloc_txe(efa_rdm_ep, peer, msg, atomic_ex, op, fi_flags, internal_flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		goto out;
@@ -210,7 +212,7 @@ efa_rdm_atomic_inject(struct fid_ep *ep,
 	msg.data = 0;
 
 	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, &msg, NULL, ofi_op_atomic,
-				      FI_INJECT | EFA_RDM_TXE_NO_COMPLETION);
+				      FI_INJECT, EFA_RDM_TXE_NO_COMPLETION);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -250,7 +252,7 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 		}
 	}
 
-	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, NULL, ofi_op_atomic, flags);
+	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, NULL, ofi_op_atomic, flags, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -356,7 +358,7 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	ofi_ioc_to_iov(resultv, atomic_ex.resp_iov, result_count, datatype_size);
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 
-	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags);
+	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -479,7 +481,7 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 		memcpy(atomic_ex.compare_desc, compare_desc, sizeof(void*) * compare_count);
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 
-	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags);
+	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
