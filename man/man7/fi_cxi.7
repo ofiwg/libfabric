@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_cxi" "7" "2026\-03\-25" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_cxi" "7" "2026\-04\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -1363,6 +1363,11 @@ to control the maximum time from the original posting of the message
 that the message should be retried.
 A value of 0 will return an error completion on the first RNR ack
 status.
+.TP
+\f[I]FI_CXI_RNR_APPEND_RETRY_TIMEOUT_US\f[R]
+When using the endpoint FI_PROTO_CXI_RNR protocol, this setting is used
+to control the maximum time to retry appending a recv buffer to the LE.
+It defaults to 200ms and if set to 0, will disable the retry mechanism.
 .TP
 \f[I]FI_CXI_EQ_ACK_BATCH_SIZE\f[R]
 Number of EQ events to process before writing an acknowledgement to HW.
