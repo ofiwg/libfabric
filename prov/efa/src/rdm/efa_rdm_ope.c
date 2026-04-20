@@ -131,7 +131,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	 * (which would have already removed it from the list).
 	 */
 	if (txe->state == EFA_RDM_OPE_SEND && 
-	    !(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED))
+	    !(txe->internal_flags & EFA_RDM_TXE_RESPONSE_RECEIVED))
 		dlist_remove(&txe->entry);
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
@@ -732,7 +732,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	case EFA_RDM_TXE_REQ:
 		break;
 	case EFA_RDM_OPE_SEND:
-		if (!(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED))
+		if (!(txe->internal_flags & EFA_RDM_TXE_RESPONSE_RECEIVED))
 			dlist_remove(&txe->entry);
 		break;
 	case EFA_RDM_OPE_ERR:
@@ -982,7 +982,6 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 		       txe->peer->conn->fi_addr, txe->tx_id, txe->msg_id,
 		       txe->cq_entry.tag, txe->total_len);
 
-
 	efa_rdm_tracepoint(send_end,
 		    txe->msg_id, (size_t) txe->cq_entry.op_context,
 		    txe->total_len, txe->cq_entry.tag, txe->peer->conn->fi_addr);
@@ -1198,7 +1197,18 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	}
 
 	if (ope->type == EFA_RDM_TXE) {
-		efa_rdm_txe_release(ope);
+		/*
+		 * This can only happen for emulated read protocols
+		 * where we use TX entry to receive data from the read.
+		 * target. When the recv completed, the RTR
+		 * send completion may not have
+		 * arrived yet. Defer the release until the RTR send
+		 * completion arrives (efa_outstanding_tx_ops == 0)
+		 * to avoid use-after-free of the tx entry.
+		 */
+		ope->internal_flags |= EFA_RDM_TXE_RESPONSE_RECEIVED;;
+		if (efa_rdm_txe_with_resp_ready_for_release(ope))
+			efa_rdm_txe_release(ope);
 	} else {
 		assert(ope->type == EFA_RDM_RXE);
 		efa_rdm_rxe_release(ope);

@@ -295,7 +295,7 @@ void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry)
 	 */
 	if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA) {
 		assert(pkt_entry->ope);
-		if (efa_rdm_txe_dc_ready_for_release(pkt_entry->ope))
+		if (efa_rdm_txe_with_resp_ready_for_release(pkt_entry->ope))
 			efa_rdm_txe_release(pkt_entry->ope);
 		return;
 	}
@@ -795,10 +795,10 @@ void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 	}
 
 	/* Set receipt received flag for DC operations */
-	txe->internal_flags |= EFA_RDM_TXE_RECEIPT_RECEIVED;
+	txe->internal_flags |= EFA_RDM_TXE_RESPONSE_RECEIVED;
 
 	/* Only release txe if both conditions are met */
-	if (efa_rdm_txe_dc_ready_for_release(txe))
+	if (efa_rdm_txe_with_resp_ready_for_release(txe))
 		efa_rdm_txe_release(txe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
@@ -869,6 +869,11 @@ void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry)
 	else
 		efa_cntr_report_tx_completion(&pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
 
-	efa_rdm_txe_release(txe);
+	/* Defer txe release until the FETCH_RTA/COMPARE_RTA send completion
+	 * arrives to avoid use-after-free if the buffer pool slot is reused.
+	 */
+	txe->internal_flags |= EFA_RDM_TXE_RESPONSE_RECEIVED;
+	if (efa_rdm_txe_with_resp_ready_for_release(txe))
+		efa_rdm_txe_release(txe);
 	efa_rdm_pke_release_rx(pkt_entry);
 }

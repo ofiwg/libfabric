@@ -621,22 +621,22 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_LONGREAD_RTW_PKT:
 		/* nothing to do when long rtw send completes*/
 		break;
-	case EFA_RDM_SHORT_RTR_PKT:
-	case EFA_RDM_LONGCTS_RTR_PKT:
-		/* Unlike other protocol, for emulated read, txe
-		 * is released in efa_rdm_ope_handle_recv_completed().
-	         * Therefore there is nothing to be done here.
-		 */
-		break;
 	case EFA_RDM_WRITE_RTA_PKT:
 		efa_rdm_pke_handle_write_rta_send_completion(pkt_entry);
 		break;
+	case EFA_RDM_SHORT_RTR_PKT:
+	case EFA_RDM_LONGCTS_RTR_PKT:
+		/* For emulated read, txe is normally released in
+		 * efa_rdm_ope_handle_recv_completed(). However, if recv
+		 * completed before this RTR send completion arrived, the
+		 * release was deferred. Release the txe now.
+		 */
 	case EFA_RDM_FETCH_RTA_PKT:
-		/* no action to be taken here */
-		break;
 	case EFA_RDM_COMPARE_RTA_PKT:
-		/* no action to be taken here */
-		break;
+		/* For fetch/compare atomics, txe is normally released in
+		 * efa_rdm_pke_handle_atomrsp_recv(). However, if the ATOMRSP
+		 * arrived before this send completion, the release was deferred.
+		 */
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
@@ -653,7 +653,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * Only release TXE when both TX ops complete and receipt is received.
 		 */
 		assert(pkt_entry->ope);
-		if (efa_rdm_txe_dc_ready_for_release(pkt_entry->ope))
+		if (efa_rdm_txe_with_resp_ready_for_release(pkt_entry->ope))
 			efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_READ_NACK_PKT:

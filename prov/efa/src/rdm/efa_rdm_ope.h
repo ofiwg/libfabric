@@ -285,13 +285,19 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 #define EFA_RDM_OPE_INTERNAL			BIT_ULL(15)
 
 /**
- * @brief flag to indicate that a DC txe has received its receipt packet
+ * @brief flag to indicate that a txe has received its response/ack
  *
- * This flag is used to track when a delivery complete operation has
- * received acknowledgment from the receiver, preventing premature
- * completion before all TX operations finish.
+ * This applies to protocols where the txe sends a request packet and
+ * needs to wait for both a response AND all TX send completions before
+ * the txe can be released or completed:
+ * - Delivery complete: REQ sent, RECEIPT received
+ * - Emulated read: RTR sent, data received via READRSP/CTSDATA
+ * - Fetch/compare atomics: FETCH_RTA/COMPARE_RTA sent, ATOMRSP received
+ *
+ * The txe cannot be released/completed until both the response has been
+ * received AND all outstanding TX ops have completed.
  */
-#define EFA_RDM_TXE_RECEIPT_RECEIVED		BIT_ULL(16)
+#define EFA_RDM_TXE_RESPONSE_RECEIVED		BIT_ULL(16)
 
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
@@ -317,24 +323,22 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope);
 void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope);
 
 /**
- * @brief Check if a delivery complete (DC) TXE is ready for release
+ * @brief Check if a txe that received its response/ack is ready for release
  *
  * @details
- * For DC packets, this function prevents use-after-free race conditions by
- * ensuring the TXE is only released when both conditions are met:
- * 1. All TX operations have completed (efa_outstanding_tx_ops == 0)
- * 2. Receipt packet has been received (EFA_RDM_TXE_RECEIPT_RECEIVED flag set)
- *
- * This dual-condition check ensures proper synchronization between send
- * completions and receipt acknowledgments in the delivery complete protocol.
+ * In protocols where the txe sends a request and receives a response
+ * (emulated read, fetch/compare atomics), the txe can only be released
+ * when both:
+ * 1. The response has been received (EFA_RDM_TXE_RESPONSE_RECEIVED flag set)
+ * 2. All TX ops have completed (efa_outstanding_tx_ops == 0)
  *
  * @param[in] txe TX operation entry to check
  * @return true if TXE is ready for release, false otherwise
  */
-static inline bool efa_rdm_txe_dc_ready_for_release(struct efa_rdm_ope *txe)
+static inline bool efa_rdm_txe_with_resp_ready_for_release(struct efa_rdm_ope *txe)
 {
 	return (txe->efa_outstanding_tx_ops == 0) &&
-	       (txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED);
+	       (txe->internal_flags & EFA_RDM_TXE_RESPONSE_RECEIVED);
 }
 
 int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope);

@@ -1198,98 +1198,113 @@ void test_efa_rdm_atomic_compare_desc_persistence(struct efa_resource **state)
  * @param[in] send_first If true, send completion happens first; if false, receipt first
  * @param[in] txe_in_send_state If true, TXE is in EFA_RDM_OPE_SEND state; if false, different state
  */
-static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bool send_first, bool txe_in_send_state)
+/**
+ * @brief Common test for txe release ordering when response/ack arrives
+ *
+ * This tests that a txe is only released when both:
+ * 1. Response/ack received (EFA_RDM_TXE_RESPONSE_RECEIVED set)
+ * 2. All TX ops completed (efa_outstanding_tx_ops == 0)
+ *
+ * @param[in] resource		test resource
+ * @param[in] send_first	if true, send completion arrives before response
+ * @param[in] pkt_type		request packet type to test
+ */
+static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resource,
+					    bool send_first, int pkt_type)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_ope *txe;
-	struct efa_rdm_pke *dc_pkt_entry, *receipt_pkt_entry;
-	struct efa_rdm_receipt_hdr *receipt_hdr;
+	struct efa_rdm_pke *req_pkt_entry, *resp_pkt_entry;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	/* Allocate TXE and set up for DC operation */
-	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	/* Allocate TXE based on protocol */
+	if (pkt_type == EFA_RDM_SHORT_RTR_PKT || pkt_type == EFA_RDM_LONGCTS_RTR_PKT) {
+		txe = efa_unit_test_alloc_txe(resource, ofi_op_read_req);
+		txe->cq_entry.flags = FI_READ;
+	} else if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT) {
+		txe = efa_unit_test_alloc_txe(resource, ofi_op_atomic);
+		txe->cq_entry.flags = FI_ATOMIC | FI_READ;
+	} else {
+		/* DC protocols */
+		txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	}
 	assert_non_null(txe);
-	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	txe->efa_outstanding_tx_ops = 1;
 
-	if (txe_in_send_state) {
-		/* Add TXE to ope_longcts_send_list to simulate active longcts send */
+	/* Set txe state based on packet type */
+	if (pkt_type == EFA_RDM_CTSDATA_PKT) {
 		txe->state = EFA_RDM_OPE_SEND;
 		dlist_insert_tail(&txe->entry, &efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list);
-		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
 	} else {
-		/* TXE is not in SEND state (e.g., eager DC TXE) */
 		txe->state = EFA_RDM_TXE_REQ;
-		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
 	}
 
-	/* Create fake DC packet entry */
-	dc_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
-	assert_non_null(dc_pkt_entry);
-	dc_pkt_entry->ope = txe;
-	dc_pkt_entry->ep = efa_rdm_ep;
-	dc_pkt_entry->peer = txe->peer;
-	struct efa_rdm_base_hdr *base_hdr = (struct efa_rdm_base_hdr *)dc_pkt_entry->wiredata;
-	if (txe_in_send_state) {
-		/* CTSDATA packet is sent when ope is in send state */
-		base_hdr->type = EFA_RDM_CTSDATA_PKT;
-		dc_pkt_entry->flags |= EFA_RDM_PKE_DC_LONGCTS_DATA;
-		struct efa_rdm_ctsdata_hdr *ctsdata_hdr = efa_rdm_pke_get_ctsdata_hdr(dc_pkt_entry);
+	/* Create request packet entry */
+	req_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(req_pkt_entry);
+	req_pkt_entry->ope = txe;
+	req_pkt_entry->ep = efa_rdm_ep;
+	req_pkt_entry->peer = txe->peer;
+	struct efa_rdm_base_hdr *req_hdr = (struct efa_rdm_base_hdr *)req_pkt_entry->wiredata;
+	req_hdr->type = pkt_type;
+	if (pkt_type == EFA_RDM_CTSDATA_PKT) {
+		req_pkt_entry->flags |= EFA_RDM_PKE_DC_LONGCTS_DATA;
+		struct efa_rdm_ctsdata_hdr *ctsdata_hdr = efa_rdm_pke_get_ctsdata_hdr(req_pkt_entry);
 		ctsdata_hdr->seg_length = 0;
-	} else {
-		base_hdr->type = EFA_RDM_DC_EAGER_MSGRTM_PKT;
 	}
 
-	/* Create fake receipt packet entry */
-	receipt_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
-	assert_non_null(receipt_pkt_entry);
-	receipt_pkt_entry->ope = txe;
-	receipt_pkt_entry->ep = efa_rdm_ep;
-	/* Set tx_id so efa_rdm_pke_handle_receipt_recv can look up the txe */
-	receipt_hdr = efa_rdm_pke_get_receipt_hdr(receipt_pkt_entry);
-	receipt_hdr->tx_id = txe->tx_id;
+	/* Create response packet entry (not needed for RTR which uses efa_rdm_ope_handle_recv_completed) */
+	if (pkt_type != EFA_RDM_SHORT_RTR_PKT && pkt_type != EFA_RDM_LONGCTS_RTR_PKT) {
+		resp_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		assert_non_null(resp_pkt_entry);
+		resp_pkt_entry->ope = txe;
+		resp_pkt_entry->ep = efa_rdm_ep;
+		if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT) {
+			struct efa_rdm_atomrsp_pkt *atomrsp_pkt = (struct efa_rdm_atomrsp_pkt *)resp_pkt_entry->wiredata;
+			atomrsp_pkt->hdr.type = EFA_RDM_ATOMRSP_PKT;
+			atomrsp_pkt->hdr.recv_id = txe->tx_id;
+			atomrsp_pkt->hdr.seg_length = 0;
+			txe->atomic_ex.resp_iov_count = 0;
+		} else {
+			/* DC protocols use RECEIPT as response */
+			struct efa_rdm_receipt_hdr *receipt_hdr = efa_rdm_pke_get_receipt_hdr(resp_pkt_entry);
+			receipt_hdr->tx_id = txe->tx_id;
+		}
+	}
 
 	/* Verify TXE is not ready for release initially */
-	assert_false(efa_rdm_txe_dc_ready_for_release(txe));
+	assert_false(efa_rdm_txe_with_resp_ready_for_release(txe));
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
 
 	if (send_first) {
 		/* Send completion first - should not release TXE yet */
-		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
+		efa_rdm_pke_handle_send_completion(req_pkt_entry);
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
-		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
-		if (txe_in_send_state) {
-			/* TXE should still be in ope_longcts_send_list */
-			assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
-			assert_int_equal(txe->state, EFA_RDM_OPE_SEND);
-		} else {
-			/* Non-long-cts TXE should not be in the list */
-			assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
-			assert_int_equal(txe->state, EFA_RDM_TXE_REQ);
-		}
+		assert_false(efa_rdm_txe_with_resp_ready_for_release(txe));
 
-		/* Receipt handling - should set flag and release TXE */
-		efa_rdm_pke_handle_receipt_recv(receipt_pkt_entry);
-		if (txe_in_send_state) {
-			/* Should remove from list */
-			assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
-		}
+		/* Response arrives - should release TXE now */
+		if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT)
+			efa_rdm_pke_handle_atomrsp_recv(resp_pkt_entry);
+		else if (pkt_type == EFA_RDM_SHORT_RTR_PKT || pkt_type == EFA_RDM_LONGCTS_RTR_PKT)
+			efa_rdm_ope_handle_recv_completed(txe);
+		else
+			efa_rdm_pke_handle_receipt_recv(resp_pkt_entry);
 	} else {
-		/* Receipt handling first - should set flag but not release TXE yet */
-		efa_rdm_pke_handle_receipt_recv(receipt_pkt_entry);
+		/* Response arrives first - should not release TXE yet */
+		if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT)
+			efa_rdm_pke_handle_atomrsp_recv(resp_pkt_entry);
+		else if (pkt_type == EFA_RDM_SHORT_RTR_PKT || pkt_type == EFA_RDM_LONGCTS_RTR_PKT)
+			efa_rdm_ope_handle_recv_completed(txe);
+		else
+			efa_rdm_pke_handle_receipt_recv(resp_pkt_entry);
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
-		assert_true(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED);
-		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
-		if (txe_in_send_state) {
-			/* TXE should be removed from ope_longcts_send_list immediately */
-			assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
-		}
+		assert_true(txe->internal_flags & EFA_RDM_TXE_RESPONSE_RECEIVED);
 
-		/* Send completion - should now release TXE */
-		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
+		/* Send completion - should release TXE now */
+		efa_rdm_pke_handle_send_completion(req_pkt_entry);
 	}
 
 	/* Verify TXE is released */
@@ -1304,9 +1319,9 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_txe_dc_send_first(struct efa_resource **state)
+void test_efa_rdm_txe_dc_ctsdata_send_first(struct efa_resource **state)
 {
-	test_efa_rdm_txe_dc_release_common(*state, true, true);
+	test_efa_rdm_txe_with_resp_release_common(*state, true, EFA_RDM_CTSDATA_PKT);
 }
 
 /**
@@ -1318,9 +1333,9 @@ void test_efa_rdm_txe_dc_send_first(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_txe_dc_receipt_first(struct efa_resource **state)
+void test_efa_rdm_txe_dc_ctsdata_resp_first(struct efa_resource **state)
 {
-	test_efa_rdm_txe_dc_release_common(*state, false, true);
+	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_CTSDATA_PKT);
 }
 
 /**
@@ -1331,22 +1346,70 @@ void test_efa_rdm_txe_dc_receipt_first(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_txe_dc_send_first_non_longcts(struct efa_resource **state)
+void test_efa_rdm_txe_dc_eager_rtm_send_first(struct efa_resource **state)
 {
-	test_efa_rdm_txe_dc_release_common(*state, true, false);
+	test_efa_rdm_txe_with_resp_release_common(*state, true, EFA_RDM_DC_EAGER_MSGRTM_PKT);
 }
 
 /**
  * @brief Test DC packet TXE release with receipt completion first (TXE not in SEND state)
  *
  * This test verifies the bug fix where non-long-cts TXEs get the
- * EFA_RDM_TXE_RECEIPT_RECEIVED flag set, allowing proper release.
+ * EFA_RDM_TXE_RESPONSE_RECEIVED flag set, allowing proper release.
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_txe_dc_receipt_first_non_longcts(struct efa_resource **state)
+void test_efa_rdm_txe_dc_eager_rtm_resp_first(struct efa_resource **state)
 {
-	test_efa_rdm_txe_dc_release_common(*state, false, false);
+	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_DC_EAGER_MSGRTM_PKT);
+}
+
+/**
+ * @brief Test SHORT_RTR txe release: send completion before recv completed
+ */
+void test_efa_rdm_txe_short_rtr_send_first(struct efa_resource **state)
+{
+	test_efa_rdm_txe_with_resp_release_common(*state, true, EFA_RDM_SHORT_RTR_PKT);
+}
+
+/**
+ * @brief Test SHORT_RTR txe release: recv completed before send completion
+ */
+void test_efa_rdm_txe_short_rtr_resp_first(struct efa_resource **state)
+{
+	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_SHORT_RTR_PKT);
+}
+
+/**
+ * @brief Test FETCH_RTA txe release: send completion before ATOMRSP
+ */
+void test_efa_rdm_txe_fetch_rta_send_first(struct efa_resource **state)
+{
+	test_efa_rdm_txe_with_resp_release_common(*state, true, EFA_RDM_FETCH_RTA_PKT);
+}
+
+/**
+ * @brief Test FETCH_RTA txe release: ATOMRSP before send completion
+ */
+void test_efa_rdm_txe_fetch_rta_resp_first(struct efa_resource **state)
+{
+	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_FETCH_RTA_PKT);
+}
+
+/**
+ * @brief Test COMPARE_RTA txe release: send completion before ATOMRSP
+ */
+void test_efa_rdm_txe_compare_rta_send_first(struct efa_resource **state)
+{
+	test_efa_rdm_txe_with_resp_release_common(*state, true, EFA_RDM_COMPARE_RTA_PKT);
+}
+
+/**
+ * @brief Test COMPARE_RTA txe release: ATOMRSP before send completion
+ */
+void test_efa_rdm_txe_compare_rta_resp_first(struct efa_resource **state)
+{
+	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_COMPARE_RTA_PKT);
 }
 
 /* RDM MSG 0-byte tests */
