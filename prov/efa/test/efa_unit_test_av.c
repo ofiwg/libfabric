@@ -401,7 +401,13 @@ void test_av_reverse_av_remove_qpn_collision(struct efa_resource **state)
 }
 
 /**
- * @brief Generate a peer with random QPN and QKEY and insert it into the implicit AV
+ * @brief Generate a peer with a unique QPN and a random QKEY and insert it
+ *        into the implicit AV
+ *
+ * The QPN is drawn from a static monotonic counter so every peer minted by
+ * this helper has a distinct (ahn, qpn) key in the reverse AV. Callers rely
+ * on this uniqueness to exercise LRU ordering and eviction behavior without
+ * tripping over the provider's QPN-collision path.
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
@@ -422,7 +428,8 @@ static struct efa_rdm_peer *test_av_get_peer_from_implicit_av(struct efa_resourc
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(err, 0);
 
-	raw_addr.qpn = rand();
+	static uint16_t next_qpn = 0;
+	raw_addr.qpn = next_qpn++;
 	raw_addr.qkey = rand();
 	ahn = efa_rdm_ep->self_ah->ahn;
 
