@@ -21,6 +21,9 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     if cntrl_env_var == "FI_EFA_INTER_MIN_READ_WRITE_SIZE" and has_rdma(cmdline_args, "write"):
         pytest.skip("FI_EFA_INTER_MIN_READ_WRITE_SIZE is only applied to emulated write protocols")
 
+    if not has_rdma(cmdline_args, "read"):
+        pytest.skip("RDMA read not supported, cannot test read protocol")
+
     if cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("No read for intra-node communication")
 
