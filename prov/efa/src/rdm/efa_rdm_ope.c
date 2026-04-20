@@ -18,7 +18,8 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   struct efa_rdm_ep *ep,
 			   struct efa_rdm_peer *peer,
 			   const struct fi_msg *msg,
-			   uint32_t op, uint64_t flags)
+			   uint32_t op, uint64_t fi_flags,
+			   uint32_t internal_flags)
 {
 	uint64_t tx_op_flags;
 
@@ -33,7 +34,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 		dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
 	}
 
-	txe->internal_flags = 0;
+	txe->internal_flags = internal_flags;
 	txe->bytes_received = 0;
 	txe->bytes_copied = 0;
 	txe->bytes_acked = 0;
@@ -66,7 +67,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	tx_op_flags = ep->base_ep.util_ep.tx_op_flags;
 	if (ep->base_ep.util_ep.tx_msg_flags == 0)
 		tx_op_flags &= ~FI_COMPLETION;
-	txe->fi_flags = flags | tx_op_flags;
+	txe->fi_flags = fi_flags | tx_op_flags;
 	txe->bytes_runt = 0;
 	dlist_init(&txe->entry);
 
@@ -866,7 +867,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 			return;
 		}
 
-		rxe->fi_flags |= EFA_RDM_TXE_NO_COMPLETION;
+		rxe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
 		efa_cntr_report_error(&ep->base_ep.util_ep, rxe->cq_entry.flags);
 		return;
 	}
@@ -914,7 +915,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 			return;
 		}
 
-		rxe->fi_flags |= EFA_RDM_TXE_NO_COMPLETION;
+		rxe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
 	}
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, rxe->cq_entry.flags);
@@ -940,7 +941,7 @@ static inline
 bool efa_rdm_txe_should_update_cq(struct efa_rdm_ope *txe)
 
 {
-	if (txe->fi_flags & EFA_RDM_TXE_NO_COMPLETION)
+	if (txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION)
 		return false;
 
 	/*
@@ -1017,7 +1018,7 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 	}
 
 	efa_cntr_report_tx_completion(&txe->ep->base_ep.util_ep, txe->cq_entry.flags);
-	txe->fi_flags |= EFA_RDM_TXE_NO_COMPLETION;
+	txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
 	return;
 }
 
@@ -1068,7 +1069,7 @@ void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope)
 		if (ope->fi_flags & FI_COMPLETION) {
 			efa_rdm_txe_report_completion(ope);
 		} else {
-			if (!(ope->fi_flags & EFA_RDM_TXE_NO_COUNTER))
+			if (!(ope->internal_flags & EFA_RDM_TXE_NO_COUNTER))
 				efa_cntr_report_tx_completion(&ep->base_ep.util_ep, ope->cq_entry.flags);
 		}
 
@@ -1754,7 +1755,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 	msg_rma.rma_iov_count = 1;
 
 	txe = efa_rdm_rma_alloc_txe(rxe->ep, NULL, &msg_rma, ofi_op_read_req,
-				    0 /* flags*/);
+				    0 /* flags */, 0 /* internal_flags */);
 	if (!txe) {
 		return -FI_ENOBUFS;
 	}
