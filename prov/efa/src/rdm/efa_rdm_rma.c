@@ -49,7 +49,8 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		      struct efa_rdm_peer *peer,
 		      const struct fi_msg_rma *msg_rma,
 		      uint32_t op,
-		      uint64_t flags)
+		      uint64_t fi_flags,
+		      uint32_t internal_flags)
 {
 	struct efa_rdm_ope *txe;
 	struct fi_msg msg;
@@ -66,7 +67,7 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	msg.iov_count = msg_rma->iov_count;
 	msg.data = msg_rma->data;
 	msg.desc = msg_rma->desc;
-	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, flags);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, fi_flags, internal_flags);
 
 	assert(msg_rma->rma_iov_count > 0);
 	assert(msg_rma->rma_iov);
@@ -162,7 +163,9 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	return ret;
 }
 
-ssize_t efa_rdm_rma_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep, const struct fi_msg_rma *msg, uint64_t flags)
+ssize_t efa_rdm_rma_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep,
+				    const struct fi_msg_rma *msg, uint64_t fi_flags,
+				    uint32_t internal_flags)
 {
 	ssize_t err;
 	struct efa_rdm_ope *txe = NULL;
@@ -174,7 +177,7 @@ ssize_t efa_rdm_rma_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep, const struct 
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "read iov_len: %lu flags: %lx\n",
 	       ofi_total_iov_len(msg->msg_iov, msg->iov_count),
-	       flags);
+	       fi_flags);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 	assert(ofi_genlock_held(&efa_rdm_ep->base_ep.domain->srx_lock));
@@ -187,7 +190,7 @@ ssize_t efa_rdm_rma_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep, const struct 
 		goto out;
 	}
 
-	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, peer, msg, ofi_op_read_req, flags);
+	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, peer, msg, ofi_op_read_req, fi_flags, internal_flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		goto out;
@@ -246,7 +249,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 		}
 	}
 
-	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, msg, flags);
+	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, msg, flags, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -288,7 +291,7 @@ ssize_t efa_rdm_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **des
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, iov, desc, iov_count, src_addr, &rma_iov, 1, context, 0);
 
-	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, &msg, 0);
+	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, &msg, 0, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -334,7 +337,7 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, &iov, &desc, 1, src_addr, &rma_iov, 1, context, 0);
 
-	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, &msg, 0);
+	err = efa_rdm_rma_generic_readmsg(efa_rdm_ep, &msg, 0, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -419,7 +422,8 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 
 static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep,
 			 const struct fi_msg_rma *msg,
-			 uint64_t flags)
+			 uint64_t fi_flags,
+			 uint32_t internal_flags)
 {
 	ssize_t err;
 	struct efa_rdm_ope *txe;
@@ -433,7 +437,7 @@ static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "write iov_len %lu flags: %lx\n",
 	       ofi_total_iov_len(msg->msg_iov, msg->iov_count),
-	       flags);
+	       fi_flags);
 
 	assert(ofi_genlock_held(&efa_rdm_ep->base_ep.domain->srx_lock));
 
@@ -443,7 +447,7 @@ static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep
 		goto out;
 	}
 
-	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, peer, msg, ofi_op_write, flags);
+	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, peer, msg, ofi_op_write, fi_flags, internal_flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		goto out;
@@ -503,7 +507,7 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 		}
 	}
 
-	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, msg, flags);
+	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, msg, flags, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -544,7 +548,7 @@ ssize_t efa_rdm_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **de
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, iov, desc, iov_count, dest_addr, &rma_iov, 1, context, 0);
 
-	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, 0);
+	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, 0, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -589,7 +593,7 @@ ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, &iov, &desc, 1, dest_addr, &rma_iov, 1, context, 0);
 
-	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, 0);
+	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, 0, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -634,7 +638,7 @@ ssize_t efa_rdm_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, &iov, &desc, 1, dest_addr, &rma_iov, 1, context, data);
 
-	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, FI_REMOTE_CQ_DATA);
+	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, FI_REMOTE_CQ_DATA, 0);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -672,7 +676,7 @@ ssize_t efa_rdm_rma_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, &iov, NULL, 1, dest_addr, &rma_iov, 1, NULL, 0);
 
-	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, FI_INJECT | EFA_RDM_TXE_NO_COMPLETION);
+	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, FI_INJECT, EFA_RDM_TXE_NO_COMPLETION);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }
@@ -711,8 +715,8 @@ ssize_t efa_rdm_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t 
 	memset(&msg, 0, sizeof(msg));
 	EFA_SETUP_MSG_RMA(msg, &iov, NULL, 1, dest_addr, &rma_iov, 1, NULL, data);
 
-	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, FI_INJECT | EFA_RDM_TXE_NO_COMPLETION |
-				FI_REMOTE_CQ_DATA);
+	err = efa_rdm_rma_generic_writemsg(efa_rdm_ep, &msg, FI_INJECT | FI_REMOTE_CQ_DATA,
+					   EFA_RDM_TXE_NO_COMPLETION);
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	return err;
 }

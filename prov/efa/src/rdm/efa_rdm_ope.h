@@ -181,7 +181,8 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   struct efa_rdm_ep *ep,
 		      	   struct efa_rdm_peer *peer,
 			   const struct fi_msg *msg,
-			   uint32_t op, uint64_t flags);
+			   uint32_t op, uint64_t fi_flags,
+			   uint32_t internal_flags);
 
 void efa_rdm_txe_release(struct efa_rdm_ope *txe);
 
@@ -240,20 +241,6 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 #define EFA_RDM_OPE_QUEUED_CTRL BIT_ULL(11)
 
 /**
- * @brief flag to indicate an ope does not need to report completion to user
- *
- * This flag is used to by emulated injection and #efa_rdm_ep_trigger_handshake
- */
-#define EFA_RDM_TXE_NO_COMPLETION	BIT_ULL(60)
-/**
- * @brief flag to indicate an ope does not need to increase counter
- *
- * This flag is used to implement #efa_rdm_ep_trigger_handshake
- *
- */
-#define EFA_RDM_TXE_NO_COUNTER		BIT_ULL(61)
-
-/**
  * @brief flag to indicate an ope has queued read requests
  *
  * When this flag is on, the ope is on ope_queued_list
@@ -292,6 +279,20 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  * completion before all TX operations finish.
  */
 #define EFA_RDM_TXE_RECEIPT_RECEIVED		BIT_ULL(16)
+
+/**
+ * @brief flag to indicate an ope does not need to report completion to user
+ *
+ * This flag is used to by emulated injection and #efa_rdm_ep_trigger_handshake
+ */
+#define EFA_RDM_TXE_NO_COMPLETION	BIT_ULL(17)
+/**
+ * @brief flag to indicate an ope does not need to increase counter
+ *
+ * This flag is used to implement #efa_rdm_ep_trigger_handshake
+ *
+ */
+#define EFA_RDM_TXE_NO_COUNTER		BIT_ULL(18)
 
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 

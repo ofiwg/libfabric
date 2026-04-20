@@ -741,12 +741,86 @@ void test_efa_rdm_ep_trigger_handshake(struct efa_resource **state)
 
 	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
 
-	assert_true(txe->fi_flags & EFA_RDM_TXE_NO_COMPLETION);
-	assert_true(txe->fi_flags & EFA_RDM_TXE_NO_COUNTER);
+	assert_true(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION);
+	assert_true(txe->internal_flags & EFA_RDM_TXE_NO_COUNTER);
 	assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
 
 	efa_rdm_txe_release(txe);
 	efa_rdm_ep->efa_outstanding_tx_ops = 0;
+}
+
+/**
+ * @brief Verify that efa_rdm_txe_construct() routes the caller-provided
+ *        libfabric flags to txe->fi_flags and EFA-internal flags
+ *        (EFA_RDM_TXE_NO_COMPLETION, EFA_RDM_TXE_NO_COUNTER,
+ *        EFA_RDM_OPE_INTERNAL, ...) to txe->internal_flags. The two
+ *        fields are independent storage, so bit-position coincidences
+ *        between FI_* and EFA_RDM_* flags are fine; we only assert that
+ *        each requested bit lands in its own field and that a zero
+ *        internal_flags argument does not implicitly set any EFA-internal
+ *        bit.
+ */
+void test_efa_rdm_txe_construct_splits_internal_flags(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct iovec iov = {0};
+	struct fi_msg msg = {0};
+	fi_addr_t addr;
+	uint32_t internal_flags_in = EFA_RDM_TXE_NO_COMPLETION |
+				     EFA_RDM_TXE_NO_COUNTER |
+				     EFA_RDM_OPE_INTERNAL;
+	uint64_t fi_flags_in = FI_INJECT | FI_REMOTE_CQ_DATA;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
+	assert_int_equal(ret, 1);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+
+	/*
+	 * Case 1: caller passes a mix of libfabric and EFA-internal flags.
+	 * fi_flags and internal_flags are independent storage (uint64_t vs
+	 * uint32_t) so bit-position coincidences between FI_* and
+	 * EFA_RDM_* flags are fine: we only assert that every requested
+	 * bit is set in its own field.
+	 */
+	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
+	assert_non_null(txe);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg,
+			      fi_flags_in, internal_flags_in);
+
+	/* Every EFA-internal bit requested is set in internal_flags. */
+	assert_int_equal(txe->internal_flags & internal_flags_in, internal_flags_in);
+	/* Every libfabric bit requested is set in fi_flags. */
+	assert_int_equal(txe->fi_flags & fi_flags_in, fi_flags_in);
+	efa_rdm_txe_release(txe);
+
+	/*
+	 * Case 2: caller passes 0 for internal_flags. No EFA-internal bits
+	 * should be set implicitly (catches a regression where the construct
+	 * fn OR's in a default internal flag).
+	 */
+	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
+	assert_non_null(txe);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg,
+			      fi_flags_in, 0);
+	assert_int_equal(txe->internal_flags & internal_flags_in, 0);
+	assert_int_equal(txe->fi_flags & fi_flags_in, fi_flags_in);
+	efa_rdm_txe_release(txe);
 }
 
 /**

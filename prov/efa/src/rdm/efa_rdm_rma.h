@@ -21,7 +21,8 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		      struct efa_rdm_peer *peer,
 		      const struct fi_msg_rma *msg_rma,
 		      uint32_t op,
-		      uint64_t flags);
+		      uint64_t fi_flags,
+		      uint32_t internal_flags);
 
 ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 

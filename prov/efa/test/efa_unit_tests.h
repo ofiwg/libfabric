@@ -148,6 +148,7 @@ void test_efa_rdm_ep_dc_send_queue_limit_before_handshake();
 void test_efa_rdm_ep_write_queue_before_handshake();
 void test_efa_rdm_ep_read_queue_before_handshake();
 void test_efa_rdm_ep_trigger_handshake();
+void test_efa_rdm_txe_construct_splits_internal_flags();
 void test_efa_rdm_read_copy_pkt_pool_128_alignment();
 void test_efa_rdm_ep_send_with_shm_no_copy();
 void test_efa_rdm_ep_rma_without_caps();
