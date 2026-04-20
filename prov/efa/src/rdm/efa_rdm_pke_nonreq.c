@@ -285,13 +285,16 @@ void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *ope;
 
-	/* if this DATA packet is used by a DC protocol, the completion
-	 * was (or will be) written when the receipt packet was received.
-	 * The txe may have already been released. So nothing
-	 * to do (or can be done) here.
+	/* if this DATA packet is used by a DC protocol, the tx entry should
+	 * be only released when both all TX ops are done and the receipt
+	 * has been received.
 	 */
-	if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA)
+	if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA) {
+		assert(pkt_entry->ope);
+		if (efa_rdm_txe_dc_ready_for_release(pkt_entry->ope))
+			efa_rdm_txe_release(pkt_entry->ope);
 		return;
+	}
 
 	ope = pkt_entry->ope;
 	ope->bytes_acked += efa_rdm_pke_get_ctsdata_hdr(pkt_entry)->seg_length;
