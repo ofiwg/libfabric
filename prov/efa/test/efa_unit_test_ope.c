@@ -1319,7 +1319,7 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 		dlist_insert_tail(&txe->entry, &efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list);
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
 	} else {
-		/* TXE is not in SEND state (e.g., non-long-cts TXE) */
+		/* TXE is not in SEND state (e.g., eager DC TXE) */
 		txe->state = EFA_RDM_TXE_REQ;
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list), 0);
 	}
@@ -1330,9 +1330,16 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 	dc_pkt_entry->ope = txe;
 	dc_pkt_entry->ep = efa_rdm_ep;
 	dc_pkt_entry->peer = txe->peer;
-	/* Set DC packet type in wiredata */
 	struct efa_rdm_base_hdr *base_hdr = (struct efa_rdm_base_hdr *)dc_pkt_entry->wiredata;
-	base_hdr->type = EFA_RDM_DC_EAGER_MSGRTM_PKT;
+	if (txe_in_send_state) {
+		/* CTSDATA packet is sent when ope is in send state */
+		base_hdr->type = EFA_RDM_CTSDATA_PKT;
+		dc_pkt_entry->flags |= EFA_RDM_PKE_DC_LONGCTS_DATA;
+		struct efa_rdm_ctsdata_hdr *ctsdata_hdr = efa_rdm_pke_get_ctsdata_hdr(dc_pkt_entry);
+		ctsdata_hdr->seg_length = 0;
+	} else {
+		base_hdr->type = EFA_RDM_DC_EAGER_MSGRTM_PKT;
+	}
 
 	/* Create fake receipt packet entry */
 	receipt_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
