@@ -521,7 +521,8 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 				efa_rdm_pke_handle_data_copied(data_pkt_entry);
 			} else {
 				assert(txe && txe->cq_entry.flags & FI_READ);
-				efa_rdm_txe_report_completion(txe);
+				if (!(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION))
+					efa_rdm_txe_report_completion(txe);
 			}
 
 			efa_rdm_txe_release(txe);
