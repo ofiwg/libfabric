@@ -14,6 +14,7 @@
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_cntr.h"
+#include "efa_rdm_cntr.h"
 #include "efa_rdm_mr.h"
 
 
@@ -643,7 +644,7 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	struct efa_rdm_cq *cq;
 	struct efa_av *av;
-	struct efa_cntr *cntr;
+	struct efa_rdm_cntr *cntr;
 	struct util_eq *eq;
 	int ret = 0;
 
@@ -682,9 +683,9 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 		break;
 	case FI_CLASS_CNTR:
-		cntr = container_of(bfid, struct efa_cntr, util_cntr.cntr_fid.fid);
+		cntr = container_of(bfid, struct efa_rdm_cntr, efa_cntr.util_cntr.cntr_fid.fid);
 
-		ret = ofi_ep_bind_cntr(&efa_rdm_ep->base_ep.util_ep, &cntr->util_cntr, flags);
+		ret = ofi_ep_bind_cntr(&efa_rdm_ep->base_ep.util_ep, &cntr->efa_cntr.util_cntr, flags);
 		if (ret)
 			return ret;
 
@@ -1073,7 +1074,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 	 * with other threads progressing the cq. */
 	efa_base_ep_close_util_ep(&efa_rdm_ep->base_ep);
 
-	efa_base_ep_remove_cntr_ibv_cq_poll_list(&efa_rdm_ep->base_ep);
+	efa_rdm_ep_remove_cntr_ibv_cq_poll_list(&efa_rdm_ep->base_ep);
 
 	if (efa_rdm_ep->self_ah)
 		efa_ah_release(efa_rdm_ep->base_ep.domain, efa_rdm_ep->self_ah, false);
@@ -1405,7 +1406,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			goto err_destroy_qp;
 
-		ret = efa_base_ep_insert_cntr_ibv_cq_poll_list(&ep->base_ep);
+		ret = efa_rdm_ep_insert_cntr_ibv_cq_poll_list(&ep->base_ep);
 		if (ret)
 			goto err_destroy_qp;
 
