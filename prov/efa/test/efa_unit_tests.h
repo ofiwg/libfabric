@@ -379,6 +379,7 @@ void test_efa_msg_fi_senddata(void **state);
 void test_efa_msg_fi_inject(void **state);
 void test_efa_msg_fi_injectdata(void **state);
 void test_efa_msg_sendmsg_inject_with_hmem_fails(void **state);
+void test_efa_msg_sendmsg_multi_iov_second_desc_hmem_fails(void **state);
 void test_efa_msg_sendmsg_inject_with_large_msg_fails(void **state);
 void test_efa_msg_inject_with_large_msg_fails(void **state);
 void test_efa_rma_read(void **state);
