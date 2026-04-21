@@ -557,7 +557,9 @@ void test_efa_rdm_rma_should_write_using_rdma_p2p_and_rdma_write_support_returns
 void test_efa_rdm_rma_should_write_using_rdma_remote_cq_data_single_iovs_with_rdma_support();
 void test_efa_rdm_rma_should_write_using_rdma_unsolicited_write_recv_not_match();
 void test_efa_rdm_rma_post_remote_write_partial_fail_no_txe_release();
+void test_efa_rdm_rma_post_remote_read_partial_fail_no_txe_release();
 void test_efa_rdm_rma_partial_post_retry_no_double_free();
+void test_efa_rdm_rma_partial_post_retry_no_double_free_read();
 /* end efa_unit_test_rdm_rma.c */
 
 static inline
