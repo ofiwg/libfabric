@@ -379,6 +379,7 @@ void test_efa_rma_writedata();
 void test_efa_rma_inject_write();
 void test_efa_rma_inject_writedata();
 void test_efa_rma_writemsg_with_inject();
+void test_efa_msg_sendmsg_multi_iov_second_desc_hmem_fails();
 void test_efa_cq_read_no_completion();
 void test_efa_cq_read_send_success();
 void test_efa_cq_read_senddata_success();
