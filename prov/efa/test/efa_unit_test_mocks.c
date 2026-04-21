@@ -299,6 +299,13 @@ int efa_mock_efa_qp_post_send_return_mock(struct efa_qp *qp, const struct ibv_sg
 	return mock_int();
 }
 
+int efa_mock_efa_qp_post_send_verify_not_inline(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
+{
+	assert_false(use_inline);
+	efa_mock_efa_qp_post_save_wr_id(wr_id);
+	return mock_int();
+}
+
 int efa_mock_efa_qp_post_read_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
 {
 	efa_mock_efa_qp_post_save_wr_id(wr_id);

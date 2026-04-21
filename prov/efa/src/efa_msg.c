@@ -266,7 +266,15 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 
 	/* Determine if we should use inline data */
 	len_fits_inline = len <= base_ep->domain->device->efa_attr.inline_buf_size;
-	is_hmem = msg->desc && efa_mr_is_hmem(msg->desc[0]);
+	is_hmem = false;
+	if (msg->desc) {
+		for (i = 0; i < msg->iov_count; i++) {
+			if (efa_mr_is_hmem(msg->desc[i])) {
+				is_hmem = true;
+				break;
+			}
+		}
+	}
 	if (len_fits_inline && !is_hmem) {
 		use_inline = true;
 		/* Prepare inline data list */
