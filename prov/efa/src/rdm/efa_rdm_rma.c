@@ -199,8 +199,22 @@ ssize_t efa_rdm_rma_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep,
 	err = efa_rdm_rma_post_read(efa_rdm_ep, txe);
 
 out:
-	if (OFI_UNLIKELY(err && txe))
-		efa_rdm_txe_release(txe);
+	if (OFI_UNLIKELY(err && txe)) {
+		if (txe->efa_outstanding_tx_ops == 0) {
+			efa_rdm_txe_release(txe);
+		} else {
+			/*
+			 * Some segments are in flight. Clamp the target length
+			 * so the final in-flight completion releases the txe
+			 * via efa_rdm_pke_handle_rma_read_completion(). Suppress
+			 * the application-visible completion: we are returning
+			 * an error to the caller, so the completion handler must
+			 * not write a CQ entry or bump the counter for this op.
+			 */
+			txe->bytes_read_total_len = txe->bytes_read_submitted;
+			txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
+		}
+	}
 
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
