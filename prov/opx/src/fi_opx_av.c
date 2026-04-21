@@ -175,8 +175,11 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 							"No local TX context matches remote peer gid_hi 0x%016lx (lid 0x%x)\n",
 							input[n].planes[OPX_PRIMARY_PLANE].gid_hi,
 							input[n].planes[OPX_PRIMARY_PLANE].lid);
-						errno = FI_EINVAL;
-						return -errno;
+						FI_WARN(fi_opx_global.prov, FI_LOG_AV,
+							"Local gids available = %#lx %#lx\n",
+							ep->tx_contexts[0]->gid_hi,
+							(ep->tx_contexts[1] != NULL) ? ep->tx_contexts[1]->gid_hi : 0);
+						opx_addr[t].tx_index = OPX_PRIMARY_PLANE;
 					}
 
 					/*
