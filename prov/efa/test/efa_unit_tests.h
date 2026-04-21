@@ -410,6 +410,7 @@ void test_efa_msg_senddata_0_byte();
 void test_efa_msg_inject_0_byte();
 void test_efa_msg_injectdata_0_byte();
 void test_efa_msg_send_0_byte_with_inject_flag();
+void test_efa_msg_sendmsg_multi_iov_second_desc_hmem_fails();
 void test_efa_rdm_msg_send_0_byte_with_inject_flag();
 void test_efa_rdm_msg_send_0_byte_no_shm();
 void test_efa_rdm_msg_sendv_0_byte_no_shm();

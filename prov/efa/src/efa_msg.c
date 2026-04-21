@@ -213,7 +213,7 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	struct efa_direct_ope *direct_ope;
 	size_t len, i;
 	size_t iov_count = msg->iov_count;
-	bool use_inline;
+	bool use_inline, len_fits_inline, is_hmem;
 	int ret = 0;
 	uintptr_t wr_id;
 
@@ -257,10 +257,6 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		wr_id = (uintptr_t) efa_ctx;
 	}
 
-	/* Determine if we should use inline data */
-	use_inline = (len <= base_ep->domain->device->efa_attr.inline_buf_size &&
-		      (!msg->desc || !efa_mr_is_hmem(msg->desc[0])));
-
 	/* Handle 0-byte send with inline path and 0 SGEs */
 	if (len == 0) {
 		iov_count = 0;
@@ -268,7 +264,19 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		goto post;
 	}
 
-	if (use_inline) {
+	/* Determine if we should use inline data */
+	len_fits_inline = len <= base_ep->domain->device->efa_attr.inline_buf_size;
+	is_hmem = false;
+	if (msg->desc) {
+		for (i = 0; i < msg->iov_count; i++) {
+			if (efa_mr_is_hmem(msg->desc[i])) {
+				is_hmem = true;
+				break;
+			}
+		}
+	}
+	if (len_fits_inline && !is_hmem) {
+		use_inline = true;
 		/* Prepare inline data list */
 		for (i = 0; i < msg->iov_count; i++) {
 			inline_data_list[i].addr = msg->msg_iov[i].iov_base;
@@ -281,6 +289,7 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 			}
 		}
 	} else {
+		use_inline = false;
 		/* Prepare SGE list */
 		for (i = 0; i < msg->iov_count; i++) {
 			/* Set TX buffer desc from SGE */
