@@ -637,6 +637,10 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * efa_rdm_pke_handle_atomrsp_recv(). However, if the ATOMRSP
 		 * arrived before this send completion, the release was deferred.
 		 */
+		assert(pkt_entry->ope);
+		if (efa_rdm_txe_with_resp_ready_for_release(pkt_entry->ope))
+			efa_rdm_txe_release(pkt_entry->ope);
+		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
@@ -650,11 +654,11 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * instead of bytes_acked to avoid issues with unset payload_size.
 		 * Note: efa_rdm_ep_record_tx_op_completed() above decrements efa_outstanding_tx_ops,
 		 * so this check must come after that call.
-		 * Only release TXE when both TX ops complete and receipt is received.
+		 * Only complete the TXE when both TX ops complete and receipt is received.
 		 */
 		assert(pkt_entry->ope);
 		if (efa_rdm_txe_with_resp_ready_for_release(pkt_entry->ope))
-			efa_rdm_txe_release(pkt_entry->ope);
+			efa_rdm_ope_handle_send_completed(pkt_entry->ope);
 		break;
 	case EFA_RDM_READ_NACK_PKT:
 		/* no action needed for NACK packet */

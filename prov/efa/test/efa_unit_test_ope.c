@@ -1215,9 +1215,12 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_pke *req_pkt_entry, *resp_pkt_entry;
+	struct fi_cq_err_entry cq_entry = {0};
+	struct efa_cq *efa_cq;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
 
 	/* Allocate TXE based on protocol */
 	if (pkt_type == EFA_RDM_SHORT_RTR_PKT || pkt_type == EFA_RDM_LONGCTS_RTR_PKT) {
@@ -1285,6 +1288,10 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
 		assert_false(efa_rdm_txe_with_resp_ready_for_release(txe));
 
+		/* For DC packets, CQ should be empty as there is no completion yet */
+		if (txe->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
+			assert_int_equal(ofi_cq_read_entries(&efa_cq->util_cq, &cq_entry, 1, NULL), -FI_EAGAIN);
+
 		/* Response arrives - should release TXE now */
 		if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT)
 			efa_rdm_pke_handle_atomrsp_recv(resp_pkt_entry);
@@ -1292,6 +1299,10 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 			efa_rdm_ope_handle_recv_completed(txe);
 		else
 			efa_rdm_pke_handle_receipt_recv(resp_pkt_entry);
+
+		/* For DC packets, CQ should now have a completion */
+		if (txe->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
+			assert_int_equal(ofi_cq_read_entries(&efa_cq->util_cq, &cq_entry, 1, NULL), 1);
 	} else {
 		/* Response arrives first - should not release TXE yet */
 		if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT)
@@ -1303,8 +1314,16 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
 		assert_true(txe->internal_flags & EFA_RDM_TXE_RESPONSE_RECEIVED);
 
+		/* For DC packets, CQ should be empty as there is no completion yet */
+		if (txe->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
+			assert_int_equal(ofi_cq_read_entries(&efa_cq->util_cq, &cq_entry, 1, NULL), -FI_EAGAIN);
+
 		/* Send completion - should release TXE now */
 		efa_rdm_pke_handle_send_completion(req_pkt_entry);
+
+		/* For DC packets, CQ should now have a completion */
+		if (txe->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
+			assert_int_equal(ofi_cq_read_entries(&efa_cq->util_cq, &cq_entry, 1, NULL), 1);
 	}
 
 	/* Verify TXE is released */

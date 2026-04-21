@@ -290,13 +290,13 @@ void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *ope;
 
 	/* if this DATA packet is used by a DC protocol, the tx entry should
-	 * be only released when both all TX ops are done and the receipt
+	 * be only completed when both all TX ops are done and the receipt
 	 * has been received.
 	 */
 	if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA) {
 		assert(pkt_entry->ope);
 		if (efa_rdm_txe_with_resp_ready_for_release(pkt_entry->ope))
-			efa_rdm_txe_release(pkt_entry->ope);
+			efa_rdm_ope_handle_send_completed(pkt_entry->ope);
 		return;
 	}
 
@@ -786,10 +786,7 @@ void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	/* Write send completion immediately to preserve DC semantics */
-	efa_rdm_txe_report_completion(txe);
-
-	/* Remove from ope_longcts_send_list since operation is complete */
+	/* Remove from ope_longcts_send_list since all the data has been delivered */
 	if (txe->state == EFA_RDM_OPE_SEND) {
 		dlist_remove(&txe->entry);
 	}
@@ -797,9 +794,9 @@ void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 	/* Set receipt received flag for DC operations */
 	txe->internal_flags |= EFA_RDM_TXE_RESPONSE_RECEIVED;
 
-	/* Only release txe if both conditions are met */
+	/* Only complete txe if both conditions are met */
 	if (efa_rdm_txe_with_resp_ready_for_release(txe))
-		efa_rdm_txe_release(txe);
+		efa_rdm_ope_handle_send_completed(txe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
 }
