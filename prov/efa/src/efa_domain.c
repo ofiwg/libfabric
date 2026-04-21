@@ -9,6 +9,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_cntr.h"
+#include "rdm/efa_rdm_cntr.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_atomic.h"
 #include "efa_rdm_mr.h"

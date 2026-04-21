@@ -820,9 +820,6 @@ int efa_base_ep_insert_cntr_ibv_cq_poll_list(struct efa_base_ep *ep)
 					return ret;
 				efa_base_ep_set_cq_ops_for_cntr(ep, rx_cq);
 			}
-			ofi_genlock_lock(&efa_cntr->util_cntr.ep_list_lock);
-			efa_cntr->need_to_scan_ep_list = true;
-			ofi_genlock_unlock(&efa_cntr->util_cntr.ep_list_lock);
 		}
 	}
 

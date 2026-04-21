@@ -5,9 +5,9 @@
 #include "ofi_util.h"
 #include "efa.h"
 #include "efa_cntr.h"
-#include "rdm/efa_rdm_cq.h"
+#include "efa_cq.h"
 
-static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
+int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 {
 	struct util_cntr *cntr;
 	uint64_t start, errcnt;
@@ -58,42 +58,33 @@ unlock:
 	return ret;
 }
 
-static uint64_t efa_cntr_read(struct fid_cntr *cntr_fid)
+uint64_t efa_cntr_read(struct fid_cntr *cntr_fid)
 {
 	struct efa_domain *domain;
-	struct efa_cntr *efa_cntr;
+	struct util_cntr *util_cntr;
 	uint64_t ret;
 
-	efa_cntr = container_of(cntr_fid, struct efa_cntr, util_cntr.cntr_fid);
-
-	domain = container_of(efa_cntr->util_cntr.domain, struct efa_domain, util_domain);
+	util_cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	domain = container_of(util_cntr->domain, struct efa_domain, util_domain);
 
 	ofi_genlock_lock(&domain->srx_lock);
-
-	if (efa_cntr->shm_cntr)
-		fi_cntr_read(efa_cntr->shm_cntr);
 	ret = ofi_cntr_read(cntr_fid);
-
 	ofi_genlock_unlock(&domain->srx_lock);
 
 	return ret;
 }
 
-static uint64_t efa_cntr_readerr(struct fid_cntr *cntr_fid)
+uint64_t efa_cntr_readerr(struct fid_cntr *cntr_fid)
 {
 	struct efa_domain *domain;
-	struct efa_cntr *efa_cntr;
+	struct util_cntr *util_cntr;
 	uint64_t ret;
 
-	efa_cntr = container_of(cntr_fid, struct efa_cntr, util_cntr.cntr_fid);
-
-	domain = container_of(efa_cntr->util_cntr.domain, struct efa_domain, util_domain);
+	util_cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	domain = container_of(util_cntr->domain, struct efa_domain, util_domain);
 
 	ofi_genlock_lock(&domain->srx_lock);
-	if (efa_cntr->shm_cntr)
-		fi_cntr_read(efa_cntr->shm_cntr);
 	ret = ofi_cntr_readerr(cntr_fid);
-
 	ofi_genlock_unlock(&domain->srx_lock);
 
 	return ret;
@@ -113,24 +104,12 @@ static struct fi_ops_cntr efa_cntr_ops = {
 static int efa_cntr_close(struct fid *fid)
 {
 	struct efa_cntr *cntr;
-	int ret, retv;
 
-	retv = 0;
 	cntr = container_of(fid, struct efa_cntr, util_cntr.cntr_fid.fid);
 
-	if (cntr->shm_cntr) {
-		ret = fi_close(&cntr->shm_cntr->fid);
-		if (ret) {
-			EFA_WARN(FI_LOG_CNTR, "Unable to close shm cntr: %s\n", fi_strerror(-ret));
-			retv = ret;
-		}
-	}
-
-	ret = ofi_cntr_cleanup(&cntr->util_cntr);
-	if (ret)
-		return ret;
+	efa_cntr_destruct(cntr);
 	free(cntr);
-	return retv;
+	return 0;
 }
 
 static struct fi_ops efa_cntr_fi_ops = {
@@ -141,66 +120,46 @@ static struct fi_ops efa_cntr_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static void efa_rdm_cntr_progress(struct util_cntr *cntr)
+void efa_cntr_progress_ibv_cq_poll_list(struct efa_cntr *efa_cntr)
 {
 	struct dlist_entry *item;
-	struct efa_cntr *efa_cntr;
-	struct efa_domain *efa_domain;
-	struct efa_cq *efa_cq;
 	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
-	struct efa_rdm_ep *efa_rdm_ep;
-	struct fid_list_entry *fid_entry;
+	struct efa_cq *efa_cq;
 
-	ofi_genlock_lock(&cntr->ep_list_lock);
-	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
-	efa_domain = container_of(efa_cntr->util_cntr.domain, struct efa_domain, util_domain);
-
-	/**
-	 * TODO: It's better to just post the initial batch of internal rx pkts during ep enable
-	 * so we don't have to iterate cntr->ep_list here.
-	 * However, it is observed that doing that will hurt performance if application opens
-	 * some idle endpoints and never poll completions for them. Move these initial posts to
-	 * the first polling before having a long term fix.
-	 */
-	if (efa_cntr->need_to_scan_ep_list) {
-		dlist_foreach(&cntr->ep_list, item) {
-			fid_entry = container_of(item, struct fid_list_entry, entry);
-			efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-			if (efa_rdm_ep->base_ep.efa_qp_enabled)
-				efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
-		}
-		efa_cntr->need_to_scan_ep_list = false;
-	}
+	assert(ofi_genlock_held(&efa_cntr->util_cntr.ep_list_lock));
 
 	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		efa_cq = container_of(poll_list_entry->cq, struct efa_cq, ibv_cq);
 		ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
-		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
+		(void) efa_cq->poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 		ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 	}
-	efa_domain_progress_rdm_peers_and_queues(efa_domain);
-	ofi_genlock_unlock(&cntr->ep_list_lock);
 }
 
 static void efa_cntr_progress(struct util_cntr *cntr)
 {
-	struct dlist_entry *item;
-	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
 	struct efa_cntr *efa_cntr;
-	struct efa_cq *efa_cq;
 
 	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
 
 	ofi_genlock_lock(&cntr->ep_list_lock);
-	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
-		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
-		efa_cq = container_of(poll_list_entry->cq, struct efa_cq, ibv_cq);
-		ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
-		(void) efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
-		ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
-	}
+	efa_cntr_progress_ibv_cq_poll_list(efa_cntr);
 	ofi_genlock_unlock(&cntr->ep_list_lock);
+}
+
+int efa_cntr_construct(struct efa_cntr *cntr, struct fid_domain *domain,
+		       struct fi_cntr_attr *attr,
+		       ofi_cntr_progress_func progress, void *context)
+{
+	dlist_init(&cntr->ibv_cq_poll_list);
+	return ofi_cntr_init(&efa_prov, domain, attr, &cntr->util_cntr,
+			     progress, context);
+}
+
+void efa_cntr_destruct(struct efa_cntr *cntr)
+{
+	ofi_cntr_cleanup(&cntr->util_cntr);
 }
 
 int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
@@ -213,74 +172,17 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (!cntr)
 		return -FI_ENOMEM;
 
-	dlist_init(&cntr->ibv_cq_poll_list);
-	cntr->need_to_scan_ep_list = false;
-
-	ret = ofi_cntr_init(&efa_prov, domain, attr, &cntr->util_cntr,
-			    efa_cntr_progress, context);
-
-	if (ret)
-		goto free;
-
-	*cntr_fid = &cntr->util_cntr.cntr_fid;
-	cntr->util_cntr.cntr_fid.ops = &efa_cntr_ops;
-	cntr->util_cntr.cntr_fid.fid.ops = &efa_cntr_fi_ops;
-
-	return FI_SUCCESS;
-
-free:
-	free(cntr);
-	return ret;
-}
-
-
-int efa_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-		      struct fid_cntr **cntr_fid, void *context)
-{
-	int ret;
-	struct efa_cntr *cntr;
-	struct efa_domain *efa_domain;
-	struct fi_cntr_attr shm_cntr_attr = {0};
-	struct fi_peer_cntr_context peer_cntr_context = {0};
-
-	cntr = calloc(1, sizeof(*cntr));
-	if (!cntr)
-		return -FI_ENOMEM;
-
-	dlist_init(&cntr->ibv_cq_poll_list);
-	cntr->need_to_scan_ep_list = false;
-	efa_domain = container_of(domain, struct efa_domain,
-				  util_domain.domain_fid);
-
-	ret = ofi_cntr_init(&efa_prov, domain, attr, &cntr->util_cntr,
-			    efa_rdm_cntr_progress, context);
-
-	if (ret)
-		goto free;
-
-	*cntr_fid = &cntr->util_cntr.cntr_fid;
-	cntr->util_cntr.cntr_fid.ops = &efa_cntr_ops;
-	cntr->util_cntr.cntr_fid.fid.ops = &efa_cntr_fi_ops;
-
-	/* open shm cntr as peer cntr */
-	if (efa_domain->shm_domain) {
-		memcpy(&shm_cntr_attr, attr, sizeof(*attr));
-		shm_cntr_attr.flags |= FI_PEER;
-		peer_cntr_context.size = sizeof(peer_cntr_context);
-		peer_cntr_context.cntr = cntr->util_cntr.peer_cntr;
-		ret = fi_cntr_open(efa_domain->shm_domain, &shm_cntr_attr,
-				   &cntr->shm_cntr, &peer_cntr_context);
-		if (ret) {
-			EFA_WARN(FI_LOG_CNTR, "Unable to open shm cntr, err: %s\n", fi_strerror(-ret));
-			goto free;
-		}
+	ret = efa_cntr_construct(cntr, domain, attr, efa_cntr_progress, context);
+	if (ret) {
+		free(cntr);
+		return ret;
 	}
 
-	return FI_SUCCESS;
+	*cntr_fid = &cntr->util_cntr.cntr_fid;
+	cntr->util_cntr.cntr_fid.ops = &efa_cntr_ops;
+	cntr->util_cntr.cntr_fid.fid.ops = &efa_cntr_fi_ops;
 
-free:
-	free(cntr);
-	return ret;
+	return FI_SUCCESS;
 }
 
 void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags)
