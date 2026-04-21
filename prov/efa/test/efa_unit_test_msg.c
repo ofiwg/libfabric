@@ -393,6 +393,52 @@ void test_efa_msg_sendmsg_inject_with_hmem_fails(struct efa_resource **state)
 }
 
 /**
+ * @brief Verify that a multi-iov send where only a non-first desc is HMEM
+ * does not use the inline path. This catches the bug where only desc[0]
+ * was checked for HMEM.
+ */
+void test_efa_msg_sendmsg_multi_iov_second_desc_hmem_fails(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff buff0, buff1;
+	struct efa_mr *efa_mr;
+	struct iovec iov[2];
+	void *desc[2];
+	int ret;
+	fi_addr_t addr;
+	struct fi_msg msg = {0};
+
+	test_efa_msg_send_prep(resource, &addr);
+
+	/* Override the post_send mock to verify use_inline is false */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_verify_not_inline;
+	will_return(efa_mock_efa_qp_post_send_verify_not_inline, 0);
+
+	efa_unit_test_buff_construct(&buff0, resource, 16);
+	efa_unit_test_buff_construct(&buff1, resource, 16);
+
+	desc[0] = fi_mr_desc(buff0.mr);
+	desc[1] = fi_mr_desc(buff1.mr);
+	/* Only mark the second desc as HMEM */
+	efa_mr = (struct efa_mr *)desc[1];
+	efa_mr->iface = FI_HMEM_CUDA;
+
+	iov[0].iov_base = buff0.buff;
+	iov[0].iov_len = buff0.size;
+	iov[1].iov_base = buff1.buff;
+	iov[1].iov_len = buff1.size;
+
+	efa_unit_test_construct_msg(&msg, iov, 2, addr, NULL, 0, desc);
+
+	ret = fi_sendmsg(resource->ep, &msg, 0);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+
+	efa_unit_test_buff_destruct(&buff1);
+	efa_unit_test_buff_destruct(&buff0);
+}
+
+/**
  * @brief Verify that fi_sendmsg with FI_INJECT and message larger than
  * inline_buf_size returns -FI_EOPNOTSUPP
  */
