@@ -456,6 +456,107 @@ void test_efa_rdm_txe_handle_error_not_write_cq(struct efa_resource **state)
 	efa_rdm_txe_release(txe);
 }
 
+/*
+ * When a multi-segment fi_send/fi_write/fi_read posts some segments
+ * and then fails on a later segment, the synchronous error return to
+ * the app is the sole error report for that op. The partial-post fix
+ * sets EFA_RDM_TXE_NO_COMPLETION on the txe so the success-completion
+ * path does not report a spurious CQ entry or counter when the
+ * in-flight segment(s) eventually drain. If one of those in-flight
+ * segments fails instead of succeeds, efa_rdm_txe_handle_error must
+ * also honor EFA_RDM_TXE_NO_COMPLETION, or the app sees a duplicate
+ * error report (one synchronous, one via the error CQ).
+ *
+ * These three tests cover each op type and assert: no error CQ entry
+ * when NO_COMPLETION is set. The counter bump is guarded by the same
+ * conditional, so suppressing the CQ write suppresses both.
+ */
+static
+void test_efa_rdm_txe_handle_error_suppressed_impl(struct efa_resource *resource,
+						   uint32_t op)
+{
+	struct efa_rdm_ope *txe;
+	struct fi_cq_err_entry cq_err = {0};
+	struct fi_cq_data_entry cq_entry;
+
+	txe = efa_unit_test_alloc_txe(resource, op);
+	assert_non_null(txe);
+	txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
+
+	efa_rdm_txe_handle_error(txe, FI_ENOTCONN,
+				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+
+	/*
+	 * No error CQ entry and no regular CQ entry: NO_COMPLETION
+	 * short-circuits before ofi_cq_write_error() and
+	 * efa_cntr_report_error().
+	 */
+	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), -FI_EAGAIN);
+	assert_int_equal(fi_cq_readerr(resource->cq, &cq_err, 0), -FI_EAGAIN);
+
+	efa_rdm_txe_release(txe);
+}
+
+void test_efa_rdm_txe_handle_error_suppressed_write(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	test_efa_rdm_txe_handle_error_suppressed_impl(resource, ofi_op_write);
+}
+
+void test_efa_rdm_txe_handle_error_suppressed_read(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	test_efa_rdm_txe_handle_error_suppressed_impl(resource, ofi_op_read_req);
+}
+
+void test_efa_rdm_txe_handle_error_suppressed_send(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	test_efa_rdm_txe_handle_error_suppressed_impl(resource, ofi_op_msg);
+}
+
+/*
+ * All fi_inject* entry points (fi_inject, fi_injectdata, fi_tinject,
+ * fi_tinjectdata, fi_inject_write, fi_inject_writedata,
+ * fi_inject_atomic) set EFA_RDM_TXE_NO_COMPLETION on the txe to
+ * suppress the success CQ per inject semantics, but also set
+ * FI_INJECT in fi_flags. Per the libfabric fi_msg/fi_rma man pages,
+ * an inject op that succeeds synchronously but later fails
+ * asynchronously MUST still report an error CQ entry. Verify that
+ * efa_rdm_txe_handle_error does NOT suppress the error CQ when
+ * FI_INJECT is set, even though NO_COMPLETION is also set.
+ */
+void test_efa_rdm_txe_handle_error_inject_still_reports_cq_error(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+	struct fi_cq_err_entry cq_err = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_write);
+	assert_non_null(txe);
+	txe->fi_flags |= FI_INJECT;
+	txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
+
+	efa_rdm_txe_handle_error(txe, FI_ENOTCONN,
+				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+
+	/* Error CQ entry must be present despite NO_COMPLETION. */
+	assert_int_equal(fi_cq_readerr(resource->cq, &cq_err, 0), 1);
+	assert_int_equal(cq_err.err, FI_ENOTCONN);
+	assert_int_equal(cq_err.prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+
+	efa_rdm_txe_release(txe);
+}
+
 void test_efa_rdm_rxe_handle_error_write_cq(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
