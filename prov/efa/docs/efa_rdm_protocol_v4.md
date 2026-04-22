@@ -323,7 +323,7 @@ Table: 2.1 a list of extra features/requests
 | ID | Name              |  Type    | Introduced since | Described in |
 |---|---|---|---|---|
 | 0  | RDMA-Read based data transfer    | extra feature | libfabric 1.10.0 | Section 4.1 |
-| 1  | delivery complete                | extra feature | libfabric 1.12.0 | Section 4.2 |
+| 1  | delivery complete                | extra feature | libfabric 1.12.0 | Section 4.2 _(baseline since 2.6)_ |
 | 2  | keep packet header length constant | extra request | libfabric 1.13.0 | Section 4.3 |
 | 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 |
 | 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 |
@@ -378,6 +378,29 @@ If receiver is in zero copy receive mode, it will have the extra request
 "constant header length", but sender does not support it. In this case, it is OK
 for sender to ignore the request, and send packets with different header length.
 It is receiver's responsibility to react accordingly. (section 4.3)
+
+#### Baseline promotion of extra features and requests (libfabric 2.6+)
+
+Starting with libfabric 2.6, backwards compatibility is only guaranteed to libfabric 2.0.
+Any extra feature or request that was introduced before libfabric 2.0 is considered to be
+universally supported by all peers, since every supported peer (v2.0+) already implements it.
+
+When an extra feature is promoted to baseline (marked as _(baseline since X.Y)_ in table 2.1),
+the following applies:
+
+- The flag is still set in `extra_info` during the handshake, because v2.0 peers check for
+  it and would reject operations if the flag is missing.
+- However, the local endpoint no longer checks the peer's `extra_info` for that flag and
+  assumes the peer always supports the feature. A handshake is no longer required before
+  using the feature.
+
+As of libfabric 2.6, the following features/requests has been baselined:
+
+- **Delivery complete (ID 1)**: Baseline since 2.6. The handshake requirement for DC packets
+  has been removed from the send, write, and atomic paths. See section 4.2.
+
+The remaining extra features and requests are candidates for the same transition in future
+releases.
 
 This concludes the workflow of the handshake subprotocol.
 
@@ -1288,6 +1311,11 @@ The workflow is just for the read requester keep using RDMA read on the responde
 not necessary for the responder to keep the progress engine running.
 
 ### 4.2 Delivery complete
+
+**Since libfabric 2.6, delivery complete is treated as a baseline feature. All supported
+peers (v2.0+) support it, so a handshake is no longer required before sending DC packets.
+The `EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE` flag is still advertised in `extra_info`
+for backwards compatibility with v2.0 peers that check for it.**
 
 The extra feature "delivery complete" was introduced with libfabric 1.12.0 and was assigned ID 1.
 
