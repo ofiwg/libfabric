@@ -518,11 +518,34 @@ void test_efa_mr_iface_helpers(struct efa_resource **state)
 {
 	struct efa_mr host = { .iface = FI_HMEM_SYSTEM };
 	struct efa_mr cuda = { .iface = FI_HMEM_CUDA };
+	struct efa_mr neuron = { .iface = FI_HMEM_NEURON };
 
 	assert_false(efa_mr_is_iface(NULL, FI_HMEM_CUDA));
 	assert_true(efa_mr_is_iface(&cuda, FI_HMEM_CUDA));
 	assert_false(efa_mr_is_iface(&cuda, FI_HMEM_NEURON));
 	assert_true(efa_mr_is_iface(&host, FI_HMEM_SYSTEM));
+
+	/* efa_mr_any_is_iface: NULL array, zero count, single iov, mixed iovs */
+	assert_false(efa_mr_any_is_iface(NULL, 4, FI_HMEM_CUDA));
+	void *none[1] = {&host};
+	assert_false(efa_mr_any_is_iface(none, 0, FI_HMEM_CUDA));
+	assert_false(efa_mr_any_is_iface(none, 1, FI_HMEM_CUDA));
+
+	void *first_cuda[2] = {&cuda, &host};
+	void *last_cuda[2] = {&host, &cuda};
+	void *null_then_cuda[2] = {NULL, &cuda};
+	assert_true(efa_mr_any_is_iface(first_cuda, 2, FI_HMEM_CUDA));
+	assert_true(efa_mr_any_is_iface(last_cuda, 2, FI_HMEM_CUDA));
+	assert_true(efa_mr_any_is_iface(null_then_cuda, 2, FI_HMEM_CUDA));
+	assert_false(efa_mr_any_is_iface(first_cuda, 2, FI_HMEM_NEURON));
+
+	/* efa_mr_any_is_non_system_hmem: excludes system; any device iface qualifies */
+	void *all_host[2] = {&host, &host};
+	void *host_neuron[2] = {&host, &neuron};
+	assert_false(efa_mr_any_is_non_system_hmem(NULL, 4));
+	assert_false(efa_mr_any_is_non_system_hmem(all_host, 2));
+	assert_true(efa_mr_any_is_non_system_hmem(host_neuron, 2));
+	assert_true(efa_mr_any_is_non_system_hmem(first_cuda, 2));
 }
 
 /**

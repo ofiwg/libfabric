@@ -143,7 +143,7 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 * so we do not check it here
 		 */
 		use_device_read = true;
-	} else if (efa_mr_is_iface(txe->desc[0], FI_HMEM_NEURON)) {
+	} else if (efa_mr_any_is_iface(txe->desc, txe->iov_count, FI_HMEM_NEURON)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "rdma read is required to post read for AWS trainium memory\n");
 		return -FI_EOPNOTSUPP;
 	}

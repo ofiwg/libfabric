@@ -118,7 +118,7 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 				txe->ep->mtu_size - efa_rdm_pke_get_req_hdr_size(pkt_entry));
 
 		if (data_size + segment_offset < txe->total_len) {
-			if (efa_mr_is_iface(txe->desc[0], FI_HMEM_CUDA)) {
+			if (efa_mr_any_is_iface(txe->desc, txe->iov_count, FI_HMEM_CUDA)) {
 				if (txe->ep->sendrecv_in_order_aligned_128_bytes)
 					data_size &= ~(EFA_RDM_IN_ORDER_ALIGNMENT - 1);
 				else
