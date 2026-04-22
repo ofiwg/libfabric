@@ -799,6 +799,35 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		return;
 	}
 
+	/*
+	 * When the op was reported as failed to the caller synchronously
+	 * (via the return value of fi_write/fi_read after a partial
+	 * multi-segment post failure), EFA_RDM_TXE_NO_COMPLETION is set
+	 * on the txe to suppress the deferred CQ/counter report for the
+	 * in-flight segment's later completion. Honor that here in the
+	 * async error path too, so the app does not see a duplicate
+	 * error report.
+	 *
+	 * fi_inject/fi_tinject/fi_inject_write/fi_inject_writedata/
+	 * fi_inject_atomic also set EFA_RDM_TXE_NO_COMPLETION (success
+	 * CQ is suppressed per inject semantics), but per the libfabric
+	 * man page fi_inject MUST still report an error CQ if the async
+	 * completion fails. Exclude inject ops from this suppression by
+	 * checking FI_INJECT in fi_flags.
+	 *
+	 * This FI_INJECT discriminator is safe because inject ops are
+	 * bounded by efa_rdm_ep->base_ep.inject_rma_size (and for msg
+	 * inject, inject_size) and always fit in a single packet, so the
+	 * partial-post double-free scenario in efa_rdm_rma_generic_writemsg
+	 * / efa_rdm_rma_generic_readmsg cannot arise for an inject txe.
+	 * A txe that has both FI_INJECT and NO_COMPLETION set is therefore
+	 * always an inject op that needs the error CQ, never a partial-
+	 * post op that needs to be suppressed.
+	 */
+	if ((txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION) &&
+	    !(txe->fi_flags & FI_INJECT))
+		return;
+
 	efa_cntr_report_error(&ep->base_ep.util_ep, txe->cq_entry.flags);
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
