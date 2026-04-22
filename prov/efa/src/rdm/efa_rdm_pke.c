@@ -486,7 +486,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 		assert(pkt_entry->peer == peer);
 
 		use_inline = (pkt_entry->pkt_size <= efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size &&
-	            !efa_mr_is_hmem((struct efa_mr *)pkt_entry->payload_mr));
+	            !efa_mr_is_non_system_hmem((struct efa_mr *)pkt_entry->payload_mr));
 
 		if (use_inline) {
 			iov_cnt = 1;

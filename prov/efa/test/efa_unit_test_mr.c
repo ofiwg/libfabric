@@ -512,6 +512,20 @@ void test_efa_mr_attr_init_system_macro(struct efa_resource **state)
 }
 
 /**
+ * @brief Test the efa_mr_is_iface helper predicate.
+ */
+void test_efa_mr_iface_helpers(struct efa_resource **state)
+{
+	struct efa_mr host = { .iface = FI_HMEM_SYSTEM };
+	struct efa_mr cuda = { .iface = FI_HMEM_CUDA };
+
+	assert_false(efa_mr_is_iface(NULL, FI_HMEM_CUDA));
+	assert_true(efa_mr_is_iface(&cuda, FI_HMEM_CUDA));
+	assert_false(efa_mr_is_iface(&cuda, FI_HMEM_NEURON));
+	assert_true(efa_mr_is_iface(&host, FI_HMEM_SYSTEM));
+}
+
+/**
  * @brief Test efa_mr_ofi_to_ibv_access with no access flags
  * 
  * When no access flags are provided, the function should default to 

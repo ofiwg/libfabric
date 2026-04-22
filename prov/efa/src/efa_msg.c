@@ -269,7 +269,7 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	is_hmem = false;
 	if (msg->desc) {
 		for (i = 0; i < msg->iov_count; i++) {
-			if (efa_mr_is_hmem(msg->desc[i])) {
+			if (efa_mr_is_non_system_hmem(msg->desc[i])) {
 				is_hmem = true;
 				break;
 			}

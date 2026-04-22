@@ -38,7 +38,7 @@ extern struct fi_ops_mr efa_domain_mr_ops;
 
 int efa_mr_regattr_validate(struct fid *fid, const struct fi_mr_attr *attr, uint64_t flags);
 
-static inline bool efa_mr_is_hmem(struct efa_mr *efa_mr)
+static inline bool efa_mr_is_non_system_hmem(struct efa_mr *efa_mr)
 {
 	return efa_mr && (
 		efa_mr->iface == FI_HMEM_CUDA ||
@@ -47,24 +47,9 @@ static inline bool efa_mr_is_hmem(struct efa_mr *efa_mr)
 		efa_mr->iface == FI_HMEM_SYNAPSEAI);
 }
 
-static inline bool efa_mr_is_cuda(struct efa_mr *efa_mr)
+static inline bool efa_mr_is_iface(struct efa_mr *efa_mr, enum fi_hmem_iface iface)
 {
-	return efa_mr ? (efa_mr->iface == FI_HMEM_CUDA) : false;
-}
-
-static inline bool efa_mr_is_neuron(struct efa_mr *efa_mr)
-{
-	return efa_mr ? (efa_mr->iface == FI_HMEM_NEURON) : false;
-}
-
-static inline bool efa_mr_is_synapseai(struct efa_mr *efa_mr)
-{
-	return efa_mr ? (efa_mr->iface == FI_HMEM_SYNAPSEAI) : false;
-}
-
-static inline bool efa_mr_is_rocr(struct efa_mr *efa_mr)
-{
-	return efa_mr && efa_mr->iface == FI_HMEM_ROCR;
+	return efa_mr && efa_mr->iface == iface;
 }
 
 #define EFA_MR_IOV_LIMIT 1

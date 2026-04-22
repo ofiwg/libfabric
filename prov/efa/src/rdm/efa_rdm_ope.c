@@ -1724,7 +1724,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 
 	/* setup iov */
 	assert(pkt_entry->ope == rxe);
-	assert(rxe->desc && efa_mr_is_hmem(rxe->desc[0]));
+	assert(rxe->desc && efa_mr_is_non_system_hmem(rxe->desc[0]));
 	iov_count = rxe->iov_count;
 	memcpy(iov, rxe->iov, rxe->iov_count * sizeof(struct iovec));
 	memcpy(desc, rxe->desc, rxe->iov_count * sizeof(void *));
@@ -1736,7 +1736,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 		return -FI_ETRUNC;
 	}
 
-	assert(efa_mr_is_hmem(rxe->desc[0]));
+	assert(efa_mr_is_non_system_hmem(rxe->desc[0]));
 	err = ofi_truncate_iov(iov, &iov_count, data_size);
 	if (err) {
 		EFA_WARN(FI_LOG_CQ,

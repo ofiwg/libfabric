@@ -529,6 +529,7 @@ void test_efa_mr_validate_regattr_invalid_iov_count();
 void test_efa_mr_validate_regattr_uninitialized_iface();
 void test_efa_rdm_mr_structure_casting();
 void test_efa_mr_attr_init_system_macro();
+void test_efa_mr_iface_helpers();
 void test_efa_mr_ofi_to_ibv_access_no_access();
 void test_efa_mr_ofi_to_ibv_access_one_flag();
 void test_efa_mr_ofi_to_ibv_access_read_not_supported();

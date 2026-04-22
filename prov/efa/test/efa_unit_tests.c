@@ -550,6 +550,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_mr_validate_regattr_uninitialized_iface, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_structure_casting, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test(test_efa_mr_attr_init_system_macro),
+		cmocka_unit_test(test_efa_mr_iface_helpers),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_no_access),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_one_flag),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_read_not_supported),

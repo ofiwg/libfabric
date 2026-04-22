@@ -302,7 +302,7 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 	int ret, err;
 
 	desc = rxe->desc[0];
-	assert(efa_mr_is_cuda(&desc->efa_mr));
+	assert(efa_mr_is_iface(&desc->efa_mr, FI_HMEM_CUDA));
 
 	ep = pke->ep;
 	assert(ep);
@@ -460,10 +460,10 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 
 	desc = ope->desc[0];
 
-	if (efa_mr_is_cuda(desc))
+	if (efa_mr_is_iface(desc, FI_HMEM_CUDA))
 		return efa_rdm_pke_copy_payload_to_cuda(pke, ope);
 
-	if (efa_mr_is_hmem(desc))
+	if (efa_mr_is_non_system_hmem(desc))
 		return efa_rdm_pke_queued_copy_payload_to_hmem(pke, ope);
 
 	assert( !desc || desc->iface == FI_HMEM_SYSTEM);
