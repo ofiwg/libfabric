@@ -75,6 +75,8 @@ void rxd_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 	} else {
 		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
 		core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
+		if (hints && (hints->caps & FI_HMEM))
+			core_info->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 }
 
@@ -83,6 +85,8 @@ int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info_in,
 {
 	rxd_info_to_core_mr_modes(version, rxd_info_in, core_info);
 	core_info->caps = FI_MSG;
+	if (rxd_info_in && (rxd_info_in->caps & FI_HMEM))
+		core_info->caps |= FI_HMEM;
 	core_info->mode = OFI_LOCAL_MR | FI_CONTEXT | FI_MSG_PREFIX;
 	core_info->ep_attr->type = FI_EP_DGRAM;
 
@@ -113,6 +117,11 @@ int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
 		info->nic = ofi_nic_dup(core_info->nic);
 		if (!info->nic)
 			return -FI_ENOMEM;
+	}
+	if (!(core_info->caps & FI_HMEM)) {
+		info->caps &= ~FI_HMEM;
+		info->tx_attr->caps &= ~FI_HMEM;
+		info->rx_attr->caps &= ~FI_HMEM;
 	}
 	return 0;
 }

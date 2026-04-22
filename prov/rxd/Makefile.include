@@ -28,6 +28,25 @@ endif !HAVE_RXD_DL
 
 #prov_install_man_pages += man/man7/fi_rxd.7
 
+if ENABLE_RXD_UNIT_TEST
+noinst_PROGRAMS += prov/rxd/test/rxd_unit_test
+TESTS += prov/rxd/test/rxd_unit_test
+prov_rxd_test_rxd_unit_test_SOURCES = \
+	prov/rxd/test/rxd_unit_tests.h \
+	prov/rxd/test/rxd_unit_tests.c
+
+prov_rxd_test_rxd_unit_test_CPPFLAGS = \
+	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/prov/rxd/src \
+	$(rxd_cmocka_CPPFLAGS)
+
+prov_rxd_test_rxd_unit_test_LDADD = \
+	$(rxd_cmocka_LIBS) $(linkback)
+
+prov_rxd_test_rxd_unit_test_LDFLAGS = \
+	$(rxd_cmocka_rpath) $(rxd_cmocka_LDFLAGS) -static
+endif ENABLE_RXD_UNIT_TEST
+
 endif HAVE_RXD
 
 #prov_dist_man_pages += man/man7/fi_rxd.7

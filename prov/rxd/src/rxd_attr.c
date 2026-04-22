@@ -48,7 +48,7 @@
 		       FI_ORDER_WAS | FI_ORDER_WAW)
 
 struct fi_tx_attr rxd_tx_attr = {
-	.caps = RXD_TX_CAPS,
+	.caps = RXD_TX_CAPS | FI_HMEM,
 	.op_flags = RXD_TX_OP_FLAGS,
 	.msg_order = RXD_MSG_ORDER,
 	.inject_size = RXD_MAX_MTU_SIZE - sizeof(struct rxd_base_hdr),
@@ -58,7 +58,7 @@ struct fi_tx_attr rxd_tx_attr = {
 };
 
 struct fi_rx_attr rxd_rx_attr = {
-	.caps = RXD_RX_CAPS,
+	.caps = RXD_RX_CAPS | FI_HMEM,
 	.op_flags = RXD_RX_OP_FLAGS,
 	.msg_order = RXD_MSG_ORDER,
 	.size = (1ULL << RXD_MAX_RX_BITS),
@@ -101,7 +101,7 @@ struct fi_fabric_attr rxd_fabric_attr = {
 };
 
 struct fi_info rxd_info = {
-	.caps = RXD_DOMAIN_CAPS | RXD_TX_CAPS | RXD_RX_CAPS,
+	.caps = RXD_DOMAIN_CAPS | RXD_TX_CAPS | RXD_RX_CAPS | FI_HMEM,
 	.addr_format = FI_FORMAT_UNSPEC,
 	.tx_attr = &rxd_tx_attr,
 	.rx_attr = &rxd_rx_attr,

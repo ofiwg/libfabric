@@ -404,6 +404,8 @@ static inline int rxd_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 	return ((tag | ignore ) == (match_tag | ignore));
 }
 
+void rxd_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
+			       struct fi_info *core_info);
 int rxd_info_to_core(uint32_t version, const struct fi_info *rxd_info,
 		     const struct fi_info *base_info, struct fi_info *core_info);
 int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
