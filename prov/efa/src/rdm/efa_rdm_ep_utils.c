@@ -510,6 +510,7 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
 		pkt_entry->peer->efa_outstanding_tx_ops--;
 
 	if (ope) {
+		assert(ope->efa_outstanding_tx_ops > 0);
 		ope->efa_outstanding_tx_ops--;
 		switch(efa_rdm_pkt_type_of(pkt_entry)) {
 		case EFA_RDM_RECEIPT_PKT:
