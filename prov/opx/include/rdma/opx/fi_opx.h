@@ -67,9 +67,9 @@
 // Delete this comment when OPX is GA-ed
 #define FI_OPX_PROVIDER_VERSION	    (OFI_VERSION_DEF_PROV)
 #define FI_OPX_DEVICE_MAX_PATH_NAME (32)
-#define FI_OPX_FABRIC_NAME	    "OPX-100"
-#define FI_OPX_DOMAIN_NAME	    "ib0"
-#define FI_OPX_DOMAIN_NAME_PREFIX   "ib"
+#define FI_OPX_FABRIC_NAME	    "OPX"
+#define FI_OPX_DOMAIN_NAME	    "hfi1_0"
+#define FI_OPX_DOMAIN_NAME_PREFIX   "hfi1_"
 
 #define FI_OPX_CACHE_LINE_SIZE (64)
 #define FI_OPX_CACHE_LINE_QWS  (FI_OPX_CACHE_LINE_SIZE / sizeof(uint64_t))
