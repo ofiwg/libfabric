@@ -471,9 +471,11 @@ AS_IF([test x"$enable_xpmem" != x"no" && test -n "$enable_xpmem" && test "$xpmem
 AC_DEFINE_UNQUOTED([HAVE_XPMEM], [$xpmem_happy],
 	  	   [XPMEM support availability])
 
+
+AS_IF([test x"$enable_xpmem" != x"yes" && test x"$enable_xpmem" != x"no"],
+	[CPPFLAGS="$CPPFLAGS $xpmem_CPPFLAGS"
+	 LDFLAGS="$LDFLAGS $xpmem_LDFLAGS"])
 LIBS="$LIBS $xpmem_LIBS"
-CPPFLAGS="$CPPFLAGS $xpmem_CPPFLAGS"
-LDFLAGS="$LDFLAGS $xpmem_LDFLAGS"
 
 dnl Disable symbol versioning when -ipo is in CFLAGS or ipo is disabled by icc.
 dnl The gcc equivalent ipo (-fwhole-program) seems to work fine.
