@@ -813,6 +813,8 @@ int smr_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
 	int ret = FI_SUCCESS;
 
+	dlist_remove(&cmd_ctx->entry);
+
 	if (cmd_ctx->cmd->hdr.op_flags & SMR_BUFFER_RECV)
 		ret = smr_copy_saved(cmd_ctx, rx_entry);
 	else

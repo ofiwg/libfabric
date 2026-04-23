@@ -593,6 +593,7 @@ static int smr_ep_close(struct fid *fid)
 {
 	struct smr_ep *ep;
 	struct smr_pend_entry *pend;
+	struct smr_cmd_ctx *cmd_ctx;
 
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
 
@@ -606,6 +607,13 @@ static int smr_ep_close(struct fid *fid)
 		if (pend->rx_entry)
 			ep->srx->owner_ops->free_entry(pend->rx_entry);
 		ofi_buf_free(pend);
+	}
+
+	while (!dlist_empty(&ep->unexp_cmd_list)) {
+		dlist_pop_front(&ep->unexp_cmd_list, struct smr_cmd_ctx,
+				cmd_ctx, entry);
+		ep->srx->owner_ops->free_entry(cmd_ctx->rx_entry);
+		ofi_buf_free(cmd_ctx);
 	}
 	ofi_genlock_unlock(&ep->util_ep.lock);
 
@@ -686,6 +694,8 @@ static int smr_discard(struct fi_peer_rx_entry *rx_entry)
 {
 	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
 	struct smr_unexp_buf *sar_buf;
+
+	dlist_remove(&cmd_ctx->entry);
 
 	switch (cmd_ctx->cmd->hdr.proto) {
 	case smr_proto_inline:
