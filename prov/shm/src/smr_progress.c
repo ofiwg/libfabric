@@ -812,8 +812,7 @@ int smr_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
 	int ret = FI_SUCCESS;
 
-	if (cmd_ctx->cmd->hdr.smr_flags & SMR_BUFFER_RECV &&
-	    cmd_ctx->cmd->hdr.proto != smr_proto_inject)
+	if (cmd_ctx->cmd->hdr.smr_flags & SMR_BUFFER_RECV)
 		ret = smr_copy_saved(cmd_ctx, rx_entry);
 	else
 		ret = smr_start_common(cmd_ctx->ep, cmd_ctx->cmd, rx_entry);
@@ -883,19 +882,32 @@ static int smr_unexp_inline(struct smr_ep *ep, struct smr_cmd_ctx *cmd_ctx,
 static int smr_unexp_inject(struct smr_ep *ep, struct smr_cmd_ctx *cmd_ctx,
 			    struct smr_cmd *cmd)
 {
-	if (!(cmd->hdr.smr_flags & SMR_BUFFER_RECV) &&
-	    cmd->hdr.smr_flags & SMR_RETURN_CMD)
-		return FI_SUCCESS;
+	struct smr_inject_buf *tx_buf;
+	struct smr_unexp_buf *buf;
+
+	cmd->hdr.smr_flags |= SMR_BUFFER_RECV;
 
 	memcpy(&cmd_ctx->cmd_cpy, cmd, sizeof(cmd_ctx->cmd->hdr));
-	cmd_ctx->cmd_cpy.data.inject_buf_index = cmd->data.inject_buf_index;
 	cmd_ctx->cmd = &cmd_ctx->cmd_cpy;
+	tx_buf = smr_freestack_get_entry_from_index(smr_inject_pool(ep->region),
+						    cmd->data.inject_buf_index);
 
-	if (!(cmd->hdr.smr_flags & SMR_RETURN_CMD))
-		return FI_SUCCESS;
+	buf = ofi_buf_alloc(ep->unexp_buf_pool);
+	if (!buf) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"Error allocating buffer\n");
+		ofi_buf_free(cmd_ctx);
+		return -FI_ENOMEM;
+	}
 
-	cmd_ctx->cmd->hdr.smr_flags &= ~SMR_RETURN_CMD;
-	smr_return_cmd(ep, cmd);
+	memcpy(buf->buf, tx_buf->data, cmd->hdr.size);
+	smr_return_inject_buf(ep->region, tx_buf);
+	slist_init(&cmd_ctx->buf_list);
+	slist_insert_tail(&buf->entry, &cmd_ctx->buf_list);
+
+	if (cmd->hdr.smr_flags & SMR_RETURN_CMD)
+		smr_return_cmd(ep, cmd);
+
 	return FI_SUCCESS;
 }
 
