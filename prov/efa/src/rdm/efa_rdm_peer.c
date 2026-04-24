@@ -76,18 +76,42 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	/* we cannot release outstanding TX packets because device
 	 * will report completion of these packets later. Setting
 	 * pkt_entry->peer to NULL so the completion will be ignored.
+	 *
+	 * Unlink pkt_entry->entry from peer->outstanding_tx_pkts and
+	 * clear EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS before the
+	 * peer struct is poisoned, so that efa_rdm_pke_release_tx()
+	 * will not dlist_remove(&pkt_entry->entry) against a poisoned
+	 * list head.
 	 */
-	dlist_foreach_container(&peer->outstanding_tx_pkts,
+	dlist_foreach_container_safe(&peer->outstanding_tx_pkts,
 				struct efa_rdm_pke,
-				pkt_entry, entry) {
+				pkt_entry, entry, tmp) {
 		pkt_entry->peer = NULL;
+		dlist_remove(&pkt_entry->entry);
+		pkt_entry->flags &= ~EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS;
 	}
-
+	
 	dlist_foreach_container_safe(&peer->overflow_pke_list,
 				     struct efa_rdm_peer_overflow_pke_list_entry,
 				     overflow_pke_list_entry, entry, tmp) {
 		dlist_remove(&overflow_pke_list_entry->entry);
-		efa_rdm_pke_release_rx(overflow_pke_list_entry->pkt_entry);
+#ifdef ENABLE_EFA_POISONING
+		/*
+		 * overflow_pke_list_entry->pkt_entry can be a dangling
+		 * pointer if the pkt_entry was already released through
+		 * normal message processing. Detect this by checking for
+		 * the poison pattern before attempting to release.
+		 */
+		if (overflow_pke_list_entry->pkt_entry->alloc_type ==
+		    (enum efa_rdm_pke_alloc_type)0xdeadbeef) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				"Skipping already-freed overflow pkt_entry: %p\n",
+				overflow_pke_list_entry->pkt_entry);
+		} else
+#endif
+		{
+			efa_rdm_pke_release_rx_list(overflow_pke_list_entry->pkt_entry);
+		}
 		ofi_buf_free(overflow_pke_list_entry);
 	}
 

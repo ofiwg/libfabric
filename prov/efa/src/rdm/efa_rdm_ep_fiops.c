@@ -816,51 +816,11 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	struct efa_av_entry *av_entry;
 	struct efa_conn_ep_peer_map_entry *peer_map_entry;
 
-#if ENABLE_DEBUG
-	struct efa_rdm_pke *pkt_entry;
-
-	dlist_foreach_safe(&efa_rdm_ep->rx_posted_buf_list, entry, tmp) {
-		pkt_entry = container_of(entry, struct efa_rdm_pke, dbg_entry);
-		efa_rdm_pke_release_rx(pkt_entry);
-	}
-
-	dlist_foreach_safe(&efa_rdm_ep->rx_pkt_list, entry, tmp) {
-		pkt_entry = container_of(entry, struct efa_rdm_pke, dbg_entry);
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Closing ep with unreleased RX pkt_entry: %p\n",
-			pkt_entry);
-		/* Unlink the packet entries before releasing */
-		pkt_entry->next = NULL;
-		efa_rdm_pke_release_rx(pkt_entry);
-	}
-
-	dlist_foreach_safe(&efa_rdm_ep->tx_pkt_list, entry, tmp) {
-		pkt_entry = container_of(entry, struct efa_rdm_pke, dbg_entry);
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Closing ep with unreleased TX pkt_entry: %p\n",
-			pkt_entry);
-		efa_rdm_pke_release_tx(pkt_entry);
-	}
-#endif
-
-	dlist_foreach_safe(&efa_rdm_ep->rxe_list, entry, tmp) {
-		rxe = container_of(entry, struct efa_rdm_ope,
-					ep_entry);
-		EFA_INFO(FI_LOG_EP_CTRL,
-			"Closing ep with unreleased rxe\n");
-		efa_rdm_rxe_release(rxe);
-	}
-
-	dlist_foreach_safe(&efa_rdm_ep->txe_list, entry, tmp) {
-		txe = container_of(entry, struct efa_rdm_ope,
-					ep_entry);
-		EFA_INFO(FI_LOG_EP_CTRL,
-			"Closing ep with unreleased txe: %p\n",
-			txe);
-		efa_rdm_txe_release(txe);
-	}
-
-	/* Clean up any remaining peers before destroying buffer pools */
+	/*
+	 * Destruct peers first so overflow packets are properly
+	 * released (including chained entries) and removed from
+	 * the debug lists before the debug sweep runs.
+	 */
 	dlist_foreach_container_safe (&efa_rdm_ep->ep_peer_list,
 				      struct efa_rdm_peer, peer,
 				      ep_peer_list_entry, tmp) {
@@ -889,6 +849,74 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		ofi_buf_free(peer_map_entry);
 	}
 
+#if ENABLE_DEBUG
+	struct efa_rdm_pke *pkt_entry;
+
+	while (!dlist_empty(&efa_rdm_ep->rx_posted_buf_list)) {
+		pkt_entry = container_of(efa_rdm_ep->rx_posted_buf_list.next,
+					 struct efa_rdm_pke, dbg_entry);
+#ifdef ENABLE_EFA_POISONING
+		if (pkt_entry->alloc_type == (enum efa_rdm_pke_alloc_type)0xdeadbeef) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				"rx_posted_buf_list corrupted: poisoned pkt_entry %p, stopping sweep\n",
+				pkt_entry);
+			break;
+		}
+#endif
+		efa_rdm_pke_release_rx(pkt_entry);
+	}
+
+	while (!dlist_empty(&efa_rdm_ep->rx_pkt_list)) {
+		pkt_entry = container_of(efa_rdm_ep->rx_pkt_list.next,
+					 struct efa_rdm_pke, dbg_entry);
+#ifdef ENABLE_EFA_POISONING
+		if (pkt_entry->alloc_type == (enum efa_rdm_pke_alloc_type)0xdeadbeef) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				"rx_pkt_list corrupted: poisoned pkt_entry %p, stopping sweep\n",
+				pkt_entry);
+			break;
+		}
+#endif
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Closing ep with unreleased RX pkt_entry: %p\n",
+			pkt_entry);
+		efa_rdm_pke_release_rx_list(pkt_entry);
+	}
+
+	while (!dlist_empty(&efa_rdm_ep->tx_pkt_list)) {
+		pkt_entry = container_of(efa_rdm_ep->tx_pkt_list.next,
+					 struct efa_rdm_pke, dbg_entry);
+#ifdef ENABLE_EFA_POISONING
+		if (pkt_entry->alloc_type == (enum efa_rdm_pke_alloc_type)0xdeadbeef) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				"tx_pkt_list corrupted: poisoned pkt_entry %p, stopping sweep\n",
+				pkt_entry);
+			break;
+		}
+#endif
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Closing ep with unreleased TX pkt_entry: %p\n",
+			pkt_entry);
+		efa_rdm_pke_release_tx(pkt_entry);
+	}
+#endif
+
+	dlist_foreach_safe(&efa_rdm_ep->rxe_list, entry, tmp) {
+		rxe = container_of(entry, struct efa_rdm_ope,
+					ep_entry);
+		EFA_INFO(FI_LOG_EP_CTRL,
+			"Closing ep with unreleased rxe\n");
+		efa_rdm_rxe_release(rxe);
+	}
+
+	dlist_foreach_safe(&efa_rdm_ep->txe_list, entry, tmp) {
+		txe = container_of(entry, struct efa_rdm_ope,
+					ep_entry);
+		EFA_INFO(FI_LOG_EP_CTRL,
+			"Closing ep with unreleased txe: %p\n",
+			txe);
+		efa_rdm_txe_release(txe);
+	}
 	if (efa_rdm_ep->ope_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->ope_pool);
 

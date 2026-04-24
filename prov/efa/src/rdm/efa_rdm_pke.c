@@ -245,6 +245,19 @@ void efa_rdm_pke_release_rx_list(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_pke *curr, *next;
 
+#if ENABLE_DEBUG
+/*
+* Remove all dbg_entry from the debug list before releasing
+* any entry. Releasing poisons the pkt_entry, which corrupts
+* adjacent dbg_entry prev/next pointers in the debug list.
+*/
+	curr = pkt_entry;
+	while (curr) {
+		dlist_remove_init(&curr->dbg_entry);
+		curr = curr->next;
+	}
+#endif
+
 	curr = pkt_entry;
 	while (curr) {
 		next = curr->next;
