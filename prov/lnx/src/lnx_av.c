@@ -284,7 +284,6 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 {
 	int i, j, k, rc;
 	bool local, once;
-	int disable_shm = 0;
 	struct lnx_peer *lp;
 	char hostname[FI_NAME_MAX];
 	struct lnx_av *lav;
@@ -294,8 +293,6 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 
 	if (flags & FI_AV_USER_ID)
 		return -FI_ENOSYS;
-
-	fi_param_get_bool(&lnx_prov, "disable_shm", &disable_shm);
 
 	lav = container_of(av, struct lnx_av, lav_av.av_fid.fid);
 
@@ -328,7 +325,7 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		 * inter-node providers
 		 */
 		if (!strcmp(hostname, la->la_hostname) &&
-		    !strcmp(lea->lea_prov, "shm") && !disable_shm)
+		    !strcmp(lea->lea_prov, "shm") && !lnx_env.disable_shm)
 			local = true;
 
 		ofi_genlock_lock(&lav->lav_av.lock);

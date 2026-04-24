@@ -44,6 +44,21 @@
 
 #define lnx_ep_rx_flags(lnx_ep) ((lnx_ep)->le_ep.rx_op_flags)
 
+enum lnx_multirail_selection {
+	LNX_MR_SELECTION_PER_MSG = 0,
+	LNX_MR_SELECTION_PER_PEER,
+	LNX_MR_SELECTION_MAX,
+};
+
+struct lnx_env {
+	enum lnx_multirail_selection mr;
+	char *prov_links;
+	int disable_shm;
+	int dump_stats;
+};
+
+extern struct lnx_env lnx_env;
+
 struct lnx_match_attr {
 	fi_addr_t lm_addr;
 	uint64_t lm_tag;
@@ -165,12 +180,6 @@ struct lnx_domain {
 	size_t ld_iov_limit;
 	int ld_num_doms;
 	int ld_ep_idx;
-};
-
-enum lnx_multirail_selection {
-	LNX_MR_SELECTION_PER_MSG = 0,
-	LNX_MR_SELECTION_PER_PEER,
-	LNX_MR_SELECTION_MAX,
 };
 
 struct lnx_ep {

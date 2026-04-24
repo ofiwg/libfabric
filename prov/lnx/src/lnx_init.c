@@ -47,6 +47,12 @@ ofi_spin_t global_bplock;
 struct ofi_bufpool *global_recv_bp = NULL;
 
 struct util_fabric lnx_fabric_info;
+struct lnx_env lnx_env = {
+	.mr = LNX_MR_SELECTION_PER_PEER,
+	.prov_links = NULL,
+	.disable_shm = false,
+	.dump_stats = false,
+};
 
 struct fi_tx_attr lnx_tx_attr = {
 	.caps 		= ~0x0ULL,
@@ -519,6 +525,49 @@ static int lnx_getinfo_helper(uint32_t version, char *prov, char *domain,
 	return rc;
 }
 
+static int lnx_init_env(void)
+{
+	char *mr_selection;
+	int rc;
+
+	rc = fi_param_get_str(&lnx_prov, "prov_links", &lnx_env.prov_links);
+	if (rc) {
+		FI_WARN(&lnx_prov, FI_LOG_FABRIC,
+			"Error getting prov_links environment variable "
+			"lnx required FI_LNX_PROV_LINKS to determine links\n");
+		return -FI_EINVAL;
+	}
+
+	fi_param_get_bool(&lnx_prov, "disable_shm", &lnx_env.disable_shm);
+
+	rc = fi_param_get_str(&lnx_prov, "multi_rail_selection",
+			      &mr_selection);
+	if (rc == -FI_ENOENT || rc == -FI_ENODATA) {
+		/* if the user makes no selection, pick the safest method
+		 * which ensures send after send is satisfied
+		 */
+		lnx_env.mr = LNX_MR_SELECTION_PER_PEER;
+	} else if (!rc) {
+		if (strncasecmp("PER_MSG", mr_selection, strlen(mr_selection)) == 0) {
+			lnx_env.mr = LNX_MR_SELECTION_PER_MSG;
+		} else if (strncasecmp("PER_PEER", mr_selection,
+				strlen(mr_selection)) == 0) {
+			lnx_env.mr = LNX_MR_SELECTION_PER_PEER;
+		} else {
+			FI_WARN(&lnx_prov, FI_LOG_CORE,
+				"Unknown multi-rail selection policy: %s\n",
+				mr_selection);
+			return FI_EINVAL;
+		}
+	} else {
+		return rc;
+	}
+
+	fi_param_get_bool(&lnx_prov, "dump_stats", &lnx_env.dump_stats);
+
+	return 0;
+}
+
 static int lnx_getinfo(uint32_t version, const char *node, const char *service,
 		       uint64_t flags, const struct fi_info *hints,
 		       struct fi_info **info)
@@ -527,7 +576,6 @@ static int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	bool new_prov;
 	struct fi_info *lnx_hints = NULL;
 	struct lnx_link_info *link;
-	char *linked_provs, *linked_provs_cp;
 	char *save_ptr0, *save_ptr1, *save_ptr2, *provider_block,
 	     *provider, *domain, *link_block;
 
@@ -538,21 +586,16 @@ static int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	if (!dlist_empty(&lnx_links))
 		goto generate_info;
 
-	rc = fi_param_get_str(&lnx_prov, "prov_links",
-			      &linked_provs);
+	rc = lnx_init_env();
 	if (rc)
 		return rc;
 
-	if (strstr(linked_provs, "lnx")) {
+	if (strstr(lnx_env.prov_links, "lnx")) {
 		FI_WARN(&lnx_prov, FI_LOG_FABRIC,
 			"Can't specify the lnx provider as part of the link: "
-			"%s\n", linked_provs);
+			"%s\n", lnx_env.prov_links);
 		return -FI_EINVAL;
 	}
-
-	linked_provs_cp = strdup(linked_provs);
-	if (!linked_provs_cp)
-		return -FI_ENOMEM;
 
 	/* If the hints are not provided then we endup with a new block */
 	lnx_hints = fi_dupinfo(hints);
@@ -586,7 +629,7 @@ static int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	 * domains
 	 *	ex: cxi:cxi0,cxi1
 	 */
-	link_block = strtok_r(linked_provs_cp, "|", &save_ptr0);
+	link_block = strtok_r(lnx_env.prov_links, "|", &save_ptr0);
 	while (link_block) {
 		lnx_trim(link_block);
 
@@ -622,7 +665,6 @@ static int lnx_getinfo(uint32_t version, const char *node, const char *service,
 		dlist_insert_tail(&link->entry, &lnx_links);
 		link_block = strtok_r(NULL, "|", &save_ptr0);
 	}
-	free(linked_provs_cp);
 
 generate_info:
 	rc = lnx_generate_link_info(info, hints);
