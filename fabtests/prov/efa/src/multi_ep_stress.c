@@ -1076,33 +1076,32 @@ static int run_sender(void)
 		}
 	}
 
-	// Wait for completion
-	for (int i = 0; i < topts.num_sender_workers; i++) {
-		void *retval;
-		ret = pthread_join(threads[i], &retval);
-		if (ret) {
-			FT_PRINTERR("pthread_join", ret);
-			goto out;
-		}
-		if (retval != NULL) {
-			ret = *(int *)retval;
-			free(retval);
-			fprintf(stderr,
-				"Sender %d failed. Exit code: %d, %s\n",
-				i, ret, fi_strerror(-ret));
-			goto out;
-		}
-	}
-
 out:
+	/* Always join all threads before cleanup to avoid
+	 * use-after-free from closing endpoints that worker
+	 * threads are still using.
+	 */
+	if (threads) {
+		for (int i = 0; i < topts.num_sender_workers; i++) {
+			if (!threads[i])
+				continue;
+			void *retval;
+			if (pthread_join(threads[i], &retval))
+				continue;
+			if (retval != NULL) {
+				if (!ret)
+					ret = *(int *)retval;
+				free(retval);
+			}
+		}
+		free(threads);
+	}
 	if (channels) {
 		for (int i = 0; i < topts.num_sender_workers; i++) {
-		       ep_message_queue_destroy(&channels[i]);
+			ep_message_queue_destroy(&channels[i]);
 		}
 		free(channels);
 	}
-	if (threads)
-		free(threads);
 	if (workers) {
 		for (int i = 0; i < topts.num_sender_workers; i++) {
 			cleanup_worker_resourses(&workers[i]);
@@ -1212,27 +1211,26 @@ static int run_receiver(void)
 		goto out;
 	}
 
-	// Wait for thread completion
-	for (int i = 0; i < topts.num_receiver_workers; i++) {
-		void *retval;
-		ret = pthread_join(threads[i], &retval);
-		if (ret) {
-			FT_PRINTERR("pthread_join", ret);
-			goto out;
-		}
-		if (retval != NULL) {
-			ret = *(int *)retval;
-			free(retval);
-			fprintf(stderr,
-				"Receiver %d failed. Exit code: %d, %s\n",
-				i, ret, fi_strerror(-ret));
-			goto out;
-		}
-	}
-
 out:
-	if (threads)
+	/* Always join all threads before cleanup to avoid
+	 * use-after-free from closing endpoints that worker
+	 * threads are still using.
+	 */
+	if (threads) {
+		for (int i = 0; i < topts.num_receiver_workers; i++) {
+			if (!threads[i])
+				continue;
+			void *retval;
+			if (pthread_join(threads[i], &retval))
+				continue;
+			if (retval != NULL) {
+				if (!ret)
+					ret = *(int *)retval;
+				free(retval);
+			}
+		}
 		free(threads);
+	}
 	if (workers) {
 		for (int i = 0; i < topts.num_receiver_workers; i++) {
 			cleanup_worker_resourses(&workers[i]);
