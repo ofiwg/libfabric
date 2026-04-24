@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022 ORNL. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,23 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-#include <ctype.h>
-
-#include <rdma/fi_errno.h>
-#include "ofi_util.h"
-#include "ofi.h"
-#include "ofi_str.h"
-#include "ofi_prov.h"
-#include "ofi_perf.h"
-#include "ofi_hmem.h"
-#include "rdma/fi_ext.h"
 #include "lnx.h"
 
 static int lnx_cq_close(struct fid *fid)
@@ -95,10 +79,9 @@ static void lnx_cq_progress(struct util_cq *cq)
 	gen_lock = &lnx_cq->lcq_lnx_domain->ld_domain.lock;
 
 	ofi_genlock_lock(gen_lock);
-	/* Kick the core provider endpoints to progress */
 	for (i = 0; i < lnx_cq->lcq_lnx_domain->ld_num_doms; i++) {
 		core_cq = &lnx_cq->lcq_core_cqs[i];
-		fi_cq_read(core_cq->cc_cq, NULL, 0);
+		(void) fi_cq_read(core_cq->cc_cq, NULL, 0);
 	}
 	ofi_genlock_unlock(gen_lock);
 }
@@ -111,10 +94,8 @@ static int lnx_open_core_cqs(struct lnx_cq *lnx_cq, struct fi_cq_attr *attr)
 	struct lnx_core_cq *core_cq;
 	struct fi_peer_cq_context cq_ctxt;
 
-	/* tell the core providers to import my CQ */
 	peer_attr.flags |= FI_PEER;
 
-	/* create all the core provider completion queues */
 	for (i = 0; i < lnx_cq->lcq_lnx_domain->ld_num_doms; i++) {
 		cd = &lnx_cq->lcq_lnx_domain->ld_core_domains[i];
 		core_cq = &lnx_cq->lcq_core_cqs[i];
@@ -122,8 +103,8 @@ static int lnx_open_core_cqs(struct lnx_cq *lnx_cq, struct fi_cq_attr *attr)
 		cq_ctxt.size = sizeof(cq_ctxt);
 		cq_ctxt.cq = lnx_cq->lcq_util_cq.peer_cq;
 
-		/* pass my CQ into the open and get back the core's cq */
-		rc = fi_cq_open(cd->cd_domain, &peer_attr, &core_cq->cc_cq, &cq_ctxt);
+		rc = fi_cq_open(cd->cd_domain, &peer_attr, &core_cq->cc_cq,
+				&cq_ctxt);
 		if (rc)
 			return rc;
 
@@ -154,9 +135,6 @@ int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_ENOMEM;
 	}
 
-	/* this is going to be a standard CQ from the read side. From the
-	 * write side, it'll use the peer_cq callbacks to write 
-	 */
 	rc = ofi_cq_init(&lnx_prov, domain, attr, &lnx_cq->lcq_util_cq,
 			 &lnx_cq_progress, context);
 	if (rc)
@@ -166,7 +144,6 @@ int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	lnx_cq->lcq_util_cq.cq_fid.fid.ops = &lnx_cq_fi_ops;
 	(*cq_fid) = &lnx_cq->lcq_util_cq.cq_fid;
 
-	/* open core CQs and tell them to import my CQ */
 	rc = lnx_open_core_cqs(lnx_cq, attr);
 
 	return rc;
