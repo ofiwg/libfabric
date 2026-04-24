@@ -7,6 +7,47 @@ from collections import deque
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
 from retrying import retry
 
+MAX_EFA_DIRECT_MSG_SIZE = 8192
+
+# EFA-specific message size lists for @pytest.mark.message_sizes decorator.
+# Generic (shared) size lists live in fabtests/pytest/common.py.
+DIRECT_SIZES = ["r:0,4,32", "r:0,1024,8192"]
+ZCPY_SIZES = ["r:0,4,32", "r:0,1024,8192"]
+REMOTE_EXIT_SIZES = [65536, 131072, 1048576]
+DGRAM_PR_CI = ["l:16, 128, 8192"]
+
+
+def trim_to_efa_direct_message_sizes(message_sizes):
+    """
+    Remove message sizes that exceed MAX_EFA_DIRECT_MSG_SIZE from a message size string.
+    Supports formats: "all", "l:size1,size2,...", "r:start,step,end".
+    Returns a modified string with only valid sizes for efa-direct.
+    Raises ValueError if the format is not recognized.
+    """
+    if message_sizes == "all":
+        return message_sizes
+
+    s = str(message_sizes)
+
+    if s.startswith("l:"):
+        sizes = [int(x) for x in s[2:].split(",")]
+        filtered = [x for x in sizes if x <= MAX_EFA_DIRECT_MSG_SIZE]
+        if not filtered:
+            raise ValueError(f"All sizes in '{message_sizes}' exceed MAX_EFA_DIRECT_MSG_SIZE ({MAX_EFA_DIRECT_MSG_SIZE})")
+        return "l:" + ",".join(str(x) for x in filtered)
+
+    if s.startswith("r:"):
+        parts = s[2:].split(",")
+        if len(parts) != 3:
+            raise ValueError(f"Range format '{message_sizes}' must be 'r:start,step,end'")
+        start, step, end = int(parts[0]), int(parts[1]), int(parts[2])
+        end = min(end, MAX_EFA_DIRECT_MSG_SIZE)
+        if start > MAX_EFA_DIRECT_MSG_SIZE:
+            raise ValueError(f"Range start {start} exceeds MAX_EFA_DIRECT_MSG_SIZE ({MAX_EFA_DIRECT_MSG_SIZE})")
+        return f"r:{start},{step},{end}"
+
+    raise ValueError(f"Unrecognized message size format: '{message_sizes}'. Expected 'all', 'l:size1,size2,...', or 'r:start,step,end'.")
+
 
 @functools.lru_cache(2)
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)

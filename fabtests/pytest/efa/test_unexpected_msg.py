@@ -7,6 +7,7 @@ SHM_DEFAULT_RX_SIZE = 1024
 
 
 # This test skips efa-direct because it does not have unexpected message
+@pytest.mark.pr_ci
 @pytest.mark.functional
 @pytest.mark.parametrize("msg_size", [1, 512, 9000, 1048576]) # cover various switch points of shm/efa protocols
 @pytest.mark.parametrize("msg_count", [1, 1024, 2048]) # below and above shm's default rx size

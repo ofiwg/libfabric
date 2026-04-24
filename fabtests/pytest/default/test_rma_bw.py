@@ -1,5 +1,6 @@
 import pytest
 
+@pytest.mark.pr_ci
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
 @pytest.mark.parametrize("endpoint_type", ["msg", "rdm"])
 @pytest.mark.parametrize("iteration_type",

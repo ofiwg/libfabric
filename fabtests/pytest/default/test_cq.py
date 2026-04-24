@@ -1,11 +1,13 @@
 import pytest
 
+@pytest.mark.pr_ci
 @pytest.mark.unit
 def test_cq(cmdline_args):
     from common import UnitTest
     test = UnitTest(cmdline_args, "fi_cq_test")
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["senddata", "writedata"])
 @pytest.mark.parametrize("endpoint_type", ["msg", "rdm", "dgram"])

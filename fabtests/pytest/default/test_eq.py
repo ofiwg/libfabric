@@ -1,5 +1,6 @@
 import pytest
 
+@pytest.mark.pr_ci
 @pytest.mark.unit
 def test_eq(cmdline_args):
     from common import UnitTest
