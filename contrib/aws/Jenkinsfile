@@ -319,7 +319,7 @@ pipeline {
                     def g4dn12x_lock_label  = "g4dn12x"
                     def c52x_lock_label  = "c52x"
                     def hpc6a48x_lock_label  = "hpc6a48x"
-                    def c6gn16x_lock_label  = "c6gn16x"
+                    def c7gn16x_lock_label  = "c6gn16x"
                     def c5n18x_lock_label  = "c5n18x"
                     def c6g2x_lock_label  = "c6g2x"
                     def trn132x_lock_label  = "trn132x"
@@ -345,8 +345,8 @@ pipeline {
                     stages["2_hpc6a_alinux2_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_hpc6a_alinux2_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
                     stages["2_hpc6a_alinux2023_efa_mpi"] = get_test_stage_with_lock("2_hpc6a_alinux2023_efa_mpi", env.BUILD_TAG, "alinux2023", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_mpi)
                     stages["2_hpc6a_alinux2023_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_hpc6a_alinux2023_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2023", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
-                    stages["2_c6gn_alinux2023_efa_mpi"] = get_test_stage_with_lock("2_c6gn_alinux2023_efa_mpi", env.BUILD_TAG, "alinux2023", "c6gn.16xlarge", 2, "us-west-2", c6gn16x_lock_label, addl_args_efa_mpi)
-                    stages["2_c6gn_alinux2023_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_c6gn_alinux2023_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2023", "c6gn.16xlarge", 2, "us-west-2", c6gn16x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
+                    stages["2_c7gn_alinux2023_efa_mpi"] = get_test_stage_with_lock("2_c7gn_alinux2023_efa_mpi", env.BUILD_TAG, "alinux2023", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_mpi)
+                    stages["2_c7gn_alinux2023_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_c7gn_alinux2023_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2023", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
                     stages["2_c5n_alinux2_efa_mpi"] = get_test_stage_with_lock("2_c5n_alinux2_efa_mpi", env.BUILD_TAG, "alinux2", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa_mpi)
                     stages["2_c5n_alinux2_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_c5n_alinux2_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
                     stages["2_c5n_alinux2023_efa_mpi"] = get_test_stage_with_lock("2_c5n_alinux2023_efa_mpi", env.BUILD_TAG, "alinux2023", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa_mpi)
@@ -358,13 +358,13 @@ pipeline {
                     def addl_args_trn1_odcr_efa_direct = " --odcr cr-097fd3374f511c972 ${addl_args_efa_direct}"
                     stages["2_trn1_ubuntu2204_efa_direct"] = get_test_stage_with_lock("2_trn1_ubuntu2204_efa_direct", env.BUILD_TAG, "ubuntu2204", "trn1.32xlarge", 2, "us-west-2", trn132x_lock_label, addl_args_trn1_odcr_efa_direct)
 
-                    // cg6n AL2 builds are the slowest b/c they have asan turned on with debug, and have slower memcpy speeds
+                    // c7gn AL2 builds are the slowest b/c they have asan turned on with debug, and have slower memcpy speeds
                     // split "libfabric tests" into "fabtests", and imb
                     def addl_args_efa_one_sided_only = "${timeout} ${generic_pf} ${efa_provider} --test-list ${one_sided_tests}"
                     def addl_args_efa_libfabric_only = "${timeout} ${generic_pf} ${efa_provider} --test-list ${libfabric_tests}"
-                    stages["2_c6gn_alinux2_efa_mpi"] = get_test_stage_with_lock("2_c6gn_alinux2_efa_mpi", env.BUILD_TAG, "alinux2", "c6gn.16xlarge", 2, "us-west-2", c6gn16x_lock_label, addl_args_efa_mpi)
-                    stages["2_c6gn_alinux2_efa_one_sided"] = get_test_stage_with_lock("2_c6gn_alinux2_efa_one_sided", env.BUILD_TAG, "alinux2", "c6gn.16xlarge", 2, "us-west-2", c6gn16x_lock_label, addl_args_efa_one_sided_only)
-                    stages["2_c6gn_alinux2_efa_libfabric"] = get_test_stage_with_lock("2_c6gn_alinux2_efa_libfabric", env.BUILD_TAG, "alinux2", "c6gn.16xlarge", 2, "us-west-2", c6gn16x_lock_label, addl_args_efa_libfabric_only)
+                    stages["2_c7gn_alinux2_efa_mpi"] = get_test_stage_with_lock("2_c7gn_alinux2_efa_mpi", env.BUILD_TAG, "alinux2", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_mpi)
+                    stages["2_c7gn_alinux2_efa_one_sided"] = get_test_stage_with_lock("2_c7gn_alinux2_efa_one_sided", env.BUILD_TAG, "alinux2", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_one_sided_only)
+                    stages["2_c7gn_alinux2_efa_libfabric"] = get_test_stage_with_lock("2_c7gn_alinux2_efa_libfabric", env.BUILD_TAG, "alinux2", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_libfabric_only)
 
                     // Multi Node Tests - TCP
                     stages["2_c6g_alinux2_tcp"] = get_test_stage_with_lock("2_c6g_alinux2_tcp", env.BUILD_TAG, "alinux2", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
