@@ -135,6 +135,8 @@ ssize_t efa_rdm_pke_init_cts(struct efa_rdm_pke *pkt_entry,
 
 void efa_rdm_pke_handle_cts_sent(struct efa_rdm_pke *pkt_entry);
 
+void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry);
+
 void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry);
 
 static inline
