@@ -37,6 +37,15 @@ AS_IF([test x"$have_efadv" = x"1"], [
 ])
 AM_CONDITIONAL([BUILD_EFA_RDMA_CHECKER], [test $efa_rdma_checker_happy -eq 1])
 
+have_efadv_create_comp_cntr=0
+AS_IF([test x"$have_efadv" = x"1"], [
+	AC_CHECK_DECL([efadv_create_comp_cntr],
+		[have_efadv_create_comp_cntr=1],
+		[have_efadv_create_comp_cntr=0],
+		[[#include <infiniband/efadv.h>]])
+])
+AM_CONDITIONAL([HAVE_EFADV_CREATE_COMP_CNTR], [test $have_efadv_create_comp_cntr -eq 1])
+
 dnl EFA GDA support
 AC_ARG_ENABLE([efagda],
 	[AS_HELP_STRING([--enable-efagda],
