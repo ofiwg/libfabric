@@ -117,6 +117,15 @@ struct lnx_t_traffic_stats {
 	uint64_t st_num_tinjectdata;
 	uint64_t st_num_posted_recvs;
 	uint64_t st_num_unexp_msgs;
+	uint64_t st_num_read;
+	uint64_t st_num_readv;
+	uint64_t st_num_readmsg;
+	uint64_t st_num_write;
+	uint64_t st_num_writev;
+	uint64_t st_num_writemsg;
+	uint64_t st_num_writedata;
+	uint64_t st_num_inject_write;
+	uint64_t st_num_inject_writedata;
 };
 
 struct lnx_core_ep {
@@ -170,8 +179,15 @@ struct lnx_av {
 struct lnx_mr {
 	struct ofi_mr lm_mr;
 	struct fi_mr_attr lm_attr;
+	size_t key_size;
 	struct fid_mr **lm_core_mr;
 	struct iovec lm_iov[LNX_IOV_LIMIT];
+	void *raw_key;
+};
+
+struct lnx_mr_key {
+	size_t key_size;
+	uint64_t prov_keys[];
 };
 
 struct lnx_domain {

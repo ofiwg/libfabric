@@ -40,7 +40,8 @@ _lnx_files = \
 	prov/lnx/src/lnx_srx.c		\
 	prov/lnx/src/lnx_mr.c		\
 	prov/lnx/src/lnx_av.c		\
-	prov/lnx/src/lnx_msg.c
+	prov/lnx/src/lnx_msg.c		\
+	prov/lnx/src/lnx_rma.c
 
 _lnx_headers = \
 	prov/lnx/include/lnx.h

@@ -99,7 +99,25 @@ static int lnx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 static int lnx_mr_control(struct fid *fid, int command, void *arg)
 {
-	return -FI_ENOSYS;
+	struct lnx_mr *lm;
+	struct fi_mr_raw_attr *raw_attr = arg;
+
+	if (command != FI_GET_RAW_MR)
+		return -FI_ENOSYS;
+
+	lm = container_of(fid, struct lnx_mr, lm_mr.mr_fid.fid);
+	if (*raw_attr->key_size < lm->key_size) {
+		FI_WARN(&lnx_prov, FI_LOG_MR,
+			"Raw key buffer is too small: input %lu, needed %lu\n",
+			*raw_attr->key_size, lm->key_size);
+		*raw_attr->key_size = lm->key_size;
+		return -FI_ETOOSMALL;
+	}
+
+	memcpy(raw_attr->raw_key, lm->raw_key, lm->key_size);
+	*raw_attr->key_size = lm->key_size;
+
+	return FI_SUCCESS;
 }
 
 static struct fi_ops lnx_mr_fi_ops = {
@@ -113,9 +131,12 @@ static struct fi_ops lnx_mr_fi_ops = {
 int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr_fid)
 {
+	struct lnx_core_domain *cd;
 	struct lnx_domain *domain;
 	struct ofi_mr *mr;
 	struct lnx_mr *lm = NULL;
+	uint64_t key;
+	int rc, i;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr ||
 	    attr->iov_count <= 0 || attr->iov_count > LNX_IOV_LIMIT)
@@ -131,7 +152,7 @@ int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	lm->lm_attr = *attr;
 	memcpy(lm->lm_iov, attr->mr_iov,
-	       sizeof(struct iovec) * attr->iov_count);
+	       sizeof(*attr->mr_iov) * attr->iov_count);
 	lm->lm_attr.mr_iov = lm->lm_iov;
 	lm->lm_core_mr = calloc(sizeof(struct fid_mr *), domain->ld_num_doms);
 	if (!lm->lm_core_mr) {
@@ -144,6 +165,25 @@ int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr->mr_fid.mem_desc = lm;
 	mr->domain = &domain->ld_domain;
 	mr->flags = flags;
+
+	if (attr->access & (FI_REMOTE_WRITE | FI_REMOTE_READ)) {
+		lm->key_size = sizeof(uint64_t) * domain->ld_num_doms;
+		lm->raw_key = malloc(lm->key_size);
+
+		for (i = 0; i < domain->ld_num_doms; i++) {
+			cd = &domain->ld_core_domains[i];
+
+			rc = fi_mr_regattr(cd->cd_domain, &lm->lm_attr,
+					   flags, &lm->lm_core_mr[i]);
+			if (rc)
+				return rc;
+			key = fi_mr_key(lm->lm_core_mr[i]);
+			memcpy((char *)lm->raw_key + sizeof(key) * i, &key,
+				sizeof(key));
+		}
+	} else {
+		lm->key_size = sizeof(uint64_t);
+	}
 
 	*mr_fid = &mr->mr_fid;
 	ofi_atomic_inc32(&domain->ld_domain.ref);
