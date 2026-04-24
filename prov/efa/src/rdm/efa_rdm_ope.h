@@ -352,15 +352,11 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 					  struct efa_rdm_pke *pkt_entry,
 					  char *pkt_data, size_t data_size);
 
-ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
-					 int pkt_type,
-					 int *pkt_entry_cnt,
-					 int *pkt_entry_data_size_vec);
+ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
+					 size_t *pkt_entry_cnt,
+					 size_t *pkt_entry_data_size_vec);
 
 ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type);
-
-ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
-					   int pkt_type, ssize_t err);
 
 ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type);
 

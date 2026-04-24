@@ -94,6 +94,10 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 		EFA_WARN(FI_LOG_CQ, "invalid operation type\n");
 		assert(0);
 	}
+
+	efa_domain_ope_list_lock(efa_rdm_ep_domain(ep));
+	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
+	efa_domain_ope_list_unlock(efa_rdm_ep_domain(ep));
 }
 
 void efa_rdm_txe_release(struct efa_rdm_ope *txe)
@@ -458,10 +462,9 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
  * On success, return 0
  * If there is not enough available packet entry in TX packet pool, return -FI_EAGAIN
  */
-ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
-					 int pkt_type,
-					 int *pkt_entry_cnt,
-					 int *pkt_entry_data_size_vec)
+ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
+					 size_t *pkt_entry_cnt,
+					 size_t *pkt_entry_data_size_vec)
 {
 	struct efa_rdm_ep *ep;
 	size_t total_pkt_entry_data_size; /* total number of bytes send via packet entry's payload */
@@ -1785,20 +1788,23 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	struct efa_rdm_ep *ep;
 	ssize_t err;
 	int64_t segment_offset;
-	int pkt_entry_cnt, pkt_entry_cnt_allocated = 0;
+	int pkt_entry_cnt_allocated = 0;
 	int i;
 	uint64_t flags = 0;
 
 	ep = ope->ep;
 	assert(ep);
 
-	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type, &pkt_entry_cnt, ep->send_pkt_entry_size_vec);
+	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type,
+					       &ep->send_pkt_entry_vec_size,
+					       ep->send_pkt_entry_data_sizes);
 	if (err)
 		return err;
-	assert(pkt_entry_cnt <= efa_base_ep_get_tx_pool_size(&ep->base_ep));
+	assert(ep->send_pkt_entry_vec_size <=
+	       efa_base_ep_get_tx_pool_size(&ep->base_ep));
 
 	segment_offset = efa_rdm_pkt_type_contains_data(pkt_type) ? (int64_t) ope->bytes_sent : -1;
-	for (i = 0; i < pkt_entry_cnt; ++i) {
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i) {
 		ep->send_pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!ep->send_pkt_entry_vec[i])) {
@@ -1808,21 +1814,19 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 
 		pkt_entry_cnt_allocated++;
 
-		err = efa_rdm_pke_fill_data(ep->send_pkt_entry_vec[i],
-					    pkt_type,
-					    ope,
-					    segment_offset,
-					    ep->send_pkt_entry_size_vec[i]);
+		err = efa_rdm_pke_fill_data(ep->send_pkt_entry_vec[i], pkt_type,
+					    ope, segment_offset,
+					    ep->send_pkt_entry_data_sizes[i]);
 		if (err)
 			goto handle_err;
 
-		if (segment_offset != -1 && pkt_entry_cnt > 1) {
-			assert(ep->send_pkt_entry_size_vec[i] > 0);
-			segment_offset += ep->send_pkt_entry_size_vec[i];
+		if (segment_offset != -1 && ep->send_pkt_entry_vec_size > 1) {
+			assert(ep->send_pkt_entry_data_sizes[i] > 0);
+			segment_offset += ep->send_pkt_entry_data_sizes[i];
 		}
 	}
 
-	assert(pkt_entry_cnt == pkt_entry_cnt_allocated);
+	assert(ep->send_pkt_entry_vec_size == pkt_entry_cnt_allocated);
 
 	/**
 	 * We currently respect FI_MORE only for eager pkt type because
@@ -1838,12 +1842,13 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	if (ope->fi_flags & FI_MORE && efa_rdm_pkt_type_is_eager(pkt_type))
 		flags |= FI_MORE;
 
-	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec, pkt_entry_cnt, flags);
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
+				ep->send_pkt_entry_vec_size, flags);
 	if (err)
 		goto handle_err;
 
 	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
-	for (i = 0; i < pkt_entry_cnt; ++i)
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
 		efa_rdm_pke_handle_sent(ep->send_pkt_entry_vec[i], pkt_type, ope->peer);
 
 	return FI_SUCCESS;
@@ -1852,53 +1857,6 @@ handle_err:
 	for (i = 0; i < pkt_entry_cnt_allocated; ++i)
 		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 
-	return efa_rdm_ope_post_send_fallback(ope, pkt_type, err);
-}
-
-/**
- * @brief Fallback to a different message type if a packet send fails.
- *
- * Currently, this function is only used in the read nack protocol. If a long read or
- * runting read RTM packet fails to send because of a memory registration failure, it
- * will send a long CTS RTM packet.
- *
- * @param[in]   ope            pointer to efa_rdm_ope. (either a txe or an rxe)
- * @param[in]   pkt_type       packet type that failed to send
- * @param[in]   err		       error code of the original failure
- * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
- *             -FI_EAGAIN      temporarily  out of resource
- */
-ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
-					   int pkt_type, ssize_t err)
-{
-	bool delivery_complete_requested = ope->fi_flags & FI_DELIVERY_COMPLETE;
-
-	if (err == -FI_ENOMR) {
-		/* Long read and runting read protocols could fail because of a
-		 * lack of memory registrations. In that case, we retry with
-		 * long CTS protocol
-		 */
-		switch (pkt_type) {
-		case EFA_RDM_LONGREAD_MSGRTM_PKT:
-		case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-			EFA_INFO(FI_LOG_EP_CTRL,
-				 "Sender fallback to long CTS untagged "
-				 "protocol because memory registration limit "
-				 "was reached on the sender\n");
-			return efa_rdm_ope_post_send_or_queue(
-				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_MSGRTM_PKT : EFA_RDM_LONGCTS_MSGRTM_PKT);
-		case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-			EFA_INFO(FI_LOG_EP_CTRL,
-				 "Sender fallback to long CTS tagged protocol "
-				 "because memory registration limit was "
-				 "reached on the sender\n");
-			return efa_rdm_ope_post_send_or_queue(
-				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_TAGRTM_PKT : EFA_RDM_LONGCTS_TAGRTM_PKT);
-		default:
-			return err;
-		}
-	}
 	return err;
 }
 
