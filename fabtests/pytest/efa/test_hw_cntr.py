@@ -17,3 +17,15 @@ def test_efa_hw_cntr_pingpong(cmdline_args, direct_message_size, fabric):
                             message_size=direct_message_size,
                             fabric=fabric)
     test.run()
+
+
+@pytest.mark.functional
+def test_efa_hw_cntr_rma_write(cmdline_args, direct_rma_size, rma_fabric):
+    _skip_if_not_built(cmdline_args)
+    if rma_fabric != "efa-direct":
+        pytest.skip("hw_cntr is only in efa-direct")
+    test = ClientServerTest(cmdline_args, "fi_efa_hw_cntr -o write",
+                            iteration_type="short",
+                            message_size=direct_rma_size,
+                            fabric=rma_fabric)
+    test.run()

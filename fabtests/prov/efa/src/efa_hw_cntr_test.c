@@ -28,7 +28,7 @@
  *
  * EFA hardware counter test.
  *
- * Runs MSG pingpong.
+ * Runs MSG pingpong or RMA write.
  */
 
 #include <stdio.h>
@@ -184,18 +184,83 @@ out:
 	return ret;
 }
 
+static int rma_write(void)
+{
+	int i, ret;
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	ft_start();
+	for (i = 0; i < opts.iterations; i++) {
+		ret = fi_write(ep, tx_buf, opts.transfer_size, mr_desc,
+			       remote_fi_addr, remote.addr, remote.key,
+			       &tx_ctx);
+		if (ret) {
+			FT_PRINTERR("fi_write", ret);
+			return ret;
+		}
+		tx_seq++;
+
+		ret = ft_get_tx_comp(tx_seq);
+		if (ret)
+			return ret;
+	}
+	ft_stop();
+
+	show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 1);
+	return 0;
+}
+
+static int run_rma(void)
+{
+	int i, ret = 0;
+
+	ret = init_fabric_with_hw_cntr();
+	if (ret)
+		return ret;
+
+	ret = ft_exchange_keys(&remote);
+	if (ret)
+		return ret;
+
+	if (!(opts.options & FT_OPT_SIZE)) {
+		for (i = 0; i < TEST_CNT; i++) {
+			if (!ft_use_size(i, opts.sizes_enabled))
+				continue;
+			opts.transfer_size = test_size[i].size;
+			init_test(&opts, test_name, sizeof(test_name));
+			ret = rma_write();
+			if (ret)
+				goto out;
+		}
+	} else {
+		init_test(&opts, test_name, sizeof(test_name));
+		ret = rma_write();
+		if (ret)
+			goto out;
+	}
+
+	ft_finalize();
+out:
+	return ret;
+}
+
 int main(int argc, char **argv)
 {
 	int op, ret;
 
 	opts = INIT_OPTS;
+	opts.rma_op = 0;
 	opts.comp_method = FT_COMP_SPIN;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "h" CS_OPTS INFO_OPTS BENCHMARK_OPTS
+			    API_OPTS)) != -1) {
 		switch (op) {
 		default:
 			if (!ft_parse_long_opts(op, optarg))
@@ -203,12 +268,17 @@ int main(int argc, char **argv)
 			ft_parse_benchmark_opts(op, optarg);
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
+			ret = ft_parse_api_opts(op, optarg, hints, &opts);
+			if (ret)
+				return ret;
 			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0],
-				   "MSG pingpong using EFA hardware counters.");
+				   "Pingpong using EFA hardware counters.");
 			ft_benchmark_usage();
+			FT_PRINT_OPTS_USAGE("-o <op>",
+				"op: msg|write (default: msg)");
 			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
@@ -225,7 +295,12 @@ int main(int argc, char **argv)
 	hints->addr_format = opts.address_format;
 	hints->mode |= FI_CONTEXT | FI_CONTEXT2;
 
-	ret = run_msg();
+	if (opts.rma_op) {
+		hints->caps |= FI_RMA;
+		ret = run_rma();
+	} else {
+		ret = run_msg();
+	}
 
 	ft_free_res();
 	return ft_exit_code(ret);
