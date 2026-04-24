@@ -2428,7 +2428,7 @@ struct cxip_txc_hpc {
 #define CXIP_RNR_TIMEOUT_US	500000
 #define CXIP_NUM_RNR_WAIT_QUEUE	5
 /* per recv req append retry timeout */
-#define CXIP_RNR_APPEND_RETRY_TIMEOUT_US 200000
+#define CXIP_RNR_APPEND_RETRY_TIMEOUT_US 2000000
 
 struct cxip_txc_rnr {
 	/* Must remain first */
