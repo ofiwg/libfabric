@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022 ORNL. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,39 +31,148 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-#include <ctype.h>
-
-#include <rdma/fi_errno.h>
-#include "ofi_util.h"
-#include "ofi.h"
-#include "ofi_str.h"
-#include "ofi_prov.h"
-#include "ofi_perf.h"
-#include "ofi_hmem.h"
-#include "rdma/fi_ext.h"
 #include "lnx.h"
 
-extern struct fi_ops_cm lnx_cm_ops;
-extern struct fi_ops_msg lnx_msg_ops;
-extern struct fi_ops_tagged lnx_tagged_ops;
-extern struct fi_ops_rma lnx_rma_ops;
-extern struct fi_ops_atomic lnx_atomic_ops;
+/*
+ * Round robin over the end points and peer addresses per message
+ * This does not take into consideration send after send requirements.
+ */
+static inline int lnx_select_send_endpoints_msg(
+			struct lnx_ep *lep, fi_addr_t lnx_addr,
+			struct lnx_core_ep **cep_out, fi_addr_t *core_addr)
+{
+	int idx, rr;
+	struct lnx_peer *lp;
+	struct lnx_core_ep *cep;
+	struct lnx_peer_map *map_addr;
+	struct lnx_peer_ep_map *ep_map;
 
-static struct fi_ops_srx_owner lnx_srx_ops = {
-	.size = sizeof(struct fi_ops_srx_owner),
-	.get_msg = lnx_get_msg,
-	.get_tag = lnx_get_tag,
-	.queue_msg = lnx_queue_msg,
-	.queue_tag = lnx_queue_tag,
-	.free_entry = lnx_free_entry,
-	.foreach_unspec_addr = lnx_foreach_unspec_addr,
+	lp = lnx_av_lookup_addr(lep->le_lav, lnx_addr);
+	if (!lp)
+		return -FI_ENOSYS;
+
+	/* round robin over the endpoints which can reach this peer */
+	rr = ofi_atomic_inc32(&lp->lp_ep_rr) - 1;
+	ep_map = &lp->lp_src_eps[lep->le_idx];
+	idx = rr % ep_map->pem_num_eps;
+	cep = ep_map->pem_eps[idx];
+
+	map_addr = ofi_bufpool_get_ibuf(cep->cep_cav->cav_map, lp->lp_addr);
+
+	/* round robin over available peer addresses */
+	rr = ofi_atomic_inc32(&map_addr->map_rr) - 1;
+	idx = rr % (map_addr->map_count);
+
+	*core_addr = map_addr->map_addrs[idx];
+
+	*cep_out = cep;
+
+	return FI_SUCCESS;
+}
+
+/*
+ * Round robin over the end points, assigning each peer a particular local
+ * endpoint and one of its core addresses to use. This ensures that the
+ * peer receives messages in the same order they are sent.
+ */
+static inline int lnx_select_send_endpoints_peer(
+			struct lnx_ep *lep, fi_addr_t lnx_addr,
+			struct lnx_core_ep **cep_out, fi_addr_t *core_addr)
+{
+	bool found = false;
+	int idx, i;
+	uint32_t rr, seed;
+	struct lnx_peer *lp;
+	struct lnx_core_ep *cep;
+	struct lnx_peer_map *map_addr;
+	struct lnx_peer_ep_map *ep_map;
+
+	lp = lnx_av_lookup_addr(lep->le_lav, lnx_addr);
+	if (!lp)
+		return -FI_ENOSYS;
+
+	if (lp->lp_locked_cep) {
+		*core_addr = lp->lp_locked_core_addr;
+		*cep_out = lp->lp_locked_cep;
+		return FI_SUCCESS;
+	}
+
+	ep_map = &lp->lp_src_eps[lep->le_idx];
+
+	while (!found) {
+		rr = ofi_atomic_inc32(&lep->le_rr) - 1;
+		idx = rr % lep->le_domain->ld_num_doms;
+		cep = &lep->le_core_eps[idx];
+
+		for (i = 0; i < ep_map->pem_num_eps; i++) {
+			if (cep == ep_map->pem_eps[i]) {
+				found = true;
+				break;
+			}
+		}
+	}
+
+	map_addr = ofi_bufpool_get_ibuf(cep->cep_cav->cav_map, lp->lp_addr);
+
+	/* randomize the address selection from the list of reachable
+	 * peer addresses. This will allow different processes to send to
+	 * different peer addresses, instead of using the first address of
+	 * a peer. This is not round robin over the peer addresses, but
+	 * in the PER_PEER case, there is no effective way to enforce
+	 * round robin across independent peers. In this method it at
+	 * least allows spreading traffic across peer addresses. */
+	seed = (uint32_t)ofi_gettime_ns();
+	rr = ofi_xorshift_random(seed);
+	idx = rr % (map_addr->map_count);
+
+	*core_addr = lp->lp_locked_core_addr = map_addr->map_addrs[idx];
+	*cep_out = lp->lp_locked_cep = cep;
+
+	return FI_SUCCESS;
+}
+
+static inline void lnx_set_send_pair_noop(struct lnx_ep *lep,
+					  struct lnx_core_ep *cep,
+					  fi_addr_t addr)
+{
+	/* no-op */
+}
+
+/* if you haven't sent to a particular peer before then lock the
+ * address you're going to send on. If this is the first message
+ * you receive from peer, then you want to respond on the same
+ * address and core endpoint that peer used. This will ensure
+ * symmetry.
+*/
+static inline void lnx_set_send_pair_peer(struct lnx_ep *lep,
+					  struct lnx_core_ep *cep,
+					  fi_addr_t addr)
+{
+	fi_addr_t core_addr, prim_addr;
+	struct lnx_peer *lp;
+
+	if (addr == FI_ADDR_UNSPEC)
+		return;
+
+	prim_addr = lnx_decode_primary_id(addr);
+	lp = lnx_av_lookup_addr(lep->le_lav, prim_addr);
+	if (!lp->lp_locked_cep) {
+		core_addr = lnx_get_core_addr(cep, addr);
+		lp->lp_locked_core_addr = core_addr;
+		lp->lp_locked_cep = cep;
+	}
+}
+
+lnx_select_tx_ep lnx_select_send_endpoints[LNX_MR_SELECTION_MAX] =
+{
+	[LNX_MR_SELECTION_PER_MSG] = &lnx_select_send_endpoints_msg,
+	[LNX_MR_SELECTION_PER_PEER] = &lnx_select_send_endpoints_peer,
+};
+
+lnx_set_tx_pair lnx_set_send_pair[LNX_MR_SELECTION_MAX] =
+{
+	[LNX_MR_SELECTION_PER_MSG] = &lnx_set_send_pair_noop,
+	[LNX_MR_SELECTION_PER_PEER] = &lnx_set_send_pair_peer,
 };
 
 static inline void lnx_dump_core_ep_stats(struct lnx_core_ep *cep)
@@ -72,8 +182,8 @@ static inline void lnx_dump_core_ep_stats(struct lnx_core_ep *cep)
 	tstats = &cep->cep_t_stats;
 
 	FI_TRACE(&lnx_prov, FI_LOG_DOMAIN, "%s,%" PRIu64 ",%" PRIu64
-			",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%"
-			PRIu64 ",%" PRIu64 "\n",
+		 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%"
+		 PRIu64 ",%" PRIu64 "\n",
 		 cep->cep_domain->cd_info->domain_attr->name,
 		 tstats->st_num_tsend, tstats->st_num_tsendv,
 		 tstats->st_num_tsendmsg, tstats->st_num_tsenddata,
@@ -81,15 +191,15 @@ static inline void lnx_dump_core_ep_stats(struct lnx_core_ep *cep)
 		 tstats->st_num_posted_recvs, tstats->st_num_unexp_msgs);
 }
 
-static inline void
-lnx_dump_srx_queue_stats(struct lnx_ep *lep)
+static inline void lnx_dump_srx_queue_stats(struct lnx_ep *lep)
 {
 	static bool header;
 
 	if (!header) {
 		FI_TRACE(&lnx_prov, FI_LOG_DOMAIN,
 			 "Domain name,tsend,tsendv,tsendmsg,tsenddata,"
-			 "tinject,tinjectdata,posted_recvs,unexp_msgs,max_queue,avg_queue\n");
+			 "tinject,tinjectdata,posted_recvs,unexp_msgs,"
+			 "max_queue,avg_queue\n");
 		header = true;
 	}
 
@@ -103,7 +213,7 @@ lnx_dump_srx_queue_stats(struct lnx_ep *lep)
 		 lep->le_srq.lps_trecv.lqp_unexq.lq_rolling_avg);
 }
 
-int lnx_ep_close(struct fid *fid)
+static int lnx_ep_close(struct fid *fid)
 {
 	int i, rc, frc = FI_SUCCESS;
 	struct lnx_ep *lep;
@@ -226,7 +336,8 @@ static int lnx_bind_core_cqs(struct lnx_ep *lep, struct lnx_cq *lcq,
 	return 0;
 }
 
-int lnx_bind_core_avs(struct lnx_ep *lep, struct lnx_av *lav, uint64_t flags)
+static int lnx_bind_core_avs(struct lnx_ep *lep, struct lnx_av *lav,
+			     uint64_t flags)
 {
 	int rc, i;
 	struct lnx_core_ep *cep;
@@ -248,8 +359,7 @@ int lnx_bind_core_avs(struct lnx_ep *lep, struct lnx_av *lav, uint64_t flags)
 	return 0;
 }
 
-static int
-lnx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int lnx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	int rc = 0;
 	struct lnx_ep *lep;
@@ -313,7 +423,7 @@ out:
 	return rc;
 }
 
-int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
+static int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	int i, rc;
 	char hostname[FI_NAME_MAX];
@@ -344,11 +454,9 @@ int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 		/* query the core address size and use it to calculate the
 		 * total size of the lnx address */
 		rc = fi_getname(&cep->cep_ep->fid, NULL, &eps_addrlen[i]);
-		if (rc == -FI_ETOOSMALL) {
-			size += (sizeof(*ep_addr)) + eps_addrlen[i];
-		} else {
+		if (rc != -FI_ETOOSMALL)
 			return -FI_EINVAL;
-		}
+		size += (sizeof(*ep_addr)) + eps_addrlen[i];
 	}
 
 	if (!addr || *addrlen < size) {
@@ -368,7 +476,8 @@ int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 		prov_name = cep->cep_domain->cd_info->fabric_attr->name;
 		memcpy(ep_addr->lea_prov, prov_name, strlen(prov_name)+1);
 		cep_addr = (char*)ep_addr + sizeof(*ep_addr);
-		rc = fi_getname(&cep->cep_ep->fid, (void*)cep_addr, &eps_addrlen[i]);
+		rc = fi_getname(&cep->cep_ep->fid, (void*)cep_addr,
+				&eps_addrlen[i]);
 		if (rc)
 			return rc;
 		ep_addr->lea_addr_size = eps_addrlen[i];
@@ -412,14 +521,14 @@ static ssize_t lnx_ep_cancel(fid_t fid, void *context)
 	return rc;
 }
 
-static int lnx_ep_getopt(fid_t fid, int level, int optname,
-			  void *optval, size_t *optlen)
+static int lnx_ep_getopt(fid_t fid, int level, int optname, void *optval,
+			 size_t *optlen)
 {
 	return -FI_ENOPROTOOPT;
 }
 
 static int lnx_ep_setopt(fid_t fid, int level, int optname, const void *optval,
-			  size_t optlen)
+			 size_t optlen)
 {
 	struct lnx_ep *lep;
 	struct lnx_core_ep *cep;
@@ -430,8 +539,8 @@ static int lnx_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 	for (i = 0; i < lep->le_domain->ld_num_doms; i++) {
 		cep = &lep->le_core_eps[i];
 
-		rc = fi_setopt(&cep->cep_ep->fid, level, optname,
-				optval, optlen);
+		rc = fi_setopt(&cep->cep_ep->fid, level, optname, optval,
+			       optlen);
 		if (rc == -FI_ENOSYS) {
 			rc = 0;
 			continue;
@@ -443,7 +552,7 @@ static int lnx_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 	return rc;
 }
 
-struct fi_ops_ep lnx_ep_ops = {
+static struct fi_ops_ep lnx_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = lnx_ep_cancel,
 	/* can't get opt, because there is no way to report multiple
@@ -456,7 +565,7 @@ struct fi_ops_ep lnx_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-struct fi_ops lnx_ep_fi_ops = {
+static struct fi_ops lnx_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = lnx_ep_close,
 	.bind = lnx_ep_bind,
@@ -464,7 +573,7 @@ struct fi_ops lnx_ep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-struct fi_ops_cm lnx_cm_ops = {
+static struct fi_ops_cm lnx_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
 	.getname = lnx_getname,
@@ -476,8 +585,7 @@ struct fi_ops_cm lnx_cm_ops = {
 	.shutdown = fi_no_shutdown,
 };
 
-static int
-lnx_open_core_eps(struct lnx_ep *lep, void *context)
+static int lnx_open_core_eps(struct lnx_ep *lep, void *context)
 {
 	int i, rc = 0;
 	struct lnx_core_domain *cd;
@@ -495,8 +603,8 @@ lnx_open_core_eps(struct lnx_ep *lep, void *context)
 		cep->cep_domain = cd;
 		cep->cep_parent = lep;
 
-		rc = fi_endpoint(cd->cd_domain, cd->cd_info,
-					&cep->cep_ep, context);
+		rc = fi_endpoint(cd->cd_domain, cd->cd_info, &cep->cep_ep,
+				 context);
 		if (rc)
 			goto fail;
 	}
@@ -512,8 +620,7 @@ fail:
 	return rc;
 }
 
-static void
-lnx_ep_nosys_progress(struct util_ep *util_ep)
+static void lnx_ep_nosys_progress(struct util_ep *util_ep)
 {
 	assert(0);
 }
@@ -553,9 +660,9 @@ static int lnx_match_unexq(struct dlist_entry *item, const void *args)
 				attr->lm_ignore);
 }
 
-static inline void
-lnx_init_qpair(struct lnx_qpair *qp, dlist_func_t *recvq_match_func,
-	       dlist_func_t *unexq_match_func)
+static inline void lnx_init_qpair(struct lnx_qpair *qp,
+				  dlist_func_t *recvq_match_func,
+				  dlist_func_t *unexq_match_func)
 {
 	dlist_init(&qp->lqp_recvq.lq_queue);
 	dlist_init(&qp->lqp_unexq.lq_queue);
@@ -563,9 +670,9 @@ lnx_init_qpair(struct lnx_qpair *qp, dlist_func_t *recvq_match_func,
 	qp->lqp_unexq.lq_match_func = unexq_match_func;
 }
 
-static int
-lnx_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
-		   struct lnx_ep **out_ep, void *context, size_t fclass)
+static int lnx_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
+			      struct lnx_ep **out_ep, void *context,
+			      size_t fclass)
 {
 	int rc;
 	struct lnx_ep *lep;
@@ -586,8 +693,9 @@ lnx_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	lep->le_ep.ep_fid.rma = &lnx_rma_ops;
 	lep->le_ep.ep_fid.atomic = &lnx_atomic_ops;
 	lep->le_domain = container_of(domain, struct lnx_domain,
-				     ld_domain.domain_fid);
-	lnx_init_qpair(&lep->le_srq.lps_trecv, lnx_match_recvq, lnx_match_unexq);
+				      ld_domain.domain_fid);
+	lnx_init_qpair(&lep->le_srq.lps_trecv, lnx_match_recvq,
+		       lnx_match_unexq);
 	lnx_init_qpair(&lep->le_srq.lps_recv, lnx_match_recvq, lnx_match_unexq);
 
 	ofi_genlock_lock(&lep->le_domain->ld_domain.lock);
@@ -618,12 +726,12 @@ lnx_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto fail;
 
 	rc = lnx_open_core_eps(lep, context);
-	if (rc) 
+	if (rc)
 		goto fail;
 
 	rc = ofi_endpoint_init(domain, (const struct util_prov *)&lnx_util_prov,
-			       info, &lep->le_ep,
-			       context, lnx_ep_nosys_progress);
+			       info, &lep->le_ep, context,
+			       lnx_ep_nosys_progress);
 	if (rc)
 		goto fail;
 
@@ -657,11 +765,10 @@ int lnx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return rc;
 	}
 
-	if (strncasecmp(LNX_PER_MSG_SELECTION_STR, mr_selection,
-		    strlen(mr_selection)) == 0) {
+	if (strncasecmp("PER_MSG", mr_selection, strlen(mr_selection)) == 0) {
 		mr = LNX_MR_SELECTION_PER_MSG;
-	} else if (strncasecmp(LNX_PER_PEER_SELECTION_STR, mr_selection,
-			 strlen(mr_selection)) == 0) {
+	} else if (strncasecmp("PER_PEER", mr_selection,
+		   strlen(mr_selection)) == 0) {
 		mr = LNX_MR_SELECTION_PER_PEER;
 	} else {
 		FI_WARN(&lnx_prov, FI_LOG_CORE,
@@ -682,4 +789,32 @@ create_ep:
 	return 0;
 }
 
+struct fi_ops_rma lnx_rma_ops = {
+	.size = sizeof(struct fi_ops_rma),
+	.read = fi_no_rma_read,
+	.readv = fi_no_rma_readv,
+	.readmsg = fi_no_rma_readmsg,
+	.write = fi_no_rma_write,
+	.writev = fi_no_rma_writev,
+	.writemsg = fi_no_rma_writemsg,
+	.inject = fi_no_rma_inject,
+	.writedata = fi_no_rma_writedata,
+	.injectdata = fi_no_rma_injectdata,
+};
 
+struct fi_ops_atomic lnx_atomic_ops = {
+	.size = sizeof(struct fi_ops_atomic),
+	.write = fi_no_atomic_write,
+	.writev = fi_no_atomic_writev,
+	.writemsg = fi_no_atomic_writemsg,
+	.inject = fi_no_atomic_inject,
+	.readwrite = fi_no_atomic_readwrite,
+	.readwritev = fi_no_atomic_readwritev,
+	.readwritemsg = fi_no_atomic_readwritemsg,
+	.compwrite = fi_no_atomic_compwrite,
+	.compwritev = fi_no_atomic_compwritev,
+	.compwritemsg = fi_no_atomic_compwritemsg,
+	.writevalid = fi_no_atomic_writevalid,
+	.readwritevalid = fi_no_atomic_readwritevalid,
+	.compwritevalid = fi_no_atomic_compwritevalid,
+};
