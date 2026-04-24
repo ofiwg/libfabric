@@ -78,6 +78,7 @@ enum {
 	FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES, /* bool */
 	FI_OPT_EFA_HOMOGENEOUS_PEERS,   /* bool */
 	FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV,     /* bool */
+	FI_OPT_EFA_MIXED_HMEM_IOV,      /* bool, read-only */
 };
 
 struct fi_fid_export {

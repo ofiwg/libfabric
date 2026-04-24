@@ -908,6 +908,7 @@ void test_efa_rdm_ep_getopt(struct efa_resource **state, size_t opt_len, int exp
 		FI_OPT_EFA_EMULATED_READ,
 		FI_OPT_EFA_EMULATED_WRITE,
 		FI_OPT_EFA_EMULATED_ATOMICS,
+		FI_OPT_EFA_MIXED_HMEM_IOV,
 	};
 	size_t num_opt_names = sizeof(opt_names) / sizeof(int);
 
@@ -930,6 +931,30 @@ void test_efa_rdm_ep_getopt_undersized_optlen(struct efa_resource **state)
 void test_efa_rdm_ep_getopt_oversized_optlen(struct efa_resource **state)
 {
 	test_efa_rdm_ep_getopt(state, 16, FI_SUCCESS);
+}
+
+/*
+ * FI_OPT_EFA_MIXED_HMEM_IOV is a read-only capability probe that must
+ * return true on any build that scans the full desc array for HMEM.
+ */
+void test_efa_rdm_ep_getopt_mixed_hmem_iov(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	bool optval;
+	size_t optlen = sizeof(optval);
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+				   FI_OPT_EFA_MIXED_HMEM_IOV, &optval, &optlen), 0);
+	assert_true(optval);
+	assert_int_equal(optlen, sizeof(bool));
+
+	/* setopt must reject it (option is read-only) */
+	optval = true;
+	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+				   FI_OPT_EFA_MIXED_HMEM_IOV, &optval, sizeof(optval)),
+			 -FI_ENOPROTOOPT);
 }
 
 void test_efa_rdm_ep_close_shm_resource_happy(struct efa_resource **state)
@@ -1595,6 +1620,9 @@ void test_efa_ep_getopt(struct efa_resource **state)
 
 	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_EMULATED_WRITE, &optval_bool, &optlen), 0);
 	assert_false(optval_bool);
+
+	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_MIXED_HMEM_IOV, &optval_bool, &optlen), 0);
+	assert_true(optval_bool);
 
 	optlen = sizeof(optval_size_t);
 	assert_int_equal(fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_RNR_RETRY, &optval_size_t, &optlen), 0);

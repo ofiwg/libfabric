@@ -193,6 +193,17 @@ provider for AWS Neuron or Habana SynapseAI.
   For efa-direct, FI_RX_CQ_DATA is required when FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV
   is false, or it will return -FI_EOPNOTSUPP for the call to fi_setopt().
 
+*FI_OPT_EFA_MIXED_HMEM_IOV - bool*
+: This option only applies to the fi_getopt() call and is read-only.
+  It is a capability probe that returns true on any libfabric build where the
+  EFA provider correctly inspects every descriptor in a multi-iov request when
+  deciding memory-type dependent behavior (inline path selection, CUDA
+  alignment, NEURON device-read requirement, HMEM copy dispatch). Applications
+  that need to safely mix host and device memory across descriptors in a
+  single request can call fi_getopt() with this option to determine whether
+  the linked libfabric contains the fix independent of the API version.
+  On builds without the fix, fi_getopt() returns -FI_ENOPROTOOPT.
+
 # PROVIDER SPECIFIC DOMAIN OPS
 The efa provider exports extensions for operations
 that are not provided by the standard libfabric interface. These extensions

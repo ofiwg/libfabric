@@ -68,6 +68,12 @@ static int efa_ep_getopt(fid_t fid, int level, int optname,
 		*(bool *)optval = false;
 		*optlen = sizeof(bool);
 		break;
+	case FI_OPT_EFA_MIXED_HMEM_IOV:
+		if (*optlen < sizeof(bool))
+			return -FI_ETOOSMALL;
+		*(bool *)optval = true;
+		*optlen = sizeof(bool);
+		break;
 	default:
 		EFA_INFO(FI_LOG_EP_CTRL, "Unknown / unsupported endpoint option\n");
 		return -FI_ENOPROTOOPT;
