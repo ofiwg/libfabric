@@ -9,6 +9,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_cntr.h"
+#include "efa_hw_cntr.h"
 #include "rdm/efa_rdm_cntr.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_atomic.h"
@@ -751,6 +752,113 @@ static uint64_t efa_domain_get_mr_lkey(struct fid_mr *mr)
 	return efa_mr->ibv_mr->lkey;
 }
 
+#if HAVE_EFADV_CREATE_COMP_CNTR
+
+static inline int efa_domain_fi_to_efadv_memory_location(
+	const struct fi_efa_memory_location *fi_mem,
+	struct efadv_memory_location *efadv_mem)
+{
+	switch (fi_mem->type) {
+	case FI_EFA_MEMORY_LOCATION_VA:
+		if (!fi_mem->ptr) {
+			EFA_WARN(FI_LOG_CNTR,
+				 "ptr is required for VA memory location\n");
+			return -FI_EINVAL;
+		}
+		break;
+	case FI_EFA_MEMORY_LOCATION_DMABUF:
+		break;
+	default:
+		EFA_WARN(FI_LOG_CNTR, "Unknown memory location type %u\n",
+			 fi_mem->type);
+		return -FI_EINVAL;
+	}
+
+	efadv_mem->ptr = fi_mem->ptr;
+	efadv_mem->dmabuf.offset = fi_mem->dmabuf.offset;
+	efadv_mem->dmabuf.fd = fi_mem->dmabuf.fd;
+	efadv_mem->type = fi_mem->type;
+	return FI_SUCCESS;
+}
+
+static int efa_domain_cntr_open_ext(struct fid_domain *domain,
+				       struct fi_cntr_attr *attr,
+				       struct fid_cntr **cntr_fid,
+				       void *context,
+				       struct fi_efa_comp_cntr_init_attr *fi_efa_attr)
+{
+	struct efadv_comp_cntr_init_attr efa_cc_attr = {0};
+	struct efa_cntr *cntr;
+	uint32_t flags;
+	int ret;
+
+	if (!fi_efa_attr) {
+		EFA_WARN(FI_LOG_CNTR,
+			 "fi_efa_attr is required for cntr_open_ext, "
+			 "use fi_cntr_open when no external memory is passed.\n");
+		return -FI_EINVAL;
+	}
+
+	if (fi_efa_attr->comp_mask) {
+		EFA_WARN(FI_LOG_CNTR,
+			 "Unsupported comp_mask 0x%lx in fi_efa_comp_cntr_init_attr\n",
+			 fi_efa_attr->comp_mask);
+		return -FI_EINVAL;
+	}
+
+	flags = fi_efa_attr->flags;
+
+	if (flags & FI_EFA_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM) {
+		efa_cc_attr.flags |= EFADV_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM;
+		ret = efa_domain_fi_to_efadv_memory_location(
+			&fi_efa_attr->comp_cntr_ext_mem, &efa_cc_attr.comp_cntr_ext_mem);
+		if (ret)
+			return ret;
+	}
+
+	if (flags & FI_EFA_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM) {
+		efa_cc_attr.flags |= EFADV_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM;
+		ret = efa_domain_fi_to_efadv_memory_location(
+			&fi_efa_attr->err_cntr_ext_mem, &efa_cc_attr.err_cntr_ext_mem);
+		if (ret)
+			return ret;
+	}
+
+	cntr = calloc(1, sizeof(*cntr));
+	if (!cntr)
+		return -FI_ENOMEM;
+
+	ret = efa_hw_cntr_open(domain, attr, cntr, cntr_fid, context, &efa_cc_attr);
+	if (ret) {
+		free(cntr);
+		return ret;
+	}
+
+	if (flags & FI_EFA_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM) {
+		cntr->comp_use_device_mem =
+			fi_efa_attr->comp_cntr_ext_mem.type == FI_EFA_MEMORY_LOCATION_DMABUF &&
+			!fi_efa_attr->comp_cntr_ext_mem.ptr;
+	}
+
+	if (flags & FI_EFA_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM) {
+		cntr->err_use_device_mem =
+			fi_efa_attr->err_cntr_ext_mem.type == FI_EFA_MEMORY_LOCATION_DMABUF &&
+			!fi_efa_attr->err_cntr_ext_mem.ptr;
+	}
+
+	return FI_SUCCESS;
+}
+#else
+static int efa_domain_cntr_open_ext(struct fid_domain *domain,
+				       struct fi_cntr_attr *attr,
+				       struct fid_cntr **cntr_fid,
+				       void *context,
+				       struct fi_efa_comp_cntr_init_attr *fi_efa_attr)
+{
+	return -FI_ENOSYS;
+}
+#endif /* HAVE_EFADV_CREATE_COMP_CNTR */
+
 static struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
 };
@@ -761,6 +869,7 @@ static struct fi_efa_ops_gda efa_ops_gda = {
 	.query_cq = efa_domain_query_cq,
 	.cq_open_ext = efa_domain_cq_open_ext,
 	.get_mr_lkey = efa_domain_get_mr_lkey,
+	.cntr_open_ext = efa_domain_cntr_open_ext,
 };
 
 static int

@@ -94,6 +94,20 @@ The following features are supported:
 *Threading*
 : Both RDM and DGRAM endpoints supports *FI_THREAD_SAFE*.
 
+*Completion counters*
+: The `efa-direct` fabric supports hardware completion counters backed by
+  MSI-X hardware counters on the EFA device.
+
+  Hardware counters are created via the `cntr_open_ext` GDA domain op
+  (see below). When a hardware counter is bound to an endpoint, it is
+  automatically attached to the QP when the endpoint is enabled. 
+  The counter is implicitly detached when the EP it is attached 
+  to is destroyed. The counter cannot be closed while it is still 
+  attached to any EP; the EP must be closed first.
+
+  *fi_cntr_read*, *fi_cntr_readerr*, and *fi_cntr_wait* are not
+  supported on the host for GPU memory-backed counters.
+
 # LIMITATIONS
 
 ## Completion events
@@ -271,6 +285,11 @@ struct fi_efa_ops_gda {
 			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
 			   struct fid_cq **cq_fid, void *context);
 	uint64_t (*get_mr_lkey)(struct fid_mr *mr);
+	int (*cntr_open_ext)(struct fid_domain *domain,
+			     struct fi_cntr_attr *attr,
+			     struct fid_cntr **cntr,
+			     void *context,
+			     struct fi_efa_comp_cntr_init_attr *efa_attr);
 };
 ```
 
@@ -397,6 +416,98 @@ Returns the local memory translation key associated with a MR. The memory regist
 
 #### Return value
 **get_mr_lkey()** returns lkey on success, or FI_KEY_NOTAVAIL if the registration has not completed.
+
+### cntr_open_ext
+This op creates a completion counter backed by a MSI-X hardware counter.
+Applications must check `FI_VERSION_GE(fi_version(), FI_VERSION(2, 5))` before
+calling `cntr_open_ext`, as older libfabric versions do not include this
+function pointer in the domain ops structure.
+
+When the *FI_EFA_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM* or
+*FI_EFA_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM* flag is set in
+`fi_efa_comp_cntr_init_attr.flags`, the application provides its own memory for
+the completion or error count via the `comp_cntr_ext_mem` or `err_cntr_ext_mem`
+fields respectively. The external memory is described by a
+`fi_efa_memory_location` structure which supports two modes: a virtual address
+(*FI_EFA_MEMORY_LOCATION_VA*), where the application supplies a direct pointer,
+or a DMA-BUF reference (*FI_EFA_MEMORY_LOCATION_DMABUF*), where the application
+supplies a file descriptor and offset into an exported DMA-BUF. When using
+DMA-BUF, the `ptr` field may also be set to provide a process-accessible
+mapping of the memory, which may enable more efficient counter reads. Using
+external memory allows the counter values to reside in application-managed
+buffers or in memory exported through DMA-BUF, enabling zero-copy observation
+of completion progress by co-located processes or devices.
+The default counter events type is `FI_CNTR_EVENTS_COMP`.
+
+Counter memory supplied by the application must not be modified directly, or the
+resulting counter value will be non-deterministic. Counter values must only be
+updated using fi_cntr* APIs.
+Only *FI_WAIT_NONE* and *FI_WAIT_UNSPEC* are supported as wait objects in
+`fi_cntr_attr`.
+
+```c
+enum fi_efa_memory_location_type {
+	FI_EFA_MEMORY_LOCATION_VA,
+	FI_EFA_MEMORY_LOCATION_DMABUF,
+};
+
+struct fi_efa_memory_location {
+	uint8_t *ptr;
+	struct {
+		uint64_t offset;
+		int32_t fd;
+		uint32_t reserved;
+	} dmabuf;
+	uint8_t type;
+	uint8_t reserved[7];
+};
+
+struct fi_efa_comp_cntr_init_attr {
+	uint64_t comp_mask;
+	uint32_t flags;
+	uint32_t reserved;
+	struct fi_efa_memory_location comp_cntr_ext_mem;
+	struct fi_efa_memory_location err_cntr_ext_mem;
+};
+```
+
+*comp_mask*
+:	Compatibility mask.
+
+*flags*
+:	A bitwise OR of the following values:
+
+	FI_EFA_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM:
+		Use application-provided memory for the completion count, as
+		described by `comp_cntr_ext_mem`.
+
+	FI_EFA_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM:
+		Use application-provided memory for the error count, as
+		described by `err_cntr_ext_mem`.
+
+*comp_cntr_ext_mem*
+:	Memory location for the completion count when using external memory.
+
+*err_cntr_ext_mem*
+:	Memory location for the error count when using external memory.
+
+*type*
+:	The type of memory location. `FI_EFA_MEMORY_LOCATION_VA` for a virtual address,
+	or `FI_EFA_MEMORY_LOCATION_DMABUF` for a DMA-BUF reference.
+
+*ptr*
+:	Virtual address pointer. Required when type is `FI_EFA_MEMORY_LOCATION_VA`.
+	When type is `FI_EFA_MEMORY_LOCATION_DMABUF`, may optionally be set to provide
+	a process-accessible mapping of the DMA-BUF memory. Otherwise should be NULL.
+
+*dmabuf.fd*
+:	DMA-BUF file descriptor (used when type is `FI_EFA_MEMORY_LOCATION_DMABUF`).
+
+*dmabuf.offset*
+:	Offset within the DMA-BUF.
+
+#### Return value
+**cntr_open_ext()** returns 0 on success, or a negative value on failure.
 
 
 ## Fabric Operation Extension
