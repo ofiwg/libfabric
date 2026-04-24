@@ -504,6 +504,51 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		info->rx_attr->caps &= ~OFI_RX_RMA_CAPS;
 	}
 	/*
+	 * Handle inject_size for wide WQE support.
+	 *
+	 * prov_info advertises inline_buf_size_ex as inject_size so that
+	 * ofi_check_info allows larger hints. Here we adjust the actual
+	 * inject_size and tx queue depth based on what the user requested.
+	 */
+	struct efa_device *device = &g_efa_selected_device_list[0];
+	uint16_t inline_buf_size = device->efa_attr.inline_buf_size;
+
+	if (!hints || !hints->tx_attr || !hints->tx_attr->inject_size) {
+		/* No hint: default to inline_buf_size */
+		info->tx_attr->inject_size = inline_buf_size;
+	} else if (hints->tx_attr->inject_size > inline_buf_size) {
+		/* Wide WQE: query actual tx depth */
+#if HAVE_INLINE_BUF_SIZE_EX
+		struct efadv_sq_depth_attr sq_attr = {0};
+		int max_sq_depth;
+
+		sq_attr.max_inline_data = hints->tx_attr->inject_size;
+		sq_attr.flags = EFADV_SQ_DEPTH_ATTR_INLINE_WRITE;
+		max_sq_depth = efadv_get_max_sq_depth(device->ibv_ctx,
+						      &sq_attr,
+						      sizeof(sq_attr));
+		if (max_sq_depth < 0) {
+			EFA_INFO(FI_LOG_CORE,
+				 "efadv_get_max_sq_depth failed: %d\n",
+				 max_sq_depth);
+			return -FI_ENODATA;
+		}
+		if (hints->tx_attr->size > max_sq_depth) {
+			EFA_INFO(FI_LOG_CORE,
+				 "Requested TX SQ depth (%zu) exceeds maximum depth (%d)"
+				 " for inline size %zu\n",
+				 hints->tx_attr->size, max_sq_depth,
+				 hints->tx_attr->inject_size);
+			return -FI_ENODATA;
+		}
+		info->tx_attr->size = max_sq_depth;
+#else
+		return -FI_ENODATA;
+#endif
+	}
+	/* inject_size <= inline_buf_size: no adjustment needed,
+	 * ofi_alter_info will set inject_size from hints */
+	/*
 	 * Handle user-provided hints and adapt the info object passed back up
 	 * based on EFA-specific constraints.
 	 */

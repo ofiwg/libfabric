@@ -284,7 +284,8 @@ static int efa_base_ep_modify_qp_rst2rts(struct efa_base_ep *base_ep,
  * @return int 0 on success, negative integer on failure
  */
 int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
-		   uint32_t tclass, bool use_unsolicited_write_recv)
+		   uint32_t tclass, bool use_unsolicited_write_recv,
+		   bool use_inline_write)
 {
 	struct efadv_qp_init_attr efa_attr = { 0 };
 
@@ -310,6 +311,10 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 		if (use_unsolicited_write_recv)
 			efa_attr.flags |= EFADV_QP_FLAGS_UNSOLICITED_WRITE_RECV;
+#endif
+#if HAVE_INLINE_BUF_SIZE_EX
+		if (use_inline_write)
+			efa_attr.flags |= EFADV_QP_FLAGS_INLINE_WRITE;
 #endif
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
 #if HAVE_EFADV_SL
@@ -382,7 +387,9 @@ void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
 	attr_ex->cap.max_send_sge = device_info->tx_attr->iov_limit;
 	attr_ex->cap.max_recv_wr = efa_base_ep_get_rx_pool_size(ep);
 	attr_ex->cap.max_recv_sge = device_info->rx_attr->iov_limit;
-	attr_ex->cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
+	attr_ex->cap.max_inline_data = EFA_INFO_TYPE_IS_DIRECT(ep->info) ?
+		ep->info->tx_attr->inject_size :
+		ep->domain->device->efa_attr.inline_buf_size;
 
 	EFA_INFO(FI_LOG_EP_CTRL,
 		 "QP cap max_send_wr=%u max_recv_wr=%u max_send_sge=%u "
@@ -416,6 +423,14 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	int ret;
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	bool use_unsolicited_write_recv = true;
+	/*
+	 * Inline RDMA write is only supported with 128-byte wide WQE,
+	 * which is enabled when the requested inject size exceeds
+	 * inline_buf_size.
+	 */
+	bool use_inline_write = EFA_INFO_TYPE_IS_DIRECT(base_ep->info) &&
+				base_ep->info->tx_attr->inject_size >
+				base_ep->domain->device->efa_attr.inline_buf_size;
 
 	efa_base_ep_construct_ibv_qp_init_attr_ex(base_ep, &attr_ex, tx_cq->ibv_cq_ex, rx_cq->ibv_cq_ex);
 
@@ -434,12 +449,12 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	}
 	EFA_INFO(FI_LOG_EP_CTRL, "creating QP with unsolicited write recv status: %d\n", use_unsolicited_write_recv);
 	ret = efa_qp_create(&base_ep->qp, &attr_ex, base_ep->info->tx_attr->tclass,
-			    use_unsolicited_write_recv);
+			    use_unsolicited_write_recv, use_inline_write);
 	if (ret)
 		return ret;
 
 	if (create_user_recv_qp) {
-		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass, tx_cq->unsolicited_write_recv_enabled);
+		ret = efa_qp_create(&base_ep->user_recv_qp, &attr_ex, base_ep->info->tx_attr->tclass, tx_cq->unsolicited_write_recv_enabled, use_inline_write);
 		if (ret) {
 			efa_base_ep_destruct_qp_unsafe(base_ep);
 			return ret;
@@ -603,10 +618,11 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	/* Use device's native limit as the default value of base ep*/
 	base_ep->max_msg_size = (size_t) base_ep->domain->device->ibv_port_attr.max_msg_sz;
 	base_ep->max_rma_size = (size_t) base_ep->domain->device->max_rdma_size;
-	base_ep->inject_msg_size = (size_t) base_ep->domain->device->efa_attr.inline_buf_size;
-	/* TODO: update inject_rma_size to inline size after firmware
-	 * supports inline rdma write */
-	base_ep->inject_rma_size = 0;
+	base_ep->inject_msg_size = info->tx_attr->inject_size;
+	if (info->tx_attr->inject_size > base_ep->domain->device->efa_attr.inline_buf_size)
+		base_ep->inject_rma_size = info->tx_attr->inject_size;
+	else
+		base_ep->inject_rma_size = 0;
 	base_ep->use_unsolicited_write_recv = true;
 	return 0;
 }
@@ -801,7 +817,7 @@ int efa_base_ep_check_qp_in_order_aligned_128_bytes(struct efa_base_ep *ep,
 	/* Create a dummy qp for query only */
 	efa_base_ep_construct_ibv_qp_init_attr_ex(ep, &attr_ex, ibv_cq.ibv_cq_ex, ibv_cq.ibv_cq_ex);
 
-	ret = efa_qp_create(&qp, &attr_ex, FI_TC_UNSPEC, ibv_cq.unsolicited_write_recv_enabled);
+	ret = efa_qp_create(&qp, &attr_ex, FI_TC_UNSPEC, ibv_cq.unsolicited_write_recv_enabled, false);
 	if (ret)
 		goto out;
 

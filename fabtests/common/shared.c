@@ -1365,15 +1365,15 @@ int ft_init_fabric(void)
 	if (ret)
 		return ret;
 
+	ret = ft_getinfo(hints, &fi);
+	if (ret)
+		return ret;
+
 	if (oob_sock >= 0 && opts.dst_addr) {
 		ret = ft_sock_sync(oob_sock, 0);
 		if (ret)
 			return ret;
 	}
-
-	ret = ft_getinfo(hints, &fi);
-	if (ret)
-		return ret;
 
 	ret = ft_open_fabric_res();
 	if (ret)
@@ -1496,21 +1496,6 @@ int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *
 				&opts.max_msg_size, sizeof opts.max_msg_size);
 		if (ret && ret != -FI_EOPNOTSUPP) {
 			FT_PRINTERR("fi_setopt(FI_OPT_MAX_MSG_SIZE)", ret);
-			return ret;
-		}
-	}
-
-	if (opts.inject_size) {
-		ret = fi_setopt(&bind_ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_MSG_SIZE,
-				&opts.inject_size, sizeof opts.inject_size);
-		if (ret && ret != -FI_EOPNOTSUPP) {
-			FT_PRINTERR("fi_setopt(FI_OPT_INJECT_MSG_SIZE)", ret);
-			return ret;
-		}
-		ret = fi_setopt(&bind_ep->fid, FI_OPT_ENDPOINT, FI_OPT_INJECT_RMA_SIZE,
-				&opts.inject_size, sizeof opts.inject_size);
-		if (ret && ret != -FI_EOPNOTSUPP) {
-			FT_PRINTERR("fi_setopt(FI_OPT_INJECT_RMA_SIZE)", ret);
 			return ret;
 		}
 	}
