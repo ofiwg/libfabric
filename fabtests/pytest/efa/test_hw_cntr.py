@@ -32,3 +32,27 @@ def test_efa_hw_cntr_rma_write(cmdline_args, message_sizes, rma_fabric):
                             message_size=message_sizes,
                             fabric=rma_fabric)
     test.run()
+
+
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.message_sizes(default_efa_direct=DIRECT_SIZES)
+@pytest.mark.short
+@pytest.mark.functional
+def test_efa_hw_cntr_pingpong_ext_mem(cmdline_args, message_sizes, fabric):
+    test = ClientServerTest(cmdline_args, "fi_efa_hw_cntr --external-mem",
+                            iteration_type="short",
+                            message_size=message_sizes,
+                            fabric=fabric)
+    test.run()
+
+
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.message_sizes(default_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.short
+@pytest.mark.functional
+def test_efa_hw_cntr_rma_write_ext_mem(cmdline_args, message_sizes, rma_fabric):
+    test = ClientServerTest(cmdline_args, "fi_efa_hw_cntr --external-mem -o write",
+                            iteration_type="short",
+                            message_size=message_sizes,
+                            fabric=rma_fabric)
+    test.run()
