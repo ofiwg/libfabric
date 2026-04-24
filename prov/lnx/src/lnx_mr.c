@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2025 ORNL. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,23 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-#include <ctype.h>
-
-#include <rdma/fi_errno.h>
-#include "ofi_util.h"
-#include "ofi.h"
-#include "ofi_str.h"
-#include "ofi_prov.h"
-#include "ofi_perf.h"
-#include "ofi_hmem.h"
-#include "rdma/fi_ext.h"
 #include "lnx.h"
 
 /*
@@ -58,7 +42,8 @@
  * target core provider we can do memory registration at that point
  */
 
-int lnx_mr_regattr_core(struct lnx_core_domain *cd, void *desc, void **core_desc)
+int lnx_mr_regattr_core(struct lnx_core_domain *cd, void *desc,
+			void **core_desc)
 {
 	int rc;
 	struct lnx_mr *lm;
@@ -135,7 +120,8 @@ int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	memset(lm, 0, sizeof(*lm));
 
 	lm->lm_attr = *attr;
-	memcpy(lm->lm_iov, attr->mr_iov, sizeof(struct iovec) * attr->iov_count);
+	memcpy(lm->lm_iov, attr->mr_iov,
+	       sizeof(struct iovec) * attr->iov_count);
 	lm->lm_attr.mr_iov = lm->lm_iov;
 	mr = &lm->lm_mr;
 	mr->mr_fid.fid.fclass = FI_CLASS_MR;
@@ -149,5 +135,3 @@ int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	return FI_SUCCESS;
 }
-
-
