@@ -100,6 +100,11 @@ struct fi_efa_ops_gda {
 			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
 			   struct fid_cq **cq_fid, void *context);
 	uint64_t (*get_mr_lkey)(struct fid_mr *mr);
+	int (*cntr_open_ext)(struct fid_domain *domain,
+			     struct fi_cntr_attr *attr,
+			     struct fid_cntr **cntr,
+			     void *context,
+			     struct fi_efa_comp_cntr_init_attr *efa_attr);
 };
 
 /*
