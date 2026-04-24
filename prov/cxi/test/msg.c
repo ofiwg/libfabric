@@ -2428,7 +2428,7 @@ Test(rnr_msg, multi_recv_retries)
 Test(rnr_msg, append_oflow, .timeout = 600, .disabled = false)
 {
 	int ret, recv_post_count = 15724;
-	int posted = 0, canceled = 0, req_overflow = 6;
+	int posted = 0, canceled = 0, req_overflow = 2;
 	uint8_t *recv_buf;
 	int recv_len = 64;
 	struct fi_cq_tagged_entry rx_cqe;
@@ -2504,6 +2504,7 @@ Test(rnr_msg, append_oflow, .timeout = 600, .disabled = false)
 			&retry_attempts_end, &optlen);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_getopt failed to get end attempts %d", ret);
 	cr_assert_neq(retry_attempts_start, retry_attempts_end, "retry attempts unchanged %ld\n", retry_attempts_end);
+	CXIP_WARN("retry_attempts_end %ld\n", retry_attempts_end);
 
 	/* now cancel the remaining recv posts that pushed us to the ceiling */
 	CXIP_WARN("Cancelling remaining recv reqs %d\n", (recv_post_total - req_overflow));
