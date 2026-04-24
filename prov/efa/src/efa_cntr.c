@@ -188,6 +188,7 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags)
 {
 	struct util_cntr *cntr;
+	struct efa_cntr *efa_cntr;
 
 	flags &= (FI_SEND | FI_WRITE | FI_READ);
 	assert(flags == FI_SEND || flags == FI_WRITE || flags == FI_READ);
@@ -201,13 +202,21 @@ void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags)
 	else
 		cntr = NULL;
 
-	if (cntr)
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+	if (!cntr)
+		return;
+
+	/* Skip cntr add for hardware counter */
+	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
+	if (efa_cntr->ibv_comp_cntr)
+		return;
+
+	cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 }
 
 void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags)
 {
 	struct util_cntr *cntr;
+	struct efa_cntr *efa_cntr;
 
 	flags &= (FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ);
 	assert(flags == FI_RECV || flags == FI_REMOTE_WRITE || flags == FI_REMOTE_READ);
@@ -221,8 +230,15 @@ void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags)
 	else
 		cntr = NULL;
 
-	if (cntr)
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+	if (!cntr)
+		return;
+
+	/* Skip cntr add for hardware counter */
+	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
+	if (efa_cntr->ibv_comp_cntr)
+		return;
+
+	cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 }
 
 void efa_cntr_report_error(struct util_ep *ep, uint64_t flags)
@@ -231,6 +247,7 @@ void efa_cntr_report_error(struct util_ep *ep, uint64_t flags)
 			 FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE);
 
 	struct util_cntr *cntr;
+	struct efa_cntr *efa_cntr;
 
 	if (flags == FI_WRITE || flags == FI_ATOMIC)
 		cntr = ep->cntrs[CNTR_WR];
@@ -247,6 +264,13 @@ void efa_cntr_report_error(struct util_ep *ep, uint64_t flags)
 	else
 		cntr = NULL;
 
-	if (cntr)
-		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
+	if (!cntr)
+		return;
+
+	/* Skip cntr adderr for hardware counter */
+	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
+	if (efa_cntr->ibv_comp_cntr)
+		return;
+
+	cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
 }
