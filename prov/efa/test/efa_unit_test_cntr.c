@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 #include "efa_unit_tests.h"
 #include "efa_cntr.h"
+#include "efa_hw_cntr.h"
 #include "rdm/efa_rdm_cntr.h"
 
 /**
@@ -239,3 +240,240 @@ void test_efa_rdm_cntr_read_before_ep_enable(struct efa_resource **state)
 
 	assert_int_equal(fi_close(&cntr->fid), 0);
 }
+
+
+#if HAVE_EFADV_CREATE_COMP_CNTR
+/**
+ * @brief Test efa_hw_cntr_open returns -FI_EOPNOTSUPP for FI_CNTR_EVENTS_BYTES
+ * when efadv_create_comp_cntr does not support IBV_COMP_CNTR_TYPE_BYTES.
+ */
+void test_efa_hw_cntr_open_unsupported_type_bytes(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cntr_attr attr = {0};
+	struct efadv_comp_cntr_init_attr cc_attr = {0};
+	struct efa_cntr *cntr;
+	struct fid_cntr *cntr_fid = NULL;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	g_efa_unit_test_mocks.efadv_create_comp_cntr =
+		efa_mock_efadv_create_comp_cntr_return_null_enotsup;
+
+	cntr = calloc(1, sizeof(*cntr));
+	assert_non_null(cntr);
+
+	attr.events = FI_CNTR_EVENTS_BYTES;
+	assert_int_equal(efa_hw_cntr_open(resource->domain, &attr, cntr, &cntr_fid, NULL, &cc_attr),
+			 -ENOTSUP);
+	assert_null(cntr_fid);
+	free(cntr);
+}
+
+/**
+ * @brief Test efa_hw_cntr_open rejects when max_cntr_value exceeds hw limit
+ */
+void test_efa_hw_cntr_open_max_cntr_value_exceeded(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cntr_attr attr = {0};
+	struct efadv_comp_cntr_init_attr cc_attr = {0};
+	struct efa_cntr *cntr;
+	struct fid_cntr *cntr_fid = NULL;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_cntr_value = UINT64_MAX;
+
+	cntr = calloc(1, sizeof(*cntr));
+	assert_non_null(cntr);
+
+	attr.events = FI_CNTR_EVENTS_COMP;
+	assert_int_equal(efa_hw_cntr_open(resource->domain, &attr, cntr, &cntr_fid, NULL, &cc_attr),
+			 -FI_EOPNOTSUPP);
+	free(cntr);
+}
+
+/**
+ * @brief Test efa_hw_cntr_open returns error when efadv_create_comp_cntr fails
+ */
+void test_efa_hw_cntr_open_ibv_fail(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cntr_attr attr = {0};
+	struct efa_cntr *cntr;
+	struct fid_cntr *cntr_fid = NULL;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	g_efa_unit_test_mocks.efadv_create_comp_cntr =
+		efa_mock_efadv_create_comp_cntr_return_null_enotsup;
+
+	cntr = calloc(1, sizeof(*cntr));
+	assert_non_null(cntr);
+
+	attr.events = FI_CNTR_EVENTS_COMP;
+	assert_int_equal(efa_hw_cntr_open(resource->domain, &attr, cntr, &cntr_fid, NULL, NULL),
+			 -ENOTSUP);
+	assert_null(cntr_fid);
+	free(cntr);
+}
+
+/**
+ * @brief Helper to open a hardware counter
+ */
+static struct fid_cntr *test_efa_hw_cntr_open(struct efa_resource *resource)
+{
+	struct fi_cntr_attr attr = {0};
+	struct efadv_comp_cntr_init_attr cc_attr = {0};
+	struct efa_domain *efa_domain;
+	struct efa_cntr *efa_cntr;
+	struct fid_cntr *cntr_fid = NULL;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	g_efa_unit_test_mocks.efadv_create_comp_cntr = efa_mock_efadv_create_comp_cntr_return_mock;
+	g_efa_unit_test_mocks.ibv_destroy_comp_cntr = efa_mock_ibv_destroy_comp_cntr_return_mock;
+
+	efa_cntr = calloc(1, sizeof(*efa_cntr));
+	assert_non_null(efa_cntr);
+
+	attr.events = FI_CNTR_EVENTS_COMP;
+	ret = efa_hw_cntr_open(resource->domain, &attr, efa_cntr, &cntr_fid, NULL, &cc_attr);
+	assert_int_equal(ret, FI_SUCCESS);
+	assert_non_null(cntr_fid);
+	assert_non_null(efa_cntr->ibv_comp_cntr);
+
+	return cntr_fid;
+}
+
+/**
+ * @brief Test efa_hw_cntr_add calls ibv_inc_comp_cntr and returns success
+ */
+void test_efa_hw_cntr_add(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid;
+
+	cntr_fid = test_efa_hw_cntr_open(resource);
+	g_efa_unit_test_mocks.ibv_inc_comp_cntr = efa_mock_ibv_inc_comp_cntr_return_mock;
+
+	assert_int_equal(fi_cntr_add(cntr_fid, 1), FI_SUCCESS);
+
+	fi_close(&cntr_fid->fid);
+}
+
+/**
+ * @brief Test efa_hw_cntr_adderr calls ibv_inc_err_comp_cntr and returns success
+ */
+void test_efa_hw_cntr_adderr(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid;
+
+	cntr_fid = test_efa_hw_cntr_open(resource);
+	g_efa_unit_test_mocks.ibv_inc_err_comp_cntr = efa_mock_ibv_inc_err_comp_cntr_return_mock;
+
+	assert_int_equal(fi_cntr_adderr(cntr_fid, 1), FI_SUCCESS);
+
+	fi_close(&cntr_fid->fid);
+}
+
+/**
+ * @brief Test efa_hw_cntr_set calls ibv_set_comp_cntr and returns success
+ */
+void test_efa_hw_cntr_set(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid;
+
+	cntr_fid = test_efa_hw_cntr_open(resource);
+	g_efa_unit_test_mocks.ibv_set_comp_cntr = efa_mock_ibv_set_comp_cntr_return_mock;
+
+	assert_int_equal(fi_cntr_set(cntr_fid, 1), FI_SUCCESS);
+
+	fi_close(&cntr_fid->fid);
+}
+
+/**
+ * @brief Test efa_hw_cntr_seterr calls ibv_set_err_comp_cntr and returns success
+ */
+void test_efa_hw_cntr_seterr(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid;
+
+	cntr_fid = test_efa_hw_cntr_open(resource);
+	g_efa_unit_test_mocks.ibv_set_err_comp_cntr = efa_mock_ibv_set_err_comp_cntr_return_mock;
+
+	assert_int_equal(fi_cntr_seterr(cntr_fid, 1), FI_SUCCESS);
+
+	fi_close(&cntr_fid->fid);
+}
+
+/**
+ * @brief Test efa_hw_cntr_read calls ibv_read_comp_cntr and returns the value
+ */
+void test_efa_hw_cntr_read(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid;
+
+	cntr_fid = test_efa_hw_cntr_open(resource);
+	g_efa_unit_test_mocks.ibv_read_comp_cntr = efa_mock_ibv_read_comp_cntr_return_mock;
+
+	will_return(efa_mock_ibv_read_comp_cntr_return_mock, 100);
+	assert_int_equal(fi_cntr_read(cntr_fid), 100);
+
+	fi_close(&cntr_fid->fid);
+}
+
+/**
+ * @brief Test efa_hw_cntr_readerr calls ibv_read_err_comp_cntr and returns the value
+ */
+void test_efa_hw_cntr_readerr(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_cntr *cntr_fid;
+
+	cntr_fid = test_efa_hw_cntr_open(resource);
+	g_efa_unit_test_mocks.ibv_read_err_comp_cntr = efa_mock_ibv_read_err_comp_cntr_return_mock;
+
+	will_return(efa_mock_ibv_read_err_comp_cntr_return_mock, 100);
+	assert_int_equal(fi_cntr_readerr(cntr_fid), 100);
+
+	fi_close(&cntr_fid->fid);
+}
+#else
+void test_efa_hw_cntr_open_unsupported_type_bytes(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_open_max_cntr_value_exceeded(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_open_ibv_fail(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_add(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_adderr(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_set(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_seterr(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_read(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_readerr(struct efa_resource **state) { skip(); }
+#endif /* HAVE_EFADV_CREATE_COMP_CNTR */

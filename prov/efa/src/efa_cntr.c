@@ -6,6 +6,7 @@
 #include "efa.h"
 #include "efa_cntr.h"
 #include "efa_cq.h"
+#include "efa_hw_cntr.h"
 
 int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 {
@@ -137,7 +138,7 @@ void efa_cntr_progress_ibv_cq_poll_list(struct efa_cntr *efa_cntr)
 	}
 }
 
-static void efa_cntr_progress(struct util_cntr *cntr)
+void efa_cntr_progress(struct util_cntr *cntr)
 {
 	struct efa_cntr *efa_cntr;
 

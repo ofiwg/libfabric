@@ -362,6 +362,15 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_post_initial_rx_pkts();
 void test_efa_rdm_cntr_read_before_ep_enable();
+void test_efa_hw_cntr_open_unsupported_type_bytes();
+void test_efa_hw_cntr_open_max_cntr_value_exceeded();
+void test_efa_hw_cntr_open_ibv_fail();
+void test_efa_hw_cntr_add();
+void test_efa_hw_cntr_adderr();
+void test_efa_hw_cntr_set();
+void test_efa_hw_cntr_seterr();
+void test_efa_hw_cntr_read();
+void test_efa_hw_cntr_readerr();
 /* begin of efa_unit_test_rdm_peer.c */
 void test_efa_rdm_peer_reorder_expected_msg_id();
 void test_efa_rdm_peer_reorder_smaller_msg_id();
