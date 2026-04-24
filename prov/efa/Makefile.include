@@ -78,7 +78,9 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_tracepoint_def.c \
 	prov/efa/src/rdm/efa_rdm_srx.c \
 	prov/efa/src/rdm/efa_rdm_util.c \
-	prov/efa/src/rdm/efa_rdm_mr.c
+	prov/efa/src/rdm/efa_rdm_mr.c \
+	prov/efa/src/rdm/efa_rdm_proto.c \
+	prov/efa/src/rdm/efa_rdm_proto_eager.c
 
 if ENABLE_EFA_UNIT_TEST
 _efa_files += prov/efa/test/efa_unit_test_data_path_ops.c
@@ -140,7 +142,9 @@ _efa_headers = \
 	prov/efa/src/rdm/efa_rdm_tracepoint.h \
 	prov/efa/src/rdm/efa_rdm_srx.h \
 	prov/efa/src/rdm/efa_rdm_util.h \
-	prov/efa/src/rdm/efa_rdm_mr.h
+	prov/efa/src/rdm/efa_rdm_mr.h \
+	prov/efa/src/rdm/efa_rdm_proto.h \
+	prov/efa/src/rdm/efa_rdm_proto_eager.h
 
 if HAVE_LTTNG
 efa_LDFLAGS += -llttng-ust
@@ -174,7 +178,8 @@ nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_test_msg.c \
 	prov/efa/test/efa_unit_test_rma.c \
 	prov/efa/test/efa_unit_test_rdm_rma.c \
-	prov/efa/test/efa_unit_test_data_path_direct.c
+	prov/efa/test/efa_unit_test_data_path_direct.c \
+	prov/efa/test/efa_unit_test_proto.c
 
 
 efa_CPPFLAGS += -I$(top_srcdir)/include -I$(top_srcdir)/prov/efa/test $(cmocka_CPPFLAGS)

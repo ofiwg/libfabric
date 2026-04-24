@@ -14,9 +14,24 @@
 #include <stddef.h>
 #include <setjmp.h>
 #include <cmocka.h>
-#include "stdio.h"
+#include <stdio.h>
 #include "efa.h"
+#include "efa_rdm_pke_cmd.h"
 #include "efa_unit_test_mocks.h"
+
+/*
+ * TODO: Remove this utility once all protocols are migrated to the
+ * refactored code path with callbacks. At that point, all PKEs will
+ * have a callback set and we can call pkt_entry->handle_pke directly.
+ */
+static inline void
+efa_unit_test_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
+{
+	if (pkt_entry->handle_pke)
+		pkt_entry->handle_pke(pkt_entry);
+	else
+		efa_rdm_pke_handle_send_completion(pkt_entry);
+}
 
 extern int g_ibv_ah_limit;
 extern int g_ibv_ah_cnt;
@@ -143,8 +158,7 @@ void test_efa_rdm_ep_tx_pkt_pool_flags();
 void test_efa_rdm_ep_rx_pkt_pool_flags();
 void test_efa_rdm_ep_pkt_pool_page_alignment();
 void test_efa_rdm_ep_dc_atomic_queue_before_handshake();
-void test_efa_rdm_ep_dc_send_queue_before_handshake();
-void test_efa_rdm_ep_dc_send_queue_limit_before_handshake();
+
 void test_efa_rdm_ep_write_queue_before_handshake();
 void test_efa_rdm_ep_read_queue_before_handshake();
 void test_efa_rdm_ep_trigger_handshake();
@@ -575,5 +589,13 @@ int efa_unit_test_get_dlist_length(struct dlist_entry *head)
 }
 
 void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr);
+
+/* Protocol TX path tests */
+void test_proto_select_eager_for_small_msg();
+void test_proto_select_eager_for_zero_len_msg();
+void test_proto_select_longread_over_longcts_with_p2p();
+void test_proto_eager_construct_pkes_single_pke();
+void test_proto_eager_send_completion_releases_txe();
+void test_proto_eager_assigns_msg_id();
 
 #endif

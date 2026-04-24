@@ -58,10 +58,6 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		return NULL;
 	}
 
-	efa_domain_ope_list_lock(efa_rdm_ep_domain(efa_rdm_ep));
-	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
-	efa_domain_ope_list_unlock(efa_rdm_ep_domain(efa_rdm_ep));
-
 	ofi_ioc_to_iov(msg_atomic->msg_iov, iov, msg_atomic->iov_count, datatype_size);
 	msg.addr = msg_atomic->addr;
 	msg.msg_iov = iov;

@@ -4,6 +4,7 @@
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
+#include "rdm/efa_rdm_proto_eager.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
 
@@ -12,7 +13,7 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 						size_t total_len,
 						int expected_ret,
 						int expected_pkt_entry_cnt,
-						int *expected_pkt_entry_data_size_vec)
+						size_t *expected_pkt_entry_data_size_vec)
 {
 	struct efa_ep_addr raw_addr;
 	struct efa_rdm_mr mock_mr;
@@ -20,7 +21,8 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 	struct efa_rdm_peer mock_peer;
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t addr;
-	int pkt_entry_cnt, pkt_entry_data_size_vec[1024];
+	size_t pkt_entry_cnt;
+	size_t pkt_entry_data_size_vec[1024];
 	int i, err, ret;
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -93,7 +95,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory(struct efa_resource **sta
 	struct efa_resource *resource = *state;
 	size_t msg_length;
 	int expected_pkt_entry_cnt;
-	int expected_pkt_entry_data_size_vec[1024];
+	size_t expected_pkt_entry_data_size_vec[1024];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -142,7 +144,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128(struct efa_resou
 	struct efa_rdm_ep *efa_rdm_ep;
 	size_t msg_length;
 	int expected_pkt_entry_cnt;
-	int expected_pkt_entry_data_size_vec[1024];
+	size_t expected_pkt_entry_data_size_vec[1024];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -191,7 +193,7 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory(struct efa_resource **sta
 	struct efa_resource *resource = *state;
 	size_t msg_length;
 	int expected_pkt_entry_cnt;
-	int expected_pkt_entry_data_size_vec[1024];
+	size_t expected_pkt_entry_data_size_vec[1024];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -216,7 +218,7 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(struct efa_resou
 	struct efa_rdm_ep *efa_rdm_ep;
 	size_t msg_length;
 	int expected_pkt_entry_cnt;
-	int expected_pkt_entry_data_size_vec[1024];
+	size_t expected_pkt_entry_data_size_vec[1024];
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -599,8 +601,9 @@ void test_efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_resource **state)
 	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep, NULL), 0);
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	txe = efa_rdm_ep_alloc_txe(efa_rdm_ep, NULL, &msg, ofi_op_msg, 0, 0);
+	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
 	assert_non_null(txe);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, NULL, &msg, ofi_op_msg, 0);
 
 	/* Use ooo rx pkt because it doesn't have mr so a read_copy pkt clone is enforced. */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->rx_ooo_pkt_pool, EFA_RDM_PKE_FROM_OOO_POOL);
@@ -1235,6 +1238,8 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 	/* Set DC packet type in wiredata */
 	struct efa_rdm_base_hdr *base_hdr = (struct efa_rdm_base_hdr *)dc_pkt_entry->wiredata;
 	base_hdr->type = EFA_RDM_DC_EAGER_MSGRTM_PKT;
+	dc_pkt_entry->handle_pke =
+		&efa_rdm_proto_eager_handle_rtm_dc_send_completion;
 
 	/* Create fake receipt packet entry */
 	receipt_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -1251,7 +1256,8 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 
 	if (send_first) {
 		/* Send completion first - should not release TXE yet */
-		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
+		efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, dc_pkt_entry);
+		efa_unit_test_pke_handle_send_completion(dc_pkt_entry);
 		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
 		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
 		if (txe_in_send_state) {
@@ -1282,7 +1288,8 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 		}
 
 		/* Send completion - should now release TXE */
-		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
+		efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, dc_pkt_entry);
+		efa_unit_test_pke_handle_send_completion(dc_pkt_entry);
 	}
 
 	/* Verify TXE is released */

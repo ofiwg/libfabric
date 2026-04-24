@@ -109,6 +109,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	pkt_entry->payload_size = 0;
 	pkt_entry->payload_mr = NULL;
 	pkt_entry->peer = NULL;
+	pkt_entry->handle_pke = NULL;
 
 	switch (alloc_type) {
 	case EFA_RDM_PKE_FROM_USER_RX_POOL:

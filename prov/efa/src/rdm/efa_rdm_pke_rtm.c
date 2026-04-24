@@ -79,16 +79,16 @@ size_t efa_rdm_pke_get_rtm_msg_length(struct efa_rdm_pke *pkt_entry)
  *
  * @param[in,out]	pkt_entry	RTM packet entry
  * @param[in]		pkt_type	RTM packet type
- * @param[in]		txe		TX entry that has user buffer information
+ * @param[in]		txe		TX entry that has user buffer
+ * information
  * @param[in]		segmment_offset data offset in respect of user buffer
- * @param[in]		data_size	user data size. If it is -1, the function
- * 					will select data size based on maximum
- * 					data capacity of packet entry.
+ * @param[in]		data_size	user data size. If it is -1, the
+ * function will select data size based on maximum data capacity of packet
+ * entry.
  * @returns
  * 0 on success
  * negative libfabric error code for failure.
  */
-static inline
 ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 					  int pkt_type,
 					  struct efa_rdm_ope *txe,
@@ -120,9 +120,9 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 		if (data_size + segment_offset < txe->total_len) {
 			if (efa_mr_is_cuda(txe->desc[0])) {
 				if (txe->ep->sendrecv_in_order_aligned_128_bytes)
-					data_size &= ~(EFA_RDM_IN_ORDER_ALIGNMENT - 1);
+					data_size &= ~(EFA_RDM_EP_IN_ORDER_ALIGNMENT - 1);
 				else
-					data_size &= ~(EFA_RDM_CUDA_MEMORY_ALIGNMENT -1);
+					data_size &= ~(EFA_RDM_EP_CUDA_MEMORY_ALIGNMENT -1);
 			}
 		}
 	}
@@ -532,134 +532,6 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_peer_move_overflow_pke_to_recvwin(peer);
 
 	efa_rdm_peer_proc_pending_items_in_robuf(peer, ep);
-}
-
-/**
- * @brief construct a eager msgrtm pkt without hdr
- *
- * @param[in,out]	pkt_entry	pkt to be initialized
- * @param[in]		txe		TX entry
- */
-static inline
-ssize_t efa_rdm_pke_init_eager_msgrtm_zero_hdr(struct efa_rdm_pke *pkt_entry,
-				      struct efa_rdm_ope *txe)
-{
-	pkt_entry->ope = txe;
-	pkt_entry->peer = txe->peer;
-
-	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
-						0, 0, txe->total_len);
-}
-
-/**
- * @brief initialzie a EFA_RDM_EAGER_MSGRTM pacekt entry
- *
- * @param[in,out]	pkt_entry	EFA_RDM_EAGER_MSGRTM to be initialized
- * @param[in]		txe		TX entry
- */
-ssize_t efa_rdm_pke_init_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
-				      struct efa_rdm_ope *txe)
-{
-	int ret;
-
-	if (pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR)
-		ret = efa_rdm_pke_init_eager_msgrtm_zero_hdr(pkt_entry, txe);
-	else
-		ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry,
-						EFA_RDM_EAGER_MSGRTM_PKT,
-						txe, 0, -1);
-	if (ret)
-		return ret;
-
-	assert(txe->total_len == pkt_entry->payload_size);
-	return 0;
-}
-
-/**
- * @brief initialize a EFA_RDM_EAGER_TAGRTM packet entry
- * @param[in,out]	pkt_entry	EFA_RDM_EAGER_TAGRTM to be initialized
- * @param[in]		txe		TX entry
- */
-ssize_t efa_rdm_pke_init_eager_tagrtm(struct efa_rdm_pke *pkt_entry,
-				  struct efa_rdm_ope *txe)
-{
-	struct efa_rdm_base_hdr *base_hdr;
-	int ret;
-
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_EAGER_TAGRTM_PKT, txe, 0, -1);
-	if (ret)
-		return ret;
-	assert(txe->total_len == pkt_entry->payload_size);
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
-	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
-	return 0;
-}
-
-/**
- * @brief initialzie a EFA_RDM_DC_EAGER_MSGRTM pacekt entry
- *
- * @param[in,out]	pkt_entry	EFA_RDM_DC_EAGER_MSGRTM to be initialized
- * @param[in]		txe		TX entry
- */
-ssize_t efa_rdm_pke_init_dc_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
-					 struct efa_rdm_ope *txe)
-
-{
-	struct efa_rdm_dc_eager_msgrtm_hdr *dc_eager_msgrtm_hdr;
-	int ret;
-
-	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_DC_EAGER_MSGRTM_PKT, txe, 0, -1);
-	if (ret)
-		return ret;
-	dc_eager_msgrtm_hdr = efa_rdm_pke_get_dc_eager_msgrtm_hdr(pkt_entry);
-	dc_eager_msgrtm_hdr->hdr.send_id = txe->tx_id;
-	return 0;
-}
-
-/**
- * @brief initialize a EFA_RDM_DC_EAGER_TAGRTM pacekt entry
- *
- * @param[in,out]	pkt_entry	EFA_RDM_DC_EAGER_TAGRTM to be initialized
- * @param[in]		txe		TX entry
- */
-ssize_t efa_rdm_pke_init_dc_eager_tagrtm(struct efa_rdm_pke *pkt_entry,
-					 struct efa_rdm_ope *txe)
-{
-	struct efa_rdm_base_hdr *base_hdr;
-	struct efa_rdm_dc_eager_tagrtm_hdr *dc_eager_tagrtm_hdr;
-	int ret;
-
-	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_DC_EAGER_TAGRTM_PKT, txe, 0, -1);
-	if (ret)
-		return ret;
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
-	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
-
-	dc_eager_tagrtm_hdr = efa_rdm_pke_get_dc_eager_tagrtm_hdr(pkt_entry);
-	dc_eager_tagrtm_hdr->hdr.send_id = txe->tx_id;
-	return 0;
-}
-
-/**
- * @brief handle the event that an EAGER RTM has send completed
- *
- * @details
- * This function applies to EAGER_MSGRTM and EAGER_TAGRTM, it
- * does not apply to DC_EAGER_MSGRTM and DC_EAGER_TAGRTM
- *
- * @param[in,out]	pkt_entry	EAGER_MSGRTM or EAGER_TAGRTM packet entry
- */
-void efa_rdm_pke_handle_eager_rtm_send_completion(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *txe;
-
-	txe = pkt_entry->ope;
-	assert(txe->total_len == pkt_entry->payload_size);
-	efa_rdm_ope_handle_send_completed(txe);
 }
 
 /**
