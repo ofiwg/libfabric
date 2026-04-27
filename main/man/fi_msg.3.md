@@ -177,10 +177,9 @@ to write CQ entries for all successful completions.  See the flags
 discussion below for more details. The requested message size that
 can be used with fi_inject is limited by inject_size.
 
-If FI_HMEM is enabled, the fi_inject call can only accept buffer with
-iface equal to FI_HMEM_SYSTEM if the provider requires the FI_MR_HMEM
-mr_mode.  This limitation applies to all the fi_\*inject\* calls and
-does not affect how inject_size is reported.
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+fi_inject can only accept buffers with iface equal to FI_HMEM_SYSTEM.
+This limitation does not affect how inject_size is reported.
 
 ## fi_senddata
 
@@ -254,7 +253,10 @@ fi_sendmsg.
   even if the operation is handled asynchronously.  This may require
   that the underlying provider implementation copy the data into a
   local buffer and transfer out of that buffer. This flag can only
-  be used with messages smaller than inject_size.
+  be used with messages smaller than inject_size. If FI_HMEM is
+  enabled and the provider requires the FI_MR_HMEM mr_mode, the
+  FI_INJECT flag can only be used with buffers whose iface is
+  FI_HMEM_SYSTEM.
 
 *FI_MULTI_RECV*
 : Applies to posted receive operations.  This flag allows the user to
