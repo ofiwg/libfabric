@@ -4,7 +4,7 @@
 #ifndef EFA_DIRECT_OPE_H
 #define EFA_DIRECT_OPE_H
 
-#include "efa_base_ep.h"
+#include "efa_direct_ep.h"
 
 /**
  * @brief Maximum number of IOVs supported by EFA device
@@ -32,24 +32,24 @@ struct efa_direct_ope {
  * and initializes the outstanding operation lists.
  * The pool is only created if FI_EFA_TRACK_MR is enabled.
  *
- * @param[in,out] base_ep	base endpoint
+ * @param[in,out] ep	efa-direct endpoint
  * @return 0 on success, negative error code on failure
  */
-int efa_direct_ope_pool_create(struct efa_base_ep *base_ep);
+int efa_direct_ope_pool_create(struct efa_direct_ep *ep);
 
 /**
  * @brief Destroy the EFA direct operation entry pool
  *
  * Releases any outstanding operations and destroys the pool.
  *
- * @param[in,out] base_ep	base endpoint
+ * @param[in,out] ep	efa-direct endpoint
  */
-void efa_direct_ope_pool_destroy(struct efa_base_ep *base_ep);
+void efa_direct_ope_pool_destroy(struct efa_direct_ep *ep);
 
 /**
  * @brief Allocate and record an operation entry
  *
- * Acquires efa_domain->util_domain.lock to protect the efa_direct_ope_list.
+ * Acquires efa_domain->util_domain.lock to protect the ope_list.
  * This is the same lock used by efa_mr_close when iterating across all EPs.
  *
  * @param[in,out] base_ep	base endpoint
@@ -66,7 +66,7 @@ struct efa_direct_ope *efa_direct_ope_alloc(struct efa_base_ep *base_ep,
 /**
  * @brief Release an operation entry
  *
- * Acquires efa_domain->util_domain.lock to protect the efa_direct_ope_list.
+ * Acquires efa_domain->util_domain.lock to protect the ope_list.
  * This is the same lock used by efa_mr_close when iterating across all EPs.
  *
  * @param[in,out] base_ep	base endpoint

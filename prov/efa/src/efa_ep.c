@@ -6,6 +6,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_cq.h"
+#include "efa_direct_ep.h"
 
 #include <infiniband/efadv.h>
 
@@ -203,18 +204,18 @@ static struct fi_ops_ep efa_ep_base_ops = {
 
 static int efa_ep_close(fid_t fid)
 {
-	struct efa_base_ep *ep;
+	struct efa_direct_ep *ep;
 	int ret;
 
-	ep = container_of(fid, struct efa_base_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct efa_direct_ep, base_ep.util_ep.ep_fid.fid);
 
 	/* We need to free the util_ep first to avoid race conditions
 	 * with other threads progressing the cntr. */
-	efa_base_ep_close_util_ep(ep);
+	efa_base_ep_close_util_ep(&ep->base_ep);
 
-	efa_base_ep_remove_cntr_ibv_cq_poll_list(ep);
+	efa_base_ep_remove_cntr_ibv_cq_poll_list(&ep->base_ep);
 
-	ret = efa_base_ep_destruct(ep);
+	ret = efa_base_ep_destruct(&ep->base_ep);
 	if (ret) {
 		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
 	}
@@ -334,18 +335,20 @@ static int efa_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 
 static int efa_ep_enable(struct fid_ep *ep_fid)
 {
-	struct efa_base_ep *ep;
+	struct efa_direct_ep *ep;
+	struct efa_base_ep *base_ep;
 	int err;
 
-	ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	ep = container_of(ep_fid, struct efa_direct_ep, base_ep.util_ep.ep_fid);
+	base_ep = &ep->base_ep;
 
-	err = efa_base_ep_create_and_enable_qp(ep);
+	err = efa_base_ep_create_and_enable_qp(base_ep);
 	if (err)
 		return err;
 
-	err = efa_base_ep_insert_cntr_ibv_cq_poll_list(ep);
+	err = efa_base_ep_insert_cntr_ibv_cq_poll_list(base_ep);
 	if (err) {
-		efa_base_ep_destruct_qp(ep);
+		efa_base_ep_destruct_qp(base_ep);
 		return err;
 	}
 
@@ -432,18 +435,18 @@ struct fi_ops_cm efa_ep_cm_ops = {
 int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context)
 {
-	struct efa_base_ep *ep;
+	struct efa_direct_ep *ep;
 	int ret;
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
 		return -FI_ENOMEM;
 
-	ret = efa_base_ep_construct(ep, domain_fid, user_info, efa_ep_progress_no_op, context);
+	ret = efa_base_ep_construct(&ep->base_ep, domain_fid, user_info, efa_ep_progress_no_op, context);
 	if (ret)
 		goto err_ep_destroy;
 
-	*ep_fid = &ep->util_ep.ep_fid;
+	*ep_fid = &ep->base_ep.util_ep.ep_fid;
 	(*ep_fid)->fid.fclass = FI_CLASS_EP;
 	(*ep_fid)->fid.context = context;
 	(*ep_fid)->fid.ops = &efa_ep_ops;
@@ -456,7 +459,7 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	return 0;
 
 err_ep_destroy:
-	efa_base_ep_destruct(ep);
+	efa_base_ep_destruct(&ep->base_ep);
 	if (ep)
 		free(ep);
 	return ret;

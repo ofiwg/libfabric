@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "efa_direct_ep.h"
 
 static void test_efa_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 			int mr_reg_count, int mr_reg_size)
@@ -634,6 +635,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep;
+	struct efa_direct_ep *ep;
 	struct efa_direct_ope *direct_ope;
 	struct fid_mr *mr = NULL;
 	struct efa_mr *efa_mr;
@@ -646,6 +648,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
 
 	base_ep = container_of(resource->ep, struct efa_base_ep,
 			       util_ep.ep_fid);
+	ep = container_of(base_ep, struct efa_direct_ep, base_ep);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -655,11 +658,11 @@ void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
 	efa_mr = container_of(mr, struct efa_mr, mr_fid);
 
 	/* Simulate an outstanding direct operation referencing this MR */
-	direct_ope = ofi_buf_alloc(base_ep->efa_direct_ope_pool);
+	direct_ope = ofi_buf_alloc(ep->ope_pool);
 	assert_non_null(direct_ope);
 	direct_ope->iov_count = 1;
 	direct_ope->desc[0] = efa_mr;
-	dlist_insert_tail(&direct_ope->entry, &base_ep->efa_direct_ope_list);
+	dlist_insert_tail(&direct_ope->entry, &ep->ope_list);
 
 	/* Close MR while operation is outstanding */
 	assert_int_equal(fi_close(&mr->fid), 0);
@@ -689,6 +692,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource 
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep1, *base_ep2;
+	struct efa_direct_ep *efa_ep1, *efa_ep2;
 	struct efa_direct_ope *direct_ope1, *direct_ope2;
 	struct fid_ep *ep2;
 	struct fid_mr *mr = NULL;
@@ -702,12 +706,14 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource 
 
 	base_ep1 = container_of(resource->ep, struct efa_base_ep,
 				util_ep.ep_fid);
+	efa_ep1 = container_of(base_ep1, struct efa_direct_ep, base_ep);
 
 	/* Create and enable a second EP on the same domain and CQ */
 	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep2, NULL), 0);
 	assert_int_equal(fi_ep_bind(ep2, &resource->cq->fid, FI_SEND | FI_RECV), 0);
 	assert_int_equal(fi_enable(ep2), 0);
 	base_ep2 = container_of(ep2, struct efa_base_ep, util_ep.ep_fid);
+	efa_ep2 = container_of(base_ep2, struct efa_direct_ep, base_ep);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -717,17 +723,17 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource 
 	efa_mr = container_of(mr, struct efa_mr, mr_fid);
 
 	/* Simulate outstanding direct operations on both EPs referencing the same MR */
-	direct_ope1 = ofi_buf_alloc(base_ep1->efa_direct_ope_pool);
+	direct_ope1 = ofi_buf_alloc(efa_ep1->ope_pool);
 	assert_non_null(direct_ope1);
 	direct_ope1->iov_count = 1;
 	direct_ope1->desc[0] = efa_mr;
-	dlist_insert_tail(&direct_ope1->entry, &base_ep1->efa_direct_ope_list);
+	dlist_insert_tail(&direct_ope1->entry, &efa_ep1->ope_list);
 
-	direct_ope2 = ofi_buf_alloc(base_ep2->efa_direct_ope_pool);
+	direct_ope2 = ofi_buf_alloc(efa_ep2->ope_pool);
 	assert_non_null(direct_ope2);
 	direct_ope2->iov_count = 1;
 	direct_ope2->desc[0] = efa_mr;
-	dlist_insert_tail(&direct_ope2->entry, &base_ep2->efa_direct_ope_list);
+	dlist_insert_tail(&direct_ope2->entry, &efa_ep2->ope_list);
 
 	/* Close MR while operations are outstanding on both EPs */
 	assert_int_equal(fi_close(&mr->fid), 0);
