@@ -4185,6 +4185,11 @@ FI_SELECTIVE_COMPLETION. See the flags discussion below for more
 details. The requested message size that can be used with
 fi_inject_atomic is limited by inject_size.
 
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the fi_inject_atomic call can only accept buffers with iface equal to
+FI_HMEM_SYSTEM. This limitation does not affect how inject_size is
+reported.
+
 The fi_atomicmsg call supports atomic functions over both connected and
 connectionless endpoints, with the ability to control the atomic
 operation per call through the use of flags. The fi_atomicmsg function
@@ -4372,7 +4377,9 @@ with atomic message calls.
     'const'. Non-constant or output buffers are unaffected by this flag
     and may be accessed by the provider at anytime until the operation
     has completed. This flag can only be used with messages smaller than
-    inject_size.
+    inject_size. If FI_HMEM is enabled and the provider requires the
+    FI_MR_HMEM mr_mode, the FI_INJECT flag can only be used with buffers
+    whose iface is FI_HMEM_SYSTEM.
 
 *FI_FENCE*
 :   Applies to transmits. Indicates that the requested operation, also
@@ -10275,7 +10282,9 @@ of transmit or receive context attributes of an endpoint.
     that buffer. A provider can limit the total amount of send data that
     may be buffered and/or the size of a single send that can use this
     flag. This limit is indicated using inject_size (see inject_size
-    above).
+    above). If FI_HMEM is enabled and the provider requires the
+    FI_MR_HMEM mr_mode, the FI_INJECT flag can only be used with buffers
+    whose iface is FI_HMEM_SYSTEM.
 
 *FI_INJECT_COMPLETE*
 :   Indicates that a completion should be generated when the source
@@ -12320,10 +12329,9 @@ entries for all successful completions. See the flags discussion below
 for more details. The requested message size that can be used with
 fi_inject is limited by inject_size.
 
-If FI_HMEM is enabled, the fi_inject call can only accept buffer with
-iface equal to FI_HMEM_SYSTEM if the provider requires the FI_MR_HMEM
-mr_mode. This limitation applies to all the fi\_\*inject\* calls and
-does not affect how inject_size is reported.
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+fi_inject can only accept buffers with iface equal to FI_HMEM_SYSTEM.
+This limitation does not affect how inject_size is reported.
 
 ## fi_senddata
 
@@ -12394,7 +12402,9 @@ fi_sendmsg.
     even if the operation is handled asynchronously. This may require
     that the underlying provider implementation copy the data into a
     local buffer and transfer out of that buffer. This flag can only be
-    used with messages smaller than inject_size.
+    used with messages smaller than inject_size. If FI_HMEM is enabled
+    and the provider requires the FI_MR_HMEM mr_mode, the FI_INJECT flag
+    can only be used with buffers whose iface is FI_HMEM_SYSTEM.
 
 *FI_MULTI_RECV*
 :   Applies to posted receive operations. This flag allows the user to
@@ -15363,6 +15373,11 @@ iov_count may be ignored.
 The write inject call is an optimized version of fi_write. It provides
 similar completion semantics as fi_inject [`fi_msg`(3)](fi_msg.3.html).
 
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the fi_inject_write call can only accept buffers with iface equal to
+FI_HMEM_SYSTEM. This limitation does not affect how inject_size is
+reported.
+
 ## fi_writedata
 
 The write data call is similar to fi_write, but allows for the sending
@@ -15427,7 +15442,9 @@ list of flags are usable with fi_readmsg and/or fi_writemsg.
     even if the operation is handled asynchronously. This may require
     that the underlying provider implementation copy the data into a
     local buffer and transfer out of that buffer. This flag can only be
-    used with messages smaller than inject_size.
+    used with messages smaller than inject_size. If FI_HMEM is enabled
+    and the provider requires the FI_MR_HMEM mr_mode, the FI_INJECT flag
+    can only be used with buffers whose iface is FI_HMEM_SYSTEM.
 
 *FI_INJECT_COMPLETE*
 :   Applies to fi_writemsg. Indicates that a completion should be
@@ -15674,6 +15691,11 @@ iov_count may be ignored.
 The tagged inject call is an optimized version of fi_tsend. It provides
 similar completion semantics as fi_inject [`fi_msg`(3)](fi_msg.3.html).
 
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the fi_tinject call can only accept buffers with iface equal to
+FI_HMEM_SYSTEM. This limitation does not affect how inject_size is
+reported.
+
 ## fi_tsenddata
 
 The tagged send data call is similar to fi_tsend, but allows for the
@@ -15742,7 +15764,9 @@ following list of flags are usable with fi_trecvmsg and/or fi_tsendmsg.
     even if the operation is handled asynchronously. This may require
     that the underlying provider implementation copy the data into a
     local buffer and transfer out of that buffer. This flag can only be
-    used with messages smaller than inject_size.
+    used with messages smaller than inject_size. If FI_HMEM is enabled
+    and the provider requires the FI_MR_HMEM mr_mode, the FI_INJECT flag
+    can only be used with buffers whose iface is FI_HMEM_SYSTEM.
 
 *FI_MULTI_RECV*
 :   Applies to posted tagged receive operations when the
