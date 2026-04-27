@@ -327,6 +327,9 @@ void test_efa_domain_open_ops_query_qp_wqs();
 void test_efa_domain_open_ops_query_cq();
 void test_efa_domain_open_ops_cq_open_ext();
 void test_efa_domain_open_ops_get_mr_lkey();
+void test_efa_fabric_open_ops_feature_known();
+void test_efa_fabric_open_ops_feature_not_on_proto();
+void test_efa_fabric_open_ops_feature_unknown();
 /* end efa_unit_test_domain.c */
 
 void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
