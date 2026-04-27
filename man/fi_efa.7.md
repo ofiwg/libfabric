@@ -255,6 +255,23 @@ struct fi_efa_mr_attr {
 (which indicates the failure reason).
 
 
+Requesting `FI_EFA_MR_OPS` in `name` returns `ops` as a pointer to the
+function table `fi_efa_ops_mr` defined as follows:
+
+```c
+struct fi_efa_ops_mr {
+	int (*support_mixed_hmem_iov)(struct fid_domain *domain_fid);
+};
+```
+
+### support_mixed_hmem_iov
+Read-only capability probe that returns non-zero on any build where the
+provider correctly inspects every descriptor in a multi-iov request for
+HMEM/iface (rather than only the first descriptor). Older providers do
+not expose `FI_EFA_MR_OPS` at all, so `fi_open_ops()` returns
+`-FI_EINVAL` there; callers can treat that as "not supported".
+
+
 To enable GPU Direct Async (GDA), which allows the GPU to interact directly with the NIC, 
 request `FI_EFA_GDA_OPS` in the `name` parameter with efa-direct fabirc.
 This returns `ops` as a pointer to the function table `fi_efa_ops_gda` defined as follows:

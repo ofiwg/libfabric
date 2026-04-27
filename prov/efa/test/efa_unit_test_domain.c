@@ -764,3 +764,21 @@ void test_efa_domain_open_ops_get_mr_lkey(struct efa_resource **state)
     assert_int_equal(ret, FI_SUCCESS);
     assert_true(lkey == mr.ibv_mr->lkey);
 }
+
+/**
+ * @brief Verify that FI_EFA_MR_OPS returns an ops table whose
+ * support_mixed_hmem_iov probe reports the fix is present.
+ */
+void test_efa_domain_open_ops_mr_support_mixed_hmem_iov(struct efa_resource **state)
+{
+    struct efa_resource *resource = *state;
+    struct fi_efa_ops_mr *efa_mr_ops;
+    int ret;
+
+    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+    ret = fi_open_ops(&resource->domain->fid, FI_EFA_MR_OPS, 0, (void **)&efa_mr_ops, NULL);
+    assert_int_equal(ret, 0);
+    assert_non_null(efa_mr_ops->support_mixed_hmem_iov);
+    assert_true(efa_mr_ops->support_mixed_hmem_iov(resource->domain));
+}

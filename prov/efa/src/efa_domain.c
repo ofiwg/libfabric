@@ -750,6 +750,15 @@ static struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
 };
 
+static int efa_domain_support_mixed_hmem_iov(struct fid_domain *domain_fid)
+{
+	return 1;
+}
+
+static struct fi_efa_ops_mr efa_ops_mr = {
+	.support_mixed_hmem_iov = efa_domain_support_mixed_hmem_iov,
+};
+
 static struct fi_efa_ops_gda efa_ops_gda = {
 	.query_addr = efa_domain_query_addr,
 	.query_qp_wqs = efa_domain_query_qp_wqs,
@@ -767,6 +776,10 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 
 	if (strcmp(ops_name, FI_EFA_DOMAIN_OPS) == 0) {
 		*ops = &efa_ops_domain;
+		return ret;
+	}
+	if (strcmp(ops_name, FI_EFA_MR_OPS) == 0) {
+		*ops = &efa_ops_mr;
 		return ret;
 	}
 	if (strcmp(ops_name, FI_EFA_GDA_OPS) == 0) {

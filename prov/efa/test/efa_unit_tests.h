@@ -333,6 +333,7 @@ void test_efa_domain_open_ops_query_qp_wqs();
 void test_efa_domain_open_ops_query_cq();
 void test_efa_domain_open_ops_cq_open_ext();
 void test_efa_domain_open_ops_get_mr_lkey();
+void test_efa_domain_open_ops_mr_support_mixed_hmem_iov();
 void test_efa_domain_rdm_mr_ops();
 void test_efa_domain_direct_mr_ops();
 void test_efa_domain_dgram_mr_ops();

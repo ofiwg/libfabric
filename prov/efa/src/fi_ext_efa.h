@@ -8,6 +8,7 @@
 
 #define FI_EFA_DOMAIN_OPS "efa domain ops"
 #define FI_EFA_GDA_OPS "efa gda ops"
+#define FI_EFA_MR_OPS "efa mr ops"
 
 struct fi_efa_mr_attr {
     uint16_t ic_id_validity;
@@ -66,6 +67,17 @@ struct fi_efa_ops_gda {
 			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
 			   struct fid_cq **cq_fid, void *context);
 	uint64_t (*get_mr_lkey)(struct fid_mr *mr);
+};
+
+struct fi_efa_ops_mr {
+	/*
+	 * Returns non-zero on any build where the provider correctly inspects
+	 * every descriptor in a multi-iov request for HMEM/iface (not just
+	 * desc[0]). This is a read-only runtime capability probe: older
+	 * providers do not expose FI_EFA_MR_OPS at all, so fi_open_ops()
+	 * returns -FI_EINVAL there.
+	 */
+	int (*support_mixed_hmem_iov)(struct fid_domain *domain_fid);
 };
 
 #endif /* _FI_EXT_EFA_H_ */
