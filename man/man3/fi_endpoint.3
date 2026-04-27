@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_endpoint" "3" "2025\-06\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_endpoint" "3" "2026\-04\-27" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -1822,6 +1822,9 @@ transfer out of that buffer.
 A provider can limit the total amount of send data that may be buffered
 and/or the size of a single send that can use this flag.
 This limit is indicated using inject_size (see inject_size above).
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the FI_INJECT flag can only be used with buffers whose iface is
+FI_HMEM_SYSTEM.
 .TP
 \f[I]FI_INJECT_COMPLETE\f[R]
 Indicates that a completion should be generated when the source

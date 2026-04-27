@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_tagged" "3" "2026\-03\-23" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_tagged" "3" "2026\-04\-27" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -221,6 +221,11 @@ iov_count may be ignored.
 The tagged inject call is an optimized version of fi_tsend.
 It provides similar completion semantics as fi_inject
 \f[V]fi_msg\f[R](3).
+.PP
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the fi_tinject call can only accept buffers with iface equal to
+FI_HMEM_SYSTEM.
+This limitation does not affect how inject_size is reported.
 .SS fi_tsenddata
 .PP
 The tagged send data call is similar to fi_tsend, but allows for the
@@ -292,6 +297,9 @@ handled asynchronously.
 This may require that the underlying provider implementation copy the
 data into a local buffer and transfer out of that buffer.
 This flag can only be used with messages smaller than inject_size.
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the FI_INJECT flag can only be used with buffers whose iface is
+FI_HMEM_SYSTEM.
 .TP
 \f[I]FI_MULTI_RECV\f[R]
 Applies to posted tagged receive operations when the
