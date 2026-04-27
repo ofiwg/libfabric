@@ -411,16 +411,30 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
 }
 
 /**
- * @brief when delivery complete atomic was used and handshake packet has not been received
- * verify the txe is queued
- *
- * @param[in]	state		struct efa_resource that is managed by the framework
+ * @brief Issue fi_read or fi_write based on op code.
  */
+static int test_efa_rdm_ep_rma_issue_op(struct fid_ep *ep, int op,
+				   char *buf, int buf_len,
+				   fi_addr_t peer_addr,
+				   uint64_t rma_addr, uint64_t rma_key)
+{
+	if (op == ofi_op_read_req)
+		return fi_read(ep, buf, buf_len, NULL, peer_addr,
+			       rma_addr, rma_key, NULL);
+	else if (op == ofi_op_write)
+		return fi_write(ep, buf, buf_len, NULL, peer_addr,
+				rma_addr, rma_key, NULL);
+
+	fail_msg("Unknown op code %d", op);
+	return -FI_EINVAL;
+}
+
 /**
- * @brief verify tx entry is queued for rma (read or write) request before handshake is made.
+ * @brief Verify tx entry is queued for rma request before handshake,
+ * and that exceeding the queue limit returns -FI_EAGAIN.
  *
  * @param[in] state	struct efa_resource that is managed by the framework
- * @param[in] op op code
+ * @param[in] op	op code (ofi_op_write or ofi_op_read_req)
  */
 void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int op)
 {
@@ -432,7 +446,7 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	int num_addr;
 	const int buf_len = 8;
 	char buf[8] = {0};
-	int err;
+	int err, i;
 	uint64_t rma_addr, rma_key;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
@@ -470,30 +484,28 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	assert_false(efa_rdm_ep->homogeneous_peers);
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
-	if (op == ofi_op_read_req) {
-		err = fi_read(resource->ep, buf, buf_len,
-				NULL, /* desc, not required */
-				peer_addr,
-				rma_addr,
-				rma_key,
-				NULL); /* context */
-	} else if (op == ofi_op_write) {
-		err = fi_write(resource->ep, buf, buf_len,
-				NULL, /* desc, not required */
-				peer_addr,
-				rma_addr,
-				rma_key,
-				NULL); /* context */
-	} else {
-		fprintf(stderr, "Unknown op code %d\n", op);
-		fail();
-	}
+	err = test_efa_rdm_ep_rma_issue_op(resource->ep, op, buf, buf_len,
+				      peer_addr, rma_addr, rma_key);
 	assert_int_equal(err, 0);
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list),  1);
 	assert_int_equal(efa_unit_test_get_dlist_length(&(efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list)), 1);
 	txe = container_of(efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list.next, struct efa_rdm_ope, queued_entry);
 	assert_true((txe->op == op));
 	assert_true(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
+
+	/* Fill remaining slots up to the limit (1 already queued) */
+	for (i = 1; i < EFA_RDM_MAX_QUEUED_OPE_BEFORE_HANDSHAKE; i++) {
+		err = test_efa_rdm_ep_rma_issue_op(resource->ep, op, buf, buf_len,
+					      peer_addr, rma_addr, rma_key);
+		assert_int_equal(err, 0);
+	}
+	assert_int_equal(efa_rdm_ep->ope_queued_before_handshake_cnt,
+	                 EFA_RDM_MAX_QUEUED_OPE_BEFORE_HANDSHAKE);
+
+	/* Exceeding the limit should return -FI_EAGAIN */
+	err = test_efa_rdm_ep_rma_issue_op(resource->ep, op, buf, buf_len,
+				      peer_addr, rma_addr, rma_key);
+	assert_int_equal(err, -FI_EAGAIN);
 }
 
 void test_efa_rdm_ep_write_queue_before_handshake(struct efa_resource **state)
