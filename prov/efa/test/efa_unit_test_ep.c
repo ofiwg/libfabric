@@ -482,12 +482,12 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	/* Do not use shm in this unit test because we are testing efa rma path */
 	peer->conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	assert_false(efa_rdm_ep->homogeneous_peers);
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_true(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 
 	err = test_efa_rdm_ep_rma_issue_op(resource->ep, op, buf, buf_len,
 				      peer_addr, rma_addr, rma_key);
 	assert_int_equal(err, 0);
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list),  1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list),  1);
 	assert_int_equal(efa_unit_test_get_dlist_length(&(efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list)), 1);
 	txe = container_of(efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list.next, struct efa_rdm_ope, queued_entry);
 	assert_true((txe->op == op));
@@ -551,7 +551,7 @@ void test_efa_rdm_ep_trigger_handshake(struct efa_resource **state)
 	assert_non_null(peer);
 
 	/* No txe should have been allocated yet */
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_true(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 
 	/*
 	 * When the peer already has made , the function should be a no-op
@@ -559,16 +559,16 @@ void test_efa_rdm_ep_trigger_handshake(struct efa_resource **state)
 	 */
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED | EFA_RDM_PEER_REQ_SENT;
 	assert_int_equal(efa_rdm_ep_trigger_handshake(efa_rdm_ep, peer), FI_SUCCESS);
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_true(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 
 	/*
 	 * Reset the peer flags to 0, now we should expect a txe allocated
 	 */
 	peer->flags = 0;
 	assert_int_equal(efa_rdm_ep_trigger_handshake(efa_rdm_ep, peer), FI_SUCCESS);
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list),  1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list),  1);
 
-	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+	txe = container_of(efa_rdm_ep->base_ep.ope_list.next, struct efa_rdm_ope, ep_entry);
 
 	assert_true(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION);
 	assert_true(txe->internal_flags & EFA_RDM_TXE_NO_COUNTER);
@@ -1240,9 +1240,9 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_res
 	}
 
 	/* txe list should be empty before and after the failed handshake post call */
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_true(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 	assert_int_equal(efa_rdm_ep_post_handshake(efa_rdm_ep, peer), -FI_EAGAIN);
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_true(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 
 	for (i = 0; i < tx_size; i++)
 		efa_rdm_pke_release_tx(pkt_entry_vec[i]);

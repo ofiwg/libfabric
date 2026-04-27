@@ -161,9 +161,9 @@ struct efa_rdm_ep {
 	size_t send_comps;
 	size_t recv_comps;
 #endif
-	/* track allocated rx_entries and tx_entries for endpoint cleanup */
+	/* track allocated tx_entries in base_ep.ope_list */
+	/* track allocated rx_entries separately */
 	struct dlist_entry rxe_list;
-	struct dlist_entry txe_list;
 
 	/*
 	 * number of posted RX packets for EFA device

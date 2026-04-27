@@ -355,8 +355,8 @@ void efa_rdm_ep_init_linked_lists(struct efa_rdm_ep *ep)
 	dlist_init(&ep->rx_pkt_list);
 	dlist_init(&ep->tx_pkt_list);
 #endif
+	dlist_init(&ep->base_ep.ope_list);
 	dlist_init(&ep->rxe_list);
-	dlist_init(&ep->txe_list);
 	dlist_init(&ep->ope_posted_ack_list);
 }
 
@@ -722,8 +722,6 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 {
 	struct dlist_entry *entry, *tmp;
-	struct efa_rdm_ope *rxe;
-	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_peer_overflow_pke_list_entry *overflow_pke_list_entry;
 	struct util_av_entry *util_av_entry;
@@ -774,16 +772,16 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 #endif
 
 	dlist_foreach_safe(&efa_rdm_ep->rxe_list, entry, tmp) {
-		rxe = container_of(entry, struct efa_rdm_ope,
-					ep_entry);
+		struct efa_rdm_ope *rxe = container_of(entry, struct efa_rdm_ope,
+						       ep_entry);
 		EFA_INFO(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased rxe\n");
 		efa_rdm_rxe_release(rxe);
 	}
 
-	dlist_foreach_safe(&efa_rdm_ep->txe_list, entry, tmp) {
-		txe = container_of(entry, struct efa_rdm_ope,
-					ep_entry);
+	dlist_foreach_safe(&efa_rdm_ep->base_ep.ope_list, entry, tmp) {
+		struct efa_rdm_ope *txe = container_of(entry, struct efa_rdm_ope,
+						       ep_entry);
 		EFA_INFO(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased txe: %p\n",
 			txe);

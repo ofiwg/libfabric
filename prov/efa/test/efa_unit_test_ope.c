@@ -345,7 +345,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	rxe->iov[0] = iov;
 	pkt_entry->ope = rxe;
 
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_true(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 
 	held_before = efa_rdm_ep->efa_rx_pkts_held;
 	to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
@@ -363,8 +363,8 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 		assert_true(pkt_entry->flags & EFA_RDM_PKE_HELD_BY_PROGRESS);
 
 		/* The internal txe must be live with local_read_pkt_entry set. */
-		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
-		txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 1);
+		txe = container_of(efa_rdm_ep->base_ep.ope_list.next, struct efa_rdm_ope, ep_entry);
 		assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
 		assert_non_null(txe->local_read_pkt_entry);
 
@@ -376,7 +376,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 		/* handle_data_copied released the held pkt: held back to baseline, to_post ++ */
 		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, held_before);
 		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 1);
-		assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+		assert_true(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 	} else {
 		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, held_before);
 		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before);
@@ -397,7 +397,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(struct efa_resource **sta
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	/* Make sure txe is cleaned for a failed read */
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_true(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 }
 
 void test_efa_rdm_rxe_post_local_read_or_queue_happy(struct efa_resource **state)
@@ -1289,8 +1289,8 @@ void test_efa_rdm_atomic_compare_desc_persistence(struct efa_resource **state)
 	compare_desc_array[0] = (void *)(uintptr_t)0xDEADBEEF;
 
 	/* Retrieve the txe from the txe_list */
-	assert_false(dlist_empty(&efa_rdm_ep->txe_list));
-	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+	assert_false(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
+	txe = container_of(efa_rdm_ep->base_ep.ope_list.next, struct efa_rdm_ope, ep_entry);
 
 	/* Verify compare_desc was copied, not just pointer stored */
 	assert_ptr_equal(txe->atomic_ex.compare_desc[0], original_desc_value);
@@ -1375,12 +1375,12 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 
 	/* Verify TXE is not ready for release initially */
 	assert_false(efa_rdm_txe_dc_ready_for_release(txe));
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 1);
 
 	if (send_first) {
 		/* Send completion first - should not release TXE yet */
 		efa_rdm_pke_handle_send_completion(dc_pkt_entry);
-		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 1);
 		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
 		if (txe_in_send_state) {
 			/* TXE should still be in ope_longcts_send_list */
@@ -1401,7 +1401,7 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 	} else {
 		/* Receipt handling first - should set flag but not release TXE yet */
 		efa_rdm_pke_handle_receipt_recv(receipt_pkt_entry);
-		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 1);
 		assert_true(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED);
 		assert_false(efa_rdm_txe_dc_ready_for_release(txe));
 		if (txe_in_send_state) {
@@ -1414,7 +1414,7 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
 	}
 
 	/* Verify TXE is released */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 0);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 0);
 }
 
 /**
