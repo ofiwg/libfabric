@@ -4,10 +4,12 @@
 #ifndef _FI_EXT_EFA_H_
 #define _FI_EXT_EFA_H_
 
+#include <stdbool.h>
 #include <rdma/fi_domain.h>
 
 #define FI_EFA_DOMAIN_OPS "efa domain ops"
 #define FI_EFA_GDA_OPS "efa gda ops"
+#define FI_EFA_FEATURE_OPS "efa feature ops"
 
 struct fi_efa_mr_attr {
     uint16_t ic_id_validity;
@@ -66,6 +68,24 @@ struct fi_efa_ops_gda {
 			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
 			   struct fid_cq **cq_fid, void *context);
 	uint64_t (*get_mr_lkey)(struct fid_mr *mr);
+};
+
+/*
+ * EFA feature flags
+ *
+ * Features are runtime-discoverable flags advertised by the provider,
+ * letting consumers detect the presence of a given behavior or bug fix
+ * independently of the libfabric API version (which cannot encode
+ * patch releases).
+ *
+ * Currently defined feature strings:
+ *
+ *   "mixed_hmem_iov" - the provider correctly inspects every descriptor
+ *                      in a multi-iov request for HMEM/iface, rather
+ *                      than only the first descriptor.
+ */
+struct fi_efa_feature_ops {
+	bool (*query)(const char *feature);
 };
 
 #endif /* _FI_EXT_EFA_H_ */

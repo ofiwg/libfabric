@@ -104,12 +104,99 @@ static int efa_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 	return FI_SUCCESS;
 }
 
+/*
+ * Feature strings advertised by this build, per fabric.
+ *
+ * Features are runtime-discoverable flags whose answer may differ
+ * between efa-direct and efa (efa-proto) because the two fabrics
+ * exercise different code paths. efa_features_direct contains strings
+ * valid for the efa-direct fabric; efa_features_proto contains
+ * strings valid for the efa fabric (RDM and DGRAM). A string absent
+ * from the matching list returns false.
+ *
+ * Consumers query by literal string, so renaming is a breaking change;
+ * prefer adding new strings over editing existing ones.
+ */
+static const char * const efa_features_direct[] = {
+	"mixed_hmem_iov",
+};
+
+static const char * const efa_features_proto[] = {
+	/*
+	 * "mixed_hmem_iov" is not advertised on the efa (RDM) fabric:
+	 * efa_rdm_pke_copy_payload_to_ope() still dispatches copy
+	 * methods based on desc[0] only, so a multi-iov request mixing
+	 * host and HMEM descriptors can still misbehave even after the
+	 * send-path descriptor scans are in place.
+	 *
+	 * The NULL placeholder keeps this a valid initializer under
+	 * pre-C23 compilers (notably MSVC), which reject an empty {}.
+	 * efa_feature_in() skips NULL entries.
+	 */
+	NULL,
+};
+
+static bool efa_feature_in(const char * const *list, size_t n,
+			   const char *feature)
+{
+	size_t i;
+
+	if (!feature)
+		return false;
+
+	for (i = 0; i < n; i++)
+		if (list[i] && strcmp(list[i], feature) == 0)
+			return true;
+
+	return false;
+}
+
+static bool efa_fabric_feature_query_direct(const char *feature)
+{
+	return efa_feature_in(efa_features_direct,
+			      ARRAY_SIZE(efa_features_direct), feature);
+}
+
+static bool efa_fabric_feature_query_proto(const char *feature)
+{
+	return efa_feature_in(efa_features_proto,
+			      ARRAY_SIZE(efa_features_proto), feature);
+}
+
+static struct fi_efa_feature_ops efa_feature_ops_direct = {
+	.query = efa_fabric_feature_query_direct,
+};
+
+static struct fi_efa_feature_ops efa_feature_ops_proto = {
+	.query = efa_fabric_feature_query_proto,
+};
+
+static int efa_fabric_ops_open(struct fid *fid, const char *ops_name,
+			       uint64_t flags, void **ops, void *context)
+{
+	struct efa_fabric *efa_fabric;
+
+	if (strcmp(ops_name, FI_EFA_FEATURE_OPS) == 0) {
+		efa_fabric = container_of(fid, struct efa_fabric,
+					  util_fabric.fabric_fid.fid);
+		if (strcasecmp(efa_fabric->util_fabric.name,
+			       EFA_DIRECT_FABRIC_NAME) == 0)
+			*ops = &efa_feature_ops_direct;
+		else
+			*ops = &efa_feature_ops_proto;
+		return FI_SUCCESS;
+	}
+
+	EFA_WARN(FI_LOG_FABRIC, "Unknown ops name: %s\n", ops_name);
+	return -FI_EINVAL;
+}
+
 static struct fi_ops efa_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_fabric_close,
 	.bind = fi_no_bind,
 	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = efa_fabric_ops_open,
 };
 
 static struct fi_ops_fabric efa_ops_fabric = {
