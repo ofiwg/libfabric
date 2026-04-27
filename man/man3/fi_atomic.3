@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_atomic" "3" "2026\-03\-23" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_atomic" "3" "2026\-04\-27" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -485,6 +485,11 @@ See the flags discussion below for more details.
 The requested message size that can be used with fi_inject_atomic is
 limited by inject_size.
 .PP
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the fi_inject_atomic call can only accept buffers with iface equal to
+FI_HMEM_SYSTEM.
+This limitation does not affect how inject_size is reported.
+.PP
 The fi_atomicmsg call supports atomic functions over both connected and
 connectionless endpoints, with the ability to control the atomic
 operation per call through the use of flags.
@@ -686,6 +691,9 @@ atomic APIs that are marked as `const'.
 Non-constant or output buffers are unaffected by this flag and may be
 accessed by the provider at anytime until the operation has completed.
 This flag can only be used with messages smaller than inject_size.
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the FI_INJECT flag can only be used with buffers whose iface is
+FI_HMEM_SYSTEM.
 .TP
 \f[I]FI_FENCE\f[R]
 Applies to transmits.
