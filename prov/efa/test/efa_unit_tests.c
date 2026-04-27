@@ -214,6 +214,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_direct_use_requested_limits, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_requested_limits, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_device_limits, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_base_ep_construct_ibv_qp_init_attr_ex_dgram, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_ep.c */
 
 		/* begin efa_unit_test_cq.c */
