@@ -2078,6 +2078,31 @@ void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_requested_limits(str
 }
 
 /**
+ * @brief Test efa_base_ep_construct_ibv_qp_init_attr_ex with DGRAM endpoint
+ *
+ * Verifies that DGRAM endpoints get IBV_QPT_UD qp_type.
+ */
+void test_efa_base_ep_construct_ibv_qp_init_attr_ex_dgram(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *efa_base_ep;
+	struct ibv_qp_init_attr_ex attr_ex = {0};
+	struct efa_cq *efa_cq;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_DGRAM, EFA_FABRIC_NAME);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_DGRAM, FI_VERSION(1, 14),
+						    resource->hints, false, true);
+
+	efa_base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+
+	efa_base_ep_construct_ibv_qp_init_attr_ex(efa_base_ep, &attr_ex,
+						  efa_cq->ibv_cq.ibv_cq_ex, efa_cq->ibv_cq.ibv_cq_ex);
+
+	assert_int_equal(attr_ex.qp_type, IBV_QPT_UD);
+}
+
+/**
  * @brief Test efa_rdm_ep_get_explicit_shm_fi_addr with valid peer having same GID
  *
  * @param[in] state struct efa_resource managed by the framework
