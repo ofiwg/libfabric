@@ -1637,7 +1637,9 @@ value of transmit or receive context attributes of an endpoint.
   that buffer.  A provider can limit the total amount of send data
   that may be buffered and/or the size of a single send that can use
   this flag. This limit is indicated using inject_size (see inject_size
-  above).
+  above). If FI_HMEM is enabled and the provider requires the
+  FI_MR_HMEM mr_mode, the FI_INJECT flag can only be used with buffers
+  whose iface is FI_HMEM_SYSTEM.
 
 *FI_INJECT_COMPLETE*
 : Indicates that a completion should be generated when the

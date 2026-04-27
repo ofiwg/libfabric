@@ -198,6 +198,11 @@ For 0-byte operations, msg_iov, desc (including FI_MR_LOCAL) and iov_count may b
 The tagged inject call is an optimized version of fi_tsend.  It provides
 similar completion semantics as fi_inject [`fi_msg`(3)](fi_msg.3.html).
 
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the fi_tinject call can only accept buffers with iface equal to
+FI_HMEM_SYSTEM.  This limitation does not affect how inject_size is
+reported.
+
 ## fi_tsenddata
 
 The tagged send data call is similar to fi_tsend, but allows for the
@@ -267,7 +272,10 @@ and/or fi_tsendmsg.
   even if the operation is handled asynchronously.  This may require
   that the underlying provider implementation copy the data into a
   local buffer and transfer out of that buffer. This flag can only
-  be used with messages smaller than inject_size.
+  be used with messages smaller than inject_size. If FI_HMEM is
+  enabled and the provider requires the FI_MR_HMEM mr_mode, the
+  FI_INJECT flag can only be used with buffers whose iface is
+  FI_HMEM_SYSTEM.
 
 *FI_MULTI_RECV*
 : Applies to posted tagged receive operations when the FI_TAGGED_MULTI_RECV

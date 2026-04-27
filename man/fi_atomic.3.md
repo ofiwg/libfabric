@@ -429,6 +429,11 @@ has not been configured with FI_SELECTIVE_COMPLETION.  See the flags
 discussion below for more details. The requested message size that
 can be used with fi_inject_atomic is limited by inject_size.
 
+If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode,
+the fi_inject_atomic call can only accept buffers with iface equal to
+FI_HMEM_SYSTEM. This limitation does not affect how inject_size is
+reported.
+
 The fi_atomicmsg call supports atomic functions over both connected
 and connectionless endpoints, with the ability to control the atomic
 operation per call through the use of flags.  The fi_atomicmsg
@@ -620,6 +625,8 @@ with atomic message calls.
   'const'.  Non-constant or output buffers are unaffected by this flag
   and may be accessed by the provider at anytime until the operation has
   completed. This flag can only be used with messages smaller than inject_size.
+  If FI_HMEM is enabled and the provider requires the FI_MR_HMEM mr_mode, the
+  FI_INJECT flag can only be used with buffers whose iface is FI_HMEM_SYSTEM.
 
 *FI_FENCE*
 : Applies to transmits.  Indicates that the requested operation, also
