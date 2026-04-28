@@ -238,9 +238,10 @@ assign:
 	cep->cep_t_stats.st_num_posted_recvs++;
 
 	rx_entry->rx_entry.addr = lnx_get_core_addr(cep, addr);
-	if (rx_entry->rx_entry.desc && *rx_entry->rx_entry.desc) {
+	if (rx_entry->rx_entry.desc) {
 		rc = lnx_mr_regattr_core(cep->cep_domain,
-					 *rx_entry->rx_entry.desc,
+					 rx_entry->rx_entry.desc,
+					 rx_entry->rx_entry.count,
 					 rx_entry->rx_entry.desc);
 		if (rc)
 			return rc;
@@ -372,7 +373,7 @@ out:
  * If nothing is found on the unexpected messages, then add a receive
  * request on the SRQ; happens in the lnx_process_recv()
  */
-int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
+int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void **desc,
 		     fi_addr_t addr, size_t count, uint64_t tag,
 		     uint64_t ignore, void *context, uint64_t flags,
 		     bool tagged)
@@ -431,7 +432,7 @@ int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
 				          rx_entry->rx_entry.msg_size);
 
 	if (desc) {
-		rc = lnx_mr_regattr_core(cep->cep_domain, desc,
+		rc = lnx_mr_regattr_core(cep->cep_domain, desc, count,
 					 rx_entry->rx_entry.desc);
 		if (rc)
 			return rc;
@@ -470,9 +471,8 @@ nomatch:
 	/* nothing on the unexpected queue, then allocate one and put it on
 	 * the receive queue
 	 */
-	rx_entry = get_rx_entry(NULL, iov, (desc) ? &desc : NULL, count,
-				match_attr.lm_addr, tag, ignore, context,
-				flags);
+	rx_entry = get_rx_entry(NULL, iov, desc, count, match_attr.lm_addr,
+				tag, ignore, context, flags);
 	if (!rx_entry) {
 		rc = -FI_ENOMEM;
 		goto out;

@@ -44,7 +44,7 @@ static ssize_t lnx_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	if (!lep)
 		return -FI_ENOSYS;
 
-	return lnx_process_recv(lep, &iov, desc, src_addr, 1, tag, ignore,
+	return lnx_process_recv(lep, &iov, &desc, src_addr, 1, tag, ignore,
 				context, lnx_ep_rx_flags(lep), true);
 }
 
@@ -52,49 +52,26 @@ static ssize_t lnx_trecvv(struct fid_ep *ep, const struct iovec *iov,
 			  void **desc, size_t count, fi_addr_t src_addr,
 			  uint64_t tag, uint64_t ignore, void *context)
 {
-	void *mr_desc;
 	struct lnx_ep *lep;
 
 	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
 	if (!lep)
 		return -FI_ENOSYS;
 
-
-	if (count == 0) {
-		mr_desc = NULL;
-	} else if (iov && count >= 1 &&
-		   count <= lep->le_domain->ld_iov_limit) {
-		mr_desc = desc ? desc[0] : NULL;
-	} else {
-		FI_WARN(&lnx_prov, FI_LOG_CORE, "Invalid IOV\n");
-		return -FI_EINVAL;
-	}
-
-	return lnx_process_recv(lep, iov, mr_desc, src_addr, count, tag, ignore,
+	return lnx_process_recv(lep, iov, desc, src_addr, count, tag, ignore,
 				context, lnx_ep_rx_flags(lep), true);
 }
 
 static ssize_t lnx_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			    uint64_t flags)
 {
-	void *mr_desc;
 	struct lnx_ep *lep;
 
 	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
 	if (!lep)
 		return -FI_ENOSYS;
 
-	if (msg->iov_count == 0) {
-		mr_desc = NULL;
-	} else if (msg->msg_iov && msg->iov_count >= 1 &&
-		   msg->iov_count <= lep->le_domain->ld_iov_limit) {
-		mr_desc = msg->desc ? msg->desc[0] : NULL;
-	} else {
-		FI_WARN(&lnx_prov, FI_LOG_CORE, "Invalid IOV\n");
-		return -FI_EINVAL;
-	}
-
-	return lnx_process_recv(lep, msg->msg_iov, mr_desc, msg->addr,
+	return lnx_process_recv(lep, msg->msg_iov, msg->desc, msg->addr,
 				msg->iov_count, msg->tag, msg->ignore,
 				msg->context, flags | lep->le_ep.rx_msg_flags,
 				true);
@@ -124,7 +101,7 @@ static ssize_t lnx_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	       core_addr, tag, buf, len);
 
 	if (desc) {
-		rc = lnx_mr_regattr_core(cep->cep_domain, desc, &core_desc);
+		rc = lnx_mr_regattr_core(cep->cep_domain, &desc, 1, &core_desc);
 		if (rc)
 			return rc;
 	}
@@ -144,7 +121,7 @@ static ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov,
 {
 	int rc;
 	struct lnx_ep *lep;
-	void *core_desc = NULL;
+	void *core_desc[LNX_IOV_LIMIT] = {0};
 	struct lnx_core_ep *cep;
 	fi_addr_t core_addr;
 
@@ -161,14 +138,15 @@ static ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov,
 	       "sending to %" PRIx64 " tag %" PRIx64 " buf %p len %zu\n",
 	       core_addr, tag, iov->iov_base, iov->iov_len);
 
-	if (desc && *desc) {
-		rc = lnx_mr_regattr_core(cep->cep_domain, *desc, &core_desc);
+	if (desc) {
+		rc = lnx_mr_regattr_core(cep->cep_domain, desc, count,
+					 core_desc);
 		if (rc)
 			return rc;
 	}
 
-	rc = fi_tsendv(cep->cep_ep, iov, (core_desc) ? &core_desc : NULL,
-		       count, core_addr, tag, context);
+	rc = fi_tsendv(cep->cep_ep, iov, core_desc, count, core_addr, tag,
+		       context);
 
 	if (!rc)
 		cep->cep_t_stats.st_num_tsendv++;
@@ -181,7 +159,7 @@ static ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 {
 	int rc;
 	struct lnx_ep *lep;
-	void *core_desc = NULL;
+	void *core_desc[LNX_IOV_LIMIT] = {0};
 	struct lnx_core_ep *cep;
 	struct fi_msg_tagged core_msg;
 
@@ -200,12 +178,12 @@ static ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	       "sending to %" PRIx64 " tag %" PRIx64 "\n",
 	       core_msg.addr, core_msg.tag);
 
-	if (core_msg.desc && *core_msg.desc) {
-		rc = lnx_mr_regattr_core(cep->cep_domain, *core_msg.desc,
-					 &core_desc);
+	if (core_msg.desc) {
+		rc = lnx_mr_regattr_core(cep->cep_domain, msg->desc,
+					 msg->iov_count, core_desc);
 		if (rc)
 			return rc;
-		core_msg.desc = &core_desc;
+		core_msg.desc = core_desc;
 	}
 
 	rc = fi_tsendmsg(cep->cep_ep, &core_msg, flags);
@@ -253,7 +231,7 @@ static ssize_t lnx_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 	struct lnx_ep *lep;
 	struct lnx_core_ep *cep;
 	fi_addr_t core_addr;
-	void *core_desc = desc;
+	void *core_desc = NULL;
 
 	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
 	if (!lep)
@@ -269,13 +247,13 @@ static ssize_t lnx_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 	       core_addr, tag, buf, len);
 
 	if (desc) {
-		rc = lnx_mr_regattr_core(cep->cep_domain, desc, &core_desc);
+		rc = lnx_mr_regattr_core(cep->cep_domain, &desc, 1, &core_desc);
 		if (rc)
 			return rc;
 	}
 
-	rc = fi_tsenddata(cep->cep_ep, buf, len, core_desc,
-			  data, core_addr, tag, context);
+	rc = fi_tsenddata(cep->cep_ep, buf, len, core_desc, data, core_addr,
+			  tag, context);
 
 	if (!rc)
 		cep->cep_t_stats.st_num_tsenddata++;

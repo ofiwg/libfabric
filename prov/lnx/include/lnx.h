@@ -270,10 +270,10 @@ int lnx_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 		uint64_t flags, struct fid_mr **mr, void *context);
 int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr_fid);
-int lnx_mr_regattr_core(struct lnx_core_domain *cd, void *desc,
+int lnx_mr_regattr_core(struct lnx_core_domain *cd, void **desc, size_t count,
 			void **core_desc);
 
-int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
+int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void **desc,
 		     fi_addr_t addr, size_t count, uint64_t tag,
 		     uint64_t ignore, void *context, uint64_t flags,
 		     bool tagged);

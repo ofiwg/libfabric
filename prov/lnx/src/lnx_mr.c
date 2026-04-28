@@ -42,23 +42,29 @@
  * target core provider we can do memory registration at that point
  */
 
-int lnx_mr_regattr_core(struct lnx_core_domain *cd, void *desc,
+int lnx_mr_regattr_core(struct lnx_core_domain *cd, void **desc, size_t count,
 			void **core_desc)
 {
-	int rc;
-	struct lnx_mr *lm;
+	int rc, i;
+	struct lnx_mr **lm;
 
-	lm = (struct lnx_mr *)desc;
-	if (lm->lm_core_mr[cd->idx])
-		goto out;
+	lm = (struct lnx_mr **)desc;
+	if (!lm)
+		return FI_SUCCESS;
 
-	rc = fi_mr_regattr(cd->cd_domain, &lm->lm_attr, lm->lm_mr.flags,
-			   &lm->lm_core_mr[cd->idx]);
-	if (rc)
-		return rc;
+	for (i = 0; i < count; i++) {
+		if (lm[i] && !lm[i]->lm_core_mr[cd->idx]) {
+			rc = fi_mr_regattr(cd->cd_domain, &lm[i]->lm_attr,
+					   lm[i]->lm_mr.flags,
+					   &lm[i]->lm_core_mr[cd->idx]);
+			if (rc)
+				return rc;
+			core_desc[i] = fi_mr_desc(lm[i]->lm_core_mr[cd->idx]);
+		} else {
+			core_desc[i] = NULL;
+		}
+	}
 
-out:
-	*core_desc = lm->lm_core_mr[cd->idx]->mem_desc;
 	return FI_SUCCESS;
 }
 
