@@ -135,3 +135,34 @@ int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	return FI_SUCCESS;
 }
+
+int lnx_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
+		uint64_t access, uint64_t offset, uint64_t requested_key,
+		uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct fi_mr_attr attr;
+
+	attr.mr_iov = iov;
+	attr.iov_count = count;
+	attr.access = access;
+	attr.offset = offset;
+	attr.requested_key = requested_key;
+	attr.context = context;
+	attr.iface = FI_HMEM_SYSTEM;
+	attr.device.reserved = 0;
+	attr.hmem_data = NULL;
+
+	return lnx_mr_regattr(fid, &attr, flags, mr);
+}
+
+int lnx_mr_reg(struct fid *fid, const void *buf, size_t len, uint64_t access,
+	       uint64_t offset, uint64_t requested_key, uint64_t flags,
+	       struct fid_mr **mr, void *context)
+{
+	struct iovec iov;
+
+	iov.iov_base = (void *) buf;
+	iov.iov_len = len;
+	return lnx_mr_regv(fid, &iov, 1, access, offset, requested_key, flags,
+			   mr, context);
+}
