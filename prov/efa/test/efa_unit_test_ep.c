@@ -1166,8 +1166,7 @@ void test_efa_rdm_ep_user_zcpy_rx_disabled(struct efa_resource **state)
 }
 
 /**
- * @brief Verify zcpy_rx is enabled for host-only workloads even when
- *        HMEM P2P is globally disabled, since host memory doesn't use P2P
+ * @brief Verify zcpy_rx is disabled if CUDA P2P is explictly disabled
  */
 void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_disabled(struct efa_resource **state)
 {
@@ -1179,8 +1178,7 @@ void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_disabled(struct efa_resource **sta
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
 
-	/* Global HMEM P2P disable doesn't affect host-only workloads */
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true, false, true);
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, true, false, false);
 }
 
 /**
@@ -1202,8 +1200,7 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state
 }
 
 /**
- * @brief Verify zcpy_rx is enabled even if CUDA P2P is not supported,
- *        as long as FI_HMEM is not requested (host-only workload)
+ * @brief Verify zcpy_rx is disabled if CUDA P2P is enabled but not supported
  */
 void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy(struct efa_resource **state)
 {
@@ -1215,9 +1212,7 @@ void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy(struct efa_resource **
 	resource->hints->mode = FI_MSG_PREFIX;
 	resource->hints->caps = FI_MSG;
 
-	/* With the fix, zcpy_rx should be enabled for host-only workloads
-	 * even when CUDA P2P is not supported */
-	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, false, true);
+	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, false, false);
 }
 
 /**
