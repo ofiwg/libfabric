@@ -32,6 +32,7 @@ sighandler_test
 # Uses FI_RMA
 multi_mr
 rma
+mr_test
 
 # Tests that are broken
 recv_cancel
