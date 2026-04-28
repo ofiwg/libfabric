@@ -91,6 +91,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_efadv_cq_attr_db=0
 	have_ibv_create_comp_channel=0
 	have_ibv_get_cq_event=0
+	have_ibv_device_attr_ex_max_comp_cntr=0
 
 	dnl $have_neuron is defined at top-level configure.ac
 	AM_CONDITIONAL([HAVE_NEURON], [ test x"$have_neuron" = x1 ])
@@ -216,6 +217,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_ibv_get_cq_event=1],
 			[have_ibv_get_cq_event=0],
 			[[#include <infiniband/verbs.h>]])
+
+		AC_CHECK_MEMBER([struct ibv_device_attr_ex.max_comp_cntr],
+			[have_ibv_device_attr_ex_max_comp_cntr=1],
+			[have_ibv_device_attr_ex_max_comp_cntr=0],
+			[[#include <infiniband/verbs.h>]])
 	])
 
 	AC_DEFINE_UNQUOTED([HAVE_RDMA_SIZE],
@@ -275,6 +281,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFA_CQ_NOTIFICATION],
 		[$have_efa_cq_notification],
 		[Indicates if EFA supports CQ notification (requires ibv_create_comp_channel and ibv_get_cq_event)])
+	AC_DEFINE_UNQUOTED([HAVE_IBV_DEVICE_ATTR_EX_MAX_COMP_CNTR],
+		[$have_ibv_device_attr_ex_max_comp_cntr],
+		[Indicates if ibv_device_attr_ex has max_comp_cntr field])
 
 
 	CPPFLAGS=$save_CPPFLAGS

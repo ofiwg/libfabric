@@ -69,6 +69,7 @@ void test_info_rdm_attributes()
 		assert_int_equal(info->ep_attr->max_msg_size, UINT64_MAX);
 		assert_int_equal(info->domain_attr->progress, FI_PROGRESS_MANUAL);
 		assert_int_equal(info->domain_attr->control_progress, FI_PROGRESS_MANUAL);
+		assert_int_equal(info->domain_attr->cntr_cnt, g_efa_selected_device_list[0].max_comp_cntr);
 #if EFA_HAVE_NON_SYSTEM_HMEM
 		assert_true(info->caps | FI_HMEM);
 #endif
