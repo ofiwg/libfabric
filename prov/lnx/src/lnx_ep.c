@@ -718,9 +718,6 @@ static int lnx_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			"Failed to create receive buffer pool");
 		goto fail;
 	}
-	rc = ofi_spin_init(&lep->le_bplock);
-	if (rc)
-		goto fail;
 
 	rc = lnx_open_core_eps(lep, context);
 	if (rc)

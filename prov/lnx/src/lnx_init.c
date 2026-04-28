@@ -47,9 +47,6 @@
 #define LNX_RX_CAPS		(FI_TAGGED | FI_RECV | FI_DIRECTED_RECV | \
 				 FI_HMEM)
 
-ofi_spin_t global_bplock;
-struct ofi_bufpool *global_recv_bp = NULL;
-
 struct util_fabric lnx_fabric_info;
 struct lnx_env lnx_env = {
 	.mr = LNX_MR_SELECTION_PER_PEER,
@@ -777,7 +774,6 @@ fail:
 static void lnx_fini(void)
 {
 	lnx_free_links(&lnx_links);
-	ofi_bufpool_destroy(global_recv_bp);
 }
 
 void ofi_link_fini(void)
@@ -802,9 +798,6 @@ struct util_prov lnx_util_prov = {
 
 LNX_INI
 {
-	struct ofi_bufpool_attr bp_attrs = {};
-	int ret;
-
 	fi_param_define(&lnx_prov, "multi_rail_selection", FI_PARAM_STRING,
 			"Specify which Multi-Rail endpoint selection "
 			"algorithm to use. One of: PER_MSG, PER_PEER. "
@@ -821,21 +814,6 @@ LNX_INI
 			"Dump LNX stats on shutdown. Defaults to 0");
 
 	dlist_init(&lnx_links);
-
-	if (!global_recv_bp) {
-		bp_attrs.size = sizeof(struct lnx_rx_entry);
-		bp_attrs.alignment = 8;
-		bp_attrs.max_cnt = UINT16_MAX;
-		bp_attrs.chunk_cnt = 64;
-		bp_attrs.flags = OFI_BUFPOOL_NO_TRACK;
-		ret = ofi_bufpool_create_attr(&bp_attrs, &global_recv_bp);
-		if (ret) {
-			FI_WARN(&lnx_prov, FI_LOG_FABRIC,
-				"Failed to create receive buffer pool");
-			return NULL;
-		}
-		ofi_spin_init(&global_bplock);
-	}
 
 	return &lnx_prov;
 }
