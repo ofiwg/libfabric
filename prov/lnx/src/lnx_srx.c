@@ -49,18 +49,12 @@ static int lnx_queue_msg(struct fi_peer_rx_entry *entry)
 static void lnx_free_entry(struct fi_peer_rx_entry *entry)
 {
 	struct lnx_rx_entry *rx_entry;
-	ofi_spin_t *bplock;
 
 	rx_entry = container_of(entry, struct lnx_rx_entry, rx_entry);
 
-	if (rx_entry->rx_global)
-		bplock = &global_bplock;
-	else
-		bplock = &rx_entry->rx_lep->le_bplock;
-
-	ofi_spin_lock(bplock);
+	ofi_genlock_lock(&rx_entry->rx_lep->le_ep.lock);
 	ofi_buf_free(rx_entry);
-	ofi_spin_unlock(bplock);
+	ofi_genlock_unlock(&rx_entry->rx_lep->le_ep.lock);
 }
 
 static void lnx_init_rx_entry(struct lnx_rx_entry *entry,
@@ -91,31 +85,16 @@ static struct lnx_rx_entry *get_rx_entry(struct lnx_ep *lep,
 					 void *context, uint64_t flags)
 {
 	struct lnx_rx_entry *rx_entry = NULL;
-	ofi_spin_t *bplock;
-	struct ofi_bufpool *bp;
 
-	/* if lp is NULL, then we don't know where the message is going to
-	 * come from, so allocate the rx_entry from a global pool
-	 */
-	if (!lep) {
-		bp = global_recv_bp;
-		bplock = &global_bplock;
-	} else {
-		bp = lep->le_recv_bp;
-		bplock = &lep->le_bplock;
-	}
+	ofi_genlock_lock(&lep->le_ep.lock);
+	rx_entry = (struct lnx_rx_entry *)ofi_buf_alloc(lep->le_recv_bp);
+	ofi_genlock_unlock(&lep->le_ep.lock);
+	if (!rx_entry)
+		return NULL;
 
-	ofi_spin_lock(bplock);
-	rx_entry = (struct lnx_rx_entry *)ofi_buf_alloc(bp);
-	ofi_spin_unlock(bplock);
-	if (rx_entry) {
-		memset(rx_entry, 0, sizeof(*rx_entry));
-		if (!lep)
-			rx_entry->rx_global = true;
-		rx_entry->rx_lep = lep;
-		lnx_init_rx_entry(rx_entry, iov, desc, count, addr, tag,
-				  ignore, context, flags);
-	}
+	rx_entry->rx_lep = lep;
+	lnx_init_rx_entry(rx_entry, iov, desc, count, addr, tag,
+				ignore, context, flags);
 
 	return rx_entry;
 }
@@ -471,7 +450,7 @@ nomatch:
 	/* nothing on the unexpected queue, then allocate one and put it on
 	 * the receive queue
 	 */
-	rx_entry = get_rx_entry(NULL, iov, desc, count, match_attr.lm_addr,
+	rx_entry = get_rx_entry(lep, iov, desc, count, match_attr.lm_addr,
 				tag, ignore, context, flags);
 	if (!rx_entry) {
 		rc = -FI_ENOMEM;

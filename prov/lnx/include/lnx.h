@@ -188,7 +188,6 @@ struct lnx_ep {
 	struct util_ep le_ep;
 	struct lnx_core_ep *le_core_eps;
 	struct ofi_bufpool *le_recv_bp;
-	ofi_spin_t le_bplock;
 	struct lnx_domain *le_domain;
 	size_t le_fclass;
 	struct lnx_peer_srq le_srq;
@@ -231,7 +230,6 @@ struct lnx_rx_entry {
 	struct lnx_ep *rx_lep;
 	struct lnx_core_ep *rx_cep;
 	uint64_t rx_ignore;
-	bool rx_global;
 };
 
 extern struct fi_ops_msg lnx_msg_ops;
@@ -242,8 +240,6 @@ extern struct fi_ops_srx_owner lnx_srx_ops;
 
 extern struct util_prov lnx_util_prov;
 extern struct fi_provider lnx_prov;
-extern struct ofi_bufpool *global_recv_bp;
-extern ofi_spin_t global_bplock;
 
 int lnx_setup_fabrics(char *name, struct lnx_fabric *lnx_fab, void *context);
 
