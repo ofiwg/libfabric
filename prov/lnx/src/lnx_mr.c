@@ -49,34 +49,38 @@ int lnx_mr_regattr_core(struct lnx_core_domain *cd, void *desc,
 	struct lnx_mr *lm;
 
 	lm = (struct lnx_mr *)desc;
-	if (lm->lm_core_mr)
+	if (lm->lm_core_mr[cd->idx])
 		goto out;
 
 	rc = fi_mr_regattr(cd->cd_domain, &lm->lm_attr, lm->lm_mr.flags,
-			   &lm->lm_core_mr);
+			   &lm->lm_core_mr[cd->idx]);
 	if (rc)
 		return rc;
 
 out:
-	*core_desc = lm->lm_core_mr->mem_desc;
+	*core_desc = lm->lm_core_mr[cd->idx]->mem_desc;
 	return FI_SUCCESS;
 }
 
 static int lnx_mr_close(struct fid *fid)
 {
 	int rc, frc = FI_SUCCESS;
+	struct lnx_domain *domain;
 	struct lnx_mr *lm;
+	int i;
 
 	lm = container_of(fid, struct lnx_mr, lm_mr.mr_fid.fid);
+	domain = container_of(lm->lm_mr.domain, struct lnx_domain, ld_domain);
 
-	if (lm->lm_core_mr) {
-		rc = fi_close(&lm->lm_core_mr->fid);
-		if (rc)
-			frc = rc;
+	for (i = 0; i < domain->ld_num_doms; i++) {
+		if (lm->lm_core_mr[i]) {
+			rc = fi_close(&lm->lm_core_mr[i]->fid);
+			if (rc)
+				frc = rc;
+		}
 	}
-
-	ofi_atomic_dec32(&lm->lm_mr.domain->ref);
-
+	free(lm->lm_core_mr);
+	ofi_atomic_dec32(&domain->ld_domain.ref);
 	ofi_buf_free(lm);
 
 	return frc;
@@ -123,6 +127,11 @@ int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	memcpy(lm->lm_iov, attr->mr_iov,
 	       sizeof(struct iovec) * attr->iov_count);
 	lm->lm_attr.mr_iov = lm->lm_iov;
+	lm->lm_core_mr = calloc(sizeof(struct fid_mr *), domain->ld_num_doms);
+	if (!lm->lm_core_mr) {
+		free(lm);
+		return -FI_ENOMEM;
+	}
 	mr = &lm->lm_mr;
 	mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	mr->mr_fid.fid.ops = &lnx_mr_fi_ops;

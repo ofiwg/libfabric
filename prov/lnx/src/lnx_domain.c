@@ -148,6 +148,7 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab, void *context,
 			if (rc)
 				return rc;
 
+			cd->idx = lnx_dom->ld_num_doms;
 			lnx_dom->ld_num_doms++;
 			cd->cd_fabric = cf;
 		}
