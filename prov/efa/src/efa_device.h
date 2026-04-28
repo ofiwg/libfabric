@@ -28,6 +28,9 @@ struct efa_device {
 	size_t			qp_table_sz_m1;
 	struct ofi_genlock		qp_table_lock;
 	int				urandom_fd;
+	/* Max number of completion counters supported by device, used to
+	 * populate info->domain_attr->cntr_cnt */
+	uint32_t		max_comp_cntr;
 };
 
 int efa_device_list_initialize(void);
