@@ -86,8 +86,8 @@ static struct fi_ops lnx_domain_fi_ops = {
 
 static struct fi_ops_mr lnx_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
-	.reg = fi_no_mr_reg,
-	.regv = fi_no_mr_regv,
+	.reg = lnx_mr_reg,
+	.regv = lnx_mr_regv,
 	.regattr = lnx_mr_regattr,
 };
 

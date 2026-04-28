@@ -260,6 +260,13 @@ int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int lnx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
 
+
+int lnx_mr_reg(struct fid *fid, const void *buf, size_t len, uint64_t access,
+	       uint64_t offset, uint64_t requested_key, uint64_t flags,
+	       struct fid_mr **mr, void *context);
+int lnx_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
+		uint64_t access, uint64_t offset, uint64_t requested_key,
+		uint64_t flags, struct fid_mr **mr, void *context);
 int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr_fid);
 int lnx_mr_regattr_core(struct lnx_core_domain *cd, void *desc,
