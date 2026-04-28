@@ -137,6 +137,20 @@ int efa_device_construct_data(struct efa_device *efa_device,
 	efa_device->max_rdma_size = 0;
 	efa_device->device_caps = 0;
 #endif
+	efa_device->max_comp_cntr = 0;
+#if HAVE_IBV_DEVICE_ATTR_EX_MAX_COMP_CNTR
+	{
+		struct ibv_device_attr_ex attr_ex = {0};
+		struct ibv_query_device_ex_input input = {0};
+
+		err = ibv_query_device_ex(efa_device->ibv_ctx, &input, &attr_ex);
+		if (err) {
+			EFA_WARN_ERRNO(FI_LOG_FABRIC, "ibv_query_device_ex failed", err);
+		} else {
+			efa_device->max_comp_cntr = attr_ex.max_comp_cntr;
+		}
+	}
+#endif
 	efa_device->rdm_info = NULL;
 	err = efa_prov_info_alloc(&efa_device->rdm_info, efa_device, FI_EP_RDM);
 	if (err) {
