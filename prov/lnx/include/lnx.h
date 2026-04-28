@@ -96,6 +96,7 @@ struct lnx_core_domain {
 	struct lnx_core_fabric *cd_fabric;
 	struct fi_info *cd_info;
 	uint64_t cd_num_sends;
+	int idx;
 };
 
 struct lnx_core_av {
@@ -169,7 +170,7 @@ struct lnx_av {
 struct lnx_mr {
 	struct ofi_mr lm_mr;
 	struct fi_mr_attr lm_attr;
-	struct fid_mr *lm_core_mr;
+	struct fid_mr **lm_core_mr;
 	struct iovec lm_iov[LNX_IOV_LIMIT];
 };
 
