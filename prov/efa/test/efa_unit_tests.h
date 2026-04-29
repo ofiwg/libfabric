@@ -252,6 +252,11 @@ void test_info_direct_msg_only_small_max_msg_size_success();
 void test_info_direct_msg_only_large_max_msg_size_fail();
 void test_info_direct_msg_rma_large_max_msg_size_success();
 void test_info_direct_msg_rma_too_large_max_msg_size_fail();
+void test_info_max_cntr_value_api_lt_2_5();
+void test_info_max_cntr_value_api_ge_2_5_within_hw_range();
+void test_info_max_cntr_value_api_ge_2_5_hint_within_hw_range();
+void test_info_max_cntr_value_api_ge_2_5_above_hw_range();
+void test_info_rdm_max_cntr_value_api_ge_2_5_within_hw_range();
 /* end efa_unit_test_info.c */
 
 void test_efa_srx_min_multi_recv_size();
