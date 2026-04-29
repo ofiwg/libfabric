@@ -1018,6 +1018,16 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "hfisvc", FI_PARAM_BOOL,
 			"Indicates that HFI Service should be used for bulk transfers if available. Default is false.");
 
+	fi_param_define(&fi_opx_provider, "multi_hfi_striping", FI_PARAM_BOOL,
+			"Enable or disable multi-HFI data striping for rendezvous "
+			"transfers over HFISVC (0 or 1). Default: 1 on CN6000/CYR; "
+			"0 on CN5000/JKR; unsupported on WFR.");
+
+	fi_param_define(
+		&fi_opx_provider, "rzv_striping_min_payload_bytes", FI_PARAM_INT,
+		"The minimum payload size in bytes for rendezvous transfers to use multi-HFI striping. Transfers below this threshold use a single rail. Default: %d.",
+		OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES_DEFAULT);
+
 	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);
 #ifdef OPX_HMEM

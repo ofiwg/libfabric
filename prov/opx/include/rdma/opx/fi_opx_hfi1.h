@@ -115,6 +115,9 @@ struct fi_opx_ep_tx;
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MIN (FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MAX (OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX + 1) /* Max value */
 
+/* Default for payload threshold size for multi-HFI striping (RZV transfers only) */
+#define OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES_DEFAULT (65536)
+
 /* Maximum Multi-packet eager chunk size. The chunk size should be at most 8K,
    even if we're using a larger (i.e. 10K) packet MTU */
 #define OPX_MP_EGR_MAX_CHUNK_SIZE_WFR  (4096)
@@ -621,14 +624,18 @@ struct fi_opx_hfi1_context_internal {
 	struct _hfi_ctrl	 *ctrl;
 };
 
+#define OPX_SAME_ASIC_MASK    0x0000007800FFFFFFull
+#define OPX_SAME_ASIC(_a, _b) (((_a) & OPX_SAME_ASIC_MASK) == ((_b) & OPX_SAME_ASIC_MASK))
+
 struct fi_opx_plane_info {
 	uint32_t hfi_unit;
 	uint32_t hfi_port;
 	uint64_t gid_hi;
+	uint64_t gid_lo;
 };
 
 int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
-				const int max_planes);
+				const int max_planes, const uint64_t *gid_filter, const int gid_filter_count);
 
 int fi_opx_hfi1_discover_same_plane(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
 				    const int max_planes);
@@ -849,7 +856,11 @@ enum opx_sriov_route opx_sriov_route_classify(opx_lid_t slid, opx_lid_t dlid, ui
 	return OPX_SRIOV_ROUTE_ALPHA_LOOPBACK;
 }
 
-struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key);
+int parse_plane_gid_filter(const char *filter_str, uint64_t *gid_values, const int max_values);
+
+struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key,
+						     const uint64_t *gid_filter, int gid_filter_count,
+						     int dual_plane_env);
 
 int init_hfi1_rxe_state(struct fi_opx_hfi1_context *context, struct fi_opx_hfi1_rxe_state *rxe_state);
 

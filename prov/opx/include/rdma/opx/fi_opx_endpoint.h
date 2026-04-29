@@ -205,7 +205,7 @@ struct fi_opx_ep_tx {
 	uint16_t	   mp_eager_chunk_size;
 	uint16_t	   pio_max_eager_tx_bytes;
 	uint16_t	   pio_flow_eager_tx_bytes;
-	uint32_t	   unused_cacheline1;
+	uint32_t	   rzv_striping_min_payload_bytes;
 	uint8_t		   do_cq_completion;
 	uint8_t		   force_credit_return;
 	uint8_t		   use_sdma;

@@ -172,7 +172,7 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 					}
 					if (!matched) {
 						FI_WARN(fi_opx_global.prov, FI_LOG_AV,
-							"No local TX context matches remote peer gid_hi 0x%016lx (lid 0x%x)\n",
+							"No local TX context matches remote peer gid_hi 0x%016lx (lid 0x%x). This can occur if there are more than 2 subnets(gid_hi). Use _FI_OPX_MULTI_HFI_FILTER_ to indicate which subnet to use.\n",
 							input[n].planes[OPX_PRIMARY_PLANE].gid_hi,
 							input[n].planes[OPX_PRIMARY_PLANE].lid);
 						FI_WARN(fi_opx_global.prov, FI_LOG_AV,
