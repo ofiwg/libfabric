@@ -256,6 +256,10 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		ret = -FI_ENOMEM;
 		goto err_free;
 	}
+	/* keep max_cntr_value and max_err_cntr_value from user info so we can
+	 * decide whether to use hw counter later */
+	efa_domain->info->domain_attr->max_cntr_value = info->domain_attr->max_cntr_value;
+	efa_domain->info->domain_attr->max_err_cntr_value = info->domain_attr->max_err_cntr_value;
 
 	*domain_fid = &efa_domain->util_domain.domain_fid;
 
