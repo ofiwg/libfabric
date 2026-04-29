@@ -2381,10 +2381,16 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		}
 	}
 	if (OPX_HFI1_PKT_SIZE > opx_ep->hfi->mtu) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-			"Packet size %u is larger than driver MTU size %u. Defaulting to the current MTU size %u\n",
-			OPX_HFI1_PKT_SIZE, opx_ep->hfi->mtu, opx_ep->hfi->mtu);
-		OPX_HFI1_PKT_SIZE = opx_ep->hfi->mtu;
+		if (opx_ep->hfi->mtu) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+				"Packet size %u is larger than driver MTU size %u. Defaulting to the current MTU size %u\n",
+				OPX_HFI1_PKT_SIZE, opx_ep->hfi->mtu, opx_ep->hfi->mtu);
+			OPX_HFI1_PKT_SIZE = opx_ep->hfi->mtu;
+		} else { /* unset/0 MTU is obviously invalid try to run with default */
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+				"Driver MTU size %u is invalid. Defaulting to the specified OPX packet size %u\n",
+				opx_ep->hfi->mtu, OPX_HFI1_PKT_SIZE);
+		}
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "Global OPX packet size %u\n", OPX_HFI1_PKT_SIZE);
 
