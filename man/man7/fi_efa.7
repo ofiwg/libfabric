@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-03\-19" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-04\-29" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -249,12 +249,13 @@ The default value is true.
 For efa-direct, FI_RX_CQ_DATA is required when
 FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV is false, or it will return
 -FI_EOPNOTSUPP for the call to fi_setopt().
-.SH PROVIDER SPECIFIC DOMAIN OPS
+.SH PROVIDER SPECIFIC OPERATION EXTENSIONS
 .PP
 The efa provider exports extensions for operations that are not provided
 by the standard libfabric interface.
 These extensions are available via the \[lq]\f[V]fi_ext_efa.h\f[R]\[rq]
-header file.
+header file and accessed through \f[V]fi_open_ops\f[R], applied to
+either the domain or fabric fid depending on the extension.
 .SS Domain Operation Extension
 .PP
 Domain operation extension is obtained by calling \f[V]fi_open_ops\f[R]
@@ -492,6 +493,56 @@ local memory translation key used by TX/RX buffer descriptor.
 .PP
 \f[B]get_mr_lkey()\f[R] returns lkey on success, or FI_KEY_NOTAVAIL if
 the registration has not completed.
+.SS Fabric Operation Extension
+.PP
+Fabric operation extension is obtained by calling \f[V]fi_open_ops\f[R]
+(see \f[V]fi_fabric(3)\f[R])
+.IP
+.nf
+\f[C]
+int fi_open_ops(struct fid *fabric, const char *name, uint64_t flags,
+    void **ops, void *context);
+\f[R]
+.fi
+.PP
+Requesting \f[V]FI_EFA_FEATURE_OPS\f[R] in \f[V]name\f[R] returns
+\f[V]ops\f[R] as a pointer to the function table
+\f[V]fi_efa_feature_ops\f[R] defined as follows:
+.IP
+.nf
+\f[C]
+struct fi_efa_feature_ops {
+    bool (*query)(const char *feature);
+};
+\f[R]
+.fi
+.PP
+Features are runtime-discoverable flags advertised by the provider,
+letting consumers detect the presence of a given behavior or bug fix
+independently of the libfabric API version (which cannot encode patch
+releases).
+The ops are exposed at fabric scope so consumers can probe features
+immediately after \f[V]fi_fabric()\f[R], before any domain is opened.
+Feature answers may differ between the \f[V]efa-direct\f[R] and
+\f[V]efa\f[R] (RDM) fabrics because the two exercise different code
+paths.
+Older provider builds do not expose \f[V]FI_EFA_FEATURE_OPS\f[R] at all,
+so \f[V]fi_open_ops()\f[R] returns \f[V]-FI_EINVAL\f[R] for the key;
+callers can treat that as \[lq]no features advertised\[rq].
+.PP
+Currently defined feature strings:
+.TP
+\f[I]\[lq]mixed_hmem_iov\[rq]\f[R] (efa-direct only)
+The provider correctly inspects every descriptor in a multi-iov request
+for HMEM/iface, rather than only the first descriptor.
+Not currently advertised on the \f[V]efa\f[R] fabric because the RDM
+receive-copy path still dispatches on \f[V]desc[0]\f[R] alone.
+.SS query
+.PP
+Return \f[V]true\f[R] if the provider build advertises
+\f[I]feature\f[R], otherwise \f[V]false\f[R].
+Passing an unknown string (including \f[V]NULL\f[R]) returns
+\f[V]false\f[R].
 .SH Traffic Class (tclass) in EFA
 .PP
 To prioritize the messages from a given endpoint, user can specify
