@@ -345,6 +345,18 @@ or underruns.  Default is false.
   Default is to determine optimal value based on the number of contexts available on the system and number of processors online.
   Only applicable if context sharing is enabled. Otherwise this value is ignored.
 
+*FI_OPX_MULTI_HFI_STRIPING*
+: Boolean (0/1, on/off, true/false, yes/no). Enable or disable multi-HFI data striping for
+  rendezvous (RZV) transfers over HFISVC. When enabled, OPX stripes large RZV transfers across
+  multiple HFI contexts for increased bandwidth. 
+  Default: 1 on CN6000, 0 on CN5000. Not supported on OPA-100 hardware.
+
+*FI_OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES*
+: Integer. Minimum rendezvous payload size in bytes for multi-HFI striping. Transfers with a
+  payload smaller than this threshold use a single HFI rail even when striping is enabled.
+  Only effective when FI_OPX_MULTI_HFI_STRIPING=1. Not supported on OPA-100 hardware.
+  Default: 65536 (64 KiB).
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

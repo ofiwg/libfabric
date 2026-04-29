@@ -785,11 +785,54 @@ static int opx_hfi1_context_populate(struct fi_opx_hfi1_context *context, struct
 	return 0;
 }
 
+static bool gid_in_filter(uint64_t gid_hi, const uint64_t *filter, int count);
+
+/*
+ * opx_hfi1_sysfs_get_chip_major() - Read chip_major from sysfs boardversion.
+ *
+ * /sys/class/infiniband/hfi1_N/boardversion contains a string of the form:
+ *   "ChipABI %u.%u, ChipRev %u.%u, SW Compat %llu"
+ * The first field of ChipRev is chip_major (7=WFR, 8=JKR, 9=CYR).
+ *
+ * Returns chip_major on success, -1 on failure (sysfs unavailable or parse error).
+ */
+static int opx_hfi1_sysfs_get_chip_major(int unit)
+{
+	char path[256];
+	snprintf(path, sizeof(path), "/sys/class/infiniband/hfi1_%d/boardversion", unit);
+
+	FILE *f = fopen(path, "r");
+	if (!f) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Cannot open %s: %s\n", path, strerror(errno));
+		return -1;
+	}
+
+	unsigned int chip_major = 0;
+	/* Parse: "ChipABI %u.%u, ChipRev %u.%u, SW Compat %llu"
+	 * We only need the first field of ChipRev (chip_major). */
+	int rc = fscanf(f, "ChipABI %*u.%*u, ChipRev %u.", &chip_major);
+	fclose(f);
+
+	if (rc != 1) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Failed to parse chip_major from %s\n", path);
+		return -1;
+	}
+
+	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "HFI unit %d: sysfs chip_major = %u\n", unit, chip_major);
+	return (int) chip_major;
+}
+
 /*
  * Open a context on the first HFI that shares our process' NUMA node.
  * If no HFI shares our NUMA node, grab the first active HFI.
+ *
+ * dual_plane_env: the raw value of _FI_OPX_DUAL_PLANE_ (1, 0, or -1 if unset).
+ *   Used to decide whether and how to apply the GID filter during candidate
+ *   selection — see the filter block inside use_default_logic below.
  */
-struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key)
+struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key,
+						     const uint64_t *gid_filter, int gid_filter_count,
+						     int dual_plane_env)
 {
 	struct fi_opx_ep *opx_ep		= (ep == NULL) ? NULL : container_of(ep, struct fi_opx_ep, ep_fid);
 	int		  fd_cdev		= -1;
@@ -955,6 +998,47 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				goto ctxt_open_err;
 			}
 			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd_cdev %d fd_verbs %d\n", fd_cdev, fd_verbs);
+
+			if (gid_filter_count > 0) {
+				/* Determine whether to apply the GID filter for this HFI_SELECT unit.
+				 * - dual_plane_env == 1: user explicitly enabled dual-plane; apply filter.
+				 * - dual_plane_env == 0: user explicitly disabled dual-plane; skip filter.
+				 * - dual_plane_env == -1 (not set): probe chip type from the just-opened
+				 *   context; apply filter only on CYR (dual-plane capable) hardware. */
+				bool apply_filter;
+				if (dual_plane_env == 1) {
+					apply_filter = true;
+				} else if (dual_plane_env == 0) {
+					apply_filter = false;
+				} else {
+					/* dual_plane_env == -1: use chip type from the opened context */
+					enum opx_hfi1_type chip_type = internal->context.hfi1_type;
+					apply_filter		     = (chip_type & OPX_HFI1_CYR) ? true : false;
+					FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+						"HFI_SELECT unit %d: chip_type=0x%x, GID filter %s\n", hfi_unit_number,
+						chip_type, apply_filter ? "applied" : "skipped (not CYR)");
+				}
+
+				if (apply_filter) {
+					/* The context is already open; ctrl tells us exactly which
+					 * unit and port were selected.  Use that GID directly. */
+					uint64_t sel_gid_hi, sel_gid_lo;
+					if (opx_hfi_get_port_gid(ctrl->__hfi_unit, ctrl->__hfi_port, &sel_gid_hi,
+								 &sel_gid_lo) < 0 ||
+					    !gid_in_filter(sel_gid_hi, gid_filter, gid_filter_count)) {
+						FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+							"FI_OPX_HFI_SELECT unit %d port %d GID 0x%016lx does not match any GID in _FI_OPX_MULTI_HFI_FILTER_. Remove FI_OPX_HFI_SELECT or remove _FI_OPX_MULTI_HFI_FILTER_.\n",
+							ctrl->__hfi_unit, ctrl->__hfi_port, sel_gid_hi);
+						FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "GID filter given was:\n");
+						for (int i = 0; i < gid_filter_count; i++) {
+							FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "  [%d] 0x%016lx\n", i,
+								gid_filter[i]);
+						}
+						opx_hfi_context_close(fd_cdev, fd_verbs);
+						goto ctxt_open_err;
+					}
+				}
+			}
 		}
 
 	} else if (opx_ep && opx_ep->common_info->src_addr &&
@@ -1007,6 +1091,26 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			goto ctxt_open_err;
 		}
 		FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd_cdev %d fd_verbs %d\n", fd_cdev, fd_verbs);
+
+		if (gid_filter_count > 0) {
+			/* The context is already open; ctrl tells us exactly which
+			 * unit and port were selected.  Use that GID directly. */
+			uint64_t sel_gid_hi, sel_gid_lo;
+			if (opx_hfi_get_port_gid(ctrl->__hfi_unit, ctrl->__hfi_port, &sel_gid_hi, &sel_gid_lo) < 0 ||
+			    !gid_in_filter(sel_gid_hi, gid_filter, gid_filter_count)) {
+				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+					"HFI unit %d port %d GID 0x%016lx does not match "
+					"any GID in _FI_OPX_MULTI_HFI_FILTER_. Remove FI_OPX_HFI_SELECT "
+					"or remove _FI_OPX_MULTI_HFI_FILTER_.\n",
+					ctrl->__hfi_unit, ctrl->__hfi_port, sel_gid_hi);
+				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "GID filter given was:\n");
+				for (int i = 0; i < gid_filter_count; i++) {
+					FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "  [%d] 0x%016lx\n", i, gid_filter[i]);
+				}
+				opx_hfi_context_close(fd_cdev, fd_verbs);
+				goto ctxt_open_err;
+			}
+		}
 	}
 	if (use_default_logic) {
 		/* Select the best HFI to open a context on */
@@ -1088,6 +1192,75 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 					hfi_candidates_count++;
 				}
 			}
+		}
+
+		if (gid_filter_count > 0 && hfi_candidates_count > 0) {
+			int filtered_count = 0;
+			for (int i = 0; i < hfi_candidates_count; i++) {
+				bool apply_filter;
+
+				if (dual_plane_env == 1) {
+					/* User explicitly enabled dual-plane: always apply GID filter */
+					apply_filter = true;
+				} else if (dual_plane_env == 0) {
+					/* User explicitly disabled dual-plane: skip GID filter */
+					apply_filter = false;
+				} else {
+					/* dual_plane_env == -1 (not set): probe chip version via sysfs.
+					 * Apply GID filter only for CYR hardware (dual-plane capable).
+					 * WFR and JKR do not support dual-plane, so skip the filter. */
+					int chip_major = opx_hfi1_sysfs_get_chip_major(hfi_candidates[i]);
+					apply_filter   = (chip_major == OPX_HFI1_CCE_CSR_CHIP_MAJOR_CYR);
+					if (!apply_filter) {
+						FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+							"HFI unit %d: chip_major=%d (not CYR), skipping GID filter\n",
+							hfi_candidates[i], chip_major);
+					}
+				}
+
+				if (!apply_filter) {
+					hfi_candidates[filtered_count] = hfi_candidates[i];
+					hfi_distances[filtered_count]  = hfi_distances[i];
+					hfi_freectxs[filtered_count]   = hfi_freectxs[i];
+					filtered_count++;
+					continue;
+				}
+
+				bool port_matches = false;
+				for (int port = OPX_MIN_PORT; port <= OPX_MAX_PORT && !port_matches; port++) {
+					if (opx_hfi_get_port_lid(hfi_candidates[i], port) <= 0) {
+						continue;
+					}
+					uint64_t cand_gid_hi, cand_gid_lo;
+					if (opx_hfi_get_port_gid(hfi_candidates[i], port, &cand_gid_hi, &cand_gid_lo) >=
+						    0 &&
+					    gid_in_filter(cand_gid_hi, gid_filter, gid_filter_count)) {
+						port_matches = true;
+					}
+				}
+				if (port_matches) {
+					hfi_candidates[filtered_count] = hfi_candidates[i];
+					hfi_distances[filtered_count]  = hfi_distances[i];
+					hfi_freectxs[filtered_count]   = hfi_freectxs[i];
+					filtered_count++;
+				} else {
+					FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+						"HFI unit %d excluded: GID not in _FI_OPX_MULTI_HFI_FILTER_\n",
+						hfi_candidates[i]);
+				}
+			}
+			if (filtered_count == 0) {
+				if (dirfd != -1) {
+					flock(dirfd, LOCK_UN);
+					close(dirfd);
+					dirfd = -1;
+				}
+				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+					"FATAL: No active HFI port GID matches _FI_OPX_MULTI_HFI_FILTER_. "
+					"Verify that the GIDs in _FI_OPX_MULTI_HFI_FILTER_ match active HFI ports.\n");
+				goto ctxt_open_err;
+			}
+			hfi_candidates_count = filtered_count;
 		}
 
 		// At this point we have a list of HFIs, sorted by distance from this pid (and by unit # as an implied
@@ -1198,11 +1371,91 @@ ctxt_open_err:
 	return NULL;
 }
 
+static bool gid_in_filter(uint64_t gid_hi, const uint64_t *filter, int count)
+{
+	for (int i = 0; i < count; i++) {
+		if (gid_hi == filter[i]) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/* Parse _FI_OPX_MULTI_HFI_FILTER_: exactly two comma-separated hex gid_hi values.
+ * Returns count (always 2) on success, 0 on any error. */
+#define OPX_PLANE_FILTER_REQUIRED_COUNT 2
+int parse_plane_gid_filter(const char *filter_str, uint64_t *gid_values, const int max_values)
+{
+	if (!filter_str || !gid_values || max_values < OPX_PLANE_FILTER_REQUIRED_COUNT) {
+		FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+			"_FI_OPX_MULTI_HFI_FILTER_ parser called with invalid arguments\n");
+		return 0;
+	}
+
+	char *str = strdup(filter_str);
+	if (!str) {
+		FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+			"_FI_OPX_MULTI_HFI_FILTER_: allocation failure while parsing '%s'\n", filter_str);
+		return 0;
+	}
+
+	int   count   = 0;
+	char *saveptr = NULL;
+	char *token   = strtok_r(str, ",", &saveptr);
+
+	while (token) {
+		while (*token == ' ' || *token == '\t') {
+			token++;
+		}
+
+		if (count >= max_values) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+				"_FI_OPX_MULTI_HFI_FILTER_ expects exactly %d comma-separated hex values, "
+				"but more were provided in '%s'\n",
+				OPX_PLANE_FILTER_REQUIRED_COUNT, filter_str);
+			free(str);
+			return 0;
+		}
+
+		char *endptr = NULL;
+		errno	     = 0;
+		uint64_t val = strtoull(token, &endptr, 16);
+
+		if (errno != 0 || endptr == token || (*endptr != '\0' && *endptr != ' ' && *endptr != '\t')) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+				"Invalid GID value '%s' in _FI_OPX_MULTI_HFI_FILTER_\n", token);
+			free(str);
+			return 0;
+		}
+
+		gid_values[count++] = val;
+		token		    = strtok_r(NULL, ",", &saveptr);
+	}
+
+	free(str);
+
+	if (count != OPX_PLANE_FILTER_REQUIRED_COUNT) {
+		FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+			"_FI_OPX_MULTI_HFI_FILTER_ requires exactly %d GID values, got %d\n",
+			OPX_PLANE_FILTER_REQUIRED_COUNT, count);
+		return 0;
+	}
+
+	if (gid_values[0] == gid_values[1]) {
+		FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
+			"_FI_OPX_MULTI_HFI_FILTER_ values must differ; got duplicate 0x%016lx\n", gid_values[0]);
+		return 0;
+	}
+
+	return count;
+}
+
 /* Multi-plane support: discover additional planes by scanning HFI units and ports */
 struct plane_candidate {
 	uint32_t hfi_unit;
 	uint32_t hfi_port;
 	uint64_t gid_hi;
+	uint64_t gid_lo;
 	int	 numa_dist;
 	int	 free_ctxts;
 };
@@ -1253,6 +1506,7 @@ static int discover_plane_candidates(const uint64_t primary_gid_hi, const uint32
 			candidates[num_candidates].hfi_unit   = unit;
 			candidates[num_candidates].hfi_port   = port;
 			candidates[num_candidates].gid_hi     = gid_hi;
+			candidates[num_candidates].gid_lo     = gid_lo;
 			candidates[num_candidates].numa_dist  = hfi_d;
 			candidates[num_candidates].free_ctxts = hfi_f;
 			num_candidates++;
@@ -1269,7 +1523,7 @@ static int discover_plane_candidates(const uint64_t primary_gid_hi, const uint32
 }
 
 int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
-				const int max_planes)
+				const int max_planes, const uint64_t *gid_filter, const int gid_filter_count)
 {
 	const uint64_t primary_gid_hi = primary_hfi->gid_hi;
 	const uint32_t primary_unit   = primary_hfi->hfi_unit;
@@ -1317,6 +1571,19 @@ int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct 
 			continue;
 		}
 
+		if (gid_filter_count > 0) {
+			bool matches_filter = false;
+			for (int f = 0; f < gid_filter_count; f++) {
+				if (candidates[i].gid_hi == gid_filter[f]) {
+					matches_filter = true;
+					break;
+				}
+			}
+			if (!matches_filter) {
+				continue;
+			}
+		}
+
 		bool already_selected = false;
 		for (int p = 0; p < num_planes; p++) {
 			if (planes[p].gid_hi == candidates[i].gid_hi) {
@@ -1333,6 +1600,15 @@ int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct 
 			if (candidates[j].gid_hi != candidates[i].gid_hi) {
 				continue;
 			}
+
+			const bool best_same_asic      = OPX_SAME_ASIC(candidates[best].gid_lo, primary_hfi->gid_lo);
+			const bool candidate_same_asic = OPX_SAME_ASIC(candidates[j].gid_lo, primary_hfi->gid_lo);
+			if (candidate_same_asic != best_same_asic) {
+				if (candidate_same_asic) {
+					best = j;
+				}
+				continue;
+			}
 			if (candidates[j].numa_dist < candidates[best].numa_dist ||
 			    (candidates[j].numa_dist == candidates[best].numa_dist &&
 			     candidates[j].free_ctxts > candidates[best].free_ctxts)) {
@@ -1343,6 +1619,7 @@ int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct 
 		planes[num_planes].hfi_unit = candidates[best].hfi_unit;
 		planes[num_planes].hfi_port = candidates[best].hfi_port;
 		planes[num_planes].gid_hi   = candidates[best].gid_hi;
+		planes[num_planes].gid_lo   = candidates[best].gid_lo;
 
 		FI_INFO(&fi_opx_provider, FI_LOG_EP_CTRL,
 			"Selected different-plane plane %d: hfi_unit=%d hfi_port=%d gid_hi=0x%016lx numa_dist=%d free_ctxts=%d\n",
@@ -1420,6 +1697,15 @@ int fi_opx_hfi1_discover_same_plane(struct fi_opx_hfi1_context *primary_hfi, str
 			if (candidates[j].gid_hi != candidates[i].gid_hi) {
 				continue;
 			}
+
+			const bool best_same_asic      = OPX_SAME_ASIC(candidates[best].gid_lo, primary_hfi->gid_lo);
+			const bool candidate_same_asic = OPX_SAME_ASIC(candidates[j].gid_lo, primary_hfi->gid_lo);
+			if (candidate_same_asic != best_same_asic) {
+				if (candidate_same_asic) {
+					best = j;
+				}
+				continue;
+			}
 			if (candidates[j].numa_dist < candidates[best].numa_dist ||
 			    (candidates[j].numa_dist == candidates[best].numa_dist &&
 			     candidates[j].free_ctxts > candidates[best].free_ctxts)) {
@@ -1430,6 +1716,7 @@ int fi_opx_hfi1_discover_same_plane(struct fi_opx_hfi1_context *primary_hfi, str
 		planes[num_planes].hfi_unit = candidates[best].hfi_unit;
 		planes[num_planes].hfi_port = candidates[best].hfi_port;
 		planes[num_planes].gid_hi   = candidates[best].gid_hi;
+		planes[num_planes].gid_lo   = candidates[best].gid_lo;
 
 		FI_INFO(&fi_opx_provider, FI_LOG_EP_CTRL,
 			"Selected same-plane plane %d: hfi_unit=%d hfi_port=%d gid_hi=0x%016lx numa_dist=%d free_ctxts=%d\n",
@@ -5498,15 +5785,10 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	struct fi_opx_ep_tx *tx	       = FI_OPX_EP_TX(opx_ep, addr);
 	const int	     plane_idx = addr.tx_index;
 
-	/* Use hfisvc.num_ctxs instead of num_tx_contexts: for single-plane
-	 * striping, num_tx_contexts stays 1 but hfisvc.num_ctxs will be 2.
-	 * For dual-plane, both are 2. This function is already inside
-	 * #if HAVE_HFISVC, so the #else is defensive only. */
-#if HAVE_HFISVC
-	const uint8_t do_stripe = ((opx_ep->domain->hfisvc.num_ctxs > 1) && !opx_mr) ? 1 : 0;
-#else
-	const uint8_t do_stripe = 0;
-#endif
+	const uint8_t do_stripe = ((opx_ep->domain->hfisvc.num_ctxs > 1) && fi_opx_global.multi_hfi_striping &&
+				   !opx_mr && (xfer_len >= opx_ep->tx->rzv_striping_min_payload_bytes)) ?
+					  1 :
+					  0;
 
 	uint32_t			     access_key	  = (uint32_t) -1;
 	uint32_t			     access_key_1 = (uint32_t) -1;
@@ -5777,7 +6059,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		hfisvc_iovs[0].hmem_iface     = src_iface;
 		hfisvc_iovs[0].access_key     = rzv_comp->access_key;
 		hfisvc_iovs[0].client_key     = opx_ep->domain->hfisvc.ctxs[plane_idx].client_key;
-		hfisvc_iovs[0].sender_lid     = OPX_LID_PLANE_KEY(tx->hfi->lid, plane_idx);
+		hfisvc_iovs[0].sender_lid     = OPX_LID_PLANE_KEY(tx->hfi->lid, 0);
 		hfisvc_iovs[0].rzv_comp_vaddr = (uintptr_t) rzv_comp;
 	}
 	assert(!(hfi1_type & OPX_HFI1_WFR));
