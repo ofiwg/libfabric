@@ -16331,11 +16331,12 @@ supported by the EFA provider for AWS Neuron or Habana SynapseAI.
     FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV is false, or it will return
     -FI_EOPNOTSUPP for the call to fi_setopt().
 
-# PROVIDER SPECIFIC DOMAIN OPS
+# PROVIDER SPECIFIC OPERATION EXTENSIONS
 
 The efa provider exports extensions for operations that are not provided
 by the standard libfabric interface. These extensions are available via
-the "`fi_ext_efa.h`" header file.
+the "`fi_ext_efa.h`" header file and accessed through `fi_open_ops`,
+applied to either the domain or fabric fid depending on the extension.
 
 ## Domain Operation Extension
 
@@ -16562,6 +16563,49 @@ this.
 
 **get_mr_lkey()** returns lkey on success, or FI_KEY_NOTAVAIL if the
 registration has not completed.
+
+## Fabric Operation Extension
+
+Fabric operation extension is obtained by calling `fi_open_ops` (see
+[`fi_fabric(3)`](fi_fabric.3.html))
+
+``` c
+int fi_open_ops(struct fid *fabric, const char *name, uint64_t flags,
+    void **ops, void *context);
+```
+
+Requesting `FI_EFA_FEATURE_OPS` in `name` returns `ops` as a pointer to
+the function table `fi_efa_feature_ops` defined as follows:
+
+``` c
+struct fi_efa_feature_ops {
+    bool (*query)(const char *feature);
+};
+```
+
+Features are runtime-discoverable flags advertised by the provider,
+letting consumers detect the presence of a given behavior or bug fix
+independently of the libfabric API version (which cannot encode patch
+releases). The ops are exposed at fabric scope so consumers can probe
+features immediately after `fi_fabric()`, before any domain is opened.
+Feature answers may differ between the `efa-direct` and `efa` (RDM)
+fabrics because the two exercise different code paths. Older provider
+builds do not expose `FI_EFA_FEATURE_OPS` at all, so `fi_open_ops()`
+returns `-FI_EINVAL` for the key; callers can treat that as "no features
+advertised".
+
+Currently defined feature strings:
+
+*"mixed_hmem_iov"* (efa-direct only)
+:   The provider correctly inspects every descriptor in a multi-iov
+    request for HMEM/iface, rather than only the first descriptor. Not
+    currently advertised on the `efa` fabric because the RDM
+    receive-copy path still dispatches on `desc[0]` alone.
+
+### query
+
+Return `true` if the provider build advertises *feature*, otherwise
+`false`. Passing an unknown string (including `NULL`) returns `false`.
 
 # Traffic Class (tclass) in EFA
 
