@@ -11,28 +11,18 @@ cm_data
 atomic
 scalable_ep
 shared_ctx
+multi_recv
+cntr_pingpong
+multi_ep
+shared_av
+-k
+rma_event
+rma_trigger
+multi_mr
+multinode
 
 # Uses SOCKADDR
 av_test
-
-# Uses FI_MSG
-multinode
-rdm_pingpong
-multi_recv
-cntr_pingpong
-multi_client
-flood
-multi_ep
-cq_data
-av_xfer
-shared_av
-fi_rdm\b
-sighandler_test
-
-# Uses FI_RMA
-multi_mr
-rma
-mr_test
 
 # Tests that are broken
 recv_cancel
