@@ -87,7 +87,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 				     struct efa_rdm_peer_overflow_pke_list_entry,
 				     overflow_pke_list_entry, entry, tmp) {
 		dlist_remove(&overflow_pke_list_entry->entry);
-		efa_rdm_pke_release_rx(overflow_pke_list_entry->pkt_entry);
+		efa_rdm_pke_release_rx_list(overflow_pke_list_entry->pkt_entry);
 		ofi_buf_free(overflow_pke_list_entry);
 	}
 
