@@ -8,7 +8,7 @@ from efa.efa_common import has_gdrcopy, has_rdma
 @pytest.mark.serial
 @pytest.mark.functional
 @pytest.mark.cuda_memory
-@pytest.mark.parametrize("fabtest_name,cntrl_env_var", [("fi_rdm_tagged_bw", "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE"), ("fi_rma_bw", "FI_EFA_INTER_MIN_READ_WRITE_SIZE")])
+@pytest.mark.parametrize("fabtest_name,cntrl_env_var", [("fi_efa_runt_read_no_handshake", "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE"), ("fi_rma_bw", "FI_EFA_INTER_MIN_READ_WRITE_SIZE")])
 def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_var):
     """
     Verify that the read protocol is used for a 1024 byte message when the env variable
