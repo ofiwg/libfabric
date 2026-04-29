@@ -292,7 +292,7 @@ struct fi_opx_global_data {
 	enum fi_progress	     progress;
 	bool			     ctx_sharing_enabled;
 	uint16_t		     pkt_size;
-	uint8_t			     unused[1];
+	bool			     multi_hfi_striping;
 	uint32_t		     rcvhdrq_entry_dws;
 	uint32_t		     unused_dw;
 	uint64_t		     unused_qw[3];

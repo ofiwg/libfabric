@@ -1176,6 +1176,24 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	}
 	tx->rzv_min_payload_bytes = l_rzv_min_payload_bytes;
 
+	// Retrieve the parameter for RZV multi-HFI striping min payload threshold
+	int l_rzv_striping_min_payload_bytes = OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES_DEFAULT;
+	rc = fi_param_get_int(fi_opx_global.prov, "rzv_striping_min_payload_bytes", &l_rzv_striping_min_payload_bytes);
+	if (rc != FI_SUCCESS) {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+				   "FI_OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
+				   l_rzv_striping_min_payload_bytes);
+	} else if (l_rzv_striping_min_payload_bytes < 0) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES was set but is outside min/max thresholds (0-%u).  Using default setting of %d\n",
+			INT32_MAX, l_rzv_striping_min_payload_bytes);
+		l_rzv_striping_min_payload_bytes = OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES_DEFAULT;
+	} else {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
+				   l_rzv_striping_min_payload_bytes);
+	}
+	tx->rzv_striping_min_payload_bytes = (uint32_t) l_rzv_striping_min_payload_bytes;
+
 	/* Now that we know how many PIO Tx send credits we have, calculate the threshold to switch from EAGER send to
 	 * RTS/CTS With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit
 	 * leftover for min reliability.
@@ -2067,6 +2085,157 @@ static int fi_opx_open_single_plane_hfisvc(struct fi_opx_ep *opx_ep, struct fi_o
 }
 #endif
 
+static bool opx_open_secondary_different_plane(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx_domain,
+					       struct fi_opx_plane_info planes[OPX_MAX_TX_CONTEXTS - 1],
+					       const uint64_t *sec_gid_filter, int sec_gid_filter_count,
+					       uint16_t primary_origin_rx, int gid_filter_count)
+{
+	int num_extra = 0;
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
+	       "Discovering different-plane HFI for dual-plane support (max %d total contexts)\n", OPX_MAX_TX_CONTEXTS);
+	num_extra = fi_opx_hfi1_discover_planes(opx_ep->hfi, planes, OPX_MAX_TX_CONTEXTS - 1,
+						sec_gid_filter_count > 0 ? sec_gid_filter : NULL, sec_gid_filter_count);
+	if (gid_filter_count == 2 && num_extra == 0) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"_FI_OPX_MULTI_HFI_FILTER_ is set but no secondary HFI port was found on "
+			"the complement GID. Verify that both GIDs in _FI_OPX_MULTI_HFI_FILTER_ "
+			"have active HFI ports; continuing with fallback chain.\n");
+	}
+
+	for (int i = 0; i < num_extra; i++) {
+		struct fi_opx_hfi1_context *sec_hfi = NULL;
+		struct fi_opx_ep_tx	   *sec_tx  = NULL;
+
+		sec_hfi =
+			fi_opx_hfi1_context_open_unit(&opx_ep->ep_fid, opx_domain->unique_job_key, planes[i].hfi_unit);
+		if (!sec_hfi) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Failed to open secondary HFI context on unit %d, continuing with fallback chain\n",
+				planes[i].hfi_unit);
+			continue;
+		}
+
+		fi_opx_ref_inc(&sec_hfi->ref_cnt, "HFI context");
+
+		void *sec_mem = malloc(sizeof(struct fi_opx_ep_tx) + FI_OPX_CACHE_LINE_SIZE);
+		if (!sec_mem) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Failed to allocate secondary TX context, continuing with fallback chain\n");
+			fi_opx_ref_dec(&sec_hfi->ref_cnt, "HFI context");
+			if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
+				free(sec_hfi->ctrl);
+				free(sec_hfi);
+			}
+			continue;
+		}
+
+		sec_tx = (struct fi_opx_ep_tx *) (((uintptr_t) sec_mem + FI_OPX_CACHE_LINE_SIZE) &
+						  ~(FI_OPX_CACHE_LINE_SIZE - 1));
+		memset(sec_tx, 0, sizeof(struct fi_opx_ep_tx));
+		sec_tx->mem = sec_mem;
+		fi_opx_ref_init(&sec_tx->ref_cnt, 1, "tx context");
+		sec_tx->hfi    = sec_hfi;
+		sec_tx->gid_hi = planes[i].gid_hi;
+
+		sec_tx->cq		 = opx_ep->tx->cq;
+		sec_tx->cq_completed_ptr = opx_ep->tx->cq_completed_ptr;
+		sec_tx->cq_err_ptr	 = opx_ep->tx->cq_err_ptr;
+		sec_tx->cq_pending_ptr	 = opx_ep->tx->cq_pending_ptr;
+		sec_tx->av_addr		 = opx_ep->tx->av_addr;
+		sec_tx->op_flags	 = opx_ep->tx->op_flags;
+		sec_tx->caps		 = opx_ep->tx->caps;
+		sec_tx->mode		 = opx_ep->tx->mode;
+		sec_tx->cq_bind_flags	 = opx_ep->tx->cq_bind_flags;
+		sec_tx->do_cq_completion = opx_ep->tx->do_cq_completion;
+
+		if (fi_opx_ep_tx_init(opx_ep, opx_domain, sec_tx, sec_hfi, primary_origin_rx,
+				      opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Failed to initialize secondary TX context, continuing with fallback chain\n");
+			free(sec_mem);
+			fi_opx_ref_dec(&sec_hfi->ref_cnt, "HFI context");
+			if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
+				free(sec_hfi->ctrl);
+				free(sec_hfi);
+			}
+			continue;
+		}
+
+#if HAVE_HFISVC
+		if (fi_opx_init_secondary_hfisvc(opx_ep, opx_domain, sec_hfi)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Failed to initialize secondary hfisvc, striping disabled\n");
+		}
+#endif
+
+		assert(opx_ep->num_tx_contexts < OPX_MAX_TX_CONTEXTS);
+		opx_ep->tx_contexts[opx_ep->num_tx_contexts]  = sec_tx;
+		opx_ep->hfi_contexts[opx_ep->num_tx_contexts] = sec_hfi;
+		sec_tx->shm				      = &opx_ep->shm;
+
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].hfi1_unit	 = (uint8_t) sec_hfi->hfi_unit;
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].unused		 = 0;
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].hfi1_subctxt_rx = 0;
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].lid		 = sec_hfi->lid;
+		opx_ep->rx->self.planes[opx_ep->num_tx_contexts].gid_hi		 = sec_tx->gid_hi;
+
+		opx_ep->num_tx_contexts++;
+
+		fi_opx_ep_rx_tx_model_init(opx_ep, sec_hfi, opx_ep->num_tx_contexts - 1,
+
+					   opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+					   opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid);
+
+		fi_opx_reliability_model_init_plane(opx_ep->reli_service, sec_hfi, opx_ep->num_tx_contexts - 1,
+						    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid);
+
+		fi_opx_global.hfi_local_info.pbc_lid[opx_ep->num_tx_contexts - 1] =
+			(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? -1UL : OPX_PBC_JKR_DLID(sec_hfi->lid);
+
+		fi_opx_global.hfi_local_info.lid[opx_ep->num_tx_contexts - 1]	   = sec_hfi->lid;
+		fi_opx_global.hfi_local_info.hfi_unit[opx_ep->num_tx_contexts - 1] = (uint8_t) sec_hfi->hfi_unit;
+
+		process_hfi_lookup(sec_hfi->hfi_unit, sec_hfi->lid, sec_tx->gid_hi, opx_ep->num_tx_contexts - 1);
+
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"Initialized dual-plane secondary TX context %d: hfi_unit=%d gid_hi=0x%016lx\n",
+			opx_ep->num_tx_contexts - 1, sec_hfi->hfi_unit, sec_tx->gid_hi);
+		return true;
+	}
+
+	return false;
+}
+
+static bool opx_open_secondary_same_plane(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx_domain,
+					  struct fi_opx_plane_info planes[OPX_MAX_TX_CONTEXTS - 1])
+{
+	int num_extra = 0;
+
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
+	       "Discovering same-plane HFI for single-plane striping fallback (max %d total contexts)\n",
+	       OPX_MAX_TX_CONTEXTS);
+	num_extra = fi_opx_hfi1_discover_same_plane(opx_ep->hfi, planes, OPX_MAX_TX_CONTEXTS - 1);
+
+	for (int i = 0; i < num_extra; i++) {
+#if HAVE_HFISVC
+		const int num_queues_before = opx_ep->hfisvc.num_queues;
+		if (fi_opx_open_single_plane_hfisvc(opx_ep, opx_domain, planes[i].hfi_unit, planes[i].hfi_port) == 0 &&
+		    opx_ep->hfisvc.num_queues > num_queues_before) {
+			FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Initialized single-plane hfisvc striping: unit=%d\n", planes[i].hfi_unit);
+			return true;
+		} else if (opx_ep->use_hfisvc) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Failed single-plane hfisvc init on unit %d, continuing with fallback chain\n",
+				planes[i].hfi_unit);
+		}
+#endif
+	}
+
+	return false;
+}
+
 static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 {
 	struct fi_opx_domain *opx_domain;
@@ -2082,15 +2251,84 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		abort();
 	}
 
-	/*
-	 * open the hfi1 context, determines JKR or WFR
-	 */
-	opx_ep->hfi = fi_opx_hfi1_context_open(&opx_ep->ep_fid, opx_domain->unique_job_key);
+	/* Read user-supplied env overrides before opening the HFI context.
+	 * Sentinel value -1 means "not set by user"; the HW-type-based default
+	 * is applied after the context is opened and OPX_HW_HFI1_TYPE is known. */
+	int dual_plane_env = -1;
+	{
+		const char *dp_env = getenv("_FI_OPX_DUAL_PLANE_");
+		if (dp_env != NULL) {
+			if (strcmp(dp_env, "1") == 0) {
+				dual_plane_env = 1;
+			} else if (strcmp(dp_env, "0") == 0) {
+				dual_plane_env = 0;
+			} else {
+				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+					"_FI_OPX_DUAL_PLANE_=%s is invalid. Must be 0 or 1. Using hardware default.\n",
+					dp_env);
+			}
+		}
+	}
+
+	int multi_hfi_striping_env = -1;
+	fi_param_get_bool(fi_opx_global.prov, "multi_hfi_striping", &multi_hfi_striping_env);
+
+	uint64_t    gid_filter[OPX_MAX_TX_CONTEXTS];
+	int	    gid_filter_count = 0;
+	const char *filter_env	     = getenv("_FI_OPX_MULTI_HFI_FILTER_");
+
+	if (filter_env != NULL) {
+		gid_filter_count = parse_plane_gid_filter(filter_env, gid_filter, OPX_MAX_TX_CONTEXTS);
+		if (gid_filter_count != 2) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+				"_FI_OPX_MULTI_HFI_FILTER_ must specify exactly 2 GIDs\n");
+			errno = FI_EINVAL;
+			return -errno;
+		}
+	}
+
+	opx_ep->hfi = fi_opx_hfi1_context_open(&opx_ep->ep_fid, opx_domain->unique_job_key, gid_filter,
+					       gid_filter_count, dual_plane_env);
 	if (!opx_ep->hfi) {
 		errno = FI_EBUSY;
 		return -errno;
 	}
 	fi_opx_ref_inc(&opx_ep->hfi->ref_cnt, "HFI context");
+
+	/* Apply HW-type-based defaults now that OPX_HW_HFI1_TYPE is known:
+	 *   CN6000/CYR  → enabled by default
+	 *   CN5000/JKR  → disabled by default
+	 *   WFR         → disabled (and unsupported; error below if user forces it on) */
+	int dual_plane = (dual_plane_env >= 0) ? dual_plane_env : (OPX_HW_HFI1_TYPE & OPX_HFI1_CYR) ? 1 : 0;
+
+	int multi_hfi_striping = (multi_hfi_striping_env >= 0) ? multi_hfi_striping_env : dual_plane;
+
+	if ((dual_plane || multi_hfi_striping) && (OPX_HW_HFI1_TYPE & OPX_HFI1_WFR)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"_FI_OPX_DUAL_PLANE_ and FI_OPX_MULTI_HFI_STRIPING are not supported on local HFI type %s.\n",
+			OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
+		errno = FI_EOPNOTSUPP;
+		goto err;
+	}
+	if (dual_plane && fi_opx_global.ctx_sharing_enabled) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"_FI_OPX_DUAL_PLANE_=1 is not supported with context sharing "
+			"(FI_OPX_CONTEXT_SHARING=1). Disable context sharing to use dual plane.\n");
+		errno = FI_EINVAL;
+		goto err;
+	}
+
+	if (filter_env != NULL && !dual_plane) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"_FI_OPX_MULTI_HFI_FILTER_ is set but dual plane support is not enabled. Filter will be ignored.\n");
+	}
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
+	       "Dual-plane support is %s. Multi-HFI striping is %s. GID filter count is %d.\n",
+	       dual_plane ? "enabled" : "disabled", multi_hfi_striping ? "enabled" : "disabled", gid_filter_count);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "GID filter values: GID hi=0x%016lx, GID lo=0x%016lx\n",
+	       gid_filter_count > 0 ? gid_filter[0] : 0, gid_filter_count > 0 ? gid_filter[1] : 0);
+
+	fi_opx_global.multi_hfi_striping = (bool) multi_hfi_striping;
 
 	int max_pkt_size;
 
@@ -2176,6 +2414,17 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			}
 			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "OPA100 Interop is %s with local HFI type %s.\n",
 				opa100_interop ? "enabled" : "disabled", OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
+			if (opa100_interop) {
+				if (dual_plane || multi_hfi_striping || filter_env != NULL) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+						"OPA100 Interop is enabled: disabling dual-plane and multi-HFI striping.\n");
+				}
+				dual_plane			 = 0;
+				multi_hfi_striping		 = 0;
+				fi_opx_global.multi_hfi_striping = false;
+				gid_filter_count		 = 0;
+				filter_env			 = NULL;
+			}
 		}
 	}
 
@@ -2524,190 +2773,41 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 done:
 #endif
 {
-	/* _FI_OPX_DUAL_PLANE_ENABLE_ */
-	int   _dual_plane_enable_ = 0;
-	char *envstr_dpe	  = getenv("_FI_OPX_DUAL_PLANE_ENABLE_");
-	if (envstr_dpe != NULL) {
-		_dual_plane_enable_ = atoi(envstr_dpe);
-		if (_dual_plane_enable_ && (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-				"_FI_OPX_DUAL_PLANE_ENABLE_ is invalid on local HFI type %s.\n",
-				OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
-			errno = FI_EOPNOTSUPP;
-			goto err;
-		}
-		if (_dual_plane_enable_ && fi_opx_global.ctx_sharing_enabled) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-				"Dual plane mode (_FI_OPX_DUAL_PLANE_ENABLE_=1) is not supported with context sharing (FI_OPX_CONTEXT_SHARING=1). Disable context sharing to use dual plane.\n");
-			errno = FI_EINVAL;
-			goto err;
-		}
-	}
+	uint64_t sec_gid_filter[OPX_MAX_TX_CONTEXTS];
+	int	 sec_gid_filter_count = 0;
 
-	/* _FI_OPX_SINGLE_PLANE_STRIPING_ */
-	int   _single_plane_striping_ = 0;
-	char *envstr_sps	      = getenv("_FI_OPX_SINGLE_PLANE_STRIPING_");
-	if (envstr_sps != NULL) {
-		_single_plane_striping_ = atoi(envstr_sps);
-		if (_single_plane_striping_ && (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-				"_FI_OPX_SINGLE_PLANE_STRIPING_ is invalid on local HFI type %s.\n",
-				OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE));
-			errno = FI_EOPNOTSUPP;
-			goto err;
+	if (gid_filter_count == 2) {
+		for (int i = 0; i < gid_filter_count; i++) {
+			if (gid_filter[i] != opx_ep->hfi->gid_hi) {
+				sec_gid_filter[sec_gid_filter_count++] = gid_filter[i];
+			}
 		}
 	}
 
 	struct fi_opx_plane_info planes[OPX_MAX_TX_CONTEXTS - 1];
-	int			 num_extra = 0;
+	bool			 secondary_plane_opened = false;
 
-	if (_dual_plane_enable_) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
-		       "Discovering different-plane HFI for dual-plane support (max %d total contexts)\n",
-		       OPX_MAX_TX_CONTEXTS);
-		num_extra = fi_opx_hfi1_discover_planes(opx_ep->hfi, planes, OPX_MAX_TX_CONTEXTS - 1);
-	} else if (_single_plane_striping_) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
-		       "Discovering same-plane HFI for single-plane striping (max %d total contexts)\n",
-		       OPX_MAX_TX_CONTEXTS);
-		num_extra = fi_opx_hfi1_discover_same_plane(opx_ep->hfi, planes, OPX_MAX_TX_CONTEXTS - 1);
-	} else {
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
-			"Multi-plane support is disabled (_FI_OPX_DUAL_PLANE_ENABLE_=0, _FI_OPX_SINGLE_PLANE_STRIPING_=0)\n");
+	if (dual_plane) {
+		secondary_plane_opened =
+			opx_open_secondary_different_plane(opx_ep, opx_domain, planes, sec_gid_filter,
+							   sec_gid_filter_count, primary_origin_rx, gid_filter_count);
+	}
+	if (!secondary_plane_opened && multi_hfi_striping) {
+		secondary_plane_opened = opx_open_secondary_same_plane(opx_ep, opx_domain, planes);
 	}
 
-	for (int i = 0; i < num_extra; i++) {
-		struct fi_opx_hfi1_context *sec_hfi = NULL;
-		struct fi_opx_ep_tx	   *sec_tx  = NULL;
+	if (!dual_plane && !multi_hfi_striping) {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"Multi-plane support is disabled (_FI_OPX_DUAL_PLANE_=0, FI_OPX_MULTI_HFI_STRIPING=0)\n");
+	}
 
-		if (planes[i].gid_hi == opx_ep->hfi->gid_hi) {
-			/* Single-plane striping: hfisvc-only (no tx_context needed) */
-			if (!_single_plane_striping_) {
-				FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
-				       "Skipping same-plane candidate on unit %d (single-plane striping disabled)\n",
-				       planes[i].hfi_unit);
-				continue;
-			}
-#if HAVE_HFISVC
-			if (fi_opx_open_single_plane_hfisvc(opx_ep, opx_domain, planes[i].hfi_unit,
-							    planes[i].hfi_port) == 0) {
-				FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
-					"Initialized single-plane hfisvc striping: unit=%d\n", planes[i].hfi_unit);
-			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
-					"Failed single-plane hfisvc init on unit %d, "
-					"continuing without striping\n",
-					planes[i].hfi_unit);
-			}
-#endif
-		} else {
-			/* Dual-plane striping: full context (different subnet) */
-			sec_hfi = fi_opx_hfi1_context_open_unit(&opx_ep->ep_fid, opx_domain->unique_job_key,
-								planes[i].hfi_unit);
-			if (!sec_hfi) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
-					"Failed to open secondary HFI context on unit %d, continuing with single plane\n",
-					planes[i].hfi_unit);
-				continue;
-			}
-
-			fi_opx_ref_inc(&sec_hfi->ref_cnt, "HFI context");
-
-			/* Allocate secondary TX context */
-			void *sec_mem = malloc(sizeof(struct fi_opx_ep_tx) + FI_OPX_CACHE_LINE_SIZE);
-			if (!sec_mem) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
-					"Failed to allocate secondary TX context, continuing with single plane\n");
-				fi_opx_ref_dec(&sec_hfi->ref_cnt, "HFI context");
-				if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
-					free(sec_hfi->ctrl);
-					free(sec_hfi);
-				}
-				continue;
-			}
-
-			sec_tx = (struct fi_opx_ep_tx *) (((uintptr_t) sec_mem + FI_OPX_CACHE_LINE_SIZE) &
-							  ~(FI_OPX_CACHE_LINE_SIZE - 1));
-			memset(sec_tx, 0, sizeof(struct fi_opx_ep_tx));
-			sec_tx->mem = sec_mem;
-			fi_opx_ref_init(&sec_tx->ref_cnt, 1, "tx context");
-			sec_tx->hfi    = sec_hfi;
-			sec_tx->gid_hi = planes[i].gid_hi;
-
-			/* Copy shared fields from primary TX context */
-			sec_tx->cq		 = opx_ep->tx->cq;
-			sec_tx->cq_completed_ptr = opx_ep->tx->cq_completed_ptr;
-			sec_tx->cq_err_ptr	 = opx_ep->tx->cq_err_ptr;
-			sec_tx->cq_pending_ptr	 = opx_ep->tx->cq_pending_ptr;
-			sec_tx->av_addr		 = opx_ep->tx->av_addr;
-			sec_tx->op_flags	 = opx_ep->tx->op_flags;
-			sec_tx->caps		 = opx_ep->tx->caps;
-			sec_tx->mode		 = opx_ep->tx->mode;
-			sec_tx->cq_bind_flags	 = opx_ep->tx->cq_bind_flags;
-			sec_tx->do_cq_completion = opx_ep->tx->do_cq_completion;
-
-			/* Initialize secondary TX context — use primary plane LID for primary_lid
-			 * so reliability keys and packet headers carry the correct primary LID */
-			if (fi_opx_ep_tx_init(opx_ep, opx_domain, sec_tx, sec_hfi, primary_origin_rx,
-					      opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid)) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
-					"Failed to initialize secondary TX context, continuing with single plane\n");
-				free(sec_mem);
-				fi_opx_ref_dec(&sec_hfi->ref_cnt, "HFI context");
-				if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
-					free(sec_hfi->ctrl);
-					free(sec_hfi);
-				}
-				continue;
-			}
-
-#if HAVE_HFISVC
-			if (fi_opx_init_secondary_hfisvc(opx_ep, opx_domain, sec_hfi)) {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
-					"Failed to initialize secondary hfisvc, striping disabled\n");
-			}
-#endif
-
-			/* Register secondary context */
-			assert(opx_ep->num_tx_contexts < OPX_MAX_TX_CONTEXTS);
-			opx_ep->tx_contexts[opx_ep->num_tx_contexts]  = sec_tx;
-			opx_ep->hfi_contexts[opx_ep->num_tx_contexts] = sec_hfi;
-			sec_tx->shm				      = &opx_ep->shm;
-
-			/* Populate secondary plane in rx->self */
-			opx_ep->rx->self.planes[opx_ep->num_tx_contexts].hfi1_unit	 = (uint8_t) sec_hfi->hfi_unit;
-			opx_ep->rx->self.planes[opx_ep->num_tx_contexts].unused		 = 0;
-			opx_ep->rx->self.planes[opx_ep->num_tx_contexts].hfi1_subctxt_rx = 0;
-			opx_ep->rx->self.planes[opx_ep->num_tx_contexts].lid		 = sec_hfi->lid;
-			opx_ep->rx->self.planes[opx_ep->num_tx_contexts].gid_hi		 = sec_tx->gid_hi;
-
-			opx_ep->num_tx_contexts++;
-
-			/* Initialize rx->tx models (CTS/DPUT/RMA RTS) for the secondary plane.
-			 * Use primary plane's subctxt_rx so reliability responses are
-			 * routed back to the primary plane's receive context. */
-			fi_opx_ep_rx_tx_model_init(opx_ep, sec_hfi, opx_ep->num_tx_contexts - 1,
-						   opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
-						   opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid);
-
-			/* Initialize reliability models for the secondary plane */
-			fi_opx_reliability_model_init_plane(opx_ep->reli_service, sec_hfi, opx_ep->num_tx_contexts - 1,
-							    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid);
-
-			fi_opx_global.hfi_local_info.pbc_lid[opx_ep->num_tx_contexts - 1] =
-				(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? -1UL : OPX_PBC_JKR_DLID(sec_hfi->lid);
-
-			fi_opx_global.hfi_local_info.lid[opx_ep->num_tx_contexts - 1] = sec_hfi->lid;
-			fi_opx_global.hfi_local_info.hfi_unit[opx_ep->num_tx_contexts - 1] =
-				(uint8_t) sec_hfi->hfi_unit;
-
-			process_hfi_lookup(sec_hfi->hfi_unit, sec_hfi->lid, sec_tx->gid_hi,
-					   opx_ep->num_tx_contexts - 1);
-
-			FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
-				"Initialized dual-plane secondary TX context %d: hfi_unit=%d gid_hi=0x%016lx\n",
-				opx_ep->num_tx_contexts - 1, sec_hfi->hfi_unit, sec_tx->gid_hi);
-		}
+	if (!opa100_interop && !secondary_plane_opened && opx_ep->num_tx_contexts == 1) {
+		opx_ep->rx->self.planes[1]		 = opx_ep->rx->self.planes[0];
+		fi_opx_global.hfi_local_info.lid[1]	 = fi_opx_global.hfi_local_info.lid[0];
+		fi_opx_global.hfi_local_info.pbc_lid[1]	 = fi_opx_global.hfi_local_info.pbc_lid[0];
+		fi_opx_global.hfi_local_info.hfi_unit[1] = fi_opx_global.hfi_local_info.hfi_unit[0];
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
+		       "No secondary HFI context available; mirroring primary plane into planes[1] for address compatibility.\n");
 	}
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "Endpoint enabled with %d TX context(s)\n",
@@ -2731,7 +2831,7 @@ done:
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->rx->self.planes[1].subctxt_rx=%d\n",
 	       opx_ep->rx->self.planes[1].hfi1_subctxt_rx);
 #endif
-}
+} /* end secondary-plane block scope */
 
 	/* Unlock */
 	fi_opx_unlock(&opx_ep->lock);
