@@ -622,19 +622,43 @@ static void lnx_ep_nosys_progress(struct util_ep *util_ep)
 	assert(0);
 }
 
-static int lnx_common_match(uint64_t tag, uint64_t match_tag,
-			    fi_addr_t recv_addr, fi_addr_t addr,
-			    uint64_t ignore)
+static int lnx_addr_match(fi_addr_t recv_addr, fi_addr_t addr)
 {
 	fi_addr_t addr1 = lnx_decode_primary_id(recv_addr);
 	fi_addr_t addr2 = lnx_decode_primary_id(addr);
 
+	if (recv_addr == FI_ADDR_UNSPEC)
+		return 1;
+
+	return addr1 == addr2;
+}
+
+static int lnx_tag_match(uint64_t tag, uint64_t match_tag, fi_addr_t recv_addr,
+			 fi_addr_t addr, uint64_t ignore)
+{
 	bool tmatch = ((tag | ignore) == (match_tag | ignore));
 
-	if (recv_addr == FI_ADDR_UNSPEC)
-		return tmatch;
+	return tmatch && lnx_addr_match(recv_addr, addr);
+}
 
-	return tmatch && (addr1 == addr2);
+static int lnx_match_trecvq(struct dlist_entry *item, const void *args)
+{
+	struct lnx_match_attr *attr = (struct lnx_match_attr *) args;
+	struct lnx_rx_entry *entry = (struct lnx_rx_entry *) item;
+
+	return lnx_tag_match(entry->rx_entry.tag, attr->lm_tag,
+			     entry->rx_entry.addr, attr->lm_addr,
+			     entry->rx_ignore);
+}
+
+static int lnx_match_tunexq(struct dlist_entry *item, const void *args)
+{
+	struct lnx_match_attr *attr = (struct lnx_match_attr *) args;
+	struct lnx_rx_entry *entry = (struct lnx_rx_entry *) item;
+
+	return lnx_tag_match(attr->lm_tag, entry->rx_entry.tag,
+			     attr->lm_addr, entry->rx_entry.addr,
+			attr->lm_ignore);
 }
 
 static int lnx_match_recvq(struct dlist_entry *item, const void *args)
@@ -642,9 +666,7 @@ static int lnx_match_recvq(struct dlist_entry *item, const void *args)
 	struct lnx_match_attr *attr = (struct lnx_match_attr *) args;
 	struct lnx_rx_entry *entry = (struct lnx_rx_entry *) item;
 
-	return lnx_common_match(entry->rx_entry.tag, attr->lm_tag,
-				entry->rx_entry.addr, attr->lm_addr,
-				entry->rx_ignore);
+	return lnx_addr_match(entry->rx_entry.addr, attr->lm_addr);
 }
 
 static int lnx_match_unexq(struct dlist_entry *item, const void *args)
@@ -652,9 +674,7 @@ static int lnx_match_unexq(struct dlist_entry *item, const void *args)
 	struct lnx_match_attr *attr = (struct lnx_match_attr *) args;
 	struct lnx_rx_entry *entry = (struct lnx_rx_entry *) item;
 
-	return lnx_common_match(attr->lm_tag, entry->rx_entry.tag,
-				attr->lm_addr, entry->rx_entry.addr,
-				attr->lm_ignore);
+	return lnx_addr_match(attr->lm_addr, entry->rx_entry.addr);
 }
 
 static inline void lnx_init_qpair(struct lnx_qpair *qp,
@@ -691,8 +711,8 @@ static int lnx_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	lep->le_ep.ep_fid.atomic = &lnx_atomic_ops;
 	lep->le_domain = container_of(domain, struct lnx_domain,
 				      ld_domain.domain_fid);
-	lnx_init_qpair(&lep->le_srq.lps_trecv, lnx_match_recvq,
-		       lnx_match_unexq);
+	lnx_init_qpair(&lep->le_srq.lps_trecv, lnx_match_trecvq,
+		       lnx_match_tunexq);
 	lnx_init_qpair(&lep->le_srq.lps_recv, lnx_match_recvq, lnx_match_unexq);
 
 	ofi_genlock_lock(&lep->le_domain->ld_domain.lock);

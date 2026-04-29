@@ -43,10 +43,10 @@
 				 FI_DELIVERY_COMPLETE | FI_TRANSMIT_COMPLETE)
 #define LNX_RX_OP_FLAGS		(FI_COMPLETION)
 
-#define LNX_TX_CAPS		(FI_TAGGED | FI_SEND | FI_HMEM | \
+#define LNX_TX_CAPS		(OFI_TX_MSG_CAPS | FI_TAGGED | FI_HMEM | \
 				 OFI_TX_RMA_CAPS)
-#define LNX_RX_CAPS		(FI_TAGGED | FI_RECV | FI_DIRECTED_RECV | \
-				 FI_HMEM | OFI_RX_RMA_CAPS)
+#define LNX_RX_CAPS		(OFI_RX_MSG_CAPS | FI_TAGGED | FI_HMEM | \
+				 FI_DIRECTED_RECV | OFI_RX_RMA_CAPS)
 
 struct util_fabric lnx_fabric_info;
 struct lnx_env lnx_env = {

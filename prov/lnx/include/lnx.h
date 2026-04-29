@@ -115,6 +115,12 @@ struct lnx_t_traffic_stats {
 	uint64_t st_num_tsenddata;
 	uint64_t st_num_tinject;
 	uint64_t st_num_tinjectdata;
+	uint64_t st_num_send;
+	uint64_t st_num_sendv;
+	uint64_t st_num_sendmsg;
+	uint64_t st_num_senddata;
+	uint64_t st_num_inject;
+	uint64_t st_num_injectdata;
 	uint64_t st_num_posted_recvs;
 	uint64_t st_num_unexp_msgs;
 	uint64_t st_num_read;
