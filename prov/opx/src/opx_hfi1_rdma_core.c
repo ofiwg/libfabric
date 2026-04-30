@@ -36,13 +36,17 @@
 #include <rdma/hfi/hfi1_ioctl.h>
 #include <rdma/hfi/hfi1_user.h>
 
-#define OPX_HFI1_VERBS_CONTEXTS_ONLY (false)
-
 /* Check for hfi1 verbs direct (rdma-core) interface support before including
  * new headers.
  * Configure assumed that verbs.h comes with hfi1dv.h
  */
 #if HAVE_HFI1_DIRECT_VERBS == 1 /* config.h */
+
+#ifndef OPX_ENABLE_HFI1_DIRECT_VERBS
+#define OPX_HFI1_VERBS_CONTEXTS_ONLY (false)
+#else
+#define OPX_HFI1_VERBS_CONTEXTS_ONLY (true)
+#endif
 
 /* Validate the new header versioning from hfi1_user.h.
  * This should be in sync with the new hfidv.h but check it anyway,
@@ -60,6 +64,9 @@
 /* Build RDMA CORE and HFI1 Direct Verbs support */
 #include <infiniband/hfi1dv.h>
 #include <infiniband/verbs.h>
+#else
+
+#define OPX_HFI1_VERBS_CONTEXTS_ONLY (false)
 
 #endif /* HAVE_HFI1_DIRECT_VERBS */
 
@@ -906,7 +913,7 @@ int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS fallback\n");
 		(*fd_cdev) = opx_hfi_context_open(unit, port, open_timeout, user_version);
 	}
-	return ((*fd_cdev) < 0);
+	return (((*fd_verbs) < 0) && ((*fd_cdev) < 0)) ? -1 : 0;
 }
 
 int opx_hfi1_wrapper_verbs_context_open(const int unit, const int port, void **ibv_context, int *fd_verbs)
@@ -1031,16 +1038,17 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 		opx_verbose_selection(_internal, _ctrl); \
 	}
 
-struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd, struct fi_opx_hfi1_context_internal *internal, int unit, int port)
+struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd_cdev, int fd_verbs, struct fi_opx_hfi1_context_internal *internal,
+					    int unit, int port)
 {
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] fd %d\n", fd);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] fd %d/%d\n", fd_cdev, fd_verbs);
 	if (OPX_HFI1_VERBS_CONTEXTS_ONLY && opx_hfi1_direct_verbs_enabled()) {
-		struct _hfi_ctrl *ctrl = opx_hfi1_rdma_userinit(fd, internal, unit, port);
+		struct _hfi_ctrl *ctrl = opx_hfi1_rdma_userinit(fd_verbs, internal, unit, port);
 		OPX_VERBOSE_SELECTION(internal, ctrl);
 		return ctrl;
 	}
 
-	struct _hfi_ctrl *ctrl = opx_hfi_userinit(fd, internal, unit, port);
+	struct _hfi_ctrl *ctrl = opx_hfi_userinit(fd_cdev, internal, unit, port);
 	OPX_VERBOSE_SELECTION(internal, ctrl);
 	return ctrl;
 }

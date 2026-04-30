@@ -219,7 +219,7 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 		internal->user_info.userversion = user_version;
 		internal->user_info.subctxt_id	= i + group_offset;
 		internal->user_info.subctxt_cnt = ep_per_hfi_context;
-		*ctrl				= opx_hfi1_wrapper_userinit(*fd_cdev, internal, hfi_unit_number, port);
+		*ctrl = opx_hfi1_wrapper_userinit(*fd_cdev, *fd_verbs, internal, hfi_unit_number, port);
 
 		if (*ctrl) {
 			assert((*ctrl)->__hfi_pg_sz == OPX_HFI1_TID_PAGESIZE);
