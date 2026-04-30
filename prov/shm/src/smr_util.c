@@ -285,6 +285,7 @@ int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	(*smr)->peer_data_offset = peer_data_offset;
 	(*smr)->name_offset = name_offset;
 	(*smr)->max_sar_buf_per_peer = SMR_BUF_BATCH_MAX;
+	(*smr)->flags |= SMR_FLAG_FAST_INJECT_V2;
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size, smr_cmd_init);
 	smr_return_queue_init(smr_return_queue(*smr), tx_size, NULL);

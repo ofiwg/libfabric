@@ -123,8 +123,13 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 		assert(cmd);
 		ce->ptr = smr_local_to_peer(ep, peer_smr, tx_id, rx_id,
 					    (uintptr_t) cmd);
+		/* Clear stale fast-inject marker from prior slot usage.
+		 * Receiver's fast RX dispatch requires the marker, so zero means
+		 * "not a fast inject" and the generic path handles it. */
+		ce->cmd.hdr.tx_ctx = 0;
 	} else {
 		cmd = &ce->cmd;
+		cmd->hdr.tx_ctx = 0;
 	}
 
 	ret = smr_send_ops[proto](ep, peer_smr, tx_id, rx_id, op, tag, data,
@@ -153,6 +158,98 @@ unlock:
 	return ret;
 }
 
+
+/* Fast send path for simple case: 1-IOV, no desc, peer supports V2.
+ * Uses the same fast inject protocol as fast_inject_v24 but also writes
+ * a CQ entry for the user context. Works for sizes SMR_MSG_DATA_LEN+1
+ * to SMR_INJECT_SIZE. For ≤ SMR_MSG_DATA_LEN, use inline. */
+static inline ssize_t smr_fast_tsend(struct smr_ep *ep, const void *buf,
+				     size_t len, fi_addr_t dest_addr,
+				     uint64_t tag, void *context, uint32_t op,
+				     uint64_t op_flags)
+{
+	struct smr_region *peer_smr;
+	struct smr_inject_buf *tx_buf;
+	int64_t tx_id, rx_id, pos;
+	ssize_t ret;
+	struct smr_cmd_entry *ce;
+	struct smr_cmd *cmd, *pcmd;
+	int16_t idx;
+
+	tx_id = smr_verify_peer(ep, dest_addr);
+	if (tx_id < 0)
+		return -FI_EAGAIN;
+	rx_id = smr_peer_data(ep->region)[tx_id].id;
+	peer_smr = smr_peer_region(ep, tx_id);
+	if (OFI_UNLIKELY(!(peer_smr->flags & SMR_FLAG_FAST_INJECT_V2)))
+		return -FI_EOPNOTSUPP;
+	ofi_genlock_lock(&ep->util_ep.lock);
+	if (OFI_UNLIKELY(smr_peer_data(ep->region)[tx_id].sar_status)) {
+		ofi_genlock_unlock(&ep->util_ep.lock);
+		return -FI_EAGAIN;
+	}
+	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
+	if (ret == -FI_ENOENT) {
+		ofi_genlock_unlock(&ep->util_ep.lock);
+		return -FI_EAGAIN;
+	}
+
+	if (len <= SMR_MSG_DATA_LEN) {
+		/* Inline fast path - no cmd_stack needed */
+		cmd = &ce->cmd;
+		cmd->hdr.tx_ctx = 0;
+		cmd->hdr.op = op;
+		cmd->hdr.status = 0;
+		cmd->hdr.op_flags = 0;
+		cmd->hdr.tag = tag;
+		cmd->hdr.tx_id = tx_id;
+		cmd->hdr.rx_id = rx_id;
+		cmd->hdr.cq_data = 0;
+		cmd->hdr.rx_ctx = 0;
+		cmd->hdr.proto = smr_proto_inline;
+		cmd->hdr.size = len;
+		memcpy(cmd->data.msg, buf, len);
+		smr_cmd_queue_commit(ce, pos);
+		ret = smr_complete_tx(ep, context, op, op_flags);
+		ofi_genlock_unlock(&ep->util_ep.lock);
+		return ret;
+	}
+
+	/* Inject fast path */
+	if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
+		smr_cmd_queue_discard(ce, pos);
+		ofi_genlock_unlock(&ep->util_ep.lock);
+		return -FI_EAGAIN;
+	}
+	pcmd = smr_freestack_pop(smr_cmd_stack(ep->region));
+	idx = smr_freestack_get_index(smr_cmd_stack(ep->region), (char *) pcmd);
+	tx_buf = &smr_inject_pool(ep->region)[idx];
+	memcpy(tx_buf->data, buf, len);
+
+	cmd = &ce->cmd;
+	cmd->hdr.entry = idx;
+	cmd->hdr.tx_ctx = SMR_FAST_INJECT_TX_CTX;
+	cmd->hdr.op = op;
+	cmd->hdr.status = 0;
+	cmd->hdr.op_flags = 0;
+	cmd->hdr.tag = tag;
+	cmd->hdr.tx_id = tx_id;
+	cmd->hdr.rx_id = rx_id;
+	cmd->hdr.cq_data = 0;
+	cmd->hdr.rx_ctx = 0;
+	cmd->hdr.proto = smr_proto_inject;
+	cmd->hdr.size = len;
+	pcmd->hdr.tx_ctx = SMR_FAST_INJECT_TX_CTX;
+	pcmd->hdr.proto = smr_proto_inject;
+	pcmd->hdr.rx_id = rx_id;
+	ce->ptr = smr_local_to_peer(ep, peer_smr, tx_id, rx_id, (uintptr_t) pcmd);
+
+	smr_cmd_queue_commit(ce, pos);
+	ret = smr_complete_tx(ep, context, op, op_flags);
+	ofi_genlock_unlock(&ep->util_ep.lock);
+	return ret;
+}
+
 static ssize_t smr_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 			void *desc, fi_addr_t dest_addr, void *context)
 {
@@ -161,6 +258,13 @@ static ssize_t smr_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
+	/* Fast path for simple send: 1-IOV, SYSTEM memory, size<=inject */
+	if (OFI_LIKELY(len <= SMR_INJECT_SIZE &&
+		(!desc || ((struct ofi_mr *)desc)->iface == FI_HMEM_SYSTEM))) {
+		ssize_t r = smr_fast_tsend(ep, buf, len, dest_addr, 0, context, ofi_op_msg, smr_ep_tx_flags(ep));
+		if (OFI_LIKELY(r != -FI_EOPNOTSUPP))
+			return r;
+	}
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
@@ -235,6 +339,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	if (len <= SMR_MSG_DATA_LEN) {
 		proto = smr_proto_inline;
 		cmd = &ce->cmd;
+		cmd->hdr.tx_ctx = 0;
 	} else {
 		proto = smr_proto_inject;
 		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
@@ -247,6 +352,10 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 		assert(cmd);
 		ce->ptr = smr_local_to_peer(ep, peer_smr, tx_id, rx_id,
 					    (uintptr_t) cmd);
+		/* Clear stale fast-inject marker from prior slot usage.
+		 * Receiver's fast RX dispatch requires the marker, so zero means
+		 * "not a fast inject" and the generic path handles it. */
+		ce->cmd.hdr.tx_ctx = 0;
 	}
 
 	ret = smr_send_ops[proto](ep, peer_smr, tx_id, rx_id, op, tag, data,
@@ -377,6 +486,13 @@ static ssize_t smr_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
+	/* Fast path for simple tsend: 1-IOV, SYSTEM memory, size<=inject */
+	if (OFI_LIKELY(len <= SMR_INJECT_SIZE &&
+		(!desc || ((struct ofi_mr *)desc)->iface == FI_HMEM_SYSTEM))) {
+		ssize_t r = smr_fast_tsend(ep, buf, len, dest_addr, tag, context, ofi_op_tagged, smr_ep_tx_flags(ep));
+		if (OFI_LIKELY(r != -FI_EOPNOTSUPP))
+			return r;
+	}
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
@@ -411,9 +527,147 @@ static ssize_t smr_tsendmsg(struct fid_ep *ep_fid,
 				   flags | ep->util_ep.tx_msg_flags);
 }
 
+
+/* Fast path for inline tagged inject */
+static inline ssize_t smr_fast_tinject(struct smr_ep *ep, const void *buf,
+				       size_t len, fi_addr_t dest_addr,
+				       uint64_t tag)
+{
+	struct smr_region *peer_smr;
+	int64_t tx_id, rx_id, pos;
+	ssize_t ret;
+	struct smr_cmd_entry *ce;
+	struct smr_cmd *cmd;
+
+	tx_id = smr_verify_peer(ep, dest_addr);
+	if (tx_id < 0)
+		return -FI_EAGAIN;
+	rx_id = smr_peer_data(ep->region)[tx_id].id;
+	peer_smr = smr_peer_region(ep, tx_id);
+	ofi_genlock_lock(&ep->util_ep.lock);
+	if (OFI_UNLIKELY(smr_peer_data(ep->region)[tx_id].sar_status)) {
+		ofi_genlock_unlock(&ep->util_ep.lock);
+		return -FI_EAGAIN;
+	}
+	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
+	if (ret == -FI_ENOENT) {
+		ofi_genlock_unlock(&ep->util_ep.lock);
+		return -FI_EAGAIN;
+	}
+	cmd = &ce->cmd;
+	cmd->hdr.tx_ctx = 0;
+	cmd->hdr.op = ofi_op_tagged;
+	cmd->hdr.status = 0;
+	cmd->hdr.op_flags = 0;
+	cmd->hdr.tag = tag;
+	cmd->hdr.tx_id = tx_id;
+	cmd->hdr.rx_id = rx_id;
+	cmd->hdr.cq_data = 0;
+	cmd->hdr.rx_ctx = 0;
+	cmd->hdr.proto = smr_proto_inline;
+	cmd->hdr.size = len;
+	memcpy(cmd->data.msg, buf, len);
+	smr_cmd_queue_commit(ce, pos);
+	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_tagged);
+	ofi_genlock_unlock(&ep->util_ep.lock);
+	return FI_SUCCESS;
+}
+
+/* Fast inject send: counter-based inject buf, no cmd_stack, no return queue.
+ * Stores inject buf index in cmd->hdr.entry for the receiver. */
+static inline ssize_t smr_fast_inject_v24(struct smr_ep *ep, const void *buf,
+					  size_t len, fi_addr_t dest_addr,
+					  uint64_t tag)
+{
+	struct smr_region *peer_smr;
+	struct smr_inject_buf *tx_buf;
+	struct smr_cmd_hdr hdr;
+	int64_t tx_id, rx_id, pos;
+	ssize_t ret;
+	struct smr_cmd_entry *ce;
+	struct smr_cmd *pcmd;
+	int16_t idx;
+
+	tx_id = smr_verify_peer(ep, dest_addr);
+	if (tx_id < 0)
+		return -FI_EAGAIN;
+	rx_id = smr_peer_data(ep->region)[tx_id].id;
+	peer_smr = smr_peer_region(ep, tx_id);
+	if (OFI_UNLIKELY(!(peer_smr->flags & SMR_FLAG_FAST_INJECT_V2)))
+		return -FI_EOPNOTSUPP;
+	ofi_genlock_lock(&ep->util_ep.lock);
+	if (OFI_UNLIKELY(smr_peer_data(ep->region)[tx_id].sar_status)) {
+		ofi_genlock_unlock(&ep->util_ep.lock);
+		return -FI_EAGAIN;
+	}
+	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
+	if (ret == -FI_ENOENT) {
+		ofi_genlock_unlock(&ep->util_ep.lock);
+		return -FI_EAGAIN;
+	}
+	if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
+		smr_cmd_queue_discard(ce, pos);
+		ofi_genlock_unlock(&ep->util_ep.lock);
+		return -FI_EAGAIN;
+	}
+	pcmd = smr_freestack_pop(smr_cmd_stack(ep->region));
+	idx = smr_freestack_get_index(smr_cmd_stack(ep->region), (char *) pcmd);
+	tx_buf = &smr_inject_pool(ep->region)[idx];
+	memcpy(tx_buf->data, buf, len);
+
+	/* Build header on stack */
+	hdr.entry = idx;
+	hdr.tx_ctx = SMR_FAST_INJECT_TX_CTX;
+	hdr.rx_ctx = 0;
+	hdr.size = len;
+	hdr.status = 0;
+	hdr.cq_data = 0;
+	hdr.tag = tag;
+	hdr.rx_id = rx_id;
+	hdr.tx_id = tx_id;
+	hdr.op = ofi_op_tagged;
+	hdr.proto = smr_proto_inject;
+	hdr.op_flags = 0;
+	hdr.resv[0] = 0;
+
+	/* Full header to pcmd (LOCAL). Receiver reads data from this */
+	pcmd->hdr = hdr;
+
+	/* Minimum to ce->cmd (CROSS-PROCESS) - only what receiver's
+	 * fast RX check needs: proto, op, rx_ctx must match for dispatch.
+	 * All other fields read from _hdr = &ce->cmd in fast path. */
+	ce->cmd.hdr.proto = smr_proto_inject;
+	ce->cmd.hdr.op = ofi_op_tagged;
+	ce->cmd.hdr.rx_ctx = 0;
+	ce->cmd.hdr.tx_ctx = SMR_FAST_INJECT_TX_CTX;
+	/* Also need: entry (for inject_buf lookup), size, rx_id, tag, op_flags, cq_data
+	 * for the fast RX path. These are all in _hdr = ce->cmd */
+	ce->cmd.hdr.entry = idx;
+	ce->cmd.hdr.size = len;
+	ce->cmd.hdr.rx_id = rx_id;
+	ce->cmd.hdr.tag = tag;
+	ce->cmd.hdr.op_flags = 0;
+	ce->cmd.hdr.cq_data = 0;
+
+	ce->ptr = smr_local_to_peer(ep, peer_smr, tx_id, rx_id, (uintptr_t) pcmd);
+	smr_cmd_queue_commit(ce, pos);
+	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_tagged);
+	ofi_genlock_unlock(&ep->util_ep.lock);
+	return FI_SUCCESS;
+}
+
 static ssize_t smr_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 			   fi_addr_t dest_addr, uint64_t tag)
 {
+	struct smr_ep *ep;
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+	if (OFI_LIKELY(len <= SMR_MSG_DATA_LEN))
+		return smr_fast_tinject(ep, buf, len, dest_addr, tag);
+	if (OFI_LIKELY(len <= SMR_INJECT_SIZE)) {
+		ssize_t r = smr_fast_inject_v24(ep, buf, len, dest_addr, tag);
+		if (OFI_LIKELY(r != -FI_EOPNOTSUPP))
+			return r;
+	}
 	return smr_generic_inject(ep_fid, buf, len, dest_addr, tag, 0,
 				  ofi_op_tagged, 0);
 }

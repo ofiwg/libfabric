@@ -184,7 +184,11 @@ static void smr_progress_return(struct smr_ep *ep)
 			break;
 
 		cmd = (struct smr_cmd *) queue_entry->ptr;
-		pending = (struct smr_pend_entry *) cmd->hdr.tx_ctx;
+		/* Fast inject: TX already completed at send time, no pend */
+		if (cmd->hdr.tx_ctx == SMR_FAST_INJECT_TX_CTX)
+			pending = NULL;
+		else
+			pending = (struct smr_pend_entry *) cmd->hdr.tx_ctx;
 
 		ret = smr_progress_return_entry(ep, cmd, pending);
 		if (ret != -FI_EAGAIN) {
@@ -1320,7 +1324,78 @@ static void smr_progress_cmd(struct smr_ep *ep)
 		if (ret == -FI_ENOENT)
 			break;
 
+		/* ce->ptr points to:
+		 *  - &ce->cmd for inline (init_fn default)
+		 *  - sender's cmd_stack cmd for inject/fast_inject
+		 * We always follow ce->ptr. Fast inject is detected via
+		 * cmd->hdr.tx_ctx == SMR_FAST_INJECT_TX_CTX. */
 		cmd = (struct smr_cmd *) ce->ptr;
+
+		/* Fast path for fast_inject_v24 tagged messages only.
+		 * We rely on the FAST_INJECT_TX_CTX marker (written atomically with the
+		 * rest of ce->cmd.hdr by smr_fast_inject_v24) rather than ce->cmd.hdr.proto,
+		 * because other protocols (SAR, RMA, etc.) may leave stale proto values
+		 * from prior usage of the same queue slot. */
+		if (ce->cmd.hdr.tx_ctx == SMR_FAST_INJECT_TX_CTX &&
+		    (ce->cmd.hdr.op == ofi_op_tagged || ce->cmd.hdr.op == ofi_op_msg) &&
+		    !ce->cmd.hdr.rx_ctx) {
+			struct fi_peer_match_attr attr;
+			struct fi_peer_rx_entry *rx_entry;
+			struct smr_region *_peer;
+			struct smr_inject_buf *_buf;
+			struct smr_cmd *_hdr = &ce->cmd;
+
+			_peer = smr_peer_region(ep, _hdr->hdr.rx_id);
+			_buf = &smr_inject_pool(_peer)[_hdr->hdr.entry];
+
+			if (_hdr->hdr.size >= 128) {
+				char *_p = (char *)_buf->data;
+				__builtin_prefetch(_p, 0, 0);
+				__builtin_prefetch(_p + 64, 0, 0);
+			}
+			attr.addr = ep->map->peers[_hdr->hdr.rx_id].fiaddr;
+			attr.msg_size = _hdr->hdr.size;
+			attr.tag = _hdr->hdr.tag;
+
+			if (_hdr->hdr.op == ofi_op_tagged)
+				ret = ep->srx->owner_ops->get_tag(ep->srx, &attr, &rx_entry);
+			else
+				ret = ep->srx->owner_ops->get_msg(ep->srx, &attr, &rx_entry);
+
+			if (OFI_LIKELY(ret == FI_SUCCESS)) {
+				ret = ofi_copy_to_mr_iov((struct ofi_mr **) rx_entry->desc,
+					rx_entry->iov, rx_entry->count, 0,
+					_buf->data, _hdr->hdr.size);
+				if (OFI_LIKELY(ret == _hdr->hdr.size)) {
+					uint64_t flags = smr_rx_cq_flags(rx_entry->flags, _hdr->hdr.op_flags);
+					smr_complete_rx(ep, rx_entry->context, _hdr->hdr.op, flags,
+						_hdr->hdr.size, rx_entry->iov[0].iov_base,
+						_hdr->hdr.rx_id, _hdr->hdr.tag, _hdr->hdr.cq_data);
+				}
+				ep->srx->owner_ops->free_entry(rx_entry);
+				smr_return_cmd(ep, (struct smr_cmd *) ce->ptr);
+				smr_cmd_queue_release(smr_cmd_queue(ep->region), ce, pos);
+				continue;
+			} else if (ret == -FI_ENOENT) {
+				/* For fast inject, the cmd is in peer's cmd_stack.
+				 * smr_alloc_cmd_ctx stores cmd pointer for later use -
+				 * that's safe since cmd lives until receiver calls
+				 * smr_return_cmd. Queue the rx_entry. */
+				ret = smr_alloc_cmd_ctx(ep, rx_entry, (struct smr_cmd *) ce->ptr);
+				if (!ret) {
+					if (_hdr->hdr.op == ofi_op_tagged)
+						ep->srx->owner_ops->queue_tag(rx_entry);
+					else
+						ep->srx->owner_ops->queue_msg(rx_entry);
+					smr_cmd_queue_release(smr_cmd_queue(ep->region), ce, pos);
+					continue;
+				}
+				/* alloc_cmd_ctx failed - don't drop, retry later */
+				ep->srx->owner_ops->free_entry(rx_entry);
+				break;
+			}
+		}
+
 		switch (cmd->hdr.op) {
 		case ofi_op_msg:
 		case ofi_op_tagged:
