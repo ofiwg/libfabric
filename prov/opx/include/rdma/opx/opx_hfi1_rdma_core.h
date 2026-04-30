@@ -59,7 +59,8 @@ int opx_hfi1_wrapper_context_open(const int unit, const int port, const uint64_t
 int opx_hfi1_wrapper_verbs_context_open(const int unit, const int port, void **ibv_context, int *fd_verbs);
 
 /* Initialize the context with hfi1 direct or cdev */
-struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd, struct fi_opx_hfi1_context_internal *internal, int unit, int port);
+struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd_cdev, int fd_verbs, struct fi_opx_hfi1_context_internal *internal,
+					    int unit, int port);
 
 /* Set PKEY */
 int opx_hfi1_wrapper_set_pkey(struct fi_opx_hfi1_context_internal *internal, uint16_t pkey);
