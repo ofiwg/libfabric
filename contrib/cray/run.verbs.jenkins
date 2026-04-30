@@ -2,5 +2,6 @@
 
 DIR=$(cd $(dirname $0) && pwd)
 
+PRODUCT=slingshot-host-software \
 CE_CONFIG_FILE=libfabric-verbs.yaml \
   bash $DIR/build.sh -n $@
