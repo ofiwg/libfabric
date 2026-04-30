@@ -77,7 +77,8 @@
 
 size_t arrsz[MAPSIZE_MAX] = {0};
 
-int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *rheq, const enum opx_hfi1_type hfi1_type)
+int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *rheq, const enum opx_hfi1_type hfi1_type,
+		    const bool send_only)
 {
 #define CREDITS_NUM 64
 	struct hfi1_ctxt_info *cinfo = &ctrl->ctxt_info;
@@ -85,6 +86,11 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	ssize_t		       sz;
 	__u64		       off;
 	void		      *maddr;
+
+	_HFI_INFO("Mapping HFI memory: send_only=%s (RX resources will %sbe mapped)\n", send_only ? "true" : "false",
+		  send_only ? "NOT " : "");
+
+	memset(arrsz, 0, sizeof(arrsz));
 
 #ifndef OPX_GUARD_SZ
 #define OPX_GUARD_SZ HFI_MMAP_PGSIZE
@@ -144,20 +150,24 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	/* 4. Map the receive header queue
 	 * (u16 * u16 -> max value 0xfffe0001)
 	 */
-	sz    = (size_t) cinfo->rcvhdrq_cnt * cinfo->rcvhdrq_entsize;
-	maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, rcvhdr_bufbase, sz, PROT_READ,
-				  pad_sz);
-	opx_hfi_touch_mmap(maddr, sz);
-	arrsz[RCVHDR_BUFBASE] = sz;
+	if (!send_only) {
+		sz    = (size_t) cinfo->rcvhdrq_cnt * cinfo->rcvhdrq_entsize;
+		maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, rcvhdr_bufbase, sz,
+					  PROT_READ, pad_sz);
+		opx_hfi_touch_mmap(maddr, sz);
+		arrsz[RCVHDR_BUFBASE] = sz;
+	}
 
 	/* 5. Map the receive eager buffer
 	 * (u16 * u32. Assuming size_t's precision is 64 bits - no overflow)
 	 */
-	sz    = (size_t) cinfo->egrtids * cinfo->rcvegr_size;
-	maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, rcvegr_bufbase, sz, PROT_READ,
-				  pad_sz);
-	opx_hfi_touch_mmap(maddr, sz);
-	arrsz[RCVEGR_BUFBASE] = sz;
+	if (!send_only) {
+		sz    = (size_t) cinfo->egrtids * cinfo->rcvegr_size;
+		maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, rcvegr_bufbase, sz,
+					  PROT_READ, pad_sz);
+		opx_hfi_touch_mmap(maddr, sz);
+		arrsz[RCVEGR_BUFBASE] = sz;
+	}
 
 	/* 6. Map the sdma completion queue */
 	if (cinfo->runtime_flags & HFI1_CAP_SDMA) {
@@ -180,41 +190,56 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 		sz = 2 * HFI_MMAP_PGSIZE;
 	}
 
-	HFI_MMAP_ERRCHECK(true, mmap_guard_enable, fd, binfo, user_regbase, sz, PROT_WRITE | PROT_READ, pad_sz);
-	arrsz[USER_REGBASE] = sz;
-	/* Set up addresses for optimized register writeback routines.
-	 * This is for the real onchip registers, shared context or not
-	 */
-	uint64_t *regbasep     = (uint64_t *) binfo->user_regbase;
-	ctrl->__hfi_rcvhdrtail = (volatile __le64 *) (regbasep + ur_rcvhdrtail);
-	ctrl->__hfi_rcvhdrhead = (volatile __le64 *) (regbasep + ur_rcvhdrhead);
-	ctrl->__hfi_rcvegrtail = (volatile __le64 *) (regbasep + ur_rcvegrindextail);
-	ctrl->__hfi_rcvegrhead = (volatile __le64 *) (regbasep + ur_rcvegrindexhead);
-	ctrl->__hfi_rcvofftail = (volatile __le64 *) (regbasep + ur_rcvegroffsettail);
+	if (!send_only) {
+		HFI_MMAP_ERRCHECK(true, mmap_guard_enable, fd, binfo, user_regbase, sz, PROT_WRITE | PROT_READ, pad_sz);
+		arrsz[USER_REGBASE] = sz;
+		/* Set up addresses for optimized register writeback routines.
+		 * This is for the real onchip registers, shared context or not
+		 */
+		uint64_t *regbasep = (uint64_t *) binfo->user_regbase;
 
-	if (cinfo->runtime_flags & HFI1_CAP_HDRSUPP) {
-		ctrl->__hfi_rcvtidflow = (volatile __le64 *) (regbasep + ur_rcvtidflowtable);
-		ctrl->__hfi_tfvalid    = 1;
+		ctrl->__hfi_rcvhdrtail = (volatile __le64 *) (regbasep + ur_rcvhdrtail);
+		ctrl->__hfi_rcvhdrhead = (volatile __le64 *) (regbasep + ur_rcvhdrhead);
+		ctrl->__hfi_rcvegrtail = (volatile __le64 *) (regbasep + ur_rcvegrindextail);
+		ctrl->__hfi_rcvegrhead = (volatile __le64 *) (regbasep + ur_rcvegrindexhead);
+		ctrl->__hfi_rcvofftail = (volatile __le64 *) (regbasep + ur_rcvegroffsettail);
+
+		if (cinfo->runtime_flags & HFI1_CAP_HDRSUPP) {
+			ctrl->__hfi_rcvtidflow = (volatile __le64 *) (regbasep + ur_rcvtidflowtable);
+			ctrl->__hfi_tfvalid    = 1;
+		} else {
+			ctrl->__hfi_rcvtidflow = ctrl->regs;
+			ctrl->__hfi_tfvalid    = 0;
+		}
 	} else {
-		ctrl->__hfi_rcvtidflow = ctrl->regs;
+		ctrl->__hfi_rcvhdrtail = NULL;
+		ctrl->__hfi_rcvhdrhead = NULL;
+		ctrl->__hfi_rcvegrtail = NULL;
+		ctrl->__hfi_rcvegrhead = NULL;
+		ctrl->__hfi_rcvofftail = NULL;
+		ctrl->__hfi_rcvtidflow = NULL;
 		ctrl->__hfi_tfvalid    = 0;
 	}
 
 	/* 8. Map the rcvhdrq tail register address */
-	if (cinfo->runtime_flags & HFI1_CAP_DMA_RTAIL) {
-		sz = HFI_MMAP_PGSIZE;
-		HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, rcvhdrtail_base, sz, PROT_READ,
-				  pad_sz);
+	if (!send_only) {
+		if (cinfo->runtime_flags & HFI1_CAP_DMA_RTAIL) {
+			sz = HFI_MMAP_PGSIZE;
+			HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, rcvhdrtail_base, sz,
+					  PROT_READ, pad_sz);
+		} else {
+			/* We don't use receive header queue tail register to detect new packets,
+			 * but here we save the address for false-eager-full recovery
+			 */
+			sz = 0;
+			/* This points inside the previously established mapping (user_rehbase). Don't munmap()! */
+			binfo->rcvhdrtail_base = (uint64_t) (uintptr_t) ctrl->__hfi_rcvhdrtail;
+		}
+		ctrl->__hfi_rcvtail    = (__le64 *) binfo->rcvhdrtail_base;
+		arrsz[RCVHDRTAIL_BASE] = sz;
 	} else {
-		/* We don't use receive header queue tail register to detect new packets,
-		 * but here we save the address for false-eager-full recovery
-		 */
-		sz = 0;
-		/* This points inside the previously established mapping (user_rehbase). Don't munmap()! */
-		binfo->rcvhdrtail_base = (uint64_t) (uintptr_t) ctrl->__hfi_rcvhdrtail;
+		ctrl->__hfi_rcvtail = NULL;
 	}
-	ctrl->__hfi_rcvtail    = (__le64 *) binfo->rcvhdrtail_base;
-	arrsz[RCVHDRTAIL_BASE] = sz;
 
 	/* 9. Map the event page */
 	off = binfo->events_bufbase & ~HFI_MMAP_PGMASK;
@@ -238,15 +263,19 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	_HFI_PDBG("ctx %#hx, subctxt_cnt %#lx, rheq %#llX, fd %d, sz %zu/%zu\n", cinfo->ctxt, subctxt_cnt, *rheq, fd,
 		  sz, (size_t) cinfo->rcvhdrq_cnt);
 	errno = 0;
-	if (hfi1_type != OPX_HFI1_WFR) {
-		/* no guards for RHEQ */
-		maddr = HFI_MMAP_ALIGNOFF(NULL, fd, *rheq, sz, PROT_READ, HFI_MMAP_FLAGS);
-		if (OFI_UNLIKELY(maddr == MAP_FAILED)) {
-			_HFI_PDBG("mmap of RHEQ size %zu failed: %s\n", sz, strerror(errno));
-			goto err_mmap_subctxt_rheq;
+	if (!send_only) {
+		if (hfi1_type != OPX_HFI1_WFR) {
+			/* no guards for RHEQ */
+			maddr = HFI_MMAP_ALIGNOFF(NULL, fd, *rheq, sz, PROT_READ, HFI_MMAP_FLAGS);
+			if (OFI_UNLIKELY(maddr == MAP_FAILED)) {
+				_HFI_PDBG("mmap of RHEQ size %zu failed: %s\n", sz, strerror(errno));
+				goto err_mmap_subctxt_rheq;
+			}
+			*rheq = (__u64) maddr;
+		} else {
+			*rheq = 0ULL;
 		}
-		*rheq = (__u64) maddr;
-	} else { /* WFR is unused/na, so NULL it */
+	} else {
 		*rheq = 0ULL;
 	}
 	_HFI_PDBG("[HFI1-DIRECT] CONTEXT INIT RHEQ %#llX mapsize %zu\n", *rheq, sz);
@@ -287,9 +316,12 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 		_HFI_PDBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvegrhead     %p \n", ctrl->__hfi_rcvegrhead);
 		_HFI_PDBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvofftail     %p \n", ctrl->__hfi_rcvofftail);
 		_HFI_PDBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvtidflow     %p \n", ctrl->__hfi_rcvtidflow);
-		{
+		if (!send_only) {
 			int i;
-			/* TID flows aren't cleared between jobs, do it now. */
+			/* TID flows aren't cleared between jobs, do it now.
+			 * Skip for send-only contexts: __hfi_rcvtidflow is NULL
+			 * because the RX register page was not mapped.
+			 */
 			for (i = 0; i < 32; ++i) {
 				_HFI_PDBG("CONTEXT INIT ctrl->__hfi_rcvtidflow[%u]               %#16.16llX \n", i,
 					  ctrl->__hfi_rcvtidflow[i]);
@@ -319,28 +351,32 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 	/* 11b) subctxt_rcvhdrbuf
 	 * u16 * u16. Prevent promotion to int through an explicit cast to size_t
 	 */
-	factor = (size_t) cinfo->rcvhdrq_cnt * cinfo->rcvhdrq_entsize;
-	factor = ALIGN(factor, HFI_MMAP_PGSIZE);
-	sz     = factor * subctxt_cnt;
-	maddr  = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, subctxt_rcvhdrbuf, sz,
-				   PROT_WRITE | PROT_READ, pad_sz);
-	opx_hfi_touch_mmap(maddr, sz);
-	arrsz[SUBCTXT_RCVHDRBUF] = sz;
+	if (!send_only) {
+		factor = (size_t) cinfo->rcvhdrq_cnt * cinfo->rcvhdrq_entsize;
+		factor = ALIGN(factor, HFI_MMAP_PGSIZE);
+		sz     = factor * subctxt_cnt;
+		maddr  = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, subctxt_rcvhdrbuf, sz,
+					   PROT_WRITE | PROT_READ, pad_sz);
+		opx_hfi_touch_mmap(maddr, sz);
+		arrsz[SUBCTXT_RCVHDRBUF] = sz;
+	}
 
 	/* 11c) subctxt_rcvegrbuf
 	 * u16 * u32. Assuming size_t's precision to be 64 bits (no overflow)
 	 */
-	factor = (size_t) cinfo->egrtids * cinfo->rcvegr_size;
-	factor = ALIGN(factor, HFI_MMAP_PGSIZE);
-	sz     = factor * subctxt_cnt;
-	if (sz / subctxt_cnt != factor) {
-		_HFI_INFO("%s (rcvegrbuf)\n", errstr);
-		goto err_int_overflow_subctxt_rcvegrbuf;
+	if (!send_only) {
+		factor = (size_t) cinfo->egrtids * cinfo->rcvegr_size;
+		factor = ALIGN(factor, HFI_MMAP_PGSIZE);
+		sz     = factor * subctxt_cnt;
+		if (sz / subctxt_cnt != factor) {
+			_HFI_INFO("%s (rcvegrbuf)\n", errstr);
+			goto err_int_overflow_subctxt_rcvegrbuf;
+		}
+		maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, subctxt_rcvegrbuf, sz,
+					  PROT_WRITE | PROT_READ, pad_sz);
+		opx_hfi_touch_mmap(maddr, sz);
+		arrsz[SUBCTXT_RCVEGRBUF] = sz;
 	}
-	maddr = HFI_MMAP_ERRCHECK(mmap_guard_enable, mmap_guard_enable, fd, binfo, subctxt_rcvegrbuf, sz,
-				  PROT_WRITE | PROT_READ, pad_sz);
-	opx_hfi_touch_mmap(maddr, sz);
-	arrsz[SUBCTXT_RCVEGRBUF] = sz;
 
 	_HFI_PDBG("CONTEXT INIT mapsize SC_CREDITS         %zu \n", arrsz[SC_CREDITS]);
 	_HFI_PDBG("CONTEXT INIT mapsize PIO_BUFBASE_SOP    %zu \n", arrsz[PIO_BUFBASE_SOP]);
@@ -394,42 +430,56 @@ int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *r
 err_int_overflow_subctxt_rcvegrbuf:
 err_mmap_subctxt_rcvegrbuf:
 	/* if we got here, subctxt_cnt must be != 0 */
-	HFI_MUNMAP_ERRCHECK(binfo, subctxt_rcvhdrbuf, arrsz[SUBCTXT_RCVHDRBUF]);
+	if (arrsz[SUBCTXT_RCVHDRBUF]) {
+		HFI_MUNMAP_ERRCHECK(binfo, subctxt_rcvhdrbuf, arrsz[SUBCTXT_RCVHDRBUF]);
+	}
 
 err_mmap_subctxt_rcvhdrbuf:
 	/* if we got it here, subctxt_cnt must be != 0 */
-	if (rheq && *rheq) {
+	if (arrsz[SUBCTXT_UREGBASE]) {
 		HFI_MUNMAP_ERRCHECK(binfo, subctxt_uregbase, arrsz[SUBCTXT_UREGBASE]);
 	}
 err_mmap_subctxt_rheq:
 	/* New field, special handling */
-	HFI_MUNMAP((void *) *rheq, sizeof(uint64_t) * (size_t) cinfo->rcvhdrq_cnt);
+	if (rheq && *rheq) {
+		HFI_MUNMAP((void *) *rheq, sizeof(uint64_t) * (size_t) cinfo->rcvhdrq_cnt);
+	}
 
 err_mmap_subctxt_uregbase:
-	HFI_MUNMAP_ERRCHECK(binfo, status_bufbase, arrsz[STATUS_BUFBASE]);
+	if (arrsz[STATUS_BUFBASE]) {
+		HFI_MUNMAP_ERRCHECK(binfo, status_bufbase, arrsz[STATUS_BUFBASE]);
+	}
 
 err_mmap_status_bufbase:
-	HFI_MUNMAP_ERRCHECK(binfo, events_bufbase, arrsz[EVENTS_BUFBASE]);
+	if (arrsz[EVENTS_BUFBASE]) {
+		HFI_MUNMAP_ERRCHECK(binfo, events_bufbase, arrsz[EVENTS_BUFBASE]);
+	}
 
 err_mmap_events_bufbase:
-	if (cinfo->runtime_flags & HFI1_CAP_DMA_RTAIL) {
+	if (arrsz[RCVHDRTAIL_BASE] && (cinfo->runtime_flags & HFI1_CAP_DMA_RTAIL)) {
 		HFI_MUNMAP_ERRCHECK(binfo, rcvhdrtail_base, arrsz[RCVHDRTAIL_BASE]);
 	}
 
 err_mmap_rcvhdrtail_base:
-	HFI_MUNMAP_ERRCHECK(binfo, user_regbase, arrsz[USER_REGBASE]);
+	if (arrsz[USER_REGBASE]) {
+		HFI_MUNMAP_ERRCHECK(binfo, user_regbase, arrsz[USER_REGBASE]);
+	}
 
 err_mmap_user_regbase:
 	/* the condition could be: if(cinfo->runtime_flags & HFI1_CAP_SDMA) too */
-	if (binfo->sdma_comp_bufbase != 0) {
+	if (arrsz[SDMA_COMP_BUFBASE] && binfo->sdma_comp_bufbase != 0) {
 		HFI_MUNMAP_ERRCHECK(binfo, sdma_comp_bufbase, arrsz[SDMA_COMP_BUFBASE]);
 	}
 
 err_mmap_sdma_comp_bufbase:
-	HFI_MUNMAP_ERRCHECK(binfo, rcvegr_bufbase, arrsz[RCVEGR_BUFBASE]);
+	if (arrsz[RCVEGR_BUFBASE]) {
+		HFI_MUNMAP_ERRCHECK(binfo, rcvegr_bufbase, arrsz[RCVEGR_BUFBASE]);
+	}
 
 err_mmap_rcvegr_bufbase:
-	HFI_MUNMAP_ERRCHECK(binfo, rcvhdr_bufbase, arrsz[RCVHDR_BUFBASE]);
+	if (arrsz[RCVHDR_BUFBASE]) {
+		HFI_MUNMAP_ERRCHECK(binfo, rcvhdr_bufbase, arrsz[RCVHDR_BUFBASE]);
+	}
 
 err_mmap_rcvhdr_bufbase:
 	HFI_MUNMAP_ERRCHECK(binfo, pio_bufbase, arrsz[PIO_BUFBASE]);
@@ -504,12 +554,14 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 		c.addr = (__u64) (&uinfo_new);
 
 		uinfo_new.userversion = uinfo->userversion;
-		uinfo_new.pad	      = uinfo->pad;
+		uinfo_new.pad	      = (((__u32) uinfo->pad) & OPX_HFI1_USER_INFO_PAD_PORT_MASK) |
+				(internal->send_only ? OPX_HFI1_USER_INFO_PAD_SEND_ONLY_BIT : 0U);
 		uinfo_new.subctxt_cnt = uinfo->subctxt_cnt;
 		uinfo_new.subctxt_id  = uinfo->subctxt_id;
 		memcpy(uinfo_new.uuid, uinfo->uuid, sizeof(uinfo_new.uuid));
-		_HFI_PDBG("CONTEXT INIT uinfo_new: ver %#x, pad %d, subc_cnt %d, subc_id %d\n", uinfo_new.userversion,
-			  uinfo_new.pad, uinfo_new.subctxt_cnt, uinfo_new.subctxt_id);
+		_HFI_PDBG("CONTEXT INIT uinfo_new: ver %#x, pad %d (send_only=%s), subc_cnt %d, subc_id %d\n",
+			  uinfo_new.userversion, uinfo_new.pad, internal->send_only ? "true" : "false",
+			  uinfo_new.subctxt_cnt, uinfo_new.subctxt_id);
 	} else {
 		/*
 		 * If psm is working with an old driver, we continue to use
@@ -703,12 +755,15 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 
 	/* Rheq is only on JKR rdma-core, we have to set the token manually */
 	__off64_t rheq_token = opx_hfi_mmap_rheq_token(cinfo);
-	if (opx_map_hfi_mem(fd, spctrl, uinfo->subctxt_cnt, (__u64 *) &rheq_token, internal->context.hfi1_type) == -1) {
+	if (opx_map_hfi_mem(fd, spctrl, uinfo->subctxt_cnt, (__u64 *) &rheq_token, internal->context.hfi1_type,
+			    internal->send_only) == -1) {
 		_HFI_ERROR("[HFI1-DIRECT] Failed to map HFI memory.- errno %s\n", strerror(errno));
 		goto err_map_hfi_mem;
 	}
 	/* Save the new mmap (from the token) in the context */
-	internal->context.info.rxe.hdrq.rhe_base = (uint64_t *) rheq_token;
+	if (!internal->send_only) {
+		internal->context.info.rxe.hdrq.rhe_base = (uint64_t *) rheq_token;
+	}
 	_HFI_PDBG("[HFI1-DIRECT] RHEQ %#lX\n", rheq_token);
 
 	/* Save some info. */
@@ -716,7 +771,7 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	spctrl->__hfi_pg_sz = __hfi_pg_sz;
 	spctrl->__hfi_unit  = cinfo->unit;
 
-	spctrl->__hfi_port	= ((int) internal->user_info.pad + 1); /* CDEV port index + 1 */
+	spctrl->__hfi_port	= ((int) (internal->user_info.pad & OPX_HFI1_USER_INFO_PAD_PORT_MASK) + 1);
 	spctrl->__hfi_tidegrcnt = cinfo->egrtids;
 	spctrl->__hfi_tidexpcnt = cinfo->rcvtids - cinfo->egrtids;
 

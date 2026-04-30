@@ -346,6 +346,9 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 	assign_ctxt_cmd.subctxt_cnt = uinfo->subctxt_cnt;
 
 	memcpy(assign_ctxt_cmd.uuid, uinfo->uuid, sizeof(assign_ctxt_cmd.uuid));
+	if (internal->send_only) {
+		assign_ctxt_cmd.reserved1 |= OPX_HFI1_ASSIGN_CTXT_RESERVED1_SEND_ONLY_BIT;
+	}
 	FI_DBG_TRACE(
 		fi_opx_global.prov, FI_LOG_EP_DATA,
 		"[HFI1-DIRECT] CONTEXT INIT assign_cmd_cmd: userversion %#X, port %u, kdeth_rcvhdrsz %u, reserved1 %#X, subctxt_cnt %u, subctxt_id %u, uuid[16] %#lX %#lX reserved2 %#X\n",
@@ -419,7 +422,9 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 	binfo->subctxt_rcvegrbuf = user_info_rsp.subctxt_rcvegrbuf;
 	binfo->subctxt_rcvhdrbuf = user_info_rsp.subctxt_rcvhdrbuf;
 
-	context->info.rxe.hdrq.rhe_base = (uint64_t *) user_info_rsp.rheq_bufbase; /* New field */
+	if (!internal->send_only) {
+		context->info.rxe.hdrq.rhe_base = (uint64_t *) (uintptr_t) user_info_rsp.rheq_bufbase;
+	}
 
 	/* Copy the new 'hfi1_ctxt_info_rsp' struct to the old 'hfi1_ctxt_info'
 	 * struct */
@@ -458,14 +463,17 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 	/* New addition to JKR */
 	__aligned_u64 rheq_bufbase = (__u64) context->info.rxe.hdrq.rhe_base;
 
-	ret = opx_map_hfi_mem(fd, pctrl, 0 /* uinfo->subctxt_cnt */, &rheq_bufbase, context->hfi1_type);
+	ret = opx_map_hfi_mem(fd, pctrl, 0 /* uinfo->subctxt_cnt */, &rheq_bufbase, context->hfi1_type,
+			      internal->send_only);
 	if (ret == -1) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] Failed to map HFI memory. errno %s\n",
 			strerror(errno));
 		goto err_map_hfi_mem;
 	}
 	/* Save the new mmap (from the token) in the context */
-	context->info.rxe.hdrq.rhe_base = (uint64_t *) rheq_bufbase;
+	if (!internal->send_only) {
+		context->info.rxe.hdrq.rhe_base = (uint64_t *) rheq_bufbase;
+	}
 
 	FI_DBG_TRACE(
 		fi_opx_global.prov, FI_LOG_EP_DATA,

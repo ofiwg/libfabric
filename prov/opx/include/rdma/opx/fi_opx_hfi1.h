@@ -617,11 +617,37 @@ struct fi_opx_hfi1_context {
 	struct opx_spio_ctrl	   *spio_ctrl;
 };
 
+/*
+ * Macros for the send-only secondary context feature.
+ *
+ * OPX_HFI1_USER_INFO_PAD_PORT_MASK: bits 0-7 of hfi1_user_info.pad carry the
+ * port index (port - 1).  These bits must be preserved across the send-only
+ * bit injection and must be masked off when reconstructing __hfi_port after
+ * the ioctl round-trip.
+ *
+ * OPX_HFI1_USER_INFO_PAD_SEND_ONLY_BIT: bit 16 of the runtime __u32
+ * hfi1_user_info.pad (MAJOR-6 path) signals to the kernel that this context
+ * should be opened in send-only mode (no receive-side resources allocated).
+ * Note: the local hfi1_user_info_dep.pad is __u16 and cannot hold this bit;
+ * the bit is injected into uinfo_new.pad (__u32) just before the ioctl.
+ *
+ * OPX_HFI1_ASSIGN_CTXT_RESERVED1_SEND_ONLY_BIT: bit 0 of
+ * hfi1_assign_ctxt_cmd.reserved1 signals send-only mode on the uverbs/
+ * rdma-core path.
+ */
+#define OPX_HFI1_USER_INFO_PAD_PORT_MASK	     (0xFFU)
+#define OPX_HFI1_USER_INFO_PAD_SEND_ONLY_BIT	     (1U << 16)
+#define OPX_HFI1_ASSIGN_CTXT_RESERVED1_SEND_ONLY_BIT (1U << 0)
+
+#define OPX_SEND_ONLY_TRUE  true
+#define OPX_SEND_ONLY_FALSE false
+
 struct fi_opx_hfi1_context_internal {
 	struct fi_opx_hfi1_context context;
 
 	struct hfi1_user_info_dep user_info;
 	struct _hfi_ctrl	 *ctrl;
+	bool			  send_only;
 };
 
 #define OPX_SAME_ASIC_MASK    0x0000007800FFFFFFull
@@ -640,7 +666,8 @@ int fi_opx_hfi1_discover_planes(struct fi_opx_hfi1_context *primary_hfi, struct 
 int fi_opx_hfi1_discover_same_plane(struct fi_opx_hfi1_context *primary_hfi, struct fi_opx_plane_info *planes,
 				    const int max_planes);
 
-struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uuid_t unique_job_key, uint32_t hfi_unit);
+struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uuid_t unique_job_key, uint32_t hfi_unit,
+							  const bool send_only);
 
 #ifdef NDEBUG
 #define FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(credits_addr)

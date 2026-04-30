@@ -2107,8 +2107,8 @@ static bool opx_open_secondary_different_plane(struct fi_opx_ep *opx_ep, struct 
 		struct fi_opx_hfi1_context *sec_hfi = NULL;
 		struct fi_opx_ep_tx	   *sec_tx  = NULL;
 
-		sec_hfi =
-			fi_opx_hfi1_context_open_unit(&opx_ep->ep_fid, opx_domain->unique_job_key, planes[i].hfi_unit);
+		sec_hfi = fi_opx_hfi1_context_open_unit(&opx_ep->ep_fid, opx_domain->unique_job_key, planes[i].hfi_unit,
+							OPX_SEND_ONLY_TRUE);
 		if (!sec_hfi) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
 				"Failed to open secondary HFI context on unit %d, continuing with fallback chain\n",
