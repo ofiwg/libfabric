@@ -720,43 +720,47 @@ static int opx_hfi1_context_populate(struct fi_opx_hfi1_context *context, struct
 	memset(context->info.sdma.queued_entries, 0, sizeof(context->info.sdma.queued_entries));
 
 	/* RXE state */
-	context->info.rxe.id	       = ctrl->ctxt_info.ctxt;
-	context->info.rxe.hdrq.rhf_off = (ctxt_info->rcvhdrq_entsize - 8) >> BYTE2DWORD_SHIFT;
+	context->info.rxe.id = ctrl->ctxt_info.ctxt;
 
-	/* Hardware registers */
-	volatile uint64_t *uregbase =
-		OPX_HFI1_INIT_UREGS(ctrl->ctxt_info.ctxt, (volatile uint64_t *) (uintptr_t) base_info->user_regbase);
-	context->info.rxe.hdrq.head_register = (volatile uint64_t *) &uregbase[ur_rcvhdrhead];
-	context->info.rxe.egrq.head_register = (volatile uint64_t *) &uregbase[ur_rcvegrindexhead];
-	volatile uint64_t *tidflowtable	     = (volatile uint64_t *) &uregbase[ur_rcvtidflowtable];
+	if (!internal->send_only) {
+		context->info.rxe.hdrq.rhf_off = (ctxt_info->rcvhdrq_entsize - 8) >> BYTE2DWORD_SHIFT;
 
-	/* TID flows aren't cleared between jobs, do it now. */
-	for (int j = 0; j < 32; ++j) {
-		OPX_HFI1_BAR_UREG_STORE(&tidflowtable[j], 0UL);
+		/* Hardware registers */
+		volatile uint64_t *uregbase = OPX_HFI1_INIT_UREGS(
+			ctrl->ctxt_info.ctxt, (volatile uint64_t *) (uintptr_t) base_info->user_regbase);
+		context->info.rxe.hdrq.head_register = (volatile uint64_t *) &uregbase[ur_rcvhdrhead];
+		context->info.rxe.egrq.head_register = (volatile uint64_t *) &uregbase[ur_rcvegrindexhead];
+		volatile uint64_t *tidflowtable	     = (volatile uint64_t *) &uregbase[ur_rcvtidflowtable];
+
+		/* TID flows aren't cleared between jobs, do it now. */
+		for (int j = 0; j < 32; ++j) {
+			OPX_HFI1_BAR_UREG_STORE(&tidflowtable[j], 0UL);
+		}
+		assert(ctrl->__hfi_tidexpcnt <= OPX_MAX_TID_COUNT);
+		context->runtime_flags = ctxt_info->runtime_flags;
+
+		/* OPX relies on RHF.SeqNum, not the RcvHdrTail */
+		assert(!(context->runtime_flags & HFI1_CAP_DMA_RTAIL));
+
+		context->info.rxe.hdrq.elemsz = ctxt_info->rcvhdrq_entsize >> BYTE2DWORD_SHIFT;
+		if (context->info.rxe.hdrq.elemsz < FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_CORE, "Invalid hdrq_entsize %u (%lu is min)\n",
+				context->info.rxe.hdrq.elemsz, FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN);
+			abort();
+		}
+		fi_opx_global.rcvhdrq_entry_dws = context->info.rxe.hdrq.elemsz;
+
+		context->info.rxe.hdrq.elemcnt = ctxt_info->rcvhdrq_cnt;
+		context->info.rxe.hdrq.elemlast =
+			((context->info.rxe.hdrq.elemcnt - 1) * context->info.rxe.hdrq.elemsz);
+		context->info.rxe.hdrq.rx_unused = -1UL;
+		context->info.rxe.hdrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvhdr_bufbase;
+		context->info.rxe.hdrq.rhf_base	 = context->info.rxe.hdrq.base_addr + context->info.rxe.hdrq.rhf_off;
+
+		context->info.rxe.egrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvegr_bufbase;
+		context->info.rxe.egrq.elemsz	 = ctxt_info->rcvegr_size;
+		context->info.rxe.egrq.size	 = ctxt_info->rcvegr_size * ctxt_info->egrtids;
 	}
-	assert(ctrl->__hfi_tidexpcnt <= OPX_MAX_TID_COUNT);
-	context->runtime_flags = ctxt_info->runtime_flags;
-
-	/* OPX relies on RHF.SeqNum, not the RcvHdrTail */
-	assert(!(context->runtime_flags & HFI1_CAP_DMA_RTAIL));
-
-	context->info.rxe.hdrq.elemsz = ctxt_info->rcvhdrq_entsize >> BYTE2DWORD_SHIFT;
-	if (context->info.rxe.hdrq.elemsz < FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CORE, "Invalid hdrq_entsize %u (%lu is min)\n",
-			context->info.rxe.hdrq.elemsz, FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN);
-		abort();
-	}
-	fi_opx_global.rcvhdrq_entry_dws = context->info.rxe.hdrq.elemsz;
-
-	context->info.rxe.hdrq.elemcnt	 = ctxt_info->rcvhdrq_cnt;
-	context->info.rxe.hdrq.elemlast	 = ((context->info.rxe.hdrq.elemcnt - 1) * context->info.rxe.hdrq.elemsz);
-	context->info.rxe.hdrq.rx_unused = -1UL;
-	context->info.rxe.hdrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvhdr_bufbase;
-	context->info.rxe.hdrq.rhf_base	 = context->info.rxe.hdrq.base_addr + context->info.rxe.hdrq.rhf_off;
-
-	context->info.rxe.egrq.base_addr = (uint32_t *) (uintptr_t) base_info->rcvegr_bufbase;
-	context->info.rxe.egrq.elemsz	 = ctxt_info->rcvegr_size;
-	context->info.rxe.egrq.size	 = ctxt_info->rcvegr_size * ctxt_info->egrtids;
 
 	/* Reference count and status */
 	fi_opx_ref_init(&context->ref_cnt, 0, "HFI context");
@@ -1740,7 +1744,8 @@ int fi_opx_hfi1_discover_same_plane(struct fi_opx_hfi1_context *primary_hfi, str
  *
  * Secondary plane contexts do not carry DAOS rank info (rank=-1, rank_inst=-1).
  */
-struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uuid_t unique_job_key, uint32_t hfi_unit)
+struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uuid_t unique_job_key, uint32_t hfi_unit,
+							  const bool send_only)
 {
 	int		  fd_cdev  = -1;
 	int		  fd_verbs = -1;
@@ -1757,6 +1762,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uui
 	context->fd_cdev		    = -1;
 	context->fd_verbs		    = -1;
 	internal->ctrl			    = NULL;
+	internal->send_only		    = send_only;
 
 	/* Verify the specified HFI unit is active */
 	if (!opx_hfi_get_unit_active(hfi_unit)) {
@@ -1772,6 +1778,14 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uui
 	 */
 	if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit, &fd_cdev, &fd_verbs) != 0) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error: Unable to open HFI unit %d\n", hfi_unit);
+		goto ctxt_open_err;
+	}
+
+	if (send_only && internal->user_info.subctxt_cnt > 0) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+			"Error: send-only secondary context does not support context sharing (subctxt_cnt=%u)\n",
+			internal->user_info.subctxt_cnt);
+		opx_hfi_context_close(fd_cdev, fd_verbs);
 		goto ctxt_open_err;
 	}
 
