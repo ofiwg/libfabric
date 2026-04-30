@@ -1039,7 +1039,8 @@ static int ft_exchange_mr_addr_key(void)
 	uint64_t addr;
 	int ret;
 
-	if (!(test_info.mr_mode & (FI_MR_VIRT_ADDR | FI_MR_PROV_KEY)))
+	if (!(test_info.mr_mode &
+	    (FI_MR_VIRT_ADDR | FI_MR_PROV_KEY | FI_MR_RAW)))
 		return 0;
 
 	if (test_info.mr_mode & FI_MR_VIRT_ADDR)
