@@ -839,6 +839,7 @@ void test_efa_domain_open_ops_cntr_open_ext(struct efa_resource **state)
 	struct fid_cntr *cntr_fid = NULL;
 	int ret;
 
+	efa_env.use_hw_cntr = 1;
 	efa_gda_ops = efa_unit_test_construct_gda_ops(resource);
 
 #if HAVE_EFADV_CREATE_COMP_CNTR

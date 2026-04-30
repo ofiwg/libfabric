@@ -503,9 +503,11 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 
 #if HAVE_EFADV_CREATE_COMP_CNTR
 	/* Attach hw counters while QP is in RESET state */
-	err = efa_base_ep_attach_comp_cntrs(base_ep, qp);
-	if (err)
-		return err;
+	if (efa_env.use_hw_cntr) {
+		err = efa_base_ep_attach_comp_cntrs(base_ep, qp);
+		if (err)
+			return err;
+	}
 #endif
 
 	qp->qkey = (base_ep->util_ep.type == FI_EP_DGRAM) ?
