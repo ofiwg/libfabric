@@ -301,6 +301,10 @@ prov_efa_tests=( \
 	"fi_efa_rnr_queue_resend -c 1 -A write -U -S 4"
 )
 
+prov_verbs_tests=( \
+        "nic_affinity_tests"
+)
+
 function errcho {
 	>&2 echo $*
 }
@@ -322,7 +326,7 @@ function print_results {
 
 	if [ $VERBOSE -eq 0 ] ; then
 		# print a simple, single-line format that is still valid YAML
-		printf "%-70s%10s\n" "$test_exe:" "$test_result"
+		printf "%-70s%10s\n" "$test_name:" "$test_result"
 	else
 		# Print a more detailed YAML format that is not a superset of
 		# the non-verbose output.  See ofiwg/fabtests#259 for a
@@ -340,7 +344,7 @@ function print_results {
 				;;
 		esac
 
-		printf -- "- name:   %s\n" "$test_exe"
+		printf -- "- name:   %s\n" "$test_name"
 		printf -- "  timestamp: %s\n" "$(date -u +'%Y%m%d-%H%M%S%z')"
 		printf -- "  result: %s\n" "$test_result"
 		printf -- "  time:   %s\n" "$test_time"
@@ -769,6 +773,57 @@ function multinode_test {
 function prov_efa_test {
 	for test in "${prov_efa_tests[@]}"; do
 		cs_test "$test"
+	done
+}
+
+function run_nic_affinity_tests {
+        local baseline
+	local test_names=(
+		"none_sanity"
+		"manual_sanity"
+		"manual_no_device"
+		"manual_invalid_device"
+		"manual_missing_config"
+		"manual_malformed_config"
+		"auto_sanity"
+		"auto_no_device"
+		"auto_invalid_device"
+		"invalid_policy"
+	)
+        local test_bin=${BIN_PATH}"fi_nic_affinity_test"
+
+	baseline=$("${test_bin}" --test baseline)
+	for test_name in "${test_names[@]}"; do
+
+                start_time=$(date '+%s')
+                cmd="${test_bin} --baseline $baseline --test $test_name"
+                $cmd > /dev/null 2>&1
+                ret=$?
+                end_time=$(date '+%s')
+                test_time=$(compute_duration "$start_time" "$end_time")
+
+                if [ $ret -ne 0 ]; then
+                        print_results "nic_affinity_$test_name" "Fail" "$test_time"
+                        if [ $ret -eq 124 ]; then
+                                cleanup
+                        fi
+                        fail_count+=1
+                else
+                        print_results "nic_affinity_$test_name" "Pass" "$test_time"
+                        pass_count+=1
+                fi
+	done
+
+	return 0
+}
+
+function prov_verbs_test {
+	for test in "${prov_verbs_tests[@]}"; do
+		if [[ "$test" == "nic_affinity_tests" ]]; then
+			run_nic_affinity_tests
+		else
+			cs_test "$test"
+		fi
 	done
 }
 
