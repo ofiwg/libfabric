@@ -75,6 +75,13 @@ AC_ARG_ENABLE([lpp],
 
 AM_CONDITIONAL([ENABLE_LPP], [test x"$enable_lpp" = x"yes"])
 
+AC_ARG_ENABLE([verbs],
+	[AS_HELP_STRING([--enable-verbs],
+		[Enable verbs provider specific tests - default YES])],
+	[], [enable_verbs=yes])
+
+AM_CONDITIONAL([ENABLE_VERBS], [test x"$enable_verbs" = x"yes"])
+
 AC_DEFUN([FI_ARG_ENABLE_SANITIZER],[
         AC_ARG_ENABLE([$1],
                       [AS_HELP_STRING([--enable-$1],

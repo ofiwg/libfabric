@@ -697,6 +697,7 @@ include prov/efa/Makefile.include
 if !MACOS
 include prov/lpp/Makefile.include
 endif
+include prov/verbs/Makefile.include
 
 man_MANS = $(real_man_pages) $(dummy_man_pages)
 
