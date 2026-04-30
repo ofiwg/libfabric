@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2024 Cornelis Networks.
+  Copyright(c) 2021-2024,2026 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -20,7 +20,7 @@
   BSD LICENSE
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2024 Cornelis Networks.
+  Copyright(c) 2021-2024,2026 Cornelis Networks.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -366,8 +366,8 @@ struct _hfi_ctrl *opx_hfi_userinit(int32_t, struct fi_opx_hfi1_context_internal 
 
 /* Map the hfi1 memory from tokens in structs hfi1_base_info
    (rheq is new from hfi1_user_info_rsp) */
-int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *rheq,
-		    const enum opx_hfi1_type hfi1_type);
+int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *rheq, const enum opx_hfi1_type hfi1_type,
+		    const bool send_only);
 
 /* don't inline these; it's all init code, and not inlining makes the */
 /* overall code shorter and easier to debug */
