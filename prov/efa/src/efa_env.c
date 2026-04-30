@@ -41,7 +41,23 @@ struct efa_env efa_env = {
 	.use_data_path_direct = true,
 	.implicit_av_size = 0,
 	.track_mr = 0,
+	.use_hw_cntr = 0,
 };
+
+/**
+ * @brief Read environment variables that are not registered via fi_param_define
+ *
+ * These are for features under development so we can control
+ * when to enable them without exposing them to applications.
+ */
+static void efa_env_unregistered_param_get(void)
+{
+	char *tmp;
+
+	tmp = getenv("FI_EFA_USE_HW_CNTR");
+	if (tmp)
+		efa_env.use_hw_cntr = atoi(tmp);
+}
 
 /* @brief Read and store the FI_EFA_* environment variables.
  */
@@ -142,6 +158,7 @@ void efa_env_param_get(void)
 	fi_param_get_bool(&efa_prov, "track_mr", &efa_env.track_mr);
 
 	efa_fork_support_request_initialize();
+	efa_env_unregistered_param_get();
 }
 
 void efa_env_define()
