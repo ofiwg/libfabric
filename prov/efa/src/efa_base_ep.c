@@ -503,7 +503,7 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 
 #if HAVE_EFADV_CREATE_COMP_CNTR
 	/* Attach hw counters while QP is in RESET state */
-	if (EFA_INFO_TYPE_IS_DIRECT(base_ep->info)) {
+	if (efa_env.use_hw_cntr && EFA_INFO_TYPE_IS_DIRECT(base_ep->info)) {
 		err = efa_base_ep_attach_comp_cntrs(base_ep, qp);
 		if (err)
 			return err;

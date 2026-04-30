@@ -93,6 +93,9 @@ int efa_hw_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	struct ibv_comp_cntr_init_attr cc_attr = {0};
 	int ret;
 
+	if (!efa_env.use_hw_cntr)
+		return -FI_EOPNOTSUPP;
+
 	efa_domain = container_of(domain, struct efa_domain, util_domain.domain_fid);
 
 	ret = efa_hw_cntr_check_attr(efa_domain, attr, &cc_attr);

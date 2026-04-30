@@ -792,6 +792,9 @@ static int efa_domain_cntr_open_ext(struct fid_domain *domain,
 	uint32_t flags;
 	int ret;
 
+	if (!efa_env.use_hw_cntr)
+		return -FI_EOPNOTSUPP;
+
 	if (!fi_efa_attr) {
 		EFA_WARN(FI_LOG_CNTR,
 			 "fi_efa_attr is required for cntr_open_ext, "

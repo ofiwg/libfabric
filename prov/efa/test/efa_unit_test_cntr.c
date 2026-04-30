@@ -256,6 +256,7 @@ void test_efa_hw_cntr_open_unsupported_type_bytes(struct efa_resource **state)
 	struct fid_cntr *cntr_fid = NULL;
 	struct efa_domain *efa_domain;
 
+	efa_env.use_hw_cntr = 1;
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
@@ -288,6 +289,7 @@ void test_efa_hw_cntr_open_max_cntr_value_exceeded(struct efa_resource **state)
 	struct fid_cntr *cntr_fid = NULL;
 	struct efa_domain *efa_domain;
 
+	efa_env.use_hw_cntr = 1;
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
@@ -315,6 +317,7 @@ void test_efa_hw_cntr_open_ibv_fail(struct efa_resource **state)
 	struct fid_cntr *cntr_fid = NULL;
 	struct efa_domain *efa_domain;
 
+	efa_env.use_hw_cntr = 1;
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
@@ -352,6 +355,8 @@ static struct fid_cntr *test_efa_hw_cntr_open(struct efa_resource *resource,
 	struct efa_cntr *efa_cntr;
 	struct fid_cntr *cntr_fid = NULL;
 	int ret;
+
+	efa_env.use_hw_cntr = 1;
 
 	if (enable_ep)
 		efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
@@ -488,6 +493,8 @@ static int test_efa_hw_cntr_open_with_wait_obj(struct efa_resource *resource,
 	struct fi_efa_comp_cntr_init_attr efa_attr = {0};
 	struct efa_domain *efa_domain;
 	int ret;
+
+	efa_env.use_hw_cntr = 1;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
@@ -630,6 +637,29 @@ void test_efa_hw_cntr_bind_ep_attach_fail(struct efa_resource **state)
 
 	fi_close(&cntr_fid->fid);
 }
+
+/**
+ * @brief Test efa_hw_cntr_open returns -FI_EOPNOTSUPP when use_hw_cntr is 0
+ */
+void test_efa_hw_cntr_open_use_hw_cntr_disabled(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cntr_attr attr = {0};
+	struct efadv_comp_cntr_init_attr cc_attr = {0};
+	struct efa_cntr *cntr;
+	struct fid_cntr *cntr_fid = NULL;
+
+	efa_env.use_hw_cntr = 0;
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	cntr = calloc(1, sizeof(*cntr));
+	assert_non_null(cntr);
+
+	assert_int_equal(efa_hw_cntr_open(resource->domain, &attr, cntr, &cntr_fid, NULL, &cc_attr),
+			 -FI_EOPNOTSUPP);
+	assert_null(cntr_fid);
+	free(cntr);
+}
 #else
 void test_efa_hw_cntr_open_unsupported_type_bytes(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_open_max_cntr_value_exceeded(struct efa_resource **state) { skip(); }
@@ -646,4 +676,5 @@ void test_efa_hw_cntr_wait_success(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_wait_returns_einval_with_wait_none(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_open_use_hw_cntr_disabled(struct efa_resource **state) { skip(); }
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */

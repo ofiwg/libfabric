@@ -378,6 +378,8 @@ void test_efa_hw_cntr_wait_success();
 void test_efa_hw_cntr_wait_returns_einval_with_wait_none();
 void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd();
 void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield();
+void test_efa_hw_cntr_open_use_hw_cntr_disabled();
+
 /* begin of efa_unit_test_rdm_peer.c */
 void test_efa_rdm_peer_reorder_expected_msg_id();
 void test_efa_rdm_peer_reorder_smaller_msg_id();
