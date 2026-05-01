@@ -672,6 +672,9 @@ static void test_efa_ibv_post_write_processing_hints_impl(struct efa_resource *r
 	efadv_qp = efadv_qp_from_ibv_qp_ex(ibv_qpx);
 	efadv_qp->wr_set_processing_hints = efa_mock_efadv_wr_set_processing_hints;
 
+	enable_high_pps_orig = efa_env.enable_high_pps;
+	efa_env.enable_high_pps = true;
+
 	if (flags & FI_EFA_WR_HIGH_PPS) {
 		expect_function_call(efa_mock_efadv_wr_set_processing_hints);
 		expect_value(efa_mock_efadv_wr_set_processing_hints, hints,
@@ -686,6 +689,7 @@ static void test_efa_ibv_post_write_processing_hints_impl(struct efa_resource *r
 	efa_ibv_post_write(qp, &sge, 1, 123456, 0x87654321, 0, 0,
 			   flags, &fake_ah, 0, 0);
 
+	efa_env.enable_high_pps = enable_high_pps_orig;
 	efa_unit_test_buff_destruct(&local_buff);
 }
 #endif

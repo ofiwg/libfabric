@@ -42,6 +42,7 @@ struct efa_env efa_env = {
 	.implicit_av_size = 0,
 	.track_mr = 0,
 	.use_hw_cntr = 0,
+	.enable_high_pps = 0,
 };
 
 /**
@@ -57,6 +58,11 @@ static void efa_env_unregistered_param_get(void)
 	tmp = getenv("FI_EFA_USE_HW_CNTR");
 	if (tmp)
 		efa_env.use_hw_cntr = atoi(tmp);
+
+	/* Read enable_high_pps directly from environment variable to avoid showing in fi_info -e */
+	tmp = getenv("FI_EFA_ENABLE_HIGH_PPS");
+	if (tmp)
+		efa_env.enable_high_pps = atoi(tmp);
 }
 
 /* @brief Read and store the FI_EFA_* environment variables.
