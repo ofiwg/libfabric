@@ -154,6 +154,20 @@ void efa_mock_ibv_wr_rdma_read_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
 void efa_mock_ibv_wr_rdma_write_imm_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
 					    uint64_t remote_addr,
 					    __be32 imm_data);
+void efa_mock_ibv_wr_start_no_op(struct ibv_qp_ex *qp);
+void efa_mock_ibv_wr_rdma_write_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
+					uint64_t remote_addr);
+void efa_mock_ibv_wr_set_sge_list_no_op(struct ibv_qp_ex *qp,
+					size_t num_sge,
+					const struct ibv_sge *sge_list);
+void efa_mock_ibv_wr_set_ud_addr_no_op(struct ibv_qp_ex *qp, struct ibv_ah *ah,
+				       uint32_t remote_qpn, uint32_t remote_qkey);
+int efa_mock_ibv_wr_complete_no_op(struct ibv_qp_ex *qp);
+
+#if HAVE_EFADV_WR_PROCESSING_HINTS
+void efa_mock_efadv_wr_set_processing_hints(struct efadv_qp *efadv_qp,
+					    uint32_t hints);
+#endif
 
 struct efa_unit_test_mocks
 {

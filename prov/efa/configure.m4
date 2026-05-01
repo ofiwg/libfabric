@@ -89,6 +89,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_efadv_query_qp_wqs=0
 	have_efadv_query_cq=0
 	have_efadv_cq_attr_db=0
+	have_efadv_wr_processing_hints=0
 	have_ibv_create_comp_channel=0
 	have_ibv_get_cq_event=0
 	have_ibv_device_attr_ex_max_comp_cntr=0
@@ -192,6 +193,36 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_efadv_sl=0],
 			[[#include <infiniband/efadv.h>]])
 
+		have_efadv_qp_from_ibv_qp_ex=0
+		AC_CHECK_DECL([efadv_qp_from_ibv_qp_ex],
+			[have_efadv_qp_from_ibv_qp_ex=1],
+			[],
+			[[#include <infiniband/efadv.h>]])
+
+		have_efadv_qp_init_attr_wr_flags=0
+		AC_CHECK_MEMBER(struct efadv_qp_init_attr.wr_flags,
+			[have_efadv_qp_init_attr_wr_flags=1],
+			[],
+			[[#include <infiniband/efadv.h>]])
+
+		have_efadv_wr_hint_burst_pps=0
+		AC_CHECK_DECL([EFADV_WR_PROCESSING_HINT_BURST_PPS_SENSITIVE],
+			[have_efadv_wr_hint_burst_pps=1],
+			[],
+			[[#include <infiniband/efadv.h>]])
+
+		have_efadv_wr_set_processing_hints=0
+		AC_CHECK_DECL([efadv_wr_set_processing_hints],
+			[have_efadv_wr_set_processing_hints=1],
+			[],
+			[[#include <infiniband/efadv.h>]])
+
+		AS_IF([test "$have_efadv_qp_from_ibv_qp_ex" = "1" -a \
+			    "$have_efadv_qp_init_attr_wr_flags" = "1" -a \
+			    "$have_efadv_wr_hint_burst_pps" = "1" -a \
+			    "$have_efadv_wr_set_processing_hints" = "1"],
+			[have_efadv_wr_processing_hints=1])
+
 		have_efadv_query_qp_wqs=1
 		AC_CHECK_DECL([efadv_query_qp_wqs],
 			[],
@@ -271,6 +302,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_SL],
 		[$have_efadv_sl],
 		[Indicates if efadv_qp_init_attr has sl])
+	AC_DEFINE_UNQUOTED([HAVE_EFADV_WR_PROCESSING_HINTS],
+		[$have_efadv_wr_processing_hints],
+		[Indicates if efadv_qp_from_ibv_qp_ex and WQE processing hint support is available])
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_QUERY_QP_WQS],
 		[$have_efadv_query_qp_wqs],
 		[Indicates if efadv_query_qp_wqs is available])

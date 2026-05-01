@@ -302,6 +302,9 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
 		if (tclass == FI_TC_LOW_LATENCY)
 			efa_attr.sl = EFA_QP_LOW_LATENCY_SERVICE_LEVEL;
 #endif
+#if HAVE_EFADV_WR_PROCESSING_HINTS
+		efa_attr.wr_flags |= EFADV_WR_EX_WITH_PROCESSING_HINTS;
+#endif
 		(*qp)->ibv_qp = efadv_create_qp_ex(
 			init_attr_ex->pd->context, init_attr_ex, &efa_attr,
 			sizeof(struct efadv_qp_init_attr));
