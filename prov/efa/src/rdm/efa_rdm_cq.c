@@ -773,9 +773,21 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 		case IBV_WC_RECV: /* fall through */
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			if (efa_cq_wc_is_unsolicited(cq)) {
-				EFA_WARN(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv",
+				/*
+				 * libfabric allows NULL op_context for target-side CQ events from RMA writes with CQ data.
+				 * EFA-RDM does not require FI_RX_CQ_DATA, so NULL context is safe here.
+				 */
+				struct fi_cq_err_entry err_entry = {0};
+				
+				EFA_INFO(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv",
 					efa_strerror(prov_errno), prov_errno);
-				efa_base_ep_write_eq_error(&ep->base_ep, to_fi_errno(prov_errno), prov_errno);
+				err_entry.op_context = NULL;
+				/*To be consistent with the succeed path. Although man page only refered to: FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)*/
+				err_entry.flags = FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE;
+				err_entry.err = to_fi_errno(prov_errno);
+				err_entry.prov_errno = prov_errno;
+
+				efa_rdm_cq_write_error(&ep->base_ep, ep->base_ep.util_ep.rx_cq, &err_entry, "unsolicited recv");
 				break;
 			}
 			assert(pkt_entry);
