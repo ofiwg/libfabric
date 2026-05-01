@@ -540,6 +540,7 @@ void test_efa_data_path_direct_qp_gen_initialization();
 void test_efa_data_path_direct_dev_req_id_roundtrip();
 void test_efa_data_path_direct_stale_completion_detected();
 void test_efa_data_path_direct_qp_gen_increments_across_qps();
+void test_efa_data_path_direct_write_high_pps_hint_set();
 /* end efa_unit_test_data_path_direct.c */
 
 

@@ -581,6 +581,12 @@ EFA_ALWAYS_INLINE void efa_send_wr_set_imm_data(struct efa_io_tx_meta_desc *meta
 	EFA_SET(&meta_desc->ctrl1, EFA_IO_TX_META_DESC_HAS_IMM, 1);
 }
 
+EFA_ALWAYS_INLINE void efa_send_wr_set_processing_hint_high_pps(struct efa_io_tx_meta_desc *meta_desc)
+{
+	EFA_SET(&meta_desc->ctrl3, EFA_IO_TX_META_DESC_PROCESSING_HINTS, EFA_IO_PROCESSING_HINT_BURST_PPS_SENSITIVE);
+}
+
+
 EFA_ALWAYS_INLINE void efa_send_wr_set_rdma_addr(struct efa_io_remote_mem_addr *remote_mem,
 					      uint32_t rkey,
 					      uint64_t remote_addr)
