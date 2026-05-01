@@ -454,6 +454,8 @@ static void util_foreach_unspec(struct fid_peer_srx *srx,
 	dlist_foreach_container_safe(&srx_ctx->unspec_unexp_msg_queue,
 				     struct util_rx_entry, rx_entry, d_entry,
 				     tmp) {
+		if (rx_entry->peer_entry.srx != srx)
+			continue;
 		rx_entry->peer_entry.addr = get_addr(&rx_entry->peer_entry);
 		if (rx_entry->peer_entry.addr == FI_ADDR_UNSPEC ||
 		    !srx_ctx->dir_recv)
@@ -472,6 +474,8 @@ static void util_foreach_unspec(struct fid_peer_srx *srx,
 	dlist_foreach_container_safe(&srx_ctx->unspec_unexp_tag_queue,
 				     struct util_rx_entry, rx_entry, d_entry,
 				     tmp) {
+		if (rx_entry->peer_entry.srx != srx)
+			continue;
 		rx_entry->peer_entry.addr = get_addr(&rx_entry->peer_entry);
 		if (rx_entry->peer_entry.addr == FI_ADDR_UNSPEC ||
 		    !srx_ctx->dir_recv)
