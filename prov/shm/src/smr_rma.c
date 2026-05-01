@@ -46,7 +46,7 @@ static void smr_format_rma_resp(struct smr_cmd *cmd, int64_t peer_id,
 				size_t total_len, uint32_t op,
 				uint64_t op_flags)
 {
-	smr_generic_format(cmd, 0, peer_id, op, 0, 0, op_flags);
+	smr_generic_format(cmd, 0, peer_id, op, 0, 0, op_flags, 0);
 	cmd->hdr.size = total_len;
 }
 

@@ -245,16 +245,21 @@ void smr_format_tx_pend(struct smr_pend_entry *pend, struct smr_cmd *cmd,
 
 void smr_generic_format(struct smr_cmd *cmd, int64_t tx_id, int64_t rx_id,
 			uint32_t op, uint64_t tag, uint64_t data,
-			uint8_t smr_flags)
+			uint8_t smr_flags, uintptr_t tx_ctx)
 {
-	cmd->hdr.op = op;
-	cmd->hdr.status = 0;
-	cmd->hdr.smr_flags = smr_flags;
-	cmd->hdr.tag = tag;
-	cmd->hdr.tx_id = tx_id;
-	cmd->hdr.rx_id = rx_id;
-	cmd->hdr.cq_data = data;
-	cmd->hdr.rx_ctx = 0;
+	struct smr_cmd_hdr hdr;
+
+	hdr.op = op;
+	hdr.status = 0;
+	hdr.smr_flags = smr_flags;
+	hdr.tag = tag;
+	hdr.tx_id = tx_id;
+	hdr.rx_id = rx_id;
+	hdr.cq_data = data;
+	hdr.rx_ctx = 0;
+	hdr.tx_ctx = tx_ctx;
+
+	cmd->hdr = hdr;
 }
 
 static void smr_format_inline(struct smr_cmd *cmd, struct ofi_mr **mr,
@@ -471,8 +476,7 @@ static ssize_t smr_do_inline(struct smr_ep *ep, struct smr_region *peer_smr,
 			     size_t total_len, void *context,
 			     struct smr_cmd *cmd)
 {
-	cmd->hdr.tx_ctx = 0;
-	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags);
+	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags, 0);
 	smr_format_inline(cmd, desc, iov, iov_count);
 
 	return FI_SUCCESS;
@@ -492,17 +496,15 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 	if (smr_flags & SMR_RETURN_CMD) {
 		pend = ofi_buf_alloc(ep->pend_pool);
 		assert(pend);
-		cmd->hdr.tx_ctx = (uintptr_t) pend;
 		smr_format_tx_pend(pend, cmd, context, desc, iov, iov_count,
 				   op_flags);
 		if (smr_freestack_avail(smr_cmd_stack(ep->region)) <=
 		    smr_env.buffer_threshold)
 			smr_flags |= SMR_BUFFER_RECV;
-	} else {
-		cmd->hdr.tx_ctx = 0;
 	}
 
-	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags);
+	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags,
+			   (uintptr_t) pend);
 	ret = smr_format_inject(ep, peer_smr, cmd, desc, iov, iov_count,
 				op_flags);
 	if (ret)
@@ -535,10 +537,11 @@ static ssize_t smr_do_iov(struct smr_ep *ep, struct smr_region *peer_smr,
 	pend = ofi_buf_alloc(ep->pend_pool);
 	assert(pend);
 
-	cmd->hdr.tx_ctx = (uintptr_t) pend;
 	smr_format_tx_pend(pend, cmd, context, desc, iov, iov_count, op_flags);
 
-	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags);
+	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags,
+			   (uintptr_t) pend);
+
 	smr_format_iov(cmd, pend);
 
 	if (smr_freestack_avail(smr_cmd_stack(ep->region)) <=
@@ -561,7 +564,6 @@ static ssize_t smr_do_sar(struct smr_ep *ep, struct smr_region *peer_smr,
 	pend = ofi_buf_alloc(ep->pend_pool);
 	assert(pend);
 
-	cmd->hdr.tx_ctx = (uintptr_t) pend;
 	smr_format_tx_pend(pend, cmd, context, desc, iov, iov_count, op_flags);
 
 	pend->sar_dir = op == ofi_op_read_req ?
@@ -572,7 +574,9 @@ static ssize_t smr_do_sar(struct smr_ep *ep, struct smr_region *peer_smr,
 	else
 		pend->sar_copy_fn = &smr_copy_sar;
 
-	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags);
+	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags,
+			   (uintptr_t) pend);
+
 	ret = smr_format_sar(ep, cmd, desc, iov, iov_count, total_len,
 			     ep->region, peer_smr, pend);
 	if (ret)
@@ -594,8 +598,8 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr,
 	pend = ofi_buf_alloc(ep->pend_pool);
 	assert(pend);
 
-	cmd->hdr.tx_ctx = (uintptr_t) pend;
-	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags);
+	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags,
+			   (uintptr_t) pend);
 	assert(iov_count == 1 && desc && desc[0]);
 	ret = smr_format_ipc(cmd, iov[0].iov_base, total_len, ep->region,
 			     desc[0]->iface, desc[0]->device);

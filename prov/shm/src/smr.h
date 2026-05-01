@@ -256,7 +256,7 @@ void smr_format_tx_pend(struct smr_pend_entry *pend, struct smr_cmd *cmd,
 			uint64_t op_flags);
 void smr_generic_format(struct smr_cmd *cmd, int64_t tx_id, int64_t rx_id,
 			uint32_t op, uint64_t tag, uint64_t data,
-			uint8_t smr_flags);
+			uint8_t smr_flags, uintptr_t tx_ctx);
 size_t smr_copy_to_sar(struct smr_ep *ep, struct smr_region *smr,
 		       struct smr_pend_entry *pend);
 size_t smr_copy_from_sar(struct smr_ep *ep, struct smr_region *smr,

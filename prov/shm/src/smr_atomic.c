@@ -64,7 +64,7 @@ static void smr_do_atomic_inline(
 			struct ofi_mr **desc, const struct iovec *iov,
 			size_t iov_count, size_t total_len, struct smr_cmd *cmd)
 {
-	smr_generic_format(cmd, tx_id, rx_id, op, 0, 0, op_flags);
+	smr_generic_format(cmd, tx_id, rx_id, op, 0, 0, op_flags, 0);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
 	smr_format_inline_atomic(cmd, desc, iov, iov_count);
 }
@@ -136,26 +136,25 @@ static int smr_do_atomic_inject(
 			size_t comp_count, size_t total_len, void *context,
 			uint8_t smr_flags, struct smr_cmd *cmd)
 {
-	struct smr_pend_entry *pend;
+	struct smr_pend_entry *pend = NULL;
 	int ret;
 
-	smr_generic_format(cmd, tx_id, rx_id, op, 0, 0, smr_flags);
+
+	if (smr_flags & SMR_RETURN_CMD) {
+		pend = ofi_buf_alloc(ep->pend_pool);
+		assert(pend);
+		smr_format_tx_pend(pend, cmd, context, res_desc, resultv,
+				   result_count, op_flags);
+	}
+
+	smr_generic_format(cmd, tx_id, rx_id, op, 0, 0, smr_flags,
+			   (uintptr_t) pend);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
 	ret = smr_format_inject_atomic(cmd, desc, iov, iov_count, resultv,
 				       result_count, comp_desc, compv,
 				       comp_count, peer_smr);
 	if (ret)
 		return ret;
-
-	if (smr_flags & SMR_RETURN_CMD) {
-		pend = ofi_buf_alloc(ep->pend_pool);
-		assert(pend);
-		cmd->hdr.tx_ctx = (uintptr_t) pend;
-		smr_format_tx_pend(pend, cmd, context, res_desc, resultv,
-				   result_count, op_flags);
-	} else {
-		cmd->hdr.tx_ctx = 0;
-	}
 
 	return FI_SUCCESS;
 }
