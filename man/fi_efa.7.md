@@ -209,6 +209,16 @@ provider for AWS Neuron or Habana SynapseAI.
   For efa-direct, FI_RX_CQ_DATA is required when FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV
   is false, or it will return -FI_EOPNOTSUPP for the call to fi_setopt().
 
+# PROVIDER SPECIFIC OPERATION FLAGS
+
+The EFA provider defines provider-specific operation flags that can be passed
+in the `flags` argument of data transfer calls such as `fi_writemsg()`.
+
+*FI_EFA_WR_HIGH_PPS*
+: This flag can be passed in the `flags` argument of RDMA write operations
+  (e.g., `fi_writemsg()`) to hint the device to optimize for higher message
+  rate.
+
 # PROVIDER SPECIFIC OPERATION EXTENSIONS
 The efa provider exports extensions for operations that are not provided
 by the standard libfabric interface. These extensions are available via

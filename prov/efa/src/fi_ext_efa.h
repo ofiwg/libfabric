@@ -125,4 +125,17 @@ struct fi_efa_feature_ops {
 	bool (*query)(const char *feature);
 };
 
+
+/**
+ * EFA provider specific op flags (60 - 63 bits)
+ * See rdma/fabric.h for 0-59 bit that apply to all providers
+ */
+
+ /*
+ * Hint the device to optimize for higher message rate for rdma operations.
+ * This flag can be passed in the 'flags' argument of data transfer calls
+ * such as fi_writemsg().
+ */
+#define FI_EFA_WR_HIGH_PPS (1ULL << 60)
+
 #endif /* _FI_EXT_EFA_H_ */
