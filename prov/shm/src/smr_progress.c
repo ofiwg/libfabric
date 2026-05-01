@@ -697,24 +697,24 @@ static int smr_progress_inject_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
 }
 
 static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
+			    struct smr_cmd_hdr *hdr,
 			    struct fi_peer_rx_entry *rx_entry)
 {
 	struct smr_pend_entry *pend;
 	uint64_t comp_flags;
 	void *comp_buf;
 	int ret;
-	bool return_cmd = cmd->hdr.smr_flags & SMR_RETURN_CMD;
+	bool return_cmd = hdr->smr_flags & SMR_RETURN_CMD;
 
 	rx_entry->peer_context = NULL;
-	assert (cmd->hdr.proto < smr_proto_max);
-	ret = smr_progress_ops[cmd->hdr.proto](
+	assert (hdr->proto < smr_proto_max);
+	ret = smr_progress_ops[hdr->proto](
 					ep, cmd, rx_entry,
 					(struct ofi_mr **) rx_entry->desc,
 					rx_entry->iov, rx_entry->count);
 	if (!cmd->hdr.rx_ctx) {
 		comp_buf = rx_entry->iov[0].iov_base;
-		comp_flags = smr_rx_cq_flags(rx_entry->flags,
-					     cmd->hdr.smr_flags);
+		comp_flags = smr_rx_cq_flags(rx_entry->flags, hdr->smr_flags);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"error processing op\n");
@@ -724,17 +724,17 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 						 ret);
 		} else {
 			ret = smr_complete_rx(ep, rx_entry->context,
-					      cmd->hdr.op, comp_flags,
-					      cmd->hdr.size, comp_buf,
-					      cmd->hdr.rx_id, cmd->hdr.tag,
-					      cmd->hdr.cq_data);
+					      hdr->op, comp_flags,
+					      hdr->size, comp_buf,
+					      hdr->rx_id, hdr->tag,
+					      hdr->cq_data);
 		}
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unable to process rx completion\n");
 		}
 		ep->srx->owner_ops->free_entry(rx_entry);
-	} else if (cmd->hdr.proto == smr_proto_sar) {
+	} else if (hdr->proto == smr_proto_sar) {
 		pend = (struct smr_pend_entry *) cmd->hdr.rx_ctx;
 		if (pend->sar_copy_fn == &smr_dsa_copy_sar)
 			return_cmd = false;
@@ -816,7 +816,8 @@ int smr_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	if (cmd_ctx->cmd->hdr.smr_flags & SMR_BUFFER_RECV)
 		ret = smr_copy_saved(cmd_ctx, rx_entry);
 	else
-		ret = smr_start_common(cmd_ctx->ep, cmd_ctx->cmd, rx_entry);
+		ret = smr_start_common(cmd_ctx->ep, cmd_ctx->cmd,
+				       &cmd_ctx->cmd->hdr, rx_entry);
 
 	ofi_buf_free(cmd_ctx);
 	rx_entry->peer_context = NULL;
@@ -1103,19 +1104,20 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 	return FI_SUCCESS;
 }
 
-static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
+static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd,
+				struct smr_cmd_hdr *hdr)
 {
 	struct fi_peer_match_attr attr;
 	struct fi_peer_rx_entry *rx_entry;
 	int ret;
 
-	if (cmd->hdr.rx_ctx)
+	if (hdr->rx_ctx)
 		return smr_progress_pending(ep, cmd);
 
-	attr.addr = ep->map->peers[cmd->hdr.rx_id].fiaddr;
-	attr.msg_size = cmd->hdr.size;
-	attr.tag = cmd->hdr.tag;
-	if (cmd->hdr.op == ofi_op_tagged) {
+	attr.addr = ep->map->peers[hdr->rx_id].fiaddr;
+	attr.msg_size = hdr->size;
+	attr.tag = hdr->tag;
+	if (hdr->op == ofi_op_tagged) {
 		ret = ep->srx->owner_ops->get_tag(ep->srx, &attr, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
@@ -1152,7 +1154,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "Error getting rx_entry\n");
 		return ret;
 	}
-	ret = smr_start_common(ep, cmd, rx_entry);
+	ret = smr_start_common(ep, cmd, hdr, rx_entry);
 
 out:
 	return ret < 0 ? ret : 0;
@@ -1309,6 +1311,7 @@ out:
 static void smr_progress_cmd(struct smr_ep *ep)
 {
 	struct smr_cmd_entry *ce;
+	struct smr_cmd_hdr hdr;
 	struct smr_cmd *cmd;
 	int ret = 0;
 	int64_t pos;
@@ -1319,10 +1322,12 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			break;
 
 		cmd = (struct smr_cmd *) ce->ptr;
-		switch (cmd->hdr.op) {
+		hdr = cmd->hdr;
+
+		switch (hdr.op) {
 		case ofi_op_msg:
 		case ofi_op_tagged:
-			ret = smr_progress_cmd_msg(ep, cmd);
+			ret = smr_progress_cmd_msg(ep, cmd, &hdr);
 			break;
 		case ofi_op_write:
 		case ofi_op_read_req:
@@ -1330,7 +1335,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			break;
 		case ofi_op_write_async:
 		case ofi_op_read_async:
-			ofi_ep_peer_rx_cntr_inc(&ep->util_ep, cmd->hdr.op);
+			ofi_ep_peer_rx_cntr_inc(&ep->util_ep, hdr.op);
 			break;
 		case ofi_op_atomic:
 		case ofi_op_atomic_fetch:
