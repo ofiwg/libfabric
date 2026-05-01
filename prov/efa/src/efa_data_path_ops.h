@@ -155,6 +155,12 @@ efa_ibv_post_write(
 	ibv_wr_set_sge_list(qp->ibv_qp_ex, sge_count, sge_list);
 	ibv_wr_set_ud_addr(qp->ibv_qp_ex, ah->ibv_ah, qpn, qkey);
 
+#if HAVE_EFADV_WR_PROCESSING_HINTS
+	if (flags & FI_EFA_WR_HIGH_PPS)
+		efadv_wr_set_processing_hints(efadv_qp_from_ibv_qp_ex(qp->ibv_qp_ex),
+					     EFADV_WR_PROCESSING_HINT_BURST_PPS_SENSITIVE);
+#endif
+
 	if (!(flags & FI_MORE)) {
 		ret = ibv_wr_complete(qp->ibv_qp_ex);
 		base_ep->is_wr_started = false;

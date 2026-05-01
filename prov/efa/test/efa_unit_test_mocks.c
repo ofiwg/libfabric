@@ -117,6 +117,42 @@ int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibv_ctx,
 	return mock();
 }
 
+void efa_mock_ibv_wr_start_no_op(struct ibv_qp_ex *qp)
+{
+}
+
+void efa_mock_ibv_wr_rdma_write_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
+					uint64_t remote_addr)
+{
+	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)qp->wr_id;
+	g_ibv_submitted_wr_id_cnt++;
+}
+
+void efa_mock_ibv_wr_set_sge_list_no_op(struct ibv_qp_ex *qp,
+					size_t num_sge,
+					const struct ibv_sge *sge_list)
+{
+}
+
+void efa_mock_ibv_wr_set_ud_addr_no_op(struct ibv_qp_ex *qp, struct ibv_ah *ah,
+				       uint32_t remote_qpn, uint32_t remote_qkey)
+{
+}
+
+int efa_mock_ibv_wr_complete_no_op(struct ibv_qp_ex *qp)
+{
+	return 0;
+}
+
+#if HAVE_EFADV_WR_PROCESSING_HINTS
+void efa_mock_efadv_wr_set_processing_hints(struct efadv_qp *efadv_qp,
+					    uint32_t hints)
+{
+	function_called();
+	check_expected(hints);
+}
+#endif
+
 /**
  * @brief a list of work requests request's WR ID
  */
@@ -800,7 +836,6 @@ void *__wrap_calloc(size_t nmemb, size_t size)
 
 	return __real_calloc(nmemb, size);
 }
-
 
 #if HAVE_EFADV_CREATE_COMP_CNTR
 static struct ibv_comp_cntr g_fake_ibv_comp_cntr;
