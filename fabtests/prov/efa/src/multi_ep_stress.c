@@ -424,7 +424,7 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 	int completed = 0;
 	struct timespec a, b;
 
-	clock_gettime(CLOCK_MONOTONIC, &a);
+	clock_gettime(CLOCK_REALTIME, &a);
 	if (topts.shared_cq) {
 		memcpy(&b, &a, sizeof(b));
 		b.tv_sec += timeout;
