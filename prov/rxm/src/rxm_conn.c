@@ -79,10 +79,14 @@ static void rxm_close_conn(struct rxm_conn *conn)
 		rx_entry = (struct fi_peer_rx_entry*)conn->deferred_sar_msgs.next;
 		rx_entry->srx->owner_ops->free_entry(rx_entry);
 	}
-	fi_close(&conn->msg_ep->fid);
+	for (int i = 0; i < conn->num_msg_eps; i++) {
+		if (conn->msg_eps && conn->msg_eps[i])
+			fi_close(&conn->msg_eps[i]->fid);
+	}
 	rxm_flush_msg_cq(conn->ep);
 	dlist_remove_init(&conn->loopback_entry);
-	conn->msg_ep = NULL;
+	free(conn->msg_eps);
+	conn->msg_eps = NULL;
 
 	if (conn->state == RXM_CM_CONNECTING || conn->state == RXM_CM_ACCEPTING)
 		conn->ep->connecting_cnt--;
@@ -218,7 +222,13 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 			goto err;
 	}
 
-	conn->msg_ep = msg_ep;
+	assert(conn->num_msg_eps == 1);
+	conn->msg_eps = calloc(conn->num_msg_eps, sizeof(*conn->msg_eps));
+	if (!conn->msg_eps) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+	conn->msg_eps[0] = msg_ep;
 	return 0;
 err:
 	fi_close(&msg_ep->fid);
@@ -288,7 +298,7 @@ static int rxm_send_connect(struct rxm_conn *conn)
 	if (ret)
 		goto err;
 
-	ret = fi_connect(conn->msg_ep, info->dest_addr, &cm_data,
+	ret = fi_connect(conn->msg_eps[0], info->dest_addr, &cm_data,
 			 sizeof(cm_data));
 	if (ret) {
 		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_connect", ret);
@@ -299,8 +309,12 @@ static int rxm_send_connect(struct rxm_conn *conn)
 	return 0;
 
 err:
-	fi_close(&conn->msg_ep->fid);
-	conn->msg_ep = NULL;
+	for (int i = 0; i < conn->num_msg_eps; i++) {
+		if (conn->msg_eps && conn->msg_eps[i])
+			fi_close(&conn->msg_eps[i]->fid);
+	}
+	free(conn->msg_eps);
+	conn->msg_eps = NULL;
 	return ret;
 }
 
@@ -410,6 +424,10 @@ rxm_alloc_conn(struct rxm_ep *ep, struct util_peer_addr *peer)
 	conn->peer = peer;
 	rxm_ref_peer(peer);
 
+	conn->num_msg_eps = 1;
+	conn->msg_eps = NULL;
+	conn->selector = &rxm_selector_single_qp;
+
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "allocated conn %p\n", conn);
 	return conn;
 }
@@ -516,7 +534,7 @@ void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 	if (conn->flow_ctrl && conn->peer_flow_ctrl) {
 		domain = container_of(conn->ep->util_ep.domain,
 				      struct rxm_domain, util_domain);
-		domain->flow_ctrl_ops->enable(conn->msg_ep,
+		domain->flow_ctrl_ops->enable(conn->msg_eps[0],
 					      conn->ep->msg_info->rx_attr->size / 2);
 	}
 
@@ -634,7 +652,7 @@ rxm_accept_connreq(struct rxm_conn *conn, struct rxm_eq_cm_entry *cm_entry)
 	cm_data.accept.align_pad[1] = 0;
 	cm_data.accept.align_pad[2] = 0;
 
-	ret = fi_accept(conn->msg_ep, &cm_data.accept, sizeof(cm_data.accept));
+	ret = fi_accept(conn->msg_eps[0], &cm_data.accept, sizeof(cm_data.accept));
 	if (ret)
 		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_accept", ret);
 	return ret;

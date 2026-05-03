@@ -69,9 +69,13 @@ rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	 * software generated atomic response message is received. */
 	tx_buf->hdr.state = RXM_ATOMIC_RESP_WAIT;
 	if (len <= rxm_ep->inject_limit)
-		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, len, 0);
+		ret = fi_inject(rxm_conn_msg_ep(rxm_conn, RXM_OP_ATOMIC,
+					       tx_buf->pkt.ctrl_hdr.msg_id),
+				&tx_buf->pkt, len, 0);
 	else
-		ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt, len,
+		ret = fi_send(rxm_conn_msg_ep(rxm_conn, RXM_OP_ATOMIC,
+					     tx_buf->pkt.ctrl_hdr.msg_id),
+			      &tx_buf->pkt, len,
 			      tx_buf->hdr.desc, 0, tx_buf);
 	if (ret == -FI_EAGAIN)
 		rxm_ep_do_progress(&rxm_ep->util_ep);

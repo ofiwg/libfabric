@@ -101,7 +101,8 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	msg_rma.desc = mr_desc;
 	msg_rma.context = rma_buf;
 
-	ret = rma_msg(rxm_conn->msg_ep, &msg_rma, flags);
+	ret = rma_msg(rxm_conn_msg_ep(rxm_conn, RXM_OP_RMA, 0),
+		      &msg_rma, flags);
 	if (!ret)
 		goto unlock;
 
@@ -231,7 +232,8 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	flags = (flags & ~FI_INJECT) | FI_COMPLETION;
 
-	ret = fi_writemsg(rxm_conn->msg_ep, &rxm_rma_msg, flags);
+	ret = fi_writemsg(rxm_conn_msg_ep(rxm_conn, RXM_OP_RMA, 0),
+			  &rxm_rma_msg, flags);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_do_progress(&rxm_ep->util_ep);
@@ -295,13 +297,15 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	}
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		ret = fi_inject_writedata(rxm_conn->msg_ep,
+		ret = fi_inject_writedata(rxm_conn_msg_ep(rxm_conn, RXM_OP_RMA,
+							 0),
 					  msg->msg_iov->iov_base,
 					  msg->msg_iov->iov_len, msg->data,
 					  msg->addr, msg->rma_iov->addr,
 					  msg->rma_iov->key);
 	} else {
-		ret = fi_inject_write(rxm_conn->msg_ep,
+		ret = fi_inject_write(rxm_conn_msg_ep(rxm_conn, RXM_OP_RMA,
+						     0),
 				      msg->msg_iov->iov_base,
 				      msg->msg_iov->iov_len, msg->addr,
 				      msg->rma_iov->addr,
@@ -450,7 +454,8 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 		goto unlock;
 	}
 
-	ret = fi_inject_write(rxm_conn->msg_ep, buf, len, dest_addr, addr, key);
+	ret = fi_inject_write(rxm_conn_msg_ep(rxm_conn, RXM_OP_RMA, 0),
+			      buf, len, dest_addr, addr, key);
 	if (ret == -FI_EAGAIN)
 		rxm_ep_do_progress(&rxm_ep->util_ep);
 	else if (ret)
@@ -484,7 +489,8 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 		goto unlock;
 	}
 
-	ret = fi_inject_writedata(rxm_conn->msg_ep, buf, len,
+	ret = fi_inject_writedata(rxm_conn_msg_ep(rxm_conn, RXM_OP_RMA, 0),
+				  buf, len,
 				  data, dest_addr, addr, key);
 	if (ret == -FI_EAGAIN)
 		rxm_ep_do_progress(&rxm_ep->util_ep);
@@ -526,7 +532,8 @@ rxm_read_thru(struct fid_ep *ep_fid, void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	ret = fi_read(conn->msg_ep, buf, len, desc, src_addr, addr,
+	ret = fi_read(rxm_conn_msg_ep(conn, RXM_OP_RMA, 0),
+		      buf, len, desc, src_addr, addr,
 		      key, context);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
@@ -549,7 +556,8 @@ rxm_readv_thru(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (ret)
 		goto unlock;
 
-	ret = fi_readv(conn->msg_ep, iov, desc, count, src_addr, addr,
+	ret = fi_readv(rxm_conn_msg_ep(conn, RXM_OP_RMA, 0),
+		       iov, desc, count, src_addr, addr,
 		       key, context);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
@@ -571,7 +579,8 @@ rxm_readmsg_thru(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	if (ret)
 		goto unlock;
 
-	ret = fi_readmsg(conn->msg_ep, msg, flags);
+	ret = fi_readmsg(rxm_conn_msg_ep(conn, RXM_OP_RMA, 0),
+			 msg, flags);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
@@ -593,7 +602,8 @@ rxm_write_thru(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		goto unlock;
 
-	ret = fi_write(conn->msg_ep, buf, len, desc, dest_addr, addr,
+	ret = fi_write(rxm_conn_msg_ep(conn, RXM_OP_RMA, 0),
+		       buf, len, desc, dest_addr, addr,
 		       key, context);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
@@ -616,7 +626,8 @@ rxm_writev_thru(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (ret)
 		goto unlock;
 
-	ret = fi_writev(conn->msg_ep, iov, desc, count, dest_addr, addr,
+	ret = fi_writev(rxm_conn_msg_ep(conn, RXM_OP_RMA, 0),
+			iov, desc, count, dest_addr, addr,
 			key, context);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
@@ -638,7 +649,8 @@ rxm_writemsg_thru(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	if (ret)
 		goto unlock;
 
-	ret = fi_writemsg(conn->msg_ep, msg, flags);
+	ret = fi_writemsg(rxm_conn_msg_ep(conn, RXM_OP_RMA, 0),
+			  msg, flags);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
@@ -660,7 +672,8 @@ rxm_inject_write_thru(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		goto unlock;
 
-	ret = fi_inject_write(conn->msg_ep, buf, len, dest_addr, addr, key);
+	ret = fi_inject_write(rxm_conn_msg_ep(conn, RXM_OP_RMA, 0),
+			      buf, len, dest_addr, addr, key);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
@@ -683,7 +696,8 @@ rxm_writedata_thru(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		goto unlock;
 
-	ret = fi_writedata(conn->msg_ep, buf, len, desc, data, dest_addr,
+	ret = fi_writedata(rxm_conn_msg_ep(conn, RXM_OP_RMA, 0),
+			   buf, len, desc, data, dest_addr,
 			   addr, key, context);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
@@ -706,7 +720,8 @@ rxm_inject_writedata_thru(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		goto unlock;
 
-	ret = fi_inject_writedata(conn->msg_ep, buf, len, data, dest_addr,
+	ret = fi_inject_writedata(rxm_conn_msg_ep(conn, RXM_OP_RMA, 0),
+				  buf, len, data, dest_addr,
 				  addr, key);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
