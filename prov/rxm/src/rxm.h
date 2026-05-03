@@ -57,6 +57,8 @@
 #include <ofi_iov.h>
 #include <ofi_hmem.h>
 
+#include "rxm_ep_selector.h"
+
 #ifndef _RXM_H_
 #define _RXM_H_
 
@@ -230,7 +232,9 @@ enum {
 struct rxm_conn {
 	enum rxm_cm_state state;
 	struct util_peer_addr *peer;
-	struct fid_ep *msg_ep;
+	struct fid_ep **msg_eps;
+	uint8_t num_msg_eps;
+	const struct rxm_ep_selector *selector;
 	struct rxm_ep *ep;
 
 	/* Prior versions of libfabric did not guarantee that all connections
@@ -786,6 +790,15 @@ static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 	return rxm_buffer_size - sizeof(struct rxm_atomic_hdr);
 }
 
+static inline struct fid_ep *
+rxm_conn_msg_ep(struct rxm_conn *conn, const struct rxm_pkt *pkt)
+{
+	uint8_t idx = conn->selector->select(conn, pkt);
+
+	assert(idx < conn->num_msg_eps);
+	return conn->msg_eps[idx];
+}
+
 static inline ssize_t
 rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
 			struct rxm_tx_buf *resp_buf, ssize_t len)
@@ -801,7 +814,8 @@ rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
 		.context = resp_buf,
 		.data = 0,
 	};
-	return fi_sendmsg(conn->msg_ep, &msg, FI_COMPLETION);
+	return fi_sendmsg(rxm_conn_msg_ep(conn, &resp_buf->pkt),
+			  &msg, FI_COMPLETION);
 }
 
 void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
@@ -901,7 +915,7 @@ rxm_free_rx_buf(struct rxm_rx_buf *rx_buf)
 	}
 
 	/* Discard rx buffer if its msg_ep was closed */
-	if (rx_buf->repost && (rx_buf->ep->msg_srx || rx_buf->conn->msg_ep)) {
+	if (rx_buf->repost && (rx_buf->ep->msg_srx || rx_buf->conn->msg_eps[0])) {
 		rxm_post_recv(rx_buf);
 	} else {
 		ofi_buf_free(rx_buf);
