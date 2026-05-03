@@ -354,6 +354,10 @@ static void rxm_free_conn(struct rxm_conn *conn)
 	if (conn->flags & RXM_CONN_INDEXED)
 		ofi_idm_clear(&conn->ep->conn_idx_map, conn->peer->index);
 
+	if (conn->selector && conn->selector->destroy)
+		conn->selector->destroy(conn->selector);
+	conn->selector = NULL;
+
 	util_put_peer(conn->peer);
 	av = container_of(conn->ep->util_ep.av, struct rxm_av, util_av);
 	rxm_av_free_conn(av, conn);
@@ -426,7 +430,13 @@ rxm_alloc_conn(struct rxm_ep *ep, struct util_peer_addr *peer)
 
 	conn->num_msg_eps = 1;
 	conn->msg_eps = NULL;
-	conn->selector = &rxm_selector_single_ep;
+	conn->selector = rxm_rr_selector_alloc();
+	if (!conn->selector) {
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "rxm_rr_selector_alloc", -FI_ENOMEM);
+		util_put_peer(peer);
+		rxm_av_free_conn(av, conn);
+		return NULL;
+	}
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "allocated conn %p\n", conn);
 	return conn;

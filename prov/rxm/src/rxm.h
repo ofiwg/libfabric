@@ -234,7 +234,7 @@ struct rxm_conn {
 	struct util_peer_addr *peer;
 	struct fid_ep **msg_eps;
 	uint8_t num_msg_eps;
-	const struct rxm_ep_selector *selector;
+	struct rxm_ep_selector *selector;
 	struct rxm_ep *ep;
 
 	/* Prior versions of libfabric did not guarantee that all connections
@@ -915,7 +915,9 @@ rxm_free_rx_buf(struct rxm_rx_buf *rx_buf)
 	}
 
 	/* Discard rx buffer if its msg_ep was closed */
-	if (rx_buf->repost && (rx_buf->ep->msg_srx || rx_buf->conn->msg_eps[0])) {
+	if (rx_buf->repost &&
+	    (rx_buf->ep->msg_srx ||
+	     (rx_buf->conn->msg_eps && rx_buf->conn->msg_eps[0]))) {
 		rxm_post_recv(rx_buf);
 	} else {
 		ofi_buf_free(rx_buf);
