@@ -60,6 +60,7 @@ int force_auto_progress;
 int rxm_use_write_rndv;
 int rxm_detect_hmem_iface;
 int rxm_rescan = -1;
+size_t rxm_num_msg_eps = 1;
 enum fi_wait_obj def_wait_obj = FI_WAIT_FD, def_tcp_wait_obj = FI_WAIT_UNSPEC;
 
 char *rxm_proto_state_str[] = {
@@ -708,6 +709,12 @@ RXM_INI
 			"in. This allows such buffers be copied or registered "
 			"internally by RxM. (default: false).");
 
+	fi_param_define(&rxm_prov, "num_msg_eps", FI_PARAM_SIZE_T,
+			"Number of msg endpoints to open per rxm connection "
+			"for multi-ep routing. Currently all slots alias the "
+			"first real msg_ep; the selector still picks among "
+			"them. (default: 1)");
+
 	fi_param_define(&rxm_prov, "rescan", FI_PARAM_BOOL,
 			"Force or disable rescanning for network interface changes. "
 			"Setting this to true will force rescanning on each fi_getinfo() invocation; "
@@ -740,6 +747,11 @@ RXM_INI
 
 	fi_param_get_bool(&rxm_prov, "detect_hmem_iface", &rxm_detect_hmem_iface);
 	fi_param_get_bool(&rxm_prov, "rescan", &rxm_rescan);
+	fi_param_get_size_t(&rxm_prov, "num_msg_eps", &rxm_num_msg_eps);
+	if (rxm_num_msg_eps < 1)
+		rxm_num_msg_eps = 1;
+	if (rxm_num_msg_eps > UINT8_MAX)
+		rxm_num_msg_eps = UINT8_MAX;
 
 #if HAVE_RXM_DL
 	ofi_mem_init();

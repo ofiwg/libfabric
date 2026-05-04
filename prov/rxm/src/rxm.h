@@ -208,6 +208,7 @@ extern int rxm_passthru;
 extern int force_auto_progress;
 extern int rxm_use_write_rndv;
 extern int rxm_detect_hmem_iface;
+extern size_t rxm_num_msg_eps;
 extern enum fi_wait_obj def_wait_obj, def_tcp_wait_obj;
 
 struct rxm_ep;
