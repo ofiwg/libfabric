@@ -89,7 +89,7 @@ Test(cntr, mod)
 }
 
 /* Test RMA with counters */
-Test(cntr, write)
+static void do_writes(void)
 {
 	int ret;
 	uint8_t *send_buf;
@@ -134,6 +134,105 @@ Test(cntr, write)
 
 	mr_destroy(&mem_window);
 	free(send_buf);
+}
+
+/* create service with no tles */
+void create_service(struct cxil_dev *dev, struct cxi_svc_desc *svc)
+{
+	int rc;
+
+	svc->enable = 1,
+	svc->restricted_vnis = 1,
+	svc->num_vld_vnis = 1,
+	svc->vnis[0] = 11,
+	svc->resource_limits = 1,
+	svc->limits.ptes.max = 8,
+	svc->limits.les.max = 10,
+	svc->limits.txqs.max = 10,
+	svc->limits.tgqs.max = 10,
+	svc->limits.eqs.max = 10,
+	svc->limits.cts.max = 10,
+	svc->limits.les.max = 10,
+	svc->limits.acs.max = 10,
+	svc->limits.tles.res = 0,
+	svc->limits.tles.max = 0,
+	svc->restricted_members = 1,
+	svc->members[0].svc_member.uid = 0, /* root */
+	svc->members[0].type = CXI_SVC_MEMBER_UID,
+
+	rc = cxil_alloc_svc(dev, svc, NULL);
+	cr_assert_gt(rc, 0, "cxil_alloc_svc rc:%d", rc);
+
+	svc->svc_id = rc;
+}
+
+struct cxil_dev *dev;
+struct cxi_svc_desc svc = {};
+static void cntr1_teardown(void)
+{
+	cxit_teardown_rma();
+	cxil_destroy_svc(dev, svc.svc_id);
+	cxil_close_device(dev);
+}
+
+TestSuite(cntr1, .init = NULL, .fini = cntr1_teardown, .timeout = 5);
+
+/* The service has no TLEs assigned so the TLE pool from the default
+ * service will be used.
+ */
+Test(cntr1, write)
+{
+	int ret;
+	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
+	size_t addrlen = sizeof(cxit_ep_addr);
+
+	if (getuid())
+		cr_skip_test("Not root user\n");
+
+	ret = cxil_open_device(0, &dev);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
+	create_service(dev, &svc);
+
+	/* Initialize the fabric stack (equivalent of cxit_setup_rma) */
+	cxit_setup_getinfo();
+
+	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_av_attr.type = FI_AV_TABLE;
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->tx_attr->size = 512;
+
+	cxit_setup_ep();
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_bind_eq();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS, "fi_enable failed: %d\n", ret);
+
+	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);
+	cr_assert(ret == FI_SUCCESS, "fi_getname failed: %d\n", ret);
+	cr_assert(addrlen == sizeof(cxit_ep_addr));
+
+	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1);
+
+	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1,
+			   &cxit_ep_fi_addr, 0, NULL);
+	cr_assert(ret == 1);
+
+	do_writes();
+}
+
+Test(cntr, write)
+{
+	do_writes();
 }
 
 /* Test all sizes of RMA transactions with counters */
