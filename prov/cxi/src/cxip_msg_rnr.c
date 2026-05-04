@@ -247,6 +247,8 @@ static int cxip_rnr_recv_cb(struct cxip_req *req, const union c_event *event)
 			  cxi_event_to_str(event),
 			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
+
+	return FI_SUCCESS;
 }
 
 static void cxip_rxc_rnr_progress(struct cxip_rxc *rxc, bool internal)
