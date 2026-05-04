@@ -51,6 +51,7 @@ void cxit_destroy_domain(void);
 void cxit_create_ep(void);
 void cxit_destroy_ep(void);
 void cxit_create_eq(void);
+void cxit_bind_eq(void);
 void cxit_destroy_eq(void);
 void cxit_create_cqs(void);
 void cxit_destroy_cqs(void);
