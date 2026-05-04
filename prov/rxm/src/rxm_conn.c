@@ -79,10 +79,8 @@ static void rxm_close_conn(struct rxm_conn *conn)
 		rx_entry = (struct fi_peer_rx_entry*)conn->deferred_sar_msgs.next;
 		rx_entry->srx->owner_ops->free_entry(rx_entry);
 	}
-	for (int i = 0; i < conn->num_msg_eps; i++) {
-		if (conn->msg_eps && conn->msg_eps[i])
-			fi_close(&conn->msg_eps[i]->fid);
-	}
+	if (conn->msg_eps && conn->msg_eps[0])
+		fi_close(&conn->msg_eps[0]->fid);
 	rxm_flush_msg_cq(conn->ep);
 	dlist_remove_init(&conn->loopback_entry);
 	free(conn->msg_eps);
@@ -222,13 +220,13 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 			goto err;
 	}
 
-	assert(conn->num_msg_eps == 1);
 	conn->msg_eps = calloc(conn->num_msg_eps, sizeof(*conn->msg_eps));
 	if (!conn->msg_eps) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
-	conn->msg_eps[0] = msg_ep;
+	for (uint8_t i = 0; i < conn->num_msg_eps; i++)
+		conn->msg_eps[i] = msg_ep;
 	return 0;
 err:
 	fi_close(&msg_ep->fid);
@@ -309,10 +307,8 @@ static int rxm_send_connect(struct rxm_conn *conn)
 	return 0;
 
 err:
-	for (int i = 0; i < conn->num_msg_eps; i++) {
-		if (conn->msg_eps && conn->msg_eps[i])
-			fi_close(&conn->msg_eps[i]->fid);
-	}
+	if (conn->msg_eps && conn->msg_eps[0])
+		fi_close(&conn->msg_eps[0]->fid);
 	free(conn->msg_eps);
 	conn->msg_eps = NULL;
 	return ret;
@@ -428,14 +424,20 @@ rxm_alloc_conn(struct rxm_ep *ep, struct util_peer_addr *peer)
 	conn->peer = peer;
 	rxm_ref_peer(peer);
 
-	conn->num_msg_eps = 1;
+	conn->num_msg_eps = (uint8_t) rxm_num_msg_eps;
 	conn->msg_eps = NULL;
-	conn->selector = rxm_rr_selector_alloc();
-	if (!conn->selector) {
-		RXM_WARN_ERR(FI_LOG_EP_CTRL, "rxm_rr_selector_alloc", -FI_ENOMEM);
-		util_put_peer(peer);
-		rxm_av_free_conn(av, conn);
-		return NULL;
+
+	if (conn->num_msg_eps > 1) {
+		conn->selector = rxm_rr_selector_alloc();
+		if (!conn->selector) {
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "rxm_rr_selector_alloc",
+				     -FI_ENOMEM);
+			util_put_peer(peer);
+			rxm_av_free_conn(av, conn);
+			return NULL;
+		}
+	} else {
+		conn->selector = (struct rxm_ep_selector *) &rxm_selector_single_ep;
 	}
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "allocated conn %p\n", conn);
