@@ -271,6 +271,7 @@ static void smr_format_inline(struct smr_cmd *cmd, struct ofi_mr **mr,
 }
 
 static int smr_format_inject(struct smr_ep *ep, struct smr_region *peer_smr,
+			      int64_t peer_id,
 			      struct smr_cmd *cmd, struct ofi_mr **mr,
 			      const struct iovec *iov, uint32_t iov_count,
 			      uint64_t op_flags)
@@ -278,7 +279,7 @@ static int smr_format_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 	struct smr_inject_buf *tx_buf;
 
 	cmd->hdr.proto = smr_proto_inject;
-	tx_buf = smr_get_inject_buf(peer_smr);
+	tx_buf = smr_get_inject_buf_cached(ep, peer_smr, peer_id);
 	if (!tx_buf) {
 		FI_DBG(&smr_prov, FI_LOG_EP_DATA,
 		       "No inject buffers available, cannot send inject "
@@ -505,7 +506,7 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 
 	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags,
 			   (uintptr_t) pend);
-	ret = smr_format_inject(ep, peer_smr, cmd, desc, iov, iov_count,
+	ret = smr_format_inject(ep, peer_smr, tx_id, cmd, desc, iov, iov_count,
 				op_flags);
 	if (ret)
 		goto err;
@@ -636,8 +637,26 @@ static int smr_ep_close(struct fid *fid)
 	struct smr_ep *ep;
 	struct smr_pend_entry *pend;
 	struct smr_cmd_ctx *cmd_ctx;
+	struct smr_inject_cache *cache;
+	struct smr_region *peer_smr;
+	int i;
 
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	for (i = 0; i < SMR_MAX_PEERS; i++) {
+		cache = &ep->inject_cache[i];
+		if (cache->count == 0)
+			continue;
+		if (!ep->map || !ep->map->peers[i].region)
+			continue;
+		peer_smr = ep->map->peers[i].region;
+		ofi_spin_lock(&peer_smr->fs_lock);
+		while (cache->count > 0) {
+			smr_freestack_push(smr_inject_pool(peer_smr),
+					   cache->bufs[--cache->count]);
+		}
+		ofi_spin_unlock(&peer_smr->fs_lock);
+	}
 
 	if (smr_env.use_dsa_sar)
 		smr_dsa_context_cleanup(ep);

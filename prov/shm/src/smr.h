@@ -37,6 +37,13 @@
 #include "ofi_shm_p2p.h"
 #include "ofi_util.h"
 
+#define SMR_INJECT_CACHE_BATCH	32
+
+struct smr_inject_cache {
+	struct smr_inject_buf	*bufs[SMR_INJECT_CACHE_BATCH];
+	int			count;
+};
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	size_t			tx_size;
@@ -61,6 +68,8 @@ struct smr_ep {
 	enum ofi_shm_p2p_type	p2p_type;
 	void			*dsa_context;
 	void 			(*smr_progress_async)(struct smr_ep *ep);
+
+	struct smr_inject_cache	inject_cache[SMR_MAX_PEERS];
 };
 
 
@@ -249,6 +258,30 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context);
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
+
+static inline struct smr_inject_buf *smr_get_inject_buf_cached(
+				struct smr_ep *ep, struct smr_region *peer_smr,
+				int64_t peer_id)
+{
+	struct smr_inject_cache *cache = &ep->inject_cache[peer_id];
+	int i;
+
+	if (cache->count > 0)
+		return cache->bufs[--cache->count];
+
+	ofi_spin_lock(&peer_smr->fs_lock);
+	for (i = 0; i < SMR_INJECT_CACHE_BATCH; i++) {
+		if (smr_freestack_isempty(smr_inject_pool(peer_smr)))
+			break;
+		cache->bufs[i] = smr_freestack_pop(smr_inject_pool(peer_smr));
+	}
+	ofi_spin_unlock(&peer_smr->fs_lock);
+
+	cache->count = i;
+	if (i == 0)
+		return NULL;
+	return cache->bufs[--cache->count];
+}
 
 void smr_format_tx_pend(struct smr_pend_entry *pend, struct smr_cmd *cmd,
 			void *context, struct ofi_mr **mr,
