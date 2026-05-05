@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022 ORNL. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,23 +31,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-#include <ctype.h>
-
-#include <rdma/fi_errno.h>
-#include "ofi_util.h"
-#include "ofi.h"
-#include "ofi_str.h"
-#include "ofi_prov.h"
-#include "ofi_perf.h"
-#include "ofi_hmem.h"
-#include "rdma/fi_ext.h"
 #include "lnx.h"
 
 static struct fi_ops_domain lnx_domain_ops = {
@@ -70,7 +54,6 @@ static int lnx_domain_close(struct fid *fid)
 	struct lnx_core_domain *cd;
 
 	domain = container_of(fid, struct lnx_domain, ld_domain.domain_fid.fid);
-
 
 	/* close all the open core domains */
 	for (i = 0; i < domain->ld_num_doms; i++) {
@@ -108,8 +91,8 @@ static struct fi_ops_mr lnx_mr_ops = {
 	.regattr = lnx_mr_regattr,
 };
 
-static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
-				void *context, struct lnx_domain *lnx_domain)
+static int lnx_open_core_domains(struct lnx_fabric *lnx_fab, void *context,
+				 struct lnx_domain *lnx_dom)
 {
 	int rc, i;
 	char *prov_name;
@@ -120,22 +103,23 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
 	for (i = 0; i < lnx_fab->lf_num_fabs; i++) {
 		cf = &lnx_fab->lf_core_fabrics[i];
 		for (itr = cf->cf_info; itr; itr = itr->next)
-			lnx_domain->ld_num_doms++;
+			lnx_dom->ld_num_doms++;
 	}
 
-	if (lnx_domain->ld_num_doms >= LNX_MAX_LOCAL_EPS) {
+	if (lnx_dom->ld_num_doms >= LNX_MAX_LOCAL_EPS) {
 		FI_WARN(&lnx_prov, FI_LOG_FABRIC,
 			"Too many domains to link. Maximum allowed: %d\n",
 			LNX_MAX_LOCAL_EPS);
 		return -FI_E2BIG;
 	}
 
-	lnx_domain->ld_core_domains = calloc(sizeof(*lnx_domain->ld_core_domains),
-					     lnx_domain->ld_num_doms);
-	if (!lnx_domain->ld_core_domains)
+	lnx_dom->ld_core_domains = calloc(
+				lnx_dom->ld_num_doms,
+				sizeof(*lnx_dom->ld_core_domains));
+	if (!lnx_dom->ld_core_domains)
 		return -FI_ENOMEM;
 
-	lnx_domain->ld_num_doms = 0;
+	lnx_dom->ld_num_doms = 0;
 
 	for (i = 0; i < lnx_fab->lf_num_fabs; i++) {
 		cf = &lnx_fab->lf_core_fabrics[i];
@@ -149,13 +133,13 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
 			setenv("FI_CXI_RX_MATCH_MODE", "software", 1);
 
 		for (itr = cf->cf_info; itr; itr = itr->next) {
-			/* The shm domain should now already be at the head of the list.
+			/* The shm domain should be at the head of the list.
 			 * This will cause all the other shm constructs to
 			 * be the head of their respective lists, ex: av.
 			 * The purpose is to optimize the shm path for
 			 * local peers.
 			 */
-			cd = &lnx_domain->ld_core_domains[lnx_domain->ld_num_doms];
+			cd = &lnx_dom->ld_core_domains[lnx_dom->ld_num_doms];
 
 			cd->cd_info = itr;
 
@@ -164,7 +148,7 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
 			if (rc)
 				return rc;
 
-			lnx_domain->ld_num_doms++;
+			lnx_dom->ld_num_doms++;
 			cd->cd_fabric = cf;
 		}
 	}
@@ -173,14 +157,16 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab,
 }
 
 int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_domain **domain, void *context)
+		    struct fid_domain **domain, void *context)
 {
 	int rc = 0;
 	struct lnx_domain *lnx_domain;
 	struct util_domain *dom;
 	struct ofi_bufpool_attr bp_attrs = {0};
-	struct lnx_fabric *lnx_fab = container_of(fabric, struct lnx_fabric,
-					lf_util_fabric.fabric_fid);
+	struct lnx_fabric *lnx_fab;
+
+	lnx_fab= container_of(fabric, struct lnx_fabric,
+			      lf_util_fabric.fabric_fid);
 
 	rc = -FI_ENOMEM;
 	lnx_domain = calloc(sizeof(*lnx_domain), 1);
@@ -209,7 +195,8 @@ int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	rc = lnx_open_core_domains(lnx_fab, context, lnx_domain);
 	if (rc) {
-		FI_INFO(&lnx_prov, FI_LOG_CORE, "Failed to initialize domain for %s\n",
+		FI_INFO(&lnx_prov, FI_LOG_CORE,
+			"Failed to initialize domain for %s\n",
 			info->domain_attr->name);
 		goto close_domain;
 	}
@@ -231,4 +218,3 @@ fail:
 out:
 	return rc;
 }
-
