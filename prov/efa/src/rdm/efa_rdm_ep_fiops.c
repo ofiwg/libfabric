@@ -735,12 +735,12 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 				      struct efa_rdm_peer, peer,
 				      ep_peer_list_entry, tmp) {
 
-		if (peer->conn->fi_addr != FI_ADDR_UNSPEC) {
+		if (peer->conn->fi_addr != FI_ADDR_NOTAVAIL) {
 			util_av_entry = ofi_bufpool_get_ibuf(
 				efa_rdm_ep->base_ep.av->util_av.av_entry_pool,
 				peer->conn->fi_addr);
 		} else {
-			assert(peer->conn->implicit_fi_addr != FI_ADDR_UNSPEC);
+			assert(peer->conn->implicit_fi_addr != FI_ADDR_NOTAVAIL);
 
 			util_av_entry = ofi_bufpool_get_ibuf(
 				efa_rdm_ep->base_ep.av->util_av_implicit.av_entry_pool,
