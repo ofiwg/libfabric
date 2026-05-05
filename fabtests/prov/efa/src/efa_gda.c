@@ -38,17 +38,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef HAVE_EFAGDA
-#include <efagda.h>
+#include <efa_cuda_dp.h>
+#include <efa_gda_kernels.h>
 
 struct fi_efa_ops_gda *efa_gda_ops;
-struct efa_cq *gda_send_cq, *gda_recv_cq;
+struct efa_cuda_cq *gda_send_cq, *gda_recv_cq;
 struct fid_cq *txcq_ext, *rxcq_ext;
 void *send_cq_buffer, *recv_cq_buffer;
 struct fid_ep *gda_ep;
-struct efa_qp *gda_qp;
+struct efa_cuda_qp *gda_qp;
 
 int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
-		  struct efa_cq **gda_cq)
+		  struct efa_cuda_cq **gda_cq)
 {
 	int ret;
 	int dmabuf_fd;
@@ -98,11 +99,15 @@ int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 		 *cq_ext, cq_ext_attr.buffer, cq_ext_attr.entry_size,
 		 cq_ext_attr.num_entries, cq_entries);
 
-	*gda_cq = efagda_create_cuda_cq(*cq_buffer, 1, cq_entries,
-					cq_ext_attr.entry_size);
+	struct efa_cuda_cq_attrs cq_attrs = {0};
+	cq_attrs.buffer = (uint8_t *)*cq_buffer;
+	cq_attrs.num_entries = cq_entries;
+	cq_attrs.entry_size = cq_ext_attr.entry_size;
+
+	*gda_cq = efa_cuda_create_cq(&cq_attrs, sizeof(cq_attrs));
 	if (!*gda_cq) {
 		ret = FI_EINVAL;
-		FT_PRINTERR("efagda_create_cuda_cq", -ret);
+		FT_PRINTERR("efa_cuda_create_cq", -ret);
 	}
 
 	return ret;
@@ -196,11 +201,20 @@ int create_gda_qp()
 	}
 
 	// initialize sq and rq on device
-	gda_qp = efagda_create_cuda_qp(sq_ptr, sq_attr.num_entries, sq_db,
-				       sq_attr.max_batch, rq_ptr,
-				       rq_attr.num_entries, rq_db);
+	struct efa_cuda_qp_attrs qp_attrs = {0};
+	qp_attrs.sq_buffer = (uint8_t *)sq_ptr;
+	qp_attrs.rq_buffer = (uint8_t *)rq_ptr;
+	qp_attrs.sq_doorbell = sq_db;
+	qp_attrs.rq_doorbell = rq_db;
+	qp_attrs.sq_num_entries = sq_attr.num_entries;
+	qp_attrs.sq_entry_size = sq_attr.entry_size;
+	qp_attrs.sq_max_batch = sq_attr.max_batch;
+	qp_attrs.rq_num_entries = rq_attr.num_entries;
+	qp_attrs.rq_entry_size = rq_attr.entry_size;
+
+	gda_qp = efa_cuda_create_qp(&qp_attrs, sizeof(qp_attrs));
 	if (!gda_qp) {
-		FT_PRINTERR("efagda_create_cuda_qp", -ret);
+		FT_PRINTERR("efa_cuda_create_qp", -ret);
 	}
 	return ret;
 }
@@ -211,8 +225,10 @@ static int run()
 	uint16_t ah;
 	uint16_t remote_qpn;
 	uint32_t remote_qkey;
-	struct ibv_wc wc;
 	uint64_t lkey;
+	cudaStream_t stream;
+	int is_client;
+	int rx_depth;
 
 	ret = ft_sync();
 	if (ret) {
@@ -226,110 +242,50 @@ static int run()
 		return -FI_ENODATA;
 	}
 
-	cuda_stream_t stream = cuda_create_stream();
-	if (opts.dst_addr) {
-		ret = efa_gda_ops->query_addr(gda_ep, remote_fi_addr, &ah,
-					      &remote_qpn, &remote_qkey);
-		if (ret) {
-			FT_PRINTERR("query_addr", -ret);
-			return ret;
-		}
+	cudaStreamCreate(&stream);
 
-		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-			ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(),
-					  opts.transfer_size);
-			if (ret)
-				return ret;
-		}
+	ret = efa_gda_ops->query_addr(gda_ep, remote_fi_addr, &ah,
+				      &remote_qpn, &remote_qkey);
+	if (ret) {
+		FT_PRINTERR("query_addr", -ret);
+		goto out;
+	}
 
-		ft_start();
-		for (int i = 0; i < opts.iterations; i++) {
-			ret = efagda_post_send(gda_qp, ah, remote_qpn,
-					       remote_qkey, (uintptr_t) tx_buf,
-					       opts.transfer_size, lkey,
-					       stream);
-			FT_DEBUG("efagda_post_send: gda_qp = %p, ah = %u, "
-				 "remote_qpn = %u, remote_qkey = %u, addr %p, "
-				 "len %lu, lkey %lu\n",
-				 gda_qp, ah, remote_qpn, remote_qkey,
-				 (void *) (uintptr_t) tx_buf,
-				 opts.transfer_size, lkey);
-			if (ret) {
-				FT_PRINTERR("efagda_post_send", -ret);
-				return ret;
-			}
+	is_client = opts.dst_addr ? 1 : 0;
+	rx_depth = fi->rx_attr->size / 2;
+	if (rx_depth > opts.iterations)
+		rx_depth = opts.iterations;
 
-			do {
-				ret = efagda_poll_cq(gda_send_cq, 1, &wc, stream);
-				if (ret > 0) {
-					FT_DEBUG("client gets %d CQ entry successfully\n", ret);
-					ret = 0;
-					break;
-				}
-				if (ret < 0) {
-					FT_PRINTERR("efagda_poll_cq", ret);
-					return ret;
-				}
+	if (is_client && ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(),
+				  opts.transfer_size);
+		if (ret)
+			goto out;
+	}
 
-				ft_stop();
-				if ((end.tv_sec - start.tv_sec) > timeout) {
-					fprintf(stderr,
-						"client %ds timeout expired\n",
-						timeout);
-					return -FI_ENODATA;
-				}
-			} while (ret == 0);
-		}
-		ft_stop();
-	} else {
-		ft_start();
-		for (int i = 0; i < opts.iterations; i++) {
-			ret = efagda_post_recv(gda_qp, (uintptr_t) rx_buf,
-					       opts.transfer_size, lkey, stream);
-			FT_DEBUG("efagda_post_recv gda_qp = %p, addr = %p, "
-				 "length = %zu, lkey = %lu\n",
-				 gda_qp, (void *) (uintptr_t) rx_buf,
-				 opts.transfer_size, lkey);
-			if (ret) {
-				FT_PRINTERR("efagda_post_recv", -ret);
-				return ret;
-			}
+	ft_start();
+	ret = efagda_run_lat_send(gda_qp, gda_send_cq, gda_recv_cq,
+				  ah, remote_qpn, remote_qkey,
+				  (uintptr_t) rx_buf, opts.transfer_size, lkey,
+				  (uintptr_t) tx_buf, opts.transfer_size, lkey,
+				  opts.iterations, rx_depth, is_client, stream);
+	ft_stop();
 
-			do {
-				ret = efagda_poll_cq(gda_recv_cq, 1, &wc,
-						     stream);
-				if (ret > 0) {
-					FT_DEBUG("server gets %d CQ entry successfully\n", ret);
-					ret = 0;
-					goto verify_data;
-				}
-				if (ret < 0) {
-					FT_PRINTERR("efagda_poll_cq", ret);
-					return ret;
-				}
+	if (ret) {
+		FT_PRINTERR("efagda_run_lat_send", -ret);
+		goto out;
+	}
 
-				ft_stop();
-				if ((end.tv_sec - start.tv_sec) > timeout) {
-					fprintf(stderr,
-						"server %ds timeout expired\n",
-						timeout);
-					return -FI_ENODATA;
-				}
-			} while (ret == 0);
-
-		verify_data:
-			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-				ret = ft_check_buf((char *) rx_buf,
-						   opts.transfer_size);
-				if (ret)
-					return ret;
-			}
-		}
-		ft_stop();
+	if (!is_client && ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_check_buf((char *) rx_buf, opts.transfer_size);
+		if (ret)
+			goto out;
 	}
 
 	show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
 
+out:
+	cudaStreamDestroy(stream);
 	return ret;
 }
 
@@ -443,11 +399,11 @@ int main(int argc, char **argv)
 	}
 
 	if (send_cq_buffer)
-		efagda_destroy_cuda_cq(send_cq_buffer);
+		efa_cuda_destroy_cq(gda_send_cq);
 	if (recv_cq_buffer)
-		efagda_destroy_cuda_cq(recv_cq_buffer);
+		efa_cuda_destroy_cq(gda_recv_cq);
 	if (gda_qp)
-		efagda_destroy_cuda_qp(gda_qp);
+		efa_cuda_destroy_qp(gda_qp);
 	// qp need to be destroyed before closing cq
 	FT_CLOSE_FID(gda_ep);
 	if (txcq_ext)
