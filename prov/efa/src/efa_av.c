@@ -826,18 +826,20 @@ static struct fi_ops efa_av_fi_ops = {
  * @param[in]	attr		AV attr application passed to fi_av_open
  * @param[out]	util_av		util_av field in efa_av
  * @param[in]	context		contexted application passed to fi_av_open
+ * @param[in]	context_len	size of provider-specific context per AV entry
  * @return	On success, return 0.
  *		On failure, return a negative libfabric error code.
  */
 int efa_av_init_util_av(struct efa_domain *efa_domain,
 			struct fi_av_attr *attr,
 			struct util_av *util_av,
-			void *context)
+			void *context,
+			size_t context_len)
 {
 	struct util_av_attr util_attr;
 
 	util_attr.addrlen = EFA_EP_ADDR_LEN;
-	util_attr.context_len = sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN;
+	util_attr.context_len = context_len;
 	util_attr.flags = 0;
 	return ofi_av_init(&efa_domain->util_domain, attr, &util_attr,
 			   util_av, context);
@@ -887,11 +889,13 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				&universe_size) == FI_SUCCESS)
 		attr->count = MAX(attr->count, universe_size);
 
-	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av_implicit, context);
+	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av_implicit, context,
+				  sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN);
 	if (ret)
 		goto err;
 
-	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context);
+	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context,
+				  sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN);
 	if (ret)
 		goto err_close_util_av_implicit;
 
