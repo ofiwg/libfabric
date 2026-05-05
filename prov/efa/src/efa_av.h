@@ -66,7 +66,7 @@ struct efa_cur_reverse_av_key {
 
 struct efa_cur_reverse_av {
 	struct efa_cur_reverse_av_key key;
-	struct efa_conn *conn;
+	struct efa_av_entry *av_entry;
 	UT_hash_handle hh;
 };
 
@@ -78,7 +78,7 @@ struct efa_prv_reverse_av_key {
 
 struct efa_prv_reverse_av {
 	struct efa_prv_reverse_av_key key;
-	struct efa_conn *conn;
+	struct efa_av_entry *av_entry;
 	UT_hash_handle hh;
 };
 
@@ -132,11 +132,11 @@ fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 int efa_av_reverse_av_add(struct efa_av *av,
 			  struct efa_cur_reverse_av **cur_reverse_av,
 			  struct efa_prv_reverse_av **prv_reverse_av,
-			  struct efa_conn *conn);
+			  struct efa_av_entry *av_entry);
 
 void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
-				    struct efa_prv_reverse_av **prv_reverse_av,
-				    struct efa_conn *conn);
+			      struct efa_prv_reverse_av **prv_reverse_av,
+			      struct efa_av_entry *av_entry);
 
 void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 					struct efa_conn *conn);
