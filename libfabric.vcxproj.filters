@@ -405,6 +405,9 @@
     <ClCompile Include="prov\rxm\src\rxm_hmem.c">
       <Filter>Source Files\prov\rxm\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\rxm\src\rxm_rpc.c">
+      <Filter>Source Files\prov\rxm\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\rxm\src\rxm_eq.c">
       <Filter>Source Files\prov\rxm\src</Filter>
     </ClCompile>
