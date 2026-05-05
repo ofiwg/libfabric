@@ -226,6 +226,9 @@ testing scope is limited.
 *fi_mr_cache_evict*
 : Tests provider MR cache eviction capabilities.
 
+*fi_nic_affinity_test*
+: Validates that fi_getinfo returns correct output when the GPU-NIC affinity feature is enabled.
+
 ## Multinode
 
 This test runs a series of tests over multiple formats and patterns to help

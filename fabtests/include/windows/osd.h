@@ -802,4 +802,16 @@ OFI_COMPLEX_OPS(float)
 OFI_COMPLEX_OPS(double)
 OFI_COMPLEX_OPS(long_double)
 
+static inline int setenv(const char *name, const char *value, int overwrite)
+{
+	if (!overwrite && getenv(name) != NULL)
+		return 0;
+	return _putenv_s(name, value);
+}
+
+static inline int unsetenv(const char *name)
+{
+	return _putenv_s(name, "");
+}
+
 #endif /* _WINDOWS_OSD_H_ */

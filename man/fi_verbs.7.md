@@ -209,6 +209,15 @@ The verbs provider checks for the following environment variables.
   testing the functionality of the dmabuf_peer_mem hooking provider and the
   corresponding kernel driver. (default: yes)
 
+*FI_VERBS_NIC_AFFINITY_POLICY*
+: NIC affinity policy for ordering NICs in fi_getinfo results. (default: none)
+
+*FI_VERBS_AFFINITY_DEVICE*
+: PCI address of device for NIC affinity.
+
+*FI_VERBS_NIC_AFFINITY_CONFIG*
+: Path to NIC affinity configuration file for 'manual' policy.
+
 ### Variables specific to MSG endpoints
 
 *FI_VERBS_IFACE*
