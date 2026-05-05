@@ -68,9 +68,11 @@ static inline void efa_data_path_direct_tracepoint_post_send(
 		const struct efa_data_path_direct_sq *sq,
 		const struct efa_io_tx_meta_desc *meta)
 {
+	uint32_t wrid_idx = meta->req_id & ~sq->wq.gen_mask;
+
 	efa_tracepoint(data_path_direct_post_send,
 		       qp->base_ep->domain->device->ibv_ctx->device->name,
-		       sq->wq.wrid[meta->req_id],
+		       sq->wq.wrid[wrid_idx],
 		       EFA_GET(&meta->ctrl1, EFA_IO_TX_META_DESC_OP_TYPE),
 		       qp->ibv_qp->qp_num,
 		       meta->dest_qp_num,
