@@ -70,7 +70,8 @@ bin_PROGRAMS = \
 	multinode/fi_multinode_coll \
 	component/sock_test \
 	component/dmabuf-rdma/cuda_check_dmabuf \
-	regression/sighandler_test
+	regression/sighandler_test \
+	regression/sighandler_chain_test
 
 if HAVE_ZE_DEVEL
 if HAVE_VERBS_DEVEL
@@ -630,6 +631,14 @@ regression_sighandler_test_SOURCES = \
 regression_sighandler_test_LDADD = libfabtests.la
 
 regression_sighandler_test_CFLAGS = \
+	$(AM_CFLAGS)
+
+regression_sighandler_chain_test_SOURCES = \
+	regression/sighandler_chain_test.c
+
+regression_sighandler_chain_test_LDADD = libfabtests.la
+
+regression_sighandler_chain_test_CFLAGS = \
 	$(AM_CFLAGS)
 
 real_man_pages = \
