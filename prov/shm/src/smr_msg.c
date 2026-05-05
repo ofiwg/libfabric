@@ -85,6 +85,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	int proto;
 	struct smr_cmd_entry *ce;
 	struct smr_cmd *cmd;
+	uint8_t smr_flags;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 
@@ -110,9 +111,8 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 
 	proto = smr_select_proto(desc, iov_count, smr_vma_enabled(ep, peer_smr),
 	                         smr_ipc_valid(ep, peer_smr, tx_id, rx_id), op,
-				 total_len, op_flags);
-
-	if (proto != smr_proto_inline) {
+				 total_len, op_flags, &smr_flags);
+	if (smr_flags & SMR_RETURN_CMD) {
 		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
 			smr_cmd_queue_discard(ce, pos);
 			ret = -FI_EAGAIN;
@@ -128,17 +128,17 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	}
 
 	ret = smr_send_ops[proto](ep, peer_smr, tx_id, rx_id, op, tag, data,
-				  op_flags, (struct ofi_mr **) desc, iov,
-				  iov_count, total_len, context, cmd);
+				  op_flags, smr_flags, (struct ofi_mr **) desc,
+				  iov, iov_count, total_len, context, cmd);
 	if (ret) {
 		smr_cmd_queue_discard(ce, pos);
-		if (proto != smr_proto_inline)
+		if (smr_flags & SMR_RETURN_CMD)
 			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
 		goto unlock;
 	}
 	smr_cmd_queue_commit(ce, pos);
 
-	if (proto != smr_proto_inline)
+	if (smr_flags & SMR_RETURN_CMD)
 		goto unlock;
 
 	ret = smr_complete_tx(ep, context, op, op_flags);
@@ -205,6 +205,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	int proto;
 	struct smr_cmd_entry *ce;
 	struct smr_cmd *cmd;
+	uint8_t smr_flags;
 
 	assert(len <= SMR_INJECT_SIZE);
 
@@ -232,36 +233,20 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 		goto unlock;
 	}
 
-	if (len <= SMR_MSG_DATA_LEN) {
-		proto = smr_proto_inline;
-		cmd = &ce->cmd;
-	} else {
-		proto = smr_proto_inject;
-		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
-			smr_cmd_queue_discard(ce, pos);
-			ret = -FI_EAGAIN;
-			goto unlock;
-		}
+	proto = len <= SMR_MSG_DATA_LEN ? smr_proto_inline : smr_proto_inject;
+	cmd = &ce->cmd;
 
-		cmd = smr_freestack_pop(smr_cmd_stack(ep->region));
-		assert(cmd);
-		ce->ptr = smr_local_to_peer(ep, peer_smr, tx_id, rx_id,
-					    (uintptr_t) cmd);
-	}
-
+	smr_flags = (op_flags & FI_REMOTE_CQ_DATA) ? SMR_REMOTE_CQ_DATA : 0;
 	ret = smr_send_ops[proto](ep, peer_smr, tx_id, rx_id, op, tag, data,
-				  op_flags, NULL, &msg_iov, 1, len, NULL, cmd);
+				  op_flags, smr_flags, NULL, &msg_iov, 1, len,
+				  NULL, cmd);
 	if (ret) {
-		if (proto != smr_proto_inline)
-			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
 		smr_cmd_queue_discard(ce, pos);
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
 	smr_cmd_queue_commit(ce, pos);
-
-	if (proto == smr_proto_inline)
-		ofi_ep_peer_tx_cntr_inc(&ep->util_ep, op);
+	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, op);
 
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);

@@ -37,6 +37,13 @@
 #include "ofi_shm_p2p.h"
 #include "ofi_util.h"
 
+#define SMR_INJECT_CACHE_BATCH	32
+
+struct smr_inject_cache {
+	struct smr_inject_buf	*bufs[SMR_INJECT_CACHE_BATCH];
+	int			count;
+};
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	size_t			tx_size;
@@ -61,6 +68,8 @@ struct smr_ep {
 	enum ofi_shm_p2p_type	p2p_type;
 	void			*dsa_context;
 	void 			(*smr_progress_async)(struct smr_ep *ep);
+
+	struct smr_inject_cache	inject_cache[SMR_MAX_PEERS];
 };
 
 
@@ -250,26 +259,51 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
 
+static inline struct smr_inject_buf *smr_get_inject_buf_cached(
+				struct smr_ep *ep, struct smr_region *peer_smr,
+				int64_t peer_id)
+{
+	struct smr_inject_cache *cache = &ep->inject_cache[peer_id];
+	int i;
+
+	if (cache->count > 0)
+		return cache->bufs[--cache->count];
+
+	ofi_spin_lock(&peer_smr->fs_lock);
+	for (i = 0; i < SMR_INJECT_CACHE_BATCH; i++) {
+		if (smr_freestack_isempty(smr_inject_pool(peer_smr)))
+			break;
+		cache->bufs[i] = smr_freestack_pop(smr_inject_pool(peer_smr));
+	}
+	ofi_spin_unlock(&peer_smr->fs_lock);
+
+	cache->count = i;
+	if (i == 0)
+		return NULL;
+	return cache->bufs[--cache->count];
+}
+
 void smr_format_tx_pend(struct smr_pend_entry *pend, struct smr_cmd *cmd,
 			void *context, struct ofi_mr **mr,
 			const struct iovec *iov, uint32_t iov_count,
 			uint64_t op_flags);
 void smr_generic_format(struct smr_cmd *cmd, int64_t tx_id, int64_t rx_id,
 			uint32_t op, uint64_t tag, uint64_t data,
-			uint64_t op_flags);
+			uint8_t smr_flags, uintptr_t tx_ctx);
 size_t smr_copy_to_sar(struct smr_ep *ep, struct smr_region *smr,
 		       struct smr_pend_entry *pend);
 size_t smr_copy_from_sar(struct smr_ep *ep, struct smr_region *smr,
 		         struct smr_pend_entry *pend);
 int smr_select_proto(void **desc, size_t iov_count, bool cma_avail,
 		     bool ipc_valid, uint32_t op, uint64_t total_len,
-		     uint64_t op_flags);
+		     uint64_t op_flags, uint8_t *smr_flags);
 typedef ssize_t (*smr_send_func)(
 		struct smr_ep *ep, struct smr_region *peer_smr,
 		int64_t tx_id, int64_t rx_id, uint32_t op, uint64_t tag,
-		uint64_t data, uint64_t op_flags, struct ofi_mr **desc,
-		const struct iovec *iov, size_t iov_count, size_t total_len,
-		void *context, struct smr_cmd *cmd);
+		uint64_t data, uint64_t op_flags, uint8_t smr_flags,
+		struct ofi_mr **desc, const struct iovec *iov,
+		size_t iov_count, size_t total_len, void *context,
+		struct smr_cmd *cmd);
 extern smr_send_func smr_send_ops[smr_proto_max];
 
 int smr_write_err_comp(struct util_cq *cq, void *context,
@@ -280,9 +314,9 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint64_t flags, size_t len, void *buf, int64_t id,
 		    uint64_t tag, uint64_t data);
 
-static inline uint64_t smr_rx_cq_flags(uint64_t rx_flags, uint16_t op_flags)
+static inline uint64_t smr_rx_cq_flags(uint64_t rx_flags, uint8_t smr_flags)
 {
-	if (op_flags & SMR_REMOTE_CQ_DATA)
+	if (smr_flags & SMR_REMOTE_CQ_DATA)
 		rx_flags |= FI_REMOTE_CQ_DATA;
 	return rx_flags;
 }

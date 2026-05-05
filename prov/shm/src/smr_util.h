@@ -35,8 +35,8 @@
 
 #include "ofi.h"
 #include "ofi_atomic_queue.h"
+#include "ofi_lock.h"
 #include "ofi_xpmem.h"
-#include <pthread.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,6 +74,7 @@ extern struct smr_env smr_env;
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
 #define SMR_BUFFER_RECV		(1 << 1)
+#define SMR_RETURN_CMD		(1 << 2)
 
 enum {
 	smr_proto_inline,	/* inline payload */
@@ -119,7 +120,7 @@ struct smr_cmd_hdr {
 	int16_t			tx_id;
 	uint8_t			op;
 	uint8_t			proto;
-	uint8_t			op_flags;
+	uint8_t			smr_flags;
 	uint8_t			resv[1];
 };
 
@@ -145,6 +146,7 @@ struct smr_cmd_rma {
 struct smr_cmd_data {
 	union {
 		uint8_t			msg[SMR_MSG_DATA_LEN];
+		uint64_t		inject_buf_index;
 		struct {
 			size_t		iov_count;
 			struct iovec	iov[SMR_IOV_LIMIT];
@@ -244,6 +246,8 @@ struct smr_region {
 			uintptr_t		base_addr;
 
 			size_t			total_size;
+
+			ofi_spin_t		fs_lock;
 		};
 		uint8_t		pad[SMR_PREFETCH_SZ];
 	};
@@ -251,8 +255,8 @@ struct smr_region {
 	struct {
 		/* offsets from start of smr_region */
 		size_t			cmd_queue_offset;
-		size_t			cmd_stack_offset;
 		size_t			inject_pool_offset;
+		size_t			cmd_stack_offset;
 		size_t			ret_queue_offset;
 		size_t			sar_pool_offset;
 		size_t			peer_data_offset;
@@ -314,9 +318,9 @@ static inline struct smr_freestack *smr_cmd_stack(struct smr_region *smr)
 {
 	return (struct smr_freestack *) ((char *) smr + smr->cmd_stack_offset);
 }
-static inline struct smr_inject_buf *smr_inject_pool(struct smr_region *smr)
+static inline struct smr_freestack *smr_inject_pool(struct smr_region *smr)
 {
-	return (struct smr_inject_buf *)
+	return (struct smr_freestack *)
 			((char *) smr + smr->inject_pool_offset);
 }
 static inline struct smr_return_queue *smr_return_queue(struct smr_region *smr)
@@ -337,11 +341,32 @@ static inline const char *smr_name(struct smr_region *smr)
 	return (const char *) smr + smr->name_offset;
 }
 
-static inline struct smr_inject_buf *smr_get_inject_buf(struct smr_region *smr,
-							struct smr_cmd *cmd)
+static inline struct smr_inject_buf *smr_get_inject_buf(struct smr_region *smr)
 {
-	return &smr_inject_pool(smr)[smr_freestack_get_index(smr_cmd_stack(smr),
-							     (char *) cmd)];
+	struct smr_inject_buf *buf;
+	ofi_spin_lock(&smr->fs_lock);
+	if (!smr_freestack_isempty(smr_inject_pool(smr)))
+		buf = smr_freestack_pop(smr_inject_pool(smr));
+	else
+		buf = NULL;
+	ofi_spin_unlock(&smr->fs_lock);
+	return buf;
+}
+
+static inline void smr_return_inject_buf(struct smr_region *smr,
+					 struct smr_inject_buf *buf)
+{
+	ofi_spin_lock(&smr->fs_lock);
+	smr_freestack_push(smr_inject_pool(smr), buf);
+	ofi_spin_unlock(&smr->fs_lock);
+}
+
+static inline void smr_return_sar_buf_by_index(struct smr_region *smr,
+					       size_t index)
+{
+	ofi_spin_lock(&smr->fs_lock);
+	smr_freestack_push_by_index(smr_sar_pool(smr), index);
+	ofi_spin_unlock(&smr->fs_lock);
 }
 
 struct smr_attr {
