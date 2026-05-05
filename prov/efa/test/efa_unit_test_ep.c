@@ -480,7 +480,7 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	/* Do not use shm in this unit test because we are testing efa rma path */
-	peer->conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	peer->av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	assert_false(efa_rdm_ep->homogeneous_peers);
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 

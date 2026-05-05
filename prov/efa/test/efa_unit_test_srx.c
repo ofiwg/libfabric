@@ -84,7 +84,7 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
 	struct efa_rdm_pke *pke;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
-	struct efa_conn conn = {0};
+	struct efa_proto_av_entry fake_entry = {0};
 	struct efa_rdm_peer peer;
 	struct efa_unit_test_eager_rtm_pkt_attr pke_attr = {.msg_id = 0,
 							    .connid = 0x1234};
@@ -113,8 +113,8 @@ void test_efa_srx_unexp_pkt(struct efa_resource **state)
 		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
 	raw_addr.qpn = 0;
 	raw_addr.qkey = 0x1234;
-	conn.ep_addr = &raw_addr;
-	efa_rdm_peer_construct(&peer, efa_rdm_ep, &conn);
+	memcpy(fake_entry.ep_addr, &raw_addr, EFA_EP_ADDR_LEN);
+	efa_rdm_peer_construct(&peer, efa_rdm_ep, &fake_entry);
 	pke->peer = &peer;
 
 	efa_unit_test_eager_msgrtm_pkt_construct(pke, &pke_attr);

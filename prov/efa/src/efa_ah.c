@@ -35,7 +35,7 @@ void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 }
 
 static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
-	struct efa_conn *conn_to_release;
+	struct efa_proto_av_entry *entry_to_release;
 	struct efa_ah *ah_tmp, *ah_to_release = NULL;
 	struct dlist_entry *tmp;
 
@@ -57,13 +57,13 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
 	assert(ah_to_release->implicit_refcnt > 0);
 
 	dlist_foreach_container_safe(&ah_to_release->implicit_conn_list,
-				      struct efa_conn, conn_to_release,
+				      struct efa_proto_av_entry, entry_to_release,
 				      ah_implicit_conn_list_entry, tmp) {
 
-		assert(conn_to_release->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
-		       conn_to_release->fi_addr == FI_ADDR_NOTAVAIL);
+		assert(entry_to_release->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
+		       entry_to_release->fi_addr == FI_ADDR_NOTAVAIL);
 
-		efa_conn_release_ah_unsafe(conn_to_release->av, conn_to_release, true);
+		efa_proto_av_entry_release_ah_unsafe(entry_to_release->av, entry_to_release, true);
 	}
 
 	if (ah_to_release->implicit_refcnt == 0 &&

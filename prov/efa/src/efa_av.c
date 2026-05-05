@@ -102,62 +102,6 @@ fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->av_entry->conn.fi_addr : FI_ADDR_NOTAVAIL;
 }
 
-static inline struct efa_conn *
-efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
-			       struct efa_prv_reverse_av **prv_reverse_av,
-			       uint16_t ahn, uint16_t qpn,
-			       struct efa_rdm_pke *pkt_entry)
-{
-	uint32_t *connid;
-	struct efa_cur_reverse_av *cur_entry;
-	struct efa_prv_reverse_av *prv_entry;
-	struct efa_cur_reverse_av_key cur_key;
-	struct efa_prv_reverse_av_key prv_key;
-
-	cur_key.ahn = ahn;
-	cur_key.qpn = qpn;
-
-	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
-
-	if (OFI_UNLIKELY(!cur_entry))
-		return NULL;
-
-	if (!pkt_entry) {
-		/**
-		 * There is no packet entry to extract connid from when we get
-		 * an IBV_WC_RECV_RDMA_WITH_IMM completion from rdma-core. Or
-		 * the pkt_entry is allocated from a buffer user posted that
-		 * doesn't expect any pkt hdr.
-		 */
-		return &cur_entry->av_entry->conn;
-	}
-
-	connid = efa_rdm_pke_connid_ptr(pkt_entry);
-	if (!connid) {
-		EFA_WARN_ONCE(FI_LOG_EP_CTRL,
-			      "An incoming packet does NOT have connection ID "
-			      "in its header.\n"
-			      "This means the peer is using an older version "
-			      "of libfabric.\n"
-			      "The communication can continue but it is "
-			      "encouraged to use\n"
-			      "a newer version of libfabric\n");
-		return &cur_entry->av_entry->conn;
-	}
-
-	if (OFI_LIKELY(*connid == efa_av_entry_ep_addr(cur_entry->av_entry)->qkey))
-		return &cur_entry->av_entry->conn;
-
-	/* the packet is from a previous peer, look for its address from the
-	 * prv_reverse_av */
-	prv_key.ahn = ahn;
-	prv_key.qpn = qpn;
-	prv_key.connid = *connid;
-	HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key), prv_entry);
-
-	return OFI_LIKELY(!!prv_entry) ? &prv_entry->av_entry->conn : NULL;
-};
-
 /**
  * @brief find fi_addr for rdm endpoint in the explicit AV
  *
@@ -171,15 +115,9 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
 fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn,
 				    uint16_t qpn, struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_conn *conn;
+	struct efa_proto_av *proto_av = container_of(av, struct efa_proto_av, efa_av);
 
-	conn = efa_av_reverse_lookup_rdm_conn(
-		&av->cur_reverse_av, &av->prv_reverse_av, ahn, qpn, pkt_entry);
-
-	if (OFI_LIKELY(!!conn))
-		return conn->fi_addr;
-
-	return FI_ADDR_NOTAVAIL;
+	return efa_proto_av_reverse_lookup(proto_av, ahn, qpn, pkt_entry);
 }
 
 /**
@@ -196,20 +134,9 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 					     uint16_t qpn,
 					     struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_conn *conn;
+	struct efa_proto_av *proto_av = container_of(av, struct efa_proto_av, efa_av);
 
-	assert(ofi_genlock_held(&av->domain->srx_lock));
-
-	conn = efa_av_reverse_lookup_rdm_conn(&av->cur_reverse_av_implicit,
-					      &av->prv_reverse_av_implicit, ahn,
-					      qpn, pkt_entry);
-
-	if (OFI_LIKELY(!!conn)) {
-		efa_av_implicit_av_lru_conn_move(av, conn);
-		return conn->implicit_fi_addr;
-	}
-
-	return FI_ADDR_NOTAVAIL;
+	return efa_proto_av_reverse_lookup_implicit(proto_av, ahn, qpn, pkt_entry);
 }
 
 /**
@@ -344,7 +271,7 @@ efa_av_get_addr_from_peer_rx_entry(struct fi_peer_rx_entry *rx_entry)
 
 	pke = (struct efa_rdm_pke *) rx_entry->peer_context;
 
-	return pke->peer->conn->fi_addr;
+	return pke->peer->av_entry->fi_addr;
 }
 
 static int efa_conn_implicit_to_explicit(struct efa_av *av,
@@ -414,7 +341,7 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	HASH_ITER(hh, implicit_conn->ep_peer_map, map_entry, tmp) {
 		HASH_DELETE(hh, implicit_conn->ep_peer_map, map_entry);
 		HASH_ADD_PTR(explicit_conn->ep_peer_map, ep_ptr, map_entry);
-		map_entry->peer.conn = explicit_conn;
+		map_entry->peer.av_entry = (struct efa_proto_av_entry *)explicit_conn;
 	}
 	assert(HASH_CNT(hh, implicit_conn->ep_peer_map) == 0);
 
