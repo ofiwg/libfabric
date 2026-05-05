@@ -38,7 +38,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 {
 	struct efa_domain *domain = base_ep->domain;
 	struct efa_mr *efa_mr;
-	struct efa_conn *conn;
+	struct efa_av_entry *av_entry;
 	size_t iov_count = msg->iov_count;
 	struct ibv_sge sge_list[2];  /* efa device support up to 2 iov */
 	uintptr_t wr_id;
@@ -102,15 +102,15 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 		}
 	}
 
-	conn = efa_av_addr_to_conn(base_ep->av, msg->addr);
-	assert(conn && conn->ep_addr);
+	av_entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
+	assert(av_entry && efa_av_entry_ep_addr(av_entry));
 
 	/* Use consolidated RDMA read function */
 	/* ep->domain->info->tx_attr->rma_iov_limit is set to 1 */
 	err = efa_qp_post_read(base_ep->qp, sge_list, iov_count,
 			       msg->rma_iov[0].key, msg->rma_iov[0].addr,
 			       wr_id, flags,
-			       conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
+			       av_entry->conn.ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 
@@ -200,7 +200,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 					 uint64_t flags)
 {
 	struct efa_domain *domain = base_ep->domain;
-	struct efa_conn *conn;
+	struct efa_av_entry *av_entry;
 	size_t iov_count = msg->iov_count;
 	struct ibv_sge sge_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
@@ -294,15 +294,15 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		}
 	}
 
-	conn = efa_av_addr_to_conn(base_ep->av, msg->addr);
-	assert(conn && conn->ep_addr);
+	av_entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
+	assert(av_entry && efa_av_entry_ep_addr(av_entry));
 
 	/* Use consolidated RDMA write function */
 	err = efa_qp_post_write(base_ep->qp, sge_list, iov_count,
 				inline_data_list, use_inline,
 				msg->rma_iov[0].key, msg->rma_iov[0].addr,
 				wr_id, msg->data, flags,
-				conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
+				av_entry->conn.ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 
