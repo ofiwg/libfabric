@@ -16,6 +16,7 @@
 		FI_EP_RDM,
 	],
 	test_class: [
+		FT_CAP_MSG,
 		FT_CAP_TAGGED,
 	],
 	comp_type: [
@@ -39,10 +40,71 @@
 		FI_EP_RDM,
 	],
 	test_class: [
+		FT_CAP_MSG,
 		FT_CAP_TAGGED,
 	],
 	comp_type: [
 		FT_COMP_QUEUE,
 	],
 	test_flags: FT_FLAG_QUICKTEST
-}
+},
+{
+	prov_name: lnx,
+	test_type: [
+		FT_TEST_LATENCY,
+		FT_TEST_BANDWIDTH,
+	],
+	class_function: [
+		FT_FUNC_WRITE,
+		FT_FUNC_WRITEV,
+		FT_FUNC_WRITEMSG,
+		FT_FUNC_INJECT_WRITE,
+		FT_FUNC_WRITEDATA,
+		FT_FUNC_INJECT_WRITEDATA,
+		FT_FUNC_READ,
+		FT_FUNC_READV,
+		FT_FUNC_READMSG,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	test_class: [
+		FT_CAP_RMA,
+	],
+	mr_mode: [
+		FI_MR_RAW,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+	],
+},
+{
+	prov_name: lnx,
+	test_type: [
+		FT_TEST_UNIT,
+	],
+	class_function: [
+		FT_FUNC_WRITE,
+		FT_FUNC_WRITEV,
+		FT_FUNC_WRITEMSG,
+		FT_FUNC_INJECT_WRITE,
+		FT_FUNC_WRITEDATA,
+		FT_FUNC_INJECT_WRITEDATA,
+		FT_FUNC_READ,
+		FT_FUNC_READV,
+		FT_FUNC_READMSG,
+	],
+	ep_type: [
+		FI_EP_RDM,
+	],
+	test_class: [
+		FT_CAP_RMA,
+	],
+	mr_mode: [
+		FI_MR_RAW,
+	],
+	comp_type: [
+		FT_COMP_QUEUE,
+	],
+	test_flags: FT_FLAG_QUICKTEST
+},

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022 ORNL. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,36 +31,9 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-#include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#include <rdma/fi_errno.h>
-#include "ofi_util.h"
-#include "ofi.h"
-#include "ofi_str.h"
-#include "ofi_prov.h"
-#include "ofi_perf.h"
-#include "ofi_hmem.h"
-#include "rdma/fi_ext.h"
 #include "lnx.h"
 
-struct lnx_peer *
-lnx_av_lookup_addr(struct lnx_av *av, fi_addr_t addr)
+struct lnx_peer *lnx_av_lookup_addr(struct lnx_av *av, fi_addr_t addr)
 {
 	struct lnx_peer *lp, **lpp;
 
@@ -80,7 +54,7 @@ lnx_av_lookup_addr(struct lnx_av *av, fi_addr_t addr)
 	return lp;
 }
 
-int lnx_av_close(struct fid *fid)
+static int lnx_av_close(struct fid *fid)
 {
 	int i, rc, frc = 0;
 	struct lnx_core_av *core_av;
@@ -110,35 +84,6 @@ static struct fi_ops lnx_av_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static void
-lnx_update_msg_entries(struct lnx_qpair *qp,
-		       fi_addr_t (*get_addr)(struct fi_peer_rx_entry *))
-{
-	struct lnx_queue *q = &qp->lqp_unexq;
-	struct lnx_rx_entry *rx_entry;
-	struct dlist_entry *item;
-
-	dlist_foreach(&q->lq_queue, item) {
-		rx_entry = (struct lnx_rx_entry *) item;
-		if (rx_entry->rx_entry.addr == FI_ADDR_UNSPEC)
-			rx_entry->rx_entry.addr = get_addr(&rx_entry->rx_entry);
-	}
-}
-
-void
-lnx_foreach_unspec_addr(struct fid_peer_srx *srx,
-			fi_addr_t (*get_addr)(struct fi_peer_rx_entry *))
-{
-	struct lnx_ep *lep;
-	struct lnx_core_ep *cep;
-
-	cep = (struct lnx_core_ep *) srx->ep_fid.fid.context;
-	lep = cep->cep_parent;
-
-	lnx_update_msg_entries(&lep->le_srq.lps_trecv, get_addr);
-	lnx_update_msg_entries(&lep->le_srq.lps_recv, get_addr);
-}
-
 static int lnx_peer_av_remove(struct lnx_peer *lp)
 {
 	int i, j, rc, frc = 0;
@@ -151,17 +96,18 @@ static int lnx_peer_av_remove(struct lnx_peer *lp)
 			break;
 		map_addr = ofi_bufpool_get_ibuf(cav->cav_map, lp->lp_addr);
 		for (j = 0; j < map_addr->map_count; j++) {
-			rc = fi_av_remove(cav->cav_av, &map_addr->map_addrs[j], 1, 0);
+			rc = fi_av_remove(cav->cav_av, &map_addr->map_addrs[j],
+					  1, 0);
 			if (rc)
 				frc = rc;
 		}
+		ofi_ibuf_free(map_addr);
 	}
 
 	return frc;
 }
 
-static void
-lnx_free_src_eps(struct lnx_peer_ep_map *src_eps, int count)
+static void lnx_free_src_eps(struct lnx_peer_ep_map *src_eps, int count)
 {
 	int i;
 
@@ -197,8 +143,8 @@ out:
 	return rc;
 }
 
-int lnx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
-		  uint64_t flags)
+static int lnx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
+			 uint64_t flags)
 {
 	struct lnx_av *lav;
 	int frc = 0, rc, i;
@@ -214,9 +160,8 @@ int lnx_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 	return frc;
 }
 
-static int
-lnx_setup_ep_mapping(struct lnx_peer *lp,
-		    struct lnx_core_ep *ceps[][LNX_MAX_LOCAL_EPS])
+static int lnx_setup_ep_mapping(struct lnx_peer *lp,
+				struct lnx_core_ep *ceps[][LNX_MAX_LOCAL_EPS])
 {
 	int i = 0, j = 0;
 	size_t size;
@@ -240,7 +185,8 @@ lnx_setup_ep_mapping(struct lnx_peer *lp,
 		return -FI_ENOMEM;
 
 	for (j = 0; j < i; j++) {
-		lp->lp_src_eps[j].pem_eps = calloc(sizeof(struct lnx_core_ep *)*counts[j], 1);
+		lp->lp_src_eps[j].pem_eps = calloc(
+				sizeof(struct lnx_core_ep *) * counts[j], 1);
 		if (!lp->lp_src_eps[j].pem_eps) {
 			lnx_free_src_eps(lp->lp_src_eps, lp->lp_ep_count);
 			return -FI_ENOMEM;
@@ -261,10 +207,10 @@ lnx_setup_ep_mapping(struct lnx_peer *lp,
 	return FI_SUCCESS;
 }
 
-static int
-lnx_insert_addr(struct lnx_core_av *core_av, struct lnx_ep_addr *addr,
-		struct lnx_peer *lp,
-		struct lnx_core_ep *cep_tmp[][LNX_MAX_LOCAL_EPS], bool local)
+static int lnx_insert_addr(struct lnx_core_av *core_av,
+			   struct lnx_ep_addr *addr, struct lnx_peer *lp,
+			   struct lnx_core_ep *cep_tmp[][LNX_MAX_LOCAL_EPS],
+			   bool local)
 {
 	int i, rc;
 	bool present;
@@ -284,8 +230,8 @@ lnx_insert_addr(struct lnx_core_av *core_av, struct lnx_ep_addr *addr,
 		return FI_SUCCESS;
 
 	/* cache the endpoint information */
-	dlist_foreach_container(&core_av->cav_endpoints, struct lnx_core_ep, cep,
-				cep_av_entry) {
+	dlist_foreach_container(&core_av->cav_endpoints, struct lnx_core_ep,
+				cep, cep_av_entry) {
 		lep = cep->cep_parent;
 		present = false;
 		i = 0;
@@ -310,7 +256,8 @@ lnx_insert_addr(struct lnx_core_av *core_av, struct lnx_ep_addr *addr,
 		if (!cav)
 			break;
 		if (cav == core_av) {
-			map_addr = ofi_bufpool_get_ibuf(core_av->cav_map, lp->lp_addr);
+			map_addr = ofi_bufpool_get_ibuf(core_av->cav_map,
+							lp->lp_addr);
 			goto insert;
 		}
 	}
@@ -323,7 +270,8 @@ lnx_insert_addr(struct lnx_core_av *core_av, struct lnx_ep_addr *addr,
 insert:
 	core_fi_addr = lnx_encode_fi_addr(lp->lp_addr, map_addr->map_count);
 
-	rc = fi_av_insert(core_av->cav_av, core_addr, 1, &core_fi_addr, FI_AV_USER_ID, NULL);
+	rc = fi_av_insert(core_av->cav_av, core_addr, 1, &core_fi_addr,
+			  FI_AV_USER_ID, NULL);
 	if (rc <= 0)
 		return rc;
 
@@ -337,7 +285,6 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 {
 	int i, j, k, rc;
 	bool local, once;
-	int disable_shm = 0;
 	struct lnx_peer *lp;
 	char hostname[FI_NAME_MAX];
 	struct lnx_av *lav;
@@ -347,8 +294,6 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 
 	if (flags & FI_AV_USER_ID)
 		return -FI_ENOSYS;
-
-	fi_param_get_bool(&lnx_prov, "disable_shm", &disable_shm);
 
 	lav = container_of(av, struct lnx_av, lav_av.av_fid.fid);
 
@@ -381,7 +326,7 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		 * inter-node providers
 		 */
 		if (!strcmp(hostname, la->la_hostname) &&
-		    !strcmp(lea->lea_prov, "shm") && !disable_shm)
+		    !strcmp(lea->lea_prov, "shm") && !lnx_env.disable_shm)
 			local = true;
 
 		ofi_genlock_lock(&lav->lav_av.lock);
@@ -402,10 +347,12 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			for (k = 0; k < lav->lav_domain->ld_num_doms; k++) {
 				core_av = &lav->lav_core_avs[k];
 
-				rc = lnx_insert_addr(core_av, lea, lp, cep_tmp, local);
+				rc = lnx_insert_addr(core_av, lea, lp, cep_tmp,
+						     local);
 				if (rc) {
-					(void) lnx_av_remove(&lav->lav_av.av_fid,
-							     &lp->lp_addr, 1, 0);
+					(void) lnx_av_remove(
+							&lav->lav_av.av_fid,
+							&lp->lp_addr, 1, 0);
 					return rc;
 				}
 				if (local) {
@@ -415,12 +362,13 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			}
 skip:
 			lea = (struct lnx_ep_addr *)
-				((char*)lea + sizeof(*lea) + lea->lea_addr_size);
+				((char*)lea + sizeof(*lea) +
+				 lea->lea_addr_size);
 		}
 		rc = lnx_setup_ep_mapping(lp, cep_tmp);
 		if (rc) {
 			(void) lnx_av_remove(&lav->lav_av.av_fid,
-						&lp->lp_addr, 1, 0);
+					     &lp->lp_addr, 1, 0);
 			return rc;
 		}
 
@@ -430,17 +378,15 @@ skip:
 	return i;
 }
 
-static const char *
-lnx_av_straddr(struct fid_av *av, const void *addr,
-	       char *buf, size_t *len)
+static const char * lnx_av_straddr(struct fid_av *av, const void *addr,
+				   char *buf, size_t *len)
 {
 	/* TODO: implement */
 	return NULL;
 }
 
-static int
-lnx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
-	      size_t *addrlen)
+static int lnx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
+			 size_t *addrlen)
 {
 	/* TODO: implement */
 	return -FI_EOPNOTSUPP;
@@ -547,5 +493,3 @@ failed:
 out:
 	return rc;
 }
-
-

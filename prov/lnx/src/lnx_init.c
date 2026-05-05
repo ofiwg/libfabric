@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022 ORNL. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,24 +31,9 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <dirent.h>
-#include <ctype.h>
-
-#include <rdma/fi_errno.h>
-#include "ofi_util.h"
-#include "ofi.h"
-#include "ofi_str.h"
-#include "ofi_prov.h"
-#include "ofi_perf.h"
-#include "ofi_hmem.h"
-#include "rdma/fi_ext.h"
 #include "lnx.h"
+#include "ofi_prov.h"
+#include <ctype.h>
 
 #define LNX_PASSTHRU_TX_OP_FLAGS	(FI_INJECT_COMPLETE | \
 					 FI_TRANSMIT_COMPLETE | \
@@ -57,24 +43,32 @@
 				 FI_DELIVERY_COMPLETE | FI_TRANSMIT_COMPLETE)
 #define LNX_RX_OP_FLAGS		(FI_COMPLETION)
 
-ofi_spin_t global_bplock;
-struct ofi_bufpool *global_recv_bp = NULL;
+#define LNX_TX_CAPS		(OFI_TX_MSG_CAPS | FI_TAGGED | FI_HMEM | \
+				 OFI_TX_RMA_CAPS)
+#define LNX_RX_CAPS		(OFI_RX_MSG_CAPS | FI_TAGGED | FI_HMEM | \
+				 FI_DIRECTED_RECV | OFI_RX_RMA_CAPS)
 
 struct util_fabric lnx_fabric_info;
+struct lnx_env lnx_env = {
+	.mr = LNX_MR_SELECTION_PER_PEER,
+	.prov_links = NULL,
+	.disable_shm = false,
+	.dump_stats = false,
+};
 
 struct fi_tx_attr lnx_tx_attr = {
-	.caps 		= ~0x0ULL,
+	.caps 		= LNX_TX_CAPS,
 	.op_flags	= LNX_PASSTHRU_TX_OP_FLAGS | LNX_TX_OP_FLAGS,
 	.msg_order 	= ~0x0ULL,
 	.comp_order 	= 0,
 	.inject_size 	= SIZE_MAX,
 	.size 		= SIZE_MAX,
 	.iov_limit 	= LNX_IOV_LIMIT,
-	.rma_iov_limit = LNX_IOV_LIMIT,
+	.rma_iov_limit	= LNX_IOV_LIMIT,
 };
 
 struct fi_rx_attr lnx_rx_attr = {
-	.caps 			= ~0x0ULL,
+	.caps 			= LNX_RX_CAPS,
 	.op_flags		= LNX_PASSTHRU_RX_OP_FLAGS | LNX_RX_OP_FLAGS,
 	.msg_order 		= ~0x0ULL,
 	.comp_order 		= 0,
@@ -92,9 +86,9 @@ struct fi_ep_attr lnx_ep_attr = {
 	.max_order_raw_size 	= SIZE_MAX,
 	.max_order_war_size 	= SIZE_MAX,
 	.max_order_waw_size 	= SIZE_MAX,
-	.mem_tag_format = FI_TAG_GENERIC,
-	.tx_ctx_cnt 		= SIZE_MAX,
-	.rx_ctx_cnt 		= SIZE_MAX,
+	.mem_tag_format		= FI_TAG_GENERIC,
+	.tx_ctx_cnt 		= 0,
+	.rx_ctx_cnt 		= 0,
 	.auth_key		= NULL,
 	.auth_key_size		= 0,
 };
@@ -106,17 +100,17 @@ struct fi_domain_attr lnx_domain_attr = {
 	.data_progress 		= FI_PROGRESS_AUTO,
 	.resource_mgmt 		= FI_RM_ENABLED,
 	.av_type 		= FI_AV_TABLE,
-	.mr_mode 		= FI_MR_RAW,
+	.mr_mode 		= 0,
 	.mr_key_size		= SIZE_MAX,
 	.cq_data_size 		= SIZE_MAX,
 	.cq_cnt 		= SIZE_MAX,
 	.ep_cnt 		= SIZE_MAX,
-	.tx_ctx_cnt 		= SIZE_MAX,
-	.rx_ctx_cnt 		= SIZE_MAX,
-	.max_ep_tx_ctx 		= SIZE_MAX,
-	.max_ep_rx_ctx 		= SIZE_MAX,
-	.max_ep_stx_ctx 	= SIZE_MAX,
-	.max_ep_srx_ctx 	= SIZE_MAX,
+	.tx_ctx_cnt 		= 0,
+	.rx_ctx_cnt 		= 0,
+	.max_ep_tx_ctx 		= 0,
+	.max_ep_rx_ctx 		= 0,
+	.max_ep_stx_ctx 	= 0,
+	.max_ep_srx_ctx 	= 0,
 	.cntr_cnt 		= SIZE_MAX,
 	.mr_iov_limit 		= SIZE_MAX,
 	.caps			= ~0x0ULL,
@@ -131,13 +125,39 @@ struct fi_fabric_attr lnx_fabric_attr = {
 };
 
 struct fi_info lnx_info = {
-	.caps = ~0x0ULL,
+	.caps = LNX_TX_CAPS | LNX_RX_CAPS,
 	.tx_attr = &lnx_tx_attr,
 	.rx_attr = &lnx_rx_attr,
 	.ep_attr = &lnx_ep_attr,
 	.domain_attr = &lnx_domain_attr,
 	.fabric_attr = &lnx_fabric_attr
 };
+
+static int lnx_fabric_close(struct fid *fid)
+{
+	int rc, i, frc = 0;
+	struct lnx_core_fabric *cf;
+	struct lnx_fabric *lnx_fab;
+
+	lnx_fab = container_of(fid, struct lnx_fabric,
+			       lf_util_fabric.fabric_fid.fid);
+
+	for (i = 0; i < lnx_fab->lf_num_fabs; i++) {
+		cf = &lnx_fab->lf_core_fabrics[i];
+
+		rc = fi_close(&cf->cf_fabric->fid);
+		if (rc)
+			frc = rc;
+	}
+
+	rc = ofi_fabric_close(&lnx_fab->lf_util_fabric);
+	if (rc)
+		frc = rc;
+
+	free(lnx_fab->lf_core_fabrics);
+
+	return frc;
+}
 
 static struct fi_ops lnx_fabric_fi_ops = {
 	.size = sizeof(struct fi_ops),
@@ -162,7 +182,6 @@ static int lnx_wait_open(struct fid_fabric *fabric_fid,
 	}
 }
 
-
 static struct fi_ops_fabric lnx_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = lnx_domain_open,
@@ -175,22 +194,6 @@ static struct fi_ops_fabric lnx_fabric_ops = {
 	.trywait = fi_no_trywait
 };
 
-struct fi_provider lnx_prov = {
-	.name = OFI_LNX,
-	.version = OFI_VERSION_DEF_PROV,
-	.fi_version = OFI_VERSION_LATEST,
-	.getinfo = lnx_getinfo,
-	.fabric = lnx_fabric,
-	.cleanup = lnx_fini
-};
-
-struct util_prov lnx_util_prov = {
-	.prov = &lnx_prov,
-	.info = &lnx_info,
-	.flags = 0
-};
-
-/* this is a list of all possible links */
 struct dlist_entry lnx_links;
 
 struct lnx_fi_cache_entry {
@@ -224,15 +227,14 @@ static void lnx_trim(char *str)
 	str[i] = '\0';
 }
 
-
-void lnx_free_links(struct dlist_entry *links)
+static void lnx_free_links(struct dlist_entry *links)
 {
 	struct lnx_link_info *link;
 	struct lnx_fi_cache_entry *e;
 	struct dlist_entry *tmp, *tmp2;
 
-	dlist_foreach_container_safe(links, struct lnx_link_info, link,
-				     entry, tmp) {
+	dlist_foreach_container_safe(links, struct lnx_link_info, link, entry,
+				     tmp) {
 		dlist_foreach_container_safe(&link->link_providers,
 					     struct lnx_fi_cache_entry, e,
 					     entry, tmp2) {
@@ -245,8 +247,8 @@ void lnx_free_links(struct dlist_entry *links)
 	}
 }
 
-static int lnx_cache_info(struct dlist_entry *head,
-			  struct fi_info *info, bool new_prov)
+static int lnx_cache_info(struct dlist_entry *head, struct fi_info *info,
+			  bool new_prov)
 {
 	struct lnx_fi_cache_entry *e;
 	struct fi_info *itr;
@@ -287,13 +289,11 @@ insert:
 	return 0;
 }
 
-static struct lnx_link_info *
-lnx_get_link_by_dom(char *domain_name)
+static struct lnx_link_info *lnx_get_link_by_dom(char *domain_name)
 {
 	struct lnx_link_info *link;
 
-	dlist_foreach_container(&lnx_links, struct lnx_link_info, link,
-				entry) {
+	dlist_foreach_container(&lnx_links, struct lnx_link_info, link, entry) {
 		if (!strcmp(domain_name, link->fi_link->domain_attr->name))
 			return link;
 	}
@@ -301,25 +301,25 @@ lnx_get_link_by_dom(char *domain_name)
 	return NULL;
 }
 
-static int lnx_generate_link_info(struct fi_info **info, const struct fi_info *hints)
+static int lnx_generate_link_info(uint32_t version, const struct fi_info *hints,
+				  struct fi_info **info)
 {
 	struct fi_info *itr, *fi = NULL, *next;
 	struct lnx_link_info *link;
 	struct lnx_fi_cache_entry *e;
-	size_t min_inject_size = SIZE_MAX, min_of_max_msg_size = SIZE_MAX;
+	size_t min_inject_size = SIZE_MAX, min_max_msg_size = SIZE_MAX;
 	size_t min_rx_size = SIZE_MAX, min_tx_size = SIZE_MAX;
 	size_t min_iov_limit = LNX_IOV_LIMIT;
 	int mr_mode = 0;
-	int len;
+	int len, link_cnt = 0;
 	int str_len = 1024;
 	char *tmp, *tmp2;
 	char *link_name;
 	char *prov_name;
 	bool reset;
-	uint64_t caps = 0;
+	uint64_t tx_caps = 0, rx_caps = 0;
 
-	dlist_foreach_container(&lnx_links, struct lnx_link_info, link,
-				entry) {
+	dlist_foreach_container(&lnx_links, struct lnx_link_info, link, entry) {
 		link_name = calloc(sizeof(char), str_len);
 		if (!link_name)
 			return -FI_ENOMEM;
@@ -349,16 +349,19 @@ static int lnx_generate_link_info(struct fi_info **info, const struct fi_info *h
 			mr_mode |= e->fi->domain_attr->mr_mode;
 
 			if (reset) {
-				caps = e->fi->caps;
-				min_inject_size = min_of_max_msg_size = SIZE_MAX;
+				tx_caps = LNX_TX_CAPS & e->fi->tx_attr->caps;
+				rx_caps = LNX_RX_CAPS & e->fi->rx_attr->caps;
+				min_inject_size = min_max_msg_size = SIZE_MAX;
 				min_rx_size = min_tx_size = SIZE_MAX;
 				min_iov_limit = LNX_IOV_LIMIT;
 				reset = false;
 			} else {
-				caps &= e->fi->caps;
+				tx_caps &= e->fi->tx_attr->caps;
+				rx_caps &= e->fi->rx_attr->caps;
 			}
-			if (e->fi->ep_attr->max_msg_size < min_of_max_msg_size)
-				min_of_max_msg_size = e->fi->ep_attr->max_msg_size;
+			if (e->fi->ep_attr->max_msg_size < min_max_msg_size)
+				min_max_msg_size =
+						e->fi->ep_attr->max_msg_size;
 			if (e->fi->tx_attr->inject_size < min_inject_size)
 				min_inject_size = e->fi->tx_attr->inject_size;
 			if (e->fi->tx_attr->iov_limit < min_iov_limit)
@@ -375,7 +378,8 @@ static int lnx_generate_link_info(struct fi_info **info, const struct fi_info *h
 						tmp[0] = '+';
 						tmp++;
 					}
-					memcpy(tmp, itr->domain_attr->name, len);
+					memcpy(tmp, itr->domain_attr->name,
+					       len);
 					tmp += (len - 1);
 				} else {
 					str_len = str_len * 2 + len;
@@ -389,13 +393,15 @@ static int lnx_generate_link_info(struct fi_info **info, const struct fi_info *h
 					tmp2 = link_name + str_len - 1;
 					tmp[0] = '+';
 					tmp++;
-					memcpy(tmp, itr->domain_attr->name, len);
+					memcpy(tmp, itr->domain_attr->name,
+					       len);
 					tmp += (len - 1);
 				}
 			}
+			link_cnt++;
 		}
 
-		link_name = realloc(link_name, strlen(link_name)+1);
+		link_name = realloc(link_name, strlen(link_name) + 1);
 		free(link->fi_link->fabric_attr->prov_name);
 		free(link->fi_link->fabric_attr->name);
 		free(link->fi_link->domain_attr->name);
@@ -410,19 +416,39 @@ static int lnx_generate_link_info(struct fi_info **info, const struct fi_info *h
 		next = fi_dupinfo(link->fi_link);
 		next->ep_attr->protocol = FI_PROTO_LNX;
 		next->domain_attr->mr_mode = mr_mode;
-		next->domain_attr->rx_ctx_cnt = lnx_util_prov.info->domain_attr->rx_ctx_cnt;
-		next->domain_attr->tx_ctx_cnt = lnx_util_prov.info->domain_attr->tx_ctx_cnt;
-		next->ep_attr->rx_ctx_cnt = lnx_util_prov.info->ep_attr->rx_ctx_cnt;
-		next->ep_attr->tx_ctx_cnt = lnx_util_prov.info->ep_attr->tx_ctx_cnt;
-		if (hints)
-			next->caps = caps & hints->caps;
-		else
-			next->caps = caps;
+		next->domain_attr->rx_ctx_cnt =
+				lnx_util_prov.info->domain_attr->rx_ctx_cnt;
+		next->domain_attr->tx_ctx_cnt =
+				lnx_util_prov.info->domain_attr->tx_ctx_cnt;
+		next->ep_attr->rx_ctx_cnt =
+				lnx_util_prov.info->ep_attr->rx_ctx_cnt;
+		next->ep_attr->tx_ctx_cnt =
+				lnx_util_prov.info->ep_attr->tx_ctx_cnt;
+
+		if (!hints || !hints->caps) {
+			next->tx_attr->caps = tx_caps;
+			next->rx_attr->caps = rx_caps;
+		} else {
+			next->tx_attr->caps = (tx_caps & hints->caps);
+			next->rx_attr->caps = (rx_caps & hints->caps);
+		}
+		next->caps = next->tx_attr->caps | next->rx_attr->caps;
 		next->tx_attr->inject_size = min_inject_size;
 		next->tx_attr->iov_limit = min_iov_limit;
-		next->ep_attr->max_msg_size = min_of_max_msg_size;
+		next->ep_attr->max_msg_size = min_max_msg_size;
 		next->rx_attr->size = min_rx_size;
 		next->tx_attr->size = min_tx_size;
+		next->domain_attr->mr_key_size = sizeof(uint64_t) * link_cnt;
+
+		if (next->caps & FI_RMA) {
+			//TODO need to add support for using providers with and
+			//without FI_MR_VIRT_ADDR
+			if (!(hints->domain_attr->mr_mode & FI_MR_RAW)) {
+				fi_freeinfo(next);
+				return -FI_ENODATA;
+			}
+			next->domain_attr->mr_mode |= FI_MR_RAW;
+		}
 
 		if (!next)
 			return -FI_ENOMEM;
@@ -441,8 +467,7 @@ static int lnx_generate_link_info(struct fi_info **info, const struct fi_info *h
 	return FI_SUCCESS;
 }
 
-static struct fi_info *
-lnx_filter_info(struct fi_info *fi, char *domain)
+static struct fi_info *lnx_filter_info(struct fi_info *fi, char *domain)
 {
 	struct fi_info *itr, *tmp, *filtered_head = NULL, *filtered_tail = NULL;
 
@@ -478,9 +503,9 @@ lnx_filter_info(struct fi_info *fi, char *domain)
 	return (filtered_head) ? filtered_head : fi;
 }
 
-int lnx_getinfo_helper(uint32_t version, char *prov, char *domain,
-		       struct fi_info *lnx_hints, bool new_prov,
-		       struct dlist_entry *link)
+static int lnx_getinfo_helper(uint32_t version, char *prov, char *domain,
+			      struct fi_info *lnx_hints, bool new_prov,
+			      struct dlist_entry *link)
 {
 	int rc;
 	char *orig_prov_name = NULL, *orig_dom_name = NULL;
@@ -503,8 +528,8 @@ int lnx_getinfo_helper(uint32_t version, char *prov, char *domain,
 		lnx_hints->domain_attr->caps &= ~(FI_REMOTE_COMM);
 	}
 
-	rc = fi_getinfo(version, NULL, NULL, OFI_GETINFO_HIDDEN,
-			lnx_hints, &core_info);
+	rc = fi_getinfo(version, NULL, NULL, OFI_GETINFO_HIDDEN, lnx_hints,
+			&core_info);
 
 	lnx_hints->fabric_attr->prov_name = orig_prov_name;
 	lnx_hints->domain_attr->name = orig_dom_name;
@@ -521,15 +546,57 @@ int lnx_getinfo_helper(uint32_t version, char *prov, char *domain,
 	return rc;
 }
 
-int lnx_getinfo(uint32_t version, const char *node, const char *service,
-		uint64_t flags, const struct fi_info *hints,
-		struct fi_info **info)
+static int lnx_init_env(void)
+{
+	char *mr_selection;
+	int rc;
+
+	rc = fi_param_get_str(&lnx_prov, "prov_links", &lnx_env.prov_links);
+	if (rc) {
+		FI_WARN(&lnx_prov, FI_LOG_FABRIC,
+			"Error getting prov_links environment variable "
+			"lnx required FI_LNX_PROV_LINKS to determine links\n");
+		return -FI_EINVAL;
+	}
+
+	fi_param_get_bool(&lnx_prov, "disable_shm", &lnx_env.disable_shm);
+
+	rc = fi_param_get_str(&lnx_prov, "multi_rail_selection",
+			      &mr_selection);
+	if (rc == -FI_ENOENT || rc == -FI_ENODATA) {
+		/* if the user makes no selection, pick the safest method
+		 * which ensures send after send is satisfied
+		 */
+		lnx_env.mr = LNX_MR_SELECTION_PER_PEER;
+	} else if (!rc) {
+		if (strncasecmp("PER_MSG", mr_selection, strlen(mr_selection)) == 0) {
+			lnx_env.mr = LNX_MR_SELECTION_PER_MSG;
+		} else if (strncasecmp("PER_PEER", mr_selection,
+				strlen(mr_selection)) == 0) {
+			lnx_env.mr = LNX_MR_SELECTION_PER_PEER;
+		} else {
+			FI_WARN(&lnx_prov, FI_LOG_CORE,
+				"Unknown multi-rail selection policy: %s\n",
+				mr_selection);
+			return FI_EINVAL;
+		}
+	} else {
+		return rc;
+	}
+
+	fi_param_get_bool(&lnx_prov, "dump_stats", &lnx_env.dump_stats);
+
+	return 0;
+}
+
+static int lnx_getinfo(uint32_t version, const char *node, const char *service,
+		       uint64_t flags, const struct fi_info *hints,
+		       struct fi_info **info)
 {
 	int rc;
 	bool new_prov;
 	struct fi_info *lnx_hints = NULL;
 	struct lnx_link_info *link;
-	char *linked_provs, *linked_provs_cp;
 	char *save_ptr0, *save_ptr1, *save_ptr2, *provider_block,
 	     *provider, *domain, *link_block;
 
@@ -540,34 +607,31 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	if (!dlist_empty(&lnx_links))
 		goto generate_info;
 
-	rc = fi_param_get_str(&lnx_prov, "prov_links",
-			      &linked_provs);
+	rc = lnx_init_env();
 	if (rc)
 		return rc;
 
-	if (strstr(linked_provs, "lnx")) {
+	if (strstr(lnx_env.prov_links, "lnx")) {
 		FI_WARN(&lnx_prov, FI_LOG_FABRIC,
-			"Can't specify the lnx provider as part of the link: %s\n",
-			linked_provs);
+			"Can't specify the lnx provider as part of the link: "
+			"%s\n", lnx_env.prov_links);
 		return -FI_EINVAL;
 	}
-
-	linked_provs_cp = strdup(linked_provs);
-	if (!linked_provs_cp)
-		return -FI_ENOMEM;
+	rc = ofi_check_info(&lnx_util_prov, &lnx_info, version, hints);
+	if (rc)
+		return rc;
 
 	/* If the hints are not provided then we endup with a new block */
 	lnx_hints = fi_dupinfo(hints);
 	if (!lnx_hints)
 		return -FI_ENOMEM;
 
-	rc = ofi_exclude_prov_name(&lnx_hints->fabric_attr->prov_name, lnx_prov.name);
+	lnx_hints->caps |= FI_PEER | FI_AV_USER_ID;
+
+	rc = ofi_exclude_prov_name(&lnx_hints->fabric_attr->prov_name,
+				   lnx_prov.name);
 	if (rc)
 		return rc;
-
-	/* get the providers which support peer functionality. These are
-	 * the only ones we can link*/
-	lnx_hints->caps |= FI_PEER;
 
 	/* Format:
 	 *  '+' appends another provider to the link.
@@ -591,7 +655,7 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	 * domains
 	 *	ex: cxi:cxi0,cxi1
 	 */
-	link_block = strtok_r(linked_provs_cp, "|", &save_ptr0);
+	link_block = strtok_r(lnx_env.prov_links, "|", &save_ptr0);
 	while (link_block) {
 		lnx_trim(link_block);
 
@@ -614,9 +678,10 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 			domain = strtok_r(NULL, ",", &save_ptr2);
 			do {
 				lnx_trim(domain);
-				rc = lnx_getinfo_helper(version, provider, domain,
-						lnx_hints, new_prov,
-						&link->link_providers);
+				rc = lnx_getinfo_helper(version, provider,
+							domain, lnx_hints,
+							new_prov,
+							&link->link_providers);
 				if (rc)
 					return rc;
 				new_prov = false;
@@ -626,19 +691,17 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 		dlist_insert_tail(&link->entry, &lnx_links);
 		link_block = strtok_r(NULL, "|", &save_ptr0);
 	}
-	free(linked_provs_cp);
 
 generate_info:
-	rc = lnx_generate_link_info(info, hints);
+	rc = lnx_generate_link_info(version, hints, info);
 
 	if (lnx_hints)
 		fi_freeinfo(lnx_hints);
 	return rc;
 }
 
-static int
-lnx_setup_core_fab(struct lnx_fabric *lnx_fab, struct fi_info *info,
-		   void *context, int i)
+static int lnx_setup_core_fab(struct lnx_fabric *lnx_fab, struct fi_info *info,
+			      void *context, int i)
 {
 	int rc = -FI_ENOMEM;
 	struct lnx_core_fabric *cf;
@@ -658,9 +721,7 @@ fail:
 	return rc;
 }
 
-int
-lnx_setup_fabrics(char *name, struct lnx_fabric *lnx_fab,
-		  void *context)
+int lnx_setup_fabrics(char *name, struct lnx_fabric *lnx_fab, void *context)
 {
 	int rc;
 	struct lnx_link_info *link;
@@ -697,8 +758,8 @@ out:
 	return FI_SUCCESS;
 }
 
-int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		void *context)
+static int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+		      void *context)
 {
 	struct lnx_fabric *lnx_fab;
 	int rc;
@@ -708,8 +769,8 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		return -FI_ENOMEM;
 
 	rc = ofi_fabric_init(&lnx_prov, lnx_info.fabric_attr,
-			     lnx_info.fabric_attr,
-			     &lnx_fab->lf_util_fabric, context);
+			     lnx_info.fabric_attr, &lnx_fab->lf_util_fabric,
+			     context);
 	if (rc)
 		goto fail;
 
@@ -723,35 +784,9 @@ fail:
 	return rc;
 }
 
-void lnx_fini(void)
+static void lnx_fini(void)
 {
 	lnx_free_links(&lnx_links);
-	ofi_bufpool_destroy(global_recv_bp);
-}
-
-int lnx_fabric_close(struct fid *fid)
-{
-	int rc, i, frc = 0;
-	struct lnx_core_fabric *cf;
-	struct lnx_fabric *lnx_fab;
-
-	lnx_fab = container_of(fid, struct lnx_fabric, lf_util_fabric.fabric_fid.fid);
-
-	for (i = 0; i < lnx_fab->lf_num_fabs; i++) {
-		cf = &lnx_fab->lf_core_fabrics[i];
-
-		rc = fi_close(&cf->cf_fabric->fid);
-		if (rc)
-			frc = rc;
-	}
-
-	rc = ofi_fabric_close(&lnx_fab->lf_util_fabric);
-	if (rc)
-		frc = rc;
-
-	free(lnx_fab->lf_core_fabrics);
-
-	return frc;
 }
 
 void ofi_link_fini(void)
@@ -759,11 +794,23 @@ void ofi_link_fini(void)
 	lnx_prov.cleanup();
 }
 
+struct fi_provider lnx_prov = {
+	.name = OFI_LNX,
+	.version = OFI_VERSION_DEF_PROV,
+	.fi_version = OFI_VERSION_LATEST,
+	.getinfo = lnx_getinfo,
+	.fabric = lnx_fabric,
+	.cleanup = lnx_fini
+};
+
+struct util_prov lnx_util_prov = {
+	.prov = &lnx_prov,
+	.info = &lnx_info,
+	.flags = 0
+};
+
 LNX_INI
 {
-	struct ofi_bufpool_attr bp_attrs = {};
-	int ret;
-
 	fi_param_define(&lnx_prov, "multi_rail_selection", FI_PARAM_STRING,
 			"Specify which Multi-Rail endpoint selection "
 			"algorithm to use. One of: PER_MSG, PER_PEER. "
@@ -780,21 +827,6 @@ LNX_INI
 			"Dump LNX stats on shutdown. Defaults to 0");
 
 	dlist_init(&lnx_links);
-
-	if (!global_recv_bp) {
-		bp_attrs.size = sizeof(struct lnx_rx_entry);
-		bp_attrs.alignment = 8;
-		bp_attrs.max_cnt = UINT16_MAX;
-		bp_attrs.chunk_cnt = 64;
-		bp_attrs.flags = OFI_BUFPOOL_NO_TRACK;
-		ret = ofi_bufpool_create_attr(&bp_attrs, &global_recv_bp);
-		if (ret) {
-			FI_WARN(&lnx_prov, FI_LOG_FABRIC,
-				"Failed to create receive buffer pool");
-			return NULL;
-		}
-		ofi_spin_init(&global_bplock);
-	}
 
 	return &lnx_prov;
 }
