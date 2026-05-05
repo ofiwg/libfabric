@@ -37,6 +37,7 @@ _efa_files = \
 	prov/efa/src/efa_av.c \
 	prov/efa/src/efa_ah.c \
 	prov/efa/src/efa_conn.c \
+	prov/efa/src/rdm/efa_proto_av.c \
 	prov/efa/src/efa_domain.c \
 	prov/efa/src/efa_fabric.c \
 	prov/efa/src/efa_mr.c \
