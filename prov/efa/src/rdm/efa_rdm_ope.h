@@ -217,12 +217,19 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 #define EFA_RDM_OPE_QUEUED_RNR BIT_ULL(9)
 
 /**
- * @brief Flag to indicate an rxe has an EOR in flight
+ * @brief Flag to indicate an rxe has an EOR or RECEIPT in flight.
  *
- * In flag means the EOR has been sent or queued, and has not got send completion.
- * hence the rxe cannot be released
+ * This flag is set when an EOR or RECEIPT packet has been sent or
+ * queued but its send completion has not yet arrived. While set,
+ * the rxe cannot be released.
+ *
+ * For EOR: set in efa_rdm_pke_handle_rma_read_completion,
+ *          cleared in efa_rdm_pke_handle_eor_send_completion.
+ * For RECEIPT: set in efa_rdm_ope_handle_recv_completed (before
+ *              posting RECEIPT), cleared in
+ *              efa_rdm_pke_handle_receipt_send_completion.
  */
-#define EFA_RDM_RXE_EOR_IN_FLIGHT BIT_ULL(10)
+#define EFA_RDM_RXE_ACK_IN_FLIGHT BIT_ULL(10)
 
 /**
  * @brief flag to indicate a txe has already written an cq error entry for RNR
@@ -272,13 +279,18 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 #define EFA_RDM_OPE_INTERNAL			BIT_ULL(15)
 
 /**
- * @brief flag to indicate that a DC txe has received its receipt packet
+ * @brief Flag to indicate that a txe has received a remote
+ * acknowledgment (RECEIPT or ATOMRSP).
  *
- * This flag is used to track when a delivery complete operation has
- * received acknowledgment from the receiver, preventing premature
- * completion before all TX operations finish.
+ * For DC protocols: set in efa_rdm_pke_handle_receipt_recv when
+ *                   the RECEIPT packet arrives from the remote.
+ * For fetch/compare atomics: set in efa_rdm_pke_handle_atomrsp_recv
+ *                            when the ATOMRSP packet arrives.
+ *
+ * The txe can only be released when both this flag is set AND all
+ * outstanding TX ops have completed (efa_outstanding_tx_ops == 0).
  */
-#define EFA_RDM_TXE_RECEIPT_RECEIVED		BIT_ULL(16)
+#define EFA_RDM_TXE_REMOTE_ACK_RECEIVED		BIT_ULL(16)
 
 /**
  * @brief flag to indicate an ope does not need to report completion to user
@@ -293,6 +305,16 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  *
  */
 #define EFA_RDM_TXE_NO_COUNTER		BIT_ULL(18)
+
+/**
+ * @brief flag to indicate that efa_rdm_ope_handle_recv_completed was called.
+ *
+ * For txe: this means an emulated read protocol received all data from
+ * the remote. For rxe: this means all data has been received and copied
+ * to the application buffer. The ope can only be released when both
+ * this flag is set AND all outstanding TX ops have completed.
+ */
+#define EFA_RDM_OPE_RECV_COMPLETED		BIT_ULL(19)
 
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
@@ -318,24 +340,70 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope);
 void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope);
 
 /**
- * @brief Check if a delivery complete (DC) TXE is ready for release
+ * @brief Check if a DC or atomic txe is ready for release.
  *
- * @details
- * For DC packets, this function prevents use-after-free race conditions by
- * ensuring the TXE is only released when both conditions are met:
- * 1. All TX operations have completed (efa_outstanding_tx_ops == 0)
- * 2. Receipt packet has been received (EFA_RDM_TXE_RECEIPT_RECEIVED flag set)
+ * Used by: DC eager/medium/longcts msg/tag/write, DC CTSDATA,
+ *          FETCH_RTA, COMPARE_RTA.
  *
- * This dual-condition check ensures proper synchronization between send
- * completions and receipt acknowledgments in the delivery complete protocol.
+ * These protocols require a remote acknowledgment (RECEIPT for DC,
+ * ATOMRSP for fetch/compare atomics) before the txe can complete.
+ * The txe is only released when both:
+ * 1. The remote ack has arrived (EFA_RDM_TXE_REMOTE_ACK_RECEIVED set)
+ * 2. All packet send completions have arrived (efa_outstanding_tx_ops == 0)
  *
  * @param[in] txe TX operation entry to check
- * @return true if TXE is ready for release, false otherwise
+ * @return true if txe is ready for release, false otherwise
  */
-static inline bool efa_rdm_txe_dc_ready_for_release(struct efa_rdm_ope *txe)
+static inline bool efa_rdm_txe_with_remote_ack_ready_for_release(struct efa_rdm_ope *txe)
 {
-	return (txe->efa_outstanding_tx_ops == 0) &&
-	       (txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED);
+	return (txe->efa_outstanding_tx_ops == 0 &&
+	       (txe->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED));
+}
+
+/**
+ * @brief Check if a longcts rxe is ready for release.
+ *
+ * Used by: CTS send completion handler for longcts msg/write
+ * (both DC and non-DC).
+ *
+ * The rxe can only be released when all of:
+ * 1. Recv completed (EFA_RDM_OPE_RECV_COMPLETED set)
+ * 2. All send completions arrived (efa_outstanding_tx_ops == 0)
+ * 3. For DC: no ack packet (RECEIPT) is in flight
+ *    (EFA_RDM_RXE_ACK_IN_FLIGHT clear). The ACK_IN_FLIGHT check
+ *    is needed because RECEIPT may be queued (not yet posted),
+ *    in which case efa_outstanding_tx_ops has not been
+ *    incremented yet.
+ *
+ * @param[in] rxe RX operation entry to check
+ * @return true if rxe is ready for release, false otherwise
+ */
+static inline bool efa_rdm_rxe_cts_ready_for_release(struct efa_rdm_ope *rxe)
+{
+	return (rxe->efa_outstanding_tx_ops == 0 &&
+		(rxe->internal_flags & EFA_RDM_OPE_RECV_COMPLETED) &&
+		!(rxe->internal_flags & EFA_RDM_RXE_ACK_IN_FLIGHT));
+}
+
+/**
+ * @brief Check if an emulated read txe is ready for release.
+ *
+ * Used by: SHORT_RTR and LONGCTS_RTR send completion handlers,
+ *          and CTS send completion handler for emulated longcts read.
+ *
+ * In emulated read, the txe posts an RTR (or CTS for longcts read)
+ * and then receives data from the remote. The txe can only be
+ * released when both:
+ * 1. Recv completed (EFA_RDM_OPE_RECV_COMPLETED set)
+ * 2. All send completions arrived (efa_outstanding_tx_ops == 0)
+ *
+ * @param[in] txe TX operation entry to check
+ * @return true if txe is ready for release, false otherwise
+ */
+static inline bool efa_rdm_txe_emulated_read_ready_for_release(struct efa_rdm_ope *txe)
+{
+	return (txe->efa_outstanding_tx_ops == 0 &&
+	       (txe->internal_flags & EFA_RDM_OPE_RECV_COMPLETED));
 }
 
 int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope);

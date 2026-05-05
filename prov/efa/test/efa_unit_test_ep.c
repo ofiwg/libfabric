@@ -1969,6 +1969,7 @@ void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion(struct
 	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
 	assert_non_null(txe);
 	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+	txe->efa_outstanding_tx_ops = 1;
 	pkt_entry->ope = txe;
 	pkt_entry->peer = peer;
 

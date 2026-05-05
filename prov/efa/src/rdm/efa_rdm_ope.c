@@ -136,7 +136,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	 * (which would have already removed it from the list).
 	 */
 	if (txe->state == EFA_RDM_OPE_SEND && 
-	    !(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED))
+	    !(txe->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED))
 		dlist_remove(&txe->entry);
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
@@ -734,7 +734,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	case EFA_RDM_TXE_REQ:
 		break;
 	case EFA_RDM_OPE_SEND:
-		if (!(txe->internal_flags & EFA_RDM_TXE_RECEIPT_RECEIVED))
+		if (!(txe->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED))
 			dlist_remove(&txe->entry);
 		break;
 	case EFA_RDM_OPE_ERR:
@@ -1013,7 +1013,6 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 		       txe->peer->conn->fi_addr, txe->tx_id, txe->msg_id,
 		       txe->cq_entry.tag, txe->total_len);
 
-
 	efa_rdm_tracepoint(send_end,
 		    txe->msg_id, (size_t) txe->cq_entry.op_context,
 		    txe->total_len, txe->cq_entry.tag, txe->peer->conn->fi_addr);
@@ -1188,6 +1187,15 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 		efa_rdm_rxe_report_completion(rxe);
 	}
 
+	/*
+	 * Mark recv completed before any release attempts below.
+	 * This flag is checked by send completion handlers
+	 * (efa_rdm_pke_handle_cts_send_completion for CTS,
+	 *  efa_rdm_pke_handle_send_completion for SHORT_RTR/LONGCTS_RTR)
+	 * to decide whether a deferred release should proceed.
+	 */
+	ope->internal_flags |= EFA_RDM_OPE_RECV_COMPLETED;
+
 	/* As can be seen, this function does not release rxe when
 	 * efa_rdm_ope_post_send_or_queue() was successful.
 	 *
@@ -1202,6 +1210,17 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	if (ope->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED) {
 		assert(ope->type == EFA_RDM_RXE);
 		rxe = ope; /* Intentionally assigned for easier understanding */
+		/*
+		 * Set ACK_IN_FLIGHT before posting RECEIPT. This must
+		 * be done before efa_rdm_ope_post_send_or_queue() because
+		 * the RECEIPT may be queued (not immediately posted), in
+		 * which case efa_outstanding_tx_ops is NOT incremented
+		 * yet. Without this flag, a pending CTS send completion
+		 * could see ops == 0 and release the rxe while the
+		 * RECEIPT is still queued, causing a hang.
+		 * Cleared in efa_rdm_pke_handle_receipt_send_completion.
+		 */
+		rxe->internal_flags |=  EFA_RDM_RXE_ACK_IN_FLIGHT;
 		err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_RECEIPT_PKT);
 		if (OFI_UNLIKELY(err)) {
 			EFA_WARN(FI_LOG_CQ,
@@ -1219,20 +1238,42 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	 * it is possible that when this function is called, EOR is still inflight
 	 * (EOR has been sent, and the send completion has NOT been received).
 	 *
-	 * If EOR is inflight, the rxe cannot be released because the rxe
-	 * is needed to handle the send completion of the EOR.
+	 * Similarly, a RECEIPT packet may have been posted or queued above
+	 * for DC protocols, setting RXE_ACK_IN_FLIGHT.
 	 *
-	 * see #efa_rdm_pke_handle_eor_send_completion
+	 * In either case, the rxe cannot be released here because it is
+	 * needed to handle the send completion of the EOR or RECEIPT.
 	 */
-	if (ope->internal_flags & EFA_RDM_RXE_EOR_IN_FLIGHT) {
+	if (ope->internal_flags & EFA_RDM_RXE_ACK_IN_FLIGHT) {
+		/*
+		 * An EOR or RECEIPT is in flight / queued. The rxe
+		 * cannot be released until its send completion arrives.
+		 * The send completion handler will release the rxe.
+		 *
+		 * see #efa_rdm_pke_handle_eor_send_completion
+		 * see #efa_rdm_pke_handle_receipt_send_completion
+		 */
 		return;
 	}
 
-	if (ope->type == EFA_RDM_TXE) {
-		efa_rdm_txe_release(ope);
-	} else {
-		assert(ope->type == EFA_RDM_RXE);
-		efa_rdm_rxe_release(ope);
+	/*
+	 * Release the ope only if all outstanding TX ops (e.g. CTS,
+	 * RTR send completions) have arrived. If not, the release is
+	 * deferred to the corresponding send completion handler:
+	 *
+	 * - txe (emulated read): RTR or CTS send completion handler
+	 *   see #efa_rdm_pke_handle_cts_send_completion
+	 *
+	 * - rxe (longcts msg/write): CTS send completion handler
+	 *   see #efa_rdm_pke_handle_cts_send_completion
+	 */
+	if (ope->efa_outstanding_tx_ops == 0) {
+		if (ope->type == EFA_RDM_TXE) {
+			efa_rdm_txe_release(ope);
+		} else {
+			assert(ope->type == EFA_RDM_RXE);
+			efa_rdm_rxe_release(ope);
+		}
 	}
 }
 

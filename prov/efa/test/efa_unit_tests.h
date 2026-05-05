@@ -296,10 +296,24 @@ void test_efa_rdm_ope_eor_packet_tracking_wait_send();
 void test_efa_rdm_ope_eor_packet_failed_posting();
 void test_efa_rdm_ope_eor_packet_tracking_unresponsive_wait_send();
 void test_efa_rdm_atomic_compare_desc_persistence();
-void test_efa_rdm_txe_dc_send_first();
-void test_efa_rdm_txe_dc_receipt_first();
-void test_efa_rdm_txe_dc_send_first_non_longcts();
-void test_efa_rdm_txe_dc_receipt_first_non_longcts();
+void test_efa_rdm_txe_dc_ctsdata_send_first();
+void test_efa_rdm_txe_dc_ctsdata_resp_first();
+void test_efa_rdm_txe_dc_eager_rtm_send_first();
+void test_efa_rdm_txe_dc_eager_rtm_resp_first();
+void test_efa_rdm_txe_short_rtr_send_first();
+void test_efa_rdm_txe_short_rtr_resp_first();
+void test_efa_rdm_txe_fetch_rta_send_first();
+void test_efa_rdm_txe_fetch_rta_resp_first();
+void test_efa_rdm_txe_compare_rta_send_first();
+void test_efa_rdm_txe_compare_rta_resp_first();
+void test_efa_rdm_rxe_longcts_msg_cts_send_first();
+void test_efa_rdm_rxe_longcts_msg_cts_recv_first();
+void test_efa_rdm_rxe_longcts_write_cts_send_first();
+void test_efa_rdm_rxe_longcts_write_cts_recv_first();
+void test_efa_rdm_txe_longcts_read_cts_send_first();
+void test_efa_rdm_txe_longcts_read_cts_recv_first();
+void test_efa_rdm_rxe_dc_longcts_write_cts_before_receipt();
+void test_efa_rdm_rxe_dc_longcts_write_receipt_before_cts();
 
 
 /* end of efa_unit_test_ope.c */
