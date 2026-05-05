@@ -58,6 +58,29 @@ struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av, fi_addr_t fi_ad
 }
 
 /**
+ * @brief Look up an efa_av_entry by fi_addr in the base (explicit) AV
+ *
+ * Wrapper around efa_av_addr_to_conn that returns the containing
+ * efa_av_entry via container_of. Exposed as the base-layer lookup
+ * primitive for callers that need to work with efa_av_entry rather
+ * than the embedded efa_conn.
+ *
+ * @param[in]	av		address vector
+ * @param[in]	fi_addr		libfabric address
+ * @return	pointer to efa_av_entry, or NULL if not found
+ */
+struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
+{
+	struct efa_conn *conn;
+
+	conn = efa_av_addr_to_conn(av, fi_addr);
+	if (!conn)
+		return NULL;
+
+	return container_of(conn, struct efa_av_entry, conn);
+}
+
+/**
  * @brief find fi_addr for efa endpoint
  *
  * @param[in]	av	address vector

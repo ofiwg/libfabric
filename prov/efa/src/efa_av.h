@@ -36,6 +36,17 @@ struct efa_av_entry {
 };
 
 /**
+ * @brief typed accessor for the ep_addr field of an AV entry
+ *
+ * @param[in]	entry	AV entry
+ * @return	pointer to the efa_ep_addr embedded in the entry
+ */
+static inline struct efa_ep_addr *efa_av_entry_ep_addr(struct efa_av_entry *entry)
+{
+	return (struct efa_ep_addr *)entry->ep_addr;
+}
+
+/**
  * @brief check if an efa_ep_addr has a non-zero GID
  *
  * @param[in]	addr	address to check
@@ -129,5 +140,13 @@ void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 
 void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 					struct efa_conn *conn);
+
+struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr);
+
+int efa_av_init_util_av(struct efa_domain *efa_domain,
+			struct fi_av_attr *attr,
+			struct util_av *util_av,
+			void *context,
+			size_t context_len);
 
 #endif
