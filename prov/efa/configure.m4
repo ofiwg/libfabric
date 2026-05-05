@@ -308,7 +308,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[],
 			[$cmocka_dir],
 			[],
-			[efa_LIBS+=" $cmocka_LDFLAGS $cmocka_LIBS -static"],
+			[cmocka_LIBS_STATIC="$cmocka_LDFLAGS $cmocka_LIBS"],
 			[AC_MSG_ERROR([Cannot compile EFA unit tests without a valid Cmocka installation directory.])],
 			[
 				#include <stdarg.h>
@@ -323,6 +323,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	])
 
 	AC_SUBST(cmocka_rpath)
+	AC_SUBST(cmocka_LIBS_STATIC)
 	AC_DEFINE_UNQUOTED([EFA_UNIT_TEST], [$efa_unit_test], [EFA unit testing])
 
 	AM_CONDITIONAL([HAVE_EFADV_CQ_EX], [ test $efadv_support_extended_cq = 1])
