@@ -315,7 +315,7 @@ pipeline {
                     def addl_args_tcp = "${timeout} ${generic_pf} ${tcp_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests}"
 
                     // Use lockable resources to limit the number of jobs that can get executed in parallel
-                    def g4dn8x_lock_label = "g4dn8x"
+                    def g5g8x_lock_label = "g5g8x"
                     def g4dn12x_lock_label  = "g4dn12x"
                     def c52x_lock_label  = "c52x"
                     def hpc6a48x_lock_label  = "hpc6a48x"
@@ -328,12 +328,12 @@ pipeline {
                     stages["1_g4dn_alinux2-efa"] = get_test_stage_with_lock("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi_nccl)
                     stages["1_g4dn_alinux2023-efa"] = get_test_stage_with_lock("1_g4dn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi_nccl)
                     stages["1_g4dn_ubuntu2204-efa"] = get_test_stage_with_lock("1_g4dn_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi_nccl)
-                    stages["1_g4dn_rhel8-efa"] = get_test_stage_with_lock("1_g4dn_rhel8_efa", env.BUILD_TAG, "rhel8", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_efa_libfabric_mpi)
+                    stages["1_g4dn_rhel8-efa"] = get_test_stage_with_lock("1_g4dn_rhel8_efa", env.BUILD_TAG, "rhel8", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi)
 
                     // Single Node Tests - SHM
-                    stages["1_g4dn_alinux2_shm"] = get_test_stage_with_lock("1_g4dn_alinux2_shm", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_shm)
-                    stages["1_g4dn_alinux2023_shm"] = get_test_stage_with_lock("1_g4dn_alinux2023_shm", env.BUILD_TAG, "alinux2023", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_shm)
-                    stages["1_g4dn_ubuntu2204_shm"] = get_test_stage_with_lock("1_g4dn_ubuntu2204_shm", env.BUILD_TAG, "ubuntu2204", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_shm)
+                    stages["1_g5g_alinux2_shm"] = get_test_stage_with_lock("1_g5g_alinux2_shm", env.BUILD_TAG, "alinux2", "g5g.8xlarge", 1, "us-west-2", g5g8x_lock_label, addl_args_shm + " --enable-efa false --use-prebuilt-ami-with-efa-installer true")
+                    stages["1_g5g_alinux2023_shm"] = get_test_stage_with_lock("1_g5g_alinux2023_shm", env.BUILD_TAG, "alinux2023", "g5g.8xlarge", 1, "us-west-2", g5g8x_lock_label, addl_args_shm + " --enable-efa false --use-prebuilt-ami-with-efa-installer true")
+                    stages["1_g5g_ubuntu2204_shm"] = get_test_stage_with_lock("1_g5g_ubuntu2204_shm", env.BUILD_TAG, "ubuntu2204", "g5g.8xlarge", 1, "us-west-2", g5g8x_lock_label, addl_args_shm + " --enable-efa false --use-prebuilt-ami-with-efa-installer true")
                     stages["1_c5_rhel8_shm"] = get_test_stage_with_lock("1_c5_rhel8_shm", env.BUILD_TAG, "rhel8", "c5.2xlarge", 1, "us-east-1", c52x_lock_label, addl_args_shm + " --enable-efa false")
                     stages["1_c5_ubuntu2204_shm_disable-cma"] = get_test_stage_with_lock("1_c5_ubuntu2204_shm_disable-cma", env.BUILD_TAG, "ubuntu2204", "c5.2xlarge", 1, "us-east-1", c52x_lock_label, addl_args_shm + " --enable-cma false --enable-efa false")
 
