@@ -99,7 +99,7 @@ fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 	cur_key.qpn = qpn;
 	HASH_FIND(hh, av->cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
 
-	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->conn->fi_addr : FI_ADDR_NOTAVAIL;
+	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->av_entry->conn.fi_addr : FI_ADDR_NOTAVAIL;
 }
 
 static inline struct efa_conn *
@@ -129,7 +129,7 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
 		 * the pkt_entry is allocated from a buffer user posted that
 		 * doesn't expect any pkt hdr.
 		 */
-		return cur_entry->conn;
+		return &cur_entry->av_entry->conn;
 	}
 
 	connid = efa_rdm_pke_connid_ptr(pkt_entry);
@@ -142,11 +142,11 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
 			      "The communication can continue but it is "
 			      "encouraged to use\n"
 			      "a newer version of libfabric\n");
-		return cur_entry->conn;
+		return &cur_entry->av_entry->conn;
 	}
 
-	if (OFI_LIKELY(*connid == cur_entry->conn->ep_addr->qkey))
-		return cur_entry->conn;
+	if (OFI_LIKELY(*connid == efa_av_entry_ep_addr(cur_entry->av_entry)->qkey))
+		return &cur_entry->av_entry->conn;
 
 	/* the packet is from a previous peer, look for its address from the
 	 * prv_reverse_av */
@@ -155,7 +155,7 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
 	prv_key.connid = *connid;
 	HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key), prv_entry);
 
-	return OFI_LIKELY(!!prv_entry) ? prv_entry->conn : NULL;
+	return OFI_LIKELY(!!prv_entry) ? &prv_entry->av_entry->conn : NULL;
 };
 
 /**
@@ -240,22 +240,22 @@ void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
  * @param[in]		av		EFA AV object
  * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
  * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
- * @param[in]		conn		efa_conn object
+ * @param[in]		av_entry	efa_av_entry object
  * @return		On success, return 0.
  * 			Otherwise, return a negative libfabric error code
  */
 int efa_av_reverse_av_add(struct efa_av *av,
 				 struct efa_cur_reverse_av **cur_reverse_av,
 				 struct efa_prv_reverse_av **prv_reverse_av,
-				 struct efa_conn *conn)
+				 struct efa_av_entry *av_entry)
 {
 	struct efa_cur_reverse_av *cur_entry;
 	struct efa_prv_reverse_av *prv_entry;
 	struct efa_cur_reverse_av_key cur_key;
 
 	memset(&cur_key, 0, sizeof(cur_key));
-	cur_key.ahn = conn->ah->ahn;
-	cur_key.qpn = conn->ep_addr->qpn;
+	cur_key.ahn = av_entry->conn.ah->ahn;
+	cur_key.qpn = efa_av_entry_ep_addr(av_entry)->qpn;
 	cur_entry = NULL;
 
 	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
@@ -268,7 +268,7 @@ int efa_av_reverse_av_add(struct efa_av *av,
 
 		cur_entry->key.ahn = cur_key.ahn;
 		cur_entry->key.qpn = cur_key.qpn;
-		cur_entry->conn = conn;
+		cur_entry->av_entry = av_entry;
 		HASH_ADD(hh, *cur_reverse_av, key, sizeof(cur_key), cur_entry);
 
 		return 0;
@@ -286,11 +286,11 @@ int efa_av_reverse_av_add(struct efa_av *av,
 
 	prv_entry->key.ahn = cur_key.ahn;
 	prv_entry->key.qpn = cur_key.qpn;
-	prv_entry->key.connid = cur_entry->conn->ep_addr->qkey;
-	prv_entry->conn = cur_entry->conn;
+	prv_entry->key.connid = efa_av_entry_ep_addr(cur_entry->av_entry)->qkey;
+	prv_entry->av_entry = cur_entry->av_entry;
 	HASH_ADD(hh, *prv_reverse_av, key, sizeof(prv_entry->key), prv_entry);
 
-	cur_entry->conn = conn;
+	cur_entry->av_entry = av_entry;
 	return 0;
 }
 
@@ -301,16 +301,13 @@ int efa_av_reverse_av_add(struct efa_av *av,
  * cur_reverse_av. Keeping the address in prv_reverse_av helps avoid QPN
  * collisions.
  *
- * @param[in]		av		EFA AV object
  * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
  * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
- * @param[in]		conn		efa_conn object
- * @return		On success, return 0.
- * 			Otherwise, return a negative libfabric error code
+ * @param[in]		av_entry	efa_av_entry object
  */
 void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 				    struct efa_prv_reverse_av **prv_reverse_av,
-				    struct efa_conn *conn)
+				    struct efa_av_entry *av_entry)
 {
 	struct efa_cur_reverse_av *cur_reverse_av_entry;
 	struct efa_prv_reverse_av *prv_reverse_av_entry;
@@ -318,22 +315,22 @@ void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 	struct efa_prv_reverse_av_key prv_key;
 
 	memset(&cur_key, 0, sizeof(cur_key));
-	cur_key.ahn = conn->ah->ahn;
-	cur_key.qpn = conn->ep_addr->qpn;
+	cur_key.ahn = av_entry->conn.ah->ahn;
+	cur_key.qpn = efa_av_entry_ep_addr(av_entry)->qpn;
 	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key),
 		  cur_reverse_av_entry);
-	if (cur_reverse_av_entry && cur_reverse_av_entry->conn == conn) {
+	if (cur_reverse_av_entry && cur_reverse_av_entry->av_entry == av_entry) {
 		HASH_DEL(*cur_reverse_av, cur_reverse_av_entry);
 		free(cur_reverse_av_entry);
 	} else {
 		memset(&prv_key, 0, sizeof(prv_key));
-		prv_key.ahn = conn->ah->ahn;
-		prv_key.qpn = conn->ep_addr->qpn;
-		prv_key.connid = conn->ep_addr->qkey;
+		prv_key.ahn = av_entry->conn.ah->ahn;
+		prv_key.qpn = efa_av_entry_ep_addr(av_entry)->qpn;
+		prv_key.connid = efa_av_entry_ep_addr(av_entry)->qkey;
 		HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key),
 			  prv_reverse_av_entry);
 		assert(prv_reverse_av_entry &&
-		       prv_reverse_av_entry->conn == conn);
+		       prv_reverse_av_entry->av_entry == av_entry);
 		HASH_DEL(*prv_reverse_av, prv_reverse_av_entry);
 		free(prv_reverse_av_entry);
 	}
@@ -423,7 +420,7 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 
 	/* Handle reverse AV and AV ref counts */
 	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
-				 &av->prv_reverse_av_implicit, implicit_conn);
+				 &av->prv_reverse_av_implicit, implicit_av_entry);
 
 	dlist_remove(&implicit_av_entry->conn.implicit_av_lru_entry);
 
@@ -439,7 +436,7 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	av->used_implicit--;
 
 	err = efa_av_reverse_av_add(av, &av->cur_reverse_av, &av->prv_reverse_av,
-				    explicit_conn);
+				    explicit_av_entry);
 	if (err)
 		return err;
 
@@ -767,11 +764,11 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	ofi_genlock_lock(&av->util_av.lock);
 
 	HASH_ITER(hh, av->cur_reverse_av, cur_entry, curtmp) {
-		efa_conn_release(av, cur_entry->conn, false);
+		efa_conn_release(av, &cur_entry->av_entry->conn, false);
 	}
 
 	HASH_ITER(hh, av->prv_reverse_av, prv_entry, prvtmp) {
-		efa_conn_release(av, prv_entry->conn, false);
+		efa_conn_release(av, &prv_entry->av_entry->conn, false);
 	}
 
 	ofi_genlock_unlock(&av->util_av.lock);
@@ -779,11 +776,11 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	ofi_genlock_lock(&av->util_av_implicit.lock);
 
 	HASH_ITER(hh, av->cur_reverse_av_implicit, cur_entry, curtmp) {
-		efa_conn_release(av, cur_entry->conn, true);
+		efa_conn_release(av, &cur_entry->av_entry->conn, true);
 	}
 
 	HASH_ITER(hh, av->prv_reverse_av_implicit, prv_entry, prvtmp) {
-		efa_conn_release(av, prv_entry->conn, true);
+		efa_conn_release(av, &prv_entry->av_entry->conn, true);
 	}
 
 	ofi_genlock_unlock(&av->util_av_implicit.lock);
