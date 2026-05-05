@@ -12,22 +12,22 @@
 #include "efa.h"
 #include "efa_direct_ope.h"
 
-int efa_direct_ope_pool_create(struct efa_base_ep *base_ep)
+int efa_direct_ope_pool_create(struct efa_direct_ep *ep)
 {
 	int ret;
 
 	if (!efa_env.track_mr) {
-		base_ep->efa_direct_ope_pool = NULL;
+		ep->ope_pool = NULL;
 		return 0;
 	}
 
-	dlist_init(&base_ep->efa_direct_ope_list);
+	dlist_init(&ep->ope_list);
 
-	ret = ofi_bufpool_create(&base_ep->efa_direct_ope_pool,
+	ret = ofi_bufpool_create(&ep->ope_pool,
 				 sizeof(struct efa_direct_ope),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
-				 base_ep->info->tx_attr->size + base_ep->info->rx_attr->size,
-				 base_ep->info->tx_attr->size + base_ep->info->rx_attr->size,
+				 ep->base_ep.info->tx_attr->size + ep->base_ep.info->rx_attr->size,
+				 ep->base_ep.info->tx_attr->size + ep->base_ep.info->rx_attr->size,
 				 OFI_BUFPOOL_NO_TRACK);
 	if (ret) {
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -36,41 +36,41 @@ int efa_direct_ope_pool_create(struct efa_base_ep *base_ep)
 		return ret;
 	}
 
-	ret = ofi_bufpool_grow(base_ep->efa_direct_ope_pool);
+	ret = ofi_bufpool_grow(ep->ope_pool);
 	if (ret) {
-		ofi_bufpool_destroy(base_ep->efa_direct_ope_pool);
-		base_ep->efa_direct_ope_pool = NULL;
+		ofi_bufpool_destroy(ep->ope_pool);
+		ep->ope_pool = NULL;
 		return ret;
 	}
 
 	EFA_INFO(FI_LOG_EP_CTRL, "ep %p: Created EFA direct op entry pool with size %zu\n",
-		 base_ep, base_ep->info->tx_attr->size + base_ep->info->rx_attr->size);
+		 ep, ep->base_ep.info->tx_attr->size + ep->base_ep.info->rx_attr->size);
 
 	return 0;
 }
 
-void efa_direct_ope_pool_destroy(struct efa_base_ep *base_ep)
+void efa_direct_ope_pool_destroy(struct efa_direct_ep *ep)
 {
 	struct efa_direct_ope *direct_ope;
 	struct dlist_entry *tmp;
 
-	if (!base_ep->efa_direct_ope_pool)
+	if (!ep->ope_pool)
 		return;
 
-	ofi_genlock_lock(&base_ep->domain->util_domain.lock);
-	if (!dlist_empty(&base_ep->efa_direct_ope_list)) {
-		dlist_foreach_container_safe(&base_ep->efa_direct_ope_list,
+	ofi_genlock_lock(&ep->base_ep.domain->util_domain.lock);
+	if (!dlist_empty(&ep->ope_list)) {
+		dlist_foreach_container_safe(&ep->ope_list,
 					     struct efa_direct_ope,
 					     direct_ope, entry, tmp) {
 			dlist_remove(&direct_ope->entry);
 			ofi_buf_free(direct_ope);
 		}
 	}
-	ofi_genlock_unlock(&base_ep->domain->util_domain.lock);
+	ofi_genlock_unlock(&ep->base_ep.domain->util_domain.lock);
 
-	EFA_INFO(FI_LOG_EP_CTRL, "ep %p: Destroying EFA direct op entry pool\n", base_ep);
-	ofi_bufpool_destroy(base_ep->efa_direct_ope_pool);
-	base_ep->efa_direct_ope_pool = NULL;
+	EFA_INFO(FI_LOG_EP_CTRL, "ep %p: Destroying EFA direct op entry pool\n", ep);
+	ofi_bufpool_destroy(ep->ope_pool);
+	ep->ope_pool = NULL;
 }
 
 struct efa_direct_ope *efa_direct_ope_alloc(struct efa_base_ep *base_ep,
@@ -78,6 +78,7 @@ struct efa_direct_ope *efa_direct_ope_alloc(struct efa_base_ep *base_ep,
 					    const struct fi_msg *msg,
 					    const struct fi_msg_rma *msg_rma)
 {
+	struct efa_direct_ep *ep = container_of(base_ep, struct efa_direct_ep, base_ep);
 	struct efa_direct_ope *direct_ope;
 	const struct iovec *msg_iov = msg ? msg->msg_iov : msg_rma->msg_iov;
 	void **desc = msg ? msg->desc : msg_rma->desc;
@@ -86,10 +87,10 @@ struct efa_direct_ope *efa_direct_ope_alloc(struct efa_base_ep *base_ep,
 	uint64_t data = msg ? msg->data : msg_rma->data;
 	size_t i;
 
-	if (!base_ep->efa_direct_ope_pool)
+	if (!ep->ope_pool)
 		return NULL;
 
-	direct_ope = ofi_buf_alloc(base_ep->efa_direct_ope_pool);
+	direct_ope = ofi_buf_alloc(ep->ope_pool);
 	if (OFI_UNLIKELY(!direct_ope)) {
 		EFA_WARN(FI_LOG_EP_DATA,
 			 "Failed to allocate EFA direct OPE\n");
@@ -110,7 +111,7 @@ struct efa_direct_ope *efa_direct_ope_alloc(struct efa_base_ep *base_ep,
 	}
 
 	ofi_genlock_lock(&base_ep->domain->util_domain.lock);
-	dlist_insert_tail(&direct_ope->entry, &base_ep->efa_direct_ope_list);
+	dlist_insert_tail(&direct_ope->entry, &ep->ope_list);
 	ofi_genlock_unlock(&base_ep->domain->util_domain.lock);
 
 	return direct_ope;
@@ -119,7 +120,13 @@ struct efa_direct_ope *efa_direct_ope_alloc(struct efa_base_ep *base_ep,
 void efa_direct_ope_release(struct efa_base_ep *base_ep,
 				  struct efa_direct_ope *direct_ope)
 {
-	if (!direct_ope || !base_ep || !base_ep->efa_direct_ope_pool)
+	struct efa_direct_ep *ep;
+
+	if (!direct_ope || !base_ep)
+		return;
+
+	ep = container_of(base_ep, struct efa_direct_ep, base_ep);
+	if (!ep->ope_pool)
 		return;
 
 	ofi_genlock_lock(&base_ep->domain->util_domain.lock);

@@ -424,16 +424,3 @@ struct fi_ops_msg efa_msg_ops = {
 	.inject = efa_ep_msg_inject,
 	.injectdata = efa_ep_msg_injectdata,
 };
-
-struct fi_ops_msg efa_dgram_ep_msg_ops = {
-	.size = sizeof(struct fi_ops_msg),
-	.recv = efa_ep_recv,
-	.recvv = efa_ep_recvv,
-	.recvmsg = efa_ep_recvmsg,
-	.send = efa_ep_send,
-	.sendv = efa_ep_sendv,
-	.sendmsg = efa_ep_sendmsg,
-	.senddata = efa_ep_senddata,
-	.inject = fi_no_msg_inject,
-	.injectdata = fi_no_msg_injectdata,
-};
