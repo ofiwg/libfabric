@@ -30,7 +30,7 @@ static struct fi_ops efa_ops_domain_fid_rdm = {
 
 static struct fi_ops_domain efa_domain_ops_rdm = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = efa_av_open,
+	.av_open = efa_rdm_av_open,
 	.cq_open = efa_rdm_cq_open,
 	.endpoint = efa_rdm_ep_open,
 	.scalable_ep = fi_no_scalable_ep,
@@ -302,8 +302,8 @@ void efa_rdm_domain_progress_peers_and_queues(struct efa_rdm_domain *rdm_domain)
 			EFA_WARN(FI_LOG_EP_CTRL,
 				 "Failed to post HANDSHAKE to peer fi_addr: "
 				 "%ld implicit fi_addr: %ld. %s\n",
-				 peer->conn->fi_addr,
-				 peer->conn->implicit_fi_addr,
+				 peer->av_entry->fi_addr,
+				 peer->av_entry->implicit_fi_addr,
 				 fi_strerror(-ret));
 			efa_base_ep_write_eq_error(&peer->ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE);
 			continue;

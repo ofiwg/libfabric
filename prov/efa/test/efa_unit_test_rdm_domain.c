@@ -270,7 +270,7 @@ void test_efa_rdm_domain_open_installs_rdm_domain_ops(void **state)
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	ops = resource->domain->ops;
 
-	assert_ptr_equal(ops->av_open, efa_av_open);
+	assert_ptr_equal(ops->av_open, efa_rdm_av_open);
 	assert_ptr_equal(ops->cq_open, efa_rdm_cq_open);
 	assert_ptr_equal(ops->endpoint, efa_rdm_ep_open);
 	assert_ptr_equal(ops->cntr_open, efa_rdm_cntr_open);

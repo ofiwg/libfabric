@@ -8,6 +8,7 @@
 #include "config.h"
 #include "efa.h"
 #include "efa_av.h"
+#include "rdm/efa_rdm_av.h"
 #include "efa_cntr.h"
 #include "efa_hw_cntr.h"
 #include "efa_cq.h"
