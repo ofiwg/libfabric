@@ -542,11 +542,8 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 				dmabuf_fd, access);
 	}
 
-	/*
-	 * TODO: need such fallback for cuda as well when
-	 * FI_CUDA_API_PERMITTED is true
-	 */
-	if (efa_mr_is_neuron(efa_mr) || efa_mr_is_rocr(efa_mr)) {
+	if (efa_mr_is_neuron(efa_mr) || efa_mr_is_rocr(efa_mr) ||
+	    efa_mr_is_cuda(efa_mr)) {
 		ret = ofi_hmem_get_dmabuf_fd(
 				efa_mr->peer.iface,
 				mr_attr->mr_iov->iov_base,
