@@ -252,6 +252,11 @@ void test_info_direct_msg_only_small_max_msg_size_success();
 void test_info_direct_msg_only_large_max_msg_size_fail();
 void test_info_direct_msg_rma_large_max_msg_size_success();
 void test_info_direct_msg_rma_too_large_max_msg_size_fail();
+void test_info_max_cntr_value_api_lt_2_5();
+void test_info_max_cntr_value_api_ge_2_5_within_hw_range();
+void test_info_max_cntr_value_api_ge_2_5_hint_within_hw_range();
+void test_info_max_cntr_value_api_ge_2_5_above_hw_range();
+void test_info_rdm_max_cntr_value_api_ge_2_5_within_hw_range();
 /* end efa_unit_test_info.c */
 
 void test_efa_srx_min_multi_recv_size();
@@ -348,6 +353,7 @@ void test_efa_domain_dgram_mr_ops();
 void test_efa_domain_mr_cache_enabled();
 void test_efa_domain_mr_cache_disabled_with_mr_local();
 void test_efa_domain_mr_cache_disabled_with_efa_direct();
+void test_efa_domain_open_ops_cntr_open_ext();
 /* end efa_unit_test_domain.c */
 
 void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
@@ -357,6 +363,23 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();
 void test_efa_rdm_cntr_post_initial_rx_pkts();
 void test_efa_rdm_cntr_read_before_ep_enable();
+void test_efa_hw_cntr_open_unsupported_type_bytes();
+void test_efa_hw_cntr_open_max_cntr_value_exceeded();
+void test_efa_hw_cntr_open_ibv_fail();
+void test_efa_hw_cntr_add();
+void test_efa_hw_cntr_adderr();
+void test_efa_hw_cntr_set();
+void test_efa_hw_cntr_seterr();
+void test_efa_hw_cntr_read();
+void test_efa_hw_cntr_readerr();
+void test_efa_hw_cntr_bind_ep();
+void test_efa_hw_cntr_bind_ep_attach_fail();
+void test_efa_hw_cntr_wait_success();
+void test_efa_hw_cntr_wait_returns_einval_with_wait_none();
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd();
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield();
+void test_efa_hw_cntr_open_use_hw_cntr_disabled();
+
 /* begin of efa_unit_test_rdm_peer.c */
 void test_efa_rdm_peer_reorder_expected_msg_id();
 void test_efa_rdm_peer_reorder_smaller_msg_id();

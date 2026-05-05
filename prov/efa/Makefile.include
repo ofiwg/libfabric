@@ -50,6 +50,7 @@ _efa_files = \
 	prov/efa/src/efa_prov.c	\
 	prov/efa/src/efa_env.c	\
 	prov/efa/src/efa_cntr.c	\
+	prov/efa/src/efa_hw_cntr.c \
 	prov/efa/src/efa_msg.c \
 	prov/efa/src/efa_rma.c \
 	prov/efa/src/efa_cq.c \
@@ -101,6 +102,7 @@ _efa_headers = \
 	prov/efa/src/efa_fork_support.h \
 	prov/efa/src/efa_cq.h \
 	prov/efa/src/efa_cntr.h \
+	prov/efa/src/efa_hw_cntr.h \
 	prov/efa/src/efa_base_ep.h \
 	prov/efa/src/efa_direct_ope.h \
 	prov/efa/src/efa_tp_def.h \
@@ -240,6 +242,18 @@ endif HAVE_EFADV_QUERY_QP_WQS
 if HAVE_EFADV_QUERY_CQ
 prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=efadv_query_cq
 endif HAVE_EFADV_QUERY_CQ
+
+if HAVE_EFADV_CREATE_COMP_CNTR
+prov_efa_test_efa_unit_test_LDFLAGS += -Wl,--wrap=efadv_create_comp_cntr \
+					-Wl,--wrap=ibv_destroy_comp_cntr \
+					-Wl,--wrap=ibv_inc_comp_cntr \
+					-Wl,--wrap=ibv_inc_err_comp_cntr \
+					-Wl,--wrap=ibv_set_comp_cntr \
+					-Wl,--wrap=ibv_set_err_comp_cntr \
+					-Wl,--wrap=ibv_read_comp_cntr \
+					-Wl,--wrap=ibv_read_err_comp_cntr \
+					-Wl,--wrap=ibv_qp_attach_comp_cntr
+endif HAVE_EFADV_CREATE_COMP_CNTR
 
 prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)
 

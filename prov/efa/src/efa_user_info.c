@@ -285,6 +285,49 @@ bool efa_user_info_should_support_hmem(int version)
 
 #endif
 /**
+ * @brief set max_cntr_value in info based on API version and device support
+ *
+ * The default max_cntr_value is UINT64_MAX (set in prov_info), which means
+ * software counter will be used.
+ *
+ * For API version < 2.5, keep the default because applications were not
+ * aware of the hardware counter limitation.
+ *
+ * For API version >= 2.5, if the device supports a hardware counter and
+ * the user's hints fit within the hardware limit, set max_cntr_value to
+ * the hardware max. Otherwise, keep the default UINT64_MAX (fall back to
+ * software counter).
+ *
+ * @param	version[in]		libfabric API version
+ * @param	info[in,out]	info to be updated
+ * @param	hints[in]		user provided hints
+ */
+static
+void efa_user_info_set_max_cntr_value(int version, struct fi_info *info,
+				      const struct fi_info *hints)
+{
+	uint64_t comp_count_max_value;
+	uint64_t err_count_max_value;
+
+	if (FI_VERSION_LT(version, FI_VERSION(2, 5)))
+		return;
+
+	comp_count_max_value = g_efa_selected_device_list[0].comp_count_max_value;
+	err_count_max_value = g_efa_selected_device_list[0].err_count_max_value;
+
+	if (!comp_count_max_value || !err_count_max_value)
+		return;
+
+	if (hints && hints->domain_attr &&
+	    (hints->domain_attr->max_cntr_value > comp_count_max_value ||
+	     hints->domain_attr->max_err_cntr_value > err_count_max_value))
+		return;
+
+	info->domain_attr->max_cntr_value = comp_count_max_value;
+	info->domain_attr->max_err_cntr_value = err_count_max_value;
+}
+
+/**
  * @brief update RDM info to match user hints
  *
  * the input info is a duplicate of prov info, which matches
@@ -540,6 +583,8 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		EFA_INFO(FI_LOG_CORE, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
 					"EFA direct provider will now switch to using FI_AV_TABLE.\n");
 	info->domain_attr->av_type = FI_AV_TABLE;
+
+	efa_user_info_set_max_cntr_value(version, info, hints);
 
 	return 0;
 }

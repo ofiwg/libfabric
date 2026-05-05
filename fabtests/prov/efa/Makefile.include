@@ -52,6 +52,9 @@ endif BUILD_EFA_RDMA_CHECKER
 if EFAGDA
 bin_PROGRAMS += prov/efa/src/fi_efa_gda
 endif EFAGDA
+if HAVE_EFADV_CREATE_COMP_CNTR
+bin_PROGRAMS += prov/efa/src/fi_efa_hw_cntr
+endif HAVE_EFADV_CREATE_COMP_CNTR
 endif HAVE_VERBS_DEVEL
 
 efa_rnr_srcs = \
@@ -139,6 +142,11 @@ install-efagda:
 endif EFAGDA
 
 EXTRA_DIST += prov/efa/src/efagda
+
+prov_efa_src_fi_efa_hw_cntr_SOURCES = \
+	prov/efa/src/efa_hw_cntr_test.c \
+	$(benchmarks_srcs)
+prov_efa_src_fi_efa_hw_cntr_LDADD = libfabtests.la
 
 endif HAVE_VERBS_DEVEL
 endif ENABLE_EFA
