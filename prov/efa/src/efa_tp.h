@@ -63,21 +63,41 @@ static inline void efa_rdm_tracepoint_wr_id_post_write(const void *wr_id)
 
 #if HAVE_EFA_DATA_PATH_DIRECT
 
+static inline uint32_t efa_get_wqe_length(const struct efa_io_tx_wqe *wqe)
+{
+	enum efa_io_send_op_type op_type;
+	uint32_t length = 0;
+
+	op_type = EFA_GET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_OP_TYPE);
+	switch (op_type) {
+	case EFA_IO_SEND:
+		if (EFA_GET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_INLINE_MSG))
+			return wqe->meta.length;
+		for (size_t i = 0; i < wqe->meta.length; i++)
+			length += wqe->data.sgl[i].length;
+		return length;
+	case EFA_IO_RDMA_READ:
+	case EFA_IO_RDMA_WRITE:
+		return wqe->data.rdma_req.remote_mem.length;
+	}
+	return 0;
+}
+
 static inline void efa_data_path_direct_tracepoint_post_send(
 		const struct efa_qp *qp,
 		const struct efa_data_path_direct_sq *sq,
-		const struct efa_io_tx_meta_desc *meta)
+		const struct efa_io_tx_wqe *wqe)
 {
-	uint32_t wrid_idx = meta->req_id & ~sq->wq.gen_mask;
+	uint32_t wrid_idx = wqe->meta.req_id & ~sq->wq.gen_mask;
 
 	efa_tracepoint(data_path_direct_post_send,
 		       qp->base_ep->domain->device->ibv_ctx->device->name,
 		       sq->wq.wrid[wrid_idx],
-		       EFA_GET(&meta->ctrl1, EFA_IO_TX_META_DESC_OP_TYPE),
+		       EFA_GET(&wqe->meta.ctrl1, EFA_IO_TX_META_DESC_OP_TYPE),
 		       qp->ibv_qp->qp_num,
-		       meta->dest_qp_num,
-		       meta->ah,
-		       meta->length);
+		       wqe->meta.dest_qp_num,
+		       wqe->meta.ah,
+		       efa_get_wqe_length(wqe));
 }
 
 static inline void efa_data_path_direct_tracepoint_post_recv(

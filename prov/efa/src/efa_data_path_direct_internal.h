@@ -609,7 +609,7 @@ efa_data_path_direct_send_wr_post(
 		dst[i] = src[i];
 
 #if HAVE_LTTNG
-	efa_data_path_direct_tracepoint_post_send(qp, sq, &wqe->meta);
+	efa_data_path_direct_tracepoint_post_send(qp, sq, wqe);
 #endif
 }
 
