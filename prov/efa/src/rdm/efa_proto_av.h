@@ -10,6 +10,30 @@ struct efa_rdm_ep;
 struct efa_rdm_peer;
 
 /**
+ * @brief Protocol AH — wraps base efa_ah with implicit refcount and LRU
+ *
+ * The base efa_ah has a single refcount and no LRU knowledge.
+ * efa_proto_ah adds the implicit/explicit refcount split, the
+ * implicit_conn_list (entries using this AH), and the LRU list
+ * entry for AH eviction.
+ *
+ * pahole: size: 128, cachelines: 2
+ *
+ * All efa_proto_ah fields are control path only (AV insert/remove/eviction).
+ * The TX hot fields (ibv_ah, ahn) are in the embedded efa_ah at cacheline 0.
+ * The protocol extension fields start at offset 88 (cacheline 1), so
+ * accessing them on the eviction path does not pollute the TX cache line.
+ */
+struct efa_proto_ah {
+	struct efa_ah	ah;                            /*     0    88  must be first (castable) */
+	/* --- cacheline 1 boundary (64 bytes) was 24 bytes ago --- */
+	int		implicit_refcnt;               /*    88     4 */
+	int		explicit_refcnt;               /*    92     4 */
+	struct dlist_entry implicit_conn_list;          /*    96    16 */
+	struct dlist_entry lru_list_entry;              /*   112    16 */
+};
+
+/**
  * @brief Protocol AV entry — flat layout with same field prefix as efa_av_entry
  *
  * pahole:
@@ -110,6 +134,17 @@ struct efa_proto_av {
 };
 
 /**
+ * @brief get the protocol AH wrapper from a base AH pointer
+ *
+ * @param[in]	ah	base AH (must be embedded in efa_proto_ah)
+ * @return	pointer to the containing efa_proto_ah
+ */
+static inline struct efa_proto_ah *efa_proto_ah_from_ah(struct efa_ah *ah)
+{
+	return container_of(ah, struct efa_proto_ah, ah);
+}
+
+/**
  * @brief typed accessor for the ep_addr field of a proto AV entry
  *
  * @param[in]	entry	proto AV entry
@@ -139,10 +174,19 @@ struct efa_rdm_peer *efa_proto_av_entry_ep_peer_map_lookup(
 void efa_proto_av_entry_ep_peer_map_remove(
 	struct efa_proto_av_entry *entry, struct efa_rdm_ep *ep);
 
+/* Protocol AH allocation / release (shared base AH + proto wrapper) */
+struct efa_ah *efa_proto_ah_alloc(struct efa_domain *domain,
+				 const uint8_t *gid,
+				 bool insert_implicit_av);
+
+void efa_proto_ah_release(struct efa_domain *domain, struct efa_ah *ah,
+			  bool release_from_implicit_av);
+
 /* SHM AV operations */
 int efa_proto_av_entry_insert_shm_av(struct efa_proto_av *av,
 					  struct efa_proto_av_entry *entry);
 
+/* Entry deinit (tears down peers on the entry) */
 void efa_proto_av_entry_deinit(struct efa_proto_av *av,
 				   struct efa_proto_av_entry *entry);
 

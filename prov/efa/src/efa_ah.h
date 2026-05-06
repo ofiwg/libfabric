@@ -9,33 +9,55 @@
 
 #define EFA_GID_LEN	16
 
+/**
+ * @brief Base address handle — shared by efa-direct and protocol paths
+ *
+ * Contains only the ibv_ah, GID, AHN, refcount, and hash handle.
+ * Protocol-specific fields (implicit_refcnt, implicit_conn_list,
+ * LRU list entry) are in efa_proto_ah.
+ *
+ * pahole: size: 88, cachelines: 2 (2-byte hole after ahn)
+ *
+ * TX hot path: ibv_ah (off=16) is passed to ibv post_send/read/write
+ *   on every send. Both ibv_ah and ahn are in cacheline 0.
+ * All other fields are control path only (AH alloc/release/hash lookup).
+ */
 struct efa_ah {
-	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
-	struct ibv_ah	*ibv_ah; /* created by ibv_create_ah() using GID */
-	uint16_t	ahn; /* adress handle number */
-	/* Number of explicit AV entries associated with this AH */
-	int explicit_refcnt;
-	/* Number of implicit AV entries associated with this AH */
-	int implicit_refcnt;
-	/* dlist of all implicit AV entries associated with this AH entry */
-	struct dlist_entry implicit_conn_list;
-	/* dlist entry in domain's LRU AH list */
-	struct dlist_entry domain_lru_ah_list_entry;
-	UT_hash_handle	hh; /* hash map handle, link all efa_ah with efa_ep->ah_map */
+	uint8_t		gid[EFA_GID_LEN];              /*     0    16 */
+	struct ibv_ah	*ibv_ah;                       /*    16     8 */
+	uint16_t	ahn;                           /*    24     2 */
+	/* 2-byte hole */
+	int		refcnt;                        /*    28     4 */
+	UT_hash_handle	hh;                            /*    32    56 */
 };
 
-void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
-					struct efa_ah *ah);
-
+/**
+ * @brief allocate an ibv_ah from GID, reusing existing AH if possible
+ *
+ * @param[in]	domain		efa domain
+ * @param[in]	gid		GID
+ * @param[in]	alloc_size	size to allocate (sizeof(efa_ah) or sizeof(efa_proto_ah))
+ * @return	pointer to efa_ah on success, NULL on failure (errno set)
+ */
 struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
-			    bool insert_implicit_av);
+			    size_t alloc_size);
 
-void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
-		    bool release_from_implicit_av);
+/**
+ * @brief release an efa_ah, destroying it when refcount reaches zero
+ *
+ * @param[in]	domain	efa domain
+ * @param[in]	ah	efa_ah to release
+ */
+void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah);
 
-void efa_ah_release_unsafe(struct efa_domain *domain, struct efa_ah *ah,
-			   bool release_from_implicit_av);
-
-void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
+/**
+ * @brief destroy an efa_ah (remove from hash, destroy ibv_ah, free)
+ *
+ * Caller must hold util_domain.lock.
+ *
+ * @param[in]	domain	efa domain
+ * @param[in]	ah	efa_ah to destroy
+ */
+void efa_ah_destroy(struct efa_domain *domain, struct efa_ah *ah);
 
 #endif

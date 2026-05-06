@@ -35,20 +35,18 @@ int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_at
 			      uint32_t inlen);
 
 struct efa_ah *__real_efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
-			    bool insert_implicit_av);
+			    size_t alloc_size);
 
 struct efa_ah *efa_mock_efa_ah_alloc_return_null(struct efa_domain *domain, const uint8_t *gid,
-			    bool insert_implicit_av);
+			    size_t alloc_size);
 
 struct efa_ah *efa_mock_efa_ah_alloc_dont_create_self_ah(struct efa_domain *domain, const uint8_t *gid,
-			    bool insert_implicit_av);
+			    size_t alloc_size);
 
-void __real_efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
-		    bool release_from_implicit_av);
+void __real_efa_ah_release(struct efa_domain *domain, struct efa_ah *ah);
 
 void efa_mock_efa_ah_release_dont_create_self_ah(struct efa_domain *domain,
-						 struct efa_ah *ah,
-						 bool release_from_implicit_av);
+						 struct efa_ah *ah);
 
 int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 					    uint32_t inlen);
@@ -166,9 +164,8 @@ struct efa_unit_test_mocks
 							  uint32_t inlen);
 	struct efa_ah *(*efa_ah_alloc)(struct efa_domain *domain,
 				       const uint8_t *gid,
-				       bool insert_implicit_av);
-	void (*efa_ah_release)(struct efa_domain *domain, struct efa_ah *ah,
-		    bool release_from_implicit_av);
+				       size_t alloc_size);
+	void (*efa_ah_release)(struct efa_domain *domain, struct efa_ah *ah);
 #if HAVE_EFADV_CQ_EX
 
 	struct ibv_cq_ex *(*efadv_create_cq)(struct ibv_context *ibvctx,

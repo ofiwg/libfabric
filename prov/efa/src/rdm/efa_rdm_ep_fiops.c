@@ -1080,7 +1080,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 	efa_rdm_ep_remove_cntr_ibv_cq_poll_list(&efa_rdm_ep->base_ep);
 
 	if (efa_rdm_ep->self_ah)
-		efa_ah_release(efa_rdm_ep->base_ep.domain, efa_rdm_ep->self_ah, false);
+		efa_proto_ah_release(efa_rdm_ep->base_ep.domain, efa_rdm_ep->self_ah, false);
 
 	efa_rdm_ep_deregister_ibv_cqs(efa_rdm_ep);
 
@@ -1350,7 +1350,7 @@ static inline
 int efa_rdm_ep_create_self_ah(struct efa_rdm_ep *rdm_ep)
 {
 
-	rdm_ep->self_ah = efa_ah_alloc(rdm_ep->base_ep.domain, rdm_ep->base_ep.src_addr.raw, false);
+	rdm_ep->self_ah = efa_proto_ah_alloc(rdm_ep->base_ep.domain, rdm_ep->base_ep.src_addr.raw, false);
 
 	return rdm_ep->self_ah ? 0 : -FI_EINVAL;
 }

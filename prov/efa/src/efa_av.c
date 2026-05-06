@@ -11,7 +11,14 @@
 
 #include "efa.h"
 #include "efa_av.h"
+#include "rdm/efa_proto_av.h"
 #include "rdm/efa_rdm_pke_utils.h"
+
+/* Stub: this function moved to efa_proto_av.c as efa_proto_ah_lru_move.
+ * The calls below are in dead code paths (old implicit AV) that will be
+ * removed in the strip commit. */
+static inline void efa_ah_implicit_av_lru_ah_move(
+	struct efa_domain *domain, struct efa_ah *ah) { }
 
 static inline struct efa_conn *efa_av_addr_to_conn_impl(struct util_av *util_av,
 							fi_addr_t fi_addr)
@@ -370,11 +377,11 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	av->used_explicit++;
 
 	/* Handle AH LRU list and refcnt */
-	assert(!dlist_empty(&ah->implicit_conn_list));
+	assert(!dlist_empty(&efa_proto_ah_from_ah(ah)->implicit_conn_list));
 	dlist_remove(&implicit_conn->ah_implicit_conn_list_entry);
 	efa_ah_implicit_av_lru_ah_move(av->domain, ah);
-	ah->implicit_refcnt--;
-	ah->explicit_refcnt++;
+	efa_proto_ah_from_ah(ah)->implicit_refcnt--;
+	efa_proto_ah_from_ah(ah)->explicit_refcnt++;
 
 	EFA_INFO(FI_LOG_AV,
 		 "Peer with implicit fi_addr %" PRIu64

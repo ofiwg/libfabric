@@ -57,6 +57,9 @@ static bool efa_is_local_peer(struct efa_av *av, const void *addr)
 	return 0;
 }
 
+/* Forward declaration for static helper defined after entry release */
+static void efa_proto_ah_lru_move(struct efa_domain *domain, struct efa_ah *ah);
+
 /* ---- Address lookup ---- */
 
 /**
@@ -357,7 +360,7 @@ void efa_proto_av_implicit_av_lru_entry_move(struct efa_proto_av *av,
 	dlist_insert_tail(&entry->implicit_av_lru_entry,
 			  &av->implicit_av_lru_list);
 
-	efa_ah_implicit_av_lru_ah_move(av->efa_av.domain, entry->ah);
+	efa_proto_ah_lru_move(av->efa_av.domain, entry->ah);
 }
 
 /* ---- Reverse lookup (protocol, connid-aware) ---- */
@@ -568,7 +571,7 @@ void efa_proto_av_entry_release(struct efa_proto_av *av,
 		dlist_remove(&entry->implicit_av_lru_entry);
 	}
 
-	efa_ah_release(av->efa_av.domain, entry->ah, release_from_implicit_av);
+	efa_proto_ah_release(av->efa_av.domain, entry->ah, release_from_implicit_av);
 	efa_proto_av_entry_release_util_av(av, entry, release_from_implicit_av);
 
 	release_from_implicit_av ? av->used_implicit-- : av->efa_av.used_explicit--;
@@ -600,15 +603,34 @@ void efa_proto_av_entry_release_ah_unsafe(struct efa_proto_av *av,
 	}
 
 	/* Decrement refcnts before release_util_av which NULLs entry->ah */
-	release_from_implicit_av ? entry->ah->implicit_refcnt-- :
-				   entry->ah->explicit_refcnt--;
+	release_from_implicit_av ? efa_proto_ah_from_ah(entry->ah)->implicit_refcnt-- :
+				   efa_proto_ah_from_ah(entry->ah)->explicit_refcnt--;
+	entry->ah->refcnt--;
 
 	efa_proto_av_entry_release_util_av(av, entry, release_from_implicit_av);
 
 	release_from_implicit_av ? av->used_implicit-- : av->efa_av.used_explicit--;
 }
 
-/* ---- AH alloc with eviction ---- */
+/* ---- Protocol AH helpers ---- */
+
+/**
+ * @brief Move the AH to the end of the LRU list (most recently used)
+ *
+ * @param[in]	domain	efa domain
+ * @param[in]	ah	base AH (must be embedded in efa_proto_ah)
+ */
+static void efa_proto_ah_lru_move(struct efa_domain *domain, struct efa_ah *ah)
+{
+	struct efa_proto_ah *proto_ah = efa_proto_ah_from_ah(ah);
+
+	assert(efa_proto_ah_from_ah(ah)->implicit_refcnt > 0 || efa_proto_ah_from_ah(ah)->explicit_refcnt > 0);
+	assert(dlist_entry_in_list(&domain->ah_lru_list,
+				   &proto_ah->lru_list_entry));
+
+	dlist_remove(&proto_ah->lru_list_entry);
+	dlist_insert_tail(&proto_ah->lru_list_entry, &domain->ah_lru_list);
+}
 
 /**
  * @brief Evict the least recently used AH that has no explicit AV entries.
@@ -625,22 +647,22 @@ void efa_proto_av_entry_release_ah_unsafe(struct efa_proto_av *av,
 static int efa_proto_ah_evict(struct efa_domain *domain)
 {
 	struct efa_proto_av_entry *entry_to_release;
-	struct efa_ah *ah_tmp, *ah_to_release = NULL;
+	struct efa_proto_ah *proto_ah_tmp, *proto_ah_to_release = NULL;
 	struct dlist_entry *tmp;
 
 	assert(ofi_genlock_held(&domain->srx_lock));
 
 	ofi_genlock_lock(&domain->util_domain.lock);
 
-	dlist_foreach_container(&domain->ah_lru_list, struct efa_ah, ah_tmp,
-				domain_lru_ah_list_entry) {
-		if (ah_tmp->explicit_refcnt == 0) {
-			ah_to_release = ah_tmp;
+	dlist_foreach_container(&domain->ah_lru_list, struct efa_proto_ah,
+				proto_ah_tmp, lru_list_entry) {
+		if (proto_ah_tmp->explicit_refcnt == 0) {
+			proto_ah_to_release = proto_ah_tmp;
 			break;
 		}
 	}
 
-	if (!ah_to_release) {
+	if (!proto_ah_to_release) {
 		ofi_genlock_unlock(&domain->util_domain.lock);
 		EFA_WARN(FI_LOG_AV,
 			 "AH creation for implicit AV entry failed with ENOMEM "
@@ -648,9 +670,9 @@ static int efa_proto_ah_evict(struct efa_domain *domain)
 		return -FI_ENOMEM;
 	}
 
-	assert(ah_to_release->implicit_refcnt > 0);
+	assert(proto_ah_to_release->implicit_refcnt > 0);
 
-	dlist_foreach_container_safe(&ah_to_release->implicit_conn_list,
+	dlist_foreach_container_safe(&proto_ah_to_release->implicit_conn_list,
 				     struct efa_proto_av_entry, entry_to_release,
 				     ah_implicit_conn_list_entry, tmp) {
 
@@ -661,9 +683,12 @@ static int efa_proto_ah_evict(struct efa_domain *domain)
 						     entry_to_release, true);
 	}
 
-	if (ah_to_release->implicit_refcnt == 0 &&
-	    ah_to_release->explicit_refcnt == 0) {
-		efa_ah_destroy_ah(domain, ah_to_release);
+	if (proto_ah_to_release->implicit_refcnt == 0 &&
+	    proto_ah_to_release->explicit_refcnt == 0) {
+		dlist_remove(&proto_ah_to_release->lru_list_entry);
+		assert(dlist_empty(&proto_ah_to_release->implicit_conn_list));
+		assert(proto_ah_to_release->ah.refcnt == 0);
+		efa_ah_destroy(domain, &proto_ah_to_release->ah);
 	}
 
 	ofi_genlock_unlock(&domain->util_domain.lock);
@@ -672,40 +697,137 @@ static int efa_proto_ah_evict(struct efa_domain *domain)
 }
 
 /**
- * @brief Allocate an AH with eviction retry for protocol AV.
+ * @brief Allocate a protocol AH with eviction retry.
  *
- * Wraps efa_ah_alloc with ENOMEM handling: if ibv_create_ah fails due
- * to too many AH entries, evicts an AH with only implicit references
- * and retries.
+ * Calls efa_ah_alloc with sizeof(efa_proto_ah) to allocate the
+ * protocol wrapper. Initializes implicit_refcnt, explicit_refcnt,
+ * implicit_conn_list, and inserts into the domain LRU list.
+ * On ENOMEM, evicts an AH with only implicit references and retries.
+ *
+ * Protocol refcnts and the LRU list are shared across all AVs sharing
+ * the same PD (domain), but per-AV call sites only hold their own
+ * util_av lock. This function takes util_domain.lock around the proto
+ * field mutations to serialize against concurrent efa_proto_ah_alloc
+ * / efa_proto_ah_release on a different AV.
  *
  * @param[in]	domain		efa domain
  * @param[in]	gid		GID
  * @param[in]	insert_implicit_av	whether this is for an implicit AV entry
- * @return	pointer to efa_ah on success, NULL on failure
+ * @return	pointer to base efa_ah on success, NULL on failure
  */
-static struct efa_ah *efa_proto_ah_alloc(struct efa_domain *domain,
+struct efa_ah *efa_proto_ah_alloc(struct efa_domain *domain,
 					 const uint8_t *gid,
 					 bool insert_implicit_av)
 {
 	struct efa_ah *ah;
+	struct efa_proto_ah *proto_ah;
 	int err;
+	bool first_proto_user;
 
-	ah = efa_ah_alloc(domain, gid, insert_implicit_av);
-	if (ah)
-		return ah;
+	ah = efa_ah_alloc(domain, gid, sizeof(struct efa_proto_ah));
+	if (!ah) {
+		if (errno != FI_ENOMEM)
+			return NULL;
 
-	if (errno != FI_ENOMEM)
-		return NULL;
+		EFA_INFO(FI_LOG_AV,
+			 "ibv_create_ah failed with ENOMEM. "
+			 "Attempting to evict AH entry\n");
 
-	EFA_INFO(FI_LOG_AV,
-		 "ibv_create_ah failed with ENOMEM. "
-		 "Attempting to evict AH entry\n");
+		err = efa_proto_ah_evict(domain);
+		if (err)
+			return NULL;
 
-	err = efa_proto_ah_evict(domain);
-	if (err)
-		return NULL;
+		ah = efa_ah_alloc(domain, gid, sizeof(struct efa_proto_ah));
+		if (!ah)
+			return NULL;
+	}
 
-	return efa_ah_alloc(domain, gid, insert_implicit_av);
+	/*
+	 * efa_ah_alloc released util_domain.lock on return. Reacquire it
+	 * before touching the protocol-specific fields (refcnts, LRU list,
+	 * implicit_conn_list) so concurrent allocators on a different AV's
+	 * lock don't race on a shared AH.
+	 *
+	 * Between efa_ah_alloc returning and reacquiring the lock, a
+	 * concurrent efa_proto_ah_release could have dropped both proto
+	 * refcnts to zero and removed the AH from the LRU list, even though
+	 * the base ah->refcnt stayed > 0. Detect "first proto user" by
+	 * checking the proto refcnts directly rather than ah->refcnt.
+	 */
+	ofi_genlock_lock(&domain->util_domain.lock);
+
+	proto_ah = efa_proto_ah_from_ah(ah);
+
+	/*
+	 * first_proto_user is true when both proto refcnts are zero — either
+	 * this is a brand-new AH (refcnt just incremented from 0 to 1 inside
+	 * efa_ah_alloc) or an AH where the last proto user released (and
+	 * removed it from the LRU list) but the base layer kept it alive.
+	 * Either way we need to (re)init the proto fields and (re)insert
+	 * into the LRU list.
+	 */
+	first_proto_user = (proto_ah->implicit_refcnt == 0 &&
+			    proto_ah->explicit_refcnt == 0);
+	if (first_proto_user) {
+		dlist_init(&proto_ah->implicit_conn_list);
+		dlist_insert_tail(&proto_ah->lru_list_entry,
+				  &domain->ah_lru_list);
+	}
+
+	insert_implicit_av ? proto_ah->implicit_refcnt++ :
+			     proto_ah->explicit_refcnt++;
+
+	if (!first_proto_user)
+		efa_proto_ah_lru_move(domain, ah);
+
+	ofi_genlock_unlock(&domain->util_domain.lock);
+
+	return ah;
+}
+
+/**
+ * @brief Release a protocol AH reference.
+ *
+ * Decrements the appropriate protocol refcount. When both protocol
+ * refcounts reach zero, removes from LRU list and calls efa_ah_release
+ * to decrement the base refcount (which destroys the AH).
+ *
+ * Protocol refcnts and the LRU list are shared across all AVs sharing
+ * the same PD (domain), but per-AV call sites only hold their own
+ * util_av lock. This function takes util_domain.lock around the proto
+ * field mutations to serialize against concurrent efa_proto_ah_alloc
+ * / efa_proto_ah_release on a different AV.
+ *
+ * @param[in]	domain			efa domain
+ * @param[in]	ah			base AH
+ * @param[in]	release_from_implicit_av	whether releasing implicit ref
+ */
+void efa_proto_ah_release(struct efa_domain *domain, struct efa_ah *ah,
+				 bool release_from_implicit_av)
+{
+	struct efa_proto_ah *proto_ah = efa_proto_ah_from_ah(ah);
+
+	/*
+	 * Protocol refcnts and LRU list are shared across AVs sharing the
+	 * same PD (domain), so mutations must be serialized by
+	 * util_domain.lock — the same lock efa_ah_release acquires.
+	 */
+	ofi_genlock_lock(&domain->util_domain.lock);
+
+	assert((release_from_implicit_av && proto_ah->implicit_refcnt > 0) ||
+	       (!release_from_implicit_av && proto_ah->explicit_refcnt > 0));
+
+	release_from_implicit_av ? proto_ah->implicit_refcnt-- :
+				   proto_ah->explicit_refcnt--;
+
+	if (proto_ah->implicit_refcnt == 0 && proto_ah->explicit_refcnt == 0) {
+		dlist_remove(&proto_ah->lru_list_entry);
+		assert(dlist_empty(&proto_ah->implicit_conn_list));
+	}
+
+	ofi_genlock_unlock(&domain->util_domain.lock);
+
+	efa_ah_release(domain, ah);
 }
 
 /* ---- Entry alloc ---- */
@@ -790,7 +912,7 @@ struct efa_proto_av_entry *efa_proto_av_entry_alloc(
 
 	if (insert_implicit_av)
 		dlist_insert_tail(&entry->ah_implicit_conn_list_entry,
-				  &entry->ah->implicit_conn_list);
+				  &efa_proto_ah_from_ah(entry->ah)->implicit_conn_list);
 
 	entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
 
@@ -826,7 +948,7 @@ err_release:
 		dlist_remove(&entry->implicit_av_lru_entry);
 
 	if (entry->ah)
-		efa_ah_release(av->efa_av.domain, entry->ah, insert_implicit_av);
+		efa_proto_ah_release(av->efa_av.domain, entry->ah, insert_implicit_av);
 
 	entry->ah = NULL;
 	memset(entry->ep_addr, 0, EFA_EP_ADDR_LEN);
@@ -967,11 +1089,11 @@ int efa_proto_av_entry_implicit_to_explicit(struct efa_proto_av *av,
 	av->efa_av.used_explicit++;
 
 	/* Handle AH LRU list and refcnt */
-	assert(!dlist_empty(&ah->implicit_conn_list));
+	assert(!dlist_empty(&efa_proto_ah_from_ah(ah)->implicit_conn_list));
 	dlist_remove(&implicit_entry->ah_implicit_conn_list_entry);
-	efa_ah_implicit_av_lru_ah_move(av->efa_av.domain, ah);
-	ah->implicit_refcnt--;
-	ah->explicit_refcnt++;
+	efa_proto_ah_lru_move(av->efa_av.domain, ah);
+	efa_proto_ah_from_ah(ah)->implicit_refcnt--;
+	efa_proto_ah_from_ah(ah)->explicit_refcnt++;
 
 	EFA_INFO(FI_LOG_AV,
 		 "Peer with implicit fi_addr %" PRIu64

@@ -275,13 +275,13 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 	}
 
-	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, insert_implicit_av);
+	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, sizeof(struct efa_ah));
 	if (!conn->ah)
 		goto err_release;
 
 	if (insert_implicit_av)
 		dlist_insert_tail(&conn->ah_implicit_conn_list_entry,
-				  &conn->ah->implicit_conn_list);
+				  &efa_proto_ah_from_ah(conn->ah)->implicit_conn_list);
 
 	conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	/*
@@ -321,7 +321,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 
 err_release:
 	if (conn->ah)
-		efa_ah_release(av->domain, conn->ah, insert_implicit_av);
+		efa_ah_release(av->domain, conn->ah);
 
 	conn->ep_addr = NULL;
 	err = ofi_av_remove_addr(util_av, fi_addr);
@@ -411,7 +411,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 	if (release_from_implicit_av)
 		dlist_remove(&conn->ah_implicit_conn_list_entry);
 
-	efa_ah_release(av->domain, conn->ah, release_from_implicit_av);
+	efa_ah_release(av->domain, conn->ah);
 
 	efa_conn_release_util_av(av, conn, release_from_implicit_av);
 
@@ -450,8 +450,8 @@ void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
 
 	efa_conn_release_util_av(av, conn, release_from_implicit_av);
 
-	release_from_implicit_av ? conn->ah->implicit_refcnt-- :
-				   conn->ah->explicit_refcnt--;
+	release_from_implicit_av ? efa_proto_ah_from_ah(conn->ah)->implicit_refcnt-- :
+				   efa_proto_ah_from_ah(conn->ah)->explicit_refcnt--;
 	release_from_implicit_av ? av->used_implicit-- : av->used_explicit--;
 }
 
