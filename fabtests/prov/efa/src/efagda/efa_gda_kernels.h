@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include <cuda_runtime.h>
 #include <efa_cuda_dp.h>
+#include <infiniband/verbs.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,6 +49,22 @@ int efagda_run_lat_send(struct efa_cuda_qp *qp,
 			uint32_t send_lkey,
 			int iters, int rx_depth, int is_client,
 			cudaStream_t stream);
+
+int efagda_run_bw(struct efa_cuda_qp *qp,
+		  struct efa_cuda_cq *send_cq,
+		  enum ibv_wr_opcode opcode,
+		  uint64_t send_addr, uint32_t send_length, uint32_t send_lkey,
+		  uint16_t ah, uint32_t remote_qpn, uint32_t remote_qkey,
+		  uint64_t remote_addr, uint32_t remote_rkey,
+		  int iters, int tx_depth,
+		  cudaStream_t stream);
+
+int efagda_run_bw_recv(struct efa_cuda_qp *qp,
+		       struct efa_cuda_cq *recv_cq,
+		       uint64_t recv_addr, uint32_t recv_length,
+		       uint32_t recv_lkey,
+		       int iters, int rx_depth,
+		       cudaStream_t stream);
 
 #ifdef __cplusplus
 }
