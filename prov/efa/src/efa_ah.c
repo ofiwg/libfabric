@@ -8,8 +8,6 @@
 #include "efa_conn.h"
 #include <infiniband/efadv.h>
 
-void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
-
 /**
  * @brief Move the AH to the end of the LRU list to indicate that it is the
  * most recently used entry
@@ -19,8 +17,8 @@ void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
  * list to remove AH entries with only implicit AV entries, so it is OK to do
  * that.
  *
- * @param[in]	av	efa address vector
- * @param[in]	conn	efa conn to be added to the LRU list
+ * @param[in]	domain	efa domain
+ * @param[in]	ah	efa AH to move
  */
 void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 					struct efa_ah *ah)
@@ -34,46 +32,16 @@ void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 			  &domain->ah_lru_list);
 }
 
-static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
-	struct efa_proto_av_entry *entry_to_release;
-	struct efa_ah *ah_tmp, *ah_to_release = NULL;
-	struct dlist_entry *tmp;
-
-	dlist_foreach_container (&domain->ah_lru_list, struct efa_ah, ah_tmp,
-				 domain_lru_ah_list_entry) {
-		if (ah_tmp->explicit_refcnt == 0) {
-			ah_to_release = ah_tmp;
-			break;
-		}
-	}
-
-	if (!ah_to_release) {
-		EFA_WARN(FI_LOG_AV,
-			 "AH creation for implicit AV entry failed with ENOMEM "
-			 "but no AH entries available to evict\n");
-		return -FI_ENOMEM;
-	}
-
-	assert(ah_to_release->implicit_refcnt > 0);
-
-	dlist_foreach_container_safe(&ah_to_release->implicit_conn_list,
-				      struct efa_proto_av_entry, entry_to_release,
-				      ah_implicit_conn_list_entry, tmp) {
-
-		assert(entry_to_release->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
-		       entry_to_release->fi_addr == FI_ADDR_NOTAVAIL);
-
-		efa_proto_av_entry_release_ah_unsafe(entry_to_release->av, entry_to_release, true);
-	}
-
-	if (ah_to_release->implicit_refcnt == 0 &&
-	    ah_to_release->explicit_refcnt == 0) {
-		efa_ah_destroy_ah(domain, ah_to_release);
-	}
-
-	return FI_SUCCESS;
-}
-
+/**
+ * @brief Emit a detailed warning for ibv_create_ah EINVAL.
+ *
+ * The most common reasons for EINVAL are cross-AZ addressing, invalid
+ * remote GID, and invalid PD. Log both local and remote GIDs plus the
+ * PD pointer to help operators diagnose failures from logs alone.
+ *
+ * @param[in]	domain	efa domain (for local GID and PD)
+ * @param[in]	gid	remote GID that failed
+ */
 static void efa_ah_warn_create_einval(struct efa_domain *domain, const uint8_t *gid)
 {
 	char remote_gid_str[INET6_ADDRSTRLEN] = {0};
@@ -96,11 +64,16 @@ static void efa_ah_warn_create_einval(struct efa_domain *domain, const uint8_t *
 
 /**
  * @brief allocate an ibv_ah object from GID.
- * This function use a hash map to store GID to ibv_ah map,
- * and re-use ibv_ah for same GID
  *
- * @param[in]	domain	efa_domain
- * @param[in]	gid	GID
+ * Uses a hash map to store GID to ibv_ah mapping and reuses ibv_ah for
+ * the same GID. If ibv_create_ah fails, returns NULL with errno set.
+ * The caller is responsible for handling ENOMEM (e.g. by evicting AH
+ * entries and retrying).
+ *
+ * @param[in]	domain		efa_domain
+ * @param[in]	gid		GID
+ * @param[in]	insert_implicit_av	whether this is for an implicit AV entry
+ * @return	pointer to efa_ah on success, NULL on failure (errno set)
  */
 struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 			    bool insert_implicit_av)
@@ -135,39 +108,13 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	memcpy(ibv_ah_attr.grh.dgid.raw, gid, EFA_GID_LEN);
 	efa_ah->ibv_ah = ibv_create_ah(ibv_pd, &ibv_ah_attr);
 	if (!efa_ah->ibv_ah) {
-		/* If the failure is because we have too many AH entries, try to
-		 * evict an AH entry with no explicit AV entries and try AH
-		 * creation again */
-		if (errno == FI_ENOMEM) {
-			EFA_INFO(
-				FI_LOG_AV,
-				"ibv_create_ah failed with ENOMEM for implicit "
-				"AV insertion. Attempting to evict AH entry\n");
-
-			err = efa_ah_implicit_av_evict_ah(domain);
-			if (err)
-				goto err_free_efa_ah;
-
-			efa_ah->ibv_ah = ibv_create_ah(ibv_pd, &ibv_ah_attr);
-			if (!efa_ah->ibv_ah) {
-				if (errno == EINVAL) {
-					efa_ah_warn_create_einval(domain, gid);
-				} else {
-					EFA_WARN(FI_LOG_AV,
-						 "ibv_create_ah failed for implicit AV "
-						 "insertion! errno: %d\n",
-						 errno);
-				}
-				goto err_free_efa_ah;
-			}
-		} else if (errno == EINVAL) {
+		if (errno == EINVAL) {
 			efa_ah_warn_create_einval(domain, gid);
-			goto err_free_efa_ah;
 		} else {
 			EFA_WARN(FI_LOG_AV,
-				 "ibv_create_ah failed! errno: %s\n", strerror(errno));
-			goto err_free_efa_ah;
+				 "ibv_create_ah failed! errno: %d\n", errno);
 		}
+		goto err_free_efa_ah;
 	}
 
 	err = efadv_query_ah(efa_ah->ibv_ah, &efa_ah_attr, sizeof(efa_ah_attr));
@@ -196,6 +143,15 @@ err_free_efa_ah:
 	return NULL;
 }
 
+/**
+ * @brief destroy an efa_ah object
+ *
+ * Removes AH from hash map and LRU list, destroys ibv_ah, frees memory.
+ * Caller must hold util_domain.lock.
+ *
+ * @param[in]	domain	efa_domain
+ * @param[in]	ah	efa_ah object to destroy
+ */
 void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah)
 {
 	int err;
@@ -216,8 +172,12 @@ void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah)
 /**
  * @brief release an efa_ah object after acquiring the util domain lock
  *
- * @param[in]	domain	efa_domain
- * @param[in]	ah	efa_ah object pointer
+ * Decrements the appropriate refcount. If both refcounts reach zero,
+ * destroys the AH.
+ *
+ * @param[in]	domain			efa_domain
+ * @param[in]	ah			efa_ah object pointer
+ * @param[in]	release_from_implicit_av	whether releasing from implicit AV
  */
 void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
 		    bool release_from_implicit_av)
