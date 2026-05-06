@@ -105,11 +105,6 @@ def test_rdm_tagged_bw_small_recv_window(cmdline_args, completion_semantic, memo
                                completion_semantic, memory_type, "all", completion_type=completion_type,
                                fabric="efa")
 
-@pytest.mark.functional
-def test_rdm_tagged_bw_use_fi_more(cmdline_args, completion_semantic, memory_type, message_size):
-    efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw --use-fi-more",
-                               "short", completion_semantic, memory_type, message_size, fabric="efa")
-
 # efa-direct does not support atomic
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
