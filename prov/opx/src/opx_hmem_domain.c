@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024-2025 by Cornelis Networks.
+ * Copyright (C) 2024-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -58,8 +58,11 @@ int opx_hmem_close_fabric(struct opx_hmem_fabric *opx_hmem_fabric)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "close hmem fabric\n");
 
+	ofi_fabric_remove(&opx_hmem_fabric->util_fabric);
+
 	free((void *) opx_hmem_fabric->util_fabric.name);
 	opx_hmem_fabric->util_fabric.name = NULL;
+	ofi_mutex_destroy(&opx_hmem_fabric->util_fabric.lock);
 	free(opx_hmem_fabric);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "hmem fabric closed\n");
