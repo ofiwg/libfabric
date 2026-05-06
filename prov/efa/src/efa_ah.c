@@ -126,6 +126,7 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	if (!efa_ah) {
 		errno = FI_ENOMEM;
 		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah\n");
+		ofi_genlock_unlock(&domain->util_domain.lock);
 		return NULL;
 	}
 
