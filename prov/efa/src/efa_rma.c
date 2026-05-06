@@ -110,7 +110,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	err = efa_qp_post_read(base_ep->qp, sge_list, iov_count,
 			       msg->rma_iov[0].key, msg->rma_iov[0].addr,
 			       wr_id, flags,
-			       av_entry->conn.ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
+			       av_entry->ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 
@@ -302,7 +302,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 				inline_data_list, use_inline,
 				msg->rma_iov[0].key, msg->rma_iov[0].addr,
 				wr_id, msg->data, flags,
-				av_entry->conn.ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
+				av_entry->ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 
