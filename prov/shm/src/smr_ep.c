@@ -248,12 +248,12 @@ void smr_generic_format(struct smr_cmd *cmd, int64_t tx_id, int64_t rx_id,
 			uint64_t op_flags)
 {
 	cmd->hdr.op = op;
-	cmd->hdr.status = 0;
 	cmd->hdr.op_flags = 0;
-	cmd->hdr.tag = tag;
-	cmd->hdr.tx_id = tx_id;
 	cmd->hdr.rx_id = rx_id;
+	cmd->hdr.tx_id = tx_id;
 	cmd->hdr.cq_data = data;
+	cmd->hdr.tag = tag;
+	cmd->hdr.status = 0;
 	cmd->hdr.rx_ctx = 0;
 
 	if (op_flags & FI_REMOTE_CQ_DATA)

@@ -86,27 +86,33 @@ enum {
 
 /*
  * Unique smr_cmd_hdr for smr message protocol:
- *	entry		for internal use managing commands (must be kept first)
- *	tx_ctx		source side context (unused by target side)
- *	rx_ctx		target side context (unused by source side)
- * 	tx_id		local shm_id of peer sending msg (unused by target)
- *	rx_id		remote shm_id of peer sending msg (unused by source)
  * 	op		type of op (ex. ofi_op_msg, defined in ofi_proto.h)
  * 	proto		smr protocol (ex. smr_proto_inline, defined above)
  * 	op_flags	operation flags (ex. SMR_REMOTE_CQ_DATA, defined above)
+ * 	resv		reserved
+ * 	tx_id		local shm_id of peer sending msg (unused by target)
+ *	rx_id		remote shm_id of peer sending msg (unused by source)
  * 	size		size of data transfer
- * 	status		returned status of operation
  * 	cq_data		remote CQ data
  * 	tag		tag for FI_TAGGED API only
  * 	datatype	atomic datatype for FI_ATOMIC API only
  * 	atomic_op	atomic operation for FI_ATOMIC API only
+ * 	status		returned status of operation
+ * 	CACHE LINE HERE Above fields must be 40 bytes if the cpu does
+ *			not support prefetching algorithms. The other 24 bytes
+ *			in this cache line come from the atomic queue cmd_entry
+ *	entry		for internal use managing commands
+ *	tx_ctx		source side context (unused by target side)
+ *	rx_ctx		target side context (unused by source side)
  */
 struct smr_cmd_hdr {
-	uint64_t		entry;
-	uint64_t		tx_ctx;
-	uint64_t		rx_ctx;
+	uint8_t			op;
+	uint8_t			proto;
+	uint8_t			op_flags;
+	uint8_t			resv[1];
+	int16_t			rx_id;
+	int16_t			tx_id;
 	uint64_t		size;
-	int64_t			status;
 	uint64_t		cq_data;
 	union {
 		uint64_t	tag;
@@ -115,12 +121,11 @@ struct smr_cmd_hdr {
 			uint8_t	atomic_op;
 		};
 	};
-	int16_t			rx_id;
-	int16_t			tx_id;
-	uint8_t			op;
-	uint8_t			proto;
-	uint8_t			op_flags;
-	uint8_t			resv[1];
+	uint64_t		status;
+	//CACHE LINE HERE - See comment above
+	uint64_t		entry;
+	uint64_t		tx_ctx;
+	uint64_t		rx_ctx;
 };
 
 #ifdef static_assert

@@ -46,7 +46,8 @@ static void smr_progress_overflow(struct smr_ep *ep)
 
 	entry = ep->overflow_list.head;
 	while (entry) {
-		cmd = (struct smr_cmd *) entry;
+		cmd = container_of(container_of(entry, struct smr_cmd_hdr,
+				   entry), struct smr_cmd, hdr);
 		peer_smr = smr_peer_region(ep, cmd->hdr.tx_id);
 		ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
 		if (ret == -FI_ENOENT)
