@@ -434,7 +434,7 @@ void test_av_reverse_av_remove_qpn_collision(struct efa_resource **state)
 	assert_int_equal(err, 1);
 	test_av_verify_av_hash_cnt(av, proto_av, 1, 0, 0, 0);
 	/* cur_reverse_av (ahn, 100) -> conn1 (fi_addr1) */
-	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
+	assert_int_equal(efa_proto_av_reverse_lookup(proto_av, ahn, 100, NULL),
 			 fi_addr1);
 
 	/* Insert peer2: same GID and qpn, different qkey. This pushes peer1's
@@ -447,7 +447,7 @@ void test_av_reverse_av_remove_qpn_collision(struct efa_resource **state)
 	test_av_verify_av_hash_cnt(av, proto_av, 1, 1, 0, 0);
 	/* cur_reverse_av (ahn, 100) now points to conn2 (fi_addr2); peer1 is
 	 * in prv_reverse_av keyed by its own qkey. */
-	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
+	assert_int_equal(efa_proto_av_reverse_lookup(proto_av, ahn, 100, NULL),
 			 fi_addr2);
 
 	/* Remove peer1 first. Without the fix this would incorrectly delete
@@ -456,7 +456,7 @@ void test_av_reverse_av_remove_qpn_collision(struct efa_resource **state)
 	assert_int_equal(err, 0);
 	/* peer1's prv entry is gone; peer2's cur entry must still be intact. */
 	test_av_verify_av_hash_cnt(av, proto_av, 1, 0, 0, 0);
-	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
+	assert_int_equal(efa_proto_av_reverse_lookup(proto_av, ahn, 100, NULL),
 			 fi_addr2);
 
 	/* Remove peer2. Without the fix this hits a NULL prv_reverse_av_entry
@@ -464,7 +464,7 @@ void test_av_reverse_av_remove_qpn_collision(struct efa_resource **state)
 	err = fi_av_remove(resource->av, &fi_addr2, 1, 0);
 	assert_int_equal(err, 0);
 	test_av_verify_av_hash_cnt(av, proto_av, 0, 0, 0, 0);
-	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
+	assert_int_equal(efa_proto_av_reverse_lookup(proto_av, ahn, 100, NULL),
 			 FI_ADDR_NOTAVAIL);
 }
 

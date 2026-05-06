@@ -5,7 +5,6 @@
 
 #include "efa.h"
 #include "efa_ah.h"
-#include "efa_conn.h"
 #include <infiniband/efadv.h>
 
 /**

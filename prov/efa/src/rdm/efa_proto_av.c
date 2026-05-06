@@ -10,21 +10,16 @@
 #include "rdm/efa_rdm_pke_utils.h"
 
 /*
- * During the coexistence period between efa_conn and efa_proto_av_entry,
- * efa_av_reverse_av_add / _remove read av_entry->conn.ah->ahn on a
- * pointer that may actually be an efa_proto_av_entry *. This relies on
- * a layout coincidence: the 'ah' field sits at offset 32 in both
- * struct efa_av_entry (inside the embedded efa_conn, which itself starts
- * with struct efa_ah *ah) and struct efa_proto_av_entry (directly).
- * If either struct is ever reordered, these static asserts break loudly
- * instead of silently reading the wrong field.
+ * efa_av_entry and efa_proto_av_entry share the same cache-line-0 layout
+ * (ep_addr, ah) so reverse_av entries and util_av contexts work across
+ * both. Break loudly if anyone ever reorders either struct.
  */
 _Static_assert(offsetof(struct efa_proto_av_entry, ep_addr) ==
 	       offsetof(struct efa_av_entry, ep_addr),
 	       "efa_av_entry and efa_proto_av_entry must share ep_addr offset");
 _Static_assert(offsetof(struct efa_proto_av_entry, ah) ==
-	       offsetof(struct efa_av_entry, conn) + offsetof(struct efa_conn, ah),
-	       "efa_av_entry->conn.ah and efa_proto_av_entry->ah must be at the same offset");
+	       offsetof(struct efa_av_entry, ah),
+	       "efa_av_entry and efa_proto_av_entry must share ah offset");
 
 /**
  * @brief Local/remote peer detection by comparing peer GID with stored local GIDs
@@ -574,7 +569,7 @@ void efa_proto_av_entry_release(struct efa_proto_av *av,
 	efa_proto_ah_release(av->efa_av.domain, entry->ah, release_from_implicit_av);
 	efa_proto_av_entry_release_util_av(av, entry, release_from_implicit_av);
 
-	release_from_implicit_av ? av->used_implicit-- : av->efa_av.used_explicit--;
+	release_from_implicit_av ? av->used_implicit-- : av->efa_av.used--;
 }
 
 /**
@@ -609,7 +604,7 @@ void efa_proto_av_entry_release_ah_unsafe(struct efa_proto_av *av,
 
 	efa_proto_av_entry_release_util_av(av, entry, release_from_implicit_av);
 
-	release_from_implicit_av ? av->used_implicit-- : av->efa_av.used_explicit--;
+	release_from_implicit_av ? av->used_implicit-- : av->efa_av.used--;
 }
 
 /* ---- Protocol AH helpers ---- */
@@ -939,7 +934,7 @@ struct efa_proto_av_entry *efa_proto_av_entry_alloc(
 		goto err_release;
 	}
 
-	insert_implicit_av ? av->used_implicit++ : av->efa_av.used_explicit++;
+	insert_implicit_av ? av->used_implicit++ : av->efa_av.used++;
 
 	return entry;
 
@@ -1086,7 +1081,7 @@ int efa_proto_av_entry_implicit_to_explicit(struct efa_proto_av *av,
 	if (err)
 		return err;
 
-	av->efa_av.used_explicit++;
+	av->efa_av.used++;
 
 	/* Handle AH LRU list and refcnt */
 	assert(!dlist_empty(&efa_proto_ah_from_ah(ah)->implicit_conn_list));
@@ -1562,7 +1557,7 @@ int efa_proto_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	av->efa_av.domain = efa_domain;
 	av->efa_av.type = attr->type;
-	av->efa_av.used_explicit = 0;
+	av->efa_av.used = 0;
 	av->implicit_av_size = efa_env.implicit_av_size;
 	av->used_implicit = 0;
 	av->shm_used = 0;

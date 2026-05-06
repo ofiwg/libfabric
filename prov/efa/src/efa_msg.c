@@ -330,7 +330,7 @@ post:
 	/* Use consolidated send function */
 	ret = efa_qp_post_send(qp, sg_list, inline_data_list, iov_count,
 			       use_inline, wr_id, msg->data, flags,
-			       av_entry->conn.ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
+			       av_entry->ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(ret))
 		ret = (ret == ENOMEM) ? -FI_EAGAIN : -ret;
 

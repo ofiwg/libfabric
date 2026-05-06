@@ -110,7 +110,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	err = efa_qp_post_read(base_ep->qp, sge_list, iov_count,
 			       msg->rma_iov[0].key, msg->rma_iov[0].addr,
 			       wr_id, flags,
-			       av_entry->conn.ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
+			       av_entry->ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 
@@ -265,7 +265,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	err = efa_qp_post_write(base_ep->qp, sge_list, iov_count,
 				msg->rma_iov[0].key, msg->rma_iov[0].addr,
 				wr_id, msg->data, flags,
-				av_entry->conn.ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
+				av_entry->ah, efa_av_entry_ep_addr(av_entry)->qpn, efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 
@@ -391,7 +391,7 @@ ssize_t efa_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 	assert(av_entry && efa_av_entry_ep_addr(av_entry));
 
 	err = efa_qp_post_write(base_ep->qp, &sge, 1, key, addr,
-				wr_id, 0, 0, av_entry->conn.ah, efa_av_entry_ep_addr(av_entry)->qpn,
+				wr_id, 0, 0, av_entry->ah, efa_av_entry_ep_addr(av_entry)->qpn,
 				efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
@@ -433,7 +433,7 @@ static ssize_t efa_rma_inject_writedata(struct fid_ep *ep, const void *buf, size
 	assert(av_entry && efa_av_entry_ep_addr(av_entry));
 
 	err = efa_qp_post_write(base_ep->qp, &sge, 1, key, addr,
-				wr_id, data, IBV_SEND_INLINE, av_entry->conn.ah, efa_av_entry_ep_addr(av_entry)->qpn,
+				wr_id, data, IBV_SEND_INLINE, av_entry->ah, efa_av_entry_ep_addr(av_entry)->qpn,
 				efa_av_entry_ep_addr(av_entry)->qkey);
 	if (OFI_UNLIKELY(err))
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
