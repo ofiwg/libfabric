@@ -48,5 +48,16 @@ static inline struct efa_rdm_pke *efa_rdm_cq_get_pke_from_wr_id(struct efa_ibv_c
 
 	return efa_rdm_cq_get_pke_from_wr_id_solicited(wr_id);
 }
+static inline void efa_rdm_cq_write_error(struct efa_base_ep* base_ep,struct util_cq* cq, struct fi_cq_err_entry* err_entry, const char* caller){
+	/*If ofi_cq_write_err failed, at least make sure the app still recv the err; hance, write the err to eq for fallback.*/
+	if (ofi_cq_write_error(cq, err_entry)) {
+		EFA_WARN(FI_LOG_CQ, "Failed to write CQ error entry for %s err: %d, message: %s (%d). Falling back to EQ\n",
+			caller ? caller : "unknown",
+			err_entry->err,
+			efa_strerror(err_entry->prov_errno),
+			err_entry->prov_errno);
+		efa_base_ep_write_eq_error(base_ep, err_entry->err, err_entry->prov_errno);
+	}
+}
 
 #endif
