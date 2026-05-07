@@ -797,6 +797,10 @@ rxm_conn_msg_ep(struct rxm_conn *conn, const struct rxm_pkt *pkt)
 	uint8_t idx = conn->selector->select(conn, pkt);
 
 	assert(idx < conn->num_msg_eps);
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+	       "ep_sel: conn=%p ctrl=%u msg_id=0x%" PRIx64 " -> ep=%u out of %u\n",
+	       conn, pkt ? pkt->ctrl_hdr.type : 0xff,
+	       pkt ? pkt->ctrl_hdr.msg_id : 0, idx, conn->num_msg_eps);
 	return conn->msg_eps[idx];
 }
 
