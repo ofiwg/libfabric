@@ -605,6 +605,27 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	opx_domain->tx_count = 0;
 	opx_domain->ep_count = 0;
 
+	/* Mark hfi_local_info "undefined"; populated when the first
+	 * endpoint opens its HFI context. Values match the startup
+	 * initialization of fi_opx_global.hfi_local_info in fi_opx_init.c. */
+	memset(&opx_domain->hfi_local_info, 0, sizeof(opx_domain->hfi_local_info));
+	opx_domain->hfi_local_info.local_lids_size  = 0;
+	opx_domain->hfi_local_info.sw_type	    = OPX_HFI1_UNDEF;
+	opx_domain->hfi_local_info.hw_type	    = OPX_HFI1_UNDEF;
+	opx_domain->hfi_local_info.sim_rctxt_fd	    = -1;
+	opx_domain->hfi_local_info.sim_sctxt_fd	    = -1;
+	opx_domain->hfi_local_info.lid[0]	    = (opx_lid_t) 0;
+	opx_domain->hfi_local_info.lid[1]	    = (opx_lid_t) 0;
+	opx_domain->hfi_local_info.hfi_unit[0]	    = (uint8_t) -1U;
+	opx_domain->hfi_local_info.hfi_unit[1]	    = (uint8_t) -1U;
+	opx_domain->hfi_local_info.sriov	    = false;
+	opx_domain->hfi_local_info.port_loopback    = false;
+	opx_domain->hfi_local_info.hairpin_loopback = false;
+	opx_domain->hfi_local_info.multi_hfi	    = false;
+	opx_domain->hfi_local_info.lid_path_mask    = 0;
+	opx_domain->hfi_local_info.lid_mask	    = 0xFFFFFFFFu;
+	opx_domain->hfi_local_info.neighbor_type    = OPX_NEIGHBOR_UNKNOWN;
+
 	ret = fi_opx_init_mr_ops(&opx_domain->domain_fid, info);
 	if (ret) {
 		goto err;
