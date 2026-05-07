@@ -1506,10 +1506,15 @@ static inline bool opx_check_sriov(int unit, int port_index)
 	return is_sriov;
 }
 
-static void opx_init_lid_masks(int unit, int port)
+static void opx_init_lid_masks(struct fi_opx_domain *opx_domain, int unit, int port)
 {
-	fi_opx_global.hfi_local_info.lid_mask	   = (opx_lid_t) opx_hfi_get_port_lid_mask(unit, port);
-	fi_opx_global.hfi_local_info.lid_path_mask = (opx_lid_t) opx_hfi_get_port_lid_path_mask(unit, port);
+	const opx_lid_t lid_mask      = (opx_lid_t) opx_hfi_get_port_lid_mask(unit, port);
+	const opx_lid_t lid_path_mask = (opx_lid_t) opx_hfi_get_port_lid_path_mask(unit, port);
+
+	opx_domain->hfi_local_info.lid_mask	   = lid_mask;
+	opx_domain->hfi_local_info.lid_path_mask   = lid_path_mask;
+	fi_opx_global.hfi_local_info.lid_mask	   = lid_mask;
+	fi_opx_global.hfi_local_info.lid_path_mask = lid_path_mask;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "lid_mask %#x, lid_path_mask %#x, lid %#x/%#x, base_lid %#x\n",
 	       fi_opx_global.hfi_local_info.lid_mask, fi_opx_global.hfi_local_info.lid_path_mask,
@@ -1518,14 +1523,14 @@ static void opx_init_lid_masks(int unit, int port)
 	       fi_opx_global.hfi_local_info.lid[0] & fi_opx_global.hfi_local_info.lid_mask);
 }
 
-static void opx_init_neighbor_type(int unit, int port)
+static void opx_init_neighbor_type(struct fi_opx_domain *opx_domain, int unit, int port)
 {
 	uint8_t neighbor_type = OPX_NEIGHBOR_UNKNOWN;
-	if (opx_hfi_get_port_neighbor_type(unit, port, &neighbor_type) == 0) {
-		fi_opx_global.hfi_local_info.neighbor_type = neighbor_type;
-	} else {
-		fi_opx_global.hfi_local_info.neighbor_type = OPX_NEIGHBOR_UNKNOWN;
+	if (opx_hfi_get_port_neighbor_type(unit, port, &neighbor_type) != 0) {
+		neighbor_type = OPX_NEIGHBOR_UNKNOWN;
 	}
+	opx_domain->hfi_local_info.neighbor_type   = neighbor_type;
+	fi_opx_global.hfi_local_info.neighbor_type = neighbor_type;
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "neighbor_type %d (unit %u port %u)\n",
 	       fi_opx_global.hfi_local_info.neighbor_type, unit, port);
 }
@@ -1585,31 +1590,46 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 	opx_trace_set_self_lid(hfi1->lid);
 #endif
 
-	/* Initialize hash table used to lookup info on any HFI units on the node */
-	/* Assert multi-endpoint globally uses the same hfi/lid */
-	assert(fi_opx_global.hfi_local_info.hfi_unit[0] == (uint8_t) -1U ||
-	       fi_opx_global.hfi_local_info.hfi_unit[0] == (uint8_t) hfi1->hfi_unit);
-	assert(fi_opx_global.hfi_local_info.lid[0] == (opx_lid_t) 0 ||
-	       fi_opx_global.hfi_local_info.lid[0] == (opx_lid_t) hfi1->lid);
+	/* Assert this endpoint's HFI/LID matches the domain's (populated by
+	 * the first endpoint opened on this domain, if any). Subsequent
+	 * endpoints bypass HFI selection in fi_opx_open_command_queues(),
+	 * so this should always hold. */
+	assert(opx_domain->hfi_local_info.hfi_unit[0] == (uint8_t) -1U ||
+	       opx_domain->hfi_local_info.hfi_unit[0] == (uint8_t) hfi1->hfi_unit);
+	assert(opx_domain->hfi_local_info.lid[0] == (opx_lid_t) 0 ||
+	       opx_domain->hfi_local_info.lid[0] == (opx_lid_t) hfi1->lid);
 
-	fi_opx_global.hfi_local_info.hfi_unit[0] = (uint8_t) hfi1->hfi_unit;
-	fi_opx_global.hfi_local_info.lid[0]	 = hfi1->lid;
+	const uint8_t	hfi_unit_0 = (uint8_t) hfi1->hfi_unit;
+	const opx_lid_t lid_0	   = hfi1->lid;
 	/* pbc_lid is per-plane and used for loopback detection.
 	 * WFR uses OPX_PBC_WFR_UNUSED (0) so set to invalid (-1UL) to never match.
 	 * Secondary plane pbc_lid[1] is initialized during dual-plane setup. */
-	fi_opx_global.hfi_local_info.pbc_lid[0] =
-		(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? -1UL : OPX_PBC_JKR_DLID(hfi1->lid);
+	const uint64_t pbc_lid_0 = (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? -1UL : OPX_PBC_JKR_DLID(hfi1->lid);
+	/* Check if JKR/SR-IOV(alpha) is enabled (or forced for unsupported testing)*/
+	const bool sriov = opx_check_sriov(hfi1->hfi_unit, (hfi1->hfi_port - 1));
+
+	opx_domain->hfi_local_info.hfi_unit[0] = hfi_unit_0;
+	opx_domain->hfi_local_info.lid[0]      = lid_0;
+	opx_domain->hfi_local_info.pbc_lid[0]  = pbc_lid_0;
+	opx_domain->hfi_local_info.pbc_lid[1]  = -1UL;
+	opx_domain->hfi_local_info.lid[1]      = (opx_lid_t) 0;
+	opx_domain->hfi_local_info.hfi_unit[1] = (uint8_t) -1U;
+	opx_domain->hfi_local_info.sriov       = sriov;
+
+	fi_opx_global.hfi_local_info.hfi_unit[0] = hfi_unit_0;
+	fi_opx_global.hfi_local_info.lid[0]	 = lid_0;
+	fi_opx_global.hfi_local_info.pbc_lid[0]	 = pbc_lid_0;
 	fi_opx_global.hfi_local_info.pbc_lid[1]	 = -1UL;
 	fi_opx_global.hfi_local_info.lid[1]	 = (opx_lid_t) 0;
 	fi_opx_global.hfi_local_info.hfi_unit[1] = (uint8_t) -1U;
-	/* Check if JKR/SR-IOV(alpha) is enabled (or forced for unsupported testing)*/
-	fi_opx_global.hfi_local_info.sriov = opx_check_sriov(hfi1->hfi_unit, (hfi1->hfi_port - 1));
+	fi_opx_global.hfi_local_info.sriov	 = sriov;
+
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SR-IOV %u, lid %#x (PBC %#lX)\n",
 	       fi_opx_global.hfi_local_info.sriov, fi_opx_global.hfi_local_info.lid[0],
 	       fi_opx_global.hfi_local_info.pbc_lid[0]);
 
-	opx_init_lid_masks(hfi1->hfi_unit, hfi1->hfi_port);
-	opx_init_neighbor_type(hfi1->hfi_unit, hfi1->hfi_port);
+	opx_init_lid_masks(opx_domain, hfi1->hfi_unit, hfi1->hfi_port);
+	opx_init_neighbor_type(opx_domain, hfi1->hfi_unit, hfi1->hfi_port);
 
 	fi_opx_init_hfi_lookup(hfi1->gid_hi, 0);
 
@@ -2190,6 +2210,21 @@ static bool opx_open_secondary_different_plane(struct fi_opx_ep *opx_ep, struct 
 		fi_opx_reliability_model_init_plane(opx_ep->reli_service, sec_hfi, opx_ep->num_tx_contexts - 1,
 						    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid);
 
+		{
+			const int      plane_idx = opx_ep->num_tx_contexts - 1;
+			const uint64_t sec_pbc_lid =
+				(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? -1UL : OPX_PBC_JKR_DLID(sec_hfi->lid);
+			const uint8_t sec_unit = (uint8_t) sec_hfi->hfi_unit;
+
+			opx_domain->hfi_local_info.pbc_lid[plane_idx]  = sec_pbc_lid;
+			opx_domain->hfi_local_info.lid[plane_idx]      = sec_hfi->lid;
+			opx_domain->hfi_local_info.hfi_unit[plane_idx] = sec_unit;
+
+			fi_opx_global.hfi_local_info.pbc_lid[plane_idx]	 = sec_pbc_lid;
+			fi_opx_global.hfi_local_info.lid[plane_idx]	 = sec_hfi->lid;
+			fi_opx_global.hfi_local_info.hfi_unit[plane_idx] = sec_unit;
+		}
+
 		fi_opx_global.hfi_local_info.pbc_lid[opx_ep->num_tx_contexts - 1] =
 			(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) ? -1UL : OPX_PBC_JKR_DLID(sec_hfi->lid);
 
@@ -2286,9 +2321,27 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			return -errno;
 		}
 	}
-
-	opx_ep->hfi = fi_opx_hfi1_context_open(&opx_ep->ep_fid, opx_domain->unique_job_key, gid_filter,
-					       gid_filter_count, dual_plane_env);
+	/*
+	 * Open the hfi1 context. The first endpoint opened on this domain
+	 * runs full HFI selection (FI_OPX_HFI_SELECT, DAOS src_addr, NUMA
+	 * distance, free-context count, ...) via fi_opx_hfi1_context_open()
+	 * The selected HFI unit is then stored in the domain local info
+	 * later during fi_opx_ep_rx_init().
+	 * Subsequent endpoints on the same domain MUST reuse that unit so
+	 * every endpoint in the domain shares one HFI/LID
+	 */
+	if (opx_domain->hfi_local_info.hfi_unit[0] != (uint8_t) -1U) {
+		const uint32_t selected_unit = opx_domain->hfi_local_info.hfi_unit[0];
+		/* Does not support DAOS Persistent Address Support except for
+		 * the first endpoint on a domain */
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"Reusing HFI unit %u from domain for this endpoint (skipping HFI selection)\n", selected_unit);
+		opx_ep->hfi = fi_opx_hfi1_context_open_unit(&opx_ep->ep_fid, opx_domain->unique_job_key, selected_unit,
+							    OPX_SEND_ONLY_FALSE);
+	} else {
+		opx_ep->hfi = fi_opx_hfi1_context_open(&opx_ep->ep_fid, opx_domain->unique_job_key, gid_filter,
+						       gid_filter_count, dual_plane_env);
+	}
 	if (!opx_ep->hfi) {
 		errno = FI_EBUSY;
 		return -errno;
