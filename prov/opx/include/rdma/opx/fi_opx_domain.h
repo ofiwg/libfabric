@@ -42,6 +42,7 @@
 #include "rdma/fi_domain.h"
 #include "ofi_atom.h"
 
+#include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_reliability.h"
 
 #include "rdma/opx/fi_opx_tid_domain.h"
@@ -163,6 +164,15 @@ struct fi_opx_domain {
 
 	struct slist	    deferred_work_queue;
 	struct ofi_bufpool *deferred_work_pool;
+
+	/*
+	 * Per-domain HFI selection state. The first endpoint opened on this
+	 * domain populates this; subsequent endpoints reuse it instead of
+	 * re-running fi_opx_hfi1_context_open (which can pick a different
+	 * HFI/LID and violate the OPX single-HFI-per-node invariant).
+	 * opx_hfi_local_info is 4 cache lines, 64-byte aligned.
+	 */
+	struct opx_hfi_local_info hfi_local_info;
 };
 
 struct fi_opx_av {
