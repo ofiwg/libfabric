@@ -982,28 +982,27 @@ static int smr_unexp_sar(struct smr_ep *ep, struct smr_cmd_ctx *cmd_ctx,
 	memcpy(&cmd_ctx->cmd_cpy, cmd,
 		sizeof(cmd->hdr) + sizeof(cmd->data));
 
-	if (cmd->hdr.size) {
-		sar_entry = ofi_buf_alloc(ep->pend_pool);
-		if (!sar_entry) {
-			ofi_buf_free(cmd_ctx);
-			ret = -FI_ENOMEM;
-			cmd->hdr.op_flags |= SMR_OP_ERROR;
-			goto out;
-		}
-		cmd->hdr.rx_ctx = (uintptr_t) sar_entry;
+	assert(cmd->hdr.size);
+	sar_entry = ofi_buf_alloc(ep->pend_pool);
+	if (!sar_entry) {
+		ofi_buf_free(cmd_ctx);
+		ret = -FI_ENOMEM;
+		cmd->hdr.op_flags |= SMR_OP_ERROR;
+		goto out;
+	}
+	cmd->hdr.rx_ctx = (uintptr_t) sar_entry;
 
-		smr_init_rx_pend(sar_entry, cmd, rx_entry, NULL, NULL, 0);
-		cmd_ctx->pend = sar_entry;
+	smr_init_rx_pend(sar_entry, cmd, rx_entry, NULL, NULL, 0);
+	cmd_ctx->pend = sar_entry;
 
-		ret = smr_buffer_sar(ep, sar_entry,
-				     sar_entry->rx_entry->peer_context);
-		if (ret == -FI_EAGAIN) {
-			dlist_insert_tail(&sar_entry->entry,
-					  &ep->async_cpy_list);
-			return FI_SUCCESS;
-		} else if (ret && ret != -FI_EAGAIN) {
-			cmd->hdr.op_flags |= SMR_OP_ERROR;
-		}
+	ret = smr_buffer_sar(ep, sar_entry,
+				sar_entry->rx_entry->peer_context);
+	if (ret == -FI_EAGAIN) {
+		dlist_insert_tail(&sar_entry->entry,
+					&ep->async_cpy_list);
+		return FI_SUCCESS;
+	} else if (ret && ret != -FI_EAGAIN) {
+		cmd->hdr.op_flags |= SMR_OP_ERROR;
 	}
 out:
 	smr_return_cmd(ep, cmd);
