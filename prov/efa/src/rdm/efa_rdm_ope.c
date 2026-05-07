@@ -13,6 +13,7 @@
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_mr.h"
+#include "efa_rdm_cq.h"
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   struct efa_rdm_ep *ep,
@@ -580,7 +581,6 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
-	int write_cq_err;
 	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	assert(rxe->type == EFA_RDM_RXE);
@@ -675,19 +675,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	}
 
 	efa_cntr_report_error(&ep->base_ep.util_ep, err_entry.flags);
-	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
-	if (write_cq_err) {
-		EFA_WARN(FI_LOG_CQ, "Failed to write CQ error entry for rxe err: %d, message: %s (%d)\n",
-			err_entry.err,
-			err_entry.err_data
-				? (const char *) err_entry.err_data
-				: efa_strerror(err_entry.prov_errno),
-		 	err_entry.prov_errno);
-
-		EFA_WARN(FI_LOG_CQ,
-			"Error writing error cq entry when handling RX error\n");
-		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-	}
+	efa_rdm_cq_write_error(&ep->base_ep, util_cq, &err_entry, "RXE");
 }
 
 /**
@@ -719,7 +707,6 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
-	int write_cq_err;
 	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	ep = txe->ep;
@@ -829,19 +816,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		return;
 
 	efa_cntr_report_error(&ep->base_ep.util_ep, txe->cq_entry.flags);
-	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
-	if (write_cq_err) {
-		EFA_WARN(FI_LOG_CQ, "Failed to write CQ error entry for txe err: %d, message: %s (%d)\n",
-			err_entry.err,
-			err_entry.err_data
-				? (const char *) err_entry.err_data
-				: efa_strerror(err_entry.prov_errno),
-			err_entry.prov_errno);
-
-		EFA_WARN(FI_LOG_CQ,
-			"Error writing error cq entry when handling TX error\n");
-		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-	}
+	efa_rdm_cq_write_error(&ep->base_ep, util_cq, &err_entry, "TXE");
 }
 
 /**
