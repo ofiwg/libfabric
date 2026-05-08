@@ -43,9 +43,10 @@
 				 FI_DELIVERY_COMPLETE | FI_TRANSMIT_COMPLETE)
 #define LNX_RX_OP_FLAGS		(FI_COMPLETION)
 
-#define LNX_TX_CAPS		(FI_TAGGED | FI_SEND | FI_HMEM)
+#define LNX_TX_CAPS		(FI_TAGGED | FI_SEND | FI_HMEM | \
+				 OFI_TX_RMA_CAPS)
 #define LNX_RX_CAPS		(FI_TAGGED | FI_RECV | FI_DIRECTED_RECV | \
-				 FI_HMEM)
+				 FI_HMEM | OFI_RX_RMA_CAPS)
 
 struct util_fabric lnx_fabric_info;
 struct lnx_env lnx_env = {
@@ -310,7 +311,7 @@ static int lnx_generate_link_info(uint32_t version, const struct fi_info *hints,
 	size_t min_rx_size = SIZE_MAX, min_tx_size = SIZE_MAX;
 	size_t min_iov_limit = LNX_IOV_LIMIT;
 	int mr_mode = 0;
-	int len;
+	int len, link_cnt = 0;
 	int str_len = 1024;
 	char *tmp, *tmp2;
 	char *link_name;
@@ -397,6 +398,7 @@ static int lnx_generate_link_info(uint32_t version, const struct fi_info *hints,
 					tmp += (len - 1);
 				}
 			}
+			link_cnt++;
 		}
 
 		link_name = realloc(link_name, strlen(link_name) + 1);
@@ -436,6 +438,17 @@ static int lnx_generate_link_info(uint32_t version, const struct fi_info *hints,
 		next->ep_attr->max_msg_size = min_max_msg_size;
 		next->rx_attr->size = min_rx_size;
 		next->tx_attr->size = min_tx_size;
+		next->domain_attr->mr_key_size = sizeof(uint64_t) * link_cnt;
+
+		if (next->caps & FI_RMA) {
+			//TODO need to add support for using providers with and
+			//without FI_MR_VIRT_ADDR
+			if (!(hints->domain_attr->mr_mode & FI_MR_RAW)) {
+				fi_freeinfo(next);
+				return -FI_ENODATA;
+			}
+			next->domain_attr->mr_mode |= FI_MR_RAW;
+		}
 
 		if (!next)
 			return -FI_ENOMEM;

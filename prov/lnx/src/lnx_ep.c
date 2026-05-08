@@ -757,19 +757,6 @@ int lnx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	return 0;
 }
 
-struct fi_ops_rma lnx_rma_ops = {
-	.size = sizeof(struct fi_ops_rma),
-	.read = fi_no_rma_read,
-	.readv = fi_no_rma_readv,
-	.readmsg = fi_no_rma_readmsg,
-	.write = fi_no_rma_write,
-	.writev = fi_no_rma_writev,
-	.writemsg = fi_no_rma_writemsg,
-	.inject = fi_no_rma_inject,
-	.writedata = fi_no_rma_writedata,
-	.injectdata = fi_no_rma_injectdata,
-};
-
 struct fi_ops_atomic lnx_atomic_ops = {
 	.size = sizeof(struct fi_ops_atomic),
 	.write = fi_no_atomic_write,
