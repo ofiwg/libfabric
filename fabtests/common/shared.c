@@ -2768,6 +2768,12 @@ static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
 	if (timeout >= 0)
 		clock_gettime(CLOCK_MONOTONIC, &a);
 
+	/*
+	 * Callers must ensure *cur < total; calling with *cur >= total
+	 * is a bug because the do...while loop always executes at least
+	 * once and can increment *cur causing an underflow in the
+	 * loop condition.
+	 */
 	do {
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
