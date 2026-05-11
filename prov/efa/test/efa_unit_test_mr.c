@@ -1450,3 +1450,37 @@ void test_efa_rdm_mr_reg_cuda_memory_non_p2p(struct efa_resource **state)
 	skip();
 }
 #endif
+
+/**
+ * @brief Verify that fi_mr_regattr rejects an out-of-range iface value
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_mr_reg_out_of_range_iface(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_mr_attr mr_reg_attr = {0};
+	struct iovec iov;
+	struct fid_mr *mr = NULL;
+	char buf[64];
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	mr_reg_attr.mr_iov = &iov;
+	mr_reg_attr.iov_count = 1;
+	mr_reg_attr.access = FI_SEND | FI_RECV;
+
+	/* Test with value >= OFI_HMEM_MAX */
+	mr_reg_attr.iface = OFI_HMEM_MAX + 100;
+	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
+	assert_int_equal(err, -FI_EINVAL);
+
+	/* Test with negative value */
+	mr_reg_attr.iface = (enum fi_hmem_iface)(-1);
+	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
+	assert_int_equal(err, -FI_EINVAL);
+	assert_null(mr);
+}
