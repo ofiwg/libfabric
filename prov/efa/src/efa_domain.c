@@ -351,9 +351,8 @@ err_free:
 			 "During the release process, an additional error (%d) was encountered\n",
 			 -ret, -err);
 	}
-
-	efa_domain = NULL;
 	*domain_fid = NULL;
+
 	return ret;
 }
 
