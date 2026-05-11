@@ -904,16 +904,26 @@ void efa_cq_progress(struct util_cq *cq)
 int efa_cq_close(fid_t fid)
 {
 	struct efa_cq *cq;
-	struct ibv_cq *ibv_cq;
+	struct ibv_cq *ibv_cq = NULL;
+	struct ibv_cq_ex *ibv_cq_ex;
 	int ret;
 
 	cq = container_of(fid, struct efa_cq, util_cq.cq_fid.fid);
 
-	if (cq->ibv_cq.ibv_cq_ex) {
-		ibv_cq = ibv_cq_ex_to_cq(cq->ibv_cq.ibv_cq_ex);
+	/* Store ibv_cq locally before cleanup */
+	ibv_cq_ex = cq->ibv_cq.ibv_cq_ex;
+	if (ibv_cq_ex)
+		ibv_cq = ibv_cq_ex_to_cq(ibv_cq_ex);
 
-		efa_cq_ack_events(cq);
+	ret = ofi_cq_cleanup(&cq->util_cq);
+	if (ret)
+		return ret;
 
+	efa_cq_signal_fini(cq);
+
+	efa_cq_ack_events(cq);
+
+	if (ibv_cq) {
 		ret = -ibv_destroy_cq(ibv_cq);
 		if (ret) {
 			EFA_WARN(FI_LOG_CQ, "Unable to close ibv cq: %s\n",
@@ -922,12 +932,6 @@ int efa_cq_close(fid_t fid)
 		}
 		cq->ibv_cq.ibv_cq_ex = NULL;
 	}
-
-	efa_cq_signal_fini(cq);
-
-	ret = ofi_cq_cleanup(&cq->util_cq);
-	if (ret)
-		return ret;
 
 	ret = efa_cq_destroy_comp_channel(cq);
 	if (ret)
