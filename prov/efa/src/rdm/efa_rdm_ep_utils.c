@@ -100,7 +100,10 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	memset(map_entry, 0, sizeof(*map_entry));
 	map_entry->ep_ptr = ep;
 
-	efa_rdm_peer_construct(&map_entry->peer, ep, conn);
+	if (efa_rdm_peer_construct(&map_entry->peer, ep, conn)) {
+		ofi_buf_free(map_entry);
+		return NULL;
+	}
 
 	efa_conn_ep_peer_map_insert(conn, map_entry);
 
@@ -145,7 +148,10 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	memset(map_entry, 0, sizeof(*map_entry));
 	map_entry->ep_ptr = ep;
 
-	efa_rdm_peer_construct(&map_entry->peer, ep, conn);
+	if (efa_rdm_peer_construct(&map_entry->peer, ep, conn)) {
+		ofi_buf_free(map_entry);
+		return NULL;
+	}
 	peer = &map_entry->peer;
 
 	efa_conn_ep_peer_map_insert(conn, map_entry);

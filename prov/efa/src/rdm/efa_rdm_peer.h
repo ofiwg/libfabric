@@ -241,7 +241,7 @@ bool efa_rdm_peer_need_connid(struct efa_rdm_peer *peer)
 
 struct efa_conn;
 
-void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn);
+int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn);
 
 void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
 

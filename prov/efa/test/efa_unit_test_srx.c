@@ -305,3 +305,62 @@ void test_efa_srx_foreach_unspec_skips_other_provider(struct efa_resource **stat
 	shm_peer_ops->discard_msg = saved_shm_discard_msg;
 	shm_peer_ops->discard_tag = saved_shm_discard_tag;
 }
+
+/**
+ * @brief Verify that peer_construct returns 0 on success (validates new int return type)
+ *
+ * After changing peer_construct from void to int, verify that the normal
+ * path still works correctly and returns 0.
+ */
+void test_efa_rdm_peer_construct_robuf_failure(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer peer = {0};
+	struct efa_ep_addr raw_addr;
+	struct efa_conn conn = {0};
+	fi_addr_t peer_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct ofi_bufpool *saved_pool;
+	struct ofi_bufpool *tiny_pool;
+	void *buf;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 99;
+	raw_addr.qkey = 0xABCD;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	conn.ep_addr = &raw_addr;
+	conn.fi_addr = peer_addr;
+
+	/* Create a tiny pool with max_cnt=1 and exhaust it */
+	ret = ofi_bufpool_create(&tiny_pool,
+				 efa_rdm_ep->peer_robuf_pool->entry_size,
+				 EFA_RDM_BUFPOOL_ALIGNMENT, 1 /* max_cnt */,
+				 1, 0);
+	assert_int_equal(ret, 0);
+	ret = ofi_bufpool_grow(tiny_pool);
+	assert_int_equal(ret, 0);
+	buf = ofi_buf_alloc(tiny_pool);
+	assert_non_null(buf);
+
+	/* Swap in the exhausted pool */
+	saved_pool = efa_rdm_ep->peer_robuf_pool;
+	efa_rdm_ep->peer_robuf_pool = tiny_pool;
+
+	/* peer_construct should fail with -FI_ENOMEM */
+	ret = efa_rdm_peer_construct(&peer, efa_rdm_ep, &conn);
+	assert_int_equal(ret, -FI_ENOMEM);
+
+	/* Restore and cleanup */
+	efa_rdm_ep->peer_robuf_pool = saved_pool;
+	ofi_buf_free(buf);
+	ofi_bufpool_destroy(tiny_pool);
+}
