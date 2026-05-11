@@ -333,7 +333,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		EFA_WARN(FI_LOG_CORE,
 			 "Unable to install fork handler: %s\n",
 			 strerror(-err));
-		return err;
+		goto err_free;
 	}
 #endif
 
