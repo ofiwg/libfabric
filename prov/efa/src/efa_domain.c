@@ -132,7 +132,7 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 				&efa_domain->fabric->shm_fabric,
 				efa_domain->fabric->util_fabric.fabric_fid.fid.context);
 		if (err) {
-			EFA_WARN(FI_LOG_DOMAIN, 
+			EFA_WARN(FI_LOG_DOMAIN,
 				 "Failed to create shm_fabric: %s\n",
 				 fi_strerror(-err));
 			return err;
@@ -656,7 +656,7 @@ static int efa_domain_cq_open_ext(struct fid_domain *domain_fid,
 	struct efa_domain *efa_domain;
 	int err, retv;
 
-	/* GPU cannot do a blocking wait on CQ entries because 
+	/* GPU cannot do a blocking wait on CQ entries because
 	 * system FDs are only accessible to CPU. */
 	if (attr->wait_obj != FI_WAIT_NONE)
 		return -FI_ENOSYS;
@@ -680,7 +680,7 @@ static int efa_domain_cq_open_ext(struct fid_domain *domain_fid,
 	if (!cq)
 		return -FI_ENOMEM;
 
-	/* 
+	/*
 	 * CQ polling is safe when CPU virtual address is provided in buffer.
 	 * Otherwise, the memory is on GPU and the use of CQ poll interfaces should be avoided.
 	 */
