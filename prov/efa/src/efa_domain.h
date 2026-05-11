@@ -60,6 +60,12 @@ struct efa_domain {
 	struct efa_mr *zero_byte_bounce_buf_mr;
 	/* list of enabled efa_base_ep in this domain */
 	struct dlist_entry base_ep_list;
+	/*
+	 * Pool backing `struct efa_mr` instances. Slots are recycled on
+	 * MR close so stale `desc` pointers from in-flight ops remain
+	 * dereferenceable for the lifetime of the domain.
+	 */
+	struct ofi_bufpool *mr_pool;
 };
 
 extern struct dlist_entry g_efa_domain_list;
