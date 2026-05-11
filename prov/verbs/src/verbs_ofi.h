@@ -688,6 +688,7 @@ struct vrb_context {
 		struct vrb_srx		*srx;
 	};
 	void				*user_ctx;
+	void				*recv_buf;
 	enum vrb_op_queue		op_queue;
 	enum ibv_wr_opcode		sq_opcode;
 };
@@ -918,15 +919,25 @@ void vrb_cleanup_cq(struct vrb_ep *cur_ep);
 int vrb_find_max_inline(struct ibv_pd *pd, struct ibv_context *context,
 			   enum ibv_qp_type qp_type);
 
+struct vrb_dgram_av_lookup_key_ht {
+	union ibv_gid gid;
+	uint32_t qpn;
+	uint16_t lid;
+	uint8_t sl;
+};
+
 struct vrb_dgram_av {
 	struct util_av util_av;
 	struct dlist_entry av_entry_list;
+	struct vrb_dgram_av_entry *raw_addr_to_av_addr_ht;
 };
 
 struct vrb_dgram_av_entry {
 	struct dlist_entry list_entry;
 	struct ofi_ib_ud_ep_name addr;
 	struct ibv_ah *ah;
+	struct vrb_dgram_av_lookup_key_ht reverse_lookup_key;
+	UT_hash_handle reverse_lookup_handle_ht;
 };
 
 static inline struct vrb_dgram_av_entry*
@@ -952,10 +963,14 @@ static inline ssize_t vrb_convert_ret(int ret)
 		return -abs(ret);
 }
 
-
-int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc);
-void vrb_report_wc(struct vrb_cq *cq, struct ibv_wc *wc);
+int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc, struct vrb_ep **ep_out,
+		void **recv_buf_out);
+void vrb_report_wc(struct vrb_cq *cq, struct ibv_wc *wc, struct vrb_ep *ep,
+		   void *recv_buf);
 void vrb_flush_cq(struct vrb_cq *cq);
+
+fi_addr_t vrb_dgram_av_reverse_lookup_ep_name(
+	struct vrb_dgram_av *av, const struct vrb_dgram_av_lookup_key_ht *key);
 
 #define vrb_init_sge(buf, len, desc) (struct ibv_sge)	\
 	{ .addr = (uintptr_t) buf,			\
