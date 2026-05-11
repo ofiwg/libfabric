@@ -10,15 +10,22 @@ import groovy.transform.Field
 @Field boolean build_ok = true
 @Field def venv_path = "/tmp/venv"
 @Field def portafiducia_path = "/tmp/PortaFiducia"
+@Field def subspace_nightly_tests_path = "/tmp/SubspaceNightlyTests"
+@Field def samwise_test_runner_path = "/tmp/SamwiseTestRunner"
+@Field def samwise_test_schema_path = "/tmp/SamwiseTestSchema"
 
+
+def get_account_id() {
+    return sh (
+        script: "aws sts get-caller-identity --query Account --output text | tr -dc 0-9",
+        returnStdout: true
+    )
+}
 
 def get_portafiducia_download_path() {
     /* Stable Portafiducia tarball */
-    def AWS_ACCOUNT_ID = sh (
-                script: "aws sts get-caller-identity --query Account --output text | tr -dc 0-9",
-                returnStdout: true
-              )
-    return "s3://libfabric-ci-$AWS_ACCOUNT_ID-us-west-2/portafiducia/portafiducia.tar.gz"
+    def AWS_ACCOUNT_ID = get_account_id()
+    return "s3://libfabric-ci-${AWS_ACCOUNT_ID}-us-west-2/portafiducia/portafiducia.tar.gz"
 }
 
 def download_and_extract_portafiducia(outputDir) {
@@ -43,6 +50,33 @@ def install_porta_fiducia() {
         pip install --upgrade awscli
         pip install -e ${portafiducia_path}
     """
+}
+
+def get_testing_packages_download_path() {
+    def AWS_ACCOUNT_ID = get_account_id()
+    return "s3://subspace-ci-tests-${AWS_ACCOUNT_ID}-us-west-2/"
+}
+
+def download_testing_package(String s3Folder, String localDir) {
+    def s3Base = get_testing_packages_download_path()
+    try {
+        sh "mkdir -p ${localDir} && aws s3 cp ${s3Base}${s3Folder}/ ${localDir}/ --recursive"
+    } catch (Exception e) {
+        unstable("Failed to download ${s3Folder}: ${e.getMessage()}")
+    }
+}
+
+// S3 folder names use hyphens; --test-suite-package flag uses underscores.
+// Keep these two forms in sync.
+def download_all_testing_packages() {
+    def packages = [
+        ['subspace-nightly-tests', subspace_nightly_tests_path],
+        ['samwise-test-runner', samwise_test_runner_path],
+        ['samwise-test-schema', samwise_test_schema_path],
+    ]
+    packages.each { pkg ->
+        download_testing_package(pkg[0], pkg[1])
+    }
 }
 
 def kill_all_clusters(instance_type, region) {
@@ -286,13 +320,22 @@ pipeline {
 
             }
         }
+        stage("Install Testing suites") {
+            when { not { environment name: 'SKIP_TESTS', value: 'true' } }
+            steps {
+                script {
+                    download_all_testing_packages()
+                }
+            }
+        }
         stage("Test EFA provider") {
             when { not { environment name: 'SKIP_TESTS', value: 'true' } }
             steps {
                 script {
                     def stages = [:]
                     def timeout = "--timeout 300"
-                    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID"
+                    def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
+                    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID ${test_suite_pkg}"
                     // onesided tests are covered by imb, collective tests are covered by omb
                     def mpi_collective_tests = "'test_omb and not onesided'"
                     def libfabric_tests = "test_efa_ut test_fabtests_functional test_fork_support test_backward_compatibility 'test_fabtests_performance and lttng'"
