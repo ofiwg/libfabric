@@ -3,6 +3,7 @@
 
 #include "efa_unit_tests.h"
 #include "efa_rdm_pke_utils.h"
+#include "efa_rdm_pke_cmd.h"
 
 /**
  * @brief Test efa_rdm_peer_reorder_msg
@@ -380,4 +381,92 @@ void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
 	/* The ooo pkt entry should be inserted to the rx_pkt_list */
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->rx_pkt_list), 1);
 #endif
+}
+
+/**
+ * @brief Verify peer_destruct clears EFA_RDM_PKE_RNR_RETRANSMIT and decrements counters
+ *
+ * When a peer is destructed while RNR retransmit packets are outstanding,
+ * the destruct must clear the RNR flag and decrement the ep/peer counters
+ * before nulling pkt_entry->peer.
+ */
+void test_efa_rdm_peer_destruct_clears_rnr_flag(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_cq *efa_rdm_cq;
+	struct efa_ibv_cq *ibv_cq;
+	struct efa_ep_addr raw_addr;
+	fi_addr_t peer_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	uint64_t wr_id;
+	int ret;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	efa_unit_test_buff_construct(&send_buff, resource, 4096);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Send a packet so we get a real pkt_entry on outstanding_tx_pkts */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	ret = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	assert_int_equal(ret, 0);
+
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cq = &efa_rdm_cq->efa_cq.ibv_cq;
+	wr_id = (uint64_t) g_ibv_submitted_wr_id_vec[0];
+	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(ibv_cq, wr_id);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	/* Simulate RNR: record completion and queue for retransmit */
+	pkt_entry->ope = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
+	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, pkt_entry);
+
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, EFA_RDM_PKE_RNR_RETRANSMIT);
+	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 1);
+	assert_int_equal(peer->rnr_queued_pkt_cnt, 1);
+
+	/* Now simulate the pkt being successfully retransmitted and on outstanding_tx_pkts.
+	 * Remove from queued_pkts and add to outstanding_tx_pkts. */
+	dlist_remove(&pkt_entry->entry);
+	pkt_entry->flags &= ~EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
+	dlist_insert_tail(&pkt_entry->entry, &peer->outstanding_tx_pkts);
+	pkt_entry->flags |= EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS;
+
+	/* Remove the txe from the ope_queued_list so ep close doesn't trip over it */
+	pkt_entry->ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
+	dlist_remove(&pkt_entry->ope->queued_entry);
+
+	/* Remove the peer via fi_av_remove, which calls peer_destruct.
+	 * This should clear the RNR flag and decrement counters. */
+	ret = fi_av_remove(resource->av, &peer_addr, 1, 0);
+	assert_int_equal(ret, 0);
+
+	/* Verify the RNR flag was cleared and counters decremented */
+	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, 0);
+	assert_null(pkt_entry->peer);
+	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 0);
+
+	/* Release the pkt so the pool can be destroyed cleanly during ep close.
+	 * Since peer is NULL and RNR flag is cleared, release_tx won't dereference peer. */
+	dlist_remove(&pkt_entry->entry);
+	pkt_entry->flags &= ~EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS;
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	efa_unit_test_buff_destruct(&send_buff);
 }
