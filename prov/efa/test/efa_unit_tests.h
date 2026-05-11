@@ -484,6 +484,7 @@ void test_efa_cq_readerr_util_cq_error();
 void test_efa_cq_poll_ep_close_bypass_path();
 void test_efa_cq_next_poll_stale_cur_wq_segv_on_ep_close();
 void test_efa_cq_read_mixed_success_error();
+void test_efa_cq_close_returns_ebusy_with_bound_ep();
 void test_efa_ep_open();
 void test_efa_ep_cancel();
 void test_efa_ep_getopt();
