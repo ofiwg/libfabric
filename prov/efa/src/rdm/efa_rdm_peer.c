@@ -76,10 +76,18 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	/* we cannot release outstanding TX packets because device
 	 * will report completion of these packets later. Setting
 	 * pkt_entry->peer to NULL so the completion will be ignored.
+	 * For packets pending RNR retransmit, clear the flag and
+	 * decrement the RNR queued counters before nulling the peer
+	 * to prevent later dereference of a NULL peer pointer.
 	 */
 	dlist_foreach_container(&peer->outstanding_tx_pkts,
 				struct efa_rdm_pke,
 				pkt_entry, entry) {
+		if (pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT) {
+			pkt_entry->flags &= ~EFA_RDM_PKE_RNR_RETRANSMIT;
+			ep->efa_rnr_queued_pkt_cnt--;
+			peer->rnr_queued_pkt_cnt--;
+		}
 		pkt_entry->peer = NULL;
 	}
 
