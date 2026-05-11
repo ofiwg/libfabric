@@ -18,6 +18,48 @@
 
 struct dlist_entry g_efa_domain_list;
 
+/**
+ * @brief Create the bufpools backing struct efa_mr instances
+ * on an efa_domain.
+ *
+ * @param[in,out] efa_domain  Domain whose pools will be created.
+ * @param[in]     info        fi_info used to decide which pools
+ *                            to create (direct, RDM, or dgram).
+ * @return 0 on success, negative libfabric error code on failure.
+ */
+static int efa_mr_pool_create(struct efa_domain *efa_domain,
+			      struct fi_info *info)
+{
+	int ret;
+
+	/* Only efa-direct and dgram domains allocate struct efa_mr. */
+	if (EFA_INFO_TYPE_IS_RDM(info))
+		return 0;
+
+	ret = ofi_bufpool_create(&efa_domain->mr_pool,
+				 sizeof(struct efa_mr),
+				 EFA_RDM_BUFPOOL_ALIGNMENT, 0, 0, 0);
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN, "mr_pool init failed! err: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * @brief Destroy any MR bufpools created by efa_mr_pool_create.
+ *
+ * @param[in,out] efa_domain  Domain whose pools will be destroyed.
+ */
+static void efa_mr_pool_destroy(struct efa_domain *efa_domain)
+{
+	if (efa_domain->mr_pool) {
+		ofi_bufpool_destroy(efa_domain->mr_pool);
+		efa_domain->mr_pool = NULL;
+	}
+}
+
 static int efa_domain_close(fid_t fid);
 
 static int efa_domain_ops_open(struct fid *fid, const char *ops_name,
@@ -220,6 +262,10 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	efa_domain->ah_map = NULL;
 
+	ret = efa_mr_pool_create(efa_domain, info);
+	if (ret)
+		goto err_free;
+
 	efa_domain->util_domain.av_type = FI_AV_TABLE;
 	efa_domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
 	/*
@@ -404,6 +450,8 @@ static int efa_domain_close(fid_t fid)
 		free(efa_domain->zero_byte_bounce_buf);
 		efa_domain->zero_byte_bounce_buf = NULL;
 	}
+
+	efa_mr_pool_destroy(efa_domain);
 
 	if (efa_domain->ibv_pd) {
 		ret = ibv_dealloc_pd(efa_domain->ibv_pd);
