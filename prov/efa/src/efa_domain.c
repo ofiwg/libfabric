@@ -235,7 +235,8 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	if (!info->ep_attr || info->ep_attr->type == FI_EP_UNSPEC) {
 		EFA_WARN(FI_LOG_DOMAIN, "ep type not specified when creating domain\n");
-		return -FI_EINVAL;
+		ret = -FI_EINVAL;
+		goto err_free;
 	}
 
 	efa_domain->mr_local = ofi_mr_local(info);
