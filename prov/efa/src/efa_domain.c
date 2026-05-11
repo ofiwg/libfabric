@@ -179,7 +179,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context)
 {
 	struct efa_domain *efa_domain;
-	int ret = 0, err;
+	int ret, err;
 	bool use_lock;
 
 	efa_domain = calloc(1, sizeof(struct efa_domain));
@@ -199,12 +199,10 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	efa_domain->fabric = container_of(fabric_fid, struct efa_fabric,
 					  util_fabric.fabric_fid);
 
-	err = ofi_domain_init(fabric_fid, info, &efa_domain->util_domain,
+	ret = ofi_domain_init(fabric_fid, info, &efa_domain->util_domain,
 			      context, OFI_LOCK_MUTEX);
-	if (err) {
-		ret = err;
+	if (ret)
 		goto err_free;
-	}
 
 	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_ct, 0);
 	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_sz, 0);
@@ -212,10 +210,9 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	efa_domain->ah_map = NULL;
 
 	use_lock = ofi_thread_level(efa_domain->util_domain.threading) <= ofi_thread_level(FI_THREAD_COMPLETION);
-	err = ofi_genlock_init(&efa_domain->srx_lock, use_lock ? OFI_LOCK_MUTEX : OFI_LOCK_NOOP);
-	if (err) {
-		EFA_WARN(FI_LOG_DOMAIN, "srx lock init failed! err: %d\n", err);
-		ret = err;
+	ret = ofi_genlock_init(&efa_domain->srx_lock, use_lock ? OFI_LOCK_MUTEX : OFI_LOCK_NOOP);
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN, "srx lock init failed! err: %d\n", ret);
 		goto err_free;
 	}
 
@@ -246,11 +243,9 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free;
 	}
 
-	err = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name, info->ep_attr->type);
-	if (err) {
-		ret = err;
+	ret = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name, info->ep_attr->type);
+	if (ret)
 		goto err_free;
-	}
 
 	efa_domain->info = fi_dupinfo(EFA_EP_TYPE_IS_RDM(info) ? efa_domain->device->rdm_info : efa_domain->device->dgram_info);
 	if (!efa_domain->info) {
@@ -281,11 +276,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid;
 	if (efa_domain->info_type == EFA_INFO_RDM) {
-		err = efa_domain_init_rdm(efa_domain, info);
-		if (err) {
+		ret = efa_domain_init_rdm(efa_domain, info);
+		if (ret) {
 			EFA_WARN(FI_LOG_DOMAIN,
 				 "efa_domain_init_rdm failed. err: %d\n",
-				 -err);
+				 -ret);
 			goto err_free;
 		}
 		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops_rdm;
@@ -304,21 +299,22 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			long page_size = ofi_get_page_size();
 			if (page_size <= 0) {
 				EFA_WARN(FI_LOG_DOMAIN, "Failed to get page size\n");
+				ret = -FI_EINVAL;
 				goto err_free;
 			}
 
-			err = ofi_memalign(&efa_domain->zero_byte_bounce_buf, page_size, page_size);
-			if (err) {
+			ret = ofi_memalign(&efa_domain->zero_byte_bounce_buf, page_size, page_size);
+			if (ret) {
 				EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate zero-byte bounce buffer\n");
 				goto err_free;
 			}
 
 			iov.iov_base = efa_domain->zero_byte_bounce_buf;
 			iov.iov_len = page_size;
-			err = fi_mr_regv(&efa_domain->util_domain.domain_fid,
+			ret = fi_mr_regv(&efa_domain->util_domain.domain_fid,
 						   &iov, 1, mr_flags, 0, 0, 0, &mr_fid, NULL);
-			if (err) {
-				EFA_WARN(FI_LOG_DOMAIN, "Failed to register zero-byte bounce buffer: %d\n", err);
+			if (ret) {
+				EFA_WARN(FI_LOG_DOMAIN, "Failed to register zero-byte bounce buffer: %d\n", ret);
 				free(efa_domain->zero_byte_bounce_buf);
 				efa_domain->zero_byte_bounce_buf = NULL;
 				goto err_free;
@@ -328,11 +324,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 #ifndef _WIN32
-	err = efa_fork_support_install_fork_handler();
-	if (err) {
+	ret = efa_fork_support_install_fork_handler();
+	if (ret) {
 		EFA_WARN(FI_LOG_CORE,
 			 "Unable to install fork handler: %s\n",
-			 strerror(-err));
+			 strerror(-ret));
 		goto err_free;
 	}
 #endif
@@ -345,7 +341,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 err_free:
 	assert(efa_domain);
-
 	err = efa_domain_close(&efa_domain->util_domain.domain_fid.fid);
 	if (err) {
 		EFA_WARN(FI_LOG_DOMAIN, "When handling error (%d), domain resource was being released. "
