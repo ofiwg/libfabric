@@ -550,6 +550,7 @@ void test_efa_rdm_mr_cache_lru_behavior();
 void test_efa_rdm_mr_cache_flush_behavior();
 void test_efa_rdm_mr_cache_reference_counting();
 
+void test_efa_mr_reg_out_of_range_iface();
 /* end efa_unit_test_mr.c */
 
 /* begin efa_unit_test_rdm_rma.c */
