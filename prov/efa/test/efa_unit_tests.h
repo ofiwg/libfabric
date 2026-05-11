@@ -259,6 +259,7 @@ void test_efa_srx_cq();
 void test_efa_srx_lock();
 void test_efa_srx_unexp_pkt();
 void test_efa_srx_foreach_unspec_skips_other_provider();
+void test_efa_rdm_peer_construct_robuf_failure();
 void test_efa_rnr_queue_and_resend_msg();
 void test_efa_rnr_queue_and_resend_tagged();
 

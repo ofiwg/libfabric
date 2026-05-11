@@ -17,7 +17,7 @@
  * @param[in]		conn	efa conn object
  * @relates efa_rdm_peer
  */
-void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn)
+int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn)
 {
 	int ret;
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
@@ -32,7 +32,7 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
 		/* ran out of memory while creating the peer reorder buffer */
 		EFA_WARN(FI_LOG_EP_CTRL, "Unable to allocate peer->robuf\n");
-		return;
+		return -FI_ENOMEM;
 	}
 	dlist_init(&peer->outstanding_tx_pkts);
 	dlist_init(&peer->txe_list);
@@ -44,6 +44,7 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	}
 
 	efa_rdm_rxe_map_construct(&peer->rxe_map);
+	return 0;
 }
 
 /**
