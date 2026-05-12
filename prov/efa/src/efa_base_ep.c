@@ -546,6 +546,10 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	base_ep->efa_recv_wr_vec = calloc(sizeof(struct efa_recv_wr), efa_base_ep_get_rx_pool_size(base_ep));
 	if (!base_ep->efa_recv_wr_vec) {
 		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for base_ep->efa_recv_wr_vec!\n");
+		fi_freeinfo(base_ep->info);
+		base_ep->info = NULL;
+		ofi_endpoint_close(&base_ep->util_ep);
+		base_ep->util_ep_initialized = false;
 		return -FI_ENOMEM;
 	}
 	base_ep->recv_wr_index = 0;

@@ -778,3 +778,14 @@ int efa_mock_ibv_get_cq_event_return_mock(struct efa_ibv_cq *ibv_cq, void **cq_c
 {
 	return mock_int();
 }
+
+extern void *__real_calloc(size_t nmemb, size_t size);
+
+void *__wrap_calloc(size_t nmemb, size_t size)
+{
+	if (g_efa_unit_test_mocks.calloc_fail_nmemb &&
+	    nmemb == g_efa_unit_test_mocks.calloc_fail_nmemb)
+		return NULL;
+
+	return __real_calloc(nmemb, size);
+}
