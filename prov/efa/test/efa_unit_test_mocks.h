@@ -240,6 +240,9 @@ struct efa_unit_test_mocks
 #if HAVE_EFADV_QUERY_CQ
 	int (*efadv_query_cq)(struct ibv_cq *ibvcq, struct efadv_cq_attr *attr, uint32_t inlen);
 #endif
+
+	/* When non-zero, __wrap_calloc will return NULL if nmemb matches this value */
+	size_t calloc_fail_nmemb;
 };
 
 struct ibv_cq_ex *efa_mock_create_cq_ex_return_null(struct ibv_context *context, struct ibv_cq_init_attr_ex *init_attr);

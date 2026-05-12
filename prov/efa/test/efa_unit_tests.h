@@ -501,6 +501,7 @@ void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy();
 void test_efa_ep_lock_type_no_op();
 void test_efa_ep_lock_type_mutex();
 void test_efa_rdm_ep_shm_ep_different_info();
+void test_efa_base_ep_construct_info_and_util_ep_initialized();
 void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data();
 void test_efa_rdm_ep_enable_ah_alloc_failure();
 void test_efa_rdm_ep_ibv_create_ah_failure();

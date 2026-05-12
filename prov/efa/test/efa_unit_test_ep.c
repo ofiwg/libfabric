@@ -2197,3 +2197,28 @@ void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_device_limits(struct
 	assert_ptr_equal(attr_ex.send_cq, ibv_cq_ex_to_cq(efa_cq->ibv_cq.ibv_cq_ex));
 	assert_ptr_equal(attr_ex.recv_cq, ibv_cq_ex_to_cq(efa_cq->ibv_cq.ibv_cq_ex));
 }
+
+/**
+ * @brief Verify efa_base_ep_construct properly initializes info and util_ep
+ *
+ * This validates that the cleanup code added for the efa_recv_wr_vec calloc
+ * failure path doesn't break the normal path.
+ */
+void test_efa_base_ep_construct_info_and_util_ep_initialized(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_ep *ep = NULL;
+	int ret;
+
+	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	/* Force calloc to fail when nmemb == sizeof(struct efa_recv_wr) */
+	g_efa_unit_test_mocks.calloc_fail_nmemb = sizeof(struct efa_recv_wr);
+
+	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
+	assert_int_equal(ret, -FI_ENOMEM);
+	assert_null(ep);
+
+	/* Reset the mock */
+	g_efa_unit_test_mocks.calloc_fail_nmemb = 0;
+}
