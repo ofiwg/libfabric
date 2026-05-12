@@ -17,6 +17,7 @@
 #include "efa_rdm_cntr.h"
 #include "efa_rdm_mr.h"
 
+static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep);
 
 static inline
 struct efa_rdm_cq *efa_rdm_ep_get_tx_rdm_cq(struct efa_rdm_ep *ep)
@@ -576,7 +577,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (!efa_rdm_ep->pke_vec) {
 		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for efa_rdm_ep->pke_vec!\n");
 		ret = -FI_ENOMEM;
-		goto err_close_shm_ep;
+		goto err_destroy_buffer_pools;
 	}
 
 	efa_rdm_ep->send_pkt_entry_vec = calloc(sizeof(struct efa_rdm_pke *), efa_base_ep_get_tx_pool_size(&efa_rdm_ep->base_ep));
@@ -615,6 +616,8 @@ err_free_send_pkt_entry_vec:
 	free(efa_rdm_ep->send_pkt_entry_vec);
 err_free_pke_vec:
 	free(efa_rdm_ep->pke_vec);
+err_destroy_buffer_pools:
+	efa_rdm_ep_destroy_buffer_pools(efa_rdm_ep);
 err_close_shm_ep:
 	if (efa_rdm_ep->shm_ep) {
 		retv = fi_close(&efa_rdm_ep->shm_ep->fid);
