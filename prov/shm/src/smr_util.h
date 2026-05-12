@@ -74,6 +74,7 @@ extern struct smr_env smr_env;
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
 #define SMR_BUFFER_RECV		(1 << 1)
+#define SMR_OP_ERROR		(1 << 2)
 
 enum {
 	smr_proto_inline,	/* inline payload */
@@ -98,9 +99,12 @@ enum {
  * 	datatype	atomic datatype for FI_ATOMIC API only
  * 	atomic_op	atomic operation for FI_ATOMIC API only
  * 	status		returned status of operation
- * 	CACHE LINE HERE Above fields must be 40 bytes if the cpu does
- *			not support prefetching algorithms. The other 24 bytes
- *			in this cache line come from the atomic queue cmd_entry
+ * 	CACHE LINE HERE Make sure above fields are 40bytes so that they are
+ * 		 	properly cache aligned with the other 24 bytes
+ *			from the atomic queue fields. This is necessary
+			(especially if your cpu does not have prefetching) so
+			that the first cache grab gets the lightweight protocol
+			fields.
  *	entry		for internal use managing commands
  *	tx_ctx		source side context (unused by target side)
  *	rx_ctx		target side context (unused by source side)
@@ -121,7 +125,7 @@ struct smr_cmd_hdr {
 			uint8_t	atomic_op;
 		};
 	};
-	uint64_t		status;
+	uint64_t		proto_data;
 	//CACHE LINE HERE - See comment above
 	uint64_t		entry;
 	uint64_t		tx_ctx;
