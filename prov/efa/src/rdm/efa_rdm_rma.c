@@ -241,6 +241,8 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 
 	assert(msg->iov_count <= efa_rdm_ep->base_ep.info->tx_attr->iov_limit);
 
+	assert(msg->rma_iov_count > 0);
+	assert(msg->rma_iov_count <= efa_rdm_ep->base_ep.info->tx_attr->rma_iov_limit);
 	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
 	if (efa_rdm_ep->shm_ep) {
 		shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, msg->addr);
@@ -490,6 +492,10 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 	err = efa_rdm_ep_cap_check_rma(efa_rdm_ep);
 	if (err)
 		return err;
+
+	assert(msg->iov_count <= efa_rdm_ep->base_ep.info->tx_attr->iov_limit);
+	assert(msg->rma_iov_count > 0);
+	assert(msg->rma_iov_count <= efa_rdm_ep->base_ep.info->tx_attr->rma_iov_limit);
 
 	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
 	if (err)
