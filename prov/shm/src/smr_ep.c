@@ -253,7 +253,6 @@ void smr_generic_format(struct smr_cmd *cmd, int64_t tx_id, int64_t rx_id,
 	cmd->hdr.tx_id = tx_id;
 	cmd->hdr.cq_data = data;
 	cmd->hdr.tag = tag;
-	cmd->hdr.status = 0;
 	cmd->hdr.rx_ctx = 0;
 
 	if (op_flags & FI_REMOTE_CQ_DATA)
