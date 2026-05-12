@@ -18,6 +18,7 @@
 #define EFA_RDM_PKE_HAS_NO_BASE_HDR	BIT_ULL(6)	/**< This packet entry's wiredata contains no base header */
 #define EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS	BIT_ULL(7) /**< this packet entry is in peer->outstanding_tx_pkts list */
 #define EFA_RDM_PKE_IN_OPE_QUEUED_PKTS	BIT_ULL(8) /**< this packet entry is in ope->queued_pkts list */
+#define EFA_RDM_PKE_HELD_BY_PROGRESS	BIT_ULL(9) /**< this rx-pool packet entry is being held by progress engine and counted in ep->efa_rx_pkts_held */
 
 #define EFA_RDM_PKE_ALIGNMENT		128
 
@@ -330,6 +331,8 @@ struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_pke *src,
 				      );
 
 struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_pke **pkt_entry_ptr);
+
+void efa_rdm_pke_mark_held(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 			  int pkt_entry_cnt, uint64_t flags);

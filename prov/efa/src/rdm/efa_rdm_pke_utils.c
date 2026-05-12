@@ -161,10 +161,6 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
 		segment_offset = ep->queued_copy_vec[i].data_offset;
 		rxe = pkt_entry->ope;
-		if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL) {
-			assert(ep->efa_rx_pkts_held > 0);
-			ep->efa_rx_pkts_held--;
-		}
 
 		if (bytes_copied[i] != MIN(pkt_entry->payload_size,
 					   rxe->cq_entry.len - segment_offset)) {
@@ -210,8 +206,7 @@ int efa_rdm_pke_queued_copy_payload_to_hmem(struct efa_rdm_pke *pke,
 
 	rxe->bytes_queued_blocking_copy += pke->payload_size;
 
-	if (pke->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL)
-		ep->efa_rx_pkts_held++;
+	efa_rdm_pke_mark_held(pke);
 
 	if (ep->queued_copy_num < EFA_RDM_MAX_QUEUED_COPY &&
 	    rxe->bytes_copied + rxe->bytes_queued_blocking_copy < rxe->total_len) {
@@ -600,8 +595,10 @@ struct efa_rdm_pke *efa_rdm_pke_get_ooo_pke(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_pke *ooo_entry;
 
-	if (OFI_UNLIKELY(!efa_env.rx_copy_ooo))
+	if (OFI_UNLIKELY(!efa_env.rx_copy_ooo)) {
+		efa_rdm_pke_mark_held(pkt_entry);
 		return pkt_entry;
+	}
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	ooo_entry = efa_rdm_pke_clone(pkt_entry, pkt_entry->ep->rx_ooo_pkt_pool,

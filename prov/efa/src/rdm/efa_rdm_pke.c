@@ -219,6 +219,13 @@ void efa_rdm_pke_release_rx(struct efa_rdm_pke *pkt_entry)
 	ep = pkt_entry->ep;
 	assert(ep);
 
+	if (pkt_entry->flags & EFA_RDM_PKE_HELD_BY_PROGRESS) {
+		assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		assert(ep->efa_rx_pkts_held > 0);
+		ep->efa_rx_pkts_held--;
+		pkt_entry->flags &= ~EFA_RDM_PKE_HELD_BY_PROGRESS;
+	}
+
 	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL) {
 		ep->efa_rx_pkts_to_post++;
 	} else if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_READ_COPY_POOL) {
@@ -250,6 +257,20 @@ void efa_rdm_pke_release_rx_list(struct efa_rdm_pke *pkt_entry)
 		curr->next = NULL;
 		efa_rdm_pke_release_rx(curr);
 		curr = next;
+	}
+}
+
+/**
+ * @brief Mark an rx-pool pkt as held by progress; release_rx() will decrement.
+ * No-op for non-rx-pool pkts.
+ * @param[in,out] pkt_entry the packet entry being retained by progress
+ */
+
+void efa_rdm_pke_mark_held(struct efa_rdm_pke *pkt_entry){
+	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL &&
+	    !(pkt_entry->flags & EFA_RDM_PKE_HELD_BY_PROGRESS)) {
+		pkt_entry->flags |= EFA_RDM_PKE_HELD_BY_PROGRESS;
+		pkt_entry->ep->efa_rx_pkts_held++;
 	}
 }
 
@@ -343,6 +364,8 @@ struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_pke **pkt_entry_ptr)
 		*pkt_entry_ptr = unexp_pkt_entry;
 	} else {
 		unexp_pkt_entry = *pkt_entry_ptr;
+		/* Retain rx-pool pkt as unexp; held flag tracks it until rxe matches. */
+		efa_rdm_pke_mark_held(unexp_pkt_entry);
 	}
 
 	return unexp_pkt_entry;
