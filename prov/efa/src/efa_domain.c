@@ -406,12 +406,12 @@ static int efa_domain_close(fid_t fid)
 
 	ret = ofi_domain_close(&efa_domain->util_domain);
 	if (ret)
-		return ret;
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to close util_domain: %d\n", ret);
 
 	if (efa_domain->shm_domain) {
 		ret = fi_close(&efa_domain->shm_domain->fid);
 		if (ret)
-			return ret;
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to close shm_domain: %d\n", ret);
 	}
 
 	if (efa_domain->info)
@@ -419,6 +419,7 @@ static int efa_domain_close(fid_t fid)
 
 	ofi_genlock_destroy(&efa_domain->srx_lock);
 	free(efa_domain);
+
 	return 0;
 }
 
