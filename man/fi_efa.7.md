@@ -111,16 +111,13 @@ The following features are supported:
   applies to the `efa` fabric when the `FI_OPT_EFA_HOMOGENEOUS_PEERS` option
   is set as `true`.
 
-## [Zero-copy receive mode](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#48-user-receive-qp-feature--request-and-zero-copy-receive)
- - Zero-copy receive mode can be enabled only if SHM transfer is disabled.
- - Unless the application explicitly disables P2P, e.g. via FI_HMEM_P2P_DISABLED,
-  zero-copy receive can be enabled only if available FI_HMEM devices all have
-  P2P support.
-  
 ## `fi_cancel` support
  - `fi_cancel` is only supported in the non-zero-copy-receive mode of the `efa` fabric.
  It's not supported in `efa-direct`, DGRAM endpoint, and the zero-copy receive mode of
  the `efa` fabric in RDM endpoint.
+
+## (Deprecated) [Zero-copy receive mode](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#48-user-receive-qp-feature--request-and-zero-copy-receive)
+ - Support for the zero-copy mode was deprecated in Libfabric v2.6
 
 When using FI_HMEM for AWS Neuron or Habana SynapseAI buffers, the provider
 requires peer to peer transaction support between the EFA and the FI_HMEM
