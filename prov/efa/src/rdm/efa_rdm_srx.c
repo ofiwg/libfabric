@@ -20,6 +20,8 @@
 void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
 			    struct efa_rdm_ope *rxe)
 {
+	assert(peer_rxe->count <= rxe->ep->base_ep.info->rx_attr->iov_limit);
+
 	rxe->fi_flags = peer_rxe->flags;
 
 	/* Handle case where we're allocating an unexpected rxe */
