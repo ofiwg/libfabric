@@ -11,6 +11,30 @@
 #include <cuda.h>
 #endif
 
+/*
+ * Reset every field of an efa_rdm_mr instance to its initial state,
+ * EXCEPT for gen. The gen counter must be preserved across
+ * bufpool slot reuse so in-flight ops that captured a stale desc
+ * pointer can detect invalidation via a generation mismatch.
+ *
+ * When adding a new field to struct efa_rdm_mr extend this function
+ * to initialize it here.
+ */
+static inline void efa_rdm_mr_reset(struct efa_rdm_mr *efa_rdm_mr)
+{
+	memset(&efa_rdm_mr->efa_mr, 0, sizeof(struct efa_mr));
+
+	efa_rdm_mr->inserted_to_mr_map = false;
+	efa_rdm_mr->needs_sync         = false;
+	efa_rdm_mr->hmem_data          = NULL;
+	efa_rdm_mr->flags              = 0;
+	efa_rdm_mr->device             = 0;
+	efa_rdm_mr->entry              = NULL;
+	efa_rdm_mr->shm_mr             = NULL;
+
+	/* gen: intentionally not reset */
+}
+
 static inline struct efa_rdm_mr *efa_rdm_mr_alloc(struct efa_domain *efa_domain)
 {
 	struct efa_rdm_mr *efa_rdm_mr;
@@ -457,6 +481,14 @@ static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_rdm_mr)
 		ret = err;
 	}
 
+	/*
+	 * Bump after dereg so a gen tick signals that destruction has
+	 * completed. The data path uses the cached efa_mr->lkey rather
+	 * than dereferencing ibv_mr, so a concurrent reader that passes
+	 * the gen check cannot fault on a cleared ibv_mr.
+	 */
+	efa_rdm_mr->gen++;
+
 	return ret;
 }
 
@@ -725,7 +757,7 @@ int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov
 		EFA_WARN(FI_LOG_MR, "Unable to initialize MR\n");
 		return -FI_ENOMEM;
 	}
-	memset(efa_rdm_mr, 0, sizeof(struct efa_rdm_mr));
+	efa_rdm_mr_reset(efa_rdm_mr);
 
 	efa_rdm_mr->efa_mr.domain = domain;
 	efa_rdm_mr->efa_mr.mr_fid.fid.fclass = FI_CLASS_MR;
@@ -764,7 +796,7 @@ static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		EFA_WARN(FI_LOG_MR, "Unable to initialize MR\n");
 		return -FI_ENOMEM;
 	}
-	memset(efa_rdm_mr, 0, sizeof(struct efa_rdm_mr));
+	efa_rdm_mr_reset(efa_rdm_mr);
 
 	efa_rdm_mr->efa_mr.domain = domain;
 	efa_rdm_mr->efa_mr.mr_fid.fid.fclass = FI_CLASS_MR;
