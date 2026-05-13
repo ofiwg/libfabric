@@ -467,6 +467,13 @@ void cxip_rxc_record_req_stat(struct cxip_rxc *rxc, enum c_ptl_list list,
 
 /*
  * cxip_recv_cancel() - Cancel outstanding receive request.
+ *
+ * Per fi_cancel semantics, cancel is best-effort: if the operation is still
+ * pending it can be canceled, but an in-progress operation (RDMA in flight)
+ * cannot be rolled back.
+ *
+ * When a rendezvous Get is in flight (rdzv_events > 0), return -FI_ENOENT to
+ * signal that the cancel did not take effect.
  */
 int cxip_recv_cancel(struct cxip_req *req)
 {
@@ -477,11 +484,23 @@ int cxip_recv_cancel(struct cxip_req *req)
 	 * or software receive list.
 	 */
 	if (!req->recv.hw_offloaded) {
-		dlist_remove_init(&req->recv.rxc_entry);
-		req->recv.canceled = true;
-		req->recv.unlinked = true;
-		cxip_recv_req_report(req);
-		cxip_recv_req_free(req);
+		if (req->recv.rdzv_events) {
+			/* RDMA in flight — cannot cancel.  Return -FI_ENOENT
+			 * so callers (e.g. OpenMPI MTL) know immediately that
+			 * the cancel did not take effect.  The rendezvous will
+			 * complete normally via rdzv_recv_req_event().
+			 */
+			RXC_DBG(rxc,
+				"Cancel refused: RDMA in flight, req: %p rdzv_events: %d\n",
+				req, req->recv.rdzv_events);
+			ret = -FI_ENOENT;
+		} else {
+			dlist_remove_init(&req->recv.rxc_entry);
+			req->recv.canceled = true;
+			req->recv.unlinked = true;
+			cxip_recv_req_report(req);
+			cxip_recv_req_free(req);
+		}
 	} else {
 		ret = cxip_pte_unlink(rxc->rx_pte, C_PTL_LIST_PRIORITY,
 				req->req_id, rxc->rx_cmdq);
