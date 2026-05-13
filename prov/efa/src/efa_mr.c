@@ -538,6 +538,7 @@ int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_at
 		 reg_ct);
 	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	efa_mr->mr_fid.mem_desc = efa_mr;
+	efa_mr->lkey = efa_mr->ibv_mr->lkey;
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 
 	return 0;

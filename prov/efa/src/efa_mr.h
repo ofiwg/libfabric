@@ -14,6 +14,14 @@ struct efa_mr {
 	struct efa_domain	*domain;
 	/* HMEM interface fields */
 	enum fi_hmem_iface	iface;
+	/*
+	 * Cached copy of ibv_mr->lkey, captured at registration. Lets
+	 * the data path read the lkey via efa_mr->lkey without
+	 * dereferencing ibv_mr, which may be NULL after a concurrent
+	 * close. The cached value is left intact across dereg; the
+	 * gen check is what guards against using a stale lkey.
+	 */
+	uint32_t		lkey;
 };
 
 struct efa_mr *efa_mr_alloc(struct efa_domain *efa_domain);
