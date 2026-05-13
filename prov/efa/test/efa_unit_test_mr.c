@@ -1728,3 +1728,49 @@ void test_efa_direct_ope_released_on_write_error(struct efa_resource **state)
 
 	free(buf);
 }
+
+/*
+ * Verify that closing an efa_rdm_mr advances its generation counter and
+ * that the counter survives bufpool slot reuse. After a close/reopen
+ * cycle we expect the same slot back (ofi_bufpool is LIFO) with a strictly
+ * greater gen.
+ */
+void test_efa_rdm_mr_gen_bumps_on_close(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	size_t mr_size = 64;
+	void *buf1;
+	void *buf2;
+	struct fid_mr *mr_fid1 = NULL;
+	struct fid_mr *mr_fid2 = NULL;
+	struct efa_rdm_mr *rdm_mr1;
+	struct efa_rdm_mr *rdm_mr2;
+	uint32_t first_gen;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	buf1 = malloc(mr_size);
+	assert_non_null(buf1);
+	buf2 = malloc(mr_size);
+	assert_non_null(buf2);
+
+	assert_int_equal(fi_mr_reg(resource->domain, buf1, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr_fid1, NULL),
+			 0);
+	rdm_mr1 = container_of(mr_fid1, struct efa_rdm_mr, efa_mr.mr_fid);
+	first_gen = rdm_mr1->gen;
+	assert_int_equal(rdm_mr1->efa_mr.lkey,
+			 rdm_mr1->efa_mr.ibv_mr->lkey);
+	assert_int_equal(fi_close(&mr_fid1->fid), 0);
+
+	assert_int_equal(fi_mr_reg(resource->domain, buf2, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr_fid2, NULL),
+			 0);
+	rdm_mr2 = container_of(mr_fid2, struct efa_rdm_mr, efa_mr.mr_fid);
+
+	assert_true(rdm_mr2->gen > first_gen);
+
+	assert_int_equal(fi_close(&mr_fid2->fid), 0);
+	free(buf1);
+	free(buf2);
+}
