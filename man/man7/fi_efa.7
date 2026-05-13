@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-04\-29" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-05\-13" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -150,19 +150,15 @@ must insert the initiator side\[cq]s address into AV before the RMA
 operation is kicked off, due to a current device limitation.
 The same limitation applies to the \f[V]efa\f[R] fabric when the
 \f[V]FI_OPT_EFA_HOMOGENEOUS_PEERS\f[R] option is set as \f[V]true\f[R].
-.SS Zero-copy receive mode
-.IP \[bu] 2
-Zero-copy receive mode can be enabled only if SHM transfer is disabled.
-.IP \[bu] 2
-Unless the application explicitly disables P2P, e.g.\ via
-FI_HMEM_P2P_DISABLED, zero-copy receive can be enabled only if available
-FI_HMEM devices all have P2P support.
 .SS \f[V]fi_cancel\f[R] support
 .IP \[bu] 2
 \f[V]fi_cancel\f[R] is only supported in the non-zero-copy-receive mode
 of the \f[V]efa\f[R] fabric.
 It\[cq]s not supported in \f[V]efa-direct\f[R], DGRAM endpoint, and the
 zero-copy receive mode of the \f[V]efa\f[R] fabric in RDM endpoint.
+.SS (Deprecated) Zero-copy receive mode
+.IP \[bu] 2
+Support for the zero-copy mode was deprecated in Libfabric v2.6
 .PP
 When using FI_HMEM for AWS Neuron or Habana SynapseAI buffers, the
 provider requires peer to peer transaction support between the EFA and
