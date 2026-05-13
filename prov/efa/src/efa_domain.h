@@ -61,9 +61,10 @@ struct efa_domain {
 	/* list of enabled efa_base_ep in this domain */
 	struct dlist_entry base_ep_list;
 	/*
-	 * Pool backing `struct efa_mr` instances. Slots are recycled on
-	 * MR close so stale `desc` pointers from in-flight ops remain
-	 * dereferenceable for the lifetime of the domain.
+	 * Pool backing MR structs. The pool entries (efa_mr/efa_rdm_mr) are
+	 * determined by info_type at creation time. Slots are recycled on MR
+	 * close and stale desc pointers from in-flight ops remain dereferenceable.
+	 * For efa_rdm the embedded gen counter detects slot reuse.
 	 */
 	struct ofi_bufpool *mr_pool;
 };
