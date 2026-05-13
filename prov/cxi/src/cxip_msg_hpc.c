@@ -1540,8 +1540,18 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 * may be freed with pending child requests.
 		 */
 		req->recv.unlinked = true;
-		cxip_recv_req_report(req);
-		cxip_recv_req_free(req);
+
+		if (req->recv.rdzv_events) {
+			/* RDMA in flight — defer free until
+			 * rdzv_recv_req_event() handles completion.
+			 */
+			RXC_DBG(rxc,
+				"Unlink with in-flight RGet, req: %p rdzv_events: %d\n",
+				req, req->recv.rdzv_events);
+		} else {
+			cxip_recv_req_report(req);
+			cxip_recv_req_free(req);
+		}
 
 		return FI_SUCCESS;
 
