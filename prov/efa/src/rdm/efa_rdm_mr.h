@@ -20,6 +20,13 @@ struct efa_rdm_mr {
 	struct ofi_mr_entry	*entry;
 	/* Used only in rdm */
 	struct fid_mr		*shm_mr;
+	/*
+	 * Monotonic generation counter bumped on every close.
+	 * Preserved across bufpool slot reuse so that in-flight ops
+	 * that captured a stale desc can detect the invalidation and
+	 * be canceled early.
+	 */
+	uint32_t		gen;
 };
 
 /* Compile-time assertion to ensure safe casting between efa_mr and efa_rdm_mr */
