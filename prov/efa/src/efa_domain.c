@@ -19,7 +19,7 @@
 struct dlist_entry g_efa_domain_list;
 
 /**
- * @brief Create the bufpools backing struct efa_mr instances
+ * @brief Create the bufpools backing efa_mr/efa_rdm_mr instances
  * on an efa_domain.
  *
  * @param[in,out] efa_domain  Domain whose pools will be created.
@@ -30,14 +30,16 @@ struct dlist_entry g_efa_domain_list;
 static int efa_mr_pool_create(struct efa_domain *efa_domain,
 			      struct fi_info *info)
 {
+	size_t entry_size;
 	int ret;
 
-	/* Only efa-direct and dgram domains allocate struct efa_mr. */
 	if (EFA_INFO_TYPE_IS_RDM(info))
-		return 0;
+		entry_size = sizeof(struct efa_rdm_mr);
+	else
+		entry_size = sizeof(struct efa_mr);
 
 	ret = ofi_bufpool_create(&efa_domain->mr_pool,
-				 sizeof(struct efa_mr),
+				 entry_size,
 				 EFA_RDM_BUFPOOL_ALIGNMENT, 0, 0, 0);
 	if (ret) {
 		EFA_WARN(FI_LOG_DOMAIN, "mr_pool init failed! err: %d\n", ret);
