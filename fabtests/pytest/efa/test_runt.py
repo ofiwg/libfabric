@@ -12,6 +12,7 @@ import pytest
     pytest.param("cuda_to_cuda", "gdrcopy", marks=pytest.mark.cuda_memory),
     pytest.param("cuda_to_cuda", "localread", marks=pytest.mark.cuda_memory),
     pytest.param("neuron_to_neuron", None, marks=pytest.mark.neuron_memory)])
+@pytest.mark.pr_ci
 def test_runt_read_functional(cmdline_args, memory_type, copy_method):
     """
     Verify runt reading protocol is working as expected by sending 1 message of 256 KB.

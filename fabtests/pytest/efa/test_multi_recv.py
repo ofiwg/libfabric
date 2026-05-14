@@ -1,5 +1,7 @@
 import pytest
 
+
+@pytest.mark.pr_ci
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
