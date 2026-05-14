@@ -337,6 +337,8 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192    = 0X000000000003FFE0UL;
 
 #define FI_OPX_DEFAULT_RX_CAPS (FI_OPX_BASE_CAPS | FI_OPX_RXONLY_CAPS)
 
+#define FI_OPX_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
+
 #define FI_OPX_DEFAULT_MODE (FI_ASYNC_IOV)
 
 /* OPX used to only have "default caps". The goal of this additional #define is to differentiate between what we
