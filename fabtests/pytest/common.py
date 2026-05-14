@@ -723,3 +723,33 @@ class MultinodeTest(ClientServerTest):
             returncode_list.append(client_process_list[i].returncode)
 
         check_returncode_list(returncode_list, strict)
+
+
+# Message size lists for @pytest.mark.message_sizes decorator.
+# Generic (provider-agnostic) size selections live here so all providers can share them.
+PERF_SIZES = ["all"]
+PERF_PR_CI = ["l:16,4096,16384,131072,1048576"]
+RANGE_SIZES = ["r:0,4,64", "r:4048,4,4148", "r:8000,4,9000", "r:17000,4,18000", "r:0,4096,1048576"]
+INJECT_SIZES = ["r:0,4,64", "r:4048,4,4148", "r:8000,4,9000"]
+RMA_PINGPONG_SIZES = ["r:4048,4,4148", "r:8000,4,9000", "r:17000,4,18000"]
+MULTI_RECV_SIZES = ["1024", "8192"]
+
+
+def test_selected_by_marker(config, test_markers, name):
+    expr_str = config.getoption("markexpr") or ""
+    if not expr_str or name not in test_markers:
+        return False
+    try:
+        from _pytest.mark.expression import Expression
+        expr = Expression.compile(expr_str)
+    except Exception as e:
+        raise RuntimeError(
+            f"test_selected_by_marker failed to compile markexpr {expr_str!r}. "
+            f"This might mean pytest's private _pytest.mark.expression API "
+            f"has changed. Underlying error: {e}"
+        ) from e
+    # would the test still be selected if `name` were removed from its markers?
+    with_marker = expr.evaluate(lambda n: n in test_markers)
+    without_marker = expr.evaluate(lambda n: n in (test_markers - {name}))
+    # true only when `name` is the reason this test got selected
+    return with_marker and not without_marker
