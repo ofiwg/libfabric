@@ -109,6 +109,12 @@ struct efa_rdm_ope {
 	size_t iov_count;
 	struct iovec iov[EFA_RDM_IOV_LIMIT];
 	void *desc[EFA_RDM_IOV_LIMIT];
+	/**
+	 * Snapshots of each desc[i] efa_rdm_mr generation counter,
+	 * captured at dispatch time (and re-captured whenever desc[] is
+	 * rewritten). Used by the data path to detect a closed MR.
+	 */
+	uint32_t desc_gen[EFA_RDM_IOV_LIMIT];
 	struct fid_mr *mr[EFA_RDM_IOV_LIMIT];
 
 	size_t rma_iov_count;

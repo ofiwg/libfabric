@@ -311,7 +311,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_ope *rxe;
-	struct efa_mr cuda_mr = {0};
+	struct efa_rdm_mr cuda_mr = {0};
 	char buf[16];
 	size_t held_before;
 	size_t to_post_before;
@@ -338,9 +338,9 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	pkt_entry->payload = pkt_entry->wiredata;
 
 	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_tagged);
-	cuda_mr.iface = FI_HMEM_CUDA;
+	cuda_mr.efa_mr.iface = FI_HMEM_CUDA;
 
-	rxe->desc[0] = &cuda_mr;
+	rxe->desc[0] = &cuda_mr.efa_mr;
 	rxe->iov_count = 1;
 	rxe->iov[0] = iov;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
