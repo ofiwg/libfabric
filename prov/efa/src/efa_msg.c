@@ -122,7 +122,7 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 			goto out_err;
 		}
 		efa_mr = (struct efa_mr *)msg->desc[i];
-		wr->sg_list[i].lkey = efa_mr->ibv_mr->lkey;
+		wr->sg_list[i].lkey = efa_mr->lkey;
 		wr->sg_list[i].addr = addr;
 	}
 
@@ -316,7 +316,7 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 				ret = -FI_EINVAL;
 				goto out_err;
 			}
-			sg_list[i].lkey = ((struct efa_mr *)msg->desc[i])->ibv_mr->lkey;
+			sg_list[i].lkey = ((struct efa_mr *)msg->desc[i])->lkey;
 			sg_list[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
 			sg_list[i].length = msg->msg_iov[i].iov_len;
 
