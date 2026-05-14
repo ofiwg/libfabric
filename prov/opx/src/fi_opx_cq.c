@@ -226,6 +226,15 @@ static struct fi_ops fi_opx_fi_ops = {.size	= sizeof(struct fi_ops),
 				      .control	= fi_opx_control_cq,
 				      .ops_open = fi_opx_ops_open_cq};
 
+static struct fi_ops_cq fi_opx_unbound_cq_ops = {.size	    = sizeof(struct fi_ops_cq),
+						 .read	    = fi_no_cq_read,
+						 .readfrom  = fi_no_cq_readfrom,
+						 .readerr   = fi_no_cq_readerr,
+						 .sread	    = fi_no_cq_sread,
+						 .sreadfrom = fi_no_cq_sreadfrom,
+						 .signal    = fi_no_cq_signal,
+						 .strerror  = fi_no_cq_strerror};
+
 int fi_opx_cq_enqueue_err(struct fi_opx_cq *opx_cq, struct opx_context *context, const int lock_required)
 {
 	assert(!lock_required);
@@ -370,6 +379,7 @@ int fi_opx_cq_open(struct fid_domain *dom, struct fi_cq_attr *attr, struct fid_c
 	opx_cq->cq_fid.fid.fclass  = FI_CLASS_CQ;
 	opx_cq->cq_fid.fid.context = context;
 	opx_cq->cq_fid.fid.ops	   = &fi_opx_fi_ops;
+	opx_cq->cq_fid.ops	   = &fi_opx_unbound_cq_ops;
 
 	opx_cq->size = attr->size ? attr->size : FI_OPX_DEFAULT_CQ_DEPTH;
 
