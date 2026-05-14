@@ -424,7 +424,11 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (attr->name)
 		return -FI_ENOSYS;
 
-	if (attr->type != FI_AV_TABLE && attr->type != FI_AV_UNSPEC)
+	if (attr->type == FI_AV_MAP)
+		FI_WARN(&lnx_prov, FI_LOG_CORE,
+			"FI_AV_MAP was selected but was deprecated in Libfabric 2.x. "
+			"LNX will swap to using FI_AV_TABLE.\n");
+	else if (attr->type != FI_AV_TABLE && attr->type != FI_AV_UNSPEC)
 		return -FI_ENOSYS;
 
 	attr->type = FI_AV_TABLE;
