@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_verbs" "7" "2025\-07\-30" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_verbs" "7" "2026\-05\-14" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -227,6 +227,16 @@ Set it to \[lq]no\[rq] to always use ibv_reg_mr which can be helpful for
 testing the functionality of the dmabuf_peer_mem hooking provider and
 the corresponding kernel driver.
 (default: yes)
+.TP
+\f[I]FI_VERBS_NIC_AFFINITY_POLICY\f[R]
+NIC affinity policy for ordering NICs in fi_getinfo results.
+(default: none)
+.TP
+\f[I]FI_VERBS_AFFINITY_DEVICE\f[R]
+PCI address of device for NIC affinity.
+.TP
+\f[I]FI_VERBS_NIC_AFFINITY_CONFIG\f[R]
+Path to NIC affinity configuration file for `manual' policy.
 .SS Variables specific to MSG endpoints
 .TP
 \f[I]FI_VERBS_IFACE\f[R]
