@@ -254,6 +254,7 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->resource_mgmt    = FI_RM_DISABLED;
 	attr->av_type	       = OPX_AV;
 	attr->mr_mode	       = FI_OPX_BASE_MR_MODE;
+	attr->caps	       = FI_OPX_DOMAIN_CAPS;
 	attr->mr_key_size      = sizeof(uint64_t);
 	attr->cq_data_size     = FI_OPX_REMOTE_CQ_DATA_SIZE;
 	attr->cq_cnt	       = (size_t) -1;
@@ -298,14 +299,48 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 #endif
 
 	if (hints) {
-		const int modern_mr_bits = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_ENDPOINT;
+		if (hints->caps & FI_OPX_DOMAIN_CAPS) {
+			domain_attr->caps = hints->caps & FI_OPX_DOMAIN_CAPS;
+		}
 
-		if (hints->mr_mode & modern_mr_bits) {
-			domain_attr->mr_mode &= ~(OFI_MR_BASIC | OFI_MR_SCALABLE);
+		if (hints->mr_mode) {
+			const int opx_modern_mr_mode = FI_MR_LOCAL | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+			int supported_mr_mode = FI_OPX_BASE_MR_MODE | opx_modern_mr_mode | FI_MR_ENDPOINT | FI_MR_RAW;
+#ifdef OPX_HMEM
+			supported_mr_mode |= FI_MR_HMEM;
+#endif
 
-			FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN,
-				"Application hints modern mr_mode 0x%x, returning mr_mode 0x%x (no requirements)\n",
-				hints->mr_mode, domain_attr->mr_mode);
+			if (hints->mr_mode == ~(OFI_MR_BASIC | OFI_MR_SCALABLE)) {
+				domain_attr->mr_mode = FI_OPX_BASE_MR_MODE;
+#ifdef OPX_HMEM
+				domain_attr->mr_mode |= FI_MR_HMEM;
+#endif
+			} else if (hints->mr_mode & ~supported_mr_mode) {
+				FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN,
+					"Unsupported mr_mode hint 0x%x, supported 0x%x\n", hints->mr_mode,
+					supported_mr_mode);
+				goto unavailable;
+			} else if (hints->mr_mode & opx_modern_mr_mode) {
+				domain_attr->mr_mode = hints->mr_mode & opx_modern_mr_mode;
+#ifdef OPX_HMEM
+				domain_attr->mr_mode |= hints->mr_mode & FI_MR_HMEM;
+#endif
+			} else if ((hints->mr_mode & FI_OPX_BASE_MR_MODE) == FI_OPX_BASE_MR_MODE) {
+				domain_attr->mr_mode = FI_OPX_BASE_MR_MODE;
+#ifdef OPX_HMEM
+				domain_attr->mr_mode |= FI_MR_HMEM;
+#endif
+			} else if (hints->mr_mode & FI_MR_ENDPOINT) {
+				domain_attr->mr_mode = 0;
+#ifdef OPX_HMEM
+				domain_attr->mr_mode |= hints->mr_mode & FI_MR_HMEM;
+#endif
+			} else {
+				FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN,
+					"Unsupported mr_mode hint 0x%x, required 0x%x\n", hints->mr_mode,
+					FI_OPX_BASE_MR_MODE);
+				goto unavailable;
+			}
 		}
 
 		if (hints->domain) {
@@ -370,6 +405,9 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 	domain_attr->cq_data_size = FI_OPX_REMOTE_CQ_DATA_SIZE;
 
 	return 0;
+unavailable:
+	errno = FI_ENODATA;
+	return -errno;
 err:
 	errno = FI_EINVAL;
 	return -errno;
