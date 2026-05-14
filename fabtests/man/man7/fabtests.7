@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fabtests" "7" "2026\-03\-05" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fabtests" "7" "2026\-05\-14" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -244,6 +244,10 @@ Tests memory registration.
 .TP
 \f[I]fi_mr_cache_evict\f[R]
 Tests provider MR cache eviction capabilities.
+.TP
+\f[I]fi_nic_affinity_test\f[R]
+Validates that fi_getinfo returns correct output when the GPU-NIC
+affinity feature is enabled.
 .SS Multinode
 .PP
 This test runs a series of tests over multiple formats and patterns to
