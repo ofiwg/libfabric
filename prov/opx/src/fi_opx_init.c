@@ -102,6 +102,12 @@ int fi_opx_check_info(const struct fi_info *info)
 		}
 	}
 
+	if (info->domain_attr && info->domain_attr->caps && (info->domain_attr->caps & ~FI_OPX_DOMAIN_CAPS)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"OPX does not support the requested domain capabilites required by the application\n");
+		goto err;
+	}
+
 	if (info->domain_attr == NULL) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
 		       "The domain_attr structure is null, there must be an issue in provider initialization\n");
@@ -368,7 +374,7 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 		/* adjust parameters down from what requested if required */
 		fi->tx_attr->op_flags = hints->tx_attr->op_flags;
 	} else if (hints && hints->caps) {
-		fi->tx_attr->caps = hints->caps;
+		fi->tx_attr->caps = hints->caps & FI_OPX_DEFAULT_TX_CAPS;
 	}
 
 	if (fi_opx_global.default_rx_attr == NULL) {
@@ -402,7 +408,7 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 		/* adjust parameters down from what requested if required */
 		fi->rx_attr->op_flags = hints->rx_attr->op_flags;
 	} else if (hints && hints->caps) {
-		fi->rx_attr->caps = hints->caps;
+		fi->rx_attr->caps = hints->caps & FI_OPX_DEFAULT_RX_CAPS;
 	}
 
 	/*
