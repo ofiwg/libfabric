@@ -1,6 +1,7 @@
 import pytest
 
 @pytest.mark.pr_ci
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.functional
 def test_flood_peer(cmdline_args, fabric):
     from common import ClientServerTest

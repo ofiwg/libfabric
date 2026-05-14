@@ -20,6 +20,8 @@ def test_mr_host(cmdline_args):
         pytest.param("neuron", marks=pytest.mark.neuron_memory),
     ],
 )
+@pytest.mark.fabric(params=["efa", "efa-direct"])
+@pytest.mark.short
 def test_mr_hmem(cmdline_args, hmem_type, fabric):
     if hmem_type == "cuda" and not has_cuda(cmdline_args.server_id):
         pytest.skip("no cuda device")
