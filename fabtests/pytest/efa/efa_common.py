@@ -2,10 +2,21 @@ import os
 import subprocess
 import functools
 import re
+import pytest
 from enum import IntEnum
 from collections import deque
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
 from retrying import retry
+
+# EFA-specific message size lists for @pytest.mark.message_sizes decorator.
+# Generic (shared) size lists live in fabtests/pytest/common.py.
+DIRECT_SIZES = ["r:0,4,32", "r:0,1024,8192"]
+# RMA variant: starts at 1 because fabtests RMA benchmarks reject 0-byte.
+DIRECT_RMA_SIZES = ["r:1,4,32", "r:1,1024,8192"]
+REMOTE_EXIT_SIZES = [65536, 131072, 1048576]
+# Use the default behavior of the test, so pass None.
+DGRAM_DEFAULT = [None]
+DGRAM_PR_CI = ["l:16,128,8192"]
 
 
 @functools.lru_cache(2)

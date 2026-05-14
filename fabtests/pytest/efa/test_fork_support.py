@@ -2,6 +2,7 @@ import pytest
 
 
 @pytest.mark.functional
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.parametrize("environment_variable", ["FI_EFA_FORK_SAFE", "RDMAV_FORK_SAFE"])
 def test_fork_support(cmdline_args, completion_semantic, environment_variable, fabric):
     from common import ClientServerTest
