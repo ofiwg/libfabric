@@ -13,6 +13,7 @@ def test_mr_host(cmdline_args):
 
 @pytest.mark.pr_ci
 @pytest.mark.unit
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.short
 def test_mr_hmem(cmdline_args, hmem_type, fabric):
     if hmem_type == "cuda" and not has_cuda(cmdline_args.server_id):
@@ -36,6 +37,7 @@ def test_mr_hmem(cmdline_args, hmem_type, fabric):
 
 
 @pytest.mark.unit
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.short
 def test_efa_mr_hmem(cmdline_args, hmem_type, fabric):
     if hmem_type != "neuron":

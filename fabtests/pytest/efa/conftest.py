@@ -1,11 +1,115 @@
 import pytest
 import time
+from common import test_selected_by_marker
 from efa_common import (
     has_rdma, 
     support_cq_interrupts,
     CudaMemorySupport,
     get_cuda_memory_support,
 )
+
+# Message size lists are defined in efa_common.py and imported by test files directly.
+# The pytest_generate_tests hook reads them from the @pytest.mark.message_sizes decorator.
+
+
+def fabric_present(string, fabric):
+    """
+    Return true if 'fabric' is present in 'string', raises error if the
+    fabric is invalid
+    """
+    if fabric == "efa":
+        return "efa" in string and "efa_direct" not in string
+    if fabric == "efa-direct":
+        return "efa_direct" in string
+    raise ValueError(f"Unknown fabric: {fabric!r}")
+
+
+def get_test_type(test_markers, config):
+    """
+    Return 'pr_ci' if this test is being collected because of the pr_ci marker,
+    else 'default'.
+    """
+    if test_selected_by_marker(config, test_markers, "pr_ci"):
+        return "pr_ci"
+    return "default"
+
+
+def choose_message_sizes_for_fabric_test_type(fabric, test_type, sizes_marker, nodeid):
+    """
+    Return all matching message-size lists for (fabric, test_type) from a
+    @pytest.mark.message_sizes marker.
+    example:
+    @pytest.mark.message_sizes(default_efa=PERF_SIZES, pr_ci_efa=DIRECT_RMA_SIZES)
+                   ^sizes marker   ^kwarg_name   ^kwarg_sizes
+    """
+    sizes = []
+    for kwarg_name, kwarg_sizes in sizes_marker.kwargs.items():
+        # add message sizes if they match both the fabric and the test type
+        if fabric_present(kwarg_name, fabric) and test_type in kwarg_name:
+            sizes.extend(kwarg_sizes)
+    if not sizes:
+        raise ValueError(
+            f"@pytest.mark.message_sizes on {nodeid} is missing a kwarg for "
+            f"fabric={fabric!r} test_type={test_type!r} "
+            f"(have {sorted(sizes_marker.kwargs)})"
+        )
+    return sizes
+
+
+def add_fabric_and_message_size_parametrization(metafunc, fabric_marker, sizes_marker, test_type):
+    # look at markers and find out if this test specifies fabric and message sizes
+    wants_fabric = fabric_marker is not None and "fabric" in metafunc.fixturenames
+    wants_sizes  = sizes_marker  is not None and "message_sizes" in metafunc.fixturenames
+
+    # no parametrization needed
+    if not wants_fabric and not wants_sizes:
+        return
+
+    # get message size based on fabric and test type
+    if wants_fabric and wants_sizes:
+        nodeid = metafunc.definition.nodeid
+        params = []
+        for fabric in fabric_marker.kwargs["params"]:
+            for size in choose_message_sizes_for_fabric_test_type(fabric, test_type, sizes_marker, nodeid):
+                params.append(pytest.param(fabric, size))
+        metafunc.parametrize(("fabric", "message_sizes"), params, indirect=["fabric"])
+        return
+
+    # no message size param, just add fabric parametrization
+    if wants_fabric:
+        metafunc.parametrize("fabric", fabric_marker.kwargs["params"], indirect=True)
+        return
+
+    # no fabric param, just add message sizes parametrization based on test type
+    sizes = []
+    for k, kwarg_sizes in sizes_marker.kwargs.items():
+        if test_type in k:
+            sizes.extend(kwarg_sizes)
+    if not sizes:
+        raise ValueError(
+            f"@pytest.mark.message_sizes on {metafunc.definition.nodeid} has "
+            f"no kwarg naming {test_type!r} (have {sorted(sizes_marker.kwargs)})"
+        )
+    metafunc.parametrize("message_sizes", sizes)
+
+
+def pytest_generate_tests(metafunc):
+    """
+    Derive parametrization from markers
+      - @pytest.mark.pr_ci
+      - @pytest.mark.fabric(params=[...])
+      - @pytest.mark.message_sizes(<test_type>_<fabric>=..., ...)
+    """
+    # get all markers
+    fabric_marker = next(metafunc.definition.iter_markers("fabric"), None)
+    sizes_marker  = next(metafunc.definition.iter_markers("message_sizes"), None)
+
+    # find out the test type running from markers (currently pr_ci or default)
+    test_markers = {m.name for m in metafunc.definition.iter_markers()}
+    test_type = get_test_type(test_markers, metafunc.config)
+
+    # generate parametrization based on found markers and test type
+    add_fabric_and_message_size_parametrization(metafunc, fabric_marker, sizes_marker, test_type)
 
 # The memory types for bi-directional tests.
 memory_type_list_bi_dir = [
@@ -67,42 +171,17 @@ def rma_bw_completion_semantic(cmdline_args, completion_semantic, rma_operation_
     return completion_semantic
 
 
-@pytest.fixture(scope="module", params=["r:0,4,64",
-                                        "r:4048,4,4148",
-                                        "r:8000,4,9000",
-                                        "r:17000,4,18000",
-                                        "r:0,4096,1048576"])
-def message_size(request):
-    return request.param
-
-
-@pytest.fixture(scope="module", params=["r:0,4,64",
-                                        "r:4048,4,4148",
-                                        "r:8000,4,9000",])
-def inject_message_size(request):
-    return request.param
-
-@pytest.fixture(scope="module", params=["r:0,4,32",
-                                        "r:0,1024,8192",])
-def direct_message_size(request):
-    return request.param
-
-# TODO: Include 0 byte test when we support 0 byte rma inject
-@pytest.fixture(scope="module", params=["r:1,4,32",
-                                        "r:1,1024,8192",])
-def direct_rma_size(request):
-    return request.param
-
-@pytest.fixture(scope="module", params=["efa", "efa-direct"])
+@pytest.fixture(scope="function")
 def fabric(request):
     return request.param
 
+
 @pytest.fixture(scope="function")
 def rma_fabric(cmdline_args, fabric):
-    if fabric == 'efa-direct' and (
-        not has_rdma(cmdline_args, 'read') or
-        not has_rdma(cmdline_args, 'write') or
-        not has_rdma(cmdline_args, 'writedata')
+    if fabric == "efa-direct" and (
+        not has_rdma(cmdline_args, "read")
+        or not has_rdma(cmdline_args, "write")
+        or not has_rdma(cmdline_args, "writedata")
     ):
         pytest.skip("FI_RMA is not supported. Skip rma tests on efa-direct.")
     return fabric

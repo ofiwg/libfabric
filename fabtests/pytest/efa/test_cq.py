@@ -5,6 +5,7 @@ from efa.efa_common import has_rdma
 # of cq that efa device can support
 @pytest.mark.pr_ci
 @pytest.mark.serial
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.unit
 def test_cq(cmdline_args, fabric):
     from common import UnitTest
@@ -13,6 +14,7 @@ def test_cq(cmdline_args, fabric):
 
 @pytest.mark.pr_ci
 @pytest.mark.functional
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.parametrize("operation_type", ["senddata", "writedata"])
 def test_cq_data(cmdline_args, operation_type, fabric):
     from common import ClientServerTest

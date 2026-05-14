@@ -2,6 +2,7 @@ import pytest
 import copy
 
 @pytest.mark.functional
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 def test_rnr_read_cq_error(cmdline_args, fabric):
     from common import ClientServerTest
 

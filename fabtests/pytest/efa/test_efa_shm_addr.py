@@ -2,6 +2,7 @@ from common import MultinodeTest
 import pytest
 
 
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 def test_efa_shm_addr(cmdline_args, fabric):
     server_id = cmdline_args.server_id
     client_id = cmdline_args.client_id
