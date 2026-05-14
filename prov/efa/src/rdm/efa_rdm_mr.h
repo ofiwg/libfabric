@@ -81,4 +81,34 @@ static inline bool efa_rdm_mr_gen_value_is_valid(uint32_t gen)
 	return (gen != UINT32_MAX);
 }
 
+/**
+ * @brief Capture the gen of each efa_rdm_mr in ope->desc[].
+ *
+ * Must be called after ope->desc[] and ope->iov_count are populated.
+ */
+static inline void efa_rdm_mr_gen_capture_in_ope_desc(struct efa_rdm_ope *ope)
+{
+	struct efa_rdm_mr *efa_rdm_mr;
+	unsigned int i;
+
+	/*
+	 * Skip if descs are not populated yet (app passed NULL, provider
+	 * will fill them later via try_fill_desc), or if the gen was
+	 * already captured on a previous call (prevents re-capture on
+	 * the repost path from overwriting the dispatch-time snapshot).
+	 */
+	if (!ope->desc[0] || efa_rdm_mr_gen_value_is_valid(ope->desc_gen[0]))
+		return;
+
+	for (i = 0; i < ope->iov_count; i++) {
+		/* We statically assert that efa_mr is first member of efa_rdm_mr */
+		efa_rdm_mr = (struct efa_rdm_mr *)ope->desc[i];
+
+		if (!efa_rdm_mr)
+			break;
+
+		ope->desc_gen[i] = efa_rdm_mr->gen;
+	}
+}
+
 #endif /* EFA_RDM_MR_H */

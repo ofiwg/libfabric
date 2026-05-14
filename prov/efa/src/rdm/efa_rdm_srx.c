@@ -38,6 +38,7 @@ void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
 			sizeof(*peer_rxe->desc) * peer_rxe->count);
 	else
 		memset(&rxe->desc[0], 0, sizeof(rxe->desc));
+	efa_rdm_mr_gen_capture_in_ope_desc(rxe);
 
 	rxe->cq_entry.op_context = peer_rxe->context;
 	rxe->peer_rxe = peer_rxe;

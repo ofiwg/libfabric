@@ -54,6 +54,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	} else {
 		memset(txe->desc, 0, sizeof(*txe->desc) * msg->iov_count);
 	}
+	efa_rdm_mr_gen_capture_in_ope_desc(txe);
 
 	/* cq_entry on completion */
 	txe->cq_entry.op_context = msg->context;
@@ -324,6 +325,7 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 			ope->desc[i] = fi_mr_desc(ope->mr[i]);
 		}
 	}
+	efa_rdm_mr_gen_capture_in_ope_desc(ope);
 }
 
 int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *read_iov)
@@ -1621,6 +1623,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 			assert(copied == ope->total_len);
 			(void) copied; /* suppress compiler warning for non-debug build */
 			ope->desc[0] = fi_mr_desc(pkt_entry->mr);
+			efa_rdm_mr_gen_capture_in_ope_desc(ope);
 			ope->iov[0].iov_base = pkt_entry->wiredata + sizeof(struct efa_rdm_rma_context_pkt);
 		}
 
