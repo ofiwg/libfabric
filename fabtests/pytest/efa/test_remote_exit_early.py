@@ -8,24 +8,28 @@ def remote_exit_early_message_size(request):
     # 1M use runtread or longread if rdma read is available
     return request.param
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_remote_exit_early_post_send(cmdline_args, remote_exit_early_message_size):
     test = ClientServerTest(cmdline_args, "fi_efa_rdm_remote_exit_early",
                             message_size=remote_exit_early_message_size)
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_remote_exit_early_post_tagged(cmdline_args, remote_exit_early_message_size):
     test = ClientServerTest(cmdline_args, "fi_efa_rdm_remote_exit_early -o tagged",
                             message_size=remote_exit_early_message_size)
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_remote_exit_early_post_writedata(cmdline_args, remote_exit_early_message_size):
     test = ClientServerTest(cmdline_args, "fi_efa_rdm_remote_exit_early -o writedata",
                             message_size=remote_exit_early_message_size)
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_remote_exit_early_post_rx(cmdline_args, remote_exit_early_message_size):
     test = ClientServerTest(cmdline_args,

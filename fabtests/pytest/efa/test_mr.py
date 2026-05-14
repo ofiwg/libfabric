@@ -4,12 +4,14 @@ import pytest
 from common import UnitTest, has_cuda, has_neuron
 
 
+@pytest.mark.pr_ci
 @pytest.mark.unit
 def test_mr_host(cmdline_args):
     test = UnitTest(cmdline_args, "fi_mr_test")
     test.run()
 
 
+@pytest.mark.pr_ci
 @pytest.mark.unit
 @pytest.mark.short
 def test_mr_hmem(cmdline_args, hmem_type, fabric):

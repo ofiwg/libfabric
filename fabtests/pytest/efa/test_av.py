@@ -1,6 +1,7 @@
 import pytest
 
 # This test skips efa-direct because it requests FI_TAGGED
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_av_xfer(cmdline_args):
     from common import ClientServerTest

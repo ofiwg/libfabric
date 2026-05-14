@@ -3,6 +3,7 @@ import copy
 from efa.efa_common import efa_retrieve_hw_counter_value
 
 # this test must be run in serial mode because it check hw counter
+@pytest.mark.pr_ci
 @pytest.mark.serial
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
