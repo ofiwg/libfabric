@@ -66,33 +66,18 @@ def num_cuda_devices(ip):
 
 
 @functools.lru_cache(10)
-@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def num_neuron_devices(ip):
-    proc = run("ssh {} /opt/aws/neuron/bin/neuron-ls -j".format(ip), shell=True,
-               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-               timeout=60, encoding="utf-8")
-
-    if has_ssh_connection_err_msg(proc.stderr):
-        raise SshConnectionError()
-
-    if proc.returncode !=0:
-        return 0
-
-    return len(json.loads(proc.stdout))
+    from efa.efa_common import get_neuron_ls_output
+    return len(get_neuron_ls_output(ip))
 
 
 @functools.lru_cache(10)
-@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def num_neuron_cores_on_device(ip, device_id):
-    proc = run("ssh {} /opt/aws/neuron/bin/neuron-ls -j".format(ip), shell=True,
-               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-               timeout=60, encoding="utf-8")
-
-    if has_ssh_connection_err_msg(proc.stderr):
-        raise SshConnectionError()
-
-    proc.check_returncode()
-    return json.loads(proc.stdout)[device_id]["nc_count"]
+    from efa.efa_common import get_neuron_ls_output
+    devices = get_neuron_ls_output(ip)
+    if not devices:
+        raise subprocess.CalledProcessError(1, "neuron-ls")
+    return devices[device_id]["nc_count"]
 
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
@@ -509,8 +494,9 @@ class ClientServerTest:
             import efa.efa_common
             if host_memory_type == "cuda":
                 efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, hmem_device_id, num_hmem)
+            elif host_memory_type == "neuron":
+                efa_device = efa.efa_common.get_efa_device_name_for_neuron_core(host_ip, hmem_device_id)
             else:
-                # TODO: Implement topology aware EFA device selection for other accelerators
                 efa_device = efa.efa_common.get_efa_device_name_for_hmem_device(host_ip, hmem_device_id, num_hmem)
             command += " -d {}-rdm".format(efa_device)
 
