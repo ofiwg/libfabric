@@ -303,7 +303,7 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 			domain_attr->caps = hints->caps & FI_OPX_DOMAIN_CAPS;
 		}
 
-		if (hints->mr_mode) {
+		{
 			const int opx_modern_mr_mode = FI_MR_LOCAL | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
 			int supported_mr_mode = FI_OPX_BASE_MR_MODE | opx_modern_mr_mode | FI_MR_ENDPOINT | FI_MR_RAW;
 #ifdef OPX_HMEM
@@ -315,6 +315,8 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 #ifdef OPX_HMEM
 				domain_attr->mr_mode |= FI_MR_HMEM;
 #endif
+			} else if (hints->mr_mode == 0) {
+				domain_attr->mr_mode = 0;
 			} else if (hints->mr_mode & ~supported_mr_mode) {
 				FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN,
 					"Unsupported mr_mode hint 0x%x, supported 0x%x\n", hints->mr_mode,

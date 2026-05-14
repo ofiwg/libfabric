@@ -364,11 +364,7 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 		if (hints->tx_attr->caps) {
 			fi->tx_attr->caps = hints->tx_attr->caps;
 		} else {
-			/* fi->caps is either:
-			   1) The caps value from the fi_info hints->caps structure
-			   2) The OPX defaults, which happens if the fi_info hints->caps is null
-			*/
-			fi->tx_attr->caps = fi->caps;
+			fi->tx_attr->caps = fi->caps & FI_OPX_DEFAULT_TX_CAPS;
 		}
 
 		/* adjust parameters down from what requested if required */
@@ -398,17 +394,13 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 		if (hints->rx_attr->caps) {
 			fi->rx_attr->caps = hints->rx_attr->caps;
 		} else {
-			/* fi->caps is either:
-			   1) The caps value from the fi_info hints->caps structure
-			   2) The OPX defaults, which happens if the fi_info hints->caps is null
-			*/
-			fi->rx_attr->caps = fi->caps;
+			fi->rx_attr->caps = fi->caps & FI_OPX_SUPPORTED_RX_CAPS;
 		}
 
 		/* adjust parameters down from what requested if required */
 		fi->rx_attr->op_flags = hints->rx_attr->op_flags;
 	} else if (hints && hints->caps) {
-		fi->rx_attr->caps = hints->caps & FI_OPX_DEFAULT_RX_CAPS;
+		fi->rx_attr->caps = hints->caps & FI_OPX_SUPPORTED_RX_CAPS;
 	}
 
 	/*
