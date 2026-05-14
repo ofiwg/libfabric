@@ -286,6 +286,7 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 	}
 
 	*domain_attr		   = *fi_opx_global.default_domain_attr;
+	domain_attr->name	   = NULL;
 	domain_attr->data_progress = progress;
 
 #ifdef OPX_ENABLED
