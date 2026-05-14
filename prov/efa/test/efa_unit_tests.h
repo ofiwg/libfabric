@@ -267,6 +267,7 @@ void test_efa_srx_foreach_unspec_skips_other_provider();
 void test_efa_rdm_peer_construct_robuf_failure();
 void test_efa_rnr_queue_and_resend_msg();
 void test_efa_rnr_queue_and_resend_tagged();
+void test_efa_rdm_ep_post_queued_pkts_releases_pkt_on_error();
 
 /* begin of efa_unit_test_ope.c */
 void test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts();
