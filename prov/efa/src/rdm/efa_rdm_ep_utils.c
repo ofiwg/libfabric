@@ -765,6 +765,8 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				/* add the pkt back to pkts, so it can be resent again */
 				dlist_insert_tail(&pkt_entry->entry, pkts);
 				pkt_entry->flags |= EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
+			} else {
+				efa_rdm_pke_release_tx(pkt_entry);
 			}
 
 			return ret;
