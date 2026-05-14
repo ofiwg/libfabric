@@ -1774,3 +1774,48 @@ void test_efa_rdm_mr_gen_bumps_on_close(struct efa_resource **state)
 	free(buf1);
 	free(buf2);
 }
+
+/**
+ * Verify that efa_rdm_mr_gen_check_ope detects a closed MR.
+ * Simulates the queued-before-handshake scenario: an ope captures
+ * desc state at dispatch, the app closes the MR while the ope is
+ * queued, and the gen check catches the mismatch before repost.
+ */
+void test_efa_rdm_mr_gen_check_ope_detects_closed_mr(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+	struct fid_mr *mr = NULL;
+	struct efa_mr *efa_mr;
+	size_t mr_size = 64;
+	void *buf;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	buf = malloc(mr_size);
+	assert_non_null(buf);
+
+	assert_int_equal(fi_mr_reg(resource->domain, buf, mr_size,
+				   FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL), 0);
+	efa_mr = container_of(mr, struct efa_mr, mr_fid);
+
+	/* Simulate dispatch: alloc txe, set desc, capture gen+lkey */
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->iov_count = 1;
+	txe->desc[0] = efa_mr;
+	efa_rdm_mr_gen_capture_in_ope_desc(txe);
+
+	/* Before close: gen check should pass (MR valid) */
+	assert_true(efa_rdm_mr_gen_check_ope(txe));
+
+	/* Close MR (bumps gen) */
+	assert_int_equal(fi_close(&mr->fid), 0);
+
+	/* After close: gen check should detect mismatch (MR invalid) */
+	assert_false(efa_rdm_mr_gen_check_ope(txe));
+
+	/* Clean up */
+	efa_rdm_txe_release(txe);
+	free(buf);
+}
