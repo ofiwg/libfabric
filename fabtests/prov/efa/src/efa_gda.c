@@ -71,7 +71,7 @@ int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 				    &dmabuf_fd, &dmabuf_offset);
 	if (ret) {
 		FT_PRINTERR("ft_hmem_get_dmabuf_fd", -ret);
-		return ret;
+		goto free_buf;
 	}
 
 	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
@@ -84,13 +84,13 @@ int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 				       cq_ext, NULL);
 	if (ret) {
 		FT_PRINTERR("cq_open_ext", -ret);
-		return ret;
+		goto free_buf;
 	}
 
 	ret = efa_gda_ops->query_cq(*cq_ext, &cq_ext_attr);
 	if (ret) {
 		FT_PRINTERR("query_cq", -ret);
-		return ret;
+		goto close_cq;
 	}
 
 	FT_DEBUG("cq_ext %p, cq_ext_attr: buffer %p, entry_size %u, "
@@ -104,6 +104,14 @@ int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 		ret = FI_EINVAL;
 		FT_PRINTERR("efagda_create_cuda_cq", -ret);
 	}
+
+	return ret;
+
+close_cq:
+	fi_close(&(*cq_ext)->fid);
+free_buf:
+	ft_hmem_free(opts.iface, *cq_buffer);
+	*cq_buffer = NULL;
 
 	return ret;
 }
