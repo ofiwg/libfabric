@@ -3083,7 +3083,7 @@ int fi_opx_ep_rx_cancel(struct fi_opx_ep_rx *rx, const uint64_t static_flags, co
 
 			item->byte_counter	      = 0;
 			item->next		      = NULL;
-			item->err_entry.flags	      = item->flags;
+			item->err_entry.flags	      = item->flags | FI_RECV | static_flags;
 			item->err_entry.len	      = 0;
 			item->err_entry.buf	      = 0;
 			item->err_entry.data	      = 0;
