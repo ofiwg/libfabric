@@ -381,8 +381,9 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 			const uint64_t byte_counter = context->byte_counter;
 
 			if (byte_counter == 0) {
-				bool free_context;
-				if (context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV) {
+				bool	       free_context;
+				const uint64_t is_multi_recv = context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV;
+				if (is_multi_recv) {
 					assert(!(context->flags &
 						 (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)));
 
@@ -421,7 +422,7 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 					/* remove the tail */
 					pending_tail = prev;
 				}
-				if (free_context) {
+				if (free_context || is_multi_recv) {
 					OPX_BUF_FREE(context);
 				}
 				context = next;
@@ -443,9 +444,7 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 			output += fi_opx_cq_fill(output, context, format);
 			++num_entries;
 			struct opx_context *next = context->next;
-			if (!(context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV)) {
-				OPX_BUF_FREE(context);
-			}
+			OPX_BUF_FREE(context);
 			context = next;
 		}
 		opx_cq->completed.head = (struct slist_entry *) context;
@@ -563,9 +562,7 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 			output += fi_opx_cq_fill(output, context, format);
 			++num_entries;
 			struct opx_context *next = context->next;
-			if (!(context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV)) {
-				OPX_BUF_FREE(context);
-			}
+			OPX_BUF_FREE(context);
 			context = next;
 		}
 		opx_cq->completed.head = (struct slist_entry *) context;
