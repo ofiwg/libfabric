@@ -982,7 +982,7 @@ void fi_opx_enqueue_completed(struct slist *queue, struct opx_context *context, 
 {
 	assert(!lock_required);
 	assert(context);
-	context->flags &= ~(FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
+	context->flags &= ~(FI_COMPLETION | FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 	slist_insert_tail((struct slist_entry *) context, queue);
 }
 
