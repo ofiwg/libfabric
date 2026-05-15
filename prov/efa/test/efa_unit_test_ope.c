@@ -313,6 +313,8 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	struct efa_rdm_ope *rxe;
 	struct efa_mr cuda_mr = {0};
 	char buf[16];
+	size_t held_before;
+	size_t to_post_before;
 	struct iovec iov = {
 		.iov_base = buf,
 		.iov_len = sizeof buf
@@ -345,12 +347,42 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
+	held_before = efa_rdm_ep->efa_rx_pkts_held;
+	to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
+
 	will_return(efa_mock_efa_rdm_pke_read_return_mock, efa_rdm_pke_read_return);
 
 	assert_int_equal(efa_rdm_rxe_post_local_read_or_queue(rxe, 0, pkt_entry, pkt_entry->payload, 16), efa_rdm_pke_read_return);
 
-	/* Clean up the rx entry no matter what returns */
-	efa_rdm_pke_release_rx(pkt_entry);
+	if (efa_rdm_pke_read_return == FI_SUCCESS) {
+		/* mark_held fired: held++, flag set */
+		struct efa_rdm_pke *context_pkt;
+		struct efa_rdm_ope *txe;
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, held_before + 1);
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before);
+		assert_true(pkt_entry->flags & EFA_RDM_PKE_HELD_BY_PROGRESS);
+
+		/* The internal txe must be live with local_read_pkt_entry set. */
+		assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+		txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+		assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
+		assert_non_null(txe->local_read_pkt_entry);
+
+		txe->local_read_pkt_entry->payload_size = 16;
+		context_pkt = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_tx_pkt_pool, 0);
+		context_pkt->flags |= EFA_RDM_PKE_LOCAL_READ;
+		efa_rdm_pke_handle_rma_completion(context_pkt);
+
+		/* handle_data_copied released the held pkt: held back to baseline, to_post ++ */
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, held_before);
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 1);
+		assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	} else {
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, held_before);
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before);
+		efa_rdm_pke_release_rx(pkt_entry);
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 1);
+	}
 }
 
 void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(struct efa_resource **state)
@@ -370,25 +402,16 @@ void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(struct efa_resource **sta
 
 void test_efa_rdm_rxe_post_local_read_or_queue_happy(struct efa_resource **state)
 {
-	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
-	struct efa_rdm_pke *tx_pkt_entry;
-	struct efa_rdm_ope *txe;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
+	/*
+	 * The impl drives the read-completion handler on success, which
+	 * releases both the held rx pkt and the internal txe. No additional
+	 * cleanup is required here.
+	 */
 	test_efa_rdm_rxe_post_local_read_or_queue_impl(resource, FI_SUCCESS);
-
-	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	/* Now we should have a txe allocated */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list),  1);
-	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
-	assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
-
-	/* We also have a tx pkt allocated inside efa_rdm_ope_read
-	 * and we need to clean it */
-	tx_pkt_entry = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_tx_pkt_pool, 0);
-	efa_rdm_pke_release(tx_pkt_entry);
 }
 
 static
