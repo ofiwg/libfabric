@@ -59,7 +59,7 @@ def parse_lspci_tree(server_id):
     "00.0  Amazon.com, Inc. Elastic Fabric Adapter (EFA)" is the EFA NIC on bus 55, device function 00.0
     """
     timeout = 60
-    result = subprocess.run([f'ssh {server_id}', 'lspci', '-tv'],
+    result = subprocess.run(f"ssh {server_id} lspci -tv",
             shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             encoding="utf-8", timeout=timeout)
@@ -333,7 +333,7 @@ def get_gpu_bdf(server_id, gpu_index):
     timeout = 60
 
     result = subprocess.run(
-        [f'ssh {server_id}', 'nvidia-smi', '--query-gpu=pci.bus_id', '--format=csv,noheader', '--id', str(gpu_index)],
+        f"ssh {server_id} nvidia-smi --query-gpu=pci.bus_id --format=csv,noheader --id {str(gpu_index)}",
             shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             encoding="utf-8", timeout=timeout)
@@ -359,7 +359,7 @@ def get_gpu_bdf(server_id, gpu_index):
 def get_rdma_core_name_for_efa_nic(server_id, bdf):
     timeout = 60
     result = subprocess.run(
-        [f'ssh {server_id}', 'ls', f'/sys/bus/pci/devices/{bdf}/infiniband'],
+        f"ssh {server_id} ls /sys/bus/pci/devices/{bdf}/infiniband",
         shell=True,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         encoding="utf-8", timeout=timeout)
