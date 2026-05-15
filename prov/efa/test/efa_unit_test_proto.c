@@ -349,3 +349,72 @@ void test_proto_eager_construct_pkes_zero_copy(struct efa_resource **state)
 	ofi_buf_free(pke);
 	efa_unit_test_buff_destruct(&send_buff);
 }
+
+/**
+ * @brief Test that a send is queued before handshake and dequeued after
+ * handshake completes when the peer may have zero-copy mode enabled.
+ */
+void test_proto_eager_queue_dequeue_handshake(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_domain *domain;
+	struct efa_rdm_ope *txe;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_cq_tagged_entry cq_entry;
+	int ret;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	efa_unit_test_buff_construct(&send_buff, resource, 64);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	domain = efa_rdm_ep_domain(ep);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	ep->peer_may_have_zcpy_rx = true;
+
+	/* Mock post_send for handshake trigger */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	assert_int_equal(ret, 0);
+
+	/* Verify the OPE is in the queued list */
+	assert_int_equal(ep->ope_queued_before_handshake_cnt, 1);
+	txe = container_of(domain->ope_queued_list.next,
+			   struct efa_rdm_ope, queued_entry);
+	assert_true(dlist_entry_in_list(&txe->queued_entry,
+					&domain->ope_queued_list));
+
+	/* Simulate handshake received */
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	/* Mock post_send for the actual data packet */
+	will_return(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	/* Progress via fi_cq_read which calls efa_domain_progress */
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	/* Verify the OPE was dequeued and sent */
+	assert_int_equal(ep->ope_queued_before_handshake_cnt, 0);
+	assert_true(dlist_empty(&domain->ope_queued_list));
+
+	efa_unit_test_buff_destruct(&send_buff);
+}

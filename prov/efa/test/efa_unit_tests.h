@@ -585,29 +585,24 @@ void test_efa_rdm_rma_partial_post_retry_no_double_free();
 void test_efa_rdm_rma_partial_post_retry_no_double_free_read();
 void test_efa_rdm_msg_send_multi_pkt_sendv_fail_no_inflight();
 /* end efa_unit_test_rdm_rma.c */
-
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)
 {
 	int i = 0;
 	struct dlist_entry *item;
-
 	dlist_foreach(head, item) {
 		i++;
 	}
-
 	return i;
 }
-
 void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr);
-
 /* Protocol TX path tests */
 void test_proto_select_eager_for_small_msg();
 void test_proto_select_eager_for_zero_len_msg();
 void test_proto_select_longread_over_longcts_with_p2p();
 void test_proto_eager_construct_pkes_single_pke();
 void test_proto_eager_construct_pkes_zero_copy();
+void test_proto_eager_queue_dequeue_handshake();
 void test_proto_eager_send_completion_releases_txe();
 void test_proto_eager_assigns_msg_id();
-
 #endif
