@@ -186,6 +186,16 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (!efa_domain)
 		return -FI_ENOMEM;
 
+	/* Initialize srx_lock first so efa_domain_close can always destroy it */
+	use_lock = info->domain_attr &&
+		   ofi_thread_level(info->domain_attr->threading) <= ofi_thread_level(FI_THREAD_COMPLETION);
+	err = ofi_genlock_init(&efa_domain->srx_lock, use_lock ? OFI_LOCK_MUTEX : OFI_LOCK_NOOP);
+	if (err) {
+		EFA_WARN(FI_LOG_DOMAIN, "srx lock init failed! err: %d\n", err);
+		free(efa_domain);
+		return err;
+	}
+
 	/* This list_entry is not the head of the list. But we initialize it
 	 * anyway to prevent a segfault in efa_domain_close.
 	 *
@@ -208,13 +218,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_sz, 0);
 
 	efa_domain->ah_map = NULL;
-
-	use_lock = ofi_thread_level(efa_domain->util_domain.threading) <= ofi_thread_level(FI_THREAD_COMPLETION);
-	ret = ofi_genlock_init(&efa_domain->srx_lock, use_lock ? OFI_LOCK_MUTEX : OFI_LOCK_NOOP);
-	if (ret) {
-		EFA_WARN(FI_LOG_DOMAIN, "srx lock init failed! err: %d\n", ret);
-		goto err_free;
-	}
 
 	efa_domain->util_domain.av_type = FI_AV_TABLE;
 	efa_domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
