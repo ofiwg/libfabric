@@ -78,6 +78,7 @@ struct ft_context *tx_ctx_arr = NULL, *rx_ctx_arr = NULL;
 uint64_t remote_cq_data = 0;
 
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
+uint32_t ft_fiversion = FT_FIVERSION;
 int (*ft_mr_alloc_func)(void);
 uint64_t ft_tag = 0;
 int ft_parent_proc = 0;
@@ -1095,7 +1096,7 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 
 	hints->domain_attr->threading = opts.threading;
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
+	ret = fi_getinfo(ft_fiversion, node, service, flags, hints, info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
@@ -2074,7 +2075,7 @@ static int getaddr(char *node, char *service,
 		return 0;
 	}
 
-	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, &fi);
+	ret = fi_getinfo(ft_fiversion, node, service, flags, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
