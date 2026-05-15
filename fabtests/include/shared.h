@@ -67,6 +67,8 @@ extern "C" {
 #define FT_FIVERSION FI_VERSION(1,21)
 #endif
 
+extern uint32_t ft_fiversion;
+
 #include "ft_osd.h"
 #define OFI_UTIL_PREFIX "ofi_"
 #define OFI_NAME_DELIM ';'
