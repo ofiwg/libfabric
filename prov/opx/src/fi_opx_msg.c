@@ -377,7 +377,7 @@ int fi_opx_init_msg_ops(struct fid_ep *ep, struct fi_info *info)
 		goto err;
 	}
 	if (info->caps & FI_MSG || (info->tx_attr && (info->tx_attr->caps & FI_MSG))) {
-		opx_ep->rx->min_multi_recv = sizeof(union fi_opx_hfi1_packet_payload);
+		opx_ep->rx->min_multi_recv = opx_ep->min_multi_recv;
 	}
 
 	return 0;

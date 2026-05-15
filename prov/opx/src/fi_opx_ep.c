@@ -2568,7 +2568,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	opx_ep->rx =
 		(struct fi_opx_ep_rx *) (((uintptr_t) mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
 	memset(opx_ep->rx, 0, sizeof(struct fi_opx_ep_rx));
-	opx_ep->rx->mem = mem;
+	opx_ep->rx->min_multi_recv = opx_ep->min_multi_recv;
+	opx_ep->rx->mem		   = mem;
 	fi_opx_ref_init(&opx_ep->rx->ref_cnt, 1, "rx context");
 
 	opx_ep->threading = (uint32_t) opx_domain->threading;
@@ -2995,7 +2996,8 @@ static int fi_opx_control_ep(fid_t fid, int command, void *arg)
 
 static int fi_opx_getopt_ep(fid_t fid, int level, int optname, void *optval, size_t *optlen)
 {
-	struct fi_opx_ep *opx_ep = container_of(fid, struct fi_opx_ep, ep_fid);
+	struct fid_ep	 *ep	 = (struct fid_ep *) fid;
+	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	if (level != FI_OPT_ENDPOINT) {
 		return -FI_ENOPROTOOPT;
@@ -3003,7 +3005,7 @@ static int fi_opx_getopt_ep(fid_t fid, int level, int optname, void *optval, siz
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
-		*(size_t *) optval = opx_ep->rx->min_multi_recv;
+		*(size_t *) optval = opx_ep->min_multi_recv;
 		*optlen		   = sizeof(size_t);
 		break;
 	case FI_OPT_CM_DATA_SIZE:
@@ -3019,7 +3021,8 @@ static int fi_opx_getopt_ep(fid_t fid, int level, int optname, void *optval, siz
 
 static int fi_opx_setopt_ep(fid_t fid, int level, int optname, const void *optval, size_t optlen)
 {
-	struct fi_opx_ep *opx_ep = container_of(fid, struct fi_opx_ep, ep_fid);
+	struct fid_ep	 *ep	 = (struct fid_ep *) fid;
+	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	if (level != FI_OPT_ENDPOINT) {
 		return -FI_ENOPROTOOPT;
@@ -3027,7 +3030,10 @@ static int fi_opx_setopt_ep(fid_t fid, int level, int optname, const void *optva
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
-		opx_ep->rx->min_multi_recv = *(size_t *) optval;
+		opx_ep->min_multi_recv = *(size_t *) optval;
+		if (opx_ep->rx) {
+			opx_ep->rx->min_multi_recv = opx_ep->min_multi_recv;
+		}
 		break;
 	case FI_OPT_CUDA_API_PERMITTED:
 		if (!hmem_ops[FI_HMEM_CUDA].initialized) {
@@ -3504,7 +3510,8 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	}
 	opx_ep = (struct fi_opx_ep *) (((uintptr_t) mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
 	memset(opx_ep, 0, sizeof(struct fi_opx_ep));
-	opx_ep->mem = mem;
+	opx_ep->mem	       = mem;
+	opx_ep->min_multi_recv = sizeof(union fi_opx_hfi1_packet_payload);
 
 #ifdef FLIGHT_RECORDER_ENABLE
 	struct flight_recorder *fr = NULL;
