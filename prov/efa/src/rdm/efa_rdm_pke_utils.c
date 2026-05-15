@@ -166,6 +166,7 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 					   rxe->cq_entry.len - segment_offset)) {
 			EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 				bytes_copied[i]);
+			/*TODO: Release pkts at j=i..N-1 (still-alive rxes from other queued messages) and write CQ errors for their rxes.*/
 			return -FI_EIO;
 		}
 
