@@ -488,7 +488,7 @@ struct fi_opx_ep_daos_info {
 struct fi_opx_ep {
 	/* == CACHE LINE 0,1 == */
 	struct fid_ep			   ep_fid; /* 10 qws */
-	uint64_t			   rpc_reserved;
+	uint64_t			   min_multi_recv;
 	struct fi_opx_ep_tx		  *tx;
 	struct fi_opx_ep_rx		  *rx;
 	struct fi_opx_reliability_service *reli_service; /* ONLOAD only */
@@ -1411,9 +1411,12 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 		assert(FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode) == FI_MSG);
 		const uint32_t	    u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, origin_rx);
 		struct opx_context *original_multi_recv_context = context;
-		context = (struct opx_context *) ((uintptr_t) recv_buf - sizeof(struct opx_context));
+		context						= (struct opx_context *) ofi_buf_alloc(rx->ctx_pool);
+		if (OFI_UNLIKELY(context == NULL)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+			abort();
+		}
 
-		assert((((uintptr_t) context) & 0x07) == 0);
 		context->flags =
 			FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode);
 		context->buf		    = recv_buf;
@@ -1486,7 +1489,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 						   rbuf);
 		}
 
-		uint64_t bytes_consumed = ((xfer_len + 8) & (~0x07ull)) + sizeof(struct opx_context);
+		uint64_t bytes_consumed = ((xfer_len + 7) & (~0x07ull));
 		original_multi_recv_context->len -= bytes_consumed;
 		original_multi_recv_context->byte_counter++;	       // re-using the byte counter as a "pending flag"
 		original_multi_recv_context->tag = (uintptr_t) opx_ep; // re-using tag to store the ep
@@ -1690,8 +1693,11 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			}
 
 			struct opx_context *original_multi_recv_context = context;
-			context = (struct opx_context *) ((uintptr_t) recv_buf - sizeof(struct opx_context));
-			assert((((uintptr_t) context) & 0x07) == 0);
+			context = (struct opx_context *) ofi_buf_alloc(rx->ctx_pool);
+			if (OFI_UNLIKELY(context == NULL)) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+				abort();
+			}
 
 			context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV |
 					 FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode);
@@ -1703,8 +1709,7 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			context->byte_counter	    = 0;
 			context->next		    = NULL;
 
-			/* the next 'fi_opx_context' must be 8-byte aligned */
-			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(struct opx_context);
+			uint64_t bytes_consumed = ((send_len + 7) & (~0x07ull));
 			original_multi_recv_context->len -= bytes_consumed;
 			original_multi_recv_context->buf =
 				(void *) ((uintptr_t) (original_multi_recv_context->buf) + bytes_consumed);
@@ -1861,8 +1866,11 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 
 			struct opx_context *original_multi_recv_context = context;
 
-			context = (struct opx_context *) ((uintptr_t) recv_buf - sizeof(struct opx_context));
-			assert((((uintptr_t) context) & 0x07) == 0);
+			context = (struct opx_context *) ofi_buf_alloc(rx->ctx_pool);
+			if (OFI_UNLIKELY(context == NULL)) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory.\n");
+				abort();
+			}
 			context->flags = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV |
 					 FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode);
 			context->buf		    = recv_buf;
@@ -1887,8 +1895,7 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 				}
 			}
 
-			/* the next 'fi_opx_context' must be 8-byte aligned */
-			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(struct opx_context);
+			uint64_t bytes_consumed = ((send_len + 7) & (~0x07ull));
 			original_multi_recv_context->len -= bytes_consumed;
 			original_multi_recv_context->buf =
 				(void *) ((uintptr_t) (original_multi_recv_context->buf) + bytes_consumed);
@@ -3896,7 +3903,7 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 	context->src_addr	      = (rx_caps & FI_DIRECTED_RECV) ? src_addr : FI_ADDR_UNSPEC;
 	context->tag		      = tag;
 	context->ignore		      = ignore;
-	context->byte_counter	      = (uint64_t) -1;
+	context->byte_counter	      = (rx_op_flags & FI_MULTI_RECV) ? 0 : (uint64_t) -1;
 
 	struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &context->hmem_info_qws[0];
 	hmem_info->is_unified		   = desc ? ((struct fi_opx_mr *) desc)->hmem_unified : 0;
@@ -3927,9 +3934,8 @@ ssize_t fi_opx_ep_rx_recv_internal(struct fi_opx_ep *opx_ep, void *buf, size_t l
 		hmem_info->iface	       = FI_HMEM_SYSTEM;
 		hmem_info->gpu.device	       = 0UL;
 		hmem_info->hmem_dev_reg_handle = OPX_HMEM_NO_HANDLE;
-		fi_opx_ep_rx_process_context(opx_ep, static_flags, context,
-					     0, // rx_op_flags
-					     OPX_HMEM_FALSE, lock_required, reliability, hfi1_type);
+		fi_opx_ep_rx_process_context(opx_ep, static_flags, context, rx_op_flags & FI_MULTI_RECV, OPX_HMEM_FALSE,
+					     lock_required, reliability, hfi1_type);
 	}
 
 	OPX_TRACE_RX_END_SUCCESS(OPX_TRACE_EVENT_RX_POST_RECV, len, tag);
@@ -3982,10 +3988,10 @@ static inline ssize_t fi_opx_ep_rx_recvmsg_internal(struct fi_opx_ep *opx_ep, co
 			base = (void *) new_base;
 		}
 		assert(((uintptr_t) base & 0x07ull) == 0);
-		assert(len >= (sizeof(struct opx_context) + opx_ep->rx->min_multi_recv));
+		assert(len >= opx_ep->rx->min_multi_recv);
 		context->flags		  = FI_MULTI_RECV;
-		context->len		  = len - sizeof(struct opx_context);
-		context->buf		  = (void *) ((uintptr_t) base + sizeof(struct opx_context));
+		context->len		  = len;
+		context->buf		  = base;
 		context->src_addr	  = msg->addr;
 		context->byte_counter	  = 0;
 		context->ignore		  = (uint64_t) -1;
