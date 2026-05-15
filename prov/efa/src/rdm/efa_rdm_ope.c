@@ -70,6 +70,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 		tx_op_flags &= ~FI_COMPLETION;
 	txe->fi_flags = fi_flags | tx_op_flags;
 	txe->bytes_runt = 0;
+	txe->local_read_pkt_entry = NULL;
 	dlist_init(&txe->entry);
 
 	switch (op) {
