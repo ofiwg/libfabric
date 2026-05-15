@@ -37,6 +37,7 @@
 
 #include <stdlib.h>
 #include <inttypes.h>
+#include <time.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
 #include <stdbool.h>
@@ -375,8 +376,9 @@ static inline int ft_use_size(int index, int enable_flags)
 #define FT_LOG(level, fmt, ...)						\
 	do {								\
 		int saved_errno = errno;				\
-		fprintf(stderr, "[%s] fabtests:%s:%d: " fmt "\n",	\
-			level, __FILE__, __LINE__, ##__VA_ARGS__);	\
+		fprintf(stderr, "[%s] %ld:fabtests:%s:%d: " fmt "\n",	\
+			level, (long)time(NULL), __FILE__,		\
+			__LINE__, ##__VA_ARGS__);			\
 		errno = saved_errno;					\
 	} while (0)
 
