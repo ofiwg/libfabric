@@ -399,8 +399,19 @@ As of libfabric 2.6, the following features/requests has been baselined:
 - **Delivery complete (ID 1)**: Baseline since 2.6. The handshake requirement for DC packets
   has been removed from the send, write, and atomic paths. See section 4.2.
 
-The remaining extra features and requests are candidates for the same transition in future
-releases.
+- **Connid header (ID 3)**: Baseline since 2.6. The endpoint always includes connid in
+  packet headers after handshake without checking the peer's `extra_info`. See section 4.4.
+
+- **Runt protocol (ID 4)**: Baseline since 2.6. The handshake requirement for RUNTCTS
+  packets has been removed. RUNTREAD packets still require a handshake for RDMA read
+  hardware verification. See section 4.5.
+
+- **Read nack (ID 6)**: Baseline since 2.6. READ_NACK packets can always be sent without
+  checking the peer's handshake status. See section 4.7.
+
+The remaining extra features (RDMA read, RDMA write, unsolicited write recv) depend on
+peer hardware capabilities and cannot be baselined — a handshake is still required to
+verify the peer's device supports them.
 
 This concludes the workflow of the handshake subprotocol.
 
