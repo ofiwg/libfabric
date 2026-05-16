@@ -326,7 +326,7 @@ Table: 2.1 a list of extra features/requests
 | 1  | delivery complete                | extra feature | libfabric 1.12.0 | Section 4.2 _(baseline since 2.6)_ |
 | 2  | keep packet header length constant | extra request | libfabric 1.13.0 | Section 4.3 |
 | 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 _(baseline since 2.6)_ |
-| 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 |
+| 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 _(baseline since 2.6)_ |
 | 5  | RDMA-Write based data transfer   | extra feature | libfabric 1.18.0 | Section 4.6 |
 | 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 |
 | 7  | User recv QP            | extra feature & request| libfabric 1.22.0 | _(legacy, see Section 4.8)_ |
@@ -1488,6 +1488,12 @@ the CONNID_HDR flag in the `flags` field of the base header. The exact location 
 each packet type.
 
 ### 4.5 Runting read message subprotocol
+
+**Since libfabric 2.6, the runt protocol is treated as a baseline feature. All supported
+peers (v2.0+) support it, so a handshake is no longer required before sending runt packets.
+The `EFA_RDM_EXTRA_FEATURE_RUNT` flag is still advertised in `extra_info` for backwards
+compatibility with v2.0 peers that check for it. Note that RUNTREAD packets still require
+a handshake to verify RDMA read hardware support.**
 
 The "runting read message protocol support" extra feature was introduced with the libfabric 1.16.0 release (together with the runting read message subprotocol) and was assigned the ID 4.
 
