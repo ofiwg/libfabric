@@ -325,7 +325,7 @@ Table: 2.1 a list of extra features/requests
 | 0  | RDMA-Read based data transfer    | extra feature | libfabric 1.10.0 | Section 4.1 |
 | 1  | delivery complete                | extra feature | libfabric 1.12.0 | Section 4.2 _(baseline since 2.6)_ |
 | 2  | keep packet header length constant | extra request | libfabric 1.13.0 | Section 4.3 |
-| 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 |
+| 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 _(baseline since 2.6)_ |
 | 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 |
 | 5  | RDMA-Write based data transfer   | extra feature | libfabric 1.18.0 | Section 4.6 |
 | 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 |
@@ -1446,6 +1446,12 @@ receiving endpoint has for the sender. Therefore, it was re-interpreted as an ex
 This re-interpretation does not change the implementation, and thus, it does not cause backward incompatibility.
 
 ### 4.4 Have connection ID in packet header (connid header)
+
+**Since libfabric 2.6, the connid header request is treated as a baseline request. All supported
+peers (v2.0+) request it, so the local endpoint always includes connid in packet headers after
+handshake without checking the peer's `extra_info`. The `EFA_RDM_EXTRA_REQUEST_CONNID_HEADER`
+flag is still advertised in `extra_info` for backwards compatibility with v2.0 peers that
+check for it.**
 
 The "have connection ID in packet header" extra request was introduced with the libfabric 1.14.0 release and was
 assigned the ID 3.
