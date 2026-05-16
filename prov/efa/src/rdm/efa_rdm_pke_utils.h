@@ -184,31 +184,22 @@ efa_rdm_pke_post_remote_read_or_nack(struct efa_rdm_ep *ep,
 	p2p_avail = err;
 	if (p2p_avail) {
 		err = efa_rdm_ope_post_remote_read_or_queue(rxe);
-	} else if (ep->homogeneous_peers || efa_rdm_peer_support_read_nack(rxe->peer)) {
+	} else {
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Receiver sending long read "
 			 "NACK packet because P2P is not available, "
 			 "unable to post RDMA read.\n");
 		goto send_nack;
-	} else {
-		EFA_INFO(FI_LOG_EP_CTRL, "P2P is not available, "
-					 "unable to post RDMA read.\n");
-		return -FI_EOPNOTSUPP;
 	}
 
+	/* If posting RDMA read fails becaue we've exhausted MRs, fall back to
+	 * read NACK */
 	if (err == -FI_ENOMR) {
-		if (ep->homogeneous_peers || efa_rdm_peer_support_read_nack(rxe->peer)) {
-			EFA_INFO(FI_LOG_EP_CTRL, "Receiver sending long read "
-						 "NACK packet because memory "
-						 "registration limit was "
-						 "reached on the receiver.\n");
-			goto send_nack;
-		} else {
-			/* Peer does not support the READ_NACK packet. So we
-			 * return EAGAIN and hope that the app runs progress
-			 * again which will free some MR registrations */
-			return -FI_EAGAIN;
-		}
+		EFA_INFO(FI_LOG_EP_CTRL, "Receiver sending long read "
+					 "NACK packet because memory "
+					 "registration limit was "
+					 "reached on the receiver.\n");
+		goto send_nack;
 	}
 
 	return err;

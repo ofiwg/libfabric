@@ -177,15 +177,6 @@ bool efa_rdm_peer_support_unsolicited_write_recv(struct efa_rdm_peer *peer)
 	       (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV);
 }
 
-static inline
-bool efa_rdm_peer_support_read_nack(struct efa_rdm_peer *peer)
-{
-	/* EFA_RDM_READ_NACK_PKT introduced in Libfabric 1.20
-	 */
-	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_READ_NACK);
-}
-
 /**
  * @brief determines whether a peer needs the endpoint to include
  * raw address int the req packet header.

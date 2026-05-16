@@ -328,7 +328,7 @@ Table: 2.1 a list of extra features/requests
 | 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 _(baseline since 2.6)_ |
 | 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 _(baseline since 2.6)_ |
 | 5  | RDMA-Write based data transfer   | extra feature | libfabric 1.18.0 | Section 4.6 |
-| 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 |
+| 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 _(baseline since 2.6)_ |
 | 7  | User recv QP            | extra feature & request| libfabric 1.22.0 | _(legacy, see Section 4.8)_ |
 | 8  | Unsolicited write recv  | extra feature | libfabric 1.22.0 | Section 4.9 |
 
@@ -1554,6 +1554,11 @@ in order to support CQ entry generation in case the sender uses
 
 
 ### 4.7 Long read and runting read nack protocol
+
+**Since libfabric 2.6, the read nack protocol is treated as a baseline feature. All supported
+peers (v2.0+) support it, so a READ_NACK packet can always be sent without checking the
+peer's handshake status or `extra_info`. The `EFA_RDM_EXTRA_FEATURE_READ_NACK` flag is still
+advertised in `extra_info` for backwards compatibility with v2.0 peers that check for it.**
 
 Long read and runting read protocols in Libfabric 1.20 and above use a nack protocol
 when the receiver is unable to register a memory region for the RDMA read operation 
