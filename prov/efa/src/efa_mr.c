@@ -60,6 +60,11 @@ int efa_mr_regattr_validate(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EBADFLAGS;
 	}
 
+	if ((flags & FI_MR_DMABUF) && !attr->dmabuf) {
+		EFA_WARN(FI_LOG_MR, "FI_MR_DMABUF set but dmabuf is NULL\n");
+		return -FI_EINVAL;
+	}
+
 	if (attr->iov_count > EFA_MR_IOV_LIMIT) {
 		EFA_WARN(FI_LOG_MR, "iov count > %d not supported\n",
 			 EFA_MR_IOV_LIMIT);
@@ -308,10 +313,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 
 	/* Explicit dmabuf registration */
 	if (flags & FI_MR_DMABUF) {
-		if (!mr_attr->dmabuf) {
-			EFA_WARN(FI_LOG_MR, "FI_MR_DMABUF set but mr_attr->dmabuf == NULL\n");
-			return NULL;
-		}
+        assert(mr_attr->dmabuf);
 
 		EFA_INFO(FI_LOG_MR,
 			 "FI_MR_DMABUF: fd=%d offset=%lu len=%zu\n",
