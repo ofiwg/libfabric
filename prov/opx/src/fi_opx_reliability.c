@@ -2014,20 +2014,25 @@ static void fi_opx_reliability_model_init_9B(struct fi_opx_reliability_service *
 		service->ping_model_9B[tx_index].hdr.kdeth.hcrc	  = 0;
 		service->ping_model_9B[tx_index].hdr.kdeth.unused = 0;
 
-		/* Bake primary_lid into QW[3] spare bits so reliability
-		 * responses can be routed back to the sender's primary plane */
-		service->ping_model_9B[tx_index].hdr.qw_9B[2] |= FI_OPX_PKT_PRIMARY_LID_TO_QW3(primary_lid);
-
 		/* reliability service */
 		union opx_hfi1_packet_hdr *hdr = &service->ping_model_9B[tx_index].hdr;
 
 		hdr->ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING;
 
+		/* Write service struct fields BEFORE ORing primary_lid into QW[3].
+		 * origin_reliability_subctxt_rx occupies QW[3] bits [47:32]; a plain
+		 * struct assignment would zero bits [39:32], clobbering primary_lid[11:7]
+		 * which FI_OPX_PKT_PRIMARY_LID_TO_QW3 places at bits [39:35]. */
 		hdr->service.origin_reliability_subctxt_rx = service->subctxt_rx;
 		hdr->service.key_dw_suffix		   = 0;
 		hdr->service.psn_count			   = 0;
 		hdr->service.psn_start			   = 0;
 		hdr->service.key			   = 0;
+
+		/* Bake primary_lid into QW[3] spare bits so reliability
+		 * responses can be routed back to the sender's primary plane.
+		 * Must come AFTER service struct writes to avoid clobbering. */
+		service->ping_model_9B[tx_index].hdr.qw_9B[2] |= FI_OPX_PKT_PRIMARY_LID_TO_QW3(primary_lid);
 
 		OPX_DEBUG_PRINT_HDR((hdr), hfi1_type);
 
@@ -2103,18 +2108,21 @@ static void fi_opx_reliability_model_init_16B(struct fi_opx_reliability_service 
 	service->ping_model_16B[tx_index].hdr.kdeth.hcrc   = 0;
 	service->ping_model_16B[tx_index].hdr.kdeth.unused = 0;
 
-	service->ping_model_16B[tx_index].hdr.qw_16B[3] |= FI_OPX_PKT_PRIMARY_LID_TO_QW3(primary_lid);
-
 	/* reliability service */
 	union opx_hfi1_packet_hdr *hdr = &service->ping_model_16B[tx_index].hdr;
 
 	hdr->ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING;
 
+	/* Write service struct fields BEFORE ORing primary_lid into QW[3].
+	 * See fi_opx_reliability_model_init_9B for ordering rationale. */
 	hdr->service.origin_reliability_subctxt_rx = service->subctxt_rx;
 	hdr->service.key_dw_suffix		   = 0;
 	hdr->service.psn_count			   = 0;
 	hdr->service.psn_start			   = 0;
 	hdr->service.key			   = 0;
+
+	/* Must come AFTER service struct writes to avoid clobbering primary_lid[11:7]. */
+	service->ping_model_16B[tx_index].hdr.qw_16B[3] |= FI_OPX_PKT_PRIMARY_LID_TO_QW3(primary_lid);
 
 	OPX_DEBUG_PRINT_HDR((hdr), hfi1_type);
 
@@ -3087,7 +3095,8 @@ void fi_opx_hfi1_rx_reliability_resynch(struct fid_ep *ep, struct fi_opx_reliabi
 
 		/* Send ack to notify the remote ep that the resynch was completed */
 		fi_opx_hfi1_tx_reliability_inject_shm(
-			ep, rx_key.value, tx_key.dlid, hdr->service.origin_reliability_subctxt_rx, (uint8_t) hfi_unit,
+			ep, rx_key.value, tx_key.dlid,
+			hdr->service.origin_reliability_subctxt_rx & OPX_SERVICE_SUBCTXT_RX_MASK, (uint8_t) hfi_unit,
 			origin_reliability_rx, FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK);
 
 		return;

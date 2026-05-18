@@ -129,15 +129,15 @@ static void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep, const union opx
 		ping_op->psn_count_coalesce = MAX(ping_op->psn_count_coalesce, psn_count);
 	} else {
 		// Send the first ACK/NACK right away, it might be an RMA fence event
-		fi_opx_hfi1_rx_reliability_ping(&opx_ep->ep_fid, service, &lookup_key.flow_key, psn_count,
-						hdr->service.psn_start, slid,
-						hdr->service.origin_reliability_subctxt_rx);
+		fi_opx_hfi1_rx_reliability_ping(
+			&opx_ep->ep_fid, service, &lookup_key.flow_key, psn_count, hdr->service.psn_start, slid,
+			hdr->service.origin_reliability_subctxt_rx & OPX_SERVICE_SUBCTXT_RX_MASK);
 
 		ping_op = ofi_buf_alloc(service->rx.pending_rx_reliability_pool);
 		if (ping_op) {
-			ping_op->ud_opcode	    = hdr->ud.opcode & FI_OPX_HFI_UD_OPCODE_MASK;
-			ping_op->slid		    = slid;
-			ping_op->subctxt_rx	    = hdr->service.origin_reliability_subctxt_rx;
+			ping_op->ud_opcode  = hdr->ud.opcode & FI_OPX_HFI_UD_OPCODE_MASK;
+			ping_op->slid	    = slid;
+			ping_op->subctxt_rx = hdr->service.origin_reliability_subctxt_rx & OPX_SERVICE_SUBCTXT_RX_MASK;
 			ping_op->key.flow_key	    = lookup_key.flow_key;
 			ping_op->psn_count	    = psn_count;
 			ping_op->psn_count_coalesce = 0;
@@ -196,8 +196,9 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_
 #ifdef OPX_DAOS
 		case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH:
 			fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service,
-							   hdr->service.origin_reliability_subctxt_rx, hdr,
-							   OPX_IS_CTX_SHARING_ENABLED);
+							   hdr->service.origin_reliability_subctxt_rx &
+								   OPX_SERVICE_SUBCTXT_RX_MASK,
+							   hdr, OPX_IS_CTX_SHARING_ENABLED);
 			break;
 		case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK:
 			fi_opx_hfi1_rx_reliability_ack_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service,
@@ -876,7 +877,8 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 				     "================ SHM received a packet from %u Segment (%s)\n",
 				     opx_ep->daos_info.rank, opx_ep->rx->shm.segment_key);
 		} else {
-			origin_reliability_rx = hdr->service.origin_reliability_subctxt_rx;
+			origin_reliability_rx =
+				hdr->service.origin_reliability_subctxt_rx & OPX_SERVICE_SUBCTXT_RX_MASK;
 		}
 
 		if (opcode == FI_OPX_HFI_BTH_OPCODE_UD) {

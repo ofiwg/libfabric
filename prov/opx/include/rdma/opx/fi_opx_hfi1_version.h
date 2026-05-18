@@ -128,6 +128,11 @@
 #define OPX_BTH_SUBCTXT_RX_SHIFT 48
 #define OPX_BTH_SUBCTXT_RX_MASK	 0xFF07
 
+/* Mask for origin_reliability_subctxt_rx in service (ping/ack/nack) headers.
+ * Same bit layout as OPX_BTH_SUBCTXT_RX_MASK: bits [15:8] and [2:0] are valid,
+ * bits [7:3] are spare in the 16-bit field and must be masked out on read. */
+#define OPX_SERVICE_SUBCTXT_RX_MASK OPX_BTH_SUBCTXT_RX_MASK
+
 #define OPX_BTH_INJECT_MSG_LENGTH(_val)	   ((_val >> 3) & 0x1F)
 #define OPX_BTH_SEND_XFER_BYTES_TAIL(_val) ((_val >> 3) & 0x1F)
 
