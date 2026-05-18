@@ -55,6 +55,7 @@
 #include "rdma/opx/fi_opx_domain.h"
 #include "opx_hmem_cache.h"
 #include "rdma/opx/fi_opx_hmem.h"
+#include "rdma/opx/opx_hfisvc_poll.h"
 #include <ofi_iov.h>
 
 /* Structure overview

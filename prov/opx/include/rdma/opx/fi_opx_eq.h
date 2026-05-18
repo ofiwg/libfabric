@@ -42,6 +42,7 @@
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/opx_hfisvc.h"
+#include "rdma/opx/opx_hfisvc_poll.h"
 #include "rdma/opx/opx_tracer.h"
 
 /* Macro indirection in order to support other macros as arguments
