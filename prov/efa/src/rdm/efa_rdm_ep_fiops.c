@@ -725,9 +725,26 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
+	struct efa_rdm_peer_overflow_pke_list_entry *overflow_pke_list_entry;
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *av_entry;
 	struct efa_conn_ep_peer_map_entry *peer_map_entry;
+
+	/*
+	 * Overflow pkes sit on both peer->overflow_pke_list and (in debug mode) rx_pkt_list.
+	 * Release them before: rx_pkt_list debug sweep & efa_rdm_peer_destruct to avoid a double-free.
+	 */
+	dlist_foreach_container(&efa_rdm_ep->ep_peer_list,
+				struct efa_rdm_peer, peer,
+				ep_peer_list_entry) {
+		dlist_foreach_container_safe(&peer->overflow_pke_list,
+					     struct efa_rdm_peer_overflow_pke_list_entry,
+					     overflow_pke_list_entry, entry, tmp) {
+			dlist_remove(&overflow_pke_list_entry->entry);
+			efa_rdm_pke_release_rx_list(overflow_pke_list_entry->pkt_entry);
+			ofi_buf_free(overflow_pke_list_entry);
+		}
+	}
 
 #if ENABLE_DEBUG
 	struct efa_rdm_pke *pkt_entry;
