@@ -79,6 +79,7 @@ struct efa_env {
 	 * operations still reference an MR when it is closed.
 	 */
 	int track_mr;
+	int state_dump_signal;
 };
 
 extern struct efa_env efa_env;

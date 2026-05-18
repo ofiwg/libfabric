@@ -7,6 +7,7 @@
 #include "efa_prov.h"
 #include "efa_prov_info.h"
 #include "efa_env.h"
+#include "rdm/efa_rdm_ep_dump.h"
 
 #ifndef _WIN32
 
@@ -242,6 +243,8 @@ EFA_INI
 
 	ofi_mutex_init(&g_efa_domain_list_lock);
 	dlist_init(&g_efa_domain_list);
+
+	efa_rdm_dump_init();
 
 	return &efa_prov;
 
