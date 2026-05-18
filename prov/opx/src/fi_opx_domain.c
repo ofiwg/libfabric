@@ -52,6 +52,7 @@
 
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/opx_hfisvc.h"
+#include "rdma/opx/opx_hfisvc_poll.h"
 
 #define OPX_DOMAIN_HFISVC_NOT_INITIALIZED (0x7FFFFFFFFFFFFFFEll)
 
@@ -605,9 +606,6 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	opx_domain->tx_count = 0;
 	opx_domain->ep_count = 0;
 
-	/* Mark hfi_local_info "undefined"; populated when the first
-	 * endpoint opens its HFI context. Values match the startup
-	 * initialization of fi_opx_global.hfi_local_info in fi_opx_init.c. */
 	memset(&opx_domain->hfi_local_info, 0, sizeof(opx_domain->hfi_local_info));
 	opx_domain->hfi_local_info.local_lids_size  = 0;
 	opx_domain->hfi_local_info.sw_type	    = OPX_HFI1_UNDEF;

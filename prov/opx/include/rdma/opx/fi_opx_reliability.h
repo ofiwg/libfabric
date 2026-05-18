@@ -334,7 +334,7 @@ struct fi_opx_reliability_tx_replay {
 	uint8_t data[];
 } __attribute__((__aligned__(64)));
 
-#define OPX_REPLAY_HDR(_replay) OPX_REPLAY_HDR_TYPE(_replay, OPX_SW_HFI1_TYPE)
+#define OPX_REPLAY_HDR(_replay, _hfi1_type) OPX_REPLAY_HDR_TYPE(_replay, _hfi1_type)
 
 #define OPX_REPLAY_HDR_TYPE(_replay, _hfi1_type)                                              \
 	((_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ? (&((_replay)->scb.scb_9B.hdr)) : \
@@ -441,12 +441,13 @@ void fi_opx_rbt_key_value(RbtHandle h, RbtIterator it, void **key, void **val)
 /*
  * Initialize the reliability service
  */
-void fi_opx_reliability_service_init(struct fi_opx_reliability_service *service, struct fi_opx_hfi1_context *hfi1,
+void fi_opx_reliability_service_init(struct fi_opx_domain *domain, struct fi_opx_reliability_service *service,
+				     struct fi_opx_hfi1_context *hfi1,
 				     void (*process_fn)(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 							const uint8_t *const payload),
 				     const enum ofi_reliability_kind reliability_kind);
-void fi_opx_reliability_model_init_plane(struct fi_opx_reliability_service *service, struct fi_opx_hfi1_context *hfi1,
-					 unsigned tx_index, opx_lid_t primary_lid);
+void fi_opx_reliability_model_init_plane(struct fi_opx_domain *domain, struct fi_opx_reliability_service *service,
+					 struct fi_opx_hfi1_context *hfi1, unsigned tx_index, opx_lid_t primary_lid);
 void fi_opx_reliability_service_fini(struct fi_opx_reliability_service *service);
 
 void fi_reliability_service_ping_remote(struct fid_ep *ep, struct fi_opx_reliability_service *service);
@@ -683,7 +684,8 @@ void dump_ping_counts();
 #endif
 
 __OPX_FORCE_INLINE__
-size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_reliability_tx_replay *replay)
+size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_domain		      *domain,
+						  struct fi_opx_reliability_tx_replay *replay)
 {
 	if (replay->use_iov) {
 		return replay->iov->iov_len;
@@ -691,7 +693,7 @@ size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_reliability_tx_r
 
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	/* Inlined but called from non-inlined functions with no const hfi1 type, so just use the runtime check */
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_SW_HFI1_TYPE(domain) & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		const uint16_t lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
 		const size_t   total_bytes   = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
 		return (total_bytes - sizeof(struct fi_opx_hfi1_stl_packet_hdr_9B));

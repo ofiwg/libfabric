@@ -448,8 +448,7 @@ err:
 	return -errno;
 }
 
-extern enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep);
-void				 fi_opx_cq_finalize_ops(struct fid_ep *ep)
+void fi_opx_cq_finalize_ops(struct fid_ep *ep)
 {
 	struct fi_opx_ep *opx_ep = (struct fi_opx_ep *) ep;
 	struct fi_opx_cq *opx_cq = opx_ep->rx->cq;
@@ -458,7 +457,7 @@ void				 fi_opx_cq_finalize_ops(struct fid_ep *ep)
 		opx_cq->cq_fid.ops = fi_opx_cq_select_ops(
 			opx_cq->format, opx_cq->domain->threading, fi_opx_select_reliability(opx_ep),
 			opx_ep->hfi->info.rxe.hdrq.elemcnt, opx_cq->ep_comm_caps, opx_cq->domain->data_progress,
-			OPX_SW_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
+			OPX_SW_HFI1_TYPE(opx_cq->domain), OPX_IS_CTX_SHARING_ENABLED);
 	}
 
 	if (opx_ep->tx->cq && (opx_ep->tx->cq != opx_ep->rx->cq)) {
@@ -466,7 +465,7 @@ void				 fi_opx_cq_finalize_ops(struct fid_ep *ep)
 		opx_cq->cq_fid.ops = fi_opx_cq_select_ops(
 			opx_cq->format, opx_cq->domain->threading, fi_opx_select_reliability(opx_ep),
 			opx_ep->hfi->info.rxe.hdrq.elemcnt, opx_cq->ep_comm_caps, opx_cq->domain->data_progress,
-			OPX_SW_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
+			OPX_SW_HFI1_TYPE(opx_cq->domain), OPX_IS_CTX_SHARING_ENABLED);
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "(end)\n");

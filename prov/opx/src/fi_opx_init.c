@@ -1060,25 +1060,6 @@ OPX_INI
 	fi_opx_global.prov		    = &fi_opx_provider;
 	fi_opx_global.daos_hfi_rank_hashmap = NULL;
 
-	memset(&fi_opx_global.hfi_local_info, 0, sizeof(fi_opx_global.hfi_local_info));
-
-	fi_opx_global.hfi_local_info.local_lids_size  = 0;
-	fi_opx_global.hfi_local_info.sw_type	      = OPX_HFI1_UNDEF;
-	fi_opx_global.hfi_local_info.hw_type	      = OPX_HFI1_UNDEF;
-	fi_opx_global.hfi_local_info.sim_rctxt_fd     = -1;
-	fi_opx_global.hfi_local_info.sim_sctxt_fd     = -1;
-	fi_opx_global.hfi_local_info.lid[0]	      = (opx_lid_t) 0;
-	fi_opx_global.hfi_local_info.lid[1]	      = (opx_lid_t) 0;
-	fi_opx_global.hfi_local_info.hfi_unit[0]      = (uint8_t) -1U;
-	fi_opx_global.hfi_local_info.hfi_unit[1]      = (uint8_t) -1U;
-	fi_opx_global.hfi_local_info.sriov	      = false;
-	fi_opx_global.hfi_local_info.port_loopback    = false;
-	fi_opx_global.hfi_local_info.hairpin_loopback = false;
-	fi_opx_global.hfi_local_info.multi_hfi	      = false;
-	fi_opx_global.hfi_local_info.lid_path_mask    = 0;
-	fi_opx_global.hfi_local_info.lid_mask	      = 0xFFFFFFFFu;
-	fi_opx_global.hfi_local_info.neighbor_type    = OPX_NEIGHBOR_UNKNOWN;
-
 	fi_opx_global.pkt_size = OPX_HFI1_DEFAULT_PKT_SIZE;
 
 	fi_opx_init = 1;

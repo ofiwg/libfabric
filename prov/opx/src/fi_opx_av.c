@@ -190,9 +190,14 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 					 */
 					if (opx_addr[t].tx_index == 1) {
 						int fwd_is_shm = opx_lid_is_shm(
-							OPX_LID_PLANE_KEY(input[n].planes[OPX_PRIMARY_PLANE].lid, 1));
-						int rev_is_shm = opx_lid_is_shm(OPX_LID_PLANE_KEY(
-							input[n].planes[opx_addr[t].tx_index].lid, 0));
+							ep->domain,
+							OPX_LID_PLANE_KEY(ep->domain,
+									  input[n].planes[OPX_PRIMARY_PLANE].lid, 1));
+						int rev_is_shm = opx_lid_is_shm(
+							ep->domain,
+							OPX_LID_PLANE_KEY(ep->domain,
+									  input[n].planes[opx_addr[t].tx_index].lid,
+									  0));
 
 						if (fwd_is_shm != rev_is_shm) {
 							/* Future: Add a env variable to select secondary plane and

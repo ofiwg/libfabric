@@ -145,45 +145,46 @@ void opx_cacheline_store_block(uint64_t dest[restrict 8], const uint64_t source[
 }
 
 __OPX_FORCE_INLINE__
-void opx_cacheline_store_block_vol(volatile uint64_t dest[restrict 8], const uint64_t source[restrict 8])
+void opx_cacheline_store_block_vol(struct fi_opx_domain *domain, volatile uint64_t dest[restrict 8],
+				   const uint64_t source[restrict 8])
 {
-	OPX_HFI1_BAR_PIO_STORE(&dest[0], source[0]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[1], source[1]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[2], source[2]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[3], source[3]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[4], source[4]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[5], source[5]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[6], source[6]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[7], source[7]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[0], source[0]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[1], source[1]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[2], source[2]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[3], source[3]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[4], source[4]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[5], source[5]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[6], source[6]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[7], source[7]);
 }
 
 __OPX_FORCE_INLINE__
-void opx_cacheline_store_qw_vol(volatile uint64_t dest[8], const uint64_t d0, const uint64_t d1, const uint64_t d2,
-				const uint64_t d3, const uint64_t d4, const uint64_t d5, const uint64_t d6,
-				const uint64_t d7)
+void opx_cacheline_store_qw_vol(struct fi_opx_domain *domain, volatile uint64_t dest[8], const uint64_t d0,
+				const uint64_t d1, const uint64_t d2, const uint64_t d3, const uint64_t d4,
+				const uint64_t d5, const uint64_t d6, const uint64_t d7)
 {
-	OPX_HFI1_BAR_PIO_STORE(&dest[0], d0);
-	OPX_HFI1_BAR_PIO_STORE(&dest[1], d1);
-	OPX_HFI1_BAR_PIO_STORE(&dest[2], d2);
-	OPX_HFI1_BAR_PIO_STORE(&dest[3], d3);
-	OPX_HFI1_BAR_PIO_STORE(&dest[4], d4);
-	OPX_HFI1_BAR_PIO_STORE(&dest[5], d5);
-	OPX_HFI1_BAR_PIO_STORE(&dest[6], d6);
-	OPX_HFI1_BAR_PIO_STORE(&dest[7], d7);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[0], d0);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[1], d1);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[2], d2);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[3], d3);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[4], d4);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[5], d5);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[6], d6);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[7], d7);
 }
 
 __OPX_FORCE_INLINE__
-void opx_cacheline_copy_block_vol(volatile uint64_t dest[restrict 8], uint64_t local[restrict 8],
-				  const uint64_t source[restrict 8])
+void opx_cacheline_copy_block_vol(struct fi_opx_domain *domain, volatile uint64_t dest[restrict 8],
+				  uint64_t local[restrict 8], const uint64_t source[restrict 8])
 {
-	OPX_HFI1_BAR_PIO_STORE(&dest[0], source[0]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[1], source[1]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[2], source[2]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[3], source[3]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[4], source[4]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[5], source[5]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[6], source[6]);
-	OPX_HFI1_BAR_PIO_STORE(&dest[7], source[7]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[0], source[0]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[1], source[1]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[2], source[2]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[3], source[3]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[4], source[4]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[5], source[5]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[6], source[6]);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[7], source[7]);
 	local[0] = source[0];
 	local[1] = source[1];
 	local[2] = source[2];
@@ -195,18 +196,19 @@ void opx_cacheline_copy_block_vol(volatile uint64_t dest[restrict 8], uint64_t l
 }
 
 __OPX_FORCE_INLINE__
-void opx_cacheline_copy_qw_vol(volatile uint64_t dest[restrict 8], uint64_t local[restrict 8], const uint64_t d0,
-			       const uint64_t d1, const uint64_t d2, const uint64_t d3, const uint64_t d4,
-			       const uint64_t d5, const uint64_t d6, const uint64_t d7)
+void opx_cacheline_copy_qw_vol(struct fi_opx_domain *domain, volatile uint64_t dest[restrict 8],
+			       uint64_t local[restrict 8], const uint64_t d0, const uint64_t d1, const uint64_t d2,
+			       const uint64_t d3, const uint64_t d4, const uint64_t d5, const uint64_t d6,
+			       const uint64_t d7)
 {
-	OPX_HFI1_BAR_PIO_STORE(&dest[0], d0);
-	OPX_HFI1_BAR_PIO_STORE(&dest[1], d1);
-	OPX_HFI1_BAR_PIO_STORE(&dest[2], d2);
-	OPX_HFI1_BAR_PIO_STORE(&dest[3], d3);
-	OPX_HFI1_BAR_PIO_STORE(&dest[4], d4);
-	OPX_HFI1_BAR_PIO_STORE(&dest[5], d5);
-	OPX_HFI1_BAR_PIO_STORE(&dest[6], d6);
-	OPX_HFI1_BAR_PIO_STORE(&dest[7], d7);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[0], d0);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[1], d1);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[2], d2);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[3], d3);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[4], d4);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[5], d5);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[6], d6);
+	OPX_HFI1_BAR_PIO_STORE(domain, &dest[7], d7);
 	local[0] = d0;
 	local[1] = d1;
 	local[2] = d2;
@@ -651,8 +653,12 @@ uint64_t fi_opx_hfi1_tx_is_shm(struct fi_opx_ep *opx_ep, const struct fi_opx_add
 	   the destination lid selected SHM) */
 	if ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "%ld\n",
-		       (long) opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index)));
-		return opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
+		       (long) opx_lid_is_shm(
+			       opx_ep->domain,
+			       OPX_LID_PLANE_KEY(opx_ep->domain, addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index)));
+		return opx_lid_is_shm(
+			opx_ep->domain,
+			OPX_LID_PLANE_KEY(opx_ep->domain, addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
 	}
 
 	if ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) != (FI_LOCAL_COMM | FI_REMOTE_COMM)) {
@@ -660,20 +666,27 @@ uint64_t fi_opx_hfi1_tx_is_shm(struct fi_opx_ep *opx_ep, const struct fi_opx_add
 		return 0;
 	}
 
-	if (fi_opx_global.hfi_local_info.sriov) {
+	if (opx_ep->domain->hfi_local_info.sriov) {
 #ifndef NDEBUG
 		enum opx_sriov_route route =
-			opx_sriov_route_classify(fi_opx_global.hfi_local_info.lid[OPX_PRIMARY_PLANE],
+			opx_sriov_route_classify(opx_ep->domain, opx_ep->domain->hfi_local_info.lid[OPX_PRIMARY_PLANE],
 						 addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "%u %u\n", (route == OPX_SRIOV_ROUTE_SHM),
-		       opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index)));
+		       opx_lid_is_shm(
+			       opx_ep->domain,
+			       OPX_LID_PLANE_KEY(opx_ep->domain, addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index)));
 #endif
-		return opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
+		return opx_lid_is_shm(
+			opx_ep->domain,
+			OPX_LID_PLANE_KEY(opx_ep->domain, addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
 	}
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "%ld\n",
-	       (long) (opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index))));
-	return opx_lid_is_shm(OPX_LID_PLANE_KEY(addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
+	       (long) (opx_lid_is_shm(
+		       opx_ep->domain,
+		       OPX_LID_PLANE_KEY(opx_ep->domain, addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index))));
+	return opx_lid_is_shm(opx_ep->domain,
+			      OPX_LID_PLANE_KEY(opx_ep->domain, addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
 }
 
 __OPX_FORCE_INLINE__
@@ -845,9 +858,9 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 	const uint64_t pbc_dlid = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		opx_cacheline_copy_qw_vol(
-			scb, replay->scb.qws,
+			opx_ep->domain, scb, replay->scb.qws,
 			opx_tx->inject_9B.qw0 | OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, dest_addr.tx_index),
+				OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, dest_addr.tx_index),
 			opx_tx->inject_9B.hdr.qw_9B[0] | lrh_dlid_9B,
 			opx_tx->inject_9B.hdr.qw_9B[1] | bth_subctxt_rx | (len << 51) |
 				((caps & FI_MSG) ? /* compile-time constant expression */
@@ -866,9 +879,9 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 		// 1st cacheline
 		const uint64_t pbc_dlid = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 		opx_cacheline_copy_qw_vol(
-			scb, replay->scb.qws,
+			opx_ep->domain, scb, replay->scb.qws,
 			opx_tx->inject_16B.qw0 | OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, dest_addr.tx_index),
+				OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, dest_addr.tx_index),
 			opx_tx->inject_16B.hdr.qw_16B[0] | ((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B)
 							    << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
 			opx_tx->inject_16B.hdr.qw_16B[1] |
@@ -892,7 +905,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 		// 2nd cacheline
 		volatile uint64_t *const scb2 = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, pio_state);
 
-		opx_cacheline_store_qw_vol(scb2, tag, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+		opx_cacheline_store_qw_vol(opx_ep->domain, scb2, tag, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
 					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
 					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD);
 
@@ -1225,7 +1238,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	const uint64_t pbc_dlid = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 	replay->scb.scb_9B.qw0	= opx_tx->send_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				 OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				 OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, dest_addr.tx_index);
+				 OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, dest_addr.tx_index);
 	replay->scb.scb_9B.hdr.qw_9B[0] = opx_tx->send_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32);
 	replay->scb.scb_9B.hdr.qw_9B[1] =
 		opx_tx->send_9B.hdr.qw_9B[1] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
@@ -1524,7 +1537,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 
 	replay->scb.scb_16B.qw0 = opx_tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, dest_addr.tx_index);
+				  OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, dest_addr.tx_index);
 	replay->scb.scb_16B.hdr.qw_16B[0] =
 		opx_tx->send_16B.hdr.qw_16B[0] |
 		((uint64_t) (lrh_dlid_16B & OPX_LRH_JKR_16B_DLID_MASK_16B) << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -1843,10 +1856,10 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		/* safe to blindly qw-copy the first portion of the source buffer */
 		opx_cacheline_copy_qw_vol(
-			scb, local_storage,
+			opx_ep->domain, scb, local_storage,
 			opx_tx->send_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+				OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
 			opx_tx->send_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_packet_length << 32),
 
 			opx_tx->send_9B.hdr.qw_9B[1] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
@@ -1861,10 +1874,11 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(
 			opx_tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48), tail_bytes, tag);
 
 	} else {
-		opx_cacheline_copy_qw_vol(scb, local_storage,
+		opx_cacheline_copy_qw_vol(opx_ep->domain, scb, local_storage,
 					  opx_tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+						  OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
+
 					  opx_tx->send_16B.hdr.qw_16B[0] |
 						  ((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -1907,18 +1921,18 @@ ssize_t opx_hfi1_tx_store_16B_hdr_extension(struct fi_opx_ep *opx_ep, struct fi_
 	volatile uint64_t	   *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, pio_local);
 
 	// spill from 1st cacheline (SOP)
-	OPX_HFI1_BAR_PIO_STORE(&scb_payload[0], first_qw); // header
-	local_storage[8] = first_qw;			   /* todo: pretty sure it's already there */
+	OPX_HFI1_BAR_PIO_STORE(opx_ep->domain, &scb_payload[0], first_qw); // header
+	local_storage[8] = first_qw;					   /* todo: pretty sure it's already there */
 
 	int i;
 
 	for (i = 1; i <= hdr_and_payload_qws; ++i) {
-		OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], buf_qws[i - 1]);
+		OPX_HFI1_BAR_PIO_STORE(opx_ep->domain, &scb_payload[i], buf_qws[i - 1]);
 		local_storage[8 + i] = buf_qws[i - 1];
 	}
 
 	for (; i <= OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS; ++i) {
-		OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_PIO_STORE(opx_ep->domain, &scb_payload[i], OPX_JKR_16B_PAD_QWORD);
 		local_storage[8 + i] = OPX_JKR_16B_PAD_QWORD;
 	}
 
@@ -1948,7 +1962,7 @@ ssize_t fi_opx_hfi1_tx_egr_store_full_payload_blocks(struct fi_opx_ep *opx_ep, s
 
 	uint16_t i;
 	for (i = 0; i < contiguous_full_blocks_to_write; ++i) {
-		opx_cacheline_store_block_vol(scb_payload, buf_qws);
+		opx_cacheline_store_block_vol(opx_ep->domain, scb_payload, buf_qws);
 
 		scb_payload += FI_OPX_CACHE_LINE_QWS;
 		buf_qws += FI_OPX_CACHE_LINE_QWS;
@@ -1968,7 +1982,7 @@ ssize_t fi_opx_hfi1_tx_egr_store_full_payload_blocks(struct fi_opx_ep *opx_ep, s
 
 		uint16_t i;
 		for (i = 0; i < full_block_credits_needed; ++i) {
-			opx_cacheline_store_block_vol(scb_payload, buf_qws);
+			opx_cacheline_store_block_vol(opx_ep->domain, scb_payload, buf_qws);
 
 			scb_payload += FI_OPX_CACHE_LINE_QWS;
 			buf_qws += FI_OPX_CACHE_LINE_QWS;
@@ -1995,11 +2009,11 @@ ssize_t fi_opx_hfi1_tx_egr_store_payload_tail(struct fi_opx_ep *opx_ep, struct f
 
 	unsigned i = 0;
 	for (; i < payload_qws_tail; ++i) {
-		OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], buf_qws[i]);
+		OPX_HFI1_BAR_PIO_STORE(opx_ep->domain, &scb_payload[i], buf_qws[i]);
 	}
 
 	for (; i < FI_OPX_CACHE_LINE_QWS; ++i) {
-		OPX_HFI1_BAR_PIO_STORE(&scb_payload[i], OPX_JKR_16B_PAD_QWORD);
+		OPX_HFI1_BAR_PIO_STORE(opx_ep->domain, &scb_payload[i], OPX_JKR_16B_PAD_QWORD);
 	}
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);
 
@@ -2424,10 +2438,10 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
 	   so we should be safe to blindly copy 2 qws out of buf */
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		opx_cacheline_copy_qw_vol(
-			scb, local_storage,
+			opx_ep->domain, scb, local_storage,
 			opx_tx->send_mp_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+				OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
 			opx_tx->send_mp_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
 			opx_tx->send_mp_9B.hdr.qw_9B[1] | bth_subctxt_rx |
 				((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
@@ -2440,10 +2454,10 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(
 			opx_tx->send_mp_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32), payload_bytes_total, 0UL, tag);
 	} else {
 		opx_cacheline_copy_qw_vol(
-			scb, local_storage,
+			opx_ep->domain, scb, local_storage,
 			opx_tx->send_mp_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-				OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+				OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
 			opx_tx->send_mp_16B.hdr.qw_16B[0] |
 				((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				 << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -2486,10 +2500,11 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_sop_first, *pio_state);
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		opx_cacheline_copy_qw_vol(scb, local_storage,
+		opx_cacheline_copy_qw_vol(opx_ep->domain, scb, local_storage,
 					  opx_tx->send_mp_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+						  OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
+
 					  opx_tx->send_mp_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
 					  opx_tx->send_mp_9B.hdr.qw_9B[1] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
@@ -2497,10 +2512,11 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(
 					  opx_tx->send_mp_9B.hdr.qw_9B[3], tail_bytes, 0UL,
 					  (((uint64_t) mp_egr_uid) << 32) | payload_offset);
 	} else {
-		opx_cacheline_copy_qw_vol(scb, local_storage,
+		opx_cacheline_copy_qw_vol(opx_ep->domain, scb, local_storage,
 					  opx_tx->send_mp_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+						  OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
+
 					  opx_tx->send_mp_16B.hdr.qw_16B[0] |
 						  ((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -2537,10 +2553,11 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 	volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_sop_first, *pio_state);
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		opx_cacheline_copy_qw_vol(scb, local_storage,
+		opx_cacheline_copy_qw_vol(opx_ep->domain, scb, local_storage,
 					  opx_tx->send_mp_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+						  OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
+
 					  opx_tx->send_mp_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
 					  opx_tx->send_mp_9B.hdr.qw_9B[1] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
 						  (uint64_t) FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH,
@@ -2553,10 +2570,11 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 		return 1; /* Consumed 1 credit */
 	} else {
 		// 1st cacheline
-		opx_cacheline_copy_qw_vol(scb, local_storage,
+		opx_cacheline_copy_qw_vol(opx_ep->domain, scb, local_storage,
 					  opx_tx->send_mp_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 						  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
-						  OPX_PBC_LOOPBACK(pbc_dlid, hfi1_type, tx_index),
+						  OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
+
 					  opx_tx->send_mp_16B.hdr.qw_16B[0] |
 						  ((uint64_t) (lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 						   << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
@@ -2577,9 +2595,9 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(
 		volatile uint64_t *const scb2 = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, *pio_state);
 
 		local_storage[8] = (((uint64_t) mp_egr_uid) << 32) | payload_offset;
-		opx_cacheline_store_qw_vol(scb2, local_storage[8], OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+		opx_cacheline_store_qw_vol(opx_ep->domain, scb2, local_storage[8], OPX_JKR_16B_PAD_QWORD,
 					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
-					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD);
+					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(*pio_state);
 
@@ -3071,7 +3089,7 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep, const uint8_
 	union opx_hfi1_packet_hdr *hdr = opx_shm_tx_next(&opx_ep->shm, dest_hfi_unit, dest_rx, &pos,
 							 opx_ep->daos_info.hfi_rank_enabled, dest_extended_rx, 0, &rc);
 	while (OFI_UNLIKELY(hdr == NULL)) {
-		fi_opx_shm_poll_many(&opx_ep->ep_fid, FI_OPX_LOCK_NOT_REQUIRED, OPX_SW_HFI1_TYPE);
+		fi_opx_shm_poll_many(&opx_ep->ep_fid, FI_OPX_LOCK_NOT_REQUIRED, OPX_SW_HFI1_TYPE(opx_ep->domain));
 		hdr = opx_shm_tx_next(&opx_ep->shm, dest_hfi_unit, dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
 				      dest_extended_rx, 0, &rc);
 	}

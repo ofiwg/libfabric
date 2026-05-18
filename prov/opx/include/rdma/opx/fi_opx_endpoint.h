@@ -924,7 +924,7 @@ uint64_t is_match(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *con
 		"%s:%s():%d src_addr.tx_index = %u, src_addr.planes[tx_index=%u].lid = 0x%x src_addr.planes[PRIMARY].lid = 0x%x src_addr.planes[PRIMARY].hfi1_subctxt_rx = 0x%x\n",
 		__FILE__, __func__, __LINE__, src_addr.tx_index, tx_index, src_addr.planes[tx_index].lid,
 		src_addr.planes[OPX_PRIMARY_PLANE].lid, src_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
-	if (OPX_SW_HFI1_TYPE & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+	if (OPX_SW_HFI1_TYPE(opx_ep->domain) & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		fprintf(stderr,
 			"%s:%s():%d hdr->match.slid = 0x%04x (%u), hdr->match.origin_rx = 0x%x (%u), origin_lid = 0x%08x, reliability.origin_rx = 0x%x primary_lid = 0x%x\n",
 			__FILE__, __func__, __LINE__, __be16_to_cpu24((__be16) hdr->lrh_9B.slid),
@@ -4594,6 +4594,22 @@ ssize_t fi_opx_recvmsg_generic(struct fid_ep *ep, const struct fi_msg *msg, uint
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 
 	return rc;
+}
+
+__OPX_FORCE_INLINE__
+enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep)
+{
+	switch (opx_ep->type) {
+	case FI_EP_RDM:
+		return OFI_RELIABILITY_KIND_ONLOAD;
+		break;
+	default:
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Endpoint type not supported (%u)\n", opx_ep->type);
+		abort();
+		break;
+	}
+
+	return OFI_RELIABILITY_KIND_NONE;
 }
 
 #endif /* _FI_PROV_OPX_ENDPOINT_H_ */

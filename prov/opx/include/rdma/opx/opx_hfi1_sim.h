@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023-2025 Cornelis Networks.
+ * Copyright (C) 2023-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,10 +46,10 @@
 /* Build simulator support */
 
 __OPX_FORCE_INLINE__
-void opx_sim_pio_store(uint64_t offset, uint64_t *value, const char *func, const int line)
+void opx_sim_pio_store(struct fi_opx_domain *domain, uint64_t offset, uint64_t *value, const char *func, const int line)
 {
 	long ret, loffset = (long) offset;
-	ret = lseek(fi_opx_global.hfi_local_info.sim_sctxt_fd, offset, SEEK_SET);
+	ret = lseek(domain->hfi_local_info.sim_sctxt_fd, offset, SEEK_SET);
 	if (ret != loffset) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s:%u FI_OPX_HFI1_BAR_STORE: offset %#16.16lX\n",
 			     func, line, offset);
@@ -58,7 +58,7 @@ void opx_sim_pio_store(uint64_t offset, uint64_t *value, const char *func, const
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s:%u FI_OPX_HFI1_BAR_STORE: %#16.16lX value [%#16.16lX]\n",
 		     func, line, offset, *value);
-	if (write(fi_opx_global.hfi_local_info.sim_sctxt_fd, value, sizeof(*value)) < 0) {
+	if (write(domain->hfi_local_info.sim_sctxt_fd, value, sizeof(*value)) < 0) {
 		perror("FI_OPX_HFI1_BAR_STORE: Unable to write BAR: ");
 		abort();
 	}
@@ -66,10 +66,11 @@ void opx_sim_pio_store(uint64_t offset, uint64_t *value, const char *func, const
 }
 
 __OPX_FORCE_INLINE__
-void opx_sim_ureg_store(uint64_t offset, uint64_t *value, const char *func, const int line)
+void opx_sim_ureg_store(struct fi_opx_domain *domain, uint64_t offset, uint64_t *value, const char *func,
+			const int line)
 {
 	long ret, loffset = (long) offset;
-	ret = lseek(fi_opx_global.hfi_local_info.sim_rctxt_fd, offset, SEEK_SET);
+	ret = lseek(domain->hfi_local_info.sim_rctxt_fd, offset, SEEK_SET);
 	if (ret != loffset) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s:%u FI_OPX_HFI1_BAR_STORE: offset %#16.16lX\n",
 			     func, line, offset);
@@ -78,7 +79,7 @@ void opx_sim_ureg_store(uint64_t offset, uint64_t *value, const char *func, cons
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s:%u FI_OPX_HFI1_BAR_STORE: %#16.16lX value [%#16.16lX]\n",
 		     func, line, offset, *value);
-	if (write(fi_opx_global.hfi_local_info.sim_rctxt_fd, value, sizeof(*value)) < 0) {
+	if (write(domain->hfi_local_info.sim_rctxt_fd, value, sizeof(*value)) < 0) {
 		perror("FI_OPX_HFI1_BAR_STORE: Unable to write BAR: ");
 		abort();
 	}
@@ -86,17 +87,17 @@ void opx_sim_ureg_store(uint64_t offset, uint64_t *value, const char *func, cons
 }
 
 __OPX_FORCE_INLINE__
-uint64_t opx_sim_ureg_load(uint64_t offset)
+uint64_t opx_sim_ureg_load(struct fi_opx_domain *domain, uint64_t offset)
 {
 	uint64_t value;
 	long	 ret, loffset = (long) offset;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_HFI1_BAR_LOAD: offset %#16.16lX\n", loffset);
-	ret = lseek(fi_opx_global.hfi_local_info.sim_rctxt_fd, offset, SEEK_SET);
+	ret = lseek(domain->hfi_local_info.sim_rctxt_fd, offset, SEEK_SET);
 	if (ret != loffset) {
 		perror("FI_OPX_HFI1_BAR_LOAD: Unable to lseek BAR: ");
 		abort();
 	}
-	if (read(fi_opx_global.hfi_local_info.sim_rctxt_fd, &value, sizeof(value)) < 0) {
+	if (read(domain->hfi_local_info.sim_rctxt_fd, &value, sizeof(value)) < 0) {
 		perror("FI_OPX_HFI1_BAR_LOAD: Unable to read BAR: ");
 		abort();
 	}
@@ -104,10 +105,11 @@ uint64_t opx_sim_ureg_load(uint64_t offset)
 	return value;
 }
 
-#define OPX_OPEN_BAR(unit, rcontext, scontext) opx_open_sim_bar(unit, rcontext, scontext)
+#define OPX_OPEN_BAR(domain, unit, rcontext, scontext) opx_open_sim_bar(domain, unit, rcontext, scontext)
 
 __OPX_FORCE_INLINE__
-void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short int scontext)
+void opx_open_sim_bar(struct fi_opx_domain *domain, unsigned unit, unsigned short int rcontext,
+		      unsigned short int scontext)
 {
 	static const char *sim_barfiles[] = {
 		/* Typical sim bar files */
@@ -155,8 +157,8 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Open (context %u) %s\n", scontext, filename);
 
-		fi_opx_global.hfi_local_info.sim_sctxt_fd = open(filename, O_RDWR);
-		if (fi_opx_global.hfi_local_info.sim_sctxt_fd < 0) {
+		domain->hfi_local_info.sim_sctxt_fd = open(filename, O_RDWR);
+		if (domain->hfi_local_info.sim_sctxt_fd < 0) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI_FNAME %s: filename %s\n", getenv("HFI_FNAME"),
 				filename);
 			perror("fi_opx_sim_open_bar Unable to open BAR\n");
@@ -190,8 +192,8 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Open (context %u) %s\n", rcontext, filename);
 
-		fi_opx_global.hfi_local_info.sim_rctxt_fd = open(filename, O_RDWR);
-		if (fi_opx_global.hfi_local_info.sim_rctxt_fd < 0) {
+		domain->hfi_local_info.sim_rctxt_fd = open(filename, O_RDWR);
+		if (domain->hfi_local_info.sim_rctxt_fd < 0) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "HFI_FNAME %s: filename %s\n", getenv("HFI_FNAME"),
 				filename);
 			perror("fi_opx_sim_open_bar Unable to open BAR\n");
@@ -200,16 +202,16 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 	}
 }
 
-#define OPX_HFI1_BAR_PIO_STORE(bar, value)                                      \
-	do {                                                                    \
-		uint64_t _value = value;                                        \
-		opx_sim_pio_store((uint64_t) bar, &_value, __func__, __LINE__); \
+#define OPX_HFI1_BAR_PIO_STORE(domain, bar, value)                                      \
+	do {                                                                            \
+		uint64_t _value = value;                                                \
+		opx_sim_pio_store(domain, (uint64_t) bar, &_value, __func__, __LINE__); \
 	} while (false)
 
-#define OPX_HFI1_BAR_UREG_STORE(bar, value)                                      \
-	do {                                                                     \
-		uint64_t _value = value;                                         \
-		opx_sim_ureg_store((uint64_t) bar, &_value, __func__, __LINE__); \
+#define OPX_HFI1_BAR_UREG_STORE(domain, bar, value)                                      \
+	do {                                                                             \
+		uint64_t _value = value;                                                 \
+		opx_sim_ureg_store(domain, (uint64_t) bar, &_value, __func__, __LINE__); \
 	} while (false)
 
 #define OPX_TXE_PIO_SEND ((uint64_t) 0x2000000)
@@ -222,12 +224,12 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 
 /* CYR constants match JKR but they are per BAR (opx_open_sim_bar) and should be masked to 8 bits.
    WFR and JKR are already <= 8 bits */
-#define OPX_HFI1_INIT_PIO_SOP(context, input)                                                                   \
+#define OPX_HFI1_INIT_PIO_SOP(domain, context, input)                                                           \
 	({                                                                                                      \
 		volatile uint64_t *__pio_sop;                                                                   \
 		const short int	   per_bar_context = context & 0xFF;                                            \
 		do {                                                                                            \
-			if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {                                                  \
+			if (OPX_SW_HFI1_TYPE(domain) & OPX_HFI1_WFR) {                                          \
 				__pio_sop = (uint64_t *) (OPX_TXE_PIO_SEND + (context * (64 * 1024L)) +         \
 							  (16 * 1024 * 1024L));                                 \
 			} else {                                                                                \
@@ -238,12 +240,12 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 		__pio_sop;                                                                                      \
 	})
 
-#define OPX_HFI1_INIT_PIO(context, input)                                                                   \
+#define OPX_HFI1_INIT_PIO(domain, context, input)                                                           \
 	({                                                                                                  \
 		volatile uint64_t *__pio;                                                                   \
 		const short int	   per_bar_context = context & 0xFF;                                        \
 		do {                                                                                        \
-			if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {                                              \
+			if (OPX_SW_HFI1_TYPE(domain) & OPX_HFI1_WFR) {                                      \
 				__pio = (uint64_t *) (OPX_TXE_PIO_SEND + (context * (64 * 1024L)));         \
 			} else {                                                                            \
 				__pio = (uint64_t *) (OPX_TXE_PIO_SEND + (per_bar_context * (64 * 1024L))); \
@@ -252,12 +254,12 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 		__pio;                                                                                      \
 	})
 
-#define OPX_HFI1_INIT_UREGS(context, input)                                                             \
+#define OPX_HFI1_INIT_UREGS(domain, context, input)                                                     \
 	({                                                                                              \
 		volatile uint64_t *__uregs;                                                             \
 		const short int	   per_bar_context = context & 0xFF;                                    \
 		do {                                                                                    \
-			if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {                                          \
+			if (OPX_SW_HFI1_TYPE(domain) & OPX_HFI1_WFR) {                                  \
 				__uregs = (uint64_t *) (OPX_WFR_RXE_PER_CONTEXT_OFFSET +                \
 							((context) * OPX_WFR_RXE_UCTX_STRIDE));         \
 			} else {                                                                        \
@@ -271,12 +273,12 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 #else
 /* Build only "real" HFI1 support (default) */
 
-#define OPX_OPEN_BAR(unit, rcontext, scontext) \
-	fi_opx_global.hfi_local_info.sim_rctxt_fd = fi_opx_global.hfi_local_info.sim_sctxt_fd = -1
+#define OPX_OPEN_BAR(domain, unit, rcontext, scontext) \
+	(domain)->hfi_local_info.sim_rctxt_fd = (domain)->hfi_local_info.sim_sctxt_fd = -1
 
 #if !defined(NDEBUG) && defined(OPX_DEBUG_VERBOSE)
 
-#define OPX_HFI1_BAR_PIO_STORE(bar, value)                                                                          \
+#define OPX_HFI1_BAR_PIO_STORE(domain, bar, value)                                                                  \
 	do {                                                                                                        \
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s:%u FI_OPX_HFI1_BAR_STORE: offset %#16.16lX\n", \
 			     __func__, __LINE__, (uint64_t) (bar));                                                 \
@@ -285,7 +287,7 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 		*(volatile uint64_t *) bar = (uint64_t) value;                                                      \
 	} while (false)
 
-#define OPX_HFI1_BAR_UREG_STORE(bar, value)                                                                         \
+#define OPX_HFI1_BAR_UREG_STORE(domain, bar, value)                                                                 \
 	do {                                                                                                        \
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s:%u FI_OPX_HFI1_BAR_STORE: offset %#16.16lX\n", \
 			     __func__, __LINE__, (uint64_t) (bar));                                                 \
@@ -296,9 +298,9 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 
 #else
 
-#define OPX_HFI1_BAR_PIO_STORE(bar, value) *(volatile uint64_t *) bar = (uint64_t) value;
+#define OPX_HFI1_BAR_PIO_STORE(domain, bar, value) *(volatile uint64_t *) bar = (uint64_t) value;
 
-#define OPX_HFI1_BAR_UREG_STORE(bar, value) *(volatile uint64_t *) bar = (uint64_t) value;
+#define OPX_HFI1_BAR_UREG_STORE(domain, bar, value) *(volatile uint64_t *) bar = (uint64_t) value;
 
 #endif
 
@@ -310,11 +312,11 @@ void opx_open_sim_bar(unsigned unit, unsigned short int rcontext, unsigned short
 #define OPX_JKR_RXE_UCTX_STRIDE ((uint64_t) 8 * 1024)
 #define OPX_WFR_RXE_UCTX_STRIDE ((uint64_t) 4 * 1024)
 
-#define OPX_HFI1_INIT_PIO_SOP(context, input) input
+#define OPX_HFI1_INIT_PIO_SOP(domain, context, input) input
 
-#define OPX_HFI1_INIT_PIO(context, input) input
+#define OPX_HFI1_INIT_PIO(domain, context, input) input
 
-#define OPX_HFI1_INIT_UREGS(context, input) input
+#define OPX_HFI1_INIT_UREGS(domain, context, input) input
 
 #endif
 
