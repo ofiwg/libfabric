@@ -4,6 +4,7 @@
 #include "efa_rdm_proto.h"
 #include "efa.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_msg.h"
 
 /* List of supported protocols.
  * The protocols listed here will be tried in the order they're listed.
@@ -27,12 +28,15 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	int req_pkt_type, iface;
 	uint16_t header_flags = 0;
 	bool tagged, delivery_complete_requested;
+	uint64_t effective_flags;
 
-	if (flags & FI_INJECT ||
+	effective_flags = efa_rdm_msg_get_tx_flags(ep, flags);
+
+	if (effective_flags & FI_INJECT ||
 	    efa_rdm_peer_expects_zero_hdr_data_transfer(peer))
 		delivery_complete_requested = false;
 	else
-		delivery_complete_requested = flags & FI_DELIVERY_COMPLETE;
+		delivery_complete_requested = effective_flags & FI_DELIVERY_COMPLETE;
 
 	tagged = (op == ofi_op_tagged);
 

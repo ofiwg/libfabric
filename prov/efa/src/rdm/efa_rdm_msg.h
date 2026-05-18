@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+struct efa_rdm_proto;
 static inline
 void efa_rdm_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **desc,
 		       size_t count, fi_addr_t addr, void *context, uint64_t data)
@@ -52,6 +53,9 @@ uint64_t efa_rdm_msg_get_tx_flags(struct efa_rdm_ep *ep, uint64_t fi_flags)
 		tx_op_flags &= ~FI_COMPLETION;
 	return fi_flags | tx_op_flags;
 }
+
+ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe,
+				    struct efa_rdm_proto *proto);
 /*
  * The following 2 OP structures are defined in efa_rdm_msg.c and is
  * used by #efa_rdm_ep_open()
