@@ -735,10 +735,9 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	assert(internal->context.hfi1_type &
 	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_MIXED_9B is determined later */
 
-	/* Need the global set early, may be changed later on interop networks */
-	if (OPX_SW_HFI1_TYPE == OPX_HFI1_UNDEF) {
-		OPX_SW_HFI1_TYPE = internal->context.hfi1_type;
-		OPX_HW_HFI1_TYPE = internal->context.hfi1_type;
+	if (OPX_SW_HFI1_TYPE(internal->domain) == OPX_HFI1_UNDEF) {
+		OPX_SW_HFI1_TYPE(internal->domain) = internal->context.hfi1_type;
+		OPX_HW_HFI1_TYPE(internal->domain) = internal->context.hfi1_type;
 	}
 
 #ifndef OPX_JKR_SUPPORT
@@ -750,11 +749,12 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 #endif
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "global type %d, opx_hfi1_check_hwversion base_info->hw_version %#X, %s\n", OPX_SW_HFI1_TYPE,
-		     binfo->hw_version, OPX_HFI1_TYPE_STRING(internal->context.hfi1_type));
+		     "domain type %d, opx_hfi1_check_hwversion base_info->hw_version %#X, %s\n",
+		     OPX_SW_HFI1_TYPE(internal->domain), binfo->hw_version,
+		     OPX_HFI1_TYPE_STRING(internal->context.hfi1_type));
 
 	/* Rheq is only on JKR rdma-core, we have to set the token manually */
-	__off64_t rheq_token = opx_hfi_mmap_rheq_token(cinfo);
+	__off64_t rheq_token = opx_hfi_mmap_rheq_token(internal->domain, cinfo);
 	if (opx_map_hfi_mem(fd, spctrl, uinfo->subctxt_cnt, (__u64 *) &rheq_token, internal->context.hfi1_type,
 			    internal->send_only) == -1) {
 		_HFI_ERROR("[HFI1-DIRECT] Failed to map HFI memory.- errno %s\n", strerror(errno));

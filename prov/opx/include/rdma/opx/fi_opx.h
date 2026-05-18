@@ -39,6 +39,9 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#include <ofi.h>
+#include <ofi_mem.h>
+
 #include <rdma/fabric.h>
 #include <rdma/providers/fi_log.h>
 #include <rdma/fi_domain.h>
@@ -127,8 +130,8 @@ typedef uint32_t opx_lid_t; /* only 3 bytes of lid is used */
 #define OPX_LID_PLANE_SHIFT 24
 
 /* The lid is masked for irrelevant dispersive routing bits (OPX_LID_PATH_MASK) */
-#define OPX_LID_PLANE_KEY(lid, plane_idx) \
-	((lid & ~OPX_LID_PATH_MASK) | ((opx_lid_t) (plane_idx) << OPX_LID_PLANE_SHIFT))
+#define OPX_LID_PLANE_KEY(domain, lid, plane_idx) \
+	(((lid) & ~OPX_LID_PATH_MASK(domain)) | ((opx_lid_t) (plane_idx) << OPX_LID_PLANE_SHIFT))
 #define OPX_LID_PLANE_GET_LID(encoded) ((opx_lid_t) (encoded) & 0x00FFFFFF)
 #define OPX_LID_PLANE_GET_IDX(encoded) ((uint8_t) ((encoded) >> OPX_LID_PLANE_SHIFT))
 
@@ -247,8 +250,9 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi_local_info, local_lid_entries) =
 OPX_COMPILE_TIME_ASSERT(sizeof(struct opx_hfi_local_info) == (FI_OPX_CACHE_LINE_SIZE * 4),
 			"Size of opx_hfi_local_info should be 4 cachelines!");
 
-#define OPX_LID_PATH_MASK fi_opx_global.hfi_local_info.lid_path_mask // sysfs: mask dispersive routing/path bits bits
-#define OPX_LID_MASK	  fi_opx_global.hfi_local_info.lid_mask	     // sysfs: mask "base" lid
+#define OPX_LID_PATH_MASK(domain) \
+	((domain)->hfi_local_info.lid_path_mask)		 // sysfs: mask dispersive routing/path bits bits
+#define OPX_LID_MASK(domain) ((domain)->hfi_local_info.lid_mask) // sysfs: mask "base" lid
 
 #ifdef OPX_SIM
 /* Build L8SIM support */
@@ -261,20 +265,18 @@ OPX_COMPILE_TIME_ASSERT(sizeof(struct opx_hfi_local_info) == (FI_OPX_CACHE_LINE_
 #endif
 
 // HFI1 type from SW/logical point of view
-#define OPX_SW_HFI1_TYPE fi_opx_global.hfi_local_info.sw_type
+#define OPX_SW_HFI1_TYPE(domain) ((domain)->hfi_local_info.sw_type)
 
 // HFI1 HW type independent of SW
-#define OPX_HW_HFI1_TYPE fi_opx_global.hfi_local_info.hw_type
+#define OPX_HW_HFI1_TYPE(domain) ((domain)->hfi_local_info.hw_type)
 
 #define OPX_IS_CTX_SHARING_ENABLED fi_opx_global.ctx_sharing_enabled
 
-// This is constant for all (macro magic) _hfi1_type except OPX_HFI1_MIXED_9B which additionally checks a variable
-// OPX_HW_HFI1_TYPE
-#define OPX_IS_EXTENDED_RX(_hfi1_type) \
-	((_hfi1_type & OPX_HFI1_CYR) || ((_hfi1_type & OPX_HFI1_MIXED_9B) && (OPX_HW_HFI1_TYPE & OPX_HFI1_CYR)))
+#define OPX_IS_EXTENDED_RX_TYPE(_hw_hfi1_type) ((_hw_hfi1_type) & OPX_HFI1_CYR)
 
-// Alternative - this only checks the variable OPX_HW_HFI1_TYPE
-// define OPX_IS_EXTENDED_RX(_ignored) (OPX_HW_HFI1_TYPE & OPX_HFI1_CYR)
+#define OPX_IS_EXTENDED_RX_DOMAIN(domain) OPX_IS_EXTENDED_RX_TYPE(OPX_HW_HFI1_TYPE(domain))
+
+struct fi_opx_domain;
 
 struct fi_opx_global_data {
 	/* == CACHE LINE 0 == */
@@ -297,15 +299,10 @@ struct fi_opx_global_data {
 	uint32_t		     unused_dw;
 	uint64_t		     unused_qw[3];
 
-	/* == CACHE LINE 2+ == */
-	struct opx_hfi_local_info hfi_local_info;
-
 	char *opx_hfi1_type_strings[];
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hmem_domain_list) == (FI_OPX_CACHE_LINE_SIZE * 1),
 			"Offset of fi_opx_global_data->hmem_domain_list should start at cacheline 1!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_global_data, hfi_local_info) == (FI_OPX_CACHE_LINE_SIZE * 2),
-			"Offset of fi_opx_global_data->hfi_local_info should start at cacheline 2!");
 
 #define OPX_HFI1_TYPE_STRING(_hfi1_type)                                   \
 	({                                                                 \
@@ -506,5 +503,15 @@ int fi_opx_bind_ep_cq(struct fid_ep *ep, struct fid_cq *cq, uint64_t flags);
 int fi_opx_bind_ep_cntr(struct fid_ep *ep, struct fid_cntr *cntr, uint64_t flags);
 int fi_opx_bind_ep_mr(struct fid_ep *ep, struct fid_mr *mr, uint64_t flags);
 int fi_opx_bind_ep_av(struct fid_ep *ep, struct fid_av *av, uint64_t flags);
+
+#ifndef NDEBUG
+#define OPX_BUF_FREE(x)                                \
+	do {                                           \
+		memset(x, 0x3C, MIN(512, sizeof(*x))); \
+		ofi_buf_free(x);                       \
+	} while (0)
+#else
+#define OPX_BUF_FREE(x) ofi_buf_free(x)
+#endif
 
 #endif /* __FI_PROV_OPX_H__ */

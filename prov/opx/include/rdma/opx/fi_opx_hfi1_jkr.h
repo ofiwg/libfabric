@@ -116,11 +116,11 @@
 #define OPX_PBC_JKR_L2COMPRESSED(_c) OPX_PBC_JKR_UNUSED /* unused until 16B headers are optimized */
 #define OPX_PBC_JKR_PORTIDX(_pidx) \
 	(((OPX_JKR_PHYS_PORT_TO_INDEX(_pidx)) & OPX_PBC_JKR_PORT_MASK) << OPX_PBC_JKR_PORT_SHIFT)
-#define OPX_PBC_JKR_LOOPBACK_PORTIDX(_pbc_lid, _tx_index)                                         \
-	((fi_opx_global.hfi_local_info.port_loopback &&                                           \
-	  ((_pbc_lid & OPX_PBC_JKR_DLID(OPX_LID_MASK)) ==                                         \
-	   (fi_opx_global.hfi_local_info.pbc_lid[_tx_index] & OPX_PBC_JKR_DLID(OPX_LID_MASK)))) ? \
-		 (OPX_PBC_JKR_PORT_LOOPBACK_MASK << OPX_PBC_JKR_PORT_SHIFT) :                     \
+#define OPX_PBC_JKR_LOOPBACK_PORTIDX(domain, _pbc_lid, _tx_index)                                     \
+	(((domain)->hfi_local_info.port_loopback &&                                                   \
+	  (((_pbc_lid) & OPX_PBC_JKR_DLID(OPX_LID_MASK(domain))) ==                                   \
+	   ((domain)->hfi_local_info.pbc_lid[_tx_index] & OPX_PBC_JKR_DLID(OPX_LID_MASK(domain))))) ? \
+		 (OPX_PBC_JKR_PORT_LOOPBACK_MASK << OPX_PBC_JKR_PORT_SHIFT) :                         \
 		 0)
 #define OPX_PBC_JKR_INSERT_NON9B_ICRC (1 << 24)
 
@@ -187,25 +187,25 @@ extern int opx_route_control[OPX_HFI1_NUM_PACKET_TYPES];
 
 /* RC (3 bits) route control value for different packet types */
 #ifndef NDEBUG
-#define OPX_ROUTE_CONTROL_VALUE(_hfi1_type, _pkt_type) \
-	opx_route_control_value(_hfi1_type, _pkt_type, __func__, __LINE__)
+#define OPX_ROUTE_CONTROL_VALUE(domain, _hfi1_type, _pkt_type) \
+	opx_route_control_value(domain, _hfi1_type, _pkt_type, __func__, __LINE__)
 
-static inline int opx_route_control_value(const enum opx_hfi1_type hfi1_type, enum opx_hfi1_packet_type pkt_type,
-					  const char *func, const int line)
+static inline int opx_route_control_value(struct fi_opx_domain *domain, const enum opx_hfi1_type hfi1_type,
+					  enum opx_hfi1_packet_type pkt_type, const char *func, const int line)
 {
-	assert(OPX_SW_HFI1_TYPE != OPX_HFI1_UNDEF);
+	assert(OPX_SW_HFI1_TYPE(domain) != OPX_HFI1_UNDEF);
 	assert(pkt_type < OPX_HFI1_NUM_PACKET_TYPES);
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[%s:%d] Return %s route control %d.\n", func, line,
 		 OPX_HFI1_PACKET_STR[pkt_type], opx_route_control[pkt_type]);
 	return opx_route_control[pkt_type];
 }
 #else
-#define OPX_ROUTE_CONTROL_VALUE(_hfi1_type, _pkt_type) opx_route_control[_pkt_type]
+#define OPX_ROUTE_CONTROL_VALUE(domain, _hfi1_type, _pkt_type) opx_route_control[_pkt_type]
 #endif
 
-static inline void opx_set_route_control_value(const bool rzv_data_disabled /* by TID */)
+static inline void opx_set_route_control_value(struct fi_opx_domain *domain, const bool rzv_data_disabled /* by TID */)
 {
-	assert(OPX_SW_HFI1_TYPE != OPX_HFI1_UNDEF);
+	assert(OPX_SW_HFI1_TYPE(domain) != OPX_HFI1_UNDEF);
 
 	/* Always default to OPX_RC_IN_ORDER_0.
 	 * OPX supports user selection of OPX_RC_OUT_OF_ORDER_* except that RZV DATA with TID must
@@ -256,9 +256,6 @@ static inline void opx_set_route_control_value(const bool rzv_data_disabled /* b
 		for (int i = 0; i < OPX_HFI1_NUM_PACKET_TYPES; ++i) {
 			opx_route_control[i] = OPX_RC_IN_ORDER_0;
 		}
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			 "All packet types using %s default route control values.\n",
-			 OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE));
 	}
 }
 /* The bit shifts here are for the half word indicating the ECN field */
@@ -287,7 +284,7 @@ static inline void opx_set_route_control_value(const bool rzv_data_disabled /* b
 #define OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B ((OPX_BTH_SUBCTXT_RX_SHIFT + 8) - OPX_LRH_JKR_ENTROPY_SHIFT_16B)
 
 /* Full RC (3 bits) is in the 16B header */
-#define OPX_LRH_JKR_16B_RC(_pkt_type) OPX_ROUTE_CONTROL_VALUE(OPX_HFI1_CYR, _pkt_type)
+#define OPX_LRH_JKR_16B_RC(domain, _pkt_type) OPX_ROUTE_CONTROL_VALUE(domain, OPX_HFI1_CYR, _pkt_type)
 
 /* RHF */
 /* JKR

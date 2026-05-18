@@ -51,13 +51,13 @@ ssize_t fi_opx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t fla
 	if (msg->iov_count == 1) {
 		return fi_opx_ep_tx_send(ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, msg->desc, msg->addr, 0,
 					 msg->context, msg->data, lock_required, OPX_CONTIG_TRUE,
-					 OPX_FLAGS_OVERRIDE_TRUE, flags, caps | FI_MSG, reliability, OPX_SW_HFI1_TYPE,
-					 OPX_IS_CTX_SHARING_ENABLED);
+					 OPX_FLAGS_OVERRIDE_TRUE, flags, caps | FI_MSG, reliability,
+					 OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_IS_CTX_SHARING_ENABLED);
 	}
 
 	return fi_opx_ep_tx_send(ep, msg->msg_iov, msg->iov_count, msg->desc, msg->addr, 0, msg->context, msg->data,
 				 lock_required, OPX_CONTIG_FALSE, OPX_FLAGS_OVERRIDE_TRUE, flags, caps | FI_MSG,
-				 reliability, OPX_SW_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
+				 reliability, OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_IS_CTX_SHARING_ENABLED);
 }
 
 ssize_t fi_opx_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count, fi_addr_t dest_addr,
@@ -73,11 +73,13 @@ ssize_t fi_opx_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 	if (count == 1) {
 		return fi_opx_ep_tx_send(ep, iov->iov_base, iov->iov_len, desc, dest_addr, 0, context, 0, lock_required,
 					 OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_FALSE, 0, /* flags */
-					 caps | FI_MSG, reliability, OPX_SW_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
+					 caps | FI_MSG, reliability, OPX_SW_HFI1_TYPE(opx_ep->domain),
+					 OPX_IS_CTX_SHARING_ENABLED);
 	}
 	return fi_opx_ep_tx_send(ep, iov, count, desc, dest_addr, 0, context, 0, lock_required, OPX_CONTIG_FALSE,
 				 OPX_FLAGS_OVERRIDE_FALSE, 0, /* flags */
-				 caps | FI_MSG, reliability, OPX_SW_HFI1_TYPE, OPX_IS_CTX_SHARING_ENABLED);
+				 caps | FI_MSG, reliability, OPX_SW_HFI1_TYPE(opx_ep->domain),
+				 OPX_IS_CTX_SHARING_ENABLED);
 }
 
 ssize_t fi_opx_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc, uint64_t data, void *context)
@@ -428,7 +430,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_IS_CTX_SHARING_ENABLED) {
-		if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			if (!lock_required) {
 				if (comm_caps == FI_LOCAL_COMM) {
 					opx_ep->ep_fid.msg = &FI_OPX_MSG_OPS_STRUCT_NAME(
@@ -458,7 +460,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 						OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_WFR, OPX_CTX_SHARING_ON);
 				}
 			}
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			if (!lock_required) {
 				if (comm_caps == FI_LOCAL_COMM) {
 					opx_ep->ep_fid.msg = &FI_OPX_MSG_OPS_STRUCT_NAME(
@@ -488,7 +490,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 						OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON);
 				}
 			}
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_JKR) {
+		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			if (!lock_required) {
 				if (comm_caps == FI_LOCAL_COMM) {
 					opx_ep->ep_fid.msg = &FI_OPX_MSG_OPS_STRUCT_NAME(
@@ -550,7 +552,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 			}
 		}
 	} else {
-		if (OPX_SW_HFI1_TYPE & OPX_HFI1_WFR) {
+		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			if (!lock_required) {
 				if (comm_caps == FI_LOCAL_COMM) {
 					opx_ep->ep_fid.msg = &FI_OPX_MSG_OPS_STRUCT_NAME(
@@ -580,7 +582,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 						OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF);
 				}
 			}
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_MIXED_9B) {
+		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			if (!lock_required) {
 				if (comm_caps == FI_LOCAL_COMM) {
 					opx_ep->ep_fid.msg = &FI_OPX_MSG_OPS_STRUCT_NAME(
@@ -610,7 +612,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 						OFI_RELIABILITY_KIND_ONLOAD, OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF);
 				}
 			}
-		} else if (OPX_SW_HFI1_TYPE & OPX_HFI1_JKR) {
+		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			if (!lock_required) {
 				if (comm_caps == FI_LOCAL_COMM) {
 					opx_ep->ep_fid.msg = &FI_OPX_MSG_OPS_STRUCT_NAME(

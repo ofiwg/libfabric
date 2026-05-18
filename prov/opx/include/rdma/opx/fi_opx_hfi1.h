@@ -36,6 +36,7 @@
 #include "opa_user.h"
 
 #include "rdma/opx/fi_opx.h"
+#include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/fi_opx_hfi1_packet.h"
 #include "rdma/opx/fi_opx_compiler.h"
 
@@ -646,8 +647,11 @@ struct fi_opx_hfi1_context_internal {
 	struct fi_opx_hfi1_context context;
 
 	struct hfi1_user_info_dep user_info;
+	int			  pad1;
 	struct _hfi_ctrl	 *ctrl;
 	bool			  send_only;
+	char			  pad2[7];
+	struct fi_opx_domain	 *domain;
 };
 
 #define OPX_SAME_ASIC_MASK    0x0000007800FFFFFFull
@@ -750,7 +754,7 @@ void fi_opx_consume_credits(union fi_opx_hfi1_pio_state *pio_state, size_t count
 
 /* SIMD version (preferred, fastest) */
 __OPX_FORCE_INLINE__
-int opx_local_lid_index(opx_lid_t lid_plane_key)
+int opx_local_lid_index(struct fi_opx_domain *domain, opx_lid_t lid_plane_key)
 {
 	// Create a 4-element vector populated with the lid we're looking for
 	__m128i target = _mm_set1_epi32(lid_plane_key);
@@ -758,8 +762,8 @@ int opx_local_lid_index(opx_lid_t lid_plane_key)
 	// Iterate through the array of lids, examining 4 entries at once. Since
 	// we know unused entries are zero, and lids will be non-zero, it's safe
 	// to include unused entries beyond local_lids_size in our comparison
-	for (int i = 0; i < fi_opx_global.hfi_local_info.local_lids_size; i += 4) {
-		__m128i current = _mm_load_si128((__m128i *) &fi_opx_global.hfi_local_info.local_lid_ids[i]);
+	for (int i = 0; i < domain->hfi_local_info.local_lids_size; i += 4) {
+		__m128i current = _mm_load_si128((__m128i *) &domain->hfi_local_info.local_lid_ids[i]);
 		__m128i compare = _mm_cmpeq_epi32(current, target);
 		int	mask	= _mm_movemask_ps((__m128) compare);
 		if (mask) {
@@ -775,22 +779,22 @@ int opx_local_lid_index(opx_lid_t lid_plane_key)
 
 /* Loop unrolled version */
 __OPX_FORCE_INLINE__
-int opx_local_lid_index(opx_lid_t lid_plane_key)
+int opx_local_lid_index(struct fi_opx_domain *domain, opx_lid_t lid_plane_key)
 {
 	// Iterate through the array of lids, examining 4 entries at once. Since
 	// we know unused entries are zero, and lids will be non-zero, it's safe
 	// to include unused entries beyond local_lids_size in our comparison
-	for (int i = 0; i < fi_opx_global.hfi_local_info.local_lids_size; i += 4) {
-		if (fi_opx_global.hfi_local_info.local_lid_ids[i] == lid_plane_key) {
+	for (int i = 0; i < domain->hfi_local_info.local_lids_size; i += 4) {
+		if (domain->hfi_local_info.local_lid_ids[i] == lid_plane_key) {
 			return i;
 		}
-		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 1] == lid_plane_key) {
+		if (domain->hfi_local_info.local_lid_ids[i + 1] == lid_plane_key) {
 			return i + 1;
 		}
-		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 2] == lid_plane_key) {
+		if (domain->hfi_local_info.local_lid_ids[i + 2] == lid_plane_key) {
 			return i + 2;
 		}
-		if (fi_opx_global.hfi_local_info.local_lid_ids[i + 3] == lid_plane_key) {
+		if (domain->hfi_local_info.local_lid_ids[i + 3] == lid_plane_key) {
 			return i + 3;
 		}
 	}
@@ -800,72 +804,73 @@ int opx_local_lid_index(opx_lid_t lid_plane_key)
 #endif
 
 __OPX_FORCE_INLINE__
-struct opx_hfi_local_entry *fi_opx_hfi1_get_lid_local(opx_lid_t lid_plane_key)
+struct opx_hfi_local_entry *fi_opx_hfi1_get_lid_local(struct fi_opx_domain *domain, opx_lid_t lid_plane_key)
 {
-	int lid_index = opx_local_lid_index(lid_plane_key);
+	int lid_index = opx_local_lid_index(domain, lid_plane_key);
 
 	// We should only ever be calling this function for lids that are shm
 	assert(lid_index != -1);
 
-	return &fi_opx_global.hfi_local_info.local_lid_entries[lid_index];
+	return &domain->hfi_local_info.local_lid_entries[lid_index];
 }
 
 __OPX_FORCE_INLINE__
-bool opx_lid_is_shm(opx_lid_t lid_plane_key)
+bool opx_lid_is_shm(struct fi_opx_domain *domain, opx_lid_t lid_plane_key)
 {
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "lid plane key %#x is_shm %u\n", lid_plane_key,
-	       (opx_local_lid_index(lid_plane_key) != -1));
-	return (opx_local_lid_index(lid_plane_key) != -1);
+	       (opx_local_lid_index(domain, lid_plane_key) != -1));
+	return (opx_local_lid_index(domain, lid_plane_key) != -1);
 }
 
 __OPX_FORCE_INLINE__
-int fi_opx_hfi1_get_lid_local_unit(opx_lid_t lid, uint8_t plane_idx)
+int fi_opx_hfi1_get_lid_local_unit(struct fi_opx_domain *domain, opx_lid_t lid, uint8_t plane_idx)
 {
-	if (fi_opx_global.hfi_local_info.lid[plane_idx] == lid) {
-		return fi_opx_global.hfi_local_info.hfi_unit[plane_idx];
+	if (domain->hfi_local_info.lid[plane_idx] == lid) {
+		return domain->hfi_local_info.hfi_unit[plane_idx];
 	}
 
-	return fi_opx_hfi1_get_lid_local(OPX_LID_PLANE_KEY(lid, plane_idx))->hfi_unit;
+	return fi_opx_hfi1_get_lid_local(domain, OPX_LID_PLANE_KEY(domain, lid, plane_idx))->hfi_unit;
 }
 
 __OPX_FORCE_INLINE__
-enum opx_sriov_route opx_sriov_route_classify(opx_lid_t slid, opx_lid_t dlid, uint8_t tx_index)
+enum opx_sriov_route opx_sriov_route_classify(struct fi_opx_domain *domain, opx_lid_t slid, opx_lid_t dlid,
+					      uint8_t tx_index)
 {
 	/* WFR does not support SRIOV — this function should never be called for WFR. */
-	assert(!(fi_opx_global.hfi_local_info.hw_type & OPX_HFI1_WFR));
+	assert(!(domain->hfi_local_info.hw_type & OPX_HFI1_WFR));
 
 	/* Same lid (masked for irrelevant dispersive routing bits) == same HFI and same VF. */
-	if ((slid & ~OPX_LID_PATH_MASK) == (dlid & ~OPX_LID_PATH_MASK)) {
+	if ((slid & ~OPX_LID_PATH_MASK(domain)) == (dlid & ~OPX_LID_PATH_MASK(domain))) {
 		/* We always insert an entry for self, can't be disabled */
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "OPX_SRIOV_ROUTE_SHM slid %#x/%#x, dlid %#x/%#x\n", slid,
-		       slid & ~OPX_LID_PATH_MASK, dlid, dlid & ~OPX_LID_PATH_MASK);
-		assert(opx_lid_is_shm(OPX_LID_PLANE_KEY(dlid, tx_index)));
+		       slid & ~OPX_LID_PATH_MASK(domain), dlid, dlid & ~OPX_LID_PATH_MASK(domain));
+		assert(opx_lid_is_shm(domain, OPX_LID_PLANE_KEY(domain, dlid, tx_index)));
 		return OPX_SRIOV_ROUTE_SHM;
 	}
 
 	/* A lid match to an HFI in this VF, already using SHM */
-	if (opx_lid_is_shm(OPX_LID_PLANE_KEY(dlid, tx_index))) {
+	if (opx_lid_is_shm(domain, OPX_LID_PLANE_KEY(domain, dlid, tx_index))) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "OPX_SRIOV_ROUTE_SHM (different HFI) slid %#x, dlid %#x\n",
 		       slid, dlid);
 		return OPX_SRIOV_ROUTE_SHM;
 	}
 
 	/* If not a base lid match (same HFI) in any VF, use fabric for routing */
-	if ((slid & OPX_LID_MASK) != (dlid & OPX_LID_MASK)) {
+	if ((slid & OPX_LID_MASK(domain)) != (dlid & OPX_LID_MASK(domain))) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "OPX_SRIOV_ROUTE_FABRIC slid %#x/%#x, dlid %#x/%#x\n", slid,
-		       slid & OPX_LID_MASK, dlid, dlid & OPX_LID_MASK);
+		       slid & OPX_LID_MASK(domain), dlid, dlid & OPX_LID_MASK(domain));
 		return OPX_SRIOV_ROUTE_FABRIC;
 	}
 
 	/* Same HFI (base LIDs match) and different VF, route depends on hardware and neighbor type */
-	if (fi_opx_global.hfi_local_info.hw_type & OPX_HFI1_CYR) {
+	if (domain->hfi_local_info.hw_type & OPX_HFI1_CYR) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "OPX_SRIOV_ROUTE_PORT_LOOPBACK slid %#x, dlid %#x\n", slid,
 		       dlid);
 		return OPX_SRIOV_ROUTE_PORT_LOOPBACK; // full CYR port loopback
 	}
 
-	if (fi_opx_global.hfi_local_info.hw_type & OPX_HFI1_JKR) {
-		if (fi_opx_global.hfi_local_info.neighbor_type == OPX_NEIGHBOR_SWITCH) {
+	if (domain->hfi_local_info.hw_type & OPX_HFI1_JKR) {
+		if (domain->hfi_local_info.neighbor_type == OPX_NEIGHBOR_SWITCH) {
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
 			       "OPX_SRIOV_ROUTE_FABRIC_HAIRPIN slid %#x, dlid %#x\n", slid, dlid);
 			return OPX_SRIOV_ROUTE_FABRIC_HAIRPIN; // JKR hairpin loopback on the fabric
@@ -891,9 +896,10 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 
 int init_hfi1_rxe_state(struct fi_opx_hfi1_context *context, struct fi_opx_hfi1_rxe_state *rxe_state);
 
-void fi_opx_init_hfi_lookup(uint64_t self_gid_hi, uint8_t self_plane_idx);
+void fi_opx_init_hfi_lookup(struct fi_opx_domain *domain, uint64_t self_gid_hi, uint8_t self_plane_idx);
 
-void process_hfi_lookup(const int hfi_unit, const opx_lid_t lid, uint64_t gid_hi, uint8_t plane_idx);
+void process_hfi_lookup(struct fi_opx_domain *domain, const int hfi_unit, const opx_lid_t lid, uint64_t gid_hi,
+			uint8_t plane_idx);
 
 /*
  * Shared memory transport
@@ -902,16 +908,6 @@ void process_hfi_lookup(const int hfi_unit, const opx_lid_t lid, uint64_t gid_hi
 #define FI_OPX_SHM_BUFFER_MASK (FI_OPX_SHM_FIFO_SIZE - 1)
 
 #define FI_OPX_SHM_PACKET_SIZE (OPX_HFI1_MAX_PKT_SIZE + sizeof(union opx_hfi1_packet_hdr))
-
-#ifndef NDEBUG
-#define OPX_BUF_FREE(x)                                \
-	do {                                           \
-		memset(x, 0x3C, MIN(512, sizeof(*x))); \
-		ofi_buf_free(x);                       \
-	} while (0)
-#else
-#define OPX_BUF_FREE(x) ofi_buf_free(x)
-#endif
 
 __OPX_FORCE_INLINE__
 void opx_print_context(struct fi_opx_hfi1_context *context)

@@ -101,7 +101,8 @@ void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint6
 					   volatile uint64_t *head_reg)
 {
 	if (OFI_UNLIKELY((hdrq_offset & FI_OPX_HFI1_HDRQ_UPDATE_MASK) == FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS)) {
-		OPX_HFI1_BAR_UREG_STORE(head_reg, (const uint64_t)(hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS));
+		OPX_HFI1_BAR_UREG_STORE(opx_ep->domain, head_reg,
+					(const uint64_t)(hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS));
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "================== > Set HFI head register\n");
 	}
 }
@@ -234,14 +235,15 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq,
 	 * Error injection .. purposefully drop packet
 	 */
 	if (OFI_UNLIKELY(FI_OPX_RELIABILITY_RX_DROP_PACKET(opx_ep->reli_service, hdr))) {
-		*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(rhf_seq, OPX_SW_HFI1_TYPE);
+		*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(rhf_seq, OPX_SW_HFI1_TYPE(opx_ep->domain));
 		*p_hdrq_head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-		if (OPX_RHF_IS_USE_EGR_BUF(rhf, OPX_SW_HFI1_TYPE)) { /* eager */
-			const uint32_t egrbfr_index	 = OPX_RHF_EGR_INDEX(rhf, OPX_SW_HFI1_TYPE);
+		if (OPX_RHF_IS_USE_EGR_BUF(rhf, OPX_SW_HFI1_TYPE(opx_ep->domain))) { /* eager */
+			const uint32_t egrbfr_index	 = OPX_RHF_EGR_INDEX(rhf, OPX_SW_HFI1_TYPE(opx_ep->domain));
 			const uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-				OPX_HFI1_BAR_UREG_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
+				OPX_HFI1_BAR_UREG_STORE(opx_ep->domain, egrq_head_reg,
+							(const uint64_t) last_egrbfr_index);
 				*p_last_egrbfr_index = egrbfr_index;
 			}
 		}
@@ -303,7 +305,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, uint64_t *p_rh
 
 		uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-			OPX_HFI1_BAR_UREG_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
+			OPX_HFI1_BAR_UREG_STORE(opx_ep->domain, egrq_head_reg, (const uint64_t) last_egrbfr_index);
 			*p_last_egrbfr_index = egrbfr_index;
 		}
 	}
@@ -382,7 +384,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, ui
 		}
 		uint32_t last_egrbfr_index = *p_last_egrbfr_index;
 		if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-			OPX_HFI1_BAR_UREG_STORE(egrq_head_reg, (const uint64_t) last_egrbfr_index);
+			OPX_HFI1_BAR_UREG_STORE(opx_ep->domain, egrq_head_reg, (const uint64_t) last_egrbfr_index);
 			*p_last_egrbfr_index = egrbfr_index;
 		}
 
@@ -513,7 +515,7 @@ int opx_write_eager_pkt_to_subctxt(struct fi_opx_ep *opx_ep, struct opx_subconte
 			opx_write_header_to_subctxt(s_rx_q, rhf_rcvd, rhf_ptr_dest, hdr, rhq_tail, hfi1_type);
 
 			if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-				OPX_HFI1_BAR_UREG_STORE(opx_ep->rx->egrq.head_register,
+				OPX_HFI1_BAR_UREG_STORE(opx_ep->domain, opx_ep->rx->egrq.head_register,
 							(const uint64_t) last_egrbfr_index);
 				*p_last_egrbfr_index = egrbfr_index;
 			}
@@ -522,7 +524,8 @@ int opx_write_eager_pkt_to_subctxt(struct fi_opx_ep *opx_ep, struct opx_subconte
 	}
 
 	if (OFI_UNLIKELY(last_egrbfr_index != egrbfr_index)) {
-		OPX_HFI1_BAR_UREG_STORE(opx_ep->rx->egrq.head_register, (const uint64_t) last_egrbfr_index);
+		OPX_HFI1_BAR_UREG_STORE(opx_ep->domain, opx_ep->rx->egrq.head_register,
+					(const uint64_t) last_egrbfr_index);
 		*p_last_egrbfr_index = egrbfr_index;
 	}
 
@@ -664,8 +667,9 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required, const
 
 		/* CYR only has 2 bits available in BTH.QP[15:8] for storing the subctxt value, while WFR/JKR uses 3
 		 * bits.*/
-		const uint8_t subctxt_dest = (!(OPX_IS_EXTENDED_RX(hfi1_type))) ? (hdr->bth.subctxt_rx & 0x7) :
-										  ((hdr->bth.subctxt_rx >> 1) & 0x3);
+		const uint8_t subctxt_dest = (!OPX_IS_EXTENDED_RX_DOMAIN(opx_ep->domain)) ?
+						     (hdr->bth.subctxt_rx & 0x7) :
+						     ((hdr->bth.subctxt_rx >> 1) & 0x3);
 
 		uint64_t  hdrq_head_local;
 		uint32_t *p_last_egrbfr_index;

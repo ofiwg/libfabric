@@ -399,15 +399,15 @@ static struct _hfi_ctrl *opx_hfi1_rdma_userinit(int fd, struct fi_opx_hfi1_conte
 	assert(context->hfi1_type &
 	       (OPX_HFI1_CYR | OPX_HFI1_JKR | OPX_HFI1_WFR)); /* OPX_HFI1_MIXED_9B is determined later */
 
-	/* Need the global set early, may be changed later on interop networks */
-	if (OPX_SW_HFI1_TYPE == OPX_HFI1_UNDEF) {
-		OPX_SW_HFI1_TYPE = context->hfi1_type;
-		OPX_HW_HFI1_TYPE = context->hfi1_type;
+	if (OPX_SW_HFI1_TYPE(internal->domain) == OPX_HFI1_UNDEF) {
+		OPX_SW_HFI1_TYPE(internal->domain) = context->hfi1_type;
+		OPX_HW_HFI1_TYPE(internal->domain) = context->hfi1_type;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "[HFI1-DIRECT] global type %d, opx_hfi1_check_hwversion base_info->hw_version %#X, %s\n",
-		     OPX_SW_HFI1_TYPE, user_info_rsp.hw_version, OPX_HFI1_TYPE_STRING(context->hfi1_type));
+		     "[HFI1-DIRECT] domain type %d, opx_hfi1_check_hwversion base_info->hw_version %#X, %s\n",
+		     OPX_SW_HFI1_TYPE(internal->domain), user_info_rsp.hw_version,
+		     OPX_HFI1_TYPE_STRING(context->hfi1_type));
 
 	/* Copy the the new 'hfi1_user_info_rsp' to the  old 'hfi1_base_info'
 	 * struct */
@@ -968,8 +968,8 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 	const opx_lid_t lid	  = opx_hfi_get_port_lid(unit, port);
 
 	// too early for env to have been checked
-	enum opx_hfi1_type opa100_interop = OPX_SW_HFI1_TYPE;
-	if (!(OPX_SW_HFI1_TYPE & OPX_HFI1_WFR)) {
+	enum opx_hfi1_type opa100_interop = OPX_SW_HFI1_TYPE(internal->domain);
+	if (!(OPX_SW_HFI1_TYPE(internal->domain) & OPX_HFI1_WFR)) {
 		int interop;
 		if (fi_param_get_bool(fi_opx_global.prov, "opa100_interop", &interop) == FI_SUCCESS) {
 			if (interop) {
@@ -982,8 +982,8 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "SW/HW version %#X/%#X. API version %#X. Core %d(%d). \n", sw_version,
 		 hw_version, internal->user_info.userversion, rec_cpu, core_id);
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "Selected %s(%s) unit %d (%d units) and port %d (%d ports); \n",
-		 OPX_HFI1_TYPE_STRING(opa100_interop), OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE), unit, hfi_count, port,
-		 num_ports);
+		 OPX_HFI1_TYPE_STRING(opa100_interop), OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE(internal->domain)), unit,
+		 hfi_count, port, num_ports);
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "Core %d(%d). NUMA domain is %d; HFI NUMA domain is %ld. \n", rec_cpu,
 		 core_id, numa_node, opx_hfi_sysfs_unit_read_node_s64(unit));
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "LID %d, Receive context %d, sub-context %d, Send context %d\n", lid,
@@ -993,26 +993,26 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 		 cinfo->credits, cinfo->rcvegr_size, cinfo->rcvtids, cinfo->egrtids, cinfo->rcvhdrq_cnt,
 		 cinfo->rcvhdrq_entsize);
 
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.local_lids_size         = %d\n",
-		 fi_opx_global.hfi_local_info.local_lids_size);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sw_type                 = %d\n",
-		 fi_opx_global.hfi_local_info.sw_type);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.hw_type                 = %d\n",
-		 fi_opx_global.hfi_local_info.hw_type);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sim_rctxt_fd            = %d\n",
-		 fi_opx_global.hfi_local_info.sim_rctxt_fd);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sim_sctxt_fd            = %d\n",
-		 fi_opx_global.hfi_local_info.sim_sctxt_fd);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.lid[0]                  = %d\n",
-		 fi_opx_global.hfi_local_info.lid[0]);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.hfi_unit[0]             = %d\n",
-		 fi_opx_global.hfi_local_info.hfi_unit[0]);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.sriov                   = %d\n",
-		 fi_opx_global.hfi_local_info.sriov);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.port_loopback           = %d\n",
-		 fi_opx_global.hfi_local_info.port_loopback);
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.hfi_local_info.multi_hfi               = %d\n",
-		 fi_opx_global.hfi_local_info.multi_hfi);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.local_lids_size              = %d\n",
+		 internal->domain->hfi_local_info.local_lids_size);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.sw_type                      = %d\n",
+		 internal->domain->hfi_local_info.sw_type);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.hw_type                      = %d\n",
+		 internal->domain->hfi_local_info.hw_type);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.sim_rctxt_fd                 = %d\n",
+		 internal->domain->hfi_local_info.sim_rctxt_fd);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.sim_sctxt_fd                 = %d\n",
+		 internal->domain->hfi_local_info.sim_sctxt_fd);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.lid[0]                       = %d\n",
+		 internal->domain->hfi_local_info.lid[0]);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.hfi_unit[0]                  = %d\n",
+		 internal->domain->hfi_local_info.hfi_unit[0]);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.sriov                        = %d\n",
+		 internal->domain->hfi_local_info.sriov);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.port_loopback                = %d\n",
+		 internal->domain->hfi_local_info.port_loopback);
+	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "domain->hfi_local_info.multi_hfi                    = %d\n",
+		 internal->domain->hfi_local_info.multi_hfi);
 
 	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "fi_opx_global.progress                               = %s\n",
 		 fi_tostr(&fi_opx_global.progress, FI_TYPE_PROGRESS));
