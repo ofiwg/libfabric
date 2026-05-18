@@ -518,24 +518,6 @@ EXTRA_DIST += \
 	$(windows_files) \
         $(prov_extra_dist)
 
-if ENABLE_COVERAGE
-coverage:
-	$(MAKE) check
-	lcov --capture --directory $(top_builddir)/prov/efa/src \
-	     --output-file coverage.info --no-external
-	lcov --remove coverage.info '*/test/*' \
-	     --output-file coverage.info
-	genhtml coverage.info --output-directory coverage_report
-	@echo "Coverage report: coverage_report/index.html"
-
-coverage-clean:
-	find $(top_builddir) -name '*.gcda' -delete
-	find $(top_builddir) -name '*.gcno' -delete
-	rm -rf coverage.info coverage_report
-
-.PHONY: coverage coverage-clean
-endif
-
 # a workaround for http://debbugs.gnu.org/cgi/bugreport.cgi?bug=18744, this
 # bug was fixed in automake 1.15, but lesser automake is supported by us.
 am__is_gnu_make = { \
