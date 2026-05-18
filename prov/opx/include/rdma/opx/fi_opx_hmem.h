@@ -568,7 +568,7 @@ void opx_hmem_event_destroy(enum fi_hmem_iface iface, union opx_hmem_event **eve
 			hipEventDestroy((*event)->hip_event);
 		}
 #endif
-		ofi_buf_free(*event);
+		OPX_BUF_FREE(*event);
 		*event = NULL;
 	}
 }
