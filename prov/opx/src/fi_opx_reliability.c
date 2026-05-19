@@ -3298,7 +3298,7 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep, struct fi_opx
 		return FI_SUCCESS;
 	}
 
-	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr)) {
 		/* INTRA-NODE or SHM?  Will we use DAOS in SR-IOV */
 
 		/* HFI Rank Support: Retreive extended addressing data

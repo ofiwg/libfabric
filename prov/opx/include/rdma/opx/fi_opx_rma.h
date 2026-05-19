@@ -109,7 +109,7 @@ void opx_readv_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->lrh_dws	 = (params->pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
 		params->lrh_dlid = opx_target_addr.planes[OPX_PRIMARY_PLANE].lid;
 	}
-	params->is_shm	    = fi_opx_hfi1_tx_is_shm(opx_ep, opx_target_addr, caps);
+	params->is_shm	    = fi_opx_hfi1_tx_is_shm(opx_ep, opx_target_addr);
 	params->reliability = reliability;
 	params->opcode	    = opcode;
 
@@ -188,7 +188,7 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	union fi_opx_hfi1_deferred_work *work =
 		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_tx->work_pending_pool);
 	assert(work != NULL);
-	const uint64_t is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr, caps);
+	const uint64_t is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr);
 	uint32_t       u32_extended_rx =
 		fi_opx_ep_get_u32_extended_rx(opx_ep, is_shm, opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
 

@@ -5649,7 +5649,7 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 		lrh_dws = (pbc_dws - 2) >> 1;	       /* (LRH QW) does not include pbc (8 bytes) */
 	}
 
-	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr)) {
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SENDV, SHM -- RENDEZVOUS RTS Noncontig (begin) context %p\n",
@@ -6461,7 +6461,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
 
-	const uint64_t is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps);
+	const uint64_t is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr);
 
 	const uint64_t bth_rx	   = ((uint64_t) dest_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid_9B = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(dest_addr.planes[OPX_PRIMARY_PLANE].lid);
@@ -6966,7 +6966,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
 
-	const uint64_t is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps);
+	const uint64_t is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr);
 
 	const uint64_t bth_rx	    = ((uint64_t) dest_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 	const uint64_t lrh_dlid_16B = dest_addr.planes[OPX_PRIMARY_PLANE].lid;

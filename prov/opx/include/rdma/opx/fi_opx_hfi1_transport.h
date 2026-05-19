@@ -657,25 +657,8 @@ void fi_opx_hfi1_memcpy8(void *restrict dest, const void *restrict src, size_t n
 }
 
 __OPX_FORCE_INLINE__
-uint64_t fi_opx_hfi1_tx_is_shm(struct fi_opx_ep *opx_ep, const struct fi_opx_addr addr, const uint64_t caps)
+uint64_t fi_opx_hfi1_tx_is_shm(struct fi_opx_ep *opx_ep, const struct fi_opx_addr addr)
 {
-	/* If (exclusively FI_LOCAL_COMM) OR (FI_LOCAL_COMM is on AND
-	   the destination lid selected SHM) */
-	if ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "%ld\n",
-		       (long) opx_lid_is_shm(
-			       opx_ep->domain,
-			       OPX_LID_PLANE_KEY(opx_ep->domain, addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index)));
-		return opx_lid_is_shm(
-			opx_ep->domain,
-			OPX_LID_PLANE_KEY(opx_ep->domain, addr.planes[OPX_PRIMARY_PLANE].lid, addr.tx_index));
-	}
-
-	if ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) != (FI_LOCAL_COMM | FI_REMOTE_COMM)) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "%ld\n", 0L);
-		return 0;
-	}
-
 	if (opx_ep->domain->hfi_local_info.sriov) {
 #ifndef NDEBUG
 		enum opx_sriov_route route =
@@ -713,7 +696,7 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 	const uint64_t lrh_dlid_9B  = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(dest_addr.planes[OPX_PRIMARY_PLANE].lid);
 	const uint32_t lrh_dlid_16B = dest_addr.planes[OPX_PRIMARY_PLANE].lid;
 
-	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr)) {
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== INJECT, SHM (begin)\n");
 		OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_INJECT_SHM, len, tag);
@@ -1178,7 +1161,7 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 	struct iovec *iov_ptr  = (struct iovec *) iov;
 	size_t	     *niov_ptr = &niov;
 
-	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr)) {
 		return opx_hfi1_tx_sendv_egr_shm(ep, iov, niov, lrh_dws, lrh_dlid_9B, total_len, payload_qws_total,
 						 xfer_bytes_tail, &dest_addr, tag, context, data, lock_required,
 						 tx_op_flags, caps, do_cq_completion, iface, hmem_device, hmem_handle,
@@ -1474,7 +1457,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	struct iovec *iov_ptr  = (struct iovec *) iov;
 	size_t	     *niov_ptr = &niov;
 
-	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr)) {
 		return opx_hfi1_tx_sendv_egr_shm_16B(ep, iov, niov, lrh_qws, lrh_dlid_16B, total_len, payload_qws_total,
 						     xfer_bytes_tail, &dest_addr, tag, context, data, lock_required,
 						     tx_op_flags, caps, do_cq_completion, iface, hmem_device,
@@ -2065,7 +2048,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
 
-	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr)) {
 		return opx_hfi1_tx_send_egr_shm(ep, buf, len, dest_addr, tag, context, data, lock_required, tx_op_flags,
 						caps, do_cq_completion, iface, hmem_device, hmem_handle);
 	}
@@ -2217,7 +2200,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
 
-	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
+	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr)) {
 		return opx_hfi1_tx_send_egr_shm_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
 						    tx_op_flags, caps, do_cq_completion, iface, hmem_device,
 						    hmem_handle);
