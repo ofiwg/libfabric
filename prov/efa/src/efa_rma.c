@@ -45,7 +45,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	int i, err = 0;
 	size_t total_len;
 	struct efa_context *efa_ctx;
-	struct efa_direct_ope *direct_ope;
+	struct efa_direct_ope *direct_ope = NULL;
 
 	efa_tracepoint(read_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
@@ -117,7 +117,10 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	efa_tracepoint(post_read, wr_id, (uintptr_t)msg->context);
 
 out_err:
+	if (direct_ope)
+		efa_direct_ope_release(base_ep, direct_ope);
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
+
 	return err;
 }
 
@@ -204,7 +207,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	int i, err = 0;
 	size_t total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	struct efa_context *efa_ctx;
-	struct efa_direct_ope *direct_ope;
+	struct efa_direct_ope *direct_ope = NULL;
 
 	if (flags & FI_INJECT && total_len > base_ep->inject_rma_size) {
 		EFA_WARN(FI_LOG_EP_DATA,
@@ -272,7 +275,10 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	efa_tracepoint(post_write, wr_id, (uintptr_t)msg->context);
 
 out_err:
+	if (direct_ope)
+		efa_direct_ope_release(base_ep, direct_ope);
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
+
 	return err;
 }
 
