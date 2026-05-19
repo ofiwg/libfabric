@@ -433,7 +433,7 @@ void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state)
 	assert_non_null(peer);
 
 	/* Simulate RNR: record completion and queue for retransmit */
-	pkt_entry->ope = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+	efa_rdm_pke_set_ope(pkt_entry, container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry));
 	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
 	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, pkt_entry);
 

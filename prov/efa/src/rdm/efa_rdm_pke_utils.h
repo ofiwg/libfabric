@@ -241,4 +241,23 @@ int efa_rdm_pke_get_available_copy_methods(struct efa_rdm_ep *ep,
 
 struct efa_rdm_pke *efa_rdm_pke_get_ooo_pke(struct efa_rdm_pke *pkt_entry);
 
+/**
+ * @brief Set the ope pointer on a pke and capture the ope's current gen.
+ */
+static inline void efa_rdm_pke_set_ope(struct efa_rdm_pke *pke, struct efa_rdm_ope *ope)
+{
+	assert(ope);
+	pke->ope = ope;
+	pke->ope_gen = ope->gen;
+}
+
+/**
+ * @brief Assert that the pke's ope reference is still valid (not freed/reused).
+ */
+static inline void efa_rdm_pke_assert_ope_valid(struct efa_rdm_pke *pke)
+{
+	assert(pke->ope);
+	assert(pke->ope->gen == pke->ope_gen);
+}
+
 #endif

@@ -330,7 +330,7 @@ void test_efa_rdm_pke_flag_tracking(void **state)
 	/* Allocate a packet entry */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = peer;
 
 	/* Initially, packet should not be in any list */
@@ -406,7 +406,7 @@ void test_efa_rdm_pke_proc_matched_eager_rtm_error(void **state)
 	rxe->iov[0].iov_len = sizeof buf;
 	rxe->cq_entry.len = 1024;
 	rxe->total_len = 1024;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
 	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock, -FI_EINVAL);
@@ -484,7 +484,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error(void **state)
 	rxe->total_len = 1024;
 	rxe->bytes_received = 0;
 	rxe->bytes_received_via_mulreq = 0;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
 	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock, -FI_EINVAL);
@@ -533,7 +533,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(void **state)
 	rxe->total_len = 2048;
 	rxe->bytes_received = 0;
 	rxe->bytes_received_via_mulreq = 0;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
 
@@ -591,6 +591,7 @@ void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void
 		pkt_entry[i]->payload = pkt_entry[i]->wiredata;
 		pkt_entry[i]->payload_size = 64;
 		pkt_entry[i]->ope = rxe;
+		pkt_entry[i]->ope_gen = rxe->gen;
 
 		/* Replicate efa_rdm_pke_queued_copy_payload_to_hmem() */
 		efa_rdm_ep->queued_copy_vec[i].pkt_entry = pkt_entry[i];
