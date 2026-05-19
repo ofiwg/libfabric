@@ -222,8 +222,8 @@ The verbs provider checks for the following environment variables.
 ### Variables specific to MSG endpoints
 
 *FI_VERBS_IFACE*
-: The prefix or the full name of the network interface associated with the verbs
-  device (default: ib)
+: A comma separated list of prefixes or full names of network interfaces
+  associated with the verbs devices to use (default: none)
 
 ### Variables specific to DGRAM endpoints
 
