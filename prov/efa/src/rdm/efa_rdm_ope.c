@@ -47,6 +47,8 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->efa_outstanding_tx_ops = 0;
 	dlist_init(&txe->queued_pkts);
 
+	txe->proto = NULL;
+
 	memcpy(txe->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
 	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
 	if (msg->desc) {
@@ -1956,6 +1958,8 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	switch (ope->op) {
 	case ofi_op_msg: /* fall through */
 	case ofi_op_tagged:
+		if (ope->proto)
+			return efa_rdm_msg_post_rtm_proto(ope->ep, ope, ope->proto);
 		return efa_rdm_msg_post_rtm(ope->ep, ope);
 	case ofi_op_write:
 		return efa_rdm_rma_post_write(ope->ep, ope);

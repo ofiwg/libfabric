@@ -494,6 +494,9 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rma_inject_write_0_byte_no_shm, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rma_inject_writedata_0_byte_no_shm, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_msg_send_0_byte_with_inject_flag, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_msg_get_tx_flags, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_msg_send_dc_eager_pkt_type, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_msg_send_selective_completion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rma_write_0_byte_with_inject_flag, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_data_path_direct_rdma_read_multiple_sge_fail, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_data_path_direct_rdma_write_multiple_sge_fail, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -592,6 +595,15 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rma_partial_post_retry_no_double_free, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_rma_partial_post_retry_no_double_free_read, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_rdm_rma.c */
+
+		/* begin efa_unit_test_proto.c */
+		cmocka_unit_test_setup_teardown(test_proto_select_eager_for_small_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_select_eager_for_zero_len_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_eager_construct_pkes_single_pke, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_eager_construct_pkes_zero_copy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_eager_queue_dequeue_handshake, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_eager_send_completion_releases_txe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_eager_assigns_msg_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
