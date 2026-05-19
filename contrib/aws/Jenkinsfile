@@ -36,6 +36,9 @@ def download_and_extract_portafiducia(outputDir) {
         mkdir -p ${outputDir}
         aws s3 cp ${downloadPath} ${tempPath}
         tar xf ${tempPath} -C ${outputDir}
+        echo '----- PortaFiducia version -----'
+        cat ${outputDir}/portafiducia_version.log
+        echo '--------------------------------'
     """
 }
 
