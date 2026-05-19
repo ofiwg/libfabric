@@ -168,7 +168,7 @@ static struct fi_ops efa_rdm_cq_fi_ops = {
 static inline void efa_rdm_cq_increment_pkt_entry_gen(struct efa_rdm_pke *pkt_entry)
 {
 	pkt_entry->gen++;
-	pkt_entry->gen &= EFA_RDM_PACKET_GEN_MASK;
+	pkt_entry->gen &= EFA_RDM_GEN_MASK;
 }
 
 /**
