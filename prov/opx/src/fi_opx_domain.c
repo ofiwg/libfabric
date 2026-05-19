@@ -299,10 +299,6 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 #endif
 
 	if (hints) {
-		if (hints->caps & FI_OPX_DOMAIN_CAPS) {
-			domain_attr->caps = hints->caps & FI_OPX_DOMAIN_CAPS;
-		}
-
 		{
 			const int opx_modern_mr_mode = FI_MR_LOCAL | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
 			int supported_mr_mode = FI_OPX_BASE_MR_MODE | opx_modern_mr_mode | FI_MR_ENDPOINT | FI_MR_RAW;

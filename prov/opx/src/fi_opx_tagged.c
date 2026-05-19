@@ -215,8 +215,6 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint
 
 	const size_t niov = msg->iov_count;
 
-	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
-
 	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -225,27 +223,26 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint
 	if (niov == 0) {
 		if (!msg->context) {
 			rc = fi_opx_ep_tx_inject_internal(ep, 0, 0, msg->addr, msg->tag, msg->data,
-							  FI_OPX_LOCK_NOT_REQUIRED, flags, caps | FI_TAGGED,
+							  FI_OPX_LOCK_NOT_REQUIRED, flags, FI_TAGGED,
 							  opx_ep->reli_service->kind, OPX_SW_HFI1_TYPE(opx_ep->domain),
 							  OPX_IS_CTX_SHARING_ENABLED);
 		} else {
 			rc = fi_opx_ep_tx_send_internal(ep, 0, 0, msg->desc, msg->addr, msg->tag, msg->context,
 							msg->data, FI_OPX_LOCK_NOT_REQUIRED, OPX_CONTIG_TRUE,
-							OPX_FLAGS_OVERRIDE_TRUE, flags, caps | FI_TAGGED,
+							OPX_FLAGS_OVERRIDE_TRUE, flags, FI_TAGGED,
 							opx_ep->reli_service->kind, OPX_SW_HFI1_TYPE(opx_ep->domain),
 							OPX_IS_CTX_SHARING_ENABLED);
 		}
 	} else if (niov == 1) {
-		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, msg->desc, msg->addr,
-						msg->tag, msg->context, msg->data, FI_OPX_LOCK_NOT_REQUIRED,
-						OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_TRUE, flags, caps | FI_TAGGED,
-						opx_ep->reli_service->kind, OPX_SW_HFI1_TYPE(opx_ep->domain),
-						OPX_IS_CTX_SHARING_ENABLED);
-	} else {
 		rc = fi_opx_ep_tx_send_internal(
-			ep, msg->msg_iov, msg->iov_count, msg->desc, msg->addr, msg->tag, msg->context, msg->data,
-			FI_OPX_LOCK_NOT_REQUIRED, OPX_CONTIG_FALSE, OPX_FLAGS_OVERRIDE_TRUE, flags, caps | FI_TAGGED,
+			ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, msg->desc, msg->addr, msg->tag, msg->context,
+			msg->data, FI_OPX_LOCK_NOT_REQUIRED, OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_TRUE, flags, FI_TAGGED,
 			opx_ep->reli_service->kind, OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_IS_CTX_SHARING_ENABLED);
+	} else {
+		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov, msg->iov_count, msg->desc, msg->addr, msg->tag,
+						msg->context, msg->data, FI_OPX_LOCK_NOT_REQUIRED, OPX_CONTIG_FALSE,
+						OPX_FLAGS_OVERRIDE_TRUE, flags, FI_TAGGED, opx_ep->reli_service->kind,
+						OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_IS_CTX_SHARING_ENABLED);
 	}
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;

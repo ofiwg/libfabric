@@ -4265,7 +4265,7 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
 
-	assert(!fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps));
+	assert(!fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr));
 	assert(len > opx_tx->mp_eager_chunk_size);
 
 	const uint64_t bth_subctxt_rx = ((uint64_t) dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
@@ -4494,7 +4494,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 		/* MP EGR benefits host/CUDA paths, but other device memory should use rendezvous. */
 		if (total_len <= opx_tx->mp_eager_max_payload_bytes && is_contiguous &&
-		    !fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps) && (caps & FI_TAGGED) &&
+		    !fi_opx_hfi1_tx_is_shm(opx_ep, addr) && (caps & FI_TAGGED) &&
 		    (hmem_iface == FI_HMEM_SYSTEM || hmem_iface == FI_HMEM_CUDA)) {
 			assert(total_len >= opx_tx->mp_eager_min_payload_bytes);
 			rc = opx_hfi1_tx_send_try_mp_egr(ep, buf, len, addr, tag, context, data, lock_required,
