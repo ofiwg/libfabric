@@ -248,7 +248,9 @@ coverage:
 	./prov/efa/test/efa_unit_test
 	lcov --capture --directory $(top_builddir)/prov/efa/src \
 	     --output-file coverage.info --no-external
-	lcov --remove coverage.info '*/test/*' \
+	lcov --remove coverage.info '*/test/*' '*/src/.libs/*' \
+	     --output-file coverage.info
+	lcov --extract coverage.info '*/prov/efa/src/*' \
 	     --output-file coverage.info
 	genhtml coverage.info --output-directory coverage_report
 	@echo "Coverage report: coverage_report/index.html"
