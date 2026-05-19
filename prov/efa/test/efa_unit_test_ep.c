@@ -1970,7 +1970,7 @@ void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion(void *
 	assert_non_null(txe);
 	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 	txe->efa_outstanding_tx_ops = 1;
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = peer;
 
 	/* Set up initial state: increment outstanding_tx_ops to simulate pending operation */
