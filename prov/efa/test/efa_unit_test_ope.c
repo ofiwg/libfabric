@@ -343,7 +343,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	rxe->desc[0] = &cuda_mr;
 	rxe->iov_count = 1;
 	rxe->iov[0] = iov;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
@@ -1387,7 +1387,7 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 	/* Create request packet entry */
 	req_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(req_pkt_entry);
-	req_pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(req_pkt_entry, txe);
 	req_pkt_entry->ep = efa_rdm_ep;
 	req_pkt_entry->peer = txe->peer;
 	struct efa_rdm_base_hdr *req_hdr = (struct efa_rdm_base_hdr *)req_pkt_entry->wiredata;
@@ -1402,7 +1402,7 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 	if (pkt_type != EFA_RDM_SHORT_RTR_PKT && pkt_type != EFA_RDM_LONGCTS_RTR_PKT) {
 		resp_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert_non_null(resp_pkt_entry);
-		resp_pkt_entry->ope = txe;
+		efa_rdm_pke_set_ope(resp_pkt_entry, txe);
 		resp_pkt_entry->ep = efa_rdm_ep;
 		if (pkt_type == EFA_RDM_FETCH_RTA_PKT || pkt_type == EFA_RDM_COMPARE_RTA_PKT) {
 			struct efa_rdm_atomrsp_pkt *atomrsp_pkt = (struct efa_rdm_atomrsp_pkt *)resp_pkt_entry->wiredata;
@@ -1672,7 +1672,7 @@ static void test_efa_rdm_ope_longcts_cts_release_common(struct efa_resource *res
 	/* Create fake CTS packet entry */
 	cts_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(cts_pkt_entry);
-	cts_pkt_entry->ope = ope;
+	efa_rdm_pke_set_ope(cts_pkt_entry, ope);
 	cts_pkt_entry->ep = efa_rdm_ep;
 	cts_pkt_entry->peer = ope->peer;
 	struct efa_rdm_base_hdr *cts_hdr = (struct efa_rdm_base_hdr *)cts_pkt_entry->wiredata;
@@ -1810,7 +1810,7 @@ static void test_efa_rdm_rxe_dc_longcts_write_cts_receipt_order_common(
 	/* Create fake CTS packet entry */
 	cts_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(cts_pkt_entry);
-	cts_pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(cts_pkt_entry, rxe);
 	cts_pkt_entry->ep = efa_rdm_ep;
 	cts_pkt_entry->peer = rxe->peer;
 	struct efa_rdm_base_hdr *cts_hdr = (struct efa_rdm_base_hdr *)cts_pkt_entry->wiredata;

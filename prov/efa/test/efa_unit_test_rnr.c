@@ -3,6 +3,7 @@
 
 #include "efa_unit_tests.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_utils.h"
 
 void test_efa_rnr_queue_and_resend_impl(void **state, uint32_t op)
 {
@@ -54,7 +55,7 @@ void test_efa_rnr_queue_and_resend_impl(void **state, uint32_t op)
 
 	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(ibv_cq, wr_id);
 
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 
 	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
 

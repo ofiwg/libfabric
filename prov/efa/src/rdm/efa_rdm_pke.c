@@ -22,6 +22,7 @@
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_tracepoint.h"
 #include "efa_rdm_pke_print.h"
+#include "efa_rdm_pke_utils.h"
 
 /**
  * @brief allocate a packet entry
@@ -290,7 +291,10 @@ void efa_rdm_pke_copy(struct efa_rdm_pke *dest,
 	 * is tied to the memory region, therefore should
 	 * not be changed.
 	 */
-	dest->ope = src->ope;
+	if (src->ope)
+		efa_rdm_pke_set_ope(dest, src->ope);
+	else
+		dest->ope = NULL;
 
 	/* Pkt from read-copy pkt pool is only used for staging data
 	 * that will be copied to application buffer via rdma-read,
@@ -537,6 +541,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 			/* Currently this is only expected for eager pkts */
 			assert(pkt_entry_cnt == 1);
 			assert(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
+			efa_rdm_pke_assert_ope_valid(pkt_entry);
 			if (pkt_entry->ope->fi_flags & FI_REMOTE_CQ_DATA) {
 				flags_in_loop |= FI_REMOTE_CQ_DATA;
 				cq_data = pkt_entry->ope->cq_entry.data;

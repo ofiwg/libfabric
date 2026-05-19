@@ -511,7 +511,7 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
 		return err;
 
 	pkt_entry->pkt_size = hdr_size + txe->iov_count * sizeof(struct efa_rma_iov);
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 	return 0;
 }
 

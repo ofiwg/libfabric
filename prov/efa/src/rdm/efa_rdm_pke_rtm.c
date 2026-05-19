@@ -295,7 +295,7 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 		}
 	}
 
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
@@ -343,7 +343,7 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 		}
 	}
 
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
@@ -454,13 +454,13 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 		rxe = efa_rdm_rxe_map_lookup(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
 		if (rxe) {
 			if (rxe->state == EFA_RDM_RXE_MATCHED) {
-				pkt_entry->ope = rxe;
+				efa_rdm_pke_set_ope(pkt_entry, rxe);
 				efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
 			} else {
 				assert(rxe->unexp_pkt);
 				unexp_pkt_entry = efa_rdm_pke_get_unexp(&pkt_entry);
 				efa_rdm_pke_append(rxe->unexp_pkt, unexp_pkt_entry);
-				unexp_pkt_entry->ope = rxe;
+				efa_rdm_pke_set_ope(unexp_pkt_entry, rxe);
 			}
 
 			return;
@@ -544,7 +544,7 @@ static inline
 ssize_t efa_rdm_pke_init_eager_msgrtm_zero_hdr(struct efa_rdm_pke *pkt_entry,
 				      struct efa_rdm_ope *txe)
 {
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = txe->peer;
 
 	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
@@ -1141,7 +1141,7 @@ ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 		return err;
 
 	pkt_entry->pkt_size = hdr_size + txe->iov_count * sizeof(struct fi_rma_iov);
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = txe->peer;
 	return 0;
 }

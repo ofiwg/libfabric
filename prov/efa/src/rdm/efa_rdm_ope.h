@@ -69,6 +69,7 @@ enum efa_rdm_cuda_copy_method {
  */
 struct efa_rdm_ope {
 	enum efa_rdm_ope_type type;
+	uint8_t gen; /**< generation counter, incremented on release for use-after-free detection */
 
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;

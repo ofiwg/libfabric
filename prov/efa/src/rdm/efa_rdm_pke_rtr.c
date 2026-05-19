@@ -11,6 +11,7 @@
 #include "efa_rdm_ep.h"
 #include "efa_rdm_rma.h"
 #include "efa_rdm_ope.h"
+#include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_req.h"
@@ -37,7 +38,7 @@ void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry,
 	}
 
 	pkt_entry->pkt_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = txe->peer;
 }
 

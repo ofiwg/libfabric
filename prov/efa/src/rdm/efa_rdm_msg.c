@@ -824,7 +824,7 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
-		(*pkt_entry_ptr)->ope = rxe;
+		efa_rdm_pke_set_ope(*pkt_entry_ptr, rxe);
 		peer_rxe->peer_context = (*pkt_entry_ptr);
 		rxe->peer_rxe = peer_rxe;
 
@@ -912,7 +912,7 @@ efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
-		(*pkt_entry_ptr)->ope = rxe;
+		efa_rdm_pke_set_ope(*pkt_entry_ptr, rxe);
 
 		if (efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->flags &
 		    EFA_RDM_REQ_OPT_CQ_DATA_HDR) {

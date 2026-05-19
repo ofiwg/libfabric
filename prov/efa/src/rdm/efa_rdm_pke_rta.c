@@ -15,6 +15,7 @@
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_req.h"
+#include "efa_rdm_pke_utils.h"
 
 /**
  * @brief initialize the common elements of WRITE_RTA, FETCH_RTA and COMPARE_RTA
@@ -72,7 +73,7 @@ ssize_t efa_rdm_pke_init_rta_common(struct efa_rdm_pke *pkt_entry,
 	data_size = ret;
 
 	pkt_entry->pkt_size = hdr_size + data_size;
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = txe->peer;
 	return 0;
 }
@@ -161,6 +162,7 @@ ssize_t efa_rdm_pke_init_write_rta(struct efa_rdm_pke *pkt_entry,
  */
 void efa_rdm_pke_handle_write_rta_send_completion(struct efa_rdm_pke *pkt_entry)
 {
+	efa_rdm_pke_assert_ope_valid(pkt_entry);
 	efa_rdm_ope_handle_send_completed(pkt_entry->ope);
 }
 
