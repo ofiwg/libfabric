@@ -32,6 +32,7 @@
  */
 
 #include <ofi_util.h>
+#include <ofi_str.h>
 
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -1187,56 +1188,46 @@ close_device:
 	return num_verbs_ifs ? 0 : -FI_ENODATA;
 }
 
-/* Builds a list of interfaces that correspond to active verbs devices */
-static int vrb_getifaddrs(struct dlist_entry *verbs_devs)
-{
-	struct ifaddrs *ifaddr, *ifa;
+static int vrb_filter_ifaddrs(struct dlist_entry *verbs_devs,
+			      struct ifaddrs *ifaddrs, const char* iface_name) {
+	struct ifaddrs *ifa;
 	struct rdma_addrinfo *rai = NULL;
 	char *dev_name = NULL;
-	char *iface = vrb_gl_data.iface;
 	int ret, num_verbs_ifs = 0;
 	size_t iface_len = 0;
 	int exact_match = 0;
 
-	ret = ofi_getifaddrs(&ifaddr);
-	if (ret) {
-		VRB_WARN(FI_LOG_FABRIC,
-			   "unable to get interface addresses\n");
-		return ret;
-	}
-
-	/* select best iface name based on user's input */
-	if (iface) {
-		iface_len = strlen(iface);
+	if (iface_name) {
+		iface_len = strlen(iface_name);
 		if (iface_len > IFNAMSIZ) {
 			VRB_INFO(FI_LOG_FABRIC, "iface name: %s, too long "
-				   "max: %d\n", iface, IFNAMSIZ);
+				   "max: %d\n", iface_name, IFNAMSIZ);
 
 		}
-		for (ifa = ifaddr; ifa && !exact_match; ifa = ifa->ifa_next)
-			exact_match = !strcmp(ifa->ifa_name, iface);
+		for (ifa = ifaddrs; ifa && !exact_match; ifa = ifa->ifa_next)
+			exact_match = !strcmp(ifa->ifa_name, iface_name);
 	}
 
-	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+	for (ifa = ifaddrs; ifa; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
 				(ifa->ifa_flags & IFF_LOOPBACK))
 			continue;
 
-		if (iface) {
+		if (iface_name) {
 			if (exact_match) {
-				if (strcmp(ifa->ifa_name, iface)) {
+				if (strcmp(ifa->ifa_name, iface_name)) {
 					FI_INFO(&vrb_prov, FI_LOG_FABRIC,
 						"skipping interface: %s for FI_EP_MSG"
 						" as it doesn't match filter: %s\n",
-						ifa->ifa_name, iface);
+						ifa->ifa_name, iface_name);
 					continue;
 				}
 			} else {
-				if (strncmp(ifa->ifa_name, iface, iface_len)) {
+				if (strncmp(ifa->ifa_name, iface_name, iface_len)) {
 					FI_INFO(&vrb_prov, FI_LOG_FABRIC,
 						"skipping interface: %s for FI_EP_MSG"
 						" as it doesn't match filter: %s\n",
-						ifa->ifa_name, iface);
+						ifa->ifa_name, iface_name);
 					continue;
 				}
 			}
@@ -1255,9 +1246,37 @@ static int vrb_getifaddrs(struct dlist_entry *verbs_devs)
 		num_verbs_ifs++;
 	}
 
+	return num_verbs_ifs;
+}
+
+/* Builds a list of interfaces that correspond to active verbs devices */
+static int vrb_getifaddrs(struct dlist_entry *verbs_devs)
+{
+	int ret, num_verbs_ifs = 0, i;
+	char **iface_list = NULL;
+	struct ifaddrs *ifaddrs = NULL;
+
+	ret = ofi_getifaddrs(&ifaddrs);
+	if (ret) {
+		VRB_WARN(FI_LOG_FABRIC,
+			   "unable to get interface addresses\n");
+		return ret;
+	}
+
+	/* select best iface name based on user's input */
+	if (vrb_gl_data.iface) {
+		iface_list = ofi_split_and_alloc(vrb_gl_data.iface, ",", NULL);
+		for (i = 0; iface_list && iface_list[i]; i++)
+			num_verbs_ifs += vrb_filter_ifaddrs(verbs_devs, ifaddrs,
+							    iface_list[i]);
+		ofi_free_string_array(iface_list);
+	} else {
+		num_verbs_ifs = vrb_filter_ifaddrs(verbs_devs, ifaddrs, NULL);
+	}
+
 	verbs_devs_print(verbs_devs);
 
-	freeifaddrs(ifaddr);
+	freeifaddrs(ifaddrs);
 	return num_verbs_ifs ? 0 : -FI_ENODATA;
 }
 
