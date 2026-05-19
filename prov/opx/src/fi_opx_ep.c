@@ -3826,15 +3826,7 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 			context->data	      = uepkt->hdr.match.ofi_data;
 			context->byte_counter = 0;
 
-			if (rx_op_flags & FI_CLAIM) { /* both FI_PEEK and FI_CLAIM were specified */
-
-				/* remove this item from the list, but don't free it.
-				   It will be freed on a subsequent FI_CLAIM that's
-				   not combined with FI_PEEK. */
-				context->claim		      = uepkt;
-				struct fi_context *op_context = (struct fi_context *) context->err_entry.op_context;
-				op_context->internal[0]	      = uepkt;
-
+			if (rx_op_flags & (FI_CLAIM | FI_DISCARD)) {
 #ifndef FI_OPX_MATCH_HASH_DISABLE
 				if (!from_hash_queue) {
 					fi_opx_hfi1_ue_packet_slist_pop_item(uepkt, &opx_ep->rx->queue[kind].ue);
@@ -3844,6 +3836,14 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 #else
 				fi_opx_hfi1_ue_packet_slist_pop_item(uepkt, &opx_ep->rx->queue[kind].ue);
 #endif
+				if (rx_op_flags & FI_CLAIM) {
+					context->claim = uepkt;
+					struct fi_context *op_context =
+						(struct fi_context *) context->err_entry.op_context;
+					op_context->internal[0] = uepkt;
+				} else {
+					OPX_BUF_FREE(uepkt);
+				}
 			}
 
 			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context, lock_required);
@@ -3883,10 +3883,30 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 
 		struct fi_context	     *op_context  = (struct fi_context *) context->err_entry.op_context;
 		struct fi_opx_hfi1_ue_packet *claimed_pkt = op_context->internal[0];
+		op_context->internal[0]			  = NULL;
+
+		if (OFI_UNLIKELY(claimed_pkt == NULL)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_CLAIM without a prior FI_PEEK|FI_CLAIM\n");
+			context->err_entry.err = FI_EINVAL;
+			fi_opx_cq_enqueue_err(opx_ep->rx->cq, context, lock_required);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
+			return;
+		}
 
 		const unsigned is_shm	   = claimed_pkt->is_shm;
 		uint8_t	       is_mp_eager = (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(claimed_pkt->hdr.bth.opcode) ==
 					      FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);
+
+		if (rx_op_flags & FI_DISCARD) {
+			context->len	      = fi_opx_hfi1_packet_hdr_message_length(&claimed_pkt->hdr);
+			context->tag	      = claimed_pkt->hdr.match.ofi_tag;
+			context->data	      = claimed_pkt->hdr.match.ofi_data;
+			context->byte_counter = 0;
+			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context, lock_required);
+			OPX_BUF_FREE(claimed_pkt);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
+			return;
+		}
 
 		opx_ep_complete_receive_operation(
 			ep, &claimed_pkt->hdr, (union fi_opx_hfi1_packet_payload *) &claimed_pkt->payload,
