@@ -101,7 +101,7 @@
 /*
  * Define bitmask to compare packet generation
  */
-#define EFA_RDM_PACKET_GEN_MASK (EFA_RDM_BUFPOOL_ALIGNMENT - 1)
+#define EFA_RDM_GEN_MASK (EFA_RDM_BUFPOOL_ALIGNMENT - 1)
 
 
 struct efa_fabric {

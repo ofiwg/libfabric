@@ -28,9 +28,9 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
 static inline struct efa_rdm_pke *efa_rdm_cq_get_pke_from_wr_id_solicited(uint64_t wr_id)
 {
 	struct efa_rdm_pke *pkt_entry;
-	uint8_t gen = wr_id & EFA_RDM_PACKET_GEN_MASK;
+	uint8_t gen = wr_id & EFA_RDM_GEN_MASK;
 
-	wr_id &= ~((uint64_t)EFA_RDM_PACKET_GEN_MASK);
+	wr_id &= ~((uint64_t)EFA_RDM_GEN_MASK);
 	pkt_entry = (struct efa_rdm_pke *) wr_id;
 	if (OFI_UNLIKELY(pkt_entry->gen != gen)) {
 		EFA_WARN(FI_LOG_CQ, "Received packet from wrong generation! pkt_entry %p expected gen %d received gen %d\n", pkt_entry, pkt_entry->gen, gen);

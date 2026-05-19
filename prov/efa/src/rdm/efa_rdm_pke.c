@@ -67,7 +67,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 #endif
 	/* Without poisoning, debug_info pointer is naturally preserved in memory. */
 
-	pkt_entry->gen &= EFA_RDM_PACKET_GEN_MASK;
+	pkt_entry->gen &= EFA_RDM_GEN_MASK;
 	dlist_init(&pkt_entry->entry);
 
 #if ENABLE_DEBUG
@@ -459,8 +459,8 @@ void efa_rdm_pke_append(struct efa_rdm_pke *dst,
 
 static inline uint64_t efa_rdm_pke_get_wr_id(struct efa_rdm_pke *pkt_entry)
 {
-	assert((uint64_t)pkt_entry->gen == ((uint64_t)pkt_entry->gen & EFA_RDM_PACKET_GEN_MASK));
-	assert((uint64_t)pkt_entry == ((uint64_t)pkt_entry & ~((uint64_t)EFA_RDM_PACKET_GEN_MASK)));
+	assert((uint64_t)pkt_entry->gen == ((uint64_t)pkt_entry->gen & EFA_RDM_GEN_MASK));
+	assert((uint64_t)pkt_entry == ((uint64_t)pkt_entry & ~((uint64_t)EFA_RDM_GEN_MASK)));
 	return (uint64_t) pkt_entry | (uint64_t) pkt_entry->gen;
 }
 
@@ -805,8 +805,8 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 
 #if ENABLE_DEBUG
 /* Compile-time assertion that debug_info gen field can hold all possible gen values */
-_Static_assert(EFA_RDM_PKE_DEBUG_GEN_MASK >= EFA_RDM_PACKET_GEN_MASK,
-               "DEBUG_GEN_BITS insufficient to hold EFA_RDM_PACKET_GEN_MASK");
+_Static_assert(EFA_RDM_PKE_DEBUG_GEN_MASK >= EFA_RDM_GEN_MASK, 
+               "DEBUG_GEN_BITS insufficient to hold EFA_RDM_GEN_MASK");
 
 /**
  * @brief Print debug info history for packet entry
