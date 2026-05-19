@@ -175,7 +175,7 @@ ssize_t efa_rdm_pke_init_cts(struct efa_rdm_pke *pkt_entry,
 	cts_hdr->connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
 
 	pkt_entry->peer = ope->peer;
-	pkt_entry->ope = (void *)ope;
+	efa_rdm_pke_set_ope(pkt_entry, (void *)ope);
 	return 0;
 }
 
@@ -261,7 +261,7 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 	if (ret)
 		return ret;
 
-	pkt_entry->ope = (void *)ope;
+	efa_rdm_pke_set_ope(pkt_entry, (void *)ope);
 	pkt_entry->peer = ope->peer;
 
 	return 0;
@@ -454,7 +454,7 @@ void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
 {
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 
-	pkt_entry->ope = (void *)txe;
+	efa_rdm_pke_set_ope(pkt_entry, (void *)txe);
 	pkt_entry->peer = txe->peer;
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
@@ -476,7 +476,7 @@ void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 {
 	struct efa_rdm_rma_context_pkt *ctx_pkt;
 
-	pkt_entry->ope = ope;
+	efa_rdm_pke_set_ope(pkt_entry, ope);
 	pkt_entry->peer = ope->peer;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_rma_context_pkt);
 
@@ -517,6 +517,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 					assert(txe->ep->efa_rx_pkts_held > 0);
 					txe->ep->efa_rx_pkts_held--;
 				}
+				efa_rdm_pke_assert_ope_valid(data_pkt_entry);
 				efa_rdm_tracepoint(rx_pke_local_read_copy_payload_end, (size_t) data_pkt_entry, data_pkt_entry->payload_size, data_pkt_entry->ope->msg_id, (size_t) data_pkt_entry->ope->cq_entry.op_context, data_pkt_entry->ope->total_len);
 				efa_rdm_pke_handle_data_copied(data_pkt_entry);
 			} else {
@@ -626,7 +627,7 @@ int efa_rdm_pke_init_eor(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe)
 	eor_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_eor_hdr);
 	pkt_entry->peer = rxe->peer;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 	return 0;
 }
 
@@ -659,7 +660,7 @@ int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope
 	nack_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_read_nack_hdr);
 	pkt_entry->peer = rxe->peer;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 	return 0;
 }
 
@@ -754,7 +755,7 @@ int efa_rdm_pke_init_receipt(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *
 
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_receipt_hdr);
 	pkt_entry->peer = rxe->peer;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	return 0;
 }
@@ -813,7 +814,7 @@ int efa_rdm_pke_init_atomrsp(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *
 
 	assert(rxe->atomrsp_data);
 	pkt_entry->peer = rxe->peer;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	atomrsp_pkt = (struct efa_rdm_atomrsp_pkt *)pkt_entry->wiredata;
 	atomrsp_hdr = &atomrsp_pkt->hdr;

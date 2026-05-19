@@ -687,6 +687,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 #if HAVE_LTTNG
 	efa_rdm_tracepoint(poll_cq, (size_t) wr_id);
 	if (pkt_entry && pkt_entry->ope)
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
@@ -753,6 +754,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 #if HAVE_LTTNG
 	efa_rdm_tracepoint(poll_cq, (size_t) wr_id);
 	if (pkt_entry && pkt_entry->ope)
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,

@@ -151,6 +151,8 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		txe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
 	}
 
+	txe->gen++;
+	txe->gen &= EFA_RDM_GEN_MASK;
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(txe,
 			      sizeof(struct efa_rdm_ope));
@@ -209,6 +211,8 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 		rxe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
 	}
 
+	rxe->gen++;
+	rxe->gen &= EFA_RDM_GEN_MASK;
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(rxe,
 			      sizeof(struct efa_rdm_ope));

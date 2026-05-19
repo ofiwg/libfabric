@@ -420,6 +420,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		return;
 	}
 
+	efa_rdm_pke_assert_ope_valid(pkt_entry);
 	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;
@@ -536,6 +537,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 
+	efa_rdm_pke_assert_ope_valid(pkt_entry);
 	ep = pkt_entry->ep;
 
 	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
@@ -563,6 +565,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* Start handling pkts with hdrs */
 	switch (efa_rdm_pkt_type_of(pkt_entry)) {
 	case EFA_RDM_HANDSHAKE_PKT:
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		efa_rdm_tracepoint(handshake_send_completion,
 				   (size_t) pkt_entry, pkt_entry->pkt_size,
 				   pkt_entry->ope->msg_id,
@@ -650,7 +653,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * so this check must come after that call.
 		 * Only release TXE when both TX ops complete and receipt is received.
 		 */
-		assert(pkt_entry->ope);
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		if (efa_rdm_txe_dc_ready_for_release(pkt_entry->ope))
 			efa_rdm_txe_release(pkt_entry->ope);
 		break;
@@ -712,6 +715,7 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		return;
 	}
 
+	efa_rdm_pke_assert_ope_valid(pkt_entry);
 	if (pkt_entry->ope->type == EFA_RDM_TXE) {
 		efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
 	} else if (pkt_entry->ope->type == EFA_RDM_RXE) {

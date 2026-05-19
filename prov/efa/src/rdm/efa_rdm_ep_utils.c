@@ -373,6 +373,9 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke
 {
 	struct efa_rdm_ope *ope = NULL;
 
+	if (pkt_entry->ope)
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
+
 #if ENABLE_DEBUG
 	/*
 	 * Record completion event based on operation type.
@@ -605,7 +608,7 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 		return -FI_EAGAIN;
 	}
 
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = peer;
 
 	if (trigger_mode) {

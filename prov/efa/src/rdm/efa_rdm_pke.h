@@ -155,6 +155,8 @@ struct efa_rdm_pke {
 
 	/** @brief pointer to #efa_rdm_ope */
 	struct efa_rdm_ope *ope;
+	/** @brief generation of ope when this pke was associated with it */
+	uint8_t ope_gen;
 
 	/** @brief number of bytes sent/received over wire */
 	size_t pkt_size;
