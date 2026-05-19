@@ -52,7 +52,7 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 	struct ibv_recv_wr *bad_wr;
 	struct ibv_recv_wr *wr;
 	struct efa_context *efa_ctx;
-	struct efa_direct_ope *direct_ope;
+	struct efa_direct_ope *direct_ope = NULL;
 	uintptr_t addr;
 	ssize_t err, post_recv_err;
 	size_t i, wr_index;
@@ -167,6 +167,8 @@ out_err:
 
 	base_ep->recv_wr_index = 0;
 
+	if (direct_ope)
+		efa_direct_ope_release(base_ep, direct_ope);
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
 
 	return err;
@@ -210,7 +212,7 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	struct ibv_sge sg_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
 	struct efa_context *efa_ctx;
-	struct efa_direct_ope *direct_ope;
+	struct efa_direct_ope *direct_ope = NULL;
 	size_t len, i;
 	size_t iov_count = msg->iov_count;
 	bool use_inline, len_fits_inline, is_hmem;
@@ -337,7 +339,10 @@ post:
 	efa_tracepoint(post_send, wr_id, (uintptr_t)msg->context);
 
 out_err:
+	if (direct_ope)
+		efa_direct_ope_release(base_ep, direct_ope);
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
+
 	return ret;
 }
 
