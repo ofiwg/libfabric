@@ -282,7 +282,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 			 "===================================== ATOMIC %s (begin)\n", is_compare ? "CAS" : "FETCH");
 		cc->cntr = opx_ep->read_cntr;
 
-		const uint64_t	       is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr, caps);
+		const uint64_t	       is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr);
 		struct fi_opx_hmem_iov fetch_iov;
 		uint64_t	       fetch_handle;
 		opx_hmem_iov_init(fetch_vaddr, buf_len, NULL, &fetch_iov, &fetch_handle);
