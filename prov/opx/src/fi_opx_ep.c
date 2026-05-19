@@ -3845,13 +3845,54 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		struct fi_context	     *op_context  = (struct fi_context *) context->err_entry.op_context;
 		struct fi_opx_hfi1_ue_packet *claimed_pkt = op_context->internal[0];
 
-		const unsigned is_shm = claimed_pkt->is_shm;
+		const unsigned is_shm	   = claimed_pkt->is_shm;
+		uint8_t	       is_mp_eager = (FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(claimed_pkt->hdr.bth.opcode) ==
+					      FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);
 
 		opx_ep_complete_receive_operation(
 			ep, &claimed_pkt->hdr, (union fi_opx_hfi1_packet_payload *) &claimed_pkt->payload,
 			claimed_pkt->hdr.match.ofi_tag, context, claimed_pkt->hdr.bth.opcode, OPX_MULTI_RECV_FALSE,
 			is_shm, rx_op_flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM), lock_required,
 			reliability, hfi1_type);
+
+		if (is_mp_eager) {
+			/*
+			 * A claimed multi-packet eager message starts from an unexpected FIRST
+			 * packet, just like fi_opx_ep_process_context_match_ue_packets().  The
+			 * FIRST packet initializes context->byte_counter, but the remaining NTH
+			 * packets are matched through mp_egr_queue.  If we skip that bookkeeping
+			 * here, FI_CLAIM receives can wait forever after MPI_Mprobe claims the
+			 * FIRST packet of a multi-packet eager message.
+			 */
+			opx_lid_t slid;
+			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+				slid = (opx_lid_t) __be16_to_cpu24((__be16) claimed_pkt->hdr.lrh_9B.slid);
+			} else {
+				slid = (opx_lid_t) __le24_to_cpu((__le24) (claimed_pkt->hdr.lrh_16B.slid20 << 20) |
+								 (claimed_pkt->hdr.lrh_16B.slid));
+			}
+
+			const uint64_t mp_egr_id =
+				OPX_GET_MP_EGR_ID(claimed_pkt->hdr.reliability.psn, slid, claimed_pkt->subctxt_rx);
+
+			fi_opx_ep_rx_process_pending_mp_eager_ue(ep, context, mp_egr_id, is_shm, lock_required,
+								 reliability, hfi1_type);
+
+			if (context->byte_counter) {
+				context->mp_egr_id = mp_egr_id;
+				slist_insert_tail((struct slist_entry *) context, &opx_ep->rx->mp_egr_queue.mq);
+			} else {
+				FI_OPX_DEBUG_COUNTERS_INC(
+					opx_ep->debug_counters.mp_eager.recv_completed_process_context);
+
+				context->next = NULL;
+				if (OFI_UNLIKELY(context->err_entry.err == FI_ETRUNC)) {
+					slist_insert_tail((struct slist_entry *) context, opx_ep->rx->cq_err_ptr);
+				} else {
+					fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context, lock_required);
+				}
+			}
+		}
 
 		/* ... and prepend the claimed uepkt to the ue free list.
 		   claimed_pkt->next should have been set to NULL at the time we
