@@ -10,11 +10,76 @@
 #include "efa_rdm_tracepoint.h"
 
 /**
+ * @brief Re-queue a matched fi_peer_rx_entry back into its SRX queue.
+ *
+ * Used by receiver-side peer-abort handling: after the receiver
+ * decides to abandon an in-flight protocol step that it cannot
+ * complete (because the peer cleanly went away), it returns the
+ * matched peer_rxe to the head of the appropriate SRX posted-recv
+ * queue (msg/tag, with FI_ADDR_UNSPEC vs per-source) so the user's
+ * original fi_recv survives and can match a subsequent message.
+ *
+ * The entry is inserted at the HEAD of the queue. This preserves
+ * matching order: the abandoned message would have been the
+ * head match if it were posted again, so re-queueing at the head
+ * keeps the posted-recv at its original position relative to
+ * other still-posted recvs.
+ *
+ * @param[in] peer_rxe	fi_peer_rx_entry carrying iov, iov_count, and
+ *			context for this operation
+ */
+int efa_rdm_srx_repost_peer_rxe(struct fi_peer_rx_entry *peer_rxe)
+{
+	struct util_srx_ctx *srx_ctx;
+	struct util_rx_entry *util_entry;
+	struct slist *queue;
+	bool is_tagged;
+
+	if (!peer_rxe || !peer_rxe->srx)
+		return -FI_EINVAL;
+
+	srx_ctx = efa_rdm_srx_get_srx_ctx(peer_rxe);
+	assert(ofi_genlock_held(srx_ctx->lock));
+
+	util_entry = container_of(peer_rxe, struct util_rx_entry, peer_entry);
+
+	/* Decide which SRX queue this entry came from. The
+	 * peer_entry.flags carry FI_MSG or FI_TAGGED depending on the
+	 * posting API; peer_entry.addr is FI_ADDR_UNSPEC unless
+	 * directed-recv is on. */
+	is_tagged = (peer_rxe->flags & FI_TAGGED) != 0;
+
+	if (peer_rxe->addr == FI_ADDR_UNSPEC) {
+		queue = is_tagged ? &srx_ctx->tag_queue : &srx_ctx->msg_queue;
+	} else {
+		queue = is_tagged ?
+			ofi_array_at(&srx_ctx->src_trecv_queues, peer_rxe->addr) :
+			ofi_array_at(&srx_ctx->src_recv_queues, peer_rxe->addr);
+	}
+	assert(queue);
+
+	/* Reset the entry to its posted state. */
+	util_entry->status = RX_ENTRY_POSTED;
+	peer_rxe->owner_context = NULL;
+	peer_rxe->peer_context = NULL;
+	peer_rxe->srx = NULL;
+	/* The matcher shrank msg_size to MIN(buffer, aborted-msg size).
+	 * Restore it to the full buffer capacity so a subsequent
+	 * (larger) match sees a freshly-posted-equivalent entry, as
+	 * util_init_rx_entry() leaves it. */
+	peer_rxe->msg_size = ofi_total_iov_len(peer_rxe->iov,
+					       peer_rxe->count);
+
+	slist_insert_head(&util_entry->s_entry, queue);
+	return FI_SUCCESS;
+}
+
+/**
  * @brief update an rxe for a peer rx entry.
  *        This function is used by two sided operation only.
  *
  * @param[in] ep	endpoint
- * @param[in] peer_rxe	fi_peer_rx_entry_msg contains iov,iov_count,context for ths operation
+ * @param[in] peer_rxe	fi_peer_rx_entry carrying iov, iov_count, and context for this operation
  * @param[in] rxe	efa_rdm_ope to be updated
  */
 void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
