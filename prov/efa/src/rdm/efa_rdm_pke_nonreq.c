@@ -239,7 +239,7 @@ void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
 
 	if (ope->state != EFA_RDM_OPE_SEND) {
 		ope->state = EFA_RDM_OPE_SEND;
-		dlist_insert_tail(&ope->entry, &efa_rdm_ep_domain(ep)->ope_longcts_send_list);
+		dlist_insert_tail(&ope->entry, &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
 	}
 }
 
@@ -440,11 +440,11 @@ void efa_rdm_pke_handle_readrsp_sent(struct efa_rdm_pke *pkt_entry)
 	rxe->window -= data_len;
 	assert(rxe->window >= 0);
 	if (rxe->bytes_sent < rxe->total_len) {
-		if (efa_is_cache_available(efa_rdm_ep_domain(pkt_entry->ep)))
+		if (efa_is_cache_available(efa_rdm_ep_rdm_domain(pkt_entry->ep)))
 			efa_rdm_ope_try_fill_desc(rxe, 0, FI_SEND);
 
 		rxe->state = EFA_RDM_OPE_SEND;
-		dlist_insert_tail(&rxe->entry, &efa_rdm_ep_domain(pkt_entry->ep)->ope_longcts_send_list);
+		dlist_insert_tail(&rxe->entry, &efa_rdm_ep_rdm_domain(pkt_entry->ep)->ope_longcts_send_list);
 	}
 }
 
@@ -707,7 +707,7 @@ void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_eor_hdr *eor_hdr;
 	struct efa_rdm_ope *txe;
 
-	efa_rdm_ep_domain(pkt_entry->ep)->num_read_msg_in_flight -= 1;
+	efa_rdm_ep_rdm_domain(pkt_entry->ep)->num_read_msg_in_flight -= 1;
 
 	eor_hdr = (struct efa_rdm_eor_hdr *)pkt_entry->wiredata;
 
@@ -741,7 +741,7 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *txe;
 	bool delivery_complete_requested;
 
-	efa_rdm_ep_domain(pkt_entry->ep)->num_read_msg_in_flight -= 1;
+	efa_rdm_ep_rdm_domain(pkt_entry->ep)->num_read_msg_in_flight -= 1;
 
 	nack_hdr = (struct efa_rdm_read_nack_hdr *) pkt_entry->wiredata;
 

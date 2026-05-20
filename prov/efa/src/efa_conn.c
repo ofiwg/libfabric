@@ -58,7 +58,7 @@ static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 	if (cur_size <= av->implicit_av_size)
 		goto out;
 
-	assert(ofi_genlock_held(&av->domain->srx_lock));
+	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 
 	dlist_pop_front(&av->implicit_av_lru_list, struct efa_conn,
 			conn_to_release, implicit_av_lru_entry);
@@ -78,7 +78,7 @@ static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 	memcpy(ep_addr_hashable, conn->ep_addr, sizeof(struct efa_ep_addr));
 	HASH_ADD(hh, av->evicted_peers_hashset, addr, sizeof(struct efa_ep_addr), ep_addr_hashable);
 
-	assert(ofi_genlock_held(&av->domain->srx_lock));
+	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 	efa_conn_release(av, conn_to_release, true);
 
 	assert(HASH_CNT(hh, av->util_av_implicit.hash) == av->implicit_av_size);
@@ -195,7 +195,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 		}
 	}
 
-	assert(ofi_genlock_held(&av->domain->srx_lock));
+	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 	HASH_ITER(hh, conn->ep_peer_map, peer_map_entry, tmp) {
 		dlist_remove(&peer_map_entry->peer.ep_peer_list_entry);
 		efa_rdm_peer_destruct(&peer_map_entry->peer, peer_map_entry->ep_ptr);
@@ -303,7 +303,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	err = efa_av_reverse_av_add(av, cur_reverse_av, prv_reverse_av, conn);
 	if (err) {
 		if (av->domain->info_type == EFA_INFO_RDM) {
-			assert(ofi_genlock_held(&av->domain->srx_lock));
+			assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 			efa_conn_rdm_deinit(av, conn);
 		}
 		goto err_release;
@@ -397,7 +397,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 		      bool release_from_implicit_av)
 {
 	assert(av->domain->info_type != EFA_INFO_RDM ||
-	       ofi_genlock_held(&av->domain->srx_lock));
+	       ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 
 	efa_conn_release_reverse_av(av, conn, release_from_implicit_av);
 	if (av->domain->info_type == EFA_INFO_RDM)
@@ -432,7 +432,7 @@ void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
 				bool release_from_implicit_av)
 {
 	assert(av->domain->info_type != EFA_INFO_RDM ||
-	       ofi_genlock_held(&av->domain->srx_lock));
+	       ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 
 	assert(ofi_genlock_held(&av->domain->util_domain.lock));
 

@@ -934,7 +934,7 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 
 	domain = container_of(cq->efa_cq.util_cq.domain, struct efa_domain, util_domain);
 
-	ofi_genlock_lock(&domain->srx_lock);
+	ofi_genlock_lock(&((struct efa_rdm_domain *) domain)->srx_lock);
 
 	if (cq->shm_cq) {
 		fi_cq_read(cq->shm_cq, NULL, 0);
@@ -953,7 +953,7 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 	ret = ofi_cq_readfrom(&cq->efa_cq.util_cq.cq_fid, buf, count, src_addr);
 
 out:
-	ofi_genlock_unlock(&domain->srx_lock);
+	ofi_genlock_unlock(&((struct efa_rdm_domain *) domain)->srx_lock);
 
 	return ret;
 }
@@ -1109,12 +1109,14 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
 	struct efa_domain *efa_domain;
+	struct efa_rdm_domain *rdm_domain;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct fid_list_entry *fid_entry;
 
 	ofi_genlock_lock(&cq->ep_list_lock);
 	efa_rdm_cq = container_of(cq, struct efa_rdm_cq, efa_cq.util_cq);
 	efa_domain = container_of(efa_rdm_cq->efa_cq.util_cq.domain, struct efa_domain, util_domain);
+	rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	/**
 	 * TODO: It's better to just post the initial batch of internal rx pkts during ep enable
@@ -1137,7 +1139,7 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
-	efa_domain_progress_rdm_peers_and_queues(efa_domain);
+	efa_domain_progress_rdm_peers_and_queues(rdm_domain);
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
@@ -1157,9 +1159,9 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
  */
 static int efa_rdm_cq_configure_wait(struct efa_rdm_cq *cq,
 				     const struct fi_cq_attr *attr,
-				     struct efa_domain *efa_domain)
+				     struct efa_rdm_domain *rdm_domain)
 {
-	bool shm_enabled = efa_domain->shm_domain != NULL;
+	bool shm_enabled = rdm_domain->shm_domain != NULL;
 
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
@@ -1249,6 +1251,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	int ret, retv;
 	struct efa_rdm_cq *cq;
 	struct efa_domain *efa_domain;
+	struct efa_rdm_domain *rdm_domain;
 	struct fi_cq_attr shm_cq_attr = {0};
 	struct fi_peer_cq_context peer_cq_context = {0};
 	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
@@ -1259,12 +1262,13 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
+	rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
-	ret = efa_rdm_cq_configure_wait(cq, attr, efa_domain);
+	ret = efa_rdm_cq_configure_wait(cq, attr, rdm_domain);
 	if (ret)
 		goto free;
 	/* Override user cq size if it's less than recommended cq size */
-	attr->size = MAX(efa_domain->rdm_cq_size, attr->size);
+	attr->size = MAX(rdm_domain->rdm_cq_size, attr->size);
 
 	dlist_init(&cq->ibv_cq_poll_list);
 	cq->need_to_scan_ep_list = false;
@@ -1298,14 +1302,14 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto destroy_signal;
 
 	/* open shm cq as peer cq */
-	if (efa_domain->shm_domain) {
+	if (rdm_domain->shm_domain) {
 		memcpy(&shm_cq_attr, attr, sizeof(*attr));
 		shm_cq_attr.wait_obj = FI_WAIT_NONE;
 		/* Bind ep with shm provider's cq */
 		shm_cq_attr.flags |= FI_PEER;
 		peer_cq_context.size = sizeof(peer_cq_context);
 		peer_cq_context.cq = cq->efa_cq.util_cq.peer_cq;
-		ret = fi_cq_open(efa_domain->shm_domain, &shm_cq_attr,
+		ret = fi_cq_open(rdm_domain->shm_domain, &shm_cq_attr,
 				 &cq->shm_cq, &peer_cq_context);
 		if (ret) {
 			EFA_WARN(FI_LOG_CQ, "Unable to open shm cq: %s\n", fi_strerror(-ret));

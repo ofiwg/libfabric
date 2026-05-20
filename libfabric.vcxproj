@@ -877,6 +877,7 @@
     <ClCompile Include="prov\efa\src\efa_hmem.c" />
     <ClCompile Include="prov\efa\src\efa_device.c" />
     <ClCompile Include="prov\efa\src\efa_domain.c" />
+    <ClCompile Include="prov\efa\src\efa_domain_util.c" />
     <ClCompile Include="prov\efa\src\efa_fabric.c" />
     <ClCompile Include="prov\efa\src\efa_mr.c" />
     <ClCompile Include="prov\efa\src\efa_shm.c" />
