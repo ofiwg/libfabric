@@ -319,6 +319,9 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_READ_NACK_PKT:
 		/* Nothing to do */
 		break;
+	case EFA_RDM_PEER_ERROR_PKT:
+		/* Nothing to do */
+		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");
 		break;
@@ -678,6 +681,9 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_READ_NACK_PKT:
 		/* no action needed for NACK packet */
 		break;
+	case EFA_RDM_PEER_ERROR_PKT:
+		/* Placeholder */
+		break;
 	default:
 		EFA_WARN(FI_LOG_CQ,
 			"invalid control pkt type %d\n",
@@ -869,6 +875,9 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		return;
 	case EFA_RDM_READ_NACK_PKT:
 		efa_rdm_pke_handle_read_nack_recv(pkt_entry);
+		return;
+	case EFA_RDM_PEER_ERROR_PKT:
+		efa_rdm_pke_handle_peer_error_recv(pkt_entry);
 		return;
 	default:
 		EFA_WARN(FI_LOG_CQ,
