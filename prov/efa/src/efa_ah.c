@@ -25,25 +25,30 @@ void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
 void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 					struct efa_ah *ah)
 {
+	struct efa_rdm_domain *rdm_domain;
+
 	assert(domain->info_type == EFA_INFO_RDM);
 
+	rdm_domain = container_of(domain, struct efa_rdm_domain, efa_domain);
 	assert(ah->implicit_refcnt > 0 || ah->explicit_refcnt > 0);
-	assert(dlist_entry_in_list(&domain->ah_lru_list,
+	assert(dlist_entry_in_list(&rdm_domain->ah_lru_list,
 				   &ah->domain_lru_ah_list_entry));
 
 	dlist_remove(&ah->domain_lru_ah_list_entry);
 	dlist_insert_tail(&ah->domain_lru_ah_list_entry,
-			  &domain->ah_lru_list);
+			  &rdm_domain->ah_lru_list);
 }
 
 static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
 	struct efa_conn *conn_to_release;
 	struct efa_ah *ah_tmp, *ah_to_release = NULL;
 	struct dlist_entry *tmp;
+	struct efa_rdm_domain *rdm_domain;
 
 	assert(domain->info_type == EFA_INFO_RDM);
+	rdm_domain = container_of(domain, struct efa_rdm_domain, efa_domain);
 
-	dlist_foreach_container (&domain->ah_lru_list, struct efa_ah, ah_tmp,
+	dlist_foreach_container (&rdm_domain->ah_lru_list, struct efa_ah, ah_tmp,
 				 domain_lru_ah_list_entry) {
 		if (ah_tmp->explicit_refcnt == 0) {
 			ah_to_release = ah_tmp;
@@ -182,10 +187,13 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	}
 
 	dlist_init(&efa_ah->implicit_conn_list);
-	if (domain->info_type == EFA_INFO_RDM)
-		dlist_insert_tail(&efa_ah->domain_lru_ah_list_entry, &domain->ah_lru_list);
-	else
+	if (domain->info_type == EFA_INFO_RDM) {
+		struct efa_rdm_domain *rdm_domain =
+			container_of(domain, struct efa_rdm_domain, efa_domain);
+		dlist_insert_tail(&efa_ah->domain_lru_ah_list_entry, &rdm_domain->ah_lru_list);
+	} else {
 		dlist_init(&efa_ah->domain_lru_ah_list_entry);
+	}
 	efa_ah->implicit_refcnt = 0;
 	efa_ah->explicit_refcnt = 0;
 	insert_implicit_av ? efa_ah->implicit_refcnt++ : efa_ah->explicit_refcnt++;

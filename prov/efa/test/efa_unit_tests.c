@@ -427,7 +427,6 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_domain_dgram_mr_ops, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_enabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_disabled_with_mr_local, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_disabled_with_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_cntr_open_ext, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_domain.c */
 

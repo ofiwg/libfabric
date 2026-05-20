@@ -98,9 +98,9 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 		assert(0);
 	}
 
-	efa_domain_ope_list_lock(efa_rdm_ep_domain(ep));
+	efa_domain_ope_list_lock(efa_rdm_ep_rdm_domain(ep));
 	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
-	efa_domain_ope_list_unlock(efa_rdm_ep_domain(ep));
+	efa_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(ep));
 }
 
 void efa_rdm_txe_release(struct efa_rdm_ope *txe)
@@ -126,9 +126,9 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		}
 	}
 
-	efa_domain_ope_list_lock(efa_rdm_ep_domain(txe->ep));
+	efa_domain_ope_list_lock(efa_rdm_ep_rdm_domain(txe->ep));
 	dlist_remove(&txe->ep_entry);
-	efa_domain_ope_list_unlock(efa_rdm_ep_domain(txe->ep));
+	efa_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(txe->ep));
 
 	/**
 	 * Make sure the entry is removed
@@ -173,9 +173,9 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 	if (rxe->peer)
 		dlist_remove(&rxe->peer_entry);
 
-	efa_domain_ope_list_lock(efa_rdm_ep_domain(rxe->ep));
+	efa_domain_ope_list_lock(efa_rdm_ep_rdm_domain(rxe->ep));
 	dlist_remove(&rxe->ep_entry);
-	efa_domain_ope_list_unlock(efa_rdm_ep_domain(rxe->ep));
+	efa_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(rxe->ep));
 
 	/**
 	 * Make sure the entry is removed
@@ -1675,7 +1675,7 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 	switch (err) {
 	case -FI_EAGAIN:
 		dlist_insert_tail(&ope->queued_entry,
-				  &efa_rdm_ep_domain(ope->ep)->ope_queued_list);
+				  &efa_rdm_ep_rdm_domain(ope->ep)->ope_queued_list);
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_READ;
 		err = 0;
 		break;
@@ -1935,7 +1935,7 @@ ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
 		ope->queued_ctrl_type = pkt_type;
 		dlist_insert_tail(&ope->queued_entry,
-				  &efa_rdm_ep_domain(ope->ep)->ope_queued_list);
+				  &efa_rdm_ep_rdm_domain(ope->ep)->ope_queued_list);
 		err = 0;
 	}
 

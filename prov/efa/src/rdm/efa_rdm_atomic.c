@@ -555,6 +555,7 @@ int efa_rdm_atomic_query(struct fid_domain *domain,
 			 struct fi_atomic_attr *attr, uint64_t flags)
 {
 	struct efa_domain *efa_domain;
+	struct efa_rdm_domain *rdm_domain;
 	int ret;
 	size_t max_atomic_size;
 
@@ -576,9 +577,10 @@ int efa_rdm_atomic_query(struct fid_domain *domain,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
+	rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
 
-	max_atomic_size = efa_domain->mtu_size - sizeof(struct efa_rdm_rta_hdr)
-			  - efa_domain->addrlen
+	max_atomic_size = rdm_domain->mtu_size - sizeof(struct efa_rdm_rta_hdr)
+			  - rdm_domain->addrlen
 			  - EFA_RDM_IOV_LIMIT * sizeof(struct fi_rma_iov);
 
 	if (flags & FI_COMPARE_ATOMIC)
