@@ -21,17 +21,12 @@ enum efa_domain_info_type {
 
 struct efa_domain {
 	struct util_domain	util_domain;
-	struct fid_domain	*shm_domain;
 	struct efa_device	*device;
 	struct ibv_pd		*ibv_pd;
 	struct fi_info		*info;
 	struct efa_fabric	*fabric;
-	struct ofi_mr_cache	*cache;
-	size_t			mtu_size;
-	size_t			addrlen;
 	bool 			mr_local;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
-	struct ofi_genlock	srx_lock; /* shared among peer providers */
 	struct efa_ah		*ah_map;
 	/* Total count of ibv memory registrations */
 	ofi_atomic64_t ibv_mr_reg_ct;
@@ -40,7 +35,25 @@ struct efa_domain {
 	/* info_type is used to distinguish between the rdm, dgram and
 	 * efa-direct paths */
 	enum efa_domain_info_type info_type;
+	/* list of enabled efa_base_ep in this domain */
+	struct dlist_entry base_ep_list;
+	/* Bounce buffer for 0-byte inject operations (efa-direct only) */
+	void *zero_byte_bounce_buf;
+	struct efa_mr *zero_byte_bounce_buf_mr;
+	/*
+	 * Pool backing MR structs. The pool entries (efa_mr/efa_rdm_mr) are
+	 * determined by info_type at creation time. Slots are recycled on MR
+	 * close and stale desc pointers from in-flight ops remain dereferenceable.
+	 * For efa_rdm the embedded gen counter detects slot reuse.
+	 */
+	struct ofi_bufpool *mr_pool;
 
+	/* fields below are RDM-specific */
+	struct ofi_genlock	srx_lock; /* shared among peer providers */
+	struct fid_domain	*shm_domain;
+	struct ofi_mr_cache	*cache;
+	size_t			mtu_size;
+	size_t			addrlen;
 	size_t			rdm_cq_size;
 	/* number of rdma-read messages in flight */
 	uint64_t		num_read_msg_in_flight;
@@ -55,18 +68,6 @@ struct efa_domain {
 	struct dlist_entry handshake_queued_peer_list;
 	/* LRU list of AH entries in this domain */
 	struct dlist_entry ah_lru_list;
-	/* Bounce buffer for 0-byte inject operations (efa-direct only) */
-	void *zero_byte_bounce_buf;
-	struct efa_mr *zero_byte_bounce_buf_mr;
-	/* list of enabled efa_base_ep in this domain */
-	struct dlist_entry base_ep_list;
-	/*
-	 * Pool backing MR structs. The pool entries (efa_mr/efa_rdm_mr) are
-	 * determined by info_type at creation time. Slots are recycled on MR
-	 * close and stale desc pointers from in-flight ops remain dereferenceable.
-	 * For efa_rdm the embedded gen counter detects slot reuse.
-	 */
-	struct ofi_bufpool *mr_pool;
 };
 
 extern struct dlist_entry g_efa_domain_list;
