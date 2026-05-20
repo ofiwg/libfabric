@@ -280,6 +280,24 @@ static inline bool efa_rdm_pkt_is_rxe_remote_read(struct efa_rdm_pke *pkt_entry)
 	return ctx_pkt->context_type == EFA_RDM_RDMA_READ_CONTEXT;
 }
 
+/**
+ * @brief Get the PEER_ERROR header pointer of a packet entry's wiredata
+ *
+ * @param[in] pke	packet entry whose wiredata holds a PEER_ERROR packet
+ * @return		typed pointer into pke->wiredata
+ */
+static inline
+struct efa_rdm_peer_error_hdr *efa_rdm_pke_get_peer_error_hdr(struct efa_rdm_pke *pke)
+{
+	return (struct efa_rdm_peer_error_hdr *)pke->wiredata;
+}
+
+int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
+				uint32_t op_id, uint32_t ref_kind,
+				int prov_errno, uint32_t connid);
+
+void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry);
+
 /* ATOMRSP packet related functions */
 static inline struct efa_rdm_atomrsp_hdr *efa_rdm_pke_get_atomrsp_hdr(struct efa_rdm_pke *pke)
 {

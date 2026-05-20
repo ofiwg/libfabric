@@ -1162,6 +1162,12 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 	/* READ_NACK feature introduced in libfabric 1.20 */
 	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_READ_NACK;
 
+	/* PEER_ERROR feature introduced in libfabric 2.6.
+	 * Advertise unconditionally; the packet type is purely a
+	 * control message and has no other dependency.
+	 */
+	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
 	/*
 	 * For backwards compatibility with older peers that may have zero-copy
 	 * receive enabled: evaluate whether an old peer with the same
