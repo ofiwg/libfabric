@@ -252,6 +252,9 @@ coverage:
 	     --output-file coverage.info
 	lcov --extract coverage.info '*/prov/efa/src/*' \
 	     --output-file coverage.info
+	find $(top_builddir) -name '*.gcno' -delete
+	find $(top_builddir) -name '*.gcda' -delete
+	find $(top_builddir) -name '*.gcov' -delete
 	genhtml coverage.info --output-directory coverage_report
 	@echo "Coverage report: coverage_report/index.html"
 
