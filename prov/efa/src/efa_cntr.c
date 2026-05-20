@@ -5,6 +5,7 @@
 #include "ofi_util.h"
 #include "efa.h"
 #include "efa_cntr.h"
+#include "efa_hw_cntr.h"
 #include "efa_cq.h"
 
 int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
@@ -176,6 +177,17 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (!cntr)
 		return -FI_ENOMEM;
 
+#if HAVE_EFADV_CREATE_COMP_CNTR
+	{
+		struct efadv_comp_cntr_init_attr efa_cc_attr = {0};
+
+		ret = efa_hw_cntr_open(domain, attr, cntr, cntr_fid, context, &efa_cc_attr);
+		if (!ret) {
+			return FI_SUCCESS;
+		}
+	}
+#endif
+	/* Fall back to software counter */
 	ret = efa_cntr_construct(cntr, domain, attr, efa_cntr_progress, context);
 	if (ret) {
 		free(cntr);
@@ -186,6 +198,7 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	cntr->util_cntr.cntr_fid.ops = &efa_cntr_ops;
 	cntr->util_cntr.cntr_fid.fid.ops = &efa_cntr_fi_ops;
 
+	EFA_INFO(FI_LOG_CNTR, "Opened software counter with cntr_fid: %p\n", *cntr_fid);
 	return FI_SUCCESS;
 }
 
