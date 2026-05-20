@@ -7,6 +7,7 @@
 #include "efa_rdm_ope.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_utils.h"
+#include "efa_errno.h"
 
 struct efa_rdm_ep;
 struct efa_rdm_peer;
@@ -237,6 +238,47 @@ struct efa_rdm_read_nack_hdr *efa_rdm_pke_get_read_nack_hdr(struct efa_rdm_pke *
 int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);
 
 void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry);
+
+/* PEER ERROR packet functions */
+
+/**
+ * @brief Whether a provider errno means the peer cleanly aborted an
+ *        in-flight protocol step (e.g. closed an MR mid-protocol or
+ *        tore down its endpoint), as opposed to a genuine local/network
+ *        fault the user must still see.
+ *
+ * Recognized statuses:
+ *  - REMOTE_ERROR_BAD_ADDRESS (7): sender's MR invalid/deregistered
+ *    under a receiver-initiated RDMA READ.
+ *  - REMOTE_ERROR_ABORT (8): peer EP reset/torn down mid-protocol.
+ */
+static inline bool efa_rdm_prov_errno_is_peer_abort(int prov_errno)
+{
+	return prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS ||
+	       prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT;
+}
+
+/**
+ * @brief Whether the failing packet is a receiver-initiated RDMA READ
+ *        context (an RDMA READ posted by an rxe for LONGREAD/RUNTREAD).
+ *
+ * Checks both rxe ownership and RDMA-READ context type; the ope->type
+ * check is required because a one-sided fi_read txe also posts an
+ * RDMA-READ context packet.
+ */
+static inline bool efa_rdm_pkt_is_rxe_remote_read(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_rma_context_pkt *ctx_pkt;
+
+	if (!pkt_entry->ope || pkt_entry->ope->type != EFA_RDM_RXE)
+		return false;
+
+	if (efa_rdm_pkt_type_of(pkt_entry) != EFA_RDM_RMA_CONTEXT_PKT)
+		return false;
+
+	ctx_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
+	return ctx_pkt->context_type == EFA_RDM_RDMA_READ_CONTEXT;
+}
 
 /* ATOMRSP packet related functions */
 static inline struct efa_rdm_atomrsp_hdr *efa_rdm_pke_get_atomrsp_hdr(struct efa_rdm_pke *pke)
