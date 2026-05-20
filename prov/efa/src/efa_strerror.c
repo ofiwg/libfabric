@@ -98,6 +98,11 @@ void efa_show_help(enum efa_errno err) {
 		help = "This error is detected remotely. "
 		"The peer doesn't support or didn't enable a locally requested feature.";
 		break;
+	case FI_EFA_ERR_PEER_ABORTED:
+		help = "The peer canceled this transfer by closing the memory "
+		"region or endpoint mid-transfer. This is expected when the peer "
+		"aborts in-flight operations.";
+		break;
 	default:
 		return;
 	}
