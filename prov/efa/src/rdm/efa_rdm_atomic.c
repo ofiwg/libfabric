@@ -135,7 +135,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 	assert(msg->iov_count <= efa_rdm_ep->base_ep.info->tx_attr->iov_limit);
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 
-	assert(ofi_genlock_held(&efa_rdm_ep->base_ep.domain->srx_lock));
+	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock));
 
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, msg->addr);
 	assert(peer);
@@ -184,11 +184,11 @@ efa_rdm_atomic_inject(struct fid_ep *ep,
 	if (err)
 		return err;
 
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	if (efa_rdm_ep->shm_ep) {
 		shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, dest_addr);
 		if (shm_addr != FI_ADDR_NOTAVAIL) {
-			ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+			ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 			if (!(efa_rdm_ep->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
 				remote_addr = 0;
 
@@ -217,7 +217,7 @@ efa_rdm_atomic_inject(struct fid_ep *ep,
 
 	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, &msg, NULL, ofi_op_atomic,
 				      FI_INJECT, EFA_RDM_TXE_NO_COMPLETION);
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	return err;
 }
 
@@ -249,11 +249,11 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 	if (err)
 		return err;
 
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	if (efa_rdm_ep->shm_ep) {
 		shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, msg->addr);
 		if (shm_addr != FI_ADDR_NOTAVAIL) {
-			ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+			ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 			efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, rma_iov, shm_desc);
 			shm_msg.addr = shm_addr;
 			return fi_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg, flags);
@@ -261,7 +261,7 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 	}
 
 	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, NULL, ofi_op_atomic, flags, 0);
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	return err;
 }
 
@@ -349,11 +349,11 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	if (err)
 		return err;
 
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	if (efa_rdm_ep->shm_ep) {
 		shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, msg->addr);
 		if (shm_addr != FI_ADDR_NOTAVAIL) {
-			ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+			ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 			efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 			shm_msg.addr = shm_addr;
 			efa_rdm_get_desc_for_shm(result_count, result_desc, shm_res_desc);
@@ -367,7 +367,7 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 
 	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags, 0);
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	return err;
 }
 
@@ -466,11 +466,11 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	if (err)
 		return err;
 
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	if (efa_rdm_ep->shm_ep) {
 		shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, msg->addr);
 		if (shm_addr != FI_ADDR_NOTAVAIL) {
-			ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+			ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 			efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 			shm_msg.addr = shm_addr;
 			efa_rdm_get_desc_for_shm(result_count, result_desc, shm_res_desc);
@@ -490,7 +490,7 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 
 	err = efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags, 0);
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	return err;
 }
 
@@ -555,6 +555,7 @@ int efa_rdm_atomic_query(struct fid_domain *domain,
 			 struct fi_atomic_attr *attr, uint64_t flags)
 {
 	struct efa_domain *efa_domain;
+	struct efa_rdm_domain *rdm_domain;
 	int ret;
 	size_t max_atomic_size;
 
@@ -576,9 +577,10 @@ int efa_rdm_atomic_query(struct fid_domain *domain,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
+	rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
-	max_atomic_size = efa_domain->mtu_size - sizeof(struct efa_rdm_rta_hdr)
-			  - efa_domain->addrlen
+	max_atomic_size = rdm_domain->mtu_size - sizeof(struct efa_rdm_rta_hdr)
+			  - rdm_domain->addrlen
 			  - EFA_RDM_IOV_LIMIT * sizeof(struct fi_rma_iov);
 
 	if (flags & FI_COMPARE_ATOMIC)

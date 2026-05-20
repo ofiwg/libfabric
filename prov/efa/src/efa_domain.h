@@ -5,6 +5,7 @@
 #define EFA_DOMAIN_H
 
 #include <infiniband/verbs.h>
+#include <stddef.h>
 #include "efa_device.h"
 #include "efa_hmem.h"
 #include "efa_env.h"
@@ -47,8 +48,10 @@ struct efa_domain {
 	 * For efa_rdm the embedded gen counter detects slot reuse.
 	 */
 	struct ofi_bufpool *mr_pool;
+};
 
-	/* fields below are RDM-specific */
+struct efa_rdm_domain {
+	struct efa_domain	efa_domain;
 	struct ofi_genlock	srx_lock; /* shared among peer providers */
 	struct fid_domain	*shm_domain;
 	struct ofi_mr_cache	*cache;
@@ -70,6 +73,9 @@ struct efa_domain {
 	struct dlist_entry ah_lru_list;
 };
 
+_Static_assert(offsetof(struct efa_rdm_domain, efa_domain) == 0,
+	       "efa_domain must be the first member of efa_rdm_domain for safe casting");
+
 extern struct dlist_entry g_efa_domain_list;
 extern ofi_mutex_t g_efa_domain_list_lock;
 
@@ -81,9 +87,9 @@ extern ofi_mutex_t g_efa_domain_list_lock;
  *    return true if a memory registration cache exists in this domain.
  *    return false if a memory registration cache does not exist in this domain.
  */
-static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
+static inline bool efa_is_cache_available(struct efa_rdm_domain *rdm_domain)
 {
-	return efa_domain->cache;
+	return rdm_domain->cache;
 }
 
 /**
@@ -126,18 +132,25 @@ bool efa_domain_support_rnr_retry_modify(struct efa_domain *domain)
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context);
 
-void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain);
+int efa_rdm_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
+			struct fid_domain **domain_fid, void *context);
 
-static inline void efa_domain_ope_list_lock(struct efa_domain *domain)
+int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
+				  const char *domain_name,
+				  enum fi_ep_type ep_type);
+
+void efa_domain_progress_rdm_peers_and_queues(struct efa_rdm_domain *rdm_domain);
+
+static inline void efa_domain_ope_list_lock(struct efa_rdm_domain *rdm_domain)
 {
 	if (efa_env.track_mr)
-		ofi_genlock_lock(&domain->util_domain.lock);
+		ofi_genlock_lock(&rdm_domain->efa_domain.util_domain.lock);
 }
 
-static inline void efa_domain_ope_list_unlock(struct efa_domain *domain)
+static inline void efa_domain_ope_list_unlock(struct efa_rdm_domain *rdm_domain)
 {
 	if (efa_env.track_mr)
-		ofi_genlock_unlock(&domain->util_domain.lock);
+		ofi_genlock_unlock(&rdm_domain->efa_domain.util_domain.lock);
 }
 
 #endif

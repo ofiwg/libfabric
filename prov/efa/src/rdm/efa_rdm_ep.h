@@ -284,6 +284,12 @@ struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 	return container_of(ep->base_ep.util_ep.domain, struct efa_domain, util_domain);
 }
 
+static inline
+struct efa_rdm_domain *efa_rdm_ep_rdm_domain(struct efa_rdm_ep *ep)
+{
+	return (struct efa_rdm_domain *) efa_rdm_ep_domain(ep);
+}
+
 void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep);
 
 int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep);
@@ -567,7 +573,7 @@ fi_addr_t efa_rdm_ep_get_explicit_shm_fi_addr(struct efa_rdm_ep *ep, fi_addr_t a
 {
 	struct efa_conn *conn;
 
-	assert(ofi_genlock_held(&ep->base_ep.domain->srx_lock));
+	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));
 	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
 	return conn ? conn->shm_fi_addr : FI_ADDR_NOTAVAIL;
 }

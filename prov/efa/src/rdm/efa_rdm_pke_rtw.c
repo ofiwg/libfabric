@@ -324,14 +324,14 @@ void efa_rdm_pke_handle_longcts_rtw_sent(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *txe;
-	struct efa_domain *efa_domain;
+	struct efa_rdm_domain *rdm_domain;
 
 	ep = pkt_entry->ep;
-	efa_domain = efa_rdm_ep_domain(ep);
+	rdm_domain = efa_rdm_ep_rdm_domain(ep);
 	txe = pkt_entry->ope;
 	txe->bytes_sent += pkt_entry->payload_size;
 	assert(txe->bytes_sent < txe->total_len);
-	if (efa_is_cache_available(efa_domain))
+	if (efa_is_cache_available(rdm_domain))
 		efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 }
 

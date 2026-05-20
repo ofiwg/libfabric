@@ -13,6 +13,7 @@ static void test_efa_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 static void test_efa_rdm_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 				int mr_reg_count, int mr_reg_size, bool gdrcopy_flag)
 {
+	struct efa_rdm_domain *rdm_domain = (struct efa_rdm_domain *) efa_domain;
 	struct efa_rdm_mr *efa_rdm_mr;
 
 	test_efa_mr_impl(efa_domain, mr, mr_reg_count, mr_reg_size);
@@ -24,7 +25,7 @@ static void test_efa_rdm_mr_impl(struct efa_domain *efa_domain, struct fid_mr *m
 		assert_true(efa_rdm_mr->inserted_to_mr_map);
 
 		/* Test SHM MR creation based on domain availability */
-		if (efa_domain->shm_domain) {
+		if (rdm_domain->shm_domain) {
 			assert_non_null(efa_rdm_mr->shm_mr);
 		} else {
 			assert_null(efa_rdm_mr->shm_mr);
@@ -823,10 +824,11 @@ void test_efa_rdm_mr_cache_regv_no_cache(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
+	struct efa_rdm_domain *rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	/* Verify cache is not available */
-	assert_null(efa_domain->cache);
-	assert_false(efa_is_cache_available(efa_domain));
+	assert_null(rdm_domain->cache);
+	assert_false(efa_is_cache_available(rdm_domain));
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -882,10 +884,11 @@ void test_efa_rdm_mr_cache_regv_with_cache(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
+	struct efa_rdm_domain *rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	/* Verify cache is available */
-	assert_non_null(efa_domain->cache);
-	assert_true(efa_is_cache_available(efa_domain));
+	assert_non_null(rdm_domain->cache);
+	assert_true(efa_is_cache_available(rdm_domain));
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -939,9 +942,10 @@ void test_efa_rdm_mr_cache_regv_cache_hit(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
+	struct efa_rdm_domain *rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	/* Verify cache is available */
-	assert_non_null(efa_domain->cache);
+	assert_non_null(rdm_domain->cache);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -1137,6 +1141,7 @@ void test_efa_rdm_mr_cache_lru_behavior(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
+	struct efa_rdm_domain *rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -1145,7 +1150,7 @@ void test_efa_rdm_mr_cache_lru_behavior(void **state)
 	iov.iov_len = mr_size;
 
 	/* Initially LRU list should be empty */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* First registration */
 	ret = efa_rdm_mr_cache_regv(resource->domain, &iov, 1,
@@ -1156,12 +1161,12 @@ void test_efa_rdm_mr_cache_lru_behavior(void **state)
 	efa_rdm_mr1 = container_of(mr1, struct efa_rdm_mr, efa_mr.mr_fid);
 	assert_non_null(efa_rdm_mr1->entry);
 	/* LRU should be empty while entry is in use */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Close first MR - should move to LRU list */
 	assert_int_equal(fi_close(&mr1->fid), 0);
 	/* LRU should now contain the entry */
-	assert_false(dlist_empty(&efa_domain->cache->lru_list));
+	assert_false(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Register same region again - should reuse from LRU */
 	ret = efa_rdm_mr_cache_regv(resource->domain, &iov, 1,
@@ -1175,11 +1180,11 @@ void test_efa_rdm_mr_cache_lru_behavior(void **state)
 	/* Should reuse the same cache entry from LRU */
 	assert_ptr_equal(efa_rdm_mr1->entry, efa_rdm_mr2->entry);
 	/* LRU should be empty again since entry is back in use */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	assert_int_equal(fi_close(&mr2->fid), 0);
 	/* LRU should contain the entry again */
-	assert_false(dlist_empty(&efa_domain->cache->lru_list));
+	assert_false(dlist_empty(&rdm_domain->cache->lru_list));
 
 	free(buf);
 #endif
@@ -1214,6 +1219,7 @@ void test_efa_rdm_mr_cache_flush_behavior(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
+	struct efa_rdm_domain *rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -1222,7 +1228,7 @@ void test_efa_rdm_mr_cache_flush_behavior(void **state)
 	iov.iov_len = mr_size;
 
 	/* Initially LRU list should be empty */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* First registration */
 	ret = efa_rdm_mr_cache_regv(resource->domain, &iov, 1,
@@ -1233,17 +1239,17 @@ void test_efa_rdm_mr_cache_flush_behavior(void **state)
 	efa_rdm_mr1 = container_of(mr1, struct efa_rdm_mr, efa_mr.mr_fid);
 	assert_non_null(efa_rdm_mr1->entry);
 	/* LRU should be empty while entry is in use */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Close MR - moves to LRU */
 	assert_int_equal(fi_close(&mr1->fid), 0);
 	/* LRU should now contain the entry */
-	assert_false(dlist_empty(&efa_domain->cache->lru_list));
+	assert_false(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Force cache flush - should clean up LRU entries */
-	ofi_mr_cache_flush(efa_domain->cache, true /* flush_lru */);
+	ofi_mr_cache_flush(rdm_domain->cache, true /* flush_lru */);
 	/* LRU should be empty after flush */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Register same region again - should create new entry after flush */
 	ret = efa_rdm_mr_cache_regv(resource->domain, &iov, 1,
@@ -1290,6 +1296,7 @@ void test_efa_rdm_mr_cache_reference_counting(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
+	struct efa_rdm_domain *rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -1298,7 +1305,7 @@ void test_efa_rdm_mr_cache_reference_counting(void **state)
 	iov.iov_len = mr_size;
 
 	/* Initially LRU list should be empty */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* First registration - creates cache entry with use_cnt = 1 */
 	ret = efa_rdm_mr_cache_regv(resource->domain, &iov, 1,
@@ -1310,7 +1317,7 @@ void test_efa_rdm_mr_cache_reference_counting(void **state)
 	assert_non_null(efa_rdm_mr1->entry);
 	assert_int_equal(efa_rdm_mr1->entry->use_cnt, 1);
 	/* LRU should still be empty since use_cnt > 0 */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Second registration - should increment reference count to 2 */
 	ret = efa_rdm_mr_cache_regv(resource->domain, &iov, 1,
@@ -1322,7 +1329,7 @@ void test_efa_rdm_mr_cache_reference_counting(void **state)
 	assert_ptr_equal(efa_rdm_mr1->entry, efa_rdm_mr2->entry);
 	assert_int_equal(efa_rdm_mr1->entry->use_cnt, 2);
 	/* LRU should still be empty since use_cnt > 0 */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Third registration - should increment reference count to 3 */
 	ret = efa_rdm_mr_cache_regv(resource->domain, &iov, 1,
@@ -1334,24 +1341,24 @@ void test_efa_rdm_mr_cache_reference_counting(void **state)
 	assert_ptr_equal(efa_rdm_mr1->entry, efa_rdm_mr3->entry);
 	assert_int_equal(efa_rdm_mr1->entry->use_cnt, 3);
 	/* LRU should still be empty since use_cnt > 0 */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Close first MR - should decrement reference count to 2, not move to LRU */
 	assert_int_equal(fi_close(&mr1->fid), 0);
 	assert_int_equal(efa_rdm_mr2->entry->use_cnt, 2);
 	/* LRU should still be empty since use_cnt > 0 */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Close second MR - should decrement reference count to 1, not move to LRU */
 	assert_int_equal(fi_close(&mr2->fid), 0);
 	assert_int_equal(efa_rdm_mr3->entry->use_cnt, 1);
 	/* LRU should still be empty since use_cnt > 0 */
-	assert_true(dlist_empty(&efa_domain->cache->lru_list));
+	assert_true(dlist_empty(&rdm_domain->cache->lru_list));
 
 	/* Close third MR - should decrement to zero and move to LRU */
 	assert_int_equal(fi_close(&mr3->fid), 0);
 	/* Now LRU should contain the entry since use_cnt reached 0 */
-	assert_false(dlist_empty(&efa_domain->cache->lru_list));
+	assert_false(dlist_empty(&rdm_domain->cache->lru_list));
 
 	free(buf);
 #endif

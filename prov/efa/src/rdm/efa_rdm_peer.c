@@ -381,7 +381,7 @@ int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer,
 
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
 
-	if (efa_rdm_ep_domain(ep)->num_read_msg_in_flight == 0 &&
+	if (efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight == 0 &&
 	    efa_rdm_peer_get_runt_size(peer, ep, ope) > 0 &&
 	    !(ope->fi_flags & FI_DELIVERY_COMPLETE)) {
 		return (op == ofi_op_tagged) ? EFA_RDM_RUNTREAD_TAGRTM_PKT

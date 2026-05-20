@@ -405,6 +405,7 @@ void test_efa_domain_peer_list_cleared(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
+	struct efa_rdm_domain *rdm_domain;
 	struct fid_ep *ep1, *ep2;
 	struct efa_rdm_ep *efa_rdm_ep1, *efa_rdm_ep2;
 	struct efa_rdm_peer *peer1, *peer2, *peer3, *peer4;
@@ -416,6 +417,7 @@ void test_efa_domain_peer_list_cleared(void **state)
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
+	rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	// Create two endpoints
 	err = fi_endpoint(resource->domain, resource->info, &ep1, NULL);
@@ -472,13 +474,13 @@ void test_efa_domain_peer_list_cleared(void **state)
 	assert_non_null(peer4);
 
 	// Manually add peers to domain lists to simulate the conditions
-	dlist_insert_tail(&peer1->handshake_queued_entry, &efa_domain->handshake_queued_peer_list);
+	dlist_insert_tail(&peer1->handshake_queued_entry, &rdm_domain->handshake_queued_peer_list);
 	peer1->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
-	dlist_insert_tail(&peer2->rnr_backoff_entry, &efa_domain->peer_backoff_list);
+	dlist_insert_tail(&peer2->rnr_backoff_entry, &rdm_domain->peer_backoff_list);
 	peer2->flags |= EFA_RDM_PEER_IN_BACKOFF;
-	dlist_insert_tail(&peer3->handshake_queued_entry, &efa_domain->handshake_queued_peer_list);
+	dlist_insert_tail(&peer3->handshake_queued_entry, &rdm_domain->handshake_queued_peer_list);
 	peer3->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
-	dlist_insert_tail(&peer4->rnr_backoff_entry, &efa_domain->peer_backoff_list);
+	dlist_insert_tail(&peer4->rnr_backoff_entry, &rdm_domain->peer_backoff_list);
 	peer4->flags |= EFA_RDM_PEER_IN_BACKOFF;
 
 	// Close endpoints - this should clear the domain lists
@@ -486,8 +488,8 @@ void test_efa_domain_peer_list_cleared(void **state)
 	fi_close(&ep2->fid);
 
 	// Verify domain lists are cleared
-	assert_true(dlist_empty(&efa_domain->peer_backoff_list));
-	assert_true(dlist_empty(&efa_domain->handshake_queued_peer_list));
+	assert_true(dlist_empty(&rdm_domain->peer_backoff_list));
+	assert_true(dlist_empty(&rdm_domain->handshake_queued_peer_list));
 }
 
 void test_efa_domain_open_ops_query_addr(void **state)
@@ -635,17 +637,17 @@ void test_efa_domain_dgram_mr_ops(void **state)
  * @param efa_domain EFA RDM domain to test
  * @param cache_expected Whether MR cache should be enabled
  */
-static void test_efa_rdm_domain_mr_cache_common(struct efa_domain *efa_domain, bool cache_expected)
+static void test_efa_rdm_domain_mr_cache_common(struct efa_rdm_domain *rdm_domain, bool cache_expected)
 {
-	struct ofi_mr_cache *cache = efa_domain->cache;
+	struct ofi_mr_cache *cache = rdm_domain->cache;
 
 	/* This helper is only for RDM domains */
-	assert_int_equal(efa_domain->info_type, EFA_INFO_RDM);
+	assert_int_equal(rdm_domain->efa_domain.info_type, EFA_INFO_RDM);
 
 	if (cache_expected) {
 		/* Test Case: MR cache should be available */
 		assert_non_null(cache);
-		assert_true(efa_is_cache_available(efa_domain));
+		assert_true(efa_is_cache_available(rdm_domain));
 
 		/* Validate entry_data_size is correct for efa_rdm_mr */
 		assert_int_equal(cache->entry_data_size, sizeof(struct efa_rdm_mr));
@@ -658,7 +660,7 @@ static void test_efa_rdm_domain_mr_cache_common(struct efa_domain *efa_domain, b
 	} else {
 		/* Test Case: MR cache should be disabled for RDM */
 		assert_null(cache);
-		assert_false(efa_is_cache_available(efa_domain));
+		assert_false(efa_is_cache_available(rdm_domain));
 	}
 }
 
@@ -676,6 +678,7 @@ void test_efa_domain_mr_cache_enabled(void **state)
 #else
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
+	struct efa_rdm_domain *rdm_domain;
 	struct fi_info *hints;
 
 	/* Create hints without FI_MR_LOCAL to enable cache */
@@ -687,9 +690,10 @@ void test_efa_domain_mr_cache_enabled(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
+	rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	/* Validate cache is enabled and properly configured */
-	test_efa_rdm_domain_mr_cache_common(efa_domain, true);
+	test_efa_rdm_domain_mr_cache_common(rdm_domain, true);
 	fi_freeinfo(hints);
 #endif
 }
@@ -704,6 +708,7 @@ void test_efa_domain_mr_cache_disabled_with_mr_local(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
+	struct efa_rdm_domain *rdm_domain;
 	struct fi_info *hints;
 
 	/* Create hints with FI_MR_LOCAL to disable cache */
@@ -715,39 +720,10 @@ void test_efa_domain_mr_cache_disabled_with_mr_local(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
+	rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	/* Validate cache is disabled */
-	test_efa_rdm_domain_mr_cache_common(efa_domain, false);
-	fi_freeinfo(hints);
-}
-
-/**
- * @brief Test MR cache disabled path: EFA-direct fabric
- *
- * This test validates that when EFA-direct fabric is used,
- * the MR cache is disabled regardless of FI_MR_LOCAL setting.
- */
-void test_efa_domain_mr_cache_disabled_with_efa_direct(void **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_domain *efa_domain;
-	struct fi_info *hints;
-
-	/* Create hints for EFA-direct fabric */
-	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
-						    FI_VERSION(2, 0), hints, true, true);
-
-	efa_domain = container_of(resource->domain, struct efa_domain,
-				  util_domain.domain_fid);
-
-	/* EFA-direct specific validations */
-	assert_int_equal(efa_domain->info_type, EFA_INFO_DIRECT);
-
-	/* Cache should be disabled for EFA-direct */
-	assert_null(efa_domain->cache);
-	assert_false(efa_is_cache_available(efa_domain));
+	test_efa_rdm_domain_mr_cache_common(rdm_domain, false);
 	fi_freeinfo(hints);
 }
 
