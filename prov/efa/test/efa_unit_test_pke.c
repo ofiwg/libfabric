@@ -4,6 +4,7 @@
 #include "rdm/efa_rdm_pke_rtw.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_pke_cmd.h"
+#include "rdm/efa_rdm_pke_nonreq.h"
 
 
 /**
@@ -718,4 +719,112 @@ void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void
 	assert_int_equal(rxe->bytes_queued_blocking_copy, 0);
 
 	efa_rdm_rxe_release(rxe);
+}
+
+/**
+ * @brief Verify efa_rdm_prov_errno_is_peer_abort() classifies the
+ *        in-scope and out-of-scope provider errnos correctly.
+ */
+void test_efa_rdm_prov_errno_is_peer_abort(void **state)
+{
+	int prov_errno;
+
+	(void) state;
+
+	/* Device completion statuses: the two peer-abort codes live here. */
+	for (prov_errno = EFA_IO_COMP_STATUS_START;
+	     prov_errno < EFA_IO_COMP_STATUS_MAX; prov_errno++) {
+		bool expected =
+			prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS ||
+			prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT ||
+			prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN;
+		assert_int_equal(efa_rdm_prov_errno_is_peer_abort(prov_errno),
+				 expected);
+	}
+
+	/* Proprietary provider errnos: none are peer-abort. */
+	for (prov_errno = EFA_PROV_ERRNO_START;
+	     prov_errno < EFA_PROV_ERRNO_MAX; prov_errno++)
+		assert_false(efa_rdm_prov_errno_is_peer_abort(prov_errno));
+}
+
+/**
+ * @brief Verify efa_rdm_pkt_is_rxe_remote_read() classifies packet
+ *        types correctly.
+ */
+void test_efa_rdm_pkt_is_rxe_remote_read(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_rma_context_pkt *ctx_pkt;
+	struct efa_rdm_ope rxe_ope = { .type = EFA_RDM_RXE };
+	struct efa_rdm_ope txe_ope = { .type = EFA_RDM_TXE };
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	pkt_entry->ope = &rxe_ope;
+
+	base_hdr = (struct efa_rdm_base_hdr *) pkt_entry->wiredata;
+
+	/* Receiver-initiated RDMA READ context packet — in scope */
+	ctx_pkt = (struct efa_rdm_rma_context_pkt *) pkt_entry->wiredata;
+	ctx_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
+	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEXT;
+	assert_true(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	/* Same RDMA READ context, but owned by a txe (one-sided
+	 * fi_read) — out of scope: the ope->type guard must reject it. */
+	pkt_entry->ope = &txe_ope;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+	pkt_entry->ope = &rxe_ope;
+
+	/* Sender-initiated RDMA WRITE context packet — out of scope */
+	ctx_pkt->context_type = EFA_RDM_RDMA_WRITE_CONTEXT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	/* Receiver-side control SENDs that ride on an rxe — out of
+	 * scope for this helper (they are not routed through the
+	 * peer-abort handler today; if that changes, extend or split
+	 * this helper). */
+	memset(pkt_entry->wiredata, 0,
+	       sizeof(struct efa_rdm_rma_context_pkt) + 64);
+	base_hdr->type = EFA_RDM_CTS_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_EOR_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_RECEIPT_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	/* Sender-side / non-rxe-protocol packets — out of scope */
+	base_hdr->type = EFA_RDM_HANDSHAKE_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_CTSDATA_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_READRSP_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_READ_NACK_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_EAGER_MSGRTM_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_LONGCTS_TAGRTM_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_LONGREAD_MSGRTM_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	efa_rdm_pke_release_tx(pkt_entry);
 }

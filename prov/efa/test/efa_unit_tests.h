@@ -451,6 +451,8 @@ void test_efa_rdm_pke_proc_matched_eager_rtm_error(void **state);
 void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error(void **state);
 void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(void **state);
 void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void **state);
+void test_efa_rdm_prov_errno_is_peer_abort(void **state);
+void test_efa_rdm_pkt_is_rxe_remote_read(void **state);
 /* end of efa_unit_test_pke.c */
 
 void test_efa_msg_fi_recv(void **state);
