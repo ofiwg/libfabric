@@ -18,7 +18,7 @@ def checkout_ci() {
   sh """
     rm -rf ${env.CUSTOM_WORKSPACE}/ci
     mkdir ${env.CUSTOM_WORKSPACE}/ci
-    git clone --recurse-submodules ${env.CI} ${env.CUSTOM_WORKSPACE}/ci
+    git clone --recurse-submodules ${env.GAD_CI} ${env.CUSTOM_WORKSPACE}/ci
   """
 }
 
@@ -159,7 +159,7 @@ pipeline {
   }
   environment {
       JOB_CADENCE = 'PR'
-      CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+      CUSTOM_WORKSPACE="/home/garbel/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
       SLURM_JOB_NAME="${env.JOB_NAME}_${env.BUILD_NUMBER}"
       RUN_LOCATION="${env.CUSTOM_WORKSPACE}/ci_resources/legacy_pipeline_scripts/"
       CI_LOCATION="${env.CUSTOM_WORKSPACE}/ci"
@@ -169,13 +169,6 @@ pipeline {
   stages {
     stage ('init') {
       parallel {
-        stage ('main') {
-          steps {
-            script {
-              initialize()
-            }
-          }
-        }
         stage ('level-zero') {
           agent { node { label 'level-zero' } }
           options { skipDefaultCheckout() }
@@ -205,17 +198,6 @@ pipeline {
     stage ('run') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage ('main') {
-          steps {
-            script {
-              withEnv(["TARGET=${CTARGET}"]) {
-                dir (CI_LOCATION) {
-                  return run_red("${env.MAIN_CONFIG}")
-                }
-              }
-            }
-          }
-        }
         stage ('level-zero') {
           agent { node { label 'level-zero' } }
           options { skipDefaultCheckout() }
