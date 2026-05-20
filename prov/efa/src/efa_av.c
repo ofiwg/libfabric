@@ -175,7 +175,7 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 {
 	struct efa_conn *conn;
 
-	assert(ofi_genlock_held(&av->domain->srx_lock));
+	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 
 	conn = efa_av_reverse_lookup_rdm_conn(&av->cur_reverse_av_implicit,
 					      &av->prv_reverse_av_implicit, ahn,
@@ -489,7 +489,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 		addr->qkey = EFA_DGRAM_CONNID;
 
 	if (av->domain->info_type == EFA_INFO_RDM)
-		assert(ofi_genlock_held(&av->domain->srx_lock));
+		assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 	ofi_genlock_lock(&av->util_av_implicit.lock);
 	ofi_genlock_lock(&av->util_av.lock);
 
@@ -601,7 +601,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	/* The order in which the util AV and SRX locks are acquired must match
 	 * in the AV insertion, removal and CQ read paths to prevent deadlocks */
 	if (av->domain->info_type == EFA_INFO_RDM)
-		ofi_genlock_lock(&av->domain->srx_lock);
+		ofi_genlock_lock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
 
 	for (i = 0; i < count; i++) {
 		addr_i = (struct efa_ep_addr *) ((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
@@ -619,7 +619,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	}
 
 	if (av->domain->info_type == EFA_INFO_RDM)
-		ofi_genlock_unlock(&av->domain->srx_lock);
+		ofi_genlock_unlock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
 
 	/* cancel remaining request and log to event queue */
 	for (; i < count ; i++) {
@@ -699,7 +699,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	/* The order in which the util AV and SRX locks are acquired must match
 	 in the AV insertion, removal and CQ read paths to prevent deadlocks */
 	if (av->domain->info_type == EFA_INFO_RDM)
-		ofi_genlock_lock(&av->domain->srx_lock);
+		ofi_genlock_lock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
 	ofi_genlock_lock(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
 		conn = efa_av_addr_to_conn(av, fi_addr[i]);
@@ -718,7 +718,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 
 	ofi_genlock_unlock(&av->util_av.lock);
 	if (av->domain->info_type == EFA_INFO_RDM)
-		ofi_genlock_unlock(&av->domain->srx_lock);
+		ofi_genlock_unlock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
 	return err;
 }
 
@@ -746,7 +746,7 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	/* The order in which the util AV and SRX locks are acquired must match
 	 in the AV insertion, removal and CQ read paths to prevent deadlocks */
 	if (av->domain->info_type == EFA_INFO_RDM)
-		ofi_genlock_lock(&av->domain->srx_lock);
+		ofi_genlock_lock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
 
 	ofi_genlock_lock(&av->util_av.lock);
 
@@ -773,7 +773,7 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	ofi_genlock_unlock(&av->util_av_implicit.lock);
 
 	if (av->domain->info_type == EFA_INFO_RDM)
-		ofi_genlock_unlock(&av->domain->srx_lock);
+		ofi_genlock_unlock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
 }
 
 static int efa_av_close(struct fid *fid)
@@ -904,6 +904,8 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	if (efa_domain->info_type == EFA_INFO_RDM && efa_domain->fabric &&
 	    efa_domain->fabric->shm_fabric) {
+		struct efa_rdm_domain *rdm_domain =
+			(struct efa_rdm_domain *) efa_domain;
 		/*
 		 * shm av supports maximum 256 entries
 		 * Reset the count to 128 to reduce memory footprint and satisfy
@@ -920,7 +922,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		}
 		av_attr.count = efa_env.shm_av_size;
 		assert(av_attr.type == FI_AV_TABLE);
-		ret = fi_av_open(efa_domain->shm_domain, &av_attr,
+		ret = fi_av_open(rdm_domain->shm_domain, &av_attr,
 				 &av->shm_rdm_av, context);
 		if (ret)
 			goto err_close_util_av;

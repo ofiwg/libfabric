@@ -381,7 +381,6 @@ void test_efa_domain_direct_mr_ops(void **state);
 void test_efa_domain_dgram_mr_ops(void **state);
 void test_efa_domain_mr_cache_enabled(void **state);
 void test_efa_domain_mr_cache_disabled_with_mr_local(void **state);
-void test_efa_domain_mr_cache_disabled_with_efa_direct(void **state);
 void test_efa_domain_open_ops_cntr_open_ext(void **state);
 /* end efa_unit_test_domain.c */
 
