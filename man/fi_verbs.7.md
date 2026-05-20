@@ -201,7 +201,8 @@ The verbs provider checks for the following environment variables.
 : The GID index to use (default: 0)
 
 *FI_VERBS_DEVICE_NAME*
-: Specify a specific verbs device to use by name
+: A comma separated list of prefixes or full names of verbs devices to use.
+  (default: none)
 
 *FI_VERBS_USE_DMABUF*
 : If supported, try to use ibv_reg_dmabuf_mr first to register dmabuf-based

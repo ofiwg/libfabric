@@ -1428,6 +1428,8 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 	struct fi_info *fi = NULL, *tail = NULL;
 	const struct verbs_ep_domain *ep_type[VERBS_NUM_DOMAIN_TYPES];
 	int ret = 0, i, j, num_devices, dom_count = 0;
+	char **device_names;
+	int device_name_found;
 
 	vrb_prof_func_start(__func__);
 
@@ -1476,6 +1478,8 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 		goto done;
 	}
 
+	device_names = ofi_split_and_alloc(vrb_gl_data.device_name, ",", NULL);
+
 	vrb_prof_func_start("alloc_info_loop");
 	for (i = 0; i < num_devices; i++) {
 		if (!ctx_list[i]) {
@@ -1486,11 +1490,22 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 			continue;
 		}
 
-		if (vrb_gl_data.device_name &&
-		    strncasecmp(ctx_list[i]->device->name,
-				vrb_gl_data.device_name,
-				strlen(vrb_gl_data.device_name)))
+		device_name_found = 0;
+		for (j=0; device_names && device_names[j]; j++) {
+			if (!strncasecmp(ctx_list[i]->device->name,
+					 device_names[j],
+					 strlen(device_names[j]))) {
+				device_name_found = 1;
+				break;
+			}
+		}
+
+		if (vrb_gl_data.device_name && !device_name_found) {
+			FI_INFO(&vrb_prov, FI_LOG_FABRIC,
+				"skipping device: %s, not in the list of "
+				"requested devices\n", ctx_list[i]->device->name);
 			continue;
+		}
 
 		for (j = 0; j < dom_count; j++) {
 			if (ep_type[j]->type == FI_EP_MSG &&
@@ -1538,6 +1553,7 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 	ret = *all_infos ? 0 : ret;
 
 	rdma_free_devices(ctx_list);
+	ofi_free_string_array(device_names);
 done:
 	vrb_prof_func_end(__func__);
 	return ret;
