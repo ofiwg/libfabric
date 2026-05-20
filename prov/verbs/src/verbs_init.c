@@ -725,8 +725,9 @@ static int vrb_read_params(void)
 		return -FI_EINVAL;
 	}
 
-	if (vrb_get_param_str("device_name", "The prefix or the full name of the "
-			      "verbs device to use", &vrb_gl_data.device_name)) {
+	if (vrb_get_param_str("device_name", "A comma separated list of prefixes "
+			      "or full names of verbs devices to use",
+			      &vrb_gl_data.device_name)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of device_name\n");
 		return -FI_EINVAL;
 	}
