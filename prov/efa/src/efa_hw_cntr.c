@@ -140,6 +140,7 @@ int efa_hw_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	*cntr_fid = &cntr->util_cntr.cntr_fid;
 	cntr->wait_obj = attr ? attr->wait_obj : FI_WAIT_UNSPEC;
 
+	EFA_INFO(FI_LOG_CNTR, "Opened hardware counter with cntr_fid: %p\n", *cntr_fid);
 	return FI_SUCCESS;
 }
 

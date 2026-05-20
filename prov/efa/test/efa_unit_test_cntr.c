@@ -630,6 +630,41 @@ void test_efa_hw_cntr_bind_ep_attach_fail(struct efa_resource **state)
 
 	fi_close(&cntr_fid->fid);
 }
+
+
+/**
+ * @brief Test fi_cntr_open uses hw counter on efa-direct domain
+ *
+ * Verify that calling fi_cntr_open (the standard OFI API) on an efa-direct
+ * domain with use_hw_cntr enabled results in a counter backed by ibv_comp_cntr.
+ */
+void test_efa_cntr_open_uses_hw_cntr(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_cntr_attr cntr_attr = {0};
+	struct fid_cntr *cntr_fid = NULL;
+	struct efa_cntr *efa_cntr;
+	struct efa_domain *efa_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	g_efa_unit_test_mocks.efadv_create_comp_cntr = efa_mock_efadv_create_comp_cntr_return_mock;
+	g_efa_unit_test_mocks.ibv_destroy_comp_cntr = efa_mock_ibv_destroy_comp_cntr_return_mock;
+
+	cntr_attr.events = FI_CNTR_EVENTS_COMP;
+	assert_int_equal(fi_cntr_open(resource->domain, &cntr_attr, &cntr_fid, NULL), 0);
+	assert_non_null(cntr_fid);
+
+	efa_cntr = container_of(cntr_fid, struct efa_cntr, util_cntr.cntr_fid);
+	assert_non_null(efa_cntr->ibv_comp_cntr);
+
+	fi_close(&cntr_fid->fid);
+}
 #else
 void test_efa_hw_cntr_open_unsupported_type_bytes(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_open_max_cntr_value_exceeded(struct efa_resource **state) { skip(); }
@@ -646,4 +681,5 @@ void test_efa_hw_cntr_wait_success(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_wait_returns_einval_with_wait_none(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd(struct efa_resource **state) { skip(); }
 void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield(struct efa_resource **state) { skip(); }
+void test_efa_cntr_open_uses_hw_cntr(struct efa_resource **state) { skip(); }
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */
