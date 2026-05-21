@@ -188,9 +188,9 @@ static ssize_t smr_generic_rma(
 				  op_flags, smr_flags, (struct ofi_mr **)desc,
 				  iov, iov_count, total_len, context, cmd);
 	if (ret) {
+		smr_cmd_queue_discard(ce, pos);
 		if (smr_flags & SMR_RETURN_CMD)
 			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
-		smr_cmd_queue_discard(ce, pos);
 		goto unlock;
 	}
 

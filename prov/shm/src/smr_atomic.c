@@ -74,21 +74,11 @@ static int smr_format_inject_atomic(
 			const struct iovec *iov, size_t count,
 			const struct iovec *resultv, size_t result_count,
 			struct ofi_mr **comp_desc, const struct iovec *compv,
-			size_t comp_count, struct smr_region *smr)
+			size_t comp_count, struct smr_inject_buf *tx_buf)
 {
-	struct smr_inject_buf *tx_buf;
 	size_t comp_size;
 
 	cmd->hdr.proto = smr_proto_inject;
-	tx_buf = smr_get_inject_buf(smr);
-	if (!tx_buf) {
-		FI_DBG(&smr_prov, FI_LOG_EP_DATA,
-		       "No inject buffers available, cannot send inject "
-		       "message\n");
-		return -FI_EAGAIN;
-	}
-
-	cmd->hdr.proto_data = smr_get_offset(smr, tx_buf);
 	switch (cmd->hdr.op) {
 	case ofi_op_atomic:
 		cmd->hdr.size = ofi_copy_from_mr_iov(
@@ -135,13 +125,23 @@ static int smr_do_atomic_inject(
 			uint8_t smr_flags, struct smr_cmd *cmd)
 {
 	struct smr_pend_entry *pend;
+	struct smr_inject_buf *tx_buf;
 	int ret;
 
+	tx_buf = smr_get_inject_buf(peer_smr);
+	if (!tx_buf) {
+		FI_DBG(&smr_prov, FI_LOG_EP_DATA,
+		       "No inject buffers available, cannot send inject "
+		       "message\n");
+		return -FI_EAGAIN;
+	}
+
+	cmd->hdr.proto_data = smr_get_offset(peer_smr, tx_buf);
 	smr_generic_format(cmd, tx_id, rx_id, op, 0, 0, smr_flags);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
 	ret = smr_format_inject_atomic(cmd, desc, iov, iov_count, resultv,
 				       result_count, comp_desc, compv,
-				       comp_count, peer_smr);
+				       comp_count, tx_buf);
 	if (ret)
 		return ret;
 
