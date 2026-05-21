@@ -177,6 +177,13 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	efa_perfset_start(ep, perf_efa_tx);
 	assert(ofi_genlock_held(&ep->base_ep.domain->srx_lock));
 
+	if ((fi_flags & FI_INJECT) && efa_mr_any_is_non_system_hmem(msg->desc, msg->iov_count)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_INJECT is not supported for HMEM buffers\n");
+		err = -FI_EOPNOTSUPP;
+		goto out;
+	}
+
 	peer = efa_rdm_ep_get_peer_explicit(ep, msg->addr);
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;

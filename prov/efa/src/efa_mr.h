@@ -67,6 +67,24 @@ static inline bool efa_mr_is_rocr(struct efa_mr *efa_mr)
 	return efa_mr && efa_mr->iface == FI_HMEM_ROCR;
 }
 
+/**
+ * @brief Return true if any descriptor in @desc refers to non-system HMEM.
+ * A NULL @desc array is treated as no HMEM.
+ */
+static inline bool efa_mr_any_is_non_system_hmem(void **desc, size_t count)
+{
+	size_t i;
+
+	if (!desc)
+		return false;
+
+	for (i = 0; i < count; i++)
+		if (efa_mr_is_hmem(desc[i]))
+			return true;
+
+	return false;
+}
+
 #define EFA_MR_IOV_LIMIT 1
 #define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE | FI_READ | FI_WRITE)
 

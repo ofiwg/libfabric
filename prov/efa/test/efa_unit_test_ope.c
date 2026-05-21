@@ -1622,3 +1622,55 @@ void test_efa_rdm_msg_send_0_byte_with_inject_flag(struct efa_resource **state)
 	ret = fi_sendmsg(resource->ep, &msg, FI_INJECT);
 	assert_int_equal(ret, 0);
 }
+
+/**
+ * @brief Verify that fi_atomicmsg with FI_INJECT and an HMEM descriptor
+ * returns -FI_EOPNOTSUPP.
+ */
+void test_efa_rdm_atomic_inject_hmem_fails(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_mr *efa_mr;
+	void *desc;
+	int ret;
+	fi_addr_t addr;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_ioc ioc = {0};
+	struct fi_rma_ioc rma_ioc = {.addr = 0x1234, .count = 1, .key = 1};
+	struct fi_msg_atomic msg = {0};
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	efa_unit_test_buff_construct(&send_buff, resource, sizeof(uint64_t));
+
+	desc = fi_mr_desc(send_buff.mr);
+	efa_mr = (struct efa_mr *)desc;
+	efa_mr->iface = FI_HMEM_CUDA;
+
+	ioc.addr = send_buff.buff;
+	ioc.count = 1;
+
+	msg.msg_iov = &ioc;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = addr;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.datatype = FI_UINT64;
+	msg.op = FI_SUM;
+
+	ret = fi_atomicmsg(resource->ep, &msg, FI_INJECT);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}

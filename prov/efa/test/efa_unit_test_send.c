@@ -167,3 +167,47 @@ void test_efa_rdm_msg_send_multi_pkt_sendv_fail_no_inflight(
 
 	efa_unit_test_buff_destruct(&send_buff);
 }
+
+/**
+ * @brief Verify that fi_sendmsg with FI_INJECT and HMEM desc returns -FI_EINVAL
+ * on the RDM protocol path.
+ */
+void test_efa_rdm_msg_sendmsg_inject_hmem_fails(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_mr *efa_mr;
+	struct iovec iov;
+	void *desc;
+	int ret;
+	fi_addr_t addr;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_msg msg = {0};
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	efa_unit_test_buff_construct(&send_buff, resource, 32);
+
+	desc = fi_mr_desc(send_buff.mr);
+	efa_mr = (struct efa_mr *)desc;
+	efa_mr->iface = FI_HMEM_CUDA;
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+
+	efa_unit_test_construct_msg(&msg, &iov, 1, addr, NULL, 0, &desc);
+
+	ret = fi_sendmsg(resource->ep, &msg, FI_INJECT);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
