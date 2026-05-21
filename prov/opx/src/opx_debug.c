@@ -43,6 +43,8 @@
 
 static struct slist ep_list = {.head = NULL};
 
+static void (*prev_sig_handler)(int) = NULL;
+
 static inline size_t opx_debug_slist_len(struct slist_entry *head)
 {
 	size_t		    count = 0;
@@ -226,7 +228,7 @@ static void opx_debug_dump_backtrace(FILE *output)
 static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 {
 	char  hostname[HOST_NAME_MAX + 1];
-	pid_t my_pid = gettid();
+	pid_t my_pid = getpid();
 
 	int rc = gethostname(hostname, HOST_NAME_MAX);
 	if (rc != 0) {
@@ -442,7 +444,9 @@ static void opx_debug_signal_handler(int signum, siginfo_t *info, void *ucontext
 {
 	opx_debug_ep_list_dump();
 
-	raise(signum);
+	if (prev_sig_handler && prev_sig_handler != SIG_DFL && prev_sig_handler != SIG_IGN) {
+		prev_sig_handler(signum);
+	}
 }
 
 static int sig_handler_installed = 0;
@@ -453,6 +457,7 @@ void opx_debug_install_handler()
 		return;
 	}
 
+	struct sigaction old_sa;
 	struct sigaction act;
 
 	memset(&act, 0, sizeof(act));
@@ -460,7 +465,9 @@ void opx_debug_install_handler()
 	act.sa_sigaction = opx_debug_signal_handler;
 	act.sa_flags	 = SA_SIGINFO;
 
-	sigaction(SIGUSR2, &act, NULL);
+	sigaction(SIGUSR2, &act, &old_sa);
+
+	prev_sig_handler = old_sa.sa_handler;
 
 	sig_handler_installed = 1;
 }

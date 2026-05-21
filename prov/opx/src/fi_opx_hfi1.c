@@ -6483,7 +6483,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 				user_context);
 			return FI_SUCCESS;
 		}
-	non_ipc:
+	non_ipc:;
 #endif
 
 		const uint16_t lrh_dws = __cpu_to_be16(
@@ -7012,7 +7012,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 			return FI_SUCCESS;
 		}
 
-	non_ipc:
+	non_ipc:;
 #endif
 
 		const uint16_t lrh_qws = (pbc_dws - 2) >> 1; /* (LRH QW) does not include pbc (8 bytes) */
