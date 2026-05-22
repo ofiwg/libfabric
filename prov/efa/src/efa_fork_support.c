@@ -215,8 +215,7 @@ void efa_atfork_callback_flush_mr_cache()
 		if (efa_domain->info_type != EFA_INFO_RDM)
 			continue;
 
-		rdm_domain = container_of(efa_domain, struct efa_rdm_domain,
-					  efa_domain);
+		rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 		if (rdm_domain->cache) {
 			while(ofi_mr_cache_flush(rdm_domain->cache, flush_lru));
 		}

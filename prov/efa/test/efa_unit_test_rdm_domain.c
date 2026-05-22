@@ -67,7 +67,7 @@ void test_efa_domain_peer_list_cleared(struct efa_resource **state)
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	// Create two endpoints
 	err = fi_endpoint(resource->domain, resource->info, &ep1, NULL);
@@ -216,7 +216,7 @@ void test_efa_domain_mr_cache_enabled(struct efa_resource **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	/* Validate cache is enabled and properly configured */
 	test_efa_rdm_domain_mr_cache_common(rdm_domain, true);
@@ -245,7 +245,7 @@ void test_efa_domain_mr_cache_disabled_with_mr_local(struct efa_resource **state
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	/* Validate cache is disabled */
 	test_efa_rdm_domain_mr_cache_common(rdm_domain, false);

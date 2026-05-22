@@ -29,6 +29,22 @@ struct efa_rdm_domain {
 	struct dlist_entry ah_lru_list;
 };
 
+/**
+ * @brief get the extended efa_rdm_domain from a base efa_domain pointer.
+ *
+ * Caller must ensure the base struct is actually embedded in an efa_rdm_domain
+ * (i.e. opened via efa_rdm_domain_open); calling on a direct/dgram base struct
+ * yields an invalid pointer.
+ *
+ * @param[in]	efa_domain	base efa_domain
+ * @return	pointer to the containing efa_rdm_domain
+ */
+static inline
+struct efa_rdm_domain *efa_rdm_domain_from_efa_domain(struct efa_domain *efa_domain)
+{
+	return container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+}
+
 /*
  * efa_is_cache_available() is a check to see whether a memory registration
  * cache is available to be used by this domain.

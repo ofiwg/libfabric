@@ -96,7 +96,7 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 	ofi_genlock_lock(&cntr->ep_list_lock);
 	efa_rdm_cntr = container_of(cntr, struct efa_rdm_cntr, efa_cntr.util_cntr);
 	efa_domain = container_of(efa_rdm_cntr->efa_cntr.util_cntr.domain, struct efa_domain, util_domain);
-	rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	/**
 	 * TODO: It's better to just post the initial batch of internal rx pkts during ep enable
@@ -137,7 +137,7 @@ int efa_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	cntr->need_to_scan_ep_list = false;
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
-	rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	ret = efa_cntr_construct(&cntr->efa_cntr, domain, attr,
 				 efa_rdm_cntr_progress, context);

@@ -1112,7 +1112,7 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	ofi_genlock_lock(&cq->ep_list_lock);
 	efa_rdm_cq = container_of(cq, struct efa_rdm_cq, efa_cq.util_cq);
 	efa_domain = container_of(efa_rdm_cq->efa_cq.util_cq.domain, struct efa_domain, util_domain);
-	rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	/**
 	 * TODO: It's better to just post the initial batch of internal rx pkts during ep enable
@@ -1258,7 +1258,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
-	rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	ret = efa_rdm_cq_configure_wait(cq, attr, rdm_domain);
 	if (ret)

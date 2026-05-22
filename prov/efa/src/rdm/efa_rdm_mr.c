@@ -174,7 +174,7 @@ static int efa_rdm_mr_cache_close(fid_t fid)
 					       mr_fid.fid);
 
 	/* Safe cast: efa_mr is first member of efa_rdm_mr, verified by static assertion */
-	ofi_mr_cache_delete(container_of(efa_mr->domain, struct efa_rdm_domain, efa_domain)->cache, ((struct efa_rdm_mr *) efa_mr)->entry);
+	ofi_mr_cache_delete(efa_rdm_domain_from_efa_domain(efa_mr->domain)->cache, ((struct efa_rdm_mr *) efa_mr)->entry);
 
 	return 0;
 }
@@ -326,7 +326,7 @@ int efa_rdm_mr_update_domain_mr_map(struct efa_rdm_mr *efa_rdm_mr, struct fi_mr_
 
 	/* this can only happen when MR cache is enabled, hence the assertion */
 	{
-	struct efa_rdm_domain *rdm_domain = container_of(efa_mr->domain, struct efa_rdm_domain, efa_domain);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_mr->domain);
 	assert(rdm_domain->cache);
 	pthread_mutex_lock(&mm_lock);
 	ofi_mr_cache_notify(rdm_domain->cache, existing_mr->ibv_mr->addr, existing_mr->ibv_mr->length);
@@ -498,7 +498,7 @@ static int efa_rdm_mr_reg_impl(struct efa_rdm_mr *efa_rdm_mr, uint64_t flags,
 
 	/* RDM-specific: MR cache flush */
 	{
-	struct efa_rdm_domain *rdm_domain = container_of(efa_rdm_mr->efa_mr.domain, struct efa_rdm_domain, efa_domain);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_rdm_mr->efa_mr.domain);
 	if (rdm_domain->cache)
 		ofi_mr_cache_flush(rdm_domain->cache, false);
 	}
@@ -685,7 +685,7 @@ int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov
 	int ret;
 
 	domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
-	rdm_domain = container_of(domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(domain);
 
 	/* If cache is available, use it */
 	if (rdm_domain->cache) {
@@ -745,7 +745,7 @@ static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return ret;
 
 	domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
-	rdm_domain = container_of(domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(domain);
 
 	efa_rdm_mr = calloc(1, sizeof(*efa_rdm_mr));
 	if (!efa_rdm_mr) {

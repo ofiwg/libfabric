@@ -906,7 +906,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (efa_domain->info_type == EFA_INFO_RDM && efa_domain->fabric &&
 	    efa_domain->fabric->shm_fabric) {
 		struct efa_rdm_domain *rdm_domain =
-			container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+			efa_rdm_domain_from_efa_domain(efa_domain);
 		/*
 		 * shm av supports maximum 256 entries
 		 * Reset the count to 128 to reduce memory footprint and satisfy

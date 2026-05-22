@@ -288,7 +288,7 @@ struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 static inline
 struct efa_rdm_domain *efa_rdm_ep_rdm_domain(struct efa_rdm_ep *ep)
 {
-	return container_of(efa_rdm_ep_domain(ep), struct efa_rdm_domain, efa_domain);
+	return efa_rdm_domain_from_efa_domain(efa_rdm_ep_domain(ep));
 }
 
 void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep);

@@ -13,7 +13,7 @@ static void test_efa_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 static void test_efa_rdm_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 				int mr_reg_count, int mr_reg_size, bool gdrcopy_flag)
 {
-	struct efa_rdm_domain *rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 	struct efa_rdm_mr *efa_rdm_mr;
 
 	test_efa_mr_impl(efa_domain, mr, mr_reg_count, mr_reg_size);
@@ -824,7 +824,7 @@ void test_efa_rdm_mr_cache_regv_no_cache(struct efa_resource **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	struct efa_rdm_domain *rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	/* Verify cache is not available */
 	assert_null(rdm_domain->cache);
@@ -884,7 +884,7 @@ void test_efa_rdm_mr_cache_regv_with_cache(struct efa_resource **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	struct efa_rdm_domain *rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	/* Verify cache is available */
 	assert_non_null(rdm_domain->cache);
@@ -942,7 +942,7 @@ void test_efa_rdm_mr_cache_regv_cache_hit(struct efa_resource **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	struct efa_rdm_domain *rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	/* Verify cache is available */
 	assert_non_null(rdm_domain->cache);
@@ -1141,7 +1141,7 @@ void test_efa_rdm_mr_cache_lru_behavior(struct efa_resource **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	struct efa_rdm_domain *rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -1219,7 +1219,7 @@ void test_efa_rdm_mr_cache_flush_behavior(struct efa_resource **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	struct efa_rdm_domain *rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);
@@ -1296,7 +1296,7 @@ void test_efa_rdm_mr_cache_reference_counting(struct efa_resource **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	struct efa_rdm_domain *rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	buf = malloc(mr_size);
 	assert_non_null(buf);

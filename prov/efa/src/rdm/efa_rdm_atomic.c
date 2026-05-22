@@ -577,7 +577,7 @@ int efa_rdm_atomic_query(struct fid_domain *domain,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
-	rdm_domain = container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	max_atomic_size = rdm_domain->mtu_size - sizeof(struct efa_rdm_rta_hdr)
 			  - rdm_domain->addrlen

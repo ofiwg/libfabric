@@ -30,7 +30,7 @@ void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 
 	assert(domain->info_type == EFA_INFO_RDM);
 
-	rdm_domain = container_of(domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(domain);
 	assert(ah->implicit_refcnt > 0 || ah->explicit_refcnt > 0);
 	assert(dlist_entry_in_list(&rdm_domain->ah_lru_list,
 				   &ah->domain_lru_ah_list_entry));
@@ -47,7 +47,7 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
 	struct efa_rdm_domain *rdm_domain;
 
 	assert(domain->info_type == EFA_INFO_RDM);
-	rdm_domain = container_of(domain, struct efa_rdm_domain, efa_domain);
+	rdm_domain = efa_rdm_domain_from_efa_domain(domain);
 
 	dlist_foreach_container (&rdm_domain->ah_lru_list, struct efa_ah, ah_tmp,
 				 domain_lru_ah_list_entry) {
@@ -190,7 +190,7 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	dlist_init(&efa_ah->implicit_conn_list);
 	if (domain->info_type == EFA_INFO_RDM) {
 		struct efa_rdm_domain *rdm_domain =
-			container_of(domain, struct efa_rdm_domain, efa_domain);
+			efa_rdm_domain_from_efa_domain(domain);
 		dlist_insert_tail(&efa_ah->domain_lru_ah_list_entry, &rdm_domain->ah_lru_list);
 	} else {
 		dlist_init(&efa_ah->domain_lru_ah_list_entry);
