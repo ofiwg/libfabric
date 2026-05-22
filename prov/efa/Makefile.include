@@ -37,6 +37,7 @@ _efa_files = \
 	prov/efa/src/efa_av.c \
 	prov/efa/src/efa_ah.c \
 	prov/efa/src/efa_conn.c \
+	prov/efa/src/rdm/efa_rdm_domain.c \
 	prov/efa/src/efa_domain.c \
 	prov/efa/src/efa_domain_util.c \
 	prov/efa/src/efa_fabric.c \
@@ -121,6 +122,7 @@ _efa_headers = \
 	prov/efa/src/efa_data_path_direct_internal.h \
 	prov/efa/src/efa_mmio.h \
 	prov/efa/src/rdm/efa_rdm_peer.h	\
+	prov/efa/src/rdm/efa_rdm_domain.h \
 	prov/efa/src/rdm/efa_rdm_cq.h \
 	prov/efa/src/rdm/efa_rdm_cntr.h \
 	prov/efa/src/rdm/efa_rdm_ep.h \
@@ -161,6 +163,7 @@ nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_test_mocks.c \
 	prov/efa/test/efa_unit_test_common.c \
 	prov/efa/test/efa_unit_test_domain.c \
+	prov/efa/test/efa_unit_test_rdm_domain.c \
 	prov/efa/test/efa_unit_test_ep.c \
 	prov/efa/test/efa_unit_test_av.c \
 	prov/efa/test/efa_unit_test_cq.c \

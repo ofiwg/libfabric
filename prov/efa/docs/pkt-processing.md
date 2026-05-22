@@ -55,7 +55,7 @@ those cases.
 
 We also may queue an rxe/te if we're unable to continue sending segments
 or if we fail to post a control message for that entry. You'll find the lists
-where those are queued and progressed in `efa_domain_progress_rdm_peers_and_queues`.
+where those are queued and progressed in `efa_rdm_domain_progress_peers_and_queues`.
 
 ### Dealing with receiver not ready errors (RNR)
 
@@ -77,5 +77,5 @@ to that peer until the peer exits backoff, meaning we either received a
 successful send completion for that peer or the backoff timer expires.
 
 See `efa_rdm_ep_queue_rnr_pkt` for where the packets are queued and backoff timers are
-set, and see `efa_domain_progress_rdm_peers_and_queues` for where those timers are
+set, and see `efa_rdm_domain_progress_peers_and_queues` for where those timers are
 checked and we allow sends to that remote peer again.
