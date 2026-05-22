@@ -3,6 +3,9 @@
 
 #include "efa_unit_tests.h"
 #include "efa_cq.h"
+#include "efa_cntr.h"
+#include "rdm/efa_rdm_cntr.h"
+#include "rdm/efa_rdm_atomic.h"
 
 
 /**
@@ -593,4 +596,67 @@ void test_efa_domain_open_ops_cntr_open_ext(struct efa_resource **state)
 #else
 	assert_int_equal(ret, -FI_ENOSYS);
 #endif
+}
+
+/**
+ * @brief Verify EFA-direct domains install base domain ops
+ *
+ * @param[in]	state	struct efa_resource managed by the framework
+ */
+void test_efa_domain_open_installs_base_domain_ops_efa_direct(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_ops_domain *ops;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	ops = resource->domain->ops;
+
+	assert_ptr_equal(ops->av_open, efa_av_open);
+	assert_ptr_equal(ops->cq_open, efa_cq_open);
+	assert_ptr_equal(ops->endpoint, efa_ep_open);
+	assert_ptr_equal(ops->cntr_open, efa_cntr_open);
+	assert_ptr_equal(ops->query_atomic, fi_no_query_atomic);
+}
+
+/**
+ * @brief Verify DGRAM domains install base domain ops
+ *
+ * DGRAM is served by the "efa" fabric whose .domain slot points to
+ * efa_rdm_domain_open. This test exercises the DGRAM redirect inside
+ * efa_rdm_domain_open which forwards to efa_domain_open and ends up
+ * with the base ops table.
+ *
+ * @param[in]	state	struct efa_resource managed by the framework
+ */
+void test_efa_domain_open_installs_base_domain_ops_dgram(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_ops_domain *ops;
+
+	efa_unit_test_resource_construct(resource, FI_EP_DGRAM, EFA_FABRIC_NAME);
+	ops = resource->domain->ops;
+
+	assert_ptr_equal(ops->av_open, efa_av_open);
+	assert_ptr_equal(ops->cq_open, efa_cq_open);
+	assert_ptr_equal(ops->endpoint, efa_ep_open);
+	assert_ptr_equal(ops->cntr_open, efa_cntr_open);
+	assert_ptr_equal(ops->query_atomic, fi_no_query_atomic);
+}
+
+/**
+ * @brief Verify FI_EFA_GDA_OPS is rejected on the DGRAM path
+ *
+ * @param[in]	state	struct efa_resource managed by the framework
+ */
+void test_efa_domain_gda_ops_rejected_for_dgram(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_efa_ops_gda *efa_gda_ops;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_DGRAM, EFA_FABRIC_NAME);
+
+	ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0,
+			  (void **)&efa_gda_ops, NULL);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
 }

@@ -2,6 +2,8 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "rdm/efa_rdm_cntr.h"
+#include "rdm/efa_rdm_atomic.h"
 
 /**
  * @brief Verify the info type in struct efa_domain for efa RDM path
@@ -250,4 +252,62 @@ void test_efa_domain_mr_cache_disabled_with_mr_local(struct efa_resource **state
 	/* Validate cache is disabled */
 	test_efa_rdm_domain_mr_cache_common(rdm_domain, false);
 	fi_freeinfo(hints);
+}
+
+/**
+ * @brief Verify EFA RDM domains install RDM-specific domain ops
+ *
+ * After the domain split, struct efa_rdm_domain installs efa_domain_ops_rdm
+ * which routes av/cq/endpoint/cntr operations to RDM-specific functions.
+ *
+ * @param[in]	state	struct efa_resource managed by the framework
+ */
+void test_efa_rdm_domain_open_installs_rdm_domain_ops(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_ops_domain *ops;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ops = resource->domain->ops;
+
+	assert_ptr_equal(ops->av_open, efa_av_open);
+	assert_ptr_equal(ops->cq_open, efa_rdm_cq_open);
+	assert_ptr_equal(ops->endpoint, efa_rdm_ep_open);
+	assert_ptr_equal(ops->cntr_open, efa_rdm_cntr_open);
+	assert_ptr_equal(ops->query_atomic, efa_rdm_atomic_query);
+}
+/**
+ * @brief Verify FI_EFA_GDA_OPS is rejected on the RDM path
+ *
+ * GDA ops are direct-only. RDM domains should fail FI_EOPNOTSUPP
+ * when the application requests them.
+ *
+ * @param[in]	state	struct efa_resource managed by the framework
+ */
+void test_efa_domain_gda_ops_rejected_for_rdm(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_efa_ops_gda *efa_gda_ops;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0,
+			  (void **)&efa_gda_ops, NULL);
+	assert_int_equal(ret, -FI_EOPNOTSUPP);
+}
+/**
+ * @brief Verify struct efa_rdm_domain places struct efa_domain at offset 0
+ *
+ * The container_of upcast/downcast between base efa_domain and extended
+ * efa_rdm_domain depends on the embedded base sitting at offset 0.
+ * This is a structural contract of the layered struct design.
+ *
+ * @param[in]	state	struct efa_resource managed by the framework
+ */
+void test_efa_rdm_domain_struct_layout(struct efa_resource **state)
+{
+	(void) state;
+
+	assert_int_equal(offsetof(struct efa_rdm_domain, efa_domain), 0);
 }

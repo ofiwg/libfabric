@@ -348,6 +348,9 @@ void test_efa_fabric_open_ops_feature_not_on_proto();
 void test_efa_fabric_open_ops_feature_unknown();
 void test_efa_domain_direct_mr_ops();
 void test_efa_domain_dgram_mr_ops();
+void test_efa_domain_open_installs_base_domain_ops_efa_direct();
+void test_efa_domain_open_installs_base_domain_ops_dgram();
+void test_efa_domain_gda_ops_rejected_for_dgram();
 /* end efa_unit_test_domain.c */
 
 /* begin efa_unit_test_rdm_domain.c */
@@ -358,6 +361,9 @@ void test_efa_domain_peer_list_cleared();
 void test_efa_domain_rdm_mr_ops();
 void test_efa_domain_mr_cache_enabled();
 void test_efa_domain_mr_cache_disabled_with_mr_local();
+void test_efa_rdm_domain_open_installs_rdm_domain_ops();
+void test_efa_domain_gda_ops_rejected_for_rdm();
+void test_efa_rdm_domain_struct_layout();
 /* end efa_unit_test_rdm_domain.c */
 
 void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();

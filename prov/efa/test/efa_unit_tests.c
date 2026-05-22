@@ -421,6 +421,9 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_fabric_open_ops_feature_unknown, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_direct_mr_ops, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_dgram_mr_ops, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_open_installs_base_domain_ops_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_open_installs_base_domain_ops_dgram, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_gda_ops_rejected_for_dgram, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_domain.c */
 
 		/* begin efa_unit_test_rdm_domain.c */
@@ -431,6 +434,9 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_domain_rdm_mr_ops, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_enabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_disabled_with_mr_local, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_domain_open_installs_rdm_domain_ops, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_gda_ops_rejected_for_rdm, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_domain_struct_layout, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_rdm_domain.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
