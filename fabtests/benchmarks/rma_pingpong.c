@@ -65,13 +65,13 @@ static int run(void)
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = pingpong_rma(opts.rma_op, &remote);
+			ret = pingpong_rma_write(opts.rma_op, &remote);
 			if (ret)
 				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = pingpong_rma(opts.rma_op, &remote);
+		ret = pingpong_rma_write(opts.rma_op, &remote);
 		if (ret)
 			goto out;
 	}
