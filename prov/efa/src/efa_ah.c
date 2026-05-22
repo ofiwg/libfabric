@@ -6,6 +6,7 @@
 #include "efa.h"
 #include "efa_ah.h"
 #include "efa_conn.h"
+#include "rdm/efa_rdm_domain.h"
 #include <infiniband/efadv.h>
 
 void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);

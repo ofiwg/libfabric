@@ -1135,7 +1135,7 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
-	efa_domain_progress_rdm_peers_and_queues(rdm_domain);
+	efa_rdm_domain_progress_peers_and_queues(rdm_domain);
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 

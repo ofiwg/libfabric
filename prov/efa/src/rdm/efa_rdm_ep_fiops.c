@@ -897,10 +897,9 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
 	struct efa_rdm_ope *ope;
-	struct efa_domain *domain = efa_rdm_ep_domain(ep);
 	struct efa_rdm_domain *rdm_domain = efa_rdm_ep_rdm_domain(ep);
 
-	assert(domain->info->ep_attr->type == FI_EP_RDM);
+	assert(rdm_domain->efa_domain.info->ep_attr->type == FI_EP_RDM);
 
 	/* Update timers for peers that are in backoff list*/
 	dlist_foreach_container_safe(&rdm_domain->peer_backoff_list,
@@ -1084,7 +1083,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 
 	/**
 	 * The QP destroy and op entries clean up must be in the same lock,
-	 * otherwise there can be race condition that efa_domain_progress_rdm_peers_and_queues
+	 * otherwise there can be race condition that efa_rdm_domain_progress_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
 	 *
 	 * Destroying the self AH also requires the SRX lock

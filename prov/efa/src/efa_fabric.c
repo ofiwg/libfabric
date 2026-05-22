@@ -20,6 +20,7 @@
 
 #include "efa_cq.h"
 #include "efa_domain.h"
+#include "rdm/efa_rdm_domain.h"
 #include "efa_prov_info.h"
 #ifdef EFA_PERF_ENABLED
 const char *efa_perf_counters_str[] = {

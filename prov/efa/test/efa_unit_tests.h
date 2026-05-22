@@ -331,31 +331,34 @@ void test_efa_rdm_pke_get_available_copy_methods_align128();
 /* begin efa_unit_test_domain.c */
 void test_efa_domain_info_type_efa_direct();
 void test_efa_domain_direct_has_bounce_buffer();
-void test_efa_domain_rdm_no_bounce_buffer();
 void test_efa_domain_no_bounce_buffer_without_fi_rma_cap_requested();
 void test_efa_domain_bounce_buffer_with_rdma();
-void test_efa_domain_info_type_efa_rdm();
 void test_efa_domain_open_ops_wrong_name();
 void test_efa_domain_open_ops_mr_query();
-void test_efa_domain_rdm_attr_mr_allocated();
 void test_efa_domain_dgram_attr_mr_allocated();
 void test_efa_domain_direct_attr_mr_allocated();
-void test_efa_domain_peer_list_cleared();
 void test_efa_domain_open_ops_query_addr();
 void test_efa_domain_open_ops_query_qp_wqs();
 void test_efa_domain_open_ops_query_cq();
 void test_efa_domain_open_ops_cq_open_ext();
+void test_efa_domain_open_ops_cntr_open_ext();
 void test_efa_domain_open_ops_get_mr_lkey();
 void test_efa_fabric_open_ops_feature_known();
 void test_efa_fabric_open_ops_feature_not_on_proto();
 void test_efa_fabric_open_ops_feature_unknown();
-void test_efa_domain_rdm_mr_ops();
 void test_efa_domain_direct_mr_ops();
 void test_efa_domain_dgram_mr_ops();
+/* end efa_unit_test_domain.c */
+
+/* begin efa_unit_test_rdm_domain.c */
+void test_efa_domain_info_type_efa_rdm();
+void test_efa_domain_rdm_no_bounce_buffer();
+void test_efa_domain_rdm_attr_mr_allocated();
+void test_efa_domain_peer_list_cleared();
+void test_efa_domain_rdm_mr_ops();
 void test_efa_domain_mr_cache_enabled();
 void test_efa_domain_mr_cache_disabled_with_mr_local();
-void test_efa_domain_open_ops_cntr_open_ext();
-/* end efa_unit_test_domain.c */
+/* end efa_unit_test_rdm_domain.c */
 
 void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep();
 void test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep();

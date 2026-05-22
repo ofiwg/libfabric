@@ -116,7 +116,7 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 	}
 
 	efa_cntr_progress_ibv_cq_poll_list(&efa_rdm_cntr->efa_cntr);
-	efa_domain_progress_rdm_peers_and_queues(rdm_domain);
+	efa_rdm_domain_progress_peers_and_queues(rdm_domain);
 	ofi_genlock_unlock(&cntr->ep_list_lock);
 }
 
