@@ -41,6 +41,7 @@ struct efa_env efa_env = {
 	.use_data_path_direct = true,
 	.implicit_av_size = 0,
 	.track_mr = 0,
+	.state_dump_signal = 0,
 };
 
 /* @brief Read and store the FI_EFA_* environment variables.
@@ -140,6 +141,7 @@ void efa_env_param_get(void)
 	}
 	fi_param_get_bool(&efa_prov, "use_data_path_direct", &efa_env.use_data_path_direct);
 	fi_param_get_bool(&efa_prov, "track_mr", &efa_env.track_mr);
+	fi_param_get_int(&efa_prov, "state_dump_signal", &efa_env.state_dump_signal);
 
 	efa_fork_support_request_initialize();
 }
@@ -236,6 +238,15 @@ void efa_env_define()
 			"any outstanding operations still reference an MR when "
 			"it is closed. This is useful for debugging memory "
 			"registration issues. (Default: false)");
+	fi_param_define(&efa_prov, "state_dump_signal", FI_PARAM_INT,
+			"Signal number that triggers an endpoint state dump "
+			"for debugging hangs in the RDM (protocol) path. "
+			"When the specified signal is received, RDM endpoint "
+			"and peer state is printed to stderr. "
+			"Currently only covers the EFA RDM protocol path. "
+			"Set to 0 to disable. "
+			"Example: 12 for SIGUSR2, 10 for SIGUSR1. "
+			"(Default: 0, disabled)");
 }
 
 

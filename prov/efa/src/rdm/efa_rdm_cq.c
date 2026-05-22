@@ -3,6 +3,7 @@
 
 #include "efa.h"
 #include "efa_rdm_cq.h"
+#include "efa_rdm_ep_dump.h"
 #include "efa_data_path_ops.h"
 #include "ofi_util.h"
 #include "efa_av.h"
@@ -1134,6 +1135,17 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
 	efa_domain_progress_rdm_peers_and_queues(efa_domain);
+
+	/* Check for state dump request triggered by FI_EFA_STATE_DUMP_SIGNAL */
+	if (efa_env.state_dump_signal && g_efa_rdm_dump_requested) {
+		dlist_foreach(&cq->ep_list, item) {
+			fid_entry = container_of(item, struct fid_list_entry, entry);
+			efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+			efa_rdm_dump_ep_state(efa_rdm_ep);
+		}
+		g_efa_rdm_dump_requested = 0;
+	}
+
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 

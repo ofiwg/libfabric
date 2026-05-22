@@ -588,6 +588,16 @@ still reference an MR when it is closed. When enabled, the provider will print
 a warning message if an MR is closed while TX or RX operations still reference it.
 This is useful for debugging memory registration issues. (Default: false).
 
+*FI_EFA_STATE_DUMP_SIGNAL*
+
+: Signal number that triggers an RDM endpoint state dump for debugging hangs.
+When the specified signal is received, the provider prints endpoint counters,
+outstanding TX/RX operations, and per-peer state to stderr. Currently only
+covers the EFA RDM (protocol) path. Set to 0 to disable.
+Example: 12 for SIGUSR2, 10 for SIGUSR1. (Default: 0, disabled).
+See [efa_rdm_ep_dump.md](prov/efa/docs/efa_rdm_ep_dump.md) for output format
+and hang pattern interpretation.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
