@@ -49,6 +49,7 @@ int pingpong(void);
 int run_pingpong(void);
 int bandwidth(void);
 int pingpong_rma_write(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote);
+int pingpong_rma_read(struct fi_rma_iov *remote);
 int bandwidth_rma(enum ft_rma_opcodes op, struct fi_rma_iov *remote);
 int rma_tx_completion(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote);
 
