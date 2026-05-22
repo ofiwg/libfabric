@@ -7,7 +7,7 @@ import pytest
 @pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES,
                            pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_RMA_SIZES)
-@pytest.mark.parametrize("operation_type", ["writedata"])
+@pytest.mark.parametrize("operation_type", ["writedata", "read"])
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
