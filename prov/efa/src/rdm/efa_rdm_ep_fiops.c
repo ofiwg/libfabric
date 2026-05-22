@@ -1083,7 +1083,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 
 	/**
 	 * The QP destroy and op entries clean up must be in the same lock,
-	 * otherwise there can be race condition that efa_domain_progress_rdm_peers_and_queues
+	 * otherwise there can be race condition that efa_rdm_domain_progress_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
 	 *
 	 * Destroying the self AH also requires the SRX lock

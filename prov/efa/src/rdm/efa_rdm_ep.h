@@ -11,6 +11,7 @@
 #include "efa_base_ep.h"
 #include "efa_rdm_rxe_map.h"
 #include "efa_rdm_mr.h"
+#include "efa_rdm_domain.h"
 
 
 /** @brief Information of a queued copy.

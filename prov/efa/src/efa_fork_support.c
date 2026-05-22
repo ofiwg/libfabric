@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa.h"
+#include "rdm/efa_rdm_domain.h"
 
 enum efa_fork_support_status g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
 

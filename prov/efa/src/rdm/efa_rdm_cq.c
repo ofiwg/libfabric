@@ -1108,15 +1108,13 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	struct dlist_entry *item;
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
-	struct efa_domain *efa_domain;
 	struct efa_rdm_domain *rdm_domain;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct fid_list_entry *fid_entry;
 
 	ofi_genlock_lock(&cq->ep_list_lock);
 	efa_rdm_cq = container_of(cq, struct efa_rdm_cq, efa_cq.util_cq);
-	efa_domain = container_of(efa_rdm_cq->efa_cq.util_cq.domain, struct efa_domain, util_domain);
-	rdm_domain = (struct efa_rdm_domain *) efa_domain;
+	rdm_domain = (struct efa_rdm_domain *) container_of(efa_rdm_cq->efa_cq.util_cq.domain, struct efa_domain, util_domain);
 
 	/**
 	 * TODO: It's better to just post the initial batch of internal rx pkts during ep enable
@@ -1139,7 +1137,7 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
-	efa_domain_progress_rdm_peers_and_queues(rdm_domain);
+	efa_rdm_domain_progress_peers_and_queues(rdm_domain);
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
@@ -1250,7 +1248,6 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 {
 	int ret, retv;
 	struct efa_rdm_cq *cq;
-	struct efa_domain *efa_domain;
 	struct efa_rdm_domain *rdm_domain;
 	struct fi_cq_attr shm_cq_attr = {0};
 	struct fi_peer_cq_context peer_cq_context = {0};
@@ -1260,9 +1257,8 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!cq)
 		return -FI_ENOMEM;
 
-	efa_domain = container_of(domain, struct efa_domain,
-				  util_domain.domain_fid);
-	rdm_domain = (struct efa_rdm_domain *) efa_domain;
+	rdm_domain = (struct efa_rdm_domain *) container_of(domain, struct efa_domain,
+							    util_domain.domain_fid);
 
 	ret = efa_rdm_cq_configure_wait(cq, attr, rdm_domain);
 	if (ret)
@@ -1284,7 +1280,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto close_util_cq;
 
 	ret = efa_cq_open_ibv_cq(
-		attr, efa_domain->device->ibv_ctx, &cq->efa_cq.ibv_cq,
+		attr, rdm_domain->efa_domain.device->ibv_ctx, &cq->efa_cq.ibv_cq,
 		&efa_cq_init_attr);
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", fi_strerror(ret));
