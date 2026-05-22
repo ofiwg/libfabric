@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_verbs" "7" "2026\-05\-14" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_verbs" "7" "2026\-05\-22" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -218,7 +218,9 @@ Prioritize XRC transport fi_info before RC transport fi_info (default:
 The GID index to use (default: 0)
 .TP
 \f[I]FI_VERBS_DEVICE_NAME\f[R]
-Specify a specific verbs device to use by name
+A comma separated list of prefixes or full names of verbs devices to
+use.
+(default: none)
 .TP
 \f[I]FI_VERBS_USE_DMABUF\f[R]
 If supported, try to use ibv_reg_dmabuf_mr first to register
@@ -240,8 +242,8 @@ Path to NIC affinity configuration file for `manual' policy.
 .SS Variables specific to MSG endpoints
 .TP
 \f[I]FI_VERBS_IFACE\f[R]
-The prefix or the full name of the network interface associated with the
-verbs device (default: ib)
+A comma separated list of prefixes or full names of network interfaces
+associated with the verbs devices to use (default: none)
 .SS Variables specific to DGRAM endpoints
 .TP
 \f[I]FI_VERBS_DGRAM_USE_NAME_SERVER\f[R]
