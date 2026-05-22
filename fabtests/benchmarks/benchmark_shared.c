@@ -293,7 +293,7 @@ int run_pingpong(void)
 	return ft_finalize();
 }
 
-int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
+int pingpong_rma_write(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
 	int ret, i;
 	size_t inject_size = fi->tx_attr->inject_size;
