@@ -100,9 +100,9 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 		assert(0);
 	}
 
-	efa_domain_ope_list_lock(efa_rdm_ep_rdm_domain(ep));
+	efa_rdm_domain_ope_list_lock(efa_rdm_ep_rdm_domain(ep));
 	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
-	efa_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(ep));
+	efa_rdm_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(ep));
 }
 
 void efa_rdm_txe_release(struct efa_rdm_ope *txe)
@@ -128,9 +128,9 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		}
 	}
 
-	efa_domain_ope_list_lock(efa_rdm_ep_rdm_domain(txe->ep));
+	efa_rdm_domain_ope_list_lock(efa_rdm_ep_rdm_domain(txe->ep));
 	dlist_remove(&txe->ep_entry);
-	efa_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(txe->ep));
+	efa_rdm_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(txe->ep));
 
 	/**
 	 * Make sure the entry is removed
@@ -177,9 +177,9 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 	if (rxe->peer)
 		dlist_remove(&rxe->peer_entry);
 
-	efa_domain_ope_list_lock(efa_rdm_ep_rdm_domain(rxe->ep));
+	efa_rdm_domain_ope_list_lock(efa_rdm_ep_rdm_domain(rxe->ep));
 	dlist_remove(&rxe->ep_entry);
-	efa_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(rxe->ep));
+	efa_rdm_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(rxe->ep));
 
 	/**
 	 * Make sure the entry is removed

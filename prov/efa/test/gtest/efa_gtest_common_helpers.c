@@ -44,10 +44,10 @@ fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av)
 
 	efa_test_fabricate_addr(ep, &raw_addr);
 
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	err = efa_av_insert_one(efa_av, &raw_addr, &fi_addr, 0, NULL, true,
 				true);
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
+	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 
 	if (err)
 		return FI_ADDR_NOTAVAIL;
