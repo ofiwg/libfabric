@@ -52,7 +52,7 @@ typedef int (*ft_nic_affinity_init)(struct fi_info *);
 typedef int (*ft_nic_affinity_test)(struct fi_info *);
 
 static char err_buf[512];
-static char *baseline_str = NULL;
+static char *expected_str = NULL;
 
 static const char *get_nic_name(struct fi_info *info)
 {
@@ -67,7 +67,7 @@ static int get_arbitrary_nic_name(char *nic_name, size_t len)
 	char *comma_pos;
 	int nic_len;
 
-	baseline_nics = strchr(baseline_str, ':') + 1;
+	baseline_nics = strchr(expected_str, ':') + 1;
 	comma_pos = strchr(baseline_nics, ',');
 	nic_len = comma_pos ? (comma_pos - baseline_nics) : strlen(baseline_nics);
 
@@ -255,86 +255,86 @@ static int print_baseline(struct fi_info *info)
 }
 
 static int check_identical_list(struct fi_info *info) {
-    int baseline_total;
-    char *baseline_nics;
-    char *baseline_ptr;
+    int expected_total;
+    char *expected_nics;
+    char *expected_ptr;
     struct fi_info *cur;
     const char *name, *prev_name;
     int current_total;
-    
-    baseline_total = atoi(baseline_str);
-    baseline_nics = strchr(baseline_str, ':') + 1;
-    baseline_ptr = baseline_nics;
+
+    expected_total = atoi(expected_str);
+    expected_nics = strchr(expected_str, ':') + 1;
+    expected_ptr = expected_nics;
     prev_name = NULL;
     current_total = 0;
-    
+
     for (cur = info; cur; cur = cur->next) {
         current_total++;
-        
+
         name = get_nic_name(cur);
         if (!name || (prev_name && strcmp(name, prev_name) == 0))
             continue;
-        
-        if (strncmp(baseline_ptr, name, strlen(name)) != 0) {
+
+        if (strncmp(expected_ptr, name, strlen(name)) != 0) {
             sprintf(err_buf, "Unexpected NIC: %s", name);
             return -FI_EOTHER;
         }
-        
-        baseline_ptr += strlen(name) + 1;
+
+        expected_ptr += strlen(name) + 1;
         prev_name = name;
     }
-    
-    if (baseline_total != current_total) {
-        sprintf(err_buf, "Total mismatch: baseline=%d, current=%d",
-                baseline_total, current_total);
+
+    if (expected_total != current_total) {
+        sprintf(err_buf, "Total mismatch: expected=%d, current=%d",
+                expected_total, current_total);
         return -FI_EOTHER;
     }
-    
+
     return 0;
 }
 
 static int check_no_interference(struct fi_info *info) {
-    int baseline_total;
-    char *baseline_nics;
-    char baseline_copy[NIC_LIST_SIZE];
+    int expected_total;
+    char *expected_nics;
+    char expected_copy[NIC_LIST_SIZE];
     struct fi_info *cur;
     const char *name, *prev_name;
     int current_total;
     char *nic_pos;
 
-    baseline_total = atoi(baseline_str);
-    baseline_nics = strchr(baseline_str, ':') + 1;
-    
-    strncpy(baseline_copy, baseline_nics, sizeof(baseline_copy) - 1);
-    baseline_copy[sizeof(baseline_copy) - 1] = '\0';
-    
+    expected_total = atoi(expected_str);
+    expected_nics = strchr(expected_str, ':') + 1;
+
+    strncpy(expected_copy, expected_nics, sizeof(expected_copy) - 1);
+    expected_copy[sizeof(expected_copy) - 1] = '\0';
+
     prev_name = NULL;
     current_total = 0;
-    
+
     for (cur = info; cur; cur = cur->next) {
         current_total++;
-        
+
         name = get_nic_name(cur);
         if (!name || (prev_name && strcmp(name, prev_name) == 0))
             continue;
 
-        nic_pos = strstr(baseline_copy, name);
+        nic_pos = strstr(expected_copy, name);
         if (!nic_pos) {
             sprintf(err_buf, "Grouping violation in NIC %s ", name);
             return -FI_EOTHER;
         }
-        
+
         memset(nic_pos, ' ', strlen(name));
         prev_name = name;
     }
-    
+
     /* Verify total count matches */
-    if (baseline_total != current_total) {
-        sprintf(err_buf, "Total mismatch: baseline=%d, current=%d",
-                baseline_total, current_total);
+    if (expected_total != current_total) {
+        sprintf(err_buf, "Total mismatch: expected=%d, current=%d",
+                expected_total, current_total);
         return -FI_EOTHER;
     }
-    
+
     return 0;
 }
 
@@ -478,12 +478,12 @@ static void usage(char *name, struct test_entry *tests)
 	struct test_entry *t;
 
 	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s --test <name> [--baseline <string>]\n\n", name);
+	fprintf(stderr, "  %s --test <name> [--expected <string>]\n\n", name);
 	fprintf(stderr, "Unit tests for verbs GPU-NIC affinity feature\n\n");
 	fprintf(stderr, "Options:\n");
 	fprintf(stderr, "  -h, --help              Display this help output\n");
 	fprintf(stderr, "  --test <name>           Run single test by name\n");
-	fprintf(stderr, "  --baseline <string>     Baseline NIC list\n");
+	fprintf(stderr, "  --expected <string>     Expected NIC list\n");
 	fprintf(stderr, "Available tests:\n");
 	for (t = tests; t->test; t++) {
 		const char *name = t->name + strlen("nic_affinity_");
@@ -528,7 +528,7 @@ int main(int argc, char **argv)
 	};
 
 	struct option long_options[] = {
-		{"baseline", required_argument, 0, 'b'},
+		{"expected", required_argument, 0, 'e'},
 		{"test", required_argument, 0, 't'},
 		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
@@ -540,8 +540,8 @@ int main(int argc, char **argv)
 
 	while ((op = getopt_long(argc, argv, "h", long_options, NULL)) != -1) {
 		switch (op) {
-		case 'b':
-			baseline_str = optarg;
+		case 'e':
+			expected_str = optarg;
 			break;
 		case 't':
 			test_name = optarg;
@@ -576,15 +576,15 @@ int main(int argc, char **argv)
 		return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 	}
 
-        if (!baseline_str) {
-                fprintf(stderr, "Error: --baseline is required\n\n");
+        if (!expected_str) {
+                fprintf(stderr, "Error: --expected is required\n\n");
                 usage(argv[0], nic_affinity_tests);
                 fi_freeinfo(hints);
                 return EXIT_FAILURE;
         }
 
-	if (!strchr(baseline_str, ':')) {
-		fprintf(stderr, "Error: Invalid baseline format.\n\n");
+	if (!strchr(expected_str, ':')) {
+		fprintf(stderr, "Error: Invalid expected format.\n\n");
 		usage(argv[0], nic_affinity_tests);
 		fi_freeinfo(hints);
 		return EXIT_FAILURE;

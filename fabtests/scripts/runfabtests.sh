@@ -796,7 +796,7 @@ function run_nic_affinity_tests {
 	for test_name in "${test_names[@]}"; do
 
                 start_time=$(date '+%s')
-                cmd="${test_bin} --baseline $baseline --test $test_name"
+                cmd="${test_bin} --expected $baseline --test $test_name"
                 $cmd > /dev/null 2>&1
                 ret=$?
                 end_time=$(date '+%s')
