@@ -45,6 +45,9 @@
 #include <core.h>
 struct pm_job_info pm_job;
 
+#define PM_CONN_RETRY_COUNT 5
+#define PM_CONN_RETRY_USEC 100000
+
 static enum multi_xfer parse_caps(char *caps)
 {
 	if (strcmp(caps, "msg") == 0) {
@@ -251,7 +254,7 @@ err:
 
 static int pm_conn_setup(bool pm)
 {
-	int sock,  ret;
+	int sock, ret, i;
 	int optval = 1;
 	bool bound = false;
 
@@ -286,9 +289,24 @@ static int pm_conn_setup(bool pm)
 		opts.dst_port = opts.src_port;
 		opts.src_addr = NULL;
 		opts.src_port = 0;
-		ret = connect(pm_job.sock,
-			      (struct sockaddr *) &pm_job.oob_server_addr,
-			      pm_job.server_addr_len);
+
+		/*
+		 * clients can race the server when launched in parallel by runfabtests
+		 * retry transient failed connects to reduce spurious test failures
+		 */
+		for (i = 0; i < PM_CONN_RETRY_COUNT; i++) {
+			ret = connect(pm_job.sock,
+				      (struct sockaddr *) &pm_job.oob_server_addr,
+				      pm_job.server_addr_len);
+			if (!ret)
+				break;
+
+			if (errno != ECONNREFUSED && errno != ETIMEDOUT &&
+			    errno != EHOSTUNREACH && errno != ENETUNREACH)
+				break;
+
+			usleep(PM_CONN_RETRY_USEC);
+		}
 	}
 
 	if (ret)
