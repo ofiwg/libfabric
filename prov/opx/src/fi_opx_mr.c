@@ -183,6 +183,24 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		return -errno;
 	}
 
+#if HAVE_HFISVC
+	/* HFISVC pins the memory region eagerly at registration time via the
+	 * kernel hfi1_mem_region_pin path. A NULL base address cannot be pinned
+	 * (the kernel returns EFAULT), and the HFISVC cmd_mr_open API truncates
+	 * its length argument to 32 bits, so any length exceeding UINT32_MAX
+	 * would silently register only the low 4 GiB of the requested range.
+	 * Reject these cases up front with a libfabric-level error rather than
+	 * letting them propagate to a kernel-side failure or a silent
+	 * truncation. TODO: document this limit along with HFISVC */
+	if (opx_domain->use_hfisvc && (!iov->iov_base || iov->iov_len > UINT32_MAX)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+			"HFISVC cannot register MR with iov_base=%p iov_len=%zu (NULL base or len > UINT32_MAX is unsupported by HFISVC pinning)\n",
+			iov->iov_base, iov->iov_len);
+		errno = FI_EOPNOTSUPP;
+		return -errno;
+	}
+#endif
+
 	struct fi_opx_mr			      *opx_mr;
 	__attribute__((__unused__)) uint64_t	       hmem_device = 0UL;
 	__attribute__((__unused__)) enum fi_hmem_iface hmem_iface  = FI_HMEM_SYSTEM;
