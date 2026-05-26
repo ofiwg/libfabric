@@ -108,9 +108,6 @@ AS_IF([test -z "$CFLAGS"],
 # <3), but it is necessary in AM 1.12.x.
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
-dnl Call the provider's CONFIGURE and CONDITIONALS macros
-m4_include([prov/efa/configure.m4])
-
 AM_PROG_LIBTOOL
 
 AC_ARG_WITH([valgrind],
@@ -321,6 +318,9 @@ dnl Check for random_r function
 AC_CHECK_FUNC([random_r], [have_random_r=1], [have_random_r=0])
 AC_DEFINE_UNQUOTED([HAVE_RANDOM_R], [$have_random_r],
 		   [Defined to 1 if random_r is available])
+
+dnl Call the provider's CONFIGURE and CONDITIONALS macros
+m4_include([prov/efa/configure.m4])
 
 AC_CONFIG_FILES([Makefile fabtests.spec])
 
