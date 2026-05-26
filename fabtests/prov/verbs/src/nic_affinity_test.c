@@ -53,6 +53,18 @@ typedef int (*ft_nic_affinity_test)(struct fi_info *);
 
 static char err_buf[512];
 static char *expected_str = NULL;
+static char *name_str = NULL;
+static char *policy_str = NULL;
+static char *device_str = NULL;
+static char *config_str = NULL;
+
+static void apply_env(const char *var, const char *val)
+{
+	if (val && strlen(val) > 0)
+		setenv(var, val, 1);
+	else
+		unsetenv(var);
+}
 
 static const char *get_nic_name(struct fi_info *info)
 {
@@ -130,6 +142,14 @@ static void cleanup(void)
 /*
  * Init functions
  */
+static int init_custom(struct fi_info *hints)
+{
+	apply_env("FI_VERBS_NIC_AFFINITY_POLICY", policy_str);
+	apply_env("FI_VERBS_AFFINITY_DEVICE", device_str);
+	apply_env("FI_VERBS_NIC_AFFINITY_CONFIG", config_str);
+	return 0;
+}
+
 static int init_none(struct fi_info *hints)
 {
 	setenv("FI_VERBS_NIC_AFFINITY_POLICY", "none", 1);
@@ -423,6 +443,17 @@ out:
 	return ret;
 }
 
+static int nic_affinity_custom(void)
+{
+	int ret, testret = FAIL;
+	ret = nic_affinity_unit_test(init_custom, check_identical_list);
+	if (ret)
+		goto fail;
+	testret = PASS;
+fail:
+	return TEST_RET_VAL(ret, testret);
+}
+
 #define nic_affinity_test(name, desc, init, test)			\
 char *nic_affinity_ ## name ## _desc = desc;				\
 static int nic_affinity_ ## name(void)					\
@@ -439,10 +470,10 @@ fail:									\
 /*
  * Tests:
  */
-nic_affinity_test(baseline, "Test manual policy for sanity",
+nic_affinity_test(baseline, "print baseline",
 		  NULL,
 		  print_baseline)
-nic_affinity_test(none_sanity, "Test manual policy for sanity",
+nic_affinity_test(none_sanity, "Test none policy for sanity",
 		  init_none,
 		  check_identical_list)
 nic_affinity_test(manual_sanity, "Test manual policy for sanity",
@@ -478,13 +509,18 @@ static void usage(char *name, struct test_entry *tests)
 	struct test_entry *t;
 
 	fprintf(stderr, "Usage:\n");
-	fprintf(stderr, "  %s --test <name> [--expected <string>]\n\n", name);
+	fprintf(stderr, "  %s --test <preset_test> [--expected <string>]\n", name);
+	fprintf(stderr, "  %s --name <name> --policy <p> --device <d> --config <c> --expected <e>\n\n", name);
 	fprintf(stderr, "Unit tests for verbs GPU-NIC affinity feature\n\n");
 	fprintf(stderr, "Options:\n");
 	fprintf(stderr, "  -h, --help              Display this help output\n");
-	fprintf(stderr, "  --test <name>           Run single test by name\n");
-	fprintf(stderr, "  --expected <string>     Expected NIC list\n");
-	fprintf(stderr, "Available tests:\n");
+	fprintf(stderr, "  --test <preset_test>    Run single preset test by name\n");
+	fprintf(stderr, "  --name <name>           Run manual test with given label\n");
+	fprintf(stderr, "  --policy <string>       Affinity policy\n");
+	fprintf(stderr, "  --device <string>       Device PCI addr\n");
+	fprintf(stderr, "  --config <string>       Affinity config path\n");
+	fprintf(stderr, "  --expected <string>     Expected fi_getinfo result\n");
+	fprintf(stderr, "Available preset tests:\n");
 	for (t = tests; t->test; t++) {
 		const char *name = t->name + strlen("nic_affinity_");
 		fprintf(stderr, "  %-23s %s\n", name, t->desc);
@@ -501,17 +537,25 @@ static struct test_entry *find_test_by_name(struct test_entry *tests,
 			return cur;
 	}
 
-        fprintf(stderr, "Error: Unknown test '%s'\n\n", name);
+        fprintf(stderr, "Error: Unknown preset test '%s'\n\n", name);
 	return NULL;
 }
 
 int main(int argc, char **argv)
 {
-	int failed, cleanup_ret;
+	int failed;
+        int cleanup_ret;
 	int op;
-	char *test_name = NULL;
-	struct test_entry *single_test;
         int ret;
+
+        char *test = NULL;
+        char desc[256] = "";
+
+        struct test_entry *single_test;
+        struct test_entry single_test_array[] = {
+                { NULL, NULL, NULL },
+                { NULL, "" }
+        };
 
 	struct test_entry nic_affinity_tests[] = {
                 TEST_ENTRY_NIC_AFFINITY(none_sanity),
@@ -530,6 +574,10 @@ int main(int argc, char **argv)
 	struct option long_options[] = {
 		{"expected", required_argument, 0, 'e'},
 		{"test", required_argument, 0, 't'},
+		{"name", required_argument, 0, 'n'},
+		{"policy", required_argument, 0, 'p'},
+		{"device", required_argument, 0, 'd'},
+		{"config", required_argument, 0, 'c'},
 		{"help", no_argument, 0, 'h'},
 		{0, 0, 0, 0}
 	};
@@ -544,7 +592,19 @@ int main(int argc, char **argv)
 			expected_str = optarg;
 			break;
 		case 't':
-			test_name = optarg;
+			test = optarg;
+			break;
+		case 'n':
+			name_str = optarg;
+			break;
+		case 'p':
+			policy_str = optarg;
+			break;
+		case 'd':
+			device_str = optarg;
+			break;
+		case 'c':
+			config_str = optarg;
 			break;
 		case '?':
 		case 'h':
@@ -555,13 +615,6 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (!test_name) {
-		fprintf(stderr, "Error: --test is required\n\n");
-		usage(argv[0], nic_affinity_tests);
-		fi_freeinfo(hints);
-		return EXIT_FAILURE;
-	}
-
         hints->mode = ~0;
 
 	hints->fabric_attr->prov_name = strdup("verbs");
@@ -570,37 +623,44 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	if (strcmp(test_name, "baseline") == 0) {
-		ret = nic_affinity_baseline();
+	if ((name_str && test) || (!name_str && !test)) {
+		fprintf(stderr, "Error: Expected exactly one of --name or --test\n\n");
+		usage(argv[0], nic_affinity_tests);
 		fi_freeinfo(hints);
-		return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+		return EXIT_FAILURE;
 	}
 
-        if (!expected_str) {
-                fprintf(stderr, "Error: --expected is required\n\n");
+        if (test && strcmp(test, "baseline") == 0) {
+                ret = nic_affinity_baseline();
+                fi_freeinfo(hints);
+                return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+
+        if (!expected_str || !strchr(expected_str, ':')) {
+                fprintf(stderr, "Error: Invalid expected format.\n\n");
                 usage(argv[0], nic_affinity_tests);
                 fi_freeinfo(hints);
                 return EXIT_FAILURE;
         }
 
-	if (!strchr(expected_str, ':')) {
-		fprintf(stderr, "Error: Invalid expected format.\n\n");
-		usage(argv[0], nic_affinity_tests);
-		fi_freeinfo(hints);
-		return EXIT_FAILURE;
+	if (name_str) {
+                sprintf(desc, "nic_affinity_%s", name_str);
+		single_test_array[0].test = nic_affinity_custom;
+                single_test_array[0].name = name_str;
+                single_test_array[0].desc = desc;
 	}
+        else {               
+                single_test = find_test_by_name(nic_affinity_tests, test);
+                if (!single_test) {
+                        usage(argv[0], nic_affinity_tests);
+                        fi_freeinfo(hints);
+                        return EXIT_FAILURE;
+                }
 
-	single_test = find_test_by_name(nic_affinity_tests, test_name);
-	if (!single_test) {
-		usage(argv[0], nic_affinity_tests);
-		fi_freeinfo(hints);
-		return EXIT_FAILURE;
-	}
-
-	struct test_entry single_test_array[] = {
-		{ single_test->test, single_test->name, single_test->desc },
-		{ NULL, "" }
-	};
+                single_test_array[0].test = single_test->test;
+                single_test_array[0].name = single_test->name;
+                single_test_array[0].desc = single_test->desc;
+        }
 	failed = run_tests(single_test_array, err_buf);
 
 	cleanup_ret = ft_free_res();
