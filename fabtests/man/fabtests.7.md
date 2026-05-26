@@ -194,7 +194,9 @@ given provider or system may achieve.
   Writedata mode is unidirectional from client to server.
 
 *fi_rma_pingpong*
-: An RMA write and writedata latency test for reliable-datagram (RDM) endpoints.
+: A latency test for RMA operations on reliable-datagram (RDM) endpoints.
+  It measures latency in both directions for write and writedata operations
+  and in only one direction for read operations.
 
 ## Unit
 
