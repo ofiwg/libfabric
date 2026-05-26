@@ -46,6 +46,14 @@ AS_IF([test x"$have_efadv" = x"1"], [
 ])
 AM_CONDITIONAL([HAVE_EFADV_CREATE_COMP_CNTR], [test $have_efadv_create_comp_cntr -eq 1])
 
+dnl Check for FI_EFA_WR_HIGH_PPS in fi_ext_efa.h (needed for efa_rma_bw).
+have_fi_efa_wr_high_pps=0
+AC_CHECK_DECL([FI_EFA_WR_HIGH_PPS],
+	[have_fi_efa_wr_high_pps=1],
+	[have_fi_efa_wr_high_pps=0],
+	[[#include <rdma/fi_ext_efa.h>]])
+AM_CONDITIONAL([HAVE_FI_EFA_WR_HIGH_PPS], [test $have_fi_efa_wr_high_pps -eq 1])
+
 dnl EFA GDA support
 AC_ARG_ENABLE([efagda],
 	[AS_HELP_STRING([--enable-efagda],
