@@ -13002,7 +13002,7 @@ Returns the remote protection key associated with a MR. The memory
 registration must have completed successfully before invoking this. The
 returned key may be used in data transfer operations at a peer. If the
 FI_MR_RAW mode bit has been set for the domain, then the memory key must
-be obtained using the fi_mr_raw_key function instead. A return value of
+be obtained using the fi_mr_raw_attr function instead. A return value of
 FI_KEY_NOTAVAIL will be returned if the registration has not completed
 or a raw memory key is required.
 
