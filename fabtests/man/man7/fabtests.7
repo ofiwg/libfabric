@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fabtests" "7" "2026\-05\-14" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fabtests" "7" "2026\-05\-26" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -212,8 +212,9 @@ Read and write modes are bidirectional by default.
 Writedata mode is unidirectional from client to server.
 .TP
 \f[I]fi_rma_pingpong\f[R]
-An RMA write and writedata latency test for reliable-datagram (RDM)
-endpoints.
+A latency test for RMA operations on reliable-datagram (RDM) endpoints.
+It measures latency in both directions for write and writedata
+operations and in only one direction for read operations.
 .SS Unit
 .PP
 These are simple one-sided unit tests that validate basic behavior of
