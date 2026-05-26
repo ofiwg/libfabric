@@ -270,6 +270,16 @@ The default value is true.
 For efa-direct, FI_RX_CQ_DATA is required when
 FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV is false, or it will return
 -FI_EOPNOTSUPP for the call to fi_setopt().
+.SH PROVIDER SPECIFIC OPERATION FLAGS
+.PP
+The EFA provider defines provider-specific operation flags that can be
+passed in the \f[V]flags\f[R] argument of data transfer calls such as
+\f[V]fi_writemsg()\f[R].
+.TP
+\f[I]FI_EFA_WR_HIGH_PPS\f[R]
+This flag can be passed in the \f[V]flags\f[R] argument of RDMA write
+operations (e.g., \f[V]fi_writemsg()\f[R]) to hint the device to
+optimize for higher message rate.
 .SH PROVIDER SPECIFIC OPERATION EXTENSIONS
 .PP
 The efa provider exports extensions for operations that are not provided
