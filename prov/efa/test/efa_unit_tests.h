@@ -422,6 +422,8 @@ void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state);
 /* end of efa_unit_test_rdm_peer.c */
 
 /* begin of efa_unit_test_pke.c */
+void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state);
+void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state);
 void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state);
 void test_efa_rdm_pke_release_rx_list(void **state);
 void test_efa_rdm_pke_alloc_rta_rxe(void **state);

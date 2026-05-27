@@ -537,7 +537,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 
-	efa_rdm_pke_assert_ope_valid(pkt_entry);
 	ep = pkt_entry->ep;
 
 	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
@@ -554,6 +553,9 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_release_tx(pkt_entry);
 		return;
 	}
+
+	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
+	efa_rdm_pke_assert_ope_valid(pkt_entry);
 
 	/* These pkts are eager pkts withour hdrs */
 	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
