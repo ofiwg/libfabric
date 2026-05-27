@@ -121,7 +121,7 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
  */
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 {
-	size_t i;
+	size_t i, j;
 	size_t bytes_copied[EFA_RDM_MAX_QUEUED_COPY] = {0};
 	struct efa_rdm_mr *desc;
 	struct efa_rdm_ope *rxe;
@@ -166,10 +166,22 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 					   rxe->cq_entry.len - segment_offset)) {
 			EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 				bytes_copied[i]);
-			/*TODO: Release pkts at j=i..N-1 (still-alive rxes from other queued messages) and write CQ errors for their rxes.*/
+
+			/* Release ALL pkt entries to avoid leak */
+			for (j = 0; j < ep->queued_copy_num; ++j) {
+				pkt_entry = ep->queued_copy_vec[j].pkt_entry;
+				rxe = pkt_entry->ope;
+				rxe->bytes_queued_blocking_copy -= pkt_entry->payload_size;
+				efa_rdm_pke_release_rx(pkt_entry);
+			}
+			ep->queued_copy_num = 0;
 			return -FI_EIO;
 		}
+	}
 
+	for (i = 0; i < ep->queued_copy_num; ++i) {
+		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
+		rxe = pkt_entry->ope;
 		rxe->bytes_queued_blocking_copy -= pkt_entry->payload_size;
 		efa_rdm_pke_handle_data_copied(pkt_entry);
 	}
