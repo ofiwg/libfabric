@@ -1,0 +1,53 @@
+codecov:
+  require_ci_to_pass: false
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+        informational: false
+    patch:
+      default:
+        target: 80%
+        threshold: 5%
+        informational: false
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+
+ignore:
+  - "prov/efa/test/**"
+  - "fabtests/**"
+  - "src/**"
+  - "include/**"
+  - "bindings/**"
+  - "prov/coll/**"
+  - "prov/cxi/**"
+  - "prov/hook/**"
+  - "prov/lnx/**"
+  - "prov/lpp/**"
+  - "prov/mrail/**"
+  - "prov/opx/**"
+  - "prov/psm2/**"
+  - "prov/psm3/**"
+  - "prov/rxd/**"
+  - "prov/rxm/**"
+  - "prov/shm/**"
+  - "prov/sm2/**"
+  - "prov/sockets/**"
+  - "prov/tcp/**"
+  - "prov/ucx/**"
+  - "prov/udp/**"
+  - "prov/usnic/**"
+  - "prov/util/**"
+  - "prov/verbs/**"
+
+flags:
+  efa-unit-tests:
+    paths:
+      - "prov/efa/src/"
+    carryforward: true
