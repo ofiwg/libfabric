@@ -349,6 +349,12 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 err_free:
 	assert(efa_domain);
+	/* TODO: efa_domain_close called here on a partially-constructed domain
+	 * is unsafe when ofi_domain_init or ofi_genlock_init failed since
+	 * efa_domain_close takes the possibly uninitialized lock. The proper
+	 * fix will involve fixing ofi_domain_init() to clean up properly
+	 * on failure path
+	 */
 	err = efa_domain_close(&efa_domain->util_domain.domain_fid.fid);
 	if (err) {
 		EFA_WARN(FI_LOG_DOMAIN, "When handling error (%d), domain resource was being released. "
