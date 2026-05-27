@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-05\-13" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-05\-26" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -126,6 +126,31 @@ See efa_fabric_comparison for a detailed comparison of \f[V]efa\f[R] vs
 .TP
 \f[I]Threading\f[R]
 Both RDM and DGRAM endpoints supports \f[I]FI_THREAD_SAFE\f[R].
+.TP
+\f[I]Completion counters\f[R]
+The \f[V]efa-direct\f[R] fabric supports hardware completion counters
+backed by MSI-X(Message Signaled Interrupts Extended) hardware counters
+on the EFA device.
+.PP
+Hardware counters are created via the \f[V]cntr_open_ext\f[R] GDA domain
+op (see below).
+When a hardware counter is bound to an endpoint, it is automatically
+attached to the QP when the endpoint is enabled.
+The counter is implicitly detached when the EP it is attached to is
+destroyed.
+The counter cannot be closed while it is still attached to any EP; the
+EP must be closed first.
+.PP
+\f[I]fi_cntr_read\f[R], \f[I]fi_cntr_readerr\f[R], and
+\f[I]fi_cntr_wait\f[R] are not supported on the host for GPU
+memory-backed counters.
+.PP
+Hardware counters do not internally poll the completion queue.
+When an operation returns \f[I]-FI_EAGAIN\f[R], the application must
+call \f[I]fi_cq_read\f[R] to make progress and free CQ space before
+retrying the operation, regardless of whether FI_SELECTIVE_COMPLETION is
+set.
+Failure to do so will result in CQ overrun.
 .SH LIMITATIONS
 .SS Completion events
 .IP \[bu] 2
@@ -245,6 +270,16 @@ The default value is true.
 For efa-direct, FI_RX_CQ_DATA is required when
 FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV is false, or it will return
 -FI_EOPNOTSUPP for the call to fi_setopt().
+.SH PROVIDER SPECIFIC OPERATION FLAGS
+.PP
+The EFA provider defines provider-specific operation flags that can be
+passed in the \f[V]flags\f[R] argument of data transfer calls such as
+\f[V]fi_writemsg()\f[R].
+.TP
+\f[I]FI_EFA_WR_HIGH_PPS\f[R]
+This flag can be passed in the \f[V]flags\f[R] argument of RDMA write
+operations (e.g., \f[V]fi_writemsg()\f[R]) to hint the device to
+optimize for higher message rate.
 .SH PROVIDER SPECIFIC OPERATION EXTENSIONS
 .PP
 The efa provider exports extensions for operations that are not provided
@@ -343,6 +378,11 @@ struct fi_efa_ops_gda {
                struct fi_efa_cq_init_attr *efa_cq_init_attr,
                struct fid_cq **cq_fid, void *context);
     uint64_t (*get_mr_lkey)(struct fid_mr *mr);
+    int (*cntr_open_ext)(struct fid_domain *domain,
+                 struct fi_cntr_attr *attr,
+                 struct fid_cntr **cntr,
+                 void *context,
+                 struct fi_efa_comp_cntr_init_attr *efa_attr);
 };
 \f[R]
 .fi
@@ -489,6 +529,112 @@ local memory translation key used by TX/RX buffer descriptor.
 .PP
 \f[B]get_mr_lkey()\f[R] returns lkey on success, or FI_KEY_NOTAVAIL if
 the registration has not completed.
+.SS cntr_open_ext
+.PP
+This op creates a completion counter backed by a MSI-X hardware counter.
+Applications must check
+\f[V]FI_VERSION_GE(fi_version(), FI_VERSION(2, 5))\f[R] before calling
+\f[V]cntr_open_ext\f[R], as older libfabric versions do not include this
+function pointer in the domain ops structure.
+.PP
+When the \f[I]FI_EFA_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM\f[R] or
+\f[I]FI_EFA_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM\f[R] flag is set in
+\f[V]fi_efa_comp_cntr_init_attr.flags\f[R], the application provides its
+own memory for the completion or error count via the
+\f[V]comp_cntr_ext_mem\f[R] or \f[V]err_cntr_ext_mem\f[R] fields
+respectively.
+The external memory is described by a \f[V]fi_efa_memory_location\f[R]
+structure which supports two modes: a virtual address
+(\f[I]FI_EFA_MEMORY_LOCATION_VA\f[R]), where the application supplies a
+direct pointer, or a DMA-BUF reference
+(\f[I]FI_EFA_MEMORY_LOCATION_DMABUF\f[R]), where the application
+supplies a file descriptor and offset into an exported DMA-BUF.
+When using DMA-BUF, the \f[V]ptr\f[R] field may also be set to provide a
+process-accessible mapping of the memory, which may enable more
+efficient counter reads.
+Using external memory allows the counter values to reside in
+application-managed buffers or in memory exported through DMA-BUF,
+enabling zero-copy observation of completion progress by co-located
+processes or devices.
+The default counter events type is \f[V]FI_CNTR_EVENTS_COMP\f[R].
+.PP
+Counter memory supplied by the application must not be modified
+directly, or the resulting counter value will be non-deterministic.
+Counter values must only be updated using fi_cntr* APIs.
+Only \f[I]FI_WAIT_NONE\f[R] and \f[I]FI_WAIT_UNSPEC\f[R] are supported
+as wait objects in \f[V]fi_cntr_attr\f[R].
+.IP
+.nf
+\f[C]
+enum fi_efa_memory_location_type {
+    FI_EFA_MEMORY_LOCATION_VA,
+    FI_EFA_MEMORY_LOCATION_DMABUF,
+};
+
+struct fi_efa_memory_location {
+    uint8_t *ptr;
+    struct {
+        uint64_t offset;
+        int32_t fd;
+        uint32_t reserved;
+    } dmabuf;
+    uint8_t type;
+    uint8_t reserved[7];
+};
+
+struct fi_efa_comp_cntr_init_attr {
+    uint64_t comp_mask;
+    uint32_t flags;
+    uint32_t reserved;
+    struct fi_efa_memory_location comp_cntr_ext_mem;
+    struct fi_efa_memory_location err_cntr_ext_mem;
+};
+\f[R]
+.fi
+.TP
+\f[I]comp_mask\f[R]
+Compatibility mask.
+.TP
+\f[I]flags\f[R]
+A bitwise OR of the following values:
+.RS
+.PP
+FI_EFA_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM: Use application-provided
+memory for the completion count, as described by
+\f[V]comp_cntr_ext_mem\f[R].
+.PP
+FI_EFA_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM: Use application-provided
+memory for the error count, as described by \f[V]err_cntr_ext_mem\f[R].
+.RE
+.TP
+\f[I]comp_cntr_ext_mem\f[R]
+Memory location for the completion count when using external memory.
+.TP
+\f[I]err_cntr_ext_mem\f[R]
+Memory location for the error count when using external memory.
+.TP
+\f[I]type\f[R]
+The type of memory location.
+\f[V]FI_EFA_MEMORY_LOCATION_VA\f[R] for a virtual address, or
+\f[V]FI_EFA_MEMORY_LOCATION_DMABUF\f[R] for a DMA-BUF reference.
+.TP
+\f[I]ptr\f[R]
+Virtual address pointer.
+Required when type is \f[V]FI_EFA_MEMORY_LOCATION_VA\f[R].
+When type is \f[V]FI_EFA_MEMORY_LOCATION_DMABUF\f[R], may optionally be
+set to provide a process-accessible mapping of the DMA-BUF memory.
+Otherwise should be NULL.
+.TP
+\f[I]dmabuf.fd\f[R]
+DMA-BUF file descriptor (used when type is
+\f[V]FI_EFA_MEMORY_LOCATION_DMABUF\f[R]).
+.TP
+\f[I]dmabuf.offset\f[R]
+Offset within the DMA-BUF.
+.SS Return value
+.PP
+\f[B]cntr_open_ext()\f[R] returns 0 on success, or a negative value on
+failure.
 .SS Fabric Operation Extension
 .PP
 Fabric operation extension is obtained by calling \f[V]fi_open_ops\f[R]

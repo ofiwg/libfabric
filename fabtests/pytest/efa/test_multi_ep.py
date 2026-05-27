@@ -2,6 +2,7 @@ import pytest
 from common import ClientServerTest
 
 @pytest.mark.functional
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.parametrize("shared_cq", [True, False])
 @pytest.mark.parametrize("shared_av", [True, False])
 def test_multi_ep(cmdline_args, shared_cq, shared_av, rma_fabric):

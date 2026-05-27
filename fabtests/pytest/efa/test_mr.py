@@ -4,13 +4,16 @@ import pytest
 from common import UnitTest, has_cuda, has_neuron
 
 
+@pytest.mark.pr_ci
 @pytest.mark.unit
 def test_mr_host(cmdline_args):
     test = UnitTest(cmdline_args, "fi_mr_test")
     test.run()
 
 
+@pytest.mark.pr_ci
 @pytest.mark.unit
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.short
 def test_mr_hmem(cmdline_args, hmem_type, fabric):
     if hmem_type == "cuda" and not has_cuda(cmdline_args.server_id):
@@ -34,6 +37,7 @@ def test_mr_hmem(cmdline_args, hmem_type, fabric):
 
 
 @pytest.mark.unit
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.short
 def test_efa_mr_hmem(cmdline_args, hmem_type, fabric):
     if hmem_type != "neuron":

@@ -274,6 +274,21 @@ void test_efa_domain_open_ops_mr_query(struct efa_resource **state)
 
 #endif /* HAVE_EFADV_QUERY_MR */
 
+static struct fi_efa_ops_gda *efa_unit_test_construct_gda_ops(
+	struct efa_resource *resource)
+{
+	struct fi_efa_ops_gda *efa_gda_ops;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0,
+			  (void **)&efa_gda_ops, NULL);
+	assert_int_equal(ret, 0);
+
+	return efa_gda_ops;
+}
+
 
 void test_efa_domain_open_ops_query_qp_wqs(struct efa_resource **state)
 {
@@ -283,10 +298,7 @@ void test_efa_domain_open_ops_query_qp_wqs(struct efa_resource **state)
     struct fi_efa_wq_attr sq_attr = {0};
     struct fi_efa_wq_attr rq_attr = {0};
 
-    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-    ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0, (void **)&efa_gda_ops, NULL);
-    assert_int_equal(ret, 0);
+    efa_gda_ops = efa_unit_test_construct_gda_ops(resource);
 
 #if HAVE_EFADV_QUERY_QP_WQS
     g_efa_unit_test_mocks.efadv_query_qp_wqs = &efa_mock_efadv_query_qp_wqs;
@@ -320,10 +332,7 @@ void test_efa_domain_open_ops_query_cq(struct efa_resource **state)
     struct fi_efa_ops_gda *efa_gda_ops;
     struct fi_efa_cq_attr cq_attr = {0};
 
-    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-
-    ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0, (void **)&efa_gda_ops, NULL);
-    assert_int_equal(ret, 0);
+    efa_gda_ops = efa_unit_test_construct_gda_ops(resource);
 
 #if HAVE_EFADV_QUERY_CQ
     g_efa_unit_test_mocks.efadv_query_cq = &efa_mock_efadv_query_cq;
@@ -744,7 +753,6 @@ void test_efa_domain_mr_cache_disabled_with_efa_direct(struct efa_resource **sta
 
 void test_efa_domain_open_ops_get_mr_lkey(struct efa_resource **state)
 {
-    int ret;
     struct efa_resource *resource = *state;
     struct fi_efa_ops_gda *efa_gda_ops;
     struct efa_mr mr = {0};
@@ -756,12 +764,9 @@ void test_efa_domain_open_ops_get_mr_lkey(struct efa_resource **state)
     ibv_mr.lkey = 1234567;
     mr.ibv_mr = &ibv_mr;
 
-    efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
-    ret = fi_open_ops(&resource->domain->fid, FI_EFA_GDA_OPS, 0, (void **)&efa_gda_ops, NULL);
-    assert_int_equal(ret, 0);
+    efa_gda_ops = efa_unit_test_construct_gda_ops(resource);
 
     lkey = efa_gda_ops->get_mr_lkey(&mr.mr_fid);
-    assert_int_equal(ret, FI_SUCCESS);
     assert_true(lkey == mr.ibv_mr->lkey);
 }
 
@@ -819,4 +824,45 @@ void test_efa_fabric_open_ops_feature_unknown(struct efa_resource **state)
     assert_int_equal(ret, 0);
     assert_false(feat_ops->query("no_such_feature"));
     assert_false(feat_ops->query(NULL));
+}
+
+/**
+ * @brief Test cntr_open_ext returns -FI_ENOSYS when efadv_create_comp_cntr is unavailable,
+ * or succeeds with mocked efadv_create_comp_cntr.
+ */
+void test_efa_domain_open_ops_cntr_open_ext(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_efa_ops_gda *efa_gda_ops;
+	struct fi_cntr_attr attr = {0};
+	struct fi_efa_comp_cntr_init_attr efa_attr = {0};
+	struct fid_cntr *cntr_fid = NULL;
+	int ret;
+
+	efa_env.use_hw_cntr = 1;
+	efa_gda_ops = efa_unit_test_construct_gda_ops(resource);
+
+#if HAVE_EFADV_CREATE_COMP_CNTR
+	{
+	struct efa_domain *efa_domain;
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
+	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	g_efa_unit_test_mocks.efadv_create_comp_cntr = efa_mock_efadv_create_comp_cntr_return_mock;
+	g_efa_unit_test_mocks.ibv_destroy_comp_cntr = efa_mock_ibv_destroy_comp_cntr_return_mock;
+	}
+#endif
+
+	attr.events = FI_CNTR_EVENTS_COMP;
+	ret = efa_gda_ops->cntr_open_ext(resource->domain, &attr, &cntr_fid,
+					  NULL, &efa_attr);
+#if HAVE_EFADV_CREATE_COMP_CNTR
+	assert_int_equal(ret, FI_SUCCESS);
+	assert_non_null(cntr_fid);
+	fi_close(&cntr_fid->fid);
+#else
+	assert_int_equal(ret, -FI_ENOSYS);
+#endif
 }

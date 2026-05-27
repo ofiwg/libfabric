@@ -5,16 +5,18 @@
 #include "ofi_util.h"
 #include "efa.h"
 #include "efa_cntr.h"
+#include "efa_hw_cntr.h"
 #include "efa_cq.h"
 
 int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 {
 	struct util_cntr *cntr;
 	uint64_t start, errcnt;
-	int ret;
+	int ret = -FI_ETIMEDOUT;
 	int numtry = 5;
 	int tryid = 0;
 	int waitim = 1;
+	static const int waitim_max = 1000; /* cap at 1ms */
 	struct efa_domain *domain;
 
 	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
@@ -44,13 +46,16 @@ int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 				ret = -FI_ETIMEDOUT;
 				goto unlock;
 			}
+		} else {
+			tryid = 0;
 		}
 
 		ret = ofi_wait(&cntr->wait->wait_fid, waitim);
 		if (ret == -FI_ETIMEDOUT)
 			ret = 0;
 
-		waitim *= 2;
+		if (waitim < waitim_max)
+			waitim *= 2;
 	}
 
 unlock:
@@ -172,6 +177,17 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (!cntr)
 		return -FI_ENOMEM;
 
+#if HAVE_EFADV_CREATE_COMP_CNTR
+	{
+		struct efadv_comp_cntr_init_attr efa_cc_attr = {0};
+
+		ret = efa_hw_cntr_open(domain, attr, cntr, cntr_fid, context, &efa_cc_attr);
+		if (!ret) {
+			return FI_SUCCESS;
+		}
+	}
+#endif
+	/* Fall back to software counter */
 	ret = efa_cntr_construct(cntr, domain, attr, efa_cntr_progress, context);
 	if (ret) {
 		free(cntr);
@@ -182,12 +198,14 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	cntr->util_cntr.cntr_fid.ops = &efa_cntr_ops;
 	cntr->util_cntr.cntr_fid.fid.ops = &efa_cntr_fi_ops;
 
+	EFA_INFO(FI_LOG_CNTR, "Opened software counter with cntr_fid: %p\n", *cntr_fid);
 	return FI_SUCCESS;
 }
 
 void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags)
 {
 	struct util_cntr *cntr;
+	struct efa_cntr *efa_cntr;
 
 	flags &= (FI_SEND | FI_WRITE | FI_READ);
 	assert(flags == FI_SEND || flags == FI_WRITE || flags == FI_READ);
@@ -201,13 +219,21 @@ void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags)
 	else
 		cntr = NULL;
 
-	if (cntr)
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+	if (!cntr)
+		return;
+
+	/* Skip cntr add for hardware counter */
+	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
+	if (efa_cntr->ibv_comp_cntr)
+		return;
+
+	cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 }
 
 void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags)
 {
 	struct util_cntr *cntr;
+	struct efa_cntr *efa_cntr;
 
 	flags &= (FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ);
 	assert(flags == FI_RECV || flags == FI_REMOTE_WRITE || flags == FI_REMOTE_READ);
@@ -221,8 +247,15 @@ void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags)
 	else
 		cntr = NULL;
 
-	if (cntr)
-		cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+	if (!cntr)
+		return;
+
+	/* Skip cntr add for hardware counter */
+	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
+	if (efa_cntr->ibv_comp_cntr)
+		return;
+
+	cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
 }
 
 void efa_cntr_report_error(struct util_ep *ep, uint64_t flags)
@@ -231,6 +264,7 @@ void efa_cntr_report_error(struct util_ep *ep, uint64_t flags)
 			 FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE);
 
 	struct util_cntr *cntr;
+	struct efa_cntr *efa_cntr;
 
 	if (flags == FI_WRITE || flags == FI_ATOMIC)
 		cntr = ep->cntrs[CNTR_WR];
@@ -247,6 +281,13 @@ void efa_cntr_report_error(struct util_ep *ep, uint64_t flags)
 	else
 		cntr = NULL;
 
-	if (cntr)
-		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
+	if (!cntr)
+		return;
+
+	/* Skip cntr adderr for hardware counter */
+	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
+	if (efa_cntr->ibv_comp_cntr)
+		return;
+
+	cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
 }

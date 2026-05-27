@@ -100,7 +100,10 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	memset(map_entry, 0, sizeof(*map_entry));
 	map_entry->ep_ptr = ep;
 
-	efa_rdm_peer_construct(&map_entry->peer, ep, conn);
+	if (efa_rdm_peer_construct(&map_entry->peer, ep, conn)) {
+		ofi_buf_free(map_entry);
+		return NULL;
+	}
 
 	efa_conn_ep_peer_map_insert(conn, map_entry);
 
@@ -145,7 +148,10 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	memset(map_entry, 0, sizeof(*map_entry));
 	map_entry->ep_ptr = ep;
 
-	efa_rdm_peer_construct(&map_entry->peer, ep, conn);
+	if (efa_rdm_peer_construct(&map_entry->peer, ep, conn)) {
+		ofi_buf_free(map_entry);
+		return NULL;
+	}
 	peer = &map_entry->peer;
 
 	efa_conn_ep_peer_map_insert(conn, map_entry);
@@ -759,6 +765,8 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				/* add the pkt back to pkts, so it can be resent again */
 				dlist_insert_tail(&pkt_entry->entry, pkts);
 				pkt_entry->flags |= EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
+			} else {
+				efa_rdm_pke_release_tx(pkt_entry);
 			}
 
 			return ret;

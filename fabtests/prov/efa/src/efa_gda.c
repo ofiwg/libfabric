@@ -37,18 +37,21 @@
 #include <shared.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #ifdef HAVE_EFAGDA
-#include <efagda.h>
+#include <efa_cuda_dp.h>
+#include <efa_gda_kernels.h>
 
 struct fi_efa_ops_gda *efa_gda_ops;
-struct efa_cq *gda_send_cq, *gda_recv_cq;
+struct efa_cuda_cq *gda_send_cq, *gda_recv_cq;
 struct fid_cq *txcq_ext, *rxcq_ext;
 void *send_cq_buffer, *recv_cq_buffer;
 struct fid_ep *gda_ep;
-struct efa_qp *gda_qp;
+struct efa_cuda_qp *gda_qp;
+static enum ibv_wr_opcode gda_op = IBV_WR_SEND;
 
 int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
-		  struct efa_cq **gda_cq)
+		  struct efa_cuda_cq **gda_cq)
 {
 	int ret;
 	int dmabuf_fd;
@@ -71,7 +74,7 @@ int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 				    &dmabuf_fd, &dmabuf_offset);
 	if (ret) {
 		FT_PRINTERR("ft_hmem_get_dmabuf_fd", -ret);
-		return ret;
+		goto free_buf;
 	}
 
 	struct fi_efa_cq_init_attr efa_cq_init_attr = {0};
@@ -84,13 +87,13 @@ int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 				       cq_ext, NULL);
 	if (ret) {
 		FT_PRINTERR("cq_open_ext", -ret);
-		return ret;
+		goto free_buf;
 	}
 
 	ret = efa_gda_ops->query_cq(*cq_ext, &cq_ext_attr);
 	if (ret) {
 		FT_PRINTERR("query_cq", -ret);
-		return ret;
+		goto close_cq;
 	}
 
 	FT_DEBUG("cq_ext %p, cq_ext_attr: buffer %p, entry_size %u, "
@@ -98,12 +101,24 @@ int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 		 *cq_ext, cq_ext_attr.buffer, cq_ext_attr.entry_size,
 		 cq_ext_attr.num_entries, cq_entries);
 
-	*gda_cq = efagda_create_cuda_cq(*cq_buffer, 1, cq_entries,
-					cq_ext_attr.entry_size);
+	struct efa_cuda_cq_attrs cq_attrs = {0};
+	cq_attrs.buffer = (uint8_t *)*cq_buffer;
+	cq_attrs.num_entries = cq_entries;
+	cq_attrs.entry_size = cq_ext_attr.entry_size;
+
+	*gda_cq = efa_cuda_create_cq(&cq_attrs, sizeof(cq_attrs));
 	if (!*gda_cq) {
 		ret = FI_EINVAL;
-		FT_PRINTERR("efagda_create_cuda_cq", -ret);
+		FT_PRINTERR("efa_cuda_create_cq", -ret);
 	}
+
+	return ret;
+
+close_cq:
+	fi_close(&(*cq_ext)->fid);
+free_buf:
+	ft_hmem_free(opts.iface, *cq_buffer);
+	*cq_buffer = NULL;
 
 	return ret;
 }
@@ -188,23 +203,35 @@ int create_gda_qp()
 	}
 
 	// initialize sq and rq on device
-	gda_qp = efagda_create_cuda_qp(sq_ptr, sq_attr.num_entries, sq_db,
-				       sq_attr.max_batch, rq_ptr,
-				       rq_attr.num_entries, rq_db);
+	struct efa_cuda_qp_attrs qp_attrs = {0};
+	qp_attrs.sq_buffer = (uint8_t *)sq_ptr;
+	qp_attrs.rq_buffer = (uint8_t *)rq_ptr;
+	qp_attrs.sq_doorbell = sq_db;
+	qp_attrs.rq_doorbell = rq_db;
+	qp_attrs.sq_num_entries = sq_attr.num_entries;
+	qp_attrs.sq_entry_size = sq_attr.entry_size;
+	qp_attrs.sq_max_batch = sq_attr.max_batch;
+	qp_attrs.rq_num_entries = rq_attr.num_entries;
+	qp_attrs.rq_entry_size = rq_attr.entry_size;
+
+	gda_qp = efa_cuda_create_qp(&qp_attrs, sizeof(qp_attrs));
 	if (!gda_qp) {
-		FT_PRINTERR("efagda_create_cuda_qp", -ret);
+		FT_PRINTERR("efa_cuda_create_qp", -ret);
 	}
 	return ret;
 }
 
-static int run()
+static int run_bw(struct fi_rma_iov *remote_iov)
 {
 	int ret;
 	uint16_t ah;
 	uint16_t remote_qpn;
 	uint32_t remote_qkey;
-	struct ibv_wc wc;
 	uint64_t lkey;
+	cudaStream_t stream;
+	int is_client;
+	int tx_depth;
+	int rx_depth;
 
 	ret = ft_sync();
 	if (ret) {
@@ -218,116 +245,151 @@ static int run()
 		return -FI_ENODATA;
 	}
 
-	cuda_stream_t stream = cuda_create_stream();
-	if (opts.dst_addr) {
-		ret = efa_gda_ops->query_addr(gda_ep, remote_fi_addr, &ah,
-					      &remote_qpn, &remote_qkey);
-		if (ret) {
-			FT_PRINTERR("query_addr", -ret);
-			return ret;
+	cudaStreamCreate(&stream);
+
+	ret = efa_gda_ops->query_addr(gda_ep, remote_fi_addr, &ah,
+				      &remote_qpn, &remote_qkey);
+	if (ret) {
+		FT_PRINTERR("query_addr", -ret);
+		goto out;
+	}
+
+	is_client = opts.dst_addr ? 1 : 0;
+	tx_depth = fi->tx_attr->size / 2;
+	rx_depth = fi->rx_attr->size / 2;
+	if (rx_depth > opts.iterations)
+		rx_depth = opts.iterations;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		if (gda_op == IBV_WR_RDMA_READ) {
+			ret = ft_fill_buf((char *) tx_buf, opts.transfer_size);
+		} else if (is_client) {
+			ret = ft_fill_buf((char *) tx_buf, opts.transfer_size);
 		}
+		if (ret)
+			goto out;
+		ft_sync();
+	}
 
-		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-			ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(),
-					  opts.transfer_size);
-			if (ret)
-				return ret;
-		}
-
-		ft_start();
-		for (int i = 0; i < opts.iterations; i++) {
-			ret = efagda_post_send(gda_qp, ah, remote_qpn,
-					       remote_qkey, (uintptr_t) tx_buf,
-					       opts.transfer_size, lkey,
-					       stream);
-			FT_DEBUG("efagda_post_send: gda_qp = %p, ah = %u, "
-				 "remote_qpn = %u, remote_qkey = %u, addr %p, "
-				 "len %lu, lkey %lu\n",
-				 gda_qp, ah, remote_qpn, remote_qkey,
-				 (void *) (uintptr_t) tx_buf,
-				 opts.transfer_size, lkey);
-			if (ret) {
-				FT_PRINTERR("efagda_post_send", -ret);
-				return ret;
-			}
-
-			do {
-				ret = efagda_poll_cq(gda_send_cq, 1, &wc, stream);
-				if (ret > 0) {
-					FT_DEBUG("client gets %d CQ entry successfully\n", ret);
-					ret = 0;
-					break;
-				}
-				if (ret < 0) {
-					FT_PRINTERR("efagda_poll_cq", ret);
-					return ret;
-				}
-
-				ft_stop();
-				if ((end.tv_sec - start.tv_sec) > timeout) {
-					fprintf(stderr,
-						"client %ds timeout expired\n",
-						timeout);
-					return -FI_ENODATA;
-				}
-			} while (ret == 0);
-		}
-		ft_stop();
+	ft_start();
+	if (is_client) {
+		/* Client: post writes/writedata/read */
+		ret = efagda_run_bw(gda_qp, gda_send_cq, gda_op,
+				    (uintptr_t) (gda_op == IBV_WR_RDMA_READ ?
+						 rx_buf : tx_buf),
+				    opts.transfer_size,
+				    lkey, ah, remote_qpn, remote_qkey,
+				    remote_iov->addr, remote_iov->key,
+				    opts.iterations, tx_depth, stream);
 	} else {
-		ft_start();
-		for (int i = 0; i < opts.iterations; i++) {
-			ret = efagda_post_recv(gda_qp, (uintptr_t) rx_buf,
-					       opts.transfer_size, lkey, stream);
-			FT_DEBUG("efagda_post_recv gda_qp = %p, addr = %p, "
-				 "length = %zu, lkey = %lu\n",
-				 gda_qp, (void *) (uintptr_t) rx_buf,
-				 opts.transfer_size, lkey);
-			if (ret) {
-				FT_PRINTERR("efagda_post_recv", -ret);
-				return ret;
-			}
-
-			do {
-				ret = efagda_poll_cq(gda_recv_cq, 1, &wc,
-						     stream);
-				if (ret > 0) {
-					FT_DEBUG("server gets %d CQ entry successfully\n", ret);
-					ret = 0;
-					goto verify_data;
-				}
-				if (ret < 0) {
-					FT_PRINTERR("efagda_poll_cq", ret);
-					return ret;
-				}
-
-				ft_stop();
-				if ((end.tv_sec - start.tv_sec) > timeout) {
-					fprintf(stderr,
-						"server %ds timeout expired\n",
-						timeout);
-					return -FI_ENODATA;
-				}
-			} while (ret == 0);
-
-		verify_data:
-			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-				ret = ft_check_buf((char *) rx_buf,
-						   opts.transfer_size);
-				if (ret)
-					return ret;
-			}
+		/* Server: for writedata/send, poll recv CQ for completions */
+		if (gda_op == IBV_WR_RDMA_WRITE_WITH_IMM ||
+		    gda_op == IBV_WR_SEND) {
+			ret = efagda_run_bw_recv(gda_qp, gda_recv_cq,
+						 (uintptr_t) rx_buf,
+						 opts.transfer_size, lkey,
+						 opts.iterations, rx_depth,
+						 stream);
 		}
-		ft_stop();
+		/* For plain write, server just waits for sync */
+	}
+	ft_stop();
+
+	if (ret) {
+		FT_PRINTERR("efagda_run_bw", -ret);
+		goto out;
+	}
+
+	show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 1);
+
+out:
+	cudaStreamDestroy(stream);
+	ft_sync();
+
+	if (!ret && ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		if ((gda_op == IBV_WR_RDMA_READ && is_client) ||
+		    (gda_op != IBV_WR_RDMA_READ && !is_client)) {
+			ret = ft_check_buf((char *) rx_buf, opts.transfer_size);
+		}
+	}
+
+	return ret;
+}
+
+static int run()
+{
+	int ret;
+	uint16_t ah;
+	uint16_t remote_qpn;
+	uint32_t remote_qkey;
+	uint64_t lkey;
+	cudaStream_t stream;
+	int is_client;
+	int rx_depth;
+
+	ret = ft_sync();
+	if (ret) {
+		FT_PRINTERR("ft_sync", -ret);
+		return ret;
+	}
+
+	lkey = efa_gda_ops->get_mr_lkey(mr);
+	if (lkey == FI_KEY_NOTAVAIL) {
+		FT_PRINTERR("get_mr_lkey", FI_KEY_NOTAVAIL);
+		return -FI_ENODATA;
+	}
+
+	cudaStreamCreate(&stream);
+
+	ret = efa_gda_ops->query_addr(gda_ep, remote_fi_addr, &ah,
+				      &remote_qpn, &remote_qkey);
+	if (ret) {
+		FT_PRINTERR("query_addr", -ret);
+		goto out;
+	}
+
+	is_client = opts.dst_addr ? 1 : 0;
+	rx_depth = fi->rx_attr->size / 2;
+	if (rx_depth > opts.iterations)
+		rx_depth = opts.iterations;
+
+	if (is_client && ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(),
+				  opts.transfer_size);
+		if (ret)
+			goto out;
+	}
+
+	ft_start();
+	ret = efagda_run_lat_send(gda_qp, gda_send_cq, gda_recv_cq,
+				  ah, remote_qpn, remote_qkey,
+				  (uintptr_t) rx_buf, opts.transfer_size, lkey,
+				  (uintptr_t) tx_buf, opts.transfer_size, lkey,
+				  opts.iterations, rx_depth, is_client, stream);
+	ft_stop();
+
+	if (ret) {
+		FT_PRINTERR("efagda_run_lat_send", -ret);
+		goto out;
+	}
+
+	if (!is_client && ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_check_buf((char *) rx_buf, opts.transfer_size);
+		if (ret)
+			goto out;
 	}
 
 	show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
 
+out:
+	cudaStreamDestroy(stream);
 	return ret;
 }
 
 int main(int argc, char **argv)
 {
 	int op, ret, i, cleanup_ret;
+	struct fi_rma_iov remote_iov = {0};
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_OOB_SYNC;
@@ -345,7 +407,9 @@ int main(int argc, char **argv)
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
-			ft_parse_api_opts(op, optarg, hints, &opts);
+			ret = ft_parse_api_opts(op, optarg, hints, &opts);
+			if (ret)
+				return ret;
 			break;
 		case 'v':
 			opts.options |= FT_OPT_VERIFY_DATA;
@@ -353,7 +417,8 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_usage(argv[0], "GPU Direct Async test");
-			FT_PRINT_OPTS_USAGE("-o <op>", "op: msg.\n");
+			FT_PRINT_OPTS_USAGE("-o <op>",
+				"op: msg, write, writedata, read\n");
 			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
 			return EXIT_FAILURE;
 		}
@@ -361,6 +426,24 @@ int main(int argc, char **argv)
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
+
+	switch (opts.rma_op) {
+	case FT_RMA_WRITE:
+		gda_op = IBV_WR_RDMA_WRITE;
+		break;
+	case FT_RMA_WRITEDATA:
+		gda_op = IBV_WR_RDMA_WRITE_WITH_IMM;
+		break;
+	case FT_RMA_READ:
+		gda_op = IBV_WR_RDMA_READ;
+		break;
+	default:
+		gda_op = IBV_WR_SEND;
+		break;
+	}
+
+	if (gda_op != IBV_WR_SEND)
+		opts.options |= FT_OPT_BW;
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps |= FI_MSG | FI_RMA | FI_HMEM;
@@ -421,25 +504,50 @@ int main(int argc, char **argv)
 		return ret;
 	}
 
+	/* Exchange RMA keys for write/writedata/read ops */
+	if (gda_op != IBV_WR_SEND) {
+		struct fi_rma_iov my_iov = {0};
+		my_iov.addr = (gda_op == IBV_WR_RDMA_READ) ?
+			      (uintptr_t) tx_buf : (uintptr_t) rx_buf;
+		my_iov.key = fi_mr_key(mr);
+
+		ret = ft_sock_send(oob_sock, &my_iov, sizeof(my_iov));
+		if (ret) {
+			FT_PRINTERR("ft_sock_send rma_iov", -ret);
+			return ret;
+		}
+		ret = ft_sock_recv(oob_sock, &remote_iov, sizeof(remote_iov));
+		if (ret) {
+			FT_PRINTERR("ft_sock_recv rma_iov", -ret);
+			return ret;
+		}
+	}
+
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
 			if (!ft_use_size(i, opts.sizes_enabled))
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = run();
+			if (gda_op == IBV_WR_SEND)
+				ret = run();
+			else
+				ret = run_bw(&remote_iov);
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = run();
+		if (gda_op == IBV_WR_SEND)
+			ret = run();
+		else
+			ret = run_bw(&remote_iov);
 	}
 
 	if (send_cq_buffer)
-		efagda_destroy_cuda_cq(send_cq_buffer);
+		efa_cuda_destroy_cq(gda_send_cq);
 	if (recv_cq_buffer)
-		efagda_destroy_cuda_cq(recv_cq_buffer);
+		efa_cuda_destroy_cq(gda_recv_cq);
 	if (gda_qp)
-		efagda_destroy_cuda_qp(gda_qp);
+		efa_cuda_destroy_qp(gda_qp);
 	// qp need to be destroyed before closing cq
 	FT_CLOSE_FID(gda_ep);
 	if (txcq_ext)

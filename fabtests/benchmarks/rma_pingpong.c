@@ -65,13 +65,19 @@ static int run(void)
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = pingpong_rma(opts.rma_op, &remote);
+			if (opts.rma_op == FT_RMA_READ)
+				ret = pingpong_rma_read(&remote);
+			else
+				ret = pingpong_rma_write(opts.rma_op, &remote);
 			if (ret)
 				goto out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = pingpong_rma(opts.rma_op, &remote);
+		if (opts.rma_op == FT_RMA_READ)
+			ret = pingpong_rma_read(&remote);
+		else
+			ret = pingpong_rma_write(opts.rma_op, &remote);
 		if (ret)
 			goto out;
 	}
@@ -116,15 +122,10 @@ int main(int argc, char **argv)
 		case 'h':
 			ft_csusage(argv[0], "Pingpong test using RMA operations.");
 			ft_benchmark_usage();
-			FT_PRINT_OPTS_USAGE("-o <op>", "rma op type: write|writedata (default: write)\n");
+			FT_PRINT_OPTS_USAGE("-o <op>", "rma op type: read|write|writedata (default: write)\n");
 			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
-	}
-
-	if (opts.rma_op != FT_RMA_WRITE && opts.rma_op != FT_RMA_WRITEDATA) {
-		FT_ERR("Only write and writedata operations are supported by rma_pingpong");
-		return EXIT_FAILURE;
 	}
 
 	if (opts.iface != FI_HMEM_SYSTEM && opts.rma_op == FT_RMA_WRITE) {
@@ -132,13 +133,12 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	if (opts.rma_op != FT_RMA_WRITEDATA &&
-	    ft_check_opts(FT_OPT_VERIFY_DATA)) {
+	if (opts.rma_op == FT_RMA_WRITE && ft_check_opts(FT_OPT_VERIFY_DATA)) {
 		FT_ERR("This test polls the last byte of an RMA buffer to "
 		       "check for fi_write completion on the RX side. Which "
 		       "doesn't guarantee that all of the data has arrived. "
 		       "Therefore, it can only support data verification for "
-		       "fi_writedata operations.");
+		       "fi_writedata and fi_read operations.");
 		return EXIT_FAILURE;
 	}
 

@@ -17,7 +17,7 @@
  * @param[in]		conn	efa conn object
  * @relates efa_rdm_peer
  */
-void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn)
+int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn)
 {
 	int ret;
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
@@ -32,7 +32,7 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
 		/* ran out of memory while creating the peer reorder buffer */
 		EFA_WARN(FI_LOG_EP_CTRL, "Unable to allocate peer->robuf\n");
-		return;
+		return -FI_ENOMEM;
 	}
 	dlist_init(&peer->outstanding_tx_pkts);
 	dlist_init(&peer->txe_list);
@@ -44,6 +44,7 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	}
 
 	efa_rdm_rxe_map_construct(&peer->rxe_map);
+	return 0;
 }
 
 /**
@@ -76,10 +77,18 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	/* we cannot release outstanding TX packets because device
 	 * will report completion of these packets later. Setting
 	 * pkt_entry->peer to NULL so the completion will be ignored.
+	 * For packets pending RNR retransmit, clear the flag and
+	 * decrement the RNR queued counters before nulling the peer
+	 * to prevent later dereference of a NULL peer pointer.
 	 */
 	dlist_foreach_container(&peer->outstanding_tx_pkts,
 				struct efa_rdm_pke,
 				pkt_entry, entry) {
+		if (pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT) {
+			pkt_entry->flags &= ~EFA_RDM_PKE_RNR_RETRANSMIT;
+			ep->efa_rnr_queued_pkt_cnt--;
+			peer->rnr_queued_pkt_cnt--;
+		}
 		pkt_entry->peer = NULL;
 	}
 
@@ -87,7 +96,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 				     struct efa_rdm_peer_overflow_pke_list_entry,
 				     overflow_pke_list_entry, entry, tmp) {
 		dlist_remove(&overflow_pke_list_entry->entry);
-		efa_rdm_pke_release_rx(overflow_pke_list_entry->pkt_entry);
+		efa_rdm_pke_release_rx_list(overflow_pke_list_entry->pkt_entry);
 		ofi_buf_free(overflow_pke_list_entry);
 	}
 

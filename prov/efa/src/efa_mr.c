@@ -60,13 +60,25 @@ int efa_mr_regattr_validate(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EBADFLAGS;
 	}
 
+	if ((flags & FI_MR_DMABUF) && !attr->dmabuf) {
+		EFA_WARN(FI_LOG_MR, "FI_MR_DMABUF set but dmabuf is NULL\n");
+		return -FI_EINVAL;
+	}
+
 	if (attr->iov_count > EFA_MR_IOV_LIMIT) {
 		EFA_WARN(FI_LOG_MR, "iov count > %d not supported\n",
 			 EFA_MR_IOV_LIMIT);
 		return -FI_EINVAL;
 	}
 
-	if (attr->iface >= OFI_HMEM_MAX || !g_efa_hmem_info[attr->iface].initialized) {
+	if (attr->iface < 0 || attr->iface >= OFI_HMEM_MAX) {
+		EFA_WARN(FI_LOG_MR,
+			 "Invalid iface value: %d (must be 0..%d)\n",
+			 (int)attr->iface, OFI_HMEM_MAX - 1);
+		return -FI_EINVAL;
+	}
+
+	if (!g_efa_hmem_info[attr->iface].initialized) {
 		EFA_WARN(FI_LOG_MR,
 			 "Cannot register memory for uninitialized iface (%s)\n",
 			 fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE));
@@ -96,6 +108,13 @@ int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	if (attr->iface == FI_HMEM_SYSTEM) {
 		efa_mr->iface = FI_HMEM_SYSTEM;
 		return FI_SUCCESS;
+	}
+
+	if (attr->iface < 0 || attr->iface >= OFI_HMEM_MAX) {
+		EFA_WARN(FI_LOG_MR,
+			"Invalid iface value: %d (must be 0..%d)\n",
+			(int)attr->iface, OFI_HMEM_MAX - 1);
+		return -FI_EINVAL;
 	}
 
 	if (efa_mr->domain->util_domain.info_domain_caps & FI_HMEM) {
@@ -294,10 +313,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 
 	/* Explicit dmabuf registration */
 	if (flags & FI_MR_DMABUF) {
-		if (!mr_attr->dmabuf) {
-			EFA_WARN(FI_LOG_MR, "FI_MR_DMABUF set but mr_attr->dmabuf == NULL\n");
-			return NULL;
-		}
+        assert(mr_attr->dmabuf);
 
 		EFA_INFO(FI_LOG_MR,
 			 "FI_MR_DMABUF: fd=%d offset=%lu len=%zu\n",

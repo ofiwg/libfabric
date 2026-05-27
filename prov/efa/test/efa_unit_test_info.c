@@ -69,6 +69,7 @@ void test_info_rdm_attributes()
 		assert_int_equal(info->ep_attr->max_msg_size, UINT64_MAX);
 		assert_int_equal(info->domain_attr->progress, FI_PROGRESS_MANUAL);
 		assert_int_equal(info->domain_attr->control_progress, FI_PROGRESS_MANUAL);
+		assert_int_equal(info->domain_attr->cntr_cnt, g_efa_selected_device_list[0].max_comp_cntr);
 #if EFA_HAVE_NON_SYSTEM_HMEM
 		assert_true(info->caps | FI_HMEM);
 #endif
@@ -1189,4 +1190,144 @@ void test_info_direct_msg_rma_too_large_max_msg_size_fail()
 	assert_null(info);
 
 	fi_freeinfo(hints);
+}
+
+static uint32_t saved_comp_count_max_value;
+static uint32_t saved_err_count_max_value;
+
+static void mock_cntr_max_values(uint32_t value)
+{
+	saved_comp_count_max_value = g_efa_selected_device_list[0].comp_count_max_value;
+	saved_err_count_max_value = g_efa_selected_device_list[0].err_count_max_value;
+	g_efa_selected_device_list[0].comp_count_max_value = value;
+	g_efa_selected_device_list[0].err_count_max_value = value;
+}
+
+static void restore_cntr_max_values(void)
+{
+	g_efa_selected_device_list[0].comp_count_max_value = saved_comp_count_max_value;
+	g_efa_selected_device_list[0].err_count_max_value = saved_err_count_max_value;
+}
+
+/**
+ * @brief Verify max_cntr_value is UINT64_MAX for API version < 2.5
+ */
+void test_info_max_cntr_value_api_lt_2_5(struct efa_resource **state)
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	mock_cntr_max_values((1ULL << 31) - 1);
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+
+	err = fi_getinfo(FI_VERSION(2, 4), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_int_equal(info->domain_attr->max_cntr_value, UINT64_MAX);
+	assert_int_equal(info->domain_attr->max_err_cntr_value, UINT64_MAX);
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+	restore_cntr_max_values();
+}
+
+/**
+ * @brief Verify max_cntr_value returns HW max when user does not hint a value
+ * for API version >= 2.5
+ */
+void test_info_max_cntr_value_api_ge_2_5_within_hw_range(struct efa_resource **state)
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	mock_cntr_max_values((1ULL << 31) - 1);
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->domain_attr->max_cntr_value = 0;
+
+	err = fi_getinfo(FI_VERSION(2, 5), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_int_equal(info->domain_attr->max_cntr_value, (1ULL << 31) - 1);
+	assert_int_equal(info->domain_attr->max_err_cntr_value, (1ULL << 31) - 1);
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+	restore_cntr_max_values();
+}
+
+/**
+ * @brief Verify max_cntr_value returns HW max when user hint is within HW range
+ * for API version >= 2.5
+ */
+void test_info_max_cntr_value_api_ge_2_5_hint_within_hw_range(struct efa_resource **state)
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	mock_cntr_max_values((1ULL << 31) - 1);
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->domain_attr->max_cntr_value = 1000;
+	hints->domain_attr->max_err_cntr_value = 2000;
+
+	err = fi_getinfo(FI_VERSION(2, 5), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_int_equal(info->domain_attr->max_cntr_value, (1ULL << 31) - 1);
+	assert_int_equal(info->domain_attr->max_err_cntr_value, (1ULL << 31) - 1);
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+	restore_cntr_max_values();
+}
+
+/**
+ * @brief Verify max_cntr_value falls back to UINT64_MAX when user requests above HW range
+ * for API version >= 2.5
+ */
+void test_info_max_cntr_value_api_ge_2_5_above_hw_range(struct efa_resource **state)
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	mock_cntr_max_values((1ULL << 31) - 1);
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->domain_attr->max_cntr_value = (1ULL << 31);
+
+	err = fi_getinfo(FI_VERSION(2, 5), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_int_equal(info->domain_attr->max_cntr_value, UINT64_MAX);
+	assert_int_equal(info->domain_attr->max_err_cntr_value, UINT64_MAX);
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+	restore_cntr_max_values();
+}
+
+/**
+ * @brief Verify max_cntr_value is always UINT64_MAX for EFA_FABRIC_NAME
+ */
+void test_info_rdm_max_cntr_value_api_ge_2_5_within_hw_range(struct efa_resource **state)
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	mock_cntr_max_values((1ULL << 31) - 1);
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->domain_attr->max_cntr_value = 0;
+
+	err = fi_getinfo(FI_VERSION(2, 5), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_int_equal(info->domain_attr->max_cntr_value, UINT64_MAX);
+	assert_int_equal(info->domain_attr->max_err_cntr_value, UINT64_MAX);
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+	restore_cntr_max_values();
 }

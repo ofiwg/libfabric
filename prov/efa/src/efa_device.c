@@ -98,6 +98,58 @@ err_close:
 }
 
 /**
+ * @brief set the max completion counter value from the device
+ *
+ * @param	efa_device[in]	pointer to a struct efa_device
+ * @return	max_comp_cntr value from device, or 0 if unavailable
+ */
+static void efa_device_set_max_comp_cntr(struct efa_device *efa_device)
+{
+	efa_device->max_comp_cntr = 0;
+#if HAVE_IBV_DEVICE_ATTR_EX_MAX_COMP_CNTR
+	struct ibv_device_attr_ex attr_ex = {0};
+	struct ibv_query_device_ex_input input = {0};
+	int err;
+
+	err = ibv_query_device_ex(efa_device->ibv_ctx, &input, &attr_ex);
+	if (err) {
+		EFA_WARN_ERRNO(FI_LOG_FABRIC, "ibv_query_device_ex failed", err);
+		return;
+	}
+	efa_device->max_comp_cntr = attr_ex.max_comp_cntr;
+#endif
+}
+
+/**
+ * @brief set the max comp/err count values from the device
+ *
+ * @param	efa_device[in,out]	pointer to a struct efa_device
+ */
+static void efa_device_set_cntr_max_values(struct efa_device *efa_device)
+{
+	efa_device->comp_count_max_value = 0;
+	efa_device->err_count_max_value = 0;
+#if HAVE_IBV_CREATE_COMP_CNTR
+	{
+		struct ibv_comp_cntr_init_attr cc_attr = {0};
+		struct ibv_comp_cntr *comp_cntr;
+		int err;
+
+		comp_cntr = ibv_create_comp_cntr(efa_device->ibv_ctx, &cc_attr);
+		if (!comp_cntr) {
+			EFA_WARN_ERRNO(FI_LOG_CNTR, "ibv_create_comp_cntr failed.", errno);
+		} else {
+			efa_device->comp_count_max_value = comp_cntr->comp_count_max_value;
+			efa_device->err_count_max_value = comp_cntr->err_count_max_value;
+			err = ibv_destroy_comp_cntr(comp_cntr);
+			if (err)
+				EFA_WARN_ERRNO(FI_LOG_CNTR, "ibv_destroy_comp_cntr failed", err);
+		}
+	}
+#endif
+}
+
+/**
  * @brief initialize data members of a struct of efa_device after the gid
  * including the prov info
  *
@@ -137,6 +189,8 @@ int efa_device_construct_data(struct efa_device *efa_device,
 	efa_device->max_rdma_size = 0;
 	efa_device->device_caps = 0;
 #endif
+	efa_device_set_max_comp_cntr(efa_device);
+	efa_device_set_cntr_max_values(efa_device);
 	efa_device->rdm_info = NULL;
 	err = efa_prov_info_alloc(&efa_device->rdm_info, efa_device, FI_EP_RDM);
 	if (err) {

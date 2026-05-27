@@ -123,6 +123,17 @@ static int efa_unit_test_mocks_teardown(void **state)
 #if HAVE_EFADV_QUERY_CQ
 		.efadv_query_cq = __real_efadv_query_cq,
 #endif
+#if HAVE_EFADV_CREATE_COMP_CNTR
+		.efadv_create_comp_cntr = __real_efadv_create_comp_cntr,
+		.ibv_destroy_comp_cntr = __real_ibv_destroy_comp_cntr,
+		.ibv_inc_comp_cntr = __real_ibv_inc_comp_cntr,
+		.ibv_inc_err_comp_cntr = __real_ibv_inc_err_comp_cntr,
+		.ibv_set_comp_cntr = __real_ibv_set_comp_cntr,
+		.ibv_set_err_comp_cntr = __real_ibv_set_err_comp_cntr,
+		.ibv_read_comp_cntr = __real_ibv_read_comp_cntr,
+		.ibv_read_err_comp_cntr = __real_ibv_read_err_comp_cntr,
+		.ibv_qp_attach_comp_cntr = __real_ibv_qp_attach_comp_cntr,
+#endif
 	};
 
 	/* Reset environment */
@@ -203,6 +214,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_ep_lock_type_no_op, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_lock_type_mutex, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_shm_ep_different_info, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_base_ep_construct_info_and_util_ep_initialized, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_enable_ah_alloc_failure, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_ibv_create_ah_failure, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -297,6 +309,11 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_info_direct_msg_only_large_max_msg_size_fail, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_direct_msg_rma_large_max_msg_size_success, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_direct_msg_rma_too_large_max_msg_size_fail, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_max_cntr_value_api_lt_2_5, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_max_cntr_value_api_ge_2_5_within_hw_range, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_max_cntr_value_api_ge_2_5_hint_within_hw_range, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_max_cntr_value_api_ge_2_5_above_hw_range, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_rdm_max_cntr_value_api_ge_2_5_within_hw_range, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_info.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_p2p_dmabuf_assumed_neuron, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -308,8 +325,10 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_srx_lock, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_unexp_pkt, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_foreach_unspec_skips_other_provider, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_construct_robuf_failure, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rnr_queue_and_resend_msg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rnr_queue_and_resend_tagged, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_post_queued_pkts_releases_pkt_on_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 
 		/* begin of efa_unit_test_ope.c */
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -407,6 +426,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_enabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_disabled_with_mr_local, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_disabled_with_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_open_ops_cntr_open_ext, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_domain.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -418,6 +438,23 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cntr_post_initial_rx_pkts, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_cntr_read_before_ep_enable, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_open_unsupported_type_bytes, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_open_max_cntr_value_exceeded, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_open_ibv_fail, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_add, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_adderr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_set, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_seterr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_read, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_readerr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_bind_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_bind_ep_attach_fail, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_wait_success, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_wait_returns_einval_with_wait_none, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_cntr_open_uses_hw_cntr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hw_cntr_open_use_hw_cntr_disabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end of efa_unit_test_cntr.c */
 
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_reorder_expected_msg_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -428,6 +465,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_keep_pke_in_overflow_list, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_append_overflow_pke_to_recvwin, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_recvwin_queue_or_append_pke, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_peer_destruct_clears_rnr_flag, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_handle_longcts_rtm_send_completion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_msg_fi_recv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_msg_fi_recvv, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -444,6 +482,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rma_write, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rma_writev, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rma_writemsg, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_ibv_post_write_processing_hints_with_high_pps, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_ibv_post_write_processing_hints_without_high_pps, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rma_writedata, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rma_inject_write, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rma_inject_writedata, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -498,6 +538,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_data_path_direct_dev_req_id_roundtrip, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_data_path_direct_stale_completion_detected, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_data_path_direct_qp_gen_increments_across_qps, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_data_path_direct_write_high_pps_hint_set, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_read_no_completion, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_read_send_success, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_read_senddata_success, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -530,6 +571,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_cq_poll_ep_close_bypass_path, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_next_poll_stale_cur_wq_segv_on_ep_close, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_cq_read_mixed_success_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_cq_close_returns_ebusy_with_bound_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_open, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_cancel, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_ep_getopt, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -561,6 +603,10 @@ int main(void)
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_all_flags_supported),
 		cmocka_unit_test(test_efa_mr_ofi_to_ibv_access_all_flags_not_supported),
 		cmocka_unit_test_setup_teardown(test_efa_mr_close_warn_outstanding_direct_ope, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_direct_ope_released_on_recv_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_direct_ope_released_on_send_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_direct_ope_released_on_read_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_direct_ope_released_on_write_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_mr_close_warn_outstanding_direct_ope_multi_ep, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_mr_close_warn_outstanding_rdm_txe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_cache_regv_no_cache, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -571,6 +617,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_cache_lru_behavior, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_cache_flush_behavior, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_mr_cache_reference_counting, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_mr_reg_out_of_range_iface, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_mr.c */
 
 		/* begin efa_unit_test_rdm_rma.c */

@@ -16,7 +16,7 @@ static void efa_rdm_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_ato
 {
 	int i;
 
-	assert(msg->rma_iov_count <= EFA_RDM_IOV_LIMIT);
+	assert(msg->rma_iov_count <= ep->base_ep.info->tx_attr->rma_iov_limit);
 	memcpy(shm_msg, msg, sizeof(*msg));
 	if (!(ep->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
 		memcpy(rma_iov, msg->rma_iov,
@@ -48,6 +48,11 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	struct iovec iov[EFA_RDM_IOV_LIMIT];
 	size_t datatype_size;
 
+	assert(msg_atomic->iov_count <= efa_rdm_ep->base_ep.info->tx_attr->iov_limit);
+	assert(msg_atomic->rma_iov_count > 0);
+	assert(msg_atomic->rma_iov_count <= efa_rdm_ep->base_ep.info->tx_attr->rma_iov_limit);
+	assert(msg_atomic->rma_iov);
+
 	datatype_size = ofi_datatype_size(msg_atomic->datatype);
 	if (OFI_UNLIKELY(!datatype_size)) {
 		return NULL;
@@ -69,7 +74,6 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, op, fi_flags, internal_flags);
 
 	assert(msg_atomic->rma_iov_count > 0);
-	assert(msg_atomic->rma_iov);
 	txe->rma_iov_count = msg_atomic->rma_iov_count;
 	ofi_rma_ioc_to_iov(msg_atomic->rma_iov,
 			   txe->rma_iov,
@@ -236,6 +240,10 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
 	if (err)
 		return err;
+
+	assert(msg->iov_count <= efa_rdm_ep->base_ep.info->tx_attr->iov_limit);
+	assert(msg->rma_iov_count > 0);
+	assert(msg->rma_iov_count <= efa_rdm_ep->base_ep.info->tx_attr->rma_iov_limit);
 
 	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
 	if (err)

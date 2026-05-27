@@ -1,11 +1,23 @@
 import os
 import subprocess
 import functools
+import json
 import re
+import pytest
 from enum import IntEnum
 from collections import deque
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
 from retrying import retry
+
+# EFA-specific message size lists for @pytest.mark.message_sizes decorator.
+# Generic (shared) size lists live in fabtests/pytest/common.py.
+DIRECT_SIZES = ["r:0,4,32", "r:0,1024,8192"]
+# RMA variant: starts at 1 because fabtests RMA benchmarks reject 0-byte.
+DIRECT_RMA_SIZES = ["r:1,4,32", "r:1,1024,8192"]
+REMOTE_EXIT_SIZES = [65536, 131072, 1048576]
+# Use the default behavior of the test, so pass None.
+DGRAM_DEFAULT = [None]
+DGRAM_PR_CI = ["l:16,128,8192"]
 
 
 @functools.lru_cache(2)
@@ -48,7 +60,7 @@ def parse_lspci_tree(server_id):
     "00.0  Amazon.com, Inc. Elastic Fabric Adapter (EFA)" is the EFA NIC on bus 55, device function 00.0
     """
     timeout = 60
-    result = subprocess.run([f'ssh {server_id}', 'lspci', '-tv'],
+    result = subprocess.run(f"ssh {server_id} lspci -tv",
             shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             encoding="utf-8", timeout=timeout)
@@ -102,6 +114,85 @@ def parse_lspci_tree(server_id):
                 tree[parent]['children'].append(bdf)
 
     return tree
+
+
+# Neuron device BDF to EFA BDF mapping for trn2 instance types.
+# Each neuron device index maps to a specific EFA NIC BDF.
+_TRN2_ND_TO_EFA_BDF = {
+    0: "0000:c9:00.0",
+    1: "0000:b4:00.0",
+    2: "0000:b3:00.0",
+    3: "0000:ca:00.0",
+    4: "0000:6c:00.0",
+    5: "0000:57:00.0",
+    6: "0000:56:00.0",
+    7: "0000:6d:00.0",
+    8: "0000:98:00.0",
+    9: "0000:83:00.0",
+    10: "0000:82:00.0",
+    11: "0000:99:00.0",
+    12: "0000:f5:00.0",
+    13: "0000:e0:00.0",
+    14: "0000:df:00.0",
+    15: "0000:f6:00.0",
+}
+
+
+@functools.lru_cache(10)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def get_neuron_ls_output(ip):
+    """
+    Run neuron-ls -j on the remote host and return the parsed JSON output.
+    Results are cached per ip to avoid repeated SSH calls.
+    """
+    proc = subprocess.run("ssh {} /opt/aws/neuron/bin/neuron-ls -j".format(ip),
+                          shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          timeout=60, encoding="utf-8")
+
+    if has_ssh_connection_err_msg(proc.stderr):
+        raise SshConnectionError()
+
+    if proc.returncode != 0:
+        return []
+
+    return json.loads(proc.stdout)
+
+
+def get_efa_device_name_for_neuron_core(ip, neuron_core_id):
+    """
+    Return the EFA device name for a given neuron core ID on trn2 instances.
+
+    Uses the neuron-ls output to find which neuron device the given core is in,
+    then looks up the corresponding EFA NIC BDF from the static mapping table
+    and resolves it to an rdma device name.
+
+    Falls back to round-robin assignment for non-trn2 instance types.
+    """
+    neuron_devices = get_neuron_ls_output(ip)
+    if not neuron_devices:
+        return get_efa_device_name_for_hmem_device(ip, 0, 1)
+
+    instance_type = neuron_devices[0].get("instance_type", "")
+
+    if instance_type.startswith("trn2"):
+        # For trn2, use the static BDF mapping
+        for device in neuron_devices:
+            if neuron_core_id in device.get("neuroncore_ids", []):
+                nd_index = device["neuron_device"]
+                efa_bdf = _TRN2_ND_TO_EFA_BDF.get(nd_index)
+                assert(efa_bdf is not None)
+                rdma_name = get_rdma_core_name_for_efa_nic(ip, efa_bdf)
+                assert(rdma_name)
+                return rdma_name
+
+    # For non-trn2, fall back to round-robin based on device index
+    # TODO: Implement topology aware NIC selection similar to CUDA
+    for device in neuron_devices:
+        if neuron_core_id in device.get("neuroncore_ids", []):
+            return get_efa_device_name_for_hmem_device(
+                ip, device["neuron_device"], len(neuron_devices))
+    return get_efa_device_name_for_hmem_device(ip, 0, len(neuron_devices))
+
 
 class CudaMemorySupport(IntEnum):
     NOT_INITIALIZED = -1
@@ -322,7 +413,7 @@ def get_gpu_bdf(server_id, gpu_index):
     timeout = 60
 
     result = subprocess.run(
-        [f'ssh {server_id}', 'nvidia-smi', '--query-gpu=pci.bus_id', '--format=csv,noheader', '--id', str(gpu_index)],
+        f"ssh {server_id} nvidia-smi --query-gpu=pci.bus_id --format=csv,noheader --id {str(gpu_index)}",
             shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             encoding="utf-8", timeout=timeout)
@@ -348,7 +439,7 @@ def get_gpu_bdf(server_id, gpu_index):
 def get_rdma_core_name_for_efa_nic(server_id, bdf):
     timeout = 60
     result = subprocess.run(
-        [f'ssh {server_id}', 'ls', f'/sys/bus/pci/devices/{bdf}/infiniband'],
+        f"ssh {server_id} ls /sys/bus/pci/devices/{bdf}/infiniband",
         shell=True,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         encoding="utf-8", timeout=timeout)

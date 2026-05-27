@@ -285,13 +285,16 @@ void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *ope;
 
-	/* if this DATA packet is used by a DC protocol, the completion
-	 * was (or will be) written when the receipt packet was received.
-	 * The txe may have already been released. So nothing
-	 * to do (or can be done) here.
+	/* if this DATA packet is used by a DC protocol, the tx entry should
+	 * be only released when both all TX ops are done and the receipt
+	 * has been received.
 	 */
-	if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA)
+	if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA) {
+		assert(pkt_entry->ope);
+		if (efa_rdm_txe_dc_ready_for_release(pkt_entry->ope))
+			efa_rdm_txe_release(pkt_entry->ope);
 		return;
+	}
 
 	ope = pkt_entry->ope;
 	ope->bytes_acked += efa_rdm_pke_get_ctsdata_hdr(pkt_entry)->seg_length;
@@ -512,13 +515,10 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 			if (txe->peer == NULL) {
 				data_pkt_entry = txe->local_read_pkt_entry;
 				assert(data_pkt_entry->payload_size > 0);
-				/* We were using a held rx pkt to post local read */
-				if (data_pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL) {
-					assert(txe->ep->efa_rx_pkts_held > 0);
-					txe->ep->efa_rx_pkts_held--;
-				}
 				efa_rdm_tracepoint(rx_pke_local_read_copy_payload_end, (size_t) data_pkt_entry, data_pkt_entry->payload_size, data_pkt_entry->ope->msg_id, (size_t) data_pkt_entry->ope->cq_entry.op_context, data_pkt_entry->ope->total_len);
 				efa_rdm_pke_handle_data_copied(data_pkt_entry);
+				/* Hand off pkt release to efa_rdm_pke_handle_data_copied() above. */
+				txe->local_read_pkt_entry = NULL;
 			} else {
 				assert(txe && txe->cq_entry.flags & FI_READ);
 				if (!(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION))

@@ -642,6 +642,10 @@ efa_data_path_direct_post_write(
 		efa_send_wr_set_imm_data(meta_desc, data);
 	}
 
+
+	if (efa_env.enable_high_pps && (flags & FI_EFA_WR_HIGH_PPS))
+		efa_send_wr_set_processing_hint_high_pps(meta_desc);
+
 	/* Set remote memory information */
 	efa_send_wr_set_rdma_addr(remote_mem, remote_key, remote_addr);
 	remote_mem->length = efa_sge_total_bytes(sge_list, sge_count);

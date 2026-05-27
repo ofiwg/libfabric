@@ -293,7 +293,7 @@ int run_pingpong(void)
 	return ft_finalize();
 }
 
-int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
+int pingpong_rma_write(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
 	int ret, i;
 	size_t inject_size = fi->tx_attr->inject_size;
@@ -384,6 +384,74 @@ int pingpong_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 				opts.argc, opts.argv);
 	else
 		show_perf(NULL, opts.transfer_size, opts.iterations, &start, &end, 2);
+
+	return 0;
+}
+
+int pingpong_rma_read(struct fi_rma_iov *remote)
+{
+	int ret, i;
+
+	if (opts.transfer_size == 0) {
+		FT_ERR("Zero-sized transfers not supported");
+		return EXIT_FAILURE;
+	}
+
+	/* Fill tx_buf with data for peer to read from us */
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_fill_buf((char *) tx_buf, opts.transfer_size);
+		if (ret)
+			return ret;
+	}
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	if (opts.dst_addr) {
+		/* Client: actively reads from server in a loop */
+		for (i = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+			if (i == opts.warmup_iterations)
+				ft_start();
+
+			ret = ft_post_rma(FT_RMA_READ, rx_buf,
+					  opts.transfer_size, remote,
+					  &tx_ctx);
+			if (ret)
+				return ret;
+
+			ret = ft_get_tx_comp(tx_seq);
+			if (ret)
+				return ret;
+
+			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+				ret = ft_check_buf((char *) rx_buf,
+						   opts.transfer_size);
+				if (ret)
+					return ret;
+			}
+		}
+		ft_stop();
+
+		/* Signal server that we are done */
+		ret = ft_sync_inband(true);
+		if (ret)
+			return ret;
+	} else {
+		/* Server: passive, just wait for client to finish */
+		ret = ft_sync_inband(true);
+		if (ret)
+			return ret;
+	}
+
+	if (opts.dst_addr) {
+		if (opts.machr)
+			show_perf_mr(opts.transfer_size, opts.iterations,
+				     &start, &end, 1, opts.argc, opts.argv);
+		else
+			show_perf(NULL, opts.transfer_size, opts.iterations,
+				  &start, &end, 1);
+	}
 
 	return 0;
 }

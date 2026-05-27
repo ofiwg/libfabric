@@ -7,6 +7,7 @@ from common import ClientServerTest
 # This test must be run in serial mode because it checks the hw counter
 @pytest.mark.serial
 @pytest.mark.functional
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.parametrize("selection_approach", ["domain name", "environment"])
 def test_efa_device_selection(cmdline_args, fabric, selection_approach):
 
@@ -73,6 +74,7 @@ def test_efa_device_selection(cmdline_args, fabric, selection_approach):
 
 # Verify that fi_getinfo does not return any info objects when FI_EFA_IFACE is set to an invalid value
 @pytest.mark.functional
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 def test_efa_device_selection_negative(cmdline_args, fabric):
     invalid_iface = "r"
 
@@ -84,6 +86,7 @@ def test_efa_device_selection_negative(cmdline_args, fabric):
 
 # Verify that fi_getinfo returns all NICs when FI_EFA_IFACE is set to all
 @pytest.mark.functional
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 def test_efa_device_selection_all(cmdline_args, fabric):
     devices = get_efa_device_names(cmdline_args.server_id)
     assert len(devices) > 0, "No EFA devices found on server"
@@ -104,6 +107,7 @@ def test_efa_device_selection_all(cmdline_args, fabric):
 
 # Verify that fi_getinfo returns two NICs when FI_EFA_IFACE is set to two NICs separated by a comma
 @pytest.mark.functional
+@pytest.mark.fabric(params=["efa", "efa-direct"])
 def test_efa_device_selection_comma(cmdline_args, fabric):
     devices = get_efa_device_names(cmdline_args.server_id)
     assert len(devices) > 0, "No EFA devices found on server"

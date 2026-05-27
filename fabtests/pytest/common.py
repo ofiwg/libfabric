@@ -66,33 +66,18 @@ def num_cuda_devices(ip):
 
 
 @functools.lru_cache(10)
-@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def num_neuron_devices(ip):
-    proc = run("ssh {} /opt/aws/neuron/bin/neuron-ls -j".format(ip), shell=True,
-               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-               timeout=60, encoding="utf-8")
-
-    if has_ssh_connection_err_msg(proc.stderr):
-        raise SshConnectionError()
-
-    if proc.returncode !=0:
-        return 0
-
-    return len(json.loads(proc.stdout))
+    from efa.efa_common import get_neuron_ls_output
+    return len(get_neuron_ls_output(ip))
 
 
 @functools.lru_cache(10)
-@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def num_neuron_cores_on_device(ip, device_id):
-    proc = run("ssh {} /opt/aws/neuron/bin/neuron-ls -j".format(ip), shell=True,
-               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-               timeout=60, encoding="utf-8")
-
-    if has_ssh_connection_err_msg(proc.stderr):
-        raise SshConnectionError()
-
-    proc.check_returncode()
-    return json.loads(proc.stdout)[device_id]["nc_count"]
+    from efa.efa_common import get_neuron_ls_output
+    devices = get_neuron_ls_output(ip)
+    if not devices:
+        raise subprocess.CalledProcessError(1, "neuron-ls")
+    return devices[device_id]["nc_count"]
 
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
@@ -509,8 +494,9 @@ class ClientServerTest:
             import efa.efa_common
             if host_memory_type == "cuda":
                 efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, hmem_device_id, num_hmem)
+            elif host_memory_type == "neuron":
+                efa_device = efa.efa_common.get_efa_device_name_for_neuron_core(host_ip, hmem_device_id)
             else:
-                # TODO: Implement topology aware EFA device selection for other accelerators
                 efa_device = efa.efa_common.get_efa_device_name_for_hmem_device(host_ip, hmem_device_id, num_hmem)
             command += " -d {}-rdm".format(efa_device)
 
@@ -723,3 +709,33 @@ class MultinodeTest(ClientServerTest):
             returncode_list.append(client_process_list[i].returncode)
 
         check_returncode_list(returncode_list, strict)
+
+
+# Message size lists for @pytest.mark.message_sizes decorator.
+# Generic (provider-agnostic) size selections live here so all providers can share them.
+PERF_SIZES = ["all"]
+PERF_PR_CI = ["l:16,4096,16384,131072,1048576"]
+RANGE_SIZES = ["r:0,4,64", "r:4048,4,4148", "r:8000,4,9000", "r:17000,4,18000", "r:0,4096,1048576"]
+INJECT_SIZES = ["r:0,4,64", "r:4048,4,4148", "r:8000,4,9000"]
+RMA_PINGPONG_SIZES = ["r:4048,4,4148", "r:8000,4,9000", "r:17000,4,18000"]
+MULTI_RECV_SIZES = ["1024", "8192"]
+
+
+def test_selected_by_marker(config, test_markers, name):
+    expr_str = config.getoption("markexpr") or ""
+    if not expr_str or name not in test_markers:
+        return False
+    try:
+        from _pytest.mark.expression import Expression
+        expr = Expression.compile(expr_str)
+    except Exception as e:
+        raise RuntimeError(
+            f"test_selected_by_marker failed to compile markexpr {expr_str!r}. "
+            f"This might mean pytest's private _pytest.mark.expression API "
+            f"has changed. Underlying error: {e}"
+        ) from e
+    # would the test still be selected if `name` were removed from its markers?
+    with_marker = expr.evaluate(lambda n: n in test_markers)
+    without_marker = expr.evaluate(lambda n: n in (test_markers - {name}))
+    # true only when `name` is the reason this test got selected
+    return with_marker and not without_marker

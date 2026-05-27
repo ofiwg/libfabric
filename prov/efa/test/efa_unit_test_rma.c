@@ -636,3 +636,86 @@ void test_efa_rma_write_0_byte_with_inject_flag(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
+
+#if HAVE_EFADV_WR_PROCESSING_HINTS
+/**
+ * @brief Helper to test efa_ibv_post_write processing hint behavior.
+ *
+ * use the flags parameter to control whether the hint should fire.
+ */
+static void test_efa_ibv_post_write_processing_hints_impl(struct efa_resource *resource,
+						  uint64_t flags)
+{
+	struct efa_unit_test_buff local_buff;
+	struct ibv_sge sge;
+	struct efa_base_ep *base_ep;
+	struct efa_qp *qp;
+	struct ibv_qp_ex *ibv_qpx;
+	struct efadv_qp *efadv_qp;
+	struct efa_ah fake_ah = {0};
+	bool enable_high_pps_orig;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	qp = base_ep->qp;
+	ibv_qpx = qp->ibv_qp_ex;
+
+	/* Set up ibv_wr function pointer mocks */
+	ibv_qpx->wr_start = &efa_mock_ibv_wr_start_no_op;
+	ibv_qpx->wr_rdma_write = &efa_mock_ibv_wr_rdma_write_save_wr;
+	ibv_qpx->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
+	ibv_qpx->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
+	ibv_qpx->wr_complete = &efa_mock_ibv_wr_complete_no_op;
+
+	/* Set up efadv_qp processing hint mock */
+	efadv_qp = efadv_qp_from_ibv_qp_ex(ibv_qpx);
+	efadv_qp->wr_set_processing_hints = efa_mock_efadv_wr_set_processing_hints;
+
+	enable_high_pps_orig = efa_env.enable_high_pps;
+	efa_env.enable_high_pps = true;
+
+	if (flags & FI_EFA_WR_HIGH_PPS) {
+		expect_function_call(efa_mock_efadv_wr_set_processing_hints);
+		expect_value(efa_mock_efadv_wr_set_processing_hints, hints,
+			     EFADV_WR_PROCESSING_HINT_BURST_PPS_SENSITIVE);
+	}
+
+	efa_unit_test_buff_construct(&local_buff, resource, 4096);
+	sge.addr = (uintptr_t)local_buff.buff;
+	sge.length = local_buff.size;
+	sge.lkey = ((struct efa_mr *)fi_mr_desc(local_buff.mr))->ibv_mr->lkey;
+
+	efa_ibv_post_write(qp, &sge, 1, 123456, 0x87654321, 0, 0,
+			   flags, &fake_ah, 0, 0);
+
+	efa_env.enable_high_pps = enable_high_pps_orig;
+	efa_unit_test_buff_destruct(&local_buff);
+}
+#endif
+
+/**
+ * @brief Test that efa_ibv_post_write calls efadv_wr_set_processing_hints
+ * when FI_EFA_WR_HIGH_PPS flag is set.
+ */
+void test_efa_ibv_post_write_processing_hints_with_high_pps(struct efa_resource **state)
+{
+#if HAVE_EFADV_WR_PROCESSING_HINTS
+	test_efa_ibv_post_write_processing_hints_impl(*state, FI_EFA_WR_HIGH_PPS);
+#else
+	skip();
+#endif
+}
+
+/**
+ * @brief Test that efa_ibv_post_write does NOT call efadv_wr_set_processing_hints
+ * when FI_DELIVERY_COMPLETE flag is set without FI_EFA_WR_HIGH_PPS.
+ */
+void test_efa_ibv_post_write_processing_hints_without_high_pps(struct efa_resource **state)
+{
+#if HAVE_EFADV_WR_PROCESSING_HINTS
+	test_efa_ibv_post_write_processing_hints_impl(*state, FI_DELIVERY_COMPLETE);
+#else
+	skip();
+#endif
+}

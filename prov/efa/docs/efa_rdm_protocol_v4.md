@@ -325,10 +325,10 @@ Table: 2.1 a list of extra features/requests
 | 0  | RDMA-Read based data transfer    | extra feature | libfabric 1.10.0 | Section 4.1 |
 | 1  | delivery complete                | extra feature | libfabric 1.12.0 | Section 4.2 _(baseline since 2.6)_ |
 | 2  | keep packet header length constant | extra request | libfabric 1.13.0 | Section 4.3 |
-| 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 |
-| 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 |
+| 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 _(baseline since 2.6)_ |
+| 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 _(baseline since 2.6)_ |
 | 5  | RDMA-Write based data transfer   | extra feature | libfabric 1.18.0 | Section 4.6 |
-| 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 |
+| 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 _(baseline since 2.6)_ |
 | 7  | User recv QP            | extra feature & request| libfabric 1.22.0 | _(legacy, see Section 4.8)_ |
 | 8  | Unsolicited write recv  | extra feature | libfabric 1.22.0 | Section 4.9 |
 
@@ -399,8 +399,19 @@ As of libfabric 2.6, the following features/requests has been baselined:
 - **Delivery complete (ID 1)**: Baseline since 2.6. The handshake requirement for DC packets
   has been removed from the send, write, and atomic paths. See section 4.2.
 
-The remaining extra features and requests are candidates for the same transition in future
-releases.
+- **Connid header (ID 3)**: Baseline since 2.6. The endpoint always includes connid in
+  packet headers after handshake without checking the peer's `extra_info`. See section 4.4.
+
+- **Runt protocol (ID 4)**: Baseline since 2.6. The handshake requirement for RUNTCTS
+  packets has been removed. RUNTREAD packets still require a handshake for RDMA read
+  hardware verification. See section 4.5.
+
+- **Read nack (ID 6)**: Baseline since 2.6. READ_NACK packets can always be sent without
+  checking the peer's handshake status. See section 4.7.
+
+The remaining extra features (RDMA read, RDMA write, unsolicited write recv) depend on
+peer hardware capabilities and cannot be baselined — a handshake is still required to
+verify the peer's device supports them.
 
 This concludes the workflow of the handshake subprotocol.
 
@@ -1447,6 +1458,12 @@ This re-interpretation does not change the implementation, and thus, it does not
 
 ### 4.4 Have connection ID in packet header (connid header)
 
+**Since libfabric 2.6, the connid header request is treated as a baseline request. All supported
+peers (v2.0+) request it, so the local endpoint always includes connid in packet headers after
+handshake without checking the peer's `extra_info`. The `EFA_RDM_EXTRA_REQUEST_CONNID_HEADER`
+flag is still advertised in `extra_info` for backwards compatibility with v2.0 peers that
+check for it.**
+
 The "have connection ID in packet header" extra request was introduced with the libfabric 1.14.0 release and was
 assigned the ID 3.
 
@@ -1482,6 +1499,12 @@ the CONNID_HDR flag in the `flags` field of the base header. The exact location 
 each packet type.
 
 ### 4.5 Runting read message subprotocol
+
+**Since libfabric 2.6, the runt protocol is treated as a baseline feature. All supported
+peers (v2.0+) support it, so a handshake is no longer required before sending runt packets.
+The `EFA_RDM_EXTRA_FEATURE_RUNT` flag is still advertised in `extra_info` for backwards
+compatibility with v2.0 peers that check for it. Note that RUNTREAD packets still require
+a handshake to verify RDMA read hardware support.**
 
 The "runting read message protocol support" extra feature was introduced with the libfabric 1.16.0 release (together with the runting read message subprotocol) and was assigned the ID 4.
 
@@ -1542,6 +1565,11 @@ in order to support CQ entry generation in case the sender uses
 
 
 ### 4.7 Long read and runting read nack protocol
+
+**Since libfabric 2.6, the read nack protocol is treated as a baseline feature. All supported
+peers (v2.0+) support it, so a READ_NACK packet can always be sent without checking the
+peer's handshake status or `extra_info`. The `EFA_RDM_EXTRA_FEATURE_READ_NACK` flag is still
+advertised in `extra_info` for backwards compatibility with v2.0 peers that check for it.**
 
 Long read and runting read protocols in Libfabric 1.20 and above use a nack protocol
 when the receiver is unable to register a memory region for the RDMA read operation 

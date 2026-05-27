@@ -513,26 +513,26 @@ void test_efa_mr_attr_init_system_macro(struct efa_resource **state)
 
 /**
  * @brief Test efa_mr_ofi_to_ibv_access with no access flags
- * 
- * When no access flags are provided, the function should default to 
+ *
+ * When no access flags are provided, the function should default to
  * FI_SEND | FI_RECV and return IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ.
  */
 void test_efa_mr_ofi_to_ibv_access_no_access(struct efa_resource **state)
 {
 	int ibv_access;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(0, true, true);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ);
 }
 
 /**
  * @brief Test efa_mr_ofi_to_ibv_access with one flag when rdma read and write are available
- * 
+ *
  */
 void test_efa_mr_ofi_to_ibv_access_one_flag(struct efa_resource **state)
 {
 	int ibv_access;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(FI_SEND, true, true);
 	assert_int_equal(ibv_access, IBV_ACCESS_REMOTE_READ);
 
@@ -558,7 +558,7 @@ void test_efa_mr_ofi_to_ibv_access_one_flag(struct efa_resource **state)
 void test_efa_mr_ofi_to_ibv_access_read_not_supported(struct efa_resource **state)
 {
 	int ibv_access;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(FI_READ, false, false);
 	assert_int_equal(ibv_access, 0);
 
@@ -568,7 +568,7 @@ void test_efa_mr_ofi_to_ibv_access_read_not_supported(struct efa_resource **stat
 
 /**
  * @brief Test efa_mr_ofi_to_ibv_access when RDMA write not supported
- * 
+ *
  * When device doesn't support RDMA write, emulate with RDMA read
  */
 void test_efa_mr_ofi_to_ibv_access_write_not_supported(struct efa_resource **state)
@@ -592,21 +592,21 @@ void test_efa_mr_ofi_to_ibv_access_write_not_supported(struct efa_resource **sta
 void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported(struct efa_resource **state)
 {
 	int ibv_access;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_READ | FI_REMOTE_WRITE, true, false);
 	assert_int_equal(ibv_access, IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);
 }
 
 /**
  * @brief Test efa_mr_ofi_to_ibv_access with all access flags combined
- * 
+ *
  * Test all OFI access flags together with full device support.
  */
 void test_efa_mr_ofi_to_ibv_access_all_flags_supported(struct efa_resource **state)
 {
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(all_flags, true, true);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
 }
@@ -618,7 +618,7 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(struct efa_resource *
 {
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
-	
+
 	ibv_access = efa_mr_ofi_to_ibv_access(all_flags, false, false);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE);
 }
@@ -1071,7 +1071,7 @@ void test_efa_rdm_mr_cache_non_overlapping(struct efa_resource **state)
 	assert_non_null(buf2);
 
 	/* Ensure buffers are non-overlapping by checking addresses */
-	assert_true((char *)buf1 + mr_size <= (char *)buf2 || 
+	assert_true((char *)buf1 + mr_size <= (char *)buf2 ||
 		    (char *)buf2 + mr_size <= (char *)buf1);
 
 	/* Register first region */
@@ -1450,3 +1450,281 @@ void test_efa_rdm_mr_reg_cuda_memory_non_p2p(struct efa_resource **state)
 	skip();
 }
 #endif
+
+/**
+ * @brief Verify that fi_mr_regattr rejects an out-of-range iface value
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_mr_reg_out_of_range_iface(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct fi_mr_attr mr_reg_attr = {0};
+	struct iovec iov;
+	struct fid_mr *mr = NULL;
+	char buf[64];
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	mr_reg_attr.mr_iov = &iov;
+	mr_reg_attr.iov_count = 1;
+	mr_reg_attr.access = FI_SEND | FI_RECV;
+
+	/* Test with value >= OFI_HMEM_MAX */
+	mr_reg_attr.iface = OFI_HMEM_MAX + 100;
+	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
+	assert_int_equal(err, -FI_EINVAL);
+
+	/* Test with negative value */
+	mr_reg_attr.iface = (enum fi_hmem_iface)(-1);
+	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
+	assert_int_equal(err, -FI_EINVAL);
+	assert_null(mr);
+}
+
+/**
+ * Verify that efa_direct_ope is released when fi_recv fails after
+ * allocating the ope. Without the fix the ope leaks on the error path.
+ */
+void test_efa_direct_ope_released_on_recv_error(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_context ctx = {0};
+	size_t buf_size = 64;
+	void *buf;
+	struct iovec iov;
+	struct fi_msg msg = {0};
+	int ret;
+
+	efa_env.track_mr = 1;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM,
+						    EFA_DIRECT_FABRIC_NAME);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0),
+						    resource->hints,
+						    true, true);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep,
+			       util_ep.ep_fid);
+
+	buf = malloc(buf_size);
+	assert_non_null(buf);
+
+	/* Post a recv with NULL desc to trigger -FI_EINVAL after ope alloc */
+	iov.iov_base = buf;
+	iov.iov_len = buf_size;
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	msg.desc = NULL;
+	msg.context = &ctx;
+
+	ret = fi_recvmsg(resource->ep, &msg, FI_COMPLETION);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	/* The ope list must be empty - ope released on error path */
+	assert_true(dlist_empty(&base_ep->efa_direct_ope_list));
+
+	free(buf);
+}
+
+/**
+ * Verify that efa_direct_ope is released when fi_sendmsg fails after
+ * allocating the ope. Without the fix the ope leaks on the error path.
+ */
+void test_efa_direct_ope_released_on_send_error(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_context ctx = {0};
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	size_t buf_size = 64;
+	void *buf;
+	struct iovec iov;
+	struct fi_msg msg = {0};
+	int ret;
+
+	efa_env.track_mr = 1;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM,
+						    EFA_DIRECT_FABRIC_NAME);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0),
+						    resource->hints,
+						    true, true);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep,
+			       util_ep.ep_fid);
+
+	/* Insert a fake peer so efa_av_addr_to_conn succeeds */
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1,
+				      &peer_addr, 0, NULL), 1);
+
+	buf = malloc(buf_size);
+	assert_non_null(buf);
+
+	/* Post a send with NULL desc to trigger -FI_EINVAL after ope alloc */
+	iov.iov_base = buf;
+	iov.iov_len = buf_size;
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	msg.desc = NULL;
+	msg.context = &ctx;
+	msg.addr = peer_addr;
+
+	ret = fi_sendmsg(resource->ep, &msg, FI_COMPLETION);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	/* The ope list must be empty - ope released on error path */
+	assert_true(dlist_empty(&base_ep->efa_direct_ope_list));
+
+	free(buf);
+}
+
+/**
+ * Verify that efa_direct_ope is released when fi_readmsg fails after
+ * allocating the ope. Without the fix the ope leaks on the error path.
+ */
+void test_efa_direct_ope_released_on_read_error(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_context ctx = {0};
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	size_t buf_size = 64;
+	void *buf;
+	struct iovec iov;
+	struct fi_rma_iov rma_iov = {0};
+	struct fi_msg_rma msg = {0};
+	int ret;
+
+	/* Skip test on platforms that don't support RDMA. */
+	if (!efa_device_support_rdma_read() || !efa_device_support_rdma_write()) {
+		skip();
+		return;
+	}
+
+	efa_env.track_mr = 1;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM,
+						    EFA_DIRECT_FABRIC_NAME);
+	resource->hints->caps |= FI_RMA;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0),
+						    resource->hints,
+						    true, true);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep,
+			       util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1,
+				      &peer_addr, 0, NULL), 1);
+
+	buf = malloc(buf_size);
+	assert_non_null(buf);
+
+	iov.iov_base = buf;
+	iov.iov_len = buf_size;
+	rma_iov.addr = 0x1000;
+	rma_iov.len = buf_size;
+	rma_iov.key = 0;
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	msg.desc = NULL;
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+	msg.context = &ctx;
+	msg.addr = peer_addr;
+
+	ret = fi_readmsg(resource->ep, &msg, FI_COMPLETION);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	assert_true(dlist_empty(&base_ep->efa_direct_ope_list));
+
+	free(buf);
+}
+
+/**
+ * Verify that efa_direct_ope is released when fi_writemsg fails after
+ * allocating the ope. Without the fix the ope leaks on the error path.
+ */
+void test_efa_direct_ope_released_on_write_error(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_context ctx = {0};
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	size_t buf_size = 64;
+	void *buf;
+	struct iovec iov;
+	struct fi_rma_iov rma_iov = {0};
+	struct fi_msg_rma msg = {0};
+	int ret;
+
+	/* Skip test on platforms that don't support RDMA. */
+	if (!efa_device_support_rdma_read() || !efa_device_support_rdma_write()) {
+		skip();
+		return;
+	}
+
+	efa_env.track_mr = 1;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM,
+						    EFA_DIRECT_FABRIC_NAME);
+	resource->hints->caps |= FI_RMA;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0),
+						    resource->hints,
+						    true, true);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep,
+			       util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1,
+				      &peer_addr, 0, NULL), 1);
+
+	buf = malloc(buf_size);
+	assert_non_null(buf);
+
+	iov.iov_base = buf;
+	iov.iov_len = buf_size;
+	rma_iov.addr = 0x1000;
+	rma_iov.len = buf_size;
+	rma_iov.key = 0;
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	msg.desc = NULL;
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+	msg.context = &ctx;
+	msg.addr = peer_addr;
+
+	ret = fi_writemsg(resource->ep, &msg, FI_COMPLETION);
+	assert_int_equal(ret, -FI_EINVAL);
+
+	assert_true(dlist_empty(&base_ep->efa_direct_ope_list));
+
+	free(buf);
+}

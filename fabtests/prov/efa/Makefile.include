@@ -40,7 +40,8 @@ bin_PROGRAMS += prov/efa/src/fi_efa_rnr_read_cq_error \
 		prov/efa/src/fi_efa_multi_ep_stress \
 		prov/efa/src/fi_efa_mmap_test \
 		prov/efa/src/fi_efa_mr_test \
-		prov/efa/src/fi_efa_runt_read_no_handshake
+		prov/efa/src/fi_efa_runt_read_no_handshake \
+		prov/efa/src/fi_efa_rma_bw
 
 if HAVE_VERBS_DEVEL
 if HAVE_EFA_DV
@@ -52,6 +53,9 @@ endif BUILD_EFA_RDMA_CHECKER
 if EFAGDA
 bin_PROGRAMS += prov/efa/src/fi_efa_gda
 endif EFAGDA
+if HAVE_EFADV_CREATE_COMP_CNTR
+bin_PROGRAMS += prov/efa/src/fi_efa_hw_cntr
+endif HAVE_EFADV_CREATE_COMP_CNTR
 endif HAVE_VERBS_DEVEL
 
 efa_rnr_srcs = \
@@ -107,6 +111,11 @@ prov_efa_src_fi_efa_runt_read_no_handshake_SOURCES = \
 	$(benchmarks_srcs)
 prov_efa_src_fi_efa_runt_read_no_handshake_LDADD = libfabtests.la
 
+prov_efa_src_fi_efa_rma_bw_SOURCES = \
+	prov/efa/src/efa_rma_bw.c \
+	$(benchmarks_srcs)
+prov_efa_src_fi_efa_rma_bw_LDADD = libfabtests.la
+
 if HAVE_VERBS_DEVEL
 if HAVE_EFA_DV
 efa_exhaust_mr_reg_srcs = \
@@ -129,16 +138,25 @@ prov_efa_src_fi_efa_rdma_checker_LDFLAGS = -lefa
 endif BUILD_EFA_RDMA_CHECKER
 
 if EFAGDA
-SUBDIRS += prov/efa/src/efagda
 prov_efa_src_fi_efa_gda_SOURCES = prov/efa/src/efa_gda.c
-prov_efa_src_fi_efa_gda_LDFLAGS = -Wl,-rpath=$(libdir)
-prov_efa_src_fi_efa_gda_LDADD = -L$(libdir) -L/usr/local/cuda/lib64 -lefagda -lcudart -lcuda libfabtests.la
-export prefix
-install-efagda:
-	$(MAKE) -C prov/efa/src/efagda install prefix=$(prefix)
+prov_efa_src_fi_efa_gda_LDFLAGS = -L$(srcdir)/prov/efa/src/efagda -L$(EFA_DP_DIRECT)/CUDA/build \
+    -Wl,-rpath=$(abs_srcdir)/prov/efa/src/efagda -Wl,-rpath=$(EFA_DP_DIRECT)/CUDA/build
+prov_efa_src_fi_efa_gda_LDADD = -lefagda -lefacudadp -L/usr/local/cuda/lib64 -lcudart -lcuda libfabtests.la
+EXTRA_prov_efa_src_fi_efa_gda_DEPENDENCIES = $(srcdir)/prov/efa/src/efagda/libefagda.so
+
+$(srcdir)/prov/efa/src/efagda/libefagda.so:
+	$(MAKE) -C $(srcdir)/prov/efa/src/efagda EFA_DP_DIRECT=$(EFA_DP_DIRECT)
+
+clean-local:
+	$(MAKE) -C $(srcdir)/prov/efa/src/efagda EFA_DP_DIRECT=$(EFA_DP_DIRECT) clean
 endif EFAGDA
 
 EXTRA_DIST += prov/efa/src/efagda
+
+prov_efa_src_fi_efa_hw_cntr_SOURCES = \
+	prov/efa/src/efa_hw_cntr_test.c \
+	$(benchmarks_srcs)
+prov_efa_src_fi_efa_hw_cntr_LDADD = libfabtests.la
 
 endif HAVE_VERBS_DEVEL
 endif ENABLE_EFA

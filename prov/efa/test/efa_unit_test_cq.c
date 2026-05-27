@@ -2542,3 +2542,35 @@ void test_efa_rdm_cq_sread_with_cqe(struct efa_resource **state)
 	assert_int_equal(cq_entry.data, write_entry.data);
 }
 
+
+/**
+ * @brief Verify that fi_close(cq) returns -FI_EBUSY when an endpoint is still bound
+ *
+ * The CQ should not be destroyed while an endpoint holds a reference.
+ * After closing the endpoint, the CQ close should succeed.
+ */
+void test_efa_cq_close_returns_ebusy_with_bound_ep(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_cq *efa_cq;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
+
+	/* Try to close CQ while ep is still bound - should fail */
+	ret = fi_close(&resource->cq->fid);
+	assert_int_equal(ret, -FI_EBUSY);
+
+	/* Verify ibv_cq is still valid */
+	assert_non_null(efa_cq->ibv_cq.ibv_cq_ex);
+
+	/* Close ep first, then CQ should succeed */
+	fi_close(&resource->ep->fid);
+	resource->ep = NULL;
+
+	ret = fi_close(&resource->cq->fid);
+	assert_int_equal(ret, 0);
+	resource->cq = NULL;
+}

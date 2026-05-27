@@ -10,15 +10,22 @@ import groovy.transform.Field
 @Field boolean build_ok = true
 @Field def venv_path = "/tmp/venv"
 @Field def portafiducia_path = "/tmp/PortaFiducia"
+@Field def subspace_nightly_tests_path = "/tmp/SubspaceNightlyTests"
+@Field def samwise_test_runner_path = "/tmp/SamwiseTestRunner"
+@Field def samwise_test_schema_path = "/tmp/SamwiseTestSchema"
 
+
+def get_account_id() {
+    return sh (
+        script: "aws sts get-caller-identity --query Account --output text | tr -dc 0-9",
+        returnStdout: true
+    )
+}
 
 def get_portafiducia_download_path() {
     /* Stable Portafiducia tarball */
-    def AWS_ACCOUNT_ID = sh (
-                script: "aws sts get-caller-identity --query Account --output text | tr -dc 0-9",
-                returnStdout: true
-              )
-    return "s3://libfabric-ci-$AWS_ACCOUNT_ID-us-west-2/portafiducia/portafiducia.tar.gz"
+    def AWS_ACCOUNT_ID = get_account_id()
+    return "s3://libfabric-ci-${AWS_ACCOUNT_ID}-us-west-2/portafiducia/portafiducia.tar.gz"
 }
 
 def download_and_extract_portafiducia(outputDir) {
@@ -29,6 +36,9 @@ def download_and_extract_portafiducia(outputDir) {
         mkdir -p ${outputDir}
         aws s3 cp ${downloadPath} ${tempPath}
         tar xf ${tempPath} -C ${outputDir}
+        echo '----- PortaFiducia version -----'
+        cat ${outputDir}/portafiducia_version.log
+        echo '--------------------------------'
     """
 }
 
@@ -43,6 +53,33 @@ def install_porta_fiducia() {
         pip install --upgrade awscli
         pip install -e ${portafiducia_path}
     """
+}
+
+def get_testing_packages_download_path() {
+    def AWS_ACCOUNT_ID = get_account_id()
+    return "s3://libfabric-ci-tests-${AWS_ACCOUNT_ID}-us-west-2/"
+}
+
+def download_testing_package(String s3Folder, String localDir) {
+    def s3Base = get_testing_packages_download_path()
+    try {
+        sh "mkdir -p ${localDir} && aws s3 cp ${s3Base}${s3Folder}/ ${localDir}/ --recursive"
+    } catch (Exception e) {
+        unstable("Failed to download ${s3Folder}: ${e.getMessage()}")
+    }
+}
+
+// S3 folder names use hyphens; --test-suite-package flag uses underscores.
+// Keep these two forms in sync.
+def download_all_testing_packages() {
+    def packages = [
+        ['subspace-nightly-tests', subspace_nightly_tests_path],
+        ['samwise-test-runner', samwise_test_runner_path],
+        ['samwise-test-schema', samwise_test_schema_path],
+    ]
+    packages.each { pkg ->
+        download_testing_package(pkg[0], pkg[1])
+    }
 }
 
 def kill_all_clusters(instance_type, region) {
@@ -286,33 +323,33 @@ pipeline {
 
             }
         }
+        stage("Install Testing suites") {
+            when { not { environment name: 'SKIP_TESTS', value: 'true' } }
+            steps {
+                script {
+                    download_all_testing_packages()
+                }
+            }
+        }
         stage("Test EFA provider") {
             when { not { environment name: 'SKIP_TESTS', value: 'true' } }
             steps {
                 script {
                     def stages = [:]
-                    def timeout = "--timeout 300"
-                    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID"
-                    // onesided tests are covered by imb, collective tests are covered by omb
-                    def mpi_collective_tests = "'test_omb and not onesided'"
-                    def libfabric_tests = "test_efa_ut test_fabtests_functional test_fork_support test_backward_compatibility 'test_fabtests_performance and lttng'"
-                    def one_sided_tests = "'test_imb and not collective'"
-                    def libfabric_and_onesided_tests = "${libfabric_tests} ${one_sided_tests}"
-                    def efa_direct_tests = "test_efa_ut 'test_fabtests_functional and efa-direct'"
-                    def nccl_functional_tests = "test_ofi_nccl_functional_tests"
+                    def timeout = "--timeout 90"
+                    def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
+                    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID ${test_suite_pkg}"
+                    def pr_ci_tests = "--test-list test_pr_ci_fabtests test_run_efa_unit_tests"
+                    def pr_ci_tests_hpc = "--test-list test_pr_ci_fabtests test_pr_ci_imb test_run_efa_unit_tests"
 
                     def efa_provider = "--test-libfabric-provider efa"
-                    def addl_args_efa_libfabric_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests}"
-                    def addl_args_efa_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests}"
-                    def addl_args_efa_libfabric_mpi_nccl = "${timeout} ${generic_pf} ${efa_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests} ${nccl_functional_tests}"
-                    def addl_args_efa_libfabric_and_onesided_mpi = "${timeout} ${generic_pf} ${efa_provider} --test-list ${libfabric_and_onesided_tests}"
-                    def addl_args_efa_direct = "${timeout} ${generic_pf} ${efa_provider} --test-list ${efa_direct_tests}"
-
-                    def shm_provider = "--test-libfabric-provider shm"
-                    def addl_args_shm = "${timeout} ${generic_pf} ${shm_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests}"
-
+                    def shm_provider = "--test-libfabric-provider shm --enable-efa false"
                     def tcp_provider = "--test-libfabric-provider tcp --enable-efa false"
-                    def addl_args_tcp = "${timeout} ${generic_pf} ${tcp_provider} --test-list ${mpi_collective_tests} ${libfabric_and_onesided_tests}"
+
+                    def addl_args_efa = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests}"
+                    def addl_args_efa_hpc = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests_hpc}"
+                    def addl_args_shm = "${timeout} ${generic_pf} ${shm_provider} ${pr_ci_tests}"
+                    def addl_args_tcp = "${timeout} ${generic_pf} ${tcp_provider} ${pr_ci_tests}"
 
                     // Use lockable resources to limit the number of jobs that can get executed in parallel
                     def g4dn8x_lock_label = "g4dn8x"
@@ -325,53 +362,40 @@ pipeline {
                     def trn132x_lock_label  = "trn132x"
 
                     // Single Node Tests - EFA
-                    stages["1_g4dn_alinux2-efa"] = get_test_stage_with_lock("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi_nccl)
-                    stages["1_g4dn_alinux2023-efa"] = get_test_stage_with_lock("1_g4dn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi_nccl)
-                    stages["1_g4dn_ubuntu2204-efa"] = get_test_stage_with_lock("1_g4dn_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa_libfabric_mpi_nccl)
-                    stages["1_g4dn_rhel8-efa"] = get_test_stage_with_lock("1_g4dn_rhel8_efa", env.BUILD_TAG, "rhel8", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_efa_libfabric_mpi)
+                    stages["1_g4dn_alinux2-efa"] = get_test_stage_with_lock("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa)
+                    stages["1_g4dn_alinux2023-efa"] = get_test_stage_with_lock("1_g4dn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa)
+                    stages["1_g4dn_ubuntu2204-efa"] = get_test_stage_with_lock("1_g4dn_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa)
+                    stages["1_g4dn_rhel8-efa"] = get_test_stage_with_lock("1_g4dn_rhel8_efa", env.BUILD_TAG, "rhel8", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_efa)
 
                     // Single Node Tests - SHM
                     stages["1_g4dn_alinux2_shm"] = get_test_stage_with_lock("1_g4dn_alinux2_shm", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_shm)
                     stages["1_g4dn_alinux2023_shm"] = get_test_stage_with_lock("1_g4dn_alinux2023_shm", env.BUILD_TAG, "alinux2023", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_shm)
                     stages["1_g4dn_ubuntu2204_shm"] = get_test_stage_with_lock("1_g4dn_ubuntu2204_shm", env.BUILD_TAG, "ubuntu2204", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_shm)
-                    stages["1_c5_rhel8_shm"] = get_test_stage_with_lock("1_c5_rhel8_shm", env.BUILD_TAG, "rhel8", "c5.2xlarge", 1, "us-east-1", c52x_lock_label, addl_args_shm + " --enable-efa false")
-                    stages["1_c5_ubuntu2204_shm_disable-cma"] = get_test_stage_with_lock("1_c5_ubuntu2204_shm_disable-cma", env.BUILD_TAG, "ubuntu2204", "c5.2xlarge", 1, "us-east-1", c52x_lock_label, addl_args_shm + " --enable-cma false --enable-efa false")
+                    stages["1_c5_rhel8_shm"] = get_test_stage_with_lock("1_c5_rhel8_shm", env.BUILD_TAG, "rhel8", "c5.2xlarge", 1, "us-east-1", c52x_lock_label, addl_args_shm)
+                    stages["1_c5_ubuntu2204_shm_disable-cma"] = get_test_stage_with_lock("1_c5_ubuntu2204_shm_disable-cma", env.BUILD_TAG, "ubuntu2204", "c5.2xlarge", 1, "us-east-1", c52x_lock_label, addl_args_shm + " --enable-cma false")
 
                     // Single Node Windows Test
                     stages["EFA_Windows_Test"] = get_single_node_windows_test_stage_with_lock("EFA_Windows_Test", c5n18x_lock_label)
 
                     // Multi Node Tests - EFA
-                    stages["2_hpc6a_alinux2_efa_mpi"] = get_test_stage_with_lock("2_hpc6a_alinux2_efa_mpi", env.BUILD_TAG, "alinux2", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_mpi)
-                    stages["2_hpc6a_alinux2_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_hpc6a_alinux2_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
-                    stages["2_hpc6a_alinux2023_efa_mpi"] = get_test_stage_with_lock("2_hpc6a_alinux2023_efa_mpi", env.BUILD_TAG, "alinux2023", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_mpi)
-                    stages["2_hpc6a_alinux2023_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_hpc6a_alinux2023_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2023", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
-                    stages["2_c7gn_alinux2023_efa_mpi"] = get_test_stage_with_lock("2_c7gn_alinux2023_efa_mpi", env.BUILD_TAG, "alinux2023", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_mpi)
-                    stages["2_c7gn_alinux2023_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_c7gn_alinux2023_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2023", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
-                    stages["2_c5n_alinux2_efa_mpi"] = get_test_stage_with_lock("2_c5n_alinux2_efa_mpi", env.BUILD_TAG, "alinux2", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa_mpi)
-                    stages["2_c5n_alinux2_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_c5n_alinux2_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
-                    stages["2_c5n_alinux2023_efa_mpi"] = get_test_stage_with_lock("2_c5n_alinux2023_efa_mpi", env.BUILD_TAG, "alinux2023", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa_mpi)
-                    stages["2_c5n_alinux2023_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_c5n_alinux2023_efa_libfabric_and_one_sided", env.BUILD_TAG, "alinux2023", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
-                    stages["2_hpc6a_ubuntu2204_efa_mpi"] = get_test_stage_with_lock("2_hpc6a_ubuntu2204_efa_mpi", env.BUILD_TAG, "ubuntu2204", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_mpi)
-                    stages["2_hpc6a_ubuntu2204_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_hpc6a_ubuntu2204_efa_libfabric_and_one_sided", env.BUILD_TAG, "ubuntu2204", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
-                    stages["2_hpc6a_rhel8_efa_mpi"] = get_test_stage_with_lock("2_hpc6a_rhel8_efa_mpi", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_mpi)
-                    stages["2_hpc6a_rhel8_efa_libfabric_and_one_sided"] = get_test_stage_with_lock("2_hpc6a_rhel8_efa_libfabric_and_one_sided", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_libfabric_and_onesided_mpi)
-                    def addl_args_trn1_odcr_efa_direct = " --odcr cr-097fd3374f511c972 ${addl_args_efa_direct}"
-                    stages["2_trn1_ubuntu2204_efa_direct"] = get_test_stage_with_lock("2_trn1_ubuntu2204_efa_direct", env.BUILD_TAG, "ubuntu2204", "trn1.32xlarge", 2, "us-west-2", trn132x_lock_label, addl_args_trn1_odcr_efa_direct)
+                    stages["2_hpc6a_alinux2_efa"] = get_test_stage_with_lock("2_hpc6a_alinux2_efa", env.BUILD_TAG, "alinux2", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
+                    stages["2_hpc6a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc6a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
+                    stages["2_c7gn_alinux2023_efa"] = get_test_stage_with_lock("2_c7gn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa)
+                    stages["2_c5n_alinux2_efa"] = get_test_stage_with_lock("2_c5n_alinux2_efa", env.BUILD_TAG, "alinux2", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa)
+                    stages["2_c5n_alinux2023_efa"] = get_test_stage_with_lock("2_c5n_alinux2023_efa", env.BUILD_TAG, "alinux2023", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa)
+                    stages["2_hpc6a_ubuntu2204_efa"] = get_test_stage_with_lock("2_hpc6a_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
+                    stages["2_hpc6a_rhel8_efa"] = get_test_stage_with_lock("2_hpc6a_rhel8_efa", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
+                    def addl_args_trn1_odcr_efa = " --odcr cr-097fd3374f511c972 ${addl_args_efa}"
+                    stages["2_trn1_ubuntu2204_efa"] = get_test_stage_with_lock("2_trn1_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "trn1.32xlarge", 2, "us-west-2", trn132x_lock_label, addl_args_trn1_odcr_efa)
 
-                    // c7gn AL2 builds are the slowest b/c they have asan turned on with debug, and have slower memcpy speeds
-                    // split "libfabric tests" into "fabtests", and imb
-                    def addl_args_efa_one_sided_only = "${timeout} ${generic_pf} ${efa_provider} --test-list ${one_sided_tests}"
-                    def addl_args_efa_libfabric_only = "${timeout} ${generic_pf} ${efa_provider} --test-list ${libfabric_tests}"
-                    stages["2_c7gn_alinux2_efa_mpi"] = get_test_stage_with_lock("2_c7gn_alinux2_efa_mpi", env.BUILD_TAG, "alinux2", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_mpi)
-                    stages["2_c7gn_alinux2_efa_one_sided"] = get_test_stage_with_lock("2_c7gn_alinux2_efa_one_sided", env.BUILD_TAG, "alinux2", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_one_sided_only)
-                    stages["2_c7gn_alinux2_efa_libfabric"] = get_test_stage_with_lock("2_c7gn_alinux2_efa_libfabric", env.BUILD_TAG, "alinux2", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa_libfabric_only)
+                    stages["2_c7gn_alinux2_efa"] = get_test_stage_with_lock("2_c7gn_alinux2_efa", env.BUILD_TAG, "alinux2", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa)
 
                     // Multi Node Tests - TCP
                     stages["2_c6g_alinux2_tcp"] = get_test_stage_with_lock("2_c6g_alinux2_tcp", env.BUILD_TAG, "alinux2", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
                     stages["2_c6g_alinux2023_tcp"] = get_test_stage_with_lock("2_c6g_alinux2023_tcp", env.BUILD_TAG, "alinux2023", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
                     stages["2_c6g_ubuntu2204_tcp"] = get_test_stage_with_lock("2_c6g_ubuntu2204_tcp", env.BUILD_TAG, "ubuntu2204", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
                     stages["2_c6g_rhel8_tcp"] = get_test_stage_with_lock("2_c6g_rhel8_tcp", env.BUILD_TAG, "rhel8", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
-                    stages["3_g4dn_alinux2_tcp"] = get_test_stage_with_lock("3_g4dn_alinux2_tcp", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 3, "us-east-1", g4dn12x_lock_label, addl_args_tcp + " --test-list test_nccl_tests --test-iterations fastest")
+                    stages["3_g4dn_alinux2_tcp"] = get_test_stage_with_lock("3_g4dn_alinux2_tcp", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 3, "us-east-1", g4dn12x_lock_label, addl_args_tcp)
 
                     parallel stages
                 }
