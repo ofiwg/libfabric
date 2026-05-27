@@ -175,7 +175,9 @@ provider for AWS Neuron or Habana SynapseAI.
   revisions.
 
 *FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES - bool*
-: This option only applies to the fi_setopt() call.
+: This option only applies to the fi_setopt() call on efa-direct endpoints.
+  RDM endpoints on the efa fabric do not support this option and fi_setopt()
+  will return -FI_EOPNOTSUPP for them.
   It is used to force the endpoint to use in-order send/recv operation for each 128 bytes
   aligned block. Enabling the option will guarantee data inside each 128 bytes
   aligned block being sent and received in order, it will also guarantee data
@@ -184,7 +186,9 @@ provider for AWS Neuron or Habana SynapseAI.
 
 
 *FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES - bool*
-: This option only applies to the fi_setopt() call.
+: This option only applies to the fi_setopt() call on efa-direct endpoints.
+  RDM endpoints on the efa fabric do not support this option and fi_setopt()
+  will return -FI_EOPNOTSUPP for them from v2.6.x onwards.
   It is used to set the endpoint to use in-order RDMA write operation for each 128 bytes
   aligned block. Enabling the option will guarantee data inside each 128 bytes
   aligned block being written in order, it will also guarantee data to be

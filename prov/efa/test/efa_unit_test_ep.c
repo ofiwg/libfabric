@@ -921,62 +921,53 @@ void test_efa_rdm_ep_setopt_homogeneous_peers(struct efa_resource **state)
 }
 
 /**
- * @brief Test fi_enable with different optval of fi_setopt for
- * FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES optname.
+ * @brief Test fi_setopt for FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES on
+ * RDM endpoints.
+ *
+ * The 128-byte once-only-delivery guarantee is supported only on
+ * efa-direct endpoints; the RDM provider rejects the option
+ * unconditionally with -FI_EOPNOTSUPP, regardless of underlying
+ * device capability or the requested optval. The `*_good` and
+ * `*_bad` wrappers exercise both optval paths under separate
+ * cmocka setup/teardown so each test gets a fresh endpoint and
+ * neither leaks resources from the other.
+ *
  * @param state struct efa_resource that is managed by the framework
- * @param expected_status expected return status of fi_enable
  * @param optval the optval passed to fi_setopt
  */
-void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(struct efa_resource **state, int expected_status, bool optval)
+void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(struct efa_resource **state, bool optval)
 {
 	struct efa_resource *resource = *state;
 
 	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
-	/* fi_setopt should always succeed */
 	assert_int_equal(fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
 				   FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES, &optval,
-				   sizeof(optval)), expected_status);
+				   sizeof(optval)),
+			 -FI_EOPNOTSUPP);
 }
 
-#if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
 /**
- * @brief Test the case where fi_enable should return success
+ * @brief Verify RDM rejects FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES
+ *        with optval=true.
  *
  * @param state struct efa_resource that is managed by the framework
  */
 void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_good(struct efa_resource **state)
 {
-	/* mock ibv_query_qp_data_in_order to return required capability */
-	g_efa_unit_test_mocks.ibv_query_qp_data_in_order = &efa_mock_ibv_query_qp_data_in_order_return_in_order_aligned_128_bytes;
-	test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(state, FI_SUCCESS, true);
+	test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(state, true);
 }
 
 /**
- * @brief Test the case where fi_enable should return -FI_EOPNOTSUPP
+ * @brief Verify RDM rejects FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES
+ *        with optval=false.
  *
  * @param state struct efa_resource that is managed by the framework
  */
 void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(struct efa_resource **state)
 {
-	/* mock ibv_query_qp_data_in_order to return zero capability */
-	g_efa_unit_test_mocks.ibv_query_qp_data_in_order = &efa_mock_ibv_query_qp_data_in_order_return_0;
-	test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(state, -FI_EOPNOTSUPP, true);
+	test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(state, false);
 }
-
-#else
-
-void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_good(struct efa_resource **state)
-{
-	test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(state, FI_SUCCESS, false);
-}
-
-void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(struct efa_resource **state)
-{
-	test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(state, -FI_EOPNOTSUPP, true);
-}
-
-#endif
 
 /**
  * @brief [Backwards compat] Verify that when zero-copy conditions are met,

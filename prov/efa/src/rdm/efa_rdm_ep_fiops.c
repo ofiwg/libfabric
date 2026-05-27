@@ -1789,25 +1789,17 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 			return ret;
 		break;
 	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
-		if (optlen != sizeof(bool))
-			return -FI_EINVAL;
-		/**
-		 * TODO: support this option after we fix the data copy atomicity
-		 * for general memory types of rx buffer
-		 */
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES is currently not supported\n");
-		return -FI_EOPNOTSUPP;
 	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
-		if (*(bool *)optval) {
-			ret = efa_base_ep_check_qp_in_order_aligned_128_bytes(&efa_rdm_ep->base_ep, IBV_WR_RDMA_WRITE);
-			if (ret)
-				return ret;
-		}
-		efa_rdm_ep->write_in_order_aligned_128_bytes = *(bool *)optval;
-		break;
+		/*
+		 * The 128-byte once-only-delivery guarantee is supported
+		 * only on efa-direct endpoints from v2.6.x onwards.
+		 */
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"In-order aligned 128-byte options are only supported "
+			"on efa-direct endpoints\n");
+		return -FI_EOPNOTSUPP;
 	case FI_OPT_EFA_HOMOGENEOUS_PEERS:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
