@@ -39,6 +39,7 @@ _efa_files = \
 	prov/efa/src/efa_conn.c \
 	prov/efa/src/rdm/efa_rdm_domain.c \
 	prov/efa/src/efa_domain.c \
+	prov/efa/src/efa_domain_util.c \
 	prov/efa/src/efa_fabric.c \
 	prov/efa/src/efa_mr.c \
 	prov/efa/src/efa_strerror.c \
@@ -97,6 +98,7 @@ _efa_headers = \
 	prov/efa/src/efa_hmem.h \
 	prov/efa/src/efa_device.h \
 	prov/efa/src/efa_domain.h \
+	prov/efa/src/efa_domain_util.h \
 	prov/efa/src/efa_errno.h \
 	prov/efa/src/efa_user_info.h \
 	prov/efa/src/efa_prov_info.h \
