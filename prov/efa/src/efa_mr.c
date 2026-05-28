@@ -13,6 +13,41 @@
 static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr_fid);
 
+			  /**
+ * @brief Allocate a struct efa_mr from the domain MR pool.
+ *
+ * Serializes the bufpool access under util_domain.lock.
+ *
+ * @param[in] efa_domain  Domain whose mr_pool backs the allocation.
+ * @return Pointer to the allocated struct efa_mr, or NULL on failure.
+ */
+struct efa_mr *efa_mr_alloc(struct efa_domain *efa_domain)
+{
+	struct efa_mr *efa_mr;
+
+	ofi_genlock_lock(&efa_domain->util_domain.lock);
+	efa_mr = ofi_buf_alloc(efa_domain->mr_pool);
+	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+
+	return efa_mr;
+}
+
+/**
+ * @brief Return a struct efa_mr to the domain MR pool.
+ *
+ * Serializes the bufpool access under util_domain.lock.
+ *
+ * @param[in] efa_mr  Pointer to the struct efa_mr to release.
+ */
+void efa_mr_free(struct efa_mr *efa_mr)
+{
+	struct efa_domain *efa_domain = efa_mr->domain;
+
+	ofi_genlock_lock(&efa_domain->util_domain.lock);
+	ofi_buf_free(efa_mr);
+	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+}
+
 /* Common validation for MR registration attributes */
 int efa_mr_regattr_validate(struct fid *fid, const struct fi_mr_attr *attr,
 				   uint64_t flags)
@@ -239,7 +274,9 @@ static int efa_mr_close(fid_t fid)
 	ret = efa_mr_dereg_impl(efa_mr);
 	if (ret)
 		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to close efa_mr", -ret);
-	free(efa_mr);
+
+	efa_mr_free(efa_mr);
+
 	return ret;
 }
 
@@ -546,11 +583,12 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EOPNOTSUPP;
 	}
 
-	efa_mr = calloc(1, sizeof(*efa_mr));
+	efa_mr = efa_mr_alloc(domain);
 	if (!efa_mr) {
-		EFA_WARN(FI_LOG_MR, "Unable to initialize md\n");
+		EFA_WARN(FI_LOG_MR, "Unable to allocate mr\n");
 		return -FI_ENOMEM;
 	}
+	memset(efa_mr, 0, sizeof(*efa_mr));
 
 	efa_mr->domain = domain;
 	efa_mr->mr_fid.fid.fclass = FI_CLASS_MR;
@@ -568,10 +606,13 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto err;
 
 	*mr_fid = &efa_mr->mr_fid;
+
 	return 0;
 err:
 	EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to register efa_mr", -ret);
-	free(efa_mr);
+
+	efa_mr_free(efa_mr);
+
 	return ret;
 }
 
