@@ -424,11 +424,12 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 	int completed = 0;
 	struct timespec a, b;
 
-	clock_gettime(CLOCK_REALTIME, &a);
+	clock_gettime(CLOCK_MONOTONIC, &a);
 	if (topts.shared_cq) {
-		memcpy(&b, &a, sizeof(b));
-		b.tv_sec += timeout;
-		ret = pthread_mutex_timedlock(&shared_cq_lock, &b);
+		struct timespec timed_mutex_deadline;
+		clock_gettime(CLOCK_REALTIME, &timed_mutex_deadline);
+		timed_mutex_deadline.tv_sec += timeout;
+		ret = pthread_mutex_timedlock(&shared_cq_lock, &timed_mutex_deadline);
 		if (ret == ETIMEDOUT) {
 			fprintf(stderr,
 				"%ds timeout expired while waiting for shared CQ lock\n",
