@@ -17,7 +17,7 @@ coverage:
 comment:
   layout: "reach,diff,flags,files"
   behavior: default
-  require_changes: true
+  require_changes: false
 
 ignore:
   - "prov/efa/test/**"
