@@ -172,7 +172,7 @@ static struct fi_ops_ep smr_ep_ops = {
 static void smr_send_name(struct smr_ep *ep, int64_t id)
 {
 	struct smr_region *peer_smr;
-	struct smr_cmd_entry *ce;
+	struct smr_cmd *cmd;
 	int64_t pos;
 	int ret;
 
@@ -181,20 +181,19 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 	if (smr_peer_data(ep->region)[id].name_sent)
 		return;
 
-	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
+	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &cmd, &pos);
 	if (ret == -FI_ENOENT)
 		return;
 
-	ce->ptr = smr_peer_to_peer(ep, peer_smr, id, (uintptr_t) &ce->cmd);
-	ce->cmd.hdr.op = SMR_OP_MAX + ofi_ctrl_connreq;
-	ce->cmd.hdr.tx_id = id;
-	ce->cmd.hdr.cq_data = ep->region->pid;
+	cmd->hdr.op = SMR_OP_MAX + ofi_ctrl_connreq;
+	cmd->hdr.tx_id = id;
+	cmd->hdr.cq_data = ep->region->pid;
 
-	ce->cmd.hdr.size = strlen(ep->name) + 1;
-	memcpy(ce->cmd.data.msg, ep->name, ce->cmd.hdr.size);
+	cmd->hdr.size = strlen(ep->name) + 1;
+	memcpy(cmd->data.msg, ep->name, cmd->hdr.size);
 
 	smr_peer_data(ep->region)[id].name_sent = 1;
-	smr_cmd_queue_commit(ce, pos);
+	smr_cmd_queue_commit(cmd, pos);
 }
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)

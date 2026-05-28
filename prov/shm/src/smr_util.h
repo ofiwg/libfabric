@@ -61,11 +61,11 @@ extern struct smr_env smr_env;
 /* SMR_CMD_SIZE refers to the total bytes dedicated for use in shm headers and
  * data. The entire atomic queue entry will be cache aligned (384) but this also
  * includes the cmd aq header (16) + cmd entry ptr (8)
- * 384 (total entry size) - 16 (aq header) - 8 (entry ptr) = 360
+ * 384 (total entry size) - 16 (aq header) = 368
  * This maximizes the inline payload. Increasing this value will increase the
  * atomic queue entry to 448 bytes.
  */
-#define SMR_CMD_SIZE		360
+#define SMR_CMD_SIZE		368
 
 /* reserves 0-255 for defined ops and room for new ops
  * 256 and beyond reserved for ctrl ops
@@ -111,6 +111,7 @@ enum {
  *	rx_ctx		target side context (unused by source side)
  */
 struct smr_cmd_hdr {
+	uint64_t		entry;
 	uint8_t			op;
 	uint8_t			proto;
 	uint8_t			smr_flags;
@@ -128,7 +129,6 @@ struct smr_cmd_hdr {
 	};
 	uint64_t		proto_data;
 	//CACHE LINE HERE - See comment above
-	uint64_t		entry;
 	uint64_t		tx_ctx;
 	uint64_t		rx_ctx;
 };
@@ -303,16 +303,11 @@ struct smr_sar_buf {
 	uint8_t		buf[SMR_SAR_SIZE];
 };
 
-struct smr_cmd_entry {
-	uintptr_t	ptr;
-	struct smr_cmd	cmd;
-};
-
 struct smr_return_entry {
 	uintptr_t ptr;
 };
 
-OFI_DECLARE_ATOMIC_Q(struct smr_cmd_entry, smr_cmd_queue);
+OFI_DECLARE_ATOMIC_Q(struct smr_cmd, smr_cmd_queue);
 OFI_DECLARE_ATOMIC_Q(struct smr_return_entry, smr_return_queue);
 
 /* Queue of offsets of the command blocks obtained from the command pool

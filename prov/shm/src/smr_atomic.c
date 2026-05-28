@@ -184,8 +184,7 @@ static ssize_t smr_generic_atomic(
 			enum fi_op atomic_op, void *context, uint32_t op,
 			uint64_t op_flags)
 {
-	struct smr_cmd_entry *ce;
-	struct smr_cmd *cmd;
+	struct smr_cmd *ce, *cmd;
 	struct smr_region *peer_smr;
 	struct iovec iov[SMR_IOV_LIMIT];
 	struct iovec compare_iov[SMR_IOV_LIMIT];
@@ -274,10 +273,10 @@ static ssize_t smr_generic_atomic(
 
 		cmd = smr_freestack_pop(smr_cmd_stack(ep->region));
 		assert(cmd);
-		ce->ptr = smr_local_to_peer(ep, peer_smr, tx_id, rx_id,
-					(uintptr_t) cmd);
+		ce->hdr.entry = smr_local_to_peer(ep, peer_smr, tx_id, rx_id,
+						  (uintptr_t) cmd);
 	} else {
-		cmd = &ce->cmd;
+		cmd = ce;
 	}
 
 	if (proto == smr_proto_inline) {
@@ -382,7 +381,6 @@ static ssize_t smr_atomic_inject(
 			fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op)
 {
-	struct smr_cmd_entry *ce;
 	struct smr_cmd *cmd;
 	struct smr_ep *ep;
 	struct smr_region *peer_smr;
@@ -415,7 +413,7 @@ static ssize_t smr_atomic_inject(
 		goto unlock;
 	}
 
-	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
+	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &cmd, &pos);
 	if (ret == -FI_ENOENT) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -431,24 +429,23 @@ static ssize_t smr_atomic_inject(
 	rma_ioc.count = count;
 	rma_ioc.key = key;
 
-	cmd = &ce->cmd;
 	if (total_len <= SMR_MSG_DATA_LEN) {
 		smr_do_atomic_inline(ep, peer_smr, id, peer_id, ofi_op_atomic,
 				     0, datatype, op, NULL, &iov, 1, total_len,
-				     &ce->cmd);
+				     cmd);
 	} else {
 		ret = smr_do_atomic_inject(ep, peer_smr, id, peer_id,
 					   ofi_op_atomic, 0, datatype, op, NULL,
 					   &iov, 1, NULL, NULL, 0, NULL, NULL,
 					   0, total_len, NULL, 0, cmd);
 		if (ret) {
-			smr_cmd_queue_discard(ce, pos);
+			smr_cmd_queue_discard(cmd, pos);
 			goto unlock;
 		}
 	}
 
 	smr_format_rma_ioc(cmd, &rma_ioc, 1);
-	smr_cmd_queue_commit(ce, pos);
+	smr_cmd_queue_commit(cmd, pos);
 	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_atomic);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);

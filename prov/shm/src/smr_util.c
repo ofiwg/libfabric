@@ -180,8 +180,8 @@ err:
 
 static inline void smr_cmd_init(void *buf)
 {
-	struct smr_cmd_entry *ce = buf;
-	ce->ptr = (uintptr_t) &ce->cmd;
+	struct smr_cmd *cmd = buf;
+	cmd->hdr.entry = (uintptr_t) cmd;
 }
 
 /* TODO: Determine if aligning SMR data helps performance */

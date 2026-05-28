@@ -1313,8 +1313,7 @@ out:
 
 static void smr_progress_cmd(struct smr_ep *ep)
 {
-	struct smr_cmd_entry *ce;
-	struct smr_cmd *cmd;
+	struct smr_cmd *ce, *cmd;
 	int ret = 0;
 	int64_t pos;
 
@@ -1323,7 +1322,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 		if (ret == -FI_ENOENT)
 			break;
 
-		cmd = (struct smr_cmd *) ce->ptr;
+		cmd = (struct smr_cmd *) ce->hdr.entry;
 		switch (cmd->hdr.op) {
 		case ofi_op_msg:
 		case ofi_op_tagged:
