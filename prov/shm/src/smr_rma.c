@@ -106,12 +106,21 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 
 static inline bool smr_do_fast_rma(struct smr_ep *ep, uint64_t op_flags,
 				   size_t rma_count, size_t total_len,
-				   struct smr_region *peer_smr)
+				   struct smr_region *peer_smr, uint32_t op)
 {
 	struct smr_domain *domain;
 
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
+
+	/* For reads, sender-side CMA is safe at all sizes: delivery is
+	 * inherently complete when process_vm_readv returns (data is in
+	 * local buffer), and the target memory is always a registered MR
+	 * with pinned pages. */
+	if (op == ofi_op_read_req && total_len <= SMR_INJECT_SIZE)
+		return domain->fast_rma &&
+		       !(op_flags & FI_REMOTE_CQ_DATA) &&
+		       rma_count == 1 && smr_vma_enabled(ep, peer_smr);
 
 	return domain->fast_rma && !(op_flags &
 		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
@@ -152,7 +161,7 @@ static ssize_t smr_generic_rma(
 		goto unlock;
 
 	total_len = ofi_total_iov_len(iov, iov_count);
-	if (smr_do_fast_rma(ep, op_flags, rma_count, total_len, peer_smr)) {
+	if (smr_do_fast_rma(ep, op_flags, rma_count, total_len, peer_smr, op)) {
 		ret = smr_rma_fast(ep, peer_smr, iov, iov_count, rma_iov,
 				   rma_count, desc, rx_id, tx_id, context, op,
 				   op_flags);
