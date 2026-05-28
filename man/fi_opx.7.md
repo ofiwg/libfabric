@@ -264,7 +264,15 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_RZV_MIN_PAYLOAD_BYTES*
 : Integer. The minimum length in bytes where rendezvous will be used.
   For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager.
-  Value must be between 64 and 65536. Defaults to 16385.
+  Value must be between 64 and 65536.
+  The default, which applies to all memory types, is selected at build time based on the device-memory (HMEM) backend
+  that OPX was configured with:
+
+  - 4096  — HMEM builds with CUDA support
+  - 8192  — HMEM builds with AMD ROCR support
+  - 16385 — host-only builds (one byte above the multi-packet eager maximum),
+    which effectively disables rendezvous for any payload that fits in
+    multi-packet eager.
 
 *FI_OPX_MP_EAGER_DISABLE*
 : Boolean (1/0, on/off, true/false, yes/no). Disables multi-packet eager. Defaults to 0.
