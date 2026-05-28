@@ -168,8 +168,7 @@ static ssize_t smr_generic_atomic(
 			enum fi_op atomic_op, void *context, uint32_t op,
 			uint64_t op_flags)
 {
-	struct smr_cmd_entry *ce;
-	struct smr_cmd *cmd;
+	struct smr_cmd *ce, *cmd;
 	struct smr_region *peer_smr;
 	struct iovec iov[SMR_IOV_LIMIT];
 	struct iovec compare_iov[SMR_IOV_LIMIT];
@@ -251,7 +250,7 @@ static ssize_t smr_generic_atomic(
 	proto = smr_select_atomic_proto(op, total_len, op_flags);
 
 	if (proto == smr_proto_inline) {
-		cmd = &ce->cmd;
+		cmd = ce;
 		smr_do_atomic_inline(ep, peer_smr, tx_id, rx_id, ofi_op_atomic,
 				     op_flags, datatype, atomic_op,
 				     (struct ofi_mr **) desc, iov, count,
@@ -265,8 +264,8 @@ static ssize_t smr_generic_atomic(
 
 		cmd = smr_freestack_pop(smr_cmd_stack(ep->region));
 		assert(cmd);
-		ce->ptr = smr_local_to_peer(ep, peer_smr, tx_id, rx_id,
-					    (uintptr_t) cmd);
+		ce->hdr.entry = smr_local_to_peer(ep, peer_smr, tx_id, rx_id,
+						  (uintptr_t) cmd);
 		ret = smr_do_atomic_inject(ep, peer_smr, tx_id, rx_id, op,
 					   op_flags, datatype, atomic_op,
 					   (struct ofi_mr **) desc, iov, count,
@@ -362,8 +361,7 @@ static ssize_t smr_atomic_inject(
 			fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 			enum fi_datatype datatype, enum fi_op op)
 {
-	struct smr_cmd_entry *ce;
-	struct smr_cmd *cmd;
+	struct smr_cmd *ce, *cmd;
 	struct smr_ep *ep;
 	struct smr_region *peer_smr;
 	struct iovec iov;
@@ -414,10 +412,10 @@ static ssize_t smr_atomic_inject(
 
 	if (total_len <= SMR_MSG_DATA_LEN) {
 		proto = smr_proto_inline;
-		cmd = &ce->cmd;
+		cmd = ce;
 		smr_do_atomic_inline(ep, peer_smr, id, peer_id, ofi_op_atomic,
 				     0, datatype, op, NULL, &iov, 1, total_len,
-				     &ce->cmd);
+				     cmd);
 	} else {
 		proto = smr_proto_inject;
 		if (smr_freestack_isempty(smr_cmd_stack(ep->region))) {
@@ -428,8 +426,8 @@ static ssize_t smr_atomic_inject(
 
 		cmd = smr_freestack_pop(smr_cmd_stack(ep->region));
 		assert(cmd);
-		ce->ptr = smr_local_to_peer(ep, peer_smr, id, peer_id,
-					    (uintptr_t) cmd);
+		ce->hdr.entry = smr_local_to_peer(ep, peer_smr, id, peer_id,
+						  (uintptr_t) cmd);
 		ret = smr_do_atomic_inject(ep, peer_smr, id, peer_id,
 					   ofi_op_atomic, 0, datatype, op, NULL,
 					   &iov, 1, NULL, NULL, 0, NULL, NULL,
