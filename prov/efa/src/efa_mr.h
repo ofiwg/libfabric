@@ -16,6 +16,9 @@ struct efa_mr {
 	enum fi_hmem_iface	iface;
 };
 
+struct efa_mr *efa_mr_alloc(struct efa_domain *efa_domain);
+void efa_mr_free(struct efa_mr *efa_mr);
+
 int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_attr *mr_attr);
 int efa_mr_dereg_impl(struct efa_mr *efa_mr);
 int efa_mr_hmem_setup(struct efa_mr *efa_mr, const struct fi_mr_attr *attr, uint64_t flags);
