@@ -553,3 +553,70 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(struct efa_res
 	efa_rdm_pke_release_rx(pkt_entry);
 	efa_rdm_rxe_release(rxe);
 }
+
+/**
+ * @brief Test that flush_queued_blocking_copy_to_hmem releases all pkt entries
+ * when a copy-size mismatch is detected, avoiding a memory leak.
+ * @param state
+ */
+void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(struct efa_resource **state){
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry[2];
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_mr mock_mr = {0};
+	char buf[1024];
+	size_t pkts_to_post_before;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	mock_mr.efa_mr.iface = FI_HMEM_CUDA;
+	mock_mr.device = 0;
+	mock_mr.flags = 0;
+
+	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_msg);
+	assert_non_null(rxe);
+	rxe->iov_count = 1;
+	rxe->iov[0].iov_base = buf;
+	rxe->iov[0].iov_len = sizeof(buf);
+	rxe->cq_entry.len = sizeof(buf);
+	rxe->desc[0] = &mock_mr;
+	rxe->total_len = sizeof(buf);
+
+	for (int i = 0; i < 2; i++) {
+		pkt_entry[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		assert_non_null(pkt_entry[i]);
+		pkt_entry[i]->payload = pkt_entry[i]->wiredata;
+		pkt_entry[i]->payload_size = 64;
+		pkt_entry[i]->ope = rxe;
+
+		/* Replicate efa_rdm_pke_queued_copy_payload_to_hmem() */
+		efa_rdm_ep->queued_copy_vec[i].pkt_entry = pkt_entry[i];
+		efa_rdm_ep->queued_copy_vec[i].data = pkt_entry[i]->payload;
+		efa_rdm_ep->queued_copy_vec[i].data_size = pkt_entry[i]->payload_size;
+		efa_rdm_ep->queued_copy_vec[i].data_offset = 0;
+		efa_rdm_ep->queued_copy_num++;
+		rxe->bytes_queued_blocking_copy += pkt_entry[i]->payload_size;
+		efa_rdm_pke_mark_held(pkt_entry[i]);
+	}
+
+	/* Mock ofi_copy_to_hmem_iov to return 0 to trigger the copy-size mismatch error path */
+	g_efa_unit_test_mocks.ofi_copy_to_hmem_iov = &efa_mock_ofi_copy_to_hmem_iov_return_mock;
+	will_return_always(efa_mock_ofi_copy_to_hmem_iov_return_mock, 0);
+
+	/*
+	 * efa_rdm_pke_release_rx() increments efa_rx_pkts_to_post for entries allocated from EFA_RX_POOL.
+	 * Snapshot before the call to verify: The 2 queued pkt entries were released back to the pool (i.e. no leak).
+	 */
+	pkts_to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
+
+	ret = efa_rdm_ep_flush_queued_blocking_copy_to_hmem(efa_rdm_ep);
+	assert_int_equal(ret, -FI_EIO);
+	assert_int_equal(efa_rdm_ep->queued_copy_num, 0);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post - pkts_to_post_before, 2);
+	assert_int_equal(rxe->bytes_queued_blocking_copy, 0);
+
+	efa_rdm_rxe_release(rxe);
+}

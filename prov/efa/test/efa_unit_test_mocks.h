@@ -72,6 +72,16 @@ ssize_t __real_ofi_copy_from_hmem_iov(void *dest, size_t size,
 				      const struct iovec *hmem_iov,
 				      size_t hmem_iov_count, uint64_t hmem_iov_offset);
 
+ssize_t __real_ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
+				    const struct iovec *hmem_iov,
+				    size_t hmem_iov_count, uint64_t hmem_iov_offset,
+				    const void *src, size_t size);
+
+ssize_t efa_mock_ofi_copy_to_hmem_iov_return_mock(enum fi_hmem_iface hmem_iface, uint64_t device,
+						  const struct iovec *hmem_iov,
+						  size_t hmem_iov_count, uint64_t hmem_iov_offset,
+						  const void *src, size_t size);
+
 extern int g_ofi_copy_from_hmem_iov_call_counter;
 ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
 						    enum fi_hmem_iface hmem_iface, uint64_t device,
@@ -203,6 +213,11 @@ struct efa_unit_test_mocks
 					  enum fi_hmem_iface hmem_iface, uint64_t device,
 					  const struct iovec *hmem_iov,
 					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
+
+	ssize_t (*ofi_copy_to_hmem_iov)(enum fi_hmem_iface hmem_iface, uint64_t device,
+					const struct iovec *hmem_iov,
+					size_t hmem_iov_count, uint64_t hmem_iov_offset,
+					const void *src, size_t size);
 
 	ssize_t (*efa_rdm_pke_copy_payload_to_ope)(struct efa_rdm_pke *pke, struct efa_rdm_ope *ope);
 

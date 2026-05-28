@@ -397,6 +397,7 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.ofi_cudaMalloc = __real_ofi_cudaMalloc,
 #endif
 	.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
+	.ofi_copy_to_hmem_iov = __real_ofi_copy_to_hmem_iov,
 	.efa_rdm_pke_copy_payload_to_ope = __real_efa_rdm_pke_copy_payload_to_ope,
 	.efa_rdm_pke_read = __real_efa_rdm_pke_read,
 	.efa_rdm_pke_proc_matched_rtm = __real_efa_rdm_pke_proc_matched_rtm,
@@ -680,6 +681,22 @@ ssize_t __wrap_ofi_copy_from_hmem_iov(void *dest, size_t size,
 				      size_t hmem_iov_count, uint64_t hmem_iov_offset)
 {
 	return g_efa_unit_test_mocks.ofi_copy_from_hmem_iov(dest, size, hmem_iface, device, hmem_iov, hmem_iov_count, hmem_iov_offset);
+}
+
+ssize_t __wrap_ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
+				    const struct iovec *hmem_iov,
+				    size_t hmem_iov_count, uint64_t hmem_iov_offset,
+				    const void *src, size_t size)
+{
+	return g_efa_unit_test_mocks.ofi_copy_to_hmem_iov(hmem_iface, device, hmem_iov, hmem_iov_count, hmem_iov_offset, src, size);
+}
+
+ssize_t efa_mock_ofi_copy_to_hmem_iov_return_mock(enum fi_hmem_iface hmem_iface, uint64_t device,
+						  const struct iovec *hmem_iov,
+						  size_t hmem_iov_count, uint64_t hmem_iov_offset,
+						  const void *src, size_t size)
+{
+	return mock_type(ssize_t);
 }
 
 ssize_t __wrap_efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke, struct efa_rdm_ope *ope)
