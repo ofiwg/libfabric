@@ -162,3 +162,47 @@ def test_efa_rma_bw_high_pps(cmdline_args, operation_type, mem_type, rma_fabric)
                                message_size="all",
                                fabric=rma_fabric,
                                additional_env="FI_EFA_ENABLE_HIGH_PPS=1 FI_EFA_ENABLE_SHM_TRANSFER=0")
+
+
+# Testing the batch mode of fi_efa_rma_bw (--post-list) which batch multiple WQEs with FI_MORE
+@pytest.mark.pr_ci
+@pytest.mark.fabric(params=["efa", "efa-direct"])
+@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES,
+                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.functional
+@pytest.mark.parametrize("operation_type", ["write", "writedata"])
+# Only test host and cuda memory; other HMEM types do not change the RMA path.
+@pytest.mark.parametrize("mem_type",
+                         ["host_to_host",
+                          pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory)])
+def test_efa_rma_bw_batch(cmdline_args, operation_type, mem_type, rma_fabric):
+    command = "fi_efa_rma_bw -e rdm --post-list 16"
+    command += " -o " + operation_type
+    efa_run_client_server_test(cmdline_args, command, "short",
+                               completion_semantic="transmit_complete",
+                               memory_type=mem_type,
+                               message_size="all",
+                               fabric=rma_fabric,
+                               additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
+
+
+# Testing the multi-ep + batch mode of fi_efa_rma_bw, which spins multiple EPs to initiate rdma requests
+@pytest.mark.pr_ci
+@pytest.mark.fabric(params=["efa", "efa-direct"])
+@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES,
+                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.functional
+@pytest.mark.parametrize("operation_type", ["write", "writedata"])
+# Only test host and cuda memory; other HMEM types do not change the RMA path.
+@pytest.mark.parametrize("mem_type",
+                         ["host_to_host",
+                          pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory)])
+def test_efa_rma_bw_multi_ep_and_batch(cmdline_args, operation_type, mem_type, rma_fabric):
+    command = "fi_efa_rma_bw -e rdm --num-eps 8 --post-list 16"
+    command += " -o " + operation_type
+    efa_run_client_server_test(cmdline_args, command, "short",
+                               completion_semantic="transmit_complete",
+                               memory_type=mem_type,
+                               message_size="all",
+                               fabric=rma_fabric,
+                               additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
