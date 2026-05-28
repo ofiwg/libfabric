@@ -47,6 +47,7 @@
 				 OFI_TX_RMA_CAPS)
 #define LNX_RX_CAPS		(OFI_RX_MSG_CAPS | FI_TAGGED | FI_HMEM | \
 				 FI_DIRECTED_RECV | OFI_RX_RMA_CAPS)
+#define LNX_DOMAIN_CAPS		(FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 struct util_fabric lnx_fabric_info;
 struct lnx_env lnx_env = {
@@ -125,7 +126,7 @@ struct fi_fabric_attr lnx_fabric_attr = {
 };
 
 struct fi_info lnx_info = {
-	.caps = LNX_TX_CAPS | LNX_RX_CAPS,
+	.caps = LNX_TX_CAPS | LNX_RX_CAPS | LNX_DOMAIN_CAPS,
 	.tx_attr = &lnx_tx_attr,
 	.rx_attr = &lnx_rx_attr,
 	.ep_attr = &lnx_ep_attr,
