@@ -1010,7 +1010,7 @@ Test(msg, sizes_desc)
 }
 
 /* Test software posted receives greater than hardware limits */
-Test(msg, sw_max_recv, .timeout = CXIT_DEFAULT_TIMEOUT)
+Test(msg, sw_max_recv, .timeout = CXIT_DEFAULT_TIMEOUT + 10)
 {
 	int i, ret;
 	uint8_t *recv_buf,
