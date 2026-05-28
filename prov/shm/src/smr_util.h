@@ -61,11 +61,11 @@ extern struct smr_env smr_env;
 /* SMR_CMD_SIZE refers to the total bytes dedicated for use in shm headers and
  * data. The entire atomic queue entry will be cache aligned (384) but this also
  * includes the cmd aq header (16) + cmd entry ptr (8)
- * 384 (total entry size) - 16 (aq header) - 8 (entry ptr) = 360
+ * 384 (total entry size) - 16 (aq header) = 368
  * This maximizes the inline payload. Increasing this value will increase the
  * atomic queue entry to 448 bytes.
  */
-#define SMR_CMD_SIZE		360
+#define SMR_CMD_SIZE		368
 
 /* reserves 0-255 for defined ops and room for new ops
  * 256 and beyond reserved for ctrl ops
@@ -87,6 +87,7 @@ enum {
 
 /*
  * Unique smr_cmd_hdr for smr message protocol:
+ *	entry		for internal use managing commands
  * 	op		type of op (ex. ofi_op_msg, defined in ofi_proto.h)
  * 	proto		smr protocol (ex. smr_proto_inline, defined above)
  * 	op_flags	operation flags (ex. SMR_REMOTE_CQ_DATA, defined above)
@@ -98,18 +99,18 @@ enum {
  * 	tag		tag for FI_TAGGED API only
  * 	datatype	atomic datatype for FI_ATOMIC API only
  * 	atomic_op	atomic operation for FI_ATOMIC API only
- *	entry		for internal use managing commands
  * 	CACHE LINE HERE Make sure above fields are 40bytes so that they are
  * 		 	properly cache aligned with the other 24 bytes
  *			from the atomic queue fields. This is necessary
 			(especially if your cpu does not have prefetching) so
 			that the first cache grab gets the lightweight protocol
 			fields.
- *	resv2		reserved for future use to keep struct size at 64 bytes
+ * 	resv2		reserved to keep hdr at 64 bytes
  *	tx_ctx		source side context (unused by target side)
  *	rx_ctx		target side context (unused by source side)
  */
 struct smr_cmd_hdr {
+	uint64_t		entry;
 	uint8_t			op;
 	uint8_t			proto;
 	uint8_t			op_flags;
@@ -125,7 +126,6 @@ struct smr_cmd_hdr {
 			uint8_t	atomic_op;
 		};
 	};
-	uint64_t		entry;
 	//CACHE LINE HERE - See comment above
 	uint64_t		resv2;
 	uint64_t		tx_ctx;
@@ -300,16 +300,11 @@ struct smr_sar_buf {
 	uint8_t		buf[SMR_SAR_SIZE];
 };
 
-struct smr_cmd_entry {
-	uintptr_t	ptr;
-	struct smr_cmd	cmd;
-};
-
 struct smr_return_entry {
 	uintptr_t ptr;
 };
 
-OFI_DECLARE_ATOMIC_Q(struct smr_cmd_entry, smr_cmd_queue);
+OFI_DECLARE_ATOMIC_Q(struct smr_cmd, smr_cmd_queue);
 OFI_DECLARE_ATOMIC_Q(struct smr_return_entry, smr_return_queue);
 
 /* Queue of offsets of the command blocks obtained from the command pool

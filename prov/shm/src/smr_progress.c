@@ -37,9 +37,8 @@
 
 static void smr_progress_overflow(struct smr_ep *ep)
 {
-	struct smr_cmd_entry *ce;
 	struct smr_region *peer_smr;
-	struct smr_cmd *cmd;
+	struct smr_cmd *ce, *cmd;
 	int64_t pos;
 	struct slist_entry *entry;
 	int ret;
@@ -53,8 +52,9 @@ static void smr_progress_overflow(struct smr_ep *ep)
 		if (ret == -FI_ENOENT)
 			return;
 
-		ce->ptr = smr_local_to_peer(ep, peer_smr, cmd->hdr.tx_id,
-					    cmd->hdr.rx_id, (uintptr_t) cmd);
+		ce->hdr.entry = smr_local_to_peer(ep, peer_smr, cmd->hdr.tx_id,
+						  cmd->hdr.rx_id,
+						  (uintptr_t) cmd);
 
 		slist_remove_head(&ep->overflow_list);
 		smr_cmd_queue_commit(ce, pos);
@@ -1320,8 +1320,7 @@ out:
 
 static void smr_progress_cmd(struct smr_ep *ep)
 {
-	struct smr_cmd_entry *ce;
-	struct smr_cmd *cmd;
+	struct smr_cmd *ce, *cmd;
 	int ret = 0;
 	int64_t pos;
 
@@ -1330,7 +1329,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 		if (ret == -FI_ENOENT)
 			break;
 
-		cmd = (struct smr_cmd *) ce->ptr;
+		cmd = (struct smr_cmd *) ce->hdr.entry;
 		switch (cmd->hdr.op) {
 		case ofi_op_msg:
 		case ofi_op_tagged:
