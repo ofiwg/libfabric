@@ -313,6 +313,15 @@ void test_efa_rdm_pke_handle_tx_error_longread_abort_requeues();
 void test_efa_rdm_pke_handle_tx_error_longread_bad_length_writes_cq_err();
 void test_efa_rdm_pke_handle_tx_error_longread_tagged_requeues();
 void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe();
+void test_efa_rdm_rxe_emit_peer_error_emits_pkt();
+void test_efa_rdm_rxe_emit_peer_error_multi_recv_emits_pkt();
+void test_efa_rdm_rxe_emit_peer_error_skips_on_peer_ep_closed();
+void test_efa_rdm_rxe_emit_peer_error_with_homogeneous_peers();
+void test_efa_rdm_rxe_emit_peer_error_skips_when_no_handshake();
+void test_efa_rdm_pke_handle_send_completion_peer_error_releases_rxe();
+void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe();
+void test_efa_rdm_rxe_emit_peer_error_reentry_safe();
+void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe();
 void test_efa_rdm_atomic_compare_desc_persistence();
 void test_efa_rdm_txe_dc_send_first();
 void test_efa_rdm_txe_dc_receipt_first();
@@ -420,6 +429,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error();
 void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch();
 void test_efa_rdm_prov_errno_is_peer_abort();
 void test_efa_rdm_pkt_is_rxe_remote_read();
+void test_efa_rdm_pke_init_peer_error_for_ope_ope_index();
 /* end of efa_unit_test_pke.c */
 
 void test_efa_msg_fi_recv();

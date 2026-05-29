@@ -175,6 +175,17 @@ struct efa_rdm_ope {
 
 	/** the source packet entry of a local read operation */
 	struct efa_rdm_pke *local_read_pkt_entry;
+
+	/**
+	 * @brief Provider errno to attach when emitting an EFA_RDM_PEER_ERROR_PKT
+	 *
+	 * Set by efa_rdm_rxe_emit_peer_error (LONGREAD direction)
+	 * and by the LONGCTS sender-side abort path (later commit), and
+	 * read by efa_rdm_pke_init_peer_error to populate the wire
+	 * header's prov_errno field. Has no meaning if no PEER_ERROR_PKT
+	 * is being emitted from this ope.
+	 */
+	int peer_error_prov_errno;
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
@@ -230,7 +241,8 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  *
  * Set on the rxe when efa_rdm_rxe_recover_from_peer_abort() commits
  * to handling the abort (re-queues the matched peer_rxe back into
- * the SRX). Sticky -- never cleared until the rxe is freed.
+ * the SRX), or when efa_rdm_rxe_emit_peer_error() posts a
+ * PEER_ERROR_PKT. Sticky -- never cleared until the rxe is freed.
  *
  * Means: "release this rxe via efa_rdm_rxe_release_peer_abort_if_drained()
  * once every device WR that uses it as wr_id has drained
@@ -325,6 +337,8 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
 
 bool efa_rdm_rxe_recover_from_peer_abort(struct efa_rdm_ope *rxe,
 					 int prov_errno);
+
+void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno);
 
 void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe);
 

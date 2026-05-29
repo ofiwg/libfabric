@@ -788,6 +788,65 @@ int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
+ * @brief Initialize a PEER_ERROR_PKT from a failing ope (rxe or txe).
+ *
+ * This is the variant called from efa_rdm_pke_fill_data when the
+ * caller posts via efa_rdm_ope_post_send_or_queue with pkt_type
+ * EFA_RDM_PEER_ERROR_PKT.
+ *
+ * The wire packet carries a single op_id that always refers to an
+ * ope owned by the receiver-of-the-packet. The init helper picks
+ * the right local field based on our ope's type:
+ *
+ *   - rxe (EFA_RDM_RXE) → we are the receiver; the packet goes
+ *     receiver -> sender (LONGREAD direction).
+ *     op_id = rxe->tx_id (peer's txe id captured from the RTM).
+ *
+ *   - txe (EFA_RDM_TXE) → we are the sender; the packet goes
+ *     sender -> receiver (LONGCTS direction).
+ *     op_id = txe->rx_id (peer's rxe id captured from the CTS).
+ *
+ * The prov_errno is read from ope->peer_error_prov_errno; the caller
+ * must have set it before posting.
+ *
+ * @param[out] pkt_entry packet entry whose wiredata will be filled
+ * @param[in]  ope       failing ope; ope->type selects direction
+ * @return     0 on success
+ */
+int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
+					struct efa_rdm_ope *ope)
+{
+	uint32_t op_id;
+	uint32_t connid;
+
+	/*
+	 * The op_id field always refers to the ope owned by the
+	 * RECEIVER of this packet. So the sender of the packet
+	 * populates op_id from "the other side's" id:
+	 *   - LONGREAD direction (receiver -> sender):
+	 *       ope is our local rxe; the peer's matching txe id
+	 *       was captured in rxe->tx_id from the inbound RTM.
+	 *   - LONGCTS direction (sender -> receiver):
+	 *       ope is our local txe; the peer's matching rxe id
+	 *       was captured in txe->rx_id from the inbound CTS.
+	 */
+	if (ope->type == EFA_RDM_RXE) {
+		op_id = ope->tx_id;
+	} else {
+		assert(ope->type == EFA_RDM_TXE);
+		op_id = ope->rx_id;
+	}
+
+	connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
+
+	pkt_entry->ope = ope;
+	pkt_entry->peer = ope->peer;
+	return efa_rdm_pke_init_peer_error(pkt_entry, op_id,
+					   EFA_RDM_PEER_ERROR_REF_OPE_INDEX,
+					   ope->peer_error_prov_errno, connid);
+}
+
+/**
  * @param[in] pkt_entry inbound rx packet whose wiredata holds the
  *                      EFA_RDM_PEER_ERROR_PKT to dispatch
  */
