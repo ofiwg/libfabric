@@ -827,6 +827,40 @@ int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
+ * @brief Initialize a PEER_ERROR_PKT from a failing ope (rxe or txe).
+ *
+ * @param[out] pkt_entry packet entry whose wiredata will be filled
+ * @param[in]  ope       failing ope; ope->type selects direction
+ * @return     0 on success
+ */
+int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
+					struct efa_rdm_ope *ope)
+{
+	uint32_t op_id;
+	uint32_t connid;
+
+	/*
+	 * The op_id field always refers to the ope owned by the
+	 * RECEIVER of this packet. So the sender of the packet
+	 * populates op_id from "the other side's" id.
+	 */
+	if (ope->type == EFA_RDM_RXE) {
+		op_id = ope->tx_id;
+	} else {
+		assert(ope->type == EFA_RDM_TXE);
+		op_id = ope->rx_id;
+	}
+
+	connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
+
+	efa_rdm_pke_set_ope(pkt_entry, ope);
+	pkt_entry->peer = ope->peer;
+	return efa_rdm_pke_init_peer_error(pkt_entry, op_id,
+					   EFA_RDM_PEER_ERROR_REF_OPE_INDEX,
+					   ope->peer_error_prov_errno, connid);
+}
+
+/**
  * @param[in] pkt_entry inbound rx packet whose wiredata holds the
  *                      EFA_RDM_PEER_ERROR_PKT to dispatch
  */

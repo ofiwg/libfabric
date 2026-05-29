@@ -304,6 +304,9 @@ int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
 				uint32_t op_id, uint32_t ref_kind,
 				int prov_errno, uint32_t connid);
 
+int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
+					struct efa_rdm_ope *ope);
+
 void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry);
 
 /* ATOMRSP packet related functions */
