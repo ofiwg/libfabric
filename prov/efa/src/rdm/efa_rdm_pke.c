@@ -527,12 +527,12 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 			iov_cnt = 1;
 			sg_list[0].addr = (uintptr_t)pkt_entry->wiredata;
 			sg_list[0].length = pkt_entry->pkt_size - pkt_entry->payload_size;
-			sg_list[0].lkey = ((struct efa_mr *)pkt_entry->mr)->ibv_mr->lkey;
+			sg_list[0].lkey = ((struct efa_mr *)pkt_entry->mr)->lkey;
 			if (pkt_entry->payload) {
 				iov_cnt = 2;
 				sg_list[1].addr = (uintptr_t)pkt_entry->payload;
 				sg_list[1].length = pkt_entry->payload_size;
-				sg_list[1].lkey = ((struct efa_mr *)pkt_entry->payload_mr)->ibv_mr->lkey;
+				sg_list[1].lkey = ((struct efa_mr *)pkt_entry->payload_mr)->lkey;
 			}
 		}
 
@@ -636,7 +636,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 
 	sge.addr = (uint64_t)local_buf;
 	sge.length = len;
-	sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
+	sge.lkey = ((struct efa_mr *)desc)->lkey;
 
 	wr_id = efa_rdm_pke_get_wr_id(pkt_entry);
 
@@ -650,7 +650,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 		"Posted RDMA read length: %ld local buf: %ld local key: %d "
 		"remote buf: %ld remote key: %ld\n",
 		len, (uint64_t) local_buf,
-		((struct efa_mr *) desc)->ibv_mr->lkey, remote_buf, remote_key);
+		((struct efa_mr *) desc)->lkey, remote_buf, remote_key);
 #endif
 #endif
 
@@ -708,7 +708,6 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	remote_buf = rma_context_pkt->remote_buf;
 	remote_key = rma_context_pkt->remote_key;
 
-	assert(((struct efa_mr *)desc)->ibv_mr);
 
 	self_comm = (txe->peer == NULL);
 	if (self_comm) {
@@ -735,7 +734,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 
 	sge.addr = (uint64_t)local_buf;
 	sge.length = len;
-	sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
+	sge.lkey = ((struct efa_mr *)desc)->lkey;
 
 	err = efa_qp_post_write(qp, &sge, 1, NULL, false, remote_key, remote_buf, wr_id,
 				cq_data, txe->fi_flags, ah, qpn, qkey);
@@ -791,7 +790,7 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 		recv_wr->wr.num_sge = 1;
 		recv_wr->wr.sg_list = recv_wr->sge;
 		recv_wr->wr.sg_list[0].length = pke_vec[i]->pkt_size;
-		recv_wr->wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
+		recv_wr->wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->lkey;
 		recv_wr->wr.sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
 		recv_wr->wr.next = NULL;
 		if (i > 0)
