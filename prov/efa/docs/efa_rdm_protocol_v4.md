@@ -74,6 +74,8 @@ Chapter 4 "extra features/requests" describes the extra features/requests define
 
  *  Section 4.9 describe the extra feature: Unsolicited write recv.
 
+ *  Section 4.10 describe the extra feature: Peer error packet (peer-abort handling).
+
 Chapter 5 "What's not covered?" describes the contents that are intentionally left out of
 this document because they are considered "implementation details".
 
@@ -174,6 +176,7 @@ Table: 1.2 A list of packet type IDs
 | 9               | `HANDSHAKE`         | Handshake                 | non-REQ  | handshake                     |
 | 10              | `RECEIPT`           | Receipt                   | non-REQ  | delivery complete (DC)         |
 | 11              | `READ_NACK`         | Read Nack packet          | non-REQ  | Long read and runting read nack protocols         |
+| 12              | `PEER_ERROR`        | Peer Error packet         | non-REQ  | Peer-abort handling for two-sided long protocols (Section 4.10) |
 | 64              | `EAGER_MSGRTM`      | Eager non-tagged Request To Message       | REQ  | eager message |
 | 65              | `EAGER_TAGRTM`      | Eager tagged Request To Message           | REQ  | eager message |
 | 66              | `MEDIUM_MSGRTM`     | Medium non-tagged Request To Message      | REQ  | medium message |
@@ -331,6 +334,7 @@ Table: 2.1 a list of extra features/requests
 | 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 _(baseline since 2.6)_ |
 | 7  | User recv QP            | extra feature & request| libfabric 1.22.0 | _(legacy, see Section 4.8)_ |
 | 8  | Unsolicited write recv  | extra feature | libfabric 1.22.0 | Section 4.9 |
+| 9  | Peer error packet       | extra feature | libfabric 2.6    | Section 4.10 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -1696,6 +1700,103 @@ EFA kernel module and rdma-core) to be met before an endpoint can use the unsoli
 write recv capability, therefore an endpoint cannot assume the other party supports
 unsolicited write recv. The rdma-write with immediate data cannot be issued if there
 is a discrepancy on this feature between local and peer.
+
+### 4.10 Peer error packet (peer-abort handling)
+
+The "Peer error packet" is an extra feature that lets two endpoints
+cleanly abandon an in-flight two-sided protocol when one side
+voluntarily withdraws (for example by closing a memory registration).
+It was introduced in libfabric 2.6 to address a class of issues where
+the EFA RDM provider previously surfaced internal protocol failures as
+user-visible recv CQ errors and leaked the peer's send-side state.
+
+The feature is gated by the `EFA_RDM_EXTRA_FEATURE_PEER_ERROR`
+extra-feature bit and uses a new control packet:
+
+| Packet | Type ID | Direction | Meaning |
+|---|---|---|---|
+| `PEER_ERROR` | 12 | bidirectional | "I am abandoning this protocol step. Please clean up your half." |
+
+The same packet type serves both directions. The wire layout is:
+
+| Field | Length | Notes |
+|---|---|---|
+| base header | 4 bytes | type, version, flags |
+| `op_id` | 4 bytes | id of an ope owned by the receiver of this packet (interpreted per `ref_kind`) |
+| `ref_kind` | 4 bytes | how the receiver resolves `op_id` (see below) |
+| `prov_errno` | 4 bytes | the underlying provider errno that triggered the abort |
+| `connid` | 4 bytes | sender's connection id (when `EFA_RDM_PKT_CONNID_HDR` is on) |
+
+`op_id` references an ope owned by the receiver-of-the-packet, and
+`ref_kind` tells the receiver how to resolve it:
+
+* `EFA_RDM_PEER_ERROR_REF_OPE_INDEX` (0): `op_id` is an ope-pool
+  index — the sender's `txe` in the LONGREAD direction (receiver
+  -> sender), or the receiver's `rxe` in the LONGCTS direction
+  (sender -> receiver).
+* `EFA_RDM_PEER_ERROR_REF_MSG_ID` (1): `op_id` is a per-peer
+  `msg_id` — used by the medium direction (sender -> receiver),
+  which has no CTS and therefore no shared ope index; the receiver
+  resolves it via `peer->rxe_map`.
+* `EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP` (2): `op_id` is a per-peer
+  `msg_id` whose message was aborted at the source before any payload
+  the receiver is owed was delivered. The receiver owes **no**
+  completion; the packet only advances the reorder window past a
+  `msg_id` that will never arrive (see "Reorder-window skip" below).
+
+`ref_kind` only selects *how to resolve* `op_id`; the action taken
+is still decided from the resolved ope's local `type`, so a single
+packet type serves every direction without an on-the-wire action
+discriminator.
+
+#### Backward compatibility
+
+The feature is negotiated via the handshake: an endpoint advertises
+`EFA_RDM_EXTRA_FEATURE_PEER_ERROR` in `extra_info[0]` and reads the
+peer's bitmask after handshake. Mixed-version behavior:
+
+| Sender | Receiver | Behavior |
+|---|---|---|
+| supports | supports | Full fix: PEER_ERROR posted in the appropriate direction; both sides clean up. |
+| supports | does not support | Sender's emit path checks the receiver's bit (and skips). Sender sees a TX CQ error; receiver's posted recv hangs (status quo). |
+| does not support | supports | Sender does not understand `PEER_ERROR_PKT` — it would never be received here. Receiver's emit path checks the sender's bit (and skips). Receiver sees a user CQ recv error (status quo); sender's txe leaks (status quo). |
+
+In all mixed-version cases, behavior is no worse than today.
+
+#### Handshake-not-received race
+
+Both directions emit `PEER_ERROR_PKT` only when the peer's
+support is known. For an extra-feature like this one, "known"
+normally means the handshake has been received and the
+`EFA_RDM_EXTRA_FEATURE_PEER_ERROR` bit is set in the cached
+`extra_info[0]`. There are two practical situations where the
+emission point is reached before the peer's handshake has
+arrived:
+
+1. **Receiver-side LONGREAD/RUNTREAD failure.** The receiver
+   posts an RDMA READ as soon as it receives the sender's RTM.
+   The sender's handshake is asynchronous and may not have
+   arrived by the time the RDMA READ fails.
+2. **Sender-side LONGCTS source-MR cancel.** The receiver's
+   handshake is typically already cached by the time CTSDATA
+   begins (the receiver posted it when it received the sender's
+   RTM, before sending CTS), but the timing is not guaranteed.
+
+To bound the conservative skip, both emit paths recognize the
+same overrides used elsewhere in the codebase for extra-feature
+gating (e.g., `efa_rdm_interop_rdma_read`):
+
+* `FI_OPT_EFA_HOMOGENEOUS_PEERS` (`ep->homogeneous_peers`):
+  the user's contract that all peers run the same software
+  with identical capabilities; emission proceeds without
+  consulting the handshake.
+* `peer->is_self`: the loopback case.
+
+When neither override applies and the peer's handshake has not
+yet been received, both directions skip emission with the same
+fallback as the "peer does not advertise the feature" row of
+the table above. Operators who hit this in production can opt
+in via `FI_OPT_EFA_HOMOGENEOUS_PEERS` to bypass the race.
 
 ## 5. What's not covered?
 
