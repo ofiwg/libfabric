@@ -1428,6 +1428,9 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 
 	efa_rdm_ope_try_fill_desc(ope, 0, FI_RECV);
 
+	if (!efa_rdm_mr_gen_check_ope(ope))
+		return -FI_ECANCELED;
+
 	max_read_once_len = MIN(efa_env.efa_read_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
 	assert(max_read_once_len > 0);
 
@@ -1808,6 +1811,10 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 					       ep->send_pkt_entry_vec_data_sizes);
 	if (err)
 		return err;
+
+	if (!efa_rdm_mr_gen_check_ope(ope))
+		return -FI_ECANCELED;
+
 	assert(ep->send_pkt_entry_vec_size <=
 	       efa_base_ep_get_tx_pool_size(&ep->base_ep));
 
@@ -1957,6 +1964,9 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 
 	if (!(ope->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 		return -FI_EAGAIN;
+
+	if (!efa_rdm_mr_gen_check_ope(ope))
+		return -FI_ECANCELED;
 
 	switch (ope->op) {
 	case ofi_op_msg: /* fall through */
