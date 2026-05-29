@@ -209,6 +209,8 @@ void efa_atfork_callback_flush_mr_cache()
 	dlist_foreach_container_safe(&g_efa_domain_list,
 				     struct efa_domain,
 				     efa_domain, list_entry, tmp) {
+		if (efa_domain->info_type != EFA_INFO_RDM)
+			continue;
 		if (efa_domain->cache) {
 			while(ofi_mr_cache_flush(efa_domain->cache, flush_lru));
 		}
