@@ -323,7 +323,6 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 	if (ofi_mr_cache_full(cache)) {
 		cache->uncached_cnt++;
 		cache->uncached_size += info->iov.iov_len;
-		goto unlock;
 	} else {
 		ret = ofi_rbmap_insert_at(&cache->tree,
 					  (void *) &(*entry)->info,
@@ -332,6 +331,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 		if (ret) {
 			goto unlock;
 		}
+		rbnode = NULL; /* now owned by the tree */
+
 		cache->cached_cnt++;
 		cache->cached_size += info->iov.iov_len;
 
@@ -342,14 +343,19 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 			util_mr_uncache_entry_storage(cache, *entry);
 			cache->uncached_cnt++;
 			cache->uncached_size += (*entry)->info.iov.iov_len;
-			goto unlock;
 		}
 	}
+	/* ofi_rbnode_del() only returns the node to the tree free list (never
+	 * allocates), so it is safe to call while holding mm_lock.
+	 */
+	if (rbnode)
+		ofi_rbnode_del(&cache->tree, rbnode);
 	pthread_mutex_unlock(&mm_lock);
 	return 0;
 
 unlock:
-	ofi_rbnode_del(&cache->tree, rbnode);
+	if (rbnode)
+		ofi_rbnode_del(&cache->tree, rbnode);
 	pthread_mutex_unlock(&mm_lock);
 free:
 	util_mr_free_entry(cache, *entry);
