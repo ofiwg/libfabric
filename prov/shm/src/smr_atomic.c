@@ -275,6 +275,7 @@ static ssize_t smr_generic_atomic(
 					   compare_iov, compare_count,
 					   total_len, context, smr_flags, cmd);
 		if (ret) {
+			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
 			smr_cmd_queue_discard(ce, pos);
 			goto unlock;
 		}
@@ -433,6 +434,7 @@ static ssize_t smr_atomic_inject(
 					   &iov, 1, NULL, NULL, 0, NULL, NULL,
 					   0, total_len, NULL, 0, cmd);
 		if (ret) {
+			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
 			smr_cmd_queue_discard(ce, pos);
 			goto unlock;
 		}
