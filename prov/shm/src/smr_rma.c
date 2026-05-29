@@ -115,8 +115,7 @@ static inline bool smr_do_fast_rma(struct smr_ep *ep, uint64_t op_flags,
 
 	return domain->fast_rma && !(op_flags &
 		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
-		     rma_count == 1 && smr_vma_enabled(ep, peer_smr) &&
-		     total_len > SMR_INJECT_SIZE;
+		     rma_count == 1 && smr_vma_enabled(ep, peer_smr);
 
 }
 
