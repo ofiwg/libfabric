@@ -511,6 +511,20 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			 * resource management is only applied to send operation.
 			 */
 			efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
+		} else if (efa_rdm_pkt_is_rxe_remote_read(pkt_entry) &&
+			   efa_rdm_prov_errno_is_peer_abort(prov_errno)) {
+			struct efa_rdm_ope *rxe = pkt_entry->ope;
+			/*
+			 * Receiver-side RDMA READ (LONGREAD/RUNTREAD) failed
+			 * because the peer withdrew mid-protocol. Mark the rxe
+			 * peer-aborted rather than leak the internal errno to
+			 * the user CQ; the clean error and rxe release are
+			 * deferred to WR drain (sibling READs may still be
+			 * DMAing into the recv buffer).
+			 */
+			efa_rdm_rxe_mark_peer_aborted(rxe, prov_errno);
+			efa_rdm_pke_release_tx(pkt_entry);
+			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 		} else {
 			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);

@@ -565,6 +565,21 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 	} else {
 		assert(x_entry_type == EFA_RDM_RXE);
 		rxe = context_pkt_entry->ope;
+
+		/*
+		 * A long-read posts multiple READ WRs on one rxe; on a
+		 * source-MR cancel some fail and some succeed. The failed
+		 * one(s) marked the rxe peer-aborted, so a sibling that
+		 * still succeeds must NOT take the EOR / recv-completed path
+		 * (it would post a spurious EOR and a bogus success). The
+		 * error completion and free are deferred to the drain helper,
+		 * run here in case this is the last reference.
+		 */
+		if (rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
+			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
+			return;
+		}
+
 		rxe->bytes_read_completed += rma_context_pkt->seg_size;
 		assert(rxe->bytes_read_completed <= rxe->bytes_read_total_len);
 		if (rxe->bytes_read_completed == rxe->bytes_read_total_len) {

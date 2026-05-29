@@ -2423,3 +2423,453 @@ void test_efa_rdm_rxe_mark_peer_aborted_multi_recv_writes_err(
 	 * the rxe); it must NOT be released again here. */
 }
 
+/**
+ * @brief Build a TX pkt_entry configured as a receiver-initiated RDMA
+ *        READ context (i.e. of type EFA_RDM_RMA_CONTEXT_PKT with
+ *        context_type EFA_RDM_RDMA_READ_CONTEXT) bound to an rxe,
+ *        then call the TX error dispatcher with the supplied
+ *        prov_errno.
+ *
+ * The helper takes ownership of the pkt_entry: the dispatcher releases
+ * it on every code path. On a peer-abort prov_errno the dispatcher
+ * marks the rxe and (once drained) reaps it internally; this helper
+ * does not release the rxe itself.
+ *
+ * Pre-bumps rxe->efa_outstanding_tx_ops (and ep/peer counters) to
+ * mirror a submitted RDMA READ WR; handle_tx_error's
+ * record_tx_op_completed at the top will return the counters to
+ * their baseline so the drain-gated rxe release fires correctly.
+ */
+static void run_longread_read_error(struct efa_resource *resource,
+				    struct efa_rdm_ope *rxe, int prov_errno)
+{
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_rma_context_pkt *ctx_pkt;
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
+	pkt_entry->peer = rxe->peer;
+
+	/* Forge the receiver-initiated RDMA READ context layout that
+	 * efa_rdm_pke_init_read_context would have produced. */
+	ctx_pkt = (struct efa_rdm_rma_context_pkt *) pkt_entry->wiredata;
+	ctx_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
+	ctx_pkt->version = EFA_RDM_PROTOCOL_VERSION;
+	ctx_pkt->flags = 0;
+	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEXT;
+	ctx_pkt->seg_size = 0;
+
+	/* Simulate a submitted RDMA READ WR on this rxe so the
+	 * record_tx_op_completed decrement at the top of handle_tx_error
+	 * leaves the per-rxe counter at its accurate post-drain value
+	 * (otherwise it would underflow and defeat the drain-gated
+	 * release). */
+	ep->efa_outstanding_tx_ops++;
+	if (rxe->peer)
+		rxe->peer->efa_outstanding_tx_ops++;
+	rxe->efa_outstanding_tx_ops++;
+
+	efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno);
+}
+
+/**
+ * @brief Assert the user CQ holds exactly one clean peer-abort error
+ *        completion (FI_ECANCELED / FI_EFA_ERR_PEER_ABORTED).
+ */
+static void assert_cq_peer_aborted_error(struct efa_resource *resource)
+{
+	struct fi_cq_err_entry err_entry;
+	int ret;
+
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(err_entry.err, FI_ECANCELED);
+	assert_int_equal(err_entry.prov_errno, FI_EFA_ERR_PEER_ABORTED);
+}
+
+/**
+ * @brief Helper: build a matched-from-SRX user-posted recv rxe and
+ *        the underlying SRX peer_rxe. The caller must hold no SRX
+ *        lock; this function takes/releases it internally.
+ *
+ * Returns the rxe (owning a peer_rxe). On out-of-band cleanup the
+ * caller is responsible for releasing the rxe (if the handler did not
+ * already reap it) and for freeing the peer_rxe via the SRX owner_ops
+ * if needed.
+ */
+static struct efa_rdm_ope *build_matched_rxe(struct efa_resource *resource)
+{
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr match_attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct iovec *iov;
+	void *desc = NULL;
+	int ret;
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+			 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	iov = calloc(1, sizeof(*iov));
+	assert_non_null(iov);
+	iov->iov_base = calloc(1, 16);
+	iov->iov_len = 16;
+
+	ret = util_srx_generic_recv(ep->peer_srx_ep, iov, &desc, 1,
+				    FI_ADDR_UNSPEC, /*context=*/(void *) 0xa1, 0);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.tag = 0;
+	match_attr.msg_size = 16;
+	ofi_genlock_lock(srx_ctx->lock);
+	ret = peer_srx->owner_ops->get_msg(peer_srx, &match_attr, &peer_rxe);
+	assert_int_equal(ret, FI_SUCCESS);
+	assert_non_null(peer_rxe);
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_msg);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->peer_rxe = peer_rxe;
+	rxe->cq_entry.flags = FI_RECV | FI_MSG;
+	rxe->cq_entry.op_context = (void *) 0xa1;
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	free(iov->iov_base);
+	free(iov);
+	return rxe;
+}
+
+/**
+ * @brief LONGREAD READ failure with REMOTE_ERROR_BAD_ADDRESS (7) →
+ *        mark + drain writes a clean RX error completion, reaps rxe.
+ */
+void test_efa_rdm_pke_handle_tx_error_longread_bad_address_peer_aborts(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct efa_rdm_ope *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+
+	rxe = build_matched_rxe(resource);
+
+	ofi_genlock_lock(srx_ctx->lock);
+	run_longread_read_error(resource, rxe,
+				EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
+	/* The failing READ was the last WR: the drain helper wrote the
+	 * RX error completion, returned the peer_rxe to the SRX (freed),
+	 * and reaped the rxe. */
+	assert_true(slist_empty(&srx_ctx->msg_queue));
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	/* User sees a clean, dedicated peer-abort error completion. */
+	assert_cq_peer_aborted_error(resource);
+}
+
+/**
+ * @brief LONGREAD READ failure with REMOTE_ERROR_ABORT (8) →
+ *        mark + drain writes a clean RX error completion, reaps rxe.
+ */
+void test_efa_rdm_pke_handle_tx_error_longread_abort_peer_aborts(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct efa_rdm_ope *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+
+	rxe = build_matched_rxe(resource);
+
+	ofi_genlock_lock(srx_ctx->lock);
+	run_longread_read_error(resource, rxe,
+				EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT);
+	assert_true(slist_empty(&srx_ctx->msg_queue));
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	assert_cq_peer_aborted_error(resource);
+}
+
+/**
+ * @brief LONGREAD READ failure with REMOTE_ERROR_BAD_LENGTH (11) →
+ *        existing behavior preserved (CQ error written, NOT re-queued).
+ *
+ * BAD_LENGTH is a real protocol violation, not a peer-clean abort,
+ * and the user must continue to see it.
+ */
+void test_efa_rdm_pke_handle_tx_error_longread_bad_length_writes_cq_err(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct efa_rdm_ope *rxe;
+	struct fi_peer_rx_entry *peer_rxe_held;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+
+	rxe = build_matched_rxe(resource);
+	peer_rxe_held = rxe->peer_rxe;
+
+	ofi_genlock_lock(srx_ctx->lock);
+	run_longread_read_error(resource, rxe,
+				EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_LENGTH);
+
+	/* The existing path runs efa_rdm_rxe_handle_error → state ERR. */
+	assert_int_equal(rxe->state, EFA_RDM_OPE_ERR);
+	/* peer_rxe was NOT returned to the SRX. */
+	assert_true(slist_empty(&srx_ctx->msg_queue));
+
+	/* Cleanup. */
+	efa_rdm_ep_get_peer_srx(ep)->owner_ops->free_entry(peer_rxe_held);
+	rxe->peer_rxe = NULL;
+	ofi_genlock_unlock(srx_ctx->lock);
+	efa_rdm_rxe_release(rxe);
+}
+
+
+/**
+ * @brief LONGREAD tagged-recv READ failure with peer-abort prov_errno
+ *        is routed through the new handler: the matched recv completes
+ *        with a clean RX error (FI_ECANCELED / FI_EFA_ERR_PEER_ABORTED)
+ *        and the rxe is reaped at WR drain.
+ *
+ * This mirrors test_efa_rdm_pke_handle_tx_error_longread_bad_address_peer_aborts
+ * but exercises the tagged path (ofi_op_tagged + tag_queue), confirming
+ * the dispatcher and abort logic do not have a hidden msg-vs-tag
+ * dependency.
+ */
+void test_efa_rdm_pke_handle_tx_error_longread_tagged_peer_aborts(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr match_attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct iovec iov;
+	char buf[16];
+	void *desc = NULL;
+	const uint64_t tag_value = 0x42;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+			 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	/* Post a tagged recv. */
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	ret = util_srx_generic_trecv(ep->peer_srx_ep, &iov, &desc, 1,
+				     FI_ADDR_UNSPEC, /*context=*/(void *) 0xa1,
+				     tag_value, /*ignore=*/0, 0);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	/* Match by tag. */
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.tag = tag_value;
+	match_attr.msg_size = 16;
+	ofi_genlock_lock(srx_ctx->lock);
+	ret = peer_srx->owner_ops->get_tag(peer_srx, &match_attr, &peer_rxe);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	/* Build a tagged rxe owning the matched peer_rxe. */
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_tagged);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->peer_rxe = peer_rxe;
+	rxe->cq_entry.flags = FI_RECV | FI_TAGGED;
+	rxe->cq_entry.op_context = (void *) 0xa1;
+	rxe->tag = tag_value;
+
+	run_longread_read_error(resource, rxe,
+				EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
+
+	/* Drain wrote the RX error completion and returned the peer_rxe
+	 * to the SRX (freed): neither queue holds it. */
+	assert_true(slist_empty(&srx_ctx->tag_queue));
+	assert_true(slist_empty(&srx_ctx->msg_queue));
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	/* User sees a clean, dedicated peer-abort error completion. */
+	assert_cq_peer_aborted_error(resource);
+}
+
+
+/**
+ * @brief Regression test for the RDMA-READ success-completion leak.
+ *
+ * A long-read receive posts multiple RDMA READ WRs on one rxe. When
+ * the source MR is canceled mid-transfer the device delivers a mix
+ * of failed and successful read completions for that rxe. The failed
+ * WR marks the rxe peer-aborted (EFA_RDM_OPE_PEER_ABORT_PENDING; the user error
+ * completion and rxe release are deferred to drain); a sibling that
+ * still completes successfully lands in
+ * efa_rdm_pke_handle_rma_completion()'s READ path.
+ *
+ * Before the fix that success path had no drain call and no
+ * EFA_RDM_OPE_PEER_ABORT_PENDING guard: if the successful sibling was the last
+ * WR to drain, efa_outstanding_tx_ops reached 0 in a handler that
+ * never released the rxe -> permanent leak (and it would also post a
+ * spurious EOR / success completion). This test fails one read WR,
+ * then drives a successful completion for the sibling and asserts
+ * the rxe leaves ep->rxe_list (freed exactly once), the user gets a
+ * single clean peer-abort error completion, and no spurious success
+ * completion is written.
+ */
+void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
+	void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr match_attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *fail_pkt, *ok_pkt;
+	struct efa_rdm_rma_context_pkt *ctx;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct iovec iov;
+	char buf[16];
+	void *desc = NULL;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
+				      0, NULL), 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	ret = util_srx_generic_recv(ep->peer_srx_ep, &iov, &desc, 1,
+				    FI_ADDR_UNSPEC, /*context=*/(void *) 0xa1, 0);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.tag = 0;
+	match_attr.msg_size = 16;
+	ofi_genlock_lock(srx_ctx->lock);
+	ret = peer_srx->owner_ops->get_msg(peer_srx, &match_attr, &peer_rxe);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_msg);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->peer_rxe = peer_rxe;
+	rxe->bytes_read_total_len = 32;	/* two 16-byte READ WRs */
+
+	ep->efa_outstanding_tx_ops += 2;
+	peer->efa_outstanding_tx_ops += 2;
+	rxe->efa_outstanding_tx_ops += 2;
+
+	/* WR #1 fails (peer-abort) -> mark sets EFA_RDM_OPE_PEER_ABORT_PENDING. No peer feature
+	 * support so no PEER_ERROR_PKT; drain is a no-op (sibling still
+	 * outstanding), and the user error completion is deferred. */
+	fail_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				     EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(fail_pkt);
+	efa_rdm_pke_set_ope(fail_pkt, rxe);
+	fail_pkt->peer = peer;
+	ctx = (struct efa_rdm_rma_context_pkt *) fail_pkt->wiredata;
+	ctx->type = EFA_RDM_RMA_CONTEXT_PKT;
+	ctx->version = EFA_RDM_PROTOCOL_VERSION;
+	ctx->flags = 0;
+	ctx->context_type = EFA_RDM_RDMA_READ_CONTEXT;
+	efa_rdm_pke_handle_tx_error(fail_pkt,
+		EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
+
+	assert_true(rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_int_equal(rxe->efa_outstanding_tx_ops, 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->base_ep.ope_list), 1);
+
+	/* WR #2 completes SUCCESSFULLY (the leak trigger). The forged
+	 * context releases the pkt itself, so do not touch ok_pkt
+	 * after the call. */
+	ok_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				   EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(ok_pkt);
+	efa_rdm_pke_set_ope(ok_pkt, rxe);
+	ok_pkt->peer = peer;
+	ctx = (struct efa_rdm_rma_context_pkt *) ok_pkt->wiredata;
+	ctx->type = EFA_RDM_RMA_CONTEXT_PKT;
+	ctx->version = EFA_RDM_PROTOCOL_VERSION;
+	ctx->flags = 0;
+	ctx->context_type = EFA_RDM_RDMA_READ_CONTEXT;
+	ctx->seg_size = 16;
+
+	efa_rdm_ep_record_tx_op_completed(ep, ok_pkt);
+	efa_rdm_pke_handle_rma_completion(ok_pkt);
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	/* Fix: drained on the success path. rxe is freed (off rxe_list),
+	 * no spurious EOR, no success completion. The deferred peer-abort
+	 * error completion was written at drain -- read it first (a pending
+	 * error makes fi_cq_read return -FI_EAVAIL, not -FI_EAGAIN), then
+	 * confirm the success queue is empty (no spurious EOR/success). */
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->base_ep.ope_list), 0);
+	assert_int_equal(ep->efa_outstanding_tx_ops, 0);
+	assert_cq_peer_aborted_error(resource);
+	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
+}
