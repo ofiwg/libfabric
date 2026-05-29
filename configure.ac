@@ -205,9 +205,19 @@ AC_ARG_ENABLE([coverage],
               [enable_coverage=no])
 
 AS_IF([test x"$enable_coverage" != x"no"],
-      [CFLAGS="-O0 -g --coverage $CFLAGS"
+      [save_CFLAGS="$CFLAGS"
+       save_LDFLAGS="$LDFLAGS"
+       CFLAGS="--coverage $CFLAGS"
        LDFLAGS="--coverage $LDFLAGS"
-       AC_MSG_NOTICE([Code coverage instrumentation enabled (gcov)])])
+       AC_MSG_CHECKING([for --coverage support])
+       AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[return 0;]])],
+                      [AC_MSG_RESULT([yes])
+                       CFLAGS="-O0 -g --coverage $save_CFLAGS"
+                       LDFLAGS="--coverage $save_LDFLAGS"],
+                      [AC_MSG_RESULT([no])
+                       CFLAGS="$save_CFLAGS"
+                       LDFLAGS="$save_LDFLAGS"
+                       AC_MSG_ERROR([--coverage requested but compiler/linker support not found.])])])
 
 AM_CONDITIONAL([ENABLE_COVERAGE], [test x"$enable_coverage" != x"no"])
 
