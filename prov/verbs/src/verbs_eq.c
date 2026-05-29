@@ -1082,7 +1082,14 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 	case RDMA_CM_EVENT_UNREACHABLE:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
-		assert(ep->state != VRB_DISCONNECTED);
+		if (ep->state == VRB_DISCONNECTED) {
+			/* If we saw a transfer error, we already generated
+			 * a shutdown event.
+			 */
+			ret = -FI_EAGAIN;
+			ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+			goto ack;
+		}
 		ep->state = VRB_DISCONNECTED;
 		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		if (vrb_is_xrc_ep(ep)) {
@@ -1112,7 +1119,14 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 	case RDMA_CM_EVENT_REJECTED:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
-		assert(ep->state != VRB_DISCONNECTED);
+		if (ep->state == VRB_DISCONNECTED) {
+			/* If we saw a transfer error, we already generated
+			 * a shutdown event.
+			 */
+			ret = -FI_EAGAIN;
+			ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+			goto ack;
+		}
 		ep->state = VRB_DISCONNECTED;
 		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		if (vrb_is_xrc_ep(ep)) {
