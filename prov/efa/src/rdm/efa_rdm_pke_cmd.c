@@ -226,6 +226,10 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		assert(data_offset == -1 && data_size == -1);
 		ret = efa_rdm_pke_init_read_nack(pkt_entry, ope);
 		break;
+	case EFA_RDM_PEER_ERROR_PKT:
+		assert(data_offset == -1 && data_size == -1);
+		ret = efa_rdm_pke_init_peer_error_for_ope(pkt_entry, ope);
+		break;
 	default:
 		assert(0 && "unknown pkt type to init");
 		ret = -FI_EINVAL;
@@ -506,23 +510,47 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
 			/*
 			 * This packet is associated with a recv operation, (such packets
-			 * include CTS and EOR) thus should always be queued for RNR. This
-			 * is regardless value of ep->handle_resource_management, because
-			 * resource management is only applied to send operation.
+			 * include CTS and EOR, and PEER_ERROR_PKT) thus should always be
+			 * queued for RNR. This is regardless of the value of
+			 * ep->handle_resource_management, because resource management is
+			 * only applied to send operation.
 			 */
 			efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
+		} else if (pkt_entry->ope->internal_flags &
+			   EFA_RDM_OPE_PEER_ABORT_PENDING) {
+			struct efa_rdm_ope *rxe = pkt_entry->ope;
+			/*
+			 * The rxe is already peer-aborted. This failing
+			 * packet is a sibling READ WR or the PEER_ERROR_PKT
+			 * itself failing async; mark/emit already ran (and
+			 * are idempotent), so just release the packet and let
+			 * the drain helper free the rxe once all its WRs
+			 * drain. The pkt-type check only selects whether to
+			 * warn about the PEER_ERROR_PKT's own async failure.
+			 */
+			if (efa_rdm_pkt_type_of(pkt_entry) ==
+			    EFA_RDM_PEER_ERROR_PKT) {
+				EFA_WARN(FI_LOG_CQ,
+					 "PEER_ERROR_PKT TX failed asynchronously "
+					 "prov_errno=%d (%s); deferring rxe release "
+					 "to drain. Sender's txe will leak.\n",
+					 prov_errno, efa_strerror(prov_errno));
+			}
+			efa_rdm_pke_release_tx(pkt_entry);
+			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 		} else if (efa_rdm_pkt_is_rxe_remote_read(pkt_entry) &&
 			   efa_rdm_prov_errno_is_peer_abort(prov_errno)) {
 			struct efa_rdm_ope *rxe = pkt_entry->ope;
 			/*
-			 * Receiver-side RDMA READ (LONGREAD/RUNTREAD) failed
-			 * because the peer withdrew mid-protocol. Mark the rxe
-			 * peer-aborted rather than leak the internal errno to
-			 * the user CQ; the clean error and rxe release are
-			 * deferred to WR drain (sibling READs may still be
-			 * DMAing into the recv buffer).
+			 * First peer-abort failure on this rxe: receiver-side
+			 * RDMA READ (LONGREAD/RUNTREAD) failed because the peer
+			 * withdrew mid-protocol. Mark the rxe peer-aborted
+			 * and notify the sender so it can reap its txe.
 			 */
+			assert(!(rxe->internal_flags &
+				 EFA_RDM_OPE_PEER_ABORT_PENDING));
 			efa_rdm_rxe_mark_peer_aborted(rxe, prov_errno);
+			efa_rdm_rxe_emit_peer_error(rxe, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
 			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 		} else {
@@ -696,7 +724,14 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		/* no action needed for NACK packet */
 		break;
 	case EFA_RDM_PEER_ERROR_PKT:
-		/* Placeholder */
+		/*
+		 * The PEER_ERROR_PKT send completed. Defer rxe release
+		 * to the drain helper.
+		 */
+		if (pkt_entry->ope &&
+		    pkt_entry->ope->type == EFA_RDM_RXE) {
+			efa_rdm_rxe_release_peer_abort_if_drained(pkt_entry->ope);
+		}
 		break;
 	default:
 		EFA_WARN(FI_LOG_CQ,

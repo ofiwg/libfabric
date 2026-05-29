@@ -745,6 +745,63 @@ void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe)
 }
 
 /**
+ * @brief Notify the sender of a peer abort by posting a PEER_ERROR_PKT.
+ *
+ * Emit only for REMOTE_ERROR_BAD_ADDRESS (sender MR canceled, peer EP
+ * still alive) and when the peer supports the feature (standard gate:
+ * ep->homogeneous_peers || peer->is_self ||
+ * efa_rdm_peer_support_peer_error(peer)). For REMOTE_ERROR_ABORT the
+ * peer is gone, so emission is skipped (the sender's txe then leaks).
+ *
+ * Called once per rxe: the caller asserts PEER_ABORT_PENDING is unset
+ * before mark+emit and routes later sibling failures to the drain-only
+ * path, so this never posts a duplicate.
+ *
+ * @param[in,out] rxe        the marked rxe
+ * @param[in]     prov_errno underlying prov_errno
+ */
+void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno)
+{
+	struct efa_rdm_ep *ep = rxe->ep;
+	bool should_emit;
+	ssize_t err;
+
+	assert(rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	should_emit = (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS) &&
+		      (rxe->peer != NULL) &&
+		      (ep->homogeneous_peers ||
+		       rxe->peer->is_self ||
+		       efa_rdm_peer_support_peer_error(rxe->peer));
+
+	if (!should_emit) {
+		if (prov_errno != EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS) {
+			EFA_INFO(FI_LOG_CQ,
+				 "Peer-abort prov_errno=%d (%s) is not the "
+				 "MR-cancel case; skipping PEER_ERROR_PKT emission.\n",
+				 prov_errno, efa_strerror(prov_errno));
+		} else {
+			EFA_INFO(FI_LOG_CQ,
+				 "Peer does not advertise EFA_RDM_EXTRA_FEATURE_PEER_ERROR "
+				 "(or its handshake has not arrived yet, and "
+				 "FI_OPT_EFA_HOMOGENEOUS_PEERS is not set); "
+				 "skipping PEER_ERROR_PKT emission. Sender's txe "
+				 "will leak.\n");
+		}
+		return;
+	}
+
+	rxe->peer_error_prov_errno = prov_errno;
+	err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_PEER_ERROR_PKT);
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_CQ,
+			 "Failed to post PEER_ERROR_PKT err=%zd; falling back "
+			 "to local cleanup. Sender's txe will leak.\n", err);
+		/* HANDLED stays set so the drain helper still releases the
+		 * rxe once sibling READ WRs drain. */
+	}
+}
+
+/**
  * @brief handle the situation that a TX operation encountered error
  *
  * This function does the follow to handle error:

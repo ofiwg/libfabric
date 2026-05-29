@@ -182,6 +182,16 @@ struct efa_rdm_ope {
 
 	/** the source packet entry of a local read operation */
 	struct efa_rdm_pke *local_read_pkt_entry;
+
+	/**
+	 * @brief Provider errno to attach when emitting an EFA_RDM_PEER_ERROR_PKT
+	 *
+	 * Set by efa_rdm_rxe_emit_peer_error (LONGREAD direction), by the LONGCTS
+	 * sender-side abort path, and read by efa_rdm_pke_init_peer_error to
+	 * populate the wire header's prov_errno field. Has no meaning if no
+	 * PEER_ERROR_PKT is being emitted from this ope.
+	 */
+	int peer_error_prov_errno;
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
@@ -352,6 +362,8 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
 
 void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno);
+
+void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno);
 
 void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe);
 
