@@ -1192,6 +1192,9 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	struct efa_rdm_ope *rxe = NULL;
 	int err;
 
+	/* A completing recv is never peer-aborted: an abort leaves data undelivered. */
+	assert(!(ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING));
+
 	/* It is important to write completion before sending ctrl packet, because the
 	 * action of sending ctrl packet may cause the release of rxe (when inject
 	 * was used on lower device).
