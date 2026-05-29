@@ -556,7 +556,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	 */
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
 		if (g_efa_hmem_info[iface].initialized &&
-		    g_efa_hmem_info[iface].p2p_supported_by_device) {
+		    g_efa_hmem_info[iface].p2p_supported_by_device == EFA_P2P_SUPPORTED) {
 			/* If user is using libfabric API 1.18 or later, by default EFA
 	 		 * provider is permitted to use CUDA library to support CUDA
 	 		 * memory, therefore p2p is not required.
@@ -1573,7 +1573,7 @@ static int efa_rdm_ep_set_cuda_api_permitted(struct efa_rdm_ep *ep, bool cuda_ap
 	/* CUDA memory can be supported by using either peer to peer or CUDA API. If neither is
 	 * available, we cannot support CUDA memory
 	 */
-	if (!g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device)
+	if (g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device != EFA_P2P_SUPPORTED)
 		return -FI_EOPNOTSUPP;
 
 	ep->cuda_api_permitted = false;

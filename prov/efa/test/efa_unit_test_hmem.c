@@ -33,7 +33,7 @@ void test_efa_hmem_info_p2p_dmabuf_assumed_neuron(struct efa_resource **state)
 
         assert_int_equal(ret, 0);
         assert_true(g_efa_hmem_info[FI_HMEM_NEURON].initialized);
-        assert_true(g_efa_hmem_info[FI_HMEM_NEURON].p2p_supported_by_device);
+        assert_int_equal(g_efa_hmem_info[FI_HMEM_NEURON].p2p_supported_by_device, EFA_P2P_SUPPORTED);
 #if HAVE_EFA_DMABUF_MR
         assert_int_equal(g_efa_hmem_info[FI_HMEM_NEURON].dmabuf_supported_by_device, EFA_DMABUF_ASSUMED);
 #else /* !HAVE_EFA_DMABUF_MR */
@@ -128,7 +128,7 @@ void test_efa_hmem_info_p2p_disabled_synapse()
 #if HAVE_CUDA
 /**
  * @brief Verify when p2p is disabled, we don't check p2p support with ofi_cudaMalloc.
- * Just leave p2p_supported_by_device to false for cuda.
+ * Just leave p2p_supported_by_device to EFA_P2P_UNSUPPORTED for cuda.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
@@ -159,7 +159,7 @@ void test_efa_hmem_info_disable_p2p_cuda(struct efa_resource **state)
 
         assert_int_equal(ret, 0);
         assert_true(g_efa_hmem_info[FI_HMEM_CUDA].initialized);
-        assert_false(g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device);
+        assert_int_equal(g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device, EFA_P2P_UNSUPPORTED);
 }
 #else
 void test_efa_hmem_info_disable_p2p_cuda()

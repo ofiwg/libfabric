@@ -179,7 +179,7 @@ void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
 	int err, baseline_ct, baseline_sz;
 
 	if (hmem_ops[FI_HMEM_CUDA].initialized &&
-	    g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
+	    g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device == EFA_P2P_SUPPORTED) {
 		resource->hints = efa_unit_test_alloc_hints_hmem(
 			FI_EP_RDM, EFA_FABRIC_NAME);
 		efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
@@ -237,7 +237,7 @@ void test_efa_direct_mr_reg_cuda_memory(struct efa_resource **state)
 	int err, baseline_ct, baseline_sz;
 
 	if (g_efa_hmem_info[FI_HMEM_CUDA].initialized &&
-	    g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
+	    g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device == EFA_P2P_SUPPORTED) {
 		resource->hints = efa_unit_test_alloc_hints_hmem(
 			FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 		efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
@@ -1394,7 +1394,7 @@ void test_efa_rdm_mr_reg_cuda_memory_non_p2p(struct efa_resource **state)
 				  util_domain.domain_fid);
 
 	/* Mock p2p as not supported to force non-p2p path */
-	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = false;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = EFA_P2P_UNSUPPORTED;
 
 	/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
 	baseline_ct = ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct);

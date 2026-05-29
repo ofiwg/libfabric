@@ -194,7 +194,7 @@ void test_info_direct_hmem_support_p2p()
 	 * efa_unit_test_mocks_teardown. So no need to save and reset these fields
 	 */
 	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
-	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = EFA_P2P_SUPPORTED;
 
 	efa_prov_info_direct_set_hmem_flags(info);
 	assert_true(info->caps & FI_HMEM);
@@ -205,7 +205,7 @@ void test_info_direct_hmem_support_p2p()
 	info = fi_allocinfo();
 	info->ep_attr->type = FI_EP_RDM;
 	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
-	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = false;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = EFA_P2P_UNSUPPORTED;
 
 	efa_prov_info_direct_set_hmem_flags(info);
 	assert_false(info->caps & FI_HMEM);

@@ -389,7 +389,7 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
 	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = 1;
 
 	/* p2p is available */
-	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = EFA_P2P_SUPPORTED;
 	efa_rdm_ep->hmem_p2p_opt = FI_HMEM_P2P_ENABLED;
 
 	/* RDMA read is supported */

@@ -44,7 +44,7 @@ static int efa_hmem_info_init_protocol_thresholds(enum fi_hmem_iface iface)
 
 	/* Fall back to FI_HMEM_SYSTEM initialization logic when p2p is
 	 * unavailable */
-	if (ofi_hmem_p2p_disabled() || !info->p2p_supported_by_device)
+	if (ofi_hmem_p2p_disabled() || info->p2p_supported_by_device != EFA_P2P_SUPPORTED)
 		iface = FI_HMEM_SYSTEM;
 
 	switch (iface) {
@@ -175,7 +175,7 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 #endif
 
 	if (!ibv_mr) {
-		info->p2p_supported_by_device = false;
+		info->p2p_supported_by_device = EFA_P2P_UNSUPPORTED;
 		EFA_WARN(FI_LOG_CORE,
 			 "Failed to register CUDA buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
 		ofi_cudaFree(ptr);
@@ -193,7 +193,7 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 		return;
 	}
 
-	info->p2p_supported_by_device = true;
+	info->p2p_supported_by_device = EFA_P2P_SUPPORTED;
 	return;
 
 #endif
@@ -258,7 +258,7 @@ static inline void efa_hmem_info_check_p2p_support_rocr(struct efa_hmem_info *in
 #endif
 
 	if (!ibv_mr) {
-		info->p2p_supported_by_device = false;
+		info->p2p_supported_by_device = EFA_P2P_UNSUPPORTED;
 		EFA_WARN(FI_LOG_CORE,
 			 "Failed to register ROCr buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
 		rocr_free(ptr);
@@ -276,7 +276,7 @@ static inline void efa_hmem_info_check_p2p_support_rocr(struct efa_hmem_info *in
 		return;
 	}
 
-	info->p2p_supported_by_device = true;
+	info->p2p_supported_by_device = EFA_P2P_SUPPORTED;
 	return;
 
 #endif
@@ -317,7 +317,7 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 	}
 
 	info->initialized = true;
-	info->p2p_supported_by_device = false;
+	info->p2p_supported_by_device = EFA_P2P_UNSUPPORTED;
 	info->dmabuf_fallback_enabled = false;
 #if HAVE_EFA_DMABUF_MR
 	info->dmabuf_supported_by_device = EFA_DMABUF_ASSUMED;
@@ -341,7 +341,7 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 			info->initialized = false;
 			return;
 		}
-		info->p2p_supported_by_device = true;
+		info->p2p_supported_by_device = EFA_P2P_SUPPORTED;
 		info->dmabuf_fallback_enabled = true;
 		efa_hmem_info_disable_dmabuf_if_env_unset(info, iface);
 		break;
@@ -361,12 +361,12 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 			info->initialized = false;
 			return;
 		}
-		info->p2p_supported_by_device = true;
+		info->p2p_supported_by_device = EFA_P2P_SUPPORTED;
 		efa_hmem_info_disable_dmabuf_if_env_unset(info, iface);
 		break;
 
 	case FI_HMEM_SYSTEM:
-		info->p2p_supported_by_device = true;
+		info->p2p_supported_by_device = EFA_P2P_SUPPORTED;
 		efa_hmem_info_disable_dmabuf_if_env_unset(info, iface);
 		break;
 
@@ -374,7 +374,7 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 		if (ofi_hmem_p2p_disabled())
 			break;
 		efa_hmem_info_check_p2p_support_cuda(info);
-		if (!info->p2p_supported_by_device)
+		if (info->p2p_supported_by_device != EFA_P2P_SUPPORTED)
 			EFA_INFO(FI_LOG_CORE, "%s P2P support is not available.\n",
 				 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 		break;
@@ -383,7 +383,7 @@ efa_hmem_info_init_iface(enum fi_hmem_iface iface)
 		if (ofi_hmem_p2p_disabled())
 			break;
 		efa_hmem_info_check_p2p_support_rocr(info);
-		if (!info->p2p_supported_by_device)
+		if (info->p2p_supported_by_device != EFA_P2P_SUPPORTED)
 			EFA_INFO(FI_LOG_CORE, "%s P2P support is not available.\n",
 				 fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 		break;
@@ -416,7 +416,7 @@ int efa_hmem_validate_p2p_opt(enum fi_hmem_iface iface, int p2p_opt, uint32_t ap
 
 	switch (p2p_opt) {
 	case FI_HMEM_P2P_REQUIRED:
-		if (OFI_UNLIKELY(ofi_hmem_p2p_disabled()) || !info->p2p_supported_by_device)
+		if (OFI_UNLIKELY(ofi_hmem_p2p_disabled()) || info->p2p_supported_by_device != EFA_P2P_SUPPORTED)
 			return -FI_EOPNOTSUPP;
 
 		return 0;

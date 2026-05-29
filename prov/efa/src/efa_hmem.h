@@ -37,9 +37,15 @@ enum efa_dmabuf_support {
 	EFA_DMABUF_ASSUMED
 };
 
+enum efa_p2p_support {
+	EFA_P2P_UNSUPPORTED,
+	EFA_P2P_SUPPORTED,
+	EFA_P2P_UNDETERMINED,
+};
+
 struct efa_hmem_info {
 	bool initialized; 	/* do we support it at all */
-	bool p2p_supported_by_device;	/* do we support p2p with this device */
+	enum efa_p2p_support p2p_supported_by_device;	/* do we support p2p with this device */
 	bool dmabuf_fallback_enabled;
 	enum efa_dmabuf_support dmabuf_supported_by_device;	/* do we support dmabuf with this device */
 

@@ -502,7 +502,7 @@ static int efa_rdm_mr_reg_impl(struct efa_rdm_mr *efa_rdm_mr, uint64_t flags,
 	 * generate proprietary mr_fid key.
 	 */
 	if ((mr_attr->iface == FI_HMEM_CUDA || mr_attr->iface == FI_HMEM_ROCR)
-		&& !g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device) {
+		&& g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device != EFA_P2P_SUPPORTED) {
 		ret = efa_mr_hmem_setup(&efa_rdm_mr->efa_mr, mr_attr, flags);
 		if (ret)
 			return ret;
