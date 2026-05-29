@@ -687,6 +687,64 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 }
 
 /**
+ * @brief Mark a receiver-side rxe as peer-aborted
+ *
+ * The rxe's in-protocol device op failed because the peer withdrew
+ * (sender MR closed / EP gone), detected locally (failed RDMA READ) or
+ * via an inbound PEER_ERROR_PKT. Does NO user-visible work: sibling WRs
+ * may still be DMAing into the recv buffer or referencing the rxe, so
+ * the completion and release are deferred to
+ * efa_rdm_rxe_release_peer_abort_if_drained() at WR drain.
+ *
+ * @param[in,out] rxe        failing user-posted recv rxe
+ * @param[in]     prov_errno underlying device prov_errno (for logging)
+ */
+void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno)
+{
+	assert(rxe);
+	assert(rxe->type == EFA_RDM_RXE);
+
+	if (rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
+		return;
+
+	EFA_INFO(FI_LOG_CQ,
+		 "Peer-abort marked on rxe %p (op=%u, device prov_errno=%d %s); "
+		 "deferring user error completion to WR drain\n",
+		 rxe, rxe->op, prov_errno, efa_strerror(prov_errno));
+
+	/* The drain helper owns this rxe's completion + release once every
+	 * WR using it as wr_id has drained. */
+	rxe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
+}
+
+/**
+ * @brief Write the deferred RX error completion and reap
+ *        a peer-aborted rxe.
+ *
+ * Deferred to here because the rxe is the wr_id for every READ/control
+ * WR a long-read or LONGCTS recv posts, and those READ WRs may still be
+ * DMAing into the recv buffer, and the RX completion is what authorizes
+ * the app to reuse it, and freeing the rxe with a WR outstanding is a
+ * use-after-free. It then writes the clean FI_ECANCELED /
+ * FI_EFA_ERR_PEER_ABORTED completion, returns peer_rxe to the SRX (firing
+ * the FI_MULTI_RECV release entry for a multi-recv child), and frees the rxe.
+ *
+ * Idempotent; called from every site that can retire the RXE's last WR.
+ */
+void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe)
+{
+	if (!(rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING))
+		return;
+	if (rxe->efa_outstanding_tx_ops != 0)
+		return;
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+		return;
+
+	efa_rdm_rxe_handle_error(rxe, FI_ECANCELED, FI_EFA_ERR_PEER_ABORTED);
+	efa_rdm_rxe_release(rxe);
+}
+
+/**
  * @brief handle the situation that a TX operation encountered error
  *
  * This function does the follow to handle error:
