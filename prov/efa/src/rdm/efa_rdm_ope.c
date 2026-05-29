@@ -688,6 +688,71 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 }
 
 /**
+ * @brief Mark a receiver-side rxe as peer-aborted
+ *
+ * The rxe's in-protocol device op failed because the peer withdrew
+ * (sender MR closed / EP gone), detected locally (failed RDMA READ) or
+ * via an inbound PEER_ERROR_PKT. Does NO user-visible work: sibling WRs
+ * may still be DMAing into the recv buffer or referencing the rxe, so
+ * the completion and release are deferred to
+ * efa_rdm_rxe_release_peer_abort_if_drained() at WR drain.
+ *
+ * @param[in,out] rxe        failing user-posted recv rxe
+ * @param[in]     prov_errno underlying device prov_errno (for logging)
+ */
+void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno)
+{
+	assert(rxe);
+	assert(rxe->type == EFA_RDM_RXE);
+
+	if (rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
+		return;
+
+	EFA_INFO(FI_LOG_CQ,
+		 "Peer-abort marked on rxe %p (op=%u, device prov_errno=%d %s); "
+		 "deferring user error completion to WR drain\n",
+		 rxe, rxe->op, prov_errno, efa_strerror(prov_errno));
+
+	/* The drain helper owns this rxe's completion + release once every
+	 * WR using it as wr_id has drained. */
+	rxe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
+}
+
+/**
+ * @brief Write the deferred RX error completion and reap
+ *        a peer-aborted rxe.
+ *
+ * Deferred to here because the rxe is the wr_id for every READ/control
+ * WR a long-read or LONGCTS recv posts, and those READ WRs may still be
+ * DMAing into the recv buffer, and the RX completion is what authorizes
+ * the app to reuse it, and freeing the rxe with a WR outstanding is a
+ * use-after-free. It then writes the clean FI_ECANCELED /
+ * FI_EFA_ERR_PEER_ABORTED completion, returns peer_rxe to the SRX (firing
+ * the FI_MULTI_RECV release entry for a multi-recv child), and frees the rxe.
+ *
+ * Idempotent; called from every site that can retire the RXE's last WR.
+ */
+void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe)
+{
+	/*
+	 * Precondition: callers only invoke this on an rxe already marked
+	 * peer-aborting -- either behind an explicit PENDING gate or right
+	 * after efa_rdm_rxe_mark_peer_aborted(). The idempotent "no-op until
+	 * the WRs drain" behavior is provided by the checks below.
+	 */
+	assert(rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	/* Do not send PEER_ERROR or write completion if there are outstanding packets */
+	if (rxe->efa_outstanding_tx_ops != 0)
+		return;
+	/* Do not send PEER_ERROR or write completion if there are queue'd packets */
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+		return;
+
+	efa_rdm_rxe_handle_error(rxe, FI_ECANCELED, FI_EFA_ERR_PEER_ABORTED);
+	efa_rdm_rxe_release(rxe);
+}
+
+/**
  * @brief handle the situation that a TX operation encountered error
  *
  * This function does the follow to handle error:
@@ -1065,6 +1130,10 @@ void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope)
 	struct efa_rdm_ope *rxe;
 
 	ep = ope->ep;
+
+	/* Aborting opes are completed exactly once by the peer-abort drain
+	 * helper; callers must route them there, never into this success path. */
+	assert(!(ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING));
 
 	if (ope->cq_entry.flags & FI_READ) {
 		/*
