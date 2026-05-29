@@ -74,6 +74,8 @@ Chapter 4 "extra features/requests" describes the extra features/requests define
 
  *  Section 4.9 describe the extra feature: Unsolicited write recv.
 
+ *  Section 4.10 describe the extra feature: Peer error packet (peer-abort handling).
+
 Chapter 5 "What's not covered?" describes the contents that are intentionally left out of
 this document because they are considered "implementation details".
 
@@ -174,6 +176,7 @@ Table: 1.2 A list of packet type IDs
 | 9               | `HANDSHAKE`         | Handshake                 | non-REQ  | handshake                     |
 | 10              | `RECEIPT`           | Receipt                   | non-REQ  | delivery complete (DC)         |
 | 11              | `READ_NACK`         | Read Nack packet          | non-REQ  | Long read and runting read nack protocols         |
+| 12              | `PEER_ERROR`        | Peer Error packet         | non-REQ  | Peer-abort handling for two-sided long protocols (Section 4.10) |
 | 64              | `EAGER_MSGRTM`      | Eager non-tagged Request To Message       | REQ  | eager message |
 | 65              | `EAGER_TAGRTM`      | Eager tagged Request To Message           | REQ  | eager message |
 | 66              | `MEDIUM_MSGRTM`     | Medium non-tagged Request To Message      | REQ  | medium message |
@@ -331,6 +334,7 @@ Table: 2.1 a list of extra features/requests
 | 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 _(baseline since 2.6)_ |
 | 7  | User recv QP            | extra feature & request| libfabric 1.22.0 | _(legacy, see Section 4.8)_ |
 | 8  | Unsolicited write recv  | extra feature | libfabric 1.22.0 | Section 4.9 |
+| 9  | Peer error packet       | extra feature | libfabric 2.6    | Section 4.10 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -1696,6 +1700,262 @@ EFA kernel module and rdma-core) to be met before an endpoint can use the unsoli
 write recv capability, therefore an endpoint cannot assume the other party supports
 unsolicited write recv. The rdma-write with immediate data cannot be issued if there
 is a discrepancy on this feature between local and peer.
+
+### 4.10 Peer error packet (peer-abort handling)
+
+The "Peer error packet" is an extra feature that lets two endpoints
+cleanly abandon an in-flight two-sided protocol when one side
+voluntarily withdraws (for example by closing a memory registration).
+It was introduced in libfabric 2.6 to address a class of issues where
+the EFA RDM provider previously surfaced internal protocol failures as
+user-visible recv CQ errors and leaked the peer's send-side state.
+
+The feature is gated by the `EFA_RDM_EXTRA_FEATURE_PEER_ERROR`
+extra-feature bit and uses a new control packet:
+
+| Packet | Type ID | Direction | Meaning |
+|---|---|---|---|
+| `PEER_ERROR` | 12 | bidirectional | "I am abandoning this protocol step. Please clean up your half." |
+
+The same packet type serves both directions. The wire layout is:
+
+| Field | Length | Notes |
+|---|---|---|
+| base header | 4 bytes | type, version, flags |
+| `op_id` | 4 bytes | id of an ope owned by the receiver of this packet (interpreted per `ref_kind`) |
+| `ref_kind` | 4 bytes | how the receiver resolves `op_id` (see below) |
+| `prov_errno` | 4 bytes | the underlying provider errno that triggered the abort |
+| `connid` | 4 bytes | sender's connection id (when `EFA_RDM_PKT_CONNID_HDR` is on) |
+
+`op_id` references an ope owned by the receiver-of-the-packet, and
+`ref_kind` tells the receiver how to resolve it:
+
+* `EFA_RDM_PEER_ERROR_REF_OPE_INDEX` (0): `op_id` is an ope-pool
+  index — the sender's `txe` in the LONGREAD direction (receiver
+  -> sender), or the receiver's `rxe` in the LONGCTS direction
+  (sender -> receiver).
+* `EFA_RDM_PEER_ERROR_REF_MSG_ID` (1): `op_id` is a per-peer
+  `msg_id` — used by the medium direction (sender -> receiver),
+  which has no CTS and therefore no shared ope index; the receiver
+  resolves it via `peer->rxe_map`.
+* `EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP` (2): `op_id` is a per-peer
+  `msg_id` whose message was aborted at the source before any payload
+  the receiver is owed was delivered (EAGER, or a medium / runt-only
+  runtread that delivered zero bytes). The receiver owes **no**
+  completion; the packet only advances the reorder window past a
+  `msg_id` that will never arrive (see "Reorder-window skip" below).
+
+`ref_kind` only selects *how to resolve* `op_id`; the action taken
+is still decided from the resolved ope's local `type`, so a single
+packet type serves every direction without an on-the-wire action
+discriminator.
+
+#### Receiver-side abort: LONGREAD / RUNTREAD READ failures
+
+When the receiver's RDMA READ posted as part of a `LONGREAD_*RTM`
+or `RUNTREAD_*RTM` protocol step fails with a "peer cleanly
+aborted" status `REMOTE_ERROR_BAD_ADDRESS` and the peer advertises
+the feature, the receiver:
+
+1. Marks the matched `rxe` peer-aborted
+   (`efa_rdm_rxe_mark_peer_aborted()`) -- no user-visible action yet,
+   since sibling READ WRs may still be DMAing into the recv buffer.
+2. Sends a `PEER_ERROR` packet to the sender with
+   `op_id = sender_txe_id_carried_in_RTM` and
+   `prov_errno = the_failing_status`.
+3. At WR-drain (`efa_outstanding_tx_ops == 0` -- every sibling READ
+   WR and the `PEER_ERROR` send have completed), writes the user RX
+   CQ error (`FI_ECANCELED` / `FI_EFA_ERR_PEER_ABORTED` -- a clean,
+   dedicated code, not the raw internal device errno), returns the
+   matched `peer_rxe` to the SRX (firing the `FI_MULTI_RECV` release
+   entry for a multi-recv child), and reaps the `rxe`. Deferring to
+   drain is what keeps the application from reclaiming its recv buffer
+   while the device may still be writing into it. The matched recv is
+   NOT re-queued; the user observes the error and may repost the
+   buffer.
+
+The sender, on receiving the `PEER_ERROR` packet:
+
+1. Looks up the ope by `op_id`; finds its `txe` (`type ==
+   EFA_RDM_TXE`).
+2. Decrements `num_read_msg_in_flight` (mirroring the EOR recv
+   decrement on the success path).
+3. Writes a TX CQ error with the same clean, dedicated code
+   (`FI_ECANCELED` / `FI_EFA_ERR_PEER_ABORTED`).
+4. Releases the `txe`.
+
+#### Sender-side abort: LONGCTS source-MR cancel
+
+When the sender's source MR is canceled mid-`CTSDATA` — detected
+either pre-post by the MR generation check (returns `-FI_ECANCELED`
+from the post path) or post-post by the NIC
+(`LOCAL_ERROR_INVALID_LKEY` on the TX CQ) — and the peer advertises
+the feature, the sender:
+
+1. Writes a TX CQ error to its user (existing behavior).
+2. Marks the `txe` `EFA_RDM_OPE_PEER_ABORT_PENDING` and defers the
+   `PEER_ERROR` emit to the `txe` drain point
+   (`efa_rdm_txe_progress_peer_abort_if_drained()`,
+   `efa_outstanding_tx_ops == 0`). Deferring the emit until every
+   CTSDATA WR has drained is what makes the receiver's `rxe` safe to
+   delete: no CTSDATA straggler can still reference the receiver's
+   `rxe` after the `PEER_ERROR` packet, even though CTSDATA routes by
+   unvalidated ope-index. At drain it sends one `PEER_ERROR` packet
+   with `op_id = receiver_rxe_id_carried_in_CTS` and the underlying
+   `prov_errno` (marking `EFA_RDM_PEER_ERROR_EMITTED`). Because
+   LONGCTS is not `efa_rdm_txe_peer_abort_uses_msg_id()`, the
+   zero-delivery (`bytes_acked == 0`) suppression does NOT apply: the
+   CTS exchange already built the receiver's `rxe`, so the sender
+   always emits.
+3. Releases the `txe` when the emitted `PEER_ERROR` packet's own
+   completion runs the drain helper again. The helper is invoked from
+   the CTSDATA completions and the `PEER_ERROR` send completion.
+
+The receiver, on receiving the `PEER_ERROR` packet:
+
+1. Looks up the ope by `op_id`; finds its `rxe` (`type ==
+   EFA_RDM_RXE`).
+2. Marks the matched `rxe` peer-aborted
+   (`efa_rdm_rxe_mark_peer_aborted()`).
+3. At WR-drain (a no-op while a CTS send is still outstanding on the
+   `rxe`) writes the user RX CQ error (`FI_ECANCELED` /
+   `FI_EFA_ERR_PEER_ABORTED`), returns the `peer_rxe` to the SRX, and
+   reaps the `rxe`.
+
+#### Sender-side abort: medium source-MR cancel
+
+The medium RTM protocol is sender-detected like LONGCTS, but it
+exchanges no CTS, so the sender never learns the receiver's `rxe`
+ope-pool index. The only identifier both sides share is the
+per-peer `msg_id`. When a medium RTM work request fails with
+`LOCAL_ERROR_INVALID_LKEY` (the user closed the source MR while
+the WR was in flight) and the peer advertises the feature, the
+sender:
+
+1. Writes a TX CQ error to its user (existing behavior).
+2. Marks the `txe` `EFA_RDM_OPE_PEER_ABORT_PENDING` and defers the
+   emit decision to the `txe` drain point
+   (`efa_rdm_txe_progress_peer_abort_if_drained()`,
+   `efa_outstanding_tx_ops == 0`). At drain the `ref_kind` is chosen by
+   delivery: a partial transfer (`bytes_acked > 0` -- the receiver
+   matched an `rxe` and took some data) sends `PEER_ERROR` with
+   `ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID` and `op_id = txe->msg_id`
+   (the receiver owes a `FI_ECANCELED` completion); a zero-delivery
+   transfer (`bytes_acked == 0` -- every medium WR failed, so the
+   receiver never built an `rxe` and owes no completion) instead sends
+   `ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP`, which carries the
+   same `op_id = txe->msg_id` but instructs the receiver only to advance
+   its reorder window past that `msg_id` (see "Reorder-window skip"
+   below). Either way the `txe` is marked `EFA_RDM_PEER_ERROR_EMITTED`
+   and kept alive.
+3. Releases the `txe` when the emitted `PEER_ERROR` packet's own
+   completion runs the drain helper again (the EMITTED phase).
+
+The medium case is detected from the txe's recorded protocol
+(`efa_rdm_txe_peer_abort_uses_msg_id()`, which covers medium and
+runt-only runtread), because a medium txe shares `EFA_RDM_TXE_REQ` state
+with eager and longread and never enters `EFA_RDM_OPE_SEND`. Detection
+fires on both `INVALID_LKEY` (post-post, NIC) and `FI_ECANCELED`
+(pre-post, MR generation check) since the emit decision lives in
+`efa_rdm_txe_handle_error()`, which both the device-WR and the queued
+pre-post cancellation paths reach. A zero-delivery transfer no longer
+relies on the `rxe_map` lookup missing: the `REF_MSG_ID_SKIP` packet is
+a deliberate reorder-window tombstone, not a spurious emit.
+
+The receiver, on receiving the `PEER_ERROR` packet:
+
+1. Sees `ref_kind == EFA_RDM_PEER_ERROR_REF_MSG_ID` and resolves
+   the `rxe` via `peer->rxe_map` keyed by `op_id` (the `msg_id`).
+   A miss is a clean drop.
+2. Marks the matched `rxe` peer-aborted via the same
+   `efa_rdm_rxe_mark_peer_aborted()` helper.
+3. Writes the user RX CQ error (`FI_ECANCELED` /
+   `FI_EFA_ERR_PEER_ABORTED`), returns the `peer_rxe` to the SRX, and
+   reaps the `rxe`. A medium `rxe` has no outstanding READ or CTS WR,
+   so the drain-gated completion fires immediately.
+
+#### Sender-side abort: reorder-window skip (EAGER / zero-delivery)
+
+EAGER, and medium / runt-only runtread that delivered zero bytes, owe
+the receiver **no** completion (no `rxe` was ever matched), but the
+aborted send still consumed a per-peer `msg_id` that the receiver's
+reorder window (`peer->robuf`) reserves. If such a send is flushed at
+the source before any payload lands, the window parks on a `msg_id` that
+will never arrive and head-of-line-blocks every later message behind it.
+
+For these protocols the sender emits `PEER_ERROR` with
+`ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP` and `op_id = txe->msg_id`
+(no new `msg_id` is allocated). EAGER two-sided RTM is flagged
+`EFA_RDM_TXE_PEER_ERROR_SKIP` directly by the abort classifier; medium /
+runt-only choose SKIP vs `REF_MSG_ID` at the drain point by
+`bytes_acked`. One-sided eager RTW is excluded
+(`efa_rdm_pkt_type_is_eager_rtm()` matches only the two-sided RTMs): it
+owes the target nothing and consumes no reorder-window slot. The emit is
+drain-deferred like the other directions, so per the §5 ordering
+guarantee no data segment can race the skip notification.
+
+The receiver, on receiving a `REF_MSG_ID_SKIP` packet
+(`efa_rdm_peer_queue_aborted_msg_tombstone()`), owes no completion and
+reuses the existing out-of-order machinery:
+
+1. If the window already advanced past `msg_id`: clean drop.
+2. If a segment for `msg_id` is buffered out-of-order: tombstone it in
+   place (`EFA_RDM_PKE_ABORTED`) and drop the control packet.
+3. Otherwise (the common never-arrived case): hold this `PEER_ERROR`
+   packet itself in the reorder window at slot `msg_id`, stamped
+   `EFA_RDM_PKE_ABORTED` (or the overflow list if out of window). The
+   unchanged drain loop (`efa_rdm_peer_proc_pending_items_in_robuf()`)
+   and overflow-promotion path slide past the tombstone exactly as they
+   do for an aborted buffered RTM, with no `rxe` built and no CQ entry.
+
+#### Backward compatibility
+
+The feature is negotiated via the handshake: an endpoint advertises
+`EFA_RDM_EXTRA_FEATURE_PEER_ERROR` in `extra_info[0]` and reads the
+peer's bitmask after handshake. Mixed-version behavior:
+
+| Sender | Receiver | Behavior |
+|---|---|---|
+| supports | supports | Full fix: PEER_ERROR posted in the appropriate direction; both sides clean up. |
+| supports | does not support | Sender's emit path checks the receiver's bit (and skips). Sender sees a TX CQ error; receiver's posted recv hangs (status quo). |
+| does not support | supports | Sender does not understand `PEER_ERROR_PKT` — it would never be received here. Receiver's emit path checks the sender's bit (and skips). Receiver sees a user CQ recv error (status quo); sender's txe leaks (status quo). |
+
+In all mixed-version cases, behavior is no worse than today.
+
+#### Handshake-not-received race
+
+Both directions emit `PEER_ERROR_PKT` only when the peer's
+support is known. For an extra-feature like this one, "known"
+normally means the handshake has been received and the
+`EFA_RDM_EXTRA_FEATURE_PEER_ERROR` bit is set in the cached
+`extra_info[0]`. There are two practical situations where the
+emission point is reached before the peer's handshake has
+arrived:
+
+1. **Receiver-side LONGREAD/RUNTREAD failure.** The receiver
+   posts an RDMA READ as soon as it receives the sender's RTM.
+   The sender's handshake is asynchronous and may not have
+   arrived by the time the RDMA READ fails.
+2. **Sender-side LONGCTS source-MR cancel.** The receiver's
+   handshake is typically already cached by the time CTSDATA
+   begins (the receiver posted it when it received the sender's
+   RTM, before sending CTS), but the timing is not guaranteed.
+
+To bound the conservative skip, both emit paths recognize the
+same overrides used elsewhere in the codebase for extra-feature
+gating (e.g., `efa_rdm_interop_rdma_read`):
+
+* `FI_OPT_EFA_HOMOGENEOUS_PEERS` (`ep->homogeneous_peers`):
+  the user's contract that all peers run the same software
+  with identical capabilities; emission proceeds without
+  consulting the handshake.
+* `peer->is_self`: the loopback case.
+
+When neither override applies and the peer's handshake has not
+yet been received, both directions skip emission with the same
+fallback as the "peer does not advertise the feature" row of
+the table above. Operators who hit this in production can opt
+in via `FI_OPT_EFA_HOMOGENEOUS_PEERS` to bypass the race.
 
 ## 5. What's not covered?
 
