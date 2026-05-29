@@ -52,6 +52,11 @@ struct smr_ep {
 
 	struct slist		overflow_list;
 	struct dlist_entry	sar_list;
+
+	/* IOV resp tracking (out-of-order completion) */
+	uint64_t		last_comp_count;
+	uint64_t		slot_bitmap; /* bits set = slots in use */
+	struct smr_pend_entry	*slot_pend[SMR_IOV_LIMIT_SLOTS];
 	struct dlist_entry	async_cpy_list;
 	struct dlist_entry	unexp_cmd_list;
 	size_t			min_multi_recv_size;

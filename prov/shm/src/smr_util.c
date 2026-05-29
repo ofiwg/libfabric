@@ -117,7 +117,9 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	ep_name_offset = peer_data_offset + sizeof(struct smr_peer_data) *
 		SMR_MAX_PEERS;
 
-	total_size = ep_name_offset + SMR_NAME_MAX;
+	total_size = ep_name_offset + SMR_NAME_MAX +
+		     sizeof(struct smr_resp_slot) * SMR_IOV_LIMIT_SLOTS +
+		     sizeof(uint64_t);
 
 	if (cmd_offset)
 		*cmd_offset = cmd_queue_offset;
@@ -288,6 +290,9 @@ int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	(*smr)->max_sar_buf_per_peer = SMR_BUF_BATCH_MAX;
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size, smr_cmd_init);
+	*smr_comp_count(*smr) = 0;
+	memset(smr_resp_slots(*smr), 0, sizeof(struct smr_resp_slot) * SMR_IOV_LIMIT_SLOTS);
+
 	smr_freestack_init(smr_inject_pool(*smr), rx_size,
 			   sizeof(struct smr_inject_buf));
 	smr_fifo_init(smr_return_queue(*smr));

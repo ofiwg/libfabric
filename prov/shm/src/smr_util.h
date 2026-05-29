@@ -186,6 +186,13 @@ static_assert(sizeof(struct smr_cmd) == SMR_CMD_SIZE,
 #endif
 
 #define SMR_INJECT_SIZE		4096
+
+/* IOV completion: per-operation status slots in sender's shared region.
+ * Receiver writes status=1 after CMA. Sender scans out-of-order. */
+#define SMR_IOV_LIMIT_SLOTS	64
+struct smr_resp_slot {
+	uint64_t	status;
+} __attribute__((aligned(8)));
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
 #define SMR_SAR_SIZE		32768
 
@@ -322,6 +329,17 @@ static inline struct smr_freestack *smr_cmd_stack(struct smr_region *smr)
 {
 	return (struct smr_freestack *) ((char *) smr + smr->cmd_stack_offset);
 }
+static inline struct smr_resp_slot *smr_resp_slots(struct smr_region *smr)
+{
+	return (struct smr_resp_slot *)((char *) smr + smr->name_offset + SMR_NAME_MAX);
+}
+
+static inline uint64_t *smr_comp_count(struct smr_region *smr)
+{
+	return (uint64_t *)((char *) smr + smr->name_offset + SMR_NAME_MAX +
+		sizeof(struct smr_resp_slot) * SMR_IOV_LIMIT_SLOTS);
+}
+
 static inline struct smr_freestack *smr_inject_pool(struct smr_region *smr)
 {
 	return (struct smr_freestack *)
