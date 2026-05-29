@@ -250,6 +250,19 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 #define EFA_RDM_RXE_ACK_IN_FLIGHT BIT_ULL(10)
 
 /**
+ * @brief The peer-abort machinery owns this ope's drain-gated cleanup.
+ *
+ * Set on the first peer-abort failure (rxe: efa_rdm_rxe_mark_peer_aborted();
+ * txe: the sender-side abort paths) -- one shared bit since an ope is only ever
+ * one type, sticky until free. Once every WR using the ope as wr_id has drained
+ * (efa_outstanding_tx_ops == 0, nothing queued), the type's drain helper writes
+ * the deferred FI_ECANCELED / FI_EFA_ERR_PEER_ABORTED completion and frees the
+ * ope. The rxe emits its PEER_ERROR_PKT eagerly at mark time; the txe defers the
+ * emit/suppress into its drain helper.
+ */
+#define EFA_RDM_OPE_PEER_ABORT_PENDING BIT_ULL(20)
+
+/**
  * @brief flag to indicate a txe has already written an cq error entry for RNR
  *
  * This flag is used to prevent writing multiple cq error entries
@@ -348,6 +361,10 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
 
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
+
+void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno);
+
+void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe);
 
 void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe);
 
