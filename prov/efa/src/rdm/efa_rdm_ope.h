@@ -320,6 +320,29 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 #define EFA_RDM_TXE_NO_COUNTER		BIT_ULL(18)
 
+/**
+ * @brief flag to indicate a txe owes a drain-gated PEER_ERROR_PKT
+ *        cleanup after a sender-side source-MR cancel.
+ *
+ * Set when a sender-side abort path takes responsibility for the txe's
+ * release: the LONGCTS path (which emits inline and also sets
+ * EFA_RDM_TXE_PEER_ERROR_EMITTED), and the medium path (which defers
+ * the emit-or-suppress decision to drain). The errored txe is kept
+ * alive while sibling WRs are in flight and freed by
+ * efa_rdm_txe_progress_peer_abort_if_drained() once
+ * efa_outstanding_tx_ops == 0. Sticky -- never cleared until release.
+ */
+#define EFA_RDM_TXE_PEER_ABORT_PENDING	BIT_ULL(20)
+
+/**
+ * @brief flag to indicate the txe has already emitted its PEER_ERROR_PKT.
+ *
+ * Distinguishes "decide now" from "already emitted, just release on the
+ * PEER_ERROR_PKT's own completion" so efa_rdm_txe_progress_peer_abort_if_drained()
+ * is idempotent and never double-emits or double-frees.
+ */
+#define EFA_RDM_TXE_PEER_ERROR_EMITTED	BIT_ULL(21)
+
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
@@ -339,6 +362,8 @@ bool efa_rdm_rxe_recover_from_peer_abort(struct efa_rdm_ope *rxe,
 					 int prov_errno);
 
 void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno);
+
+void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe);
 

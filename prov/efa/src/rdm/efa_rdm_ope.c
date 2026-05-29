@@ -939,6 +939,69 @@ void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno)
 }
 
 /**
+ * @brief Release a sender-side errored txe once its PEER_ERROR_PKT
+ *        cleanup has drained.
+ *
+ * Called after efa_rdm_ep_record_tx_op_completed has decremented the
+ * current packet's reference, from every send-completion / tx-error
+ * site that can drain the last WR of an aborting sender-side transfer.
+ * No-op until the txe is marked EFA_RDM_TXE_PEER_ABORT_PENDING and
+ * every WR using it as wr_id has drained (efa_outstanding_tx_ops == 0,
+ * no queued pkt).
+ *
+ * Two phases, distinguished by EFA_RDM_TXE_PEER_ERROR_EMITTED:
+ *  - Already emitted (LONGCTS, which emits inline and sets both flags;
+ *    or medium after its deferred emit): the emitted PEER_ERROR_PKT has
+ *    drained, so release the txe.
+ *  - Not yet emitted (medium first drain): decide. bytes_acked == 0
+ *    (zero-delivery) suppresses the emit and releases the drained txe.
+ *    bytes_acked > 0 emits one PEER_ERROR_PKT and keeps the txe alive
+ *    (the emitted packet is itself an outstanding WR; releasing now
+ *    would UAF) until that packet's own completion runs this again.
+ */
+void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
+{
+	ssize_t err;
+
+	if (!(txe->internal_flags & EFA_RDM_TXE_PEER_ABORT_PENDING))
+		return;
+	if (txe->efa_outstanding_tx_ops != 0)
+		return;
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+		return;
+
+	if (txe->internal_flags & EFA_RDM_TXE_PEER_ERROR_EMITTED) {
+		/* The emitted PEER_ERROR_PKT has drained; free the txe. */
+		efa_rdm_txe_release(txe);
+		return;
+	}
+
+	if (txe->bytes_acked == 0) {
+		/* Zero-delivery: no segment landed at the receiver, so it
+		 * never built an rxe. Suppress the un-actionable emit and
+		 * release the drained txe. */
+		efa_rdm_txe_release(txe);
+		return;
+	}
+
+	/* At least one segment landed: notify the receiver so it can
+	 * abandon the doomed message. Keep the txe alive -- the emitted
+	 * PEER_ERROR_PKT's own completion runs this helper again to release
+	 * it (see EMITTED phase above). */
+	txe->internal_flags |= EFA_RDM_TXE_PEER_ERROR_EMITTED;
+	err = efa_rdm_ope_post_send_or_queue(txe, EFA_RDM_PEER_ERROR_PKT);
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_CQ,
+			 "Sender-side abort: failed to post "
+			 "PEER_ERROR_PKT err=%zd. Receiver's rxe will leak.\n",
+			 err);
+		/* The post failed so no PEER_ERROR_PKT completion will
+		 * arrive to release the txe; release it now (still drained). */
+		efa_rdm_txe_release(txe);
+	}
+}
+
+/**
  * @brief handle the situation that a TX operation encountered error
  *
  * This function does the follow to handle error:
@@ -967,6 +1030,8 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
+	ssize_t post_err;
+	enum efa_rdm_ope_state prev_state = txe->state;
 	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	ep = txe->ep;
@@ -1077,6 +1142,67 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 
 	efa_cntr_report_error(&ep->base_ep.util_ep, txe->cq_entry.flags);
 	efa_rdm_cq_write_error(&ep->base_ep, util_cq, &err_entry, "TXE");
+
+	/*
+	 * LONGCTS sender-side abort emission.
+	 *
+	 * If the failure was caused by the user canceling the source
+	 * MR mid-LONGCTS-CTSDATA — detected pre-post by the MR
+	 * generation check (returns -FI_ECANCELED) or post-post by the
+	 * NIC (LOCAL_ERROR_INVALID_LKEY) — and the peer is known to
+	 * support PEER_ERROR_PKT, emit one so the receiver can
+	 * re-queue its rxe back into the SRX. Without this signal the
+	 * receiver's posted recv would wait indefinitely.
+	 *
+	 * The gate requires prev_state == EFA_RDM_OPE_SEND, NOT merely
+	 * bytes_sent > 0. The PEER_ERROR_PKT carries op_id = txe->rx_id
+	 * (the receiver's rxe id), and txe->rx_id is populated ONLY by
+	 * efa_rdm_pke_handle_cts_recv(), which is also the only place
+	 * that transitions a txe into EFA_RDM_OPE_SEND. A txe in any
+	 * other state (e.g. a medium or runting-read RTM txe, which set
+	 * bytes_sent but never receive a CTS) has a stale/garbage
+	 * rx_id; emitting for it would send a wild op_id on the wire.
+	 * Gating on the state that establishes rx_id keeps the wire
+	 * op_id valid. The pre-post FI_ECANCELED path (efa_domain.c)
+	 * only iterates ope_longcts_send_list, i.e. OPE_SEND txes, so
+	 * both detection paths are covered.
+	 *
+	 *  The errored txe must outlive the sibling CTSDATA WRs already
+	 *  posted to fill the current window (still in flight on our send
+	 *  queue) and the PEER_ERROR_PKT itself, all of which use it as
+	 *  wr_id. We therefore do NOT release it here; instead we mark it
+	 *  PEER_ABORT_PENDING|PEER_ERROR_EMITTED so
+	 *  efa_rdm_txe_progress_peer_abort_if_drained() frees it once every
+	 *  such WR has drained (efa_outstanding_tx_ops == 0).
+	 */
+	if (!(txe->internal_flags & EFA_RDM_OPE_INTERNAL) &&
+	    (txe->op == ofi_op_msg || txe->op == ofi_op_tagged) &&
+	    prev_state == EFA_RDM_OPE_SEND &&
+	    (err == FI_ECANCELED ||
+	     prov_errno == EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY) &&
+	    txe->peer != NULL &&
+	    (ep->homogeneous_peers ||
+	     txe->peer->is_self ||
+	     efa_rdm_peer_support_peer_error(txe->peer))) {
+
+		txe->peer_error_prov_errno = prov_errno;
+		txe->internal_flags |= EFA_RDM_TXE_PEER_ABORT_PENDING |
+				       EFA_RDM_TXE_PEER_ERROR_EMITTED;
+		post_err = efa_rdm_ope_post_send_or_queue(
+				txe, EFA_RDM_PEER_ERROR_PKT);
+		if (OFI_UNLIKELY(post_err)) {
+			EFA_WARN(FI_LOG_CQ,
+				 "LONGCTS sender-side abort: failed to post "
+				 "PEER_ERROR_PKT err=%zd. Receiver's rxe will "
+				 "leak.\n", post_err);
+		}
+		/* The txe now owns a drain-gated release. Sibling CTSDATA
+		 * WRs (and the PEER_ERROR_PKT just posted) may still be in
+		 * flight using the txe as wr_id; the drain helper frees it
+		 * once efa_outstanding_tx_ops reaches 0. Try now in case
+		 * this was the last reference. */
+		efa_rdm_txe_progress_peer_abort_if_drained(txe);
+	}
 }
 
 /**
