@@ -530,6 +530,25 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 	} else {
 		assert(x_entry_type == EFA_RDM_RXE);
 		rxe = context_pkt_entry->ope;
+
+		/*
+		 * A long-read receive posts multiple RDMA READ WRs on the
+		 * same rxe. If the source MR was canceled mid-transfer,
+		 * the device delivers a mix of failed and successful read
+		 * completions for that rxe; the failed one(s) already ran
+		 * peer-abort recovery (marking the rxe OPE_ERR /
+		 * PEER_ABORT_HANDLED and writing the user remedy). For a
+		 * sibling that nonetheless completes successfully, do NOT
+		 * fall into the EOR / recv-completed path (it would post a
+		 * spurious EOR and write a bogus success completion on top
+		 * of the abort). if this is the last reference, the rxe is
+		 * freed here.
+		 */
+		if (rxe->internal_flags & EFA_RDM_RXE_PEER_ABORT_HANDLED) {
+			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
+			return;
+		}
+
 		rxe->bytes_read_completed += rma_context_pkt->seg_size;
 		assert(rxe->bytes_read_completed <= rxe->bytes_read_total_len);
 		if (rxe->bytes_read_completed == rxe->bytes_read_total_len) {
