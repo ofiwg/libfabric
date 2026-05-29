@@ -14,6 +14,7 @@
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_mr.h"
 #include "efa_rdm_cq.h"
+#include "efa_rdm_srx.h"
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   struct efa_rdm_ep *ep,
@@ -677,6 +678,198 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 
 	efa_cntr_report_error(&ep->base_ep.util_ep, err_entry.flags);
 	efa_rdm_cq_write_error(&ep->base_ep, util_cq, &err_entry, "RXE");
+}
+
+/**
+ * @brief Decide whether a user-posted recv rxe can be safely re-queued
+ *        to the SRX after a peer-clean abort.
+ *
+ * @param[in] rxe  receiver-side rxe whose in-protocol device op
+ *                 failed with a peer-clean-abort prov_errno.
+ * @return true if the peer_rxe can be returned to the SRX.
+ */
+static bool efa_rdm_rxe_can_requeue(struct efa_rdm_ope *rxe)
+{
+	/* Re-queue only applies to user-posted two-sided recvs which
+	 * have a peer_rxe to return to the SRX. */
+	if (rxe->op != ofi_op_msg && rxe->op != ofi_op_tagged)
+		return false;
+
+	if (!rxe->peer_rxe)
+		return false;
+
+	/* Multi-recv children cannot be re-queued. The owner buffer's
+	 * iov has already been advanced past the carved slice when
+	 * this child was matched, and the SRX has no mechanism to
+	 * un-advance. Per fi_cq(3) the user is owed an error CQ
+	 * entry for the failed message, and per fi_msg(3) a single
+	 * FI_MULTI_RECV release entry must be generated when the
+	 * owner is consumed. The user-CQ-error path
+	 * (handle_error + freeing the peer_rxe through
+	 * util_free_entry) honors both. */
+	if (rxe->peer_rxe->owner_context)
+		return false;
+
+	return true;
+}
+
+/**
+ * @brief Apply local recovery for a receiver-side rxe after a peer abort.
+ *
+ * If efa_rdm_rxe_can_requeue() accepts the rxe, return its peer_rxe
+ * to the SRX so the user's posted fi_recv survives (no user CQ entry).
+ * Otherwise write a user-visible CQ error; for multi-recv children,
+ * also release the peer_rxe through the SRX so the FI_MULTI_RECV
+ * release entry fires per fi_msg(3).
+ *
+ * Does NOT release the rxe — the caller decides lifetime. A true
+ * return means the rxe was re-queued and carries no user CQ entry,
+ * so the caller should release it (immediately, or after a deferred
+ * PEER_ERROR_PKT send completion). A false return means a CQ error
+ * was written (or the rxe had already errored): the rxe must stay
+ * alive for fi_cq_readerr.
+ *
+ * Postconditions:
+ *  - rxe->state == EFA_RDM_OPE_ERR.
+ *  - Re-entry on a rxe already in OPE_ERR is a no-op (returns false).
+ *
+ * @param[in,out] rxe        failing user-posted recv rxe
+ * @param[in]     prov_errno underlying prov_errno
+ * @return true if the rxe was re-queued (caller should release it).
+ */
+bool efa_rdm_rxe_recover_from_peer_abort(struct efa_rdm_ope *rxe,
+					 int prov_errno)
+{
+	struct efa_rdm_ep *ep;
+	struct fid_peer_srx *peer_srx;
+	struct util_srx_ctx *srx_ctx;
+	struct dlist_entry *tmp;
+	struct efa_rdm_pke *pkt_entry;
+	int ret;
+
+	assert(rxe);
+	assert(rxe->type == EFA_RDM_RXE);
+	ep = rxe->ep;
+	assert(ep);
+
+	if (rxe->state == EFA_RDM_OPE_ERR) {
+		/* Already progressed through an error path; nothing to
+		 * do here.  The first error wins. */
+		return false;
+	}
+
+	EFA_INFO(FI_LOG_CQ,
+		 "Peer-abort recovery on rxe %p (op=%u, prov_errno=%d %s)\n",
+		 rxe, rxe->op, prov_errno, efa_strerror(prov_errno));
+
+	if (!efa_rdm_rxe_can_requeue(rxe)) {
+		/* Write a user-visible CQ error. efa_rdm_rxe_handle_error
+		 * sets rxe->state = EFA_RDM_OPE_ERR internally. */
+		efa_rdm_rxe_handle_error(rxe, to_fi_errno(prov_errno),
+					 prov_errno);
+
+		/* For multi-recv children, release the peer_rxe through
+		 * the SRX so the owner's multi_recv_ref decrements and
+		 * the FI_MULTI_RECV release entry fires per fi_msg(3)
+		 * when the buffer is consumed. Clear peer_rxe to avoid
+		 * a double-free on the eventual rxe release. */
+		if (rxe->peer_rxe && rxe->peer_rxe->owner_context) {
+			efa_rdm_ep_get_peer_srx(ep)->owner_ops->
+				free_entry(rxe->peer_rxe);
+			rxe->peer_rxe = NULL;
+		}
+		return false;
+	}
+
+	/* Return the peer_rxe to the SRX so the user's posted recv
+	 * survives. */
+	peer_srx = efa_rdm_ep_get_peer_srx(ep);
+	srx_ctx = (struct util_srx_ctx *) peer_srx->ep_fid.fid.context;
+	(void) srx_ctx;
+	assert(ofi_genlock_held(srx_ctx->lock));
+
+	ret = efa_rdm_srx_repost_peer_rxe(rxe->peer_rxe);
+	if (OFI_UNLIKELY(ret)) {
+		EFA_WARN(FI_LOG_CQ,
+			 "efa_rdm_srx_repost_peer_rxe failed err=%d; "
+			 "falling back to user CQ error\n", ret);
+		efa_rdm_rxe_handle_error(rxe, to_fi_errno(prov_errno),
+					 prov_errno);
+		return false;
+	}
+
+	/* The peer_rxe is now back in the SRX; the rxe must NOT free
+	 * it on release. */
+	rxe->peer_rxe = NULL;
+
+	/* Drain any TX packets queued on the rxe. */
+	dlist_foreach_container_safe(&rxe->queued_pkts,
+				     struct efa_rdm_pke,
+				     pkt_entry, entry, tmp)
+		efa_rdm_pke_release_tx(pkt_entry);
+
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS) {
+		dlist_remove(&rxe->queued_entry);
+		rxe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
+	}
+
+	if (rxe->unexp_pkt) {
+		efa_rdm_pke_release_rx_list(rxe->unexp_pkt);
+		rxe->unexp_pkt = NULL;
+	}
+
+	/* Mark terminally errored so a second failure on the same rxe
+	 * (e.g., a second RDMA READ WR for the same long-read
+	 * transfer) early-returns at the top. */
+	rxe->state = EFA_RDM_OPE_ERR;
+
+	/* The peer-abort machinery now owns this rxe's release. The
+	 * rxe must outlive any sibling RDMA READ WR still in flight
+	 * that uses it as wr_id. The drain helper below performs the
+	 * actual free; see EFA_RDM_RXE_PEER_ABORT_HANDLED. */
+	rxe->internal_flags |= EFA_RDM_RXE_PEER_ABORT_HANDLED;
+	return true;
+}
+
+/**
+ * @brief Release the rxe iff the peer-abort machinery owns its
+ *        lifetime and every WR/queued pkt that references it has
+ *        drained.
+ *
+ * The rxe is used as wr_id by every RDMA READ WR a long-read
+ * transfer posts (efa_rdm_ope_post_read posts up to N WRs in a loop,
+ * each bumping rxe->efa_outstanding_tx_ops) and by an optional
+ * PEER_ERROR_PKT efa_rdm_rxe_emit_peer_error() may post. The rxe
+ * must outlive every one of them; releasing on the first completion
+ * causes a use-after-free when sibling WRs or the PEER_ERROR_PKT completes
+ * afterward.
+ *
+ * Drain conditions, all required:
+ *  - EFA_RDM_RXE_PEER_ABORT_HANDLED set: peer-abort recovery has run
+ *    AND release is desired (excludes the multi-recv write-CQ-error
+ *    sub-path that does not also emit, where the pre-existing
+ *    leak/TODO behavior is preserved).
+ *  - efa_outstanding_tx_ops == 0: no device WR uses the rxe as
+ *    wr_id. record_tx_op_completed() at the top of every TX
+ *    completion/error path has already decremented for the current
+ *    packet, so this reflects "no remaining outstanding."
+ *  - !EFA_RDM_OPE_QUEUED_FLAGS: nothing on rxe->queued_pkts (e.g.,
+ *    a PEER_ERROR_PKT awaiting RNR retransmit).
+ *
+ * Idempotent and safe to call from every drain point: handle_tx_error
+ * (recover branch and HANDLED branch), handle_send_completion
+ * (PEER_ERROR_PKT case), and the inbound LONGCTS dispatcher.
+ */
+void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe)
+{
+	if (!(rxe->internal_flags & EFA_RDM_RXE_PEER_ABORT_HANDLED))
+		return;
+	if (rxe->efa_outstanding_tx_ops != 0)
+		return;
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS)
+		return;
+
+	efa_rdm_rxe_release_internal(rxe);
 }
 
 /**
