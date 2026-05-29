@@ -346,6 +346,11 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 #define EFA_RDM_OPE_RECV_COMPLETED		BIT_ULL(19)
 
+/**
+ * @brief flag to indicate the ope has already emitted its PEER_ERROR_PKT.
+ */
+#define EFA_RDM_PEER_ERROR_EMITTED	BIT_ULL(21)
+
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
@@ -364,6 +369,8 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
 void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno);
 
 void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno);
+
+void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe);
 
