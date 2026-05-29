@@ -1103,8 +1103,16 @@ void efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_rdm_pke *pkt_entr
 	}
 
 	txe = pkt_entry->ope;
+
 	txe->bytes_acked += pkt_entry->payload_size;
-	if (txe->total_len == txe->bytes_acked)
+	/* An aborting txe's single completion + release are owned by the
+	 * peer-abort drain helper. This success completion is a WR drain, so
+	 * drive it (a no-op until the txe's last WR drains, then it emits the
+	 * PEER_ERROR_PKT / writes the one completion); otherwise take the
+	 * normal full-completion path. */
+	if (txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
+		efa_rdm_txe_progress_peer_abort_if_drained(txe);
+	else if (txe->total_len == txe->bytes_acked)
 		efa_rdm_ope_handle_send_completed(txe);
 }
 
