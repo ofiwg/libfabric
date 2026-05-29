@@ -65,10 +65,18 @@ struct efa_hmem_info {
 #define DMABUF_IS_ASSUMED(info) \
 	((info)->dmabuf_supported_by_device == EFA_DMABUF_ASSUMED)
 
+/*
+ * NB: p2p_supported_by_device and protocol thresholds may be updated by
+ * application code when p2p support is probed at first registration. This could
+ * lead to thread-safety questions. These updates are pure writes and idempotent,
+ * so ought to be safe. Alternatives are pushing this down to the domain level or
+ * similar to take a lock.
+ */
 extern struct efa_hmem_info	g_efa_hmem_info[OFI_HMEM_MAX];
 
 int efa_hmem_validate_p2p_opt(enum fi_hmem_iface iface, int p2p_opt, uint32_t api_version);
 int efa_hmem_info_initialize();
+int efa_hmem_info_apply_protocol_thresholds(enum fi_hmem_iface iface);
 int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size);
 int efa_copy_to_hmem(void *desc, void *dest, const void *src, size_t size);
 ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, size_t buff_size, const struct iovec *hmem_iov, size_t iov_count);

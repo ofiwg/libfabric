@@ -498,18 +498,39 @@ static int efa_rdm_mr_reg_impl(struct efa_rdm_mr *efa_rdm_mr, uint64_t flags,
 		ofi_mr_cache_flush(efa_rdm_mr->efa_mr.domain->cache, false);
 
 	/*
-	 * For cuda and rocr iface when p2p is unavailable, skip ibv_reg_mr() and
-	 * generate proprietary mr_fid key.
+	 * For cuda/rocr, the p2p probe is deferred to first HMEM MR
+	 * registration to avoid provider-initiated device allocations
+	 * during initialization.
 	 */
-	if ((mr_attr->iface == FI_HMEM_CUDA || mr_attr->iface == FI_HMEM_ROCR)
-		&& g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device != EFA_P2P_SUPPORTED) {
-		ret = efa_mr_hmem_setup(&efa_rdm_mr->efa_mr, mr_attr, flags);
-		if (ret)
-			return ret;
-		efa_rdm_mr->efa_mr.mr_fid.key = efa_rdm_mr_non_p2p_keygen();
-		efa_rdm_mr->efa_mr.mr_fid.mem_desc = &efa_rdm_mr->efa_mr;
+	if (mr_attr->iface == FI_HMEM_CUDA || mr_attr->iface == FI_HMEM_ROCR) {
+		switch (g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device) {
+		case EFA_P2P_UNDETERMINED:
+			/* Probe: attempt ibv_reg_mr with the app's buffer */
+			ret = efa_mr_reg_impl(&efa_rdm_mr->efa_mr, flags, mr_attr);
+			if (ret == 0) {
+				g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device = EFA_P2P_SUPPORTED;
+				efa_hmem_info_apply_protocol_thresholds(mr_attr->iface);
+				break;
+			}
+			g_efa_hmem_info[mr_attr->iface].p2p_supported_by_device = EFA_P2P_UNSUPPORTED;
+			EFA_INFO(FI_LOG_MR,
+				 "%s P2P support is not available, using non-p2p path.\n",
+				 fi_tostr(&mr_attr->iface, FI_TYPE_HMEM_IFACE));
+			/* fall through */
+		case EFA_P2P_UNSUPPORTED:
+			ret = efa_mr_hmem_setup(&efa_rdm_mr->efa_mr, mr_attr, flags);
+			if (ret)
+				return ret;
+			efa_rdm_mr->efa_mr.mr_fid.key = efa_rdm_mr_non_p2p_keygen();
+			efa_rdm_mr->efa_mr.mr_fid.mem_desc = &efa_rdm_mr->efa_mr;
+			break;
+		case EFA_P2P_SUPPORTED:
+			ret = efa_mr_reg_impl(&efa_rdm_mr->efa_mr, flags, mr_attr);
+			if (ret)
+				return ret;
+			break;
+		}
 	} else {
-		/* base mr registration (ibv mr), must be called the first before RDM specific fields are setup */
 		ret = efa_mr_reg_impl(&efa_rdm_mr->efa_mr, flags, mr_attr);
 		if (ret)
 			return ret;

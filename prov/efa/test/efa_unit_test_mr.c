@@ -172,50 +172,76 @@ void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
 	size_t mr_size = 64;
-	void *buf;
-	struct fid_mr *mr = NULL;
+	void *buf1, *buf2;
+	struct fid_mr *mr1 = NULL, *mr2 = NULL;
 	struct fi_mr_attr mr_reg_attr = { 0 };
 	struct iovec iovec;
 	int err, baseline_ct, baseline_sz;
 
-	if (hmem_ops[FI_HMEM_CUDA].initialized &&
-	    g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device == EFA_P2P_SUPPORTED) {
-		resource->hints = efa_unit_test_alloc_hints_hmem(
-			FI_EP_RDM, EFA_FABRIC_NAME);
-		efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
-							    FI_VERSION(2, 0),
-							    resource->hints,
-							    true, true);
-
-		efa_domain = container_of(resource->domain, struct efa_domain,
-					  util_domain.domain_fid);
-		/* fi_endpoint calls ofi_bufpool_grow, which registers mr */
-		baseline_ct = ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct);
-		baseline_sz = ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz);
-
-		err = ofi_cudaMalloc(&buf, mr_size);
-		assert_int_equal(err, 0);
-		assert_non_null(buf);
-
-		mr_reg_attr.access = FI_SEND | FI_RECV;
-		mr_reg_attr.iface = FI_HMEM_CUDA;
-		iovec.iov_base = buf;
-		iovec.iov_len = mr_size;
-		mr_reg_attr.mr_iov = &iovec;
-		mr_reg_attr.iov_count = 1;
-
-		err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr);
-		assert_int_equal(err, 0);
-
-		/* FI_MR_DMABUF flag was not set, so GDRCopy should be registered if available */
-		test_efa_rdm_mr_impl(efa_domain, mr, baseline_ct + 1, baseline_sz + mr_size, true);
-
-		assert_int_equal(fi_close(&mr->fid), 0);
-		test_efa_rdm_mr_impl(efa_domain, NULL, baseline_ct, baseline_sz, false);
-
-		err = ofi_cudaFree(buf);
-		assert_int_equal(err, 0);
+	if (!hmem_ops[FI_HMEM_CUDA].initialized) {
+		skip();
+		return;
 	}
+
+	resource->hints = efa_unit_test_alloc_hints_hmem(
+		FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(2, 0),
+						    resource->hints,
+						    true, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+
+	/* Start with UNDETERMINED to exercise the lazy probe */
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = EFA_P2P_UNDETERMINED;
+
+	baseline_ct = ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct);
+	baseline_sz = ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz);
+
+	err = ofi_cudaMalloc(&buf1, mr_size);
+	assert_int_equal(err, 0);
+
+	/* First registration: triggers the lazy p2p probe */
+	mr_reg_attr.access = FI_SEND | FI_RECV;
+	mr_reg_attr.iface = FI_HMEM_CUDA;
+	iovec.iov_base = buf1;
+	iovec.iov_len = mr_size;
+	mr_reg_attr.mr_iov = &iovec;
+	mr_reg_attr.iov_count = 1;
+
+	err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr1);
+	assert_int_equal(err, 0);
+
+	/* Probe must have resolved to a definitive state */
+	assert_int_not_equal(g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device, EFA_P2P_UNDETERMINED);
+
+	if (g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device == EFA_P2P_SUPPORTED) {
+		/* p2p path: ibv_reg_mr was called */
+		assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct), baseline_ct + 1);
+		assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz), baseline_sz + mr_size);
+
+		/* Second registration: takes the normal SUPPORTED path */
+		err = ofi_cudaMalloc(&buf2, mr_size);
+		assert_int_equal(err, 0);
+
+		iovec.iov_base = buf2;
+		err = fi_mr_regattr(resource->domain, &mr_reg_attr, 0, &mr2);
+		assert_int_equal(err, 0);
+
+		assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct), baseline_ct + 2);
+		assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz), baseline_sz + 2 * mr_size);
+
+		fi_close(&mr2->fid);
+		ofi_cudaFree(buf2);
+	} else {
+		/* non-p2p path: ibv_reg_mr was NOT called (probe failed, fell through) */
+		assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_ct), baseline_ct);
+		assert_int_equal(ofi_atomic_get64(&efa_domain->ibv_mr_reg_sz), baseline_sz);
+	}
+
+	fi_close(&mr1->fid);
+	ofi_cudaFree(buf1);
 }
 #else
 void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)

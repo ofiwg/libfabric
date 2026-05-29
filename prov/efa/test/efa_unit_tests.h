@@ -229,6 +229,7 @@ void test_efa_hmem_info_p2p_dmabuf_assumed_neuron();
 void test_efa_hmem_info_p2p_disabled_neuron();
 void test_efa_hmem_info_p2p_disabled_synapse();
 void test_efa_hmem_info_disable_p2p_cuda();
+void test_efa_hmem_info_cuda_p2p_deferred();
 void test_efa_nic_select_all_devices_matches();
 void test_efa_nic_select_first_device_matches();
 void test_efa_nic_select_first_device_with_surrounding_comma_matches();

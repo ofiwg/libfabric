@@ -1571,9 +1571,12 @@ static int efa_rdm_ep_set_cuda_api_permitted(struct efa_rdm_ep *ep, bool cuda_ap
 	}
 
 	/* CUDA memory can be supported by using either peer to peer or CUDA API. If neither is
-	 * available, we cannot support CUDA memory
+	 * available, we cannot support CUDA memory.
+	 *
+	 * When p2p is EFA_P2P_UNDETERMINED (not yet probed), we allow this optimistically.
+	 * If p2p later turns out to be unavailable, data transfers will fail with -FI_ENOSYS.
 	 */
-	if (g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device != EFA_P2P_SUPPORTED)
+	if (g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device == EFA_P2P_UNSUPPORTED)
 		return -FI_EOPNOTSUPP;
 
 	ep->cuda_api_permitted = false;
