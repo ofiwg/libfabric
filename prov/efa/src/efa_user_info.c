@@ -694,7 +694,7 @@ int efa_get_user_info(uint32_t version, const char *node,
 				dupinfo->caps &= ~FI_LOCAL_COMM;
 		}
 
-		if (EFA_INFO_TYPE_IS_DIRECT(prov_info)) {
+		if (EFA_EP_TYPE_IS_RDM(prov_info) && !EFA_INFO_TYPE_IS_RDM(prov_info)) {
 			ret = efa_user_info_alter_direct(version, dupinfo, hints);
 			if (ret) {
 				fi_freeinfo(dupinfo);
