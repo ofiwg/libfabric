@@ -4,6 +4,7 @@
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
+#include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_srx.h"
 #include "ofi_util.h"
 
@@ -3211,7 +3212,6 @@ void test_efa_rdm_rxe_emit_peer_error_with_homogeneous_peers(void **state)
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
 	ofi_genlock_unlock(srx_ctx->lock);
 
-	/* Cleanup. */
 	peer_abort_test_release_inflight_rxe(ep, srx_ctx, rxe);
 }
 
@@ -3669,6 +3669,667 @@ void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe(
 	assert_cq_peer_aborted_error(resource);
 	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
 }
+/**
+ * @brief LONGREAD direction: PEER_ERROR_PKT recv with send_id set ->
+ *        the sender's txe is failed and released; num_read_msg_in_flight
+ *        is decremented.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct efa_rdm_ope *txe;
+	struct fi_cq_err_entry err_entry;
+	uint64_t in_flight_before;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* Build a real txe (uses the common helper which sets up a peer). */
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_TXE_REQ;
+	txe->internal_flags = 0;
+	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->cq_entry.op_context = (void *) 0xa1;
+
+	/* The sender would have incremented num_read_msg_in_flight when
+	 * it sent the LONGREAD/RUNTREAD RTM. Simulate that. */
+	efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight = 1;
+	in_flight_before = efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight;
+
+	/* Build the inbound PEER_ERROR_PKT pointing at our txe via send_id. */
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+
+	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id = txe->tx_id;
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
+	err_hdr->connid = 0xc0ffee;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
+
+	/* num_read_msg_in_flight decremented. */
+	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight,
+			 in_flight_before - 1);
+
+	/* User must see a TX CQ error with the clean, dedicated
+	 * peer-abort code (not the raw wire prov_errno). */
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(err_entry.err, FI_ECANCELED);
+	assert_int_equal(err_entry.prov_errno, FI_EFA_ERR_PEER_ABORTED);
+
+	/* The aborted op owes exactly one completion: a second error read
+	 * must find the CQ empty. A duplicate terminal completion (e.g.
+	 * handle_error writing an error and the drain helper writing another)
+	 * surfaces here as a second readerr. Use fi_cq_readerr, not fi_cq_read,
+	 * so the check does not drive the progress engine -- whose internal RX
+	 * repost would trip the rx-pkt accounting this test hand-sets up. */
+	memset(&err_entry, 0, sizeof(err_entry));
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+}
+
+/**
+ * @brief LONGCTS direction: PEER_ERROR_PKT recv with recv_id set ->
+ *        receiver's matched rxe is marked peer-aborted and, once
+ *        drained, completes with a clean FI_ECANCELED /
+ *        FI_EFA_ERR_PEER_ABORTED error and is reaped.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr match_attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct efa_rdm_ope *rxe;
+	struct iovec iov;
+	char buf[16];
+	void *desc = NULL;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+			 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	/* Post + match a recv to build the rxe. */
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	ret = util_srx_generic_recv(ep->peer_srx_ep, &iov, &desc, 1,
+				    FI_ADDR_UNSPEC, /*context=*/(void *) 0xa1, 0);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.tag = 0;
+	match_attr.msg_size = 16;
+	ofi_genlock_lock(srx_ctx->lock);
+	ret = peer_srx->owner_ops->get_msg(peer_srx, &match_attr, &peer_rxe);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_msg);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->peer_rxe = peer_rxe;
+
+	/* Build the inbound PEER_ERROR_PKT pointing at our rxe via recv_id. */
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted += 1;
+
+	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id = rxe->rx_id;
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+	err_hdr->connid = 0xbeef;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
+
+	/* The matched rxe has no outstanding WR, so the drain fires
+	 * immediately: peer_rxe returned to the SRX (freed, not
+	 * re-queued), so the queue is empty, and the rxe is reaped. */
+	assert_true(slist_empty(&srx_ctx->msg_queue));
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	/* The receiver's matched recv gets a clean peer-abort error. */
+	assert_cq_peer_aborted_error(resource);
+}
+
+
+
+/**
+ * @brief LONGCTS direction with a tagged rxe: PEER_ERROR_PKT recv
+ *        with recv_id set must mark the matched tagged rxe
+ *        peer-aborted and, once drained, complete it with a clean
+ *        peer-abort error and reap it (from the tag path, not msg).
+ *
+ * Sister test to test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe
+ * (which uses ofi_op_msg) — this confirms the dispatcher's LONGCTS
+ * branch and the abort handler's tagged path don't have a hidden
+ * msg-vs-tag dependency.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr match_attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct efa_rdm_ope *rxe;
+	struct iovec iov;
+	char buf[16];
+	void *desc = NULL;
+	const uint64_t tag_value = 0x1234;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+			 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	/* Post + match a tagged recv. */
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	ret = util_srx_generic_trecv(ep->peer_srx_ep, &iov, &desc, 1,
+				     FI_ADDR_UNSPEC, /*context=*/(void *) 0xa1,
+				     tag_value, /*ignore=*/0, 0);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.tag = tag_value;
+	match_attr.msg_size = 16;
+	ofi_genlock_lock(srx_ctx->lock);
+	ret = peer_srx->owner_ops->get_tag(peer_srx, &match_attr, &peer_rxe);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_tagged);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->peer_rxe = peer_rxe;
+	rxe->cq_entry.flags = FI_RECV | FI_TAGGED;
+	rxe->tag = tag_value;
+
+	/* Build the inbound PEER_ERROR_PKT pointing at our tagged rxe via recv_id. */
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted += 1;
+
+	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id = rxe->rx_id;
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+	err_hdr->connid = 0xbeef;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
+
+	/* The matched tagged rxe has no outstanding WR, so the drain
+	 * fires immediately: peer_rxe returned to the SRX (freed), so
+	 * neither queue holds it, and the rxe is reaped. */
+	assert_true(slist_empty(&srx_ctx->tag_queue));
+	assert_true(slist_empty(&srx_ctx->msg_queue));
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	/* The receiver's matched recv gets a clean peer-abort error. */
+	assert_cq_peer_aborted_error(resource);
+}
+
+/**
+ * @brief Inbound dispatcher drops a PEER_ERROR_PKT whose op_id is
+ *        out of range, without touching domain state.
+ *
+ * op_id is wire-supplied. ofi_bufpool_get_ibuf() does not
+ * bounds-check, so an out-of-range id would otherwise resolve to an
+ * arbitrary slot. The dispatcher validates the index with
+ * ofi_bufpool_ibuf_is_valid() first and drops the packet. Verify a
+ * huge op_id neither underflows num_read_msg_in_flight nor writes a
+ * user CQ error.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct fi_cq_err_entry err_entry;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* No txe/rxe allocated; num_read_msg_in_flight stays 0 so an
+	 * unguarded decrement would wrap it. */
+	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+
+	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id = 0xffffffff;	/* far out of range */
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
+	err_hdr->connid = 0xc0ffee;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
+
+	/* Counter not touched (no underflow). */
+	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
+
+	/* No user CQ error written. */
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, -FI_EAGAIN);
+}
+/*
+ * Simulate the source MR being closed mid-transfer (its generation bumped)
+ * so efa_rdm_mr_gen_check_ope() reports the MR was canceled -- the
+ * precondition the sender peer-abort path (efa_rdm_txe_mark_peer_abort_if_needed)
+ * requires before it will mark the txe and drive the PEER_ERROR emit/drain.
+ * The caller must also set txe->protocol to the aborting RTM type.
+ */
+static void efa_unit_test_txe_simulate_source_mr_canceled(struct efa_rdm_ope *txe)
+{
+	static struct efa_rdm_mr stale_source_mr;
+
+	stale_source_mr.gen = 1;	/* current MR generation (valid sentinel-free) */
+	txe->iov_count = 1;
+	txe->desc[0] = &stale_source_mr;
+	txe->desc_gen[0] = 2;		/* dispatch-time snapshot, now stale (!= mr gen) */
+}
+
+/**
+ * @brief LONGCTS sender-side: txe in mid-CTSDATA gets
+ *        LOCAL_ERROR_INVALID_LKEY (post-WR-submit race) →
+ *        TX CQ error written AND a PEER_ERROR_PKT posted.
+ */
+void test_efa_rdm_txe_handle_error_emits_peer_error_on_invalid_lkey(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct fi_cq_err_entry err_entry;
+	size_t outstanding_before;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_OPE_SEND;
+	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->cq_entry.op_context = (void *) 0xa1;
+	txe->total_len = 1024;
+	txe->bytes_sent = 256;	/* mid-CTSDATA */
+
+	/* Mark the peer as supporting PEER_ERROR_PKT. */
+	peer = txe->peer;
+	assert_non_null(peer);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	/* Simulate the LONGCTS_*RTM has already been linked into
+	 * the longcts send list. The error handler removes it. */
+	dlist_insert_tail(&txe->entry,
+			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+
+	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
+
+	/* Simulate a CTSDATA WR still in flight so handle_error's drain is a
+	 * no-op until that last WR drains. */
+	txe->efa_outstanding_tx_ops = 1;
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe, FI_EINVAL,
+		EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+
+	/* handle_error marks the txe and drives the drain itself, but with a
+	 * WR still in flight nothing is emitted yet and the user completion
+	 * is withheld. */
+	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, -FI_EAGAIN);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+
+	/* The last WR drains; the drain helper now emits the PEER_ERROR_PKT. */
+	txe->efa_outstanding_tx_ops--;
+	efa_rdm_txe_progress_peer_abort_if_drained(txe);
+
+	/* PEER_ERROR_PKT was posted (efa_outstanding_tx_ops bumped). */
+	assert_int_equal(ep->efa_outstanding_tx_ops,
+			 outstanding_before + 1);
+
+	/* The txe's peer_error_prov_errno was set so the wire packet
+	 * carries the right cause. */
+	assert_int_equal(txe->peer_error_prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+}
+
+/**
+ * @brief LONGCTS sender-side: txe in mid-CTSDATA gets
+ *        FI_ECANCELED (gen check before-post detection) →
+ *        TX CQ error written AND a PEER_ERROR_PKT posted.
+ */
+void test_efa_rdm_txe_handle_error_emits_peer_error_on_canceled(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	size_t outstanding_before;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_tagged);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_OPE_SEND;
+	txe->cq_entry.flags = FI_SEND | FI_TAGGED;
+	txe->cq_entry.op_context = (void *) 0xb2;
+	txe->total_len = 1024;
+	txe->bytes_sent = 512;
+
+	peer = txe->peer;
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	dlist_insert_tail(&txe->entry,
+			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
+
+	/* Simulate the call site in efa_domain.c: after the gen check
+	 * returns -FI_ECANCELED, the caller passes err = FI_ECANCELED
+	 * and prov_errno = FI_EFA_ERR_PKT_POST. Our hook examines the
+	 * err field. */
+	efa_rdm_txe_handle_error(txe, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+	/* handle_error marks the txe and, with no WR in flight, drives the
+	 * single emit itself. */
+
+	assert_int_equal(ep->efa_outstanding_tx_ops,
+			 outstanding_before + 1);
+	assert_int_equal(txe->peer_error_prov_errno, FI_EFA_ERR_PKT_POST);
+}
+
+/**
+ * @brief LONGCTS sender-side fallback: peer doesn't advertise
+ *        EFA_RDM_EXTRA_FEATURE_PEER_ERROR → no PEER_ERROR_PKT.
+ *        Sender still sees TX CQ error.
+ */
+void test_efa_rdm_txe_handle_error_no_emit_when_peer_unsupported(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct fi_cq_err_entry err_entry;
+	size_t outstanding_before;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_OPE_SEND;
+	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->total_len = 1024;
+	txe->bytes_sent = 256;
+
+	peer = txe->peer;
+	/* Handshake received but feature bit NOT advertised — old peer. */
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] = 0;
+
+	dlist_insert_tail(&txe->entry,
+			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe, FI_EINVAL,
+		EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+
+	/* User still sees a TX CQ error. */
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(err_entry.prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+
+	/* No PEER_ERROR_PKT was posted. */
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+}
+
+/**
+ * @brief LONGCTS sender-side: when ep->homogeneous_peers is set,
+ *        emit PEER_ERROR_PKT for an MR-cancel abort even if the
+ *        receiver's handshake has not been received and the feature
+ *        bit therefore appears unset.
+ *
+ * Mirrors test_efa_rdm_rxe_emit_peer_error_with_homogeneous_peers
+ * in the rxe direction.
+ */
+void test_efa_rdm_txe_handle_error_emits_peer_error_with_homogeneous_peers(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	size_t outstanding_before;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	ep->homogeneous_peers = true;
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_OPE_SEND;
+	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->total_len = 1024;
+	txe->bytes_sent = 256;
+
+	peer = txe->peer;
+	/* Deliberately leave handshake-received unset and feature bit
+	 * cleared, to confirm homogeneous_peers bypasses the gate. */
+	assert_false(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	assert_false(efa_rdm_peer_support_peer_error(peer));
+
+	dlist_insert_tail(&txe->entry,
+			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+
+	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe, FI_EINVAL,
+		EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	/* handle_error marks the txe and, with no WR in flight, drives the
+	 * single emit itself. */
+
+	/* PEER_ERROR_PKT was posted despite no handshake. */
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
+	assert_int_equal(txe->peer_error_prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+}
+
+/**
+ * @brief LONGCTS sender-side: when neither homogeneous_peers nor
+ *        is_self applies and the receiver's handshake has not yet
+ *        been received, skip PEER_ERROR_PKT emission. The user
+ *        still sees a TX CQ error; the receiver's rxe leaks
+ *        (status quo).
+ */
+void test_efa_rdm_txe_handle_error_skips_peer_error_when_no_handshake(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct fi_cq_err_entry err_entry;
+	size_t outstanding_before;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	assert_false(ep->homogeneous_peers);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_OPE_SEND;
+	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->total_len = 1024;
+	txe->bytes_sent = 256;
+
+	peer = txe->peer;
+	/* No handshake received from receiver. */
+	assert_false(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+
+	dlist_insert_tail(&txe->entry,
+			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe, FI_EINVAL,
+		EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+
+	/* User still sees a TX CQ error. */
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(err_entry.prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+
+	/* No PEER_ERROR_PKT was posted. */
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+}
+
+/**
+ * @brief LONGCTS emit gate is keyed on state, not bytes_sent.
+ *
+ * A medium (or runting-read) RTM txe sets bytes_sent but never
+ * receives a CTS, so it stays in EFA_RDM_TXE_REQ and its rx_id is
+ * never populated. If such a txe hits LOCAL_ERROR_INVALID_LKEY
+ * (e.g. user closed the source MR), the sender must NOT emit a
+ * PEER_ERROR_PKT: doing so would put a stale/garbage rx_id on the
+ * wire (the op_id field is txe->rx_id). The user still gets a TX CQ
+ * error. This pins the state-based gate that replaced the looser
+ * bytes_sent > 0 condition.
+ */
+void test_efa_rdm_txe_handle_error_no_emit_when_not_longcts(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct fi_cq_err_entry err_entry;
+	size_t outstanding_before;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	/* Medium-RTM-like txe: data sent, but no CTS received, so it is
+	 * still in TXE_REQ and rx_id is unset. */
+	txe->state = EFA_RDM_TXE_REQ;
+	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->total_len = 1024;
+	txe->bytes_sent = 256;
+
+	peer = txe->peer;
+	assert_non_null(peer);
+	/* Peer fully supports the feature; only the state gate should
+	 * stop emission. */
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe, FI_EINVAL,
+		EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+
+	/* User still sees a TX CQ error. */
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(err_entry.prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+
+	/* No PEER_ERROR_PKT was posted despite bytes_sent > 0 and full
+	 * peer support, because the txe was not in LONGCTS send state. */
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+}
 
 /**
  * @brief Regression test for the RDMA-READ success-completion leak.
@@ -3687,7 +4348,7 @@ void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe(
  * never released the rxe -> permanent leak (and it would also post a
  * spurious EOR / success completion). This test fails one read WR,
  * then drives a successful completion for the sibling and asserts
- * the rxe leaves ep->rxe_list (freed exactly once), the user gets a
+ * the rxe leaves ep->base_ep.ope_list (freed exactly once), the user gets a
  * single clean peer-abort error completion, and no spurious success
  * completion is written.
  */
@@ -3798,4 +4459,237 @@ void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
 	assert_int_equal(ep->efa_outstanding_tx_ops, 0);
 	assert_cq_peer_aborted_error(resource);
 	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
+}
+
+/**
+ * @brief Regression test for the CTS-outstanding inbound LONGCTS leak.
+ *
+ * On the LONGCTS recv path the receiver refills its window by posting
+ * additional CTS packets mid-transfer, so a CTS can be in flight when
+ * the sender's MR-cancel PEER_ERROR_PKT arrives. The inbound handler
+ * recovers the rxe (marks EFA_RDM_OPE_PEER_ABORT_PENDING) and attempts a drain,
+ * but the drain is a no-op while the CTS is outstanding
+ * (efa_outstanding_tx_ops > 0).
+ *
+ * Before the fix the CTS send-completion case was a bare break with
+ * no drain retry, so the rxe was never freed -> leak. The fix makes
+ * the CTS send-completion call the drain helper. This test asserts
+ * the rxe survives the inbound PEER_ERROR_PKT (CTS still in flight)
+ * and is freed exactly when the CTS completes.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
+	void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr match_attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct efa_rdm_pke *err_pkt, *cts_pkt;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct efa_rdm_ope *rxe;
+	struct iovec iov;
+	char buf[16];
+	void *desc = NULL;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+			 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	ret = util_srx_generic_recv(ep->peer_srx_ep, &iov, &desc, 1,
+				    FI_ADDR_UNSPEC, /*context=*/(void *) 0xa1, 0);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.tag = 0;
+	match_attr.msg_size = 16;
+	ofi_genlock_lock(srx_ctx->lock);
+	ret = peer_srx->owner_ops->get_msg(peer_srx, &match_attr, &peer_rxe);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_msg);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_OPE_SEND;	/* LONGCTS recv: sending CTS/CTSDATA */
+	/*
+	 * A real rxe transitions to OPE_SEND together with being inserted
+	 * onto ope_longcts_send_list (efa_rdm_pke_handle_cts_recv). Mirror
+	 * that here so the drain's efa_rdm_rxe_handle_error() can validly
+	 * dlist_remove(&rxe->entry) for the OPE_SEND state.
+	 */
+	dlist_insert_tail(&rxe->entry,
+			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+	rxe->peer_rxe = peer_rxe;
+
+	/* Simulate a CTS in flight on this rxe (window refill). */
+	cts_pkt = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				    EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(cts_pkt);
+	efa_rdm_pke_set_ope(cts_pkt, rxe);
+	cts_pkt->peer = peer;
+	((struct efa_rdm_base_hdr *) cts_pkt->wiredata)->type = EFA_RDM_CTS_PKT;
+	ep->efa_outstanding_tx_ops += 1;
+	peer->efa_outstanding_tx_ops += 1;
+	rxe->efa_outstanding_tx_ops += 1;
+
+	/* Inbound PEER_ERROR_PKT (LONGCTS direction) targeting our rxe. */
+	err_pkt = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				    EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(err_pkt);
+	ep->efa_rx_pkts_posted += 1;
+	err_hdr = (struct efa_rdm_peer_error_hdr *) err_pkt->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id = rxe->rx_id;
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+	err_hdr->connid = 0xbeef;
+	err_pkt->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(err_pkt);
+
+	/* Recovery ran (EFA_RDM_OPE_PEER_ABORT_PENDING set) but the rxe must NOT be freed yet:
+	 * the CTS is still outstanding, so the drain was a no-op. */
+	assert_true(rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->base_ep.ope_list), 1);
+
+	/* The CTS send completes. Its send-completion handler must now
+	 * drain and free the rxe (the regression: a bare break left it
+	 * leaked forever). */
+	efa_rdm_pke_handle_send_completion(cts_pkt);
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->base_ep.ope_list), 0);
+	assert_int_equal(ep->efa_outstanding_tx_ops, 0);
+}
+
+/**
+ * @brief Regression test for the LONGCTS sender-side abort txe leak.
+ *
+ * When a LONGCTS transfer's source MR is canceled mid-CTSDATA, the
+ * failing WR runs the abort path: it writes the TX CQ error, emits a
+ * PEER_ERROR_PKT (its own outstanding WR on the txe), and marks the
+ * txe PEER_ABORT_PENDING|PEER_ERROR_EMITTED -- it does NOT release the
+ * txe, because the PEER_ERROR_PKT (and any sibling CTSDATA WRs) still
+ * use it as wr_id.
+ *
+ * Before the fix nothing freed the errored txe: the success-completion
+ * path only releases on bytes_acked == total_len (never true
+ * post-abort), sibling failures early-return on OPE_ERR, and the
+ * PEER_ERROR_PKT completion only released the RXE direction. The txe
+ * leaked until ep close. This test drives the abort, then completes the
+ * emitted PEER_ERROR_PKT and asserts the drain-gated release frees the
+ * txe exactly once.
+ */
+void test_efa_rdm_pke_handle_tx_error_longcts_abort_drains_txe(
+	void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *err_pkt;
+	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err_entry = {0};
+	size_t txe_base;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_OPE_SEND;
+	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->total_len = 4096;
+	txe->bytes_acked = 256;        /* partial; never reaches total_len */
+	txe->rx_id = 0x7;
+	peer = txe->peer;
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+	dlist_insert_tail(&txe->entry,
+			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+
+	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
+
+	/* efa_rdm_txe_construct (via the helper) already links the txe on
+	 * ep->base_ep.ope_list; track it as the freed observable. */
+	txe_base = efa_unit_test_get_dlist_length(&ep->base_ep.ope_list);
+
+	/* Simulate the failing CTSDATA WR still being counted as in flight so
+	 * handle_error's drain is a no-op until it drains. */
+	txe->efa_outstanding_tx_ops = 1;
+
+	/* A CTSDATA WR fails with INVALID_LKEY (source MR canceled).
+	 * handle_error marks the txe and drives the drain itself, but with the
+	 * WR still in flight it withholds the completion and emits nothing. */
+	efa_rdm_txe_handle_error(txe, FI_EINVAL,
+		EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	assert_int_equal(txe->state, EFA_RDM_OPE_ERR);
+	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	/* Not yet emitted, nothing on the CQ, txe untouched. */
+	assert_false(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), -FI_EAGAIN);
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->base_ep.ope_list),
+			 txe_base);
+
+	/* The CTSDATA WR drains; the drain helper now emits the
+	 * PEER_ERROR_PKT and keeps the txe alive until that packet's own
+	 * send completion. */
+	txe->efa_outstanding_tx_ops--;
+	efa_rdm_txe_progress_peer_abort_if_drained(txe);
+	assert_true(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), -FI_EAGAIN);
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->base_ep.ope_list),
+			 txe_base);
+	assert_int_equal(txe->efa_outstanding_tx_ops, 1);
+
+	/* The emitted PEER_ERROR_PKT completes. Complete the real packet
+	 * the abort posted (on peer->outstanding_tx_pkts) so no live pke
+	 * is left referencing the txe. The drain helper now surfaces the
+	 * single completion and frees the txe. */
+	err_pkt = NULL;
+	dlist_foreach_container(&peer->outstanding_tx_pkts, struct efa_rdm_pke,
+				err_pkt, entry) {
+		if (efa_rdm_pke_get_base_hdr(err_pkt)->type ==
+		    EFA_RDM_PEER_ERROR_PKT)
+			break;
+	}
+	assert_non_null(err_pkt);
+	assert_int_equal(efa_rdm_pke_get_base_hdr(err_pkt)->type,
+			 EFA_RDM_PEER_ERROR_PKT);
+	efa_rdm_pke_handle_send_completion(err_pkt);
+
+	/* Exactly one TX completion, surfaced as the dedicated
+	 * FI_ECANCELED / FI_EFA_ERR_PEER_ABORTED pair, only after the
+	 * notification went out. */
+	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), -FI_EAVAIL);
+	assert_int_equal(fi_cq_readerr(resource->cq, &cq_err_entry, 0), 1);
+	assert_int_equal(cq_err_entry.err, FI_ECANCELED);
+	assert_int_equal(cq_err_entry.prov_errno, FI_EFA_ERR_PEER_ABORTED);
+	/* No second completion. */
+	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), -FI_EAGAIN);
+
+	/* txe freed exactly once (off txe_list), outstanding == 0. */
+	assert_int_equal(ep->efa_outstanding_tx_ops, 0);
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->base_ep.ope_list),
+			 txe_base - 1);
 }

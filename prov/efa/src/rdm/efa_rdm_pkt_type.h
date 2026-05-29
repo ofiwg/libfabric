@@ -100,6 +100,34 @@ bool efa_rdm_pkt_type_is_medium(int pkt_type)
 }
 
 /**
+ * @brief determine whether a req pkt type is a longcts two-sided RTM
+ *        (send/tagged), excluding the one-sided RTW variants.
+ *
+ * Used by the sender-side peer-abort path: a LONGCTS RTM aborted before
+ * its first CTS (still in EFA_RDM_TXE_REQ) has no receiver ope index
+ * (txe->rx_id), so it is signalled by per-peer msg_id with
+ * REF_MSG_ID_SKIP -- exactly like the EAGER / medium / runt-only abort.
+ * One-sided LONGCTS RTW targets no two-sided reorder window and is
+ * excluded.
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool efa_rdm_pkt_type_is_longcts_rtm(int pkt_type)
+{
+	switch(pkt_type) {
+	case EFA_RDM_LONGCTS_MSGRTM_PKT:
+	case EFA_RDM_LONGCTS_TAGRTM_PKT:
+	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
+	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+/**
  * @brief determine whether a req pkt type is longcts RTM or RTW.
  *
  * @param[in]		pkt_type		REQ packet type
