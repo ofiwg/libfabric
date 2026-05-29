@@ -62,7 +62,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 
 	/* Provide default mock return values for CQ operations during teardown */
 	if (g_efa_unit_test_mocks.efa_ibv_cq_start_poll) {
-		will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+		will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
 	}
 
 	efa_unit_test_resource_destruct(resource);

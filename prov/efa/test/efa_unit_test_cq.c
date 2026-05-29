@@ -2450,8 +2450,8 @@ static int test_efa_rdm_cq_sread_prep(struct efa_resource *resource)
 
 	g_efa_unit_test_mocks.efa_ibv_req_notify_cq = efa_mock_ibv_req_notify_cq_return_mock;
 	g_efa_unit_test_mocks.efa_ibv_get_cq_event = efa_mock_ibv_get_cq_event_return_mock;
-	will_return_maybe(efa_mock_ibv_req_notify_cq_return_mock, 0);
-	will_return_maybe(efa_mock_ibv_get_cq_event_return_mock, -1);
+	will_return_int_maybe(efa_mock_ibv_req_notify_cq_return_mock, 0);
+	will_return_int_maybe(efa_mock_ibv_get_cq_event_return_mock, -1);
 
 	efa_unit_test_resource_construct_no_cq_and_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -2487,7 +2487,7 @@ void test_efa_rdm_cq_sread_no_wait_obj(void **state)
 	assert_int_equal(ret, -FI_ENOSYS);
 
 	assert_int_equal(fi_close(&waitless_cq->fid), 0);
-	will_return_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+	will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
 }
 
 /**
