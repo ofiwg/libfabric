@@ -17599,10 +17599,10 @@ HFI selection logic.
     default threshold is 8192. This has no meaning if Libfabric was not
     configured with GDRCopy or ROCR support.
 
-*FI_OPX_MIXED_NETWORK*
+*FI_OPX_OPA100_INTEROP*
 :   Boolean (1/0, on/off, true/false, yes/no). Indicates that the job
-    requires OPA100 support. Set to 0 if OPA100 support is not needed.
-    Default is 1.
+    requires OPA100 support. Set to 1 if OPA100 support is needed with
+    CN5000 or CN6000. Default is 0.
 
 *FI_OPX_ROUTE_CONTROL*
 :   Integer. Specify the route control for each packet type. The format
@@ -17610,10 +17610,10 @@ HFI selection logic.
     `<inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>`.
 
 Each value can range from 0-7. 0-3 is used for in-order and 4-7 is used
-for out-of-order. If Token ID (TID) is enabled the out-of-order route
-controls are disabled.
+for out-of-order. If Token ID (TID) is enabled then
+`<rendezvous data packet value>` must use in-order route controls.
 
-Default is `0:0:0:0:0:0` on OPA100 and `4:4:4:4:0:4` on CN5000.
+Default is in-order (`0:0:0:0:0:0`) route controls.
 
 *FI_OPX_SHM_ENABLE*
 :   Boolean (1/0, on/off, true/false, yes/no). Enables shm across all
@@ -17641,6 +17641,20 @@ Default is `0:0:0:0:0:0` on OPA100 and `4:4:4:4:0:4` on CN5000.
     optimal value based on the number of contexts available on the
     system and number of processors online. Only applicable if context
     sharing is enabled. Otherwise this value is ignored.
+
+*FI_OPX_MULTI_HFI_STRIPING*
+:   Boolean (0/1, on/off, true/false, yes/no). Enable or disable
+    multi-HFI data striping for rendezvous (RZV) transfers over HFISVC.
+    When enabled, OPX stripes large RZV transfers across multiple HFI
+    contexts for increased bandwidth. Default: 1 on CN6000, 0 on CN5000.
+    Not supported on OPA-100 hardware.
+
+*FI_OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES*
+:   Integer. Minimum rendezvous payload size in bytes for multi-HFI
+    striping. Transfers with a payload smaller than this threshold use a
+    single HFI rail even when striping is enabled. Only effective when
+    FI_OPX_MULTI_HFI_STRIPING=1. Not supported on OPA-100 hardware.
+    Default: 65536 (64 KiB).
 
 # SEE ALSO
 
