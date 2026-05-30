@@ -268,6 +268,7 @@ void efa_unit_test_resource_destruct(struct efa_resource *resource)
 {
 	if (resource->ep) {
 		assert_int_equal(fi_close(&resource->ep->fid), 0);
+		resource->ep = NULL;
 	}
 
 	if (g_ibv_submitted_wr_id_vec) {
@@ -278,30 +279,37 @@ void efa_unit_test_resource_destruct(struct efa_resource *resource)
 
 	if (resource->eq) {
 		assert_int_equal(fi_close(&resource->eq->fid), 0);
+		resource->eq = NULL;
 	}
 
 	if (resource->cq) {
 		assert_int_equal(fi_close(&resource->cq->fid), 0);
+		resource->cq = NULL;
 	}
 
 	if (resource->av) {
 		assert_int_equal(fi_close(&resource->av->fid), 0);
+		resource->av = NULL;
 	}
 
 	if (resource->domain) {
 		assert_int_equal(fi_close(&resource->domain->fid), 0);
+		resource->domain = NULL;
 	}
 
 	if (resource->fabric) {
 		assert_int_equal(fi_close(&resource->fabric->fid), 0);
+		resource->fabric = NULL;
 	}
 
 	if (resource->info) {
 		fi_freeinfo(resource->info);
+		resource->info = NULL;
 	}
 
 	if (resource->hints) {
 		fi_freeinfo(resource->hints);
+		resource->hints = NULL;
 	}
 }
 
