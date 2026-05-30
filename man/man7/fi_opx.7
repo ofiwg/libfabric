@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_opx" "7" "2025\-12\-02" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_opx" "7" "2026\-05\-30" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .PP
 {%include JB/setup %}
@@ -419,11 +419,11 @@ The default threshold is 8192.
 This has no meaning if Libfabric was not configured with GDRCopy or ROCR
 support.
 .TP
-\f[I]FI_OPX_MIXED_NETWORK\f[R]
+\f[I]FI_OPX_OPA100_INTEROP\f[R]
 Boolean (1/0, on/off, true/false, yes/no).
 Indicates that the job requires OPA100 support.
-Set to 0 if OPA100 support is not needed.
-Default is 1.
+Set to 1 if OPA100 support is needed with CN5000 or CN6000.
+Default is 0.
 .TP
 \f[I]FI_OPX_ROUTE_CONTROL\f[R]
 Integer.
@@ -433,11 +433,11 @@ The format is -
 .PP
 Each value can range from 0-7.
 0-3 is used for in-order and 4-7 is used for out-of-order.
-If Token ID (TID) is enabled the out-of-order route controls are
-disabled.
+If Token ID (TID) is enabled then
+\f[V]<rendezvous data packet value>\f[R] must use in-order route
+controls.
 .PP
-Default is \f[V]0:0:0:0:0:0\f[R] on OPA100 and \f[V]4:4:4:4:0:4\f[R] on
-CN5000.
+Default is in-order (\f[V]0:0:0:0:0:0\f[R]) route controls.
 .TP
 \f[I]FI_OPX_SHM_ENABLE\f[R]
 Boolean (1/0, on/off, true/false, yes/no).
@@ -471,6 +471,24 @@ Default is to determine optimal value based on the number of contexts
 available on the system and number of processors online.
 Only applicable if context sharing is enabled.
 Otherwise this value is ignored.
+.TP
+\f[I]FI_OPX_MULTI_HFI_STRIPING\f[R]
+Boolean (0/1, on/off, true/false, yes/no).
+Enable or disable multi-HFI data striping for rendezvous (RZV) transfers
+over HFISVC.
+When enabled, OPX stripes large RZV transfers across multiple HFI
+contexts for increased bandwidth.
+Default: 1 on CN6000, 0 on CN5000.
+Not supported on OPA-100 hardware.
+.TP
+\f[I]FI_OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES\f[R]
+Integer.
+Minimum rendezvous payload size in bytes for multi-HFI striping.
+Transfers with a payload smaller than this threshold use a single HFI
+rail even when striping is enabled.
+Only effective when FI_OPX_MULTI_HFI_STRIPING=1.
+Not supported on OPA-100 hardware.
+Default: 65536 (64 KiB).
 .SH SEE ALSO
 .PP
 \f[V]fabric\f[R](7), \f[V]fi_provider\f[R](7), \f[V]fi_getinfo\f[R](7),
