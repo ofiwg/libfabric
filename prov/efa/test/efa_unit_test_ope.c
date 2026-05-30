@@ -17,7 +17,7 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 	struct efa_ep_addr raw_addr;
 	struct efa_rdm_mr mock_mr;
 	struct efa_rdm_ope mock_txe;
-	struct efa_rdm_peer mock_peer;
+	struct efa_rdm_peer mock_peer = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t addr;
 	size_t pkt_entry_cnt;
@@ -422,7 +422,7 @@ void test_efa_rdm_ope_handle_error_impl(
 {
 	struct fi_cq_data_entry cq_entry;
 	struct fi_cq_err_entry cq_err_entry = {0};
-	struct fi_eq_err_entry eq_err_entry;
+	struct fi_eq_err_entry eq_err_entry = {0};
 
 	efa_rdm_ope_handle_error(ope, FI_ENOTCONN,
 				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
