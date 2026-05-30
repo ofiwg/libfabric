@@ -281,7 +281,7 @@ void test_rdm_cq_handshake_bad_send_status_impl(struct efa_resource **state, int
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
 	struct fi_cq_data_entry cq_entry;
-	struct fi_eq_err_entry eq_err_entry;
+	struct fi_eq_err_entry eq_err_entry = {0};
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_cq *efa_rdm_cq;
@@ -416,7 +416,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_pke *pkt_entry;
 	struct fi_cq_data_entry cq_entry;
-	struct fi_eq_err_entry eq_err_entry;
+	struct fi_eq_err_entry eq_err_entry = {0};
 	int ret;
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct efa_ibv_cq *ibv_cq;
@@ -511,7 +511,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry;
-	struct fi_eq_err_entry eq_err_entry;
+	struct fi_eq_err_entry eq_err_entry = {0};
 	int ret;
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct efa_ibv_cq *ibv_cq;
