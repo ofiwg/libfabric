@@ -14,6 +14,7 @@ alexia.ingerson <aingerso@jfcst-cb.cluster>
 Ali Mohammed <ali.mohammed@hpe.com>
 Amir Shehata <amir.shehata@gmail.com>
 Amir Shehata <shehataa@ornl.gov>
+Amit Radzi <amitrad@amazon.com>
 Amith Abraham <aabraham@cray.com>
 Amith Abraham <amith.abraham@hpe.com>
 Ana Guerrero López <ana@ekaia.org>
@@ -34,6 +35,7 @@ AWS ParallelCluster user <centos@ip-172-31-23-100.ec2.internal>
 AWS ParallelCluster user <ec2-user@ip-172-31-0-240.us-east-2.compute.internal>
 AWS ParallelCluster user <ec2-user@ip-172-31-15-28.ec2.internal>
 aws-ceenugal <123417666+aws-ceenugal@users.noreply.github.com>
+Baruch Siach <baruch@tkos.co.il>
 Bella Bai <baiyunyu@amazon.com>
 Ben Lynam <ben.lynam23@gmail.com>
 Ben Lynam <Ben.Lynam@cornelisnetworks.com>
@@ -74,7 +76,9 @@ Cody D'Ambrosio <cody.dambrosio@hpe.com>
 Cody Mann <cody.mann@cornelisnetworks.com>
 Coni Gehler <cgehler@cray.com>
 ct-clmsn <ct.clmsn@gmail.com>
+Dan Cherniavsky <dchern@amazon.com>
 Daniel Kranzdorf <dkkranzd@amazon.com>
+Daniel Magee <daniel.magee@cornelisnetworks.com>
 Dardo D Kleiner <dkleiner@cmf.nrl.navy.mil>
 Dariusz Sciebura <dariusz.sciebura@gmail.com>
 Dariusz Sciebura <dariuszs@graphcore.ai>
@@ -111,6 +115,7 @@ Firas Jahjah <firasj@amazon.com>
 Frank Zago <fzago@cray.com>
 Franz Pöschel <franz.poeschel@gmail.com>
 fullerdj <fullerdj@users.noreply.github.com>
+Gad Arbel <gad.arbel@intel.com>
 Gal Pressman <galpress@amazon.com>
 Garrett Weil <gweil@cornelisnetworks.com>
 Gengbin Zheng <gengbin.zheng@intel.com>
@@ -139,6 +144,7 @@ Jack Morrison <jack.morrison@cornelisnetworks.com>
 Jaime Arteaga <jaime.a.arteaga.molina@intel.com>
 James Dinan <james.dinan@intel.com>
 James Fillers <fillersjt@ornl.gov>
+James Li <jameslli@amazon.com>
 James Shimek <jshimek@cray.com>
 James Swaro <james.swaro@gmail.com>
 James Swaro <james.swaro@hpe.com>
@@ -185,12 +191,15 @@ k0zmo <k0zmo@outlook.com>
 Kaike Wan <kaike.wan@intel.com>
 Kajetan Świerk <k0zmo@outlook.com>
 Kalyan Kodamagula <kalyan.kodamagula@hpe.com>
+Ken Raffenetti <ken.raffenetti@cornelisnetworks.com>
+Ken Raffenetti <kraffenetti@cornelisnetworks.com>
 Ken Raffenetti <raffenet@mcs.anl.gov>
 Kevan Rehm <krehm@cray.com>
 Kevan rehm <krehm@cray.com>
 Kevin Ji <1146876+kevinji@users.noreply.github.com>
 Kevin Ji <kji@anthropic.com>
 kseager <kayla.seager@intel.com>
+kumarsuresh-hpe <kumar.suresh@hpe.com>
 Kyle Gerheiser <kyle.gerheiser@intel.com>
 Kyle Kim <kimkyle@amazon.com>
 Latchesar Ionkov <lionkov@lanl.gov>
@@ -207,6 +216,7 @@ Martin Kontsek <mkontsek@cisco.com>
 Matt Koop <mkoop@amazon.com>
 Md Bulbul Sharif <md-bulbul.sharif@hpe.com>
 Miao Luo <miao.luo@intel.com>
+Michael Blocksome <michael.blocksome@cornelisnetworks.com>
 Michael Blocksome <michael.blocksome@intel.com>
 Michael Chuvelev <michael.chuvelev@intel.com>
 Michael Heinz <mheinz@cornelisnetworks.com>
@@ -216,10 +226,12 @@ Michael Margolin <mrgolin@amazon.com>
 Michael Wilkins <michael.wilkins@cornelisnetworks.com>
 Mike Uttormark <mike.uttormark@hpe.com>
 Mike Wilkins <michael.wilkins@cornelisnetworks.com>
+Mike Wilkins <mwilkins@cornelisnetworks.com>
 Mikhail Khalilov <miharulidze@gmail.com>
 Mikhail Khalilov <mikhail.khalilov@intel.com>
 Min Si <msi@anl.gov>
 Misbah Mubarak <mimubara@amazon.com>
+Mitchell Young <mthyoung@amazon.com>
 mmubarak <misbah.mubarak@gmail.com>
 Mohan Gandhi <mohgan@amazon.com>
 muttormark <mike.uttormark@hpe.com>
@@ -262,6 +274,7 @@ Philip Davis <philipdavis01@gmail.com>
 Philipp Friese <philipp.friese@cit.tum.de>
 Pierre Roux <piroux@cisco.com>
 Piotr Chmiel <piotrc@graphcore.ai>
+Pooja Nara <pooja.nara@cornelisnetworks.com>
 Prankur Gupta <prankgup@cisco.com>
 PukNgae Cryolitia <Cryolitia@gmail.com>
 Quentin Boyer <quentin.boyer@eviden.com>
@@ -317,6 +330,7 @@ Sylvain Didelot <didelot.sylvain@gmail.com>
 Sylvain Didelot <sdidelot@ddn.com>
 szegel <szegel@ip-10-0-2-236.corp.pcluster.com>
 Tadeusz Struk <tstruk@gigaio.com>
+Tal Avraham <talavr@amazon.com>
 Tang, Jingyin <jytang@amazon.com>
 Terrence Mitchem <terrence.mitchem@hpe.com>
 Thananon Patinyasakdikul <apatinya@cisco.com>
@@ -338,6 +352,7 @@ Tony Zinger <ajz@cray.com>
 tonyzinger <ajz@cray.com>
 Trevor Hendricks <trevorhe@amazon.com>
 Tyler Reddy <tyler.je.reddy@gmail.com>
+Ubuntu <ubuntu@ip-10-0-56-213.ap-northeast-1.compute.internal>
 Ubuntu <ubuntu@ip-172-31-15-224.ec2.internal>
 Venkata Krishna Nimmagadda <nvkrishna85@gmail.com>
 Venkata Krishna Nimmagadda <venkata.krishna.nimmagadda@intel.com>
@@ -353,6 +368,7 @@ William Zhang <wilzhang@amazon.com>
 Xuezhao Liu <xuezhao.liu@intel.com>
 Xuyang Wang <xuywang@cisco.com>
 Yaakov Selkowitz <yselkowi@redhat.com>
+Yehuda Yitschak <yehuday@amazon.com>
 Yin Li <yinliq@amazon.com>
 yohann <yohann.burette@intel.com>
 Yohann Burette <yohann.burette@intel.com>

@@ -73,7 +73,7 @@ extern "C" {
 #endif
 
 #define FI_MAJOR_VERSION 2
-#define FI_MINOR_VERSION 5
+#define FI_MINOR_VERSION 6
 #define FI_REVISION_VERSION 0
 
 /* Removing these breaks the build for some apps.
