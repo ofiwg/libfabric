@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2025 by Cornelis Networks.
+ * Copyright (C) 2021-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -71,7 +71,7 @@ static ssize_t fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 		const int lock_required		  = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 		fi_opx_lock_if_required(&opx_cq->lock, lock_required);
-		ofi_cq_err_memcpy(opx_cq->domain->fabric->fabric_fid.api_version, buf, &context->err_entry);
+		ofi_cq_err_memcpy(opx_cq->domain->fabric->util_fabric.fabric_fid.api_version, buf, &context->err_entry);
 		slist_remove_head((struct slist *) &opx_cq->err);
 		OPX_BUF_FREE(context);
 		fi_opx_unlock_if_required(&opx_cq->lock, lock_required);
