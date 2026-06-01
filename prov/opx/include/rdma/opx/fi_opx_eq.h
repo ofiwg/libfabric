@@ -167,8 +167,6 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_cq, pending) == (FI_OPX_CACHE_LIN
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_cq, progress) == (FI_OPX_CACHE_LINE_SIZE * 2),
 			"struct fi_opx_cq.progress should start at cacheline 2!\n");
 
-int fi_opx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr, struct fid_eq **eq, void *context);
-
 #define DUMP_ENTRY_INPUT(entry)                                                                                        \
 	({                                                                                                             \
 		fprintf(stderr, "%s:%s():%d entry = %p\n", __FILE__, __func__, __LINE__, (entry));                     \
