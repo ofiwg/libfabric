@@ -157,7 +157,7 @@ efa_rdm_pke_copy_from_hmem_iov(struct efa_rdm_mr *iov_mr, struct efa_rdm_pke *pk
 	return copied;
 }
 
-/** 
+/**
  * @brief This function either posts RDMA read, or sends a NACK packet when p2p
  * is not available or memory registration limit was reached on the receiver.
  *

@@ -27,7 +27,7 @@ If `make check` fails, then directly executing the test executable also works
 
 ## What Should be Tested
 1. We are biased toward testing public, stable functions, e.g. we prefer testing `fi_*` to `efa_*` - the former more closely resembles real user behavior.
-1. We make a conscious trade-off to test larger rather than smaller units. A large test unit consists of more state variables, and testing it gives us more confidence in the overall system. 
+1. We make a conscious trade-off to test larger rather than smaller units. A large test unit consists of more state variables, and testing it gives us more confidence in the overall system.
 1. We avoid testing `static` functions that are implementation details and subject to frequent changes. More importantly, `static` function tests have to be written in the same source files and difficult to manage in a central place.
 1. We are biased toward testing edge cases over "happy cases", especially if the code path under test cannot be covered by integration tests.
 

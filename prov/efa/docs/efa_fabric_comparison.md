@@ -43,7 +43,7 @@ EFA fabric implements a more complex, layered approach with protocol emulation:
 - Chooses appropriate protocol based on operation type, message size, and EFA NIC capabilities
 - Allocates `efa_rdm_pke` (EFA-RDM packet entry) structures from buffer pool
 - Each packet entry is a 128-byte data structure allocated from ~8KB buffers (comparable to device MTU size) to support staging wiredata from application when
-necessary. 
+necessary.
 
 - Each `pke` corresponds to a WQE that interacts with EFA device
 - One operation entry can map to multiple packet entries (e.g., a 16KB message can be sent via 2 packet entries)

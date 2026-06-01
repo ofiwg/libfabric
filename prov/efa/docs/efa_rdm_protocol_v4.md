@@ -925,7 +925,7 @@ Like in two-sided communication, there are also two endpoints involved in one-si
 However, only on one side will the application call libfabric's one-sided API (such as `fi_write`,
 `fi_read` and `fi_atomic`). In protocol v4, this side is called the requester.
 
-On the other side (which is called the responder), the application does not make calls to 
+On the other side (which is called the responder), the application does not make calls to
 lifabric's API, but the EFA provider requires the application to keep the progress engine running
 to facilitate the communication. This is because the EFA provider only supports `FI_PROGRESS_MANUAL`.
 
@@ -1489,7 +1489,7 @@ Address Handle Number (AHN) and QPN of a received packet. Because the GID can be
 the only unknown part is CONNID.
 
 The extra request "connid header" was introduced to address the issue. Also because this is an extra request,
-an endpoint cannot assume that the peer supports it, thus the endpoint needs to be able to handle the case 
+an endpoint cannot assume that the peer supports it, thus the endpoint needs to be able to handle the case
 that incoming packets do not have the sender connection ID in it. It is up to the implementation to decide
 whether the endpoint should abort the communication or continue without using the extra request in this case.
 
@@ -1572,8 +1572,8 @@ peer's handshake status or `extra_info`. The `EFA_RDM_EXTRA_FEATURE_READ_NACK` f
 advertised in `extra_info` for backwards compatibility with v2.0 peers that check for it.**
 
 Long read and runting read protocols in Libfabric 1.20 and above use a nack protocol
-when the receiver is unable to register a memory region for the RDMA read operation 
-or P2P support is unavailable for the RDMA read operation, typically because of a 
+when the receiver is unable to register a memory region for the RDMA read operation
+or P2P support is unavailable for the RDMA read operation, typically because of a
 hardware limitation.
 
 Table: 4.2 Format of the READ_NACK packet
@@ -1593,9 +1593,9 @@ The nack protocols work as follows
    - One LONGREAD_RTM packet in case of long read protocol
    - Multiple RUNTREAD_RTM packets in case of runting read protocol
    - One LONGREAD_RTW packet in case of emulated long-read write protocol
-* The receiver attempts to register a memory region for the RDMA operation but fails, 
+* The receiver attempts to register a memory region for the RDMA operation but fails,
 or P2P is unavailable for the RDMA operation
-* After all RTM/RTW packets have been processed, the receiver sends a READ_NACK packet to the sender 
+* After all RTM/RTW packets have been processed, the receiver sends a READ_NACK packet to the sender
 * The sender then switches to the long CTS protocol and sends a LONGCTS_RTM/LONGCTS_RTW packet
 * The receiver sends a CTS packet and the data transfer continues as in the long CTS protocol
 

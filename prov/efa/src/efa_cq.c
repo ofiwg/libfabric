@@ -304,7 +304,7 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
  * This function handles hardware-assisted RDMA writes with immediate data at
  * remote endpoint.  These do not have a packet context, nor do they have a
  * connid available.
- * 
+ *
  * @param[in]		base_ep     efa_base_ep
  * @param[in]		ibv_cq_ex   extended ibv cq
  */
@@ -340,7 +340,7 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
 /**
  * @brief poll rdma-core cq and process the cq entry
  *
- * @param[in]	cqe_to_process    Max number of cq entry to poll and process. 
+ * @param[in]	cqe_to_process    Max number of cq entry to poll and process.
  * A negative number means to poll until cq empty.
  * @param[in]   util_cq           util_cq
  */
@@ -567,7 +567,7 @@ int efa_cq_trywait(struct efa_cq *cq) {
 
 /**
  * @brief Poll for completion events with timeout.
- * 
+ *
  * ibv_get_cq_event() waits for the next completion event in the
  * completion event channel. Fills the arguments cq with the
  * CQ that got the event and cq_context with the CQ's context.
@@ -613,7 +613,7 @@ int efa_poll_events(struct efa_cq *cq, int timeout)
 		ofi_atomic_inc32(&cq->nevents);
 		rc--;
 	}
-	
+
 	if (fds[1].revents & POLLIN) {
 		EFA_INFO(FI_LOG_CQ, "efa_poll_events: signal FD triggered by fi_cq_signal\n");
 		fd_signal_reset(&cq->signal);
@@ -691,8 +691,8 @@ static ssize_t efa_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			ret = efa_poll_events(cq, timeout);
 			if (ret && ret != -FI_EAGAIN)
 				break;
-		} 
-		
+		}
+
 		ret = cq->util_cq.cq_fid.ops->readfrom(&cq->util_cq.cq_fid, buffer, count - num_completions, src_addr ? src_addr + num_completions : NULL);
 		if (ret > 0) {
 			buffer += ret * cq->entry_size;
@@ -721,7 +721,7 @@ static ssize_t efa_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
  * This may be used to wake-up a thread that is blocked waiting to read a
  * completion operation. The fi_cq_signal operation is only available if the CQ
  * was configured with a wait object.
- * 
+ *
  * Returns 0 on success. On error, returns a negative fabric errno.
  */
 int efa_cq_signal(struct fid_cq *cq_fid)
@@ -948,22 +948,22 @@ int efa_cq_close(fid_t fid)
 /**
  * @brief
  * The fi_control call is used to access provider or implementation specific
- * details of the completion queue. Users may use fi_control to retrieve the 
- * underlying wait object associated with a CQ, in order to use it in other 
+ * details of the completion queue. Users may use fi_control to retrieve the
+ * underlying wait object associated with a CQ, in order to use it in other
  * system calls. The following control commands are usable with a CQ.
- * 
+ *
  * FI_GETWAIT
  * This command allows the user to retrieve the low-level wait object associated
- * with the CQ. 
- * 
+ * with the CQ.
+ *
  * FI_GETWAITOBJ
- * This command allows the user to retrieve the type of wait object specified 
+ * This command allows the user to retrieve the type of wait object specified
  * during CQ creation, through the CQ attributes.
  *
  * @param[in]	fid		Completion queue fid
  * @param[in]	command	Command of control operation to perform on CQ.
  * @param[out]	arg		Optional control argument. An address where a
- * pointer to the returned wait object will be written. This should be an 
+ * pointer to the returned wait object will be written. This should be an
  * ‘int *’ for FI_WAIT_FD.
  *
  * @return Returns 0 on success. On error, returns a negative fabric errno.

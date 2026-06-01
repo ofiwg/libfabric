@@ -85,7 +85,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 			return NULL;
 		}
 		pkt_entry->debug_info->counter = 0;
-		memset(pkt_entry->debug_info->entries, 0, 
+		memset(pkt_entry->debug_info->entries, 0,
 		       sizeof(pkt_entry->debug_info->entries));
 	}
 #endif
@@ -805,7 +805,7 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 
 #if ENABLE_DEBUG
 /* Compile-time assertion that debug_info gen field can hold all possible gen values */
-_Static_assert(EFA_RDM_PKE_DEBUG_GEN_MASK >= EFA_RDM_PACKET_GEN_MASK, 
+_Static_assert(EFA_RDM_PKE_DEBUG_GEN_MASK >= EFA_RDM_PACKET_GEN_MASK,
                "DEBUG_GEN_BITS insufficient to hold EFA_RDM_PACKET_GEN_MASK");
 
 /**

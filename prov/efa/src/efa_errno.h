@@ -21,7 +21,7 @@
 
 
 /** @defgroup EfaErrnoXMacros EFA error-handling X macros
- * 
+ *
  * The macros described here are [X
  * macros](https://en.wikipedia.org/wiki/X_macro) or "higher-order" macros,
  * which are designed to take a function-like macro as the sole argument to

@@ -777,7 +777,7 @@ void test_ah_refcnt(struct efa_resource **state)
 	ofi_genlock_unlock(&efa_rdm_ep->base_ep.domain->srx_lock);
 
 	efa_ah = peer->conn->ah;
-	
+
 	assert_int_equal(g_ibv_ah_cnt, 2);
 
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
@@ -787,7 +787,7 @@ void test_ah_refcnt(struct efa_resource **state)
 	/* Move implicit AV entry to explicit AV entry */
 	err = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
 	assert_int_equal(err, 1);
-	
+
 	assert_int_equal(g_ibv_ah_cnt, 2);
 
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);

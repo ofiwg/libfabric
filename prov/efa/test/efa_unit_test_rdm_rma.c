@@ -308,7 +308,7 @@ void test_efa_rdm_rma_read_0_byte_no_shm(struct efa_resource **state)
 	ret = fi_read(resource->ep, NULL, 0, NULL, addr, 0x87654321, 123456, NULL);
 	assert_int_equal(ret, 0);
 	assert_int_equal(efa_rdm_ep->efa_outstanding_tx_ops, 1);
-	
+
 }
 
 void test_efa_rdm_rma_readv_0_byte_no_shm(struct efa_resource **state)
@@ -322,7 +322,7 @@ void test_efa_rdm_rma_readv_0_byte_no_shm(struct efa_resource **state)
 
 	ret = fi_readv(resource->ep, &iov, NULL, 0, addr, 0x87654321, 123456, NULL);
 	assert_int_equal(ret, 0);
-	
+
 }
 
 void test_efa_rdm_rma_readmsg_0_byte_no_shm(struct efa_resource **state)
@@ -340,7 +340,7 @@ void test_efa_rdm_rma_readmsg_0_byte_no_shm(struct efa_resource **state)
 
 	ret = fi_readmsg(resource->ep, &msg, 0);
 	assert_int_equal(ret, 0);
-	
+
 }
 
 void test_efa_rdm_rma_write_0_byte_no_shm(struct efa_resource **state)
@@ -370,7 +370,7 @@ void test_efa_rdm_rma_writev_0_byte_no_shm(struct efa_resource **state)
 
 	ret = fi_writev(resource->ep, &iov, NULL, 0, addr, 0x87654321, 123456, NULL);
 	assert_int_equal(ret, 0);
-	
+
 }
 
 void test_efa_rdm_rma_writemsg_0_byte_no_shm(struct efa_resource **state)
@@ -388,7 +388,7 @@ void test_efa_rdm_rma_writemsg_0_byte_no_shm(struct efa_resource **state)
 
 	ret = fi_writemsg(resource->ep, &msg, 0);
 	assert_int_equal(ret, 0);
-	
+
 }
 
 void test_efa_rdm_rma_writedata_0_byte_no_shm(struct efa_resource **state)
@@ -401,7 +401,7 @@ void test_efa_rdm_rma_writedata_0_byte_no_shm(struct efa_resource **state)
 
 	ret = fi_writedata(resource->ep, NULL, 0, NULL, 0, addr, 0x87654321, 123456, NULL);
 	assert_int_equal(ret, 0);
-	
+
 }
 
 void test_efa_rdm_rma_inject_write_0_byte_no_shm(struct efa_resource **state)
@@ -414,7 +414,7 @@ void test_efa_rdm_rma_inject_write_0_byte_no_shm(struct efa_resource **state)
 
 	ret = fi_inject_write(resource->ep, NULL, 0, addr, 0x87654321, 123456);
 	assert_int_equal(ret, 0);
-	
+
 }
 
 void test_efa_rdm_rma_inject_writedata_0_byte_no_shm(struct efa_resource **state)
@@ -427,7 +427,7 @@ void test_efa_rdm_rma_inject_writedata_0_byte_no_shm(struct efa_resource **state
 
 	ret = fi_inject_writedata(resource->ep, NULL, 0, 0, addr, 0x87654321, 123456);
 	assert_int_equal(ret, 0);
-	
+
 }
 
 void test_efa_rdm_rma_write_0_byte_with_inject_flag(struct efa_resource **state)
