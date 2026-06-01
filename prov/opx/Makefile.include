@@ -52,7 +52,6 @@ opx_files =									\
 		prov/opx/src/opx_ipc.c						\
 		prov/opx/src/opx_debug.c					\
 		prov/opx/src/fi_opx_ep.c					\
-		prov/opx/src/fi_opx_eq.c					\
 		prov/opx/src/fi_opx_fabric.c					\
 		prov/opx/src/fi_opx_info.c					\
 		prov/opx/src/fi_opx_init.c					\

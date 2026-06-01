@@ -83,7 +83,9 @@ static struct fi_ops_fabric fi_opx_ops_fabric = {
 	.size	    = sizeof(struct fi_ops_fabric),
 	.domain	    = fi_opx_domain,
 	.passive_ep = fi_no_passive_ep,
-	.eq_open    = fi_no_eq_open,
+	.eq_open    = ofi_eq_create,
+	.wait_open  = ofi_wait_fd_open,
+	.trywait    = ofi_trywait,
 };
 
 static inline void opx_util_fabric_cleanup(struct fi_opx_fabric *opx_fabric, int fabric_initialized)
