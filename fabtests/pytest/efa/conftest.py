@@ -260,12 +260,15 @@ def pytest_collection_modifyitems(session, config, items):
     # Called after collection has been performed, may filter or re-order the items in-place
     binpath = config.getoption("--binpath", default="") or ""
     have_hw_cntr = os.path.exists(os.path.join(binpath, "fi_efa_hw_cntr"))
+    have_gda = os.path.exists(os.path.join(binpath, "fi_efa_gda"))
 
     deselected = []
     remaining = []
     for item in items:
         markers = {m.name for m in item.iter_markers()}
         if "hw_cntr" in markers and not have_hw_cntr:
+            deselected.append(item)
+        elif "gda" in markers and not have_gda:
             deselected.append(item)
         else:
             remaining.append(item)
