@@ -165,10 +165,7 @@ static int fi_opx_close_domain(fid_t fid)
 		return ret;
 	}
 
-	ret = fi_opx_ref_dec(&opx_domain->fabric->ref_cnt, "fabric");
-	if (ret) {
-		return ret;
-	}
+	ofi_atomic_dec32(&opx_domain->fabric->util_fabric.ref);
 
 	free(opx_domain);
 
@@ -447,7 +444,7 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	int		      ret	      = 0;
 	int		      get_param_check = 0;
 	struct fi_opx_domain *opx_domain      = NULL;
-	struct fi_opx_fabric *opx_fabric      = container_of(fabric, struct fi_opx_fabric, fabric_fid);
+	struct fi_opx_fabric *opx_fabric      = container_of(fabric, struct fi_opx_fabric, util_fabric.fabric_fid);
 
 	if (!info) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "no info supplied\n");
@@ -671,7 +668,7 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	ofi_bufpool_create(&opx_domain->deferred_work_pool, sizeof(struct opx_domain_deferred_work), 32, UINT_MAX, 2048,
 			   OFI_BUFPOOL_NO_ZERO);
 
-	fi_opx_ref_inc(&opx_fabric->ref_cnt, "fabric");
+	ofi_atomic_inc32(&opx_fabric->util_fabric.ref);
 
 	*dom = &opx_domain->domain_fid;
 

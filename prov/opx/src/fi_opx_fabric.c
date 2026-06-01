@@ -33,7 +33,6 @@
 #include <ofi.h>
 
 #include "rdma/opx/fi_opx_domain.h"
-#include "rdma/opx/fi_opx_eq.h"
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_internal.h"
 #include "opx_shm.h"
@@ -49,14 +48,14 @@ static int fi_opx_close_fabric(struct fid *fid)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "close fabric\n");
 	int		      ret;
-	struct fi_opx_fabric *opx_fabric = container_of(fid, struct fi_opx_fabric, fabric_fid);
+	struct fi_opx_fabric *opx_fabric = container_of(fid, struct fi_opx_fabric, util_fabric.fabric_fid.fid);
 
 	ret = fi_opx_fid_check(fid, FI_CLASS_FABRIC, "fabric");
 	if (ret) {
 		return ret;
 	}
 
-	ret = fi_opx_ref_finalize(&opx_fabric->ref_cnt, "fabric");
+	ret = ofi_fabric_close(&opx_fabric->util_fabric);
 	if (ret) {
 		return ret;
 	}
@@ -87,7 +86,7 @@ static struct fi_ops_fabric fi_opx_ops_fabric = {
 	.eq_open    = fi_no_eq_open,
 };
 
-static inline void opx_util_fabric_cleanup(struct fi_opx_fabric *opx_fabric)
+static inline void opx_util_fabric_cleanup(struct fi_opx_fabric *opx_fabric, int fabric_initialized)
 {
 	if (opx_fabric->tid_fabric) {
 		opx_close_tid_fabric(opx_fabric->tid_fabric);
@@ -99,6 +98,9 @@ static inline void opx_util_fabric_cleanup(struct fi_opx_fabric *opx_fabric)
 		opx_fabric->hmem_fabric = NULL;
 	}
 #endif
+	if (fabric_initialized) {
+		ofi_fabric_close(&opx_fabric->util_fabric);
+	}
 }
 
 int fi_opx_check_fabric_attr(struct fi_fabric_attr *attr)
@@ -128,8 +130,22 @@ int fi_opx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "open fabric\n");
 
+	struct fi_fabric_attr prov_attr = {
+		.name	      = FI_OPX_FABRIC_NAME,
+		.prov_version = FI_OPX_PROVIDER_VERSION,
+	};
+	struct fi_fabric_attr user_attr;
 	int		      ret;
-	struct fi_opx_fabric *opx_fabric = NULL;
+	int		      fabric_initialized = 0;
+	struct fi_opx_fabric *opx_fabric	 = NULL;
+
+	user_attr = attr ? *attr : prov_attr;
+	if (!user_attr.name) {
+		user_attr.name = FI_OPX_FABRIC_NAME;
+	}
+	if (!user_attr.api_version) {
+		user_attr.api_version = fi_opx_global.prov->fi_version;
+	}
 
 	if (attr) {
 		if (attr->fabric) {
@@ -150,12 +166,18 @@ int fi_opx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 		goto err;
 	}
 
-	opx_fabric->fabric_fid.fid.fclass  = FI_CLASS_FABRIC;
-	opx_fabric->fabric_fid.fid.context = context;
-	opx_fabric->fabric_fid.fid.ops	   = &fi_opx_fi_ops;
-	opx_fabric->fabric_fid.ops	   = &fi_opx_ops_fabric;
-	opx_fabric->fabric_fid.api_version = attr ? attr->api_version : 0;
-	opx_fabric->tid_fabric		   = NULL;
+	prov_attr.api_version = user_attr.api_version;
+	ret = ofi_fabric_init(fi_opx_global.prov, &prov_attr, &user_attr, &opx_fabric->util_fabric, context);
+	if (ret) {
+		errno = -ret;
+		goto err;
+	}
+	fabric_initialized = 1;
+
+	opx_fabric->util_fabric.fabric_fid.fid.ops     = &fi_opx_fi_ops;
+	opx_fabric->util_fabric.fabric_fid.ops	       = &fi_opx_ops_fabric;
+	opx_fabric->util_fabric.fabric_fid.api_version = user_attr.api_version;
+	opx_fabric->tid_fabric			       = NULL;
 #ifdef OPX_HMEM
 	opx_fabric->hmem_fabric = NULL;
 #endif
@@ -180,12 +202,10 @@ int fi_opx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 	opx_fabric->hmem_fabric = opx_hmem_fabric;
 #endif
 
-	*fabric = &opx_fabric->fabric_fid;
+	*fabric = &opx_fabric->util_fabric.fabric_fid;
 
 	/* work around for imported psm2 source that wants to set thread affinity */
 	setenv("FI_OPX_NO_CPUAFFINITY", "", 0);
-
-	fi_opx_ref_init(&opx_fabric->ref_cnt, 0, "fabric");
 
 	opx_register_shm_handler();
 
@@ -193,7 +213,7 @@ int fi_opx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void 
 	return 0;
 err:
 	if (opx_fabric) {
-		opx_util_fabric_cleanup(opx_fabric);
+		opx_util_fabric_cleanup(opx_fabric, fabric_initialized);
 		free(opx_fabric);
 	}
 	return -errno;

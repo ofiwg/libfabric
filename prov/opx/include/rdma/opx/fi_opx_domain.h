@@ -41,6 +41,7 @@
 
 #include "rdma/fi_domain.h"
 #include "ofi_atom.h"
+#include "ofi_util.h"
 
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_timer.h"
@@ -89,9 +90,8 @@ struct fi_opx_hfisvc_ctx {
 #endif
 
 struct fi_opx_fabric {
-	struct fid_fabric fabric_fid;
+	struct util_fabric util_fabric;
 
-	ofi_atomic64_t	       ref_cnt;
 	struct opx_tid_fabric *tid_fabric;
 #ifdef OPX_HMEM
 	struct opx_hmem_fabric *hmem_fabric;
