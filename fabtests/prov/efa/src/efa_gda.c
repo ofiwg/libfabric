@@ -49,6 +49,53 @@ void *send_cq_buffer, *recv_cq_buffer;
 struct fid_ep *gda_ep;
 struct efa_cuda_qp *gda_qp;
 static enum ibv_wr_opcode gda_op = IBV_WR_SEND;
+static bool use_hw_cntr;
+static volatile uint64_t *hw_send_cntr_ptr;
+static volatile uint64_t *hw_recv_cntr_ptr;
+
+enum {
+	LONG_OPT_USE_HW_CNTR,
+};
+
+static int create_hw_cntr(struct fid_cntr **cntr,
+			  volatile uint64_t **cntr_ptr)
+{
+	int ret, dmabuf_fd;
+	uint64_t dmabuf_offset;
+	void *cuda_buf;
+	struct fi_cntr_attr attr = {0};
+	struct fi_efa_comp_cntr_init_attr efa_attr = {0};
+
+	ret = ft_hmem_alloc(opts.iface, opts.device, &cuda_buf,
+			    sizeof(uint64_t));
+	if (ret)
+		return ret;
+
+	ret = ft_hmem_get_dmabuf_fd(opts.iface, cuda_buf, sizeof(uint64_t),
+				    &dmabuf_fd, &dmabuf_offset);
+	if (ret) {
+		ft_hmem_free(opts.iface, cuda_buf);
+		return ret;
+	}
+
+	attr.events = FI_CNTR_EVENTS_COMP;
+	attr.wait_obj = FI_WAIT_UNSPEC;
+
+	efa_attr.flags = FI_EFA_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM;
+	efa_attr.comp_cntr_ext_mem.type = FI_EFA_MEMORY_LOCATION_DMABUF;
+	efa_attr.comp_cntr_ext_mem.dmabuf.fd = dmabuf_fd;
+	efa_attr.comp_cntr_ext_mem.dmabuf.offset = dmabuf_offset;
+
+	ret = efa_gda_ops->cntr_open_ext(domain, &attr, cntr, NULL, &efa_attr);
+	if (ret) {
+		FT_WARN("hw cntr open failed (%s)\n", fi_strerror(-ret));
+		ft_hmem_free(opts.iface, cuda_buf);
+		return ret;
+	}
+
+	*cntr_ptr = (volatile uint64_t *)cuda_buf;
+	return 0;
+}
 
 int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 		  struct efa_cuda_cq **gda_cq)
@@ -274,7 +321,9 @@ static int run_bw(struct fi_rma_iov *remote_iov)
 	ft_start();
 	if (is_client) {
 		/* Client: post writes/writedata/read */
-		ret = efagda_run_bw(gda_qp, gda_send_cq, gda_op,
+		ret = efagda_run_bw(gda_qp, gda_send_cq,
+				    use_hw_cntr ? hw_send_cntr_ptr : NULL,
+				    gda_op,
 				    (uintptr_t) (gda_op == IBV_WR_RDMA_READ ?
 						 rx_buf : tx_buf),
 				    opts.transfer_size,
@@ -286,6 +335,7 @@ static int run_bw(struct fi_rma_iov *remote_iov)
 		if (gda_op == IBV_WR_RDMA_WRITE_WITH_IMM ||
 		    gda_op == IBV_WR_SEND) {
 			ret = efagda_run_bw_recv(gda_qp, gda_recv_cq,
+						 use_hw_cntr ? hw_recv_cntr_ptr : NULL,
 						 (uintptr_t) rx_buf,
 						 opts.transfer_size, lkey,
 						 opts.iterations, rx_depth,
@@ -362,10 +412,12 @@ static int run()
 
 	ft_start();
 	ret = efagda_run_lat_send(gda_qp, gda_send_cq, gda_recv_cq,
-				  ah, remote_qpn, remote_qkey,
-				  (uintptr_t) rx_buf, opts.transfer_size, lkey,
-				  (uintptr_t) tx_buf, opts.transfer_size, lkey,
-				  opts.iterations, rx_depth, is_client, stream);
+			  use_hw_cntr ? hw_send_cntr_ptr : NULL,
+			  use_hw_cntr ? hw_recv_cntr_ptr : NULL,
+			  ah, remote_qpn, remote_qkey,
+			  (uintptr_t) rx_buf, opts.transfer_size, lkey,
+			  (uintptr_t) tx_buf, opts.transfer_size, lkey,
+			  opts.iterations, rx_depth, is_client, stream);
 	ft_stop();
 
 	if (ret) {
@@ -400,9 +452,17 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv,
-			    "vh" ADDR_OPTS INFO_OPTS CS_OPTS API_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv,
+			    "vh" ADDR_OPTS INFO_OPTS CS_OPTS API_OPTS,
+			    (struct option[]){
+				{"use-hw-cntr", no_argument, NULL,
+				 LONG_OPT_USE_HW_CNTR},
+				{0, 0, 0, 0}
+			    }, NULL)) != -1) {
 		switch (op) {
+		case LONG_OPT_USE_HW_CNTR:
+			use_hw_cntr = true;
+			break;
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
@@ -420,6 +480,8 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE("-o <op>",
 				"op: msg, write, writedata, read\n");
 			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
+			FT_PRINT_OPTS_USAGE("--use-hw-cntr",
+				"Use hardware counter instead of send CQ");
 			return EXIT_FAILURE;
 		}
 	}
@@ -452,6 +514,9 @@ int main(int argc, char **argv)
 				      FI_MR_HMEM;
 	hints->domain_attr->progress = FI_PROGRESS_MANUAL;
 	hints->mode |= FI_CONTEXT | FI_CONTEXT2;
+
+	if (use_hw_cntr)
+		ft_fiversion = FI_VERSION(2, 5);
 
 	ret = ft_init_fabric();
 	if (ret) {
@@ -489,7 +554,28 @@ int main(int argc, char **argv)
 		return ret;
 	}
 
-	ret = ft_enable_ep(gda_ep, eq, av, txcq_ext, rxcq_ext, txcntr, rxcntr,
+	if (use_hw_cntr) {
+		ret = create_hw_cntr(&txcntr, &hw_send_cntr_ptr);
+		if (ret) {
+			FT_PRINTERR("create_hw_cntr send", -ret);
+			return ret;
+		}
+		ret = create_hw_cntr(&rxcntr, &hw_recv_cntr_ptr);
+		if (ret) {
+			FT_PRINTERR("create_hw_cntr recv", -ret);
+			return ret;
+		}
+		ret = fi_ep_bind(gda_ep, &rxcntr->fid,
+				 (gda_op == IBV_WR_RDMA_WRITE_WITH_IMM) ?
+					 FI_REMOTE_WRITE :
+					 FI_RECV);
+		if (ret) {
+			FT_PRINTERR("fi_ep_bind rxcntr", -ret);
+			return ret;
+		}
+	}
+
+	ret = ft_enable_ep(gda_ep, eq, av, txcq_ext, rxcq_ext, txcntr, NULL,
 			   rma_cntr);
 	if (ret)
 		return ret;
