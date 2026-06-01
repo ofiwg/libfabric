@@ -614,7 +614,7 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
  * @todo Currently, this only checks for unresponsive receiver
  * (#EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE) and attempts to promote it to
  * #FI_EFA_ERR_ESTABLISHED_RECV_UNRESP if a handshake was made, or
- * #FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP if the handshake failed. 
+ * #FI_EFA_ERR_UNESTABLISHED_RECV_UNRESP if the handshake failed.
  * This should be expanded to handle other
  * RDMA Core error codes (#EFA_IO_COMP_STATUSES) for the sake of more accurate
  * error reporting
@@ -778,7 +778,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 				 * EFA-RDM does not require FI_RX_CQ_DATA, so NULL context is safe here.
 				 */
 				struct fi_cq_err_entry err_entry = {0};
-				
+
 				EFA_INFO(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv",
 					efa_strerror(prov_errno), prov_errno);
 				err_entry.op_context = NULL;
@@ -935,7 +935,7 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 	if (cq->shm_cq) {
 		fi_cq_read(cq->shm_cq, NULL, 0);
 
-		/* 
+		/*
 		 * fi_cq_read(cq->shm_cq, NULL, 0) will progress shm ep and write
 		 * completion to efa. Use ofi_cq_read_entries to get the number of
 		 * shm completions without progressing efa ep again.

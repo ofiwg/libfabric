@@ -142,8 +142,8 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_128_multiple_alignment(struct e
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 10240;
 	total_runt_size = 16384;
-	/* 16384 - 10240 is smaller than 12000 (total_len), 
-	 * runt size must be (16384 - 10240) // 128 * 128 = 6144 
+	/* 16384 - 10240 is smaller than 12000 (total_len),
+	 * runt size must be (16384 - 10240) // 128 * 128 = 6144
 	 */
 	expected_runt_size = 6144;
 	test_efa_rdm_peer_get_runt_size_impl(resource, FI_HMEM_CUDA, peer_num_runt_bytes_in_flight, total_runt_size, msg_length, expected_runt_size);
@@ -165,8 +165,8 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_non_128_multiple_alignment(stru
 	msg_length = 12000;
 	peer_num_runt_bytes_in_flight = 512;
 	total_runt_size = 1004;
-	/* 1004 - 512 is smaller than 12000 (total_len), 
-	 * runt size must be (1004 - 512) // 128 * 128 = 384 
+	/* 1004 - 512 is smaller than 12000 (total_len),
+	 * runt size must be (1004 - 512) // 128 * 128 = 384
 	 */
 	expected_runt_size = 384;
 	test_efa_rdm_peer_get_runt_size_impl(resource, FI_HMEM_CUDA, peer_num_runt_bytes_in_flight, total_runt_size, msg_length, expected_runt_size);

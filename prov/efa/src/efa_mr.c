@@ -385,7 +385,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 					  (void *)mr_attr->mr_iov->iov_base,
 					  mr_attr->mr_iov->iov_len, access);
 		}
-		
+
 		/* get fd failed, no fallback */
 		EFA_WARN(FI_LOG_MR,
 			 "ofi_hmem_get_dmabuf_fd failed for %s: ret=%d (%s)\n",
@@ -528,7 +528,7 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	device_support_rdma_write = domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
 #endif
 
-	/* For efa-direct, fail registration if RDMA operations are requested 
+	/* For efa-direct, fail registration if RDMA operations are requested
 	 * but hardware doesn't support them
 	 */
 	if ((attr->access & (FI_READ | FI_REMOTE_READ)) &&

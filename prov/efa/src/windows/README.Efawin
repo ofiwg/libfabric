@@ -1,6 +1,6 @@
 Efawin headers and loader can be obtained from https://github.com/aws/efawin.
 
-Copy the contents of the folder including subfolders from 
+Copy the contents of the folder including subfolders from
 https://github.com/aws/efawin/tree/v1.0.0/interface
 into the folder containing this file.
 

@@ -2036,7 +2036,7 @@ static void test_efa_base_ep_construct_ibv_qp_init_attr_ex_use_requested_limits(
 	assert_int_equal(efa_base_ep->info->rx_attr->size, rx_size);
 
 	/* Call the function under test */
-	efa_base_ep_construct_ibv_qp_init_attr_ex(efa_base_ep, &attr_ex, 
+	efa_base_ep_construct_ibv_qp_init_attr_ex(efa_base_ep, &attr_ex,
 							  efa_cq->ibv_cq.ibv_cq_ex, efa_cq->ibv_cq.ibv_cq_ex);
 
 	/* Since requested values are within device limits, QP attrs should match requested values */
@@ -2178,7 +2178,7 @@ void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_device_limits(struct
 	assert_int_equal(efa_base_ep->info->rx_attr->iov_limit, resource->info->rx_attr->iov_limit);
 
 	/* Call the function under test */
-	efa_base_ep_construct_ibv_qp_init_attr_ex(efa_base_ep, &attr_ex, 
+	efa_base_ep_construct_ibv_qp_init_attr_ex(efa_base_ep, &attr_ex,
 							  efa_cq->ibv_cq.ibv_cq_ex, efa_cq->ibv_cq.ibv_cq_ex);
 
 	/* Since EFA fabric limits can be equal or larger than device limits,

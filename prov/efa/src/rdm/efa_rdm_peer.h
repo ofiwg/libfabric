@@ -94,7 +94,7 @@ struct efa_rdm_peer {
 	uint64_t host_id; 		/* Optional peer host id. Default 0 */
 	/**
 	 * @brief reorder buffer
-	 * 
+	 *
 	 * @details temporarily hold packets that are out-of-order, whose msg_id is larger that the one EP is expecting from the peer
 	 */
 	struct efa_rdm_robuf robuf;

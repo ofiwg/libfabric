@@ -100,8 +100,8 @@ static void efa_hw_cntr_no_progress(struct util_cntr *cntr)
 	 * operations when the SQ or RQ is full. Per the fi_cq man page,
 	 * applications size their CQ to at least the same size as the
 	 * endpoint queues bound to it, so a full SQ/RQ implies the CQ is also
-	 * full. The application must periodically call fi_cq_read() when getting 
-	 * -FI_EAGAIN to consume entries and prevent CQ overrun, even with 
+	 * full. The application must periodically call fi_cq_read() when getting
+	 * -FI_EAGAIN to consume entries and prevent CQ overrun, even with
 	 * FI_SELECTIVE_COMPLETION set.
 	 */
 }

@@ -337,7 +337,7 @@ void test_info_tx_rx_msg_order_dgram_order_sas(struct efa_resource **state)
 
 /**
  * @brief Verify max order size is set correctly according to hints
- * 
+ *
  * @param hints hints
  * @param expected_ret expected rc of fi_getinfo
  * @param expected_size expected value of max_order_*_size. Ignored when expected_ret is non-zero.
@@ -830,11 +830,11 @@ void test_efa_use_device_rdma_opt_old() {
 	test_use_device_rdma(0, 0, 0, FI_VERSION(1,17));
 }
 
-typedef void (*setup_hints_func_t)(struct fi_info *hints, struct fid_fabric *fabric, 
+typedef void (*setup_hints_func_t)(struct fi_info *hints, struct fid_fabric *fabric,
 				   struct fid_domain *domain, struct fi_info *info1);
 
-static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func, 
-				   bool expect_fabric_reuse, 
+static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
+				   bool expect_fabric_reuse,
 				   bool expect_domain_reuse)
 {
 	struct fi_info *hints1, *hints2, *info1, *info2;
@@ -877,7 +877,7 @@ static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
 	} else {
 		assert_null(info2->fabric_attr->fabric);
 	}
-	
+
 	if (expect_domain_reuse) {
 		assert_ptr_equal(info2->domain_attr->domain, domain);
 		assert_string_equal(info2->fabric_attr->name, util_domain->fabric->name);
@@ -906,25 +906,25 @@ static void test_info_reuse_fabric_domain(setup_hints_func_t setup_func,
 	assert_int_equal(err, 0);
 }
 
-static void setup_fabric_attr_hints(struct fi_info *hints, struct fid_fabric *fabric, 
+static void setup_fabric_attr_hints(struct fi_info *hints, struct fid_fabric *fabric,
 				     struct fid_domain *domain, struct fi_info *info1)
 {
 	hints->fabric_attr->fabric = fabric;
 }
 
-static void setup_domain_attr_hints(struct fi_info *hints, struct fid_fabric *fabric, 
+static void setup_domain_attr_hints(struct fi_info *hints, struct fid_fabric *fabric,
 				     struct fid_domain *domain, struct fi_info *info1)
 {
 	hints->domain_attr->domain = domain;
 }
 
-static void setup_fabric_name_hints(struct fi_info *hints, struct fid_fabric *fabric, 
+static void setup_fabric_name_hints(struct fi_info *hints, struct fid_fabric *fabric,
 				     struct fid_domain *domain, struct fi_info *info1)
 {
 	hints->fabric_attr->name = strdup(info1->fabric_attr->name);
 }
 
-static void setup_domain_name_hints(struct fi_info *hints, struct fid_fabric *fabric, 
+static void setup_domain_name_hints(struct fi_info *hints, struct fid_fabric *fabric,
 				     struct fid_domain *domain, struct fi_info *info1)
 {
 	hints->domain_attr->name = strdup(info1->domain_attr->name);
@@ -966,9 +966,9 @@ void test_info_reuse_domain_via_name()
 	test_info_reuse_fabric_domain(setup_domain_name_hints, true, true);
 }
 
-static void test_info_direct_rma_common(bool mock_unsolicited_write_recv, 
+static void test_info_direct_rma_common(bool mock_unsolicited_write_recv,
 					bool set_rma, bool set_rx_cq_data,
-					int expected_err, size_t expected_cq_data_size, 
+					int expected_err, size_t expected_cq_data_size,
 					bool expect_rx_cq_data_mode, bool expect_rma_caps)
 {
 	struct fi_info *hints, *info;

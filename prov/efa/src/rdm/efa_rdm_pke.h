@@ -35,40 +35,40 @@ enum efa_rdm_pke_alloc_type {
 
 /**
  * @brief Packet entry
- * 
+ *
  * efa_rdm_pke (pke stands for packet entry) is used the following occassions:
- * 
+ *
  * First, it is used as the work request ID for the request EFA provider posted to EFA
  * device via rdma-core:
- * 
+ *
  * For each request EFA provider submits to EFA device, it will allocate a packet entry.
- * 
+ *
  * When the request was submitted to rdma-core, the pointer of the packet entry will be used as work
  * request ID (`wr_id`).
- * 
+ *
  * When the request was completed, rdma-core return a completion, with the "wr_id"
  * in it, so EFA provder knows which request has completed.
- * 
+ *
  * Sometimes, the completion can be a Receiver Not Ready (RNR) error completion.
  * In that case the packet entry will be queued and resubmitted. For the resubmission,
  * the packet entry must contain all the information of the request.
- * 
+ *
  * EFA device (rdma-core) supported request types are:
  *  send and receive (by all EFA device)
  *  read and write (by certain EFA device)
- * 
+ *
  * a send/read/write request uses a packet entry allocated from endpoint's efa_tx_pkt_pool.
  * a read request uses a packet entry allocated from efa_rx_pkt_pool. Both pool's memories
  * are registeredd with efa device, the registration is stored in
  * the "mr" field of the packet entry.
- * 
+ *
  * Second, packet entries can be used to store received packet entries that is
  * unexpected or out-of-order. This is because the efa_rx_pkt_pool's size is fixed,
  * therefore it cannot be used to hold unexpected/out-of-order packets. When an unexpected/out-of-order
  * packet is received, a new packet entry will be cloned from unexpected/ooo_pkt_pool.
  * The old packet will be released then reposted to EFA device or SHM. The new packet
  * (allocated from unexpected/ooo_pkt_pool)'s memory is not registered
- * 
+ *
  * Finally, packet entries can be used to support local read copy. Local read copy means
  * to copy data from a packet entry to HMEM receive buffer through EFA device's read capability.
  * Local require a packet entry's memory to be registered with device. If the packet entry's memory
@@ -192,13 +192,13 @@ struct efa_rdm_pke {
 	/** @brief indicate where the memory of this packet entry reside */
 	enum efa_rdm_pke_alloc_type alloc_type;
 
-	/** 
+	/**
 	 * @brief flags indicating the status of the packet entry
-	 * 
+	 *
 	 * @see #EFA_RDM_PKE_IN_USE
 	 * @see #EFA_RDM_PKE_RNR_RETRANSMIT
 	 * @see #EFA_RDM_PKE_LOCAL_READ
-	 * @see #EFA_RDM_PKE_DC_LONGCTS_DATA 
+	 * @see #EFA_RDM_PKE_DC_LONGCTS_DATA
 	 * @see #EFA_RDM_PKE_LOCAL_WRITE
 	 * @see #EFA_RDM_PKE_SEND_TO_USER_RECV_QP
 	 * @see #EFA_RDM_PKE_HAS_NO_BASE_HDR
@@ -218,7 +218,7 @@ struct efa_rdm_pke {
 
 	/**
 	 * @brief a buffer that contains actual user data that is going over wire
-	 * 
+	 *
 	 * @details
 	 * "payload" points to either a location inside user's buffer,
 	 * (when user's buffer is registered with EFA device), or
@@ -230,7 +230,7 @@ struct efa_rdm_pke {
 
 	/**
 	 * @brief memory regstration for user buffer
-	 * 
+	 *
 	 * @details
 	 * payload_mr is same as mr, when payload is pointing to
 	 * a location inside wiredata.
@@ -239,7 +239,7 @@ struct efa_rdm_pke {
 
 	/**
 	 * @brief size of payload buffer
-	 * 
+	 *
 	 */
 	size_t payload_size;
 
@@ -257,10 +257,10 @@ struct efa_rdm_pke {
 	 *
 	 * 1. Packet header. All packet entries have a packet header,
 	 *    except the packet entry allocated from readcopy_pool.
-	 * 
+	 *
 	 * 2. User buffer infomation, which presents
 	 *    only for LONGREAD and RUNTREAD RTM packets.
-	 * 
+	 *
 	 * 3. User data, which presents when:
 	 *    a) pakcet is an outging (TX) packet, and EFA device
 	 *       is not able to send data directory from user's buffer

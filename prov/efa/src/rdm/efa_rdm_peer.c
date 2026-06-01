@@ -184,7 +184,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 			return -FI_EALREADY;
 		} else {
 			/* Current receive window size is too small to hold incoming messages.
-			 * Store the overflow messages in a double linked list, and move it 
+			 * Store the overflow messages in a double linked list, and move it
 			 * back to receive window later.
 			 */
 			struct efa_rdm_peer_overflow_pke_list_entry *overflow_pke_list_entry;
@@ -256,7 +256,7 @@ int efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_rdm_pke *ooo_entry,
  * overflow_pke_list and move the pkt entry to receive window if it fits.
  *
  * @param[in,out]	peer 		peer
- * 
+ *
  */
 void efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_rdm_peer *peer)
 {

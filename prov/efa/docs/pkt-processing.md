@@ -21,14 +21,14 @@ in progress, sends and receives queued due to resource exhaustion, unexpected
 messages, and structures to track out of order packets and remote peer
 capabilities and status.
 
-`efa_rdm_ope` contains information and structures used in send/receive operations. 
-It is used in send operation for send posted directly by the app or indirectly 
-by emulated read/write operations. When the send is completed a send completion 
+`efa_rdm_ope` contains information and structures used in send/receive operations.
+It is used in send operation for send posted directly by the app or indirectly
+by emulated read/write operations. When the send is completed a send completion
 will be written and the txe (TX entry) will be released.
-It is used in  receive operation for a receive posted by the app. This structure 
-is used for tag matching, to queue unexpected messages to be matched later, and to 
+It is used in  receive operation for a receive posted by the app. This structure
+is used for tag matching, to queue unexpected messages to be matched later, and to
 keep track of whether long message receives are completed. Just like the txe,
-when a receive operation is completed a receive completion is written to the app 
+when a receive operation is completed a receive completion is written to the app
 and the `rxe` (RX entry) is released.
 
 `efa_rdm_cq_progress` is the progress handler we register when the completion queue

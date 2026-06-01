@@ -77,7 +77,7 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 	 * and we use 1st iov for header.
 	 * 2. p2p is available.
 	 * Note that FI_INJECT requires outbound buffer to be reusable
-	 * immediately after function returns, so a copy from the user buffer 
+	 * immediately after function returns, so a copy from the user buffer
 	 * to the internal bounce buffer is needed.
 	 */
 	/* TODO: Disable copies when total packet size with payload is smaller
@@ -230,7 +230,7 @@ int efa_rdm_pke_queued_copy_payload_to_hmem(struct efa_rdm_pke *pke,
  * api.
  *
  * gdrcopy, which is available only when cuda_is_gdrcopy_enabled() is true.
- * 
+ *
  * @param[in]			ep, efa_mr
  * @param[in,out]		local_read_available, cuda_memcpy_available,
  * gdrcopy_available

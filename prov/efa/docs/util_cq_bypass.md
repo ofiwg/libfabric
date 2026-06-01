@@ -87,7 +87,7 @@ sequenceDiagram
     Note over DeviceCQ,Application: Normal Operation - Direct Path
     DeviceCQ->>Provider: Completion Event
     Provider->>Application: Write directly to application buffer
-    
+
     Note over DeviceCQ,Application: EP Close Scenario
     Provider->>UtilCQ: Flush outstanding entries during EP close
     Application->>Provider: Poll for completion
@@ -127,7 +127,7 @@ sequenceDiagram
     DeviceCQ->>Provider: CQE 3 (Error)
     Provider->>Provider: Stop processing at error
     Provider->>Application: Return 2 (successful entries)
-    
+
     Note over DeviceCQ,Provider: Device CQ remains in poll-active state
     Note over DeviceCQ,Provider: Error CQE cached for next call
 ```
@@ -144,7 +144,7 @@ sequenceDiagram
     Application->>Provider: fi_cq_read(cq_fid, buf, count)
     Provider->>Provider: Process cached error CQE
     Provider->>Application: Return -FI_EAVAIL
-    
+
     Note over DeviceCQ,Provider: Device CQ remains in poll-active state
     Note over DeviceCQ,Provider: Error must be consumed via fi_cq_readerr
 ```
@@ -161,7 +161,7 @@ sequenceDiagram
     Provider->>Application: Copy error details to err_buf
     Provider->>DeviceCQ: End polling (ibv_end_poll)
     Provider->>Application: Return 1 (error consumed)
-    
+
     Note over DeviceCQ,Provider: Device CQ poll state ended
     Note over DeviceCQ,Provider: Next fi_cq_read can start fresh polling
 ```

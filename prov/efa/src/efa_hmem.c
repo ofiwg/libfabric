@@ -427,7 +427,7 @@ int efa_hmem_validate_p2p_opt(enum fi_hmem_iface iface, int p2p_opt, uint32_t ap
 	 *     PREFERED means a provider should prefer P2P if it is available.
 	 *
 	 * These options does not require that p2p is supported by device,
-	 * nor do they prohibit that p2p is required by implementation. 
+	 * nor do they prohibit that p2p is required by implementation.
 	 * Therefore they are always supported unless p2p is disabled.
 	 */
 	case FI_HMEM_P2P_PREFERRED:

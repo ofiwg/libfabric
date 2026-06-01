@@ -226,10 +226,10 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 	data_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	data_hdr->flags = 0;
 
-	/* Data is sent using rxe in the emulated longcts read 
-	 * protocol. The emulated longcts write and the longcts 
+	/* Data is sent using rxe in the emulated longcts read
+	 * protocol. The emulated longcts write and the longcts
 	 * message protocols sends data using txe.
-	 * This check ensures appropriate recv_id is 
+	 * This check ensures appropriate recv_id is
 	 * assigned for the respective protocols */
 	if (ope->type == EFA_RDM_RXE) {
 		data_hdr->recv_id = ope->tx_id;

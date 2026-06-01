@@ -112,8 +112,8 @@ int efa_user_info_check_fabric_object(const struct fi_info *hints,
 	if (strcmp(util_fabric->name, prov_info->fabric_attr->name))
 		return -FI_EINVAL;
 
-	ret = ofi_check_fabric_attr(efa_util_prov.prov, 
-				    prov_info->fabric_attr, 
+	ret = ofi_check_fabric_attr(efa_util_prov.prov,
+				    prov_info->fabric_attr,
 				    &fabric_attr);
 	if (ret) {
 		EFA_WARN(FI_LOG_CORE, "Fabric attributes validation failed\n");
@@ -512,8 +512,8 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 	 * When application requests FI_RX_CQ_DATA, efa-direct
 	 * will respect it, and will finally disable unsolicited
 	 * write recv during the QP creation.
-	 * 
-	 * For NULL hints, return FI_RMA and FI_RX_CQ_DATA as 
+	 *
+	 * For NULL hints, return FI_RMA and FI_RX_CQ_DATA as
 	 * efa direct can support them.
 	 */
 	if (!hints || (hints && hints->mode & FI_RX_CQ_DATA)) {

@@ -291,7 +291,7 @@ EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_read_nack_hdr, 16);
 /**
  * @brief header format of ATOMRSP packet. (Packet Type ID 8)
  * ATOMRSP packet is used in emulated fetch/compare atomic sub-protocol.
- * 
+ *
  * It is sent from responder to requester, which contains the response
  * to a fetch/compare atomic request
  */

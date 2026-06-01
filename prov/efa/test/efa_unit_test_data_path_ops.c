@@ -3,7 +3,7 @@
 
 /*
  * Unit test stub versions of EFA data path operations
- * 
+ *
  * This file provides stub implementations of the data path operations
  * specifically for unit testing. These functions are needed because
  * static inline functions cannot have their addresses taken for
