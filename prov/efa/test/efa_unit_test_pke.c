@@ -371,9 +371,9 @@ void test_efa_rdm_pke_flag_tracking(struct efa_resource **state)
 
 
 /**
- * @brief Test efa_rdm_pke_proc_matched_eager_rtm doesn't free pkt_entry on error 
+ * @brief Test efa_rdm_pke_proc_matched_eager_rtm doesn't free pkt_entry on error
  * because it is handled by the caller.
- * 
+ *
  *
  * @param state
  */
@@ -422,7 +422,7 @@ void test_efa_rdm_pke_proc_matched_eager_rtm_error(struct efa_resource **state)
 /**
  * @brief Helper function to create a medium RTM packet
  */
-static struct efa_rdm_pke *create_medium_rtm_pkt(struct efa_rdm_ep *ep, uint32_t msg_id, 
+static struct efa_rdm_pke *create_medium_rtm_pkt(struct efa_rdm_ep *ep, uint32_t msg_id,
                                                  uint64_t msg_length, uint64_t seg_offset,
                                                  size_t payload_size)
 {
@@ -453,7 +453,7 @@ static struct efa_rdm_pke *create_medium_rtm_pkt(struct efa_rdm_ep *ep, uint32_t
 
 /**
  * @brief Test efa_rdm_pke_proc_matched_mulreq_rtm doesn't double free the first
- * pkt_entry on error. The first packet should be released by the caller, not 
+ * pkt_entry on error. The first packet should be released by the caller, not
  * by the function itself.
  *
  * @param state
@@ -532,7 +532,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(struct efa_res
 	rxe->cq_entry.len = 2048;
 	rxe->total_len = 2048;
 	rxe->bytes_received = 0;
-	rxe->bytes_received_via_mulreq = 0; 
+	rxe->bytes_received_via_mulreq = 0;
 	pkt_entry->ope = rxe;
 
 	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
@@ -546,7 +546,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(struct efa_res
 	/* The function should have:
 	 * 1. NOT released the first packet - caller's responsibility
 	 * 2. Released the second packet - function's responsibility
-	 * 
+	 *
 	 * We only release the first packet here. The second packet should have
 	 * been released by the function when it failed.
 	 */

@@ -1492,12 +1492,12 @@ static void test_efa_cq_data_path_direct_status(
 	if (ret && wait_obj != FI_WAIT_NONE)
 		/* EFA device doesn't support cq notification. */
 		return;
-		
+
 	assert_int_equal(ret, 0);
 	efa_cq = container_of(cq, struct efa_cq, util_cq.cq_fid);
 
 	assert_true(efa_cq->ibv_cq.data_path_direct_enabled == data_path_direct_enabled);
-	
+
 	assert_int_equal(fi_close(&cq->fid), 0);
 
 	/* Recover the mocked vendor_id */
@@ -2199,7 +2199,7 @@ void test_efa_cq_readerr_util_cq_error(struct efa_resource **state)
  * when efa_cq_start_poll is called while poll is already active, and that
  * the fix properly handles destroyed QPs during CQ polling.
  *
- * Scenario: fi_cq_read hits completion error -> fi_close(ep) destroys QP and 
+ * Scenario: fi_cq_read hits completion error -> fi_close(ep) destroys QP and
  * calls efa_cq_poll_ibv_cq -> should handle NULL base_ep gracefully
  */
 void test_efa_cq_poll_ep_close_bypass_path(struct efa_resource **state)

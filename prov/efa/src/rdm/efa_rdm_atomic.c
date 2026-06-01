@@ -435,7 +435,7 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	struct efa_rdm_atomic_ex atomic_ex = {
 		.resp_iov_count = result_count,
 		.comp_iov_count = compare_count,
-		
+
 	};
 	size_t datatype_size;
 	fi_addr_t shm_addr;
