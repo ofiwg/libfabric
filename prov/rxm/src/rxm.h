@@ -231,9 +231,9 @@ enum {
  * remote rxm ep's.
  */
 struct rxm_conn {
-	enum rxm_cm_state state;
 	struct util_peer_addr *peer;
 	struct fid_ep **msg_eps;
+	enum rxm_cm_state *states;
 	uint8_t num_msg_eps;
 	struct rxm_ep_selector *selector;
 	struct rxm_ep *ep;

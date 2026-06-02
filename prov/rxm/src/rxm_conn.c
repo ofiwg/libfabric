@@ -86,10 +86,11 @@ static void rxm_close_conn(struct rxm_conn *conn)
 	free(conn->msg_eps);
 	conn->msg_eps = NULL;
 
-	if (conn->state == RXM_CM_CONNECTING || conn->state == RXM_CM_ACCEPTING)
+	if (conn->states[0] == RXM_CM_CONNECTING ||
+	    conn->states[0] == RXM_CM_ACCEPTING)
 		conn->ep->connecting_cnt--;
 	assert(conn->ep->connecting_cnt >= 0);
-	conn->state = RXM_CM_IDLE;
+	conn->states[0] = RXM_CM_IDLE;
 }
 
 static int rxm_bind_comp(struct rxm_ep *ep, struct fid_ep *msg_ep)
@@ -169,14 +170,13 @@ static int rxm_bind_comp(struct rxm_ep *ep, struct fid_ep *msg_ep)
 	return 0;
 }
 
-static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
+static int rxm_open_msg_ep(struct rxm_conn *conn, uint8_t idx,
+			   struct fi_info *msg_info)
 {
 	struct rxm_domain *domain;
 	struct rxm_ep *ep;
 	struct fid_ep *msg_ep;
 	int ret;
-
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "open msg ep %p\n", conn);
 
 	assert(ofi_genlock_held(&conn->ep->util_ep.lock));
 	ep = conn->ep;
@@ -212,25 +212,48 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 		goto err;
 	}
 
-	conn->flow_ctrl = domain->flow_ctrl_ops->available(msg_ep);
-
 	if (!ep->msg_srx) {
 		ret = rxm_prepost_recv(ep, msg_ep);
 		if (ret)
 			goto err;
 	}
 
-	conn->msg_eps = calloc(conn->num_msg_eps, sizeof(*conn->msg_eps));
-	if (!conn->msg_eps) {
-		ret = -FI_ENOMEM;
-		goto err;
-	}
-	for (uint8_t i = 0; i < conn->num_msg_eps; i++)
-		conn->msg_eps[i] = msg_ep;
+	conn->msg_eps[idx] = msg_ep;
 	return 0;
 err:
 	fi_close(&msg_ep->fid);
 	return ret;
+}
+
+static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
+{
+	struct rxm_domain *domain;
+	int ret;
+
+	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "open msg ep %p\n", conn);
+	assert(ofi_genlock_held(&conn->ep->util_ep.lock));
+
+	conn->msg_eps = calloc(conn->num_msg_eps, sizeof(*conn->msg_eps));
+	if (!conn->msg_eps) {
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "calloc msg_eps", -FI_ENOMEM);
+		return -FI_ENOMEM;
+	}
+
+	ret = rxm_open_msg_ep(conn, 0, msg_info);
+	if (ret) {
+		free(conn->msg_eps);
+		conn->msg_eps = NULL;
+		return ret;
+	}
+
+	domain = container_of(conn->ep->util_ep.domain, struct rxm_domain,
+			      util_domain);
+	conn->flow_ctrl = domain->flow_ctrl_ops->available(conn->msg_eps[0]);
+
+	for (uint8_t i = 1; i < conn->num_msg_eps; i++)
+		conn->msg_eps[i] = conn->msg_eps[0];
+
+	return 0;
 }
 
 /* We send passive endpoint's port to the server as connection request
@@ -302,7 +325,7 @@ static int rxm_send_connect(struct rxm_conn *conn)
 		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_connect", ret);
 		goto err;
 	}
-	conn->state = RXM_CM_CONNECTING;
+	conn->states[0] = RXM_CM_CONNECTING;
 	conn->ep->connecting_cnt++;
 	return 0;
 
@@ -311,6 +334,7 @@ err:
 		fi_close(&conn->msg_eps[0]->fid);
 	free(conn->msg_eps);
 	conn->msg_eps = NULL;
+	conn->states[0] = RXM_CM_IDLE;
 	return ret;
 }
 
@@ -320,7 +344,7 @@ static int rxm_connect(struct rxm_conn *conn)
 
 	assert(ofi_genlock_held(&conn->ep->util_ep.lock));
 
-	switch (conn->state) {
+	switch (conn->states[0]) {
 	case RXM_CM_IDLE:
 		ret = rxm_send_connect(conn);
 		if (ret)
@@ -333,7 +357,7 @@ static int rxm_connect(struct rxm_conn *conn)
 		return 0;
 	default:
 		assert(0);
-		conn->state = RXM_CM_IDLE;
+		conn->states[0] = RXM_CM_IDLE;
 		break;
 	}
 
@@ -353,6 +377,9 @@ static void rxm_free_conn(struct rxm_conn *conn)
 	if (conn->selector && conn->selector->destroy)
 		conn->selector->destroy(conn->selector);
 	conn->selector = NULL;
+
+	free(conn->states);
+	conn->states = NULL;
 
 	util_put_peer(conn->peer);
 	av = container_of(conn->ep->util_ep.av, struct rxm_av, util_av);
@@ -381,7 +408,7 @@ void rxm_freeall_conns(struct rxm_ep *ep)
 		if (!conn)
 			continue;
 
-		if (conn->state != RXM_CM_IDLE)
+		if (conn->states[0] != RXM_CM_IDLE)
 			rxm_close_conn(conn);
 		rxm_free_conn(conn);
 	}
@@ -410,7 +437,6 @@ rxm_alloc_conn(struct rxm_ep *ep, struct util_peer_addr *peer)
 	}
 
 	conn->ep = ep;
-	conn->state = RXM_CM_IDLE;
 	conn->remote_index = -1;
 	conn->flags = 0;
 	conn->flow_ctrl = false;
@@ -427,11 +453,20 @@ rxm_alloc_conn(struct rxm_ep *ep, struct util_peer_addr *peer)
 	conn->num_msg_eps = (uint8_t) rxm_num_msg_eps;
 	conn->msg_eps = NULL;
 
+	conn->states = calloc(conn->num_msg_eps, sizeof(*conn->states));
+	if (!conn->states) {
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "calloc states", -FI_ENOMEM);
+		util_put_peer(peer);
+		rxm_av_free_conn(av, conn);
+		return NULL;
+	}
+
 	if (conn->num_msg_eps > 1) {
 		conn->selector = rxm_rr_selector_alloc();
 		if (!conn->selector) {
 			RXM_WARN_ERR(FI_LOG_EP_CTRL, "rxm_rr_selector_alloc",
 				     -FI_ENOMEM);
+			free(conn->states);
 			util_put_peer(peer);
 			rxm_av_free_conn(av, conn);
 			return NULL;
@@ -480,7 +515,7 @@ ssize_t rxm_get_conn(struct rxm_ep *ep, fi_addr_t addr, struct rxm_conn **conn)
 	if (!*conn)
 		return -FI_ENOMEM;
 
-	if ((*conn)->state == RXM_CM_CONNECTED) {
+	if ((*conn)->states[0] == RXM_CM_CONNECTED) {
 		if (!dlist_empty(&(*conn)->deferred_tx_queue)) {
 			rxm_ep_do_progress(&ep->util_ep);
 			if (!dlist_empty(&(*conn)->deferred_tx_queue))
@@ -535,7 +570,7 @@ void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 	       "processing connected for handle: %p\n", conn);
 
 	assert(ofi_genlock_held(&conn->ep->util_ep.lock));
-	if (conn->state == RXM_CM_CONNECTING) {
+	if (conn->states[0] == RXM_CM_CONNECTING) {
 		conn->remote_index = rxm_peer_index(cm_entry->data.accept.
 						    server_conn_id);
 		conn->remote_pid = rxm_peer_pid(cm_entry->data.accept.
@@ -552,7 +587,8 @@ void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 
 	conn->ep->connecting_cnt--;
 	assert(conn->ep->connecting_cnt >= 0);
-	conn->state = RXM_CM_CONNECTED;
+	for (uint8_t i = 0; i < conn->num_msg_eps; i++)
+		conn->states[i] = RXM_CM_CONNECTED;
 }
 
 /* For simultaneous connection requests, if the peer won the coin
@@ -580,7 +616,7 @@ rxm_process_reject(struct rxm_conn *conn, struct fi_eq_err_entry *entry)
 		reason = RXM_REJECT_ECONNREFUSED;
 	}
 
-	switch (conn->state) {
+	switch (conn->states[0]) {
 	case RXM_CM_IDLE:
 		/* Unlikely, but can occur if our request was rejected, and
 		 * there was a failure trying to accept the peer's.
@@ -700,7 +736,7 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		goto remove;
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "connreq for %p\n", conn);
-	switch (conn->state) {
+	switch (conn->states[0]) {
 	case RXM_CM_IDLE:
 		break;
 	case RXM_CM_CONNECTING:
@@ -763,7 +799,7 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 	if (ret)
 		goto close;
 
-	conn->state = RXM_CM_ACCEPTING;
+	conn->states[0] = RXM_CM_ACCEPTING;
 	conn->ep->connecting_cnt++;
 put:
 	util_put_peer(peer);
@@ -786,9 +822,9 @@ void rxm_process_shutdown(struct rxm_conn *conn)
 	assert(ofi_genlock_held(&conn->ep->util_ep.lock));
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "shutdown conn %p (state %d)\n",
-		conn, conn->state);
+		conn, conn->states[0]);
 
-	switch (conn->state) {
+	switch (conn->states[0]) {
 	case RXM_CM_IDLE:
 		break;
 	case RXM_CM_CONNECTING:

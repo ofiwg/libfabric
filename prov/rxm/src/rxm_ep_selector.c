@@ -18,9 +18,19 @@ const struct rxm_ep_selector rxm_selector_single_ep = {
 
 static uint8_t rxm_rr_next(struct rxm_rr_selector *rr, struct rxm_conn *conn)
 {
+	uint8_t idx;
+
 	if (conn->num_msg_eps <= 1)
 		return 0;
-	return 1 + (rr->rr_counter++ % (conn->num_msg_eps - 1));
+
+	idx = 1 + (rr->rr_counter % (conn->num_msg_eps - 1));
+
+	if (conn->states[idx] == RXM_CM_CONNECTED) {
+		rr->rr_counter++;
+		return idx;
+	}
+
+	return 0;
 }
 
 static uint8_t rxm_rr_select(struct rxm_conn *conn, const struct rxm_pkt *pkt)

@@ -799,7 +799,7 @@ static ssize_t rxm_send_credits(struct fid_ep *ep, uint64_t credits)
 	tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
 	tx_buf->pkt.ctrl_hdr.ctrl_data = credits;
 
-	if (rxm_conn->state != RXM_CM_CONNECTED)
+	if (rxm_conn->states[0] != RXM_CM_CONNECTED)
 		goto defer;
 
 	iov.iov_base = &tx_buf->pkt;
