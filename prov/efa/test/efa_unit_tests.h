@@ -334,6 +334,16 @@ void test_efa_rdm_txe_handle_error_skips_peer_error_when_no_handshake();
 void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding();
 void test_efa_rdm_pke_handle_tx_error_longcts_abort_drains_txe();
 void test_efa_rdm_txe_handle_error_no_emit_when_not_longcts();
+void test_efa_rdm_pke_handle_peer_error_recv_medium_requeues_rxe();
+void test_efa_rdm_pke_handle_peer_error_recv_medium_tagged();
+void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped();
+void test_efa_rdm_pke_handle_tx_error_medium_suppresses_peer_error_on_zero_delivery();
+void test_efa_rdm_pke_handle_tx_error_medium_emits_peer_error_once();
+void test_efa_rdm_pke_handle_tx_error_dc_medium_suppresses_peer_error_on_zero_delivery();
+void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported();
+void test_efa_rdm_pke_handle_tx_error_medium_suppresses_with_homogeneous_peers();
+void test_efa_rdm_pke_handle_tx_error_not_medium_no_emit();
+void test_efa_rdm_pke_handle_tx_error_medium_no_emit_on_non_lkey_errno();
 void test_efa_rdm_atomic_compare_desc_persistence();
 void test_efa_rdm_txe_dc_send_first();
 void test_efa_rdm_txe_dc_receipt_first();
@@ -442,6 +452,7 @@ void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch();
 void test_efa_rdm_prov_errno_is_peer_abort();
 void test_efa_rdm_pkt_is_rxe_remote_read();
 void test_efa_rdm_pke_init_peer_error_for_ope_ope_index();
+void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id();
 /* end of efa_unit_test_pke.c */
 
 void test_efa_msg_fi_recv();

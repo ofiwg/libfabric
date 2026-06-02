@@ -817,6 +817,7 @@ int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *ope)
 {
 	uint32_t op_id;
+	uint32_t ref_kind;
 	uint32_t connid;
 
 	/*
@@ -829,20 +830,32 @@ int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 	 *   - LONGCTS direction (sender -> receiver):
 	 *       ope is our local txe; the peer's matching rxe id
 	 *       was captured in txe->rx_id from the inbound CTS.
+	 *   - MSG_ID (medium direction, sender -> receiver):
+	 *       no CTS is ever exchanged, so the sender does not know
+	 *       the receiver's rxe id. The only shared identifier is
+	 *       the per-peer msg_id, which the receiver resolves via
+	 *       its rxe_map. A txe running a medium protocol is
+	 *       identified by ope->protocol.
 	 */
 	if (ope->type == EFA_RDM_RXE) {
+		ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
 		op_id = ope->tx_id;
 	} else {
 		assert(ope->type == EFA_RDM_TXE);
-		op_id = ope->rx_id;
+		if (efa_rdm_pkt_type_is_medium(ope->protocol)) {
+			ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID;
+			op_id = ope->msg_id;
+		} else {
+			ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
+			op_id = ope->rx_id;
+		}
 	}
 
 	connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
 
 	pkt_entry->ope = ope;
 	pkt_entry->peer = ope->peer;
-	return efa_rdm_pke_init_peer_error(pkt_entry, op_id,
-					   EFA_RDM_PEER_ERROR_REF_OPE_INDEX,
+	return efa_rdm_pke_init_peer_error(pkt_entry, op_id, ref_kind,
 					   ope->peer_error_prov_errno, connid);
 }
 
@@ -888,6 +901,36 @@ void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
 	EFA_INFO(FI_LOG_CQ,
 		 "Received PEER_ERROR_PKT (op_id=%u prov_errno=%d %s)\n",
 		 err_hdr->op_id, prov_errno, efa_strerror(prov_errno));
+
+	/*
+	 * MSG_ID direction (medium, sender -> receiver): op_id is a
+	 * per-peer msg_id, not an ope-pool index. Resolve our rxe via
+	 * the peer's rxe_map. pkt_entry->peer is set on the RX
+	 * completion path (efa_rdm_cq.c) and the packet is dropped
+	 * there if the peer cannot be resolved, so it is non-NULL
+	 * here. A miss (unknown/stale msg_id, or all medium WRs failed
+	 * so the receiver never built an rxe) is a clean drop. Recover
+	 * locally; do NOT emit a PEER_ERROR_PKT back -- the sender
+	 * already knows. A medium rxe has efa_outstanding_tx_ops == 0
+	 * (no CTS, no READ), so the drain helper frees it immediately.
+	 */
+	if (err_hdr->ref_kind == EFA_RDM_PEER_ERROR_REF_MSG_ID) {
+		ope = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map,
+					     err_hdr->op_id);
+		/* rxe_map only ever holds rxes, so the type check is
+		 * defensive; a NULL (miss) or non-rxe is a clean drop. */
+		if (OFI_UNLIKELY(!ope || ope->type != EFA_RDM_RXE)) {
+			EFA_WARN(FI_LOG_CQ,
+				 "PEER_ERROR_PKT msg_id=%u did not match a "
+				 "receive entry; dropping.\n", err_hdr->op_id);
+			efa_rdm_pke_release_rx(pkt_entry);
+			return;
+		}
+		(void) efa_rdm_rxe_recover_from_peer_abort(ope, prov_errno);
+		efa_rdm_rxe_release_peer_abort_if_drained(ope);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
 
 	/*
 	 * op_id is wire-supplied. ofi_bufpool_get_ibuf() does not
