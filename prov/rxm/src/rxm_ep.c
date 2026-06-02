@@ -527,7 +527,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 	struct fi_msg msg;
 	ssize_t ret = 0;
 
-	if (rxm_conn->state != RXM_CM_CONNECTED)
+	if (rxm_conn->states[0] != RXM_CM_CONNECTED)
 		return;
 
 	while (!dlist_empty(&rxm_conn->deferred_tx_queue) && !ret) {
