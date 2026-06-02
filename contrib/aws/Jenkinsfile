@@ -82,23 +82,11 @@ def download_all_testing_packages() {
     }
 }
 
-def kill_all_clusters(instance_type, region) {
-    def instance_type_without_period = sh(
-        script: "echo ${instance_type.take(10)} | tr -d '.\\n'",
-        returnStdout: true
-    )
-    sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name \'*${instance_type_without_period}*\' --region ${region} || true"
-}
-
 def run_test_orchestrator_once(run_name, build_tag, os, instance_type, instance_count, region, addl_args) {
     /*
      * Run PortaFiducia/tests/test_orchestrator.py with given command line arguments
      * param@ args: str, the command line arguments
      */
-    if (instance_type == "trn1.32xlarge") {
-        kill_all_clusters(instance_type, region)
-    }
-
     def cluster_name = get_cluster_name(build_tag, os, instance_type)
     def args = "--os ${os} --instance-type ${instance_type} --instance-count ${instance_count} --region ${region} --cluster-name ${cluster_name} ${addl_args} --junit-xml outputs/${cluster_name}.xml"
     sh ". ${venv_path}/bin/activate; cd ${portafiducia_path}/tests && ./test_orchestrator.py ${args}"
@@ -359,7 +347,6 @@ pipeline {
                     def c7gn16x_lock_label  = "c6gn16x"
                     def c5n18x_lock_label  = "c5n18x"
                     def c6g2x_lock_label  = "c6g2x"
-                    def trn132x_lock_label  = "trn132x"
 
                     // Single Node Tests - EFA
                     stages["1_g4dn_alinux2-efa"] = get_test_stage_with_lock("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa)
@@ -385,8 +372,6 @@ pipeline {
                     stages["2_c5n_alinux2023_efa"] = get_test_stage_with_lock("2_c5n_alinux2023_efa", env.BUILD_TAG, "alinux2023", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa)
                     stages["2_hpc6a_ubuntu2204_efa"] = get_test_stage_with_lock("2_hpc6a_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
                     stages["2_hpc6a_rhel8_efa"] = get_test_stage_with_lock("2_hpc6a_rhel8_efa", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
-                    def addl_args_trn1_odcr_efa = " --odcr cr-097fd3374f511c972 ${addl_args_efa}"
-                    stages["2_trn1_ubuntu2204_efa"] = get_test_stage_with_lock("2_trn1_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "trn1.32xlarge", 2, "us-west-2", trn132x_lock_label, addl_args_trn1_odcr_efa)
 
                     stages["2_c7gn_alinux2_efa"] = get_test_stage_with_lock("2_c7gn_alinux2_efa", env.BUILD_TAG, "alinux2", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa)
 
