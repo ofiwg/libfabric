@@ -186,6 +186,20 @@ struct efa_rdm_ope {
 	 * is being emitted from this ope.
 	 */
 	int peer_error_prov_errno;
+
+	/**
+	 * @brief The wire protocol (REQ packet type) selected for this ope
+	 *
+	 * One of the EFA_RDM_*_PKT type ids (e.g. EFA_RDM_MEDIUM_MSGRTM_PKT,
+	 * EFA_RDM_LONGCTS_MSGRTM_PKT). Recorded where the two-sided protocol
+	 * is decided (efa_rdm_msg_select_rtm result) or switched (the read
+	 * NACK longcts fallback), the only points at which an ope's protocol
+	 * is established or changes. The queued/RNR re-post path replays the
+	 * already-selected packet type and does not re-run selection, so this
+	 * value remains valid across re-posts. 0 if no protocol has been
+	 * selected for this ope.
+	 */
+	uint32_t protocol;
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,

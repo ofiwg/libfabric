@@ -37,6 +37,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	}
 
 	txe->internal_flags = internal_flags;
+	txe->protocol = 0;
 	txe->bytes_received = 0;
 	txe->bytes_copied = 0;
 	txe->bytes_acked = 0;
