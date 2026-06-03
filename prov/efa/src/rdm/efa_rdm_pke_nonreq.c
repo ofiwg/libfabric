@@ -8,6 +8,7 @@
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
+#include "efa_rdm_peer.h"
 
 #include "efa_rdm_tracepoint.h"
 
@@ -920,9 +921,11 @@ void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
 		/* rxe_map only ever holds rxes, so the type check is
 		 * defensive; a NULL (miss) or non-rxe is a clean drop. */
 		if (OFI_UNLIKELY(!ope || ope->type != EFA_RDM_RXE)) {
-			EFA_WARN(FI_LOG_CQ,
-				 "PEER_ERROR_PKT msg_id=%u did not match a "
-				 "receive entry; dropping.\n", err_hdr->op_id);
+			/* No rxe yet, but the msg_id may be buffered OOO in
+			 * the reorder window or overflow list. Abort it so
+			 * the window can advance past it. */
+			efa_rdm_peer_abort_ooo_msg(pkt_entry->peer,
+						   err_hdr->op_id);
 			efa_rdm_pke_release_rx(pkt_entry);
 			return;
 		}
