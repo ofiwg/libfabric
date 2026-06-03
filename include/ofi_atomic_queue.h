@@ -33,7 +33,7 @@
 /* Code derived from Dmitry Vyukov */
 /* see:  https://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue */
 
-/*  Multi-producer/multi-consumer bounded queue.
+/*  Multi-producer/single-consumer bounded queue.
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
  *  are met:
@@ -110,10 +110,10 @@ struct name {							\
 	ofi_atomic64_t	write_pos;				\
 	uint8_t		pad0[OFI_CACHE_LINE_SIZE -		\
 			     sizeof(ofi_atomic64_t)];		\
-	ofi_atomic64_t	read_pos;				\
+	int64_t		read_pos;				\
 	ofi_aq_init_fn	init_fn;				\
 	uint8_t		pad1[OFI_CACHE_LINE_SIZE -		\
-			     (sizeof(ofi_atomic64_t) +		\
+			     (sizeof(int64_t) +			\
 			     sizeof(ofi_aq_init_fn))];		\
 	int		size;					\
 	int		size_mask;				\
@@ -132,7 +132,7 @@ static inline void name ## _init(struct name *aq, size_t size,	\
 	aq->size_mask = aq->size - 1;				\
 	aq->init_fn = init_fn;					\
 	ofi_atomic_initialize64(&aq->write_pos, 0);		\
-	ofi_atomic_initialize64(&aq->read_pos, 0);		\
+	aq->read_pos = 0;					\
 	for (i = 0; i < size; i++) {				\
 		ofi_atomic_initialize64(&aq->entry[i].seq, i);	\
 		if (aq->init_fn)				\
@@ -201,29 +201,16 @@ static inline void name ## _release(struct name *aq,		\
 static inline int name ## _head(struct name *aq,		\
 		entrytype **buf, int64_t *pos)			\
 {								\
-	int64_t diff, seq;					\
+	int64_t seq;						\
 	struct name ## _entry *ce;				\
 again:								\
-	*pos = ofi_atomic_load_explicit64(&aq->read_pos,	\
-			memory_order_relaxed);			\
-	for (;;) {						\
-		ce = &aq->entry[*pos & aq->size_mask];		\
-		seq = ofi_atomic_load_explicit64(&(ce->seq),	\
+	*pos = aq->read_pos;					\
+	ce = &aq->entry[*pos & aq->size_mask];			\
+	seq = ofi_atomic_load_explicit64(&(ce->seq),		\
 			memory_order_acquire);			\
-		diff = seq - (*pos + 1);			\
-		if (diff == 0) {				\
-			if (ofi_atomic_compare_exchange_weak64(	\
-				&aq->read_pos, pos,		\
-				*pos + 1))			\
-				break;				\
-		} else if (diff < 0) {				\
-			return -FI_ENOENT;			\
-		} else {					\
-			*pos = ofi_atomic_load_explicit64(	\
-				&aq->read_pos,			\
-				memory_order_relaxed);		\
-		}						\
-	}							\
+	if (seq != *pos + 1)					\
+		return -FI_ENOENT;				\
+	aq->read_pos = *pos + 1;				\
 	*buf = &ce->buf;					\
 	if (ce->noop) {						\
 		ce->noop = false;				\
