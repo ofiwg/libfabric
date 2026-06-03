@@ -710,10 +710,11 @@ RXM_INI
 			"internally by RxM. (default: false).");
 
 	fi_param_define(&rxm_prov, "num_msg_eps", FI_PARAM_SIZE_T,
-			"Number of msg endpoints to open per rxm connection "
-			"for multi-ep routing. Currently all slots alias the "
-			"first real msg_ep; the selector still picks among "
-			"them. (default: 1)");
+			"Number of msg endpoints (and underlying connections/QPs) "
+			"to open per rxm connection for multi-ep routing. Each "
+			"slot opens a distinct QP and the selector spreads traffic "
+			"across them in round-robin fashion. Clamped to [1, 255]. "
+			"(default: 1)");
 
 	fi_param_define(&rxm_prov, "rescan", FI_PARAM_BOOL,
 			"Force or disable rescanning for network interface changes. "

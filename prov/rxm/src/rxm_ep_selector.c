@@ -30,6 +30,11 @@ static uint8_t rxm_rr_next(struct rxm_rr_selector *rr, struct rxm_conn *conn)
 		return idx;
 	}
 
+	if (conn->states[idx] == RXM_CM_IDLE) {
+		rr->rr_next = 1;
+		(void) rxm_send_connect(conn, idx);
+	}
+
 	return 0;
 }
 
