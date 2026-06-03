@@ -50,6 +50,7 @@ struct smr_env {
 	size_t	max_gdrcopy_size;
 	int	use_xpmem;
 	size_t	buffer_threshold;
+	size_t	rma_fast_size;
 };
 
 extern struct smr_env smr_env;
@@ -184,6 +185,7 @@ static_assert(sizeof(struct smr_cmd) == SMR_CMD_SIZE,
 
 #define SMR_INJECT_SIZE		4096
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
+#define SMR_RMA_FAST_SIZE	16384
 #define SMR_SAR_SIZE		32768
 
 #define SMR_DIR		"/dev/shm/"

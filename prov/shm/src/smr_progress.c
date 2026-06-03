@@ -1340,6 +1340,15 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			ret = smr_progress_cmd_rma(ep, cmd);
 			break;
 		case ofi_op_write_async:
+			if (cmd->hdr.op_flags & SMR_REMOTE_CQ_DATA) {
+				ret = smr_complete_rx(ep, NULL, ofi_op_write,
+					smr_rx_cq_flags(0, cmd->hdr.op_flags),
+					cmd->hdr.size, NULL, cmd->hdr.rx_id, 0,
+					cmd->hdr.cq_data);
+				break;
+			}
+			ofi_ep_peer_rx_cntr_inc(&ep->util_ep, cmd->hdr.op);
+			break;
 		case ofi_op_read_async:
 			ofi_ep_peer_rx_cntr_inc(&ep->util_ep, cmd->hdr.op);
 			break;
