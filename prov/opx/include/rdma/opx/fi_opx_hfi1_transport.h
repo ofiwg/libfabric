@@ -451,7 +451,12 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 		uint32_t	       offset;
 		int32_t		       origin_byte_counter_adj;
 	} tid_info;
-	uint64_t unused3[3];
+	/* Bounded count of *consecutive* no-progress -FI_EAGAIN results
+	 * from opx_hfi1_rx_rzv_rts_tid_setup().  When a TID registration repeatedly
+	 * fails to make progress this counter drives a fallback to eager (non-TID)
+	 * rendezvous instead of re-queueing the TID_SETUP work item forever. */
+	uint64_t tid_setup_no_progress_retries;
+	uint64_t unused3[2];
 
 	/* == CACHE LINE 3 == */
 	union opx_hfi1_dput_iov elided_head;
