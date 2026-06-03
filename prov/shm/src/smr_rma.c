@@ -44,17 +44,21 @@ static void smr_add_rma_cmd(struct smr_region *peer_smr,
 static void smr_format_rma_resp(struct smr_cmd *cmd, int64_t peer_id,
 				const struct fi_rma_iov *rma_iov, size_t count,
 				size_t total_len, uint32_t op,
-				uint64_t op_flags)
+				uint64_t data, uint64_t op_flags)
 {
-	smr_generic_format(cmd, 0, peer_id, op, 0, 0, op_flags);
+	smr_generic_format(cmd, 0, peer_id, op, 0, data, op_flags);
 	cmd->hdr.size = total_len;
+	if (op_flags & FI_REMOTE_CQ_DATA) {
+		cmd->hdr.cq_data = data;
+		cmd->hdr.op_flags |= SMR_REMOTE_CQ_DATA;
+	}
 }
 
 static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 			    const struct iovec *iov, size_t iov_count,
 			    const struct fi_rma_iov *rma_iov, size_t rma_count,
 			    void **desc, int rx_id, int tx_id, void *context,
-			    uint32_t op, uint64_t op_flags)
+			    uint32_t op, uint64_t data, uint64_t op_flags)
 {
 	struct iovec vma_iovec[SMR_IOV_LIMIT], rma_iovec[SMR_IOV_LIMIT];
 	struct ofi_xpmem_client *xpmem;
@@ -91,7 +95,7 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 
 	smr_format_rma_resp(cmd, rx_id, rma_iov, rma_count, total_len,
 			    (op == ofi_op_write) ? ofi_op_write_async :
-			    ofi_op_read_async, op_flags);
+			    ofi_op_read_async, data, op_flags);
 
 	smr_cmd_queue_commit(cmd, pos);
 
@@ -106,16 +110,16 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 
 static inline bool smr_do_fast_rma(struct smr_ep *ep, uint64_t op_flags,
 				   size_t rma_count, size_t total_len,
-				   struct smr_region *peer_smr)
+				   struct smr_region *peer_smr, uint32_t op)
 {
 	struct smr_domain *domain;
 
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
 
-	return domain->fast_rma && !(op_flags &
-		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
-		     rma_count == 1 && smr_vma_enabled(ep, peer_smr);
+	return domain->fast_rma && !(op_flags & FI_DELIVERY_COMPLETE) &&
+		     rma_count == 1 && smr_vma_enabled(ep, peer_smr) &&
+		     (op == ofi_op_read_req || total_len <= smr_env.rma_fast_size);
 
 }
 
@@ -150,10 +154,10 @@ static ssize_t smr_generic_rma(
 		goto unlock;
 
 	total_len = ofi_total_iov_len(iov, iov_count);
-	if (smr_do_fast_rma(ep, op_flags, rma_count, total_len, peer_smr)) {
+	if (smr_do_fast_rma(ep, op_flags, rma_count, total_len, peer_smr, op)) {
 		ret = smr_rma_fast(ep, peer_smr, iov, iov_count, rma_iov,
 				   rma_count, desc, rx_id, tx_id, context, op,
-				   op_flags);
+				   data, op_flags);
 		goto unlock;
 	}
 
