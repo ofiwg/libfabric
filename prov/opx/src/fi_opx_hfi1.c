@@ -2593,6 +2593,10 @@ int opx_hfi1_rx_rzv_rts_tid_fallback(union fi_opx_hfi1_deferred_work	  *work,
 	return params->work_elem.work_fn(work);
 }
 
+#ifndef FI_OPX_RTS_TID_SETUP_MAX_NO_PROGRESS_RETRIES
+#define FI_OPX_RTS_TID_SETUP_MAX_NO_PROGRESS_RETRIES (1024)
+#endif
+
 int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
@@ -2611,11 +2615,44 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 	} else if (register_rc != FI_SUCCESS) {
 		assert(register_rc == -FI_EAGAIN);
 		FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters.expected_receive.rts_tid_setup_retries);
+
+		/* A no-progress -FI_EAGAIN re-queues this TID_SETUP work
+		 * item to be retried on every subsequent poll cycle.  Bound the number
+		 * of consecutive no-progress retries; once exceeded, fall back to eager
+		 * (non-TID) rendezvous -- the same escape already used for the
+		 * -FI_EPERM (TID-disabled) case above.
+		 * The counter is reset on any forward progress below. */
+		if (OFI_UNLIKELY(++params->tid_setup_no_progress_retries >=
+				 FI_OPX_RTS_TID_SETUP_MAX_NO_PROGRESS_RETRIES)) {
+			/* If we've already sent one or more CTS packets using TID,
+			 * params->cur_iov may have advanced. Normalize the remaining iov list
+			 * so eager fallback can't re-send already-covered iovs. */
+			if (OFI_UNLIKELY(params->cur_iov != 0)) {
+				const uint32_t start_iov = params->cur_iov;
+				const uint32_t rem_niov	 = (uint32_t) (params->niov - start_iov);
+
+				for (uint32_t i = 0; i < rem_niov; i++) {
+					params->dput_iov[i] = params->dput_iov[start_iov + i];
+				}
+
+				params->niov	= rem_niov;
+				params->cur_iov = 0;
+			}
+
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) EAGAIN no-progress retry limit reached, eager fallback (params=%p rzv_comp=%p context=%p)\n",
+			       params, params->rzv_comp, params->rzv_comp->context);
+			return opx_hfi1_rx_rzv_rts_tid_fallback(work, params);
+		}
+
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) EAGAIN (No Progress) (params=%p rzv_comp=%p context=%p)\n",
 		       params, params->rzv_comp, params->rzv_comp->context);
 		return -FI_EAGAIN;
 	}
+
+	/* made forward progress acquiring TIDs so reset the no-progress retry counter. */
+	params->tid_setup_no_progress_retries = 0;
 
 	void *cur_addr_range_end = (void *) (params->tid_info.cur_addr_range.buf + params->tid_info.cur_addr_range.len);
 	void *tid_addr_block_end =
@@ -3249,6 +3286,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 	params->tid_info.npairs			 = 0;
 	params->tid_info.offset			 = 0;
 	params->tid_info.origin_byte_counter_adj = 0;
+	params->tid_setup_no_progress_retries	 = 0;
 	params->opcode				 = opcode;
 	params->elided_head.bytes		 = 0;
 	params->elided_tail.bytes		 = 0;
