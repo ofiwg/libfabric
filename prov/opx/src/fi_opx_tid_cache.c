@@ -684,9 +684,14 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 	ret = ofi_rbmap_insert_at(&cache->tree, (void *) &(*entry)->info, (void *) *entry, &(*entry)->node, rbnode);
 
 	if (OFI_UNLIKELY(ret)) {
-		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "ofi_rbmap_insert returned %d (%s) %p\n", ret, strerror(ret),
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "ofi_rbmap_insert returned %d (%s) %p\n", -ret, strerror(-ret),
 		       (*entry)->node);
 		ofi_rbnode_free(&cache->tree, rbnode);
+		/* On -FI_EALREADY the insert set (*entry)->node to the EXISTING
+		 * colliding node, not our prealloc. This entry was never linked
+		 * into the tree, so clear node before the caller frees it;
+		 * otherwise opx_cache_free_entry()'s !entry->node trap fires. */
+		(*entry)->node = NULL;
 		goto error;
 	}
 	cache->cached_cnt++;
@@ -735,13 +740,35 @@ enum opx_tid_cache_entry_status opx_tid_cache_find(struct fi_opx_ep *opx_ep, con
 						   struct ofi_mr_entry **entry)
 {
 	enum opx_tid_cache_entry_status ret;
+	/* Declared before the 'research' label below so it survives the
+	 * re-search goto; assigned from the find result on every iteration. */
+	const struct opx_tid_mr *opx_mr;
 
 	OPX_DEBUG_ENTRY(info);
 
 	struct ofi_mr_cache *cache = opx_ep->tid_domain->tid_cache;
+
+	/*
+	 * Re-search point. The TID cache rbtree uses an overlap comparator
+	 * (opx_util_mr_find_overlap), so a single registration range can
+	 * overlap MULTIPLE page-adjacent cached entries, yet opx_mr_rbt_find()
+	 * returns only ONE matching entry per call. When an idle (use_cnt == 0)
+	 * entry fails the memory-monitor valid() check (e.g. kdreg2 detected
+	 * that the pages were remapped) we evict that single entry. Previously
+	 * each eviction branch then returned NOT_FOUND immediately; if a second
+	 * overlapping entry was still resident in the tree, the fresh insert in
+	 * opx_tid_cache_crte() (ofi_rbmap_insert_at) collided with it and
+	 * returned -FI_EALREADY, which left (*entry)->node pointing at the
+	 * residual node and tripped the opx_cache_free_entry() "!entry->node"
+	 * abort. Instead we re-search (goto research) after each eviction so a
+	 * NOT_FOUND result reliably means "no overlapping entry remains", and
+	 * the subsequent insert in crte cannot hit EALREADY. Each eviction
+	 * removes one entry from the finite tree, so the re-search is bounded.
+	 */
+research:
 	cache->search_cnt++;
-	*entry				      = opx_mr_rbt_find(&cache->tree, info);
-	const struct opx_tid_mr *const opx_mr = (*entry) ? (struct opx_tid_mr *) (*entry)->data : NULL;
+	*entry = opx_mr_rbt_find(&cache->tree, info);
+	opx_mr = (*entry) ? (const struct opx_tid_mr *) (*entry)->data : NULL;
 	if (!*entry) {
 		OPX_TRACE_TID_INSTANT(OPX_TRACE_EVENT_TID_CACHE_MISS, (uint64_t) info->iov.iov_base, info->iov.iov_len);
 		ret = OPX_TID_CACHE_ENTRY_NOT_FOUND;
@@ -784,7 +811,9 @@ enum opx_tid_cache_entry_status opx_tid_cache_find(struct fi_opx_ep *opx_ep, con
 			*entry = NULL;
 			OPX_TRACE_TID_INSTANT(OPX_TRACE_EVENT_TID_CACHE_MISS, (uint64_t) info->iov.iov_base,
 					      info->iov.iov_len);
-			ret = OPX_TID_CACHE_ENTRY_NOT_FOUND;
+			/* Evicted one overlapping idle entry; re-search in case
+			 * another overlapping entry is still resident. */
+			goto research;
 		} else {
 			OPX_TRACE_TID_INSTANT(OPX_TRACE_EVENT_TID_CACHE_HIT, (uint64_t) info->iov.iov_base,
 					      info->iov.iov_len);
@@ -808,7 +837,9 @@ enum opx_tid_cache_entry_status opx_tid_cache_find(struct fi_opx_ep *opx_ep, con
 			opx_mr_uncache_entry_storage(cache, *entry);
 			dlist_insert_tail(&(*entry)->list_entry, &cache->dead_region_list);
 			*entry = NULL;
-			ret    = OPX_TID_CACHE_ENTRY_NOT_FOUND;
+			/* Evicted one overlapping idle entry; re-search in case
+			 * another overlapping entry is still resident. */
+			goto research;
 		} else {
 			ret = OPX_TID_CACHE_ENTRY_OVERLAP_LEFT;
 		}
@@ -830,7 +861,9 @@ enum opx_tid_cache_entry_status opx_tid_cache_find(struct fi_opx_ep *opx_ep, con
 			opx_mr_uncache_entry_storage(cache, *entry);
 			dlist_insert_tail(&(*entry)->list_entry, &cache->dead_region_list);
 			*entry = NULL;
-			ret    = OPX_TID_CACHE_ENTRY_NOT_FOUND;
+			/* Evicted one overlapping idle entry; re-search in case
+			 * another overlapping entry is still resident. */
+			goto research;
 		} else {
 			ret = OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT;
 		}
