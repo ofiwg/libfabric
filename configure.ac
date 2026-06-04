@@ -123,6 +123,7 @@ m4_version_prereq([2.70],
              AC_MSG_ERROR([Cannot continue])])
      ])
 AM_PROG_CC_C_O
+AC_PROG_CXX
 AC_PROG_CPP
 
 AC_ARG_ENABLE([debug],
