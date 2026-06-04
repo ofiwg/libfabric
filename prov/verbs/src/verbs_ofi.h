@@ -211,8 +211,8 @@ extern struct vrb_gl_data {
 		char	*xrcd_filename;
 	} msg;
 
-	bool	peer_mem_support;
-	bool	dmabuf_support;
+	int	peer_mem_support;
+	int	dmabuf_support;
 
 	vrb_nic_affinity_handler_t	nic_affinity_handler;
 	char	*nic_affinity_policy;
