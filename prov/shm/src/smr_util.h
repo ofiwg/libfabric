@@ -220,7 +220,7 @@ struct smr_ep_name {
 
 static inline const char *smr_no_prefix(const char *addr)
 {
-	char *start;
+	const char *start;
 
 	return (start = strstr(addr, "://")) ? start + 3 : addr;
 }
