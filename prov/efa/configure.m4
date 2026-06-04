@@ -393,6 +393,80 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AM_CONDITIONAL([HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES], [ test $efa_support_data_in_order_aligned_128_byte = 1])
 	AM_CONDITIONAL([ENABLE_EFA_UNIT_TEST], [ test x"$enable_efa_unit_test" != xno])
 
+	AC_ARG_ENABLE([efa-gtest],
+		[
+			AS_HELP_STRING([--enable-efa-gtest=GTEST_INSTALL_DIR],
+				[Provide a path to the Google Test installation directory
+				in order to enable EFA GTest/GMock Tests.])
+		],
+		[gtest_dir=$enableval],
+		[enable_efa_gtest=no])
+
+	AS_IF([test x"$enable_efa_gtest" != xno ],
+	[
+		efa_gtest=1
+		AC_LANG_PUSH([C++])
+
+		gtest_CPPFLAGS="-I$gtest_dir/include"
+		gtest_LDFLAGS=""
+		gtest_LIBS=""
+
+		dnl Find the library directory (lib64 or lib)
+		AS_IF([test -d "$gtest_dir/lib64"],
+			[gtest_LDFLAGS="-L$gtest_dir/lib64"],
+			[AS_IF([test -d "$gtest_dir/lib"],
+				[gtest_LDFLAGS="-L$gtest_dir/lib"],
+				[AC_MSG_ERROR([Cannot find lib or lib64 directory in $gtest_dir])])])
+
+		dnl Check for gtest/gtest.h
+		fi_check_gtest_save_CPPFLAGS="$CPPFLAGS"
+		fi_check_gtest_save_LDFLAGS="$LDFLAGS"
+		fi_check_gtest_save_LIBS="$LIBS"
+		fi_check_gtest_save_CXXFLAGS="$CXXFLAGS"
+		CXXFLAGS="$CXXFLAGS -std=c++17"
+		CPPFLAGS="$CPPFLAGS $gtest_CPPFLAGS"
+		LDFLAGS="$LDFLAGS $gtest_LDFLAGS"
+
+		dnl Compile test for gtest and gmock headers
+		AC_MSG_CHECKING([for gtest/gtest.h and gmock/gmock.h])
+		AC_COMPILE_IFELSE(
+			[AC_LANG_PROGRAM(
+				[[#include <gtest/gtest.h>
+				  #include <gmock/gmock.h>]],
+				[[]])],
+			[AC_MSG_RESULT([yes])],
+			[AC_MSG_RESULT([no])
+			 AC_MSG_ERROR([Cannot compile with gtest/gmock headers from $gtest_dir/include])])
+
+		dnl Link test for gtest and gmock
+		LIBS="$LIBS -lgmock -lgtest -lpthread"
+		AC_MSG_CHECKING([whether we can link against gtest and gmock])
+		AC_LINK_IFELSE(
+			[AC_LANG_PROGRAM(
+				[[#include <gtest/gtest.h>
+				  #include <gmock/gmock.h>]],
+				[[int argc = 0; char *argv[] = {nullptr}; testing::InitGoogleMock(&argc, argv);]])],
+			[AC_MSG_RESULT([yes])
+			 gtest_LIBS="-lgmock -lgtest -lpthread"],
+			[AC_MSG_RESULT([no])
+			 AC_MSG_ERROR([Cannot link against gtest/gmock in $gtest_dir])])
+
+		CPPFLAGS="$fi_check_gtest_save_CPPFLAGS"
+		LDFLAGS="$fi_check_gtest_save_LDFLAGS"
+		LIBS="$fi_check_gtest_save_LIBS"
+		CXXFLAGS="$fi_check_gtest_save_CXXFLAGS"
+
+		AC_LANG_POP([C++])
+	],
+	[
+		efa_gtest=0
+	])
+
+	AC_SUBST(gtest_CPPFLAGS)
+	AC_SUBST(gtest_LDFLAGS)
+	AC_SUBST(gtest_LIBS)
+	AM_CONDITIONAL([ENABLE_EFA_GTEST], [ test x"$enable_efa_gtest" != xno])
+
 	AC_SUBST(efa_CPPFLAGS)
 	AC_SUBST(efa_LDFLAGS)
 	AC_SUBST(efa_LIBS)
