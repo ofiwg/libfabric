@@ -368,7 +368,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[],
 			[$cmocka_dir],
 			[],
-			[efa_LIBS+=" $cmocka_LDFLAGS $cmocka_LIBS -static"],
+			[],
 			[AC_MSG_ERROR([Cannot compile EFA unit tests without a valid Cmocka installation directory.])],
 			[
 				#include <stdarg.h>
