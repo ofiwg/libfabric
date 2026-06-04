@@ -4684,6 +4684,99 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_on_non_lkey_errno(struct ef
 }
 
 /**
+ * @brief Runt-only runting-read sender-side: a RUNTREAD RTM WR whose
+ *        transfer has no READ remainder (total_len == bytes_runt) fails
+ *        with INVALID_LKEY and the peer supports the feature -> the txe
+ *        is flagged PEER_ABORT_PENDING and the abort is signalled by
+ *        msg_id (REF_MSG_ID), exactly like a medium transfer.
+ *
+ * This is the runt-only analog of the medium MR-cancel: the whole
+ * message rode the REQ packets, so there is no READ to fail and the
+ * medium-style msg_id PEER_ERROR_PKT is the only abort signal.
+ */
+void test_efa_rdm_pke_handle_tx_error_runtread_only_emits_peer_error(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_TXE_REQ;
+	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->cq_entry.op_context = (void *) 0xa1;
+	txe->msg_id = 0x99;
+	/* Runt-only: the whole message is the runt, no READ remainder. */
+	txe->total_len = 4096;
+	txe->bytes_runt = 4096;
+
+	peer = txe->peer;
+	assert_non_null(peer);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	/* Keep the txe alive past the single WR drain so we can inspect
+	 * the flags the gate set (a sibling WR still in flight). */
+	txe->efa_outstanding_tx_ops = 1;
+
+	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_RUNTREAD_MSGRTM_PKT,
+				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+
+	/* The gate accepted the runt-only runtread: PENDING set, errno
+	 * stashed. The abort uses the msg_id reference kind. */
+	assert_true(txe->internal_flags & EFA_RDM_TXE_PEER_ABORT_PENDING);
+	assert_int_equal(txe->peer_error_prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	assert_true(efa_rdm_txe_peer_abort_uses_msg_id(txe));
+}
+
+/**
+ * @brief Runting-read WITH a READ remainder (bytes_runt < total_len)
+ *        must NOT take the medium-style msg_id emit path: that case is
+ *        signalled to the receiver through the READ failure path
+ *        (efa_rdm_rxe_recover_from_peer_abort), so no PEER_ABORT_PENDING
+ *        is set here and no PEER_ERROR_PKT is posted from this site.
+ */
+void test_efa_rdm_pke_handle_tx_error_runtread_with_read_no_emit(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	size_t outstanding_before;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_TXE_REQ;
+	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->msg_id = 0x99;
+	/* Has a READ remainder: runt portion is only part of the message. */
+	txe->total_len = 1048576;
+	txe->bytes_runt = 4096;
+
+	peer = txe->peer;
+	assert_non_null(peer);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_RUNTREAD_MSGRTM_PKT,
+				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+
+	/* Not flagged for the msg_id emit path; no PEER_ERROR_PKT posted. */
+	assert_false(txe->internal_flags & EFA_RDM_TXE_PEER_ABORT_PENDING);
+	assert_false(efa_rdm_txe_peer_abort_uses_msg_id(txe));
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+}
+
+/**
  * @brief Regression test for the LONGCTS sender-side abort txe leak.
  *
  * When a LONGCTS transfer's source MR is canceled mid-CTSDATA, the

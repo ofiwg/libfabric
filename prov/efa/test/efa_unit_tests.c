@@ -406,6 +406,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_handle_tx_error_medium_suppresses_with_homogeneous_peers, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_handle_tx_error_not_medium_no_emit, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_handle_tx_error_medium_no_emit_on_non_lkey_errno, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_handle_tx_error_runtread_only_emits_peer_error, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_handle_tx_error_runtread_with_read_no_emit, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_atomic_compare_desc_persistence, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_txe_dc_send_first, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_txe_dc_receipt_first, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -446,6 +448,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pkt_is_rxe_remote_read, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_init_peer_error_for_ope_ope_index, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_init_peer_error_for_ope_runtread, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end of efa_unit_test_pke.c */
 
 		/* begin efa_unit_test_domain.c */

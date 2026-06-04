@@ -849,3 +849,54 @@ void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id(struct efa_resource 
 			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 	efa_rdm_pke_release_tx(pkt_entry);
 }
+
+/**
+ * @brief Verify efa_rdm_pke_init_peer_error_for_ope() routes a runtread
+ *        txe by remainder: runt-only (total_len == bytes_runt) carries no
+ *        RDMA READ and uses the MSG_ID direction (op_id = msg_id), while a
+ *        runtread WITH a READ remainder is signalled through the READ
+ *        failure path and uses OPE_INDEX (op_id = rx_id) here.
+ */
+void test_efa_rdm_pke_init_peer_error_for_ope_runtread(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *hdr;
+	struct efa_rdm_ope txe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe.type = EFA_RDM_TXE;
+	txe.ep = ep;
+	txe.protocol = EFA_RDM_RUNTREAD_MSGRTM_PKT;
+	txe.msg_id = 0x99;
+	txe.rx_id = 0xdead;
+	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+
+	/* Runt-only (total_len == bytes_runt): MSG_ID direction. */
+	txe.total_len = 4096;
+	txe.bytes_runt = 4096;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	/* With a READ remainder (bytes_runt < total_len): OPE_INDEX. */
+	txe.total_len = 1048576;
+	txe.bytes_runt = 4096;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_OPE_INDEX);
+	assert_int_equal(hdr->op_id, txe.rx_id);
+	efa_rdm_pke_release_tx(pkt_entry);
+}

@@ -506,14 +506,15 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			prev_state = txe->state;
 			efa_rdm_txe_handle_error(txe, err, prov_errno);
 			/*
-			 * Medium sender-side source-MR cancel. LONGCTS is
-			 * handled inside efa_rdm_txe_handle_error (it has a
-			 * CTS and reaches OPE_SEND); medium never reaches
-			 * OPE_SEND, so its PENDING mark is set here from the
-			 * failing packet's own type.
+			 * Sender-side source-MR cancel for a protocol that
+			 * has no CTS and no READ, so the abort is signalled
+			 * to the receiver by msg_id: medium, or a runt-only
+			 * runting-read (bytes_runt == total_len). (LONGCTS
+			 * has a CTS and is handled inside
+			 * efa_rdm_txe_handle_error, which reaches OPE_SEND.)
 			 */
 			if (prev_state != EFA_RDM_OPE_ERR &&
-			    efa_rdm_pkt_type_is_medium(efa_rdm_pkt_type_of(pkt_entry)) &&
+			    efa_rdm_txe_peer_abort_uses_msg_id(txe) &&
 			    prov_errno == EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY &&
 			    txe->peer != NULL &&
 			    (ep->homogeneous_peers || txe->peer->is_self ||
@@ -741,6 +742,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
 		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
+		/*
+		 * A successful runt WR of a runt-only transfer that is
+		 * aborting (source MR canceled on a sibling WR), a healthy
+		 * transfer is never touched.
+		 */
+		if (pkt_entry->ope->internal_flags & EFA_RDM_TXE_PEER_ABORT_PENDING)
+			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);

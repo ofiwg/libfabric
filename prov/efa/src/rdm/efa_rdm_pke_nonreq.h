@@ -309,6 +309,29 @@ int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
 				uint32_t op_id, uint32_t ref_kind,
 				int prov_errno, uint32_t connid);
 
+/**
+ * @brief Whether a sender-side peer-abort for this txe is signalled to the
+ *        receiver via msg_id (EFA_RDM_PEER_ERROR_REF_MSG_ID) rather than a
+ *        shared ope index.
+ *
+ * True for the two sender-detected protocols that exchange no CTS, so the
+ * sender never learns the receiver's rxe ope-pool index and the only shared
+ * identifier is the per-peer msg_id:
+ *   - medium RTM (all data in REQ packets), and
+ *   - a runt-only runting-read RTM (bytes_runt == total_len), where the whole
+ *     message rides the REQ packets and no RDMA READ is posted.
+ *
+ * @param[in] txe   the failing/aborting txe
+ * @return    true if the abort uses the msg_id reference kind
+ */
+static inline
+bool efa_rdm_txe_peer_abort_uses_msg_id(struct efa_rdm_ope *txe)
+{
+	return efa_rdm_pkt_type_is_medium(txe->protocol) ||
+	       (efa_rdm_pkt_type_is_runtread(txe->protocol) &&
+		txe->total_len == txe->bytes_runt);
+}
+
 int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *ope);
 

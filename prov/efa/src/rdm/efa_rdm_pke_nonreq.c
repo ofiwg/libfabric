@@ -831,19 +831,19 @@ int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 	 *   - LONGCTS direction (sender -> receiver):
 	 *       ope is our local txe; the peer's matching rxe id
 	 *       was captured in txe->rx_id from the inbound CTS.
-	 *   - MSG_ID (medium direction, sender -> receiver):
-	 *       no CTS is ever exchanged, so the sender does not know
-	 *       the receiver's rxe id. The only shared identifier is
-	 *       the per-peer msg_id, which the receiver resolves via
-	 *       its rxe_map. A txe running a medium protocol is
-	 *       identified by ope->protocol.
+	 *   - MSG_ID (sender -> receiver, no CTS exchanged):
+	 *       the sender does not know the receiver's rxe id. The only
+	 *       shared identifier is the per-peer msg_id, which the
+	 *       receiver resolves via its rxe_map. Used by a medium txe
+	 *       and by a runt-only runting-read txe -- see
+	 *       efa_rdm_txe_peer_abort_uses_msg_id().
 	 */
 	if (ope->type == EFA_RDM_RXE) {
 		ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
 		op_id = ope->tx_id;
 	} else {
 		assert(ope->type == EFA_RDM_TXE);
-		if (efa_rdm_pkt_type_is_medium(ope->protocol)) {
+		if (efa_rdm_txe_peer_abort_uses_msg_id(ope)) {
 			ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID;
 			op_id = ope->msg_id;
 		} else {

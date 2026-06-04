@@ -345,6 +345,8 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported();
 void test_efa_rdm_pke_handle_tx_error_medium_suppresses_with_homogeneous_peers();
 void test_efa_rdm_pke_handle_tx_error_not_medium_no_emit();
 void test_efa_rdm_pke_handle_tx_error_medium_no_emit_on_non_lkey_errno();
+void test_efa_rdm_pke_handle_tx_error_runtread_only_emits_peer_error();
+void test_efa_rdm_pke_handle_tx_error_runtread_with_read_no_emit();
 void test_efa_rdm_atomic_compare_desc_persistence();
 void test_efa_rdm_txe_dc_send_first();
 void test_efa_rdm_txe_dc_receipt_first();
@@ -457,6 +459,7 @@ void test_efa_rdm_prov_errno_is_peer_abort();
 void test_efa_rdm_pkt_is_rxe_remote_read();
 void test_efa_rdm_pke_init_peer_error_for_ope_ope_index();
 void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id();
+void test_efa_rdm_pke_init_peer_error_for_ope_runtread();
 /* end of efa_unit_test_pke.c */
 
 void test_efa_msg_fi_recv();
