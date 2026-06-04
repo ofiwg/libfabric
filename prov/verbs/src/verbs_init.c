@@ -735,7 +735,7 @@ static int vrb_read_params(void)
 	if (vrb_gl_data.dmabuf_support) {
 		if (vrb_get_param_bool("use_dmabuf", "Enable dmabuf based memory "
 				       "registrations, if supported. Yes by default.",
-				       (int *)&vrb_gl_data.dmabuf_support)) {
+				       &vrb_gl_data.dmabuf_support)) {
 			VRB_WARN(FI_LOG_CORE, "Invalid value of use_dmabuf\n");
 			return -FI_EINVAL;
 		}

@@ -44,7 +44,7 @@ static inline void vrb_os_fini()
 {
 }
 
-static inline void vrb_os_mem_support(bool *peer_mem, bool *dmabuf)
+static inline void vrb_os_mem_support(int *peer_mem, int *dmabuf)
 {
 	char *line = NULL;
 	size_t line_size = 0;
@@ -57,9 +57,9 @@ static inline void vrb_os_mem_support(bool *peer_mem, bool *dmabuf)
 
 	while ((bytes = getline(&line, &line_size, kallsyms_fd)) != -1) {
 		if (strstr(line, "ib_register_peer_memory_client"))
-			*peer_mem = true;
+			*peer_mem = (int)true;
 		else if (strstr(line, "ib_umem_dmabuf_get"))
-			*dmabuf = true;
+			*dmabuf = (int)true;
 		if (*peer_mem && *dmabuf)
 			break;
 	}
