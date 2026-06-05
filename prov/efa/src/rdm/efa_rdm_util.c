@@ -167,3 +167,68 @@ int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer, in
 
 	return 0;
 }
+
+/**
+ * @brief return the exact name of an EFA RDM packet type
+ * @param[in] pkt_type  an EFA_RDM_*_PKT id (see efa_rdm_protocol.h)
+ * @return constant string naming the exact packet type
+ */
+const char *efa_rdm_rtm_type_to_str(int pkt_type)
+{
+	switch (pkt_type) {
+	/* Non-REQ / control packets */
+	case EFA_RDM_RETIRED_RTS_PKT:		return "RETIRED_RTS";
+	case EFA_RDM_RETIRED_CONNACK_PKT:	return "RETIRED_CONNACK";
+	case EFA_RDM_CTS_PKT:			return "CTS";
+	case EFA_RDM_CTSDATA_PKT:		return "CTSDATA";
+	case EFA_RDM_READRSP_PKT:		return "READRSP";
+	case EFA_RDM_RMA_CONTEXT_PKT:		return "RMA_CONTEXT";
+	case EFA_RDM_EOR_PKT:			return "EOR";
+	case EFA_RDM_ATOMRSP_PKT:		return "ATOMRSP";
+	case EFA_RDM_HANDSHAKE_PKT:		return "HANDSHAKE";
+	case EFA_RDM_RECEIPT_PKT:		return "RECEIPT";
+	case EFA_RDM_READ_NACK_PKT:		return "READ_NACK";
+
+	/* Baseline REQ packets */
+	case EFA_RDM_EAGER_MSGRTM_PKT:		return "EAGER_MSGRTM";
+	case EFA_RDM_EAGER_TAGRTM_PKT:		return "EAGER_TAGRTM";
+	case EFA_RDM_MEDIUM_MSGRTM_PKT:		return "MEDIUM_MSGRTM";
+	case EFA_RDM_MEDIUM_TAGRTM_PKT:		return "MEDIUM_TAGRTM";
+	case EFA_RDM_LONGCTS_MSGRTM_PKT:	return "LONGCTS_MSGRTM";
+	case EFA_RDM_LONGCTS_TAGRTM_PKT:	return "LONGCTS_TAGRTM";
+	case EFA_RDM_EAGER_RTW_PKT:		return "EAGER_RTW";
+	case EFA_RDM_LONGCTS_RTW_PKT:		return "LONGCTS_RTW";
+	case EFA_RDM_SHORT_RTR_PKT:		return "SHORT_RTR";
+	case EFA_RDM_LONGCTS_RTR_PKT:		return "LONGCTS_RTR";
+	case EFA_RDM_WRITE_RTA_PKT:		return "WRITE_RTA";
+	case EFA_RDM_FETCH_RTA_PKT:		return "FETCH_RTA";
+	case EFA_RDM_COMPARE_RTA_PKT:		return "COMPARE_RTA";
+
+	/* Extra-feature REQ packets (read-based) */
+	case EFA_RDM_LONGREAD_MSGRTM_PKT:	return "LONGREAD_MSGRTM";
+	case EFA_RDM_LONGREAD_TAGRTM_PKT:	return "LONGREAD_TAGRTM";
+	case EFA_RDM_LONGREAD_RTW_PKT:		return "LONGREAD_RTW";
+	case EFA_RDM_READ_RTR_PKT:		return "READ_RTR";
+
+	/* Delivery-complete (DC) REQ packets */
+	case EFA_RDM_DC_EAGER_MSGRTM_PKT:	return "DC_EAGER_MSGRTM";
+	case EFA_RDM_DC_EAGER_TAGRTM_PKT:	return "DC_EAGER_TAGRTM";
+	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:	return "DC_MEDIUM_MSGRTM";
+	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:	return "DC_MEDIUM_TAGRTM";
+	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:	return "DC_LONGCTS_MSGRTM";
+	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:	return "DC_LONGCTS_TAGRTM";
+	case EFA_RDM_DC_EAGER_RTW_PKT:		return "DC_EAGER_RTW";
+	case EFA_RDM_DC_LONGCTS_RTW_PKT:	return "DC_LONGCTS_RTW";
+	case EFA_RDM_DC_WRITE_RTA_PKT:		return "DC_WRITE_RTA";
+
+	/* Runting REQ packets */
+	case EFA_RDM_RUNTCTS_MSGRTM_PKT:	return "RUNTCTS_MSGRTM";
+	case EFA_RDM_RUNTCTS_TAGRTM_PKT:	return "RUNTCTS_TAGRTM";
+	case EFA_RDM_RUNTCTS_RTW_PKT:		return "RUNTCTS_RTW";
+	case EFA_RDM_RUNTREAD_MSGRTM_PKT:	return "RUNTREAD_MSGRTM";
+	case EFA_RDM_RUNTREAD_TAGRTM_PKT:	return "RUNTREAD_TAGRTM";
+	case EFA_RDM_RUNTREAD_RTW_PKT:		return "RUNTREAD_RTW";
+
+	default:				return "UNKNOWN";
+	}
+}

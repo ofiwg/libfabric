@@ -23,6 +23,8 @@ int efa_rdm_construct_msg_with_local_and_peer_information(struct efa_rdm_ep *ep,
 
 int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer, int prov_errno, char *err_msg, size_t *buflen);
 
+const char *efa_rdm_rtm_type_to_str(int pkt_type);
+
 #ifdef ENABLE_EFA_POISONING
 static inline void efa_rdm_poison_mem_region(void *ptr, size_t size)
 {
