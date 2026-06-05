@@ -426,7 +426,8 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 				goto err4;
 		}
 		_domain->util_domain.domain_fid.ops = &vrb_msg_domain_ops;
-		_domain->cm_ops = &vrb_rdmacm_ops;
+		_domain->cm_ops = (vrb_gl_data.msg.prefer_cm == VRB_CM_UDCM) ?
+			&vrb_udcm_ops : &vrb_rdmacm_ops;
 		ret = _domain->cm_ops->domain_init(_domain);
 		if (ret)
 			goto err4;

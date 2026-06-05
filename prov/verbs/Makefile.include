@@ -5,6 +5,7 @@ _verbs_files =							\
 	prov/verbs/src/verbs_cm.c				\
 	prov/verbs/src/verbs_cm_xrc.c				\
 	prov/verbs/src/verbs_cm_rdma.c				\
+	prov/verbs/src/verbs_cm_ud.c				\
 	prov/verbs/src/verbs_cq.c				\
 	prov/verbs/src/verbs_domain.c				\
 	prov/verbs/src/verbs_domain_xrc.c			\

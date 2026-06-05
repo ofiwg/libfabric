@@ -54,7 +54,7 @@ struct vrb_gl_data vrb_gl_data = {
 	.use_odp		= 0,
 	.cqread_bunch_size	= 8,
 	.iface			= NULL,
-	.gid_idx		= 0,
+	.gid_idx		= -1,
 	.dgram			= {
 		.use_name_server	= 1,
 		.name_server_port	= 5678,
@@ -64,6 +64,7 @@ struct vrb_gl_data vrb_gl_data = {
 		/* Disabled by default. Use XRC transport for message
 		 * endpoint only if it is explicitly requested */
 		.prefer_xrc		= 0,
+		.prefer_cm		= VRB_CM_RDMACM,
 		.xrcd_filename		= "/tmp/verbs_xrcd",
 	},
 
@@ -696,6 +697,29 @@ static int vrb_read_params(void)
 		return -FI_EINVAL;
 	}
 
+	/* Parse prefer_cm string parameter into enum value */
+	{
+		char *prefer_cm_str = NULL;
+		if (vrb_get_param_str("prefer_cm",
+				      "Preferred connection management: 'rdmacm' (default) or 'udcm'.",
+				      &prefer_cm_str)) {
+			VRB_WARN(FI_LOG_CORE, "Invalid value of prefer_cm\n");
+			return -FI_EINVAL;
+		}
+
+		/* Convert string to enum, with error handling at the front */
+		if (prefer_cm_str != NULL) {
+			if (strcmp(prefer_cm_str, "udcm") == 0) {
+				vrb_gl_data.msg.prefer_cm = VRB_CM_UDCM;
+			} else if (strcmp(prefer_cm_str, "rdmacm") == 0) {
+				vrb_gl_data.msg.prefer_cm = VRB_CM_RDMACM;
+			} else {
+				VRB_WARN(FI_LOG_CORE, "Invalid prefer_cm value '%s', must be 'rdmacm' or 'udcm'. Using default 'rdmacm'.\n", prefer_cm_str);
+				vrb_gl_data.msg.prefer_cm = VRB_CM_RDMACM;
+			}
+		}
+	}
+
 	if (vrb_get_param_bool("prefer_xrc", "Order XRC transport fi_infos "
 			       "ahead of RC.  Default orders RC first.  This "
 			       "setting must usually be combined with setting "
@@ -720,7 +744,8 @@ static int vrb_read_params(void)
 	}
 	if (vrb_get_param_int("gid_idx", "Set which gid index to use "
 			      "attribute (0 - 255)", &vrb_gl_data.gid_idx) ||
-	    (vrb_gl_data.gid_idx < 0 || vrb_gl_data.gid_idx > 255)) {
+	    (vrb_gl_data.gid_idx != -1 &&
+	     (vrb_gl_data.gid_idx < 0 || vrb_gl_data.gid_idx > 255))) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of gid index\n");
 		return -FI_EINVAL;
 	}

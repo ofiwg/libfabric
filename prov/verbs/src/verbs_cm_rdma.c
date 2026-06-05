@@ -1107,10 +1107,11 @@ static int vrb_rdmacm_eq_close(struct vrb_eq *eq)
 	return 0;
 }
 
-static int vrb_rdmacm_disconnect(struct vrb_ep *ep)
+static void vrb_rdmacm_ep_preclose(struct vrb_ep *ep)
 {
-	/* rdma_disconnect is called as part of shutdown; nothing extra needed. */
-	return 0;
+	/* With RDMA-CM, the QP already entered ERROR from the disconnect
+	 * event and rdma_destroy_ep manages the QP lifecycle.  Nothing
+	 * needed here. */
 }
 
 static int vrb_rdmacm_reject(struct vrb_pep *pep, struct vrb_connreq *connreq,
@@ -1214,12 +1215,12 @@ struct vrb_cm_ops vrb_rdmacm_ops = {
 	.connect = vrb_rdmacm_connect,
 	.accept = vrb_rdmacm_accept,
 	.shutdown = vrb_rdmacm_shutdown,
-	.disconnect = vrb_rdmacm_disconnect,
 	.listen = vrb_rdmacm_listen,
 	.reject = vrb_rdmacm_reject,
 	.progress = vrb_rdmacm_progress,
 	.ep_init = vrb_rdmacm_ep_init,
 	.ep_close = vrb_rdmacm_ep_close,
+	.ep_preclose = vrb_rdmacm_ep_preclose,
 	.ep_bind = vrb_rdmacm_ep_bind,
 	.ep_enable = vrb_rdmacm_ep_enable,
 	.ep_setname = vrb_rdmacm_ep_setname,
@@ -1234,6 +1235,7 @@ struct vrb_cm_ops vrb_rdmacm_ops = {
 	.setname = vrb_rdmacm_setname,
 	.getname = vrb_rdmacm_getname,
 	.getpeer = vrb_rdmacm_getpeer,
+	.getinfo_addr = vrb_rdmacm_getinfo_addr,
 	.cm_backend = VRB_CM_RDMACM,
 };
 

@@ -649,6 +649,8 @@ static int vrb_ep_close(fid_t fid)
 		if (ep->eq)
 			ofi_mutex_unlock(&ep->eq->event_lock);
 
+		ep->cm_ops->ep_preclose(ep);
+
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);
@@ -1410,6 +1412,9 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_pep)
 		return -FI_ENOMEM;
 
+	_pep->fabric = container_of(fabric, struct vrb_fabric,
+				    util_fabric.fabric_fid);
+
 	if (!(_pep->info = fi_dupinfo(info))) {
 		ret = -FI_ENOMEM;
 		goto err1;
@@ -1421,7 +1426,8 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		_pep->info->dest_addrlen = 0;
 	}
 
-	_pep->cm_ops = &vrb_rdmacm_ops;
+	_pep->cm_ops = (vrb_gl_data.msg.prefer_cm == VRB_CM_UDCM) ?
+		&vrb_udcm_ops : &vrb_rdmacm_ops;
 	ret = _pep->cm_ops->pep_init(_pep);
 	if (ret)
 		goto err2;
