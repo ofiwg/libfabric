@@ -529,11 +529,13 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 {
 	struct fi_info *cur;
 	struct addrinfo *ai;
+	uint32_t addr_format = hints ? hints->addr_format : FI_FORMAT_UNSPEC;
 	uint16_t port_save = 0;
 	int ret;
 
-	/* Avoid getting wild card address from MSG provider */
-	if (ofi_is_wildcard_listen_addr(node, service, flags, hints)) {
+	/* Only apply wildcard rewrite for sockaddr-based formats. */
+	if (addr_format != FI_ADDR_IB_UD &&
+	    ofi_is_wildcard_listen_addr(node, service, flags, hints)) {
 		if (service) {
 			ret = getaddrinfo(NULL, service, NULL, &ai);
 			if (ret) {
@@ -566,7 +568,7 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 	if (port_save) {
 		for (cur = *info; cur; cur = cur->next) {
 			assert(cur->src_addr);
-			ofi_addr_set_port(cur->src_addr, port_save);
+			rxm_addr_set_port(cur->addr_format, cur->src_addr, port_save);
 		}
 	}
 

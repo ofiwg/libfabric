@@ -698,6 +698,32 @@ int rxm_start_listen(struct rxm_ep *ep);
 void rxm_stop_listen(struct rxm_ep *ep);
 void rxm_conn_progress(struct rxm_ep *ep);
 
+static inline uint16_t
+rxm_addr_get_port(uint32_t addr_format, const void *addr)
+{
+	if (addr_format == FI_ADDR_IB_UD)
+		return ((const struct ofi_addr_ib_ud *)addr)->service;
+	return (uint16_t)ofi_addr_get_port((const struct sockaddr *)addr);
+}
+
+static inline void
+rxm_addr_set_port(uint32_t addr_format, void *addr, uint16_t port)
+{
+	if (addr_format == FI_ADDR_IB_UD)
+		((struct ofi_addr_ib_ud *)addr)->service = port;
+	else
+		ofi_addr_set_port((struct sockaddr *)addr, port);
+}
+
+static inline int
+rxm_addr_cmp(uint32_t addr_format, const void *a1, const void *a2)
+{
+	if (addr_format == FI_ADDR_IB_UD)
+		return memcmp(a1, a2, sizeof(struct ofi_addr_ib_ud));
+	return ofi_addr_cmp(&rxm_prov, (const struct sockaddr *)a1,
+			    (const struct sockaddr *)a2);
+}
+
 
 extern struct fi_provider rxm_prov;
 extern struct fi_info rxm_thru_info;
