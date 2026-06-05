@@ -52,6 +52,7 @@ static void smr_progress_overflow(struct smr_ep *ep)
 		if (ret == -FI_ENOENT)
 			return;
 
+		ce->hdr.smr_flags = cmd->hdr.smr_flags;
 		ce->hdr.entry = smr_local_to_peer(ep, peer_smr, cmd->hdr.tx_id,
 						  cmd->hdr.rx_id,
 						  (uintptr_t) cmd);
@@ -1341,7 +1342,8 @@ static void smr_progress_cmd(struct smr_ep *ep)
 		if (ret == -FI_ENOENT)
 			break;
 
-		cmd = (struct smr_cmd *) ce->hdr.entry;
+		cmd = (ce->hdr.smr_flags & SMR_RETURN_CMD) ?
+		      (struct smr_cmd *) ce->hdr.entry : ce;
 		switch (cmd->hdr.op) {
 		case ofi_op_msg:
 		case ofi_op_tagged:

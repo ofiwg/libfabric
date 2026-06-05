@@ -186,6 +186,7 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 		return;
 
 	cmd->hdr.op = SMR_OP_MAX + ofi_ctrl_connreq;
+	cmd->hdr.smr_flags = 0;
 	cmd->hdr.tx_id = id;
 	cmd->hdr.cq_data = ep->region->pid;
 
