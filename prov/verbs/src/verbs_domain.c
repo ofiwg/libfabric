@@ -224,6 +224,9 @@ static int vrb_domain_close(fid_t fid)
 		domain->pd = NULL;
 	}
 
+	if (domain->cm_ops)
+		domain->cm_ops->domain_close(domain);
+
 	ret = ofi_domain_close(&domain->util_domain);
 	if (ret)
 		return ret;
@@ -423,6 +426,11 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 				goto err4;
 		}
 		_domain->util_domain.domain_fid.ops = &vrb_msg_domain_ops;
+		_domain->cm_ops = &vrb_rdmacm_ops;
+		ret = _domain->cm_ops->domain_init(_domain);
+		if (ret)
+			goto err4;
+
 		break;
 	default:
 		VRB_INFO(FI_LOG_DOMAIN, "Ivalid EP type is provided, "

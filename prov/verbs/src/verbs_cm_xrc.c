@@ -136,18 +136,18 @@ static void vrb_log_ep_conn(struct vrb_xrc_ep *ep, char *desc)
 	VRB_INFO(FI_LOG_EP_CTRL, "EP %p, %s\n", (void *) ep, desc);
 	VRB_INFO(FI_LOG_EP_CTRL,
 		  "EP %p, CM ID %p, TGT CM ID %p, SRQN %d Peer SRQN %d\n",
-		  (void*) ep, (void *) ep->base_ep.id, (void *) ep->tgt_id,
+		  (void*) ep, (void *) vrb_rdmacm_ep_id(&ep->base_ep), (void *) ep->tgt_id,
 		  ep->srqn, ep->peer_srqn);
 
 
-	if (ep->base_ep.id) {
-		addr = rdma_get_local_addr(ep->base_ep.id);
+	if (vrb_rdmacm_ep_id(&ep->base_ep)) {
+		addr = rdma_get_local_addr(vrb_rdmacm_ep_id(&ep->base_ep));
 		len = sizeof(buf);
 		ofi_straddr(buf, &len, ep->base_ep.info_attr.addr_format, addr);
 		VRB_INFO(FI_LOG_EP_CTRL, "EP %p src_addr: %s\n",
 			   (void *) ep, buf);
 
-		addr = rdma_get_peer_addr(ep->base_ep.id);
+		addr = rdma_get_peer_addr(vrb_rdmacm_ep_id(&ep->base_ep));
 		len = sizeof(buf);
 		ofi_straddr(buf, &len, ep->base_ep.info_attr.addr_format, addr);
 		VRB_INFO(FI_LOG_EP_CTRL, "EP %p dst_addr: %s\n",
@@ -185,9 +185,10 @@ void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect)
 			rdma_disconnect(ep->tgt_id);
 		}
 
-		if (ep->base_ep.id->ps == RDMA_PS_UDP) {
-			rdma_destroy_id(ep->base_ep.id);
-			ep->base_ep.id = NULL;
+		if (vrb_rdmacm_ep_id(&ep->base_ep) &&
+		    vrb_rdmacm_ep_id(&ep->base_ep)->ps == RDMA_PS_UDP) {
+			rdma_destroy_id(vrb_rdmacm_ep_id(&ep->base_ep));
+			vrb_rdmacm_ep_set_id(&ep->base_ep, NULL);
 		}
 	}
 
@@ -208,7 +209,7 @@ int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
 	int ret;
 
 	assert(ofi_mutex_held(&ep->base_ep.eq->event_lock));
-	assert(!ep->base_ep.id && !ep->base_ep.ibv_qp && !ep->ini_conn);
+	assert(!vrb_rdmacm_ep_id(&ep->base_ep) && !ep->base_ep.ibv_qp && !ep->ini_conn);
 
 	domain->xrc.lock_acquire(&domain->xrc.ini_lock);
 	ret = vrb_get_shared_ini_conn(ep, &ep->ini_conn);
@@ -236,7 +237,7 @@ void vrb_ep_ini_conn_done(struct vrb_xrc_ep *ep, uint32_t tgt_qpn)
 	struct vrb_domain *domain = vrb_ep2_domain(&ep->base_ep);
 
 	assert(ofi_mutex_held(&ep->base_ep.eq->event_lock));
-	assert(ep->base_ep.id && ep->ini_conn);
+	assert(vrb_rdmacm_ep_id(&ep->base_ep) && ep->ini_conn);
 
 	domain->xrc.lock_acquire(&domain->xrc.ini_lock);
 	assert(ep->ini_conn->state == VRB_INI_QP_CONNECTING ||
@@ -245,11 +246,11 @@ void vrb_ep_ini_conn_done(struct vrb_xrc_ep *ep, uint32_t tgt_qpn)
 	/* If this was a physical INI/TGT QP connection, remove the QP
 	 * from control of the RDMA CM. We don't want the shared INI QP
 	 * to be destroyed if this endpoint closes. */
-	if (ep->base_ep.id == ep->ini_conn->phys_conn_id) {
+	if (vrb_rdmacm_ep_id(&ep->base_ep) == ep->ini_conn->phys_conn_id) {
 		ep->ini_conn->phys_conn_id = NULL;
 		ep->ini_conn->state = VRB_INI_QP_CONNECTED;
 		ep->ini_conn->tgt_qpn = tgt_qpn;
-		ep->base_ep.id->qp = NULL;
+		vrb_rdmacm_ep_id(&ep->base_ep)->qp = NULL;
 		VRB_DBG(FI_LOG_EP_CTRL,
 			  "Set INI Conn QP %d remote TGT QP %d\n",
 			  ep->ini_conn->ini_qp->qp_num,
@@ -264,7 +265,7 @@ void vrb_ep_ini_conn_done(struct vrb_xrc_ep *ep, uint32_t tgt_qpn)
 void vrb_ep_ini_conn_rejected(struct vrb_xrc_ep *ep)
 {
 	assert(ofi_mutex_held(&ep->base_ep.eq->event_lock));
-	assert(ep->base_ep.id && ep->ini_conn);
+	assert(vrb_rdmacm_ep_id(&ep->base_ep) && ep->ini_conn);
 
 	vrb_log_ep_conn(ep, "INI Connection Rejected");
 	vrb_put_shared_ini_conn(ep);

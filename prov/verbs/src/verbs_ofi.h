@@ -161,6 +161,9 @@
 #define VERBS_ANY_DOMAIN "verbs_any_domain"
 #define VERBS_ANY_FABRIC "verbs_any_fabric"
 
+#define VRB_CM_UNKNOWN 0
+#define VRB_CM_RDMACM 1
+
 #ifdef HAVE_FABRIC_PROFILE
 struct vrb_profile;
 typedef struct vrb_profile    vrb_profile_t;
@@ -303,13 +306,17 @@ struct vrb_eq {
 	struct vrb_fabric	*fab;
 	ofi_mutex_t		lock;
 	ofi_mutex_t		event_lock;
+	struct dlist_entry	domain_list;
+	struct dlist_entry	pep_list;
 	struct dlistfd_head	list_head;
-	struct rdma_event_channel *channel;
 	uint64_t		flags;
 	struct fi_eq_err_entry	err;
 
 	ofi_epoll_t		epollfd;
 	enum fi_wait_obj	wait_obj;
+
+	void			*cm_ctx;
+	struct vrb_cm_ops	*cm_ops;
 
 	struct {
 		/* The connection key map is used during the XRC connection
@@ -346,12 +353,7 @@ int vrb_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 struct vrb_pep {
 	struct fid_pep		pep_fid;
 	struct vrb_eq		*eq;
-	struct rdma_cm_id	*id;
-
-	/* XRC uses SIDR based RDMA CM exchanges for setting up
-	 * shared QP connections. This ID is bound to the same
-	 * port number as "id", but the RDMA_PS_UDP port space. */
-	struct rdma_cm_id	*xrc_ps_udp_id;
+	struct dlist_entry	eq_entry;
 
 	int			backlog;
 	int			bound;
@@ -360,6 +362,9 @@ struct vrb_pep {
 
 	/* for profiling */
 	vrb_profile_t		*profile;
+
+	struct vrb_cm_ops	*cm_ops;
+	void			*cm_ctx;
 };
 
 struct fi_ops_cm *vrb_pep_ops_cm(struct vrb_pep *pep);
@@ -376,8 +381,10 @@ enum {
 	VRB_USE_ODP = BIT(1),
 };
 
+struct vrb_cm_ops;
 struct vrb_domain {
 	struct util_domain		util_domain;
+	struct dlist_entry		eq_entry;
 	struct ibv_context		*verbs;
 	struct ibv_pd			*pd;
 
@@ -415,6 +422,9 @@ struct vrb_domain {
 
 	/* for profiling */
 	vrb_profile_t		*profile;
+
+	struct vrb_cm_ops		*cm_ops;
+    	void				*cm_ctx;
 };
 
 struct vrb_cq;
@@ -610,8 +620,11 @@ struct vrb_ep {
 	int64_t				threshold;
 
 	enum vrb_ep_state		state;
+
+	// Connection Management
+	struct vrb_cm_ops		*cm_ops;
 	union {
-		struct rdma_cm_id	*id;
+		void				*cm_ctx;
 		struct {
 			struct ofi_addr_ib_ud	ep_name;
 			int			service;
@@ -649,6 +662,88 @@ struct vrb_ep {
 	vrb_profile_t			*profile;
 };
 
+/*
+ * RDMA-CM specific context structures. Defined here so that inline
+ * accessors below can reach the 'id' field without requiring all
+ * callers to include verbs_cm_rdma.c internals.
+ */
+struct vrb_rdmacm_domain_ctx {
+	/* Bootstrap channel: only used to create rdmacm IDs before they are
+	 * migrated to the per-EQ channel in ep_bind.  Never added to any
+	 * epollfd and therefore never polled directly. */
+	struct rdma_event_channel *cm_channel;
+};
+
+struct vrb_rdmacm_eq_ctx {
+	struct rdma_event_channel *cm_channel;
+};
+
+/* Only the RDMA-CM id lives here; conn_param and cm_priv_data remain
+ * on vrb_ep for compatibility with XRC and generic close paths. */
+struct vrb_rdmacm_ep_ctx {
+	struct rdma_cm_id *id;
+};
+
+struct vrb_rdmacm_pep_ctx {
+	struct rdma_cm_id		*id;
+	struct rdma_cm_id		*xrc_ps_udp_id;
+};
+
+/* Inline accessor for the RDMA-CM id stored in ep->cm_ctx.
+ * Only valid when the EP is using the RDMA-CM backend. */
+static inline struct rdma_cm_id *vrb_rdmacm_ep_id(struct vrb_ep *ep)
+{
+	return ep->cm_ctx ? ((struct vrb_rdmacm_ep_ctx *)ep->cm_ctx)->id : NULL;
+}
+
+static inline void vrb_rdmacm_ep_set_id(struct vrb_ep *ep, struct rdma_cm_id *id)
+{
+	if (ep->cm_ctx)
+		((struct vrb_rdmacm_ep_ctx *)ep->cm_ctx)->id = id;
+}
+
+struct vrb_connreq;  /* full definition below */
+
+struct vrb_cm_ops {
+	// Endpoint connection operations
+	int (*connect)(struct vrb_ep *ep, const void *addr, const void *param,
+		       size_t paramlen);
+	int (*accept)(struct vrb_ep *ep, const void *param, size_t paramlen);
+	int (*shutdown)(struct vrb_ep *ep, uint64_t flags);
+	int (*disconnect)(struct vrb_ep *ep);
+
+	//Passive endpoint operations
+	int (*listen)(struct vrb_pep *pep);
+	int (*reject)(struct vrb_pep *pep, struct vrb_connreq *connreq,
+		      const void *param, size_t paramlen);
+
+	// Progress and event handling
+	ssize_t (*progress)(struct vrb_eq *eq, uint32_t *event,
+			    void *buf, size_t len);
+
+	// Resource management
+	int (*ep_init)(struct vrb_ep *ep, struct fi_info *info);
+	int (*ep_close)(struct vrb_ep *ep);
+	int (*ep_bind)(struct vrb_ep *ep, struct vrb_eq *eq);
+	int (*ep_enable)(struct vrb_ep *ep, struct ibv_qp_init_attr *attr);
+	int (*ep_setname)(struct vrb_ep *ep, void *addr, size_t addrlen);
+	int (*ep_getname)(struct vrb_ep *ep, void *addr, size_t *addrlen);
+	int (*pep_init)(struct vrb_pep *pep);
+	int (*pep_close)(struct vrb_pep *pep);
+	int (*pep_bind)(struct vrb_pep *pep, struct vrb_eq *eq);
+	int (*domain_init)(struct vrb_domain *domain);
+	int (*domain_close)(struct vrb_domain *domain);
+	int (*eq_open)(struct vrb_eq *eq);
+	int (*eq_close)(struct vrb_eq *eq);
+
+	// Address resolution
+	int (*setname)(struct vrb_pep *pep, void *addr, size_t addrlen);
+	int (*getname)(struct vrb_pep *pep, void *addr, size_t *addrlen);
+	int (*getpeer)(struct vrb_ep *ep, void *addr, size_t *addrlen);
+
+	// Name for debugging
+	int cm_backend;
+};
 
 enum vrb_op_queue {
 	VRB_OP_SQ,
@@ -743,6 +838,16 @@ extern struct fi_ops_rma vrb_msg_ep_rma_ops_ts;
 extern struct fi_ops_rma vrb_msg_ep_rma_ops;
 extern struct fi_ops_rma vrb_msg_xrc_ep_rma_ops_ts;
 extern struct fi_ops_rma vrb_msg_xrc_ep_rma_ops;
+extern struct vrb_cm_ops vrb_rdmacm_ops;
+int vrb_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr);
+void vrb_msg_ep_prepare_cm_data(const void *param, size_t param_size,
+				    struct vrb_cm_data_hdr *cm_hdr);
+int vrb_eq_copy_event_data(struct fi_eq_cm_entry *entry,
+				   size_t max_dest_len, const void *priv_data,
+				   size_t priv_datalen);
+void vrb_eq_skip_xrc_cm_data(const void **priv_data, size_t *priv_data_len);
+void vrb_eq_xrc_disconnect_event(struct vrb_eq *eq,
+				     struct rdma_cm_event *cma_event, int *acked);
 
 #define VRB_XRC_VERSION	2
 
@@ -797,8 +902,6 @@ void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep);
 
 void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
 			       struct ibv_qp_init_attr *attr);
-void vrb_msg_ep_prepare_rdma_cm_hdr(void *priv_data,
-				    const struct rdma_cm_id *id);
 
 int vrb_process_xrc_connreq(struct vrb_ep *ep,
 			       struct vrb_connreq *connreq);
@@ -810,6 +913,19 @@ void vrb_eq_clear_xrc_conn_tag(struct vrb_xrc_ep *ep);
 void vrb_set_xrc_cm_data(struct vrb_xrc_cm_data *local, int reciprocal,
 			    uint32_t conn_tag, uint16_t port, uint32_t tgt_qpn,
 			    uint32_t srqn);
+int vrb_eq_xrc_connreq_event(struct vrb_eq *eq, struct fi_eq_cm_entry *entry,
+			     size_t len, uint32_t *event,
+			     struct rdma_cm_event *cma_event, int *acked,
+			     const void **priv_data, size_t *priv_datalen);
+int vrb_eq_xrc_rej_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event);
+int vrb_eq_xrc_cm_err_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event,
+			    int *acked);
+ssize_t vrb_eq_xrc_connected_event(struct vrb_eq *eq,
+				   struct rdma_cm_event *cma_event, int *acked,
+				   struct fi_eq_cm_entry *entry, size_t len,
+				   uint32_t *event);
+void vrb_eq_xrc_timewait_event(struct vrb_eq *eq,
+			       struct rdma_cm_event *cma_event, int *acked);
 int vrb_verify_xrc_cm_data(struct vrb_xrc_cm_data *remote,
 			      int private_data_len);
 int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
@@ -820,12 +936,18 @@ int vrb_resend_shared_accept_xrc(struct vrb_xrc_ep *ep,
 				    struct vrb_connreq *connreq,
 				    struct rdma_cm_id *id);
 void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect);
+int vrb_xrc_migrade_rdma_id(struct vrb_xrc_ep *ep);
 void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen);
 void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn);
 int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 			       struct vrb_ini_shared_conn **ini_conn);
 void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep);
+void _vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep);
+int vrb_create_ini_qp(struct vrb_xrc_ep *ep);
+void vrb_create_shutdown_event(struct vrb_xrc_ep *ep);
+int vrb_process_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
+				   void *param, size_t paramlen);
 
 void vrb_save_priv_data(struct vrb_xrc_ep *ep, const void *data,
 			   size_t len);

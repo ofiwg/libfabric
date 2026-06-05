@@ -808,6 +808,9 @@
     <ClCompile Include="prov\verbs\src\verbs_cm.c">
       <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <ClCompile Include="prov\verbs\src\verbs_cm_rdma.c">
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_cm_xrc.c">
       <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
