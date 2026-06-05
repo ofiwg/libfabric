@@ -1132,7 +1132,15 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 	uint64_t	  do_dmabuf = (uint64_t) (context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 	if (do_dmabuf) {
 		opx_mr = ((struct fi_opx_hmem_info *) context->hmem_info_qws)->dmabuf.opx_mr;
-		if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
+		if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED && OFI_LIKELY(xfer_len <= recv_len)) {
+			context->byte_counter = niov;
+			context->len	      = xfer_len;
+			context->data	      = ofi_data;
+			context->tag	      = origin_tag;
+			context->next	      = NULL;
+			context->flags |= FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
+					  FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
+
 			int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(opx_ep, context, niov, recv_buf,
 									       &payload->rendezvous.hfisvc.iovs[0]);
 			if (OFI_UNLIKELY(deferred_rc)) {
