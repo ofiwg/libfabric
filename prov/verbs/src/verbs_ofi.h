@@ -225,34 +225,6 @@ struct verbs_addr {
 	struct rdma_addrinfo *rai;
 };
 
-/*
- * fields of Infiniband packet headers that are used to
- * represent OFI EP address
- * - LRH (Local Route Header) - Link Layer:
- *   - LID - destination Local Identifier
- *   - SL - Service Level
- * - GRH (Global Route Header) - Network Layer:
- *   - GID - destination Global Identifier
- * - BTH (Base Transport Header) - Transport Layer:
- *   - QPN - destination Queue Pair number
- *   - P_key - Partition Key
- *
- * Note: DON'T change the placement of the fields in the structure.
- *       The placement is to keep structure size = 256 bits (32 byte).
- */
-struct ofi_ib_ud_ep_name {
-	union ibv_gid	gid;		/* 64-bit GUID + 64-bit EUI - GRH */
-
-	uint32_t	qpn;		/* BTH */
-
-	uint16_t	lid; 		/* LRH */
-	uint16_t	pkey;		/* BTH */
-	uint16_t	service;	/* for NS src addr, 0 means any */
-
-	uint8_t 	sl;		/* LRH */
-	uint8_t		padding[5];	/* forced padding to 256 bits (32 byte) */
-}; /* 256 bits */
-
 #define VERBS_IB_UD_NS_ANY_SERVICE	0
 
 static inline
@@ -641,8 +613,8 @@ struct vrb_ep {
 	union {
 		struct rdma_cm_id	*id;
 		struct {
-			struct ofi_ib_ud_ep_name	ep_name;
-			int				service;
+			struct ofi_addr_ib_ud	ep_name;
+			int			service;
 		};
 	};
 
@@ -928,7 +900,7 @@ struct vrb_dgram_av {
 
 struct vrb_dgram_av_entry {
 	struct dlist_entry list_entry;
-	struct ofi_ib_ud_ep_name addr;
+	struct ofi_addr_ib_ud addr;
 	struct ibv_ah *ah;
 };
 

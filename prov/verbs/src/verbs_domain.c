@@ -405,7 +405,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 			 */
 			fab->name_server.port =
 					vrb_gl_data.dgram.name_server_port;
-			fab->name_server.name_len = sizeof(struct ofi_ib_ud_ep_name);
+			fab->name_server.name_len = sizeof(struct ofi_addr_ib_ud);
 			fab->name_server.service_len = sizeof(int);
 			fab->name_server.service_cmp = vrb_dgram_ns_service_cmp;
 			fab->name_server.is_service_wildcard =

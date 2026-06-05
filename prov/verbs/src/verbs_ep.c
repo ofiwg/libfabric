@@ -838,7 +838,7 @@ static int vrb_create_dgram_ep(struct vrb_domain *domain, struct vrb_ep *ep,
 
 	ep->ep_name.lid = port_attr.lid;
 	ep->ep_name.sl = port_attr.sm_sl;
-	ep->ep_name.gid = gid;
+	ep->ep_name.gid = *(union ofi_ib_gid *)&gid;
 	ep->ep_name.qpn = ep->ibv_qp->qp_num;
 	ep->ep_name.pkey = p_key;
 
@@ -1369,7 +1369,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		break;
 	case FI_EP_DGRAM:
 		ep->service = (info->src_addr) ?
-			(((struct ofi_ib_ud_ep_name *)info->src_addr)->service) :
+			(((struct ofi_addr_ib_ud *)info->src_addr)->service) :
 			(((getpid() & 0x7FFF) << 16) + ((uintptr_t)ep & 0xFFFF));
 
 		if (dom->util_domain.threading == FI_THREAD_SAFE) {

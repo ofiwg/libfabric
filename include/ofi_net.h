@@ -625,6 +625,43 @@ void ofi_bsock_prefetch_done(struct ofi_bsock *bsock, size_t len);
 #define OFI_IB_IP_PS_MASK   0xFFFFFFFFFFFF0000ULL
 #define OFI_IB_IP_PORT_MASK   0x000000000000FFFFULL
 
+/* Portable mirror of libibverbs' union ibv_gid so that shared headers
+ * (ofi_net.h, rxm) can reference the GID type without depending on
+ * <infiniband/verbs.h>. */
+union ofi_ib_gid {
+	uint8_t		raw[16];
+	struct {
+		uint64_t subnet_prefix;	/* network byte order */
+		uint64_t interface_id;	/* network byte order */
+	} global;
+};
+
+/*
+ * FI_ADDR_IB_UD native address format — 32 bytes.
+ *
+ * This is the address stored directly in the AV for UD endpoints
+ * (including the UDCM connection manager path).
+ * It carries all fields needed to create a UD address handle and
+ * route connection-management messages.
+ *
+ * Note: DON'T change the placement of the fields in the structure.
+ *       The placement is to keep structure size = 256 bits (32 byte).
+ *       This struct doubles as the wire format — any layout change
+ *       breaks interop.
+ */
+struct ofi_addr_ib_ud {
+	union ofi_ib_gid gid;		/* 128-bit GID (GRH routing) */
+
+	uint32_t	qpn;		/* Queue Pair Number (BTH) */
+
+	uint16_t	lid;		/* Local ID (LRH) */
+	uint16_t	pkey;		/* Partition Key (BTH) */
+	uint16_t	service;	/* Service port (NS / RXM), 0 = any */
+
+	uint8_t		sl;		/* Service Level (LRH) */
+	uint8_t		padding[5];	/* Pad to 32 bytes */
+}; /* 32 bytes */
+
 struct ofi_sockaddr_ib {
 	unsigned short int  sib_family; /* AF_IB */
 	uint16_t            sib_pkey;
@@ -734,6 +771,8 @@ static inline size_t ofi_sizeof_addr_format(int format)
 		return sizeof(struct sockaddr_in6);
 	case FI_SOCKADDR_IB:
 		return sizeof(struct ofi_sockaddr_ib);
+	case FI_ADDR_IB_UD:
+		return sizeof(struct ofi_addr_ib_ud);
 	default:
 		FI_WARN(&core_prov, FI_LOG_CORE, "Unsupported address format\n");
 		return 0;

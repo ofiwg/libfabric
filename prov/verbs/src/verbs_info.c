@@ -368,14 +368,14 @@ int vrb_set_rai(uint32_t addr_format, void *src_addr, size_t src_addrlen,
 }
 
 static inline
-void *vrb_dgram_ep_name_to_string(const struct ofi_ib_ud_ep_name *name,
+void *vrb_dgram_ep_name_to_string(const struct ofi_addr_ib_ud *name,
 				     size_t *len)
 {
 	char *str;
 	if (!name)
 		return NULL;
 
-	*len = sizeof(struct ofi_ib_ud_ep_name);
+	*len = sizeof(struct ofi_addr_ib_ud);
 
 	str = calloc(*len, 1);
 	if (!str)
@@ -389,7 +389,7 @@ void *vrb_dgram_ep_name_to_string(const struct ofi_ib_ud_ep_name *name,
 	return str;
 }
 
-static int vrb_fill_addr_by_ep_name(struct ofi_ib_ud_ep_name *ep_name,
+static int vrb_fill_addr_by_ep_name(struct ofi_addr_ib_ud *ep_name,
 				       uint32_t fmt, void **addr, size_t *addrlen)
 {
 	if (fmt == FI_ADDR_STR) {
@@ -1355,8 +1355,8 @@ static int vrb_get_srcaddr_devs(struct dlist_entry *verbs_devs,
 static int vrb_set_info_addrs(struct fi_info *info,
 				 struct rdma_addrinfo *rai,
 				 uint32_t fmt,
-				 struct ofi_ib_ud_ep_name *src_addr,
-				 struct ofi_ib_ud_ep_name *dest_addr)
+				 struct ofi_addr_ib_ud *src_addr,
+				 struct ofi_addr_ib_ud *dest_addr)
 {
 	struct fi_info *iter_info = info;
 	int ret;
@@ -1751,7 +1751,7 @@ static int vrb_del_info_not_belong_to_dev(const char *dev_name, struct fi_info *
 }
 
 static int vrb_resolve_ib_ud_dest_addr(const char *node, const char *service,
-					  struct ofi_ib_ud_ep_name **dest_addr)
+					  struct ofi_addr_ib_ud **dest_addr)
 {
 	int svc = VERBS_IB_UD_NS_ANY_SERVICE;
 	struct util_ns ns = {
@@ -1766,7 +1766,7 @@ static int vrb_resolve_ib_ud_dest_addr(const char *node, const char *service,
 
 	if (service)
 		svc = atoi(service);
-	*dest_addr = (struct ofi_ib_ud_ep_name *)
+	*dest_addr = (struct ofi_addr_ib_ud *)
 		ofi_ns_resolve_name(&ns, node, &svc);
 	if (*dest_addr) {
 		VERBS_INFO_NODE_2_UD_ADDR(FI_LOG_CORE, node, svc, *dest_addr);
@@ -1807,8 +1807,8 @@ static void vrb_delete_dgram_infos(struct fi_info **info)
 static int vrb_handle_ib_ud_addr(const char *node, const char *service,
 				    uint64_t flags, struct fi_info **info)
 {
-	struct ofi_ib_ud_ep_name *dest_addr = NULL;
-	struct ofi_ib_ud_ep_name *src_addr = NULL;
+	struct ofi_addr_ib_ud *dest_addr = NULL;
+	struct ofi_addr_ib_ud *src_addr = NULL;
 	void *addr = NULL;
 	size_t len = 0;
 	uint32_t fmt = FI_FORMAT_UNSPEC;
