@@ -275,6 +275,7 @@ static ssize_t smr_generic_atomic(
 
 		cmd = smr_freestack_pop(smr_cmd_stack(ep->region));
 		assert(cmd);
+		ce->hdr.smr_flags = smr_flags;
 		ce->hdr.entry = smr_local_to_peer(ep, peer_smr, tx_id, rx_id,
 						  (uintptr_t) cmd);
 	} else {

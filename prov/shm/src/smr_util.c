@@ -178,12 +178,6 @@ err:
 	return -FI_EBUSY;
 }
 
-static inline void smr_cmd_init(void *buf)
-{
-	struct smr_cmd *cmd = buf;
-	cmd->hdr.entry = (uintptr_t) cmd;
-}
-
 /* TODO: Determine if aligning SMR data helps performance */
 int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	       struct smr_region *volatile *smr)
@@ -287,7 +281,7 @@ int smr_create(const struct fi_provider *prov, const struct smr_attr *attr,
 	(*smr)->name_offset = name_offset;
 	(*smr)->max_sar_buf_per_peer = SMR_BUF_BATCH_MAX;
 
-	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size, smr_cmd_init);
+	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size, NULL);
 	smr_freestack_init(smr_inject_pool(*smr), rx_size,
 			   sizeof(struct smr_inject_buf));
 	smr_return_queue_init(smr_return_queue(*smr), tx_size, NULL);
