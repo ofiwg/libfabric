@@ -1296,6 +1296,17 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 		tx->use_sdma = 1;
 	}
 
+	tx->replay_copy		   = 0;
+	const char *dp_replay_copy = getenv("_FI_OPX_REPLAY_COPY");
+	if (dp_replay_copy != NULL) {
+		if (strcmp(dp_replay_copy, "1") == 0) {
+			FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
+				"_FI_OPX_REPLAY_COPY_ is enabled. (EXPERIMENTAL; enabling may wedge SDMA completion in some cases).\n");
+			tx->replay_copy = 1;
+		}
+	}
+	FI_DBG(&fi_opx_provider, FI_LOG_EP_DATA, "replay_copy %u.\n", tx->replay_copy);
+
 	// Set the SDMA minimum message length
 	int l_sdma_min_payload_bytes;
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_min_payload_bytes", &l_sdma_min_payload_bytes);
