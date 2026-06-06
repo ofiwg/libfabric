@@ -40,6 +40,7 @@
 #include "rdma/opx/opx_debug.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_eq.h"
+#include "rdma/opx/fi_opx_hfi1_sdma.h"
 
 static struct slist ep_list = {.head = NULL};
 
@@ -179,6 +180,21 @@ static void opx_debug_dump_tx_flow(struct fi_opx_ep *opx_ep, pid_t my_pid, FILE 
 				replay = replay->next;
 			}
 			fprintf(output, "   %6u    %06X      %06X   #\n", replay_count, first_psn, last_psn);
+
+			/* head replay state decides lost-SDMA-completion
+			 * (pinned + comp_state QUEUED/PENDING_WRITEV) vs RX-never-ACK
+			 * (!pinned + bytes_outstanding>0) at hang time. */
+			struct fi_opx_reliability_tx_replay *head =
+				(struct fi_opx_reliability_tx_replay *) node_type->val;
+			int head_comp_state = -1;
+			if (head->use_sdma && head->sdma_we) {
+				head_comp_state =
+					(int) ((struct fi_opx_hfi1_sdma_work_entry *) head->sdma_we)->comp_state;
+			}
+			fprintf(output,
+				"(%d) #   HEAD replay: pinned=%d acked=%d use_sdma=%d use_iov=%d nack_count=%u sdma_we=%p comp_state=%d (0=FREE,1=PENDING_WRITEV,2=QUEUED,3=COMPLETE,4=ERROR)\n",
+				my_pid, head->pinned, head->acked, head->use_sdma, head->use_iov, head->nack_count,
+				head->sdma_we, head_comp_state);
 		} else {
 			fprintf(output, "        0       N/A         N/A   #\n");
 		}
@@ -201,6 +217,25 @@ static void opx_debug_dump_opx_cq(pid_t my_pid, struct fi_opx_cq *cq, FILE *outp
 			opx_debug_slist_len(cq->completed.head));
 		fprintf(output, "(%d)        err                             : %p (%lu)\n", my_pid, cq->err.head,
 			opx_debug_slist_len(cq->err.head));
+	}
+}
+
+/* Walk the CQ pending completion list and dump each context's
+ * byte_counter + decoded direction flags to bisect a stuck (byte_counter!=0)
+ * rendezvous completion. Capped to avoid looping on a corrupt list. */
+static void opx_debug_dump_cq_pending(pid_t my_pid, const char *which, struct slist_entry *head, FILE *output)
+{
+	struct opx_context *ctx = (struct opx_context *) head;
+	unsigned	    idx = 0;
+	while (ctx != NULL && idx < 1024) {
+		const char *dir = (ctx->flags & FI_SEND) ? ((ctx->flags & FI_RECV) ? "FI_SEND|FI_RECV" : "FI_SEND") :
+							   ((ctx->flags & FI_RECV) ? "FI_RECV" : "none");
+		fprintf(output,
+			"(%d)   %s.pending[%u] ctx=%p byte_counter=%lu flags=0x%lx(%s) len=%zu tag=0x%lx op_context=%p err.op_context=%p\n",
+			my_pid, which, idx, (void *) ctx, (unsigned long) ctx->byte_counter, (unsigned long) ctx->flags,
+			dir, ctx->len, (unsigned long) ctx->tag, (void *) ctx->next, ctx->err_entry.op_context);
+		ctx = ctx->next;
+		++idx;
 	}
 }
 
@@ -295,6 +330,7 @@ static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 	fprintf(output, "(%d) --------------- Pending/Completion Queues --------------\n", my_pid);
 	fprintf(output, "(%d) tx.cq_pending_ptr                      : %p (%lu)\n", my_pid,
 		opx_ep->tx->cq_pending_ptr->head, opx_debug_slist_len(opx_ep->tx->cq_pending_ptr->head));
+	opx_debug_dump_cq_pending(my_pid, "tx", opx_ep->tx->cq_pending_ptr->head, output);
 
 	fprintf(output, "(%d) tx.cq_completed_ptr                    : %p (%lu)\n", my_pid,
 		opx_ep->tx->cq_completed_ptr->head, opx_debug_slist_len(opx_ep->tx->cq_completed_ptr->head));
@@ -304,6 +340,7 @@ static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 
 	fprintf(output, "(%d) rx.cq_pending_ptr                      : %p (%lu)\n", my_pid,
 		opx_ep->rx->cq_pending_ptr->head, opx_debug_slist_len(opx_ep->rx->cq_pending_ptr->head));
+	opx_debug_dump_cq_pending(my_pid, "rx", opx_ep->rx->cq_pending_ptr->head, output);
 
 	fprintf(output, "(%d) rx.cq_completed_ptr                    : %p (%lu)\n", my_pid,
 		opx_ep->rx->cq_completed_ptr->head, opx_debug_slist_len(opx_ep->rx->cq_completed_ptr->head));
