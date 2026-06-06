@@ -916,8 +916,17 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 	 * a threshold, return an error.
 	 */
 	if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
-		OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, 0);
-		return -1;
+		/* Release a stale throttle when nothing is outstanding.
+		 * bytes_outstanding==0 means every packet (incl. retransmits) is
+		 * ACK'd, so it is flooding-safe to clear and self-heals a throttle
+		 * any retire path failed to release. A new NACK will re-arm it. */
+		if ((*psn_ptr)->psn.bytes_outstanding == 0) {
+			(*psn_ptr)->psn.throttle   = 0;
+			(*psn_ptr)->psn.nack_count = 0;
+		} else {
+			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, 0);
+			return -1;
+		}
 	}
 	if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 		(*psn_ptr)->psn.throttle = 1;
@@ -974,7 +983,15 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 		 * a threshold, return an error.
 		 */
 		if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
-			return -1;
+			/* Release a stale throttle when nothing is
+			 * outstanding (bytes_outstanding==0 => all packets ACK'd).
+			 * Flooding-safe self-heal; a new NACK re-arms it. */
+			if ((*psn_ptr)->psn.bytes_outstanding == 0) {
+				(*psn_ptr)->psn.throttle   = 0;
+				(*psn_ptr)->psn.nack_count = 0;
+			} else {
+				return -1;
+			}
 		}
 		if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 			(*psn_ptr)->psn.throttle = 1;
@@ -1074,7 +1091,15 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 	 * a threshold, return an error.
 	 */
 	if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
-		return -1;
+		/* Release a stale throttle when nothing is
+		 * outstanding (bytes_outstanding==0 => all packets ACK'd).
+		 * Flooding-safe self-heal; a new NACK re-arms it. */
+		if ((*psn_ptr)->psn.bytes_outstanding == 0) {
+			(*psn_ptr)->psn.throttle   = 0;
+			(*psn_ptr)->psn.nack_count = 0;
+		} else {
+			return -1;
+		}
 	}
 	if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 		(*psn_ptr)->psn.throttle = 1;

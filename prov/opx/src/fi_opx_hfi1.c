@@ -2153,9 +2153,10 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	replay->scb.scb_9B.hdr.qw_9B[2] = opx_ep->rx->tx.cts[params->tx_index].cts_9B.hdr.qw_9B[2] | psn |
 					  FI_OPX_PKT_TX_INDEX_TO_QW3(params->tx_index);
 	replay->scb.scb_9B.hdr.qw_9B[3] = opx_ep->rx->tx.cts[params->tx_index].cts_9B.hdr.qw_9B[3];
-	replay->scb.scb_9B.hdr.qw_9B[4] = opx_ep->rx->tx.cts[params->tx_index].cts_9B.hdr.qw_9B[4] |
-					  ((uint64_t) params->tid_info.npairs << 32) | (params->niov << 48) |
-					  (params->opcode);
+	replay->scb.scb_9B.hdr.qw_9B[4] =
+		opx_ep->rx->tx.cts[params->tx_index].cts_9B.hdr.qw_9B[4] | ((uint64_t) params->tid_info.npairs << 32) |
+		(params->niov << 48) |
+		(((uint64_t) (uint16_t) (int16_t) params->tid_info.origin_byte_counter_adj) << 16) | (params->opcode);
 	replay->scb.scb_9B.hdr.qw_9B[5] = params->origin_byte_counter_vaddr;
 	replay->scb.scb_9B.hdr.qw_9B[6] = (uint64_t) params->rzv_comp;
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2291,9 +2292,10 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 	replay->scb.scb_16B.hdr.qw_16B[3] = opx_ep->rx->tx.cts[params->tx_index].cts_16B.hdr.qw_16B[3] | psn |
 					    FI_OPX_PKT_TX_INDEX_TO_QW3(params->tx_index);
 	replay->scb.scb_16B.hdr.qw_16B[4] = opx_ep->rx->tx.cts[params->tx_index].cts_16B.hdr.qw_16B[4];
-	replay->scb.scb_16B.hdr.qw_16B[5] = opx_ep->rx->tx.cts[params->tx_index].cts_16B.hdr.qw_16B[5] |
-					    ((uint64_t) params->tid_info.npairs << 32) | (params->niov << 48) |
-					    params->opcode;
+	replay->scb.scb_16B.hdr.qw_16B[5] =
+		opx_ep->rx->tx.cts[params->tx_index].cts_16B.hdr.qw_16B[5] |
+		((uint64_t) params->tid_info.npairs << 32) | (params->niov << 48) |
+		(((uint64_t) (uint16_t) (int16_t) params->tid_info.origin_byte_counter_adj) << 16) | params->opcode;
 	replay->scb.scb_16B.hdr.qw_16B[6] = params->origin_byte_counter_vaddr;
 
 	replay->scb.scb_16B.hdr.qw_16B[7] = (uint64_t) params->rzv_comp;
@@ -4727,7 +4729,8 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 			bool need_padding = (sdma_we_bytes & 0x7ul) != 0;
 			params->sdma_we->use_bounce_buf =
 				(!sdma_no_bounce_buf || opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
-				 opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH || need_padding);
+				 opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH || need_padding ||
+				 opx_ep->tx->replay_copy);
 
 			const uint64_t max_pkts_per_req =
 				params->sdma_we->use_bounce_buf ? OPX_SDMA_MAX_PKTS_BOUNCE_BUF : opx_tx->sdma_max_pkts;
@@ -4961,7 +4964,12 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 	unsigned       i;
 	const void    *sbuf_start	  = params->src_base_addr;
 	const bool     sdma_no_bounce_buf = params->sdma_no_bounce_buf;
-	const uint64_t max_pkts_per_req = sdma_no_bounce_buf ? opx_tx->sdma_max_pkts_tid : OPX_SDMA_MAX_PKTS_BOUNCE_BUF;
+	/* A replay_copy-forced bounce must cap packet_count to the
+	 * bounce-buffer capacity or the copy into fixed-size bounce_buf.buf
+	 * overflows (SIGSEGV). Mirror the non-TID path's use_bounce_buf cap. */
+	const uint64_t max_pkts_per_req = (sdma_no_bounce_buf && !opx_ep->tx->replay_copy) ?
+						  opx_tx->sdma_max_pkts_tid :
+						  OPX_SDMA_MAX_PKTS_BOUNCE_BUF;
 
 	assert(params->ntidpairs != 0);
 	assert(niov == 1);
@@ -5123,7 +5131,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 			 * are used when not DC or fetch, not for "padding".
 			 */
 			assert(!(packet_count == 1 && (bytes_to_send & 0x3ul)));
-			params->sdma_we->use_bounce_buf = !sdma_no_bounce_buf;
+			params->sdma_we->use_bounce_buf = (!sdma_no_bounce_buf || opx_ep->tx->replay_copy);
 
 			uint8_t *sbuf_tmp;
 			if (params->sdma_we->use_bounce_buf) {
@@ -5458,6 +5466,10 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 				(*origin_byte_counter) += tid_payload->tid_cts.origin_byte_counter_adjust;
 			}
 		}
+	} else if (dput_opcode == FI_OPX_HFI_DPUT_OPCODE_RZV && origin_byte_counter) {
+		/* a TID->eager fallback CTS carries the receiver's TID
+		 * alignment adjustment; apply it here (it is 0 in the normal path). */
+		(*origin_byte_counter) += (int16_t) hdr->cts.target.vaddr.unused1;
 	}
 
 	assert((ntidpairs == 0) || (niov == 1));
