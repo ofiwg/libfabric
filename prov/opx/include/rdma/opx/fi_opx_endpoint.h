@@ -268,7 +268,7 @@ struct fi_opx_ep_tx {
 	uint16_t	      sdma_max_pkts_tid;
 	uint16_t	      sdma_max_pkts;
 	uint32_t	      sdma_bounce_buf_threshold;
-	uint32_t	      unused_cacheline7;
+	uint32_t	      replay_copy;
 
 	/* == CACHE LINE 12, 13+ == */
 
@@ -2521,15 +2521,19 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		rzv_comp->bytes_accumulated += bytes;
 		rzv_comp->byte_counter -= bytes;
 
-		if (rzv_comp->byte_counter == 0) {
-			assert(target_context->byte_counter >= rzv_comp->bytes_accumulated);
-			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-			       "hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, rzv_comp->bytes_accumulated=%lu, target_byte_counter = %p, %lu -> %lu\n",
-			       hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes, rzv_comp->bytes_accumulated,
-			       &target_context->byte_counter, target_context->byte_counter,
-			       target_context->byte_counter - rzv_comp->bytes_accumulated);
+		/* Decrement the global completion counter per delivered
+		 * packet, mirroring the RZV_TID fix below.  The old lump-subtract
+		 * gated on rzv_comp->byte_counter==0 was skipped when a multi-chunk
+		 * send's per-chunk init exceeded the summed delivered bytes, wedging
+		 * the receive though every PSN arrived. */
+		assert(target_context->byte_counter >= bytes);
+		target_context->byte_counter -= bytes;
 
-			target_context->byte_counter -= rzv_comp->bytes_accumulated;
+		if (rzv_comp->byte_counter == 0) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, rzv_comp->bytes_accumulated=%lu, target_byte_counter = %p, %lu\n",
+			       hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes, rzv_comp->bytes_accumulated,
+			       &target_context->byte_counter, target_context->byte_counter);
 
 			/* free the rendezvous completion structure */
 			OPX_BUF_FREE(rzv_comp);
@@ -2619,6 +2623,16 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		rzv_comp->bytes_accumulated += bytes;
 		rzv_comp->byte_counter -= bytes;
 
+		/* Decrement the global completion counter per delivered
+		 * packet, in lockstep with rzv_comp.  The old lump-subtract gated on
+		 * rzv_comp->byte_counter reaching EXACTLY 0 was skipped in a multi-CTS
+		 * TID split (per-chunk init can exceed summed delivered bytes), wedging
+		 * the receive forever though every PSN arrived.  Per-packet sums to the
+		 * same init (xfer_len - immediate_total), so it still reaches 0 once.
+		 */
+		assert(target_context->byte_counter >= bytes);
+		target_context->byte_counter -= bytes;
+
 		/* On completion, decrement TID refcount and maybe free the TID cache */
 		if (rzv_comp->byte_counter == 0) {
 			const uint64_t tid_vaddr  = rzv_comp->tid_vaddr;
@@ -2627,8 +2641,6 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			       (void *) tid_vaddr, (void *) (tid_vaddr + tid_length), tid_length, tid_length);
 
 			opx_deregister_for_rzv(opx_ep, tid_vaddr, tid_length);
-
-			target_context->byte_counter -= rzv_comp->bytes_accumulated;
 
 			/* free the rendezvous completion structure */
 			OPX_BUF_FREE(rzv_comp);

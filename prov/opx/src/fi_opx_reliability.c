@@ -1061,12 +1061,21 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 	if (start == head) {
 		if (halt == start) {
 			*value_ptr = NULL;
-			/* Clear any nack throttling. */
-			start->psn_ptr->psn.throttle   = 0;
-			start->psn_ptr->psn.nack_count = 0;
 		} else {
 			*value_ptr = (struct fi_opx_reliability_tx_replay *) halt;
 		}
+		/*
+		 * Release the NACK throttle when an ACK retires the
+		 * queue HEAD, not only on a full drain (halt == start). The old
+		 * full-drain-only release latched the throttle permanently under
+		 * sustained traffic (tail keeps growing, queue never empties),
+		 * starving all later sends on this flow incl. the barrier. Safe:
+		 * the next NACK re-arms nack_count and bytes_outstanding still
+		 * guards flooding. psn_ptr lives in tx_flow_rbtree, so it stays
+		 * valid after the head replay is freed below.
+		 */
+		start->psn_ptr->psn.throttle   = 0;
+		start->psn_ptr->psn.nack_count = 0;
 	}
 
 #ifdef OPX_RELIABILITY_DEBUG
@@ -1188,7 +1197,17 @@ ssize_t fi_opx_reliability_sdma_replay_complete(union fi_opx_reliability_deferre
 				params->flow_key,
 				"(tx) packet psn=%08u replay over SDMA complete and ACK'd, freeing replay\n",
 				(uint32_t) (OPX_REPLAY_HDR(we->replay, hfi1_type)->reliability.psn));
+			/* SDMA-completion is the one retire path that
+			   never released the NACK throttle. Clear it here when the
+			   flow has nothing left outstanding; the bytes_outstanding==0
+			   guard is flooding-safe (no unacked replays remain). psn_ptr
+			   lives in tx_flow_rbtree; capture before freeing the replay. */
+			union fi_opx_reliability_tx_psn *psn_ptr = we->replay->psn_ptr;
 			fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, we->replay);
+			if (psn_ptr->psn.bytes_outstanding == 0) {
+				psn_ptr->psn.throttle	= 0;
+				psn_ptr->psn.nack_count = 0;
+			}
 
 #ifdef OPX_RELIABILITY_DEBUG
 		} else {
