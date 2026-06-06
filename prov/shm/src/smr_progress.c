@@ -169,25 +169,49 @@ static int smr_progress_return_entry(struct smr_ep *ep, struct smr_cmd *cmd,
 
 static void smr_progress_return(struct smr_ep *ep)
 {
-	struct smr_return_entry *queue_entry;
 	struct smr_cmd *cmd;
 	struct smr_pend_entry *pending;
-	int64_t pos;
+	uint64_t cc, status;
+	size_t w;
 	int ret;
 
-	while (1) {
-		ret = smr_return_queue_head(smr_return_queue(ep->region),
-					    &queue_entry, &pos);
-		if (ret == -FI_ENOENT)
-			break;
+	/* comp_count is bumped (release) by peers each time they return a
+	 * borrowed command. Read it with acquire; if unchanged, nothing was
+	 * returned since the last scan and the slots/payloads we would read
+	 * are already accounted for.
+	 */
+	cc = __atomic_load_n(smr_comp_count(ep->region), __ATOMIC_ACQUIRE);
+	if (cc == ep->last_comp_count)
+		return;
+	ep->last_comp_count = cc;
 
-		cmd = (struct smr_cmd *) queue_entry->ptr;
-		pending = (struct smr_pend_entry *) cmd->hdr.tx_ctx;
+	for (w = 0; w < ep->bitmap_words; w++) {
+		uint64_t bits = ep->return_bitmap[w];
 
-		ret = smr_progress_return_entry(ep, cmd, pending);
-		if (ret != -FI_EAGAIN) {
-			assert(pending);
-			if (cmd->hdr.smr_flags & SMR_OP_ERROR) {
+		while (bits) {
+			int b = __builtin_ctzll(bits);
+			int16_t slot = (int16_t) (w * 64) + b;
+
+			bits &= ~(1ULL << b);
+
+			cmd = smr_freestack_get_entry_from_index(
+					smr_cmd_stack(ep->region), slot);
+			pending = (struct smr_pend_entry *) cmd->hdr.tx_ctx;
+
+			/* Plain load: ordered by the comp_count acquire
+			 * above. A slot whose status has not advanced since
+			 * we last saw it has not been (re)signaled.
+			 */
+			status = smr_resp_slots(ep->region)[slot].status;
+			if (status == pending->last_resp_seen)
+				continue;
+			pending->last_resp_seen = status;
+
+			ret = smr_progress_return_entry(ep, cmd, pending);
+			if (ret == -FI_EAGAIN)
+				continue;
+
+			if (ret || (cmd->hdr.smr_flags & SMR_OP_ERROR)) {
 				ret = smr_write_err_comp(
 						ep->util_ep.tx_cq,
 						pending->comp_ctx,
@@ -199,16 +223,14 @@ static void smr_progress_return(struct smr_ep *ep)
 						cmd->hdr.op,
 						pending->comp_flags);
 			}
-			if (ret) {
+			if (ret)
 				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-					"unable to process "
-					"tx completion\n");
-			}
+					"unable to process tx completion\n");
+
+			ep->return_bitmap[w] &= ~(1ULL << b);
 			ofi_buf_free(pending);
 			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
 		}
-		smr_return_queue_release(smr_return_queue(ep->region),
-					 queue_entry, pos);
 	}
 }
 

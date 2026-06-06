@@ -267,7 +267,7 @@ struct smr_region {
 		size_t			cmd_queue_offset;
 		size_t			inject_pool_offset;
 		size_t			cmd_stack_offset;
-		size_t			ret_queue_offset;
+		size_t			resp_slots_offset;
 		size_t			sar_pool_offset;
 		size_t			peer_data_offset;
 		size_t			name_offset;
@@ -305,12 +305,16 @@ struct smr_sar_buf {
 	uint8_t		buf[SMR_SAR_SIZE];
 };
 
-struct smr_return_entry {
-	uintptr_t ptr;
+/* Per-command completion slot. The receiver bumps status (single writer
+ * at a time) when it is done with a borrowed command; the sender scans
+ * its in-flight bitmap and completes out-of-order. comp_count gates the
+ * scan. There is one slot per command-stack entry, indexed by the
+ * command's freestack index, so capacity matches the command stack. */
+struct smr_resp_slot {
+	uint64_t	status;
 };
 
 OFI_DECLARE_ATOMIC_Q(struct smr_cmd, smr_cmd_queue);
-OFI_DECLARE_ATOMIC_Q(struct smr_return_entry, smr_return_queue);
 
 /* Queue of offsets of the command blocks obtained from the command pool
  * freestack
@@ -328,10 +332,16 @@ static inline struct smr_freestack *smr_inject_pool(struct smr_region *smr)
 	return (struct smr_freestack *)
 			((char *) smr + smr->inject_pool_offset);
 }
-static inline struct smr_return_queue *smr_return_queue(struct smr_region *smr)
+/* comp_count sits at the start of the resp-slot block (its own cache
+ * line); the slot array follows. */
+static inline uint64_t *smr_comp_count(struct smr_region *smr)
 {
-	return (struct smr_return_queue *)
-			((char *) smr + smr->ret_queue_offset);
+	return (uint64_t *) ((char *) smr + smr->resp_slots_offset);
+}
+static inline struct smr_resp_slot *smr_resp_slots(struct smr_region *smr)
+{
+	return (struct smr_resp_slot *)
+			((char *) smr + smr->resp_slots_offset + 64);
 }
 static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {

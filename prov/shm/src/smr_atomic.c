@@ -152,6 +152,7 @@ static int smr_do_atomic_inject(
 		cmd->hdr.tx_ctx = (uintptr_t) pend;
 		smr_format_tx_pend(pend, cmd, context, res_desc, resultv,
 				   result_count, op_flags);
+		smr_alloc_resp_slot(ep, cmd, pend);
 	} else {
 		cmd->hdr.tx_ctx = 0;
 	}

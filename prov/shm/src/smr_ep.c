@@ -501,6 +501,9 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 	if (pend && op != ofi_op_read_req)
 		pend->bytes_done = cmd->hdr.size;
 
+	if (pend)
+		smr_alloc_resp_slot(ep, cmd, pend);
+
 	return FI_SUCCESS;
 err:
 	if (pend)
@@ -529,6 +532,8 @@ static ssize_t smr_do_iov(struct smr_ep *ep, struct smr_region *peer_smr,
 	if (smr_freestack_avail(smr_cmd_stack(ep->region)) <=
 	    smr_env.buffer_threshold)
 		cmd->hdr.smr_flags |= SMR_BUFFER_RECV;
+
+	smr_alloc_resp_slot(ep, cmd, pend);
 
 	return FI_SUCCESS;
 }
@@ -560,8 +565,12 @@ static ssize_t smr_do_sar(struct smr_ep *ep, struct smr_region *peer_smr,
 	smr_generic_format(cmd, tx_id, rx_id, op, tag, data, smr_flags);
 	ret = smr_format_sar(ep, cmd, desc, iov, iov_count, total_len,
 			     ep->region, peer_smr, pend);
-	if (ret)
+	if (ret) {
 		ofi_buf_free(pend);
+		return ret;
+	}
+
+	smr_alloc_resp_slot(ep, cmd, pend);
 
 	return ret;
 }
@@ -600,6 +609,8 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr,
 	if (smr_freestack_avail(smr_cmd_stack(ep->region)) <=
 	    smr_env.buffer_threshold)
 		cmd->hdr.smr_flags |= SMR_BUFFER_RECV;
+
+	smr_alloc_resp_slot(ep, cmd, pend);
 
 	return FI_SUCCESS;
 }
@@ -659,6 +670,8 @@ static int smr_ep_close(struct fid *fid)
 
 	if (ep->pend_pool)
 		ofi_bufpool_destroy(ep->pend_pool);
+
+	free(ep->return_bitmap);
 
 	free((void *)ep->name);
 	free(ep);
@@ -978,8 +991,21 @@ static int smr_create_pools(struct smr_ep *ep, struct fi_info *info)
 	if (ret)
 		goto free1;
 
+	/* One return-tracking bit per command-stack entry (resp slot). */
+	ep->bitmap_words = (roundup_power_of_two(ep->tx_size) + 63) / 64;
+	if (!ep->bitmap_words)
+		ep->bitmap_words = 1;
+	ep->return_bitmap = calloc(ep->bitmap_words, sizeof(uint64_t));
+	if (!ep->return_bitmap) {
+		ret = -FI_ENOMEM;
+		goto free0;
+	}
+	ep->last_comp_count = 0;
+
 	return FI_SUCCESS;
 
+free0:
+	ofi_bufpool_destroy(ep->pend_pool);
 free1:
 	ofi_bufpool_destroy(ep->unexp_buf_pool);
 free2:

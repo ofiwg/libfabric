@@ -641,6 +641,9 @@ static void dsa_complete_tx_work(struct smr_ep *ep, struct smr_pend_entry *pend)
 
 			smr_peer_data(ep->region)[pend->cmd->hdr.tx_id].sar_status =
 								SMR_SAR_FREE;
+			/* Completed out of band; release the resp slot the
+			 * drain would otherwise have cleared. */
+			smr_free_resp_slot(ep, pend->cmd);
 			smr_freestack_push(smr_cmd_stack(ep->region), pend->cmd);
 			ofi_buf_free(pend);
 			return;

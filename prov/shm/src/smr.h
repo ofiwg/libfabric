@@ -50,6 +50,13 @@ struct smr_ep {
 	struct ofi_bufpool	*unexp_buf_pool;
 	struct ofi_bufpool	*pend_pool;
 
+	/* Resp-slot return tracking: one bit per in-flight borrowed cmd,
+	 * indexed by the cmd's command-stack index. last_comp_count gates
+	 * the drain scan against the peer-incremented completion count. */
+	uint64_t		*return_bitmap;
+	size_t			bitmap_words;
+	uint64_t		last_comp_count;
+
 	struct slist		overflow_list;
 	struct dlist_entry	sar_list;
 	struct dlist_entry	async_cpy_list;
@@ -119,29 +126,19 @@ static inline uintptr_t smr_peer_to_owner(struct smr_ep *ep,
 static inline void smr_return_cmd(struct smr_ep *ep, struct smr_cmd *cmd)
 {
 	struct smr_region *peer_smr = smr_peer_region(ep, cmd->hdr.rx_id);
-	uintptr_t peer_ptr;
-	int64_t pos;
-	struct smr_return_entry *queue_entry;
-	int ret;
+	int16_t slot;
 
-	ret = smr_return_queue_next(smr_return_queue(peer_smr), &queue_entry,
-				    &pos);
-	if (ret == -FI_ENOENT) {
-		/* return queue runs in parallel to command stack
-		 * ie we will never run out of space
-		 */
-		assert(0);
-		return;
-	}
-
-	peer_ptr = smr_peer_to_owner(ep, peer_smr, cmd->hdr.rx_id,
-				     (uintptr_t) cmd);
-	assert(peer_ptr >= (uintptr_t) peer_smr->base_addr &&
-	       peer_ptr < (uintptr_t) peer_smr->base_addr +
-	       peer_smr->total_size);
-	queue_entry->ptr = peer_ptr;
-
-	smr_return_queue_commit(queue_entry, pos);
+	/* The command was borrowed from the peer's (sender's) command
+	 * stack; its freestack index is the resp-slot id. Bump the slot
+	 * status (only one peer touches a given slot at a time) and the
+	 * completion count, which the sender reads with acquire to gate
+	 * its drain scan. The release on comp_count orders the prior
+	 * status store and the payload, so no atomic RMW is needed on the
+	 * status itself.
+	 */
+	slot = smr_freestack_get_index(smr_cmd_stack(peer_smr), (char *) cmd);
+	smr_resp_slots(peer_smr)[slot].status++;
+	__atomic_add_fetch(smr_comp_count(peer_smr), 1, __ATOMIC_RELEASE);
 }
 
 extern struct fi_provider smr_prov;
@@ -186,6 +183,7 @@ struct smr_pend_entry {
 	size_t				iov_count;
 	struct ofi_mr			*mr[SMR_IOV_LIMIT];
 	size_t				bytes_done;
+	uint64_t			last_resp_seen;
 	void				*comp_ctx;
 	uint64_t			comp_flags;
 	int				sar_dir;
@@ -193,6 +191,34 @@ struct smr_pend_entry {
 						struct smr_ep *ep,
 						struct smr_pend_entry *pend);
 };
+
+/* Reserve the per-command resp slot for a borrowed (SMR_RETURN_CMD)
+ * command. The slot id is the command's index in the local command
+ * stack, so it needs no header field and matches command-stack capacity.
+ * Call only after all fallible setup so a failure path cannot leak a
+ * slot from the bitmap.
+ */
+static inline void smr_alloc_resp_slot(struct smr_ep *ep, struct smr_cmd *cmd,
+				       struct smr_pend_entry *pend)
+{
+	int16_t slot = smr_freestack_get_index(smr_cmd_stack(ep->region),
+					       (char *) cmd);
+
+	ep->return_bitmap[slot >> 6] |= 1ULL << (slot & 63);
+	smr_resp_slots(ep->region)[slot].status = 0;
+	pend->last_resp_seen = 0;
+}
+
+/* Release a resp slot from outside the drain (e.g. when an async DSA
+ * copy completes a borrowed command's return directly). The drain clears
+ * its own bit inline. */
+static inline void smr_free_resp_slot(struct smr_ep *ep, struct smr_cmd *cmd)
+{
+	int16_t slot = smr_freestack_get_index(smr_cmd_stack(ep->region),
+					       (char *) cmd);
+
+	ep->return_bitmap[slot >> 6] &= ~(1ULL << (slot & 63));
+}
 
 struct smr_cmd_ctx {
 	struct dlist_entry	entry;
