@@ -60,11 +60,12 @@ static void smr_format_inline_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
 static void smr_do_atomic_inline(
 			struct smr_ep *ep, struct smr_region *peer_smr,
 			int64_t tx_id, int64_t rx_id, uint32_t op,
-			uint64_t op_flags, uint8_t datatype, uint8_t atomic_op,
+			uint8_t datatype, uint8_t atomic_op,
 			struct ofi_mr **desc, const struct iovec *iov,
-			size_t iov_count, size_t total_len, struct smr_cmd *cmd)
+			size_t iov_count, size_t total_len, uint8_t smr_flags,
+			struct smr_cmd *cmd)
 {
-	smr_generic_format(cmd, tx_id, rx_id, op, 0, 0, op_flags);
+	smr_generic_format(cmd, tx_id, rx_id, op, 0, 0, smr_flags);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
 	smr_format_inline_atomic(cmd, desc, iov, iov_count);
 }
@@ -282,9 +283,9 @@ static ssize_t smr_generic_atomic(
 
 	if (proto == smr_proto_inline) {
 		smr_do_atomic_inline(ep, peer_smr, tx_id, rx_id, ofi_op_atomic,
-				     op_flags, datatype, atomic_op,
+				     datatype, atomic_op,
 				     (struct ofi_mr **) desc, iov, count,
-				     total_len, cmd);
+				     total_len, smr_flags, cmd);
 	} else {
 		ret = smr_do_atomic_inject(ep, peer_smr, tx_id, rx_id, op,
 					   op_flags, datatype, atomic_op,
@@ -433,8 +434,8 @@ static ssize_t smr_atomic_inject(
 
 	if (total_len <= SMR_MSG_DATA_LEN) {
 		smr_do_atomic_inline(ep, peer_smr, id, peer_id, ofi_op_atomic,
-				     0, datatype, op, NULL, &iov, 1, total_len,
-				     ce);
+				     datatype, op, NULL, &iov, 1, total_len,
+				     0, ce);
 	} else {
 		ret = smr_do_atomic_inject(ep, peer_smr, id, peer_id,
 					   ofi_op_atomic, 0, datatype, op, NULL,
