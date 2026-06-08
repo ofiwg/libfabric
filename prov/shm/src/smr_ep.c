@@ -727,7 +727,8 @@ static int smr_discard(struct fi_peer_rx_entry *rx_entry)
 		ofi_buf_free(sar_buf);
 	}
 
-	if (cmd_ctx->cmd->hdr.smr_flags & SMR_RETURN_CMD)
+	if (cmd_ctx->cmd != &cmd_ctx->cmd_cpy &&
+	    (cmd_ctx->cmd->hdr.smr_flags & SMR_RETURN_CMD))
 		smr_return_cmd(cmd_ctx->ep, cmd_ctx->cmd);
 
 	ofi_buf_free(cmd_ctx);
