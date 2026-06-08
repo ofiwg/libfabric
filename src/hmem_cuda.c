@@ -50,6 +50,12 @@
 #endif
 
 /*
+ * Explicitly declare cuCtxCreate_v2 so we can reference it by name regardless
+ * of what the cuCtxCreate macro expands to in a given CUDA toolkit version.
+ */
+CUresult CUDAAPI cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev);
+
+/*
  * Convenience higher-order macros for enumerating CUDA driver/runtime and
  * NVML API function names
  */
@@ -71,6 +77,10 @@
 	_(cuMemGetAddressRange)		\
 	_(cuDeviceGetAttribute)		\
 	_(cuDeviceGet)			\
+	_(cuCtxCreate_v2)		\
+	_(cuCtxDestroy)			\
+	_(cuMemAlloc)			\
+	_(cuMemFree)			\
 	_(cuStreamCreate)		\
 	_(cuStreamDestroy)		\
 	_(cuStreamSynchronize)		\
@@ -160,6 +170,10 @@ static struct {
 	CUresult (*cuDeviceGetAttribute)(int* pi,
 					 CUdevice_attribute attrib, CUdevice dev);
 	CUresult (*cuDeviceGet)(CUdevice* device, int ordinal);
+	CUresult (*cuCtxCreate_v2)(CUcontext *pctx, unsigned int flags, CUdevice dev);
+	CUresult (*cuCtxDestroy)(CUcontext ctx);
+	CUresult (*cuMemAlloc)(CUdeviceptr *dptr, size_t bytesize);
+	CUresult (*cuMemFree)(CUdeviceptr dptr);
 	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
 					unsigned int flags);
 	cudaError_t (*cudaHostUnregister)(void *ptr);
@@ -349,6 +363,34 @@ cudaError_t ofi_cudaMalloc(void **ptr, size_t size)
 cudaError_t ofi_cudaFree(void *ptr)
 {
 	return cuda_ops.cudaFree(ptr);
+}
+
+CUresult ofi_cuDeviceGet(CUdevice *device, int ordinal)
+{
+	return cuda_ops.cuDeviceGet(device, ordinal);
+}
+
+/* Explicitly use cuCtxCreate_v2 for a stable API across CUDA toolkit versions.
+ * https://docs.nvidia.com/cuda/archive/12.6.3/cuda-driver-api/group__CUDA__CTX.html#group__CUDA__CTX_1g65dc0012348bc84810e2103a40d8e2cf
+ */
+CUresult ofi_cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev)
+{
+	return cuda_ops.cuCtxCreate_v2(pctx, flags, dev);
+}
+
+CUresult ofi_cuCtxDestroy(CUcontext ctx)
+{
+	return cuda_ops.cuCtxDestroy(ctx);
+}
+
+CUresult ofi_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize)
+{
+	return cuda_ops.cuMemAlloc(dptr, bytesize);
+}
+
+CUresult ofi_cuMemFree(CUdeviceptr dptr)
+{
+	return cuda_ops.cuMemFree(dptr);
 }
 
 CUresult ofi_cuStreamCreate(CUstream *phStream, unsigned int flags)
