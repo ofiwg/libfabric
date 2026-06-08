@@ -1560,7 +1560,7 @@ static void verify_peek_claim_order_same_tag(size_t xfer_base_size, bool claim)
 				     ret);
 		}
 
-		/* Recieve unexpected message. If message is FI_CLAIM,
+		/* Receive unexpected message. If message is FI_CLAIM,
 		 * FI_CONTEXT buffer contains data to progress receive.
 		 */
 		ret = fi_trecvmsg(cxit_ep, &tmsg, claim ? FI_CLAIM : 0);

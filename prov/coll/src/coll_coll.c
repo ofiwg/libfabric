@@ -1308,7 +1308,7 @@ int coll_query_collective(struct fid_domain *dom_fid,
 	 * limited by the size of the rank portion of the collective tag, which
 	 * is 31 bits.  Future collectives may impose further restrictions which
 	 * will need to update the calculation.  For example, operations which
-	 * require dedicated space in the recieve buffer for each rank would
+	 * require dedicated space in the receive buffer for each rank would
 	 * limit the number of members by buffer size and value type
 	 * (8kB buffer / 64B value = 128 member max).
 	 */

@@ -23,7 +23,7 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-#define APPEND_LE_FATAL "Recieve LE resources exhuasted. Requires use " \
+#define APPEND_LE_FATAL "Receive LE resources exhausted. Requires use " \
 	" of FI_PROTO_CXI endpoint protocol\n"
 
 static int cxip_rnr_send_cb(struct cxip_req *req, const union c_event *event);
