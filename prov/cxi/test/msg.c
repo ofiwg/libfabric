@@ -3105,7 +3105,7 @@ static void msg_hybrid_append_test_runner(bool recv_truncation,
 	/* Make sure unlink of FI_MULTI_RECV did not update counter */
 	recv_cnt = fi_cntr_read(cxit_recv_cntr);
 	cr_assert(recv_cnt == byte_counts ? trunc_byte_len : iters,
-		  "Unlink updated RX recieve count %ld by software", recv_cnt);
+		  "Unlink updated RX receive count %ld by software", recv_cnt);
 
 	for (i = 0; i < recv_win_len; i++)
 		cr_assert_eq(send_window.mem[i], recv_window.mem[i],
