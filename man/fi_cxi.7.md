@@ -1151,7 +1151,7 @@ The CXI provider checks for the following environment variables:
     *software* - Message matching is fully onloaded.
 
     *hybrid* - Message matching begins fully offloaded, if resources become
-    exhuasted hardware will transition message matching to a hybrid of
+    exhausted hardware will transition message matching to a hybrid of
     hardware and software matching.
 
     For both *"hybrid"* and *"software"* modes and care should be taken to
@@ -1747,7 +1747,7 @@ number of inflight RDMA operations to and from a single endpoint. For users whic
 relying on the provider default value (e.g. MPI), the FI_CXI_DEFAULT_CQ_SIZE environment
 variable can be used to override the provider default value.
 
-### Endpoint Recieve Size Attribute
+### Endpoint Receive Size Attribute
 
 The CXI provider uses the endpoint receive size attribute to size internal command
 and hardware event queues. Failing to size the either command queue correctly can result
@@ -1814,7 +1814,7 @@ posted receive list rather than offloading to hardware. This avoids having to al
 hardware receive resource for each unxpected messsage and posted receive.
 
 *Note*: In practice, dependent processes (e.g. parallel job) will most likely be sharing a
-recieve hardware resource pool.
+receive hardware resource pool.
 
 *Note*: Each match mode may still enter flow control. For example, if a user is not draining
 the libfabric completion queue at a reasonable rate, corresponding hardware events may fill
@@ -1839,7 +1839,7 @@ rank 0 would transition to software match mode instead of all the ranks on the t
 
 The FI_CXI_HYBRID_POSTED_RECV_PREEMPTIVE and FI_CXI_HYBRID_UNEXPECTED_MSG_PREEMPTIVE
 environment variables will force the transition to software match mode if the user
-requested endpoint recieve size attribute is exceeded. The benefit of running with
+requested endpoint receive size attribute is exceeded. The benefit of running with
 these enabled is that software match mode transition is 100% in control of the libfabric
 user through the receive size attribute. One approach users could take here is set
 receive size attribute to expected usage, and if this expected usage is exceeded, only

@@ -1386,7 +1386,7 @@ message headers will be onloaded to free resources.
 \f[I]software\f[R] - Message matching is fully onloaded.
 .PP
 \f[I]hybrid\f[R] - Message matching begins fully offloaded, if resources
-become exhuasted hardware will transition message matching to a hybrid
+become exhausted hardware will transition message matching to a hybrid
 of hardware and software matching.
 .PP
 For both \f[I]\[lq]hybrid\[rq]\f[R] and \f[I]\[lq]software\[rq]\f[R]
@@ -2098,7 +2098,7 @@ endpoint.
 For users which are relying on the provider default value (e.g.\ MPI),
 the FI_CXI_DEFAULT_CQ_SIZE environment variable can be used to override
 the provider default value.
-.SS Endpoint Recieve Size Attribute
+.SS Endpoint Receive Size Attribute
 .PP
 The CXI provider uses the endpoint receive size attribute to size
 internal command and hardware event queues.
@@ -2177,7 +2177,7 @@ This avoids having to allocated a hardware receive resource for each
 unxpected messsage and posted receive.
 .PP
 \f[I]Note\f[R]: In practice, dependent processes (e.g.\ parallel job)
-will most likely be sharing a recieve hardware resource pool.
+will most likely be sharing a receive hardware resource pool.
 .PP
 \f[I]Note\f[R]: Each match mode may still enter flow control.
 For example, if a user is not draining the libfabric completion queue at
@@ -2208,7 +2208,7 @@ to software match mode instead of all the ranks on the target NIC.
 The FI_CXI_HYBRID_POSTED_RECV_PREEMPTIVE and
 FI_CXI_HYBRID_UNEXPECTED_MSG_PREEMPTIVE environment variables will force
 the transition to software match mode if the user requested endpoint
-recieve size attribute is exceeded.
+receive size attribute is exceeded.
 The benefit of running with these enabled is that software match mode
 transition is 100% in control of the libfabric user through the receive
 size attribute.

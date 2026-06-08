@@ -250,7 +250,7 @@ static int rdzv_mrecv_req_lookup(struct cxip_req *req,
 }
 
 /*
- * rdzv_mrecv_req_event() - Look up a multi-recieve child request using an
+ * rdzv_mrecv_req_event() - Look up a multi-receive child request using an
  * event and multi-recv request.
  *
  * Each rendezvous Put transaction targeting a multi-receive buffer is tracked
@@ -2653,7 +2653,7 @@ static int cxip_claim_onload_cb(struct cxip_req *req,
 	}
 
 	/* Add to the sw UX list as a claimed entry, it will be ignored in
-	 * recieve matching of UX list entries. Its order no longer matters.
+	 * receive matching of UX list entries. Its order no longer matters.
 	 */
 	dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
 	rxc->sw_ux_list_len++;
