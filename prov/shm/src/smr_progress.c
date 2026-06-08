@@ -361,7 +361,8 @@ static int smr_progress_pending_sar(struct smr_ep *ep, struct smr_cmd *cmd)
 			dlist_insert_tail(&pend->entry, &ep->async_cpy_list);
 			return FI_SUCCESS;
 		}
-		cmd->hdr.smr_flags |= SMR_OP_ERROR;
+		if (ret)
+			cmd->hdr.smr_flags |= SMR_OP_ERROR;
 		goto out;
 	}
 
