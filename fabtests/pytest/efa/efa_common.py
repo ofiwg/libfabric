@@ -339,28 +339,22 @@ def has_rdma(cmdline_args, operation):
 @functools.lru_cache(maxsize=None)
 def _has_rdma_cached(server_id, client_id, binpath, timeout, environments, operation):
     assert operation in ["read", "write", "writedata"]
-    binpath = binpath or ""
-    cmd = "timeout " + str(timeout) \
-          + " " + os.path.join(binpath, f"fi_efa_rdma_checker -o {operation}")
-    if environments:
-        cmd = environments + " " + cmd
-    server_proc = subprocess.run("ssh {} {}".format(server_id, cmd),
-               stdout=subprocess.PIPE,
-               stderr=subprocess.STDOUT,
-               shell=True,
-               universal_newlines=True)
-    if has_ssh_connection_err_msg(server_proc.stdout):
-        raise SshConnectionError()
 
-    client_proc = subprocess.run("ssh {} {}".format(client_id, cmd),
-               stdout=subprocess.PIPE,
-               stderr=subprocess.STDOUT,
-               shell=True,
-               universal_newlines=True)
-    if has_ssh_connection_err_msg(client_proc.stdout):
-        raise SshConnectionError()
+    def _check_host(host_id):
+        cmd = "timeout " + str(timeout) \
+              + " python3 -m ofi.efa_rdma_checker -o " + operation
+        if environments:
+            cmd = environments + " " + cmd
+        proc = subprocess.run("ssh {} {}".format(host_id, cmd),
+                   stdout=subprocess.PIPE,
+                   stderr=subprocess.STDOUT,
+                   shell=True,
+                   universal_newlines=True)
+        if has_ssh_connection_err_msg(proc.stdout):
+            raise SshConnectionError()
+        return proc.returncode == 0
 
-    return (server_proc.returncode == 0 and client_proc.returncode == 0)
+    return _check_host(server_id) and _check_host(client_id)
 
 def efa_retrieve_gid(hostname):
     """
