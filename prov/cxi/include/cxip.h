@@ -3133,7 +3133,7 @@ struct cxip_coll_mc {
 	struct cxip_coll_reduction reduction[CXIP_COLL_MAX_CONCUR];
 	/* Logical address context for leaf rdma get */
 	uint64_t rdma_get_lac_va_tx;
-	/* Logical address context recieved by the leaf */
+	/* Logical address context received by the leaf */
 	uint64_t rdma_get_lac_va_rx;
 	/* pointer to the source buffer base used in the RDMA */
 	uint8_t *root_rdma_get_data_p;
