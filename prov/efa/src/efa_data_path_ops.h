@@ -127,6 +127,8 @@ efa_ibv_post_write(
 		struct efa_qp *qp,
 		const struct ibv_sge *sge_list,
 		size_t sge_count,
+		const struct ibv_data_buf *inline_data_list,
+		bool use_inline,
 		uint32_t remote_key,
 		uint64_t remote_addr,
 		uintptr_t wr_id,
@@ -152,7 +154,11 @@ efa_ibv_post_write(
 		ibv_wr_rdma_write(qp->ibv_qp_ex, remote_key, remote_addr);
 	}
 
-	ibv_wr_set_sge_list(qp->ibv_qp_ex, sge_count, sge_list);
+	if (use_inline)
+		ibv_wr_set_inline_data_list(qp->ibv_qp_ex, sge_count, inline_data_list);
+	else
+		ibv_wr_set_sge_list(qp->ibv_qp_ex, sge_count, sge_list);
+
 	ibv_wr_set_ud_addr(qp->ibv_qp_ex, ah->ibv_ah, qpn, qkey);
 
 #if HAVE_EFADV_WR_PROCESSING_HINTS
@@ -300,6 +306,7 @@ efa_qp_post_write(struct efa_qp *qp,
 					 remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey);
 #endif
 	return efa_ibv_post_write(qp, sge_list, sge_count,
+				  inline_data_list, use_inline,
 				  remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey);
 }
 
