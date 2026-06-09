@@ -10,6 +10,27 @@
 # Path to install modulefiles in
 %{!?modulefile_path: %define modulefile_path /usr/share/Modules/modulefiles}
 
+# GPU acceleration toggles.  All default OFF (except gdrcopy, which only takes
+# effect when CUDA is enabled), so a stock `rpmbuild --rebuild` of this SRPM
+# produces a byte-for-byte CPU-only build identical to prior releases.
+#   CPU-only (default):   rpmbuild --rebuild libfabric-*.src.rpm
+#   CUDA (default path):  rpmbuild --rebuild libfabric-*.src.rpm --with cuda
+#   CUDA (custom path):   ... --with cuda --define "cuda_path /usr/local/cuda-12.4"
+#   CUDA, no GDRCopy:     ... --with cuda --without gdrcopy
+#   ROCm (custom path):   ... --with rocm --define "rocm_path /opt/rocm-6.1.1"
+# dlopen is enabled with each toggle so the rebuilt RPM is not hard-bound to a
+# single CUDA/ROCm/GDRCopy library version.
+%bcond_with cuda
+%bcond_with rocm
+# GDRCopy defaults ON but is only emitted alongside --with cuda (see %%build);
+# disable with --without gdrcopy.
+%bcond_without gdrcopy
+
+# Default toolkit locations; override with --define "<name>_path <dir>".
+%{!?cuda_path: %global cuda_path /usr/local/cuda}
+%{!?rocm_path: %global rocm_path /opt/rocm}
+%{!?gdrcopy_path: %global gdrcopy_path /usr}
+
 Name: libfabric
 Version: @VERSION@
 Release: 1%{?dist}
@@ -40,7 +61,13 @@ Development files for the libfabric library.
 %setup -q -n %{name}-%{version}
 
 %build
-%configure %{configopts}
+# GPU configure flags are appended only when the corresponding --with toggle is
+# passed; with no toggles this expands to exactly `%%configure %%{configopts}`.
+# GDRCopy is nested under CUDA because configure only enables it when CUDA is
+# present (have_cuda=1); emitting --with-gdrcopy alone would be a no-op/error.
+%configure %{configopts} \
+    %{?with_cuda:--with-cuda=%{cuda_path} --enable-cuda-dlopen %{?with_gdrcopy:--with-gdrcopy=%{gdrcopy_path} --enable-gdrcopy-dlopen}} \
+    %{?with_rocm:--with-rocr=%{rocm_path} --enable-rocr-dlopen}
 make %{?_smp_mflags}
 
 %install
