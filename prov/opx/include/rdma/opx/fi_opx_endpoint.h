@@ -1120,7 +1120,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 	uint64_t xfer_len = hdr->rzv_rts.message_length;
 
 #ifdef OPX_TRACER_ENABLED
-	const uint64_t trace_slid_len = OPX_TRACE_PACK_SLID_LEN(lid, xfer_len);
+	const uint64_t trace_slid_len = OPX_TRACE_PACK_SLID_LEN(OPX_TRACE_GET_SLID(hdr, hfi1_type), xfer_len);
 	OPX_TRACE_RX_BEGIN(OPX_TRACE_EVENT_RX_RZV_RTS_HFISVC, trace_slid_len, origin_tag);
 #endif
 
@@ -4449,13 +4449,12 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			return -FI_EAGAIN;
 		}
 
-		/* If hmem_iface != FI_HMEM_SYSTEM, we skip MP EGR because RZV yields better performance for devices */
 		if (total_len <= opx_tx->mp_eager_max_payload_bytes && is_contiguous &&
-		    !fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps) && (caps & FI_TAGGED) && hmem_iface == FI_HMEM_SYSTEM) {
+		    !fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps) && (caps & FI_TAGGED)) {
 			assert(total_len >= opx_tx->mp_eager_min_payload_bytes);
 			rc = opx_hfi1_tx_send_try_mp_egr(ep, buf, len, addr, tag, context, data, lock_required,
 							 override_flags, tx_op_flags, caps, reliability,
-							 do_cq_completion, FI_HMEM_SYSTEM, 0ul, OPX_HMEM_NO_HANDLE,
+							 do_cq_completion, hmem_iface, hmem_device, hmem_handle,
 							 hfi1_type, ctx_sharing);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
 				OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
