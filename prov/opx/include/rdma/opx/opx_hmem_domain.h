@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024-2025 Cornelis Networks.
+ * Copyright (C) 2024-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,7 +41,7 @@
 
 #define OPX_HMEM_NO_LOCK_ON_CLEANUP (0)
 
-#define OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT (4096)
+#define OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT (512)
 #define OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT (OPX_HFI1_PKT_SIZE)
 #define OPX_HMEM_DEV_REG_THRESHOLD_MAX		(OPX_HFI1_PKT_SIZE)
 #define OPX_HMEM_DEV_REG_THRESHOLD_MIN		(0)
