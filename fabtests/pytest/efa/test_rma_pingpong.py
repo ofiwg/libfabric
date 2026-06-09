@@ -45,7 +45,9 @@ def test_rma_pingpong_range_no_inject(cmdline_args, operation_type, rma_bw_compl
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["writedata"])
 @pytest.mark.parametrize("inject_size", [64])
-def test_rma_pingpong_wide_wqe(cmdline_args, operation_type, inject_size, rma_fabric):
+@pytest.mark.parametrize("use_data_path_direct", [0, 1])
+def test_rma_pingpong_wide_wqe(cmdline_args, operation_type, inject_size, rma_fabric, use_data_path_direct):
     """Test RMA pingpong with wide WQE inject."""
     command = "fi_rma_pingpong -e rdm -E -o {} -j {} -S {}".format(operation_type, inject_size, inject_size)
-    efa_run_client_server_test(cmdline_args, command, "short", "delivery_complete","host_to_host", "all", fabric=rma_fabric)
+    env = "FI_EFA_USE_DATA_PATH_DIRECT={}".format(use_data_path_direct)
+    efa_run_client_server_test(cmdline_args, command, "short", "delivery_complete","host_to_host", "all", fabric=rma_fabric, additional_env=env)
