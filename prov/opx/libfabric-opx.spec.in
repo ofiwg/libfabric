@@ -4,7 +4,7 @@
 #
 #  GPL LICENSE SUMMARY
 #
-#  Copyright(c) 2021 Cornelis Networks.
+#  Copyright(c) 2021,2026 Cornelis Networks.
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of version 2 of the GNU General Public License as
@@ -20,7 +20,7 @@
 #
 #  BSD LICENSE
 #
-#  Copyright(c) 2021 Cornelis Networks.
+#  Copyright(c) 2021,2026 Cornelis Networks.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions
@@ -52,6 +52,22 @@
 %{!?provider: %define provider opx}
 %{!?provider_formal: %define provider_formal OPX}
 
+# GPU acceleration toggles for the OPX DL provider plugin.  Default OFF, so a
+# stock `rpmbuild --rebuild` is identical to prior CPU-only releases.
+#   CUDA:  rpmbuild --rebuild libfabric-opx-*.src.rpm --with cuda
+#   ROCm:  rpmbuild --rebuild libfabric-opx-*.src.rpm --with rocm
+# These set HAVE_CUDA/HAVE_ROCR and the OPX_HMEM master switch at configure
+# time so the provider's GPU dispatch paths are compiled in.  GDRCopy is NOT a
+# toggle here: its implementation lives in core libfabric.so (which this RPM
+# excludes) and is reached via linkback at runtime -- it belongs to the core
+# libfabric SRPM, not the OPX plugin.
+%bcond_with cuda
+%bcond_with rocm
+
+# Default toolkit locations; override with --define "<name>_path <dir>".
+%{!?cuda_path: %global cuda_path /usr/local/cuda}
+%{!?rocm_path: %global rocm_path /opt/rocm}
+
 Name: libfabric-%{provider}
 Version: @VERSION@
 Release: 1%{?dist}
@@ -76,7 +92,11 @@ provider functionality in the existing libfabric installation.
 %setup -q -n libfabric-%{version}
 
 %build
-%configure %{configopts} --enable-%{provider}=dl --enable-direct=%{provider}
+# GPU configure flags are appended only when the corresponding --with toggle is
+# passed; with no toggles this matches the prior CPU-only %%configure line.
+%configure %{configopts} --enable-%{provider}=dl --enable-direct=%{provider} \
+    %{?with_cuda:--with-cuda=%{cuda_path} --enable-cuda-dlopen} \
+    %{?with_rocm:--with-rocr=%{rocm_path} --enable-rocr-dlopen}
 make %{?_smp_mflags}
 
 %install
