@@ -198,6 +198,27 @@ m4_map([FI_ARG_ENABLE_SANITIZER],[
        [ubsan, undefined, UndefinedBehavior]
 ])
 
+AC_ARG_ENABLE([coverage],
+              [AS_HELP_STRING([--enable-coverage],
+                              [Enable code coverage instrumentation via gcov @<:@default=no@:>@])],
+              [],
+              [enable_coverage=no])
+
+AS_IF([test x"$enable_coverage" != x"no"],
+      [save_CFLAGS="$CFLAGS"
+       save_LDFLAGS="$LDFLAGS"
+       CFLAGS="-O0 -g --coverage $CFLAGS"
+       LDFLAGS="--coverage $LDFLAGS"
+       AC_MSG_CHECKING([for --coverage support])
+       AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[return 0;]])],
+                      [AC_MSG_RESULT([yes])],
+                      [AC_MSG_RESULT([no])
+                       CFLAGS="$save_CFLAGS"
+                       LDFLAGS="$save_LDFLAGS"
+                       AC_MSG_ERROR([--coverage requested but compiler/linker support not found.])])])
+
+AM_CONDITIONAL([ENABLE_COVERAGE], [test x"$enable_coverage" != x"no"])
+
 dnl Checks for header files.
 dnl This is only necessary for Autoconf <v2.70.
 m4_version_prereq([2.70],
