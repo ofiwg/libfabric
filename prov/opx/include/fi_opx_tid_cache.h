@@ -125,8 +125,8 @@ void opx_tid_cache_purge_ep(struct ofi_mr_cache *cache, struct fi_opx_ep *opx_ep
 /* Cleanup the cache at exit/finalize */
 void opx_tid_cache_cleanup(struct ofi_mr_cache *cache);
 
-/* De-register (lazy, unless force is true) a memory region on TID rendezvous completion */
-void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr, const int64_t tid_length);
+/* De-register a TID rendezvous registration by releasing the owned cache entries */
+void opx_deregister_entries_for_rzv(struct fi_opx_ep *opx_ep, struct ofi_mr_entry **entries, const uint8_t nentries);
 
 /* Register a memory region for TID rendezvous,
  * return 0 on success
