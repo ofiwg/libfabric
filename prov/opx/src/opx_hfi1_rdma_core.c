@@ -79,6 +79,8 @@
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/opx_hfi1_cn5000.h"
 
+#include "fi_opx_tid_cache.h"
+
 /* TID function pointers */
 int32_t (*opx_fn_hfi1_free_tid)(struct fi_opx_hfi1_context *context, uint64_t tidlist, uint32_t tidcnt);
 int32_t (*opx_fn_hfi1_update_tid)(struct fi_opx_hfi1_context *context, uint64_t vaddr, uint32_t *length,
@@ -1155,6 +1157,13 @@ int32_t opx_hfi_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, 
 		       "IOCTL FAILED : No TIDs available, requested range=%p-%p (%u bytes, %lu pages)\n",
 		       (void *) vaddr, (void *) (vaddr + *length), *length, (*length) / PAGE_SIZE);
 		err = -FI_ENOSPC;
+	} else if (errno == EFAULT) {
+		FI_DBG(&fi_opx_provider, FI_LOG_MR,
+		       "IOCTL FAILED : EFAULT, requested range=%p-%p (%u bytes, %lu pages)\n", (void *) vaddr,
+		       (void *) (vaddr + *length), *length, (*length) / PAGE_SIZE);
+		/* Attempt prefaulting recovery on the region. This may only fault a single page with uffd. */
+		opx_write_prefault(vaddr, 0, *length);
+		err = -errno;
 	} else {
 		FI_WARN(&fi_opx_provider, FI_LOG_MR,
 			"IOCTL FAILED ERR %d errno %d \"%s\" requested range=%p-%p (%u bytes, %lu pages)\n", err, errno,

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2024 Cornelis Networks.
+ * Copyright (C) 2022-2024,2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -83,6 +83,40 @@ int opx_tid_cache_flush(struct ofi_mr_cache *cache, const bool flush_lru)
 
 	pthread_mutex_lock(&mm_lock);
 	return freed_entries;
+}
+
+/*
+ * Force a contiguous run of pages resident from the calling (application)
+ * thread by issuing a non-destructive write access to one byte of every page
+ * in the byte range [start, end).
+ *
+ * A WRITE access is required: the userfaultfd memory monitor only services
+ * UFFD_PAGEFAULT_FLAG_WRITE faults, so a read access would raise a fault the
+ * handler refuses to resolve and the page would stay absent. The hfi1
+ * TID_UPDATE ioctl pins with FOLL_WRITE, so it likewise needs writable,
+ * present pages. __atomic_fetch_or() with an operand of 0 performs a real
+ * read-modify-write store yet leaves the byte value unchanged, so existing
+ * buffer contents are preserved.
+ *
+ * Faulting the pages in lets pin_user_pages cover the range in a single ioctl
+ * instead of stopping at the first not-present page (partial update or
+ * EFAULT).
+ *
+ * The page target MUST be cast through a volatile-qualified pointer. To the C
+ * abstract machine "x | 0 == x" with a discarded result is a no-op, so an
+ * optimizing compiler (clang at -O3 in particular; gcc happens to keep it) is
+ * free to delete the atomic entirely. The page-fault side effect we depend on
+ * is invisible to the optimizer, so without volatile the prefault loop is
+ * elided, TID_UPDATE then faults on not-present pages, and the transfer hangs.
+ * The volatile qualifier marks the access as observable and forces the
+ * compiler to emit the read-modify-write store at every optimization level. */
+static inline void opx_write_prefault(uint64_t vaddr, uint32_t start, uint32_t end)
+{
+	FI_DBG(&fi_opx_provider, FI_LOG_MR, "prefault %p bytes [%u - %u] (pages %lu)\n", (char *) (vaddr + start),
+	       start, end, (unsigned long) ((end - start) / PAGE_SIZE));
+	for (uint32_t off = start; off < end; off += PAGE_SIZE) {
+		__atomic_fetch_or((volatile char *) (vaddr + off), 0, __ATOMIC_RELAXED);
+	}
 }
 
 /* Purge all entries for the specified endpoint */

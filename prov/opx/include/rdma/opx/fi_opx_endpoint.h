@@ -573,11 +573,12 @@ struct fi_opx_ep {
 
 	/* == CACHE LINE 6 == */
 	/* Hot-path scalars: accessed on every poll, send, recv, or match. */
-	struct fi_opx_ep_daos_info daos_info; /* 18 bytes */
-	bool			   use_expected_tid_rzv;
-	bool			   use_hfisvc;
-	enum fi_hmem_iface	   use_gpu_ipc;
-	ofi_spin_t		   lock; /* lock size varies based on ENABLE_DEBUG */
+	bool		   use_prefault_write;
+	bool		   use_expected_tid_rzv;
+	bool		   use_hfisvc;
+	char		   unused_c[17];
+	enum fi_hmem_iface use_gpu_ipc;
+	ofi_spin_t	   lock; /* lock size varies based on ENABLE_DEBUG */
 
 	/* Init-only fields (cold): set during bind/enable, never on hot path */
 	struct fi_opx_cntr *init_send_cntr;
@@ -593,6 +594,7 @@ struct fi_opx_ep {
 	struct opx_shm_tx shm;
 
 	/* == CACHE LINE 7+ == */
+	struct fi_opx_ep_daos_info daos_info; /* 18 bytes */
 #ifdef FLIGHT_RECORDER_ENABLE
 	struct flight_recorder *fr;
 #endif
@@ -614,8 +616,8 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, hfisvc) == (FI_OPX_CACHE_LINE
 OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_ep *) 0)->hfisvc) == FI_OPX_CACHE_LINE_SIZE,
 			"fi_opx_ep->hfisvc must be exactly one cacheline!");
 #endif
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, daos_info) == (FI_OPX_CACHE_LINE_SIZE * 6),
-			"Offset of fi_opx_ep->daos_info should start at cacheline 6!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, use_prefault_write) == (FI_OPX_CACHE_LINE_SIZE * 6),
+			"Offset of fi_opx_ep->use_prefault_write should start at cacheline 6!");
 
 /*
  * A 'scalable endpoint' may not be directly specified in a data movement
