@@ -364,13 +364,15 @@ static const unsigned OPX_HMEM_OFI_MEM_TYPE[4] = {
 
 #endif // OPX_HMEM
 
+// TODO: Consider removing union opx_hmem_stream/union opx_hmem_event. They are
+// only used by CUDA now, so CUstream/CUevent can be used directly.  Rename
+// opx_hmem_xxx functions to cuda_xxx (removing iface/device parameters), or
+// consider implementing async functions so CUDA can use ofi_async_xxx instead
+// of having separate cuda_xxx functions.
 union opx_hmem_stream {
 	uint64_t *handle;
 #if HAVE_CUDA
 	CUstream cu_stream;
-#endif
-#if HAVE_ROCR
-	hipStream_t hip_stream;
 #endif
 };
 
@@ -378,9 +380,6 @@ union opx_hmem_event {
 	uint64_t *handle;
 #if HAVE_CUDA
 	CUevent cu_event;
-#endif
-#if HAVE_ROCR
-	hipEvent_t hip_event;
 #endif
 };
 
@@ -393,13 +392,6 @@ void opx_hmem_dbg_trace(enum fi_hmem_iface iface, char *string, int result)
 		ofi_cuGetErrorString(result, &error_string);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s CUresult=%d (%s)\n", string, result,
 			     error_string ? error_string : "unknown error");
-		return;
-	}
-#endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s hipError_t=%d (%s)\n", string, result,
-			     hipGetErrorString(result));
 		return;
 	}
 #endif
@@ -419,13 +411,6 @@ void opx_hmem_warn_trace(enum fi_hmem_iface iface, char *string, int result)
 		return;
 	}
 #endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "%s hipError_t=%d (%s)\n", string, result,
-			hipGetErrorString(result));
-		return;
-	}
-#endif
 	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "%s result=%d with invalid iface (%d)\n", string, result, iface);
 }
 
@@ -441,11 +426,6 @@ void opx_hmem_stream_synchronize(enum fi_hmem_iface iface, union opx_hmem_stream
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
 		result = ofi_cuStreamSynchronize(stream->cu_stream);
-	}
-#endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		result = hipStreamSynchronize(stream->hip_stream);
 	}
 #endif
 	if (result) {
@@ -474,11 +454,6 @@ int opx_hmem_stream_create(enum fi_hmem_iface iface, union opx_hmem_stream **str
 		result = ofi_cuStreamCreate(&new_stream->cu_stream, CU_STREAM_DEFAULT);
 	}
 #endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		result = hipStreamCreate(&new_stream->hip_stream);
-	}
-#endif
 	if (result) {
 		opx_hmem_dbg_trace(iface, "Error creating the HMEM stream", result);
 		free(new_stream);
@@ -501,11 +476,6 @@ void opx_hmem_stream_destroy(enum fi_hmem_iface iface, union opx_hmem_stream *st
 #if HAVE_CUDA
 		if (iface == FI_HMEM_CUDA) {
 			ofi_cuStreamDestroy(stream->cu_stream);
-		}
-#endif
-#if HAVE_ROCR
-		if (iface == FI_HMEM_ROCR) {
-			hipStreamDestroy(stream->hip_stream);
 		}
 #endif
 		free(stream);
@@ -534,11 +504,6 @@ int opx_hmem_event_create(enum fi_hmem_iface iface, struct opx_hmem_domain *doma
 		result = ofi_cuEventCreate(&new_event->cu_event, CU_EVENT_DEFAULT);
 	}
 #endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		result = hipEventCreate(&new_event->hip_event);
-	}
-#endif
 	if (result) {
 		opx_hmem_dbg_trace(iface, "Error creating the event", result);
 		free(new_event);
@@ -563,11 +528,6 @@ void opx_hmem_event_destroy(enum fi_hmem_iface iface, union opx_hmem_event **eve
 			ofi_cuEventDestroy((*event)->cu_event);
 		}
 #endif
-#if HAVE_ROCR
-		if (iface == FI_HMEM_ROCR) {
-			hipEventDestroy((*event)->hip_event);
-		}
-#endif
 		OPX_BUF_FREE(*event);
 		*event = NULL;
 	}
@@ -587,11 +547,6 @@ int opx_hmem_event_record(enum fi_hmem_iface iface, union opx_hmem_event *event,
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
 		result = ofi_cuEventRecord(event->cu_event, stream->cu_stream);
-	}
-#endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		result = hipEventRecord(event->hip_event, stream->hip_stream);
 	}
 #endif
 	if (result) {
@@ -615,12 +570,6 @@ int opx_hmem_event_synchronize(enum fi_hmem_iface iface, union opx_hmem_event **
 	if (iface == FI_HMEM_CUDA) {
 		result = ofi_cuEventSynchronize((*event)->cu_event);
 		opx_hmem_event_destroy(FI_HMEM_CUDA, event);
-	}
-#endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		result = hipEventSynchronize((*event)->hip_event);
-		opx_hmem_event_destroy(FI_HMEM_ROCR, event);
 	}
 #endif
 
@@ -652,18 +601,6 @@ enum opx_hmem_return_code opx_hmem_event_query(enum fi_hmem_iface iface, union o
 		}
 	}
 #endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		hipError_t result = hipEventQuery(event->hip_event);
-		if (result == hipSuccess) {
-			return OPX_HMEM_SUCCESS;
-		} else if (result == hipErrorNotReady) {
-			return OPX_HMEM_ERROR_NOT_READY;
-		} else {
-			return OPX_HMEM_ERROR;
-		}
-	}
-#endif
 	return OPX_HMEM_ERROR;
 }
 
@@ -685,11 +622,6 @@ int opx_hmem_memcpy_async_DtoD(enum fi_hmem_iface iface, void *dst, const void *
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
 		result = ofi_cuMemcpyDtoDAsync((CUdeviceptr) dst, (CUdeviceptr) src, size, stream->cu_stream);
-	}
-#endif
-#if HAVE_ROCR
-	if (iface == FI_HMEM_ROCR) {
-		result = hipMemcpyAsync(dst, src, size, hipMemcpyDeviceToDevice, stream->hip_stream);
 	}
 #endif
 	if (result) {

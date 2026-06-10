@@ -46,28 +46,60 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 
 	//  If we have an asynchrous HMEM Copy, see if it is complete first
 	if (params->context->byte_counter != 0) {
-		int status;
-		if (opx_ep->domain->hmem_domain->hmem_stream.type == FI_HMEM_CUDA) {
-			status = opx_hmem_event_query(FI_HMEM_CUDA, params->hmem_event);
-		} else if (opx_ep->domain->hmem_domain->hmem_stream.type == FI_HMEM_ROCR) {
-			status = opx_hmem_event_query(FI_HMEM_ROCR, params->hmem_event);
+		int			 status;
+		const char		*query_name;
+		const enum fi_hmem_iface iface = params->cache_entry->info.iface;
+
+		if (iface == FI_HMEM_ROCR) {
+			query_name = "ofi_async_copy_query";
+			status	   = ofi_async_copy_query(FI_HMEM_ROCR, params->rocr_async_event);
+		} else if (iface == FI_HMEM_CUDA) {
+			query_name = "opx_hmem_event_query";
+			status	   = opx_hmem_event_query(FI_HMEM_CUDA, params->hmem_event);
+			if (status == OPX_HMEM_SUCCESS) {
+				status = FI_SUCCESS;
+			} else if (status == OPX_HMEM_ERROR_NOT_READY) {
+				status = -FI_EAGAIN;
+			} else {
+				status = -FI_EIO;
+			}
 		} else {
+			OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FATAL ERROR, unexpected IPC async iface=%lu len=%lu. Abort\n", (unsigned long) iface,
+				(unsigned long) params->context->byte_counter);
 			abort();
 		}
-		if (status == OPX_HMEM_SUCCESS) {
-			opx_hmem_event_destroy(opx_ep->domain->hmem_domain->hmem_stream.type, &params->hmem_event);
+
+		if (status == FI_SUCCESS) {
+			if (iface == FI_HMEM_ROCR) {
+				ofi_free_async_copy_event(FI_HMEM_ROCR, params->rocr_async_device,
+							  params->rocr_async_event);
+				params->rocr_async_event = NULL;
+			} else {
+				opx_hmem_event_destroy(FI_HMEM_CUDA, &params->hmem_event);
+			}
+
 			ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, params->cache_entry);
 			params->context->byte_counter = 0;
 			params->context->flags &= ~(FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 			slist_insert_tail((struct slist_entry *) params->context, opx_ep->rx->cq_completed_ptr);
-		} else if (status == OPX_HMEM_ERROR_NOT_READY) {
+		} else if (status == -FI_EBUSY || status == -FI_EAGAIN) {
 			OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
 			return -FI_EAGAIN;
 		} else {
 			OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_IPC_RECV_SEND_CTS, 0, 0);
-			opx_hmem_event_destroy(opx_ep->domain->hmem_domain->hmem_stream.type, &params->hmem_event);
+			if (iface == FI_HMEM_ROCR) {
+				ofi_free_async_copy_event(FI_HMEM_ROCR, params->rocr_async_device,
+							  params->rocr_async_event);
+				params->rocr_async_event = NULL;
+			} else {
+				opx_hmem_event_destroy(FI_HMEM_CUDA, &params->hmem_event);
+			}
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FATAL ERROR, opx_hmem_event_query failed. Abort\n");
+				"FATAL ERROR, %s failed: status=%d iface=%lu device=%lu len=%lu. Abort\n", query_name,
+				status, (unsigned long) iface, (unsigned long) params->cache_entry->info.device,
+				(unsigned long) params->context->byte_counter);
 			abort();
 		}
 	}
