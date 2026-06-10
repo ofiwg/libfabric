@@ -7,7 +7,7 @@
 
 #define MSG_SIZE 10
 
-void test_efa_rdm_msg_send_to_local_peer_with_null_desc(struct efa_resource **state)
+void test_efa_rdm_msg_send_to_local_peer_with_null_desc(void **state)
 {
         struct efa_resource *resource = *state;
         char buf[MSG_SIZE];
@@ -91,7 +91,7 @@ void test_efa_rdm_msg_send_to_local_peer_with_null_desc(struct efa_resource **st
  * packet as in-flight and this test would fail.
  */
 void test_efa_rdm_msg_send_multi_pkt_sendv_fail_no_inflight(
-		struct efa_resource **state)
+		void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
