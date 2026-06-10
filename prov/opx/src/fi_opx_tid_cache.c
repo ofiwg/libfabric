@@ -563,6 +563,10 @@ int opx_register_tid_region_retryable(struct ofi_mr_cache *cache, uint64_t tid_v
 {
 	int ret;
 
+	if (opx_ep->use_prefault_write) {
+		assert(tid_length == (uint64_t) (uint32_t) tid_length);
+		opx_write_prefault(tid_vaddr, 0, (uint32_t) tid_length);
+	}
 	/* Hold the cache->lock across registering the TIDs  */
 	pthread_mutex_lock(&cache->lock);
 	{

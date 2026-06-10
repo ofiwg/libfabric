@@ -3538,6 +3538,16 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 		opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_ON;
 	}
 
+	int use_prefault_write = (default_monitor == uffd_monitor);
+	if (fi_param_get_bool(fi_opx_global.prov, "tid_prefault_region", &use_prefault_write) == FI_SUCCESS) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_TID_PREFAULT_REGION override is %s.\n",
+			use_prefault_write ? "TRUE" : "FALSE");
+	} else {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_TID_PREFAULT_REGION defaults to %s.\n",
+			use_prefault_write ? "TRUE" : "FALSE");
+	}
+	opx_ep->use_prefault_write = (bool) use_prefault_write;
+
 	int expected_receive_enable_env;
 	if (fi_param_get_bool(fi_opx_global.prov, "expected_receive_enable", &expected_receive_enable_env) ==
 	    FI_SUCCESS) {
