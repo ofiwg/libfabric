@@ -10,7 +10,7 @@
  * efa_rdm_pke_handle_longcts_rtm_send_completion shouldn't touch
  * txe and write send completion.
  */
-void test_efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_resource **state)
+void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state)
 {
     struct efa_resource *resource = *state;
     struct efa_rdm_pke *pkt_entry;
@@ -79,7 +79,7 @@ void test_efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_resource **s
  *
  * @param state
  */
-void test_efa_rdm_pke_release_rx_list(struct efa_resource **state)
+void test_efa_rdm_pke_release_rx_list(void **state)
 {
     struct efa_resource *resource = *state;
     struct efa_rdm_ep *efa_rdm_ep;
@@ -114,7 +114,7 @@ void test_efa_rdm_pke_release_rx_list(struct efa_resource **state)
     efa_rdm_ep->efa_rx_pkt_pool = NULL;
 }
 
-void test_efa_rdm_pke_alloc_rta_rxe(struct efa_resource **state)
+void test_efa_rdm_pke_alloc_rta_rxe(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -155,7 +155,7 @@ void test_efa_rdm_pke_alloc_rta_rxe(struct efa_resource **state)
 	efa_rdm_pke_release_rx(pke);
 }
 
-void test_efa_rdm_pke_alloc_rtw_rxe(struct efa_resource **state)
+void test_efa_rdm_pke_alloc_rtw_rxe(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -204,7 +204,7 @@ void test_efa_rdm_pke_alloc_rtw_rxe(struct efa_resource **state)
 	efa_rdm_pke_release_rx(pke);
 }
 
-void test_efa_rdm_pke_alloc_rtr_rxe(struct efa_resource **state)
+void test_efa_rdm_pke_alloc_rtr_rxe(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -253,7 +253,7 @@ void test_efa_rdm_pke_alloc_rtr_rxe(struct efa_resource **state)
 	efa_rdm_pke_release_rx(pke);
 }
 
-void test_efa_rdm_pke_get_unexp(struct efa_resource **state)
+void test_efa_rdm_pke_get_unexp(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_pke *pkt_entry, *unexp_pkt_entry;
@@ -286,7 +286,7 @@ void test_efa_rdm_pke_get_unexp(struct efa_resource **state)
  *
  * @param state
  */
-void test_efa_rdm_pke_flag_tracking(struct efa_resource **state)
+void test_efa_rdm_pke_flag_tracking(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -377,7 +377,7 @@ void test_efa_rdm_pke_flag_tracking(struct efa_resource **state)
  *
  * @param state
  */
-void test_efa_rdm_pke_proc_matched_eager_rtm_error(struct efa_resource **state)
+void test_efa_rdm_pke_proc_matched_eager_rtm_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -458,7 +458,7 @@ static struct efa_rdm_pke *create_medium_rtm_pkt(struct efa_rdm_ep *ep, uint32_t
  *
  * @param state
  */
-void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error(struct efa_resource **state)
+void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -503,7 +503,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error(struct efa_reso
  *
  * @param state
  */
-void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(struct efa_resource **state)
+void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -559,7 +559,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(struct efa_res
  * when a copy-size mismatch is detected, avoiding a memory leak.
  * @param state
  */
-void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(struct efa_resource **state){
+void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void **state){
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_entry[2];

@@ -11,7 +11,7 @@
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_hmem_info_p2p_dmabuf_assumed_neuron(struct efa_resource **state)
+void test_efa_hmem_info_p2p_dmabuf_assumed_neuron(void **state)
 {
         int ret;
         struct efa_resource *resource = *state;
@@ -41,7 +41,7 @@ void test_efa_hmem_info_p2p_dmabuf_assumed_neuron(struct efa_resource **state)
 #endif
 }
 #else
-void test_efa_hmem_info_p2p_dmabuf_assumed_neuron()
+void test_efa_hmem_info_p2p_dmabuf_assumed_neuron(void **state)
 {
         skip();
 }
@@ -53,7 +53,7 @@ void test_efa_hmem_info_p2p_dmabuf_assumed_neuron()
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_hmem_info_p2p_disabled_neuron(struct efa_resource **state)
+void test_efa_hmem_info_p2p_disabled_neuron(void **state)
 {
         int ret;
         struct efa_resource *resource = *state;
@@ -80,7 +80,7 @@ void test_efa_hmem_info_p2p_disabled_neuron(struct efa_resource **state)
         assert_false(g_efa_hmem_info[FI_HMEM_NEURON].initialized);
 }
 #else
-void test_efa_hmem_info_p2p_disabled_neuron()
+void test_efa_hmem_info_p2p_disabled_neuron(void **state)
 {
         skip();
 }
@@ -92,7 +92,7 @@ void test_efa_hmem_info_p2p_disabled_neuron()
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_hmem_info_p2p_disabled_synapse(struct efa_resource **state)
+void test_efa_hmem_info_p2p_disabled_synapse(void **state)
 {
         int ret;
         struct efa_resource *resource = *state;
@@ -119,7 +119,7 @@ void test_efa_hmem_info_p2p_disabled_synapse(struct efa_resource **state)
         assert_false(g_efa_hmem_info[FI_HMEM_SYNAPSEAI].initialized);
 }
 #else
-void test_efa_hmem_info_p2p_disabled_synapse()
+void test_efa_hmem_info_p2p_disabled_synapse(void **state)
 {
         skip();
 }
@@ -132,7 +132,7 @@ void test_efa_hmem_info_p2p_disabled_synapse()
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_hmem_info_disable_p2p_cuda(struct efa_resource **state)
+void test_efa_hmem_info_disable_p2p_cuda(void **state)
 {
         int ret;
         struct efa_resource *resource = *state;
@@ -162,7 +162,7 @@ void test_efa_hmem_info_disable_p2p_cuda(struct efa_resource **state)
         assert_false(g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device);
 }
 #else
-void test_efa_hmem_info_disable_p2p_cuda()
+void test_efa_hmem_info_disable_p2p_cuda(void **state)
 {
         skip();
 }
