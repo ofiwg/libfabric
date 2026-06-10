@@ -4,7 +4,7 @@
 #include "efa_unit_tests.h"
 #include "efa_rdm_pke_cmd.h"
 
-void test_efa_rnr_queue_and_resend_impl(struct efa_resource **state, uint32_t op)
+void test_efa_rnr_queue_and_resend_impl(void **state, uint32_t op)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -79,7 +79,7 @@ void test_efa_rnr_queue_and_resend_impl(struct efa_resource **state, uint32_t op
  * the "rnr_queued_pkt_cnt" in endpoint and peer were properly updated,
  * so is the EFA_RDM_PKE_RNR_RETRANSMIT flag.
  */
-void test_efa_rnr_queue_and_resend_msg(struct efa_resource **state)
+void test_efa_rnr_queue_and_resend_msg(void **state)
 {
 	return test_efa_rnr_queue_and_resend_impl(state, ofi_op_msg);
 }
@@ -89,7 +89,7 @@ void test_efa_rnr_queue_and_resend_msg(struct efa_resource **state)
  * the "rnr_queued_pkt_cnt" in endpoint and peer were properly updated,
  * so is the EFA_RDM_PKE_RNR_RETRANSMIT flag for tagged messages
  */
-void test_efa_rnr_queue_and_resend_tagged(struct efa_resource **state)
+void test_efa_rnr_queue_and_resend_tagged(void **state)
 {
 	return test_efa_rnr_queue_and_resend_impl(state, ofi_op_tagged);
 }
