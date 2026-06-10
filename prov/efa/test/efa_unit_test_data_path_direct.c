@@ -7,7 +7,7 @@
 #include "efa_io_defs.h"
 #include "efa_data_path_direct_entry.h"
 
-static void test_efa_data_path_direct_multiple_sge_fail_impl(struct efa_resource **state, uint32_t fi_opcode)
+static void test_efa_data_path_direct_multiple_sge_fail_impl(void **state, uint32_t fi_opcode)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	struct efa_resource *resource = *state;
@@ -58,12 +58,12 @@ static void test_efa_data_path_direct_multiple_sge_fail_impl(struct efa_resource
 #endif
 }
 
-void test_efa_data_path_direct_rdma_read_multiple_sge_fail(struct efa_resource **state)
+void test_efa_data_path_direct_rdma_read_multiple_sge_fail(void **state)
 {
 	test_efa_data_path_direct_multiple_sge_fail_impl(state, FI_READ);
 }
 
-void test_efa_data_path_direct_rdma_write_multiple_sge_fail(struct efa_resource **state)
+void test_efa_data_path_direct_rdma_write_multiple_sge_fail(void **state)
 {
 	test_efa_data_path_direct_multiple_sge_fail_impl(state, FI_WRITE);
 }
@@ -74,7 +74,7 @@ void test_efa_data_path_direct_rdma_write_multiple_sge_fail(struct efa_resource 
  * for the same QPN slot, and that gen_mask/shifted_gen are set correctly
  * on the data path direct work queues.
  */
-void test_efa_data_path_direct_qp_gen_initialization(struct efa_resource **state)
+void test_efa_data_path_direct_qp_gen_initialization(void **state)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	struct efa_resource *resource = *state;
@@ -120,7 +120,7 @@ void test_efa_data_path_direct_qp_gen_initialization(struct efa_resource **state
  * generation bits OR'd in, and that efa_wq_put_dev_req_id correctly
  * strips them before returning the index to the pool.
  */
-void test_efa_data_path_direct_dev_req_id_roundtrip(struct efa_resource **state)
+void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	struct efa_resource *resource = *state;
@@ -170,7 +170,7 @@ void test_efa_data_path_direct_dev_req_id_roundtrip(struct efa_resource **state)
  * @brief Verify that efa_data_path_direct_is_valid_wrid_qp_gen detects
  * a stale completion whose generation bits don't match the current QP.
  */
-void test_efa_data_path_direct_stale_completion_detected(struct efa_resource **state)
+void test_efa_data_path_direct_stale_completion_detected(void **state)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	struct efa_resource *resource = *state;
@@ -214,7 +214,7 @@ void test_efa_data_path_direct_stale_completion_detected(struct efa_resource **s
  * @brief Verify that the QP generation counter increments across
  * QP destroy/create cycles on the same QPN slot.
  */
-void test_efa_data_path_direct_qp_gen_increments_across_qps(struct efa_resource **state)
+void test_efa_data_path_direct_qp_gen_increments_across_qps(void **state)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	struct efa_resource *resource = *state;

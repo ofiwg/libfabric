@@ -8,7 +8,7 @@
  * @brief test that when a wrong fi_info was used to open resource, the error is handled
  * gracefully
  */
-void test_info_open_ep_with_wrong_info()
+void test_info_open_ep_with_wrong_info(void **state)
 {
 	struct fi_info *hints, *info;
 	struct fid_fabric *fabric = NULL;
@@ -51,7 +51,7 @@ void test_info_open_ep_with_wrong_info()
 /**
  * @brief Verify that efa rdm path fi_info objects have some expected values
  */
-void test_info_rdm_attributes()
+void test_info_rdm_attributes(void **state)
 {
 	struct fi_info *hints, *info = NULL, *info_head = NULL;
 	int err;
@@ -81,7 +81,7 @@ void test_info_rdm_attributes()
 /**
  * @brief Verify that efa dgram path fi_info objects have some expected values
  */
-void test_info_dgram_attributes()
+void test_info_dgram_attributes(void **state)
 {
 	struct fi_info *hints, *info = NULL, *info_head = NULL;
 	int err;
@@ -135,7 +135,7 @@ static void test_info_direct_attributes_impl(struct fi_info *hints,
 	fi_freeinfo(info_head);
 }
 
-void test_info_direct_attributes_no_rma()
+void test_info_direct_attributes_no_rma(void **state)
 {
 	struct fi_info *hints;
 
@@ -148,7 +148,7 @@ void test_info_direct_attributes_no_rma()
 	fi_freeinfo(hints);
 }
 
-void test_info_direct_attributes_rma()
+void test_info_direct_attributes_rma(void **state)
 {
 	struct fi_info *hints;
 	bool support_fi_rma = (efa_device_support_rdma_read() &&
@@ -169,7 +169,7 @@ void test_info_direct_attributes_rma()
  * @brief Verify that efa direct only supports HMEM with p2p
  */
 #if EFA_HAVE_NON_SYSTEM_HMEM
-void test_info_direct_hmem_support_p2p()
+void test_info_direct_hmem_support_p2p(void **state)
 {
 	struct fi_info *info;
 	bool hmem_ops_cuda_init;
@@ -216,7 +216,7 @@ void test_info_direct_hmem_support_p2p()
 	hmem_ops[FI_HMEM_CUDA].initialized = hmem_ops_cuda_init;
 }
 #else
-void test_info_direct_hmem_support_p2p()
+void test_info_direct_hmem_support_p2p(void **state)
 {
 }
 #endif
@@ -286,7 +286,7 @@ static void test_info_tx_rx_size_from_hints(struct fi_info *hints, int expected_
 	fi_freeinfo(info);
 }
 
-void test_info_tx_rx_msg_order_rdm_order_none(struct efa_resource **state)
+void test_info_tx_rx_msg_order_rdm_order_none(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -296,7 +296,7 @@ void test_info_tx_rx_msg_order_rdm_order_none(struct efa_resource **state)
 	test_info_tx_rx_msg_order_from_hints(resource->hints, 0);
 }
 
-void test_info_tx_rx_msg_order_rdm_order_sas(struct efa_resource **state)
+void test_info_tx_rx_msg_order_rdm_order_sas(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -308,7 +308,7 @@ void test_info_tx_rx_msg_order_rdm_order_sas(struct efa_resource **state)
 	test_info_tx_rx_msg_order_from_hints(resource->hints, 0);
 }
 
-void test_info_tx_rx_msg_order_dgram_order_none(struct efa_resource **state)
+void test_info_tx_rx_msg_order_dgram_order_none(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -322,7 +322,7 @@ void test_info_tx_rx_msg_order_dgram_order_none(struct efa_resource **state)
  * @brief dgram endpoint doesn't support any ordering, so fi_getinfo
  * should return -FI_ENODATA if hints requests sas
  */
-void test_info_tx_rx_msg_order_dgram_order_sas(struct efa_resource **state)
+void test_info_tx_rx_msg_order_dgram_order_sas(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -364,7 +364,7 @@ test_info_max_order_size_from_hints(struct fi_info *hints, int expected_ret, siz
  * DGRAM ep type doesn't support FI_ATOMIC, fi_getinfo should return
  * ENODATA when FI_ATOMIC is requested in hints.
  */
-void test_info_max_order_size_dgram_with_atomic(struct efa_resource **state)
+void test_info_max_order_size_dgram_with_atomic(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -380,7 +380,7 @@ void test_info_max_order_size_dgram_with_atomic(struct efa_resource **state)
  * RDM ep type supports FI_ATOMIC. When FI_ORDER_ATOMIC_* is NOT requested,
  * max_order_*_size should be 0
  */
-void test_info_max_order_size_rdm_with_atomic_no_order(struct efa_resource **state)
+void test_info_max_order_size_rdm_with_atomic_no_order(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -398,7 +398,7 @@ void test_info_max_order_size_rdm_with_atomic_no_order(struct efa_resource **sta
  * RDM ep type supports FI_ATOMIC. When FI_ORDER_ATOMIC_* is requested,
  * max_order_*_size should be the max atomic size derived from mtu and headers
  */
-void test_info_max_order_size_rdm_with_atomic_order(struct efa_resource **state)
+void test_info_max_order_size_rdm_with_atomic_order(void **state)
 {
 	struct efa_resource *resource = *state;
 	size_t max_atomic_size = g_efa_selected_device_list[0].ibv_port_attr.max_msg_sz
@@ -417,7 +417,7 @@ void test_info_max_order_size_rdm_with_atomic_order(struct efa_resource **state)
 	test_info_max_order_size_from_hints(resource->hints, FI_SUCCESS, max_atomic_size);
 }
 
-void test_info_tx_rx_op_flags_rdm(struct efa_resource **state)
+void test_info_tx_rx_op_flags_rdm(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -429,7 +429,7 @@ void test_info_tx_rx_op_flags_rdm(struct efa_resource **state)
 	test_info_tx_rx_op_flags_from_hints(resource->hints, 0);
 }
 
-void test_info_tx_rx_size_rdm(struct efa_resource **state)
+void test_info_tx_rx_size_rdm(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -496,7 +496,7 @@ static void test_info_check_shm_info_from_hints(struct fi_info *hints)
  * @brief Check shm info created by efa_domain() has correct caps.
  *
  */
-void test_info_check_shm_info_hmem()
+void test_info_check_shm_info_hmem(void **state)
 {
 	struct fi_info *hints;
 
@@ -511,7 +511,7 @@ void test_info_check_shm_info_hmem()
 	fi_freeinfo(hints);
 }
 
-void test_info_check_shm_info_op_flags()
+void test_info_check_shm_info_op_flags(void **state)
 {
 	struct fi_info *hints;
 
@@ -528,7 +528,7 @@ void test_info_check_shm_info_op_flags()
 	fi_freeinfo(hints);
 }
 
-void test_info_check_shm_info_threading()
+void test_info_check_shm_info_threading(void **state)
 {
 	struct fi_info *hints;
 
@@ -544,7 +544,7 @@ void test_info_check_shm_info_threading()
  * @brief Check that case when a user requested FI_HMEM support
  *        using libfabric API < 1.18,
  */
-void test_info_check_hmem_cuda_support_on_api_lt_1_18()
+void test_info_check_hmem_cuda_support_on_api_lt_1_18(void **state)
 {
 	struct fi_info *hints, *info = NULL;
 	int err;
@@ -583,7 +583,7 @@ void test_info_check_hmem_cuda_support_on_api_lt_1_18()
  * @brief Check that case when a user requested FI_HMEM support
  *        using libfabric API >= 1.18,
  */
-void test_info_check_hmem_cuda_support_on_api_ge_1_18()
+void test_info_check_hmem_cuda_support_on_api_ge_1_18(void **state)
 {
 	struct fi_info *hints, *info = NULL;
 	int err;
@@ -628,7 +628,7 @@ void check_no_hmem_support_when_not_requested(char *fabric_name)
  * @brief Check that EFA does not claim support of FI_HMEM when
  *        it is not requested
  */
-void test_info_check_no_hmem_support_when_not_requested() {
+void test_info_check_no_hmem_support_when_not_requested(void **state) {
 	check_no_hmem_support_when_not_requested(EFA_FABRIC_NAME);
 	check_no_hmem_support_when_not_requested(EFA_DIRECT_FABRIC_NAME);
 }
@@ -637,7 +637,7 @@ void test_info_check_no_hmem_support_when_not_requested() {
  * @brief Check that EFA direct info object is not returned when atomic
  *        or ordering capabilities are requested
  */
-void test_info_direct_unsupported()
+void test_info_direct_unsupported(void **state)
 {
 	struct fi_info *hints, *info = NULL;
 	int err;
@@ -668,7 +668,7 @@ void test_info_direct_unsupported()
 /**
  * @brief Verify that efa-direct fi_info objects are returned before efa info objects
  */
-void test_info_direct_ordering()
+void test_info_direct_ordering(void **state)
 {
 	struct fi_info *hints, *info = NULL, *info_head = NULL;
 	bool efa_direct_returned = false, efa_returned = false;
@@ -792,39 +792,39 @@ void test_use_device_rdma( const int env_val,
 const int VALUE_NOT_SET = -1;
 
 /* settings agree: on */
-void test_efa_use_device_rdma_env1_opt1() {
+void test_efa_use_device_rdma_env1_opt1(void **state) {
 	test_use_device_rdma(1, 1, 1, FI_VERSION(1,18));
 }
 /* settings agree: off */
-void test_efa_use_device_rdma_env0_opt0() {
+void test_efa_use_device_rdma_env0_opt0(void **state) {
 	test_use_device_rdma(0, 0, 0, FI_VERSION(1,18));
 }
 /* settings conflict, env on */
-void test_efa_use_device_rdma_env1_opt0() {
+void test_efa_use_device_rdma_env1_opt0(void **state) {
 	test_use_device_rdma(1, 0, 1, FI_VERSION(1,18));
 }
 /* settings conflict, env off */
-void test_efa_use_device_rdma_env0_opt1() {
+void test_efa_use_device_rdma_env0_opt1(void **state) {
 	test_use_device_rdma(0, 1, 0, FI_VERSION(1,18));
 }
 /* setopt only on */
-void test_efa_use_device_rdma_opt1() {
+void test_efa_use_device_rdma_opt1(void **state) {
 	test_use_device_rdma(VALUE_NOT_SET, 1, 1, FI_VERSION(1,18));
 }
 /* setopt only off */
-void test_efa_use_device_rdma_opt0() {
+void test_efa_use_device_rdma_opt0(void **state) {
 	test_use_device_rdma(VALUE_NOT_SET, 0, 0, FI_VERSION(1,18));
 }
 /* environment only on */
-void test_efa_use_device_rdma_env1() {
+void test_efa_use_device_rdma_env1(void **state) {
 	test_use_device_rdma(1, VALUE_NOT_SET, 1, FI_VERSION(1,18));
 }
 /* environment only off */
-void test_efa_use_device_rdma_env0() {
+void test_efa_use_device_rdma_env0(void **state) {
 	test_use_device_rdma(0, VALUE_NOT_SET, 0, FI_VERSION(1,18));
 }
 /* setopt rejected in 1,17 */
-void test_efa_use_device_rdma_opt_old() {
+void test_efa_use_device_rdma_opt_old(void **state) {
 	test_use_device_rdma(1, 1, 1, FI_VERSION(1,17));
 	test_use_device_rdma(0, 0, 0, FI_VERSION(1,17));
 }
@@ -933,7 +933,7 @@ static void setup_domain_name_hints(struct fi_info *hints, struct fid_fabric *fa
  * @brief Test that fi_getinfo can reuse fabric object
  * when provided in hints via fabric_attr->fabric
  */
-void test_info_reuse_fabric_via_fabric_attr()
+void test_info_reuse_fabric_via_fabric_attr(void **state)
 {
 	test_info_reuse_fabric_domain(setup_fabric_attr_hints, true, false);
 }
@@ -942,7 +942,7 @@ void test_info_reuse_fabric_via_fabric_attr()
  * @brief Test that fi_getinfo can reuse domain object
  * when provided in hints via domain_attr->domain
  */
-void test_info_reuse_domain_via_domain_attr()
+void test_info_reuse_domain_via_domain_attr(void **state)
 {
 	test_info_reuse_fabric_domain(setup_domain_attr_hints, false, true);
 }
@@ -951,7 +951,7 @@ void test_info_reuse_domain_via_domain_attr()
  * @brief Test that fi_getinfo can reuse fabric
  * when provided in hints via fabric_attr->name
  */
-void test_info_reuse_fabric_via_name()
+void test_info_reuse_fabric_via_name(void **state)
 {
 	test_info_reuse_fabric_domain(setup_fabric_name_hints, true, false);
 }
@@ -960,7 +960,7 @@ void test_info_reuse_fabric_via_name()
  * @brief Test that fi_getinfo can reuse domain
  * when provided in hints via domain_attr->name
  */
-void test_info_reuse_domain_via_name()
+void test_info_reuse_domain_via_name(void **state)
 {
 	test_info_reuse_fabric_domain(setup_domain_name_hints, true, true);
 }
@@ -1023,7 +1023,7 @@ static void test_info_direct_rma_common(bool mock_unsolicited_write_recv,
 /**
  * @brief Test NULL hints return efa-direct info object with FI_RMA and FI_RX_CQ_DATA
  */
-void test_info_direct_null_hints_return_rma_and_rx_cq_data()
+void test_info_direct_null_hints_return_rma_and_rx_cq_data(void **state)
 {
 	struct fi_info *info;
 	int err;
@@ -1049,7 +1049,7 @@ void test_info_direct_null_hints_return_rma_and_rx_cq_data()
  * @brief Test hints requesting FI_RMA with FI_RX_CQ_DATA when unsolicited write recv is not supported
  * Should succeed and return info with both FI_RMA and FI_RX_CQ_DATA
  */
-void test_info_direct_rma_with_rx_cq_data_when_no_unsolicited_write_recv()
+void test_info_direct_rma_with_rx_cq_data_when_no_unsolicited_write_recv(void **state)
 {
 	test_info_direct_rma_common(false, true, true, 0, 4, true, true);
 }
@@ -1058,7 +1058,7 @@ void test_info_direct_rma_with_rx_cq_data_when_no_unsolicited_write_recv()
  * @brief Test hints requesting FI_RMA without FI_RX_CQ_DATA when unsolicited write recv is not supported
  * Should fail with -FI_ENODATA
  */
-void test_info_direct_rma_without_rx_cq_data_when_no_unsolicited_write_recv()
+void test_info_direct_rma_without_rx_cq_data_when_no_unsolicited_write_recv(void **state)
 {
 	test_info_direct_rma_common(false, true, false, -FI_ENODATA, 0, false, false);
 }
@@ -1067,7 +1067,7 @@ void test_info_direct_rma_without_rx_cq_data_when_no_unsolicited_write_recv()
  * @brief Test hints not requesting FI_RMA and FI_RX_CQ_DATA when unsolicited write recv is not supported
  * Should succeed without FI_RMA capabilities
  */
-void test_info_direct_no_rma_no_rx_cq_data_when_no_unsolicited_write_recv()
+void test_info_direct_no_rma_no_rx_cq_data_when_no_unsolicited_write_recv(void **state)
 {
 	test_info_direct_rma_common(false, false, false, 0, 4, false, false);
 }
@@ -1076,7 +1076,7 @@ void test_info_direct_no_rma_no_rx_cq_data_when_no_unsolicited_write_recv()
  * @brief Test hints requesting FI_RMA without FI_RX_CQ_DATA when unsolicited write recv is supported
  * Should succeed with FI_RMA but no FI_RX_CQ_DATA
  */
-void test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_supported()
+void test_info_direct_rma_without_rx_cq_data_when_unsolicited_write_recv_supported(void **state)
 {
 	test_info_direct_rma_common(true, true, false, 0, 4, false, true);
 }

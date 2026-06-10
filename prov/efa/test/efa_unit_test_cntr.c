@@ -53,7 +53,7 @@ void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep_impl(struct efa_reso
     fi_close(&cntr->fid);
 }
 
-void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -61,7 +61,7 @@ void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource 
 	test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep_impl(resource);
 }
 
-void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -107,7 +107,7 @@ void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep_impl(struct efa_
     fi_close(&cntr->fid);
 }
 
-void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -115,7 +115,7 @@ void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resou
 	test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep_impl(resource);
 }
 
-void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -123,7 +123,7 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_r
 	test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep_impl(resource);
 }
 
-void test_efa_rdm_cntr_post_initial_rx_pkts(struct efa_resource **state)
+void test_efa_rdm_cntr_post_initial_rx_pkts(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -170,7 +170,7 @@ void test_efa_rdm_cntr_post_initial_rx_pkts(struct efa_resource **state)
 	fi_close(&cntr->fid);
 }
 
-void test_efa_rdm_cntr_read_before_ep_enable(struct efa_resource **state)
+void test_efa_rdm_cntr_read_before_ep_enable(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_ep *ep;
