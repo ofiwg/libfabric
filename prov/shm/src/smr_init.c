@@ -40,7 +40,7 @@ struct sigaction *old_action = NULL;
 struct smr_env smr_env = {
 	.disable_cma = false,
 	.use_dsa_sar = false,
-	.max_gdrcopy_size = 3072,
+	.max_gdrcopy_size = SMR_MAX_GDRCOPY_SIZE,
 	.use_xpmem = false,
 	.buffer_threshold = 1,
 	.rma_fast_size = SMR_RMA_FAST_SIZE,
@@ -52,6 +52,7 @@ static void smr_init_env(void)
 	fi_param_get_size_t(&smr_prov, "rx_size", &smr_info.rx_attr->size);
 	fi_param_get_bool(&smr_prov, "disable_cma", &smr_env.disable_cma);
 	fi_param_get_bool(&smr_prov, "use_dsa_sar", &smr_env.use_dsa_sar);
+	fi_param_get_size_t(&smr_prov, "max_gdrcopy_size", &smr_env.max_gdrcopy_size);
 	fi_param_get_bool(&smr_prov, "use_xpmem", &smr_env.use_xpmem);
 	fi_param_get_size_t(&smr_prov, "buffer_threshold",
 			    &smr_env.buffer_threshold);
@@ -219,6 +220,10 @@ SHM_INI
 			"Manually disables CMA. Default: false");
 	fi_param_define(&smr_prov, "use_dsa_sar", FI_PARAM_BOOL,
 			"Enable use of DSA in SAR protocol. Default: false");
+	fi_param_define(&smr_prov, "max_gdrcopy_size", FI_PARAM_SIZE_T,
+			"Maximum message size for gdrcopy transfers. Messages "
+			"larger than this size use the IPC protocol with cudaMemcpy.",
+			 SMR_MAX_GDRCOPY_SIZE);
 	fi_param_define(&smr_prov, "use_xpmem", FI_PARAM_BOOL,
 			"Enable XPMEM over CMA when possible "
 			"(default: false)");
