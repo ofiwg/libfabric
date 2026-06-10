@@ -6,7 +6,7 @@
 /*
  * test the error handling path of efa_device_construct()
  */
-void test_efa_device_construct_error_handling()
+void test_efa_device_construct_error_handling(void **state)
 {
 	int ibv_err = 4242;
 	struct ibv_device **ibv_device_list;

@@ -14,7 +14,7 @@
  * change it via fi_setopt
  *
  */
-void test_efa_srx_min_multi_recv_size(struct efa_resource **state)
+void test_efa_srx_min_multi_recv_size(void **state)
 {
         struct efa_resource *resource = *state;
         struct efa_rdm_ep *efa_rdm_ep;
@@ -39,7 +39,7 @@ void test_efa_srx_min_multi_recv_size(struct efa_resource **state)
 
 
 /* This test verified that cq is correctly bound to srx when it's bound to ep */
-void test_efa_srx_cq(struct efa_resource **state)
+void test_efa_srx_cq(void **state)
 {
         struct efa_resource *resource = *state;
         struct efa_rdm_ep *efa_rdm_ep;
@@ -53,7 +53,7 @@ void test_efa_srx_cq(struct efa_resource **state)
 }
 
 /* This test verified that srx_lock created in efa_domain is correctly passed to srx */
-void test_efa_srx_lock(struct efa_resource **state)
+void test_efa_srx_lock(void **state)
 {
         struct efa_resource *resource = *state;
         struct efa_rdm_ep *efa_rdm_ep;
@@ -75,7 +75,7 @@ void test_efa_srx_lock(struct efa_resource **state)
  *
  * @param state
  */
-void test_efa_srx_unexp_pkt(struct efa_resource **state)
+void test_efa_srx_unexp_pkt(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -167,7 +167,7 @@ static int test_foreach_unspec_discard_no_op(struct fi_peer_rx_entry *entry)
 	return FI_SUCCESS;
 }
 
-void test_efa_srx_foreach_unspec_skips_other_provider(struct efa_resource **state)
+void test_efa_srx_foreach_unspec_skips_other_provider(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -312,7 +312,7 @@ void test_efa_srx_foreach_unspec_skips_other_provider(struct efa_resource **stat
  * After changing peer_construct from void to int, verify that the normal
  * path still works correctly and returns 0.
  */
-void test_efa_rdm_peer_construct_robuf_failure(struct efa_resource **state)
+void test_efa_rdm_peer_construct_robuf_failure(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;

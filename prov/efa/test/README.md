@@ -36,7 +36,23 @@ If `make check` fails, then directly executing the test executable also works
 1. Write the test in the above test file.
 1. Declare the test in `efa_unit_tests.h`.
 1. Create or find an existing cmocka test group in `efa_unit_tests.c`, and the test to the group.
-1. If you need to use `struct efa_resource`, then accept `struct efa_resource **resource` as as input to the test function. The framework will automatically create the resources before the test and destroy them after the test.
+1. Every test function must use cmocka's `CMUnitTestFunction` signature, i.e.
+   take a single `void **state` argument. If you need to use
+   `struct efa_resource`, recover it from `state` on the first line of the test
+   body:
+   ```c
+   void test_foo(void **state)
+   {
+       struct efa_resource *resource = *state;
+       /* ... */
+   }
+   ```
+   The framework allocates `resource` via the group setup and destroys it in the
+   teardown, so the test body only reads `*state`. Declaring the parameter as
+   `void **state` (rather than `struct efa_resource **`) keeps the function
+   pointer type identical to what cmocka's test table expects: under C23
+   (GCC 15 / Ubuntu 26.04) a mismatched pointer type is a hard error, not a
+   warning.
 
 ## Mocking
 * To mock a function, you need to make sure that the function is declared in a header file, and defined in a different file from where it is called. You will need to add `-Wl,--wrap=<function to mock>`
