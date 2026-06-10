@@ -34,7 +34,7 @@ int test_efa_cntr_get_ibv_cq_poll_list_length(struct fid_cntr *cntr_fid)
  *
  * @param state struct efa_resource that is managed by the framework
  */
-void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr;
@@ -59,7 +59,7 @@ void test_efa_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource 
 	fi_close(&cntr->fid);
 }
 
-void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr;
@@ -91,7 +91,7 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resou
  *
  * @param state struct efa_resource that is managed by the framework
  */
-void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cq *txcq, *rxcq;
@@ -126,7 +126,7 @@ void test_efa_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resou
 	fi_close(&cntr->fid);
 }
 
-void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cq *txcq, *rxcq;
@@ -162,7 +162,7 @@ void test_efa_rdm_cntr_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_r
 	fi_close(&cntr->fid);
 }
 
-void test_efa_rdm_cntr_post_initial_rx_pkts(struct efa_resource **state)
+void test_efa_rdm_cntr_post_initial_rx_pkts(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -209,7 +209,7 @@ void test_efa_rdm_cntr_post_initial_rx_pkts(struct efa_resource **state)
 	fi_close(&cntr->fid);
 }
 
-void test_efa_rdm_cntr_read_before_ep_enable(struct efa_resource **state)
+void test_efa_rdm_cntr_read_before_ep_enable(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_ep *ep;
@@ -247,7 +247,7 @@ void test_efa_rdm_cntr_read_before_ep_enable(struct efa_resource **state)
  * @brief Test efa_hw_cntr_open returns -FI_EOPNOTSUPP for FI_CNTR_EVENTS_BYTES
  * when efadv_create_comp_cntr does not support IBV_COMP_CNTR_TYPE_BYTES.
  */
-void test_efa_hw_cntr_open_unsupported_type_bytes(struct efa_resource **state)
+void test_efa_hw_cntr_open_unsupported_type_bytes(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cntr_attr attr = {0};
@@ -280,7 +280,7 @@ void test_efa_hw_cntr_open_unsupported_type_bytes(struct efa_resource **state)
 /**
  * @brief Test efa_hw_cntr_open rejects when max_cntr_value exceeds hw limit
  */
-void test_efa_hw_cntr_open_max_cntr_value_exceeded(struct efa_resource **state)
+void test_efa_hw_cntr_open_max_cntr_value_exceeded(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cntr_attr attr = {0};
@@ -309,7 +309,7 @@ void test_efa_hw_cntr_open_max_cntr_value_exceeded(struct efa_resource **state)
 /**
  * @brief Test efa_hw_cntr_open returns error when efadv_create_comp_cntr fails
  */
-void test_efa_hw_cntr_open_ibv_fail(struct efa_resource **state)
+void test_efa_hw_cntr_open_ibv_fail(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cntr_attr attr = {0};
@@ -386,7 +386,7 @@ static struct fid_cntr *test_efa_hw_cntr_open(struct efa_resource *resource,
 /**
  * @brief Test efa_hw_cntr_add calls ibv_inc_comp_cntr and returns success
  */
-void test_efa_hw_cntr_add(struct efa_resource **state)
+void test_efa_hw_cntr_add(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
@@ -402,7 +402,7 @@ void test_efa_hw_cntr_add(struct efa_resource **state)
 /**
  * @brief Test efa_hw_cntr_adderr calls ibv_inc_err_comp_cntr and returns success
  */
-void test_efa_hw_cntr_adderr(struct efa_resource **state)
+void test_efa_hw_cntr_adderr(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
@@ -418,7 +418,7 @@ void test_efa_hw_cntr_adderr(struct efa_resource **state)
 /**
  * @brief Test efa_hw_cntr_set calls ibv_set_comp_cntr and returns success
  */
-void test_efa_hw_cntr_set(struct efa_resource **state)
+void test_efa_hw_cntr_set(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
@@ -434,7 +434,7 @@ void test_efa_hw_cntr_set(struct efa_resource **state)
 /**
  * @brief Test efa_hw_cntr_seterr calls ibv_set_err_comp_cntr and returns success
  */
-void test_efa_hw_cntr_seterr(struct efa_resource **state)
+void test_efa_hw_cntr_seterr(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
@@ -450,7 +450,7 @@ void test_efa_hw_cntr_seterr(struct efa_resource **state)
 /**
  * @brief Test efa_hw_cntr_read calls ibv_read_comp_cntr and returns the value
  */
-void test_efa_hw_cntr_read(struct efa_resource **state)
+void test_efa_hw_cntr_read(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
@@ -467,7 +467,7 @@ void test_efa_hw_cntr_read(struct efa_resource **state)
 /**
  * @brief Test efa_hw_cntr_readerr calls ibv_read_err_comp_cntr and returns the value
  */
-void test_efa_hw_cntr_readerr(struct efa_resource **state)
+void test_efa_hw_cntr_readerr(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid;
@@ -519,7 +519,7 @@ static int test_efa_hw_cntr_open_with_wait_obj(struct efa_resource *resource,
 /**
  * @brief Test efa_hw_cntr_wait returns success when counter already meets threshold
  */
-void test_efa_hw_cntr_wait_success(struct efa_resource **state)
+void test_efa_hw_cntr_wait_success(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid = NULL;
@@ -544,7 +544,7 @@ void test_efa_hw_cntr_wait_success(struct efa_resource **state)
 /**
  * @brief Test efa_hw_cntr_wait returns -FI_EINVAL when wait_obj is FI_WAIT_NONE
  */
-void test_efa_hw_cntr_wait_returns_einval_with_wait_none(struct efa_resource **state)
+void test_efa_hw_cntr_wait_returns_einval_with_wait_none(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid = NULL;
@@ -563,7 +563,7 @@ void test_efa_hw_cntr_wait_returns_einval_with_wait_none(struct efa_resource **s
  * @brief Test cntr_open_ext returns -FI_EOPNOTSUPP when wait_obj is FI_WAIT_FD
  * GPU cannot do a blocking wait because system FDs are only accessible to CPU.
  */
-void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd(struct efa_resource **state)
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid = NULL;
@@ -576,7 +576,7 @@ void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd(struct efa_resource *
 /**
  * @brief Test cntr_open_ext returns -FI_EOPNOTSUPP when wait_obj is FI_WAIT_YIELD
  */
-void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield(struct efa_resource **state)
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid = NULL;
@@ -589,7 +589,7 @@ void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield(struct efa_resourc
 /**
  * @brief Verify fi_enable succeeds when ibv_qp_attach_comp_cntr returns 0
  */
-void test_efa_hw_cntr_bind_ep(struct efa_resource **state)
+void test_efa_hw_cntr_bind_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid = NULL;
@@ -617,7 +617,7 @@ void test_efa_hw_cntr_bind_ep(struct efa_resource **state)
  * @brief Verify fi_enable fails when ibv_qp_attach_comp_cntr returns
  *        -ENOTSUP for a counter bound with FI_REMOTE_READ.
  */
-void test_efa_hw_cntr_bind_ep_attach_fail(struct efa_resource **state)
+void test_efa_hw_cntr_bind_ep_attach_fail(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr_fid = NULL;
@@ -645,7 +645,7 @@ void test_efa_hw_cntr_bind_ep_attach_fail(struct efa_resource **state)
  * Verify that calling fi_cntr_open (the standard OFI API) on an efa-direct
  * domain with use_hw_cntr enabled results in a counter backed by ibv_comp_cntr.
  */
-void test_efa_cntr_open_uses_hw_cntr(struct efa_resource **state)
+void test_efa_cntr_open_uses_hw_cntr(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cntr_attr cntr_attr = {0};
@@ -677,7 +677,7 @@ void test_efa_cntr_open_uses_hw_cntr(struct efa_resource **state)
 /**
  * @brief Test efa_hw_cntr_open returns -FI_EOPNOTSUPP when use_hw_cntr is 0
  */
-void test_efa_hw_cntr_open_use_hw_cntr_disabled(struct efa_resource **state)
+void test_efa_hw_cntr_open_use_hw_cntr_disabled(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cntr_attr attr = {0};
@@ -697,21 +697,21 @@ void test_efa_hw_cntr_open_use_hw_cntr_disabled(struct efa_resource **state)
 	free(cntr);
 }
 #else
-void test_efa_hw_cntr_open_unsupported_type_bytes(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_open_max_cntr_value_exceeded(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_open_ibv_fail(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_add(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_adderr(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_set(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_seterr(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_read(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_readerr(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_bind_ep(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_bind_ep_attach_fail(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_wait_success(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_wait_returns_einval_with_wait_none(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield(struct efa_resource **state) { skip(); }
-void test_efa_cntr_open_uses_hw_cntr(struct efa_resource **state) { skip(); }
-void test_efa_hw_cntr_open_use_hw_cntr_disabled(struct efa_resource **state) { skip(); }
+void test_efa_hw_cntr_open_unsupported_type_bytes(void **state) { skip(); }
+void test_efa_hw_cntr_open_max_cntr_value_exceeded(void **state) { skip(); }
+void test_efa_hw_cntr_open_ibv_fail(void **state) { skip(); }
+void test_efa_hw_cntr_add(void **state) { skip(); }
+void test_efa_hw_cntr_adderr(void **state) { skip(); }
+void test_efa_hw_cntr_set(void **state) { skip(); }
+void test_efa_hw_cntr_seterr(void **state) { skip(); }
+void test_efa_hw_cntr_read(void **state) { skip(); }
+void test_efa_hw_cntr_readerr(void **state) { skip(); }
+void test_efa_hw_cntr_bind_ep(void **state) { skip(); }
+void test_efa_hw_cntr_bind_ep_attach_fail(void **state) { skip(); }
+void test_efa_hw_cntr_wait_success(void **state) { skip(); }
+void test_efa_hw_cntr_wait_returns_einval_with_wait_none(void **state) { skip(); }
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_fd(void **state) { skip(); }
+void test_efa_hw_cntr_open_returns_eopnotsupp_with_wait_yield(void **state) { skip(); }
+void test_efa_cntr_open_uses_hw_cntr(void **state) { skip(); }
+void test_efa_hw_cntr_open_use_hw_cntr_disabled(void **state) { skip(); }
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */
