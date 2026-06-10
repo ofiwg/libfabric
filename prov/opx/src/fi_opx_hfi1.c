@@ -3301,21 +3301,48 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	/* Most modern GPUs have support for Unified Virtual Addressing (UVA).
 	   This allows us to use generic cudaMemcpy for DtoH and DtoD */
 	OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_COPY, 0, 0);
-	union opx_hmem_event *event = NULL;
+	void	*event		   = NULL;
+	uint64_t rocr_async_device = 0;
 	if (!is_hmem) {
 		ret = ofi_copy_from_hmem(ipc_info->iface, ipc_info->device, context->buf, device_ptr, xfer_len);
 		if (ret) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FATAL ERROR, cudaMemcpy with IPC handle failed. Abort\n");
+				"FATAL ERROR, IPC copy from HMEM failed: ret=%d iface=%lu device=%lu len=%lu. Abort\n",
+				ret, (unsigned long) ipc_info->iface, (unsigned long) ipc_info->device,
+				(unsigned long) xfer_len);
 			abort();
 		}
 	} else {
 		if (ipc_info->iface == FI_HMEM_CUDA) {
 			opx_hmem_memcpy_async(FI_HMEM_CUDA, ipc_info->device, context->buf, device_ptr, xfer_len,
-					      opx_ep->domain->hmem_domain, &event, OPX_HMEM_MEMCPY_ASYNC_DTOD);
+					      opx_ep->domain->hmem_domain, (union opx_hmem_event **) &event,
+					      OPX_HMEM_MEMCPY_ASYNC_DTOD);
 		} else if (ipc_info->iface == FI_HMEM_ROCR) {
-			opx_hmem_memcpy_async(FI_HMEM_ROCR, ipc_info->device, context->buf, device_ptr, xfer_len,
-					      opx_ep->domain->hmem_domain, &event, OPX_HMEM_MEMCPY_ASYNC_DTOD);
+			struct iovec dst_iov = {.iov_base = context->buf, .iov_len = xfer_len};
+			ret		     = ofi_create_async_copy_event(FI_HMEM_ROCR, ipc_info->device, &event);
+			if (!ret) {
+				ssize_t cret = ofi_async_copy_to_hmem_iov(FI_HMEM_ROCR, ipc_info->device, &dst_iov, 1,
+									  0, device_ptr, xfer_len, event);
+				ret	     = (cret < 0) ? (int) cret : 0;
+			}
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"ROCR async IPC copy enqueue failed, falling back to synchronous copy: ret=%d device=%lu len=%lu\n",
+					ret, (unsigned long) ipc_info->device, (unsigned long) xfer_len);
+				/* ROCR async backend frees the event on enqueue failure */
+				event = NULL;
+				ret   = ofi_copy_to_hmem(FI_HMEM_ROCR, ipc_info->device, context->buf, device_ptr,
+							 xfer_len);
+				if (ret) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"FATAL ERROR, ROCR IPC synchronous fallback failed: ret=%d device=%lu len=%lu. Abort\n",
+						ret, (unsigned long) ipc_info->device, (unsigned long) xfer_len);
+					abort();
+				}
+			} else {
+				rocr_async_device     = ipc_info->device;
+				context->byte_counter = xfer_len;
+			}
 		} else {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"FATAL ERROR, memcpy with IPC handle unexpected iface=%lu. Abort\n", ipc_info->iface);
@@ -3346,7 +3373,8 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 	params->niov			    = niov;
 	params->context			    = context;
 	params->cache_entry		    = entry;
-	params->hmem_event		    = event;
+	params->event			    = event;
+	params->rocr_async_device	    = rocr_async_device;
 
 	params->tx_index = FI_OPX_HFI1_PACKET_TX_INDEX(hdr);
 

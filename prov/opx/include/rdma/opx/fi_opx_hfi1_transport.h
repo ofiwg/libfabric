@@ -523,14 +523,19 @@ struct opx_hfi1_rx_ipc_rts_params {
 	uint64_t		niov;
 
 	/* == CACHE LINE 1 == */
-	uint64_t	      lrh_dlid;
-	uint32_t	      u32_extended_rx;
-	uint16_t	      origin_rx;
-	uint8_t		      target_hfi_unit;
-	uint8_t		      tx_index;
-	struct opx_context   *context;
-	struct ofi_mr_entry  *cache_entry;
-	union opx_hmem_event *hmem_event;
+	uint64_t	     lrh_dlid;
+	uint32_t	     u32_extended_rx;
+	uint16_t	     origin_rx;
+	uint8_t		     target_hfi_unit;
+	uint8_t		     tx_index;
+	struct opx_context  *context;
+	struct ofi_mr_entry *cache_entry;
+	union {
+		void		      *event;
+		union opx_hmem_event  *hmem_event;
+		ofi_hmem_async_event_t rocr_async_event;
+	};
+	uint64_t rocr_async_device;
 
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi1_rx_ipc_rts_params, lrh_dlid) == FI_OPX_CACHE_LINE_SIZE * 1,
