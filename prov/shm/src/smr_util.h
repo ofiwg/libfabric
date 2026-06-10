@@ -187,6 +187,7 @@ static_assert(sizeof(struct smr_cmd) == SMR_CMD_SIZE,
 #define SMR_INJECT_SIZE		4096
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
 #define SMR_RMA_FAST_SIZE	16384
+#define SMR_MAX_GDRCOPY_SIZE    3072
 #define SMR_SAR_SIZE		32768
 
 #define SMR_DIR		"/dev/shm/"
