@@ -462,6 +462,36 @@ static int rocr_get_device_from_hsa_agent(hsa_agent_t agent, uint64_t *device)
 	return -FI_ENODEV;
 }
 
+static bool rocr_hsa_pointer_is_imported(uint32_t type)
+{
+	return type == HSA_EXT_POINTER_TYPE_IPC ||
+	       type == HSA_EXT_POINTER_TYPE_GRAPHICS;
+}
+
+static int rocr_allow_access_if_needed(void *ptr, hsa_agent_t owner,
+				       hsa_agent_t selected_agent,
+				       uint32_t type)
+{
+	hsa_status_t hsa_ret;
+
+	if (rocr_hsa_pointer_is_imported(type) ||
+	    !rocr_hsa_agent_is_valid(owner) ||
+	    !rocr_hsa_agent_is_valid(selected_agent) ||
+	    rocr_hsa_agents_equal(owner, selected_agent))
+		return FI_SUCCESS;
+
+	hsa_ret = ofi_hsa_amd_agents_allow_access(1, &selected_agent, NULL, ptr);
+	if (hsa_ret == HSA_STATUS_SUCCESS)
+		return FI_SUCCESS;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to allow ROCR async copy agent access: ptr=%p owner=0x%lx selected=0x%lx type=%u: %s\n",
+		ptr, owner.handle, selected_agent.handle, type,
+		ofi_hsa_status_to_string(hsa_ret));
+
+	return -FI_EINVAL;
+}
+
 static int rocr_memcpy(void *dest, const void *src, size_t size)
 {
 	hsa_status_t hsa_ret;
@@ -477,8 +507,10 @@ static int rocr_memcpy(void *dest, const void *src, size_t size)
 	return -FI_EIO;
 }
 
-static int rocr_host_memory_ptr(void *host_ptr, void **ptr, hsa_agent_t *agent,
-				size_t *size, uint64_t *offset, bool *system)
+static int rocr_host_memory_ptr(void *host_ptr, void **ptr,
+				hsa_agent_t *agent, size_t *size,
+				uint64_t *offset, bool *system,
+				uint32_t *type)
 {
 	hsa_amd_pointer_info_t info = {
 		.size = sizeof(info),
@@ -503,6 +535,9 @@ static int rocr_host_memory_ptr(void *host_ptr, void **ptr, hsa_agent_t *agent,
 
 	if (size)
 		*size = info.sizeInBytes;
+
+	if (type)
+		*type = info.type;
 
 	if (info.type != HSA_EXT_POINTER_TYPE_LOCKED) {
 		if (info.type == HSA_EXT_POINTER_TYPE_IPC ||
@@ -533,7 +568,7 @@ int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
 	void *dest_memcpy_ptr;
 
 	ret = rocr_host_memory_ptr(dest, &dest_memcpy_ptr, NULL, NULL, NULL,
-				   NULL);
+				   NULL, NULL);
 
 	if (ret != FI_SUCCESS)
 		return ret;
@@ -549,7 +584,7 @@ int rocr_copy_to_dev(uint64_t device, void *dest, const void *src, size_t size)
 	void *src_memcpy_ptr;
 
 	ret = rocr_host_memory_ptr((void *) src, &src_memcpy_ptr, NULL, NULL,
-				   NULL, NULL);
+				   NULL, NULL, NULL);
 	if (ret != FI_SUCCESS)
 		return ret;
 
@@ -594,6 +629,8 @@ static int rocr_dev_async_copy(void *dst, const void *src, size_t size,
 {
 	void *src_hsa_ptr;
 	void *dst_hsa_ptr;
+	void *src_copy_ptr;
+	void *dst_copy_ptr;
 	int ret;
 	hsa_status_t hsa_ret;
 	struct ofi_hsa_stream *s;
@@ -604,19 +641,21 @@ static int rocr_dev_async_copy(void *dst, const void *src, size_t size,
 	hsa_agent_t agents[2];
 	bool src_local, dst_local;
 	size_t src_offset = 0, dst_offset = 0;
+	uint32_t src_type = HSA_EXT_POINTER_TYPE_UNKNOWN;
+	uint32_t dst_type = HSA_EXT_POINTER_TYPE_UNKNOWN;
 
 	if (!event)
 		return -FI_EINVAL;
 
 	s = event;
 
-	ret = rocr_host_memory_ptr((void *) src, &src_hsa_ptr, &agents[0], NULL,
-				   &src_offset, &src_local);
+	ret = rocr_host_memory_ptr((void *)src, &src_hsa_ptr, &agents[0],
+				   NULL, &src_offset, &src_local, &src_type);
 	if (ret != FI_SUCCESS)
 		return ret;
 
 	ret = rocr_host_memory_ptr(dst, &dst_hsa_ptr, &agents[1], NULL,
-				   &dst_offset, &dst_local);
+				   &dst_offset, &dst_local, &dst_type);
 	if (ret != FI_SUCCESS)
 		return ret;
 
@@ -631,17 +670,43 @@ static int rocr_dev_async_copy(void *dst, const void *src, size_t size,
 
 	/* device to device */
 	if (!src_local && !dst_local) {
-		hsa_ret = ofi_hsa_amd_agents_allow_access(
-			rocr_agents.num_gpu, rocr_agents.gpu_agents, NULL,
-			dst_hsa_ptr);
-		if (hsa_ret != HSA_STATUS_SUCCESS) {
+		hsa_agent_t src_owner = agents[0];
+		hsa_agent_t dst_owner = agents[1];
+		bool src_agent_valid = rocr_hsa_agent_is_valid(agents[0]);
+		bool dst_agent_valid = rocr_hsa_agent_is_valid(agents[1]);
+
+		if (!src_agent_valid && !dst_agent_valid) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
-				"Failed to perform hsa_amd_agents_allow_access "
-				"%s\n",
-				ofi_hsa_status_to_string(hsa_ret));
+				"Unable to perform ROCR device async copy; source and destination agents are invalid\n");
 			ret = -FI_EINVAL;
 			goto fail;
 		}
+
+		/* Imported ROCr mappings are attached and access-granted to local
+		 * GPUs before copy setup.  Use the non-imported side's agent so a
+		 * local GPU pulls from the import instead of a peer GPU writing
+		 * receiver-local OpenMP memory.
+		 */
+		if (rocr_hsa_pointer_is_imported(src_type) && dst_agent_valid) {
+			agents[0] = agents[1];
+		} else if (rocr_hsa_pointer_is_imported(dst_type) && src_agent_valid) {
+			agents[1] = agents[0];
+		} else if (!src_agent_valid) {
+			agents[0] = agents[1];
+		} else if (!dst_agent_valid) {
+			agents[1] = agents[0];
+		}
+
+		ret = rocr_allow_access_if_needed(src_hsa_ptr, src_owner,
+							 agents[0], src_type);
+		if (ret != FI_SUCCESS)
+			goto fail;
+
+		ret = rocr_allow_access_if_needed(dst_hsa_ptr, dst_owner,
+							 agents[1], dst_type);
+		if (ret != FI_SUCCESS)
+			goto fail;
+
 		ipc_signal->addr = NULL;
 		/* device to host */
 	} else if (!src_local && dst_local) {
@@ -666,12 +731,14 @@ static int rocr_dev_async_copy(void *dst, const void *src, size_t size,
 		agents[1] = agents[0];
 	}
 
+	dst_copy_ptr = (void *)((uintptr_t)dst_hsa_ptr + dst_offset);
+	src_copy_ptr = (void *)((uintptr_t)src_hsa_ptr + src_offset);
+
 	ofi_hsa_signal_store_screlease(ipc_signal->sig, 1);
 
-	hsa_ret = ofi_hsa_amd_memory_async_copy(
-		(void *) ((uintptr_t) dst_hsa_ptr + dst_offset), agents[1],
-		(void *) ((uintptr_t) src_hsa_ptr + src_offset), agents[0],
-		size, 0, NULL, ipc_signal->sig);
+	hsa_ret = ofi_hsa_amd_memory_async_copy(dst_copy_ptr, agents[1],
+						src_copy_ptr, agents[0],
+						size, 0, NULL, ipc_signal->sig);
 
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -789,7 +856,8 @@ int rocr_get_ipc_handle_size(size_t *size)
 
 int rocr_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
 {
-	return rocr_host_memory_ptr((void *) ptr, base, NULL, size, NULL, NULL);
+	return rocr_host_memory_ptr((void *) ptr, base, NULL, size, NULL, NULL,
+				   NULL);
 }
 
 int rocr_get_handle(void *dev_buf, size_t size, void **handle)
@@ -813,14 +881,29 @@ int rocr_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr)
 {
 	hsa_status_t hsa_ret;
 
-	hsa_ret = hsa_ops.hsa_amd_ipc_memory_attach(
-		(hsa_amd_ipc_memory_t *) handle, len, 0, NULL, ipc_ptr);
+	hsa_ret = hsa_ops.hsa_amd_ipc_memory_attach((hsa_amd_ipc_memory_t *)handle,
+					len, (uint32_t) rocr_agents.num_gpu,
+					rocr_agents.num_gpu ? rocr_agents.gpu_agents : NULL,
+					ipc_ptr);
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform hsa_amd_ipc_memory_attach: %s\n",
+			ofi_hsa_status_to_string(hsa_ret));
+		return -FI_EINVAL;
+	}
+
+	hsa_ret = ofi_hsa_amd_agents_allow_access(rocr_agents.num_gpu,
+						    rocr_agents.gpu_agents, NULL,
+						    *ipc_ptr);
 	if (hsa_ret == HSA_STATUS_SUCCESS)
 		return FI_SUCCESS;
 
 	FI_WARN(&core_prov, FI_LOG_CORE,
-		"Failed to perform hsa_amd_ipc_memory_attach: %s\n",
+		"Failed to perform hsa_amd_agents_allow_access: %s\n",
 		ofi_hsa_status_to_string(hsa_ret));
+
+	(void) hsa_ops.hsa_amd_ipc_memory_detach(*ipc_ptr);
+	*ipc_ptr = NULL;
 
 	return -FI_EINVAL;
 }
@@ -1195,6 +1278,7 @@ int rocr_hmem_cleanup(void)
 
 	return FI_SUCCESS;
 }
+
 
 int rocr_host_register(void *ptr, size_t size)
 {
