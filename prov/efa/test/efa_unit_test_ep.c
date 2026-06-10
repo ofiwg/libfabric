@@ -13,7 +13,7 @@
  * @param[in]	raw_id		The host id string that is written in the host id file.
  * @param[in]	expect_id	Expected parsed host id integer
  */
-void test_efa_rdm_ep_host_id(struct efa_resource **state, bool file_exists, char *raw_id, uint64_t expect_id)
+void test_efa_rdm_ep_host_id(void **state, bool file_exists, char *raw_id, uint64_t expect_id)
 {
 	int fd = -1;
 	ssize_t written_len;
@@ -54,7 +54,7 @@ void test_efa_rdm_ep_host_id(struct efa_resource **state, bool file_exists, char
 /**
  * @brief Verify the EFA RDM endpoint ignores non-existent host id file
  */
-void test_efa_rdm_ep_ignore_missing_host_id_file(struct efa_resource **state)
+void test_efa_rdm_ep_ignore_missing_host_id_file(void **state)
 {
 	test_efa_rdm_ep_host_id(state, false, NULL, 0);
 }
@@ -62,7 +62,7 @@ void test_efa_rdm_ep_ignore_missing_host_id_file(struct efa_resource **state)
 /**
  * @brief Verify the EFA RDM endpoint correctly parses a valid host id string
  */
-void test_efa_rdm_ep_has_valid_host_id(struct efa_resource **state)
+void test_efa_rdm_ep_has_valid_host_id(void **state)
 {
 	test_efa_rdm_ep_host_id(state, true, "i-01234567812345678", 0x1234567812345678);
 }
@@ -70,7 +70,7 @@ void test_efa_rdm_ep_has_valid_host_id(struct efa_resource **state)
 /**
  * @brief Verify the EFA RDM endpoint ignores a short (<16 char) host id string
  */
-void test_efa_rdm_ep_ignore_short_host_id(struct efa_resource **state)
+void test_efa_rdm_ep_ignore_short_host_id(void **state)
 {
 	test_efa_rdm_ep_host_id(state, true, "i-012345678", 0);
 }
@@ -78,7 +78,7 @@ void test_efa_rdm_ep_ignore_short_host_id(struct efa_resource **state)
 /**
  * @brief Verify the EFA RDM endpoint ignores a malformatted host id string
  */
-void test_efa_rdm_ep_ignore_non_hex_host_id(struct efa_resource **state)
+void test_efa_rdm_ep_ignore_non_hex_host_id(void **state)
 {
 	test_efa_rdm_ep_host_id(state, true, "i-0abcdefghabcdefgh", 0);
 }
@@ -96,7 +96,7 @@ void test_efa_rdm_ep_ignore_non_hex_host_id(struct efa_resource **state)
  * @param[in]	peer_host_id	The remote peer host id
  * @param[in]	include_connid	Toggle whether connid should be included in handshake packet
  */
-void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uint64_t local_host_id, uint64_t peer_host_id, bool include_connid)
+void test_efa_rdm_ep_handshake_exchange_host_id(void **state, uint64_t local_host_id, uint64_t peer_host_id, bool include_connid)
 {
 	fi_addr_t peer_addr = 0;
 	int cq_read_recv_ret, cq_read_send_ret;
@@ -229,27 +229,27 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	resource->ep = NULL;
 }
 #else
-void test_efa_rdm_ep_handshake_exchange_host_id() {
+void test_efa_rdm_ep_handshake_exchange_host_id(void **state, uint64_t local_host_id, uint64_t peer_host_id, bool include_connid) {
 	skip();
 }
 #endif
 
-void test_efa_rdm_ep_handshake_receive_and_send_valid_host_ids_with_connid(struct efa_resource **state)
+void test_efa_rdm_ep_handshake_receive_and_send_valid_host_ids_with_connid(void **state)
 {
 	test_efa_rdm_ep_handshake_exchange_host_id(state, 0x1234567812345678, 0x8765432187654321, true);
 }
 
-void test_efa_rdm_ep_handshake_receive_and_send_valid_host_ids_without_connid(struct efa_resource **state)
+void test_efa_rdm_ep_handshake_receive_and_send_valid_host_ids_without_connid(void **state)
 {
 	test_efa_rdm_ep_handshake_exchange_host_id(state, 0x1234567812345678, 0x8765432187654321, false);
 }
 
-void test_efa_rdm_ep_handshake_receive_valid_peer_host_id_and_do_not_send_local_host_id(struct efa_resource **state)
+void test_efa_rdm_ep_handshake_receive_valid_peer_host_id_and_do_not_send_local_host_id(void **state)
 {
 	test_efa_rdm_ep_handshake_exchange_host_id(state, 0x0, 0x8765432187654321, true);
 }
 
-void test_efa_rdm_ep_handshake_receive_without_peer_host_id_and_do_not_send_local_host_id(struct efa_resource **state)
+void test_efa_rdm_ep_handshake_receive_without_peer_host_id_and_do_not_send_local_host_id(void **state)
 {
 	test_efa_rdm_ep_handshake_exchange_host_id(state, 0x0, 0x0, true);
 }
@@ -259,7 +259,7 @@ void test_efa_rdm_ep_handshake_receive_without_peer_host_id_and_do_not_send_loca
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_tx_pkt_pool_flags(struct efa_resource **state) {
+void test_efa_rdm_ep_tx_pkt_pool_flags(void **state) {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
 	uint64_t flags = OFI_BUFPOOL_NONSHARED | OFI_BUFPOOL_NO_TRACK;
@@ -280,7 +280,7 @@ void test_efa_rdm_ep_tx_pkt_pool_flags(struct efa_resource **state) {
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_rx_pkt_pool_flags(struct efa_resource **state) {
+void test_efa_rdm_ep_rx_pkt_pool_flags(void **state) {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
 	uint64_t flags = OFI_BUFPOOL_NONSHARED | OFI_BUFPOOL_NO_TRACK;
@@ -302,7 +302,7 @@ void test_efa_rdm_ep_rx_pkt_pool_flags(struct efa_resource **state) {
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
+void test_efa_rdm_ep_pkt_pool_page_alignment(void **state)
 {
 	int ret;
 	struct efa_rdm_pke *pkt_entry;
@@ -337,7 +337,7 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_read_copy_pkt_pool_128_alignment(struct efa_resource **state)
+void test_efa_rdm_read_copy_pkt_pool_128_alignment(void **state)
 {
 	int ret;
 	struct efa_rdm_pke *pkt_entry;
@@ -375,7 +375,7 @@ void test_efa_rdm_read_copy_pkt_pool_128_alignment(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **state)
+void test_efa_rdm_pke_get_available_copy_methods_align128(void **state)
 {
 	int ret;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -417,7 +417,7 @@ void test_efa_rdm_pke_get_available_copy_methods_align128(struct efa_resource **
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_dc_atomic_queue_before_handshake(struct efa_resource **state)
+void test_efa_rdm_ep_dc_atomic_queue_before_handshake(void **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
@@ -484,7 +484,7 @@ void test_efa_rdm_ep_dc_atomic_queue_before_handshake(struct efa_resource **stat
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_dc_send_queue_before_handshake(struct efa_resource **state)
+void test_efa_rdm_ep_dc_send_queue_before_handshake(void **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
@@ -546,7 +546,7 @@ void test_efa_rdm_ep_dc_send_queue_before_handshake(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_dc_send_queue_limit_before_handshake(struct efa_resource **state)
+void test_efa_rdm_ep_dc_send_queue_limit_before_handshake(void **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
@@ -606,7 +606,7 @@ void test_efa_rdm_ep_dc_send_queue_limit_before_handshake(struct efa_resource **
  * @param[in] state	struct efa_resource that is managed by the framework
  * @param[in] op op code
  */
-void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int op)
+void test_efa_rdm_ep_rma_queue_before_handshake(void **state, int op)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -680,12 +680,12 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 	assert_true(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
 }
 
-void test_efa_rdm_ep_write_queue_before_handshake(struct efa_resource **state)
+void test_efa_rdm_ep_write_queue_before_handshake(void **state)
 {
 	test_efa_rdm_ep_rma_queue_before_handshake(state, ofi_op_write);
 }
 
-void test_efa_rdm_ep_read_queue_before_handshake(struct efa_resource **state)
+void test_efa_rdm_ep_read_queue_before_handshake(void **state)
 {
 	test_efa_rdm_ep_rma_queue_before_handshake(state, ofi_op_read_req);
 }
@@ -696,7 +696,7 @@ void test_efa_rdm_ep_read_queue_before_handshake(struct efa_resource **state)
  *
  * @param state efa_resource
  */
-void test_efa_rdm_ep_trigger_handshake(struct efa_resource **state)
+void test_efa_rdm_ep_trigger_handshake(void **state)
 {
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -755,7 +755,7 @@ void test_efa_rdm_ep_trigger_handshake(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_send_with_shm_no_copy(struct efa_resource **state)
+void test_efa_rdm_ep_send_with_shm_no_copy(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_ep_addr raw_addr = {0};
@@ -792,7 +792,7 @@ void test_efa_rdm_ep_send_with_shm_no_copy(struct efa_resource **state)
  *
  * @param[in] state	struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_rma_without_caps(struct efa_resource **state)
+void test_efa_rdm_ep_rma_without_caps(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -843,7 +843,7 @@ void test_efa_rdm_ep_rma_without_caps(struct efa_resource **state)
  *
  * @param[in] state	struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_atomic_without_caps(struct efa_resource **state)
+void test_efa_rdm_ep_atomic_without_caps(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -894,7 +894,7 @@ void test_efa_rdm_ep_atomic_without_caps(struct efa_resource **state)
 /*
  * Check fi_getopt return with different input opt_len
  */
-void test_efa_rdm_ep_getopt(struct efa_resource **state, size_t opt_len, int expected_return)
+void test_efa_rdm_ep_getopt(void **state, size_t opt_len, int expected_return)
 {
 	struct efa_resource *resource = *state;
 	size_t opt_val;
@@ -921,18 +921,18 @@ void test_efa_rdm_ep_getopt(struct efa_resource **state, size_t opt_len, int exp
 }
 
 /* undersized optlen should return -FI_ETOOSMALL */
-void test_efa_rdm_ep_getopt_undersized_optlen(struct efa_resource **state)
+void test_efa_rdm_ep_getopt_undersized_optlen(void **state)
 {
 	test_efa_rdm_ep_getopt(state, 0, -FI_ETOOSMALL);
 }
 
 /* oversized optlen should return FI_SUCCESS */
-void test_efa_rdm_ep_getopt_oversized_optlen(struct efa_resource **state)
+void test_efa_rdm_ep_getopt_oversized_optlen(void **state)
 {
 	test_efa_rdm_ep_getopt(state, 16, FI_SUCCESS);
 }
 
-void test_efa_rdm_ep_close_shm_resource_happy(struct efa_resource **state)
+void test_efa_rdm_ep_close_shm_resource_happy(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
@@ -950,7 +950,7 @@ void test_efa_rdm_ep_close_shm_resource_happy(struct efa_resource **state)
 	assert_null(ep->shm_ep);
 }
 
-void test_efa_rdm_ep_close_shm_resource_unhappy(struct efa_resource **state)
+void test_efa_rdm_ep_close_shm_resource_unhappy(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
@@ -986,7 +986,7 @@ void test_efa_rdm_ep_close_shm_resource_unhappy(struct efa_resource **state)
 	free(buf);
 }
 
-void test_efa_rdm_ep_setopt_shared_memory_permitted(struct efa_resource **state)
+void test_efa_rdm_ep_setopt_shared_memory_permitted(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
@@ -1000,7 +1000,7 @@ void test_efa_rdm_ep_setopt_shared_memory_permitted(struct efa_resource **state)
 	assert_null(ep->shm_ep);
 }
 
-void test_efa_rdm_ep_setopt_homogeneous_peers(struct efa_resource **state)
+void test_efa_rdm_ep_setopt_homogeneous_peers(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
@@ -1025,7 +1025,7 @@ void test_efa_rdm_ep_setopt_homogeneous_peers(struct efa_resource **state)
  * @param expected_status expected return status of fi_enable
  * @param optval the optval passed to fi_setopt
  */
-void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(struct efa_resource **state, int expected_status, bool optval)
+void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(void **state, int expected_status, bool optval)
 {
 	struct efa_resource *resource = *state;
 
@@ -1043,7 +1043,7 @@ void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(struct efa_reso
  *
  * @param state struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_good(struct efa_resource **state)
+void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_good(void **state)
 {
 	/* mock ibv_query_qp_data_in_order to return required capability */
 	g_efa_unit_test_mocks.ibv_query_qp_data_in_order = &efa_mock_ibv_query_qp_data_in_order_return_in_order_aligned_128_bytes;
@@ -1055,7 +1055,7 @@ void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_good(struct efa_resour
  *
  * @param state struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(struct efa_resource **state)
+void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(void **state)
 {
 	/* mock ibv_query_qp_data_in_order to return zero capability */
 	g_efa_unit_test_mocks.ibv_query_qp_data_in_order = &efa_mock_ibv_query_qp_data_in_order_return_0;
@@ -1064,12 +1064,12 @@ void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(struct efa_resourc
 
 #else
 
-void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_good(struct efa_resource **state)
+void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_good(void **state)
 {
 	test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(state, FI_SUCCESS, false);
 }
 
-void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(struct efa_resource **state)
+void test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_bad(void **state)
 {
 	test_efa_rdm_ep_enable_qp_in_order_aligned_128_bytes_common(state, -FI_EOPNOTSUPP, true);
 }
@@ -1152,7 +1152,7 @@ static void test_efa_rdm_ep_use_zcpy_rx_impl(struct efa_resource *resource,
  * 3. app's max msg size is smaller than mtu_size - prefix_size
  * 4. app doesn't use FI_DIRECTED_RECV, FI_TAGGED, FI_ATOMIC capability
  */
-void test_efa_rdm_ep_user_zcpy_rx_disabled(struct efa_resource **state)
+void test_efa_rdm_ep_user_zcpy_rx_disabled(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -1168,7 +1168,7 @@ void test_efa_rdm_ep_user_zcpy_rx_disabled(struct efa_resource **state)
 /**
  * @brief Verify zcpy_rx is disabled if CUDA P2P is explictly disabled
  */
-void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_disabled(struct efa_resource **state)
+void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_disabled(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -1184,7 +1184,7 @@ void test_efa_rdm_ep_user_disable_p2p_zcpy_rx_disabled(struct efa_resource **sta
 /**
  * @brief When sas is requested for either tx or rx. zcpy will be disabled
  */
-void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state)
+void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -1202,7 +1202,7 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_sas(struct efa_resource **state
 /**
  * @brief Verify zcpy_rx is disabled if CUDA P2P is enabled but not supported
  */
-void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy(struct efa_resource **state)
+void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -1218,7 +1218,7 @@ void test_efa_rdm_ep_user_p2p_not_supported_zcpy_rx_happy(struct efa_resource **
 /**
  * @brief Verify zcpy_rx is disabled if FI_MR_LOCAL is not set
  */
-void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_no_mr_local(struct efa_resource **state)
+void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_no_mr_local(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -1231,7 +1231,7 @@ void test_efa_rdm_ep_user_zcpy_rx_unhappy_due_to_no_mr_local(struct efa_resource
 	test_efa_rdm_ep_use_zcpy_rx_impl(resource, false, true, false);
 }
 
-void test_efa_rdm_ep_close_discard_posted_recv(struct efa_resource **state)
+void test_efa_rdm_ep_close_discard_posted_recv(void **state)
 {
 	struct efa_resource *resource = *state;
 	char buf[16];
@@ -1250,7 +1250,7 @@ void test_efa_rdm_ep_close_discard_posted_recv(struct efa_resource **state)
 	resource->ep = NULL;
 }
 
-void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
+void test_efa_rdm_ep_zcpy_recv_cancel(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_context cancel_context = {0};
@@ -1283,7 +1283,7 @@ void test_efa_rdm_ep_zcpy_recv_cancel(struct efa_resource **state)
  * @brief When user posts more than rx size fi_recv, we should return eagain and make sure
  * there is no rx entry leaked
  */
-void test_efa_rdm_ep_zcpy_recv_eagain(struct efa_resource **state)
+void test_efa_rdm_ep_zcpy_recv_eagain(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff recv_buff;
@@ -1325,7 +1325,7 @@ void test_efa_rdm_ep_zcpy_recv_eagain(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_resource **state)
+void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(void **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
@@ -1381,7 +1381,7 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(struct efa_res
 }
 
 static
-void test_efa_rdm_ep_rx_refill_impl(struct efa_resource **state, int threshold, int rx_size)
+void test_efa_rdm_ep_rx_refill_impl(void **state, int threshold, int rx_size)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -1450,12 +1450,12 @@ void test_efa_rdm_ep_rx_refill_impl(struct efa_resource **state, int threshold, 
 	efa_env.internal_rx_refill_threshold = threshold_orig;
 }
 
-void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size(struct efa_resource **state)
+void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size(void **state)
 {
 	test_efa_rdm_ep_rx_refill_impl(state, 8, 64);
 }
 
-void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size(struct efa_resource **state)
+void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size(void **state)
 {
 	test_efa_rdm_ep_rx_refill_impl(state, 128, 64);
 }
@@ -1468,7 +1468,7 @@ void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size(struct efa_resource
  * @param[in]	state			struct efa_resource that is managed by the framework
  * @param[in]	is_supported	support status
  */
-void test_efa_rdm_ep_support_unsolicited_write_recv(struct efa_resource **state)
+void test_efa_rdm_ep_support_unsolicited_write_recv(void **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_cq *efa_cq;
@@ -1488,7 +1488,7 @@ void test_efa_rdm_ep_support_unsolicited_write_recv(struct efa_resource **state)
  *
  * @param state
  */
-void test_efa_rdm_ep_default_sizes(struct efa_resource **state)
+void test_efa_rdm_ep_default_sizes(void **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
@@ -1517,7 +1517,7 @@ void test_efa_rdm_ep_default_sizes(struct efa_resource **state)
  * have the same logic)
  * @param state
  */
-void test_efa_ep_open(struct efa_resource **state)
+void test_efa_ep_open(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_ep;
@@ -1545,7 +1545,7 @@ void test_efa_ep_open(struct efa_resource **state)
  * It should return -FI_ENOSYS as device doesn't support it;
  * @param state
  */
-void test_efa_ep_cancel(struct efa_resource **state)
+void test_efa_ep_cancel(void **state)
 {
 	struct efa_resource *resource = *state;
 	int ret;
@@ -1561,7 +1561,7 @@ void test_efa_ep_cancel(struct efa_resource **state)
  *
  * @param state
  */
-void test_efa_ep_getopt(struct efa_resource **state)
+void test_efa_ep_getopt(void **state)
 {
 	struct efa_resource *resource = *state;
 	int optval_int;
@@ -1609,7 +1609,7 @@ void test_efa_ep_getopt(struct efa_resource **state)
  * cannot be set as false
  * @param state
  */
-void test_efa_ep_setopt_use_device_rdma(struct efa_resource **state)
+void test_efa_ep_setopt_use_device_rdma(void **state)
 {
 	struct efa_resource *resource = *state;
 	bool optval;
@@ -1632,7 +1632,7 @@ void test_efa_ep_setopt_use_device_rdma(struct efa_resource **state)
  * FI_OPT_FI_HMEM_P2P cannot be set as FI_HMEM_P2P_DISABLED
  * @param state
  */
-void test_efa_ep_setopt_hmem_p2p(struct efa_resource **state)
+void test_efa_ep_setopt_hmem_p2p(void **state)
 {
 	struct efa_resource *resource = *state;
 	int optval;
@@ -1659,7 +1659,7 @@ void test_efa_ep_setopt_hmem_p2p(struct efa_resource **state)
  * @brief Test the fi_setopt API for efa_ep with FI_OPT_EFA_RNR_RETRY
  * @param state
  */
-void test_efa_ep_setopt_rnr_retry(struct efa_resource **state)
+void test_efa_ep_setopt_rnr_retry(void **state)
 {
 	struct efa_resource *resource = *state;
 	size_t optval;
@@ -1686,7 +1686,7 @@ void test_efa_ep_setopt_rnr_retry(struct efa_resource **state)
  * @brief Test the fi_setopt API for efa_ep with FI_OPT_*_SIZE
  * @param state
  */
-void test_efa_ep_setopt_sizes(struct efa_resource **state)
+void test_efa_ep_setopt_sizes(void **state)
 {
 	struct efa_resource *resource = *state;
 	size_t optval;
@@ -1729,7 +1729,7 @@ void test_efa_ep_setopt_sizes(struct efa_resource **state)
  *
  * @param state
  */
-void test_efa_ep_bind_and_enable(struct efa_resource **state)
+void test_efa_ep_bind_and_enable(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_ep;
@@ -1754,7 +1754,7 @@ void test_efa_ep_bind_and_enable(struct efa_resource **state)
  * @param state unit test resources
  */
 static
-void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_impl(struct efa_resource **state, bool data_path_direct_enabled, char *fabric_name)
+void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_impl(void **state, bool data_path_direct_enabled, char *fabric_name)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1793,22 +1793,22 @@ void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_impl(struct efa_r
 	efa_cq->ibv_cq.data_path_direct_enabled = data_path_direct_enabled_orig;
 }
 
-void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_happy(struct efa_resource **state)
+void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_happy(void **state)
 {
 	test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_impl(state, true, EFA_DIRECT_FABRIC_NAME);
 }
 
-void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(struct efa_resource **state)
+void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(void **state)
 {
 	test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_impl(state, false, EFA_DIRECT_FABRIC_NAME);
 }
 
-void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_happy(struct efa_resource **state)
+void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_happy(void **state)
 {
 	test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_impl(state, true, EFA_FABRIC_NAME);
 }
 
-void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(struct efa_resource **state)
+void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(void **state)
 {
 	test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_impl(state, false, EFA_FABRIC_NAME);
 }
@@ -1816,23 +1816,23 @@ void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(struc
 #else
 
 /* No value to test this, already covered by test_efa_rdm_ep_data_path_direct_ops */
-void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_happy(struct efa_resource **state)
+void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_happy(void **state)
 {
 	skip();
 }
 
 /* No value to test this, already covered by test_efa_rdm_ep_data_path_direct_ops */
-void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(struct efa_resource **state)
+void test_efa_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(void **state)
 {
 	skip();
 }
 
-void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_happy(struct efa_resource **state)
+void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_happy(void **state)
 {
 	skip();
 }
 
-void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(struct efa_resource **state)
+void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(void **state)
 {
 	skip();
 }
@@ -1844,7 +1844,7 @@ void test_efa_rdm_ep_data_path_direct_equal_to_cq_data_path_direct_unhappy(struc
  *
  * @param[in] state struct efa_resource managed by the framework
  */
-void test_efa_ep_lock_type_no_op(struct efa_resource **state)
+void test_efa_ep_lock_type_no_op(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_base_ep;
@@ -1862,7 +1862,7 @@ void test_efa_ep_lock_type_no_op(struct efa_resource **state)
  *
  * @param[in] state struct efa_resource managed by the framework
  */
-void test_efa_ep_lock_type_mutex(struct efa_resource **state)
+void test_efa_ep_lock_type_mutex(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_base_ep;
@@ -1881,7 +1881,7 @@ void test_efa_ep_lock_type_mutex(struct efa_resource **state)
  *
  * @param[in] state struct efa_resource managed by the framework
  */
-void test_efa_rdm_ep_shm_ep_different_info(struct efa_resource **state)
+void test_efa_rdm_ep_shm_ep_different_info(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep1, *efa_rdm_ep2;
@@ -1923,7 +1923,7 @@ void test_efa_rdm_ep_shm_ep_different_info(struct efa_resource **state)
 /**
  * @brief Test that unsolicited write recv is disabled when FI_RX_CQ_DATA mode is set
  */
-void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data(struct efa_resource **state)
+void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_base_ep;
@@ -1946,7 +1946,7 @@ void test_efa_base_ep_disable_unsolicited_write_recv_with_rx_cq_data(struct efa_
 /**
  * @brief Test that unsolicited write recv is disabled when FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV is false
  */
-void test_efa_rdm_ep_setopt_cq_flow_control(struct efa_resource **state)
+void test_efa_rdm_ep_setopt_cq_flow_control(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
@@ -1969,7 +1969,7 @@ void test_efa_rdm_ep_setopt_cq_flow_control(struct efa_resource **state)
 /**
  * @brief Test disabling FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV will fail without FI_RX_CQ_DATA in efa direct
  */
-void test_efa_direct_ep_setopt_cq_flow_control_no_rx_cq_data(struct efa_resource **state)
+void test_efa_direct_ep_setopt_cq_flow_control_no_rx_cq_data(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_base_ep;
@@ -1987,7 +1987,7 @@ void test_efa_direct_ep_setopt_cq_flow_control_no_rx_cq_data(struct efa_resource
 /**
  * @brief Test setting FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV with FI_RX_CQ_DATA will disable unsolicited write recv
  */
-void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data(struct efa_resource **state)
+void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_base_ep;
@@ -2017,7 +2017,7 @@ void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data(struct efa_resour
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ep_enable_ah_alloc_failure(struct efa_resource **state)
+void test_efa_rdm_ep_enable_ah_alloc_failure(void **state)
 {
 	struct efa_resource *resource = *state;
 	int ret;
@@ -2038,7 +2038,7 @@ void test_efa_rdm_ep_enable_ah_alloc_failure(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ep_ibv_create_ah_failure(struct efa_resource **state)
+void test_efa_rdm_ep_ibv_create_ah_failure(void **state)
 {
 	struct efa_resource *resource = *state;
 	int ret;
@@ -2062,7 +2062,7 @@ void test_efa_rdm_ep_ibv_create_ah_failure(struct efa_resource **state)
  * are processed during the cq poll
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion(struct efa_resource **state)
+void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -2136,7 +2136,7 @@ void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion(struct
  *
  * @param[in] state struct efa_resource managed by the framework
  */
-void test_efa_rdm_ep_get_explicit_shm_fi_addr(struct efa_resource **state)
+void test_efa_rdm_ep_get_explicit_shm_fi_addr(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -2169,7 +2169,7 @@ void test_efa_rdm_ep_get_explicit_shm_fi_addr(struct efa_resource **state)
  *
  * @param[in] state struct efa_resource managed by the framework
  */
-void test_efa_rdm_ep_get_explicit_shm_fi_addr_no_shm(struct efa_resource **state)
+void test_efa_rdm_ep_get_explicit_shm_fi_addr_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -2254,7 +2254,7 @@ static void test_efa_base_ep_construct_ibv_qp_init_attr_ex_use_requested_limits(
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_direct_use_requested_limits(struct efa_resource **state)
+void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_direct_use_requested_limits(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -2266,7 +2266,7 @@ void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_direct_use_requested_lim
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_requested_limits(struct efa_resource **state)
+void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_requested_limits(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -2278,7 +2278,7 @@ void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_requested_limits(str
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_device_limits(struct efa_resource **state)
+void test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_device_limits(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *efa_base_ep;

@@ -36,7 +36,7 @@ static void test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
 	assert_int_equal(ret, 1);
 }
 
-void test_efa_rma_read(struct efa_resource **state)
+void test_efa_rma_read(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -60,7 +60,7 @@ void test_efa_rma_read(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_readv(struct efa_resource **state)
+void test_efa_rma_readv(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -87,7 +87,7 @@ void test_efa_rma_readv(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_readmsg(struct efa_resource **state)
+void test_efa_rma_readmsg(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -118,7 +118,7 @@ void test_efa_rma_readmsg(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_write(struct efa_resource **state)
+void test_efa_rma_write(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -142,7 +142,7 @@ void test_efa_rma_write(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_writev(struct efa_resource **state)
+void test_efa_rma_writev(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -169,7 +169,7 @@ void test_efa_rma_writev(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_writemsg(struct efa_resource **state)
+void test_efa_rma_writemsg(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -200,7 +200,7 @@ void test_efa_rma_writemsg(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_writedata(struct efa_resource **state)
+void test_efa_rma_writedata(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -225,7 +225,7 @@ void test_efa_rma_writedata(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_inject_write(struct efa_resource **state)
+void test_efa_rma_inject_write(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -244,7 +244,7 @@ void test_efa_rma_inject_write(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_inject_writedata(struct efa_resource **state)
+void test_efa_rma_inject_writedata(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -264,7 +264,7 @@ void test_efa_rma_inject_writedata(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_writemsg_with_inject(struct efa_resource **state)
+void test_efa_rma_writemsg_with_inject(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
