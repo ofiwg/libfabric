@@ -501,6 +501,13 @@ void opx_mr_uncache_entry_storage(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	enum fi_hmem_iface	iface	= entry->info.iface;
 	struct ofi_mem_monitor *monitor = cache->monitors[iface];
 
+	/* idempotency guard. node==NULL means storage was already
+	   uncached (rbmap node removed, monitor unsubscribed, cached_cnt
+	   decremented). */
+	if (!entry->node) {
+		return;
+	}
+
 	OPX_DEBUG_ENTRY2(entry, OPX_TID_CACHE_ENTRY_FOUND);
 	if (entry->use_cnt > 0) {
 #ifdef OPX_TID_DEBUG_USECNT

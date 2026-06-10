@@ -2577,6 +2577,34 @@ int opx_hfi1_rx_rzv_rts_tid_fallback(union fi_opx_hfi1_deferred_work	  *work,
 	params->dput_iov[params->cur_iov].bytes -= bytes_already_sent;
 	params->dst_vaddr = params->dput_iov[params->cur_iov].rbuf;
 
+	/* Re-base the primary rzv_comp's local byte_counter to the
+	   unsent (eager fallback) portion.  At RTS entry the primary rzv_comp's
+	   byte_counter was stamped with the FULL receive length
+	   (rzv_comp->byte_counter = target_context->byte_counter).  On the normal
+	   multi-CTS TID path that value is overwritten to the final chunk's length
+	   by opx_hfi1_rx_rzv_rts_tid_prep_cts() in its last_cts branch (where
+	   cts_params == params).  This fallback is the ONLY split path that reuses
+	   the primary rzv_comp WITHOUT re-initing its byte_counter, so if one or
+	   more TID CTS chunks were already sent, the primary would receive only the
+	   remaining bytes yet still expect the full count -- its byte_counter would
+	   never reach 0, OPX_BUF_FREE(rzv_comp) (gated on byte_counter==0 in the
+	   receive data handler) would never run, and the buffer would be orphaned
+	   in rzv_completion_pool (the global target_context->byte_counter is now
+	   decremented per-packet, so the context still completes/frees first).
+	   That orphan trips ofi_bufpool_destroy()'s use_cnt assertion in debug
+	   builds.  niov==1 is guaranteed for TID (opx_hfi1_rx_rzv_rts_tid_eligible),
+	   so the unsent remainder is simply this single iov's post-rewrite byte
+	   count, which already folds in any alignment / elided adjustments baked
+	   into dput_iov by tid_eligible. */
+#ifndef NDEBUG
+	const uint64_t prev_rzv_byte_counter = params->rzv_comp->byte_counter;
+#endif
+	params->rzv_comp->byte_counter = params->dput_iov[params->cur_iov].bytes;
+#ifndef NDEBUG
+	assert(params->rzv_comp->byte_counter > 0);
+	assert(params->rzv_comp->byte_counter <= prev_rzv_byte_counter);
+#endif
+
 	params->tid_info.npairs = 0;
 
 	if (OPX_SW_HFI1_TYPE(params->opx_ep->domain) & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
