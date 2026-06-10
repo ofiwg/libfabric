@@ -96,6 +96,9 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		}
 		recv_rzv_comp->context	  = context;
 		recv_rzv_comp->access_key = (uint32_t) -1;
+		/* HFISVC recv uses the access_key union, not TID registration */
+		recv_rzv_comp->tid_registered  = 0;
+		recv_rzv_comp->tid_entry_count = 0;
 
 		struct hfisvc_client_completion completion = {
 			.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,

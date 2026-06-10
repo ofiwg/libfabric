@@ -658,8 +658,11 @@ struct fi_opx_rzv_completion {
 			uint32_t unused_also;
 		};
 	};
-	uint64_t byte_counter;
-	uint64_t bytes_accumulated;
+	uint64_t	     byte_counter;
+	uint64_t	     bytes_accumulated;
+	uint8_t		     tid_registered;
+	uint8_t		     tid_entry_count;
+	struct ofi_mr_entry *tid_entries[OPX_RZV_MAX_TID_ENTRIES];
 };
 
 struct fi_opx_rma_request {
@@ -1207,6 +1210,9 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			}
 			recv_rzv_comp->context	  = context;
 			recv_rzv_comp->access_key = (uint32_t) -1;
+			/* HFISVC recv uses the access_key union, not TID registration */
+			recv_rzv_comp->tid_registered  = 0;
+			recv_rzv_comp->tid_entry_count = 0;
 
 			struct hfisvc_client_completion completion = {
 				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
@@ -1306,6 +1312,9 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			}
 			recv_rzv_comp->context	  = context;
 			recv_rzv_comp->access_key = (uint32_t) -1;
+			/* HFISVC recv uses the access_key union, not TID registration */
+			recv_rzv_comp->tid_registered  = 0;
+			recv_rzv_comp->tid_entry_count = 0;
 
 			struct hfisvc_client_completion completion = {
 				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
@@ -2535,6 +2544,14 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 			       hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes, rzv_comp->bytes_accumulated,
 			       &target_context->byte_counter, target_context->byte_counter);
 
+			/*  a TID-registered chunk whose final packet is delivered
+			 * via the eager opcode (TID->eager fallback) must still release its
+			 * TID registration here; deregister is driven by ownership, not opcode. */
+			if (rzv_comp->tid_registered) {
+				opx_deregister_entries_for_rzv(opx_ep, rzv_comp->tid_entries,
+							       rzv_comp->tid_entry_count);
+			}
+
 			/* free the rendezvous completion structure */
 			OPX_BUF_FREE(rzv_comp);
 		}
@@ -2635,12 +2652,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 
 		/* On completion, decrement TID refcount and maybe free the TID cache */
 		if (rzv_comp->byte_counter == 0) {
-			const uint64_t tid_vaddr  = rzv_comp->tid_vaddr;
-			const uint64_t tid_length = rzv_comp->tid_length;
-			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "tid vaddr>buf [%p - %p] tid len %lu/%#lX\n",
-			       (void *) tid_vaddr, (void *) (tid_vaddr + tid_length), tid_length, tid_length);
+			/* deregister iff this rzv_comp owns a TID registration,
+			 * keeping register/deregister balanced regardless of opcode. */
+			if (rzv_comp->tid_registered) {
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "tid vaddr>buf [%p - %p] tid len %lu/%#lX\n",
+				       (void *) rzv_comp->tid_vaddr,
+				       (void *) (rzv_comp->tid_vaddr + rzv_comp->tid_length), rzv_comp->tid_length,
+				       rzv_comp->tid_length);
 
-			opx_deregister_for_rzv(opx_ep, tid_vaddr, tid_length);
+				opx_deregister_entries_for_rzv(opx_ep, rzv_comp->tid_entries,
+							       rzv_comp->tid_entry_count);
+			}
 
 			/* free the rendezvous completion structure */
 			OPX_BUF_FREE(rzv_comp);

@@ -2535,6 +2535,17 @@ union fi_opx_hfi1_deferred_work *opx_hfi1_rx_rzv_rts_tid_prep_cts(union fi_opx_h
 	cts_params->rzv_comp->tid_length	= cur_addr_range_tid_len;
 	cts_params->rzv_comp->byte_counter	= cur_addr_range_tid_len;
 	cts_params->rzv_comp->bytes_accumulated = 0;
+	/* prep_cts is reached only after opx_register_for_rzv() success,
+	 * so this rzv_comp owns the cache entries that range incremented and must
+	 * release them by pointer at completion (both !last_cts chunk and last_cts
+	 * primary-reuse). The overflow guard in opx_register_for_rzv() guarantees
+	 * entry_count <= OPX_RZV_MAX_TID_ENTRIES here. */
+	assert(tid_addr_block->entry_count <= OPX_RZV_MAX_TID_ENTRIES);
+	for (uint32_t i = 0; i < tid_addr_block->entry_count; i++) {
+		cts_params->rzv_comp->tid_entries[i] = tid_addr_block->entries[i];
+	}
+	cts_params->rzv_comp->tid_entry_count = tid_addr_block->entry_count;
+	cts_params->rzv_comp->tid_registered  = 1;
 
 	cts_params->tid_info.npairs		     = tid_addr_block->npairs;
 	cts_params->tid_info.offset		     = tid_addr_block->offset;
@@ -2810,6 +2821,8 @@ int opx_hfi1_rx_rzv_rts_elided(struct fi_opx_ep *opx_ep, union fi_opx_hfi1_defer
 
 	rzv_comp->byte_counter	    = params->elided_head.bytes + params->elided_tail.bytes;
 	rzv_comp->bytes_accumulated = 0;
+	rzv_comp->tid_registered    = 0;
+	rzv_comp->tid_entry_count   = 0;
 
 	if (OPX_SW_HFI1_TYPE(opx_ep->domain) & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		cts_params->work_elem.work_fn = opx_hfi1_rx_rzv_rts_send_cts;
@@ -3309,6 +3322,8 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 	params->rzv_comp->tid_length		 = 0UL;
 	params->rzv_comp->byte_counter		 = 0UL;
 	params->rzv_comp->bytes_accumulated	 = 0UL;
+	params->rzv_comp->tid_registered	 = 0;
+	params->rzv_comp->tid_entry_count	 = 0;
 	params->rzv_comp->context		 = target_context;
 	params->dst_vaddr			 = dst_vaddr;
 	params->is_shm				 = is_shm;
@@ -5497,7 +5512,7 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 	} else if (dput_opcode == FI_OPX_HFI_DPUT_OPCODE_RZV && origin_byte_counter) {
 		/* a TID->eager fallback CTS carries the receiver's TID
 		 * alignment adjustment; apply it here (it is 0 in the normal path). */
-		(*origin_byte_counter) += (int16_t) hdr->cts.target.vaddr.unused1;
+		(*origin_byte_counter) += (int16_t) hdr->cts.target.vaddr.tid_alignment_adj;
 	}
 
 	assert((ntidpairs == 0) || (niov == 1));
@@ -6020,6 +6035,9 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		rc = -FI_ENOMEM;
 		goto err;
 	}
+	/* HFISVC send uses the access_key union, not TID registration */
+	rzv_comp->tid_registered  = 0;
+	rzv_comp->tid_entry_count = 0;
 
 	if (do_stripe) {
 		rzv_comp_1 = (struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
@@ -6029,6 +6047,8 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 			rc = -FI_ENOMEM;
 			goto err;
 		}
+		rzv_comp_1->tid_registered  = 0;
+		rzv_comp_1->tid_entry_count = 0;
 	}
 
 	const uint16_t credits_needed =

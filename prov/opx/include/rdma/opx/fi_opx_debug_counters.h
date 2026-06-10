@@ -327,6 +327,7 @@ struct fi_opx_debug_counters {
 		uint64_t tid_cache_overlap_right;
 		uint64_t reg_for_rzv_get_initial;
 		uint64_t reg_for_rzv_get_remaining;
+		uint64_t rts_tid_entries_overflow;
 	} expected_receive;
 
 	struct {
@@ -617,6 +618,7 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_cache_overlap_right);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.reg_for_rzv_get_initial);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.reg_for_rzv_get_remaining);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_entries_overflow);
 #endif
 
 #ifdef OPX_DEBUG_COUNTERS_RECV
