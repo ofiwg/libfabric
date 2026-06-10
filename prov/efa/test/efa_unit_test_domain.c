@@ -9,7 +9,7 @@
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_info_type_efa_rdm(struct efa_resource **state)
+void test_efa_domain_info_type_efa_rdm(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -24,7 +24,7 @@ void test_efa_domain_info_type_efa_rdm(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_info_type_efa_direct(struct efa_resource **state)
+void test_efa_domain_info_type_efa_direct(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -39,7 +39,7 @@ void test_efa_domain_info_type_efa_direct(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_direct_has_bounce_buffer(struct efa_resource **state)
+void test_efa_domain_direct_has_bounce_buffer(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -62,7 +62,7 @@ void test_efa_domain_direct_has_bounce_buffer(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_rdm_no_bounce_buffer(struct efa_resource **state)
+void test_efa_domain_rdm_no_bounce_buffer(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -92,7 +92,7 @@ struct verbs_mr {
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_no_bounce_buffer_without_fi_rma_cap_requested(struct efa_resource **state)
+void test_efa_domain_no_bounce_buffer_without_fi_rma_cap_requested(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -121,7 +121,7 @@ void test_efa_domain_no_bounce_buffer_without_fi_rma_cap_requested(struct efa_re
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_bounce_buffer_with_rdma(struct efa_resource **state)
+void test_efa_domain_bounce_buffer_with_rdma(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -151,7 +151,7 @@ void test_efa_domain_bounce_buffer_with_rdma(struct efa_resource **state)
 }
 
 /* test fi_open_ops with a wrong name */
-void test_efa_domain_open_ops_wrong_name(struct efa_resource **state)
+void test_efa_domain_open_ops_wrong_name(void **state)
 {
     struct efa_resource *resource = *state;
     int ret;
@@ -204,7 +204,7 @@ void test_efa_domain_open_ops_mr_query_common(
 
 #if HAVE_EFADV_QUERY_MR
 
-void test_efa_domain_open_ops_mr_query(struct efa_resource **state)
+void test_efa_domain_open_ops_mr_query(void **state)
 {
     struct efa_resource *resource = *state;
 
@@ -257,7 +257,7 @@ void test_efa_domain_open_ops_mr_query(struct efa_resource **state)
 
 #else
 
-void test_efa_domain_open_ops_mr_query(struct efa_resource **state)
+void test_efa_domain_open_ops_mr_query(void **state)
 {
     struct efa_resource *resource = *state;
 
@@ -275,7 +275,7 @@ void test_efa_domain_open_ops_mr_query(struct efa_resource **state)
 #endif /* HAVE_EFADV_QUERY_MR */
 
 
-void test_efa_domain_open_ops_query_qp_wqs(struct efa_resource **state)
+void test_efa_domain_open_ops_query_qp_wqs(void **state)
 {
     struct efa_resource *resource = *state;
     int ret;
@@ -313,7 +313,7 @@ void test_efa_domain_open_ops_query_qp_wqs(struct efa_resource **state)
 }
 
 
-void test_efa_domain_open_ops_query_cq(struct efa_resource **state)
+void test_efa_domain_open_ops_query_cq(void **state)
 {
     struct efa_resource *resource = *state;
     int ret;
@@ -346,7 +346,7 @@ void test_efa_domain_open_ops_query_cq(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_rdm_attr_mr_allocated(struct efa_resource **state)
+void test_efa_domain_rdm_attr_mr_allocated(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -361,7 +361,7 @@ void test_efa_domain_rdm_attr_mr_allocated(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_dgram_attr_mr_allocated(struct efa_resource **state)
+void test_efa_domain_dgram_attr_mr_allocated(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -377,7 +377,7 @@ void test_efa_domain_dgram_attr_mr_allocated(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_direct_attr_mr_allocated(struct efa_resource **state)
+void test_efa_domain_direct_attr_mr_allocated(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -392,7 +392,7 @@ void test_efa_domain_direct_attr_mr_allocated(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_domain_peer_list_cleared(struct efa_resource **state)
+void test_efa_domain_peer_list_cleared(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -481,7 +481,7 @@ void test_efa_domain_peer_list_cleared(struct efa_resource **state)
 	assert_true(dlist_empty(&efa_domain->handshake_queued_peer_list));
 }
 
-void test_efa_domain_open_ops_query_addr(struct efa_resource **state)
+void test_efa_domain_open_ops_query_addr(void **state)
 {
 	struct efa_resource *resource = *state;
 	int ret;
@@ -514,7 +514,7 @@ void test_efa_domain_open_ops_query_addr(struct efa_resource **state)
 	assert_int_equal(remote_qkey, 0x1234);
 }
 
-void test_efa_domain_open_ops_cq_open_ext(struct efa_resource **state)
+void test_efa_domain_open_ops_cq_open_ext(void **state)
 {
     struct efa_resource *resource = *state;
     struct fi_efa_ops_gda *efa_gda_ops;
@@ -566,7 +566,7 @@ void test_efa_domain_open_ops_cq_open_ext(struct efa_resource **state)
 #endif
 }
 
-void test_efa_domain_open_ops_get_mr_lkey(struct efa_resource **state)
+void test_efa_domain_open_ops_get_mr_lkey(void **state)
 {
     int ret;
     struct efa_resource *resource = *state;
@@ -593,7 +593,7 @@ void test_efa_domain_open_ops_get_mr_lkey(struct efa_resource **state)
  * @brief Verify query("mixed_hmem_iov") returns true on efa-direct,
  * which is the fabric where this feature is advertised.
  */
-void test_efa_fabric_open_ops_feature_known(struct efa_resource **state)
+void test_efa_fabric_open_ops_feature_known(void **state)
 {
     struct efa_resource *resource = *state;
     struct fi_efa_feature_ops *feat_ops;
@@ -612,7 +612,7 @@ void test_efa_fabric_open_ops_feature_known(struct efa_resource **state)
  * @brief Verify query("mixed_hmem_iov") returns false on efa (RDM),
  * which does not currently advertise the feature.
  */
-void test_efa_fabric_open_ops_feature_not_on_proto(struct efa_resource **state)
+void test_efa_fabric_open_ops_feature_not_on_proto(void **state)
 {
     struct efa_resource *resource = *state;
     struct fi_efa_feature_ops *feat_ops;
@@ -630,7 +630,7 @@ void test_efa_fabric_open_ops_feature_not_on_proto(struct efa_resource **state)
 /**
  * @brief Verify query() returns false for an unknown feature and for NULL.
  */
-void test_efa_fabric_open_ops_feature_unknown(struct efa_resource **state)
+void test_efa_fabric_open_ops_feature_unknown(void **state)
 {
     struct efa_resource *resource = *state;
     struct fi_efa_feature_ops *feat_ops;

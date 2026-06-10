@@ -7,7 +7,7 @@
 
 #define MSG_SIZE 10
 
-void test_efa_rdm_msg_send_to_local_peer_with_null_desc(struct efa_resource **state)
+void test_efa_rdm_msg_send_to_local_peer_with_null_desc(void **state)
 {
         struct efa_resource *resource = *state;
         char buf[MSG_SIZE];

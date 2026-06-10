@@ -67,7 +67,7 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
  * Verify that efa_rdm_ope_prepare_to_post_send() will return
  * -FI_EAGAIN, when there is not enough TX packet available,
  */
-void test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts(struct efa_resource **state)
+void test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -88,7 +88,7 @@ void test_efa_rdm_ope_prepare_to_post_send_with_no_enough_tx_pkts(struct efa_res
 /**
  * @brief verify the pkt_entry_cnt and data size for host memory
  */
-void test_efa_rdm_ope_prepare_to_post_send_host_memory(struct efa_resource **state)
+void test_efa_rdm_ope_prepare_to_post_send_host_memory(void **state)
 {
 	struct efa_resource *resource = *state;
 	size_t msg_length;
@@ -136,7 +136,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory(struct efa_resource **sta
 /**
  * @brief verify the pkt_entry_cnt and data size for host memory when align128 was requested
  */
-void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128(struct efa_resource **state)
+void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -186,7 +186,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128(struct efa_resou
 /**
  * @brief verify the pkt_entry_cnt and data size for cuda memory
  */
-void test_efa_rdm_ope_prepare_to_post_send_cuda_memory(struct efa_resource **state)
+void test_efa_rdm_ope_prepare_to_post_send_cuda_memory(void **state)
 {
 	struct efa_resource *resource = *state;
 	size_t msg_length;
@@ -210,7 +210,7 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory(struct efa_resource **sta
 /**
  * @brief verify the pkt_entry_cnt and data size for cuda memory when align128 was requested
  */
-void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(struct efa_resource **state)
+void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -239,7 +239,7 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(struct efa_resou
 /**
  * @brief verify that 0 byte write can be submitted successfully
  */
-void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
+void test_efa_rdm_ope_post_write_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -352,7 +352,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	efa_rdm_pke_release_rx(pkt_entry);
 }
 
-void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(struct efa_resource **state)
+void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(void **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
@@ -367,7 +367,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(struct efa_resource **sta
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 }
 
-void test_efa_rdm_rxe_post_local_read_or_queue_happy(struct efa_resource **state)
+void test_efa_rdm_rxe_post_local_read_or_queue_happy(void **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
@@ -423,7 +423,7 @@ void test_efa_rdm_ope_handle_error_impl(
 	}
 }
 
-void test_efa_rdm_txe_handle_error_write_cq(struct efa_resource **state)
+void test_efa_rdm_txe_handle_error_write_cq(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *txe;
@@ -438,7 +438,7 @@ void test_efa_rdm_txe_handle_error_write_cq(struct efa_resource **state)
 	efa_rdm_txe_release(txe);
 }
 
-void test_efa_rdm_txe_handle_error_not_write_cq(struct efa_resource **state)
+void test_efa_rdm_txe_handle_error_not_write_cq(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *txe;
@@ -455,7 +455,7 @@ void test_efa_rdm_txe_handle_error_not_write_cq(struct efa_resource **state)
 	efa_rdm_txe_release(txe);
 }
 
-void test_efa_rdm_rxe_handle_error_write_cq(struct efa_resource **state)
+void test_efa_rdm_rxe_handle_error_write_cq(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
@@ -470,7 +470,7 @@ void test_efa_rdm_rxe_handle_error_write_cq(struct efa_resource **state)
 	efa_rdm_rxe_release(rxe);
 }
 
-void test_efa_rdm_rxe_handle_error_not_write_cq(struct efa_resource **state)
+void test_efa_rdm_rxe_handle_error_not_write_cq(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
@@ -487,7 +487,7 @@ void test_efa_rdm_rxe_handle_error_not_write_cq(struct efa_resource **state)
 	efa_rdm_rxe_release(rxe);
 }
 
-void test_efa_rdm_rxe_map(struct efa_resource **state)
+void test_efa_rdm_rxe_map(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
@@ -526,7 +526,7 @@ void test_efa_rdm_rxe_map(struct efa_resource **state)
 	efa_rdm_ep->map_entry_pool = NULL;
 }
 
-void test_efa_rdm_rxe_list_removal(struct efa_resource **state)
+void test_efa_rdm_rxe_list_removal(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
@@ -550,7 +550,7 @@ void test_efa_rdm_rxe_list_removal(struct efa_resource **state)
 	dlist_empty(&efa_rdm_ep_domain(efa_rdm_ep)->ope_longcts_send_list);
 }
 
-void test_efa_rdm_txe_list_removal(struct efa_resource **state)
+void test_efa_rdm_txe_list_removal(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *txe;
@@ -579,7 +579,7 @@ void test_efa_rdm_txe_list_removal(struct efa_resource **state)
 	assert_true(dlist_empty(&efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list));
 }
 
-void test_efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_resource **state)
+void test_efa_rdm_txe_prepare_local_read_pkt_entry(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *txe;
@@ -631,7 +631,7 @@ void test_efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_resource **state)
  * This test verifies that queue flags are properly cleaned up after
  * dlist_remove in error handling functions.
  */
-void test_efa_rdm_txe_handle_error_queue_flags_cleanup(struct efa_resource **state)
+void test_efa_rdm_txe_handle_error_queue_flags_cleanup(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *txe;
@@ -666,7 +666,7 @@ void test_efa_rdm_txe_handle_error_queue_flags_cleanup(struct efa_resource **sta
 /**
  * @brief Test that queue flags are properly cleaned up for rxe error handling
  */
-void test_efa_rdm_rxe_handle_error_queue_flags_cleanup(struct efa_resource **state)
+void test_efa_rdm_rxe_handle_error_queue_flags_cleanup(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
@@ -703,7 +703,7 @@ void test_efa_rdm_rxe_handle_error_queue_flags_cleanup(struct efa_resource **sta
  *
  * This test verifies that a new error state prevents duplicate error handling.
  */
-void test_efa_rdm_txe_handle_error_duplicate_prevention(struct efa_resource **state)
+void test_efa_rdm_txe_handle_error_duplicate_prevention(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *txe;
@@ -742,7 +742,7 @@ void test_efa_rdm_txe_handle_error_duplicate_prevention(struct efa_resource **st
 /**
  * @brief Test error state prevents duplicate error handling for rxe
  */
-void test_efa_rdm_rxe_handle_error_duplicate_prevention(struct efa_resource **state)
+void test_efa_rdm_rxe_handle_error_duplicate_prevention(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
@@ -851,7 +851,7 @@ static void test_efa_rdm_ope_ack_packet_tracking_common(
  * @param[in] pkt_type Packet type (EFA_RDM_RECEIPT_PKT or EFA_RDM_EOR_PKT)
  */
 static
-void test_efa_rdm_ope_receit_eor_packet_tracking_cq_read_common(struct efa_resource **state, int pkt_type)
+void test_efa_rdm_ope_receit_eor_packet_tracking_cq_read_common(void **state, int pkt_type)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
@@ -879,7 +879,7 @@ void test_efa_rdm_ope_receit_eor_packet_tracking_cq_read_common(struct efa_resou
  * via efa_rdm_ep_wait_send with successful completion status.
  */
 static
-void test_efa_rdm_ope_ack_packet_tracking_wait_send_common(struct efa_resource **state, int pkt_type)
+void test_efa_rdm_ope_ack_packet_tracking_wait_send_common(void **state, int pkt_type)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
@@ -907,7 +907,7 @@ void test_efa_rdm_ope_ack_packet_tracking_wait_send_common(struct efa_resource *
  * proper list management during error conditions.
  */
 static
-void test_efa_rdm_ope_ack_packet_failed_posting_common(struct efa_resource **state, int pkt_type)
+void test_efa_rdm_ope_ack_packet_failed_posting_common(void **state, int pkt_type)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -929,7 +929,7 @@ void test_efa_rdm_ope_ack_packet_failed_posting_common(struct efa_resource **sta
  * verifies that subsequent wait_send calls skip operations from that peer.
  */
 static
-void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(struct efa_resource **state, int pkt_type)
+void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **state, int pkt_type)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -974,7 +974,7 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(struct e
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ope_receipt_packet_tracking_cq_read(struct efa_resource **state)
+void test_efa_rdm_ope_receipt_packet_tracking_cq_read(void **state)
 {
 	test_efa_rdm_ope_receit_eor_packet_tracking_cq_read_common(state, EFA_RDM_RECEIPT_PKT);
 }
@@ -987,7 +987,7 @@ void test_efa_rdm_ope_receipt_packet_tracking_cq_read(struct efa_resource **stat
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ope_receipt_packet_tracking_wait_send(struct efa_resource **state)
+void test_efa_rdm_ope_receipt_packet_tracking_wait_send(void **state)
 {
 	test_efa_rdm_ope_ack_packet_tracking_wait_send_common(state, EFA_RDM_RECEIPT_PKT);
 }
@@ -1000,7 +1000,7 @@ void test_efa_rdm_ope_receipt_packet_tracking_wait_send(struct efa_resource **st
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ope_receipt_packet_failed_posting(struct efa_resource **state)
+void test_efa_rdm_ope_receipt_packet_failed_posting(void **state)
 {
 	test_efa_rdm_ope_ack_packet_failed_posting_common(state, EFA_RDM_RECEIPT_PKT);
 }
@@ -1013,7 +1013,7 @@ void test_efa_rdm_ope_receipt_packet_failed_posting(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ope_receipt_packet_tracking_unresponsive_wait_send(struct efa_resource **state)
+void test_efa_rdm_ope_receipt_packet_tracking_unresponsive_wait_send(void **state)
 {
 	test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(state, EFA_RDM_RECEIPT_PKT);
 }
@@ -1026,7 +1026,7 @@ void test_efa_rdm_ope_receipt_packet_tracking_unresponsive_wait_send(struct efa_
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ope_eor_packet_tracking_cq_read(struct efa_resource **state)
+void test_efa_rdm_ope_eor_packet_tracking_cq_read(void **state)
 {
 	test_efa_rdm_ope_receit_eor_packet_tracking_cq_read_common(state, EFA_RDM_EOR_PKT);
 }
@@ -1039,7 +1039,7 @@ void test_efa_rdm_ope_eor_packet_tracking_cq_read(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ope_eor_packet_tracking_wait_send(struct efa_resource **state)
+void test_efa_rdm_ope_eor_packet_tracking_wait_send(void **state)
 {
 	test_efa_rdm_ope_ack_packet_tracking_wait_send_common(state, EFA_RDM_EOR_PKT);
 }
@@ -1052,7 +1052,7 @@ void test_efa_rdm_ope_eor_packet_tracking_wait_send(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ope_eor_packet_failed_posting(struct efa_resource **state)
+void test_efa_rdm_ope_eor_packet_failed_posting(void **state)
 {
 	test_efa_rdm_ope_ack_packet_failed_posting_common(state, EFA_RDM_EOR_PKT);
 }
@@ -1065,7 +1065,7 @@ void test_efa_rdm_ope_eor_packet_failed_posting(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_ope_eor_packet_tracking_unresponsive_wait_send(struct efa_resource **state)
+void test_efa_rdm_ope_eor_packet_tracking_unresponsive_wait_send(void **state)
 {
 	test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(state, EFA_RDM_EOR_PKT);
 }
@@ -1079,7 +1079,7 @@ void test_efa_rdm_ope_eor_packet_tracking_unresponsive_wait_send(struct efa_reso
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_atomic_compare_desc_persistence(struct efa_resource **state)
+void test_efa_rdm_atomic_compare_desc_persistence(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff, result_buff, compare_buff;
@@ -1304,7 +1304,7 @@ static void test_efa_rdm_txe_dc_release_common(struct efa_resource *resource, bo
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_txe_dc_send_first(struct efa_resource **state)
+void test_efa_rdm_txe_dc_send_first(void **state)
 {
 	test_efa_rdm_txe_dc_release_common(*state, true, true);
 }
@@ -1318,7 +1318,7 @@ void test_efa_rdm_txe_dc_send_first(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_txe_dc_receipt_first(struct efa_resource **state)
+void test_efa_rdm_txe_dc_receipt_first(void **state)
 {
 	test_efa_rdm_txe_dc_release_common(*state, false, true);
 }
@@ -1331,7 +1331,7 @@ void test_efa_rdm_txe_dc_receipt_first(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_txe_dc_send_first_non_longcts(struct efa_resource **state)
+void test_efa_rdm_txe_dc_send_first_non_longcts(void **state)
 {
 	test_efa_rdm_txe_dc_release_common(*state, true, false);
 }
@@ -1344,13 +1344,13 @@ void test_efa_rdm_txe_dc_send_first_non_longcts(struct efa_resource **state)
  *
  * @param[in] state cmocka state variable
  */
-void test_efa_rdm_txe_dc_receipt_first_non_longcts(struct efa_resource **state)
+void test_efa_rdm_txe_dc_receipt_first_non_longcts(void **state)
 {
 	test_efa_rdm_txe_dc_release_common(*state, false, false);
 }
 
 /* RDM MSG 0-byte tests */
-void test_efa_rdm_msg_send_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_msg_send_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -1366,7 +1366,7 @@ void test_efa_rdm_msg_send_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(efa_rdm_ep->efa_outstanding_tx_ops, 1);
 }
 
-void test_efa_rdm_msg_sendv_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_msg_sendv_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1379,7 +1379,7 @@ void test_efa_rdm_msg_sendv_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_msg_sendmsg_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_msg_sendmsg_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1395,7 +1395,7 @@ void test_efa_rdm_msg_sendmsg_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_msg_senddata_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_msg_senddata_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1407,7 +1407,7 @@ void test_efa_rdm_msg_senddata_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_msg_inject_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_msg_inject_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1419,7 +1419,7 @@ void test_efa_rdm_msg_inject_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_msg_injectdata_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_msg_injectdata_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1432,7 +1432,7 @@ void test_efa_rdm_msg_injectdata_0_byte_no_shm(struct efa_resource **state)
 }
 
 /* RDM Tagged 0-byte tests */
-void test_efa_rdm_tagged_send_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_tagged_send_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1444,7 +1444,7 @@ void test_efa_rdm_tagged_send_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_tagged_sendv_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_tagged_sendv_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1457,7 +1457,7 @@ void test_efa_rdm_tagged_sendv_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_tagged_sendmsg_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_tagged_sendmsg_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1473,7 +1473,7 @@ void test_efa_rdm_tagged_sendmsg_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_tagged_senddata_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_tagged_senddata_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1485,7 +1485,7 @@ void test_efa_rdm_tagged_senddata_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_tagged_inject_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_tagged_inject_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1497,7 +1497,7 @@ void test_efa_rdm_tagged_inject_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_tagged_injectdata_0_byte_no_shm(struct efa_resource **state)
+void test_efa_rdm_tagged_injectdata_0_byte_no_shm(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t addr;
@@ -1509,7 +1509,7 @@ void test_efa_rdm_tagged_injectdata_0_byte_no_shm(struct efa_resource **state)
 	assert_int_equal(ret, 0);
 }
 
-void test_efa_rdm_msg_send_0_byte_with_inject_flag(struct efa_resource **state)
+void test_efa_rdm_msg_send_0_byte_with_inject_flag(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct iovec iov = {0};

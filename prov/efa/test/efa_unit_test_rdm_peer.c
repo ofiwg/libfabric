@@ -76,7 +76,7 @@ void test_efa_rdm_peer_reorder_msg_impl(struct efa_resource *resource,
 	}
 }
 
-void test_efa_rdm_peer_reorder_expected_msg_id(struct efa_resource **state) {
+void test_efa_rdm_peer_reorder_expected_msg_id(void **state) {
 	struct efa_resource *resource = *state;
 	uint32_t msg_id, exp_msg_id;
 	int expected_ret;
@@ -97,7 +97,7 @@ void test_efa_rdm_peer_reorder_expected_msg_id(struct efa_resource **state) {
 }
 
 
-void test_efa_rdm_peer_reorder_smaller_msg_id(struct efa_resource **state) {
+void test_efa_rdm_peer_reorder_smaller_msg_id(void **state) {
 	struct efa_resource *resource = *state;
 	uint32_t msg_id, exp_msg_id;
 	int expected_ret;
@@ -119,7 +119,7 @@ void test_efa_rdm_peer_reorder_smaller_msg_id(struct efa_resource **state) {
 	test_efa_rdm_peer_reorder_msg_impl(resource, exp_msg_id, msg_id, expected_ret);
 }
 
-void test_efa_rdm_peer_reorder_larger_msg_id(struct efa_resource **state) {
+void test_efa_rdm_peer_reorder_larger_msg_id(void **state) {
 	struct efa_resource *resource = *state;
 	uint32_t msg_id, exp_msg_id;
 	int expected_ret;
@@ -134,7 +134,7 @@ void test_efa_rdm_peer_reorder_larger_msg_id(struct efa_resource **state) {
 	test_efa_rdm_peer_reorder_msg_impl(resource, exp_msg_id, msg_id, expected_ret);
 }
 
-void test_efa_rdm_peer_reorder_overflow_msg_id(struct efa_resource **state) {
+void test_efa_rdm_peer_reorder_overflow_msg_id(void **state) {
 	struct efa_resource *resource = *state;
 	uint32_t msg_id, exp_msg_id;
 	int expected_ret;
@@ -210,7 +210,7 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin_impl(
 	efa_rdm_peer_move_overflow_pke_to_recvwin(*peer);
 }
 
-void test_efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_resource **state) {
+void test_efa_rdm_peer_move_overflow_pke_to_recvwin(void **state) {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt_entry;
@@ -229,7 +229,7 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_resource **state)
 	efa_rdm_pke_release_rx(pkt_entry);
 }
 
-void test_efa_rdm_peer_keep_pke_in_overflow_list(struct efa_resource **state) {
+void test_efa_rdm_peer_keep_pke_in_overflow_list(void **state) {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt_entry;
@@ -282,7 +282,7 @@ void alloc_pke_in_overflow_list(struct efa_rdm_ep *efa_rdm_ep,
 	dlist_insert_head(&overflow_pke_list_entry->entry, &peer->overflow_pke_list);
 }
 
-void test_efa_rdm_peer_append_overflow_pke_to_recvwin(struct efa_resource **state) {
+void test_efa_rdm_peer_append_overflow_pke_to_recvwin(void **state) {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt_entry1, *pkt_entry2;
@@ -330,7 +330,7 @@ void test_efa_rdm_peer_append_overflow_pke_to_recvwin(struct efa_resource **stat
 	efa_rdm_pke_release_rx(pkt_entry1);
 }
 
-void test_efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_resource **state)
+void test_efa_rdm_peer_recvwin_queue_or_append_pke(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_peer *peer;
