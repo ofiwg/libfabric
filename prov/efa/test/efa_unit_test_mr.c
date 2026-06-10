@@ -51,7 +51,7 @@ static void test_efa_rdm_mr_impl(struct efa_domain *efa_domain, struct fid_mr *m
 	}
 }
 
-void test_efa_rdm_mr_reg_host_memory(struct efa_resource **state)
+void test_efa_rdm_mr_reg_host_memory(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -84,7 +84,7 @@ void test_efa_rdm_mr_reg_host_memory(struct efa_resource **state)
 	free(buf);
 }
 
-void test_efa_rdm_mr_reg_host_memory_no_mr_local(struct efa_resource **state)
+void test_efa_rdm_mr_reg_host_memory_no_mr_local(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_info *hints;
@@ -123,7 +123,7 @@ void test_efa_rdm_mr_reg_host_memory_no_mr_local(struct efa_resource **state)
 	free(buf);
 }
 
-void test_efa_rdm_mr_reg_host_memory_overlapping_buffers(struct efa_resource **state)
+void test_efa_rdm_mr_reg_host_memory_overlapping_buffers(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -167,7 +167,7 @@ void test_efa_rdm_mr_reg_host_memory_overlapping_buffers(struct efa_resource **s
 }
 
 #if HAVE_CUDA
-void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
+void test_efa_rdm_mr_reg_cuda_memory(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -218,14 +218,14 @@ void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
 	}
 }
 #else
-void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
+void test_efa_rdm_mr_reg_cuda_memory(void **state)
 {
 	skip();
 }
 #endif
 
 #if HAVE_CUDA
-void test_efa_direct_mr_reg_cuda_memory(struct efa_resource **state)
+void test_efa_direct_mr_reg_cuda_memory(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -275,13 +275,13 @@ void test_efa_direct_mr_reg_cuda_memory(struct efa_resource **state)
 	}
 }
 #else
-void test_efa_direct_mr_reg_cuda_memory(struct efa_resource **state)
+void test_efa_direct_mr_reg_cuda_memory(void **state)
 {
 	skip();
 }
 #endif
 
-void test_efa_direct_mr_reg_rdma_read_not_supported(struct efa_resource **state)
+void test_efa_direct_mr_reg_rdma_read_not_supported(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -323,7 +323,7 @@ void test_efa_direct_mr_reg_rdma_read_not_supported(struct efa_resource **state)
 	efa_domain->device->device_caps = efa_device_caps_orig;
 }
 
-void test_efa_direct_mr_reg_rdma_write_not_supported(struct efa_resource **state)
+void test_efa_direct_mr_reg_rdma_write_not_supported(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -367,7 +367,7 @@ void test_efa_direct_mr_reg_rdma_write_not_supported(struct efa_resource **state
 	efa_domain->device->device_caps = efa_device_caps_orig;
 }
 
-void test_efa_mr_validate_regattr_invalid_iov_count(struct efa_resource **state)
+void test_efa_mr_validate_regattr_invalid_iov_count(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_mr_attr mr_attr = { 0 };
@@ -402,7 +402,7 @@ void test_efa_mr_validate_regattr_invalid_iov_count(struct efa_resource **state)
 	free(buf2);
 }
 
-void test_efa_mr_validate_regattr_uninitialized_iface(struct efa_resource **state)
+void test_efa_mr_validate_regattr_uninitialized_iface(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_mr_attr mr_attr = { 0 };
@@ -438,7 +438,7 @@ void test_efa_mr_validate_regattr_uninitialized_iface(struct efa_resource **stat
 /**
  * @brief Test RDM MR structure casting safety
  */
-void test_efa_rdm_mr_structure_casting(struct efa_resource **state)
+void test_efa_rdm_mr_structure_casting(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -481,7 +481,7 @@ void test_efa_rdm_mr_structure_casting(struct efa_resource **state)
 /**
  * @brief Test EFA_MR_ATTR_INIT_SYSTEM macro
  */
-void test_efa_mr_attr_init_system_macro(struct efa_resource **state)
+void test_efa_mr_attr_init_system_macro(void **state)
 {
 	struct iovec iov;
 	void *buf;
@@ -517,7 +517,7 @@ void test_efa_mr_attr_init_system_macro(struct efa_resource **state)
  * When no access flags are provided, the function should default to
  * FI_SEND | FI_RECV and return IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ.
  */
-void test_efa_mr_ofi_to_ibv_access_no_access(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_no_access(void **state)
 {
 	int ibv_access;
 
@@ -529,7 +529,7 @@ void test_efa_mr_ofi_to_ibv_access_no_access(struct efa_resource **state)
  * @brief Test efa_mr_ofi_to_ibv_access with one flag when rdma read and write are available
  *
  */
-void test_efa_mr_ofi_to_ibv_access_one_flag(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_one_flag(void **state)
 {
 	int ibv_access;
 
@@ -555,7 +555,7 @@ void test_efa_mr_ofi_to_ibv_access_one_flag(struct efa_resource **state)
 /**
  * @brief Test efa_mr_ofi_to_ibv_access when RDMA read not supported
  */
-void test_efa_mr_ofi_to_ibv_access_read_not_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_read_not_supported(void **state)
 {
 	int ibv_access;
 
@@ -571,7 +571,7 @@ void test_efa_mr_ofi_to_ibv_access_read_not_supported(struct efa_resource **stat
  *
  * When device doesn't support RDMA write, emulate with RDMA read
  */
-void test_efa_mr_ofi_to_ibv_access_write_not_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_write_not_supported(void **state)
 {
 	int ibv_access;
 
@@ -589,7 +589,7 @@ void test_efa_mr_ofi_to_ibv_access_write_not_supported(struct efa_resource **sta
  * When only remote read is supported, FI_REMOTE_READ gets IBV_ACCESS_REMOTE_READ
  * and FI_REMOTE_WRITE gets IBV_ACCESS_LOCAL_WRITE.
  */
-void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported(void **state)
 {
 	int ibv_access;
 
@@ -602,7 +602,7 @@ void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported(struct 
  *
  * Test all OFI access flags together with full device support.
  */
-void test_efa_mr_ofi_to_ibv_access_all_flags_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_all_flags_supported(void **state)
 {
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
@@ -614,7 +614,7 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_supported(struct efa_resource **sta
 /**
  * @brief Test efa_mr_ofi_to_ibv_access with all access flags, no device support
  */
-void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(void **state)
 {
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
@@ -630,7 +630,7 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(struct efa_resource *
  * When FI_EFA_TRACK_MR is enabled and an MR is closed while a direct
  * operation still references it, efa_mr_close will warn and clear the desc entry.
  */
-void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
+void test_efa_mr_close_warn_outstanding_direct_ope(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep;
@@ -685,7 +685,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
  * Two EPs share one MR. Each EP has an in-flight direct operation referencing
  * the MR. Closing the MR should warn and clear desc on both EPs.
  */
-void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource **state)
+void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep1, *base_ep2;
@@ -758,7 +758,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource 
  * When FI_EFA_TRACK_MR is enabled and an MR is closed while an RDM
  * TX operation still references it, efa_mr_close will warn and clear the desc entry.
  */
-void test_efa_mr_close_warn_outstanding_rdm_txe(struct efa_resource **state)
+void test_efa_mr_close_warn_outstanding_rdm_txe(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *txe;
@@ -803,7 +803,7 @@ void test_efa_mr_close_warn_outstanding_rdm_txe(struct efa_resource **state)
  * scenario by falling back to internal registration and creates the expected
  * MR structure without cache entries.
  */
-void test_efa_rdm_mr_cache_regv_no_cache(struct efa_resource **state)
+void test_efa_rdm_mr_cache_regv_no_cache(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_info *hints;
@@ -859,7 +859,7 @@ void test_efa_rdm_mr_cache_regv_no_cache(struct efa_resource **state)
  * This test validates that efa_rdm_mr_cache_regv properly uses the MR cache
  * when it's available and creates the expected MR structure.
  */
-void test_efa_rdm_mr_cache_regv_with_cache(struct efa_resource **state)
+void test_efa_rdm_mr_cache_regv_with_cache(void **state)
 {
 #ifdef ENABLE_ASAN
 	skip();
@@ -916,7 +916,7 @@ void test_efa_rdm_mr_cache_regv_with_cache(struct efa_resource **state)
  * This test validates that multiple registrations of the same buffer
  * result in cache hits when cache is enabled.
  */
-void test_efa_rdm_mr_cache_regv_cache_hit(struct efa_resource **state)
+void test_efa_rdm_mr_cache_regv_cache_hit(void **state)
 {
 #ifdef ENABLE_ASAN
 	skip();
@@ -982,7 +982,7 @@ void test_efa_rdm_mr_cache_regv_cache_hit(struct efa_resource **state)
  * New registration is smaller and fully encapsulated within a previous region.
  * The reference count should be incremented and the same cache entry returned.
  */
-void test_efa_rdm_mr_cache_encapsulation_smaller(struct efa_resource **state)
+void test_efa_rdm_mr_cache_encapsulation_smaller(void **state)
 {
 #ifdef ENABLE_ASAN
 	skip();
@@ -1044,7 +1044,7 @@ void test_efa_rdm_mr_cache_encapsulation_smaller(struct efa_resource **state)
  * New registration and previous registrations have no full encapsulations.
  * A new registration should be created with reference count of 1.
  */
-void test_efa_rdm_mr_cache_non_overlapping(struct efa_resource **state)
+void test_efa_rdm_mr_cache_non_overlapping(void **state)
 {
 #ifdef ENABLE_ASAN
 	skip();
@@ -1114,7 +1114,7 @@ void test_efa_rdm_mr_cache_non_overlapping(struct efa_resource **state)
  * Tests that MRs with reference count of zero are moved to LRU list
  * and can be reused when the same region is registered again.
  */
-void test_efa_rdm_mr_cache_lru_behavior(struct efa_resource **state)
+void test_efa_rdm_mr_cache_lru_behavior(void **state)
 {
 #ifdef ENABLE_ASAN
 	skip();
@@ -1191,7 +1191,7 @@ void test_efa_rdm_mr_cache_lru_behavior(struct efa_resource **state)
  * Tests that cache flush operations properly clean up entries
  * and that subsequent registrations create new entries.
  */
-void test_efa_rdm_mr_cache_flush_behavior(struct efa_resource **state)
+void test_efa_rdm_mr_cache_flush_behavior(void **state)
 {
 #ifdef ENABLE_ASAN
 	skip();
@@ -1267,7 +1267,7 @@ void test_efa_rdm_mr_cache_flush_behavior(struct efa_resource **state)
  * Tests that multiple references to the same cached region properly
  * increment/decrement reference counts and manage LRU list placement.
  */
-void test_efa_rdm_mr_cache_reference_counting(struct efa_resource **state)
+void test_efa_rdm_mr_cache_reference_counting(void **state)
 {
 #ifdef ENABLE_ASAN
 	skip();
@@ -1365,7 +1365,7 @@ void test_efa_rdm_mr_cache_reference_counting(struct efa_resource **state)
  * properly initializes the MR structure, including the mem_desc field
  * and iface field. It uses fi_mr_desc to verify the descriptor is correct.
  */
-void test_efa_rdm_mr_reg_cuda_memory_non_p2p(struct efa_resource **state)
+void test_efa_rdm_mr_reg_cuda_memory_non_p2p(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -1445,7 +1445,7 @@ void test_efa_rdm_mr_reg_cuda_memory_non_p2p(struct efa_resource **state)
 	assert_int_equal(err, 0);
 }
 #else
-void test_efa_rdm_mr_reg_cuda_memory_non_p2p(struct efa_resource **state)
+void test_efa_rdm_mr_reg_cuda_memory_non_p2p(void **state)
 {
 	skip();
 }
@@ -1456,7 +1456,7 @@ void test_efa_rdm_mr_reg_cuda_memory_non_p2p(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_mr_reg_out_of_range_iface(struct efa_resource **state)
+void test_efa_mr_reg_out_of_range_iface(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_mr_attr mr_reg_attr = {0};
@@ -1489,7 +1489,7 @@ void test_efa_mr_reg_out_of_range_iface(struct efa_resource **state)
  * Verify that efa_direct_ope is released when fi_recv fails after
  * allocating the ope. Without the fix the ope leaks on the error path.
  */
-void test_efa_direct_ope_released_on_recv_error(struct efa_resource **state)
+void test_efa_direct_ope_released_on_recv_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep;
@@ -1536,7 +1536,7 @@ void test_efa_direct_ope_released_on_recv_error(struct efa_resource **state)
  * Verify that efa_direct_ope is released when fi_sendmsg fails after
  * allocating the ope. Without the fix the ope leaks on the error path.
  */
-void test_efa_direct_ope_released_on_send_error(struct efa_resource **state)
+void test_efa_direct_ope_released_on_send_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep;
@@ -1595,7 +1595,7 @@ void test_efa_direct_ope_released_on_send_error(struct efa_resource **state)
  * Verify that efa_direct_ope is released when fi_readmsg fails after
  * allocating the ope. Without the fix the ope leaks on the error path.
  */
-void test_efa_direct_ope_released_on_read_error(struct efa_resource **state)
+void test_efa_direct_ope_released_on_read_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep;
@@ -1664,7 +1664,7 @@ void test_efa_direct_ope_released_on_read_error(struct efa_resource **state)
  * Verify that efa_direct_ope is released when fi_writemsg fails after
  * allocating the ope. Without the fix the ope leaks on the error path.
  */
-void test_efa_direct_ope_released_on_write_error(struct efa_resource **state)
+void test_efa_direct_ope_released_on_write_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep;
