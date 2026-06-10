@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022-2024 Cornelis Networks.
+ * Copyright (C) 2022-2024,2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -112,6 +112,8 @@
 #define OPX_MAX_TID_COUNT 2048
 
 #define OPX_TID_PAIR_MAX_PAGES (512)
+
+#define OPX_RZV_MAX_TID_ENTRIES 16
 
 #define OPX_TID_NPAGES(tid_reuse_cache, npages)                                                                     \
 	do {                                                                                                        \
@@ -308,6 +310,11 @@ struct opx_tid_addr_block {
 	uint32_t     offset;
 	uint32_t     npairs;
 	uint32_t     pairs[FI_OPX_MAX_DPUT_TIDPAIRS];
+
+	/* the cache entries whose use_cnt was incremented while
+	 * registering this range */
+	uint32_t	     entry_count;
+	struct ofi_mr_entry *entries[FI_OPX_MAX_DPUT_TIDPAIRS];
 };
 
 /*
