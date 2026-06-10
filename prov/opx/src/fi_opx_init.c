@@ -1139,6 +1139,9 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL,
 			"Deprecated. Use FI_OPX_TID_DISABLE instead.");
 	fi_param_define(
+		&fi_opx_provider, "tid_prefault_region", FI_PARAM_BOOL,
+		"Prefault the region before pinning.  Defaults to true for the uffd memory monitor, otherwise false.");
+	fi_param_define(
 		&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
 		"When set, specify the set of CPU cores to set the progress thread affinity to. The format is <start>:<end>:<stride> where each triplet <start>:<end>:<stride> defines a block Both <start> and <end> is a core_id.");
 	fi_param_define(
