@@ -298,7 +298,8 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
 #endif
 #if HAVE_INLINE_BUF_SIZE_EX
 		if (init_attr_ex->cap.max_inline_data >
-		    g_efa_selected_device_list[0].efa_attr.inline_buf_size)
+		    g_efa_selected_device_list[0].efa_attr.inline_buf_size &&
+		    efa_device_support_rdma_write())
 			efa_attr.flags |= EFADV_QP_FLAGS_INLINE_WRITE;
 #endif
 		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
@@ -593,15 +594,55 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep)
 	return err;
 }
 
+/**
+ * @brief Compute the per-endpoint inline-data limits for fi_inject() and
+ *        inline RMA write.
+ *
+ * Inject sizes are based on HW capabilities, gating capabilities, and
+ * the endpoint type. Only RDM uses wide-wqe; for the non-direct
+ * RDM path, efa_rdm_ep_construct() overwrites these values after this
+ * function returns.
+ *
+ * @param[in]  ep_type              endpoint type (FI_EP_DGRAM or FI_EP_RDM)
+ * @param[in]  inject_size_hint     inject size given by caller's hint
+ * @param[in]  attr                 device attributes (efa_device.efa_attr)
+ * @param[out] msg_inject_size_out  fi_inject() msg cap for this EP
+ * @param[out] rma_inject_size_out  inline RMA write cap (0 if unsupported)
+ */
+static void efa_base_ep_get_inject_sizes(enum fi_ep_type ep_type,
+					 size_t inject_size_hint,
+					 const struct efadv_device_attr *attr,
+					 size_t *msg_inject_size_out,
+					 size_t *rma_inject_size_out)
+{
+	*msg_inject_size_out = inject_size_hint;
+
+	if (ep_type == FI_EP_DGRAM) {
+		/* no rma inject for dgram */
+		*rma_inject_size_out = 0;
+		return;
+	}
+
+	/* efa-direct sizes; efa_rdm_ep_construct() overwrites these for the
+	 * non-direct RDM path. RMA inject is only available when wide WQE
+	 * is being used and the device supports RDMA write. */
+	if (inject_size_hint > attr->inline_buf_size && efa_device_support_rdma_write())
+		*rma_inject_size_out = inject_size_hint;
+	else
+		*rma_inject_size_out = 0;
+}
+
 int efa_base_ep_construct(struct efa_base_ep *base_ep,
 			  struct fid_domain *domain_fid,
 			  struct fi_info *info,
 			  ofi_ep_progress_func progress,
 			  void *context)
 {
+	struct efadv_device_attr *attr;
 	int err;
 
 	base_ep->domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
+	attr = &base_ep->domain->device->efa_attr;
 
 	err = ofi_endpoint_init(domain_fid, &efa_util_prov, info, &base_ep->util_ep,
 				context, progress);
@@ -636,11 +677,12 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	/* Use device's native limit as the default value of base ep*/
 	base_ep->max_msg_size = (size_t) base_ep->domain->device->ibv_port_attr.max_msg_sz;
 	base_ep->max_rma_size = (size_t) base_ep->domain->device->max_rdma_size;
-	base_ep->inject_msg_size = info->tx_attr->inject_size;
-	if (info->tx_attr->inject_size > base_ep->domain->device->efa_attr.inline_buf_size)
-		base_ep->inject_rma_size = info->tx_attr->inject_size;
-	else
-		base_ep->inject_rma_size = 0;
+
+	efa_base_ep_get_inject_sizes(info->ep_attr->type,
+				     info->tx_attr->inject_size, attr,
+				     &base_ep->inject_msg_size,
+				     &base_ep->inject_rma_size);
+
 	base_ep->use_unsolicited_write_recv = true;
 	return 0;
 }

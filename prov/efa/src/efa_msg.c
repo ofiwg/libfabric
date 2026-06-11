@@ -266,8 +266,8 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 		goto post;
 	}
 
-	/* Determine if we should use inline data */
-	len_fits_inline = len <= base_ep->domain->device->efa_attr.inline_buf_size;
+	/* Check against supported inject msg size */
+	len_fits_inline = len <= base_ep->inject_msg_size;
 	is_hmem = false;
 	if (msg->desc) {
 		for (i = 0; i < msg->iov_count; i++) {
