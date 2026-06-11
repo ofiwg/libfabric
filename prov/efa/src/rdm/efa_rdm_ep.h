@@ -11,6 +11,7 @@
 #include "efa_base_ep.h"
 #include "efa_rdm_rxe_map.h"
 #include "efa_rdm_mr.h"
+#include "efa_rdm_domain.h"
 
 
 /** @brief Information of a queued copy.
@@ -282,6 +283,12 @@ static inline
 struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 {
 	return container_of(ep->base_ep.util_ep.domain, struct efa_domain, util_domain);
+}
+
+static inline
+struct efa_rdm_domain *efa_rdm_ep_rdm_domain(struct efa_rdm_ep *ep)
+{
+	return efa_rdm_domain_from_efa_domain(efa_rdm_ep_domain(ep));
 }
 
 void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep);

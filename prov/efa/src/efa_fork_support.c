@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa.h"
+#include "rdm/efa_rdm_domain.h"
 
 enum efa_fork_support_status g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
 
@@ -209,8 +210,14 @@ void efa_atfork_callback_flush_mr_cache()
 	dlist_foreach_container_safe(&g_efa_domain_list,
 				     struct efa_domain,
 				     efa_domain, list_entry, tmp) {
-		if (efa_domain->cache) {
-			while(ofi_mr_cache_flush(efa_domain->cache, flush_lru));
+		struct efa_rdm_domain *rdm_domain;
+
+		if (efa_domain->info_type != EFA_INFO_RDM)
+			continue;
+
+		rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
+		if (rdm_domain->cache) {
+			while(ofi_mr_cache_flush(rdm_domain->cache, flush_lru));
 		}
 	}
 	ofi_mutex_unlock(&g_efa_domain_list_lock);

@@ -89,7 +89,7 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	if (use_p2p &&
 	    txe->total_len >= g_efa_hmem_info[iface].min_read_msg_size &&
 	    efa_rdm_interop_rdma_read(efa_rdm_ep, txe->peer) &&
-	    (txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(efa_rdm_ep))))
+	    (txe->desc[0] || efa_is_cache_available(efa_rdm_ep_rdm_domain(efa_rdm_ep))))
 		return readbase_rtm;
 
 	if (txe->total_len <= eager_rtm_max_data_size)

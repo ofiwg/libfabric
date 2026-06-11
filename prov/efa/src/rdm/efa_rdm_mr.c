@@ -174,7 +174,7 @@ static int efa_rdm_mr_cache_close(fid_t fid)
 					       mr_fid.fid);
 
 	/* Safe cast: efa_mr is first member of efa_rdm_mr, verified by static assertion */
-	ofi_mr_cache_delete(efa_mr->domain->cache, ((struct efa_rdm_mr *) efa_mr)->entry);
+	ofi_mr_cache_delete(efa_rdm_domain_from_efa_domain(efa_mr->domain)->cache, ((struct efa_rdm_mr *) efa_mr)->entry);
 
 	return 0;
 }
@@ -325,16 +325,19 @@ int efa_rdm_mr_update_domain_mr_map(struct efa_rdm_mr *efa_rdm_mr, struct fi_mr_
 		 existing_mr->ibv_mr->length);
 
 	/* this can only happen when MR cache is enabled, hence the assertion */
-	assert(efa_mr->domain->cache);
+	{
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_mr->domain);
+	assert(rdm_domain->cache);
 	pthread_mutex_lock(&mm_lock);
-	ofi_mr_cache_notify(efa_mr->domain->cache, existing_mr->ibv_mr->addr, existing_mr->ibv_mr->length);
+	ofi_mr_cache_notify(rdm_domain->cache, existing_mr->ibv_mr->addr, existing_mr->ibv_mr->length);
 	pthread_mutex_unlock(&mm_lock);
 
 	/* due to MR cache's deferred de-registration, ofi_mr_cache_notify() only move the region to dead_region_list
 	 * ofi_mr_cache_flush() will actually remove the region from cache.
 	 * lru is a list of regions that are still active, so we set flush_lru to false.
 	 */
-	ofi_mr_cache_flush(efa_mr->domain->cache, false /*flush_lru */);
+	ofi_mr_cache_flush(rdm_domain->cache, false /*flush_lru */);
+	}
 
 	/*
 	 * When MR cache removes a MR, it will call its delete_region() call back. delete_region() calls efa_mr_dereg_impl(),
@@ -494,8 +497,11 @@ static int efa_rdm_mr_reg_impl(struct efa_rdm_mr *efa_rdm_mr, uint64_t flags,
 	int ret;
 
 	/* RDM-specific: MR cache flush */
-	if (efa_rdm_mr->efa_mr.domain->cache)
-		ofi_mr_cache_flush(efa_rdm_mr->efa_mr.domain->cache, false);
+	{
+	struct efa_rdm_domain *rdm_domain = efa_rdm_domain_from_efa_domain(efa_rdm_mr->efa_mr.domain);
+	if (rdm_domain->cache)
+		ofi_mr_cache_flush(rdm_domain->cache, false);
+	}
 
 	/*
 	 * For cuda and rocr iface when p2p is unavailable, skip ibv_reg_mr() and
@@ -672,19 +678,21 @@ int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov
 {
 	struct fi_mr_attr attr = EFA_MR_ATTR_INIT_SYSTEM(iov, count, access, offset, requested_key, context);
 	struct efa_domain *domain;
+	struct efa_rdm_domain *rdm_domain;
 	struct efa_rdm_mr *efa_rdm_mr;
 	struct ofi_mr_entry *entry;
 	struct ofi_mr_info info = {0};
 	int ret;
 
 	domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
+	rdm_domain = efa_rdm_domain_from_efa_domain(domain);
 
 	/* If cache is available, use it */
-	if (domain->cache) {
+	if (rdm_domain->cache) {
 		ofi_mr_info_get_iov_from_mr_attr(&info, &attr, flags);
 		info.iface = attr.iface;
 		info.device = attr.device.reserved;
-		ret = ofi_mr_cache_search(domain->cache, &info, &entry);
+		ret = ofi_mr_cache_search(rdm_domain->cache, &info, &entry);
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
@@ -727,6 +735,7 @@ static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			      uint64_t flags, struct fid_mr **mr_fid)
 {
 	struct efa_domain *domain;
+	struct efa_rdm_domain *rdm_domain;
 	struct efa_rdm_mr *efa_rdm_mr;
 	int ret;
 	struct fi_mr_attr mr_attr = {0};
@@ -736,6 +745,7 @@ static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return ret;
 
 	domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
+	rdm_domain = efa_rdm_domain_from_efa_domain(domain);
 
 	efa_rdm_mr = calloc(1, sizeof(*efa_rdm_mr));
 	if (!efa_rdm_mr) {
@@ -762,7 +772,7 @@ static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	}
 
 	/* RDM-specific: SHM MR registration */
-	if (domain->shm_domain) {
+	if (rdm_domain->shm_domain) {
 		uint64_t shm_flags = efa_rdm_mr->flags;
 		struct fi_mr_attr shm_attr = mr_attr;
 
@@ -770,7 +780,7 @@ static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			shm_flags |= FI_HMEM_DEVICE_ONLY;
 
 		shm_attr.hmem_data = efa_rdm_mr->hmem_data;
-		ret = fi_mr_regattr(efa_rdm_mr->efa_mr.domain->shm_domain,
+		ret = fi_mr_regattr(rdm_domain->shm_domain,
 				    &shm_attr, shm_flags,
 				    &efa_rdm_mr->shm_mr);
 		if (ret) {

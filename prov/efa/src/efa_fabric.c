@@ -20,6 +20,7 @@
 
 #include "efa_cq.h"
 #include "efa_domain.h"
+#include "rdm/efa_rdm_domain.h"
 #include "efa_prov_info.h"
 #ifdef EFA_PERF_ENABLED
 const char *efa_perf_counters_str[] = {
@@ -201,6 +202,15 @@ static struct fi_ops efa_fi_ops = {
 
 static struct fi_ops_fabric efa_ops_fabric = {
 	.size = sizeof(struct fi_ops_fabric),
+	.domain = efa_rdm_domain_open,
+	.passive_ep = fi_no_passive_ep,
+	.eq_open = ofi_eq_create,
+	.wait_open = ofi_wait_fd_open,
+	.trywait = efa_trywait
+};
+
+static struct fi_ops_fabric efa_ops_fabric_direct = {
+	.size = sizeof(struct fi_ops_fabric),
 	.domain = efa_domain_open,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = ofi_eq_create,
@@ -244,7 +254,10 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	*fabric_fid = &efa_fabric->util_fabric.fabric_fid;
 	(*fabric_fid)->fid.fclass = FI_CLASS_FABRIC;
 	(*fabric_fid)->fid.ops = &efa_fi_ops;
-	(*fabric_fid)->ops = &efa_ops_fabric;
+	if (strcasecmp(efa_fabric->util_fabric.name, EFA_DIRECT_FABRIC_NAME) == 0)
+		(*fabric_fid)->ops = &efa_ops_fabric_direct;
+	else
+		(*fabric_fid)->ops = &efa_ops_fabric;
 	(*fabric_fid)->api_version = attr->api_version;
 
 	return 0;

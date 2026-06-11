@@ -10,10 +10,8 @@
 #include "efa_av.h"
 #include "efa_cntr.h"
 #include "efa_hw_cntr.h"
-#include "rdm/efa_rdm_cntr.h"
-#include "rdm/efa_rdm_cq.h"
-#include "rdm/efa_rdm_atomic.h"
-#include "efa_rdm_mr.h"
+#include "efa_cq.h"
+#include "efa_domain_util.h"
 
 
 struct dlist_entry g_efa_domain_list;
@@ -45,20 +43,6 @@ static struct fi_ops_domain efa_domain_ops = {
 	.query_collective = fi_no_query_collective,
 };
 
-static struct fi_ops_domain efa_domain_ops_rdm = {
-	.size = sizeof(struct fi_ops_domain),
-	.av_open = efa_av_open,
-	.cq_open = efa_rdm_cq_open,
-	.endpoint = efa_rdm_ep_open,
-	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = efa_rdm_cntr_open,
-	.poll_open = fi_poll_create,
-	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = fi_no_srx_context,
-	.query_atomic = efa_rdm_atomic_query,
-	.query_collective = fi_no_query_collective,
-};
-
 /**
  * @brief init the device and ibv_pd field in efa_domain
  *
@@ -68,7 +52,7 @@ static struct fi_ops_domain efa_domain_ops_rdm = {
  * @return 0 if efa_domain->device and efa_domain->ibv_pd has been set successfully
  *         negative error code if err is encountered
  */
-static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
+int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
                                          const char *domain_name,
                                          enum fi_ep_type ep_type)
 {
@@ -104,71 +88,13 @@ static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
 	return 0;
 }
 
-static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *info)
-{
-	struct fi_info *shm_info = NULL;
-	int err;
-
-	assert(EFA_INFO_TYPE_IS_RDM(info));
-
-	/*
-	 * Open the MR cache if application did not set FI_MR_LOCAL
-	 * and the cache is enabled
-	 *
-	 * Explicit memory registrations from external application
-	 * should never go in the MR cache
-	 */
-	efa_domain->cache = NULL;
-	if (!efa_domain->mr_local && efa_mr_cache_enable) {
-		err = efa_rdm_mr_cache_open(&efa_domain->cache,
-						    efa_domain);
-		if (err)
-			return err;
-	}
-	efa_domain->util_domain.domain_fid.mr = &efa_rdm_domain_mr_ops;
-
-	efa_shm_info_create(info, &shm_info);
-	if (shm_info && !efa_domain->fabric->shm_fabric) {
-		err = fi_fabric(shm_info->fabric_attr,
-				&efa_domain->fabric->shm_fabric,
-				efa_domain->fabric->util_fabric.fabric_fid.fid.context);
-		if (err) {
-			EFA_WARN(FI_LOG_DOMAIN,
-				 "Failed to create shm_fabric: %s\n",
-				 fi_strerror(-err));
-			return err;
-		}
-	}
-
-	if (efa_domain->fabric->shm_fabric) {
-		err = fi_domain(efa_domain->fabric->shm_fabric, shm_info,
-				&efa_domain->shm_domain, NULL);
-		if (err)
-			return err;
-	}
-
-	efa_domain->mtu_size = efa_domain->device->ibv_port_attr.max_msg_sz;
-	efa_domain->addrlen = (info->src_addr) ? info->src_addrlen : info->dest_addrlen;
-	efa_domain->rdm_cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
-				  efa_env.cq_size);
-	efa_domain->num_read_msg_in_flight = 0;
-
-	dlist_init(&efa_domain->ope_queued_list);
-	dlist_init(&efa_domain->ope_longcts_send_list);
-	dlist_init(&efa_domain->peer_backoff_list);
-	dlist_init(&efa_domain->handshake_queued_peer_list);
-
-	if (shm_info)
-		fi_freeinfo(shm_info);
-
-	return 0;
-}
-
-/* @brief Allocate a domain, open the device, and set it up based on the hints.
+/* @brief Allocate an efa-direct or dgram domain.
  *
- * This function creates a domain and uses the info struct to configure the
- * domain based on what capabilities are set. Fork support is checked here and
- * the MR cache is also set up here.
+ * This function creates a domain and uses the info struct to configure
+ * the domain based on what capabilities are set. Allocates the base
+ * struct efa_domain (no MR cache, no SHM, no RDM-specific bookkeeping).
+ * For DIRECT with FI_RMA capability, also registers the 0-byte rma
+ * bounce buffer. Fork support is checked here.
  *
  * @param fabric_fid fabric that the domain should be tied to
  * @param info info struct that was validated and returned by fi_getinfo
@@ -180,7 +106,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context)
 {
 	struct efa_domain *efa_domain;
-	int ret, err;
+	int ret = 0, err;
 	bool use_lock;
 
 	efa_domain = calloc(1, sizeof(struct efa_domain));
@@ -197,158 +123,85 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		return err;
 	}
 
-	/* This list_entry is not the head of the list. But we initialize it
-	 * anyway to prevent a segfault in efa_domain_close.
-	 *
-	 * efa_domain_close always removes this dlist_entry. If the domain is
-	 * successfully opened, then this entry is added to g_efa_domain_list
-	 * and is successfully removed in efa_domain_close. But if the domain
-	 * open fails and we reach efa_domain_close in the error path, then not
-	 * initializing this list_entry will cause a segfault efa_domain_close.
-	 */
-	dlist_init(&efa_domain->list_entry);
-	efa_domain->fabric = container_of(fabric_fid, struct efa_fabric,
-					  util_fabric.fabric_fid);
+	if (EFA_INFO_TYPE_IS_DIRECT(info)) {
+		efa_domain->info_type = EFA_INFO_DIRECT;
+	} else if (EFA_INFO_TYPE_IS_DGRAM(info)) {
+		efa_domain->info_type = EFA_INFO_DGRAM;
+	} else {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efa_domain_open called with non-direct/dgram info\n");
+		ofi_genlock_destroy(&efa_domain->srx_lock);
+		free(efa_domain);
+		*domain_fid = NULL;
+		return -FI_EINVAL;
+	}
 
-	ret = ofi_domain_init(fabric_fid, info, &efa_domain->util_domain,
-			      context, OFI_LOCK_MUTEX);
-	if (ret)
-		goto err_free;
-
-	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_ct, 0);
-	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_sz, 0);
-
-	efa_domain->ah_map = NULL;
-
-	efa_domain->util_domain.av_type = FI_AV_TABLE;
-	efa_domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
-	/*
-	 * FI_MR_PROV_KEY means provider will generate a key for MR,
-	 * which EFA provider does by using key generated by EFA device.
-	 *
-	 * util_domain.mr_map.mode is same as info->mode, which has
-	 * the bit FI_MR_PROV_KEY on. When the bit is on, util_domain.mr_map
-	 * will generate a key for MR, which is not what we want
-	 * (we want to use the key generated by device). Therefore unset
-	 * the FI_MR_PROV_KEY bit of mr_map.
-	 */
-	efa_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
-
-	if (!info->ep_attr || info->ep_attr->type == FI_EP_UNSPEC) {
-		EFA_WARN(FI_LOG_DOMAIN, "ep type not specified when creating domain\n");
-		ret = -FI_EINVAL;
+	err = efa_domain_init_base(efa_domain, fabric_fid, info, context);
+	if (err) {
+		ret = err;
 		goto err_free;
 	}
 
-	efa_domain->mr_local = ofi_mr_local(info);
-	if ((EFA_INFO_TYPE_IS_DGRAM(info) || EFA_INFO_TYPE_IS_DIRECT(info)) && !efa_domain->mr_local) {
+	if (!efa_domain->mr_local) {
 		EFA_WARN(FI_LOG_EP_DATA, "EFA direct and dgram require FI_MR_LOCAL, but application does not support it\n");
 		ret = -FI_ENODATA;
 		goto err_free;
 	}
 
-	ret = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name, info->ep_attr->type);
-	if (ret)
-		goto err_free;
-
-	efa_domain->info = fi_dupinfo(EFA_EP_TYPE_IS_RDM(info) ? efa_domain->device->rdm_info : efa_domain->device->dgram_info);
-	if (!efa_domain->info) {
-		ret = -FI_ENOMEM;
-		goto err_free;
-	}
-	/* keep max_cntr_value and max_err_cntr_value from user info so we can
-	 * decide whether to use hw counter later */
-	efa_domain->info->domain_attr->max_cntr_value = info->domain_attr->max_cntr_value;
-	efa_domain->info->domain_attr->max_err_cntr_value = info->domain_attr->max_err_cntr_value;
-
 	*domain_fid = &efa_domain->util_domain.domain_fid;
 
-	/**
-	 * TODO: After separating efa_domain's core functionality
-	 * and efa-rdm specific functionality, we should remove
-	 * such fabric branching and assign the fields for each
-	 * fabric individually
-	 */
-	if (EFA_INFO_TYPE_IS_RDM(info)) {
-		efa_domain->info_type = EFA_INFO_RDM;
-	} else if (EFA_INFO_TYPE_IS_DIRECT(info)) {
-		efa_domain->info_type = EFA_INFO_DIRECT;
-	} else {
-		assert(EFA_INFO_TYPE_IS_DGRAM(info));
-		efa_domain->info_type = EFA_INFO_DGRAM;
-	}
-
-	dlist_init(&efa_domain->ah_lru_list);
-	if (efa_env.track_mr)
-		dlist_init(&efa_domain->base_ep_list);
-
 	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid;
-	if (efa_domain->info_type == EFA_INFO_RDM) {
-		ret = efa_domain_init_rdm(efa_domain, info);
-		if (ret) {
-			EFA_WARN(FI_LOG_DOMAIN,
-				 "efa_domain_init_rdm failed. err: %d\n",
-				 -ret);
+	efa_domain->util_domain.domain_fid.ops = &efa_domain_ops;
+	efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
+
+	/* Allocate and register bounce buffer for 0-byte rma operations (efa-direct only) */
+	if (efa_domain->info_type == EFA_INFO_DIRECT && info->caps & FI_RMA) {
+		struct iovec iov;
+		struct fid_mr *mr_fid;
+		uint64_t mr_flags = FI_READ | FI_WRITE;
+
+		long page_size = ofi_get_page_size();
+		if (page_size <= 0) {
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to get page size\n");
+			ret = -FI_EINVAL;
 			goto err_free;
 		}
-		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops_rdm;
-	} else {
-		assert(efa_domain->info_type == EFA_INFO_DIRECT || efa_domain->info_type == EFA_INFO_DGRAM);
-		efa_domain->util_domain.domain_fid.ops = &efa_domain_ops;
-		efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
-		efa_domain->cache = NULL;
 
-		/* Allocate and register bounce buffer for 0-byte rma operations (efa-direct only) */
-		if (efa_domain->info_type == EFA_INFO_DIRECT && info->caps & FI_RMA) {
-			struct iovec iov;
-			struct fid_mr *mr_fid;
-			uint64_t mr_flags = FI_READ | FI_WRITE;
-
-			long page_size = ofi_get_page_size();
-			if (page_size <= 0) {
-				EFA_WARN(FI_LOG_DOMAIN, "Failed to get page size\n");
-				ret = -FI_EINVAL;
-				goto err_free;
-			}
-
-			ret = ofi_memalign(&efa_domain->zero_byte_bounce_buf, page_size, page_size);
-			if (ret) {
-				EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate zero-byte bounce buffer\n");
-				goto err_free;
-			}
-
-			iov.iov_base = efa_domain->zero_byte_bounce_buf;
-			iov.iov_len = page_size;
-			ret = fi_mr_regv(&efa_domain->util_domain.domain_fid,
-						   &iov, 1, mr_flags, 0, 0, 0, &mr_fid, NULL);
-			if (ret) {
-				EFA_WARN(FI_LOG_DOMAIN, "Failed to register zero-byte bounce buffer: %d\n", ret);
-				free(efa_domain->zero_byte_bounce_buf);
-				efa_domain->zero_byte_bounce_buf = NULL;
-				goto err_free;
-			}
-			efa_domain->zero_byte_bounce_buf_mr = container_of(mr_fid, struct efa_mr, mr_fid);
+		ret = ofi_memalign(&efa_domain->zero_byte_bounce_buf, page_size, page_size);
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate zero-byte bounce buffer\n");
+			goto err_free;
 		}
+
+		iov.iov_base = efa_domain->zero_byte_bounce_buf;
+		iov.iov_len = page_size;
+		ret = fi_mr_regv(&efa_domain->util_domain.domain_fid,
+				 &iov, 1, mr_flags, 0, 0, 0, &mr_fid, NULL);
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN, "Failed to register zero-byte bounce buffer: %d\n", ret);
+			free(efa_domain->zero_byte_bounce_buf);
+			efa_domain->zero_byte_bounce_buf = NULL;
+			goto err_free;
+		}
+		efa_domain->zero_byte_bounce_buf_mr = container_of(mr_fid, struct efa_mr, mr_fid);
 	}
 
-#ifndef _WIN32
-	ret = efa_fork_support_install_fork_handler();
-	if (ret) {
-		EFA_WARN(FI_LOG_CORE,
-			 "Unable to install fork handler: %s\n",
-			 strerror(-ret));
+	err = efa_domain_finalize_base(efa_domain);
+	if (err) {
+		ret = err;
 		goto err_free;
 	}
-#endif
-
-	ofi_mutex_lock(&g_efa_domain_list_lock);
-	dlist_insert_tail(&efa_domain->list_entry, &g_efa_domain_list);
-	ofi_mutex_unlock(&g_efa_domain_list_lock);
 
 	return 0;
 
 err_free:
 	assert(efa_domain);
+	/* TODO: efa_domain_close called here on a partially-constructed domain
+	 * is unsafe when ofi_domain_init or ofi_genlock_init failed since
+	 * efa_domain_close takes the possibly uninitialized lock. The proper
+	 * fix will involve fixing ofi_domain_init() to clean up properly
+	 * on failure path
+	 */
 	err = efa_domain_close(&efa_domain->util_domain.domain_fid.fid);
 	if (err) {
 		EFA_WARN(FI_LOG_DOMAIN, "When handling error (%d), domain resource was being released. "
@@ -363,35 +216,13 @@ err_free:
 static int efa_domain_close(fid_t fid)
 {
 	struct efa_domain *efa_domain;
-	struct efa_ah *ah_entry, *tmp;
 	int ret;
 
 	efa_domain = container_of(fid, struct efa_domain,
 				  util_domain.domain_fid.fid);
 
-	ofi_mutex_lock(&g_efa_domain_list_lock);
-	dlist_remove(&efa_domain->list_entry);
-	ofi_mutex_unlock(&g_efa_domain_list_lock);
-
-	if (efa_domain->cache) {
-		ofi_mr_cache_cleanup(efa_domain->cache);
-		free(efa_domain->cache);
-		efa_domain->cache = NULL;
-	}
-
-	/* Clean up ah_map if any entries remain */
-	ofi_genlock_lock(&efa_domain->util_domain.lock);
-	if (efa_domain->ah_map) {
-		EFA_WARN(FI_LOG_DOMAIN, "AH map not empty during domain close! Cleaning up ...\n");
-		HASH_ITER(hh, efa_domain->ah_map, ah_entry, tmp) {
-			ret = ibv_destroy_ah(ah_entry->ibv_ah);
-			if (ret)
-				EFA_WARN(FI_LOG_DOMAIN, "ibv_destroy_ah failed during cleanup! err=%d\n", ret);
-			HASH_DEL(efa_domain->ah_map, ah_entry);
-			free(ah_entry);
-		}
-	}
-	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+	efa_domain_remove_from_global_list(efa_domain);
+	efa_domain_cleanup_ah_map(efa_domain);
 
 	if (efa_domain->zero_byte_bounce_buf_mr) {
 		ret = fi_close(&efa_domain->zero_byte_bounce_buf_mr->mr_fid.fid);
@@ -416,18 +247,11 @@ static int efa_domain_close(fid_t fid)
 	if (ret)
 		EFA_WARN(FI_LOG_DOMAIN, "Failed to close util_domain: %d\n", ret);
 
-	if (efa_domain->shm_domain) {
-		ret = fi_close(&efa_domain->shm_domain->fid);
-		if (ret)
-			EFA_WARN(FI_LOG_DOMAIN, "Failed to close shm_domain: %d\n", ret);
-	}
-
 	if (efa_domain->info)
 		fi_freeinfo(efa_domain->info);
 
 	ofi_genlock_destroy(&efa_domain->srx_lock);
 	free(efa_domain);
-
 	return 0;
 }
 
@@ -751,6 +575,7 @@ static uint64_t efa_domain_get_mr_lkey(struct fid_mr *mr)
 	return efa_mr->ibv_mr->lkey;
 }
 
+
 #if HAVE_EFADV_CREATE_COMP_CNTR
 
 static inline int efa_domain_fi_to_efadv_memory_location(
@@ -861,7 +686,8 @@ static int efa_domain_cntr_open_ext(struct fid_domain *domain,
 }
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */
 
-static struct fi_efa_ops_domain efa_ops_domain = {
+
+struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
 };
 
@@ -902,118 +728,3 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 	return ret;
 }
 
-void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
-{
-	struct efa_rdm_peer *peer;
-	struct dlist_entry *tmp;
-	struct efa_rdm_ope *ope;
-	int ret;
-
-	assert(domain->info->ep_attr->type == FI_EP_RDM);
-
-	/* Update timers for peers that are in backoff list*/
-	dlist_foreach_container_safe(&domain->peer_backoff_list, struct efa_rdm_peer,
-				     peer, rnr_backoff_entry, tmp) {
-		if (ofi_gettime_us() >= peer->rnr_backoff_begin_ts +
-					peer->rnr_backoff_wait_time) {
-			peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
-			dlist_remove(&peer->rnr_backoff_entry);
-		}
-	}
-
-	/*
-	 * Resend handshake packet for any peers where the first
-	 * handshake send failed.
-	 */
-	dlist_foreach_container_safe(&domain->handshake_queued_peer_list,
-				     struct efa_rdm_peer, peer,
-				     handshake_queued_entry, tmp) {
-		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
-			continue;
-
-		ret = efa_rdm_ep_post_handshake(peer->ep, peer);
-		if (ret == -FI_EAGAIN)
-			continue;
-
-		if (OFI_UNLIKELY(ret)) {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				 "Failed to post HANDSHAKE to peer fi_addr: "
-				 "%ld implicit fi_addr: %ld. %s\n",
-				 peer->conn->fi_addr,
-				 peer->conn->implicit_fi_addr,
-				 fi_strerror(-ret));
-			efa_base_ep_write_eq_error(&peer->ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE);
-			continue;
-		}
-
-		dlist_remove(&peer->handshake_queued_entry);
-		peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_QUEUED;
-		peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
-	}
-
-	/*
-	 * Repost pkts for all queued op entries
-	 */
-	dlist_foreach_container_safe(&domain->ope_queued_list,
-				     struct efa_rdm_ope,
-				     ope, queued_entry, tmp) {
-
-		peer = ope->peer;
-		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
-			continue;
-
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE))
-			continue;
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_RNR))
-			continue;
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
-			continue;
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_READ))
-			continue;
-	}
-	/*
-	 * Send data packets until window or data queue is exhausted.
-	 */
-	dlist_foreach_container(&domain->ope_longcts_send_list, struct efa_rdm_ope,
-				ope, entry) {
-		peer = ope->peer;
-		assert(peer);
-		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
-			continue;
-
-		/*
-		 * Do not send DATA packet until we received HANDSHAKE packet from the peer,
-		 * this is because endpoint does not know whether peer need connid in header
-		 * until it get the HANDSHAKE packet.
-		 *
-		 * We only do this for DATA packet because other types of packets always
-		 * has connid in there packet header. If peer does not make use of the connid,
-		 * the connid can be safely ignored.
-		 *
-		 * DATA packet is different because for DATA packet connid is an optional
-		 * header inserted between the mandatory header and the application data.
-		 * Therefore if peer does not use/understand connid, it will take connid
-		 * as application data thus cause data corruption.
-		 *
-		 * This will not cause deadlock because peer will send a HANDSHAKE packet
-		 * back upon receiving 1st packet from the endpoint, and in all 3 sub0protocols
-		 * (long-CTS message, emulated long-CTS write and emulated long-CTS read)
-		 * where DATA packet is used, endpoint will send other types of packet to
-		 * peer before sending DATA packets. The workflow of the 3 sub-protocol
-		 * can be found in protocol v4 document chapter 3.
-		 */
-		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
-			continue;
-
-		if (ope->window > 0) {
-			ret = efa_rdm_ope_post_send(ope, EFA_RDM_CTSDATA_PKT);
-			if (OFI_UNLIKELY(ret)) {
-				if (ret == -FI_EAGAIN)
-					continue;
-
-				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
-				continue;
-			}
-		}
-	}
-}

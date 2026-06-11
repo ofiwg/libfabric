@@ -443,6 +443,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		    struct fid_ep **ep, void *context)
 {
 	struct efa_domain *efa_domain = NULL;
+	struct efa_rdm_domain *rdm_domain = NULL;
 	struct efa_rdm_ep *efa_rdm_ep = NULL;
 	int ret, retv;
 	enum fi_hmem_iface iface;
@@ -458,17 +459,18 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
+	rdm_domain = efa_rdm_domain_from_efa_domain(efa_domain);
 
 	ret = efa_base_ep_construct(&efa_rdm_ep->base_ep, domain, info,
 				    efa_rdm_ep_progress_no_op, context);
 	if (ret)
 		goto err_free_ep;
 
-	if (efa_domain->shm_domain) {
+	if (rdm_domain->shm_domain) {
 		efa_rdm_ep->shm_info = NULL;
 		efa_shm_info_create(info, &efa_rdm_ep->shm_info);
 		if (efa_rdm_ep->shm_info) {
-			ret = fi_endpoint(efa_domain->shm_domain, efa_rdm_ep->shm_info,
+			ret = fi_endpoint(rdm_domain->shm_domain, efa_rdm_ep->shm_info,
 					  &efa_rdm_ep->shm_ep, efa_rdm_ep);
 			if (ret)
 				goto err_destroy_base_ep;
@@ -895,12 +897,12 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
 	struct efa_rdm_ope *ope;
-	struct efa_domain *domain = efa_rdm_ep_domain(ep);
+	struct efa_rdm_domain *rdm_domain = efa_rdm_ep_rdm_domain(ep);
 
-	assert(domain->info->ep_attr->type == FI_EP_RDM);
+	assert(rdm_domain->efa_domain.info->ep_attr->type == FI_EP_RDM);
 
 	/* Update timers for peers that are in backoff list*/
-	dlist_foreach_container_safe(&domain->peer_backoff_list,
+	dlist_foreach_container_safe(&rdm_domain->peer_backoff_list,
 			struct efa_rdm_peer, peer, rnr_backoff_entry, tmp) {
 		if (ofi_gettime_us() >= peer->rnr_backoff_begin_ts +
 					peer->rnr_backoff_wait_time) {
@@ -909,7 +911,7 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 		}
 	}
 
-	dlist_foreach_container_safe(&domain->ope_queued_list,
+	dlist_foreach_container_safe(&rdm_domain->ope_queued_list,
 			struct efa_rdm_ope, ope, queued_entry, tmp) {
 		if (ope->ep == ep) {
 			switch (efa_rdm_pke_get_ctrl_pkt_type_from_queued_ope(ope)) {
@@ -1081,7 +1083,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 
 	/**
 	 * The QP destroy and op entries clean up must be in the same lock,
-	 * otherwise there can be race condition that efa_domain_progress_rdm_peers_and_queues
+	 * otherwise there can be race condition that efa_rdm_domain_progress_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
 	 *
 	 * Destroying the self AH also requires the SRX lock
@@ -1200,6 +1202,7 @@ int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 	int ret, retv = 0;
 	struct efa_domain *efa_domain;
 	struct efa_av *efa_av;
+	struct efa_rdm_domain *rdm_domain;
 	struct efa_rdm_cq *efa_rdm_cq;
 
 
@@ -1240,14 +1243,15 @@ int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 	}
 
 	efa_domain = efa_rdm_ep_domain(efa_rdm_ep);
+	rdm_domain = efa_rdm_ep_rdm_domain(efa_rdm_ep);
 
-	if (efa_domain->shm_domain) {
-		ret = fi_close(&efa_domain->shm_domain->fid);
+	if (rdm_domain->shm_domain) {
+		ret = fi_close(&rdm_domain->shm_domain->fid);
 		if (ret) {
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm domain: %s\n", fi_strerror(-ret));
 			retv = ret;
 		}
-		efa_domain->shm_domain = NULL;
+		rdm_domain->shm_domain = NULL;
 	}
 
 	if (efa_domain->fabric->shm_fabric) {
@@ -1280,7 +1284,7 @@ void efa_rdm_ep_update_shm(struct efa_rdm_ep *ep)
 	 * when efa_env.enable_shm_transfer is false
 	 * , shm resources won't be created.
 	 */
-	if (!efa_rdm_ep_domain(ep)->shm_domain)
+	if (!efa_rdm_ep_rdm_domain(ep)->shm_domain)
 		return;
 
 	use_shm = true;
@@ -1461,7 +1465,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 			peer_srx_context.srx = ep->shm_peer_srx;
 
 			peer_srx_attr.op_flags |= FI_PEER;
-			ret = fi_srx_context(efa_rdm_ep_domain(ep)->shm_domain,
+			ret = fi_srx_context(efa_rdm_ep_rdm_domain(ep)->shm_domain,
 				&peer_srx_attr, &ep->shm_srx, &peer_srx_context);
 			if (ret)
 				goto err_close_shm;

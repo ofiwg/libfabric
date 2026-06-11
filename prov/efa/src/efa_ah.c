@@ -6,6 +6,7 @@
 #include "efa.h"
 #include "efa_ah.h"
 #include "efa_conn.h"
+#include "rdm/efa_rdm_domain.h"
 #include <infiniband/efadv.h>
 
 void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
@@ -25,21 +26,30 @@ void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
 void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 					struct efa_ah *ah)
 {
+	struct efa_rdm_domain *rdm_domain;
+
+	assert(domain->info_type == EFA_INFO_RDM);
+
+	rdm_domain = efa_rdm_domain_from_efa_domain(domain);
 	assert(ah->implicit_refcnt > 0 || ah->explicit_refcnt > 0);
-	assert(dlist_entry_in_list(&domain->ah_lru_list,
+	assert(dlist_entry_in_list(&rdm_domain->ah_lru_list,
 				   &ah->domain_lru_ah_list_entry));
 
 	dlist_remove(&ah->domain_lru_ah_list_entry);
 	dlist_insert_tail(&ah->domain_lru_ah_list_entry,
-			  &domain->ah_lru_list);
+			  &rdm_domain->ah_lru_list);
 }
 
 static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
 	struct efa_conn *conn_to_release;
 	struct efa_ah *ah_tmp, *ah_to_release = NULL;
 	struct dlist_entry *tmp;
+	struct efa_rdm_domain *rdm_domain;
 
-	dlist_foreach_container (&domain->ah_lru_list, struct efa_ah, ah_tmp,
+	assert(domain->info_type == EFA_INFO_RDM);
+	rdm_domain = efa_rdm_domain_from_efa_domain(domain);
+
+	dlist_foreach_container (&rdm_domain->ah_lru_list, struct efa_ah, ah_tmp,
 				 domain_lru_ah_list_entry) {
 		if (ah_tmp->explicit_refcnt == 0) {
 			ah_to_release = ah_tmp;
@@ -117,7 +127,8 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	HASH_FIND(hh, domain->ah_map, gid, EFA_GID_LEN, efa_ah);
 	if (efa_ah) {
 		insert_implicit_av ? efa_ah->implicit_refcnt++ : efa_ah->explicit_refcnt++;
-		efa_ah_implicit_av_lru_ah_move(domain, efa_ah);
+		if (domain->info_type == EFA_INFO_RDM)
+			efa_ah_implicit_av_lru_ah_move(domain, efa_ah);
 		ofi_genlock_unlock(&domain->util_domain.lock);
 		return efa_ah;
 	}
@@ -136,8 +147,8 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	if (!efa_ah->ibv_ah) {
 		/* If the failure is because we have too many AH entries, try to
 		 * evict an AH entry with no explicit AV entries and try AH
-		 * creation again */
-		if (errno == FI_ENOMEM) {
+		 * creation again. Eviction only applies to RDM domains. */
+		if (errno == FI_ENOMEM && domain->info_type == EFA_INFO_RDM) {
 			EFA_INFO(
 				FI_LOG_AV,
 				"ibv_create_ah failed with ENOMEM for implicit "
@@ -177,7 +188,13 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	}
 
 	dlist_init(&efa_ah->implicit_conn_list);
-	dlist_insert_tail(&efa_ah->domain_lru_ah_list_entry, &domain->ah_lru_list);
+	if (domain->info_type == EFA_INFO_RDM) {
+		struct efa_rdm_domain *rdm_domain =
+			efa_rdm_domain_from_efa_domain(domain);
+		dlist_insert_tail(&efa_ah->domain_lru_ah_list_entry, &rdm_domain->ah_lru_list);
+	} else {
+		dlist_init(&efa_ah->domain_lru_ah_list_entry);
+	}
 	efa_ah->implicit_refcnt = 0;
 	efa_ah->explicit_refcnt = 0;
 	insert_implicit_av ? efa_ah->implicit_refcnt++ : efa_ah->explicit_refcnt++;

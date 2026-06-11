@@ -488,8 +488,8 @@ void test_efa_rdm_ep_rma_queue_before_handshake(struct efa_resource **state, int
 				      peer_addr, rma_addr, rma_key);
 	assert_int_equal(err, 0);
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list),  1);
-	assert_int_equal(efa_unit_test_get_dlist_length(&(efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list)), 1);
-	txe = container_of(efa_rdm_ep_domain(efa_rdm_ep)->ope_queued_list.next, struct efa_rdm_ope, queued_entry);
+	assert_int_equal(efa_unit_test_get_dlist_length(&(efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list)), 1);
+	txe = container_of(efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list.next, struct efa_rdm_ope, queued_entry);
 	assert_true((txe->op == op));
 	assert_true(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
 

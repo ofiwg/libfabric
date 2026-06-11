@@ -432,7 +432,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 					assert(!(pkt_entry->peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED));
 					pkt_entry->peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
 					dlist_insert_tail(&pkt_entry->peer->handshake_queued_entry,
-						  &efa_rdm_ep_domain(ep)->handshake_queued_peer_list);
+						  &efa_rdm_ep_rdm_domain(ep)->handshake_queued_peer_list);
 					break;
 				case EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN: /* fall through */
 				case FI_EFA_ERR_ESTABLISHED_RECV_UNRESP: /* fall through */
