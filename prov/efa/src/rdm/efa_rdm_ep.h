@@ -348,9 +348,8 @@ bool efa_rdm_ep_support_rdma_read(struct efa_rdm_ep *ep)
 /**
  * @brief determine if both peers support RDMA read
  *
- * This function can only return true if peers are homogeneous,
- * or a handshake packet has already been exchanged and the peer
- * set the EFA_RDM_EXTRA_FEATURE_RDMA_READ flag.
+ * This function can only return true if a handshake packet has already
+ * been exchanged and the peer set the EFA_RDM_EXTRA_FEATURE_RDMA_READ flag.
  * @params[in]		ep		Endpoint for communication with peer
  * @params[in]		peer		An EFA peer
  * @return		boolean		both self and peer support RDMA read
@@ -359,7 +358,7 @@ static inline
 bool efa_both_support_rdma_read(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
 	return efa_rdm_ep_support_rdma_read(ep) &&
-	       (ep->homogeneous_peers || peer->is_self || efa_rdm_peer_support_rdma_read(peer));
+	       efa_rdm_peer_support_rdma_read(peer);
 }
 
 /**
@@ -387,10 +386,12 @@ bool efa_both_support_rdma_read(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer
 static inline
 bool efa_rdm_interop_rdma_read(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
-	bool rdma_read_support = efa_both_support_rdma_read(ep, peer);
 	uint32_t ep_dev_ver, peer_dev_ver;
 
-	if (!rdma_read_support)
+	if (ep->homogeneous_peers || peer->is_self)
+		return efa_rdm_ep_support_rdma_read(ep);
+
+	if (!efa_both_support_rdma_read(ep, peer))
 		return false;
 
 	ep_dev_ver = efa_rdm_ep_domain(ep)->device->ibv_attr.vendor_part_id;
