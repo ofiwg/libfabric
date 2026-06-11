@@ -124,8 +124,9 @@ send_tag | ignore == recv_tag | ignore
 ```
 
 In general, message tags are checked against receive buffers in the
-order in which messages have been posted to the endpoint.  See the
-ordering discussion below for more details.
+order in which messages have been posted to the endpoint. If a matched
+receive cannot be completed, the application receives an error completion.
+See the ordering discussion below for more details.
 
 The send functions -- fi_tsend, fi_tsendv, fi_tsendmsg,
 fi_tinject, and fi_tsenddata -- are used
