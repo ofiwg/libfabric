@@ -7,6 +7,9 @@
 #include "efa_mr.h"
 #include <stddef.h>
 
+ /* UINT32_MAX is reserved as a sentinel indicating "not yet set." A valid gen is any other value. */
+#define EFA_RDM_MR_INVALID_GEN_VALUE UINT32_MAX
+
 struct efa_rdm_mr {
 	struct efa_mr		efa_mr;
 	bool			inserted_to_mr_map;
@@ -56,5 +59,26 @@ int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov
 			  size_t count, uint64_t access, uint64_t offset,
 			  uint64_t requested_key, uint64_t flags,
 			  struct fid_mr **mr, void *context);
+
+/**
+ * @brief Advance the MR generation counter, skipping EFA_RDM_MR_INVALID_GEN_VALUE.
+ *
+ * EFA_RDM_MR_INVALID_GEN_VALUE is reserved as a sentinel in ope->desc_gen[]
+ * to indicate "not yet captured." A live MR must never hold that value.
+ */
+static inline void efa_rdm_mr_gen_bump(struct efa_rdm_mr *mr)
+{
+	mr->gen++;
+	if (OFI_UNLIKELY(mr->gen == EFA_RDM_MR_INVALID_GEN_VALUE))
+		mr->gen = 0;
+}
+
+/**
+ * @brief Check whether a gen value is valid.
+ */
+static inline bool efa_rdm_mr_gen_value_is_valid(uint32_t gen)
+{
+	return (gen != EFA_RDM_MR_INVALID_GEN_VALUE);
+}
 
 #endif /* EFA_RDM_MR_H */
