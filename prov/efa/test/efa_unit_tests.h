@@ -229,6 +229,7 @@ void test_efa_hmem_info_p2p_dmabuf_assumed_neuron(void **state);
 void test_efa_hmem_info_p2p_disabled_neuron(void **state);
 void test_efa_hmem_info_p2p_disabled_synapse(void **state);
 void test_efa_hmem_info_disable_p2p_cuda(void **state);
+void test_efa_hmem_info_check_p2p_cuda_ctx_create_destroy_on_memalloc_fail(void **state);
 void test_efa_nic_select_all_devices_matches(void);
 void test_efa_nic_select_first_device_matches(void);
 void test_efa_nic_select_first_device_with_surrounding_comma_matches(void);
