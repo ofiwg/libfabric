@@ -1474,5 +1474,5 @@ void test_ep_getopt_inject_size_wide_wqe(struct efa_resource **state)
 			&inject_rma_size, &sz), 0);
 
 	assert_int_equal(inject_msg_size, 33);
-	assert_int_equal(inject_rma_size, 33);
+	assert_int_equal(inject_rma_size, efa_device_support_rdma_write() ? 33 : 0);
 }
