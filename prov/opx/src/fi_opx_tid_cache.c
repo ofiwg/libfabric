@@ -659,7 +659,7 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 		goto error;
 	}
 
-	struct ofi_rbnode *rbnode = ofi_rbnode_new(&cache->tree);
+	struct ofi_rbnode *rbnode = ofi_rbnode_alloc(&cache->tree);
 	if (OFI_UNLIKELY(!rbnode)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "Failed to alloc rbnode, return -FI_ENOMEM\n");
 		goto error;
@@ -682,7 +682,7 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 	if (OFI_UNLIKELY(ret)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "ofi_rbmap_insert returned %d (%s) %p\n", ret, strerror(ret),
 		       (*entry)->node);
-		ofi_rbnode_del(&cache->tree, rbnode);
+		ofi_rbnode_free(&cache->tree, rbnode);
 		goto error;
 	}
 	cache->cached_cnt++;

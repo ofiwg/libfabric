@@ -4,6 +4,7 @@
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  * Copyright (c) 2020 Cisco Systems, Inc. All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (C) 2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -268,6 +269,12 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
  * new entry, then check under lock that a conflict with another thread
  * hasn't occurred.  If a conflict occurred, we return -EAGAIN and
  * restart the entire operation.
+ *
+ * The rbnode for the tree insertion is also pre-allocated outside the
+ * lock for the same reason: ofi_rbmap_insert() may call malloc() which
+ * can trigger madvise() via the allocator, and an intercepting memory
+ * monitor (e.g. OPAL) would call back into ofi_import_monitor_notify()
+ * which needs mm_lock -- deadlocking the thread.
  */
 static int
 util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
@@ -300,6 +307,12 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 	assert(ofi_iov_within(&(*info).iov, &(*entry)->info.iov));
 	*info = (*entry)->info;
 
+	struct ofi_rbnode *rbnode = ofi_rbnode_alloc(&cache->tree);
+	if (OFI_UNLIKELY(!rbnode)) {
+		ret = -FI_ENOMEM;
+		goto free;
+	}
+
 	pthread_mutex_lock(&mm_lock);
 	cur = ofi_mr_rbt_find(&cache->tree, info);
 	if (cur) {
@@ -311,11 +324,14 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 		cache->uncached_cnt++;
 		cache->uncached_size += info->iov.iov_len;
 	} else {
-		if (ofi_rbmap_insert(&cache->tree, (void *) &(*entry)->info,
-				     (void *) *entry, &(*entry)->node)) {
-			ret = -FI_ENOMEM;
+		ret = ofi_rbmap_insert_at(&cache->tree,
+					  (void *) &(*entry)->info,
+					  (void *) *entry, &(*entry)->node,
+					  rbnode);
+		if (ret)
 			goto unlock;
-		}
+		rbnode = NULL; /* now owned by the tree */
+
 		cache->cached_cnt++;
 		cache->cached_size += info->iov.iov_len;
 
@@ -328,10 +344,17 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 			cache->uncached_size += (*entry)->info.iov.iov_len;
 		}
 	}
+	/* ofi_rbnode_free() only returns the node to the tree free list (never
+	 * allocates), so it is safe to call while holding mm_lock.
+	 */
+	if (rbnode)
+		ofi_rbnode_free(&cache->tree, rbnode);
 	pthread_mutex_unlock(&mm_lock);
 	return 0;
 
 unlock:
+	if (rbnode)
+		ofi_rbnode_free(&cache->tree, rbnode);
 	pthread_mutex_unlock(&mm_lock);
 free:
 	util_mr_free_entry(cache, *entry);
