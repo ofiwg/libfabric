@@ -487,7 +487,7 @@ static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_rdm_mr)
 	 * than dereferencing ibv_mr, so a concurrent reader that passes
 	 * the gen check cannot fault on a cleared ibv_mr.
 	 */
-	efa_rdm_mr->gen++;
+	efa_rdm_mr_gen_bump(efa_rdm_mr);
 
 	return ret;
 }

@@ -57,4 +57,28 @@ int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov
 			  uint64_t requested_key, uint64_t flags,
 			  struct fid_mr **mr, void *context);
 
+/**
+ * @brief Advance the MR generation counter, skipping UINT32_MAX.
+ *
+ * UINT32_MAX is reserved as a sentinel in ope->desc_gen[] to indicate
+ * "not yet captured." A live MR must never hold that value.
+ */
+static inline void efa_rdm_mr_gen_bump(struct efa_rdm_mr *mr)
+{
+	mr->gen++;
+	if (OFI_UNLIKELY(mr->gen == UINT32_MAX))
+		mr->gen = 0;
+}
+
+/**
+ * @brief Check whether a gen value is valid.
+ *
+ * UINT32_MAX is reserved as a sentinel indicating "not yet set."
+ * A valid gen is any other value.
+ */
+static inline bool efa_rdm_mr_gen_value_is_valid(uint32_t gen)
+{
+	return (gen != UINT32_MAX);
+}
+
 #endif /* EFA_RDM_MR_H */
