@@ -3,6 +3,7 @@
 #include "rdm/efa_rdm_pke_rta.h"
 #include "rdm/efa_rdm_pke_rtw.h"
 #include "rdm/efa_rdm_pke_utils.h"
+#include "rdm/efa_rdm_pke_nonreq.h"
 
 
 /**
@@ -619,4 +620,283 @@ void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(stru
 	assert_int_equal(rxe->bytes_queued_blocking_copy, 0);
 
 	efa_rdm_rxe_release(rxe);
+}
+
+/**
+ * @brief Verify efa_rdm_prov_errno_is_peer_abort() classifies the
+ *        in-scope and out-of-scope provider errnos correctly.
+ *
+ * Peer-abort statuses are EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS
+ * and EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT. All other statuses
+ * (LOCAL_ERROR_*, BAD_LENGTH, RNR, UNRESP_REMOTE, UNKNOWN_PEER, ...)
+ * must classify as non-peer-abort so the existing user-visible error
+ * paths remain untouched.
+ */
+void test_efa_rdm_prov_errno_is_peer_abort(struct efa_resource **state)
+{
+	(void) state;
+
+	struct {
+		int prov_errno;
+		bool expected;
+	} cases[] = {
+		/* In scope: peer-clean-abort statuses. */
+		{ EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS, true },
+		{ EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT, true },
+
+		/* Out of scope: genuine local/network/protocol errors that
+		 * the user must continue to see. */
+		{ EFA_IO_COMP_STATUS_OK, false },
+		{ EFA_IO_COMP_STATUS_FLUSHED, false },
+		{ EFA_IO_COMP_STATUS_LOCAL_ERROR_QP_INTERNAL_ERROR, false },
+		{ EFA_IO_COMP_STATUS_LOCAL_ERROR_UNSUPPORTED_OP, false },
+		{ EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_AH, false },
+		{ EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY, false },
+		{ EFA_IO_COMP_STATUS_LOCAL_ERROR_BAD_LENGTH, false },
+		{ EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN, false },
+		{ EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR, false },
+		{ EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_LENGTH, false },
+		{ EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_STATUS, false },
+		{ EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, false },
+		{ EFA_IO_COMP_STATUS_REMOTE_ERROR_UNKNOWN_PEER, false },
+		{ EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE, false },
+		{ EFA_IO_COMP_STATUS_REMOTE_ERROR_FEATURE_MISMATCH, false },
+		{ FI_EFA_ERR_OOM, false },
+		{ FI_EFA_ERR_OTHER, false },
+	};
+
+	for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {
+		bool got = efa_rdm_prov_errno_is_peer_abort(cases[i].prov_errno);
+		assert_int_equal(got, cases[i].expected);
+	}
+}
+
+/**
+ * @brief Verify efa_rdm_pkt_is_rxe_remote_read() classifies packet
+ *        types correctly.
+ */
+void test_efa_rdm_pkt_is_rxe_remote_read(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_rma_context_pkt *ctx_pkt;
+	struct efa_rdm_ope rxe_ope = { .type = EFA_RDM_RXE };
+	struct efa_rdm_ope txe_ope = { .type = EFA_RDM_TXE };
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	pkt_entry->ope = &rxe_ope;
+
+	base_hdr = (struct efa_rdm_base_hdr *) pkt_entry->wiredata;
+
+	/* Receiver-initiated RDMA READ context packet — in scope */
+	ctx_pkt = (struct efa_rdm_rma_context_pkt *) pkt_entry->wiredata;
+	ctx_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
+	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEXT;
+	assert_true(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	/* Same RDMA READ context, but owned by a txe (one-sided
+	 * fi_read) — out of scope: the ope->type guard must reject it. */
+	pkt_entry->ope = &txe_ope;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+	pkt_entry->ope = &rxe_ope;
+
+	/* Sender-initiated RDMA WRITE context packet — out of scope */
+	ctx_pkt->context_type = EFA_RDM_RDMA_WRITE_CONTEXT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	/* Receiver-side control SENDs that ride on an rxe — out of
+	 * scope for this helper (they are not routed through the
+	 * peer-abort handler today; if that changes, extend or split
+	 * this helper). */
+	memset(pkt_entry->wiredata, 0,
+	       sizeof(struct efa_rdm_rma_context_pkt) + 64);
+	base_hdr->type = EFA_RDM_CTS_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_EOR_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_RECEIPT_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	/* Sender-side / non-rxe-protocol packets — out of scope */
+	base_hdr->type = EFA_RDM_HANDSHAKE_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_CTSDATA_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_READRSP_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_READ_NACK_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_EAGER_MSGRTM_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_LONGCTS_TAGRTM_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	base_hdr->type = EFA_RDM_LONGREAD_MSGRTM_PKT;
+	assert_false(efa_rdm_pkt_is_rxe_remote_read(pkt_entry));
+
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+/**
+ * @brief Verify efa_rdm_pke_init_peer_error_for_ope() derives the wire
+ *        op_id/ref_kind/prov_errno for the OPE_INDEX directions.
+ *
+ * The packet's op_id always names an ope owned by the RECEIVER of the
+ * packet, so the sender populates it from the peer's id captured on the
+ * wire:
+ *   - rxe (LONGREAD direction, receiver -> sender): op_id = rxe->tx_id.
+ *   - txe (LONGCTS direction, sender -> receiver): op_id = txe->rx_id.
+ * Both use ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX.
+ */
+void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *hdr;
+	struct efa_rdm_ope rxe = {0};
+	struct efa_rdm_ope txe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* rxe (LONGREAD direction): op_id = tx_id. */
+	rxe.type = EFA_RDM_RXE;
+	rxe.ep = ep;
+	rxe.tx_id = 0x1234;
+	rxe.peer_error_prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &rxe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->type, EFA_RDM_PEER_ERROR_PKT);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_OPE_INDEX);
+	assert_int_equal(hdr->op_id, rxe.tx_id);
+	assert_int_equal(hdr->prov_errno,
+			 EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	/* txe (LONGCTS direction): op_id = rx_id. */
+	txe.type = EFA_RDM_TXE;
+	txe.ep = ep;
+	txe.rx_id = 0x5678;
+	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_OPE_INDEX);
+	assert_int_equal(hdr->op_id, txe.rx_id);
+	assert_int_equal(hdr->prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+/**
+ * @brief Verify efa_rdm_pke_init_peer_error_for_ope() derives the wire
+ *        op_id/ref_kind for the medium MSG_ID direction.
+ *
+ * A medium txe exchanges no CTS, so the sender does not know the
+ * receiver's rxe ope-pool index; the abort is keyed by the per-peer
+ * msg_id: ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID, op_id = txe->msg_id.
+ * The medium protocol is identified by ope->protocol.
+ */
+void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *hdr;
+	struct efa_rdm_ope txe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe.type = EFA_RDM_TXE;
+	txe.ep = ep;
+	txe.protocol = EFA_RDM_MEDIUM_MSGRTM_PKT;
+	txe.msg_id = 0x99;
+	txe.rx_id = 0xdead;	/* must be ignored for the MSG_ID direction */
+	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	assert_int_equal(hdr->prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+/**
+ * @brief Verify efa_rdm_pke_init_peer_error_for_ope() routes a runtread
+ *        txe by remainder: runt-only (total_len == bytes_runt) carries no
+ *        RDMA READ and uses the MSG_ID direction (op_id = msg_id), while a
+ *        runtread WITH a READ remainder is signalled through the READ
+ *        failure path and uses OPE_INDEX (op_id = rx_id) here.
+ */
+void test_efa_rdm_pke_init_peer_error_for_ope_runtread(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *hdr;
+	struct efa_rdm_ope txe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe.type = EFA_RDM_TXE;
+	txe.ep = ep;
+	txe.protocol = EFA_RDM_RUNTREAD_MSGRTM_PKT;
+	txe.msg_id = 0x99;
+	txe.rx_id = 0xdead;
+	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+
+	/* Runt-only (total_len == bytes_runt): MSG_ID direction. */
+	txe.total_len = 4096;
+	txe.bytes_runt = 4096;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	/* With a READ remainder (bytes_runt < total_len): OPE_INDEX. */
+	txe.total_len = 1048576;
+	txe.bytes_runt = 4096;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_OPE_INDEX);
+	assert_int_equal(hdr->op_id, txe.rx_id);
+	efa_rdm_pke_release_tx(pkt_entry);
 }

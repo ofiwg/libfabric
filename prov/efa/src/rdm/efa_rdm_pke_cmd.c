@@ -226,6 +226,10 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		assert(data_offset == -1 && data_size == -1);
 		ret = efa_rdm_pke_init_read_nack(pkt_entry, ope);
 		break;
+	case EFA_RDM_PEER_ERROR_PKT:
+		assert(data_offset == -1 && data_size == -1);
+		ret = efa_rdm_pke_init_peer_error_for_ope(pkt_entry, ope);
+		break;
 	default:
 		assert(0 && "unknown pkt type to init");
 		ret = -FI_EINVAL;
@@ -319,6 +323,9 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_READ_NACK_PKT:
 		/* Nothing to do */
 		break;
+	case EFA_RDM_PEER_ERROR_PKT:
+		/* Nothing to do */
+		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");
 		break;
@@ -399,6 +406,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 {
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_ep *ep;
+	enum efa_rdm_ope_state prev_state;
 
 	int err = to_fi_errno(prov_errno);
 
@@ -494,19 +502,104 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 				efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
 			}
 		} else {
-			efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
+			txe = pkt_entry->ope;
+			prev_state = txe->state;
+			efa_rdm_txe_handle_error(txe, err, prov_errno);
+			/*
+			 * Sender-side source-MR cancel for a protocol that
+			 * has no CTS and no READ, so the abort is signalled
+			 * to the receiver by msg_id: medium, or a runt-only
+			 * runting-read (bytes_runt == total_len). (LONGCTS
+			 * has a CTS and is handled inside
+			 * efa_rdm_txe_handle_error, which reaches OPE_SEND.)
+			 */
+			if (prev_state != EFA_RDM_OPE_ERR &&
+			    efa_rdm_txe_peer_abort_uses_msg_id(txe) &&
+			    prov_errno == EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY &&
+			    txe->peer != NULL &&
+			    (ep->homogeneous_peers || txe->peer->is_self ||
+			     efa_rdm_peer_support_peer_error(txe->peer))) {
+				txe->peer_error_prov_errno = prov_errno;
+				txe->internal_flags |= EFA_RDM_TXE_PEER_ABORT_PENDING;
+			}
 			efa_rdm_pke_release_tx(pkt_entry);
+			/* No-op unless EFA_RDM_TXE_PEER_ABORT_PENDING is set
+			 * (LONGCTS or medium sender-side abort): frees the
+			 * errored txe once this WR was the last to drain. */
+			efa_rdm_txe_progress_peer_abort_if_drained(txe);
 		}
 		break;
 	case EFA_RDM_RXE:
 		if (prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_RNR) {
 			/*
 			 * This packet is associated with a recv operation, (such packets
-			 * include CTS and EOR) thus should always be queued for RNR. This
-			 * is regardless value of ep->handle_resource_management, because
-			 * resource management is only applied to send operation.
+			 * include CTS and EOR, and PEER_ERROR_PKT) thus should always be
+			 * queued for RNR. This is regardless of the value of
+			 * ep->handle_resource_management, because resource management is
+			 * only applied to send operation.
 			 */
 			efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
+		} else if (pkt_entry->ope->internal_flags &
+			   EFA_RDM_RXE_PEER_ABORT_HANDLED) {
+			struct efa_rdm_ope *rxe = pkt_entry->ope;
+			/*
+			 * The rxe is already in peer-abort recovery. The
+			 * failing packet is either a sibling RDMA READ WR
+			 * (a long-read posts multiple READ WRs and more
+			 * than one fails when the source MR is canceled)
+			 * or the PEER_ERROR_PKT we posted failing
+			 * asynchronously. Recovery and emission already
+			 * ran on the first failure and are idempotent;
+			 * do not re-run them. Just release this packet
+			 * and let the drain helper free the rxe once
+			 * every WR/queued pkt that uses it as wr_id has
+			 * drained.
+			 *
+			 * The pkt-type discriminator distinguishes the
+			 * PEER_ERROR_PKT's own async failure (warn, clear
+			 * IN_FLIGHT) from a sibling READ-context drain
+			 * (silent). Without this discriminator a sibling
+			 * READ WR failing while a PEER_ERROR_PKT is in
+			 * flight would be misclassified as the
+			 * PEER_ERROR_PKT failing and would clear the flag
+			 * prematurely.
+			 */
+			if (efa_rdm_pkt_type_of(pkt_entry) ==
+			    EFA_RDM_PEER_ERROR_PKT) {
+				EFA_WARN(FI_LOG_CQ,
+					 "PEER_ERROR_PKT TX failed asynchronously "
+					 "prov_errno=%d (%s); deferring rxe release "
+					 "to drain. Sender's txe will leak.\n",
+					 prov_errno, efa_strerror(prov_errno));
+			}
+			efa_rdm_pke_release_tx(pkt_entry);
+			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
+		} else if (efa_rdm_pkt_is_rxe_remote_read(pkt_entry) &&
+			   efa_rdm_prov_errno_is_peer_abort(prov_errno)) {
+			struct efa_rdm_ope *rxe = pkt_entry->ope;
+			/*
+			 * First peer-abort failure on this rxe.
+			 * Receiver-side RDMA READ (LONGREAD / RUNTREAD)
+			 * failed because the peer cleanly went away
+			 * mid-protocol. Recover locally instead of
+			 * surfacing an internal-protocol error on the
+			 * user's RX CQ, then notify the sender so it can
+			 * reap its txe.
+			 *
+			 * This branch follows the PEER_ABORT_HANDLED
+			 * branch above, so it is only reached on the
+			 * first failure (HANDLED unset). recover/emit set
+			 * HANDLED, diverting every later sibling failure
+			 * to the drain-only branch -- so recover/emit run
+			 * at most once per rxe. Assert that invariant.
+			 */
+			assert(!(rxe->internal_flags &
+				 EFA_RDM_RXE_PEER_ABORT_HANDLED));
+			(void) efa_rdm_rxe_recover_from_peer_abort(rxe,
+								   prov_errno);
+			efa_rdm_rxe_emit_peer_error(rxe, prov_errno);
+			efa_rdm_pke_release_tx(pkt_entry);
+			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 		} else {
 			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
@@ -571,10 +664,39 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_CTS_PKT:
+		/*
+		 * A CTS can be in flight (window refill) when an inbound
+		 * PEER_ERROR_PKT recovers this rxe on the LONGCTS recv
+		 * path. Recovery marks the rxe PEER_ABORT_HANDLED but the
+		 * drain it attempts is a no-op while this CTS is
+		 * outstanding. Now that the CTS has drained
+		 * (record_tx_op_completed above decremented
+		 * efa_outstanding_tx_ops), retry the drain so the rxe is
+		 * freed. No-op for a healthy (non-recovered) rxe.
+		 */
+		efa_rdm_rxe_release_peer_abort_if_drained(pkt_entry->ope);
 		break;
-	case EFA_RDM_CTSDATA_PKT:
+	case EFA_RDM_CTSDATA_PKT: {
+		/*
+		 * Snapshot PENDING before the handler: on a healthy full
+		 * completion the handler releases the txe, so the flag must
+		 * be read first. PENDING is only ever set on an aborting
+		 * (OPE_ERR) txe the handler will NOT release.
+		 */
+		bool peer_abort_pending = pkt_entry->ope &&
+			(pkt_entry->ope->internal_flags & EFA_RDM_TXE_PEER_ABORT_PENDING);
+		struct efa_rdm_ope *ctsdata_txe = pkt_entry->ope;
 		efa_rdm_pke_handle_ctsdata_send_completion(pkt_entry);
+		/*
+		 * A successful CTSDATA WR of a LONGCTS transfer aborting on
+		 * source-MR cancel: the txe was not released by the handler
+		 * (bytes_acked never reaches total_len). If this is the last
+		 * WR to drain, free the errored txe.
+		 */
+		if (peer_abort_pending)
+			efa_rdm_txe_progress_peer_abort_if_drained(ctsdata_txe);
 		break;
+	}
 	case EFA_RDM_READRSP_PKT:
 		efa_rdm_pke_handle_readrsp_send_completion(pkt_entry);
 		break;
@@ -597,6 +719,17 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 		efa_rdm_pke_handle_medium_rtm_send_completion(pkt_entry);
+		/*
+		 * A successful medium WR of a transfer that is aborting
+		 * (source MR canceled): the txe was not released here
+		 * (bytes_acked < total_len because sibling WRs failed).
+		 * Retry the deferred PEER_ERROR_PKT emit/release decision
+		 * now that this WR has drained. Guarded by the pre-call
+		 * PENDING snapshot so a healthy full-success transfer
+		 * (txe already released by the handler) is never touched.
+		 */
+		if (pkt_entry->ope->internal_flags & EFA_RDM_TXE_PEER_ABORT_PENDING)
+			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
@@ -609,6 +742,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
 		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
+		/*
+		 * A successful runt WR of a runt-only transfer that is
+		 * aborting (source MR canceled on a sibling WR), a healthy
+		 * transfer is never touched.
+		 */
+		if (pkt_entry->ope->internal_flags & EFA_RDM_TXE_PEER_ABORT_PENDING)
+			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
@@ -651,11 +791,35 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * Only release TXE when both TX ops complete and receipt is received.
 		 */
 		assert(pkt_entry->ope);
-		if (efa_rdm_txe_dc_ready_for_release(pkt_entry->ope))
+		/*
+		 * A DC medium transfer aborting on source-MR cancel never
+		 * receives its RECEIPT, so dc_ready_for_release stays false.
+		 * Take the deferred PEER_ERROR_PKT decision instead. Guarded
+		 * by PENDING (only ever set on medium txes), so non-medium DC
+		 * ops are untouched.
+		 */
+		if (pkt_entry->ope->internal_flags & EFA_RDM_TXE_PEER_ABORT_PENDING)
+			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
+		else if (efa_rdm_txe_dc_ready_for_release(pkt_entry->ope))
 			efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_READ_NACK_PKT:
 		/* no action needed for NACK packet */
+		break;
+	case EFA_RDM_PEER_ERROR_PKT:
+		/*
+		 * PEER_ERROR_PKT send completed; both helpers are
+		 * drain-gated (an rxe/txe may still have sibling WRs
+		 * in flight using it as wr_id).
+		 *
+		 * RXE: receiver-initiated abort -> drain-gated release.
+		 * TXE: LONGCTS or medium sender-side abort -> drain-gated release.
+		 */
+		assert(pkt_entry->ope);
+		if (pkt_entry->ope->type == EFA_RDM_RXE)
+			efa_rdm_rxe_release_peer_abort_if_drained(pkt_entry->ope);
+		else
+			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
 		break;
 	default:
 		EFA_WARN(FI_LOG_CQ,
@@ -847,6 +1011,9 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		return;
 	case EFA_RDM_READ_NACK_PKT:
 		efa_rdm_pke_handle_read_nack_recv(pkt_entry);
+		return;
+	case EFA_RDM_PEER_ERROR_PKT:
+		efa_rdm_pke_handle_peer_error_recv(pkt_entry);
 		return;
 	default:
 		EFA_WARN(FI_LOG_CQ,

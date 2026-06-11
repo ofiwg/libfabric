@@ -7,6 +7,7 @@
 #include "efa_rdm_ope.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_utils.h"
+#include "efa_errno.h"
 
 struct efa_rdm_ep;
 struct efa_rdm_peer;
@@ -235,6 +236,106 @@ struct efa_rdm_read_nack_hdr *efa_rdm_pke_get_read_nack_hdr(struct efa_rdm_pke *
 int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);
 
 void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry);
+
+/* PEER ERROR packet functions */
+
+/**
+ * @brief return whether a provider errno indicates that the peer cleanly
+ *        aborted an in-flight protocol step
+ *
+ * "Peer cleanly aborted" means the peer made a normal, voluntary action
+ * (e.g. closed an MR mid-protocol or tore down its endpoint) that caused
+ * the device op posted by this side to fail. It is distinct
+ * from genuine local faults (LOCAL_ERROR_*) and network faults
+ * (BAD_LENGTH, UNRESP_REMOTE, etc.) that the user must continue to see.
+ *
+ * Currently the recognized peer-abort statuses are:
+ *
+ * - EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS (7) — sender's MR was
+ *   invalid or deregistered while a receiver-initiated RDMA READ
+ *   referenced it.
+ * - EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT (8) — peer EP was reset /
+ *   torn down by the remote side while a control SEND was in flight.
+ *
+ * @param[in] prov_errno provider-specific error code
+ * @return true if the prov_errno matches a peer-abort status
+ */
+static inline bool efa_rdm_prov_errno_is_peer_abort(int prov_errno)
+{
+	return prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS ||
+	       prov_errno == EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT;
+}
+
+/**
+ * @brief return whether the failing packet is a receiver-initiated
+ *        RDMA READ context packet (i.e. an RDMA READ posted by a
+ *        receiver-side rxe as part of a LONGREAD / RUNTREAD transfer)
+ *
+ * Checks both that the rxe owns the packet and that the packet is an
+ * RDMA READ context. The ope->type check is required: a one-sided
+ * fi_read txe also posts an RDMA READ context packet, so context_type
+ * alone does not distinguish the receiver-initiated case.
+ *
+ * @param[in] pkt_entry packet entry that hit a TX error
+ * @return true if the packet is a receiver-initiated RDMA READ context
+ */
+static inline bool efa_rdm_pkt_is_rxe_remote_read(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_rma_context_pkt *ctx_pkt;
+
+	if (!pkt_entry->ope || pkt_entry->ope->type != EFA_RDM_RXE)
+		return false;
+
+	if (efa_rdm_pkt_type_of(pkt_entry) != EFA_RDM_RMA_CONTEXT_PKT)
+		return false;
+
+	ctx_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
+	return ctx_pkt->context_type == EFA_RDM_RDMA_READ_CONTEXT;
+}
+
+/**
+ * @brief Get the PEER_ERROR header pointer of a packet entry's wiredata
+ *
+ * @param[in] pke	packet entry whose wiredata holds a PEER_ERROR packet
+ * @return		typed pointer into pke->wiredata
+ */
+static inline
+struct efa_rdm_peer_error_hdr *efa_rdm_pke_get_peer_error_hdr(struct efa_rdm_pke *pke)
+{
+	return (struct efa_rdm_peer_error_hdr *)pke->wiredata;
+}
+
+int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
+				uint32_t op_id, uint32_t ref_kind,
+				int prov_errno, uint32_t connid);
+
+/**
+ * @brief Whether a sender-side peer-abort for this txe is signalled to the
+ *        receiver via msg_id (EFA_RDM_PEER_ERROR_REF_MSG_ID) rather than a
+ *        shared ope index.
+ *
+ * True for the two sender-detected protocols that exchange no CTS, so the
+ * sender never learns the receiver's rxe ope-pool index and the only shared
+ * identifier is the per-peer msg_id:
+ *   - medium RTM (all data in REQ packets), and
+ *   - a runt-only runting-read RTM (bytes_runt == total_len), where the whole
+ *     message rides the REQ packets and no RDMA READ is posted.
+ *
+ * @param[in] txe   the failing/aborting txe
+ * @return    true if the abort uses the msg_id reference kind
+ */
+static inline
+bool efa_rdm_txe_peer_abort_uses_msg_id(struct efa_rdm_ope *txe)
+{
+	return efa_rdm_pkt_type_is_medium(txe->protocol) ||
+	       (efa_rdm_pkt_type_is_runtread(txe->protocol) &&
+		txe->total_len == txe->bytes_runt);
+}
+
+int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
+					struct efa_rdm_ope *ope);
+
+void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry);
 
 /* ATOMRSP packet related functions */
 static inline struct efa_rdm_atomrsp_hdr *efa_rdm_pke_get_atomrsp_hdr(struct efa_rdm_pke *pke)

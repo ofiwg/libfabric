@@ -30,7 +30,8 @@
 #define EFA_RDM_EXTRA_FEATURE_READ_NACK		BIT_ULL(6)
 #define EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP	BIT_ULL(7)
 #define EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV	BIT_ULL(8)
-#define EFA_RDM_NUM_EXTRA_FEATURE_OR_REQUEST		9
+#define EFA_RDM_EXTRA_FEATURE_PEER_ERROR		BIT_ULL(9)
+#define EFA_RDM_NUM_EXTRA_FEATURE_OR_REQUEST		10
 /*
  * The length of 64-bit extra_info array used in efa_rdm_ep
  * and efa_rdm_peer
@@ -60,6 +61,7 @@
 #define EFA_RDM_HANDSHAKE_PKT		9
 #define EFA_RDM_RECEIPT_PKT 		10
 #define EFA_RDM_READ_NACK_PKT		11
+#define EFA_RDM_PEER_ERROR_PKT		12
 
 #define EFA_RDM_REQ_PKT_BEGIN		64
 #define EFA_RDM_BASELINE_REQ_PKT_BEGIN	64
@@ -287,6 +289,54 @@ struct efa_rdm_read_nack_hdr {
 };
 
 EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_read_nack_hdr, 16);
+
+/*
+ * @brief format of the peer error packet. (Packet Type ID 12)
+ *
+ * PEER_ERROR is a bidirectional control packet telling the remote
+ * peer that this side is abandoning an in-flight two-sided protocol
+ * step. A single packet type serves both directions: the receiver
+ * uses `op_id` and `ref_kind` to find the local operation (ope) that
+ * is being abandoned.
+ *
+ * Header fields:
+ *  - op_id:      identifies an ope owned by the packet's receiver.
+ *  - ref_kind:   how the receiver resolves op_id:
+ *      EFA_RDM_PEER_ERROR_REF_OPE_INDEX - an ope-pool index
+ *        (the LONGREAD and LONGCTS directions).
+ *      EFA_RDM_PEER_ERROR_REF_MSG_ID - a per-peer msg_id resolved
+ *        via the peer's rxe_map (the medium direction, which has no
+ *        CTS and so shares no ope index).
+ *  - prov_errno: the provider error that triggered the abort, used
+ *    for CQ-entry and log attribution.
+ *
+ * Current emit sites:
+ *  1. Receiver -> sender (LONGREAD/RUNTREAD): the receiver's RDMA
+ *     READ fails because the sender canceled its source MR.
+ *  2. Sender -> receiver (LONGCTS/medium): the sender's source MR is
+ *     canceled mid-transfer.
+ *
+ * The wire format is generic enough to cover future abort modes
+ * (e.g. resource-exhaustion, application cancel).
+ */
+
+/* op_id is an ope-pool index owned by the receiver of this packet. */
+#define EFA_RDM_PEER_ERROR_REF_OPE_INDEX	0
+/* op_id is a per-peer msg_id, resolved via the peer's rxe_map. */
+#define EFA_RDM_PEER_ERROR_REF_MSG_ID		1
+
+struct efa_rdm_peer_error_hdr {
+	EFA_RDM_BASE_HEADER();
+	uint32_t op_id;     /* ID of the ope owned by the receiver of this packet */
+	uint32_t ref_kind;  /* how to resolve op_id (EFA_RDM_PEER_ERROR_REF_*) */
+	uint32_t prov_errno;/* the prov_errno that triggered the abort, for logging */
+	union {
+		uint32_t connid;  /* set when EFA_RDM_PKT_CONNID_HDR is on */
+		uint32_t padding;
+	};
+};
+
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_peer_error_hdr, 20);
 
 /**
  * @brief header format of ATOMRSP packet. (Packet Type ID 8)

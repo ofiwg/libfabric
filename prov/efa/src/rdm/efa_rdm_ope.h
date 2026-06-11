@@ -175,6 +175,31 @@ struct efa_rdm_ope {
 
 	/** the source packet entry of a local read operation */
 	struct efa_rdm_pke *local_read_pkt_entry;
+
+	/**
+	 * @brief Provider errno to attach when emitting an EFA_RDM_PEER_ERROR_PKT
+	 *
+	 * Set by efa_rdm_rxe_emit_peer_error (LONGREAD direction)
+	 * and by the LONGCTS sender-side abort path (later commit), and
+	 * read by efa_rdm_pke_init_peer_error to populate the wire
+	 * header's prov_errno field. Has no meaning if no PEER_ERROR_PKT
+	 * is being emitted from this ope.
+	 */
+	int peer_error_prov_errno;
+
+	/**
+	 * @brief The wire protocol (REQ packet type) selected for this ope
+	 *
+	 * One of the EFA_RDM_*_PKT type ids (e.g. EFA_RDM_MEDIUM_MSGRTM_PKT,
+	 * EFA_RDM_LONGCTS_MSGRTM_PKT). Recorded where the two-sided protocol
+	 * is decided (efa_rdm_msg_select_rtm result) or switched (the read
+	 * NACK longcts fallback), the only points at which an ope's protocol
+	 * is established or changes. The queued/RNR re-post path replays the
+	 * already-selected packet type and does not re-run selection, so this
+	 * value remains valid across re-posts. 0 if no protocol has been
+	 * selected for this ope.
+	 */
+	uint32_t protocol;
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
@@ -223,6 +248,21 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  * hence the rxe cannot be released
  */
 #define EFA_RDM_RXE_EOR_IN_FLIGHT BIT_ULL(10)
+
+/**
+ * @brief Flag to indicate the peer-abort machinery owns this rxe's
+ *        release.
+ *
+ * Set on the rxe when efa_rdm_rxe_recover_from_peer_abort() commits
+ * to handling the abort (re-queues the matched peer_rxe back into
+ * the SRX), or when efa_rdm_rxe_emit_peer_error() posts a
+ * PEER_ERROR_PKT. Sticky -- never cleared until the rxe is freed.
+ *
+ * Means: "release this rxe via efa_rdm_rxe_release_peer_abort_if_drained()
+ * once every device WR that uses it as wr_id has drained
+ * (efa_outstanding_tx_ops == 0) and no packet is queued on it."
+ */
+#define EFA_RDM_RXE_PEER_ABORT_HANDLED BIT_ULL(19)
 
 /**
  * @brief flag to indicate a txe has already written an cq error entry for RNR
@@ -294,6 +334,29 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 #define EFA_RDM_TXE_NO_COUNTER		BIT_ULL(18)
 
+/**
+ * @brief flag to indicate a txe owes a drain-gated PEER_ERROR_PKT
+ *        cleanup after a sender-side source-MR cancel.
+ *
+ * Set when a sender-side abort path takes responsibility for the txe's
+ * release: the LONGCTS path (which emits inline and also sets
+ * EFA_RDM_TXE_PEER_ERROR_EMITTED), and the medium path (which defers
+ * the emit-or-suppress decision to drain). The errored txe is kept
+ * alive while sibling WRs are in flight and freed by
+ * efa_rdm_txe_progress_peer_abort_if_drained() once
+ * efa_outstanding_tx_ops == 0. Sticky -- never cleared until release.
+ */
+#define EFA_RDM_TXE_PEER_ABORT_PENDING	BIT_ULL(20)
+
+/**
+ * @brief flag to indicate the txe has already emitted its PEER_ERROR_PKT.
+ *
+ * Distinguishes "decide now" from "already emitted, just release on the
+ * PEER_ERROR_PKT's own completion" so efa_rdm_txe_progress_peer_abort_if_drained()
+ * is idempotent and never double-emits or double-frees.
+ */
+#define EFA_RDM_TXE_PEER_ERROR_EMITTED	BIT_ULL(21)
+
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
@@ -308,6 +371,15 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
 
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
+
+bool efa_rdm_rxe_recover_from_peer_abort(struct efa_rdm_ope *rxe,
+					 int prov_errno);
+
+void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno);
+
+void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe);
+
+void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe);
 
 void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe);
 

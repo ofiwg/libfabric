@@ -593,6 +593,9 @@ uint32_t *efa_rdm_pke_connid_ptr(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_READ_NACK_PKT:
 		return &efa_rdm_pke_get_read_nack_hdr(pkt_entry)->connid;
 
+	case EFA_RDM_PEER_ERROR_PKT:
+		return &efa_rdm_pke_get_peer_error_hdr(pkt_entry)->connid;
+
 	case EFA_RDM_HANDSHAKE_PKT:
 		return &(efa_rdm_pke_get_handshake_opt_connid_hdr(pkt_entry)->connid);
 

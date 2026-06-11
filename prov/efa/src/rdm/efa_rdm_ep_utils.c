@@ -190,6 +190,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, struct efa_rdm_p
 	efa_domain_ope_list_unlock(efa_rdm_ep_domain(ep));
 	rxe->type = EFA_RDM_RXE;
 	rxe->internal_flags = 0;
+	rxe->protocol = 0;
 	rxe->fi_flags = 0;
 	rxe->rx_id = ofi_buf_index(rxe);
 	rxe->iov_count = 0;
