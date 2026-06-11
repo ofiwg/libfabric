@@ -13,8 +13,7 @@
  * @brief update an rxe for a peer rx entry.
  *        This function is used by two sided operation only.
  *
- * @param[in] ep	endpoint
- * @param[in] peer_rxe	fi_peer_rx_entry_msg contains iov,iov_count,context for ths operation
+ * @param[in] peer_rxe	fi_peer_rx_entry carrying iov, iov_count, and context for this operation
  * @param[in] rxe	efa_rdm_ope to be updated
  */
 void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
@@ -158,8 +157,7 @@ static void efa_rdm_srx_update_mr(struct util_srx_ctx *srx, struct util_rx_entry
 /**
  * @brief Construct peer srx
  *
- * @param[in] efa_rdm_ep efa_rdm_ep
- * @param[out] peer_srx the constructed peer srx
+ * @param[in] ep The EFA RDM endpoint whose peer SRX is being constructed.
  */
 int efa_rdm_peer_srx_construct(struct efa_rdm_ep *ep)
 {
