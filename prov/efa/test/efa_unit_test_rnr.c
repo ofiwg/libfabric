@@ -35,17 +35,17 @@ void test_efa_rnr_queue_and_resend_impl(struct efa_resource **state, uint32_t op
 	/* Add mock for efa_qp_post_send */
 	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
 	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_true(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 
 	if (op == ofi_op_msg)
 		ret = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, NULL /* context */);
 	else
 		ret = fi_tsend(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, 1234, NULL /* context */);
 	assert_int_equal(ret, 0);
-	assert_false(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_false(dlist_empty(&efa_rdm_ep->base_ep.ope_list));
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
-	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+	txe = container_of(efa_rdm_ep->base_ep.ope_list.next, struct efa_rdm_ope, ep_entry);
 
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
 	ibv_cq = &efa_rdm_cq->efa_cq.ibv_cq;
@@ -135,7 +135,7 @@ void test_efa_rdm_ep_post_queued_pkts_releases_pkt_on_error(struct efa_resource 
 		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
 	assert_int_equal(ret, 0);
 
-	txe = container_of(efa_rdm_ep->txe_list.next,
+	txe = container_of(efa_rdm_ep->base_ep.ope_list.next,
 			   struct efa_rdm_ope, ep_entry);
 
 	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq,

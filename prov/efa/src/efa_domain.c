@@ -241,7 +241,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 	efa_domain->mr_local = ofi_mr_local(info);
-	if ((EFA_INFO_TYPE_IS_DGRAM(info) || EFA_INFO_TYPE_IS_DIRECT(info)) && !efa_domain->mr_local) {
+	if (!EFA_INFO_TYPE_IS_RDM(info) && !efa_domain->mr_local) {
 		EFA_WARN(FI_LOG_EP_DATA, "EFA direct and dgram require FI_MR_LOCAL, but application does not support it\n");
 		ret = -FI_ENODATA;
 		goto err_free;
@@ -271,11 +271,10 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	 */
 	if (EFA_INFO_TYPE_IS_RDM(info)) {
 		efa_domain->info_type = EFA_INFO_RDM;
-	} else if (EFA_INFO_TYPE_IS_DIRECT(info)) {
-		efa_domain->info_type = EFA_INFO_DIRECT;
-	} else {
-		assert(EFA_INFO_TYPE_IS_DGRAM(info));
+	} else if (EFA_INFO_TYPE_IS_DGRAM(info)) {
 		efa_domain->info_type = EFA_INFO_DGRAM;
+	} else {
+		efa_domain->info_type = EFA_INFO_DIRECT;
 	}
 
 	dlist_init(&efa_domain->ah_lru_list);

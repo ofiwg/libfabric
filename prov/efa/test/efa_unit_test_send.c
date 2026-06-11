@@ -163,7 +163,7 @@ void test_efa_rdm_msg_send_multi_pkt_sendv_fail_no_inflight(
 	assert_int_equal(efa_unit_test_get_dlist_length(&peer->outstanding_tx_pkts),
 			 peer_outstanding_pkts_before);
 	/* txe was released by the caller (safe: no segments were committed). */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 0);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 0);
 
 	efa_unit_test_buff_destruct(&send_buff);
 }

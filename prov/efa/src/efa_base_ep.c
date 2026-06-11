@@ -413,17 +413,9 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 
 	assert(tx_cq->unsolicited_write_recv_enabled == rx_cq->unsolicited_write_recv_enabled);
 
-	if (EFA_INFO_TYPE_IS_DIRECT(base_ep->info)) {
-		/* If user intend to post rx buffer for cq data, we shouldn't
-		 * enable unsolicited write recv */
-		use_unsolicited_write_recv =
-			tx_cq->unsolicited_write_recv_enabled && !(base_ep->info->mode & FI_RX_CQ_DATA);
-	} else {
-		/* RDM full protocol doesn't support FI_RX_CQ_DATA.
-		 * Set FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV to false to disable unsolicited write recv. */
-		use_unsolicited_write_recv =
-			tx_cq->unsolicited_write_recv_enabled && base_ep->use_unsolicited_write_recv;
-	}
+	use_unsolicited_write_recv =
+		tx_cq->unsolicited_write_recv_enabled && base_ep->use_unsolicited_write_recv
+		&& !(base_ep->info->mode & FI_RX_CQ_DATA);
 	EFA_INFO(FI_LOG_EP_CTRL, "creating QP with unsolicited write recv status: %d\n", use_unsolicited_write_recv);
 	ret = efa_qp_create(&base_ep->qp, &attr_ex, base_ep->info->tx_attr->tclass,
 			    use_unsolicited_write_recv);
@@ -642,6 +634,8 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	else
 		base_ep->inject_rma_size = 0;
 	base_ep->use_unsolicited_write_recv = true;
+	base_ep->ope_pool = NULL;
+	dlist_init(&base_ep->ope_list);
 	return 0;
 }
 

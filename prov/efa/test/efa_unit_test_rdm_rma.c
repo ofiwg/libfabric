@@ -541,7 +541,7 @@ void test_efa_rdm_rma_post_remote_write_partial_fail_no_txe_release(
 	 * With the fix, the txe must still be live because the first
 	 * segment is in-flight (efa_outstanding_tx_ops > 0).
 	 */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 1);
 	assert_int_equal(efa_rdm_ep->efa_outstanding_tx_ops,
 			 efa_rdm_ep->efa_max_outstanding_tx_ops);
 	assert_int_equal(peer->efa_outstanding_tx_ops, 1);
@@ -559,7 +559,7 @@ void test_efa_rdm_rma_post_remote_write_partial_fail_no_txe_release(
 	efa_rdm_pke_handle_rma_completion(inflight_pke);
 
 	/* The txe was released by the completion path. No leak. */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 0);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 0);
 	assert_int_equal(efa_rdm_ep->efa_outstanding_tx_ops,
 			 efa_rdm_ep->efa_max_outstanding_tx_ops - 1);
 	assert_int_equal(peer->efa_outstanding_tx_ops, 0);
@@ -670,7 +670,7 @@ void test_efa_rdm_rma_partial_post_retry_no_double_free(
 	assert_int_equal(ret, -FI_EAGAIN);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 	/* txe1 must still be live; retry's txe2 was released inline. */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 1);
 	assert_int_equal(peer->efa_outstanding_tx_ops, 1);
 
 	/*
@@ -684,7 +684,7 @@ void test_efa_rdm_rma_partial_post_retry_no_double_free(
 	efa_rdm_pke_handle_rma_completion(inflight_pke);
 
 	/* Post-fix: both txes have been released; peer/ep state is clean. */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 0);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 0);
 	assert_int_equal(peer->efa_outstanding_tx_ops, 0);
 	assert_true(dlist_empty(&peer->outstanding_tx_pkts));
 
@@ -794,7 +794,7 @@ void test_efa_rdm_rma_post_remote_read_partial_fail_no_txe_release(
 	 * With the fix, the txe must still be live because the first
 	 * segment is in-flight.
 	 */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 1);
 	assert_int_equal(efa_rdm_ep->efa_outstanding_tx_ops,
 			 efa_rdm_ep->efa_max_outstanding_tx_ops);
 	assert_int_equal(peer->efa_outstanding_tx_ops, 1);
@@ -812,7 +812,7 @@ void test_efa_rdm_rma_post_remote_read_partial_fail_no_txe_release(
 	efa_rdm_pke_handle_rma_completion(inflight_pke);
 
 	/* The txe was released by the completion path. No leak. */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 0);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 0);
 	assert_int_equal(efa_rdm_ep->efa_outstanding_tx_ops,
 			 efa_rdm_ep->efa_max_outstanding_tx_ops - 1);
 	assert_int_equal(peer->efa_outstanding_tx_ops, 0);
@@ -913,7 +913,7 @@ void test_efa_rdm_rma_partial_post_retry_no_double_free_read(
 	ret = fi_readmsg(resource->ep, &msg, 0);
 	assert_int_equal(ret, -FI_EAGAIN);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 1);
 	assert_int_equal(peer->efa_outstanding_tx_ops, 1);
 
 	/*
@@ -935,7 +935,7 @@ void test_efa_rdm_rma_partial_post_retry_no_double_free_read(
 	efa_rdm_pke_handle_rma_completion(inflight_pke);
 
 	/* Clean drain: both txes released, peer/ep state clean. */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list), 0);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->base_ep.ope_list), 0);
 	assert_int_equal(peer->efa_outstanding_tx_ops, 0);
 	assert_true(dlist_empty(&peer->outstanding_tx_pkts));
 
