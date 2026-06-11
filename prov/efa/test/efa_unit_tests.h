@@ -583,6 +583,8 @@ void test_efa_direct_ope_released_on_read_error();
 void test_efa_direct_ope_released_on_write_error();
 void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep();
 void test_efa_mr_close_warn_outstanding_rdm_txe();
+void test_efa_rdm_mr_gen_bumps_on_close();
+void test_efa_rdm_mr_gen_check_ope_detects_closed_mr();
 void test_efa_rdm_mr_cache_regv_no_cache();
 void test_efa_rdm_mr_cache_regv_with_cache();
 void test_efa_rdm_mr_cache_regv_cache_hit();

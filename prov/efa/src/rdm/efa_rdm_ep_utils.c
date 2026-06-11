@@ -749,15 +749,18 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 		pkt_entry->flags &= ~EFA_RDM_PKE_IN_OPE_QUEUED_PKTS;
-
-		switch (efa_rdm_pkt_type_of(pkt_entry)) {
-		case EFA_RDM_RMA_CONTEXT_PKT:
-			assert(((struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata)->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
-			ret = efa_rdm_pke_write(pkt_entry);
-			break;
-		default:
-			ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
-			break;
+		if (!efa_rdm_mr_gen_check_ope(pkt_entry->ope)) {
+			ret = -FI_ECANCELED;
+		} else {
+			switch (efa_rdm_pkt_type_of(pkt_entry)) {
+			case EFA_RDM_RMA_CONTEXT_PKT:
+				assert(((struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata)->context_type ==
+					EFA_RDM_RDMA_WRITE_CONTEXT);
+				ret = efa_rdm_pke_write(pkt_entry);
+				break;
+			default:
+				ret = efa_rdm_pke_sendv(&pkt_entry, 1, 0);
+			}
 		}
 
 		if (ret) {
