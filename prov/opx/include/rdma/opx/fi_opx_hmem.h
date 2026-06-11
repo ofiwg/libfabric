@@ -39,11 +39,6 @@
 #include "rdma/opx/opx_tracer.h"
 #include "ofi_hmem.h"
 
-#if HAVE_ROCR
-#define __HIP_PLATFORM_AMD__ 0
-#include <hip/hip_runtime.h>
-#endif
-
 #define OPX_HMEM_NO_HANDLE		   (0)
 #define OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET (-1L)
 
