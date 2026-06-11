@@ -14,7 +14,7 @@
  *        This function is used by two sided operation only.
  *
  * @param[in] ep	endpoint
- * @param[in] peer_rxe	fi_peer_rx_entry_msg contains iov,iov_count,context for ths operation
+ * @param[in] peer_rxe	fi_peer_rx_entry carrying iov, iov_count, and context for this operation
  * @param[in] rxe	efa_rdm_ope to be updated
  */
 void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
