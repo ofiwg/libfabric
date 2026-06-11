@@ -395,6 +395,11 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #endif
 #if HAVE_CUDA
 	.ofi_cudaMalloc = __real_ofi_cudaMalloc,
+	.ofi_cuDeviceGet = __real_ofi_cuDeviceGet,
+	.ofi_cuCtxCreate_v2 = __real_ofi_cuCtxCreate_v2,
+	.ofi_cuCtxDestroy = __real_ofi_cuCtxDestroy,
+	.ofi_cuMemAlloc = __real_ofi_cuMemAlloc,
+	.ofi_cuMemFree = __real_ofi_cuMemFree,
 #endif
 	.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 	.ofi_copy_to_hmem_iov = __real_ofi_copy_to_hmem_iov,
@@ -672,6 +677,61 @@ cudaError_t efa_mock_ofi_cudaMalloc_return_mock(void **ptr, size_t size)
 {
 	/* Not mocking return value so this function will fail when it is called */
 	return (cudaError_t) mock();
+}
+
+CUresult __wrap_ofi_cuDeviceGet(CUdevice *device, int ordinal)
+{
+	return g_efa_unit_test_mocks.ofi_cuDeviceGet(device, ordinal);
+}
+
+CUresult efa_mock_ofi_cuDeviceGet_return_mock(CUdevice *device, int ordinal)
+{
+	*device = (CUdevice) mock();
+	return (CUresult) mock();
+}
+
+CUresult __wrap_ofi_cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev)
+{
+	return g_efa_unit_test_mocks.ofi_cuCtxCreate_v2(pctx, flags, dev);
+}
+
+CUresult efa_mock_ofi_cuCtxCreate_v2_return_mock(CUcontext *pctx, unsigned int flags, CUdevice dev)
+{
+	*pctx = (CUcontext) mock();
+	function_called();
+	return (CUresult) mock();
+}
+
+CUresult __wrap_ofi_cuCtxDestroy(CUcontext ctx)
+{
+	return g_efa_unit_test_mocks.ofi_cuCtxDestroy(ctx);
+}
+
+CUresult efa_mock_ofi_cuCtxDestroy_return_mock(CUcontext ctx)
+{
+	function_called();
+	return (CUresult) mock();
+}
+
+CUresult __wrap_ofi_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize)
+{
+	return g_efa_unit_test_mocks.ofi_cuMemAlloc(dptr, bytesize);
+}
+
+CUresult efa_mock_ofi_cuMemAlloc_return_mock(CUdeviceptr *dptr, size_t bytesize)
+{
+	*dptr = (CUdeviceptr) mock();
+	return (CUresult) mock();
+}
+
+CUresult __wrap_ofi_cuMemFree(CUdeviceptr dptr)
+{
+	return g_efa_unit_test_mocks.ofi_cuMemFree(dptr);
+}
+
+CUresult efa_mock_ofi_cuMemFree_return_mock(CUdeviceptr dptr)
+{
+	return (CUresult) mock();
 }
 #endif
 

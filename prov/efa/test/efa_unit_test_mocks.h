@@ -207,6 +207,11 @@ struct efa_unit_test_mocks
 
 #if HAVE_CUDA
 	cudaError_t (*ofi_cudaMalloc)(void **ptr, size_t size);
+	CUresult (*ofi_cuDeviceGet)(CUdevice *device, int ordinal);
+	CUresult (*ofi_cuCtxCreate_v2)(CUcontext *pctx, unsigned int flags, CUdevice dev);
+	CUresult (*ofi_cuCtxDestroy)(CUcontext ctx);
+	CUresult (*ofi_cuMemAlloc)(CUdeviceptr *dptr, size_t bytesize);
+	CUresult (*ofi_cuMemFree)(CUdeviceptr dptr);
 #endif
 
 	ssize_t (*ofi_copy_from_hmem_iov)(void *dest, size_t size,
@@ -322,6 +327,16 @@ void *efa_mock_neuron_alloc_return_mock(void **handle, size_t size);
 #if HAVE_CUDA
 cudaError_t __real_ofi_cudaMalloc(void **ptr, size_t size);
 cudaError_t efa_mock_ofi_cudaMalloc_return_mock(void **ptr, size_t size);
+CUresult __real_ofi_cuDeviceGet(CUdevice *device, int ordinal);
+CUresult __real_ofi_cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev);
+CUresult __real_ofi_cuCtxDestroy(CUcontext ctx);
+CUresult __real_ofi_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
+CUresult __real_ofi_cuMemFree(CUdeviceptr dptr);
+CUresult efa_mock_ofi_cuDeviceGet_return_mock(CUdevice *device, int ordinal);
+CUresult efa_mock_ofi_cuCtxCreate_v2_return_mock(CUcontext *pctx, unsigned int flags, CUdevice dev);
+CUresult efa_mock_ofi_cuCtxDestroy_return_mock(CUcontext ctx);
+CUresult efa_mock_ofi_cuMemAlloc_return_mock(CUdeviceptr *dptr, size_t bytesize);
+CUresult efa_mock_ofi_cuMemFree_return_mock(CUdeviceptr dptr);
 #endif
 
 #if HAVE_EFADV_QUERY_MR
