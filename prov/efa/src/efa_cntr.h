@@ -32,10 +32,6 @@ void efa_cntr_destruct(struct efa_cntr *cntr);
 
 void efa_cntr_progress_ibv_cq_poll_list(struct efa_cntr *efa_cntr);
 
-uint64_t efa_cntr_read(struct fid_cntr *cntr_fid);
-
-uint64_t efa_cntr_readerr(struct fid_cntr *cntr_fid);
-
 int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout);
 
 void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags);
