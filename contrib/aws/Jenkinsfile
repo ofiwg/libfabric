@@ -95,7 +95,7 @@ def run_test_orchestrator_once(run_name, build_tag, os, instance_type, instance_
      * Run PortaFiducia/tests/test_orchestrator.py with given command line arguments
      * param@ args: str, the command line arguments
      */
-    if (instance_type == "trn1.32xlarge") {
+    if (instance_type == "trn2.48xlarge") {
         kill_all_clusters(instance_type, region)
     }
 
@@ -224,7 +224,7 @@ def post_build_actions() {
     junit testResults: 'outputs/**/*.xml', keepLongStdio: false
     archiveArtifacts artifacts: 'outputs/**/*.*'
     // Try To Cleanup Resources
-    def regions = ["us-east-1", "eu-north-1", "us-west-2"]
+    def regions = ["us-east-1", "eu-north-1", "us-west-2", "ap-southeast-4"]
     def cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
     regions.each { region ->
         sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
@@ -344,58 +344,53 @@ pipeline {
 
                     def efa_provider = "--test-libfabric-provider efa"
                     def shm_provider = "--test-libfabric-provider shm --enable-efa false"
+                    def sm2_provider = "--test-libfabric-provider sm2 --enable-efa false"
                     def tcp_provider = "--test-libfabric-provider tcp --enable-efa false"
+                    def sockets_provider = "--test-libfabric-provider sockets --enable-efa false"
 
                     def addl_args_efa = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests}"
                     def addl_args_efa_hpc = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests_hpc}"
                     def addl_args_shm = "${timeout} ${generic_pf} ${shm_provider} ${pr_ci_tests}"
+                    def addl_args_sm2 = "${timeout} ${generic_pf} ${sm2_provider} ${pr_ci_tests}"
                     def addl_args_tcp = "${timeout} ${generic_pf} ${tcp_provider} ${pr_ci_tests}"
+                    def addl_args_sockets = "${timeout} ${generic_pf} ${sockets_provider} ${pr_ci_tests}"
 
                     // Use lockable resources to limit the number of jobs that can get executed in parallel
-                    def g4dn8x_lock_label = "g4dn8x"
-                    def g4dn12x_lock_label  = "g4dn12x"
-                    def c52x_lock_label  = "c52x"
-                    def hpc6a48x_lock_label  = "hpc6a48x"
-                    def c7gn16x_lock_label  = "c6gn16x"
-                    def c5n18x_lock_label  = "c5n18x"
-                    def c6g2x_lock_label  = "c6g2x"
-                    def trn132x_lock_label  = "trn132x"
+                    def hpc7g16x_lock_label = "hpc7g16x"
+                    def hpc8a96x_lock_label = "hpc8a96x"
+                    def c7g16x_lock_label   = "c7g16x"
+                    def c7gn16x_lock_label  = "c7gn16x"
+                    def c8gn16x_lock_label  = "c8gn16x"
+                    def hpc6a48x_lock_label = "hpc6a48x"
+                    def g4dn16x_lock_label  = "g4dn16x"
+                    def trn248x_lock_label  = "trn248x"
+                    def c5n18x_lock_label   = "c5n18x"
+                    def c7i16x_lock_label   = "c7i16x"
 
-                    // Single Node Tests - EFA
-                    stages["1_g4dn_alinux2-efa"] = get_test_stage_with_lock("1_g4dn_alinux2_efa", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa)
-                    stages["1_g4dn_alinux2023-efa"] = get_test_stage_with_lock("1_g4dn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa)
-                    stages["1_g4dn_ubuntu2204-efa"] = get_test_stage_with_lock("1_g4dn_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, addl_args_efa)
-                    stages["1_g4dn_rhel8-efa"] = get_test_stage_with_lock("1_g4dn_rhel8_efa", env.BUILD_TAG, "rhel8", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_efa)
+                    // Multi Node Tests - EFA
+                    stages["2_hpc7g_alinux2023_efa"] = get_test_stage_with_lock("2_hpc7g_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa_hpc}")
+                    stages["2_hpc8a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc8a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc8a.96xlarge", 2, "eu-north-1", hpc8a96x_lock_label, "--odcr cr-0c2007d91766881ab ${addl_args_efa_hpc}")
+                    stages["2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock("2_c7g_ubuntu2404_efa",   env.BUILD_TAG, "ubuntu2404", "c7g.16xlarge",   2, "us-west-2", c7g16x_lock_label,   "--odcr cr-03255c1eeaf9777db ${addl_args_efa}")
+                    stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
+                    stages["2_c8gn_alinux2023_efa"]  = get_test_stage_with_lock("2_c8gn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "c8gn.16xlarge",  2, "us-west-2", c8gn16x_lock_label,  "--odcr cr-0698f5e644dab6868 ${addl_args_efa}")
+                    stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa_hpc}")
+                    stages["2_hpc6a_rhel9_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel9_efa",      env.BUILD_TAG, "rhel9",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa_hpc}")
 
-                    // Single Node Tests - SHM
-                    stages["1_g4dn_alinux2_shm"] = get_test_stage_with_lock("1_g4dn_alinux2_shm", env.BUILD_TAG, "alinux2", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_shm)
-                    stages["1_g4dn_alinux2023_shm"] = get_test_stage_with_lock("1_g4dn_alinux2023_shm", env.BUILD_TAG, "alinux2023", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_shm)
-                    stages["1_g4dn_ubuntu2204_shm"] = get_test_stage_with_lock("1_g4dn_ubuntu2204_shm", env.BUILD_TAG, "ubuntu2204", "g4dn.8xlarge", 1, "us-east-1", g4dn8x_lock_label, addl_args_shm)
-                    stages["1_c5_rhel8_shm"] = get_test_stage_with_lock("1_c5_rhel8_shm", env.BUILD_TAG, "rhel8", "c5.2xlarge", 1, "us-east-1", c52x_lock_label, addl_args_shm)
-                    stages["1_c5_ubuntu2204_shm_disable-cma"] = get_test_stage_with_lock("1_c5_ubuntu2204_shm_disable-cma", env.BUILD_TAG, "ubuntu2204", "c5.2xlarge", 1, "us-east-1", c52x_lock_label, addl_args_shm + " --enable-cma false")
+                    // Multi Node Tests - Accelerator EFA
+                    stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.16xlarge",  2, "us-west-2",      g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_efa}")
+                    stages["2_trn2_alinux2023_efa"]  = get_test_stage_with_lock("2_trn2_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "trn2.48xlarge",  2, "ap-southeast-4", trn248x_lock_label, "--odcr cr-0ea39f1e125501d50 ${addl_args_efa}")
 
                     // Single Node Windows Test
                     stages["EFA_Windows_Test"] = get_single_node_windows_test_stage_with_lock("EFA_Windows_Test", c5n18x_lock_label)
 
-                    // Multi Node Tests - EFA
-                    stages["2_hpc6a_alinux2_efa"] = get_test_stage_with_lock("2_hpc6a_alinux2_efa", env.BUILD_TAG, "alinux2", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
-                    stages["2_hpc6a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc6a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
-                    stages["2_c7gn_alinux2023_efa"] = get_test_stage_with_lock("2_c7gn_alinux2023_efa", env.BUILD_TAG, "alinux2023", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa)
-                    stages["2_c5n_alinux2_efa"] = get_test_stage_with_lock("2_c5n_alinux2_efa", env.BUILD_TAG, "alinux2", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa)
-                    stages["2_c5n_alinux2023_efa"] = get_test_stage_with_lock("2_c5n_alinux2023_efa", env.BUILD_TAG, "alinux2023", "c5n.18xlarge", 2, "us-east-1", c5n18x_lock_label, addl_args_efa)
-                    stages["2_hpc6a_ubuntu2204_efa"] = get_test_stage_with_lock("2_hpc6a_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
-                    stages["2_hpc6a_rhel8_efa"] = get_test_stage_with_lock("2_hpc6a_rhel8_efa", env.BUILD_TAG, "rhel8", "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, addl_args_efa_hpc)
-                    def addl_args_trn1_odcr_efa = " --odcr cr-097fd3374f511c972 ${addl_args_efa}"
-                    stages["2_trn1_ubuntu2204_efa"] = get_test_stage_with_lock("2_trn1_ubuntu2204_efa", env.BUILD_TAG, "ubuntu2204", "trn1.32xlarge", 2, "us-west-2", trn132x_lock_label, addl_args_trn1_odcr_efa)
+                    // Multi Node Tests - Other Providers
+                    stages["2_c7i_alinux2023_tcp"]      = get_test_stage_with_lock("2_c7i_alinux2023_tcp",      env.BUILD_TAG, "alinux2023", "c7i.16xlarge", 2, "us-west-2", c7i16x_lock_label, "--odcr cr-02f365311e1143b20 ${addl_args_tcp}")
+                    stages["2_c7i_ubuntu2204_sockets"]  = get_test_stage_with_lock("2_c7i_ubuntu2204_sockets",  env.BUILD_TAG, "ubuntu2204", "c7i.16xlarge", 2, "us-west-2", c7i16x_lock_label, "--odcr cr-02f365311e1143b20 ${addl_args_sockets}")
 
-                    stages["2_c7gn_alinux2_efa"] = get_test_stage_with_lock("2_c7gn_alinux2_efa", env.BUILD_TAG, "alinux2", "c7gn.16xlarge", 2, "us-west-2", c7gn16x_lock_label, addl_args_efa)
-
-                    // Multi Node Tests - TCP
-                    stages["2_c6g_alinux2_tcp"] = get_test_stage_with_lock("2_c6g_alinux2_tcp", env.BUILD_TAG, "alinux2", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
-                    stages["2_c6g_alinux2023_tcp"] = get_test_stage_with_lock("2_c6g_alinux2023_tcp", env.BUILD_TAG, "alinux2023", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
-                    stages["2_c6g_ubuntu2204_tcp"] = get_test_stage_with_lock("2_c6g_ubuntu2204_tcp", env.BUILD_TAG, "ubuntu2204", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
-                    stages["2_c6g_rhel8_tcp"] = get_test_stage_with_lock("2_c6g_rhel8_tcp", env.BUILD_TAG, "rhel8", "c6g.2xlarge", 2, "us-west-2", c6g2x_lock_label, addl_args_tcp)
-                    stages["3_g4dn_alinux2_tcp"] = get_test_stage_with_lock("3_g4dn_alinux2_tcp", env.BUILD_TAG, "alinux2", "g4dn.12xlarge", 3, "us-east-1", g4dn12x_lock_label, addl_args_tcp)
+                    // Single Node Tests - SM2 / SHM
+                    stages["1_g4dn_alinux2023_sm2"]              = get_test_stage_with_lock("1_g4dn_alinux2023_sm2",              env.BUILD_TAG, "alinux2023", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_sm2}")
+                    stages["1_g4dn_ubuntu2404_shm"]              = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm",              env.BUILD_TAG, "ubuntu2404", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_shm}")
+                    stages["1_g4dn_ubuntu2404_shm_disable-cma"]  = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm_disable-cma",  env.BUILD_TAG, "ubuntu2404", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_shm} --enable-cma false")
 
                     parallel stages
                 }
