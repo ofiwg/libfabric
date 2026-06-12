@@ -26,7 +26,7 @@ static void test_efa_msg_recv_prep(struct efa_resource *resource,
 	assert_int_equal(ret, 1);
 }
 
-void test_efa_msg_fi_recv(struct efa_resource **state)
+void test_efa_msg_fi_recv(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -46,7 +46,7 @@ void test_efa_msg_fi_recv(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
-void test_efa_msg_fi_recvv(struct efa_resource **state)
+void test_efa_msg_fi_recvv(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -68,7 +68,7 @@ void test_efa_msg_fi_recvv(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
-void test_efa_msg_fi_recvmsg(struct efa_resource **state)
+void test_efa_msg_fi_recvmsg(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -115,7 +115,7 @@ static void test_efa_msg_send_prep(struct efa_resource *resource,
 	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
 }
 
-void test_efa_msg_fi_send(struct efa_resource **state)
+void test_efa_msg_fi_send(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -137,7 +137,7 @@ void test_efa_msg_fi_send(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
-void test_efa_msg_fi_sendv(struct efa_resource **state)
+void test_efa_msg_fi_sendv(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -161,7 +161,7 @@ void test_efa_msg_fi_sendv(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
-void test_efa_msg_fi_sendmsg(struct efa_resource **state)
+void test_efa_msg_fi_sendmsg(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -188,7 +188,7 @@ void test_efa_msg_fi_sendmsg(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
-void test_efa_msg_fi_senddata(struct efa_resource **state)
+void test_efa_msg_fi_senddata(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -211,7 +211,7 @@ void test_efa_msg_fi_senddata(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
-void test_efa_msg_fi_inject(struct efa_resource **state)
+void test_efa_msg_fi_inject(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -229,7 +229,7 @@ void test_efa_msg_fi_inject(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
-void test_efa_msg_fi_injectdata(struct efa_resource **state)
+void test_efa_msg_fi_injectdata(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff send_buff;
@@ -254,7 +254,7 @@ void test_efa_msg_fi_injectdata(struct efa_resource **state)
  * does not use the inline path. This catches the bug where only desc[0]
  * was checked for HMEM.
  */
-void test_efa_msg_sendmsg_multi_iov_second_desc_hmem_fails(struct efa_resource **state)
+void test_efa_msg_sendmsg_multi_iov_second_desc_hmem_fails(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff buff0, buff1;
