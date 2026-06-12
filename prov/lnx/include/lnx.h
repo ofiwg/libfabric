@@ -96,6 +96,8 @@ struct lnx_core_domain {
 	struct lnx_core_fabric *cd_fabric;
 	struct fi_info *cd_info;
 	uint64_t cd_num_sends;
+	uint64_t key_seed;
+	int idx;
 };
 
 struct lnx_core_av {
@@ -114,8 +116,23 @@ struct lnx_t_traffic_stats {
 	uint64_t st_num_tsenddata;
 	uint64_t st_num_tinject;
 	uint64_t st_num_tinjectdata;
+	uint64_t st_num_send;
+	uint64_t st_num_sendv;
+	uint64_t st_num_sendmsg;
+	uint64_t st_num_senddata;
+	uint64_t st_num_inject;
+	uint64_t st_num_injectdata;
 	uint64_t st_num_posted_recvs;
 	uint64_t st_num_unexp_msgs;
+	uint64_t st_num_read;
+	uint64_t st_num_readv;
+	uint64_t st_num_readmsg;
+	uint64_t st_num_write;
+	uint64_t st_num_writev;
+	uint64_t st_num_writemsg;
+	uint64_t st_num_writedata;
+	uint64_t st_num_inject_write;
+	uint64_t st_num_inject_writedata;
 };
 
 struct lnx_core_ep {
@@ -169,8 +186,15 @@ struct lnx_av {
 struct lnx_mr {
 	struct ofi_mr lm_mr;
 	struct fi_mr_attr lm_attr;
-	struct fid_mr *lm_core_mr;
+	size_t key_size;
+	struct fid_mr **lm_core_mr;
 	struct iovec lm_iov[LNX_IOV_LIMIT];
+	void *raw_key;
+};
+
+struct lnx_mr_key {
+	uint64_t base_addr;
+	uint64_t prov_keys[];
 };
 
 struct lnx_domain {
@@ -187,7 +211,6 @@ struct lnx_ep {
 	struct util_ep le_ep;
 	struct lnx_core_ep *le_core_eps;
 	struct ofi_bufpool *le_recv_bp;
-	ofi_spin_t le_bplock;
 	struct lnx_domain *le_domain;
 	size_t le_fclass;
 	struct lnx_peer_srq le_srq;
@@ -230,7 +253,6 @@ struct lnx_rx_entry {
 	struct lnx_ep *rx_lep;
 	struct lnx_core_ep *rx_cep;
 	uint64_t rx_ignore;
-	bool rx_global;
 };
 
 extern struct fi_ops_msg lnx_msg_ops;
@@ -241,8 +263,6 @@ extern struct fi_ops_srx_owner lnx_srx_ops;
 
 extern struct util_prov lnx_util_prov;
 extern struct fi_provider lnx_prov;
-extern struct ofi_bufpool *global_recv_bp;
-extern ofi_spin_t global_bplock;
 
 int lnx_setup_fabrics(char *name, struct lnx_fabric *lnx_fab, void *context);
 
@@ -260,12 +280,19 @@ int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int lnx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
 
+
+int lnx_mr_reg(struct fid *fid, const void *buf, size_t len, uint64_t access,
+	       uint64_t offset, uint64_t requested_key, uint64_t flags,
+	       struct fid_mr **mr, void *context);
+int lnx_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
+		uint64_t access, uint64_t offset, uint64_t requested_key,
+		uint64_t flags, struct fid_mr **mr, void *context);
 int lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr_fid);
-int lnx_mr_regattr_core(struct lnx_core_domain *cd, void *desc,
+int lnx_mr_regattr_core(struct lnx_core_domain *cd, void **desc, size_t count,
 			void **core_desc);
 
-int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
+int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void **desc,
 		     fi_addr_t addr, size_t count, uint64_t tag,
 		     uint64_t ignore, void *context, uint64_t flags,
 		     bool tagged);

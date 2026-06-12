@@ -101,6 +101,7 @@ static int lnx_peer_av_remove(struct lnx_peer *lp)
 			if (rc)
 				frc = rc;
 		}
+		ofi_ibuf_free(map_addr);
 	}
 
 	return frc;
