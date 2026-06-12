@@ -43,7 +43,7 @@ void test_impl_cq_read_empty_cq(struct efa_resource *resource, enum fi_ep_type e
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_dgram_cq_read_empty_cq(struct efa_resource **state)
+void test_dgram_cq_read_empty_cq(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_impl_cq_read_empty_cq(resource, FI_EP_DGRAM);
@@ -56,7 +56,7 @@ void test_dgram_cq_read_empty_cq(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_ibv_cq_ex_read_empty_cq(struct efa_resource **state)
+void test_ibv_cq_ex_read_empty_cq(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_impl_cq_read_empty_cq(resource, FI_EP_RDM);
@@ -186,7 +186,7 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_rdm_cq_read_bad_send_status_unresponsive_receiver(struct efa_resource **state)
+void test_rdm_cq_read_bad_send_status_unresponsive_receiver(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
@@ -203,7 +203,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver(struct efa_resource 
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id(struct efa_resource **state)
+void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
@@ -220,7 +220,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_rdm_cq_read_bad_send_status_unreachable_receiver(struct efa_resource **state)
+void test_rdm_cq_read_bad_send_status_unreachable_receiver(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
@@ -237,7 +237,7 @@ void test_rdm_cq_read_bad_send_status_unreachable_receiver(struct efa_resource *
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_rdm_cq_read_bad_send_status_invalid_qpn(struct efa_resource **state)
+void test_rdm_cq_read_bad_send_status_invalid_qpn(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -255,7 +255,7 @@ void test_rdm_cq_read_bad_send_status_invalid_qpn(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_rdm_cq_read_bad_send_status_message_too_long(struct efa_resource **state)
+void test_rdm_cq_read_bad_send_status_message_too_long(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_rdm_cq_read_bad_send_status(resource,
@@ -271,7 +271,7 @@ void test_rdm_cq_read_bad_send_status_message_too_long(struct efa_resource **sta
  * @param expect_eq_err whether an eq error is expected
  */
 static
-void test_rdm_cq_handshake_bad_send_status_impl(struct efa_resource **state, int prov_errno, bool expect_eq_err)
+void test_rdm_cq_handshake_bad_send_status_impl(void **state, int prov_errno, bool expect_eq_err)
 {
 	fi_addr_t peer_addr = 0;
 	int ret;
@@ -359,27 +359,27 @@ void test_rdm_cq_handshake_bad_send_status_impl(struct efa_resource **state, int
 	resource->ep = NULL;
 }
 
-void test_rdm_cq_handshake_bad_send_status_bad_qpn(struct efa_resource **state)
+void test_rdm_cq_handshake_bad_send_status_bad_qpn(void **state)
 {
 	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_DEST_QPN, false);
 }
 
-void test_rdm_cq_handshake_bad_send_status_unresp_remote(struct efa_resource **state)
+void test_rdm_cq_handshake_bad_send_status_unresp_remote(void **state)
 {
 	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, false);
 }
 
-void test_rdm_cq_handshake_bad_send_status_unreach_remote(struct efa_resource **state)
+void test_rdm_cq_handshake_bad_send_status_unreach_remote(void **state)
 {
 	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE, false);
 }
 
-void test_rdm_cq_handshake_bad_send_status_remote_abort(struct efa_resource **state)
+void test_rdm_cq_handshake_bad_send_status_remote_abort(void **state)
 {
 	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT, false);
 }
 
-void test_rdm_cq_handshake_bad_send_status_unsupported_op(struct efa_resource **state)
+void test_rdm_cq_handshake_bad_send_status_unsupported_op(void **state)
 {
 	test_rdm_cq_handshake_bad_send_status_impl(state, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNSUPPORTED_OP, true);
 }
@@ -390,7 +390,7 @@ void test_rdm_cq_handshake_bad_send_status_unsupported_op(struct efa_resource **
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_ibv_cq_unsolicited_write_recv_status(struct efa_resource **state)
+void test_ibv_cq_unsolicited_write_recv_status(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -410,7 +410,7 @@ void test_ibv_cq_unsolicited_write_recv_status(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
+void test_ibv_cq_ex_read_bad_recv_status(void **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
@@ -506,7 +506,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
  * @param[in]	state					struct efa_resource that is managed by the framework
  * @param[in]	use_unsolicited_recv	whether to use unsolicited write recv
  */
-void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource **state, bool use_unsolicited_recv)
+void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(void **state, bool use_unsolicited_recv)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
@@ -613,12 +613,12 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(struct efa_resource 
 	resource->ep = NULL;
 }
 
-void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_unsolicited_recv(struct efa_resource **state)
+void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_unsolicited_recv(void **state)
 {
 	test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(state, true);
 }
 
-void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv(struct efa_resource **state)
+void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv(void **state)
 {
 	test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(state, false);
 }
@@ -632,7 +632,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_use_solicited_recv(struct
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
+void test_ibv_cq_ex_read_failed_poll(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry;
@@ -663,7 +663,7 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_rdm_cq_create_error_handling(struct efa_resource **state)
+void test_rdm_cq_create_error_handling(void **state)
 {
 
 	struct efa_resource *resource = *state;
@@ -735,7 +735,7 @@ int test_efa_rdm_cq_get_ibv_cq_poll_list_length(struct fid_cq *cq_fid)
  *
  * @param state struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -750,7 +750,7 @@ void test_efa_rdm_cq_ibv_cq_poll_list_same_tx_rx_cq_single_ep(struct efa_resourc
  *
  * @param state struct efa_resource that is managed by the framework
  */
-void test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_resource **state)
+void test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cq *txcq, *rxcq;
@@ -779,7 +779,7 @@ void test_efa_rdm_cq_ibv_cq_poll_list_separate_tx_rx_cq_single_ep(struct efa_res
 	fi_close(&rxcq->fid);
 }
 
-void test_efa_rdm_cq_post_initial_rx_pkts(struct efa_resource **state)
+void test_efa_rdm_cq_post_initial_rx_pkts(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -807,7 +807,7 @@ void test_efa_rdm_cq_post_initial_rx_pkts(struct efa_resource **state)
 	assert_false(efa_rdm_cq->need_to_scan_ep_list);
 }
 
-void test_efa_rdm_cq_before_ep_enable(struct efa_resource **state)
+void test_efa_rdm_cq_before_ep_enable(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_ep *ep;
@@ -987,7 +987,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_ibv_cq_ex_read_recover_forgotten_peer_ah(struct efa_resource **state)
+void test_ibv_cq_ex_read_recover_forgotten_peer_ah(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_impl_ibv_cq_ex_read_unknow_peer_ah(resource, false, true);
@@ -1000,7 +1000,7 @@ void test_ibv_cq_ex_read_recover_forgotten_peer_ah(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer(struct efa_resource **state)
+void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_impl_ibv_cq_ex_read_unknow_peer_ah(resource, false, false);
@@ -1015,21 +1015,21 @@ void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer(struct 
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_ibv_cq_ex_read_ignore_removed_peer(struct efa_resource **state)
+void test_ibv_cq_ex_read_ignore_removed_peer(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_impl_ibv_cq_ex_read_unknow_peer_ah(resource, true, true);
 }
 #else
-void test_ibv_cq_ex_read_recover_forgotten_peer_ah()
+void test_ibv_cq_ex_read_recover_forgotten_peer_ah(void **state)
 {
 	skip();
 }
-void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer()
+void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer(void **state)
 {
 	skip();
 }
-void test_ibv_cq_ex_read_ignore_removed_peer()
+void test_ibv_cq_ex_read_ignore_removed_peer(void **state)
 {
 	skip();
 }
@@ -1119,7 +1119,7 @@ static void test_efa_cq_read_prep(struct efa_resource *resource,
  * success status for send operation without wr_id (inject). In this case
  * no completion should be generated.
  */
-void test_efa_cq_read_no_completion(struct efa_resource **state)
+void test_efa_cq_read_no_completion(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry;
@@ -1141,7 +1141,7 @@ void test_efa_cq_read_no_completion(struct efa_resource **state)
  * @brief test EFA CQ's fi_cq_read() works properly when rdma-core return
  * success status for send operation.
  */
-void test_efa_cq_read_send_success(struct efa_resource **state)
+void test_efa_cq_read_send_success(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_context *efa_context;
@@ -1171,7 +1171,7 @@ void test_efa_cq_read_send_success(struct efa_resource **state)
  * @brief test EFA CQ's fi_cq_read() works properly when rdma-core return
  * success status for senddata operation.
  */
-void test_efa_cq_read_senddata_success(struct efa_resource **state)
+void test_efa_cq_read_senddata_success(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_context *efa_context;
@@ -1201,7 +1201,7 @@ void test_efa_cq_read_senddata_success(struct efa_resource **state)
  * @brief test EFA CQ's fi_cq_read() works properly when rdma-core return
  * success status for recv operation.
  */
-void test_efa_cq_read_recv_success(struct efa_resource **state)
+void test_efa_cq_read_recv_success(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_context *efa_context;
@@ -1231,7 +1231,7 @@ void test_efa_cq_read_recv_success(struct efa_resource **state)
  * @brief test EFA CQ's fi_cq_read() works properly when rdma-core return
  * success status for senddata operation.
  */
-void test_efa_cq_read_write_success(struct efa_resource **state)
+void test_efa_cq_read_write_success(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_context *efa_context;
@@ -1261,7 +1261,7 @@ void test_efa_cq_read_write_success(struct efa_resource **state)
  * @brief test EFA CQ's fi_cq_read() works properly when rdma-core return
  * success status for writedata operation.
  */
-void test_efa_cq_read_writedata_success(struct efa_resource **state)
+void test_efa_cq_read_writedata_success(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_context *efa_context;
@@ -1291,7 +1291,7 @@ void test_efa_cq_read_writedata_success(struct efa_resource **state)
  * @brief test EFA CQ's fi_cq_read() works properly when rdma-core return
  * success status for read operation.
  */
-void test_efa_cq_read_read_success(struct efa_resource **state)
+void test_efa_cq_read_read_success(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_context *efa_context;
@@ -1321,7 +1321,7 @@ void test_efa_cq_read_read_success(struct efa_resource **state)
  * @brief test EFA CQ's fi_cq_read() works properly when rdma-core return
  * success status for recv rdma with imm operation.
  */
-void test_efa_cq_read_recv_rdma_with_imm_success(struct efa_resource **state)
+void test_efa_cq_read_recv_rdma_with_imm_success(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry;
@@ -1372,7 +1372,7 @@ static void efa_cq_check_cq_err_entry(struct efa_resource *resource, int vendor_
  *
  * @param[in]  state            struct efa_resource that is managed by the framework
  */
-void test_efa_cq_read_send_failure(struct efa_resource **state)
+void test_efa_cq_read_send_failure(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_context *efa_context;
@@ -1406,7 +1406,7 @@ void test_efa_cq_read_send_failure(struct efa_resource **state)
  *
  * @param[in]  state            struct efa_resource that is managed by the framework
  */
-void test_efa_cq_read_recv_failure(struct efa_resource **state)
+void test_efa_cq_read_recv_failure(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_context *efa_context;
@@ -1440,7 +1440,7 @@ void test_efa_cq_read_recv_failure(struct efa_resource **state)
  *
  * @param[in]  state            struct efa_resource that is managed by the framework
  */
-void test_efa_cq_recv_rdma_with_imm_failure(struct efa_resource **state)
+void test_efa_cq_recv_rdma_with_imm_failure(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry;
@@ -1468,7 +1468,7 @@ void test_efa_cq_recv_rdma_with_imm_failure(struct efa_resource **state)
  * @param state unit test resources
  */
 static void test_efa_cq_data_path_direct_status(
-	struct efa_resource **state, uint32_t vendor_part_id,
+	void **state, uint32_t vendor_part_id,
 	bool data_path_direct_enabled, enum fi_wait_obj wait_obj, char *fabric_name)
 {
 	struct efa_resource *resource = *state;
@@ -1512,7 +1512,7 @@ static void test_efa_cq_data_path_direct_status(
  *
  * @param state unit test resources
  */
-void test_efa_cq_data_path_direct_disabled_by_env(struct efa_resource **state)
+void test_efa_cq_data_path_direct_disabled_by_env(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1535,7 +1535,7 @@ void test_efa_cq_data_path_direct_disabled_by_env(struct efa_resource **state)
  *
  * @param state unit test resources
  */
-void test_efa_cq_data_path_direct_disabled_with_old_device(struct efa_resource **state)
+void test_efa_cq_data_path_direct_disabled_with_old_device(void **state)
 {
 	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE, EFA_DIRECT_FABRIC_NAME);
 }
@@ -1546,7 +1546,7 @@ void test_efa_cq_data_path_direct_disabled_with_old_device(struct efa_resource *
  *
  * @param state unit test resources
  */
-void test_efa_cq_data_path_direct_enabled_with_new_device(struct efa_resource **state)
+void test_efa_cq_data_path_direct_enabled_with_new_device(void **state)
 {
 	test_efa_cq_data_path_direct_status(state, 0xefa1, true, FI_WAIT_NONE, EFA_DIRECT_FABRIC_NAME);
 }
@@ -1558,7 +1558,7 @@ void test_efa_cq_data_path_direct_enabled_with_new_device(struct efa_resource **
  *
  * @param state unit test resources
  */
-void test_efa_cq_data_path_direct_with_wait_obj(struct efa_resource **state)
+void test_efa_cq_data_path_direct_with_wait_obj(void **state)
 {
 #if HAVE_EFADV_CQ_ATTR_DB
 	test_efa_cq_data_path_direct_status(state, 0xefa1, true, FI_WAIT_UNSPEC, EFA_DIRECT_FABRIC_NAME);
@@ -1573,7 +1573,7 @@ void test_efa_cq_data_path_direct_with_wait_obj(struct efa_resource **state)
  *
  * @param state unit test resources
  */
-void test_efa_rdm_cq_data_path_direct_disabled_with_old_device(struct efa_resource **state)
+void test_efa_rdm_cq_data_path_direct_disabled_with_old_device(void **state)
 {
 	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE, EFA_FABRIC_NAME);
 }
@@ -1584,14 +1584,14 @@ void test_efa_rdm_cq_data_path_direct_disabled_with_old_device(struct efa_resour
  *
  * @param state unit test resources
  */
-void test_efa_rdm_cq_data_path_direct_enabled_with_new_device(struct efa_resource **state)
+void test_efa_rdm_cq_data_path_direct_enabled_with_new_device(void **state)
 {
 	test_efa_cq_data_path_direct_status(state, 0xefa1, true, FI_WAIT_NONE, EFA_FABRIC_NAME);
 }
 
 #else
 
-void test_efa_cq_data_path_direct_disabled_by_env(struct efa_resource **state)
+void test_efa_cq_data_path_direct_disabled_by_env(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1603,19 +1603,19 @@ void test_efa_cq_data_path_direct_disabled_by_env(struct efa_resource **state)
 	assert_false(efa_cq->ibv_cq.data_path_direct_enabled);
 }
 
-void test_efa_cq_data_path_direct_disabled_with_old_device(struct efa_resource **state)
+void test_efa_cq_data_path_direct_disabled_with_old_device(void **state)
 {
 	/* cq direct should always be disabled */
 	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE, EFA_DIRECT_FABRIC_NAME);
 }
 
-void test_efa_cq_data_path_direct_enabled_with_new_device(struct efa_resource **state)
+void test_efa_cq_data_path_direct_enabled_with_new_device(void **state)
 {
 	/* cq direct should always be disabled */
 	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_NONE, EFA_DIRECT_FABRIC_NAME);
 }
 
-void test_efa_cq_data_path_direct_with_wait_obj(struct efa_resource **state)
+void test_efa_cq_data_path_direct_with_wait_obj(void **state)
 {
 	/* cq direct should always be disabled */
 #if HAVE_EFADV_CQ_ATTR_DB
@@ -1625,12 +1625,12 @@ void test_efa_cq_data_path_direct_with_wait_obj(struct efa_resource **state)
 #endif
 }
 
-void test_efa_rdm_cq_data_path_direct_disabled_with_old_device(struct efa_resource **state)
+void test_efa_rdm_cq_data_path_direct_disabled_with_old_device(void **state)
 {
 	test_efa_cq_data_path_direct_status(state, 0xefa0, false, FI_WAIT_NONE, EFA_FABRIC_NAME);
 }
 
-void test_efa_rdm_cq_data_path_direct_enabled_with_new_device(struct efa_resource **state)
+void test_efa_rdm_cq_data_path_direct_enabled_with_new_device(void **state)
 {
 	test_efa_cq_data_path_direct_status(state, 0xefa1, false, FI_WAIT_NONE, EFA_FABRIC_NAME);
 }
@@ -1643,7 +1643,7 @@ void test_efa_rdm_cq_data_path_direct_enabled_with_new_device(struct efa_resourc
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_cq_trywait_no_channel(struct efa_resource **state)
+void test_efa_cq_trywait_no_channel(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1695,7 +1695,7 @@ static int test_efa_cq_sread_prep(struct efa_resource *resource)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_cq_trywait_completions_available(struct efa_resource **state)
+void test_efa_cq_trywait_completions_available(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1731,7 +1731,7 @@ void test_efa_cq_trywait_completions_available(struct efa_resource **state)
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_efa_cq_trywait_success(struct efa_resource **state)
+void test_efa_cq_trywait_success(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1752,7 +1752,7 @@ void test_efa_cq_trywait_success(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_cq_sread_enosys(struct efa_resource **state)
+void test_efa_cq_sread_enosys(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1775,7 +1775,7 @@ void test_efa_cq_sread_enosys(struct efa_resource **state)
  *
  * @param[in]  state	struct efa_resource that is managed by the framework
  */
-void test_efa_cq_sread_eagain(struct efa_resource **state)
+void test_efa_cq_sread_eagain(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry = {0};
@@ -1795,7 +1795,7 @@ void test_efa_cq_sread_eagain(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_cq_control_getwait_with_channel(struct efa_resource **state)
+void test_efa_cq_control_getwait_with_channel(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1820,7 +1820,7 @@ void test_efa_cq_control_getwait_with_channel(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_cq_control_getwait_no_channel(struct efa_resource **state)
+void test_efa_cq_control_getwait_no_channel(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1842,7 +1842,7 @@ void test_efa_cq_control_getwait_no_channel(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_cq_control_getwaitobj(struct efa_resource **state)
+void test_efa_cq_control_getwaitobj(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1866,7 +1866,7 @@ void test_efa_cq_control_getwaitobj(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_efa_cq_control_invalid_command(struct efa_resource **state)
+void test_efa_cq_control_invalid_command(void **state)
 {
 	struct efa_resource *resource = *state;
 	int dummy_arg = 0;
@@ -1883,7 +1883,7 @@ void test_efa_cq_control_invalid_command(struct efa_resource **state)
  *
  * @param[in] state struct efa_resource managed by the framework
  */
-void test_efa_cq_ep_list_lock_type_no_op(struct efa_resource **state)
+void test_efa_cq_ep_list_lock_type_no_op(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1902,7 +1902,7 @@ void test_efa_cq_ep_list_lock_type_no_op(struct efa_resource **state)
  *
  * @param[in] state struct efa_resource managed by the framework
  */
-void test_efa_cq_ep_list_lock_type_mutex(struct efa_resource **state)
+void test_efa_cq_ep_list_lock_type_mutex(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -1921,7 +1921,7 @@ void test_efa_cq_ep_list_lock_type_mutex(struct efa_resource **state)
  * This test verifies the fix from commit 643af57a4 that properly sets CQ ops
  * when counters are bound to endpoints.
  */
-void test_efa_cq_ops_override_with_counter_binding(struct efa_resource **state)
+void test_efa_cq_ops_override_with_counter_binding(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fid_cntr *cntr;
@@ -1958,7 +1958,7 @@ void test_efa_cq_ops_override_with_counter_binding(struct efa_resource **state)
  * This test verifies the fix from commit 14f8cd478 that adds input validation
  * to efa_cq_readfrom to return -FI_EAGAIN for invalid parameters.
  */
-void test_efa_cq_readfrom_input_validation(struct efa_resource **state)
+void test_efa_cq_readfrom_input_validation(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry;
@@ -2044,7 +2044,7 @@ static void test_efa_cq_readerr_common(struct efa_resource *resource, bool user_
 /**
  * @brief Test CQ readerr return value with user-owned buffer
  */
-void test_efa_cq_readerr_return_value_user_buffer(struct efa_resource **state)
+void test_efa_cq_readerr_return_value_user_buffer(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_efa_cq_readerr_common(resource, true);
@@ -2053,7 +2053,7 @@ void test_efa_cq_readerr_return_value_user_buffer(struct efa_resource **state)
 /**
  * @brief Test CQ readerr return value with provider-owned buffer
  */
-void test_efa_cq_readerr_return_value_provider_buffer(struct efa_resource **state)
+void test_efa_cq_readerr_return_value_provider_buffer(void **state)
 {
 	struct efa_resource *resource = *state;
 	test_efa_cq_readerr_common(resource, false);
@@ -2067,7 +2067,7 @@ void test_efa_cq_readerr_return_value_provider_buffer(struct efa_resource **stat
  * to application cqs.
  *
  */
-void test_efa_cq_readfrom_start_poll_error(struct efa_resource **state)
+void test_efa_cq_readfrom_start_poll_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry;
@@ -2108,7 +2108,7 @@ void test_efa_cq_readfrom_start_poll_error(struct efa_resource **state)
  * This test verifies
  * efa_cq_readfrom reads from util_cq when there are CQEs available.
  */
-void test_efa_cq_readfrom_util_cq_entries(struct efa_resource **state)
+void test_efa_cq_readfrom_util_cq_entries(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -2151,7 +2151,7 @@ void test_efa_cq_readfrom_util_cq_entries(struct efa_resource **state)
  * This test verifies
  * efa_cq_readerr reads from util_cq when there are error entries available.
  */
-void test_efa_cq_readerr_util_cq_error(struct efa_resource **state)
+void test_efa_cq_readerr_util_cq_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -2202,7 +2202,7 @@ void test_efa_cq_readerr_util_cq_error(struct efa_resource **state)
  * Scenario: fi_cq_read hits completion error -> fi_close(ep) destroys QP and 
  * calls efa_cq_poll_ibv_cq -> should handle NULL base_ep gracefully
  */
-void test_efa_cq_poll_ep_close_bypass_path(struct efa_resource **state)
+void test_efa_cq_poll_ep_close_bypass_path(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -2247,7 +2247,7 @@ void test_efa_cq_poll_ep_close_bypass_path(struct efa_resource **state)
  * Without the fix: SEGV/SIGBUS (cur_wq points to freed QP memory)
  * With the fix (NULLing cur_wq after consumption): passes
  */
-void test_efa_cq_next_poll_stale_cur_wq_segv_on_ep_close(struct efa_resource **state)
+void test_efa_cq_next_poll_stale_cur_wq_segv_on_ep_close(void **state)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	struct efa_resource *resource = *state;
@@ -2304,7 +2304,7 @@ void test_efa_cq_next_poll_stale_cur_wq_segv_on_ep_close(struct efa_resource **s
  * First fi_cq_read(..., buf, 3) should return 2 (successful entries).
  * Second fi_cq_read should return -FI_EAVAIL (error available).
  */
-void test_efa_cq_read_mixed_success_error(struct efa_resource **state)
+void test_efa_cq_read_mixed_success_error(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
@@ -2467,7 +2467,7 @@ static int test_efa_rdm_cq_sread_prep(struct efa_resource *resource)
 /**
  * @brief Test fi_cq_sread() with wait object disabled returns -FI_ENOSYS
  */
-void test_efa_rdm_cq_sread_no_wait_obj(struct efa_resource **state)
+void test_efa_rdm_cq_sread_no_wait_obj(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry;
@@ -2490,7 +2490,7 @@ void test_efa_rdm_cq_sread_no_wait_obj(struct efa_resource **state)
 /**
  * @brief Test RDM CQ fi_cq_sread() returns -FI_EAGAIN when CQ is empty and timeout expires
  */
-void test_efa_rdm_cq_sread_eagain(struct efa_resource **state)
+void test_efa_rdm_cq_sread_eagain(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry = {0};
@@ -2507,7 +2507,7 @@ void test_efa_rdm_cq_sread_eagain(struct efa_resource **state)
 /**
  * @brief Test RDM CQ fi_cq_sread() returns completions when available
  */
-void test_efa_rdm_cq_sread_with_cqe(struct efa_resource **state)
+void test_efa_rdm_cq_sread_with_cqe(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_cq *efa_rdm_cq;
@@ -2549,7 +2549,7 @@ void test_efa_rdm_cq_sread_with_cqe(struct efa_resource **state)
  * The CQ should not be destroyed while an endpoint holds a reference.
  * After closing the endpoint, the CQ close should succeed.
  */
-void test_efa_cq_close_returns_ebusy_with_bound_ep(struct efa_resource **state)
+void test_efa_cq_close_returns_ebusy_with_bound_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_cq *efa_cq;
