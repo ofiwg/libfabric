@@ -586,6 +586,9 @@ static int vrb_close_free_ep(struct vrb_ep *ep)
 	ep->util_ep.ep_fid.msg = NULL;
 	free(ep->cm_priv_data);
 
+	if (ep->cm_ops)
+		ep->cm_ops->ep_close(ep);
+
 	ret = ofi_endpoint_close(&ep->util_ep);
 	if (ret)
 		return ret;
@@ -642,11 +645,11 @@ static int vrb_ep_close(fid_t fid)
 
 		if (vrb_is_xrc_ep(ep))
 			vrb_ep_xrc_close(ep);
-		else
-			rdma_destroy_ep(ep->id);
 
 		if (ep->eq)
 			ofi_mutex_unlock(&ep->eq->event_lock);
+
+		ep->cm_ops->ep_preclose(ep);
 
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 		vrb_cleanup_cq(ep);
@@ -697,7 +700,7 @@ static inline int vrb_ep_xrc_set_tgt_chan(struct vrb_ep *ep)
 	struct vrb_xrc_ep *xrc_ep = container_of(ep, struct vrb_xrc_ep,
 						    base_ep);
 	if (xrc_ep->tgt_id)
-		return rdma_migrate_id(xrc_ep->tgt_id, ep->eq->channel);
+		return vrb_xrc_migrade_rdma_id(xrc_ep);
 
 	return FI_SUCCESS;
 }
@@ -732,7 +735,7 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (vrb_is_xrc_ep(ep))
 			ret = vrb_ep_xrc_set_tgt_chan(ep);
 		else
-			ret = rdma_migrate_id(ep->id, ep->eq->channel);
+			ret = ep->cm_ops->ep_bind(ep, ep->eq);
 		ofi_mutex_unlock(&ep->eq->event_lock);
 		if (ret) {
 			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_migrate_id");
@@ -838,7 +841,7 @@ static int vrb_create_dgram_ep(struct vrb_domain *domain, struct vrb_ep *ep,
 
 	ep->ep_name.lid = port_attr.lid;
 	ep->ep_name.sl = port_attr.sm_sl;
-	ep->ep_name.gid = gid;
+	ep->ep_name.gid = *(union ofi_ib_gid *)&gid;
 	ep->ep_name.qpn = ep->ibv_qp->qp_num;
 	ep->ep_name.pkey = p_key;
 
@@ -1046,24 +1049,9 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 			return -FI_EINVAL;
 		}
 
-		/* Server-side QP creation, after RDMA_CM_EVENT_CONNECT_REQUEST
-		 * is recevied */
-		if (ep->id->verbs && ep->ibv_qp == NULL) {
-			vrb_prof_func_start("rdma_create_qp");
-			ret = rdma_create_qp(ep->id, domain->pd, &attr);
-			if (ret) {
-				VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_create_qp");
-				return -errno;
-			}
-			vrb_prof_func_end("rdma_create_qp");
-			if (ep->profile)
-				vrb_prof_cntr_inc(ep->profile,
-						 FI_VAR_MSG_QUEUE_CNT);
-
-			/* Allow shared XRC INI QP not controlled by RDMA CM
-			 * to share same post functions as RC QP. */
-			ep->ibv_qp = ep->id->qp;
-		}
+		ret = ep->cm_ops->ep_enable(ep, &attr);
+		if (ret)
+			return ret;
 		break;
 	case FI_EP_DGRAM:
 		assert(domain);
@@ -1214,8 +1202,6 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 {
 	struct vrb_domain *dom;
 	struct vrb_ep *ep;
-	struct vrb_connreq *connreq;
-	struct vrb_pep *pep;
 	struct fi_info *fi;
 	int ret;
 
@@ -1290,86 +1276,14 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:
-		if (dom->ext_flags & VRB_USE_XRC) {
-			if (dom->util_domain.threading == FI_THREAD_SAFE) {
-				*ep->util_ep.ep_fid.msg = vrb_msg_xrc_ep_msg_ops_ts;
-				ep->util_ep.ep_fid.rma = &vrb_msg_xrc_ep_rma_ops_ts;
-			} else {
-				*ep->util_ep.ep_fid.msg = vrb_msg_xrc_ep_msg_ops;
-				ep->util_ep.ep_fid.rma = &vrb_msg_xrc_ep_rma_ops;
-			}
-			ep->util_ep.ep_fid.cm = &vrb_msg_xrc_ep_cm_ops;
-			ep->util_ep.ep_fid.atomic = &vrb_msg_xrc_ep_atomic_ops;
-		} else {
-			if (dom->util_domain.threading == FI_THREAD_SAFE) {
-				*ep->util_ep.ep_fid.msg = vrb_msg_ep_msg_ops_ts;
-				ep->util_ep.ep_fid.rma = &vrb_msg_ep_rma_ops_ts;
-			} else {
-				*ep->util_ep.ep_fid.msg = vrb_msg_ep_msg_ops;
-				ep->util_ep.ep_fid.rma = &vrb_msg_ep_rma_ops;
-			}
-			ep->util_ep.ep_fid.cm = &vrb_msg_ep_cm_ops;
-			ep->util_ep.ep_fid.atomic = &vrb_msg_ep_atomic_ops;
-		}
-
-		if (!info->handle) {
-			/* Only RC, XRC active RDMA CM ID is created at connect */
-			if (!(dom->ext_flags & VRB_USE_XRC)) {
-				ret = vrb_create_ep(ep,
-					vrb_get_port_space(info->addr_format), &ep->id);
-				if (ret)
-					goto close_ep;
-				ep->id->context = &ep->util_ep.ep_fid.fid;
-			}
-		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
-			connreq = container_of(info->handle,
-					       struct vrb_connreq, handle);
-			if (dom->ext_flags & VRB_USE_XRC) {
-				assert(connreq->is_xrc);
-
-				if (!connreq->xrc.is_reciprocal) {
-					ret = vrb_process_xrc_connreq(ep, connreq);
-					if (ret)
-						goto close_ep;
-				}
-			} else {
-				/* ep now owns this rdma cm id, prevent trying to access
-				 * it outside of ep operations to avoid possible use-after-
-				 * free bugs in case the ep is closed
-				 */
-				ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
-				ep->state = VRB_REQ_RCVD;
-				ep->id = connreq->id;
-				connreq->id = NULL;
-				ep->ibv_qp = ep->id->qp;
-				ep->id->context = &ep->util_ep.ep_fid.fid;
-				ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
-			}
-		} else if (info->handle->fclass == FI_CLASS_PEP) {
-			pep = container_of(info->handle, struct vrb_pep, pep_fid.fid);
-			ep->id = pep->id;
-			ep->ibv_qp = ep->id->qp;
-			pep->id = NULL;
-			vrb_prof_func_start("rdma_resolve_addr");
-			if (rdma_resolve_addr(ep->id, info->src_addr, info->dest_addr,
-					      VERBS_RESOLVE_TIMEOUT)) {
-				ret = -errno;
-				VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_resolve_addr");
-				/* rdma_destroy_ep will close the id->qp */
-				ep->ibv_qp = NULL;
-				rdma_destroy_ep(ep->id);
-				goto close_ep;
-			}
-			vrb_prof_func_end("rdma_resolve_addr");
-			ep->id->context = &ep->util_ep.ep_fid.fid;
-		} else {
-			ret = -FI_ENOSYS;
+		ret = dom->cm_ops->ep_init(ep, info);
+		if (ret)
 			goto close_ep;
-		}
+		ep->cm_ops = dom->cm_ops;
 		break;
 	case FI_EP_DGRAM:
 		ep->service = (info->src_addr) ?
-			(((struct ofi_ib_ud_ep_name *)info->src_addr)->service) :
+			(((struct ofi_addr_ib_ud *)info->src_addr)->service) :
 			(((getpid() & 0x7FFF) << 16) + ((uintptr_t)ep & 0xFFFF));
 
 		if (dom->util_domain.threading == FI_THREAD_SAFE) {
@@ -1407,40 +1321,23 @@ close_ep:
 static int vrb_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
 	struct vrb_pep *pep;
+	struct vrb_eq *eq;
 	int ret;
 
 	pep = container_of(fid, struct vrb_pep, pep_fid.fid);
 	if (bfid->fclass != FI_CLASS_EQ)
 		return -FI_EINVAL;
 
-	pep->eq = container_of(bfid, struct vrb_eq, eq_fid.fid);
-	/*
-	 * This is a restrictive solution that enables an XRC EP to
-	 * inform it's peer the port that should be used in making the
-	 * reciprocal connection request. While it meets RXM requirements
-	 * it limits an EQ to a single passive endpoint. TODO: implement
-	 * a more general solution.
-	 */
-	if (vrb_is_xrc_info(pep->info)) {
-		if (pep->eq->xrc.pep_port) {
-			VRB_WARN(FI_LOG_EP_CTRL,
-				   "XRC limits EQ binding to a single PEP\n");
-			return -FI_EINVAL;
-		}
-		pep->eq->xrc.pep_port = ntohs(rdma_get_src_port(pep->id));
-	}
+	eq = container_of(bfid, struct vrb_eq, eq_fid.fid);
+	pep->eq = eq;
 
-	ret = rdma_migrate_id(pep->id, pep->eq->channel);
+	ret = pep->cm_ops->pep_bind(pep, eq);
 	if (ret) {
-		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_migrate_id");
-		return -errno;
+		pep->eq = NULL;
+		return ret;
 	}
 
-	if (vrb_is_xrc_info(pep->info)) {
-		ret = rdma_migrate_id(pep->xrc_ps_udp_id, pep->eq->channel);
-		if (ret)
-			return -errno;
-	}
+	dlist_insert_tail(&pep->eq_entry, &eq->pep_list);
 	return FI_SUCCESS;
 }
 
@@ -1476,10 +1373,11 @@ static int vrb_pep_close(fid_t fid)
 	struct vrb_pep *pep;
 
 	pep = container_of(fid, struct vrb_pep, pep_fid.fid);
-	if (pep->id)
-		rdma_destroy_ep(pep->id);
-	if (pep->xrc_ps_udp_id)
-		rdma_destroy_ep(pep->xrc_ps_udp_id);
+
+	if (pep->eq)
+		dlist_remove(&pep->eq_entry);
+
+	(void) pep->cm_ops->pep_close(pep);
 
 	fi_freeinfo(pep->info);
 	free(pep);
@@ -1514,6 +1412,9 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_pep)
 		return -FI_ENOMEM;
 
+	_pep->fabric = container_of(fabric, struct vrb_fabric,
+				    util_fabric.fabric_fid);
+
 	if (!(_pep->info = fi_dupinfo(info))) {
 		ret = -FI_ENOMEM;
 		goto err1;
@@ -1525,49 +1426,19 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		_pep->info->dest_addrlen = 0;
 	}
 
-	ret = rdma_create_id(NULL, &_pep->id, &_pep->pep_fid.fid,
-			     vrb_get_port_space(_pep->info->addr_format));
-	if (ret) {
-		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_create_id");
+	_pep->cm_ops = (vrb_gl_data.msg.prefer_cm == VRB_CM_UDCM) ?
+		&vrb_udcm_ops : &vrb_rdmacm_ops;
+	ret = _pep->cm_ops->pep_init(_pep);
+	if (ret)
 		goto err2;
-	}
-
-	if (info->src_addr) {
-		ret = rdma_bind_addr(_pep->id, (struct sockaddr *) info->src_addr);
-		if (ret) {
-			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_bind_addr");
-			ret = -errno;
-			goto err3;
-		}
-		_pep->bound = 1;
-	}
-
-	/* XRC listens on both RDMA_PS_TCP and RDMA_PS_UDP */
-	if (vrb_is_xrc_info(info)) {
-		ret = rdma_create_id(NULL, &_pep->xrc_ps_udp_id,
-				     &_pep->pep_fid.fid, RDMA_PS_UDP);
-		if (ret) {
-			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_create_id");
-			goto err3;
-		}
-		/* Currently both listens must be bound to same port number */
-		ofi_addr_set_port(_pep->info->src_addr,
-				  ntohs(rdma_get_src_port(_pep->id)));
-		ret = rdma_bind_addr(_pep->xrc_ps_udp_id,
-				     (struct sockaddr *)_pep->info->src_addr);
-		if (ret) {
-			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_bind_addr");
-			goto err4;
-		}
-	}
 
 	_pep->pep_fid.fid.fclass = FI_CLASS_PEP;
 	_pep->pep_fid.fid.context = context;
 	_pep->pep_fid.fid.ops = &vrb_pep_fi_ops;
 	_pep->pep_fid.ops = &vrb_pep_ops;
 	_pep->pep_fid.cm = vrb_pep_ops_cm(_pep);
-
 	_pep->src_addrlen = info->src_addrlen;
+	dlist_init(&_pep->eq_entry);
 
 	*pep = &_pep->pep_fid;
 
@@ -1575,11 +1446,6 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	return 0;
 
-err4:
-	/* Only possible for XRC code path */
-	rdma_destroy_id(_pep->xrc_ps_udp_id);
-err3:
-	rdma_destroy_id(_pep->id);
 err2:
 	fi_freeinfo(_pep->info);
 err1:

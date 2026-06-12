@@ -211,6 +211,17 @@ static struct fi_info rxm_coll_info = {
 	.fabric_attr = &rxm_fabric_attr
 };
 
+static struct fi_info rxm_coll_udcm_info = {
+	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS | FI_COLLECTIVE,
+	.addr_format = FI_ADDR_IB_UD,
+	.tx_attr = &rxm_tx_attr_coll,
+	.rx_attr = &rxm_rx_attr_coll,
+	.ep_attr = &rxm_ep_attr_coll,
+	.domain_attr = &rxm_domain_attr,
+	.fabric_attr = &rxm_fabric_attr,
+	.next = &rxm_coll_info,
+};
+
 static struct fi_info rxm_base_info = {
 	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS | FI_HMEM,
 	.addr_format = FI_SOCKADDR,
@@ -219,7 +230,7 @@ static struct fi_info rxm_base_info = {
 	.ep_attr = &rxm_ep_attr,
 	.domain_attr = &rxm_domain_attr,
 	.fabric_attr = &rxm_fabric_attr,
-	.next = &rxm_coll_info,
+	.next = &rxm_coll_udcm_info,
 };
 
 static struct fi_info rxm_tcp_info = {
@@ -255,8 +266,19 @@ static struct fi_info rxm_verbs_info = {
 	.next = &rxm_thru_info,
 };
 
+static struct fi_info rxm_verbs_udcm_info = {
+	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS | FI_HMEM,
+	.addr_format = FI_ADDR_IB_UD,
+	.tx_attr = &rxm_tx_attr,
+	.rx_attr = &rxm_rx_attr,
+	.ep_attr = &rxm_ep_attr,
+	.domain_attr = &rxm_domain_attr,
+	.fabric_attr = &rxm_verbs_fabric_attr,
+	.next = &rxm_verbs_info,
+};
+
 struct util_prov rxm_util_prov = {
 	.prov = &rxm_prov,
-	.info = &rxm_verbs_info,
+	.info = &rxm_verbs_udcm_info,
 	.flags = 0,
 };

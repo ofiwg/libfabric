@@ -971,6 +971,8 @@ int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
 		return cmp ? cmp : memcmp(&ofi_sin6_port(sa1),
 					  &ofi_sin_port(sa2),
 					  sizeof(ofi_sin6_port(sa1)));
+	case AF_IB:
+		return memcmp(sa1, sa2, sizeof(struct ofi_sockaddr_ib));
 	default:
 		FI_WARN(prov, FI_LOG_FABRIC, "Invalid address format!\n");
 		assert(0);

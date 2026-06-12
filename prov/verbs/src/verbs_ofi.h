@@ -161,6 +161,10 @@
 #define VERBS_ANY_DOMAIN "verbs_any_domain"
 #define VERBS_ANY_FABRIC "verbs_any_fabric"
 
+#define VRB_CM_UNKNOWN 0
+#define VRB_CM_RDMACM 1
+#define VRB_CM_UDCM 2
+
 #ifdef HAVE_FABRIC_PROFILE
 struct vrb_profile;
 typedef struct vrb_profile    vrb_profile_t;
@@ -209,6 +213,8 @@ extern struct vrb_gl_data {
 	struct {
 		int	prefer_xrc;
 		char	*xrcd_filename;
+		int	prefer_cm;
+		int	udcm_ns_port;
 	} msg;
 
 	int	peer_mem_support;
@@ -224,34 +230,6 @@ struct verbs_addr {
 	struct dlist_entry entry;
 	struct rdma_addrinfo *rai;
 };
-
-/*
- * fields of Infiniband packet headers that are used to
- * represent OFI EP address
- * - LRH (Local Route Header) - Link Layer:
- *   - LID - destination Local Identifier
- *   - SL - Service Level
- * - GRH (Global Route Header) - Network Layer:
- *   - GID - destination Global Identifier
- * - BTH (Base Transport Header) - Transport Layer:
- *   - QPN - destination Queue Pair number
- *   - P_key - Partition Key
- *
- * Note: DON'T change the placement of the fields in the structure.
- *       The placement is to keep structure size = 256 bits (32 byte).
- */
-struct ofi_ib_ud_ep_name {
-	union ibv_gid	gid;		/* 64-bit GUID + 64-bit EUI - GRH */
-
-	uint32_t	qpn;		/* BTH */
-
-	uint16_t	lid; 		/* LRH */
-	uint16_t	pkey;		/* BTH */
-	uint16_t	service;	/* for NS src addr, 0 means any */
-
-	uint8_t 	sl;		/* LRH */
-	uint8_t		padding[5];	/* forced padding to 256 bits (32 byte) */
-}; /* 256 bits */
 
 #define VERBS_IB_UD_NS_ANY_SERVICE	0
 
@@ -331,13 +309,17 @@ struct vrb_eq {
 	struct vrb_fabric	*fab;
 	ofi_mutex_t		lock;
 	ofi_mutex_t		event_lock;
+	struct dlist_entry	domain_list;
+	struct dlist_entry	pep_list;
 	struct dlistfd_head	list_head;
-	struct rdma_event_channel *channel;
 	uint64_t		flags;
 	struct fi_eq_err_entry	err;
 
 	ofi_epoll_t		epollfd;
 	enum fi_wait_obj	wait_obj;
+
+	void			*cm_ctx;
+	struct vrb_cm_ops	*cm_ops;
 
 	struct {
 		/* The connection key map is used during the XRC connection
@@ -374,12 +356,8 @@ int vrb_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 struct vrb_pep {
 	struct fid_pep		pep_fid;
 	struct vrb_eq		*eq;
-	struct rdma_cm_id	*id;
-
-	/* XRC uses SIDR based RDMA CM exchanges for setting up
-	 * shared QP connections. This ID is bound to the same
-	 * port number as "id", but the RDMA_PS_UDP port space. */
-	struct rdma_cm_id	*xrc_ps_udp_id;
+	struct vrb_fabric	*fabric;   /* back-pointer, used by UD-CM */
+	struct dlist_entry	eq_entry;
 
 	int			backlog;
 	int			bound;
@@ -388,6 +366,9 @@ struct vrb_pep {
 
 	/* for profiling */
 	vrb_profile_t		*profile;
+
+	struct vrb_cm_ops	*cm_ops;
+	void			*cm_ctx;
 };
 
 struct fi_ops_cm *vrb_pep_ops_cm(struct vrb_pep *pep);
@@ -404,8 +385,10 @@ enum {
 	VRB_USE_ODP = BIT(1),
 };
 
+struct vrb_cm_ops;
 struct vrb_domain {
 	struct util_domain		util_domain;
+	struct dlist_entry		eq_entry;
 	struct ibv_context		*verbs;
 	struct ibv_pd			*pd;
 
@@ -443,6 +426,9 @@ struct vrb_domain {
 
 	/* for profiling */
 	vrb_profile_t		*profile;
+
+	struct vrb_cm_ops		*cm_ops;
+    	void				*cm_ctx;
 };
 
 struct vrb_cq;
@@ -638,11 +624,14 @@ struct vrb_ep {
 	int64_t				threshold;
 
 	enum vrb_ep_state		state;
+
+	// Connection Management
+	struct vrb_cm_ops		*cm_ops;
 	union {
-		struct rdma_cm_id	*id;
+		void				*cm_ctx;
 		struct {
-			struct ofi_ib_ud_ep_name	ep_name;
-			int				service;
+			struct ofi_addr_ib_ud	ep_name;
+			int			service;
 		};
 	};
 
@@ -677,6 +666,174 @@ struct vrb_ep {
 	vrb_profile_t			*profile;
 };
 
+/*
+ * RDMA-CM specific context structures. Defined here so that inline
+ * accessors below can reach the 'id' field without requiring all
+ * callers to include verbs_cm_rdma.c internals.
+ */
+struct vrb_rdmacm_domain_ctx {
+	/* Bootstrap channel: only used to create rdmacm IDs before they are
+	 * migrated to the per-EQ channel in ep_bind.  Never added to any
+	 * epollfd and therefore never polled directly. */
+	struct rdma_event_channel *cm_channel;
+};
+
+struct vrb_rdmacm_eq_ctx {
+	struct rdma_event_channel *cm_channel;
+};
+
+/* Only the RDMA-CM id lives here; conn_param and cm_priv_data remain
+ * on vrb_ep for compatibility with XRC and generic close paths. */
+struct vrb_rdmacm_ep_ctx {
+	struct rdma_cm_id *id;
+};
+
+struct vrb_rdmacm_pep_ctx {
+	struct rdma_cm_id		*id;
+	struct rdma_cm_id		*xrc_ps_udp_id;
+};
+
+struct vrb_cm_data_hdr {
+	uint8_t	size;
+	char	data[];
+};
+
+#define VRB_UDCM_RECV_WR    512
+#define VRB_UDCM_SEND_WR	256
+#define VRB_UDCM_BUF_SIZE	1024
+
+/* Shared, ref-counted IB resources for UD CM signalling.
+ * Created by PEP listen (server) or lazily at ep_bind (client-only).
+ * All UD send/recv goes through a single ib_ctx per EQ. */
+struct vrb_udcm_ib_ctx {
+	struct ibv_context		*verbs;
+	struct ibv_pd			*pd;
+	struct ibv_comp_channel		*comp_channel;
+	struct ibv_cq			*ud_recv_cq;
+	struct ibv_cq			*ud_send_cq;
+	struct ibv_qp			*ud_qp;
+	struct ofi_addr_ib_ud		local_name;
+	uint8_t				*recv_bufs;
+	struct ibv_mr			*recv_mr;
+	uint8_t				*send_buf;
+	struct ibv_mr			*send_mr;
+	ofi_spin_t			send_lock;
+	ofi_atomic32_t			ref;
+	struct vrb_eq			*eq;
+	int				gid_idx;
+	uint8_t				port_num;
+	uint16_t			pkey_index;
+};
+
+struct vrb_udcm_domain_ctx {
+	struct vrb_domain		*domain;
+	struct vrb_udcm_ib_ctx		*ib;
+	struct dlist_entry		ep_list;
+	ofi_spin_t			lock;
+	ofi_atomic32_t			ref;
+	ofi_atomic32_t			next_conn_id;
+	uint32_t			retry_seed;
+};
+
+struct vrb_udcm_eq_ctx {
+	struct vrb_domain		*domain;
+};
+
+enum vrb_udcm_state {
+	VRB_UDCM_IDLE,
+	VRB_UDCM_REQ_SENT,
+	VRB_UDCM_REQ_RCVD,
+	VRB_UDCM_REP_SENT,
+	VRB_UDCM_RTU_SENT,
+	VRB_UDCM_CONNECTED,
+	VRB_UDCM_REJECTING,
+	VRB_UDCM_DISCONNECTED,
+};
+
+struct vrb_udcm_ep_ctx {
+	struct vrb_ep			*ep;
+	struct dlist_entry		 list_entry;
+	enum vrb_udcm_state		 state;
+	struct ofi_addr_ib_ud		 peer_name;
+	uint32_t			 peer_rc_qpn;
+	uint32_t			 conn_id;
+	uint32_t			 peer_conn_id;
+	uint8_t				 priv_data[VERBS_CM_DATA_SIZE];
+	size_t				 priv_data_len;
+	union ofi_sock_ip		 src_addr;
+	uint8_t				 src_addr_len;
+	union ofi_sock_ip		 peer_addr;
+	uint8_t				 peer_addr_len;
+	bool				 pending_rtu;
+	uint64_t			 retry_deadline_ns;
+	int				 retry_count;
+};
+
+struct vrb_udcm_pep_ctx {
+	bool				listening;
+	struct vrb_udcm_ib_ctx		*ib;
+	int				service;
+};
+
+static inline struct rdma_cm_id *vrb_rdmacm_ep_id(struct vrb_ep *ep)
+{
+	return ep->cm_ctx ? ((struct vrb_rdmacm_ep_ctx *)ep->cm_ctx)->id : NULL;
+}
+
+static inline void vrb_rdmacm_ep_set_id(struct vrb_ep *ep, struct rdma_cm_id *id)
+{
+	if (ep->cm_ctx)
+		((struct vrb_rdmacm_ep_ctx *)ep->cm_ctx)->id = id;
+}
+
+struct vrb_connreq;  /* full definition below */
+
+struct vrb_cm_ops {
+	// Endpoint connection operations
+	int (*connect)(struct vrb_ep *ep, const void *addr, const void *param,
+		       size_t paramlen);
+	int (*accept)(struct vrb_ep *ep, const void *param, size_t paramlen);
+	int (*shutdown)(struct vrb_ep *ep, uint64_t flags);
+
+	//Passive endpoint operations
+	int (*listen)(struct vrb_pep *pep);
+	int (*reject)(struct vrb_pep *pep, struct vrb_connreq *connreq,
+		      const void *param, size_t paramlen);
+
+	// Progress and event handling
+	ssize_t (*progress)(struct vrb_eq *eq, uint32_t *event,
+			    void *buf, size_t len);
+
+	// Resource management
+	int (*ep_init)(struct vrb_ep *ep, struct fi_info *info);
+	int (*ep_close)(struct vrb_ep *ep);
+	void (*ep_preclose)(struct vrb_ep *ep);
+	int (*ep_bind)(struct vrb_ep *ep, struct vrb_eq *eq);
+	int (*ep_enable)(struct vrb_ep *ep, struct ibv_qp_init_attr *attr);
+	int (*ep_setname)(struct vrb_ep *ep, void *addr, size_t addrlen);
+	int (*ep_getname)(struct vrb_ep *ep, void *addr, size_t *addrlen);
+	int (*pep_init)(struct vrb_pep *pep);
+	int (*pep_close)(struct vrb_pep *pep);
+	int (*pep_bind)(struct vrb_pep *pep, struct vrb_eq *eq);
+	int (*domain_init)(struct vrb_domain *domain);
+	int (*domain_close)(struct vrb_domain *domain);
+	int (*eq_open)(struct vrb_eq *eq);
+	int (*eq_close)(struct vrb_eq *eq);
+
+	// Address resolution
+	int (*setname)(struct vrb_pep *pep, void *addr, size_t addrlen);
+	int (*getname)(struct vrb_pep *pep, void *addr, size_t *addrlen);
+	int (*getpeer)(struct vrb_ep *ep, void *addr, size_t *addrlen);
+
+	// fi_getinfo address handling
+	int (*getinfo_addr)(struct dlist_entry *verbs_devs,
+			    const char *node, const char *service,
+			    uint64_t flags, const struct fi_info *hints,
+			    struct fi_info **info);
+
+	// Name for debugging
+	int cm_backend;
+};
 
 enum vrb_op_queue {
 	VRB_OP_SQ,
@@ -771,6 +928,27 @@ extern struct fi_ops_rma vrb_msg_ep_rma_ops_ts;
 extern struct fi_ops_rma vrb_msg_ep_rma_ops;
 extern struct fi_ops_rma vrb_msg_xrc_ep_rma_ops_ts;
 extern struct fi_ops_rma vrb_msg_xrc_ep_rma_ops;
+extern struct vrb_cm_ops vrb_rdmacm_ops;
+extern struct vrb_cm_ops vrb_udcm_ops;
+
+int vrb_rdmacm_getinfo_addr(struct dlist_entry *verbs_devs,
+			   const char *node, const char *service,
+			   uint64_t flags, const struct fi_info *hints,
+			   struct fi_info **info);
+int vrb_udcm_getinfo_addr(struct dlist_entry *verbs_devs,
+			 const char *node, const char *service,
+			 uint64_t flags, const struct fi_info *hints,
+			 struct fi_info **info);
+
+int vrb_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr);
+void vrb_msg_ep_prepare_cm_data(const void *param, size_t param_size,
+				    struct vrb_cm_data_hdr *cm_hdr);
+int vrb_eq_copy_event_data(struct fi_eq_cm_entry *entry,
+				   size_t max_dest_len, const void *priv_data,
+				   size_t priv_datalen);
+void vrb_eq_skip_xrc_cm_data(const void **priv_data, size_t *priv_data_len);
+void vrb_eq_xrc_disconnect_event(struct vrb_eq *eq,
+				     struct rdma_cm_event *cma_event, int *acked);
 
 #define VRB_XRC_VERSION	2
 
@@ -801,6 +979,14 @@ struct vrb_connreq {
 	 * non-RDMA CM managed QP. */
 	int				is_xrc;
 	struct vrb_xrc_conn_info	xrc;
+
+	/* UD-CM peer identity (valid when used with UDCM backend) */
+	struct ofi_addr_ib_ud		udcm_peer_name;
+	uint32_t			udcm_peer_rc_qpn;
+	uint32_t			udcm_conn_id;
+	struct vrb_domain		*udcm_domain;
+	union ofi_sock_ip		udcm_peer_addr;
+	uint8_t				udcm_peer_addr_len;
 };
 
 /* Structure below is a copy of the RDMA CM header (structure ib_connect_hdr in
@@ -814,10 +1000,6 @@ struct vrb_rdma_cm_hdr {
 	uint32_t dst_addr[4];
 };
 
-struct vrb_cm_data_hdr {
-	uint8_t	size;
-	char	data[];
-};
 
 int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
 			    void *param_data, size_t param_len);
@@ -825,8 +1007,6 @@ void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep);
 
 void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
 			       struct ibv_qp_init_attr *attr);
-void vrb_msg_ep_prepare_rdma_cm_hdr(void *priv_data,
-				    const struct rdma_cm_id *id);
 
 int vrb_process_xrc_connreq(struct vrb_ep *ep,
 			       struct vrb_connreq *connreq);
@@ -838,6 +1018,19 @@ void vrb_eq_clear_xrc_conn_tag(struct vrb_xrc_ep *ep);
 void vrb_set_xrc_cm_data(struct vrb_xrc_cm_data *local, int reciprocal,
 			    uint32_t conn_tag, uint16_t port, uint32_t tgt_qpn,
 			    uint32_t srqn);
+int vrb_eq_xrc_connreq_event(struct vrb_eq *eq, struct fi_eq_cm_entry *entry,
+			     size_t len, uint32_t *event,
+			     struct rdma_cm_event *cma_event, int *acked,
+			     const void **priv_data, size_t *priv_datalen);
+int vrb_eq_xrc_rej_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event);
+int vrb_eq_xrc_cm_err_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event,
+			    int *acked);
+ssize_t vrb_eq_xrc_connected_event(struct vrb_eq *eq,
+				   struct rdma_cm_event *cma_event, int *acked,
+				   struct fi_eq_cm_entry *entry, size_t len,
+				   uint32_t *event);
+void vrb_eq_xrc_timewait_event(struct vrb_eq *eq,
+			       struct rdma_cm_event *cma_event, int *acked);
 int vrb_verify_xrc_cm_data(struct vrb_xrc_cm_data *remote,
 			      int private_data_len);
 int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
@@ -848,12 +1041,18 @@ int vrb_resend_shared_accept_xrc(struct vrb_xrc_ep *ep,
 				    struct vrb_connreq *connreq,
 				    struct rdma_cm_id *id);
 void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect);
+int vrb_xrc_migrade_rdma_id(struct vrb_xrc_ep *ep);
 void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen);
 void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn);
 int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 			       struct vrb_ini_shared_conn **ini_conn);
 void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep);
+void _vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep);
+int vrb_create_ini_qp(struct vrb_xrc_ep *ep);
+void vrb_create_shutdown_event(struct vrb_xrc_ep *ep);
+int vrb_process_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
+				   void *param, size_t paramlen);
 
 void vrb_save_priv_data(struct vrb_xrc_ep *ep, const void *data,
 			   size_t len);
@@ -880,6 +1079,7 @@ int vrb_get_matching_info(uint32_t version, const struct fi_info *hints,
 			     uint8_t passive);
 int vrb_get_port_space(uint32_t addr_format);
 void vrb_alter_info(const struct fi_info *hints, struct fi_info *info);
+int vrb_resolve_gid_idx_for_device(struct ibv_context *ctx);
 
 struct verbs_ep_domain {
 	char			*suffix;
@@ -928,7 +1128,7 @@ struct vrb_dgram_av {
 
 struct vrb_dgram_av_entry {
 	struct dlist_entry list_entry;
-	struct ofi_ib_ud_ep_name addr;
+	struct ofi_addr_ib_ud addr;
 	struct ibv_ah *ah;
 };
 

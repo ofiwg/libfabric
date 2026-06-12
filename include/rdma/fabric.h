@@ -344,6 +344,7 @@ enum {
 	FI_PROTO_CXI_RNR,
 	FI_PROTO_LPP,
 	FI_PROTO_LNX,
+	FI_PROTO_UD_CM_IB_RC,
 };
 
 enum {

@@ -42,10 +42,10 @@ struct vrb_ini_conn_key {
 	struct vrb_cq	*tx_cq;
 };
 
-static int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
+int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
 				   void *param, size_t paramlen);
 
-static int vrb_create_ini_qp(struct vrb_xrc_ep *ep)
+int vrb_create_ini_qp(struct vrb_xrc_ep *ep)
 {
 #if VERBS_HAVE_XRC
 	struct ibv_qp_init_attr_ex attr_ex;
@@ -60,7 +60,7 @@ static int vrb_create_ini_qp(struct vrb_xrc_ep *ep)
 	attr_ex.qp_context = domain;
 	attr_ex.srq = NULL;
 
-	ret = rdma_create_qp_ex(ep->base_ep.id, &attr_ex);
+	ret = rdma_create_qp_ex(vrb_rdmacm_ep_id(&ep->base_ep), &attr_ex);
 	if (ret) {
 		ret = -errno;
 		VRB_WARN(FI_LOG_EP_CTRL,
@@ -153,12 +153,13 @@ void _vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 	ini_conn = ep->ini_conn;
 	ep->ini_conn = NULL;
 	ep->base_ep.ibv_qp = NULL;
-	if (ep->base_ep.id)
-		ep->base_ep.id->qp = NULL;
+	if (vrb_rdmacm_ep_id(&ep->base_ep))
+		vrb_rdmacm_ep_id(&ep->base_ep)->qp = NULL;
 
 	/* If XRC physical QP connection was not completed, make sure
 	 * any pending connection to that destination will get scheduled. */
-	if (ep->base_ep.id && ep->base_ep.id == ini_conn->phys_conn_id) {
+	if (vrb_rdmacm_ep_id(&ep->base_ep) &&
+	    vrb_rdmacm_ep_id(&ep->base_ep) == ini_conn->phys_conn_id) {
 		if (ini_conn->state == VRB_INI_QP_CONNECTING)
 			ini_conn->state = VRB_INI_QP_UNCONNECTED;
 
@@ -205,7 +206,7 @@ void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
 }
 
 /* Caller must hold domain:eq:lock */
-static void vrb_create_shutdown_event(struct vrb_xrc_ep *ep)
+void vrb_create_shutdown_event(struct vrb_xrc_ep *ep)
 {
 	struct fi_eq_cm_entry entry = {
 		.fid = &ep->base_ep.util_ep.ep_fid.fid,
@@ -215,95 +216,6 @@ static void vrb_create_shutdown_event(struct vrb_xrc_ep *ep)
 	eq_entry = vrb_eq_alloc_entry(FI_SHUTDOWN, &entry, sizeof(entry));
 	if (eq_entry)
 		dlistfd_insert_tail(&eq_entry->item, &ep->base_ep.eq->list_head);
-}
-
-/* Caller must hold domain:xrc.ini_lock */
-void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn)
-{
-	struct vrb_xrc_ep *ep;
-	enum vrb_ini_qp_state last_state;
-	int ret;
-
-	/* Continue to schedule shared connections if the physical connection
-	 * has completed and there are connection requests pending. We could
-	 * implement a throttle here if it is determined that it is better to
-	 * limit the number of outstanding connections. */
-	while (1) {
-		if (dlist_empty(&ini_conn->pending_list) ||
-				ini_conn->state == VRB_INI_QP_CONNECTING)
-			return;
-
-		dlist_pop_front(&ini_conn->pending_list,
-				struct vrb_xrc_ep, ep, ini_conn_entry);
-
-		dlist_insert_tail(&ep->ini_conn_entry,
-				  &ep->ini_conn->active_list);
-		last_state = ep->ini_conn->state;
-
-		ret = vrb_create_ep(&ep->base_ep,
-				       last_state == VRB_INI_QP_UNCONNECTED ?
-				       RDMA_PS_TCP : RDMA_PS_UDP,
-				       &ep->base_ep.id);
-		if (ret) {
-			VRB_WARN(FI_LOG_EP_CTRL,
-				   "Failed to create active CM ID %d\n",
-				   ret);
-			goto err;
-		}
-
-		if (last_state == VRB_INI_QP_UNCONNECTED) {
-			assert(!ep->ini_conn->phys_conn_id && ep->base_ep.id);
-
-			if (ep->ini_conn->ini_qp &&
-			    ibv_destroy_qp(ep->ini_conn->ini_qp)) {
-				VRB_WARN(FI_LOG_EP_CTRL, "Failed to destroy "
-					   "physical INI QP %d\n", errno);
-			}
-			ret = vrb_create_ini_qp(ep);
-			if (ret) {
-				VRB_WARN(FI_LOG_EP_CTRL, "Failed to create "
-					   "physical INI QP %d\n", ret);
-				goto err;
-			}
-			ep->ini_conn->ini_qp = ep->base_ep.id->qp;
-			ep->ini_conn->state = VRB_INI_QP_CONNECTING;
-			ep->ini_conn->phys_conn_id = ep->base_ep.id;
-		} else {
-			assert(!ep->base_ep.id->qp);
-			VRB_DBG(FI_LOG_EP_CTRL, "Sharing XRC INI QPN %d\n",
-				  ep->ini_conn->ini_qp->qp_num);
-		}
-
-		assert(ep->ini_conn->ini_qp);
-		ep->base_ep.id->context = &ep->base_ep.util_ep.ep_fid.fid;
-		ret = rdma_migrate_id(ep->base_ep.id,
-				      ep->base_ep.eq->channel);
-		if (ret) {
-			VRB_WARN(FI_LOG_EP_CTRL,
-				   "Failed to migrate active CM ID %d\n", ret);
-			goto err;
-		}
-
-		ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL, "XRC connect src_addr",
-				rdma_get_local_addr(ep->base_ep.id));
-		ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL, "XRC connect dest_addr",
-				rdma_get_peer_addr(ep->base_ep.id));
-
-		ep->base_ep.ibv_qp = ep->ini_conn->ini_qp;
-		ret = vrb_process_ini_conn(ep, ep->conn_setup->pending_recip,
-					      ep->conn_setup->pending_param,
-					      ep->conn_setup->pending_paramlen);
-err:
-		if (ret) {
-			ep->ini_conn->state = last_state;
-			_vrb_put_shared_ini_conn(ep);
-
-			/* We need to let the application know that the
-			 * connect request has failed. */
-			vrb_create_shutdown_event(ep);
-			break;
-		}
-	}
 }
 
 /* Caller must hold domain:xrc:eq:lock */
@@ -330,7 +242,7 @@ int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
 	ep->base_ep.conn_param.rnr_retry_count = 7;
 	ep->base_ep.conn_param.srq = 1;
 
-	if (!ep->base_ep.id->qp)
+	if (!vrb_rdmacm_ep_id(&ep->base_ep)->qp)
 		ep->base_ep.conn_param.qp_num =
 				ep->ini_conn->ini_qp->qp_num;
 
@@ -338,7 +250,7 @@ int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
 	       ep->conn_state == VRB_XRC_ORIG_CONNECTED);
 	vrb_next_xrc_conn_state(ep);
 
-	ret = rdma_resolve_route(ep->base_ep.id, VERBS_RESOLVE_TIMEOUT);
+	ret = rdma_resolve_route(vrb_rdmacm_ep_id(&ep->base_ep), VERBS_RESOLVE_TIMEOUT);
 	if (ret) {
 		ret = -errno;
 		VRB_WARN(FI_LOG_EP_CTRL,
@@ -435,9 +347,9 @@ int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep)
 	assert(ofi_mutex_held(&ep->base_ep.eq->event_lock));
 	vrb_put_shared_ini_conn(ep);
 
-	if (ep->base_ep.id) {
-		rdma_destroy_id(ep->base_ep.id);
-		ep->base_ep.id = NULL;
+	if (vrb_rdmacm_ep_id(&ep->base_ep)) {
+		rdma_destroy_id(vrb_rdmacm_ep_id(&ep->base_ep));
+		vrb_rdmacm_ep_set_id(&ep->base_ep, NULL);
 	}
 	if (ep->tgt_ibv_qp)
 		vrb_put_tgt_qp(ep);

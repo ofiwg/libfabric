@@ -258,7 +258,8 @@ static int rxm_init_connect_data(struct rxm_conn *conn,
 		return -FI_EOTHER;
 	}
 
-	cm_data->connect.port = ofi_addr_get_port(&conn->ep->addr.sa);
+	cm_data->connect.port = rxm_addr_get_port(conn->ep->msg_info->addr_format,
+						  &conn->ep->addr);
 	cm_data->connect.client_conn_id = rxm_conn_id(conn->peer->index);
 	return 0;
 }
@@ -656,7 +657,8 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 
 	memcpy(&peer_addr, cm_entry->info->dest_addr,
 	       cm_entry->info->dest_addrlen);
-	ofi_addr_set_port(&peer_addr.sa, cm_entry->data.connect.port);
+	rxm_addr_set_port(cm_entry->info->addr_format, &peer_addr,
+			  cm_entry->data.connect.port);
 
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
 	peer = util_get_peer(av, &peer_addr, 0);
@@ -675,7 +677,8 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		break;
 	case RXM_CM_CONNECTING:
 		/* simultaneous connections */
-		cmp = ofi_addr_cmp(&rxm_prov, &peer_addr.sa, &ep->addr.sa);
+		cmp = rxm_addr_cmp(ep->msg_info->addr_format,
+				   &peer_addr, &ep->addr);
 		if (cmp < 0) {
 			/* let our request finish */
 			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
@@ -987,7 +990,7 @@ int rxm_start_listen(struct rxm_ep *ep)
 		return -FI_ENOMEM;
 
 	ep->msg_info->src_addrlen = addr_len;
-	ofi_addr_set_port(ep->msg_info->src_addr, 0);
+	rxm_addr_set_port(ep->msg_info->addr_format, ep->msg_info->src_addr, 0);
 
 	if (ep->util_ep.domain->data_progress == FI_PROGRESS_AUTO ||
 	    force_auto_progress) {
