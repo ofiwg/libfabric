@@ -6,11 +6,12 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v2.6.0, Mon June 15, 2026
+v2.6.0, Mon June 22, 2026
 =========================
 
 ## Core ##
 
+- ofi_atomic_queue: convert from MPMC to MPSC
 - hmem: Add additional CUDA wrapper functions
 - man: Fix reference to fi_mr_raw_attr()
 - common: Fix byte order of AF_IB ofi_addr_set_port
@@ -22,6 +23,7 @@ v2.6.0, Mon June 15, 2026
 
 ## CXI ##
 
+- Fix spelling of "receive" across CXI provider
 - Extend timeout for sw_max_recv msg test
 - Refuse cancel for receives with RDMA in flight
 - Add test for TLE pool sharing from the default service
@@ -125,6 +127,13 @@ v2.6.0, Mon June 15, 2026
 
 ## OPX ##
 
+- Lower GDRcopy threshold/Allow HMEM MP Eager
+- Initialize deferred HFISVC receive contexts
+- Make OPENED MR notify non-owning for rzv completion
+- Document HMEM-dependent FI_OPX_RZV_MIN_PAYLOAD_BYTES defaults
+- Reject incompatible MR registrations when HFISVC is enabled
+- Handle MP eager FI_CLAIM receives
+- Drop mm lock before memory operations
 - Remove SDMA queue ring size workaround
 - Remove global hfi_local_info
 - Fix origin_rx in realibility ping, ack and nack
@@ -214,6 +223,21 @@ v2.6.0, Mon June 15, 2026
 
 ## SHM ##
 
+- Register max_gdrcopy_size env var
+- Do not return local cmd copy in smr_discard
+- Remove init_fn from cmd queue release path
+- Fix the error flag propagation
+- Let atomic_inline use smr_flags for format
+- Revert to a lock-unlock inject pool
+- Fix compile warning coming from shm
+- Do not take inject for op_read_req
+- Do not check for total_len < inject_size on rma_fast
+- Push cmd back to stack on error
+- remove cmd_entry ptr
+- Remove 0-byte copy SAR
+- Move inject pool above command stack
+- Use hdr.smr_flags to indicate an error
+- Reorganize cmd_hdr fields
 - Clean up pending unexpected messages on close
 - Remove unused function
 
@@ -223,10 +247,13 @@ v2.6.0, Mon June 15, 2026
 
 ## Util ##
 
+- Drop mm lock before memory operations
 - Fix the unspec queue scanning
 
 ## Verbs ##
 
+- Use ints for boolean values in vrb_gl_data for consistency
+- Revert "prov/verbs: Enable logging of ibv_async_events"
 - Allow FI_VERBS_IFACE to be a list
 - Allow FI_VERBS_DEVICE_NAME to be a list
 - Add tests for GPU-NIC affinity
@@ -237,6 +264,8 @@ v2.6.0, Mon June 15, 2026
 
 ## Fabtests ##
 
+- verbs: Add support for custom affinity tests
+- verbs: Change baseline to expected
 - multinode: Retry failed connections on startup
 - efa/multi_ep_stress: Fix timeout in wait_for_comp
 - efa: Guard fi_efa_rma_bw build on FI_EFA_WR_HIGH_PPS
