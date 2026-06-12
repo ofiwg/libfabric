@@ -163,10 +163,12 @@ rxm_send_rndv(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf,
 					 RXM_RNDV_READ_DONE_WAIT);
 
-		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
+		ret = fi_inject(rxm_conn_msg_ep(rxm_conn, &tx_buf->pkt),
+				&tx_buf->pkt, pkt_size, 0);
 	} else {
 		RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_TX);
-		ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size,
+		ret = fi_send(rxm_conn_msg_ep(rxm_conn, &tx_buf->pkt),
+			      &tx_buf->pkt, pkt_size,
 			      tx_buf->hdr.desc, 0, tx_buf);
 	}
 
@@ -258,7 +260,8 @@ rxm_send_segment(struct rxm_ep *rxm_ep,
 
 	*out_tx_buf = tx_buf;
 
-	return fi_send(rxm_conn->msg_ep, &tx_buf->pkt, sizeof(struct rxm_pkt) +
+	return fi_send(rxm_conn_msg_ep(rxm_conn, &tx_buf->pkt),
+		       &tx_buf->pkt, sizeof(struct rxm_pkt) +
 		       tx_buf->pkt.ctrl_hdr.seg_size, tx_buf->hdr.desc, 0, tx_buf);
 }
 
@@ -292,7 +295,8 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	iov_offset += rxm_buffer_size;
 
-	ret = fi_send(rxm_conn->msg_ep, &first_tx_buf->pkt,
+	ret = fi_send(rxm_conn_msg_ep(rxm_conn, &first_tx_buf->pkt),
+		      &first_tx_buf->pkt,
 		      sizeof(struct rxm_pkt) + first_tx_buf->pkt.ctrl_hdr.seg_size,
 		      first_tx_buf->hdr.desc, 0, first_tx_buf);
 	if (ret) {
@@ -372,7 +376,8 @@ rxm_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				 &tx_buf->pkt);
 	memcpy(tx_buf->pkt.data, buf, len);
 
-	ret = fi_send(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size,
+	ret = fi_send(rxm_conn_msg_ep(rxm_conn, &tx_buf->pkt),
+		      &tx_buf->pkt, pkt_size,
 		      tx_buf->hdr.desc, 0, tx_buf);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
@@ -396,7 +401,8 @@ rxm_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.cntrs[CNTR_TX]) {
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
-		ret = fi_inject(rxm_conn->msg_ep, inject_pkt, pkt_size, 0);
+		ret = fi_inject(rxm_conn_msg_ep(rxm_conn, inject_pkt),
+				inject_pkt, pkt_size, 0);
 	} else {
 		ret = rxm_emulate_inject(rxm_ep, rxm_conn, buf, len,
 					 pkt_size, inject_pkt->hdr.data,
@@ -438,10 +444,12 @@ rxm_direct_send(struct rxm_ep *ep, struct rxm_conn *rxm_conn,
 			send_desc[i + 1] = fi_mr_desc(mr->msg_mr);
 		}
 
-		ret = fi_sendv(rxm_conn->msg_ep, send_iov, send_desc,
+		ret = fi_sendv(rxm_conn_msg_ep(rxm_conn, &tx_buf->pkt),
+			       send_iov, send_desc,
 			       count + 1, 0, tx_buf);
 	} else {
-		ret = fi_sendv(rxm_conn->msg_ep, send_iov, NULL,
+		ret = fi_sendv(rxm_conn_msg_ep(rxm_conn, &tx_buf->pkt),
+			       send_iov, NULL,
 			       count + 1, 0, tx_buf);
 	}
 	return ret;
@@ -476,7 +484,8 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					     eager_buf->pkt.hdr.size, iov,
 					     count, 0);
 		assert((size_t) ret == eager_buf->pkt.hdr.size);
-		ret = fi_send(rxm_conn->msg_ep, &eager_buf->pkt, total_len,
+		ret = fi_send(rxm_conn_msg_ep(rxm_conn, &eager_buf->pkt),
+			      &eager_buf->pkt, total_len,
 			      eager_buf->hdr.desc, 0, eager_buf);
 	}
 
@@ -769,7 +778,8 @@ rxm_send_thru(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	ret = fi_send(conn->msg_ep, buf, len, desc, 0, context);
+	ret = fi_send(rxm_conn_msg_ep(conn, NULL),
+		      buf, len, desc, 0, context);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
@@ -790,7 +800,8 @@ rxm_sendv_thru(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (ret)
 		goto unlock;
 
-	ret = fi_sendv(conn->msg_ep, iov, desc, count, 0, context);
+	ret = fi_sendv(rxm_conn_msg_ep(conn, NULL),
+		       iov, desc, count, 0, context);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
@@ -811,7 +822,8 @@ rxm_sendmsg_thru(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	if (ret)
 		goto unlock;
 
-	ret = fi_sendmsg(conn->msg_ep, msg, flags);
+	ret = fi_sendmsg(rxm_conn_msg_ep(conn, NULL),
+			 msg, flags);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
@@ -832,7 +844,8 @@ rxm_inject_thru(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		goto unlock;
 
-	ret = fi_inject(conn->msg_ep, buf, len, 0);
+	ret = fi_inject(rxm_conn_msg_ep(conn, NULL),
+			buf, len, 0);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
@@ -853,7 +866,8 @@ rxm_senddata_thru(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	ret = fi_senddata(conn->msg_ep, buf, len, desc, data, 0, context);
+	ret = fi_senddata(rxm_conn_msg_ep(conn, NULL),
+			  buf, len, desc, data, 0, context);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
@@ -874,7 +888,8 @@ rxm_injectdata_thru(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	ret = fi_injectdata(conn->msg_ep, buf, len, data, 0);
+	ret = fi_injectdata(rxm_conn_msg_ep(conn, NULL),
+			    buf, len, data, 0);
 unlock:
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
