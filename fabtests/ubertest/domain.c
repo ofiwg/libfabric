@@ -189,7 +189,7 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 			return ret;
 
 		ctrl->cpy_buf = calloc(1, size);
-		if (!ctrl->buf || !ctrl->cpy_buf)
+		if (!ctrl->cpy_buf)
 			return -FI_ENOMEM;
 
 		key = (ctrl == &ft_tx_ctrl ? FT_TX_MR_KEY : FT_RX_MR_KEY);
