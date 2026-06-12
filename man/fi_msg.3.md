@@ -197,7 +197,8 @@ transfer.
 
 The fi_recv call posts a data buffer to the receive queue of the
 corresponding endpoint.  Posted receives are searched in the order in
-which they were posted in order to match sends.
+which they were posted in order to match sends. If a matched receive
+cannot be completed, the application receives an error completion.
 Message boundaries are maintained.  The order in which
 the receives complete is dependent on
 the endpoint type and protocol.  For connectionless endpoints, the
