@@ -15,6 +15,7 @@ static uint64_t efa_rdm_cntr_read(struct fid_cntr *cntr_fid)
 {
 	struct efa_rdm_cntr *efa_rdm_cntr;
 	struct efa_domain *domain;
+	uint64_t ret;
 
 	efa_rdm_cntr = container_of(cntr_fid, struct efa_rdm_cntr, efa_cntr.util_cntr.cntr_fid);
 	domain = container_of(efa_rdm_cntr->efa_cntr.util_cntr.domain, struct efa_domain, util_domain);
@@ -23,15 +24,24 @@ static uint64_t efa_rdm_cntr_read(struct fid_cntr *cntr_fid)
 	ofi_genlock_lock(&domain->srx_lock);
 	if (efa_rdm_cntr->shm_cntr)
 		fi_cntr_read(efa_rdm_cntr->shm_cntr);
+
+	/*
+	 * keep srx_lock for ofi_cntr_read because the registered
+	 * progress callback (efa_rdm_cntr_progress) drives ibv_cq polling,
+	 * and the CQ poll path calls efa_rdm_ep_get_peer_explicit which
+	 * asserts srx_lock is held.
+	 */
+	ret = ofi_cntr_read(cntr_fid);
 	ofi_genlock_unlock(&domain->srx_lock);
 
-	return efa_cntr_read(cntr_fid);
+	return ret;
 }
 
 static uint64_t efa_rdm_cntr_readerr(struct fid_cntr *cntr_fid)
 {
 	struct efa_rdm_cntr *efa_rdm_cntr;
 	struct efa_domain *domain;
+	uint64_t ret;
 
 	efa_rdm_cntr = container_of(cntr_fid, struct efa_rdm_cntr, efa_cntr.util_cntr.cntr_fid);
 	domain = container_of(efa_rdm_cntr->efa_cntr.util_cntr.domain, struct efa_domain, util_domain);
@@ -39,9 +49,17 @@ static uint64_t efa_rdm_cntr_readerr(struct fid_cntr *cntr_fid)
 	ofi_genlock_lock(&domain->srx_lock);
 	if (efa_rdm_cntr->shm_cntr)
 		fi_cntr_read(efa_rdm_cntr->shm_cntr);
+
+	/*
+	 * keep srx_lock for ofi_cntr_readerr because the registered
+	 * progress callback (efa_rdm_cntr_progress) drives ibv_cq polling,
+	 * and the CQ poll path calls efa_rdm_ep_get_peer_explicit which
+	 * asserts srx_lock is held.
+	 */
+	ret = ofi_cntr_readerr(cntr_fid);
 	ofi_genlock_unlock(&domain->srx_lock);
 
-	return efa_cntr_readerr(cntr_fid);
+	return ret;
 }
 
 static struct fi_ops_cntr efa_rdm_cntr_ops = {

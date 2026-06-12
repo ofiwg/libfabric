@@ -17,12 +17,8 @@ int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 	int tryid = 0;
 	int waitim = 1;
 	static const int waitim_max = 1000; /* cap at 1ms */
-	struct efa_domain *domain;
 
 	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
-	domain = container_of(cntr->domain, struct efa_domain, util_domain);
-
-	ofi_genlock_lock(&domain->srx_lock);
 
 	assert(cntr->wait);
 	errcnt = ofi_atomic_get64(&cntr->err);
@@ -30,22 +26,16 @@ int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 
 	for (tryid = 0; tryid < numtry; ++tryid) {
 		cntr->progress(cntr);
-		if (threshold <= ofi_atomic_get64(&cntr->cnt)) {
-		        ret = FI_SUCCESS;
-			goto unlock;
-		}
+		if (threshold <= ofi_atomic_get64(&cntr->cnt))
+			return FI_SUCCESS;
 
-		if (errcnt != ofi_atomic_get64(&cntr->err)) {
-			ret = -FI_EAVAIL;
-			goto unlock;
-		}
+		if (errcnt != ofi_atomic_get64(&cntr->err))
+			return -FI_EAVAIL;
 
 		if (timeout >= 0) {
 			timeout -= (int)(ofi_gettime_ms() - start);
-			if (timeout <= 0) {
-				ret = -FI_ETIMEDOUT;
-				goto unlock;
-			}
+			if (timeout <= 0)
+				return -FI_ETIMEDOUT;
 		} else {
 			tryid = 0;
 		}
@@ -58,47 +48,13 @@ int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 			waitim *= 2;
 	}
 
-unlock:
-	ofi_genlock_unlock(&domain->srx_lock);
-	return ret;
-}
-
-uint64_t efa_cntr_read(struct fid_cntr *cntr_fid)
-{
-	struct efa_domain *domain;
-	struct util_cntr *util_cntr;
-	uint64_t ret;
-
-	util_cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
-	domain = container_of(util_cntr->domain, struct efa_domain, util_domain);
-
-	ofi_genlock_lock(&domain->srx_lock);
-	ret = ofi_cntr_read(cntr_fid);
-	ofi_genlock_unlock(&domain->srx_lock);
-
-	return ret;
-}
-
-uint64_t efa_cntr_readerr(struct fid_cntr *cntr_fid)
-{
-	struct efa_domain *domain;
-	struct util_cntr *util_cntr;
-	uint64_t ret;
-
-	util_cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
-	domain = container_of(util_cntr->domain, struct efa_domain, util_domain);
-
-	ofi_genlock_lock(&domain->srx_lock);
-	ret = ofi_cntr_readerr(cntr_fid);
-	ofi_genlock_unlock(&domain->srx_lock);
-
 	return ret;
 }
 
 static struct fi_ops_cntr efa_cntr_ops = {
 	.size = sizeof(struct fi_ops_cntr),
-	.read = efa_cntr_read,
-	.readerr = efa_cntr_readerr,
+	.read = ofi_cntr_read,
+	.readerr = ofi_cntr_readerr,
 	.add = ofi_cntr_add,
 	.adderr = ofi_cntr_adderr,
 	.set = ofi_cntr_set,
