@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_shm" "7" "2026\-02\-27" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_shm" "7" "2026\-06\-12" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -194,6 +194,11 @@ Default false
 \f[I]FI_SHM_USE_DSA_SAR\f[R]
 Enables memory copy offload to Intel DSA SAR protocol.
 Default false
+.TP
+\f[I]FI_SHM_MAX_GDRCOPY_SIZE\f[R]
+Maximum message size for gdrcopy transfers.
+Messages larger than this size use the IPC protocol with cudaMemcpy.
+Default 3072.
 .TP
 \f[I]FI_SHM_USE_XPMEM\f[R]
 SHM can use SAR, CMA or XPMEM for host memory transfers.
