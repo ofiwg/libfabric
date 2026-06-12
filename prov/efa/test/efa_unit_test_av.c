@@ -15,7 +15,7 @@
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_av_insert_duplicate_raw_addr(struct efa_resource **state)
+void test_av_insert_duplicate_raw_addr(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_ep_addr raw_addr = {0};
@@ -50,7 +50,7 @@ void test_av_insert_duplicate_raw_addr(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_av_insert_duplicate_gid(struct efa_resource **state)
+void test_av_insert_duplicate_gid(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_ep_addr raw_addr = {0};
@@ -78,7 +78,7 @@ void test_av_insert_duplicate_gid(struct efa_resource **state)
 	assert_int_not_equal(addr1, addr2);
 }
 
-static void efa_ah_cnt_av_impl(struct efa_resource **state, bool efa_fabric, bool multi_av)
+static void efa_ah_cnt_av_impl(void **state, bool efa_fabric, bool multi_av)
 {
 	struct efa_resource *resource = *state;
 	struct efa_ep_addr raw_addr = {0};
@@ -167,22 +167,22 @@ static void efa_ah_cnt_av_impl(struct efa_resource **state, bool efa_fabric, boo
 	resource->ep = NULL;
 }
 
-void test_efa_ah_cnt_one_av_efa(struct efa_resource **state)
+void test_efa_ah_cnt_one_av_efa(void **state)
 {
 	efa_ah_cnt_av_impl(state, true, false);
 }
 
-void test_efa_ah_cnt_one_av_efa_direct(struct efa_resource **state)
+void test_efa_ah_cnt_one_av_efa_direct(void **state)
 {
 	efa_ah_cnt_av_impl(state, false, false);
 }
 
-void test_efa_ah_cnt_multi_av_efa(struct efa_resource **state)
+void test_efa_ah_cnt_multi_av_efa(void **state)
 {
 	efa_ah_cnt_av_impl(state, true, true);
 }
 
-void test_efa_ah_cnt_multi_av_efa_direct(struct efa_resource **state)
+void test_efa_ah_cnt_multi_av_efa_direct(void **state)
 {
 	efa_ah_cnt_av_impl(state, false, true);
 }
@@ -192,7 +192,7 @@ void test_efa_ah_cnt_multi_av_efa_direct(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_av_multiple_ep_impl(struct efa_resource **state, char *fabric_name)
+void test_av_multiple_ep_impl(void **state, char *fabric_name)
 {
 	struct efa_resource *resource = *state;
 	struct fid_ep *ep1, *ep2;
@@ -230,7 +230,7 @@ void test_av_multiple_ep_impl(struct efa_resource **state, char *fabric_name)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_av_multiple_ep_efa(struct efa_resource **state)
+void test_av_multiple_ep_efa(void **state)
 {
 	return test_av_multiple_ep_impl(state, EFA_FABRIC_NAME);
 }
@@ -241,7 +241,7 @@ void test_av_multiple_ep_efa(struct efa_resource **state)
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_av_multiple_ep_efa_direct(struct efa_resource **state)
+void test_av_multiple_ep_efa_direct(void **state)
 {
 	return test_av_multiple_ep_impl(state, EFA_DIRECT_FABRIC_NAME);
 }
@@ -272,7 +272,7 @@ static void test_av_verify_av_hash_cnt(struct efa_av *av,
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_av_reinsertion(struct efa_resource **state)
+void test_av_reinsertion(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_peer *peer;
@@ -338,7 +338,7 @@ void test_av_reinsertion(struct efa_resource **state)
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_av_reverse_av_remove_qpn_collision(struct efa_resource **state)
+void test_av_reverse_av_remove_qpn_collision(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_ep_addr raw_addr;
@@ -458,7 +458,7 @@ static struct efa_rdm_peer *test_av_get_peer_from_implicit_av(struct efa_resourc
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_av_implicit(struct efa_resource **state)
+void test_av_implicit(void **state)
 {
 	struct efa_resource *resource = *state;
 
@@ -472,7 +472,7 @@ void test_av_implicit(struct efa_resource **state)
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_av_implicit_to_explicit(struct efa_resource **state)
+void test_av_implicit_to_explicit(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_ep_addr raw_addr, raw_addr_2;
@@ -554,7 +554,7 @@ static void test_av_implicit_av_verify_lru_list_first_last_elements(
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_av_implicit_av_lru_insertion(struct efa_resource **state)
+void test_av_implicit_av_lru_insertion(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -642,7 +642,7 @@ void test_av_implicit_av_lru_insertion(struct efa_resource **state)
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_av_implicit_av_lru_eviction(struct efa_resource **state)
+void test_av_implicit_av_lru_eviction(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -734,7 +734,7 @@ void test_av_implicit_av_lru_eviction(struct efa_resource **state)
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_ah_refcnt(struct efa_resource **state)
+void test_ah_refcnt(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t fi_addr;
@@ -951,7 +951,7 @@ void test_ah_lru_eviction_impl(bool explicit)
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_ah_lru_eviction_explicit_av_insert(struct efa_resource **state)
+void test_ah_lru_eviction_explicit_av_insert(void **state)
 {
 	test_ah_lru_eviction_impl(true);
 }
@@ -963,7 +963,7 @@ void test_ah_lru_eviction_explicit_av_insert(struct efa_resource **state)
  *
  * @param[in]	state	struct efa_resource that is managed by the framework
  */
-void test_ah_lru_eviction_implicit_av_insert(struct efa_resource **state)
+void test_ah_lru_eviction_implicit_av_insert(void **state)
 {
 	test_ah_lru_eviction_impl(false);
 }

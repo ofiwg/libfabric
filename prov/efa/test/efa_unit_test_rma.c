@@ -65,7 +65,7 @@ static bool test_efa_rma_prep(struct efa_resource *resource, fi_addr_t *addr)
 	return fi_rma_supported;
 }
 
-void test_efa_rma_read(struct efa_resource **state)
+void test_efa_rma_read(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -96,7 +96,7 @@ void test_efa_rma_read(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_readv(struct efa_resource **state)
+void test_efa_rma_readv(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -130,7 +130,7 @@ void test_efa_rma_readv(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_readmsg(struct efa_resource **state)
+void test_efa_rma_readmsg(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -169,7 +169,7 @@ void test_efa_rma_readmsg(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_write(struct efa_resource **state)
+void test_efa_rma_write(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -200,7 +200,7 @@ void test_efa_rma_write(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_writev(struct efa_resource **state)
+void test_efa_rma_writev(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -234,7 +234,7 @@ void test_efa_rma_writev(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_writemsg(struct efa_resource **state)
+void test_efa_rma_writemsg(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -273,7 +273,7 @@ void test_efa_rma_writemsg(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_writedata(struct efa_resource **state)
+void test_efa_rma_writedata(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -305,7 +305,7 @@ void test_efa_rma_writedata(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_inject_write(struct efa_resource **state)
+void test_efa_rma_inject_write(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -331,7 +331,7 @@ void test_efa_rma_inject_write(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_inject_writedata(struct efa_resource **state)
+void test_efa_rma_inject_writedata(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -358,7 +358,7 @@ void test_efa_rma_inject_writedata(struct efa_resource **state)
 	efa_unit_test_buff_destruct(&local_buff);
 }
 
-void test_efa_rma_writemsg_with_inject(struct efa_resource **state)
+void test_efa_rma_writemsg_with_inject(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_buff local_buff;
@@ -396,7 +396,7 @@ void test_efa_rma_writemsg_with_inject(struct efa_resource **state)
 }
 
 /* 0-byte RMA tests - require device FI_RMA support (RDMA read + write) for bounce buffer */
-void test_efa_rma_read_0_byte(struct efa_resource **state)
+void test_efa_rma_read_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t src_addr;
@@ -418,7 +418,7 @@ void test_efa_rma_read_0_byte(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
-void test_efa_rma_readv_0_byte(struct efa_resource **state)
+void test_efa_rma_readv_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct iovec iov = {0};
@@ -441,7 +441,7 @@ void test_efa_rma_readv_0_byte(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
-void test_efa_rma_readmsg_0_byte(struct efa_resource **state)
+void test_efa_rma_readmsg_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct iovec iov = {0};
@@ -469,7 +469,7 @@ void test_efa_rma_readmsg_0_byte(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
-void test_efa_rma_write_0_byte(struct efa_resource **state)
+void test_efa_rma_write_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t dest_addr;
@@ -491,7 +491,7 @@ void test_efa_rma_write_0_byte(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
-void test_efa_rma_writev_0_byte(struct efa_resource **state)
+void test_efa_rma_writev_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct iovec iov = {0};
@@ -514,7 +514,7 @@ void test_efa_rma_writev_0_byte(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
-void test_efa_rma_writemsg_0_byte(struct efa_resource **state)
+void test_efa_rma_writemsg_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct iovec iov = {0};
@@ -542,7 +542,7 @@ void test_efa_rma_writemsg_0_byte(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
-void test_efa_rma_writedata_0_byte(struct efa_resource **state)
+void test_efa_rma_writedata_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t dest_addr;
@@ -564,7 +564,7 @@ void test_efa_rma_writedata_0_byte(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
-void test_efa_rma_inject_write_0_byte(struct efa_resource **state)
+void test_efa_rma_inject_write_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t dest_addr;
@@ -586,7 +586,7 @@ void test_efa_rma_inject_write_0_byte(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
-void test_efa_rma_inject_writedata_0_byte(struct efa_resource **state)
+void test_efa_rma_inject_writedata_0_byte(void **state)
 {
 	struct efa_resource *resource = *state;
 	fi_addr_t dest_addr;
@@ -608,7 +608,7 @@ void test_efa_rma_inject_writedata_0_byte(struct efa_resource **state)
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 }
 
-void test_efa_rma_write_0_byte_with_inject_flag(struct efa_resource **state)
+void test_efa_rma_write_0_byte_with_inject_flag(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct iovec iov = {0};

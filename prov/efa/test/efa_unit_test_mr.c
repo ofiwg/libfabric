@@ -24,7 +24,7 @@ static void test_efa_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 	}
 }
 
-void test_efa_rdm_mr_reg_host_memory(struct efa_resource **state)
+void test_efa_rdm_mr_reg_host_memory(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -57,7 +57,7 @@ void test_efa_rdm_mr_reg_host_memory(struct efa_resource **state)
 	free(buf);
 }
 
-void test_efa_rdm_mr_reg_host_memory_no_mr_local(struct efa_resource **state)
+void test_efa_rdm_mr_reg_host_memory_no_mr_local(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct fi_info *hints;
@@ -96,7 +96,7 @@ void test_efa_rdm_mr_reg_host_memory_no_mr_local(struct efa_resource **state)
 	free(buf);
 }
 
-void test_efa_rdm_mr_reg_host_memory_overlapping_buffers(struct efa_resource **state)
+void test_efa_rdm_mr_reg_host_memory_overlapping_buffers(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -140,7 +140,7 @@ void test_efa_rdm_mr_reg_host_memory_overlapping_buffers(struct efa_resource **s
 }
 
 #if HAVE_CUDA
-void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
+void test_efa_rdm_mr_reg_cuda_memory(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -191,14 +191,14 @@ void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
 	}
 }
 #else
-void test_efa_rdm_mr_reg_cuda_memory(struct efa_resource **state)
+void test_efa_rdm_mr_reg_cuda_memory(void **state)
 {
 	skip();
 }
 #endif
 
 #if HAVE_CUDA
-void test_efa_direct_mr_reg_no_gdrcopy(struct efa_resource **state)
+void test_efa_direct_mr_reg_no_gdrcopy(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -249,13 +249,13 @@ void test_efa_direct_mr_reg_no_gdrcopy(struct efa_resource **state)
 	}
 }
 #else
-void test_efa_direct_mr_reg_no_gdrcopy(struct efa_resource **state)
+void test_efa_direct_mr_reg_no_gdrcopy(void **state)
 {
 	skip();
 }
 #endif
 
-void test_efa_direct_mr_reg_rdma_read_not_supported(struct efa_resource **state)
+void test_efa_direct_mr_reg_rdma_read_not_supported(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -297,7 +297,7 @@ void test_efa_direct_mr_reg_rdma_read_not_supported(struct efa_resource **state)
 	efa_domain->device->device_caps = efa_device_caps_orig;
 }
 
-void test_efa_direct_mr_reg_rdma_write_not_supported(struct efa_resource **state)
+void test_efa_direct_mr_reg_rdma_write_not_supported(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_domain *efa_domain;
@@ -347,7 +347,7 @@ void test_efa_direct_mr_reg_rdma_write_not_supported(struct efa_resource **state
  * When no access flags are provided, the function should default to 
  * FI_SEND | FI_RECV and return IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ.
  */
-void test_efa_mr_ofi_to_ibv_access_no_access(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_no_access(void **state)
 {
 	int ibv_access;
 	
@@ -359,7 +359,7 @@ void test_efa_mr_ofi_to_ibv_access_no_access(struct efa_resource **state)
  * @brief Test efa_mr_ofi_to_ibv_access with one flag when rdma read and write are available
  * 
  */
-void test_efa_mr_ofi_to_ibv_access_one_flag(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_one_flag(void **state)
 {
 	int ibv_access;
 	
@@ -385,7 +385,7 @@ void test_efa_mr_ofi_to_ibv_access_one_flag(struct efa_resource **state)
 /**
  * @brief Test efa_mr_ofi_to_ibv_access when RDMA read not supported
  */
-void test_efa_mr_ofi_to_ibv_access_read_not_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_read_not_supported(void **state)
 {
 	int ibv_access;
 	
@@ -401,7 +401,7 @@ void test_efa_mr_ofi_to_ibv_access_read_not_supported(struct efa_resource **stat
  * 
  * When device doesn't support RDMA write, emulate with RDMA read
  */
-void test_efa_mr_ofi_to_ibv_access_write_not_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_write_not_supported(void **state)
 {
 	int ibv_access;
 
@@ -419,7 +419,7 @@ void test_efa_mr_ofi_to_ibv_access_write_not_supported(struct efa_resource **sta
  * When only remote read is supported, FI_REMOTE_READ gets IBV_ACCESS_REMOTE_READ
  * and FI_REMOTE_WRITE gets IBV_ACCESS_LOCAL_WRITE.
  */
-void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported(void **state)
 {
 	int ibv_access;
 	
@@ -432,7 +432,7 @@ void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported(struct 
  * 
  * Test all OFI access flags together with full device support.
  */
-void test_efa_mr_ofi_to_ibv_access_all_flags_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_all_flags_supported(void **state)
 {
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
@@ -444,7 +444,7 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_supported(struct efa_resource **sta
 /**
  * @brief Test efa_mr_ofi_to_ibv_access with all access flags, no device support
  */
-void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(struct efa_resource **state)
+void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(void **state)
 {
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
@@ -458,7 +458,7 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(struct efa_resource *
  * This test verifies that efa_mr_internal_regv only creates EFA MR
  * and does not create a corresponding SHM MR, even when SHM domain exists.
  */
-void test_efa_mr_internal_regv_no_shm_mr(struct efa_resource **state)
+void test_efa_mr_internal_regv_no_shm_mr(void **state)
 {
 	struct efa_resource *resource = *state;
 	size_t mr_size = 64;
@@ -495,7 +495,7 @@ void test_efa_mr_internal_regv_no_shm_mr(struct efa_resource **state)
  * When FI_EFA_TRACK_MR is enabled and an MR is closed while a direct
  * operation still references it, efa_mr_close will warn and clear the desc entry.
  */
-void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
+void test_efa_mr_close_warn_outstanding_direct_ope(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep;
@@ -550,7 +550,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope(struct efa_resource **state)
  * Two EPs share one MR. Each EP has an in-flight direct operation referencing
  * the MR. Closing the MR should warn and clear desc on both EPs.
  */
-void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource **state)
+void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_base_ep *base_ep1, *base_ep2;
@@ -623,7 +623,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(struct efa_resource 
  * When FI_EFA_TRACK_MR is enabled and an MR is closed while an RDM
  * TX operation still references it, efa_mr_close will warn and clear the desc entry.
  */
-void test_efa_mr_close_warn_outstanding_rdm_txe(struct efa_resource **state)
+void test_efa_mr_close_warn_outstanding_rdm_txe(void **state)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *txe;
