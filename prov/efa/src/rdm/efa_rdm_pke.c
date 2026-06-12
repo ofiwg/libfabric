@@ -22,6 +22,7 @@
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_tracepoint.h"
 #include "efa_rdm_pke_print.h"
+#include "efa_rdm_pke_utils.h"
 
 /**
  * @brief allocate a packet entry
@@ -67,7 +68,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 #endif
 	/* Without poisoning, debug_info pointer is naturally preserved in memory. */
 
-	pkt_entry->gen &= EFA_RDM_PACKET_GEN_MASK;
+	pkt_entry->gen &= EFA_RDM_GEN_MASK;
 	dlist_init(&pkt_entry->entry);
 
 #if ENABLE_DEBUG
@@ -290,7 +291,10 @@ void efa_rdm_pke_copy(struct efa_rdm_pke *dest,
 	 * is tied to the memory region, therefore should
 	 * not be changed.
 	 */
-	dest->ope = src->ope;
+	if (src->ope)
+		efa_rdm_pke_set_ope(dest, src->ope);
+	else
+		dest->ope = NULL;
 
 	/* Pkt from read-copy pkt pool is only used for staging data
 	 * that will be copied to application buffer via rdma-read,
@@ -459,8 +463,8 @@ void efa_rdm_pke_append(struct efa_rdm_pke *dst,
 
 static inline uint64_t efa_rdm_pke_get_wr_id(struct efa_rdm_pke *pkt_entry)
 {
-	assert((uint64_t)pkt_entry->gen == ((uint64_t)pkt_entry->gen & EFA_RDM_PACKET_GEN_MASK));
-	assert((uint64_t)pkt_entry == ((uint64_t)pkt_entry & ~((uint64_t)EFA_RDM_PACKET_GEN_MASK)));
+	assert((uint64_t)pkt_entry->gen == ((uint64_t)pkt_entry->gen & EFA_RDM_GEN_MASK));
+	assert((uint64_t)pkt_entry == ((uint64_t)pkt_entry & ~((uint64_t)EFA_RDM_GEN_MASK)));
 	return (uint64_t) pkt_entry | (uint64_t) pkt_entry->gen;
 }
 
@@ -537,6 +541,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
 			/* Currently this is only expected for eager pkts */
 			assert(pkt_entry_cnt == 1);
 			assert(peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP);
+			efa_rdm_pke_assert_ope_valid(pkt_entry);
 			if (pkt_entry->ope->fi_flags & FI_REMOTE_CQ_DATA) {
 				flags_in_loop |= FI_REMOTE_CQ_DATA;
 				cq_data = pkt_entry->ope->cq_entry.data;
@@ -805,8 +810,8 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 
 #if ENABLE_DEBUG
 /* Compile-time assertion that debug_info gen field can hold all possible gen values */
-_Static_assert(EFA_RDM_PKE_DEBUG_GEN_MASK >= EFA_RDM_PACKET_GEN_MASK,
-               "DEBUG_GEN_BITS insufficient to hold EFA_RDM_PACKET_GEN_MASK");
+_Static_assert(EFA_RDM_PKE_DEBUG_GEN_MASK >= EFA_RDM_GEN_MASK, 
+               "DEBUG_GEN_BITS insufficient to hold EFA_RDM_GEN_MASK");
 
 /**
  * @brief Print debug info history for packet entry

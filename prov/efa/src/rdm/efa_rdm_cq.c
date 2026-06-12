@@ -168,7 +168,7 @@ static struct fi_ops efa_rdm_cq_fi_ops = {
 static inline void efa_rdm_cq_increment_pkt_entry_gen(struct efa_rdm_pke *pkt_entry)
 {
 	pkt_entry->gen++;
-	pkt_entry->gen &= EFA_RDM_PACKET_GEN_MASK;
+	pkt_entry->gen &= EFA_RDM_GEN_MASK;
 }
 
 /**
@@ -686,12 +686,14 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 
 #if HAVE_LTTNG
 	efa_rdm_tracepoint(poll_cq, (size_t) wr_id);
-	if (pkt_entry && pkt_entry->ope)
+	if (pkt_entry && pkt_entry->ope) {
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
 				   pkt_entry->ope->peer ? pkt_entry->ope->peer->conn->fi_addr : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
+	}
 #endif
 
 	if (!efa_cq_wc_is_unsolicited(cq)) {
@@ -752,12 +754,14 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 
 #if HAVE_LTTNG
 	efa_rdm_tracepoint(poll_cq, (size_t) wr_id);
-	if (pkt_entry && pkt_entry->ope)
+	if (pkt_entry && pkt_entry->ope) {
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
 				   pkt_entry->ope->peer ? pkt_entry->ope->peer->conn->fi_addr : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
+	}
 #endif
 
 	if (OFI_UNLIKELY(status != IBV_WC_SUCCESS)) {

@@ -175,7 +175,7 @@ ssize_t efa_rdm_pke_init_cts(struct efa_rdm_pke *pkt_entry,
 	cts_hdr->connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
 
 	pkt_entry->peer = ope->peer;
-	pkt_entry->ope = (void *)ope;
+	efa_rdm_pke_set_ope(pkt_entry, (void *)ope);
 	return 0;
 }
 
@@ -185,6 +185,40 @@ void efa_rdm_pke_handle_cts_sent(struct efa_rdm_pke *pkt_entry)
 
 	ope = pkt_entry->ope;
 	ope->window = efa_rdm_pke_get_cts_hdr(pkt_entry)->recv_length;
+}
+
+/**
+ * @brief Handle CTS packet send completion.
+ *
+ * CTS can be sent by two different ope types:
+ *
+ * 1. rxe for longcts msg/write (DC and non-DC):
+ *    Release if efa_rdm_rxe_cts_ready_for_release(), which
+ *    checks recv completed, ops == 0, and no ACK in flight.
+ *
+ * 2. txe for emulated longcts read:
+ *    Release if efa_rdm_txe_emulated_read_ready_for_release(),
+ *    which checks recv completed and ops == 0.
+ *
+ * In both cases, the ope is released either here or in
+ * efa_rdm_ope_handle_recv_completed(), whichever happens last.
+ *
+ * @param[in] pkt_entry the CTS packet entry whose send completed
+ */
+void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_ope *ope;
+
+	ope = pkt_entry->ope;
+	assert(ope);
+	if (ope->type == EFA_RDM_RXE) {
+		if (efa_rdm_rxe_cts_ready_for_release(ope))
+			efa_rdm_rxe_release(ope);
+	} else {
+		assert(ope->type == EFA_RDM_TXE);
+		if (efa_rdm_txe_emulated_read_ready_for_release(ope))
+			efa_rdm_txe_release(ope);
+	}
 }
 
 void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
@@ -261,7 +295,7 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 	if (ret)
 		return ret;
 
-	pkt_entry->ope = (void *)ope;
+	efa_rdm_pke_set_ope(pkt_entry, (void *)ope);
 	pkt_entry->peer = ope->peer;
 
 	return 0;
@@ -291,7 +325,7 @@ void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry)
 	 */
 	if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA) {
 		assert(pkt_entry->ope);
-		if (efa_rdm_txe_dc_ready_for_release(pkt_entry->ope))
+		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
 			efa_rdm_txe_release(pkt_entry->ope);
 		return;
 	}
@@ -457,7 +491,7 @@ void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
 {
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 
-	pkt_entry->ope = (void *)txe;
+	efa_rdm_pke_set_ope(pkt_entry, (void *)txe);
 	pkt_entry->peer = txe->peer;
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
@@ -479,7 +513,7 @@ void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 {
 	struct efa_rdm_rma_context_pkt *ctx_pkt;
 
-	pkt_entry->ope = ope;
+	efa_rdm_pke_set_ope(pkt_entry, ope);
 	pkt_entry->peer = ope->peer;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_rma_context_pkt);
 
@@ -515,6 +549,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 			if (txe->peer == NULL) {
 				data_pkt_entry = txe->local_read_pkt_entry;
 				assert(data_pkt_entry->payload_size > 0);
+				efa_rdm_pke_assert_ope_valid(data_pkt_entry);
 				efa_rdm_tracepoint(rx_pke_local_read_copy_payload_end, (size_t) data_pkt_entry, data_pkt_entry->payload_size, data_pkt_entry->ope->msg_id, (size_t) data_pkt_entry->ope->cq_entry.op_context, data_pkt_entry->ope->total_len);
 				efa_rdm_pke_handle_data_copied(data_pkt_entry);
 				/* Hand off pkt release to efa_rdm_pke_handle_data_copied() above. */
@@ -545,7 +580,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 				efa_rdm_rxe_release(rxe);
 			}
 
-			rxe->internal_flags |= EFA_RDM_RXE_EOR_IN_FLIGHT;
+			rxe->internal_flags |= EFA_RDM_RXE_ACK_IN_FLIGHT;
 			rxe->bytes_received += rxe->bytes_read_completed;
 			rxe->bytes_copied += rxe->bytes_read_completed;
 			if (rxe->bytes_copied == rxe->total_len) {
@@ -626,7 +661,7 @@ int efa_rdm_pke_init_eor(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe)
 	eor_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_eor_hdr);
 	pkt_entry->peer = rxe->peer;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 	return 0;
 }
 
@@ -640,7 +675,7 @@ void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry)
 	if (rxe->bytes_copied == rxe->total_len) {
 		efa_rdm_rxe_release(rxe);
 	} else {
-		rxe->internal_flags &= ~EFA_RDM_RXE_EOR_IN_FLIGHT;
+		rxe->internal_flags &= ~EFA_RDM_RXE_ACK_IN_FLIGHT;
 	}
 }
 
@@ -659,7 +694,7 @@ int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope
 	nack_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_read_nack_hdr);
 	pkt_entry->peer = rxe->peer;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 	return 0;
 }
 
@@ -682,7 +717,15 @@ void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 	txe->bytes_acked += txe->total_len - txe->bytes_runt;
 	if (txe->bytes_acked == txe->total_len) {
 		efa_rdm_txe_report_completion(txe);
-		efa_rdm_txe_release(txe);
+		/*
+		 * The txe is released either here or in
+		 * efa_rdm_pke_handle_send_completion() for the
+		 * LONGREAD_RTM packet, whichever happens last.
+		 * Release here if the send completion already arrived.
+		 */
+		txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
+		if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
+			efa_rdm_txe_release(txe);
 	}
 
 	efa_rdm_pke_release_rx(pkt_entry);
@@ -754,7 +797,7 @@ int efa_rdm_pke_init_receipt(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *
 
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_receipt_hdr);
 	pkt_entry->peer = rxe->peer;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	return 0;
 }
@@ -764,7 +807,19 @@ void efa_rdm_pke_handle_receipt_send_completion(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *rxe;
 
 	rxe = pkt_entry->ope;
-	efa_rdm_rxe_release(rxe);
+	/*
+	 * Clear ACK_IN_FLIGHT so the CTS send completion handler
+	 * (efa_rdm_pke_handle_cts_send_completion) can see that
+	 * no ack is pending and proceed with release.
+	 */
+	rxe->internal_flags &= ~EFA_RDM_RXE_ACK_IN_FLIGHT;
+	/*
+	 * Release the rxe if the CTS send completion has already
+	 * arrived (efa_outstanding_tx_ops == 0). Otherwise, the
+	 * CTS send completion handler will release it.
+	 */
+	if (rxe->efa_outstanding_tx_ops == 0)
+		efa_rdm_rxe_release(rxe);
 }
 
 void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
@@ -790,11 +845,15 @@ void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 		dlist_remove(&txe->entry);
 	}
 
-	/* Set receipt received flag for DC operations */
-	txe->internal_flags |= EFA_RDM_TXE_RECEIPT_RECEIVED;
-
-	/* Only release txe if both conditions are met */
-	if (efa_rdm_txe_dc_ready_for_release(txe))
+	/*
+	 * Mark that the remote ack (RECEIPT) has arrived.
+	 * The txe is released either here or in
+	 * efa_rdm_pke_handle_send_completion() for the DC
+	 * request/CTSDATA packet, whichever happens last.
+	 * Release here if the send completion already arrived.
+	 */
+	txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
+	if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
 		efa_rdm_txe_release(txe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
@@ -813,7 +872,7 @@ int efa_rdm_pke_init_atomrsp(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *
 
 	assert(rxe->atomrsp_data);
 	pkt_entry->peer = rxe->peer;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	atomrsp_pkt = (struct efa_rdm_atomrsp_pkt *)pkt_entry->wiredata;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
@@ -865,6 +924,15 @@ void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry)
 	else
 		efa_cntr_report_tx_completion(&pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
 
-	efa_rdm_txe_release(txe);
+	/*
+	 * Mark that the remote response (ATOMRSP) has arrived.
+	 * The txe is released either here or in
+	 * efa_rdm_pke_handle_send_completion() for the
+	 * FETCH_RTA/COMPARE_RTA packet, whichever happens last.
+	 * Release here if the send completion already arrived.
+	 */
+	txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
+	if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
+		efa_rdm_txe_release(txe);
 	efa_rdm_pke_release_rx(pkt_entry);
 }

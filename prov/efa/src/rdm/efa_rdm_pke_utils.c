@@ -45,7 +45,7 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 	size_t tx_iov_offset, copied;
 	struct efa_rdm_mr *iov_mr;
 
-	pke->ope = ope;
+	efa_rdm_pke_set_ope(pke, ope);
 	pke->peer = ope->peer;
 	if (data_size == 0) {
 		pke->pkt_size = payload_offset;
@@ -134,6 +134,7 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 		data = ep->queued_copy_vec[i].data;
 		segment_offset = ep->queued_copy_vec[i].data_offset;
 
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		rxe = pkt_entry->ope;
 		desc = rxe->desc[0];
 		assert(desc && desc->efa_mr.iface != FI_HMEM_SYSTEM);
@@ -161,6 +162,7 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
 		segment_offset = ep->queued_copy_vec[i].data_offset;
 		rxe = pkt_entry->ope;
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
 
 		if (bytes_copied[i] != MIN(pkt_entry->payload_size,
 					   rxe->cq_entry.len - segment_offset)) {
@@ -440,7 +442,7 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 	ep = pke->ep;
 	assert(ep);
 
-	pke->ope = ope;
+	efa_rdm_pke_set_ope(pke, ope);
 	segment_offset = efa_rdm_pke_get_segment_offset(pke);
 	/*
 	 * Under 3 rare situations, this function does not perform the copy

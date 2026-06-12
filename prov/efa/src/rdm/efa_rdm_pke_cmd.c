@@ -420,6 +420,7 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		return;
 	}
 
+	efa_rdm_pke_assert_ope_valid(pkt_entry);
 	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
 		txe = pkt_entry->ope;
@@ -553,6 +554,9 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
+	efa_rdm_pke_assert_ope_valid(pkt_entry);
+
 	/* These pkts are eager pkts withour hdrs */
 	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
 		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
@@ -563,6 +567,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* Start handling pkts with hdrs */
 	switch (efa_rdm_pkt_type_of(pkt_entry)) {
 	case EFA_RDM_HANDSHAKE_PKT:
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		efa_rdm_tracepoint(handshake_send_completion,
 				   (size_t) pkt_entry, pkt_entry->pkt_size,
 				   pkt_entry->ope->msg_id,
@@ -571,6 +576,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_CTS_PKT:
+		efa_rdm_pke_handle_cts_send_completion(pkt_entry);
 		break;
 	case EFA_RDM_CTSDATA_PKT:
 		efa_rdm_pke_handle_ctsdata_send_completion(pkt_entry);
@@ -604,7 +610,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		/* nothing to do */
+		/* For long read, the txe is released either here or in
+		 * efa_rdm_pke_handle_eor_recv(), whichever happens last.
+		 * Release here if EOR already arrived.
+		 */
+		assert(pkt_entry->ope);
+		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
+			efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
@@ -617,24 +629,33 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_handle_longcts_rtw_send_completion(pkt_entry);
 		break;
 	case EFA_RDM_LONGREAD_RTW_PKT:
-		/* nothing to do when long rtw send completes*/
+		/* For long read write, the txe is released either here or in
+		 * efa_rdm_pke_handle_eor_recv(), whichever happens last.
+		 * Release here if EOR already arrived.
+		 */
+		assert(pkt_entry->ope);
+		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
+			efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_SHORT_RTR_PKT:
 	case EFA_RDM_LONGCTS_RTR_PKT:
-		/* Unlike other protocol, for emulated read, txe
-		 * is released in efa_rdm_ope_handle_recv_completed().
-	         * Therefore there is nothing to be done here.
+		/* For emulated read, the txe is released either here
+		 * or in efa_rdm_ope_handle_recv_completed(), whichever
+		 * happens last. Release here if recv already completed.
 		 */
+		assert(pkt_entry->ope);
+		if (efa_rdm_txe_emulated_read_ready_for_release(pkt_entry->ope))
+			efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_WRITE_RTA_PKT:
 		efa_rdm_pke_handle_write_rta_send_completion(pkt_entry);
 		break;
-	case EFA_RDM_FETCH_RTA_PKT:
-		/* no action to be taken here */
-		break;
-	case EFA_RDM_COMPARE_RTA_PKT:
-		/* no action to be taken here */
-		break;
+	case EFA_RDM_FETCH_RTA_PKT: /* fall through */
+	case EFA_RDM_COMPARE_RTA_PKT: /* fall through */
+		/* For fetch/compare atomics, the txe is released either
+		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
+		 * happens last. Release here if ATOMRSP already arrived.
+		 */
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
@@ -650,8 +671,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * so this check must come after that call.
 		 * Only release TXE when both TX ops complete and receipt is received.
 		 */
-		assert(pkt_entry->ope);
-		if (efa_rdm_txe_dc_ready_for_release(pkt_entry->ope))
+		efa_rdm_pke_assert_ope_valid(pkt_entry);
+		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
 			efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_READ_NACK_PKT:
@@ -712,6 +733,7 @@ void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 		return;
 	}
 
+	efa_rdm_pke_assert_ope_valid(pkt_entry);
 	if (pkt_entry->ope->type == EFA_RDM_TXE) {
 		efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
 	} else if (pkt_entry->ope->type == EFA_RDM_RXE) {

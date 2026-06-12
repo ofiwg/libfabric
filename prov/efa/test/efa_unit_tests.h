@@ -309,10 +309,30 @@ void test_efa_rdm_ope_eor_packet_tracking_wait_send(void **state);
 void test_efa_rdm_ope_eor_packet_failed_posting(void **state);
 void test_efa_rdm_ope_eor_packet_tracking_unresponsive_wait_send(void **state);
 void test_efa_rdm_atomic_compare_desc_persistence(void **state);
-void test_efa_rdm_txe_dc_send_first(void **state);
-void test_efa_rdm_txe_dc_receipt_first(void **state);
-void test_efa_rdm_txe_dc_send_first_non_longcts(void **state);
-void test_efa_rdm_txe_dc_receipt_first_non_longcts(void **state);
+void test_efa_rdm_txe_dc_ctsdata_send_first(void **state);
+void test_efa_rdm_txe_dc_ctsdata_resp_first(void **state);
+void test_efa_rdm_txe_dc_eager_rtm_send_first(void **state);
+void test_efa_rdm_txe_dc_eager_rtm_resp_first(void **state);
+void test_efa_rdm_txe_short_rtr_send_first(void **state);
+void test_efa_rdm_txe_short_rtr_resp_first(void **state);
+void test_efa_rdm_txe_fetch_rta_send_first(void **state);
+void test_efa_rdm_txe_fetch_rta_resp_first(void **state);
+void test_efa_rdm_txe_compare_rta_send_first(void **state);
+void test_efa_rdm_txe_compare_rta_resp_first(void **state);
+void test_efa_rdm_txe_longread_tagrtm_send_first(void **state);
+void test_efa_rdm_txe_longread_tagrtm_resp_first(void **state);
+void test_efa_rdm_txe_longread_msgrtm_send_first(void **state);
+void test_efa_rdm_txe_longread_msgrtm_resp_first(void **state);
+void test_efa_rdm_txe_longread_rtw_send_first(void **state);
+void test_efa_rdm_txe_longread_rtw_resp_first(void **state);
+void test_efa_rdm_rxe_longcts_msg_cts_send_first(void **state);
+void test_efa_rdm_rxe_longcts_msg_cts_recv_first(void **state);
+void test_efa_rdm_rxe_longcts_write_cts_send_first(void **state);
+void test_efa_rdm_rxe_longcts_write_cts_recv_first(void **state);
+void test_efa_rdm_txe_longcts_read_cts_send_first(void **state);
+void test_efa_rdm_txe_longcts_read_cts_recv_first(void **state);
+void test_efa_rdm_rxe_dc_longcts_write_cts_before_receipt(void **state);
+void test_efa_rdm_rxe_dc_longcts_write_receipt_before_cts(void **state);
 
 
 /* end of efa_unit_test_ope.c */
@@ -402,6 +422,8 @@ void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state);
 /* end of efa_unit_test_rdm_peer.c */
 
 /* begin of efa_unit_test_pke.c */
+void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state);
+void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state);
 void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state);
 void test_efa_rdm_pke_release_rx_list(void **state);
 void test_efa_rdm_pke_alloc_rta_rxe(void **state);

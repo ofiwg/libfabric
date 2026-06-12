@@ -3,7 +3,108 @@
 #include "rdm/efa_rdm_pke_rta.h"
 #include "rdm/efa_rdm_pke_rtw.h"
 #include "rdm/efa_rdm_pke_utils.h"
+#include "rdm/efa_rdm_pke_cmd.h"
 
+
+/**
+ * @brief Test that efa_rdm_pke_handle_send_completion does not crash
+ * when peer has been removed (use-after-free fix).
+ *
+ * Scenario: A pkt_entry is submitted, then the peer is removed via
+ * fi_av_remove (which calls peer_destruct, setting pkt_entry->peer = NULL
+ * and releasing the txe). When the send completion arrives later,
+ * the handler must not dereference the freed ope.
+ */
+void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_ope *txe;
+	fi_addr_t peer_addr = 0;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Use test utility to allocate txe (also inserts a peer at addr 0) */
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+
+	/* Allocate and init a TX pkt_entry */
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+
+	err = efa_rdm_pke_init_eager_msgrtm(pkt_entry, txe);
+	assert_int_equal(err, 0);
+
+	/* Simulate device submission */
+	efa_rdm_ep_record_tx_op_submitted(efa_rdm_ep, pkt_entry);
+
+	/* Remove peer from AV, which triggers peer_destruct:
+	 * - sets pkt_entry->peer = NULL
+	 * - releases the txe (ope is now freed/reused)
+	 */
+	err = fi_av_remove(resource->av, &peer_addr, 1, 0);
+	assert_int_equal(err, 0);
+	assert_null(pkt_entry->peer);
+	assert_null(pkt_entry->ope);
+	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+
+	/* Simulate the send completion arriving after peer removal.
+	 * The handler must not dereference pkt_entry->ope since
+	 * peer_destruct already released the txe.
+	 */
+	efa_rdm_pke_handle_send_completion(pkt_entry);
+}
+
+/**
+ * @brief Test that efa_rdm_pke_handle_tx_error does not crash
+ * when peer has been removed (use-after-free fix).
+ *
+ * Same scenario as above but for the error path.
+ */
+void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_ope *txe;
+	fi_addr_t peer_addr = 0;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	/* Use test utility to allocate txe (also inserts a peer at addr 0) */
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+
+	/* Allocate and init a TX pkt_entry */
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+
+	err = efa_rdm_pke_init_eager_msgrtm(pkt_entry, txe);
+	assert_int_equal(err, 0);
+
+	/* Simulate device submission */
+	efa_rdm_ep_record_tx_op_submitted(efa_rdm_ep, pkt_entry);
+
+	/* Remove peer from AV */
+	err = fi_av_remove(resource->av, &peer_addr, 1, 0);
+	assert_int_equal(err, 0);
+	assert_null(pkt_entry->peer);
+	assert_null(pkt_entry->ope);
+	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+
+	/* Simulate a TX error arriving after peer removal.
+	 * The handler must not dereference pkt_entry->ope since
+	 * peer_destruct already released the txe.
+	 */
+	efa_rdm_pke_handle_tx_error(pkt_entry, EFA_IO_COMP_STATUS_LOCAL_ERROR_QP_INTERNAL_ERROR);
+}
 
 /**
  * @brief When handling a long cts rtm as read nack fallback,
@@ -330,7 +431,7 @@ void test_efa_rdm_pke_flag_tracking(void **state)
 	/* Allocate a packet entry */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
-	pkt_entry->ope = txe;
+	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = peer;
 
 	/* Initially, packet should not be in any list */
@@ -406,7 +507,7 @@ void test_efa_rdm_pke_proc_matched_eager_rtm_error(void **state)
 	rxe->iov[0].iov_len = sizeof buf;
 	rxe->cq_entry.len = 1024;
 	rxe->total_len = 1024;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
 	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock, -FI_EINVAL);
@@ -484,7 +585,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error(void **state)
 	rxe->total_len = 1024;
 	rxe->bytes_received = 0;
 	rxe->bytes_received_via_mulreq = 0;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
 	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock, -FI_EINVAL);
@@ -533,7 +634,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(void **state)
 	rxe->total_len = 2048;
 	rxe->bytes_received = 0;
 	rxe->bytes_received_via_mulreq = 0;
-	pkt_entry->ope = rxe;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
 
@@ -591,6 +692,7 @@ void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void
 		pkt_entry[i]->payload = pkt_entry[i]->wiredata;
 		pkt_entry[i]->payload_size = 64;
 		pkt_entry[i]->ope = rxe;
+		pkt_entry[i]->ope_gen = rxe->gen;
 
 		/* Replicate efa_rdm_pke_queued_copy_payload_to_hmem() */
 		efa_rdm_ep->queued_copy_vec[i].pkt_entry = pkt_entry[i];
