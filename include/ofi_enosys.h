@@ -44,6 +44,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_collective.h>
+#include <rdma/fi_rpc.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -552,6 +553,44 @@ ssize_t fi_coll_no_gather(struct fid_ep *ep, const void *buf, size_t count, void
 ssize_t fi_coll_no_msg(struct fid_ep *ep, const struct fi_msg_collective *msg,
 		       struct fi_ioc *resultv, void **result_desc, size_t result_count,
 		       uint64_t flags);
+
+/*
+static struct fi_ops_rpc X = {
+	.size = sizeof(struct fi_ops_rpc),
+	.req = fi_no_rpc_req,
+	.reqv = fi_no_rpc_reqv,
+	.reqmsg = fi_no_rpc_reqmsg,
+	.resp = fi_no_rpc_resp,
+	.respv = fi_no_rpc_respv,
+	.respmsg = fi_no_rpc_respmsg,
+	.discard = fi_no_rpc_discard,
+};
+*/
+ssize_t fi_no_rpc_req(struct fid_ep *ep, const void *req_buf, size_t req_len,
+		      void *req_desc, void *resp_buf, size_t resp_len,
+		      void *resp_desc, fi_addr_t dest_addr, int timeout,
+		      void *context);
+
+ssize_t fi_no_rpc_reqv(struct fid_ep *ep, const struct iovec *req_iov,
+		       void **req_desc, size_t req_count, struct iovec *resp_iov,
+		       void **resp_desc, size_t resp_count, fi_addr_t dest_addr,
+		       int timeout, void *context);
+
+ssize_t fi_no_rpc_reqmsg(struct fid_ep *ep, const struct fi_msg_rpc *msg,
+			 uint64_t flags);
+
+ssize_t fi_no_rpc_resp(struct fid_ep *ep, const void *buf, size_t len,
+		       void *desc, fi_addr_t dest_addr, uint64_t rpc_id,
+		       void *context);
+
+ssize_t fi_no_rpc_respv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+		        size_t count, fi_addr_t dest_addr, uint64_t rpc_id,
+			void *context);
+
+ssize_t fi_no_rpc_respmsg(struct fid_ep *ep, const struct fi_msg_rpc_resp *msg,
+		          uint64_t flags);
+
+ssize_t fi_no_rpc_discard(struct fid_ep *ep, uint64_t rpc_id);
 
 #ifdef __cplusplus
 }
