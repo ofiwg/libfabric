@@ -164,6 +164,10 @@ The *shm* provider checks for the following environment variables:
 *FI_SHM_USE_DSA_SAR*
 : Enables memory copy offload to Intel DSA SAR protocol.  Default false
 
+*FI_SHM_MAX_GDRCOPY_SIZE*
+ : Maximum message size for gdrcopy transfers. Messages larger
+   than this size use the IPC protocol with cudaMemcpy.  Default 3072.
+
 *FI_SHM_USE_XPMEM*
  : SHM can use SAR, CMA or XPMEM for host memory transfers. If
    FI_SHM_USE_XPMEM is set to 1, the provider will select XPMEM over CMA if
