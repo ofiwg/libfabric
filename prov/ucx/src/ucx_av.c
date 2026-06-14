@@ -230,7 +230,7 @@ static int ucx_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	size_t realsz;
 
 	mav = container_of(av, struct ucx_av, av.fid);
-	ave = (struct ucx_ave *) ofi_array_at_max(&mav->addr_array, fi_addr,
+	ave = (struct ucx_ave *) ofi_array_at_max(&mav->ave_array, fi_addr,
 						  mav->count);
 	if (!ave)
 		return -FI_EINVAL;
