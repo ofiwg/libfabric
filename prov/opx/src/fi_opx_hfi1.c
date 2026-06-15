@@ -2357,92 +2357,112 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep, struct fi_opx_hfi
 		return 0;
 	}
 
-#ifndef NDEBUG
-	const uintptr_t rbuf_end = params->dst_vaddr + params->dput_iov[0].bytes;
-#endif
-
-	/* Caller adjusted pointers and lengths past the immediate data.
-	 * Now align the destination buffer to be page aligned for expected TID writes
-	 * This should point/overlap into the immediate data area.
-	 * Then realign source buffer and lengths appropriately.
+	/* Caller adjusted pointers and lengths past the immediate data. Derive the
+	 * TID-eligible interval into locals first, decide all return-0 cases, and
+	 * only then mutate params. This keeps a late ineligibility bail (below)
+	 * side-effect free, since the caller reuses params for a plain non-TID CTS
+	 * when this returns 0.
 	 */
-	/* TID writes must start on 64 byte boundaries */
-	uintptr_t vaddr_aligned64 = params->dst_vaddr & -64;
+	const uintptr_t orig_dst_vaddr = params->dst_vaddr;
+	const uintptr_t orig_rbuf      = params->dput_iov[0].rbuf;
+	const uintptr_t orig_sbuf      = params->dput_iov[0].sbuf;
+	const size_t	orig_bytes     = params->dput_iov[0].bytes;
 
-	int64_t byte_counter_adjust;
+	/* TID writes must start on 64 byte boundaries. Align the start down into
+	 * the immediate data area when possible, otherwise elide a head fragment. */
+	uintptr_t vaddr_aligned64 = orig_dst_vaddr & -64;
+	uintptr_t tid_dst_vaddr;
+	uintptr_t tid_rbuf;
+	uintptr_t tid_sbuf;
+	size_t	  tid_bytes;
+	size_t	  elided_head_bytes;
+	int64_t	  byte_counter_adjust;
 
-	if (vaddr_aligned64 >= (params->dst_vaddr - immediate_data)) {
-		size_t alignment_adjustment = params->dst_vaddr - vaddr_aligned64;
-		params->dst_vaddr -= alignment_adjustment;
-		params->dput_iov[0].rbuf -= alignment_adjustment;
-		params->dput_iov[0].sbuf -= alignment_adjustment;
-		params->dput_iov[0].bytes += alignment_adjustment;
-
-		byte_counter_adjust = alignment_adjustment;
-
-		params->elided_head.bytes = 0;
+	if (vaddr_aligned64 >= (orig_dst_vaddr - immediate_data)) {
+		const size_t alignment_adjustment = orig_dst_vaddr - vaddr_aligned64;
+		tid_dst_vaddr			  = orig_dst_vaddr - alignment_adjustment;
+		tid_rbuf			  = orig_rbuf - alignment_adjustment;
+		tid_sbuf			  = orig_sbuf - alignment_adjustment;
+		tid_bytes			  = orig_bytes + alignment_adjustment;
+		elided_head_bytes		  = 0;
+		byte_counter_adjust		  = alignment_adjustment;
 	} else {
-		// Round up to next 64-byte boundary.
-		vaddr_aligned64 = (params->dst_vaddr + 63) & -64;
+		vaddr_aligned64 = (orig_dst_vaddr + 63) & -64;
+		assert(vaddr_aligned64 > orig_dst_vaddr);
 
-		// If params->dst_vaddr is already on a 64-byte boundary, then
-		// adding 63 to it and ANDing that with -64 would result in the
-		// same address. *But* in that situation, we should not have
-		// taken this else branch, so rounding up to the next boundary
-		// should definitely result in vaddr being > params->dst_vaddr
-		assert(vaddr_aligned64 > params->dst_vaddr);
-
-		// Get the portion of bytes at the start of the buffer that
-		// we'll need to send a separate CTS for, and then adjust the
-		// original buffers
-		params->elided_head.bytes	= vaddr_aligned64 - params->dst_vaddr;
-		params->elided_head.rbuf	= params->dst_vaddr;
-		params->elided_head.rbuf_iface	= params->dput_iov[0].rbuf_iface;
-		params->elided_head.rbuf_device = params->dput_iov[0].rbuf_device;
-		params->elided_head.sbuf	= params->dput_iov[0].sbuf;
-		params->elided_head.sbuf_iface	= params->dput_iov[0].sbuf_iface;
-		params->elided_head.sbuf_device = params->dput_iov[0].sbuf_device;
-		params->elided_head.sbuf_handle = params->dput_iov[0].sbuf_handle;
-
-		params->dst_vaddr	 = vaddr_aligned64;
-		params->dput_iov[0].rbuf = vaddr_aligned64;
-		params->dput_iov[0].sbuf += params->elided_head.bytes;
-		params->dput_iov[0].bytes -= params->elided_head.bytes;
-
-		// No byte counter adjustment necessary because we didn't
-		// overlap with immediate data so we aren't requesting bytes
-		// to be sent that were already sent.
+		elided_head_bytes   = vaddr_aligned64 - orig_dst_vaddr;
+		tid_dst_vaddr	    = vaddr_aligned64;
+		tid_rbuf	    = vaddr_aligned64;
+		tid_sbuf	    = orig_sbuf + elided_head_bytes;
+		tid_bytes	    = orig_bytes - elided_head_bytes;
 		byte_counter_adjust = 0;
 	}
 
-	// Make sure that our buffer still ends in the same place, even after
-	// adjusting the start to be cacheline-aligned
-	assert((params->dst_vaddr + params->dput_iov[0].bytes) == rbuf_end);
+	assert((tid_dst_vaddr + tid_bytes) == (orig_dst_vaddr + orig_bytes));
 
-	/* We need to ensure the length is a qw multiple. If a shorter length
-	   is needed, and no immediate tail data was sent, we'll need to get
-	   the elided tail data via separate CTS packet */
-	const size_t elided_tail_bytes = params->dput_iov[0].bytes & 7;
-	const size_t qw_floor_length   = params->dput_iov[0].bytes & -8;
-	if (elided_tail_bytes && !immediate_tail) {
-		params->elided_tail.bytes	= elided_tail_bytes;
-		params->elided_tail.rbuf	= params->dput_iov[0].rbuf + qw_floor_length;
-		params->elided_tail.sbuf	= params->dput_iov[0].sbuf + qw_floor_length;
-		params->elided_tail.rbuf_iface	= params->dput_iov[0].rbuf_iface;
-		params->elided_tail.rbuf_device = params->dput_iov[0].rbuf_device;
-		params->elided_tail.sbuf_iface	= params->dput_iov[0].sbuf_iface;
-		params->elided_tail.sbuf_device = params->dput_iov[0].sbuf_device;
-		params->elided_tail.sbuf_handle = params->dput_iov[0].sbuf_handle;
+	/* TID length must be a qw multiple; any sub-qword tail is elided unless it
+	 * already arrived as immediate tail data. */
+	const size_t qw_tail_bytes   = tid_bytes & 7;
+	const size_t qw_floor_length = tid_bytes & -8;
+
+	/* For page-granular HMEM TID pages (ROCr/ZE), the registered range is
+	 * rounded out to whole pages, which can extend past the end of the device
+	 * allocation. The pinning path will not register a range that overruns the
+	 * allocation, so keep only the page-aligned-end portion in TID and send the
+	 * partial final page via the existing elided eager CTS. CUDA uses a 64KB
+	 * TID page that stays within its (>=64KB) allocations, so it is exempt. */
+	size_t tid_length      = qw_floor_length;
+	size_t page_tail_bytes = 0;
+	if (is_hmem && OPX_TID_PAGE_SIZE[iface] == PAGE_SIZE) {
+		const uintptr_t qw_floor_end   = tid_rbuf + qw_floor_length;
+		const uintptr_t page_floor_end = qw_floor_end & -((int64_t) OPX_TID_PAGE_SIZE[iface]);
+
+		tid_length	= (page_floor_end > tid_rbuf) ? (page_floor_end - tid_rbuf) : 0;
+		page_tail_bytes = qw_floor_length - tid_length;
+
+		assert(tid_length <= qw_floor_length);
+		assert((tid_length & 7) == 0);
+
+		if (tid_length < opx_tx->tid_min_payload_bytes) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_tid_ineligible);
+			return 0;
+		}
+	}
+
+	if (qw_tail_bytes && immediate_tail) {
+		/* Immediate tail bytes were already delivered; drop from the counter. */
+		byte_counter_adjust -= qw_tail_bytes;
+	}
+
+	/* All return-0 decisions are made; commit to params. */
+	params->dst_vaddr	  = tid_dst_vaddr;
+	params->dput_iov[0].rbuf  = tid_rbuf;
+	params->dput_iov[0].sbuf  = tid_sbuf;
+	params->dput_iov[0].bytes = tid_length;
+
+	if (elided_head_bytes) {
+		params->elided_head	  = params->dput_iov[0];
+		params->elided_head.bytes = elided_head_bytes;
+		params->elided_head.rbuf  = orig_dst_vaddr;
+		params->elided_head.sbuf  = orig_sbuf;
 	} else {
-		// If elided_tail_bytes was non-zero, then it must be the case
-		// that we had immediate_tail data and don't need to request those
-		// bytes to be sent via separate CTS packet. But we still do need
-		// to subtract them from the byte counter.
-		byte_counter_adjust -= elided_tail_bytes;
+		params->elided_head.bytes = 0;
+	}
+
+	/* Coalesce the page tail and the (non-immediate) qword tail into the single
+	 * elided_tail slot; the two regions are contiguous at qw_floor_end. */
+	if (page_tail_bytes || (qw_tail_bytes && !immediate_tail)) {
+		params->elided_tail	  = params->dput_iov[0];
+		params->elided_tail.rbuf  = tid_rbuf + tid_length;
+		params->elided_tail.sbuf  = tid_sbuf + tid_length;
+		params->elided_tail.bytes = page_tail_bytes + (immediate_tail ? 0 : qw_tail_bytes);
+
+		assert(params->elided_tail.bytes);
+		assert((params->elided_tail.rbuf + params->elided_tail.bytes) <= (orig_dst_vaddr + orig_bytes));
+	} else {
 		params->elided_tail.bytes = 0;
 	}
 
-	params->dput_iov[0].bytes = qw_floor_length;
 	params->rzv_comp->context->byte_counter += byte_counter_adjust;
 	params->tid_info.origin_byte_counter_adj = (int32_t) byte_counter_adjust;
 
