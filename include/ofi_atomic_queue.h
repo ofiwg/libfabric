@@ -204,13 +204,13 @@ static inline int name ## _head(struct name *aq,		\
 	int64_t seq;						\
 	struct name ## _entry *ce;				\
 again:								\
-	*pos = aq->read_pos;					\
-	ce = &aq->entry[*pos & aq->size_mask];			\
+	ce = &aq->entry[aq->read_pos & aq->size_mask];		\
 	seq = ofi_atomic_load_explicit64(&(ce->seq),		\
 			memory_order_acquire);			\
-	if (seq != *pos + 1)					\
+	if (seq != aq->read_pos + 1)				\
 		return -FI_ENOENT;				\
-	aq->read_pos = *pos + 1;				\
+	*pos = aq->read_pos;					\
+	aq->read_pos++;						\
 	*buf = &ce->buf;					\
 	if (ce->noop) {						\
 		ce->noop = false;				\
