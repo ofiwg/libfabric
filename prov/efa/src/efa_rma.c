@@ -268,6 +268,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 
 	/* Handle 0-byte write with bounce buffer */
 	if (total_len == 0) {
+		use_inline = false;
 		sge_list[0].addr = (uint64_t)domain->zero_byte_bounce_buf;
 		sge_list[0].length = 0;
 		sge_list[0].lkey = domain->zero_byte_bounce_buf_mr->ibv_mr->lkey;
