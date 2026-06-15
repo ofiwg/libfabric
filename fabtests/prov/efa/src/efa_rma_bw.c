@@ -256,8 +256,9 @@ static int bandwidth_rma_efa(struct fi_rma_iov *remote)
 	if (opts.rma_op == FT_RMA_WRITEDATA && !opts.dst_addr) {
 		/* Server side for writedata: pre-post rx buffers round-robin. */
 		if (fi->rx_attr->mode & FI_RX_CQ_DATA) {
+			int pre_post_limit = MIN(opts.window_size, total_iterations);
 			for (int ep_idx = 0; ep_idx < num_eps; ep_idx++) {
-				while (per_ep_posted[ep_idx] < opts.window_size) {
+				while (per_ep_posted[ep_idx] < pre_post_limit) {
 					ret = post_rx(ep_idx, per_ep_posted,
 						      per_ep_completed,
 						      &posted_cnt, 0);
