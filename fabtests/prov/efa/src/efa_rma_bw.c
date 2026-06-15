@@ -225,38 +225,30 @@ static int post_rx(int ep_idx, int *per_ep_posted, int *per_ep_completed,
 	return 0;
 }
 
-static int bandwidth_rma_efa(struct fi_rma_iov *remote)
+/*
+ * Unified post/poll loop for both TX (initiator) and RX (writedata server).
+ *
+ * TX side: posts RMA ops round-robin across EPs, polls txcq.
+ * RX side: pre-posts recvs, polls rxcq, reposts on completion.
+ *
+ * iters_per_ep: number of operations per EP to complete.
+ * do_measure: if true, calls ft_start()/ft_stop() around the loop.
+ */
+static int run_loop(struct fi_rma_iov *remote, size_t rma_start_offset,
+		    int iters_per_ep, bool do_measure)
 {
 	int ret, posted_cnt = 0, completed_cnt = 0;
 	int per_ep_posted[EFA_RMA_BW_MAX_EPS] = {0};
 	int per_ep_completed[EFA_RMA_BW_MAX_EPS] = {0};
+	int total_posts = iters_per_ep * num_eps;
 	size_t offset;
-	size_t rma_start_offset;
-	int total_iterations = opts.iterations + opts.warmup_iterations;
-	int total_posts = total_iterations * num_eps;
-	int pool_size = opts.window_size * num_eps;
-	bool warmup_done = false;
 	char *buf;
 	uint64_t flags;
-
-	tx_ctx_pool = calloc(pool_size, sizeof(*tx_ctx_pool));
-	rx_ctx_pool = calloc(pool_size, sizeof(*rx_ctx_pool));
-	if (!tx_ctx_pool || !rx_ctx_pool) {
-		ret = -FI_ENOMEM;
-		goto out_free;
-	}
-
-	ret = ft_sync();
-	if (ret)
-		goto out_free;
-
-	rma_start_offset = FT_RMA_SYNC_MSG_BYTES +
-			   MAX(ft_tx_prefix_size(), ft_rx_prefix_size());
 
 	if (opts.rma_op == FT_RMA_WRITEDATA && !opts.dst_addr) {
 		/* Server side for writedata: pre-post rx buffers round-robin. */
 		if (fi->rx_attr->mode & FI_RX_CQ_DATA) {
-			int pre_post_limit = MIN(opts.window_size, total_iterations);
+			int pre_post_limit = MIN(opts.window_size, iters_per_ep);
 			for (int ep_idx = 0; ep_idx < num_eps; ep_idx++) {
 				while (per_ep_posted[ep_idx] < pre_post_limit) {
 					ret = post_rx(ep_idx, per_ep_posted,
@@ -265,31 +257,28 @@ static int bandwidth_rma_efa(struct fi_rma_iov *remote)
 					if (ret == -FI_EAGAIN)
 						break;
 					if (ret)
-						goto out_free;
+						return ret;
 				}
 			}
 		}
 
+		if (do_measure)
+			ft_start();
+
 		/* Poll rxcq for completions, reposting to same EP. */
 		while (completed_cnt < total_posts) {
-			if (!warmup_done &&
-			    completed_cnt >= opts.warmup_iterations * num_eps) {
-				ft_start();
-				warmup_done = true;
-			}
-
 			ret = bw_comp_nonblocking(rxcq, &rx_cq_cntr,
 						  &completed_cnt,
 						  (fi->rx_attr->mode & FI_RX_CQ_DATA) ?
 						  per_ep_completed : NULL);
 			if (ret < 0)
-				goto out_free;
+				return ret;
 
 			if ((fi->rx_attr->mode & FI_RX_CQ_DATA) && ret > 0) {
 				/* Repost to EPs that have room in their window */
 				for (int ep_idx = 0; ep_idx < num_eps; ep_idx++) {
 					while (per_ep_posted[ep_idx] <
-					       total_iterations &&
+					       iters_per_ep &&
 					       (per_ep_posted[ep_idx] -
 					        per_ep_completed[ep_idx]) <
 					       opts.window_size) {
@@ -305,7 +294,7 @@ static int bandwidth_rma_efa(struct fi_rma_iov *remote)
 						if (post_list > 1 &&
 						    (per_ep_posted[ep_idx] + 1) % post_list &&
 						    per_ep_posted[ep_idx] + 1 <
-						    total_iterations &&
+						    iters_per_ep &&
 						    (per_ep_posted[ep_idx] + 1 -
 						     per_ep_completed[ep_idx]) <
 						    opts.window_size)
@@ -319,24 +308,20 @@ static int bandwidth_rma_efa(struct fi_rma_iov *remote)
 						if (ret == -FI_EAGAIN)
 							break;
 						if (ret)
-							goto out_free;
+							return ret;
 					}
 				}
 			}
 		}
 	} else {
+		if (do_measure)
+			ft_start();
+
 		/* Initiator side: post RMA ops, try all EPs each pass (perftest style) */
 		while (posted_cnt < total_posts ||
 		       completed_cnt < total_posts) {
-			if (!warmup_done &&
-			    completed_cnt >= opts.warmup_iterations * num_eps) {
-				ft_start();
-				warmup_done = true;
-			}
-
 			for (int ep_idx = 0; ep_idx < num_eps; ep_idx++) {
-				while (per_ep_posted[ep_idx] < opts.iterations +
-				       opts.warmup_iterations &&
+				while (per_ep_posted[ep_idx] < iters_per_ep &&
 				       (per_ep_posted[ep_idx] -
 				        per_ep_completed[ep_idx]) <
 				       opts.window_size) {
@@ -370,7 +355,7 @@ static int bandwidth_rma_efa(struct fi_rma_iov *remote)
 					if (post_list > 1 &&
 					    per_ep_posted[ep_idx] % post_list &&
 					    per_ep_posted[ep_idx] <
-					    total_iterations &&
+					    iters_per_ep &&
 					    (per_ep_posted[ep_idx] -
 					     per_ep_completed[ep_idx]) <
 					    opts.window_size)
@@ -387,7 +372,7 @@ static int bandwidth_rma_efa(struct fi_rma_iov *remote)
 						break;
 					}
 					if (ret)
-						goto out_free;
+						return ret;
 					posted_cnt++;
 				}
 			}
@@ -396,11 +381,52 @@ static int bandwidth_rma_efa(struct fi_rma_iov *remote)
 						  &completed_cnt,
 						  per_ep_completed);
 			if (ret < 0)
-				goto out_free;
+				return ret;
 		}
 	}
 
-	ft_stop();
+	if (do_measure)
+		ft_stop();
+
+	return 0;
+}
+
+static int bandwidth_rma_efa(struct fi_rma_iov *remote)
+{
+	int ret;
+	size_t rma_start_offset;
+	int pool_size = opts.window_size * num_eps;
+
+	tx_ctx_pool = calloc(pool_size, sizeof(*tx_ctx_pool));
+	rx_ctx_pool = calloc(pool_size, sizeof(*rx_ctx_pool));
+	if (!tx_ctx_pool || !rx_ctx_pool) {
+		ret = -FI_ENOMEM;
+		goto out_free;
+	}
+
+	rma_start_offset = FT_RMA_SYNC_MSG_BYTES +
+			   MAX(ft_tx_prefix_size(), ft_rx_prefix_size());
+
+	/* Warmup */
+	ret = ft_sync();
+	if (ret)
+		goto out_free;
+
+	ret = run_loop(remote, rma_start_offset,
+		       opts.warmup_iterations, false);
+	if (ret)
+		goto out_free;
+
+	/* Measurement */
+	ret = ft_sync();
+	if (ret)
+		goto out_free;
+
+	ret = run_loop(remote, rma_start_offset,
+		       opts.iterations, true);
+	if (ret)
+		goto out_free;
+
 	if (opts.machr)
 		show_perf_mr(opts.transfer_size, opts.iterations * num_eps,
 			     &start, &end, 1, opts.argc, opts.argv);
