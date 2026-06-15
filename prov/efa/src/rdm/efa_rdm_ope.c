@@ -2034,7 +2034,6 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag)
 	switch (flag) {
 	case EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE:
 		ret = efa_rdm_ope_repost_ope_queued_before_handshake(ope);
-		--ope->ep->ope_queued_before_handshake_cnt;
 		break;
 	case EFA_RDM_OPE_QUEUED_RNR:
 		assert(!dlist_empty(&ope->queued_pkts));
@@ -2059,10 +2058,13 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag)
 			efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
 		else
 			efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
-		return ret;
+	} else {
+		ope->internal_flags &= ~flag;
+		dlist_remove(&ope->queued_entry);
 	}
 
-	ope->internal_flags &= ~flag;
-	dlist_remove(&ope->queued_entry);
+	if (flag == EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
+		--ope->ep->ope_queued_before_handshake_cnt;
+
 	return ret;
 }
