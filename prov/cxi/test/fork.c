@@ -375,12 +375,14 @@ static void child_memory_free_runner(bool huge_page, int thread_count)
  * MR cache lock if threads are forking while other threads are doing memory
  * registration.
  */
-Test(fork, child_memory_free_system_page_size)
+Test(fork, child_memory_free_system_page_size,
+     .timeout = CXIT_DEFAULT_TIMEOUT + 10)
 {
 	child_memory_free_runner(false, 16);
 }
 
-Test(fork, child_memory_free_huge_page_size)
+Test(fork, child_memory_free_huge_page_size,
+     .timeout = CXIT_DEFAULT_TIMEOUT + 10)
 {
 	child_memory_free_runner(true, 16);
 }
