@@ -137,7 +137,7 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 
 	ibv_pd = ibv_alloc_pd(g_efa_selected_device_list[0].ibv_ctx);
 	if (!ibv_pd) {
-		EFA_WARN(FI_LOG_CORE, "failed to allocate ibv_pd: %d", errno);
+		EFA_WARN(FI_LOG_CORE, "failed to allocate ibv_pd: %d\n", errno);
 		ofi_cudaFree(ptr);
 		return;
 	}

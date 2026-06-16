@@ -1352,7 +1352,7 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 					   EFA_RDM_PKE_FROM_READ_COPY_POOL);
 	if (!pkt_entry_copy) {
 		EFA_WARN(FI_LOG_CQ,
-			"readcopy pkt pool exhausted! Set FI_EFA_READCOPY_POOL_SIZE to a higher value!");
+			"readcopy pkt pool exhausted! Set FI_EFA_READCOPY_POOL_SIZE to a higher value!\n");
 		return -FI_EAGAIN;
 	}
 
