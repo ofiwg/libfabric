@@ -731,7 +731,7 @@ int efa_cq_signal(struct fid_cq *cq_fid)
 	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 	if (!cq->wait_obj) {
 		EFA_WARN(FI_LOG_CQ, "fi_cq_signal is only available if the CQ "
-				 "was configured with a wait object.");
+				 "was configured with a wait object.\n");
 		return -FI_EINVAL;
 	}
 
