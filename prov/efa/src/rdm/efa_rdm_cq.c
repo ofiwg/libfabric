@@ -783,7 +783,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 				 */
 				struct fi_cq_err_entry err_entry = {0};
 
-				EFA_INFO(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv",
+				EFA_INFO(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv\n",
 					efa_strerror(prov_errno), prov_errno);
 				err_entry.op_context = NULL;
 				/*To be consistent with the succeed path. Although man page only refered to: FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)*/
