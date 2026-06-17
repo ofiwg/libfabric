@@ -1,0 +1,69 @@
+name: EFA unit-test build check
+
+# Compile-only check for the EFA provider unit tests (prov/efa/test/).
+
+on:
+  push:
+    paths:
+      - 'prov/efa/test/**'
+      - '.github/workflows/build-efa-unit-tests.yml'
+  pull_request:
+    paths:
+      - 'prov/efa/test/**'
+      - '.github/workflows/build-efa-unit-tests.yml'
+
+permissions: {}
+
+jobs:
+  efa-unit-test-build:
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    container: gcc:15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y \
+            build-essential git make pkg-config \
+            libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev \
+            libnuma-dev libudev-dev uuid-dev cmake ninja-build \
+            libibverbs-dev libcmocka-dev
+
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v4.3.1
+
+      # Stage apt's cmocka under a non-default prefix (/opt/cmocka) so that
+      # configure emits an explicit -L for it; this keeps the provider's
+      # cmocka rpath absolute at link time.
+      - name: Stage cmocka into a non-default prefix
+        run: |
+          set -x
+          libdir=$(dirname "$(dpkg -L libcmocka-dev | grep -m1 'libcmocka\.so$')")
+          incdir=$(dirname "$(dpkg -L libcmocka-dev | grep -m1 '/cmocka\.h$')")
+          mkdir -p /opt/cmocka/lib /opt/cmocka/include
+          ln -s "$libdir"/libcmocka.so* /opt/cmocka/lib/
+          ln -s "$incdir"/cmocka*.h     /opt/cmocka/include/
+
+      - name: Configure + build EFA unit tests (compile-only)
+        run: |
+          set -x
+          ./autogen.sh
+          # --enable-only builds nothing but the explicitly enabled providers.
+          # efa needs shm (efa_shm.c links the shm provider's smr_* symbols).
+          ./configure --prefix="$PWD/install" \
+                      --enable-only \
+                      --enable-efa \
+                      --enable-shm \
+                      --enable-efa-unit-test=/opt/cmocka
+          make -j "$(nproc)" prov/efa/test/efa_unit_test
+
+      - name: Upload config.log on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: efa-unit-test-config.log
+          path: config.log
