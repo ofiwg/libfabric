@@ -2352,7 +2352,7 @@ ssize_t ft_tx_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote,
 {
 	ssize_t ret;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE) && size > 0) {
 		/* Fill data. Last byte reserved for iteration number */
 		ret = ft_fill_buf((char *) tx_buf, size - 1);
 		if (ret)
@@ -2423,7 +2423,7 @@ ssize_t ft_inject_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote,
 {
 	ssize_t ret;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE) && size > 0) {
 		/* Fill data. Last byte reserved for iteration number */
 		ret = ft_fill_buf((char *) tx_buf, size - 1);
 		if (ret)
@@ -2702,7 +2702,7 @@ ssize_t ft_rx_rma(int iter, enum ft_rma_opcodes rma_op, struct fid_ep *ep,
 		return EXIT_FAILURE;
 	}
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE) && size > 0) {
 		ret = ft_check_buf((char *) rx_buf, size - 1);
 		if (ret)
 			return ret;
