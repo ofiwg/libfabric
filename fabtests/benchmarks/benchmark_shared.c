@@ -316,8 +316,8 @@ int pingpong_rma_write(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	if (ft_check_opts(FT_OPT_VERIFY_DATA))
 		inject_size = 0;
 
-	if (opts.transfer_size == 0) {
-		FT_ERR("Zero-sized transfers not supported");
+	if (opts.transfer_size == 0 && rma_op == FT_RMA_WRITE) {
+		FT_ERR("Zero-sized transfers not supported for write op");
 		return EXIT_FAILURE;
 	}
 
@@ -391,11 +391,6 @@ int pingpong_rma_write(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 int pingpong_rma_read(struct fi_rma_iov *remote)
 {
 	int ret, i;
-
-	if (opts.transfer_size == 0) {
-		FT_ERR("Zero-sized transfers not supported");
-		return EXIT_FAILURE;
-	}
 
 	/* Fill tx_buf with data for peer to read from us */
 	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
