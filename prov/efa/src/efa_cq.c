@@ -69,8 +69,8 @@ void efa_cq_read_entry_common(struct efa_ibv_cq *cq, struct fi_cq_msg_entry *ent
 			entry->op_context = direct_ope->context;
 			entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode) : direct_ope->context->completion_flags;
 		} else {
-			entry->op_context = (void *)ibv_cqx->wr_id;
-			entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode): ((struct efa_context *) ibv_cqx->wr_id)->completion_flags;
+			entry->op_context = (void *)(uintptr_t)ibv_cqx->wr_id;
+			entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode): ((struct efa_context *)(uintptr_t)ibv_cqx->wr_id)->completion_flags;
 		}
 	} else {
 		entry->op_context = NULL;
@@ -143,7 +143,7 @@ static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq
 		} else if (efa_env.track_mr) {
 			addr = ((struct efa_direct_ope *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id)->context->addr;
 		} else {
-			addr = ((struct efa_context *)ibv_cq->ibv_cq_ex->wr_id)->addr;
+			addr = ((struct efa_context *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id)->addr;
 		}
 		break;
 	case IBV_WC_RECV: /* fall through */
