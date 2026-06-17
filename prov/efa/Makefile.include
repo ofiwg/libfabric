@@ -293,12 +293,17 @@ noinst_PROGRAMS += prov/efa/test/gtest/efa_gtest
 TESTS += prov/efa/test/gtest/efa_gtest
 
 nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
-	prov/efa/test/gtest/efa_gtest_main.cc
+	prov/efa/test/gtest/efa_gtest_main.cc \
+	prov/efa/test/gtest/efa_gtest_common_mocks.cc \
+	prov/efa/test/gtest/efa_gtest_common_resource.cc \
+	prov/efa/test/gtest/efa_gtest_common_helpers.c
 
 prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	$(gtest_CPPFLAGS) \
 	-I$(top_srcdir)/include \
+	-I$(top_srcdir)/prov/efa/src \
+	-I$(top_srcdir)/prov/efa/src/rdm \
 	-I$(top_srcdir)/prov/efa/test/gtest
 
 prov_efa_test_gtest_efa_gtest_CXXFLAGS = -std=c++17
@@ -310,7 +315,11 @@ prov_efa_test_gtest_efa_gtest_LDADD = \
 prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-static \
 	$(efa_LDFLAGS) \
-	$(gtest_LDFLAGS)
+	$(gtest_LDFLAGS) \
+	-Wl,--wrap=ibv_create_ah \
+	-Wl,--wrap=ibv_destroy_ah \
+	-Wl,--wrap=efadv_query_ah \
+	-Wl,--wrap=efa_av_reverse_av_add
 
 prov_efa_test_gtest_efa_gtest_LIBS = $(linkback)
 

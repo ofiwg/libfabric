@@ -2,8 +2,8 @@
 
 ## How to run
 
-To run efa unit tests, you will need to have cmocka installed.
-* [Cmocka Mirror](https://cmocka.org/files/)
+To run efa unit tests, you will need to have cmocka 1.1.5 installed.
+* [Cmocka Mirror](https://cmocka.org/files/1.1/cmocka-1.1.5.tar.xz)
 * [Install Instructions](https://gitlab.com/cmocka/cmocka/-/blob/master/INSTALL.md)
 
 You will need to configure libfabric with `--enable-efa-unit-test=<path_to_cmocka_install>`.
