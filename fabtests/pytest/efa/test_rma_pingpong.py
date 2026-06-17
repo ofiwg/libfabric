@@ -1,12 +1,12 @@
-from efa.efa_common import efa_run_client_server_test, DIRECT_RMA_SIZES
+from efa.efa_common import efa_run_client_server_test, DIRECT_SIZES
 from common import perf_progress_model_cli, PERF_SIZES, PERF_PR_CI, RMA_PINGPONG_SIZES
 import pytest
 
 
 @pytest.mark.pr_ci
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES,
-                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_SIZES,
+                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_SIZES)
 @pytest.mark.parametrize("operation_type", ["writedata", "read"])
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
@@ -19,7 +19,7 @@ def test_rma_pingpong(cmdline_args, iteration_type, operation_type, rma_bw_compl
 
 
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=RMA_PINGPONG_SIZES, default_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=RMA_PINGPONG_SIZES, default_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["writedata"])
 def test_rma_pingpong_range(cmdline_args, operation_type, rma_bw_completion_semantic, message_sizes,

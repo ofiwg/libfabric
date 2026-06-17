@@ -1,4 +1,4 @@
-from efa.efa_common import efa_run_client_server_test, DIRECT_RMA_SIZES
+from efa.efa_common import efa_run_client_server_test, DIRECT_SIZES
 from common import (perf_progress_model_cli, ClientServerTest,
                     PERF_SIZES, PERF_PR_CI, RANGE_SIZES, INJECT_SIZES)
 import pytest
@@ -7,8 +7,8 @@ import copy
 
 @pytest.mark.pr_ci
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES,
-                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_SIZES,
+                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_SIZES)
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
@@ -22,7 +22,7 @@ def test_rma_bw(cmdline_args, iteration_type, rma_operation_type, rma_bw_complet
                                timeout=timeout, fabric=rma_fabric)
 
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_SIZES)
 @pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"]])
 def test_rma_bw_small_tx_rx(cmdline_args, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, env_vars, rma_fabric, message_sizes):
     cmdline_args_copy = copy.copy(cmdline_args)
@@ -38,7 +38,7 @@ def test_rma_bw_small_tx_rx(cmdline_args, rma_operation_type, rma_bw_completion_
                                timeout=timeout, fabric=rma_fabric)
 
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=RANGE_SIZES, default_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=RANGE_SIZES, default_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
 def test_rma_bw_range(cmdline_args, rma_operation_type, rma_bw_completion_semantic, message_sizes, rma_bw_memory_type, rma_fabric):
     command = "fi_rma_bw -e rdm"
@@ -102,7 +102,7 @@ def test_rma_bw_large(cmdline_args, operation_type, rma_bw_completion_semantic, 
                                memory_type="host_to_host", warmup_iteration_type=0, timeout=timeout, fabric=rma_fabric)
 
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=INJECT_SIZES, default_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=INJECT_SIZES, default_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["writedata", "write"])
 @pytest.mark.parametrize("iteration_type",
@@ -120,8 +120,8 @@ def test_rma_bw_use_fi_more(cmdline_args, operation_type, iteration_type, rma_bw
 
 
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES,
-                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_SIZES,
+                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
 @pytest.mark.parametrize("comp_method", ["sread", "fd"])
 def test_rma_bw_sread(cmdline_args, rma_operation_type, rma_bw_completion_semantic,
@@ -145,8 +145,8 @@ def test_rma_bw_sread(cmdline_args, rma_operation_type, rma_bw_completion_semant
 
 @pytest.mark.pr_ci
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES,
-                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_SIZES,
+                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["write", "writedata"])
 # Only test host and cuda memory; other HMEM types do not change the RMA path.
@@ -167,8 +167,8 @@ def test_efa_rma_bw_high_pps(cmdline_args, operation_type, mem_type, rma_fabric)
 # Testing the batch mode of fi_efa_rma_bw (--post-list) which batch multiple WQEs with FI_MORE
 @pytest.mark.pr_ci
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES,
-                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_SIZES,
+                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["write", "writedata"])
 # Only test host and cuda memory; other HMEM types do not change the RMA path.
@@ -189,8 +189,8 @@ def test_efa_rma_bw_batch(cmdline_args, operation_type, mem_type, rma_fabric):
 # Testing the multi-ep + batch mode of fi_efa_rma_bw, which spins multiple EPs to initiate rdma requests
 @pytest.mark.pr_ci
 @pytest.mark.fabric(params=["efa", "efa-direct"])
-@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_RMA_SIZES,
-                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_SIZES,
+                           pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["write", "writedata"])
 # Only test host and cuda memory; other HMEM types do not change the RMA path.

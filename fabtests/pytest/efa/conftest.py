@@ -39,7 +39,7 @@ def choose_message_sizes_for_fabric_test_type(fabric, test_type, sizes_marker, n
     Return all matching message-size lists for (fabric, test_type) from a
     @pytest.mark.message_sizes marker.
     example:
-    @pytest.mark.message_sizes(default_efa=PERF_SIZES, pr_ci_efa=DIRECT_RMA_SIZES)
+    @pytest.mark.message_sizes(default_efa=PERF_SIZES, pr_ci_efa=DIRECT_SIZES)
                    ^sizes marker   ^kwarg_name   ^kwarg_sizes
     """
     sizes = []

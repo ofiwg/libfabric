@@ -1,7 +1,7 @@
 import os
 import pytest
 from common import ClientServerTest
-from efa.efa_common import DIRECT_SIZES, DIRECT_RMA_SIZES
+from efa.efa_common import DIRECT_SIZES
 
 @pytest.fixture(autouse=True)
 def skip_if_not_built(cmdline_args):
@@ -24,7 +24,7 @@ def test_efa_hw_cntr_pingpong(cmdline_args, message_sizes, fabric):
 
 
 @pytest.mark.fabric(params=["efa-direct"])
-@pytest.mark.message_sizes(default_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa_direct=DIRECT_SIZES)
 @pytest.mark.short
 @pytest.mark.functional
 def test_efa_hw_cntr_rma_write(cmdline_args, message_sizes, rma_fabric):
@@ -50,7 +50,7 @@ def test_efa_hw_cntr_pingpong_ext_mem(cmdline_args, message_sizes, fabric):
 
 
 @pytest.mark.fabric(params=["efa-direct"])
-@pytest.mark.message_sizes(default_efa_direct=DIRECT_RMA_SIZES)
+@pytest.mark.message_sizes(default_efa_direct=DIRECT_SIZES)
 @pytest.mark.short
 @pytest.mark.functional
 def test_efa_hw_cntr_rma_write_ext_mem(cmdline_args, message_sizes, rma_fabric):
