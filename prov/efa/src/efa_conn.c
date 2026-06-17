@@ -303,13 +303,8 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	err = efa_av_reverse_av_add(av, cur_reverse_av, prv_reverse_av, conn);
 	if (err) {
 		if (av->domain->info_type == EFA_INFO_RDM) {
-			/* insert_implicit_av is only true for the CQ read path
-			 * which already has the SRX lock */
-			if (insert_implicit_av)
-				ofi_genlock_lock(&av->domain->srx_lock);
+			assert(ofi_genlock_held(&av->domain->srx_lock));
 			efa_conn_rdm_deinit(av, conn);
-			if (insert_implicit_av)
-				ofi_genlock_unlock(&av->domain->srx_lock);
 		}
 		goto err_release;
 	}
@@ -319,8 +314,11 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	return conn;
 
 err_release:
-	if (conn->ah)
+	if (conn->ah) {
+		if (insert_implicit_av)
+			dlist_remove(&conn->ah_implicit_conn_list_entry);
 		efa_ah_release(av->domain, conn->ah, insert_implicit_av);
+	}
 
 	conn->ep_addr = NULL;
 	err = ofi_av_remove_addr(util_av, fi_addr);
