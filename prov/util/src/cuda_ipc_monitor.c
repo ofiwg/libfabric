@@ -56,6 +56,7 @@ static bool cuda_ipc_monitor_valid(struct ofi_mem_monitor *monitor,
 
 #endif /* HAVE_CUDA */
 static struct ofi_mem_monitor cuda_ipc_monitor_ = {
+	.iface = FI_HMEM_CUDA,
 	.init = ofi_monitor_init,
 	.cleanup = ofi_monitor_cleanup,
 	.start = ofi_monitor_start_no_op,

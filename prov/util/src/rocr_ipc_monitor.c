@@ -57,6 +57,7 @@ static bool rocr_ipc_monitor_valid(struct ofi_mem_monitor *monitor,
 #endif /* HAVE_ROCR */
 
 static struct ofi_mem_monitor rocr_ipc_monitor_ = {
+	.iface = FI_HMEM_ROCR,
 	.init = ofi_monitor_init,
 	.cleanup = ofi_monitor_cleanup,
 	.start = ofi_monitor_start_no_op,
