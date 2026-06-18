@@ -635,9 +635,10 @@ static int ze_hmem_cleanup_internal(int fini_workaround)
 					"Failed to destroy ZE cmd_queue\n");
 				ret = -FI_EINVAL;
 			}
+
+			if (dev_info[i].cl_pool)
+				ofi_bufpool_destroy(dev_info[i].cl_pool);
 		}
-		if (dev_info[i].cl_pool)
-			ofi_bufpool_destroy(dev_info[i].cl_pool);
 	}
 
 	free(devices);
