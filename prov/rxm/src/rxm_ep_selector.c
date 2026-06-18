@@ -20,12 +20,12 @@ static uint8_t rxm_rr_next(struct rxm_rr_selector *rr, struct rxm_conn *conn)
 {
 	uint8_t idx;
 
-	if (conn->num_msg_eps <= 1)
+	if (OFI_UNLIKELY(conn->num_msg_eps <= 1))
 		return 0;
 
 	idx = 1 + (rr->rr_counter % (conn->num_msg_eps - 1));
 
-	if (conn->states[idx] == RXM_CM_CONNECTED) {
+	if (OFI_LIKELY(conn->states[idx] == RXM_CM_CONNECTED)) {
 		rr->rr_counter++;
 		return idx;
 	}
@@ -51,7 +51,7 @@ static uint8_t rxm_rr_select(struct rxm_conn *conn, const struct rxm_pkt *pkt)
                 // RMA / rndv-RMA .
 		return rxm_rr_next(rr, conn);
 
-	if (pkt->ctrl_hdr.type != rxm_ctrl_seg)
+	if (OFI_LIKELY(pkt->ctrl_hdr.type != rxm_ctrl_seg))
                 // Not SAR
 		return 0;
 
@@ -67,8 +67,8 @@ static uint8_t rxm_rr_select(struct rxm_conn *conn, const struct rxm_pkt *pkt)
 		/* On map-grow OOM, fall back to ep 0 for the rest of this
 		 * SAR message. Subsequent segments will also miss the
 		 * lookup and land on 0, preserving in-order delivery. */
-		if (ofi_idm_set(&rr->sar_pins, (int) msg_id,
-				(void *)(uintptr_t)(idx + 1)) < 0)
+		if (OFI_UNLIKELY(ofi_idm_set(&rr->sar_pins, (int) msg_id,
+				(void *)(uintptr_t)(idx + 1)) < 0))
 			return 0;
 		return idx;
 
