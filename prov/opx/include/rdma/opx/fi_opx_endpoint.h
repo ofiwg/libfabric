@@ -576,7 +576,8 @@ struct fi_opx_ep {
 	bool		   use_prefault_write;
 	bool		   use_expected_tid_rzv;
 	bool		   use_hfisvc;
-	char		   unused_c[17];
+	char		   unused_c[13];
+	uint32_t	   gpu_ipc_min_threshold;
 	enum fi_hmem_iface use_gpu_ipc;
 	ofi_spin_t	   lock; /* lock size varies based on ENABLE_DEBUG */
 

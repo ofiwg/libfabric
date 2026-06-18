@@ -1176,6 +1176,10 @@ OPX_INI
 	fi_param_define(
 		&fi_opx_provider, "gpu_ipc_intranode", FI_PARAM_BOOL,
 		"Controls whether IPC will be used to facilitate GPU to GPU intranode copies over PCIe, NVLINK, or xGMI. If support is available, it is enabled by default.");
+	fi_param_define(
+		&fi_opx_provider, "gpu_ipc_min", FI_PARAM_INT,
+		"The minimum message length in bytes where GPU IPC will be used for intranode GPU buffers. Value must be >= %d. Defaults to %d.",
+		OPX_GPU_IPC_MIN_THRESHOLD_MIN, OPX_GPU_IPC_MIN_THRESHOLD_DEFAULT);
 #endif
 	fi_param_define(
 		&fi_opx_provider, "route_control", FI_PARAM_STRING,

@@ -446,7 +446,7 @@ int opx_hmem_stream_create(enum fi_hmem_iface iface, union opx_hmem_stream **str
 	}
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
-		result = ofi_cuStreamCreate(&new_stream->cu_stream, CU_STREAM_DEFAULT);
+		result = ofi_cuStreamCreate(&new_stream->cu_stream, CU_STREAM_NON_BLOCKING);
 	}
 #endif
 	if (result) {
@@ -496,12 +496,12 @@ int opx_hmem_event_create(enum fi_hmem_iface iface, struct opx_hmem_domain *doma
 	}
 #if HAVE_CUDA
 	if (iface == FI_HMEM_CUDA) {
-		result = ofi_cuEventCreate(&new_event->cu_event, CU_EVENT_DEFAULT);
+		result = ofi_cuEventCreate(&new_event->cu_event, CU_EVENT_DISABLE_TIMING);
 	}
 #endif
 	if (result) {
 		opx_hmem_dbg_trace(iface, "Error creating the event", result);
-		free(new_event);
+		OPX_BUF_FREE(new_event);
 		return OPX_HMEM_ERROR;
 	}
 	*event = new_event;
@@ -674,13 +674,15 @@ void opx_hmem_memcpy_async(enum fi_hmem_iface iface, uint64_t device, void *dst,
 	if (ret) {
 		opx_hmem_stream_synchronize(iface, domain->hmem_stream.stream);
 		opx_hmem_event_destroy(iface, &new_event);
+		goto err;
 	}
 
 	*event = new_event;
 	return;
 
 err:
-	ret = ofi_copy_to_hmem(iface, device, dst, src, size);
+	*event = NULL;
+	ret    = ofi_copy_to_hmem(iface, device, dst, src, size);
 	if (ret) {
 		opx_hmem_dbg_trace(iface, "Error trying to synchronously copy", ret);
 		abort();

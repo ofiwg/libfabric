@@ -3602,6 +3602,22 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 		}
 	}
 	opx_ep->use_gpu_ipc = use_ipc;
+
+	int gpu_ipc_min_threshold;
+	if (fi_param_get_int(fi_opx_global.prov, "gpu_ipc_min", &gpu_ipc_min_threshold) != FI_SUCCESS) {
+		opx_ep->gpu_ipc_min_threshold = OPX_GPU_IPC_MIN_THRESHOLD_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_GPU_IPC_MIN not set.  Using default setting of %u\n",
+				   opx_ep->gpu_ipc_min_threshold);
+	} else if (gpu_ipc_min_threshold < OPX_GPU_IPC_MIN_THRESHOLD_MIN) {
+		opx_ep->gpu_ipc_min_threshold = OPX_GPU_IPC_MIN_THRESHOLD_DEFAULT;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_GPU_IPC_MIN was set below the minimum threshold (%d).  Using default setting of %u\n",
+			OPX_GPU_IPC_MIN_THRESHOLD_MIN, opx_ep->gpu_ipc_min_threshold);
+	} else {
+		opx_ep->gpu_ipc_min_threshold = (uint32_t) gpu_ipc_min_threshold;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_GPU_IPC_MIN was specified.  Set to %u\n",
+				   opx_ep->gpu_ipc_min_threshold);
+	}
 #endif
 
 #ifndef OPX_DEV_OVERRIDE

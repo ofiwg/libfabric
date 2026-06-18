@@ -116,6 +116,9 @@ struct fi_opx_ep_tx;
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MIN (FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
 #define OPX_RZV_MIN_PAYLOAD_BYTES_MAX (OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX + 1) /* Max value */
 
+#define OPX_GPU_IPC_MIN_THRESHOLD_DEFAULT (2048)
+#define OPX_GPU_IPC_MIN_THRESHOLD_MIN	  (0)
+
 /* Default for payload threshold size for multi-HFI striping (RZV transfers only) */
 #define OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES_DEFAULT (65536)
 
