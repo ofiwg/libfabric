@@ -297,7 +297,8 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_common_mocks.cc \
 	prov/efa/test/gtest/efa_gtest_common_resource.cc \
 	prov/efa/test/gtest/efa_gtest_common_helpers.c \
-	prov/efa/test/gtest/efa_gtest_conn.cc
+	prov/efa/test/gtest/efa_gtest_conn.cc \
+	prov/efa/test/gtest/efa_gtest_ah.cc
 
 prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
 	$(AM_CPPFLAGS) \

@@ -27,9 +27,9 @@ You can then directly execute the test executable:
 * `efa_gtest_{component}.cc`: The tests themselves, one file per component (e.g. `efa_gtest_conn.cc`).
 
 ## What Should be Tested
-1. We are biased toward testing public, stable functions, e.g. we prefer testing `fi_*` to `efa_*` - the former more closely resembles real user behavior.
-1. We make a conscious trade-off to test larger rather than smaller units. A large test unit consists of more state variables, and testing it gives us more confidence in the overall system.
-2. We are biased toward testing edge cases over "happy cases", especially if the code path under test cannot be covered by integration tests.
+1. Unit tests should test `efa_*` functions as opposed to `fi_*` functions - the latter should be left to integration tests as much as possible.
+2. We make a conscious trade-off to test larger rather than smaller units. Hitting small but trivial units can increase coverage but don't test anything interesting.
+3. We are biased toward testing edge cases over "happy cases", especially if the code path under test cannot be covered by integration tests.
 
 ## How to write
 1. Read the [GoogleTest documentation](https://google.github.io/googletest/), particularly the [primer](https://google.github.io/googletest/primer.html), and the [gMock Cookbook](https://google.github.io/googletest/gmock_cook_book.html).
