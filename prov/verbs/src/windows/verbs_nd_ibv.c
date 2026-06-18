@@ -946,3 +946,11 @@ int ibv_post_srq_recv(struct ibv_srq *srq, struct ibv_recv_wr *recv_wr,
 	VRB_TRACE(FI_LOG_FABRIC, "\n");
 	return ENOSYS;
 }
+
+ssize_t _ibv_query_gid_table(struct ibv_context *context,
+							 struct ibv_gid_entry *entries, size_t max_entries,
+							 uint32_t flags)
+{
+	VRB_TRACE(FI_LOG_FABRIC, "\n");
+	return ENOSYS;
+}

@@ -36,6 +36,7 @@
 
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <netdb.h>
 #include <stdint.h>
 #include <rdma/rdma_cma.h>
 
@@ -187,6 +188,7 @@ int vrb_check_ep_attr(const struct fi_info *hints,
 
 	switch (hints->ep_attr->protocol) {
 	case FI_PROTO_UNSPEC:
+	case FI_PROTO_UD_CM_IB_RC:
 	case FI_PROTO_RDMA_CM_IB_RC:
 	case FI_PROTO_RDMA_CM_IB_XRC:
 	case FI_PROTO_IWARP:
@@ -252,8 +254,13 @@ static int vrb_check_hints(uint32_t version, const struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
-	if (!ofi_valid_addr_format(info->addr_format, hints->addr_format))
-		return -FI_ENODATA;
+	if (!ofi_valid_addr_format(info->addr_format, hints->addr_format)) {
+
+		if (!(vrb_gl_data.msg.prefer_cm == VRB_CM_UDCM &&
+		      info->ep_attr->type == FI_EP_MSG &&
+		      hints->addr_format == FI_ADDR_IB_UD))
+			return -FI_ENODATA;
+	}
 
 	prov_mode = ofi_mr_get_prov_mode(version, hints, info);
 
@@ -368,14 +375,14 @@ int vrb_set_rai(uint32_t addr_format, void *src_addr, size_t src_addrlen,
 }
 
 static inline
-void *vrb_dgram_ep_name_to_string(const struct ofi_ib_ud_ep_name *name,
+void *vrb_dgram_ep_name_to_string(const struct ofi_addr_ib_ud *name,
 				     size_t *len)
 {
 	char *str;
 	if (!name)
 		return NULL;
 
-	*len = sizeof(struct ofi_ib_ud_ep_name);
+	*len = sizeof(struct ofi_addr_ib_ud);
 
 	str = calloc(*len, 1);
 	if (!str)
@@ -389,7 +396,7 @@ void *vrb_dgram_ep_name_to_string(const struct ofi_ib_ud_ep_name *name,
 	return str;
 }
 
-static int vrb_fill_addr_by_ep_name(struct ofi_ib_ud_ep_name *ep_name,
+static int vrb_fill_addr_by_ep_name(struct ofi_addr_ib_ud *ep_name,
 				       uint32_t fmt, void **addr, size_t *addrlen)
 {
 	if (fmt == FI_ADDR_STR) {
@@ -809,6 +816,68 @@ static bool vrb_hmem_supported(const char *dev_name)
 	return false;
 }
 
+/*
+ * Auto-detect the best GID index for a device when not explicitly set.
+ * For RoCE: prefer RoCEv2 IPv4-mapped > RoCEv2 link-local > fallback to 0.
+ * For pure IB: use the first valid IB GID entry > fallback to 0.
+ * Returns the resolved GID index.
+ */
+int vrb_resolve_gid_idx_for_device(struct ibv_context *ctx)
+{
+	struct ibv_gid_entry entries[16];
+	ssize_t n;
+	int best = 0;
+	int best_score = 0;
+	bool found_roce_v2 = false;
+
+	/* If user explicitly set gid_idx, use it */
+	if (vrb_gl_data.gid_idx != -1)
+		return vrb_gl_data.gid_idx;
+
+	n = ibv_query_gid_table(ctx, entries, 16, 0);
+	if (n <= 0)
+		return 0;
+
+	/* First pass: look for RoCEv2 entries (IPv4-mapped preferred) */
+	for (ssize_t i = 0; i < n; i++) {
+		int score = 0;
+
+		if (entries[i].port_num != 1)
+			continue;
+		if (entries[i].gid_type != IBV_GID_TYPE_ROCE_V2)
+			continue;
+
+		found_roce_v2 = true;
+		score = 1;
+		/* IPv4-mapped GID: ::ffff:x.x.x.x — bytes 10,11 are 0xff */
+		if (entries[i].gid.raw[10] == 0xff &&
+		    entries[i].gid.raw[11] == 0xff)
+			score = 2;
+		if (score > best_score) {
+			best_score = score;
+			best = entries[i].gid_index;
+		}
+	}
+
+	/* If no RoCEv2 found (pure IB device), use first valid IB GID */
+	if (!found_roce_v2) {
+		for (ssize_t i = 0; i < n; i++) {
+			if (entries[i].port_num != 1)
+				continue;
+			if (entries[i].gid_type == IBV_GID_TYPE_IB) {
+				best = entries[i].gid_index;
+				break;
+			}
+		}
+	}
+
+	FI_INFO(&vrb_prov, FI_LOG_FABRIC,
+		"Resolved gid_idx=%d for device %s\n", best,
+		ibv_get_device_name(ctx->device));
+
+	return best;
+}
+
 static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			     const struct verbs_ep_domain *ep_dom)
 {
@@ -876,8 +945,10 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		goto err;
 
 	switch (ctx->device->transport_type) {
-	case IBV_TRANSPORT_IB:
-		if (ibv_query_gid(ctx, 1, vrb_gl_data.gid_idx, &gid)) {
+	case IBV_TRANSPORT_IB: {
+		int gid_idx = vrb_resolve_gid_idx_for_device(ctx);
+
+		if (ibv_query_gid(ctx, 1, gid_idx, &gid)) {
 			VRB_WARN_ERRNO(FI_LOG_FABRIC, "ibv_query_gid");
 			ret = -errno;
 			goto err;
@@ -894,9 +965,13 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 
 		switch (ep_dom->type) {
 		case FI_EP_MSG:
+			if (ep_dom->protocol != FI_PROTO_UNSPEC) {
+				fi->ep_attr->protocol = ep_dom->protocol;
+				break;
+			}
 			fi->ep_attr->protocol =
-				ep_dom->protocol == FI_PROTO_UNSPEC ?
-				FI_PROTO_RDMA_CM_IB_RC : ep_dom->protocol;
+				vrb_gl_data.msg.prefer_cm == VRB_CM_RDMACM ?
+				FI_PROTO_RDMA_CM_IB_RC : FI_PROTO_UD_CM_IB_RC;
 			break;
 		case FI_EP_DGRAM:
 			fi->ep_attr->protocol = FI_PROTO_IB_UD;
@@ -907,6 +982,7 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			goto err;
 		}
 		break;
+	}
 	case IBV_TRANSPORT_IWARP:
 		fi->fabric_attr->name = strdup(VERBS_IWARP_FABRIC);
 		if (!fi->fabric_attr->name) {
@@ -1335,6 +1411,8 @@ static int vrb_get_srcaddr_devs(struct dlist_entry *verbs_devs,
 	for (fi = *info; fi; fi = fi->next) {
 		if (fi->ep_attr->type == FI_EP_DGRAM)
 			continue;
+		if (fi->addr_format == FI_ADDR_IB_UD)
+			continue;
 		dlist_foreach_container(verbs_devs, struct verbs_dev_info,
 					dev, entry) {
 			if (!vrb_cmp_domain_and_dev_name(fi->domain_attr->name,
@@ -1355,8 +1433,8 @@ static int vrb_get_srcaddr_devs(struct dlist_entry *verbs_devs,
 static int vrb_set_info_addrs(struct fi_info *info,
 				 struct rdma_addrinfo *rai,
 				 uint32_t fmt,
-				 struct ofi_ib_ud_ep_name *src_addr,
-				 struct ofi_ib_ud_ep_name *dest_addr)
+				 struct ofi_addr_ib_ud *src_addr,
+				 struct ofi_addr_ib_ud *dest_addr)
 {
 	struct fi_info *iter_info = info;
 	int ret;
@@ -1440,6 +1518,105 @@ static int vrb_device_has_ipoib_addr(struct dlist_entry *verbs_devs,
 
 #define VERBS_NUM_DOMAIN_TYPES		3
 
+static int vrb_fill_ib_ud_from_sockaddr(const struct sockaddr *sa,
+					struct ofi_addr_ib_ud *ud_addr)
+{
+	memset(ud_addr, 0, sizeof(*ud_addr));
+
+	if (sa->sa_family == AF_INET) {
+		const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
+
+		/* IPv4-mapped GID: ::ffff:a.b.c.d */
+		ud_addr->gid.raw[10] = 0xff;
+		ud_addr->gid.raw[11] = 0xff;
+		memcpy(&ud_addr->gid.raw[12], &sin->sin_addr, 4);
+		ud_addr->service = ntohs(sin->sin_port);
+		return FI_SUCCESS;
+	}
+
+	if (sa->sa_family == AF_INET6) {
+		const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
+
+		memcpy(ud_addr->gid.raw, &sin6->sin6_addr, 16);
+		ud_addr->service = ntohs(sin6->sin6_port);
+		return FI_SUCCESS;
+	}
+
+	if (sa->sa_family == AF_IB) {
+		const struct ofi_sockaddr_ib *sib =
+			(const struct ofi_sockaddr_ib *)sa;
+
+		memcpy(ud_addr->gid.raw, &sib->sib_addr, 16);
+		ud_addr->pkey = sib->sib_pkey;
+		ud_addr->service = ofi_addr_get_port(sa);
+		return FI_SUCCESS;
+	}
+
+	return -FI_EINVAL;
+}
+
+static int vrb_prepend_udcm_msg_dup(struct fi_info *src, struct fi_info **tail)
+{
+	struct fi_info *sa_fi;
+	struct ofi_addr_ib_ud *ud_src = NULL;
+	struct ofi_addr_ib_ud *ud_dst = NULL;
+	int ret;
+
+	if (vrb_gl_data.msg.prefer_cm != VRB_CM_UDCM ||
+	    src->ep_attr->type != FI_EP_MSG)
+		return FI_SUCCESS;
+
+	/* Duplicate src — this copy retains the original sockaddr format */
+	sa_fi = fi_dupinfo(src);
+	if (!sa_fi)
+		return -FI_ENOMEM;
+
+	if (src->src_addr && src->src_addrlen >= sizeof(struct sockaddr)) {
+		ud_src = calloc(1, sizeof(*ud_src));
+		if (!ud_src) {
+			fi_freeinfo(sa_fi);
+			return -FI_ENOMEM;
+		}
+
+		ret = vrb_fill_ib_ud_from_sockaddr((const struct sockaddr *) src->src_addr,
+						   ud_src);
+		if (ret) {
+			free(ud_src);
+			ud_src = NULL;
+		}
+	}
+
+	if (src->dest_addr && src->dest_addrlen >= sizeof(struct sockaddr)) {
+		ud_dst = calloc(1, sizeof(*ud_dst));
+		if (!ud_dst) {
+			free(ud_src);
+			fi_freeinfo(sa_fi);
+			return -FI_ENOMEM;
+		}
+
+		ret = vrb_fill_ib_ud_from_sockaddr((const struct sockaddr *) src->dest_addr,
+						   ud_dst);
+		if (ret) {
+			free(ud_dst);
+			ud_dst = NULL;
+		}
+	}
+
+	free(src->src_addr);
+	src->src_addr = ud_src;
+	src->src_addrlen = ud_src ? sizeof(*ud_src) : 0;
+	free(src->dest_addr);
+	src->dest_addr = ud_dst;
+	src->dest_addrlen = ud_dst ? sizeof(*ud_dst) : 0;
+	src->addr_format = FI_ADDR_IB_UD;
+
+	sa_fi->next = src->next;
+	src->next = sa_fi;
+	*tail = sa_fi;
+
+	return FI_SUCCESS;
+}
+
 static int vrb_init_info(struct dlist_entry *verbs_devs,
 			 struct fi_info **all_infos)
 {
@@ -1463,7 +1640,8 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 	}
 
 	/* List XRC MSG_EP domain before default RC MSG_EP if requested */
-	if (vrb_gl_data.msg.prefer_xrc) {
+	if (vrb_gl_data.msg.prefer_xrc &&
+		vrb_gl_data.msg.prefer_cm == VRB_CM_RDMACM) {
 		if (VERBS_HAVE_XRC)
 			ep_type[dom_count++] = &verbs_msg_xrc_domain;
 		else
@@ -1485,7 +1663,8 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 	else
 		ep_type[dom_count++] = &verbs_msg_domain;
 
-	if (!vrb_gl_data.msg.prefer_xrc && VERBS_HAVE_XRC)
+	if (!vrb_gl_data.msg.prefer_xrc && VERBS_HAVE_XRC &&
+		vrb_gl_data.msg.prefer_cm == VRB_CM_RDMACM)
 		ep_type[dom_count++] = &verbs_msg_xrc_domain;
 
 	ep_type[dom_count++] = &verbs_dgram_domain;
@@ -1548,6 +1727,8 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 				tail->next = fi;
 			tail = fi;
 
+			(void) vrb_prepend_udcm_msg_dup(fi, &tail);
+
 			/* If verbs HMEM is supported, duplicate previously
 			 * allocated fi_info and apply HMEM flags.
 			 */
@@ -1563,6 +1744,8 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 
 				tail->next = fi;
 				tail = fi;
+
+				(void) vrb_prepend_udcm_msg_dup(fi, &tail);
 			}
 		}
 	}
@@ -1751,11 +1934,18 @@ static int vrb_del_info_not_belong_to_dev(const char *dev_name, struct fi_info *
 }
 
 static int vrb_resolve_ib_ud_dest_addr(const char *node, const char *service,
-					  struct ofi_ib_ud_ep_name **dest_addr)
+					  struct ofi_addr_ib_ud **dest_addr)
 {
 	int svc = VERBS_IB_UD_NS_ANY_SERVICE;
+	int ns_port;
+
+	if (service)
+		svc = atoi(service);
+
+	ns_port = (svc > 0) ? svc : vrb_gl_data.dgram.name_server_port;
+
 	struct util_ns ns = {
-		.port = vrb_gl_data.dgram.name_server_port,
+		.port = ns_port,
 		.name_len = sizeof(**dest_addr),
 		.service_len = sizeof(svc),
 		.service_cmp = vrb_dgram_ns_service_cmp,
@@ -1764,9 +1954,7 @@ static int vrb_resolve_ib_ud_dest_addr(const char *node, const char *service,
 
 	ofi_ns_init(&ns);
 
-	if (service)
-		svc = atoi(service);
-	*dest_addr = (struct ofi_ib_ud_ep_name *)
+	*dest_addr = (struct ofi_addr_ib_ud *)
 		ofi_ns_resolve_name(&ns, node, &svc);
 	if (*dest_addr) {
 		VERBS_INFO_NODE_2_UD_ADDR(FI_LOG_CORE, node, svc, *dest_addr);
@@ -1804,11 +1992,241 @@ static void vrb_delete_dgram_infos(struct fi_info **info)
 	}
 }
 
+static int vrb_set_ib_ud_addr_from_ipv4(const struct sockaddr_in *sin,
+					 struct ofi_addr_ib_ud **ud_addr)
+{
+	struct ofi_addr_ib_ud *addr;
+
+	addr = calloc(1, sizeof(*addr));
+	if (!addr)
+		return -FI_ENOMEM;
+
+	addr->gid.raw[10] = 0xff;
+	addr->gid.raw[11] = 0xff;
+	memcpy(&addr->gid.raw[12], &sin->sin_addr, 4);
+	addr->service = sin->sin_port ? ntohs(sin->sin_port) : 1;
+
+	*ud_addr = addr;
+	return FI_SUCCESS;
+}
+
+static int vrb_set_msg_src_ib_ud(struct fi_info *fi, const struct sockaddr *sa)
+{
+	struct ofi_addr_ib_ud *ud_src;
+	int ret;
+
+	ud_src = calloc(1, sizeof(*ud_src));
+	if (!ud_src)
+		return -FI_ENOMEM;
+
+	ret = vrb_fill_ib_ud_from_sockaddr(sa, ud_src);
+	if (ret) {
+		free(ud_src);
+		return ret;
+	}
+
+	free(fi->src_addr);
+	fi->src_addr = ud_src;
+	fi->src_addrlen = sizeof(*ud_src);
+	return FI_SUCCESS;
+}
+
+static int vrb_set_msg_dest_from_ipv4(struct fi_info *fi,
+				      const struct sockaddr_in *sin,
+				      bool force_nonzero_port)
+{
+	struct sockaddr_in *dsin;
+	struct ofi_addr_ib_ud *ud_dst;
+	int ret;
+
+	if (fi->addr_format == FI_ADDR_IB_UD) {
+		ret = vrb_set_ib_ud_addr_from_ipv4(sin, &ud_dst);
+		if (ret)
+			return ret;
+
+		free(fi->dest_addr);
+		fi->dest_addr = ud_dst;
+		fi->dest_addrlen = sizeof(*ud_dst);
+		return FI_SUCCESS;
+	}
+
+	dsin = calloc(1, sizeof(*dsin));
+	if (!dsin)
+		return -FI_ENOMEM;
+
+	*dsin = *sin;
+	if (force_nonzero_port)
+		dsin->sin_port = htons(1);
+
+	free(fi->dest_addr);
+	fi->dest_addr = dsin;
+	fi->dest_addrlen = sizeof(*dsin);
+	return FI_SUCCESS;
+}
+
+static int vrb_set_all_msg_dest_from_ipv4(struct fi_info *info,
+					  const struct sockaddr_in *sin,
+					  bool force_nonzero_port)
+{
+	struct fi_info *fi;
+	int ret;
+
+	for (fi = info; fi; fi = fi->next) {
+		if (fi->ep_attr->type == FI_EP_DGRAM)
+			continue;
+
+		ret = vrb_set_msg_dest_from_ipv4(fi, sin, force_nonzero_port);
+		if (ret)
+			return ret;
+	}
+
+	return FI_SUCCESS;
+}
+
+
+int vrb_udcm_getinfo_addr(struct dlist_entry *verbs_devs,
+			 const char *node, const char *service,
+			 uint64_t flags, const struct fi_info *hints,
+			 struct fi_info **info)
+{
+	struct fi_info *fi;
+	int ret, found = 0;
+
+	ret = vrb_get_srcaddr_devs(verbs_devs, info);
+	if (ret)
+		return ret;
+
+	for (fi = *info; fi; fi = fi->next) {
+		if (fi->ep_attr->type == FI_EP_DGRAM)
+			continue;
+
+		if (fi->addr_format == FI_ADDR_IB_UD) {
+			struct fi_info *src_fi;
+			const struct sockaddr *sa = NULL;
+
+			for (src_fi = *info; src_fi; src_fi = src_fi->next) {
+				if (src_fi->ep_attr->type != FI_EP_MSG)
+					continue;
+				if (src_fi->addr_format == FI_ADDR_IB_UD)
+					continue;
+				if (!src_fi->src_addr)
+					continue;
+
+				if (!strcmp(fi->domain_attr->name, VERBS_ANY_DOMAIN) ||
+				    !vrb_cmp_domain_and_dev_name(fi->domain_attr->name,
+							  src_fi->domain_attr->name)) {
+					sa = src_fi->src_addr;
+					break;
+				}
+			}
+
+			if (sa) {
+				ret = vrb_set_msg_src_ib_ud(fi, sa);
+				if (ret)
+					continue;
+
+				found++;
+			}
+			continue;
+		}
+
+		if (!fi->src_addr &&
+		    !strcmp(fi->domain_attr->name, VERBS_ANY_DOMAIN)) {
+			struct verbs_dev_info *dev;
+
+			if (!dlist_empty(verbs_devs)) {
+				dlist_foreach_container(verbs_devs,
+							struct verbs_dev_info,
+							dev, entry) {
+					ret = vrb_info_add_dev_addr(&fi, dev);
+					if (ret)
+						return ret;
+					break;
+				}
+			}
+		}
+
+		if (fi->src_addr)
+			found++;
+	}
+
+	if (node && !(flags & FI_SOURCE)) {
+		struct addrinfo ai_hints = {
+			.ai_family   = AF_INET,
+			.ai_socktype = SOCK_STREAM,
+		};
+		struct addrinfo *ai = NULL;
+		int gai_ret;
+
+		gai_ret = getaddrinfo(node, service, &ai_hints, &ai);
+		if (!gai_ret && ai) {
+			ret = vrb_set_all_msg_dest_from_ipv4(*info,
+							 (struct sockaddr_in *)ai->ai_addr,
+							 true);
+			if (ret) {
+				freeaddrinfo(ai);
+				return ret;
+			}
+			freeaddrinfo(ai);
+		} else if (gai_ret) {
+			VRB_INFO(FI_LOG_FABRIC,
+				 "udcm: getaddrinfo(%s) failed: %s\n",
+				 node, gai_strerror(gai_ret));
+			return -FI_ENODATA;
+		}
+	} else if (hints && hints->dest_addr && !(flags & FI_SOURCE)) {
+		const struct sockaddr *sa = hints->dest_addr;
+
+		if (sa->sa_family == AF_INET &&
+		    hints->dest_addrlen >= sizeof(struct sockaddr_in)) {
+			ret = vrb_set_all_msg_dest_from_ipv4(*info,
+							 (const struct sockaddr_in *)sa,
+							 false);
+			if (ret)
+				return ret;
+		} else if (sa->sa_family == AF_IB &&
+			   hints->dest_addrlen >= sizeof(struct ofi_sockaddr_ib)) {
+			for (fi = *info; fi; fi = fi->next) {
+				struct ofi_addr_ib_ud *ud_dst;
+
+				if (fi->ep_attr->type == FI_EP_DGRAM)
+					continue;
+
+				if (fi->addr_format == FI_ADDR_IB_UD) {
+					ud_dst = calloc(1, sizeof(*ud_dst));
+					if (!ud_dst)
+						return -FI_ENOMEM;
+
+					ret = vrb_fill_ib_ud_from_sockaddr(sa, ud_dst);
+					if (ret) {
+						free(ud_dst);
+						return ret;
+					}
+
+					free(fi->dest_addr);
+					fi->dest_addr = ud_dst;
+					fi->dest_addrlen = sizeof(*ud_dst);
+					continue;
+				}
+
+				free(fi->dest_addr);
+				fi->dest_addr = mem_dup(hints->dest_addr,
+							hints->dest_addrlen);
+				if (!fi->dest_addr)
+					return -FI_ENOMEM;
+				fi->dest_addrlen = hints->dest_addrlen;
+			}
+		}
+	}
+
+	return found ? FI_SUCCESS : -FI_ENODATA;
+}
+
 static int vrb_handle_ib_ud_addr(const char *node, const char *service,
 				    uint64_t flags, struct fi_info **info)
 {
-	struct ofi_ib_ud_ep_name *dest_addr = NULL;
-	struct ofi_ib_ud_ep_name *src_addr = NULL;
+	struct ofi_addr_ib_ud *dest_addr = NULL;
+	struct ofi_addr_ib_ud *src_addr = NULL;
 	void *addr = NULL;
 	size_t len = 0;
 	uint32_t fmt = FI_FORMAT_UNSPEC;
@@ -1877,10 +2295,10 @@ out:
 	return ret;
 }
 
-static int vrb_handle_sock_addr(struct dlist_entry *verbs_devs,
-				   const char *node, const char *service,
-				   uint64_t flags, const struct fi_info *hints,
-				   struct fi_info **info)
+int vrb_rdmacm_getinfo_addr(struct dlist_entry *verbs_devs,
+			   const char *node, const char *service,
+			   uint64_t flags, const struct fi_info *hints,
+			   struct fi_info **info)
 {
 	struct rdma_cm_id *id = NULL;
 	struct rdma_addrinfo *rai;
@@ -1923,7 +2341,10 @@ static int vrb_get_match_infos(struct dlist_entry *verbs_devs,
 
 	if (!hints || !hints->ep_attr || hints->ep_attr->type == FI_EP_MSG ||
 	    hints->ep_attr->type == FI_EP_UNSPEC) {
-		ret_sock_addr = vrb_handle_sock_addr(verbs_devs, node, service, flags, hints, info);
+		struct vrb_cm_ops *cm_ops = (vrb_gl_data.msg.prefer_cm == VRB_CM_UDCM) ?
+			&vrb_udcm_ops : &vrb_rdmacm_ops;
+		ret_sock_addr = cm_ops->getinfo_addr(verbs_devs,
+				node, service, flags, hints, info);
 		if (ret_sock_addr) {
 			VRB_INFO(FI_LOG_FABRIC,
 				   "handling of the socket address fails - %d\n",
@@ -1989,7 +2410,21 @@ static void vrb_filter_info_by_addr_format(struct fi_info **info, int addr_forma
 	struct fi_info *cur, *prev= NULL, *next = NULL;
 	for (cur = *info; cur; cur = next) {
 		next = cur->next;
-		if (!ofi_match_addr_format(cur->addr_format, addr_format)) {
+
+		if (cur->addr_format == FI_ADDR_IB_UD) {
+			if (addr_format != FI_FORMAT_UNSPEC &&
+			    addr_format != FI_SOCKADDR &&
+			    addr_format != FI_ADDR_IB_UD) {
+				if (prev)
+					prev->next = cur->next;
+				else
+					*info = cur->next;
+				cur->next = NULL;
+				fi_freeinfo(cur);
+			} else {
+				prev = cur;
+			}
+		} else if (!ofi_match_addr_format(cur->addr_format, addr_format)) {
 			if (prev)
 				prev->next = cur->next;
 			else
@@ -2400,6 +2835,9 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		fi_freeinfo(vrb_util_prov.info);
 		vrb_util_prov.info = tmp_info;
 	}
+	if (service && atoi(service) > 0)
+		vrb_gl_data.msg.udcm_ns_port = atoi(service);
+
 	ret = vrb_get_match_infos(&vrb_devs, version, node, service,
 				     flags, hints,
 				     vrb_util_prov.info, info);

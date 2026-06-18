@@ -261,6 +261,7 @@ static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 	CASEENUMSTRN(FI_PROTO_CXI_RNR, len);
 	CASEENUMSTRN(FI_PROTO_LPP, len);
 	CASEENUMSTRN(FI_PROTO_LNX, len);
+	CASEENUMSTRN(FI_PROTO_UD_CM_IB_RC, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;

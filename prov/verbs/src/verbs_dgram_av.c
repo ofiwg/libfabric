@@ -35,7 +35,7 @@
 static inline int vrb_dgram_av_is_addr_valid(struct vrb_dgram_av *av,
 						const void *addr)
 {
-	const struct ofi_ib_ud_ep_name *check_name = addr;
+	const struct ofi_addr_ib_ud *check_name = addr;
 	return (check_name->lid > 0);
 }
 
@@ -58,19 +58,20 @@ vrb_dgram_av_insert_addr(struct vrb_dgram_av *av, const void *addr,
 	struct vrb_dgram_av_entry *av_entry;
 	struct vrb_domain *domain =
 		container_of(av->util_av.domain, struct vrb_domain, util_domain);
+	struct ofi_addr_ib_ud *ud = (struct ofi_addr_ib_ud *)addr;
 
 	struct ibv_ah_attr ah_attr = {
 		.is_global = 0,
-		.dlid = ((struct ofi_ib_ud_ep_name *)addr)->lid,
-		.sl = ((struct ofi_ib_ud_ep_name *)addr)->sl,
+		.dlid = ud->lid,
+		.sl = ud->sl,
 		.src_path_bits = 0,
 		.port_num = 1,
 	};
 
-	if (((struct ofi_ib_ud_ep_name *)addr)->gid.global.interface_id) {
+	if (ud->gid.global.interface_id) {
 		ah_attr.is_global = 1;
 		ah_attr.grh.hop_limit = 64;
-		ah_attr.grh.dgid = ((struct ofi_ib_ud_ep_name *)addr)->gid;
+		ah_attr.grh.dgid = *(union ibv_gid *)&ud->gid;
 		ah_attr.grh.sgid_index = vrb_gl_data.gid_idx;
 	} else if (OFI_UNLIKELY(!vrb_dgram_av_is_addr_valid(av, addr))) {
 		ret = -FI_EADDRNOTAVAIL;
@@ -92,7 +93,7 @@ vrb_dgram_av_insert_addr(struct vrb_dgram_av *av, const void *addr,
 			   "Unable to create Address Handle, errno - %d\n", errno);
 		goto fn2;
 	}
-	av_entry->addr = *(struct ofi_ib_ud_ep_name *)addr;
+	av_entry->addr = *(struct ofi_addr_ib_ud *)addr;
 	dlist_insert_tail(&av_entry->list_entry, &av->av_entry_list);
 
 	if (fi_addr)
@@ -122,7 +123,7 @@ static int vrb_dgram_av_insert(struct fid_av *av_fid, const void *addr,
 	VRB_DBG(FI_LOG_AV, "Inserting %"PRIu64" addresses\n", count);
 	for (i = 0; i < count; i++) {
 		ret = vrb_dgram_av_insert_addr(
-				av, (struct ofi_ib_ud_ep_name *)addr + i,
+				av, (struct ofi_addr_ib_ud *)addr + i,
 				fi_addr ? &fi_addr[i] : NULL, context);
 		if (!ret)
 			success_cnt++;

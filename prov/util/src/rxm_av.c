@@ -304,7 +304,30 @@ static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	}
 
 	av = container_of(av_fid, struct rxm_av, util_av.av_fid.fid);
-	ret = ofi_ip_av_insert(av_fid, addr, count, fi_addr, flags, context);
+
+	if (av->util_av.domain->addr_format == FI_ADDR_IB_UD) {
+		size_t addrlen = sizeof(struct ofi_addr_ib_ud);
+		int success_cnt = 0;
+
+		ret = ofi_verify_av_insert(&av->util_av, flags, context);
+		if (ret)
+			goto out;
+
+		for (size_t i = 0; i < count; i++) {
+			const void *a = (const char *)addr + i * addrlen;
+
+			ofi_genlock_lock(&av->util_av.lock);
+			ret = ofi_av_insert_addr(&av->util_av, a,
+						 fi_addr ? &fi_addr[i] : NULL);
+			ofi_genlock_unlock(&av->util_av.lock);
+			if (!ret)
+				success_cnt++;
+		}
+		ret = success_cnt;
+	} else {
+		ret = ofi_ip_av_insert(av_fid, addr, count, fi_addr, flags,
+				       context);
+	}
 	if (ret < 0)
 		goto out;
 
@@ -341,6 +364,10 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 	int ret;
 
 	av = container_of(av_fid, struct rxm_av, util_av.av_fid.fid);
+
+	if (av->util_av.domain->addr_format == FI_ADDR_IB_UD)
+		return -FI_ENOSYS;
+
 	ret = ofi_verify_av_insert(&av->util_av, flags, context);
 	if (ret)
 		return ret;
@@ -376,6 +403,10 @@ int rxm_av_insertsvc(struct fid_av *av, const char *node, const char *service,
 static const char *rxm_av_straddr(struct fid_av *av_fid, const void *addr,
 				  char *buf, size_t *len)
 {
+	struct util_av *av = container_of(av_fid, struct util_av, av_fid);
+
+	if (av->domain->addr_format == FI_ADDR_IB_UD)
+		return ofi_straddr(buf, len, FI_ADDR_IB_UD, addr);
 	return ofi_ip_av_straddr(av_fid, addr, buf, len);
 }
 
