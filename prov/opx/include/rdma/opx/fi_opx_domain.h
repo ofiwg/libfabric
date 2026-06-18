@@ -141,6 +141,7 @@ struct fi_opx_domain {
 		ofi_atomic64_t			 ref_cnt;
 		void				*libhfi1verbs;
 		int (*initialize)(struct ibv_context *ctx);
+		int (*finalize)(struct ibv_context *ctx);
 		int (*get_client_key)(struct ibv_context *ctx, hfisvc_client_key_t *key);
 		int (*command_queue_open)(hfisvc_client_command_queue_t *command_queue, struct ibv_context *ctx);
 		int (*command_queue_close)(hfisvc_client_command_queue_t *command_queue);
