@@ -100,18 +100,41 @@ The following features are supported:
 
   Hardware counters are created via the `cntr_open_ext` GDA domain op
   (see below). When a hardware counter is bound to an endpoint, it is
-  automatically attached to the QP when the endpoint is enabled. 
-  The counter is implicitly detached when the EP it is attached 
-  to is destroyed. The counter cannot be closed while it is still 
+  automatically attached to the QP when the endpoint is enabled.
+  The counter is implicitly detached when the EP it is attached
+  to is destroyed. The counter cannot be closed while it is still
   attached to any EP; the EP must be closed first.
 
   *fi_cntr_read*, *fi_cntr_readerr*, and *fi_cntr_wait* are not
   supported on the host for GPU memory-backed counters.
 
   Hardware counters do not internally poll the completion queue.
-  When an operation returns *-FI_EAGAIN*, the application must call *fi_cq_read* to 
-  make progress and free CQ space before retrying the operation, regardless of whether 
+  When an operation returns *-FI_EAGAIN*, the application must call *fi_cq_read* to
+  make progress and free CQ space before retrying the operation, regardless of whether
   FI_SELECTIVE_COMPLETION is set. Failure to do so will result in CQ overrun.
+
+# MR ABORTING
+
+On the `efa` fabric of an *FI_EP_RDM* endpoint, an application can abort an
+in-flight transfer by calling `fi_close()` on the source memory region (MR)
+backing it -- the memory region associated with the local buffer for a
+send/write/read transmits operation, or the remote memory region associated
+with a read/write. Closing the MR signals the provider to cancel any in-flight
+operation that still references it.
+
+This does not apply to memory regions that are referenced by posted receive
+operations. The provider will fail to close a memory region that has a
+corresponding posted recv buffer leading to undefined behavior. The only way
+to abort receive operations, and/or TX operations who's memory region is associated
+with posted recv's is by closing the corresponding endpoint.
+
+If the user closes an MR on an outstanding TX operation, and its peer connection is
+functioning normally, the operation is guaranteed to eventually provide a single TX completion.
+The operation may succeed or fail, depending on timing. The exact error completion provided
+depends on underlying protocol used for the transfer. If a receive operation has been matched
+to an aborted TX operation, and its peer connection is functioning normally, the receiver side
+is guaranteed to write a CQ error for the matched receive.  If the peer endpoint is closed, or
+if the peer dies, the corresponding matched TX/RX completions may never complete.
 
 # LIMITATIONS
 
