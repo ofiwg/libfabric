@@ -113,6 +113,54 @@ The following features are supported:
   make progress and free CQ space before retrying the operation, regardless of whether 
   FI_SELECTIVE_COMPLETION is set. Failure to do so will result in CQ overrun.
 
+# MR ABORTING
+
+On the `efa` fabric of an *FI_EP_RDM* endpoint, an application can abort
+in-flight transfers by calling `fi_close()` on a memory registration (MR) that
+backs them, without tearing down the endpoint. Closing the MR signals the
+provider to cancel any operation that still references it.
+
+On the initiating (TX) side, every operation that references a closed source MR
+is guaranteed to reach a terminal error completion: it is never silently
+dropped and is never retried. The operation always completes with an error, but
+the exact completion code depends on where the cancellation was caught:
+
+- When the device flushes an already-posted work request during MR teardown,
+  the operation completes with *FI_ECANCELED*.
+- When the NIC or the provider rejects a work request because its source MR is
+  no longer valid, the operation completes with *FI_ECANCELED* or *FI_EINVAL*.
+- When the abort is reconciled through the provider's peer-notification
+  protocol -- for example a long-read transfer, where the receiver detects the
+  closed source MR on its RDMA read and notifies the initiator -- the operation
+  completes with *FI_ECANCELED* and provider error *FI_EFA_ERR_PEER_ABORTED*.
+
+In every case the application receives exactly one terminal completion per
+posted operation and must not expect the transfer to be retried.
+
+On the target (RX) side, the provider makes a best-effort attempt to notify the
+peer so that a matched receive that can no longer be completed is not left
+outstanding indefinitely. Where the provider can do so, it will generate an
+error completion of *FI_ECANCELED* (provider error *FI_EFA_ERR_PEER_ABORTED*)
+for such a matched receive rather than leaving it pending. This is best-effort:
+it relies on the initiating endpoint still being alive to tell the receiver that
+the transfer was aborted. If the initiator is also gone (for example, its
+endpoint was destroyed), the receiver may not be notified and the matched
+receive may remain outstanding.
+
+Applications can expect the following when an MR is aborted:
+
+- No partial or stale data is delivered for an aborted transfer. A receive
+  buffer that received no completion, or that completed with
+  *FI_EFA_ERR_PEER_ABORTED*, holds no valid payload and may be reposted.
+- Receives that have not yet been matched to an incoming message are unaffected
+  and remain posted.
+- Message ordering is preserved. An aborted message does not strand subsequent
+  messages from the same peer; later messages that did arrive are still
+  delivered in posting order.
+- This behavior applies to the `efa` fabric of the *FI_EP_RDM* endpoint. The
+  `efa-direct` fabric has no provider-level reorder or notification protocol and
+  relies on the device's work-completion errors to report aborted operations.
+
 # LIMITATIONS
 
 ## Completion events
