@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "rdm/efa_rdm_pke_nonreq.h"
 
 static void test_efa_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 			int mr_reg_count, int mr_reg_size)
@@ -1931,5 +1932,255 @@ void test_efa_rdm_mr_gen_check_ope_detects_closed_mr(void **state)
 
 	/* Clean up */
 	efa_rdm_txe_release(txe);
+	free(buf);
+}
+
+/*
+ * Verify that efa-direct fi_send with a closed MR does not crash.
+ * efa_post_send always reads efa_mr->lkey from desc (no conditional
+ * copy path), so this deterministically exercises the cached lkey.
+ */
+void test_efa_direct_fi_send_with_closed_mr_no_crash(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	struct fid_mr *mr = NULL;
+	size_t buf_size = 512;
+	void *buf;
+	struct iovec iov;
+	struct fi_msg msg = {0};
+	void *desc;
+	int ret;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(2, 0),
+						    resource->hints, true, true);
+
+	buf = calloc(buf_size, 1);
+	assert_non_null(buf);
+	ret = fi_mr_reg(resource->domain, buf, buf_size, FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
+	assert_int_equal(ret, 0);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	/* Save the descriptor before closing the MR (ibv_mr becomes NULL) */
+	desc = fi_mr_desc(mr);
+	assert_int_equal(fi_close(&mr->fid), 0);
+
+	/* Mock post_send as success, as we only test that the WR build path doesn't crash */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return_int(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	/* fi_send reads efa_mr->lkey (cached) and does not crash by derefrencing the MR */
+	iov.iov_base = buf;
+	iov.iov_len = buf_size;
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	msg.desc = &desc;
+	msg.addr = peer_addr;
+
+	ret = fi_sendmsg(resource->ep, &msg, FI_COMPLETION);
+	/* assert on the mocked value just for sanity */
+	assert_int_equal(ret, 0);
+
+	free(buf);
+}
+
+/*
+ * Verify that an RNR-queued operation is canceled with FI_ECANCELED
+ * when the MR is closed while the pkt is queued for retransmit.
+ * Progress drives process_queued_ope → gen check fails → CQ error.
+ */
+void test_efa_rdm_mr_gen_check_cancels_rnr_queued_ope(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_cq *efa_rdm_cq;
+	struct efa_ibv_cq *ibv_cq;
+	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err_entry = {0};
+	struct fid_mr *mr = NULL;
+	size_t buf_size = 4096;
+	void *buf;
+	uint64_t wr_id;
+	void *desc;
+	int ret;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	buf = calloc(buf_size, 1);
+	assert_non_null(buf);
+	ret = fi_mr_reg(resource->domain, buf, 4096, FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
+	assert_int_equal(ret, 0);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	/* Mock a successful send, the packet is tracked as submitted */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	desc = fi_mr_desc(mr);
+	ret = fi_send(resource->ep, buf, buf_size, desc, peer_addr, NULL);
+	assert_int_equal(ret, 0);
+
+	/* Retrieve the txe and pkt */
+	txe = container_of(efa_rdm_ep->base_ep.ope_list.next, struct efa_rdm_ope, ep_entry);
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cq = &efa_rdm_cq->efa_cq.ibv_cq;
+	wr_id = (uint64_t)g_ibv_submitted_wr_id_vec[0];
+	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(ibv_cq, wr_id);
+	pkt_entry->ope = txe;
+
+	/* Simulate RNR: complete the tx operation, then queue the packet for retransmit */
+	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
+	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, pkt_entry);
+
+	/* Close MR while the packet is queued */
+	assert_int_equal(fi_close(&mr->fid), 0);
+
+	/* Mock empty CQ poll so progress only processes queued opes */
+	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
+	will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+
+	/* Drive progress, the gen check should fail, and the ope will be canceled */
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAVAIL);
+
+	/* Read the error */
+	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(cq_err_entry.err, FI_ECANCELED);
+
+	free(buf);
+}
+
+/*
+ * Verify that a long-CTS ope is canceled with FI_ECANCELED when the
+ * MR is closed while the ope is on ope_longcts_send_list waiting to
+ * drip CTSDATA packets.
+ */
+void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_cq *efa_rdm_cq;
+	struct efa_ibv_cq *ibv_cq;
+	struct efa_rdm_pke *cts_pke;
+	struct efa_rdm_cts_hdr *cts_hdr;
+	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err_entry = {0};
+	struct fid_mr *mr = NULL;
+	size_t buf_size = 4096;
+	void *buf;
+	uint64_t wr_id;
+	void *desc;
+	int ret;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	buf = calloc(buf_size, 1);
+	assert_non_null(buf);
+	ret = fi_mr_reg(resource->domain, buf, 4096, FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
+	assert_int_equal(ret, 0);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	/* Mock a successful send, the initial RTM goes out */
+	g_efa_unit_test_mocks.efa_qp_post_send = &efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	desc = fi_mr_desc(mr);
+	ret = fi_send(resource->ep, buf, buf_size, desc, peer_addr, NULL);
+	assert_int_equal(ret, 0);
+
+	/* Complete the initial RTM pkt so it doesn't leak on teardown */
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	ibv_cq = &efa_rdm_cq->efa_cq.ibv_cq;
+	wr_id = (uint64_t)g_ibv_submitted_wr_id_vec[0];
+	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(ibv_cq, wr_id);
+	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	/* Retrieve the txe */
+	txe = container_of(efa_rdm_ep->base_ep.ope_list.next, struct efa_rdm_ope, ep_entry);
+
+	/*
+	 * Simulate receiving a CTS: craft a CTS pke and call the handler.
+	 * This sets ope->window and inserts the ope onto ope_longcts_send_list.
+	 */
+	cts_pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(cts_pke);
+	cts_pke->ep = efa_rdm_ep;
+	cts_hdr = (struct efa_rdm_cts_hdr *)cts_pke->wiredata;
+	cts_hdr->type = EFA_RDM_CTS_PKT;
+	cts_hdr->send_id = ofi_buf_index(txe);
+	cts_hdr->recv_id = 0;
+	cts_hdr->recv_length = 4096;
+
+	efa_rdm_pke_handle_cts_recv(cts_pke);
+
+	/* Force RX counters to satisfy invariant after CTS handler released the pke */
+	efa_rdm_ep->efa_rx_pkts_to_post = 0;
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
+	efa_rdm_ep->efa_rx_pkts_held = 0;
+
+	/* Verify ope is on the longcts list */
+	assert_int_equal(txe->state, EFA_RDM_OPE_SEND);
+	assert_true(txe->window > 0);
+	assert_false(dlist_empty(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list));
+
+	/* Close the MR while the ope is waiting to drip CTSDATA */
+	assert_int_equal(fi_close(&mr->fid), 0);
+
+	/* Mock empty CQ and mark peer handshake as received so progress will enter the loop */
+	g_efa_unit_test_mocks.efa_ibv_cq_start_poll = &efa_mock_efa_ibv_cq_start_poll_return_mock;
+	will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
+
+	/* Drive progress, the gen check should fail, and the ope will be canceled */
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAVAIL);
+
+	/* Read the error */
+	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(cq_err_entry.err, FI_ECANCELED);
+
 	free(buf);
 }
