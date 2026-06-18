@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+#include "efa_gtest_common_helpers.h"
 #include "efa.h"
 #include "efa_av.h"
 #include "rdm/efa_rdm_ep.h"
-#include "efa_gtest_common_helpers.h"
 
 void efa_test_fabricate_addr(struct fid_ep *ep, struct efa_ep_addr *addr)
 {
@@ -53,4 +53,14 @@ fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av)
 		return FI_ADDR_NOTAVAIL;
 
 	return fi_addr;
+}
+
+struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
+						fi_addr_t fi_addr)
+{
+	struct efa_av *efa_av =
+		container_of(av, struct efa_av, util_av.av_fid);
+	struct efa_conn *conn = efa_av_addr_to_conn_implicit(efa_av, fi_addr);
+
+	return conn ? conn->ah->ibv_ah : NULL;
 }
