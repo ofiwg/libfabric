@@ -15,7 +15,11 @@ struct rxm_ep_selector {
 
 struct rxm_rr_selector {
 	struct rxm_ep_selector base;
-	uint32_t rr_counter;
+	/* Next RR ep index to try, in [1, num_msg_eps - 1]. Advanced with
+	 * compare-and-wrap instead of a modulo to avoid a runtime integer
+	 * divide in the hot path. Clamped on use so it self-heals if
+	 * num_msg_eps shrinks (e.g. an ep connection fails). */
+	uint8_t rr_next;
 	/* msg_id -> (ep_idx + 1) encoded as void*; entry present means
 	 * the SAR message is pinned to that ep. Absent (NULL) means no
 	 * pin yet. +1 encoding distinguishes "pinned to ep 0" from

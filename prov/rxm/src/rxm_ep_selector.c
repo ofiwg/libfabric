@@ -23,10 +23,16 @@ static uint8_t rxm_rr_next(struct rxm_rr_selector *rr, struct rxm_conn *conn)
 	if (OFI_UNLIKELY(conn->num_msg_eps <= 1))
 		return 0;
 
-	idx = 1 + (rr->rr_counter % (conn->num_msg_eps - 1));
+	/* Self-heal if num_msg_eps shrank (e.g. an ep connection failed)
+	 * and left rr_next pointing past the current end. */
+	if (OFI_UNLIKELY(rr->rr_next >= conn->num_msg_eps))
+		rr->rr_next = 1;
+
+	idx = rr->rr_next;
 
 	if (OFI_LIKELY(conn->states[idx] == RXM_CM_CONNECTED)) {
-		rr->rr_counter++;
+		if (OFI_UNLIKELY(++rr->rr_next >= conn->num_msg_eps))
+			rr->rr_next = 1;
 		return idx;
 	}
 
@@ -105,5 +111,6 @@ struct rxm_ep_selector *rxm_rr_selector_alloc(void)
 
 	rr->base.select = rxm_rr_select;
 	rr->base.destroy = rxm_rr_destroy;
+	rr->rr_next = 1;
 	return &rr->base;
 }
