@@ -37,6 +37,16 @@ int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
  */
 fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av);
 
+struct ibv_ah;
+
+/**
+ * @brief Resolve an implicit-AV fi_addr to the ibv_ah backing its conn.
+ * Lets a test assert which underlying AH a peer insert ended up using
+ * (e.g. that an ENOMEM retry kept the newly created AH).
+ */
+struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
+						fi_addr_t fi_addr);
+
 #ifdef __cplusplus
 }
 #endif
