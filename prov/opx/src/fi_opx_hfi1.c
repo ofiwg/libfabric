@@ -80,7 +80,6 @@
 #define FI_OPX_TID_MSG_MISALIGNED_THRESHOLD (15 * OPX_HFI1_TID_PAGESIZE)
 #endif
 
-#define OPX_GPU_IPC_MIN_THRESHOLD 2048
 /*
  * Return the NUMA node id where the process is currently running.
  */
@@ -6471,7 +6470,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 
 #ifdef OPX_HMEM
 		if (opx_ep->use_gpu_ipc == src_iface && src_iface != FI_HMEM_SYSTEM &&
-		    len >= OPX_GPU_IPC_MIN_THRESHOLD) {
+		    len >= opx_ep->gpu_ipc_min_threshold) {
 			int ret = ofi_hmem_get_base_addr(src_iface, buf, len,
 							 (void **) &payload->rendezvous.ipc.ipc_info.base_addr,
 							 &payload->rendezvous.ipc.ipc_info.base_length);
@@ -6993,7 +6992,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 #ifdef OPX_HMEM
 		if (opx_ep->use_gpu_ipc == src_iface && src_iface != FI_HMEM_SYSTEM &&
-		    len >= OPX_GPU_IPC_MIN_THRESHOLD) {
+		    len >= opx_ep->gpu_ipc_min_threshold) {
 			int ret = ofi_hmem_get_base_addr(src_iface, buf, len,
 							 (void **) &payload->rendezvous.ipc.ipc_info.base_addr,
 							 &payload->rendezvous.ipc.ipc_info.base_length);
