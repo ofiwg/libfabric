@@ -178,7 +178,9 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 static void smr_fini(void)
 {
 #if HAVE_SHM_DL
+	ofi_monitors_cleanup();
 	ofi_hmem_cleanup();
+	ofi_mem_fini();
 #endif
 	smr_dsa_cleanup();
 	smr_cleanup();
@@ -203,7 +205,9 @@ struct util_prov smr_util_prov = {
 SHM_INI
 {
 #if HAVE_SHM_DL
+	ofi_mem_init();
 	ofi_hmem_init();
+	ofi_monitors_init();
 	ofi_params_init();
 #endif
 	fi_param_define(&smr_prov, "tx_size", FI_PARAM_SIZE_T,
