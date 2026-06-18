@@ -140,6 +140,12 @@ static int fi_opx_close_domain(fid_t fid)
 			FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Closing context %d\n", i);
 
 			opx_hfisvc_keyset_free(opx_domain->hfisvc.ctxs[i].access_key_set);
+			opx_domain->hfisvc.ctxs[i].access_key_set = 0;
+			int finalize_ret = (*opx_domain->hfisvc.finalize)(opx_domain->hfisvc.ctxs[i].ctx);
+			if (finalize_ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+					"[HFISVC] Failed finalizing context %d, ret=%d\n", i, finalize_ret);
+			}
 			opx_hfi1_rdma_context_close(opx_domain->hfisvc.ctxs[i].ctx);
 			opx_domain->hfisvc.ctxs[i].ctx = NULL;
 		}
@@ -684,6 +690,11 @@ int opx_domain_hfisvc_init_ctx(struct fi_opx_domain *domain, int ctx_index)
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] get_client_key failed for ctx %d, ret=%d\n",
 			ctx_index, ret);
+		int finalize_ret = (*domain->hfisvc.finalize)(domain->hfisvc.ctxs[ctx_index].ctx);
+		if (finalize_ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Failed finalizing context %d, ret=%d\n",
+				ctx_index, finalize_ret);
+		}
 		return -FI_ENODEV;
 	}
 
@@ -692,6 +703,11 @@ int opx_domain_hfisvc_init_ctx(struct fi_opx_domain *domain, int ctx_index)
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Failed initializing keyset for ctx %d, ret=%d\n",
 			ctx_index, ret);
+		int finalize_ret = (*domain->hfisvc.finalize)(domain->hfisvc.ctxs[ctx_index].ctx);
+		if (finalize_ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Failed finalizing context %d, ret=%d\n",
+				ctx_index, finalize_ret);
+		}
 		return -FI_ENODEV;
 	}
 
@@ -735,6 +751,7 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 
 	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize found\n");
 
+	domain->hfisvc.finalize		   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_finalize");
 	domain->hfisvc.get_client_key	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_key");
 	domain->hfisvc.command_queue_open  = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_open");
 	domain->hfisvc.command_queue_close = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_close");
@@ -757,6 +774,7 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_disable");
 	domain->hfisvc.doorbell = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_doorbell");
 
+	assert(domain->hfisvc.finalize != NULL);
 	assert(domain->hfisvc.get_client_key != NULL);
 	assert(domain->hfisvc.command_queue_open != NULL);
 	assert(domain->hfisvc.command_queue_close != NULL);
@@ -767,12 +785,26 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 	assert(domain->hfisvc.cmd_rdma_read_va != NULL);
 	assert(domain->hfisvc.doorbell != NULL);
 
+	/* Initialize the primary context (ctxs[0]) before opening queues. */
+	int ret = opx_domain_hfisvc_init_ctx(domain, 0);
+	if (ret) {
+		rc = ret;
+		goto done;
+	}
+
 	/* Open domain-level MR command/completion queues on primary context */
 	OPX_HFISVC_DEBUG_LOG("Creating domain MR command queue\n");
-	int ret = (*domain->hfisvc.command_queue_open)(&domain->hfisvc.mr_command_queue, domain->hfisvc.ctxs[0].ctx);
+	ret = (*domain->hfisvc.command_queue_open)(&domain->hfisvc.mr_command_queue, domain->hfisvc.ctxs[0].ctx);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Failed creating domain MR command queue, ret=%d\n",
 			ret);
+		opx_hfisvc_keyset_free(domain->hfisvc.ctxs[0].access_key_set);
+		domain->hfisvc.ctxs[0].access_key_set = 0;
+		int finalize_ret		      = (*domain->hfisvc.finalize)(domain->hfisvc.ctxs[0].ctx);
+		if (finalize_ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"[HFISVC] Failed finalizing primary context, ret=%d\n", finalize_ret);
+		}
 		rc = -FI_ENODEV;
 		goto done;
 	}
@@ -783,16 +815,14 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
 			"[HFISVC] Failed creating domain MR completion queue, ret=%d\n", ret);
 		(*domain->hfisvc.command_queue_close)(&domain->hfisvc.mr_command_queue);
+		opx_hfisvc_keyset_free(domain->hfisvc.ctxs[0].access_key_set);
+		domain->hfisvc.ctxs[0].access_key_set = 0;
+		int finalize_ret		      = (*domain->hfisvc.finalize)(domain->hfisvc.ctxs[0].ctx);
+		if (finalize_ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"[HFISVC] Failed finalizing primary context, ret=%d\n", finalize_ret);
+		}
 		rc = -FI_ENODEV;
-		goto done;
-	}
-
-	/* Initialize the primary context (ctxs[0]) */
-	ret = opx_domain_hfisvc_init_ctx(domain, 0);
-	if (ret) {
-		(*domain->hfisvc.completion_queue_close)(&domain->hfisvc.mr_completion_queue);
-		(*domain->hfisvc.command_queue_close)(&domain->hfisvc.mr_command_queue);
-		rc = ret;
 		goto done;
 	}
 
