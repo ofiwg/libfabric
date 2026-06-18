@@ -47,6 +47,7 @@
 
 struct ofi_mr_cache_params cache_params = {
 	.max_cnt = 1024,
+	.max_size = SIZE_MAX,
 	.cuda_monitor_enabled = true,
 	.rocr_monitor_enabled = true,
 	.ze_monitor_enabled = true,
