@@ -306,6 +306,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   This only has an effect with HMEM enabled builds of OPX.
   Defaults to on.
 
+*FI_OPX_GPU_IPC_MIN*
+: Integer. The minimum message length in bytes where GPU IPC will be used for intranode GPU buffers.
+  This only has an effect with HMEM enabled builds of OPX and when FI_OPX_GPU_IPC_INTRANODE is enabled.
+  Value must be >= 0. Defaults to 2048.
+
 *FI_OPX_DEV_REG_SEND_THRESHOLD*
 : Integer. The individual packet threshold where lengths above do not use a device
   registered copy when sending data from GPU.
@@ -356,7 +361,7 @@ or underruns.  Default is false.
 *FI_OPX_MULTI_HFI_STRIPING*
 : Boolean (0/1, on/off, true/false, yes/no). Enable or disable multi-HFI data striping for
   rendezvous (RZV) transfers over HFISVC. When enabled, OPX stripes large RZV transfers across
-  multiple HFI contexts for increased bandwidth. 
+  multiple HFI contexts for increased bandwidth.
   Default: 1 on CN6000, 0 on CN5000. Not supported on OPA-100 hardware.
 
 *FI_OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES*
