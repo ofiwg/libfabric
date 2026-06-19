@@ -269,28 +269,6 @@ endif HAVE_EFADV_CREATE_COMP_CNTR
 
 prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)
 
-if ENABLE_COVERAGE
-coverage:
-	lcov --capture --directory $(top_builddir)/prov/efa/src \
-	     --output-file coverage.info --no-external
-	lcov --remove coverage.info '*/test/*' '*/src/.libs/*' \
-	     --output-file coverage.info
-	lcov --extract coverage.info '*/prov/efa/src/*' \
-	     --output-file coverage.info
-	find $(top_builddir) -name '*.gcno' -delete
-	find $(top_builddir) -name '*.gcda' -delete
-	find $(top_builddir) -name '*.gcov' -delete
-	genhtml coverage.info --output-directory coverage_report
-	@echo "Coverage report: coverage_report/index.html"
-
-coverage-clean:
-	find $(top_builddir) -name '*.gcda' -delete
-	find $(top_builddir) -name '*.gcno' -delete
-	rm -rf coverage.info coverage_report
-
-.PHONY: coverage coverage-clean
-endif ENABLE_COVERAGE
-
 endif ENABLE_EFA_UNIT_TEST
 
 if ENABLE_EFA_GTEST
