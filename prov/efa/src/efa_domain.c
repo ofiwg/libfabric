@@ -1062,9 +1062,8 @@ void efa_domain_progress_rdm_peers_and_queues(struct efa_domain *domain)
 			else
 				ret = -FI_ECANCELED;
 
-			if (OFI_UNLIKELY(ret)) {
-				if (ret != -FI_EAGAIN)
-					efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
+			if (OFI_UNLIKELY(ret && (ret != -FI_EAGAIN))) {
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
 			}
 		}
 	}
