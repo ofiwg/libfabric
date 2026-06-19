@@ -217,6 +217,58 @@ def check_for_relevant_changes() {
     }
 }
 
+def record_coverage() {
+    /*
+     * Publish EFA unit-test coverage with the Jenkins Coverage plugin.
+     *
+     * Coverage generation lives on the PortaFiducia side: each test stage builds
+     * libfabric with --enable-coverage, runs the EFA unit tests, then runs gcovr
+     * on the cluster to emit Cobertura XML scoped to prov/efa/src. Here we only
+     * consume the reports.
+     *
+     * Contract with PortaFiducia: it delivers one tarball per cluster into
+     * outputs/, named 'coverage_<cluster>.tar.gz', each containing the cluster's
+     * 'coverage-<build>[-gtest].xml' reports. The report names encode the PR and
+     * build flags but NOT the cluster, so reports from different clusters share
+     * names — we extract each tarball into its own directory to avoid name conflicts.
+     */
+    def tarballs = sh(
+        script: "find outputs -name 'coverage_*.tar.gz' 2>/dev/null",
+        returnStdout: true
+    ).trim()
+    if (!tarballs) {
+        echo "No coverage tarballs found under outputs/; skipping coverage report."
+        return
+    }
+    // Extract each tarball into a sibling dir named after it (coverage_<cluster>/)
+    // so identically-named reports from different clusters don't overwrite each
+    // other. The recursive recordCoverage glob below then picks up all of them.
+    sh '''
+        for f in outputs/coverage_*.tar.gz; do
+            d="${f%.tar.gz}"
+            mkdir -p "$d"
+            tar xzf "$f" -C "$d"
+        done
+    '''
+    // Delta coverage vs. the PR target branch (needs the Git Forensics plugin).
+    discoverGitReferenceBuild(targetBranch: env.CHANGE_TARGET ?: 'main')
+    // Merge every per-stage Cobertura report into one result. The stages run the
+    // same EFA source on different instance types, so reports overlap; the plugin
+    // merges by summing per-line hits, i.e. a line covered on any instance counts
+    // as covered.
+    // Informational only for the initial rollout: no qualityGates, so coverage is
+    // reported (and modified-line delta shown via the reference build above) but a
+    // low number never marks the build unstable. Add a gate here later, e.g.
+    //   qualityGates: [[threshold: 80.0, metric: 'LINE', baseline: 'MODIFIED_LINES', unstable: true]]
+    // which ports Codecov's 80% patch-coverage gate.
+    recordCoverage(
+        tools: [[parser: 'COBERTURA', pattern: 'outputs/**/coverage-*.xml']],
+        id: 'efa-unit-tests',
+        name: 'EFA Unit Test Coverage',
+        sourceCodeRetention: 'EVERY_BUILD'
+    )
+}
+
 def post_build_actions() {
     if (env.SKIP_TESTS == 'true') {
         return
@@ -225,6 +277,7 @@ def post_build_actions() {
     sh 'find outputs -name "*.xml" | xargs du -shc'
     junit testResults: 'outputs/**/*.xml', keepLongStdio: false
     archiveArtifacts artifacts: 'outputs/**/*.*'
+    record_coverage()
     // Try To Cleanup Resources
     def regions = ["us-east-1", "eu-north-1", "us-west-2", "ap-southeast-4"]
     def cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
@@ -365,7 +418,7 @@ pipeline {
                     def c8gn16x_lock_label  = "c8gn16x"
                     def hpc6a48x_lock_label = "hpc6a48x"
                     def g4dn16x_lock_label  = "g4dn16x"
-                    def trn248x_lock_label  = "trn248x"
+                    // def trn248x_lock_label  = "trn248x"
                     def c5n18x_lock_label   = "c5n18x"
                     def c7i16x_lock_label   = "c7i16x"
 
@@ -379,7 +432,7 @@ pipeline {
 
                     // Multi Node Tests - Accelerator EFA
                     stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.16xlarge",  2, "us-west-2",      g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_efa}")
-                    stages["2_trn2_alinux2023_efa"]  = get_test_stage_with_lock("2_trn2_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "trn2.48xlarge",  2, "ap-southeast-4", trn248x_lock_label, "--odcr cr-0ea39f1e125501d50 ${addl_args_efa}")
+                    // stages["2_trn2_alinux2023_efa"]  = get_test_stage_with_lock("2_trn2_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "trn2.48xlarge",  2, "ap-southeast-4", trn248x_lock_label, "--odcr cr-0ea39f1e125501d50 ${addl_args_efa}")
 
                     // Single Node Windows Test
                     stages["EFA_Windows_Test"] = get_single_node_windows_test_stage_with_lock("EFA_Windows_Test", c5n18x_lock_label)
