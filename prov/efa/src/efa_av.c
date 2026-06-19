@@ -904,7 +904,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		goto err_close_util_av_implicit;
 
 	if (efa_domain->info_type == EFA_INFO_RDM && efa_domain->fabric &&
-	    efa_domain->fabric->shm_fabric) {
+	    ((struct efa_rdm_fabric *) efa_domain->fabric)->shm_fabric) {
 		struct efa_rdm_domain *rdm_domain =
 			(struct efa_rdm_domain *) efa_domain;
 		/*

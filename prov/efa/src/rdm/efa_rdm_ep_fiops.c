@@ -1203,8 +1203,8 @@ int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 	struct efa_domain *efa_domain;
 	struct efa_av *efa_av;
 	struct efa_rdm_domain *rdm_domain;
+	struct efa_rdm_fabric *rdm_fabric;
 	struct efa_rdm_cq *efa_rdm_cq;
-
 
 	ret = efa_rdm_ep_close_shm_ep_resources(efa_rdm_ep);
 	if (ret) {
@@ -1244,6 +1244,7 @@ int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 
 	efa_domain = efa_rdm_ep_domain(efa_rdm_ep);
 	rdm_domain = efa_rdm_ep_rdm_domain(efa_rdm_ep);
+	rdm_fabric = (struct efa_rdm_fabric *) efa_domain->fabric;
 
 	if (rdm_domain->shm_domain) {
 		ret = fi_close(&rdm_domain->shm_domain->fid);
@@ -1254,13 +1255,13 @@ int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 		rdm_domain->shm_domain = NULL;
 	}
 
-	if (efa_domain->fabric->shm_fabric) {
-		ret = fi_close(&efa_domain->fabric->shm_fabric->fid);
+	if (rdm_fabric->shm_fabric) {
+		ret = fi_close(&rdm_fabric->shm_fabric->fid);
 		if (ret) {
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm fabric: %s\n", fi_strerror(-ret));
 			retv = ret;
 		}
-		efa_domain->fabric->shm_fabric = NULL;
+		rdm_fabric->shm_fabric = NULL;
 	}
 
 	return retv;

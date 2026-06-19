@@ -45,6 +45,7 @@ static struct fi_ops_domain efa_domain_ops_rdm = {
 static int efa_rdm_domain_init(struct efa_rdm_domain *rdm_domain, struct fi_info *info)
 {
 	struct efa_domain *efa_domain = &rdm_domain->efa_domain;
+	struct efa_rdm_fabric *rdm_fabric = (struct efa_rdm_fabric *) efa_domain->fabric;
 	struct fi_info *shm_info = NULL;
 	int err;
 
@@ -67,9 +68,9 @@ static int efa_rdm_domain_init(struct efa_rdm_domain *rdm_domain, struct fi_info
 	efa_domain->util_domain.domain_fid.mr = &efa_rdm_domain_mr_ops;
 
 	efa_shm_info_create(info, &shm_info);
-	if (shm_info && !efa_domain->fabric->shm_fabric) {
+	if (shm_info && !rdm_fabric->shm_fabric) {
 		err = fi_fabric(shm_info->fabric_attr,
-				&efa_domain->fabric->shm_fabric,
+				&rdm_fabric->shm_fabric,
 				efa_domain->fabric->util_fabric.fabric_fid.fid.context);
 		if (err) {
 			EFA_WARN(FI_LOG_DOMAIN, 
@@ -79,8 +80,8 @@ static int efa_rdm_domain_init(struct efa_rdm_domain *rdm_domain, struct fi_info
 		}
 	}
 
-	if (efa_domain->fabric->shm_fabric) {
-		err = fi_domain(efa_domain->fabric->shm_fabric, shm_info,
+	if (rdm_fabric->shm_fabric) {
+		err = fi_domain(rdm_fabric->shm_fabric, shm_info,
 				&rdm_domain->shm_domain, NULL);
 		if (err)
 			return err;
