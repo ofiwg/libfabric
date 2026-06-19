@@ -151,6 +151,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 }
 
 static struct ofi_hmem_ops g_hmem_ops_backup[OFI_HMEM_MAX];
+static struct fi_info *g_prov_info_backup;
 
 /* Runs before every hmem test */
 static int efa_unit_test_hmem_setup(void **state)
@@ -173,6 +174,24 @@ static int efa_unit_test_hmem_setup(void **state)
 		return ret;
 
 	memcpy(g_hmem_ops_backup, hmem_ops, sizeof(g_hmem_ops_backup));
+
+	/* Deep copy the entire prov_info list */
+	g_prov_info_backup = NULL;
+	{
+		struct fi_info *src, *dst, *tail = NULL;
+
+		for (src = (struct fi_info *)efa_util_prov.info; src; src = src->next) {
+			dst = fi_dupinfo(src);
+			if (!dst)
+				return -1;
+			if (!g_prov_info_backup)
+				g_prov_info_backup = dst;
+			else
+				tail->next = dst;
+			tail = dst;
+		}
+	}
+
 	return 0;
 }
 
@@ -181,6 +200,12 @@ static int efa_unit_test_hmem_teardown(void **state)
 {
 	memcpy(hmem_ops, g_hmem_ops_backup, sizeof(g_hmem_ops_backup));
 	ofi_hmem_disable_p2p = 0;
+
+	/* Restore prov_info to pre-test state */
+	fi_freeinfo((struct fi_info *)efa_util_prov.info);
+	efa_util_prov.info = g_prov_info_backup;
+	g_prov_info_backup = NULL;
+
 	return efa_unit_test_mocks_teardown(state);
 }
 
@@ -325,6 +350,9 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_info_check_hmem_cuda_support_on_api_lt_1_18, NULL, NULL),
 		cmocka_unit_test_setup_teardown(test_info_check_hmem_cuda_support_on_api_ge_1_18, NULL, NULL),
 		cmocka_unit_test_setup_teardown(test_info_check_no_hmem_support_when_not_requested, NULL, NULL),
+		cmocka_unit_test_setup_teardown(test_info_hmem_supported_with_null_hints, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
+		cmocka_unit_test_setup_teardown(test_info_hmem_not_advertised_with_null_hints_when_unsupported, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
+		cmocka_unit_test_setup_teardown(test_info_hmem_requested_but_unsupported_returns_enodata, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
 		cmocka_unit_test_setup_teardown(test_info_direct_unsupported, NULL, NULL),
 		cmocka_unit_test_setup_teardown(test_info_direct_ordering, NULL, NULL),
 		cmocka_unit_test_setup_teardown(test_info_reuse_fabric_via_fabric_attr, NULL, NULL),

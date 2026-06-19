@@ -71,7 +71,7 @@ void test_info_rdm_attributes(void **state)
 		assert_int_equal(info->domain_attr->control_progress, FI_PROGRESS_MANUAL);
 		assert_int_equal(info->domain_attr->cntr_cnt, g_efa_selected_device_list[0].max_comp_cntr);
 #if EFA_HAVE_NON_SYSTEM_HMEM
-		assert_true(info->caps | FI_HMEM);
+		assert_false(info->caps & FI_HMEM);
 #endif
 	}
 
@@ -621,6 +621,7 @@ void check_no_hmem_support_when_not_requested(char *fabric_name)
 	assert_int_equal(err, 0);
 	assert_non_null(info);
 	assert_false(info->caps & FI_HMEM);
+	assert_false(info->domain_attr->mr_mode & FI_MR_HMEM);
 	fi_freeinfo(info);
 	fi_freeinfo(hints);
 }
@@ -632,6 +633,128 @@ void check_no_hmem_support_when_not_requested(char *fabric_name)
 void test_info_check_no_hmem_support_when_not_requested(void **state) {
 	check_no_hmem_support_when_not_requested(EFA_FABRIC_NAME);
 	check_no_hmem_support_when_not_requested(EFA_DIRECT_FABRIC_NAME);
+}
+
+/**
+ * @brief Check that EFA advertises FI_HMEM when no hints are provided
+ *        and HMEM is supported (NULL hints should return all capabilities)
+ */
+#if EFA_HAVE_NON_SYSTEM_HMEM
+void test_info_hmem_supported_with_null_hints(void **state)
+{
+	struct fi_info *info = NULL;
+	struct fi_info *cur;
+	bool found_hmem = false;
+	int err;
+	struct fi_info *prov;
+
+	if (!efa_device_support_rdma_read()) {
+		skip();
+	}
+
+	/* Mock any HMEM iface as initialized (restored by hmem_teardown) */
+	hmem_ops[FI_HMEM_CUDA].initialized = true;
+
+	/*
+	 * Set FI_HMEM on the prov_info list entries that fi_getinfo uses as
+	 * source for fi_dupinfo. ofi_alter_info intersects info->caps with
+	 * tx/rx attr->caps, so the attrs must also have FI_HMEM. This
+	 * simulates what efa_prov_info_alloc_for_rdm would have done if
+	 * the HMEM library had been available at provider init time.
+	 */
+	for (prov = (struct fi_info *)efa_util_prov.info; prov; prov = prov->next) {
+		prov->caps |= FI_HMEM;
+		prov->tx_attr->caps |= FI_HMEM;
+		prov->rx_attr->caps |= FI_HMEM;
+	}
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, NULL, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+
+	for (cur = info; cur; cur = cur->next) {
+		if ((cur->caps & FI_HMEM) &&
+		    !strcmp(cur->fabric_attr->prov_name, "efa")) {
+			found_hmem = true;
+			assert_true(cur->domain_attr->mr_mode & FI_MR_HMEM);
+			assert_true(cur->tx_attr->caps & FI_HMEM);
+			assert_true(cur->rx_attr->caps & FI_HMEM);
+			break;
+		}
+	}
+	assert_true(found_hmem);
+
+	fi_freeinfo(info);
+}
+#else
+void test_info_hmem_supported_with_null_hints(void **state)
+{
+}
+#endif
+
+/**
+ * @brief Check that EFA does not advertise FI_HMEM with null hints when
+ *        no HMEM is supported on the system
+ */
+void test_info_hmem_not_advertised_with_null_hints_when_unsupported(void **state)
+{
+	struct fi_info *info = NULL;
+	struct fi_info *cur;
+	int err;
+	enum fi_hmem_iface iface;
+	struct fi_info *prov;
+
+	/* Force all HMEM ifaces to uninitialized (restored by hmem_teardown) */
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
+		hmem_ops[iface].initialized = false;
+	}
+
+	/* Clear FI_HMEM from prov_info to simulate a system where HMEM was
+	 * never available at init time */
+	for (prov = (struct fi_info *)efa_util_prov.info; prov; prov = prov->next) {
+		prov->caps &= ~FI_HMEM;
+		prov->tx_attr->caps &= ~FI_HMEM;
+		prov->rx_attr->caps &= ~FI_HMEM;
+	}
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, NULL, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+
+	for (cur = info; cur; cur = cur->next) {
+		if (!strcmp(cur->fabric_attr->prov_name, "efa")) {
+			assert_false(cur->caps & FI_HMEM);
+			assert_false(cur->domain_attr->mr_mode & FI_MR_HMEM);
+		}
+	}
+
+	fi_freeinfo(info);
+}
+
+/**
+ * @brief Check that fi_getinfo returns -FI_ENODATA when user requests
+ *        FI_HMEM but the system does not support it
+ */
+void test_info_hmem_requested_but_unsupported_returns_enodata(void **state)
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+	enum fi_hmem_iface iface;
+
+	/* Force all HMEM ifaces to uninitialized (restored by hmem_teardown) */
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(iface) {
+		hmem_ops[iface].initialized = false;
+	}
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->caps |= FI_HMEM;
+	hints->domain_attr->mr_mode |= FI_MR_HMEM;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0ULL, hints, &info);
+	assert_int_equal(err, -FI_ENODATA);
+
+	fi_freeinfo(hints);
 }
 
 /**
