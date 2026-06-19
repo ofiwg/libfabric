@@ -169,6 +169,10 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	struct efa_rdm_peer *peer;
 	size_t available_tx_pkts;
 
+	do {
+
+	} while (1);
+
 	efa_rdm_tracepoint(send_begin_msg_context,
 		    (size_t) msg->context, (size_t) msg->addr);
 
