@@ -478,19 +478,20 @@ static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_rdm_mr)
 		efa_rdm_mr->hmem_data = NULL;
 	}
 
+	/*
+	 * Bump gen before dereg to narrow the window in which a queued operation could
+	 * be reposted with a stale lkey (the data path uses the cached efa_mr->lkey
+	 * rather than dereferencing ibv_mr, so a concurrent reader cannot fault).
+	 * Bumping beforehand better serves the user's fi_close intent immediately,
+	 * regardless of the deregistration's progress.
+	 */
+	efa_rdm_mr_gen_bump(efa_rdm_mr);
+
 	err = efa_mr_dereg_impl(&efa_rdm_mr->efa_mr);
 	if (err) {
 		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to de-register efa_mr", -err);
 		ret = err;
 	}
-
-	/*
-	 * Bump after dereg so a gen tick signals that destruction has
-	 * completed. The data path uses the cached efa_mr->lkey rather
-	 * than dereferencing ibv_mr, so a concurrent reader that passes
-	 * the gen check cannot fault on a cleared ibv_mr.
-	 */
-	efa_rdm_mr_gen_bump(efa_rdm_mr);
 
 	return ret;
 }
