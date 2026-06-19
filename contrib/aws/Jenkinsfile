@@ -52,6 +52,8 @@ def install_porta_fiducia() {
         pip install --upgrade pip
         pip install --upgrade awscli
         pip install -e ${portafiducia_path}
+        pwd
+        test -f PortaFiducia/portafiducia_version.log && cat PortaFiducia/portafiducia_version.log || true
     """
 }
 
