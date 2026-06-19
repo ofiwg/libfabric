@@ -205,8 +205,31 @@ static int ft_cuda_detect_memory_support(void)
 	// Blackwell or newer: nv-p2p deprecated
 	if (cc_major >= 10)
 		gdr_supported = false;
-	else
+	else {
 		gdr_supported = (gdr_attr == 1);
+		/*
+		 * The CUDA device attribute only indicates GPU-side GDR
+		 * capability. Verify that the kernel peer-memory module
+		 * is actually loaded, since without it the NIC cannot
+		 * register GPU buffers (e.g. g6 instances with L4 GPUs).
+		 */
+		if (gdr_supported) {
+			FILE *f = fopen("/proc/modules", "r");
+			if (f) {
+				char line[256];
+				int found = 0;
+				while (fgets(line, sizeof(line), f)) {
+					if (strstr(line, "nvidia_peermem")) {
+						found = 1;
+						break;
+					}
+				}
+				fclose(f);
+				if (!found)
+					gdr_supported = false;
+			}
+		}
+	}
 
 	// Final truth table
 	if (!gdr_supported && !dmabuf_supported)
