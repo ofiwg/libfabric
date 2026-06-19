@@ -343,10 +343,19 @@ void efa_user_info_set_max_cntr_value(int version, struct fi_info *info,
 static
 int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_info *hints)
 {
-	if (hints && (hints->caps & FI_HMEM)) {
+	if (!hints) {
 		/*
-		 * FI_HMEM is a primary capability, therefore only check
-		 * (and cliam) its support when user explicitly requested it.
+		 * No hints provided; per the spec, return all supported
+		 * capabilities. Advertise FI_HMEM if supported.
+		 */
+		if (efa_user_info_should_support_hmem(version))
+			info->caps |= FI_HMEM;
+		else
+			info->caps &= ~FI_HMEM;
+	} else if (hints->caps & FI_HMEM) {
+		/*
+		 * FI_HMEM is a primary capability. When user explicitly
+		 * requested it, verify support and fail if unavailable.
 		 */
 		if (!efa_user_info_should_support_hmem(version)) {
 			return -FI_ENODATA;
@@ -354,6 +363,7 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 
 		info->caps |= FI_HMEM;
 	} else {
+		// Hints provided but FI_HMEM not requested; don't advertise it
 		info->caps &= ~FI_HMEM;
 	}
 
@@ -362,7 +372,7 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 		 * because EFA provider's HMEM support rely on
 		 * application to provide descriptor for device buffer.
 		 */
-		if (hints->domain_attr &&
+		if (hints && hints->domain_attr &&
 		    !(hints->domain_attr->mr_mode & FI_MR_HMEM)) {
 			EFA_WARN(FI_LOG_CORE,
 			        "FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
@@ -370,9 +380,11 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 		}
 
 		info->domain_attr->mr_mode |= FI_MR_HMEM;
+	} else {
+		info->domain_attr->mr_mode &= ~FI_MR_HMEM;
 	}
 
-	if (FI_VERSION_LT(version, FI_VERSION(1, 18)) && info->caps & FI_HMEM) {
+	if (hints && FI_VERSION_LT(version, FI_VERSION(1, 18)) && info->caps & FI_HMEM) {
 		/* our HMEM atomic support rely on calls to CUDA API, which
 		 * is disabled if user are using libfabric API version 1.17 and earlier.
 		 */
@@ -485,20 +497,31 @@ static
 int efa_user_info_alter_direct(int version, struct fi_info *info, const struct fi_info *hints)
 {
 	/*
-	 * FI_HMEM is a primary capability, therefore only check
-	 * and claim support when explicitly requested
+	 * FI_HMEM is a primary capability. When user explicitly
+	 * requested it, verify support. When no hints, advertise if supported.
+	 *
+	 * For efa-direct, HMEM support requires P2P (unlike RDM which can
+	 * fall back to CUDA API calls). The prov_info already has FI_HMEM
+	 * set correctly based on P2P availability, so for no-hints we just
+	 * keep what prov_info had (the dupinfo already carries it).
 	 */
-	if (hints && (hints->caps & FI_HMEM))
+	if (!hints) {
+		/*
+		 * Nothing to do: dupinfo already has the correct FI_HMEM
+		 * state from efa_prov_info_direct_set_hmem_flags
+		 */
+	} else if (hints->caps & FI_HMEM) {
 		info->caps |= FI_HMEM;
-	else
+	} else {
 		info->caps &= ~FI_HMEM;
+	}
 
 	if (info->caps & FI_HMEM) {
 		/* Add FI_MR_HMEM to mr_mode when claiming support of FI_HMEM
 		 * because EFA provider's HMEM support rely on
 		 * application to provide descriptor for device buffer.
 		 */
-		if (hints->domain_attr &&
+		if (hints && hints->domain_attr &&
 		    !(hints->domain_attr->mr_mode & FI_MR_HMEM)) {
 			EFA_WARN(FI_LOG_CORE,
 			        "FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
@@ -506,6 +529,8 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		}
 
 		info->domain_attr->mr_mode |= FI_MR_HMEM;
+	} else {
+		info->domain_attr->mr_mode &= ~FI_MR_HMEM;
 	}
 
 	/**
