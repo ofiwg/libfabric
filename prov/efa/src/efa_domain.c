@@ -176,6 +176,12 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free;
 	}
 
+	err = efa_mr_pool_create(efa_domain, sizeof(struct efa_mr));
+	if (err) {
+		ret = err;
+		goto err_free;
+	}
+
 	if (!efa_domain->mr_local) {
 		EFA_WARN(FI_LOG_EP_DATA, "EFA direct and dgram require FI_MR_LOCAL, but application does not support it\n");
 		ret = -FI_ENODATA;
