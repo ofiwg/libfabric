@@ -370,15 +370,18 @@ void test_efa_domain_open_ops_query_cq(void **state);
 void test_efa_domain_open_ops_cq_open_ext(void **state);
 void test_efa_domain_open_ops_cntr_open_ext(void **state);
 void test_efa_domain_open_ops_get_mr_lkey(void **state);
-void test_efa_fabric_open_ops_feature_known(void **state);
-void test_efa_fabric_open_ops_feature_not_on_proto(void **state);
-void test_efa_fabric_open_ops_feature_unknown(void **state);
 void test_efa_domain_direct_mr_ops(void **state);
 void test_efa_domain_dgram_mr_ops(void **state);
 void test_efa_domain_open_installs_base_domain_ops_efa_direct(void **state);
 void test_efa_domain_open_installs_base_domain_ops_dgram(void **state);
 void test_efa_domain_gda_ops_rejected_for_dgram(void **state);
 /* end efa_unit_test_domain.c */
+
+/* begin efa_unit_test_fabric.c */
+void test_efa_fabric_open_ops_feature_known(void **state);
+void test_efa_fabric_open_ops_feature_not_on_proto(void **state);
+void test_efa_fabric_open_ops_feature_unknown(void **state);
+/* end efa_unit_test_fabric.c */
 
 /* begin efa_unit_test_rdm_domain.c */
 void test_efa_domain_info_type_efa_rdm(void **state);
