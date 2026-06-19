@@ -1854,7 +1854,6 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 					       ep->send_pkt_entry_vec_data_sizes);
 	if (err)
 		return err;
-
 	assert(ep->send_pkt_entry_vec_size <=
 	       efa_base_ep_get_tx_pool_size(&ep->base_ep));
 
@@ -2032,26 +2031,22 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag)
 	if (!(ope->internal_flags & flag))
 		return 0;
 
-	if (efa_rdm_mr_gen_check_ope(ope)) {
-		switch (flag) {
-		case EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE:
-			ret = efa_rdm_ope_repost_ope_queued_before_handshake(ope);
-			break;
-		case EFA_RDM_OPE_QUEUED_RNR:
-			assert(!dlist_empty(&ope->queued_pkts));
-			ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
-			break;
-		case EFA_RDM_OPE_QUEUED_CTRL:
-			ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
-			break;
-		case EFA_RDM_OPE_QUEUED_READ:
-			ret = efa_rdm_ope_post_read(ope);
-			break;
-		default:
-			break;
-		}
-	} else {
-		ret = -FI_ECANCELED;
+	switch (flag) {
+	case EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE:
+		ret = efa_rdm_ope_repost_ope_queued_before_handshake(ope);
+		break;
+	case EFA_RDM_OPE_QUEUED_RNR:
+		assert(!dlist_empty(&ope->queued_pkts));
+		ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
+		break;
+	case EFA_RDM_OPE_QUEUED_CTRL:
+		ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
+		break;
+	case EFA_RDM_OPE_QUEUED_READ:
+		ret = efa_rdm_ope_post_read(ope);
+		break;
+	default:
+		break;
 	}
 
 	if (OFI_UNLIKELY(ret)) {
