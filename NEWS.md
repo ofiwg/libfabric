@@ -36,6 +36,8 @@ v2.6.0, Mon June 22, 2026
 
 ## EFA ##
 
+- use cmocka's "void ** state" signature in unit tests for C23
+- honor homogeneous_peers in efa_rdm_interop_rdma_read
 - Drive real completion handler in local-read unit test
 - NULL local_read_pkt_entry after data-copied hand-off
 - Track efa_rx_pkts_held with a per-pkt flag
@@ -223,6 +225,7 @@ v2.6.0, Mon June 22, 2026
 
 ## SHM ##
 
+- DL initialize mem and monitors
 - Register max_gdrcopy_size env var
 - Do not return local cmd copy in smr_discard
 - Remove init_fn from cmd queue release path
@@ -245,13 +248,19 @@ v2.6.0, Mon June 22, 2026
 
 - Remove unnecessary dependency on shm provider enable flag
 
+## UCX ##
+
+- fix ucx_av_lookup to index ave_array (fixes Spawn / dynamic processes)
+
 ## Util ##
 
+- Initialize cache_params max size
 - Drop mm lock before memory operations
 - Fix the unspec queue scanning
 
 ## Verbs ##
 
+- Bug in EP state machine captured by an assertion failure
 - Use ints for boolean values in vrb_gl_data for consistency
 - Revert "prov/verbs: Enable logging of ibv_async_events"
 - Allow FI_VERBS_IFACE to be a list
