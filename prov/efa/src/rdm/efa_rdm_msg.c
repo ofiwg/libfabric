@@ -202,6 +202,8 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		txe->tag = tag;
 	}
 
+    assert(false);
+
 	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
 
 	txe->msg_id = peer->next_msg_id++;
