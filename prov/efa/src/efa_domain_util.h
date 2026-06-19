@@ -30,6 +30,18 @@ int efa_domain_init_base(struct efa_domain *efa_domain,
 			 void *context);
 
 /**
+ * @brief Create the bufpool backing MR allocations on an efa_domain.
+ *
+ * Each path passes its own entry size: efa_domain_open uses
+ * sizeof(struct efa_mr) (efa-direct, dgram); efa_rdm_domain_open uses
+ * sizeof(struct efa_rdm_mr) (efa-rdm). The pool is destroyed in
+ * efa_domain_destruct via the type-agnostic efa_mr_pool_destroy.
+ *
+ * @return 0 on success, negative errno on failure.
+ */
+int efa_mr_pool_create(struct efa_domain *efa_domain, size_t entry_size);
+
+/**
  * @brief Final post-init steps shared by both open paths.
  *
  * Installs the fork-support handler (no-op on Windows) and inserts the

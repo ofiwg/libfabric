@@ -167,6 +167,12 @@ int efa_rdm_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free;
 	}
 
+	err = efa_mr_pool_create(efa_domain, sizeof(struct efa_rdm_mr));
+	if (err) {
+		ret = err;
+		goto err_free;
+	}
+
 	*domain_fid = &efa_domain->util_domain.domain_fid;
 
 	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid_rdm;

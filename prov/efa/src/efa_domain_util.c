@@ -9,24 +9,21 @@
 #include "efa_domain_util.h"
 
 /**
- * @brief Create the bufpools backing efa_mr/efa_rdm_mr instances
- * on an efa_domain.
+ * @brief Create the bufpool backing efa_mr/efa_rdm_mr instances on an
+ * efa_domain.
  *
- * @param[in,out] efa_domain  Domain whose pools will be created.
- * @param[in]     info        fi_info used to decide which pools
- *                            to create (direct, RDM, or dgram).
+ * Caller passes the entry size: efa_domain_open passes
+ * sizeof(struct efa_mr); efa_rdm_domain_open passes
+ * sizeof(struct efa_rdm_mr). Pool is freed on close via the
+ * type-agnostic efa_mr_pool_destroy.
+ *
+ * @param[in,out] efa_domain  Domain whose pool will be created.
+ * @param[in]     entry_size  Size of each pooled MR entry.
  * @return 0 on success, negative libfabric error code on failure.
  */
-static int efa_mr_pool_create(struct efa_domain *efa_domain,
-			      struct fi_info *info)
+int efa_mr_pool_create(struct efa_domain *efa_domain, size_t entry_size)
 {
-	size_t entry_size;
 	int ret;
-
-	if (EFA_INFO_TYPE_IS_RDM(info))
-		entry_size = sizeof(struct efa_rdm_mr);
-	else
-		entry_size = sizeof(struct efa_mr);
 
 	ret = ofi_bufpool_create(&efa_domain->mr_pool,
 				 entry_size,
@@ -77,10 +74,6 @@ int efa_domain_init_base(struct efa_domain *efa_domain,
 	ofi_atomic_initialize64(&efa_domain->ibv_mr_reg_sz, 0);
 
 	efa_domain->ah_map = NULL;
-
-	err = efa_mr_pool_create(efa_domain, info);
-	if (err)
-		return err;
 
 	efa_domain->util_domain.av_type = FI_AV_TABLE;
 	efa_domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
