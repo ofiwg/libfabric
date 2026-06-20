@@ -1,0 +1,721 @@
+---
+layout: page
+title: fi_efa(7)
+tagline: Libfabric Programmer's Manual
+---
+{% include JB/setup %}
+
+# NAME
+
+fi_efa \- The Amazon Elastic Fabric Adapter (EFA) Provider
+
+# OVERVIEW
+
+The EFA provider supports the Elastic Fabric Adapter (EFA) device on
+Amazon EC2.  EFA provides reliable and unreliable datagram send/receive
+with direct hardware access from userspace (OS bypass). For reliable
+datagram (RDM) EP type, it supports two fabric names: `efa` and `efa-direct`.
+The `efa` fabric implements a set of
+[wire protocols](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md)
+to support more capabilities and features beyond the EFA device capabilities.
+The `efa-direct` fabric, on the contrary, offloads all libfabric data plane calls to
+the device directly without wire protocols. Compared to the `efa` fabric, the `efa-direct`
+fabric supports fewer capabilities and has more mode requirements for applications.
+But it provides a fast path to hand off application requests to the device.
+To use `efa-direct`, set the name field in `fi_fabric_attr` to `efa-direct`.
+More details and difference between the two fabrics will be presented below.
+
+
+# SUPPORTED FEATURES
+
+The following features are supported:
+
+*Endpoint types*
+: The provider supports endpoint type *FI_EP_DGRAM*, and *FI_EP_RDM* on a new
+  Scalable (unordered) Reliable Datagram protocol (SRD). SRD provides support
+  for reliable datagrams and more complete error handling than typically seen
+  with other Reliable Datagram (RD) implementations.
+
+*RDM Endpoint capabilities*
+: 
+  For the `efa` fabric, the following data transfer interfaces are supported:
+  *FI_MSG*, *FI_TAGGED*, *FI_SEND*, *FI_RECV*,  *FI_RMA*, *FI_WRITE*, *FI_READ*,
+  *FI_ATOMIC*, *FI_DIRECTED_RECV*, *FI_MULTI_RECV*, and *FI_SOURCE*.
+  It provides SAS guarantees for data operations, and
+  does not have a maximum message size (for all operations).
+  For the `efa-direct` fabric, it supports *FI_MSG*, *FI_SEND*, *FI_RECV*, *FI_RMA*,
+  *FI_WRITE*, *FI_READ*, and *FI_SOURCE*. As mentioned earlier, it doesn't provide
+  SAS guarantees, and has different maximum message sizes for different operations.
+  For MSG operations, the maximum message size is the MTU size of the efa device
+  (approximately 8KiB). For RMA operations, the maximum message size is the maximum
+  RDMA size of the EFA device. The exact values of these sizes can be queried by the
+  `fi_getopt` API with option names `FI_OPT_MAX_MSG_SIZE` and `FI_OPT_MAX_RMA_SIZE`
+
+
+*DGRAM Endpoint capabilities*
+: The DGRAM endpoint only supports *FI_MSG* capability with a maximum
+  message size of the MTU of the underlying hardware (approximately 8 KiB).
+
+*Address vectors*
+: The provider supports *FI_AV_TABLE*. *FI_AV_MAP* was deprecated in Libfabric 2.x.
+  Applications can still use *FI_AV_MAP* to create an address vector. But the EFA
+  provider implementation will print a warning and switch to *FI_AV_TABLE*.
+  *FI_EVENT* is unsupported.
+
+*Completion events*
+: The provider supports *FI_CQ_FORMAT_CONTEXT*, *FI_CQ_FORMAT_MSG*, and
+  *FI_CQ_FORMAT_DATA*. *FI_CQ_FORMAT_TAGGED* is supported on the `efa` fabric
+  of RDM endpoint.
+  
+  The `efa` and `efa-direct` fabrics for RDM endpoints support *FI_WAIT_UNSPEC*
+  and *FI_WAIT_FD* wait objects for blocking CQ operations (*fi_cq_sread*).
+  
+  DGRAM endpoints do not support wait objects.
+
+*Modes*
+: The provider requires the use of *FI_MSG_PREFIX* when running over
+  the DGRAM endpoint. And it requires the use of *FI_CONTEXT2* mode
+  for DGRAM endpoint and the `efa-direct` fabric of RDM endpoint.
+  The `efa` fabric of RDM endpoint doesn't have these requirements.
+
+*Memory registration modes*
+: The `efa` fabric of RDM endpoint does not require memory registration for send and receive
+  operations, i.e. it does not require *FI_MR_LOCAL*. Applications may specify
+  *FI_MR_LOCAL* in the MR mode flags in order to use descriptors provided by the
+  application. The `efa-direct` fabric of *FI_EP_RDM* endpint and the *FI_EP_DGRAM* endpoint only supports *FI_MR_LOCAL*.
+
+*Progress*
+: The *FI_EP_RDM* endpoint in the `efa` fabric supports *FI_PROGRESS_MANUAL*.
+  The *FI_EP_RDM* and *FI_EP_DGRAM* endpoints in the `efa-direct` fabric
+  support *FI_PROGRESS_AUTO*. See
+  [efa_fabric_comparison](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_fabric_comparison.md)
+  for a detailed comparison of `efa` vs `efa-direct` fabrics.
+
+*Threading*
+: Both RDM and DGRAM endpoints supports *FI_THREAD_SAFE*.
+
+*Completion counters*
+: The `efa-direct` fabric supports hardware completion counters backed by
+  MSI-X(Message Signaled Interrupts Extended) hardware counters on the EFA device.
+
+  Hardware counters are created via the `cntr_open_ext` GDA domain op
+  (see below). When a hardware counter is bound to an endpoint, it is
+  automatically attached to the QP when the endpoint is enabled. 
+  The counter is implicitly detached when the EP it is attached 
+  to is destroyed. The counter cannot be closed while it is still 
+  attached to any EP; the EP must be closed first.
+
+  *fi_cntr_read*, *fi_cntr_readerr*, and *fi_cntr_wait* are not
+  supported on the host for GPU memory-backed counters.
+
+  Hardware counters do not internally poll the completion queue.
+  When an operation returns *-FI_EAGAIN*, the application must call *fi_cq_read* to 
+  make progress and free CQ space before retrying the operation, regardless of whether 
+  FI_SELECTIVE_COMPLETION is set. Failure to do so will result in CQ overrun.
+
+# LIMITATIONS
+
+## Completion events
+- DGRAM endpoints do not support synchronous CQ reads (*fi_cq_sread*) or wait objects.
+- *FI_WAIT_FD* is not supported for RDM endpoints with SHM transfers enabled.
+  Valid wait objects are *FI_WAIT_NONE* or *FI_WAIT_UNSPEC*. Blocking read via
+  *fi_cq_sread()* is supported and will wait on SHM completions. When SHM
+  transfers are disabled, *FI_WAIT_FD* wait objects are supported.
+
+## RMA operations
+- Completion events for RMA targets (*FI_RMA_EVENT*) is not supported.
+- For the `efa-direct` fabric, the target side of RMA operation must
+  insert the initiator side's address into AV before the RMA operation
+  is kicked off, due to a current device limitation. The same limitation
+  applies to the `efa` fabric when the `FI_OPT_EFA_HOMOGENEOUS_PEERS` option
+  is set as `true`.
+
+## `fi_cancel` support
+ - `fi_cancel` is only supported in the non-zero-copy-receive mode of the `efa` fabric.
+ It's not supported in `efa-direct`, DGRAM endpoint, and the zero-copy receive mode of
+ the `efa` fabric in RDM endpoint.
+
+## (Deprecated) [Zero-copy receive mode](https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#48-user-receive-qp-feature--request-and-zero-copy-receive)
+ - Support for the zero-copy mode was deprecated in Libfabric v2.6
+
+When using FI_HMEM for AWS Neuron or Habana SynapseAI buffers, the provider
+requires peer to peer transaction support between the EFA and the FI_HMEM
+device. Therefore, the FI_HMEM_P2P_DISABLED option is not supported by the EFA
+provider for AWS Neuron or Habana SynapseAI.
+
+# PROVIDER SPECIFIC ENDPOINT LEVEL OPTION
+
+*FI_OPT_EFA_RNR_RETRY*
+: Defines the number of RNR retry. The application can use it to reset RNR retry
+  counter via the call to fi_setopt. Note that this option must be set before
+  the endpoint is enabled. Otherwise, the call will fail. Also note that this
+  option only applies to RDM endpoint.
+
+*FI_OPT_EFA_EMULATED_READ, FI_OPT_EFA_EMULATED_WRITE, FI_OPT_EFA_EMULATED_ATOMICS - bool*
+: These options only apply to the fi_getopt() call.
+  They are used to query the EFA provider to determine if the endpoint is
+  emulating Read, Write, and Atomic operations (return value is true), or if
+  these operations are assisted by hardware support (return value is false).
+
+*FI_OPT_EFA_USE_DEVICE_RDMA - bool*
+: This option only applies to the fi_setopt() call.
+  Only available if the application selects a libfabric API version >= 1.18.
+  This option allows an application to change libfabric's behavior
+  with respect to RDMA transfers.  Note that there is also an environment
+  variable FI_EFA_USE_DEVICE_RDMA which the user may set as well.  If the
+  environment variable and the argument provided with this variable are in
+  conflict, then fi_setopt will return -FI_EINVAL, and the environment variable
+  will be respected.  If the hardware does not support RDMA and the argument
+  is true, then fi_setopt will return -FI_EOPNOTSUPP.  If the application uses
+  API version < 1.18, the argument is ignored and fi_setopt returns
+  -FI_ENOPROTOOPT.
+  The default behavior for RDMA transfers depends on API version.  For
+  API >= 1.18 RDMA is enabled by default on any hardware which supports it.
+  For API<1.18, RDMA is enabled by default only on certain newer hardware
+  revisions.
+
+*FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES - bool*
+: This option only applies to the fi_setopt() call.
+  It is used to force the endpoint to use in-order send/recv operation for each 128 bytes
+  aligned block. Enabling the option will guarantee data inside each 128 bytes
+  aligned block being sent and received in order, it will also guarantee data
+  to be delivered to the receive buffer only once. If endpoint is not able to
+  support this feature, it will return -FI_EOPNOTSUPP for the call to fi_setopt().
+
+
+*FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES - bool*
+: This option only applies to the fi_setopt() call.
+  It is used to set the endpoint to use in-order RDMA write operation for each 128 bytes
+  aligned block. Enabling the option will guarantee data inside each 128 bytes
+  aligned block being written in order, it will also guarantee data to be
+  delivered to the target buffer only once. If endpoint is not able to support
+  this feature, it will return -FI_EOPNOTSUPP for the call to fi_setopt().
+
+*FI_OPT_EFA_HOMOGENEOUS_PEERS - bool*
+: This option only applies to the fi_setopt() call for RDM endpoints on efa fabric. 
+  RDM endpoints on efa-direct fabric are unaffected by this option. 
+  When set to true, it indicates all peers are homogeneous, meaning they run on the 
+  same platform, use the same software versions, and share identical capabilities.
+  It accelerates the initial communication setup as interoperability between peers
+  is guaranteed. When set to true, the target side of a RMA operation must
+  insert the initiator side's address into AV before the RMA operation
+  is kicked off, due to a current device limitation.
+  The default value is false.
+
+*FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV - bool*
+: This option only applies to the fi_setopt() call.
+  It is used to disable unsolicited write recv for this endpoint, which can reduce
+  the likelihood of CQ overflow. The default value is true.
+  For efa-direct, FI_RX_CQ_DATA is required when FI_OPT_EFA_USE_UNSOLICITED_WRITE_RECV
+  is false, or it will return -FI_EOPNOTSUPP for the call to fi_setopt().
+
+# PROVIDER SPECIFIC OPERATION FLAGS
+
+The EFA provider defines provider-specific operation flags that can be passed
+in the `flags` argument of data transfer calls such as `fi_writemsg()`.
+
+*FI_EFA_WR_HIGH_PPS*
+: This flag can be passed in the `flags` argument of RDMA write operations
+  (e.g., `fi_writemsg()`) to hint the device to optimize for higher message
+  rate.
+
+# PROVIDER SPECIFIC OPERATION EXTENSIONS
+The efa provider exports extensions for operations that are not provided
+by the standard libfabric interface. These extensions are available via
+the "`fi_ext_efa.h`" header file and accessed through `fi_open_ops`,
+applied to either the domain or fabric fid depending on the extension.
+
+## Domain Operation Extension
+
+Domain operation extension is obtained by calling `fi_open_ops`
+(see [`fi_domain(3)`](fi_domain.3.html))
+```c
+int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
+    void **ops, void *context);
+```
+
+Requesting `FI_EFA_DOMAIN_OPS` in `name` returns `ops` as
+the pointer to the function table `fi_efa_ops_domain` defined as follows:
+
+```c
+struct fi_efa_ops_domain {
+	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
+};
+```
+
+### query_mr
+This op queries an existing memory registration as input, and outputs the efa
+specific mr attribute which is defined as follows
+
+```c
+struct fi_efa_mr_attr {
+    uint16_t ic_id_validity;
+    uint16_t recv_ic_id;
+    uint16_t rdma_read_ic_id;
+    uint16_t rdma_recv_ic_id;
+};
+```
+
+*ic_id_validity*
+:	Validity mask of interconnect id fields. Currently the following bits are supported in the mask:
+
+	FI_EFA_MR_ATTR_RECV_IC_ID:
+		recv_ic_id has a valid value.
+
+	FI_EFA_MR_ATTR_RDMA_READ_IC_ID:
+		rdma_read_ic_id has a valid value.
+
+	FI_EFA_MR_ATTR_RDMA_RECV_IC_ID:
+		rdma_recv_ic_id has a valid value.
+
+*recv_ic_id*
+:	Physical interconnect used by the device to reach the MR for receive operation. It is only valid when `ic_id_validity` has the `FI_EFA_MR_ATTR_RECV_IC_ID` bit.
+
+*rdma_read_ic_id*
+:	Physical interconnect used by the device to reach the MR for RDMA read operation. It is only valid when `ic_id_validity` has the `FI_EFA_MR_ATTR_RDMA_READ_IC_ID` bit.
+
+*rdma_recv_ic_id*
+:	Physical interconnect used by the device to reach the MR for RDMA write receive. It is only valid when `ic_id_validity` has the `FI_EFA_MR_ATTR_RDMA_RECV_IC_ID` bit.
+
+#### Return value
+**query_mr()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+
+To enable GPU Direct Async (GDA), which allows the GPU to interact directly with the NIC, 
+request `FI_EFA_GDA_OPS` in the `name` parameter with efa-direct fabirc.
+This returns `ops` as a pointer to the function table `fi_efa_ops_gda` defined as follows:
+
+```c
+struct fi_efa_ops_gda {
+	int (*query_addr)(struct fid_ep *ep_fid, fi_addr_t addr, uint16_t *ahn,
+			  uint16_t *remote_qpn, uint32_t *remote_qkey);
+	int (*query_qp_wqs)(struct fid_ep *ep_fid, struct fi_efa_wq_attr *sq_attr, struct fi_efa_wq_attr *rq_attr);
+	int (*query_cq)(struct fid_cq *cq_fid, struct fi_efa_cq_attr *cq_attr);
+	int (*cq_open_ext)(struct fid_domain *domain_fid,
+			   struct fi_cq_attr *attr,
+			   struct fi_efa_cq_init_attr *efa_cq_init_attr,
+			   struct fid_cq **cq_fid, void *context);
+	uint64_t (*get_mr_lkey)(struct fid_mr *mr);
+	int (*cntr_open_ext)(struct fid_domain *domain,
+			     struct fi_cntr_attr *attr,
+			     struct fid_cntr **cntr,
+			     void *context,
+			     struct fi_efa_comp_cntr_init_attr *efa_attr);
+};
+```
+
+### query_addr
+This op queries the following address information for a given endpoint and destination address.
+
+*ahn*
+:	Address handle number.
+
+*remote_qpn*
+:	Remote queue pair Number.
+
+*remote_qkey*
+:	qkey for the remote queue pair.
+
+#### Return value
+**query_addr()** returns FI_SUCCESS on success, or -FI_EINVAL on failure.
+
+### query_qp_wqs
+This op queries EFA specific Queue Pair work queue attributes for a given endpoint.
+It retrieves the send queue attributes in sq_attr and receive queue attributes in rq_attr, which is defined as follows.
+
+```c
+struct fi_efa_wq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+    uint32_t *doorbell;
+    uint32_t max_batch;
+};
+```
+
+*buffer*
+:	Queue buffer.
+
+*entry_size*
+:	Size of each entry in the queue.
+
+*num_entries*
+:	Maximal number of entries in the queue.
+
+*doorbell*
+:	Queue doorbell.
+
+*max_batch*
+:	Maximum batch size for queue submissions.
+
+#### Return value
+**query_qp_wqs()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### query_cq
+This op queries EFA specific Completion Queue attributes for a given cq.
+
+```c
+struct fi_efa_cq_attr {
+    uint8_t *buffer;
+    uint32_t entry_size;
+    uint32_t num_entries;
+};
+```
+
+*buffer*
+:	Completion queue buffer.
+
+*entry_size*
+:	Size of each completion queue entry.
+
+*num_entries*
+:	Maximal number of entries in the completion queue.
+
+#### Return value
+**query_cq()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### cq_open_ext
+This op creates a completion queue with external memory provided via dmabuf.
+The memory can be passed by supplying the following struct.
+
+```c
+struct fi_efa_cq_init_attr {
+	uint64_t flags;
+	struct {
+		uint8_t *buffer;
+		uint64_t length;
+		uint64_t offset;
+		uint32_t fd;
+	} ext_mem_dmabuf;
+};
+```
+
+*flags*
+:	A bitwise OR of the various values described below.
+
+	FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF:
+		create CQ with external memory provided via dmabuf.
+
+*ext_mem_dmabuf*
+:	Structure containing information about external memory when using
+	FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF flag.
+
+	*buffer*
+	:	Pointer to the memory mapped in the process's virtual address space. 
+		The field is optional, but if not provided, the use of CQ poll interfaces should be avoided.
+
+	*length*
+	:	Length of the memory region to use.
+
+	*offset*
+	:	Offset within the dmabuf.
+
+	*fd*
+	:	File descriptor of the dmabuf.
+
+#### Return value
+**cq_open_ext()** returns 0 on success, or the value of errno on failure
+(which indicates the failure reason).
+
+### get_mr_lkey
+Returns the local memory translation key associated with a MR. The memory registration must have completed successfully before invoking this.
+
+*lkey*
+:	local memory translation key used by TX/RX buffer descriptor.
+
+#### Return value
+**get_mr_lkey()** returns lkey on success, or FI_KEY_NOTAVAIL if the registration has not completed.
+
+### cntr_open_ext
+This op creates a completion counter backed by a MSI-X hardware counter.
+Applications must check `FI_VERSION_GE(fi_version(), FI_VERSION(2, 5))` before
+calling `cntr_open_ext`, as older libfabric versions do not include this
+function pointer in the domain ops structure.
+
+When the *FI_EFA_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM* or
+*FI_EFA_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM* flag is set in
+`fi_efa_comp_cntr_init_attr.flags`, the application provides its own memory for
+the completion or error count via the `comp_cntr_ext_mem` or `err_cntr_ext_mem`
+fields respectively. The external memory is described by a
+`fi_efa_memory_location` structure which supports two modes: a virtual address
+(*FI_EFA_MEMORY_LOCATION_VA*), where the application supplies a direct pointer,
+or a DMA-BUF reference (*FI_EFA_MEMORY_LOCATION_DMABUF*), where the application
+supplies a file descriptor and offset into an exported DMA-BUF. When using
+DMA-BUF, the `ptr` field may also be set to provide a process-accessible
+mapping of the memory, which may enable more efficient counter reads. Using
+external memory allows the counter values to reside in application-managed
+buffers or in memory exported through DMA-BUF, enabling zero-copy observation
+of completion progress by co-located processes or devices.
+The default counter events type is `FI_CNTR_EVENTS_COMP`.
+
+Counter memory supplied by the application must not be modified directly, or the
+resulting counter value will be non-deterministic. Counter values must only be
+updated using fi_cntr* APIs.
+Only *FI_WAIT_NONE* and *FI_WAIT_UNSPEC* are supported as wait objects in
+`fi_cntr_attr`.
+
+```c
+enum fi_efa_memory_location_type {
+	FI_EFA_MEMORY_LOCATION_VA,
+	FI_EFA_MEMORY_LOCATION_DMABUF,
+};
+
+struct fi_efa_memory_location {
+	uint8_t *ptr;
+	struct {
+		uint64_t offset;
+		int32_t fd;
+		uint32_t reserved;
+	} dmabuf;
+	uint8_t type;
+	uint8_t reserved[7];
+};
+
+struct fi_efa_comp_cntr_init_attr {
+	uint64_t comp_mask;
+	uint32_t flags;
+	uint32_t reserved;
+	struct fi_efa_memory_location comp_cntr_ext_mem;
+	struct fi_efa_memory_location err_cntr_ext_mem;
+};
+```
+
+*comp_mask*
+:	Compatibility mask.
+
+*flags*
+:	A bitwise OR of the following values:
+
+	FI_EFA_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM:
+		Use application-provided memory for the completion count, as
+		described by `comp_cntr_ext_mem`.
+
+	FI_EFA_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM:
+		Use application-provided memory for the error count, as
+		described by `err_cntr_ext_mem`.
+
+*comp_cntr_ext_mem*
+:	Memory location for the completion count when using external memory.
+
+*err_cntr_ext_mem*
+:	Memory location for the error count when using external memory.
+
+*type*
+:	The type of memory location. `FI_EFA_MEMORY_LOCATION_VA` for a virtual address,
+	or `FI_EFA_MEMORY_LOCATION_DMABUF` for a DMA-BUF reference.
+
+*ptr*
+:	Virtual address pointer. Required when type is `FI_EFA_MEMORY_LOCATION_VA`.
+	When type is `FI_EFA_MEMORY_LOCATION_DMABUF`, may optionally be set to provide
+	a process-accessible mapping of the DMA-BUF memory. Otherwise should be NULL.
+
+*dmabuf.fd*
+:	DMA-BUF file descriptor (used when type is `FI_EFA_MEMORY_LOCATION_DMABUF`).
+
+*dmabuf.offset*
+:	Offset within the DMA-BUF.
+
+#### Return value
+**cntr_open_ext()** returns 0 on success, or a negative value on failure.
+
+
+## Fabric Operation Extension
+
+Fabric operation extension is obtained by calling `fi_open_ops`
+(see [`fi_fabric(3)`](fi_fabric.3.html))
+```c
+int fi_open_ops(struct fid *fabric, const char *name, uint64_t flags,
+    void **ops, void *context);
+```
+
+Requesting `FI_EFA_FEATURE_OPS` in `name` returns `ops` as a pointer to the
+function table `fi_efa_feature_ops` defined as follows:
+
+```c
+struct fi_efa_feature_ops {
+	bool (*query)(const char *feature);
+};
+```
+
+Features are runtime-discoverable flags advertised by the provider,
+letting consumers detect the presence of a given behavior or bug fix
+independently of the libfabric API version (which cannot encode patch
+releases). The ops are exposed at fabric scope so consumers can probe
+features immediately after `fi_fabric()`, before any domain is opened.
+Feature answers may differ between the `efa-direct` and `efa` (RDM)
+fabrics because the two exercise different code paths. Older provider
+builds do not expose `FI_EFA_FEATURE_OPS` at all, so `fi_open_ops()`
+returns `-FI_EINVAL` for the key; callers can treat that as "no
+features advertised".
+
+Currently defined feature strings:
+
+*"mixed_hmem_iov"* (efa-direct only)
+:	The provider correctly inspects every descriptor in a multi-iov
+	request for HMEM/iface, rather than only the first descriptor.
+	Not currently advertised on the `efa` fabric because the RDM
+	receive-copy path still dispatches on `desc[0]` alone.
+
+### query
+Return `true` if the provider build advertises *feature*, otherwise
+`false`. Passing an unknown string (including `NULL`) returns `false`.
+
+
+# Traffic Class (tclass) in EFA
+To prioritize the messages from a given endpoint, user can specify `fi_info->tx_attr->tclass = FI_TC_LOW_LATENCY` in the fi_endpoint() call to set the service level in rdma-core. All other tclass values will be ignored.
+
+# RUNTIME PARAMETERS
+
+*FI_EFA_IFACE*
+: A comma-delimited list of EFA device, i.e. NIC, names that should be visible to
+  the application. This paramater can be used to include/exclude NICs to enforce
+  process affinity based on the hardware topology. The default value is "all" which
+  allows all available NICs to be discovered.
+
+*FI_EFA_TX_SIZE*
+: Maximum number of transmit operations before the provider returns -FI_EAGAIN.
+  For only the RDM endpoint, this parameter will cause transmit operations to
+  be queued when this value is set higher than the default and the transmit queue
+  is full.
+
+*FI_EFA_RX_SIZE*
+: Maximum number of receive operations before the provider returns -FI_EAGAIN.
+
+# RUNTIME PARAMETERS SPECIFIC TO RDM ENDPOINT
+
+These OFI runtime parameters apply only to the RDM endpoint.
+
+*FI_EFA_RX_WINDOW_SIZE*
+: Maximum number of MTU-sized messages that can be in flight from any
+  single endpoint as part of long message data transfer.
+
+*FI_EFA_TX_QUEUE_SIZE*
+: Depth of transmit queue opened with the NIC. This may not be set to a value
+  greater than what the NIC supports.
+
+*FI_EFA_RECVWIN_SIZE*
+: Size of out of order reorder buffer (in messages).  Messages
+  received out of this window will result in an error.
+
+*FI_EFA_CQ_SIZE*
+: Size of any cq created, in number of entries.
+
+*FI_EFA_MR_CACHE_ENABLE*
+: Enables using the mr cache and in-line registration instead of a bounce
+  buffer for iov's larger than max_memcpy_size. Defaults to true. When
+  disabled, only uses a bounce buffer
+
+*FI_EFA_MR_MAX_CACHED_COUNT*
+: Sets the maximum number of memory registrations that can be cached at
+  any time.
+
+*FI_EFA_MR_MAX_CACHED_SIZE*
+: Sets the maximum amount of memory that cached memory registrations can
+  hold onto at any time.
+
+*FI_EFA_MAX_MEMCPY_SIZE*
+: Threshold size switch between using memory copy into a pre-registered
+  bounce buffer and memory registration on the user buffer.
+
+*FI_EFA_MTU_SIZE*
+: Overrides the default MTU size of the device.
+
+*FI_EFA_RX_COPY_UNEXP*
+: Enables the use of a separate pool of bounce-buffers to copy unexpected
+  messages out of the pre-posted receive buffers.
+
+*FI_EFA_RX_COPY_OOO*
+: Enables the use of a separate pool of bounce-buffers to copy out-of-order RTS
+  packets out of the pre-posted receive buffers.
+
+*FI_EFA_MAX_TIMEOUT*
+: Maximum timeout (us) for backoff to a peer after a receiver not ready error.
+
+*FI_EFA_TIMEOUT_INTERVAL*
+: Time interval (us) for the base timeout to use for exponential backoff
+  to a peer after a receiver not ready error.
+
+*FI_EFA_ENABLE_SHM_TRANSFER*
+: Enable SHM provider to provide the communication across all intra-node processes.
+  SHM transfer will be disabled in the case where
+  [`ptrace protection`](https://wiki.ubuntu.com/SecurityTeam/Roadmap/KernelHardening#ptrace_Protection)
+  is turned on. You can turn it off to enable shm transfer.
+
+  FI_EFA_ENABLE_SHM_TRANSFER is parsed during the fi_domain call and is related to the FI_OPT_SHARED_MEMORY_PERMITTED endpoint option.
+  If FI_EFA_ENABLE_SHM_TRANSFER is set to true, the FI_OPT_SHARED_MEMORY_PERMITTED endpoint
+  option overrides FI_EFA_ENABLE_SHM_TRANSFER. If FI_EFA_ENABLE_SHM_TRANSFER is set to false,
+  but the FI_OPT_SHARED_MEMORY_PERMITTED is set to true, the FI_OPT_SHARED_MEMORY_PERMITTED
+  setopt call will fail with -FI_EINVAL.
+
+*FI_EFA_SHM_AV_SIZE*
+: Defines the maximum number of entries in SHM provider's address vector.
+
+*FI_EFA_SHM_MAX_MEDIUM_SIZE*
+: Defines the switch point between small/medium message and large message. The message
+  larger than this switch point will be transferred with large message protocol.
+  NOTE: This parameter is now deprecated.
+
+*FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE*
+: The maximum size for inter EFA messages to be sent by using medium message protocol. Messages which can fit in one packet will be sent as eager message. Messages whose sizes are smaller than this value will be sent using medium message protocol. Other messages will be sent using CTS based long message protocol.
+
+*FI_EFA_FORK_SAFE*
+: Enable fork() support. This may have a small performance impact and should only be set when required. Applications that require to register regions backed by huge pages and also require fork support are not supported.
+
+*FI_EFA_RUNT_SIZE*
+: The maximum number of bytes that will be eagerly sent by inflight messages uses runting read message protocol (Default 307200).
+
+*FI_EFA_INTER_MIN_READ_MESSAGE_SIZE*
+: The minimum message size in bytes for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol. (Default 1048576).
+
+*FI_EFA_INTER_MIN_READ_WRITE_SIZE*
+: The mimimum message size for emulated inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the firmware supports RDMA write, device RDMA write will always be used.
+
+*FI_EFA_USE_DEVICE_RDMA*
+: Specify whether to require or ignore RDMA features of the EFA device.
+- When set to 1/true/yes/on, all RDMA features of the EFA device are used. But if EFA device does not support RDMA and FI_EFA_USE_DEVICE_RDMA is set to 1/true/yes/on, user's application is aborted and a warning message is printed.
+- When set to 0/false/no/off, libfabric will emulate all fi_rma operations instead of offloading them to the EFA network device. Libfabric will not use device RDMA to implement send/receive operations.
+- If not set, RDMA operations will occur when available based on RDMA device ID/version.
+
+*FI_EFA_USE_HUGE_PAGE*
+: Specify Whether EFA provider can use huge page memory for internal buffer.
+Using huge page memory has a small performance advantage, but can
+cause system to run out of huge page memory. By default, EFA provider
+will use huge page unless FI_EFA_FORK_SAFE is set to 1/on/true.
+
+*FI_EFA_USE_ZCPY_RX*
+: Enables the use of application's receive buffers in place of bounce-buffers when feasible.
+(Default: 1). Setting this environment variable to 0 can disable this feature.
+Explicitly setting this variable to 1 does not guarantee this feature
+due to other requirements. See
+https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md
+for details.
+
+*FI_EFA_USE_UNSOLICITED_WRITE_RECV*
+: Use device's unsolicited write recv functionality when it's available. (Default: 1).
+Setting this environment variable to 0 can disable this feature.
+
+*FI_EFA_INTERNAL_RX_REFILL_THRESHOLD*
+: The threshold that EFA provider will refill the internal rx pkt pool. (Default: 8).
+When the number of internal rx pkts to post is lower than this threshold,
+the refill will be skipped.
+
+*FI_EFA_USE_DATA_PATH_DIRECT*
+
+: Use the direct data path implementation that bypasses rdma-core on data path, including the CQ polling and TX/RX submissions, when it's available.
+Setting this variable as 0 will disable this feature (Default: true).
+
+*FI_EFA_TRACK_MR*
+
+: Enable tracking of memory registrations to detect if any outstanding operations
+still reference an MR when it is closed. When enabled, the provider will print
+a warning message if an MR is closed while TX or RX operations still reference it.
+This is useful for debugging memory registration issues. (Default: false).
+
+# SEE ALSO
+
+[`fabric`(7)](fabric.7.html),
+[`fi_provider`(7)](fi_provider.7.html),
+[`fi_getinfo`(3)](fi_getinfo.3.html)
