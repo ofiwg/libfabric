@@ -936,7 +936,7 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
 						  int prov_errno,
 						  enum efa_rdm_ope_state prev_state)
 {
-	bool is_longcts;
+	bool is_eager, is_medium, is_runt_only_runtread, is_longcts;
 
 	/*
 	 * This check must come first in order to properly handle txe errors
@@ -951,16 +951,29 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
 	if (OFI_LIKELY(efa_rdm_mr_gen_check_ope(txe)))
 		return false;
 
-	/* Only a LONGCTS two-sided RTM that has processed its first CTS is
-	 * sender-signalled here: prev_state == OPE_SEND means txe->rx_id is
-	 * valid, so the receiver is referenced by ope index at emit time. */
-	is_longcts = efa_rdm_pkt_type_is_longcts_rtm(txe->protocol) &&
-		     prev_state == EFA_RDM_OPE_SEND;
-	if (!is_longcts)
+	/* Only protocols whose source MR carries user data the receiver is
+	 * waiting on and cannot self-detect. Runtread WITH a tail READ
+	 * (total_len > bytes_runt) is excluded -- the receiver's own failing
+	 * RDMA READ signals it; only runt-only runtread (== bytes_runt) is
+	 * sender-signalled. LONGREAD and one-sided RTW/RTR carry no such data. */
+	is_eager = efa_rdm_pkt_type_is_eager_rtm(txe->protocol);
+	is_medium = efa_rdm_pkt_type_is_medium(txe->protocol);
+	is_runt_only_runtread = efa_rdm_pkt_type_is_runtread(txe->protocol) &&
+				txe->total_len == txe->bytes_runt;
+	is_longcts = efa_rdm_pkt_type_is_longcts_rtm(txe->protocol);
+	if (!is_eager && !is_medium && !is_runt_only_runtread && !is_longcts)
 		return false;
 
 	txe->peer_error_prov_errno = prov_errno;
 	txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
+
+	/* A LONGCTS aborted before its CTS arrived has no valid rx_id, so the
+	 * receiver must be signalled by per-peer msg_id (REF_MSG_ID_SKIP)
+	 * instead of ope index. handle_error already set txe->state to OPE_ERR,
+	 * so test the saved prev_state; a LONGCTS that reached OPE_SEND has a
+	 * valid rx_id and is referenced by ope index at emit time. */
+	if (is_longcts && prev_state != EFA_RDM_OPE_SEND)
+		txe->internal_flags |= EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID;
 
 	return true;
 }
