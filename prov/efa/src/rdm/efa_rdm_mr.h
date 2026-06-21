@@ -128,4 +128,30 @@ static inline void efa_rdm_mr_gen_capture_in_ope_desc(struct efa_rdm_ope *ope)
 	}
 }
 
+/**
+ * @brief Check whether any MR in ope->desc[] has been closed since dispatch.
+ *
+ * @return true if all MRs are still valid, false on any gen mismatches.
+ */
+static inline bool efa_rdm_mr_gen_check_ope(struct efa_rdm_ope *ope)
+{
+	struct efa_rdm_mr *efa_rdm_mr;
+	unsigned int i;
+
+	for (i = 0; i < ope->iov_count; i++) {
+		/* We statically assert that efa_mr is first member of efa_rdm_mr */
+		efa_rdm_mr = ope->desc[i];
+		if (!efa_rdm_mr)
+			break;
+
+		/* Gen check is only invoked in the repost path, after descs gen were already captured */
+		assert(efa_rdm_mr_gen_value_is_valid(ope->desc_gen[i]));
+
+		if (efa_rdm_mr->gen != ope->desc_gen[i])
+			return false;
+	}
+
+	return true;
+}
+
 #endif /* EFA_RDM_MR_H */

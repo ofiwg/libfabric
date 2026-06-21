@@ -369,13 +369,14 @@ void efa_rdm_domain_progress_peers_and_queues(struct efa_rdm_domain *rdm_domain)
 			continue;
 
 		if (ope->window > 0) {
-			ret = efa_rdm_ope_post_send(ope, EFA_RDM_CTSDATA_PKT);
-			if (OFI_UNLIKELY(ret)) {
-				if (ret == -FI_EAGAIN)
-					continue;
+			if (efa_rdm_mr_gen_check_ope(ope))
+				ret = efa_rdm_ope_post_send(ope, EFA_RDM_CTSDATA_PKT);
+			else
+				ret = -FI_ECANCELED;
 
-				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
-				continue;
+			if (OFI_UNLIKELY(ret)) {
+				if (ret != -FI_EAGAIN)
+					efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
 			}
 		}
 	}
