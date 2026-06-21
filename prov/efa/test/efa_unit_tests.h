@@ -614,6 +614,8 @@ void test_efa_direct_ope_released_on_write_error(void **state);
 void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(void **state);
 void test_efa_mr_close_warn_outstanding_rdm_txe(void **state);
 void test_efa_rdm_mr_gen_bumps_on_close(void **state);
+void test_efa_rdm_mr_gen_capture_not_overwritten_on_repost(void **state);
+void test_efa_rdm_mr_gen_check_ope_detects_closed_mr(void **state);
 void test_efa_rdm_mr_cache_regv_no_cache(void **state);
 void test_efa_rdm_mr_cache_regv_with_cache(void **state);
 void test_efa_rdm_mr_cache_regv_cache_hit(void **state);
