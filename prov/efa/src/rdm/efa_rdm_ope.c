@@ -139,7 +139,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	 * Skip removal if receipt was already processed
 	 * (which would have already removed it from the list).
 	 */
-	if (txe->state == EFA_RDM_OPE_SEND && 
+	if (txe->state == EFA_RDM_OPE_SEND &&
 	    !(txe->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED))
 		dlist_remove(&txe->entry);
 
