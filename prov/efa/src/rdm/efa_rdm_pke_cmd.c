@@ -505,9 +505,15 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			efa_rdm_txe_handle_error(txe, err, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
 			/*
-			 * No-op unless EFA_RDM_OPE_PEER_ABORT_PENDING is set
-			 * (LONGCTS sender-side abort): frees the errored txe
-			 * once this sibling WR was the last to drain.
+			 * No-op unless efa_rdm_txe_handle_error() set
+			 * EFA_RDM_OPE_PEER_ABORT_PENDING (sender-side
+			 * source-MR cancel for LONGCTS / medium / runt-only /
+			 * EAGER two-sided RTM -- the emit decision now lives in
+			 * efa_rdm_txe_handle_error so both the device-WR and the
+			 * pre-post gen-check cancellation paths are covered):
+			 * frees the errored txe, or emits the deferred
+			 * PEER_ERROR_PKT, once this sibling WR was the last to
+			 * drain.
 			 */
 			efa_rdm_txe_progress_peer_abort_if_drained(txe);
 		}
@@ -686,6 +692,17 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 		efa_rdm_pke_handle_medium_rtm_send_completion(pkt_entry);
+		/*
+		 * A successful medium WR of a transfer that is aborting
+		 * (source MR canceled): the txe was not released here
+		 * (bytes_acked < total_len because sibling WRs failed).
+		 * Retry the deferred PEER_ERROR_PKT emit/release decision
+		 * now that this WR has drained. Guarded by the pre-call
+		 * PENDING snapshot so a healthy full-success transfer
+		 * (txe already released by the handler) is never touched.
+		 */
+		if (pkt_entry->ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
+			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
@@ -722,6 +739,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
 		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
+		/*
+		 * A successful runt WR of a runt-only transfer that is
+		 * aborting (source MR canceled on a sibling WR), a healthy
+		 * transfer is never touched.
+		 */
+		if (pkt_entry->ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
+			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
@@ -777,7 +801,16 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * Only release TXE when both TX ops complete and receipt is received.
 		 */
 		efa_rdm_pke_assert_ope_valid(pkt_entry);
-		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
+		/*
+		 * A DC medium transfer aborting on source-MR cancel never
+		 * receives its RECEIPT, so the ready-for-release check stays
+		 * false. Take the deferred PEER_ERROR_PKT decision instead.
+		 * Guarded by PENDING (only ever set on medium txes), so
+		 * non-medium DC ops are untouched.
+		 */
+		if (pkt_entry->ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
+			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
+		else if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
 			efa_rdm_txe_release(pkt_entry->ope);
 		break;
 	case EFA_RDM_READ_NACK_PKT:

@@ -85,6 +85,32 @@ bool efa_rdm_pkt_type_is_eager(int pkt_type)
 }
 
 /**
+ * @brief determine whether a req pkt type is an eager two-sided RTM
+ *        (send/tagged), excluding the one-sided RTW variants.
+ *
+ * Used by the sender-side peer-abort path: only two-sided sends consume
+ * a per-peer msg_id in the receiver's reorder window, so only these need
+ * a MSG_ID_SKIP notification when aborted at the source. One-sided eager
+ * RTW is self-contained and owes the target nothing.
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool efa_rdm_pkt_type_is_eager_rtm(int pkt_type)
+{
+	switch(pkt_type) {
+	case EFA_RDM_EAGER_MSGRTM_PKT:
+	case EFA_RDM_EAGER_TAGRTM_PKT:
+	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
+	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+/**
  * @brief determine whether a req pkt type is part of a medium protocol
  *
  * medium protocol send user data eagerly without CTS based flow control.

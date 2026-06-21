@@ -813,11 +813,11 @@ void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno)
  *
  * Two phases (EFA_RDM_PEER_ERROR_EMITTED):
  *  - already emitted: the PEER_ERROR_PKT has drained, so free the txe.
- *  - not yet emitted: emit one now and keep the txe alive until that
- *    packet's own completion frees it. Emitting only after every
- *    CTSDATA WR has drained is what makes the receiver's rxe safe to
- *    delete -- no CTSDATA can race the notification (mr_abort design
- *    §5); the emitted packet is itself a WR, so releasing now would UAF.
+ *  - not yet emitted: Emit a PEER_ERROR_PKT and keep the txe alive
+ *    until that packet's own completion frees it. Emitting only after
+ *    every data WR has drained is what makes the receiver's rxe safe to
+ *    delete -- no data segment can race the notification; the emitted
+ *    packet is itself a WR, so releasing now would UAF.
  */
 void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 {
@@ -836,16 +836,23 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 		return;
 	}
 
-	/* All data WRs have drained: notify the receiver so it can
-	 * abandon the doomed message. Keep the txe alive -- the emitted
-	 * PEER_ERROR_PKT's own completion runs this helper again to release
-	 * it (see EMITTED phase above). */
+	/*
+	 * Every data WR has drained, so it is now safe to notify the
+	 * receiver -- no segment can race the notification. The wire
+	 * ref_kind (REF_OPE_INDEX / REF_MSG_ID / REF_MSG_ID_SKIP) is
+	 * derived from the txe at emit time in
+	 * efa_rdm_pke_init_peer_error_for_ope(); bytes_acked is final here,
+	 * so the SKIP-vs-completion choice it makes is stable.
+	 *
+	 * Keep the txe alive -- the emitted PEER_ERROR_PKT's own completion
+	 * runs this helper again to release it.
+	 */
 	txe->internal_flags |= EFA_RDM_PEER_ERROR_EMITTED;
 	err = efa_rdm_ope_post_send_or_queue(txe, EFA_RDM_PEER_ERROR_PKT);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ,
-			 "Sender-side abort: failed to post "
-			 "PEER_ERROR_PKT err=%zd. Receiver's rxe will leak.\n",
+			 "Sender-side abort: failed to post PEER_ERROR_PKT "
+			 "err=%zd. Receiver's rxe/reorder window may stall.\n",
 			 err);
 		/* The post failed so no PEER_ERROR_PKT completion will
 		 * arrive to release the txe; release it now (still drained). */
@@ -884,6 +891,9 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	struct efa_rdm_pke *pkt_entry;
 	enum efa_rdm_ope_state prev_state = txe->state;
 	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
+	bool uses_msg_id;
+	bool is_eager_rtm;
+	bool is_longcts;
 
 	ep = txe->ep;
 	memset(&err_entry, 0, sizeof(err_entry));
@@ -994,33 +1004,51 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	efa_cntr_report_error(&ep->base_ep.util_ep, txe->cq_entry.flags);
 	efa_rdm_cq_write_error(&ep->base_ep, util_cq, &err_entry, "TXE");
 
-    /*
-     * LONGCTS sender-side abort: the source MR was canceled mid-CTSDATA,
-     * detected pre-post by the MR gen check (-FI_ECANCELED) or post-post
-     * by the NIC (LOCAL_ERROR_INVALID_LKEY). Tell the receiver so its
-     * matched recv errors out instead of hanging.
-     *
-     * Gate on prev_state == OPE_SEND (not bytes_sent): op_id = txe->rx_id
-     * is only valid once efa_rdm_pke_handle_cts_recv() moves the txe to
-     * OPE_SEND.
-     *
-     * Mark PENDING and let efa_rdm_txe_progress_peer_abort_if_drained()
-     * emit once they drain, so no CTSDATA races the PEER_ERROR notification
-     * The txe is freed on the PEER_ERROR_PKT's own completion.
-     */
-	if (!(txe->internal_flags & EFA_RDM_OPE_INTERNAL) &&
-	    (txe->op == ofi_op_msg || txe->op == ofi_op_tagged) &&
-	    prev_state == EFA_RDM_OPE_SEND &&
-	    (err == FI_ECANCELED ||
-	     prov_errno == EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY) &&
-	    txe->peer != NULL &&
-	    (ep->homogeneous_peers ||
-	     txe->peer->is_self ||
-	     efa_rdm_peer_support_peer_error(txe->peer))) {
 
-		txe->peer_error_prov_errno = prov_errno;
-		txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
-		efa_rdm_txe_progress_peer_abort_if_drained(txe);
+	/*
+	 * Sender-side abort: the source MR was canceled mid-transfer,
+	 * detected pre-post by the MR gen check (-FI_ECANCELED) or post-post
+	 * by the NIC (LOCAL_ERROR_INVALID_LKEY/FLUSHED). Tell the receiver so its
+	 * matched recv errors out instead of hanging. Covers LONGCTS plus the
+	 * msg_id-based protocols (medium / runt-only, and EAGER which only
+	 * unblocks the reorder window); the wire ref_kind is selected later in
+	 * efa_rdm_pke_init_peer_error_for_ope().
+	 *
+	 * LONGCTS gates on prev_state == OPE_SEND (not bytes_sent): op_id =
+	 * txe->rx_id is only valid once efa_rdm_pke_handle_cts_recv() moves the
+	 * txe to OPE_SEND. The msg_id kinds use txe->msg_id, always valid, so
+	 * they need no gate.
+	 *
+	 * Mark PENDING and let efa_rdm_txe_progress_peer_abort_if_drained()
+	 * emit once they drain, so no data segment races the PEER_ERROR
+	 * notification. The txe is freed on the PEER_ERROR_PKT's own completion.
+	 */
+	{
+		uses_msg_id = efa_rdm_txe_peer_abort_uses_msg_id(txe);
+		is_eager_rtm = efa_rdm_pkt_type_is_eager_rtm(txe->protocol);
+		/* LONGCTS uses rx_id, valid only in OPE_SEND. */
+		is_longcts = (prev_state == EFA_RDM_OPE_SEND) &&
+				  !uses_msg_id && !is_eager_rtm;
+
+		if (!(txe->internal_flags & EFA_RDM_OPE_INTERNAL) &&
+		    (txe->op == ofi_op_msg || txe->op == ofi_op_tagged) &&
+		    (is_longcts || uses_msg_id || is_eager_rtm) &&
+		    (err == FI_ECANCELED ||
+		     prov_errno == EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY) &&
+		    txe->peer != NULL &&
+		    (ep->homogeneous_peers ||
+		     txe->peer->is_self ||
+		     efa_rdm_peer_support_peer_error(txe->peer))) {
+
+			txe->peer_error_prov_errno = prov_errno;
+			txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
+			/* Try now in case this was the last reference; otherwise
+			 * a later sibling data-WR drain (success or error) or the
+			 * PEER_ERROR_PKT's own completion runs it. The SKIP-vs-
+			 * completion ref_kind is derived at emit time in
+			 * efa_rdm_pke_init_peer_error_for_ope(). */
+			efa_rdm_txe_progress_peer_abort_if_drained(txe);
+		}
 	}
 }
 

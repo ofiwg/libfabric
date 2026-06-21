@@ -331,12 +331,28 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged();
 void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped();
 void test_efa_rdm_txe_handle_error_emits_peer_error_on_invalid_lkey();
 void test_efa_rdm_txe_handle_error_emits_peer_error_on_canceled();
+void test_efa_rdm_txe_handle_error_eager_prepost_cancel_emits_skip();
 void test_efa_rdm_txe_handle_error_no_emit_when_peer_unsupported();
 void test_efa_rdm_txe_handle_error_emits_peer_error_with_homogeneous_peers();
 void test_efa_rdm_txe_handle_error_skips_peer_error_when_no_handshake();
 void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding();
 void test_efa_rdm_pke_handle_tx_error_longcts_abort_drains_txe();
 void test_efa_rdm_txe_handle_error_no_emit_when_not_longcts();
+void test_efa_rdm_pke_handle_peer_error_recv_medium_reaps_rxe();
+void test_efa_rdm_pke_handle_peer_error_recv_medium_tagged();
+void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped();
+void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down();
+void test_efa_rdm_pke_handle_tx_error_medium_emits_skip_on_zero_delivery();
+void test_efa_rdm_pke_handle_tx_error_medium_emits_peer_error_once();
+void test_efa_rdm_pke_handle_tx_error_dc_medium_emits_skip_on_zero_delivery();
+void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported();
+void test_efa_rdm_pke_handle_tx_error_medium_emits_skip_with_homogeneous_peers();
+void test_efa_rdm_pke_handle_tx_error_eager_emits_skip();
+void test_efa_rdm_pke_handle_tx_error_eager_no_emit_when_peer_unsupported();
+void test_efa_rdm_pke_handle_tx_error_eager_rtw_no_emit();
+void test_efa_rdm_pke_handle_tx_error_medium_no_emit_on_non_lkey_errno();
+void test_efa_rdm_pke_handle_tx_error_runtread_only_emits_peer_error();
+void test_efa_rdm_pke_handle_tx_error_runtread_with_read_no_emit();
 void test_efa_rdm_atomic_compare_desc_persistence(void **state);
 void test_efa_rdm_txe_dc_ctsdata_send_first(void **state);
 void test_efa_rdm_txe_dc_ctsdata_resp_first(void **state);
@@ -450,11 +466,21 @@ void test_efa_rdm_peer_reorder_expected_msg_id(void **state);
 void test_efa_rdm_peer_reorder_smaller_msg_id(void **state);
 void test_efa_rdm_peer_reorder_larger_msg_id(void **state);
 void test_efa_rdm_peer_reorder_overflow_msg_id(void **state);
+void test_efa_rdm_peer_abort_ooo_msg_overflow_multi_segment(void **state);
 void test_efa_rdm_peer_move_overflow_pke_to_recvwin(void **state);
 void test_efa_rdm_peer_keep_pke_in_overflow_list(void **state);
 void test_efa_rdm_peer_append_overflow_pke_to_recvwin(void **state);
 void test_efa_rdm_peer_recvwin_queue_or_append_pke(void **state);
 void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state);
+void test_efa_rdm_peer_abort_ooo_in_overflow();
+void test_efa_rdm_peer_abort_ooo_in_recvwin();
+void test_efa_rdm_peer_abort_ooo_miss();
+void test_efa_rdm_peer_abort_ooo_recvwin_drain_progresses();
+void test_efa_rdm_peer_skip_aborted_msg_id_never_arrived_unblocks_window();
+void test_efa_rdm_peer_skip_aborted_msg_id_head_advances();
+void test_efa_rdm_peer_skip_aborted_msg_id_already_processed_noop();
+void test_efa_rdm_peer_skip_aborted_msg_id_buffered_tombstones();
+void test_efa_rdm_peer_skip_aborted_msg_id_tombstone_behind_head();
 /* end of efa_unit_test_rdm_peer.c */
 
 /* begin of efa_unit_test_pke.c */
@@ -474,6 +500,9 @@ void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void
 void test_efa_rdm_prov_errno_is_peer_abort();
 void test_efa_rdm_pkt_is_rxe_remote_read();
 void test_efa_rdm_pke_init_peer_error_for_ope_ope_index();
+void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id();
+void test_efa_rdm_pke_init_peer_error_for_ope_runtread();
+void test_efa_rdm_pke_init_peer_error_for_ope_eager_skip();
 /* end of efa_unit_test_pke.c */
 
 void test_efa_msg_fi_recv(void **state);
