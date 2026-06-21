@@ -341,6 +341,10 @@ void test_efa_rdm_txe_handle_error_emits_peer_error_with_homogeneous_peers(void 
 void test_efa_rdm_txe_handle_error_skips_peer_error_when_no_handshake(void **state);
 void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(void **state);
 void test_efa_rdm_pke_handle_tx_error_longcts_abort_drains_txe(void **state);
+void test_efa_rdm_pke_handle_peer_error_recv_medium_reaps_rxe(void **state);
+void test_efa_rdm_pke_handle_peer_error_recv_medium_tagged(void **state);
+void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped(void **state);
+void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down(void **state);
 void test_efa_rdm_txe_handle_error_no_emit_when_not_longcts(void **state);
 void test_efa_rdm_atomic_compare_desc_persistence(void **state);
 void test_efa_rdm_txe_dc_ctsdata_send_first(void **state);
@@ -458,11 +462,21 @@ void test_efa_rdm_peer_reorder_expected_msg_id(void **state);
 void test_efa_rdm_peer_reorder_smaller_msg_id(void **state);
 void test_efa_rdm_peer_reorder_larger_msg_id(void **state);
 void test_efa_rdm_peer_reorder_overflow_msg_id(void **state);
+void test_efa_rdm_peer_abort_ooo_msg_overflow_multi_segment(void **state);
 void test_efa_rdm_peer_move_overflow_pke_to_recvwin(void **state);
 void test_efa_rdm_peer_keep_pke_in_overflow_list(void **state);
 void test_efa_rdm_peer_append_overflow_pke_to_recvwin(void **state);
 void test_efa_rdm_peer_recvwin_queue_or_append_pke(void **state);
 void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state);
+void test_efa_rdm_peer_abort_ooo_in_overflow(void **state);
+void test_efa_rdm_peer_abort_ooo_in_recvwin(void **state);
+void test_efa_rdm_peer_abort_ooo_miss(void **state);
+void test_efa_rdm_peer_abort_ooo_recvwin_drain_progresses(void **state);
+void test_efa_rdm_peer_skip_aborted_msg_id_never_arrived_unblocks_window(void **state);
+void test_efa_rdm_peer_skip_aborted_msg_id_head_advances(void **state);
+void test_efa_rdm_peer_skip_aborted_msg_id_already_processed_noop(void **state);
+void test_efa_rdm_peer_skip_aborted_msg_id_buffered_abort_markers(void **state);
+void test_efa_rdm_peer_skip_aborted_msg_id_abort_marker_behind_head(void **state);
 /* end of efa_unit_test_rdm_peer.c */
 
 /* begin of efa_unit_test_pke.c */
