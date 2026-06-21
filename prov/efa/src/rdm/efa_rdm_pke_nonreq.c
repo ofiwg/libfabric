@@ -854,26 +854,60 @@ int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *ope)
 {
 	uint32_t op_id;
+	uint32_t ref_kind;
 	uint32_t connid;
 
 	/*
-	 * The op_id field always refers to the ope owned by the
-	 * RECEIVER of this packet. So the sender of the packet
-	 * populates op_id from "the other side's" id.
+	 * op_id identifies the transfer we're abandoning; ref_kind says how
+	 * the receiver reads it:
+	 *   rxe  -> REF_OPE_INDEX, rxe->tx_id (peer's txe, from the RTM)
+	 *   txe (LONGCTS, CTS processed) -> REF_OPE_INDEX, txe->rx_id (peer's
+	 *                                   rxe, from the CTS)
+	 *   txe (LONGCTS aborted pre-CTS) -> REF_MSG_ID_SKIP, msg_id (no rx_id
+	 *                                    known; receiver owes no completion)
+	 *   txe (medium/runtread/EAGER) -> REF_MSG_ID or REF_MSG_ID_SKIP, msg_id
 	 */
 	if (ope->type == EFA_RDM_RXE) {
+		ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
 		op_id = ope->tx_id;
 	} else {
 		assert(ope->type == EFA_RDM_TXE);
-		op_id = ope->rx_id;
+		/*
+		 * msg_id-keyed aborts (EAGER / medium / runtread, and a LONGCTS
+		 * RTM aborted before its first CTS -- flagged with
+		 * EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID) pick the ref_kind from
+		 * bytes_acked:
+		 *   - bytes_acked == 0: nothing was delivered, so the receiver
+		 *     owes no completion -- REF_MSG_ID_SKIP only unblocks its
+		 *     reorder window past msg_id. EAGER always lands here (it
+		 *     never acks data); a pre-CTS LONGCTS abort always lands here
+		 *     too (no CTSDATA was acked); a runtread whose runt RTM(s)
+		 *     were all flushed/cancelled before any acked also lands here
+		 *     (no recv was matched).
+		 *   - bytes_acked > 0: the receiver took partial data and owes
+		 *     a FI_ECANCELED on the matched rxe -- REF_MSG_ID. A runtread
+		 *     that acked some runt segments before the abort lands here.
+		 * Everything else (a LONGCTS that reached OPE_SEND) carries the
+		 * receiver's rxe index, REF_OPE_INDEX. bytes_acked is final here:
+		 * emission only happens once every data WR has drained.
+		 */
+		if (efa_rdm_txe_peer_abort_uses_msg_id(ope) ||
+		    (ope->internal_flags & EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID)) {
+			ref_kind = (ope->bytes_acked == 0)
+				   ? EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP
+				   : EFA_RDM_PEER_ERROR_REF_MSG_ID;
+			op_id = ope->msg_id;
+		} else {
+			ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
+			op_id = ope->rx_id;
+		}
 	}
 
 	connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
 
 	efa_rdm_pke_set_ope(pkt_entry, ope);
 	pkt_entry->peer = ope->peer;
-	return efa_rdm_pke_init_peer_error(pkt_entry, op_id,
-					   EFA_RDM_PEER_ERROR_REF_OPE_INDEX,
+	return efa_rdm_pke_init_peer_error(pkt_entry, op_id, ref_kind,
 					   ope->peer_error_prov_errno, connid);
 }
 
@@ -910,7 +944,7 @@ void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
 		 err_hdr->op_id, prov_errno, efa_strerror(prov_errno));
 
 	/*
-	 * MSG_ID_SKIP direction (EAGER / medium / runt-only runtread that
+	 * MSG_ID_SKIP direction (EAGER / medium / runtread that
 	 * delivered zero bytes): op_id is a per-peer msg_id whose message
 	 * was aborted at the source before any payload the receiver is owed
 	 * arrived. The receiver owes NO completion -- the sole purpose is to

@@ -967,3 +967,251 @@ void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state)
 			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 	efa_rdm_pke_release_tx(pkt_entry);
 }
+
+/**
+ * @brief Verify efa_rdm_pke_init_peer_error_for_ope() derives the wire
+ *        op_id/ref_kind for the medium MSG_ID direction.
+ *
+ * A medium txe exchanges no CTS, so the sender does not know the
+ * receiver's rxe ope-pool index; the abort is keyed by the per-peer
+ * msg_id (op_id = txe->msg_id). The medium protocol is identified by
+ * ope->protocol. bytes_acked picks the ref_kind:
+ *   - bytes_acked > 0 (receiver got partial data, owes a completion):
+ *     EFA_RDM_PEER_ERROR_REF_MSG_ID.
+ *   - bytes_acked == 0 (nothing delivered, owes no completion, only
+ *     unblock the reorder window): EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP.
+ */
+void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *hdr;
+	struct efa_rdm_ope txe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe.type = EFA_RDM_TXE;
+	txe.ep = ep;
+	txe.protocol = EFA_RDM_MEDIUM_MSGRTM_PKT;
+	txe.msg_id = 0x99;
+	txe.rx_id = 0xdead;	/* must be ignored for the MSG_ID direction */
+	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+
+	/* Partial delivery (bytes_acked > 0): REF_MSG_ID (owes completion). */
+	txe.bytes_acked = 128;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	assert_int_equal(hdr->prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	/* Zero delivery (bytes_acked == 0): REF_MSG_ID_SKIP (no completion,
+	 * just unblock the receiver's reorder window). */
+	txe.bytes_acked = 0;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+/**
+ * @brief Verify efa_rdm_pke_init_peer_error_for_ope() routes a runtread
+ *        txe -- with or without a READ remainder -- through the MSG_ID
+ *        direction (op_id = msg_id). Runtread exchanges no CTS, so there
+ *        is no rx_id; its runt RTM(s) carry user data backed by the user
+ *        MR and can be flushed/cancelled before the receiver matches. The
+ *        ref_kind is then picked from bytes_acked: REF_MSG_ID when a
+ *        partial runt was acked (matched rxe owes one FI_ECANCELED), or
+ *        REF_MSG_ID_SKIP when nothing was acked (no recv matched; only
+ *        advance the reorder window).
+ */
+void test_efa_rdm_pke_init_peer_error_for_ope_runtread(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *hdr;
+	struct efa_rdm_ope txe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe.type = EFA_RDM_TXE;
+	txe.ep = ep;
+	txe.protocol = EFA_RDM_RUNTREAD_MSGRTM_PKT;
+	txe.msg_id = 0x99;
+	txe.rx_id = 0xdead;
+	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+
+	/* Runt-only (total_len == bytes_runt) with partial delivery
+	 * (bytes_acked > 0): MSG_ID direction, REF_MSG_ID. */
+	txe.total_len = 4096;
+	txe.bytes_runt = 4096;
+	txe.bytes_acked = 128;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	/* Runt-only with zero delivery (bytes_acked == 0): REF_MSG_ID_SKIP. */
+	txe.bytes_acked = 0;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	/* With a READ remainder (bytes_runt < total_len), partial runt
+	 * acked (bytes_acked > 0): still MSG_ID-keyed (runtread has no
+	 * rx_id), REF_MSG_ID, op_id = msg_id. */
+	txe.total_len = 1048576;
+	txe.bytes_runt = 4096;
+	txe.bytes_acked = 128;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	/* With a READ remainder but nothing acked (bytes_acked == 0): the
+	 * runt RTM(s) were all flushed/cancelled before any was delivered,
+	 * so no recv was matched -- REF_MSG_ID_SKIP, op_id = msg_id. */
+	txe.bytes_acked = 0;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+/**
+ * @brief Verify efa_rdm_pke_init_peer_error_for_ope() routes an EAGER
+ *        two-sided RTM txe to REF_MSG_ID_SKIP.
+ *
+ * An EAGER RTM is a single REQ carrying all the data; if it is aborted
+ * at the source the data never lands, so the receiver owes no completion
+ * and the packet only unblocks its reorder window (op_id = txe->msg_id).
+ * This holds regardless of bytes_acked (an EAGER abort never acks data),
+ * so the SKIP routing is keyed purely on the eager protocol.
+ */
+void test_efa_rdm_pke_init_peer_error_for_ope_eager_skip(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *hdr;
+	struct efa_rdm_ope txe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe.type = EFA_RDM_TXE;
+	txe.ep = ep;
+	txe.protocol = EFA_RDM_EAGER_MSGRTM_PKT;
+	txe.msg_id = 0x99;
+	txe.rx_id = 0xdead;	/* must be ignored for the SKIP direction */
+	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	assert_int_equal(hdr->prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+/**
+ * @brief Verify efa_rdm_pke_init_peer_error_for_ope() routes a LONGCTS
+ *        two-sided RTM aborted before its first CTS to REF_MSG_ID_SKIP.
+ *
+ * A LONGCTS RTM that reached EFA_RDM_OPE_SEND (a CTS was processed) knows
+ * the receiver's rxe index (txe->rx_id) and is signalled by REF_OPE_INDEX.
+ * But a LONGCTS RTM aborted while still in EFA_RDM_TXE_REQ has no rx_id;
+ * efa_rdm_txe_handle_error() sets EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID so the
+ * abort is keyed by per-peer msg_id instead. Since no CTSDATA was ever
+ * acked (bytes_acked == 0), the receiver owes no completion and the
+ * ref_kind is REF_MSG_ID_SKIP -- the receiver only marks the msg_id aborted
+ * and advances its reorder window. This is the fix for the LONGCTS
+ * reorder-window-stall hang (matched recv never established, since no CTS
+ * was exchanged).
+ */
+void test_efa_rdm_pke_init_peer_error_for_ope_longcts_pre_cts_skip(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *hdr;
+	struct efa_rdm_ope txe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe.type = EFA_RDM_TXE;
+	txe.ep = ep;
+	txe.protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	txe.msg_id = 0x99;
+	txe.rx_id = 0xdead;	/* must be ignored for the pre-CTS direction */
+	txe.bytes_acked = 0;	/* no CTSDATA acked before the abort */
+	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+
+	/* Pre-CTS abort: the BY_MSG_ID flag forces msg_id keying even though
+	 * the protocol itself is not one of the msg_id-keyed protocols. With
+	 * bytes_acked == 0 the ref_kind is REF_MSG_ID_SKIP, op_id = msg_id. */
+	txe.internal_flags = EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->type, EFA_RDM_PEER_ERROR_PKT);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP);
+	assert_int_equal(hdr->op_id, txe.msg_id);
+	assert_int_equal(hdr->prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	efa_rdm_pke_release_tx(pkt_entry);
+
+	/* Without the flag (the LONGCTS-reached-OPE_SEND case), the same
+	 * protocol is keyed by ope index (REF_OPE_INDEX, op_id = rx_id),
+	 * proving the flag is what selects the msg_id direction. */
+	txe.internal_flags = 0;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->ref_kind, EFA_RDM_PEER_ERROR_REF_OPE_INDEX);
+	assert_int_equal(hdr->op_id, txe.rx_id);
+	efa_rdm_pke_release_tx(pkt_entry);
+}
