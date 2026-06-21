@@ -4580,6 +4580,315 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 	assert_int_equal(ep->efa_outstanding_tx_ops, 0);
 }
 
+/* Build a matched rxe, insert it into the peer's rxe_map under msg_id,
+ * and drive an inbound medium PEER_ERROR_PKT (ref_kind=MSG_ID,
+ * op_id=msg_id). Asserts the matched peer_rxe is returned to the SRX
+ * (freed, not re-queued) so the given queue is empty, and a clean
+ * peer-abort error completion is written to the user CQ. op selects
+ * msg vs tagged. */
+static void run_medium_inbound_peer_abort(struct efa_resource *resource,
+				       uint32_t op, uint64_t tag,
+				       struct slist *queue,
+				       struct slist *other_queue)
+{
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr match_attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct efa_rdm_ope *rxe;
+	const uint64_t msg_id = 0x77;
+	struct iovec iov;
+	char buf[16];
+	void *desc = NULL;
+	int ret;
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
+				      0, NULL), 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	if (op == ofi_op_tagged)
+		ret = util_srx_generic_trecv(ep->peer_srx_ep, &iov, &desc, 1,
+					     FI_ADDR_UNSPEC, (void *) 0xa1,
+					     tag, 0, 0);
+	else
+		ret = util_srx_generic_recv(ep->peer_srx_ep, &iov, &desc, 1,
+					    FI_ADDR_UNSPEC, (void *) 0xa1, 0);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.tag = tag;
+	match_attr.msg_size = 16;
+	ofi_genlock_lock(srx_ctx->lock);
+	if (op == ofi_op_tagged)
+		ret = peer_srx->owner_ops->get_tag(peer_srx, &match_attr,
+						   &peer_rxe);
+	else
+		ret = peer_srx->owner_ops->get_msg(peer_srx, &match_attr,
+						   &peer_rxe);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, op);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->peer_rxe = peer_rxe;
+	rxe->msg_id = msg_id;
+	rxe->tag = tag;
+	rxe->cq_entry.flags = (op == ofi_op_tagged) ? (FI_RECV | FI_TAGGED)
+						    : (FI_RECV | FI_MSG);
+	/* A medium message inserts its rxe into the peer's rxe_map
+	 * keyed by msg_id; the inbound MSG_ID path resolves it there. */
+	efa_rdm_rxe_map_insert(&peer->rxe_map, msg_id, rxe);
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted += 1;
+	pkt_entry->peer = peer;
+
+	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id = msg_id;
+	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID;
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+	err_hdr->connid = 0xbeef;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
+
+	/* The medium rxe has no outstanding WR, so the drain fires
+	 * immediately: the matched peer_rxe is returned to the SRX
+	 * (freed, not re-queued) and the rxe is reaped, so neither queue
+	 * holds it. */
+	assert_true(slist_empty(queue));
+	if (other_queue)
+		assert_true(slist_empty(other_queue));
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	/* The matched recv gets a clean peer-abort error completion. */
+	assert_cq_peer_aborted_error(resource);
+}
+
+/**
+ * @brief Medium inbound (msg): a PEER_ERROR_PKT with ref_kind=MSG_ID
+ *        resolves the rxe via the peer's rxe_map, marks it
+ *        peer-aborted, and (no outstanding WR) completes it with a
+ *        clean peer-abort error at drain.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_medium_reaps_rxe(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+
+	run_medium_inbound_peer_abort(resource, ofi_op_msg, 0,
+				   &srx_ctx->msg_queue, &srx_ctx->tag_queue);
+}
+
+/**
+ * @brief Medium inbound (tagged): same as above but confirms tag_queue
+ *        routing for a tagged rxe.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_medium_tagged(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+
+	run_medium_inbound_peer_abort(resource, ofi_op_tagged, 0x42,
+				   &srx_ctx->tag_queue, &srx_ctx->msg_queue);
+}
+
+/**
+ * @brief Medium inbound miss: a PEER_ERROR_PKT with ref_kind=MSG_ID
+ *        whose msg_id is not in the peer's rxe_map (e.g. all medium
+ *        WRs failed so the receiver never built an rxe) is a clean
+ *        drop -- no crash, no user CQ error.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct fi_cq_err_entry err_entry;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
+				      0, NULL), 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+	pkt_entry->peer = peer;
+
+	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id = 0xdeadbeef;	/* msg_id never inserted */
+	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID;
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+	err_hdr->connid = 0xbeef;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
+
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, -FI_EAGAIN);
+}
+
+/**
+ * @brief PEER_ERROR_PKT (MSG_ID) arrives for an unexpected rxe
+ *        (RXE_UNEXP). The rxe has no user op bound, so the handler must:
+ *          1. Release unexp_pkt (buffered segments).
+ *          2. Release the rxe via efa_rdm_rxe_release (frees peer_rxe
+ *             through the SRX, removes from rxe_map).
+ *          3. NOT call recover (which would corrupt the SRX).
+ *          4. NOT write a user CQ error (no user op).
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down(
+	void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct efa_rdm_pke *pkt_entry, *unexp_pkt;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct efa_rdm_ope *rxe;
+	struct fi_peer_rx_entry *peer_rxe;
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr match_attr = {0};
+	const uint32_t msg_id = 0x55;
+	size_t rxe_list_len_before;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
+				      0, NULL), 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	/* Allocate the inbound PEER_ERROR pke early (efa_rx_pkt_pool has
+	 * limited entries). */
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+	pkt_entry->peer = peer;
+
+	struct iovec iov;
+	char buf[16];
+	void *desc = NULL;
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	ret = util_srx_generic_recv(ep->peer_srx_ep, &iov, &desc, 1,
+				    FI_ADDR_UNSPEC, (void *) 0xa1, 0);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	ofi_genlock_lock(srx_ctx->lock);
+
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.tag = 0;
+	match_attr.msg_size = 16;
+	ret = peer_srx->owner_ops->get_msg(peer_srx, &match_attr, &peer_rxe);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_msg);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_UNEXP;
+	rxe->peer_rxe = peer_rxe;
+	rxe->msg_id = msg_id;
+
+	unexp_pkt = efa_rdm_pke_alloc(ep, ep->rx_unexp_pkt_pool,
+				      EFA_RDM_PKE_FROM_UNEXP_POOL);
+	assert_non_null(unexp_pkt);
+	rxe->unexp_pkt = unexp_pkt;
+
+	efa_rdm_rxe_map_insert(&peer->rxe_map, msg_id, rxe);
+
+	rxe_list_len_before = efa_unit_test_get_dlist_length(&ep->base_ep.ope_list);
+
+	/* Fill in the PEER_ERROR_PKT wiredata. */
+	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id = msg_id;
+	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID;
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+	err_hdr->connid = 0xbeef;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	/* rxe was freed (removed from rxe_list). */
+	assert_int_equal(efa_unit_test_get_dlist_length(&ep->base_ep.ope_list),
+			 rxe_list_len_before - 1);
+
+	/* SRX msg_queue must be empty (peer_rxe freed, not re-queued). */
+	assert_true(slist_empty(&srx_ctx->msg_queue));
+}
+
 /**
  * @brief Regression test for the LONGCTS sender-side abort txe leak.
  *
