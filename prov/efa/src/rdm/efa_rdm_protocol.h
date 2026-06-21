@@ -301,8 +301,10 @@ EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_read_nack_hdr, 16);
  * Header fields:
  *  - op_id:      an ope owned by the packet's receiver.
  *  - ref_kind:   how to resolve op_id -- REF_OPE_INDEX (an ope-pool
- *                index; LONGREAD/LONGCTS) or REF_MSG_ID (a per-peer
- *                msg_id via the rxe_map; medium, which has no CTS).
+ *                index; LONGREAD/LONGCTS), REF_MSG_ID (a per-peer
+ *                msg_id via the rxe_map; medium that took partial
+ *                data), or REF_MSG_ID_SKIP (a per-peer msg_id whose
+ *                message never delivered; unblock the reorder window).
  *  - prov_errno: the triggering provider error, for CQ/log attribution.
  */
 
@@ -310,6 +312,17 @@ EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_read_nack_hdr, 16);
 #define EFA_RDM_PEER_ERROR_REF_OPE_INDEX	0
 /* op_id is a per-peer msg_id, resolved via the peer's rxe_map. */
 #define EFA_RDM_PEER_ERROR_REF_MSG_ID		1
+/*
+ * op_id is a per-peer msg_id whose message was aborted at the source
+ * before any payload the receiver is owed was delivered (EAGER, or a
+ * medium / runt-only runtread that delivered zero bytes). The receiver
+ * owes NO completion for this msg_id; the packet exists solely to
+ * advance the reorder window past an id that will never arrive, so the
+ * messages queued behind it can be processed. Distinct from REF_MSG_ID,
+ * which targets a matched rxe that took partial data and IS owed a
+ * FI_ECANCELED completion.
+ */
+#define EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP	2
 
 struct efa_rdm_peer_error_hdr {
 	EFA_RDM_BASE_HEADER();

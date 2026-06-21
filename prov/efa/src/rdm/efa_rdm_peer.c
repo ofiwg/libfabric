@@ -296,6 +296,164 @@ void efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_rdm_peer *peer)
 }
 
 /**
+ * @brief Abort a buffered out-of-order message for a given msg_id.
+ *
+ * Called from the inbound PEER_ERROR_PKT handler (MSG_ID miss) when the
+ * receiver has no rxe yet but may have buffered the first segment:
+ *  - Overflow list: physically remove (not yet promoted into recvwin) --
+ *    release the pke chain, free the entry.
+ *  - Recvwin: do NOT NULL the slot (that wedges the drain loop). Mark
+ *    the head pke EFA_RDM_PKE_ABORTED so proc_pending_items_in_robuf
+ *    skips it (frees the chain, slides the window, builds no rxe).
+ *
+ * @param[in,out] peer    peer whose reorder state to check
+ * @param[in]     msg_id  the aborted message's per-peer msg_id
+ * @return true if an OOO entry was found and aborted
+ */
+bool efa_rdm_peer_abort_ooo_msg(struct efa_rdm_peer *peer, uint32_t msg_id)
+{
+	struct efa_rdm_peer_overflow_pke_list_entry *overflow_entry;
+	struct dlist_entry *tmp;
+	struct efa_rdm_pke *pke;
+	uint32_t entry_msg_id;
+	bool aborted = false;
+
+	/* Check recvwin (abort marker, do not NULL the slot). */
+	if (ofi_recvwin_id_valid(&peer->robuf, msg_id)) {
+		pke = *ofi_recvwin_get_msg(&peer->robuf, msg_id);
+		if (pke && efa_rdm_pke_get_rtm_msg_id(pke) == msg_id) {
+			pke->flags |= EFA_RDM_PKE_ABORTED;
+			return true;
+		}
+	}
+
+	/*
+	 * Check overflow list (safe to physically remove).
+	 *
+	 * The overflow list stores ONE entry per segment (it does not chain
+	 * same-msg_id segments the way the recvwin does), so a multi-segment
+	 * medium message has multiple overflow entries for the same msg_id.
+	 * Remove ALL of them -- returning after the first match would leak
+	 * the remaining segments.
+	 */
+	dlist_foreach_container_safe(&peer->overflow_pke_list,
+				     struct efa_rdm_peer_overflow_pke_list_entry,
+				     overflow_entry, entry, tmp) {
+		entry_msg_id = efa_rdm_pke_get_rtm_msg_id(overflow_entry->pkt_entry);
+		if (entry_msg_id == msg_id) {
+			dlist_remove(&overflow_entry->entry);
+			efa_rdm_pke_release_rx_list(overflow_entry->pkt_entry);
+			ofi_buf_free(overflow_entry);
+			aborted = true;
+		}
+	}
+
+	return aborted;
+}
+
+/**
+ * @brief Queue an inbound PEER_ERROR (skip) packet into the reorder window
+ *        as an abort marker, so the window can advance past a source-aborted
+ *        msg_id that will never arrive.
+ *
+ * Called from the inbound PEER_ERROR_PKT handler for REF_MSG_ID_SKIP. The
+ * named message was aborted at the source and owes no completion, but the
+ * reorder window is (or will be) parked on msg_id. Three cases:
+ *  1. Already processed: nothing to do.
+ *  2. A segment was already buffered: mark it aborted in place
+ *     (efa_rdm_peer_abort_ooo_msg); this packet is not needed.
+ *  3. Never arrived: hold this packet, stamp it as the abort marker, and
+ *     queue it in the recvwin (or the overflow list).
+ *
+ * Consumes @p pkt_entry in all cases; the caller must not touch it after.
+ *
+ * @param[in,out] peer       peer whose reorder window to unblock
+ * @param[in]     ep         endpoint
+ * @param[in,out] pkt_entry  inbound PEER_ERROR (skip) packet (consumed)
+ * @param[in]     msg_id     source-aborted msg_id (the wire op_id)
+ * @return 1 if queued as an abort marker, 0 if not needed (released), or a
+ *         negative errno on allocation failure.
+ */
+int efa_rdm_peer_queue_aborted_msg_marker(struct efa_rdm_peer *peer,
+					     struct efa_rdm_ep *ep,
+					     struct efa_rdm_pke *pkt_entry,
+					     uint32_t msg_id)
+{
+	struct efa_rdm_robuf *robuf = &peer->robuf;
+	struct efa_rdm_pke *ooo_entry;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+
+	/* Case 1: window already advanced past this id -- clean drop. */
+	if (ofi_recvwin_id_processed(robuf, msg_id)) {
+		efa_rdm_pke_release_rx(pkt_entry);
+		return 0;
+	}
+
+	/*
+	 * Case 2: a segment was already buffered; mark it aborted in place and
+	 * drop this control packet.
+	 */
+	if (efa_rdm_peer_abort_ooo_msg(peer, msg_id)) {
+		efa_rdm_pke_release_rx(pkt_entry);
+	} else {
+		/*
+		 * Case 3: never arrived. Hold this packet for the reorder window
+		 * (efa_rdm_pke_get_ooo_pke does the rx-pool accounting / clone, and
+		 * consumes pkt_entry), then stamp it as the abort marker.
+		 */
+		ooo_entry = efa_rdm_pke_get_ooo_pke(pkt_entry);
+		if (OFI_UNLIKELY(!ooo_entry)) {
+			/*
+			 * Clone failed (rx_copy_ooo path): get_ooo_pke wrote an EQ
+			 * error but did NOT consume pkt_entry, and our caller ignores
+			 * the return value, so release the inbound packet here to
+			 * avoid leaking an rx pkt on the abort path.
+			 */
+			efa_rdm_pke_release_rx(pkt_entry);
+			return -FI_ENOMEM;
+		}
+
+		/*
+		 * This PEER_ERROR non-req packet masquerades as an RTM so it can sit in
+		 * the msg_id-keyed reorder window: efa_rdm_pke_get_rtm_msg_id() reads
+		 * rtm_hdr->msg_id and asserts REQ_MSG/REQ_ATOMIC, so set msg_id and
+		 * REQ_MSG. EFA_RDM_PKE_ABORTED makes the drain loop cleanly drop the
+		 * packet when processed, unblocking the reorder window; set it last,
+		 * as the get_ooo_pke clone path resets pke->flags.
+		 */
+		rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(ooo_entry);
+		rtm_hdr->msg_id = msg_id;
+		rtm_hdr->flags |= EFA_RDM_REQ_MSG;
+		ooo_entry->flags |= EFA_RDM_PKE_ABORTED;
+
+		if (ofi_recvwin_id_valid(robuf, msg_id)) {
+			efa_rdm_peer_recvwin_queue_or_append_pke(ooo_entry, msg_id, robuf);
+		} else {
+			/*
+			 * Out of window: stash in the overflow list, promoted into the
+			 * recvwin later by efa_rdm_peer_move_overflow_pke_to_recvwin.
+			 */
+			struct efa_rdm_peer_overflow_pke_list_entry *overflow_entry;
+
+			overflow_entry = ofi_buf_alloc(ep->overflow_pke_pool);
+			if (OFI_UNLIKELY(!overflow_entry)) {
+				EFA_WARN(FI_LOG_EP_CTRL,
+					 "Unable to allocate overflow entry for "
+					 "aborted msg_id %u abort marker\n", msg_id);
+				efa_rdm_pke_release_rx(ooo_entry);
+				return -FI_ENOMEM;
+			}
+			overflow_entry->pkt_entry = ooo_entry;
+			dlist_insert_head(&overflow_entry->entry, &peer->overflow_pke_list);
+		}
+	}
+
+	/* Advance the window now in case msg_id was the head slot. */
+	efa_rdm_peer_proc_pending_items_in_robuf(peer, ep);
+	return 1;
+}
+
+/**
  * @brief process packet entries in reorder buffer
  * This function is called after processing the expected packet entry
  *
@@ -306,20 +464,31 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 {
 	struct efa_rdm_pke *pending_pkt;
 	int ret = 0;
-	uint32_t msg_id, exp_msg_id;
+	uint32_t msg_id = 0, exp_msg_id = 0;
 
 	while (1) {
 		pending_pkt = *ofi_recvwin_peek((&peer->robuf));
 		if (!pending_pkt)
 			return;
 
-		msg_id = efa_rdm_pke_get_rtm_msg_id(pending_pkt);
-		EFA_DBG(FI_LOG_EP_CTRL,
-		       "Processing msg_id %d from robuf\n", msg_id);
-		/* efa_rdm_pke_proc_rtm_rta will write error cq entry if needed */
-		ret = efa_rdm_pke_proc_rtm_rta(pending_pkt, peer);
-		*ofi_recvwin_get_next_msg((&peer->robuf)) = NULL;
+		/*
+		 * An abort marker owes no completion -- it is either an aborted
+		 * RTM segment or an inbound PEER_ERROR packet stamped to sit in
+		 * the window -- so free its pke chain rather than processing it
+		 * as a real message. Anything else is a real RTM/RTA. Either way
+		 * the slot is then cleared and the window advanced below.
+		 */
+		if (pending_pkt->flags & EFA_RDM_PKE_ABORTED) {
+			efa_rdm_pke_release_rx_list(pending_pkt);
+		} else {
+			msg_id = efa_rdm_pke_get_rtm_msg_id(pending_pkt);
+			EFA_DBG(FI_LOG_EP_CTRL,
+			       "Processing msg_id %d from robuf\n", msg_id);
+			/* efa_rdm_pke_proc_rtm_rta will write error cq entry if needed */
+			ret = efa_rdm_pke_proc_rtm_rta(pending_pkt, peer);
+		}
 
+		*ofi_recvwin_get_next_msg((&peer->robuf)) = NULL;
 		exp_msg_id = ofi_recvwin_next_exp_id((&peer->robuf));
 		if (exp_msg_id % efa_env.recvwin_size == 0)
 			efa_rdm_peer_move_overflow_pke_to_recvwin(peer);
