@@ -96,6 +96,30 @@ struct expected_err {
 	int prov_errno;
 };
 
+/*
+ * Abort-class CQ errors shared by the RMA abort and partial tests. Which
+ * set is "expected" depends on which side tears its MR down while ops are
+ * in flight:
+ *
+ *   local close  - the INITIATOR closes its own source MR while ops are in
+ *                  flight: initiator-close abort, and the partial test
+ *                  (which closes one of two local MRs aliasing the same
+ *                  buffer). Every error is local-origin.
+ *   remote close - the TARGET closes the remote MR (target-close abort).
+ *                  The op that lands on the invalidated MR takes a remote
+ *                  access error (remote MR invalid).
+ */
+static struct expected_err mr_abort_local_close_errs[] = {
+	{ .err = FI_ECANCELED, .prov_errno = 1 },     /* device flush */
+	{ .err = FI_ECANCELED, .prov_errno = 4100 },  /* RDM pkt post failure */
+	{ .err = FI_EINVAL,    .prov_errno = 5 },     /* local MR invalid */
+};
+
+static struct expected_err mr_abort_remote_close_errs[] = {
+	{ .err = FI_EINVAL,    .prov_errno = 7 },     /* remote MR invalid */
+	{ .err = FI_ECANCELED, .prov_errno = 1 },     /* device flush */
+};
+
 static struct mr_slot *slots;
 static struct op_ctx *op_arr;
 static int *close_order;
@@ -943,19 +967,14 @@ static int run_fill_abort_initiator(int iter)
 	}
 
 	/* Drain CQ */
-	if (close_side == CLOSE_TARGET) {
-		struct expected_err target_errs[] = {
-			{ .err = FI_EINVAL, .prov_errno = 7 },  /* remote MR invalid */
-		};
-		missing = drain_cq_counted(txcq, total_posted, target_errs, 1);
-	} else {
-		struct expected_err initiator_errs[] = {
-			{ .err = FI_ECANCELED, .prov_errno = 1 },    /* device flush */
-			{ .err = FI_ECANCELED, .prov_errno = 4100 },  /* RDM pkt post fail */
-			{ .err = FI_EINVAL, .prov_errno = 5 },        /* local MR invalid */
-		};
-		missing = drain_cq_counted(txcq, total_posted, initiator_errs, 3);
-	}
+	if (close_side == CLOSE_TARGET)
+		missing = drain_cq_counted(txcq, total_posted,
+					   mr_abort_remote_close_errs,
+					   ARRAY_SIZE(mr_abort_remote_close_errs));
+	else
+		missing = drain_cq_counted(txcq, total_posted,
+					   mr_abort_local_close_errs,
+					   ARRAY_SIZE(mr_abort_local_close_errs));
 
 	if (missing < 0)
 		return missing; /* drain_cq_counted hit unexpected error */
@@ -1074,12 +1093,6 @@ static int run_partial_close_initiator(void)
 {
 	struct mr_slot extra_slot = {0};
 	struct fi_rma_iov local_iov, remote_iov;
-	struct expected_err partial_errs[] = {
-		{ .err = FI_ECANCELED, .prov_errno = 1 },    /* device flush */
-		{ .err = FI_ECANCELED, .prov_errno = 4100 },  /* RDM pkt post fail */
-		{ .err = FI_EINVAL, .prov_errno = 5 },        /* local MR invalid */
-		{ .err = FI_EINVAL, .prov_errno = 7 },        /* remote MR invalid */
-	};
 	int i, completed_ok = 0, completed_err = 0, completed;
 	int missing;
 	int ret;
@@ -1140,7 +1153,8 @@ static int run_partial_close_initiator(void)
 	extra_slot.mr = NULL;
 
 	/* Drain both completions */
-	missing = drain_cq_counted(txcq, 2, partial_errs, 4);
+	missing = drain_cq_counted(txcq, 2, mr_abort_local_close_errs,
+				   ARRAY_SIZE(mr_abort_local_close_errs));
 	if (missing < 0) {
 		ret = missing;
 		goto close_extra;
