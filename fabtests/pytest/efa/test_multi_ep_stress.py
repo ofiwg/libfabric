@@ -98,3 +98,18 @@ def test_multi_ep_stress_multi_and_transient_sender_receiver(cmdline_args, remov
         cmd += " --remove-av"
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
+
+@pytest.mark.functional
+@pytest.mark.parametrize("op_type", ["untagged", "tagged", "writedata"])
+def test_multi_ep_stress_thread_completion_shared_av(cmdline_args, op_type):
+    # Test concurrent fi_send/fi_tsend/fi_writedata vs fi_av_insert, fi_cq_read vs fi_av_insert across worker threads under FI_THREAD_COMPLETION
+    cmd = f"fi_efa_multi_ep_stress --threading completion --shared-av --sender-workers 4 --receiver-workers 4 --op-type {op_type}"
+    test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
+    test.run()
+
+@pytest.mark.functional
+def test_multi_ep_stress_thread_completion_shared_av_ep_recycling(cmdline_args):
+    # With EP recycling, one thread could call fi_enable while other thread fi_av_insert under FI_THREAD_COMPLETION
+    cmd = f"fi_efa_multi_ep_stress --threading completion --shared-av --sender-workers 4 --receiver-workers 4 --sender-ep-cycles 5 --receiver-ep-cycles 5"
+    test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
+    test.run()
