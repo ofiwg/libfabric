@@ -2076,6 +2076,21 @@ int main(int argc, char **argv)
 	}
 
 	/*
+	 * The partial test always closes a local MR on the initiator; it has
+	 * no target-close path (run_partial_close_target() only closes its
+	 * extra MR during cleanup, after the transfer). Reject -R target for
+	 * -T partial so the unsupported combination fails explicitly rather
+	 * than silently running the initiator-close path mislabeled as
+	 * "target".
+	 */
+	if (close_side == CLOSE_TARGET && test_mode == TEST_PARTIAL) {
+		FT_ERR("Target-close (-R target) is not supported for "
+		       "the partial test (-T partial): it only closes a "
+		       "local MR on the initiator");
+		return EXIT_FAILURE;
+	}
+
+	/*
 	 * -X (aborted ops owe a target recv completion) only applies to the
 	 * two-sided send/tagged protocols. RMA/atomic and partial modes have
 	 * no posted recv to complete, so reject it there.
