@@ -360,8 +360,8 @@ static int check_no_interference(struct fi_info *info) {
 
 static int validate_consistency()
 {
-        struct fi_info *policy_info1;
-	struct fi_info *policy_info2;
+        struct fi_info *policy_info1 = NULL;
+	struct fi_info *policy_info2 = NULL;
 	const char *name1;
 	const char *name2;
         int ret;
