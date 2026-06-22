@@ -342,6 +342,12 @@ static int setup_endpoint(struct worker_context *ctx, uint64_t total_ops)
 		goto error;
 	}
 
+	ret = fi_ep_bind(ctx->ep, &eq->fid, 0);
+	if (ret) {
+		FT_PRINTERR("fi_ep_bind(eq)", ret);
+		goto error;
+	}
+
 	ret = fi_enable(ctx->ep);
 	if (ret) {
 		FT_PRINTERR("fi_enable", ret);
@@ -455,6 +461,18 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 				fi_cq_strerror(cq, err_entry.prov_errno,
 					       err_entry.err_data, NULL, 0));
 		} else if (timeout > 0) {
+			/* Check EQ for EFA internal packet errors */
+			struct fi_eq_err_entry eq_err = {0};
+			ret = fi_eq_read(eq, NULL, NULL, 0, 0);
+			if (ret == -FI_EAVAIL) {
+				fi_eq_readerr(eq, &eq_err, 0);
+				fprintf(stderr,
+					"EQ error: %s (prov_errno: %d)\n",
+					fi_strerror(eq_err.err),
+					eq_err.prov_errno);
+				completed = -eq_err.err;
+				break;
+			}
 			clock_gettime(CLOCK_MONOTONIC, &b);
 			if (b.tv_sec - a.tv_sec >= timeout) {
 				fprintf(stderr,
@@ -481,7 +499,7 @@ static void *run_sender_worker(void *arg)
 {
 	struct worker_context *ctx = (struct worker_context*) arg;
 	struct ep_message msg;
-	int ret;
+	int ret, comp_ret;
 	struct random_data random_data;
 	const uint64_t total_ops = ctx->num_peers * topts.msgs_per_sender;
 	const uint64_t msg_per_ep_lifecyle = total_ops / topts.sender_ep_recycling;
@@ -658,7 +676,15 @@ static void *run_sender_worker(void *arg)
 			if (ret == 0) {
 				break;
 			} else if (ret == -FI_EAGAIN) {
-				if (wait_for_comp(ctx->cq, 1) == 0) {
+				comp_ret = wait_for_comp(ctx->cq, 1);
+				if (comp_ret < 0) {
+					fprintf(stderr,
+						"Sender %d: peer endpoint closed, exiting now\n",
+						ctx->worker_id);
+					ret = 0;
+					goto out;
+				}
+				if (comp_ret == 0) {
 					fprintf(stderr,
 						"Sender %d: operation has stuck\n",
 						ctx->worker_id);
@@ -691,7 +717,15 @@ static void *run_sender_worker(void *arg)
 					"completions\n",
 					ctx->worker_id, cycle);
 				uint64_t ops_pending =  ops_total_in_this_cycle - ops_completed_in_this_cycle;
-				ops_completed += wait_for_comp(ctx->cq, ops_pending);
+				comp_ret = wait_for_comp(ctx->cq, ops_pending);
+				if (comp_ret < 0) {
+					fprintf(stderr,
+						"Sender %d: peer endpoint closed, exiting now\n",
+						ctx->worker_id);
+					ret = 0;
+					goto out;
+				}
+				ops_completed += comp_ret;
 			} else {
 				printf("Sender %u EP cycle %d: Not waiting for "
 					"completions\n",
