@@ -78,6 +78,7 @@ static struct option test_long_opts[] = {
 	{"shared-cq", no_argument, NULL, OPT_SHARED_CQ},
 	{"op-type", required_argument, NULL, OPT_OP_TYPE},
 	{"random-seed", required_argument, NULL, OPT_RANDOM_SEED},
+	{"threading", required_argument, NULL, LONG_OPT_THREADING},
 	{0, 0, 0, 0}};
 
 // RMA information
@@ -1416,6 +1417,8 @@ static int parse_test_opts(int argc, char **argv)
 			print_test_usage();
 			return -2;
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
@@ -1444,7 +1447,14 @@ int main(int argc, char **argv)
 		goto out;
 
 	// Set up hints
-	opts.threading = FI_THREAD_SAFE;
+	if (!opts.threading)
+		opts.threading = FI_THREAD_SAFE;
+	if (opts.threading == FI_THREAD_COMPLETION && topts.shared_cq) {
+		fprintf(stderr, "--shared-cq is incompatible with "
+			"--threading completion\n");
+		ret = -1;
+		goto out;
+	}
 	hints->caps = FI_MSG | FI_RMA;
 	hints->mode = FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = FI_MR_ALLOCATED | FI_MR_LOCAL |
