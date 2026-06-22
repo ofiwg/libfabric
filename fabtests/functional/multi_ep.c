@@ -468,18 +468,28 @@ static int setup_av_ep(int idx)
 {
 	int ret;
 
-	fi_freeinfo(hints);
-	hints = fi_dupinfo(fi);
-	fi_freeinfo(fi);
+	if(!opts.dst_addr) {
+		/**
+		 * only clear src_addr on server side, to avoid addr in use
+		 * errors. some providers may require src_addr to be set on
+		 * client side for address resolution when binding traffic
+		 * to specific addresses. src_port originally only set on
+		 * server side, so letting src_addr persist on client side
+		 * should not cause addr in use issues
+		 */
+		fi_freeinfo(hints);
+		hints = fi_dupinfo(fi);
+		fi_freeinfo(fi);
 
-	free(hints->src_addr);
-	hints->src_addr = NULL;
-	hints->src_addrlen = 0;
+		free(hints->src_addr);
+		hints->src_addr = NULL;
+		hints->src_addrlen = 0;
 
-	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
-	if (ret) {
-		FT_PRINTERR("fi_getinfo", ret);
-		return ret;
+		ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
+		if (ret) {
+			FT_PRINTERR("fi_getinfo", ret);
+			return ret;
+		}
 	}
 
 	ret = fi_endpoint(domain, fi, &eps[idx], NULL);
