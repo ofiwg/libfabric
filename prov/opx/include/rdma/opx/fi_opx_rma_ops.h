@@ -34,6 +34,8 @@
 #ifndef _FI_PROV_OPX_RMA_OPS_H_
 #define _FI_PROV_OPX_RMA_OPS_H_
 
+#include "rdma/opx/fi_opx_atomic_clones.h"
+
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
  * operands of the token pasting operator are not expanded */
@@ -120,16 +122,18 @@
 
 #define FI_OPX_RX_ATOMIC_SPECIALIZED_FUNC_NAME_(OP, DT) fi_opx_rx_atomic_##OP##_##DT
 
-#define FI_OPX_RX_ATOMIC_DO_MIN(buf_, addr_, ctype)   \
-	ctype	    *buf__  = (ctype *) buf_;         \
-	ctype	    *addr__ = (ctype *) addr_;        \
-	const size_t count  = nbytes / sizeof(ctype); \
-	unsigned     i;                               \
-	for (i = 0; i < count; ++i)                   \
-		if (buf__[i] < addr__[i])             \
-			addr__[i] = buf__[i];
+#define FI_OPX_RX_ATOMIC_DO_MIN_SCALAR(buf_, addr_, ctype)    \
+	{                                                     \
+		ctype	    *buf__  = (ctype *) buf_;         \
+		ctype	    *addr__ = (ctype *) addr_;        \
+		const size_t count  = nbytes / sizeof(ctype); \
+		unsigned     i;                               \
+		for (i = 0; i < count; ++i)                   \
+			if (buf__[i] < addr__[i])             \
+				addr__[i] = buf__[i];         \
+	}
 
-#define FI_OPX_RX_ATOMIC_DO_MAX(buf_, addr_, ctype)           \
+#define FI_OPX_RX_ATOMIC_DO_MAX_SCALAR(buf_, addr_, ctype)    \
 	{                                                     \
 		ctype	    *buf__  = (ctype *) buf_;         \
 		ctype	    *addr__ = (ctype *) addr_;        \
@@ -140,7 +144,55 @@
 				addr__[i] = buf__[i];         \
 	}
 
-#define FI_OPX_RX_ATOMIC_DO_SUM(buf_, addr_, ctype)           \
+#ifdef FI_OPX_RX_ATOMIC_USE_TARGET_CLONES
+#define FI_OPX_RX_ATOMIC_CLONED_NUMERIC_PROTOTYPES(op_)                                                 \
+	void fi_opx_rx_atomic_##op_##_int32_target_clones(const void *buf, void *addr, size_t nbytes);  \
+	void fi_opx_rx_atomic_##op_##_uint32_target_clones(const void *buf, void *addr, size_t nbytes); \
+	void fi_opx_rx_atomic_##op_##_int64_target_clones(const void *buf, void *addr, size_t nbytes);  \
+	void fi_opx_rx_atomic_##op_##_uint64_target_clones(const void *buf, void *addr, size_t nbytes); \
+	void fi_opx_rx_atomic_##op_##_float_target_clones(const void *buf, void *addr, size_t nbytes);  \
+	void fi_opx_rx_atomic_##op_##_double_target_clones(const void *buf, void *addr, size_t nbytes)
+
+FI_OPX_RX_ATOMIC_CLONED_NUMERIC_PROTOTYPES(min);
+FI_OPX_RX_ATOMIC_CLONED_NUMERIC_PROTOTYPES(max);
+FI_OPX_RX_ATOMIC_CLONED_NUMERIC_PROTOTYPES(sum);
+FI_OPX_RX_ATOMIC_CLONED_NUMERIC_PROTOTYPES(prod);
+FI_OPX_RX_ATOMIC_CLONED_NUMERIC_PROTOTYPES(atomic_write);
+
+#define FI_OPX_RX_ATOMIC_CLONED_TYPE_IS(ctype, type) __builtin_types_compatible_p(ctype, type)
+
+#define FI_OPX_RX_ATOMIC_CLONED_NUMERIC_DISPATCH(op_, buf_, addr_, ctype, scalar_)          \
+	{                                                                                   \
+		if (FI_OPX_RX_ATOMIC_CLONED_TYPE_IS(ctype, int32_t)) {                      \
+			fi_opx_rx_atomic_##op_##_int32_target_clones(buf_, addr_, nbytes);  \
+		} else if (FI_OPX_RX_ATOMIC_CLONED_TYPE_IS(ctype, uint32_t)) {              \
+			fi_opx_rx_atomic_##op_##_uint32_target_clones(buf_, addr_, nbytes); \
+		} else if (FI_OPX_RX_ATOMIC_CLONED_TYPE_IS(ctype, int64_t)) {               \
+			fi_opx_rx_atomic_##op_##_int64_target_clones(buf_, addr_, nbytes);  \
+		} else if (FI_OPX_RX_ATOMIC_CLONED_TYPE_IS(ctype, uint64_t)) {              \
+			fi_opx_rx_atomic_##op_##_uint64_target_clones(buf_, addr_, nbytes); \
+		} else if (FI_OPX_RX_ATOMIC_CLONED_TYPE_IS(ctype, float)) {                 \
+			fi_opx_rx_atomic_##op_##_float_target_clones(buf_, addr_, nbytes);  \
+		} else if (FI_OPX_RX_ATOMIC_CLONED_TYPE_IS(ctype, double)) {                \
+			fi_opx_rx_atomic_##op_##_double_target_clones(buf_, addr_, nbytes); \
+		} else {                                                                    \
+			scalar_;                                                            \
+		}                                                                           \
+	}
+
+#define FI_OPX_RX_ATOMIC_CLONED_NUMERIC_COMPLEX_DISPATCH(op_, buf_, addr_, ctype, scalar_)          \
+	{                                                                                           \
+		if (FI_OPX_RX_ATOMIC_CLONED_TYPE_IS(ctype, complex float)) {                        \
+			fi_opx_rx_atomic_##op_##_float_target_clones(buf_, addr_, nbytes);          \
+		} else if (FI_OPX_RX_ATOMIC_CLONED_TYPE_IS(ctype, complex double)) {                \
+			fi_opx_rx_atomic_##op_##_double_target_clones(buf_, addr_, nbytes);         \
+		} else {                                                                            \
+			FI_OPX_RX_ATOMIC_CLONED_NUMERIC_DISPATCH(op_, buf_, addr_, ctype, scalar_); \
+		}                                                                                   \
+	}
+#endif
+
+#define FI_OPX_RX_ATOMIC_DO_SUM_SCALAR(buf_, addr_, ctype)    \
 	{                                                     \
 		ctype	    *buf__  = (ctype *) buf_;         \
 		ctype	    *addr__ = (ctype *) addr_;        \
@@ -150,7 +202,7 @@
 			addr__[i] += buf__[i];                \
 	}
 
-#define FI_OPX_RX_ATOMIC_DO_PROD(buf_, addr_, ctype)          \
+#define FI_OPX_RX_ATOMIC_DO_PROD_SCALAR(buf_, addr_, ctype)   \
 	{                                                     \
 		ctype	    *buf__  = (ctype *) buf_;         \
 		ctype	    *addr__ = (ctype *) addr_;        \
@@ -159,6 +211,26 @@
 		for (i = 0; i < count; ++i)                   \
 			addr__[i] = addr__[i] * buf__[i];     \
 	}
+
+#ifdef FI_OPX_RX_ATOMIC_USE_TARGET_CLONES
+#define FI_OPX_RX_ATOMIC_DO_MIN(buf_, addr_, ctype)                       \
+	FI_OPX_RX_ATOMIC_CLONED_NUMERIC_DISPATCH(min, buf_, addr_, ctype, \
+						 FI_OPX_RX_ATOMIC_DO_MIN_SCALAR(buf_, addr_, ctype))
+#define FI_OPX_RX_ATOMIC_DO_MAX(buf_, addr_, ctype)                       \
+	FI_OPX_RX_ATOMIC_CLONED_NUMERIC_DISPATCH(max, buf_, addr_, ctype, \
+						 FI_OPX_RX_ATOMIC_DO_MAX_SCALAR(buf_, addr_, ctype))
+#define FI_OPX_RX_ATOMIC_DO_SUM(buf_, addr_, ctype)                               \
+	FI_OPX_RX_ATOMIC_CLONED_NUMERIC_COMPLEX_DISPATCH(sum, buf_, addr_, ctype, \
+							 FI_OPX_RX_ATOMIC_DO_SUM_SCALAR(buf_, addr_, ctype))
+#define FI_OPX_RX_ATOMIC_DO_PROD(buf_, addr_, ctype)                       \
+	FI_OPX_RX_ATOMIC_CLONED_NUMERIC_DISPATCH(prod, buf_, addr_, ctype, \
+						 FI_OPX_RX_ATOMIC_DO_PROD_SCALAR(buf_, addr_, ctype))
+#else
+#define FI_OPX_RX_ATOMIC_DO_MIN(buf_, addr_, ctype)  FI_OPX_RX_ATOMIC_DO_MIN_SCALAR(buf_, addr_, ctype)
+#define FI_OPX_RX_ATOMIC_DO_MAX(buf_, addr_, ctype)  FI_OPX_RX_ATOMIC_DO_MAX_SCALAR(buf_, addr_, ctype)
+#define FI_OPX_RX_ATOMIC_DO_SUM(buf_, addr_, ctype)  FI_OPX_RX_ATOMIC_DO_SUM_SCALAR(buf_, addr_, ctype)
+#define FI_OPX_RX_ATOMIC_DO_PROD(buf_, addr_, ctype) FI_OPX_RX_ATOMIC_DO_PROD_SCALAR(buf_, addr_, ctype)
+#endif
 
 #define FI_OPX_RX_ATOMIC_DO_LOR(buf_, addr_, ctype)           \
 	{                                                     \
@@ -299,15 +371,23 @@
 			buf__[i] = addr__[i];                 \
 	}
 
-#define FI_OPX_RX_ATOMIC_DO_ATOMIC_WRITE(buf_, addr_, ctype)  \
-	{                                                     \
-		ctype	    *buf__  = (ctype *) buf_;         \
-		ctype	    *addr__ = (ctype *) addr_;        \
-		const size_t count  = nbytes / sizeof(ctype); \
-		unsigned     i;                               \
-		for (i = 0; i < count; ++i)                   \
-			addr__[i] = buf__[i];                 \
+#define FI_OPX_RX_ATOMIC_DO_ATOMIC_WRITE_SCALAR(buf_, addr_, ctype) \
+	{                                                           \
+		ctype	    *buf__  = (ctype *) buf_;               \
+		ctype	    *addr__ = (ctype *) addr_;              \
+		const size_t count  = nbytes / sizeof(ctype);       \
+		unsigned     i;                                     \
+		for (i = 0; i < count; ++i)                         \
+			addr__[i] = buf__[i];                       \
 	}
+
+#ifdef FI_OPX_RX_ATOMIC_USE_TARGET_CLONES
+#define FI_OPX_RX_ATOMIC_DO_ATOMIC_WRITE(buf_, addr_, ctype)                               \
+	FI_OPX_RX_ATOMIC_CLONED_NUMERIC_COMPLEX_DISPATCH(atomic_write, buf_, addr_, ctype, \
+							 FI_OPX_RX_ATOMIC_DO_ATOMIC_WRITE_SCALAR(buf_, addr_, ctype))
+#else
+#define FI_OPX_RX_ATOMIC_DO_ATOMIC_WRITE(buf_, addr_, ctype) FI_OPX_RX_ATOMIC_DO_ATOMIC_WRITE_SCALAR(buf_, addr_, ctype)
+#endif
 
 #define FI_OPX_RX_ATOMIC_DO_CSWAP(buf_, addr_, ctype)            \
 	{                                                        \

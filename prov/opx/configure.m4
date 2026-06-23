@@ -49,6 +49,15 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 	dnl If OPXS_KERNEL is set and a valid path then CPPFLAGS=-I${OPXS_KERNEL}/include/uapi
 	dnl Allow user to specify an alternate kernel headers prefix
 	AC_ARG_VAR([OPXS_KERNEL], [Kernel headers prefix; expects $OPXS_KERNEL/include/uapi])
+	AC_ARG_ENABLE([opx-target-clones],
+		[AS_HELP_STRING([--enable-opx-target-clones@<:@=yes|no|auto@:>@],
+			[Enable OPX target_clones atomic helpers @<:@default=auto@:>@])],
+		[], [enable_opx_target_clones=auto])
+	AS_CASE([x$enable_opx_target_clones],
+		[xyes], [],
+		[xno], [],
+		[xauto], [],
+		[AC_MSG_ERROR([--enable-opx-target-clones expects yes, no, or auto])])
 
 	UAPI_HOME="/usr/include/uapi"
 	if test -n "$OPXS_KERNEL" && test -d "$OPXS_KERNEL/include/uapi"; then
@@ -176,6 +185,67 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 				opx_happy=0
 			]
 		)
+
+		opx_target_clones=0
+		AS_IF([test $opx_happy -eq 1 && test "x$enable_opx_target_clones" = "xyes" && test x$host_cpu != xx86_64], [
+			AC_MSG_ERROR([OPX target_clones requested but currently supported only on x86_64])
+		])
+		AS_IF([test $opx_happy -eq 1 && test "x$enable_opx_target_clones" != "xno" && test x$host_cpu = xx86_64], [
+			AC_CACHE_CHECK([whether the compiler and linker support OPX target_clones], [opx_cv_target_clones], [
+				AC_LINK_IFELSE([AC_LANG_PROGRAM(
+					[[
+						#include <stddef.h>
+
+						#if defined(__clang__)
+						#ifndef __has_attribute
+						#define __has_attribute(x) 0
+						#endif
+						#if !__has_attribute(target_clones)
+						#error "target_clones not supported"
+						#endif
+						#elif !defined(__GNUC__) || (__GNUC__ < 6)
+						#error "target_clones not supported"
+						#endif
+
+						__attribute__((target_clones("avx512f", "avx2", "sse2", "default")))
+						static void opx_target_clones_impl(const void *src, void *dst, size_t n)
+						{
+							const char *s = src;
+							char *d = dst;
+							size_t i;
+
+							for (i = 0; i < n; ++i)
+								d[i] = s[i];
+						}
+
+						void opx_target_clones_wrapper(const void *src, void *dst, size_t n)
+						{
+							opx_target_clones_impl(src, dst, n);
+						}
+					]],
+					[[
+						char src[1] = { 1 };
+						char dst[1] = { 0 };
+
+						opx_target_clones_wrapper(src, dst, sizeof(src));
+						return dst[0] != 1;
+					]])],
+					[opx_cv_target_clones=yes],
+					[opx_cv_target_clones=no])
+			])
+			AS_IF([test "x$opx_cv_target_clones" = "xyes"], [
+				opx_target_clones=1
+			], [
+				AS_IF([test "x$enable_opx_target_clones" = "xyes"],
+					[AC_MSG_ERROR([OPX target_clones requested but compiler/linker does not support it])],
+					[AC_MSG_NOTICE([OPX target_clones disabled: compiler/linker support not detected])])
+			])
+		], [
+			AS_IF([test "x$enable_opx_target_clones" = "xno"],
+				[AC_MSG_NOTICE([OPX target_clones disabled by user])])
+		])
+		AC_DEFINE_UNQUOTED([HAVE_OPX_TARGET_CLONES], [$opx_target_clones], [Define to 1 if OPX target_clones atomic helpers are supported])
+
 		AS_IF([test $opx_happy -eq 1],[
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
 				[[#include <rdma/hfi/hfi1_user.h>]],
