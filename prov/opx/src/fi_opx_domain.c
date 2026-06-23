@@ -739,9 +739,9 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 	 * libhfi1verbs handle, but endpoint/context close paths may release
 	 * that global handle before this domain polls its HFISVC queues.
 	 */
-	domain->hfisvc.libhfi1verbs = dlopen("libhfi1verbs.so", RTLD_LAZY);
+	domain->hfisvc.libhfi1verbs = dlopen("libhfi1verbs.so.1", RTLD_LAZY);
 	if (domain->hfisvc.libhfi1verbs == NULL) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] dlopen(libhfi1verbs.so) failed: %s\n", dlerror());
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] Could not dlopen libhfi1verbs: %s\n", dlerror());
 		rc = -FI_ENODEV;
 		goto done;
 	}
