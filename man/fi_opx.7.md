@@ -201,7 +201,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
   The logic used will always be the first valid in a selector list. For example, `default` and
   `fixed` will match all callers, so if either are in the beginning of a selector list, you will
-  only use `fixed` or `default` regardles of if there are any more selectors.
+  only use `fixed` or `default` regardless of if there are any more selectors.
 
   Examples:
   - `FI_OPX_HFI_SELECT=0` all callers will open contexts on HFI 0.
@@ -215,16 +215,15 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 : Integer. HFI1 port number.  If the specified port is not available, a default active port will be selected.
   Special value 0 indicates any available port. Defaults to port 1 on OPA100 and any port on CN5000.
 
-*FI_OPX_DELIVERY_COMPLETION_THRESHOLD*
-: Integer. Will be deprecated. Please use FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD.
-
 *FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD*
 : Integer. The maximum message length in bytes that will be copied to the SDMA bounce buffer.
   For messages larger than this threshold, the send will not be completed until receiver
   has ACKed. Value must be between 16385 and 2147483646. Defaults to 16385.
 
-*FI_OPX_SDMA_DISABLE*
-: Boolean (1/0, on/off, true/false, yes/no). Disables SDMA offload hardware. Default is 0.
+*FI_OPX_SDMA*
+: Boolean (1/0, on/off, true/false, yes/no). Enables SDMA offload hardware. Defaults to 1 (SDMA enabled).
+  Deprecated alias: FI_OPX_SDMA_DISABLE (still honored, emits a deprecation warning). The two have
+  inverted meaning: FI_OPX_SDMA=0 is equivalent to the old FI_OPX_SDMA_DISABLE=1.
 
 *FI_OPX_MAX_PKT_SIZE*
 : Integer. Set the maximum packet size which must be less than or equal to the driver's
@@ -274,23 +273,22 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
     which effectively disables rendezvous for any payload that fits in
     multi-packet eager.
 
-*FI_OPX_MP_EAGER_DISABLE*
-: Boolean (1/0, on/off, true/false, yes/no). Disables multi-packet eager. Defaults to 0.
+*FI_OPX_MP_EAGER*
+: Boolean (1/0, on/off, true/false, yes/no). Enables multi-packet eager. Defaults to 1 (enabled).
+  Deprecated alias: FI_OPX_MP_EAGER_DISABLE (still honored, emits a deprecation warning). The two have
+  inverted meaning: FI_OPX_MP_EAGER=0 is equivalent to the old FI_OPX_MP_EAGER_DISABLE=1.
 
-*FI_OPX_TID_DISABLE*
-: Boolean (1/0, on/off, true/false, yes/no). Disables using Token ID (TID). Defaults to 0.
-
-*FI_OPX_EXPECTED_RECEIVE_ENABLE*
-: Deprecated. Use FI_OPX_TID_DISABLE instead.
+*FI_OPX_TID*
+: Boolean (1/0, on/off, true/false, yes/no). Enables using Token ID (TID). Defaults to 1 (TID enabled).
+  Deprecated alias: FI_OPX_TID_DISABLE (still honored, emits a deprecation warning). The two have
+  inverted meaning: FI_OPX_TID=0 is equivalent to the old FI_OPX_TID_DISABLE=1.
+  The deprecated FI_OPX_EXPECTED_RECEIVE_ENABLE has been removed; use FI_OPX_TID instead.
 
 *FI_OPX_PROG_AFFINITY*
 : String. This sets the affinity to be used for any progress threads. Set as a colon-separated
   triplet as `start:end:stride`, where stride controls the interval between selected cores.
   For example, `1:5:2` will have cores 1, 3, and 5 as valid cores for progress threads. By default
   no affinity is set.
-
-*FI_OPX_AUTO_PROGRESS_INTERVAL_USEC*
-: Deprecated/ignored. Auto progress threads are now interrupt-driven and only poll when data is available.
 
 *FI_OPX_PKEY*
 : Integer. Partition key, a 2 byte positive integer. Default is the Pkey in the index 0 of the
@@ -337,10 +335,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
   Default is in-order (`0:0:0:0:0:0`) route controls.
 
-*FI_OPX_SHM_ENABLE*
+*FI_OPX_SHM*
 : Boolean (1/0, on/off, true/false, yes/no). Enables shm across all ports and hfi units
   on the node. Setting it to NO disables shm except peers with same lid and same
   hfi1 (loopback).  Defaults to: "YES"
+  Deprecated alias: FI_OPX_SHM_ENABLE (still honored, emits a deprecation warning).
 
 *FI_OPX_LINK_DOWN_WAIT_TIME_MAX_SEC*
 : Integer. The maximum time in seconds to wait for a link to come back up. Default is 70 seconds.
@@ -369,6 +368,24 @@ or underruns.  Default is false.
   payload smaller than this threshold use a single HFI rail even when striping is enabled.
   Only effective when FI_OPX_MULTI_HFI_STRIPING=1. Not supported on OPA-100 hardware.
   Default: 65536 (64 KiB).
+
+# TRACING
+
+The OPX provider includes an optional per-process performance tracing facility. The following
+environment variables control it. They are read directly from the environment (not as
+fi_param values) and are intended for development and performance debugging.
+
+*FI_OPX_TRACER_OUT_PATH*
+: String. Specify the directory path used to output per-process performance tracing log files.
+  When unset, tracing output is disabled (default: none).
+
+*FI_OPX_TRACER_BUFFER_SIZE*
+: Integer. Size in bytes of the in-memory per-process trace buffer. The value is clamped to the
+  provider's supported minimum, maximum, and default buffer sizes.
+
+*FI_OPX_TRACER_FILTER*
+: String. Filter expression selecting which trace events are recorded. When unset, no filter is
+  applied.
 
 # SEE ALSO
 

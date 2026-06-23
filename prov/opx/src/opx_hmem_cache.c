@@ -150,31 +150,6 @@ static struct fi_ops opx_mr_cache_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-#ifndef NDEBUG
-// Derived from the libfabric utility mr function util_mr_find_within
-static int opx_hmem_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
-{
-	struct ofi_mr_entry *entry = data;
-	struct ofi_mr_info  *info  = key;
-
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_MR,
-		     "OPX_DEBUG_ENTRY KEY [%p - %p] (len: %zu,%#lX)  ENTRY [%p - %p] (len: %zu,%#lX)\n",
-		     info->iov.iov_base, (char *) (info->iov.iov_base) + info->iov.iov_len, info->iov.iov_len,
-		     info->iov.iov_len, entry->info.iov.iov_base,
-		     (char *) (entry->info.iov.iov_base) + entry->info.iov.iov_len, entry->info.iov.iov_len,
-		     entry->info.iov.iov_len);
-
-	if (ofi_iov_shifted_left(&info->iov, &entry->info.iov)) {
-		return -1;
-	}
-	if (ofi_iov_shifted_right(&info->iov, &entry->info.iov)) {
-		return 1;
-	}
-
-	return 0;
-}
-#endif
-
 // Derived from libfabric utility mr function util_mr_find_overlap
 static int opx_hmem_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data)
 {
@@ -206,9 +181,8 @@ static int opx_hmem_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data
 }
 
 /*
- * COPIED FROM ofi_mr_cache_init because it needs to be able to set the
- * compare function. util_mr_find_within checks info->peer_id and OPX
- * does not currently use this field.
+ * COPIED FROM ofi_mr_cache_init which was static and so it was
+ * inaccessible to OPX direct calls.
  */
 __OPX_FORCE_INLINE__
 int opx_hmem_cache_init(struct util_domain *domain, struct ofi_mem_monitor **monitors, struct ofi_mr_cache *cache)
@@ -239,11 +213,7 @@ int opx_hmem_cache_init(struct util_domain *domain, struct ofi_mem_monitor **mon
 	cache->prov	       = &fi_opx_provider;
 	ofi_atomic_inc32(&domain->ref);
 
-#ifndef NDEBUG
-	ofi_rbmap_init(&cache->tree, getenv("OPX_FIND_WITHIN") ? opx_hmem_mr_find_within : opx_hmem_mr_find_overlap);
-#else
 	ofi_rbmap_init(&cache->tree, opx_hmem_mr_find_overlap);
-#endif
 	ret = ofi_monitors_add_cache(monitors, cache);
 	if (ret) {
 		goto destroy;

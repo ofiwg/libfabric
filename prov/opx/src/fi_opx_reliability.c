@@ -2253,7 +2253,14 @@ void fi_opx_reliability_service_init(struct fi_opx_domain *domain, struct fi_opx
 	 */
 	service->drop_count = 0;
 	service->drop_mask  = 0x00FF; /* default: drop every 256'th packet */
-	char *env	    = getenv("FI_OPX_RELIABILITY_SERVICE_DROP_PACKET_MASK");
+	char *env	    = getenv("_FI_OPX_RELIABILITY_SERVICE_DROP_PACKET_MASK_");
+	if (!env) {
+		env = getenv("FI_OPX_RELIABILITY_SERVICE_DROP_PACKET_MASK");
+		if (env) {
+			fprintf(stderr,
+				"FI_OPX_RELIABILITY_SERVICE_DROP_PACKET_MASK is deprecated. Use _FI_OPX_RELIABILITY_SERVICE_DROP_PACKET_MASK_ instead.\n");
+		}
+	}
 	if (env) {
 		uint16_t mask = (uint16_t) strtoul(env, NULL, 16);
 		fprintf(stderr, "%s():%d FI_OPX_RELIABILITY_SERVICE_DROP_PACKET_MASK = '%s' (0x%04hx)\n", __func__,

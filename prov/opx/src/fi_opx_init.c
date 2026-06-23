@@ -1100,21 +1100,25 @@ OPX_INI
 	fi_param_define(
 		&fi_opx_provider, "hfi_select", FI_PARAM_STRING,
 		"Overrides the normal algorithm used to choose which HFI a process will use. See the documentation for more information.");
+	fi_param_define(&fi_opx_provider, "mp_eager", FI_PARAM_BOOL,
+			"Enables tx multi-packet eager use. Defaults to %s.",
+			OPX_MP_EGR_DISABLE_DEFAULT ? "FALSE" : "TRUE");
 	fi_param_define(&fi_opx_provider, "mp_eager_disable", FI_PARAM_BOOL,
-			"Disables tx multi-packet eager use. Defaults to %s.",
+			"Deprecated. Use FI_OPX_MP_EAGER instead. Disables tx multi-packet eager use. Defaults to %s.",
 			OPX_MP_EGR_DISABLE_DEFAULT ? "TRUE" : "FALSE");
 	fi_param_define(
 		&fi_opx_provider, "rzv_min_payload_bytes", FI_PARAM_INT,
 		"The minimum length in bytes where rendezvous will be used. For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager. Defaults to %d.",
 		OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT);
-	fi_param_define(&fi_opx_provider, "delivery_completion_threshold", FI_PARAM_INT,
-			"Will be deprecated. Please use FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD");
 	fi_param_define(
 		&fi_opx_provider, "sdma_bounce_buf_threshold", FI_PARAM_INT,
 		"The maximum message length in bytes that will be copied to the SDMA bounce buffer. For messages larger than this threshold, the send will not be completed until receiver has ACKed. Value must be between %d and %d. Defaults to %d.",
 		OPX_SDMA_BOUNCE_BUF_MIN, OPX_SDMA_BOUNCE_BUF_MAX, OPX_SDMA_BOUNCE_BUF_THRESHOLD);
-	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_BOOL,
-			"Disables SDMA offload hardware. Default is FALSE (SDMA Enabled).");
+	fi_param_define(&fi_opx_provider, "sdma", FI_PARAM_BOOL,
+			"Enables SDMA offload hardware. Default is TRUE (SDMA Enabled).");
+	fi_param_define(
+		&fi_opx_provider, "sdma_disable", FI_PARAM_BOOL,
+		"Deprecated. Use FI_OPX_SDMA instead. Disables SDMA offload hardware. Default is FALSE (SDMA Enabled).");
 	fi_param_define(
 		&fi_opx_provider, "sdma_min_payload_bytes", FI_PARAM_INT,
 		"The minimum message length in bytes where SDMA will be used. For messages smaller than this threshold, the send will be completed using PIO. Value must be between %d and %d. Defaults to %d.",
@@ -1140,19 +1144,17 @@ OPX_INI
 		&fi_opx_provider, "tid_min_payload_bytes", FI_PARAM_INT,
 		"The minimum message length in bytes where TID will be used. Value must be >= %d. Defaults to %d.",
 		OPX_TID_MIN_PAYLOAD_BYTES_MIN, OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT);
-	fi_param_define(&fi_opx_provider, "tid_disable", FI_PARAM_BOOL,
-			"Disables using Token ID (TID). Defaults to FALSE (TID Enabled).");
-	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL,
-			"Deprecated. Use FI_OPX_TID_DISABLE instead.");
+	fi_param_define(&fi_opx_provider, "tid", FI_PARAM_BOOL,
+			"Enables using Token ID (TID). Defaults to TRUE (TID Enabled).");
+	fi_param_define(
+		&fi_opx_provider, "tid_disable", FI_PARAM_BOOL,
+		"Deprecated. Use FI_OPX_TID instead. Disables using Token ID (TID). Defaults to FALSE (TID Enabled).");
 	fi_param_define(
 		&fi_opx_provider, "tid_prefault_region", FI_PARAM_BOOL,
 		"Prefault the region before pinning.  Defaults to true for the uffd memory monitor, otherwise false.");
 	fi_param_define(
 		&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
 		"When set, specify the set of CPU cores to set the progress thread affinity to. The format is <start>:<end>:<stride> where each triplet <start>:<end>:<stride> defines a block Both <start> and <end> is a core_id.");
-	fi_param_define(
-		&fi_opx_provider, "auto_progress_interval_usec", FI_PARAM_INT,
-		"Deprecated/ignored. Auto progress threads are now interrupt-driven and only poll when data is available.");
 	fi_param_define(
 		&fi_opx_provider, "pkey", FI_PARAM_INT,
 		"Partition key.  Should be a 2 byte positive integer. Default is the Pkey in the index 0 of the Pkey table of the unit and port on which context is created.");
@@ -1162,8 +1164,11 @@ OPX_INI
 	fi_param_define(NULL, "opx_tracer_out_path", FI_PARAM_STRING,
 			"Specify path to output per-process performance tracing log files (default: none)");
 	fi_param_define(
-		&fi_opx_provider, "shm_enable", FI_PARAM_BOOL,
+		&fi_opx_provider, "shm", FI_PARAM_BOOL,
 		"Enables SHM across all ports and hfi units on the node. Setting it to FALSE disables SHM except peers with same lid and same hfi1 (loopback). Defaults to TRUE.");
+	fi_param_define(
+		&fi_opx_provider, "shm_enable", FI_PARAM_BOOL,
+		"Deprecated. Use FI_OPX_SHM instead. Enables SHM across all ports and hfi units on the node. Setting it to FALSE disables SHM except peers with same lid and same hfi1 (loopback). Defaults to TRUE.");
 	fi_param_define(
 		&fi_opx_provider, "port", FI_PARAM_INT,
 		"HFI1 port number.  If the specified port is not available, a default active port will be selected. Special value 0 indicates any available port. Defaults to port 1 on OPA100 and any port on CN5000.");

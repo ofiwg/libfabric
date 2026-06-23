@@ -111,13 +111,6 @@ __OPX_FORCE_INLINE__
 void opx_open_sim_bar(struct fi_opx_domain *domain, unsigned unit, unsigned short int rcontext,
 		      unsigned short int scontext)
 {
-	static const char *sim_barfiles[] = {
-		/* Typical sim bar files */
-		"/sys/devices/pcif00f:00/f00f:00:00.0/resource0", /* hfi_0 */
-		"/sys/devices/pcif00f:00/f00f:00:01.0/resource0", /* hfi_1 */
-		"/sys/devices/f00f:01:00.0/resource0",		  /* hfi_0 updated simpci */
-		"/sys/devices/f00f:02:00.0/resource0"		  /* hfi_1 updated simpci */
-	};
 	static bool once_only = false;
 	if (once_only) {
 		/* Move globals to per-endpoint if we need to test > 1 endpoint in simulation */
@@ -139,15 +132,6 @@ void opx_open_sim_bar(struct fi_opx_domain *domain, unsigned unit, unsigned shor
 		if (getenv("HFI_FNAME")) {
 			/* Arbitrary user specified file name*/
 			filename = getenv("HFI_FNAME");
-		} else if (getenv("FI_OPX_SIMPCI_V")) {
-			/* Old "standard" file names */
-			assert(unit < 2); /* simulation limit for this option */
-			int v = atoi(getenv("FI_OPX_SIMPCI_V"));
-			assert((v == 0) || (v == 1));
-			if (v) {
-				unit += 2;
-			}
-			filename = sim_barfiles[unit];
 		} else {
 			/* Calculate new expected path/filename */
 			snprintf(filename_storage, sizeof(filename_storage), "%s_%d/device/%s", OPX_CLASS_PATH, unit,
@@ -174,15 +158,6 @@ void opx_open_sim_bar(struct fi_opx_domain *domain, unsigned unit, unsigned shor
 		if (getenv("HFI_FNAME")) {
 			/* Arbitrary user specified file name*/
 			filename = getenv("HFI_FNAME");
-		} else if (getenv("FI_OPX_SIMPCI_V")) {
-			/* Old "standard" file names */
-			assert(unit < 2); /* simulation limit for this option */
-			int v = atoi(getenv("FI_OPX_SIMPCI_V"));
-			assert((v == 0) || (v == 1));
-			if (v) {
-				unit += 2;
-			}
-			filename = sim_barfiles[unit];
 		} else {
 			/* Calculate new expected path/filename */
 			snprintf(filename_storage, sizeof(filename_storage), "/sys/class/infiniband/hfi1_%d/device/%s",

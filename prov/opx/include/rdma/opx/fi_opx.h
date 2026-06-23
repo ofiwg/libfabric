@@ -182,27 +182,6 @@ static const char *const OPX_HFI1_PACKET_STR[] = {
 	[OPX_HFI1_MP_EAGER] = "OPX_HFI1_MP_EAGER", [OPX_HFI1_DPUT] = "OPX_HFI1_DPUT",
 	[OPX_HFI1_RZV_CTRL] = "OPX_HFI1_RZV_CTRL", [OPX_HFI1_RZV_DATA] = "OPX_HFI1_RZV_DATA"};
 
-/* Will remove after 16B SDMA support is finished */
-#define OPX_NO_9B_SUPPORT(_hfi1_type)                                                                             \
-	do {                                                                                                      \
-		if (!(_hfi1_type & OPX_HFI1_CNX000)) {                                                            \
-			fprintf(stderr, "%s NO 9B SUPPORT for %s\n", __func__, OPX_HFI1_TYPE_STRING(_hfi1_type)); \
-			if (getenv("OPX_9B_ABORT"))                                                               \
-				abort();                                                                          \
-		}                                                                                                 \
-		assert(_hfi1_type != OPX_HFI1_UNDEF);                                                             \
-	} while (0)
-
-#define OPX_NO_16B_SUPPORT(_hfi1_type)                                                                             \
-	do {                                                                                                       \
-		if (!(_hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B))) {                                          \
-			fprintf(stderr, "%s NO 16B SUPPORT for %s\n", __func__, OPX_HFI1_TYPE_STRING(_hfi1_type)); \
-			if (getenv("OPX_16B_ABORT"))                                                               \
-				abort();                                                                           \
-		}                                                                                                  \
-		assert(_hfi1_type != OPX_HFI1_UNDEF);                                                              \
-	} while (0)
-
 #define OPX_MAX_HFIS (16)
 OPX_COMPILE_TIME_ASSERT((OPX_MAX_HFIS & 3) == 0, "OPX_MAX_HFIS must be a multiple of 4!\n");
 OPX_COMPILE_TIME_ASSERT(sizeof(opx_lid_t) == sizeof(uint32_t), "opx_lid_t must remain 32-bit");

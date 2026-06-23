@@ -1219,13 +1219,19 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 
 	// Set the multi-packet eager max message length
 	int l_mp_eager_disable;
-	if (fi_param_get_bool(fi_opx_global.prov, "mp_eager_disable", &l_mp_eager_disable) != FI_SUCCESS) {
-		l_mp_eager_disable = OPX_MP_EGR_DISABLE_DEFAULT;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER_DISABLE not set.  Using default setting of %d\n",
-				   l_mp_eager_disable);
-	} else {
+	int l_mp_eager;
+	if (fi_param_get_bool(fi_opx_global.prov, "mp_eager", &l_mp_eager) == FI_SUCCESS) {
+		l_mp_eager_disable = !l_mp_eager;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER was specified.  Set to %d\n", l_mp_eager);
+	} else if (fi_param_get_bool(fi_opx_global.prov, "mp_eager_disable", &l_mp_eager_disable) == FI_SUCCESS) {
+		FI_WARN_ONCE(&fi_opx_provider, FI_LOG_EP_DATA,
+			     "FI_OPX_MP_EAGER_DISABLE is deprecated. Use FI_OPX_MP_EAGER instead.\n");
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER_DISABLE was specified.  Set to %d\n",
 				   l_mp_eager_disable);
+	} else {
+		l_mp_eager_disable = OPX_MP_EGR_DISABLE_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_MP_EAGER not set.  Using default setting of %d\n",
+				   !l_mp_eager_disable);
 	}
 
 	if (l_rzv_min_payload_bytes <= l_pio_flow_eager_tx_bytes) {
@@ -1264,10 +1270,6 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	int l_sdma_bounce_buf_threshold;
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_bounce_buf_threshold", &l_sdma_bounce_buf_threshold);
 	if (rc != FI_SUCCESS) {
-		rc = fi_param_get_int(fi_opx_global.prov, "delivery_completion_threshold",
-				      &l_sdma_bounce_buf_threshold);
-	}
-	if (rc != FI_SUCCESS) {
 		tx->sdma_bounce_buf_threshold = OPX_SDMA_BOUNCE_BUF_THRESHOLD;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
 				   "FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD not set.  Using default setting of %d\n",
@@ -1287,17 +1289,23 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	tx->force_credit_return = 0;
 
 	int sdma_disable;
-	if (fi_param_get_bool(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
+	int l_sdma;
+	if (fi_param_get_bool(fi_opx_global.prov, "sdma", &l_sdma) == FI_SUCCESS) {
+		tx->use_sdma = l_sdma;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA was specified.  Set to %d\n", l_sdma);
+	} else if (fi_param_get_bool(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
 		tx->use_sdma = !sdma_disable;
-		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA, "sdma_disable parm specified as %s.\n",
-			sdma_disable ? "TRUE" : "FALSE");
+		FI_WARN_ONCE(&fi_opx_provider, FI_LOG_EP_DATA,
+			     "FI_OPX_SDMA_DISABLE is deprecated. Use FI_OPX_SDMA instead.\n");
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_DISABLE was specified as %s.\n",
+				   sdma_disable ? "TRUE" : "FALSE");
 	} else {
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA_DISABLE not specified; using SDMA\n");
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_SDMA not specified; using SDMA\n");
 		tx->use_sdma = 1;
 	}
 
 	tx->replay_copy		   = 0;
-	const char *dp_replay_copy = getenv("_FI_OPX_REPLAY_COPY");
+	const char *dp_replay_copy = getenv("_FI_OPX_REPLAY_COPY_");
 	if (dp_replay_copy != NULL) {
 		if (strcmp(dp_replay_copy, "1") == 0) {
 			FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
@@ -3538,19 +3546,16 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	opx_ep->tid_domain = opx_ep->domain->tid_domain;
 
 	/* enable/disable receive side (CTS) expected receive (TID) */
+	int tid_env;
 	int tid_disable_env;
-	int tid_disable_specified =
-		(fi_param_get_bool(fi_opx_global.prov, "tid_disable", &tid_disable_env) == FI_SUCCESS);
-	if (tid_disable_specified) {
-		if (tid_disable_env) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_TID_DISABLE specified as TRUE, disabling TID.\n");
-			opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_OFF;
-		} else {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_TID_DISABLE specified as FALSE (default option), enabling TID.\n");
-			opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_ON;
-		}
+	if (fi_param_get_bool(fi_opx_global.prov, "tid", &tid_env) == FI_SUCCESS) {
+		opx_ep->use_expected_tid_rzv = tid_env ? OPX_TID_ENABLE_ON : OPX_TID_ENABLE_OFF;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_TID specified as %s.\n",
+			tid_env ? "TRUE" : "FALSE");
+	} else if (fi_param_get_bool(fi_opx_global.prov, "tid_disable", &tid_disable_env) == FI_SUCCESS) {
+		FI_WARN_ONCE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "FI_OPX_TID_DISABLE is deprecated. Use FI_OPX_TID instead.\n");
+		opx_ep->use_expected_tid_rzv = tid_disable_env ? OPX_TID_ENABLE_OFF : OPX_TID_ENABLE_ON;
 	} else {
 		opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_ON;
 	}
@@ -3564,22 +3569,6 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 			use_prefault_write ? "TRUE" : "FALSE");
 	}
 	opx_ep->use_prefault_write = (bool) use_prefault_write;
-
-	int expected_receive_enable_env;
-	if (fi_param_get_bool(fi_opx_global.prov, "expected_receive_enable", &expected_receive_enable_env) ==
-	    FI_SUCCESS) {
-		if (tid_disable_specified) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_EXPECTED_RECEIVE_ENABLE is deprecated. Ignoring because replacement environment variable FI_OPX_TID_DISABLE was specified and takes precedence.\n");
-		} else if (!expected_receive_enable_env) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_EXPECTED_RECEIVE_ENABLE was specified as OFF, but is deprecated. Expected receive (TID) will be disabled, but please use FI_OPX_TID_DISABLE=1 in the future.\n");
-			opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_OFF;
-		} else {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_EXPECTED_RECEIVE_ENABLE was specified as ON, but is deprecated. Expected receive (TID) is enabled by default. Ignoring.\n");
-		}
-	}
 
 #ifdef OPX_HMEM
 	int use_ipc;
