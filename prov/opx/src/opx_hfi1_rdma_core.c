@@ -160,18 +160,20 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 	opx_fn_hfi1_free_tid   = opx_hfi_free_tid;
 	opx_fn_hfi1_update_tid = opx_hfi_update_tid;
 
-	opx_rdma_ops.libhfi1verbs = dlopen("libhfi1verbs.so", RTLD_LAZY);
+	opx_rdma_ops.libhfi1verbs = dlopen("libhfi1verbs.so.1", RTLD_LAZY);
 
 	if (!opx_rdma_ops.libhfi1verbs) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Could not dlopen libhfi1verbs.\n");
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Could not dlopen libhfi1verbs: %s\n",
+			dlerror());
 		opx_rdma_ops.hfi1_direct_verbs_enabled = false;
 		pthread_mutex_unlock(&opx_rdma_ops.lock);
 		return opx_rdma_ops.hfi1_direct_verbs_enabled;
 	}
 
-	opx_rdma_ops.libibverbs = dlopen("libibverbs.so", RTLD_LAZY);
+	opx_rdma_ops.libibverbs = dlopen("libibverbs.so.1", RTLD_LAZY);
 	if (!opx_rdma_ops.libibverbs) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Could not dlopen libibverbs.\n");
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Could not dlopen libibverbs: %s\n",
+			dlerror());
 		opx_rdma_ops.hfi1_direct_verbs_enabled = false;
 		dlclose(opx_rdma_ops.libhfi1verbs);
 		opx_rdma_ops.libhfi1verbs = NULL;
