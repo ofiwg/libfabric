@@ -171,8 +171,8 @@ static struct fi_rma_iov *remote_arr;
  * it instead: the TX side via drain_cq_counted(), and the target RX drain's
  * slack == 0 branch (the -X owed protocols, where required is guaranteed).
  */
-#define CQ_FIRST_TIMEOUT_MS 5000
-#define CQ_IDLE_TIMEOUT_MS  50
+#define CQ_FIRST_TIMEOUT_MS 10000
+#define CQ_IDLE_TIMEOUT_MS  1000
 
 /*
  * Non-blocking accumulate of `len` bytes from the OOB socket into `buf`.
