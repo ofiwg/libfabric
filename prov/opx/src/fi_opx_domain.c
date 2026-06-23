@@ -149,6 +149,11 @@ static int fi_opx_close_domain(fid_t fid)
 			opx_hfi1_rdma_context_close(opx_domain->hfisvc.ctxs[i].ctx);
 			opx_domain->hfisvc.ctxs[i].ctx = NULL;
 		}
+
+		if (opx_domain->hfisvc.libhfi1verbs != NULL) {
+			dlclose(opx_domain->hfisvc.libhfi1verbs);
+			opx_domain->hfisvc.libhfi1verbs = NULL;
+		}
 	}
 #endif
 
@@ -728,17 +733,18 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 		goto done;
 	}
 
-	// Driver support but library/apis not found
-	// dlopen is done - once - in hfi1dv rdma-core and copied to hfisvc
-
-	domain->hfisvc.libhfi1verbs = opx_rdma_ops.libhfi1verbs;
+	/*
+	 * Keep an HFISVC-owned dynamic loader reference for the function
+	 * pointers cached below.  The HFI1 direct-verbs path also owns a
+	 * libhfi1verbs handle, but endpoint/context close paths may release
+	 * that global handle before this domain polls its HFISVC queues.
+	 */
+	domain->hfisvc.libhfi1verbs = dlopen("libhfi1verbs.so", RTLD_LAZY);
 	if (domain->hfisvc.libhfi1verbs == NULL) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs not found\n");
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] dlopen(libhfi1verbs.so) failed: %s\n", dlerror());
 		rc = -FI_ENODEV;
 		goto done;
 	}
-
-	fi_opx_ref_inc(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
 
 	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs found\n");
 
@@ -831,6 +837,12 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 	domain->use_hfisvc = 1;
 
 done:
+	if (rc != FI_SUCCESS) {
+		if (domain->hfisvc.libhfi1verbs != NULL) {
+			dlclose(domain->hfisvc.libhfi1verbs);
+			domain->hfisvc.libhfi1verbs = NULL;
+		}
+	}
 	pthread_mutex_unlock(&opx_rdma_ops.lock);
 
 	return rc;
