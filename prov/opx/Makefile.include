@@ -33,6 +33,7 @@
 if HAVE_OPX
 opx_files =									\
 		prov/opx/src/fi_opx_atomic.c					\
+		prov/opx/src/fi_opx_atomic_clones.c				\
 		prov/opx/src/fi_opx_av.c					\
 		prov/opx/src/fi_opx_cm.c					\
 		prov/opx/src/fi_opx_cntr.c					\
