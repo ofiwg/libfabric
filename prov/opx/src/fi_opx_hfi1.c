@@ -404,9 +404,14 @@ void fi_opx_init_hfi_lookup(struct fi_opx_domain *domain, uint64_t self_gid_hi, 
 	}
 
 	int shm_enable_env;
-	if (fi_param_get_bool(fi_opx_global.prov, "shm_enable", &shm_enable_env) != FI_SUCCESS) {
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "shm_enable param not specified\n");
-		shm_enable_env = OPX_SHM_ENABLE_DEFAULT;
+	if (fi_param_get_bool(fi_opx_global.prov, "shm", &shm_enable_env) != FI_SUCCESS) {
+		if (fi_param_get_bool(fi_opx_global.prov, "shm_enable", &shm_enable_env) == FI_SUCCESS) {
+			FI_WARN_ONCE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				     "FI_OPX_SHM_ENABLE is deprecated. Use FI_OPX_SHM instead.\n");
+		} else {
+			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "shm param not specified\n");
+			shm_enable_env = OPX_SHM_ENABLE_DEFAULT;
+		}
 	}
 
 	/* Always insert an entry for self */

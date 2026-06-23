@@ -1037,9 +1037,13 @@ void opx_verbose_selection(struct fi_opx_hfi1_context_internal *internal, struct
 		 fi_opx_global.opx_hfi1_type_strings[OPX_HFI1_CNX000]);
 }
 /* Environment variable is not published */
-#define OPX_VERBOSE_SELECTION(_internal, _ctrl)          \
-	if (getenv("FI_OPX_VERBOSE_SELECTION")) {        \
-		opx_verbose_selection(_internal, _ctrl); \
+#define OPX_VERBOSE_SELECTION(_internal, _ctrl)                                                                    \
+	if (getenv("_FI_OPX_VERBOSE_SELECTION_")) {                                                                \
+		opx_verbose_selection(_internal, _ctrl);                                                           \
+	} else if (getenv("FI_OPX_VERBOSE_SELECTION")) {                                                           \
+		FI_WARN_ONCE(&fi_opx_provider, FI_LOG_FABRIC,                                                      \
+			     "FI_OPX_VERBOSE_SELECTION is deprecated. Use _FI_OPX_VERBOSE_SELECTION_ instead.\n"); \
+		opx_verbose_selection(_internal, _ctrl);                                                           \
 	}
 
 struct _hfi_ctrl *opx_hfi1_wrapper_userinit(int fd_cdev, int fd_verbs, struct fi_opx_hfi1_context_internal *internal,
