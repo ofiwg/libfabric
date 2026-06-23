@@ -1244,7 +1244,6 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 #endif
 	ssize_t remain = total_len, iov_idx = 0, iov_base_offset = 0;
 
-	OPX_NO_16B_SUPPORT(hfi1_type);
 	const uint64_t pbc_dlid = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 	replay->scb.scb_9B.qw0	= opx_tx->send_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				 OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
@@ -1542,8 +1541,6 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 	}
 #endif
 	ssize_t remain = total_len, iov_idx = 0, iov_base_offset = 0;
-
-	OPX_NO_9B_SUPPORT(hfi1_type);
 
 	replay->scb.scb_16B.qw0 = opx_tx->send_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
 				  OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
@@ -2068,8 +2065,6 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
 
-	OPX_NO_16B_SUPPORT(hfi1_type);
-
 	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
 		return opx_hfi1_tx_send_egr_shm(ep, buf, len, dest_addr, tag, context, data, lock_required, tx_op_flags,
 						caps, do_cq_completion, iface, hmem_device, hmem_handle);
@@ -2221,8 +2216,6 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 {
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
-
-	OPX_NO_9B_SUPPORT(hfi1_type);
 
 	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr, caps)) {
 		return opx_hfi1_tx_send_egr_shm_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,

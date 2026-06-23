@@ -125,36 +125,6 @@ static const char *OPX_TID_CACHE_ENTRY_STATUS[] = {
 
 /* RBMAP compare functions. */
 
-/*
- * COPIED FROM util_mr_find_overlap which was static and so it was
- * inaccessible to OPX direct calls.
- *
- * Copied here for debug (env var OPX_FIND_WITHIN)
- */
-#ifndef NDEBUG
-static int opx_util_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
-{
-	struct ofi_mr_entry *entry = data;
-	struct ofi_mr_info  *info  = key;
-
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_MR,
-		     "OPX_DEBUG_ENTRY KEY [%p - %p] (len: %zu,%#lX)  ENTRY [%p - %p] (len: %zu,%#lX)\n",
-		     info->iov.iov_base, (char *) (info->iov.iov_base) + info->iov.iov_len, info->iov.iov_len,
-		     info->iov.iov_len, entry->info.iov.iov_base,
-		     (char *) (entry->info.iov.iov_base) + entry->info.iov.iov_len, entry->info.iov.iov_len,
-		     entry->info.iov.iov_len);
-
-	if (ofi_iov_shifted_left(&info->iov, &entry->info.iov)) {
-		return -1;
-	}
-	if (ofi_iov_shifted_right(&info->iov, &entry->info.iov)) {
-		return 1;
-	}
-
-	return 0;
-}
-#endif
-
 /* Register/TID Update (pin) the pages.
  *
  * Hold the cache->lock across registering the TIDs  */
@@ -389,11 +359,8 @@ int opx_tid_cache_init(struct util_domain *domain, struct ofi_mem_monitor **moni
 	cache->domain	     = domain;
 	ofi_atomic_inc32(&domain->ref);
 
-#ifndef NDEBUG
-	ofi_rbmap_init(&cache->tree, getenv("OPX_FIND_WITHIN") ? opx_util_mr_find_within : opx_util_mr_find_overlap);
-#else
 	ofi_rbmap_init(&cache->tree, opx_util_mr_find_overlap);
-#endif
+
 	ret = ofi_monitors_add_cache(monitors, cache);
 	if (ret) {
 		goto destroy;
