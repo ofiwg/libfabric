@@ -466,13 +466,19 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 			struct fi_eq_err_entry eq_err = {0};
 			ret = fi_eq_read(eq, NULL, NULL, 0, 0);
 			if (ret == -FI_EAVAIL) {
-				fi_eq_readerr(eq, &eq_err, 0);
-				fprintf(stderr,
-					"EQ error: %s (prov_errno: %d)\n",
-					fi_strerror(eq_err.err),
-					eq_err.prov_errno);
-				completed = -eq_err.err;
-				break;
+				ret = fi_eq_readerr(eq, &eq_err, 0);
+				if (ret > 0) {
+					fprintf(stderr,
+						"EQ error: %s (prov_errno: %d)\n",
+						fi_strerror(eq_err.err),
+						eq_err.prov_errno);
+					completed = -eq_err.err;
+					break;
+				} else if (ret != -FI_EAGAIN) {
+					fprintf(stderr,
+						"fi_eq_readerr unexpected error: %s\n",
+						fi_strerror(-ret));
+				}
 			}
 			clock_gettime(CLOCK_MONOTONIC, &b);
 			if (b.tv_sec - a.tv_sec >= timeout) {
