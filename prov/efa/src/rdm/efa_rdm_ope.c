@@ -2023,14 +2023,20 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	}
 }
 
-int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag)
+int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 {
 	int ret = 0;
+	uint32_t flag = ope->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS;
 
-	assert(flag & EFA_RDM_OPE_QUEUED_FLAGS);
-
-	if (!(ope->internal_flags & flag))
+	if (!flag)
 		return 0;
+
+	/*
+	 * The queued flags are mutually exclusive: an ope is linked onto
+	 * ope_queued_list through a single queued_entry node, so at most one
+	 * EFA_RDM_OPE_QUEUED_* bit can be set at a time.
+	 */
+	assert((flag & (flag - 1)) == 0);
 
 	switch (flag) {
 	case EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE:
