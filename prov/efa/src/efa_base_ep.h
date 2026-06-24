@@ -91,11 +91,15 @@ struct efa_base_ep {
 
 	bool use_unsolicited_write_recv;
 
+	/* Pool and list for outstanding operation entries. Shared by both
+	 * efa-direct (efa_direct_ope) and efa-rdm (efa_rdm_ope) endpoints;
+	 * entries are linked via ope_list and used to warn on MR close while
+	 * an operation that still references the MR is in flight. */
+	struct ofi_bufpool *ope_pool;
+	struct dlist_entry ope_list;
+
 	/* entry for efa_domain->base_ep_list */
 	struct dlist_entry base_ep_entry;
-	/* Only used by EFA direct */
-	struct ofi_bufpool *efa_direct_ope_pool;	/**< pool for efa_direct_ope */
-	struct dlist_entry efa_direct_ope_list;	/**< list of outstanding ops */
 };
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);

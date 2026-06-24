@@ -120,8 +120,6 @@ struct efa_rdm_ep {
 	int rx_readcopy_pkt_pool_used;
 	int rx_readcopy_pkt_pool_max_used;
 
-	/* datastructure to maintain send/recv states */
-	struct ofi_bufpool *ope_pool;
 	/* data structure to maintain overflow pke linked list entry */
 	struct ofi_bufpool *overflow_pke_pool;
 	/* data structure to maintain pkt rx map */
@@ -162,9 +160,7 @@ struct efa_rdm_ep {
 	size_t send_comps;
 	size_t recv_comps;
 #endif
-	/* track allocated rx_entries and tx_entries for endpoint cleanup */
-	struct dlist_entry rxe_list;
-	struct dlist_entry txe_list;
+	/* outstanding ops are tracked in base_ep.ope_list */
 
 	/*
 	 * number of posted RX packets for EFA device

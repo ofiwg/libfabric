@@ -239,7 +239,13 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
-	ret = ofi_bufpool_create(&ep->ope_pool,
+	/*
+	 * Operation entries are tracked on the shared base_ep.ope_list, so
+	 * they are allocated from the shared base_ep.ope_pool. Unlike
+	 * efa-direct, efa-rdm always needs this pool: it backs live tx/rx
+	 * operation entries, not just the FI_EFA_TRACK_MR in-flight check.
+	 */
+	ret = ofi_bufpool_create(&ep->base_ep.ope_pool,
 				 sizeof(struct efa_rdm_ope),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
@@ -247,7 +253,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
-	ret = ofi_bufpool_grow(ep->ope_pool);
+	ret = ofi_bufpool_grow(ep->base_ep.ope_pool);
 	if (ret)
 		goto err_free;
 
@@ -307,8 +313,8 @@ err_free:
 	if (ep->map_entry_pool)
 		ofi_bufpool_destroy(ep->map_entry_pool);
 
-	if (ep->ope_pool)
-		ofi_bufpool_destroy(ep->ope_pool);
+	if (ep->base_ep.ope_pool)
+		ofi_bufpool_destroy(ep->base_ep.ope_pool);
 
 	if (ep->overflow_pke_pool)
 		ofi_bufpool_destroy(ep->overflow_pke_pool);
@@ -355,8 +361,8 @@ void efa_rdm_ep_init_linked_lists(struct efa_rdm_ep *ep)
 	dlist_init(&ep->rx_pkt_list);
 	dlist_init(&ep->tx_pkt_list);
 #endif
-	dlist_init(&ep->rxe_list);
-	dlist_init(&ep->txe_list);
+	/* base_ep.ope_list, which tracks both tx and rx entries, is
+	 * initialized in efa_base_ep_construct(). */
 	dlist_init(&ep->ope_posted_ack_list);
 }
 
@@ -724,8 +730,6 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 {
 	struct dlist_entry *entry, *tmp;
-	struct efa_rdm_ope *rxe;
-	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_peer_overflow_pke_list_entry *overflow_pke_list_entry;
 	struct util_av_entry *util_av_entry;
@@ -775,21 +779,19 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	}
 #endif
 
-	dlist_foreach_safe(&efa_rdm_ep->rxe_list, entry, tmp) {
-		rxe = container_of(entry, struct efa_rdm_ope,
-					ep_entry);
-		EFA_INFO(FI_LOG_EP_CTRL,
-			"Closing ep with unreleased rxe\n");
-		efa_rdm_rxe_release(rxe);
-	}
-
-	dlist_foreach_safe(&efa_rdm_ep->txe_list, entry, tmp) {
-		txe = container_of(entry, struct efa_rdm_ope,
-					ep_entry);
-		EFA_INFO(FI_LOG_EP_CTRL,
-			"Closing ep with unreleased txe: %p\n",
-			txe);
-		efa_rdm_txe_release(txe);
+	dlist_foreach_safe(&efa_rdm_ep->base_ep.ope_list, entry, tmp) {
+		struct efa_rdm_ope *ope = container_of(entry, struct efa_rdm_ope,
+						       ep_entry);
+		if (ope->type == EFA_RDM_RXE) {
+			EFA_INFO(FI_LOG_EP_CTRL,
+				"Closing ep with unreleased rxe\n");
+			efa_rdm_rxe_release(ope);
+		} else {
+			EFA_INFO(FI_LOG_EP_CTRL,
+				"Closing ep with unreleased txe: %p\n",
+				ope);
+			efa_rdm_txe_release(ope);
+		}
 	}
 
 	/* Clean up any remaining peers before destroying buffer pools */
@@ -821,8 +823,8 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		ofi_buf_free(peer_map_entry);
 	}
 
-	if (efa_rdm_ep->ope_pool)
-		ofi_bufpool_destroy(efa_rdm_ep->ope_pool);
+	if (efa_rdm_ep->base_ep.ope_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->base_ep.ope_pool);
 
 	if (efa_rdm_ep->overflow_pke_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->overflow_pke_pool);
@@ -1063,8 +1065,10 @@ static int efa_rdm_ep_close(struct fid *fid)
 		* assertion error when the rx_pool is destroyed.
 		*/
 		ofi_genlock_lock(&((struct efa_rdm_domain *) domain)->srx_lock);
-		dlist_foreach_safe (&efa_rdm_ep->rxe_list, entry, tmp) {
+		dlist_foreach_safe (&efa_rdm_ep->base_ep.ope_list, entry, tmp) {
 			rxe = container_of(entry, struct efa_rdm_ope, ep_entry);
+			if (rxe->type != EFA_RDM_RXE)
+				continue;
 			EFA_INFO(FI_LOG_EP_CTRL, "Closing ep with unreleased rxe\n");
 			if (rxe->state != EFA_RDM_RXE_UNEXP)
 				efa_rdm_rxe_release(rxe);

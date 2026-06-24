@@ -4,6 +4,7 @@
 #include "config.h"
 #include <ofi_util.h>
 #include "efa.h"
+#include "efa_direct_ope.h"
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_ope.h"
 #if HAVE_CUDA
@@ -252,8 +253,9 @@ static void efa_mr_close_check_inflight_ope(struct efa_mr *efa_mr)
 	dlist_foreach_container(&efa_domain->base_ep_list, struct efa_base_ep,
 				base_ep, base_ep_entry) {
 		struct efa_direct_ope *direct_ope;
+
 		dlist_foreach_container_safe (
-			&base_ep->efa_direct_ope_list,
+			&base_ep->ope_list,
 			struct efa_direct_ope, direct_ope,
 			entry, tmp) {
 			efa_mr_close_warn_inflight_ope(direct_ope->desc, direct_ope->iov_count, &direct_ope->cq_entry, efa_mr, base_ep);

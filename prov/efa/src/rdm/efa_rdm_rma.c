@@ -55,7 +55,7 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 	struct efa_rdm_ope *txe;
 	struct fi_msg msg;
 
-	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;

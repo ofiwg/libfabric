@@ -229,7 +229,7 @@ void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
 
 	ep = pkt_entry->ep;
 	cts_pkt = (struct efa_rdm_cts_hdr *)pkt_entry->wiredata;
-	ope = ofi_bufpool_get_ibuf(pkt_entry->ep->ope_pool, cts_pkt->send_id);
+	ope = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, cts_pkt->send_id);
 
 	ope->rx_id = cts_pkt->recv_id;
 	ope->window = cts_pkt->recv_length;
@@ -391,7 +391,7 @@ void efa_rdm_pke_handle_ctsdata_recv(struct efa_rdm_pke *pkt_entry)
 
 	data_hdr = efa_rdm_pke_get_ctsdata_hdr(pkt_entry);
 
-	ope = ofi_bufpool_get_ibuf(pkt_entry->ep->ope_pool,
+	ope = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool,
 				   data_hdr->recv_id);
 
 	hdr_size = sizeof(struct efa_rdm_ctsdata_hdr);
@@ -470,7 +470,7 @@ void efa_rdm_pke_handle_readrsp_recv(struct efa_rdm_pke *pkt_entry)
 
 	readrsp_pkt = (struct efa_rdm_readrsp_pkt *)pkt_entry->wiredata;
 	readrsp_hdr = &readrsp_pkt->hdr;
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->ope_pool, readrsp_hdr->recv_id);
+	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, readrsp_hdr->recv_id);
 	assert(txe->cq_entry.flags & FI_READ);
 	txe->rx_id = readrsp_hdr->send_id;
 	efa_rdm_pke_proc_ctsdata(pkt_entry, txe,
@@ -712,7 +712,7 @@ void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 	eor_hdr = (struct efa_rdm_eor_hdr *)pkt_entry->wiredata;
 
 	/* pre-post buf used here, so can NOT track back to txe with x_entry */
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->ope_pool, eor_hdr->send_id);
+	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, eor_hdr->send_id);
 
 	txe->bytes_acked += txe->total_len - txe->bytes_runt;
 	if (txe->bytes_acked == txe->total_len) {
@@ -745,7 +745,7 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 
 	nack_hdr = (struct efa_rdm_read_nack_hdr *) pkt_entry->wiredata;
 
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->ope_pool, nack_hdr->send_id);
+	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, nack_hdr->send_id);
 
 	efa_rdm_pke_release_rx(pkt_entry);
 	txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
@@ -829,7 +829,7 @@ void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 
 	receipt_hdr = efa_rdm_pke_get_receipt_hdr(pkt_entry);
 	/* Retrieve the txe that will be written into TX CQ*/
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->ope_pool,
+	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool,
 				   receipt_hdr->tx_id);
 	if (!txe) {
 		EFA_WARN(FI_LOG_CQ,
@@ -909,7 +909,7 @@ void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry)
 
 	atomrsp_pkt = (struct efa_rdm_atomrsp_pkt *)pkt_entry->wiredata;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->ope_pool, atomrsp_hdr->recv_id);
+	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, atomrsp_hdr->recv_id);
 
 	ret = efa_copy_to_hmem_iov(txe->atomic_ex.result_desc, txe->atomic_ex.resp_iov,
 	                           txe->atomic_ex.resp_iov_count, atomrsp_pkt->data,
