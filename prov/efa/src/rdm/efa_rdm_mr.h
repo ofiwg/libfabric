@@ -138,6 +138,12 @@ static inline bool efa_rdm_mr_gen_check_ope(struct efa_rdm_ope *ope)
 	struct efa_rdm_mr *efa_rdm_mr;
 	unsigned int i;
 
+	/* MR gen check is only for TXEs. We do not support aborting receive
+	 * operations by deregistering the MRs*/
+	if (ope->type != EFA_RDM_TXE) {
+		return true;
+	}
+
 	for (i = 0; i < ope->iov_count; i++) {
 		/* We statically assert that efa_mr is first member of efa_rdm_mr */
 		efa_rdm_mr = ope->desc[i];
