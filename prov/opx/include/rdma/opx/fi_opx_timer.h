@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2025 Cornelis Networks.
+ * Copyright (C) 2022-2026 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -57,11 +57,10 @@ union fi_opx_timer_stamp {
 #if defined(__x86_64__) || defined(__i386__)
 __attribute__((always_inline)) static inline uint64_t fi_opx_timer_get_cycles()
 {
-	uint64_t cycles;
-	uint32_t a, d;
-	asm volatile("rdtsc" : "=a"(a), "=d"(d));
-	cycles = ((uint64_t) a) | (((uint64_t) d) << 32);
-	return cycles;
+	uint64_t low, high;
+
+	asm volatile("rdtsc" : "=a"(low), "=d"(high));
+	return low | (high << 32);
 }
 #elif defined(__riscv) && defined(__riscv_xlen) && (__riscv_xlen == 64)
 __attribute__((always_inline)) static inline uint64_t fi_opx_timer_get_cycles()
