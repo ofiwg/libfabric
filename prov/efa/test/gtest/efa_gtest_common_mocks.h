@@ -22,6 +22,9 @@ struct efa_rdm_pke;
 struct ofi_bufpool;
 struct efa_qp;
 struct efa_ah;
+struct efa_rdm_ep;
+struct efa_rdm_ope;
+struct dlist_entry;
 
 /*
  * X-macro list of every mocked function. Each row is
