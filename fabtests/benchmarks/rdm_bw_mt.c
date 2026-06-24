@@ -39,7 +39,7 @@
  * objects. These objects can be struct ft_fabric_resources which will contain
  * all resources that can be opened under a single fabtest and
  * struct ft_buffer_resouces for all resources associated with a buffer.
- * For the case of this test it will be:
+ * For the FI_THREAD_DOMAIN case of this test it will be:
  *
  * 				fabric
  *			 _________|_________
@@ -61,6 +61,22 @@
  * This test comes with a TODO to refactor the common code to support more tests
  * of this type and enable easier development of future tests with more
  * compatible objects instead of global variables.
+ *
+ * For the FI_THREAD_COMPLETION case:
+ * One shared domain and av; each thread owns its own ep and cq.
+ *
+ *                          fabric
+ *                            |
+ *                       domain (shared)
+ *                            |
+ *                        av (shared)
+ *              _____________|_____________
+ *             /             |             \
+ *        thread_0       thread_1       thread_n
+ *          |                |              |
+ *        ep, cq           ep, cq         ep, cq
+ *        buf, mr          buf, mr        buf, mr
+ *
  * WARNING: Not all options are supported in this test!
  */
 
@@ -99,6 +115,8 @@ struct thread_args {
 };
 
 static struct thread_args *targs = NULL;
+static struct fid_domain *shared_domain = NULL;
+static struct fid_av *shared_av = NULL;
 
 static void cleanup_ofi(void)
 {
@@ -118,18 +136,30 @@ static void cleanup_ofi(void)
 				printf("fi_close(cq[%d]) failed: %d\n", i, ret);
 		}
 
-		if (targs[i].av) {
+		if (targs[i].av && targs[i].av != shared_av) {
 			ret = fi_close(&targs[i].av->fid);
 			if (ret)
 				printf("fi_close(av[%d]) failed: %d\n", i, ret);
 		}
 
-		if (targs[i].domain) {
+		if (targs[i].domain && targs[i].domain != shared_domain) {
 			ret = fi_close(&targs[i].domain->fid);
 			if (ret)
 				printf("fi_close(domain[%d]) failed: %d\n", i,
 					ret);
 		}
+	}
+
+	if (shared_av) {
+		ret = fi_close(&shared_av->fid);
+		if (ret)
+			printf("fi_close(shared_av) failed: %d\n", ret);
+	}
+
+	if (shared_domain) {
+		ret = fi_close(&shared_domain->fid);
+		if (ret)
+			printf("fi_close(shared_domain) failed: %d\n", ret);
 	}
 
 	if (fabric) {
@@ -187,13 +217,12 @@ static int init_ofi(void)
 {
 	struct fi_cq_attr cq_attr;
 	struct fi_av_attr av_attr;
-	struct fi_cntr_attr cntr_attr;
 	int ret = FI_SUCCESS, i;
 
-        ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
-        if (ret) {
+	ret = fi_fabric(fi->fabric_attr, &fabric, NULL);
+	if (ret) {
 		printf("fi_fabric failed: %d\n", ret);
-                return ret;
+		return ret;
 	}
 
 	targs = calloc(num_eps, sizeof(*targs));
@@ -202,15 +231,45 @@ static int init_ofi(void)
 		return -FI_ENOMEM;
 	}
 
+	if (opts.threading == FI_THREAD_COMPLETION) {
+		ret = fi_domain(fabric, fi, &shared_domain, NULL);
+		if (ret) {
+			printf("fi_domain failed: %d\n", ret);
+			return ret;
+		}
+
+		memset(&av_attr, 0, sizeof(av_attr));
+		av_attr.type = FI_AV_UNSPEC;
+		av_attr.count = num_eps;
+		ret = fi_av_open(shared_domain, &av_attr, &shared_av, NULL);
+		if (ret) {
+			printf("fi_av_open failed: %d\n", ret);
+			return ret;
+		}
+	}
+
 	for (i = 0; i < num_eps; i++) {
 		memset(&cq_attr, 0, sizeof(cq_attr));
-		memset(&av_attr, 0, sizeof(av_attr));
-		memset(&cntr_attr, 0, sizeof(cntr_attr));
 
-		ret = fi_domain(fabric, fi, &targs[i].domain, NULL);
-		if (ret) {
-			printf("fi_domain failed ep[%d]: %d\n", i, ret);
-			return ret;
+		if (opts.threading == FI_THREAD_COMPLETION) {
+			targs[i].domain = shared_domain;
+			targs[i].av = shared_av;
+		} else {
+			ret = fi_domain(fabric, fi, &targs[i].domain, NULL);
+			if (ret) {
+				printf("fi_domain failed ep[%d]: %d\n", i, ret);
+				return ret;
+			}
+
+			memset(&av_attr, 0, sizeof(av_attr));
+			av_attr.type = FI_AV_UNSPEC;
+			av_attr.count = 1;
+			ret = fi_av_open(targs[i].domain, &av_attr,
+					 &targs[i].av, NULL);
+			if (ret) {
+				printf("fi_av_open failed: %d\n", ret);
+				return ret;
+			}
 		}
 
 		ret = fi_endpoint(targs[i].domain, fi, &targs[i].ep, NULL);
@@ -224,14 +283,6 @@ static int init_ofi(void)
 		ret = fi_cq_open(targs[i].domain, &cq_attr, &targs[i].cq, NULL);
 		if (ret) {
 			printf("fi_cq_open failed: %d\n", ret);
-			return ret;
-		}
-
-		av_attr.type = FI_AV_UNSPEC;
-		av_attr.count = 1;
-		ret = fi_av_open(targs[i].domain, &av_attr, &targs[i].av, NULL);
-		if (ret) {
-			printf("fi_av_open failed: %d\n", ret);
 			return ret;
 		}
 
@@ -609,6 +660,9 @@ static void usage(void)
 	FT_PRINT_OPTS_USAGE("-n <num endpoints>",
 			    "number of endpoints (threads) to use");
 	FT_PRINT_OPTS_USAGE("-U", "enable FI_DELIVERY_COMPLETE");
+	FT_PRINT_OPTS_USAGE("--threading <model>",
+			    "domain (default): per-thread domain/av; "
+			    "completion: shared domain/av, per-thread cq");
 	fprintf(stderr, "Notice to user: Not all fabtests options are supported"
 		" by this test. If something isn't working check if the option"
 		" is supported before reporting a bug.\n");
@@ -661,7 +715,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
-	hints->domain_attr->threading = FI_THREAD_DOMAIN;
+	hints->domain_attr->threading = opts.threading;
 	hints->caps = FI_MSG;
 	hints->mode |= FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
@@ -672,9 +726,9 @@ int main(int argc, char **argv)
 		hints->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
-        ret = ft_init_oob();
-        if (ret)
-                goto out;
+	ret = ft_init_oob();
+	if (ret)
+		goto out;
 
 	if (oob_sock >= 0 && opts.dst_addr) {
 		ret = ft_sock_sync(oob_sock, 0);
