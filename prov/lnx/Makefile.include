@@ -46,14 +46,24 @@ _lnx_headers = \
 
 if HAVE_LNX_DL
 pkglib_LTLIBRARIES += liblnx-fi.la
-liblnx_fi_la_SOURCES = $(_lnx_files) $(_lnx_headers)
-liblnx_fi_la_LIBADD = $(linkback) $(lnx_LIBS)
-liblnx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+liblnx_fi_la_SOURCES = $(_lnx_files) $(_lnx_headers) $(common_srcs)
+liblnx_fi_la_CPPFLAGS = 				\
+	-I$(top_srcdir)/include				\
+	-I$(top_srcdir)/prov/lnx/include		\
+	$(AM_CPPFLAGS) $(lnx_CPPFLAGS)
+liblnx_fi_la_LIBADD = $(top_builddir)/src/libfabric.la $(linkback) $(lnx_LIBS)
+libverbs_fi_la_LDFLAGS =				\
+	-module -avoid-version -shared -export-dynamic	\
+	$(lnx_LDFLAGS)
 liblnx_fi_la_DEPENDENCIES = $(linkback)
-else
+else !HAVE_LNX_DL
 src_libfabric_la_SOURCES += $(_lnx_files) $(_lnx_headers)
-src_libfabric_la_CPPFLAGS += -I$(top_srcdir)/prov/lnx/include
-endif
+src_libfabric_la_CPPFLAGS += 				\
+	-I$(top_srcdir)/prov/lnx/include		\
+	$(lnx_CPPFLAGS)
+src_libfabric_la_LDFLAGS += $(lnx_LDFLAGS)
+src_libfabric_la_LIBADD += $(lnx_LIBS)
+endif !HAVE_LNX_DL
 
 prov_install_man_pages += man/man7/fi_lnx.7
 
