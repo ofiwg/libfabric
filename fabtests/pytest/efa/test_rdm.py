@@ -354,3 +354,12 @@ def test_rmd_tagged_pingpong_truncate_error(cmdline_args, completion_semantic):
                                completion_semantic, "host_to_host",
                                message_size=message_size, fabric="efa",
                                timeout=15, might_fail=might_fail)
+
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa", "efa-direct"])
+@pytest.mark.parametrize("num_eps", [8, 16, 32])
+def test_rdm_bw_mt_thread_completion(cmdline_args, num_eps, fabric):
+    from common import ClientServerTest
+    test = ClientServerTest(cmdline_args, f"fi_rdm_bw_mt -g -n {num_eps} --threading completion",
+                            "standard", "transmit_complete", fabric=fabric)
+    test.run()
