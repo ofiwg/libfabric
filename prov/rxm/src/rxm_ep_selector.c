@@ -30,16 +30,23 @@ static uint8_t rxm_rr_next(struct rxm_rr_selector *rr, struct rxm_conn *conn)
 
 	idx = rr->rr_next;
 
-	if (OFI_LIKELY(conn->states[idx] == RXM_CM_CONNECTED)) {
-		if (OFI_UNLIKELY(++rr->rr_next >= conn->num_msg_eps))
-			rr->rr_next = 1;
-		return idx;
-	}
-
-	if (conn->states[idx] == RXM_CM_IDLE) {
+	/* Always advance the RR pointer, regardless of the slot's state, so
+	 * the cursor keeps rotating during warm-up instead of stalling on a
+	 * not-yet-connected slot. Over the first sends this walks every slot
+	 * and fires a connect on each IDLE one, bringing all QPs up in
+	 * parallel. */
+	if (OFI_UNLIKELY(++rr->rr_next >= conn->num_msg_eps))
 		rr->rr_next = 1;
+
+	if (OFI_LIKELY(conn->states[idx] == RXM_CM_CONNECTED))
+		return idx;
+
+	/* Slot not connected yet: kick off its connect (if idle) and fall
+	 * back to the always-connected primary (slot 0) for this send. A
+	 * failed rxm_send_connect just leaves the slot IDLE; the cursor will
+	 * wrap back and retry it. */
+	if (OFI_UNLIKELY(conn->states[idx] == RXM_CM_IDLE))
 		(void) rxm_send_connect(conn, idx);
-	}
 
 	return 0;
 }
