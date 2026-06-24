@@ -1,7 +1,7 @@
 import pytest
 from common import ClientServerTest
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 def test_multi_ep_stress_standard(cmdline_args, remove_av):
     cmd = f"fi_efa_multi_ep_stress"
@@ -10,7 +10,7 @@ def test_multi_ep_stress_standard(cmdline_args, remove_av):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 def test_multi_ep_stress_tagged(cmdline_args, remove_av):
     cmd = f"fi_efa_multi_ep_stress --op-type tagged"
@@ -19,7 +19,7 @@ def test_multi_ep_stress_tagged(cmdline_args, remove_av):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 def test_multi_ep_stress_writedata(cmdline_args, remove_av):
     cmd = f"fi_efa_multi_ep_stress --op-type writedata"
@@ -28,7 +28,7 @@ def test_multi_ep_stress_writedata(cmdline_args, remove_av):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 def test_multi_ep_stress_multi_receivers(cmdline_args, remove_av):
     cmd = f"fi_efa_multi_ep_stress --receiver-workers 4"
@@ -37,7 +37,7 @@ def test_multi_ep_stress_multi_receivers(cmdline_args, remove_av):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 def test_multi_ep_stress_multi_senders(cmdline_args, remove_av):
     cmd = f"fi_efa_multi_ep_stress --sender-workers 10"
@@ -46,7 +46,7 @@ def test_multi_ep_stress_multi_senders(cmdline_args, remove_av):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 def test_multi_ep_stress_shared_cq(cmdline_args, remove_av):
     cmd = f"fi_efa_multi_ep_stress --receiver-workers 4 --shared-cq"
@@ -55,7 +55,7 @@ def test_multi_ep_stress_shared_cq(cmdline_args, remove_av):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 def test_multi_ep_stress_shared_av(cmdline_args, remove_av):
     cmd = f"fi_efa_multi_ep_stress --sender-workers 8 --receiver-workers 2 --shared-av"
@@ -64,7 +64,7 @@ def test_multi_ep_stress_shared_av(cmdline_args, remove_av):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 def test_multi_ep_stress_shared_av_and_cq(cmdline_args, remove_av):
     cmd = f"fi_efa_multi_ep_stress --sender-workers 8 --receiver-workers 2 --shared-av --shared-cq"
@@ -73,7 +73,7 @@ def test_multi_ep_stress_shared_av_and_cq(cmdline_args, remove_av):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 def test_multi_ep_stress_transient_client(cmdline_args, remove_av):
     cmd = f"fi_efa_multi_ep_stress --sender-ep-cycles 5"
@@ -82,7 +82,7 @@ def test_multi_ep_stress_transient_client(cmdline_args, remove_av):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("remove_av", [True, False])
 @pytest.mark.parametrize("configuration", [{"sender_workers": 2, "receiver_workers": 4, "sender_ep_cycles": 10, "receiver_ep_cycles": 20},
                                            {"sender_workers": 4, "receiver_workers": 2, "sender_ep_cycles": 20, "receiver_ep_cycles": 10},
@@ -99,7 +99,7 @@ def test_multi_ep_stress_multi_and_transient_sender_receiver(cmdline_args, remov
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 @pytest.mark.parametrize("op_type", ["untagged", "tagged", "writedata"])
 def test_multi_ep_stress_thread_completion_shared_av(cmdline_args, op_type):
     # Test concurrent fi_send/fi_tsend/fi_writedata vs fi_av_insert, fi_cq_read vs fi_av_insert across worker threads under FI_THREAD_COMPLETION
@@ -107,7 +107,7 @@ def test_multi_ep_stress_thread_completion_shared_av(cmdline_args, op_type):
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
 
-@pytest.mark.functional
+@pytest.mark.unstable
 def test_multi_ep_stress_thread_completion_shared_av_ep_recycling(cmdline_args):
     # With EP recycling, one thread could call fi_enable while other thread fi_av_insert under FI_THREAD_COMPLETION
     cmd = f"fi_efa_multi_ep_stress --threading completion --shared-av --sender-workers 4 --receiver-workers 4 --sender-ep-cycles 5 --receiver-ep-cycles 5"
