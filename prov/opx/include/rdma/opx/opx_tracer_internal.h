@@ -145,9 +145,10 @@ static inline uint64_t opx_trace_rdtsc(void)
 	return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 #else
 	/* TSC mode - RDTSC instruction (x86_64) */
-	uint32_t lo, hi;
-	__asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
-	return ((uint64_t) hi << 32) | lo;
+	uint64_t low, high;
+
+	asm volatile("rdtsc" : "=a"(low), "=d"(high));
+	return low | (high << 32);
 #endif
 }
 

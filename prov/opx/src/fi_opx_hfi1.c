@@ -4354,8 +4354,7 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 			if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 				bytes_to_send_this_packet =
 					MIN(bytes_to_send + params->payload_bytes_for_iovec, max_bytes_per_packet);
-				uint64_t tail_bytes	      = bytes_to_send_this_packet & 0x3Ful;
-				blocks_to_send_in_this_packet = (bytes_to_send_this_packet >> 6) + (tail_bytes ? 1 : 0);
+				blocks_to_send_in_this_packet = (bytes_to_send_this_packet + 0x3Ful) >> 6;
 				pbc_dws			      = 2 + /* pbc */
 					  2 +			    /* lrh */
 					  3 +			    /* bth */
@@ -4369,9 +4368,7 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 				uint64_t       payload_n_additional_hdr_tail_bytes =
 					(MIN(bytes_to_send + params->payload_bytes_for_iovec + additional_hdr_tail_byte,
 					     max_bytes_per_packet));
-				uint64_t tail_bytes = payload_n_additional_hdr_tail_bytes & 0x3Ful;
-				blocks_to_send_in_this_packet =
-					(payload_n_additional_hdr_tail_bytes >> 6) + (tail_bytes ? 1 : 0);
+				blocks_to_send_in_this_packet = (payload_n_additional_hdr_tail_bytes + 0x3Ful) >> 6;
 				bytes_to_send_this_packet =
 					payload_n_additional_hdr_tail_bytes - additional_hdr_tail_byte;
 				pbc_dws = 2 + /* pbc */
@@ -4769,8 +4766,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 			 * that in a single SDMA send */
 			uintptr_t rbuf_wrap	= (rbuf + 0x100000000ul) & 0xFFFFFFFF00000000ul;
 			uint64_t  sdma_we_bytes = MIN(bytes_to_send, (rbuf_wrap - rbuf));
-			uint64_t  packet_count =
-				(sdma_we_bytes / max_dput_bytes) + ((sdma_we_bytes % max_dput_bytes) ? 1 : 0);
+			uint64_t  packet_count	= (sdma_we_bytes + max_dput_bytes - 1) / max_dput_bytes;
 
 			assert(packet_count > 0);
 
@@ -5141,8 +5137,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
-			uint64_t packet_count =
-				(bytes_to_send / max_dput_bytes) + ((bytes_to_send % max_dput_bytes) ? 1 : 0);
+			uint64_t packet_count = (bytes_to_send + max_dput_bytes - 1) / max_dput_bytes;
 
 			assert(packet_count > 0);
 			packet_count = MIN(packet_count, max_pkts_per_req);
