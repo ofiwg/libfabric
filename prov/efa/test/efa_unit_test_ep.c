@@ -482,12 +482,12 @@ void test_efa_rdm_ep_rma_queue_before_handshake(void **state, int op)
 	/* Do not use shm in this unit test because we are testing efa rma path */
 	peer->conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	assert_false(efa_rdm_ep->homogeneous_peers);
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 
 	err = test_efa_rdm_ep_rma_issue_op(resource->ep, op, buf, buf_len,
 				      peer_addr, rma_addr, rma_key);
 	assert_int_equal(err, 0);
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list),  1);
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE),  1);
 	assert_int_equal(efa_unit_test_get_dlist_length(&(efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list)), 1);
 	txe = container_of(efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list.next, struct efa_rdm_ope, queued_entry);
 	assert_true((txe->op == op));
@@ -551,7 +551,7 @@ void test_efa_rdm_ep_trigger_handshake(void **state)
 	assert_non_null(peer);
 
 	/* No txe should have been allocated yet */
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 
 	/*
 	 * When the peer already has made , the function should be a no-op
@@ -559,16 +559,16 @@ void test_efa_rdm_ep_trigger_handshake(void **state)
 	 */
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED | EFA_RDM_PEER_REQ_SENT;
 	assert_int_equal(efa_rdm_ep_trigger_handshake(efa_rdm_ep, peer), FI_SUCCESS);
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 
 	/*
 	 * Reset the peer flags to 0, now we should expect a txe allocated
 	 */
 	peer->flags = 0;
 	assert_int_equal(efa_rdm_ep_trigger_handshake(efa_rdm_ep, peer), FI_SUCCESS);
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->txe_list),  1);
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE),  1);
 
-	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
+	txe = efa_unit_test_get_first_ope(efa_rdm_ep, EFA_RDM_TXE);
 
 	assert_true(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION);
 	assert_true(txe->internal_flags & EFA_RDM_TXE_NO_COUNTER);
@@ -627,7 +627,7 @@ void test_efa_rdm_txe_construct_splits_internal_flags(void **state)
 	 * EFA_RDM_* flags are fine: we only assert that every requested
 	 * bit is set in its own field.
 	 */
-	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
 	assert_non_null(txe);
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg,
 			      fi_flags_in, internal_flags_in);
@@ -643,7 +643,7 @@ void test_efa_rdm_txe_construct_splits_internal_flags(void **state)
 	 * should be set implicitly (catches a regression where the construct
 	 * fn OR's in a default internal flag).
 	 */
-	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
 	assert_non_null(txe);
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg,
 			      fi_flags_in, 0);
@@ -1240,9 +1240,9 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(void **state)
 	}
 
 	/* txe list should be empty before and after the failed handshake post call */
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 	assert_int_equal(efa_rdm_ep_post_handshake(efa_rdm_ep, peer), -FI_EAGAIN);
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 
 	for (i = 0; i < tx_size; i++)
 		efa_rdm_pke_release_tx(pkt_entry_vec[i]);

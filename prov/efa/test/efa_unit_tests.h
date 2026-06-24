@@ -666,6 +666,45 @@ int efa_unit_test_get_dlist_length(struct dlist_entry *head)
 	return i;
 }
 
+/*
+ * efa-rdm tx and rx entries are tracked on the shared base_ep.ope_list,
+ * differentiated by efa_rdm_ope::type. These helpers count / fetch entries
+ * of a given type (EFA_RDM_TXE or EFA_RDM_RXE) so tests can reason about
+ * tx and rx entries independently.
+ */
+static inline
+int efa_unit_test_get_ope_list_length(struct efa_rdm_ep *ep,
+				      enum efa_rdm_ope_type type)
+{
+	int i = 0;
+	struct dlist_entry *item;
+	struct efa_rdm_ope *ope;
+
+	dlist_foreach(&ep->base_ep.ope_list, item) {
+		ope = container_of(item, struct efa_rdm_ope, ep_entry);
+		if (ope->type == type)
+			i++;
+	}
+
+	return i;
+}
+
+static inline
+struct efa_rdm_ope *efa_unit_test_get_first_ope(struct efa_rdm_ep *ep,
+						enum efa_rdm_ope_type type)
+{
+	struct dlist_entry *item;
+	struct efa_rdm_ope *ope;
+
+	dlist_foreach(&ep->base_ep.ope_list, item) {
+		ope = container_of(item, struct efa_rdm_ope, ep_entry);
+		if (ope->type == type)
+			return ope;
+	}
+
+	return NULL;
+}
+
 void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr);
 
 #endif

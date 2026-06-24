@@ -178,7 +178,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, struct efa_rdm_p
 {
 	struct efa_rdm_ope *rxe;
 
-	rxe = ofi_buf_alloc(ep->ope_pool);
+	rxe = ofi_buf_alloc(ep->base_ep.ope_pool);
 	if (OFI_UNLIKELY(!rxe)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "RX entries exhausted\n");
 		return NULL;
@@ -186,7 +186,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, struct efa_rdm_p
 
 	rxe->ep = ep;
 	efa_rdm_domain_ope_list_lock(efa_rdm_ep_rdm_domain(ep));
-	dlist_insert_tail(&rxe->ep_entry, &ep->rxe_list);
+	dlist_insert_tail(&rxe->ep_entry, &ep->base_ep.ope_list);
 	efa_rdm_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(ep));
 	rxe->type = EFA_RDM_RXE;
 	rxe->internal_flags = 0;
@@ -595,7 +595,7 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 
 	msg.addr = peer->conn->fi_addr;
 
-	txe = ofi_buf_alloc(ep->ope_pool);
+	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;

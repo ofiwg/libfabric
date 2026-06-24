@@ -102,7 +102,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	}
 
 	efa_rdm_domain_ope_list_lock(efa_rdm_ep_rdm_domain(ep));
-	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
+	dlist_insert_tail(&txe->ep_entry, &ep->base_ep.ope_list);
 	efa_rdm_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(ep));
 }
 

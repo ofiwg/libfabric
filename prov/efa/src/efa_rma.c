@@ -446,18 +446,7 @@ ssize_t efa_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 	return efa_rma_post_write(base_ep, &msg, FI_INJECT | FI_REMOTE_CQ_DATA);
 }
 
-struct fi_ops_rma efa_dgram_ep_rma_ops = {
-	.size = sizeof(struct fi_ops_rma),
-	.read = fi_no_rma_read,
-	.readv = fi_no_rma_readv,
-	.readmsg = fi_no_rma_readmsg,
-	.write = fi_no_rma_write,
-	.writev = fi_no_rma_writev,
-	.writemsg = fi_no_rma_writemsg,
-	.inject = fi_no_rma_inject,
-	.writedata = fi_no_rma_writedata,
-	.injectdata = fi_no_rma_injectdata,
-};
+
 
 struct fi_ops_rma efa_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
