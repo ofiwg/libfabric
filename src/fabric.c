@@ -1015,21 +1015,23 @@ unlock:
 	pthread_mutex_unlock(&common_locks.ini_lock);
 }
 
+static void ofi_free_prov_recursive(struct ofi_prov *prov)
+{
+	if (!prov)
+		return;
+
+	ofi_free_prov_recursive(prov->next);
+	ofi_free_prov(prov);
+}
+
 FI_DESTRUCTOR(fi_fini(void))
 {
-	struct ofi_prov *prov;
-
 	pthread_mutex_lock(&common_locks.ini_lock);
 
 	if (!ofi_init)
 		goto unlock;
 
-	while (prov_head) {
-		prov = prov_head;
-		prov_head = prov->next;
-		ofi_free_prov(prov);
-	}
-
+	ofi_free_prov_recursive(prov_head);
 	ofi_free_filter(&prov_filter);
 	ofi_shm_p2p_cleanup();
 	ofi_monitors_cleanup();
