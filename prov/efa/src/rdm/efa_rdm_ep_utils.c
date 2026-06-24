@@ -1192,14 +1192,7 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
 			continue;
 
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE))
-			continue;
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_RNR))
-			continue;
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
-			continue;
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_READ))
-			continue;
+		efa_rdm_ope_process_queued_ope(ope);
 	}
 	/*
 	 * Send data packets until window or data queue is exhausted.
