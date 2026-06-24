@@ -501,7 +501,10 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_t
 		OPX_COUNTERS_STORE_VAL(request->comp_entry.start_time_ns, sdma_start_ns);
 		opx_tx->hfi->info.sdma.queued_entries[fill_index] = (void *) &request->comp_entry;
 
-		fill_index = (fill_index + 1) % (opx_tx->hfi->info.sdma.queue_size);
+		fill_index++;
+		if (OFI_UNLIKELY(fill_index >= opx_tx->hfi->info.sdma.queue_size)) {
+			fill_index = 0;
+		}
 		--avail;
 
 		for (int i = 0; i < request->num_iovs; ++i) {
