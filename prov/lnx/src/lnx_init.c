@@ -758,6 +758,9 @@ void ofi_link_fini(void)
 
 LNX_INI
 {
+#if HAVE_LNX_DL
+	ofi_params_init();
+#endif
 	struct ofi_bufpool_attr bp_attrs = {};
 	int ret;
 
