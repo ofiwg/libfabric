@@ -125,7 +125,7 @@ struct efa_rdm_ope {
 	/* entry is linked with ope_longcts_send_list in efa_domain */
 	struct dlist_entry entry;
 
-	/* ep_entry is linked to tx/rxe_list in efa_rdm_ep */
+	/* ep_entry is linked to base_ep.ope_list */
 	struct dlist_entry ep_entry;
 
 	/* ack_list_entry is linked to ope_posted_ack_list in efa_rdm_ep */

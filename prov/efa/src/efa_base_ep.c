@@ -684,6 +684,8 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 				     &base_ep->inject_rma_size);
 
 	base_ep->use_unsolicited_write_recv = true;
+	base_ep->ope_pool = NULL;
+	dlist_init(&base_ep->ope_list);
 	return 0;
 }
 

@@ -50,7 +50,7 @@ void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state)
 	assert_int_equal(err, 0);
 	assert_null(pkt_entry->peer);
 	assert_null(pkt_entry->ope);
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 
 	/* Simulate the send completion arriving after peer removal.
 	 * The handler must not dereference pkt_entry->ope since
@@ -97,7 +97,7 @@ void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state)
 	assert_int_equal(err, 0);
 	assert_null(pkt_entry->peer);
 	assert_null(pkt_entry->ope);
-	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 
 	/* Simulate a TX error arriving after peer removal.
 	 * The handler must not dereference pkt_entry->ope since
@@ -148,7 +148,7 @@ void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state)
     msg.iov_count = 1;
     msg.msg_iov = &iov;
     msg.desc = NULL;
-    txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
+    txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
     assert_non_null(txe);
     efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
     txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
@@ -424,7 +424,7 @@ void test_efa_rdm_pke_flag_tracking(void **state)
 	msg.iov_count = 1;
 	msg.msg_iov = &iov;
 	msg.desc = NULL;
-	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
 	assert_non_null(txe);
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
 

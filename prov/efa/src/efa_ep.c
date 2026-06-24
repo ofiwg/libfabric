@@ -334,23 +334,23 @@ static int efa_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 
 static int efa_ep_enable(struct fid_ep *ep_fid)
 {
-	struct efa_base_ep *ep;
+	struct efa_base_ep *base_ep;
 	int err;
 
-	ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 
-	err = efa_base_ep_create_and_enable_qp(ep);
+	err = efa_base_ep_create_and_enable_qp(base_ep);
 	if (err)
 		return err;
 
-	err = efa_base_ep_insert_cntr_ibv_cq_poll_list(ep);
+	err = efa_base_ep_insert_cntr_ibv_cq_poll_list(base_ep);
 	if (err) {
-		efa_base_ep_destruct_qp(ep);
+		efa_base_ep_destruct_qp(base_ep);
 		return err;
 	}
 
 	if (efa_env.track_mr)
-		err = efa_direct_ope_pool_create(ep);
+		err = efa_direct_ope_pool_create(base_ep);
 
 	return err;
 }

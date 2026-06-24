@@ -424,7 +424,7 @@ struct efa_rdm_ope *efa_unit_test_alloc_txe(struct efa_resource *resource, uint3
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
 
-	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
 	if (!txe)
 		return NULL;
 

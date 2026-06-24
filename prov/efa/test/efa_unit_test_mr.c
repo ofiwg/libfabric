@@ -656,11 +656,11 @@ void test_efa_mr_close_warn_outstanding_direct_ope(void **state)
 	efa_mr = container_of(mr, struct efa_mr, mr_fid);
 
 	/* Simulate an outstanding direct operation referencing this MR */
-	direct_ope = ofi_buf_alloc(base_ep->efa_direct_ope_pool);
+	direct_ope = ofi_buf_alloc(base_ep->ope_pool);
 	assert_non_null(direct_ope);
 	direct_ope->iov_count = 1;
 	direct_ope->desc[0] = efa_mr;
-	dlist_insert_tail(&direct_ope->entry, &base_ep->efa_direct_ope_list);
+	dlist_insert_tail(&direct_ope->entry, &base_ep->ope_list);
 
 	/* Close MR while operation is outstanding */
 	assert_int_equal(fi_close(&mr->fid), 0);
@@ -718,17 +718,17 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(void **state)
 	efa_mr = container_of(mr, struct efa_mr, mr_fid);
 
 	/* Simulate outstanding direct operations on both EPs referencing the same MR */
-	direct_ope1 = ofi_buf_alloc(base_ep1->efa_direct_ope_pool);
+	direct_ope1 = ofi_buf_alloc(base_ep1->ope_pool);
 	assert_non_null(direct_ope1);
 	direct_ope1->iov_count = 1;
 	direct_ope1->desc[0] = efa_mr;
-	dlist_insert_tail(&direct_ope1->entry, &base_ep1->efa_direct_ope_list);
+	dlist_insert_tail(&direct_ope1->entry, &base_ep1->ope_list);
 
-	direct_ope2 = ofi_buf_alloc(base_ep2->efa_direct_ope_pool);
+	direct_ope2 = ofi_buf_alloc(base_ep2->ope_pool);
 	assert_non_null(direct_ope2);
 	direct_ope2->iov_count = 1;
 	direct_ope2->desc[0] = efa_mr;
-	dlist_insert_tail(&direct_ope2->entry, &base_ep2->efa_direct_ope_list);
+	dlist_insert_tail(&direct_ope2->entry, &base_ep2->ope_list);
 
 	/* Close MR while operations are outstanding on both EPs */
 	assert_int_equal(fi_close(&mr->fid), 0);
@@ -1534,7 +1534,7 @@ void test_efa_direct_ope_released_on_recv_error(void **state)
 	assert_int_equal(ret, -FI_EINVAL);
 
 	/* The ope list must be empty - ope released on error path */
-	assert_true(dlist_empty(&base_ep->efa_direct_ope_list));
+	assert_true(dlist_empty(&base_ep->ope_list));
 
 	free(buf);
 }
@@ -1593,7 +1593,7 @@ void test_efa_direct_ope_released_on_send_error(void **state)
 	assert_int_equal(ret, -FI_EINVAL);
 
 	/* The ope list must be empty - ope released on error path */
-	assert_true(dlist_empty(&base_ep->efa_direct_ope_list));
+	assert_true(dlist_empty(&base_ep->ope_list));
 
 	free(buf);
 }
@@ -1662,7 +1662,7 @@ void test_efa_direct_ope_released_on_read_error(void **state)
 	ret = fi_readmsg(resource->ep, &msg, FI_COMPLETION);
 	assert_int_equal(ret, -FI_EINVAL);
 
-	assert_true(dlist_empty(&base_ep->efa_direct_ope_list));
+	assert_true(dlist_empty(&base_ep->ope_list));
 
 	free(buf);
 }
@@ -1731,7 +1731,7 @@ void test_efa_direct_ope_released_on_write_error(void **state)
 	ret = fi_writemsg(resource->ep, &msg, FI_COMPLETION);
 	assert_int_equal(ret, -FI_EINVAL);
 
-	assert_true(dlist_empty(&base_ep->efa_direct_ope_list));
+	assert_true(dlist_empty(&base_ep->ope_list));
 
 	free(buf);
 }

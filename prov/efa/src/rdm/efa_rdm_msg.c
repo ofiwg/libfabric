@@ -192,7 +192,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		goto out;
 	}
 
-	txe = ofi_buf_alloc(ep->ope_pool);
+	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		goto out;

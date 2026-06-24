@@ -49,7 +49,7 @@ void efa_direct_ope_pool_destroy(struct efa_base_ep *base_ep);
 /**
  * @brief Allocate and record an operation entry
  *
- * Acquires efa_domain->util_domain.lock to protect the efa_direct_ope_list.
+ * Acquires efa_domain->util_domain.lock to protect the ope_list.
  * This is the same lock used by efa_mr_close when iterating across all EPs.
  *
  * @param[in,out] base_ep	base endpoint
@@ -66,7 +66,7 @@ struct efa_direct_ope *efa_direct_ope_alloc(struct efa_base_ep *base_ep,
 /**
  * @brief Release an operation entry
  *
- * Acquires efa_domain->util_domain.lock to protect the efa_direct_ope_list.
+ * Acquires efa_domain->util_domain.lock to protect the ope_list.
  * This is the same lock used by efa_mr_close when iterating across all EPs.
  *
  * @param[in,out] base_ep	base endpoint

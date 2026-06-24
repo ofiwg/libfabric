@@ -611,16 +611,10 @@ static void efa_rdm_mr_close_check_inflight_ope(struct efa_mr *efa_mr)
 	ofi_genlock_lock(&efa_domain->util_domain.lock);
 	dlist_foreach_container(&efa_domain->base_ep_list, struct efa_base_ep,
 				base_ep, base_ep_entry) {
-		struct efa_rdm_ep *rdm_ep;
 		struct efa_rdm_ope *ope;
-		rdm_ep = container_of(base_ep, struct efa_rdm_ep, base_ep);
+
 		dlist_foreach_container_safe (
-			&rdm_ep->txe_list, struct efa_rdm_ope,
-			ope, ep_entry, tmp) {
-			efa_mr_close_warn_inflight_ope(ope->desc, ope->iov_count, &ope->cq_entry, efa_mr, base_ep);
-		}
-		dlist_foreach_container_safe (
-			&rdm_ep->rxe_list, struct efa_rdm_ope,
+			&base_ep->ope_list, struct efa_rdm_ope,
 			ope, ep_entry, tmp) {
 			efa_mr_close_warn_inflight_ope(ope->desc, ope->iov_count, &ope->cq_entry, efa_mr, base_ep);
 		}
