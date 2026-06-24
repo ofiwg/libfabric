@@ -1161,13 +1161,23 @@ int32_t opx_hfi_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, 
 		FI_DBG(&fi_opx_provider, FI_LOG_MR,
 		       "IOCTL FAILED : EFAULT, requested range=%p-%p (%u bytes, %lu pages)\n", (void *) vaddr,
 		       (void *) (vaddr + *length), *length, (*length) / PAGE_SIZE);
-		/* Attempt prefaulting recovery on the region. This may only fault a single page with uffd. */
-		opx_write_prefault(vaddr, 0, *length);
-		err = -errno;
+#ifdef OPX_HMEM
+		if (flags != HFI1_MEMINFO_TYPE_SYSTEM) {
+			err = -FI_EFAULT;
+		} else
+#endif
+		{
+			/* Attempt prefaulting recovery on the region. This may only fault a single page with uffd. */
+			opx_write_prefault(vaddr, 0, *length);
+			err = -FI_EAGAIN;
+		}
 	} else {
+		const int ioctl_errno = errno;
 		FI_WARN(&fi_opx_provider, FI_LOG_MR,
-			"IOCTL FAILED ERR %d errno %d \"%s\" requested range=%p-%p (%u bytes, %lu pages)\n", err, errno,
-			strerror(errno), (void *) vaddr, (void *) (vaddr + *length), *length, (*length) / PAGE_SIZE);
+			"IOCTL FAILED ERR %d errno %d \"%s\" requested range=%p-%p (%u bytes, %lu pages)\n", err,
+			ioctl_errno, strerror(ioctl_errno), (void *) vaddr, (void *) (vaddr + *length), *length,
+			(*length) / PAGE_SIZE);
+		err = ioctl_errno ? -ioctl_errno : err;
 	}
 
 	/* Hard error, we can't trust these */

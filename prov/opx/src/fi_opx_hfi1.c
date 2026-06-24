@@ -2628,7 +2628,7 @@ int opx_hfi1_rx_rzv_rts_tid_fallback(union fi_opx_hfi1_deferred_work	  *work,
 
 	FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters.expected_receive.rts_fallback_eager_reg_rzv);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-	       "===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) EPERM, switching to non-TID send CTS (params=%p rzv_comp=%p context=%p)\n",
+	       "===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) switching to non-TID send CTS (params=%p rzv_comp=%p context=%p)\n",
 	       params, params->rzv_comp, params->rzv_comp->context);
 
 	return params->work_elem.work_fn(work);
@@ -2653,8 +2653,7 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 	/* TID has been disabled for this endpoint, fall back to rendezvous */
 	if (OFI_UNLIKELY(register_rc == -FI_EPERM)) {
 		return opx_hfi1_rx_rzv_rts_tid_fallback(work, params);
-	} else if (register_rc != FI_SUCCESS) {
-		assert(register_rc == -FI_EAGAIN);
+	} else if (register_rc == -FI_EAGAIN) {
 		FI_OPX_DEBUG_COUNTERS_INC(params->opx_ep->debug_counters.expected_receive.rts_tid_setup_retries);
 
 		/* A no-progress -FI_EAGAIN re-queues this TID_SETUP work
@@ -2690,6 +2689,11 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 		       "===================================== RECV, HFI -- RENDEZVOUS RTS TID SETUP (end) EAGAIN (No Progress) (params=%p rzv_comp=%p context=%p)\n",
 		       params, params->rzv_comp, params->rzv_comp->context);
 		return -FI_EAGAIN;
+	} else if (register_rc != FI_SUCCESS) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"TID registration failed with non-retryable error %d (%s), switching to non-TID rendezvous (params=%p rzv_comp=%p context=%p)\n",
+			register_rc, fi_strerror(-register_rc), params, params->rzv_comp, params->rzv_comp->context);
+		return opx_hfi1_rx_rzv_rts_tid_fallback(work, params);
 	}
 
 	/* made forward progress acquiring TIDs so reset the no-progress retry counter. */
