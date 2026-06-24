@@ -1504,7 +1504,7 @@ int opx_tid_get_tids_for_range(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov 
 				OPX_TID_CACHE_DEBUG_FPRINTF("## %s:%u return %d (negative error code) errno=%d (%s)\n",
 							    __func__, __LINE__, rc, errno, strerror(errno));
 			}
-			ret = -FI_EAGAIN;
+			ret = rc;
 			goto register_end;
 		}
 
