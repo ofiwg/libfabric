@@ -4,6 +4,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_rdm_ep.h"
+#include "efa_rdm_fabric.h"
 #include "efa_rdm_cq.h"
 #include "efa_rdm_srx.h"
 #include "efa_rdm_rma.h"

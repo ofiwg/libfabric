@@ -4,6 +4,7 @@
 #include <ofi_iov.h>
 #include <ofi_atomic.h>
 #include "efa.h"
+#include "efa_rdm_fabric.h"
 #include "efa_rdm_rma.h"
 #include "efa_cntr.h"
 #include "efa_rdm_atomic.h"

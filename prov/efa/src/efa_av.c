@@ -12,6 +12,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "rdm/efa_rdm_domain.h"
+#include "rdm/efa_rdm_fabric.h"
 #include "rdm/efa_rdm_pke_utils.h"
 
 static inline struct efa_conn *efa_av_addr_to_conn_impl(struct util_av *util_av,
