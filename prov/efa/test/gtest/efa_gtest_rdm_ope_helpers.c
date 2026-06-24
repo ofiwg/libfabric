@@ -8,6 +8,7 @@
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
+#include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_peer.h"
 #include "rdm/efa_rdm_protocol.h"
@@ -157,8 +158,7 @@ int efa_test_process_queued_ope_after_handshake(struct efa_test_queued_op *qop)
 	 * skip gate; force the software toggle so the device path is taken. */
 	ep->use_device_rdma = true;
 
-	return efa_rdm_ope_process_queued_ope(qop->txe,
-					      EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
+	return efa_rdm_ope_process_queued_ope(qop->txe);
 }
 
 void efa_test_queued_op_cleanup(struct efa_test_queued_op *qop, uint64_t wr_id)
@@ -180,4 +180,106 @@ void efa_test_queued_op_cleanup(struct efa_test_queued_op *qop, uint64_t wr_id)
 		fi_close(&qop->mr->fid);
 		qop->mr = NULL;
 	}
+}
+
+static void efa_test_fill_process_queued_result(
+	struct efa_rdm_ep *ep, struct efa_rdm_ope *txe,
+	struct efa_test_process_queued_result *res)
+{
+	res->any_queued_flag_set =
+		!!(txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS);
+	res->queued_list_empty = dlist_empty(&ep->ope_queued_list);
+	res->before_handshake_cnt = ep->ope_queued_before_handshake_cnt;
+}
+
+int efa_test_queue_ope_with_flag(struct fid_ep *ep_fid, struct fid_av *av_fid,
+				 int flag_kind, struct efa_test_queued_op *qop)
+{
+	struct efa_rdm_ep *ep = container_of(ep_fid, struct efa_rdm_ep,
+					     base_ep.util_ep.ep_fid);
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = FI_ADDR_NOTAVAIL;
+	struct efa_rdm_pke *pkt_entry;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int ret;
+
+	memset(qop, 0, sizeof(*qop));
+	qop->ep = ep_fid;
+
+	ret = fi_getname(&ep_fid->fid, &raw_addr, &raw_addr_len);
+	if (ret)
+		return ret;
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	if (fi_av_insert(av_fid, &raw_addr, 1, &peer_addr, 0, NULL) != 1)
+		return -FI_EINVAL;
+
+	qop->peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	if (!qop->peer)
+		return -FI_EINVAL;
+	qop->peer->conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
+
+	iov.iov_base = qop->buf;
+	iov.iov_len = sizeof(qop->buf);
+	msg.msg_iov = &iov;
+	msg.iov_count = 1;
+	msg.addr = peer_addr;
+
+	qop->txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	if (!qop->txe)
+		return -FI_ENOMEM;
+	efa_rdm_txe_construct(qop->txe, ep, qop->peer, &msg, ofi_op_msg, 0, 0);
+
+	switch (flag_kind) {
+	case EFA_TEST_QUEUED_FLAG_RNR:
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+					      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		if (!pkt_entry)
+			return -FI_ENOMEM;
+		efa_rdm_pke_set_ope(pkt_entry, qop->txe);
+		pkt_entry->peer = qop->peer;
+		efa_rdm_ep_queue_rnr_pkt(ep, pkt_entry);
+		break;
+	case EFA_TEST_QUEUED_FLAG_CTRL:
+		qop->queued_ctrl_type = EFA_RDM_CTS_PKT;
+		qop->txe->queued_ctrl_type = qop->queued_ctrl_type;
+		qop->txe->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
+		dlist_insert_tail(&qop->txe->queued_entry, &ep->ope_queued_list);
+		break;
+	case EFA_TEST_QUEUED_FLAG_READ:
+		/*
+		 * efa_rdm_ope_post_read() asserts a non-empty rma_iov, and
+		 * takes its zero-byte branch while bytes_read_total_len is 0.
+		 */
+		qop->txe->rma_iov_count = 1;
+		qop->txe->rma_iov[0].addr = (uint64_t) qop->buf;
+		qop->txe->rma_iov[0].len = sizeof(qop->buf);
+		qop->txe->rma_iov[0].key = 0x1234;
+		qop->txe->internal_flags |= EFA_RDM_OPE_QUEUED_READ;
+		dlist_insert_tail(&qop->txe->queued_entry, &ep->ope_queued_list);
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	if (dlist_empty(&ep->ope_queued_list))
+		return -FI_EINVAL;
+
+	return 0;
+}
+
+int efa_test_process_queued_flag_op(struct efa_test_queued_op *qop,
+				    struct efa_test_process_queued_result *res)
+{
+	struct efa_rdm_ep *ep = container_of(qop->ep, struct efa_rdm_ep,
+					     base_ep.util_ep.ep_fid);
+
+	if (!qop->txe)
+		return -FI_EINVAL;
+
+	res->ret = efa_rdm_ope_process_queued_ope(qop->txe);
+	efa_test_fill_process_queued_result(ep, qop->txe, res);
+	return 0;
 }

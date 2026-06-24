@@ -349,6 +349,9 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=efa_qp_post_read \
 	-Wl,--wrap=efa_qp_post_write \
 	-Wl,--wrap=efadv_create_qp_ex \
+	-Wl,--wrap=efa_rdm_ep_post_queued_pkts \
+	-Wl,--wrap=efa_rdm_pke_fill_data \
+	-Wl,--wrap=efa_rdm_pke_read \
 	-Wl,--wrap=malloc
 
 prov_efa_test_gtest_efa_gtest_LIBS = $(linkback)
