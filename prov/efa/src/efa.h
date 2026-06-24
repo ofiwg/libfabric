@@ -108,19 +108,6 @@ struct efa_fabric {
 	struct util_fabric	util_fabric;
 };
 
-/* efa_rdm_fabric extends struct efa_fabric */
-struct efa_rdm_fabric {
-	struct efa_fabric	efa_fabric;
-
-	struct fid_fabric	*shm_fabric;
-#ifdef EFA_PERF_ENABLED
-	struct ofi_perfset	perf_set;
-#endif
-};
-
-_Static_assert(offsetof(struct efa_rdm_fabric, efa_fabric) == 0,
-	       "efa_fabric must be the first member of efa_rdm_fabric for safe casting");
-
 struct efa_context {
 	uint64_t completion_flags;
 	fi_addr_t addr;
@@ -281,25 +268,6 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 enum efa_perf_counters {
 	EFA_PERF_FOREACH(OFI_ENUM_VAL)
 };
-
-extern const char *efa_perf_counters_str[];
-
-static inline void efa_perfset_start(struct efa_rdm_ep *ep, size_t index)
-{
-	struct efa_domain *domain = efa_rdm_ep_domain(ep);
-	struct efa_rdm_fabric *rdm_fabric = (struct efa_rdm_fabric *) domain->fabric;
-	ofi_perfset_start(&rdm_fabric->perf_set, index);
-}
-
-static inline void efa_perfset_end(struct efa_rdm_ep *ep, size_t index)
-{
-	struct efa_domain *domain = efa_rdm_ep_domain(ep);
-	struct efa_rdm_fabric *rdm_fabric = (struct efa_rdm_fabric *) domain->fabric;
-	ofi_perfset_end(&rdm_fabric->perf_set, index);
-}
-#else
-#define efa_perfset_start(ep, index) do {} while (0)
-#define efa_perfset_end(ep, index) do {} while (0)
 #endif
 
 static inline

@@ -879,6 +879,7 @@
     <ClCompile Include="prov\efa\src\efa_domain.c" />
     <ClCompile Include="prov\efa\src\efa_domain_util.c" />
     <ClCompile Include="prov\efa\src\efa_fabric.c" />
+    <ClCompile Include="prov\efa\src\efa_fabric_util.c" />
     <ClCompile Include="prov\efa\src\efa_mr.c" />
     <ClCompile Include="prov\efa\src\efa_shm.c" />
     <ClCompile Include="prov\efa\src\efa_strerror.c" />
@@ -896,6 +897,7 @@
     <ClCompile Include="prov\efa\src\efa_ep.c" />
     <ClCompile Include="prov\efa\src\efa_direct_ope.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_domain.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_fabric.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_ope.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_rxe_map.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_atomic.c" />
@@ -1019,6 +1021,7 @@
     <ClInclude Include="prov\efa\src\windows\infiniband\verbs.h" />
     <ClInclude Include="prov\efa\src\windows\infiniband\verbs_defs.h" />
     <ClInclude Include="prov\efa\src\efa.h" />
+    <ClInclude Include="prov\efa\src\efa_fabric_util.h" />
     <ClInclude Include="prov\efa\src\efa_av.h" />
     <ClInclude Include="prov\efa\src\efa_ah.h" />
     <ClInclude Include="prov\efa\src\efa_conn.h" />
@@ -1026,6 +1029,7 @@
     <ClInclude Include="prov\efa\src\efa_cntr.h" />
     <ClInclude Include="prov\efa\src\efa_hw_cntr.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_ep.h" />
+    <ClInclude Include="prov\efa\src\rdm\efa_rdm_fabric.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_cntr.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pke_utils.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pke_nonreq.h" />

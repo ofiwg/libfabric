@@ -9,6 +9,7 @@
 #include <ofi_iov.h>
 
 #include "efa.h"
+#include "efa_rdm_fabric.h"
 
 #include "efa_rdm_msg.h"
 #include "efa_rdm_srx.h"

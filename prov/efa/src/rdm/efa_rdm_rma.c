@@ -7,6 +7,7 @@
 #include <ofi_iov.h>
 #include "efa.h"
 
+#include "efa_rdm_fabric.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
 #include "efa_rdm_pke_cmd.h"
