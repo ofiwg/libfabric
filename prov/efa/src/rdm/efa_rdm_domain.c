@@ -13,6 +13,7 @@
 #include "efa_rdm_cq.h"
 #include "efa_rdm_atomic.h"
 #include "efa_rdm_domain.h"
+#include "efa_rdm_fabric.h"
 #include "efa_rdm_mr.h"
 
 static int efa_rdm_domain_close(fid_t fid);
