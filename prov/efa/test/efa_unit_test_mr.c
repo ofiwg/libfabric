@@ -1781,3 +1781,61 @@ void test_efa_rdm_mr_gen_bumps_on_close(void **state)
 	free(buf1);
 	free(buf2);
 }
+
+/**
+ * Verify that efa_rdm_mr_gen_check_ope skips the gen check for an RXE
+ * queued with EFA_RDM_OPE_QUEUED_CTRL (CTS packet). On the receiver side
+ * of a long CTS operation, if posting the CTS fails with -FI_EAGAIN the
+ * RXE is added to ope_queued_list. When efa_rdm_domain_progress_peers_and_queues
+ * processes this entry it calls efa_rdm_mr_gen_check_ope, which must
+ * return true without reading ope->desc_gen (since the check is TXE-only).
+ */
+void test_efa_rdm_mr_gen_check_ope_skips_rxe_queued_ctrl_cts(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_domain *rdm_domain;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+	rdm_domain = efa_rdm_ep_rdm_domain(efa_rdm_ep);
+
+	/* Allocate RXE simulating receiver side of a long CTS operation */
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_msg);
+	assert_non_null(rxe);
+
+	/*
+	 * Set desc_gen to the invalid sentinel. If efa_rdm_mr_gen_check_ope
+	 * ever tries to read this for an RXE, it would hit the assert that
+	 * desc_gen is valid. The fact that the test passes proves the check
+	 * is skipped for RXEs.
+	 */
+	rxe->iov_count = 1;
+	rxe->desc[0] = NULL;
+	rxe->desc_gen[0] = EFA_RDM_MR_INVALID_GEN_VALUE;
+
+	/* Simulate EAGAIN on CTS post: set QUEUED_CTRL and add to queue */
+	rxe->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
+	rxe->queued_ctrl_type = EFA_RDM_CTS_PKT;
+	dlist_insert_tail(&rxe->queued_entry, &rdm_domain->ope_queued_list);
+
+	assert_int_equal(
+		efa_unit_test_get_dlist_length(&rdm_domain->ope_queued_list), 1);
+
+	/*
+	 * Directly invoke efa_rdm_mr_gen_check_ope on the RXE.
+	 * This is the same check that efa_rdm_ope_process_queued_ope calls
+	 * before attempting to repost. For an RXE it must return true
+	 * without attempting to read ope->desc_gen (which holds the
+	 * invalid sentinel and would trigger an assert if accessed).
+	 */
+	assert_true(efa_rdm_mr_gen_check_ope(rxe));
+
+	/* Clean up: remove from queued list and release */
+	dlist_remove(&rxe->queued_entry);
+	rxe->internal_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
+	efa_rdm_rxe_release(rxe);
+}
