@@ -1613,15 +1613,13 @@ static int run_send_abort_target(int iter)
 	int reaped = 0;		/* terminal completions counted so far */
 
 	/*
-	 * Phase 1: drain RX completions while polling OOB (non-blocking) for
-	 * the initiator's (required, slack) counts. NO internal timeout -- the
-	 * target's continued RX progress is what lets the initiator's counted
-	 * TX drain finish and ship the counts (for LONGREAD/RUNTREAD the
-	 * sender's TX completion only lands after the receiver detects the
-	 * failed read and emits PEER_ERROR), so a short internal deadline here
-	 * would deadlock the pair. If the counts genuinely never arrive, the
-	 * outer pytest test timeout bounds us. Every reaped completion is
-	 * reposted to keep the RQ at depth (see target_recv_drain_one).
+	 * Phase 1: poll OOB (non-blocking) for the initiator's
+	 * (required, slack) counts and, under FI_PROGRESS_MANUAL, drain RX
+	 * completions while we wait. NO internal timeout: under
+	 * FI_PROGRESS_MANUAL our RX progress is what lets the initiator's TX
+	 * drain finish and ship the counts, so a deadline here would deadlock
+	 * the pair. Under FI_PROGRESS_AUTO the provider drives RX progress
+	 * itself, so we skip the manual poll and reap in phase 2.
 	 */
 	while (!have_counts) {
 		ret = oob_recv_nonblock(oob_sock, counts, sizeof(counts),
@@ -1636,6 +1634,12 @@ static int run_send_abort_target(int iter)
 			have_counts = 1;
 			break;
 		}
+
+		/*
+		 * Only poll the RX CQ here under FI_PROGRESS_MANUAL.
+		 */
+		if (fi->domain_attr->data_progress != FI_PROGRESS_MANUAL)
+			continue;
 
 		ret = target_recv_drain_one(recv_abort_errs,
 					    ARRAY_SIZE(recv_abort_errs),
