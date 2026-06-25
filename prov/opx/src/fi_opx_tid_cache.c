@@ -56,6 +56,7 @@
 #include "fi_opx_tid.h"
 #include "fi_opx_tid_cache.h"
 #include <ofi_iov.h>
+#include <unistd.h>
 
 #ifndef NDEBUG
 static const char *OPX_TID_CACHE_ENTRY_STATUS[] = {
@@ -1362,7 +1363,53 @@ int opx_tid_cache_setup(struct ofi_mr_cache **cache, struct opx_tid_domain *doma
 	} else if (default_monitor == uffd_monitor) {
 		FI_DBG(&fi_opx_provider, FI_LOG_MR, "uffd_monitor\n");
 	} else if (default_monitor == kdreg2_monitor) {
-		FI_DBG(&fi_opx_provider, FI_LOG_MR, "kdreg2_monitor\n");
+		/* kdreg2 was selected (it is the build-time default when HAVE_KDREG2_MONITOR
+		 * is set), but the kdreg2 kernel module may not be loaded on this host,
+		 * in which case /dev/kdreg2 does not exist and the later
+		 * kdreg2_monitor->start() would fail and abort domain creation.
+		 *
+		 * Probe availability with access() rather than calling start() here so
+		 * that we do NOT (a) trip kdreg2_monitor_start()'s max_cnt==0 ->
+		 * -FI_ENOSPC false negative (OPX overrides max_cnt only further down),
+		 * (b) spawn the kdreg2 evictor thread before *cache is allocated, or
+		 * (c) race kdreg2_monitor_start()'s unlocked idempotency guard. The
+		 * real start still happens later under mm_state_lock via
+		 * ofi_monitors_add_cache() -> ofi_monitors_update() -> monitor->start().
+		 *
+		 * The "/dev/kdreg2" literal mirrors KDREG2_DEVICE_NAME from the kdreg2
+		 * uapi (prov/util/src/kdreg2_mem_monitor.c), which is not exposed to the
+		 * opx provider.
+		 */
+		if (access("/dev/kdreg2", R_OK | W_OK) == 0) {
+			FI_DBG(&fi_opx_provider, FI_LOG_MR, "kdreg2_monitor\n");
+		} else if (cache_params.monitor) {
+			/* User explicitly requested kdreg2 via FI_MR_CACHE_MONITOR but it
+			 * is unavailable -> hard fail, mirroring the memhooks
+			 * explicit-request behavior above. */
+			FI_WARN(&fi_opx_provider, FI_LOG_MR,
+				"kdreg2 monitor requested via FI_MR_CACHE_MONITOR, but /dev/kdreg2 is\n"
+				"unavailable (module not loaded?).  No working monitor available.\n");
+			return -FI_ENOSYS;
+		} else {
+			/* kdreg2 was only the build-time default -> fall back to memhooks.
+			 * Replicate the memhooks arm above so that an Open MPI 4.1.0/4.1.1
+			 * patch conflict (memhooks->start returns -FI_EALREADY) chains to
+			 * UFFD instead of leaving a broken configuration. */
+			FI_WARN(&fi_opx_provider, FI_LOG_MR,
+				"kdreg2 memory monitor unavailable (module not loaded?).  Falling back to memhooks.\n");
+			memory_monitors[FI_HMEM_SYSTEM] = memhooks_monitor;
+			err				= memhooks_monitor->start(memhooks_monitor);
+			if (err == -FI_EALREADY) {
+				FI_WARN(&fi_opx_provider, FI_LOG_MR,
+					"Detected potential memhooks monitor conflict. Switching to UFFD.\n");
+				memory_monitors[FI_HMEM_SYSTEM] = uffd_monitor;
+			} else if (err) {
+				FI_WARN(&fi_opx_provider, FI_LOG_MR,
+					"memhooks monitor failed to start (%s).  No working monitor available.\n",
+					fi_strerror(err));
+				return err;
+			}
+		}
 	} else {
 		if (default_monitor == cuda_monitor) {
 			FI_WARN(&fi_opx_provider, FI_LOG_MR, "cuda_monitor is unsupported in opx\n");
