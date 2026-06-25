@@ -442,8 +442,14 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 
 	memcpy(fi->ep_attr, fi_opx_global.default_ep_attr, sizeof(*fi->ep_attr));
 	if (hints && hints->ep_attr) {
-		/* adjust parameters down from what requested if required */
-		fi->ep_attr->type = hints->ep_attr->type;
+		if (hints->ep_attr->type != FI_EP_UNSPEC) {
+			if (hints->ep_attr->type != FI_EP_RDM) {
+				FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
+				       "unavailable [bad ep_attr->type (%u)]\n", hints->ep_attr->type);
+				goto err;
+			}
+			fi->ep_attr->type = hints->ep_attr->type;
+		}
 		if (hints->ep_attr->max_msg_size > 0 &&
 		    hints->ep_attr->max_msg_size <= fi_opx_global.default_ep_attr->max_msg_size) {
 			fi->ep_attr->max_msg_size = hints->ep_attr->max_msg_size;
