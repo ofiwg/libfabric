@@ -104,6 +104,11 @@ uint32_t efa_test_get_qp_num(struct fid_ep *ep);
 void efa_test_set_ibv_cq_ex(struct efa_ibv_cq *ibv_cq, int status,
 			    uint64_t wr_id);
 
+int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
+
+ssize_t efa_test_cq_read_staged_data_entry(struct fid_cq *cq_fid,
+					   struct fi_cq_data_entry *entry);
+
 struct ibv_ah;
 
 /**
