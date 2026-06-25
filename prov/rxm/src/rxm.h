@@ -234,7 +234,7 @@ struct rxm_conn {
 	struct util_peer_addr *peer;
 	struct fid_ep **msg_eps;
 	uint8_t num_msg_eps;
-	const struct rxm_ep_selector *selector;
+	struct rxm_ep_selector *selector;
 	struct rxm_ep *ep;
 
 	/* Prior versions of libfabric did not guarantee that all connections
