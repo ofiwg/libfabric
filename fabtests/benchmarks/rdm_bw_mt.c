@@ -595,7 +595,11 @@ static int run_size(void)
 		}
 	}
 
-	show_perf(NULL, xfer_size, opts.iterations, &start, &end, num_eps);
+	if (opts.machr)
+		show_perf_mr(xfer_size, opts.iterations, &start, &end,
+			     num_eps, opts.argc, opts.argv);
+	else
+		show_perf(NULL, xfer_size, opts.iterations, &start, &end, num_eps);
 
 out:
 	for (i = 0; i < num_eps; i++) {
