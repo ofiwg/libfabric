@@ -94,8 +94,23 @@ contract or copy a pattern from a nearby test when the docs can settle it.
   `WillOnce`s with a `WillRepeatedly(Invoke(__real_<fn>))` tail, e.g. fail the
   first `ibv_create_ah` (`WillOnce(Return(nullptr))`) and let later ones succeed
   for real.
-- **Explicit cardinality.** Trace the path and use `WillOnce` / `Times(N)` /
-  `Times(0)` rather than a bare `WillRepeatedly` when the count is known.
+- **Pin cardinality on the calls that form the unit's contract; don't
+  over-assert on incidental ones.** A call count is part of the contract when
+  the number itself is the behavior under test — a side-effecting op that must
+  fire an exact number of times (`start_poll` once, `end_poll` once, `next_poll`
+  once), a `Times(0)` proving a branch was skipped, or a test whose whole point
+  is the count (e.g. `EfaCQPollTest`'s `stops_at_cqe_to_process` pins the
+  per-CQE reads at `Times(2)` to prove the loop breaks at `cqe_to_process`).
+  Trace the path and pin those with `WillOnce` / `Times(N)` / `Times(0)`. But
+  how often a *pure CQE getter* (`efa_ibv_cq_wc_read_*`) is read is a fragile,
+  transitive detail of the implementation, not part of the unit's contract:
+  pinning `Times(2)` because `base_ep` happens to be derived once in the poll
+  loop and again in `fill_err_entry` makes the test fail on a refactor that
+  changes nothing observable. When the output assertions already prove each read
+  happened (a wrong/absent `opcode` read shows up as wrong `flags`; a wrong
+  `qp_num` yields a NULL `base_ep` and no completion), match those getters with
+  `WillRepeatedly(Return(...))`. This is the one case where a bare
+  `WillRepeatedly` is preferred over an explicit count.
 - **Teardown calls fall through to real unless armed.** Because arming is
   opt-in, you generally do *not* enumerate the endpoint's destruct calls (e.g.
   the RDM CQ drain's `efa_ibv_cq_start_poll`) — they reach `__real_`. The
