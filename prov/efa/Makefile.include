@@ -308,6 +308,7 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_common_resource.cc \
 	prov/efa/test/gtest/efa_gtest_common_helpers.c \
 	prov/efa/test/gtest/efa_gtest_conn.cc \
+	prov/efa/test/gtest/efa_gtest_cq.cc \
 	prov/efa/test/gtest/efa_gtest_ah.cc
 
 prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
@@ -331,7 +332,20 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=ibv_create_ah \
 	-Wl,--wrap=ibv_destroy_ah \
 	-Wl,--wrap=efadv_query_ah \
-	-Wl,--wrap=efa_av_reverse_av_add
+	-Wl,--wrap=efa_av_reverse_av_add \
+	-Wl,--wrap=efa_ibv_cq_start_poll \
+	-Wl,--wrap=efa_ibv_cq_next_poll \
+	-Wl,--wrap=efa_ibv_cq_end_poll \
+	-Wl,--wrap=efa_ibv_cq_wc_read_opcode \
+	-Wl,--wrap=efa_ibv_cq_wc_read_vendor_err \
+	-Wl,--wrap=efa_ibv_cq_wc_read_qp_num \
+	-Wl,--wrap=efa_ibv_cq_wc_read_wc_flags \
+	-Wl,--wrap=efa_ibv_cq_wc_read_imm_data \
+	-Wl,--wrap=efa_ibv_cq_wc_read_byte_len \
+	-Wl,--wrap=efa_ibv_cq_wc_read_src_qp \
+	-Wl,--wrap=efa_ibv_cq_wc_read_slid \
+	-Wl,--wrap=efa_av_reverse_av_add \
+	-Wl,--wrap=efa_direct_ope_release
 
 prov_efa_test_gtest_efa_gtest_LIBS = $(linkback)
 
