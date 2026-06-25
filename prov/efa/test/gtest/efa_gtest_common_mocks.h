@@ -12,6 +12,7 @@ struct efa_av;
 struct efa_cur_reverse_av;
 struct efa_prv_reverse_av;
 struct efa_conn;
+struct efa_ibv_cq;
 
 /*
  * X macro infrastructure for mock generation.
@@ -44,13 +45,58 @@ struct efa_conn;
 #define EFA_MOCK_ARGS_efa_av_reverse_av_add \
 	av, cur_reverse_av, prv_reverse_av, conn
 
-/* --- Function list --- */
+#define EFA_MOCK_PARAMS_efa_ibv_cq_start_poll \
+	struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr
+#define EFA_MOCK_ARGS_efa_ibv_cq_start_poll ibv_cq, attr
 
-#define EFA_MOCK_FUNCTIONS(X)             \
-	X(struct ibv_ah *, ibv_create_ah) \
-	X(int, ibv_destroy_ah)            \
-	X(int, efadv_query_ah)            \
-	X(int, efa_av_reverse_av_add)
+#define EFA_MOCK_PARAMS_efa_ibv_cq_next_poll struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_next_poll   ibv_cq
+
+#define EFA_MOCK_PARAMS_efa_ibv_cq_end_poll struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_end_poll   ibv_cq
+
+#define EFA_MOCK_PARAMS_efa_ibv_cq_wc_read_opcode struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_wc_read_opcode	  ibv_cq
+
+#define EFA_MOCK_PARAMS_efa_ibv_cq_wc_read_vendor_err struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_wc_read_vendor_err   ibv_cq
+
+#define EFA_MOCK_PARAMS_efa_ibv_cq_wc_read_qp_num struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_wc_read_qp_num	  ibv_cq
+
+#define EFA_MOCK_PARAMS_efa_ibv_cq_wc_read_wc_flags struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_wc_read_wc_flags   ibv_cq
+
+#define EFA_MOCK_PARAMS_efa_ibv_cq_wc_read_imm_data struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_wc_read_imm_data   ibv_cq
+
+#define EFA_MOCK_PARAMS_efa_ibv_cq_wc_read_byte_len struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_wc_read_byte_len   ibv_cq
+
+#define EFA_MOCK_PARAMS_efa_ibv_cq_wc_read_src_qp struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_wc_read_src_qp	  ibv_cq
+
+#define EFA_MOCK_PARAMS_efa_ibv_cq_wc_read_slid struct efa_ibv_cq *ibv_cq
+#define EFA_MOCK_ARGS_efa_ibv_cq_wc_read_slid	ibv_cq
+
+/* --- Function lists --- */
+
+#define EFA_MOCK_FUNCTIONS(X)                            \
+	X(struct ibv_ah *, ibv_create_ah)                \
+	X(int, ibv_destroy_ah)                           \
+	X(int, efadv_query_ah)                           \
+	X(int, efa_av_reverse_av_add)                    \
+	X(int, efa_ibv_cq_start_poll)                    \
+	X(int, efa_ibv_cq_next_poll)                     \
+	X(void, efa_ibv_cq_end_poll)                     \
+	X(enum ibv_wc_opcode, efa_ibv_cq_wc_read_opcode) \
+	X(uint32_t, efa_ibv_cq_wc_read_vendor_err)       \
+	X(uint32_t, efa_ibv_cq_wc_read_qp_num)           \
+	X(unsigned int, efa_ibv_cq_wc_read_wc_flags)     \
+	X(uint32_t, efa_ibv_cq_wc_read_imm_data)         \
+	X(uint32_t, efa_ibv_cq_wc_read_byte_len)         \
+	X(uint32_t, efa_ibv_cq_wc_read_src_qp)           \
+	X(uint32_t, efa_ibv_cq_wc_read_slid)
 
 /* --- Generator macros --- */
 
