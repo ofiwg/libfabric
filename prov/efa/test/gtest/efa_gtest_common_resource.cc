@@ -41,9 +41,6 @@ void efa_test_resource_construct(struct efa_resource *resource,
 	ASSERT_NE(hints, nullptr);
 	resource->hints = hints;
 
-	/* The fabric and ep type are already encoded in hints; derive the API
-	 * version from the fabric name rather than taking it as a separate
-	 * argument that could disagree with hints. */
 	fabric_name = hints->fabric_attr ? hints->fabric_attr->name : NULL;
 	fi_version =
 		(fabric_name && !strcmp(EFA_DIRECT_FABRIC_NAME, fabric_name)) ?

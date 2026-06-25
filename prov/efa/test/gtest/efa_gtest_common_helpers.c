@@ -4,6 +4,8 @@
 #include "efa_gtest_common_helpers.h"
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_mr.h"
+#include "efa_device.h"
 #include "rdm/efa_rdm_ep.h"
 
 void efa_test_fabricate_addr(struct fid_ep *ep, struct efa_ep_addr *addr)
@@ -53,6 +55,56 @@ fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av)
 		return FI_ADDR_NOTAVAIL;
 
 	return fi_addr;
+}
+
+int efa_test_set_track_mr(int value)
+{
+	int prev = efa_env.track_mr;
+
+	efa_env.track_mr = value;
+	return prev;
+}
+
+fi_addr_t efa_test_rma_insert_peer(struct fid_ep *ep, struct fid_av *av)
+{
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t fi_addr = FI_ADDR_NOTAVAIL;
+	int ret;
+
+	/* Reuse the EP's own GID; fi_av_insert's real ibv_create_ah rejects a
+	 * fabricated one. qpn/qkey are not validated, so any value works. */
+	ret = fi_getname(&ep->fid, &raw_addr, &raw_addr_len);
+	if (ret)
+		return FI_ADDR_NOTAVAIL;
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+
+	ret = fi_av_insert(av, &raw_addr, 1, &fi_addr, 0, NULL);
+	if (ret != 1)
+		return FI_ADDR_NOTAVAIL;
+
+	return fi_addr;
+}
+
+bool efa_test_device_supports_rma(void)
+{
+	if (g_efa_selected_device_cnt <= 0)
+		return false;
+
+	return efa_device_support_rdma_read() &&
+	       efa_device_support_rdma_write();
+}
+
+void efa_test_get_zero_byte_bounce_buf(struct fid_ep *ep, uint64_t *addr,
+				       uint32_t *lkey)
+{
+	struct efa_base_ep *base_ep =
+		container_of(ep, struct efa_base_ep, util_ep.ep_fid);
+	struct efa_domain *domain = base_ep->domain;
+
+	*addr = (uint64_t) domain->zero_byte_bounce_buf;
+	*lkey = domain->zero_byte_bounce_buf_mr->lkey;
 }
 
 struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,

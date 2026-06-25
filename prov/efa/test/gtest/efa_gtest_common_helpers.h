@@ -14,6 +14,8 @@
 #ifndef EFA_GTEST_COMMON_HELPERS_H
 #define EFA_GTEST_COMMON_HELPERS_H
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
@@ -21,6 +23,38 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief Whether the real selected EFA device advertises both RDMA read and
+ * write (the condition under which the efa-direct provider advertises FI_RMA).
+ * The RMA tests require this: fi_enable creates a real QP with RDMA send-ops
+ * flags that a non-RDMA device rejects with -FI_EOPNOTSUPP, so tests query this
+ * and GTEST_SKIP on hosts that lack it.
+ */
+bool efa_test_device_supports_rma(void);
+
+/**
+ * @brief Set efa_env.track_mr and return its previous value. Toggling track_mr
+ * before EP construction controls whether the direct-ope tracking pool (and
+ * thus the efa_direct_ope_alloc/release branch in the post paths) is created.
+ */
+int efa_test_set_track_mr(int value);
+
+/**
+ * @brief Insert a fabricated peer via fi_av_insert so efa_av_addr_to_conn
+ * returns a valid conn (with ah + ep_addr) for the RMA post paths.
+ * @return the fi_addr on success, or FI_ADDR_NOTAVAIL on failure.
+ */
+fi_addr_t efa_test_rma_insert_peer(struct fid_ep *ep, struct fid_av *av);
+
+/**
+ * @brief Read the domain's zero-byte bounce buffer address and lkey for the
+ * endpoint behind @p ep. The 0-byte RMA post paths build their single SGE from
+ * these, so a test can assert the SGE was wired to the bounce buffer rather
+ * than to caller memory.
+ */
+void efa_test_get_zero_byte_bounce_buf(struct fid_ep *ep, uint64_t *addr,
+				       uint32_t *lkey);
 
 /**
  * @brief Fabricate a unique address and insert it via fi_av_insert (explicit

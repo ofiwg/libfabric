@@ -12,6 +12,8 @@ struct efa_av;
 struct efa_cur_reverse_av;
 struct efa_prv_reverse_av;
 struct efa_conn;
+struct efa_qp;
+struct efa_ah;
 
 /*
  * X macro infrastructure for mock generation.
@@ -44,13 +46,21 @@ struct efa_conn;
 #define EFA_MOCK_ARGS_efa_av_reverse_av_add \
 	av, cur_reverse_av, prv_reverse_av, conn
 
+#define EFA_MOCK_PARAMS_efa_qp_post_read                                       \
+	struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count,  \
+		uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id,   \
+		uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey
+#define EFA_MOCK_ARGS_efa_qp_post_read \
+	qp, sge_list, sge_count, remote_key, remote_addr, wr_id, flags, ah, qpn, qkey
+
 /* --- Function list --- */
 
 #define EFA_MOCK_FUNCTIONS(X)             \
 	X(struct ibv_ah *, ibv_create_ah) \
 	X(int, ibv_destroy_ah)            \
 	X(int, efadv_query_ah)            \
-	X(int, efa_av_reverse_av_add)
+	X(int, efa_av_reverse_av_add)     \
+	X(int, efa_qp_post_read)
 
 /* --- Generator macros --- */
 
