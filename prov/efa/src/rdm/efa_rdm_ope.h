@@ -454,6 +454,6 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope);
 
 ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe);
 
-int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag);
+int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope);
 
 #endif
