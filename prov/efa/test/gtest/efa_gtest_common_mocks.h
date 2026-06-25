@@ -49,6 +49,7 @@ struct efa_ah;
 	X(int, efa_ibv_cq_start_poll,                                          \
 	  (struct efa_ibv_cq * ibv_cq, struct ibv_poll_cq_attr * attr),        \
 	  (ibv_cq, attr))                                                      \
+	X(int, efa_ibv_cq_next_poll, (struct efa_ibv_cq * ibv_cq), (ibv_cq))   \
 	X(void, efa_ibv_cq_end_poll, (struct efa_ibv_cq * ibv_cq), (ibv_cq))   \
 	X(enum ibv_wc_opcode, efa_ibv_cq_wc_read_opcode,                       \
 	  (struct efa_ibv_cq * ibv_cq), (ibv_cq))                              \
@@ -58,7 +59,13 @@ struct efa_ah;
 	  (ibv_cq))                                                            \
 	X(unsigned int, efa_ibv_cq_wc_read_wc_flags,                           \
 	  (struct efa_ibv_cq * ibv_cq), (ibv_cq))                              \
+	X(uint32_t, efa_ibv_cq_wc_read_imm_data,                               \
+	  (struct efa_ibv_cq * ibv_cq), (ibv_cq))                              \
 	X(uint32_t, efa_ibv_cq_wc_read_byte_len, (struct efa_ibv_cq * ibv_cq), \
+	  (ibv_cq))                                                            \
+	X(uint32_t, efa_ibv_cq_wc_read_src_qp, (struct efa_ibv_cq * ibv_cq),   \
+	  (ibv_cq))                                                            \
+	X(uint32_t, efa_ibv_cq_wc_read_slid, (struct efa_ibv_cq * ibv_cq),     \
 	  (ibv_cq))                                                            \
 	X(int, ofi_mr_map_insert,                                              \
 	  (struct ofi_mr_map * map, const struct fi_mr_attr *attr,             \

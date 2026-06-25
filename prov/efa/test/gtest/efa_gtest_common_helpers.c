@@ -159,6 +159,15 @@ void efa_test_get_zero_byte_bounce_buf(struct fid_ep *ep, uint64_t *addr,
 	*lkey = domain->zero_byte_bounce_buf_mr->lkey;
 }
 
+ssize_t efa_test_cq_read_staged_data_entry(struct fid_cq *cq_fid,
+					   struct fi_cq_data_entry *entry)
+{
+	struct efa_cq *efa_cq =
+		container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+
+	return ofi_cq_read_entries(&efa_cq->util_cq, entry, 1, NULL);
+}
+
 struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
 						fi_addr_t fi_addr)
 {
