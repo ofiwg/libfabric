@@ -84,7 +84,7 @@ void test_efa_srx_unexp_pkt(void **state)
 	struct efa_rdm_pke *pke;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
-	struct efa_conn conn = {0};
+	struct efa_rdm_av_entry fake_entry = {0};
 	struct efa_rdm_peer peer;
 	struct efa_unit_test_eager_rtm_pkt_attr pke_attr = {.msg_id = 0,
 							    .connid = 0x1234};
@@ -113,8 +113,8 @@ void test_efa_srx_unexp_pkt(void **state)
 		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
 	raw_addr.qpn = 0;
 	raw_addr.qkey = 0x1234;
-	conn.ep_addr = &raw_addr;
-	efa_rdm_peer_construct(&peer, efa_rdm_ep, &conn);
+	memcpy(fake_entry.ep_addr, &raw_addr, EFA_EP_ADDR_LEN);
+	efa_rdm_peer_construct(&peer, efa_rdm_ep, &fake_entry);
 	pke->peer = &peer;
 
 	efa_unit_test_eager_msgrtm_pkt_construct(pke, &pke_attr);
@@ -318,7 +318,7 @@ void test_efa_rdm_peer_construct_robuf_failure(void **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer peer = {0};
 	struct efa_ep_addr raw_addr;
-	struct efa_conn conn = {0};
+	struct efa_rdm_av_entry av_entry = {0};
 	fi_addr_t peer_addr;
 	size_t raw_addr_len = sizeof(raw_addr);
 	struct ofi_bufpool *saved_pool;
@@ -337,8 +337,8 @@ void test_efa_rdm_peer_construct_robuf_failure(void **state)
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
-	conn.ep_addr = &raw_addr;
-	conn.fi_addr = peer_addr;
+	memcpy(av_entry.ep_addr, &raw_addr, EFA_EP_ADDR_LEN);
+	av_entry.fi_addr = peer_addr;
 
 	/* Create a tiny pool with max_cnt=1 and exhaust it */
 	ret = ofi_bufpool_create(&tiny_pool,
@@ -356,7 +356,7 @@ void test_efa_rdm_peer_construct_robuf_failure(void **state)
 	efa_rdm_ep->peer_robuf_pool = tiny_pool;
 
 	/* peer_construct should fail with -FI_ENOMEM */
-	ret = efa_rdm_peer_construct(&peer, efa_rdm_ep, &conn);
+	ret = efa_rdm_peer_construct(&peer, efa_rdm_ep, &av_entry);
 	assert_int_equal(ret, -FI_ENOMEM);
 
 	/* Restore and cleanup */

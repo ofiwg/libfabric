@@ -3,6 +3,7 @@
 
 #include "efa.h"
 #include "efa_av.h"
+#include "rdm/efa_rdm_av.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_utils.h"
@@ -14,17 +15,17 @@
  *
  * @param[in,out]	peer	rdm peer
  * @param[in]		ep	rdm endpoint
- * @param[in]		conn	efa conn object
+ * @param[in]		av_entry	efa rdm av entry
  * @relates efa_rdm_peer
  */
-int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn)
+int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_av_entry *av_entry)
 {
 	int ret;
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
 
 	peer->ep = ep;
-	peer->conn = conn;
-	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, conn->ep_addr);
+	peer->av_entry = av_entry;
+	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, efa_rdm_av_entry_ep_addr(av_entry));
 	peer->host_id = peer->is_self ? ep->host_id : 0;	/* Peer host id is exchanged via handshake */
 	peer->num_runt_bytes_in_flight = 0;
 	/* allocate the robuf circular queue from the pre-allocated buffer pool */
@@ -39,7 +40,7 @@ int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, str
 	dlist_init(&peer->rxe_list);
 	dlist_init(&peer->overflow_pke_list);
 
-	if (conn->shm_fi_addr != FI_ADDR_NOTAVAIL) {
+	if (av_entry->shm_fi_addr != FI_ADDR_NOTAVAIL) {
 		peer->is_local = 1;
 	}
 

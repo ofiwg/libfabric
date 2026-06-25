@@ -117,6 +117,11 @@ void test_efa_ah_cnt_multi_av_efa(void **state);
 void test_efa_ah_cnt_multi_av_efa_direct(void **state);
 void test_av_multiple_ep_efa(void **state);
 void test_av_multiple_ep_efa_direct(void **state);
+void test_av_insert_remove_lookup_efa_direct(void **state);
+void test_av_base_addr_to_entry_invalid(void **state);
+/* end efa_unit_test_av.c */
+
+/* begin efa_unit_test_rdm_av.c */
 void test_av_reinsertion(void **state);
 void test_av_reverse_av_remove_qpn_collision(void **state);
 void test_av_implicit(void **state);
@@ -126,7 +131,18 @@ void test_av_implicit_av_lru_eviction(void **state);
 void test_ah_refcnt(void **state);
 void test_ah_lru_eviction_explicit_av_insert(void **state);
 void test_ah_lru_eviction_implicit_av_insert(void **state);
-/* end efa_unit_test_av.c */
+void test_av_rdm_reverse_lookup_explicit(void **state);
+void test_av_rdm_addr_to_entry_after_remove(void **state);
+void test_av_rdm_insert_remove_with_peer(void **state);
+void test_av_implicit_to_explicit_peer_updated(void **state);
+void test_av_rdm_batch_insert(void **state);
+void test_av_rdm_remove_nonexistent(void **state);
+void test_av_rdm_prv_reverse_av(void **state);
+void test_av_rdm_insert_invalid_address(void **state);
+void test_av_implicit_av_unbounded(void **state);
+void test_av_rdm_open_unsupported_attrs(void **state);
+void test_av_implicit_av_lru_move_single(void **state);
+/* end efa_unit_test_rdm_av.c */
 
 void test_efa_device_construct_error_handling(void **state);
 void test_efa_rdm_ep_ignore_missing_host_id_file(void **state);

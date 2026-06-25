@@ -154,7 +154,7 @@ static void efa_rdm_pke_print_eager_tag_rtm(char *prefix,
 	tag_rtm_hdr = (struct efa_rdm_eager_tagrtm_hdr *) pkt_entry->wiredata;
 
 	if (pkt_entry->peer)
-		fi_addr = pkt_entry->peer->conn->fi_addr;
+		fi_addr = pkt_entry->peer->av_entry->fi_addr;
 
 	EFA_DBG(FI_LOG_EP_DATA,
 		"%s EFA RDM RTM packet - type: %" PRIu32 "  version: %" PRIu8
@@ -195,7 +195,7 @@ static void efa_rdm_pke_print_longread_rtw(char *prefix,
 		" msg_length: %" PRIu64 " send_id: %" PRIu32
 		" read_iov_count: %" PRIu32 "\n",
 		prefix, base_hdr->type, base_hdr->version, base_hdr->flags,
-		pkt_entry->peer->conn->fi_addr, base_hdr->msg_id, rtw_hdr->rma_iov_count,
+		pkt_entry->peer->av_entry->fi_addr, base_hdr->msg_id, rtw_hdr->rma_iov_count,
 		rtw_hdr->msg_length, rtw_hdr->send_id, rtw_hdr->read_iov_count);
 
 	efa_rdm_pke_print_fi_rma_iov("rma_iov", rtw_hdr->rma_iov_count,
