@@ -48,15 +48,11 @@ We intercept functions with the GNU linker's `--wrap` and back them with gmock f
 3. Add any needed forward struct declarations at the top of the header.
 4. Add `-Wl,--wrap=<fn>` to `prov_efa_test_gtest_efa_gtest_LDFLAGS` in `prov/efa/Makefile.include`.
 
-If adding a mock breaks other tests, it's likely due to the new mock is being unintentionally called in a test where a real function call is expected. By default, mocked functions will return 0/false/NULL/default construct, and this may not be the expected behavior of the real functions. There are two solutions to this:
-
-1. Define multiple mock classes analogous to `MockEfa`, to isolate the mocks, and only install the mocks you need by `MockEfa::set(&mock_efa);`
-2. Set up the correct expectation to route all calls to a specific wrapped function to the real function, like
+If adding a mock breaks other tests, it's likely due to the new mock is being unintentionally called in a test where a real function call is expected. By default, mocked functions will return 0/false/NULL/default construct, and this may not be the expected behavior of the real functions. The solution to this is to set up the correct expectation to route all calls to a specific wrapped function to the real function, like
 ```
-ON_CALL(*this, ibv_create_ah(_,:_))
-        .WillByDefault(Invoke(__real_ibv_create_ah));
+EXPECT_CALL(*this, ibv_create_ah(_,:_))
+        .WillRepeatedly(Invoke(__real_ibv_create_ah));
 ```
-A mixture of both strategy can be used, to minimize the changes required.
 
 ### Using mocks in tests
 

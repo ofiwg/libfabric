@@ -41,6 +41,17 @@ class EfaAhTest : public Test
 
 	void TearDown() override
 	{
+		/*
+		 * Closing the (QP-enabled) endpoint in TearDown drains the CQ
+		 * via efa_rdm_ep_wait_send ->
+		 * efa_rdm_cq_poll_ibv_cq_closing_ep, which calls
+		 * efa_ibv_cq_start_poll while the mock is still installed.
+		 * Route it to the real stub (returns ENOENT, i.e. empty CQ) so
+		 * the drain loop never enters and never reaches qp_num lookup.
+		 */
+		EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll)
+			.WillRepeatedly(Invoke(__real_efa_ibv_cq_start_poll));
+
 		efa_test_resource_destruct(&resource);
 		// It's necessary to uninstall the mock after destruct
 		// because the tests have dummy AHs that cannot be given

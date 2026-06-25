@@ -25,8 +25,8 @@ class EfaConnTest : public Test
 
 	void TearDown() override
 	{
-		efa_test_resource_destruct(&resource);
 		MockEfa::set(nullptr);
+		efa_test_resource_destruct(&resource);
 	}
 };
 
