@@ -34,33 +34,15 @@
 #include "lnx.h"
 #include "ofi_iov.h"
 
-static int lnx_get_msg(struct fid_peer_srx *srx,
-		       struct fi_peer_match_attr *match,
-		       struct fi_peer_rx_entry **entry)
-{
-	return -FI_ENOSYS;
-}
-
-static int lnx_queue_msg(struct fi_peer_rx_entry *entry)
-{
-	return -FI_ENOSYS;
-}
-
 static void lnx_free_entry(struct fi_peer_rx_entry *entry)
 {
 	struct lnx_rx_entry *rx_entry;
-	ofi_spin_t *bplock;
 
 	rx_entry = container_of(entry, struct lnx_rx_entry, rx_entry);
 
-	if (rx_entry->rx_global)
-		bplock = &global_bplock;
-	else
-		bplock = &rx_entry->rx_lep->le_bplock;
-
-	ofi_spin_lock(bplock);
+	ofi_genlock_lock(&rx_entry->rx_lep->le_ep.lock);
 	ofi_buf_free(rx_entry);
-	ofi_spin_unlock(bplock);
+	ofi_genlock_unlock(&rx_entry->rx_lep->le_ep.lock);
 }
 
 static void lnx_init_rx_entry(struct lnx_rx_entry *entry,
@@ -80,7 +62,7 @@ static void lnx_init_rx_entry(struct lnx_rx_entry *entry,
 	entry->rx_entry.addr = addr;
 	entry->rx_entry.context = context;
 	entry->rx_entry.tag = tag;
-	entry->rx_entry.flags = flags | FI_TAGGED | FI_RECV;
+	entry->rx_entry.flags = flags;
 	entry->rx_ignore = ignore;
 }
 
@@ -91,31 +73,16 @@ static struct lnx_rx_entry *get_rx_entry(struct lnx_ep *lep,
 					 void *context, uint64_t flags)
 {
 	struct lnx_rx_entry *rx_entry = NULL;
-	ofi_spin_t *bplock;
-	struct ofi_bufpool *bp;
 
-	/* if lp is NULL, then we don't know where the message is going to
-	 * come from, so allocate the rx_entry from a global pool
-	 */
-	if (!lep) {
-		bp = global_recv_bp;
-		bplock = &global_bplock;
-	} else {
-		bp = lep->le_recv_bp;
-		bplock = &lep->le_bplock;
-	}
+	ofi_genlock_lock(&lep->le_ep.lock);
+	rx_entry = (struct lnx_rx_entry *)ofi_buf_alloc(lep->le_recv_bp);
+	ofi_genlock_unlock(&lep->le_ep.lock);
+	if (!rx_entry)
+		return NULL;
 
-	ofi_spin_lock(bplock);
-	rx_entry = (struct lnx_rx_entry *)ofi_buf_alloc(bp);
-	ofi_spin_unlock(bplock);
-	if (rx_entry) {
-		memset(rx_entry, 0, sizeof(*rx_entry));
-		if (!lep)
-			rx_entry->rx_global = true;
-		rx_entry->rx_lep = lep;
-		lnx_init_rx_entry(rx_entry, iov, desc, count, addr, tag,
-				  ignore, context, flags);
-	}
+	rx_entry->rx_lep = lep;
+	lnx_init_rx_entry(rx_entry, iov, desc, count, addr, tag, ignore,
+			  context, flags);
 
 	return rx_entry;
 }
@@ -238,9 +205,10 @@ assign:
 	cep->cep_t_stats.st_num_posted_recvs++;
 
 	rx_entry->rx_entry.addr = lnx_get_core_addr(cep, addr);
-	if (rx_entry->rx_entry.desc && *rx_entry->rx_entry.desc) {
+	if (rx_entry->rx_entry.desc) {
 		rc = lnx_mr_regattr_core(cep->cep_domain,
-					 *rx_entry->rx_entry.desc,
+					 rx_entry->rx_entry.desc,
+					 rx_entry->rx_entry.count,
 					 rx_entry->rx_entry.desc);
 		if (rc)
 			return rc;
@@ -252,6 +220,91 @@ finalize:
 out:
 	return rc;
 }
+
+
+static int lnx_get_msg(struct fid_peer_srx *srx,
+		       struct fi_peer_match_attr *match,
+		       struct fi_peer_rx_entry **entry)
+{
+	struct lnx_match_attr match_attr = {0};
+	struct lnx_peer_srq *lnx_srq;
+	struct lnx_core_ep *cep;
+	struct lnx_ep *lep;
+	struct lnx_rx_entry *rx_entry;
+	fi_addr_t addr = match->addr;
+	int rc = 0;
+
+	cep = srx->ep_fid.fid.context;
+	lep = cep->cep_parent;
+	lnx_srq = &lep->le_srq;
+
+	match_attr.lm_addr = addr;
+
+	rx_entry = lnx_remove_first_match(&lnx_srq->lps_recv.lqp_recvq,
+					  &match_attr);
+	if (rx_entry) {
+		FI_DBG(&lnx_prov, FI_LOG_CORE,
+		       "addr = %" PRIx64 " found\n", match_attr.lm_addr);
+
+		goto assign;
+	}
+
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "addr = %" PRIx64 " not found\n", match_attr.lm_addr);
+
+	rx_entry = get_rx_entry(lep, NULL, NULL, 0, addr, 0, 0, NULL,
+				FI_MSG | FI_RECV);
+	if (!rx_entry) {
+		rc = -FI_ENOMEM;
+		goto out;
+	}
+
+	rx_entry->rx_entry.owner_context = lnx_srq;
+	rx_entry->rx_cep = cep;
+
+	rc = -FI_ENOENT;
+
+	cep->cep_t_stats.st_num_unexp_msgs++;
+
+	goto finalize;
+
+assign:
+	lnx_set_send_pair[lep->le_mr](lep, cep, addr);
+
+	cep->cep_t_stats.st_num_posted_recvs++;
+
+	rx_entry->rx_entry.addr = lnx_get_core_addr(cep, addr);
+	if (rx_entry->rx_entry.desc) {
+		rc = lnx_mr_regattr_core(cep->cep_domain,
+					 rx_entry->rx_entry.desc,
+					 rx_entry->rx_entry.count,
+					 rx_entry->rx_entry.desc);
+		if (rc)
+			return rc;
+	}
+finalize:
+	rx_entry->rx_entry.msg_size = match->msg_size;
+	*entry = &rx_entry->rx_entry;
+
+out:
+	return rc;
+}
+
+static int lnx_queue_msg(struct fi_peer_rx_entry *entry)
+{
+	struct lnx_rx_entry *rx_entry;
+	struct lnx_peer_srq *lnx_srq =
+				(struct lnx_peer_srq*)entry->owner_context;
+
+	rx_entry = container_of(entry, struct lnx_rx_entry, rx_entry);
+	FI_DBG(&lnx_prov, FI_LOG_CORE,
+	       "addr = %" PRIx64 " found\n", entry->addr);
+
+	lnx_insert_rx_entry(&lnx_srq->lps_recv.lqp_unexq, rx_entry);
+
+	return 0;
+}
+
 
 static void lnx_update_msg_entries(
 			struct lnx_qpair *qp,
@@ -316,13 +369,14 @@ static int lnx_discard(struct lnx_ep *lep, struct lnx_rx_entry *rx_entry,
 }
 
 static int lnx_peek(struct lnx_ep *lep, struct lnx_match_attr *match_attr,
-		    void *context, uint64_t flags)
+		    void *context, uint64_t flags, bool tagged)
 {
 	int rc;
 	struct lnx_rx_entry *rx_entry;
 	struct lnx_peer_srq *lnx_srq = &lep->le_srq;
 
-	rx_entry = lnx_find_first_match(&lnx_srq->lps_trecv.lqp_unexq,
+	rx_entry = lnx_find_first_match(tagged ? &lnx_srq->lps_trecv.lqp_unexq :
+					&lnx_srq->lps_recv.lqp_unexq,
 					match_attr);
 	if (!rx_entry) {
 		FI_DBG(&lnx_prov, FI_LOG_CORE,
@@ -340,7 +394,11 @@ static int lnx_peek(struct lnx_ep *lep, struct lnx_match_attr *match_attr,
 			  rx_entry->rx_entry.tag);
 
 	if (flags & FI_DISCARD) {
-		rc = rx_entry->rx_cep->cep_srx.peer_ops->discard_tag(
+		if (tagged)
+			rc = rx_entry->rx_cep->cep_srx.peer_ops->discard_tag(
+							&rx_entry->rx_entry);
+		else
+			rc = rx_entry->rx_cep->cep_srx.peer_ops->discard_msg(
 							&rx_entry->rx_entry);
 		dlist_remove(&rx_entry->entry);
 		lnx_free_entry(&rx_entry->rx_entry);
@@ -372,7 +430,7 @@ out:
  * If nothing is found on the unexpected messages, then add a receive
  * request on the SRQ; happens in the lnx_process_recv()
  */
-int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
+int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void **desc,
 		     fi_addr_t addr, size_t count, uint64_t tag,
 		     uint64_t ignore, void *context, uint64_t flags,
 		     bool tagged)
@@ -382,8 +440,12 @@ int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
 	struct lnx_match_attr match_attr;
 	struct lnx_core_ep *cep;
 	int rc = 0;
+	uint64_t rx_flags = tagged ? FI_TAGGED | FI_RECV : FI_MSG | FI_RECV;
+	struct lnx_qpair *qp;
 	fi_addr_t sub_addr, encoded_addr = lnx_encode_fi_addr(addr, 0);
 
+	//TODO fix locking
+	qp = tagged ? &lnx_srq->lps_trecv : &lnx_srq->lps_recv;
 	/* Matching format should always be in the encoded form */
 	match_attr.lm_addr = (addr == FI_ADDR_UNSPEC) ||
 			     !(lep->le_ep.caps & FI_DIRECTED_RECV) ?
@@ -392,7 +454,7 @@ int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
 	match_attr.lm_tag = tag;
 
 	if (flags & FI_PEEK)
-		return lnx_peek(lep, &match_attr, context, flags);
+		return lnx_peek(lep, &match_attr, context, flags, tagged);
 
 	if (flags & FI_DISCARD) {
 		rx_entry = (struct lnx_rx_entry *)
@@ -404,8 +466,7 @@ int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
 		rx_entry = (struct lnx_rx_entry *)
 			   (((struct fi_context *)context)->internal[0]);
 	} else {
-		rx_entry = lnx_remove_first_match(&lnx_srq->lps_trecv.lqp_unexq,
-						&match_attr);
+		rx_entry = lnx_remove_first_match(&qp->lqp_unexq, &match_attr);
 		if (!rx_entry) {
 			FI_DBG(&lnx_prov, FI_LOG_CORE,
 			       "addr=%" PRIx64 " tag=%" PRIx64 " ignore=%"
@@ -426,12 +487,12 @@ int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
 	cep = rx_entry->rx_cep;
 	sub_addr = lnx_get_core_addr(cep, rx_entry->rx_entry.addr);
 	lnx_init_rx_entry(rx_entry, iov, desc, count, sub_addr, tag, ignore,
-			  context, rx_entry->rx_entry.flags | flags);
+			  context, rx_entry->rx_entry.flags | flags | rx_flags);
 	rx_entry->rx_entry.msg_size = MIN(ofi_total_iov_len(iov, count),
 				          rx_entry->rx_entry.msg_size);
 
 	if (desc) {
-		rc = lnx_mr_regattr_core(cep->cep_domain, desc,
+		rc = lnx_mr_regattr_core(cep->cep_domain, desc, count,
 					 rx_entry->rx_entry.desc);
 		if (rc)
 			return rc;
@@ -444,21 +505,11 @@ int lnx_process_recv(struct lnx_ep *lep, const struct iovec *iov, void *desc,
 	else
 		rc = cep->cep_srx.peer_ops->start_msg(&rx_entry->rx_entry);
 
-	if (rc == -FI_EINPROGRESS) {
-		/* this is telling me that more messages can match the same
-		 * rx_entry. So keep it on the queue
-		 */
-		FI_DBG(&lnx_prov, FI_LOG_CORE,
-		       "addr = %" PRIx64 " tag = %" PRIx64 " ignore = %" PRIx64
-		       " start_tag() in progress\n",
-		       addr, tag, ignore);
-
-		goto insert_recvq;
-	}
 	if (rc)
 		FI_WARN(&lnx_prov, FI_LOG_CORE,
 			"start tag failed with %d\n", rc);
 
+	//TODO fix MULTI_RECV
 	FI_DBG(&lnx_prov, FI_LOG_CORE,
 	       "addr = %" PRIx64 " tag = %" PRIx64 " ignore = %" PRIx64
 	       " start_tag() success\n",
@@ -470,17 +521,13 @@ nomatch:
 	/* nothing on the unexpected queue, then allocate one and put it on
 	 * the receive queue
 	 */
-	rx_entry = get_rx_entry(NULL, iov, (desc) ? &desc : NULL, count,
-				match_attr.lm_addr, tag, ignore, context,
-				flags);
+	rx_entry = get_rx_entry(lep, iov, desc, count, match_attr.lm_addr,
+				tag, ignore, context, flags | rx_flags);
 	if (!rx_entry) {
 		rc = -FI_ENOMEM;
 		goto out;
 	}
-
-insert_recvq:
-	lnx_insert_rx_entry(&lnx_srq->lps_trecv.lqp_recvq, rx_entry);
-
+	lnx_insert_rx_entry(&qp->lqp_recvq, rx_entry);
 out:
 	return rc;
 }

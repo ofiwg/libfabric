@@ -76,18 +76,50 @@ static int lnx_domain_close(struct fid *fid)
 	return frc;
 }
 
+static int lnx_domain_control(struct fid *fid, int command, void *arg)
+{
+	struct fi_mr_map_raw *map_raw;
+	struct lnx_mr_key *mapped;
+
+	switch (command) {
+	case FI_MAP_RAW_MR:
+		map_raw = arg;
+
+		assert(map_raw->key_size % sizeof(uint64_t) == 0);
+		mapped = malloc(sizeof(*mapped) + map_raw->key_size);
+		if (!mapped)
+			return -FI_ENOMEM;
+
+		memcpy(mapped->prov_keys, map_raw->raw_key, map_raw->key_size);
+		mapped->base_addr = map_raw->base_addr;
+		*map_raw->key = (uint64_t)(uintptr_t)mapped;
+		return FI_SUCCESS;
+	case FI_UNMAP_KEY:
+		mapped = (struct lnx_mr_key *)(uintptr_t) *(uint64_t *)arg;
+		if (!mapped)
+			return FI_SUCCESS;
+
+		free(mapped);
+		return FI_SUCCESS;
+	default:
+		return -FI_ENOSYS;
+	}
+
+	return -FI_ENOSYS;
+}
+
 static struct fi_ops lnx_domain_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = lnx_domain_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = lnx_domain_control,
 	.ops_open = fi_no_ops_open,
 };
 
 static struct fi_ops_mr lnx_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
-	.reg = fi_no_mr_reg,
-	.regv = fi_no_mr_regv,
+	.reg = lnx_mr_reg,
+	.regv = lnx_mr_regv,
 	.regattr = lnx_mr_regattr,
 };
 
@@ -148,6 +180,8 @@ static int lnx_open_core_domains(struct lnx_fabric *lnx_fab, void *context,
 			if (rc)
 				return rc;
 
+			cd->idx = lnx_dom->ld_num_doms;
+			cd->key_seed = 1;
 			lnx_dom->ld_num_doms++;
 			cd->cd_fabric = cf;
 		}
