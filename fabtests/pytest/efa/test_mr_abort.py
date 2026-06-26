@@ -177,17 +177,25 @@ def abort_owes_rx_completion(protocol):
     completion on the target for this protocol (the -X flag of
     fi_mr_abort).
 
-    Owed: LONGCTS and RUNTREAD-LONGREAD. The receiver matches the recv
-    and takes partial data (a CTS handshake, or a runt + tail RDMA READ)
-    before the abort, so the provider must complete that matched rxe with
-    a clean FI_ECANCELED.
+    Owed: LONGREAD only. The LONGREAD RTM is a pure read-request control
+    packet -- it carries the read iov, no inline user data, and its send WR
+    uses the internal TX pool MR rather than the user's source MR. So
+    closing the source MR cannot flush the RTM: it is always delivered, the
+    receiver always matches the recv and posts the tail RDMA READ, and that
+    READ then fails against the invalidated source rkey -- driving the
+    matched rxe to a clean FI_ECANCELED. Exactly one terminal completion is
+    therefore guaranteed.
 
-    Not owed: EAGER, MEDIUM, RUNTREAD-NOREAD (runt-only). An aborted
-    message either delivered nothing or rides REQ packets with no CTS /
-    no READ; the receiver is not required to produce a completion (a stray
-    FI_ECANCELED may still arrive and is tolerated, but is not required).
+    Not owed: EAGER, MEDIUM, LONGCTS, RUNTREAD-LONGREAD, RUNTREAD-NOREAD.
+    Every one of these carries source-MR user data in its RTM (EAGER/MEDIUM
+    full or first segment, LONGCTS first segment, RUNTREAD runt segments),
+    so the RTM itself can be flushed or gen-check cancelled before the
+    receiver ever matches the recv. When that happens the receiver owes no
+    completion, so the recv-completion count is indeterminate and -X (which
+    blocks until reaped == required) would hang the target. These use the
+    slack path: a stray FI_ECANCELED is tolerated but never required.
     """
-    return protocol in ("LONGCTS", "RUNTREAD-LONGREAD")
+    return protocol in ("LONGREAD",)
 
 
 # --- Test: send ---
