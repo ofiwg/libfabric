@@ -2823,6 +2823,13 @@ int opx_hfi1_rx_rzv_rts_elided(struct fi_opx_ep *opx_ep, union fi_opx_hfi1_defer
 	cts_params->niov	    = niov;
 	cts_params->tid_info.npairs = 0;
 
+	/*
+	 * The elided eager head/tail CTS is cloned from the parent work item via a
+	 * partial memcpy and is otherwise left holding recycled pool memory.
+	 * Clear any stale value in the adjustment field.
+	 */
+	cts_params->tid_info.origin_byte_counter_adj = 0;
+
 	rzv_comp->byte_counter	    = params->elided_head.bytes + params->elided_tail.bytes;
 	rzv_comp->bytes_accumulated = 0;
 	rzv_comp->tid_registered    = 0;
