@@ -367,7 +367,7 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 #endif
 	err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, ope);
 	if (err) {
-		efa_rdm_pke_release_rx(pkt_entry);
+		/* copy_payload_to_ope() releases pkt_entry on error; do not release it here. */
 		efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_RXE_COPY);
 	}
 
