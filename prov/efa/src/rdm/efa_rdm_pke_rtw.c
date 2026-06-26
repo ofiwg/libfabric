@@ -167,8 +167,8 @@ void efa_rdm_pke_proc_eager_rtw(struct efa_rdm_pke *pkt_entry,
 	} else {
 		err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 		if (OFI_UNLIKELY(err)) {
+			/* copy_payload_to_ope() releases pkt_entry on error; do not release it here. */
 			efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RXE_COPY);
-			efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 		}
 	}
@@ -424,9 +424,9 @@ void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	} else {
 		err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 		if (OFI_UNLIKELY(err)) {
+			/* copy_payload_to_ope() releases pkt_entry on error; do not release it here. */
 			efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RXE_COPY);
 			efa_rdm_rxe_release(rxe);
-			efa_rdm_pke_release_rx(pkt_entry);
 			return;
 		}
 	}
