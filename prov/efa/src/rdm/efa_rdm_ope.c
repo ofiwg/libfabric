@@ -1734,6 +1734,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 		EFA_WARN(FI_LOG_CQ,
 			"data_offset %ld out of range\n",
 			rx_data_offset);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ETRUNC;
 	}
 
@@ -1743,6 +1744,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 		EFA_WARN(FI_LOG_CQ,
 			"data_offset %ld data_size %ld out of range\n",
 			rx_data_offset, data_size);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ETRUNC;
 	}
 
@@ -1756,6 +1758,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 	txe = efa_rdm_rma_alloc_txe(rxe->ep, NULL, &msg_rma, ofi_op_read_req,
 				    0 /* flags*/);
 	if (!txe) {
+		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ENOBUFS;
 	}
 
@@ -1763,9 +1766,11 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 	txe->internal_flags |= EFA_RDM_OPE_INTERNAL;
 	err = efa_rdm_ope_post_remote_read_or_queue(txe);
 	/* The rx pkts are held until the local read completes */
-	if (err)
+	if (err) {
+		efa_rdm_pke_release_rx(txe->local_read_pkt_entry);
+		txe->local_read_pkt_entry = NULL;
 		efa_rdm_txe_release(txe);
-	else if (txe->local_read_pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL)
+	} else if (txe->local_read_pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL)
 		txe->ep->efa_rx_pkts_held++;
 
 	return err;

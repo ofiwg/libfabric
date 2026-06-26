@@ -79,9 +79,9 @@ static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 		 * emulated protocols */
 		if (ret == -FI_ENOMR)
 			return 0;
+		/* proc_matched_rtm() (via the copy layer) releases pkt_entry on error; do not release it here. */
 		efa_rdm_rxe_handle_error(rxe, -ret,
 			rxe->op == ofi_op_msg ? FI_EFA_ERR_PKT_PROC_MSGRTM : FI_EFA_ERR_PKT_PROC_TAGRTM);
-		efa_rdm_pke_release_rx(pkt_entry);
 		efa_rdm_rxe_release(rxe);
 	}
 
