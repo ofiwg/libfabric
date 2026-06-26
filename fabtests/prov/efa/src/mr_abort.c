@@ -49,6 +49,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_cm.h>
+#include <rdma/fi_ext.h>
 
 #include "shared.h"
 #include "hmem.h"
@@ -131,6 +132,7 @@ static enum close_order_mode close_order_mode = CLOSE_ORDER_REVERSE;
 static enum close_side close_side = CLOSE_INITIATOR;
 static enum test_mode test_mode = TEST_ABORT;
 static int close_ep_first;
+static int set_homogeneous_peers;
 
 /*
  * -r <file>: replay a previously dumped close order instead of generating
@@ -1800,6 +1802,32 @@ static int run(void)
 	if (ret)
 		return ret;
 
+	if (set_homogeneous_peers) {
+		bool homogeneous = true;
+		/*
+		 * Tell the EP all peers are homogeneous so it skips the
+		 * handshake requirement before using an extra-feature,
+		 * read-based protocol (e.g. LONGREAD). Skipping the handshake
+		 * makes protocol selection deterministic from the very first
+		 * send, so the target is reliably owed -- and can enforce via
+		 * -X -- exactly one completion per op.
+		 *
+		 * Normally this option is set before fi_enable(), but
+		 * ft_init_fabric() has already enabled the EP. Setting it here
+		 * is still correct: EFA's setopt handler has no enable-state
+		 * guard, and homogeneous_peers is read lazily at RTM-post time
+		 * (efa_rdm_msg_post_rtm), not at enable. No send has been posted
+		 * yet at this point, so the value is in effect for every op.
+		 */
+		ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT,
+				FI_OPT_EFA_HOMOGENEOUS_PEERS,
+				&homogeneous, sizeof(homogeneous));
+		if (ret) {
+			FT_PRINTERR("fi_setopt(HOMOGENEOUS_PEERS)", ret);
+			return ret;
+		}
+	}
+
 	ret = alloc_test_res();
 	if (ret)
 		return ret;
@@ -1842,7 +1870,7 @@ int main(int argc, char **argv)
 	srand(time(NULL));
 
 	while ((op = getopt(argc, argv,
-			    "W:N:C:R:T:A:r:Xh" CS_OPTS INFO_OPTS API_OPTS)) != -1) {
+			    "W:N:C:R:T:A:r:XHh" CS_OPTS INFO_OPTS API_OPTS)) != -1) {
 		switch (op) {
 		case 'W':
 			num_mrs = atoi(optarg);
@@ -1899,6 +1927,9 @@ int main(int argc, char **argv)
 			break;
 		case 'X':
 			abort_owes_rx_completion = 1;
+			break;
+		case 'H':
+			set_homogeneous_peers = 1;
 			break;
 		default:
 			ft_parseinfo(op, optarg, hints, &opts);
