@@ -256,6 +256,14 @@ ssize_t efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock(struct efa_rdm_pke 
 	return mock_int();
 }
 
+ssize_t efa_mock_efa_rdm_pke_copy_payload_to_ope_release_and_return_mock(struct efa_rdm_pke *pke, struct efa_rdm_ope *ope)
+{
+	ssize_t ret = mock_int();
+	if (ret)
+		efa_rdm_pke_release_rx(pke);
+	return ret;
+}
+
 int efa_mock_efa_rdm_pke_read_return_mock(struct efa_rdm_ope *ope)
 {
 	return mock_int();
