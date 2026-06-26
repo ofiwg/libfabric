@@ -1,15 +1,8 @@
-import os
 import pytest
 from common import ClientServerTest
 from efa.efa_common import DIRECT_SIZES, DIRECT_RMA_SIZES
 
-@pytest.fixture(autouse=True)
-def skip_if_not_built(cmdline_args):
-    binpath = cmdline_args.binpath or ""
-    if not os.path.exists(os.path.join(binpath, "fi_efa_hw_cntr")):
-        pytest.skip("fi_efa_hw_cntr requires efadv_create_comp_cntr")
-
-
+@pytest.mark.hw_cntr
 @pytest.mark.fabric(params=["efa-direct"])
 @pytest.mark.message_sizes(default_efa_direct=DIRECT_SIZES)
 @pytest.mark.short
@@ -22,7 +15,7 @@ def test_efa_hw_cntr_pingpong(cmdline_args, message_sizes, fabric):
                             additional_env="FI_EFA_USE_HW_CNTR=1")
     test.run()
 
-
+@pytest.mark.hw_cntr
 @pytest.mark.fabric(params=["efa-direct"])
 @pytest.mark.message_sizes(default_efa_direct=DIRECT_RMA_SIZES)
 @pytest.mark.short
@@ -35,7 +28,7 @@ def test_efa_hw_cntr_rma_write(cmdline_args, message_sizes, rma_fabric):
                             additional_env="FI_EFA_USE_HW_CNTR=1")
     test.run()
 
-
+@pytest.mark.hw_cntr
 @pytest.mark.fabric(params=["efa-direct"])
 @pytest.mark.message_sizes(default_efa_direct=DIRECT_SIZES)
 @pytest.mark.short
@@ -48,7 +41,7 @@ def test_efa_hw_cntr_pingpong_ext_mem(cmdline_args, message_sizes, fabric):
                             additional_env="FI_EFA_USE_HW_CNTR=1")
     test.run()
 
-
+@pytest.mark.hw_cntr
 @pytest.mark.fabric(params=["efa-direct"])
 @pytest.mark.message_sizes(default_efa_direct=DIRECT_RMA_SIZES)
 @pytest.mark.short

@@ -1,3 +1,4 @@
+import os
 import pytest
 import time
 from common import test_selected_by_marker
@@ -246,6 +247,22 @@ def cuda_validation_fixture(request, cmdline_args):
 @pytest.hookimpl(hookwrapper=True)
 def pytest_collection_modifyitems(session, config, items):
     # Called after collection has been performed, may filter or re-order the items in-place
+    binpath = config.getoption("--binpath", default="") or ""
+    have_hw_cntr = os.path.exists(os.path.join(binpath, "fi_efa_hw_cntr"))
+
+    deselected = []
+    remaining = []
+    for item in items:
+        markers = {m.name for m in item.iter_markers()}
+        if "hw_cntr" in markers and not have_hw_cntr:
+            deselected.append(item)
+        else:
+            remaining.append(item)
+
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = remaining
+
     # We use this hook to always run the MR exhaustion test at the end
     mr_exhaustion_tests, other_tests = [], []
     for item in items:
