@@ -278,6 +278,7 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(void **state);
 void test_efa_rdm_ope_post_write_0_byte_no_shm(void);
 void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(void **state);
 void test_efa_rdm_rxe_post_local_read_or_queue_happy(void **state);
+void test_efa_rdm_rxe_post_local_read_or_queue_clone_error(void **state);
 void test_efa_rdm_txe_handle_error_write_cq(void **state);
 void test_efa_rdm_txe_handle_error_not_write_cq(void **state);
 void test_efa_rdm_txe_handle_error_suppressed_write(void **state);
