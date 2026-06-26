@@ -739,6 +739,8 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 		pend = (struct smr_pend_entry *) cmd->hdr.rx_ctx;
 		if (pend->sar_copy_fn == &smr_dsa_copy_sar)
 			return_cmd = false;
+	} else if (cmd->hdr.proto == smr_proto_ipc && cmd->hdr.rx_ctx) {
+		return_cmd = false;
 	}
 
 	if (return_cmd)
@@ -1203,6 +1205,8 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 			pend = (struct smr_pend_entry *) cmd->hdr.rx_ctx;
 			if (pend->sar_copy_fn == &smr_dsa_copy_sar)
 				return_cmd = false;
+		} else if (cmd->hdr.proto == smr_proto_ipc) {
+			return_cmd = false;
 		}
 		goto out;
 	}
