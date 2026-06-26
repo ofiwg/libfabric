@@ -886,16 +886,16 @@ static int run_fill_abort_initiator(int iter)
 
 	/* Drain CQ */
 	if (close_side == CLOSE_TARGET)
-		missing = drain_cq_counted(txcq, total_posted,
-					   mr_abort_remote_close_errs,
-					   ARRAY_SIZE(mr_abort_remote_close_errs));
+		ret = drain_cq_counted(txcq, total_posted,
+				       mr_abort_remote_close_errs,
+				       ARRAY_SIZE(mr_abort_remote_close_errs));
 	else
-		missing = drain_cq_counted(txcq, total_posted,
-					   mr_abort_local_close_errs,
-					   ARRAY_SIZE(mr_abort_local_close_errs));
+		ret = drain_cq_counted(txcq, total_posted,
+				       mr_abort_local_close_errs,
+				       ARRAY_SIZE(mr_abort_local_close_errs));
 
-	if (missing < 0)
-		return missing; /* drain_cq_counted hit unexpected error */
+	if (ret != 0)
+		return ret; /* drain_cq_counted hit unexpected error */
 
 	/* Report */
 	completed_ok = 0;
@@ -908,6 +908,16 @@ static int run_fill_abort_initiator(int iter)
 				completed_err++;
 		}
 	}
+
+	/*
+	 * The TX side is deterministic: every posted op must reach exactly one
+	 * terminal completion. drain_cq_counted() already blocked until
+	 * total_posted CQ entries were read, so a nonzero "missing" here means
+	 * the per-op tally disagrees with the raw count -- i.e. an op_context
+	 * was completed more than once (or a stale completion aliased a reused
+	 * op_arr slot).
+	 */
+	missing = total_posted - (completed_ok + completed_err);
 
 	fprintf(stderr, "Iteration %d: op=%s size=%zu posted=%d mrs=%d "
 	       "ops_per_mr=%d ok=%d err=%d missing=%d "
@@ -1012,7 +1022,6 @@ static int run_partial_close_initiator(void)
 	struct mr_slot extra_slot = {0};
 	struct fi_rma_iov local_iov, remote_iov;
 	int i, completed_ok = 0, completed_err = 0, completed;
-	int missing;
 	int ret;
 
 	/* Use slot 0's buffer for both MRs */
@@ -1071,12 +1080,10 @@ static int run_partial_close_initiator(void)
 	extra_slot.mr = NULL;
 
 	/* Drain both completions */
-	missing = drain_cq_counted(txcq, 2, mr_abort_local_close_errs,
-				   ARRAY_SIZE(mr_abort_local_close_errs));
-	if (missing < 0) {
-		ret = missing;
+	ret = drain_cq_counted(txcq, 2, mr_abort_local_close_errs,
+			       ARRAY_SIZE(mr_abort_local_close_errs));
+	if (ret != 0)
 		goto close_extra;
-	}
 
 	for (i = 0; i < 2; i++) {
 		if (op_arr[i].completed) {
@@ -1389,10 +1396,10 @@ static int run_send_abort_initiator(int iter)
 		{ .err = FI_EINVAL, .prov_errno = 5 },        /* local MR invalid */
 		{ .err = FI_ECANCELED, .prov_errno = 4127 },  /* peer abort: receiver detected the yanked source MR on its RDMA read and notified us via PEER_ERROR_PKT */
 	};
-	missing = drain_cq_counted(txcq, total_posted, send_initiator_errs,
-				   ARRAY_SIZE(send_initiator_errs));
-	if (missing < 0)
-		return missing; /* drain_cq_counted hit unexpected error */
+	ret = drain_cq_counted(txcq, total_posted, send_initiator_errs,
+			       ARRAY_SIZE(send_initiator_errs));
+	if (ret != 0)
+		return ret; /* drain_cq_counted hit unexpected error */
 
 	completed_ok = 0;
 	completed_err = 0;
@@ -1404,6 +1411,16 @@ static int run_send_abort_initiator(int iter)
 				completed_err++;
 		}
 	}
+
+	/*
+	 * The TX side is deterministic: every posted send must reach exactly
+	 * one terminal completion. drain_cq_counted() already blocked until
+	 * total_posted CQ entries were read, so a nonzero "missing" here means
+	 * the per-op tally disagrees with the raw count -- i.e. an op_context
+	 * was completed more than once (or a stale completion aliased a reused
+	 * op_arr slot).
+	 */
+	missing = total_posted - (completed_ok + completed_err);
 
 	/*
 	 * Send the (required, slack) completion counts to the target over
