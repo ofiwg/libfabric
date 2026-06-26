@@ -78,7 +78,7 @@ enum test_mode {
 struct op_ctx {
 	struct fi_context2 context;
 	int mr_idx;	/* which mr_slot this op belongs to */
-	int completed;
+	int completions;	/* must end == 1 for every posted op */
 	int status;	/* 0 = success, negative = error code */
 	int prov_errno;
 };
@@ -364,7 +364,7 @@ static void reset_test_state(void)
 		slots[i].mr_closed = 0;
 	}
 	for (i = 0; i < max_ops(); i++) {
-		op_arr[i].completed = 0;
+		op_arr[i].completions = 0;
 		op_arr[i].status = 0;
 		op_arr[i].mr_idx = -1;
 	}
@@ -653,7 +653,7 @@ static int drain_cq_counted(struct fid_cq *cq, int expected,
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
 	struct op_ctx *o;
-	int remaining, ret;
+	int idx, remaining, ret;
 
 	remaining = expected;
 
@@ -662,7 +662,27 @@ static int drain_cq_counted(struct fid_cq *cq, int expected,
 		if (ret > 0) {
 			o = container_of(comp.op_context,
 					 struct op_ctx, context);
-			o->completed = 1;
+			/*
+			 * Each posted op submits exactly one op_context and is
+			 * owed exactly one terminal completion. Validate the
+			 * context resolves to a posted op and that this is its
+			 * first completion: a second completion for the same op
+			 * (or a context outside the posted range) is a provider
+			 * contract violation. Counting it toward `remaining`
+			 * would mask a genuinely missing completion, so fail.
+			 */
+			idx = (int) (o - op_arr);
+			if (idx < 0 || idx >= expected) {
+				FT_ERR("TX completion for out-of-range "
+				       "op_context (idx=%d, expected < %d)",
+				       idx, expected);
+				return -FI_EOTHER;
+			}
+			if (++o->completions > 1) {
+				FT_ERR("op idx=%d tied to %d completions "
+				       "(expected 1)", idx, o->completions);
+				return -FI_EOTHER;
+			}
 			o->status = 0;
 			remaining--;
 		} else if (ret == -FI_EAVAIL) {
@@ -675,7 +695,20 @@ static int drain_cq_counted(struct fid_cq *cq, int expected,
 			if (ret == 1) {
 				o = container_of(err.op_context,
 						 struct op_ctx, context);
-				o->completed = 1;
+				idx = (int) (o - op_arr);
+				if (idx < 0 || idx >= expected) {
+					FT_ERR("TX error completion for "
+					       "out-of-range op_context "
+					       "(idx=%d, expected < %d)",
+					       idx, expected);
+					return -FI_EOTHER;
+				}
+				if (++o->completions > 1) {
+					FT_ERR("op idx=%d tied to %d "
+					       "completions (expected 1)",
+					       idx, o->completions);
+					return -FI_EOTHER;
+				}
 				o->status = -err.err;
 				o->prov_errno = err.prov_errno;
 				if (!is_expected_err(&err, err_list,
@@ -901,7 +934,7 @@ static int run_fill_abort_initiator(int iter)
 	completed_ok = 0;
 	completed_err = 0;
 	for (i = 0; i < total_posted; i++) {
-		if (op_arr[i].completed) {
+		if (op_arr[i].completions) {
 			if (op_arr[i].status == 0)
 				completed_ok++;
 			else
@@ -1086,7 +1119,7 @@ static int run_partial_close_initiator(void)
 		goto close_extra;
 
 	for (i = 0; i < 2; i++) {
-		if (op_arr[i].completed) {
+		if (op_arr[i].completions) {
 			if (op_arr[i].status == 0)
 				completed_ok++;
 			else
@@ -1102,10 +1135,12 @@ static int run_partial_close_initiator(void)
 	fprintf(stderr, "Partial close: posted=2 ok=%d err=%d missing=%d "
 	       "surviving_op=%s closed_op=%s ... ",
 	       completed_ok, completed_err, 2 - completed,
-	       op_arr[0].completed ?
-		       (op_arr[0].status == 0 ? "ok" : "FAIL") : "missing",
-	       op_arr[1].completed ?
-		       (op_arr[1].status == 0 ? "ok" : "err") : "missing");
+	       op_arr[0].completions == 0 ? "missing" :
+	       op_arr[0].completions > 1  ? "DOUBLE"  :
+		       (op_arr[0].status == 0 ? "ok" : "FAIL"),
+	       op_arr[1].completions == 0 ? "missing" :
+	       op_arr[1].completions > 1  ? "DOUBLE"  :
+		       (op_arr[1].status == 0 ? "ok" : "err"));
 
 	if (completed != 2) {
 		fprintf(stderr, "FAIL (missing completions)\n");
@@ -1404,7 +1439,7 @@ static int run_send_abort_initiator(int iter)
 	completed_ok = 0;
 	completed_err = 0;
 	for (i = 0; i < total_posted; i++) {
-		if (op_arr[i].completed) {
+		if (op_arr[i].completions) {
 			if (op_arr[i].status == 0)
 				completed_ok++;
 			else
