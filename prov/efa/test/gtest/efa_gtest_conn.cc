@@ -31,9 +31,8 @@ class EfaConnTest : public Test
 };
 
 /**
- * @brief Test that efa_conn_alloc cleans up RDM resources when
- * efa_av_reverse_av_add fails (efa_conn.c:304-316).
- * Verifies the cleanup path calls efa_conn_rdm_deinit without crash.
+ * @brief efa_conn_alloc unwinds the conn via efa_conn_rdm_deinit when
+ * efa_av_reverse_av_add fails, so the insert fails cleanly.
  */
 TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
 {
@@ -46,7 +45,7 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
 	ASSERT_NE(resource.ep, nullptr);
 
 	MockEfa::set(&mock_efa);
-	EXPECT_CALL(mock_efa, ibv_create_ah(_, _))
+	EXPECT_CALL(mock_efa, ibv_create_ah)
 		.WillOnce(Return(&dummy_ibv_ah));
 	/*
 	 * Fake the dummy ah destroy but route
@@ -61,7 +60,7 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
 		}));
 	EXPECT_CALL(mock_efa, efadv_query_ah)
 		.WillRepeatedly(Return(0));
-	EXPECT_CALL(mock_efa, efa_av_reverse_av_add(_, _, _, _))
+	EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
 		.WillOnce(Return(-FI_ENOMEM));
 
 	addr = efa_test_insert_peer_new_gid(resource.ep, resource.av);
@@ -97,7 +96,7 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_explicit_insert)
 		}));
 	EXPECT_CALL(mock_efa, efadv_query_ah)
 		.WillRepeatedly(Return(0));
-	EXPECT_CALL(mock_efa, efa_av_reverse_av_add(_, _, _, _))
+	EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
 		.WillOnce(Return(-FI_ENOMEM));
 
 	num_addr = efa_test_explicit_av_insert(resource.ep, resource.av, &addr);
