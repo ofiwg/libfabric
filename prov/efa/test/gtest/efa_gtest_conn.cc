@@ -48,8 +48,18 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
 	MockEfa::set(&mock_efa);
 	EXPECT_CALL(mock_efa, ibv_create_ah(_, _))
 		.WillOnce(Return(&dummy_ibv_ah));
-	EXPECT_CALL(mock_efa, ibv_destroy_ah(_)).WillRepeatedly(Return(0));
-	EXPECT_CALL(mock_efa, efadv_query_ah(_, _, _))
+	/*
+	 * Fake the dummy ah destroy but route
+	 * the self_ah to the real destroy so it and its PD are not leaked.
+	 */
+	EXPECT_CALL(mock_efa, ibv_destroy_ah(_))
+		.Times(2)
+		.WillRepeatedly(Invoke([](struct ibv_ah *ah) -> int {
+			if (ah == &dummy_ibv_ah)
+				return 0;
+			return __real_ibv_destroy_ah(ah);
+		}));
+	EXPECT_CALL(mock_efa, efadv_query_ah)
 		.WillRepeatedly(Return(0));
 	EXPECT_CALL(mock_efa, efa_av_reverse_av_add(_, _, _, _))
 		.WillOnce(Return(-FI_ENOMEM));
@@ -78,8 +88,14 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_explicit_insert)
 	MockEfa::set(&mock_efa);
 	EXPECT_CALL(mock_efa, ibv_create_ah(_, _))
 		.WillOnce(Return(&dummy_ibv_ah));
-	EXPECT_CALL(mock_efa, ibv_destroy_ah(_)).WillRepeatedly(Return(0));
-	EXPECT_CALL(mock_efa, efadv_query_ah(_, _, _))
+	EXPECT_CALL(mock_efa, ibv_destroy_ah(_))
+		.Times(2)
+		.WillRepeatedly(Invoke([](struct ibv_ah *ah) -> int {
+			if (ah == &dummy_ibv_ah)
+				return 0;
+			return __real_ibv_destroy_ah(ah);
+		}));
+	EXPECT_CALL(mock_efa, efadv_query_ah)
 		.WillRepeatedly(Return(0));
 	EXPECT_CALL(mock_efa, efa_av_reverse_av_add(_, _, _, _))
 		.WillOnce(Return(-FI_ENOMEM));

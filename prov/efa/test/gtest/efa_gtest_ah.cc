@@ -87,14 +87,16 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 		.WillRepeatedly(Return(0));
 
 	/*
-	 * ibv_destroy_ah fires three times: when AH A is evicted during the
-	 * second insert, for AH B during teardown, and for the endpoint's
-	 * self_ah during teardown (created by fi_enable before the mock was
-	 * installed, but destroyed while the mock is still active).
+	 * ibv_destroy_ah is called for three AH's: we need to fake
+	 * dummy_ah_a/b's destroy calls, but actually call destroy on self_ah.
 	 */
 	EXPECT_CALL(mock_efa, ibv_destroy_ah)
 		.Times(3)
-		.WillRepeatedly(Return(0));
+		.WillRepeatedly(Invoke([](struct ibv_ah *ah) -> int {
+			if (ah == &dummy_ah_a || ah == &dummy_ah_b)
+				return 0;
+			return __real_ibv_destroy_ah(ah);
+		}));
 
 	/*
 	 * Route reverse-AV bookkeeping to the real implementation so the
@@ -162,10 +164,11 @@ TEST_F(EfaAhTest, alloc_enomem_no_evictable_ah_fails)
 			return nullptr;
 		}));
 
-	/* The failed insert creates no AH, so the only ibv_destroy_ah is for
-	 * the endpoint's self_ah (created by fi_enable before the mock was
-	 * installed) during teardown while the mock is still active. */
-	EXPECT_CALL(mock_efa, ibv_destroy_ah).Times(1).WillOnce(Return(0));
+	/* The failed insert creates no AH, so ibv_destroy_ah is only expected
+	 * to be called once on the real AH. */
+	EXPECT_CALL(mock_efa, ibv_destroy_ah)
+		.Times(1)
+		.WillOnce(Invoke(__real_ibv_destroy_ah));
 
 	addr = efa_test_insert_peer_new_gid(resource.ep, resource.av);
 	EXPECT_EQ(addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
