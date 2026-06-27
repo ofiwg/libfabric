@@ -50,15 +50,9 @@ class EfaAhTest : public Test
 };
 
 /**
- * @brief ibv_create_ah fails with ENOMEM, an existing implicit AH is evicted,
- * and the retried ibv_create_ah succeeds (the ENOMEM eviction branch in
- * efa_ah_alloc, via efa_ah_implicit_av_evict_ah).
- *
- * Two distinct GIDs are inserted into the implicit AV. The first insert
- * succeeds and populates the AH map / LRU list. The second insert's initial
- * ibv_create_ah returns ENOMEM, which triggers efa_ah_implicit_av_evict_ah to
- * release the first (implicit-only) AH; the subsequent retry then succeeds, so
- * the second insert returns a valid fi_addr.
+ * @brief efa_ah_alloc's ENOMEM eviction branch where the retry succeeds: a
+ * second insert hits ENOMEM, efa_ah_implicit_av_evict_ah releases the first
+ * (implicit-only) AH, and the retried ibv_create_ah succeeds.
  */
 TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 {
@@ -69,7 +63,7 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 	 * Three ibv_create_ah calls in order:
 	 *   1. first GID  -> success (populates AH map + LRU)
 	 *   2. second GID -> ENOMEM (drives the errno == FI_ENOMEM branch)
-	 *   3. second GID retry after eviction -> success
+	 *   3. second GID retry after eviction of dummy_ah_a -> success
 	 */
 	EXPECT_CALL(mock_efa, ibv_create_ah)
 		.WillOnce(Return(&dummy_ah_a))
@@ -80,8 +74,6 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 		}))
 		.WillOnce(Return(&dummy_ah_b));
 
-	/* efadv_query_ah runs once per successful ibv_create_ah (GIDs A and B).
-	 */
 	EXPECT_CALL(mock_efa, efadv_query_ah)
 		.Times(2)
 		.WillRepeatedly(Return(0));
@@ -98,30 +90,14 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 			return __real_ibv_destroy_ah(ah);
 		}));
 
-	/*
-	 * Route reverse-AV bookkeeping to the real implementation so the
-	 * cur/prv reverse-AV hashes stay consistent across the eviction (which
-	 * removes A's entry) and the later teardown removal.
-	 */
+	// run the real reverse_av_add to populate the reverse av hash
 	EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
 		.WillRepeatedly(Invoke(__real_efa_av_reverse_av_add));
 
-	/*
-	 * Insert through efa_av_insert_one, the only production entry to
-	 * efa_ah_alloc. The eviction path releases a fully-wired implicit
-	 * efa_conn (conn->av, implicit_fi_addr, implicit_conn_list linkage)
-	 * that efa_conn_alloc builds under the AV locks insert_one holds; a
-	 * bare efa_ah_alloc would leave an empty implicit_conn_list with no
-	 * AH to evict.
-	 */
 	addr_a = efa_test_insert_peer_new_gid(resource.ep, resource.av);
 	EXPECT_NE(addr_a, (fi_addr_t) FI_ADDR_NOTAVAIL);
 
-	/*
-	 * Inserting B is what drives the ENOMEM eviction: its first
-	 * ibv_create_ah fails, A (the only entry with no explicit refs) is
-	 * evicted, and the retry succeeds.
-	 */
+	// we have configured this insertion to fail-retry-succeed
 	addr_b = efa_test_insert_peer_new_gid(resource.ep, resource.av);
 	EXPECT_NE(addr_b, (fi_addr_t) FI_ADDR_NOTAVAIL);
 
@@ -141,15 +117,9 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 }
 
 /**
- * @brief ibv_create_ah fails with ENOMEM but no AH can be evicted, so the
- * insert fails (the ENOMEM eviction branch in efa_ah_alloc, where
- * efa_ah_implicit_av_evict_ah returns -FI_ENOMEM).
- *
- * A single implicit AV insert is attempted with an empty AH map / LRU list.
- * ibv_create_ah returns ENOMEM, the eviction helper finds no releasable AH and
- * returns -FI_ENOMEM, so efa_ah_alloc bails out via err_free_efa_ah without
- * ever reaching efadv_query_ah or creating a reverse-AV entry. The insert
- * therefore fails with FI_ADDR_NOTAVAIL.
+ * @brief efa_ah_alloc's ENOMEM eviction branch where the retry never happens:
+ * with an empty AH map efa_ah_implicit_av_evict_ah returns -FI_ENOMEM, so
+ * efa_ah_alloc bails via err_free_efa_ah and the insert fails.
  */
 TEST_F(EfaAhTest, alloc_enomem_no_evictable_ah_fails)
 {
