@@ -483,8 +483,7 @@ static void dump_close_order(void)
 		return;
 
 	if (close_order_replay_path) {
-		fprintf(stderr,
-			"close order (%s, %d MRs) reproduced from %s\n",
+		FT_INFO(			"close order (%s, %d MRs) reproduced from %s\n",
 			close_order_str(), close_order_len,
 			close_order_replay_path);
 		return;
@@ -510,8 +509,7 @@ static void dump_close_order(void)
 		fprintf(f, "%d\n", close_order[i]);
 	fclose(f);
 
-	fprintf(stderr,
-		"close order (%s, %d MRs) written to %s -- reproduce with -r %s\n",
+	FT_INFO(		"close order (%s, %d MRs) written to %s -- reproduce with -r %s\n",
 		close_order_str(), close_order_len, path, path);
 }
 
@@ -952,7 +950,7 @@ static int run_fill_abort_initiator(int iter)
 	 */
 	missing = total_posted - (completed_ok + completed_err);
 
-	fprintf(stderr, "Iteration %d: op=%s size=%zu posted=%d mrs=%d "
+	FT_INFO("Iteration %d: op=%s size=%zu posted=%d mrs=%d "
 	       "ops_per_mr=%d ok=%d err=%d missing=%d "
 	       "close_order=%s side=%s ... %s\n",
 	       iter, op_str(), opts.transfer_size, total_posted,
@@ -1132,7 +1130,7 @@ static int run_partial_close_initiator(void)
 	 * op_arr[0] used slots[0].mr (not closed) — must succeed.
 	 * op_arr[1] used extra_slot.mr (closed) — may succeed or fail.
 	 */
-	fprintf(stderr, "Partial close: posted=2 ok=%d err=%d missing=%d "
+	FT_INFO("Partial close: posted=2 ok=%d err=%d missing=%d "
 	       "surviving_op=%s closed_op=%s ... ",
 	       completed_ok, completed_err, 2 - completed,
 	       op_arr[0].completions == 0 ? "missing" :
@@ -1143,13 +1141,13 @@ static int run_partial_close_initiator(void)
 		       (op_arr[1].status == 0 ? "ok" : "err"));
 
 	if (completed != 2) {
-		fprintf(stderr, "FAIL (missing completions)\n");
+		FT_INFO("FAIL (missing completions)\n");
 		ret = -FI_EOTHER;
 	} else if (op_arr[0].status != 0) {
-		fprintf(stderr, "FAIL (surviving MR op must not fail)\n");
+		FT_INFO("FAIL (surviving MR op must not fail)\n");
 		ret = -FI_EOTHER;
 	} else {
-		fprintf(stderr, "PASS\n");
+		FT_INFO("PASS\n");
 		ret = 0;
 	}
 
@@ -1223,7 +1221,7 @@ static int reuse_check_initiator(void)
 		if (ret == -FI_EAVAIL) {
 			memset(&err, 0, sizeof(err));
 			fi_cq_readerr(txcq, &err, 0);
-			fprintf(stderr, "Reuse drain: residual error %d (%s)\n",
+			FT_INFO("Reuse drain: residual error %d (%s)\n",
 			       err.err, fi_strerror(err.err));
 		}
 	} while (ret != -FI_EAGAIN);
@@ -1300,7 +1298,7 @@ static int reuse_check_initiator(void)
 		return ret;
 	}
 
-	fprintf(stderr, "Reuse: write ok, read ok ... PASS\n");
+	FT_INFO("Reuse: write ok, read ok ... PASS\n");
 	return 0;
 }
 
@@ -1474,7 +1472,7 @@ static int run_send_abort_initiator(int iter)
 	if (ret)
 		return ret;
 
-	fprintf(stderr, "Iteration %d: mode=%s size=%zu posted=%d mrs=%d "
+	FT_INFO("Iteration %d: mode=%s size=%zu posted=%d mrs=%d "
 	       "ok=%d err=%d missing=%d side=%s ... %s\n",
 	       iter, mode_str, opts.transfer_size, total_posted,
 	       mrs_used, completed_ok, completed_err,
@@ -1752,8 +1750,7 @@ static int run_send_abort_target(int iter)
 	 * terminal completions. A shortfall is a genuine missing completion.
 	 */
 	if (reaped < required) {
-		fprintf(stderr,
-			"Target iter %d: required=%d slack=%d reaped=%d "
+		FT_INFO(			"Target iter %d: required=%d slack=%d reaped=%d "
 			"recv_ok=%d peer_aborted=%d short=%d ... FAIL\n",
 			iter, required, slack, reaped, recv_ok,
 			recv_canceled, required - reaped);
@@ -1773,8 +1770,7 @@ static int run_send_abort_target(int iter)
 	 * so just log them for visibility and pass.
 	 */
 	if (reaped > required + slack) {
-		fprintf(stderr,
-			"Target iter %d: required=%d slack=%d reaped=%d "
+		FT_INFO(			"Target iter %d: required=%d slack=%d reaped=%d "
 			"recv_ok=%d peer_aborted=%d straggler_over=%d ... "
 			"PASS (cross-iteration straggler)\n",
 			iter, required, slack, reaped, recv_ok,
@@ -1782,8 +1778,7 @@ static int run_send_abort_target(int iter)
 		return 0;
 	}
 
-	fprintf(stderr,
-		"Target iter %d: required=%d slack=%d reaped=%d recv_ok=%d "
+	FT_INFO(		"Target iter %d: required=%d slack=%d reaped=%d recv_ok=%d "
 		"peer_aborted=%d ... PASS\n",
 		iter, required, slack, reaped, recv_ok, recv_canceled);
 
