@@ -781,80 +781,92 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		goto reject;
 	}
 
-	/* We don't handle simultaneous connects for secondary eps.
-	 * Both sides simply reject (states[idx] != IDLE) and 
-         * rxm_process_reject drops the slot. The conn stays alive on
-	 * its other slots; we just lose this one from rotation. */
-	if (idx > 0) {
+	if (idx == 0) {
+		conn = rxm_add_conn(ep, peer);
+		if (!conn)
+			goto remove;
+	} else {
+		/* Secondary connreq. */
 		conn = ofi_idm_lookup(&ep->conn_idx_map, peer->index);
 		if (!conn || conn->states[0] != RXM_CM_CONNECTED ||
-		    idx >= conn->num_msg_eps || conn->states[idx] != RXM_CM_IDLE) {
+		    idx >= conn->num_msg_eps) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"secondary connreq idx=%u rejected: conn=%p states[0]=%d num_eps=%u\n",
 				idx, conn, conn ? conn->states[0] : -1,
 				conn ? conn->num_msg_eps : 0);
 			goto remove;
 		}
-	} else {
-		conn = rxm_add_conn(ep, peer);
-		if (!conn)
-			goto remove;
-
-		FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "connreq for %p\n", conn);
-		switch (conn->states[0]) {
-		case RXM_CM_IDLE:
-			break;
-		case RXM_CM_CONNECTING:
-			/* simultaneous connections */
-			cmp = ofi_addr_cmp(&rxm_prov, &peer_addr.sa, &ep->addr.sa);
-			if (cmp < 0) {
-				/* let our request finish */
-				FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
-					"simultaneous, reject peer %p\n", conn);
-				rxm_reject_connreq(ep, cm_entry, RXM_REJECT_EALREADY);
-				goto put;
-			} else if (cmp > 0) {
-				/* accept peer's request */
-				FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
-					"simultaneous, accept peer %p\n", conn);
-				rxm_close_conn(conn);
-			} else {
-				/* connecting to ourself, create loopback conn */
-				FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "loopback conn %p\n", conn);
-				conn = rxm_alloc_conn(ep, peer);
-				if (!conn)
-					goto remove;
-
-				dlist_insert_tail(&conn->loopback_entry, &ep->loopback_list);
-				break;
-			}
-			break;
-		case RXM_CM_ACCEPTING:
-		case RXM_CM_CONNECTED:
-			if (conn->remote_pid &&
-			    (conn->remote_pid == rxm_peer_pid(cm_entry->data.connect.
-							      client_conn_id))) {
-				FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
-					"simultaneous, reject peer\n");
-				rxm_reject_connreq(ep, cm_entry, RXM_REJECT_EALREADY);
-				goto put;
-			} else {
-				FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
-					"old connection exists, replacing %p\n", conn);
-				rxm_close_conn(conn);
-			}
-			break;
-		default:
-			assert(0);
-			break;
-		}
-
-		conn->remote_pid = rxm_peer_pid(cm_entry->data.connect.client_conn_id);
-		conn->remote_index = rxm_peer_index(cm_entry->data.connect.client_conn_id);
 	}
 
-	if (idx == 0)
+	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "connreq for %p\n", conn);
+	switch (conn->states[idx]) {
+	case RXM_CM_IDLE:
+		break;
+	case RXM_CM_CONNECTING:
+		/* simultaneous connections */
+		cmp = ofi_addr_cmp(&rxm_prov, &peer_addr.sa, &ep->addr.sa);
+		if (cmp < 0) {
+			/* let our request finish */
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+				"simultaneous, reject peer %p ep %u\n", conn, idx);
+			rxm_reject_connreq(ep, cm_entry, RXM_REJECT_EALREADY);
+			goto put;
+		} else if (cmp > 0) {
+			/* accept peer's request */
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+				"simultaneous, accept peer %p ep %u\n", conn, idx);
+			if (idx == 0)
+				rxm_close_conn(conn);
+			else
+				rxm_drop_secondary_ep(conn, idx);
+		} else if (idx == 0) {
+			/* connecting to ourself, create loopback conn */
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "loopback conn %p\n", conn);
+			conn = rxm_alloc_conn(ep, peer);
+			if (!conn)
+				goto remove;
+			dlist_insert_tail(&conn->loopback_entry, &ep->loopback_list);
+		} else {
+			/* loopback is meaningless for a secondary slot. */
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"loopback secondary connreq idx=%u rejected: conn=%p\n",
+				idx, conn);
+			goto remove;
+		}
+		break;
+	case RXM_CM_ACCEPTING:
+	case RXM_CM_CONNECTED:
+		if (idx > 0) {
+			/* a CONNECTED/ACCEPTING secondary should never receive
+			 * another connreq. */
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"secondary connreq idx=%u rejected: conn=%p states[idx]=%d\n",
+				idx, conn, conn->states[idx]);
+			goto remove;
+		}
+		if (conn->remote_pid &&
+		    (conn->remote_pid == rxm_peer_pid(cm_entry->data.connect.
+						      client_conn_id))) {
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+				"simultaneous, reject peer\n");
+			rxm_reject_connreq(ep, cm_entry, RXM_REJECT_EALREADY);
+			goto put;
+		} else {
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+				"old connection exists, replacing %p\n", conn);
+			rxm_close_conn(conn);
+		}
+		break;
+	default:
+		assert(0);
+		break;
+	}
+
+	if (idx == 0) {
+		conn->remote_pid = rxm_peer_pid(cm_entry->data.connect.client_conn_id);
+		conn->remote_index = rxm_peer_index(cm_entry->data.connect.client_conn_id);
 		ret = rxm_open_conn(conn, cm_entry->info);
+        }
 	else
 		ret = rxm_open_msg_ep(conn, idx, cm_entry->info);
 	if (ret)
