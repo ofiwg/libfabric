@@ -208,6 +208,13 @@ static inline void opx_util_domain_cleanup(struct fi_opx_domain *opx_domain)
 #endif
 }
 
+uint32_t opx_domain_get_ctx_cnt(int hfi)
+{
+	uint32_t ctx_cnt = opx_hfi_get_num_contexts(hfi);
+
+	return ctx_cnt ? ctx_cnt : FI_OPX_DEFAULT_DOMAIN_CTX_CNT;
+}
+
 int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 {
 	struct fi_domain_attr *attr;
@@ -218,8 +225,9 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	}
 
 	uint32_t       ppn	  = 1; /* TODO */
-	const unsigned tx_ctx_cnt = 160 / ppn;
-	const unsigned rx_ctx_cnt = 160 / ppn;
+	const unsigned ctx_cnt	  = opx_domain_get_ctx_cnt(0);
+	const unsigned tx_ctx_cnt = ctx_cnt / ppn;
+	const unsigned rx_ctx_cnt = ctx_cnt / ppn;
 
 	attr->domain = NULL;
 	attr->name   = strdup(FI_OPX_DOMAIN_NAME);
@@ -233,7 +241,7 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->mr_key_size      = sizeof(uint64_t);
 	attr->cq_data_size     = FI_OPX_REMOTE_CQ_DATA_SIZE;
 	attr->cq_cnt	       = (size_t) -1;
-	attr->ep_cnt	       = 160 / ppn;
+	attr->ep_cnt	       = ctx_cnt / ppn;
 	attr->tx_ctx_cnt       = tx_ctx_cnt;
 	attr->rx_ctx_cnt       = rx_ctx_cnt;
 

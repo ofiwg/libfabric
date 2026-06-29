@@ -752,6 +752,15 @@ static int opx_getinfo_set_nic(int hfi, struct fi_info *info)
 	return FI_SUCCESS;
 }
 
+static void opx_getinfo_set_ctx_counts(int hfi, struct fi_info *info)
+{
+	uint32_t ctx_cnt = opx_domain_get_ctx_cnt(hfi);
+
+	info->domain_attr->ep_cnt     = ctx_cnt;
+	info->domain_attr->tx_ctx_cnt = ctx_cnt;
+	info->domain_attr->rx_ctx_cnt = ctx_cnt;
+}
+
 static int opx_getinfo_dup_global(int hfi, struct fi_info **info, struct fi_info **info_tail)
 {
 	struct fi_info *global_info = fi_opx_global.info;
@@ -769,6 +778,8 @@ static int opx_getinfo_dup_global(int hfi, struct fi_info **info, struct fi_info
 			fi_freeinfo(global_dup);
 			goto err;
 		}
+
+		opx_getinfo_set_ctx_counts(hfi, global_dup);
 
 		ret = opx_getinfo_set_nic(hfi, global_dup);
 		if (ret != FI_SUCCESS) {
@@ -823,6 +834,8 @@ static int opx_getinfo_alloc_and_fill(const int hfi, const char *node, const cha
 	if (ret != FI_SUCCESS) {
 		goto err;
 	}
+
+	opx_getinfo_set_ctx_counts(hfi, result_info);
 
 	result_info->next = NULL;
 
