@@ -75,6 +75,7 @@
 
 #define CUDA_RUNTIME_FUNCS_DEF(_)	\
 	_(cudaMemcpy)			\
+	_(cudaMemcpyAsync)		\
 	_(cudaDeviceSynchronize)	\
 	_(cudaFree)			\
 	_(cudaMalloc)			\
@@ -119,6 +120,8 @@ static struct {
 static struct {
 	cudaError_t (*cudaMemcpy)(void *dst, const void *src, size_t size,
 				  enum cudaMemcpyKind kind);
+	cudaError_t (*cudaMemcpyAsync)(void *dst, const void *src, size_t size,
+				       enum cudaMemcpyKind kind, CUstream stream);
 	cudaError_t (*cudaDeviceSynchronize)(void);
 	cudaError_t (*cudaFree)(void* ptr);
 	cudaError_t (*cudaMalloc)(void** ptr, size_t size);
@@ -783,6 +786,9 @@ int cuda_put_dmabuf_fd(int fd)
 #endif /* HAVE_CUDA_DMABUF */
 }
 
+static int cuda_ipc_event_pool_init(void);
+static void cuda_ipc_event_pool_cleanup(void);
+
 int cuda_hmem_init(void)
 {
 	int ret;
@@ -795,6 +801,10 @@ int cuda_hmem_init(void)
 
 	fi_param_define(NULL, "hmem_cuda_use_dmabuf", FI_PARAM_BOOL,
 			"Use dma-buf for sharing buffer with hardware. (default: true)");
+
+	fi_param_define(NULL, "hmem_cuda_enable_async_copy", FI_PARAM_BOOL,
+			"Allow async copy for CUDA transfers. "
+			"(default: true)");
 
 	ret = cuda_hmem_dl_init();
 	if (ret != FI_SUCCESS)
@@ -850,6 +860,7 @@ int cuda_hmem_cleanup(void)
 	cuda_hmem_dl_cleanup();
 	if (cuda_attr.use_gdrcopy)
 		cuda_gdrcopy_hmem_cleanup();
+	cuda_ipc_event_pool_cleanup();
 	return FI_SUCCESS;
 }
 
@@ -962,6 +973,181 @@ int cuda_get_ipc_handle_size(size_t *size)
 	return FI_SUCCESS;
 }
 
+/*
+ * Async copy event: wraps a CUDA stream + event for non-blocking IPC copies.
+ * Pool of CUDA stream+event pairs for async IPC copies.
+ * Fixed-size array of pre-created stream+event pairs, assigned round-robin.
+ * If more copies are in-flight than pool entries, copies share a stream
+ * (serialized by CUDA stream ordering). Matches UCX's approach of
+ * key->stream_id % max_streams.
+ */
+struct cuda_async_copy_event {
+	CUstream stream;
+	CUevent  event;
+};
+
+#define CUDA_IPC_EVENT_POOL_SIZE 128
+
+static struct cuda_async_copy_event cuda_ipc_events[CUDA_IPC_EVENT_POOL_SIZE];
+static ofi_atomic32_t cuda_ipc_event_pool_initialized;
+static ofi_atomic32_t cuda_ipc_event_next;
+static pthread_mutex_t cuda_ipc_event_pool_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int cuda_ipc_event_pool_init(void)
+{
+	CUresult ret;
+	int i;
+
+	pthread_mutex_lock(&cuda_ipc_event_pool_lock);
+	if (ofi_atomic_load_explicit32(&cuda_ipc_event_pool_initialized,
+				       memory_order_acquire)) {
+		pthread_mutex_unlock(&cuda_ipc_event_pool_lock);
+		return FI_SUCCESS;
+	}
+
+	for (i = 0; i < CUDA_IPC_EVENT_POOL_SIZE; i++) {
+		ret = cuda_ops.cuStreamCreate(&cuda_ipc_events[i].stream,
+					      CU_STREAM_NON_BLOCKING);
+		if (ret != CUDA_SUCCESS) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"cuStreamCreate failed: %d\n", ret);
+			goto fail;
+		}
+
+		ret = cuda_ops.cuEventCreate(&cuda_ipc_events[i].event,
+					     CU_EVENT_DISABLE_TIMING);
+		if (ret != CUDA_SUCCESS) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"cuEventCreate failed: %d\n", ret);
+			cuda_ops.cuStreamDestroy(cuda_ipc_events[i].stream);
+			goto fail;
+		}
+	}
+
+	ofi_atomic_initialize32(&cuda_ipc_event_next, 0);
+	ofi_atomic_store_explicit32(&cuda_ipc_event_pool_initialized, 1,
+				    memory_order_release);
+	pthread_mutex_unlock(&cuda_ipc_event_pool_lock);
+	return FI_SUCCESS;
+
+fail:
+	for (i--; i >= 0; i--) {
+		cuda_ops.cuEventDestroy(cuda_ipc_events[i].event);
+		cuda_ops.cuStreamDestroy(cuda_ipc_events[i].stream);
+	}
+	pthread_mutex_unlock(&cuda_ipc_event_pool_lock);
+	return -FI_ENOSYS;
+}
+
+static void cuda_ipc_event_pool_cleanup(void)
+{
+	int i;
+
+	if (!ofi_atomic_load_explicit32(&cuda_ipc_event_pool_initialized,
+					memory_order_acquire))
+		return;
+
+	for (i = 0; i < CUDA_IPC_EVENT_POOL_SIZE; i++) {
+		cuda_ops.cuEventDestroy(cuda_ipc_events[i].event);
+		cuda_ops.cuStreamDestroy(cuda_ipc_events[i].stream);
+	}
+	ofi_atomic_store_explicit32(&cuda_ipc_event_pool_initialized, 0,
+				    memory_order_release);
+}
+
+int cuda_create_async_copy_event(uint64_t device,
+				 ofi_hmem_async_event_t *event)
+{
+	int idx, ret;
+
+	if (!ofi_atomic_load_explicit32(&cuda_ipc_event_pool_initialized,
+					memory_order_acquire)) {
+		ret = cuda_ipc_event_pool_init();
+		if (ret)
+			return ret;
+	}
+
+	idx = ofi_atomic_inc32(&cuda_ipc_event_next) % CUDA_IPC_EVENT_POOL_SIZE;
+	*event = &cuda_ipc_events[idx];
+	return FI_SUCCESS;
+}
+
+int cuda_free_async_copy_event(uint64_t device, ofi_hmem_async_event_t event)
+{
+	return FI_SUCCESS;
+}
+
+int cuda_async_copy_to_dev(uint64_t device, void *dst, const void *src,
+			   size_t size, ofi_hmem_async_event_t event)
+{
+	struct cuda_async_copy_event *ev = event;
+	cudaError_t cuda_ret;
+	CUresult ret;
+
+	cuda_ret = cuda_ops.cudaMemcpyAsync(dst, src, size,
+					    cudaMemcpyDefault, ev->stream);
+	if (cuda_ret != cudaSuccess) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"cudaMemcpyAsync failed: %s:%s\n",
+			ofi_cudaGetErrorName(cuda_ret),
+			ofi_cudaGetErrorString(cuda_ret));
+		return -FI_EIO;
+	}
+
+	ret = cuda_ops.cuEventRecord(ev->event, ev->stream);
+	if (ret != CUDA_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"cuEventRecord failed: %d\n", ret);
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
+}
+
+int cuda_async_copy_from_dev(uint64_t device, void *dst, const void *src,
+			     size_t size, ofi_hmem_async_event_t event)
+{
+	struct cuda_async_copy_event *ev = event;
+	cudaError_t cuda_ret;
+	CUresult ret;
+
+	cuda_ret = cuda_ops.cudaMemcpyAsync(dst, src, size,
+					    cudaMemcpyDefault, ev->stream);
+	if (cuda_ret != cudaSuccess) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"cudaMemcpyAsync failed: %s:%s\n",
+			ofi_cudaGetErrorName(cuda_ret),
+			ofi_cudaGetErrorString(cuda_ret));
+		return -FI_EIO;
+	}
+
+	ret = cuda_ops.cuEventRecord(ev->event, ev->stream);
+	if (ret != CUDA_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"cuEventRecord failed: %d\n", ret);
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
+}
+
+int cuda_async_copy_query(ofi_hmem_async_event_t event)
+{
+	struct cuda_async_copy_event *ev = event;
+	CUresult ret;
+
+	ret = cuda_ops.cuEventQuery(ev->event);
+	if (ret == CUDA_SUCCESS)
+		return FI_SUCCESS;
+
+	if (ret == CUDA_ERROR_NOT_READY)
+		return -FI_EBUSY;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"cuEventQuery failed: %d\n", ret);
+	return -FI_EIO;
+}
+
 bool cuda_is_gdrcopy_enabled(void)
 {
 	return cuda_attr.use_gdrcopy;
@@ -988,6 +1174,33 @@ int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 }
 
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_create_async_copy_event(uint64_t device, ofi_hmem_async_event_t *event)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_free_async_copy_event(uint64_t device, ofi_hmem_async_event_t event)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_async_copy_to_dev(uint64_t device, void *dst, const void *src,
+			   size_t size, ofi_hmem_async_event_t event)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_async_copy_from_dev(uint64_t device, void *dst, const void *src,
+			     size_t size, ofi_hmem_async_event_t event)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_async_copy_query(ofi_hmem_async_event_t event)
 {
 	return -FI_ENOSYS;
 }
