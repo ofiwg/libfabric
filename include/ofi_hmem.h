@@ -108,6 +108,7 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 
 struct ofi_hmem_ops {
 	bool initialized;
+	bool async_copy_enabled;
 	int (*init)(void);
 	int (*cleanup)(void);
 	int (*create_async_copy_event)(uint64_t device,
@@ -187,6 +188,13 @@ bool rocr_is_dmabuf_requested(void);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
+int cuda_create_async_copy_event(uint64_t device, ofi_hmem_async_event_t *event);
+int cuda_free_async_copy_event(uint64_t device, ofi_hmem_async_event_t event);
+int cuda_async_copy_to_dev(uint64_t device, void *dst, const void *src,
+			   size_t size, ofi_hmem_async_event_t event);
+int cuda_async_copy_from_dev(uint64_t device, void *dst, const void *src,
+			     size_t size, ofi_hmem_async_event_t event);
+int cuda_async_copy_query(ofi_hmem_async_event_t event);
 int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
@@ -403,6 +411,13 @@ static inline bool ofi_hmem_p2p_disabled(void)
 {
 	return ofi_hmem_disable_p2p;
 }
+
+static inline bool ofi_hmem_async_copy_enabled(enum fi_hmem_iface iface)
+{
+	return hmem_ops[iface].async_copy_enabled;
+}
+
+void ofi_hmem_set_async_copy_enabled(void);
 
 int ofi_create_async_copy_event(enum fi_hmem_iface iface, uint64_t device,
 				ofi_hmem_async_event_t *event);
