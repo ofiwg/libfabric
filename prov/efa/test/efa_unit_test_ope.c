@@ -306,20 +306,15 @@ void test_efa_rdm_ope_post_write_0_byte(void **state)
  * @param[in]	efa_rdm_pke_read_return	return code of efa_rdm_pke_read
  */
 static
-void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resource, int efa_rdm_pke_read_return, bool force_clone)
+void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resource, int efa_rdm_pke_read_return)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_ope *rxe;
-	struct efa_domain *efa_domain;
-	struct fid_ep *ep = NULL;
-	struct ofi_bufpool *src_pool;
-	enum efa_rdm_pke_alloc_type src_alloc_type;
 	struct efa_rdm_mr cuda_mr = {0};
 	char buf[16];
 	size_t held_before;
 	size_t to_post_before;
-	size_t readcopy_before;
 	struct iovec iov = {
 		.iov_base = buf,
 		.iov_len = sizeof buf
@@ -333,32 +328,14 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 	 */
 	g_efa_unit_test_mocks.efa_rdm_pke_read = &efa_mock_efa_rdm_pke_read_return_mock;
 
-	if (force_clone) {
-		/* The clone-swap path needs rx_readcopy_pkt_pool, which is only created when the application requests FI_HMEM.*/
-		efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
-		efa_domain->util_domain.mr_mode |= FI_MR_HMEM;
-		assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep, NULL), 0);
-		efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	} else {
-		efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	}
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	/* Fake a rdma read enabled device */
 	efa_rdm_ep_domain(efa_rdm_ep)->device->max_rdma_size = efa_env.efa_read_segment_size;
 
-	/* ooo pool forces efa_rdm_txe_prepare_local_read_pkt_entry() to clone
-	 * into the read-copy pool and free the original */
-	if (force_clone) {
-		src_pool = efa_rdm_ep->rx_ooo_pkt_pool;
-		src_alloc_type = EFA_RDM_PKE_FROM_OOO_POOL;
-	} else {
-		src_pool = efa_rdm_ep->efa_rx_pkt_pool;
-		src_alloc_type = EFA_RDM_PKE_FROM_EFA_RX_POOL;
-	}
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, src_pool, src_alloc_type);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	pkt_entry->payload = pkt_entry->wiredata;
-	pkt_entry->payload_size = sizeof buf;
 
 	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_tagged);
 	cuda_mr.efa_mr.iface = FI_HMEM_CUDA;
@@ -372,7 +349,6 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 
 	held_before = efa_rdm_ep->efa_rx_pkts_held;
 	to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
-	readcopy_before = efa_rdm_ep->rx_readcopy_pkt_pool_used;
 
 	will_return(efa_mock_efa_rdm_pke_read_return_mock, efa_rdm_pke_read_return);
 
@@ -402,23 +378,11 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 1);
 		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 	} else {
-		/* On error, efa_rdm_rxe_post_local_read_or_queue() now owns and
-		 * releases the rx pkt itself.
-		 * The caller must NOT release it again.
-		 */
 		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, held_before);
-		if (force_clone) {
-			assert_int_equal(efa_rdm_ep->rx_readcopy_pkt_pool_used, readcopy_before);
-		} else {
-			assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 1);
-		}
-		/* The internal txe must be cleaned up for a failed read. */
-		assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before);
+		efa_rdm_pke_release_rx(pkt_entry);
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 1);
 	}
-
-	/* The clone variant uses a dedicated endpoint*/
-	if (force_clone)
-		assert_int_equal(fi_close(&ep->fid), 0);
 }
 
 void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(void **state)
@@ -428,7 +392,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_unhappy(void **state)
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
-	test_efa_rdm_rxe_post_local_read_or_queue_impl(resource, -FI_ENOMR, false);
+	test_efa_rdm_rxe_post_local_read_or_queue_impl(resource, -FI_ENOMR);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
@@ -447,19 +411,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_happy(void **state)
 	 * releases both the held rx pkt and the internal txe. No additional
 	 * cleanup is required here.
 	 */
-	test_efa_rdm_rxe_post_local_read_or_queue_impl(resource, FI_SUCCESS, false);
-}
-
-/**
- * @brief Verify the clone-swap error path of efa_rdm_rxe_post_local_read_or_queue.
- */
-void test_efa_rdm_rxe_post_local_read_or_queue_clone_error(void **state)
-{
-	struct efa_resource *resource = *state;
-
-	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-
-	test_efa_rdm_rxe_post_local_read_or_queue_impl(resource, -FI_ENOMR, true);
+	test_efa_rdm_rxe_post_local_read_or_queue_impl(resource, FI_SUCCESS);
 }
 
 static

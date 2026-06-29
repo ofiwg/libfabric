@@ -472,10 +472,9 @@ void test_efa_rdm_pke_flag_tracking(void **state)
 
 
 /**
- * @brief Test efa_rdm_pke_proc_matched_eager_rtm releases pkt_entry on error.
+ * @brief Test efa_rdm_pke_proc_matched_eager_rtm doesn't free pkt_entry on error
+ * because it is handled by the caller.
  *
- * On error, efa_rdm_pke_proc_matched_eager_rtm (via the copy layer) releases
- * pkt_entry; the caller releases only rxe. Verify no leak and no double free.
  *
  * @param state
  */
@@ -510,14 +509,14 @@ void test_efa_rdm_pke_proc_matched_eager_rtm_error(void **state)
 	rxe->total_len = 1024;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
-	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_release_and_return_mock;
-	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_release_and_return_mock, -FI_EINVAL);
+	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
+	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock, -FI_EINVAL);
 
 	err = efa_rdm_pke_proc_matched_eager_rtm(pkt_entry);
 	assert_int_not_equal(err, 0);
 
-	/* The copy layer (mock) released pkt_entry on error; the caller releases
-	 * only rxe. Releasing pkt_entry here would be a double free. */
+	/* Verify there is no double free */
+	efa_rdm_pke_release_rx(pkt_entry);
 	efa_rdm_rxe_release(rxe);
 }
 
@@ -554,9 +553,9 @@ static struct efa_rdm_pke *create_medium_rtm_pkt(struct efa_rdm_ep *ep, uint32_t
 }
 
 /**
- * @brief Test efa_rdm_pke_proc_matched_mulreq_rtm releases the (first/only) pkt
- * on error. The copy layer releases the packet on error; the caller releases
- * rxe only. Verify no leak and no double free.
+ * @brief Test efa_rdm_pke_proc_matched_mulreq_rtm doesn't double free the first
+ * pkt_entry on error. The first packet should be released by the caller, not
+ * by the function itself.
  *
  * @param state
  */
@@ -588,15 +587,14 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error(void **state)
 	rxe->bytes_received_via_mulreq = 0;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
-	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_release_and_return_mock;
-	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_release_and_return_mock, -FI_EINVAL);
+	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
+	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock, -FI_EINVAL);
 
 	err = efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
 	assert_int_not_equal(err, 0);
 
-	/* The copy layer (mock) released the (first/only) pkt on error; the
-	 * caller releases only rxe. Releasing pkt_entry here would be a double
-	 * free. */
+	/* Verify there is no double free by releasing the first packet entry */
+	efa_rdm_pke_release_rx(pkt_entry);
 	efa_rdm_rxe_release(rxe);
 }
 
@@ -638,17 +636,22 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(void **state)
 	rxe->bytes_received_via_mulreq = 0;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
-	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_release_and_return_mock;
+	g_efa_unit_test_mocks.efa_rdm_pke_copy_payload_to_ope = &efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock;
 
-	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_release_and_return_mock, 0);          /* first pkt: success, NOT freed by mock */
-	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_release_and_return_mock, -FI_EINVAL); /* second pkt: error, freed by mock */
+	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock, 0);
+	will_return_int(efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock, -FI_EINVAL);
 
 	err = efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
 	assert_int_not_equal(err, 0);
 
-	/* First pkt: mock simulated success without releasing, so the test still
-	 * owns it. Second pkt: released by the copy layer (mock) on error. */
-	efa_rdm_pke_release_rx(pkt_entry);   /* first pkt only */
+	/* The function should have:
+	 * 1. NOT released the first packet - caller's responsibility
+	 * 2. Released the second packet - function's responsibility
+	 *
+	 * We only release the first packet here. The second packet should have
+	 * been released by the function when it failed.
+	 */
+	efa_rdm_pke_release_rx(pkt_entry);
 	efa_rdm_rxe_release(rxe);
 }
 

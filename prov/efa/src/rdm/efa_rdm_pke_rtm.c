@@ -300,8 +300,8 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
-			/* proc_matched_rtm() (via the copy layer) releases pkt_entry on error; do not release it here. */
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
+			efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
@@ -350,8 +350,8 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 		if (OFI_UNLIKELY(err)) {
 			if (err == -FI_ENOMR)
 				return err;
-			/* proc_matched_rtm() (via the copy layer) releases pkt_entry on error; do not release it here. */
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_TAGRTM);
+			efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
@@ -683,8 +683,7 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
 	 * On success, efa_rdm_pke_copy_data_to_ope will write rx completion,
 	 * release pkt_entry and rxe
 	 *
-	 * On error, efa_rdm_pke_copy_payload_to_ope() releases pkt_entry;
-	 * the caller must NOT release it. rxe is released by the caller.
+	 * On error, pkt_entry and rxe are released by caller.
 	 */
 	err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 
@@ -896,10 +895,8 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 				    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
 			err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
-			if (err) {
-				efa_rdm_pke_release_rx_list(pkt_entry);
+			if (err)
 				return err;
-			}
 		}
 	}
 
@@ -921,10 +918,8 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 					 "limit was reached on the receiver\n");
 				err = efa_rdm_ope_post_send_or_queue(
 					rxe, EFA_RDM_READ_NACK_PKT);
-				if (err) {
-					efa_rdm_pke_release_rx_list(cur);
+				if (err)
 					return err;
-				}
 			} else {
 				msg_id = efa_rdm_pke_get_rtm_msg_id(cur);
 				efa_rdm_rxe_map_remove(&cur->peer->rxe_map, msg_id,
@@ -940,8 +935,13 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 
 		err = efa_rdm_pke_copy_payload_to_ope(cur, rxe);
 		if (err) {
-			/* efa_rdm_pke_copy_payload_to_ope() frees cur on error no matter where it
-			 * sits in the chain; the rest are freed by later iterations. */
+			/* On error,
+			 * If this is the first packet (cur == pkt_entry), caller will release it
+			 * If this is NOT the first packet, we release it here
+			 */
+			if (cur != pkt_entry) {
+				efa_rdm_pke_release_rx(cur);
+			}
 			ret = err;
 		}
 
@@ -1222,8 +1222,9 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
 	err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
-	/* This function owns pkt_entry on both success and error (the caller no longer releases it). */
-	efa_rdm_pke_release_rx(pkt_entry);
+	if (OFI_LIKELY(!err)) {
+		efa_rdm_pke_release_rx(pkt_entry);
+	}
 	return err;
 }
 

@@ -92,8 +92,6 @@ ssize_t __real_efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke, struct e
 
 ssize_t efa_mock_efa_rdm_pke_copy_payload_to_ope_return_mock(struct efa_rdm_pke *pke, struct efa_rdm_ope *ope);
 
-ssize_t efa_mock_efa_rdm_pke_copy_payload_to_ope_release_and_return_mock(struct efa_rdm_pke *pke, struct efa_rdm_ope *ope);
-
 int __real_efa_rdm_pke_read(struct efa_rdm_ope *ope);
 
 bool __real_efa_device_support_unsolicited_write_recv();

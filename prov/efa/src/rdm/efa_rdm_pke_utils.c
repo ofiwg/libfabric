@@ -323,15 +323,12 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 		ep, desc, &local_read_available, &cuda_memcpy_available, &gdrcopy_available);
 	if (ret < 0) {
 		EFA_WARN(FI_LOG_EP_DATA, "Failed to get available copy methods, ret = %d\n", ret);
-		/* This copy layer owns pke on error; release it so the caller does not release it again. */
-		efa_rdm_pke_release_rx(pke);
 		return ret;
 	}
 
 	if (!local_read_available && !gdrcopy_available && !cuda_memcpy_available) {
 		EFA_WARN(FI_LOG_CQ, "None of the copy methods: localread, gdrcopy or cudaMemcpy is available,"
 			"thus libfabric is not able to copy received data to Nvidia GPU\n");
-		efa_rdm_pke_release_rx(pke);
 		return -FI_EINVAL;
 	}
 
@@ -489,8 +486,6 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 	if (bytes_copied != MIN(pke->payload_size, ope->cq_entry.len - segment_offset)) {
 		EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 			bytes_copied);
-		/* This copy layer owns pke on error; release it here (caller must not). */
-		efa_rdm_pke_release_rx(pke);
 		return -FI_EIO;
 	}
 
