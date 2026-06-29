@@ -1400,18 +1400,34 @@ static void smr_progress_async_ipc(struct smr_ep *ep,
 	iface = ipc_entry->cmd->data.ipc_info.iface;
 	device = ipc_entry->cmd->data.ipc_info.device;
 
-	if (ofi_async_copy_query(iface, ipc_entry->async_event))
+	ret = ofi_async_copy_query(iface, ipc_entry->async_event);
+	if (ret == -FI_EBUSY)
 		return;
+
+	if (ret) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"async IPC copy failed: %d\n", ret);
+		ipc_entry->cmd->hdr.smr_flags |= SMR_OP_ERROR;
+	}
 
 	ofi_mr_cache_delete(domain->ipc_cache, ipc_entry->ipc_entry);
 	ofi_free_async_copy_event(iface, device, ipc_entry->async_event);
 
-	ret = smr_complete_rx(ep, ipc_entry->comp_ctx, ipc_entry->cmd->hdr.op,
-			      ipc_entry->comp_flags, ipc_entry->cmd->hdr.size,
-			      ipc_entry->iov[0].iov_base,
-			      ipc_entry->cmd->hdr.rx_id,
-			      ipc_entry->cmd->hdr.tag,
-			      ipc_entry->cmd->hdr.cq_data);
+	if (ret) {
+		ret = smr_write_err_comp(ep->util_ep.rx_cq,
+					ipc_entry->comp_ctx,
+					ipc_entry->comp_flags,
+					ipc_entry->cmd->hdr.tag, ret);
+	} else {
+		ret = smr_complete_rx(ep, ipc_entry->comp_ctx,
+				      ipc_entry->cmd->hdr.op,
+				      ipc_entry->comp_flags,
+				      ipc_entry->cmd->hdr.size,
+				      ipc_entry->iov[0].iov_base,
+				      ipc_entry->cmd->hdr.rx_id,
+				      ipc_entry->cmd->hdr.tag,
+				      ipc_entry->cmd->hdr.cq_data);
+	}
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process rx completion\n");
