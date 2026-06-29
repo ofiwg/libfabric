@@ -754,11 +754,14 @@ static int opx_getinfo_set_nic(int hfi, struct fi_info *info)
 
 static void opx_getinfo_set_ctx_counts(int hfi, struct fi_info *info)
 {
-	uint32_t ctx_cnt = opx_domain_get_ctx_cnt(hfi);
+	uint32_t ctx_cnt     = opx_domain_get_ctx_cnt(hfi);
+	uint32_t ppn	     = opx_query_local_rank_count();
+	int	 num_hfis    = opx_hfi_get_num_units();
+	uint32_t ppn_per_hfi = (num_hfis > 1) ? MAX(1, ppn / (uint32_t) num_hfis) : ppn;
 
-	info->domain_attr->ep_cnt     = ctx_cnt;
-	info->domain_attr->tx_ctx_cnt = ctx_cnt;
-	info->domain_attr->rx_ctx_cnt = ctx_cnt;
+	info->domain_attr->ep_cnt     = ctx_cnt / ppn_per_hfi;
+	info->domain_attr->tx_ctx_cnt = ctx_cnt / ppn_per_hfi;
+	info->domain_attr->rx_ctx_cnt = ctx_cnt / ppn_per_hfi;
 }
 
 static int opx_getinfo_dup_global(int hfi, struct fi_info **info, struct fi_info **info_tail)
