@@ -339,14 +339,18 @@ struct opx_domain_deferred_work {
 	uint64_t	  unused;
 } __attribute__((__aligned__(32))) __attribute__((__packed__));
 
+#define FI_OPX_DEFAULT_DOMAIN_CTX_CNT 160
+
+uint32_t opx_domain_get_ctx_cnt(int hfi);
+
 static inline uint32_t fi_opx_domain_get_tx_max(struct fid_domain *domain)
 {
-	return 160;
+	return opx_domain_get_ctx_cnt(0);
 }
 
 static inline uint32_t fi_opx_domain_get_rx_max(struct fid_domain *domain)
 {
-	return 160;
+	return opx_domain_get_ctx_cnt(0);
 }
 
 int opx_hfisvc_mr_deferred_open(struct opx_domain_deferred_work *work);
