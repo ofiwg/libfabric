@@ -546,7 +546,7 @@ static ssize_t smr_progress_ipc(struct smr_ep *ep, struct smr_cmd *cmd,
 	ptr = (char *) (uintptr_t) mr_entry->info.mapped_addr +
 		(uintptr_t) cmd->data.ipc_info.offset;
 
-	if (cmd->data.ipc_info.iface == FI_HMEM_ROCR) {
+	if (ofi_hmem_async_copy_enabled(cmd->data.ipc_info.iface)) {
 		ret = smr_ipc_async_copy(ep, cmd, rx_entry, mr_entry, iov,
 					 iov_count, ptr);
 		if (ret)
