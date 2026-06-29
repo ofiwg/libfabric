@@ -342,6 +342,7 @@ struct opx_domain_deferred_work {
 #define FI_OPX_DEFAULT_DOMAIN_CTX_CNT 160
 
 uint32_t opx_domain_get_ctx_cnt(int hfi);
+uint32_t opx_query_local_rank_count(void);
 
 static inline uint32_t fi_opx_domain_get_tx_max(struct fid_domain *domain)
 {

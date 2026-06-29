@@ -215,6 +215,23 @@ uint32_t opx_domain_get_ctx_cnt(int hfi)
 	return ctx_cnt ? ctx_cnt : FI_OPX_DEFAULT_DOMAIN_CTX_CNT;
 }
 
+uint32_t opx_query_local_rank_count(void)
+{
+	const char *e;
+
+	if ((((e = getenv("MPI_LOCALNRANKS")) && *e)) || (((e = getenv("OMPI_COMM_WORLD_LOCAL_SIZE")) && *e)) ||
+	    (((e = getenv("LOCAL_WORLD_SIZE")) && *e)) || (((e = getenv("SLURM_NTASKS_PER_NODE")) && *e)) ||
+	    (((e = getenv("CCL_LOCAL_SIZE")) && *e))) {
+		char	     *ep;
+		unsigned long val = strtoul(e, &ep, 10);
+		if (ep != e && val > 0) {
+			return (uint32_t) val;
+		}
+	}
+
+	return 1;
+}
+
 int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 {
 	struct fi_domain_attr *attr;
@@ -224,10 +241,12 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 		goto err;
 	}
 
-	uint32_t       ppn	  = 1; /* TODO */
-	const unsigned ctx_cnt	  = opx_domain_get_ctx_cnt(0);
-	const unsigned tx_ctx_cnt = ctx_cnt / ppn;
-	const unsigned rx_ctx_cnt = ctx_cnt / ppn;
+	const uint32_t ppn	   = opx_query_local_rank_count();
+	const unsigned ctx_cnt	   = opx_domain_get_ctx_cnt(0);
+	const int      num_hfis	   = opx_hfi_get_num_units();
+	const uint32_t ppn_per_hfi = (num_hfis > 1) ? MAX(1, ppn / (uint32_t) num_hfis) : ppn;
+	const unsigned tx_ctx_cnt  = ctx_cnt / ppn_per_hfi;
+	const unsigned rx_ctx_cnt  = ctx_cnt / ppn_per_hfi;
 
 	attr->domain = NULL;
 	attr->name   = strdup(FI_OPX_DOMAIN_NAME);
@@ -241,7 +260,7 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->mr_key_size      = sizeof(uint64_t);
 	attr->cq_data_size     = FI_OPX_REMOTE_CQ_DATA_SIZE;
 	attr->cq_cnt	       = (size_t) -1;
-	attr->ep_cnt	       = ctx_cnt / ppn;
+	attr->ep_cnt	       = ctx_cnt / ppn_per_hfi;
 	attr->tx_ctx_cnt       = tx_ctx_cnt;
 	attr->rx_ctx_cnt       = rx_ctx_cnt;
 
