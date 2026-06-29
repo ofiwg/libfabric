@@ -413,7 +413,7 @@ void test_efa_rdm_rxe_post_local_read_or_queue_impl(struct efa_resource *resourc
 			assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 1);
 		}
 		/* The internal txe must be cleaned up for a failed read. */
-		assert_true(dlist_empty(&efa_rdm_ep->txe_list));
+		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 	}
 
 	/* The clone variant uses a dedicated endpoint*/
