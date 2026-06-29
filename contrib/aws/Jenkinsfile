@@ -340,7 +340,7 @@ pipeline {
                     def stages = [:]
                     def timeout = "--timeout 90"
                     def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
-                    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID ${test_suite_pkg}"
+                    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID ${test_suite_pkg} --use-prebuilt-ami-with-efa-installer true"
                     def pr_ci_tests = "--test-list test_pr_ci_fabtests test_run_efa_unit_tests"
                     def pr_ci_tests_hpc = "--test-list test_pr_ci_fabtests test_pr_ci_imb test_run_efa_unit_tests"
 
