@@ -119,6 +119,7 @@ static int ofi_hmem_system_dev_reg_copy(uint64_t handle, void *dest,
 struct ofi_hmem_ops hmem_ops[] = {
 	[FI_HMEM_SYSTEM] = {
 		.initialized = true,
+		.async_copy_enabled = false,
 		.init = ofi_hmem_init_noop,
 		.cleanup = ofi_hmem_cleanup_noop,
 		.copy_to_hmem = ofi_memcpy,
@@ -145,15 +146,16 @@ struct ofi_hmem_ops hmem_ops[] = {
 	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
+		.async_copy_enabled = false,
 		.init = cuda_hmem_init,
 		.cleanup = cuda_hmem_cleanup,
 		.copy_to_hmem = cuda_copy_to_dev,
 		.copy_from_hmem = cuda_copy_from_dev,
-		.create_async_copy_event = ofi_no_create_async_copy_event,
-		.free_async_copy_event = ofi_no_free_async_copy_event,
-		.async_copy_to_hmem = ofi_no_async_memcpy,
-		.async_copy_from_hmem = ofi_no_async_memcpy,
-		.async_copy_query = ofi_no_async_copy_query,
+		.create_async_copy_event = cuda_create_async_copy_event,
+		.free_async_copy_event = cuda_free_async_copy_event,
+		.async_copy_to_hmem = cuda_async_copy_to_dev,
+		.async_copy_from_hmem = cuda_async_copy_from_dev,
+		.async_copy_query = cuda_async_copy_query,
 		.is_addr_valid = cuda_is_addr_valid,
 		.get_handle = cuda_get_handle,
 		.open_handle = cuda_open_handle,
@@ -172,6 +174,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,
+		.async_copy_enabled = false,
 		.init = rocr_hmem_init,
 		.cleanup = rocr_hmem_cleanup,
 		.copy_to_hmem = rocr_copy_to_dev,
@@ -199,6 +202,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
+		.async_copy_enabled = false,
 		.init = ze_hmem_init,
 		.cleanup = ze_hmem_cleanup,
 		.copy_to_hmem = ze_hmem_copy,
@@ -226,6 +230,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 	},
 	[FI_HMEM_NEURON] = {
 		.initialized = false,
+		.async_copy_enabled = false,
 		.init = neuron_hmem_init,
 		.cleanup = neuron_hmem_cleanup,
 		.copy_to_hmem = neuron_copy_to_dev,
@@ -252,6 +257,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 	},
 	[FI_HMEM_SYNAPSEAI] = {
 		.initialized = false,
+		.async_copy_enabled = false,
 		.init = synapseai_init,
 		.cleanup = synapseai_cleanup,
 		.copy_to_hmem = synapseai_copy_to_hmem,
@@ -683,6 +689,22 @@ void ofi_hmem_init(void)
 		if (disable_p2p == 1)
 			ofi_hmem_disable_p2p = true;
 	}
+
+	ofi_hmem_set_async_copy_enabled();
+}
+
+void ofi_hmem_set_async_copy_enabled(void)
+{
+	int enable = 1;
+
+	if (ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
+		fi_param_get_bool(NULL, "hmem_cuda_enable_async_copy",
+				  &enable);
+		hmem_ops[FI_HMEM_CUDA].async_copy_enabled = enable;
+	}
+
+	if (ofi_hmem_is_initialized(FI_HMEM_ROCR))
+		hmem_ops[FI_HMEM_ROCR].async_copy_enabled = true;
 }
 
 void ofi_hmem_cleanup(void)
