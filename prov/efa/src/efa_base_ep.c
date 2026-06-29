@@ -451,16 +451,16 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 }
 
 /**
- * @brief Map ofi_cntr_index to ibv_comp_cntr_attach_op bit
+ * @brief Map ofi_cntr_index to ibv_qp_attach_comp_cntr_op bit
  */
 #if HAVE_EFADV_CREATE_COMP_CNTR
 static const uint32_t efa_cntr_index_to_ibv_op[] = {
-	[CNTR_TX]     = IBV_COMP_CNTR_ATTACH_OP_SEND,
-	[CNTR_RX]     = IBV_COMP_CNTR_ATTACH_OP_RECV,
-	[CNTR_RD]     = IBV_COMP_CNTR_ATTACH_OP_RDMA_READ,
-	[CNTR_WR]     = IBV_COMP_CNTR_ATTACH_OP_RDMA_WRITE,
-	[CNTR_REM_RD] = IBV_COMP_CNTR_ATTACH_OP_REMOTE_RDMA_READ,
-	[CNTR_REM_WR] = IBV_COMP_CNTR_ATTACH_OP_REMOTE_RDMA_WRITE,
+	[CNTR_TX]     = IBV_QP_ATTACH_COMP_CNTR_OP_SEND,
+	[CNTR_RX]     = IBV_QP_ATTACH_COMP_CNTR_OP_RECV,
+	[CNTR_RD]     = IBV_QP_ATTACH_COMP_CNTR_OP_RDMA_READ,
+	[CNTR_WR]     = IBV_QP_ATTACH_COMP_CNTR_OP_RDMA_WRITE,
+	[CNTR_REM_RD] = IBV_QP_ATTACH_COMP_CNTR_OP_REMOTE_RDMA_READ,
+	[CNTR_REM_WR] = IBV_QP_ATTACH_COMP_CNTR_OP_REMOTE_RDMA_WRITE,
 };
 
 /**
@@ -478,7 +478,7 @@ static int efa_base_ep_attach_comp_cntrs(struct efa_base_ep *base_ep,
 {
 	struct util_cntr *util_cntr;
 	struct efa_cntr *efa_cntr;
-	struct ibv_comp_cntr_attach_attr attr;
+	struct ibv_qp_attach_comp_cntr_attr attr;
 	int i, err;
 
 	for (i = 0; i < CNTR_CNT; i++) {
@@ -489,7 +489,7 @@ static int efa_base_ep_attach_comp_cntrs(struct efa_base_ep *base_ep,
 		efa_cntr = container_of(util_cntr, struct efa_cntr, util_cntr);
 		if (!efa_cntr->ibv_comp_cntr)
 			continue;
-		attr = (struct ibv_comp_cntr_attach_attr){
+		attr = (struct ibv_qp_attach_comp_cntr_attr){
 			.comp_mask = 0,
 			.op_mask = efa_cntr_index_to_ibv_op[i],
 		};
