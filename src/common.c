@@ -2124,6 +2124,17 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 		    (ifa->ifa_addr->sa_family != AF_INET6)))
 			continue;
 
+		/* Skip VPN/PPP tunnels unless explicitly requested. IFF_POINTOPOINT
+		 * is not defined on Windows, so guard accordingly. */
+#ifdef IFF_POINTOPOINT
+		if (!iface && (ifa->ifa_flags & IFF_POINTOPOINT)) {
+			FI_DBG(prov, FI_LOG_CORE,
+				"Skip point-to-point interface (%s)\n",
+				ifa->ifa_name);
+			continue;
+		}
+#endif /* IFF_POINTOPOINT */
+
 		addr_entry = calloc(1, sizeof(*addr_entry));
 		if (!addr_entry)
 			continue;
