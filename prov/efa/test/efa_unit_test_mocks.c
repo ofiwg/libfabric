@@ -883,21 +883,21 @@ int efa_mock_ibv_destroy_comp_cntr_return_mock(struct ibv_comp_cntr *cntr)
 
 int __wrap_ibv_qp_attach_comp_cntr(struct ibv_qp *qp,
 				   struct ibv_comp_cntr *comp_cntr,
-				   struct ibv_comp_cntr_attach_attr *attr)
+				   struct ibv_qp_attach_comp_cntr_attr *attr)
 {
 	return g_efa_unit_test_mocks.ibv_qp_attach_comp_cntr(qp, comp_cntr, attr);
 }
 
 int efa_mock_ibv_qp_attach_comp_cntr_return_mock(struct ibv_qp *qp,
 						  struct ibv_comp_cntr *comp_cntr,
-						  struct ibv_comp_cntr_attach_attr *attr)
+						  struct ibv_qp_attach_comp_cntr_attr *attr)
 {
 	return 0;
 }
 
 int efa_mock_ibv_qp_attach_comp_cntr_return_enotsup(struct ibv_qp *qp,
 						     struct ibv_comp_cntr *comp_cntr,
-						     struct ibv_comp_cntr_attach_attr *attr)
+						     struct ibv_qp_attach_comp_cntr_attr *attr)
 {
 	return ENOTSUP;
 }
