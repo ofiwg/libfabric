@@ -6137,7 +6137,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 			rzv_comp_1->access_key = access_key_1;
 
 			struct hfisvc_client_completion completion_0 = {
-				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.flags		= OPX_HFISVC_CMPL_CQ,
 				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[0],
 				.cq.app_context = (uint64_t) rzv_comp,
 			};
@@ -6153,7 +6153,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 			}
 
 			struct hfisvc_client_completion completion_1 = {
-				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.flags		= OPX_HFISVC_CMPL_CQ,
 				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[1],
 				.cq.app_context = (uint64_t) rzv_comp_1,
 			};
@@ -6184,7 +6184,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		} else {
 			rzv_comp->access_key			   = access_key;
 			struct hfisvc_client_completion completion = {
-				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.flags		= OPX_HFISVC_CMPL_CQ,
 				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
 				.cq.app_context = (uint64_t) rzv_comp,
 			};

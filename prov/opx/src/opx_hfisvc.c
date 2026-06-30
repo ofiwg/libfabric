@@ -101,7 +101,7 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		recv_rzv_comp->tid_entry_count = 0;
 
 		struct hfisvc_client_completion completion = {
-			.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+			.flags		= OPX_HFISVC_CMPL_CQ,
 			.cq.app_context = (uint64_t) recv_rzv_comp,
 			.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
 		};
