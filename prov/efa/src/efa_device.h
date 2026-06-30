@@ -9,6 +9,7 @@
 #include <infiniband/efadv.h>
 #include <stdbool.h>
 #include "ofi_lock.h"
+#include "ofi_atom.h"
 
 struct efa_qp;
 
@@ -22,7 +23,12 @@ struct efa_device {
 	uint32_t		max_rdma_size;
 	struct fi_info		*rdm_info;
 	struct fi_info		*dgram_info;
-	/* QP table and lock for device-level QP management */
+	/* QP table and lock for device-level QP management.
+	 * qp_table_initialized guards against use-after-free during fi_fini:
+	 * the library destructor may free qp_table while other threads are
+	 * still accessing the qp_table.
+	 */
+	ofi_atomic32_t		qp_table_initialized;
 	struct efa_qp		**qp_table;
 	uint8_t			*qp_gen_table;
 	size_t			qp_table_sz_m1;

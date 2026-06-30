@@ -181,6 +181,10 @@ static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 	if (!data_path_direct->cur_cqe)
 		return ENOENT;
 
+	if (OFI_UNLIKELY(!ofi_atomic_load_explicit32(
+		&efa_domain->device->qp_table_initialized, memory_order_acquire)))
+		return ENOENT;
+
 	qpn = data_path_direct->cur_cqe->qp_num;
 	data_path_direct->cur_qp =
 		efa_domain->device->qp_table[qpn & efa_domain->device->qp_table_sz_m1];

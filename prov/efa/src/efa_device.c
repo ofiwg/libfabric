@@ -212,6 +212,8 @@ int efa_device_construct_data(struct efa_device *efa_device,
 	if (err)
 		goto err_close;
 
+	ofi_atomic_store_explicit32(&efa_device->qp_table_initialized, 1,
+				    memory_order_release);
 	return 0;
 
 err_close:
@@ -249,6 +251,9 @@ err_close:
 void efa_device_destruct(struct efa_device *device)
 {
 	int err;
+
+	ofi_atomic_store_explicit32(&device->qp_table_initialized, 0,
+				    memory_order_release);
 
 	if (device->qp_table) {
 		free(device->qp_table);

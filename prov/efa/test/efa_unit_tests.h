@@ -129,6 +129,8 @@ void test_ah_lru_eviction_implicit_av_insert(void **state);
 /* end efa_unit_test_av.c */
 
 void test_efa_device_construct_error_handling(void **state);
+void test_efa_device_qp_table_initialized_after_construct(void **state);
+void test_efa_device_ep_close_after_table_invalidated(void **state);
 void test_efa_rdm_ep_ignore_missing_host_id_file(void **state);
 void test_efa_rdm_ep_has_valid_host_id(void **state);
 void test_efa_rdm_ep_ignore_short_host_id(void **state);

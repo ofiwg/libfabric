@@ -95,7 +95,9 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 		if (rx_cq != tx_cq)
 			efa_cq_invalidate_cur_wq(rx_cq, qp);
 		efa_qp_destruct(qp);
-		domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1] = NULL;
+		if (OFI_LIKELY(ofi_atomic_load_explicit32(
+			&domain->device->qp_table_initialized, memory_order_acquire)))
+			domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1] = NULL;
 		base_ep->qp = NULL;
 	}
 
@@ -545,6 +547,10 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 		rq_wq->shifted_gen = qp->data_path_direct_qp.gen << __builtin_ctz(rq_wq->desc_mask + 1);
 	}
 #endif
+
+	if (OFI_UNLIKELY(!ofi_atomic_load_explicit32(
+		&base_ep->domain->device->qp_table_initialized, memory_order_acquire)))
+		return -FI_ESHUTDOWN;
 
 	base_ep->domain->device->qp_table[qp->qp_num & base_ep->domain->device->qp_table_sz_m1] = qp;
 
