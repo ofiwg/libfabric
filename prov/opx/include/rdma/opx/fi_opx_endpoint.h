@@ -4486,8 +4486,10 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			return -FI_EAGAIN;
 		}
 
+		/* MP EGR benefits host/CUDA paths, but other device memory should use rendezvous. */
 		if (total_len <= opx_tx->mp_eager_max_payload_bytes && is_contiguous &&
-		    !fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps) && (caps & FI_TAGGED)) {
+		    !fi_opx_hfi1_tx_is_shm(opx_ep, addr, caps) && (caps & FI_TAGGED) &&
+		    (hmem_iface == FI_HMEM_SYSTEM || hmem_iface == FI_HMEM_CUDA)) {
 			assert(total_len >= opx_tx->mp_eager_min_payload_bytes);
 			rc = opx_hfi1_tx_send_try_mp_egr(ep, buf, len, addr, tag, context, data, lock_required,
 							 override_flags, tx_op_flags, caps, reliability,
