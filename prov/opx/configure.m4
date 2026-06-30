@@ -323,6 +323,28 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 					AC_MSG_WARN([HFISVC DMABUF support not defined, building HFISVC without DMABUF])
 				])
 				AC_DEFINE_UNQUOTED([HAVE_HFISVC_DMABUF], [$hfi1_dmabuf_found], [hfisvc dmabuf support availability])
+
+				dnl The CQ completion flag macro was renamed between
+				dnl rdma-core-internal versions. Earlier versions define
+				dnl HFISVC_CLIENT_COMPLETION_FLAG_CQ in <infiniband/hfisvc_client.h>;
+				dnl later versions moved it to the kernel uapi as HFI1_BULKSVC_CMPL_CQ
+				dnl in <rdma/hfi/hfi1_user.h>. Detect which name is available so the
+				dnl OPX source can build against either rdma-core-internal version.
+				AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+								[[#include <infiniband/hfisvc_client.h>]],
+								[[unsigned long opx_cmpl_cq_flag = HFISVC_CLIENT_COMPLETION_FLAG_CQ; (void) opx_cmpl_cq_flag;]])],
+								[opx_hfisvc_cmpl_cq_found=1],
+								[opx_hfisvc_cmpl_cq_found=0]
+							)
+
+				AS_CASE([$opx_hfisvc_cmpl_cq_found],
+				[1], [
+					AC_MSG_NOTICE([hfisvc_client.h defines HFISVC_CLIENT_COMPLETION_FLAG_CQ])
+				],
+				[
+					AC_MSG_NOTICE([HFISVC_CLIENT_COMPLETION_FLAG_CQ not defined, using HFI1_BULKSVC_CMPL_CQ])
+				])
+				AC_DEFINE_UNQUOTED([HAVE_HFISVC_CLIENT_COMPLETION_FLAG_CQ], [$opx_hfisvc_cmpl_cq_found], [hfisvc client CQ completion flag macro name (1 = legacy HFISVC_CLIENT_COMPLETION_FLAG_CQ, 0 = HFI1_BULKSVC_CMPL_CQ)])
 			])
 			AC_DEFINE_UNQUOTED(HAVE_HFI1_DIRECT_VERBS, [$hfi1dv_happy], [hfi1 direct verbs enabled])
 			AC_DEFINE_UNQUOTED([HAVE_HFISVC], [$hfisvc_happy], [hfisvc support availability])
