@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 #include <string>
 
+using testing::Test;
 using testing::TestWithParam;
 using testing::ValuesIn;
 
@@ -37,16 +38,18 @@ static std::string rtm_variant_name(enum efa_test_rtm_variant v)
 	return s;
 }
 
-/**
- * @brief Covers the RTM TX-init functions (efa_rdm_pke_init_*rtm), which stamp
- * a packet header and copy/describe payload from a txe.
+/*
+ * Shared setup for the RTM TX tests: a bare RDM "efa" endpoint. No MockEfa is
+ * installed — the init/sent/completion paths fire no wrapped calls, and the
+ * peer insert and endpoint teardown use the real AH alloc/destroy. Each test's
+ * C bridge does the build, the field/counter read-back, and cleanup.
  */
-class EfaRdmPkeRtmInitTest : public TestWithParam<enum efa_test_rtm_variant>
+class EfaRdmPkeRtmFixture
 {
 	protected:
 	struct efa_resource resource = {};
 
-	void SetUp() override
+	void construct()
 	{
 		memset(&resource, 0, sizeof(resource));
 		efa_test_resource_construct(
@@ -55,9 +58,28 @@ class EfaRdmPkeRtmInitTest : public TestWithParam<enum efa_test_rtm_variant>
 		ASSERT_NE(resource.ep, nullptr);
 	}
 
-	void TearDown() override
+	void destruct()
 	{
 		efa_test_resource_destruct(&resource);
+	}
+};
+
+/**
+ * @brief Covers the RTM TX-init functions (efa_rdm_pke_init_*rtm), which stamp
+ * a packet header and copy/describe payload from a txe.
+ */
+class EfaRdmPkeRtmInitTest :
+	public EfaRdmPkeRtmFixture,
+	public TestWithParam<enum efa_test_rtm_variant>
+{
+	protected:
+	void SetUp() override
+	{
+		construct();
+	}
+	void TearDown() override
+	{
+		destruct();
 	}
 };
 
@@ -133,3 +155,126 @@ INSTANTIATE_TEST_SUITE_P(
 	[](const testing::TestParamInfo<enum efa_test_rtm_variant> &info) {
 		return rtm_variant_name(info.param);
 	});
+
+/* @brief Covers the TX sent and send-completion handlers */
+class EfaRdmPkeRtmSentTest : public EfaRdmPkeRtmFixture, public Test
+{
+	protected:
+	void SetUp() override
+	{
+		construct();
+	}
+	void TearDown() override
+	{
+		destruct();
+	}
+};
+
+/* A non-boundary chunk */
+static constexpr size_t kChunk = 4096;
+
+TEST_F(EfaRdmPkeRtmSentTest, medium_sent_and_completion_boundary)
+{
+	struct efa_test_rtm_sent_result res;
+
+	/* sent: bytes_sent advances by the payload, no completion. */
+	efa_test_rtm_sent_build(resource.ep, resource.av,
+				EFA_TEST_RTM_MEDIUM_MSG, EFA_TEST_RTM_OP_SENT,
+				/*payload_size=*/kChunk,
+				/*bytes_already=*/kChunk, 0, &res);
+	EXPECT_EQ(res.bytes_sent, 2 * kChunk);
+
+	/* request completion mid-transfer: bytes_acked advances but no
+	 * completion. */
+	efa_test_rtm_sent_build(
+		resource.ep, resource.av, EFA_TEST_RTM_MEDIUM_MSG,
+		EFA_TEST_RTM_OP_COMPLETION, /*payload_size=*/kChunk,
+		/*bytes_already=*/0, 0, &res);
+	EXPECT_EQ(res.bytes_acked, kChunk);
+	EXPECT_FALSE(res.send_completed);
+	EXPECT_TRUE(res.txe_on_ope_list);
+	EXPECT_FALSE(res.cq_has_completion);
+
+	/* completion at the boundary: the final byte completes the op, frees
+	 * the txe, and writes the SEND completion to the CQ. */
+	efa_test_rtm_sent_build(resource.ep, resource.av,
+				EFA_TEST_RTM_MEDIUM_MSG,
+				EFA_TEST_RTM_OP_COMPLETION,
+				/*payload_size=*/EFA_TEST_RTM_LONG_LEN,
+				/*bytes_already=*/0, 0, &res);
+	EXPECT_TRUE(res.send_completed);
+	EXPECT_FALSE(res.txe_on_ope_list);
+	EXPECT_TRUE(res.cq_has_completion);
+}
+
+TEST_F(EfaRdmPkeRtmSentTest, longcts_sent_and_completion_boundary)
+{
+	struct efa_test_rtm_sent_result res;
+
+	efa_test_rtm_sent_build(resource.ep, resource.av,
+				EFA_TEST_RTM_LONGCTS_MSG, EFA_TEST_RTM_OP_SENT,
+				/*payload_size=*/kChunk,
+				/*bytes_already=*/kChunk, 0, &res);
+	EXPECT_EQ(res.bytes_sent, 2 * kChunk);
+
+	efa_test_rtm_sent_build(resource.ep, resource.av,
+				EFA_TEST_RTM_LONGCTS_MSG,
+				EFA_TEST_RTM_OP_COMPLETION,
+				/*payload_size=*/EFA_TEST_RTM_LONG_LEN,
+				/*bytes_already=*/0, 0, &res);
+	EXPECT_TRUE(res.send_completed);
+	EXPECT_TRUE(res.cq_has_completion);
+}
+
+/**
+ * @brief longread "sent" bumps the domain's in-flight read count
+ */
+TEST_F(EfaRdmPkeRtmSentTest, longread_sent_bumps_in_flight_read)
+{
+	struct efa_test_rtm_sent_result res;
+
+	efa_test_rtm_sent_build(resource.ep, resource.av,
+				EFA_TEST_RTM_LONGREAD_MSG, EFA_TEST_RTM_OP_SENT,
+				/*payload_size=*/0, /*bytes_already=*/0, 0,
+				&res);
+	EXPECT_EQ(res.num_read_msg_in_flight, 1u);
+}
+
+/**
+ * @brief runtread sent accrues bytes_sent and the peer's runt-in-flight
+ * bytes, and bumps the in-flight read count only for the first segment
+ */
+TEST_F(EfaRdmPkeRtmSentTest, runtread_sent_first_segment)
+{
+	struct efa_test_rtm_sent_result res;
+
+	efa_test_rtm_sent_build(resource.ep, resource.av,
+				EFA_TEST_RTM_RUNTREAD_MSG, EFA_TEST_RTM_OP_SENT,
+				/*payload_size=*/kChunk, /*bytes_already=*/0,
+				/*seg_offset=*/0, &res);
+	EXPECT_EQ(res.bytes_sent, kChunk);
+	EXPECT_EQ(res.num_runt_bytes_in_flight, (int64_t) kChunk);
+	EXPECT_EQ(res.num_read_msg_in_flight, 1u);
+
+	efa_test_rtm_sent_build(resource.ep, resource.av,
+				EFA_TEST_RTM_RUNTREAD_MSG, EFA_TEST_RTM_OP_SENT,
+				/*payload_size=*/kChunk, /*bytes_already=*/0,
+				/*seg_offset=*/kChunk, &res);
+	EXPECT_EQ(res.num_read_msg_in_flight, 0u);
+}
+
+TEST_F(EfaRdmPkeRtmSentTest, runtread_completion_boundary)
+{
+	struct efa_test_rtm_sent_result res;
+
+	/* num_runt_bytes_in_flight is set to payload_size, so a
+	 * completion drains it back to zero and completes the op. */
+	efa_test_rtm_sent_build(resource.ep, resource.av,
+				EFA_TEST_RTM_RUNTREAD_MSG,
+				EFA_TEST_RTM_OP_COMPLETION,
+				/*payload_size=*/EFA_TEST_RTM_LONG_LEN,
+				/*bytes_already=*/0, 0, &res);
+	EXPECT_TRUE(res.send_completed);
+	EXPECT_EQ(res.num_runt_bytes_in_flight, 0);
+	EXPECT_TRUE(res.cq_has_completion);
+}
