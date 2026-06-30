@@ -283,8 +283,7 @@ static int ucx_getinfo(uint32_t version, const char *node,
 	if (status != FI_SUCCESS)
 		tls = auto_val;
 
-	if (strncmp(tls, auto_val, strlen(auto_val)) != 0 &&
-	    getenv("UCX_TLS"))
+	if (strncmp(tls, auto_val, strlen(auto_val)))
 		setenv("UCX_TLS", tls, 0);
 
 	status = fi_param_get(&ucx_prov, "ep_flush", &ucx_descriptor.ep_flush);
