@@ -54,6 +54,18 @@
 #include <infiniband/hfi1dv.h>
 #include <infiniband/verbs.h>
 #include <infiniband/hfisvc_client.h>
+
+/*
+ * The CQ completion flag macro was renamed between rdma-core-internal
+ * versions. configure detects which name the installed hfisvc_client.h
+ * provides (HAVE_HFISVC_CLIENT_COMPLETION_FLAG_CQ). OPX code uses
+ * OPX_HFISVC_CMPL_CQ so it builds against either version.
+ */
+#if HAVE_HFISVC_CLIENT_COMPLETION_FLAG_CQ
+#define OPX_HFISVC_CMPL_CQ HFISVC_CLIENT_COMPLETION_FLAG_CQ
+#else
+#define OPX_HFISVC_CMPL_CQ HFI1_BULKSVC_CMPL_CQ
+#endif
 #endif
 
 #ifdef __cplusplus

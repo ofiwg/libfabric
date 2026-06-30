@@ -1215,7 +1215,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			recv_rzv_comp->tid_entry_count = 0;
 
 			struct hfisvc_client_completion completion = {
-				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.flags		= OPX_HFISVC_CMPL_CQ,
 				.cq.app_context = (uint64_t) recv_rzv_comp,
 				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
 			};
@@ -1317,7 +1317,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			recv_rzv_comp->tid_entry_count = 0;
 
 			struct hfisvc_client_completion completion = {
-				.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+				.flags		= OPX_HFISVC_CMPL_CQ,
 				.cq.app_context = (uint64_t) recv_rzv_comp,
 				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
 			};

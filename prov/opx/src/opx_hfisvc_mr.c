@@ -38,7 +38,7 @@ void opx_hfisvc_mr_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_
 	assert(opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_NOT_REGISTERED);
 
 	struct hfisvc_client_completion completion = {
-		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+		.flags		= OPX_HFISVC_CMPL_CQ,
 		.cq.handle	= opx_domain->hfisvc.mr_completion_queue,
 		.cq.app_context = (uint64_t) opx_mr,
 	};
@@ -112,13 +112,13 @@ int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_
 	}
 
 	struct hfisvc_client_completion enable_completion = {
-		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+		.flags		= OPX_HFISVC_CMPL_CQ,
 		.cq.handle	= opx_domain->hfisvc.mr_completion_queue,
 		.cq.app_context = (uint64_t) opx_mr,
 	};
 
 	struct hfisvc_client_completion mr_notification = {
-		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+		.flags		= OPX_HFISVC_CMPL_CQ,
 		.cq.handle	= opx_domain->hfisvc.mr_completion_queue,
 		.cq.app_context = (uint64_t) opx_mr,
 	};
@@ -156,7 +156,7 @@ void opx_hfisvc_mr_disable_access_key(struct fi_opx_domain *opx_domain, struct f
 	assert(opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPENED);
 
 	struct hfisvc_client_completion disable_completion = {
-		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+		.flags		= OPX_HFISVC_CMPL_CQ,
 		.cq.handle	= opx_domain->hfisvc.mr_completion_queue,
 		.cq.app_context = (uint64_t) opx_mr,
 	};
@@ -184,7 +184,7 @@ void opx_hfisvc_mr_deregister_mr(struct fi_opx_domain *opx_domain, struct fi_opx
 	assert(opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_DEREGISTER);
 
 	struct hfisvc_client_completion completion = {
-		.flags		= HFISVC_CLIENT_COMPLETION_FLAG_CQ,
+		.flags		= OPX_HFISVC_CMPL_CQ,
 		.cq.handle	= opx_domain->hfisvc.mr_completion_queue,
 		.cq.app_context = (uint64_t) opx_mr,
 	};
