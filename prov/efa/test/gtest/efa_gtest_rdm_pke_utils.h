@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
-/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All
+ * rights reserved. */
 
-/*
- * C-linkage bridge for the RTM packet-entry tests (efa_gtest_rdm_pke_rtm.cc).
+/* C-linkage bridge for the RTM packet-entry tests (efa_gtest_rdm_pke_rtm.cc).
  * See efa_gtest_common_helpers.h for why this exists */
 
 #ifndef EFA_GTEST_RDM_PKE_UTILS_H
@@ -76,7 +76,7 @@ enum efa_test_rtm_variant {
 		EFA_TEST_RTM_FAM_EAGER | EFA_TEST_RTM_ZERO_HDR,
 };
 
-// Header fields read from the built packet
+/* Header fields read from the built packet */
 struct efa_test_rtm_init_result {
 	ssize_t ret; /* return code of the init function */
 	int base_type;
@@ -115,6 +115,40 @@ void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 int efa_test_rtm_pkt_type(enum efa_test_rtm_variant variant);
 
 int efa_test_get_tx_min_credits(void);
+
+/* --- TX sent / send-completion handler bridge --- */
+enum efa_test_rtm_sent_op {
+	EFA_TEST_RTM_OP_SENT,
+	EFA_TEST_RTM_OP_COMPLETION,
+};
+
+struct efa_test_rtm_sent_result {
+	uint64_t bytes_sent;
+	uint64_t bytes_acked;
+	uint64_t num_read_msg_in_flight;
+	int64_t num_runt_bytes_in_flight;
+	int send_completed;
+	int cq_has_completion;
+	int txe_on_ope_list;
+};
+
+/**
+ * @brief Drive one TX sent/completion handler and report observable counters.
+ *
+ * @param[in]	ep	RDM efa endpoint
+ * @param[in]	av	the endpoint's AV
+ * @param[in]	variant	selects family/tagged/dc
+ * @param[in]	op	sent vs send-completion handler
+ * @param[in]	payload_size	bytes carried by this packet
+ * @param[in]	bytes_already	txe->bytes_sent/bytes_acked before the call
+ * @param[in]	seg_offset	runtread seg_offset header field (ignored else)
+ * @param[out]	out	observable counters after the call
+ */
+void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
+			     enum efa_test_rtm_variant variant,
+			     enum efa_test_rtm_sent_op op, size_t payload_size,
+			     size_t bytes_already, size_t seg_offset,
+			     struct efa_test_rtm_sent_result *out);
 
 #ifdef __cplusplus
 }
