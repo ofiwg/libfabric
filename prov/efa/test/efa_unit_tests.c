@@ -175,8 +175,12 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_ah_lru_eviction_implicit_av_insert, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_av.c */
 
-		/* begin efa_unit_test_ep.c */
+		/* begin efa_unit_test_device.c */
 		cmocka_unit_test_setup_teardown(test_efa_device_construct_error_handling, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_device_finalize_skips_active_device, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		/* end efa_unit_test_device.c */
+
+		/* begin efa_unit_test_ep.c */
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_ignore_missing_host_id_file, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_has_valid_host_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_ignore_short_host_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
