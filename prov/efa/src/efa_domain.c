@@ -71,6 +71,7 @@ int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
 		    strcmp((const char *) (domain_name + strlen(device_name)),
 		           domain_name_suffix) == 0) {
 			efa_domain->device = &g_efa_selected_device_list[i];
+			ofi_atomic_inc32(&efa_domain->device->ref_cnt);
 			break;
 		}
 	}

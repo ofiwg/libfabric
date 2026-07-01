@@ -167,6 +167,8 @@ int efa_device_construct_data(struct efa_device *efa_device,
 
 	assert(efa_device->ibv_ctx);
 
+	ofi_atomic_initialize32(&efa_device->ref_cnt, 0);
+
 	/* Initialize QP table */
 	efa_device->qp_table = NULL;
 	qp_table_size = roundup_power_of_two(efa_device->ibv_attr.max_qp);
@@ -420,9 +422,19 @@ err_free:
 void efa_device_list_finalize(void)
 {
 	int i;
+	bool any_active = false;
 
 	if (g_efa_selected_device_list) {
 		for (i = 0; i < g_efa_selected_device_cnt; i++) {
+			if (ofi_atomic_get32(&g_efa_selected_device_list[i].ref_cnt) > 0) {
+				EFA_WARN(FI_LOG_DOMAIN,
+					 "Device %d still has active references (ref_cnt=%d), "
+					 "skipping teardown for this device.\n",
+					 i, ofi_atomic_get32(&g_efa_selected_device_list[i].ref_cnt));
+				any_active = true;
+				continue;
+			}
+
 			ofi_genlock_destroy(&g_efa_selected_device_list[i].qp_table_lock);
 
 #ifndef _WIN32
@@ -433,17 +445,20 @@ void efa_device_list_finalize(void)
 			efa_device_destruct(&g_efa_selected_device_list[i]);
 		}
 
-		free(g_efa_selected_device_list);
-		g_efa_selected_device_list = NULL;
+		if (!any_active) {
+			free(g_efa_selected_device_list);
+			g_efa_selected_device_list = NULL;
+			g_efa_selected_device_cnt = 0;
+		}
 	}
 
-	g_efa_selected_device_cnt = 0;
-
-	if (g_efa_ibv_gid_list) {
-		free(g_efa_ibv_gid_list);
-		g_efa_ibv_gid_list = NULL;
+	if (!any_active) {
+		if (g_efa_ibv_gid_list) {
+			free(g_efa_ibv_gid_list);
+			g_efa_ibv_gid_list = NULL;
+		}
+		g_efa_ibv_gid_cnt = 0;
 	}
-	g_efa_ibv_gid_cnt = 0;
 }
 
 /**
