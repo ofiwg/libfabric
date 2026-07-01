@@ -84,6 +84,7 @@ static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
 		    strcmp((const char *) (domain_name + strlen(device_name)),
 		           domain_name_suffix) == 0) {
 			efa_domain->device = &g_efa_selected_device_list[i];
+			ofi_atomic_inc32(&efa_domain->device->ref_cnt);
 			break;
 		}
 	}
@@ -409,6 +410,9 @@ static int efa_domain_close(fid_t fid)
 
 	if (efa_domain->info)
 		fi_freeinfo(efa_domain->info);
+
+	if (efa_domain->device)
+		ofi_atomic_dec32(&efa_domain->device->ref_cnt);
 
 	ofi_genlock_destroy(&efa_domain->srx_lock);
 	free(efa_domain);

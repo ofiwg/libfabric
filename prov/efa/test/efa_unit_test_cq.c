@@ -687,11 +687,14 @@ void test_rdm_cq_create_error_handling(void **state)
 	expect_function_call(efa_mock_create_cq_ex_return_null);
 
 	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	ofi_atomic_initialize32(&efa_device.ref_cnt, 0);
+	ofi_atomic_inc32(&efa_device.ref_cnt);
 	efa_domain->device = &efa_device;
 
 	assert_int_not_equal(fi_cq_open(resource->domain, &cq_attr, &resource->cq, NULL), 0);
 	/* set cq as NULL to avoid double free by fi_close in cleanup stage */
 	resource->cq = NULL;
+	efa_domain->device = &g_efa_selected_device_list[0];
 	efa_device_destruct(&efa_device);
 	ibv_free_device_list(ibv_device_list);
 }
