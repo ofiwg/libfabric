@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2026 ETH Zurich. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -307,7 +308,8 @@ static ssize_t rxd_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void
 static struct rxd_x_entry *rxd_tx_entry_init_msg(struct rxd_ep *ep, fi_addr_t addr,
 					uint32_t op, const struct iovec *iov,
 					size_t iov_count, uint64_t tag,
-					uint64_t data, uint32_t flags, void *context)
+					uint64_t data, uint32_t flags, void *context,
+					void **desc)
 {
 	struct rxd_x_entry *tx_entry;
 	struct rxd_domain *rxd_domain = rxd_ep_domain(ep);
@@ -316,7 +318,8 @@ static struct rxd_x_entry *rxd_tx_entry_init_msg(struct rxd_ep *ep, fi_addr_t ad
 	void *ptr;
 
 	tx_entry = rxd_tx_entry_init_common(ep, addr, op, iov, iov_count,
-					    tag, data, flags, context, &base_hdr, &ptr);
+					    tag, data, flags, context, desc,
+					    &base_hdr, &ptr);
 	if (!tx_entry)
 		return NULL;
 
@@ -376,7 +379,7 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 
 	tx_entry = rxd_tx_entry_init_msg(rxd_ep, rxd_addr, op, iov, iov_count,
-					 tag, data, rxd_flags, NULL);
+					 tag, data, rxd_flags, NULL, NULL);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
 		goto out;
@@ -393,7 +396,7 @@ out:
 ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 			       size_t iov_count, fi_addr_t addr, uint64_t tag,
 			       uint64_t data, void *context, uint32_t op,
-			       uint32_t rxd_flags)
+			       uint32_t rxd_flags, void **desc)
 {
 	struct rxd_x_entry *tx_entry;
 	ssize_t ret = -FI_EAGAIN;
@@ -420,7 +423,7 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 
 	tx_entry = rxd_tx_entry_init_msg(rxd_ep, rxd_addr, op, iov, iov_count,
-					 tag, data, rxd_flags, context);
+					 tag, data, rxd_flags, context, desc);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
 		goto out;
@@ -449,7 +452,7 @@ static ssize_t rxd_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	return rxd_ep_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
 				   msg->addr, 0, msg->data, msg->context,
 				   RXD_MSG, rxd_tx_flags(flags |
-				   ep->util_ep.tx_msg_flags));
+				   ep->util_ep.tx_msg_flags), msg->desc);
 
 }
 
@@ -462,7 +465,7 @@ static ssize_t rxd_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void
 
 	return rxd_ep_generic_sendmsg(ep, iov, count, dest_addr, 0,
 				      0, context, RXD_MSG,
-				      ep->tx_flags);
+				      ep->tx_flags, desc);
 }
 
 static ssize_t rxd_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -478,7 +481,7 @@ static ssize_t rxd_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	return rxd_ep_generic_sendmsg(ep, &iov, 1, dest_addr, 0,
 				      0, context, RXD_MSG,
-				      ep->tx_flags);
+				      ep->tx_flags, &desc);
 }
 
 static ssize_t rxd_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -510,7 +513,7 @@ static ssize_t rxd_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 
 	return rxd_ep_generic_sendmsg(ep, &iov, 1, dest_addr, 0, data, context,
 				      RXD_MSG, ep->tx_flags |
-				      RXD_REMOTE_CQ_DATA);
+				      RXD_REMOTE_CQ_DATA, &desc);
 }
 
 static ssize_t rxd_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
