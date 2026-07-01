@@ -450,6 +450,7 @@ void test_efa_rdm_pke_flag_tracking(void **state);
 void test_efa_rdm_pke_proc_matched_eager_rtm_error(void **state);
 void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error(void **state);
 void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(void **state);
+void test_efa_rdm_pke_proc_matched_mulreq_rtm_runtread_trunc_chain(void **state);
 void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void **state);
 /* end of efa_unit_test_pke.c */
 
