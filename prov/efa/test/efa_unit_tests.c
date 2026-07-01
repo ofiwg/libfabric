@@ -3,6 +3,12 @@
 
 #include "efa_unit_tests.h"
 
+// Harmless suppression: persistent allocation from glibc outside of EFA provider
+const char *__lsan_default_suppressions(void)
+{
+	return "leak:_dlerror_run\n";
+}
+
 struct efa_env orig_efa_env = {0};
 struct efa_hmem_info g_efa_hmem_info_backup[OFI_HMEM_MAX];
 
