@@ -167,6 +167,9 @@ void efa_domain_destruct(struct efa_domain *efa_domain)
 {
 	int ret;
 
+	if (efa_domain->device)
+		ofi_atomic_dec32(&efa_domain->device->ref_cnt);
+
 	efa_domain_remove_from_global_list(efa_domain);
 	efa_domain_cleanup_ah_map(efa_domain);
 
