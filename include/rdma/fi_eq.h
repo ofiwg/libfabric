@@ -200,6 +200,7 @@ enum fi_cq_format {
 	FI_CQ_FORMAT_MSG,
 	FI_CQ_FORMAT_DATA,
 	FI_CQ_FORMAT_TAGGED,
+	FI_CQ_FORMAT_RPC,
 };
 
 struct fi_cq_entry {
@@ -230,14 +231,33 @@ struct fi_cq_tagged_entry {
 	uint64_t		tag;
 };
 
+struct fi_cq_rpc_entry {
+	void			*op_context;
+	uint64_t		flags;
+	size_t			len;
+	void			*buf;
+	uint64_t		data;
+	union {
+		uint64_t	tag;
+		uint64_t	rpc_id;
+	};
+	int			timeout;
+};
+
 struct fi_cq_err_entry {
 	void			*op_context;
 	uint64_t		flags;
 	size_t			len;
 	void			*buf;
 	uint64_t		data;
-	uint64_t		tag;
-	size_t			olen;
+	union {
+		uint64_t	tag;
+		uint64_t	rpc_id;
+	};
+	union {
+		size_t		olen;
+		int		timeout;  /* when used as fi_cq_rpc_entry */
+	};
 	int			err;
 	int			prov_errno;
 	/* err_data is available until the next time the CQ is read */
