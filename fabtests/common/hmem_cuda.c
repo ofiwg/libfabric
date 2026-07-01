@@ -548,12 +548,9 @@ int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 #if HAVE_CUDA_DMABUF
 	CUdeviceptr aligned_ptr;
 	CUresult cuda_ret;
-	int ret;
 
 	size_t aligned_size;
 	size_t host_page_size = sysconf(_SC_PAGESIZE);
-	void *base_addr;
-	size_t total_size;
 	unsigned long long flags;
 
 	if (!dmabuf_supported) {
@@ -561,12 +558,16 @@ int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 		return -FI_EOPNOTSUPP;
 	}
 
-	ret = ft_cuda_get_base_addr(buf, len, &base_addr, &total_size);
-	if (ret)
-		return ret;
-
-	aligned_ptr = (uintptr_t) ft_get_page_start(base_addr, host_page_size);
-	aligned_size = (uintptr_t) ft_get_page_end((void *) ((uintptr_t) base_addr + total_size - 1),
+	/*
+	 * Use the caller-provided addr and size directly instead of
+	 * querying cuMemGetAddressRange(). For CUDA VMM allocations with
+	 * multiple physical segments mapped into a contiguous VA range,
+	 * cuMemGetAddressRange() only returns the size of the individual
+	 * segment containing the pointer, not the full reserved VA range.
+	 * cuMemGetHandleForAddressRange only requires page align.
+	 */
+	aligned_ptr = (uintptr_t) ft_get_page_start(buf, host_page_size);
+	aligned_size = (uintptr_t) ft_get_page_end((void *) ((uintptr_t) buf + len - 1),
 						    host_page_size) - (uintptr_t) aligned_ptr + 1;
 
 	flags = 0;
