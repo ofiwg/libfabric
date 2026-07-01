@@ -178,6 +178,22 @@ bool efa_rdm_peer_support_unsolicited_write_recv(struct efa_rdm_peer *peer)
 }
 
 /**
+ * @brief whether the peer advertises EFA_RDM_PEER_ERROR_PKT support
+ *
+ * Negotiated via the handshake. A peer without this bit cannot decode a
+ * PEER_ERROR_PKT, so we must not emit one to it (the caller then falls
+ * back to the legacy "leak the txe / write a local CQ error" behavior).
+ *
+ * @param[in] peer	a peer from whom we have received a HANDSHAKE
+ */
+static inline
+bool efa_rdm_peer_support_peer_error(struct efa_rdm_peer *peer)
+{
+	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) &&
+	       (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_PEER_ERROR);
+}
+
+/**
  * @brief determines whether a peer needs the endpoint to include
  * raw address int the req packet header.
  *
@@ -246,6 +262,10 @@ int efa_rdm_peer_recvwin_queue_or_append_pke(struct efa_rdm_pke *pkt_entry, uint
 void efa_rdm_peer_move_overflow_pke_to_recvwin(struct efa_rdm_peer *peer);
 
 void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
+
+bool efa_rdm_peer_abort_ooo_msg(struct efa_rdm_peer *peer, uint32_t msg_id);
+
+int efa_rdm_peer_queue_aborted_msg_marker(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry, uint32_t msg_id);
 
 size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
 

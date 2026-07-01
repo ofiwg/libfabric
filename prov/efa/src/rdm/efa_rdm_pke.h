@@ -19,6 +19,7 @@
 #define EFA_RDM_PKE_IN_PEER_OUTSTANDING_TX_PKTS	BIT_ULL(7) /**< this packet entry is in peer->outstanding_tx_pkts list */
 #define EFA_RDM_PKE_IN_OPE_QUEUED_PKTS	BIT_ULL(8) /**< this packet entry is in ope->queued_pkts list */
 #define EFA_RDM_PKE_HELD_BY_PROGRESS	BIT_ULL(9) /**< this rx-pool packet entry is being held by progress engine and counted in ep->efa_rx_pkts_held */
+#define EFA_RDM_PKE_ABORTED		BIT_ULL(10) /**< this OOO pke is an abort marker for a peer-aborted message */
 
 #define EFA_RDM_PKE_ALIGNMENT		128
 

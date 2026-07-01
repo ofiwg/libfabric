@@ -11,7 +11,7 @@ MR_ABORT_NUM_MRS = 2046
 
 # --- Test: abort (RMA) ---
 @pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"])  # TODO add test for efa fabric
+@pytest.mark.fabric(params=["efa-direct", "efa"])
 @pytest.mark.parametrize("rma_op", ["write", "read", "writedata"])
 @pytest.mark.parametrize("cancel_order", ["reverse", "random"])
 @pytest.mark.parametrize("close_side", ["initiator", "target"])
@@ -41,7 +41,7 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
 
 # --- Test: partial (2 MRs on same buffer) ---
 @pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
+@pytest.mark.fabric(params=["efa-direct", "efa"])
 @pytest.mark.parametrize("rma_op", ["write", "read", "writedata"])
 @pytest.mark.parametrize("message_size", [
     4096,
@@ -102,6 +102,7 @@ def determine_settings_for_proto(protocol, memory_type_symm, fabric):
         "EAGER": EAGER_SIZE,
         "MEDIUM": MEDIUM_SIZE,
         "LONGCTS": LARGE_SIZE,
+        "LONGREAD": LARGE_SIZE,
         "RUNTREAD-LONGREAD": LARGE_SIZE,
         "RUNTREAD-NOREAD": RUNT_ONLY_SIZE,
     }
@@ -131,6 +132,20 @@ def determine_settings_for_proto(protocol, memory_type_symm, fabric):
         # Disable read-base; size above medium_max forces LONGCTS.
         proto_env = ("FI_EFA_USE_DEVICE_RDMA=0 "
                      "FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE=65536")
+    elif protocol == "LONGREAD":
+        # Pure long read: read-base enabled (USE_DEVICE_RDMA=1) with the
+        # runt budget set to 0, so no runt segments ride the RTM and the
+        # entire payload is pulled by the receiver via RDMA READ. The
+        # LONGREAD RTM is a pure read-request (no source-MR payload), so
+        # closing the source MR cannot flush it before the receiver matches:
+        # the recv is always matched and its tail READ then fails against
+        # the invalidated source rkey, yielding exactly one FI_ECANCELED.
+        # This is the only protocol owed a completion under -X (see
+        # abort_owes_rx_completion). Run with -H (HOMOGENEOUS_PEERS) so the
+        # sender does not stall on a handshake before selecting it.
+        proto_env = ("FI_EFA_USE_DEVICE_RDMA=1 "
+                     "FI_EFA_RUNT_SIZE=0 "
+                     "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE=65536")
     elif protocol == "RUNTREAD-LONGREAD":
         # Read-base enabled with a runt budget smaller than the message
         # (RUNT_SIZE=131072 < 1 MiB). Under the fi_mr_abort flood this
@@ -162,26 +177,34 @@ def abort_owes_rx_completion(protocol):
     completion on the target for this protocol (the -X flag of
     fi_mr_abort).
 
-    Owed: LONGCTS and RUNTREAD-LONGREAD. The receiver matches the recv
-    and takes partial data (a CTS handshake, or a runt + tail RDMA READ)
-    before the abort, so the provider must complete that matched rxe with
-    a clean FI_ECANCELED.
+    Owed: LONGREAD only. The LONGREAD RTM is a pure read-request control
+    packet -- it carries the read iov, no inline user data, and its send WR
+    uses the internal TX pool MR rather than the user's source MR. So
+    closing the source MR cannot flush the RTM: it is always delivered, the
+    receiver always matches the recv and posts the tail RDMA READ, and that
+    READ then fails against the invalidated source rkey -- driving the
+    matched rxe to a clean FI_ECANCELED. Exactly one terminal completion is
+    therefore guaranteed.
 
-    Not owed: EAGER, MEDIUM, RUNTREAD-NOREAD (runt-only). An aborted
-    message either delivered nothing or rides REQ packets with no CTS /
-    no READ; the receiver is not required to produce a completion (a stray
-    FI_ECANCELED may still arrive and is tolerated, but is not required).
+    Not owed: EAGER, MEDIUM, LONGCTS, RUNTREAD-LONGREAD, RUNTREAD-NOREAD.
+    Every one of these carries source-MR user data in its RTM (EAGER/MEDIUM
+    full or first segment, LONGCTS first segment, RUNTREAD runt segments),
+    so the RTM itself can be flushed or gen-check cancelled before the
+    receiver ever matches the recv. When that happens the receiver owes no
+    completion, so the recv-completion count is indeterminate and -X (which
+    blocks until reaped == required) would hang the target. These use the
+    slack path: a stray FI_ECANCELED is tolerated but never required.
     """
-    return protocol in ("LONGCTS", "RUNTREAD-LONGREAD")
+    return protocol in ("LONGREAD",)
 
 
 # --- Test: send ---
 @pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
+@pytest.mark.fabric(params=["efa-direct", "efa"])
 @pytest.mark.parametrize("cancel_order", ["reverse", "random"])
 @pytest.mark.parametrize("close_side", ["initiator"]) # TODO add target
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
-@pytest.mark.parametrize("protocol", ["EAGER", "MEDIUM", "LONGCTS", "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"])
+@pytest.mark.parametrize("protocol", ["EAGER", "MEDIUM", "LONGCTS", "LONGREAD", "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"])
 def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
                        ops_per_mr, protocol, memory_type_symm):
     if fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
@@ -198,9 +221,17 @@ def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
         pytest.skip("efa-direct max send size is 8KB")
 
     owe_flag = " -X" if abort_owes_rx_completion(protocol) else ""
+    # LONGREAD is an extra-feature (read-based) protocol. Pass -H to set
+    # HOMOGENEOUS_PEERS on the endpoint, which makes it ignore the handshake
+    # requirement before selecting a read-based protocol. Without it the
+    # first sends are queued pending the peer handshake and the abort race is
+    # nondeterministic; skipping the handshake pins LONGREAD from the first
+    # send so the target reliably owes -- and can enforce via -X -- exactly
+    # one completion per send.
+    homogeneous_flag = " -H" if protocol == "LONGREAD" else ""
     command = (f"fi_mr_abort -T send -C {cancel_order}"
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
-               f" -S {message_size}{owe_flag}  -A ep_first")
+               f" -S {message_size}{owe_flag}{homogeneous_flag}  -A ep_first")
     test = ClientServerTest(cmdline_args, command, timeout=360, fabric=fabric,
                             memory_type=memory_type_symm, additional_env=env)
     test.run()
@@ -208,11 +239,11 @@ def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
 
 # --- Test: tagged ---
 @pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"])  # TODO add test for efa fabric
+@pytest.mark.fabric(params=["efa-direct", "efa"])
 @pytest.mark.parametrize("cancel_order", ["reverse", "random"])
 @pytest.mark.parametrize("close_side", ["initiator"]) # TODO add target
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
-@pytest.mark.parametrize("protocol", ["EAGER", "MEDIUM", "LONGCTS", "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"])
+@pytest.mark.parametrize("protocol", ["EAGER", "MEDIUM", "LONGCTS", "LONGREAD", "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"])
 def test_mr_abort_tagged(cmdline_args, fabric, cancel_order, close_side,
                          ops_per_mr, protocol, memory_type_symm):
     if fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
@@ -227,9 +258,13 @@ def test_mr_abort_tagged(cmdline_args, fabric, cancel_order, close_side,
     env, message_size = determine_settings_for_proto(protocol, memory_type_symm, fabric)
 
     owe_flag = " -X" if abort_owes_rx_completion(protocol) else ""
+    # See test_mr_abort_send: -H sets HOMOGENEOUS_PEERS so LONGREAD ignores
+    # the handshake and is selected from the first send, letting the target
+    # enforce (via -X) exactly one completion per send.
+    homogeneous_flag = " -H" if protocol == "LONGREAD" else ""
     command = (f"fi_mr_abort -T tagged -C {cancel_order}"
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
-               f" -S {message_size}{owe_flag} -A ep_first")
+               f" -S {message_size}{owe_flag}{homogeneous_flag} -A ep_first")
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=fabric,
                             memory_type=memory_type_symm, additional_env=env)
     test.run()

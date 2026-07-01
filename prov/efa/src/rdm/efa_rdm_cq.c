@@ -771,8 +771,16 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 		case IBV_WC_RDMA_WRITE: /* fall through */
 		case IBV_WC_RDMA_READ:
 			assert(pkt_entry);
-			efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno);
+			/*
+			 * Bump gen before the handler: the peer-abort path can
+			 * recycle this buffer into a new in-flight PEER_ERROR_PKT
+			 * WR at the current gen, so bumping after would corrupt
+			 * that live packet and trip the wr_id gen check. All TX
+			 * paths bump before the handler; RECV paths repost after
+			 * the poll loop and bump after.
+			 */
 			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
+			efa_rdm_pke_handle_tx_error(pkt_entry, prov_errno);
 			break;
 		case IBV_WC_RECV: /* fall through */
 		case IBV_WC_RECV_RDMA_WITH_IMM:
@@ -808,8 +816,9 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 #if ENABLE_DEBUG
 			ep->send_comps++;
 #endif
-			efa_rdm_pke_handle_send_completion(pkt_entry);
+			/* Bump gen before the handler; see the TX error path above. */
 			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
+			efa_rdm_pke_handle_send_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV:
 			/* efa_rdm_cq_handle_recv_completion does additional work to determine the source
@@ -823,8 +832,9 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 		case IBV_WC_RDMA_READ:
 		case IBV_WC_RDMA_WRITE:
 			efa_rdm_ep_record_tx_op_completed(pkt_entry->ep, pkt_entry);
-			efa_rdm_pke_handle_rma_completion(pkt_entry);
+			/* Bump gen before the handler; see the TX error path above. */
 			efa_rdm_cq_increment_pkt_entry_gen(pkt_entry);
+			efa_rdm_pke_handle_rma_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(

@@ -8,6 +8,7 @@
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
+#include "efa_rdm_peer.h"
 
 #include "efa_rdm_tracepoint.h"
 
@@ -211,6 +212,12 @@ void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry)
 
 	ope = pkt_entry->ope;
 	assert(ope);
+
+	if (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
+		efa_rdm_rxe_release_peer_abort_if_drained(ope);
+		return;
+	}
+
 	if (ope->type == EFA_RDM_RXE) {
 		if (efa_rdm_rxe_cts_ready_for_release(ope))
 			efa_rdm_rxe_release(ope);
@@ -317,7 +324,18 @@ void efa_rdm_pke_handle_ctsdata_sent(struct efa_rdm_pke *pkt_entry)
 
 void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_rdm_ope *ope;
+	struct efa_rdm_ope *ope = pkt_entry->ope;
+	assert(ope);
+
+	/* An aborting txe's single completion + release are owned by the
+	 * peer-abort drain helper. Drive it here (this success completion is a
+	 * WR drain): a no-op until the txe's last WR drains, then it emits the
+	 * PEER_ERROR_PKT / writes the one completion. Never take the normal
+	 * success path (or the DC remote-ack release) for an aborting txe. */
+	if (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
+		efa_rdm_txe_progress_peer_abort_if_drained(ope);
+		return;
+	}
 
 	/* if this DATA packet is used by a DC protocol, the tx entry should
 	 * be only released when both all TX ops are done and the receipt
@@ -330,7 +348,6 @@ void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	ope = pkt_entry->ope;
 	ope->bytes_acked += efa_rdm_pke_get_ctsdata_hdr(pkt_entry)->seg_length;
 
 	if (ope->total_len == ope->bytes_acked)
@@ -565,6 +582,21 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 	} else {
 		assert(x_entry_type == EFA_RDM_RXE);
 		rxe = context_pkt_entry->ope;
+
+		/*
+		 * A long-read posts multiple READ WRs on one rxe; on a
+		 * source-MR cancel some fail and some succeed. The failed
+		 * one(s) marked the rxe peer-aborted, so a sibling that
+		 * still succeeds must NOT take the EOR / recv-completed path
+		 * (it would post a spurious EOR and a bogus success). The
+		 * error completion and free are deferred to the drain helper,
+		 * run here in case this is the last reference.
+		 */
+		if (rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
+			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
+			return;
+		}
+
 		rxe->bytes_read_completed += rma_context_pkt->seg_size;
 		assert(rxe->bytes_read_completed <= rxe->bytes_read_total_len);
 		if (rxe->bytes_read_completed == rxe->bytes_read_total_len) {
@@ -779,6 +811,279 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 				EFA_RDM_LONGCTS_MSGRTM_PKT;
 		efa_rdm_ope_post_send_or_queue(txe, txe->protocol);
 	}
+}
+
+/* PEER_ERROR packet related functions */
+
+/**
+ * @brief Initialize an EFA_RDM_PEER_ERROR_PKT packet entry's wiredata
+ *
+ * @param[out] pkt_entry  packet entry whose wiredata will be filled
+ * @param[in]  op_id      ope id owned by the packet's receiver
+ * @param[in]  ref_kind   how the receiver resolves op_id (EFA_RDM_PEER_ERROR_REF_*)
+ * @param[in]  prov_errno the prov_errno that triggered the abort
+ * @param[in]  connid     local endpoint's connection ID (qkey)
+ * @return     0 on success
+ */
+int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
+				uint32_t op_id, uint32_t ref_kind,
+				int prov_errno, uint32_t connid)
+{
+	struct efa_rdm_peer_error_hdr *err_hdr;
+
+	err_hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id = op_id;
+	err_hdr->ref_kind = ref_kind;
+	err_hdr->prov_errno = (uint32_t) prov_errno;
+	err_hdr->connid = connid;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+	return 0;
+}
+
+/**
+ * @brief Initialize a PEER_ERROR_PKT from a failing ope (rxe or txe).
+ *
+ * @param[out] pkt_entry packet entry whose wiredata will be filled
+ * @param[in]  ope       failing ope; ope->type selects direction
+ * @return     0 on success
+ */
+int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
+					struct efa_rdm_ope *ope)
+{
+	uint32_t op_id;
+	uint32_t ref_kind;
+	uint32_t connid;
+
+	/*
+	 * op_id identifies the transfer we're abandoning; ref_kind says how
+	 * the receiver reads it:
+	 *   rxe  -> REF_OPE_INDEX, rxe->tx_id (peer's txe, from the RTM)
+	 *   txe (LONGCTS, CTS processed) -> REF_OPE_INDEX, txe->rx_id (peer's
+	 *                                   rxe, from the CTS)
+	 *   txe (LONGCTS aborted pre-CTS) -> REF_MSG_ID_SKIP, msg_id (no rx_id
+	 *                                    known; receiver owes no completion)
+	 *   txe (medium/runtread/EAGER) -> REF_MSG_ID or REF_MSG_ID_SKIP, msg_id
+	 */
+	if (ope->type == EFA_RDM_RXE) {
+		ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
+		op_id = ope->tx_id;
+	} else {
+		assert(ope->type == EFA_RDM_TXE);
+		/*
+		 * msg_id-keyed aborts (EAGER / medium / runtread, and a LONGCTS
+		 * RTM aborted before its first CTS -- flagged with
+		 * EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID) pick the ref_kind from
+		 * bytes_acked:
+		 *   - bytes_acked == 0: nothing was delivered, so the receiver
+		 *     owes no completion -- REF_MSG_ID_SKIP only unblocks its
+		 *     reorder window past msg_id. EAGER always lands here (it
+		 *     never acks data); a pre-CTS LONGCTS abort always lands here
+		 *     too (no CTSDATA was acked); a runtread whose runt RTM(s)
+		 *     were all flushed/cancelled before any acked also lands here
+		 *     (no recv was matched).
+		 *   - bytes_acked > 0: the receiver took partial data and owes
+		 *     a FI_ECANCELED on the matched rxe -- REF_MSG_ID. A runtread
+		 *     that acked some runt segments before the abort lands here.
+		 * Everything else (a LONGCTS that reached OPE_SEND) carries the
+		 * receiver's rxe index, REF_OPE_INDEX. bytes_acked is final here:
+		 * emission only happens once every data WR has drained.
+		 */
+		if (efa_rdm_txe_peer_abort_uses_msg_id(ope) ||
+		    (ope->internal_flags & EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID)) {
+			ref_kind = (ope->bytes_acked == 0)
+				   ? EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP
+				   : EFA_RDM_PEER_ERROR_REF_MSG_ID;
+			op_id = ope->msg_id;
+		} else {
+			ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
+			op_id = ope->rx_id;
+		}
+	}
+
+	connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
+
+	efa_rdm_pke_set_ope(pkt_entry, ope);
+	pkt_entry->peer = ope->peer;
+	return efa_rdm_pke_init_peer_error(pkt_entry, op_id, ref_kind,
+					   ope->peer_error_prov_errno, connid);
+}
+
+/**
+ * @brief Receiver-side dispatcher for inbound EFA_RDM_PEER_ERROR_PKT.
+ *
+ * The packet is bidirectional; its op_id names a local ope, and the
+ * ope's type recovers the direction:
+ *   - EFA_RDM_TXE (LONGREAD): the receiver told us our send failed.
+ *     Decrement num_read_msg_in_flight (as EOR recv does on success),
+ *     write a clean TX CQ error (FI_ECANCELED / FI_EFA_ERR_PEER_ABORTED),
+ *     and release the txe.
+ *   - EFA_RDM_RXE (LONGCTS): the sender told us its source MR is gone.
+ *     Mark the matched rxe peer-aborted; at drain it gets the same
+ *     clean RX error and is reaped.
+ *
+ * Both directions consume the inbound packet via release_rx.
+ *
+ * @param[in] pkt_entry inbound PEER_ERROR_PKT to dispatch
+ */
+void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *ope;
+	int prov_errno;
+
+	ep = pkt_entry->ep;
+	err_hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	prov_errno = (int) err_hdr->prov_errno;
+
+	EFA_INFO(FI_LOG_CQ,
+		 "Received PEER_ERROR_PKT (op_id=%u prov_errno=%d %s)\n",
+		 err_hdr->op_id, prov_errno, efa_strerror(prov_errno));
+
+	/*
+	 * MSG_ID_SKIP direction (EAGER / medium / runtread that
+	 * delivered zero bytes): op_id is a per-peer msg_id whose message
+	 * was aborted at the source before any payload the receiver is owed
+	 * arrived. The receiver owes NO completion -- the sole purpose is to
+	 * advance the reorder window past an id that will never arrive, so
+	 * the messages queued behind it can be processed. Do NOT emit back
+	 * (the sender already knows).
+	 */
+	if (err_hdr->ref_kind == EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP) {
+		/*
+		 * Queue this packet into the reorder window as an abort marker so
+		 * the unchanged drain loop slides past the aborted msg_id. The
+		 * helper consumes pkt_entry (queues/holds/releases it); do not
+		 * touch it afterward.
+		 */
+		(void) efa_rdm_peer_queue_aborted_msg_marker(
+			pkt_entry->peer, ep, pkt_entry, err_hdr->op_id);
+		return;
+	}
+
+	/*
+	 * MSG_ID direction (medium): op_id is a per-peer msg_id, resolved
+	 * via the peer's rxe_map (pkt_entry->peer is set on the RX path).
+	 * A miss (unknown/stale msg_id, or no rxe ever built) is a clean
+	 * drop. Mark locally; do NOT emit back (the sender already knows).
+	 * A medium rxe has no outstanding WR, so the drain frees it now.
+	 */
+	if (err_hdr->ref_kind == EFA_RDM_PEER_ERROR_REF_MSG_ID) {
+		ope = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map,
+					     err_hdr->op_id);
+		/*
+		 * rxe_map only ever holds rxes, so the type check is
+		 * defensive; a NULL (miss) or non-rxe is a clean drop.
+		 */
+		if (OFI_UNLIKELY(!ope || ope->type != EFA_RDM_RXE)) {
+			/*
+			 * No rxe yet, but the msg_id may be buffered OOO in
+			 * the reorder window or overflow list. Abort it so
+			 * the window can advance past it.
+			 */
+			efa_rdm_peer_abort_ooo_msg(pkt_entry->peer,
+						   err_hdr->op_id);
+			efa_rdm_pke_release_rx(pkt_entry);
+			return;
+		}
+		if (ope->state == EFA_RDM_RXE_UNEXP) {
+			/*
+			 * No user op bound -> no CQ entry owed: release the
+			 * buffered segments, then the rxe (efa_rdm_rxe_release
+			 * frees peer_rxe via free_entry, then release_internal).
+			 */
+			if (ope->unexp_pkt) {
+				efa_rdm_pke_release_rx_list(ope->unexp_pkt);
+				ope->unexp_pkt = NULL;
+			}
+			efa_rdm_rxe_release(ope);
+			efa_rdm_pke_release_rx(pkt_entry);
+			return;
+		}
+		/*
+		 * Matched to a posted recv: a user op is bound, so this rxe is
+		 * owed a completion. A medium rxe has no outstanding WR, so
+		 * release_if_drained writes the completion now.
+		 */
+		efa_rdm_rxe_mark_peer_aborted(ope, prov_errno);
+		efa_rdm_rxe_release_peer_abort_if_drained(ope);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	/*
+	 * op_id is wire-supplied. ofi_bufpool_get_ibuf() does not
+	 * bounds-check its index and would return a bogus non-NULL
+	 * pointer (or a pointer to a freed/unallocated slot) for an
+	 * out-of-range or stale id, which the !ope check below cannot
+	 * catch. Validate the index against the pool first so a
+	 * malformed, duplicate, or stale PEER_ERROR_PKT cannot make us
+	 * act on an arbitrary ope.
+	 */
+	if (OFI_UNLIKELY(!ofi_bufpool_ibuf_is_valid(ep->base_ep.ope_pool,
+						    err_hdr->op_id))) {
+		EFA_WARN(FI_LOG_CQ,
+			 "PEER_ERROR_PKT op_id=%u out of range or no longer "
+			 "valid; dropping.\n", err_hdr->op_id);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	ope = ofi_bufpool_get_ibuf(ep->base_ep.ope_pool, err_hdr->op_id);
+	switch (ope->type) {
+	case EFA_RDM_TXE:
+		/* LONGREAD direction: the peer told us our send failed.
+		 * The PEER_ERROR packet gets sent instead of the EOR packet,
+		 * and the num_read_msg_in_flight would get decremented upon
+		 * receipt of the EOR packet, mirror book keeping.
+		 */
+		if (OFI_LIKELY(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight > 0))
+			efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight -= 1;
+
+		/*
+		 * Defer the free to WR drain, exactly like the local
+		 * sender-side abort path. Mark the txe peer-aborted and set
+		 * EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED so the drain helper will free it
+		 * after there are no more outstanding work requests
+		 * (i.e.. RUNTING READ with READ where read fails, PEER_ERROR has been
+		 * received and runts are still in progress).
+		 */
+		ope->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING |
+				       EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED;
+
+		/* Surface the dedicated peer-abort code on the
+		 * sender's TX CQ that the receiver wrote on its RX CQ,
+		 * rather than the raw internal device prov_errno.
+		 *
+		 * handle_error sees PEER_ABORT_PENDING already set and drives
+		 * the drain itself: it defers the free to WR drain (the drain
+		 * helper only releases -- EMITTED set, nothing emitted back --
+		 * once no outstanding WR still references this txe).
+		 */
+		efa_rdm_txe_handle_error(ope, FI_ECANCELED,
+					 FI_EFA_ERR_PEER_ABORTED);
+		break;
+	case EFA_RDM_RXE:
+		/* LONGCTS direction: the peer told us their MR is gone.
+		 * Mark our matched rxe peer-aborted, and attempt to
+		 * release the rxe via the drain helper -- a no-op if
+		 * any outstanding WR's reference this txe
+		 */
+		efa_rdm_rxe_mark_peer_aborted(ope, prov_errno);
+		efa_rdm_rxe_release_peer_abort_if_drained(ope);
+		break;
+	default:
+		EFA_WARN(FI_LOG_CQ,
+			 "PEER_ERROR_PKT op_id=%u resolved to ope of "
+			 "unexpected type %d; dropping.\n",
+			 err_hdr->op_id, ope->type);
+		break;
+	}
+
+	efa_rdm_pke_release_rx(pkt_entry);
 }
 
 /* receipt packet related functions */

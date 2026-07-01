@@ -193,6 +193,16 @@ struct efa_rdm_ope {
 	 * stays valid across re-posts. 0 if none selected yet.
 	 */
 	uint32_t protocol;
+
+	/**
+	 * @brief Provider errno to attach when emitting an EFA_RDM_PEER_ERROR_PKT
+	 *
+	 * Set by efa_rdm_rxe_emit_peer_error (LONGREAD direction), by the LONGCTS
+	 * sender-side abort path, and read by efa_rdm_pke_init_peer_error to
+	 * populate the wire header's prov_errno field. Has no meaning if no
+	 * PEER_ERROR_PKT is being emitted from this ope.
+	 */
+	int peer_error_prov_errno;
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
@@ -248,6 +258,19 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  *              efa_rdm_pke_handle_receipt_send_completion.
  */
 #define EFA_RDM_RXE_ACK_IN_FLIGHT BIT_ULL(10)
+
+/**
+ * @brief The peer-abort machinery owns this ope's drain-gated cleanup.
+ *
+ * Set on the first peer-abort failure (rxe: efa_rdm_rxe_mark_peer_aborted();
+ * txe: the sender-side abort paths) -- one shared bit since an ope is only ever
+ * one type, sticky until free. Once every WR using the ope as wr_id has drained
+ * (efa_outstanding_tx_ops == 0, nothing queued), the type's drain helper writes
+ * the deferred FI_ECANCELED / FI_EFA_ERR_PEER_ABORTED completion and frees the
+ * ope. The rxe emits its PEER_ERROR_PKT eagerly at mark time; the txe defers the
+ * emit/suppress into its drain helper.
+ */
+#define EFA_RDM_OPE_PEER_ABORT_PENDING BIT_ULL(20)
 
 /**
  * @brief flag to indicate a txe has already written an cq error entry for RNR
@@ -334,6 +357,28 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 #define EFA_RDM_OPE_RECV_COMPLETED		BIT_ULL(19)
 
+/**
+ * @brief flag to indicate the ope has already emitted its PEER_ERROR_PKT.
+ */
+#define EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED	BIT_ULL(21)
+
+/**
+ * @brief flag to indicate a sender-side LONGCTS peer-abort must be
+ *        signalled to the receiver by per-peer msg_id rather than by the
+ *        receiver's ope index.
+ *
+ * Set in efa_rdm_txe_handle_error() when a LONGCTS two-sided RTM is
+ * aborted before its first CTS arrives (state still EFA_RDM_TXE_REQ), so
+ * txe->rx_id (the receiver's rxe index, learned only from the CTS) is not
+ * yet valid. efa_rdm_pke_init_peer_error_for_ope() reads this flag and
+ * encodes the PEER_ERROR_PKT with op_id = txe->msg_id and
+ * EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP (bytes_acked is always 0 in this
+ * case -- no CTSDATA was acked), so the receiver marks the msg_id aborted
+ * and advances its reorder window without producing a completion (no recv
+ * was ever matched, since no CTS was exchanged).
+ */
+#define EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID	BIT_ULL(22)
+
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
@@ -348,6 +393,14 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
 
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
+
+void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno);
+
+void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno);
+
+void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe);
+
+void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe);
 
 void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe);
 
