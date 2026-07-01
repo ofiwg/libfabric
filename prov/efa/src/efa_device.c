@@ -167,6 +167,8 @@ int efa_device_construct_data(struct efa_device *efa_device,
 
 	assert(efa_device->ibv_ctx);
 
+	ofi_atomic_initialize32(&efa_device->ref_cnt, 0);
+
 	/* Initialize QP table */
 	efa_device->qp_table = NULL;
 	qp_table_size = roundup_power_of_two(efa_device->ibv_attr.max_qp);
@@ -422,6 +424,16 @@ void efa_device_list_finalize(void)
 	int i;
 
 	if (g_efa_selected_device_list) {
+		for (i = 0; i < g_efa_selected_device_cnt; i++) {
+			if (ofi_atomic_get32(&g_efa_selected_device_list[i].ref_cnt) > 0) {
+				EFA_WARN(FI_LOG_DOMAIN,
+					 "Device %d still has active references (ref_cnt=%d), "
+					 "skipping device list teardown.\n",
+					 i, ofi_atomic_get32(&g_efa_selected_device_list[i].ref_cnt));
+				return;
+			}
+		}
+
 		for (i = 0; i < g_efa_selected_device_cnt; i++) {
 			ofi_genlock_destroy(&g_efa_selected_device_list[i].qp_table_lock);
 
