@@ -9,6 +9,7 @@
 #include <infiniband/efadv.h>
 #include <stdbool.h>
 #include "ofi_lock.h"
+#include "ofi_atom.h"
 
 struct efa_qp;
 
@@ -33,6 +34,11 @@ struct efa_device {
 	uint32_t		max_comp_cntr;
 	uint64_t		comp_count_max_value;
 	uint64_t		err_count_max_value;
+	/* Refcount of open domains using this device. efa_device_list_finalize
+	 * skips destruction when ref_cnt > 0, preventing use-after-free when
+	 * fi_fini races with threads still inside the provider.
+	 */
+	ofi_atomic32_t		ref_cnt;
 };
 
 int efa_device_list_initialize(void);

@@ -187,4 +187,7 @@ void efa_domain_destruct(struct efa_domain *efa_domain)
 		fi_freeinfo(efa_domain->info);
 		efa_domain->info = NULL;
 	}
+
+	if (efa_domain->device)
+		ofi_atomic_dec32(&efa_domain->device->ref_cnt);
 }
