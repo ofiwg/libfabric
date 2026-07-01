@@ -218,8 +218,6 @@ AS_IF([test x"$enable_coverage" != x"no"],
                        LDFLAGS="$save_LDFLAGS"
                        AC_MSG_ERROR([--coverage requested but compiler/linker support not found.])])])
 
-AM_CONDITIONAL([ENABLE_COVERAGE], [test x"$enable_coverage" != x"no"])
-
 dnl Checks for header files.
 dnl This is only necessary for Autoconf <v2.70.
 m4_version_prereq([2.70],
