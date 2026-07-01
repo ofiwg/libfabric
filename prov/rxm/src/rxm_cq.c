@@ -89,9 +89,19 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
 static void rxm_replace_rx_buf(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_rx_buf *new_rx_buf;
+	struct fid_ep *rx_ep;
 	int ret;
 
-	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->rx_ep);
+	if (!rx_buf->ep->msg_srx && rx_buf->conn) {
+		if (!rx_buf->conn->msg_ep)
+			return;
+
+		rx_ep = rx_buf->conn->msg_ep;
+	} else {
+		rx_ep = rx_buf->rx_ep;
+	}
+
+	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_ep);
 	if (!new_rx_buf)
 		return;
 
