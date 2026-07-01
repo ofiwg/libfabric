@@ -100,8 +100,8 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 	}
 
 	uint32_t	    n, i, t;
-	struct fi_opx_addr *input	= (struct fi_opx_addr *) addr;
-	const unsigned	    ep_tx_count = opx_av->ep_tx_count;
+	struct fi_opx_addr *input = (struct fi_opx_addr *) addr;
+	struct fi_opx_ep   *ep_tx = opx_av->ep_tx;
 
 	switch (opx_av->type) {
 	case FI_AV_TABLE:
@@ -157,8 +157,8 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 
 				/* Match remote peer's RX plane gid_hi to a local TX context */
 				int matched = 0;
-				if (opx_av->ep_tx[0] != NULL) {
-					struct fi_opx_ep *ep = opx_av->ep_tx[0];
+				if (ep_tx != NULL) {
+					struct fi_opx_ep *ep = ep_tx;
 					for (int j = 0; j < ep->num_tx_contexts; j++) {
 						if (ep->tx_contexts[j]->gid_hi ==
 						    input[n].planes[OPX_PRIMARY_PLANE].gid_hi) {
@@ -220,8 +220,7 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 			}
 
 			struct fi_opx_extended_addr *output_ext = NULL;
-			if ((opx_av->type == FI_AV_MAP) &&
-			    (opx_av->ep_tx[0] != NULL && opx_av->ep_tx[0]->daos_info.hfi_rank_enabled)) {
+			if ((opx_av->type == FI_AV_MAP) && (ep_tx != NULL && ep_tx->daos_info.hfi_rank_enabled)) {
 				struct fi_opx_extended_addr *input_ext = (struct fi_opx_extended_addr *) addr;
 				if (posix_memalign((void **) &output_ext, FI_OPX_CACHE_LINE_SIZE,
 						   sizeof(struct fi_opx_extended_addr) * count)) {
@@ -240,8 +239,8 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 
 			size_t opx_addr_idx = (opx_av->type == FI_AV_TABLE) ? 0 : opx_av->addr_count;
 
-			for (i = 0; i < ep_tx_count; ++i) {
-				rc = fi_opx_ep_tx_connect(opx_av->ep_tx[i], count + base_count, &opx_addr[opx_addr_idx],
+			if (ep_tx != NULL) {
+				rc = fi_opx_ep_tx_connect(ep_tx, count + base_count, &opx_addr[opx_addr_idx],
 							  output_ext);
 				if (OFI_UNLIKELY(rc)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_EAGAIN\n");
@@ -397,7 +396,7 @@ static const char *fi_opx_av_straddr(struct fid_av *av, const void *addr, char *
 	char		  tmp[100];
 	int		  n;
 
-	if (opx_av->ep_tx[0] == NULL || !opx_av->ep_tx[0]->daos_info.hfi_rank_enabled) {
+	if (opx_av->ep_tx == NULL || !opx_av->ep_tx->daos_info.hfi_rank_enabled) {
 		struct fi_opx_addr *opx_addr = (struct fi_opx_addr *) addr;
 		/* Parse address with standard address format */
 		n = 1 + snprintf(tmp, sizeof(tmp), "%08x.%04x.%02x", opx_addr->planes[OPX_PRIMARY_PLANE].lid,
@@ -446,13 +445,7 @@ int fi_opx_bind_ep_av(struct fid_ep *ep, struct fid_av *av, uint64_t flags)
 
 	opx_ep->av = opx_av;
 
-	const unsigned ep_tx_max = sizeof(opx_av->ep_tx) / sizeof(struct fi_opx_ep *);
-	if (opx_av->ep_tx_count < ep_tx_max) {
-		opx_av->ep_tx[opx_av->ep_tx_count++] = opx_ep;
-	} else {
-		FI_WARN(fi_opx_global.prov, FI_LOG_AV, "Too many ep tx contexts (max = %u)\n", ep_tx_max);
-		abort();
-	}
+	opx_av->ep_tx = opx_ep;
 
 	fi_opx_ref_inc(&opx_av->ref_cnt, "address vector");
 
@@ -536,11 +529,7 @@ int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_a
 	fi_opx_ref_init(&opx_av->ref_cnt, 0, "address vector");
 	opx_av->type = attr->type;
 
-	opx_av->ep_tx_count = 0;
-	unsigned i, ep_tx_max = sizeof(opx_av->ep_tx) / sizeof(struct fi_opx_ep *);
-	for (i = 0; i < ep_tx_max; ++i) {
-		opx_av->ep_tx[i] = NULL;
-	}
+	opx_av->ep_tx = NULL;
 
 	opx_av->map_addr = NULL;
 
