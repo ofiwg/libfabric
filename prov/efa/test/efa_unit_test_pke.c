@@ -653,6 +653,87 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(void **state)
 }
 
 /**
+ * @brief Helper function to create a RUNTREAD MSGRTM packet from the rx pool
+ */
+static struct efa_rdm_pke *create_runtread_msgrtm_pkt(struct efa_rdm_ep *ep, uint32_t msg_id,
+						      uint64_t msg_length, uint64_t runt_length, size_t payload_size)
+{
+	struct efa_rdm_pke *pkt;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_runtread_rtm_base_hdr *runtread_hdr;
+	static char payload[1024];
+
+	pkt = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	if (!pkt)
+		return NULL;
+
+	pkt->payload = payload;
+	pkt->payload_size = payload_size;
+	pkt->next = NULL;
+
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt);
+	base_hdr->type = EFA_RDM_RUNTREAD_MSGRTM_PKT;
+
+	runtread_hdr = efa_rdm_pke_get_runtread_rtm_base_hdr(pkt);
+	runtread_hdr->hdr.flags = EFA_RDM_REQ_MSG;
+	runtread_hdr->hdr.msg_id = msg_id;
+	runtread_hdr->msg_length = msg_length;
+	runtread_hdr->send_id = 0;
+	runtread_hdr->read_iov_count = 0;
+	runtread_hdr->seg_offset = 0;
+	runtread_hdr->runt_length = runt_length;
+
+	return pkt;
+}
+
+/**
+ * @brief The function must release the WHOLE chain via efa_rdm_pke_release_rx_list().
+ * Verify: the call returns the truncation error, and BOTH packets are returned to the rx pool.
+ * @param state
+ */
+void test_efa_rdm_pke_proc_matched_mulreq_rtm_runtread_trunc_chain(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry, *pkt_entry2;
+	struct efa_rdm_ope *rxe;
+	char buf[16];
+	size_t to_post_before;
+	int err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	pkt_entry  = create_runtread_msgrtm_pkt(efa_rdm_ep, 1, 1024, 256, 512);
+	assert_non_null(pkt_entry);
+	pkt_entry2 = create_runtread_msgrtm_pkt(efa_rdm_ep, 1, 1024, 256, 512);
+	assert_non_null(pkt_entry2);
+	pkt_entry->next = pkt_entry2;
+
+	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_msg);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->internal_flags = 0;
+	/* Undersized receive: iov total (16) < total_len (1024) -> ofi_truncate_iov
+	 * returns -FI_ETRUNC inside efa_rdm_ope_prepare_to_post_read(). */
+	rxe->iov_count = 1;
+	rxe->iov[0].iov_base = buf;
+	rxe->iov[0].iov_len = sizeof buf;
+	rxe->desc[0] = NULL;
+	rxe->cq_entry.len = sizeof buf;
+	rxe->total_len = 1024;
+	rxe->bytes_read_total_len = 0;
+	rxe->bytes_received = 0;
+	rxe->bytes_received_via_mulreq = 0;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
+	to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
+	err = efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
+	assert_int_equal(err, -FI_ETRUNC);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 2);
+	efa_rdm_rxe_release(rxe);
+}
+
+/**
  * @brief Test that flush_queued_blocking_copy_to_hmem releases all pkt entries
  * when a copy-size mismatch is detected, avoiding a memory leak.
  * @param state
