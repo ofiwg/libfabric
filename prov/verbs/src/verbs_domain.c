@@ -87,10 +87,15 @@ static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)
 		credits_to_give = 0;
 	}
 
-	if (credits_to_give &&
-	    vrb_ep2_domain(ep)->send_credits(&ep->util_ep.ep_fid,
-					     credits_to_give)) {
-		ep->rq_credits_avail += credits_to_give;
+	if (credits_to_give) {
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+		if (vrb_ep2_domain(ep)->send_credits(&ep->util_ep.ep_fid,
+						     credits_to_give)) {
+			ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+			ep->rq_credits_avail += credits_to_give;
+			ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+		}
+		return FI_SUCCESS;
 	}
 	ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 
