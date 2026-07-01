@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import functools
+from datetime import datetime
 from subprocess import Popen, TimeoutExpired, run
 from tempfile import NamedTemporaryFile
 from time import sleep
@@ -175,6 +176,37 @@ PASS = 1
 SKIP = 2
 FAIL = 3
 
+
+def get_fabtests_log_dir():
+    """Return FABTESTS_LOG_DIR, defaulting to ~/fabtest_logs."""
+    return os.environ.get(
+        "FABTESTS_LOG_DIR", os.path.expanduser("~/fabtest_logs"))
+
+
+def make_test_log_paths():
+    """Create unique server and client log paths for the current test."""
+    test_id = os.environ.get(
+        "PYTEST_CURRENT_TEST", "unknown_test").split(" (")[0]
+    safe_test_id = re.sub(r"[^A-Za-z0-9._-]", "_", test_id)[:180]
+    name_parts = [
+        safe_test_id,
+        datetime.now().strftime("%Y%m%d-%H%M%S.%f"),
+    ]
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker:
+        name_parts.append(worker)
+
+    log_dir = get_fabtests_log_dir()
+    os.makedirs(log_dir, exist_ok=True)
+    base_path = os.path.join(log_dir, "_".join(name_parts))
+    return base_path + ".server.log", base_path + ".client.log"
+
+
+def remove_test_logs(*log_paths):
+    for log_path in log_paths:
+        os.unlink(log_path)
+
+
 def check_returncode(returncode, strict):
     """
     check one return code
@@ -202,7 +234,7 @@ def check_returncode(returncode, strict):
 
     return FAIL, error_msg
 
-def check_returncode_list(returncode_list, strict):
+def check_returncode_list(returncode_list, strict, extra_fail_message=None):
     """
     check a list of returncode, and call pytest's handler accordingly.
         If there is failure in return, call pytest.fail()
@@ -210,6 +242,7 @@ def check_returncode_list(returncode_list, strict):
         If there is no failure or skip, do nothing
     @param resultcode_list: a list of return code
     @param strict: a boolean indicating wether strict mode should be used.
+    @param extra_fail_message: optional text appended to the failure reason.
     @return: no return
     """
     result = PASS
@@ -231,6 +264,8 @@ def check_returncode_list(returncode_list, strict):
             break
 
     if result == FAIL:
+        if extra_fail_message:
+            reason = "{}\n{}".format(reason, extra_fail_message)
         pytest.fail(reason)
 
     if result == SKIP:
@@ -539,12 +574,14 @@ class ClientServerTest:
         except TimeoutExpired:
             client_timed_out = True
 
-        if has_ssh_connection_err_msg(result.output):
+        client_output = result.output
+        print("client_stdout:")
+        print(client_output)
+
+        if has_ssh_connection_err_msg(client_output):
             print("client encountered ssh connection issue!")
             raise SshConnectionError()
 
-        print("client_stdout:")
-        print(result.output)
         print(f"client returncode: {result.returncode}")
 
         if client_timed_out:
@@ -560,11 +597,23 @@ class ClientServerTest:
         if self._cmdline_args.is_test_excluded(self._client_base_command):
             pytest.skip("excluded")
 
+        server_log_path, client_log_path = make_test_log_paths()
+        log_msg = "server log: {}\nclient log: {}".format(
+            server_log_path, client_log_path)
+
         # Start server
         print("")
         print("server_command: " + self._server_command)
-        server_process = Popen(self._server_command, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, shell=True, universal_newlines=True)
+        print(log_msg)
+
+        with open(server_log_path, "w") as server_log_file:
+            server_process = Popen(
+                self._server_command,
+                stdout=server_log_file,
+                stderr=subprocess.STDOUT,
+                shell=True,
+                universal_newlines=True,
+            )
         sleep(1)
 
         client_returncode = -1
@@ -575,31 +624,45 @@ class ClientServerTest:
                 retry_on_exception=is_ssh_connection_error,
                 stop_max_delay=self._timeout * 1000,  # Convert to milliseconds
                 wait_fixed=CLIENT_RETRY_INTERVAL_MS,
-            )(self._run_client_command)(server_process, self._client_command).returncode
+            )(self._run_client_command)(server_process, self._client_command, client_log_path).returncode
         except Exception as e:
             print("Client error: {}".format(e))
             # Clean up server if client is terminated unexpectedly
             server_process.terminate()
 
-        server_output = ""
         server_timed_out = False
         try:
-            server_output, _ = server_process.communicate(
+            server_process.wait(
                 timeout=self._timeout + SERVER_RESTART_DELAY_MS/1000)
         except TimeoutExpired:
-            server_process.terminate()
             server_timed_out = True
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=SERVER_RESTART_DELAY_MS/1000)
+            except TimeoutExpired:
+                server_process.kill()
+                server_process.wait()
 
-        if has_ssh_connection_err_msg(server_output):
+        print("server_stdout:")
+        ssh_connection_error = False
+        output_ends_with_newline = True
+        with open(server_log_path, errors="replace") as server_log_file:
+            for line in server_log_file:
+                print(line, end="")
+                output_ends_with_newline = line.endswith("\n")
+                if has_ssh_connection_err_msg(line):
+                    ssh_connection_error = True
+        if not output_ends_with_newline:
+            print("")
+
+        if ssh_connection_error:
             print("encountered ssh connection issue!")
             raise SshConnectionError()
 
-        print("server_stdout:")
-        print(server_output)
         print(f"server returncode: {server_process.returncode}")
 
         if server_timed_out:
-            raise RuntimeError("Server timed out")
+            raise RuntimeError("Server timed out\n" + log_msg)
 
         list_to_check_return_code = []
         if not self._server_parameters['might_fail']:
@@ -607,8 +670,15 @@ class ClientServerTest:
         if not self._client_parameters['might_fail']:
             list_to_check_return_code.append(client_returncode)
 
-        check_returncode_list(list_to_check_return_code,
-                              self._cmdline_args.strict_fabtests_mode)
+        strict = self._cmdline_args.strict_fabtests_mode
+        has_failure = any(
+            check_returncode(returncode, strict)[0] == FAIL
+            for returncode in list_to_check_return_code)
+        if not has_failure:
+            remove_test_logs(server_log_path, client_log_path)
+
+        check_returncode_list(list_to_check_return_code, strict,
+                              extra_fail_message=log_msg)
 
 
 class MultinodeTest(ClientServerTest):
