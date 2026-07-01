@@ -9,6 +9,7 @@
 #include <infiniband/efadv.h>
 #include <stdbool.h>
 #include "ofi_lock.h"
+#include "ofi_atom.h"
 
 struct efa_qp;
 
@@ -28,6 +29,11 @@ struct efa_device {
 	size_t			qp_table_sz_m1;
 	struct ofi_genlock		qp_table_lock;
 	int				urandom_fd;
+	/* Refcount of open domains using this device. efa_device_list_finalize
+	 * skips destruction when ref_cnt > 0, preventing use-after-free when
+	 * fi_fini races with threads still inside the provider.
+	 */
+	ofi_atomic32_t		ref_cnt;
 };
 
 int efa_device_list_initialize(void);
