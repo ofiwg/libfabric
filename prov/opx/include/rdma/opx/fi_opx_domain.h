@@ -221,17 +221,13 @@ struct fi_opx_av {
 	ofi_atomic64_t	      ref_cnt;
 	uint32_t	      addr_count;
 	enum fi_av_type	      type;
-	unsigned	      ep_tx_count;
+	/* == CACHE LINE 1 == */
 
-	/* == CACHE LINE 1..20 == */
-
-	struct fi_opx_ep *ep_tx[160];
-
-	/* == ALL OTHER CACHE LINES == */
-
+	struct fi_opx_ep   *ep_tx;
 	struct fi_opx_addr *table_addr; /* allocated buffer to free */
 	uint64_t	    rx_ctx_bits;
 	uint32_t	    table_count; /* table, not av, count */
+	uint32_t	    pad;	 /* explicit tail padding to 8-byte alignment (96 bytes) */
 };
 
 /**
