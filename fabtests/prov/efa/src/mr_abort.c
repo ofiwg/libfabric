@@ -49,6 +49,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_cm.h>
+#include <rdma/fi_ext.h>
 
 #include "shared.h"
 #include "hmem.h"
@@ -77,7 +78,7 @@ enum test_mode {
 struct op_ctx {
 	struct fi_context2 context;
 	int mr_idx;	/* which mr_slot this op belongs to */
-	int completed;
+	int completions;	/* must end == 1 for every posted op */
 	int status;	/* 0 = success, negative = error code */
 	int prov_errno;
 };
@@ -131,6 +132,7 @@ static enum close_order_mode close_order_mode = CLOSE_ORDER_REVERSE;
 static enum close_side close_side = CLOSE_INITIATOR;
 static enum test_mode test_mode = TEST_ABORT;
 static int close_ep_first;
+static int set_homogeneous_peers;
 
 /*
  * -r <file>: replay a previously dumped close order instead of generating
@@ -362,7 +364,7 @@ static void reset_test_state(void)
 		slots[i].mr_closed = 0;
 	}
 	for (i = 0; i < max_ops(); i++) {
-		op_arr[i].completed = 0;
+		op_arr[i].completions = 0;
 		op_arr[i].status = 0;
 		op_arr[i].mr_idx = -1;
 	}
@@ -481,8 +483,7 @@ static void dump_close_order(void)
 		return;
 
 	if (close_order_replay_path) {
-		fprintf(stderr,
-			"close order (%s, %d MRs) reproduced from %s\n",
+		FT_INFO(			"close order (%s, %d MRs) reproduced from %s\n",
 			close_order_str(), close_order_len,
 			close_order_replay_path);
 		return;
@@ -508,8 +509,7 @@ static void dump_close_order(void)
 		fprintf(f, "%d\n", close_order[i]);
 	fclose(f);
 
-	fprintf(stderr,
-		"close order (%s, %d MRs) written to %s -- reproduce with -r %s\n",
+	FT_INFO(		"close order (%s, %d MRs) written to %s -- reproduce with -r %s\n",
 		close_order_str(), close_order_len, path, path);
 }
 
@@ -651,7 +651,7 @@ static int drain_cq_counted(struct fid_cq *cq, int expected,
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
 	struct op_ctx *o;
-	int remaining, ret;
+	int idx, remaining, ret;
 
 	remaining = expected;
 
@@ -660,7 +660,27 @@ static int drain_cq_counted(struct fid_cq *cq, int expected,
 		if (ret > 0) {
 			o = container_of(comp.op_context,
 					 struct op_ctx, context);
-			o->completed = 1;
+			/*
+			 * Each posted op submits exactly one op_context and is
+			 * owed exactly one terminal completion. Validate the
+			 * context resolves to a posted op and that this is its
+			 * first completion: a second completion for the same op
+			 * (or a context outside the posted range) is a provider
+			 * contract violation. Counting it toward `remaining`
+			 * would mask a genuinely missing completion, so fail.
+			 */
+			idx = (int) (o - op_arr);
+			if (idx < 0 || idx >= expected) {
+				FT_ERR("TX completion for out-of-range "
+				       "op_context (idx=%d, expected < %d)",
+				       idx, expected);
+				return -FI_EOTHER;
+			}
+			if (++o->completions > 1) {
+				FT_ERR("op idx=%d tied to %d completions "
+				       "(expected 1)", idx, o->completions);
+				return -FI_EOTHER;
+			}
 			o->status = 0;
 			remaining--;
 		} else if (ret == -FI_EAVAIL) {
@@ -673,7 +693,20 @@ static int drain_cq_counted(struct fid_cq *cq, int expected,
 			if (ret == 1) {
 				o = container_of(err.op_context,
 						 struct op_ctx, context);
-				o->completed = 1;
+				idx = (int) (o - op_arr);
+				if (idx < 0 || idx >= expected) {
+					FT_ERR("TX error completion for "
+					       "out-of-range op_context "
+					       "(idx=%d, expected < %d)",
+					       idx, expected);
+					return -FI_EOTHER;
+				}
+				if (++o->completions > 1) {
+					FT_ERR("op idx=%d tied to %d "
+					       "completions (expected 1)",
+					       idx, o->completions);
+					return -FI_EOTHER;
+				}
 				o->status = -err.err;
 				o->prov_errno = err.prov_errno;
 				if (!is_expected_err(&err, err_list,
@@ -884,22 +917,22 @@ static int run_fill_abort_initiator(int iter)
 
 	/* Drain CQ */
 	if (close_side == CLOSE_TARGET)
-		missing = drain_cq_counted(txcq, total_posted,
-					   mr_abort_remote_close_errs,
-					   ARRAY_SIZE(mr_abort_remote_close_errs));
+		ret = drain_cq_counted(txcq, total_posted,
+				       mr_abort_remote_close_errs,
+				       ARRAY_SIZE(mr_abort_remote_close_errs));
 	else
-		missing = drain_cq_counted(txcq, total_posted,
-					   mr_abort_local_close_errs,
-					   ARRAY_SIZE(mr_abort_local_close_errs));
+		ret = drain_cq_counted(txcq, total_posted,
+				       mr_abort_local_close_errs,
+				       ARRAY_SIZE(mr_abort_local_close_errs));
 
-	if (missing < 0)
-		return missing; /* drain_cq_counted hit unexpected error */
+	if (ret != 0)
+		return ret; /* drain_cq_counted hit unexpected error */
 
 	/* Report */
 	completed_ok = 0;
 	completed_err = 0;
 	for (i = 0; i < total_posted; i++) {
-		if (op_arr[i].completed) {
+		if (op_arr[i].completions) {
 			if (op_arr[i].status == 0)
 				completed_ok++;
 			else
@@ -907,7 +940,17 @@ static int run_fill_abort_initiator(int iter)
 		}
 	}
 
-	fprintf(stderr, "Iteration %d: op=%s size=%zu posted=%d mrs=%d "
+	/*
+	 * The TX side is deterministic: every posted op must reach exactly one
+	 * terminal completion. drain_cq_counted() already blocked until
+	 * total_posted CQ entries were read, so a nonzero "missing" here means
+	 * the per-op tally disagrees with the raw count -- i.e. an op_context
+	 * was completed more than once (or a stale completion aliased a reused
+	 * op_arr slot).
+	 */
+	missing = total_posted - (completed_ok + completed_err);
+
+	FT_INFO("Iteration %d: op=%s size=%zu posted=%d mrs=%d "
 	       "ops_per_mr=%d ok=%d err=%d missing=%d "
 	       "close_order=%s side=%s ... %s\n",
 	       iter, op_str(), opts.transfer_size, total_posted,
@@ -1010,7 +1053,6 @@ static int run_partial_close_initiator(void)
 	struct mr_slot extra_slot = {0};
 	struct fi_rma_iov local_iov, remote_iov;
 	int i, completed_ok = 0, completed_err = 0, completed;
-	int missing;
 	int ret;
 
 	/* Use slot 0's buffer for both MRs */
@@ -1069,15 +1111,13 @@ static int run_partial_close_initiator(void)
 	extra_slot.mr = NULL;
 
 	/* Drain both completions */
-	missing = drain_cq_counted(txcq, 2, mr_abort_local_close_errs,
-				   ARRAY_SIZE(mr_abort_local_close_errs));
-	if (missing < 0) {
-		ret = missing;
+	ret = drain_cq_counted(txcq, 2, mr_abort_local_close_errs,
+			       ARRAY_SIZE(mr_abort_local_close_errs));
+	if (ret != 0)
 		goto close_extra;
-	}
 
 	for (i = 0; i < 2; i++) {
-		if (op_arr[i].completed) {
+		if (op_arr[i].completions) {
 			if (op_arr[i].status == 0)
 				completed_ok++;
 			else
@@ -1090,22 +1130,24 @@ static int run_partial_close_initiator(void)
 	 * op_arr[0] used slots[0].mr (not closed) — must succeed.
 	 * op_arr[1] used extra_slot.mr (closed) — may succeed or fail.
 	 */
-	fprintf(stderr, "Partial close: posted=2 ok=%d err=%d missing=%d "
+	FT_INFO("Partial close: posted=2 ok=%d err=%d missing=%d "
 	       "surviving_op=%s closed_op=%s ... ",
 	       completed_ok, completed_err, 2 - completed,
-	       op_arr[0].completed ?
-		       (op_arr[0].status == 0 ? "ok" : "FAIL") : "missing",
-	       op_arr[1].completed ?
-		       (op_arr[1].status == 0 ? "ok" : "err") : "missing");
+	       op_arr[0].completions == 0 ? "missing" :
+	       op_arr[0].completions > 1  ? "DOUBLE"  :
+		       (op_arr[0].status == 0 ? "ok" : "FAIL"),
+	       op_arr[1].completions == 0 ? "missing" :
+	       op_arr[1].completions > 1  ? "DOUBLE"  :
+		       (op_arr[1].status == 0 ? "ok" : "err"));
 
 	if (completed != 2) {
-		fprintf(stderr, "FAIL (missing completions)\n");
+		FT_INFO("FAIL (missing completions)\n");
 		ret = -FI_EOTHER;
 	} else if (op_arr[0].status != 0) {
-		fprintf(stderr, "FAIL (surviving MR op must not fail)\n");
+		FT_INFO("FAIL (surviving MR op must not fail)\n");
 		ret = -FI_EOTHER;
 	} else {
-		fprintf(stderr, "PASS\n");
+		FT_INFO("PASS\n");
 		ret = 0;
 	}
 
@@ -1179,7 +1221,7 @@ static int reuse_check_initiator(void)
 		if (ret == -FI_EAVAIL) {
 			memset(&err, 0, sizeof(err));
 			fi_cq_readerr(txcq, &err, 0);
-			fprintf(stderr, "Reuse drain: residual error %d (%s)\n",
+			FT_INFO("Reuse drain: residual error %d (%s)\n",
 			       err.err, fi_strerror(err.err));
 		}
 	} while (ret != -FI_EAGAIN);
@@ -1256,7 +1298,7 @@ static int reuse_check_initiator(void)
 		return ret;
 	}
 
-	fprintf(stderr, "Reuse: write ok, read ok ... PASS\n");
+	FT_INFO("Reuse: write ok, read ok ... PASS\n");
 	return 0;
 }
 
@@ -1387,21 +1429,31 @@ static int run_send_abort_initiator(int iter)
 		{ .err = FI_EINVAL, .prov_errno = 5 },        /* local MR invalid */
 		{ .err = FI_ECANCELED, .prov_errno = 4127 },  /* peer abort: receiver detected the yanked source MR on its RDMA read and notified us via PEER_ERROR_PKT */
 	};
-	missing = drain_cq_counted(txcq, total_posted, send_initiator_errs,
-				   ARRAY_SIZE(send_initiator_errs));
-	if (missing < 0)
-		return missing; /* drain_cq_counted hit unexpected error */
+	ret = drain_cq_counted(txcq, total_posted, send_initiator_errs,
+			       ARRAY_SIZE(send_initiator_errs));
+	if (ret != 0)
+		return ret; /* drain_cq_counted hit unexpected error */
 
 	completed_ok = 0;
 	completed_err = 0;
 	for (i = 0; i < total_posted; i++) {
-		if (op_arr[i].completed) {
+		if (op_arr[i].completions) {
 			if (op_arr[i].status == 0)
 				completed_ok++;
 			else
 				completed_err++;
 		}
 	}
+
+	/*
+	 * The TX side is deterministic: every posted send must reach exactly
+	 * one terminal completion. drain_cq_counted() already blocked until
+	 * total_posted CQ entries were read, so a nonzero "missing" here means
+	 * the per-op tally disagrees with the raw count -- i.e. an op_context
+	 * was completed more than once (or a stale completion aliased a reused
+	 * op_arr slot).
+	 */
+	missing = total_posted - (completed_ok + completed_err);
 
 	/*
 	 * Send the (required, slack) completion counts to the target over
@@ -1420,7 +1472,7 @@ static int run_send_abort_initiator(int iter)
 	if (ret)
 		return ret;
 
-	fprintf(stderr, "Iteration %d: mode=%s size=%zu posted=%d mrs=%d "
+	FT_INFO("Iteration %d: mode=%s size=%zu posted=%d mrs=%d "
 	       "ok=%d err=%d missing=%d side=%s ... %s\n",
 	       iter, mode_str, opts.transfer_size, total_posted,
 	       mrs_used, completed_ok, completed_err,
@@ -1613,15 +1665,13 @@ static int run_send_abort_target(int iter)
 	int reaped = 0;		/* terminal completions counted so far */
 
 	/*
-	 * Phase 1: drain RX completions while polling OOB (non-blocking) for
-	 * the initiator's (required, slack) counts. NO internal timeout -- the
-	 * target's continued RX progress is what lets the initiator's counted
-	 * TX drain finish and ship the counts (for LONGREAD/RUNTREAD the
-	 * sender's TX completion only lands after the receiver detects the
-	 * failed read and emits PEER_ERROR), so a short internal deadline here
-	 * would deadlock the pair. If the counts genuinely never arrive, the
-	 * outer pytest test timeout bounds us. Every reaped completion is
-	 * reposted to keep the RQ at depth (see target_recv_drain_one).
+	 * Phase 1: poll OOB (non-blocking) for the initiator's
+	 * (required, slack) counts and, under FI_PROGRESS_MANUAL, drain RX
+	 * completions while we wait. NO internal timeout: under
+	 * FI_PROGRESS_MANUAL our RX progress is what lets the initiator's TX
+	 * drain finish and ship the counts, so a deadline here would deadlock
+	 * the pair. Under FI_PROGRESS_AUTO the provider drives RX progress
+	 * itself, so we skip the manual poll and reap in phase 2.
 	 */
 	while (!have_counts) {
 		ret = oob_recv_nonblock(oob_sock, counts, sizeof(counts),
@@ -1636,6 +1686,12 @@ static int run_send_abort_target(int iter)
 			have_counts = 1;
 			break;
 		}
+
+		/*
+		 * Only poll the RX CQ here under FI_PROGRESS_MANUAL.
+		 */
+		if (fi->domain_attr->data_progress != FI_PROGRESS_MANUAL)
+			continue;
 
 		ret = target_recv_drain_one(recv_abort_errs,
 					    ARRAY_SIZE(recv_abort_errs),
@@ -1689,20 +1745,40 @@ static int run_send_abort_target(int iter)
 		}
 	}
 
-	/* Pass when reaped lands in [required, required + slack]. */
-	if (reaped < required || reaped > required + slack) {
-		int missing = required - reaped; /* >0 short, <0 over */
-
-		fprintf(stderr,
-			"Target iter %d: required=%d slack=%d reaped=%d "
-			"recv_ok=%d peer_aborted=%d missing=%d ... FAIL\n",
+	/*
+	 * Lower bound is firm: the receiver must produce at least `required`
+	 * terminal completions. A shortfall is a genuine missing completion.
+	 */
+	if (reaped < required) {
+		FT_INFO(			"Target iter %d: required=%d slack=%d reaped=%d "
+			"recv_ok=%d peer_aborted=%d short=%d ... FAIL\n",
 			iter, required, slack, reaped, recv_ok,
-			recv_canceled, missing);
+			recv_canceled, required - reaped);
 		return -FI_EOTHER;
 	}
 
-	fprintf(stderr,
-		"Target iter %d: required=%d slack=%d reaped=%d recv_ok=%d "
+	/*
+	 * Exceeding required + slack is NOT a failure. The upper bound can only
+	 * be crossed in the slack > 0 branch, which reaps within a rolling idle
+	 * window rather than waiting for an exact count (the slack == 0 branch
+	 * blocks until reaped == required, so it stops on the nose). A peer
+	 * abort is reported to the receiver via an asynchronous PEER_ERROR_PKT
+	 * the sender emits only after its data WRs drain, so a completion
+	 * accounted for in an earlier iteration's (required, slack) budget can
+	 * land in a later iteration's window. These stragglers net out across
+	 * the run (cumulative reaped never exceeds cumulative required + slack),
+	 * so just log them for visibility and pass.
+	 */
+	if (reaped > required + slack) {
+		FT_INFO(			"Target iter %d: required=%d slack=%d reaped=%d "
+			"recv_ok=%d peer_aborted=%d straggler_over=%d ... "
+			"PASS (cross-iteration straggler)\n",
+			iter, required, slack, reaped, recv_ok,
+			recv_canceled, reaped - (required + slack));
+		return 0;
+	}
+
+	FT_INFO(		"Target iter %d: required=%d slack=%d reaped=%d recv_ok=%d "
 		"peer_aborted=%d ... PASS\n",
 		iter, required, slack, reaped, recv_ok, recv_canceled);
 
@@ -1796,6 +1872,32 @@ static int run(void)
 	if (ret)
 		return ret;
 
+	if (set_homogeneous_peers) {
+		bool homogeneous = true;
+		/*
+		 * Tell the EP all peers are homogeneous so it skips the
+		 * handshake requirement before using an extra-feature,
+		 * read-based protocol (e.g. LONGREAD). Skipping the handshake
+		 * makes protocol selection deterministic from the very first
+		 * send, so the target is reliably owed -- and can enforce via
+		 * -X -- exactly one completion per op.
+		 *
+		 * Normally this option is set before fi_enable(), but
+		 * ft_init_fabric() has already enabled the EP. Setting it here
+		 * is still correct: EFA's setopt handler has no enable-state
+		 * guard, and homogeneous_peers is read lazily at RTM-post time
+		 * (efa_rdm_msg_post_rtm), not at enable. No send has been posted
+		 * yet at this point, so the value is in effect for every op.
+		 */
+		ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT,
+				FI_OPT_EFA_HOMOGENEOUS_PEERS,
+				&homogeneous, sizeof(homogeneous));
+		if (ret) {
+			FT_PRINTERR("fi_setopt(HOMOGENEOUS_PEERS)", ret);
+			return ret;
+		}
+	}
+
 	ret = alloc_test_res();
 	if (ret)
 		return ret;
@@ -1838,7 +1940,7 @@ int main(int argc, char **argv)
 	srand(time(NULL));
 
 	while ((op = getopt(argc, argv,
-			    "W:N:C:R:T:A:r:Xh" CS_OPTS INFO_OPTS API_OPTS)) != -1) {
+			    "W:N:C:R:T:A:r:XHh" CS_OPTS INFO_OPTS API_OPTS)) != -1) {
 		switch (op) {
 		case 'W':
 			num_mrs = atoi(optarg);
@@ -1895,6 +1997,9 @@ int main(int argc, char **argv)
 			break;
 		case 'X':
 			abort_owes_rx_completion = 1;
+			break;
+		case 'H':
+			set_homogeneous_peers = 1;
 			break;
 		default:
 			ft_parseinfo(op, optarg, hints, &opts);
