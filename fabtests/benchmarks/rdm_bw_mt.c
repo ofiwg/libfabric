@@ -493,6 +493,8 @@ static void *uni_bandwidth(void *context)
 	int i, ret;
 	const struct thread_args *targs = context;
 
+	ft_hmem_init_thread(opts.iface, opts.device);
+
 	pthread_barrier_wait(&barrier);
 	for (i = 0; i < opts.warmup_iterations; i++) {
 		ret = opts.dst_addr ? bw_send(context) : bw_recv(context);
@@ -524,6 +526,8 @@ static void *bi_bandwidth(void *context)
 {
 	int i, ret;
 	struct thread_args *targs = context;
+
+	ft_hmem_init_thread(opts.iface, opts.device);
 
 	pthread_barrier_wait(&barrier);
 	for (i = 0; i < opts.warmup_iterations; i++) {
