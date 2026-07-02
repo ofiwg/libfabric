@@ -385,6 +385,27 @@ err:
 	return -FI_ENODATA;
 }
 
+int ft_cuda_init_thread(uint64_t device)
+{
+	cudaError_t cuda_ret;
+
+	cuda_ret = cuda_ops.cudaSetDevice(device);
+	if (cuda_ret != cudaSuccess) {
+		CUDA_ERR(cuda_ret, "cudaSetDevice failed");
+		return -FI_EIO;
+	}
+
+	/* cudaFree() forces context activation since cudaSetDevice() alone 
+	 * may do lazy initialization */
+	cuda_ret = cuda_ops.cudaFree(NULL);
+	if (cuda_ret != cudaSuccess) {
+		CUDA_ERR(cuda_ret, "cudaFree failed");
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
+}
+
 int ft_cuda_cleanup(void)
 {
 	dlclose(cudart_handle);
@@ -601,6 +622,11 @@ enum ft_cuda_memory_support ft_cuda_memory_support(void)
 #else
 
 int ft_cuda_init(void)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_cuda_init_thread(uint64_t device)
 {
 	return -FI_ENOSYS;
 }
