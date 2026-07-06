@@ -194,7 +194,7 @@ static uint32_t efa_generate_qkey(struct efa_device *device)
 	}
 
 	/* 0x80000000 and up is privileged Q Key range. */
-	val &= 0x7fffffff;
+	val &= ~EFA_QKEY_PRIVILEGED_MASK;
 
 	return val;
 }

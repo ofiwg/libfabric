@@ -19,6 +19,11 @@
 #define EFA_QP_LOW_LATENCY_SERVICE_LEVEL 8
 #define EFA_ERROR_MSG_BUFFER_LENGTH 1024
 
+/* 0x80000000 and up is the privileged Q Key range, which is not usable by
+ * unprivileged endpoints. Both the provider generated QKEYs and the ones
+ * supplied by the application must stay below it. */
+#define EFA_QKEY_PRIVILEGED_MASK 0x80000000
+
 /* Default rnr_retry for efa-rdm ep.
  * If first attempt to send a packet failed,
  * this value controls how many times firmware

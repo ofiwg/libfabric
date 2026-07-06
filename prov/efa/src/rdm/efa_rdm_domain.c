@@ -249,6 +249,15 @@ efa_rdm_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_GDA_OPS\n");
 		return -FI_EOPNOTSUPP;
 	}
+	if (strcmp(ops_name, FI_EFA_MODIFY_EP_OPS) == 0) {
+		/*
+		 * On efa-rdm the QKEY doubles as the connection ID that is
+		 * embedded in every packet header and cached by peers, so it
+		 * cannot be modified after the endpoint is enabled.
+		 */
+		EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_MODIFY_EP_OPS\n");
+		return -FI_EOPNOTSUPP;
+	}
 
 	EFA_WARN(FI_LOG_DOMAIN, "Unknown ops name: %s\n", ops_name);
 	ret = -FI_EINVAL;
