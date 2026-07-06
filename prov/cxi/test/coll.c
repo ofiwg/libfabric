@@ -721,7 +721,7 @@ Test(coll_put, put_red_pkt_distrib)
 	struct cxip_cq *rx_cq;
 	struct cxip_coll_reduction *reduction;
 	struct cxip_coll_data coll_data = {.red_cnt = 1};
-	struct fi_cq_data_entry entry;
+	struct fi_cq_tagged_entry entry;
 	int i, cnt, ret;
 
 	_create_netsim_collective(5, false, FI_SUCCESS);
