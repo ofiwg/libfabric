@@ -12,6 +12,7 @@
 #include "efa_hw_cntr.h"
 #include "efa_cq.h"
 #include "efa_domain_util.h"
+#include "rdm/efa_rdm_domain.h"
 
 
 struct dlist_entry g_efa_domain_list;
@@ -691,6 +692,74 @@ static struct fi_efa_ops_gda efa_ops_gda = {
 	.cntr_open_ext = efa_domain_cntr_open_ext,
 };
 
+static int efa_domain_modify_ep(struct fid_ep *ep_fid,
+				struct fi_efa_ep_attr *ep_attr, int attr_mask)
+{
+	struct efa_base_ep *base_ep;
+	struct efa_domain *domain;
+	struct ibv_qp_attr ibv_attr = {0};
+	int ibv_mask = 0;
+	int ret;
+	uint32_t old_qkey;
+
+	if (!ep_fid || !ep_attr)
+		return -FI_EINVAL;
+
+	if (attr_mask & ~FI_EFA_EP_ATTR_SUPPORTED_FLAGS) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported attr_mask: %d\n", attr_mask);
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (!attr_mask)
+		return FI_SUCCESS;
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	domain = base_ep->domain;
+
+	if (!base_ep->qp || !base_ep->qp->ibv_qp) {
+		EFA_WARN(FI_LOG_DOMAIN, "Endpoint QP not initialized\n");
+		return -FI_EINVAL;
+	}
+
+	if (attr_mask & FI_EFA_EP_ATTR_QKEY) {
+		ibv_attr.qkey = ep_attr->qkey;
+		ibv_mask |= IBV_QP_QKEY;
+	}
+
+	/*
+	 * The RDM local read path reads qp->qkey to target the
+	 * endpoint's own QP for GPU memory copies. Take the srx_lock
+	 * to synchronize with those data-path reads.
+	 */
+	if (domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_lock(&((struct efa_rdm_domain *) domain)->srx_lock);
+
+	ret = -ibv_modify_qp(base_ep->qp->ibv_qp, &ibv_attr, ibv_mask);
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "ibv_modify_qp failed: %d\n", ret);
+		goto out;
+	}
+
+	if (attr_mask & FI_EFA_EP_ATTR_QKEY) {
+		old_qkey = base_ep->qp->qkey;
+		base_ep->qp->qkey = ep_attr->qkey;
+		EFA_INFO(FI_LOG_DOMAIN, "EP qkey updated: 0x%x -> 0x%x\n",
+			 old_qkey, ep_attr->qkey);
+	}
+
+out:
+	if (domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_unlock(&((struct efa_rdm_domain *) domain)->srx_lock);
+
+	return ret;
+}
+
+struct fi_efa_ops_modify_ep efa_ops_modify_ep = {
+	.modify_ep = efa_domain_modify_ep,
+};
+
 static int
 efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		     void **ops, void *context)
@@ -710,6 +779,10 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		}
 
 		*ops = &efa_ops_gda;
+		return ret;
+	}
+	if (strcmp(ops_name, FI_EFA_MODIFY_EP_OPS) == 0) {
+		*ops = &efa_ops_modify_ep;
 		return ret;
 	}
 

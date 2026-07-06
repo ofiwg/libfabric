@@ -10,6 +10,7 @@
 #define FI_EFA_DOMAIN_OPS "efa domain ops"
 #define FI_EFA_GDA_OPS "efa gda ops"
 #define FI_EFA_FEATURE_OPS "efa feature ops"
+#define FI_EFA_MODIFY_EP_OPS "efa modify ep ops"
 
 struct fi_efa_mr_attr {
     uint16_t ic_id_validity;
@@ -137,5 +138,20 @@ struct fi_efa_feature_ops {
  * such as fi_writemsg().
  */
 #define FI_EFA_WR_HIGH_PPS (1ULL << 60)
+
+enum {
+	FI_EFA_EP_ATTR_QKEY = 1 << 0,
+};
+
+#define FI_EFA_EP_ATTR_SUPPORTED_FLAGS (FI_EFA_EP_ATTR_QKEY)
+
+struct fi_efa_ep_attr {
+	uint32_t qkey;
+};
+
+struct fi_efa_ops_modify_ep {
+	int (*modify_ep)(struct fid_ep *ep, struct fi_efa_ep_attr *ep_attr,
+			 int attr_mask);
+};
 
 #endif /* _FI_EXT_EFA_H_ */

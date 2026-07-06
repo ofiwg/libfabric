@@ -526,6 +526,47 @@ struct fi_efa_comp_cntr_init_attr {
 **cntr_open_ext()** returns 0 on success, or a negative value on failure.
 
 
+### FI_EFA_MODIFY_EP_OPS
+
+To modify endpoint attributes at runtime, request `FI_EFA_MODIFY_EP_OPS` in the
+`name` parameter. This returns `ops` as a pointer to the function table
+`fi_efa_ops_modify_ep` defined as follows:
+
+```c
+struct fi_efa_ops_modify_ep {
+	int (*modify_ep)(struct fid_ep *ep, struct fi_efa_ep_attr *ep_attr,
+			 int attr_mask);
+};
+```
+
+#### modify_ep
+This op modifies attributes on the endpoint. The `attr_mask` parameter specifies
+which attributes to modify.
+
+```c
+enum {
+	FI_EFA_EP_ATTR_QKEY = 1 << 0,
+};
+
+struct fi_efa_ep_attr {
+	uint32_t qkey;
+};
+```
+
+*attr_mask*
+:	A bitwise OR of the attributes to modify. Currently supported:
+
+	FI_EFA_EP_ATTR_QKEY:
+		Modify the queue key. The new value is taken from `ep_attr->qkey`.
+
+Unsupported flags in `attr_mask` will cause the call to return `-FI_EOPNOTSUPP`.
+
+#### Return value
+**modify_ep()** returns 0 on success, or a negative error code on failure:
+
+- `-FI_EINVAL`: NULL endpoint or ep_attr, or endpoint not enabled.
+- `-FI_EOPNOTSUPP`: Unsupported flags in `attr_mask`.
+
 ## Fabric Operation Extension
 
 Fabric operation extension is obtained by calling `fi_open_ops`

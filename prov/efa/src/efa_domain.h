@@ -52,6 +52,7 @@ struct efa_domain {
 extern struct dlist_entry g_efa_domain_list;
 extern ofi_mutex_t g_efa_domain_list_lock;
 extern struct fi_efa_ops_domain efa_ops_domain;
+extern struct fi_efa_ops_modify_ep efa_ops_modify_ep;
 
 /**
  * @brief domain name suffix according to endpoint type

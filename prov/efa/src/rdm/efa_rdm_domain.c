@@ -260,6 +260,10 @@ efa_rdm_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_GDA_OPS\n");
 		return -FI_EOPNOTSUPP;
 	}
+	if (strcmp(ops_name, FI_EFA_MODIFY_EP_OPS) == 0) {
+		*ops = &efa_ops_modify_ep;
+		return ret;
+	}
 
 	EFA_WARN(FI_LOG_DOMAIN, "Unknown ops name: %s\n", ops_name);
 	ret = -FI_EINVAL;
