@@ -307,7 +307,9 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_rma.cc \
 	prov/efa/test/gtest/efa_gtest_hmem.cc \
 	prov/efa/test/gtest/efa_gtest_tclass_utils.c \
-	prov/efa/test/gtest/efa_gtest_tclass.cc
+	prov/efa/test/gtest/efa_gtest_tclass.cc \
+	prov/efa/test/gtest/efa_gtest_domain_utils.c \
+	prov/efa/test/gtest/efa_gtest_domain.cc
 
 prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
@@ -352,6 +354,7 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=efa_rdm_ep_post_queued_pkts \
 	-Wl,--wrap=efa_rdm_pke_fill_data \
 	-Wl,--wrap=efa_rdm_pke_read \
+	-Wl,--wrap=ibv_modify_qp \
 	-Wl,--wrap=malloc
 
 prov_efa_test_gtest_efa_gtest_LIBS = $(linkback)

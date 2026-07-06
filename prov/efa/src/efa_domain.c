@@ -697,6 +697,98 @@ static struct fi_efa_ops_gda efa_ops_gda = {
 	.cntr_open_ext = efa_domain_cntr_open_ext,
 };
 
+/**
+ * @brief Modify attributes of an enabled endpoint
+ *
+ * Only the efa-direct path is supported. On efa-rdm the QKEY doubles as the
+ * connection ID that is embedded in every packet header and cached by peers,
+ * so it cannot be changed once the endpoint is enabled.
+ *
+ * The caller is responsible for serializing this call against data path
+ * operations and fi_close() on @p ep_fid. This function does not take the
+ * endpoint lock, so a concurrent fi_send()/fi_close() on the same endpoint is
+ * undefined behavior.
+ *
+ * @param[in]	ep_fid		Endpoint fid
+ * @param[in]	ep_attr		New attribute values
+ * @param[in]	attr_mask	Bitwise OR of the FI_EFA_EP_ATTR_* attributes to
+ *				modify
+ * @return 0 on success, negative FI error code on failure
+ */
+static int efa_domain_modify_ep(struct fid_ep *ep_fid,
+				struct fi_efa_ep_attr *ep_attr, uint64_t attr_mask)
+{
+	struct efa_base_ep *base_ep;
+	struct efa_domain *domain;
+	struct ibv_qp_attr ibv_attr = {0};
+	int ibv_mask = 0;
+	int ret;
+	uint32_t old_qkey;
+
+	if (!ep_fid || !ep_attr)
+		return -FI_EINVAL;
+
+	if (ep_fid->fid.fclass != FI_CLASS_EP) {
+		EFA_WARN(FI_LOG_DOMAIN, "fid is not an endpoint\n");
+		return -FI_EINVAL;
+	}
+
+	if (attr_mask & ~FI_EFA_EP_ATTR_SUPPORTED_FLAGS) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported attr_mask: %ld\n", attr_mask);
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (!attr_mask)
+		return FI_SUCCESS;
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	domain = base_ep->domain;
+
+	if (!base_ep->efa_qp_enabled || !base_ep->qp || !base_ep->qp->ibv_qp) {
+		EFA_WARN(FI_LOG_DOMAIN, "Endpoint is not enabled\n");
+		return -FI_EINVAL;
+	}
+
+	if (attr_mask & FI_EFA_EP_ATTR_QKEY) {
+		if (domain->info_type != EFA_INFO_DIRECT) {
+			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports "
+						"FI_EFA_MODIFY_EP_OPS\n");
+			return -FI_EOPNOTSUPP;
+		}
+
+		if (ep_attr->qkey & EFA_QKEY_PRIVILEGED_MASK) {
+			EFA_WARN(FI_LOG_DOMAIN,
+				 "QKEY 0x%x is in the privileged range and "
+				 "cannot be used\n",
+				 ep_attr->qkey);
+			return -FI_EINVAL;
+		}
+
+		ibv_attr.qkey = ep_attr->qkey;
+		ibv_mask |= IBV_QP_QKEY;
+
+		ret = -ibv_modify_qp(base_ep->qp->ibv_qp, &ibv_attr, ibv_mask);
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN, "ibv_modify_qp failed: %d\n",
+				 ret);
+			return ret;
+		}
+
+		old_qkey = base_ep->qp->qkey;
+		base_ep->qp->qkey = ep_attr->qkey;
+		base_ep->src_addr.qkey = ep_attr->qkey;
+		EFA_INFO(FI_LOG_DOMAIN, "EP qkey updated: 0x%x -> 0x%x\n",
+			 old_qkey, ep_attr->qkey);
+	}
+
+	return FI_SUCCESS;
+}
+
+static struct fi_efa_ops_modify_ep efa_ops_modify_ep = {
+	.modify_ep = efa_domain_modify_ep,
+};
+
 static int
 efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		     void **ops, void *context)
@@ -716,6 +808,16 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 		}
 
 		*ops = &efa_ops_gda;
+		return ret;
+	}
+	if (strcmp(ops_name, FI_EFA_MODIFY_EP_OPS) == 0) {
+		efa_domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
+		if (efa_domain->info_type != EFA_INFO_DIRECT) {
+			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_MODIFY_EP_OPS\n");
+			return -FI_EOPNOTSUPP;
+		}
+
+		*ops = &efa_ops_modify_ep;
 		return ret;
 	}
 
