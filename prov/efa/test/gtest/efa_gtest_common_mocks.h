@@ -104,7 +104,20 @@ struct efa_ah;
 	X(struct ibv_qp *, efadv_create_qp_ex,                                 \
 	  (struct ibv_context * ibvctx, struct ibv_qp_init_attr_ex * attr_ex,  \
 	   struct efadv_qp_init_attr * efa_attr, uint32_t inlen),              \
-	  (ibvctx, attr_ex, efa_attr, inlen))
+	  (ibvctx, attr_ex, efa_attr, inlen))                                  \
+	X(ssize_t, efa_rdm_ep_post_queued_pkts,                                \
+	  (struct efa_rdm_ep * ep, struct dlist_entry * pkts), (ep, pkts))     \
+	X(int, efa_rdm_pke_fill_data,                                          \
+	  (struct efa_rdm_pke * pke, int pkt_type, struct efa_rdm_ope * ope,   \
+	   int64_t data_offset, int data_size),                                \
+	  (pke, pkt_type, ope, data_offset, data_size))                        \
+	X(int, efa_rdm_pke_read,                                               \
+	  (struct efa_rdm_pke * pkt_entry, void *local_buf, size_t len,        \
+	   void *desc, uint64_t remote_buf, size_t remote_key),                \
+	  (pkt_entry, local_buf, len, desc, remote_buf, remote_key))           \
+	X(int, ibv_modify_qp,                                                  \
+	  (struct ibv_qp * qp, struct ibv_qp_attr * attr, int attr_mask),      \
+	  (qp, attr, attr_mask))
 
 /* --- Generator macros --- */
 
