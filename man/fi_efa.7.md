@@ -234,6 +234,8 @@ int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
     void **ops, void *context);
 ```
 
+### FI_EFA_DOMAIN_OPS
+
 Requesting `FI_EFA_DOMAIN_OPS` in `name` returns `ops` as
 the pointer to the function table `fi_efa_ops_domain` defined as follows:
 
@@ -282,8 +284,10 @@ struct fi_efa_mr_attr {
 (which indicates the failure reason).
 
 
-To enable GPU Direct Async (GDA), which allows the GPU to interact directly with the NIC, 
-request `FI_EFA_GDA_OPS` in the `name` parameter with efa-direct fabirc.
+### FI_EFA_GDA_OPS
+
+To enable GPU Direct Async (GDA), which allows the GPU to interact directly with the NIC,
+request `FI_EFA_GDA_OPS` in the `name` parameter with efa-direct fabric.
 This returns `ops` as a pointer to the function table `fi_efa_ops_gda` defined as follows:
 
 ```c
