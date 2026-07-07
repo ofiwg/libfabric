@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-05\-26" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-07\-07" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -151,6 +151,36 @@ call \f[I]fi_cq_read\f[R] to make progress and free CQ space before
 retrying the operation, regardless of whether FI_SELECTIVE_COMPLETION is
 set.
 Failure to do so will result in CQ overrun.
+.SH MR ABORTING
+.PP
+On the \f[V]efa\f[R] fabric of an \f[I]FI_EP_RDM\f[R] endpoint, an
+application can abort an in-flight transfer by calling
+\f[V]fi_close()\f[R] on the source memory region (MR) backing it \[en]
+the memory region associated with the local buffer for a send/write/read
+transmits operation, or the remote memory region associated with a
+read/write.
+Closing the MR signals the provider to cancel any in-flight operation
+that still references it.
+.PP
+This does not apply to memory regions that are referenced by posted
+receive operations.
+The provider will fail to close a memory region that has a corresponding
+posted recv buffer leading to undefined behavior.
+The only way to abort receive operations, and/or TX operations who\[cq]s
+memory region is associated with posted recv\[cq]s is by closing the
+corresponding endpoint.
+.PP
+If the user closes an MR on an outstanding TX operation, and its peer
+connection is functioning normally, the operation is guaranteed to
+eventually provide a single TX completion.
+The operation may succeed or fail, depending on timing.
+The exact error completion provided depends on underlying protocol used
+for the transfer.
+If a receive operation has been matched to an aborted TX operation, and
+its peer connection is functioning normally, the receiver side is
+guaranteed to write a CQ error for the matched receive.
+If the peer endpoint is closed, or if the peer dies, the corresponding
+matched TX/RX completions may never complete.
 .SH LIMITATIONS
 .SS Completion events
 .IP \[bu] 2
