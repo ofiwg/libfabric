@@ -495,7 +495,7 @@ void test_av_implicit_to_explicit(void **state)
 	assert_int_equal(err, 0);
 
 	/* Modify the peer and verify that the peer is moved as-is */
-	peer->next_msg_id = 355;
+	ofi_atomic_set32(&peer->next_msg_id, 355);
 	peer->flags |= EFA_RDM_PEER_IN_BACKOFF;
 
 	/* Insert explicitly */
@@ -518,7 +518,7 @@ void test_av_implicit_to_explicit(void **state)
 	assert_int_equal(test_addr, explicit_fi_addr);
 
 	/* Verify the manually set peer properties above */
-	assert_int_equal(peer->next_msg_id, 355);
+	assert_int_equal(ofi_atomic_get32(&peer->next_msg_id), 355);
 	assert_true(peer->flags & EFA_RDM_PEER_IN_BACKOFF);
 
 	/* Unset the flag to make fi_av_remove easier */

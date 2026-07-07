@@ -22,6 +22,8 @@ int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, str
 	int ret;
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
 
+	ofi_atomic_initialize32(&peer->next_msg_id, 0);
+
 	peer->ep = ep;
 	peer->conn = conn;
 	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, conn->ep_addr);

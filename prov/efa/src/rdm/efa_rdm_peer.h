@@ -5,6 +5,7 @@
 #define EFA_RDM_PEER_H
 
 #include "ofi_recvwin.h"
+#include "ofi_atom.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_rxe_map.h"
@@ -98,7 +99,7 @@ struct efa_rdm_peer {
 	 * @details temporarily hold packets that are out-of-order, whose msg_id is larger that the one EP is expecting from the peer
 	 */
 	struct efa_rdm_robuf robuf;
-	uint32_t next_msg_id;		/**< msg_id to be assigned to the next packet sent to the peer. */
+	ofi_atomic32_t next_msg_id;	/**< msg_id to be assigned to the next packet sent to the peer. */
 	uint32_t flags;			/**< flags such as #EFA_RDM_PEER_REQ_SENT #EFA_RDM_PEER_HANDSHAKE_SENT #EFA_RDM_PEER_HANDSHAKE_RECEIVED and #EFA_RDM_PEER_IN_BACKOFF */
 	uint32_t nextra_p3;		/**< number of members in extra_info plus 3 (See protocol v4 document section 2.1) */
 	uint64_t extra_info[EFA_RDM_MAX_NUM_EXINFO]; /**< the feature/request flag for each version (See protocol v4 document section 2.1)*/

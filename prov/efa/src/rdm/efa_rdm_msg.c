@@ -206,7 +206,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 
 	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
 
-	txe->msg_id = peer->next_msg_id++;
+	txe->msg_id = ofi_atomic_inc32(&peer->next_msg_id) - 1;
 
 	EFA_DBG(FI_LOG_EP_DATA,
 		"peer: %" PRIu64
@@ -219,7 +219,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	err = efa_rdm_msg_post_rtm(ep, txe);
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_txe_release(txe);
-		peer->next_msg_id--;
+		ofi_atomic_dec32(&peer->next_msg_id);
 	}
 
 out:

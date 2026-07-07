@@ -152,13 +152,13 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 		goto out;
 	}
 
-	txe->msg_id = peer->next_msg_id++;
+	txe->msg_id = ofi_atomic_inc32(&peer->next_msg_id) - 1;
 
 	err = efa_rdm_atomic_post_atomic(efa_rdm_ep, txe);
 
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_txe_release(txe);
-		peer->next_msg_id--;
+		ofi_atomic_dec32(&peer->next_msg_id);
 	}
 
 out:
