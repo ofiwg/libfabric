@@ -36,10 +36,11 @@
 #include <errno.h>
 #include <shared.h>
 #include <rdma/fi_ext.h>
+#include <infiniband/verbs.h>
+#include <infiniband/efadv.h>
 
 static void *mmap_buf;
 static struct fid_mr *mmap_mr;
-static bool use_emulated_read;
 
 struct test_case {
 	const char *name;
@@ -115,8 +116,61 @@ static void cleanup_mmap_buffer(void)
 	}
 }
 
+/*
+ * Query the EFA device directly to determine whether it supports hardware
+ * RDMA read.
+ */
+static int efa_query_rdma_read_support(bool *supported)
+{
+	struct ibv_device **dev_list;
+	struct ibv_context *ibv_ctx;
+	struct efadv_device_attr efadv_attr;
+	int num_dev = 0;
+	int ret, i;
 
-static int run_single_test(struct test_case *test)
+	*supported = false;
+
+	dev_list = ibv_get_device_list(&num_dev);
+	if (!dev_list || num_dev < 1) {
+		FT_ERR("No ibv devices found");
+		if (dev_list)
+			ibv_free_device_list(dev_list);
+		return -FI_ENODEV;
+	}
+
+	/* Use the first EFA device, consistent with fi_efa_rdma_checker. */
+	for (i = 0; i < num_dev; i++) {
+		ibv_ctx = ibv_open_device(dev_list[i]);
+		if (!ibv_ctx)
+			continue;
+
+		memset(&efadv_attr, 0, sizeof(efadv_attr));
+		ret = efadv_query_device(ibv_ctx, &efadv_attr,
+					 sizeof(efadv_attr));
+		ibv_close_device(ibv_ctx);
+		if (ret) {
+			/* EOPNOTSUPP means this is not an EFA device */
+			if (ret == EOPNOTSUPP)
+				continue;
+			FT_ERR("efadv_query_device failed on device %d: %d",
+			       i, -ret);
+			ibv_free_device_list(dev_list);
+			return -ret;
+		}
+
+		*supported = !!(efadv_attr.device_caps &
+				EFADV_DEVICE_ATTR_CAPS_RDMA_READ);
+		ibv_free_device_list(dev_list);
+		return FI_SUCCESS;
+	}
+
+	ibv_free_device_list(dev_list);
+	FT_ERR("No EFA device found");
+	return -FI_ENODEV;
+}
+
+
+static int run_single_test(struct test_case *test, bool device_support_rdma_read)
 {
 	int ret;
 
@@ -124,8 +178,14 @@ static int run_single_test(struct test_case *test)
 
 	ret = setup_mmap_buffer(test->mmap_prot, test->mr_access);
 
-	/* FI_REMOTE_WRITE/FI_READ do not need IBV_ACCESS_LOCAL_WRITE without RDMA read */
-	if (use_emulated_read &&
+	/*
+	 * If we don't have rdma read, then the mr reg will succeed for
+	 * FI_READ and FI_REMOTE_WRITE because the reg API only checks
+	 * the buffer access flags for capabilities that might get used.
+	 * Technically, we should be failing in this case, but MR and
+	 * allocation that goes through libfabric will never hit this issue
+	 */
+	if (!device_support_rdma_read &&
 	    (test->mr_access == FI_REMOTE_WRITE || test->mr_access == FI_READ))
 		test->should_pass = true;
 
@@ -158,13 +218,13 @@ static int run_single_test(struct test_case *test)
 	}
 }
 
-static int run_test(void)
+static int run_test(bool device_support_rdma_read)
 {
 	int ret, i;
 	int failed_tests = 0;
 
 	for (i = 0; i < NUM_TEST_CASES; i++) {
-		ret = run_single_test(&test_cases[i]);
+		ret = run_single_test(&test_cases[i], device_support_rdma_read);
 		if (ret)
 			failed_tests++;
 	}
@@ -178,6 +238,7 @@ static int run_test(void)
 static int run(void)
 {
 	int ret;
+	bool device_support_rdma_read;
 
 	ret = ft_init();
 	if (ret)
@@ -201,15 +262,13 @@ static int run(void)
 		return ret;
 	}
 
-	ret = fi_getopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_EMULATED_READ,
-			&use_emulated_read,
-			&(size_t) {sizeof use_emulated_read});
+	ret = efa_query_rdma_read_support(&device_support_rdma_read);
 	if (ret) {
-		FT_PRINTERR("fi_getopt(FI_OPT_EFA_EMULATED_READ)", ret);
+		FT_PRINTERR("efa_query_rdma_read_support", ret);
 		return ret;
 	}
 
-	ret = run_test();
+	ret = run_test(device_support_rdma_read);
 
 	ft_free_res();
 	return ret;
