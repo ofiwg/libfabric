@@ -16241,6 +16241,33 @@ to make progress and free CQ space before retrying the operation,
 regardless of whether FI_SELECTIVE_COMPLETION is set. Failure to do so
 will result in CQ overrun.
 
+# MR ABORTING
+
+On the `efa` fabric of an *FI_EP_RDM* endpoint, an application can abort
+an in-flight transfer by calling `fi_close()` on the source memory
+region (MR) backing it -- the memory region associated with the local
+buffer for a send/write/read transmits operation, or the remote memory
+region associated with a read/write. Closing the MR signals the provider
+to cancel any in-flight operation that still references it.
+
+This does not apply to memory regions that are referenced by posted
+receive operations. The provider will fail to close a memory region that
+has a corresponding posted recv buffer leading to undefined behavior.
+The only way to abort receive operations, and/or TX operations who's
+memory region is associated with posted recv's is by closing the
+corresponding endpoint.
+
+If the user closes an MR on an outstanding TX operation, and its peer
+connection is functioning normally, the operation is guaranteed to
+eventually provide a single TX completion. The operation may succeed or
+fail, depending on timing. The exact error completion provided depends
+on underlying protocol used for the transfer. If a receive operation has
+been matched to an aborted TX operation, and its peer connection is
+functioning normally, the receiver side is guaranteed to write a CQ
+error for the matched receive. If the peer endpoint is closed, or if the
+peer dies, the corresponding matched TX/RX completions may never
+complete.
+
 # LIMITATIONS
 
 ## Completion events
