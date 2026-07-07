@@ -1302,6 +1302,7 @@ int all_to_all(size_t size)
 	double start, stop;
 	int mapping = 0;
 	int rmapping = 0;
+	static int header = 1;
 
 	start = stop = 0;
 	i = pending = completed = 0;
@@ -1365,7 +1366,12 @@ int all_to_all(size_t size)
 	if (options.test_type == RECV)
 		return 0;
 
-	printf("%10zd (x %4d) %10.2lf us/xfer %12.2lf MB/s\n", size,
+	if (header) {
+		printf("%10s %-8s %10s %12s\n",
+		       "bytes", "(x iter)", "usec/xfer", "MB/sec");
+		header = 0;
+	}
+	printf("%10zd (x %4d) %10.2lf %12.2lf\n", size,
 		options.iters,
 		(stop - start) / (options.iters * (options.max_ranks - 1)),
 		((long)size * options.iters * ((options.max_ranks - 1) +
@@ -1384,6 +1390,7 @@ int point_to_point(size_t size)
 	double start, stop;
 	int mapping = 0;
 	int rmapping = 0;
+	static int header = 1;
 
 	start = stop = 0;
 	i = pending = completed = 0;
@@ -1441,7 +1448,12 @@ verify:
 	if (!options.client)
 		return 0;
 
-	printf("%10zd (x %4d) %10.2lf us/xfer %12.2lf MB/s\n", size,
+	if (header) {
+		printf("%10s %-8s %10s %12s\n",
+		       "bytes", "(x iter)", "usec/xfer", "MB/sec");
+		header = 0;
+	}
+	printf("%10zd (x %4d) %10.2lf %12.2lf\n", size,
 		options.iters,
 		(stop - start) / options.iters,
 		((long)size * options.iters) / (stop - start));
