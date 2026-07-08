@@ -3136,15 +3136,15 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 			     const uint64_t tx_op_flags, const uint64_t dest_rx, const uint64_t caps,
 			     const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 			     const enum fi_hmem_iface hmem_iface, const uint64_t hmem_handle,
-			     const uint64_t hmem_device, const struct fi_opx_mr *opx_mr,
-			     const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
+			     const uint64_t hmem_device, struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type,
+			     const bool ctx_sharing);
 
 ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr,
 				 uint64_t tag, void *user_context, const uint32_t data, int lock_required,
 				 const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t dest_rx,
 				 const uint64_t caps, const enum ofi_reliability_kind reliability,
 				 const uint64_t do_cq_completion, const enum fi_hmem_iface hmem_iface,
-				 const uint64_t hmem_device, const uint64_t hmem_handle, const struct fi_opx_mr *opx_mr,
+				 const uint64_t hmem_device, const uint64_t hmem_handle, struct fi_opx_mr *opx_mr,
 				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
 
 __OPX_FORCE_INLINE__
@@ -3153,9 +3153,8 @@ ssize_t opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_t l
 				    const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t dest_rx,
 				    const uint64_t caps, const enum ofi_reliability_kind reliability,
 				    const uint64_t do_cq_completion, const enum fi_hmem_iface hmem_iface,
-				    const uint64_t hmem_device, const uint64_t hmem_handle,
-				    const struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type,
-				    const bool ctx_sharing)
+				    const uint64_t hmem_device, const uint64_t hmem_handle, struct fi_opx_mr *opx_mr,
+				    const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	if (hfi1_type & OPX_HFI1_WFR) {
 		return opx_hfi1_tx_send_rzv(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,

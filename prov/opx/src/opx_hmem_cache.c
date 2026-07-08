@@ -485,8 +485,7 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 	opx_mr->flags			    = entry->info.flags;
 	struct opx_hmem_domain *hmem_domain = (struct opx_hmem_domain *) cache->domain;
 	opx_mr->domain			    = hmem_domain->opx_domain;
-	opx_mr->base_addr    = hmem_domain->opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : entry->info.iov.iov_base;
-	opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_NOT_REGISTERED;
+	opx_mr->base_addr = hmem_domain->opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : entry->info.iov.iov_base;
 
 	assert(opx_mr->attr.iface == FI_HMEM_CUDA || opx_mr->attr.iface == FI_HMEM_ROCR);
 
@@ -565,21 +564,11 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	}
 	opx_mr->attr.hmem_data = 0UL;
 
+	bool suppress_free = false;
 #if HAVE_HFISVC
-	if (opx_mr->domain->use_hfisvc) {
-		if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
-			OPX_HFISVC_DEBUG_LOG("Closing cached mr opx_mr=%p (hfisvc.state=%d)\n", opx_mr,
-					     opx_mr->hfisvc.state);
-			opx_mr->hfisvc.state |= OPX_MR_HFISVC_STATE_CLOSE_ISSUED;
-			opx_domain_hfisvc_poll(opx_mr->domain);
-			opx_mr->hfisvc.state &= ~OPX_MR_HFISVC_STATE_CLOSE_ISSUED;
-		}
-
-		int ret = opx_domain_deferred_work_enqueue_close(opx_mr->domain, opx_mr);
-		if (ret) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc close mr returned %d\n",
-				ret);
-		}
+	int ret = opx_mr_hfisvc_enqueue_deferred_close(opx_mr->domain, opx_mr, &suppress_free);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc close mr returned %d\n", ret);
 	}
 #endif
 
@@ -596,13 +585,8 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 		}
 	}
 
-	// If HFI service is being used, opx_mr will be freed by the deferred close
-	if (!opx_mr->domain->use_hfisvc) {
-#ifndef NDEBUG
-		/* Intentionally setting opx_mr to non-valid value to allow easier debug of
-		 * an attempt to access the opx_mr after it's been deleted */
-		memset(opx_mr, 0xAA, sizeof(*opx_mr));
-#endif
+	// suppress_free set when opx_mr will be freed by the hfisvc deferred close
+	if (!suppress_free) {
 		free(opx_mr);
 	}
 }

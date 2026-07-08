@@ -294,10 +294,14 @@ int opx_hfisvc_keyset_alloc_key(opx_hfisvc_keyset_t *keyset, opx_hfisvc_key_t *k
 	} else if (OFI_UNLIKELY(_keyset->leased_slow > _keyset->slow_treshold)) {
 		// Slow table populated by 7/8, need to expand
 		if (OFI_UNLIKELY(opx_hfisvc_keyset_grow(&_keyset) != 0)) {
-			FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.alloc_enospc);
+			if (counters) {
+				FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.alloc_enospc);
+			}
 			return -FI_ENOSPC;
 		}
-		FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.keyset_grow);
+		if (counters) {
+			FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.keyset_grow);
+		}
 		*keyset		 = (opx_hfisvc_keyset_t) _keyset;
 		_keyset->hintptr = _keyset->fast_bitmap;
 		// Last word in the new keyset is always 0, do not need any search
@@ -369,7 +373,9 @@ int opx_hfisvc_keyset_alloc_key(opx_hfisvc_keyset_t *keyset, opx_hfisvc_key_t *k
 		_keyset->leased_slow++;
 	}
 
-	FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.alloc);
+	if (counters) {
+		FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.alloc);
+	}
 	return 0;
 } // opx_hfisvc_keyset_alloc_key
 
@@ -380,7 +386,9 @@ __OPX_FORCE_INLINE__
 void opx_hfisvc_keyset_free_key(opx_hfisvc_keyset_t keyset, opx_hfisvc_key_t key,
 				struct fi_opx_debug_counters *counters)
 {
-	FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.free);
+	if (counters) {
+		FI_OPX_DEBUG_COUNTERS_INC(counters->hfisvc.access_key.free);
+	}
 
 	struct opx_hfisvc_keyset *_keyset = (struct opx_hfisvc_keyset *) keyset;
 	assert(_keyset);
