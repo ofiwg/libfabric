@@ -891,6 +891,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 			rxe->tx_id = runtread_rtm_hdr->send_id;
 			read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry));
 			rxe->rma_iov_count = runtread_rtm_hdr->read_iov_count;
+			assert(rxe->rma_iov_count <= ep->base_ep.info->tx_attr->rma_iov_limit);
 			memcpy(rxe->rma_iov, read_iov, rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 			efa_rdm_tracepoint(runtread_read_posted, rxe->msg_id,
 				    (size_t) rxe->cq_entry.op_context, rxe->total_len);
@@ -1215,6 +1216,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 
 	rxe->tx_id = rtm_hdr->send_id;
 	rxe->rma_iov_count = rtm_hdr->read_iov_count;
+	assert(rxe->rma_iov_count <= ep->base_ep.info->tx_attr->rma_iov_limit);
 	memcpy(rxe->rma_iov, read_iov,
 	       rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 
