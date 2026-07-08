@@ -174,7 +174,6 @@ void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
  * @brief process a RTM that has been matched to a RX entry
  *
  * @param[in,out]	pkt_entry	RTM packet entry
- * @param[in,out]	rxe			RX entry that matches the RTM
  *
  * @returns
  * 0 on success
@@ -283,6 +282,13 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
 		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(
+				&ep->base_ep, FI_EINVAL,
+				FI_EFA_ERR_PKT_PROC_MSGRTM);
+			efa_rdm_pke_release_rx(pkt_entry);
+			return -FI_EINVAL;
+		}
 		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	} else {
 		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
@@ -331,6 +337,13 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 	rtm_hdr = (struct efa_rdm_rtm_base_hdr *) pkt_entry->wiredata;
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
 		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(
+				&ep->base_ep, FI_EINVAL,
+				FI_EFA_ERR_PKT_PROC_TAGRTM);
+			efa_rdm_pke_release_rx(pkt_entry);
+			return -FI_EINVAL;
+		}
 		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	} else {
 		rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, &pkt_entry);
@@ -864,7 +877,6 @@ void efa_rdm_pke_handle_medium_rtm_send_completion(struct efa_rdm_pke *pkt_entry
  * RTM and 2 types of RUNTREAD RTM.
  *
  * @param[in,out]	pkt_entry	packet entry
- * @param[in]	peer	efa_rdm_peer struct of the sender
  */
 ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 {
@@ -1332,6 +1344,7 @@ ssize_t efa_rdm_pke_init_runtread_tagrtm(struct efa_rdm_pke *pkt_entry,
  * This function applies to both RUNTREAD_MSGRTM and RUNTREAD_TAGRTM.
  *
  * @param[in,out]	pkt_entry	packet entry
+ * @param[in,out]	peer	efa_rdm_peer struct of the sender
  */
 void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
