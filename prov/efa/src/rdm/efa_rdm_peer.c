@@ -391,9 +391,10 @@ bool efa_rdm_peer_abort_ooo_msg(struct efa_rdm_peer *peer, uint32_t msg_id)
  *        as an abort marker, so the window can advance past a source-aborted
  *        msg_id that will never arrive.
  *
- * Called from the inbound PEER_ERROR_PKT handler for REF_MSG_ID_SKIP. The
- * named message was aborted at the source and owes no completion, but the
- * reorder window is (or will be) parked on msg_id. Three cases:
+ * Called from the inbound PEER_ERROR_PKT handler when no matched rxe exists
+ * for msg_id. The named message was aborted at the source and (per the
+ * receiver's own state) owes no completion, but the reorder window is (or
+ * will be) parked on msg_id. Three cases:
  *  1. Already processed: nothing to do.
  *  2. A segment was already buffered: mark it aborted in place
  *     (efa_rdm_peer_abort_ooo_msg); this packet is not needed.

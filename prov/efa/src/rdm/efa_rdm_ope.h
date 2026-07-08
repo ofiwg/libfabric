@@ -363,23 +363,6 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 #define EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED	BIT_ULL(21)
 
 /**
- * @brief flag to indicate a sender-side LONGCTS peer-abort must be
- *        signalled to the receiver by per-peer msg_id rather than by the
- *        receiver's ope index.
- *
- * Set in efa_rdm_txe_handle_error() when a LONGCTS two-sided RTM is
- * aborted before its first CTS arrives (state still EFA_RDM_TXE_REQ), so
- * txe->rx_id (the receiver's rxe index, learned only from the CTS) is not
- * yet valid. efa_rdm_pke_init_peer_error_for_ope() reads this flag and
- * encodes the PEER_ERROR_PKT with op_id = txe->msg_id and
- * EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP (bytes_acked is always 0 in this
- * case -- no CTSDATA was acked), so the receiver marks the msg_id aborted
- * and advances its reorder window without producing a completion (no recv
- * was ever matched, since no CTS was exchanged).
- */
-#define EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID	BIT_ULL(22)
-
-/**
  * @brief Sentinel for an ope id not yet learned from the peer.
  *
  * A txe's rx_id is only known once a CTS has been processed; testing

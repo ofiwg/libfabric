@@ -295,36 +295,17 @@ EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_read_nack_hdr, 16);
 /*
  * @brief format of the peer error packet. (Packet Type ID 12)
  *
- * PEER_ERROR is a bidirectional control packet telling the remote peer
- * this side is abandoning an in-flight two-sided protocol step. One
- * packet type serves both directions; the receiver uses op_id +
- * ref_kind to resolve the local ope being abandoned.
- *
- * Header fields:
- *  - op_id:      an ope owned by the packet's receiver.
- *  - ref_kind:   how to resolve op_id -- REF_OPE_INDEX (an ope-pool
- *                index; LONGREAD/LONGCTS), REF_MSG_ID (a per-peer
- *                msg_id via the rxe_map; medium that took partial
- *                data), or REF_MSG_ID_SKIP (a per-peer msg_id whose
- *                message never delivered; unblock the reorder window).
- *  - prov_errno: the triggering provider error, for CQ/log attribution.
+ * PEER_ERROR is a bidirectional control packet telling the remote peer this
+ * side is abandoning an in-flight two-sided protocol step. It carries only
+ * identifiers, never a verdict about what the remote must do: a device TX
+ * error can fire while the data still arrives at the peer, so only the
+ * receiving side's local state can decide the outcome. msg_id (with the
+ * packet's source peer) always uniquely names the transfer; op_id is an
+ * optional ope-pool index owned by the packet's receiver that avoids a
+ * linear msg_id search, but pooled opes are freed and reused, so it is
+ * usable only when op_id_valid is set and the resolved ope still names
+ * this msg_id.
  */
-
-/* op_id is an ope-pool index owned by the receiver of this packet. */
-#define EFA_RDM_PEER_ERROR_REF_OPE_INDEX	0
-/* op_id is a per-peer msg_id, resolved via the peer's rxe_map. */
-#define EFA_RDM_PEER_ERROR_REF_MSG_ID		1
-/*
- * op_id is a per-peer msg_id whose message was aborted at the source
- * before any payload the receiver is owed was delivered (EAGER, or a
- * medium / runt-only runtread that delivered zero bytes). The receiver
- * owes NO completion for this msg_id; the packet exists solely to
- * advance the reorder window past an id that will never arrive, so the
- * messages queued behind it can be processed. Distinct from REF_MSG_ID,
- * which targets a matched rxe that took partial data and IS owed a
- * FI_ECANCELED completion.
- */
-#define EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP	2
 
 /**
  * @brief Direction a PEER_ERROR packet flows, from the emitter's viewpoint.
@@ -341,17 +322,18 @@ enum efa_rdm_peer_error_direction {
 
 struct efa_rdm_peer_error_hdr {
 	EFA_RDM_BASE_HEADER();
-	uint32_t op_id;     /* ID of the ope owned by the receiver of this packet */
-	uint32_t ref_kind;  /* how to resolve op_id (EFA_RDM_PEER_ERROR_REF_*) */
-	uint32_t direction; /* enum efa_rdm_peer_error_direction (emitter's viewpoint) */
-	uint32_t prov_errno;/* the prov_errno that triggered the abort, for logging */
+	uint32_t msg_id;      /* per-peer msg_id of the aborted transfer (always valid) */
+	uint32_t op_id;       /* peer-owned ope index; usable iff op_id_valid != 0 */
+	uint32_t op_id_valid; /* nonzero iff op_id is usable */
+	uint32_t direction;   /* enum efa_rdm_peer_error_direction (emitter's viewpoint) */
+	uint32_t prov_errno;  /* the prov_errno that triggered the abort, for logging */
 	union {
 		uint32_t connid;  /* set when EFA_RDM_PKT_CONNID_HDR is on */
 		uint32_t padding;
 	};
 };
 
-EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_peer_error_hdr, 24);
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_peer_error_hdr, 28);
 
 /**
  * @brief header format of ATOMRSP packet. (Packet Type ID 8)

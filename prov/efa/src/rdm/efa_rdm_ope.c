@@ -711,6 +711,10 @@ void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno)
 	if (rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
 		return;
 
+	/* Peer Abort only supports send/tagged */
+	if (rxe->op != ofi_op_msg && rxe->op != ofi_op_tagged)
+		return;
+
 	EFA_INFO(FI_LOG_CQ,
 		 "Peer-abort marked on rxe %p (op=%u, device prov_errno=%d %s); "
 		 "deferring user error completion to WR drain\n",
@@ -897,8 +901,8 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 	 * homogeneous_peers); otherwise there is no one to tell, so surface the
 	 * completion and free now. When we emit, keep the txe alive -- the
 	 * packet's own completion re-runs this helper (EMITTED branch) to free
-	 * it. The wire ref_kind is derived from the txe in
-	 * efa_rdm_pke_init_peer_error_for_ope(); bytes_acked is final here.
+	 * it. The wire identifiers (msg_id, and an optional op_id hint) are
+	 * derived from the txe in efa_rdm_pke_init_peer_error_for_ope().
 	 */
 	peer_support_err_pkt = txe->peer &&
 	    (txe->ep->homogeneous_peers || txe->peer->is_self ||
@@ -936,17 +940,13 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
  *
  * @param[in]	txe		txe that encountered the error
  * @param[in]	prov_errno	positive EFA provider error code
- * @param[in]	prev_state	txe->state before handle_error set it to OPE_ERR
  * @return	true if this is a peer abort whose normal error CQ is withheld
  *		(the drain delivers FI_ECANCELED / FI_EFA_ERR_PEER_ABORTED);
  *		false for an ordinary error the caller should report.
  */
 static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
-						  int prov_errno,
-						  enum efa_rdm_ope_state prev_state)
+						  int prov_errno)
 {
-	bool is_eager, is_medium, is_runt_only_runtread, is_longcts;
-
 	/*
 	 * This check must come first in order to properly handle txe errors
 	 * on READ based protocols.
@@ -960,30 +960,23 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
 	if (OFI_LIKELY(efa_rdm_mr_gen_check_ope(txe)))
 		return false;
 
-	/* Only protocols whose source MR carries user data the receiver is
-	 * waiting on and cannot self-detect. Runtread WITH a tail READ
-	 * (total_len > bytes_runt) is excluded -- the receiver's own failing
-	 * RDMA READ signals it; only runt-only runtread (== bytes_runt) is
-	 * sender-signalled. LONGREAD and one-sided RTW/RTR carry no such data. */
-	is_eager = efa_rdm_pkt_type_is_eager_rtm(txe->protocol);
-	is_medium = efa_rdm_pkt_type_is_medium(txe->protocol);
-	is_runt_only_runtread = efa_rdm_pkt_type_is_runtread(txe->protocol) &&
-				txe->total_len == txe->bytes_runt;
-	is_longcts = efa_rdm_pkt_type_is_longcts_rtm(txe->protocol);
-	if (!is_eager && !is_medium && !is_runt_only_runtread && !is_longcts)
+	/*
+	 * Only two-sided RTM protocols whose source MR carries user data the
+	 * receiver is waiting on: EAGER, medium, runtread (with OR without a
+	 * tail READ), and LONGCTS.
+	 */
+	if (!efa_rdm_pkt_type_is_eager_rtm(txe->protocol) &&
+	    !efa_rdm_pkt_type_is_medium(txe->protocol) &&
+	    !efa_rdm_pkt_type_is_runtread(txe->protocol) &&
+	    !efa_rdm_pkt_type_is_longcts_rtm(txe->protocol))
+		return false;
+
+	/* MR Abort is only supported for send/tagged operations */
+	if  (txe->op != ofi_op_msg && txe->op != ofi_op_tagged)
 		return false;
 
 	txe->peer_error_prov_errno = prov_errno;
 	txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
-
-	/* A LONGCTS aborted before its CTS arrived has no valid rx_id, so the
-	 * receiver must be signalled by per-peer msg_id (REF_MSG_ID_SKIP)
-	 * instead of ope index. handle_error already set txe->state to OPE_ERR,
-	 * so test the saved prev_state; a LONGCTS that reached OPE_SEND has a
-	 * valid rx_id and is referenced by ope index at emit time. */
-	if (is_longcts && prev_state != EFA_RDM_OPE_SEND)
-		txe->internal_flags |= EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID;
-
 	return true;
 }
 
@@ -1016,7 +1009,6 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
-	enum efa_rdm_ope_state prev_state = txe->state;
 	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	ep = txe->ep;
@@ -1130,7 +1122,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	    !(txe->fi_flags & FI_INJECT))
 		return;
 
-	if (efa_rdm_txe_mark_peer_abort_if_needed(txe, prov_errno, prev_state)) {
+	if (efa_rdm_txe_mark_peer_abort_if_needed(txe, prov_errno)) {
 		efa_rdm_txe_progress_peer_abort_if_drained(txe);
 		return;
 	}

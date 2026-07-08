@@ -370,7 +370,7 @@ void test_efa_rdm_pke_handle_tx_error_eager_no_emit_when_peer_unsupported(void *
 void test_efa_rdm_pke_handle_tx_error_eager_rtw_no_emit(void **state);
 void test_efa_rdm_pke_handle_tx_error_medium_no_emit_on_non_lkey_errno(void **state);
 void test_efa_rdm_pke_handle_tx_error_runtread_only_emits_peer_error(void **state);
-void test_efa_rdm_pke_handle_tx_error_runtread_with_read_no_emit(void **state);
+void test_efa_rdm_pke_handle_tx_error_runtread_with_read_emits(void **state);
 void test_efa_rdm_atomic_compare_desc_persistence(void **state);
 void test_efa_rdm_txe_dc_ctsdata_send_first(void **state);
 void test_efa_rdm_txe_dc_ctsdata_resp_first(void **state);

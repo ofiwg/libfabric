@@ -708,10 +708,14 @@ static int deliver_peer_error_skip(struct efa_rdm_ep *efa_rdm_ep,
 
 	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	/* msg_id-only packet (no op_id hint): the receiver decides -- with no
+	 * matched rxe it advances the reorder window past msg_id. */
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id = msg_id;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP;
+	err_hdr->op_id_valid = 0;
+	err_hdr->msg_id = msg_id;
+	err_hdr->op_id = 0;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_FLUSHED;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -1040,27 +1044,27 @@ void test_efa_rdm_peer_skip_aborted_msg_id_abort_marker_behind_head(
 }
 
 /**
- * @brief RX side of the LONGCTS pre-CTS abort fix: an inbound
- *        PEER_ERROR_PKT with REF_MSG_ID_SKIP for a LONGCTS msg_id that
- *        never arrived unblocks the reorder window WITHOUT producing a
- *        completion -- driven through the full inbound dispatcher
+ * @brief RX side of the LONGCTS pre-CTS abort fix: an inbound msg_id-only
+ *        PEER_ERROR_PKT for a LONGCTS msg_id that never arrived unblocks
+ *        the reorder window WITHOUT producing a completion -- driven
+ *        through the full inbound dispatcher
  *        efa_rdm_pke_handle_peer_error_recv().
  *
  * Counterpart to the sender-side tests
  * (test_efa_rdm_txe_handle_error_longcts_prepost_cancel_emits_skip /
  * test_efa_rdm_pke_init_peer_error_for_ope_longcts_pre_cts_skip): a
  * LONGCTS sender aborted before its first CTS has no receiver rxe index,
- * so it emits a REF_MSG_ID_SKIP packet keyed by msg_id. On the wire that
- * packet is indistinguishable from an EAGER/medium skip, so the receiver
- * path is shared; the other skip tests drive the
- * efa_rdm_peer_queue_aborted_msg_marker() helper directly, whereas
- * this one exercises the actual receive entry point
- * (efa_rdm_pke_handle_peer_error_recv) for the LONGCTS never-arrived
- * case.
+ * so it emits a msg_id-only packet (no op_id hint). On the wire that
+ * packet is indistinguishable from an EAGER/medium msg_id-only abort, so
+ * the receiver path is shared; with no matched rxe the receiver-decides
+ * dispatcher routes to efa_rdm_peer_queue_aborted_msg_marker(). The other
+ * skip tests drive that helper directly, whereas this one exercises the
+ * actual receive entry point (efa_rdm_pke_handle_peer_error_recv) with
+ * the packet a sender emits for a LONGCTS RTM that never arrived.
  *
  * msg_id 0 (the aborted LONGCTS RTM) never arrives; msg_id 1 arrives OOO
  * and is buffered (then aborted so the drain releases it without the
- * full recv-match/CQ path). Dispatching the SKIP packet for 0 abort markers
+ * full recv-match/CQ path). Dispatching the packet for 0 abort markers
  * it and slides the window past the buffered 1, leaving exp_msg_id == 2,
  * with no rxe and no CQ entry.
  */
@@ -1088,7 +1092,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
-	/* pke1 (buffered) and the SKIP packet are rx-pool pkes the drain
+	/* pke1 (buffered) and the PEER_ERROR packet are rx-pool pkes the drain
 	 * releases; keep the rx-pkt accounting invariant intact. */
 	efa_rdm_ep->efa_rx_pkts_posted =
 		efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep) - 2;
@@ -1114,18 +1118,22 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 	/* Build the inbound PEER_ERROR (skip) packet for the never-arrived
 	 * LONGCTS msg_id 0 and deliver it through the FULL dispatcher (the
 	 * actual receive entry point), not the abort marker helper. The
-	 * dispatcher routes REF_MSG_ID_SKIP to the abort marker path and
-	 * consumes the packet. */
+	 * dispatcher finds no matched rxe and routes to the abort marker path,
+	 * consuming the packet. */
 	skip_pkt = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
 				     EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(skip_pkt);
 	skip_pkt->peer = peer;
 	err_hdr = (struct efa_rdm_peer_error_hdr *) skip_pkt->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	/* msg_id-only (no op_id hint): the dispatcher finds no matched rxe and
+	 * routes to the abort-marker path, consuming the packet. */
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id_valid = 0;
+	err_hdr->msg_id = 0;
 	err_hdr->op_id = 0;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_FLUSHED;
 	err_hdr->connid = raw_addr.qkey;
 	skip_pkt->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
