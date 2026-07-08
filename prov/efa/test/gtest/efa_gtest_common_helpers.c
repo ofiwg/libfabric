@@ -55,6 +55,21 @@ fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av)
 	return fi_addr;
 }
 
+fi_addr_t efa_test_insert_self_gid_peer(struct fid_ep *ep, struct fid_av *av)
+{
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = FI_ADDR_NOTAVAIL;
+
+	if (fi_getname(&ep->fid, &raw_addr, &raw_addr_len))
+		return FI_ADDR_NOTAVAIL;
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	if (fi_av_insert(av, &raw_addr, 1, &peer_addr, 0, NULL) != 1)
+		return FI_ADDR_NOTAVAIL;
+	return peer_addr;
+}
+
 struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
 						fi_addr_t fi_addr)
 {

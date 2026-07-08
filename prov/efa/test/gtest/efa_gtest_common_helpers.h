@@ -37,6 +37,12 @@ int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
  */
 fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av);
 
+/**
+ * @brief Insert a peer using the EP's own GID.
+ * @return the fi_addr, or FI_ADDR_NOTAVAIL on failure
+ */
+fi_addr_t efa_test_insert_self_gid_peer(struct fid_ep *ep, struct fid_av *av);
+
 struct ibv_ah;
 
 /**
