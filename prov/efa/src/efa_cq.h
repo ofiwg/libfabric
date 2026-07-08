@@ -200,7 +200,9 @@ const char *efa_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
  * @param[in]    prov_errno  EFA provider * error code(must be positive)
  * @param[out]   err_msg     Pointer to the address of error message written by
  * this function
- * @param[out]   buflen      Pointer to the returned error data size
+ * @param[in,out] buflen     On input, the capacity of err_msg in bytes. On
+ * output, the byte length of the message written.
+ * The message could be truncated to fit the input capacity.
  * @return       A status code. 0 if the error data was written successfully,
  * otherwise a negative FI error code.
  */
@@ -212,10 +214,11 @@ static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
 	char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
 	char local_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
 	const char *base_msg = efa_strerror(prov_errno);
+
 	size_t len = 0;
 	uint64_t local_host_id;
 
-	*buflen = 0;
+	size_t buflen_in = *buflen;
 
 	len = sizeof(ep_addr_str);
 	efa_base_ep_raw_addr_str(ep, ep_addr_str, &len);
@@ -233,21 +236,16 @@ static inline int efa_write_error_msg(struct efa_base_ep *ep, fi_addr_t addr,
 	/* efa-raw cannot get peer host id without a handshake */
 	strcpy(peer_host_id_str, "N/A");
 
-	int ret = snprintf(err_msg, EFA_ERROR_MSG_BUFFER_LENGTH,
+	int ret = snprintf(err_msg, buflen_in,
 			   "%s My EFA addr: %s My host id: %s Peer EFA addr: "
 			   "%s Peer host id: %s",
 			   base_msg, ep_addr_str, local_host_id_str,
 			   peer_addr_str, peer_host_id_str);
 
-	if (ret < 0 || ret > EFA_ERROR_MSG_BUFFER_LENGTH - 1) {
+	if (ret < 0) {
 		return -FI_EINVAL;
 	}
-
-	if (strlen(err_msg) >= EFA_ERROR_MSG_BUFFER_LENGTH) {
-		return -FI_ENOBUFS;
-	}
-
-	*buflen = EFA_ERROR_MSG_BUFFER_LENGTH;
+	*buflen = MIN((size_t) ret + 1, buflen_in);
 
 	return 0;
 }

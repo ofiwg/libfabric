@@ -292,7 +292,8 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_rdm_mr.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_pke.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_ope_helpers.c \
-	prov/efa/test/gtest/efa_gtest_rdm_ope.cc
+	prov/efa/test/gtest/efa_gtest_rdm_ope.cc \
+	prov/efa/test/gtest/efa_gtest_cq.cc
 
 prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
@@ -316,7 +317,14 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=ibv_destroy_ah \
 	-Wl,--wrap=efadv_query_ah \
 	-Wl,--wrap=efa_av_reverse_av_add \
-	-Wl,--wrap=ofi_mr_map_insert
+	-Wl,--wrap=ofi_mr_map_insert \
+	-Wl,--wrap=efa_ibv_cq_start_poll \
+	-Wl,--wrap=efa_ibv_cq_end_poll \
+	-Wl,--wrap=efa_ibv_cq_wc_read_opcode \
+	-Wl,--wrap=efa_ibv_cq_wc_read_vendor_err \
+	-Wl,--wrap=efa_ibv_cq_wc_read_qp_num \
+	-Wl,--wrap=efa_ibv_cq_wc_read_wc_flags \
+	-Wl,--wrap=efa_ibv_cq_wc_read_byte_len
 
 prov_efa_test_gtest_efa_gtest_LIBS = $(linkback)
 
