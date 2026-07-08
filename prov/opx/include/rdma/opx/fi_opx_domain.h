@@ -36,6 +36,8 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 #include <uuid/uuid.h>
 #include <uthash.h>
 
@@ -236,6 +238,7 @@ struct fi_opx_av {
  * Each state indicates the following:
  *
  * NOT_REGISTERED      : The MR has not been registered with HFI service at all.
+ * OPEN_DEFERRED	   : The MR has been created, but the registration with HFI service has been deferred.
  * PENDING_OPEN        : A request to register this MR with HFI service has been submitted, and we're waiting
  *                       for a completion from HFI service to let us know it's done.
  * PENDING_KEY_ALLOC   : This MR is registered with HFI service, but does not yet have an access_key assigned
@@ -245,6 +248,12 @@ struct fi_opx_av {
  *                       HFI service to let us know it's done.
  * OPENED              : This MR is registered with HFI service, and may be used for DMA operations in HFI service
  *                       using its access_key.
+ * PENDING_OPEN_CLOSE  : A request to close this MR with HFI service has been submitted, and we're waiting
+ *                       for a completion from HFI service to let us know the MR register is done.
+ * PENDING_KEY_ALLOC_CLOSE : A request to close this MR with HFI service has been submitted, and we're waiting
+ *                       for a completion from HFI service to let us know the access_key is assigned.
+ * PENDING_KEY_ENABLE_CLOSE : A request to close this MR with HFI service has been submitted, and we're waiting
+ *                       for a completion from HFI service to let us know the key is enabled.
  * PENDING_KEY_DISABLE : A request to deregister the access_key associated with this MR has been submitted to
  *                       HFI service, and we're waiting for a completion from HFI service to let us know it's done.
  * PENDING_DEREGISTER  : The access_key has been successfully deregistered from HFI service and freed, and now
@@ -254,17 +263,30 @@ struct fi_opx_av {
  * CLOSED              : The MR has been fully deregisterd with HFI service, and may be closed/freed.
  */
 enum opx_mr_hfisvc_state {
-	OPX_MR_HFISVC_STATE_NOT_REGISTERED = 0,
-	OPX_MR_HFISVC_STATE_PENDING_OPEN,
-	OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC,
-	OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE,
-	OPX_MR_HFISVC_STATE_OPENED,
-	OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE,
-	OPX_MR_HFISVC_STATE_PENDING_DEREGISTER,
-	OPX_MR_HFISVC_STATE_PENDING_CLOSE,
-	OPX_MR_HFISVC_STATE_CLOSED,
-	OPX_MR_HFISVC_STATE_CLOSE_ISSUED = 0x80000000,
+	OPX_MR_HFISVC_STATE_NOT_REGISTERED	     = 0,
+	OPX_MR_HFISVC_STATE_OPEN_DEFERRED	     = (1 << 0),
+	OPX_MR_HFISVC_STATE_PENDING_OPEN	     = (1 << 1),
+	OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC	     = (1 << 2),
+	OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE	     = (1 << 3),
+	OPX_MR_HFISVC_STATE_OPENED		     = (1 << 4),
+	OPX_MR_HFISVC_STATE_PENDING_OPEN_CLOSE	     = (1 << 5),
+	OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC_CLOSE  = (1 << 6),
+	OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE_CLOSE = (1 << 7),
+	OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE	     = (1 << 8),
+	OPX_MR_HFISVC_STATE_PENDING_DEREGISTER	     = (1 << 9),
+	OPX_MR_HFISVC_STATE_PENDING_CLOSE	     = (1 << 10),
+	OPX_MR_HFISVC_STATE_CLOSED		     = (1 << 11)
 };
+#define OPX_MR_HFISVC_STATE_CLOSE_SHIFT 4
+OPX_COMPILE_TIME_ASSERT((OPX_MR_HFISVC_STATE_PENDING_OPEN << OPX_MR_HFISVC_STATE_CLOSE_SHIFT) ==
+				OPX_MR_HFISVC_STATE_PENDING_OPEN_CLOSE,
+			"Pending-open close state should be derived from pending-open state");
+OPX_COMPILE_TIME_ASSERT((OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC << OPX_MR_HFISVC_STATE_CLOSE_SHIFT) ==
+				OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC_CLOSE,
+			"Pending-key-alloc close state should be derived from pending-key-alloc state");
+OPX_COMPILE_TIME_ASSERT((OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE << OPX_MR_HFISVC_STATE_CLOSE_SHIFT) ==
+				OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE_CLOSE,
+			"Pending-key-enable close state should be derived from pending-key-enable state");
 
 struct fi_opx_mr {
 	/* == CACHE LINE 0-2 == */
@@ -358,6 +380,7 @@ static inline uint32_t fi_opx_domain_get_rx_max(struct fid_domain *domain)
 
 int opx_hfisvc_mr_deferred_open(struct opx_domain_deferred_work *work);
 int opx_hfisvc_mr_deferred_close(struct opx_domain_deferred_work *work);
+int opx_hfisvc_mr_lazy_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr);
 
 #if HAVE_HFISVC
 __OPX_FORCE_INLINE__
@@ -393,6 +416,53 @@ __OPX_FORCE_INLINE__
 int opx_domain_deferred_work_enqueue_close(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr)
 {
 	return opx_domain_deferred_work_enqueue(opx_domain, opx_mr, opx_hfisvc_mr_deferred_close);
+}
+
+static inline bool opx_mr_hfisvc_needs_close(const struct fi_opx_mr *opx_mr)
+{
+	assert(opx_mr != NULL);
+	return (opx_mr->hfisvc.state & (OPX_MR_HFISVC_STATE_PENDING_OPEN | OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC |
+					OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE | OPX_MR_HFISVC_STATE_OPENED));
+}
+
+static inline bool opx_mr_hfisvc_close_in_progress(const struct fi_opx_mr *opx_mr)
+{
+	assert(opx_mr != NULL);
+	return (opx_mr->hfisvc.state &
+		(OPX_MR_HFISVC_STATE_PENDING_OPEN_CLOSE | OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC_CLOSE |
+		 OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE_CLOSE | OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE |
+		 OPX_MR_HFISVC_STATE_PENDING_DEREGISTER | OPX_MR_HFISVC_STATE_PENDING_CLOSE));
+}
+
+__OPX_FORCE_INLINE__
+void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain);
+
+static inline int opx_mr_hfisvc_enqueue_deferred_close(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr,
+						       bool *suppress_free)
+{
+	assert(opx_mr != NULL);
+
+	bool needs_close = opx_mr_hfisvc_needs_close(opx_mr);
+	*suppress_free	 = needs_close || opx_mr_hfisvc_close_in_progress(opx_mr);
+
+	if (!needs_close) {
+		return FI_SUCCESS;
+	}
+
+	if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
+		OPX_HFISVC_DEBUG_LOG("Closing cached mr opx_mr=%p (hfisvc.state=%d --> %d)\n", opx_mr,
+				     opx_mr->hfisvc.state, opx_mr->hfisvc.state << OPX_MR_HFISVC_STATE_CLOSE_SHIFT);
+		opx_mr->hfisvc.state <<= OPX_MR_HFISVC_STATE_CLOSE_SHIFT;
+		opx_domain_hfisvc_poll(opx_mr->domain);
+	}
+
+	int ret = opx_domain_deferred_work_enqueue_close(opx_domain, opx_mr);
+	if (ret) {
+		// opx_mr leaked if close was not enqueued, don't free it, it could still be in use
+		return ret;
+	}
+
+	return FI_SUCCESS;
 }
 
 __OPX_FORCE_INLINE__

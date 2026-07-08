@@ -37,6 +37,7 @@
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_hmem.h"
+#include "rdma/opx/opx_hfisvc_poll.h"
 #include "rdma/opx/opx_tracer.h"
 
 #include <ofi_enosys.h>
@@ -52,17 +53,15 @@ static int fi_opx_close_mr(fid_t fid)
 
 	OPX_TRACE_MR_BEGIN(OPX_TRACE_EVENT_MR_DEREG, (uint64_t) opx_mr->iov.iov_base, opx_mr->iov.iov_len);
 
-	int ret = 0;
+	int  ret	   = 0;
+	bool suppress_free = false;
 #if HAVE_HFISVC
-	if (opx_domain->use_hfisvc) {
-		ret = opx_domain_deferred_work_enqueue_close(opx_domain, opx_mr);
-		if (ret) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc close mr returned %d\n",
-				ret);
-			OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_DEREG, (uint64_t) (-ret), 0);
-			errno = -ret;
-			return ret;
-		}
+	ret = opx_mr_hfisvc_enqueue_deferred_close(opx_domain, opx_mr, &suppress_free);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc close mr returned %d\n", ret);
+		OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_DEREG, (uint64_t) (-ret), 0);
+		errno = -ret;
+		return ret;
 	}
 #endif
 	if (opx_mr->dmabuf_internal) {
@@ -80,13 +79,8 @@ static int fi_opx_close_mr(fid_t fid)
 		}
 	}
 
-	// If HFI service is being used, opx_mr will be freed by the deferred close
-	if (!opx_domain->use_hfisvc) {
-#ifndef NDEBUG
-		/* Intentionally setting opx_mr to non-valid value to allow easier debug of
-		 * an attempt to access the opx_mr after it's been deleted */
-		memset(opx_mr, 0xAA, sizeof(*opx_mr));
-#endif
+	// suppress_free set when opx_mr will be freed by the hfisvc deferred close
+	if (!suppress_free) {
 		free(opx_mr);
 	}
 	// opx_mr (the object passed in as fid) is now unusable
@@ -282,18 +276,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					opx_mr->dmabuf.base_addr = (void *) ((uintptr_t) base - dmabuf_offset);
 					opx_mr->attr.iface	 = hmem_iface;
 					opx_mr->attr.dmabuf	 = &opx_mr->dmabuf;
-
-					ret = opx_domain_deferred_work_enqueue_open(opx_domain, opx_mr);
-					if (ret) {
-						FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-							"Error enqueuing deferred hfisvc open mr returned %d\n", ret);
-						ofi_mr_cache_delete(opx_domain->hmem_domain->hmem_cache, entry);
-						OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_CACHE_SEARCH,
-								       (uint64_t) (-ret), 0);
-						OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) (-ret), 0);
-						errno = -ret;
-						return ret;
-					}
+					opx_mr->hfisvc.state	 = OPX_MR_HFISVC_STATE_OPEN_DEFERRED;
 				}
 #endif
 				opx_mr->hfisvc.access_key = (uint32_t) -1;
@@ -388,20 +371,11 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
 	}
 	HASH_ADD(hh, opx_domain->mr_hashmap, mr_fid.key, sizeof(opx_mr->mr_fid.key), opx_mr);
-
 #if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {
-		ret = opx_domain_deferred_work_enqueue_open(opx_domain, opx_mr);
-		if (ret) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error enqueuing deferred hfisvc open mr returned %d\n",
-				ret);
-			OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) (-ret), 0);
-			errno = -ret;
-			return ret;
-		}
+		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPEN_DEFERRED;
 	}
 #endif
-
 	*mr = &opx_mr->mr_fid;
 
 	OPX_TRACE_MR_END_SUCCESS(OPX_TRACE_EVENT_MR_REG, 0, 0);
