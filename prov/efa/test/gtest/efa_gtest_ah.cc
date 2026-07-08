@@ -41,10 +41,11 @@ class EfaAhTest : public Test
 
 	void TearDown() override
 	{
+		/* ep_close calls this wrapped function */
+		EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll)
+			.WillRepeatedly(Return(ENOENT));
+
 		efa_test_resource_destruct(&resource);
-		// It's necessary to uninstall the mock after destruct
-		// because the tests have dummy AHs that cannot be given
-		// to the real ibv_destroy_ah
 		MockEfa::set(nullptr);
 	}
 };
