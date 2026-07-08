@@ -110,6 +110,7 @@ static inline void efa_cq_write_error_data(struct efa_cq *efa_cq, struct efa_bas
 		err_msg = (char *)buf->err_data;
 	} else {
 		err_msg = efa_cq->err_buf;
+		buf->err_data_size = EFA_ERROR_MSG_BUFFER_LENGTH;
 	}
 
 	if (efa_write_error_msg(base_ep, addr, prov_errno, err_msg, &buf->err_data_size) != 0) {

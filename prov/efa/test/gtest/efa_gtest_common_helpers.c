@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
-#include "efa_gtest_common_helpers.h"
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_cq.h"
 #include "rdm/efa_rdm_ep.h"
+#include "efa_gtest_common_helpers.h"
 
 void efa_test_fabricate_addr(struct fid_ep *ep, struct efa_ep_addr *addr)
 {
@@ -84,6 +85,51 @@ fi_addr_t efa_test_insert_self_gid_peer(struct fid_ep *ep, struct fid_av *av)
 	if (fi_av_insert(av, &raw_addr, 1, &peer_addr, 0, NULL) != 1)
 		return FI_ADDR_NOTAVAIL;
 	return peer_addr;
+}
+
+struct efa_context *efa_test_alloc_context(uint64_t completion_flags,
+					   fi_addr_t addr)
+{
+	struct efa_context *ctx = calloc(1, sizeof(*ctx));
+
+	if (!ctx)
+		return NULL;
+	ctx->completion_flags = completion_flags;
+	ctx->addr = addr;
+	return ctx;
+}
+
+struct efa_ibv_cq *efa_test_get_ibv_cq(struct fid_cq *cq_fid)
+{
+	struct efa_cq *efa_cq;
+
+	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+	return &efa_cq->ibv_cq;
+}
+
+char *efa_test_get_cq_err_buf(struct fid_cq *cq_fid)
+{
+	struct efa_cq *efa_cq;
+
+	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+	return efa_cq->err_buf;
+}
+
+const size_t efa_test_cq_err_buf_len = EFA_ERROR_MSG_BUFFER_LENGTH;
+
+uint32_t efa_test_get_qp_num(struct fid_ep *ep)
+{
+	struct efa_base_ep *base_ep;
+
+	base_ep = container_of(ep, struct efa_base_ep, util_ep.ep_fid);
+	return base_ep->qp->qp_num;
+}
+
+void efa_test_set_ibv_cq_ex(struct efa_ibv_cq *ibv_cq, int status,
+			    uint64_t wr_id)
+{
+	ibv_cq->ibv_cq_ex->status = status;
+	ibv_cq->ibv_cq_ex->wr_id = wr_id;
 }
 
 struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
