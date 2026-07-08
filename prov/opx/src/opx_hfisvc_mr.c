@@ -31,11 +31,12 @@
  */
 #include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/opx_hfisvc.h"
+#include "rdma/opx/opx_hfisvc_poll.h"
 
 #if HAVE_HFISVC
 void opx_hfisvc_mr_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr)
 {
-	assert(opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_NOT_REGISTERED);
+	assert(opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPEN_DEFERRED);
 
 	struct hfisvc_client_completion completion = {
 		.flags		= OPX_HFISVC_CMPL_CQ,
@@ -91,6 +92,13 @@ void opx_hfisvc_mr_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_
 		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=NOT_REGISTERED -> PENDING_OPEN\n", opx_mr);
 		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_OPEN;
 	}
+}
+
+int opx_hfisvc_mr_lazy_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr)
+{
+	assert(opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPEN_DEFERRED);
+
+	return opx_domain_deferred_work_enqueue_open(opx_domain, opx_mr);
 }
 
 int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr)
@@ -222,10 +230,15 @@ int opx_hfisvc_mr_deferred_open(struct opx_domain_deferred_work *work)
 		return FI_SUCCESS;
 	}
 
-	if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_NOT_REGISTERED) {
+	if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPEN_DEFERRED) {
 		opx_hfisvc_mr_open(opx_mr->domain, opx_mr);
 	} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC) {
 		opx_hfisvc_mr_enable_access_key(opx_mr->domain, opx_mr);
+	} else if (!(opx_mr->hfisvc.state &
+		     (OPX_MR_HFISVC_STATE_PENDING_OPEN | OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE))) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Unexpected deferred open state opx_mr=%p state=%d\n", opx_mr,
+			opx_mr->hfisvc.state);
+		assert(0);
 	}
 
 #endif
@@ -245,8 +258,17 @@ int opx_hfisvc_mr_deferred_close(struct opx_domain_deferred_work *work)
 
 	if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPENED) {
 		opx_hfisvc_mr_disable_access_key(opx_mr->domain, opx_mr);
+	} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC_CLOSE) {
+		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
+		opx_hfisvc_mr_deregister_mr(opx_mr->domain, opx_mr);
 	} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_DEREGISTER) {
 		opx_hfisvc_mr_deregister_mr(opx_mr->domain, opx_mr);
+	} else if (!(opx_mr->hfisvc.state &
+		     (OPX_MR_HFISVC_STATE_PENDING_CLOSE | OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE |
+		      OPX_MR_HFISVC_STATE_PENDING_OPEN_CLOSE | OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE_CLOSE))) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Unexpected deferred close state opx_mr=%p state=%d\n", opx_mr,
+			opx_mr->hfisvc.state);
+		assert(0);
 	}
 
 #endif

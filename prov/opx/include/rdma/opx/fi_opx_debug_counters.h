@@ -343,6 +343,9 @@ struct fi_opx_debug_counters {
 			uint64_t enomem_completion;
 			uint64_t enomem_context;
 
+			uint64_t lazy_mr_open;
+			uint64_t lazy_mr_open_error;
+			uint64_t eagain_lazy_mr_open;
 			uint64_t reg_dma_buf;
 		} rzv_send_rts;
 
@@ -351,6 +354,9 @@ struct fi_opx_debug_counters {
 			uint64_t truncation_rdma_read;
 			uint64_t deferred;
 			uint64_t eagain_hfisvc;
+			uint64_t lazy_mr_open;
+			uint64_t lazy_mr_open_error;
+			uint64_t eagain_lazy_mr_open;
 			uint64_t completed;
 		} rzv_recv_rts;
 
@@ -744,6 +750,9 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.eagain_hfisvc);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.enomem_completion);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.enomem_context);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.lazy_mr_open);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.lazy_mr_open_error);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.eagain_lazy_mr_open);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.reg_dma_buf);
 
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.rdma_read);
@@ -751,6 +760,9 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.completed);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.deferred);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.eagain_hfisvc);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.lazy_mr_open);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.lazy_mr_open_error);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.eagain_lazy_mr_open);
 
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.access_key.alloc);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.access_key.alloc_enospc);

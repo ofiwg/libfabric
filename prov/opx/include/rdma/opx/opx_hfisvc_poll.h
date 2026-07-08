@@ -131,21 +131,22 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 						     opx_mr);
 				assert(opx_mr->hfisvc.mr_handle == mr_handle);
 				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_CLOSED;
-			} else if (opx_mr->hfisvc.state & OPX_MR_HFISVC_STATE_CLOSE_ISSUED) {
-				if (opx_mr->hfisvc.state ==
-				    (OPX_MR_HFISVC_STATE_PENDING_OPEN | OPX_MR_HFISVC_STATE_CLOSE_ISSUED)) {
-					OPX_HFISVC_DEBUG_LOG(
-						"MR State transition opx_mr=%p hfisvc.mr_handle=%u state=PENDING_OPEN with CLOSE_ISSUED -> PENDING_DEREGISTER\n",
-						opx_mr, (uint32_t) mr_handle);
-					opx_mr->hfisvc.mr_handle = mr_handle;
-					opx_mr->hfisvc.state	 = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
-				} else if (opx_mr->hfisvc.state == (OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE |
-								    OPX_MR_HFISVC_STATE_CLOSE_ISSUED)) {
-					OPX_HFISVC_DEBUG_LOG(
-						"MR State transition opx_mr=%p state=PENDING_KEY_ENABLE with CLOSE_ISSUED -> OPENED\n",
-						opx_mr);
-					opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPENED;
-				}
+			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_OPEN_CLOSE) {
+				OPX_HFISVC_DEBUG_LOG(
+					"MR State transition opx_mr=%p hfisvc.mr_handle=%u state=PENDING_OPEN with CLOSE_ISSUED -> PENDING_DEREGISTER\n",
+					opx_mr, (uint32_t) mr_handle);
+				opx_mr->hfisvc.mr_handle = mr_handle;
+				opx_mr->hfisvc.state	 = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
+			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC_CLOSE) {
+				OPX_HFISVC_DEBUG_LOG(
+					"MR State transition opx_mr=%p hfisvc.mr_handle=%u state=PENDING_KEY_ALLOC with CLOSE_ISSUED -> PENDING_DEREGISTER\n",
+					opx_mr, (uint32_t) opx_mr->hfisvc.mr_handle);
+				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
+			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE_CLOSE) {
+				OPX_HFISVC_DEBUG_LOG(
+					"MR State transition opx_mr=%p state=PENDING_KEY_ENABLE with CLOSE_ISSUED -> OPENED\n",
+					opx_mr);
+				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPENED;
 			} else {
 				// TODO: FI_WARN, post some kind of error to the error queue
 				fprintf(stderr,

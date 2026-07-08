@@ -4396,7 +4396,7 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 			   const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
 			   const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 			   const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device, const uint64_t hmem_handle,
-			   const struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+			   struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	if (is_contiguous) {
 		return OPX_FABRIC_TX_SEND_RZV(ep, buf, len, addr, tag, context, data, lock_required, override_flags,
@@ -4514,7 +4514,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	rc = opx_ep_tx_send_rzv(ep, buf, len, addr, tag, context, local_iov, niov, total_len, data, lock_required,
 				is_contiguous, override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-				hmem_iface, hmem_device, hmem_handle, (const struct fi_opx_mr *) desc, hfi1_type,
+				hmem_iface, hmem_device, hmem_handle, (struct fi_opx_mr *) desc, hfi1_type,
 				ctx_sharing);
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
