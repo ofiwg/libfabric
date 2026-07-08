@@ -41,6 +41,7 @@
 #include <infiniband/hfisvc_client.h>
 
 #include "rdma/opx/opx_hfi1_rdma_core.h"
+#include "rdma/opx/opx_hfisvc_poll.h"
 
 #endif
 
@@ -110,7 +111,21 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 		if (context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
 			struct fi_opx_mr *opx_mr = ((struct fi_opx_hmem_info *) context->hmem_info_qws)->dmabuf.opx_mr;
+			assert(opx_mr);
+			if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPEN_DEFERRED) {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.lazy_mr_open);
+				rc = opx_hfisvc_mr_lazy_open(opx_ep->domain, opx_mr);
+				if (rc) {
+					FI_OPX_DEBUG_COUNTERS_INC(
+						opx_ep->debug_counters.hfisvc.rzv_recv_rts.lazy_mr_open_error);
+					OPX_BUF_FREE(recv_rzv_comp);
+					break;
+				}
+			}
 			if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
+				opx_domain_hfisvc_poll(opx_ep->domain);
+				FI_OPX_DEBUG_COUNTERS_INC(
+					opx_ep->debug_counters.hfisvc.rzv_recv_rts.eagain_lazy_mr_open);
 				OPX_BUF_FREE(recv_rzv_comp);
 				rc = -FI_EAGAIN;
 				break;
@@ -139,8 +154,8 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 			OPX_HFISVC_DEBUG_LOG(
 				"[%d/%d] Successfully issued rdma_read sbuf_lid=%u context=%p recv-mr_handle=%u recv-offset=%lu sbuf_key=%u, sbuf_access_key=%u sbuf_len=%lu sender_rzv_comp=%lX\n",
-				i + 1, niov, sbuf_lid_iov, context, (uint32_t) opx_mr->hfisvc.mr_handle, local_offset,
-				sbuf_client_key, sbuf_access_key, sbuf_len, sender_rzv_comp);
+				i + 1, niov, sbuf_lid_masked, context, (uint32_t) opx_mr->hfisvc.mr_handle,
+				local_offset, sbuf_client_key, sbuf_access_key, sbuf_len, sender_rzv_comp);
 		} else {
 			rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
 				opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */, sbuf_lid_masked,
@@ -163,7 +178,7 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 			OPX_HFISVC_DEBUG_LOG(
 				"STRIPE-RECV-DEFERRED: [IOV %d/%d] Issued RDMA read on plane %d: context=%p recv_buf=%p sbuf_lid=%u sbuf_client_key=%u sbuf_access_key=%u sbuf_len=%lu recv_rzv_comp=%p\n",
-				i + 1, niov, i, context, recv_buf, sbuf_lid_iov, sbuf_client_key, sbuf_access_key,
+				i + 1, niov, i, context, recv_buf, sbuf_lid_masked, sbuf_client_key, sbuf_access_key,
 				sbuf_len, recv_rzv_comp);
 		}
 		recv_buf += sbuf_len;

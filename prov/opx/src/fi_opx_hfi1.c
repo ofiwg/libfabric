@@ -6042,7 +6042,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 				   const uint32_t data, uint64_t bth_rx, uint64_t lrh_dlid,
 				   const uint64_t do_cq_completion, void *user_context, struct fi_opx_addr addr,
 				   const uint64_t caps, const enum fi_hmem_iface src_iface,
-				   const uint64_t src_device_id, const struct fi_opx_mr *opx_mr, uint64_t tx_op_flags,
+				   const uint64_t src_device_id, struct fi_opx_mr *opx_mr, uint64_t tx_op_flags,
 				   const bool ctx_sharing, const enum opx_hfi1_type hfi1_type)
 {
 #if HAVE_HFISVC
@@ -6072,9 +6072,18 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	union fi_opx_hfi1_pio_state pio_state = *tx->pio_state;
 
 	if (opx_mr && opx_mr->hfisvc.state > OPX_MR_HFISVC_STATE_NOT_REGISTERED) {
+		if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPEN_DEFERRED) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.lazy_mr_open);
+			rc = opx_hfisvc_mr_lazy_open(opx_ep->domain, opx_mr);
+			if (rc) {
+				FI_OPX_DEBUG_COUNTERS_INC(
+					opx_ep->debug_counters.hfisvc.rzv_send_rts.lazy_mr_open_error);
+				goto err;
+			}
+		}
 		if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
 			OPX_HFISVC_DEBUG_LOG("EAGAIN (MR state not yet OPENED state=%d)\n", opx_mr->hfisvc.state);
-			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_hfisvc);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_lazy_mr_open);
 			opx_domain_hfisvc_poll(opx_ep->domain);
 			rc = -FI_EAGAIN;
 			goto err;
@@ -6506,8 +6515,8 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 			     const uint64_t tx_op_flags, const uint64_t dest_rx, const uint64_t caps,
 			     const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 			     const enum fi_hmem_iface src_iface, const uint64_t src_device_id,
-			     const uint64_t src_handle, const struct fi_opx_mr *opx_mr,
-			     const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+			     const uint64_t src_handle, struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type,
+			     const bool ctx_sharing)
 {
 	// We should already have grabbed the lock prior to calling this function
 	assert(!lock_required);
@@ -7010,9 +7019,8 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				 const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t dest_rx,
 				 const uint64_t caps, const enum ofi_reliability_kind reliability,
 				 const uint64_t do_cq_completion, const enum fi_hmem_iface src_iface,
-				 const uint64_t src_device_id, const uint64_t src_handle,
-				 const struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type,
-				 const bool ctx_sharing)
+				 const uint64_t src_device_id, const uint64_t src_handle, struct fi_opx_mr *opx_mr,
+				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	// We should already have grabbed the lock prior to calling this function
 	assert(!lock_required);
