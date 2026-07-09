@@ -25,6 +25,8 @@ def test_runt_read_functional(cmdline_args, memory_type, copy_method):
     cmdline_args.append_environ("FI_EFA_RUNT_SIZE=65536")
 
     if copy_method == "gdrcopy":
+        if cmdline_args.do_dmabuf_reg_for_hmem:
+            pytest.skip("gdrcopy is not used under dmabuf registration")
         if not has_gdrcopy(cmdline_args.server_id) or not has_gdrcopy(cmdline_args.client_id):
             pytest.skip("No gdrcopy")
 
