@@ -61,8 +61,6 @@ struct efa_prv_reverse_av {
 struct efa_av {
 	struct fid_av *shm_rdm_av;
 	struct efa_domain *domain;
-	size_t used_explicit;
-	size_t used_implicit;
 	size_t shm_used;
 	enum fi_av_type type;
 	/* cur_reverse_av is a map from (ahn + qpn) to current (latest) efa_conn.
