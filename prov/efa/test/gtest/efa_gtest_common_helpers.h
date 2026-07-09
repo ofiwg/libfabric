@@ -53,6 +53,13 @@ struct ibv_ah;
 struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
 						fi_addr_t fi_addr);
 
+/**
+ * @brief Get/set an RDM domain's shm_domain.
+ */
+struct fid_domain *efa_test_get_shm_domain(struct fid_domain *domain);
+void efa_test_set_shm_domain(struct fid_domain *domain,
+			     struct fid_domain *shm_domain);
+
 #ifdef __cplusplus
 }
 #endif
