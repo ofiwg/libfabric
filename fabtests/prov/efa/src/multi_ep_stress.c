@@ -449,6 +449,7 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 		}
 	}
 
+	unsigned retry_count = 0;
 	while (completed < num_completions) {
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
@@ -489,7 +490,8 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 				break;
 			}
 		}
-		sched_yield();
+		ret = ft_backoff(retry_count++, timeout*1000000, false);
+		assert(ret == 0);
 	}
 
 	if (topts.shared_cq) {
@@ -526,6 +528,7 @@ static void *run_sender_worker(void *arg)
 	memset(ops_posted_for_peer, 0, sizeof(ops_posted_for_peer));
 
 	bool should_reset_cycle = true;
+	unsigned retry_count = 0;
 	while(ops_posted < total_ops) {
 		if (should_reset_cycle) {
 			// Start a new endpoint cycle
@@ -627,13 +630,14 @@ static void *run_sender_worker(void *arg)
 			|| ops_posted_for_peer[peer_idx] == topts.msgs_per_sender) {
 			if (++peer_idx == ctx->num_peers)
 				peer_idx = 0;
-			// Relinquish current CPU core to break busy-wait loop
-			// on the current thread. Main thread will be scheduled
-			// before current thread, therefore it would likely push
-			// an update to worker's control queue if the one was pending.
-			sched_yield();
+			ret = ft_backoff(retry_count++, timeout*1000000, true);
+			if (ret) {
+				FT_PRINTERR("ft_backoff", ret);
+				goto out;
+			}
 			continue;
 		}
+		retry_count = 0;
 
 		// Post one operation
 		struct fi_context2 *fi_ctx;

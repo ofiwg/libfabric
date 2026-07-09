@@ -413,10 +413,17 @@ static int read_cq(struct fid_cq *cqueue)
 {
 	struct fi_cq_entry cq_entry;
 	int ret;
+	unsigned retry_count = 0;
 
 	do {
 		ret = fi_cq_read(cqueue, &cq_entry, 1);
-		if (ret < 0 && ret != -FI_EAGAIN)
+		if (ret == -FI_EAGAIN) {
+			ret = ft_backoff(retry_count++, timeout*1000000, true);
+			if (ret)
+				return ret;
+			continue;
+		}
+		if (ret < 0)
 			return ret;
 		if (ret == 1)
 			return 0;
@@ -427,6 +434,7 @@ static int post_send(void *context)
 {
 	int ret;
 	struct thread_args *targs = context;
+	unsigned retry_count = 0;
 
 	do {
 		ret = fi_send(targs->ep, targs->tx_buf, xfer_size,
@@ -434,6 +442,9 @@ static int post_send(void *context)
 		if (ret != -FI_EAGAIN)
 			return ret;
 
+		ret = ft_backoff(retry_count++, 1, false);
+		if (ret)
+			return ret;
 		force_progress(targs->cq);
 	} while (1);
 }
@@ -442,6 +453,7 @@ static int post_recv(void *context)
 {
 	int ret;
 	struct thread_args *targs = context;
+	unsigned retry_count = 0;
 
 	do {
 		ret = fi_recv(targs->ep, targs->rx_buf, xfer_size,
@@ -449,6 +461,9 @@ static int post_recv(void *context)
 		if (ret != -FI_EAGAIN)
 			return ret;
 
+		ret = ft_backoff(retry_count++, 1, false);
+		if (ret)
+			return ret;
 		force_progress(targs->cq);
 	} while (1);
 }
