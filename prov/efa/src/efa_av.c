@@ -420,14 +420,10 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
-	av->used_implicit--;
-
 	err = efa_av_reverse_av_add(av, &av->cur_reverse_av, &av->prv_reverse_av,
 				    explicit_conn);
 	if (err)
 		return err;
-
-	av->used_explicit++;
 
 	/* Handle AH LRU list and refcnt */
 	assert(!dlist_empty(&ah->implicit_conn_list));
@@ -932,8 +928,6 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	av->domain = efa_domain;
 	av->type = attr->type;
 	av->implicit_av_size = efa_env.implicit_av_size;
-	av->used_implicit = 0;
-	av->used_explicit = 0;
 	av->shm_used = 0;
 
 	*av_fid = &av->util_av.av_fid;

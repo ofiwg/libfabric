@@ -314,8 +314,6 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		goto err_release;
 	}
 
-	insert_implicit_av ? av->used_implicit++ : av->used_explicit++;
-
 	return conn;
 
 err_release:
@@ -411,8 +409,6 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 	efa_ah_release(av->domain, conn->ah, release_from_implicit_av);
 
 	efa_conn_release_util_av(av, conn, release_from_implicit_av);
-
-	release_from_implicit_av ? av->used_implicit-- : av->used_explicit--;
 }
 
 /**
@@ -449,7 +445,6 @@ void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
 
 	release_from_implicit_av ? conn->ah->implicit_refcnt-- :
 				   conn->ah->explicit_refcnt--;
-	release_from_implicit_av ? av->used_implicit-- : av->used_explicit--;
 }
 
 void efa_conn_ep_peer_map_insert(struct efa_conn *conn, struct efa_conn_ep_peer_map_entry *map_entry)
