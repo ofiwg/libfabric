@@ -262,6 +262,7 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 			node = NULL;
 		} else {
 			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "'%s' is not a valid OPX address.\n", node);
+			errno = FI_ENODATA;
 			goto err;
 		}
 	}
