@@ -135,6 +135,13 @@ int efa_rdm_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (EFA_INFO_TYPE_IS_DGRAM(info))
 		return efa_domain_open(fabric_fid, info, domain_fid, context);
 
+	if (!info->domain_attr) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efa_rdm_domain_open called without domain_attr\n");
+		*domain_fid = NULL;
+		return -FI_EINVAL;
+	}
+
 	rdm_domain = calloc(1, sizeof(struct efa_rdm_domain));
 	if (!rdm_domain) {
 		*domain_fid = NULL;
@@ -143,8 +150,8 @@ int efa_rdm_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	efa_domain = &rdm_domain->efa_domain;
 
 	/* Initialize srx_lock first so efa_rdm_domain_close can always destroy it */
-	use_lock = info->domain_attr &&
-		   ofi_thread_level(info->domain_attr->threading) <= ofi_thread_level(FI_THREAD_COMPLETION);
+	use_lock = ofi_thread_level(info->domain_attr->threading) <=
+		   ofi_thread_level(FI_THREAD_COMPLETION);
 	err = ofi_genlock_init(&rdm_domain->srx_lock, use_lock ? OFI_LOCK_MUTEX : OFI_LOCK_NOOP);
 	if (err) {
 		EFA_WARN(FI_LOG_DOMAIN, "srx lock init failed! err: %d\n", err);

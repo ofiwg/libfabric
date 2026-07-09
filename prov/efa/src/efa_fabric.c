@@ -141,7 +141,10 @@ err_free_fabric:
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context)
 {
-	if (attr && attr->name &&
+	if (!attr)
+		return -FI_EINVAL;
+
+	if (attr->name &&
 	    strcasecmp(attr->name, EFA_DIRECT_FABRIC_NAME) == 0)
 		return efa_fabric_open_base(attr, fabric_fid, context);
 	return efa_rdm_fabric_open(attr, fabric_fid, context);
