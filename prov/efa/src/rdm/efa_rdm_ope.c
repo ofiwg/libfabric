@@ -2184,6 +2184,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 
 		pkt_entry_cnt_allocated++;
 
+		/* coverity[negative_returns : FALSE] - data_offset is signed; -1 is a valid documented sentinel */
 		err = efa_rdm_pke_fill_data(ep->send_pkt_entry_vec[i], pkt_type,
 					    ope, segment_offset,
 					    ep->send_pkt_entry_vec_data_sizes[i]);

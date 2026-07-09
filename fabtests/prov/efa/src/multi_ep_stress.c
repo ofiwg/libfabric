@@ -1293,6 +1293,7 @@ static int run_test(void)
 		printf("Using provided random seed: %u\n", topts.random_seed);
 		printf("-------------------------\n\n");
 	} else {
+		/* coverity[store_truncates_time_t : FALSE] - value is only used as a PRNG seed */
 		topts.random_seed = (unsigned int)time(NULL);
 		printf("-------------------------\n");
 		printf("Generated random seed: %u\n", topts.random_seed);

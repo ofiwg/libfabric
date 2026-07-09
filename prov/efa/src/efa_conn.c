@@ -460,6 +460,7 @@ struct efa_rdm_peer *efa_conn_ep_peer_map_lookup(struct efa_conn *conn,
 {
 	struct efa_conn_ep_peer_map_entry *map_entry;
 
+	/* coverity[suspicious_sizeof : FALSE] - key is a pointer; HASH_FIND_PTR compares sizeof(void *) */
 	HASH_FIND_PTR(conn->ep_peer_map, &ep, map_entry);
 
 	return map_entry ? &map_entry->peer : NULL;
@@ -469,6 +470,7 @@ void efa_conn_ep_peer_map_remove(struct efa_conn *conn, struct efa_rdm_ep *ep)
 {
 	struct efa_conn_ep_peer_map_entry *map_entry;
 
+	/* coverity[suspicious_sizeof : FALSE] - key is a pointer; HASH_FIND_PTR compares sizeof(void *) */
 	HASH_FIND_PTR(conn->ep_peer_map, &ep, map_entry);
 	assert(map_entry);
 	HASH_DELETE(hh, conn->ep_peer_map, map_entry);

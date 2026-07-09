@@ -189,6 +189,7 @@ static int oob_recv_nonblock(int fd, void *buf, size_t len, size_t *got)
 	ssize_t ret;
 
 	while (*got < len) {
+		/* coverity[overflow_sink : FALSE] - loop guard *got < len bounds len - *got; cannot underflow */
 		ret = ofi_recv_socket(fd, (char *) buf + *got, len - *got,
 				      MSG_DONTWAIT);
 		if (ret > 0) {
