@@ -834,6 +834,12 @@ static void efa_rdm_txe_write_deferred_peer_abort_completion(struct efa_rdm_ope 
 	err_entry.buf = txe->cq_entry.buf;
 	err_entry.data = txe->cq_entry.data;
 	err_entry.tag = txe->cq_entry.tag;
+
+	/* A peer-aborted txe is always a two-sided send (never an emulated RMA
+	 * op), which required a valid peer; a NULL-peer local read never enters
+	 * the abort path. */
+	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
+	assert(txe->peer);
 	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, txe->peer, err_entry.prov_errno,
 						 err_msg, &err_entry.err_data_size)))
 		err_entry.err_data_size = 0;
