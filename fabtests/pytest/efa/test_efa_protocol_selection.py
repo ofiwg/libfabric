@@ -62,7 +62,9 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     # The hw counter should record:
     # - The exact message size if gdrcopy is enabled, or
     # - More if gdrcopy is disabled and localread is used.
-    if (has_gdrcopy(cmdline_args.server_id)):
+    # Under dmabuf registration the EFA provider does not use gdrcopy even when
+    # it is installed on the host, so the copy falls back to localread.
+    if (has_gdrcopy(cmdline_args.server_id) and not cmdline_args.do_dmabuf_reg_for_hmem):
         assert bytes_read == message_size
         assert server_read_wrs_after_test == server_read_wrs_before_test + 1
     else:
