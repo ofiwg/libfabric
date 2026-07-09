@@ -444,9 +444,12 @@ static int efa_rdm_mr_dereg_impl(struct efa_rdm_mr *efa_rdm_mr)
 	int err;
 
 	if (efa_rdm_mr->shm_mr) {
-		ret = fi_close(&efa_rdm_mr->shm_mr->fid);
-		if (ret)
-			return ret;
+		err = fi_close(&efa_rdm_mr->shm_mr->fid);
+		if (err) {
+			EFA_WARN_FI_ERRNO(FI_LOG_MR,
+				"Unable to close shm MR", -err);
+			ret = err;
+		}
 		efa_rdm_mr->shm_mr = NULL;
 	}
 
@@ -547,7 +550,7 @@ static void efa_rdm_mr_hmem_setup(struct efa_rdm_mr *efa_rdm_mr,
 static int efa_rdm_mr_reg_impl(struct efa_rdm_mr *efa_rdm_mr, uint64_t flags,
 			       const struct fi_mr_attr *mr_attr)
 {
-	int ret;
+	int ret, err;
 
 	/* RDM-specific: MR cache flush */
 	{
@@ -585,7 +588,11 @@ static int efa_rdm_mr_reg_impl(struct efa_rdm_mr *efa_rdm_mr, uint64_t flags,
 	assert(efa_rdm_mr->efa_mr.mr_fid.key != FI_KEY_NOTAVAIL);
 	ret = efa_rdm_mr_update_domain_mr_map(efa_rdm_mr, (struct fi_mr_attr *)mr_attr, flags);
 	if (ret) {
-		ret = efa_rdm_mr_dereg_impl(efa_rdm_mr);
+		err = efa_rdm_mr_dereg_impl(efa_rdm_mr);
+		if (err)
+			EFA_WARN_FI_ERRNO(FI_LOG_MR,
+					"MR registration failed, then deregistering "
+					"the partially created MR failed with", -err);
 		return ret;
 	}
 
@@ -626,27 +633,15 @@ static void efa_rdm_mr_close_check_inflight_ope(struct efa_mr *efa_mr)
 static int efa_rdm_mr_close(fid_t fid)
 {
 	struct efa_rdm_mr *efa_rdm_mr;
-	int ret = 0, err;
+	int ret = 0;
 
 	efa_rdm_mr = container_of(fid, struct efa_rdm_mr, efa_mr.mr_fid.fid);
 	if (efa_env.track_mr)
 		efa_rdm_mr_close_check_inflight_ope(&efa_rdm_mr->efa_mr);
 
-	if (efa_rdm_mr->shm_mr) {
-		err = fi_close(&efa_rdm_mr->shm_mr->fid);
-		if (err) {
-			EFA_WARN_FI_ERRNO(FI_LOG_MR,
-				"Unable to close shm MR", -err);
-			ret = err;
-		}
-		efa_rdm_mr->shm_mr = NULL;
-	}
-
-	err = efa_rdm_mr_dereg_impl(efa_rdm_mr);
-	if (err) {
-		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to close efa_rdm_mr", -err);
-		ret = ret ? ret : err;
-	}
+	ret = efa_rdm_mr_dereg_impl(efa_rdm_mr);
+	if (ret)
+		EFA_WARN_FI_ERRNO(FI_LOG_MR, "Unable to close efa_rdm_mr", -ret);
 
 	efa_rdm_mr_free(efa_rdm_mr);
 
