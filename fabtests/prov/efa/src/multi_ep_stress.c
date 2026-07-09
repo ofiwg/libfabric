@@ -1442,6 +1442,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
+	opts.threading = FI_THREAD_SAFE;
 	timeout = 10;
 
 	hints = fi_allocinfo();
@@ -1453,8 +1454,6 @@ int main(int argc, char **argv)
 		goto out;
 
 	// Set up hints
-	if (!opts.threading)
-		opts.threading = FI_THREAD_SAFE;
 	if (opts.threading == FI_THREAD_COMPLETION && topts.shared_cq) {
 		fprintf(stderr, "--shared-cq is incompatible with "
 			"--threading completion\n");
