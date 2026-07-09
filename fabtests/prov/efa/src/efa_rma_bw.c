@@ -516,7 +516,7 @@ static int run(void)
 			goto out;
 	}
 
-	ft_finalize();
+	ret = ft_finalize();
 out:
 	for (i = 1; i < num_eps; i++) {
 		if (eps[i])
