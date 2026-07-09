@@ -76,6 +76,7 @@ fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 	memset(&cur_key, 0, sizeof(cur_key));
 	cur_key.ahn = ahn;
 	cur_key.qpn = qpn;
+	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
 	HASH_FIND(hh, av->cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
 
 	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->conn->fi_addr : FI_ADDR_NOTAVAIL;
@@ -96,6 +97,7 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
 	cur_key.ahn = ahn;
 	cur_key.qpn = qpn;
 
+	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
 	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
 
 	if (OFI_UNLIKELY(!cur_entry))
@@ -244,6 +246,7 @@ int efa_av_reverse_av_add(struct efa_av *av,
 	cur_key.qpn = conn->ep_addr->qpn;
 	cur_entry = NULL;
 
+	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
 	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
 	if (!cur_entry) {
 		cur_entry = malloc(sizeof(*cur_entry));
@@ -306,6 +309,7 @@ void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 	memset(&cur_key, 0, sizeof(cur_key));
 	cur_key.ahn = conn->ah->ahn;
 	cur_key.qpn = conn->ep_addr->qpn;
+	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
 	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key),
 		  cur_reverse_av_entry);
 	if (cur_reverse_av_entry && cur_reverse_av_entry->conn == conn) {
