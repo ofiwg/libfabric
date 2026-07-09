@@ -79,3 +79,22 @@ struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
 
 	return conn ? conn->ah->ibv_ah : NULL;
 }
+
+static struct efa_rdm_domain *efa_test_rdm_domain(struct fid_domain *domain)
+{
+	struct efa_domain *efa_domain = container_of(
+		domain, struct efa_domain, util_domain.domain_fid);
+
+	return container_of(efa_domain, struct efa_rdm_domain, efa_domain);
+}
+
+struct fid_domain *efa_test_get_shm_domain(struct fid_domain *domain)
+{
+	return efa_test_rdm_domain(domain)->shm_domain;
+}
+
+void efa_test_set_shm_domain(struct fid_domain *domain,
+			     struct fid_domain *shm_domain)
+{
+	efa_test_rdm_domain(domain)->shm_domain = shm_domain;
+}
