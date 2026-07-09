@@ -515,22 +515,6 @@ int ft_cuda_copy_from_hmem(uint64_t device, void *dst, const void *src,
 	return -FI_EIO;
 }
 
-/* TODO: Make get_base_addr a general hmem ops API */
-static
-int ft_cuda_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
-{
-	CUresult cu_result;
-
-	cu_result = cuda_ops.cuMemGetAddressRange(
-				(CUdeviceptr *)base,
-				size, (CUdeviceptr) ptr);
-	if (cu_result == CUDA_SUCCESS)
-		return FI_SUCCESS;
-
-	ft_cuda_driver_api_print_error(cu_result, "cuMemGetAddressRange");
-	return -FI_EIO;
-}
-
 /**
  * @brief Get dmabuf fd and offset for a given cuda memory allocation
  *
