@@ -381,9 +381,7 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 			const uint64_t byte_counter = context->byte_counter;
 
 			if (byte_counter == 0) {
-				bool	       free_context;
-				const uint64_t is_multi_recv = context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV;
-				if (is_multi_recv) {
+				if (context->flags & FI_OPX_CQ_CONTEXT_MULTIRECV) {
 					assert(!(context->flags &
 						 (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)));
 
@@ -401,9 +399,6 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 						slist_insert_tail((struct slist_entry *) multi_recv_context,
 								  opx_ep->rx->cq_completed_ptr);
 					}
-					free_context = false;
-				} else {
-					free_context = true;
 				}
 				context->flags &= ~(FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
 				output += fi_opx_cq_fill(output, context, format);
@@ -422,9 +417,7 @@ static ssize_t fi_opx_cq_poll_noinline(struct fi_opx_cq *opx_cq, void *buf, size
 					/* remove the tail */
 					pending_tail = prev;
 				}
-				if (free_context || is_multi_recv) {
-					OPX_BUF_FREE(context);
-				}
+				OPX_BUF_FREE(context);
 				context = next;
 			} else {
 				prev	= context;
