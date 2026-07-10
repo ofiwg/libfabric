@@ -887,6 +887,7 @@ int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 	uint32_t op_id;
 	uint32_t ref_kind;
 	uint32_t connid;
+	int err;
 
 	/*
 	 * op_id identifies the transfer we're abandoning; ref_kind says how
@@ -938,8 +939,10 @@ int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 
 	efa_rdm_pke_set_ope(pkt_entry, ope);
 	pkt_entry->peer = ope->peer;
-	return efa_rdm_pke_init_peer_error(pkt_entry, op_id, ref_kind,
-					   ope->peer_error_prov_errno, connid);
+	err = efa_rdm_pke_init_peer_error(pkt_entry, op_id, ref_kind,
+					  ope->peer_error_prov_errno, connid);
+	efa_rdm_pke_get_peer_error_hdr(pkt_entry)->emitter_ope_type = ope->type;
+	return err;
 }
 
 /**
