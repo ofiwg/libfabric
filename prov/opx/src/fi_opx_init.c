@@ -94,17 +94,17 @@ int fi_opx_check_info(const struct fi_info *info)
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
 		       "The application's capability hints are null. OPX is allowed to specify whatever capabilities it wishes\n");
 	} else {
-		// Check to make sure the hinted capabilites are a subset of what OPX can support
+		// Check to make sure the hinted capabilities are a subset of what OPX can support
 		if ((info->caps & FI_OPX_SUPPORTED_CAPS) != info->caps) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-				"OPX does not support the requested capabilites required by the application\n");
+				"OPX does not support the requested capabilities required by the application\n");
 			goto err;
 		}
 	}
 
 	if (info->domain_attr && info->domain_attr->caps && (info->domain_attr->caps & ~FI_OPX_DOMAIN_CAPS)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-			"OPX does not support the requested domain capabilites required by the application\n");
+			"OPX does not support the requested domain capabilities required by the application\n");
 		goto err;
 	}
 
