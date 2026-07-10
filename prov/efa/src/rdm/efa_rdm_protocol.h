@@ -324,10 +324,24 @@ EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_read_nack_hdr, 16);
  */
 #define EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP	2
 
+/**
+ * @brief Direction a PEER_ERROR packet flows, from the emitter's viewpoint.
+ *
+ * TX_TO_RX: a sender aborted an in-flight send (EAGER / MEDIUM / LONGCTS /
+ *           RUNTREAD); the packet's receiver is the transfer's receiver.
+ * RX_TO_TX: a receiver's RDMA READ failed (LONGREAD / RUNTREAD); the
+ *           packet's receiver is the transfer's sender.
+ */
+enum efa_rdm_peer_error_direction {
+	EFA_RDM_PEER_ERROR_TX_TO_RX = 0,
+	EFA_RDM_PEER_ERROR_RX_TO_TX = 1,
+};
+
 struct efa_rdm_peer_error_hdr {
 	EFA_RDM_BASE_HEADER();
 	uint32_t op_id;     /* ID of the ope owned by the receiver of this packet */
 	uint32_t ref_kind;  /* how to resolve op_id (EFA_RDM_PEER_ERROR_REF_*) */
+	uint32_t direction; /* enum efa_rdm_peer_error_direction (emitter's viewpoint) */
 	uint32_t prov_errno;/* the prov_errno that triggered the abort, for logging */
 	union {
 		uint32_t connid;  /* set when EFA_RDM_PKT_CONNID_HDR is on */
@@ -335,7 +349,7 @@ struct efa_rdm_peer_error_hdr {
 	};
 };
 
-EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_peer_error_hdr, 20);
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_peer_error_hdr, 24);
 
 /**
  * @brief header format of ATOMRSP packet. (Packet Type ID 8)
