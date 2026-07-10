@@ -31,6 +31,13 @@ int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
 				fi_addr_t *addr);
 
 /**
+ * @brief Insert the ep's own address as a peer via an (explicit) fi_av_insert.
+ * @return Number of addresses inserted (1 on success), or negative on error.
+ */
+int efa_test_insert_self_peer(struct fid_ep *ep, struct fid_av *av,
+			      fi_addr_t *addr);
+
+/**
  * @brief Insert a peer with a fabricated GID that won't be in the ah_map.
  * This forces efa_ah_alloc to call ibv_create_ah for a new GID.
  * @return The fi_addr, or FI_ADDR_NOTAVAIL on failure.

@@ -30,6 +30,22 @@ int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
 	return fi_av_insert(av, &raw_addr, 1, addr, 0, NULL);
 }
 
+int efa_test_insert_self_peer(struct fid_ep *ep, struct fid_av *av,
+			      fi_addr_t *addr)
+{
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	int ret;
+
+	ret = fi_getname(&ep->fid, &raw_addr, &raw_addr_len);
+	if (ret)
+		return ret;
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+
+	return fi_av_insert(av, &raw_addr, 1, addr, 0, NULL);
+}
+
 fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
