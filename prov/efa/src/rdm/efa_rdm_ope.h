@@ -4,6 +4,8 @@
 #ifndef _EFA_RDM_OPE_H
 #define _EFA_RDM_OPE_H
 
+#include <assert.h>
+
 #include "efa_rdm_pke.h"
 
 #define EFA_RDM_IOV_LIMIT		(4)
@@ -15,6 +17,13 @@ enum efa_rdm_ope_type {
 	EFA_RDM_TXE = 1, /**< this ope is for an TX operation */
 	EFA_RDM_RXE,     /**< this ope is for an RX operation */
 };
+
+/*
+ * These values are serialized in efa_rdm_peer_error_hdr
+ * (emitter_ope_type), so they are wire format and may never change.
+ */
+static_assert(EFA_RDM_TXE == 1 && EFA_RDM_RXE == 2,
+	      "efa_rdm_ope_type values are serialized in efa_rdm_peer_error_hdr");
 
 /**
  * @brief EFA RDM operation entry (ope)'s state
