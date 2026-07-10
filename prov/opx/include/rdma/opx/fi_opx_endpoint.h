@@ -1489,12 +1489,10 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 						   rbuf);
 		}
 
-		uint64_t bytes_consumed = ((xfer_len + 7) & (~0x07ull));
-		original_multi_recv_context->len -= bytes_consumed;
+		original_multi_recv_context->len -= xfer_len;
 		original_multi_recv_context->byte_counter++;	       // re-using the byte counter as a "pending flag"
 		original_multi_recv_context->tag = (uintptr_t) opx_ep; // re-using tag to store the ep
-		original_multi_recv_context->buf =
-			(void *) ((uintptr_t) (original_multi_recv_context->buf) + bytes_consumed);
+		original_multi_recv_context->buf = (void *) ((uintptr_t) (original_multi_recv_context->buf) + xfer_len);
 		assert(context->next == NULL);
 		if (lock_required) {
 			fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
@@ -1709,10 +1707,9 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			context->byte_counter	    = 0;
 			context->next		    = NULL;
 
-			uint64_t bytes_consumed = ((send_len + 7) & (~0x07ull));
-			original_multi_recv_context->len -= bytes_consumed;
+			original_multi_recv_context->len -= send_len;
 			original_multi_recv_context->buf =
-				(void *) ((uintptr_t) (original_multi_recv_context->buf) + bytes_consumed);
+				(void *) ((uintptr_t) (original_multi_recv_context->buf) + send_len);
 
 			/* post a completion event for the individual receive */
 			if (lock_required) {
@@ -1895,10 +1892,9 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 				}
 			}
 
-			uint64_t bytes_consumed = ((send_len + 7) & (~0x07ull));
-			original_multi_recv_context->len -= bytes_consumed;
+			original_multi_recv_context->len -= send_len;
 			original_multi_recv_context->buf =
-				(void *) ((uintptr_t) (original_multi_recv_context->buf) + bytes_consumed);
+				(void *) ((uintptr_t) (original_multi_recv_context->buf) + send_len);
 
 			assert(context->next == NULL);
 			/* post a completion event for the individual receive */
