@@ -97,7 +97,7 @@ void test_efa_rnr_queue_and_resend_tagged(void **state)
 
 /**
  * @brief Verify that a pkt is released when efa_rdm_ep_post_queued_pkts
- * encounters a non-EAGAIN error on repost. Without the fix the pkt leaks.
+ * encounters a non-EAGAIN error on repost, so it does not leak.
  */
 void test_efa_rdm_ep_post_queued_pkts_releases_pkt_on_error(void **state)
 {
@@ -162,9 +162,8 @@ void test_efa_rdm_ep_post_queued_pkts_releases_pkt_on_error(void **state)
 	/*
 	 * The proof that the pkt was released is in the test teardown:
 	 * ofi_bufpool_destroy asserts that all entries have been returned
-	 * (use_cnt == 0). Without the fix, the leaked pkt causes that
-	 * assertion to fire during endpoint close, crashing the test.
-	 * With the fix, teardown completes cleanly.
+	 * (use_cnt == 0); a leaked pkt makes that assertion fire during
+	 * endpoint close.
 	 */
 	efa_unit_test_buff_destruct(&send_buff);
 }

@@ -4548,11 +4548,10 @@ void test_efa_rdm_txe_handle_error_no_emit_when_not_longcts(void **state)
  * still completes successfully lands in
  * efa_rdm_pke_handle_rma_completion()'s READ path.
  *
- * Before the fix that success path had no drain call and no
- * EFA_RDM_OPE_PEER_ABORT_PENDING guard: if the successful sibling was the last
- * WR to drain, efa_outstanding_tx_ops reached 0 in a handler that
- * never released the rxe -> permanent leak (and it would also post a
- * spurious EOR / success completion). This test fails one read WR,
+ * That success path must call the drain helper under the
+ * EFA_RDM_OPE_PEER_ABORT_PENDING guard: when the successful sibling is
+ * the last WR to drain, the rxe must be released there, and no spurious
+ * EOR / success completion posted. This test fails one read WR,
  * then drives a successful completion for the sibling and asserts
  * the rxe leaves ep->base_ep.ope_list (freed exactly once), the user gets a
  * single clean peer-abort error completion, and no spurious success
@@ -4677,9 +4676,7 @@ void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
  * but the drain is a no-op while the CTS is outstanding
  * (efa_outstanding_tx_ops > 0).
  *
- * Before the fix the CTS send-completion case was a bare break with
- * no drain retry, so the rxe was never freed -> leak. The fix makes
- * the CTS send-completion call the drain helper. This test asserts
+ * The CTS send-completion must call the drain helper. This test asserts
  * the rxe survives the inbound PEER_ERROR_PKT (CTS still in flight)
  * and is freed exactly when the CTS completes.
  */
@@ -5646,11 +5643,10 @@ void test_efa_rdm_pke_handle_tx_error_runtread_with_read_no_emit(void **state)
  * txe, because the PEER_ERROR_PKT (and any sibling CTSDATA WRs) still
  * use it as wr_id.
  *
- * Before the fix nothing freed the errored txe: the success-completion
- * path only releases on bytes_acked == total_len (never true
- * post-abort), sibling failures early-return on OPE_ERR, and the
- * PEER_ERROR_PKT completion only released the RXE direction. The txe
- * leaked until ep close. This test drives the abort, then completes the
+ * The PEER_ERROR_PKT completion must free the errored txe: the
+ * success-completion path only releases on bytes_acked == total_len
+ * (never true post-abort) and sibling failures early-return on
+ * OPE_ERR. This test drives the abort, then completes the
  * emitted PEER_ERROR_PKT and asserts the drain-gated release frees the
  * txe exactly once.
  */

@@ -724,12 +724,11 @@ static int deliver_peer_error_skip(struct efa_rdm_ep *efa_rdm_ep,
  * @brief The core fix: a source-aborted msg_id that NEVER arrived must
  *        not head-of-line block the messages buffered behind it.
  *
- * Reproduces the EAGER/MEDIUM heisenbug deterministically. The sender
- * allocated msg_id 0, posted it, then the device flushed it at the
- * source (MR closed) before it ever reached the receiver. Later messages
- * msg_id 1 and 2 DID arrive and are buffered out-of-order, waiting for
- * msg_id 0. Without the fix the window parks on 0 forever and 1, 2 (and
- * everything after) are stranded.
+ * The sender allocated msg_id 0, posted it, then the device flushed it
+ * at the source (MR closed) before it ever reached the receiver. Later
+ * messages msg_id 1 and 2 DID arrive and are buffered out-of-order,
+ * waiting for msg_id 0; the window must slide past 0 or they are
+ * stranded forever.
  *
  * An inbound PEER_ERROR (skip) packet for msg_id 0 is queued into the
  * recvwin as an abort marker; the drain then slides past 0 and continues
@@ -1057,7 +1056,7 @@ void test_efa_rdm_peer_skip_aborted_msg_id_abort_marker_behind_head(
  * efa_rdm_peer_queue_aborted_msg_marker() helper directly, whereas
  * this one exercises the actual receive entry point
  * (efa_rdm_pke_handle_peer_error_recv) for the LONGCTS never-arrived
- * scenario -- the exact packet the sender-side fix now emits.
+ * case.
  *
  * msg_id 0 (the aborted LONGCTS RTM) never arrives; msg_id 1 arrives OOO
  * and is buffered (then aborted so the drain releases it without the
