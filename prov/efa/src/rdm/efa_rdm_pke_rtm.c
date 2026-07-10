@@ -871,7 +871,6 @@ void efa_rdm_pke_handle_medium_rtm_send_completion(struct efa_rdm_pke *pkt_entry
  * RTM and 2 types of RUNTREAD RTM.
  *
  * @param[in,out]	pkt_entry	packet entry
- * @param[in]	peer	efa_rdm_peer struct of the sender
  */
 ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 {
@@ -1347,6 +1346,7 @@ ssize_t efa_rdm_pke_init_runtread_tagrtm(struct efa_rdm_pke *pkt_entry,
  * This function applies to both RUNTREAD_MSGRTM and RUNTREAD_TAGRTM.
  *
  * @param[in,out]	pkt_entry	packet entry
+ * @param[in,out]	peer	efa_rdm_peer struct of the sender
  */
 void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
 {
