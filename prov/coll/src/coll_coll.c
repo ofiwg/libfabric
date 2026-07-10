@@ -699,7 +699,7 @@ void coll_join_comp(struct util_coll_operation *coll_op)
 
 	coll_op->data.join.new_mc->seq = 0;
 	coll_op->data.join.new_mc->group_id =
-		(uint16_t) ofi_bitmask_get_lsbset(coll_op->data.join.data);
+		(uint16_t) ofi_bitmask_get_lsbset(&coll_op->data.join.data);
 
 	/* mark the local mask bit */
 	ofi_bitmask_unset(ep->util_ep.coll_cid_mask,
