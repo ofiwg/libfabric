@@ -331,61 +331,6 @@ out:
 	return FI_EADDRNOTAVAIL;
 }
 
-/**
- * @brief Read peer raw address from packet entry or the EFA device and look up
- * the peer address in explicit and implicit AVs This function should only be
- * called if the peer AH is unknown.
- * @return Pointer to peer struct, or NULL if unavailable.
- */
-static inline struct efa_rdm_peer *
-efa_rdm_cq_lookup_raw_addr(struct efa_rdm_pke *pke,
-			   struct efa_ep_addr *efa_ep_addr)
-{
-	struct efa_rdm_ep *ep;
-	fi_addr_t addr;
-	struct efa_rdm_peer *peer = NULL;
-	bool implicit = false;
-	char gid_str_cdesc[INET6_ADDRSTRLEN];
-
-	ep = pke->ep;
-	assert(ep);
-
-	/* First check the explicit AV */
-	addr = ofi_av_lookup_fi_addr(&ep->base_ep.av->util_av,
-				     (void *) efa_ep_addr);
-	if (addr != FI_ADDR_NOTAVAIL) {
-		implicit = false;
-		peer = efa_rdm_ep_get_peer_explicit(ep, addr);
-		assert(peer);
-		goto out;
-	}
-
-	/* Next check implicit AV */
-	addr = ofi_av_lookup_fi_addr(&ep->base_ep.av->util_av_implicit,
-				     (void *) efa_ep_addr);
-	if (addr != FI_ADDR_NOTAVAIL) {
-		implicit = true;
-		peer = efa_rdm_ep_get_peer_implicit(ep, addr);
-		assert(peer);
-		goto out;
-	}
-
-	return NULL;
-
-out:
-	inet_ntop(AF_INET6, efa_ep_addr->raw, gid_str_cdesc, INET6_ADDRSTRLEN);
-	/* The EFA device may not be able to provide the AHN if the packet
-	 * arrived immediately after the AH creation. So this behavior is
-	 * expected at application startup. */
-	EFA_INFO(FI_LOG_AV,
-		 "Recovered fi_addr for peer:[QPN]:[QKey] = "
-		 "[%s]:[%" PRIu16 "]:[%" PRIu32 "] fi_addr: %" PRIu64
-		 " implicit AV: %s\n",
-		 gid_str_cdesc, efa_ep_addr->qpn, efa_ep_addr->qkey, addr,
-		 implicit ? "true" : "false");
-
-	return peer;
-}
 
 /**
  * @brief Determine peer struct from ibv_cq and packet entry
@@ -406,6 +351,8 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	struct efa_ep_addr efa_ep_addr = {0};
 	struct efa_ep_addr_hashable *efa_ep_addr_hashable = NULL;
 	struct efa_rdm_peer *peer = NULL;
+	char gid_str_cdesc[INET6_ADDRSTRLEN];
+	bool raw_addr_available = false;
 	int ret;
 	uint32_t gid;
 	uint32_t qpn;
@@ -420,18 +367,23 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 
 	/* To determine the source peer struct, the workflow is the following
 	 * 1. Get GID and QPN from rdma-core and check the explicit AV
-	 * 2. If not found, check the implicit AV with GID and QPN
-	 * 3 (a). If not found, retrieve raw address from the packet header
-	 * 3 (b). If packet header doesn't have raw address, retrieve raw
+	 * 2 (a). If not found, retrieve raw address from the packet header
+	 * 2 (b). If packet header doesn't have raw address, retrieve raw
 	 * address with efadv_wc_read_sgid
-	 * 4. Check explicit and implicit AVs for the raw address retrieved in
-	 * (3)
-	 * 5. If not found and raw address is available, insert raw address into
+	 * 3. Check explicit AVs for the raw address retrieved in (2)
+	 * -------------------------------------------------------------------
+	 * Slow path with implicit AV
+	 * 4. If not found, check the implicit AV with GID and QPN
+	 * 5. If the peer was evicted from implicit AV, drop the packet
+	 * 6. Check implicit AVs for the raw address retrieved in (2)
+	 * 7. If not found and raw address is available, insert raw address into
 	 * the implicit AV
 	 *
 	 * TODO: Remove the usage of efadv_wc_read_sgid after EFA device's
 	 * behavior is fixed
 	 */
+
+	/* Step 1: Check explicit AV with GID and QPN */
 	explicit_fi_addr =
 		efa_av_reverse_lookup_rdm(efa_av, gid, qpn, pkt_entry);
 
@@ -444,6 +396,24 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 		goto out;
 	}
 
+	/* Step 2: Retrieve raw address from packet header or efadv_wc_read_sgid */
+	ret = efa_rdm_cq_populate_src_efa_ep_addr(
+		pkt_entry, efa_ibv_cq,
+		&efa_ep_addr);
+	if (!ret)
+		raw_addr_available = true;
+
+	/* Step 3: Check explicit AV for the raw address */
+	if (raw_addr_available) {
+		explicit_fi_addr = ofi_av_lookup_fi_addr(&ep->base_ep.av->util_av,
+							 (void *) &efa_ep_addr);
+		if (explicit_fi_addr != FI_ADDR_NOTAVAIL) {
+			peer = efa_rdm_ep_get_peer_explicit(ep, explicit_fi_addr);
+			goto raw_addr_found;
+		}
+	}
+
+	/* Step 4: Check implicit AV with GID and QPN (slow path) */
 	implicit_fi_addr =
 		efa_av_reverse_lookup_rdm_implicit(efa_av, gid, qpn, pkt_entry);
 
@@ -456,19 +426,12 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 		goto out;
 	}
 
-	ret = efa_rdm_cq_populate_src_efa_ep_addr(
-		pkt_entry, efa_ibv_cq,
-		&efa_ep_addr);
-	if (ret) {
-		/* Failed to read raw address from packet entry and
-		 * efadv_wc_read_sgid */
+	if (!raw_addr_available)
 		return NULL;
-	}
 
-	/* If the packet is from a peer that we evicted from the implicit AV,
-	 * print a warning and ignore the packet. We do this because we lose
-	 * information about previous communication from the peer when we evict
-	 * the peer from the implicit AV
+	/* Step 5: If the peer was evicted from implicit AV, drop the packet.
+	 * We do this because we lose information about previous communication
+	 * from the peer when we evict the peer from the implicit AV
 	 *
 	 * TODO: continue communication with peer by saving the previous state
 	 * and restoring it
@@ -481,10 +444,15 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 		return NULL;
 	}
 
-	peer = efa_rdm_cq_lookup_raw_addr(pkt_entry, &efa_ep_addr);
-	if (peer)
-		goto out;
+	/* Step 6: Check implicit AV for the raw address */
+	implicit_fi_addr = ofi_av_lookup_fi_addr(&ep->base_ep.av->util_av_implicit,
+						 (void *) &efa_ep_addr);
+	if (implicit_fi_addr != FI_ADDR_NOTAVAIL) {
+		peer = efa_rdm_ep_get_peer_implicit(ep, implicit_fi_addr);
+		goto raw_addr_found;
+	}
 
+	/* Step 7: Insert raw address into implicit AV */
 	EFA_DBG(FI_LOG_CQ,
 		"Peer with gid %d and qpn %d not found in explicit or implicit "
 		"AV. Attempting to insert into implicit AV...\n",
@@ -503,6 +471,23 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	}
 	assert(implicit_fi_addr != FI_ADDR_NOTAVAIL);
 	peer = efa_rdm_ep_get_peer_implicit(ep, implicit_fi_addr);
+	goto out;
+
+raw_addr_found:
+	assert(peer);
+	inet_ntop(AF_INET6, efa_ep_addr.raw, gid_str_cdesc, INET6_ADDRSTRLEN);
+	/* The EFA device may not be able to provide the AHN if the packet
+	 * arrived immediately after the AH creation. So this behavior is
+	 * expected at application startup. */
+	EFA_INFO(FI_LOG_AV,
+		 "Recovered fi_addr for peer:[QPN]:[QKey] = "
+		 "[%s]:[%" PRIu16 "]:[%" PRIu32 "] fi_addr: %" PRIu64
+		 " implicit AV: %s\n",
+		 gid_str_cdesc, efa_ep_addr.qpn, efa_ep_addr.qkey,
+		 peer->conn->fi_addr != FI_ADDR_NOTAVAIL ?
+			peer->conn->fi_addr : peer->conn->implicit_fi_addr,
+		 peer->conn->implicit_fi_addr != FI_ADDR_NOTAVAIL ?
+			"true" : "false");
 
 out:
 	assert(peer);
