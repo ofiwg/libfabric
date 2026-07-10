@@ -133,6 +133,12 @@ static int sm2_cma_hmem_memcpy(struct sm2_ep *ep,
 	domain = container_of(ep->util_ep.domain, struct sm2_domain,
 			      util_domain);
 
+	/* ipc_cache is only allocated when IPC is enabled for the iface; guard
+	 * against a NULL cache so a mis-selected IPC path fails cleanly instead
+	 * of dereferencing NULL. */
+	if (!domain->ipc_cache)
+		return -FI_EOPNOTSUPP;
+
 	ipc_info = &cma_data->ipc_info;
 	ret = ofi_ipc_cache_search(domain->ipc_cache,
 				   xfer_entry->hdr.sender_gid, ipc_info,
@@ -208,6 +214,19 @@ static int sm2_progress_cma(struct sm2_ep *ep,
 		 * device memory, so we open the IPC handle,
 		 * return the handle to the sender for the
 		 * sender to a device memcpy */
+
+		/* This path requires IPC (the peer maps our device buffer via
+		 * the IPC cache). When IPC is disabled (e.g. multiple CUDA
+		 * devices without peer access), the IPC cache is never
+		 * allocated, so refuse the transfer instead of proceeding and
+		 * dereferencing a NULL cache. */
+		if (!ofi_hmem_is_ipc_enabled(iface)) {
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+				"host-to-device CMA transfer requires IPC, "
+				"which is disabled for hmem iface %d\n",
+				iface);
+			return -FI_EOPNOTSUPP;
+		}
 
 		/* TODO - multiple IOV support - update protocol selection logic
 		 * to use SAR for multiple IOVs */
