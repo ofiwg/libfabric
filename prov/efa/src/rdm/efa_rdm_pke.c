@@ -382,8 +382,8 @@ void efa_rdm_pke_release_cloned(struct efa_rdm_pke *pkt_entry)
 	while (pkt_entry) {
 		assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_OOO_POOL ||
 		       pkt_entry->alloc_type == EFA_RDM_PKE_FROM_UNEXP_POOL);
-		efa_rdm_pke_release(pkt_entry);
 		next = pkt_entry->next;
+		efa_rdm_pke_release(pkt_entry);
 		pkt_entry = next;
 	}
 }
