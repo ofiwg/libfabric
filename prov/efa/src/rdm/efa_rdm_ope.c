@@ -590,6 +590,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
+	enum efa_rdm_ope_state prev_state;
 	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	assert(rxe->type == EFA_RDM_RXE);
@@ -624,6 +625,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		assert(0 && "rxe unknown state");
 	}
 
+	prev_state = rxe->state;
 	rxe->state = EFA_RDM_OPE_ERR;
 
 	dlist_foreach_container_safe(&rxe->queued_pkts,
@@ -642,7 +644,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	}
 
 	err_entry.flags = rxe->cq_entry.flags;
-	if (rxe->state != EFA_RDM_RXE_UNEXP)
+	if (prev_state != EFA_RDM_RXE_UNEXP)
 		err_entry.op_context = rxe->cq_entry.op_context;
 	err_entry.buf = rxe->cq_entry.buf;
 	err_entry.data = rxe->cq_entry.data;
