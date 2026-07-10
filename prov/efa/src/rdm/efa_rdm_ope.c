@@ -28,6 +28,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->type = EFA_RDM_TXE;
 	txe->op = op;
 	txe->tx_id = ofi_buf_index(txe);
+	txe->rx_id = EFA_RDM_OPE_INVALID_ID;
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->peer = peer;
 	/* peer would be NULL for local read operation */
