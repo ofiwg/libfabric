@@ -1495,7 +1495,7 @@ void test_efa_mr_reg_out_of_range_iface(void **state)
 
 /**
  * Verify that efa_direct_ope is released when fi_recv fails after
- * allocating the ope. Without the fix the ope leaks on the error path.
+ * allocating the ope, so the error path does not leak it.
  */
 void test_efa_direct_ope_released_on_recv_error(void **state)
 {
@@ -1542,7 +1542,7 @@ void test_efa_direct_ope_released_on_recv_error(void **state)
 
 /**
  * Verify that efa_direct_ope is released when fi_sendmsg fails after
- * allocating the ope. Without the fix the ope leaks on the error path.
+ * allocating the ope, so the error path does not leak it.
  */
 void test_efa_direct_ope_released_on_send_error(void **state)
 {
@@ -1601,7 +1601,7 @@ void test_efa_direct_ope_released_on_send_error(void **state)
 
 /**
  * Verify that efa_direct_ope is released when fi_readmsg fails after
- * allocating the ope. Without the fix the ope leaks on the error path.
+ * allocating the ope, so the error path does not leak it.
  */
 void test_efa_direct_ope_released_on_read_error(void **state)
 {
@@ -1670,7 +1670,7 @@ void test_efa_direct_ope_released_on_read_error(void **state)
 
 /**
  * Verify that efa_direct_ope is released when fi_writemsg fails after
- * allocating the ope. Without the fix the ope leaks on the error path.
+ * allocating the ope, so the error path does not leak it.
  */
 void test_efa_direct_ope_released_on_write_error(void **state)
 {

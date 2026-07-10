@@ -2249,8 +2249,8 @@ void test_efa_cq_poll_ep_close_bypass_path(void **state)
  * 3. fi_close(ep) destroys the QP (freeing cur_wq's target), then drains the CQ
  * 4. The drain's next_poll mock reads cur_wq->wrid_idx_pool_next → SEGV if dangling
  *
- * Without the fix: SEGV/SIGBUS (cur_wq points to freed QP memory)
- * With the fix (NULLing cur_wq after consumption): passes
+ * cur_wq must be NULLed after consumption so the drain never touches
+ * freed QP memory.
  */
 void test_efa_cq_next_poll_stale_cur_wq_segv_on_ep_close(void **state)
 {
