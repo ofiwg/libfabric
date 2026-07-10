@@ -37,6 +37,57 @@ int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
  */
 fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av);
 
+struct efa_ibv_cq;
+
+/*
+ * Layout-compatible copy of struct efa_context (from efa.h).
+ * Guarded to avoid redefinition in .c files that include efa.h directly.
+ */
+#ifndef EFA_H
+struct efa_context {
+	uint64_t completion_flags;
+	fi_addr_t addr;
+};
+#endif
+
+/**
+ * @brief Get the efa_ibv_cq embedded in a fid_cq.
+ * Navigates: fid_cq → util_cq → efa_cq → efa_ibv_cq.
+ */
+struct efa_ibv_cq *efa_test_get_ibv_cq(struct fid_cq *cq_fid);
+
+/**
+ * @brief Get the QP number of the endpoint's underlying EFA QP.
+ */
+uint32_t efa_test_get_qp_num(struct fid_ep *ep);
+
+/**
+ * @brief Ensure the efa_cq's err_buf is allocated.
+ * efa_rdm_cq_open does not allocate err_buf (only efa_cq_open does),
+ * but efa_cq_poll_ibv_cq's error path requires it.
+ */
+void efa_test_alloc_err_buf(struct efa_ibv_cq *ibv_cq);
+void efa_test_free_err_buf(struct efa_ibv_cq *ibv_cq);
+
+/**
+ * @brief Set the status and wr_id fields on the ibv_cq_ex inside efa_ibv_cq.
+ * Needed because efa_ibv_cq is opaque from C++.
+ */
+void efa_test_set_ibv_cq_ex(struct efa_ibv_cq *ibv_cq, int status,
+			    uint64_t wr_id);
+
+int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq);
+
+/**
+ * @brief Read back one already-staged completion from the CQ's util_cq without
+ * progressing. Wraps ofi_cq_read_entries (not fi_cq_read), so it does NOT
+ * re-enter the mocked efa_cq poll path. Lets a success-path test prove a
+ * completion was actually written (op_context/flags/len/data) rather than only
+ * asserting the poll return value. Returns 1 on one entry, -FI_EAGAIN if none.
+ */
+ssize_t efa_test_cq_read_staged_data_entry(struct fid_cq *cq_fid,
+					   struct fi_cq_data_entry *entry);
+
 struct ibv_ah;
 
 /**
