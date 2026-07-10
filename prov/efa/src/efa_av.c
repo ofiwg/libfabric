@@ -219,7 +219,9 @@ void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 	dlist_insert_tail(&conn->implicit_av_lru_entry,
 			  &av->implicit_av_lru_list);
 
+	ofi_genlock_lock(&av->domain->util_domain.lock);
 	efa_ah_implicit_av_lru_ah_move(av->domain, conn->ah);
+	ofi_genlock_unlock(&av->domain->util_domain.lock);
 }
 
 /*
@@ -431,12 +433,18 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	if (err)
 		return err;
 
-	/* Handle AH LRU list and refcnt */
+	/* Handle AH LRU list and refcnt.
+	 * AH refcnts are protected by util_domain.lock, which is also
+	 * held by efa_ah_alloc and efa_ah_release. 
+	 * efa_conn_implicit_to_explicit is the slow path so taking 
+	 * an extra lock is fine. */
+	ofi_genlock_lock(&av->domain->util_domain.lock);
 	assert(!dlist_empty(&ah->implicit_conn_list));
 	dlist_remove(&implicit_conn->ah_implicit_conn_list_entry);
 	efa_ah_implicit_av_lru_ah_move(av->domain, ah);
 	ah->implicit_refcnt--;
 	ah->explicit_refcnt++;
+	ofi_genlock_unlock(&av->domain->util_domain.lock);
 
 	EFA_INFO(FI_LOG_AV,
 		 "Peer with implicit fi_addr %" PRIu64

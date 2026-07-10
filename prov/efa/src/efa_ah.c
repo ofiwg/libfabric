@@ -29,6 +29,7 @@ void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 	struct efa_rdm_domain *rdm_domain;
 
 	assert(domain->info_type == EFA_INFO_RDM);
+	assert(ofi_genlock_held(&domain->util_domain.lock));
 
 	rdm_domain = (struct efa_rdm_domain *) domain;
 	assert(ah->implicit_refcnt > 0 || ah->explicit_refcnt > 0);
@@ -47,6 +48,7 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
 	struct efa_rdm_domain *rdm_domain;
 
 	assert(domain->info_type == EFA_INFO_RDM);
+	assert(ofi_genlock_held(&domain->util_domain.lock));
 	rdm_domain = (struct efa_rdm_domain *) domain;
 
 	dlist_foreach_container (&rdm_domain->ah_lru_list, struct efa_ah, ah_tmp,
@@ -139,6 +141,7 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	if (!efa_ah) {
 		errno = FI_ENOMEM;
 		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah\n");
+		ofi_genlock_unlock(&domain->util_domain.lock);
 		return NULL;
 	}
 
@@ -149,8 +152,8 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	if (!efa_ah->ibv_ah) {
 		/* If the failure is because we have too many AH entries, try to
 		 * evict an AH entry with no explicit AV entries and try AH
-		 * creation again. Eviction only applies to RDM domains. */
-		if (errno == FI_ENOMEM && domain->info_type == EFA_INFO_RDM) {
+		 * creation again. Eviction only applies to implicit AV. */
+		if (errno == FI_ENOMEM && insert_implicit_av) {
 			EFA_INFO(
 				FI_LOG_AV,
 				"ibv_create_ah failed with ENOMEM for implicit "
