@@ -289,7 +289,8 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_conn.cc \
 	prov/efa/test/gtest/efa_gtest_ah.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_pke_rtm.cc \
-	prov/efa/test/gtest/efa_gtest_rdm_mr.cc
+	prov/efa/test/gtest/efa_gtest_rdm_mr.cc \
+	prov/efa/test/gtest/efa_gtest_rdm_pke.cc
 
 prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
