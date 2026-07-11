@@ -91,5 +91,7 @@ efa_genlock_held(struct ofi_genlock *lock, struct ofi_tsa_lock_symbol *sym)
 
 #endif /* OFI_THREAD_SAFETY_ANALYSIS */
 
+/* EFA lock symbols (one per lock role). */
+OFI_TSA_LOCK_SYMBOL_DECLARE(efa_qp_table_lock_sym);
 
 #endif /* EFA_THREAD_ANNOTATIONS_H */
