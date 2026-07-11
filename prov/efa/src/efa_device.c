@@ -28,6 +28,11 @@
 #include "efawin.h"
 #endif
 
+/* Storage for the device QP-table lock analysis symbol. TODO: once a
+ * second lock is added, these should be moved to a separate thread safety
+ * .c file */
+OFI_TSA_LOCK_SYMBOL_DEFINE(efa_qp_table_lock_sym);
+
 /**
  * @brief initialize data members of a struct of efa_device until the gid
  *
@@ -161,6 +166,7 @@ static void efa_device_set_cntr_max_values(struct efa_device *efa_device)
  */
 int efa_device_construct_data(struct efa_device *efa_device,
 			 struct ibv_device *ibv_device)
+	OFI_TSA_NO_ANALYSIS
 {
 	int err;
 	size_t qp_table_size;
@@ -249,6 +255,8 @@ err_close:
  * @param	device[in,out]		pointer to an efa_device struct
  */
 void efa_device_destruct(struct efa_device *device)
+	/* No lock analysis: teardown is guarded by device->ref_cnt. */
+	OFI_TSA_NO_ANALYSIS
 {
 	int err;
 

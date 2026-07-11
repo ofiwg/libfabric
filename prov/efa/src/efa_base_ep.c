@@ -65,11 +65,11 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 	 *
 	 * Lock ordering: device lock -> CQ locks -> QP operations
 	 */
-	ofi_genlock_lock(&base_ep->domain->device->qp_table_lock);
+	EFA_GENLOCK_LOCK(&base_ep->domain->device->qp_table_lock, efa_qp_table_lock_sym);
 	efa_base_ep_lock_cq(base_ep);
 	efa_base_ep_destruct_qp_unsafe(base_ep);
 	efa_base_ep_unlock_cq(base_ep);
-	ofi_genlock_unlock(&base_ep->domain->device->qp_table_lock);
+	EFA_GENLOCK_UNLOCK(&base_ep->domain->device->qp_table_lock, efa_qp_table_lock_sym);
 	return 0;
 }
 
@@ -507,6 +507,7 @@ static int efa_base_ep_attach_comp_cntrs(struct efa_base_ep *base_ep,
 
 static
 int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
+	OFI_TSA_REQUIRES(efa_qp_table_lock_sym)
 {
 	int err;
 
@@ -1025,7 +1026,7 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep)
 	 *
 	 * Lock ordering: device lock -> CQ locks -> QP operations
 	 */
-	ofi_genlock_lock(&ep->domain->device->qp_table_lock);
+	EFA_GENLOCK_LOCK(&ep->domain->device->qp_table_lock, efa_qp_table_lock_sym);
 	efa_base_ep_lock_cq(ep);
 	err = efa_base_ep_create_qp(ep, &scq->ibv_cq, &rcq->ibv_cq);
 	if (err)
@@ -1035,7 +1036,7 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep)
 
 out:
 	efa_base_ep_unlock_cq(ep);
-	ofi_genlock_unlock(&ep->domain->device->qp_table_lock);
+	EFA_GENLOCK_UNLOCK(&ep->domain->device->qp_table_lock, efa_qp_table_lock_sym);
 	return err;
 }
 

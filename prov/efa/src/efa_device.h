@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include "ofi_lock.h"
 #include "ofi_atom.h"
+#include "efa_thread_annotations.h"
 
 struct efa_qp;
 
@@ -24,7 +25,7 @@ struct efa_device {
 	struct fi_info		*rdm_info;
 	struct fi_info		*dgram_info;
 	/* QP table and lock for device-level QP management */
-	struct efa_qp		**qp_table;
+	struct efa_qp		**qp_table OFI_TSA_GUARDED_BY(efa_qp_table_lock_sym);
 	uint8_t			*qp_gen_table;
 	size_t			qp_table_sz_m1;
 	struct ofi_genlock		qp_table_lock;
