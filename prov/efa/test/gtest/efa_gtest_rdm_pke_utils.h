@@ -43,6 +43,16 @@ void efa_test_pke_release_cloned(struct efa_rdm_pke *head);
  */
 size_t efa_test_ep_unexp_pool_outstanding(struct fid_ep *ep);
 
+int efa_test_failed_reorder_msg_releases_rx_pkt(struct fid_ep *ep,
+						fi_addr_t peer_addr,
+						size_t *to_post_before,
+						size_t *to_post_after);
+
+int efa_test_failed_reorder_msg_overflow_releases_rx_pkt_and_entry(
+	struct fid_ep *ep, fi_addr_t peer_addr, size_t *to_post_before,
+	size_t *to_post_after, size_t *overflow_free_before,
+	size_t *overflow_free_after);
+
 #ifdef __cplusplus
 }
 #endif

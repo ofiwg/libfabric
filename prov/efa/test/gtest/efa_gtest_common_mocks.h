@@ -15,6 +15,8 @@ struct efa_conn;
 struct ofi_mr_map;
 struct fi_mr_attr;
 struct efa_ibv_cq;
+struct efa_rdm_pke;
+struct ofi_bufpool;
 
 /*
  * X macro infrastructure for mock generation.
@@ -51,6 +53,9 @@ struct efa_ibv_cq;
 	struct ofi_mr_map *map, const struct fi_mr_attr *attr,             \
 		uint64_t *key, void *context, uint64_t flags
 #define EFA_MOCK_ARGS_ofi_mr_map_insert map, attr, key, context, flags
+#define EFA_MOCK_PARAMS_efa_rdm_pke_clone                              \
+	struct efa_rdm_pke *src, struct ofi_bufpool *pkt_pool, int alloc_type
+#define EFA_MOCK_ARGS_efa_rdm_pke_clone src, pkt_pool, alloc_type
 
 #define EFA_MOCK_PARAMS_efa_ibv_cq_start_poll \
 	struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr
@@ -88,7 +93,8 @@ struct efa_ibv_cq;
 	X(uint32_t, efa_ibv_cq_wc_read_qp_num)           \
 	X(unsigned int, efa_ibv_cq_wc_read_wc_flags)     \
 	X(uint32_t, efa_ibv_cq_wc_read_byte_len)		\
-	X(int, ofi_mr_map_insert)
+	X(int, ofi_mr_map_insert)						\
+	X(struct efa_rdm_pke *, efa_rdm_pke_clone)
 
 /* --- Generator macros --- */
 

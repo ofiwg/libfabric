@@ -450,7 +450,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	bool slide_recvwin;
 	int ret;
-	uint32_t msg_id, exp_msg_id;
+	uint32_t exp_msg_id;
 
 	ep = pkt_entry->ep;
 
@@ -480,42 +480,13 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 		}
 	}
 
-	msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 	ret = efa_rdm_peer_reorder_msg(peer, pkt_entry->ep, pkt_entry);
 	if (ret == 1) {
 		/* Packet was queued */
 		return;
 	} else if (OFI_UNLIKELY(ret < 0)) {
-		if (OFI_UNLIKELY(ret == -FI_EALREADY)) {
-			/* Packet with same msg_id has been processed before */
-			EFA_WARN(FI_LOG_EP_CTRL,
-				"Invalid msg_id: %" PRIu32
-				" robuf->exp_msg_id: %" PRIu32 "\n",
-			       msg_id, peer->robuf.exp_msg_id);
-
-#if ENABLE_DEBUG
-			/* Print debug info on reorder error */
-			EFA_WARN(FI_LOG_EP_CTRL,
-			         "  pkt_entry=%p gen=%u\n"
-			         "  Debug info history:\n",
-			         pkt_entry, pkt_entry->gen);
-			efa_rdm_pke_print_debug_info(pkt_entry);
-#endif
-			efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_PKT_ALREADY_PROCESSED);
-			efa_rdm_pke_release_rx(pkt_entry);
-			return;
-		}
-
-		if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {
-			/* running out of memory while copy packet */
-			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_OOM);
-			return;
-		}
-
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Unknown error %d processing REQ packet msg_id: %"
-			PRIu32 "\n", ret, msg_id);
-		efa_base_ep_write_eq_error(&ep->base_ep, ret, FI_EFA_ERR_OTHER);
+		/* reorder_msg already reported error to the EQ */
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 

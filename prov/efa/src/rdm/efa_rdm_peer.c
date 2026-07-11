@@ -130,15 +130,16 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 /**
  * @brief run incoming packet_entry through reorder buffer
  * queue the packet entry if msg_id is larger than expected.
- * If queue failed, abort the application and print error message.
+ * On error, write an EQ error entry; the caller releases the packet entry.
  *
  * @param[in]		peer		peer
  * @param[in]		ep		endpoint
- * @param[in,out]	pkt_entry	packet entry, will be released if successfully queued
+ * @param[in,out]	pkt_entry	packet entry; consumed when queued, otherwise left for the caller to release
  * @returns
  * 0 if `msg_id` of `pkt_entry` matches expected msg_id.
  * 1 if `msg_id` of `pkt_entry` is larger than expected, and the packet entry is queued successfully
  * -FI_EALREADY if `msg_id` of `pkt_entry` is smaller than expected.
+ * -FI_ENOMEM if queuing the out-of-order packet entry failed due to allocation failure.
  */
 int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 			     struct efa_rdm_pke *pkt_entry)
@@ -147,6 +148,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	struct efa_rdm_pke *ooo_entry;
 	uint32_t msg_id;
+	int ret;
 
 	assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type >= EFA_RDM_REQ_PKT_BEGIN);
 
@@ -185,7 +187,9 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 			         pkt_entry, pkt_entry->gen);
 			efa_rdm_pke_print_debug_info(pkt_entry);
 #endif
-			return -FI_EALREADY;
+			efa_base_ep_write_eq_error(&ep->base_ep, -FI_EALREADY, FI_EFA_ERR_PKT_ALREADY_PROCESSED);
+			ret = -FI_EALREADY;
+			goto out;
 		} else {
 			/* Current receive window size is too small to hold incoming messages.
 			 * Store the overflow messages in a double linked list, and move it
@@ -196,12 +200,17 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 			overflow_pke_list_entry = ofi_buf_alloc(ep->overflow_pke_pool);
 			if (OFI_UNLIKELY(!overflow_pke_list_entry)) {
 				EFA_WARN(FI_LOG_EP_CTRL, "Unable to allocate an overflow_pke_list_entry.\n");
-				return -FI_ENOMEM;
+				efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_OOM);
+				ret = -FI_ENOMEM;
+				goto out;
 			}
 
 			ooo_entry = efa_rdm_pke_get_ooo_pke(pkt_entry);
-			if (!ooo_entry)
-				return -FI_ENOMEM;
+			if (!ooo_entry) {
+				ofi_buf_free(overflow_pke_list_entry);
+				ret = -FI_ENOMEM;
+				goto out;
+			}
 
 			overflow_pke_list_entry->pkt_entry = ooo_entry;
 
@@ -212,15 +221,22 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 				"Storing overflow msg_id %d in overflow_pke_list.\n",
 				msg_id);
 
-			return 1;
+			ret = 1;
+			goto out;
 		}
 	}
 
 	ooo_entry = efa_rdm_pke_get_ooo_pke(pkt_entry);
-	if (!ooo_entry)
-		return -FI_ENOMEM;
+	if (!ooo_entry) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
 
-	return efa_rdm_peer_recvwin_queue_or_append_pke(ooo_entry, msg_id, robuf);
+	ret = efa_rdm_peer_recvwin_queue_or_append_pke(ooo_entry, msg_id, robuf);
+	assert(ret == 1);
+out:
+	assert(ret >= 0 || ret == -FI_EALREADY || ret == -FI_ENOMEM);
+	return ret;
 }
 
 /**
