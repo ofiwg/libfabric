@@ -271,7 +271,7 @@ void efa_rdm_pke_handle_dc_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
- * @brief initialize the the header of a LONGCTS RTW packet
+ * @brief initialize the header of a LONGCTS RTW packet
  *
  * This function applies to both EFA_RDM_LONGCTS_RTW_PKT and
  * EFA_RDM_DC_LONGCTS_RTW_PKT

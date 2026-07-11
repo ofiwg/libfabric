@@ -222,7 +222,7 @@ void efa_env_define()
 	fi_param_define(&efa_prov, "inter_max_gdrcopy_message_size", FI_PARAM_INT,
 			"The maximum message size to use gdrcopy. If instance support gdrcopy, messages whose size is smaller than this value will be sent by eager/longcts protocol (Default 32768).");
 	fi_param_define(&efa_prov, "inter_min_read_write_size", FI_PARAM_INT,
-			"The mimimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the efa device supports RDMA write, device RDMA write will always be used.");
+			"The minimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the efa device supports RDMA write, device RDMA write will always be used.");
 	fi_param_define(&efa_prov, "inter_read_segment_size", FI_PARAM_INT,
 			"Calls to RDMA read is segmented using this value.");
 	fi_param_define(&efa_prov, "fork_safe", FI_PARAM_BOOL,
@@ -250,7 +250,7 @@ void efa_env_define()
 			"The maximum size of the implicit AV used to store AV "
 			"entries of peers that were not explicitly inserted "
 			"into the AV by the application. Setting this variable "
-			"to a positive value will enforce the the maximum "
+			"to a positive value will enforce the maximum "
 			"size. Setting this value to 0 will allow unbounded "
 			"growth of the implicit AV. (Default: 0)",
 			efa_env.implicit_av_size);

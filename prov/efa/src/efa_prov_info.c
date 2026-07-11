@@ -62,7 +62,7 @@ const struct fi_domain_attr efa_domain_attr = {
  * @param 	prov_info[out]		pointer to prov_info object
  * @param	device[in]		pointer to an efa_device struct, which contains device attributes
  * @param	ep_type[in]		endpoint type, can be FI_EP_RDM or FI_EP_DGRAM
- * @return	0 on sucessess
+ * @return	0 on success
  * 		negative libfabric error code on failure
  */
 static

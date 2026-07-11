@@ -450,7 +450,7 @@ int efa_hmem_validate_p2p_opt(enum fi_hmem_iface iface, int p2p_opt, uint32_t ap
 	 * According to fi_setopt() document:
 	 *
 	 *     ENABLED means a provider may use P2P.
-	 *     PREFERED means a provider should prefer P2P if it is available.
+	 *     PREFERRED means a provider should prefer P2P if it is available.
 	 *
 	 * These options does not require that p2p is supported by device,
 	 * nor do they prohibit that p2p is required by implementation.
