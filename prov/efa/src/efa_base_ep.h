@@ -11,6 +11,7 @@
 #include "ofi.h"
 #include "ofi_util.h"
 #include "efa_av.h"
+#include "efa_thread_annotations.h"
 #include "rdm/efa_rdm_protocol.h"
 #include "efa_data_path_direct_structs.h"
 
@@ -106,7 +107,8 @@ int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);
 
 int efa_base_ep_destruct(struct efa_base_ep *base_ep);
 
-int efa_base_ep_enable(struct efa_base_ep *base_ep);
+int efa_base_ep_enable(struct efa_base_ep *base_ep)
+	OFI_TSA_REQUIRES(efa_qp_table_lock_sym);
 
 int efa_base_ep_construct(struct efa_base_ep *base_ep,
 			  struct fid_domain* domain_fid,
@@ -128,7 +130,8 @@ void efa_base_ep_close_util_ep(struct efa_base_ep *base_ep);
 
 int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep);
 
-int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep);
+int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
+	OFI_TSA_REQUIRES(efa_qp_table_lock_sym);
 
 bool efa_qp_support_op_in_order_aligned_128_bytes(struct efa_qp *qp,
 						       enum ibv_wr_opcode op);
