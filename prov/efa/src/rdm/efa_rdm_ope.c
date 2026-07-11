@@ -455,7 +455,7 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 /**
  * @brief prepare ope to send the give pkt type
  *
- * For given packet type, calcuate how many packets are going to be
+ * For given packet type, calculate how many packets are going to be
  * sent. If there are more than 1 packet, calculate how many data
  * each packet will carry.
  *

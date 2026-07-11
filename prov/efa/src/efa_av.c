@@ -681,7 +681,7 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
  * @param[in]	counter	number of libfabric addresses in the array
  * @param[in]	flags	flags
  * @return	0 if all addresses have been removed successfully,
- * 		negative libfabric error code if error was encoutnered.
+ * 		negative libfabric error code if error was encountered.
  */
 static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			 size_t count, uint64_t flags)
