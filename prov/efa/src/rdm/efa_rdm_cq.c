@@ -80,7 +80,7 @@ static void efa_rdm_cq_wait_del_signal(struct efa_rdm_cq *cq)
  * @brief close a CQ of EFA RDM endpoint
  *
  * @param[in,out]	fid	fid of the CQ to be closed
- * @returns		0 on sucesss,
+ * @returns		0 on success,
  * 			negative libfabric error code on error
  * @relates efa_rdm_cq
  */
@@ -794,7 +794,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 				EFA_INFO(FI_LOG_CQ, "Receive error %s (%d) for unsolicited write recv\n",
 					efa_strerror(prov_errno), prov_errno);
 				err_entry.op_context = NULL;
-				/*To be consistent with the succeed path. Although man page only refered to: FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)*/
+				/*To be consistent with the succeed path. Although man page only referred to: FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)*/
 				err_entry.flags = FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE;
 				err_entry.err = to_fi_errno(prov_errno);
 				err_entry.prov_errno = prov_errno;

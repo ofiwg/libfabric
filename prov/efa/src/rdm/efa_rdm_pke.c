@@ -91,7 +91,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	}
 #endif
 	/* Initialize necessary fields in pkt_entry.
-	 * The memory region allocated by ofi_buf_alloc_ex is not initalized.
+	 * The memory region allocated by ofi_buf_alloc_ex is not initialized.
 	 */
 	pkt_entry->ep = ep;
 	pkt_entry->mr = mr;
