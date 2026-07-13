@@ -1,0 +1,4 @@
+# LeakSanitizer suppressions for the EFA unit-test binaries.
+#
+# benign suppression: persistent glibc allocation
+leak:_dlerror_run
