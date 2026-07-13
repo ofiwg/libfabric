@@ -268,12 +268,6 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 	}
 
 	if (hints) {
-		if (hints->dest_addr) {
-			FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-			       "cannot support dest_addr lookups now\n");
-			goto err;
-		}
-
 		if (hints->src_addr) {
 			fi->src_addr = mem_dup(hints->src_addr, hints->src_addrlen);
 			if (!fi->src_addr) {
@@ -308,14 +302,28 @@ static int fi_opx_fillinfo(int hfi, struct fi_info *fi, const char *node, const 
 		 * returned address is only usable locally.
 		 */
 
-		if ((flags & FI_SOURCE) == 0) {
+		/* node/service already parsed into fi->dest_addr takes
+		 * precedence; overwriting it here would leak that allocation. */
+		if (fi->dest_addr != NULL) {
+			FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC,
+				"dest_addr hint ignored; using address from node/service\n");
+		} else {
 			if ((hints->addr_format != FI_FORMAT_UNSPEC) && (hints->addr_format != FI_ADDR_OPX)) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "invalid addr_format hint (%d)\n",
 					hints->addr_format);
 				errno = FI_EINVAL;
 				goto err;
 			}
-			fi->dest_addr = mem_dup(hints->dest_addr, hints->dest_addrlen);
+			/* dest_addrlen is always reported as sizeof(struct
+			 * fi_opx_addr); a shorter hint would leak uninitialized heap. */
+			if (hints->dest_addrlen != sizeof(struct fi_opx_addr)) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+					"invalid dest_addrlen hint (%zu), expected %zu\n", hints->dest_addrlen,
+					sizeof(struct fi_opx_addr));
+				errno = FI_EINVAL;
+				goto err;
+			}
+			fi->dest_addr = mem_dup(hints->dest_addr, sizeof(struct fi_opx_addr));
 			if (!fi->dest_addr) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "Failed to alloc memory.\n");
 				goto err;
