@@ -160,3 +160,11 @@ void efa_test_set_shm_domain(struct fid_domain *domain,
 {
 	efa_test_rdm_domain(domain)->shm_domain = shm_domain;
 }
+
+int efa_test_get_util_domain_ref(struct fid_domain *domain)
+{
+	struct efa_domain *efa_domain = container_of(
+		domain, struct efa_domain, util_domain.domain_fid);
+
+	return ofi_atomic_get32(&efa_domain->util_domain.ref);
+}
