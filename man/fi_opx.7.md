@@ -350,7 +350,16 @@ this will cause a segfault when mmapped memory is illegally accessed through buf
 or underruns.  Default is false.
 
 *FI_OPX_CONTEXT_SHARING*
-: Boolean (1/0, on/off, true/false, yes/no). Enables context sharing in OPX. Defaults to FALSE (1 HFI context per endpoint).
+: Boolean (1/0, on/off, true/false, yes/no). Enables or disables context sharing in OPX. Defaults to auto, which enables
+  context sharing only when the number of local ranks exceeds the total number of HFI contexts available on the node
+  (summed across all active HFI units). Setting this to true or false always enables or disables context sharing
+  regardless of local rank count.
+  The local rank count is read from the first of the following environment variables that is set:
+  MPI_LOCALNRANKS, OMPI_COMM_WORLD_LOCAL_SIZE, LOCAL_WORLD_SIZE, SLURM_NTASKS_PER_NODE, or CCL_LOCAL_SIZE.
+  If none of these are set, the auto default behaves as if there is 1 local rank (context sharing not enabled).
+  On CN6000/CYR hardware the auto default never enables context sharing, since dual-plane
+  support and context sharing are mutually exclusive and dual-plane is enabled by default
+  on that generation; set FI_OPX_CONTEXT_SHARING=1 explicitly to enable it on CN6000/CYR.
 
 *FI_OPX_ENDPOINTS_PER_HFI_CONTEXT*
 : Integer. Specify how many endpoints should share a single HFI context. Valid values are from 2 to 8.
