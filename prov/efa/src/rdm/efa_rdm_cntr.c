@@ -155,10 +155,10 @@ int efa_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	ret = efa_cntr_construct(&cntr->efa_cntr, domain, attr,
 				 efa_rdm_cntr_progress, context);
-	if (ret)
+	if (ret) {
 		goto free;
+	}
 
-	*cntr_fid = &cntr->efa_cntr.util_cntr.cntr_fid;
 	cntr->efa_cntr.util_cntr.cntr_fid.ops = &efa_rdm_cntr_ops;
 	cntr->efa_cntr.util_cntr.cntr_fid.fid.ops = &efa_rdm_cntr_fi_ops;
 
@@ -172,10 +172,12 @@ int efa_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 				   &cntr->shm_cntr, &peer_cntr_context);
 		if (ret) {
 			EFA_WARN(FI_LOG_CNTR, "Unable to open shm cntr, err: %s\n", fi_strerror(-ret));
+			efa_cntr_destruct(&cntr->efa_cntr);
 			goto free;
 		}
 	}
 
+	*cntr_fid = &cntr->efa_cntr.util_cntr.cntr_fid;
 	return FI_SUCCESS;
 
 free:
