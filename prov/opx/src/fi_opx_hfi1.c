@@ -200,7 +200,9 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"FI_OPX_CONTEXT_SHARING not specified on CN6000/CYR hardware. Context sharing is not auto-enabled on this generation; set FI_OPX_CONTEXT_SHARING=1 to opt in explicitly.\n");
 	} else {
-		const uint32_t ppn = opx_query_local_rank_count();
+		int32_t local_rank_count;
+		opx_query_local_rank_info(&local_rank_count, NULL);
+		const uint32_t ppn = local_rank_count > 0 ? (uint32_t) local_rank_count : 1;
 
 		// Multi-HFI striping consumes 2 contexts per endpoint (one per plane) instead of 1
 		// when explicitly enabled, so the available context count must be halved below.

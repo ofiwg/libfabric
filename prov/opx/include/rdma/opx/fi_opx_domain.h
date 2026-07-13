@@ -338,7 +338,7 @@ struct opx_domain_deferred_work {
 #define FI_OPX_DEFAULT_DOMAIN_CTX_CNT 160
 
 uint32_t opx_domain_get_ctx_cnt(int hfi);
-uint32_t opx_query_local_rank_count(void);
+void	 opx_query_local_rank_info(int32_t *local_rank_count, int32_t *local_rank);
 
 /* Sum of opx_domain_get_ctx_cnt() across every active HFI unit on the node.
  * Used to decide whether the number of local ranks exceeds the total number
