@@ -42,9 +42,15 @@
 
 /* CN5000 support (CDEV, HFI1-DIRECT) common support functions. */
 
-/* Get the port index from configuration */
+/* Get the port index from configuration.
+ *
+ * ctx_sharing: true if context sharing is enabled (explicitly or via
+ * PPN-based auto-detection) for the endpoint being opened. When context
+ * sharing is active, ranks sharing a context must all converge on the
+ * same port, since the hfi1 driver's context-sharing match
+ * (subctxt_id/subctxt_cnt/uuid) is scoped per-port. */
 __OPX_FORCE_INLINE__
-int opx_select_port_index(struct fi_opx_domain *domain, int unit)
+int opx_select_port_index(struct fi_opx_domain *domain, int unit, bool ctx_sharing)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] %s, unit %d\n",
 		     OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE(domain)), unit);
@@ -66,21 +72,62 @@ int opx_select_port_index(struct fi_opx_domain *domain, int unit)
 
 	int port_index; /* calculate from port */
 	if (port == OPX_PORT_NUM_ANY) {
-		/* Rudimentary attempt at load balancing across ports */
-		const pid_t pid = getpid();
-
-		/* Spread port *index* from pid (even 0, odd 1) */
-		port_index = (pid & (pid_t) 0x1);
-		port	   = port_index + 1;
-		/* check if port is usable and swap if it's down,
-		   assuming here that at least one port is working */
-		if (opx_hfi_get_port_lid(unit, port) <= 0) {
-			FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
-				 "[HFI1-DIRECT] port index %d failed, use %d, pid %d\n", port_index, port_index ? 0 : 1,
-				 getpid());
-			port_index = port_index ? 0 : 1;
-			port	   = port_index + 1;
+		int active_port_list[OPX_MAX_PORT];
+		int active_ports = 0;
+		for (int p = OPX_MIN_PORT; p <= OPX_MAX_PORT; p++) {
+			if (opx_hfi_get_port_lid(unit, p) > 0) {
+				active_port_list[active_ports++] = p;
+			}
 		}
+		if (active_ports == 0) {
+			return -1;
+		}
+
+		int32_t local_rank_id;
+		opx_query_local_rank_info(NULL, &local_rank_id);
+		if (active_ports > 1 && local_rank_id >= 0) {
+			/* Assign ports round-robin by local rank ID; every rank on
+			 * the node observes identical port/LID topology, so this
+			 * converges without any cross-process signaling. Safe for
+			 * context sharing too: group_offset already keys sharing
+			 * groups off hfi_unit_number alone, so per-port subctxt_id
+			 * reuse doesn't collide. */
+			port = active_port_list[(uint32_t) local_rank_id % (uint32_t) active_ports];
+		} else if (ctx_sharing) {
+			/* Without a rank ID, context sharing still requires every
+			 * rank to converge on the same port deterministically, so
+			 * pin to the lowest active port. PID-based balancing (used
+			 * below when sharing is disabled) risks silently splitting
+			 * a sharing group across ports into separate, unshared
+			 * contexts, since it isn't coordinated across ranks. */
+			port			    = active_port_list[0];
+			static bool port_pin_warned = false;
+			if (!port_pin_warned) {
+				if (active_ports > 1) {
+					FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+						"[HFI1-DIRECT] Context sharing is enabled and %d ports are active on unit %d, but local rank ID could not be determined; pinning to port %d for all context-sharing endpoints. Set FI_OPX_PORT to override.\n",
+						active_ports, unit, port);
+				}
+				port_pin_warned = true;
+			}
+		} else {
+			/* Rudimentary attempt at load balancing across ports */
+			const pid_t pid = getpid();
+
+			/* Spread port *index* from pid (even 0, odd 1) */
+			port_index = (pid & (pid_t) 0x1);
+			port	   = port_index + 1;
+			/* check if port is usable and swap if it's down,
+			   assuming here that at least one port is working */
+			if (opx_hfi_get_port_lid(unit, port) <= 0) {
+				FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
+					 "[HFI1-DIRECT] port index %d failed, use %d, pid %d\n", port_index,
+					 port_index ? 0 : 1, getpid());
+				port_index = port_index ? 0 : 1;
+				port	   = port_index + 1;
+			}
+		}
+		port_index = port - 1;
 	} else {
 		port_index = port - 1; /* User selected port */
 	}
