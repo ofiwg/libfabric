@@ -165,25 +165,12 @@ static int opx_hfi1_sysfs_get_chip_major(int unit);
 static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_context_internal *internal,
 				    uuid_t unique_job_key, int hfi_unit_number, int *fd_cdev, int *fd_verbs)
 {
-	int port = opx_select_port_index(internal->domain, hfi_unit_number) + 1;
-	if (port <= 0) {
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to select an HFI port on unit %d.\n", hfi_unit_number);
-		return -1;
-	}
-	unsigned int user_version;
-	void	    *ibv_context;
-	if (opx_hfi1_wrapper_context_open(hfi_unit_number, port, 0, OPX_SW_HFI1_TYPE(internal->domain), &ibv_context,
-					  &user_version, fd_cdev, fd_verbs) != 0) {
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open HFI unit %d.\n", hfi_unit_number);
-		return -1;
-	}
-	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "opx_hfi_context_open fd_cdev %d fd_verbs %d.\n", *fd_cdev,
-		     *fd_verbs);
-	internal->context.ibv_context = ibv_context;
-
 	// Check whether user wants to enable context sharing or not. If the user has not
 	// set FI_OPX_CONTEXT_SHARING explicitly, enable it automatically when the number
 	// of local ranks exceeds the total number of contexts available across all HFIs.
+	// This must be determined before port selection below, since the driver's
+	// context-sharing match is per-port and all context-sharing endpoints must
+	// converge on the same port.
 	int context_sharing_enabled = 0;
 	if (fi_param_get_bool(fi_opx_global.prov, "context_sharing", &context_sharing_enabled) == FI_SUCCESS) {
 		if (context_sharing_enabled) {
@@ -235,6 +222,22 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 				ppn, ctx_cnt);
 		}
 	}
+
+	int port = opx_select_port_index(internal->domain, hfi_unit_number, context_sharing_enabled) + 1;
+	if (port <= 0) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to select an HFI port on unit %d.\n", hfi_unit_number);
+		return -1;
+	}
+	unsigned int user_version;
+	void	    *ibv_context;
+	if (opx_hfi1_wrapper_context_open(hfi_unit_number, port, 0, OPX_SW_HFI1_TYPE(internal->domain), &ibv_context,
+					  &user_version, fd_cdev, fd_verbs) != 0) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open HFI unit %d.\n", hfi_unit_number);
+		return -1;
+	}
+	FI_DBG_TRACE(&fi_opx_provider, FI_LOG_FABRIC, "opx_hfi_context_open fd_cdev %d fd_verbs %d.\n", *fd_cdev,
+		     *fd_verbs);
+	internal->context.ibv_context = ibv_context;
 
 	/* When context sharing is enabled each endpoint will map N available contexts on a given node to 0, 1,
 	... N - 1 context sharing groups. Each of these groups will have up to X number of endpoints based on
