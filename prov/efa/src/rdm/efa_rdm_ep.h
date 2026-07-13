@@ -241,6 +241,8 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep);
 
 void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep);
 
+void efa_rdm_ep_purge_queued_blocking_copy_for_rxe(struct efa_rdm_ope *rxe);
+
 #define efa_rdm_rx_flags(efa_rdm_ep) ((efa_rdm_ep)->base_ep.util_ep.rx_op_flags)
 #define efa_rdm_tx_flags(efa_rdm_ep) ((efa_rdm_ep)->base_ep.util_ep.tx_op_flags)
 
