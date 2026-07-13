@@ -104,6 +104,11 @@ struct fid_domain *efa_test_get_shm_domain(struct fid_domain *domain);
 void efa_test_set_shm_domain(struct fid_domain *domain,
 			     struct fid_domain *shm_domain);
 
+/**
+ * @brief Get util_domain's refcount.
+ */
+int efa_test_get_util_domain_ref(struct fid_domain *domain);
+
 #ifdef __cplusplus
 }
 #endif
