@@ -340,6 +340,12 @@ struct opx_domain_deferred_work {
 uint32_t opx_domain_get_ctx_cnt(int hfi);
 uint32_t opx_query_local_rank_count(void);
 
+/* Sum of opx_domain_get_ctx_cnt() across every active HFI unit on the node.
+ * Used to decide whether the number of local ranks exceeds the total number
+ * of contexts the node's HFIs can provide, so context sharing can be enabled
+ * automatically instead of requiring FI_OPX_CONTEXT_SHARING to be set. */
+uint32_t opx_domain_get_total_ctx_cnt(void);
+
 static inline uint32_t fi_opx_domain_get_tx_max(struct fid_domain *domain)
 {
 	return opx_domain_get_ctx_cnt(0);

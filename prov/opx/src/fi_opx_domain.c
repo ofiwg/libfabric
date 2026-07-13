@@ -212,6 +212,24 @@ uint32_t opx_domain_get_ctx_cnt(int hfi)
 	return ctx_cnt ? ctx_cnt : FI_OPX_DEFAULT_DOMAIN_CTX_CNT;
 }
 
+uint32_t opx_domain_get_total_ctx_cnt(void)
+{
+	const int num_hfis = opx_hfi_get_num_units();
+	uint32_t  total	   = 0;
+
+	/* Sum the raw per-unit context count directly (not via
+	 * opx_domain_get_ctx_cnt()) so a unit reporting 0 contexts
+	 * contributes 0, not a 160-context fallback, to the total. The
+	 * fallback below is only applied once, to the aggregate. */
+	for (int hfi = 0; hfi < num_hfis; ++hfi) {
+		if (opx_hfi_get_unit_active(hfi)) {
+			total += opx_hfi_get_num_contexts(hfi);
+		}
+	}
+
+	return total ? total : FI_OPX_DEFAULT_DOMAIN_CTX_CNT;
+}
+
 uint32_t opx_query_local_rank_count(void)
 {
 	const char *e;

@@ -159,6 +159,8 @@ static void opx_hfi_setup_ctx_shring_grps(int hfi_unit_number, int *ctx_groups, 
 	}
 }
 
+static int opx_hfi1_sysfs_get_chip_major(int unit);
+
 // Used by fi_opx_hfi1_context_open as a convenience.
 static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_context_internal *internal,
 				    uuid_t unique_job_key, int hfi_unit_number, int *fd_cdev, int *fd_verbs)
@@ -179,7 +181,9 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 		     *fd_verbs);
 	internal->context.ibv_context = ibv_context;
 
-	// Check whether user wants to enable context sharing or not.
+	// Check whether user wants to enable context sharing or not. If the user has not
+	// set FI_OPX_CONTEXT_SHARING explicitly, enable it automatically when the number
+	// of local ranks exceeds the total number of contexts available across all HFIs.
 	int context_sharing_enabled = 0;
 	if (fi_param_get_bool(fi_opx_global.prov, "context_sharing", &context_sharing_enabled) == FI_SUCCESS) {
 		if (context_sharing_enabled) {
@@ -187,7 +191,46 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 				"FI_OPX_CONTEXT_SHARING specified as TRUE, enabling context sharing.\n");
 		} else {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_CONTEXT_SHARING specified as FALSE (default option), disabling context sharing.\n");
+				"FI_OPX_CONTEXT_SHARING specified as FALSE, disabling context sharing.\n");
+		}
+	} else if (opx_hfi1_sysfs_get_chip_major(hfi_unit_number) == OPX_HFI1_CCE_CSR_CHIP_MAJOR_CYR) {
+		// CN6000/CYR defaults to dual-plane/multi-HFI striping, which is mutually
+		// exclusive with context sharing, so context sharing requires an explicit opt-in
+		// (FI_OPX_CONTEXT_SHARING=1) on this generation; PPN-based auto-enable does not apply.
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_CONTEXT_SHARING not specified on CN6000/CYR hardware. Context sharing is not auto-enabled on this generation; set FI_OPX_CONTEXT_SHARING=1 to opt in explicitly.\n");
+	} else {
+		const uint32_t ppn = opx_query_local_rank_count();
+
+		// Multi-HFI striping consumes 2 contexts per endpoint (one per plane) instead of 1
+		// when explicitly enabled, so the available context count must be halved below.
+		int	    dual_plane_env = -1;
+		const char *dp_env	   = getenv("_FI_OPX_DUAL_PLANE_");
+		if (dp_env != NULL) {
+			if (strcmp(dp_env, "1") == 0) {
+				dual_plane_env = 1;
+			} else if (strcmp(dp_env, "0") == 0) {
+				dual_plane_env = 0;
+			}
+		}
+		int multi_hfi_striping_env = -1;
+		fi_param_get_bool(fi_opx_global.prov, "multi_hfi_striping", &multi_hfi_striping_env);
+
+		const bool striping_active =
+			(multi_hfi_striping_env == 1) || (multi_hfi_striping_env < 0 && dual_plane_env == 1);
+
+		const uint32_t ctx_cnt_raw = opx_domain_get_total_ctx_cnt();
+		const uint32_t ctx_cnt	   = striping_active ? ctx_cnt_raw / 2 : ctx_cnt_raw;
+
+		if (ppn > ctx_cnt) {
+			context_sharing_enabled = 1;
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_CONTEXT_SHARING not specified. Automatically enabling context sharing because the number of local ranks (%u) exceeds the total number of contexts available (%u).\n",
+				ppn, ctx_cnt);
+		} else {
+			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_CONTEXT_SHARING not specified. Context sharing not needed (%u local ranks, %u contexts available).\n",
+				ppn, ctx_cnt);
 		}
 	}
 
