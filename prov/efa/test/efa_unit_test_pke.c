@@ -803,6 +803,109 @@ void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void
 }
 
 /**
+ * @brief Releasing an rxe must purge its still-queued blocking copies.
+ *
+ * The blocking-copy batch spans transfers, so an rxe torn down early
+ * leaves stale entries a later flush would dereference.
+ *
+ * We queue two segments for rxe A and one for rxe B, release A, and verify:
+ *   - A's two entries are gone (queued_copy_num drops 3 -> 1),
+ *   - the surviving entry belongs to B,
+ *   - A's two packets are returned to the RX pool (no leak),
+ *   - A's bytes_queued_blocking_copy is zeroed.
+ */
+void test_efa_rdm_rxe_release_purges_queued_blocking_copy(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_a[2], *pkt_b;
+	struct efa_rdm_ope *rxe_a, *rxe_b;
+	struct efa_rdm_mr mock_mr = {0};
+	char buf_a[1024], buf_b[1024];
+	size_t pkts_to_post_before;
+	int i, n;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	mock_mr.efa_mr.iface = FI_HMEM_CUDA;
+	mock_mr.device = 0;
+	mock_mr.flags = 0;
+
+	rxe_a = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_msg);
+	assert_non_null(rxe_a);
+	rxe_a->iov_count = 1;
+	rxe_a->iov[0].iov_base = buf_a;
+	rxe_a->iov[0].iov_len = sizeof(buf_a);
+	rxe_a->cq_entry.len = sizeof(buf_a);
+	rxe_a->desc[0] = &mock_mr;
+	rxe_a->total_len = sizeof(buf_a);
+
+	rxe_b = efa_rdm_ep_alloc_rxe(efa_rdm_ep, NULL, ofi_op_msg);
+	assert_non_null(rxe_b);
+	rxe_b->iov_count = 1;
+	rxe_b->iov[0].iov_base = buf_b;
+	rxe_b->iov[0].iov_len = sizeof(buf_b);
+	rxe_b->cq_entry.len = sizeof(buf_b);
+	rxe_b->desc[0] = &mock_mr;
+	rxe_b->total_len = sizeof(buf_b);
+
+	/* Queue two blocking copies for rxe_a, then one for rxe_b, replicating
+	 * efa_rdm_pke_queued_copy_payload_to_hmem() without triggering a flush. */
+	for (i = 0; i < 2; i++) {
+		pkt_a[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		assert_non_null(pkt_a[i]);
+		pkt_a[i]->payload = pkt_a[i]->wiredata;
+		pkt_a[i]->payload_size = 64;
+		pkt_a[i]->ope = rxe_a;
+		pkt_a[i]->ope_gen = rxe_a->gen;
+		efa_rdm_ep->queued_copy_vec[efa_rdm_ep->queued_copy_num].pkt_entry = pkt_a[i];
+		efa_rdm_ep->queued_copy_vec[efa_rdm_ep->queued_copy_num].data = pkt_a[i]->payload;
+		efa_rdm_ep->queued_copy_vec[efa_rdm_ep->queued_copy_num].data_size = pkt_a[i]->payload_size;
+		efa_rdm_ep->queued_copy_vec[efa_rdm_ep->queued_copy_num].data_offset = 0;
+		efa_rdm_ep->queued_copy_num++;
+		rxe_a->bytes_queued_blocking_copy += pkt_a[i]->payload_size;
+		efa_rdm_pke_mark_held(pkt_a[i]);
+	}
+
+	pkt_b = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_b);
+	pkt_b->payload = pkt_b->wiredata;
+	pkt_b->payload_size = 64;
+	pkt_b->ope = rxe_b;
+	pkt_b->ope_gen = rxe_b->gen;
+	efa_rdm_ep->queued_copy_vec[efa_rdm_ep->queued_copy_num].pkt_entry = pkt_b;
+	efa_rdm_ep->queued_copy_vec[efa_rdm_ep->queued_copy_num].data = pkt_b->payload;
+	efa_rdm_ep->queued_copy_vec[efa_rdm_ep->queued_copy_num].data_size = pkt_b->payload_size;
+	efa_rdm_ep->queued_copy_vec[efa_rdm_ep->queued_copy_num].data_offset = 0;
+	efa_rdm_ep->queued_copy_num++;
+	rxe_b->bytes_queued_blocking_copy += pkt_b->payload_size;
+	efa_rdm_pke_mark_held(pkt_b);
+
+	assert_int_equal(efa_rdm_ep->queued_copy_num, 3);
+
+	pkts_to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
+
+	/* Release rxe_a: its two queued copies must be purged, rxe_b's kept. */
+	efa_rdm_rxe_release(rxe_a);
+
+	assert_int_equal(efa_rdm_ep->queued_copy_num, 1);
+	assert_ptr_equal(efa_rdm_ep->queued_copy_vec[0].pkt_entry, pkt_b);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post - pkts_to_post_before, 2);
+	assert_int_equal(rxe_b->bytes_queued_blocking_copy, 64);
+
+	/* No stale reference to rxe_a remains. */
+	for (n = 0; n < efa_rdm_ep->queued_copy_num; n++)
+		assert_ptr_not_equal(efa_rdm_ep->queued_copy_vec[n].pkt_entry->ope, rxe_a);
+
+	/* Clean up rxe_b's surviving entry. */
+	rxe_b->bytes_queued_blocking_copy -= pkt_b->payload_size;
+	efa_rdm_pke_release_rx(pkt_b);
+	efa_rdm_ep->queued_copy_num = 0;
+	efa_rdm_rxe_release(rxe_b);
+}
+
+/**
  * @brief Verify efa_rdm_prov_errno_is_peer_abort() classifies the
  *        in-scope and out-of-scope provider errnos correctly.
  */
