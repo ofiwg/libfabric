@@ -342,6 +342,7 @@ void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe(void 
 void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state);
 void test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe(void **state);
 void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged(void **state);
+void test_efa_rdm_pke_handle_peer_error_recv_longcts_msg_id_only(void **state);
 void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state);
 void test_efa_rdm_txe_handle_error_emits_peer_error_on_invalid_lkey(void **state);
 void test_efa_rdm_txe_handle_error_emits_peer_error_on_canceled(void **state);
