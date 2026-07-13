@@ -363,7 +363,10 @@ or underruns.  Default is false.
 
 *FI_OPX_ENDPOINTS_PER_HFI_CONTEXT*
 : Integer. Specify how many endpoints should share a single HFI context. Valid values are from 2 to 8.
-  Default is to determine optimal value based on the number of contexts available on the system and number of processors online.
+  Default is to determine an optimal value based on the number of contexts available on the system and
+  the local rank count (see FI_OPX_CONTEXT_SHARING), falling back to the number of processors online if
+  the local rank count cannot be determined. Middleware that opens more than one endpoint per rank
+  (e.g. some SHMEM configurations) may need to override this default explicitly.
   Only applicable if context sharing is enabled. Otherwise this value is ignored.
 
 *FI_OPX_MULTI_HFI_STRIPING*
