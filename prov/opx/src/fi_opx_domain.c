@@ -230,21 +230,51 @@ uint32_t opx_domain_get_total_ctx_cnt(void)
 	return total ? total : FI_OPX_DEFAULT_DOMAIN_CTX_CNT;
 }
 
-uint32_t opx_query_local_rank_count(void)
+static bool opx_parse_env_int(const char *name, int32_t *out)
 {
-	const char *e;
+	const char *e = getenv(name);
+	if (!e || !*e) {
+		return false;
+	}
+	char *ep;
+	long  val = strtol(e, &ep, 10);
+	if (ep == e) {
+		return false;
+	}
+	*out = (int32_t) val;
+	return true;
+}
 
-	if ((((e = getenv("MPI_LOCALNRANKS")) && *e)) || (((e = getenv("OMPI_COMM_WORLD_LOCAL_SIZE")) && *e)) ||
-	    (((e = getenv("LOCAL_WORLD_SIZE")) && *e)) || (((e = getenv("SLURM_NTASKS_PER_NODE")) && *e)) ||
-	    (((e = getenv("CCL_LOCAL_SIZE")) && *e))) {
-		char	     *ep;
-		unsigned long val = strtoul(e, &ep, 10);
-		if (ep != e && val > 0) {
-			return (uint32_t) val;
-		}
+void opx_query_local_rank_info(int32_t *local_rank_count, int32_t *local_rank)
+{
+	static const struct {
+		const char *count_var;
+		const char *id_var;
+	} launchers[] = {
+		{"MPI_LOCALNRANKS", "MPI_LOCALRANKID"}, {"OMPI_COMM_WORLD_LOCAL_SIZE", "OMPI_COMM_WORLD_LOCAL_RANK"},
+		{"LOCAL_WORLD_SIZE", "LOCAL_RANK"},	{"SLURM_NTASKS_PER_NODE", "SLURM_LOCALID"},
+		{"CCL_LOCAL_SIZE", "CCL_LOCAL_RANK"},
+	};
+
+	if (local_rank_count) {
+		*local_rank_count = -1;
+	}
+	if (local_rank) {
+		*local_rank = -1;
 	}
 
-	return 1;
+	for (size_t i = 0; i < sizeof(launchers) / sizeof(launchers[0]); i++) {
+		int32_t count;
+		if (opx_parse_env_int(launchers[i].count_var, &count) && count > 0) {
+			if (local_rank_count) {
+				*local_rank_count = count;
+			}
+			if (local_rank) {
+				opx_parse_env_int(launchers[i].id_var, local_rank);
+			}
+			return;
+		}
+	}
 }
 
 int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
@@ -256,7 +286,9 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 		goto err;
 	}
 
-	const uint32_t ppn	   = opx_query_local_rank_count();
+	int32_t local_rank_count;
+	opx_query_local_rank_info(&local_rank_count, NULL);
+	const uint32_t ppn	   = local_rank_count > 0 ? (uint32_t) local_rank_count : 1;
 	const unsigned ctx_cnt	   = opx_domain_get_ctx_cnt(0);
 	const int      num_hfis	   = opx_hfi_get_num_units();
 	const uint32_t ppn_per_hfi = (num_hfis > 1) ? MAX(1, ppn / (uint32_t) num_hfis) : ppn;
