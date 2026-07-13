@@ -194,6 +194,14 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 	if (rxe->rxe_map)
 		efa_rdm_rxe_map_remove(rxe->rxe_map, rxe->msg_id, rxe);
 
+	/*
+	 * Drop any deferred blocking copies that still reference this rxe. The
+	 * per-endpoint copy batch outlives a single transfer, so an rxe torn
+	 * down early (e.g. peer-aborted) can leave held packets pointing at it;
+	 * purging here keeps a later flush from touching the freed rxe.
+	 */
+	efa_rdm_ep_purge_queued_blocking_copy_for_rxe(rxe);
+
 	for (i = 0; i < rxe->iov_count; i++) {
 		if (rxe->mr[i]) {
 			err = fi_close((struct fid *)rxe->mr[i]);

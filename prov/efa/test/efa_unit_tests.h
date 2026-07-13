@@ -523,6 +523,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_first_packet_error(void **state);
 void test_efa_rdm_pke_proc_matched_mulreq_rtm_second_packet_error(void **state);
 void test_efa_rdm_pke_proc_matched_mulreq_rtm_runtread_trunc_chain(void **state);
 void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void **state);
+void test_efa_rdm_rxe_release_purges_queued_blocking_copy(void **state);
 void test_efa_rdm_prov_errno_is_peer_abort(void **state);
 void test_efa_rdm_pkt_is_rxe_remote_read(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state);
