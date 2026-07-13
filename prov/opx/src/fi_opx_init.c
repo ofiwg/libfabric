@@ -1221,8 +1221,9 @@ OPX_INI
 	fi_param_define(
 		&fi_opx_provider, "opa100_interop", FI_PARAM_BOOL,
 		"Indicates that the job requires OPA100 support. Set to 1 if OPA100 support is needed with CN5000 or CN6000. Default is 0.");
-	fi_param_define(&fi_opx_provider, "context_sharing", FI_PARAM_BOOL,
-			"Enables context sharing in OPX. Defaults to FALSE (1 HFI context per endpoint).");
+	fi_param_define(
+		&fi_opx_provider, "context_sharing", FI_PARAM_BOOL,
+		"Enables or disables context sharing in OPX. Defaults to auto, which enables context sharing only when the number of local ranks exceeds the total number of HFI contexts available on the node. Setting this to true or false always enables or disables context sharing regardless of local rank count. On CN6000/CYR hardware the auto default never enables context sharing; set this to true explicitly to enable it on that generation.");
 	fi_param_define(
 		&fi_opx_provider, "endpoints_per_hfi_context", FI_PARAM_INT,
 		"Specify how many endpoints should share a single HFI context. Valid values are from 2 to 8. Default is to determine optimal value based on the number of contexts available on the system and number of processors online. Only applicable if context sharing is enabled. Otherwise this value is ignored.");
