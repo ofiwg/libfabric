@@ -388,7 +388,6 @@ void test_efa_rma_writedata(void **state);
 void test_efa_rma_inject_write(void **state);
 void test_efa_rma_inject_writedata(void **state);
 void test_efa_rma_writemsg_with_inject(void **state);
-void test_efa_msg_sendmsg_multi_iov_second_desc_hmem_fails(void **state);
 void test_efa_cq_read_no_completion(void **state);
 void test_efa_cq_read_send_success(void **state);
 void test_efa_cq_read_senddata_success(void **state);
