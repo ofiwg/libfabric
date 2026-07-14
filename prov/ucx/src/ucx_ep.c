@@ -278,7 +278,8 @@ int ucx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (ofi_status)
 		goto free_ep;
 
-	if (ucx_descriptor.single_thread)
+	if (ucx_descriptor.single_thread
+		|| u_domain->u_domain.threading == FI_THREAD_DOMAIN)
 		worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
 	else if (info->domain_attr->threading == FI_THREAD_SAFE)
 		worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
