@@ -108,7 +108,8 @@ dnl
 	AS_IF([test $$1_happy -eq 1],
 		[PROVIDERS_TO_BUILD="$PROVIDERS_TO_BUILD $1"
 		 PROVIDERS_COUNT=$((PROVIDERS_COUNT+1))
-		 _FI_PROVIDER_PC_ADD($1)
+		 AS_IF([test $$1_dl -eq 0],
+		       [_FI_PROVIDER_PC_ADD($1)])
 		 AS_IF([test $$1_dl -eq 1],
 			[PROVIDERS_DL="prov/$1/lib$1.la $PROVIDERS_DL"
 			 AS_IF([test x"$enable_static" = x"yes" &&
