@@ -467,41 +467,40 @@ int opx_hfi_get_unit_port_active(int unit, int port)
 	return (rv > 0);
 }
 
-/* Get the number of free contexts from the unit id. */
+/* Get the number of free contexts from the unit id, summed across all
+   active ports. */
 /* Returns 0 if no unit or no match. */
 int opx_hfi_get_num_free_contexts(int unit_id)
 {
-	int64_t	 val;
-	uint32_t p = OPX_MIN_PORT;
+	int total = 0;
 
-	for (; p <= OPX_MAX_PORT; p++) {
-		if (opx_hfi_get_port_lid(unit_id, p) > 0) {
-			break;
+	for (uint32_t p = OPX_MIN_PORT; p <= OPX_MAX_PORT; p++) {
+		int64_t val;
+		if (opx_hfi_get_port_lid(unit_id, p) > 0 &&
+		    !opx_sysfs_port_read_s64(unit_id, p, "nfreectxts", &val, 0)) {
+			total += (int) val;
 		}
 	}
 
-	if (p <= OPX_MAX_PORT && !opx_sysfs_unit_read_s64(unit_id, "nfreectxts", &val, 0)) {
-		return (uint32_t) val;
-	}
-
-	return 0;
+	return total;
 }
 
-/* Get the number of contexts from the unit id. */
+/* Get the number of contexts from the unit id, summed across all active
+   ports. */
 /* Returns 0 if no unit or no match. */
 int opx_hfi_get_num_contexts(int unit_id)
 {
-	int64_t	 val;
-	uint32_t p = OPX_MIN_PORT;
-	for (; p <= OPX_MAX_PORT; p++) {
-		if (opx_hfi_get_port_lid(unit_id, p) > 0) {
-			break;
+	int total = 0;
+
+	for (uint32_t p = OPX_MIN_PORT; p <= OPX_MAX_PORT; p++) {
+		int64_t val;
+		if (opx_hfi_get_port_lid(unit_id, p) > 0 &&
+		    !opx_sysfs_port_read_s64(unit_id, p, "num_ctxts", &val, 0)) {
+			total += (int) val;
 		}
 	}
-	if (p <= OPX_MAX_PORT && !opx_sysfs_unit_read_s64(unit_id, "nctxts", &val, 0)) {
-		return (uint32_t) val;
-	}
-	return 0;
+
+	return total;
 }
 
 /* Given a unit number and port number, returns 1 if the unit and port are active.
