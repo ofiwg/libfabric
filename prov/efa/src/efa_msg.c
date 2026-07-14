@@ -333,10 +333,16 @@ post:
 	ret = efa_qp_post_send(qp, sg_list, inline_data_list, iov_count,
 			       use_inline, wr_id, msg->data, flags,
 			       conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
-	if (OFI_UNLIKELY(ret))
+	if (OFI_UNLIKELY(ret)) {
 		ret = (ret == ENOMEM) ? -FI_EAGAIN : -ret;
+		goto out_err;
+	}
 
 	efa_tracepoint(post_send, wr_id, (uintptr_t)msg->context);
+
+	ofi_genlock_unlock(&base_ep->util_ep.lock);
+
+	return ret;
 
 out_err:
 	if (direct_ope)
