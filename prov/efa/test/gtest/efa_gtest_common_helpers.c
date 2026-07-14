@@ -132,6 +132,36 @@ void efa_test_set_ibv_cq_ex(struct efa_ibv_cq *ibv_cq, int status,
 	ibv_cq->ibv_cq_ex->wr_id = wr_id;
 }
 
+int efa_test_set_track_mr(int value)
+{
+	int prev = efa_env.track_mr;
+
+	efa_env.track_mr = value;
+	return prev;
+}
+
+int efa_test_device_supports_rma(void)
+{
+	if (g_efa_selected_device_cnt <= 0)
+		return 0;
+
+	return efa_device_support_rdma_read() &&
+	       efa_device_support_rdma_write();
+}
+
+size_t efa_test_ope_list_count(struct fid_ep *ep)
+{
+	struct efa_base_ep *base_ep =
+		container_of(ep, struct efa_base_ep, util_ep.ep_fid);
+	struct dlist_entry *item;
+	size_t count = 0;
+
+	dlist_foreach(&base_ep->ope_list, item)
+		count++;
+
+	return count;
+}
+
 struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
 						fi_addr_t fi_addr)
 {

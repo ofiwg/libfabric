@@ -111,10 +111,16 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 			       msg->rma_iov[0].key, msg->rma_iov[0].addr,
 			       wr_id, flags,
 			       conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
-	if (OFI_UNLIKELY(err))
+	if (OFI_UNLIKELY(err)) {
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
+		goto out_err;
+	}
 
 	efa_tracepoint(post_read, wr_id, (uintptr_t)msg->context);
+
+	ofi_genlock_unlock(&base_ep->util_ep.lock);
+
+	return err;
 
 out_err:
 	if (direct_ope)
@@ -303,10 +309,16 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 				msg->rma_iov[0].key, msg->rma_iov[0].addr,
 				wr_id, msg->data, flags,
 				conn->ah, conn->ep_addr->qpn, conn->ep_addr->qkey);
-	if (OFI_UNLIKELY(err))
+	if (OFI_UNLIKELY(err)) {
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
+		goto out_err;
+	}
 
 	efa_tracepoint(post_write, wr_id, (uintptr_t)msg->context);
+
+	ofi_genlock_unlock(&base_ep->util_ep.lock);
+
+	return err;
 
 out_err:
 	if (direct_ope)

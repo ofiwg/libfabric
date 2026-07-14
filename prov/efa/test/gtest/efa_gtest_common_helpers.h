@@ -97,6 +97,12 @@ struct ibv_ah;
 struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
 						fi_addr_t fi_addr);
 
+int efa_test_set_track_mr(int value);
+
+int efa_test_device_supports_rma(void);
+
+size_t efa_test_ope_list_count(struct fid_ep *ep);
+
 /**
  * @brief Get/set an RDM domain's shm_domain.
  */
