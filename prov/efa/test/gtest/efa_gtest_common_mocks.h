@@ -17,6 +17,8 @@ struct fi_mr_attr;
 struct efa_ibv_cq;
 struct efa_rdm_pke;
 struct ofi_bufpool;
+struct efa_qp;
+struct efa_ah;
 
 /*
  * X macro infrastructure for mock generation.
@@ -57,6 +59,36 @@ struct ofi_bufpool;
 	struct efa_rdm_pke *src, struct ofi_bufpool *pkt_pool, int alloc_type
 #define EFA_MOCK_ARGS_efa_rdm_pke_clone src, pkt_pool, alloc_type
 
+#define EFA_MOCK_PARAMS_efa_qp_post_recv \
+	struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad
+#define EFA_MOCK_ARGS_efa_qp_post_recv qp, wr, bad
+
+#define EFA_MOCK_PARAMS_efa_qp_post_send                                        \
+	struct efa_qp *qp, const struct ibv_sge *sge_list,                     \
+		const struct ibv_data_buf *inline_data_list, size_t iov_count, \
+		bool use_inline, uintptr_t wr_id, uint64_t data,               \
+		uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey
+#define EFA_MOCK_ARGS_efa_qp_post_send                                        \
+	qp, sge_list, inline_data_list, iov_count, use_inline, wr_id, data,   \
+		flags, ah, qpn, qkey
+
+#define EFA_MOCK_PARAMS_efa_qp_post_read                                       \
+	struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count,  \
+		uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id,   \
+		uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey
+#define EFA_MOCK_ARGS_efa_qp_post_read \
+	qp, sge_list, sge_count, remote_key, remote_addr, wr_id, flags, ah, qpn, qkey
+
+#define EFA_MOCK_PARAMS_efa_qp_post_write                                      \
+	struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count,  \
+		const struct ibv_data_buf *inline_data_list, bool use_inline, \
+		uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id,   \
+		uint64_t data, uint64_t flags, struct efa_ah *ah,             \
+		uint32_t qpn, uint32_t qkey
+#define EFA_MOCK_ARGS_efa_qp_post_write                                  \
+	qp, sge_list, sge_count, inline_data_list, use_inline, remote_key, \
+		remote_addr, wr_id, data, flags, ah, qpn, qkey
+
 #define EFA_MOCK_PARAMS_efa_ibv_cq_start_poll \
 	struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr
 #define EFA_MOCK_ARGS_efa_ibv_cq_start_poll ibv_cq, attr
@@ -81,11 +113,15 @@ struct ofi_bufpool;
 
 /* --- Function list --- */
 
-#define EFA_MOCK_FUNCTIONS(X)                            \
-	X(struct ibv_ah *, ibv_create_ah)                \
-	X(int, ibv_destroy_ah)                           \
-	X(int, efadv_query_ah)                           \
-	X(int, efa_av_reverse_av_add)                    \
+#define EFA_MOCK_FUNCTIONS(X)             \
+	X(struct ibv_ah *, ibv_create_ah) \
+	X(int, ibv_destroy_ah)            \
+	X(int, efadv_query_ah)            \
+	X(int, efa_av_reverse_av_add)     \
+	X(int, efa_qp_post_recv)          \
+	X(int, efa_qp_post_send)          \
+	X(int, efa_qp_post_read)          \
+	X(int, efa_qp_post_write)		\
 	X(int, efa_ibv_cq_start_poll)                    \
 	X(void, efa_ibv_cq_end_poll)                     \
 	X(enum ibv_wc_opcode, efa_ibv_cq_wc_read_opcode) \
