@@ -71,6 +71,11 @@
 #include "psm_user.h"
 #include "../psm_log.h"
 
+/* Declared in libfabric core (include/ofi.h); avoid including that header
+   here since it pulls in headers that conflict with this file's free()
+   macro redefinition. */
+void ofi_get_local_rank_info(int *local_rank_count, int *local_rank);
+
 unsigned psm3_dbgmask = __HFI_DEBUG_DEFAULT;
 char psm3_mylabel[1024];
 static int psm3_myrank = -1;
@@ -182,36 +187,13 @@ static void psm3_init_mylabel(void)
 			psm3_myrank_count = val;
 	}
 
-	if ((((e = getenv("MPI_LOCALRANKID")) && *e))	// MPICH and IMPI
-	    || (((e = getenv("OMPI_COMM_WORLD_LOCAL_RANK")) && *e)) // OMPI
-	    || (((e = getenv("MPI_LOCALRANKID")) && *e)) // Platform MPI
-	    // N/A | (((e = getenv("MPIRUN_TBD")) && *e)) // older MPICH
-	    || (((e = getenv("PSC_MPI_NODE_RANK")) && *e)) // pathscale MPI
-	    || (((e = getenv("LOCAL_RANK")) && *e)) // pyTorch torchrun
-	    || (((e = getenv("SLURM_LOCALID")) && *e)) // SLURM
-	    || (((e = getenv("CCL_LOCAL_RANK")) && *e)) // oneCCL 1 node w/o launcher
-	) {
-		char *ep;
-		unsigned long val;
-		val = strtoul(e, &ep, 10);
-		if (ep != e) /* valid conversion */
-			psm3_mylocalrank = val;
-	}
-
-	if ((((e = getenv("MPI_LOCALNRANKS")) && *e))	// MPICH and IMPI
-	    || (((e = getenv("OMPI_COMM_WORLD_LOCAL_SIZE")) && *e)) // OMPI
-	    || (((e = getenv("MPI_LOCALNRANKS")) && *e)) // Platform MPI
-	    // N/A || (((e = getenv("MPIRUN_TBD")) && *e)) // older MPICH
-	    || (((e = getenv("PSC_MPI_PPN")) && *e)) // pathscale MPI
-	    || (((e = getenv("LOCAL_WORLD_SIZE")) && *e)) // pyTorch torchrun
-	    || (((e = getenv("SLURM_NTASKS_PER_NODE")) && *e)) // SLURM
-	    || (((e = getenv("CCL_LOCAL_SIZE")) && *e)) // oneCCL 1 node w/o launcher
-	) {
-		char *ep;
-		unsigned long val;
-		val = strtoul(e, &ep, 10);
-		if (ep != e) /* valid conversion */
-			psm3_mylocalrank_count = val;
+	{
+		int rank, count;
+		ofi_get_local_rank_info(&count, &rank);
+		if (rank >= 0)
+			psm3_mylocalrank = rank;
+		if (count >= 0)
+			psm3_mylocalrank_count = count;
 	}
 
 	if ((((e = getenv("PMI_RANK")) && *e))	// MPICH and *_SIZE
