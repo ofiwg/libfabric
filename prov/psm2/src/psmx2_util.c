@@ -199,27 +199,22 @@ int psmx2_errno(int err)
 
 /*
  * PSM context sharing requires some information from the MPI process manager.
- * Try to get the needed information from the environment.
+ * Try to get the needed information from the environment, normalizing it
+ * into MPI_LOCALNRANKS/MPI_LOCALRANKID if not already set.
  */
 void psmx2_query_mpi(void)
 {
-	char *s;
 	char env[32];
-	int local_size = -1;
-	int local_rank = -1;
+	int local_size, local_rank;
 
-	/* Check Open MPI */
-	if ((s = getenv("OMPI_COMM_WORLD_LOCAL_SIZE"))) {
-		local_size = atoi(s);
-		if ((s = getenv("OMPI_COMM_WORLD_LOCAL_RANK")))
-			local_rank = atoi(s);
+	ofi_get_local_rank_info(&local_size, &local_rank);
+	if (local_size >= 0) {
 		snprintf(env, sizeof(env), "%d", local_size);
 		setenv("MPI_LOCALNRANKS", env, 0);
+	}
+	if (local_rank >= 0) {
 		snprintf(env, sizeof(env), "%d", local_rank);
 		setenv("MPI_LOCALRANKID", env, 0);
-		return;
 	}
-
-	/* TODO: check other MPI */
 }
 
