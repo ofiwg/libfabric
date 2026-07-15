@@ -155,14 +155,16 @@ static void opx_hfi_setup_ctx_shring_grps(int hfi_unit_number, int *ctx_groups, 
 					"Unable to determine the number of processors online. Defaulting to 2 endpoints per HFI context. Please use FI_OPX_ENDPOINTS_PER_HFI_CONTEXT for finer grain control.\n");
 				*ep_per_hfi_context = 2;
 			} else {
-				*ep_per_hfi_context = MIN(HFI1_MAX_SHARED_CTXTS, nproc / num_ctxs);
+				*ep_per_hfi_context =
+					MIN(HFI1_MAX_SHARED_CTXTS, MAX(2, (nproc + num_ctxs - 1) / num_ctxs));
 				FI_TRACE(
 					fi_opx_global.prov, FI_LOG_EP_DATA,
 					"FI_OPX_ENDPOINTS_PER_HFI_CONTEXT not specified and local rank count is unknown. Mapping %d endpoints per HFI context as a default value based on (%ld processors online) / (%d available contexts on HFI unit %d).\n",
 					*ep_per_hfi_context, nproc, num_ctxs, hfi_unit_number);
 			}
 		} else {
-			*ep_per_hfi_context = MIN(HFI1_MAX_SHARED_CTXTS, (long) ppn / num_ctxs);
+			*ep_per_hfi_context =
+				MIN(HFI1_MAX_SHARED_CTXTS, MAX(2, ((long) ppn + num_ctxs - 1) / num_ctxs));
 			FI_TRACE(
 				fi_opx_global.prov, FI_LOG_EP_DATA,
 				"FI_OPX_ENDPOINTS_PER_HFI_CONTEXT not specified. Mapping %d endpoints per HFI context as a default value based on (%d local ranks) / (%d available contexts on HFI unit %d).\n",
