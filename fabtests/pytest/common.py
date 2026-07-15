@@ -4,6 +4,7 @@ import json
 import errno
 import os
 import re
+import shlex
 import subprocess
 import functools
 from datetime import datetime
@@ -18,6 +19,14 @@ import pytest
 perf_progress_model_cli = "--data-progress manual --control-progress unified"
 SERVER_RESTART_DELAY_MS = 10_1000
 CLIENT_RETRY_INTERVAL_MS = 1_000
+
+# Shared non-interactive SSH command.
+bssh = "ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o BatchMode=yes"
+
+# Polling limits for Linux xdist OOB port readiness.
+OOB_POLL_INTERVAL_SEC = 0.5
+PORT_CLEAR_TIMEOUT_SEC = 10
+SERVER_LISTEN_TIMEOUT_SEC = 30
 
 
 class SshConnectionError(Exception):
@@ -377,6 +386,99 @@ class UnitTest:
             for msg in self._failing_warn_msgs:
                 assert output.find(msg) == -1
 
+
+def _run_ssh_probe(host_id, command):
+    """Run `command` on `host_id` over SSH and return stdout."""
+    remote_command = "/bin/bash --login -c {}".format(shlex.quote(command))
+    try:
+        proc = run("{} {} {}".format(bssh, host_id, shlex.quote(remote_command)),
+                   shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                   timeout=60, encoding="utf-8")
+    except TimeoutExpired:
+        raise SshConnectionError()
+    if has_ssh_connection_err_msg(proc.stderr):
+        raise SshConnectionError()
+    if proc.returncode != 0:
+        raise RuntimeError("'{}' failed on {}: {}".format(
+            command, host_id, proc.stderr.strip()))
+    return proc.stdout
+
+
+@functools.lru_cache(10)
+def _is_linux_host(host_id):
+    """Return whether `host_id` runs Linux."""
+    return _run_ssh_probe(host_id, "uname -s").strip() == "Linux"
+
+
+def _oob_port_has_listener(host_id, port):
+    """Return whether TCP `port` has a listener on `host_id`."""
+    output = _run_ssh_probe(host_id, "ss -ltn")
+    # Match the port in the local-address column.
+    suffix = ":{}".format(port)
+    for line in output.splitlines():
+        fields = line.split()
+        if len(fields) >= 4 and fields[3].endswith(suffix):
+            return True
+    return False
+
+
+def _oob_port_from_command(command):
+    """Return the explicit `-E=<port>` value, if present."""
+    match = re.search(r"(?:^|\s)-E=(\d+)(?![\w=-])", command)
+    return int(match.group(1)) if match else None
+
+
+def _wait_for_oob_port_free(host_id, port):
+    """Wait until the worker's OOB port is available."""
+    deadline = time.time() + PORT_CLEAR_TIMEOUT_SEC
+    while _oob_port_has_listener(host_id, port):
+        if time.time() >= deadline:
+            raise RuntimeError(
+                "OOB port {} on {} is still in use before starting the "
+                "server -- orphaned listener from a previous test?".format(
+                    port, host_id))
+        sleep(OOB_POLL_INTERVAL_SEC)
+
+
+def _wait_for_server_listening(host_id, port, server_process,
+                               server_log_path=None):
+    """
+    Wait for the server's OOB listener before starting the client.
+
+    Include server output when the server exits or the wait times out.
+    Server stdout is redirected to server_log_path, so read output from
+    the log file rather than the process pipe.
+    """
+    def server_output():
+        if not server_log_path:
+            return "<no server log>"
+        try:
+            with open(server_log_path) as f:
+                return f.read()
+        except OSError as e:
+            return "<failed to read server log {}: {}>".format(
+                server_log_path, e)
+
+    deadline = time.time() + SERVER_LISTEN_TIMEOUT_SEC
+    while True:
+        if server_process.poll() is not None:
+            raise RuntimeError(
+                "Server exited (returncode {}) before listening on OOB port "
+                "{}. Server output:\n{}".format(
+                    server_process.returncode, port, server_output()))
+        if _oob_port_has_listener(host_id, port):
+            return
+        if time.time() >= deadline:
+            server_process.terminate()
+            server_process.wait()
+            raise RuntimeError(
+                "Server did not listen on OOB port {} on {} within {}s. "
+                "Server output:\n{}".format(
+                    port, host_id, SERVER_LISTEN_TIMEOUT_SEC,
+                    server_output()))
+        sleep(OOB_POLL_INTERVAL_SEC)
+
+
 class ClientServerTest:
 
     def __init__(self, cmdline_args, executable,
@@ -606,6 +708,16 @@ class ClientServerTest:
         print("server_command: " + self._server_command)
         print(log_msg)
 
+        # Use port readiness for Linux xdist workers with explicit OOB ports.
+        oob_port = None
+        if "PYTEST_XDIST_WORKER" in os.environ:
+            oob_port = _oob_port_from_command(self._server_command)
+        use_oob_readiness = (oob_port is not None and
+                             _is_linux_host(self._cmdline_args.server_id))
+
+        if use_oob_readiness:
+            _wait_for_oob_port_free(self._cmdline_args.server_id, oob_port)
+
         with open(server_log_path, "w") as server_log_file:
             server_process = Popen(
                 self._server_command,
@@ -614,7 +726,13 @@ class ClientServerTest:
                 shell=True,
                 universal_newlines=True,
             )
-        sleep(1)
+
+        if use_oob_readiness:
+            _wait_for_server_listening(self._cmdline_args.server_id, oob_port,
+                                       server_process,
+                                       server_log_path=server_log_path)
+        else:
+            sleep(1)
 
         client_returncode = -1
         try:
