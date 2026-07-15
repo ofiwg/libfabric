@@ -302,6 +302,52 @@ uint32_t ofi_generate_seed(void)
 	return rand_seed;
 }
 
+static bool ofi_parse_env_int(const char *name, int *out)
+{
+	const char *e = getenv(name);
+	if (!e || !*e)
+		return false;
+
+	char *ep;
+	long val = strtol(e, &ep, 10);
+	if (ep == e)
+		return false;
+
+	*out = (int) val;
+	return true;
+}
+
+void ofi_get_local_rank_info(int *local_rank_count, int *local_rank)
+{
+	static const struct {
+		const char *count_var;
+		const char *rank_var;
+	} launchers[] = {
+		{ "MPI_LOCALNRANKS", "MPI_LOCALRANKID" },
+		{ "OMPI_COMM_WORLD_LOCAL_SIZE", "OMPI_COMM_WORLD_LOCAL_RANK" },
+		{ "PSC_MPI_PPN", "PSC_MPI_NODE_RANK" },
+		{ "LOCAL_WORLD_SIZE", "LOCAL_RANK" },
+		{ "SLURM_NTASKS_PER_NODE", "SLURM_LOCALID" },
+		{ "CCL_LOCAL_SIZE", "CCL_LOCAL_RANK" },
+	};
+
+	if (local_rank_count)
+		*local_rank_count = -1;
+	if (local_rank)
+		*local_rank = -1;
+
+	for (size_t i = 0; i < ARRAY_SIZE(launchers); i++) {
+		int count;
+		if (ofi_parse_env_int(launchers[i].count_var, &count) && count > 0) {
+			if (local_rank_count)
+				*local_rank_count = count;
+			if (local_rank)
+				ofi_parse_env_int(launchers[i].rank_var, local_rank);
+			return;
+		}
+	}
+}
+
 uint64_t ofi_get_realtime_ns(void)
 {
 	struct timespec now;

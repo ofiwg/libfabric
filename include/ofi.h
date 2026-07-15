@@ -460,6 +460,8 @@ uint64_t ofi_get_realtime_ns(void);
 uint64_t ofi_get_realtime_ms(void);
 uint64_t ofi_get_realtime_us(void);
 
+void ofi_get_local_rank_info(int *local_rank_count, int *local_rank);
+
 static inline uint64_t ofi_timeout_time(int timeout)
 {
 	return (timeout >= 0) ? ofi_gettime_ms() + timeout : 0;
