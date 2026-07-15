@@ -126,11 +126,10 @@ static int mrail_parse_env_vars(void)
 	 * Local rank is used to set the default tx rail when fixed mapping
 	 * is used.
 	 */
-	str = getenv("MPI_LOCALRANKID");
-	if (!str)
-		str = getenv("OMPI_COMM_WORLD_LOCAL_RANK");
-	if (str)
-		mrail_local_rank = atoi(str);
+	int local_rank = -1;
+	ofi_get_local_rank_info(NULL, &local_rank);
+	if (local_rank >= 0)
+		mrail_local_rank = local_rank;
 
 	return 0;
 }
