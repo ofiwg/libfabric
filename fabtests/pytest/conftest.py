@@ -7,6 +7,8 @@ import yaml
 
 import pytest
 
+from common import bssh
+
 
 def get_option_longform(option_name, option_params):
     '''
@@ -37,8 +39,6 @@ def pytest_addoption(parser):
             parser.addoption(option_longform, dest=option_name, type=getattr(builtins, option_type),
                              help=option_helpmsg, default=option_default)
 
-# base ssh command
-bssh = "ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o BatchMode=yes"
 
 class CmdlineArgs:
 
