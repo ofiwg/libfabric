@@ -3701,8 +3701,10 @@ void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
 	txe->cq_entry.op_context = (void *) 0xa1;
 
-	/* The sender would have incremented num_read_msg_in_flight when
-	 * it sent the LONGREAD/RUNTREAD RTM. Simulate that. */
+	/* The sender would have incremented num_read_msg_in_flight and set
+	 * EFA_RDM_TXE_READ_MSG_COUNTED when it sent the LONGREAD/RUNTREAD
+	 * RTM (flag and bump are set together). Simulate both. */
+	txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
 	efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight = 1;
 	in_flight_before = efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight;
 
@@ -4235,6 +4237,88 @@ void test_efa_rdm_txe_handle_error_emits_peer_error_on_canceled(void **state)
 	assert_int_equal(ep->efa_outstanding_tx_ops,
 			 outstanding_before + 1);
 	assert_int_equal(txe->peer_error_prov_errno, FI_EFA_ERR_PKT_POST);
+}
+
+/**
+ * @brief LONGREAD sender-side abort: a canceled LONGREAD RTM must notify
+ *        the peer and balance num_read_msg_in_flight.
+ *
+ * The msg_id is consumed at RTM init, so the receiver's reorder window
+ * waits on it regardless of protocol; and a posted RTM bumped the domain
+ * read throttle, whose normal decrement (EOR / READ_NACK / PEER_ERROR
+ * from the receiver) never arrives for a self-aborted send.
+ *
+ * Stage a LONGREAD txe whose RTM was posted (READ_MSG_COUNTED set,
+ * counter bumped) and whose source MR was closed, retire it through
+ * efa_rdm_txe_handle_error(), and assert the PEER_ERROR emit happened
+ * and the counter returned to its baseline. A second txe whose RTM was
+ * never posted (flag unset) must emit too but leave the counter alone.
+ */
+void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *txe_unsent;
+	struct efa_rdm_peer *peer;
+	size_t outstanding_before;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* --- Case 1: RTM reached the device before the abort. --- */
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_tagged);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_TXE_REQ;
+	txe->cq_entry.flags = FI_SEND | FI_TAGGED;
+	txe->cq_entry.op_context = (void *) 0xc3;
+	txe->total_len = 65536;
+
+	peer = txe->peer;
+	assert_non_null(peer);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	txe->protocol = EFA_RDM_LONGREAD_TAGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
+
+	/* Simulate efa_rdm_pke_handle_longread_rtm_sent(): the RTM was
+	 * accepted by the device, bumping the read counter. */
+	txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
+	efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight = 1;
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+
+	/* Marked, emitted (PEER_ERROR WR posted), counter balanced. */
+	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
+	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
+	assert_false(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
+	assert_int_equal(txe->peer_error_prov_errno, FI_EFA_ERR_PKT_POST);
+
+	/* --- Case 2: RTM canceled before it was ever posted. --- */
+	txe_unsent = efa_unit_test_alloc_txe(resource, ofi_op_tagged);
+	assert_non_null(txe_unsent);
+	txe_unsent->state = EFA_RDM_TXE_REQ;
+	txe_unsent->cq_entry.flags = FI_SEND | FI_TAGGED;
+	txe_unsent->cq_entry.op_context = (void *) 0xc4;
+	txe_unsent->total_len = 65536;
+	txe_unsent->peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	txe_unsent->peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+	txe_unsent->protocol = EFA_RDM_LONGREAD_TAGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe_unsent);
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe_unsent, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+
+	/* Still marked and emitted (the receiver's window needs the marker
+	 * regardless), but the never-bumped counter is left alone. */
+	assert_true(txe_unsent->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
+	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
 }
 
 /**

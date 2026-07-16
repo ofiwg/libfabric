@@ -142,6 +142,25 @@ bool efa_rdm_pkt_type_is_longcts_rtm(int pkt_type)
 }
 
 /**
+ * @brief determine whether a req pkt type is a longread two-sided RTM
+ *        (send/tagged), excluding the one-sided RTW variant.
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool efa_rdm_pkt_type_is_longread_rtm(int pkt_type)
+{
+	switch(pkt_type) {
+	case EFA_RDM_LONGREAD_MSGRTM_PKT:
+	case EFA_RDM_LONGREAD_TAGRTM_PKT:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+/**
  * @brief determine whether a req pkt type is longcts RTM or RTW.
  *
  * @param[in]		pkt_type		REQ packet type

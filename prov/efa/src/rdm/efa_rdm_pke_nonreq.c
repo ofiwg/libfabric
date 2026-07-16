@@ -876,12 +876,12 @@ void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_eor_hdr *eor_hdr;
 	struct efa_rdm_ope *txe;
 
-	efa_rdm_ep_rdm_domain(pkt_entry->ep)->num_read_msg_in_flight -= 1;
-
 	eor_hdr = (struct efa_rdm_eor_hdr *)pkt_entry->wiredata;
 
 	/* pre-post buf used here, so can NOT track back to txe with x_entry */
 	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, eor_hdr->send_id);
+
+	efa_rdm_txe_read_msg_uncount(txe);
 
 	txe->bytes_acked += txe->total_len - txe->bytes_runt;
 	if (txe->bytes_acked == txe->total_len) {
@@ -910,11 +910,11 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *txe;
 	bool delivery_complete_requested;
 
-	efa_rdm_ep_rdm_domain(pkt_entry->ep)->num_read_msg_in_flight -= 1;
-
 	nack_hdr = (struct efa_rdm_read_nack_hdr *) pkt_entry->wiredata;
 
 	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, nack_hdr->send_id);
+
+	efa_rdm_txe_read_msg_uncount(txe);
 
 	efa_rdm_pke_release_rx(pkt_entry);
 	txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
@@ -1151,8 +1151,7 @@ void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
 			 * A PEER_ERROR is sent in place of the EOR, so mirror the EOR
 			 * recv bookkeeping the success path would have done.
 			 */
-			if (OFI_LIKELY(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight > 0))
-				efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight -= 1;
+			efa_rdm_txe_read_msg_uncount(ope);
 
 			/*
 			 * Mark aborted and EMITTED (we owe no PEER_ERROR back), then let
