@@ -849,7 +849,8 @@ static void efa_rdm_txe_write_deferred_peer_abort_completion(struct efa_rdm_ope 
 
 	/* A peer-aborted txe is always a two-sided send (never an emulated RMA
 	 * op), which required a valid peer; a NULL-peer local read never enters
-	 * the abort path. */
+	 * the abort path. (Two-sided here: EAGER/MEDIUM/RUNTREAD/LONGCTS/
+	 * LONGREAD RTMs.) */
 	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
 	assert(txe->peer);
 	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, txe->peer, err_entry.prov_errno,
@@ -941,9 +942,32 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 	efa_rdm_txe_release(txe);
 }
 
+/* Release this txe's num_read_msg_in_flight slot, if it holds one; see
+ * the declaration in efa_rdm_ope.h for the exactly-once semantics. */
+void efa_rdm_txe_release_read_msg_slot(struct efa_rdm_ope *txe)
+{
+	struct efa_rdm_domain *domain;
+	int64_t num_read_msg_in_flight;
+
+	if (!(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED))
+		return;
+	txe->internal_flags &= ~EFA_RDM_TXE_READ_MSG_COUNTED;
+
+	domain = efa_rdm_ep_rdm_domain(txe->ep);
+	num_read_msg_in_flight = ofi_atomic_dec64(&domain->num_read_msg_in_flight);
+	assert(num_read_msg_in_flight >= 0);
+	(void) num_read_msg_in_flight;
+}
+
 /**
- * @brief Decide whether a TX error is a source-MR-cancel peer abort and, if
- *        so, mark the txe so the drain helper will notify the peer.
+ * @brief Mark a txe as peer-aborting if its TX error is a source-MR-cancel
+ *        peer abort: a TX error on a two-sided (send/tagged) RTM whose
+ *        source MR the application closed, detected by the MR generation
+ *        check. Marking stashes prov_errno, sets
+ *        EFA_RDM_OPE_PEER_ABORT_PENDING so the drain helper will notify
+ *        the peer, and, when applicable, releases the txe's
+ *        num_read_msg_in_flight slot, which the receiver's terminal
+ *        packet would otherwise have released.
  *
  * @param[in]	txe		txe that encountered the error
  * @param[in]	prov_errno	positive EFA provider error code
@@ -972,18 +996,27 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
 		return false;
 
 	/*
-	 * Only two-sided RTM protocols whose source MR carries user data the
-	 * receiver is waiting on: EAGER, medium, runtread (with OR without a
-	 * tail READ), and LONGCTS.
+	 * Any two-sided RTM: its msg_id was consumed at init, so the
+	 * receiver's reorder window is (or will be) waiting on it. That
+	 * includes a LONGREAD RTM, which carries no MR-backed payload of
+	 * its own; abandoning a canceled one without notifying the peer
+	 * parks the peer's reorder window on that msg_id forever.
 	 */
-	if (!efa_rdm_pkt_type_is_eager_rtm(txe->protocol) &&
-	    !efa_rdm_pkt_type_is_medium(txe->protocol) &&
-	    !efa_rdm_pkt_type_is_runtread(txe->protocol) &&
-	    !efa_rdm_pkt_type_is_longcts_rtm(txe->protocol))
+	if (!efa_rdm_pkt_type_is_rtm(txe->protocol))
 		return false;
 
 	txe->peer_error_prov_errno = prov_errno;
 	txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
+
+	/*
+	 * A posted LONGREAD RTM or tail-read RUNTREAD first segment bumped
+	 * num_read_msg_in_flight; the EOR / READ_NACK / PEER_ERROR that
+	 * would normally release the slot never arrives for a self-aborted
+	 * send the receiver never saw, so release it here. The helper is a
+	 * no-op if a racing receiver notification already consumed it.
+	 */
+	efa_rdm_txe_release_read_msg_slot(txe);
+
 	return true;
 }
 

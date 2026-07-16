@@ -391,6 +391,27 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 #define EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED	BIT_ULL(21)
 
+/**
+ * @brief flag: this txe bumped num_read_msg_in_flight.
+ *
+ * Set at every site that bumps the counter (LONGREAD RTM sent; first
+ * segment of a tail-read RUNTREAD sent); consumed, exactly once per
+ * txe, by whichever decrement site resolves the transfer first --
+ * EOR, READ_NACK, or PEER_ERROR receipt, or the sender-side abort
+ * path -- via efa_rdm_txe_release_read_msg_slot(). An RTM canceled before
+ * its first post never set the flag.
+ */
+#define EFA_RDM_TXE_READ_MSG_COUNTED		BIT_ULL(22)
+
+/**
+ * @brief release this txe's num_read_msg_in_flight slot, if it holds one.
+ *
+ * Test-and-clears EFA_RDM_TXE_READ_MSG_COUNTED so concurrent resolution
+ * paths (receiver's terminal packet vs. sender-side abort) decrement
+ * exactly once between them. No-op for a txe that never bumped.
+ */
+void efa_rdm_txe_release_read_msg_slot(struct efa_rdm_ope *txe);
+
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
