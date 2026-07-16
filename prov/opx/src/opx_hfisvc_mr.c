@@ -106,8 +106,8 @@ int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_
 	assert(opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC);
 
 	uint32_t access_key;
-	// TODO: Figure out how to pass in counters
-	int ret = opx_hfisvc_keyset_alloc_key(&opx_domain->hfisvc.ctxs[0].access_key_set, &access_key, NULL);
+	int	 ret = opx_hfisvc_keyset_alloc_key(&opx_domain->hfisvc.ctxs[0].access_key_set, &access_key,
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_domain));
 	if (ret) {
 		OPX_HFISVC_DEBUG_LOG("Unable to allocate access_key for mr=%p buf=%p-%p (EAGAIN)\n", opx_mr,
 
@@ -145,7 +145,7 @@ int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_
 							      opx_mr->dmabuf.len + opx_mr->dmabuf.offset),
 			ret);
 		opx_hfisvc_keyset_free_key(opx_domain->hfisvc.ctxs[0].access_key_set, access_key,
-					   NULL); // TODO: Debug counters parm
+					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_domain));
 		return -FI_EAGAIN;
 	}
 	(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx);

@@ -167,6 +167,8 @@ static int fi_opx_close_domain(fid_t fid)
 
 	ofi_atomic_dec32(&opx_domain->fabric->util_fabric.ref);
 
+	FI_OPX_DEBUG_COUNTERS_PRINT(opx_domain->debug_counters);
+
 	free(opx_domain);
 
 	// opx_domain (the object passed in as fid) is now unusable
@@ -549,6 +551,7 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 		errno = FI_ENOMEM;
 		goto err;
 	}
+	FI_OPX_DEBUG_COUNTERS_INIT(opx_domain->debug_counters);
 	opx_domain->tid_domain = NULL;
 #ifdef OPX_HMEM
 	opx_domain->hmem_domain = NULL;
