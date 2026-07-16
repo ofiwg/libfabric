@@ -28,12 +28,17 @@ enum {
     FI_EFA_CQ_INIT_FLAGS_EXT_MEM_DMABUF = 1 << 0,
 };
 
+enum fi_efa_wq_caps {
+    FI_EFA_WQ_CAPS_64_BIT_REQ_ID = 1 << 0,
+};
+
 struct fi_efa_wq_attr {
     uint8_t *buffer;
     uint32_t entry_size;
     uint32_t num_entries;
     uint32_t *doorbell;
     uint32_t max_batch;
+    uint16_t caps;
 };
 
 struct fi_efa_cq_attr {

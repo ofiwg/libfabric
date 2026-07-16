@@ -354,6 +354,7 @@ struct fi_efa_wq_attr {
     uint32_t num_entries;
     uint32_t *doorbell;
     uint32_t max_batch;
+    uint16_t caps;
 };
 ```
 
@@ -371,6 +372,14 @@ struct fi_efa_wq_attr {
 
 *max_batch*
 :	Maximum batch size for queue submissions.
+
+*caps*
+:	Work queue capabilities:
+
+	FI_EFA_WQ_CAPS_64_BIT_REQ_ID
+		Work queue supports posting requests with 64-bit IDs.
+		When set, the associated completion queue is guaranteed
+		to return 64-bit request IDs as well.
 
 #### Return value
 **query_qp_wqs()** returns 0 on success, or the value of errno on failure
