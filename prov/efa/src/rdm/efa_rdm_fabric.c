@@ -134,12 +134,6 @@ int efa_rdm_fabric_open(struct fi_fabric_attr *attr,
 	struct efa_rdm_fabric *rdm_fabric;
 	int ret;
 
-	if (!attr || !attr->name) {
-		EFA_WARN(FI_LOG_FABRIC,
-			 "fabric attr or attr->name is NULL\n");
-		return -FI_EINVAL;
-	}
-
 	rdm_fabric = calloc(1, sizeof(*rdm_fabric));
 	if (!rdm_fabric)
 		return -FI_ENOMEM;

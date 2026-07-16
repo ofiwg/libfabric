@@ -58,12 +58,6 @@ int ofi_fabric_init(const struct fi_provider *prov,
 	if (ret)
 		return ret;
 
-	if (!user_attr->name) {
-		FI_WARN(prov, FI_LOG_FABRIC,
-			"fabric attr name is NULL\n");
-		return -FI_EINVAL;
-	}
-
 	fabric->prov = prov;
 	ofi_atomic_initialize32(&fabric->ref, 0);
 	dlist_init(&fabric->domain_list);
