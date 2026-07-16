@@ -3551,7 +3551,7 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 
 	if ((int32_t) rzv_comp->access_key >= 0) {
 		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[ctx_idx].access_key_set, rzv_comp->access_key,
-					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain));
 	}
 	OPX_BUF_FREE(rzv_comp);
 }

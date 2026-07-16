@@ -212,6 +212,8 @@ struct fi_opx_domain {
 	 * opx_hfi_local_info is 4 cache lines, 64-byte aligned.
 	 */
 	struct opx_hfi_local_info hfi_local_info;
+
+	FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS;
 };
 
 struct fi_opx_av {
