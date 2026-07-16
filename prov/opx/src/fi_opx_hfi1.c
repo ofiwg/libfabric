@@ -117,7 +117,7 @@ static void opx_hfi_setup_ctx_shring_grps(int hfi_unit_number, int *ctx_groups, 
 	*ep_per_hfi_context = 0;
 	*group_offset	    = 0;
 
-	int num_ctxs = opx_hfi_get_num_contexts(hfi_unit_number);
+	int num_ctxs = opx_hfi_get_port_num_contexts(hfi_unit_number, OPX_PORT_NUM_ANY);
 	if (num_ctxs == 0) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Unable to determine the number of contexts available for use on HFI unit %d. Context sharing will be disabled.\n",
@@ -176,8 +176,13 @@ static void opx_hfi_setup_ctx_shring_grps(int hfi_unit_number, int *ctx_groups, 
 static int opx_hfi1_sysfs_get_chip_major(int unit);
 
 // Used by fi_opx_hfi1_context_open as a convenience.
+// hfi_unit_fixed: OPX_HFI_UNIT_FIXED_TRUE if this process is guaranteed to use
+// hfi_unit_number specifically (FI_OPX_HFI_SELECT, DAOS src_addr,
+// domain/plane unit reuse), OPX_HFI_UNIT_FIXED_FALSE if hfi_unit_number is
+// only a candidate from distance/load selection.
 static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_context_internal *internal,
-				    uuid_t unique_job_key, int hfi_unit_number, int *fd_cdev, int *fd_verbs)
+				    uuid_t unique_job_key, int hfi_unit_number, bool hfi_unit_fixed, int *fd_cdev,
+				    int *fd_verbs)
 {
 	// Check whether user wants to enable context sharing or not. If the user has not
 	// set FI_OPX_CONTEXT_SHARING explicitly, enable it automatically when the number
@@ -222,7 +227,17 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 		const bool striping_active =
 			(multi_hfi_striping_env == 1) || (multi_hfi_striping_env < 0 && dual_plane_env == 1);
 
-		const uint32_t ctx_cnt_raw = opx_domain_get_total_ctx_cnt();
+		// FI_OPX_PORT pins to a specific port independently of hfi_unit_fixed;
+		// 0 or unset means any port.
+		int fixed_port = OPX_PORT_NUM_ANY;
+		if (fi_param_get_int(fi_opx_global.prov, "port", &fixed_port) == FI_SUCCESS) {
+			if (!((fixed_port == 0) || (fixed_port == 1) || (fixed_port == 2))) {
+				fixed_port = OPX_PORT_NUM_ANY;
+			}
+		}
+
+		const uint32_t ctx_cnt_raw = hfi_unit_fixed ? opx_domain_get_ctx_cnt(hfi_unit_number, fixed_port) :
+							      opx_domain_get_total_ctx_cnt(fixed_port);
 		const uint32_t ctx_cnt	   = striping_active ? ctx_cnt_raw / 2 : ctx_cnt_raw;
 
 		if (ppn > ctx_cnt) {
@@ -1093,8 +1108,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				"User-specified HFI selection set to %d. Skipping HFI selection algorithm \n",
 				hfi_unit_number);
 
-			if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number, &fd_cdev,
-						     &fd_verbs) != 0) {
+			if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number,
+						     OPX_HFI_UNIT_FIXED_TRUE, &fd_cdev, &fd_verbs) != 0) {
 				FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open user-specified HFI.\n");
 				goto ctxt_open_err;
 			}
@@ -1185,8 +1200,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 				hfi_unit_number);
 		}
 
-		if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number, &fd_cdev, &fd_verbs) !=
-		    0) {
+		if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number, OPX_HFI_UNIT_FIXED_TRUE,
+					     &fd_cdev, &fd_verbs) != 0) {
 			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Unable to open application-specified HFI.\n");
 			goto ctxt_open_err;
 		}
@@ -1376,16 +1391,17 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			hfi_unit_number	    = hfi_candidates[hfi_candidate_index];
 
 			context_open_failed = opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number,
-								       &fd_cdev, &fd_verbs);
+								       OPX_HFI_UNIT_FIXED_FALSE, &fd_cdev, &fd_verbs);
 			int t		    = range;
 			while (context_open_failed && t-- > 1) {
 				hfi_candidate_index++;
 				if (hfi_candidate_index >= higher) {
 					hfi_candidate_index = lower;
 				}
-				hfi_unit_number	    = hfi_candidates[hfi_candidate_index];
-				context_open_failed = opx_open_hfi_and_context(&ctrl, internal, unique_job_key,
-									       hfi_unit_number, &fd_cdev, &fd_verbs);
+				hfi_unit_number = hfi_candidates[hfi_candidate_index];
+				context_open_failed =
+					opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number,
+								 OPX_HFI_UNIT_FIXED_FALSE, &fd_cdev, &fd_verbs);
 			}
 			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Opened fd_cdev %d fd_verbs %d\n", fd_cdev, fd_verbs);
 
@@ -1869,7 +1885,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open_unit(struct fid_ep *ep, uui
 	 * creates the ibv_context via opx_hfi1_rdma_context_open(), then calls
 	 * opx_hfi1_wrapper_userinit() to initialize the user context.
 	 */
-	if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit, &fd_cdev, &fd_verbs) != 0) {
+	if (opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit, OPX_HFI_UNIT_FIXED_TRUE, &fd_cdev,
+				     &fd_verbs) != 0) {
 		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error: Unable to open HFI unit %d\n", hfi_unit);
 		goto ctxt_open_err;
 	}

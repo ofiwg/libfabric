@@ -207,9 +207,10 @@ int opx_hfi_get_unit_port_active(int unit, int port);
 /* Returns 0 if no unit or no match. */
 int opx_hfi_get_num_free_contexts(int unit_id);
 
-/* Get the number of contexts from the unit id. */
+/* Get the number of contexts on a specific port of the unit id, or summed
+   across all active ports if port is OPX_PORT_NUM_ANY. */
 /* Returns 0 if no unit or no match. */
-int opx_hfi_get_num_contexts(int unit_id);
+int opx_hfi_get_port_num_contexts(int unit_id, int port);
 
 /* Open hfi device file, return -1 on error. */
 int opx_hfi_context_open(int unit, int port, uint64_t open_timeout, unsigned int *user_version);
