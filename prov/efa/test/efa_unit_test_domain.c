@@ -287,12 +287,14 @@ void test_efa_domain_open_ops_query_qp_wqs(void **state)
     assert_true(sq_attr.entry_size > 0);
     assert_true(sq_attr.num_entries > 0);
     assert_true(sq_attr.max_batch > 0);
+    assert_int_equal(sq_attr.caps, 0);
 
     assert_non_null(rq_attr.buffer);
     assert_non_null(rq_attr.doorbell);
     assert_true(rq_attr.entry_size > 0);
     assert_true(rq_attr.num_entries > 0);
     assert_true(rq_attr.max_batch > 0);
+    assert_int_equal(rq_attr.caps, 0);
 #else
     assert_int_equal(ret, -FI_ENOSYS);
 #endif /* HAVE_EFADV_QUERY_QP_WQS */
