@@ -115,7 +115,8 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 				OPX_BUF_FREE(rzv_comp);
 			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE) {
 				opx_hfisvc_keyset_free_key(opx_domain->hfisvc.ctxs[0].access_key_set,
-							   opx_mr->hfisvc.access_key, NULL);
+							   opx_mr->hfisvc.access_key,
+							   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_domain));
 				opx_mr->hfisvc.access_key = (uint32_t) -1;
 				OPX_HFISVC_DEBUG_LOG(
 					"MR State transition opx_mr=%p state=PENDING_KEY_DISABLE -> PENDING_DEREGISTER\n",
