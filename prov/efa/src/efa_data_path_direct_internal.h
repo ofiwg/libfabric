@@ -122,6 +122,50 @@ efa_wq_get_dev_req_id(struct efa_data_path_direct_wq *wq, uint64_t wr_id)
 }
 
 /**
+ * @brief Reconstruct 64-bit request ID from TX completion descriptor
+ *
+ * When 64-bit request ID mode is enabled, the wr_id is reconstructed
+ * from the CQE's req_id and req_id_ex fields.
+ *
+ * @param tcqe Pointer to TX completion descriptor
+ * @return Reconstructed 64-bit work request ID
+ */
+EFA_ALWAYS_INLINE uint64_t
+efa_get_req_id_64(struct efa_io_tx_cdesc *tcqe)
+{
+	struct efa_io_req_id_ex *req_id_ex = &tcqe->req_id_ex;
+
+	return (uint64_t)tcqe->common.req_id |
+	       (uint64_t)req_id_ex->w[0] << 16 |
+	       (uint64_t)req_id_ex->w[1] << 32 |
+	       (uint64_t)req_id_ex->w[2] << 48;
+}
+
+/**
+ * @brief Get the work request ID from a send queue completion
+ *
+ * In 64-bit mode, reconstructs the wr_id directly from the CQE.
+ * Otherwise, looks up the wr_id from the wrid table using the device req_id.
+ *
+ * @param wq Pointer to the send work queue
+ * @param cqe Pointer to the completion queue entry
+ * @return The 64-bit work request ID
+ */
+EFA_ALWAYS_INLINE uint64_t
+efa_get_sq_comp_wrid(struct efa_data_path_direct_wq *wq,
+		     struct efa_io_cdesc_common *cqe)
+{
+	if (wq->req_id_64_bit) {
+		struct efa_io_tx_cdesc *tcqe =
+			container_of(cqe, struct efa_io_tx_cdesc, common);
+
+		return efa_get_req_id_64(tcqe);
+	}
+
+	return wq->wrid[cqe->req_id & ~wq->gen_mask];
+}
+
+/**
  * @brief Convert EFA hardware completion status to IBV work completion status
  *
  * Translates EFA-specific completion status codes to standard InfiniBand
@@ -285,8 +329,8 @@ efa_data_path_direct_process_ex_cqe(struct efa_ibv_cq *ibv_cq,
 	    EFA_IO_SEND_QUEUE) {
 		ibv_cq->data_path_direct.cur_wq =
 			&qp->data_path_direct_qp.sq.wq;
-		wrid_idx = cqe->req_id & ~ibv_cq->data_path_direct.cur_wq->gen_mask;
-		ibvcqx->wr_id = ibv_cq->data_path_direct.cur_wq->wrid[wrid_idx];
+		ibvcqx->wr_id = efa_get_sq_comp_wrid(
+			ibv_cq->data_path_direct.cur_wq, cqe);
 		ibvcqx->status = to_ibv_status(cqe->status);
 	} else {
 		/* Handle receive queue completions */
@@ -321,26 +365,27 @@ efa_data_path_direct_process_ex_cqe(struct efa_ibv_cq *ibv_cq,
 EFA_ALWAYS_INLINE void efa_wq_put_wrid_idx(struct efa_data_path_direct_wq *wq,
 				       uint32_t wrid_idx)
 {
-	ofi_genlock_lock(wq->wqlock);
 	wq->wrid_idx_pool_next--; /* Move back in the pool */
 	wq->wrid_idx_pool[wq->wrid_idx_pool_next] = wrid_idx; /* Return index */
-	wq->wqe_completed++; /* Update completion counter */
-	ofi_genlock_unlock(wq->wqlock);
 }
 
 /**
- * @brief Return a device request ID to the free pool, stripping generation bits
+ * @brief Finalize a CQE by updating completion counter and returning pool index
  *
- * Masks off the QP generation bits from the device request ID before
- * returning the underlying wrid index to the free pool.
+ * Always increments wqe_completed. Only returns the pool index when
+ * not in 64-bit request ID mode.
  *
  * @param wq Pointer to the work queue structure
- * @param dev_req_id Device request ID including generation bits
+ * @param cqe Pointer to the completion queue entry
  */
-EFA_ALWAYS_INLINE void efa_wq_put_dev_req_id(struct efa_data_path_direct_wq *wq,
-					     uint32_t dev_req_id)
+EFA_ALWAYS_INLINE void efa_wq_cqe_finalize(struct efa_data_path_direct_wq *wq,
+					    struct efa_io_cdesc_common *cqe)
 {
-	efa_wq_put_wrid_idx(wq, dev_req_id & ~wq->gen_mask);
+	ofi_genlock_lock(wq->wqlock);
+	wq->wqe_completed++;
+	if (!wq->req_id_64_bit)
+		efa_wq_put_wrid_idx(wq, cqe->req_id & ~wq->gen_mask);
+	ofi_genlock_unlock(wq->wqlock);
 }
 
 /**
@@ -365,6 +410,7 @@ efa_data_path_direct_wq_initialize(struct efa_data_path_direct_wq *wq,
 	wq->wqe_cnt = wqe_cnt;
 	wq->desc_mask = wqe_cnt - 1; /* Assumes wqe_cnt is power of 2 */
 	wq->pc = 0; /* Initialize producer counter */
+	wq->req_id_64_bit = false;
 
 	/* Allocate work request ID array */
 	wq->wrid = malloc(wq->wqe_cnt * sizeof(*wq->wrid));

@@ -70,6 +70,7 @@ struct efa_data_path_direct_wq {
 	uint32_t wqe_completed; /**< Number of work requests completed */
 	uint16_t pc;            /**< Producer counter for device queue indexing */
 	uint16_t desc_mask;     /**< Mask for wrapping queue indices */
+	bool req_id_64_bit;	/**< WQ supports 64-bit request IDs */
 
 	/**
 	 * Index of the next entry to use in wrid_idx_pool. This tracks the
