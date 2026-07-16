@@ -406,6 +406,7 @@ pipeline {
 
                     def addl_args_efa = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests}"
                     def addl_args_efa_hpc = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests_hpc}"
+                    def addl_args_efa_hpc_dso = "${addl_args_efa_hpc} test_pr_ci_dso"
                     def addl_args_shm = "${timeout} ${generic_pf} ${shm_provider} ${pr_ci_tests}"
                     def addl_args_sm2 = "${timeout} ${generic_pf} ${sm2_provider} ${pr_ci_tests}"
                     def addl_args_tcp = "${timeout} ${generic_pf} ${tcp_provider} ${pr_ci_tests}"
@@ -428,7 +429,7 @@ pipeline {
                     stages["2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock("2_c7g_ubuntu2404_efa",   env.BUILD_TAG, "ubuntu2404", "c7g.16xlarge",   2, "us-west-2", c7g16x_lock_label,   "--odcr cr-03255c1eeaf9777db ${addl_args_efa}")
                     stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
                     stages["2_c8gn_alinux2023_efa"]  = get_test_stage_with_lock("2_c8gn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "c8gn.16xlarge",  2, "us-west-2", c8gn16x_lock_label,  "--odcr cr-0698f5e644dab6868 ${addl_args_efa}")
-                    stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa_hpc}")
+                    stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa_hpc_dso}")
 
                     // Multi Node Tests - Accelerator EFA
                     stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.16xlarge",  2, "us-west-2",      g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_efa}")
