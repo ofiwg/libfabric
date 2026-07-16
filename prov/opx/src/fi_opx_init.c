@@ -761,7 +761,7 @@ static int opx_getinfo_set_nic(int hfi, struct fi_info *info)
 
 static void opx_getinfo_set_ctx_counts(int hfi, struct fi_info *info)
 {
-	uint32_t ctx_cnt = opx_domain_get_ctx_cnt(hfi);
+	uint32_t ctx_cnt = opx_domain_get_ctx_cnt(hfi, OPX_PORT_NUM_ANY);
 	int32_t	 local_rank_count;
 	opx_query_local_rank_info(&local_rank_count, NULL);
 	uint32_t ppn	     = local_rank_count > 0 ? (uint32_t) local_rank_count : 1;

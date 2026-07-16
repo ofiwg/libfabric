@@ -207,14 +207,14 @@ static inline void opx_util_domain_cleanup(struct fi_opx_domain *opx_domain)
 #endif
 }
 
-uint32_t opx_domain_get_ctx_cnt(int hfi)
+uint32_t opx_domain_get_ctx_cnt(int hfi, int port)
 {
-	uint32_t ctx_cnt = opx_hfi_get_num_contexts(hfi);
+	uint32_t ctx_cnt = opx_hfi_get_port_num_contexts(hfi, port);
 
 	return ctx_cnt ? ctx_cnt : FI_OPX_DEFAULT_DOMAIN_CTX_CNT;
 }
 
-uint32_t opx_domain_get_total_ctx_cnt(void)
+uint32_t opx_domain_get_total_ctx_cnt(int port)
 {
 	const int num_hfis = opx_hfi_get_num_units();
 	uint32_t  total	   = 0;
@@ -225,7 +225,7 @@ uint32_t opx_domain_get_total_ctx_cnt(void)
 	 * fallback below is only applied once, to the aggregate. */
 	for (int hfi = 0; hfi < num_hfis; ++hfi) {
 		if (opx_hfi_get_unit_active(hfi)) {
-			total += opx_hfi_get_num_contexts(hfi);
+			total += opx_hfi_get_port_num_contexts(hfi, port);
 		}
 	}
 
@@ -291,7 +291,7 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	int32_t local_rank_count;
 	opx_query_local_rank_info(&local_rank_count, NULL);
 	const uint32_t ppn	   = local_rank_count > 0 ? (uint32_t) local_rank_count : 1;
-	const unsigned ctx_cnt	   = opx_domain_get_ctx_cnt(0);
+	const unsigned ctx_cnt	   = opx_domain_get_ctx_cnt(0, OPX_PORT_NUM_ANY);
 	const int      num_hfis	   = opx_hfi_get_num_units();
 	const uint32_t ppn_per_hfi = (num_hfis > 1) ? MAX(1, ppn / (uint32_t) num_hfis) : ppn;
 	const unsigned tx_ctx_cnt  = ctx_cnt / ppn_per_hfi;
