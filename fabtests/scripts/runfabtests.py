@@ -13,6 +13,11 @@ import pytest
 from junitparser import JUnitXml
 from pytest import ExitCode
 
+# Marks whose tests only run when explicitly requested via -t or -m.
+# Tests carrying these marks are excluded from every other run, including
+# the default (no arguments) run.
+OPT_IN_MARKS = ["pre_release"]
+
 
 def get_option_longform(option_name, option_params):
     '''
@@ -172,6 +177,16 @@ def fabtests_args_to_pytest_args(fabtests_args, shared_options, run_mode):
         # AND the user-supplied marker expression onto the expression
         # derived from the test sets (-t), e.g. -t quick -m 'not pre_release'
         markers = "(" + markers + ") and (" + fabtests_args.marker_expression + ")"
+
+    # Opt-in marks are excluded from every run unless the user explicitly
+    # names them in -t or -m, e.g. -t pre_release or -m pre_release.
+    for mark in OPT_IN_MARKS:
+        if mark in fabtests_args.testsets.split(","):
+            continue
+        if fabtests_args.marker_expression and mark in fabtests_args.marker_expression:
+            continue
+        markers = "(" + markers + ") and (not " + mark + ")"
+
     pytest_args.append("-m")
     pytest_args.append(markers)
 
