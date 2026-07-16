@@ -372,12 +372,18 @@ static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
 	sq_attr->num_entries = qp_sq_attr.num_entries;
 	sq_attr->doorbell = qp_sq_attr.doorbell;
 	sq_attr->max_batch = qp_sq_attr.max_batch;
+	sq_attr->caps = 0;
+#if HAVE_EFADV_WQ_ATTR_CAPS
+	if (qp_sq_attr.caps & EFADV_WQ_CAPS_64_BIT_REQ_ID)
+		sq_attr->caps |= FI_EFA_WQ_CAPS_64_BIT_REQ_ID;
+#endif
 
 	rq_attr->buffer = qp_rq_attr.buffer;
 	rq_attr->entry_size = qp_rq_attr.entry_size;
 	rq_attr->num_entries = qp_rq_attr.num_entries;
 	rq_attr->doorbell = qp_rq_attr.doorbell;
 	rq_attr->max_batch = qp_rq_attr.max_batch;
+	rq_attr->caps = 0;
 
 	return FI_SUCCESS;
 }
