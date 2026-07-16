@@ -365,7 +365,6 @@ struct fi_opx_debug_counters {
 			uint64_t alloc_enospc;
 			uint64_t free;
 			uint64_t keyset_grow;
-
 		} access_key;
 
 		struct {
@@ -835,7 +834,7 @@ static inline void fi_opx_debug_counters_init(struct fi_opx_debug_counters *coun
                                                                \
 	} while (0)
 
-#define FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep) (&((opx_ep)->debug_counters))
+#define FI_OPX_DEBUG_COUNTERS_GET_PTR(x) (&((x)->debug_counters))
 #define OPX_COUNTERS_RECORD_MEASURE(_val, _target)     \
 	do {                                           \
 		_target.n++;                           \
@@ -868,7 +867,7 @@ static inline void fi_opx_debug_counters_init(struct fi_opx_debug_counters *coun
 #define FI_OPX_DEBUG_COUNTERS_INC_COND_N(cond, n, x)
 #define FI_OPX_DEBUG_COUNTERS_MAX_OF(x, y)
 #define FI_OPX_DEBUG_COUNTERS_MIN_OF(x, y)
-#define FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep) (NULL)
+#define FI_OPX_DEBUG_COUNTERS_GET_PTR(x) (NULL)
 #define OPX_COUNTERS_RECORD_MEASURE(_val, _target)
 #define OPX_COUNTERS_TIME_NS(_target, _counters)
 #define OPX_COUNTERS_STORE_VAL(_target, _val)

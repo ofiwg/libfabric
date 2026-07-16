@@ -6107,21 +6107,21 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	} else {
 		if (do_stripe) {
 			if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.ctxs[0].access_key_set, &access_key,
-							FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
+							FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain))) {
 				OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys on plane 0)\n");
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
 				rc = -FI_EAGAIN;
 				goto err;
 			}
 			if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.ctxs[1].access_key_set, &access_key_1,
-							FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
+							FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain))) {
 				OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys on plane 1)\n");
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
 				rc = -FI_EAGAIN;
 				goto err;
 			}
 		} else if (opx_hfisvc_keyset_alloc_key(&opx_ep->domain->hfisvc.ctxs[plane_idx].access_key_set,
-						       &access_key, FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep))) {
+						       &access_key, FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain))) {
 			OPX_HFISVC_DEBUG_LOG("EAGAIN (No free keys)\n");
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_access_key);
 			rc = -FI_EAGAIN;
@@ -6509,15 +6509,15 @@ err:
 	if ((int32_t) access_key >= 0) {
 		if (do_stripe) {
 			opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[0].access_key_set, access_key,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain));
 		} else {
 			opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[plane_idx].access_key_set, access_key,
-						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain));
 		}
 	}
 	if ((int32_t) access_key_1 >= 0) {
 		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[1].access_key_set, access_key_1,
-					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain));
 	}
 	OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_RTS, xfer_len, tag);
 	return rc;
