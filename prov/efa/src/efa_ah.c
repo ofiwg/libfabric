@@ -109,6 +109,8 @@ static void efa_ah_warn_create_einval(struct efa_domain *domain, const uint8_t *
  * This function use a hash map to store GID to ibv_ah map,
  * and re-use ibv_ah for same GID
  *
+ * Acquires and releases domain->util_domain.lock.
+ *
  * @param[in]	domain	efa_domain
  * @param[in]	gid	GID
  */
@@ -139,6 +141,7 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	if (!efa_ah) {
 		errno = FI_ENOMEM;
 		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah\n");
+		ofi_genlock_unlock(&domain->util_domain.lock);
 		return NULL;
 	}
 
