@@ -70,8 +70,9 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp)
 	struct efa_data_path_direct_qp *direct_qp = &efa_qp->data_path_direct_qp;
 	struct efa_base_ep *base_ep = efa_qp->base_ep;
 
-	struct efadv_wq_attr sq_attr; /* Send queue attributes from hardware */
-	struct efadv_wq_attr rq_attr; /* Receive queue attributes from hardware */
+	struct efadv_wq_attr sq_attr = {0}; /* Send queue attributes from hardware */
+	struct efadv_wq_attr rq_attr = {0}; /* Receive queue attributes from hardware */
+	bool sq_req_id_64_bit = false;
 	int ret = 0;
 
 	/* Initialize the direct queue pair structure */
@@ -91,7 +92,7 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp)
 	direct_qp->rq.wq.max_batch = rq_attr.max_batch;
 	/* Initialize receive work queue management structures */
 	efa_data_path_direct_wq_initialize(&direct_qp->rq.wq, rq_attr.num_entries,
-			   &base_ep->util_ep.lock);
+			   false, &base_ep->util_ep.lock);
 
 	/* Configure send queue with hardware attributes */
 	direct_qp->sq.desc = sq_attr.buffer;          /* Hardware SQ buffer */
@@ -101,9 +102,13 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp)
 
 	direct_qp->sq.wq.wqe_size = sq_attr.entry_size; /* Entry size */
 	direct_qp->sq.wq.max_batch = sq_attr.max_batch;
+#if HAVE_EFADV_WQ_ATTR_CAPS
+	sq_req_id_64_bit = !!(sq_attr.caps & EFADV_WQ_CAPS_64_BIT_REQ_ID) &&
+				efa_env.use_sq_req_id_64_bit;
+#endif
 	/* Initialize send work queue management structures */
 	efa_data_path_direct_wq_initialize(&direct_qp->sq.wq, sq_attr.num_entries,
-			   &base_ep->util_ep.lock);
+			   sq_req_id_64_bit, &base_ep->util_ep.lock);
 
 	/* Mirror efa_qp_init_indices functionality - indices already initialized */
 
