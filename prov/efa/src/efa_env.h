@@ -80,6 +80,7 @@ struct efa_env {
 	 */
 	int track_mr;
 	int use_hw_cntr;
+	int use_sq_req_id_64_bit;
 };
 
 extern struct efa_env efa_env;

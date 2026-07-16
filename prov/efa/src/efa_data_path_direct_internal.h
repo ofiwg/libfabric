@@ -122,6 +122,45 @@ efa_wq_get_dev_req_id(struct efa_data_path_direct_wq *wq, uint64_t wr_id)
 }
 
 /**
+ * @brief Set 64-bit request ID directly in the TX meta descriptor
+ *
+ * When 64-bit request ID mode is enabled, the wr_id is placed directly
+ * in the descriptor (req_id + req_id_ex fields) instead of going through
+ * the wrid index pool translation.
+ *
+ * @param md Pointer to TX meta descriptor
+ * @param wr_id 64-bit work request ID to encode
+ */
+EFA_ALWAYS_INLINE void
+efa_set_req_id_64(struct efa_io_tx_meta_desc *md, uint64_t wr_id)
+{
+	md->req_id = (uint16_t)wr_id;
+	md->req_id_ex.w[0] = (uint16_t)(wr_id >> 16);
+	md->req_id_ex.w[1] = (uint16_t)(wr_id >> 32);
+	md->req_id_ex.w[2] = (uint16_t)(wr_id >> 48);
+}
+
+/**
+ * @brief Set the work request ID in a send queue meta descriptor
+ *
+ * In 64-bit mode, places the wr_id directly in the descriptor.
+ * Otherwise, allocates a pool index and stores the mapping.
+ *
+ * @param md Pointer to TX meta descriptor
+ * @param wq Pointer to the send work queue
+ * @param wr_id 64-bit work request ID
+ */
+EFA_ALWAYS_INLINE void
+efa_set_sq_comp_wrid(struct efa_io_tx_meta_desc *md,
+		     struct efa_data_path_direct_wq *wq, uint64_t wr_id)
+{
+	if (wq->req_id_64_bit)
+		efa_set_req_id_64(md, wr_id);
+	else
+		md->req_id = efa_wq_get_dev_req_id(wq, wr_id);
+}
+
+/**
  * @brief Reconstruct 64-bit request ID from TX completion descriptor
  *
  * When 64-bit request ID mode is enabled, the wr_id is reconstructed
@@ -402,7 +441,7 @@ EFA_ALWAYS_INLINE void efa_wq_cqe_finalize(struct efa_data_path_direct_wq *wq,
  */
 EFA_ALWAYS_INLINE int
 efa_data_path_direct_wq_initialize(struct efa_data_path_direct_wq *wq,
-				   uint32_t wqe_cnt,
+				   uint32_t wqe_cnt, bool req_id_64_bit,
 				   struct ofi_genlock *wqlock)
 {
 	int i;
@@ -410,23 +449,25 @@ efa_data_path_direct_wq_initialize(struct efa_data_path_direct_wq *wq,
 	wq->wqe_cnt = wqe_cnt;
 	wq->desc_mask = wqe_cnt - 1; /* Assumes wqe_cnt is power of 2 */
 	wq->pc = 0; /* Initialize producer counter */
-	wq->req_id_64_bit = false;
+	wq->req_id_64_bit = req_id_64_bit;
 
-	/* Allocate work request ID array */
-	wq->wrid = malloc(wq->wqe_cnt * sizeof(*wq->wrid));
-	if (!wq->wrid)
-		return ENOMEM;
+	if (!req_id_64_bit) {
+		/* Allocate work request ID array */
+		wq->wrid = malloc(wq->wqe_cnt * sizeof(*wq->wrid));
+		if (!wq->wrid)
+			return ENOMEM;
 
-	/* Allocate work request ID index pool */
-	wq->wrid_idx_pool = malloc(wqe_cnt * sizeof(uint32_t));
-	if (!wq->wrid_idx_pool) {
-		free(wq->wrid);
-		return ENOMEM;
+		/* Allocate work request ID index pool */
+		wq->wrid_idx_pool = malloc(wqe_cnt * sizeof(uint32_t));
+		if (!wq->wrid_idx_pool) {
+			free(wq->wrid);
+			return ENOMEM;
+		}
+
+		/* Initialize the work request ID free index pool */
+		for (i = 0; i < wqe_cnt; i++)
+			wq->wrid_idx_pool[i] = i;
 	}
-
-	/* Initialize the work request ID free index pool */
-	for (i = 0; i < wqe_cnt; i++)
-		wq->wrid_idx_pool[i] = i;
 
 	wq->wqlock = wqlock;
 	return 0;

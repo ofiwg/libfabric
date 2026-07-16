@@ -448,7 +448,7 @@ static inline int efa_data_path_direct_post_send(
 
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
-	meta_desc->req_id = efa_wq_get_dev_req_id(&sq->wq, wr_id);
+	efa_set_sq_comp_wrid(meta_desc, &sq->wq, wr_id);
 
 	/* Set common control flags */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_SEND);
@@ -539,7 +539,7 @@ static inline int efa_data_path_direct_post_read(
 
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
-	meta_desc->req_id = efa_wq_get_dev_req_id(&sq->wq, wr_id);
+	efa_set_sq_comp_wrid(meta_desc, &sq->wq, wr_id);
 
 	/* Set common control flags for RDMA READ */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_RDMA_READ);
@@ -641,7 +641,7 @@ efa_data_path_direct_post_write(
 
 	/* Build metadata in local stack variable */
 	efa_data_path_direct_set_ud_addr(meta_desc, ah, qpn, qkey);
-	meta_desc->req_id = efa_wq_get_dev_req_id(&sq->wq, wr_id);
+	efa_set_sq_comp_wrid(meta_desc, &sq->wq, wr_id);
 
 	/* Set common control flags for RDMA WRITE */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_RDMA_WRITE);
