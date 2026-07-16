@@ -95,6 +95,7 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 	struct efa_domain *domain;
 	struct efa_qp *qp = base_ep->qp;
 	struct efa_qp *user_recv_qp = base_ep->user_recv_qp;
+	struct efa_qp **qp_table_slot;
 	uint32_t qp_num;
 	struct efa_cq *tx_cq, *rx_cq;
 	int err;
@@ -113,7 +114,9 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 		if (rx_cq != tx_cq)
 			efa_cq_invalidate_cur_wq(rx_cq, qp);
 		efa_qp_destruct(qp);
-		domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1] = NULL;
+		qp_table_slot = &domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1];
+		assert(!*qp_table_slot || *qp_table_slot == qp);
+		*qp_table_slot = NULL;
 		base_ep->qp = NULL;
 	}
 
@@ -124,7 +127,9 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 		if (rx_cq != tx_cq)
 			efa_cq_invalidate_cur_wq(rx_cq, user_recv_qp);
 		efa_qp_destruct(user_recv_qp);
-		domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1] = NULL;
+		qp_table_slot = &domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1];
+		assert(!*qp_table_slot || *qp_table_slot == user_recv_qp);
+		*qp_table_slot = NULL;
 		base_ep->user_recv_qp = NULL;
 	}
 
@@ -356,6 +361,7 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
 		return -errno;
 	}
 
+	(*qp)->qp_num = (*qp)->ibv_qp->qp_num;
 	(*qp)->ibv_qp_ex = ibv_qp_to_qp_ex((*qp)->ibv_qp);
 	/* Initialize it explicitly for safety */
 	(*qp)->data_path_direct_enabled = false;
@@ -500,8 +506,6 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 	err = efa_base_ep_modify_qp_rst2rts(base_ep, qp);
 	if (err)
 		return err;
-
-	qp->qp_num = qp->ibv_qp->qp_num;
 
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (qp->data_path_direct_enabled) {
