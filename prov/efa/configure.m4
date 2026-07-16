@@ -89,6 +89,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_efadv_query_qp_wqs=0
 	have_efadv_query_cq=0
 	have_efadv_cq_attr_db=0
+	have_efadv_wq_attr_caps=0
 	have_efadv_wr_processing_hints=0
 	have_ibv_create_comp_channel=0
 	have_ibv_get_cq_event=0
@@ -239,6 +240,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_efadv_cq_attr_db=0],
 			[[#include <infiniband/efadv.h>]])
 
+		AC_CHECK_MEMBER([struct efadv_wq_attr.caps],
+			[have_efadv_wq_attr_caps=1],
+			[have_efadv_wq_attr_caps=0],
+			[[#include <infiniband/efadv.h>]])
+
 		dnl Check for CQ notification functions
 		AC_CHECK_DECL([ibv_create_comp_channel],
 			[have_ibv_create_comp_channel=1],
@@ -314,6 +320,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_CQ_ATTR_DB],
 		[$have_efadv_cq_attr_db],
 		[Indicates if efadv_cq_attr struct has doorbell field])
+	AC_DEFINE_UNQUOTED([HAVE_EFADV_WQ_ATTR_CAPS],
+		[$have_efadv_wq_attr_caps],
+		[Indicates if efadv_wq_attr struct has caps field])
 	AC_DEFINE_UNQUOTED([HAVE_INLINE_BUF_SIZE_EX],
 		[$have_inline_buf_size_ex],
 		[Indicates if efadv_device_attr has inline_buf_size_ex field for wide WQE])
