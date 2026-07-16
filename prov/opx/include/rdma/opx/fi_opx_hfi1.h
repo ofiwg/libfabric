@@ -646,6 +646,9 @@ struct fi_opx_hfi1_context {
 #define OPX_SEND_ONLY_TRUE  true
 #define OPX_SEND_ONLY_FALSE false
 
+#define OPX_HFI_UNIT_FIXED_TRUE	 true
+#define OPX_HFI_UNIT_FIXED_FALSE false
+
 struct fi_opx_hfi1_context_internal {
 	struct fi_opx_hfi1_context context;
 
