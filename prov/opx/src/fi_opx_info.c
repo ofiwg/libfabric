@@ -83,9 +83,9 @@ void fi_opx_set_info(struct fi_info *fi, enum fi_progress progress)
 		.mr_key_size	  = 2,
 		.cq_data_size	  = FI_OPX_REMOTE_CQ_DATA_SIZE,
 		.cq_cnt		  = SIZE_MAX,
-		.ep_cnt		  = opx_domain_get_ctx_cnt(0),
-		.tx_ctx_cnt	  = opx_domain_get_ctx_cnt(0),
-		.rx_ctx_cnt	  = opx_domain_get_ctx_cnt(0),
+		.ep_cnt		  = opx_domain_get_ctx_cnt(0, OPX_PORT_NUM_ANY),
+		.tx_ctx_cnt	  = opx_domain_get_ctx_cnt(0, OPX_PORT_NUM_ANY),
+		.rx_ctx_cnt	  = opx_domain_get_ctx_cnt(0, OPX_PORT_NUM_ANY),
 
 		.max_ep_tx_ctx	= 1,
 		.max_ep_rx_ctx	= 1,
