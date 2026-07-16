@@ -42,6 +42,7 @@ struct efa_env efa_env = {
 	.implicit_av_size = 0,
 	.track_mr = 0,
 	.use_hw_cntr = 1,
+	.use_sq_req_id_64_bit = 1,
 };
 
 /**
@@ -57,6 +58,10 @@ static void efa_env_unregistered_param_get(void)
 	tmp = getenv("FI_EFA_USE_HW_CNTR");
 	if (tmp)
 		efa_env.use_hw_cntr = atoi(tmp);
+
+	tmp = getenv("FI_EFA_USE_SQ_REQ_ID_64_BIT");
+	if (tmp)
+		efa_env.use_sq_req_id_64_bit = atoi(tmp);
 }
 
 /* @brief Read and store the FI_EFA_* environment variables.
