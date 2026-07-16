@@ -168,6 +168,10 @@ def fabtests_args_to_pytest_args(fabtests_args, shared_options, run_mode):
         pytest_args.append("--tb=no")
 
     markers = fabtests_testsets_to_pytest_markers(fabtests_args.testsets, run_mode)
+    if fabtests_args.marker_expression:
+        # AND the user-supplied marker expression onto the expression
+        # derived from the test sets (-t), e.g. -t quick -m 'not pre_release'
+        markers = "(" + markers + ") and (" + fabtests_args.marker_expression + ")"
     pytest_args.append("-m")
     pytest_args.append(markers)
 
@@ -298,6 +302,10 @@ def main():
     parser.add_argument("client_id", type=str, help="client ip or hostname")
     parser.add_argument("-t", dest="testsets", type=str, default="quick",
                         help="test set(s): all,quick,unit,functional,standard,short,ubertest,cuda_memory,neuron_memory (default quick)")
+    parser.add_argument("-m", "--marker-expression", dest="marker_expression", type=str,
+                        help="pytest marker expression ANDed onto the expression "
+                             "derived from -t, e.g. -t quick -m 'not pre_release' "
+                             "runs the quick set excluding pre_release tests.")
     parser.add_argument("-v", dest="verbose", action="count", default=0,
                         help="verbosity level"
                              "-v: print extra info for failed test(s)"
