@@ -161,7 +161,7 @@ def test_efa_rma_bw_high_pps(cmdline_args, operation_type, mem_type, rma_fabric)
                                memory_type=mem_type,
                                message_size="all",
                                fabric=rma_fabric,
-                               additional_env="FI_EFA_ENABLE_HIGH_PPS=1 FI_EFA_ENABLE_SHM_TRANSFER=0")
+                               additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
 
 
 # Testing the batch mode of fi_efa_rma_bw (--post-list) which batch multiple WQEs with FI_MORE

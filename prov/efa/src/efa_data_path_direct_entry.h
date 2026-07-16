@@ -645,7 +645,7 @@ efa_data_path_direct_post_write(
 	}
 
 
-	if (efa_env.enable_high_pps && (flags & FI_EFA_WR_HIGH_PPS))
+	if (flags & FI_EFA_WR_HIGH_PPS)
 		efa_send_wr_set_processing_hint_high_pps(meta_desc);
 
 	/* Set remote memory information */
