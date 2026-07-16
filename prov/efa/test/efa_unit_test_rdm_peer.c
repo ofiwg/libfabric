@@ -475,7 +475,9 @@ void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state)
 
 /**
  * @brief PEER_ERROR for a msg_id buffered in the overflow list
- *        removes and frees the entry.
+ *        marks the entry EFA_RDM_PKE_ABORTED in place (it must NOT be
+ *        removed: the entry doubles as the abort marker that later
+ *        slides the reorder window past this msg_id).
  */
 void test_efa_rdm_peer_abort_ooo_in_overflow(void **state)
 {
@@ -483,6 +485,8 @@ void test_efa_rdm_peer_abort_ooo_in_overflow(void **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_overflow_pke_list_entry *overflow_entry;
+	struct dlist_entry *tmp;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t addr;
@@ -507,7 +511,22 @@ void test_efa_rdm_peer_abort_ooo_in_overflow(void **state)
 
 	ret = efa_rdm_peer_abort_ooo_msg(peer, msg_id);
 	assert_true(ret);
-	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list), 0);
+
+	/*
+	 * The entry must remain on the overflow list, marked ABORTED, so the
+	 * reorder window can still slide past the msg_id.
+	 */
+	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list), 1);
+	assert_true(pkt_entry->flags & EFA_RDM_PKE_ABORTED);
+
+	/* Clean up the marked entry. */
+	dlist_foreach_container_safe(&peer->overflow_pke_list,
+				     struct efa_rdm_peer_overflow_pke_list_entry,
+				     overflow_entry, entry, tmp) {
+		dlist_remove(&overflow_entry->entry);
+		efa_rdm_pke_release_rx_list(overflow_entry->pkt_entry);
+		ofi_buf_free(overflow_entry);
+	}
 }
 
 /**
@@ -1152,7 +1171,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 }
 
 /**
- * @brief Regression test for the MEDIUM overflow-list abort leak.
+ * @brief Regression test for the MEDIUM overflow-list multi-segment abort.
  *
  * A multi-segment MEDIUM message that arrives out-of-order while the
  * reorder window is full lands in the peer's overflow_pke_list. Unlike
@@ -1161,15 +1180,14 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
  * a SEPARATE overflow_pke_list_entry. So one msg_id can have multiple
  * overflow entries.
  *
- * efa_rdm_peer_abort_ooo_msg() must remove ALL overflow entries for the
- * aborted msg_id. The bug: it removes only the FIRST match and returns,
- * leaking the remaining segments (never released until ep close) and
- * potentially wedging overflow promotion for a msg_id the window has
- * already slid past.
+ * efa_rdm_peer_abort_ooo_msg() must mark ALL overflow entries for the
+ * aborted msg_id EFA_RDM_PKE_ABORTED, in place (a single-match mark would
+ * leak the remaining segments), and leave unrelated msg_ids untouched.
  *
- * This test stages two segments of the same OOO medium msg_id in the
- * overflow list, aborts it, and asserts the overflow list is fully
- * drained. It FAILS against the buggy single-match implementation.
+ * This test stages two segments of the same OOO medium msg_id plus one
+ * segment of a different msg_id in the overflow list, aborts the first
+ * id, and asserts all three entries survive with exactly the two
+ * targeted segments marked.
  */
 void test_efa_rdm_peer_abort_ooo_msg_overflow_multi_segment(void **state)
 {
@@ -1219,26 +1237,24 @@ void test_efa_rdm_peer_abort_ooo_msg_overflow_multi_segment(void **state)
 	assert_true(ret);
 
 	/*
-	 * BUG ASSERTION: every overflow entry for aborted_msg_id must be
-	 * gone. Only the unrelated other_msg_id entry should remain.
-	 * The buggy single-match implementation leaves 2 entries (one
-	 * leaked aborted segment + the other msg_id).
+	 * All three entries remain on the list (the marked entries ARE the
+	 * abort marker), with both segments of aborted_msg_id marked and the
+	 * unrelated one untouched.
 	 */
 	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list),
-			 1);
+			 3);
+	assert_true(seg0->flags & EFA_RDM_PKE_ABORTED);
+	assert_true(seg1->flags & EFA_RDM_PKE_ABORTED);
+	assert_false(other->flags & EFA_RDM_PKE_ABORTED);
 
-	/* The surviving entry is the unrelated msg_id. */
+	/* Clean up all entries. */
 	{
 		struct efa_rdm_peer_overflow_pke_list_entry *e;
 		struct dlist_entry *tmp;
-		uint32_t found = 0;
 
 		dlist_foreach_container_safe(&peer->overflow_pke_list,
 			struct efa_rdm_peer_overflow_pke_list_entry,
 			e, entry, tmp) {
-			found = efa_rdm_pke_get_rtm_msg_id(e->pkt_entry);
-			assert_int_equal(found, other_msg_id);
-			/* clean up the survivor */
 			dlist_remove(&e->entry);
 			efa_rdm_pke_release_rx_list(e->pkt_entry);
 			ofi_buf_free(e);
