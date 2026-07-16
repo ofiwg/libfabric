@@ -120,9 +120,13 @@ ring_db:
 	return err;
 }
 
+static inline bool
+efa_cqe_is_64_bit_comp(struct efa_io_cdesc_common *cqe, struct efa_qp *qp)
+{
+	bool sq_cqe = EFA_GET(&cqe->flags, EFA_IO_CDESC_COMMON_Q_TYPE) == EFA_IO_SEND_QUEUE;
 
-
-
+	return (sq_cqe && qp->data_path_direct_qp.sq.wq.req_id_64_bit);
+}
 
 /**
  * @brief Check if a completion has a valid QP generation
@@ -187,8 +191,9 @@ static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 		efa_domain->device->qp_table[qpn & efa_domain->device->qp_table_sz_m1];
 
 	if (!data_path_direct->cur_qp || qpn != data_path_direct->cur_qp->qp_num ||
-	    !efa_data_path_direct_is_valid_wrid_qp_gen(data_path_direct->cur_cqe,
-						       data_path_direct->cur_qp)) {
+	    (!efa_cqe_is_64_bit_comp(data_path_direct->cur_cqe, data_path_direct->cur_qp) &&
+	     !efa_data_path_direct_is_valid_wrid_qp_gen(data_path_direct->cur_cqe,
+							data_path_direct->cur_qp))) {
 		data_path_direct->cur_wq = NULL;
 		EFA_INFO(FI_LOG_CQ, "Dropping CQE for QP[%u]: stale or invalid\n", qpn);
 		return EINVAL;
@@ -234,7 +239,7 @@ static inline int efa_data_path_direct_next_poll(struct efa_ibv_cq *ibv_cq)
 	assert(cqe);
 
 	if (ibv_cq->data_path_direct.cur_wq)
-		efa_wq_put_dev_req_id(ibv_cq->data_path_direct.cur_wq, cqe->req_id);
+		efa_wq_cqe_finalize(ibv_cq->data_path_direct.cur_wq, cqe);
 	return efa_data_path_direct_start_poll(ibv_cq, NULL);
 }
 
@@ -259,8 +264,7 @@ static inline void efa_data_path_direct_end_poll(struct efa_ibv_cq *ibv_cq)
 
 	if (cqe) {
 		if (ibv_cq->data_path_direct.cur_wq)
-			efa_wq_put_dev_req_id(ibv_cq->data_path_direct.cur_wq,
-				    cqe->req_id);
+			efa_wq_cqe_finalize(ibv_cq->data_path_direct.cur_wq, cqe);
 #if HAVE_EFADV_CQ_ATTR_DB
 		if (ibv_cq->data_path_direct.db)
 			efa_update_cq_doorbell(&ibv_cq->data_path_direct, false);

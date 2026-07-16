@@ -114,7 +114,7 @@ void test_efa_data_path_direct_qp_gen_initialization(void **state)
 
 /**
  * @brief Verify that efa_wq_get_dev_req_id returns a request ID with
- * generation bits OR'd in, and that efa_wq_put_dev_req_id correctly
+ * generation bits OR'd in, and that efa_wq_cqe_finalize correctly
  * strips them before returning the index to the pool.
  */
 void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
@@ -124,6 +124,7 @@ void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
 	struct efa_base_ep *base_ep;
 	struct efa_qp *qp;
 	struct efa_data_path_direct_wq *sq_wq;
+	struct efa_io_cdesc_common fake_cqe = {0};
 	uint32_t dev_req_id;
 	uint32_t wrid_idx;
 	uint64_t test_wr_id = 0xDEADBEEF;
@@ -153,8 +154,9 @@ void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
 	/* Pool next should have advanced by 1 */
 	assert_int_equal(sq_wq->wrid_idx_pool_next, pool_next_before + 1);
 
-	/* Put it back using dev_req_id (with gen bits) */
-	efa_wq_put_dev_req_id(sq_wq, dev_req_id);
+	/* Finalize using a fake CQE with the dev_req_id */
+	fake_cqe.req_id = dev_req_id;
+	efa_wq_cqe_finalize(sq_wq, &fake_cqe);
 
 	/* Pool next should be back to original */
 	assert_int_equal(sq_wq->wrid_idx_pool_next, pool_next_before);
