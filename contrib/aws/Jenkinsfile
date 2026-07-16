@@ -87,23 +87,11 @@ def download_all_testing_packages() {
     }
 }
 
-def kill_all_clusters(instance_type, region) {
-    def instance_type_without_period = sh(
-        script: "echo ${instance_type.take(10)} | tr -d '.\\n'",
-        returnStdout: true
-    )
-    sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name \'*${instance_type_without_period}*\' --region ${region} || true"
-}
-
 def run_test_orchestrator_once(run_name, build_tag, os, instance_type, instance_count, region, addl_args) {
     /*
      * Run PortaFiducia/tests/test_orchestrator.py with given command line arguments
      * param@ args: str, the command line arguments
      */
-    if (instance_type == "trn2.48xlarge") {
-        kill_all_clusters(instance_type, region)
-    }
-
     def cluster_name = get_cluster_name(build_tag, os, instance_type)
     def args = "--os ${os} --instance-type ${instance_type} --instance-count ${instance_count} --region ${region} --cluster-name ${cluster_name} ${addl_args} --junit-xml outputs/${cluster_name}.xml"
     sh ". ${venv_path}/bin/activate; cd ${portafiducia_path}/tests && ./test_orchestrator.py ${args}"
@@ -431,7 +419,6 @@ pipeline {
                     def c8gn16x_lock_label  = "c8gn16x"
                     def hpc6a48x_lock_label = "hpc6a48x"
                     def g4dn16x_lock_label  = "g4dn16x"
-                    def trn248x_lock_label  = "trn248x"
                     def c5n18x_lock_label   = "c5n18x"
                     def c7i16x_lock_label   = "c7i16x"
 
@@ -445,7 +432,6 @@ pipeline {
 
                     // Multi Node Tests - Accelerator EFA
                     stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.16xlarge",  2, "us-west-2",      g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_efa}")
-                    stages["2_trn2_alinux2023_efa"]  = get_test_stage_with_lock("2_trn2_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "trn2.48xlarge",  2, "ap-southeast-4", trn248x_lock_label, "--odcr cr-0ea39f1e125501d50 ${addl_args_efa}")
 
                     // Single Node Windows Test
                     stages["EFA_Windows_Test"] = get_single_node_windows_test_stage_with_lock("EFA_Windows_Test", c5n18x_lock_label)
