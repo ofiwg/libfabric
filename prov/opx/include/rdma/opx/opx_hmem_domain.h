@@ -36,6 +36,7 @@
 #include "rdma/fi_domain.h"
 #include "rdma/opx/fi_opx_hfi1_packet.h"
 
+#include "ofi_hmem.h"
 #include "ofi_util.h"
 #include "ofi_mr.h"
 
@@ -61,19 +62,17 @@ struct opx_hmem_fabric {
 	struct util_fabric util_fabric;
 };
 
-union opx_hmem_stream;
-
 struct opx_hmem_domain {
 	struct util_domain    util_domain;
 	struct ofi_mr_cache  *hmem_cache;
 	struct fi_opx_domain *opx_domain;
 	struct dlist_entry    list_entry; /* linked to hmem_domain_list */
 	struct ofi_mr_cache  *ipc_cache;
+#if HAVE_CUDA
 	struct {
-		union opx_hmem_stream *stream;
-		struct ofi_bufpool    *event_pool;
-		enum fi_hmem_iface     type;
-	} hmem_stream;
+		CUstream stream;
+	} cuda;
+#endif
 	uint32_t devreg_copy_from_threshold;
 	uint32_t devreg_copy_to_threshold;
 	uint32_t dmabuf_supported;

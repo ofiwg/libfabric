@@ -3513,9 +3513,16 @@ void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_h
 		}
 	} else {
 		if (ipc_info->iface == FI_HMEM_CUDA) {
-			opx_hmem_memcpy_async(FI_HMEM_CUDA, ipc_info->device, context->buf, device_ptr, xfer_len,
-					      opx_ep->domain->hmem_domain, (union opx_hmem_event **) &event,
-					      OPX_HMEM_MEMCPY_ASYNC_DTOD);
+#if HAVE_CUDA
+			CUevent cuda_event = NULL;
+
+			opx_hmem_cuda_memcpy_async(ipc_info->device, context->buf, device_ptr, xfer_len,
+						   opx_ep->domain->hmem_domain, &cuda_event,
+						   OPX_HMEM_MEMCPY_ASYNC_DTOD);
+			event = cuda_event;
+#else
+			event = NULL;
+#endif
 		} else if (ipc_info->iface == FI_HMEM_ROCR) {
 			struct iovec dst_iov = {.iov_base = context->buf, .iov_len = xfer_len};
 			ret		     = ofi_create_async_copy_event(FI_HMEM_ROCR, ipc_info->device, &event);
