@@ -34,9 +34,9 @@
 #include <config.h>
 #endif
 
+#include "ofi.h"
 #include "ofi_hmem.h"
 #include "ofi_mem.h"
-#include "ofi.h"
 
 #if HAVE_ROCR
 
@@ -45,9 +45,9 @@
 
 #define HSA_MAX_SIGNALS 512
 #define HSA_MAX_STREAMS (HSA_MAX_SIGNALS / MAX_NUM_ASYNC_OP)
-#define D2H_THRESHOLD 16384
-#define H2D_THRESHOLD 1048576
-#define MAX_AGENTS 64
+#define D2H_THRESHOLD	16384
+#define H2D_THRESHOLD	1048576
+#define MAX_AGENTS	64
 
 static struct agents {
 	int num_gpu;
@@ -75,13 +75,11 @@ static struct rocm_ipc_signal_fs *ipc_signal_fs = NULL;
 struct hsa_ops {
 	hsa_status_t (*hsa_memory_copy)(void *dst, const void *src,
 					size_t size);
-	hsa_status_t (*hsa_amd_memory_async_copy)(void* dst,
-					hsa_agent_t dst_agent,
-					const void* src,
-					hsa_agent_t src_agent, size_t size,
-					uint32_t num_dep_signals,
-					const hsa_signal_t* dep_signals,
-					hsa_signal_t completion_signal);
+	hsa_status_t (*hsa_amd_memory_async_copy)(
+		void *dst, hsa_agent_t dst_agent, const void *src,
+		hsa_agent_t src_agent, size_t size, uint32_t num_dep_signals,
+		const hsa_signal_t *dep_signals,
+		hsa_signal_t completion_signal);
 	hsa_status_t (*hsa_amd_pointer_info)(const void *ptr,
 					     hsa_amd_pointer_info_t *info,
 					     void *(*alloc)(size_t),
@@ -92,19 +90,18 @@ struct hsa_ops {
 	hsa_status_t (*hsa_status_string)(hsa_status_t status,
 					  const char **status_string);
 	hsa_status_t (*hsa_memory_allocate)(hsa_region_t region, size_t size,
-					void **ptr);
+					    void **ptr);
 	hsa_status_t (*hsa_memory_free)(void *ptr);
-	hsa_status_t (*hsa_agent_iterate_regions)(hsa_agent_t agent,
-					hsa_status_t (*callback)(hsa_region_t, void *),
-					void *data);
+	hsa_status_t (*hsa_agent_iterate_regions)(
+		hsa_agent_t agent,
+		hsa_status_t (*callback)(hsa_region_t, void *), void *data);
 	hsa_status_t (*hsa_region_get_info)(hsa_region_t region,
-					hsa_region_info_t attribute,
-					void *value);
-	hsa_status_t (*hsa_amd_dereg_dealloc_cb)(void *ptr,
-						 hsa_amd_deallocation_callback_t cb);
-	hsa_status_t (*hsa_amd_reg_dealloc_cb)(void *ptr,
-					       hsa_amd_deallocation_callback_t cb,
-					       void *user_data);
+					    hsa_region_info_t attribute,
+					    void *value);
+	hsa_status_t (*hsa_amd_dereg_dealloc_cb)(
+		void *ptr, hsa_amd_deallocation_callback_t cb);
+	hsa_status_t (*hsa_amd_reg_dealloc_cb)(
+		void *ptr, hsa_amd_deallocation_callback_t cb, void *user_data);
 	hsa_status_t (*hsa_amd_memory_lock)(void *host_ptr, size_t size,
 					    hsa_agent_t *agents, int num_agents,
 					    void **agent_ptr);
@@ -112,33 +109,34 @@ struct hsa_ops {
 	hsa_status_t (*hsa_agent_get_info)(hsa_agent_t agent,
 					   hsa_agent_info_t attribute,
 					   void *value);
-	hsa_status_t (*hsa_amd_ipc_memory_create)(void* ptr, size_t len,
-					hsa_amd_ipc_memory_t* handle);
+	hsa_status_t (*hsa_amd_ipc_memory_create)(void *ptr, size_t len,
+						  hsa_amd_ipc_memory_t *handle);
 	hsa_status_t (*hsa_amd_ipc_memory_attach)(
-		const hsa_amd_ipc_memory_t* handle, size_t len,
-		uint32_t num_agents,
-		const hsa_agent_t* mapping_agents,
-		void** mapped_ptr);
-	hsa_status_t (*hsa_amd_ipc_memory_detach)(void* mapped_ptr);
+		const hsa_amd_ipc_memory_t *handle, size_t len,
+		uint32_t num_agents, const hsa_agent_t *mapping_agents,
+		void **mapped_ptr);
+	hsa_status_t (*hsa_amd_ipc_memory_detach)(void *mapped_ptr);
 	void (*hsa_signal_store_screlease)(hsa_signal_t signal,
 					   hsa_signal_value_t value);
 	hsa_signal_value_t (*hsa_signal_load_scacquire)(hsa_signal_t signal);
 	hsa_status_t (*hsa_amd_agents_allow_access)(uint32_t num_agents,
-			const hsa_agent_t* agents,
-			const uint32_t* flags, const void* ptr);
+						    const hsa_agent_t *agents,
+						    const uint32_t *flags,
+						    const void *ptr);
 	hsa_status_t (*hsa_signal_create)(hsa_signal_value_t initial_value,
-			uint32_t num_consumers,
-			const hsa_agent_t *consumers,
-			hsa_signal_t *signal);
+					  uint32_t num_consumers,
+					  const hsa_agent_t *consumers,
+					  hsa_signal_t *signal);
 	hsa_status_t (*hsa_signal_destroy)(hsa_signal_t signal);
 	hsa_status_t (*hsa_iterate_agents)(
 		hsa_status_t (*callback)(hsa_agent_t agent, void *data),
 		void *data);
 	hsa_status_t (*hsa_system_get_info)(hsa_system_info_t attribute,
-					    void* value);
+					    void *value);
 #if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
-	hsa_status_t (*hsa_amd_portable_export_dmabuf)(const void* ptr, size_t size,
-						       int* dmabuf, uint64_t* offset);
+	hsa_status_t (*hsa_amd_portable_export_dmabuf)(const void *ptr,
+						       size_t size, int *dmabuf,
+						       uint64_t *offset);
 	hsa_status_t (*hsa_amd_portable_close_dmabuf)(int dmabuf);
 #endif
 };
@@ -171,10 +169,8 @@ static struct hsa_ops hsa_ops = {
 	.hsa_agent_iterate_regions = hsa_agent_iterate_regions,
 	.hsa_region_get_info = hsa_region_get_info,
 	/* used for memory monitoring */
-	.hsa_amd_dereg_dealloc_cb =
-		hsa_amd_deregister_deallocation_callback,
-	.hsa_amd_reg_dealloc_cb =
-		hsa_amd_register_deallocation_callback,
+	.hsa_amd_dereg_dealloc_cb = hsa_amd_deregister_deallocation_callback,
+	.hsa_amd_reg_dealloc_cb = hsa_amd_register_deallocation_callback,
 	/* memory lock/unlock used for registration */
 	.hsa_amd_memory_lock = hsa_amd_memory_lock,
 	.hsa_amd_memory_unlock = hsa_amd_memory_unlock,
@@ -206,22 +202,23 @@ static struct hsa_ops hsa_ops = {
 #endif /* ENABLE_ROCR_DLOPEN */
 
 static hsa_status_t
-ofi_hsa_iterate_agents(hsa_status_t (*callback)(hsa_agent_t agent,
-		void *data), void *data)
+ofi_hsa_iterate_agents(hsa_status_t (*callback)(hsa_agent_t agent, void *data),
+		       void *data)
 {
 	return hsa_ops.hsa_iterate_agents(callback, data);
 }
 
-static hsa_status_t
-ofi_hsa_amd_agents_allow_access(uint32_t num_agents, const hsa_agent_t* agents,
-				const uint32_t* flags, const void* ptr)
+static hsa_status_t ofi_hsa_amd_agents_allow_access(uint32_t num_agents,
+						    const hsa_agent_t *agents,
+						    const uint32_t *flags,
+						    const void *ptr)
 {
-	return hsa_ops.hsa_amd_agents_allow_access(num_agents, agents,
-						   flags, ptr);
+	return hsa_ops.hsa_amd_agents_allow_access(num_agents, agents, flags,
+						   ptr);
 }
 
-static void
-ofi_hsa_signal_store_screlease(hsa_signal_t signal, hsa_signal_value_t value)
+static void ofi_hsa_signal_store_screlease(hsa_signal_t signal,
+					   hsa_signal_value_t value)
 {
 	hsa_ops.hsa_signal_store_screlease(signal, value);
 }
@@ -235,9 +232,8 @@ static void ofi_hsa_signal_create(struct ofi_hsa_signal_info *sinfo, void *arg)
 {
 	hsa_status_t hsa_ret;
 
-	if ((hsa_ret = hsa_ops.hsa_signal_create(1, 0, NULL,
-						&sinfo->sig) !=
-		HSA_STATUS_SUCCESS)) {
+	if ((hsa_ret = hsa_ops.hsa_signal_create(1, 0, NULL, &sinfo->sig) !=
+		       HSA_STATUS_SUCCESS)) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to perform hsa_signal_create: %s\n",
 			ofi_hsa_status_to_string(hsa_ret));
@@ -249,7 +245,7 @@ static void ofi_hsa_signal_destroy(struct ofi_hsa_signal_info *sinfo, void *arg)
 	hsa_status_t hsa_ret;
 
 	if ((hsa_ret = hsa_ops.hsa_signal_destroy(sinfo->sig) !=
-		HSA_STATUS_SUCCESS)) {
+		       HSA_STATUS_SUCCESS)) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to perform hsa_signal_destroy: %s\n",
 			ofi_hsa_status_to_string(hsa_ret));
@@ -261,7 +257,7 @@ hsa_status_t ofi_hsa_amd_memory_lock(void *host_ptr, size_t size,
 				     void **agent_ptr)
 {
 	return hsa_ops.hsa_amd_memory_lock(host_ptr, size, agents, num_agents,
-					    agent_ptr);
+					   agent_ptr);
 }
 
 hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr)
@@ -269,7 +265,8 @@ hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr)
 	return hsa_ops.hsa_amd_memory_unlock(host_ptr);
 }
 
-hsa_status_t ofi_hsa_memory_allocate(hsa_region_t region, size_t size, void **ptr)
+hsa_status_t ofi_hsa_memory_allocate(hsa_region_t region, size_t size,
+				     void **ptr)
 {
 	return hsa_ops.hsa_memory_allocate(region, size, ptr);
 }
@@ -279,15 +276,16 @@ hsa_status_t ofi_hsa_memory_free(void *ptr)
 	return hsa_ops.hsa_memory_free(ptr);
 }
 
-hsa_status_t ofi_hsa_agent_iterate_regions(hsa_agent_t agent,
-		hsa_status_t (*callback)(hsa_region_t, void *),
-		void *data)
+hsa_status_t
+ofi_hsa_agent_iterate_regions(hsa_agent_t agent,
+			      hsa_status_t (*callback)(hsa_region_t, void *),
+			      void *data)
 {
 	return hsa_ops.hsa_agent_iterate_regions(agent, callback, data);
 }
 
 hsa_status_t ofi_hsa_region_get_info(hsa_region_t region,
-		hsa_region_info_t attribute, void *value)
+				     hsa_region_info_t attribute, void *value)
 {
 	return hsa_ops.hsa_region_get_info(region, attribute, value);
 }
@@ -299,11 +297,14 @@ static hsa_status_t find_gpu_memory_region(hsa_region_t region, void *data)
 	hsa_status_t hsa_ret;
 	hsa_region_t *gpu_region = (hsa_region_t *) data;
 
-	hsa_ret = ofi_hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT, &segment);
-	if (hsa_ret != HSA_STATUS_SUCCESS || segment != HSA_REGION_SEGMENT_GLOBAL)
+	hsa_ret = ofi_hsa_region_get_info(region, HSA_REGION_INFO_SEGMENT,
+					  &segment);
+	if (hsa_ret != HSA_STATUS_SUCCESS ||
+	    segment != HSA_REGION_SEGMENT_GLOBAL)
 		return hsa_ret;
 
-	hsa_ret = ofi_hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS, &flags);
+	hsa_ret = ofi_hsa_region_get_info(region, HSA_REGION_INFO_GLOBAL_FLAGS,
+					  &flags);
 	if (hsa_ret != HSA_STATUS_SUCCESS)
 		return hsa_ret;
 
@@ -324,8 +325,8 @@ void *rocr_alloc(size_t size)
 	if (rocr_agents.num_gpu == 0)
 		return NULL;
 
-	hsa_ret = ofi_hsa_agent_iterate_regions(rocr_agents.gpu_agents[0],
-						find_gpu_memory_region, &gpu_region);
+	hsa_ret = ofi_hsa_agent_iterate_regions(
+		rocr_agents.gpu_agents[0], find_gpu_memory_region, &gpu_region);
 	if (hsa_ret != HSA_STATUS_SUCCESS && hsa_ret != HSA_STATUS_INFO_BREAK) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find GPU memory region: %s\n",
@@ -334,7 +335,8 @@ void *rocr_alloc(size_t size)
 	}
 
 	if (gpu_region.handle == 0) {
-		FI_WARN(&core_prov, FI_LOG_CORE, "No suitable GPU memory region found\n");
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"No suitable GPU memory region found\n");
 		return NULL;
 	}
 
@@ -366,16 +368,16 @@ hsa_status_t ofi_hsa_memory_copy(void *dst, const void *src, size_t size)
 	return hsa_ops.hsa_memory_copy(dst, src, size);
 }
 
-hsa_status_t ofi_hsa_amd_memory_async_copy(void* dst, hsa_agent_t dst_agent,
-					const void* src,
-					hsa_agent_t src_agent, size_t size,
-					uint32_t num_dep_signals,
-					const hsa_signal_t* dep_signals,
-					hsa_signal_t completion_signal)
+hsa_status_t ofi_hsa_amd_memory_async_copy(void *dst, hsa_agent_t dst_agent,
+					   const void *src,
+					   hsa_agent_t src_agent, size_t size,
+					   uint32_t num_dep_signals,
+					   const hsa_signal_t *dep_signals,
+					   hsa_signal_t completion_signal)
 {
-	return hsa_ops.hsa_amd_memory_async_copy(dst, dst_agent,
-				src, src_agent, size, num_dep_signals,
-				dep_signals, completion_signal);
+	return hsa_ops.hsa_amd_memory_async_copy(
+		dst, dst_agent, src, src_agent, size, num_dep_signals,
+		dep_signals, completion_signal);
 }
 
 hsa_status_t ofi_hsa_amd_pointer_info(void *ptr, hsa_amd_pointer_info_t *info,
@@ -384,7 +386,7 @@ hsa_status_t ofi_hsa_amd_pointer_info(void *ptr, hsa_amd_pointer_info_t *info,
 				      hsa_agent_t **accessible)
 {
 	return hsa_ops.hsa_amd_pointer_info(ptr, info, alloc,
-		num_agents_accessible, accessible);
+					    num_agents_accessible, accessible);
 }
 
 hsa_status_t ofi_hsa_init(void)
@@ -435,6 +437,31 @@ static hsa_status_t ofi_hsa_agent_get_info(hsa_agent_t agent,
 	return hsa_ops.hsa_agent_get_info(agent, attribute, value);
 }
 
+static bool rocr_hsa_agent_is_valid(hsa_agent_t agent)
+{
+	return agent.handle != 0;
+}
+
+static bool rocr_hsa_agents_equal(hsa_agent_t a, hsa_agent_t b)
+{
+	return a.handle == b.handle;
+}
+
+static int rocr_get_device_from_hsa_agent(hsa_agent_t agent, uint64_t *device)
+{
+	if (!device || !rocr_hsa_agent_is_valid(agent))
+		return -FI_EINVAL;
+
+	for (uint64_t i = 0; i < rocr_agents.num_gpu; i++) {
+		if (rocr_hsa_agents_equal(agent, rocr_agents.gpu_agents[i])) {
+			*device = i;
+			return FI_SUCCESS;
+		}
+	}
+
+	return -FI_ENODEV;
+}
+
 static int rocr_memcpy(void *dest, const void *src, size_t size)
 {
 	hsa_status_t hsa_ret;
@@ -450,9 +477,8 @@ static int rocr_memcpy(void *dest, const void *src, size_t size)
 	return -FI_EIO;
 }
 
-static int rocr_host_memory_ptr(void *host_ptr, void **ptr,
-				hsa_agent_t *agent, size_t *size,
-				uint64_t *offset, bool *system)
+static int rocr_host_memory_ptr(void *host_ptr, void **ptr, hsa_agent_t *agent,
+				size_t *size, uint64_t *offset, bool *system)
 {
 	hsa_amd_pointer_info_t info = {
 		.size = sizeof(info),
@@ -462,7 +488,7 @@ static int rocr_host_memory_ptr(void *host_ptr, void **ptr,
 	if (system)
 		*system = false;
 
-	hsa_ret = ofi_hsa_amd_pointer_info((void *)host_ptr, &info, NULL, NULL,
+	hsa_ret = ofi_hsa_amd_pointer_info((void *) host_ptr, &info, NULL, NULL,
 					   NULL);
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -480,7 +506,7 @@ static int rocr_host_memory_ptr(void *host_ptr, void **ptr,
 
 	if (info.type != HSA_EXT_POINTER_TYPE_LOCKED) {
 		if (info.type == HSA_EXT_POINTER_TYPE_IPC ||
-			info.type == HSA_EXT_POINTER_TYPE_HSA)
+		    info.type == HSA_EXT_POINTER_TYPE_HSA)
 			*ptr = info.agentBaseAddress;
 		else
 			*ptr = host_ptr;
@@ -488,7 +514,7 @@ static int rocr_host_memory_ptr(void *host_ptr, void **ptr,
 		if (info.type == HSA_EXT_POINTER_TYPE_UNKNOWN && system)
 			*system = true;
 		if (offset)
-			*offset = (uintptr_t)host_ptr - (uintptr_t)*ptr;
+			*offset = (uintptr_t) host_ptr - (uintptr_t) *ptr;
 	} else {
 		*ptr = (void *) ((uintptr_t) info.agentBaseAddress +
 				 (uintptr_t) host_ptr -
@@ -507,7 +533,7 @@ int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
 	void *dest_memcpy_ptr;
 
 	ret = rocr_host_memory_ptr(dest, &dest_memcpy_ptr, NULL, NULL, NULL,
-							   NULL);
+				   NULL);
 
 	if (ret != FI_SUCCESS)
 		return ret;
@@ -517,14 +543,13 @@ int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
 	return ret;
 }
 
-int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
-		     size_t size)
+int rocr_copy_to_dev(uint64_t device, void *dest, const void *src, size_t size)
 {
 	int ret;
 	void *src_memcpy_ptr;
 
 	ret = rocr_host_memory_ptr((void *) src, &src_memcpy_ptr, NULL, NULL,
-							   NULL, NULL);
+				   NULL, NULL);
 	if (ret != FI_SUCCESS)
 		return ret;
 
@@ -564,9 +589,8 @@ int rocr_free_async_copy_event(uint64_t device, void *ev)
 	return FI_SUCCESS;
 }
 
-static int
-rocr_dev_async_copy(void *dst, const void *src, size_t size,
-		    ofi_hmem_async_event_t event)
+static int rocr_dev_async_copy(void *dst, const void *src, size_t size,
+			       ofi_hmem_async_event_t event)
 {
 	void *src_hsa_ptr;
 	void *dst_hsa_ptr;
@@ -586,8 +610,8 @@ rocr_dev_async_copy(void *dst, const void *src, size_t size,
 
 	s = event;
 
-	ret = rocr_host_memory_ptr((void *)src, &src_hsa_ptr, &agents[0],
-				   NULL, &src_offset, &src_local);
+	ret = rocr_host_memory_ptr((void *) src, &src_hsa_ptr, &agents[0], NULL,
+				   &src_offset, &src_local);
 	if (ret != FI_SUCCESS)
 		return ret;
 
@@ -607,18 +631,19 @@ rocr_dev_async_copy(void *dst, const void *src, size_t size,
 
 	/* device to device */
 	if (!src_local && !dst_local) {
-		hsa_ret = ofi_hsa_amd_agents_allow_access(rocr_agents.num_gpu,
-						    rocr_agents.gpu_agents, NULL,
-						    dst_hsa_ptr);
+		hsa_ret = ofi_hsa_amd_agents_allow_access(
+			rocr_agents.num_gpu, rocr_agents.gpu_agents, NULL,
+			dst_hsa_ptr);
 		if (hsa_ret != HSA_STATUS_SUCCESS) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
-			   "Failed to perform hsa_amd_agents_allow_access %s\n",
-			   ofi_hsa_status_to_string(hsa_ret));
+				"Failed to perform hsa_amd_agents_allow_access "
+				"%s\n",
+				ofi_hsa_status_to_string(hsa_ret));
 			ret = -FI_EINVAL;
 			goto fail;
 		}
 		ipc_signal->addr = NULL;
-	/* device to host */
+		/* device to host */
 	} else if (!src_local && dst_local) {
 		size_t d2h_thresh;
 
@@ -643,9 +668,10 @@ rocr_dev_async_copy(void *dst, const void *src, size_t size,
 
 	ofi_hsa_signal_store_screlease(ipc_signal->sig, 1);
 
-	hsa_ret = ofi_hsa_amd_memory_async_copy((void*)((uintptr_t)dst_hsa_ptr+dst_offset), agents[1],
-						(void*)((uintptr_t)src_hsa_ptr+src_offset), agents[0],
-						size, 0, NULL, ipc_signal->sig);
+	hsa_ret = ofi_hsa_amd_memory_async_copy(
+		(void *) ((uintptr_t) dst_hsa_ptr + dst_offset), agents[1],
+		(void *) ((uintptr_t) src_hsa_ptr + src_offset), agents[0],
+		size, 0, NULL, ipc_signal->sig);
 
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -709,7 +735,7 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	hsa_device_type_t hsa_dev_type;
 	hsa_status_t hsa_ret;
 
-	hsa_ret = ofi_hsa_amd_pointer_info((void *)addr, &hsa_info, NULL, NULL,
+	hsa_ret = ofi_hsa_amd_pointer_info((void *) addr, &hsa_info, NULL, NULL,
 					   NULL);
 	if (hsa_ret == HSA_STATUS_SUCCESS) {
 		if (hsa_info.type == HSA_EXT_POINTER_TYPE_UNKNOWN) {
@@ -721,7 +747,22 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 						 (void *) &hsa_dev_type);
 		if (hsa_ret == HSA_STATUS_SUCCESS) {
 			if (hsa_dev_type == HSA_DEVICE_TYPE_GPU) {
-				/* TODO get device pointer/id */
+				if (device) {
+					int ret =
+						rocr_get_device_from_hsa_agent(
+							hsa_info.agentOwner,
+							device);
+					if (ret) {
+						FI_WARN(&core_prov, FI_LOG_CORE,
+							"Failed to map ROCR "
+							"HSA agent 0x%lx to a "
+							"device ordinal: %s\n",
+							hsa_info.agentOwner
+								.handle,
+							fi_strerror(-ret));
+						return false;
+					}
+				}
 				if (flags)
 					*flags = FI_HMEM_DEVICE_ONLY;
 				return true;
@@ -748,22 +789,22 @@ int rocr_get_ipc_handle_size(size_t *size)
 
 int rocr_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
 {
-	return rocr_host_memory_ptr((void*)ptr, base, NULL, size, NULL, NULL);
+	return rocr_host_memory_ptr((void *) ptr, base, NULL, size, NULL, NULL);
 }
 
 int rocr_get_handle(void *dev_buf, size_t size, void **handle)
 {
 	hsa_status_t hsa_ret;
 
-	hsa_ret = hsa_ops.hsa_amd_ipc_memory_create(dev_buf, size,
-				(hsa_amd_ipc_memory_t *)handle);
+	hsa_ret = hsa_ops.hsa_amd_ipc_memory_create(
+		dev_buf, size, (hsa_amd_ipc_memory_t *) handle);
 
 	if (hsa_ret == HSA_STATUS_SUCCESS)
 		return FI_SUCCESS;
 
 	FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to perform hsa_amd_ipc_memory_create: %s\n",
-			ofi_hsa_status_to_string(hsa_ret));
+		"Failed to perform hsa_amd_ipc_memory_create: %s\n",
+		ofi_hsa_status_to_string(hsa_ret));
 
 	return -FI_EINVAL;
 }
@@ -772,8 +813,8 @@ int rocr_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr)
 {
 	hsa_status_t hsa_ret;
 
-	hsa_ret = hsa_ops.hsa_amd_ipc_memory_attach((hsa_amd_ipc_memory_t *)handle,
-					len, 0, NULL, ipc_ptr);
+	hsa_ret = hsa_ops.hsa_amd_ipc_memory_attach(
+		(hsa_amd_ipc_memory_t *) handle, len, 0, NULL, ipc_ptr);
 	if (hsa_ret == HSA_STATUS_SUCCESS)
 		return FI_SUCCESS;
 
@@ -805,13 +846,13 @@ bool rocr_is_ipc_enabled(void)
 	return !ofi_hmem_p2p_disabled();
 }
 
-static hsa_status_t
-rocr_hsa_agent_callback(hsa_agent_t agent, void* data)
+static hsa_status_t rocr_hsa_agent_callback(hsa_agent_t agent, void *data)
 {
 	hsa_device_type_t device_type;
 
 	ofi_hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
-	if (device_type == HSA_DEVICE_TYPE_GPU)
+	if (device_type == HSA_DEVICE_TYPE_GPU &&
+	    rocr_agents.num_gpu < MAX_AGENTS)
 		rocr_agents.gpu_agents[rocr_agents.num_gpu++] = agent;
 
 	return HSA_STATUS_SUCCESS;
@@ -837,16 +878,16 @@ static int rocr_hmem_dl_init(void)
 		goto err;
 	}
 
-	hsa_ops.hsa_amd_memory_async_copy = dlsym(hsa_handle,
-				"hsa_amd_memory_async_copy");
+	hsa_ops.hsa_amd_memory_async_copy =
+		dlsym(hsa_handle, "hsa_amd_memory_async_copy");
 	if (!hsa_ops.hsa_amd_memory_async_copy) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_memory_async_copy\n");
 		goto err;
 	}
 
-	hsa_ops.hsa_amd_pointer_info = dlsym(hsa_handle,
-					      "hsa_amd_pointer_info");
+	hsa_ops.hsa_amd_pointer_info =
+		dlsym(hsa_handle, "hsa_amd_pointer_info");
 	if (!hsa_ops.hsa_amd_pointer_info) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_pointer_info\n");
@@ -877,7 +918,8 @@ static int rocr_hmem_dl_init(void)
 		dlsym(hsa_handle, "hsa_amd_deregister_deallocation_callback");
 	if (!hsa_ops.hsa_amd_dereg_dealloc_cb) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find hsa_amd_deregister_deallocation_callback\n");
+			"Failed to find "
+			"hsa_amd_deregister_deallocation_callback\n");
 		goto err;
 	}
 
@@ -885,20 +927,20 @@ static int rocr_hmem_dl_init(void)
 		dlsym(hsa_handle, "hsa_amd_register_deallocation_callback");
 	if (!hsa_ops.hsa_amd_reg_dealloc_cb) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find hsa_amd_register_deallocation_callback\n");
+			"Failed to find "
+			"hsa_amd_register_deallocation_callback\n");
 		goto err;
 	}
 
-	hsa_ops.hsa_amd_memory_lock = dlsym(hsa_handle,
-					     "hsa_amd_memory_lock");
+	hsa_ops.hsa_amd_memory_lock = dlsym(hsa_handle, "hsa_amd_memory_lock");
 	if (!hsa_ops.hsa_amd_memory_lock) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_memory_lock\n");
 		goto err;
 	}
 
-	hsa_ops.hsa_amd_memory_unlock = dlsym(hsa_handle,
-					       "hsa_amd_memory_unlock");
+	hsa_ops.hsa_amd_memory_unlock =
+		dlsym(hsa_handle, "hsa_amd_memory_unlock");
 	if (!hsa_ops.hsa_amd_memory_unlock) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_memory_unlock\n");
@@ -912,48 +954,48 @@ static int rocr_hmem_dl_init(void)
 		goto err;
 	}
 
-	hsa_ops.hsa_amd_ipc_memory_create= dlsym(hsa_handle,
-					"hsa_amd_ipc_memory_create");
+	hsa_ops.hsa_amd_ipc_memory_create =
+		dlsym(hsa_handle, "hsa_amd_ipc_memory_create");
 	if (!hsa_ops.hsa_amd_ipc_memory_create) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_ipc_memory_create\n");
 		goto err;
 	}
 
-	hsa_ops.hsa_amd_ipc_memory_attach = dlsym(hsa_handle,
-					"hsa_amd_ipc_memory_attach");
+	hsa_ops.hsa_amd_ipc_memory_attach =
+		dlsym(hsa_handle, "hsa_amd_ipc_memory_attach");
 	if (!hsa_ops.hsa_amd_ipc_memory_attach) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_ipc_memory_attach\n");
 		goto err;
 	}
 
-	hsa_ops.hsa_amd_ipc_memory_detach = dlsym(hsa_handle,
-					"hsa_amd_ipc_memory_detach");
+	hsa_ops.hsa_amd_ipc_memory_detach =
+		dlsym(hsa_handle, "hsa_amd_ipc_memory_detach");
 	if (!hsa_ops.hsa_amd_ipc_memory_detach) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_ipc_memory_detach\n");
 		goto err;
 	}
 
-	hsa_ops.hsa_signal_store_screlease = dlsym(hsa_handle,
-						   "hsa_signal_store_screlease");
+	hsa_ops.hsa_signal_store_screlease =
+		dlsym(hsa_handle, "hsa_signal_store_screlease");
 	if (!hsa_ops.hsa_signal_store_screlease) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_signal_store_screlease\n");
 		goto err;
 	}
 
-	hsa_ops.hsa_signal_load_scacquire = dlsym(hsa_handle,
-						  "hsa_signal_load_scacquire");
+	hsa_ops.hsa_signal_load_scacquire =
+		dlsym(hsa_handle, "hsa_signal_load_scacquire");
 	if (!hsa_ops.hsa_signal_load_scacquire) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_signal_load_scacquire\n");
 		goto err;
 	}
 
-	hsa_ops.hsa_amd_agents_allow_access = dlsym(hsa_handle,
-						    "hsa_amd_agents_allow_access");
+	hsa_ops.hsa_amd_agents_allow_access =
+		dlsym(hsa_handle, "hsa_amd_agents_allow_access");
 	if (!hsa_ops.hsa_amd_agents_allow_access) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_agents_allow_access\n");
@@ -1002,7 +1044,8 @@ static int rocr_hmem_dl_init(void)
 		goto err;
 	}
 
-	hsa_ops.hsa_agent_iterate_regions = dlsym(hsa_handle, "hsa_agent_iterate_regions");
+	hsa_ops.hsa_agent_iterate_regions =
+		dlsym(hsa_handle, "hsa_agent_iterate_regions");
 	if (!hsa_ops.hsa_agent_iterate_regions) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_agent_iterate_regions\n");
@@ -1017,14 +1060,16 @@ static int rocr_hmem_dl_init(void)
 	}
 
 #if HAVE_HSA_AMD_PORTABLE_EXPORT_DMABUF
-	hsa_ops.hsa_amd_portable_export_dmabuf = dlsym(hsa_handle, "hsa_amd_portable_export_dmabuf");
+	hsa_ops.hsa_amd_portable_export_dmabuf =
+		dlsym(hsa_handle, "hsa_amd_portable_export_dmabuf");
 	if (!hsa_ops.hsa_amd_portable_export_dmabuf) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_portable_export_dmabuf\n");
 		goto err;
 	}
 
-	hsa_ops.hsa_amd_portable_close_dmabuf = dlsym(hsa_handle, "hsa_amd_portable_close_dmabuf");
+	hsa_ops.hsa_amd_portable_close_dmabuf =
+		dlsym(hsa_handle, "hsa_amd_portable_close_dmabuf");
 	if (!hsa_ops.hsa_amd_portable_close_dmabuf) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_portable_close_dmabuf\n");
@@ -1056,13 +1101,12 @@ static int rocr_init_async_streams(void)
 	if (ipc_stream_fs)
 		return 0;
 
-	ipc_stream_fs = rocm_ipc_stream_fs_create(HSA_MAX_STREAMS,
-				NULL, NULL);
+	ipc_stream_fs = rocm_ipc_stream_fs_create(HSA_MAX_STREAMS, NULL, NULL);
 	if (!ipc_stream_fs)
 		return -FI_ENOMEM;
 
 	ipc_signal_fs = rocm_ipc_signal_fs_create(HSA_MAX_SIGNALS,
-				ofi_hsa_signal_create, NULL);
+						  ofi_hsa_signal_create, NULL);
 	if (!ipc_signal_fs)
 		return -FI_ENOMEM;
 
@@ -1077,12 +1121,14 @@ int rocr_hmem_init(void)
 	int ret;
 	int log_level;
 
-	fi_param_define(NULL, "rocr_d2h_threshold", FI_PARAM_SIZE_T,
+	fi_param_define(
+		NULL, "rocr_d2h_threshold", FI_PARAM_SIZE_T,
 		"Threshold for switching to hsa memcpy for device-to-host"
 		"  copies. (Default 16384");
 
 	fi_param_define(NULL, "hmem_rocr_use_dmabuf", FI_PARAM_BOOL,
-			"Use dma-buf for sharing buffer with hardware. (default: true)");
+			"Use dma-buf for sharing buffer with hardware. "
+			"(default: true)");
 
 	ret = rocr_hmem_dl_init();
 	if (ret != FI_SUCCESS)
@@ -1099,9 +1145,8 @@ int rocr_hmem_init(void)
 	memset(&rocr_agents, 0, sizeof(rocr_agents));
 
 	hsa_ret = ofi_hsa_iterate_agents(rocr_hsa_agent_callback, NULL);
-	if (hsa_ret != HSA_STATUS_SUCCESS &&
-	    hsa_ret != HSA_STATUS_INFO_BREAK)
-	    goto fail;
+	if (hsa_ret != HSA_STATUS_SUCCESS && hsa_ret != HSA_STATUS_INFO_BREAK)
+		goto fail;
 
 	return 0;
 
@@ -1133,7 +1178,7 @@ int rocr_hmem_cleanup(void)
 
 	if (ipc_signal_fs)
 		rocm_ipc_signal_fs_destroy(ipc_signal_fs, HSA_MAX_SIGNALS,
-					ofi_hsa_signal_destroy, NULL);
+					   ofi_hsa_signal_destroy, NULL);
 
 	if (ipc_stream_fs)
 		rocm_ipc_stream_fs_free(ipc_stream_fs);
@@ -1195,7 +1240,7 @@ int rocr_dev_register(const void *addr, size_t size, uint64_t *handle)
 	struct rocr_dev_reg_handle *rocr_handle;
 	hsa_status_t hsa_ret;
 
-	hsa_ret = ofi_hsa_amd_pointer_info((void *)addr, &hsa_info, NULL, NULL,
+	hsa_ret = ofi_hsa_amd_pointer_info((void *) addr, &hsa_info, NULL, NULL,
 					   NULL);
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -1275,7 +1320,8 @@ static bool rocr_is_dmabuf_supported(void)
 
 	/* HSA_AMD_SYSTEM_INFO_DMABUF_SUPPORTED = 0x204, we use the number
 	 * instead of var name for backward compatibility reasons. */
-	hsa_ret = hsa_ops.hsa_system_get_info((hsa_system_info_t) 0x204, &dmabuf_support);
+	hsa_ret = hsa_ops.hsa_system_get_info((hsa_system_info_t) 0x204,
+					      &dmabuf_support);
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to retrieve system info (dmabuf): %s\n",
@@ -1300,12 +1346,13 @@ static bool rocr_is_dmabuf_supported(void)
 		}
 
 		snprintf(kernel_conf_file, sizeof(kernel_conf_file),
-			"/boot/config-%s", utsname.release);
+			 "/boot/config-%s", utsname.release);
 		fp = fopen(kernel_conf_file, "r");
 
 		if (fp == NULL) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
-				"DMABUF support: could not open kernel conf file %s error\n",
+				"DMABUF support: could not open kernel conf "
+				"file %s error\n",
 				kernel_conf_file);
 			goto out;
 		}
@@ -1328,7 +1375,7 @@ out:
 }
 
 int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
-			     uint64_t *offset)
+			    uint64_t *offset)
 {
 	static bool supported = false, checked = false;
 
@@ -1345,7 +1392,8 @@ int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
 	/* maybe need base addr calculation here? empirically the hsa call
 	 * here does it internally
 	 */
-	hsa_ret = hsa_ops.hsa_amd_portable_export_dmabuf(addr, size, dmabuf_fd, offset);
+	hsa_ret = hsa_ops.hsa_amd_portable_export_dmabuf(addr, size, dmabuf_fd,
+							 offset);
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to export dmabuf handle: %s\n",
@@ -1384,8 +1432,7 @@ int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
 	return -FI_ENOSYS;
 }
 
-int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
-		     size_t size)
+int rocr_copy_to_dev(uint64_t device, void *dest, const void *src, size_t size)
 {
 	return -FI_ENOSYS;
 }
@@ -1445,14 +1492,12 @@ int rocr_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
 	return -FI_ENOSYS;
 }
 
-int rocr_create_async_copy_event(uint64_t device,
-				 ofi_hmem_async_event_t *event)
+int rocr_create_async_copy_event(uint64_t device, ofi_hmem_async_event_t *event)
 {
 	return -FI_ENOSYS;
 }
 
-int rocr_free_async_copy_event(uint64_t device,
-			       ofi_hmem_async_event_t event)
+int rocr_free_async_copy_event(uint64_t device, ofi_hmem_async_event_t event)
 {
 	return -FI_ENOSYS;
 }
@@ -1497,7 +1542,7 @@ int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 }
 
 int rocr_hmem_get_dmabuf_fd(const void *addr, uint64_t size, int *dmabuf_fd,
-			     uint64_t *offset)
+			    uint64_t *offset)
 {
 	return -FI_ENOSYS;
 }

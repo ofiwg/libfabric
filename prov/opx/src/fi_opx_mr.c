@@ -224,13 +224,12 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		hmem_iface  = attr->iface;
 		hmem_device = opx_hmem_get_attr_device(hmem_iface, attr);
 
-		uint64_t detected_device	 = 0UL;
-		uint64_t detected_unified = 0UL;
-		enum fi_hmem_iface detected_iface	 = opx_hmem_get_ptr_iface(iov->iov_base, &detected_device, &detected_unified);
-		// TODO Remove '&& hmem_iface != FI_HMEM_ROCR' when opx_hmem_get_ptr_iface is
-		// fixed to return the correct device for FI_HMEM_ROCR.
-		if (detected_iface != hmem_iface || detected_unified ||
-		    (detected_device != hmem_device && hmem_iface != FI_HMEM_ROCR)) {
+		uint64_t	   detected_device  = 0UL;
+		uint64_t	   detected_unified = 0UL;
+		enum fi_hmem_iface detected_iface;
+
+		detected_iface = opx_hmem_get_ptr_iface(iov->iov_base, &detected_device, &detected_unified);
+		if (detected_iface != hmem_iface || detected_unified || detected_device != hmem_device) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 				"FI_HMEM_DEVICE_ONLY attr does not match detected HMEM memory: attr iface=%d device=%lu, detected iface=%d device=%lu unified=%lu\n",
 				hmem_iface, hmem_device, detected_iface, detected_device, detected_unified);
