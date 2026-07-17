@@ -90,8 +90,7 @@ static inline void ofi_bitmask_set_all(struct ofi_bitmask *mask)
 		mask->bytes[bytesize - 1] >>= 8 - tail_bits;
 }
 
-#if !defined(__has_builtin) || !__has_builtin(__builtin_ctzll) || \
-	!__has_builtin(__builtin_ctz)
+#if !defined(__GNUC__) && !defined(__clang__)
 #error "This file requires GCC/Clang builtins (__builtin_ctzll, __builtin_ctz)!"
 #endif
 static inline size_t ofi_bitmask_get_lsbset(const struct ofi_bitmask *mask)
