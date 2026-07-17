@@ -260,8 +260,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 	if (op == FI_ATOMIC_READ) {
 		assert(!is_compare);
 		assert(datatype < OFI_DATATYPE_LAST);
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			 "===================================== ATOMIC READ (begin)\n");
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "===================================== ATOMIC READ (begin)\n");
 		struct fi_opx_hmem_iov fetch_iov;
 		uint64_t	       hmem_handle;
 		opx_hmem_iov_init(fetch_vaddr, buf_len, NULL, &fetch_iov, &hmem_handle);
@@ -270,16 +270,16 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 		opx_readv_internal(opx_ep, &fetch_iov, 1, &hmem_handle, opx_dst_addr, &addr, &key, opx_tx->op_flags,
 				   opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype, op, FI_OPX_HFI_DPUT_OPCODE_GET,
 				   lock_required, caps, reliability, hfi1_type);
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			 "===================================== ATOMIC READ (end)\n");
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "===================================== ATOMIC READ (end)\n");
 		return count;
 	}
 
 	if (is_fetch) {
 		OPX_TRACE_ATOMIC_BEGIN(is_compare ? OPX_TRACE_EVENT_ATOMIC_CSWAP : OPX_TRACE_EVENT_ATOMIC_FETCH, addr,
 				       buf_len);
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			 "===================================== ATOMIC %s (begin)\n", is_compare ? "CAS" : "FETCH");
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "===================================== ATOMIC %s (begin)\n", is_compare ? "CAS" : "FETCH");
 		cc->cntr = opx_ep->read_cntr;
 
 		const uint64_t	       is_shm = fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr);
@@ -322,8 +322,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 						  opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype, op, lock_required,
 						  caps, reliability, is_hmem, is_shm, hfi1_type, ctx_sharing);
 		}
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC %s (end)\n",
-			 is_compare ? "CAS" : "FETCH");
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "===================================== ATOMIC %s (end)\n", is_compare ? "CAS" : "FETCH");
 		OPX_TRACE_ATOMIC_END_SUCCESS(is_compare ? OPX_TRACE_EVENT_ATOMIC_CSWAP : OPX_TRACE_EVENT_ATOMIC_FETCH,
 					     addr, buf_len);
 
@@ -334,7 +334,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 	}
 
 	OPX_TRACE_ATOMIC_BEGIN(OPX_TRACE_EVENT_ATOMIC_WRITE, addr, buf_len);
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC WRITE (begin)\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== ATOMIC WRITE (begin)\n");
 	cc->cntr = opx_ep->write_cntr;
 	struct fi_opx_hmem_iov buf_iov;
 	uint64_t	       handle;
@@ -342,7 +343,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 
 	opx_write_internal(opx_ep, &buf_iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
 			   opx_tx->op_flags, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC WRITE (end)\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== ATOMIC WRITE (end)\n");
 	OPX_TRACE_ATOMIC_END_SUCCESS(OPX_TRACE_EVENT_ATOMIC_WRITE, addr, buf_len);
 
 	return count;
@@ -882,8 +883,8 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	cc->hit_zero	       = fi_opx_hit_zero;
 	cc->cntr	       = opx_ep->write_cntr;
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		 "===================================== ATOMIC INJECT WRITE (begin)\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== ATOMIC INJECT WRITE (begin)\n");
 
 	struct fi_opx_hmem_iov iov;
 	uint64_t	       handle;
@@ -893,8 +894,8 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
 			   opx_tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		 "===================================== ATOMIC INJECT WRITE (end)\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== ATOMIC INJECT WRITE (end)\n");
 	return 0;
 }
 

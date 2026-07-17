@@ -896,6 +896,30 @@ static int opx_hfi1_sysfs_get_chip_major(int unit)
 	return (int) chip_major;
 }
 
+static inline bool opx_should_apply_gid_filter(int gid_filter_count, int dual_plane_env, bool is_cyr)
+{
+	/* Single-GID filter always pins the (only) context to that specific GID/subnet,
+	 * independent of chip type or _FI_OPX_DUAL_PLANE_; always apply. */
+	if (gid_filter_count == 1) {
+		return true;
+	}
+
+	/* User explicitly enabled dual-plane: always apply GID filter */
+	if (dual_plane_env == 1) {
+		return true;
+	}
+
+	/* User explicitly disabled dual-plane: skip GID filter */
+	if (dual_plane_env == 0) {
+		return false;
+	}
+
+	/* dual_plane_env == -1 (not set): probe chip version via sysfs.
+	 * Apply GID filter only for CYR hardware (dual-plane capable).
+	 * WFR and JKR do not support dual-plane, so skip the filter. */
+	return is_cyr;
+}
+
 /*
  * Open a context on the first HFI that shares our process' NUMA node.
  * If no HFI shares our NUMA node, grab the first active HFI.
@@ -1078,25 +1102,24 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 
 			if (gid_filter_count > 0) {
 				/* Determine whether to apply the GID filter for this HFI_SELECT unit.
+				 * - gid_filter_count == 1: single-GID filter always pins the (only)
+				 *   context to that specific GID/subnet, independent of chip type or
+				 *   _FI_OPX_DUAL_PLANE_; always apply.
 				 * - dual_plane_env == 1: user explicitly enabled dual-plane; apply filter.
 				 * - dual_plane_env == 0: user explicitly disabled dual-plane; skip filter.
 				 * - dual_plane_env == -1 (not set): probe chip type from the just-opened
 				 *   context; apply filter only on CYR (dual-plane capable) hardware. */
-				bool apply_filter;
-				if (dual_plane_env == 1) {
-					apply_filter = true;
-				} else if (dual_plane_env == 0) {
-					apply_filter = false;
-				} else {
-					/* dual_plane_env == -1: use chip type from the opened context */
-					enum opx_hfi1_type chip_type = internal->context.hfi1_type;
-					apply_filter		     = (chip_type & OPX_HFI1_CYR) ? true : false;
-					FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
-						"HFI_SELECT unit %d: chip_type=0x%x, GID filter %s\n", hfi_unit_number,
-						chip_type, apply_filter ? "applied" : "skipped (not CYR)");
-				}
+				bool apply_filter =
+					opx_should_apply_gid_filter(gid_filter_count, dual_plane_env,
+								    (internal->context.hfi1_type & OPX_HFI1_CYR) != 0);
 
-				if (apply_filter) {
+				if (!apply_filter) {
+					if (dual_plane_env == -1 && gid_filter_count != 1) {
+						FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+							"HFI_SELECT unit %d: chip_type=0x%x (not CYR), skipping GID filter\n",
+							hfi_unit_number, internal->context.hfi1_type);
+					}
+				} else {
 					/* The context is already open; ctrl tells us exactly which
 					 * unit and port were selected.  Use that GID directly. */
 					uint64_t sel_gid_hi, sel_gid_lo;
@@ -1274,28 +1297,17 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		if (gid_filter_count > 0 && hfi_candidates_count > 0) {
 			int filtered_count = 0;
 			for (int i = 0; i < hfi_candidates_count; i++) {
-				bool apply_filter;
+				int  chip_major = opx_hfi1_sysfs_get_chip_major(hfi_candidates[i]);
+				bool apply_filter =
+					opx_should_apply_gid_filter(gid_filter_count, dual_plane_env,
+								    (chip_major == OPX_HFI1_CCE_CSR_CHIP_MAJOR_CYR));
 
-				if (dual_plane_env == 1) {
-					/* User explicitly enabled dual-plane: always apply GID filter */
-					apply_filter = true;
-				} else if (dual_plane_env == 0) {
-					/* User explicitly disabled dual-plane: skip GID filter */
-					apply_filter = false;
-				} else {
-					/* dual_plane_env == -1 (not set): probe chip version via sysfs.
-					 * Apply GID filter only for CYR hardware (dual-plane capable).
-					 * WFR and JKR do not support dual-plane, so skip the filter. */
-					int chip_major = opx_hfi1_sysfs_get_chip_major(hfi_candidates[i]);
-					apply_filter   = (chip_major == OPX_HFI1_CCE_CSR_CHIP_MAJOR_CYR);
-					if (!apply_filter) {
+				if (!apply_filter) {
+					if (dual_plane_env == -1 && gid_filter_count != 1) {
 						FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
 							"HFI unit %d: chip_major=%d (not CYR), skipping GID filter\n",
 							hfi_candidates[i], chip_major);
 					}
-				}
-
-				if (!apply_filter) {
 					hfi_candidates[filtered_count] = hfi_candidates[i];
 					hfi_distances[filtered_count]  = hfi_distances[i];
 					hfi_freectxs[filtered_count]   = hfi_freectxs[i];
@@ -1458,12 +1470,15 @@ static bool gid_in_filter(uint64_t gid_hi, const uint64_t *filter, int count)
 	return false;
 }
 
-/* Parse _FI_OPX_MULTI_HFI_FILTER_: exactly two comma-separated hex gid_hi values.
- * Returns count (always 2) on success, 0 on any error. */
-#define OPX_PLANE_FILTER_REQUIRED_COUNT 2
+/* Parse _FI_OPX_MULTI_HFI_FILTER_: one or two comma-separated hex gid_hi values.
+ * A single GID selects that plane and forces single-plane mode (dual-plane
+ * disabled); two GIDs behave as before. Returns count (1 or 2) on success,
+ * 0 on any error. */
+#define OPX_PLANE_FILTER_MIN_COUNT 1
+#define OPX_PLANE_FILTER_MAX_COUNT 2
 int parse_plane_gid_filter(const char *filter_str, uint64_t *gid_values, const int max_values)
 {
-	if (!filter_str || !gid_values || max_values < OPX_PLANE_FILTER_REQUIRED_COUNT) {
+	if (!filter_str || !gid_values || max_values < OPX_PLANE_FILTER_MIN_COUNT) {
 		FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
 			"_FI_OPX_MULTI_HFI_FILTER_ parser called with invalid arguments\n");
 		return 0;
@@ -1487,9 +1502,9 @@ int parse_plane_gid_filter(const char *filter_str, uint64_t *gid_values, const i
 
 		if (count >= max_values) {
 			FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
-				"_FI_OPX_MULTI_HFI_FILTER_ expects exactly %d comma-separated hex values, "
+				"_FI_OPX_MULTI_HFI_FILTER_ expects at most %d comma-separated hex values, "
 				"but more were provided in '%s'\n",
-				OPX_PLANE_FILTER_REQUIRED_COUNT, filter_str);
+				OPX_PLANE_FILTER_MAX_COUNT, filter_str);
 			free(str);
 			return 0;
 		}
@@ -1511,14 +1526,15 @@ int parse_plane_gid_filter(const char *filter_str, uint64_t *gid_values, const i
 
 	free(str);
 
-	if (count != OPX_PLANE_FILTER_REQUIRED_COUNT) {
+	if (count < OPX_PLANE_FILTER_MIN_COUNT || count > OPX_PLANE_FILTER_MAX_COUNT) {
 		FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
-			"_FI_OPX_MULTI_HFI_FILTER_ requires exactly %d GID values, got %d\n",
-			OPX_PLANE_FILTER_REQUIRED_COUNT, count);
+			"_FI_OPX_MULTI_HFI_FILTER_ requires %d or %d GID values, got %d\n", OPX_PLANE_FILTER_MIN_COUNT,
+			OPX_PLANE_FILTER_MAX_COUNT, count);
 		return 0;
 	}
 
-	if (gid_values[0] == gid_values[1]) {
+	/* Duplicate check only makes sense when two GIDs were provided. */
+	if (count == 2 && gid_values[0] == gid_values[1]) {
 		FI_WARN(&fi_opx_provider, FI_LOG_EP_CTRL,
 			"_FI_OPX_MULTI_HFI_FILTER_ values must differ; got duplicate 0x%016lx\n", gid_values[0]);
 		return 0;
