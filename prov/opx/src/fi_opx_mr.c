@@ -171,11 +171,21 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	}
 
 	if ((flags & (FI_MR_LOCAL | FI_MR_RAW | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_MMU_NOTIFY |
-		      FI_MR_RMA_EVENT | FI_MR_ENDPOINT | FI_MR_HMEM | FI_MR_DMABUF)) != flags) {
+		      FI_MR_RMA_EVENT | FI_MR_ENDPOINT | FI_MR_HMEM | FI_MR_DMABUF | FI_HMEM_DEVICE_ONLY)) != flags) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Unsupported flags specified, client requested %lu\n", flags);
 		errno = FI_EINVAL;
 		return -errno;
 	}
+
+#ifndef OPX_HMEM
+	if (flags & FI_HMEM_DEVICE_ONLY) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+			"FI_HMEM_DEVICE_ONLY requires OPX HMEM support, but OPX was built without HMEM\n");
+		OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) FI_EINVAL, 0);
+		errno = FI_EINVAL;
+		return -errno;
+	}
+#endif
 
 #if HAVE_HFISVC
 	/* HFISVC pins the memory region eagerly at registration time via the
@@ -202,12 +212,39 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	OPX_TRACE_MR_BEGIN(OPX_TRACE_EVENT_MR_REG, (uint64_t) iov->iov_base, iov->iov_len);
 
 #ifdef OPX_HMEM
-	uint64_t hmem_unified;
-	hmem_iface = opx_hmem_get_ptr_iface(iov->iov_base, &hmem_device, &hmem_unified);
+	uint64_t hmem_unified = 0UL;
+	if (flags & FI_HMEM_DEVICE_ONLY) {
+		if (!attr || !opx_hmem_is_device_iface(attr->iface)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+				"FI_HMEM_DEVICE_ONLY requires a device HMEM iface, client requested iface %d\n",
+				attr ? attr->iface : FI_HMEM_SYSTEM);
+			errno = FI_EINVAL;
+			return -errno;
+		}
+		hmem_iface  = attr->iface;
+		hmem_device = opx_hmem_get_attr_device(hmem_iface, attr);
+
+		uint64_t detected_device	 = 0UL;
+		uint64_t detected_unified = 0UL;
+		enum fi_hmem_iface detected_iface	 = opx_hmem_get_ptr_iface(iov->iov_base, &detected_device, &detected_unified);
+		// TODO Remove '&& hmem_iface != FI_HMEM_ROCR' when opx_hmem_get_ptr_iface is
+		// fixed to return the correct device for FI_HMEM_ROCR.
+		if (detected_iface != hmem_iface || detected_unified ||
+		    (detected_device != hmem_device && hmem_iface != FI_HMEM_ROCR)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+				"FI_HMEM_DEVICE_ONLY attr does not match detected HMEM memory: attr iface=%d device=%lu, detected iface=%d device=%lu unified=%lu\n",
+				hmem_iface, hmem_device, detected_iface, detected_device, detected_unified);
+			errno = FI_EINVAL;
+			return -errno;
+		}
+	} else {
+		hmem_iface = opx_hmem_get_ptr_iface(iov->iov_base, &hmem_device, &hmem_unified);
+	}
 
 	if ((hmem_iface == FI_HMEM_CUDA || hmem_iface == FI_HMEM_ROCR) && (flags & FI_MR_DMABUF) == 0) {
 		struct ofi_mr_entry *entry;
 		struct ofi_mr_info   info = {.iface	   = hmem_iface,
+					     .hmem_unified = hmem_unified ? 1 : 0,
 					     .device	   = hmem_device,
 					     .iov.iov_base = iov->iov_base,
 					     .iov.iov_len  = iov->iov_len,
@@ -317,20 +354,13 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	}
 
 #ifdef OPX_HMEM
-	switch (hmem_iface) {
-	case FI_HMEM_CUDA:
-		opx_mr->attr.device.cuda = (int) hmem_device;
-		int err			 = cuda_set_sync_memops((void *) iov->iov_base);
+	opx_hmem_set_mr_device(&opx_mr->attr, hmem_iface, hmem_device);
+	if (hmem_iface == FI_HMEM_CUDA) {
+		int err = cuda_set_sync_memops((void *) iov->iov_base);
 		if (OFI_UNLIKELY(err != 0)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "cuda_set_sync_memops(%p) FAILED (returned %d)\n",
 				(void *) iov->iov_base, err);
 		}
-		break;
-	case FI_HMEM_ZE:
-		opx_mr->attr.device.ze = (int) hmem_device;
-		break;
-	default:
-		opx_mr->attr.device.reserved = hmem_device;
 	}
 	opx_mr->attr.iface   = (enum fi_hmem_iface) hmem_iface;
 	opx_mr->hmem_unified = hmem_unified ? 1 : 0;
