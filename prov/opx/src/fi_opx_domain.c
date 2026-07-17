@@ -862,48 +862,36 @@ int opx_domain_hfisvc_init(struct fi_opx_domain *domain)
 
 	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] libhfi1verbs found\n");
 
-	domain->hfisvc.initialize = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_initialize");
-	if (domain->hfisvc.initialize == NULL) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize not found\n");
-		rc = -FI_ENODEV;
-		goto done;
-	}
+#define OPX_HFISVC_DLSYM(_member, _symbol)                                                              \
+	do {                                                                                            \
+		domain->hfisvc._member = dlsym(domain->hfisvc.libhfi1verbs, _symbol);                   \
+		if (domain->hfisvc._member == NULL) {                                                   \
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] %s not found\n", _symbol); \
+			rc = -FI_ENODEV;                                                                \
+			goto done;                                                                      \
+		}                                                                                       \
+	} while (0)
 
-	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFISVC] hfisvc_client_initialize found\n");
+	OPX_HFISVC_DLSYM(initialize, "hfisvc_client_initialize");
+	OPX_HFISVC_DLSYM(finalize, "hfisvc_client_finalize");
+	OPX_HFISVC_DLSYM(get_client_key, "hfisvc_client_key");
+	OPX_HFISVC_DLSYM(command_queue_open, "hfisvc_client_command_queue_open");
+	OPX_HFISVC_DLSYM(command_queue_close, "hfisvc_client_command_queue_close");
+	OPX_HFISVC_DLSYM(completion_queue_open, "hfisvc_client_completion_queue_open");
+	OPX_HFISVC_DLSYM(completion_queue_close, "hfisvc_client_completion_queue_close");
+	OPX_HFISVC_DLSYM(cq_read, "hfisvc_client_cq_read");
+	OPX_HFISVC_DLSYM(cmd_dma_access_once_va, "hfisvc_client_cmd_dma_access_once_va");
+	OPX_HFISVC_DLSYM(cmd_dma_access_once, "hfisvc_client_cmd_dma_access_once");
+	OPX_HFISVC_DLSYM(cmd_rdma_read, "hfisvc_client_cmd_rdma_read");
+	OPX_HFISVC_DLSYM(cmd_rdma_read_va, "hfisvc_client_cmd_rdma_read_va");
+	OPX_HFISVC_DLSYM(cmd_rdma_write, "hfisvc_client_cmd_rdma_write");
+	OPX_HFISVC_DLSYM(cmd_mr_open, "hfisvc_client_cmd_mr_open");
+	OPX_HFISVC_DLSYM(cmd_mr_close, "hfisvc_client_cmd_mr_close");
+	OPX_HFISVC_DLSYM(cmd_dma_access_enable, "hfisvc_client_cmd_dma_access_enable");
+	OPX_HFISVC_DLSYM(cmd_dma_access_disable, "hfisvc_client_cmd_dma_access_disable");
+	OPX_HFISVC_DLSYM(doorbell, "hfisvc_client_doorbell");
 
-	domain->hfisvc.finalize		   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_finalize");
-	domain->hfisvc.get_client_key	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_key");
-	domain->hfisvc.command_queue_open  = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_open");
-	domain->hfisvc.command_queue_close = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_command_queue_close");
-	domain->hfisvc.completion_queue_open =
-		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_completion_queue_open");
-	domain->hfisvc.completion_queue_close =
-		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_completion_queue_close");
-	domain->hfisvc.cq_read = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cq_read");
-	domain->hfisvc.cmd_dma_access_once_va =
-		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_once_va");
-	domain->hfisvc.cmd_dma_access_once = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_once");
-	domain->hfisvc.cmd_rdma_read	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_read");
-	domain->hfisvc.cmd_rdma_read_va	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_read_va");
-	domain->hfisvc.cmd_rdma_write	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_rdma_write");
-	domain->hfisvc.cmd_mr_open	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_mr_open");
-	domain->hfisvc.cmd_mr_close	   = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_mr_close");
-	domain->hfisvc.cmd_dma_access_enable =
-		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_enable");
-	domain->hfisvc.cmd_dma_access_disable =
-		dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_cmd_dma_access_disable");
-	domain->hfisvc.doorbell = dlsym(domain->hfisvc.libhfi1verbs, "hfisvc_client_doorbell");
-
-	assert(domain->hfisvc.finalize != NULL);
-	assert(domain->hfisvc.get_client_key != NULL);
-	assert(domain->hfisvc.command_queue_open != NULL);
-	assert(domain->hfisvc.command_queue_close != NULL);
-	assert(domain->hfisvc.completion_queue_open != NULL);
-	assert(domain->hfisvc.completion_queue_close != NULL);
-	assert(domain->hfisvc.cq_read != NULL);
-	assert(domain->hfisvc.cmd_dma_access_once_va != NULL);
-	assert(domain->hfisvc.cmd_rdma_read_va != NULL);
-	assert(domain->hfisvc.doorbell != NULL);
+#undef OPX_HFISVC_DLSYM
 
 	/* Initialize the primary context (ctxs[0]) before opening queues. */
 	int ret = opx_domain_hfisvc_init_ctx(domain, 0);
