@@ -54,13 +54,16 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 			query_name = "ofi_async_copy_query";
 			status	   = ofi_async_copy_query(FI_HMEM_ROCR, params->rocr_async_event);
 		} else if (iface == FI_HMEM_CUDA) {
-			query_name = "opx_hmem_event_query";
-			status	   = opx_hmem_event_query(FI_HMEM_CUDA, params->hmem_event);
+			query_name = "opx_hmem_cuda_event_query";
+#if HAVE_CUDA
+			status = opx_hmem_cuda_event_query(params->cuda_event);
 			if (status == OPX_HMEM_SUCCESS) {
 				status = FI_SUCCESS;
 			} else if (status == OPX_HMEM_ERROR_NOT_READY) {
 				status = -FI_EAGAIN;
-			} else {
+			} else
+#endif
+			{
 				status = -FI_EIO;
 			}
 		} else {
@@ -77,7 +80,9 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 							  params->rocr_async_event);
 				params->rocr_async_event = NULL;
 			} else {
-				opx_hmem_event_destroy(FI_HMEM_CUDA, &params->hmem_event);
+#if HAVE_CUDA
+				opx_hmem_cuda_event_destroy(&params->cuda_event);
+#endif
 			}
 
 			ofi_mr_cache_delete(opx_ep->domain->hmem_domain->ipc_cache, params->cache_entry);
@@ -94,7 +99,9 @@ int opx_ipc_send_cts(union fi_opx_hfi1_deferred_work *work, const enum opx_hfi1_
 							  params->rocr_async_event);
 				params->rocr_async_event = NULL;
 			} else {
-				opx_hmem_event_destroy(FI_HMEM_CUDA, &params->hmem_event);
+#if HAVE_CUDA
+				opx_hmem_cuda_event_destroy(&params->cuda_event);
+#endif
 			}
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"FATAL ERROR, %s failed: status=%d iface=%lu device=%lu len=%lu. Abort\n", query_name,
