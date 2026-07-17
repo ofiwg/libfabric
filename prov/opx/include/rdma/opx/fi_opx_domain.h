@@ -437,37 +437,6 @@ static inline bool opx_mr_hfisvc_close_in_progress(const struct fi_opx_mr *opx_m
 }
 
 __OPX_FORCE_INLINE__
-void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain);
-
-static inline int opx_mr_hfisvc_enqueue_deferred_close(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr,
-						       bool *suppress_free)
-{
-	assert(opx_mr != NULL);
-
-	bool needs_close = opx_mr_hfisvc_needs_close(opx_mr);
-	*suppress_free	 = needs_close || opx_mr_hfisvc_close_in_progress(opx_mr);
-
-	if (!needs_close) {
-		return FI_SUCCESS;
-	}
-
-	if (opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED) {
-		OPX_HFISVC_DEBUG_LOG("Closing cached mr opx_mr=%p (hfisvc.state=%d --> %d)\n", opx_mr,
-				     opx_mr->hfisvc.state, opx_mr->hfisvc.state << OPX_MR_HFISVC_STATE_CLOSE_SHIFT);
-		opx_mr->hfisvc.state <<= OPX_MR_HFISVC_STATE_CLOSE_SHIFT;
-		opx_domain_hfisvc_poll(opx_mr->domain);
-	}
-
-	int ret = opx_domain_deferred_work_enqueue_close(opx_domain, opx_mr);
-	if (ret) {
-		// opx_mr leaked if close was not enqueued, don't free it, it could still be in use
-		return ret;
-	}
-
-	return FI_SUCCESS;
-}
-
-__OPX_FORCE_INLINE__
 void opx_domain_deferred_work_do(struct fi_opx_domain *opx_domain)
 {
 	struct opx_domain_deferred_work *prev_item = NULL;
