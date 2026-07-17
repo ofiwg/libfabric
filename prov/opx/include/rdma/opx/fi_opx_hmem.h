@@ -371,321 +371,166 @@ static const unsigned OPX_HMEM_OFI_MEM_TYPE[4] = {
 
 #endif // OPX_HMEM
 
-// TODO: Consider removing union opx_hmem_stream/union opx_hmem_event. They are
-// only used by CUDA now, so CUstream/CUevent can be used directly.  Rename
-// opx_hmem_xxx functions to cuda_xxx (removing iface/device parameters), or
-// consider implementing async functions so CUDA can use ofi_async_xxx instead
-// of having separate cuda_xxx functions.
-union opx_hmem_stream {
-	uint64_t *handle;
 #if HAVE_CUDA
-	CUstream cu_stream;
+#ifdef OPX_HMEM
+#include "rdma/opx/opx_hmem_domain.h"
 #endif
-};
-
-union opx_hmem_event {
-	uint64_t *handle;
-#if HAVE_CUDA
-	CUevent cu_event;
-#endif
-};
 
 __OPX_FORCE_INLINE__
-void opx_hmem_dbg_trace(enum fi_hmem_iface iface, char *string, int result)
+void opx_hmem_cuda_dbg_trace(char *string, CUresult result)
 {
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		const char *error_string = NULL;
-		ofi_cuGetErrorString(result, &error_string);
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s CUresult=%d (%s)\n", string, result,
-			     error_string ? error_string : "unknown error");
-		return;
-	}
-#endif
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s result=%d with invalid iface (%d)\n", string, result,
-		     iface);
+	const char *error_string = NULL;
+
+	ofi_cuGetErrorString(result, &error_string);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s CUresult=%d (%s)\n", string, result,
+		     error_string ? error_string : "unknown error");
 }
 
 __OPX_FORCE_INLINE__
-void opx_hmem_warn_trace(enum fi_hmem_iface iface, char *string, int result)
+void opx_hmem_cuda_warn_trace(char *string, CUresult result)
 {
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		const char *error_string = NULL;
-		ofi_cuGetErrorString(result, &error_string);
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "%s CUresult=%d (%s)\n", string, result,
-			error_string ? error_string : "unknown error");
-		return;
-	}
-#endif
-	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "%s result=%d with invalid iface (%d)\n", string, result, iface);
+	const char *error_string = NULL;
+
+	ofi_cuGetErrorString(result, &error_string);
+	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "%s CUresult=%d (%s)\n", string, result,
+		error_string ? error_string : "unknown error");
 }
 
-/**
- * @brief Wait for the oustanding GPU operations on the stream to complete
- *
- * @param stream The opx stream to be synchronized
- */
 __OPX_FORCE_INLINE__
-void opx_hmem_stream_synchronize(enum fi_hmem_iface iface, union opx_hmem_stream *stream)
+void opx_hmem_cuda_stream_synchronize(CUstream stream)
 {
-	int result = OPX_HMEM_ERROR;
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		result = ofi_cuStreamSynchronize(stream->cu_stream);
-	}
-#endif
+	CUresult result = ofi_cuStreamSynchronize(stream);
+
 	if (result) {
-		opx_hmem_warn_trace(iface, "Error synchronizing the stream", result);
+		opx_hmem_cuda_warn_trace("Error synchronizing the CUDA stream", result);
 		abort();
 	}
 }
 
-/**
- * @brief Create a stream for GPU operations to complete
- *
- * @param stream Pointer to the opx stream that was created
- * @return 0 on success, -1 on failure.
- */
 __OPX_FORCE_INLINE__
-int opx_hmem_stream_create(enum fi_hmem_iface iface, union opx_hmem_stream **stream)
+int opx_hmem_cuda_stream_create(CUstream *stream)
 {
-	int		       result	  = OPX_HMEM_ERROR;
-	union opx_hmem_stream *new_stream = (union opx_hmem_stream *) calloc(1, sizeof(*new_stream));
-	if (OFI_UNLIKELY(!new_stream)) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "Error allocating memory for HMEM stream\n");
-		return OPX_HMEM_ERROR;
-	}
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		result = ofi_cuStreamCreate(&new_stream->cu_stream, CU_STREAM_NON_BLOCKING);
-	}
-#endif
+	CUresult result = ofi_cuStreamCreate(stream, CU_STREAM_NON_BLOCKING);
+
 	if (result) {
-		opx_hmem_dbg_trace(iface, "Error creating the HMEM stream", result);
-		free(new_stream);
+		opx_hmem_cuda_dbg_trace("Error creating the CUDA stream", result);
 		return OPX_HMEM_ERROR;
 	}
-	*stream = new_stream;
 	return OPX_HMEM_SUCCESS;
 }
 
-/**
- * @brief Destroy the stream used for GPU operations
- *
- * @param stream The opx stream to destroy
- */
 __OPX_FORCE_INLINE__
-void opx_hmem_stream_destroy(enum fi_hmem_iface iface, union opx_hmem_stream *stream)
+void opx_hmem_cuda_stream_destroy(CUstream stream)
 {
 	if (stream) {
-		opx_hmem_stream_synchronize(iface, stream);
-#if HAVE_CUDA
-		if (iface == FI_HMEM_CUDA) {
-			ofi_cuStreamDestroy(stream->cu_stream);
-		}
-#endif
-		free(stream);
+		opx_hmem_cuda_stream_synchronize(stream);
+		ofi_cuStreamDestroy(stream);
 	}
 }
 
-#ifdef OPX_HMEM
-/**
- * @brief Create an event to record in order to sync GPU operations on a stream
- *
- * @param domain Pointer to the opx domain containing the event pool for allocation
- * @param event Pointer to the opx event that was created
- * @return 0 on success, -1 on failure.
- */
 __OPX_FORCE_INLINE__
-int opx_hmem_event_create(enum fi_hmem_iface iface, struct opx_hmem_domain *domain, union opx_hmem_event **event)
+int opx_hmem_cuda_event_create(CUevent *event)
 {
-	int		      result	= OPX_HMEM_ERROR;
-	union opx_hmem_event *new_event = ofi_buf_alloc(domain->hmem_stream.event_pool);
-	if (OFI_UNLIKELY(!new_event)) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "Error allocating memory for HMEM event\n");
-		return OPX_HMEM_ERROR;
-	}
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		result = ofi_cuEventCreate(&new_event->cu_event, CU_EVENT_DISABLE_TIMING);
-	}
-#endif
+	CUresult result = ofi_cuEventCreate(event, CU_EVENT_DISABLE_TIMING);
+
 	if (result) {
-		opx_hmem_dbg_trace(iface, "Error creating the event", result);
-		OPX_BUF_FREE(new_event);
+		opx_hmem_cuda_dbg_trace("Error creating the CUDA event", result);
 		return OPX_HMEM_ERROR;
 	}
-	*event = new_event;
 	return OPX_HMEM_SUCCESS;
 }
-#endif
 
-/**
- * @brief Destroy an event
- *
- * @param event The opx event to be destroyed
- */
 __OPX_FORCE_INLINE__
-void opx_hmem_event_destroy(enum fi_hmem_iface iface, union opx_hmem_event **event)
+void opx_hmem_cuda_event_destroy(CUevent *event)
 {
 	if (*event) {
-#if HAVE_CUDA
-		if (iface == FI_HMEM_CUDA) {
-			ofi_cuEventDestroy((*event)->cu_event);
-		}
-#endif
-		OPX_BUF_FREE(*event);
+		ofi_cuEventDestroy(*event);
 		*event = NULL;
 	}
 }
 
-/**
- * @brief Create an event to record in order to sync GPU operations on a stream
- *
- * @param event The opx event to record for later synchronization
- * @param stream The opx stream on which to record the event
- * @return 0 on success, -1 on failure.
- */
 __OPX_FORCE_INLINE__
-int opx_hmem_event_record(enum fi_hmem_iface iface, union opx_hmem_event *event, union opx_hmem_stream *stream)
+int opx_hmem_cuda_event_record(CUevent event, CUstream stream)
 {
-	int result = OPX_HMEM_ERROR;
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		result = ofi_cuEventRecord(event->cu_event, stream->cu_stream);
-	}
-#endif
+	CUresult result = ofi_cuEventRecord(event, stream);
+
 	if (result) {
-		opx_hmem_dbg_trace(iface, "Error recording an event on the steam", result);
+		opx_hmem_cuda_dbg_trace("Error recording an event on the CUDA stream", result);
 		return OPX_HMEM_ERROR;
 	}
 	return OPX_HMEM_SUCCESS;
 }
 
-/**
- * @brief Synchronize the recorded HMEM event
- *
- * @param event The opx event on which to wait for synchronization
- * @return 0 on success, -1 on failure.
- */
 __OPX_FORCE_INLINE__
-int opx_hmem_event_synchronize(enum fi_hmem_iface iface, union opx_hmem_event **event)
+int opx_hmem_cuda_event_synchronize(CUevent *event)
 {
-	int result = OPX_HMEM_ERROR;
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		result = ofi_cuEventSynchronize((*event)->cu_event);
-		opx_hmem_event_destroy(FI_HMEM_CUDA, event);
-	}
-#endif
+	CUresult result = ofi_cuEventSynchronize(*event);
 
+	opx_hmem_cuda_event_destroy(event);
 	if (result) {
-		opx_hmem_dbg_trace(iface, "Error on event synchronize", result);
+		opx_hmem_cuda_dbg_trace("Error on CUDA event synchronize", result);
 		abort();
 	}
 	return OPX_HMEM_SUCCESS;
 }
 
-/**
- * @brief Check the status of a recorded event
- *
- * @param event Pointer to the opx stream that was created
- * @return 0 event completion, 1 the event is still pending, -1 error
- */
 __OPX_FORCE_INLINE__
-enum opx_hmem_return_code opx_hmem_event_query(enum fi_hmem_iface iface, union opx_hmem_event *event)
+enum opx_hmem_return_code opx_hmem_cuda_event_query(CUevent event)
 {
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		CUresult result = ofi_cuEventQuery(event->cu_event);
-		if (result == CUDA_SUCCESS) {
-			return OPX_HMEM_SUCCESS;
-		} else if (result == CUDA_ERROR_NOT_READY) {
-			return OPX_HMEM_ERROR_NOT_READY;
-		} else {
-			return OPX_HMEM_ERROR;
-		}
+	CUresult result = ofi_cuEventQuery(event);
+
+	if (result == CUDA_SUCCESS) {
+		return OPX_HMEM_SUCCESS;
 	}
-#endif
+	if (result == CUDA_ERROR_NOT_READY) {
+		return OPX_HMEM_ERROR_NOT_READY;
+	}
 	return OPX_HMEM_ERROR;
 }
 
-/**
- * @brief Issue an asynchronous HMEM DtoD memcpy on the given stream
- *
- * @param iface HMEM interface type
- * @param dst Pointer to the destination device
- * @param src Pointer to the source device
- * @param size Length to be copied
- * @param stream The opx HMEM stream on which the copy should be started
- * @return  0 on success, -1 on failure.
- */
 __OPX_FORCE_INLINE__
-int opx_hmem_memcpy_async_DtoD(enum fi_hmem_iface iface, void *dst, const void *src, size_t size,
-			       union opx_hmem_stream *stream)
+int opx_hmem_cuda_memcpy_async_DtoD(void *dst, const void *src, size_t size, CUstream stream)
 {
-	int result = OPX_HMEM_ERROR;
-#if HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		result = ofi_cuMemcpyDtoDAsync((CUdeviceptr) dst, (CUdeviceptr) src, size, stream->cu_stream);
-	}
-#endif
+	CUresult result = ofi_cuMemcpyDtoDAsync((CUdeviceptr) dst, (CUdeviceptr) src, size, stream);
+
 	if (result) {
-		opx_hmem_dbg_trace(iface, "Error on the asynchronous copy", result);
+		opx_hmem_cuda_dbg_trace("Error on the asynchronous CUDA copy", result);
 		return OPX_HMEM_ERROR;
 	}
 	return OPX_HMEM_SUCCESS;
 }
 
 #ifdef OPX_HMEM
-/**
- * @brief Kick off an asynchronous HMEM memcpy
- *
- * This function starts an asynchronous HMEM memcpy and creates the event to query for completion.
- * If one has not already been created, create a new HMEM stream and save it on the HMEM domain.
- * After it determines a stream is available, it creates an event to record after the memcpy is started.
- * If the asynchronous copy has any failure, it tries to complete a synchronous copy.  If the synchronous
- * copy also fails, the function will abort.
- *
- * @param iface HMEM interface type
- * @param dst Pointer to the destination device
- * @param src Pointer to the source device
- * @param size Length to be copied
- * @param domain Pointer to the opx domain containing the HMEM stream and event pool
- * @param event Pointer to the opx event that was created
- */
 __OPX_FORCE_INLINE__
-void opx_hmem_memcpy_async(enum fi_hmem_iface iface, uint64_t device, void *dst, const void *src, size_t size,
-			   struct opx_hmem_domain *domain, union opx_hmem_event **event, int copy_type)
+void opx_hmem_cuda_memcpy_async(uint64_t device, void *dst, const void *src, size_t size,
+				struct opx_hmem_domain *domain, CUevent *event, int copy_type)
 {
-	union opx_hmem_event *new_event;
-	int		      ret;
+	CUevent new_event = NULL;
+	int	ret;
 
-	if (domain->hmem_stream.stream == NULL) {
-		ret = opx_hmem_stream_create(iface, &domain->hmem_stream.stream);
+	if (domain->cuda.stream == NULL) {
+		ret = opx_hmem_cuda_stream_create(&domain->cuda.stream);
 		if (ret) {
 			goto err;
 		}
-		domain->hmem_stream.type = iface;
 	}
 
-	ret = opx_hmem_event_create(iface, domain, &new_event);
+	ret = opx_hmem_cuda_event_create(&new_event);
 	if (ret) {
 		goto err;
 	}
 
 	assert(copy_type == OPX_HMEM_MEMCPY_ASYNC_DTOD);
-	ret = opx_hmem_memcpy_async_DtoD(iface, dst, src, size, domain->hmem_stream.stream);
+	ret = opx_hmem_cuda_memcpy_async_DtoD(dst, src, size, domain->cuda.stream);
 	if (ret) {
-		opx_hmem_event_destroy(iface, &new_event);
+		opx_hmem_cuda_event_destroy(&new_event);
 		goto err;
 	}
 
-	ret = opx_hmem_event_record(iface, new_event, domain->hmem_stream.stream);
+	ret = opx_hmem_cuda_event_record(new_event, domain->cuda.stream);
 	if (ret) {
-		opx_hmem_stream_synchronize(iface, domain->hmem_stream.stream);
-		opx_hmem_event_destroy(iface, &new_event);
+		opx_hmem_cuda_stream_synchronize(domain->cuda.stream);
+		opx_hmem_cuda_event_destroy(&new_event);
 		goto err;
 	}
 
@@ -694,12 +539,13 @@ void opx_hmem_memcpy_async(enum fi_hmem_iface iface, uint64_t device, void *dst,
 
 err:
 	*event = NULL;
-	ret    = ofi_copy_to_hmem(iface, device, dst, src, size);
+	ret    = ofi_copy_to_hmem(FI_HMEM_CUDA, device, dst, src, size);
 	if (ret) {
-		opx_hmem_dbg_trace(iface, "Error trying to synchronously copy", ret);
+		opx_hmem_cuda_dbg_trace("Error trying to synchronously copy", ret);
 		abort();
 	}
 }
+#endif
 #endif
 
 #endif
