@@ -12,6 +12,8 @@
 #include "efa_rdm_rxe_map.h"
 #include "efa_rdm_mr.h"
 #include "efa_rdm_domain.h"
+#include "ofi_indexer.h"
+#include "efa_av_array.h"
 
 
 /** @brief Information of a queued copy.
@@ -132,11 +134,12 @@ struct efa_rdm_ep {
 	/* list of pre-posted recv buffers */
 	struct dlist_entry rx_posted_buf_list;
 
-	/* bufpool to hold the fi_addr->peer hashmap entries */
-	struct ofi_bufpool *peer_map_entry_pool;
-
-	/**< List of peers associated with this endpoint */
-	struct dlist_entry ep_peer_list;
+	/* fi_addr-indexed maps from this endpoint to its peers,
+	 * one for the explicit AV and one for the implicit AV. Peers are
+	 * allocated from efa_rdm_peer_pool and the maps hold pointers to them. */
+	struct efa_av_array *fi_addr_to_peer_map;
+	struct efa_av_array *fi_addr_to_peer_map_implicit;
+	struct ofi_bufpool *efa_rdm_peer_pool;
 
 	/* buffer pool for peer reorder circular buffer */
 	struct ofi_bufpool *peer_robuf_pool;
@@ -230,6 +233,14 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 
 int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr);
 struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr);
+
+int efa_rdm_ep_peer_map_init(struct efa_av_array **arr);
+
+struct efa_rdm_peer *efa_rdm_ep_peer_map_lookup(struct efa_av_array *arr, fi_addr_t addr);
+
+int efa_rdm_ep_peer_map_insert(struct efa_av_array *arr, fi_addr_t addr, struct efa_rdm_peer *peer);
+
+struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_addr_t addr);
 
 struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 					   struct efa_rdm_peer *peer, uint32_t op);
