@@ -4322,6 +4322,110 @@ void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **s
 }
 
 /**
+ * @brief A peer-abort decided BEFORE the peer's handshake must defer the
+ *        emit, not drop it.
+ *
+ * Before the handshake, PEER_ERROR support is unknown; resolving it
+ * pessimistically drops the one notification that keeps the receiver's
+ * reorder window from parking forever on the aborted msg_id.
+ *
+ * Stage a marked txe on a peer with no HANDSHAKE_RECEIVED, retire it via
+ * efa_rdm_txe_handle_error(), and assert it PARKS (alive, no emit, no
+ * completion). Then deliver a handshake advertising PEER_ERROR support
+ * and assert the parked emit fires.
+ */
+void test_efa_rdm_txe_peer_abort_pre_handshake_defers_emit(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_handshake_hdr *handshake_hdr;
+	struct efa_rdm_handshake_opt_connid_hdr *connid_hdr;
+	struct efa_rdm_handshake_opt_device_version_hdr *dv_hdr;
+	struct fi_cq_err_entry err_entry;
+	size_t outstanding_before;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_tagged);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_TXE_REQ;
+	txe->cq_entry.flags = FI_SEND | FI_TAGGED;
+	txe->cq_entry.op_context = (void *) 0xe6;
+	txe->total_len = 65536;
+	txe->protocol = EFA_RDM_LONGCTS_TAGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
+
+	/* The peer's handshake has NOT arrived: support is unknown. */
+	peer = txe->peer;
+	assert_non_null(peer);
+	assert_false(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+
+	/*
+	 * The txe parks: marked, not emitted, not freed, completion
+	 * withheld.
+	 */
+	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_false(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	assert_int_equal(efa_unit_test_get_dlist_length(&peer->txe_list), 1);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	/* Deliver the peer's handshake advertising PEER_ERROR support. */
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted += 1;
+	pkt_entry->peer = peer;
+
+	handshake_hdr = (struct efa_rdm_handshake_hdr *) pkt_entry->wiredata;
+	handshake_hdr->type = EFA_RDM_HANDSHAKE_PKT;
+	handshake_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	handshake_hdr->flags = 0;
+	handshake_hdr->nextra_p3 = 4;
+	handshake_hdr->extra_info[0] = EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_handshake_hdr) +
+			      sizeof(uint64_t);
+
+	connid_hdr = (struct efa_rdm_handshake_opt_connid_hdr *)
+		     (pkt_entry->wiredata + pkt_entry->pkt_size);
+	connid_hdr->connid = 0x1234;
+	handshake_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
+	pkt_entry->pkt_size += sizeof(*connid_hdr);
+
+	dv_hdr = (struct efa_rdm_handshake_opt_device_version_hdr *)
+		 (pkt_entry->wiredata + pkt_entry->pkt_size);
+	dv_hdr->device_version = 0xefa1;
+	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR;
+	pkt_entry->pkt_size += sizeof(*dv_hdr);
+
+	efa_rdm_pke_handle_handshake_recv(pkt_entry);
+
+	/*
+	 * The handshake handler re-drives the parked abort: the PEER_ERROR
+	 * posts (one new WR), EMITTED is set, and the user completion stays
+	 * withheld until the packet's own completion.
+	 */
+	assert_true(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	assert_true(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, -FI_EAGAIN);
+}
+
+/**
  * @brief Before-post (gen-check) cancellation of a queued EAGER two-sided
  *        RTM emits a msg_id-only PEER_ERROR_PKT.
  *

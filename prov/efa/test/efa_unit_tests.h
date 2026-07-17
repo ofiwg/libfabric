@@ -347,6 +347,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state)
 void test_efa_rdm_txe_handle_error_emits_peer_error_on_invalid_lkey(void **state);
 void test_efa_rdm_txe_handle_error_emits_peer_error_on_canceled(void **state);
 void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **state);
+void test_efa_rdm_txe_peer_abort_pre_handshake_defers_emit(void **state);
 void test_efa_rdm_txe_handle_error_eager_prepost_cancel_emits_skip(void **state);
 void test_efa_rdm_txe_handle_error_longcts_prepost_cancel_emits_skip(void **state);
 void test_efa_rdm_txe_handle_error_runtread_prepost_cancel_emits_skip(void **state);

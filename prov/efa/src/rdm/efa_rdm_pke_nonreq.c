@@ -101,6 +101,7 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_handshake_hdr *handshake_pkt;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_peer_parked_cts *parked_cts;
+	struct efa_rdm_ope *txe;
 	struct dlist_entry *tmp;
 	uint64_t *host_id_ptr;
 
@@ -159,6 +160,22 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	}
 	/* else: legacy peer without HMEM_P2P_HDR, peer->p2p_supported
 	 * remains true as initialized in efa_rdm_peer_construct(). */
+
+	/*
+	 * Peer-abort emits decided before this handshake were parked because
+	 * PEER_ERROR support was unknown; re-drive them now that the peer's
+	 * feature flags are known. The helper is idempotent and drain-gated;
+	 * it may release the txe (unsupported peer), so walk safely. Run
+	 * before the parked-CTS apply below so a parked CTS naming an
+	 * aborted ope sees the ope's final state.
+	 */
+	dlist_foreach_container_safe(&peer->txe_list,
+				     struct efa_rdm_ope, txe,
+				     peer_entry, tmp) {
+		if ((txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) &&
+		    !(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED))
+			efa_rdm_txe_progress_peer_abort_if_drained(txe);
+	}
 
 	/*
 	 * Apply CTSs that were parked awaiting this handshake, now that

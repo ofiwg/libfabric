@@ -877,6 +877,11 @@ static void efa_rdm_txe_write_deferred_peer_abort_completion(struct efa_rdm_ope 
  * completion and free the txe; not yet emitted means emit the PEER_ERROR_PKT
  * (only safe now that no data WR can race it) and keep the txe alive until
  * that packet's own completion frees it.
+ *
+ * If the peer's handshake has not arrived yet, PEER_ERROR support is
+ * unknown and the emit decision is DEFERRED: the txe parks (alive on
+ * peer->txe_list, EMITTED unset) and efa_rdm_pke_handle_handshake_recv()
+ * re-drives this helper when the handshake lands.
  */
 void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 {
@@ -937,8 +942,30 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 		return;
 	}
 
-	/* Peer cannot be notified (no PEER_ERROR support); surface the single
+	/*
+	 * Before the peer's HANDSHAKE arrives, support is UNKNOWN, not
+	 * absent: resolving it pessimistically would discard the one
+	 * notification that keeps the receiver's reorder window from parking
+	 * forever on this msg_id. Park the txe (alive on peer->txe_list,
+	 * EMITTED unset); the handshake handler re-drives this helper once
+	 * the peer's feature flags are known, and peer teardown reclaims the
+	 * txe if the handshake never arrives.
+	 */
+	if (txe->peer &&
+	    !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		EFA_WARN(FI_LOG_CQ,
+			 "Sender-side abort of msg_id %u decided before the "
+			 "peer's handshake; deferring PEER_ERROR emit until "
+			 "the handshake arrives.\n", txe->msg_id);
+		return;
+	}
+
+	/* Handshake received and the peer does not advertise PEER_ERROR
+	 * support: there is genuinely no one to tell. Surface the single
 	 * completion now and free the txe. */
+	EFA_WARN(FI_LOG_CQ,
+		 "Peer does not support PEER_ERROR_PKT; dropping the abort "
+		 "notification for msg_id %u.\n", txe->msg_id);
 	efa_rdm_txe_write_deferred_peer_abort_completion(txe);
 	efa_rdm_txe_release(txe);
 }
