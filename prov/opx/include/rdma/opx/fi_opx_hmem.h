@@ -77,48 +77,69 @@ OPX_COMPILE_TIME_ASSERT((sizeof(struct fi_opx_hmem_info) & 0x7) == 0,
 			"sizeof(fi_opx_hmem_info) should be a multiple of 8");
 
 __OPX_FORCE_INLINE__
+uint64_t opx_hmem_get_attr_device(enum fi_hmem_iface iface, const struct fi_mr_attr *attr)
+{
+	if (!attr) {
+		return 0UL;
+	}
+
+	switch (iface) {
+	case FI_HMEM_CUDA:
+		return attr->device.cuda;
+	case FI_HMEM_ZE:
+		return attr->device.ze;
+	case FI_HMEM_ROCR:
+		return attr->device.rocr;
+	case FI_HMEM_SYSTEM:
+	default:
+		return 0UL;
+	}
+}
+
+__OPX_FORCE_INLINE__
+void opx_hmem_set_mr_device(struct fi_mr_attr *attr, enum fi_hmem_iface iface, uint64_t device)
+{
+	switch (iface) {
+	case FI_HMEM_CUDA:
+		attr->device.cuda = (int) device;
+		break;
+	case FI_HMEM_ZE:
+		attr->device.ze = (int) device;
+		break;
+	case FI_HMEM_ROCR:
+		attr->device.rocr = (int) device;
+		break;
+	default:
+		attr->device.reserved = device;
+	}
+}
+
+__OPX_FORCE_INLINE__
+int opx_hmem_is_device_iface(enum fi_hmem_iface iface)
+{
+	return iface != FI_HMEM_SYSTEM;
+}
+
+__OPX_FORCE_INLINE__
 enum fi_hmem_iface opx_hmem_get_ptr_iface(const void *ptr, uint64_t *device, uint64_t *is_unified)
 {
+	*device = 0UL;
 #ifdef OPX_HMEM
-#if HAVE_CUDA
-	unsigned mem_type;
-	unsigned is_managed;
-	unsigned device_ordinal;
 
-	/* Each pointer in 'data' needs to have the same array index
-	   as the corresponding attribute in 'cuda_attributes' */
-	void *data[] = {&mem_type, &is_managed, &device_ordinal};
+	uint64_t	   hmem_flags  = 0UL;
+	enum fi_hmem_iface iface       = ofi_get_hmem_iface(ptr, device, &hmem_flags);
+	bool		   device_only = !!(hmem_flags & FI_HMEM_DEVICE_ONLY);
 
-	enum CUpointer_attribute_enum cuda_attributes[] = {
-		CU_POINTER_ATTRIBUTE_MEMORY_TYPE, CU_POINTER_ATTRIBUTE_IS_MANAGED, CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL};
-
-	CUresult cuda_rc =
-		ofi_cuPointerGetAttributes(ARRAY_SIZE(cuda_attributes), cuda_attributes, data, (CUdeviceptr) ptr);
-
-	if (cuda_rc == CUDA_SUCCESS) {
-		*is_unified = is_managed;
-		if (mem_type == CU_MEMORYTYPE_DEVICE && !is_managed) {
-			*device = device_ordinal;
-			OPX_TRACE_HMEM_INSTANT(OPX_TRACE_EVENT_HMEM_DETECT, (uint64_t) FI_HMEM_CUDA, *device);
-			return FI_HMEM_CUDA;
-		} else {
-			*device = 0UL;
-			return FI_HMEM_SYSTEM;
-		}
-	} else if (cuda_rc != CUDA_ERROR_INVALID_CONTEXT) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Bad return code %hu from cuPointerGetAttributes()",
-			     cuda_rc);
+	*is_unified = (hmem_flags & FI_HMEM_HOST_ALLOC) || (opx_hmem_is_device_iface(iface) && !device_only);
+	if (*is_unified) {
+		*device = 0UL;
+		return FI_HMEM_SYSTEM;
 	}
-#else
-	*is_unified		 = 0UL;
-	enum fi_hmem_iface iface = ofi_get_hmem_iface(ptr, device, NULL);
 	OPX_TRACE_HMEM_INSTANT_COND(iface != FI_HMEM_SYSTEM, OPX_TRACE_EVENT_HMEM_DETECT, (uint64_t) iface, *device);
 	return iface;
 #endif
-#endif
 
 	*is_unified = 0UL;
-	*device	    = 0UL;
 	return FI_HMEM_SYSTEM;
 }
 
@@ -127,16 +148,7 @@ enum fi_hmem_iface opx_hmem_get_mr_iface(const struct fi_opx_mr *desc, uint64_t 
 {
 #ifdef OPX_HMEM
 	if (desc && !desc->hmem_unified) {
-		switch (desc->attr.iface) {
-		case FI_HMEM_CUDA:
-			*device = desc->attr.device.cuda;
-			break;
-		case FI_HMEM_ZE:
-			*device = desc->attr.device.ze;
-			break;
-		default:
-			*device = 0ul;
-		}
+		*device = opx_hmem_get_attr_device(desc->attr.iface, &desc->attr);
 		*handle = (uint64_t) desc->attr.hmem_data;
 		return desc->attr.iface;
 	}

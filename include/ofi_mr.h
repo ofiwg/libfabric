@@ -66,6 +66,8 @@ int ofi_open_mr_cache(uint32_t version, void *attr, size_t attr_len,
 struct ofi_mr_info {
 	struct iovec iov;
 	enum fi_hmem_iface iface;
+	uint8_t hmem_unified;
+	uint8_t pad[3];
 	uint64_t device;
 	uint64_t flags;
 

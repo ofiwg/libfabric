@@ -169,6 +169,25 @@ static int opx_hmem_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data
 		return 1;
 	}
 
+	if (info->iface < entry->info.iface) {
+		return -1;
+	}
+	if (info->iface > entry->info.iface) {
+		return 1;
+	}
+	if (info->hmem_unified < entry->info.hmem_unified) {
+		return -1;
+	}
+	if (info->hmem_unified > entry->info.hmem_unified) {
+		return 1;
+	}
+	if (info->device < entry->info.device) {
+		return -1;
+	}
+	if (info->device > entry->info.device) {
+		return 1;
+	}
+
 	OPX_DEBUG_EXIT(entry);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_MR,
@@ -489,7 +508,8 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 
 	assert(opx_mr->attr.iface == FI_HMEM_CUDA || opx_mr->attr.iface == FI_HMEM_ROCR);
 
-	(opx_mr->attr.iface == FI_HMEM_CUDA) ? (opx_mr->attr.device.cuda = entry->info.device) : (void) 0;
+	opx_hmem_set_mr_device(&opx_mr->attr, opx_mr->attr.iface, entry->info.device);
+	opx_mr->hmem_unified = entry->info.hmem_unified;
 
 	/* FLush the cache so that if there are entries on the dead region list
 	 * with the same page as we are about to register, they are unregistered first.
