@@ -157,6 +157,27 @@ AS_IF([test x"$enable_debug" != x"no"],
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
 
+# Clang Thread Safety Analysis. Off by default; enable with
+# --enable-thread-safety-analysis. Only then, and only if the compiler
+# supports it, add -Wthread-safety and define OFI_THREAD_SAFETY_ANALYSIS.
+AC_ARG_ENABLE([thread_safety_analysis],
+	[AS_HELP_STRING([--enable-thread-safety-analysis],
+		[Enable Clang thread safety analysis @<:@default=no@:>@])],
+	[],
+	[enable_thread_safety_analysis=no])
+
+AS_IF([test x"$enable_thread_safety_analysis" != x"no"], [
+	AC_MSG_CHECKING([whether $CC supports -Wthread-safety])
+	CFLAGS_save="$CFLAGS"
+	CFLAGS="-Werror -Wthread-safety $CFLAGS_save"
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[]])],
+			  [AC_MSG_RESULT([yes])
+			   CFLAGS="-Wthread-safety -DOFI_THREAD_SAFETY_ANALYSIS $CFLAGS_save"],
+			  [AC_MSG_RESULT([no])
+			   CFLAGS="$CFLAGS_save"])
+	unset CFLAGS_save
+])
+
 AC_ARG_ENABLE([profile],
               [AS_HELP_STRING([--enable-profile],
                               [Enable profiling @<:@default=no@:>@])],
