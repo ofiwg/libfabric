@@ -133,6 +133,10 @@ def _resolve_memory_type_candidates(memory_type_marker, nodeid):
         return memory_type_list_bi_dir
     elif marker_value == "host_and_hmem_memory_symm_only":
         return memory_type_list_symm
+    elif marker_value == "cuda_to_cuda_only":
+        return memory_type_list_cuda_to_cuda
+    elif marker_value == "neuron_to_neuron_only":
+        return memory_type_list_neuron_to_neuron
     raise ValueError(
         f"@pytest.mark.memory_type on {nodeid} has unknown value {marker_value!r}"
     )
@@ -151,18 +155,6 @@ def add_memory_type_parametrization(metafunc, memory_type_marker):
 
     if "memory_type" not in metafunc.fixturenames:
         return
-
-    # memory_type may already be parametrized directly via
-    # @pytest.mark.parametrize (e.g. test_runt.py couples it with copy_method).
-    # A direct decorator overrides fixture parametrization, so defer to it.
-    for pmark in metafunc.definition.iter_markers("parametrize"):
-        argnames = pmark.args[0]
-        if isinstance(argnames, str):
-            names = [n.strip() for n in argnames.split(",")]
-        else:
-            names = [str(n).strip() for n in argnames]
-        if "memory_type" in names:
-            return
 
     # A test consuming the memory_type fixture must declare a memory_type marker.
     if memory_type_marker is None:
@@ -241,6 +233,15 @@ memory_type_list_symm = [
     pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
     pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
     pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
+]
+
+# Single memory type pools for tests that run only one.
+memory_type_list_cuda_to_cuda = [
+    pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
+]
+
+memory_type_list_neuron_to_neuron = [
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
 ]
 
 hmem_type_list = [
