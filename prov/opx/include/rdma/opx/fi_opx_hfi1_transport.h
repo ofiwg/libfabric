@@ -697,8 +697,8 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 	const uint32_t lrh_dlid_16B = dest_addr.planes[OPX_PRIMARY_PLANE].lid;
 
 	if (fi_opx_hfi1_tx_is_shm(opx_ep, dest_addr)) {
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			 "===================================== INJECT, SHM (begin)\n");
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "===================================== INJECT, SHM (begin)\n");
 		OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_INJECT_SHM, len, tag);
 		uint64_t			 pos;
 		ssize_t				 rc;
@@ -778,8 +778,8 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 		opx_shm_tx_advance(opx_tx->shm, (void *) hdr, pos);
 
 		OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_INJECT_SHM, len, tag);
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			 "===================================== INJECT, SHM (end)\n");
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "===================================== INJECT, SHM (end)\n");
 		return FI_SUCCESS;
 	}
 
@@ -1026,8 +1026,8 @@ ssize_t opx_hfi1_tx_sendv_egr_shm(struct fid_ep *ep, const struct iovec *iov, si
 	const uint64_t bth_subctxt_rx = ((uint64_t) addr->planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
 					<< OPX_BTH_SUBCTXT_RX_SHIFT;
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		 "===================================== SENDV, SHM -- EAGER (begin)\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SENDV, SHM -- EAGER (begin)\n");
 	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, 0, 0);
 	uint64_t			 pos;
 	ssize_t				 rc;
@@ -1119,8 +1119,8 @@ ssize_t opx_hfi1_tx_sendv_egr_shm(struct fid_ep *ep, const struct iovec *iov, si
 	}
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, 0, 0);
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		 "===================================== SENDV, SHM -- EAGER (end)\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SENDV, SHM -- EAGER (end)\n");
 	return rc;
 }
 
@@ -1308,8 +1308,8 @@ ssize_t opx_hfi1_tx_sendv_egr_shm_16B(struct fid_ep *ep, const struct iovec *iov
 	const uint64_t bth_subctxt_rx = ((uint64_t) addr->planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
 					<< OPX_BTH_SUBCTXT_RX_SHIFT;
 
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		 "===================================== SENDV 16B, SHM -- EAGER (begin)\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SENDV 16B, SHM -- EAGER (begin)\n");
 	OPX_TRACE_TX_BEGIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, 0, 0);
 	uint64_t			 pos;
 	ssize_t				 rc;
@@ -1408,8 +1408,8 @@ ssize_t opx_hfi1_tx_sendv_egr_shm_16B(struct fid_ep *ep, const struct iovec *iov
 	}
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SENDV_EAGER_SHM, 0, 0);
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		 "===================================== SENDV 16B, SHM -- EAGER (end)\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== SENDV 16B, SHM -- EAGER (end)\n");
 	return rc;
 }
 

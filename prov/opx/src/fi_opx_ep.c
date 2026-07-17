@@ -2302,13 +2302,33 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 
 	if (filter_env != NULL) {
 		gid_filter_count = parse_plane_gid_filter(filter_env, gid_filter, OPX_MAX_TX_CONTEXTS);
-		if (gid_filter_count != 2) {
+		if (gid_filter_count < 1 || gid_filter_count > 2) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-				"_FI_OPX_MULTI_HFI_FILTER_ must specify exactly 2 GIDs\n");
+				"_FI_OPX_MULTI_HFI_FILTER_ must specify 1 or 2 GIDs\n");
 			errno = FI_EINVAL;
 			return -errno;
 		}
 	}
+
+	/*
+	 * Ordering dependency: The explicit dual-plane/single-GID contradiction check
+	 * must happen before fi_opx_hfi1_context_open() to fail fast without side effects.
+	 */
+	if (gid_filter_count == 1 && dual_plane_env == 1) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"_FI_OPX_DUAL_PLANE_=1 was explicitly requested but only 1 GID was given in "
+			"_FI_OPX_MULTI_HFI_FILTER_. Dual-plane mode requires 2 GIDs. Provide 2 GIDs, or "
+			"unset/clear _FI_OPX_DUAL_PLANE_ to use single-plane mode with 1 GID.\n");
+		errno = FI_EINVAL;
+		return -errno;
+	}
+
+	/*
+	 * Ordering dependency: fi_opx_hfi1_context_open() applies the single-GID filter unconditionally
+	 * for primary context selection. The subsequent dual_plane and striping computations only
+	 * refine how the secondary context paths behave (forcing single-plane).
+	 */
+
 	/*
 	 * Open the hfi1 context. The first endpoint opened on this domain
 	 * runs full HFI selection (FI_OPX_HFI_SELECT, DAOS src_addr, NUMA
@@ -2344,6 +2364,13 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 
 	int multi_hfi_striping = (multi_hfi_striping_env >= 0) ? multi_hfi_striping_env : dual_plane;
 
+	if (gid_filter_count == 1 && dual_plane) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"1 GID specified in _FI_OPX_MULTI_HFI_FILTER_; disabling dual-plane auto-detection, "
+			"all contexts will use the single specified plane.\n");
+		dual_plane = 0;
+	}
+
 	if ((dual_plane || multi_hfi_striping) && (OPX_HW_HFI1_TYPE(opx_domain) & OPX_HFI1_WFR)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
 			"_FI_OPX_DUAL_PLANE_ and FI_OPX_MULTI_HFI_STRIPING are not supported on local HFI type %s.\n",
@@ -2359,7 +2386,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		goto err;
 	}
 
-	if (filter_env != NULL && !dual_plane) {
+	if (filter_env != NULL && !dual_plane && gid_filter_count == 2) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
 			"_FI_OPX_MULTI_HFI_FILTER_ is set but dual plane support is not enabled. Filter will be ignored.\n");
 	}
@@ -2367,7 +2394,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	       "Dual-plane support is %s. Multi-HFI striping is %s. GID filter count is %d.\n",
 	       dual_plane ? "enabled" : "disabled", multi_hfi_striping ? "enabled" : "disabled", gid_filter_count);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL, "GID filter values: GID hi=0x%016lx, GID lo=0x%016lx\n",
-	       gid_filter_count > 0 ? gid_filter[0] : 0, gid_filter_count > 0 ? gid_filter[1] : 0);
+	       gid_filter_count > 0 ? gid_filter[0] : 0, gid_filter_count > 1 ? gid_filter[1] : 0);
 
 	fi_opx_global.multi_hfi_striping = (bool) multi_hfi_striping;
 
@@ -2870,24 +2897,22 @@ done:
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "Endpoint enabled with %d TX context(s)\n",
 		opx_ep->num_tx_contexts);
 
-#ifndef NDEBUG
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->rx->self.planes[0].hfi1_unit=%d\n",
-	       opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_unit);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->rx->self.planes[0].lid=%d\n",
-	       opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->rx->self.planes[0].gid_hi=0x%016lx\n",
-	       opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].gid_hi);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->rx->self.planes[0].subctxt_rx=%d\n",
-	       opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->rx->self.planes[1].hfi1_unit=%d\n",
-	       opx_ep->rx->self.planes[1].hfi1_unit);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->rx->self.planes[1].lid=%d\n",
-	       opx_ep->rx->self.planes[1].lid);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->rx->self.planes[1].gid_hi=0x%016lx\n",
-	       opx_ep->rx->self.planes[1].gid_hi);
-	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->rx->self.planes[1].subctxt_rx=%d\n",
-	       opx_ep->rx->self.planes[1].hfi1_subctxt_rx);
-#endif
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "opx_ep->rx->self.planes[0].hfi1_unit=%d\n",
+		opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_unit);
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "opx_ep->rx->self.planes[0].lid=%d\n",
+		opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid);
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "opx_ep->rx->self.planes[0].gid_hi=0x%016lx\n",
+		opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].gid_hi);
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "opx_ep->rx->self.planes[0].subctxt_rx=%d\n",
+		opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "opx_ep->rx->self.planes[1].hfi1_unit=%d\n",
+		opx_ep->rx->self.planes[1].hfi1_unit);
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "opx_ep->rx->self.planes[1].lid=%d\n",
+		opx_ep->rx->self.planes[1].lid);
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "opx_ep->rx->self.planes[1].gid_hi=0x%016lx\n",
+		opx_ep->rx->self.planes[1].gid_hi);
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "opx_ep->rx->self.planes[1].subctxt_rx=%d\n",
+		opx_ep->rx->self.planes[1].hfi1_subctxt_rx);
 } /* end secondary-plane block scope */
 
 	/* Unlock */
