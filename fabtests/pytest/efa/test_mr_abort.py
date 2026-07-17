@@ -29,7 +29,8 @@ MR_ABORT_NUM_MRS = 2046
     # workers.
     pytest.param(10485760, marks=pytest.mark.serial),
 ])
-def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr, message_size, memory_type_symm):
+@pytest.mark.memory_type("host_and_hmem_memory_symm_only")
+def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr, message_size, memory_type):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
@@ -39,7 +40,7 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
     command = (f"fi_mr_abort -T abort -o {rma_op} -C {cancel_order}"
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
                f" -S {message_size}")
-    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
+    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type)
     test.run()
 
 
@@ -54,12 +55,13 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
     # 10 MiB: run serially to avoid resource contention (see test_mr_abort).
     pytest.param(10485760, marks=pytest.mark.serial),
 ])
-def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, message_size, memory_type_symm):
+@pytest.mark.memory_type("host_and_hmem_memory_symm_only")
+def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, message_size, memory_type):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
     command = (f"fi_mr_abort -T partial -o {rma_op} -S {message_size}")
-    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
+    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type)
     test.run()
 
 
@@ -209,15 +211,16 @@ def abort_owes_rx_completion(protocol):
 @pytest.mark.parametrize("close_side", ["initiator"]) # TODO add target
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
 @pytest.mark.parametrize("protocol", ["EAGER", "MEDIUM", "LONGCTS", "LONGREAD", "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"])
+@pytest.mark.memory_type("host_and_hmem_memory_symm_only")
 def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
-                       ops_per_mr, protocol, memory_type_symm):
+                       ops_per_mr, protocol, memory_type):
     if fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
     if close_side == "target":
         pytest.skip("efa does not currently support canceling posted RX buffers")
 
-    env, message_size = determine_settings_for_proto(protocol, memory_type_symm, fabric)
+    env, message_size = determine_settings_for_proto(protocol, memory_type, fabric)
 
     # read-base (LONGREAD/RUNTREAD) and the larger LONGCTS sizes require RDMA
     # read / message sizes that efa-direct does not support for sends.
@@ -237,7 +240,7 @@ def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
                f" -S {message_size}{owe_flag}{homogeneous_flag}  -A ep_first")
     test = ClientServerTest(cmdline_args, command, timeout=360, fabric=fabric,
-                            memory_type=memory_type_symm, additional_env=env)
+                            memory_type=memory_type, additional_env=env)
     test.run()
 
 
@@ -248,8 +251,9 @@ def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
 @pytest.mark.parametrize("close_side", ["initiator"]) # TODO add target
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
 @pytest.mark.parametrize("protocol", ["EAGER", "MEDIUM", "LONGCTS", "LONGREAD", "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"])
+@pytest.mark.memory_type("host_and_hmem_memory_symm_only")
 def test_mr_abort_tagged(cmdline_args, fabric, cancel_order, close_side,
-                         ops_per_mr, protocol, memory_type_symm):
+                         ops_per_mr, protocol, memory_type):
     if fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
@@ -259,7 +263,7 @@ def test_mr_abort_tagged(cmdline_args, fabric, cancel_order, close_side,
     if close_side == "target":
         pytest.skip("efa does not currently support canceling posted RX buffers")
 
-    env, message_size = determine_settings_for_proto(protocol, memory_type_symm, fabric)
+    env, message_size = determine_settings_for_proto(protocol, memory_type, fabric)
 
     owe_flag = " -X" if abort_owes_rx_completion(protocol) else ""
     # See test_mr_abort_send: -H sets HOMOGENEOUS_PEERS so LONGREAD ignores
@@ -270,5 +274,5 @@ def test_mr_abort_tagged(cmdline_args, fabric, cancel_order, close_side,
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
                f" -S {message_size}{owe_flag}{homogeneous_flag} -A ep_first")
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=fabric,
-                            memory_type=memory_type_symm, additional_env=env)
+                            memory_type=memory_type, additional_env=env)
     test.run()
