@@ -44,8 +44,6 @@
 
 #include "rdma/opx/opx_tracer.h"
 
-union opx_hmem_event;
-
 /*
  * ==== NOTE_COMPLETION_TYPES ====
  *
@@ -536,8 +534,10 @@ struct opx_hfi1_rx_ipc_rts_params {
 	struct opx_context  *context;
 	struct ofi_mr_entry *cache_entry;
 	union {
-		void		      *event;
-		union opx_hmem_event  *hmem_event;
+		void *event;
+#if HAVE_CUDA
+		CUevent cuda_event;
+#endif
 		ofi_hmem_async_event_t rocr_async_event;
 	};
 	uint64_t rocr_async_device;
