@@ -942,3 +942,215 @@ void test_efa_rdm_rma_partial_post_retry_no_double_free_read(
 	efa_unit_test_buff_destruct(&recv_buff);
 }
 
+
+/**
+ * @brief Test that efa_rdm_rma_should_read_using_rdma returns false
+ *        when peer has p2p_supported=false
+ */
+void test_efa_rdm_rma_should_read_using_rdma_peer_p2p_false(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer peer = {0};
+	struct efa_rdm_ep *ep;
+	uint32_t efa_device_caps_orig;
+	uint32_t vendor_part_id_orig;
+	bool result;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	efa_device_caps_orig = g_efa_selected_device_list[0].device_caps;
+	g_efa_selected_device_list[0].device_caps |= EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+	vendor_part_id_orig = g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
+	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = 0xEFA1;
+
+	ep->use_device_rdma = true;
+
+	peer.flags = EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer.extra_info[0] = EFA_RDM_EXTRA_FEATURE_RDMA_READ;
+	peer.device_version = 0xEFA1;
+	peer.p2p_supported = false;
+
+	result = efa_rdm_rma_should_read_using_rdma(ep, &peer, true);
+	assert_false(result);
+
+	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = vendor_part_id_orig;
+	g_efa_selected_device_list[0].device_caps = efa_device_caps_orig;
+}
+
+/**
+ * @brief Test that efa_rdm_rma_should_read_using_rdma returns true
+ *        when peer has p2p_supported=true
+ */
+void test_efa_rdm_rma_should_read_using_rdma_peer_p2p_true(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer peer = {0};
+	struct efa_rdm_ep *ep;
+	uint32_t efa_device_caps_orig;
+	uint32_t vendor_part_id_orig;
+	bool result;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	efa_device_caps_orig = g_efa_selected_device_list[0].device_caps;
+	g_efa_selected_device_list[0].device_caps |= EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+	vendor_part_id_orig = g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
+	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = 0xEFA1;
+
+	ep->use_device_rdma = true;
+
+	peer.flags = EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer.extra_info[0] = EFA_RDM_EXTRA_FEATURE_RDMA_READ;
+	peer.device_version = 0xEFA1;
+	peer.p2p_supported = true;
+
+	result = efa_rdm_rma_should_read_using_rdma(ep, &peer, true);
+	assert_true(result);
+
+	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = vendor_part_id_orig;
+	g_efa_selected_device_list[0].device_caps = efa_device_caps_orig;
+}
+
+/**
+ * @brief Test that efa_rdm_rma_should_write_using_rdma returns false
+ *        when peer has p2p_supported=false
+ */
+void test_efa_rdm_rma_should_write_using_rdma_peer_p2p_false_returns_false(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer peer = {0};
+	struct efa_rdm_ope txe = {0};
+	bool result;
+	struct efa_rdm_ep *ep;
+	uint32_t efa_device_caps_orig;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	efa_device_caps_orig = g_efa_selected_device_list[0].device_caps;
+	g_efa_selected_device_list[0].device_caps |= EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
+
+	ep->use_device_rdma = true;
+	ep->homogeneous_peers = false;
+
+	peer.flags = EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer.extra_info[0] = EFA_RDM_EXTRA_FEATURE_RDMA_WRITE;
+	peer.p2p_supported = false;
+	txe.fi_flags = 0;
+	txe.iov_count = 1;
+	txe.rma_iov_count = 1;
+
+	result = efa_rdm_rma_should_write_using_rdma(ep, &txe, &peer, true);
+	assert_false(result);
+
+	g_efa_selected_device_list[0].device_caps = efa_device_caps_orig;
+}
+
+/**
+ * @brief Test that efa_rdm_rma_should_read_using_rdma works for homogeneous
+ *        peers without requiring a handshake, using local ep p2p state.
+ *
+ * When ep has FI_HMEM with hmem_p2p_opt=DISABLED, should return false
+ * even without handshake received.
+ */
+void test_efa_rdm_rma_should_read_using_rdma_homogeneous_no_p2p(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer peer = {0};
+	struct efa_rdm_ep *ep;
+	uint32_t efa_device_caps_orig;
+	bool result;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	efa_device_caps_orig = g_efa_selected_device_list[0].device_caps;
+	g_efa_selected_device_list[0].device_caps |= EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+
+	ep->use_device_rdma = true;
+	ep->homogeneous_peers = true;
+	ep->base_ep.info->caps |= FI_HMEM;
+	ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
+
+	/* Peer has no handshake - homogeneous path should not require it */
+	peer.flags = 0;
+
+	result = efa_rdm_rma_should_read_using_rdma(ep, &peer, true);
+	assert_false(result);
+
+	g_efa_selected_device_list[0].device_caps = efa_device_caps_orig;
+}
+
+/**
+ * @brief Test that efa_rdm_rma_should_read_using_rdma returns true for
+ *        homogeneous peers when local ep supports p2p (no FI_HMEM).
+ */
+void test_efa_rdm_rma_should_read_using_rdma_homogeneous_with_p2p(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer peer = {0};
+	struct efa_rdm_ep *ep;
+	uint32_t efa_device_caps_orig;
+	bool result;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	efa_device_caps_orig = g_efa_selected_device_list[0].device_caps;
+	g_efa_selected_device_list[0].device_caps |= EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+
+	ep->use_device_rdma = true;
+	ep->homogeneous_peers = true;
+
+	/* No FI_HMEM → always p2p. No handshake needed for homogeneous. */
+	peer.flags = 0;
+
+	result = efa_rdm_rma_should_read_using_rdma(ep, &peer, true);
+	assert_true(result);
+
+	g_efa_selected_device_list[0].device_caps = efa_device_caps_orig;
+}
+
+/**
+ * @brief Test that efa_rdm_rma_should_write_using_rdma works for self peer
+ *        without requiring a handshake, using local ep p2p state.
+ */
+void test_efa_rdm_rma_should_write_using_rdma_self_no_p2p(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_peer peer = {0};
+	struct efa_rdm_ope txe = {0};
+	struct efa_rdm_ep *ep;
+	uint32_t efa_device_caps_orig;
+	bool result;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	efa_device_caps_orig = g_efa_selected_device_list[0].device_caps;
+	g_efa_selected_device_list[0].device_caps |= EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
+
+	ep->use_device_rdma = true;
+	ep->base_ep.info->caps |= FI_HMEM;
+	ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
+
+	/* Self peer - no handshake needed */
+	peer.is_self = true;
+	peer.flags = 0;
+	txe.fi_flags = 0;
+	txe.iov_count = 1;
+	txe.rma_iov_count = 1;
+
+	result = efa_rdm_rma_should_write_using_rdma(ep, &txe, &peer, true);
+	assert_false(result);
+
+	g_efa_selected_device_list[0].device_caps = efa_device_caps_orig;
+}

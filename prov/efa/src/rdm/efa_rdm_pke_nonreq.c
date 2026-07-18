@@ -31,6 +31,7 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_handshake_opt_connid_hdr *connid_hdr;
 	struct efa_rdm_handshake_opt_host_id_hdr *host_id_hdr;
 	struct efa_rdm_handshake_opt_device_version_hdr *device_version_hdr;
+	struct efa_rdm_handshake_opt_hmem_cap_hdr *hmem_cap_hdr;
 
 	handshake_hdr = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
 	handshake_hdr->type = EFA_RDM_HANDSHAKE_PKT;
@@ -75,6 +76,16 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	device_version_hdr->device_version = g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
 	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR;
 	pkt_entry->pkt_size += sizeof (struct efa_rdm_handshake_opt_device_version_hdr);
+
+	/* Include HMEM capability header.
+	 * p2p_supported = 1 means the peer's buffers can be accessed by
+	 * the NIC directly for all operations posted to the NIC.
+	 */
+	hmem_cap_hdr = (struct efa_rdm_handshake_opt_hmem_cap_hdr *)
+		       (pkt_entry->wiredata + pkt_entry->pkt_size);
+	hmem_cap_hdr->p2p_supported = efa_rdm_ep_use_p2p(pkt_entry->ep);
+	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_HMEM_P2P_HDR;
+	pkt_entry->pkt_size += sizeof(struct efa_rdm_handshake_opt_hmem_cap_hdr);
 
 	pkt_entry->peer = peer;
 	return 0;
@@ -129,6 +140,18 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 
 	peer->device_version = efa_rdm_pke_get_handshake_opt_device_version(pkt_entry);
 	EFA_INFO(FI_LOG_CQ, "Received peer EFA device version: 0x%x\n", peer->device_version);
+
+	if (handshake_pkt->flags & EFA_RDM_HANDSHAKE_HMEM_P2P_HDR) {
+		struct efa_rdm_handshake_opt_hmem_cap_hdr *hmem_cap_hdr;
+
+		hmem_cap_hdr = efa_rdm_pke_get_handshake_opt_hmem_cap_ptr(pkt_entry);
+		peer->p2p_supported = hmem_cap_hdr->p2p_supported;
+		EFA_INFO(FI_LOG_CQ,
+			 "Received peer HMEM caps: p2p_supported=%u\n",
+			 peer->p2p_supported);
+	}
+	/* else: legacy peer without HMEM_P2P_HDR, peer->p2p_supported
+	 * remains true as initialized in efa_rdm_peer_construct(). */
 
 	efa_rdm_pke_release_rx(pkt_entry);
 }

@@ -28,6 +28,26 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 
 ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 
+/**
+ * @brief Determine if one-sided fi_read should use device RDMA read.
+ *
+ * For one-sided fi_read, there is no NACK fallback. The sender must
+ * know upfront whether the peer's buffers are NIC-accessible (p2p).
+ *
+ * @param[in] ep	Endpoint
+ * @param[in] peer	Peer to read from
+ * @param[in] use_p2p	Whether local p2p is available
+ * @return bool		Whether device RDMA read should be used
+ */
+static inline
+bool efa_rdm_rma_should_read_using_rdma(struct efa_rdm_ep *ep,
+					struct efa_rdm_peer *peer,
+					bool use_p2p)
+{
+	return efa_rdm_interop_rdma_read(ep, peer) &&
+	       efa_both_support_p2p(ep, peer, use_p2p);
+}
+
 static inline
 bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe,
 					  struct efa_rdm_peer *peer, bool use_p2p)
@@ -63,7 +83,8 @@ bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_o
 		}
 	}
 
-	return use_p2p && efa_both_support_rdma_write(ep, peer);
+	return efa_both_support_rdma_write(ep, peer) &&
+	       efa_both_support_p2p(ep, peer, use_p2p);
 }
 
 #endif
