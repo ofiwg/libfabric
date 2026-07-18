@@ -65,7 +65,7 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 	mr_p2p_available = false;
 
 	if (iov_mr) {
-		ret = efa_rdm_ep_use_p2p(pke->ep, &iov_mr->efa_mr);
+		ret = efa_rdm_ep_use_p2p_for_mr(pke->ep, &iov_mr->efa_mr);
 		if (ret < 0)
 			return ret;
 		mr_p2p_available = ret;
@@ -247,7 +247,7 @@ int efa_rdm_pke_get_available_copy_methods(struct efa_rdm_ep *ep,
 	bool mr_p2p_available;
 
 	assert(efa_rdm_mr);
-	ret = efa_rdm_ep_use_p2p(ep, &efa_rdm_mr->efa_mr);
+	ret = efa_rdm_ep_use_p2p_for_mr(ep, &efa_rdm_mr->efa_mr);
 	if (ret < 0) {
 		return ret;
 	}
