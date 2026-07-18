@@ -298,7 +298,7 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep);
  * if the transfer should fail.
  */
 static inline
-int efa_rdm_ep_use_p2p(struct efa_rdm_ep *efa_rdm_ep, struct efa_mr *efa_mr)
+int efa_rdm_ep_use_p2p_for_mr(struct efa_rdm_ep *efa_rdm_ep, struct efa_mr *efa_mr)
 {
 	/*
 	 * P2P is always available for host memory (Unregistered buffer will be

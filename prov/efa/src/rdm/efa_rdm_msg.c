@@ -128,7 +128,7 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 	}
 
-	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
+	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
 	if (err < 0)
 		return err;
 
