@@ -1190,6 +1190,205 @@ void test_efa_rdm_ep_handshake_receive_peer_no_user_recv_qp(void **state)
 }
 
 /**
+ * @brief Verify peer p2p_supported is set to the received value when
+ * handshake includes HMEM_P2P_HDR with p2p_supported=1
+ */
+void test_efa_rdm_ep_handshake_receive_hmem_p2p_supported(void **state)
+{
+	fi_addr_t peer_addr = 0;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_peer *peer;
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
+
+	pkt_attr.connid = 0x1234;
+	pkt_attr.device_version = 0xefa1;
+	pkt_attr.include_hmem_p2p = true;
+	pkt_attr.p2p_supported = true;
+	efa_unit_test_construct_handshake_pkt_for_receive(pkt_entry, &pkt_attr);
+
+	pkt_entry->peer = peer;
+	efa_rdm_pke_handle_handshake_recv(pkt_entry);
+
+	assert_true(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	assert_true(peer->p2p_supported);
+}
+
+/**
+ * @brief Verify peer p2p_supported is set to false when
+ * handshake includes HMEM_P2P_HDR with p2p_supported=0
+ */
+void test_efa_rdm_ep_handshake_receive_hmem_p2p_not_supported(void **state)
+{
+	fi_addr_t peer_addr = 0;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_peer *peer;
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
+
+	pkt_attr.connid = 0x1234;
+	pkt_attr.device_version = 0xefa1;
+	pkt_attr.include_hmem_p2p = true;
+	pkt_attr.p2p_supported = false;
+	efa_unit_test_construct_handshake_pkt_for_receive(pkt_entry, &pkt_attr);
+
+	pkt_entry->peer = peer;
+	efa_rdm_pke_handle_handshake_recv(pkt_entry);
+
+	assert_true(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	assert_false(peer->p2p_supported);
+}
+
+/**
+ * @brief Verify peer p2p_supported defaults to true for a legacy peer
+ * that does not include the HMEM_P2P_HDR in its handshake
+ */
+void test_efa_rdm_ep_handshake_receive_hmem_legacy_peer(void **state)
+{
+	fi_addr_t peer_addr = 0;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_peer *peer;
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
+
+	pkt_attr.connid = 0x1234;
+	pkt_attr.device_version = 0xefa1;
+	pkt_attr.include_hmem_p2p = false; /* legacy peer: no HMEM_P2P_HDR */
+	efa_unit_test_construct_handshake_pkt_for_receive(pkt_entry, &pkt_attr);
+
+	pkt_entry->peer = peer;
+	efa_rdm_pke_handle_handshake_recv(pkt_entry);
+
+	assert_true(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	/* Legacy peers default to p2p_supported=true */
+	assert_true(peer->p2p_supported);
+}
+
+/**
+ * @brief Test that efa_rdm_ep_support_p2p returns true when FI_HMEM
+ *        is not requested (all buffers are system memory).
+ */
+void test_efa_rdm_ep_p2p_supported_no_hmem(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* Without FI_HMEM, efa_rdm_ep_use_p2p should return true */
+	assert_true(efa_rdm_ep_use_p2p(ep));
+}
+
+/**
+ * @brief Test that efa_rdm_ep_support_p2p returns true when FI_HMEM is
+ *        requested and a non-system interface has p2p device support.
+ */
+void test_efa_rdm_ep_p2p_supported_hmem_with_p2p_device(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+
+	/* Enable CUDA with p2p support */
+	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = true;
+
+	/* Construct EP without enabling, set FI_HMEM on its info, then enable */
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	ep->base_ep.info->caps |= FI_HMEM;
+	assert_int_equal(fi_enable(resource->ep), 0);
+
+	/* FI_HMEM with p2p device → efa_rdm_ep_use_p2p should return true */
+	assert_true(efa_rdm_ep_use_p2p(ep));
+}
+
+/**
+ * @brief Test that efa_rdm_ep_support_p2p returns false when FI_HMEM is
+ *        requested but no non-system interface has p2p device support.
+ */
+void test_efa_rdm_ep_p2p_supported_hmem_without_p2p_device(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+
+	/* Ensure no non-system interface has p2p */
+	g_efa_hmem_info[FI_HMEM_CUDA].initialized = true;
+	g_efa_hmem_info[FI_HMEM_CUDA].p2p_supported_by_device = false;
+	g_efa_hmem_info[FI_HMEM_NEURON].initialized = false;
+	g_efa_hmem_info[FI_HMEM_SYNAPSEAI].initialized = false;
+
+	/* Construct EP without enabling, set FI_HMEM on its info, then enable */
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	ep->base_ep.info->caps |= FI_HMEM;
+	assert_int_equal(fi_enable(resource->ep), 0);
+
+	/* FI_HMEM without p2p device → efa_rdm_ep_use_p2p should return false */
+	assert_false(efa_rdm_ep_use_p2p(ep));
+}
+
+/**
  * @brief when efa_rdm_ep_post_handshake_error failed due to pkt pool exhaustion,
  * make sure both txe is cleaned
  *

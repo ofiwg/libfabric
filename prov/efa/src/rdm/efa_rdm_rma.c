@@ -137,7 +137,7 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 
 	use_p2p = err;
 
-	if (use_p2p && efa_rdm_interop_rdma_read(ep, txe->peer)) {
+	if (efa_rdm_rma_should_read_using_rdma(ep, txe->peer, use_p2p)) {
 		/* RDMA read interoperability check also checks domain.use_device_rdma,
 		 * so we do not check it here
 		 */
