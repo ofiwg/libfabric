@@ -27,6 +27,15 @@ int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, str
 	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, conn->ep_addr);
 	peer->host_id = peer->is_self ? ep->host_id : 0;	/* Peer host id is exchanged via handshake */
 	peer->num_runt_bytes_in_flight = 0;
+	/*
+	 * Default to true to stay consistent with legacy peers that do not
+	 * send EFA_RDM_HANDSHAKE_HMEM_P2P_HDR, and to always assume the
+	 * performant RDMA path by default. This avoids accidentally
+	 * disabling the performant code path for future peers. Only
+	 * overridden to false when the peer explicitly advertises
+	 * p2p_supported=0.
+	 */
+	peer->p2p_supported = true;
 	/* allocate the robuf circular queue from the pre-allocated buffer pool */
 	ret = efa_recvwin_buf_alloc(&peer->robuf, efa_env.recvwin_size, true, ep->peer_robuf_pool);
 	if (OFI_UNLIKELY(ret == -FI_ENOMEM)) {

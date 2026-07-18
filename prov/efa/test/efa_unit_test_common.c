@@ -400,6 +400,16 @@ void efa_unit_test_construct_handshake_pkt_for_receive(struct efa_rdm_pke *pkt_e
 	APPEND_OPT_HANDSHAKE_FIELD(connid,		EFA_RDM_PKT_CONNID_HDR);
         APPEND_OPT_HANDSHAKE_FIELD(host_id,		EFA_RDM_HANDSHAKE_HOST_ID_HDR);
         APPEND_OPT_HANDSHAKE_FIELD(device_version,	EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR);
+
+	/* Include HMEM cap header only if requested */
+	if (attr->include_hmem_p2p) {
+		struct efa_rdm_handshake_opt_hmem_cap_hdr *_hdr =
+			(struct efa_rdm_handshake_opt_hmem_cap_hdr *)
+			(pkt_entry->wiredata + pkt_entry->pkt_size);
+		_hdr->p2p_supported = attr->p2p_supported ? 1 : 0;
+		handshake_hdr->flags |= EFA_RDM_HANDSHAKE_HMEM_P2P_HDR;
+		pkt_entry->pkt_size += sizeof(*_hdr);
+	}
 }
 
 
