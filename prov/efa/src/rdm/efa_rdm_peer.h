@@ -88,7 +88,18 @@ struct efa_rdm_peer_overflow_pke_list_entry {
 struct efa_rdm_peer {
 	struct efa_rdm_ep *ep;		/**< local ep */
 	bool is_self;			/**< flag indicating whether the peer is the endpoint itself */
-	bool is_local;			/**< flag indicating wehther the peer is local (on the same instance) */
+	bool is_local;			/**< flag indicating whether the peer is local (on the same instance) */
+	/**
+	 * @brief Whether this peer's buffers can be accessed by the NIC directly.
+	 *
+	 * p2p means the NIC can directly access the peer's buffers for all
+	 * operations posted to the NIC (RDMA read/write sources and targets).
+	 *
+	 * Received from the peer's handshake HMEM_P2P_HDR.
+	 * true = peer has no accelerator memory, or accelerator memory with p2p support.
+	 * false = peer has accelerator memory (FI_HMEM) without p2p support.
+	 */
+	bool p2p_supported;
 	uint32_t device_version;	/**< EFA device version */
 	struct efa_conn *conn;		/**< pointer to efa_conn struct in the av entry */
 	uint64_t host_id; 		/* Optional peer host id. Default 0 */
