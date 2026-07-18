@@ -131,7 +131,7 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
 
 	/* Check p2p support. Cannot use device read when p2p is not available. */
-	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
+	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
 	if (err < 0)
 		return err;
 
@@ -373,7 +373,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	int ctrl_type, iface, use_p2p;
 	size_t max_eager_rtw_data_size;
 
-	err = efa_rdm_ep_use_p2p(ep, txe->desc[0]);
+	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
 	if (err < 0)
 		return err;
 

@@ -177,7 +177,7 @@ efa_rdm_pke_post_remote_read_or_nack(struct efa_rdm_ep *ep,
 	int p2p_avail;
 
 	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
-	err = efa_rdm_ep_use_p2p(ep, rxe->desc[0]);
+	err = efa_rdm_ep_use_p2p_for_mr(ep, rxe->desc[0]);
 	if (err < 0)
 		return err;
 
