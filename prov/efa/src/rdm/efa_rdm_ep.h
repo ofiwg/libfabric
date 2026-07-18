@@ -319,6 +319,61 @@ int efa_rdm_ep_use_p2p_for_mr(struct efa_rdm_ep *efa_rdm_ep, struct efa_mr *efa_
 	return 0;
 }
 
+/**
+ * @brief Endpoint-level p2p capability check.
+ *
+ * Unlike efa_rdm_ep_use_p2p_for_mr() which checks a specific memory
+ * registration, this function checks the general endpoint-level p2p
+ * capability without per-MR granularity. It is used to determine what
+ * to advertise in the handshake (peer's view of our p2p capability)
+ * and to check the peer's p2p capability for homogeneous/self peers.
+ *
+ * Returns true if FI_HMEM is not requested (all buffers are system memory),
+ * or if hmem_p2p_opt is not DISABLED (device has p2p support).
+ *
+ * @param[in] ep	efa_rdm_ep
+ * @return bool		Whether the endpoint supports p2p
+ */
+static inline
+bool efa_rdm_ep_use_p2p(struct efa_rdm_ep *ep)
+{
+	return !(ep->base_ep.info->caps & FI_HMEM) ||
+	       (ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
+}
+
+/**
+ * @brief Check whether both local and remote sides support p2p for one-sided RMA.
+ *
+ * For one-sided fi_read/fi_write, there is no NACK fallback. The sender must
+ * know upfront that both sides can do p2p.
+ *
+ * use_p2p is a per-MR level check that reflects whether the specific local
+ * buffer is NIC-accessible. It is always checked first as the authoritative
+ * local gating condition.
+ *
+ * The ep/peer level p2p (efa_rdm_ep_support_p2p / peer->p2p_supported) is
+ * a best-effort check that lacks per-buffer granularity — it reflects the
+ * general capability advertised during handshake.
+ *
+ * @param[in] ep	Endpoint
+ * @param[in] peer	Peer
+ * @param[in] use_p2p	Per-MR local p2p availability
+ * @return bool		Whether both sides support p2p
+ */
+static inline
+bool efa_both_support_p2p(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer,
+			  bool use_p2p)
+{
+	if (!use_p2p)
+		return false;
+
+	if (ep->homogeneous_peers || peer->is_self)
+		return efa_rdm_ep_use_p2p(ep);
+
+	assert(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	return peer->p2p_supported;
+}
+
 /*
  * @brief: check whether RDMA read is allowed and supported.
  *

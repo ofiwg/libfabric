@@ -96,6 +96,8 @@ struct efa_unit_test_handshake_pkt_attr {
 	uint32_t connid;
 	uint64_t host_id;
 	uint32_t device_version;
+	bool include_hmem_p2p;	/* whether to include EFA_RDM_HANDSHAKE_HMEM_P2P_HDR */
+	bool p2p_supported;	/* value of p2p_supported in the header (only used when include_hmem_p2p=true) */
 };
 
 void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_resource *resource, size_t buff_size);
@@ -167,6 +169,12 @@ void test_efa_rdm_ep_zcpy_recv_not_created_but_peer_flag_set(void **state);
 void test_efa_rdm_ep_zcpy_compat_disabled_by_sas(void **state);
 void test_efa_rdm_ep_handshake_receive_peer_user_recv_qp(void **state);
 void test_efa_rdm_ep_handshake_receive_peer_no_user_recv_qp(void **state);
+void test_efa_rdm_ep_handshake_receive_hmem_p2p_supported(void **state);
+void test_efa_rdm_ep_handshake_receive_hmem_p2p_not_supported(void **state);
+void test_efa_rdm_ep_handshake_receive_hmem_legacy_peer(void **state);
+void test_efa_rdm_ep_p2p_supported_no_hmem(void **state);
+void test_efa_rdm_ep_p2p_supported_hmem_with_p2p_device(void **state);
+void test_efa_rdm_ep_p2p_supported_hmem_without_p2p_device(void **state);
 void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(void **state);
 void test_efa_rdm_ep_rx_refill_threshold_smaller_than_rx_size(void **state);
 void test_efa_rdm_ep_rx_refill_threshold_larger_than_rx_size(void **state);
@@ -618,6 +626,12 @@ void test_efa_rdm_rma_partial_post_retry_no_double_free_read(void **state);
 void test_efa_rdm_msg_send_multi_pkt_sendv_fail_no_inflight(void **state);
 void test_efa_ibv_post_write_processing_hints_with_high_pps(void **state);
 void test_efa_ibv_post_write_processing_hints_without_high_pps(void **state);
+void test_efa_rdm_rma_should_read_using_rdma_peer_p2p_false(void **state);
+void test_efa_rdm_rma_should_read_using_rdma_peer_p2p_true(void **state);
+void test_efa_rdm_rma_should_read_using_rdma_homogeneous_no_p2p(void **state);
+void test_efa_rdm_rma_should_read_using_rdma_homogeneous_with_p2p(void **state);
+void test_efa_rdm_rma_should_write_using_rdma_peer_p2p_false_returns_false(void **state);
+void test_efa_rdm_rma_should_write_using_rdma_self_no_p2p(void **state);
 /* end efa_unit_test_rdm_rma.c */
 
 static inline

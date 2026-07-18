@@ -335,6 +335,7 @@ struct efa_rdm_handshake_hdr {
 #define EFA_RDM_HANDSHAKE_HOST_ID_HDR		BIT_ULL(0)
 #define EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR	BIT_ULL(1)
 #define EFA_RDM_HANDSHAKE_USER_RECV_QP_HDR	BIT_ULL(2)
+#define EFA_RDM_HANDSHAKE_HMEM_P2P_HDR		BIT_ULL(3)
 
 EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_handshake_hdr, 8);
 
@@ -361,10 +362,30 @@ struct efa_rdm_handshake_opt_user_recv_qp_hdr {
 	uint32_t qkey;
 };
 
+/**
+ * @brief Optional handshake header advertising HMEM p2p capability.
+ *
+ * p2p_supported = 1 means the peer's buffers can be accessed by the NIC
+ * directly. This covers all operations posted to the NIC, including RDMA
+ * read/write sources and targets.
+ * p2p_supported = 0 means the peer has accelerator memory (FI_HMEM) without p2p
+ * support, so operations posted directly to the NIC involving that peer's
+ * buffers may fail.
+ */
+struct efa_rdm_handshake_opt_hmem_cap_hdr {
+	union {
+		struct {
+			uint8_t p2p_supported;
+		};
+		uint64_t reserved;
+	};
+};
+
 EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_handshake_opt_connid_hdr, 8);
 EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_handshake_opt_host_id_hdr, 8);
 EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_handshake_opt_device_version_hdr, 8);
 EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_handshake_opt_user_recv_qp_hdr, 8);
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_handshake_opt_hmem_cap_hdr, 8);
 
 /* @brief header format of RECEIPT packet */
 struct efa_rdm_receipt_hdr {
