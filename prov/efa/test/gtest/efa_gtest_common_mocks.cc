@@ -16,13 +16,13 @@ void MockEfa::set(MockEfa *instance)
 }
 
 // Generate the definitions of the __wrap_* functions
-#define EFA_MOCK_GEN_WRAP(ret, name)                             \
-	ret __wrap_##name(EFA_MOCK_PARAMS_##name)                \
+#define EFA_MOCK_GEN_WRAP(ret, name, params, args)               \
+	ret __wrap_##name params                                 \
 	{                                                        \
 		auto *mock = MockEfa::get();                     \
 		if (mock)                                        \
-			return mock->name(EFA_MOCK_ARGS_##name); \
-		return __real_##name(EFA_MOCK_ARGS_##name);      \
+			return mock->name args;                  \
+		return __real_##name args;                       \
 	}
 
 extern "C" {

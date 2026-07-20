@@ -27,9 +27,8 @@ You can then directly execute the test executable:
 * `efa_gtest_{component}.cc`: The tests themselves, one file per component (e.g. `efa_gtest_conn.cc`).
 
 ## What Should be Tested
-1. Unit tests should test `efa_*` functions as opposed to `fi_*` functions - the latter should be left to integration tests as much as possible.
-2. We make a conscious trade-off to test larger rather than smaller units. Hitting small but trivial units can increase coverage but don't test anything interesting.
-3. We are biased toward testing edge cases over "happy cases", especially if the code path under test cannot be covered by integration tests.
+1. We make a conscious trade-off to test larger rather than smaller units. Hitting small but trivial units can increase coverage but don't test anything interesting.
+2. We are biased toward testing edge cases over "happy cases", especially if the code path under test cannot be covered by integration tests.
 
 ## How to write
 1. Read the [GoogleTest documentation](https://google.github.io/googletest/), particularly the [primer](https://google.github.io/googletest/primer.html), and the [gMock Cookbook](https://google.github.io/googletest/gmock_cook_book.html).
@@ -43,10 +42,9 @@ We intercept functions with the GNU linker's `--wrap` and back them with gmock f
 
 ### Adding a new mock
 
-1. Define `EFA_MOCK_PARAMS_<fn>` (full parameter declarations) and `EFA_MOCK_ARGS_<fn>` (argument names only) in `efa_gtest_common_mocks.h`.
-2. Add `X(return_type, fn)` to the `EFA_MOCK_FUNCTIONS` list.
-3. Add any needed forward struct declarations at the top of the header.
-4. Add `-Wl,--wrap=<fn>` to `prov_efa_test_gtest_efa_gtest_LDFLAGS` in `prov/efa/Makefile.include`.
+1. Add a row `X(return_type, fn, (param decls), (arg names))` to the `EFA_MOCK_FUNCTIONS` list in `efa_gtest_common_mocks.h`. The parenthesized param/arg groups are single macro arguments (the parens shield their commas); the generators drop them into `MOCK_METHOD` and the `__real_`/`__wrap_` prototypes.
+2. Add any needed forward struct declarations at the top of the header.
+3. Add `-Wl,--wrap=<fn>` to `prov_efa_test_gtest_efa_gtest_LDFLAGS` in `prov/efa/Makefile.include`.
 
 If adding a mock breaks other tests, it's likely due to the new mock is being unintentionally called in a test where a real function call is expected. By default, mocked functions will return 0/false/NULL/default construct, and this may not be the expected behavior of the real functions. There are two solutions to this:
 
