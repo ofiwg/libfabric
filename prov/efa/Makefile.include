@@ -86,9 +86,9 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_util.c \
 	prov/efa/src/rdm/efa_rdm_mr.c
 
-if ENABLE_EFA_UNIT_TEST
+if ENABLE_EFA_DATA_PATH_OPS_STUB
 _efa_files += prov/efa/test/efa_unit_test_data_path_ops.c
-endif ENABLE_EFA_UNIT_TEST
+endif ENABLE_EFA_DATA_PATH_OPS_STUB
 
 _efa_headers = \
 	prov/efa/src/efa.h \
