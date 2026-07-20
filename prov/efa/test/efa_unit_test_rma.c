@@ -776,7 +776,7 @@ static void test_efa_ibv_post_write_processing_hints_impl(struct efa_resource *r
 	sge.length = local_buff.size;
 	sge.lkey = ((struct efa_mr *)fi_mr_desc(local_buff.mr))->ibv_mr->lkey;
 
-	efa_ibv_post_write(qp, &sge, 1, 123456, 0x87654321, 0, 0,
+	efa_ibv_post_write(qp, &sge, 1, NULL, false, 123456, 0x87654321, 0, 0,
 			   flags, &fake_ah, 0, 0);
 
 	efa_unit_test_buff_destruct(&local_buff);
