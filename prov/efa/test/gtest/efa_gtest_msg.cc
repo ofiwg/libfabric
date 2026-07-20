@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
-/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+/* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All
+ * rights reserved. */
 
 #include "efa_gtest_common_helpers.h"
 #include "efa_gtest_common_mocks.h"
@@ -40,8 +41,8 @@ class EfaMsgTest : public Test
 		ASSERT_EQ(ret, 0) << "fi_mr_reg failed: " << fi_strerror(-ret);
 		local_desc = fi_mr_desc(local_mr);
 
-		peer_addr = efa_test_insert_self_gid_peer(resource.ep,
-							  resource.av);
+		peer_addr =
+			efa_test_insert_self_gid_peer(resource.ep, resource.av);
 		ASSERT_NE(peer_addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
 
 		MockEfa::set(&mock_efa);
@@ -69,7 +70,8 @@ class EfaMsgTest : public Test
 };
 
 /**
- * @brief Asserts that efa_post_send with track_mr posts a direct_ope which persists
+ * @brief Asserts that efa_post_send with track_mr posts a direct_ope which
+ * persists
  */
 TEST_F(EfaMsgTest, send_success_keeps_direct_ope_alive)
 {
@@ -82,9 +84,8 @@ TEST_F(EfaMsgTest, send_success_keeps_direct_ope_alive)
 	auto wr_id_is_not_ctx = Truly([&ctx](uintptr_t wr_id) {
 		return wr_id != 0 && wr_id != (uintptr_t) &ctx;
 	});
-	EXPECT_CALL(mock_efa,
-		    efa_qp_post_send(_, _, _, 1, _, wr_id_is_not_ctx, _, _,
-				     _, _, _))
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send, _, _, _, 1, _,
+			wr_id_is_not_ctx, _, _, _, _, _)
 		.WillOnce(Return(0));
 
 	int ret = fi_send(resource.ep, local_buf, 4096, local_desc, peer_addr,
@@ -95,7 +96,8 @@ TEST_F(EfaMsgTest, send_success_keeps_direct_ope_alive)
 }
 
 /**
- * @brief Asserts that efa_post_recv with track_mr posts a direct_ope which persists
+ * @brief Asserts that efa_post_recv with track_mr posts a direct_ope which
+ * persists
  */
 TEST_F(EfaMsgTest, recv_success_keeps_direct_ope_alive)
 {
@@ -108,7 +110,7 @@ TEST_F(EfaMsgTest, recv_success_keeps_direct_ope_alive)
 	auto wr_id_is_not_ctx = Truly([&ctx](const struct ibv_recv_wr *wr) {
 		return wr->wr_id != 0 && wr->wr_id != (uintptr_t) &ctx;
 	});
-	EXPECT_CALL(mock_efa, efa_qp_post_recv(_, wr_id_is_not_ctx, _))
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_recv, _, wr_id_is_not_ctx, _)
 		.WillOnce(Return(0));
 
 	int ret = fi_recv(resource.ep, local_buf, 4096, local_desc, peer_addr,
