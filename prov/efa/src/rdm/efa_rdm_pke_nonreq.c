@@ -1054,6 +1054,40 @@ int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
+ * @brief RX-side outcome for an inbound PEER_ERROR that names a matched rxe.
+ *
+ * Decided purely from the rxe's local state, never from the wire, because a
+ * device TX error can fire after data landed: an unexpected rxe owes no
+ * completion and is reaped, and a matched rxe completes FI_ECANCELED at WR
+ * drain.
+ */
+static void efa_rdm_pke_peer_error_handle_matched_rxe(struct efa_rdm_ope *rxe,
+						      int prov_errno)
+{
+	if (rxe->state == EFA_RDM_RXE_UNEXP) {
+		/*
+		 * No user op bound -> no CQ entry owed: release the buffered
+		 * segments, then the rxe (efa_rdm_rxe_release frees peer_rxe via
+		 * free_entry, then release_internal).
+		 */
+		if (rxe->unexp_pkt) {
+			efa_rdm_pke_release_rx_list(rxe->unexp_pkt);
+			rxe->unexp_pkt = NULL;
+		}
+		efa_rdm_rxe_release(rxe);
+		return;
+	}
+
+	/*
+	 * Matched to a posted recv: owed a completion. Mark peer-aborted and
+	 * attempt the drain-gated release (a no-op while any WR still
+	 * references the rxe, e.g. an in-flight LONGCTS/RUNTREAD READ).
+	 */
+	efa_rdm_rxe_mark_peer_aborted(rxe, prov_errno);
+	efa_rdm_rxe_release_peer_abort_if_drained(rxe);
+}
+
+/**
  * @brief Receiver-side dispatcher for inbound EFA_RDM_PEER_ERROR_PKT.
  *
  * The packet is bidirectional; its op_id names a local ope, and the
@@ -1131,27 +1165,7 @@ void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
 			efa_rdm_pke_release_rx(pkt_entry);
 			return;
 		}
-		if (ope->state == EFA_RDM_RXE_UNEXP) {
-			/*
-			 * No user op bound -> no CQ entry owed: release the
-			 * buffered segments, then the rxe (efa_rdm_rxe_release
-			 * frees peer_rxe via free_entry, then release_internal).
-			 */
-			if (ope->unexp_pkt) {
-				efa_rdm_pke_release_rx_list(ope->unexp_pkt);
-				ope->unexp_pkt = NULL;
-			}
-			efa_rdm_rxe_release(ope);
-			efa_rdm_pke_release_rx(pkt_entry);
-			return;
-		}
-		/*
-		 * Matched to a posted recv: a user op is bound, so this rxe is
-		 * owed a completion. A medium rxe has no outstanding WR, so
-		 * release_if_drained writes the completion now.
-		 */
-		efa_rdm_rxe_mark_peer_aborted(ope, prov_errno);
-		efa_rdm_rxe_release_peer_abort_if_drained(ope);
+		efa_rdm_pke_peer_error_handle_matched_rxe(ope, prov_errno);
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
