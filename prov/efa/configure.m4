@@ -368,7 +368,6 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 
 	AS_IF([test x"$enable_efa_unit_test" != xno ],
 	[
-		efa_unit_test=1
 		FI_CHECK_PACKAGE(cmocka,
 			[cmocka.h],
 			[cmocka],
@@ -385,13 +384,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 				#include <setjmp.h>
 			])
 		cmocka_rpath+=" -R${cmocka_LDFLAGS:3} "
-	],
-	[
-		efa_unit_test=0
 	])
 
 	AC_SUBST(cmocka_rpath)
-	AC_DEFINE_UNQUOTED([EFA_UNIT_TEST], [$efa_unit_test], [EFA unit testing])
 
 	AM_CONDITIONAL([HAVE_EFADV_CQ_EX], [ test $efadv_support_extended_cq = 1])
 	AM_CONDITIONAL([HAVE_EFADV_QUERY_MR], [ test $have_efadv_query_mr = 1])
@@ -474,6 +469,12 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_SUBST(gtest_LDFLAGS)
 	AC_SUBST(gtest_LIBS)
 	AM_CONDITIONAL([ENABLE_EFA_GTEST], [ test x"$enable_efa_gtest" != xno])
+
+	AS_IF([test x"$enable_efa_unit_test" != xno || test x"$enable_efa_gtest" != xno],
+		[efa_unit_test=1], [efa_unit_test=0])
+	AC_DEFINE_UNQUOTED([EFA_UNIT_TEST], [$efa_unit_test],
+		[Expose EFA data-path static-inline ops as linkable stubs for unit tests])
+	AM_CONDITIONAL([ENABLE_EFA_DATA_PATH_OPS_STUB], [test $efa_unit_test = 1])
 
 	AC_SUBST(efa_CPPFLAGS)
 	AC_SUBST(efa_LDFLAGS)
