@@ -847,9 +847,7 @@ void test_efa_domain_open_ops_cntr_open_ext(void **state)
 	struct efa_domain *efa_domain;
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	efa_unit_test_set_hw_cntr_max_values(efa_domain);
 	g_efa_unit_test_mocks.efadv_create_comp_cntr = efa_mock_efadv_create_comp_cntr_return_mock;
 	g_efa_unit_test_mocks.ibv_destroy_comp_cntr = efa_mock_ibv_destroy_comp_cntr_return_mock;
 	}
