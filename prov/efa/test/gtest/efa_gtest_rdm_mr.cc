@@ -54,7 +54,7 @@ TEST_F(EfaRdmMrTest, reg_map_insert_failure_propagates_error)
 	attr.access = FI_SEND | FI_RECV;
 	attr.iface = FI_HMEM_SYSTEM;
 
-	EXPECT_CALL(mock_efa, ofi_mr_map_insert)
+	EFA_EXPECT_CALL(mock_efa, ofi_mr_map_insert)
 		.Times(1)
 		.WillOnce(Return(-FI_ENOMEM));
 

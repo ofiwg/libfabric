@@ -49,9 +49,6 @@ TEST_P(EfaRtmTest, read_nack_missing_rxe_no_null_deref)
 {
 	ssize_t ret = 0;
 
-	EXPECT_CALL(mock_efa, ofi_mr_map_insert)
-		.WillOnce(Invoke(__real_ofi_mr_map_insert));
-
 	ASSERT_EQ(efa_test_rtm_read_nack_missing_rxe(resource.ep, peer_addr,
 						     GetParam(), &ret),
 		  1);

@@ -38,34 +38,34 @@ You can then directly execute the test executable:
 5. If a test needs EFA internals, expose them through a helper in `efa_gtest_common_helpers.c` rather than including the EFA headers from C++.
 
 ## Mocking
-We intercept functions with the GNU linker's `--wrap` and back them with gmock for expressive expectations. The `EFA_MOCK_FUNCTIONS` X macro in `efa_gtest_common_mocks.h` is the single source of truth — it generates `MOCK_METHOD` declarations, `__real_` extern declarations, and `__wrap_` trampolines automatically.
+We intercept functions with the GNU linker's `--wrap` and back them with gmock for expressive expectations. The `EFA_MOCK_FUNCTIONS` X macro in `efa_gtest_common_mocks.h` is the single source of truth — it generates `MOCK_METHOD` declarations, `__real_` extern declarations, `__wrap_` trampolines, and a `MockEfa::Fn` enumerator per function automatically.
+
+A `--wrap=<fn>` is global: it rewires *every* call to `<fn>` across the whole test binary. So the moment one test file adds a symbol to the wrap set, an installed mock would intercept that symbol everywhere — including in tests that never cared about it. To contain this, each `MockEfa` instance carries an *armed* bitset and the trampoline forwards to the mock **only for armed functions**, falling through to `__real_<fn>` otherwise. A function is automatically armed through `EFA_EXPECT_CALL` (below).
 
 ### Adding a new mock
 
-1. Add a row `X(return_type, fn, (param decls), (arg names))` to the `EFA_MOCK_FUNCTIONS` list in `efa_gtest_common_mocks.h`. The parenthesized param/arg groups are single macro arguments (the parens shield their commas); the generators drop them into `MOCK_METHOD` and the `__real_`/`__wrap_` prototypes.
+1. Add a row `X(return_type, fn, (param decls), (arg names))` to the `EFA_MOCK_FUNCTIONS` list in `efa_gtest_common_mocks.h`. The parenthesized param/arg groups are single macro arguments (the parens shield their commas); the generators drop them into `MOCK_METHOD`, the `__real_`/`__wrap_` prototypes, and the arm enumerator.
 2. Add any needed forward struct declarations at the top of the header.
 3. Add `-Wl,--wrap=<fn>` to `prov_efa_test_gtest_efa_gtest_LDFLAGS` in `prov/efa/Makefile.include`.
 
-If adding a mock breaks other tests, it's likely due to the new mock is being unintentionally called in a test where a real function call is expected. By default, mocked functions will return 0/false/NULL/default construct, and this may not be the expected behavior of the real functions. There are two solutions to this:
-
-1. Define multiple mock classes analogous to `MockEfa`, to isolate the mocks, and only install the mocks you need by `MockEfa::set(&mock_efa);`
-2. Set up the correct expectation to route all calls to a specific wrapped function to the real function, like
+Because the trampoline only intercepts *armed* functions, adding a new mock does not silently reroute an existing test's real calls into gMock's defaults — an unarmed function stays real. If a wrapped function does need real behavior *within* a test that also mocks it (e.g. you arm it but want some calls to run for real), route it explicitly:
 ```
-ON_CALL(*this, ibv_create_ah(_,:_))
-        .WillByDefault(Invoke(__real_ibv_create_ah));
+EFA_EXPECT_CALL(mock_efa, ibv_create_ah)
+        .WillRepeatedly(Invoke(__real_ibv_create_ah));
 ```
-A mixture of both strategy can be used, to minimize the changes required.
 
 ### Using mocks in tests
 
-Install the mock with `MockEfa::set(&mock)` and set up `EXPECT_CALL(mock, ...)` expectations (e.g. `.WillOnce(testing::Return(...))`). When no mock is installed, the trampoline falls through to the real `__real_<fn>` implementation.
+Install the mock with `MockEfa::set(&mock)` and set up expectations with **`EFA_EXPECT_CALL(mock, ...)`** — not the bare `EXPECT_CALL` — e.g. `.WillOnce(testing::Return(...))`. `EFA_EXPECT_CALL` arms the function and opens the expectation in one step; the chained action builders (`.WillOnce`/`.Times`/etc.) work exactly as on `EXPECT_CALL`. A function you never `EFA_EXPECT_CALL` stays unarmed, so its wrapped calls fall through to `__real_<fn>`.
 
-Because `--wrap` rewires every call to the function across the whole test binary, always restore the default in the fixture's `TearDown` — clear the mock with `MockEfa::set(nullptr)` — so mocks don't leak between tests.
+`EFA_EXPECT_CALL(mock, fn)` matches any arguments; to match on arguments pass them as trailing macro args — `EFA_EXPECT_CALL(mock_efa, ibv_destroy_ah, &dummy_ah)` expands to `EXPECT_CALL(mock_efa, ibv_destroy_ah(&dummy_ah))`. (Matchers cannot be written as `fn(...)` inside the macro because the arming step pastes `FN_##fn`, which requires `fn` to be a bare identifier; the macro uses `__VA_OPT__` to add the matcher parentheses only when trailing args are present.)
+
+Always clear the mock in the fixture's `TearDown` with `MockEfa::set(nullptr)` so it doesn't leak between tests. Note the arming bitset lives on the per-test `MockEfa` instance, so it resets automatically each test — but the `--wrap` symbol and the installed-mock pointer are process-global, hence the explicit clear.
 
 ### Strictness and explicit actions
 
-Declare the mock member as `testing::StrictMock<MockEfa>`, not bare `MockEfa`. A bare mock only prints a warning when a wrapped function fires with no matching `EXPECT_CALL`; `StrictMock` makes it a hard failure. That is the behavior we want here: `--wrap` intercepts the function process-wide, so every wrapped call that fires during a test is significant and should be accounted for. Reserve `testing::NiceMock<MockEfa>` for the rare, commented case where a helper fires a high-volume call you deliberately don't want to enumerate.
+Declare the mock member as `testing::StrictMock<MockEfa>`, not bare `MockEfa`. A bare mock only prints a warning when an *armed* function fires with no matching expectation; `StrictMock` makes it a hard failure. That is the behavior we want here: once you arm a function you have declared it significant, so every armed call that fires should be accounted for. Reserve `testing::NiceMock<MockEfa>` for the rare, commented case where a helper fires a high-volume call you deliberately don't want to enumerate.
 
-Strictness is a separate concern from the *return value* of an expected call: `StrictMock` only governs whether a call was expected, never what it returns. A `StrictMock` whose `EXPECT_CALL` omits an action still returns the gMock default (0/false/NULL/default-constructed). So always give every `EXPECT_CALL` an explicit action (`WillOnce`/`WillRepeatedly`/`Times(0)`) rather than relying on that implicit default.
+Strictness is a separate concern from the *return value* of an expected call: `StrictMock` only governs whether a call was expected, never what it returns. A `StrictMock` whose expectation omits an action still returns the gMock default (0/false/NULL/default-constructed). So always give every `EFA_EXPECT_CALL` an explicit action (`WillOnce`/`WillRepeatedly`/`Times(0)`) rather than relying on that implicit default.
 
-Note that the mock is typically installed *after* `efa_test_resource_construct` and cleared in `TearDown`, so any wrapped call made while tearing the resources down (e.g. destroying the endpoint's `self_ah` via `ibv_destroy_ah`) is also subject to strict checking — expect those calls too.
+Because arming is opt-in, a wrapped call made during teardown falls through to `__real_<fn>` **unless the test armed that function** — so you generally do *not* need to expect the endpoint's teardown calls (e.g. the RDM CQ drain's `efa_ibv_cq_start_poll`). The exception is a function the test *does* arm that also fires during teardown: e.g. a test that arms `ibv_destroy_ah` for a peer AH must clear the mock (`MockEfa::set(nullptr)`) *before* `efa_test_resource_destruct`, or the real destroy of `self_ah` will route into the mock as an unexpected call. See `EfaConnTest`.

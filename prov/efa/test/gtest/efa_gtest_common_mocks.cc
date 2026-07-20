@@ -15,14 +15,17 @@ void MockEfa::set(MockEfa *instance)
 	g_mock_efa = instance;
 }
 
-// Generate the definitions of the __wrap_* functions
-#define EFA_MOCK_GEN_WRAP(ret, name, params, args)               \
-	ret __wrap_##name params                                 \
-	{                                                        \
-		auto *mock = MockEfa::get();                     \
-		if (mock)                                        \
-			return mock->name args;                  \
-		return __real_##name args;                       \
+/*
+ * Route a wrapped call into the mock only when the installed mock has armed
+ * this function (via EFA_EXPECT_CALL); otherwise fall through to __real_.
+ */
+#define EFA_MOCK_GEN_WRAP(ret, name, params, args)                      \
+	ret __wrap_##name params                                        \
+	{                                                               \
+		auto *mock = MockEfa::get();                            \
+		if (mock && mock->is_armed(MockEfa::FN_##name))         \
+			return mock->name args;                         \
+		return __real_##name args;                              \
 	}
 
 extern "C" {
