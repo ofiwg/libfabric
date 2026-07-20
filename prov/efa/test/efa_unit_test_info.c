@@ -1217,7 +1217,7 @@ void test_info_max_cntr_value_api_lt_2_5(void **state)
 	struct fi_info *hints, *info;
 	int err;
 
-	mock_cntr_max_values((1ULL << 31) - 1);
+	mock_cntr_max_values(EFA_HW_CNTR_MAX_VALUE);
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	assert_non_null(hints);
@@ -1241,7 +1241,7 @@ void test_info_max_cntr_value_api_ge_2_5_within_hw_range(void **state)
 	struct fi_info *hints, *info;
 	int err;
 
-	mock_cntr_max_values((1ULL << 31) - 1);
+	mock_cntr_max_values(EFA_HW_CNTR_MAX_VALUE);
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	assert_non_null(hints);
@@ -1249,8 +1249,8 @@ void test_info_max_cntr_value_api_ge_2_5_within_hw_range(void **state)
 
 	err = fi_getinfo(FI_VERSION(2, 5), NULL, NULL, 0, hints, &info);
 	assert_int_equal(err, 0);
-	assert_int_equal(info->domain_attr->max_cntr_value, (1ULL << 31) - 1);
-	assert_int_equal(info->domain_attr->max_err_cntr_value, (1ULL << 31) - 1);
+	assert_int_equal(info->domain_attr->max_cntr_value, EFA_HW_CNTR_MAX_VALUE);
+	assert_int_equal(info->domain_attr->max_err_cntr_value, EFA_HW_CNTR_MAX_VALUE);
 
 	fi_freeinfo(info);
 	fi_freeinfo(hints);
@@ -1266,7 +1266,7 @@ void test_info_max_cntr_value_api_ge_2_5_hint_within_hw_range(void **state)
 	struct fi_info *hints, *info;
 	int err;
 
-	mock_cntr_max_values((1ULL << 31) - 1);
+	mock_cntr_max_values(EFA_HW_CNTR_MAX_VALUE);
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	assert_non_null(hints);
@@ -1275,8 +1275,8 @@ void test_info_max_cntr_value_api_ge_2_5_hint_within_hw_range(void **state)
 
 	err = fi_getinfo(FI_VERSION(2, 5), NULL, NULL, 0, hints, &info);
 	assert_int_equal(err, 0);
-	assert_int_equal(info->domain_attr->max_cntr_value, (1ULL << 31) - 1);
-	assert_int_equal(info->domain_attr->max_err_cntr_value, (1ULL << 31) - 1);
+	assert_int_equal(info->domain_attr->max_cntr_value, EFA_HW_CNTR_MAX_VALUE);
+	assert_int_equal(info->domain_attr->max_err_cntr_value, EFA_HW_CNTR_MAX_VALUE);
 
 	fi_freeinfo(info);
 	fi_freeinfo(hints);
@@ -1292,7 +1292,7 @@ void test_info_max_cntr_value_api_ge_2_5_above_hw_range(void **state)
 	struct fi_info *hints, *info;
 	int err;
 
-	mock_cntr_max_values((1ULL << 31) - 1);
+	mock_cntr_max_values(EFA_HW_CNTR_MAX_VALUE);
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 	assert_non_null(hints);
@@ -1316,7 +1316,7 @@ void test_info_rdm_max_cntr_value_api_ge_2_5_within_hw_range(void **state)
 	struct fi_info *hints, *info;
 	int err;
 
-	mock_cntr_max_values((1ULL << 31) - 1);
+	mock_cntr_max_values(EFA_HW_CNTR_MAX_VALUE);
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	assert_non_null(hints);
