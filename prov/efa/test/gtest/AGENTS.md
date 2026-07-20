@@ -104,9 +104,11 @@ contract or copy a pattern from a nearby test when the docs can settle it.
   `efa_test_resource_destruct`, or `self_ah`'s real destroy routes into the mock
   as an unexpected call (see `EfaConnTest`).
 - **Static-inline functions** (`efa_qp_post_*`, `efa_ibv_cq_*` in
-  `efa_data_path_ops.h`) are only linkable under `#if EFA_UNIT_TEST`. Mocking them
-  requires configuring with **both** `--enable-efa-unit-test` AND
-  `--enable-efa-gtest`; gtest-only silently binds `--wrap` to nothing → false pass.
+  `efa_data_path_ops.h`) are only linkable under `#if EFA_UNIT_TEST`, which turns
+  their `static inline` bodies into extern decls backed by the stub
+  `efa_unit_test_data_path_ops.c`. `EFA_UNIT_TEST` is derived from *either* test
+  suite (`--enable-efa-gtest` OR `--enable-efa-unit-test`), so `--enable-efa-gtest`
+  alone makes them `--wrap`-able — the gtest suite does **not** need cmocka.
 
 ### C/C++ bridge
 
