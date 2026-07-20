@@ -10,12 +10,12 @@
 To run efa unit tests, you will need to have [GoogleTest 1.17](https://github.com/google/googletest/releases/tag/v1.17.0) installed.
 See installation instructions [here](https://google.github.io/googletest/quickstart-cmake.html).
 
-You will need to configure libfabric with `--enable-efa-gtest=<path_to_gtest_install>`.
+Note that the GTest suite **does not** depend on the cmocka suite (`--enable-efa-unit-test`).
 
 An example build and run command would look like:
 
 ```bash
-./autogen.sh && ./configure --enable-efa-gtest=/home/ec2-user/googletest/install
+./autogen.sh && ./configure --your-flags --enable-efa --enable-efa-gtest=/path/to/googletest/install
 make /prov/efa/test/gtest/efa_gtest -j
 ```
 
@@ -24,12 +24,18 @@ You can then directly execute the test executable:
 ./prov/efa/test/gtest/efa_gtest
 ```
 
+To run a subset of the test suite, you can do
+```
+./prov/efa/test/gtest/efa_gtest --gtest_filter='EfaCqTest*'
+```
+
 ## File Structure
 * `efa_gtest_main.cc`: Test entry point. Its `main` calls `InitGoogleMock` and `RUN_ALL_TESTS()`. Tests register themselves through the `TEST`/`TEST_F` macros, so — unlike cmocka — there is nothing to declare or add to `main` by hand.
 * `efa_gtest_common_resource.{cc,h}`: Defines `struct efa_resource` and `efa_test_resource_construct`/`efa_test_resource_destruct`, which build and tear down a full set of OFI objects (fabric, domain, endpoint, EQ, AV, CQ).
-* `efa_gtest_common_mocks.{cc,h}`: The `MockEfa` gmock class for libibverbs/efadv calls (e.g. `ibv_create_ah`), plus the `__wrap_*` trampolines that route those calls to the installed mock.
+* `efa_gtest_common_mocks.{cc,h}`: All mock-related infrastructure. This is the single place you add a mock definition (a row in the `EFA_MOCK_FUNCTIONS` X macro), from which the related X-macro machinery generates the `MockEfa` class's `MOCK_METHOD` declarations, the `__real_`/`__wrap_` prototypes and trampolines, and the per-function arm enumerator. 
 * `efa_gtest_common_helpers.{c,h}`: C-linkage helpers. EFA internal headers (`efa.h`, `efa_av.h`, ...) transitively pull in `unix/osd.h`, which uses C `_Complex` types that don't compile under C++. Anything a test needs from EFA internals is wrapped by a C function here and declared `extern "C"` in the header.
-* `efa_gtest_{component}.cc`: The tests themselves, one file per component (e.g. `efa_gtest_conn.cc`).
+* `efa_gtest_{component}.cc`: The tests themselves, one file per component.
+* `efa_gtest_{component}_utils.{c,h}`: Optional, test-specific C-bridge utilities for a single component — the per-component counterpart to `efa_gtest_common_helpers.{c,h}`. Use these when a component's tests need C-linkage access to EFA internals that is too specialized to belong in the shared helpers.
 
 ## What Should be Tested
 1. We make a conscious trade-off to test larger rather than smaller units. Hitting small but trivial units can increase coverage but don't test anything interesting.
@@ -38,9 +44,10 @@ You can then directly execute the test executable:
 ## How to write
 1. Read the [GoogleTest documentation](https://google.github.io/googletest/), particularly the [primer](https://google.github.io/googletest/primer.html), and the [gMock Cookbook](https://google.github.io/googletest/gmock_cook_book.html).
 2. Pick the component file `efa_gtest_{component}.cc` (create one if needed and add it to `nodist_..._SOURCES` in `prov/efa/Makefile.include`).
-3. Write a fixture class deriving from `::testing::Test`. Embed a `struct efa_resource` and any mocks (e.g. `MockEfa`); call `efa_test_resource_construct` to set up and `efa_test_resource_destruct` + `MockEfa::set(nullptr)` to tear down. See `EfaConnTest` in `efa_gtest_conn.cc`.
+3. Write a fixture class deriving from `::testing::Test`. Typically you need a `struct efa_resource` and an instance of `MockEfa` as members; call `efa_test_resource_construct` to set up and `efa_test_resource_destruct` + `MockEfa::set(nullptr)` to tear down.
 4. Write tests with `TEST_F(Fixture, name)`. There is no header to update and no group to register — gtest discovers tests automatically.
-5. If a test needs EFA internals, expose them through a helper in `efa_gtest_common_helpers.c` rather than including the EFA headers from C++.
+5. To run the *same* test body over several inputs (e.g. an opcode or a bool flag), write a parameterized test instead of copy-pasting `TEST_F`s. Derive the fixture from `testing::TestWithParam<T>` (rather than `testing::Test`), read the current input with `GetParam()` inside a `TEST_P(Fixture, name)`, and register the value set once with `INSTANTIATE_TEST_SUITE_P(, Fixture, <generator>, <name-fn>)` — where `<generator>` is e.g. `testing::Bool()` or `testing::Values(...)`, and the optional trailing lambda names each instance for readable output. See `EfaRtmTest` in `efa_gtest_rdm_pke_rtm.cc`.
+6. If a test needs EFA internals, expose them through a C-linkage helper rather than including the EFA headers from C++ — in `efa_gtest_common_helpers.c` if it is broadly reusable, or in a component-specific `efa_gtest_{component}_utils.c` (with its `.h` declaring the `extern "C"` interface) if it is specialized to one component's tests. Remember to add any new `.c` file to `nodist_..._SOURCES` in `prov/efa/Makefile.include`.
 
 ## Mocking
 We intercept functions with the GNU linker's `--wrap` and back them with gmock for expressive expectations. The `EFA_MOCK_FUNCTIONS` X macro in `efa_gtest_common_mocks.h` is the single source of truth — it generates `MOCK_METHOD` declarations, `__real_` extern declarations, `__wrap_` trampolines, and a `MockEfa::Fn` enumerator per function automatically.
@@ -53,9 +60,10 @@ A `--wrap=<fn>` is global: it rewires *every* call to `<fn>` across the whole te
 2. Add any needed forward struct declarations at the top of the header.
 3. Add `-Wl,--wrap=<fn>` to `prov_efa_test_gtest_efa_gtest_LDFLAGS` in `prov/efa/Makefile.include`.
 
-Because the trampoline only intercepts *armed* functions, adding a new mock does not silently reroute an existing test's real calls into gMock's defaults — an unarmed function stays real. If a wrapped function does need real behavior *within* a test that also mocks it (e.g. you arm it but want some calls to run for real), route it explicitly:
+Because the trampoline only intercepts *armed* functions, adding a new mock does not silently reroute an existing test's real calls into gMock's defaults — an unarmed function stays real. Arming a function only to send *every* call straight to `__real_<fn>` is pointless — it behaves exactly like leaving it unarmed. Arming earns its keep when you want to intercept *some* calls but let the rest run for real; sequence the actions with per-call `WillOnce`s and a `WillRepeatedly` tail. For example, to fail the first AH creation but let all later ones succeed for real:
 ```
 EFA_EXPECT_CALL(mock_efa, ibv_create_ah)
+        .WillOnce(Return(nullptr))
         .WillRepeatedly(Invoke(__real_ibv_create_ah));
 ```
 
@@ -63,7 +71,7 @@ EFA_EXPECT_CALL(mock_efa, ibv_create_ah)
 
 Install the mock with `MockEfa::set(&mock)` and set up expectations with **`EFA_EXPECT_CALL(mock, ...)`** — not the bare `EXPECT_CALL` — e.g. `.WillOnce(testing::Return(...))`. `EFA_EXPECT_CALL` arms the function and opens the expectation in one step; the chained action builders (`.WillOnce`/`.Times`/etc.) work exactly as on `EXPECT_CALL`. A function you never `EFA_EXPECT_CALL` stays unarmed, so its wrapped calls fall through to `__real_<fn>`.
 
-`EFA_EXPECT_CALL(mock, fn)` matches any arguments; to match on arguments pass them as trailing macro args — `EFA_EXPECT_CALL(mock_efa, ibv_destroy_ah, &dummy_ah)` expands to `EXPECT_CALL(mock_efa, ibv_destroy_ah(&dummy_ah))`. (Matchers cannot be written as `fn(...)` inside the macro because the arming step pastes `FN_##fn`, which requires `fn` to be a bare identifier; the macro uses `__VA_OPT__` to add the matcher parentheses only when trailing args are present.)
+`EFA_EXPECT_CALL(mock, fn)` matches any arguments; to match on arguments pass them as trailing args — `EFA_EXPECT_CALL(mock_efa, fn, arg1, arg2, ...)` expands to `EXPECT_CALL(mock_efa, fn(arg1, arg2, ...))`.
 
 Always clear the mock in the fixture's `TearDown` with `MockEfa::set(nullptr)` so it doesn't leak between tests. Note the arming bitset lives on the per-test `MockEfa` instance, so it resets automatically each test — but the `--wrap` symbol and the installed-mock pointer are process-global, hence the explicit clear.
 
