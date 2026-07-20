@@ -385,6 +385,27 @@ err:
 	return -FI_ENODATA;
 }
 
+int ft_cuda_init_thread(uint64_t device)
+{
+	cudaError_t cuda_ret;
+
+	cuda_ret = cuda_ops.cudaSetDevice(device);
+	if (cuda_ret != cudaSuccess) {
+		CUDA_ERR(cuda_ret, "cudaSetDevice failed");
+		return -FI_EIO;
+	}
+
+	/* cudaFree() forces context activation since cudaSetDevice() alone 
+	 * may do lazy initialization */
+	cuda_ret = cuda_ops.cudaFree(NULL);
+	if (cuda_ret != cudaSuccess) {
+		CUDA_ERR(cuda_ret, "cudaFree failed");
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
+}
+
 int ft_cuda_cleanup(void)
 {
 	dlclose(cudart_handle);
@@ -494,22 +515,6 @@ int ft_cuda_copy_from_hmem(uint64_t device, void *dst, const void *src,
 	return -FI_EIO;
 }
 
-/* TODO: Make get_base_addr a general hmem ops API */
-static
-int ft_cuda_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
-{
-	CUresult cu_result;
-
-	cu_result = cuda_ops.cuMemGetAddressRange(
-				(CUdeviceptr *)base,
-				size, (CUdeviceptr) ptr);
-	if (cu_result == CUDA_SUCCESS)
-		return FI_SUCCESS;
-
-	ft_cuda_driver_api_print_error(cu_result, "cuMemGetAddressRange");
-	return -FI_EIO;
-}
-
 /**
  * @brief Get dmabuf fd and offset for a given cuda memory allocation
  *
@@ -601,6 +606,11 @@ enum ft_cuda_memory_support ft_cuda_memory_support(void)
 #else
 
 int ft_cuda_init(void)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_cuda_init_thread(uint64_t device)
 {
 	return -FI_ENOSYS;
 }
