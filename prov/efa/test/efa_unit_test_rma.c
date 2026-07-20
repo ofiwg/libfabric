@@ -746,7 +746,6 @@ static void test_efa_ibv_post_write_processing_hints_impl(struct efa_resource *r
 	struct ibv_qp_ex *ibv_qpx;
 	struct efadv_qp *efadv_qp;
 	struct efa_ah fake_ah = {0};
-	bool enable_high_pps_orig;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
