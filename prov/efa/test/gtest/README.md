@@ -1,5 +1,10 @@
 # GoogleTest-based EFA unit tests
 
+> **Using an AI coding agent?** Read [AGENTS.md](AGENTS.md) — it distills the
+> conventions in this README into task-oriented skills for writing tests,
+> reviewing tests, and finding bugs in EFA source. This applies whether you are an
+> agent yourself or a human planning to drive one.
+
 ## How to run
 
 To run efa unit tests, you will need to have [GoogleTest 1.17](https://github.com/google/googletest/releases/tag/v1.17.0) installed.
