@@ -261,9 +261,7 @@ void test_efa_hw_cntr_open_unsupported_type_bytes(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	efa_unit_test_set_hw_cntr_max_values(efa_domain);
 	g_efa_unit_test_mocks.efadv_create_comp_cntr =
 		efa_mock_efadv_create_comp_cntr_return_null_enotsup;
 
@@ -294,7 +292,7 @@ void test_efa_hw_cntr_open_max_cntr_value_exceeded(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
+	efa_domain->device->comp_count_max_value = EFA_HW_CNTR_MAX_VALUE;
 	efa_domain->info->domain_attr->max_cntr_value = UINT64_MAX;
 
 	cntr = calloc(1, sizeof(*cntr));
@@ -322,9 +320,7 @@ void test_efa_hw_cntr_open_ibv_fail(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	efa_unit_test_set_hw_cntr_max_values(efa_domain);
 	g_efa_unit_test_mocks.efadv_create_comp_cntr =
 		efa_mock_efadv_create_comp_cntr_return_null_enotsup;
 
@@ -365,9 +361,7 @@ static struct fid_cntr *test_efa_hw_cntr_open(struct efa_resource *resource,
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	efa_unit_test_set_hw_cntr_max_values(efa_domain);
 	g_efa_unit_test_mocks.efadv_create_comp_cntr = efa_mock_efadv_create_comp_cntr_return_mock;
 	g_efa_unit_test_mocks.ibv_destroy_comp_cntr = efa_mock_ibv_destroy_comp_cntr_return_mock;
 
@@ -504,9 +498,7 @@ static int test_efa_hw_cntr_open_with_wait_obj(struct efa_resource *resource,
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	efa_unit_test_set_hw_cntr_max_values(efa_domain);
 	g_efa_unit_test_mocks.efadv_create_comp_cntr = efa_mock_efadv_create_comp_cntr_return_mock;
 	g_efa_unit_test_mocks.ibv_destroy_comp_cntr = efa_mock_ibv_destroy_comp_cntr_return_mock;
 
@@ -658,9 +650,7 @@ void test_efa_cntr_open_uses_hw_cntr(void **state)
 
 	efa_domain = container_of(resource->domain, struct efa_domain,
 				  util_domain.domain_fid);
-	efa_domain->device->max_comp_cntr = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_cntr_value = (1ULL << 31) - 1;
-	efa_domain->info->domain_attr->max_err_cntr_value = (1ULL << 31) - 1;
+	efa_unit_test_set_hw_cntr_max_values(efa_domain);
 	g_efa_unit_test_mocks.efadv_create_comp_cntr = efa_mock_efadv_create_comp_cntr_return_mock;
 	g_efa_unit_test_mocks.ibv_destroy_comp_cntr = efa_mock_ibv_destroy_comp_cntr_return_mock;
 
