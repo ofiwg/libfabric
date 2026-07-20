@@ -1,7 +1,14 @@
 import os
 import pytest
+import subprocess
 import time
-from common import test_selected_by_marker
+from retrying import retry
+from common import (
+    test_selected_by_marker,
+    has_ssh_connection_err_msg,
+    is_ssh_connection_error,
+    SshConnectionError,
+)
 from efa_common import (
     has_rdma, 
     support_cq_interrupts,
@@ -244,11 +251,44 @@ def cuda_validation_fixture(request, cmdline_args):
         print("No CUDA memory mark, skipping validation")
 
 
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def device_has_hw_cntr(host_id):
+    """
+    Return True if the EFA device reports a non-zero hardware
+    counter count, indiciating hardware counter support
+    """
+    command = "ssh {} 'fi_info -p efa -v || /opt/amazon/efa/bin/fi_info -p efa -v' | grep cntr_cnt".format(host_id)
+    proc = subprocess.run(command, shell=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8", timeout=60)
+
+    if has_ssh_connection_err_msg(proc.stdout) or has_ssh_connection_err_msg(proc.stderr):
+        raise SshConnectionError()
+
+    for line in proc.stdout.strip().split("\n"):
+        value = line.split(":")[-1].strip()
+        if value.isdigit() and int(value) > 0:
+            return True
+    return False
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_collection_modifyitems(session, config, items):
     # Called after collection has been performed, may filter or re-order the items in-place
     binpath = config.getoption("--binpath", default="") or ""
+    server_id = config.getoption("--server-id", default="")
+    client_id = config.getoption("--client-id", default="")
     have_hw_cntr = os.path.exists(os.path.join(binpath, "fi_efa_hw_cntr"))
+    if have_hw_cntr:
+        for host_id in filter(None, (server_id, client_id)):
+            try:
+                if not device_has_hw_cntr(host_id):
+                    have_hw_cntr = False
+                    break
+            except SshConnectionError:
+                pytest.fail(
+                    "Could not determine hw_cntr support: ssh to {} failed after "
+                    "retries. Refusing to silently deselect hw_cntr tests.".format(host_id))
     have_gda = os.path.exists(os.path.join(binpath, "fi_efa_gda"))
 
     deselected = []
