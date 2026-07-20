@@ -18,6 +18,12 @@
 #include "efa.h"
 #include "efa_unit_test_mocks.h"
 
+/**
+ * Maximum value of hardware completion counters on the EFA device.
+ * Used to mock hardware counter support in unit tests.
+ */
+#define EFA_HW_CNTR_MAX_VALUE (((uint64_t)1 << 31) - 1)
+
 extern int g_ibv_ah_limit;
 extern int g_ibv_ah_cnt;
 extern int g_self_ah_cnt;
@@ -739,6 +745,15 @@ void test_efa_rdm_rma_should_read_using_rdma_homogeneous_with_p2p(void **state);
 void test_efa_rdm_rma_should_write_using_rdma_peer_p2p_false_returns_false(void **state);
 void test_efa_rdm_rma_should_write_using_rdma_self_no_p2p(void **state);
 /* end efa_unit_test_rdm_rma.c */
+
+static inline
+void efa_unit_test_set_hw_cntr_max_values(struct efa_domain *efa_domain)
+{
+	efa_domain->device->comp_count_max_value = EFA_HW_CNTR_MAX_VALUE;
+	efa_domain->device->err_count_max_value = EFA_HW_CNTR_MAX_VALUE;
+	efa_domain->info->domain_attr->max_cntr_value = EFA_HW_CNTR_MAX_VALUE;
+	efa_domain->info->domain_attr->max_err_cntr_value = EFA_HW_CNTR_MAX_VALUE;
+}
 
 static inline
 int efa_unit_test_get_dlist_length(struct dlist_entry *head)
