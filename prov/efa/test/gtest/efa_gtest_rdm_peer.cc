@@ -47,8 +47,7 @@ TEST_F(EfaRdmPeerTest, failed_reorder_msg_releases_rx_pkt)
 {
 	size_t to_post_before = 0, to_post_after = 0;
 
-	EXPECT_CALL(mock_efa, ofi_mr_map_insert).WillRepeatedly(Invoke(__real_ofi_mr_map_insert));
-	EXPECT_CALL(mock_efa, efa_rdm_pke_clone).WillOnce(Return(nullptr));
+	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_clone).WillOnce(Return(nullptr));
 
 	ASSERT_EQ(efa_test_failed_reorder_msg_releases_rx_pkt(
 			  resource.ep, peer_addr, &to_post_before,
@@ -67,8 +66,7 @@ TEST_F(EfaRdmPeerTest, failed_reorder_msg_overflow_releases_rx_pkt_and_entry)
 	size_t to_post_before = 0, to_post_after = 0;
 	size_t overflow_free_before = 0, overflow_free_after = 0;
 
-	EXPECT_CALL(mock_efa, ofi_mr_map_insert).WillRepeatedly(Invoke(__real_ofi_mr_map_insert));
-	EXPECT_CALL(mock_efa, efa_rdm_pke_clone).WillOnce(Return(nullptr));
+	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_clone).WillOnce(Return(nullptr));
 
 	ASSERT_EQ(efa_test_failed_reorder_msg_overflow_releases_rx_pkt_and_entry(
 			  resource.ep, peer_addr, &to_post_before,

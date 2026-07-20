@@ -12,15 +12,6 @@ using testing::Return;
 using testing::Invoke;
 using testing::StrictMock;
 
-/**
- * @brief Exercises the ENOMEM recovery branch of efa_ah_alloc.
- *
- * When ibv_create_ah fails with FI_ENOMEM during an implicit AV insertion,
- * efa_ah_alloc attempts to evict an AH entry that has no explicit AV references
- * and retries ibv_create_ah. These tests drive both outcomes of that branch:
- * the retry succeeding after a successful eviction, and the branch bailing out
- * because there is no AH available to evict.
- */
 class EfaAhTest : public Test
 {
 	protected:
@@ -41,19 +32,13 @@ class EfaAhTest : public Test
 
 	void TearDown() override
 	{
-		/* ep_close calls this wrapped function */
-		EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll)
-			.WillRepeatedly(Return(ENOENT));
-
 		efa_test_resource_destruct(&resource);
 		MockEfa::set(nullptr);
 	}
 };
 
 /**
- * @brief efa_ah_alloc's ENOMEM eviction branch where the retry succeeds: a
- * second insert hits ENOMEM, efa_ah_implicit_av_evict_ah releases the first
- * (implicit-only) AH, and the retried ibv_create_ah succeeds.
+ * @brief Exerise efa_ah_alloc's ENOMEM eviction branch where the retry succeeds
  */
 TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 {
@@ -66,7 +51,7 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 	 *   2. second GID -> ENOMEM (drives the errno == FI_ENOMEM branch)
 	 *   3. second GID retry after eviction of dummy_ah_a -> success
 	 */
-	EXPECT_CALL(mock_efa, ibv_create_ah)
+	EFA_EXPECT_CALL(mock_efa, ibv_create_ah)
 		.WillOnce(Return(&dummy_ah_a))
 		.WillOnce(Invoke([](struct ibv_pd *,
 				    struct ibv_ah_attr *) -> struct ibv_ah * {
@@ -75,7 +60,7 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 		}))
 		.WillOnce(Return(&dummy_ah_b));
 
-	EXPECT_CALL(mock_efa, efadv_query_ah)
+	EFA_EXPECT_CALL(mock_efa, efadv_query_ah)
 		.Times(2)
 		.WillRepeatedly(Return(0));
 
@@ -83,7 +68,7 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 	 * ibv_destroy_ah is called for three AH's: we need to fake
 	 * dummy_ah_a/b's destroy calls, but actually call destroy on self_ah.
 	 */
-	EXPECT_CALL(mock_efa, ibv_destroy_ah)
+	EFA_EXPECT_CALL(mock_efa, ibv_destroy_ah)
 		.Times(3)
 		.WillRepeatedly(Invoke([](struct ibv_ah *ah) -> int {
 			if (ah == &dummy_ah_a || ah == &dummy_ah_b)
@@ -91,21 +76,14 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 			return __real_ibv_destroy_ah(ah);
 		}));
 
-	// run the real reverse_av_add to populate the reverse av hash
-	EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
-		.WillRepeatedly(Invoke(__real_efa_av_reverse_av_add));
 
 	addr_a = efa_test_insert_peer_new_gid(resource.ep, resource.av);
 	EXPECT_NE(addr_a, (fi_addr_t) FI_ADDR_NOTAVAIL);
 
-	// we have configured this insertion to fail-retry-succeed
 	addr_b = efa_test_insert_peer_new_gid(resource.ep, resource.av);
 	EXPECT_NE(addr_b, (fi_addr_t) FI_ADDR_NOTAVAIL);
 
-	/*
-	 * A's conn was released during B's insert, so addr_a no longer
-	 * resolves. This proves A specifically was the evicted entry.
-	 */
+	/* This proves A specifically was the evicted entry */
 	EXPECT_EQ(efa_test_implicit_addr_to_ibv_ah(resource.av, addr_a),
 		  nullptr);
 	/*
@@ -118,28 +96,20 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 }
 
 /**
- * @brief efa_ah_alloc's ENOMEM eviction branch where the retry never happens:
- * with an empty AH map efa_ah_implicit_av_evict_ah returns -FI_ENOMEM, so
- * efa_ah_alloc bails via err_free_efa_ah and the insert fails.
+ * @brief Exercise efa_ah_alloc's ENOMEM eviction branch where there is nothing
+ * to evict, so the retry never happens and the insert fails
  */
 TEST_F(EfaAhTest, alloc_enomem_no_evictable_ah_fails)
 {
 	fi_addr_t addr;
 
-	/* The only AH creation attempt fails with ENOMEM; with an empty LRU
-	 * list the eviction helper cannot free anything, so no retry occurs. */
-	EXPECT_CALL(mock_efa, ibv_create_ah)
+	/* one failed AH creation: empty LRU = no retry */
+	EFA_EXPECT_CALL(mock_efa, ibv_create_ah)
 		.WillOnce(Invoke([](struct ibv_pd *,
 				    struct ibv_ah_attr *) -> struct ibv_ah * {
 			errno = ENOMEM;
 			return nullptr;
 		}));
-
-	/* The failed insert creates no AH, so ibv_destroy_ah is only expected
-	 * to be called once on the real AH. */
-	EXPECT_CALL(mock_efa, ibv_destroy_ah)
-		.Times(1)
-		.WillOnce(Invoke(__real_ibv_destroy_ah));
 
 	addr = efa_test_insert_peer_new_gid(resource.ep, resource.av);
 	EXPECT_EQ(addr, (fi_addr_t) FI_ADDR_NOTAVAIL);

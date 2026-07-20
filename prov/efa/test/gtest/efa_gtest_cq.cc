@@ -46,18 +46,18 @@ class EfaCqTest : public Test
 	/* Set up expectations to get an error cqe */
 	void set_expectations_for_cq_err()
 	{
-		EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll).WillOnce(Return(0));
-		EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_qp_num)
+		EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll).WillOnce(Return(0));
+		EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_qp_num)
 			.WillOnce(Return(qp_num));
-		EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_opcode)
+		EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_opcode)
 			.WillOnce(Return(IBV_WC_SEND));
-		EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_vendor_err)
+		EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_vendor_err)
 			.WillOnce(Return(kProvErrno));
-		EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_byte_len)
+		EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_byte_len)
 			.WillOnce(Return(64));
-		EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_wc_flags)
+		EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_wc_flags)
 			.WillOnce(Return(0));
-		EXPECT_CALL(mock_efa, efa_ibv_cq_end_poll).Times(1);
+		EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_end_poll).Times(1);
 	}
 
 	void drive_error_cqe(struct efa_context *ctx,

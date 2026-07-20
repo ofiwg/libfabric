@@ -5,6 +5,7 @@
 #ifndef EFA_GTEST_COMMON_MOCKS_H
 #define EFA_GTEST_COMMON_MOCKS_H
 
+#include <bitset>
 #include <gmock/gmock.h>
 #include <infiniband/efadv.h>
 #include <infiniband/verbs.h>
@@ -24,7 +25,7 @@ struct efa_ah;
 /*
  * X-macro list of every mocked function. Each row is
  *   X(ret, name, (param decls), (arg names))
- *
+ * 
  * To add a new mocked function:
  *   1. Add a row to EFA_MOCK_FUNCTIONS
  *   2. Add any needed forward struct declarations above
@@ -101,14 +102,30 @@ struct efa_ah;
 #define EFA_MOCK_GEN_REAL_DECL(ret, name, params, args) \
 	ret __real_##name params;
 
+#define EFA_MOCK_GEN_ENUM(ret, name, params, args) FN_##name,
+
 class MockEfa
 {
 	public:
 	EFA_MOCK_FUNCTIONS(EFA_MOCK_GEN_METHOD)
 
+	/* FN_COUNT is the last member of the enum, hence the number of wrapped fns */
+	enum Fn { EFA_MOCK_FUNCTIONS(EFA_MOCK_GEN_ENUM) FN_COUNT };
+
+	void arm(Fn fn) { armed_.set(fn); }
+	/* test whether a wrapped function should be mocked in the current test */
+	bool is_armed(Fn fn) const { return armed_.test(fn); }
+
 	static MockEfa *get();
 	static void set(MockEfa *instance);
+
+	private:
+	std::bitset<FN_COUNT> armed_;
 };
+
+#define EFA_EXPECT_CALL(obj, name, ...)          \
+	((obj).arm(MockEfa::FN_##name),          \
+	 EXPECT_CALL(obj, name __VA_OPT__((__VA_ARGS__))))
 
 // Generate the declarations of the real function prototypes
 extern "C" {
