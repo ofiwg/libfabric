@@ -799,11 +799,13 @@ static bool vrb_hmem_supported(const char *dev_name)
 		return false;
 
 	if (vrb_gl_data.peer_mem_support && (strstr(dev_name, "mlx") ||
-					     strstr(dev_name, "bnxt_re")))
+					     strstr(dev_name, "bnxt_re") ||
+					     strstr(dev_name, "roce")))
 		return true;
 
 	if (vrb_gl_data.dmabuf_support && (strstr(dev_name, "mlx") ||
-					   strstr(dev_name, "bnxt_re")))
+					   strstr(dev_name, "bnxt_re") ||
+					   strstr(dev_name, "roce")))
 		return true;
 
 	return false;
