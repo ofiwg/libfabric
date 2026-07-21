@@ -136,18 +136,9 @@ def abort_case_params():
 
 
 # --- Test: abort (RMA) ---
-@pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"])  # TODO add test for efa fabric
-@pytest.mark.parametrize("close_side", ["initiator", "target"])
-@pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
-@pytest.mark.parametrize(
-    "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
-    abort_case_params())
-def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr,
-                  high_pps, sl_low_latency, message_size, memory_type):
-    if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
-        pytest.skip("fi_mr_abort not supported with efa with SHM")
-
+def run_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side,
+                 ops_per_mr, high_pps, sl_low_latency, message_size,
+                 memory_type):
     command = (f"fi_mr_abort -T abort -o {rma_op} -C {cancel_order}"
                f" -R {close_side} -N {ops_per_mr} -W {mr_abort_num_mrs(ops_per_mr)}"
                f" -S {message_size}{MR_ABORT_EP_ARGS}")
@@ -164,20 +155,45 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
     test.run()
 
 
-# --- Test: partial (2 MRs on same buffer) ---
+# efa-direct runs one preferred memory flavor; efa runs every detected
+# flavor (host_to_host plus the accelerator flavor) so both the system and
+# hmem paths are covered.
 @pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
-@pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
-@pytest.mark.parametrize("split_eps", [False, True],
-                         ids=["same_ep", "split_eps"])
-@pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
-                         rma_case_params())
-def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
-                          sl_low_latency, message_size, memory_type,
-                          split_eps):
-    if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
-        pytest.skip("fi_mr_abort not supported with efa with SHM")
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.parametrize("close_side", ["initiator", "target"])
+@pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)
+@pytest.mark.parametrize(
+    "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
+    abort_case_params())
+def test_mr_abort_efa_direct(cmdline_args, rma_fabric, rma_op, cancel_order,
+                             close_side, ops_per_mr, high_pps, sl_low_latency,
+                             message_size, memory_type):
+    run_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side,
+                 ops_per_mr, high_pps, sl_low_latency, message_size,
+                 memory_type)
 
+
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa"])
+@pytest.mark.parametrize("close_side", ["initiator", "target"])
+@pytest.mark.memory_type(memory_type_list_symm)
+@pytest.mark.parametrize(
+    "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
+    abort_case_params())
+def test_mr_abort_efa(cmdline_args, rma_fabric, rma_op, cancel_order,
+                      close_side, ops_per_mr, high_pps, sl_low_latency,
+                      message_size, memory_type):
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("fi_mr_abort not supported with efa with SHM")
+    run_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side,
+                 ops_per_mr, high_pps, sl_low_latency, message_size,
+                 memory_type)
+
+
+# --- Test: partial (2 MRs on same buffer) ---
+def run_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
+                         sl_low_latency, message_size, memory_type,
+                         split_eps):
     command = (f"fi_mr_abort -T partial -o {rma_op} -S {message_size}"
                f"{MR_ABORT_EP_ARGS}")
 
@@ -211,21 +227,45 @@ def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
     test.run()
 
 
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)
+@pytest.mark.parametrize("split_eps", [False, True],
+                         ids=["same_ep", "split_eps"])
+@pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
+                         rma_case_params())
+def test_mr_abort_partial_efa_direct(cmdline_args, rma_fabric, rma_op,
+                                     high_pps, sl_low_latency, message_size,
+                                     memory_type, split_eps):
+    run_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
+                         sl_low_latency, message_size, memory_type, split_eps)
+
+
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa"])
+@pytest.mark.memory_type(memory_type_list_symm)
+@pytest.mark.parametrize("split_eps", [False, True],
+                         ids=["same_ep", "split_eps"])
+@pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
+                         rma_case_params())
+def test_mr_abort_partial_efa(cmdline_args, rma_fabric, rma_op, high_pps,
+                              sl_low_latency, message_size, memory_type,
+                              split_eps):
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("fi_mr_abort not supported with efa with SHM")
+    run_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
+                         sl_low_latency, message_size, memory_type, split_eps)
+
+
 # --- Test: incast (many initiator EPs, one target EP) ---
 MR_ABORT_INCAST_NUM_DOMAINS = 4
 MR_ABORT_INCAST_INITIATOR_EPS = (MR_ABORT_INCAST_NUM_DOMAINS *
                                  MR_ABORT_EPS_PER_DOMAIN)
 
 
-@pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"])  # TODO add test for efa fabric
-@pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
-@pytest.mark.parametrize(
-    "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
-    list(abort_case_params()))
-def test_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order, ops_per_mr,
-                         high_pps, sl_low_latency, message_size, memory_type,
-                         num_domains):
+def run_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order,
+                        ops_per_mr, high_pps, sl_low_latency, message_size,
+                        memory_type, num_domains):
     """
     Incast: 16 initiator endpoints, 4 per EFA NIC across 4 NICs, all
     targeting a single endpoint on a separate platform. Skipped when
@@ -264,6 +304,36 @@ def test_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order, ops_per
 
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type)
     test.run()
+
+
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)
+@pytest.mark.parametrize(
+    "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
+    abort_case_params())
+def test_mr_abort_incast_efa_direct(cmdline_args, rma_fabric, rma_op,
+                                    cancel_order, ops_per_mr, high_pps,
+                                    sl_low_latency, message_size, memory_type,
+                                    num_domains):
+    run_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order,
+                        ops_per_mr, high_pps, sl_low_latency, message_size,
+                        memory_type, num_domains)
+
+
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa"])
+@pytest.mark.memory_type(memory_type_list_symm)
+@pytest.mark.parametrize(
+    "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
+    abort_case_params())
+def test_mr_abort_incast_efa(cmdline_args, rma_fabric, rma_op, cancel_order,
+                             ops_per_mr, high_pps, sl_low_latency,
+                             message_size, memory_type, num_domains):
+    # No SHM guard needed: the incast helper already requires two platforms.
+    run_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order,
+                        ops_per_mr, high_pps, sl_low_latency, message_size,
+                        memory_type, num_domains)
 
 
 def determine_settings_for_proto(protocol, memory_type, fabric):
@@ -413,44 +483,30 @@ SEND_PROTOCOLS = ["EAGER", "MEDIUM", "LONGCTS", "LONGREAD",
 EFA_DIRECT_MAX_SEND_SIZE = MSG_SIZE_8KIB
 
 
-def send_case_params():
+def send_case_params(fabric):
     """
-    Generate the (tagged, protocol) combinations that can actually run on
-    the fabrics generated by the fabric marker (efa-direct only): efa-direct
-    does not support tagged sends, and its 8KB send limit leaves only
-    EAGER (4KB). The tagged dimension is kept for the efa fabric.
-
-    TODO take the fabric into account once the efa fabric is added; tagged
-    sends and the larger protocols apply there.
+    Generate the (tagged, protocol) combinations that can run on the given
+    fabric, so no never-runnable case is collected: efa-direct does not
+    support tagged sends and its 8KB send limit leaves only EAGER; the efa
+    fabric runs the full cross product.
     """
     params = []
-    for tagged in [False]:
+    for tagged in [False, True]:
         for protocol in SEND_PROTOCOLS:
-            # memory_type is irrelevant for the size lookup on efa-direct:
-            # any non-("efa", host_to_host) combination takes the fallback
-            # path in determine_settings_for_proto.
-            _, message_size = determine_settings_for_proto(
-                protocol, "host_to_host", "efa-direct")
-            if message_size > EFA_DIRECT_MAX_SEND_SIZE:
-                continue
+            if fabric == "efa-direct":
+                if tagged:
+                    continue
+                _, message_size = determine_settings_for_proto(
+                    protocol, "host_to_host", "efa-direct")
+                if message_size > EFA_DIRECT_MAX_SEND_SIZE:
+                    continue
             params.append(pytest.param(tagged, protocol,
                                        id=f"tagged_{tagged}-{protocol}"))
     return params
 
 
-@pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
-@pytest.mark.parametrize("cancel_order", ["reverse", "random"])
-# TODO add "target" once efa supports canceling posted RX buffers
-@pytest.mark.parametrize("close_side", ["initiator"])
-@pytest.mark.parametrize("ops_per_mr", [1, 4])
-@pytest.mark.parametrize("tagged, protocol", send_case_params())
-@pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
-def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
-                       ops_per_mr, tagged, protocol, memory_type):
-    if fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
-        pytest.skip("fi_mr_abort not supported with efa with SHM")
-
+def run_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
+                      ops_per_mr, tagged, protocol, memory_type):
     send_op = "tagged" if tagged else "send"
 
     env, message_size = determine_settings_for_proto(protocol, memory_type, fabric)
@@ -471,4 +527,35 @@ def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
     test = ClientServerTest(cmdline_args, command, timeout=360, fabric=fabric,
                             memory_type=memory_type, additional_env=env)
     test.run()
+
+
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.parametrize("cancel_order", ["reverse", "random"])
+# TODO add "target" once efa supports canceling posted RX buffers
+@pytest.mark.parametrize("close_side", ["initiator"])
+@pytest.mark.parametrize("ops_per_mr", [1, 4])
+@pytest.mark.parametrize("tagged, protocol", send_case_params("efa-direct"))
+@pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)
+def test_mr_abort_send_efa_direct(cmdline_args, fabric, cancel_order,
+                                  close_side, ops_per_mr, tagged, protocol,
+                                  memory_type):
+    run_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
+                      ops_per_mr, tagged, protocol, memory_type)
+
+
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa"])
+@pytest.mark.parametrize("cancel_order", ["reverse", "random"])
+# TODO add "target" once efa supports canceling posted RX buffers
+@pytest.mark.parametrize("close_side", ["initiator"])
+@pytest.mark.parametrize("ops_per_mr", [1, 4])
+@pytest.mark.parametrize("tagged, protocol", send_case_params("efa"))
+@pytest.mark.memory_type(memory_type_list_symm)
+def test_mr_abort_send_efa(cmdline_args, fabric, cancel_order, close_side,
+                           ops_per_mr, tagged, protocol, memory_type):
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("fi_mr_abort not supported with efa with SHM")
+    run_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
+                      ops_per_mr, tagged, protocol, memory_type)
 
