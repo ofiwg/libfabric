@@ -1,9 +1,12 @@
 import os
 import pytest
 import time
-from common import test_selected_by_marker
+from common import (
+    test_selected_by_marker,
+    num_hmem_devices,
+)
 from efa_common import (
-    has_rdma, 
+    has_rdma,
     support_cq_interrupts,
     CudaMemorySupport,
     get_cuda_memory_support,
@@ -94,16 +97,107 @@ def add_fabric_and_message_size_parametrization(metafunc, fabric_marker, sizes_m
     metafunc.parametrize("message_sizes", sizes)
 
 
+def _endpoint_has_device(memory_token, server_id, client_id):
+    """
+    Return True if both endpoints named in a memory-type token have the
+    hmem device that token requires.
+
+    Any SSH/detection failure propagates to the caller,
+    which falls back to including all candidate memory types.
+    """
+    client_memory_type, server_memory_type = memory_token.split("_to_")
+    for memory_type_name, ip in ((client_memory_type, client_id),
+                                 (server_memory_type, server_id)):
+        if memory_type_name == "host":
+            # host memory needs no accelerator device
+            continue
+        if num_hmem_devices(ip, memory_type_name) <= 0:
+            return False
+    return True
+
+
+def _resolve_memory_type_candidates(memory_type_marker, nodeid):
+    """
+    Resolve a @pytest.mark.memory_type("<value>") marker to its candidate pool
+    of pytest.param memory-type tokens.
+    """
+    if not memory_type_marker.args:
+        raise ValueError(
+            f"@pytest.mark.memory_type on {nodeid} must name a memory type"
+        )
+
+    marker_value = memory_type_marker.args[0]
+    if marker_value == "host_and_hmem_memory_all":
+        return memory_type_list_all
+    elif marker_value == "host_and_hmem_memory_bi_dir_only":
+        return memory_type_list_bi_dir
+    elif marker_value == "host_and_hmem_memory_symm_only":
+        return memory_type_list_symm
+    elif marker_value == "cuda_to_cuda_only":
+        return memory_type_list_cuda_to_cuda
+    elif marker_value == "neuron_to_neuron_only":
+        return memory_type_list_neuron_to_neuron
+    raise ValueError(
+        f"@pytest.mark.memory_type on {nodeid} has unknown value {marker_value!r}"
+    )
+
+
+def add_memory_type_parametrization(metafunc, memory_type_marker):
+    """
+    Parametrize the memory_type fixture at collection time from the test's
+    @pytest.mark.memory_type(...) declaration, dropping any permutation whose
+    device is absent on the owning endpoint.
+
+    Fallback (no coverage regression): if --server-id/--client-id are not
+    provided or device detection fails, every candidate memory type is
+    included and the runtime skip in common.py remains the safety net.
+    """
+
+    if "memory_type" not in metafunc.fixturenames:
+        return
+
+    # A test consuming the memory_type fixture must declare a memory_type marker.
+    if memory_type_marker is None:
+        raise ValueError(
+            f"{metafunc.definition.nodeid} consumes the memory_type fixture "
+            f"but is missing @pytest.mark.memory_type(...)"
+        )
+
+    candidates = _resolve_memory_type_candidates(
+        memory_type_marker, metafunc.definition.nodeid
+    )
+
+    server_id = metafunc.config.getoption("--server-id", default=None)
+    client_id = metafunc.config.getoption("--client-id", default=None)
+
+    if not server_id or not client_id:
+        params = candidates
+    else:
+        try:
+            params = [
+                param for param in candidates
+                if _endpoint_has_device(param.values[0], server_id, client_id)
+            ]
+        except Exception:
+            # Fallback to all memory types when detection/SSH fails
+            params = candidates
+
+    metafunc.parametrize("memory_type", params, scope="module")
+
+
 def pytest_generate_tests(metafunc):
     """
     Derive parametrization from markers
       - @pytest.mark.pr_ci
       - @pytest.mark.fabric(params=[...])
       - @pytest.mark.message_sizes(<test_type>_<fabric>=..., ...)
+      - @pytest.mark.memory_type("<value>")
+    the last also filtering by endpoint device availability.
     """
     # get all markers
     fabric_marker = next(metafunc.definition.iter_markers("fabric"), None)
     sizes_marker  = next(metafunc.definition.iter_markers("message_sizes"), None)
+    memory_type_marker = next(metafunc.definition.iter_markers("memory_type"), None)
 
     # find out the test type running from markers (currently pr_ci or default)
     test_markers = {m.name for m in metafunc.definition.iter_markers()}
@@ -111,6 +205,10 @@ def pytest_generate_tests(metafunc):
 
     # generate parametrization based on found markers and test type
     add_fabric_and_message_size_parametrization(metafunc, fabric_marker, sizes_marker, test_type)
+
+    # parametrize memory_type from its marker, dropping permutations
+    # whose device is absent on the owning endpoint
+    add_memory_type_parametrization(metafunc, memory_type_marker)
 
 # The memory types for bi-directional tests.
 memory_type_list_bi_dir = [
@@ -137,6 +235,15 @@ memory_type_list_symm = [
     pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
 ]
 
+# Single memory type pools for tests that run only one.
+memory_type_list_cuda_to_cuda = [
+    pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
+]
+
+memory_type_list_neuron_to_neuron = [
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+]
+
 hmem_type_list = [
     pytest.param("cuda", marks=pytest.mark.cuda_memory),
     pytest.param("neuron", marks=pytest.mark.neuron_memory),
@@ -144,18 +251,6 @@ hmem_type_list = [
 
 @pytest.fixture(scope="module", params=hmem_type_list)
 def hmem_type(request):
-    return request.param
-
-@pytest.fixture(scope="module", params=memory_type_list_all)
-def memory_type(request):
-    return request.param
-
-@pytest.fixture(scope="module", params=memory_type_list_bi_dir)
-def memory_type_bi_dir(request):
-    return request.param
-
-@pytest.fixture(scope="module", params=memory_type_list_symm)
-def memory_type_symm(request):
     return request.param
 
 @pytest.fixture(scope="module", params=["read", "writedata", "write"])
