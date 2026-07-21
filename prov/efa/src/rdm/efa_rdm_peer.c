@@ -47,6 +47,7 @@ int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, str
 	dlist_init(&peer->txe_list);
 	dlist_init(&peer->rxe_list);
 	dlist_init(&peer->overflow_pke_list);
+	dlist_init(&peer->parked_cts_list);
 
 	if (conn->shm_fi_addr != FI_ADDR_NOTAVAIL) {
 		peer->is_local = 1;
@@ -71,6 +72,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer_overflow_pke_list_entry *overflow_pke_list_entry;
+	struct efa_rdm_peer_parked_cts *parked_cts;
 
 	if (peer->robuf.pending)
 		efa_recvwin_free(&peer->robuf, true);
@@ -112,6 +114,14 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 		efa_rdm_pke_release_rx_list(overflow_pke_list_entry->pkt_entry);
 		ofi_buf_free(overflow_pke_list_entry);
 	}
+
+	dlist_foreach_container_safe(&peer->parked_cts_list,
+				     struct efa_rdm_peer_parked_cts,
+				     parked_cts, entry, tmp) {
+		dlist_remove(&parked_cts->entry);
+		ofi_buf_free(parked_cts);
+	}
+	peer->parked_cts_cnt = 0;
 
 	dlist_foreach_container_safe(&peer->txe_list,
 				     struct efa_rdm_ope,

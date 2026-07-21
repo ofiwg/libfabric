@@ -122,6 +122,7 @@ struct efa_rdm_ep {
 
 	/* data structure to maintain overflow pke linked list entry */
 	struct ofi_bufpool *overflow_pke_pool;
+	struct ofi_bufpool *parked_cts_pool; /**< pool of efa_rdm_peer_parked_cts */
 	/* data structure to maintain pkt rx map */
 	struct ofi_bufpool *map_entry_pool;
 	/*

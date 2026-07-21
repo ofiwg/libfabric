@@ -1215,3 +1215,100 @@ void test_efa_rdm_pke_init_peer_error_for_ope_longcts_pre_cts_skip(void **state)
 	assert_int_equal(hdr->op_id, txe.rx_id);
 	efa_rdm_pke_release_tx(pkt_entry);
 }
+
+/**
+ * @brief A CTS from a handshake-less peer parks; the handshake applies it.
+ *
+ * A CTS is not acted on before the peer's handshake delivers its
+ * feature flags: it must be parked (not applied, not dropped), and the
+ * handshake handler must apply it (window set, ope moved to the
+ * longcts send list).
+ */
+void test_efa_rdm_pke_cts_parked_before_handshake_applied_on_handshake(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *cts_pke;
+	struct efa_rdm_cts_hdr *cts_hdr;
+	struct efa_rdm_pke *hs_pke;
+	struct efa_rdm_handshake_hdr *handshake_hdr;
+	struct efa_rdm_handshake_opt_connid_hdr *connid_hdr;
+	struct efa_rdm_handshake_opt_device_version_hdr *dv_hdr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	txe->total_len = 1048576;
+	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+
+	peer = txe->peer;
+	assert_non_null(peer);
+	assert_false(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	assert_false(ep->homogeneous_peers);
+	assert_false(peer->is_self);
+
+	/* Deliver a CTS naming the txe before the peer's handshake. */
+	cts_pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				    EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(cts_pke);
+	ep->efa_rx_pkts_posted += 1;
+	cts_pke->peer = peer;
+	cts_hdr = (struct efa_rdm_cts_hdr *) cts_pke->wiredata;
+	cts_hdr->type = EFA_RDM_CTS_PKT;
+	cts_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	cts_hdr->flags = 0;
+	cts_hdr->send_id = ofi_buf_index(txe);
+	cts_hdr->recv_id = 7;
+	cts_hdr->recv_length = 16384;
+	cts_pke->pkt_size = sizeof(struct efa_rdm_cts_hdr);
+
+	efa_rdm_pke_handle_cts_recv(cts_pke);
+
+	/* Parked: recorded on the peer, not applied, not on the send list. */
+	assert_int_equal(peer->parked_cts_cnt, 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&peer->parked_cts_list), 1);
+	assert_int_equal(txe->window, 0);
+	assert_true(txe->state != EFA_RDM_OPE_SEND);
+	assert_true(dlist_empty(&efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list));
+
+	/* Deliver the peer's handshake. */
+	hs_pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				   EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(hs_pke);
+	ep->efa_rx_pkts_posted += 1;
+	hs_pke->peer = peer;
+	handshake_hdr = (struct efa_rdm_handshake_hdr *) hs_pke->wiredata;
+	handshake_hdr->type = EFA_RDM_HANDSHAKE_PKT;
+	handshake_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	handshake_hdr->flags = 0;
+	handshake_hdr->nextra_p3 = 4;
+	handshake_hdr->extra_info[0] = 0;
+	hs_pke->pkt_size = sizeof(struct efa_rdm_handshake_hdr) +
+			   sizeof(uint64_t);
+	connid_hdr = (struct efa_rdm_handshake_opt_connid_hdr *)
+		     (hs_pke->wiredata + hs_pke->pkt_size);
+	connid_hdr->connid = 0x1234;
+	handshake_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
+	hs_pke->pkt_size += sizeof(*connid_hdr);
+	dv_hdr = (struct efa_rdm_handshake_opt_device_version_hdr *)
+		 (hs_pke->wiredata + hs_pke->pkt_size);
+	dv_hdr->device_version = 0xefa1;
+	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR;
+	hs_pke->pkt_size += sizeof(*dv_hdr);
+
+	efa_rdm_pke_handle_handshake_recv(hs_pke);
+
+	/* Applied: window/rx_id set, ope on the send list, record freed. */
+	assert_true(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	assert_int_equal(peer->parked_cts_cnt, 0);
+	assert_true(dlist_empty(&peer->parked_cts_list));
+	assert_int_equal(txe->window, 16384);
+	assert_int_equal(txe->rx_id, 7);
+	assert_int_equal(txe->state, EFA_RDM_OPE_SEND);
+	assert_false(dlist_empty(&efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list));
+}

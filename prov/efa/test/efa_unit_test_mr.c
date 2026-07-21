@@ -2148,6 +2148,7 @@ void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
 	cts_pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(cts_pke);
 	cts_pke->ep = efa_rdm_ep;
+	cts_pke->peer = peer;
 	cts_hdr = (struct efa_rdm_cts_hdr *)cts_pke->wiredata;
 	cts_hdr->type = EFA_RDM_CTS_PKT;
 	cts_hdr->send_id = ofi_buf_index(txe);
