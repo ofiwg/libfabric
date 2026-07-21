@@ -100,6 +100,7 @@ struct efa_rdm_peer_parked_cts {
 	uint32_t send_id;         /**< ID of the send operation on our side */
 	uint32_t recv_id;         /**< ID of the receive operation on the peer side */
 	uint64_t recv_length;     /**< number of bytes the peer is ready to receive */
+	uint32_t msg_id;          /**< per-peer msg ID; only meaningful if the peer wrote it */
 };
 
 struct efa_rdm_peer {

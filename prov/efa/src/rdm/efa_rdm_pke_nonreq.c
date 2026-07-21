@@ -13,8 +13,9 @@
 #include "efa_rdm_tracepoint.h"
 
 static void efa_rdm_ep_proc_cts(struct efa_rdm_ep *ep,
+				struct efa_rdm_peer *peer,
 				uint32_t send_id, uint32_t recv_id,
-				uint64_t recv_length);
+				uint64_t recv_length, uint32_t msg_id);
 
 /* This file define functons for the following packet type:
  *       HANDSHAKE
@@ -166,10 +167,11 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 	dlist_foreach_container_safe(&peer->parked_cts_list,
 				     struct efa_rdm_peer_parked_cts,
 				     parked_cts, entry, tmp) {
-		efa_rdm_ep_proc_cts(pkt_entry->ep,
+		efa_rdm_ep_proc_cts(pkt_entry->ep, peer,
 				    parked_cts->send_id,
 				    parked_cts->recv_id,
-				    parked_cts->recv_length);
+				    parked_cts->recv_length,
+				    parked_cts->msg_id);
 		dlist_remove(&parked_cts->entry);
 		peer->parked_cts_cnt--;
 		ofi_buf_free(parked_cts);
@@ -211,6 +213,7 @@ ssize_t efa_rdm_pke_init_cts(struct efa_rdm_pke *pkt_entry,
 	bytes_left = ope->total_len - ope->bytes_received;
 	cts_hdr->recv_length = MIN(bytes_left, efa_env.tx_min_credits * ope->ep->max_data_payload_size);
 	assert(cts_hdr->recv_length > 0);
+	cts_hdr->msg_id = ope->msg_id;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_cts_hdr);
 
 	/*
@@ -274,19 +277,52 @@ void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
- * @brief apply a CTS's grant to the ope its send_id names
+ * @brief validate a CTS against the ope its send_id names, and apply it
  *
- * Resolves the ope from the CTS's send_id, records the peer's receive
- * window and recv_id, and moves the ope onto the domain's long-CTS
- * send list if it is not already there.
+ * A source-MR cancel can free/reuse the send_id-named ope before the
+ * CTS is processed (the device errors without waiting for the peer), so
+ * acting on it blindly could corrupt an unrelated transfer. Drop the
+ * CTS unless the slot is still allocated, still names this transfer
+ * (msg_id; only trusted when the peer wrote it -- PEER_ERROR /
+ * homogeneous_peers / self), and is not already peer-aborting. Parked
+ * CTSs are processed after the peer's handshake, so the trust decision
+ * is always made with the peer's feature flags known.
  */
 static void efa_rdm_ep_proc_cts(struct efa_rdm_ep *ep,
+				struct efa_rdm_peer *peer,
 				uint32_t send_id, uint32_t recv_id,
-				uint64_t recv_length)
+				uint64_t recv_length, uint32_t msg_id)
 {
 	struct efa_rdm_ope *ope;
 
+	if (OFI_UNLIKELY(!ofi_bufpool_ibuf_is_valid(ep->base_ep.ope_pool,
+						    send_id))) {
+		EFA_WARN(FI_LOG_CQ,
+			 "CTS send_id=%u out of range or no longer valid; "
+			 "dropping stale CTS.\n", send_id);
+		return;
+	}
+
 	ope = ofi_bufpool_get_ibuf(ep->base_ep.ope_pool, send_id);
+
+	if (ep->homogeneous_peers || peer->is_self ||
+	    efa_rdm_peer_support_peer_error(peer)) {
+		if (OFI_UNLIKELY(ope->msg_id != msg_id)) {
+			EFA_INFO(FI_LOG_CQ,
+				 "CTS send_id=%u msg_id=%u does not match resolved ope "
+				 "msg_id=%u (txe freed/reused); dropping stale CTS.\n",
+				 send_id, msg_id, ope->msg_id);
+			return;
+		}
+	}
+
+	if (OFI_UNLIKELY(ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)) {
+		EFA_INFO(FI_LOG_CQ,
+			 "CTS send_id=%u names an ope already peer-aborting; "
+			 "dropping stale CTS (cleanup owned by drain).\n",
+			 send_id);
+		return;
+	}
 
 	ope->rx_id = recv_id;
 	ope->window = recv_length;
@@ -335,6 +371,10 @@ void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
 		parked_cts->send_id = cts_pkt->send_id;
 		parked_cts->recv_id = cts_pkt->recv_id;
 		parked_cts->recv_length = cts_pkt->recv_length;
+		/* Trailing garbage if an old peer did not write msg_id;
+		 * harmless: it is only consulted if the handshake
+		 * negotiates msg_id support. */
+		parked_cts->msg_id = cts_pkt->msg_id;
 		dlist_insert_tail(&parked_cts->entry, &peer->parked_cts_list);
 		peer->parked_cts_cnt++;
 
@@ -342,8 +382,8 @@ void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	efa_rdm_ep_proc_cts(ep, cts_pkt->send_id,
-			    cts_pkt->recv_id, cts_pkt->recv_length);
+	efa_rdm_ep_proc_cts(ep, peer, cts_pkt->send_id, cts_pkt->recv_id,
+			    cts_pkt->recv_length, cts_pkt->msg_id);
 	efa_rdm_pke_release_rx(pkt_entry);
 }
 

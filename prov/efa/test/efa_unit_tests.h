@@ -509,6 +509,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(void *
 void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state);
 void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state);
 void test_efa_rdm_pke_cts_parked_before_handshake_applied_on_handshake(void **state);
+void test_efa_rdm_pke_cts_parked_before_handshake_stale_dropped(void **state);
 void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state);
 void test_efa_rdm_pke_release_rx_list(void **state);
 void test_efa_rdm_pke_alloc_rta_rxe(void **state);

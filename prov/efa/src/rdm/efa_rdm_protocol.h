@@ -174,9 +174,11 @@ struct efa_rdm_cts_hdr {
 	uint32_t send_id; /* ID of the send opertaion on sender side */
 	uint32_t recv_id; /* ID of the receive operatin on receive side */
 	uint64_t recv_length; /* number of bytes receiver is ready to receive */
+	uint32_t msg_id; /* per-peer msg ID of the transfer */
+	uint32_t padding2; /* pad to 8-byte alignment */
 };
 
-EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_cts_hdr, 24);
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_cts_hdr, 32);
 
 /* this flag is to indicated the CTS is the response of a RTR packet */
 #define EFA_RDM_CTS_READ_REQ		BIT_ULL(7)
