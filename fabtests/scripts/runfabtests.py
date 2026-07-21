@@ -5,6 +5,7 @@
 import argparse
 import builtins
 import os
+import re
 import sys
 
 import yaml
@@ -18,6 +19,19 @@ from pytest import ExitCode
 # the default (no arguments) run.
 OPT_IN_MARKS = ["pre_release"]
 
+
+def mark_in_expression(mark, expression):
+    '''
+        check whether a mark is explicitly named in a testsets string or
+        pytest marker expression. The testsets string (-t) may be a simple
+        comma separated list (e.g. "functional,pre_release") or a full
+        pytest boolean expression (e.g. "(unit or pre_release) and not
+        cuda_memory"), so match the mark as a whole word rather than as an
+        exact list element or raw substring.
+    '''
+    if not expression:
+        return False
+    return re.search(r"\b" + re.escape(mark) + r"\b", expression) is not None
 
 def get_option_longform(option_name, option_params):
     '''
@@ -181,9 +195,9 @@ def fabtests_args_to_pytest_args(fabtests_args, shared_options, run_mode):
     # Opt-in marks are excluded from every run unless the user explicitly
     # names them in -t or -m, e.g. -t pre_release or -m pre_release.
     for mark in OPT_IN_MARKS:
-        if mark in fabtests_args.testsets.split(","):
+        if mark_in_expression(mark, fabtests_args.testsets):
             continue
-        if fabtests_args.marker_expression and mark in fabtests_args.marker_expression:
+        if mark_in_expression(mark, fabtests_args.marker_expression):
             continue
         markers = "(" + markers + ") and (not " + mark + ")"
 
