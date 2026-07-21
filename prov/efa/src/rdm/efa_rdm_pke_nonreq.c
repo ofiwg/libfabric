@@ -251,26 +251,39 @@ void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry)
 	}
 }
 
-void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
+/**
+ * @brief apply a CTS's grant to the ope its send_id names
+ *
+ * Resolves the ope from the CTS's send_id, records the peer's receive
+ * window and recv_id, and moves the ope onto the domain's long-CTS
+ * send list if it is not already there.
+ */
+static void efa_rdm_ep_proc_cts(struct efa_rdm_ep *ep,
+				uint32_t send_id, uint32_t recv_id,
+				uint64_t recv_length)
 {
-	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *ope;
-	struct efa_rdm_cts_hdr *cts_pkt;
 
-	ep = pkt_entry->ep;
-	cts_pkt = (struct efa_rdm_cts_hdr *)pkt_entry->wiredata;
-	ope = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, cts_pkt->send_id);
+	ope = ofi_bufpool_get_ibuf(ep->base_ep.ope_pool, send_id);
 
-	ope->rx_id = cts_pkt->recv_id;
-	ope->window = cts_pkt->recv_length;
+	ope->rx_id = recv_id;
+	ope->window = recv_length;
 	assert(ope->window > 0);
-
-	efa_rdm_pke_release_rx(pkt_entry);
 
 	if (ope->state != EFA_RDM_OPE_SEND) {
 		ope->state = EFA_RDM_OPE_SEND;
 		dlist_insert_tail(&ope->entry, &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
 	}
+}
+
+void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_cts_hdr *cts_pkt;
+
+	cts_pkt = (struct efa_rdm_cts_hdr *)pkt_entry->wiredata;
+	efa_rdm_ep_proc_cts(pkt_entry->ep, cts_pkt->send_id,
+			    cts_pkt->recv_id, cts_pkt->recv_length);
+	efa_rdm_pke_release_rx(pkt_entry);
 }
 
 /* CTSDATA pakcet related functions */
