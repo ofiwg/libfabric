@@ -334,7 +334,7 @@ Table: 2.1 a list of extra features/requests
 | 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 _(baseline since 2.6)_ |
 | 7  | User recv QP            | extra feature & request| libfabric 1.22.0 | _(legacy, see Section 4.8)_ |
 | 8  | Unsolicited write recv  | extra feature | libfabric 1.22.0 | Section 4.9 |
-| 9  | Peer error packet       | extra feature | libfabric 2.6    | Section 4.10 |
+| 9  | Peer error packet       | extra feature | libfabric 2.7    | Section 4.10 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
