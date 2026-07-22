@@ -526,7 +526,11 @@ def get_efa_device_name_for_cuda_device(ip, cuda_device_id, num_cuda_devices):
         return closest_nics[0]
 
     # Multiple GPUs share the same EFA NIC
-    return closest_nics[(cuda_device_id * num_efa) // num_cuda_devices]
+    # closest_nics only contains NICs at the same PCIe distance from this GPU,
+    # which may be fewer than the total EFA devices on the host
+    nic_idx = ((cuda_device_id * num_efa) // num_cuda_devices) % len(closest_nics)
+
+    return closest_nics[nic_idx]
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def support_cq_interrupts(hostname):
