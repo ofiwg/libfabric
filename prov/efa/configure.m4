@@ -426,7 +426,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 		fi_check_gtest_save_LDFLAGS="$LDFLAGS"
 		fi_check_gtest_save_LIBS="$LIBS"
 		fi_check_gtest_save_CXXFLAGS="$CXXFLAGS"
-		CXXFLAGS="$CXXFLAGS -std=c++17"
+		CXXFLAGS="$CXXFLAGS -std=c++20"
 		CPPFLAGS="$CPPFLAGS $gtest_CPPFLAGS"
 		LDFLAGS="$LDFLAGS $gtest_LDFLAGS"
 

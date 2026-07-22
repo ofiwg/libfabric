@@ -308,7 +308,7 @@ prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
 	-I$(top_srcdir)/prov/efa/src/rdm \
 	-I$(top_srcdir)/prov/efa/test/gtest
 
-prov_efa_test_gtest_efa_gtest_CXXFLAGS = -std=c++17
+prov_efa_test_gtest_efa_gtest_CXXFLAGS = -std=c++20
 
 prov_efa_test_gtest_efa_gtest_LDADD = \
 	$(gtest_LIBS) \
