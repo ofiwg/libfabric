@@ -26,9 +26,9 @@ class EfaRdmPeerTest : public testing::Test
 					   FI_EP_RDM, EFA_FABRIC_NAME));
 		ASSERT_NE(resource.ep, nullptr);
 
-		peer_addr =
-			efa_test_insert_self_gid_peer(resource.ep, resource.av);
-		ASSERT_NE(peer_addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
+		ASSERT_EQ(efa_test_av_insert_self(resource.ep, resource.av,
+						  &peer_addr),
+			  1);
 
 		MockEfa::set(&mock_efa);
 	}

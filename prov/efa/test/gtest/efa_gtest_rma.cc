@@ -18,10 +18,8 @@ static constexpr uint64_t kRemoteAddr = 0x87654321;
 static constexpr uint32_t kRemoteKey = 123456;
 
 /**
- * @brief Covers efa_rma_post_read / efa_rma_post_write, reached through the
- * public fi_read / fi_write ops on an efa-direct EP that requested FI_RMA.
- * Requires a device with RDMA read+write caps; skips otherwise, since fi_enable
- * creates a real QP with RDMA send-ops flags that a non-RDMA device rejects.
+ * @brief Covers efa_rma_post_read / efa_rma_post_write.
+ * Requires a device with RDMA read+write caps; skips otherwise.
  */
 class EfaRmaTest : public Test
 {
@@ -39,11 +37,9 @@ class EfaRmaTest : public Test
 		efa_test_resource_construct(&resource, hints);
 		ASSERT_NE(resource.ep, nullptr);
 
-		/* Insert the peer before installing the mock so fi_av_insert's
-		 * wrapped ibv_create_ah/efadv_query_ah run for real and
-		 * populate conn->ah; we only want to intercept the QP post. */
-		peer_addr = efa_test_rma_insert_peer(resource.ep, resource.av);
-		ASSERT_NE(peer_addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
+		ASSERT_EQ(efa_test_av_insert_self(resource.ep, resource.av,
+						  &peer_addr),
+			  1);
 
 		MockEfa::set(&mock_efa);
 	}

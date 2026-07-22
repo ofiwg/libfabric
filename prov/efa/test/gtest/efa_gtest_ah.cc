@@ -77,10 +77,10 @@ TEST_F(EfaAhTest, alloc_enomem_evict_and_retry_succeeds)
 		}));
 
 
-	addr_a = efa_test_insert_peer_new_gid(resource.ep, resource.av);
+	addr_a = efa_test_av_insert_new_ah(resource.ep, resource.av);
 	EXPECT_NE(addr_a, (fi_addr_t) FI_ADDR_NOTAVAIL);
 
-	addr_b = efa_test_insert_peer_new_gid(resource.ep, resource.av);
+	addr_b = efa_test_av_insert_new_ah(resource.ep, resource.av);
 	EXPECT_NE(addr_b, (fi_addr_t) FI_ADDR_NOTAVAIL);
 
 	/* This proves A specifically was the evicted entry */
@@ -111,6 +111,6 @@ TEST_F(EfaAhTest, alloc_enomem_no_evictable_ah_fails)
 			return nullptr;
 		}));
 
-	addr = efa_test_insert_peer_new_gid(resource.ep, resource.av);
+	addr = efa_test_av_insert_new_ah(resource.ep, resource.av);
 	EXPECT_EQ(addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
 }
