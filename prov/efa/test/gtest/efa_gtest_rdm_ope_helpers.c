@@ -18,7 +18,7 @@ int efa_test_drive_rxe_unexp_handle_error(struct fid_ep *ep, void *op_context,
 	int prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE;
 	int ret;
 
-	ret = efa_test_insert_self_peer(
+	ret = efa_test_av_insert_self(
 		ep, &efa_rdm_ep->base_ep.util_ep.av->av_fid, &peer_addr);
 	if (ret != 1)
 		return -FI_EINVAL;
