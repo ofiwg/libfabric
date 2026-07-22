@@ -24,7 +24,7 @@ void efa_test_fabricate_addr(struct fid_ep *ep, struct efa_ep_addr *addr)
 	addr->qkey = 0x5678;
 }
 
-int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
+int efa_test_av_insert_fake_gid(struct fid_ep *ep, struct fid_av *av,
 				fi_addr_t *addr)
 {
 	struct efa_ep_addr raw_addr;
@@ -33,8 +33,8 @@ int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
 	return fi_av_insert(av, &raw_addr, 1, addr, 0, NULL);
 }
 
-int efa_test_insert_self_peer(struct fid_ep *ep, struct fid_av *av,
-			      fi_addr_t *addr)
+int efa_test_av_insert_self(struct fid_ep *ep, struct fid_av *av,
+			    fi_addr_t *addr)
 {
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
@@ -49,7 +49,7 @@ int efa_test_insert_self_peer(struct fid_ep *ep, struct fid_av *av,
 	return fi_av_insert(av, &raw_addr, 1, addr, 0, NULL);
 }
 
-fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av)
+fi_addr_t efa_test_av_insert_new_ah(struct fid_ep *ep, struct fid_av *av)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_av *efa_av;
@@ -72,21 +72,6 @@ fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av)
 		return FI_ADDR_NOTAVAIL;
 
 	return fi_addr;
-}
-
-fi_addr_t efa_test_insert_self_gid_peer(struct fid_ep *ep, struct fid_av *av)
-{
-	struct efa_ep_addr raw_addr = {0};
-	size_t raw_addr_len = sizeof(raw_addr);
-	fi_addr_t peer_addr = FI_ADDR_NOTAVAIL;
-
-	if (fi_getname(&ep->fid, &raw_addr, &raw_addr_len))
-		return FI_ADDR_NOTAVAIL;
-	raw_addr.qpn = 0;
-	raw_addr.qkey = 0x1234;
-	if (fi_av_insert(av, &raw_addr, 1, &peer_addr, 0, NULL) != 1)
-		return FI_ADDR_NOTAVAIL;
-	return peer_addr;
 }
 
 struct efa_context *efa_test_alloc_context(uint64_t completion_flags,
@@ -140,28 +125,6 @@ int efa_test_set_track_mr(int value)
 
 	efa_env.track_mr = value;
 	return prev;
-}
-
-fi_addr_t efa_test_rma_insert_peer(struct fid_ep *ep, struct fid_av *av)
-{
-	struct efa_ep_addr raw_addr;
-	size_t raw_addr_len = sizeof(raw_addr);
-	fi_addr_t fi_addr = FI_ADDR_NOTAVAIL;
-	int ret;
-
-	/* Reuse the EP's own GID; fi_av_insert's real ibv_create_ah rejects a
-	 * fabricated one. qpn/qkey are not validated, so any value works. */
-	ret = fi_getname(&ep->fid, &raw_addr, &raw_addr_len);
-	if (ret)
-		return FI_ADDR_NOTAVAIL;
-	raw_addr.qpn = 1;
-	raw_addr.qkey = 0x1234;
-
-	ret = fi_av_insert(av, &raw_addr, 1, &fi_addr, 0, NULL);
-	if (ret != 1)
-		return FI_ADDR_NOTAVAIL;
-
-	return fi_addr;
 }
 
 int efa_test_device_supports_rma(void)

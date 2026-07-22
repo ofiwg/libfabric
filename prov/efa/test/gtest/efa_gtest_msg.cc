@@ -41,9 +41,9 @@ class EfaMsgTest : public Test
 		ASSERT_EQ(ret, 0) << "fi_mr_reg failed: " << fi_strerror(-ret);
 		local_desc = fi_mr_desc(local_mr);
 
-		peer_addr =
-			efa_test_insert_self_gid_peer(resource.ep, resource.av);
-		ASSERT_NE(peer_addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
+		ASSERT_EQ(efa_test_av_insert_self(resource.ep, resource.av,
+						  &peer_addr),
+			  1);
 
 		MockEfa::set(&mock_efa);
 	}

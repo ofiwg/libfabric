@@ -55,7 +55,7 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
 	EFA_EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
 		.WillOnce(Return(-FI_ENOMEM));
 
-	addr = efa_test_insert_peer_new_gid(resource.ep, resource.av);
+	addr = efa_test_av_insert_new_ah(resource.ep, resource.av);
 	EXPECT_EQ(addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
 }
 
@@ -88,6 +88,6 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_explicit_insert)
 	EFA_EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
 		.WillOnce(Return(-FI_ENOMEM));
 
-	num_addr = efa_test_explicit_av_insert(resource.ep, resource.av, &addr);
+	num_addr = efa_test_av_insert_fake_gid(resource.ep, resource.av, &addr);
 	EXPECT_EQ(num_addr, 0);
 }
