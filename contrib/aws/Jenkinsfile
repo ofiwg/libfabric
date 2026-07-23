@@ -420,6 +420,7 @@ pipeline {
                     def c8gn16x_lock_label  = "c8gn16x"
                     def hpc6a48x_lock_label = "hpc6a48x"
                     def g4dn16x_lock_label  = "g4dn16x"
+                    def g4dn12x_lock_label  = "g4dn12x"
                     def c5n18x_lock_label   = "c5n18x"
                     def c7i16x_lock_label   = "c7i16x"
 
@@ -432,7 +433,9 @@ pipeline {
                     stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa_hpc_dso}")
 
                     // Multi Node Tests - Accelerator EFA
-                    stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.16xlarge",  2, "us-west-2",      g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_efa}")
+                    // Use g4dn.12xlarge (4 GPUs) for the EFA CUDA stage to avoid the
+                    // single-GPU worker oversubscription that hangs the EFA progress engine.
+                    stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.12xlarge",  2, "us-east-1",      g4dn12x_lock_label, "--odcr cr-06968bbb5916ec4d3 ${addl_args_efa}")
 
                     // Single Node Windows Test
                     stages["EFA_Windows_Test"] = get_single_node_windows_test_stage_with_lock("EFA_Windows_Test", c5n18x_lock_label)
@@ -443,8 +446,8 @@ pipeline {
 
                     // Single Node Tests - SM2 / SHM
                     stages["1_g4dn_alinux2023_sm2"]              = get_test_stage_with_lock("1_g4dn_alinux2023_sm2",              env.BUILD_TAG, "alinux2023", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_sm2}")
-                    stages["1_g4dn_ubuntu2404_shm"]              = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm",              env.BUILD_TAG, "ubuntu2404", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_shm}")
-                    stages["1_g4dn_ubuntu2404_shm_disable-cma"]  = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm_disable-cma",  env.BUILD_TAG, "ubuntu2404", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_shm} --enable-cma false")
+                    stages["1_g4dn_ubuntu2404_shm"]              = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm",              env.BUILD_TAG, "ubuntu2404", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, "--odcr cr-06968bbb5916ec4d3 ${addl_args_shm}")
+                    stages["1_g4dn_ubuntu2404_shm_disable-cma"]  = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm_disable-cma",  env.BUILD_TAG, "ubuntu2404", "g4dn.12xlarge", 1, "us-east-1", g4dn12x_lock_label, "--odcr cr-06968bbb5916ec4d3 ${addl_args_shm} --enable-cma false")
 
                     parallel stages
                 }
