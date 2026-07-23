@@ -30,24 +30,29 @@ static int efa_hw_cntr_check_attr(struct efa_domain *efa_domain,
 				  const struct fi_cntr_attr *attr,
 				  struct ibv_comp_cntr_init_attr *cc_attr)
 {
+	uint32_t api_version;
+
+	api_version = efa_domain->util_domain.fabric->fabric_fid.api_version;
+
 	if (efa_domain->info->domain_attr->max_cntr_value >
 	    efa_domain->device->comp_count_max_value) {
-		EFA_INFO(FI_LOG_CNTR,
-			 "Domain max_cntr_value (%lu) exceeds completion "
-			 "counter limit (%lu). Hardware counter cannot be used.\n",
-			 efa_domain->info->domain_attr->max_cntr_value,
-			 efa_domain->device->comp_count_max_value);
+		if (FI_VERSION_GE(api_version, FI_VERSION(2, 5)))
+			EFA_WARN(FI_LOG_CNTR,
+				 "Domain max_cntr_value (%lu) exceeds completion "
+				 "counter limit (%lu). Hardware counter cannot be used.\n",
+				 efa_domain->info->domain_attr->max_cntr_value,
+				 efa_domain->device->comp_count_max_value);
 		return -FI_EOPNOTSUPP;
 	}
 
 	if (efa_domain->info->domain_attr->max_err_cntr_value >
 	    efa_domain->device->err_count_max_value) {
-		EFA_INFO(
-			FI_LOG_CNTR,
-			"Domain max_err_cntr_value (%lu) exceeds error counter "
-			"limit (%lu). Hardware counter cannot be used.\n",
-			efa_domain->info->domain_attr->max_err_cntr_value,
-			efa_domain->device->err_count_max_value);
+		if (FI_VERSION_GE(api_version, FI_VERSION(2, 5)))
+			EFA_WARN(FI_LOG_CNTR,
+				 "Domain max_err_cntr_value (%lu) exceeds error counter "
+				 "limit (%lu). Hardware counter cannot be used.\n",
+				 efa_domain->info->domain_attr->max_err_cntr_value,
+				 efa_domain->device->err_count_max_value);
 		return -FI_EOPNOTSUPP;
 	}
 
