@@ -85,6 +85,24 @@ struct efa_rdm_peer_overflow_pke_list_entry {
 	struct efa_rdm_pke *pkt_entry;
 };
 
+/**
+ * @brief a CTS that arrived before the peer's handshake
+ *
+ * A CTS is not acted on until the peer's handshake delivers its feature
+ * flags: the header fields are copied out so the RX pkt entry can be
+ * released immediately, and the record is applied (or dropped) by the
+ * handshake handler. Allocated from efa_rdm_ep::parked_cts_pool, which
+ * grows on demand -- dropping a legit CTS would stall its transfer
+ * (CTS is never retransmitted), so parking is never capped.
+ */
+struct efa_rdm_peer_parked_cts {
+	struct dlist_entry entry; /**< linked to efa_rdm_peer::parked_cts_list */
+	uint32_t send_id;         /**< ID of the send operation on our side */
+	uint32_t recv_id;         /**< ID of the receive operation on the peer side */
+	uint64_t recv_length;     /**< number of bytes the peer is ready to receive */
+	uint32_t msg_id;          /**< per-peer msg ID; only meaningful if the peer wrote it */
+};
+
 struct efa_rdm_peer {
 	struct efa_rdm_ep *ep;		/**< local ep */
 	bool is_self;			/**< flag indicating whether the peer is the endpoint itself */
@@ -123,6 +141,8 @@ struct efa_rdm_peer {
 	struct dlist_entry txe_list; /**< a list of txe related to this peer */
 	struct dlist_entry rxe_list; /**< a list of rxe related to this peer */
 	struct dlist_entry overflow_pke_list; /**< a list of out-of-order pke that overflow the current recvwin */
+	struct dlist_entry parked_cts_list; /**< CTSs received before the peer's handshake, applied when it arrives */
+	size_t parked_cts_cnt;		/**< number of entries on parked_cts_list */
 	struct dlist_entry ep_peer_list_entry; /**< linked to efa_rdm_ep->ep_peer_list */
 	/**
 	 * @brief number of bytes that has been sent as part of runting protocols

@@ -1186,6 +1186,13 @@ ssize_t efa_rdm_pke_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
 void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry)
 {
 	efa_rdm_ep_rdm_domain(pkt_entry->ep)->num_read_msg_in_flight += 1;
+	/*
+	 * Record the bump on the txe so a sender-side abort, which receives
+	 * none of the packets that normally decrement the counter, can
+	 * balance it.
+	 */
+	assert(pkt_entry->ope);
+	pkt_entry->ope->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
 }
 
 /**
@@ -1344,8 +1351,12 @@ void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry, struct 
 	peer->num_runt_bytes_in_flight += pkt_data_size;
 
 	if (efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry)->seg_offset == 0 &&
-	    txe->total_len > txe->bytes_runt)
+	    txe->total_len > txe->bytes_runt) {
 		efa_rdm_ep_rdm_domain(pkt_entry->ep)->num_read_msg_in_flight += 1;
+		/* Record the bump so a sender-side abort can balance the
+		 * counter; see EFA_RDM_TXE_READ_MSG_COUNTED. */
+		txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
+	}
 }
 
 /**

@@ -28,6 +28,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->type = EFA_RDM_TXE;
 	txe->op = op;
 	txe->tx_id = ofi_buf_index(txe);
+	txe->rx_id = EFA_RDM_OPE_INVALID_ID;
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->peer = peer;
 	/* peer would be NULL for local read operation */
@@ -192,6 +193,14 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 
 	if (rxe->rxe_map)
 		efa_rdm_rxe_map_remove(rxe->rxe_map, rxe->msg_id, rxe);
+
+	/*
+	 * Drop any deferred blocking copies that still reference this rxe. The
+	 * per-endpoint copy batch outlives a single transfer, so an rxe torn
+	 * down early (e.g. peer-aborted) can leave held packets pointing at it;
+	 * purging here keeps a later flush from touching the freed rxe.
+	 */
+	efa_rdm_ep_purge_queued_blocking_copy_for_rxe(rxe);
 
 	for (i = 0; i < rxe->iov_count; i++) {
 		if (rxe->mr[i]) {
@@ -710,6 +719,10 @@ void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno)
 	if (rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
 		return;
 
+	/* Peer Abort only supports send/tagged */
+	if (rxe->op != ofi_op_msg && rxe->op != ofi_op_tagged)
+		return;
+
 	EFA_INFO(FI_LOG_CQ,
 		 "Peer-abort marked on rxe %p (op=%u, device prov_errno=%d %s); "
 		 "deferring user error completion to WR drain\n",
@@ -834,6 +847,13 @@ static void efa_rdm_txe_write_deferred_peer_abort_completion(struct efa_rdm_ope 
 	err_entry.buf = txe->cq_entry.buf;
 	err_entry.data = txe->cq_entry.data;
 	err_entry.tag = txe->cq_entry.tag;
+
+	/* A peer-aborted txe is always a two-sided send (never an emulated RMA
+	 * op), which required a valid peer; a NULL-peer local read never enters
+	 * the abort path. (Two-sided here: EAGER/MEDIUM/RUNTREAD/LONGCTS/
+	 * LONGREAD RTMs.) */
+	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
+	assert(txe->peer);
 	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, txe->peer, err_entry.prov_errno,
 						 err_msg, &err_entry.err_data_size)))
 		err_entry.err_data_size = 0;
@@ -857,6 +877,11 @@ static void efa_rdm_txe_write_deferred_peer_abort_completion(struct efa_rdm_ope 
  * completion and free the txe; not yet emitted means emit the PEER_ERROR_PKT
  * (only safe now that no data WR can race it) and keep the txe alive until
  * that packet's own completion frees it.
+ *
+ * If the peer's handshake has not arrived yet, PEER_ERROR support is
+ * unknown and the emit decision is DEFERRED: the txe parks (alive on
+ * peer->txe_list, EMITTED unset) and efa_rdm_pke_handle_handshake_recv()
+ * re-drives this helper when the handshake lands.
  */
 void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 {
@@ -890,8 +915,8 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 	 * homogeneous_peers); otherwise there is no one to tell, so surface the
 	 * completion and free now. When we emit, keep the txe alive -- the
 	 * packet's own completion re-runs this helper (EMITTED branch) to free
-	 * it. The wire ref_kind is derived from the txe in
-	 * efa_rdm_pke_init_peer_error_for_ope(); bytes_acked is final here.
+	 * it. The wire identifiers (msg_id, and an optional op_id hint) are
+	 * derived from the txe in efa_rdm_pke_init_peer_error_for_ope().
 	 */
 	peer_support_err_pkt = txe->peer &&
 	    (txe->ep->homogeneous_peers || txe->peer->is_self ||
@@ -917,8 +942,30 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 		return;
 	}
 
-	/* Peer cannot be notified (no PEER_ERROR support); surface the single
+	/*
+	 * Before the peer's HANDSHAKE arrives, support is UNKNOWN, not
+	 * absent: resolving it pessimistically would discard the one
+	 * notification that keeps the receiver's reorder window from parking
+	 * forever on this msg_id. Park the txe (alive on peer->txe_list,
+	 * EMITTED unset); the handshake handler re-drives this helper once
+	 * the peer's feature flags are known, and peer teardown reclaims the
+	 * txe if the handshake never arrives.
+	 */
+	if (txe->peer &&
+	    !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		EFA_WARN(FI_LOG_CQ,
+			 "Sender-side abort of msg_id %u decided before the "
+			 "peer's handshake; deferring PEER_ERROR emit until "
+			 "the handshake arrives.\n", txe->msg_id);
+		return;
+	}
+
+	/* Handshake received and the peer does not advertise PEER_ERROR
+	 * support: there is genuinely no one to tell. Surface the single
 	 * completion now and free the txe. */
+	EFA_WARN(FI_LOG_CQ,
+		 "Peer does not support PEER_ERROR_PKT; dropping the abort "
+		 "notification for msg_id %u.\n", txe->msg_id);
 	efa_rdm_txe_write_deferred_peer_abort_completion(txe);
 	efa_rdm_txe_release(txe);
 }
@@ -929,17 +976,27 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
  *
  * @param[in]	txe		txe that encountered the error
  * @param[in]	prov_errno	positive EFA provider error code
- * @param[in]	prev_state	txe->state before handle_error set it to OPE_ERR
  * @return	true if this is a peer abort whose normal error CQ is withheld
  *		(the drain delivers FI_ECANCELED / FI_EFA_ERR_PEER_ABORTED);
  *		false for an ordinary error the caller should report.
  */
-static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
-						  int prov_errno,
-						  enum efa_rdm_ope_state prev_state)
+void efa_rdm_txe_read_msg_uncount(struct efa_rdm_ope *txe)
 {
-	bool is_eager, is_medium, is_runt_only_runtread, is_longcts;
+	struct efa_rdm_domain *domain;
 
+	if (!(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED))
+		return;
+	txe->internal_flags &= ~EFA_RDM_TXE_READ_MSG_COUNTED;
+
+	domain = efa_rdm_ep_rdm_domain(txe->ep);
+	assert(domain->num_read_msg_in_flight > 0);
+	if (OFI_LIKELY(domain->num_read_msg_in_flight > 0))
+		domain->num_read_msg_in_flight -= 1;
+}
+
+static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
+						  int prov_errno)
+{
 	/*
 	 * This check must come first in order to properly handle txe errors
 	 * on READ based protocols.
@@ -953,29 +1010,36 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
 	if (OFI_LIKELY(efa_rdm_mr_gen_check_ope(txe)))
 		return false;
 
-	/* Only protocols whose source MR carries user data the receiver is
-	 * waiting on and cannot self-detect. Runtread WITH a tail READ
-	 * (total_len > bytes_runt) is excluded -- the receiver's own failing
-	 * RDMA READ signals it; only runt-only runtread (== bytes_runt) is
-	 * sender-signalled. LONGREAD and one-sided RTW/RTR carry no such data. */
-	is_eager = efa_rdm_pkt_type_is_eager_rtm(txe->protocol);
-	is_medium = efa_rdm_pkt_type_is_medium(txe->protocol);
-	is_runt_only_runtread = efa_rdm_pkt_type_is_runtread(txe->protocol) &&
-				txe->total_len == txe->bytes_runt;
-	is_longcts = efa_rdm_pkt_type_is_longcts_rtm(txe->protocol);
-	if (!is_eager && !is_medium && !is_runt_only_runtread && !is_longcts)
+	/*
+	 * Only two-sided RTM protocols whose msg_id the receiver's reorder
+	 * window is (or will be) waiting on: EAGER, medium, runtread (with OR
+	 * without a tail READ), LONGCTS, and LONGREAD. A LONGREAD RTM carries
+	 * no MR-backed payload itself, but its msg_id was consumed at init;
+	 * abandoning it without notifying the peer parks the peer's reorder
+	 * window on that msg_id forever.
+	 */
+	if (!efa_rdm_pkt_type_is_eager_rtm(txe->protocol) &&
+	    !efa_rdm_pkt_type_is_medium(txe->protocol) &&
+	    !efa_rdm_pkt_type_is_runtread(txe->protocol) &&
+	    !efa_rdm_pkt_type_is_longcts_rtm(txe->protocol) &&
+	    !efa_rdm_pkt_type_is_longread_rtm(txe->protocol))
+		return false;
+
+	/* MR Abort is only supported for send/tagged operations */
+	if  (txe->op != ofi_op_msg && txe->op != ofi_op_tagged)
 		return false;
 
 	txe->peer_error_prov_errno = prov_errno;
 	txe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
 
-	/* A LONGCTS aborted before its CTS arrived has no valid rx_id, so the
-	 * receiver must be signalled by per-peer msg_id (REF_MSG_ID_SKIP)
-	 * instead of ope index. handle_error already set txe->state to OPE_ERR,
-	 * so test the saved prev_state; a LONGCTS that reached OPE_SEND has a
-	 * valid rx_id and is referenced by ope index at emit time. */
-	if (is_longcts && prev_state != EFA_RDM_OPE_SEND)
-		txe->internal_flags |= EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID;
+	/*
+	 * A posted LONGREAD RTM or tail-read RUNTREAD first segment bumped
+	 * num_read_msg_in_flight; the EOR / READ_NACK / PEER_ERROR that
+	 * would normally release the slot never arrives for a self-aborted
+	 * send the receiver never saw, so release it here. The helper is a
+	 * no-op if a racing receiver notification already consumed it.
+	 */
+	efa_rdm_txe_read_msg_uncount(txe);
 
 	return true;
 }
@@ -1009,7 +1073,6 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
-	enum efa_rdm_ope_state prev_state = txe->state;
 	char err_msg[EFA_ERROR_MSG_BUFFER_LENGTH] = {0};
 
 	ep = txe->ep;
@@ -1123,7 +1186,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	    !(txe->fi_flags & FI_INJECT))
 		return;
 
-	if (efa_rdm_txe_mark_peer_abort_if_needed(txe, prov_errno, prev_state)) {
+	if (efa_rdm_txe_mark_peer_abort_if_needed(txe, prov_errno)) {
 		efa_rdm_txe_progress_peer_abort_if_drained(txe);
 		return;
 	}

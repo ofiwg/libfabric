@@ -334,7 +334,7 @@ Table: 2.1 a list of extra features/requests
 | 6  | Read nack packets                | extra feature | libfabric 1.20.0 | Section 4.7 _(baseline since 2.6)_ |
 | 7  | User recv QP            | extra feature & request| libfabric 1.22.0 | _(legacy, see Section 4.8)_ |
 | 8  | Unsolicited write recv  | extra feature | libfabric 1.22.0 | Section 4.9 |
-| 9  | Peer error packet       | extra feature | libfabric 2.6    | Section 4.10 |
+| 9  | Peer error packet       | extra feature | libfabric 2.7    | Section 4.10 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -1712,48 +1712,88 @@ is a discrepancy on this feature between local and peer.
 The "Peer error packet" is an extra feature that lets two endpoints
 cleanly abandon an in-flight two-sided protocol when one side
 voluntarily withdraws (for example by closing a memory registration).
-It was introduced in libfabric 2.6 to address a class of issues where
-the EFA RDM provider previously surfaced internal protocol failures as
-user-visible recv CQ errors and leaked the peer's send-side state.
+It was introduced in libfabric 2.7. Previously a withdrawal left the
+peer inconsistent: a withdrawing sender stranded the receiver's message
+ordering on a message that would never arrive, hanging all later
+traffic from that sender, and a withdrawing receiver left the sender
+waiting forever for an acknowledgment, leaking its send-side state and
+never producing a TX CQE.
 
 The feature is gated by the `EFA_RDM_EXTRA_FEATURE_PEER_ERROR`
-extra-feature bit and uses a new control packet:
+extra-feature bit and uses a new control packet, PEER_ERROR (type ID
+12). The same packet type serves both directions: it means "I am
+abandoning this transfer; clean up your half."
 
-| Packet | Type ID | Direction | Meaning |
-|---|---|---|---|
-| `PEER_ERROR` | 12 | bidirectional | "I am abandoning this protocol step. Please clean up your half." |
+Table: 4.4 Format of the PEER_ERROR packet
 
-The same packet type serves both directions. The wire layout is:
+| Name | Length (bytes) | Type | C language type | Notes |
+|---|---|---|---|---|
+| `type`        | 1 | integer | `uint8_t`  | part of base header |
+| `version`     | 1 | integer | `uint8_t`  | part of base header |
+| `flags`       | 2 | integer | `uint16_t` | part of base header |
+| `msg_id`      | 4 | integer | `uint32_t` | message ID of the aborted transfer (always valid) |
+| `op_id`       | 4 | integer | `uint32_t` | optional operation ID owned by the packet's receiver |
+| `op_id_valid` | 4 | integer | `uint32_t` | nonzero iff `op_id` is usable |
+| `direction`   | 4 | integer | `uint32_t` | which side aborted, from the emitter's viewpoint |
+| `prov_errno`  | 4 | integer | `uint32_t` | the provider errno that triggered the abort |
+| `multiuse(connid/padding)` | 4 | integer | `uint32_t` | `connid` if CONNID_HDR is set, otherwise `padding` |
 
-| Field | Length | Notes |
-|---|---|---|
-| base header | 4 bytes | type, version, flags |
-| `op_id` | 4 bytes | id of an ope owned by the receiver of this packet (interpreted per `ref_kind`) |
-| `ref_kind` | 4 bytes | how the receiver resolves `op_id` (see below) |
-| `prov_errno` | 4 bytes | the underlying provider errno that triggered the abort |
-| `connid` | 4 bytes | sender's connection id (when `EFA_RDM_PKT_CONNID_HDR` is on) |
+**Receiver-decides model.** The packet carries only *identifiers*, never a
+verdict about what the remote must do. The endpoint that receives a
+PEER_ERROR inspects its own bookkeeping for the named transfer to decide
+the outcome. This is required because a sender can observe a local send
+failure after the data already landed at the peer -- the EFA device
+reports the failure without waiting for remote acknowledgment -- so the
+emitting side cannot know whether the peer is owed a completion. Only the
+receiving side's own state is authoritative.
 
-`op_id` references an ope owned by the receiver-of-the-packet, and
-`ref_kind` tells the receiver how to resolve it:
+* `msg_id` is always valid. Combined with the packet's source peer it
+  uniquely names the transfer, whether that transfer is matched, buffered
+  out of order, or not yet seen.
+* `op_id` is an optional shortcut: an operation ID owned by the packet's
+  receiver, echoed back so the receiver can locate the transfer without a
+  message-ID lookup. It is present only when the emitter had previously
+  learned the peer's operation ID from the protocol exchange. Because
+  operation IDs can be reused, the receiver must confirm that the
+  operation it resolves still belongs to the transfer named by `msg_id`
+  before acting on it.
 
-* `EFA_RDM_PEER_ERROR_REF_OPE_INDEX` (0): `op_id` is an ope-pool
-  index — the sender's `txe` in the LONGREAD direction (receiver
-  -> sender), or the receiver's `rxe` in the LONGCTS direction
-  (sender -> receiver).
-* `EFA_RDM_PEER_ERROR_REF_MSG_ID` (1): `op_id` is a per-peer
-  `msg_id` — used by the medium direction (sender -> receiver),
-  which has no CTS and therefore no shared ope index; the receiver
-  resolves it via `peer->rxe_map`.
-* `EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP` (2): `op_id` is a per-peer
-  `msg_id` whose message was aborted at the source before any payload
-  the receiver is owed was delivered. The receiver owes **no**
-  completion; the packet only advances the reorder window past a
-  `msg_id` that will never arrive (see "Reorder-window skip" below).
+When the **receiver of data** gets a PEER_ERROR (the sender abandoned the
+transfer), the outcomes are: ignore it (the transfer already completed);
+quietly discard state for a transfer the application had not matched;
+complete a matched receive operation with `FI_ECANCELED` /
+`FI_EFA_ERR_PEER_ABORTED` once any in-flight device work for it finishes;
+mark a buffered out-of-order segment aborted, so it is discarded rather
+than delivered when message ordering reaches it; or record the abort so
+message ordering can advance past a message ID that will never arrive.
 
-`ref_kind` only selects *how to resolve* `op_id`; the action taken
-is still decided from the resolved ope's local `type`, so a single
-packet type serves every direction without an on-the-wire action
-discriminator.
+When the **sender of data** gets a PEER_ERROR (the receiver could not
+complete the transfer, long-read protocols), the outcomes are: ignore it
+(the send already resolved its own error); or abort the send and report a
+TX error completion with the peer's errno once any in-flight device work
+for it finishes.
+
+#### CTS header extension (stale-CTS detection)
+
+A sender that withdraws can release a long-CTS transfer's state before
+the receiver's CTS -- which names that transfer by `send_id` -- arrives,
+and the released `send_id` may be reused by an unrelated transfer. To let
+the sender reject such a stale CTS, the CTS header gains a trailing
+`msg_id` field (appended after `recv_length`, so every pre-2.7 field
+keeps its offset and an older peer simply ignores the extra bytes; no
+handshake negotiation is required). On receiving a CTS the sender
+confirms the operation named by `send_id` still exists, still belongs to
+the transfer named by `msg_id` (consulted only when the peer is known to
+write the field), and is not itself being aborted; otherwise the CTS is
+dropped.
+
+Whether the `msg_id` field can be trusted is a property of the peer that is
+unknown until its handshake arrives, so a CTS received before the peer's
+handshake is parked and processed once the handshake delivers the peer's
+feature flags. Against an older peer that never writes `msg_id`, a CTS
+cannot be validated as belonging to the current transfer rather than a past,
+aborted one: combining MR abort with the long-CTS protocols toward such a
+peer can therefore corrupt the state machine.
 
 #### Backward compatibility
 
@@ -1763,46 +1803,27 @@ peer's bitmask after handshake. Mixed-version behavior:
 
 | Sender | Receiver | Behavior |
 |---|---|---|
-| supports | supports | Full fix: PEER_ERROR posted in the appropriate direction; both sides clean up. |
-| supports | does not support | Sender's emit path checks the receiver's bit (and skips). Sender sees a TX CQ error; receiver's posted recv hangs (status quo). |
-| does not support | supports | Sender does not understand `PEER_ERROR_PKT` — it would never be received here. Receiver's emit path checks the sender's bit (and skips). Receiver sees a user CQ recv error (status quo); sender's txe leaks (status quo). |
+| supports | supports | Full fix: PEER_ERROR sent in the appropriate direction; both sides clean up. |
+| supports | does not support | Sender checks the receiver's bit and does not send. Sender sees a TX CQ error; receiver's posted recv hangs (status quo). |
+| does not support | supports | Sender does not understand PEER_ERROR and never emits one. Receiver checks the sender's bit and does not send. Receiver sees a recv CQ error (status quo); sender's send state leaks (status quo). |
 
-In all mixed-version cases, behavior is no worse than today.
+In all mixed-version cases, behavior is no worse than before the feature.
 
 #### Handshake-not-received race
 
-Both directions emit `PEER_ERROR_PKT` only when the peer's
-support is known. For an extra-feature like this one, "known"
-normally means the handshake has been received and the
-`EFA_RDM_EXTRA_FEATURE_PEER_ERROR` bit is set in the cached
-`extra_info[0]`. There are two practical situations where the
-emission point is reached before the peer's handshake has
-arrived:
+An endpoint emits PEER_ERROR only when the peer's support is known,
+which normally means the peer's handshake has been received. A sender
+that withdraws before the receiver's handshake arrives reaches the
+emission point earlier. Support is unknown rather than absent, so the
+sender defers the decision: the aborted transfer is held, and when the
+peer's handshake arrives the sender either emits the PEER_ERROR (peer
+supports it) or falls back to local cleanup (peer does not). A transfer
+whose handshake never arrives is reclaimed when the peer is removed.
 
-1. **Receiver-side LONGREAD/RUNTREAD failure.** The receiver
-   posts an RDMA READ as soon as it receives the sender's RTM.
-   The sender's handshake is asynchronous and may not have
-   arrived by the time the RDMA READ fails.
-2. **Sender-side LONGCTS source-MR cancel.** The receiver's
-   handshake is typically already cached by the time CTSDATA
-   begins (the receiver posted it when it received the sender's
-   RTM, before sending CTS), but the timing is not guaranteed.
-
-To bound the conservative skip, both emit paths recognize the
-same overrides used elsewhere in the codebase for extra-feature
-gating (e.g., `efa_rdm_interop_rdma_read`):
-
-* `FI_OPT_EFA_HOMOGENEOUS_PEERS` (`ep->homogeneous_peers`):
-  the user's contract that all peers run the same software
-  with identical capabilities; emission proceeds without
-  consulting the handshake.
-* `peer->is_self`: the loopback case.
-
-When neither override applies and the peer's handshake has not
-yet been received, both directions skip emission with the same
-fallback as the "peer does not advertise the feature" row of
-the table above. Operators who hit this in production can opt
-in via `FI_OPT_EFA_HOMOGENEOUS_PEERS` to bypass the race.
+Both directions may also decide immediately, without a handshake, for
+the loopback case and under `FI_OPT_EFA_HOMOGENEOUS_PEERS` -- the
+user's contract that all peers run the same software with identical
+capabilities.
 
 ## 5. What's not covered?
 
