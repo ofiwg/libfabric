@@ -891,6 +891,13 @@ static int xnet_handle_read_req(struct xnet_ep *ep)
 	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	if (ep->cur_rx.hdr.base_hdr.rma_iov_cnt > XNET_IOV_LIMIT) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
+			"invalid rma iov count %u\n",
+			ep->cur_rx.hdr.base_hdr.rma_iov_cnt);
+		return -FI_EIO;
+	}
+
 	resp = xnet_alloc_xfer(xnet_ep2_progress(ep));
 	if (!resp)
 		return -FI_ENOMEM;
@@ -946,6 +953,13 @@ static int xnet_handle_write(struct xnet_ep *ep)
 	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	if (ep->cur_rx.hdr.base_hdr.rma_iov_cnt > XNET_IOV_LIMIT) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
+			"invalid rma iov count %u\n",
+			ep->cur_rx.hdr.base_hdr.rma_iov_cnt);
+		return -FI_EIO;
+	}
+
 	rx_entry = xnet_alloc_xfer(xnet_ep2_progress(ep));
 	if (!rx_entry)
 		return -FI_ENOMEM;
