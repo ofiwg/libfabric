@@ -92,9 +92,8 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_efadv_wr_processing_hints=0
 	have_ibv_create_comp_channel=0
 	have_ibv_get_cq_event=0
-	have_ibv_device_attr_ex_max_comp_cntr=0
-	have_ibv_create_comp_cntr=0
 	have_efadv_create_comp_cntr=0
+	have_ibv_query_comp_cntr_caps=0
 
 	dnl $have_neuron is defined at top-level configure.ac
 	AM_CONDITIONAL([HAVE_NEURON], [ test x"$have_neuron" = x1 ])
@@ -251,20 +250,16 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_ibv_get_cq_event=0],
 			[[#include <infiniband/verbs.h>]])
 
-		AC_CHECK_MEMBER([struct ibv_device_attr_ex.max_comp_cntr],
-			[have_ibv_device_attr_ex_max_comp_cntr=1],
-			[have_ibv_device_attr_ex_max_comp_cntr=0],
-			[[#include <infiniband/verbs.h>]])
-
-		AC_CHECK_DECL([ibv_create_comp_cntr],
-			[have_ibv_create_comp_cntr=1],
-			[have_ibv_create_comp_cntr=0],
-			[[#include <infiniband/verbs.h>]])
 		AC_CHECK_DECL([efadv_create_comp_cntr],
 			[have_efadv_create_comp_cntr=1],
 			[have_efadv_create_comp_cntr=0],
 			[[#include <infiniband/efadv.h>]])
-		
+
+		AC_CHECK_DECL([ibv_query_comp_cntr_caps],
+			[have_ibv_query_comp_cntr_caps=1],
+			[have_ibv_query_comp_cntr_caps=0],
+			[[#include <infiniband/verbs.h>]])
+
 		AC_CHECK_MEMBER([struct efadv_device_attr.inline_buf_size_ex],
 			[have_inline_buf_size_ex=1],
 			[have_inline_buf_size_ex=0],
@@ -334,15 +329,12 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFA_CQ_NOTIFICATION],
 		[$have_efa_cq_notification],
 		[Indicates if EFA supports CQ notification (requires ibv_create_comp_channel and ibv_get_cq_event)])
-	AC_DEFINE_UNQUOTED([HAVE_IBV_DEVICE_ATTR_EX_MAX_COMP_CNTR],
-		[$have_ibv_device_attr_ex_max_comp_cntr],
-		[Indicates if ibv_device_attr_ex has max_comp_cntr field])
-	AC_DEFINE_UNQUOTED([HAVE_IBV_CREATE_COMP_CNTR],
-		[$have_ibv_create_comp_cntr],
-		[Indicates if ibv_create_comp_cntr is available])
 	AC_DEFINE_UNQUOTED([HAVE_EFADV_CREATE_COMP_CNTR],
 		[$have_efadv_create_comp_cntr],
 		[Indicates if efadv_create_comp_cntr is available])
+	AC_DEFINE_UNQUOTED([HAVE_IBV_QUERY_COMP_CNTR_CAPS],
+		[$have_ibv_query_comp_cntr_caps],
+		[Indicates if ibv_query_comp_cntr_caps is available])
 
 
 	CPPFLAGS=$save_CPPFLAGS
