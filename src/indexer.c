@@ -36,8 +36,12 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
+#include <limits.h>
 #include <ofi_indexer.h>
+#include <ofi_mb.h>
+#include <ofi.h>
 
 /*
  * Indexer - to find a structure given an index
@@ -255,20 +259,42 @@ void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item))
 
 int ofi_array_grow(struct ofi_dyn_arr *arr, int index)
 {
-	int c, i;
+	char *chunk, **table;
+	size_t c, i;
 
 	assert(arr->item_size);
-	assert(!ofi_array_chunk(arr, index));
 
-	c = ofi_idx_chunk_id(index);
-	arr->chunk[c] = calloc(OFI_IDX_CHUNK_SIZE, arr->item_size);
-	if (!arr->chunk[c])
+	if (index < 0 || (size_t) index > arr->max_index) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (!arr->chunk) {
+		table = calloc(arr->max_chunks, sizeof(*table));
+		if (!table)
+			goto nomem;
+		/* publish the zeroed chunk table with a release
+		 * barrier; lock-free readers consume it via dependency
+		 * ordering, so they need no read-side barrier. */
+		ofi_wmb();
+		arr->chunk = table;
+	}
+
+	c = (size_t) index >> arr->chunk_shift;
+	assert(!arr->chunk[c]);
+	chunk = calloc(arr->chunk_size, arr->item_size);
+	if (!chunk)
 		goto nomem;
 
 	if (arr->init) {
-		for (i = 0; i < OFI_IDX_CHUNK_SIZE; i++)
-			arr->init(arr, ofi_array_item(arr, arr->chunk[c], i));
+		for (i = 0; i < arr->chunk_size; i++)
+			arr->init(arr, ofi_array_item(arr, chunk, (int) i));
 	}
+
+	/* publish the fully initialized chunk only after a
+	 * release barrier so its contents are visible before the pointer. */
+	ofi_wmb();
+	arr->chunk[c] = chunk;
 
 	return index;
 
@@ -277,18 +303,64 @@ nomem:
 	return -1;
 }
 
+#define OFI_DYN_ARR_MAX_CNT ((size_t) INT_MAX + 1)
+
+int ofi_array_init_attr(struct ofi_dyn_arr *arr,
+			const struct ofi_dyn_arr_attr *attr)
+{
+	size_t chunk_size, max_cnt, pow2;
+	unsigned int shift = 0;
+
+	memset(arr, 0, sizeof(*arr));
+
+	chunk_size = attr->chunk_cnt ? attr->chunk_cnt : OFI_IDX_CHUNK_SIZE;
+	if (chunk_size > OFI_DYN_ARR_MAX_CNT) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"requested chunk size %zu over max supported %zu\n",
+			chunk_size, OFI_DYN_ARR_MAX_CNT);
+		return -FI_EINVAL;
+	}
+
+	/* Round chunk size up to a power of two so the intra-chunk offset is a
+	 * shift/mask. */
+	for (pow2 = 1; pow2 < chunk_size; pow2 <<= 1)
+		shift++;
+	chunk_size = pow2;
+
+	max_cnt = attr->max_cnt ? attr->max_cnt : (size_t) OFI_IDX_MAX_INDEX + 1;
+	if (max_cnt > OFI_DYN_ARR_MAX_CNT) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"requested array size %zu over max supported %zu\n",
+			max_cnt, OFI_DYN_ARR_MAX_CNT);
+		return -FI_EINVAL;
+	}
+
+	arr->chunk_size = chunk_size;
+	arr->chunk_shift = shift;
+	arr->max_chunks = (max_cnt + chunk_size - 1) / chunk_size;
+	arr->max_index = arr->max_chunks * chunk_size - 1;
+	arr->item_size = attr->item_size;
+	arr->init = attr->init;
+	return FI_SUCCESS;
+}
+
 int ofi_array_iter(struct ofi_dyn_arr *arr, void *context,
 		    int (*callback)(struct ofi_dyn_arr *arr, void *item,
 				    void *context))
 {
-	int ret, c, i;
+	int ret;
+	size_t c, i;
 
-	for (c = 0; c < OFI_IDX_MAX_CHUNKS; c++) {
+	if (!arr->chunk)
+		return 0;
+
+	for (c = 0; c < arr->max_chunks; c++) {
 		if (!arr->chunk[c])
 			continue;
 
-		for (i = 0; i < OFI_IDX_CHUNK_SIZE; i++) {
-			ret = callback(arr, ofi_array_item(arr, arr->chunk[c], i),
+		for (i = 0; i < arr->chunk_size; i++) {
+			ret = callback(arr,
+				       ofi_array_item(arr, arr->chunk[c], (int) i),
 				       context);
 			if (ret)
 				return ret;
@@ -299,13 +371,15 @@ int ofi_array_iter(struct ofi_dyn_arr *arr, void *context,
 
 void ofi_array_destroy(struct ofi_dyn_arr *arr)
 {
-	int c;
+	size_t c;
 
-	for (c = 0; c < OFI_IDX_MAX_CHUNKS; c++) {
-		if (!arr->chunk[c])
-			continue;
+	if (!arr->chunk)
+		return;
 
-		free(arr->chunk[c]);
-		arr->chunk[c] = NULL;
+	for (c = 0; c < arr->max_chunks; c++) {
+		if (arr->chunk[c])
+			free(arr->chunk[c]);
 	}
+	free(arr->chunk);
+	arr->chunk = NULL;
 }

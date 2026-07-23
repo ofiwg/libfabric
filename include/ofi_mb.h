@@ -199,6 +199,16 @@ static inline void ofi_wmb(void)
 	__atomic_thread_fence(__ATOMIC_RELEASE);
 }
 
+#elif defined(_MSC_VER)
+#include <intrin.h>
+
+/* MSVC exposes neither C11 nor GCC builtin atomics; the SFENCE intrinsic
+ * provides the release/store ordering ofi_wmb() requires. */
+static inline void ofi_wmb(void)
+{
+	_mm_sfence();
+}
+
 #else
 #error "Neither built-in atomics nor C11 atomics is supported by compiler."
 #endif

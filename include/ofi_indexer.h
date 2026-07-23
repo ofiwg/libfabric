@@ -271,18 +271,38 @@ static inline void *ofi_idm_lookup(struct index_map *idm, int index)
 
 struct ofi_dyn_arr
 {
-	char *chunk[OFI_IDX_MAX_CHUNKS];
+	char **chunk;
+	size_t max_chunks;
+	size_t chunk_size;
+	unsigned int chunk_shift;
+	size_t max_index;
 	size_t item_size;
 	void (*init)(struct ofi_dyn_arr *arr, void *item);
 };
+
+struct ofi_dyn_arr_attr {
+	size_t item_size;
+	/* items per chunk; rounded up to a power of two.
+	 * Zero selects the default (OFI_IDX_CHUNK_SIZE). */
+	size_t chunk_cnt;
+	/* maximum item count; rounded up to a multiple of the
+	 * chunk size. Zero selects default of ~1M (OFI_IDX_MAX_INDEX). */
+	size_t max_cnt;
+	void (*init)(struct ofi_dyn_arr *arr, void *item);
+};
+
+int ofi_array_init_attr(struct ofi_dyn_arr *arr,
+			const struct ofi_dyn_arr_attr *attr);
 
 static inline void
 ofi_array_init(struct ofi_dyn_arr *arr, size_t item_size,
 	       void (*init)(struct ofi_dyn_arr *arr, void *item))
 {
-	memset(arr, 0, sizeof(*arr));
-	arr->item_size = item_size;
-	arr->init = init;
+	struct ofi_dyn_arr_attr attr = {0};
+
+	attr.item_size = item_size;
+	attr.init = init;
+	ofi_array_init_attr(arr, &attr);
 }
 
 int ofi_array_grow(struct ofi_dyn_arr *arr, int index);
@@ -294,8 +314,11 @@ void ofi_array_destroy(struct ofi_dyn_arr *arr);
 
 static inline char *ofi_array_chunk(struct ofi_dyn_arr *arr, int index)
 {
-	assert(arr->chunk);
-	return arr->chunk[ofi_idx_chunk_id(index)];
+	char **table = arr->chunk;
+
+	if (!table)
+		return NULL;
+	return table[(size_t) index >> arr->chunk_shift];
 }
 
 static inline void *
@@ -306,7 +329,8 @@ ofi_array_item(struct ofi_dyn_arr *arr, char *chunk, int offset)
 
 static inline void *ofi_array_at(struct ofi_dyn_arr *arr, int index)
 {
-	assert(index <= OFI_IDX_MAX_INDEX);
+	if (index < 0 || (size_t) index > arr->max_index)
+		return NULL;
 
 	if (!ofi_array_chunk(arr, index)) {
 		if (ofi_array_grow(arr, index) < 0)
@@ -314,17 +338,18 @@ static inline void *ofi_array_at(struct ofi_dyn_arr *arr, int index)
 	}
 
 	return ofi_array_item(arr, ofi_array_chunk(arr, index),
-			      ofi_idx_offset(index));
+			      (int) ((size_t) index & (arr->chunk_size - 1)));
 }
 
 static inline void *ofi_array_at_max(struct ofi_dyn_arr *arr, int index,
 				     int max_size)
 {
-	if (index >= max_size || !ofi_array_chunk(arr, index))
+	if (index < 0 || index >= max_size || (size_t) index > arr->max_index ||
+	    !ofi_array_chunk(arr, index))
 		return NULL;
 
 	return ofi_array_item(arr, ofi_array_chunk(arr, index),
-			      ofi_idx_offset(index));
+			      (int) ((size_t) index & (arr->chunk_size - 1)));
 }
 
 #endif /* _OFI_INDEXER_H_ */
