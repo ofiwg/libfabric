@@ -111,15 +111,12 @@ struct expected_err {
  *                  access error (remote MR invalid).
  */
 static struct expected_err mr_abort_local_close_errs[] = {
-	{ .err = FI_ECANCELED, .prov_errno = 1 },     /* device flush */
-	{ .err = FI_ECANCELED, .prov_errno = 4100 },  /* RDM pkt post failure */
 	{ .err = FI_ECANCELED, .prov_errno = 4127 },  /* Peer Aborted */
 	{ .err = FI_EINVAL,    .prov_errno = 5 },     /* local MR invalid */
 };
 
 static struct expected_err mr_abort_remote_close_errs[] = {
 	{ .err = FI_EINVAL,    .prov_errno = 7 },     /* remote MR invalid */
-	{ .err = FI_ECANCELED, .prov_errno = 1 },     /* device flush */
 };
 
 static struct mr_slot *slots;
