@@ -9,10 +9,11 @@
 void test_efa_device_construct_error_handling(void **state)
 {
 	int ibv_err = 4242;
+	int num_devices;
 	struct ibv_device **ibv_device_list;
 	struct efa_device efa_device = {0};
 
-	ibv_device_list = ibv_get_device_list(&g_efa_selected_device_cnt);
+	ibv_device_list = ibv_get_device_list(&num_devices);
 	if (ibv_device_list == NULL) {
 		skip();
 		return;
