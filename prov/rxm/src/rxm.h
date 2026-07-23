@@ -57,6 +57,8 @@
 #include <ofi_iov.h>
 #include <ofi_hmem.h>
 
+#include "rxm_ep_selector.h"
+
 #ifndef _RXM_H_
 #define _RXM_H_
 
@@ -85,7 +87,7 @@ union rxm_cm_data {
 		uint8_t op_version;
 		uint16_t port;
 		uint8_t flow_ctrl;
-		uint8_t padding;
+		uint8_t ep_idx;
 		uint32_t eager_limit;
 		uint32_t rx_size; /* used? */
 		uint64_t client_conn_id;
@@ -206,6 +208,7 @@ extern int rxm_passthru;
 extern int force_auto_progress;
 extern int rxm_use_write_rndv;
 extern int rxm_detect_hmem_iface;
+extern size_t rxm_num_msg_eps;
 extern enum fi_wait_obj def_wait_obj, def_tcp_wait_obj;
 
 struct rxm_ep;
@@ -228,9 +231,11 @@ enum {
  * remote rxm ep's.
  */
 struct rxm_conn {
-	enum rxm_cm_state state;
 	struct util_peer_addr *peer;
-	struct fid_ep *msg_ep;
+	struct fid_ep **msg_eps;
+	enum rxm_cm_state *states;
+	uint8_t num_msg_eps;
+	struct rxm_ep_selector *selector;
 	struct rxm_ep *ep;
 
 	/* Prior versions of libfabric did not guarantee that all connections
@@ -252,6 +257,18 @@ struct rxm_conn {
 };
 
 void rxm_freeall_conns(struct rxm_ep *ep);
+
+static inline int rxm_get_ep_idx(struct rxm_conn *conn, struct fid *fid)
+{
+	uint8_t i;
+
+	for (i = 0; i < conn->num_msg_eps; i++)
+		if (conn->msg_eps[i] && &conn->msg_eps[i]->fid == fid)
+			return i;
+	return -1;
+}
+
+int rxm_send_connect(struct rxm_conn *conn, uint8_t idx);
 
 struct rxm_fabric {
 	struct util_fabric util_fabric;
@@ -786,6 +803,19 @@ static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 	return rxm_buffer_size - sizeof(struct rxm_atomic_hdr);
 }
 
+static inline struct fid_ep *
+rxm_conn_msg_ep(struct rxm_conn *conn, const struct rxm_pkt *pkt)
+{
+	uint8_t idx = conn->selector->select(conn, pkt);
+
+	assert(idx < conn->num_msg_eps);
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
+	       "ep_sel: conn=%p ctrl=%u msg_id=0x%" PRIx64 " -> ep=%u out of %u\n",
+	       conn, pkt ? pkt->ctrl_hdr.type : 0xff,
+	       pkt ? pkt->ctrl_hdr.msg_id : 0, idx, conn->num_msg_eps);
+	return conn->msg_eps[idx];
+}
+
 static inline ssize_t
 rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
 			struct rxm_tx_buf *resp_buf, ssize_t len)
@@ -801,7 +831,8 @@ rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
 		.context = resp_buf,
 		.data = 0,
 	};
-	return fi_sendmsg(conn->msg_ep, &msg, FI_COMPLETION);
+	return fi_sendmsg(rxm_conn_msg_ep(conn, &resp_buf->pkt),
+			  &msg, FI_COMPLETION);
 }
 
 void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
@@ -901,7 +932,8 @@ rxm_free_rx_buf(struct rxm_rx_buf *rx_buf)
 	}
 
 	/* Discard rx buffer if its msg_ep was closed */
-	if (rx_buf->repost && (rx_buf->ep->msg_srx || rx_buf->conn->msg_ep)) {
+	if (rx_buf->repost && (rx_buf->ep->msg_srx ||
+	     (rx_buf->conn->msg_eps && rx_buf->conn->msg_eps[0]))) {
 		rxm_post_recv(rx_buf);
 	} else {
 		ofi_buf_free(rx_buf);
