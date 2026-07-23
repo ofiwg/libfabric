@@ -53,7 +53,7 @@ liblnx_fi_la_CPPFLAGS = 				\
 	-I$(top_srcdir)/prov/lnx/include		\
 	$(AM_CPPFLAGS) $(lnx_CPPFLAGS)
 liblnx_fi_la_LIBADD = $(top_builddir)/src/libfabric.la $(linkback) $(lnx_LIBS)
-libverbs_fi_la_LDFLAGS =				\
+liblnx_fi_la_LDFLAGS =				\
 	-module -avoid-version -shared -export-dynamic	\
 	$(lnx_LDFLAGS)
 liblnx_fi_la_DEPENDENCIES = $(linkback)
