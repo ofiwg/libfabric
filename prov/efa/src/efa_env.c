@@ -41,7 +41,7 @@ struct efa_env efa_env = {
 	.use_data_path_direct = true,
 	.implicit_av_size = 0,
 	.track_mr = 0,
-	.use_hw_cntr = 0,
+	.use_hw_cntr = 1,
 };
 
 /**
