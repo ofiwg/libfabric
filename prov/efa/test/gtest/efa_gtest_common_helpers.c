@@ -4,6 +4,8 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_cq.h"
+#include "efa_mr.h"
+#include "efa_device.h"
 #include "rdm/efa_rdm_ep.h"
 #include "efa_gtest_common_helpers.h"
 
@@ -22,7 +24,7 @@ void efa_test_fabricate_addr(struct fid_ep *ep, struct efa_ep_addr *addr)
 	addr->qkey = 0x5678;
 }
 
-int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
+int efa_test_av_insert_fake_gid(struct fid_ep *ep, struct fid_av *av,
 				fi_addr_t *addr)
 {
 	struct efa_ep_addr raw_addr;
@@ -31,8 +33,8 @@ int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
 	return fi_av_insert(av, &raw_addr, 1, addr, 0, NULL);
 }
 
-int efa_test_insert_self_peer(struct fid_ep *ep, struct fid_av *av,
-			      fi_addr_t *addr)
+int efa_test_av_insert_self(struct fid_ep *ep, struct fid_av *av,
+			    fi_addr_t *addr)
 {
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
@@ -47,7 +49,7 @@ int efa_test_insert_self_peer(struct fid_ep *ep, struct fid_av *av,
 	return fi_av_insert(av, &raw_addr, 1, addr, 0, NULL);
 }
 
-fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av)
+fi_addr_t efa_test_av_insert_new_ah(struct fid_ep *ep, struct fid_av *av)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_av *efa_av;
@@ -70,21 +72,6 @@ fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av)
 		return FI_ADDR_NOTAVAIL;
 
 	return fi_addr;
-}
-
-fi_addr_t efa_test_insert_self_gid_peer(struct fid_ep *ep, struct fid_av *av)
-{
-	struct efa_ep_addr raw_addr = {0};
-	size_t raw_addr_len = sizeof(raw_addr);
-	fi_addr_t peer_addr = FI_ADDR_NOTAVAIL;
-
-	if (fi_getname(&ep->fid, &raw_addr, &raw_addr_len))
-		return FI_ADDR_NOTAVAIL;
-	raw_addr.qpn = 0;
-	raw_addr.qkey = 0x1234;
-	if (fi_av_insert(av, &raw_addr, 1, &peer_addr, 0, NULL) != 1)
-		return FI_ADDR_NOTAVAIL;
-	return peer_addr;
 }
 
 struct efa_context *efa_test_alloc_context(uint64_t completion_flags,
@@ -160,6 +147,17 @@ size_t efa_test_ope_list_count(struct fid_ep *ep)
 		count++;
 
 	return count;
+}
+
+void efa_test_get_zero_byte_bounce_buf(struct fid_ep *ep, uint64_t *addr,
+				       uint32_t *lkey)
+{
+	struct efa_base_ep *base_ep =
+		container_of(ep, struct efa_base_ep, util_ep.ep_fid);
+	struct efa_domain *domain = base_ep->domain;
+
+	*addr = (uint64_t) domain->zero_byte_bounce_buf;
+	*lkey = domain->zero_byte_bounce_buf_mr->lkey;
 }
 
 struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,

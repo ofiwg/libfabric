@@ -24,9 +24,6 @@ class EfaConnTest : public Test
 
 	void TearDown() override
 	{
-		/* Uninstall the mock before destruct: ep close drains the RDM
-		 * CQ, whose efa_ibv_cq_* calls are globally wrapped and would
-		 * otherwise route into the (now-irrelevant) mock. */
 		MockEfa::set(nullptr);
 		efa_test_resource_destruct(&resource);
 	}
@@ -47,17 +44,18 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
 	ASSERT_NE(resource.ep, nullptr);
 
 	MockEfa::set(&mock_efa);
-	EXPECT_CALL(mock_efa, ibv_create_ah)
+	EFA_EXPECT_CALL(mock_efa, ibv_create_ah)
 		.WillOnce(Return(&dummy_ibv_ah));
 	/* The unwind releases only the peer's dummy AH; self_ah is destroyed
 	 * in teardown after the mock is uninstalled (real destroy). */
-	EXPECT_CALL(mock_efa, ibv_destroy_ah(&dummy_ibv_ah)).WillOnce(Return(0));
-	EXPECT_CALL(mock_efa, efadv_query_ah)
+	EFA_EXPECT_CALL(mock_efa, ibv_destroy_ah, &dummy_ibv_ah)
+		.WillOnce(Return(0));
+	EFA_EXPECT_CALL(mock_efa, efadv_query_ah)
 		.WillRepeatedly(Return(0));
-	EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
+	EFA_EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
 		.WillOnce(Return(-FI_ENOMEM));
 
-	addr = efa_test_insert_peer_new_gid(resource.ep, resource.av);
+	addr = efa_test_av_insert_new_ah(resource.ep, resource.av);
 	EXPECT_EQ(addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
 }
 
@@ -79,16 +77,17 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_explicit_insert)
 	ASSERT_NE(resource.ep, nullptr);
 
 	MockEfa::set(&mock_efa);
-	EXPECT_CALL(mock_efa, ibv_create_ah(_, _))
+	EFA_EXPECT_CALL(mock_efa, ibv_create_ah, _, _)
 		.WillOnce(Return(&dummy_ibv_ah));
 	/* The unwind releases only the peer's dummy AH; self_ah is destroyed
 	 * in teardown after the mock is uninstalled (real destroy). */
-	EXPECT_CALL(mock_efa, ibv_destroy_ah(&dummy_ibv_ah)).WillOnce(Return(0));
-	EXPECT_CALL(mock_efa, efadv_query_ah)
+	EFA_EXPECT_CALL(mock_efa, ibv_destroy_ah, &dummy_ibv_ah)
+		.WillOnce(Return(0));
+	EFA_EXPECT_CALL(mock_efa, efadv_query_ah)
 		.WillRepeatedly(Return(0));
-	EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
+	EFA_EXPECT_CALL(mock_efa, efa_av_reverse_av_add)
 		.WillOnce(Return(-FI_ENOMEM));
 
-	num_addr = efa_test_explicit_av_insert(resource.ep, resource.av, &addr);
+	num_addr = efa_test_av_insert_fake_gid(resource.ep, resource.av, &addr);
 	EXPECT_EQ(num_addr, 0);
 }

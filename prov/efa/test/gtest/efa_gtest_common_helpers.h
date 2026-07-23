@@ -14,6 +14,8 @@
 #ifndef EFA_GTEST_COMMON_HELPERS_H
 #define EFA_GTEST_COMMON_HELPERS_H
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
@@ -23,32 +25,39 @@ extern "C" {
 #endif
 
 /**
- * @brief Fabricate a unique address and insert it via fi_av_insert (explicit
- * path).
- * @return Number of addresses successfully inserted (0 on expected failure).
+ * @brief Whether the real selected EFA device advertises both RDMA read and write.
  */
-int efa_test_explicit_av_insert(struct fid_ep *ep, struct fid_av *av,
+int efa_test_device_supports_rma(void);
+
+/**
+ * @brief Set efa_env.track_mr and return its previous value.
+ */
+int efa_test_set_track_mr(int value);
+
+/**
+ * @brief Read the domain's zero-byte bounce buffer address and lkey for the
+ * endpoint behind @p ep.
+ */
+void efa_test_get_zero_byte_bounce_buf(struct fid_ep *ep, uint64_t *addr,
+				       uint32_t *lkey);
+
+/**
+ * @brief Insert a peer with a fabricated GID via fi_av_insert.
+ */
+int efa_test_av_insert_fake_gid(struct fid_ep *ep, struct fid_av *av,
 				fi_addr_t *addr);
 
 /**
- * @brief Insert the ep's own address as a peer via an (explicit) fi_av_insert.
- * @return Number of addresses inserted (1 on success), or negative on error.
+ * @brief Insert the ep's own (self) GID as a peer via fi_av_insert.
  */
-int efa_test_insert_self_peer(struct fid_ep *ep, struct fid_av *av,
-			      fi_addr_t *addr);
+int efa_test_av_insert_self(struct fid_ep *ep, struct fid_av *av,
+			    fi_addr_t *addr);
 
 /**
- * @brief Insert a peer with a fabricated GID that won't be in the ah_map.
- * This forces efa_ah_alloc to call ibv_create_ah for a new GID.
- * @return The fi_addr, or FI_ADDR_NOTAVAIL on failure.
+ * @brief Insert a fabricated-GID peer via the RDM-internal efa_av_insert_one.
  */
-fi_addr_t efa_test_insert_peer_new_gid(struct fid_ep *ep, struct fid_av *av);
+fi_addr_t efa_test_av_insert_new_ah(struct fid_ep *ep, struct fid_av *av);
 
-/**
- * @brief Insert a peer using the EP's own GID.
- * @return the fi_addr, or FI_ADDR_NOTAVAIL on failure
- */
-fi_addr_t efa_test_insert_self_gid_peer(struct fid_ep *ep, struct fid_av *av);
 struct efa_ibv_cq;
 struct efa_context;
 
@@ -90,16 +99,10 @@ void efa_test_set_ibv_cq_ex(struct efa_ibv_cq *ibv_cq, int status,
 struct ibv_ah;
 
 /**
- * @brief Resolve an implicit-AV fi_addr to the ibv_ah backing its conn.
- * Lets a test assert which underlying AH a peer insert ended up using
- * (e.g. that an ENOMEM retry kept the newly created AH).
+ * @brief Resolve an implicit-AV fi_addr to the underlying ibv_ah.
  */
 struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
 						fi_addr_t fi_addr);
-
-int efa_test_set_track_mr(int value);
-
-int efa_test_device_supports_rma(void);
 
 size_t efa_test_ope_list_count(struct fid_ep *ep);
 
