@@ -710,6 +710,8 @@ extern struct option long_opts[];
 int ft_parse_long_opts(int op, char *optarg);
 void ft_longopts_usage();
 
+int ft_backoff(unsigned backoff_count, unsigned max_delay_us, bool giveup_after_max_delay);
+
 #define ft_assert(expr)					\
 	do {						\
 		if (!debug_assert) {			\

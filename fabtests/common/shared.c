@@ -4681,3 +4681,46 @@ int ft_parse_long_opts(int op, char *optarg)
 		return EXIT_FAILURE;
 	}
 }
+
+/**
+ * ft_backoff - interrupt execution of current thread
+ * @backoff_count: count of previously done calls in the same loop
+ * @max_delay_us: the maximum allowed sleep period in microseconds
+ * @giveup_after_max_delay: boolean flag whatever backoff should timout
+ *                        after reaching max waiting period
+ *
+ * Backoff strategy depends on backoff count
+ * 1-999:     pause CPU core
+ * 1000:      relinquish the CPU
+ * 1000-...:  exponential sleeps until hard timeout (defined by fabtests)
+ *
+ * Returns: 0 on success, -FI_ETIMEDOUT if hard timeout reached
+ */
+int ft_backoff(unsigned backoff_count,
+		unsigned max_delay_us,
+		bool giveup_after_max_delay) {
+	const unsigned long_backoff_threshold = 10;
+	_Thread_local static unsigned last_backoff_count = 0;
+	_Thread_local static unsigned last_delay_us = 0;
+	assert(backoff_count == 0 || backoff_count == last_backoff_count + 1);
+	last_backoff_count = backoff_count;
+	if(backoff_count < long_backoff_threshold) {
+#if defined(__x86_64__)
+		asm volatile("pause" ::: "memory");
+#elif defined(__aarch64__)
+		asm volatile("yield" ::: "memory");
+#endif
+	} else if (backoff_count == long_backoff_threshold) {
+		sched_yield();
+		last_delay_us = 0;
+	} else {
+		last_delay_us = last_delay_us ? last_delay_us*2 : 1;
+		if(last_delay_us > max_delay_us) {
+			if (giveup_after_max_delay)
+				return -FI_ETIMEDOUT;
+			last_delay_us = max_delay_us;
+		}
+		usleep(last_delay_us);
+	}
+	return 0;
+}
