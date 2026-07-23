@@ -351,7 +351,7 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	struct efa_rdm_ep *ep;
 	struct dlist_entry *entry;
 	struct util_av_entry *implicit_util_av_entry, *explicit_util_av_entry;
-	struct efa_conn_ep_peer_map_entry *map_entry, *tmp;
+	struct efa_rdm_peer *peer;
 	struct efa_av_entry *implicit_av_entry, *explicit_av_entry;
 	struct fid_peer_srx *peer_srx;
 
@@ -404,12 +404,6 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	explicit_conn->fi_addr = *fi_addr;
 	explicit_conn->shm_fi_addr = implicit_conn->shm_fi_addr;
 	explicit_conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
-	HASH_ITER(hh, implicit_conn->ep_peer_map, map_entry, tmp) {
-		HASH_DELETE(hh, implicit_conn->ep_peer_map, map_entry);
-		HASH_ADD_PTR(explicit_conn->ep_peer_map, ep_ptr, map_entry);
-		map_entry->peer.conn = explicit_conn;
-	}
-	assert(HASH_CNT(hh, implicit_conn->ep_peer_map) == 0);
 
 	/* Handle reverse AV and AV ref counts */
 	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
@@ -451,6 +445,14 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	ofi_genlock_lock(&av->util_av.ep_list_lock);
 	dlist_foreach(&av->util_av.ep_list, entry) {
 		ep = container_of(entry, struct efa_rdm_ep, base_ep.util_ep.av_entry);
+		/* move from implicit to explicit peer map, using new fi_addr */
+		peer = efa_rdm_peer_map_remove(&ep->fi_addr_to_peer_map_implicit,
+					       implicit_fi_addr);
+		if (peer) {
+			peer->conn = explicit_conn;
+			efa_rdm_peer_map_insert(&ep->fi_addr_to_peer_map,
+						*fi_addr, peer);
+		}
 		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 		peer_srx->owner_ops->foreach_unspec_addr(peer_srx, &efa_av_get_addr_from_peer_rx_entry);
 	}

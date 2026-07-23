@@ -7,6 +7,7 @@
 #include <infiniband/efadv.h>
 
 #include "efa.h"
+#include "rdm/efa_rdm_ep.h"
 
 /*
  * Local/remote peer detection by comparing peer GID with stored local GIDs
@@ -174,7 +175,11 @@ int efa_conn_rdm_insert_shm_av(struct efa_av *av, struct efa_conn *conn)
 void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 {
 	int err;
-	struct efa_conn_ep_peer_map_entry *peer_map_entry, *tmp;
+	struct dlist_entry *entry, *tmp;
+	struct efa_rdm_ep *ep;
+	struct ofi_dyn_arr *peer_map;
+	struct efa_rdm_peer *peer;
+	fi_addr_t fi_addr;
 
 	assert(av->domain->info_type == EFA_INFO_RDM);
 
@@ -196,13 +201,26 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	}
 
 	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
-	HASH_ITER(hh, conn->ep_peer_map, peer_map_entry, tmp) {
-		dlist_remove(&peer_map_entry->peer.ep_peer_list_entry);
-		efa_rdm_peer_destruct(&peer_map_entry->peer, peer_map_entry->ep_ptr);
-		HASH_DEL(conn->ep_peer_map, peer_map_entry);
-		ofi_buf_free(peer_map_entry);
+
+	/* since an efa_conn is all connections to a specific remote ep,
+	 * we must walk all local ep peer maps and remove the connection
+	 * to the remote ep */
+	dlist_foreach_safe(&av->util_av.ep_list, entry, tmp) {
+		ep = container_of(entry, struct efa_rdm_ep,
+				  base_ep.util_ep.av_entry);
+		if (conn->fi_addr != FI_ADDR_NOTAVAIL) {
+			peer_map = &ep->fi_addr_to_peer_map;
+			fi_addr = conn->fi_addr;
+		} else {
+			peer_map = &ep->fi_addr_to_peer_map_implicit;
+			fi_addr = conn->implicit_fi_addr;
+		}
+		peer = efa_rdm_peer_map_remove(peer_map, fi_addr);
+		if (peer) {
+			efa_rdm_peer_destruct(peer, ep);
+			ofi_buf_free(peer);
+		}
 	}
-	assert(HASH_CNT(hh, conn->ep_peer_map) == 0);
 }
 
 /**
@@ -443,31 +461,4 @@ void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
 
 	release_from_implicit_av ? conn->ah->implicit_refcnt-- :
 				   conn->ah->explicit_refcnt--;
-}
-
-void efa_conn_ep_peer_map_insert(struct efa_conn *conn, struct efa_conn_ep_peer_map_entry *map_entry)
-{
-	HASH_ADD_PTR(conn->ep_peer_map, ep_ptr, map_entry);
-}
-
-struct efa_rdm_peer *efa_conn_ep_peer_map_lookup(struct efa_conn *conn,
-						 struct efa_rdm_ep *ep)
-{
-	struct efa_conn_ep_peer_map_entry *map_entry;
-
-	/* coverity[suspicious_sizeof : FALSE] - key is a pointer; HASH_FIND_PTR compares sizeof(void *) */
-	HASH_FIND_PTR(conn->ep_peer_map, &ep, map_entry);
-
-	return map_entry ? &map_entry->peer : NULL;
-}
-
-void efa_conn_ep_peer_map_remove(struct efa_conn *conn, struct efa_rdm_ep *ep)
-{
-	struct efa_conn_ep_peer_map_entry *map_entry;
-
-	/* coverity[suspicious_sizeof : FALSE] - key is a pointer; HASH_FIND_PTR compares sizeof(void *) */
-	HASH_FIND_PTR(conn->ep_peer_map, &ep, map_entry);
-	assert(map_entry);
-	HASH_DELETE(hh, conn->ep_peer_map, map_entry);
-	ofi_buf_free(map_entry);
 }

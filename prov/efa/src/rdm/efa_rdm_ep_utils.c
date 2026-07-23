@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ofi.h"
+#include "ofi_indexer.h"
 #include <ofi_util.h>
 #include <ofi_iov.h>
 #include "efa.h"
@@ -46,6 +47,55 @@ int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 }
 
 
+void efa_rdm_peer_map_init(struct ofi_dyn_arr *arr)
+{
+	ofi_array_init(arr, sizeof(struct efa_rdm_peer *), NULL);
+}
+
+struct efa_rdm_peer *efa_rdm_peer_map_lookup(struct ofi_dyn_arr *arr, fi_addr_t addr)
+{
+	struct efa_rdm_peer **slot;
+
+	if (addr > OFI_IDX_MAX_INDEX)
+		return NULL;
+
+	slot = ofi_array_at_max(arr, (int) addr, OFI_IDX_MAX_INDEX + 1);
+	return slot ? *slot : NULL;
+}
+
+int efa_rdm_peer_map_insert(struct ofi_dyn_arr *arr, fi_addr_t addr, struct efa_rdm_peer *peer)
+{
+	struct efa_rdm_peer **slot;
+
+	if (addr > OFI_IDX_MAX_INDEX)
+		return -FI_ENOMEM;
+
+	slot = ofi_array_at(arr, (int) addr);
+	if (!slot)
+		return -FI_ENOMEM;
+
+	assert(!*slot);
+	*slot = peer;
+	return 0;
+}
+
+struct efa_rdm_peer *efa_rdm_peer_map_remove(struct ofi_dyn_arr *arr, fi_addr_t addr)
+{
+	struct efa_rdm_peer **slot;
+	struct efa_rdm_peer *peer;
+
+	if (addr > OFI_IDX_MAX_INDEX)
+		return NULL;
+
+	slot = ofi_array_at_max(arr, (int) addr, OFI_IDX_MAX_INDEX + 1);
+	if (!slot || !*slot)
+		return NULL;
+
+	peer = *slot;
+	*slot = NULL;
+	return peer;
+}
+
 /**
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
  * the explicit AV, this function is a thread-safe version of efa_rdm_ep_get_peer_explicit
@@ -75,41 +125,40 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
 	struct efa_conn *conn;
-	struct efa_conn_ep_peer_map_entry *map_entry;
 	struct efa_rdm_peer *peer;
 
 	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));
 
-	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
-
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
-	peer = efa_conn_ep_peer_map_lookup(conn, ep);
+	peer = efa_rdm_peer_map_lookup(&ep->fi_addr_to_peer_map, addr);
 	if (peer)
 		return peer;
 
+	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
+	if (OFI_UNLIKELY(!conn))
+		return NULL;
+
 	EFA_INFO(FI_LOG_EP_DATA, "Creating peer for addr %lu\n", addr);
-	map_entry = ofi_buf_alloc(ep->peer_map_entry_pool);
-	if (OFI_UNLIKELY(!map_entry)) {
-		EFA_WARN(FI_LOG_EP_DATA,
-			"Map entries for fi_addr to peer mapping exhausted.\n");
+	peer = ofi_buf_alloc(ep->efa_rdm_peer_pool);
+	if (OFI_UNLIKELY(!peer)) {
+		EFA_WARN(FI_LOG_EP_DATA, "Cannot allocate peer\n");
 		return NULL;
 	}
 
-	memset(map_entry, 0, sizeof(*map_entry));
-	map_entry->ep_ptr = ep;
-
-	if (efa_rdm_peer_construct(&map_entry->peer, ep, conn)) {
-		ofi_buf_free(map_entry);
+	if (efa_rdm_peer_construct(peer, ep, conn)) {
+		ofi_buf_free(peer);
 		return NULL;
 	}
 
-	efa_conn_ep_peer_map_insert(conn, map_entry);
+	if (efa_rdm_peer_map_insert(&ep->fi_addr_to_peer_map, addr, peer)) {
+		efa_rdm_peer_destruct(peer, ep);
+		ofi_buf_free(peer);
+		return NULL;
+	}
 
-	dlist_insert_tail(&map_entry->peer.ep_peer_list_entry, &ep->ep_peer_list);
-
-	return &map_entry->peer;
+	return peer;
 }
 
 /**
@@ -124,42 +173,39 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 {
 	struct efa_conn *conn;
 	struct efa_rdm_peer *peer;
-	struct efa_conn_ep_peer_map_entry *map_entry;
 
 	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));
-
-	conn = efa_av_addr_to_conn_implicit(ep->base_ep.av, addr);
 
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
-	peer = efa_conn_ep_peer_map_lookup(conn, ep);
+	peer = efa_rdm_peer_map_lookup(&ep->fi_addr_to_peer_map_implicit, addr);
 	if (peer)
 		goto out;
 
+	conn = efa_av_addr_to_conn_implicit(ep->base_ep.av, addr);
+	if (OFI_UNLIKELY(!conn))
+		return NULL;
+
 	EFA_INFO(FI_LOG_EP_DATA, "Creating peer for addr %lu\n", addr);
-	map_entry = ofi_buf_alloc(ep->peer_map_entry_pool);
-	if (OFI_UNLIKELY(!map_entry)) {
-		EFA_WARN(FI_LOG_EP_DATA,
-			"Map entries for fi_addr to peer mapping exhausted.\n");
+	peer = ofi_buf_alloc(ep->efa_rdm_peer_pool);
+	if (OFI_UNLIKELY(!peer)) {
+		EFA_WARN(FI_LOG_EP_DATA, "Cannot allocate peer\n");
 		return NULL;
 	}
 
-	memset(map_entry, 0, sizeof(*map_entry));
-	map_entry->ep_ptr = ep;
-
-	if (efa_rdm_peer_construct(&map_entry->peer, ep, conn)) {
-		ofi_buf_free(map_entry);
+	if (efa_rdm_peer_construct(peer, ep, conn)) {
+		ofi_buf_free(peer);
 		return NULL;
 	}
-	peer = &map_entry->peer;
 
-	efa_conn_ep_peer_map_insert(conn, map_entry);
-
-	dlist_insert_tail(&map_entry->peer.ep_peer_list_entry, &ep->ep_peer_list);
+	if (efa_rdm_peer_map_insert(&ep->fi_addr_to_peer_map_implicit, addr, peer)) {
+		efa_rdm_peer_destruct(peer, ep);
+		ofi_buf_free(peer);
+		return NULL;
+	}
 
 out:
-	assert(peer);
 	/* Move to the front of the LRU list */
 	efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->conn);
 	return peer;
