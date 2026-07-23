@@ -1092,10 +1092,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 	 * The QP destroy and op entries clean up must be in the same lock,
 	 * otherwise there can be race condition that efa_rdm_domain_progress_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
-	 *
-	 * Destroying the self AH also requires the SRX lock
-	 * Destroying the self AH modifies the AH refcnts which can also
-	 * modified in the CQ read path by implicit-to-explicit AV entry conversion
 	 */
 	ofi_genlock_lock(&((struct efa_rdm_domain *) domain)->srx_lock);
 
@@ -1426,13 +1422,9 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		/* Acquire the SRX lock before creating self AH
-		 * Creating the self AH modifies the AH refcnts which can also
-		 * modified in the CQ read path by implicit-to-explicit AV entry
-		 * conversion */
-		ofi_genlock_lock(&efa_rdm_ep_rdm_domain(ep)->srx_lock);
+		/* Self AH creation modifies AH refcnts which are
+		 * protected by util_domain.lock inside efa_ah_alloc */
 		ret = efa_rdm_ep_create_self_ah(ep);
-		ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(ep)->srx_lock);
 		if (ret) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 			 "EFA RDM endpoint cannot create ah for its own address\n");
