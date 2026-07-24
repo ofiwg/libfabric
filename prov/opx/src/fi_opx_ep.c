@@ -894,7 +894,21 @@ static int fi_opx_close_ep(fid_t fid)
 #endif
 
 		if (ofi_atomic_get64(&opx_ep->hfi->ref_cnt) == 0) {
-			// Free the HFI context
+			/* Release the kernel HFI user context. The device mmaps pin the
+			 * cdev's struct file, so unmap them, then close fd_cdev (ibv_close_device
+			 * above closed fd_verbs only; pass -1 to avoid double-closing it), then
+			 * free ctrl. Unmap must precede free(ctrl) since it reads ctrl->ctxt_info. */
+			const bool send_only =
+				container_of(opx_ep->hfi, struct fi_opx_hfi1_context_internal, context)->send_only;
+			if (opx_ep->hfi->ctrl) {
+				opx_hfi_context_unmap(opx_ep->hfi->ctrl, opx_ep->hfi->subctxt_cnt,
+						      (uint64_t) opx_ep->hfi->info.rxe.hdrq.rhe_base,
+						      opx_ep->hfi->hfi1_type, send_only);
+			}
+			if (opx_ep->hfi->fd_cdev != -1) {
+				opx_hfi_context_close(opx_ep->hfi->fd_cdev, -1);
+				opx_ep->hfi->fd_cdev = -1;
+			}
 			if (opx_ep->hfi->ctrl) {
 				free(opx_ep->hfi->ctrl);
 				opx_ep->hfi->ctrl = NULL;
@@ -929,6 +943,19 @@ static int fi_opx_close_ep(fid_t fid)
 			opx_hfi1_rdma_context_close(sec_hfi->ibv_context);
 #endif
 			if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
+				/* Release the per-context cdev fd (see primary block above):
+				 * unmap device regions, close fd_cdev, then free ctrl. */
+				const bool sec_send_only =
+					container_of(sec_hfi, struct fi_opx_hfi1_context_internal, context)->send_only;
+				if (sec_hfi->ctrl) {
+					opx_hfi_context_unmap(sec_hfi->ctrl, sec_hfi->subctxt_cnt,
+							      (uint64_t) sec_hfi->info.rxe.hdrq.rhe_base,
+							      sec_hfi->hfi1_type, sec_send_only);
+				}
+				if (sec_hfi->fd_cdev != -1) {
+					opx_hfi_context_close(sec_hfi->fd_cdev, -1);
+					sec_hfi->fd_cdev = -1;
+				}
 				if (sec_hfi->ctrl) {
 					free(sec_hfi->ctrl);
 				}
@@ -2140,6 +2167,21 @@ static bool opx_open_secondary_different_plane(struct fi_opx_ep *opx_ep, struct 
 				"Failed to allocate secondary TX context, continuing with fallback chain\n");
 			fi_opx_ref_dec(&sec_hfi->ref_cnt, "HFI context");
 			if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
+				/* Release everything opened by the secondary context (see
+				 * primary teardown block): verbs, then unmap device regions,
+				 * then the cdev that holds the kernel HFI user context, then ctrl. */
+				const bool err_send_only =
+					container_of(sec_hfi, struct fi_opx_hfi1_context_internal, context)->send_only;
+				opx_hfi1_rdma_context_close(sec_hfi->ibv_context);
+				if (sec_hfi->ctrl) {
+					opx_hfi_context_unmap(sec_hfi->ctrl, sec_hfi->subctxt_cnt,
+							      (uint64_t) sec_hfi->info.rxe.hdrq.rhe_base,
+							      sec_hfi->hfi1_type, err_send_only);
+				}
+				if (sec_hfi->fd_cdev != -1) {
+					opx_hfi_context_close(sec_hfi->fd_cdev, -1);
+					sec_hfi->fd_cdev = -1;
+				}
 				free(sec_hfi->ctrl);
 				free(sec_hfi);
 			}
@@ -2172,6 +2214,21 @@ static bool opx_open_secondary_different_plane(struct fi_opx_ep *opx_ep, struct 
 			free(sec_mem);
 			fi_opx_ref_dec(&sec_hfi->ref_cnt, "HFI context");
 			if (ofi_atomic_get64(&sec_hfi->ref_cnt) == 0) {
+				/* Release everything opened by the secondary context (see
+				 * primary teardown block): verbs, then unmap device regions,
+				 * then the cdev that holds the kernel HFI user context, then ctrl. */
+				const bool err_send_only =
+					container_of(sec_hfi, struct fi_opx_hfi1_context_internal, context)->send_only;
+				opx_hfi1_rdma_context_close(sec_hfi->ibv_context);
+				if (sec_hfi->ctrl) {
+					opx_hfi_context_unmap(sec_hfi->ctrl, sec_hfi->subctxt_cnt,
+							      (uint64_t) sec_hfi->info.rxe.hdrq.rhe_base,
+							      sec_hfi->hfi1_type, err_send_only);
+				}
+				if (sec_hfi->fd_cdev != -1) {
+					opx_hfi_context_close(sec_hfi->fd_cdev, -1);
+					sec_hfi->fd_cdev = -1;
+				}
 				free(sec_hfi->ctrl);
 				free(sec_hfi);
 			}
