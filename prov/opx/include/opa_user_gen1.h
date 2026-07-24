@@ -369,6 +369,11 @@ struct _hfi_ctrl *opx_hfi_userinit(int32_t, struct fi_opx_hfi1_context_internal 
 int opx_map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt, __u64 *rheq, const enum opx_hfi1_type hfi1_type,
 		    const bool send_only);
 
+/* Reverse of opx_map_hfi_mem: unmap the per-context device mappings so the
+   kernel can release the HFI user context when the cdev fd is closed. */
+void opx_hfi_context_unmap(struct _hfi_ctrl *ctrl, size_t subctxt_cnt, uint64_t rheq,
+			   const enum opx_hfi1_type hfi1_type, const bool send_only);
+
 /* don't inline these; it's all init code, and not inlining makes the */
 /* overall code shorter and easier to debug */
 void opx_hfi_touch_mmap(void *, size_t) __attribute__((noinline));
