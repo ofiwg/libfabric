@@ -493,6 +493,80 @@ err_mmap_pio_bufbase_sop:
 err_mmap_sc_credits_addr:
 	return -1;
 }
+
+/*
+ * Unmap the per-context device mappings established by opx_map_hfi_mem().
+ * Each device region was mmap'd on the HFI cdev fd, and every such mapping
+ * holds a reference on the cdev's struct file in the kernel; the kernel only
+ * releases the HFI user context (dd->freectxts) from hfi1_file_close() once
+ * that file's refcount reaches zero, i.e. after the fd is closed AND every
+ * device VMA is unmapped. Sizes are recomputed from ctrl->ctxt_info exactly
+ * as in opx_map_hfi_mem (the file-global arrsz[] is transient and stale here),
+ * and regions are unmapped in reverse order with the identical gating. The
+ * anonymous guard pad pages are intentionally not unmapped (they hold no cdev
+ * file reference), matching the map function's own error-unwind path.
+ */
+void opx_hfi_context_unmap(struct _hfi_ctrl *ctrl, size_t subctxt_cnt, uint64_t rheq,
+			   const enum opx_hfi1_type hfi1_type, const bool send_only)
+{
+	if (!ctrl) {
+		return;
+	}
+
+	struct hfi1_ctxt_info *cinfo = &ctrl->ctxt_info;
+	struct hfi1_base_info *binfo = &ctrl->base_info;
+	size_t		       sz;
+
+	if (subctxt_cnt) {
+		if (!send_only) {
+			sz = ALIGN((size_t) cinfo->egrtids * cinfo->rcvegr_size, HFI_MMAP_PGSIZE) * subctxt_cnt;
+			HFI_MUNMAP_ERRCHECK(binfo, subctxt_rcvegrbuf, sz);
+
+			sz = ALIGN((size_t) cinfo->rcvhdrq_cnt * cinfo->rcvhdrq_entsize, HFI_MMAP_PGSIZE) * subctxt_cnt;
+			HFI_MUNMAP_ERRCHECK(binfo, subctxt_rcvhdrbuf, sz);
+		}
+		HFI_MUNMAP_ERRCHECK(binfo, subctxt_uregbase, HFI_MMAP_PGSIZE);
+	}
+
+	if (rheq && !send_only && hfi1_type != OPX_HFI1_WFR) {
+		HFI_MUNMAP((void *) rheq, sizeof(uint64_t) * (size_t) cinfo->rcvhdrq_cnt);
+	}
+
+	HFI_MUNMAP_ERRCHECK(binfo, status_bufbase, HFI_MMAP_PGSIZE);
+	HFI_MUNMAP_ERRCHECK(binfo, events_bufbase, HFI_MMAP_PGSIZE);
+
+	/* rcvhdrtail_base is only its own mapping when DMA_RTAIL is set; otherwise
+	 * it points inside user_regbase and must not be unmapped separately. */
+	if (!send_only && (cinfo->runtime_flags & HFI1_CAP_DMA_RTAIL)) {
+		HFI_MUNMAP_ERRCHECK(binfo, rcvhdrtail_base, HFI_MMAP_PGSIZE);
+	}
+
+	if (!send_only) {
+		sz = (OPX_HFI1_WFR == opx_hfi1_check_hwversion(binfo->hw_version)) ? HFI_MMAP_PGSIZE :
+										     2 * HFI_MMAP_PGSIZE;
+		HFI_MUNMAP_ERRCHECK(binfo, user_regbase, sz);
+	}
+
+	if ((cinfo->runtime_flags & HFI1_CAP_SDMA) && binfo->sdma_comp_bufbase != 0) {
+		sz = cinfo->sdma_ring_size * sizeof(struct hfi1_sdma_comp_entry);
+		HFI_MUNMAP_ERRCHECK(binfo, sdma_comp_bufbase, sz);
+	}
+
+	if (!send_only) {
+		sz = (size_t) cinfo->egrtids * cinfo->rcvegr_size;
+		HFI_MUNMAP_ERRCHECK(binfo, rcvegr_bufbase, sz);
+
+		sz = (size_t) cinfo->rcvhdrq_cnt * cinfo->rcvhdrq_entsize;
+		HFI_MUNMAP_ERRCHECK(binfo, rcvhdr_bufbase, sz);
+	}
+
+	sz = (size_t) cinfo->credits * CREDITS_NUM;
+	HFI_MUNMAP_ERRCHECK(binfo, pio_bufbase, sz);
+	HFI_MUNMAP_ERRCHECK(binfo, pio_bufbase_sop, sz);
+
+	HFI_MUNMAP_ERRCHECK(binfo, sc_credits_addr, HFI_MMAP_PGSIZE);
+}
+
 /* It is allowed to have multiple devices (and of different types)
 	   simultaneously opened and initialized, although this (still! Oct 07)
 	   unimplemented.  This routine is used by the low level hfi protocol code (and
