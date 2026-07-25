@@ -382,7 +382,25 @@ static inline uint32_t fi_opx_domain_get_rx_max(struct fid_domain *domain)
 
 int opx_hfisvc_mr_deferred_open(struct opx_domain_deferred_work *work);
 int opx_hfisvc_mr_deferred_close(struct opx_domain_deferred_work *work);
+
+#if HAVE_HFISVC
 int opx_hfisvc_mr_lazy_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr);
+
+__OPX_FORCE_INLINE__
+void opx_hfisvc_mr_lazy_open_if_deferred(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr)
+{
+	if (opx_mr && opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPEN_DEFERRED) {
+		opx_hfisvc_mr_lazy_open(opx_domain, opx_mr);
+	}
+}
+#else
+__OPX_FORCE_INLINE__
+void opx_hfisvc_mr_lazy_open_if_deferred(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr)
+{
+	(void) opx_domain;
+	(void) opx_mr;
+}
+#endif
 
 #if HAVE_HFISVC
 __OPX_FORCE_INLINE__
