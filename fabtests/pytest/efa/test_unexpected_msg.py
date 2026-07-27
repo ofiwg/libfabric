@@ -1,5 +1,5 @@
 import pytest
-from efa.efa_common import efa_run_client_server_test
+from efa.efa_common import efa_run_client_server_test, memory_type_list_all
 
 
 SHM_DEFAULT_MAX_INJECT_SIZE = 4096
@@ -11,6 +11,7 @@ SHM_DEFAULT_RX_SIZE = 1024
 @pytest.mark.functional
 @pytest.mark.parametrize("msg_size", [1, 512, 9000, 1048576]) # cover various switch points of shm/efa protocols
 @pytest.mark.parametrize("msg_count", [1, 1024, 2048]) # below and above shm's default rx size
+@pytest.mark.memory_type(memory_type_list_all)
 def test_unexpected_msg(cmdline_args, msg_size, msg_count, memory_type, completion_semantic):
     from common import ClientServerTest
     if cmdline_args.server_id == cmdline_args.client_id:
