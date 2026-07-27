@@ -40,7 +40,8 @@ void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 			  &rdm_domain->ah_lru_list);
 }
 
-static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
+static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain,
+					      bool insert_implicit_av) {
 	struct efa_conn *conn_to_release;
 	struct efa_ah *ah_tmp, *ah_to_release = NULL;
 	struct dlist_entry *tmp;
@@ -73,7 +74,17 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain) {
 		assert(conn_to_release->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
 		       conn_to_release->fi_addr == FI_ADDR_NOTAVAIL);
 
+		/*
+		 * The implicit insert path already holds util_av_implicit.lock.
+		 * The explicit insert path does not, so acquire it here.
+		 */
+		if (!insert_implicit_av)
+			ofi_genlock_lock(&conn_to_release->av->util_av_implicit.lock);
+		else
+			assert(ofi_genlock_held(&conn_to_release->av->util_av_implicit.lock));
 		efa_conn_release_ah_unsafe(conn_to_release->av, conn_to_release, true);
+		if (!insert_implicit_av)
+			ofi_genlock_unlock(&conn_to_release->av->util_av_implicit.lock);
 	}
 
 	if (ah_to_release->implicit_refcnt == 0 &&
@@ -153,10 +164,11 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 		if (errno == FI_ENOMEM && domain->info_type == EFA_INFO_RDM) {
 			EFA_INFO(
 				FI_LOG_AV,
-				"ibv_create_ah failed with ENOMEM for implicit "
-				"AV insertion. Attempting to evict AH entry\n");
+				"ibv_create_ah failed with ENOMEM for %s "
+				"AV insertion. Attempting to evict AH entry\n",
+				insert_implicit_av ? "implicit" : "explicit");
 
-			err = efa_ah_implicit_av_evict_ah(domain);
+			err = efa_ah_implicit_av_evict_ah(domain, insert_implicit_av);
 			if (err)
 				goto err_free_efa_ah;
 
@@ -166,8 +178,9 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 					efa_ah_warn_create_einval(domain, gid);
 				} else {
 					EFA_WARN(FI_LOG_AV,
-						 "ibv_create_ah failed for implicit AV "
+						 "ibv_create_ah failed for %s AV "
 						 "insertion! errno: %d\n",
+						 insert_implicit_av ? "implicit" : "explicit",
 						 errno);
 				}
 				goto err_free_efa_ah;
