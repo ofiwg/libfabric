@@ -86,9 +86,13 @@ struct efa_av {
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		struct fid_av **av_fid, void *context);
 
-int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
-		      fi_addr_t *fi_addr, uint64_t flags, void *context,
-		      bool insert_shm_av, bool insert_implicit_av);
+int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *addr,
+			       fi_addr_t *fi_addr, uint64_t flags,
+			       void *context, bool insert_shm_av);
+
+int efa_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
+			       fi_addr_t *fi_addr, uint64_t flags,
+			       void *context);
 
 struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
 struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av,
