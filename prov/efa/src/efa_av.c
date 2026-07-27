@@ -459,28 +459,11 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	return FI_SUCCESS;
 }
 
-/**
- * @brief insert one address into address vector (AV)
- *
- * @param[in]	av	address vector
- * @param[in]	addr	raw address, in the format of gid:qpn:qkey
- * @param[out]	fi_addr pointer to the output fi address. This address is used by fi_send
- * @param[in]	flags	flags user passed to fi_av_insert.
- * @param[in]	context	context user passed to fi_av_insert
- * @param[in]	insert_shm_av	whether insert address to shm av
- * @param[in]	insert_implicit_av	whether insert address to implicit AV
- * @return	0 on success, a negative error code on failure
- */
-int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
-		      fi_addr_t *fi_addr, uint64_t flags, void *context,
-		      bool insert_shm_av, bool insert_implicit_av)
+static inline int efa_av_insert_one_validate(struct efa_av *av,
+				     struct efa_ep_addr *addr,
+				     fi_addr_t *fi_addr,
+				     char *raw_gid_str)
 {
-	struct efa_conn *conn;
-	char raw_gid_str[INET6_ADDRSTRLEN];
-	fi_addr_t efa_fiaddr;
-	fi_addr_t implicit_fi_addr;
-	int ret = 0;
-
 	if (!efa_av_is_valid_address(addr)) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert bad addr\n");
 		*fi_addr = FI_ADDR_NOTAVAIL;
@@ -492,89 +475,188 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 
 	if (av->domain->info_type == EFA_INFO_RDM)
 		assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
-	ofi_genlock_lock(&av->util_av_implicit.lock);
-	ofi_genlock_lock(&av->util_av.lock);
 
-	memset(raw_gid_str, 0, sizeof(raw_gid_str));
+	memset(raw_gid_str, 0, INET6_ADDRSTRLEN);
 	if (!inet_ntop(AF_INET6, addr->raw, raw_gid_str, INET6_ADDRSTRLEN)) {
 		EFA_WARN(FI_LOG_AV, "cannot convert address to string. errno: %d\n", errno);
-		ret = -FI_EINVAL;
 		*fi_addr = FI_ADDR_NOTAVAIL;
-		goto out;
+		return -FI_EINVAL;
 	}
+
+	return 0;
+}
+
+/**
+ * @brief insert one address into the explicit address vector
+ *
+ * If the address already exists in the explicit AV, return the existing
+ * fi_addr. If it exists in the implicit AV, move it from implicit to
+ * explicit. Otherwise allocate a new connection entry in the explicit AV.
+ *
+ * @param[in]	av	address vector
+ * @param[in]	addr	raw address, in the format of gid:qpn:qkey
+ * @param[out]	fi_addr pointer to the output fi address
+ * @param[in]	flags	flags user passed to fi_av_insert
+ * @param[in]	context	context user passed to fi_av_insert
+ * @param[in]	insert_shm_av	whether insert address to shm av
+ * @return	0 on success, a negative error code on failure
+ */
+int efa_av_insert_one_explicit(struct efa_av *av,
+			       struct efa_ep_addr *addr,
+			       fi_addr_t *fi_addr, uint64_t flags,
+			       void *context, bool insert_shm_av)
+{
+	char raw_gid_str[INET6_ADDRSTRLEN];
+	struct efa_conn *conn;
+	fi_addr_t efa_fiaddr;
+	fi_addr_t implicit_fi_addr;
+	int ret;
+
+	ret = efa_av_insert_one_validate(av, addr, fi_addr, raw_gid_str);
+	if (ret)
+		return ret;
 
 	EFA_INFO(FI_LOG_AV,
-		 "Inserting address GID[%s] QP[%u] QKEY[%u] to %s AV ....\n",
-		 raw_gid_str, addr->qpn, addr->qkey,
-		 insert_implicit_av ? "implicit" : "explicit");
+		 "Inserting address GID[%s] QP[%u] QKEY[%u] to explicit AV\n",
+		 raw_gid_str, addr->qpn, addr->qkey);
 
-	/*
-	 * Check if this address already has been inserted, if so set *fi_addr
-	 * to existing address, and return 0 for success.
-	 */
+	ofi_genlock_lock(&av->util_av.lock);
+
+	/* Check if this address already exists in the explicit AV */
 	efa_fiaddr = ofi_av_lookup_fi_addr_unsafe(&av->util_av, addr);
 	if (efa_fiaddr != FI_ADDR_NOTAVAIL) {
-		/* We should never try to insert into the implicit AV an address
-		 * that's already in the explicit AV */
-		assert(!insert_implicit_av);
-
-		EFA_INFO(FI_LOG_AV, "Found existing AV entry pointing to this address! fi_addr: %ld\n", efa_fiaddr);
+		EFA_INFO(FI_LOG_AV,
+			 "Found existing AV entry pointing to this "
+			 "address! fi_addr: %" PRId64 "\n",
+			 efa_fiaddr);
 		*fi_addr = efa_fiaddr;
-		ret = 0;
-		goto out;
+		ofi_genlock_unlock(&av->util_av.lock);
+		return 0;
 	}
 
-	implicit_fi_addr =
-		ofi_av_lookup_fi_addr_unsafe(&av->util_av_implicit, addr);
+	/* Check if this address exists in the implicit AV */
+	ofi_genlock_lock(&av->util_av_implicit.lock);
+	implicit_fi_addr = ofi_av_lookup_fi_addr_unsafe(&av->util_av_implicit, addr);
 	if (implicit_fi_addr != FI_ADDR_NOTAVAIL) {
 		EFA_INFO(FI_LOG_AV,
-			 "Found implicit AV entry id %ld for the same "
-			 "address\n",
+			 "Found implicit AV entry id %" PRId64
+			 " for the same address\n",
 			 implicit_fi_addr);
-
-		if (insert_implicit_av) {
-			/* Move to the end of the LRU list */
-			conn = efa_av_addr_to_conn_implicit(av,
-							    implicit_fi_addr);
-			efa_av_implicit_av_lru_conn_move(av, conn);
-
-			*fi_addr = implicit_fi_addr;
-			goto out;
-		}
 
 		ret = efa_conn_implicit_to_explicit(av, addr, implicit_fi_addr,
 						    fi_addr);
 		if (ret)
 			*fi_addr = FI_ADDR_NOTAVAIL;
-		goto out;
-	}
 
-	conn = efa_conn_alloc(av, addr, flags, context, insert_shm_av, insert_implicit_av);
+		ofi_genlock_unlock(&av->util_av_implicit.lock);
+		ofi_genlock_unlock(&av->util_av.lock);
+		return ret;
+	}
+	ofi_genlock_unlock(&av->util_av_implicit.lock);
+
+	/* Address not found in either AV, allocate a new explicit entry */
+	conn = efa_conn_alloc(av, addr, flags, context, insert_shm_av, false);
 	if (!conn) {
 		*fi_addr = FI_ADDR_NOTAVAIL;
-		ret = -FI_EADDRNOTAVAIL;
-		goto out;
+		ofi_genlock_unlock(&av->util_av.lock);
+		return -FI_EADDRNOTAVAIL;
 	}
 
-	if (insert_implicit_av) {
-		*fi_addr = conn->implicit_fi_addr;
-		EFA_INFO(FI_LOG_AV,
-			 "Successfully inserted address GID[%s] QP[%u] "
-			 "QKEY[%u] to implicit AV. fi_addr: %ld\n",
-			 raw_gid_str, addr->qpn, addr->qkey, *fi_addr);
-	} else {
-		*fi_addr = conn->fi_addr;
-		EFA_INFO(FI_LOG_AV,
-			 "Successfully inserted address GID[%s] QP[%u] "
-			 "QKEY[%u] to explicit AV. fi_addr: %ld\n",
-			 raw_gid_str, addr->qpn, addr->qkey, *fi_addr);
-	}
-	ret = 0;
-
-out:
+	*fi_addr = conn->fi_addr;
 	ofi_genlock_unlock(&av->util_av.lock);
+
+	EFA_INFO(FI_LOG_AV,
+		 "Successfully inserted address GID[%s] QP[%u] "
+		 "QKEY[%u] to explicit AV. fi_addr: %" PRId64 "\n",
+		 raw_gid_str, addr->qpn, addr->qkey, *fi_addr);
+
+	return 0;
+}
+
+/**
+ * @brief insert one address into the implicit address vector
+ *
+ * If the address already exists in the explicit AV, return the existing
+ * explicit fi_addr (no implicit insertion needed). If it already exists in
+ * the implicit AV, update its LRU position. Otherwise allocate a new
+ * connection entry in the implicit AV.
+ *
+ * @param[in]	av	address vector
+ * @param[in]	addr	raw address, in the format of gid:qpn:qkey
+ * @param[out]	fi_addr pointer to the output fi address
+ * @param[in]	flags	flags user passed to fi_av_insert
+ * @param[in]	context	context user passed to fi_av_insert
+ * @return	0 on success, a negative error code on failure
+ */
+int efa_av_insert_one_implicit(struct efa_av *av,
+			       struct efa_ep_addr *addr,
+			       fi_addr_t *fi_addr, uint64_t flags,
+			       void *context)
+{
+	char raw_gid_str[INET6_ADDRSTRLEN];
+	struct efa_conn *conn;
+	fi_addr_t implicit_fi_addr;
+	fi_addr_t efa_fiaddr;
+	int ret;
+
+	ret = efa_av_insert_one_validate(av, addr, fi_addr, raw_gid_str);
+	if (ret)
+		return ret;
+
+	EFA_INFO(FI_LOG_AV,
+		 "Inserting address GID[%s] QP[%u] QKEY[%u] to implicit AV\n",
+		 raw_gid_str, addr->qpn, addr->qkey);
+
+	/* Check if this address already exists in the explicit AV */
+	ofi_genlock_lock(&av->util_av.lock);
+	efa_fiaddr = ofi_av_lookup_fi_addr_unsafe(&av->util_av, addr);
+	if (efa_fiaddr != FI_ADDR_NOTAVAIL) {
+		*fi_addr = efa_fiaddr;
+		ofi_genlock_unlock(&av->util_av.lock);
+		EFA_INFO(FI_LOG_AV,
+			 "Found existing AV entry pointing to this "
+			 "address! fi_addr: %" PRId64 "\n",
+			 efa_fiaddr);
+		return 0;
+	}
+	ofi_genlock_unlock(&av->util_av.lock);
+
+	/* Check if address already exists in the implicit AV */
+	ofi_genlock_lock(&av->util_av_implicit.lock);
+	implicit_fi_addr =
+		ofi_av_lookup_fi_addr_unsafe(&av->util_av_implicit, addr);
+	if (implicit_fi_addr != FI_ADDR_NOTAVAIL) {
+		EFA_INFO(FI_LOG_AV,
+			 "Found implicit AV entry id %" PRId64
+			 " for the same address\n",
+			 implicit_fi_addr);
+
+		/* Move to the end of the LRU list */
+		conn = efa_av_addr_to_conn_implicit(av, implicit_fi_addr);
+		efa_av_implicit_av_lru_conn_move(av, conn);
+
+		*fi_addr = implicit_fi_addr;
+		ofi_genlock_unlock(&av->util_av_implicit.lock);
+		return 0;
+	}
+
+	/* Address not found in either AV, allocate a new implicit entry */
+	conn = efa_conn_alloc(av, addr, flags, context, false, true);
+	if (!conn) {
+		*fi_addr = FI_ADDR_NOTAVAIL;
+		ofi_genlock_unlock(&av->util_av_implicit.lock);
+		return -FI_EADDRNOTAVAIL;
+	}
+
+	*fi_addr = conn->implicit_fi_addr;
 	ofi_genlock_unlock(&av->util_av_implicit.lock);
-	return ret;
+
+	EFA_INFO(FI_LOG_AV,
+		 "Successfully inserted address GID[%s] QP[%u] "
+		 "QKEY[%u] to implicit AV. fi_addr: %" PRId64 "\n",
+		 raw_gid_str, addr->qpn, addr->qkey, *fi_addr);
+
+	return 0;
 }
 
 int efa_av_insert(struct fid_av *av_fid, const void *addr,
@@ -608,7 +690,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	for (i = 0; i < count; i++) {
 		addr_i = (struct efa_ep_addr *) ((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
 
-		ret = efa_av_insert_one(av, addr_i, &fi_addr_res, flags, context, true, false);
+		ret = efa_av_insert_one_explicit(av, addr_i, &fi_addr_res, flags, context, true);
 		if (ret) {
 			EFA_WARN(FI_LOG_AV, "insert raw_addr to av failed! ret=%d\n",
 				 ret);

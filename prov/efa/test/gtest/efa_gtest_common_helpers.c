@@ -64,8 +64,7 @@ fi_addr_t efa_test_av_insert_new_ah(struct fid_ep *ep, struct fid_av *av)
 	efa_test_fabricate_addr(ep, &raw_addr);
 
 	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
-	err = efa_av_insert_one(efa_av, &raw_addr, &fi_addr, 0, NULL, true,
-				true);
+	err = efa_av_insert_one_implicit(efa_av, &raw_addr, &fi_addr, 0, NULL);
 	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 
 	if (err)
