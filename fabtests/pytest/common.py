@@ -927,3 +927,22 @@ def test_selected_by_marker(config, test_markers, name):
     without_marker = expr.evaluate(lambda n: n in (test_markers - {name}))
     # true only when `name` is the reason this test got selected
     return with_marker and not without_marker
+
+
+def client_server_have_device(memory_token, server_id, client_id):
+    """
+    Return True if both client and server endpoints named in a memory-type
+    token have the hmem device that token requires.
+
+    Any SSH/detection failure propagates to the caller,
+    which falls back to including all candidate memory types.
+    """
+    client_memory_type, server_memory_type = memory_token.split("_to_")
+    for memory_type_name, ip in ((client_memory_type, client_id),
+                                 (server_memory_type, server_id)):
+        if memory_type_name == "host":
+            # host memory needs no accelerator device
+            continue
+        if num_hmem_devices(ip, memory_type_name) <= 0:
+            return False
+    return True
