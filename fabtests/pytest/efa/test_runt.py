@@ -1,19 +1,12 @@
 from efa.efa_common import (efa_retrieve_hw_counter_value,
-                            efa_run_client_server_test, has_gdrcopy)
+                            efa_run_client_server_test, has_gdrcopy,
+                            memory_type_list_cuda_to_cuda,
+                            memory_type_list_neuron_to_neuron)
 
 import pytest
 
 
-# this test must be run in serial mode because it check hw counter
-# efa-direct does not have runt read so skip this test
-@pytest.mark.serial
-@pytest.mark.functional
-@pytest.mark.parametrize("memory_type,copy_method", [
-    pytest.param("cuda_to_cuda", "gdrcopy", marks=pytest.mark.cuda_memory),
-    pytest.param("cuda_to_cuda", "localread", marks=pytest.mark.cuda_memory),
-    pytest.param("neuron_to_neuron", None, marks=pytest.mark.neuron_memory)])
-@pytest.mark.pr_ci
-def test_runt_read_functional(cmdline_args, memory_type, copy_method):
+def run_runt_read_functional(cmdline_args, memory_type, copy_method):
     """
     Verify runt read protocol works with FI_OPT_EFA_HOMOGENEOUS_PEERS set,
     which skips the handshake. This sends 1 message of 256 KB using
@@ -104,3 +97,22 @@ def test_runt_read_functional(cmdline_args, memory_type, copy_method):
         # for which the server (receiver) will issue 1 read request.
         assert server_read_wrs == 1
         assert server_read_bytes == 196608
+
+
+# this test must be run in serial mode because it checks hw counters
+# efa-direct does not have runt read so skip this test
+@pytest.mark.serial
+@pytest.mark.functional
+@pytest.mark.memory_type(memory_type_list_cuda_to_cuda)
+@pytest.mark.parametrize("copy_method", ["gdrcopy", "localread"])
+@pytest.mark.pr_ci
+def test_runt_read_functional_cuda(cmdline_args, memory_type, copy_method):
+    run_runt_read_functional(cmdline_args, memory_type, copy_method)
+
+
+@pytest.mark.serial
+@pytest.mark.functional
+@pytest.mark.memory_type(memory_type_list_neuron_to_neuron)
+@pytest.mark.pr_ci
+def test_runt_read_functional_neuron(cmdline_args, memory_type):
+    run_runt_read_functional(cmdline_args, memory_type, copy_method=None)
