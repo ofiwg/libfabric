@@ -642,6 +642,7 @@ ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov,
 		if (ret < 0)
 			return ret;
 
+		buff += size;
 		bytes_remaining -= size;
 	}
 
