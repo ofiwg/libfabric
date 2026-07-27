@@ -63,7 +63,7 @@ TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
  * @brief Test that efa_conn_alloc cleans up RDM resources when
  * efa_av_reverse_av_add fails via the explicit fi_av_insert path
  * (insert_implicit_av=false). The explicit path acquires the SRX lock
- * itself before calling efa_av_insert_one.
+ * itself before calling efa_av_insert_one_explicit.
  */
 TEST_F(EfaConnTest, alloc_reverse_av_add_failure_explicit_insert)
 {
