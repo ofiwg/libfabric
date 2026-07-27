@@ -34,6 +34,15 @@ memory_type_list_symm = [
     pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
 ]
 
+# Single memory type lists for tests that run only one.
+memory_type_list_cuda_to_cuda = [
+    pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
+]
+
+memory_type_list_neuron_to_neuron = [
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+]
+
 # EFA-specific message size lists for @pytest.mark.message_sizes decorator.
 # Generic (shared) size lists live in fabtests/pytest/common.py.
 DIRECT_SIZES = ["r:0,4,32", "r:0,1024,8192"]
