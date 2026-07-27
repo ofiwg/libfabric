@@ -1,5 +1,6 @@
 import pytest
 from common import ClientServerTest
+from efa.efa_common import memory_type_list_symm
 
 
 pytestmark = pytest.mark.pre_release
@@ -66,10 +67,11 @@ def combined_msg_size_params():
 @pytest.mark.parametrize("cancel_order", ["reverse", "random"])
 @pytest.mark.parametrize("close_side", ["initiator", "target"])
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
+@pytest.mark.memory_type(memory_type_list_symm)
 @pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
                          list(combined_msg_size_params()))
 def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr,
-                  high_pps, sl_low_latency, message_size, memory_type_symm):
+                  high_pps, sl_low_latency, message_size, memory_type):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
@@ -79,7 +81,6 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
     command = (f"fi_mr_abort -T abort -o {rma_op} -C {cancel_order}"
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
                f" -S {message_size}")
-
     if high_pps:
         assert(rma_op != "read")
         command += " --high-pps"
@@ -89,17 +90,18 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
         assert(message_size < 128)
         command += " --sl-low-latency"
 
-    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
+    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type)
     test.run()
 
 
 # --- Test: partial (2 MRs on same buffer) ---
 @pytest.mark.functional
 @pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
+@pytest.mark.memory_type(memory_type_list_symm)
 @pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
                          list(combined_msg_size_params()))
 def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
-                          sl_low_latency, message_size, memory_type_symm):
+                          sl_low_latency, message_size, memory_type):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
@@ -114,11 +116,11 @@ def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
         assert(message_size < 128)
         command += " --sl-low-latency"
 
-    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
+    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type)
     test.run()
 
 
-def determine_settings_for_proto(protocol, memory_type_symm, fabric):
+def determine_settings_for_proto(protocol, memory_type, fabric):
     """
     Return the (env, message_size) needed to exercise a specific EFA RDM
     two-sided wire protocol with fi_mr_abort.
@@ -170,7 +172,7 @@ def determine_settings_for_proto(protocol, memory_type_symm, fabric):
 
     # Fallback: HMEM or efa-direct. Protocol pinning via the host RDM
     # thresholds does not apply; return a representative size and no env.
-    if fabric != "efa" or memory_type_symm != "host_to_host":
+    if fabric != "efa" or memory_type != "host_to_host":
         return "", proto_size[protocol]
 
     # Host + efa: pin the protocol deterministically via env-var thresholds.
@@ -265,9 +267,9 @@ def abort_owes_rx_completion(protocol):
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
 @pytest.mark.parametrize("tagged", [True, False])
 @pytest.mark.parametrize("protocol", ["EAGER", "MEDIUM", "LONGCTS", "LONGREAD", "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"])
+@pytest.mark.memory_type(memory_type_list_symm)
 def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
-                       ops_per_mr, tagged, protocol, memory_type_symm):
-
+                       ops_per_mr, tagged, protocol, memory_type):
     if fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
@@ -280,7 +282,7 @@ def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
             pytest.skip("efa-direct does not support tagged sends")
         send_op = "tagged"
 
-    env, message_size = determine_settings_for_proto(protocol, memory_type_symm, fabric)
+    env, message_size = determine_settings_for_proto(protocol, memory_type, fabric)
 
     # efa-direct max message size is 8k
     if fabric == "efa-direct" and message_size > 8192:
@@ -299,5 +301,6 @@ def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
                f" -S {message_size}{owe_flag}{homogeneous_flag}  -A ep_first")
     test = ClientServerTest(cmdline_args, command, timeout=360, fabric=fabric,
-                            memory_type=memory_type_symm, additional_env=env)
+                            memory_type=memory_type, additional_env=env)
     test.run()
+

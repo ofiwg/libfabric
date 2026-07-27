@@ -1,4 +1,5 @@
-from efa.efa_common import efa_run_client_server_test, DIRECT_SIZES
+from efa.efa_common import (efa_run_client_server_test, DIRECT_SIZES,
+                            memory_type_list_all)
 from common import (perf_progress_model_cli, ClientServerTest,
                     PERF_SIZES, PERF_PR_CI, RANGE_SIZES, INJECT_SIZES)
 import pytest
@@ -12,6 +13,7 @@ import copy
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.memory_type(memory_type_list_all)
 def test_rma_bw(cmdline_args, iteration_type, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, rma_fabric, rx_cq_data_cli, message_sizes):
     command = "fi_rma_bw -e rdm"
     command = command + " -o " + rma_operation_type + " " + perf_progress_model_cli + rx_cq_data_cli
@@ -24,6 +26,7 @@ def test_rma_bw(cmdline_args, iteration_type, rma_operation_type, rma_bw_complet
 @pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_SIZES)
 @pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"]])
+@pytest.mark.memory_type(memory_type_list_all)
 def test_rma_bw_small_tx_rx(cmdline_args, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, env_vars, rma_fabric, message_sizes):
     cmdline_args_copy = copy.copy(cmdline_args)
     for env_var in env_vars:
@@ -40,6 +43,7 @@ def test_rma_bw_small_tx_rx(cmdline_args, rma_operation_type, rma_bw_completion_
 @pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.message_sizes(default_efa=RANGE_SIZES, default_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
+@pytest.mark.memory_type(memory_type_list_all)
 def test_rma_bw_range(cmdline_args, rma_operation_type, rma_bw_completion_semantic, message_sizes, rma_bw_memory_type, rma_fabric):
     command = "fi_rma_bw -e rdm"
     command = command + " -o " + rma_operation_type
@@ -124,6 +128,7 @@ def test_rma_bw_use_fi_more(cmdline_args, operation_type, iteration_type, rma_bw
                            pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
 @pytest.mark.parametrize("comp_method", ["sread", "fd"])
+@pytest.mark.memory_type(memory_type_list_all)
 def test_rma_bw_sread(cmdline_args, rma_operation_type, rma_bw_completion_semantic,
                       rma_bw_memory_type, support_sread, comp_method,
                       rma_fabric, message_sizes):
