@@ -123,9 +123,10 @@ class MockEfa
 	std::bitset<FN_COUNT> armed_;
 };
 
-#define EFA_EXPECT_CALL(obj, name, ...)          \
-	((obj).arm(MockEfa::FN_##name),          \
-	 EXPECT_CALL(obj, name __VA_OPT__((__VA_ARGS__))))
+#define EFA_EXPECT_CALL(obj, name, ...)                                    \
+	((obj).arm(MockEfa::FN_##name),                                    \
+	 EXPECT_CALL(obj, GMOCK_PP_IF(GMOCK_PP_IS_EMPTY(__VA_ARGS__), name, \
+				      name(__VA_ARGS__))))
 
 // Generate the declarations of the real function prototypes
 extern "C" {
