@@ -436,7 +436,7 @@ static struct efa_rdm_peer *test_av_get_peer_from_implicit_av(struct efa_resourc
 	/* Manually insert into implicit AV */
 	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 
-	err = efa_av_insert_one(av, &raw_addr, &implicit_fi_addr, 0, NULL, true, true);
+	err = efa_av_insert_one_implicit(av, &raw_addr, &implicit_fi_addr, 0, NULL);
 
 	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
 
@@ -615,7 +615,7 @@ void test_av_implicit_av_lru_insertion(void **state)
 
 	/* Access peer1 through repeated AV insertion path */
 	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
-	err = efa_av_insert_one(av, peer1->conn->ep_addr, &implicit_fi_addr, 0, NULL, true, true);
+	err = efa_av_insert_one_implicit(av, peer1->conn->ep_addr, &implicit_fi_addr, 0, NULL);
 	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	assert_int_equal(err, 0);
 	assert_int_equal(implicit_fi_addr, 1);
@@ -626,7 +626,7 @@ void test_av_implicit_av_lru_insertion(void **state)
 
 	/* Access peer2 through repeated AV insertion path */
 	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
-	err = efa_av_insert_one(av, peer2->conn->ep_addr, &implicit_fi_addr, 0, NULL, true, true);
+	err = efa_av_insert_one_implicit(av, peer2->conn->ep_addr, &implicit_fi_addr, 0, NULL);
 	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	assert_int_equal(err, 0);
 	assert_int_equal(implicit_fi_addr, 2);
@@ -703,7 +703,7 @@ void test_av_implicit_av_lru_eviction(void **state)
 
 	/* Access peer0 through repeated AV insertion path */
 	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
-	err = efa_av_insert_one(av, peer0->conn->ep_addr, &implicit_fi_addr, 0, NULL, true, true);
+	err = efa_av_insert_one_implicit(av, peer0->conn->ep_addr, &implicit_fi_addr, 0, NULL);
 	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	assert_int_equal(err, 0);
 	assert_int_equal(implicit_fi_addr, 0);
@@ -772,7 +772,7 @@ void test_ah_refcnt(void **state)
 
 	/* Manually insert into implicit AV */
 	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
-	err = efa_av_insert_one(av, &raw_addr, &fi_addr, 0, NULL, true, true);
+	err = efa_av_insert_one_implicit(av, &raw_addr, &fi_addr, 0, NULL);
 	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, fi_addr);
 	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 
@@ -895,7 +895,7 @@ void test_ah_lru_eviction_impl(bool explicit)
 
 	/* Manually insert into implicit AV in first domain */
 	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep[0])->srx_lock);
-	err = efa_av_insert_one(efa_av[0], &raw_addr[0], &fi_addr, 0, NULL, true, true);
+	err = efa_av_insert_one_implicit(efa_av[0], &raw_addr[0], &fi_addr, 0, NULL);
 	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep[0], fi_addr);
 	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep[0])->srx_lock);
 
@@ -910,7 +910,7 @@ void test_ah_lru_eviction_impl(bool explicit)
 		peer = efa_rdm_ep_get_peer(efa_rdm_ep[0], fi_addr);
 	} else {
 		ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep[0])->srx_lock);
-		err = efa_av_insert_one(efa_av[0], &raw_addr[1], &fi_addr, 0, NULL, true, true);
+		err = efa_av_insert_one_implicit(efa_av[0], &raw_addr[1], &fi_addr, 0, NULL);
 		peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep[0], fi_addr);
 		ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep[0])->srx_lock);
 	}
