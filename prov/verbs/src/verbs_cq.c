@@ -214,6 +214,7 @@ vrb_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 
 int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 {
+	struct slist_entry *entry, *prev;
 	struct vrb_context *ctx;
 	struct vrb_ep *ep;
 	int ret;
@@ -231,9 +232,14 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 		if (ctx->op_queue == VRB_OP_SQ) {
 			ep = ctx->ep;
 			assert(ep);
-			assert(!slist_empty(&ep->sq_list));
-			assert(ep->sq_list.head == &ctx->entry);
-			(void) slist_remove_head(&ep->sq_list);
+			/* The completing send is on this ep's sq_list, but
+			 * not necessarily at its head. */
+			slist_foreach(&ep->sq_list, entry, prev) {
+				if (entry == &ctx->entry)
+					break;
+			}
+			assert(entry == &ctx->entry);
+			slist_remove(&ep->sq_list, &ctx->entry, prev);
 			ep->sq_credits++;
 
 			/* workaround incorrect opcode reported by verbs */
