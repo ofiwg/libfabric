@@ -161,7 +161,9 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 out:
 	assert(peer);
 	/* Move to the front of the LRU list */
+	ofi_genlock_lock(&ep->base_ep.av->util_av_implicit.lock);
 	efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->conn);
+	ofi_genlock_unlock(&ep->base_ep.av->util_av_implicit.lock);
 	return peer;
 }
 
