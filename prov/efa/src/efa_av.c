@@ -178,19 +178,20 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 					     struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_conn *conn;
+	fi_addr_t implicit_fi_addr = FI_ADDR_NOTAVAIL;
 
-	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
-
+	ofi_genlock_lock(&av->util_av_implicit.lock);
 	conn = efa_av_reverse_lookup_rdm_conn(&av->cur_reverse_av_implicit,
 					      &av->prv_reverse_av_implicit, ahn,
 					      qpn, pkt_entry);
 
 	if (OFI_LIKELY(!!conn)) {
 		efa_av_implicit_av_lru_conn_move(av, conn);
-		return conn->implicit_fi_addr;
+		implicit_fi_addr = conn->implicit_fi_addr;
 	}
+	ofi_genlock_unlock(&av->util_av_implicit.lock);
 
-	return FI_ADDR_NOTAVAIL;
+	return implicit_fi_addr;
 }
 
 static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
@@ -210,6 +211,7 @@ static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
 void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 					struct efa_conn *conn)
 {
+	assert(ofi_genlock_held(&av->util_av_implicit.lock));
 	assert(av->implicit_av_size == 0 ||
 	       HASH_CNT(hh, av->util_av_implicit.hash) <= av->implicit_av_size);
 	assert(dlist_entry_in_list(&av->implicit_av_lru_list,
