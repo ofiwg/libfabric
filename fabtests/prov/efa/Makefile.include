@@ -85,7 +85,8 @@ prov_efa_src_fi_efa_info_test_SOURCES = \
 prov_efa_src_fi_efa_info_test_LDADD = libfabtests.la
 
 prov_efa_src_fi_mr_abort_SOURCES = \
-	prov/efa/src/mr_abort.c
+	prov/efa/src/mr_abort.c \
+	$(efa_shared_srcs)
 prov_efa_src_fi_mr_abort_LDADD = libfabtests.la
 
 prov_efa_src_fi_efa_rdm_remote_exit_early_SOURCES = \

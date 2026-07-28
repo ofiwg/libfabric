@@ -50,8 +50,10 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_ext.h>
+#include <rdma/fi_ext_efa.h>
 
 #include "shared.h"
+#include "efa_shared.h"
 #include "hmem.h"
 
 enum close_order_mode {
@@ -130,6 +132,7 @@ static enum close_side close_side = CLOSE_INITIATOR;
 static enum test_mode test_mode = TEST_ABORT;
 static int close_ep_first;
 static int set_homogeneous_peers;
+static bool use_high_pps;
 
 /*
  * -r <file>: replay a previously dumped close order instead of generating
@@ -392,25 +395,46 @@ static char *slot_op_buf(int op_idx, int mr_idx)
 
 static ssize_t post_rma_op(int op_idx, int mr_idx)
 {
+	uint64_t flags;
 	struct mr_slot *s = &slots[mr_idx];
 	struct op_ctx *o = &op_arr[op_idx];
+	struct iovec msg_iov = {
+		.iov_base = s->buf,
+		.iov_len = opts.transfer_size,
+	};
+	struct fi_rma_iov rma_iov = {
+		.addr = remote_arr[mr_idx].addr,
+		.len = opts.transfer_size,
+		.key = remote_arr[mr_idx].key,
+	};
+	struct fi_msg_rma msg = {
+		.msg_iov = &msg_iov,
+		.desc = &s->desc,
+		.iov_count = 1,
+		.addr = remote_fi_addr,
+		.rma_iov = &rma_iov,
+		.rma_iov_count = 1,
+		.context = &o->context,
+	};
 
 	o->mr_idx = mr_idx;
 
+	flags = 0;
+	if (use_high_pps) {
+		assert(opts.rma_op == FT_RMA_WRITE ||
+		       opts.rma_op == FT_RMA_WRITEDATA);
+		flags = FI_EFA_WR_HIGH_PPS;
+	}
+
 	switch (opts.rma_op) {
 	case FT_RMA_WRITE:
-		return fi_write(ep, s->buf, opts.transfer_size, s->desc,
-				remote_fi_addr, remote_arr[mr_idx].addr,
-				remote_arr[mr_idx].key, &o->context);
+		return fi_writemsg(ep, &msg, flags);
 	case FT_RMA_WRITEDATA:
-		return fi_writedata(ep, s->buf, opts.transfer_size, s->desc,
-				    remote_cq_data, remote_fi_addr,
-				    remote_arr[mr_idx].addr,
-				    remote_arr[mr_idx].key, &o->context);
+		msg.data = remote_cq_data;
+		flags |= FI_REMOTE_CQ_DATA;
+		return fi_writemsg(ep, &msg, flags);
 	case FT_RMA_READ:
-		return fi_read(ep, s->buf, opts.transfer_size, s->desc,
-			       remote_fi_addr, remote_arr[mr_idx].addr,
-			       remote_arr[mr_idx].key, &o->context);
+		return fi_readmsg(ep, &msg, flags);
 	default:
 		return -FI_EINVAL;
 	}
@@ -1930,6 +1954,7 @@ int main(int argc, char **argv)
 	opts.transfer_size = 4096; /* 4KB default — override with -S */
 	opts.iterations = 10;
 	opts.cqdata_op = 0;
+	build_efa_long_opts();
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -1937,9 +1962,13 @@ int main(int argc, char **argv)
 
 	srand(time(NULL));
 
-	while ((op = getopt(argc, argv,
-			    "W:N:C:R:T:A:r:XHh" CS_OPTS INFO_OPTS API_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv,
+				 "W:N:C:R:T:A:r:XHh" CS_OPTS INFO_OPTS API_OPTS,
+				 efa_long_opts, &lopt_idx)) != -1) {
 		switch (op) {
+		case OPT_HIGH_PPS:
+			use_high_pps = true;
+			break;
 		case 'W':
 			num_mrs = atoi(optarg);
 			break;
@@ -2039,6 +2068,7 @@ int main(int argc, char **argv)
 				"Aborted send/tagged ops are owed a target "
 				"recv completion (LONGCTS/LONGREAD); only "
 				"valid with -T send|tagged");
+			efa_longopts_usage();
 			return EXIT_FAILURE;
 		}
 	}
@@ -2048,6 +2078,12 @@ int main(int argc, char **argv)
 
 	if (num_mrs <= 0 || ops_per_mr <= 0) {
 		FT_ERR("-W and -N must be positive");
+		return EXIT_FAILURE;
+	}
+
+	if (use_high_pps &&
+	    (opts.rma_op != FT_RMA_WRITE && opts.rma_op != FT_RMA_WRITEDATA)) {
+		FT_ERR("High PPS only supported with RDMA write operations");
 		return EXIT_FAILURE;
 	}
 
