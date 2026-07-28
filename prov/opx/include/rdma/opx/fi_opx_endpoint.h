@@ -3599,6 +3599,12 @@ void fi_opx_ep_rx_poll_internal(struct fid_ep *ep, const uint64_t caps, const en
 	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) { /* constant compile-time expression */
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps, OFI_RELIABILITY_KIND_ONLOAD,
 					FI_OPX_HDRQ_MASK_8192, hfi1_type, ctx_sharing);
+	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_2048_CYR) { /* constant compile-time expression */
+		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps, OFI_RELIABILITY_KIND_ONLOAD,
+					FI_OPX_HDRQ_MASK_2048_CYR, hfi1_type, ctx_sharing);
+	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192_CYR) { /* constant compile-time expression */
+		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps, OFI_RELIABILITY_KIND_ONLOAD,
+					FI_OPX_HDRQ_MASK_8192_CYR, hfi1_type, ctx_sharing);
 	} else {
 		FI_OPX_FABRIC_POLL_MANY(ep, FI_OPX_LOCK_NOT_REQUIRED, rx_caps, OFI_RELIABILITY_KIND_ONLOAD, hdrq_mask,
 					hfi1_type, ctx_sharing);

@@ -247,7 +247,8 @@ int fi_opx_cq_enqueue_err(struct fi_opx_cq *opx_cq, struct opx_context *context,
 struct fi_ops_cq *fi_opx_cq_select_ops(const enum fi_cq_format format, const enum fi_threading threading,
 				       const enum ofi_reliability_kind reliability, const uint64_t rcvhdrcnt,
 				       const uint64_t caps, const enum fi_progress progress,
-				       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+				       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing,
+				       const uint32_t rcvhdrq_entry_dws, const enum opx_hfi1_type hw_type)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "(called)\n");
 
@@ -267,7 +268,33 @@ struct fi_ops_cq *fi_opx_cq_select_ops(const enum fi_cq_format format, const enu
 
 	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
+	// Fast-path tables assume a fixed hdrq entry size per hfi1_type (32 DWs
+	// WFR/MIXED_9B/JKR, 64 DWs CYR). rcvhdrq_entry_dws is this endpoint's
+	// actual entry size (per-context, not the process-wide global, since a
+	// process may have multiple heterogeneous HFI contexts). Mismatch falls
+	// back to the entsize-agnostic runtime ops path.
+	const uint32_t entry_dws	= rcvhdrq_entry_dws;
+	const uint32_t expected_32dw_ht = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B | OPX_HFI1_JKR)) ?
+						  FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN :
+						  0;
+	// Gated on hw_type (not hfi1_type/sw_type): sw_type is CYR only when
+	// hw_type is also CYR (sw_type starts equal to hw_type and only ever
+	// diverges to MIXED_9B), so hw_type is the correct, mode-independent
+	// discriminator for whether 64-DW entries are expected.
+	const uint32_t expected_64dw_ht	    = (hw_type & OPX_HFI1_CYR) ? (2 * FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN) : 0;
+	const bool     entsize_matches_32dw = expected_32dw_ht && (entry_dws == expected_32dw_ht);
+	const bool     entsize_matches_64dw = expected_64dw_ht && (entry_dws == expected_64dw_ht);
+
 	if (hfi1_type & OPX_HFI1_WFR) {
+		if (!entsize_matches_32dw) {
+			FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
+				"WARNING: hfi1 hdrq entry size %u DWs does not match WFR fast-path assumption of %u DWs. Falling back to runtime ops.\n",
+				entry_dws, expected_32dw_ht);
+			return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 0,
+										    ctx_sharing) :
+					       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps,
+											0, ctx_sharing);
+		}
 		switch (rcvhdrcnt) {
 		case 2048:
 			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 0,
@@ -288,26 +315,71 @@ struct fi_ops_cq *fi_opx_cq_select_ops(const enum fi_cq_format format, const enu
 											0, ctx_sharing);
 		}
 	} else if (hfi1_type & OPX_HFI1_MIXED_9B) {
-		switch (rcvhdrcnt) {
-		case 2048:
-			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 1,
-										 ctx_sharing) :
-					       fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps, 1,
-										     ctx_sharing);
-		case 8192:
-			return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps, 1,
-										 ctx_sharing) :
-					       fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps, 1,
-										     ctx_sharing);
-		default:
+		const bool is_cyr_hw = (hw_type & OPX_HFI1_CYR) != 0;
+
+		if (is_cyr_hw && entsize_matches_64dw) {
+			switch (rcvhdrcnt) {
+			case 2048:
+				return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps,
+											 4, ctx_sharing) :
+						       fi_opx_cq_select_non_locking_2048_ops(format, reliability,
+											     comm_caps, 4, ctx_sharing);
+			case 8192:
+				return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps,
+											 4, ctx_sharing) :
+						       fi_opx_cq_select_non_locking_8192_ops(format, reliability,
+											     comm_caps, 4, ctx_sharing);
+			default:
+				FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
+					"WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");
+				return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability,
+											    comm_caps, 1, ctx_sharing) :
+						       fi_opx_cq_select_non_locking_runtime_ops(
+							       format, reliability, comm_caps, 1, ctx_sharing);
+			}
+		} else if (entsize_matches_32dw) {
+			// The 32-DW ops-table content is keyed only on the
+			// MIXED_9B wire-protocol token, not hw_type, so any
+			// hardware (including CYR configured at 32 DWs) that
+			// matches the 32-DW assumption takes this fast path.
+			switch (rcvhdrcnt) {
+			case 2048:
+				return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps,
+											 1, ctx_sharing) :
+						       fi_opx_cq_select_non_locking_2048_ops(format, reliability,
+											     comm_caps, 1, ctx_sharing);
+			case 8192:
+				return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps,
+											 1, ctx_sharing) :
+						       fi_opx_cq_select_non_locking_8192_ops(format, reliability,
+											     comm_caps, 1, ctx_sharing);
+			default:
+				FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
+					"WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");
+				return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability,
+											    comm_caps, 1, ctx_sharing) :
+						       fi_opx_cq_select_non_locking_runtime_ops(
+							       format, reliability, comm_caps, 1, ctx_sharing);
+			}
+		} else {
 			FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
-				"WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");
+				"WARNING: hfi1 hdrq entry size %u DWs does not match MIXED_9B fast-path assumption for hw_type %s. Falling back to runtime ops.\n",
+				entry_dws, OPX_HFI1_TYPE_STRING(hw_type));
 			return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 1,
 										    ctx_sharing) :
 					       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps,
 											1, ctx_sharing);
 		}
 	} else if (hfi1_type & OPX_HFI1_JKR) {
+		if (!entsize_matches_32dw) {
+			FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
+				"WARNING: hfi1 hdrq entry size %u DWs does not match JKR fast-path assumption of %u DWs. Falling back to runtime ops.\n",
+				entry_dws, expected_32dw_ht);
+			return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 2,
+										    ctx_sharing) :
+					       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps,
+											2, ctx_sharing);
+		}
 		switch (rcvhdrcnt) {
 		case 2048:
 			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 2,
@@ -328,6 +400,15 @@ struct fi_ops_cq *fi_opx_cq_select_ops(const enum fi_cq_format format, const enu
 											2, ctx_sharing);
 		}
 	} else if (hfi1_type & OPX_HFI1_CYR) {
+		if (!entsize_matches_64dw) {
+			FI_INFO(fi_opx_global.prov, FI_LOG_CQ,
+				"WARNING: hfi1 hdrq entry size %u DWs does not match CYR fast-path assumption of %u DWs. Falling back to runtime ops.\n",
+				entry_dws, expected_64dw_ht);
+			return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps, 3,
+										    ctx_sharing) :
+					       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps,
+											3, ctx_sharing);
+		}
 		switch (rcvhdrcnt) {
 		case 2048:
 			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps, 3,
@@ -467,7 +548,8 @@ void fi_opx_cq_finalize_ops(struct fid_ep *ep)
 		opx_cq->cq_fid.ops = fi_opx_cq_select_ops(
 			opx_cq->format, opx_cq->domain->threading, fi_opx_select_reliability(opx_ep),
 			opx_ep->hfi->info.rxe.hdrq.elemcnt, opx_cq->ep_comm_caps, opx_cq->domain->data_progress,
-			OPX_SW_HFI1_TYPE(opx_cq->domain), OPX_IS_CTX_SHARING_ENABLED);
+			OPX_SW_HFI1_TYPE(opx_cq->domain), OPX_IS_CTX_SHARING_ENABLED, opx_ep->hfi->info.rxe.hdrq.elemsz,
+			OPX_HW_HFI1_TYPE(opx_cq->domain));
 	}
 
 	if (opx_ep->tx->cq && (opx_ep->tx->cq != opx_ep->rx->cq)) {
@@ -475,7 +557,8 @@ void fi_opx_cq_finalize_ops(struct fid_ep *ep)
 		opx_cq->cq_fid.ops = fi_opx_cq_select_ops(
 			opx_cq->format, opx_cq->domain->threading, fi_opx_select_reliability(opx_ep),
 			opx_ep->hfi->info.rxe.hdrq.elemcnt, opx_cq->ep_comm_caps, opx_cq->domain->data_progress,
-			OPX_SW_HFI1_TYPE(opx_cq->domain), OPX_IS_CTX_SHARING_ENABLED);
+			OPX_SW_HFI1_TYPE(opx_cq->domain), OPX_IS_CTX_SHARING_ENABLED, opx_ep->hfi->info.rxe.hdrq.elemsz,
+			OPX_HW_HFI1_TYPE(opx_cq->domain));
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "(end)\n");
