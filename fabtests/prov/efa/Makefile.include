@@ -61,6 +61,10 @@ bin_PROGRAMS += prov/efa/src/fi_efa_hw_cntr
 endif HAVE_EFADV_CREATE_COMP_CNTR
 endif HAVE_VERBS_DEVEL
 
+efa_shared_srcs = \
+	prov/efa/src/efa_shared.h \
+	prov/efa/src/efa_shared.c
+
 efa_rnr_srcs = \
 	prov/efa/src/efa_shared.h \
 	prov/efa/src/efa_rnr_shared.h \
@@ -117,6 +121,7 @@ prov_efa_src_fi_efa_runt_read_no_handshake_LDADD = libfabtests.la
 if HAVE_FI_EFA_WR_HIGH_PPS
 prov_efa_src_fi_efa_rma_bw_SOURCES = \
 	prov/efa/src/efa_rma_bw.c \
+	$(efa_shared_srcs) \
 	$(benchmarks_srcs)
 prov_efa_src_fi_efa_rma_bw_LDADD = libfabtests.la
 endif HAVE_FI_EFA_WR_HIGH_PPS
