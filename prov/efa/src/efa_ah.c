@@ -82,7 +82,7 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain,
 			ofi_genlock_lock(&conn_to_release->av->util_av_implicit.lock);
 		else
 			assert(ofi_genlock_held(&conn_to_release->av->util_av_implicit.lock));
-		efa_conn_release_ah_unsafe(conn_to_release->av, conn_to_release, true);
+		efa_conn_release_implicit_ah_unsafe(conn_to_release->av, conn_to_release);
 		if (!insert_implicit_av)
 			ofi_genlock_unlock(&conn_to_release->av->util_av_implicit.lock);
 	}
