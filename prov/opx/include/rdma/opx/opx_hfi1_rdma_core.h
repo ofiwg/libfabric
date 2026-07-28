@@ -74,9 +74,6 @@ int opx_hfi1_wrapper_reset_context(struct fi_opx_hfi1_context *context);
 /* Close the rdma-core context */
 void opx_hfi1_rdma_context_close(void *ibv_context);
 
-/* Close the rdma-core lib */
-void opx_hfi1_rdma_lib_close();
-
 /* TID function pointers and wrapper */
 struct fi_opx_hfi1_context;
 
@@ -128,7 +125,6 @@ struct opx_rdma_ops_struct {
 
 	bool		hfi1_direct_verbs_enabled; /* run-time check based on dlopen() */
 	pthread_mutex_t lock;			   /* for dlopen/close */
-	ofi_atomic64_t	ref_cnt;		   /* non-zero indicates dlopen of libverbs is done */
 
 	/* dlopen libraries */
 
