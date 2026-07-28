@@ -316,6 +316,16 @@ static const uint64_t FI_OPX_HDRQ_MASK_RUNTIME = 0ULL;
 static const uint64_t FI_OPX_HDRQ_MASK_2048    = 0X000000000000FFE0UL;
 static const uint64_t FI_OPX_HDRQ_MASK_8192    = 0X000000000003FFE0UL;
 
+/*
+CYR (CN6000) uses a 64 doubleword (256 byte) hdrq entry size by default, twice
+the 32 DW (128 byte) entry size assumed by the masks above. Using the 32-DW
+masks with a 64-DW entry size fails the "hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0"
+assertion in fi_opx_hfi1_poll_once()/opx_is_rhf_empty(). These CYR-specific
+masks are computed for the 64 DW stride: 2047 * 0x40 and 8191 * 0x40.
+*/
+static const uint64_t FI_OPX_HDRQ_MASK_2048_CYR = 0X000000000001FFC0UL;
+static const uint64_t FI_OPX_HDRQ_MASK_8192_CYR = 0X000000000007FFC0UL;
+
 #define FI_OPX_DEFAULT_MSG_ORDER (FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW | FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW)
 
 #define FI_OPX_TXONLY_CAPS (FI_SEND | FI_READ | FI_WRITE)
