@@ -58,7 +58,7 @@ static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 	if (cur_size <= av->implicit_av_size)
 		goto out;
 
-	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
+	assert(ofi_genlock_held(&av->util_av_implicit.lock));
 
 	dlist_pop_front(&av->implicit_av_lru_list, struct efa_conn,
 			conn_to_release, implicit_av_lru_entry);
@@ -78,7 +78,6 @@ static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 	memcpy(ep_addr_hashable, conn->ep_addr, sizeof(struct efa_ep_addr));
 	HASH_ADD(hh, av->evicted_peers_hashset, addr, sizeof(struct efa_ep_addr), ep_addr_hashable);
 
-	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 	efa_conn_release(av, conn_to_release, true);
 
 	assert(HASH_CNT(hh, av->util_av_implicit.hash) == av->implicit_av_size);
