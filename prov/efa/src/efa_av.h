@@ -9,6 +9,7 @@
 #include "rdm/efa_rdm_peer.h"
 #include "efa_ah.h"
 #include "efa_conn.h"
+#include "efa_thread_annotations.h"
 
 #define EFA_MIN_AV_SIZE (16384)
 #define EFA_SHM_MAX_AV_COUNT       (256)
@@ -79,7 +80,7 @@ struct efa_av {
 	struct efa_prv_reverse_av *prv_reverse_av_implicit;
 
 	size_t implicit_av_size;
-	struct dlist_entry implicit_av_lru_list;
+	struct dlist_entry implicit_av_lru_list OFI_TSA_GUARDED_BY(efa_implicit_av_lock_sym);
 	struct efa_ep_addr_hashable *evicted_peers_hashset;
 };
 
@@ -117,6 +118,7 @@ void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 				    struct efa_conn *conn);
 
 void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
-					struct efa_conn *conn);
+					struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
 
 #endif
