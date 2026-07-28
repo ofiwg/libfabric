@@ -32,6 +32,7 @@
 if HAVE_EFA
 _efa_files = \
 	prov/efa/src/efa_device.c \
+	prov/efa/src/efa_thread_annotations.c \
 	prov/efa/src/efa_hmem.c \
 	prov/efa/src/efa_shm.c \
 	prov/efa/src/efa_av.c \
