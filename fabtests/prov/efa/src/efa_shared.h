@@ -5,6 +5,8 @@
 #ifndef _EFA_SHARED_H
 #define _EFA_SHARED_H
 
+#include <getopt.h>
+
 #define EFA_FABRIC_NAME	       "efa"
 #define EFA_DIRECT_FABRIC_NAME "efa-direct"
 
@@ -15,5 +17,21 @@
 #define EFA_INFO_TYPE_IS_DIRECT(_info)                                     \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM) && \
 	 !strcasecmp(_info->fabric_attr->name, EFA_DIRECT_FABRIC_NAME))
+
+enum {
+	OPT_HIGH_PPS = 256,
+	OPT_POST_LIST,
+	OPT_NUM_EPS,
+};
+
+/*
+ * Merged long options table combining the EFA-specific options
+ * (e.g. --high-pps) with the shared fabtests long_opts (e.g. --no-rx-cq-data)
+ */
+extern struct option *efa_long_opts;
+
+void build_efa_long_opts(void);
+
+void efa_longopts_usage(void);
 
 #endif /* _EFA_SHARED_H */
