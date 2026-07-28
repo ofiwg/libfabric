@@ -41,7 +41,9 @@ void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 }
 
 static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain,
-					      bool insert_implicit_av) {
+					      bool insert_implicit_av)
+	OFI_TSA_NO_ANALYSIS // clang cannot reason about conditional locking statically
+{
 	struct efa_conn *conn_to_release;
 	struct efa_ah *ah_tmp, *ah_to_release = NULL;
 	struct dlist_entry *tmp;
@@ -79,12 +81,12 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain,
 		 * The explicit insert path does not, so acquire it here.
 		 */
 		if (!insert_implicit_av)
-			ofi_genlock_lock(&conn_to_release->av->util_av_implicit.lock);
+			EFA_GENLOCK_LOCK(&conn_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 		else
-			assert(ofi_genlock_held(&conn_to_release->av->util_av_implicit.lock));
+			assert(EFA_GENLOCK_HELD(&conn_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 		efa_conn_release_implicit_ah_unsafe(conn_to_release->av, conn_to_release);
 		if (!insert_implicit_av)
-			ofi_genlock_unlock(&conn_to_release->av->util_av_implicit.lock);
+			EFA_GENLOCK_UNLOCK(&conn_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	}
 
 	if (ah_to_release->implicit_refcnt == 0 &&

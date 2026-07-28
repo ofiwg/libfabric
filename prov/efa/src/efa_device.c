@@ -28,11 +28,6 @@
 #include "efawin.h"
 #endif
 
-/* Storage for the device QP-table lock analysis symbol. TODO: once a
- * second lock is added, these should be moved to a separate thread safety
- * .c file */
-OFI_TSA_LOCK_SYMBOL_DEFINE(efa_qp_table_lock_sym);
-
 /**
  * @brief initialize data members of a struct of efa_device until the gid
  *

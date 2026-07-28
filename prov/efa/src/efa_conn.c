@@ -44,6 +44,7 @@ static bool efa_is_local_peer(struct efa_av *av, const void *addr)
  */
 static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 						 struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
 {
 	size_t cur_size;
 	struct efa_ep_addr_hashable *ep_addr_hashable;
@@ -58,7 +59,7 @@ static inline int efa_av_implicit_av_lru_insert(struct efa_av *av,
 	if (cur_size <= av->implicit_av_size)
 		goto out;
 
-	assert(ofi_genlock_held(&av->util_av_implicit.lock));
+	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 
 	dlist_pop_front(&av->implicit_av_lru_list, struct efa_conn,
 			conn_to_release, implicit_av_lru_entry);
@@ -219,6 +220,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
  */
 struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 				uint64_t flags, void *context, bool insert_shm_av, bool insert_implicit_av)
+	OFI_TSA_NO_ANALYSIS // clang cannot reason about conditional locking statically
 {
 	struct util_av *util_av;
 	struct efa_cur_reverse_av **cur_reverse_av;
@@ -233,7 +235,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		memset(context, 0, sizeof(int));
 
 	if (insert_implicit_av) {
-		assert(ofi_genlock_held(&av->util_av_implicit.lock));
+		assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 		util_av = &av->util_av_implicit;
 		cur_reverse_av = &av->cur_reverse_av_implicit;
 		prv_reverse_av = &av->prv_reverse_av_implicit;
@@ -330,7 +332,7 @@ void efa_conn_release_reverse_av(struct efa_av *av, struct efa_conn *conn,
 				 bool release_from_implicit_av)
 {
 	if (release_from_implicit_av) {
-		assert(ofi_genlock_held(&av->util_av_implicit.lock));
+		assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 		efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
 					 &av->prv_reverse_av_implicit, conn);
 	} else {
@@ -351,7 +353,7 @@ void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
 	int err;
 
 	if (release_from_implicit_av) {
-		assert(ofi_genlock_held(&av->util_av_implicit.lock));
+		assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 		util_av = &av->util_av_implicit;
 		fi_addr = conn->implicit_fi_addr;
 	} else {
@@ -418,8 +420,9 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
  * @param[in]	conn	efa_conn object pointer
  */
 void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
 {
-	assert(ofi_genlock_held(&av->util_av_implicit.lock));
+	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 	efa_conn_release_reverse_av(av, conn, true);
 
 	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));

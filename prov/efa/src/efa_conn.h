@@ -6,6 +6,7 @@
 
 #include "ofi_util.h"
 #include "rdm/efa_rdm_peer.h"
+#include "efa_thread_annotations.h"
 
 struct efa_conn {
 	struct efa_ah *ah;
@@ -49,6 +50,7 @@ void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
 void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 		      bool release_from_implicit_av);
 
-void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *conn);
+void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
 
 #endif
