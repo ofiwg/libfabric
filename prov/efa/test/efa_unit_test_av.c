@@ -382,8 +382,8 @@ void test_av_reverse_av_remove_qpn_collision(void **state)
 	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
 			 fi_addr2);
 
-	/* Remove peer1 first. Without the fix this would incorrectly delete
-	 * peer2's cur_reverse_av entry and leave peer1's prv entry orphaned. */
+	/* Remove peer1 first: peer2's cur_reverse_av entry must survive and
+	 * peer1's prv entry must not be orphaned. */
 	err = fi_av_remove(resource->av, &fi_addr1, 1, 0);
 	assert_int_equal(err, 0);
 	/* peer1's prv entry is gone; peer2's cur entry must still be intact. */
@@ -391,8 +391,8 @@ void test_av_reverse_av_remove_qpn_collision(void **state)
 	assert_int_equal(efa_av_reverse_lookup_rdm(av, ahn, 100, NULL),
 			 fi_addr2);
 
-	/* Remove peer2. Without the fix this hits a NULL prv_reverse_av_entry
-	 * in efa_av_reverse_av_remove() -> SEGV / assertion failure. */
+	/* Remove peer2: efa_av_reverse_av_remove() must tolerate a NULL
+	 * prv_reverse_av_entry. */
 	err = fi_av_remove(resource->av, &fi_addr2, 1, 0);
 	assert_int_equal(err, 0);
 	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);

@@ -1495,7 +1495,7 @@ void test_efa_mr_reg_out_of_range_iface(void **state)
 
 /**
  * Verify that efa_direct_ope is released when fi_recv fails after
- * allocating the ope. Without the fix the ope leaks on the error path.
+ * allocating the ope, so the error path does not leak it.
  */
 void test_efa_direct_ope_released_on_recv_error(void **state)
 {
@@ -1542,7 +1542,7 @@ void test_efa_direct_ope_released_on_recv_error(void **state)
 
 /**
  * Verify that efa_direct_ope is released when fi_sendmsg fails after
- * allocating the ope. Without the fix the ope leaks on the error path.
+ * allocating the ope, so the error path does not leak it.
  */
 void test_efa_direct_ope_released_on_send_error(void **state)
 {
@@ -1601,7 +1601,7 @@ void test_efa_direct_ope_released_on_send_error(void **state)
 
 /**
  * Verify that efa_direct_ope is released when fi_readmsg fails after
- * allocating the ope. Without the fix the ope leaks on the error path.
+ * allocating the ope, so the error path does not leak it.
  */
 void test_efa_direct_ope_released_on_read_error(void **state)
 {
@@ -1670,7 +1670,7 @@ void test_efa_direct_ope_released_on_read_error(void **state)
 
 /**
  * Verify that efa_direct_ope is released when fi_writemsg fails after
- * allocating the ope. Without the fix the ope leaks on the error path.
+ * allocating the ope, so the error path does not leak it.
  */
 void test_efa_direct_ope_released_on_write_error(void **state)
 {
@@ -2148,9 +2148,11 @@ void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
 	cts_pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(cts_pke);
 	cts_pke->ep = efa_rdm_ep;
+	cts_pke->peer = peer;
 	cts_hdr = (struct efa_rdm_cts_hdr *)cts_pke->wiredata;
 	cts_hdr->type = EFA_RDM_CTS_PKT;
 	cts_hdr->send_id = ofi_buf_index(txe);
+	cts_hdr->msg_id = txe->msg_id;
 	cts_hdr->recv_id = 0;
 	cts_hdr->recv_length = 4096;
 

@@ -3348,8 +3348,10 @@ void test_efa_rdm_pke_handle_send_completion_peer_error_releases_rxe(void **stat
 
 	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_RX_TO_TX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id_valid = 0;
 	err_hdr->op_id = 0xdead;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT;
 	err_hdr->connid = 0xc0ffee;
@@ -3436,8 +3438,10 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state)
 		struct efa_rdm_peer_error_hdr *err_hdr =
 			(struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 		err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+		err_hdr->direction = EFA_RDM_PEER_ERROR_RX_TO_TX;
 		err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 		err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+		err_hdr->op_id_valid = 0;
 	}
 
 	ep->efa_outstanding_tx_ops++;
@@ -3697,8 +3701,10 @@ void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
 	txe->cq_entry.op_context = (void *) 0xa1;
 
-	/* The sender would have incremented num_read_msg_in_flight when
-	 * it sent the LONGREAD/RUNTREAD RTM. Simulate that. */
+	/* The sender would have incremented num_read_msg_in_flight and set
+	 * EFA_RDM_TXE_READ_MSG_COUNTED when it sent the LONGREAD/RUNTREAD
+	 * RTM (flag and bump are set together). Simulate both. */
+	txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
 	efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight = 1;
 	in_flight_before = efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight;
 
@@ -3712,8 +3718,10 @@ void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id_valid = 1;
+	err_hdr->msg_id = txe->msg_id;
 	err_hdr->op_id = txe->tx_id;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_RX_TO_TX;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
 	err_hdr->connid = 0xc0ffee;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -3809,10 +3817,12 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe(void **state)
 
 	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id_valid = 1;
+	err_hdr->msg_id = rxe->msg_id;
 	err_hdr->op_id = rxe->rx_id;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -3907,10 +3917,12 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged(void **state)
 
 	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id_valid = 1;
+	err_hdr->msg_id = rxe->msg_id;
 	err_hdr->op_id = rxe->rx_id;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -3925,6 +3937,111 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged(void **state)
 	ofi_genlock_unlock(srx_ctx->lock);
 
 	/* The receiver's matched recv gets a clean peer-abort error. */
+	assert_cq_peer_aborted_error(resource);
+}
+
+/**
+ * @brief LONGCTS pre-CTS: a msg_id-only PEER_ERROR resolves
+ *        the matched rxe via the peer's rxe_list fallback scan (LONGCTS
+ *        rxes are not in rxe_map), marks it peer-aborted, and completes
+ *        with FI_ECANCELED.
+ */
+void test_efa_rdm_pke_handle_peer_error_recv_longcts_msg_id_only(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct util_srx_ctx *srx_ctx;
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_match_attr match_attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct efa_rdm_peer *peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr = 0;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *err_hdr;
+	struct efa_rdm_ope *rxe;
+	struct iovec iov;
+	char buf[16];
+	void *desc = NULL;
+	uint32_t msg_id = 42;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+			 1);
+	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	assert_non_null(peer);
+
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	ret = util_srx_generic_recv(ep->peer_srx_ep, &iov, &desc, 1,
+				    FI_ADDR_UNSPEC, /*context=*/(void *) 0xa1, 0);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.tag = 0;
+	match_attr.msg_size = 16;
+	ofi_genlock_lock(srx_ctx->lock);
+	ret = peer_srx->owner_ops->get_msg(peer_srx, &match_attr, &peer_rxe);
+	assert_int_equal(ret, FI_SUCCESS);
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_msg);
+	assert_non_null(rxe);
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->peer_rxe = peer_rxe;
+	rxe->msg_id = msg_id;
+
+	/*
+	 * LONGCTS rxes are NOT in rxe_map — they are only on
+	 * peer->rxe_list (via peer_entry, set by efa_rdm_ep_alloc_rxe).
+	 * The fallback scan in efa_rdm_pke_handle_peer_error_recv must
+	 * find this rxe by msg_id.
+	 */
+	assert_null(rxe->rxe_map);
+
+	/*
+	 * Build a msg_id-only PEER_ERROR (op_id_valid=0). This is what a
+	 * sender emits for a pre-CTS abort: the CTS was never processed
+	 * (or was dropped by the PEER_ABORT_PENDING check), so rx_id is
+	 * unknown and op_id cannot be supplied.
+	 */
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted += 1;
+	pkt_entry->peer = peer;
+
+	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
+	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id_valid = 0;
+	err_hdr->msg_id = msg_id;
+	err_hdr->op_id = 0;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
+	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
+	err_hdr->connid = 0xbeef;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
+
+	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
+
+	/*
+	 * The msg_id resolves via peer->rxe_list scan → handle_matched_rxe.
+	 * No outstanding WR so drain fires immediately: peer_rxe freed, rxe
+	 * reaped, queue empty.
+	 */
+	assert_true(slist_empty(&srx_ctx->msg_queue));
+	ofi_genlock_unlock(srx_ctx->lock);
+
 	assert_cq_peer_aborted_error(resource);
 }
 
@@ -3963,10 +4080,12 @@ void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state)
 
 	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_RX_TO_TX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id_valid = 1;
+	err_hdr->msg_id = 0xffffffff;
 	err_hdr->op_id = 0xffffffff;	/* far out of range */
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
 	err_hdr->connid = 0xc0ffee;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -4121,8 +4240,194 @@ void test_efa_rdm_txe_handle_error_emits_peer_error_on_canceled(void **state)
 }
 
 /**
+ * @brief LONGREAD sender-side abort: a canceled LONGREAD RTM must notify
+ *        the peer and balance num_read_msg_in_flight.
+ *
+ * The msg_id is consumed at RTM init, so the receiver's reorder window
+ * waits on it regardless of protocol; and a posted RTM bumped the domain
+ * read throttle, whose normal decrement (EOR / READ_NACK / PEER_ERROR
+ * from the receiver) never arrives for a self-aborted send.
+ *
+ * Stage a LONGREAD txe whose RTM was posted (READ_MSG_COUNTED set,
+ * counter bumped) and whose source MR was closed, retire it through
+ * efa_rdm_txe_handle_error(), and assert the PEER_ERROR emit happened
+ * and the counter returned to its baseline. A second txe whose RTM was
+ * never posted (flag unset) must emit too but leave the counter alone.
+ */
+void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *txe_unsent;
+	struct efa_rdm_peer *peer;
+	size_t outstanding_before;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* --- Case 1: RTM reached the device before the abort. --- */
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_tagged);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_TXE_REQ;
+	txe->cq_entry.flags = FI_SEND | FI_TAGGED;
+	txe->cq_entry.op_context = (void *) 0xc3;
+	txe->total_len = 65536;
+
+	peer = txe->peer;
+	assert_non_null(peer);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	txe->protocol = EFA_RDM_LONGREAD_TAGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
+
+	/* Simulate efa_rdm_pke_handle_longread_rtm_sent(): the RTM was
+	 * accepted by the device, bumping the read counter. */
+	txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
+	efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight = 1;
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+
+	/* Marked, emitted (PEER_ERROR WR posted), counter balanced. */
+	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
+	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
+	assert_false(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
+	assert_int_equal(txe->peer_error_prov_errno, FI_EFA_ERR_PKT_POST);
+
+	/* --- Case 2: RTM canceled before it was ever posted. --- */
+	txe_unsent = efa_unit_test_alloc_txe(resource, ofi_op_tagged);
+	assert_non_null(txe_unsent);
+	txe_unsent->state = EFA_RDM_TXE_REQ;
+	txe_unsent->cq_entry.flags = FI_SEND | FI_TAGGED;
+	txe_unsent->cq_entry.op_context = (void *) 0xc4;
+	txe_unsent->total_len = 65536;
+	txe_unsent->peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	txe_unsent->peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+	txe_unsent->protocol = EFA_RDM_LONGREAD_TAGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe_unsent);
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe_unsent, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+
+	/* Still marked and emitted (the receiver's window needs the marker
+	 * regardless), but the never-bumped counter is left alone. */
+	assert_true(txe_unsent->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
+	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
+}
+
+/**
+ * @brief A peer-abort decided BEFORE the peer's handshake must defer the
+ *        emit, not drop it.
+ *
+ * Before the handshake, PEER_ERROR support is unknown; resolving it
+ * pessimistically drops the one notification that keeps the receiver's
+ * reorder window from parking forever on the aborted msg_id.
+ *
+ * Stage a marked txe on a peer with no HANDSHAKE_RECEIVED, retire it via
+ * efa_rdm_txe_handle_error(), and assert it PARKS (alive, no emit, no
+ * completion). Then deliver a handshake advertising PEER_ERROR support
+ * and assert the parked emit fires.
+ */
+void test_efa_rdm_txe_peer_abort_pre_handshake_defers_emit(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_handshake_hdr *handshake_hdr;
+	struct efa_rdm_handshake_opt_connid_hdr *connid_hdr;
+	struct efa_rdm_handshake_opt_device_version_hdr *dv_hdr;
+	struct fi_cq_err_entry err_entry;
+	size_t outstanding_before;
+	int ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_tagged);
+	assert_non_null(txe);
+	txe->state = EFA_RDM_TXE_REQ;
+	txe->cq_entry.flags = FI_SEND | FI_TAGGED;
+	txe->cq_entry.op_context = (void *) 0xe6;
+	txe->total_len = 65536;
+	txe->protocol = EFA_RDM_LONGCTS_TAGRTM_PKT;
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
+
+	/* The peer's handshake has NOT arrived: support is unknown. */
+	peer = txe->peer;
+	assert_non_null(peer);
+	assert_false(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+
+	outstanding_before = ep->efa_outstanding_tx_ops;
+
+	efa_rdm_txe_handle_error(txe, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+
+	/*
+	 * The txe parks: marked, not emitted, not freed, completion
+	 * withheld.
+	 */
+	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_false(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	assert_int_equal(efa_unit_test_get_dlist_length(&peer->txe_list), 1);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	/* Deliver the peer's handshake advertising PEER_ERROR support. */
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted += 1;
+	pkt_entry->peer = peer;
+
+	handshake_hdr = (struct efa_rdm_handshake_hdr *) pkt_entry->wiredata;
+	handshake_hdr->type = EFA_RDM_HANDSHAKE_PKT;
+	handshake_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	handshake_hdr->flags = 0;
+	handshake_hdr->nextra_p3 = 4;
+	handshake_hdr->extra_info[0] = EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_handshake_hdr) +
+			      sizeof(uint64_t);
+
+	connid_hdr = (struct efa_rdm_handshake_opt_connid_hdr *)
+		     (pkt_entry->wiredata + pkt_entry->pkt_size);
+	connid_hdr->connid = 0x1234;
+	handshake_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
+	pkt_entry->pkt_size += sizeof(*connid_hdr);
+
+	dv_hdr = (struct efa_rdm_handshake_opt_device_version_hdr *)
+		 (pkt_entry->wiredata + pkt_entry->pkt_size);
+	dv_hdr->device_version = 0xefa1;
+	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR;
+	pkt_entry->pkt_size += sizeof(*dv_hdr);
+
+	efa_rdm_pke_handle_handshake_recv(pkt_entry);
+
+	/*
+	 * The handshake handler re-drives the parked abort: the PEER_ERROR
+	 * posts (one new WR), EMITTED is set, and the user completion stays
+	 * withheld until the packet's own completion.
+	 */
+	assert_true(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	assert_true(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
+	memset(&err_entry, 0, sizeof(err_entry));
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, -FI_EAGAIN);
+}
+
+/**
  * @brief Before-post (gen-check) cancellation of a queued EAGER two-sided
- *        RTM emits a REF_MSG_ID_SKIP PEER_ERROR_PKT.
+ *        RTM emits a msg_id-only PEER_ERROR_PKT.
  *
  * Regression test for the reorder-window-stranding gap: an EAGER /
  * medium / runt-only RTM canceled BEFORE its WR reached the device is
@@ -4174,7 +4479,7 @@ void test_efa_rdm_txe_handle_error_eager_prepost_cancel_emits_skip(void **state)
 
 	/* The consolidated emit decision marked the txe PENDING and (single
 	 * WR, already drained) emitted the PEER_ERROR_PKT, keeping the txe
-	 * alive for that packet's completion. The emit derives REF_MSG_ID_SKIP
+	 * alive for that packet's completion. The emit carries msg_id only
 	 * for this eager txe (see efa_rdm_pke_init_peer_error_for_ope, covered
 	 * by test_efa_rdm_pke_init_peer_error_for_ope_eager_skip). */
 	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
@@ -4184,17 +4489,16 @@ void test_efa_rdm_txe_handle_error_eager_prepost_cancel_emits_skip(void **state)
 
 /**
  * @brief Pre-CTS (TXE_REQ) cancellation of a LONGCTS two-sided RTM emits
- *        a REF_MSG_ID_SKIP PEER_ERROR_PKT keyed by msg_id.
+ *        a msg_id-only PEER_ERROR_PKT.
  *
  * Regression test for the LONGCTS reorder-window-stall hang: a LONGCTS
  * RTM canceled while still in EFA_RDM_TXE_REQ (its first CTS never
  * processed, so txe->rx_id is unknown) used to be suppressed by the
  * prev_state == OPE_SEND gate, leaving the receiver's reorder window
- * parked forever on the never-delivered msg_id. The fix routes this
- * abort through the msg_id path (EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID), so
- * efa_rdm_txe_handle_error() now marks the txe PENDING, sets the
- * BY_MSG_ID flag, and (single WR, already drained) emits the
- * PEER_ERROR_PKT. The emit derives REF_MSG_ID_SKIP for this txe (see
+ * parked forever on the never-delivered msg_id. The fix marks the txe
+ * PENDING (rx_id stays the unset sentinel -- no rx_id known pre-CTS) and, with its
+ * single WR already drained, emits a msg_id-only PEER_ERROR_PKT; the
+ * receiver decides the outcome from its reorder-window state (see
  * test_efa_rdm_pke_init_peer_error_for_ope_longcts_pre_cts_skip).
  *
  * Mirrors test_efa_rdm_txe_handle_error_eager_prepost_cancel_emits_skip
@@ -4239,19 +4543,18 @@ void test_efa_rdm_txe_handle_error_longcts_prepost_cancel_emits_skip(void **stat
 	 * single emit itself. */
 
 	/* The consolidated emit decision marked the txe PENDING, recorded
-	 * that it must be signalled by msg_id (no rx_id known pre-CTS), and
-	 * emitted the PEER_ERROR_PKT, keeping the txe alive for that packet's
-	 * completion. */
+	 * that no rx_id is known (pre-CTS), so it is signalled msg_id-only
+	 * (rx_id stays the unset sentinel), and emitted the PEER_ERROR_PKT, keeping
+	 * the txe alive for that packet's completion. */
 	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
-	assert_true(txe->internal_flags & EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID);
+	assert_int_equal(txe->rx_id, EFA_RDM_OPE_INVALID_ID);
 	assert_true(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
 }
 
 /**
  * @brief Pre-match (TXE_REQ) cancellation of a RUNTREAD RTM that has a
- *        tail READ remainder emits a REF_MSG_ID_SKIP PEER_ERROR_PKT keyed
- *        by msg_id.
+ *        tail READ remainder emits a msg_id-only PEER_ERROR_PKT.
  *
  * Regression test for the read-base reorder-window-stall hang. A RUNTREAD
  * RTM carries user data (the runt segments) backed by the user MR, so the
@@ -4262,14 +4565,14 @@ void test_efa_rdm_txe_handle_error_longcts_prepost_cancel_emits_skip(void **stat
  * leaving the receiver's reorder window parked forever on the
  * never-delivered msg_id. The fix makes all runtread msg_id-keyed, so
  * efa_rdm_txe_handle_error() marks the txe PENDING and (single WR, already
- * drained) emits the PEER_ERROR_PKT. With bytes_acked == 0 (no runt
- * segment landed, no recv matched) the emit derives REF_MSG_ID_SKIP (see
+ * drained) emits the PEER_ERROR_PKT. With no rx_id (runtread exchanges no
+ * CTS) the emit is msg_id-only and the receiver decides the outcome (see
  * test_efa_rdm_pke_init_peer_error_for_ope_runtread).
  *
  * Mirrors test_efa_rdm_txe_handle_error_longcts_prepost_cancel_emits_skip
- * but for a RUNTREAD RTM with a READ remainder. Unlike the pre-CTS LONGCTS
- * case, runtread is keyed by msg_id directly (it has no rx_id to fall back
- * from), so EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID is NOT set.
+ * but for a RUNTREAD RTM with a READ remainder. Like every runtread abort
+ * it is keyed by msg_id (it has no rx_id), so rx_id stays the unset sentinel
+ * and no op_id hint is emitted.
  */
 void test_efa_rdm_txe_handle_error_runtread_prepost_cancel_emits_skip(void **state)
 {
@@ -4313,11 +4616,10 @@ void test_efa_rdm_txe_handle_error_runtread_prepost_cancel_emits_skip(void **sta
 	/* handle_error marks the txe and, with no WR in flight, drives the
 	 * single emit itself. */
 
-	/* PENDING + emitted, but NOT BY_MSG_ID: runtread reaches the msg_id
-	 * path via efa_rdm_txe_peer_abort_uses_msg_id(), not the LONGCTS
-	 * pre-CTS rx_id-fallback flag. */
+	/* PENDING + emitted, but rx_id unset: runtread exchanges no CTS,
+	 * so no rx_id is ever known and the emit is msg_id-only. */
 	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
-	assert_false(txe->internal_flags & EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID);
+	assert_int_equal(txe->rx_id, EFA_RDM_OPE_INVALID_ID);
 	assert_true(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
 }
@@ -4548,11 +4850,10 @@ void test_efa_rdm_txe_handle_error_no_emit_when_not_longcts(void **state)
  * still completes successfully lands in
  * efa_rdm_pke_handle_rma_completion()'s READ path.
  *
- * Before the fix that success path had no drain call and no
- * EFA_RDM_OPE_PEER_ABORT_PENDING guard: if the successful sibling was the last
- * WR to drain, efa_outstanding_tx_ops reached 0 in a handler that
- * never released the rxe -> permanent leak (and it would also post a
- * spurious EOR / success completion). This test fails one read WR,
+ * That success path must call the drain helper under the
+ * EFA_RDM_OPE_PEER_ABORT_PENDING guard: when the successful sibling is
+ * the last WR to drain, the rxe must be released there, and no spurious
+ * EOR / success completion posted. This test fails one read WR,
  * then drives a successful completion for the sibling and asserts
  * the rxe leaves ep->base_ep.ope_list (freed exactly once), the user gets a
  * single clean peer-abort error completion, and no spurious success
@@ -4677,9 +4978,7 @@ void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
  * but the drain is a no-op while the CTS is outstanding
  * (efa_outstanding_tx_ops > 0).
  *
- * Before the fix the CTS send-completion case was a bare break with
- * no drain retry, so the rxe was never freed -> leak. The fix makes
- * the CTS send-completion call the drain helper. This test asserts
+ * The CTS send-completion must call the drain helper. This test asserts
  * the rxe survives the inbound PEER_ERROR_PKT (CTS still in flight)
  * and is freed exactly when the CTS completes.
  */
@@ -4762,10 +5061,12 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 	ep->efa_rx_pkts_posted += 1;
 	err_hdr = (struct efa_rdm_peer_error_hdr *) err_pkt->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id_valid = 1;
+	err_hdr->msg_id = rxe->msg_id;
 	err_hdr->op_id = rxe->rx_id;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_OPE_INDEX;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	err_pkt->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -4910,10 +5211,12 @@ static void run_medium_inbound_peer_abort(struct efa_resource *resource,
 
 	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id = msg_id;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID;
+	err_hdr->op_id_valid = 0;
+	err_hdr->msg_id = msg_id;
+	err_hdr->op_id = 0;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -4974,10 +5277,12 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_tagged(void **state)
 }
 
 /**
- * @brief Medium inbound miss: a PEER_ERROR_PKT with ref_kind=MSG_ID
- *        whose msg_id is not in the peer's rxe_map (e.g. all medium
- *        WRs failed so the receiver never built an rxe) is a clean
- *        drop -- no crash, no user CQ error.
+ * @brief Medium inbound miss: a msg_id-only PEER_ERROR_PKT whose msg_id is
+ *        not in the peer's rxe_map (e.g. all medium WRs failed so the
+ *        receiver never built an rxe) does not crash and writes no user CQ
+ *        error. With no matched rxe the receiver-decides dispatcher routes
+ *        it to the abort-marker path (unblocking the reorder window); an
+ *        in-window msg_id is used so this stays on the recvwin path.
  */
 void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped(void **state)
 {
@@ -5013,10 +5318,12 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped(voi
 
 	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id = 0xdeadbeef;	/* msg_id never inserted */
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID;
+	err_hdr->op_id_valid = 0;
+	err_hdr->msg_id = 0x7;	/* never inserted, but in-window */
+	err_hdr->op_id = 0;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -5114,10 +5421,12 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down(
 	/* Fill in the PEER_ERROR_PKT wiredata. */
 	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id = msg_id;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID;
+	err_hdr->op_id_valid = 0;
+	err_hdr->msg_id = msg_id;
+	err_hdr->op_id = 0;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -5137,11 +5446,11 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down(
  * @brief Medium sender-side: a medium RTM WR fails with
  *        LOCAL_ERROR_INVALID_LKEY (user closed the source MR) and the
  *        peer supports the feature. A single failing WR with
- *        bytes_acked == 0 (zero-delivery) emits a REF_MSG_ID_SKIP
+ *        bytes_acked == 0 (zero-delivery) emits a msg_id-only
  *        PEER_ERROR_PKT at drain: the receiver matched no rxe (owes no
  *        completion) but its reorder window reserved this msg_id, so the
- *        skip unblocks it. The txe stays alive until the skip packet's
- *        own completion drains it.
+ *        abort unblocks it. The txe stays alive until the PEER_ERROR
+ *        packet's own completion drains it.
  */
 void test_efa_rdm_pke_handle_tx_error_medium_emits_skip_on_zero_delivery(void **state)
 {
@@ -5176,14 +5485,14 @@ void test_efa_rdm_pke_handle_tx_error_medium_emits_skip_on_zero_delivery(void **
 	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_MEDIUM_MSGRTM_PKT,
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
-	/* The completion is withheld -- deferred to the skip packet's drain
-	 * (not written eagerly here). */
+	/* The completion is withheld -- deferred to the PEER_ERROR packet's
+	 * drain (not written eagerly here). */
 	memset(&err_entry, 0, sizeof(err_entry));
 	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
 	assert_int_equal(ret, -FI_EAGAIN);
 
 	/* Zero-delivery (bytes_acked == 0): the single data WR drained, so
-	 * the drain helper emitted a REF_MSG_ID_SKIP PEER_ERROR_PKT (window
+	 * the drain helper emitted a msg_id-only PEER_ERROR_PKT (window
 	 * unblock). That packet is itself a WR, so outstanding rose by one
 	 * and the txe is still alive (off no list yet -- kept for the skip
 	 * packet's completion). */
@@ -5249,7 +5558,7 @@ void test_efa_rdm_pke_handle_tx_error_medium_emits_peer_error_once(void **state)
 /**
  * @brief Medium sender-side, DC variant: a DC_MEDIUM RTM WR failing
  *        with INVALID_LKEY and bytes_acked == 0 (zero-delivery) emits a
- *        REF_MSG_ID_SKIP PEER_ERROR_PKT at drain to unblock the
+ *        msg_id-only PEER_ERROR_PKT at drain to unblock the
  *        receiver's reorder window. Pins efa_rdm_pkt_type_is_medium()
  *        coverage of DC medium types.
  */
@@ -5282,7 +5591,7 @@ void test_efa_rdm_pke_handle_tx_error_dc_medium_emits_skip_on_zero_delivery(void
 	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_DC_MEDIUM_MSGRTM_PKT,
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
-	/* Zero-delivery: drain emits the SKIP packet (one WR), txe alive. */
+	/* Zero-delivery: drain emits the PEER_ERROR_PKT (one WR), txe alive. */
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
 }
 
@@ -5334,7 +5643,7 @@ void test_efa_rdm_pke_handle_tx_error_medium_no_emit_when_peer_unsupported(void 
 /**
  * @brief Medium sender-side: ep->homogeneous_peers bypasses the
  *        handshake check. A single WR with bytes_acked == 0
- *        (zero-delivery) emits a REF_MSG_ID_SKIP at drain to unblock the
+ *        (zero-delivery) emits a msg_id-only PEER_ERROR_PKT at drain to unblock the
  *        window. The PENDING flag confirms the handshake bypass.
  */
 void test_efa_rdm_pke_handle_tx_error_medium_emits_skip_with_homogeneous_peers(void **state)
@@ -5367,15 +5676,15 @@ void test_efa_rdm_pke_handle_tx_error_medium_emits_skip_with_homogeneous_peers(v
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
 	/* Zero-delivery with homogeneous_peers: handshake bypassed, drain
-	 * emits the REF_MSG_ID_SKIP packet (one WR), txe kept alive. */
+	 * emits the msg_id-only PEER_ERROR_PKT (one WR), txe kept alive. */
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
 }
 
 /**
  * @brief An eager two-sided RTM failing with INVALID_LKEY (source MR
- *        closed) emits a REF_MSG_ID_SKIP PEER_ERROR_PKT: eager owes the
+ *        closed) emits a msg_id-only PEER_ERROR_PKT: eager owes the
  *        receiver no completion, but its single REQ consumed a msg_id the
- *        receiver's reorder window reserved, so the skip unblocks it.
+ *        receiver's reorder window reserved, so the abort unblocks it.
  */
 void test_efa_rdm_pke_handle_tx_error_eager_emits_skip(void **state)
 {
@@ -5409,16 +5718,16 @@ void test_efa_rdm_pke_handle_tx_error_eager_emits_skip(void **state)
 	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_EAGER_MSGRTM_PKT,
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
-	/* The completion is withheld -- deferred to the skip packet's drain
-	 * (not written eagerly here). */
+	/* The completion is withheld -- deferred to the PEER_ERROR packet's
+	 * drain (not written eagerly here). */
 	memset(&err_entry, 0, sizeof(err_entry));
 	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
 	assert_int_equal(ret, -FI_EAGAIN);
 
 	/* The eager classifier marked the txe PENDING; the single WR drained,
 	 * so the drain helper emitted the PEER_ERROR_PKT (one new WR), keeping
-	 * the txe alive for its completion. The wire ref_kind (REF_MSG_ID_SKIP
-	 * for eager) is derived at emit time -- see
+	 * the txe alive for its completion. The wire identifiers (msg_id only
+	 * for eager) are derived at emit time -- see
 	 * test_efa_rdm_pke_init_peer_error_for_ope_eager_skip. */
 	assert_true(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
@@ -5581,36 +5890,41 @@ void test_efa_rdm_pke_handle_tx_error_runtread_only_emits_peer_error(void **stat
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
 	/* The gate accepted the runt-only runtread: PENDING set, errno
-	 * stashed. The abort uses the msg_id reference kind. */
+	 * stashed. Runtread exchanges no CTS, so the emit is msg_id-only
+	 * (rx_id stays the unset sentinel). */
 	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
 	assert_int_equal(txe->peer_error_prov_errno,
 			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
-	assert_true(efa_rdm_txe_peer_abort_uses_msg_id(txe));
+	assert_int_equal(txe->rx_id, EFA_RDM_OPE_INVALID_ID);
 }
 
 /**
  * @brief Runting-read WITH a READ remainder (bytes_runt < total_len)
- *        must NOT take the medium-style msg_id emit path: that case is
- *        signalled to the receiver through the READ failure path
- *        (efa_rdm_rxe_mark_peer_aborted), so no PEER_ABORT_PENDING
- *        is set here and no PEER_ERROR_PKT is posted from this site.
+ *        now ALSO emits a msg_id-only PEER_ERROR_PKT from the sender.
+ *
+ * Receiver-decides model (RuntRead bidirectional): the runt RTM(s) carry
+ * user data from the source MR, so a source-MR cancel can flush them before
+ * the receiver matches. The sender can no longer infer whether the receiver
+ * matched, so it always marks the txe PEER_ABORT_PENDING and emits a
+ * msg_id-only PEER_ERROR_PKT. This may race the receiver's own tail-READ
+ * failure notification (RX->TX); both are made idempotent on the receiver.
+ * (This inverts the pre-rework behavior, where the sender suppressed the
+ * emit for the with-READ case and relied solely on the receiver's READ
+ * failure.)
  */
-void test_efa_rdm_pke_handle_tx_error_runtread_with_read_no_emit(void **state)
+void test_efa_rdm_pke_handle_tx_error_runtread_with_read_emits(void **state)
 {
 	struct efa_resource *resource = *state;
-	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
-	size_t outstanding_before;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-	ep = container_of(resource->ep, struct efa_rdm_ep,
-			  base_ep.util_ep.ep_fid);
 
 	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
 	assert_non_null(txe);
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
+	txe->cq_entry.op_context = (void *) 0xa1;
 	txe->msg_id = 0x99;
 	/* Has a READ remainder: runt portion is only part of the message. */
 	txe->total_len = 1048576;
@@ -5621,19 +5935,25 @@ void test_efa_rdm_pke_handle_tx_error_runtread_with_read_no_emit(void **state)
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
 
-	outstanding_before = ep->efa_outstanding_tx_ops;
+	/* Keep the txe alive past the single WR drain so we can inspect the
+	 * flags the gate set (a sibling WR still in flight). */
+	txe->efa_outstanding_tx_ops = 1;
 
+	/* Simulate the source-MR cancel so the MR gen check fails and the
+	 * abort path is taken. */
+	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 	run_rtm_tx_error_with_type(resource, txe, EFA_RDM_RUNTREAD_MSGRTM_PKT,
 				   EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
 
-	/* Not flagged for the emit path; no PEER_ERROR_PKT posted. The runt
-	 * RTM was in flight (after-post INVALID_LKEY), so the receiver matched
-	 * the recv and its tail READ will fail and notify -- the sender must
-	 * not also emit. (efa_rdm_txe_peer_abort_uses_msg_id() still reports
-	 * runtread as msg_id-keyed in general; the gate suppresses the emit
-	 * for this with-READ device-WR case.) */
-	assert_false(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
-	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before);
+	/* The gate now accepts runtread WITH a READ remainder (previously
+	 * excluded): PENDING set, errno stashed. Runtread exchanges no CTS,
+	 * so the emit is msg_id-only (rx_id unset). The receiver reconciles
+	 * this msg_id-only notification with any tail-READ-failure notification
+	 * idempotently. */
+	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_int_equal(txe->peer_error_prov_errno,
+			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	assert_int_equal(txe->rx_id, EFA_RDM_OPE_INVALID_ID);
 }
 
 /**
@@ -5646,11 +5966,10 @@ void test_efa_rdm_pke_handle_tx_error_runtread_with_read_no_emit(void **state)
  * txe, because the PEER_ERROR_PKT (and any sibling CTSDATA WRs) still
  * use it as wr_id.
  *
- * Before the fix nothing freed the errored txe: the success-completion
- * path only releases on bytes_acked == total_len (never true
- * post-abort), sibling failures early-return on OPE_ERR, and the
- * PEER_ERROR_PKT completion only released the RXE direction. The txe
- * leaked until ep close. This test drives the abort, then completes the
+ * The PEER_ERROR_PKT completion must free the errored txe: the
+ * success-completion path only releases on bytes_acked == total_len
+ * (never true post-abort) and sibling failures early-return on
+ * OPE_ERR. This test drives the abort, then completes the
  * emitted PEER_ERROR_PKT and asserts the drain-gated release frees the
  * txe exactly once.
  */

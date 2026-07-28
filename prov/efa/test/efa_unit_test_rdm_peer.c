@@ -475,7 +475,9 @@ void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state)
 
 /**
  * @brief PEER_ERROR for a msg_id buffered in the overflow list
- *        removes and frees the entry.
+ *        marks the entry EFA_RDM_PKE_ABORTED in place (it must NOT be
+ *        removed: the entry doubles as the abort marker that later
+ *        slides the reorder window past this msg_id).
  */
 void test_efa_rdm_peer_abort_ooo_in_overflow(void **state)
 {
@@ -483,6 +485,8 @@ void test_efa_rdm_peer_abort_ooo_in_overflow(void **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_overflow_pke_list_entry *overflow_entry;
+	struct dlist_entry *tmp;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t addr;
@@ -507,7 +511,22 @@ void test_efa_rdm_peer_abort_ooo_in_overflow(void **state)
 
 	ret = efa_rdm_peer_abort_ooo_msg(peer, msg_id);
 	assert_true(ret);
-	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list), 0);
+
+	/*
+	 * The entry must remain on the overflow list, marked ABORTED, so the
+	 * reorder window can still slide past the msg_id.
+	 */
+	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list), 1);
+	assert_true(pkt_entry->flags & EFA_RDM_PKE_ABORTED);
+
+	/* Clean up the marked entry. */
+	dlist_foreach_container_safe(&peer->overflow_pke_list,
+				     struct efa_rdm_peer_overflow_pke_list_entry,
+				     overflow_entry, entry, tmp) {
+		dlist_remove(&overflow_entry->entry);
+		efa_rdm_pke_release_rx_list(overflow_entry->pkt_entry);
+		ofi_buf_free(overflow_entry);
+	}
 }
 
 /**
@@ -708,10 +727,14 @@ static int deliver_peer_error_skip(struct efa_rdm_ep *efa_rdm_ep,
 
 	err_hdr = (struct efa_rdm_peer_error_hdr *) pkt_entry->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	/* msg_id-only packet (no op_id hint): the receiver decides -- with no
+	 * matched rxe it advances the reorder window past msg_id. */
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id = msg_id;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP;
+	err_hdr->op_id_valid = 0;
+	err_hdr->msg_id = msg_id;
+	err_hdr->op_id = 0;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_FLUSHED;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -724,12 +747,11 @@ static int deliver_peer_error_skip(struct efa_rdm_ep *efa_rdm_ep,
  * @brief The core fix: a source-aborted msg_id that NEVER arrived must
  *        not head-of-line block the messages buffered behind it.
  *
- * Reproduces the EAGER/MEDIUM heisenbug deterministically. The sender
- * allocated msg_id 0, posted it, then the device flushed it at the
- * source (MR closed) before it ever reached the receiver. Later messages
- * msg_id 1 and 2 DID arrive and are buffered out-of-order, waiting for
- * msg_id 0. Without the fix the window parks on 0 forever and 1, 2 (and
- * everything after) are stranded.
+ * The sender allocated msg_id 0, posted it, then the device flushed it
+ * at the source (MR closed) before it ever reached the receiver. Later
+ * messages msg_id 1 and 2 DID arrive and are buffered out-of-order,
+ * waiting for msg_id 0; the window must slide past 0 or they are
+ * stranded forever.
  *
  * An inbound PEER_ERROR (skip) packet for msg_id 0 is queued into the
  * recvwin as an abort marker; the drain then slides past 0 and continues
@@ -1041,27 +1063,27 @@ void test_efa_rdm_peer_skip_aborted_msg_id_abort_marker_behind_head(
 }
 
 /**
- * @brief RX side of the LONGCTS pre-CTS abort fix: an inbound
- *        PEER_ERROR_PKT with REF_MSG_ID_SKIP for a LONGCTS msg_id that
- *        never arrived unblocks the reorder window WITHOUT producing a
- *        completion -- driven through the full inbound dispatcher
+ * @brief RX side of the LONGCTS pre-CTS abort fix: an inbound msg_id-only
+ *        PEER_ERROR_PKT for a LONGCTS msg_id that never arrived unblocks
+ *        the reorder window WITHOUT producing a completion -- driven
+ *        through the full inbound dispatcher
  *        efa_rdm_pke_handle_peer_error_recv().
  *
  * Counterpart to the sender-side tests
  * (test_efa_rdm_txe_handle_error_longcts_prepost_cancel_emits_skip /
  * test_efa_rdm_pke_init_peer_error_for_ope_longcts_pre_cts_skip): a
  * LONGCTS sender aborted before its first CTS has no receiver rxe index,
- * so it emits a REF_MSG_ID_SKIP packet keyed by msg_id. On the wire that
- * packet is indistinguishable from an EAGER/medium skip, so the receiver
- * path is shared; the other skip tests drive the
- * efa_rdm_peer_queue_aborted_msg_marker() helper directly, whereas
- * this one exercises the actual receive entry point
- * (efa_rdm_pke_handle_peer_error_recv) for the LONGCTS never-arrived
- * scenario -- the exact packet the sender-side fix now emits.
+ * so it emits a msg_id-only packet (no op_id hint). On the wire that
+ * packet is indistinguishable from an EAGER/medium msg_id-only abort, so
+ * the receiver path is shared; with no matched rxe the receiver-decides
+ * dispatcher routes to efa_rdm_peer_queue_aborted_msg_marker(). The other
+ * skip tests drive that helper directly, whereas this one exercises the
+ * actual receive entry point (efa_rdm_pke_handle_peer_error_recv) with
+ * the packet a sender emits for a LONGCTS RTM that never arrived.
  *
  * msg_id 0 (the aborted LONGCTS RTM) never arrives; msg_id 1 arrives OOO
  * and is buffered (then aborted so the drain releases it without the
- * full recv-match/CQ path). Dispatching the SKIP packet for 0 abort markers
+ * full recv-match/CQ path). Dispatching the packet for 0 abort markers
  * it and slides the window past the buffered 1, leaving exp_msg_id == 2,
  * with no rxe and no CQ entry.
  */
@@ -1089,7 +1111,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
-	/* pke1 (buffered) and the SKIP packet are rx-pool pkes the drain
+	/* pke1 (buffered) and the PEER_ERROR packet are rx-pool pkes the drain
 	 * releases; keep the rx-pkt accounting invariant intact. */
 	efa_rdm_ep->efa_rx_pkts_posted =
 		efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep) - 2;
@@ -1115,18 +1137,22 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 	/* Build the inbound PEER_ERROR (skip) packet for the never-arrived
 	 * LONGCTS msg_id 0 and deliver it through the FULL dispatcher (the
 	 * actual receive entry point), not the abort marker helper. The
-	 * dispatcher routes REF_MSG_ID_SKIP to the abort marker path and
-	 * consumes the packet. */
+	 * dispatcher finds no matched rxe and routes to the abort marker path,
+	 * consuming the packet. */
 	skip_pkt = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
 				     EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(skip_pkt);
 	skip_pkt->peer = peer;
 	err_hdr = (struct efa_rdm_peer_error_hdr *) skip_pkt->wiredata;
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
+	err_hdr->direction = EFA_RDM_PEER_ERROR_TX_TO_RX;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	/* msg_id-only (no op_id hint): the dispatcher finds no matched rxe and
+	 * routes to the abort-marker path, consuming the packet. */
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
+	err_hdr->op_id_valid = 0;
+	err_hdr->msg_id = 0;
 	err_hdr->op_id = 0;
-	err_hdr->ref_kind = EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_FLUSHED;
 	err_hdr->connid = raw_addr.qkey;
 	skip_pkt->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -1145,7 +1171,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 }
 
 /**
- * @brief Regression test for the MEDIUM overflow-list abort leak.
+ * @brief Regression test for the MEDIUM overflow-list multi-segment abort.
  *
  * A multi-segment MEDIUM message that arrives out-of-order while the
  * reorder window is full lands in the peer's overflow_pke_list. Unlike
@@ -1154,15 +1180,14 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
  * a SEPARATE overflow_pke_list_entry. So one msg_id can have multiple
  * overflow entries.
  *
- * efa_rdm_peer_abort_ooo_msg() must remove ALL overflow entries for the
- * aborted msg_id. The bug: it removes only the FIRST match and returns,
- * leaking the remaining segments (never released until ep close) and
- * potentially wedging overflow promotion for a msg_id the window has
- * already slid past.
+ * efa_rdm_peer_abort_ooo_msg() must mark ALL overflow entries for the
+ * aborted msg_id EFA_RDM_PKE_ABORTED, in place (a single-match mark would
+ * leak the remaining segments), and leave unrelated msg_ids untouched.
  *
- * This test stages two segments of the same OOO medium msg_id in the
- * overflow list, aborts it, and asserts the overflow list is fully
- * drained. It FAILS against the buggy single-match implementation.
+ * This test stages two segments of the same OOO medium msg_id plus one
+ * segment of a different msg_id in the overflow list, aborts the first
+ * id, and asserts all three entries survive with exactly the two
+ * targeted segments marked.
  */
 void test_efa_rdm_peer_abort_ooo_msg_overflow_multi_segment(void **state)
 {
@@ -1212,26 +1237,24 @@ void test_efa_rdm_peer_abort_ooo_msg_overflow_multi_segment(void **state)
 	assert_true(ret);
 
 	/*
-	 * BUG ASSERTION: every overflow entry for aborted_msg_id must be
-	 * gone. Only the unrelated other_msg_id entry should remain.
-	 * The buggy single-match implementation leaves 2 entries (one
-	 * leaked aborted segment + the other msg_id).
+	 * All three entries remain on the list (the marked entries ARE the
+	 * abort marker), with both segments of aborted_msg_id marked and the
+	 * unrelated one untouched.
 	 */
 	assert_int_equal(efa_unit_test_get_dlist_length(&peer->overflow_pke_list),
-			 1);
+			 3);
+	assert_true(seg0->flags & EFA_RDM_PKE_ABORTED);
+	assert_true(seg1->flags & EFA_RDM_PKE_ABORTED);
+	assert_false(other->flags & EFA_RDM_PKE_ABORTED);
 
-	/* The surviving entry is the unrelated msg_id. */
+	/* Clean up all entries. */
 	{
 		struct efa_rdm_peer_overflow_pke_list_entry *e;
 		struct dlist_entry *tmp;
-		uint32_t found = 0;
 
 		dlist_foreach_container_safe(&peer->overflow_pke_list,
 			struct efa_rdm_peer_overflow_pke_list_entry,
 			e, entry, tmp) {
-			found = efa_rdm_pke_get_rtm_msg_id(e->pkt_entry);
-			assert_int_equal(found, other_msg_id);
-			/* clean up the survivor */
 			dlist_remove(&e->entry);
 			efa_rdm_pke_release_rx_list(e->pkt_entry);
 			ofi_buf_free(e);
