@@ -410,39 +410,26 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 }
 
 /**
- * @brief release an efa conn object
- * Caller of this function must obtain av->util_av.lock or
- * av->util_av_implicit.lock and the SRX lock. It also calls
- * efa_ah_release_unsafe which does not acquire the util_domain lock the
- * protects the AH map. This function is called when evicting an AH entry in the
- * CQ read path which already has the SRX lock and the util_domain lock.
+ * @brief release an efa conn object from the implicit AV
+ * Caller of this function must obtain av->util_av_implicit.lock, the
+ * util_domain lock, and the SRX lock. This function is called when
+ * evicting an AH entry in the CQ read path.
  *
  * @param[in]	av	address vector
  * @param[in]	conn	efa_conn object pointer
- * @param[in]	release_from_implicit_av		whether to release conn
- * from implicit AV
- * @param[in]	grab_srx_lock		whether to get the SRX lock before
- * destroying the peer struct
  */
-void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
-				bool release_from_implicit_av)
+void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *conn)
 {
-	assert(av->domain->info_type != EFA_INFO_RDM ||
-	       ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
+	assert(ofi_genlock_held(&av->util_av_implicit.lock));
+	efa_conn_release_reverse_av(av, conn, true);
+
+	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
+	efa_conn_rdm_deinit(av, conn);
 
 	assert(ofi_genlock_held(&av->domain->util_domain.lock));
-
-	efa_conn_release_reverse_av(av, conn, release_from_implicit_av);
-	if (av->domain->info_type == EFA_INFO_RDM)
-		efa_conn_rdm_deinit(av, conn);
-
-	if (release_from_implicit_av)
-		dlist_remove(&conn->ah_implicit_conn_list_entry);
-
-	efa_conn_release_util_av(av, conn, release_from_implicit_av);
-
-	release_from_implicit_av ? conn->ah->implicit_refcnt-- :
-				   conn->ah->explicit_refcnt--;
+	dlist_remove(&conn->ah_implicit_conn_list_entry);
+	efa_conn_release_util_av(av, conn, true);
+	conn->ah->implicit_refcnt--;
 }
 
 void efa_conn_ep_peer_map_insert(struct efa_conn *conn, struct efa_conn_ep_peer_map_entry *map_entry)
