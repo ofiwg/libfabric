@@ -132,7 +132,7 @@ static enum close_side close_side = CLOSE_INITIATOR;
 static enum test_mode test_mode = TEST_ABORT;
 static int close_ep_first;
 static int set_homogeneous_peers;
-static bool use_high_pps;
+static bool use_high_pps = false;
 
 /*
  * -r <file>: replay a previously dumped close order instead of generating
@@ -1887,10 +1887,7 @@ static int run(void)
 	if (close_side == CLOSE_TARGET || opts.rma_op == FT_RMA_WRITEDATA)
 		cq_attr.format = FI_CQ_FORMAT_DATA;
 
-	if (hints->ep_attr->type == FI_EP_MSG)
-		ret = ft_init_fabric_cm();
-	else
-		ret = ft_init_fabric();
+	ret = ft_init_fabric();
 	if (ret)
 		return ret;
 
