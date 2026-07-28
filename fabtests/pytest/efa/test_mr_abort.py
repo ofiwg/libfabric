@@ -20,6 +20,7 @@ MR_ABORT_NUM_MRS = 2046
 @pytest.mark.parametrize("cancel_order", ["reverse", "random"])
 @pytest.mark.parametrize("close_side", ["initiator", "target"])
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
+@pytest.mark.parametrize("high_pps", [True, False])
 @pytest.mark.parametrize("message_size", [
     4096,
     65536,
@@ -29,7 +30,7 @@ MR_ABORT_NUM_MRS = 2046
     # workers.
     pytest.param(10485760, marks=pytest.mark.serial),
 ])
-def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr, message_size, memory_type_symm):
+def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr, high_pps, message_size, memory_type_symm):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
@@ -39,6 +40,12 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
     command = (f"fi_mr_abort -T abort -o {rma_op} -C {cancel_order}"
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
                f" -S {message_size}")
+
+    if high_pps:
+        if rma_op == "read":
+            pytest.skip("High PPS not supported with RDMA read")
+        command += " --high-pps"
+
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
     test.run()
 
@@ -47,6 +54,7 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
 @pytest.mark.functional
 @pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
 @pytest.mark.parametrize("rma_op", ["write", "read", "writedata"])
+@pytest.mark.parametrize("high_pps", [True, False])
 @pytest.mark.parametrize("message_size", [
     4096,
     65536,
@@ -54,11 +62,17 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
     # 10 MiB: run serially to avoid resource contention (see test_mr_abort).
     pytest.param(10485760, marks=pytest.mark.serial),
 ])
-def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, message_size, memory_type_symm):
+def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps, message_size, memory_type_symm):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
     command = (f"fi_mr_abort -T partial -o {rma_op} -S {message_size}")
+
+    if high_pps:
+        if rma_op == "read":
+            pytest.skip("High PPS not supported with RDMA read")
+        command += " --high-pps"
+
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
     test.run()
 
