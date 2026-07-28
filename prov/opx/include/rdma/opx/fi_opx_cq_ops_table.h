@@ -46,8 +46,12 @@
 /* Number of types in enum fi_cq_format */
 #define FI_CQ_FORMAT_COUNT 5
 
-/* Number of types in enum opx_hfi1_type */
-#define OPX_HFI1_TYPE_COUNT 4
+/* Number of types in enum opx_hfi1_type, PLUS one extra slot (index 4) for
+ * CYR hardware negotiated into MIXED_9B software mode. CYR's real entry size
+ * (64 DWs) differs from the MIXED_9B slot's assumed 32 DWs, so it cannot
+ * share that slot's fast-path tables; it gets its own slot at index 4,
+ * built with the CYR mask constants but the MIXED_9B protocol/header token. */
+#define OPX_HFI1_TYPE_COUNT 5
 
 typedef struct fi_ops_cq op_matrix_t[FI_CQ_FORMAT_COUNT][1 /* OFI_RELIABILITY_KIND_ONLOAD */][FI_OPX_COMMS_COUNT]
 				    [OPX_HFI1_TYPE_COUNT][2 /* CTX_SHARING ON or OFF */];

@@ -494,6 +494,20 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 				fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
 			}
 
+		} else if (hdrq_mask == FI_OPX_HDRQ_MASK_2048_CYR) {
+			for (i = 0; i < ep_count; ++i) {
+				fi_opx_lock(&opx_cq->progress.ep[i]->lock);
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability,
+						  FI_OPX_HDRQ_MASK_2048_CYR, hfi1_type, ctx_sharing);
+				fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
+			}
+		} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192_CYR) {
+			for (i = 0; i < ep_count; ++i) {
+				fi_opx_lock(&opx_cq->progress.ep[i]->lock);
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability,
+						  FI_OPX_HDRQ_MASK_8192_CYR, hfi1_type, ctx_sharing);
+				fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
+			}
 		} else {
 			for (i = 0; i < ep_count; ++i) {
 				fi_opx_lock(&opx_cq->progress.ep[i]->lock);
@@ -512,6 +526,16 @@ __attribute__((flatten)) ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *
 			for (i = 0; i < ep_count; ++i) {
 				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability,
 						  FI_OPX_HDRQ_MASK_8192, hfi1_type, ctx_sharing);
+			}
+		} else if (hdrq_mask == FI_OPX_HDRQ_MASK_2048_CYR) {
+			for (i = 0; i < ep_count; ++i) {
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability,
+						  FI_OPX_HDRQ_MASK_2048_CYR, hfi1_type, ctx_sharing);
+			}
+		} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192_CYR) {
+			for (i = 0; i < ep_count; ++i) {
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability,
+						  FI_OPX_HDRQ_MASK_8192_CYR, hfi1_type, ctx_sharing);
 			}
 		} else {
 			for (i = 0; i < ep_count; ++i) {
