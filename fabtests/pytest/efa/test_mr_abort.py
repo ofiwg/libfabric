@@ -216,25 +216,32 @@ def abort_owes_rx_completion(protocol):
     return protocol in ("LONGREAD",)
 
 
-# --- Test: send ---
+# --- Test: send and tagged ---
 @pytest.mark.functional
 @pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
 @pytest.mark.parametrize("cancel_order", ["reverse", "random"])
 @pytest.mark.parametrize("close_side", ["initiator"]) # TODO add target
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
+@pytest.mark.parametrize("tagged", [True, False])
 @pytest.mark.parametrize("protocol", ["EAGER", "MEDIUM", "LONGCTS", "LONGREAD", "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"])
 def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
-                       ops_per_mr, protocol, memory_type_symm):
+                       ops_per_mr, tagged, protocol, memory_type_symm):
+
     if fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
     if close_side == "target":
         pytest.skip("efa does not currently support canceling posted RX buffers")
 
+    send_op = "send"
+    if tagged:
+        if fabric == "efa-direct":
+            pytest.skip("efa-direct does not support tagged sends")
+        send_op = "tagged"
+
     env, message_size = determine_settings_for_proto(protocol, memory_type_symm, fabric)
 
-    # read-base (LONGREAD/RUNTREAD) and the larger LONGCTS sizes require RDMA
-    # read / message sizes that efa-direct does not support for sends.
+    # efa-direct max message size is 8k
     if fabric == "efa-direct" and message_size > 8192:
         pytest.skip("efa-direct max send size is 8KB")
 
@@ -247,42 +254,9 @@ def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
     # send so the target reliably owes -- and can enforce via -X -- exactly
     # one completion per send.
     homogeneous_flag = " -H" if protocol == "LONGREAD" else ""
-    command = (f"fi_mr_abort -T send -C {cancel_order}"
+    command = (f"fi_mr_abort -T {send_op} -C {cancel_order}"
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
                f" -S {message_size}{owe_flag}{homogeneous_flag}  -A ep_first")
     test = ClientServerTest(cmdline_args, command, timeout=360, fabric=fabric,
-                            memory_type=memory_type_symm, additional_env=env)
-    test.run()
-
-
-# --- Test: tagged ---
-@pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"])  # TODO add test for efa fabric
-@pytest.mark.parametrize("cancel_order", ["reverse", "random"])
-@pytest.mark.parametrize("close_side", ["initiator"]) # TODO add target
-@pytest.mark.parametrize("ops_per_mr", [1, 4])
-@pytest.mark.parametrize("protocol", ["EAGER", "MEDIUM", "LONGCTS", "LONGREAD", "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"])
-def test_mr_abort_tagged(cmdline_args, fabric, cancel_order, close_side,
-                         ops_per_mr, protocol, memory_type_symm):
-    if fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
-        pytest.skip("fi_mr_abort not supported with efa with SHM")
-
-    if fabric == "efa-direct":
-        pytest.skip("efa-direct does not support tagged messages")
-
-    if close_side == "target":
-        pytest.skip("efa does not currently support canceling posted RX buffers")
-
-    env, message_size = determine_settings_for_proto(protocol, memory_type_symm, fabric)
-
-    owe_flag = " -X" if abort_owes_rx_completion(protocol) else ""
-    # See test_mr_abort_send: -H sets HOMOGENEOUS_PEERS so LONGREAD ignores
-    # the handshake and is selected from the first send, letting the target
-    # enforce (via -X) exactly one completion per send.
-    homogeneous_flag = " -H" if protocol == "LONGREAD" else ""
-    command = (f"fi_mr_abort -T tagged -C {cancel_order}"
-               f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
-               f" -S {message_size}{owe_flag}{homogeneous_flag} -A ep_first")
-    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=fabric,
                             memory_type=memory_type_symm, additional_env=env)
     test.run()
