@@ -436,8 +436,10 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	 * TODO: continue communication with peer by saving the previous state
 	 * and restoring it
 	 */
+	EFA_GENLOCK_LOCK(&efa_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	HASH_FIND(hh, ep->base_ep.av->evicted_peers_hashset, &efa_ep_addr,
 		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
+	EFA_GENLOCK_UNLOCK(&efa_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	if (OFI_UNLIKELY(!!efa_ep_addr_hashable)) {
 		EFA_WARN(FI_LOG_CQ, "Received packet from peer already evicted "
 				    "from the implicit AV\n");

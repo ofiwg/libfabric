@@ -81,7 +81,7 @@ struct efa_av {
 
 	size_t implicit_av_size;
 	struct dlist_entry implicit_av_lru_list OFI_TSA_GUARDED_BY(efa_implicit_av_lock_sym);
-	struct efa_ep_addr_hashable *evicted_peers_hashset;
+	struct efa_ep_addr_hashable *evicted_peers_hashset OFI_TSA_GUARDED_BY(efa_implicit_av_lock_sym);
 };
 
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,

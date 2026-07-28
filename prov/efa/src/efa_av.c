@@ -865,6 +865,7 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 }
 
 static int efa_av_close(struct fid *fid)
+	OFI_TSA_NO_ANALYSIS
 {
 	struct efa_av *av;
 	int err = 0;
