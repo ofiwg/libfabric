@@ -49,7 +49,6 @@ void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
 void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 		      bool release_from_implicit_av);
 
-void efa_conn_release_ah_unsafe(struct efa_av *av, struct efa_conn *conn,
-				bool release_from_implicit_av);
+void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *conn);
 
 #endif
