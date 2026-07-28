@@ -76,6 +76,7 @@
 #include <rdma/fi_ext_efa.h>
 
 #include <shared.h>
+#include "efa_shared.h"
 #include "benchmarks/benchmark_shared.h"
 
 
@@ -525,41 +526,6 @@ out:
 	return ret;
 }
 
-enum {
-	OPT_HIGH_PPS = 256,
-	OPT_POST_LIST,
-	OPT_NUM_EPS,
-};
-
-static struct option efa_extra_opts[] = {
-	{"high-pps", no_argument, NULL, OPT_HIGH_PPS},
-	{"post-list", required_argument, NULL, OPT_POST_LIST},
-	{"num-eps", required_argument, NULL, OPT_NUM_EPS},
-	{0, 0, 0, 0}
-};
-
-static struct option *efa_long_opts;
-
-/*
- * Build a merged long options table by prepending EFA-specific options
- * to the shared fabtests long_opts. This allows getopt_long to parse
- * both EFA-specific (e.g. --high-pps) and shared (e.g. --no-rx-cq-data)
- * long options in a single call.
- */
-static void build_long_opts(void)
-{
-	int shared_cnt, i;
-	int extra_cnt = sizeof(efa_extra_opts) / sizeof(efa_extra_opts[0]) - 1;
-
-	for (shared_cnt = 0; long_opts[shared_cnt].name; shared_cnt++)
-		;
-	efa_long_opts = calloc(shared_cnt + extra_cnt + 1, sizeof(struct option));
-	for (i = 0; i < extra_cnt; i++)
-		efa_long_opts[i] = efa_extra_opts[i];
-	for (i = 0; i < shared_cnt; i++)
-		efa_long_opts[extra_cnt + i] = long_opts[i];
-}
-
 int main(int argc, char **argv)
 {
 	int op, ret, cleanup_ret;
@@ -578,7 +544,7 @@ int main(int argc, char **argv)
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 	hints->addr_format = opts.address_format;
 
-	build_long_opts();
+	build_efa_long_opts();
 
 	while ((op = getopt_long(argc, argv, "hq:" CS_OPTS INFO_OPTS API_OPTS
 			    BENCHMARK_OPTS, efa_long_opts,
@@ -606,16 +572,10 @@ int main(int argc, char **argv)
 			ft_benchmark_usage();
 			FT_PRINT_OPTS_USAGE("-o <op>",
 				"RMA op type: write|writedata|read (default: write)");
-			FT_PRINT_OPTS_USAGE("--high-pps",
-				"Enable FI_EFA_WR_HIGH_PPS flag on writes");
-			FT_PRINT_OPTS_USAGE("--post-list <n>",
-				"Batch n posts per doorbell using FI_MORE (default: 1)");
-			FT_PRINT_OPTS_USAGE("-q <n>, --num-eps <n>",
-				"Number of endpoints/QPs (default: 1)");
 			fprintf(stderr, "Note: read/write bw tests are bidirectional.\n"
 					"      writedata bw test is unidirectional"
 					" from the client side.\n");
-			ft_longopts_usage();
+			efa_longopts_usage();
 			return EXIT_FAILURE;
 		default:
 			if (!ft_parse_long_opts(op, optarg))
