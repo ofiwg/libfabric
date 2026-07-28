@@ -147,19 +147,23 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 	pthread_mutex_lock(&opx_rdma_ops.lock);
 
 	if (opx_rdma_ops.libhfi1verbs != NULL) {
-		fi_opx_ref_inc(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
 		pthread_mutex_unlock(&opx_rdma_ops.lock);
 		return opx_rdma_ops.hfi1_direct_verbs_enabled;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] one time initialization\n");
 
-	fi_opx_ref_init(&opx_rdma_ops.ref_cnt, 0, "opx_rdma_ops");
-
 	/* Set old tid functions until/unless we pass and enable the new support */
 	opx_fn_hfi1_free_tid   = opx_hfi_free_tid;
 	opx_fn_hfi1_update_tid = opx_hfi_update_tid;
 
+	/* libibverbs discovers and registers hfi1's rdma-core provider plugin
+	   (/usr/lib64/libibverbs/libhfi1verbs-*.so) internally, lazily, the
+	   first time ibv_get_device_list() is called. That registration does
+	   not safely survive a dlclose()+dlopen() cycle of libibverbs/
+	   libhfi1verbs within the same process, so once loaded here,
+	   libhfi1verbs and libibverbs are kept resident for the life of the
+	   process and are never dlclose()'d. */
 	opx_rdma_ops.libhfi1verbs = dlopen("libhfi1verbs.so.1", RTLD_LAZY);
 
 	if (!opx_rdma_ops.libhfi1verbs) {
@@ -198,9 +202,7 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 	OPX_HFI1_RDMA_OP_DLSYM(opx_rdma_ops.libhfi1verbs, hfi1_ack_event);
 	OPX_HFI1_RDMA_OP_DLSYM(opx_rdma_ops.libhfi1verbs, hfi1_ctxt_reset);
 
-	if (opx_rdma_ops.hfi1_direct_verbs_enabled) {
-		fi_opx_ref_inc(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
-	} else {
+	if (!opx_rdma_ops.hfi1_direct_verbs_enabled) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Could not setup HFI1 Direct Verbs.\n");
 		dlclose(opx_rdma_ops.libhfi1verbs);
 		opx_rdma_ops.libhfi1verbs = NULL;
@@ -743,33 +745,12 @@ void opx_hfi1_rdma_context_close(void *ibv_context)
 	/* ignore errors */
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI1-DIRECT] Close context %p and libraries\n", ibv_context);
+
+	/* Close only the device context; libhfi1verbs/libibverbs themselves
+	   are never dlclose()'d (see opx_hfi1_rdma_op_initialize() for why). */
 	if (opx_rdma_ops.libibverbs && ibv_context) {
 		OPX_HFI1_RDMA_FN(ibv_close_device)((struct ibv_context *) ibv_context);
 	}
-	opx_hfi1_rdma_lib_close();
-}
-
-void opx_hfi1_rdma_lib_close()
-{
-	pthread_mutex_lock(&opx_rdma_ops.lock);
-	if (opx_rdma_ops.libhfi1verbs) {
-		if (ofi_atomic_get64(&opx_rdma_ops.ref_cnt)) {
-			fi_opx_ref_dec(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
-		}
-		if (ofi_atomic_get64(&opx_rdma_ops.ref_cnt)) {
-			pthread_mutex_unlock(&opx_rdma_ops.lock);
-			return;
-		}
-		fi_opx_ref_finalize(&opx_rdma_ops.ref_cnt, "opx_rdma_ops");
-		dlclose(opx_rdma_ops.libhfi1verbs);
-		opx_rdma_ops.libhfi1verbs = NULL;
-
-		if (opx_rdma_ops.libibverbs) {
-			dlclose(opx_rdma_ops.libibverbs);
-		}
-		opx_rdma_ops.libibverbs = NULL;
-	}
-	pthread_mutex_unlock(&opx_rdma_ops.lock);
 }
 
 #else /* HAVE_HFI1_DIRECT_VERBS */
@@ -845,11 +826,6 @@ int32_t opx_hfi1_rdma_free_tid(struct fi_opx_hfi1_context *context, uint64_t tid
 }
 
 void opx_hfi1_rdma_context_close(void *ibv_context)
-{
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
-}
-
-void opx_hfi1_rdma_lib_close()
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
 }
