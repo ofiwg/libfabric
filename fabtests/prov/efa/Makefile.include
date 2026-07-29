@@ -96,6 +96,7 @@ prov_efa_src_fi_efa_rdm_remote_exit_early_LDADD = libfabtests.la
 
 prov_efa_src_fi_efa_multi_ep_stress_SOURCES = \
 	prov/efa/src/multi_ep_stress.c \
+	prov/efa/src/efa_shared.c \
 	$(efa_rnr_srcs)
 prov_efa_src_fi_efa_multi_ep_stress_LDADD = libfabtests.la
 
