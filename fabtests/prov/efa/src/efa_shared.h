@@ -34,4 +34,7 @@ void build_efa_long_opts(void);
 
 void efa_longopts_usage(void);
 
+int efa_calc_peer_distribution(int my_idx, int my_count, int peer_count,
+			       int *num_peers, int **peer_ids);
+
 #endif /* _EFA_SHARED_H */
