@@ -12,35 +12,52 @@ pytestmark = pytest.mark.pre_release
 # instance.
 MR_ABORT_NUM_MRS = 2046
 
-
 BASE_MESSAGE_SIZES = [
+    64,
     4096,
     65536,
     1048576,
     10485760,
 ]
 
+SL_LOW_LATENCY_MAX_WRITE_SIZE = 128
+
+
 def combined_msg_size_params():
     for rma_op in ["write", "read", "writedata"]:
         for size in BASE_MESSAGE_SIZES:
 
             high_pps_vals = [None]
+            sl_low_latency_vals = [None]
 
             if (rma_op == "write" or rma_op == "writedata"):
                 # High PPS parametrization is only applicable for RDMA writes
                 high_pps_vals = [True, False]
 
+                # Low latency SL is only applicable for small RDMA writes
+                if size < SL_LOW_LATENCY_MAX_WRITE_SIZE:
+                    sl_low_latency_vals = [True, False]
+
             marks = []
             if size == 10485760:
+                # 10 MiB: large transfers consume far more memory/NIC resources
+                # Run this size serially to avoid resource contention with
+                # parallel workers
                 marks = [pytest.mark.serial]
 
             for high_pps_val in high_pps_vals:
-                id = f"{rma_op}-{size}"
-                if high_pps_val is not None:
-                    id += f"-high_pps-{high_pps_val}"
+                for sl_low_latency_val in sl_low_latency_vals:
 
-                yield pytest.param(size, rma_op, high_pps_val,
-                                   marks=marks, id=id)
+                    id = f"{rma_op}-{size}"
+
+                    if high_pps_val is not None:
+                        id += f"-high_pps-{high_pps_val}"
+
+                    if sl_low_latency_val is not None:
+                        id += f"-sl_low_lat-{sl_low_latency_val}"
+
+                    yield pytest.param(size, rma_op, high_pps_val,
+                                       sl_low_latency_val, marks=marks, id=id)
 
 
 # --- Test: abort (RMA) ---
@@ -49,9 +66,10 @@ def combined_msg_size_params():
 @pytest.mark.parametrize("cancel_order", ["reverse", "random"])
 @pytest.mark.parametrize("close_side", ["initiator", "target"])
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
-@pytest.mark.parametrize("message_size, rma_op, high_pps",
+@pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
                          list(combined_msg_size_params()))
-def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr, high_pps, message_size, memory_type_symm):
+def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr,
+                  high_pps, sl_low_latency, message_size, memory_type_symm):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
@@ -66,6 +84,11 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
         assert(rma_op != "read")
         command += " --high-pps"
 
+    if sl_low_latency:
+        assert(rma_op != "read")
+        assert(message_size < 128)
+        command += " --sl-low-latency"
+
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
     test.run()
 
@@ -73,9 +96,10 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
 # --- Test: partial (2 MRs on same buffer) ---
 @pytest.mark.functional
 @pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
-@pytest.mark.parametrize("message_size, rma_op, high_pps",
+@pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
                          list(combined_msg_size_params()))
-def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps, message_size, memory_type_symm):
+def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
+                          sl_low_latency, message_size, memory_type_symm):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
@@ -84,6 +108,11 @@ def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps, message_si
     if high_pps:
         assert(rma_op != "read")
         command += " --high-pps"
+
+    if sl_low_latency:
+        assert(rma_op != "read")
+        assert(message_size < 128)
+        command += " --sl-low-latency"
 
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
     test.run()

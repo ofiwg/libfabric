@@ -22,6 +22,7 @@ enum {
 	OPT_HIGH_PPS = 256,
 	OPT_POST_LIST,
 	OPT_NUM_EPS,
+	OPT_SL_LOW_LATENCY,
 };
 
 /*
