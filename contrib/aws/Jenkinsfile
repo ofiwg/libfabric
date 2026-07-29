@@ -17,6 +17,9 @@ import groovy.transform.Field
 @Field def samwise_test_runner_path = "/tmp/SamwiseTestRunner"
 @Field def samwise_test_schema_path = "/tmp/SamwiseTestSchema"
 
+def is_post_merge() {
+    return env.CHANGE_ID == null
+}
 
 def get_account_id() {
     return sh (
@@ -186,9 +189,20 @@ def get_cluster_name(build_tag, os, instance_type) {
 ]
 
 def check_for_relevant_changes() {
-    sh "git fetch origin ${env.CHANGE_TARGET}:refs/remotes/origin/${env.CHANGE_TARGET} --no-tags --no-recurse-submodules"
+    def diff_range
+    if (is_post_merge()) {
+        def prev = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT
+        if (!prev) {
+            echo "No previous successful commit recorded; running to seed the baseline."
+            return
+        }
+        diff_range = "${prev}..HEAD"
+    } else {
+        sh "git fetch origin ${env.CHANGE_TARGET}:refs/remotes/origin/${env.CHANGE_TARGET} --no-tags --no-recurse-submodules"
+        diff_range = "origin/${env.CHANGE_TARGET}...HEAD"
+    }
     def all_changes = sh(
-        script: "git diff --name-only origin/${env.CHANGE_TARGET}...HEAD",
+        script: "git diff --name-only ${diff_range}",
         returnStdout: true
     ).trim()
     if (!all_changes) {
@@ -258,8 +272,11 @@ def record_coverage() {
         return
     }
     // Delta coverage vs. the PR target branch (needs the Git Forensics plugin).
-    discoverGitReferenceBuild(targetBranch: env.CHANGE_TARGET ?: 'main')
-    // Informational only for now: no qualityGates, 
+    // Post-merge produces the baseline
+    if (!is_post_merge()) {
+        discoverGitReferenceBuild(targetBranch: env.CHANGE_TARGET ?: 'main')
+    }
+    // Informational only for now: no qualityGates,
     // Add a gate here later, e.g.
     // qualityGates: [[threshold: 80.0, metric: 'LINE', baseline: 'MODIFIED_LINES', unstable: true]]
     recordCoverage(
@@ -285,11 +302,12 @@ def post_build_actions() {
     regions.each { region ->
         sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
     }
-    // Windows Cluster, has a different name
-    sh """
-        . ${venv_path}/bin/activate
-        ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
-    """
+    if (!is_post_merge()) {
+        sh """
+            . ${venv_path}/bin/activate
+            ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
+        """
+    }
 }
 
 def get_single_node_windows_test_stage_with_lock(stage_name, lock_label) {
@@ -330,6 +348,102 @@ def get_test_stage_with_lock(stage_name, build_tag, os, instance_type, instance_
             }
         }
     }
+}
+
+def build_pr_test_stages() {
+    def stages = [:]
+    def timeout = "--timeout 90"
+    def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
+    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID ${test_suite_pkg}"
+    def pr_ci_tests = "--test-list test_pr_ci_fabtests test_run_efa_unit_tests"
+    def pr_ci_tests_hpc = "--test-list test_pr_ci_fabtests test_pr_ci_imb test_run_efa_unit_tests"
+
+    def efa_provider = "--test-libfabric-provider efa"
+    def shm_provider = "--test-libfabric-provider shm --enable-efa false"
+    def sm2_provider = "--test-libfabric-provider sm2 --enable-efa false"
+    def tcp_provider = "--test-libfabric-provider tcp --enable-efa false"
+    def sockets_provider = "--test-libfabric-provider sockets --enable-efa false"
+
+    def addl_args_efa = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests}"
+    def addl_args_neuron = "${timeout} ${generic_pf} ${efa_provider} --test-list test_neuron_sdk_compilation --use-prebuilt-accelerator-ami neuron"
+    def addl_args_efa_hpc = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests_hpc}"
+    def addl_args_efa_hpc_dso = "${addl_args_efa_hpc} test_pr_ci_dso"
+    def addl_args_shm = "${timeout} ${generic_pf} ${shm_provider} ${pr_ci_tests}"
+    def addl_args_sm2 = "${timeout} ${generic_pf} ${sm2_provider} ${pr_ci_tests}"
+    def addl_args_tcp = "${timeout} ${generic_pf} ${tcp_provider} ${pr_ci_tests}"
+    def addl_args_sockets = "${timeout} ${generic_pf} ${sockets_provider} ${pr_ci_tests}"
+
+    // Use lockable resources to limit the number of jobs that can get executed in parallel
+    def hpc7g16x_lock_label = "hpc7g16x"
+    def hpc8a96x_lock_label = "hpc8a96x"
+    def c7g16x_lock_label   = "c7g16x"
+    def c7gn16x_lock_label  = "c7gn16x"
+    def c8gn16x_lock_label  = "c8gn16x"
+    def hpc6a48x_lock_label = "hpc6a48x"
+    def g4dn16x_lock_label  = "g4dn16x"
+    def c5n18x_lock_label   = "c5n18x"
+    def c7i16x_lock_label   = "c7i16x"
+
+    // Multi Node Tests - EFA
+    stages["2_hpc7g_alinux2023_efa"] = get_test_stage_with_lock("2_hpc7g_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa_hpc}")
+    stages["2_hpc8a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc8a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc8a.96xlarge", 2, "eu-north-1", hpc8a96x_lock_label, "--odcr cr-0c2007d91766881ab ${addl_args_efa_hpc}")
+    stages["2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock("2_c7g_ubuntu2404_efa",   env.BUILD_TAG, "ubuntu2404", "c7g.16xlarge",   2, "us-west-2", c7g16x_lock_label,   "--odcr cr-03255c1eeaf9777db ${addl_args_efa}")
+    stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
+    stages["2_c8gn_alinux2023_efa"]  = get_test_stage_with_lock("2_c8gn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "c8gn.16xlarge",  2, "us-west-2", c8gn16x_lock_label,  "--odcr cr-0698f5e644dab6868 ${addl_args_efa}")
+    stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa_hpc_dso}")
+
+    // Multi Node Tests - Accelerator EFA
+    stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.16xlarge",  2, "us-west-2",      g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_efa}")
+
+    // Single Node Windows Test
+    stages["EFA_Windows_Test"] = get_single_node_windows_test_stage_with_lock("EFA_Windows_Test", c5n18x_lock_label)
+
+    // Multi Node Tests - Other Providers
+    stages["2_c7i_alinux2023_tcp"]      = get_test_stage_with_lock("2_c7i_alinux2023_tcp",      env.BUILD_TAG, "alinux2023", "c7i.16xlarge", 2, "us-west-2", c7i16x_lock_label, "--odcr cr-02f365311e1143b20 ${addl_args_tcp}")
+    stages["2_c7i_ubuntu2204_sockets"]  = get_test_stage_with_lock("2_c7i_ubuntu2204_sockets",  env.BUILD_TAG, "ubuntu2204", "c7i.16xlarge", 2, "us-west-2", c7i16x_lock_label, "--odcr cr-02f365311e1143b20 ${addl_args_sockets}")
+
+    // Single Node Tests - SM2 / SHM
+    stages["1_g4dn_alinux2023_sm2"]              = get_test_stage_with_lock("1_g4dn_alinux2023_sm2",              env.BUILD_TAG, "alinux2023", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_sm2}")
+    stages["1_g4dn_ubuntu2404_shm"]              = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm",              env.BUILD_TAG, "ubuntu2404", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_shm}")
+    stages["1_g4dn_ubuntu2404_shm_disable-cma"]  = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm_disable-cma",  env.BUILD_TAG, "ubuntu2404", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_shm} --enable-cma false")
+
+    // Single Node Tests - Compilation wtih Neuron SDK
+    stages["1_c5n_alinux2023_neuron"]  = get_test_stage_with_lock("1_c5n_alinux2023_neuron", env.BUILD_TAG, "alinux2023", "c5n.18xlarge",  1, "us-east-1", c5n18x_lock_label, "--odcr cr-03c9932f13d83e2d9 ${addl_args_neuron}")
+
+    return stages
+}
+
+def build_postmerge_test_stages() {
+    def stages = [:]
+    def timeout = "--timeout 90"
+    def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
+
+    def commit_selector = "--test-type commit --test-libfabric-commit ${env.GIT_COMMIT}"
+    def generic_pf = "--cluster-type manual_cluster --test-target libfabric ${commit_selector} ${test_suite_pkg}"
+
+    def efa_provider = "--test-libfabric-provider efa"
+    def unit_tests_coverage = "--test-list 'test_run_efa_unit_tests[unittest-debug] and not asan' 'test_run_efa_unit_tests_gtest[unittest-debug] and not asan'"
+
+    def addl_args_efa = "${timeout} ${generic_pf} ${efa_provider} ${unit_tests_coverage}"
+
+    def hpc7g16x_lock_label = "hpc7g16x"
+    def hpc8a96x_lock_label = "hpc8a96x"
+    def c7g16x_lock_label   = "c7g16x"
+    def c7gn16x_lock_label  = "c7gn16x"
+    def c8gn16x_lock_label  = "c8gn16x"
+    def hpc6a48x_lock_label = "hpc6a48x"
+    def g4dn16x_lock_label  = "g4dn16x"
+
+    // only EFA provider needs to be tested for unit test coverage
+    stages["2_hpc7g_alinux2023_efa"] = get_test_stage_with_lock("2_hpc7g_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa}")
+    stages["2_hpc8a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc8a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc8a.96xlarge", 2, "eu-north-1", hpc8a96x_lock_label, "--odcr cr-0c2007d91766881ab ${addl_args_efa}")
+    stages["2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock("2_c7g_ubuntu2404_efa",   env.BUILD_TAG, "ubuntu2404", "c7g.16xlarge",   2, "us-west-2", c7g16x_lock_label,   "--odcr cr-03255c1eeaf9777db ${addl_args_efa}")
+    stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
+    stages["2_c8gn_alinux2023_efa"]  = get_test_stage_with_lock("2_c8gn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "c8gn.16xlarge",  2, "us-west-2", c8gn16x_lock_label,  "--odcr cr-0698f5e644dab6868 ${addl_args_efa}")
+    stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa}")
+    stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.16xlarge",  2, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_efa}")
+
+    return stages
 }
 
 pipeline {
@@ -391,66 +505,8 @@ pipeline {
             when { not { environment name: 'SKIP_TESTS', value: 'true' } }
             steps {
                 script {
-                    def stages = [:]
-                    def timeout = "--timeout 90"
-                    def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
-                    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID ${test_suite_pkg}"
-                    def unit_tests = "--test-list test_run_efa_unit_tests"
-                    def pr_ci_tests = "--test-list test_pr_ci_fabtests test_run_efa_unit_tests"
-                    def pr_ci_tests_hpc = "--test-list test_pr_ci_fabtests test_pr_ci_imb test_run_efa_unit_tests"
-
-                    def efa_provider = "--test-libfabric-provider efa"
-                    def shm_provider = "--test-libfabric-provider shm --enable-efa false"
-                    def sm2_provider = "--test-libfabric-provider sm2 --enable-efa false"
-                    def tcp_provider = "--test-libfabric-provider tcp --enable-efa false"
-                    def sockets_provider = "--test-libfabric-provider sockets --enable-efa false"
-
-                    def addl_args_efa = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests}"
-                    def addl_args_neuron = "${timeout} ${generic_pf} ${efa_provider} --test-list test_neuron_sdk_compilation --use-prebuilt-accelerator-ami neuron"
-                    def addl_args_efa_hpc = "${timeout} ${generic_pf} ${efa_provider} ${pr_ci_tests_hpc}"
-                    def addl_args_efa_hpc_dso = "${addl_args_efa_hpc} test_pr_ci_dso"
-                    def addl_args_shm = "${timeout} ${generic_pf} ${shm_provider} ${pr_ci_tests}"
-                    def addl_args_sm2 = "${timeout} ${generic_pf} ${sm2_provider} ${pr_ci_tests}"
-                    def addl_args_tcp = "${timeout} ${generic_pf} ${tcp_provider} ${pr_ci_tests}"
-                    def addl_args_sockets = "${timeout} ${generic_pf} ${sockets_provider} ${pr_ci_tests}"
-
-                    // Use lockable resources to limit the number of jobs that can get executed in parallel
-                    def hpc7g16x_lock_label = "hpc7g16x"
-                    def hpc8a96x_lock_label = "hpc8a96x"
-                    def c7g16x_lock_label   = "c7g16x"
-                    def c7gn16x_lock_label  = "c7gn16x"
-                    def c8gn16x_lock_label  = "c8gn16x"
-                    def hpc6a48x_lock_label = "hpc6a48x"
-                    def g4dn16x_lock_label  = "g4dn16x"
-                    def c5n18x_lock_label   = "c5n18x"
-                    def c7i16x_lock_label   = "c7i16x"
-
-                    // Multi Node Tests - EFA
-                    stages["2_hpc7g_alinux2023_efa"] = get_test_stage_with_lock("2_hpc7g_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa_hpc}")
-                    stages["2_hpc8a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc8a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc8a.96xlarge", 2, "eu-north-1", hpc8a96x_lock_label, "--odcr cr-0c2007d91766881ab ${addl_args_efa_hpc}")
-                    stages["2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock("2_c7g_ubuntu2404_efa",   env.BUILD_TAG, "ubuntu2404", "c7g.16xlarge",   2, "us-west-2", c7g16x_lock_label,   "--odcr cr-03255c1eeaf9777db ${addl_args_efa}")
-                    stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
-                    stages["2_c8gn_alinux2023_efa"]  = get_test_stage_with_lock("2_c8gn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "c8gn.16xlarge",  2, "us-west-2", c8gn16x_lock_label,  "--odcr cr-0698f5e644dab6868 ${addl_args_efa}")
-                    stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa_hpc_dso}")
-
-                    // Multi Node Tests - Accelerator EFA
-                    stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.16xlarge",  2, "us-west-2",      g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_efa}")
-
-                    // Single Node Windows Test
-                    stages["EFA_Windows_Test"] = get_single_node_windows_test_stage_with_lock("EFA_Windows_Test", c5n18x_lock_label)
-
-                    // Multi Node Tests - Other Providers
-                    stages["2_c7i_alinux2023_tcp"]      = get_test_stage_with_lock("2_c7i_alinux2023_tcp",      env.BUILD_TAG, "alinux2023", "c7i.16xlarge", 2, "us-west-2", c7i16x_lock_label, "--odcr cr-02f365311e1143b20 ${addl_args_tcp}")
-                    stages["2_c7i_ubuntu2204_sockets"]  = get_test_stage_with_lock("2_c7i_ubuntu2204_sockets",  env.BUILD_TAG, "ubuntu2204", "c7i.16xlarge", 2, "us-west-2", c7i16x_lock_label, "--odcr cr-02f365311e1143b20 ${addl_args_sockets}")
-
-                    // Single Node Tests - SM2 / SHM
-                    stages["1_g4dn_alinux2023_sm2"]              = get_test_stage_with_lock("1_g4dn_alinux2023_sm2",              env.BUILD_TAG, "alinux2023", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_sm2}")
-                    stages["1_g4dn_ubuntu2404_shm"]              = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm",              env.BUILD_TAG, "ubuntu2404", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_shm}")
-                    stages["1_g4dn_ubuntu2404_shm_disable-cma"]  = get_test_stage_with_lock("1_g4dn_ubuntu2404_shm_disable-cma",  env.BUILD_TAG, "ubuntu2404", "g4dn.16xlarge", 1, "us-west-2", g4dn16x_lock_label, "--odcr cr-02a4720192f900b53 ${addl_args_shm} --enable-cma false")
-
-                    // Single Node Tests - Compilation wtih Neuron SDK
-                    stages["1_c5n_alinux2023_neuron"]  = get_test_stage_with_lock("1_c5n_alinux2023_neuron", env.BUILD_TAG, "alinux2023", "c5n.18xlarge",  1, "us-east-1", c5n18x_lock_label, "--odcr cr-03c9932f13d83e2d9 ${addl_args_neuron}")
-
+                    def stages = is_post_merge() ? build_postmerge_test_stages()
+                                                 : build_pr_test_stages()
                     parallel stages
                 }
             }
