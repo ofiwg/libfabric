@@ -534,10 +534,10 @@ struct fi_opx_ep {
 	struct fi_opx_cntr *init_write_cntr;
 	uint64_t	    rx_cq_bflags;
 
-	/* == CACHE LINE 5 == */
+	/* == CACHE LINE 5-6 == */
 	/* hfisvc is placed first so its offset is fixed regardless of
 	   ofi_spin_t size (which varies between DEBUG and RELEASE builds).
-	   Sized to exactly 64 bytes (one cacheline). */
+	   Sized to exactly 128 bytes (two cachelines). */
 #if HAVE_HFISVC
 	struct {
 		/**
@@ -555,6 +555,21 @@ struct fi_opx_ep {
 		hfisvc_client_completion_queue_t internal_completion_queues[OPX_MAX_TX_CONTEXTS];
 
 		/**
+		 * @brief Completion queues used EXCLUSIVELY for ephemeral memory registration
+		 * completions (cmd_dma_access_once_va), kept separate from
+		 * internal_completion_queues (used for rdma_read/rdma_write/RZV target-side
+		 * completions). HFISVC divides its total in-flight completion limit across
+		 * completion queues, so segregating initiator-side (ephemeral registration)
+		 * completions from target-side (rdma_read) completions here avoids a live-lock
+		 * in biband traffic where both ranks are simultaneously sending and receiving:
+		 * without this separation, both ranks could exhaust the shared in-flight limit
+		 * on rdma_read (EAGAIN) with neither able to make progress, since freeing space
+		 * requires the other rank's rdma_read to complete.
+		 * (one per plane for dual-plane support)
+		 */
+		hfisvc_client_completion_queue_t emr_completion_queues[OPX_MAX_TX_CONTEXTS];
+
+		/**
 		 * @brief Pointer to the CQ's hfisvc completion queue. Use this completion queue
 		 * when no further action is needed before bubbling up the completion to
 		 * the user/middleware.
@@ -563,15 +578,23 @@ struct fi_opx_ep {
 
 		uint32_t rdma_read_count[OPX_MAX_TX_CONTEXTS];
 		uint32_t num_queues;
-		uint32_t unused_pad;
-		uint64_t unused_qw;
+
+		/* Explicit padding to fill out the two-cacheline (128 byte) budget; the
+		   compiler does not automatically pad this struct to that size. Computed
+		   from the sizes of the preceding members so it (and the size assert
+		   below) automatically stays correct if OPX_MAX_TX_CONTEXTS ever changes. */
+		uint8_t unused_pad[(FI_OPX_CACHE_LINE_SIZE * 2) -
+				   (sizeof(hfisvc_client_command_queue_t) * OPX_MAX_TX_CONTEXTS +
+				    sizeof(hfisvc_client_completion_queue_t) * OPX_MAX_TX_CONTEXTS * 2 +
+				    sizeof(hfisvc_client_completion_queue_t *) +
+				    sizeof(uint32_t) * OPX_MAX_TX_CONTEXTS + sizeof(uint32_t))];
 	} hfisvc;
 #else
 	/* Placeholder to maintain cacheline alignment when hfisvc is disabled */
-	uint8_t unused_cl5[FI_OPX_CACHE_LINE_SIZE];
+	uint8_t unused_cl5_6[FI_OPX_CACHE_LINE_SIZE * 2];
 #endif
 
-	/* == CACHE LINE 6 == */
+	/* == CACHE LINE 7 == */
 	/* Hot-path scalars: accessed on every poll, send, recv, or match. */
 	bool		   use_prefault_write;
 	bool		   use_expected_tid_rzv;
@@ -614,11 +637,11 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, common_info) == (FI_OPX_CACHE
 #if HAVE_HFISVC
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, hfisvc) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Offset of fi_opx_ep->hfisvc should start at cacheline 5!");
-OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_ep *) 0)->hfisvc) == FI_OPX_CACHE_LINE_SIZE,
-			"fi_opx_ep->hfisvc must be exactly one cacheline!");
+OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_ep *) 0)->hfisvc) == (FI_OPX_CACHE_LINE_SIZE * 2),
+			"fi_opx_ep->hfisvc must be exactly two cachelines!");
 #endif
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, use_prefault_write) == (FI_OPX_CACHE_LINE_SIZE * 6),
-			"Offset of fi_opx_ep->use_prefault_write should start at cacheline 6!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, use_prefault_write) == (FI_OPX_CACHE_LINE_SIZE * 7),
+			"Offset of fi_opx_ep->use_prefault_write should start at cacheline 7!");
 
 /*
  * A 'scalable endpoint' may not be directly specified in a data movement
@@ -3557,26 +3580,33 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 }
 #endif
 
+#if HAVE_HFISVC
 __OPX_FORCE_INLINE__
-void opx_ep_hfisvc_poll_internal_queue(struct fi_opx_ep *opx_ep)
+void opx_ep_hfisvc_poll_one_queue(struct fi_opx_ep *opx_ep, hfisvc_client_completion_queue_t queue, int ctx_idx)
+{
+	struct hfisvc_client_cq_entry hfisvc_out[64];
+
+	size_t n = (*opx_ep->domain->hfisvc.cq_read)(queue, 0ul /* flags */, hfisvc_out, sizeof(*hfisvc_out), 64);
+	while (n > 0) {
+		for (size_t i = 0; i < n; ++i) {
+			opx_ep_hfisvc_poll_proc_internal_completion(opx_ep, &hfisvc_out[i], ctx_idx);
+		}
+		n = (*opx_ep->domain->hfisvc.cq_read)(queue, 0ul /* flags */, hfisvc_out, sizeof(*hfisvc_out), 64);
+	}
+}
+#endif
+
+__OPX_FORCE_INLINE__
+void opx_ep_hfisvc_poll_queues(struct fi_opx_ep *opx_ep)
 {
 #if HAVE_HFISVC
 	if (!opx_ep->use_hfisvc) {
 		return;
 	}
 
-	struct hfisvc_client_cq_entry hfisvc_out[64];
-
 	for (int ctx_idx = 0; ctx_idx < opx_ep->hfisvc.num_queues; ctx_idx++) {
-		size_t n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queues[ctx_idx],
-							     0ul /* flags */, hfisvc_out, sizeof(*hfisvc_out), 64);
-		while (n > 0) {
-			for (size_t i = 0; i < n; ++i) {
-				opx_ep_hfisvc_poll_proc_internal_completion(opx_ep, &hfisvc_out[i], ctx_idx);
-			}
-			n = (*opx_ep->domain->hfisvc.cq_read)(opx_ep->hfisvc.internal_completion_queues[ctx_idx],
-							      0ul /* flags */, hfisvc_out, sizeof(*hfisvc_out), 64);
-		}
+		opx_ep_hfisvc_poll_one_queue(opx_ep, opx_ep->hfisvc.internal_completion_queues[ctx_idx], ctx_idx);
+		opx_ep_hfisvc_poll_one_queue(opx_ep, opx_ep->hfisvc.emr_completion_queues[ctx_idx], ctx_idx);
 	}
 #endif
 }
@@ -3610,7 +3640,7 @@ void fi_opx_ep_rx_poll_internal(struct fid_ep *ep, const uint64_t caps, const en
 					hfi1_type, ctx_sharing);
 	}
 
-	opx_ep_hfisvc_poll_internal_queue(opx_ep);
+	opx_ep_hfisvc_poll_queues(opx_ep);
 
 	fi_opx_ep_do_pending_work(opx_ep);
 
