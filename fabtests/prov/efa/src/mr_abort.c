@@ -133,6 +133,7 @@ static enum test_mode test_mode = TEST_ABORT;
 static int close_ep_first;
 static int set_homogeneous_peers;
 static bool use_high_pps = false;
+static bool sl_low_latency = false;
 
 /*
  * -r <file>: replay a previously dumped close order instead of generating
@@ -1966,6 +1967,9 @@ int main(int argc, char **argv)
 		case OPT_HIGH_PPS:
 			use_high_pps = true;
 			break;
+		case OPT_SL_LOW_LATENCY:
+			sl_low_latency = true;
+			break;
 		case 'W':
 			num_mrs = atoi(optarg);
 			break;
@@ -2145,6 +2149,9 @@ int main(int argc, char **argv)
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->addr_format = opts.address_format;
+
+	if (sl_low_latency)
+		hints->tx_attr->tclass = FI_TC_LOW_LATENCY;
 
 	/*
 	 * For writedata, fabtests' ft_getinfo() auto-adds FI_RX_CQ_DATA to
