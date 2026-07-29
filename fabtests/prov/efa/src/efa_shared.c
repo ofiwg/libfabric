@@ -14,6 +14,7 @@ static struct option efa_extra_opts[] = {
 	{"high-pps", no_argument, NULL, OPT_HIGH_PPS},
 	{"post-list", required_argument, NULL, OPT_POST_LIST},
 	{"num-eps", required_argument, NULL, OPT_NUM_EPS},
+	{"sl-low-latency", no_argument, NULL, OPT_SL_LOW_LATENCY},
 	{0, 0, 0, 0}
 };
 
@@ -47,6 +48,8 @@ void efa_longopts_usage(void)
 		"Batch n posts per doorbell using FI_MORE (default: 1)");
 	FT_PRINT_OPTS_USAGE("-q <n>, --num-eps <n>",
 		"Number of endpoints/QPs (default: 1)");
+	FT_PRINT_OPTS_USAGE("--sl-low-latency",
+		"Enable FI_TC_LOW_LATENCY on all endpoints used in the test");
 	ft_longopts_usage();
 }
 
