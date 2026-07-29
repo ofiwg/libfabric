@@ -409,6 +409,7 @@ void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
 static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 				  struct efa_ibv_cq *tx_cq,
 				  struct efa_ibv_cq *rx_cq)
+	OFI_TSA_REQUIRES(efa_qp_table_lock_sym)
 {
 	int ret;
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
@@ -573,6 +574,7 @@ void efa_qp_destruct(struct efa_qp *qp)
 }
 
 int efa_base_ep_enable(struct efa_base_ep *base_ep)
+	OFI_TSA_REQUIRES(efa_qp_table_lock_sym)
 {
 	int err;
 

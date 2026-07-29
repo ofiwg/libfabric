@@ -165,6 +165,7 @@ efa_data_path_direct_is_valid_wrid_qp_gen(struct efa_io_cdesc_common *cqe,
  */
 static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 						   struct ibv_poll_cq_attr *attr)
+	OFI_TSA_NO_ANALYSIS
 {
 	uint32_t qpn;
 	struct efa_domain *efa_domain;
