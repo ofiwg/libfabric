@@ -288,6 +288,7 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_common_helpers.c \
 	prov/efa/test/gtest/efa_gtest_rdm_pke_utils.c \
 	prov/efa/test/gtest/efa_gtest_conn.cc \
+	prov/efa/test/gtest/efa_gtest_ah_utils.c \
 	prov/efa/test/gtest/efa_gtest_ah.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_pke_rtm.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_mr.cc \
@@ -335,7 +336,8 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=efa_qp_post_recv \
 	-Wl,--wrap=efa_qp_post_send \
 	-Wl,--wrap=efa_qp_post_read \
-	-Wl,--wrap=efa_qp_post_write
+	-Wl,--wrap=efa_qp_post_write \
+	-Wl,--wrap=malloc
 
 prov_efa_test_gtest_efa_gtest_LIBS = $(linkback)
 

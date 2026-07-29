@@ -24,6 +24,14 @@
 extern "C" {
 #endif
 
+struct efa_ep_addr;
+
+/**
+ * @brief Fabricate a unique peer address from the ep's own address, perturbed
+ * so it differs from the ep's real GID (and from prior fabricated addrs).
+ */
+void efa_test_fabricate_addr(struct fid_ep *ep, struct efa_ep_addr *addr);
+
 /**
  * @brief Whether the real selected EFA device advertises both RDMA read and write.
  */
@@ -117,6 +125,19 @@ void efa_test_set_shm_domain(struct fid_domain *domain,
  * @brief Get util_domain's refcount.
  */
 int efa_test_get_util_domain_ref(struct fid_domain *domain);
+
+/**
+ * @brief Try to acquire domain->util_domain.lock, releasing it again on
+ * success. Should be run on an observer thread to check whether the lock is
+ * currently held.
+ * @return 0 if the lock was free, else EBUSY.
+ */
+int efa_test_util_domain_trylock(struct fid_domain *domain);
+
+/**
+ * @brief Unlock domain->util_domain.lock from the current thread.
+ */
+void efa_test_util_domain_unlock(struct fid_domain *domain);
 
 #ifdef __cplusplus
 }

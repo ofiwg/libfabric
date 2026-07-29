@@ -7,6 +7,7 @@
 
 #include <bitset>
 #include <gmock/gmock.h>
+#include <vector>
 #include <infiniband/efadv.h>
 #include <infiniband/verbs.h>
 
@@ -132,5 +133,17 @@ class MockEfa
 extern "C" {
 EFA_MOCK_FUNCTIONS(EFA_MOCK_GEN_REAL_DECL)
 }
+
+/* Largest number of malloc failures we can inject */
+#define EFA_TEST_MALLOC_FAIL_MAX 64
+
+/**
+ * @brief Fail selected mallocs by 0-based ordinal after calling this function;
+ * all others go to real malloc.
+ * @param[in] ordinals	0-based malloc ordinals to fail (each in
+ *			[0, EFA_TEST_MALLOC_FAIL_MAX)), e.g. {1, 3} fails the 2nd
+ *			and 4th malloc. Order and duplicates don't matter.
+ */
+void efa_test_fail_mallocs(const std::vector<unsigned> &ordinals);
 
 #endif /* EFA_GTEST_COMMON_MOCKS_H */

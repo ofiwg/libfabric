@@ -1,10 +1,12 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+#include "efa_gtest_ah_utils.h"
 #include "efa_gtest_common_helpers.h"
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
 #include <cerrno>
+#include <thread>
 #include <gtest/gtest.h>
 
 using testing::Test;
@@ -113,4 +115,30 @@ TEST_F(EfaAhTest, alloc_enomem_no_evictable_ah_fails)
 
 	addr = efa_test_av_insert_new_ah(resource.ep, resource.av);
 	EXPECT_EQ(addr, (fi_addr_t) FI_ADDR_NOTAVAIL);
+}
+
+/**
+ * @brief Assert that efa_ah_alloc's malloc-failure path must release
+ * domain->util_domain.lock before returning NULL
+ */
+TEST_F(EfaAhTest, alloc_malloc_failure_releases_domain_lock)
+{
+	struct efa_ah *ah;
+	int trylock_ret = -1;
+
+	errno = 0;
+	efa_test_fail_mallocs({0});
+	ah = efa_test_ah_alloc_fabricated_gid(resource.ep);
+
+	EXPECT_EQ(ah, nullptr);
+	EXPECT_EQ(errno, FI_ENOMEM);
+
+	std::thread observer([&] {
+		trylock_ret = efa_test_util_domain_trylock(resource.domain);
+	});
+	observer.join();
+	EXPECT_EQ(trylock_ret, 0);
+
+	if (trylock_ret != 0)
+		efa_test_util_domain_unlock(resource.domain);
 }
