@@ -17,6 +17,7 @@
 
 #include "hmem.h"
 #include "shared.h"
+#include "efa_shared.h"
 #include "ft_random.h"
 
 #define MAX_WORKERS	64
@@ -208,8 +209,8 @@ struct context_pool {
 
 // Worker context structure
 struct worker_context {
-	size_t num_peers;
-	uint16_t *peer_ids;
+	int num_peers;
+	int *peer_ids;
 	struct ep_message_queue *control_queue;
 	struct fid_ep *ep;
 	struct fid_cq *cq;
@@ -359,55 +360,6 @@ static int setup_endpoint(struct worker_context *ctx, uint64_t total_ops)
 error:
 	cleanup_endpoint(ctx);
 	return ret;
-}
-
-/**
- * calculate_worker_distribution - Distribute peers across workers
- * @current_worker_id: ID of the worker to calculate distribution for
- * @total_workers: Total number of workers in the system
- * @total_peers: Total number of peers to distribute
- * @num_peers: Output - number of peers assigned to this worker
- * @peer_ids: Output - dynamically allocated array of peer IDs for this worker
- *
- * Distributes peers evenly across workers. When peers <= workers, each worker
- * gets one peer (worker_id % total_peers). When peers > workers, distributes
- * peers round-robin with remainder distributed to lower-numbered workers.
- *
- * Returns: FI_SUCCESS on success, -FI_ENOMEM on allocation failure
- *
- * Note: Caller must free the allocated peer_ids array
- */
-static int calculate_worker_distribution(uint16_t current_worker_id,
-					uint16_t total_workers,
-					uint16_t total_peers,
-					size_t *num_peers,
-					uint16_t **peer_ids)
-{
-	if (total_peers <= total_workers) {
-		// Each worker has one peer
-		*num_peers = 1;
-		*peer_ids = malloc(sizeof(int));
-		if (*peer_ids == NULL)
-			goto error;
-		**peer_ids = current_worker_id % total_peers;
-	} else {
-		// Multiple peers per worker
-		*num_peers = total_peers / total_workers;
-		if (current_worker_id < total_peers % total_workers)
-			(*num_peers)++;
-		*peer_ids = malloc(*num_peers * sizeof(int));
-		if (*peer_ids == NULL)
-			goto error;
-		for (size_t i = 0; i < *num_peers; i++) {
-			(*peer_ids)[i] = current_worker_id + i * total_workers;
-		}
-	}
-	return FI_SUCCESS;
-error:
-	fprintf(stderr,
-		"Failed to allocate peer_ids for worker %d\n",
-		current_worker_id);
-	return -FI_ENOMEM;
 }
 
 /**
@@ -922,7 +874,7 @@ static void *run_receiver_worker(void *arg)
 					ctx->worker_id, cycle);
 			}
 			printf("Receiver %u EP cycle %d: Posted %" PRIu64
-				" and completed %" PRIu64 " receives from %zu senders\n\n",
+				" and completed %" PRIu64 " receives from %d senders\n\n",
 				ctx->worker_id, cycle, ops_posted, ops_completed, ctx->num_peers);
 		}
 	}
@@ -1039,7 +991,7 @@ static int run_sender(void)
 		worker->worker_id = i;
 		worker->control_queue = &channels[i];
 
-		ret = calculate_worker_distribution(i,
+		ret = efa_calc_peer_distribution(i,
 						topts.num_sender_workers,
 						topts.num_receiver_workers,
 						&worker->num_peers,
@@ -1189,7 +1141,7 @@ static int run_receiver(void)
 		worker->worker_id = i;
 		worker->control_queue = &control_queue;
 
-		ret = calculate_worker_distribution(i,
+		ret = efa_calc_peer_distribution(i,
 						topts.num_receiver_workers,
 						topts.num_sender_workers,
 						&worker->num_peers,
