@@ -995,6 +995,12 @@ static int fi_opx_close_ep(fid_t fid)
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
 					"Failed closing EP completion queue for ctx %d, ret=%d\n", i, ret);
 			}
+			ret = (*opx_ep->domain->hfisvc.completion_queue_close)(
+				&opx_ep->hfisvc.emr_completion_queues[i]);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+					"Failed closing EP emr completion queue for ctx %d, ret=%d\n", i, ret);
+			}
 			ret = (*opx_ep->domain->hfisvc.command_queue_close)(&opx_ep->hfisvc.command_queues[i]);
 			if (ret) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
@@ -2020,6 +2026,17 @@ static int fi_opx_init_secondary_hfisvc(struct fi_opx_ep *opx_ep, struct fi_opx_
 		return -1;
 	}
 
+	if ((*opx_domain->hfisvc.completion_queue_open)(&opx_ep->hfisvc.emr_completion_queues[ctx_idx],
+							opx_domain->hfisvc.ctxs[ctx_idx].ctx)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL, "Failed creating EP emr completion queue for ctx %d\n",
+			ctx_idx);
+		(*opx_domain->hfisvc.completion_queue_close)(&opx_ep->hfisvc.internal_completion_queues[ctx_idx]);
+		(*opx_domain->hfisvc.command_queue_close)(&opx_ep->hfisvc.command_queues[ctx_idx]);
+		opx_hfisvc_keyset_free(opx_domain->hfisvc.ctxs[ctx_idx].access_key_set);
+		opx_hfi1_rdma_context_close(sec_hfi->ibv_context);
+		return -1;
+	}
+
 	opx_domain->hfisvc.num_ctxs++;
 	opx_ep->hfisvc.num_queues++;
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
@@ -2104,6 +2121,18 @@ static int fi_opx_open_single_plane_hfisvc(struct fi_opx_ep *opx_ep, struct fi_o
 							opx_domain->hfisvc.ctxs[ctx_idx].ctx)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
 			"Single-plane hfisvc: failed to open completion queue for ctx %d\n", ctx_idx);
+		(*opx_domain->hfisvc.command_queue_close)(&opx_ep->hfisvc.command_queues[ctx_idx]);
+		opx_domain->hfisvc.num_ctxs--;
+		opx_hfisvc_keyset_free(opx_domain->hfisvc.ctxs[ctx_idx].access_key_set);
+		opx_hfi1_rdma_context_close(ibv_context);
+		return -1;
+	}
+
+	if ((*opx_domain->hfisvc.completion_queue_open)(&opx_ep->hfisvc.emr_completion_queues[ctx_idx],
+							opx_domain->hfisvc.ctxs[ctx_idx].ctx)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"Single-plane hfisvc: failed to open emr completion queue for ctx %d\n", ctx_idx);
+		(*opx_domain->hfisvc.completion_queue_close)(&opx_ep->hfisvc.internal_completion_queues[ctx_idx]);
 		(*opx_domain->hfisvc.command_queue_close)(&opx_ep->hfisvc.command_queues[ctx_idx]);
 		opx_domain->hfisvc.num_ctxs--;
 		opx_hfisvc_keyset_free(opx_domain->hfisvc.ctxs[ctx_idx].access_key_set);
@@ -2883,6 +2912,13 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 								opx_domain->hfisvc.ctxs[0].ctx)) {
 			fprintf(stderr, "(%d) %s:%s():%d Failed creating EP completion queue for ctx 0!\n", getpid(),
 				__FILE__, __func__, __LINE__);
+			abort();
+		}
+
+		if ((*opx_domain->hfisvc.completion_queue_open)(&opx_ep->hfisvc.emr_completion_queues[0],
+								opx_domain->hfisvc.ctxs[0].ctx)) {
+			fprintf(stderr, "(%d) %s:%s():%d Failed creating EP emr completion queue for ctx 0!\n",
+				getpid(), __FILE__, __func__, __LINE__);
 			abort();
 		}
 
