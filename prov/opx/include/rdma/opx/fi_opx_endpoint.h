@@ -4387,18 +4387,17 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 				 const uint64_t tx_op_flags, const uint64_t caps,
 				 const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 				 const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
-				 const uint64_t hmem_handle, struct fi_opx_mr *opx_mr,
-				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+				 const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	ssize_t rc;
 	if (is_contiguous) {
 		rc = OPX_FABRIC_TX_SEND_EGR(ep, buf, len, addr, tag, context, data, lock_required, override_flags,
 					    tx_op_flags, caps, reliability, do_cq_completion, hmem_iface, hmem_device,
-					    hmem_handle, opx_mr, hfi1_type, ctx_sharing);
+					    hmem_handle, hfi1_type, ctx_sharing);
 	} else {
 		rc = OPX_FABRIC_TX_SENDV_EGR(ep, local_iov, niov, total_len, addr, tag, context, data, lock_required,
 					     override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-					     hmem_iface, hmem_device, hmem_handle, opx_mr, hfi1_type, ctx_sharing);
+					     hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 	}
 
 	if (OFI_LIKELY(rc == FI_SUCCESS)) {
@@ -4414,13 +4413,12 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 		if (is_contiguous) {
 			rc = OPX_FABRIC_TX_SEND_EGR(ep, buf, len, addr, tag, context, data, lock_required,
 						    override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-						    hmem_iface, hmem_device, hmem_handle, opx_mr, hfi1_type,
-						    ctx_sharing);
+						    hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
 		} else {
 			rc = OPX_FABRIC_TX_SENDV_EGR(ep, local_iov, niov, total_len, addr, tag, context, data,
 						     lock_required, override_flags, tx_op_flags, caps, reliability,
-						     do_cq_completion, hmem_iface, hmem_device, hmem_handle, opx_mr,
-						     hfi1_type, ctx_sharing);
+						     do_cq_completion, hmem_iface, hmem_device, hmem_handle, hfi1_type,
+						     ctx_sharing);
 		}
 	} while (rc == -FI_ENOBUFS && loop++ < FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES);
 
@@ -4508,10 +4506,14 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	if (total_len < opx_tx->rzv_min_payload_bytes) {
 		if (total_len <= opx_tx->pio_flow_eager_tx_bytes) {
+			if (opx_ep->use_hfisvc && hmem_iface != FI_HMEM_SYSTEM) {
+				opx_hfisvc_mr_lazy_open_if_deferred(opx_ep->domain, (struct fi_opx_mr *) desc);
+			}
+
 			rc = opx_ep_tx_send_try_eager(ep, buf, len, addr, tag, context, local_iov, niov, total_len,
 						      data, lock_required, is_contiguous, override_flags, tx_op_flags,
 						      caps, reliability, do_cq_completion, hmem_iface, hmem_device,
-						      hmem_handle, (struct fi_opx_mr *) desc, hfi1_type, ctx_sharing);
+						      hmem_handle, hfi1_type, ctx_sharing);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
 				OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
