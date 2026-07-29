@@ -13,23 +13,44 @@ pytestmark = pytest.mark.pre_release
 MR_ABORT_NUM_MRS = 2046
 
 
-# --- Test: abort (RMA) ---
-@pytest.mark.functional
-@pytest.mark.fabric(params=["efa-direct"])  # TODO add test for efa fabric
-@pytest.mark.parametrize("rma_op", ["write", "read", "writedata"])
-@pytest.mark.parametrize("cancel_order", ["reverse", "random"])
-@pytest.mark.parametrize("close_side", ["initiator", "target"])
-@pytest.mark.parametrize("ops_per_mr", [1, 4])
-@pytest.mark.parametrize("high_pps", [True, False])
-@pytest.mark.parametrize("message_size", [
+BASE_MESSAGE_SIZES = [
     4096,
     65536,
     1048576,
-    # 10 MiB: large transfers consume far more memory/NIC resources, so
-    # run this size serially to avoid resource contention with parallel
-    # workers.
-    pytest.param(10485760, marks=pytest.mark.serial),
-])
+    10485760,
+]
+
+def combined_msg_size_params():
+    for rma_op in ["write", "read", "writedata"]:
+        for size in BASE_MESSAGE_SIZES:
+
+            high_pps_vals = [None]
+
+            if (rma_op == "write" or rma_op == "writedata"):
+                # High PPS parametrization is only applicable for RDMA writes
+                high_pps_vals = [True, False]
+
+            marks = []
+            if size == 10485760:
+                marks = [pytest.mark.serial]
+
+            for high_pps_val in high_pps_vals:
+                id = f"{rma_op}-{size}"
+                if high_pps_val is not None:
+                    id += f"-high_pps-{high_pps_val}"
+
+                yield pytest.param(size, rma_op, high_pps_val,
+                                   marks=marks, id=id)
+
+
+# --- Test: abort (RMA) ---
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa-direct"])  # TODO add test for efa fabric
+@pytest.mark.parametrize("cancel_order", ["reverse", "random"])
+@pytest.mark.parametrize("close_side", ["initiator", "target"])
+@pytest.mark.parametrize("ops_per_mr", [1, 4])
+@pytest.mark.parametrize("message_size, rma_op, high_pps",
+                         list(combined_msg_size_params()))
 def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr, high_pps, message_size, memory_type_symm):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
@@ -42,8 +63,7 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
                f" -S {message_size}")
 
     if high_pps:
-        if rma_op == "read":
-            pytest.skip("High PPS not supported with RDMA read")
+        assert(rma_op != "read")
         command += " --high-pps"
 
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
@@ -53,15 +73,8 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
 # --- Test: partial (2 MRs on same buffer) ---
 @pytest.mark.functional
 @pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
-@pytest.mark.parametrize("rma_op", ["write", "read", "writedata"])
-@pytest.mark.parametrize("high_pps", [True, False])
-@pytest.mark.parametrize("message_size", [
-    4096,
-    65536,
-    1048576,
-    # 10 MiB: run serially to avoid resource contention (see test_mr_abort).
-    pytest.param(10485760, marks=pytest.mark.serial),
-])
+@pytest.mark.parametrize("message_size, rma_op, high_pps",
+                         list(combined_msg_size_params()))
 def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps, message_size, memory_type_symm):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
@@ -69,8 +82,7 @@ def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps, message_si
     command = (f"fi_mr_abort -T partial -o {rma_op} -S {message_size}")
 
     if high_pps:
-        if rma_op == "read":
-            pytest.skip("High PPS not supported with RDMA read")
+        assert(rma_op != "read")
         command += " --high-pps"
 
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type_symm)
