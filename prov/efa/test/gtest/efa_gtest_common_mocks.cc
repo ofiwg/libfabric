@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_gtest_common_mocks.h"
+#include <cassert>
 
 static MockEfa *g_mock_efa = nullptr;
 
@@ -30,4 +31,36 @@ void MockEfa::set(MockEfa *instance)
 
 extern "C" {
 EFA_MOCK_FUNCTIONS(EFA_MOCK_GEN_WRAP)
+}
+
+/*
+ * malloc arming mechanism is intentionally outside MockEfa since gmock calls
+ * malloc internally, which would recurse.
+ */
+static std::bitset<EFA_TEST_MALLOC_FAIL_MAX> g_malloc_fail;
+static unsigned g_malloc_count = 0;
+
+extern "C" void *__real_malloc(size_t size);
+
+extern "C" void *__wrap_malloc(size_t size)
+{
+	if (g_malloc_fail.any()) {
+		unsigned ord = g_malloc_count++;
+		if (ord < EFA_TEST_MALLOC_FAIL_MAX && g_malloc_fail[ord]) {
+			g_malloc_fail[ord] = false;
+			return nullptr;
+		}
+	}
+	return __real_malloc(size);
+}
+
+void efa_test_fail_mallocs(const std::vector<unsigned> &ordinals)
+{
+	g_malloc_fail.reset();
+	g_malloc_count = 0;
+
+	for (unsigned n : ordinals) {
+		assert(n < EFA_TEST_MALLOC_FAIL_MAX);
+		g_malloc_fail[n] = true;
+	}
 }
