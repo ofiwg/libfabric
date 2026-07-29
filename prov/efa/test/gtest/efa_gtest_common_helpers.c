@@ -195,3 +195,23 @@ int efa_test_get_util_domain_ref(struct fid_domain *domain)
 
 	return ofi_atomic_get32(&efa_domain->util_domain.ref);
 }
+
+int efa_test_util_domain_trylock(struct fid_domain *domain)
+{
+	struct efa_domain *efa_domain = container_of(
+		domain, struct efa_domain, util_domain.domain_fid);
+	int ret;
+
+	ret = ofi_mutex_trylock(&efa_domain->util_domain.lock.base.mutex);
+	if (!ret)
+		ofi_mutex_unlock(&efa_domain->util_domain.lock.base.mutex);
+	return ret;
+}
+
+void efa_test_util_domain_unlock(struct fid_domain *domain)
+{
+	struct efa_domain *efa_domain = container_of(
+		domain, struct efa_domain, util_domain.domain_fid);
+
+	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+}
