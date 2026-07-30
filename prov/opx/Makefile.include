@@ -71,6 +71,7 @@ opx_files =									\
 		prov/opx/src/fi_opx_shm.c					\
 		prov/opx/src/fi_opx_tid_cache.c					\
 		prov/opx/src/opx_hmem_cache.c					\
+		prov/opx/src/opx_shm_cache.c					\
 		prov/opx/src/fi_opx_hfi_select.c				\
 		prov/opx/src/opa_utils_gen1.c					\
 		prov/opx/src/opa_proto.c					\
@@ -176,7 +177,8 @@ noinst_HEADERS = \
 	$(top_srcdir)/prov/opx/include/opa_service.h \
 	$(top_srcdir)/prov/opx/include/linux-i386/bit_ops.h \
 	$(top_srcdir)/prov/opx/include/linux-i386/sysdep.h \
-	$(top_srcdir)/prov/opx/include/opx_shm.h
+	$(top_srcdir)/prov/opx/include/opx_shm.h \
+	$(top_srcdir)/prov/opx/include/opx_shm_cache.h
 
 prov_install_man_pages += man/man7/fi_opx.7
 
