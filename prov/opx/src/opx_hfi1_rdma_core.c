@@ -180,7 +180,7 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 		pthread_mutex_unlock(&opx_rdma_ops.lock);
 		return opx_rdma_ops.hfi1_direct_verbs_enabled;
 	}
-	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI-DIRECT] libibverbs found\n");
+	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "[HFI-DIRECT] libibverbs found\n");
 
 	OPX_HFI1_RDMA_OP_DLSYM(opx_rdma_ops.libibverbs, ibv_get_device_list);
 	OPX_HFI1_RDMA_OP_DLSYM(opx_rdma_ops.libibverbs, ibv_get_device_name);

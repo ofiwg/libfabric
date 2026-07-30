@@ -2738,7 +2738,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 		}
 	}
 
-	FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "SW HFI type %s is being used for local HFI type %s.\n",
+	FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC, "SW HFI type %s is being used for local HFI type %s.\n",
 		OPX_HFI1_TYPE_STRING(OPX_SW_HFI1_TYPE(opx_ep->domain)),
 		OPX_HFI1_TYPE_STRING(OPX_HW_HFI1_TYPE(opx_ep->domain)));
 
@@ -3962,10 +3962,10 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 
 	int use_prefault_write = (default_monitor == uffd_monitor);
 	if (fi_param_get_bool(fi_opx_global.prov, "tid_prefault_region", &use_prefault_write) == FI_SUCCESS) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_TID_PREFAULT_REGION override is %s.\n",
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_TID_PREFAULT_REGION override is %s.\n",
 			use_prefault_write ? "TRUE" : "FALSE");
 	} else {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_TID_PREFAULT_REGION defaults to %s.\n",
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_TID_PREFAULT_REGION defaults to %s.\n",
 			use_prefault_write ? "TRUE" : "FALSE");
 	}
 	opx_ep->use_prefault_write = (bool) use_prefault_write;
@@ -4150,7 +4150,7 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 #else
 	opx_ep->use_hfisvc = false;
 #endif
-	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] HFI Service is %s for bulk transfers.\n",
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] HFI Service is %s for bulk transfers.\n",
 		opx_ep->use_hfisvc ? "enabled" : "disabled");
 
 	*ep = &opx_ep->ep_fid;
