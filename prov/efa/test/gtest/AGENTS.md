@@ -124,6 +124,13 @@ contract or copy a pattern from a nearby test when the docs can settle it.
   `efa_unit_test_data_path_ops.c`. `EFA_UNIT_TEST` is derived from *either* test
   suite (`--enable-efa-gtest` OR `--enable-efa-unit-test`), so `--enable-efa-gtest`
   alone makes them `--wrap`-able — the gtest suite does **not** need cmocka.
+- **Inject OOM with `efa_test_fail_mallocs(ordinals)`**, not a `MockEfa` row.
+  It arms 0-based `malloc` ordinals to return NULL (`{0}` = next malloc, `{1,3}` =
+  2nd and 4th; each failure is one-shot); all others hit `__real_malloc`. Counting
+  restarts at each call. It lives outside `MockEfa` because gmock allocates while
+  matching, which would recurse. No teardown call needed — a listener in
+  `efa_gtest_main.cc` resets it after every test. See
+  `EfaAhTest.alloc_malloc_failure_releases_domain_lock`.
 
 ### C/C++ bridge
 
