@@ -412,12 +412,16 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	OFI_TSA_REQUIRES(efa_qp_table_lock_sym)
 {
 	int ret;
-	struct ibv_qp_init_attr_ex attr_ex = { 0 };
+	struct ibv_qp_init_attr_ex attr_ex = {0};
 	bool use_unsolicited_write_recv = true;
+	uint32_t tclass;
+	struct efa_domain *domain = base_ep->domain;
 
-	efa_base_ep_construct_ibv_qp_init_attr_ex(base_ep, &attr_ex, tx_cq->ibv_cq_ex, rx_cq->ibv_cq_ex);
+	efa_base_ep_construct_ibv_qp_init_attr_ex(
+		base_ep, &attr_ex, tx_cq->ibv_cq_ex, rx_cq->ibv_cq_ex);
 
-	assert(tx_cq->unsolicited_write_recv_enabled == rx_cq->unsolicited_write_recv_enabled);
+	assert(tx_cq->unsolicited_write_recv_enabled ==
+	       rx_cq->unsolicited_write_recv_enabled);
 
 	/*
 	 * Unsolicited write recv requires hardware support
@@ -427,19 +431,57 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	 * the user intends to post rx buffers for cq data (FI_RX_CQ_DATA); the
 	 * efa-rdm full protocol does not set FI_RX_CQ_DATA in its mode.
 	 */
-	use_unsolicited_write_recv =
-		tx_cq->unsolicited_write_recv_enabled &&
-		base_ep->use_unsolicited_write_recv &&
-		!(base_ep->info->mode & FI_RX_CQ_DATA);
-	EFA_INFO(FI_LOG_EP_CTRL, "creating QP with unsolicited write recv status: %d\n", use_unsolicited_write_recv);
-	ret = efa_qp_create(&base_ep->qp, &attr_ex, base_ep->info->tx_attr->tclass,
+	use_unsolicited_write_recv = tx_cq->unsolicited_write_recv_enabled &&
+				     base_ep->use_unsolicited_write_recv &&
+				     !(base_ep->info->mode & FI_RX_CQ_DATA);
+	EFA_INFO(FI_LOG_EP_CTRL,
+		 "creating QP with unsolicited write recv status: %d\n",
+		 use_unsolicited_write_recv);
+
+	tclass = FI_TC_UNSPEC;
+
+	/* The domain level tclass applies to all endpoints in the domain.
+	 * The endpoint level tclass can override the domain level tclass.
+	 *
+	 * A QP is created with FI_TC_LOW_LATENCY if either
+	 * 1. The endpoint level tclass is set to FI_TC_LOW_LATENCY
+	 * 2. The endpoint level tclass is not set/set to FI_TC_UNSPEC and the
+	 * domain level tclass is set to FI_TC_LOW_LATENCY
+	 */
+	switch (base_ep->info->tx_attr->tclass) {
+	case FI_TC_LOW_LATENCY:
+		EFA_INFO(FI_LOG_EP_CTRL,
+			 "base_ep->info->tx_attr->tclass is set to "
+			 "FI_TC_LOW_LATENCY. Creating QP with "
+			 "FI_TC_LOW_LATENCY\n");
+		tclass = FI_TC_LOW_LATENCY;
+		break;
+	case FI_TC_UNSPEC:
+		if (domain->info->domain_attr->tclass == FI_TC_LOW_LATENCY) {
+			EFA_INFO(FI_LOG_EP_CTRL,
+				 "base_ep->info->tx_attr->tclass is set to "
+				 "FI_TC_UNSPEC but "
+				 "domain->info->domain_attr->tclass is set to "
+				 "FI_TC_LOW_LATENCY. Creating QP with "
+				 "FI_TC_LOW_LATENCY\n");
+			tclass = FI_TC_LOW_LATENCY;
+		}
+		break;
+	default:
+		EFA_INFO(FI_LOG_EP_CTRL,
+			 "Creating QP with default FI_TC_UNSPEC\n");
+		break;
+	}
+
+	ret = efa_qp_create(&base_ep->qp, &attr_ex, tclass,
 			    use_unsolicited_write_recv);
 	if (ret)
 		return ret;
 
 #if HAVE_EFA_DATA_PATH_DIRECT
 	/* Only enable direct QP when direct CQ is enabled */
-	assert(tx_cq->data_path_direct_enabled == rx_cq->data_path_direct_enabled);
+	assert(tx_cq->data_path_direct_enabled ==
+	       rx_cq->data_path_direct_enabled);
 	if (tx_cq->data_path_direct_enabled) {
 		ret = efa_data_path_direct_qp_initialize(base_ep->qp);
 		if (ret) {
