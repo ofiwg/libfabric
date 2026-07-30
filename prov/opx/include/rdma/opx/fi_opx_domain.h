@@ -123,6 +123,14 @@ struct fi_opx_domain {
 	uuid_t unique_job_key;
 	char   unique_job_key_str[OPX_JOB_KEY_STR_SIZE];
 
+	/*
+	 * Per-node driver-version-check shm cache segment this process created as
+	 * the "winner", so it can be released via opx_shm_cache_unlink() at domain
+	 * teardown.  Empty on non-winners.  Sized to OPX_SHM_SEGMENT_NAME_MAX_LENGTH
+	 * (opx_shm.h, not included here).
+	 */
+	char drvchk_shm_name[512];
+
 	char *progress_affinity_str;
 
 	uint32_t rx_count;

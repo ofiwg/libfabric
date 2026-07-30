@@ -47,6 +47,7 @@
 #include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_hfi1.h"
+#include "opx_shm_cache.h"
 
 #include <ofi_enosys.h>
 
@@ -72,6 +73,9 @@ static int fi_opx_close_domain(fid_t fid)
 	if (ret) {
 		return ret;
 	}
+
+	/* Release the cached drvchk shm segment on orderly exit (winner only; crash path self-heals). */
+	opx_shm_cache_unlink(opx_domain->drvchk_shm_name);
 
 	ret = fi_opx_finalize_mr_ops(&opx_domain->domain_fid);
 	if (ret) {

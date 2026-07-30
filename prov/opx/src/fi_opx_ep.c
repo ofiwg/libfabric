@@ -57,6 +57,9 @@
 #include <limits.h>
 #include <sys/utsname.h>
 
+/* Per-node shm cache used to run the HFI driver-version check once per node. */
+#include "opx_shm_cache.h"
+
 #include "rdma/opx/fi_opx_fabric.h"
 
 #define FI_OPX_EP_RX_UEPKT_BLOCKSIZE (256)
@@ -3588,11 +3591,106 @@ int opx_hfi_drv_version_check(char *min_version)
 	return 1;
 }
 
-int opx_is_tid_allowed()
+/*
+ * Cache the HFI driver-version check in a per-node shm segment (opx_shm_cache).
+ *
+ * opx_hfi_drv_version_check() does three popen()s (7 fork+exec) and every rank
+ * runs it, so at high PPN MPI_Init sees ~7*N fork+exec per node.  The driver
+ * version is node-global for a job's lifetime, so opx_shm_cache_get() runs the
+ * check on one process per node and hands the cached result to the rest.
+ */
+
+/* opx_shm_cache producer: run the real check once and store its 0/1 result. */
+static int opx_drvchk_produce(void *result, size_t result_len, void *context)
+{
+	if (result_len != sizeof(int32_t)) {
+		return -1;
+	}
+	*(int32_t *) result = (int32_t) opx_hfi_drv_version_check((char *) context);
+	return 0;
+}
+
+/*
+ * Read /sys/module/hfi1/srcversion (open()+read(), NO fork) into dst.  It goes
+ * into the cache token so a driver upgrade invalidates a pre-upgrade result.
+ * On failure a fixed string is used; the check still runs, we just lose that
+ * staleness guard.
+ */
+static void opx_drvchk_read_srcversion(char *dst, size_t len)
+{
+	int fd = open("/sys/module/hfi1/srcversion", O_RDONLY);
+	if (fd < 0) {
+		snprintf(dst, len, "nosrcver");
+		return;
+	}
+
+	char	buf[128] = {0};
+	ssize_t n	 = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+	if (n <= 0) {
+		snprintf(dst, len, "nosrcver");
+		return;
+	}
+
+	/* Strip the trailing newline sysfs leaves behind. */
+	buf[n] = '\0';
+	while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r' || buf[n - 1] == ' ' || buf[n - 1] == '\t')) {
+		buf[--n] = '\0';
+	}
+	snprintf(dst, len, "%s", buf);
+}
+
+/*
+ * Return opx_hfi_drv_version_check(min_version)'s result, running the actual
+ * check at most once per node via opx_shm_cache.
+ *
+ * The check is fail-closed: on any cache failure (name build, shm/mmap error,
+ * producer failure, or wait timeout) we run opx_hfi_drv_version_check()
+ * directly for a definitive 0/1 rather than assuming a result.  This preserves
+ * the original gate semantics (no successful driver check => feature disabled),
+ * which both the TID and HMEM callers rely on.  The direct check only runs on
+ * the cache-failure path, so it adds no forks in the normal case and is no
+ * worse than the original per-rank check if the shm subsystem is unavailable.
+ */
+static int opx_drvchk_cached_version_ok(struct fi_opx_domain *opx_domain, char *min_version)
+{
+	/*
+	 * The shm segment name is generic (job-scoped); the cache token carries
+	 * everything the result actually depends on (min_version + driver
+	 * srcversion), so an upgraded driver or a different threshold is detected
+	 * as stale by opx_shm_cache_get() rather than silently reused.
+	 */
+	char name[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
+	if (opx_shm_cache_name(name, sizeof(name), "drvchk", opx_domain->unique_job_key_str) != 0) {
+		return opx_hfi_drv_version_check(min_version);
+	}
+
+	char srcversion[64];
+	opx_drvchk_read_srcversion(srcversion, sizeof(srcversion));
+
+	char token[OPX_SHM_CACHE_MAX_TOKEN_LEN];
+	snprintf(token, sizeof(token), "%s:%s", min_version, srcversion);
+
+	int32_t result;
+	int	is_winner = 0;
+	if (opx_shm_cache_get(name, token, &result, sizeof(result), opx_drvchk_produce, min_version, &is_winner) !=
+	    OPX_SHM_CACHE_SUCCESS) {
+		return opx_hfi_drv_version_check(min_version);
+	}
+
+	/* Record the name so the cached segment can be released at domain teardown (winner only). */
+	if (is_winner) {
+		snprintf(opx_domain->drvchk_shm_name, sizeof(opx_domain->drvchk_shm_name), "%s", name);
+	}
+
+	return (int) result;
+}
+
+int opx_is_tid_allowed(struct fi_opx_domain *opx_domain)
 {
 	struct utsname uname_data;
 	return (!uname(&uname_data) && (strverscmp(uname_data.release, "6.5") >= 0)) ||
-	       opx_hfi_drv_version_check("10.14");
+	       opx_drvchk_cached_version_ok(opx_domain, "10.14");
 }
 
 int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct fid_ep **ep, void *context)
@@ -3752,7 +3850,7 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 #endif
 
 #ifndef OPX_DEV_OVERRIDE
-	if (opx_ep->use_expected_tid_rzv == OPX_TID_ENABLE_ON && !opx_is_tid_allowed()) {
+	if (opx_ep->use_expected_tid_rzv == OPX_TID_ENABLE_ON && !opx_is_tid_allowed(opx_domain)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Expected receive (TID) cannot be enabled due to unsupported driver version. Upgrade Omni-path driver to enable this feature. Disabling TID.\n");
 		opx_ep->use_expected_tid_rzv = OPX_TID_ENABLE_OFF;
@@ -3764,7 +3862,7 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 
 #ifdef OPX_HMEM
 #ifndef OPX_DEV_OVERRIDE
-	if (!opx_hfi_drv_version_check("10.14")) {
+	if (!opx_drvchk_cached_version_ok(opx_domain, "10.14")) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_HMEM is enabled, but the installed HFI driver is not HMEM enabled!\n");
 		errno = FI_EOPNOTSUPP;
