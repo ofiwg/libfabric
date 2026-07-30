@@ -328,6 +328,78 @@ void efa_user_info_set_max_cntr_value(int version, struct fi_info *info,
 }
 
 /**
+ * @brief Check whether the EFA provider can honor
+ * a given traffic class
+ *
+ * @param tclass traffic class to check
+ * @return true if EFA supports tclass, false otherwise
+ */
+static bool efa_tclass_supported(uint32_t tclass)
+{
+	switch (tclass) {
+	case FI_TC_UNSPEC:
+	case FI_TC_BEST_EFFORT:
+		return true;
+	case FI_TC_LOW_LATENCY:
+#if HAVE_EFADV_SL
+		return true;
+#else
+		return false;
+#endif
+	default:
+		return false;
+	}
+}
+
+/**
+ * @brief validate and propagate the traffic class hints into info
+ *
+ * fi_info carries two traffic class fields: domain_attr->tclass is the
+ * default for all endpoints opened on the domain, and tx_attr->tclass is
+ * the per-endpoint override. A tx_attr->tclass of FI_TC_UNSPEC means
+ * "inherit the domain default", so the two are propagated independently
+ * and the distinction is preserved for fi_endpoint() to resolve.
+ *
+ * @param	info[in,out]	info to be updated
+ * @param	hints[in]	user provided hints
+ * @return	0 on success
+ * 		-FI_ENODATA if EFA cannot honor a requested traffic class
+ */
+static
+int efa_user_info_alter_tclass(struct fi_info *info, const struct fi_info *hints)
+{
+	uint32_t domain_tclass, tx_tclass;
+
+	domain_tclass = (hints && hints->domain_attr) ?
+			hints->domain_attr->tclass : FI_TC_UNSPEC;
+	tx_tclass = (hints && hints->tx_attr) ?
+		    hints->tx_attr->tclass : FI_TC_UNSPEC;
+
+	if (!efa_tclass_supported(domain_tclass)) {
+		EFA_INFO(FI_LOG_CORE,
+			 "Unsupported domain_attr->tclass: 0x%x\n",
+			 domain_tclass);
+
+		domain_tclass = FI_TC_UNSPEC;
+	}
+
+	if (!efa_tclass_supported(tx_tclass)) {
+		EFA_INFO(FI_LOG_CORE,
+			 "Unsupported tx_attr->tclass: 0x%x\n", tx_tclass);
+
+		tx_tclass = FI_TC_UNSPEC;
+	}
+
+	if (domain_tclass != FI_TC_UNSPEC)
+		info->domain_attr->tclass = domain_tclass;
+
+	if (tx_tclass != FI_TC_UNSPEC)
+		info->tx_attr->tclass = tx_tclass;
+
+	return 0;
+}
+
+/**
  * @brief update RDM info to match user hints
  *
  * the input info is a duplicate of prov info, which matches
@@ -771,6 +843,12 @@ int efa_get_user_info(uint32_t version, const char *node,
 				fi_freeinfo(dupinfo);
 				continue;
 			}
+		}
+
+		ret = efa_user_info_alter_tclass(dupinfo, hints);
+		if (ret) {
+			fi_freeinfo(dupinfo);
+			continue;
 		}
 
 		ofi_alter_info(dupinfo, hints, version);
