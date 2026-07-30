@@ -1,0 +1,66 @@
+name: EFA thread-safety analysis
+
+# Clang thread safety analysis for the EFA provider. Builds the provider with
+# clang -Wthread-safety and fails only on thread-safety violations. Runs when
+# EFA sources, the configure probe, or this workflow change.
+
+on:
+  push:
+    paths:
+      - 'prov/efa/**'
+      - 'configure.ac'
+      - '.github/workflows/thread-safety-analysis.yml'
+  pull_request:
+    paths:
+      - 'prov/efa/**'
+      - 'configure.ac'
+      - '.github/workflows/thread-safety-analysis.yml'
+
+permissions: {}
+
+env:
+  RDMA_CORE_VERSION: v35.0
+  RDMA_CORE_PATH: '$PWD/rdma-core/build'
+
+jobs:
+  efa-thread-safety:
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential clang git make pkg-config \
+            libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev \
+            libnuma-dev libudev-dev uuid-dev cmake ninja-build
+
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v4.3.1
+
+      - name: Build EFA with thread safety analysis (clang)
+        run: |
+          set -x
+          git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
+          pushd rdma-core; bash build.sh; popd
+          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
+          ./autogen.sh
+          # --enable-only builds only the listed providers. efa needs shm
+          # (efa_shm.c links the shm provider's smr_* symbols).
+          ./configure --prefix=$PWD/install \
+                      --enable-only \
+                      --enable-efa=$PWD/rdma-core/build \
+                      --enable-shm \
+                      --enable-thread-safety-analysis \
+                      CC=clang
+          # -Werror=thread-safety makes only locking-contract violations fatal;
+          # unrelated warnings do not fail the job.
+          make -j 2 AM_CFLAGS="-Wthread-safety -Werror=thread-safety"
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: efa-thread-safety-config.log
+          path: config.log
