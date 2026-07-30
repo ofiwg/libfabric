@@ -82,3 +82,16 @@ Declare the mock member as `testing::StrictMock<MockEfa>`, not bare `MockEfa`. A
 Strictness is a separate concern from the *return value* of an expected call: `StrictMock` only governs whether a call was expected, never what it returns. A `StrictMock` whose expectation omits an action still returns the gMock default (0/false/NULL/default-constructed). So always give every `EFA_EXPECT_CALL` an explicit action (`WillOnce`/`WillRepeatedly`/`Times(0)`) rather than relying on that implicit default.
 
 Because arming is opt-in, a wrapped call made during teardown falls through to `__real_<fn>` **unless the test armed that function** — so you generally do *not* need to expect the endpoint's teardown calls (e.g. the RDM CQ drain's `efa_ibv_cq_start_poll`). The exception is a function the test *does* arm that also fires during teardown: e.g. a test that arms `ibv_destroy_ah` for a peer AH must clear the mock (`MockEfa::set(nullptr)`) *before* `efa_test_resource_destruct`, or the real destroy of `self_ah` will route into the mock as an unexpected call. See `EfaConnTest`.
+
+### Injecting malloc failures
+
+To exercise out-of-memory error paths, call `efa_test_fail_mallocs(ordinals)` (declared in `efa_gtest_common_mocks.h`). It arms a set of 0-based `malloc` ordinals to fail: `{0}` fails the very next `malloc`, `{1, 3}` fails the 2nd and 4th, and so on. Every other allocation runs for real. Ordering and duplicates in the vector don't matter, and ordinals must be less than `EFA_TEST_MALLOC_FAIL_MAX`.
+
+```c
+efa_test_fail_mallocs({0});		/* fail the first malloc on the path */
+res = efa_func(args);
+```
+
+This deliberately lives *outside* `MockEfa` rather than being an `EFA_MOCK_FUNCTIONS` row. gMock itself allocates while matching expectations, so routing `malloc` through the mock would recurse. Instead `__wrap_malloc` consults a standalone process-global bitset and counter: it fails on the armed ordinals (each failure is one-shot — the bit is cleared as it fires so a repeated allocation size isn't re-failed) and forwards everything else to `__real_malloc`.
+
+Each call to `efa_test_fail_mallocs` resets the counter, and the counter is automatically cleared at the end of each test, if any is set.
