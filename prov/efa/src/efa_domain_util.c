@@ -112,6 +112,9 @@ int efa_domain_init_base(struct efa_domain *efa_domain,
 	efa_domain->info->domain_attr->max_cntr_value = info->domain_attr->max_cntr_value;
 	efa_domain->info->domain_attr->max_err_cntr_value = info->domain_attr->max_err_cntr_value;
 
+	/* Also store the tclass which is read during fi_endpoint */
+	efa_domain->info->domain_attr->tclass = info->domain_attr->tclass;
+
 	if (efa_env.track_mr)
 		dlist_init(&efa_domain->base_ep_list);
 
