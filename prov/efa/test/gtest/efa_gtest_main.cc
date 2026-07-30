@@ -3,6 +3,7 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include "efa_gtest_common_mocks.h"
 
 // Harmless suppression: persistent allocation from glibc outside of EFA provider
 extern "C" const char *__lsan_default_suppressions(void)
@@ -10,8 +11,19 @@ extern "C" const char *__lsan_default_suppressions(void)
 	return "leak:_dlerror_run\n";
 }
 
+/* Automatically reset malloc failure injections, if any */
+class MallocFailReset : public testing::EmptyTestEventListener
+{
+	void OnTestEnd(const testing::TestInfo &) override
+	{
+		efa_test_fail_mallocs({});
+	}
+};
+
 int main(int argc, char **argv)
 {
 	::testing::InitGoogleMock(&argc, argv);
+	testing::UnitTest::GetInstance()->listeners().Append(
+		new MallocFailReset);
 	return RUN_ALL_TESTS();
 }
