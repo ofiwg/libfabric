@@ -85,6 +85,8 @@ int ofi_init = 0;
 extern struct ofi_common_locks common_locks;
 
 static struct ofi_filter prov_filter;
+static uint32_t ofi_addr_format_filter = FI_FORMAT_UNSPEC;
+static uint32_t ofi_parse_addr_format(const char *str);
 
 
 static struct ofi_prov *
@@ -973,6 +975,16 @@ void fi_ini(void)
 			"The name of a colective offload provider (default: \
 			empty - no provider)");
 
+	fi_param_define(NULL, "addr_format", FI_PARAM_STRING,
+			"Filter fi_getinfo results to only return entries "
+			"matching the specified address format. "
+			"See fi_getinfo(3) Addressing Formats for valid values "
+			"(default: all)");
+	param_val = NULL;
+	fi_param_get_str(NULL, "addr_format", &param_val);
+	if (param_val)
+		ofi_addr_format_filter = ofi_parse_addr_format(param_val);
+
 	ofi_params_init();
 
 	ofi_load_dl_prov();
@@ -1082,6 +1094,60 @@ void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 	}
 }
 DEFAULT_SYMVER(fi_freeinfo_, fi_freeinfo, FABRIC_1.9);
+
+static const struct {
+	const char	*name;
+	uint32_t	fmt;
+} ofi_addr_formats[] = {
+	{ "FI_SOCKADDR",	FI_SOCKADDR },
+	{ "FI_SOCKADDR_IN",	FI_SOCKADDR_IN },
+	{ "FI_SOCKADDR_IN6",	FI_SOCKADDR_IN6 },
+	{ "FI_SOCKADDR_IB",	FI_SOCKADDR_IB },
+	{ "FI_ADDR_IB_UD",	FI_ADDR_IB_UD },
+	{ "FI_ADDR_EFA",	FI_ADDR_EFA },
+	{ "FI_ADDR_PSMX3",	FI_ADDR_PSMX3 },
+	{ "FI_ADDR_OPX",	FI_ADDR_OPX },
+	{ "FI_ADDR_CXI",	FI_ADDR_CXI },
+	{ "FI_ADDR_STR",	FI_ADDR_STR },
+};
+
+static uint32_t ofi_parse_addr_format(const char *str)
+{
+	size_t i;
+
+	if (!str)
+		return FI_FORMAT_UNSPEC;
+
+	for (i = 0; i < ARRAY_SIZE(ofi_addr_formats); i++) {
+		if (!strcasecmp(str, ofi_addr_formats[i].name))
+			return ofi_addr_formats[i].fmt;
+	}
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Unknown addr_format filter value: %s\n", str);
+	return FI_FORMAT_UNSPEC;
+}
+
+static void
+ofi_filter_info_by_addr_format(struct fi_info **info, uint32_t addr_format)
+{
+	struct fi_info *cur, *prev = NULL, *next;
+
+	for (cur = *info; cur; cur = next) {
+		next = cur->next;
+
+		if (cur->addr_format != addr_format) {
+			if (prev)
+				prev->next = next;
+			else
+				*info = next;
+			cur->next = NULL;
+			fi_freeinfo(cur);
+		} else {
+			prev = cur;
+		}
+	}
+}
 
 static bool
 ofi_info_match_prov(struct fi_info *info, struct ofi_info_match *match)
@@ -1418,6 +1484,9 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 		ofi_filter_info(hints, info);
 		ofi_reorder_info(info);
 	}
+
+	if (ofi_addr_format_filter != FI_FORMAT_UNSPEC)
+		ofi_filter_info_by_addr_format(info, ofi_addr_format_filter);
 
 	return *info ? 0 : -FI_ENODATA;
 }
