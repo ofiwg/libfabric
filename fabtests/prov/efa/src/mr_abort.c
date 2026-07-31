@@ -421,11 +421,42 @@ static char *slot_op_buf(int op_idx, int mr_idx)
 	return slots[mr_idx].buf + (size_t) op_in_mr * opts.transfer_size;
 }
 
+/* Each side picks the half of pair p that it owns. */
+static struct fid_ep *local_ep_for_pair(int p)
+{
+	return eps[opts.dst_addr ? p : target_ep_for_pair[p]];
+}
+
+static fi_addr_t peer_addr_for_pair(int p)
+{
+	return remote_ep_addrs[opts.dst_addr ? target_ep_for_pair[p] : p];
+}
+
+/*
+ * Route an MR slot to a pair, round-robin, so a send and its matching recv
+ * land on the same pair.
+ */
+static int pair_idx_for_mr_idx(int mr_idx)
+{
+	return mr_idx % num_initiator_eps;
+}
+
+static struct fid_ep *op_local_ep(int mr_idx)
+{
+	return local_ep_for_pair(pair_idx_for_mr_idx(mr_idx));
+}
+
+static fi_addr_t op_peer_addr(int mr_idx)
+{
+	return peer_addr_for_pair(pair_idx_for_mr_idx(mr_idx));
+}
+
 static ssize_t post_rma_op(int op_idx, int mr_idx)
 {
 	uint64_t flags;
 	struct mr_slot *s = &slots[mr_idx];
 	struct op_ctx *o = &op_arr[op_idx];
+	struct fid_ep *lep = op_local_ep(mr_idx);
 	struct iovec msg_iov = {
 		.iov_base = s->buf,
 		.iov_len = opts.transfer_size,
@@ -439,7 +470,7 @@ static ssize_t post_rma_op(int op_idx, int mr_idx)
 		.msg_iov = &msg_iov,
 		.desc = &s->desc,
 		.iov_count = 1,
-		.addr = remote_fi_addr,
+		.addr = op_peer_addr(mr_idx),
 		.rma_iov = &rma_iov,
 		.rma_iov_count = 1,
 		.context = &o->context,
@@ -456,13 +487,13 @@ static ssize_t post_rma_op(int op_idx, int mr_idx)
 
 	switch (opts.rma_op) {
 	case FT_RMA_WRITE:
-		return fi_writemsg(ep, &msg, flags);
+		return fi_writemsg(lep, &msg, flags);
 	case FT_RMA_WRITEDATA:
 		msg.data = remote_cq_data;
 		flags |= FI_REMOTE_CQ_DATA;
-		return fi_writemsg(ep, &msg, flags);
+		return fi_writemsg(lep, &msg, flags);
 	case FT_RMA_READ:
-		return fi_readmsg(ep, &msg, flags);
+		return fi_readmsg(lep, &msg, flags);
 	default:
 		return -FI_EINVAL;
 	}
@@ -472,32 +503,34 @@ static ssize_t post_send_op(int op_idx, int mr_idx)
 {
 	struct mr_slot *s = &slots[mr_idx];
 	struct op_ctx *o = &op_arr[op_idx];
+	struct fid_ep *lep = op_local_ep(mr_idx);
 	char *buf = slot_op_buf(op_idx, mr_idx);
 
 	o->mr_idx = mr_idx;
 
 	if (test_mode == TEST_TAGGED)
-		return fi_tsend(ep, buf, opts.transfer_size, s->desc,
-				remote_fi_addr, 0xCAFE, &o->context);
+		return fi_tsend(lep, buf, opts.transfer_size, s->desc,
+				op_peer_addr(mr_idx), 0xCAFE, &o->context);
 	else
-		return fi_send(ep, buf, opts.transfer_size, s->desc,
-			       remote_fi_addr, &o->context);
+		return fi_send(lep, buf, opts.transfer_size, s->desc,
+			       op_peer_addr(mr_idx), &o->context);
 }
 
 static ssize_t post_recv_op(int op_idx, int mr_idx)
 {
 	struct mr_slot *s = &slots[mr_idx];
 	struct op_ctx *o = &op_arr[op_idx];
+	struct fid_ep *lep = op_local_ep(mr_idx);
 	char *buf = slot_op_buf(op_idx, mr_idx);
 
 	o->mr_idx = mr_idx;
 
 	if (test_mode == TEST_TAGGED)
-		return fi_trecv(ep, buf, opts.transfer_size, s->desc,
-				remote_fi_addr, 0xCAFE, 0, &o->context);
+		return fi_trecv(lep, buf, opts.transfer_size, s->desc,
+				op_peer_addr(mr_idx), 0xCAFE, 0, &o->context);
 	else
-		return fi_recv(ep, buf, opts.transfer_size, s->desc,
-			       remote_fi_addr, &o->context);
+		return fi_recv(lep, buf, opts.transfer_size, s->desc,
+			       op_peer_addr(mr_idx), &o->context);
 }
 
 static void shuffle(int *arr, int n)
@@ -905,13 +938,20 @@ static int run_fill_abort_initiator(int iter)
 		 *
 		 * Use op_arr[0] as context so drain_cq_counted's container_of
 		 * resolves to a valid op_ctx.
+		 *
+		 * A control message, not a slot op: it borrows this slot's remote
+		 * key because a 0-byte write still needs a valid destination MR.
+		 * Which pair carries it does not matter -- the target closes all
+		 * its MRs on receipt.
 		 */
-		op_arr[0].mr_idx = 0;
-		ret = fi_writedata(ep, NULL, 0, NULL,
+		const int SIGNAL_MR_IDX = 0;
+
+		op_arr[0].mr_idx = SIGNAL_MR_IDX;
+		ret = fi_writedata(op_local_ep(SIGNAL_MR_IDX), NULL, 0, NULL,
 				   (uint64_t) 0xFFFF,
-				   remote_fi_addr,
-				   remote_arr[0].addr,
-				   remote_arr[0].key,
+				   op_peer_addr(SIGNAL_MR_IDX),
+				   remote_arr[SIGNAL_MR_IDX].addr,
+				   remote_arr[SIGNAL_MR_IDX].key,
 				   &op_arr[0].context);
 		if (ret) {
 			FT_PRINTERR("fi_writedata (signal)", ret);
