@@ -3172,7 +3172,7 @@ int ft_sync_inband(bool repost_rx)
 
 	if (opts.dst_addr) {
 		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 0, &tx_ctx,
-				FI_DELIVERY_COMPLETE);
+				opts.sync_comp_flags);
 		if (ret)
 			return ret;
 
@@ -3185,7 +3185,7 @@ int ft_sync_inband(bool repost_rx)
 			return ret;
 
 		ret = ft_tx_msg(ep, remote_fi_addr, tx_buf, 0, &tx_ctx,
-				FI_DELIVERY_COMPLETE);
+				opts.sync_comp_flags);
 		if (ret)
 			return ret;
 	}
@@ -4595,6 +4595,10 @@ void ft_longopts_usage()
 		"Do not request FI_RX_CQ_DATA in hints for writedata/sendata tests");
 	FT_PRINT_OPTS_USAGE("--expect-error",
 		"Expect specific error code");
+	FT_PRINT_OPTS_USAGE("--sync-comp <mode>",
+		"Completion semantic for inband sync:\n"
+		"transmit_complete, delivery_complete (default),\n"
+		"commit_complete");
 }
 
 int debug_assert;
@@ -4611,6 +4615,7 @@ struct option long_opts[] = {
 	{"threading", required_argument, NULL, LONG_OPT_THREADING},
 	{"no-rx-cq-data", no_argument, NULL, LONG_OPT_NO_RX_CQ_DATA},
 	{"expect-error", required_argument, NULL, LONG_OPT_EXPECT_ERROR},
+	{"sync-comp", required_argument, NULL, LONG_OPT_SYNC_COMP},
 	{NULL, 0, NULL, 0},
 };
 
@@ -4676,6 +4681,21 @@ int ft_parse_long_opts(int op, char *optarg)
 		return 0;
 	case LONG_OPT_EXPECT_ERROR:
 		opts.expect_error = atoi(optarg);
+		return 0;
+	case LONG_OPT_SYNC_COMP:
+		if (!strcasecmp("transmit_complete", optarg) ||
+		    !strcasecmp("transmit", optarg))
+			opts.sync_comp_flags = FI_TRANSMIT_COMPLETE;
+		else if (!strcasecmp("delivery_complete", optarg) ||
+			 !strcasecmp("delivery", optarg))
+			opts.sync_comp_flags = FI_DELIVERY_COMPLETE;
+		else if (!strcasecmp("commit_complete", optarg) ||
+			 !strcasecmp("commit", optarg))
+			opts.sync_comp_flags = FI_COMMIT_COMPLETE;
+		else {
+			FT_ERR("Invalid sync completion mode: %s", optarg);
+			return EXIT_FAILURE;
+		}
 		return 0;
 	default:
 		return EXIT_FAILURE;
