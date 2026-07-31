@@ -180,6 +180,7 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 	struct efa_conn *conn;
 	fi_addr_t implicit_fi_addr = FI_ADDR_NOTAVAIL;
 
+	ofi_genlock_lock(&av->domain->util_domain.lock);
 	EFA_GENLOCK_LOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	conn = efa_av_reverse_lookup_rdm_conn(&av->cur_reverse_av_implicit,
 					      &av->prv_reverse_av_implicit, ahn,
@@ -190,6 +191,7 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 		implicit_fi_addr = conn->implicit_fi_addr;
 	}
 	EFA_GENLOCK_UNLOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	ofi_genlock_unlock(&av->domain->util_domain.lock);
 
 	return implicit_fi_addr;
 }
@@ -222,6 +224,7 @@ void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 	dlist_insert_tail(&conn->implicit_av_lru_entry,
 			  &av->implicit_av_lru_list);
 
+	assert(ofi_genlock_held(&av->domain->util_domain.lock));
 	efa_ah_implicit_av_lru_ah_move(av->domain, conn->ah);
 }
 
@@ -477,9 +480,6 @@ static inline int efa_av_insert_one_validate(struct efa_av *av,
 	if (av->domain->info_type == EFA_INFO_DGRAM)
 		addr->qkey = EFA_DGRAM_CONNID;
 
-	if (av->domain->info_type == EFA_INFO_RDM)
-		assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
-
 	memset(raw_gid_str, 0, INET6_ADDRSTRLEN);
 	if (!inet_ntop(AF_INET6, addr->raw, raw_gid_str, INET6_ADDRSTRLEN)) {
 		EFA_WARN(FI_LOG_AV, "cannot convert address to string. errno: %d\n", errno);
@@ -686,10 +686,9 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	if (flags)
 		return -FI_ENOSYS;
 
-	/* The order in which the util AV and SRX locks are acquired must match
-	 * in the AV insertion, removal and CQ read paths to prevent deadlocks */
+	/* Lock ordering: util_domain.lock -> util_av.lock -> util_av_implicit.lock */
 	if (av->domain->info_type == EFA_INFO_RDM)
-		ofi_genlock_lock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
+		ofi_genlock_lock(&av->domain->util_domain.lock);
 
 	for (i = 0; i < count; i++) {
 		addr_i = (struct efa_ep_addr *) ((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
@@ -707,7 +706,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	}
 
 	if (av->domain->info_type == EFA_INFO_RDM)
-		ofi_genlock_unlock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
+		ofi_genlock_unlock(&av->domain->util_domain.lock);
 
 	/* cancel remaining request and log to event queue */
 	for (; i < count ; i++) {

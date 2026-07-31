@@ -464,8 +464,10 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	 * not local or shm is disabled for transmission. We shouldn't insert
 	 * in to shm av in this case.
 	 */
+	ofi_genlock_lock(&ep->base_ep.domain->util_domain.lock);
 	ret = efa_av_insert_one_implicit(ep->base_ep.av, &efa_ep_addr, &implicit_fi_addr,
 				0, NULL);
+	ofi_genlock_unlock(&ep->base_ep.domain->util_domain.lock);
 	if (OFI_UNLIKELY(ret != 0)) {
 		efa_base_ep_write_eq_error(&ep->base_ep, ret,
 					   FI_EFA_ERR_AV_INSERT);
