@@ -347,8 +347,10 @@ static int util_queue_msg(struct fi_peer_rx_entry *rx_entry)
 	util_entry = container_of(rx_entry, struct util_rx_entry, peer_entry);
 	assert(util_entry->status == RX_ENTRY_UNEXP);
 	if (!srx_ctx->dir_recv || rx_entry->addr == FI_ADDR_UNSPEC) {
+		ofi_genlock_lock(&srx_ctx->unspec_lock);
 		dlist_insert_tail(&util_entry->d_entry,
 				  &srx_ctx->unspec_unexp_msg_queue);
+		ofi_genlock_unlock(&srx_ctx->unspec_lock);
 	} else {
 		unexp_peer = ofi_array_at(&srx_ctx->src_unexp_peers,
 					  rx_entry->addr);
@@ -372,8 +374,10 @@ static int util_queue_tag(struct fi_peer_rx_entry *rx_entry)
 	util_entry = container_of(rx_entry, struct util_rx_entry, peer_entry);
 	assert(util_entry->status == RX_ENTRY_UNEXP);
 	if (!srx_ctx->dir_recv || rx_entry->addr == FI_ADDR_UNSPEC) {
+		ofi_genlock_lock(&srx_ctx->unspec_lock);
 		dlist_insert_tail(&util_entry->d_entry,
 				  &srx_ctx->unspec_unexp_tag_queue);
+		ofi_genlock_unlock(&srx_ctx->unspec_lock);
 	} else {
 		unexp_peer = ofi_array_at(&srx_ctx->src_unexp_peers,
 					  rx_entry->addr);
@@ -450,7 +454,7 @@ static void util_foreach_unspec(struct fid_peer_srx *srx,
 
 	srx_ctx = srx->ep_fid.fid.context;
 
-	assert(ofi_genlock_held(srx_ctx->lock));
+	ofi_genlock_lock(&srx_ctx->unspec_lock);
 	dlist_foreach_container_safe(&srx_ctx->unspec_unexp_msg_queue,
 				     struct util_rx_entry, rx_entry, d_entry,
 				     tmp) {
@@ -490,6 +494,7 @@ static void util_foreach_unspec(struct fid_peer_srx *srx,
 			dlist_insert_tail(&unexp_peer->entry,
 					  &srx_ctx->unexp_peers);
 	}
+	ofi_genlock_unlock(&srx_ctx->unspec_lock);
 }
 
 static struct fi_ops_srx_owner util_srx_owner_ops = {
@@ -525,10 +530,12 @@ static struct util_rx_entry *util_search_unexp_msg(struct util_srx_ctx *srx,
 	struct util_unexp_peer *unexp_peer;
 
 	if (addr == FI_ADDR_UNSPEC) {
+		ofi_genlock_lock(&srx->unspec_lock);
 		if (!dlist_empty(&srx->unspec_unexp_msg_queue)) {
 			dlist_pop_front(&srx->unspec_unexp_msg_queue,
 					struct util_rx_entry, rx_entry,
 					d_entry);
+			ofi_genlock_unlock(&srx->unspec_lock);
 			return rx_entry;
 		}
 
@@ -536,9 +543,12 @@ static struct util_rx_entry *util_search_unexp_msg(struct util_srx_ctx *srx,
 					struct util_unexp_peer, unexp_peer,
 					entry) {
 			rx_entry = util_search_peer_msg(unexp_peer);
-			if (rx_entry)
+			if (rx_entry) {
+				ofi_genlock_unlock(&srx->unspec_lock);
 				return rx_entry;
+			}
 		}
+		ofi_genlock_unlock(&srx->unspec_lock);
 		return NULL;
 	}
 
@@ -652,6 +662,7 @@ static struct util_rx_entry *util_search_unexp_tag(struct util_srx_ctx *srx,
 	struct util_unexp_peer *unexp_peer;
 
 	if (addr == FI_ADDR_UNSPEC) {
+		ofi_genlock_lock(&srx->unspec_lock);
 		dlist_foreach_container(&srx->unspec_unexp_tag_queue,
 					struct util_rx_entry, rx_entry,
 					d_entry) {
@@ -662,6 +673,7 @@ static struct util_rx_entry *util_search_unexp_tag(struct util_srx_ctx *srx,
 			if (remove)
 				dlist_remove(&rx_entry->d_entry);
 
+			ofi_genlock_unlock(&srx->unspec_lock);
 			return rx_entry;
 		}
 
@@ -669,9 +681,12 @@ static struct util_rx_entry *util_search_unexp_tag(struct util_srx_ctx *srx,
 				struct util_unexp_peer, unexp_peer, entry) {
 			rx_entry = util_search_peer_tag(unexp_peer, tag,
 							ignore, remove);
-			if (rx_entry)
+			if (rx_entry) {
+				ofi_genlock_unlock(&srx->unspec_lock);
 				return rx_entry;
+			}
 		}
+		ofi_genlock_unlock(&srx->unspec_lock);
 		return NULL;
 	}
 
@@ -1058,6 +1073,7 @@ int util_srx_close(struct fid *fid)
 	ofi_bufpool_destroy(srx->rx_pool);
 
 	ofi_genlock_unlock(srx->lock);
+	ofi_genlock_destroy(&srx->unspec_lock);
 	free(srx);
 
 	return FI_SUCCESS;
@@ -1222,6 +1238,14 @@ int util_ep_srx_context(struct util_domain *domain, size_t rx_size,
 	dlist_init(&srx->unspec_unexp_tag_queue);
 	dlist_init(&srx->unexp_peers);
 
+	ret = ofi_genlock_init(&srx->unspec_lock,
+			       domain->threading == FI_THREAD_DOMAIN ?
+			       OFI_LOCK_NOOP : OFI_LOCK_MUTEX);
+	if (ret) {
+		free(srx);
+		return ret;
+	}
+
 	ofi_array_init(&srx->src_recv_queues, sizeof(struct slist),
 		       util_srx_init_slist);
 	ofi_array_init(&srx->src_trecv_queues, sizeof(struct slist),
@@ -1242,6 +1266,7 @@ int util_ep_srx_context(struct util_domain *domain, size_t rx_size,
 	pool_attr.context = srx;
 	ret = ofi_bufpool_create_attr(&pool_attr, &srx->rx_pool);
 	if (ret) {
+		ofi_genlock_destroy(&srx->unspec_lock);
 		free(srx);
 		return ret;
 	}

@@ -1356,6 +1356,7 @@ struct util_srx_ctx {
 
 	struct ofi_bufpool	*rx_pool;
 	struct ofi_genlock	*lock;
+	struct ofi_genlock	unspec_lock;
 };
 
 struct util_match_attr {
