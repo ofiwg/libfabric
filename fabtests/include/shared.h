@@ -226,6 +226,7 @@ struct ft_opts {
 	uint64_t device;
 	enum fi_threading threading;
 	int expect_error;
+	uint64_t sync_comp_flags; /* completion semantic for inband sync */
 
 	char **argv;
 };
@@ -339,6 +340,7 @@ extern char default_port[8];
 		.address_format = FI_FORMAT_UNSPEC, \
 		.threading = FI_THREAD_DOMAIN, \
 		.expect_error = 0, \
+		.sync_comp_flags = FI_DELIVERY_COMPLETE, \
 	}
 
 #define FT_STR_LEN 32
@@ -701,6 +703,7 @@ enum {
 	LONG_OPT_THREADING,
 	LONG_OPT_NO_RX_CQ_DATA,
 	LONG_OPT_EXPECT_ERROR,
+	LONG_OPT_SYNC_COMP,
 };
 
 extern int debug_assert;
