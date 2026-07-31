@@ -238,9 +238,9 @@ static int max_ops(void)
 {
 	int n = num_mrs * ops_per_mr;
 
-	/* Partial test always uses 2 ops regardless of num_mrs */
-	if (test_mode == TEST_PARTIAL && n < 2)
-		n = 2;
+	/* The partial test posts 2 ops per slot, all outstanding at once */
+	if (test_mode == TEST_PARTIAL)
+		n = 2 * num_mrs;
 
 	/* Target-close posts an extra signal write before filling the queue */
 	if (close_side == CLOSE_TARGET)
@@ -1136,18 +1136,29 @@ static int run_fill_abort_target(void)
  *
  * Register 2 MRs on the same buffer. Post 1 write with each MR.
  * Close only the first MR. Verify: one op errors, the other completes.
- * Only runs on the initiator side.
+ *
+ * Runs once per slot, and num_mrs == num_initiator_eps here, so every pair is
+ * covered exactly once. Every pair posts and closes before any completion is
+ * reaped, so a close must only abort the ops on its own MR.
  */
-static int run_partial_close_initiator(void)
+
+/*
+ * Post both writes for one slot and close the alias MR. Slot mr_idx owns
+ * op_arr[2 * mr_idx] (op on the surviving slot MR) and op_arr[2 * mr_idx + 1]
+ * (op on the closed alias); max_ops() sizes op_arr to match.
+ */
+static int partial_post_one_slot(int mr_idx)
 {
 	struct mr_slot extra_slot = {0};
 	struct fi_rma_iov local_iov, remote_iov;
-	int i, completed_ok = 0, completed_err = 0, completed;
+	struct op_ctx *surviving = &op_arr[2 * mr_idx];
+	struct op_ctx *closed = &op_arr[2 * mr_idx + 1];
 	int ret;
 
-	/* Use slot 0's buffer for both MRs */
-	extra_slot.buf = slots[0].buf;
-	extra_slot.key = MR_ABORT_KEY_BASE + num_mrs; /* unique key */
+	/* Use this slot's buffer for both MRs */
+	extra_slot.buf = slots[mr_idx].buf;
+	/* Unique key: slot keys occupy [BASE, BASE + num_mrs) */
+	extra_slot.key = MR_ABORT_KEY_BASE + num_mrs + mr_idx;
 
 	ret = ft_reg_mr(fi, extra_slot.buf, opts.transfer_size,
 			ft_info_to_mr_access(fi), extra_slot.key, opts.iface,
@@ -1171,22 +1182,22 @@ static int run_partial_close_initiator(void)
 	if (ret)
 		goto close_extra;
 
-	/* Post write using slot 0's MR (will be closed) */
-	reset_test_state();
-	ret = fi_write(ep, slots[0].buf, opts.transfer_size,
-		       slots[0].desc, remote_fi_addr,
-		       remote_arr[0].addr, remote_arr[0].key,
-		       &op_arr[0].context);
+	/* Post write using this slot's MR (will survive) */
+	surviving->mr_idx = mr_idx;
+	ret = fi_write(op_local_ep(mr_idx), slots[mr_idx].buf,
+		       opts.transfer_size, slots[mr_idx].desc,
+		       op_peer_addr(mr_idx), remote_arr[mr_idx].addr,
+		       remote_arr[mr_idx].key, &surviving->context);
 	if (ret) {
-		FT_PRINTERR("fi_write (slot 0)", ret);
+		FT_PRINTERR("fi_write (slot MR)", ret);
 		goto close_extra;
 	}
 
-	/* Post write using extra MR (will survive) */
-	ret = fi_write(ep, extra_slot.buf, opts.transfer_size,
-		       extra_slot.desc, remote_fi_addr,
-		       remote_iov.addr, remote_iov.key,
-		       &op_arr[1].context);
+	/* Post write using extra MR (will be closed) */
+	closed->mr_idx = mr_idx;
+	ret = fi_write(op_local_ep(mr_idx), extra_slot.buf, opts.transfer_size,
+		       extra_slot.desc, op_peer_addr(mr_idx),
+		       remote_iov.addr, remote_iov.key, &closed->context);
 	if (ret) {
 		FT_PRINTERR("fi_write (extra)", ret);
 		goto close_extra;
@@ -1199,16 +1210,25 @@ static int run_partial_close_initiator(void)
 		goto close_extra;
 	}
 	extra_slot.mr = NULL;
+	return 0;
 
-	/* Drain both completions */
-	ret = drain_cq_counted(txcq, 2, mr_abort_local_close_errs,
-			       ARRAY_SIZE(mr_abort_local_close_errs));
-	if (ret != 0)
-		goto close_extra;
+close_extra:
+	FT_CLOSE_FID(extra_slot.mr);
+	return ret;
+}
+
+/* Verify slot mr_idx's two completions, already reaped by the caller's drain. */
+static int partial_check_one_slot(int mr_idx)
+{
+	struct op_ctx *surviving = &op_arr[2 * mr_idx];
+	struct op_ctx *closed = &op_arr[2 * mr_idx + 1];
+	int i, completed_ok = 0, completed_err = 0, completed;
 
 	for (i = 0; i < 2; i++) {
-		if (op_arr[i].completions) {
-			if (op_arr[i].status == 0)
+		struct op_ctx *o = i ? closed : surviving;
+
+		if (o->completions) {
+			if (o->status == 0)
 				completed_ok++;
 			else
 				completed_err++;
@@ -1217,90 +1237,211 @@ static int run_partial_close_initiator(void)
 	completed = completed_ok + completed_err;
 
 	/*
-	 * op_arr[0] used slots[0].mr (not closed) — must succeed.
-	 * op_arr[1] used extra_slot.mr (closed) — may succeed or fail.
+	 * surviving used slots[mr_idx].mr (not closed) — must succeed.
+	 * closed used extra_slot.mr (closed) — may succeed or fail.
 	 */
-	FT_INFO("Partial close: posted=2 ok=%d err=%d missing=%d "
-	       "surviving_op=%s closed_op=%s ... ",
-	       completed_ok, completed_err, 2 - completed,
-	       op_arr[0].completions == 0 ? "missing" :
-	       op_arr[0].completions > 1  ? "DOUBLE"  :
-		       (op_arr[0].status == 0 ? "ok" : "FAIL"),
-	       op_arr[1].completions == 0 ? "missing" :
-	       op_arr[1].completions > 1  ? "DOUBLE"  :
-		       (op_arr[1].status == 0 ? "ok" : "err"));
+	FT_INFO("Partial close: slot=%d pair=%d posted=2 ok=%d err=%d "
+	       "missing=%d surviving_op=%s closed_op=%s ... ",
+	       mr_idx, pair_idx_for_mr_idx(mr_idx), completed_ok, completed_err,
+	       2 - completed,
+	       surviving->completions == 0 ? "missing" :
+	       surviving->completions > 1  ? "DOUBLE"  :
+		       (surviving->status == 0 ? "ok" : "FAIL"),
+	       closed->completions == 0 ? "missing" :
+	       closed->completions > 1  ? "DOUBLE"  :
+		       (closed->status == 0 ? "ok" : "err"));
 
 	if (completed != 2) {
 		FT_INFO("FAIL (missing completions)\n");
-		ret = -FI_EOTHER;
-	} else if (op_arr[0].status != 0) {
+		return -FI_EOTHER;
+	}
+	if (surviving->status != 0) {
 		FT_INFO("FAIL (surviving MR op must not fail)\n");
-		ret = -FI_EOTHER;
-	} else {
-		FT_INFO("PASS\n");
-		ret = 0;
+		return -FI_EOTHER;
 	}
 
-	/* Sync with target so it can safely close its extra MR */
-	if (!ret)
-		ret = ft_sync();
-
-close_extra:
-	FT_CLOSE_FID(extra_slot.mr);
-	return ret;
+	FT_INFO("PASS\n");
+	return 0;
 }
 
-static int run_partial_close_target(void)
+/*
+ * One loop posts and closes on every pair, then one drain reaps all the
+ * completions at once and a second loop checks each pair's pair of ops.
+ */
+static int run_partial_close_initiator(void)
 {
-	struct mr_slot extra_slot = {0};
+	int mr_idx, ret;
+
+	reset_test_state();
+
+	for (mr_idx = 0; mr_idx < num_mrs; mr_idx++) {
+		ret = partial_post_one_slot(mr_idx);
+		if (ret)
+			return ret;
+	}
+
+	ret = drain_cq_counted(txcq, 2 * num_mrs, mr_abort_local_close_errs,
+			       ARRAY_SIZE(mr_abort_local_close_errs));
+	if (ret)
+		return ret;
+
+	for (mr_idx = 0; mr_idx < num_mrs; mr_idx++) {
+		ret = partial_check_one_slot(mr_idx);
+		if (ret)
+			return ret;
+	}
+
+	/* Sync once the target's extra MRs are safe to close */
+	return ft_sync();
+}
+
+/* Target half of one slot: see partial_post_one_slot(). */
+static int partial_target_one_slot(struct mr_slot *extra_slot, int mr_idx)
+{
 	struct fi_rma_iov local_iov, remote_iov;
 	int ret;
 
 	/* Register an extra MR for the second write target */
-	ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &extra_slot.buf,
+	ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &extra_slot->buf,
 			    opts.transfer_size);
 	if (ret)
 		return ret;
-	extra_slot.key = MR_ABORT_KEY_BASE + num_mrs;
+	extra_slot->key = MR_ABORT_KEY_BASE + num_mrs + mr_idx;
 
-	ret = ft_reg_mr(fi, extra_slot.buf, opts.transfer_size,
-			ft_info_to_mr_access(fi), extra_slot.key, opts.iface,
-			opts.device, &extra_slot.mr, &extra_slot.desc);
+	ret = ft_reg_mr(fi, extra_slot->buf, opts.transfer_size,
+			ft_info_to_mr_access(fi), extra_slot->key, opts.iface,
+			opts.device, &extra_slot->mr, &extra_slot->desc);
 	if (ret) {
 		FT_PRINTERR("ft_reg_mr (extra)", ret);
-		ft_hmem_free(opts.iface, extra_slot.buf);
 		return ret;
 	}
 
 	/* Exchange the extra key with initiator */
-	local_iov.key = fi_mr_key(extra_slot.mr);
+	local_iov.key = fi_mr_key(extra_slot->mr);
 	local_iov.addr = (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR) ?
-		(uintptr_t) extra_slot.buf : 0;
+		(uintptr_t) extra_slot->buf : 0;
 	local_iov.len = opts.transfer_size;
 
 	ret = ft_sock_recv(oob_sock, &remote_iov, sizeof(remote_iov));
 	if (!ret)
 		ret = ft_sock_send(oob_sock, &local_iov, sizeof(local_iov));
-	if (ret)
-		goto cleanup;
+	return ret;
+}
 
-	/* Wait for initiator to finish the partial close test */
+/*
+ * All the extra MRs must stay alive until the initiator has drained every
+ * completion, so register them all up front and close them after the sync.
+ */
+static int run_partial_close_target(void)
+{
+	struct mr_slot *extra_slots;
+	int mr_idx, ret;
+
+	extra_slots = calloc(num_mrs, sizeof(*extra_slots));
+	if (!extra_slots)
+		return -FI_ENOMEM;
+
+	for (mr_idx = 0; mr_idx < num_mrs; mr_idx++) {
+		ret = partial_target_one_slot(&extra_slots[mr_idx], mr_idx);
+		if (ret)
+			goto cleanup;
+	}
+
+	/* Wait for the initiator to finish posting, closing and draining */
 	ret = ft_sync();
 
 cleanup:
-	FT_CLOSE_FID(extra_slot.mr);
-	ft_hmem_free(opts.iface, extra_slot.buf);
+	for (mr_idx = 0; mr_idx < num_mrs; mr_idx++) {
+		FT_CLOSE_FID(extra_slots[mr_idx].mr);
+		if (extra_slots[mr_idx].buf)
+			ft_hmem_free(opts.iface, extra_slots[mr_idx].buf);
+	}
+	free(extra_slots);
 	return ret;
 }
 
 /*
  * Test 3: Endpoint reuse after abort
  *
- * Re-register MRs, do a normal write + read round-trip.
+ * Re-register MRs, then do a normal write + read round-trip on every pair to
+ * show each local endpoint still works after the abort storm.
  */
-static int reuse_check_initiator(void)
+
+/* Block for one txcq completion; every reuse op must succeed outright. */
+static int reuse_wait_one_comp(const char *what)
+{
+	struct fi_cq_tagged_entry comp;
+	struct fi_cq_err_entry err;
+	int ret;
+
+	do {
+		ret = fi_cq_read(txcq, &comp, 1);
+		if (ret == -FI_EAVAIL) {
+			memset(&err, 0, sizeof(err));
+			fi_cq_readerr(txcq, &err, 0);
+			FT_ERR("Unexpected CQ error during reuse %s:", what);
+			FT_CQ_ERR(txcq, err, NULL, 0);
+			return -err.err;
+		}
+	} while (ret == -FI_EAGAIN);
+	if (ret < 0) {
+		FT_PRINTERR("fi_cq_read (reuse)", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * Write + read round-trip on pair p. The buffer comes from slot p % num_mrs
+ * because -W may leave fewer slots than pairs. Contains one ft_sync(), matched
+ * by reuse_check_target().
+ */
+static int reuse_check_one_pair(int p)
 {
 	struct fi_context2 reuse_ctx;
+	int slot = p % num_mrs;
+	int ret;
+
+	/* Write */
+	ret = ft_hmem_memset(opts.iface, opts.device, slots[slot].buf,
+			     0xAB, opts.transfer_size);
+	if (ret)
+		return ret;
+	ret = fi_write(local_ep_for_pair(p), slots[slot].buf, opts.transfer_size,
+		       slots[slot].desc, peer_addr_for_pair(p),
+		       remote_arr[slot].addr, remote_arr[slot].key, &reuse_ctx);
+	if (ret) {
+		FT_PRINTERR("fi_write (reuse)", ret);
+		return ret;
+	}
+
+	ret = reuse_wait_one_comp("write");
+	if (ret)
+		return ret;
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	/* Read */
+	ret = ft_hmem_memset(opts.iface, opts.device, slots[slot].buf,
+			     0, opts.transfer_size);
+	if (ret)
+		return ret;
+	ret = fi_read(local_ep_for_pair(p), slots[slot].buf, opts.transfer_size,
+		      slots[slot].desc, peer_addr_for_pair(p),
+		      remote_arr[slot].addr, remote_arr[slot].key, &reuse_ctx);
+	if (ret) {
+		FT_PRINTERR("fi_read (reuse)", ret);
+		return ret;
+	}
+
+	return reuse_wait_one_comp("read");
+}
+
+static int reuse_check_initiator(void)
+{
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
 	int i, ret;
@@ -1328,67 +1469,16 @@ static int reuse_check_initiator(void)
 	if (ret)
 		return ret;
 
-	/* Write */
-	ret = ft_hmem_memset(opts.iface, opts.device, slots[0].buf,
-			     0xAB, opts.transfer_size);
-	if (ret)
-		return ret;
-	ret = fi_write(ep, slots[0].buf, opts.transfer_size,
-		       slots[0].desc, remote_fi_addr,
-		       remote_arr[0].addr, remote_arr[0].key, &reuse_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_write (reuse)", ret);
-		return ret;
-	}
-
-	do {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret == -FI_EAVAIL) {
-			memset(&err, 0, sizeof(err));
-			fi_cq_readerr(txcq, &err, 0);
-			FT_ERR("Unexpected CQ error during reuse write:");
-			FT_CQ_ERR(txcq, err, NULL, 0);
-			return -err.err;
+	for (i = 0; i < num_initiator_eps; i++) {
+		ret = reuse_check_one_pair(i);
+		if (ret) {
+			FT_INFO("Reuse: pair %d FAIL\n", i);
+			return ret;
 		}
-	} while (ret == -FI_EAGAIN);
-	if (ret < 0) {
-		FT_PRINTERR("fi_cq_read (reuse write)", ret);
-		return ret;
 	}
 
-	ret = ft_sync();
-	if (ret)
-		return ret;
-
-	/* Read */
-	ret = ft_hmem_memset(opts.iface, opts.device, slots[0].buf,
-			     0, opts.transfer_size);
-	if (ret)
-		return ret;
-	ret = fi_read(ep, slots[0].buf, opts.transfer_size,
-		      slots[0].desc, remote_fi_addr,
-		      remote_arr[0].addr, remote_arr[0].key, &reuse_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_read (reuse)", ret);
-		return ret;
-	}
-
-	do {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret == -FI_EAVAIL) {
-			memset(&err, 0, sizeof(err));
-			fi_cq_readerr(txcq, &err, 0);
-			FT_ERR("Unexpected CQ error during reuse read:");
-			FT_CQ_ERR(txcq, err, NULL, 0);
-			return -err.err;
-		}
-	} while (ret == -FI_EAGAIN);
-	if (ret < 0) {
-		FT_PRINTERR("fi_cq_read (reuse read)", ret);
-		return ret;
-	}
-
-	FT_INFO("Reuse: write ok, read ok ... PASS\n");
+	FT_INFO("Reuse: write ok, read ok on %d pair(s) ... PASS\n",
+		num_initiator_eps);
 	return 0;
 }
 
@@ -1408,12 +1498,13 @@ static int reuse_check_target(void)
 	if (ret)
 		return ret;
 
-	/* Sync after initiator's write */
-	ret = ft_sync();
-	if (ret)
-		return ret;
+	/* One sync per pair, matching reuse_check_one_pair(). */
+	for (i = 0; i < num_initiator_eps; i++) {
+		ret = ft_sync();
+		if (ret)
+			return ret;
+	}
 
-	/* Initiator does read, no sync needed — target just keeps MRs alive */
 	return 0;
 }
 
@@ -2383,9 +2474,9 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	/* Partial test only uses slot 0 + one extra MR */
+	/* One slot per pair; -W does not apply. */
 	if (test_mode == TEST_PARTIAL)
-		num_mrs = 1;
+		num_mrs = num_initiator_eps;
 
 	hints->caps = FI_MSG;
 	switch (test_mode) {
