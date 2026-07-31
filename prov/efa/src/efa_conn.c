@@ -214,6 +214,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
  */
 struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
 					 uint64_t flags, void *context, bool insert_shm_av)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	struct util_av *util_av;
 	struct efa_cur_reverse_av **cur_reverse_av;
@@ -308,6 +309,7 @@ err_release:
 struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
 					 uint64_t flags, void *context)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	struct util_av *util_av_implicit;
 	struct util_av_entry *util_av_entry = NULL;
@@ -450,6 +452,7 @@ void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
  */
 void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 		      bool release_from_implicit_av)
+	OFI_TSA_NO_ANALYSIS // util_domain.lock is not taken during AV remove and close
 {
 	efa_conn_release_reverse_av(av, conn, release_from_implicit_av);
 	if (av->domain->info_type == EFA_INFO_RDM)
@@ -474,6 +477,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
  */
 void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *conn)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 	efa_conn_release_reverse_av(av, conn, true);
