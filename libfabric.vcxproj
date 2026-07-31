@@ -872,6 +872,7 @@
   <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64' OR '$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">
     <ClCompile Include="prov\efa\src\windows\efawin.c" />
     <ClCompile Include="prov\efa\src\efa_av.c" />
+    <ClCompile Include="prov\efa\src\efa_av_array.c" />
     <ClCompile Include="prov\efa\src\efa_ah.c" />
     <ClCompile Include="prov\efa\src\efa_conn.c" />
     <ClCompile Include="prov\efa\src\efa_hmem.c" />
@@ -1023,6 +1024,7 @@
     <ClInclude Include="prov\efa\src\efa.h" />
     <ClInclude Include="prov\efa\src\efa_fabric_util.h" />
     <ClInclude Include="prov\efa\src\efa_av.h" />
+    <ClInclude Include="prov\efa\src\efa_av_array.h" />
     <ClInclude Include="prov\efa\src\efa_ah.h" />
     <ClInclude Include="prov\efa\src\efa_conn.h" />
     <ClInclude Include="prov\efa\src\efa_base_ep.h" />
