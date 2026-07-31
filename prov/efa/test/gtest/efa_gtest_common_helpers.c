@@ -51,21 +51,18 @@ int efa_test_av_insert_self(struct fid_ep *ep, struct fid_av *av,
 
 fi_addr_t efa_test_av_insert_new_ah(struct fid_ep *ep, struct fid_av *av)
 {
-	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_av *efa_av;
 	struct efa_ep_addr raw_addr;
 	fi_addr_t fi_addr = FI_ADDR_NOTAVAIL;
 	int err;
 
-	efa_rdm_ep =
-		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_av = container_of(av, struct efa_av, util_av.av_fid);
 
 	efa_test_fabricate_addr(ep, &raw_addr);
 
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_lock(&efa_av->domain->util_domain.lock);
 	err = efa_av_insert_one_implicit(efa_av, &raw_addr, &fi_addr, 0, NULL);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_unlock(&efa_av->domain->util_domain.lock);
 
 	if (err)
 		return FI_ADDR_NOTAVAIL;
