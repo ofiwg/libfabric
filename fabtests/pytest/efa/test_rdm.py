@@ -126,7 +126,8 @@ def test_rdm_tagged_bw_small_recv_window(cmdline_args, completion_semantic, memo
 @pytest.mark.message_sizes(default_efa=RANGE_SIZES)
 @pytest.mark.functional
 def test_rdm_tagged_bw_use_fi_more(cmdline_args, completion_semantic, memory_type, message_sizes):
-    efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw --use-fi-more",
+    command = "fi_rdm_tagged_bw -w 0 --use-fi-more --sync-comp " + completion_semantic
+    efa_run_client_server_test(cmdline_args, command,
                                "short", completion_semantic, memory_type, message_sizes, fabric="efa")
 
 # efa-direct does not support atomic
