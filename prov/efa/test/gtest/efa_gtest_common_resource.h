@@ -58,6 +58,15 @@ void efa_test_resource_construct(struct efa_resource *resource,
 				 struct fi_info *hints);
 
 /**
+ * @brief Same as efa_test_resource_construct but stops short of fi_enable(),
+ * so the endpoint's QP has not been created yet. Use this when a test must
+ * install a mock that intercepts QP creation; call fi_enable() from the test
+ * body once the expectations are set.
+ */
+void efa_test_resource_construct_no_enable(struct efa_resource *resource,
+					   struct fi_info *hints);
+
+/**
  * @brief Destroy all OFI resources in the resource struct.
  * Closes resources in correct order. Uses gtest EXPECT macros so that
  * all cleanup is attempted even if one close fails.

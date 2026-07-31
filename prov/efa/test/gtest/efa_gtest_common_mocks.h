@@ -93,7 +93,11 @@ struct efa_ah;
 	   uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah,  \
 	   uint32_t qpn, uint32_t qkey),                                       \
 	  (qp, sge_list, sge_count, inline_data_list, use_inline, remote_key,  \
-	   remote_addr, wr_id, data, flags, ah, qpn, qkey))
+	   remote_addr, wr_id, data, flags, ah, qpn, qkey))                    \
+	X(struct ibv_qp *, efadv_create_qp_ex,                                 \
+	  (struct ibv_context * ibvctx, struct ibv_qp_init_attr_ex * attr_ex,  \
+	   struct efadv_qp_init_attr * efa_attr, uint32_t inlen),              \
+	  (ibvctx, attr_ex, efa_attr, inlen))
 
 /* --- Generator macros --- */
 

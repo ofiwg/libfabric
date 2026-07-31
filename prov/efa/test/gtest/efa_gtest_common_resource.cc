@@ -30,6 +30,18 @@ void efa_test_resource_construct(struct efa_resource *resource,
 				 struct fi_info *hints)
 {
 	int ret;
+
+	ASSERT_NO_FATAL_FAILURE(
+		efa_test_resource_construct_no_enable(resource, hints));
+
+	ret = fi_enable(resource->ep);
+	ASSERT_EQ(ret, 0) << "fi_enable failed: " << fi_strerror(-ret);
+}
+
+void efa_test_resource_construct_no_enable(struct efa_resource *resource,
+					   struct fi_info *hints)
+{
+	int ret;
 	struct fi_av_attr av_attr = {};
 	struct fi_cq_attr cq_attr = {};
 	struct fi_eq_attr eq_attr = {};
@@ -76,9 +88,6 @@ void efa_test_resource_construct(struct efa_resource *resource,
 	ASSERT_EQ(ret, 0) << "fi_cq_open failed: " << fi_strerror(-ret);
 
 	fi_ep_bind(resource->ep, &resource->cq->fid, FI_SEND | FI_RECV);
-
-	ret = fi_enable(resource->ep);
-	ASSERT_EQ(ret, 0) << "fi_enable failed: " << fi_strerror(-ret);
 }
 
 void efa_test_resource_destruct(struct efa_resource *resource)
