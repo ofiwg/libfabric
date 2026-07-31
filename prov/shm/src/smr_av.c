@@ -443,10 +443,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			smr_ep->region->max_sar_buf_per_peer =
 				MIN(SMR_BUF_BATCH_MAX,
 				    SMR_MAX_PEERS / smr_av->smr_map.num_peers);
-			ofi_genlock_lock(&util_ep->lock);
 			smr_ep->srx->owner_ops->foreach_unspec_addr(
 						smr_ep->srx, &smr_get_addr);
-			ofi_genlock_unlock(&util_ep->lock);
 		}
 	}
 	ofi_genlock_unlock(&util_av->lock);
