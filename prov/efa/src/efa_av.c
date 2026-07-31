@@ -213,6 +213,7 @@ static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
 void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 					struct efa_conn *conn)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 	assert(av->implicit_av_size == 0 ||
@@ -351,6 +352,7 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 					 fi_addr_t implicit_fi_addr,
 					 fi_addr_t *fi_addr)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	int err;
 	struct efa_ah *ah;
@@ -433,6 +435,7 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 		return err;
 
 	/* Handle AH LRU list and refcnt */
+	assert(ofi_genlock_held(&av->domain->util_domain.lock));
 	assert(!dlist_empty(&ah->implicit_conn_list));
 	dlist_remove(&implicit_conn->ah_implicit_conn_list_entry);
 	efa_ah_implicit_av_lru_ah_move(av->domain, ah);
@@ -516,6 +519,7 @@ int efa_av_insert_one_explicit(struct efa_av *av,
 			       struct efa_ep_addr *addr,
 			       fi_addr_t *fi_addr, uint64_t flags,
 			       void *context, bool insert_shm_av)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	char raw_gid_str[INET6_ADDRSTRLEN];
 	struct efa_conn *conn;
@@ -603,6 +607,7 @@ int efa_av_insert_one_implicit(struct efa_av *av,
 			       struct efa_ep_addr *addr,
 			       fi_addr_t *fi_addr, uint64_t flags,
 			       void *context)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	char raw_gid_str[INET6_ADDRSTRLEN];
 	struct efa_conn *conn;
@@ -699,7 +704,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	 * The order in which the util domain and av locks are acquired must be 
 	 * util_domain.lock -> util_av.lock -> util_av_implicit.lock
 	 * in the AV insertion, removal and CQ read paths to prevent deadlocks */
-	ofi_genlock_lock(&av->domain->util_domain.lock);
+	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 
 	for (i = 0; i < count; i++) {
 		addr_i = (struct efa_ep_addr *) ((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
@@ -716,7 +721,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 		success_cnt++;
 	}
 
-	ofi_genlock_unlock(&av->domain->util_domain.lock);
+	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 
 	/* cancel remaining request and log to event queue */
 	for (; i < count ; i++) {
@@ -796,7 +801,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	/* The order in which the util domain and av locks are acquired must be 
 	 * util_domain.lock -> util_av.lock -> util_av_implicit.lock
 	 * in the AV insertion, removal and CQ read paths to prevent deadlocks */
-	ofi_genlock_lock(&av->domain->util_domain.lock);
+	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 	ofi_genlock_lock(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
 		conn = efa_av_addr_to_conn(av, fi_addr[i]);
@@ -814,7 +819,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	}
 
 	ofi_genlock_unlock(&av->util_av.lock);
-	ofi_genlock_unlock(&av->domain->util_domain.lock);
+	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 	return err;
 }
 
@@ -842,7 +847,7 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	/* The order in which the util domain and av locks are acquired must be 
 	 * util_domain.lock -> util_av.lock -> util_av_implicit.lock
 	 * in the AV insertion, removal and CQ read paths to prevent deadlocks */
-	ofi_genlock_lock(&av->domain->util_domain.lock);
+	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 
 	ofi_genlock_lock(&av->util_av.lock);
 	HASH_ITER(hh, av->cur_reverse_av, cur_entry, curtmp) {
@@ -864,7 +869,7 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	}
 	EFA_GENLOCK_UNLOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 
-	ofi_genlock_unlock(&av->domain->util_domain.lock);
+	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 }
 
 static int efa_av_close(struct fid *fid)
@@ -899,11 +904,10 @@ static int efa_av_close(struct fid *fid)
 					 fi_strerror(err));
 			}
 		}
-	}
-
-	HASH_ITER(hh, av->evicted_peers_hashset, ep_addr_hashable, tmp) {
-		HASH_DEL(av->evicted_peers_hashset, ep_addr_hashable);
-		free(ep_addr_hashable);
+		HASH_ITER(hh, av->evicted_peers_hashset, ep_addr_hashable, tmp) {
+			HASH_DEL(av->evicted_peers_hashset, ep_addr_hashable);
+			free(ep_addr_hashable);
+		}
 	}
 
 	free(av);

@@ -28,7 +28,7 @@ struct efa_rdm_domain {
 	/* list of #efa_rdm_peer that will retry posting handshake pkt */
 	struct dlist_entry handshake_queued_peer_list;
 	/* LRU list of AH entries in this domain */
-	struct dlist_entry ah_lru_list;
+	struct dlist_entry ah_lru_list OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
 };
 
 _Static_assert(offsetof(struct efa_rdm_domain, efa_domain) == 0,

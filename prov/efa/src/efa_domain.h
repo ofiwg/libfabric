@@ -27,7 +27,7 @@ struct efa_domain {
 	struct efa_fabric	*fabric;
 	bool 			mr_local;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
-	struct efa_ah		*ah_map;
+	struct efa_ah		*ah_map OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
 	/* Total count of ibv memory registrations */
 	ofi_atomic64_t ibv_mr_reg_ct;
 	/* Total size of memory registrations (in bytes) */

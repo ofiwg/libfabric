@@ -53,6 +53,7 @@ int efa_domain_init_base(struct efa_domain *efa_domain,
 			 struct fid_fabric *fabric_fid,
 			 struct fi_info *info,
 			 void *context)
+	OFI_TSA_NO_ANALYSIS
 {
 	int err;
 
@@ -152,7 +153,7 @@ void efa_domain_cleanup_ah_map(struct efa_domain *efa_domain)
 	struct efa_ah *ah_entry, *tmp;
 	int ret;
 
-	ofi_genlock_lock(&efa_domain->util_domain.lock);
+	EFA_GENLOCK_LOCK(&efa_domain->util_domain.lock, efa_util_domain_lock_sym);
 	if (efa_domain->ah_map) {
 		EFA_WARN(FI_LOG_DOMAIN, "AH map not empty during domain close! Cleaning up ...\n");
 		HASH_ITER(hh, efa_domain->ah_map, ah_entry, tmp) {
@@ -163,7 +164,7 @@ void efa_domain_cleanup_ah_map(struct efa_domain *efa_domain)
 			free(ah_entry);
 		}
 	}
-	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+	EFA_GENLOCK_UNLOCK(&efa_domain->util_domain.lock, efa_util_domain_lock_sym);
 }
 
 void efa_domain_destruct(struct efa_domain *efa_domain)
