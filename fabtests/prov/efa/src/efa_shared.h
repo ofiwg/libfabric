@@ -6,6 +6,7 @@
 #define _EFA_SHARED_H
 
 #include <getopt.h>
+#include <rdma/fabric.h>
 
 #define EFA_FABRIC_NAME	       "efa"
 #define EFA_DIRECT_FABRIC_NAME "efa-direct"
@@ -37,5 +38,10 @@ void efa_longopts_usage(void);
 
 int efa_calc_peer_distribution(int my_idx, int my_count, int peer_count,
 			       int *num_peers, int **peer_ids);
+
+int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
+			   struct fid_ep **local_eps, int local_n,
+			   struct fid_av *av, fi_addr_t *remote_addrs,
+			   int remote_n);
 
 #endif /* _EFA_SHARED_H */
