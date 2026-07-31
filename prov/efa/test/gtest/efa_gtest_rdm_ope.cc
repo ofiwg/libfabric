@@ -1,12 +1,21 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+#include "efa_gtest_common_helpers.h"
+#include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
 #include "efa_gtest_rdm_ope_helpers.h"
 #include <gtest/gtest.h>
 #include <rdma/fi_errno.h>
 
+using testing::_;
+using testing::DoAll;
+using testing::Return;
+using testing::SaveArg;
+using testing::StrictMock;
 using testing::Test;
+using testing::TestWithParam;
+using testing::Values;
 
 class EfaRdmOpeTest : public Test
 {
@@ -49,3 +58,100 @@ TEST_F(EfaRdmOpeTest, rxe_unexp_error_suppresses_op_context)
 	/* The sentinel should not be here */
 	EXPECT_EQ(err_entry.op_context, nullptr);
 }
+
+/**
+ * @brief Covers efa_rdm_ope_process_queued_ope's FI_MORE stripping.
+ *
+ * An op posted with FI_MORE to a peer with no handshake is queued in
+ * software; by the time it is replayed the application's flushing
+ * (non-FI_MORE) op has already passed, so the repost must not carry the
+ * stale FI_MORE into the QP post or the doorbell is never rung.
+ */
+class EfaRdmOpeQueuedFiMoreTest : public TestWithParam<int>
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+
+		struct fi_info *hints = efa_test_alloc_default_hints(
+			FI_EP_RDM, EFA_FABRIC_NAME);
+		ASSERT_NE(hints, nullptr);
+		hints->caps |= FI_MSG | FI_RMA;
+
+		efa_test_resource_construct(&resource, hints);
+		ASSERT_NE(resource.ep, nullptr);
+
+		/* Checked after construct: the device list is only populated
+		 * by fi_getinfo. */
+		if (!efa_test_device_supports_rma())
+			GTEST_SKIP()
+				<< "device does not support RDMA read+write";
+
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_P(EfaRdmOpeQueuedFiMoreTest, repost_does_not_carry_fi_more_to_qp)
+{
+	int op_kind = GetParam();
+	struct efa_test_queued_op qop = {};
+	uintptr_t wr_id = 0;
+	uint64_t seen_flags = 0;
+
+	ASSERT_EQ(efa_test_queue_op_with_fi_more(resource.ep, resource.av,
+						 resource.domain, op_kind,
+						 &qop),
+		  0);
+	/* Queued with the caller's FI_MORE preserved on the ope */
+	ASSERT_TRUE(qop.fi_more_was_set);
+
+	switch (op_kind) {
+	case EFA_TEST_QUEUED_OP_SEND:
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+			.WillOnce(DoAll(SaveArg<5>(&wr_id),
+					SaveArg<7>(&seen_flags), Return(0)));
+		break;
+	case EFA_TEST_QUEUED_OP_READ:
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_read)
+			.WillOnce(DoAll(SaveArg<5>(&wr_id),
+					SaveArg<6>(&seen_flags), Return(0)));
+		break;
+	case EFA_TEST_QUEUED_OP_WRITE:
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_write)
+			.WillOnce(DoAll(SaveArg<7>(&wr_id),
+					SaveArg<9>(&seen_flags), Return(0)));
+		break;
+	default:
+		FAIL() << "unknown op kind " << op_kind;
+	}
+
+	EXPECT_EQ(efa_test_process_queued_ope_after_handshake(&qop), 0);
+	EXPECT_FALSE(seen_flags & FI_MORE);
+
+	efa_test_queued_op_cleanup(&qop, wr_id);
+}
+
+INSTANTIATE_TEST_SUITE_P(QueuedOps, EfaRdmOpeQueuedFiMoreTest,
+			 Values(EFA_TEST_QUEUED_OP_SEND,
+				EFA_TEST_QUEUED_OP_READ,
+				EFA_TEST_QUEUED_OP_WRITE),
+			 [](const testing::TestParamInfo<int> &info) {
+				 switch (info.param) {
+				 case EFA_TEST_QUEUED_OP_SEND:
+					 return "send";
+				 case EFA_TEST_QUEUED_OP_READ:
+					 return "read";
+				 default:
+					 return "write";
+				 }
+			 });
