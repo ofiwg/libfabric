@@ -29,6 +29,7 @@ void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 	struct efa_rdm_domain *rdm_domain;
 
 	assert(domain->info_type == EFA_INFO_RDM);
+	assert(ofi_genlock_held(&domain->util_domain.lock));
 
 	rdm_domain = (struct efa_rdm_domain *) domain;
 	assert(ah->implicit_refcnt > 0 || ah->explicit_refcnt > 0);
@@ -138,13 +139,11 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 
 	efa_ah = NULL;
 
-	ofi_genlock_lock(&domain->util_domain.lock);
 	HASH_FIND(hh, domain->ah_map, gid, EFA_GID_LEN, efa_ah);
 	if (efa_ah) {
 		insert_implicit_av ? efa_ah->implicit_refcnt++ : efa_ah->explicit_refcnt++;
 		if (domain->info_type == EFA_INFO_RDM)
 			efa_ah_implicit_av_lru_ah_move(domain, efa_ah);
-		ofi_genlock_unlock(&domain->util_domain.lock);
 		return efa_ah;
 	}
 
@@ -152,7 +151,6 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	if (!efa_ah) {
 		errno = FI_ENOMEM;
 		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah\n");
-		ofi_genlock_unlock(&domain->util_domain.lock);
 		return NULL;
 	}
 
@@ -219,14 +217,12 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	efa_ah->ahn = efa_ah_attr.ahn;
 	memcpy(efa_ah->gid, gid, EFA_GID_LEN);
 	HASH_ADD(hh, domain->ah_map, gid, EFA_GID_LEN, efa_ah);
-	ofi_genlock_unlock(&domain->util_domain.lock);
 	return efa_ah;
 
 err_destroy_ibv_ah:
 	ibv_destroy_ah(efa_ah->ibv_ah);
 err_free_efa_ah:
 	free(efa_ah);
-	ofi_genlock_unlock(&domain->util_domain.lock);
 	return NULL;
 }
 
@@ -256,13 +252,13 @@ void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah)
 void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
 		    bool release_from_implicit_av)
 {
-	ofi_genlock_lock(&domain->util_domain.lock);
 #if ENABLE_DEBUG
 	struct efa_ah *tmp;
 
 	HASH_FIND(hh, domain->ah_map, ah->gid, EFA_GID_LEN, tmp);
 	assert(tmp == ah);
 #endif
+	assert(ofi_genlock_held(&domain->util_domain.lock));
 	assert((release_from_implicit_av && ah->implicit_refcnt > 0) ||
 	       (!release_from_implicit_av && ah->explicit_refcnt > 0));
 
@@ -272,5 +268,4 @@ void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
 	if (ah->implicit_refcnt == 0 && ah->explicit_refcnt == 0) {
 		efa_ah_destroy_ah(domain, ah);
 	}
-	ofi_genlock_unlock(&domain->util_domain.lock);
 }

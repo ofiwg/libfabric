@@ -154,6 +154,8 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 		return NULL;
 
 	/*
+	 * The util_domain.lock is required for efa_av_implicit_av_lru_conn_move, 
+	 * which modifies domain->ah_lru_list.
 	 * The endpoint lock protects the peer map; the implicit-AV lock
 	 * protects peer->conn and its implicit-LRU entry (touched by the LRU
 	 * move below).
@@ -163,8 +165,9 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	 * the same time. Otherwise, the promotion could free the implicit conn
 	 * and cause the LRU move to operate on a now-bad pointer.
 	 *
-	 * Follows locking order: implicit-AV -> endpoint.
+	 * Follows locking order: util_domain -> implicit-AV -> endpoint.
 	 */
+	ofi_genlock_lock(&ep->base_ep.domain->util_domain.lock);
 	EFA_GENLOCK_LOCK(&ep->base_ep.av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	EFA_GENLOCK_LOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
 
@@ -207,6 +210,7 @@ unlock_ep:
 		efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->conn);
 
 	EFA_GENLOCK_UNLOCK(&ep->base_ep.av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	ofi_genlock_unlock(&ep->base_ep.domain->util_domain.lock);
 	return peer;
 }
 
