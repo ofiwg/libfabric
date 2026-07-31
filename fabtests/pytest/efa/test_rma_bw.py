@@ -110,7 +110,7 @@ def test_rma_bw_large(cmdline_args, operation_type, rma_bw_completion_semantic, 
                           "48", # larger than max batch wqe cnt
                           "128"]) # larger than window size (64)
 def test_rma_bw_use_fi_more(cmdline_args, operation_type, iteration_type, rma_bw_completion_semantic, message_sizes, rma_fabric):
-    command = "fi_rma_bw -e rdm -j 0 --use-fi-more"
+    command = "fi_rma_bw -e rdm -w 0 -j 0 --use-fi-more --sync-comp " + rma_bw_completion_semantic
     command = command + " -o " + operation_type
     # rma_bw test with data verification takes longer to finish
     timeout = max(540, cmdline_args.timeout)
