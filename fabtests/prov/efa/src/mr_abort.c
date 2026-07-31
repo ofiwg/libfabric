@@ -73,6 +73,12 @@ enum test_mode {
 	TEST_TAGGED,
 };
 
+/* mr_abort-only long options, above the efa_shared and shared opt ranges. */
+enum {
+	OPT_NUM_TARGET_EPS = 512,
+	OPT_NUM_INITIATOR_EPS,
+};
+
 /*
  * Each MR slot can have ops_per_mr operations posted against it.
  * op_ctx tracks per-operation state; mr_slot tracks per-MR state.
@@ -134,6 +140,27 @@ static int close_ep_first;
 static int set_homogeneous_peers;
 static bool use_high_pps = false;
 static bool sl_low_latency = false;
+
+#define EFA_MR_ABORT_MAX_EPS 64
+
+static int num_target_eps = 1;
+static int num_initiator_eps = 1;
+static bool num_eps_set;
+static bool target_eps_set;
+static bool initiator_eps_set;
+
+static struct fid_ep *eps[EFA_MR_ABORT_MAX_EPS];
+static fi_addr_t *remote_ep_addrs;
+static int n_local_eps = 1;
+static int n_peer_eps = 1;
+
+/*
+ * Endpoint pairing built by build_ep_pairs(). Pairs are numbered by initiator
+ * endpoint: there are num_initiator_eps of them and pair p is (initiator ep p,
+ * target ep target_ep_for_pair[p]). Both sides build the identical array, so a pair
+ * index names the same pair on both ends.
+ */
+static int *target_ep_for_pair;
 
 /*
  * -r <file>: replay a previously dumped close order instead of generating
@@ -1880,6 +1907,96 @@ static int run_mr_abort_test(int is_initiator)
 	return ret;
 }
 
+/*
+ * Enumerate from the initiator's side on both sides: both know the endpoint
+ * counts, so both derive the same array with nothing exchanged over the wire.
+ * Since only 1:1 and incast are allowed (enforced in main()),
+ * efa_calc_peer_distribution() returns exactly one peer per initiator endpoint.
+ */
+static int build_ep_pairs(void)
+{
+	int i, n, ret;
+	int *target_ids;
+
+	target_ep_for_pair = calloc(num_initiator_eps, sizeof(*target_ep_for_pair));
+	if (!target_ep_for_pair)
+		return -FI_ENOMEM;
+
+	for (i = 0; i < num_initiator_eps; i++) {
+		ret = efa_calc_peer_distribution(i, num_initiator_eps,
+						 num_target_eps, &n,
+						 &target_ids);
+		if (ret)
+			return ret;
+
+		assert(n == 1);
+		target_ep_for_pair[i] = target_ids[0];
+		free(target_ids);
+	}
+
+	FT_INFO("endpoint pairing: %d initiator ep(s), %d target ep(s)",
+		num_initiator_eps, num_target_eps);
+	for (i = 0; i < num_initiator_eps; i++)
+		FT_DEBUG("  pair %d: initiator ep %d <-> target ep %d", i, i,
+			 target_ep_for_pair[i]);
+
+	return 0;
+}
+
+static int setup_eps(void)
+{
+	int i, ret;
+
+	n_local_eps = opts.dst_addr ? num_initiator_eps : num_target_eps;
+	n_peer_eps = opts.dst_addr ? num_target_eps : num_initiator_eps;
+
+	ret = build_ep_pairs();
+	if (ret)
+		return ret;
+
+	remote_ep_addrs = calloc(n_peer_eps, sizeof(*remote_ep_addrs));
+	if (!remote_ep_addrs)
+		return -FI_ENOMEM;
+
+	eps[0] = ep;
+	for (i = 1; i < n_local_eps; i++) {
+		ret = fi_endpoint(domain, fi, &eps[i], NULL);
+		if (ret) {
+			FT_PRINTERR("fi_endpoint", ret);
+			return ret;
+		}
+		ret = ft_enable_ep(eps[i], eq, av, txcq, rxcq,
+				   txcntr, rxcntr, rma_cntr);
+		if (ret)
+			return ret;
+	}
+
+	ret = efa_exchange_addrs_oob(oob_sock, opts.dst_addr != NULL,
+				     eps, n_local_eps, av, remote_ep_addrs,
+				     n_peer_eps);
+	if (ret)
+		return ret;
+
+	remote_fi_addr = remote_ep_addrs[0];
+	return 0;
+}
+
+static void teardown_eps(void)
+{
+	int i;
+
+	for (i = 1; i < n_local_eps; i++) {
+		if (eps[i]) {
+			fi_close(&eps[i]->fid);
+			eps[i] = NULL;
+		}
+	}
+	free(remote_ep_addrs);
+	remote_ep_addrs = NULL;
+	free(target_ep_for_pair);
+	target_ep_for_pair = NULL;
+}
+
 static int run(void)
 {
 	int ret;
@@ -1888,12 +2005,19 @@ static int run(void)
 	if (close_side == CLOSE_TARGET || opts.rma_op == FT_RMA_WRITEDATA)
 		cq_attr.format = FI_CQ_FORMAT_DATA;
 
+	opts.options |= FT_OPT_SKIP_ADDR_EXCH;
+
 	ret = ft_init_fabric();
+	if (ret)
+		return ret;
+
+	ret = setup_eps();
 	if (ret)
 		return ret;
 
 	if (set_homogeneous_peers) {
 		bool homogeneous = true;
+		int i;
 		/*
 		 * Tell the EP all peers are homogeneous so it skips the
 		 * handshake requirement before using an extra-feature,
@@ -1902,6 +2026,10 @@ static int run(void)
 		 * send, so the target is reliably owed -- and can enforce via
 		 * -X -- exactly one completion per op.
 		 *
+		 * Set on every local endpoint: the option is per-EP, so an EP
+		 * left without it would still handshake and make the -X contract
+		 * depend on which endpoint an op was routed to.
+		 *
 		 * Normally this option is set before fi_enable(), but
 		 * ft_init_fabric() has already enabled the EP. Setting it here
 		 * is still correct: EFA's setopt handler has no enable-state
@@ -1909,12 +2037,14 @@ static int run(void)
 		 * (efa_rdm_msg_post_rtm), not at enable. No send has been posted
 		 * yet at this point, so the value is in effect for every op.
 		 */
-		ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT,
-				FI_OPT_EFA_HOMOGENEOUS_PEERS,
-				&homogeneous, sizeof(homogeneous));
-		if (ret) {
-			FT_PRINTERR("fi_setopt(HOMOGENEOUS_PEERS)", ret);
-			return ret;
+		for (i = 0; i < n_local_eps; i++) {
+			ret = fi_setopt(&eps[i]->fid, FI_OPT_ENDPOINT,
+					FI_OPT_EFA_HOMOGENEOUS_PEERS,
+					&homogeneous, sizeof(homogeneous));
+			if (ret) {
+				FT_PRINTERR("fi_setopt(HOMOGENEOUS_PEERS)", ret);
+				return ret;
+			}
 		}
 	}
 
@@ -1927,10 +2057,20 @@ static int run(void)
 	/*
 	 * Target teardown order: EFA requires the endpoint to be closed
 	 * before recv buffer MRs can be deregistered. Use -A ep_first
-	 * to close the EP before freeing test MRs.
+	 * to close the EP before freeing test MRs. eps[0] == ep is closed
+	 * by ft_free_res(); the extra EPs are closed here.
 	 */
-	if (close_ep_first && !opts.dst_addr)
+	if (close_ep_first && !opts.dst_addr) {
+		int i;
+
+		for (i = 1; i < n_local_eps; i++) {
+			if (eps[i]) {
+				FT_CLOSE_FID(eps[i]);
+				eps[i] = NULL;
+			}
+		}
 		FT_CLOSE_FID(ep);
+	}
 
 	if (!ret)
 		ret = free_test_res();
@@ -1940,7 +2080,40 @@ static int run(void)
 	if (!ret)
 		ft_finalize();
 
+	teardown_eps();
+
 	return ret;
+}
+
+/* mr_abort-only options appended to the shared efa_long_opts table. */
+static struct option mr_abort_extra_opts[] = {
+	{"num-target-eps", required_argument, NULL, OPT_NUM_TARGET_EPS},
+	{"num-initiator-eps", required_argument, NULL, OPT_NUM_INITIATOR_EPS},
+	{0, 0, 0, 0}
+};
+
+static struct option *mr_abort_long_opts;
+
+static int build_mr_abort_long_opts(void)
+{
+	int efa_cnt, extra_cnt, i;
+
+	build_efa_long_opts();
+
+	for (efa_cnt = 0; efa_long_opts[efa_cnt].name; efa_cnt++)
+		;
+	extra_cnt = sizeof(mr_abort_extra_opts) / sizeof(mr_abort_extra_opts[0]) - 1;
+
+	mr_abort_long_opts = calloc(efa_cnt + extra_cnt + 1, sizeof(struct option));
+	if (!mr_abort_long_opts)
+		return -FI_ENOMEM;
+
+	for (i = 0; i < extra_cnt; i++)
+		mr_abort_long_opts[i] = mr_abort_extra_opts[i];
+	for (i = 0; i < efa_cnt; i++)
+		mr_abort_long_opts[extra_cnt + i] = efa_long_opts[i];
+
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -1952,7 +2125,8 @@ int main(int argc, char **argv)
 	opts.transfer_size = 4096; /* 4KB default — override with -S */
 	opts.iterations = 10;
 	opts.cqdata_op = 0;
-	build_efa_long_opts();
+	if (build_mr_abort_long_opts())
+		return EXIT_FAILURE;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -1962,13 +2136,25 @@ int main(int argc, char **argv)
 
 	while ((op = getopt_long(argc, argv,
 				 "W:N:C:R:T:A:r:XHh" CS_OPTS INFO_OPTS API_OPTS,
-				 efa_long_opts, &lopt_idx)) != -1) {
+				 mr_abort_long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		case OPT_HIGH_PPS:
 			use_high_pps = true;
 			break;
 		case OPT_SL_LOW_LATENCY:
 			sl_low_latency = true;
+			break;
+		case OPT_NUM_EPS:
+			num_target_eps = num_initiator_eps = atoi(optarg);
+			num_eps_set = true;
+			break;
+		case OPT_NUM_TARGET_EPS:
+			num_target_eps = atoi(optarg);
+			target_eps_set = true;
+			break;
+		case OPT_NUM_INITIATOR_EPS:
+			num_initiator_eps = atoi(optarg);
+			initiator_eps_set = true;
 			break;
 		case 'W':
 			num_mrs = atoi(optarg);
@@ -2069,6 +2255,11 @@ int main(int argc, char **argv)
 				"Aborted send/tagged ops are owed a target "
 				"recv completion (LONGCTS/LONGREAD); only "
 				"valid with -T send|tagged");
+			FT_PRINT_OPTS_USAGE("--num-target-eps <n>",
+				"Number of endpoints on the target side");
+			FT_PRINT_OPTS_USAGE("--num-initiator-eps <n>",
+				"Number of endpoints on the initiator side "
+				"(>= --num-target-eps; incast)");
 			efa_longopts_usage();
 			return EXIT_FAILURE;
 		}
@@ -2079,6 +2270,29 @@ int main(int argc, char **argv)
 
 	if (num_mrs <= 0 || ops_per_mr <= 0) {
 		FT_ERR("-W and -N must be positive");
+		return EXIT_FAILURE;
+	}
+
+	if (num_eps_set && (target_eps_set || initiator_eps_set)) {
+		FT_ERR("use --num-eps OR --num-target-eps/--num-initiator-eps, "
+		       "not both");
+		return EXIT_FAILURE;
+	}
+
+	if (num_target_eps < 1 || num_target_eps > EFA_MR_ABORT_MAX_EPS ||
+	    num_initiator_eps < 1 || num_initiator_eps > EFA_MR_ABORT_MAX_EPS) {
+		FT_ERR("endpoint counts must be 1-%d", EFA_MR_ABORT_MAX_EPS);
+		return EXIT_FAILURE;
+	}
+
+	/*
+	 * Outcast would give an initiator endpoint more than one peer, so a pair
+	 * index would no longer name one pair. build_ep_pairs() relies on that.
+	 */
+	if (num_initiator_eps < num_target_eps) {
+		FT_ERR("outcast is not supported: --num-initiator-eps (%d) must be "
+		       ">= --num-target-eps (%d)", num_initiator_eps,
+		       num_target_eps);
 		return EXIT_FAILURE;
 	}
 

@@ -7,6 +7,8 @@
 #include <string.h>
 #include <getopt.h>
 
+#include <rdma/fi_cm.h>
+
 #include <shared.h>
 #include "efa_shared.h"
 
@@ -100,4 +102,66 @@ int efa_calc_peer_distribution(int my_idx, int my_count, int peer_count,
 
 	*num_peers = n;
 	return FI_SUCCESS;
+}
+
+int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
+			   struct fid_ep **local_eps, int local_n,
+			   struct fid_av *av, fi_addr_t *remote_addrs,
+			   int remote_n)
+{
+	char *local_buf = NULL, *remote_buf = NULL;
+	size_t addrlen;
+	int i, ret;
+
+	local_buf = calloc(local_n, FT_MAX_CTRL_MSG);
+	remote_buf = calloc(remote_n, FT_MAX_CTRL_MSG);
+	if (!local_buf || !remote_buf) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	for (i = 0; i < local_n; i++) {
+		addrlen = FT_MAX_CTRL_MSG;
+		ret = fi_getname(&local_eps[i]->fid,
+				 local_buf + (size_t) i * FT_MAX_CTRL_MSG,
+				 &addrlen);
+		if (ret) {
+			FT_PRINTERR("fi_getname", ret);
+			goto out;
+		}
+	}
+
+	if (is_initiator) {
+		ret = ft_sock_send(oob_sock, local_buf,
+				   (size_t) local_n * FT_MAX_CTRL_MSG);
+		if (ret)
+			goto out;
+		ret = ft_sock_recv(oob_sock, remote_buf,
+				   (size_t) remote_n * FT_MAX_CTRL_MSG);
+		if (ret)
+			goto out;
+	} else {
+		ret = ft_sock_recv(oob_sock, remote_buf,
+				   (size_t) remote_n * FT_MAX_CTRL_MSG);
+		if (ret)
+			goto out;
+		ret = ft_sock_send(oob_sock, local_buf,
+				   (size_t) local_n * FT_MAX_CTRL_MSG);
+		if (ret)
+			goto out;
+	}
+
+	for (i = 0; i < remote_n; i++) {
+		ret = ft_av_insert(av,
+				   remote_buf + (size_t) i * FT_MAX_CTRL_MSG,
+				   1, &remote_addrs[i], 0, NULL);
+		if (ret)
+			goto out;
+	}
+
+	ret = FI_SUCCESS;
+out:
+	free(local_buf);
+	free(remote_buf);
+	return ret;
 }
