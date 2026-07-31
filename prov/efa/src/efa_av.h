@@ -89,11 +89,13 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *addr,
 			       fi_addr_t *fi_addr, uint64_t flags,
-			       void *context, bool insert_shm_av);
+			       void *context, bool insert_shm_av)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
 int efa_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 			       fi_addr_t *fi_addr, uint64_t flags,
-			       void *context);
+			       void *context)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
 struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
 struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av,

@@ -1112,9 +1112,9 @@ static int efa_rdm_ep_close(struct fid *fid)
 	 * modified in the CQ read path by implicit-to-explicit AV entry conversion
 	 */
 	if (efa_rdm_ep->self_ah) {
-		ofi_genlock_lock(&domain->util_domain.lock);
+		EFA_GENLOCK_LOCK(&domain->util_domain.lock, efa_util_domain_lock_sym);
 		efa_ah_release(domain, efa_rdm_ep->self_ah, false);
-		ofi_genlock_unlock(&domain->util_domain.lock);
+		EFA_GENLOCK_UNLOCK(&domain->util_domain.lock, efa_util_domain_lock_sym);
 	}
 
 	efa_rdm_ep_deregister_ibv_cqs(efa_rdm_ep);
@@ -1394,6 +1394,7 @@ int efa_rdm_ep_register_ibv_cqs(struct efa_rdm_ep *ep)
  */
 static inline
 int efa_rdm_ep_create_self_ah(struct efa_rdm_ep *rdm_ep)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 
 	rdm_ep->self_ah = efa_ah_alloc(rdm_ep->base_ep.domain, rdm_ep->base_ep.src_addr.raw, false);
@@ -1439,9 +1440,9 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * Creating the self AH modifies the AH refcnts which can also
 		 * modified in the CQ read path by implicit-to-explicit AV entry
 		 * conversion */
-		ofi_genlock_lock(&ep->base_ep.domain->util_domain.lock);                          
+		EFA_GENLOCK_LOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);              
 		ret = efa_rdm_ep_create_self_ah(ep);
-		ofi_genlock_unlock(&ep->base_ep.domain->util_domain.lock);                          
+		EFA_GENLOCK_UNLOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);            
 		if (ret) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 			 "EFA RDM endpoint cannot create ah for its own address\n");
