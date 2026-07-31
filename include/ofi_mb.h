@@ -181,6 +181,9 @@
  * SOFTWARE.
  */
 
+#ifndef _OFI_MB_H_
+#define _OFI_MB_H_
+
 #include "config.h"
 #include <stdbool.h>
 
@@ -192,6 +195,11 @@ static inline void ofi_wmb(void)
 	atomic_thread_fence(memory_order_release);
 }
 
+static inline void ofi_rmb(void)
+{
+	atomic_thread_fence(memory_order_acquire);
+}
+
 #elif defined(HAVE_BUILTIN_MM_ATOMICS)
 
 static inline void ofi_wmb(void)
@@ -199,6 +207,26 @@ static inline void ofi_wmb(void)
 	__atomic_thread_fence(__ATOMIC_RELEASE);
 }
 
+static inline void ofi_rmb(void)
+{
+	__atomic_thread_fence(__ATOMIC_ACQUIRE);
+}
+
+#elif defined(_MSC_VER)
+#include <intrin.h>
+
+static inline void ofi_wmb(void)
+{
+	_mm_sfence();
+}
+
+static inline void ofi_rmb(void)
+{
+	_mm_lfence();
+}
+
 #else
 #error "Neither built-in atomics nor C11 atomics is supported by compiler."
 #endif
+
+#endif /* _OFI_MB_H_ */
