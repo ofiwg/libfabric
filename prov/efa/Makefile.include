@@ -35,6 +35,7 @@ _efa_files = \
 	prov/efa/src/efa_hmem.c \
 	prov/efa/src/efa_shm.c \
 	prov/efa/src/efa_av.c \
+	prov/efa/src/efa_av_array.c \
 	prov/efa/src/efa_ah.c \
 	prov/efa/src/efa_conn.c \
 	prov/efa/src/rdm/efa_rdm_domain.c \
@@ -93,6 +94,7 @@ endif ENABLE_EFA_UNIT_TEST
 _efa_headers = \
 	prov/efa/src/efa.h \
 	prov/efa/src/efa_av.h \
+	prov/efa/src/efa_av_array.h \
 	prov/efa/src/efa_ah.h \
 	prov/efa/src/efa_conn.h \
 	prov/efa/src/efa_mr.h \
