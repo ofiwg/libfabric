@@ -259,6 +259,23 @@ static inline const char *opx_hfi1_bth_opcode_to_string(uint16_t opcode)
 	(((packet_hdr)->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? ntohl((packet_hdr)->bth.psn) & 0x00FFFFFF : \
 									(packet_hdr)->reliability.psn)
 
+/* Setter paired with the FI_OPX_HFI1_PACKET_PSN getter above; the two encodings
+ * are not interchangeable and eager shares QW[3] with the sender LID.
+ *
+ * The RZV_DATA branch names qw_16B[3] but is layout-independent: the qw_9B[]
+ * and qw_16B[] union arms are offset by one quadword, so qw_16B[3] is the same
+ * storage as qw_9B[2], which is where bth.psn lives in both. */
+#define OPX_HFI1_PACKET_SET_PSN(packet_hdr, psn_val)                             \
+	do {                                                                     \
+		union opx_hfi1_packet_hdr *_packet_hdr = (packet_hdr);           \
+		const uint32_t		   _psn_val    = (uint32_t) (psn_val);   \
+		if (_packet_hdr->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) { \
+			_packet_hdr->qw_16B[3] |= (uint64_t) htonl(_psn_val);    \
+		} else {                                                         \
+			_packet_hdr->reliability.psn = _psn_val & 0x00FFFFFF;    \
+		}                                                                \
+	} while (0)
+
 /* Bounds-validated tx_index extraction: asserts raw field < OPX_MAX_TX_CONTEXTS in debug builds */
 #define FI_OPX_HFI1_PACKET_TX_INDEX(packet_hdr)                                                   \
 	({                                                                                        \

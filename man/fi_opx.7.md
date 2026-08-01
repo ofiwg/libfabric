@@ -321,6 +321,20 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   The default threshold is 8192.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
+*FI_OPX_EAGER_SDMA*
+: Boolean (1/0, on/off, true/false, yes/no). Sends single-packet eager messages originating
+  in device memory over SDMA rather than PIO, so the DMA engine reads the payload from device
+  memory instead of the CPU. On GPUs where a CPU read of the host-visible device mapping is
+  far slower than a read of host memory, this is a substantial latency and bandwidth win in
+  the upper eager range.
+  Applies only to contiguous, non-FI_INJECT, quadword-aligned, off-node sends of at least
+  1024 bytes that still fit in a single eager packet. Note that the message must also be at
+  least FI_OPX_SDMA_MIN_PAYLOAD_BYTES and below FI_OPX_RZV_MIN_PAYLOAD_BYTES to be eligible;
+  with the default values of those two thresholds, no message size satisfies both, so enabling
+  this alone has no effect unless FI_OPX_SDMA_MIN_PAYLOAD_BYTES is lowered as well.
+  Requires FI_OPX_SDMA to be enabled, which is the default.
+  Experimental. This only has an effect with HMEM enabled builds of OPX. Defaults to off.
+
 *FI_OPX_OPA100_INTEROP*
 : Boolean (1/0, on/off, true/false, yes/no). Indicates that the job requires OPA100
   support. Set to 1 if OPA100 support is needed with CN5000 or CN6000. Default is 0.
