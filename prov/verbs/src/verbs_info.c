@@ -793,8 +793,10 @@ static int vrb_have_device(void)
 	return ret;
 }
 
-static bool vrb_hmem_supported(const char *dev_name)
+static bool vrb_hmem_supported(struct ibv_context *ctx)
 {
+	const char *dev_name = ibv_get_device_name(ctx->device);
+
 	if (ofi_hmem_p2p_disabled())
 		return false;
 
@@ -803,10 +805,18 @@ static bool vrb_hmem_supported(const char *dev_name)
 					     strstr(dev_name, "roce")))
 		return true;
 
-	if (vrb_gl_data.dmabuf_support && (strstr(dev_name, "mlx") ||
-					   strstr(dev_name, "bnxt_re") ||
-					   strstr(dev_name, "roce")))
-		return true;
+#if VERBS_HAVE_DMABUF_MR
+	if (vrb_gl_data.dmabuf_support) {
+		struct ibv_pd *pd = ibv_alloc_pd(ctx);
+		if (pd) {
+			struct ibv_mr *mr = ibv_reg_dmabuf_mr(pd, 0, 0, 0, -1, 0);
+			bool supported = (!mr && errno != EOPNOTSUPP);
+			ibv_dealloc_pd(pd);
+			if (supported)
+				return true;
+		}
+	}
+#endif
 
 	return false;
 }
@@ -1553,7 +1563,7 @@ static int vrb_init_info(struct dlist_entry *verbs_devs,
 			/* If verbs HMEM is supported, duplicate previously
 			 * allocated fi_info and apply HMEM flags.
 			 */
-			if (vrb_hmem_supported(ctx_list[i]->device->name)) {
+			if (vrb_hmem_supported(ctx_list[i])) {
 				fi = fi_dupinfo(fi);
 				if (!fi)
 					continue;
