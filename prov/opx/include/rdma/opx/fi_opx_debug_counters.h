@@ -246,6 +246,13 @@ struct fi_opx_debug_counters {
 		uint64_t writev_time_ns_max;
 		uint64_t writev_time_ns_avg;
 		uint64_t nontid_requests;
+		uint64_t eager_sends;
+		uint64_t eager_eagain_room;
+		uint64_t eager_eagain_we;
+		uint64_t eager_eagain_work;
+		uint64_t eager_eagain_cc;
+		uint64_t eager_eagain_context;
+		uint64_t eager_eagain_replay;
 		uint64_t tid_requests;
 		uint64_t replay_requests;
 		uint64_t proc_reqs_calls;
@@ -562,6 +569,13 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 
 #ifdef OPX_DEBUG_COUNTERS_SDMA
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.nontid_requests);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_sends);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_room);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_we);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_work);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_cc);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_context);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_replay);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.tid_requests);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.replay_requests);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.proc_reqs_calls);

@@ -33,6 +33,7 @@
 #include <assert.h>
 #include <string.h>
 #include "rdma/opx/fi_opx_hfi1_sdma.h"
+#include "rdma/opx/fi_opx_rma.h" /* fi_opx_hit_zero */
 #include "rdma/opx/opx_tracer.h"
 
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
@@ -525,4 +526,206 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_t
 	opx_hfi1_sdma_writev(opx_ep, opx_tx, iovecs, iovs_used, avail, fill_index, __FILE__, __func__, __LINE__);
 
 	queue->slots_avail = avail;
+}
+
+int opx_hfi1_tx_send_egr_sdma_complete(union fi_opx_hfi1_deferred_work *work)
+{
+	struct fi_opx_hfi1_dput_params *params = &work->dput;
+	struct fi_opx_ep	       *opx_ep = params->opx_ep;
+
+	assert(params->work_elem.work_type == OPX_WORK_TYPE_LAST);
+
+	struct fi_opx_hfi1_sdma_work_entry *we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
+	while (we) {
+		/* request->comp_state points into the WE, so it must stay live
+		 * until it leaves QUEUED. */
+		if (we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_writev);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
+			return -FI_EAGAIN;
+		} else if (we->comp_state == OPX_SDMA_COMP_QUEUED) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_sdma_completion);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
+			return -FI_EAGAIN;
+		}
+		assert(we->comp_state == OPX_SDMA_COMP_COMPLETE || we->comp_state == OPX_SDMA_COMP_ERROR);
+
+		slist_remove_head(&params->sdma_reqs);
+		we->next = NULL;
+		fi_opx_hfi1_sdma_return_we(opx_ep, we);
+		we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
+	}
+
+	assert(slist_empty(&params->sdma_reqs));
+	return FI_SUCCESS;
+}
+
+/*
+ * Zero-copy: the replay iov points at the caller's buffer and a NAK re-reads it,
+ * so the buffer must stay intact until the replay retires. A use_iov replay
+ * therefore requires a completion counter, which is why FI_INJECT is excluded.
+ */
+ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr,
+				  uint64_t tag, void *user_context, const uint32_t data, const uint64_t tx_op_flags,
+				  const uint64_t caps, const enum ofi_reliability_kind reliability,
+				  const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
+				  const uint64_t hmem_device, const enum opx_hfi1_type hfi1_type)
+{
+	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
+
+	assert(iface != FI_HMEM_SYSTEM);
+	assert(len <= OPX_HFI1_PKT_SIZE);
+	assert(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B));
+	/* Unaligned would over-deliver on the receiver and over-read the source. */
+	assert((len & 7) == 0);
+
+	/* No inline tail: the whole payload rides in the iov. */
+	const size_t   xfer_bytes_tail	 = 0;
+	const size_t   payload_qws_total = (len + 7) >> 3;
+	const uint64_t bth_subctxt_rx	 = ((uint64_t) dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
+					<< OPX_BTH_SUBCTXT_RX_SHIFT;
+	const uint64_t lrh_dlid_9B = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(dest_addr.planes[OPX_PRIMARY_PLANE].lid);
+	const uint64_t pbc_dlid	   = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
+
+	const uint64_t pbc_dws = 2 + /* pbc */
+				 2 + /* lrh */
+				 3 + /* bth */
+				 9 + /* kdeth */
+				 (payload_qws_total << 1);
+	const uint16_t lrh_dws = __cpu_to_be16((uint16_t) (pbc_dws - 2 + 1));
+
+	/* Every -FI_EAGAIN below precedes any wire or reliability side effect. */
+	if (OFI_UNLIKELY(!fi_opx_hfi1_sdma_queue_has_room(opx_ep, opx_tx, OPX_SDMA_NONTID_DATA_IOV_COUNT + 1))) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eager_eagain_room);
+		return -FI_EAGAIN;
+	}
+
+	struct fi_opx_hfi1_sdma_work_entry *we = fi_opx_hfi1_sdma_get_idle_we(opx_ep);
+	if (OFI_UNLIKELY(we == NULL)) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eager_eagain_we);
+		return -FI_EAGAIN;
+	}
+
+	union fi_opx_hfi1_deferred_work *work =
+		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_tx->work_pending_pool);
+	if (OFI_UNLIKELY(work == NULL)) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eager_eagain_work);
+		fi_opx_hfi1_sdma_return_we(opx_ep, we);
+		return -FI_EAGAIN;
+	}
+	/* work_pending_pool is OFI_BUFPOOL_NO_ZERO. Only the fields below are read
+	 * for this work element: it goes on work_pending_completion, which no dput
+	 * consumer walks, so the rest of the union is left alone. */
+	work->work_elem.slist_entry.next  = NULL;
+	work->work_elem.work_type	  = OPX_WORK_TYPE_LAST;
+	work->work_elem.work_fn		  = opx_hfi1_tx_send_egr_sdma_complete;
+	work->work_elem.completion_action = NULL;
+	work->work_elem.payload_copy	  = NULL;
+	work->work_elem.complete	  = false;
+	work->dput.opx_ep		  = opx_ep;
+	slist_init(&work->dput.sdma_reqs);
+
+	struct fi_opx_completion_counter *user_cc =
+		(struct fi_opx_completion_counter *) ofi_buf_alloc(opx_ep->rma_counter_pool);
+	if (OFI_UNLIKELY(user_cc == NULL)) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eager_eagain_cc);
+		OPX_BUF_FREE(work);
+		fi_opx_hfi1_sdma_return_we(opx_ep, we);
+		return -FI_EAGAIN;
+	}
+
+	struct opx_context *context = NULL;
+	if (do_cq_completion) {
+		context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+		if (OFI_UNLIKELY(context == NULL)) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eager_eagain_context);
+			OPX_BUF_FREE(user_cc);
+			OPX_BUF_FREE(work);
+			fi_opx_hfi1_sdma_return_we(opx_ep, we);
+			return -FI_EAGAIN;
+		}
+		context->next		      = NULL;
+		context->err_entry.err	      = 0;
+		context->err_entry.op_context = user_context;
+		context->flags		      = FI_SEND | (caps & (FI_TAGGED | FI_MSG));
+		context->len		      = len;
+		context->buf		      = NULL;
+		context->byte_counter	      = 0;
+		context->tag		      = tag;
+	}
+
+	user_cc->next		    = NULL;
+	user_cc->initial_byte_count = len;
+	user_cc->byte_counter	    = len;
+	user_cc->cntr		    = opx_ep->send_cntr;
+	user_cc->cq		    = opx_ep->tx->cq;
+	user_cc->context	    = context;
+	user_cc->hit_zero	    = fi_opx_hit_zero;
+
+	/* true: allocate from the IOV pool. */
+	struct fi_opx_reliability_tx_replay *replay =
+		fi_opx_reliability_service_replay_allocate(opx_ep->reli_service, true);
+	if (OFI_UNLIKELY(replay == NULL)) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eager_eagain_replay);
+		if (context) {
+			OPX_BUF_FREE(context);
+		}
+		OPX_BUF_FREE(user_cc);
+		OPX_BUF_FREE(work);
+		fi_opx_hfi1_sdma_return_we(opx_ep, we);
+		return -FI_EAGAIN;
+	}
+	replay->use_sdma = true;
+	replay->tx_index = dest_addr.tx_index;
+
+	/* replay_allocate() already aimed the union at &replay->data. The iov
+	 * carries only the payload; the header is in scb. */
+	replay->iov->iov_base = (void *) buf;
+	replay->iov->iov_len  = len;
+
+	replay->scb.scb_9B.qw0 = opx_tx->send_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+				 OPX_PBC_CR(opx_tx->force_credit_return, hfi1_type) | pbc_dlid |
+				 OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, dest_addr.tx_index);
+	replay->scb.scb_9B.hdr.qw_9B[0] = opx_tx->send_9B.hdr.qw_9B[0] | lrh_dlid_9B | ((uint64_t) lrh_dws << 32);
+	replay->scb.scb_9B.hdr.qw_9B[1] =
+		opx_tx->send_9B.hdr.qw_9B[1] | bth_subctxt_rx | (xfer_bytes_tail << 51) |
+		((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_EAGER_CQ :
+									(uint64_t) FI_OPX_HFI_BTH_OPCODE_MSG_EAGER) :
+				   ((tx_op_flags & FI_REMOTE_CQ_DATA) ? (uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER_CQ :
+									(uint64_t) FI_OPX_HFI_BTH_OPCODE_TAG_EAGER));
+	/* PSN is assigned later by opx_hfi1_sdma_register_replays(). */
+	replay->scb.scb_9B.hdr.qw_9B[2] = opx_tx->send_9B.hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(dest_addr.tx_index);
+	replay->scb.scb_9B.hdr.qw_9B[3] = opx_tx->send_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32);
+	replay->scb.scb_9B.hdr.qw_9B[4] = opx_tx->send_9B.hdr.qw_9B[4] | (payload_qws_total << 48);
+	/* No inline tail: the whole payload rides in the iov. */
+	replay->scb.scb_9B.hdr.qw_9B[5] = 0;
+	replay->scb.scb_9B.hdr.qw_9B[6] = tag;
+
+	fi_opx_hfi1_sdma_init_we(we, user_cc, dest_addr.planes[OPX_PRIMARY_PLANE].lid,
+				 dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, iface, (int) hmem_device);
+	/* Not owned by init_we. */
+	we->tx_index	   = dest_addr.tx_index;
+	we->use_bounce_buf = false;
+	fi_opx_hfi1_sdma_add_packet(we, replay, len);
+
+	const uint32_t fragsize = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type);
+
+	opx_hfi1_sdma_enqueue_dput(opx_ep, we, fragsize, len);
+	assert(we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
+	assert(we->next == NULL);
+	slist_insert_tail((struct slist_entry *) we, &work->dput.sdma_reqs);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_tx->work_pending_completion);
+
+	/* This path does not traverse the SDMA deferred work list that would
+	 * otherwise drive the writev. Guarded because enqueue_dput() drops the
+	 * request on pool exhaustion, and process_requests() requires a non-empty
+	 * queue; reliability retransmits the already-registered replay. */
+	if (!slist_empty(&opx_tx->sdma_request_queue.list)) {
+		opx_hfi1_sdma_process_requests(opx_ep, opx_tx);
+	}
+
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eager_sends);
+
+	return FI_SUCCESS;
 }

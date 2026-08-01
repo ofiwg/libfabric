@@ -1372,11 +1372,30 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				   tx->sdma_min_payload_bytes);
 	}
 
-	if (tx->sdma_min_payload_bytes < tx->rzv_min_payload_bytes) {
+#ifdef OPX_HMEM
+	/* Eager-SDMA submits through the same engine, so the master disable wins.
+	 * Clearing it here rather than in the dispatch gate also keeps the pool
+	 * allocations in this function the single authority on SDMA availability. */
+	if (opx_ep->use_eager_sdma && !tx->use_sdma) {
+		opx_ep->use_eager_sdma = false;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"FI_OPX_SDMA_MIN_PAYLOAD_BYTES(%d) will only impact RMA and atomic operations until the FI_OPX_RZV_MIN_PAYLOAD_BYTES(%d) value is hit.\n",
-			tx->sdma_min_payload_bytes, tx->rzv_min_payload_bytes);
+			"FI_OPX_EAGER_SDMA was requested but SDMA is disabled; eager sends will use PIO.\n");
 	}
+
+	/* At the default thresholds this window is empty. */
+	if (opx_ep->use_eager_sdma) {
+		const uint32_t eager_sdma_floor = MAX(OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES, tx->sdma_min_payload_bytes);
+		if (eager_sdma_floor >= tx->rzv_min_payload_bytes) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"FI_OPX_EAGER_SDMA is enabled but unreachable: it requires a message length in [%u, %u), which is empty. Lower FI_OPX_SDMA_MIN_PAYLOAD_BYTES (currently %u) below FI_OPX_RZV_MIN_PAYLOAD_BYTES (currently %u), keeping in mind it also governs TID and rendezvous data-phase selection.\n",
+				eager_sdma_floor, tx->rzv_min_payload_bytes, tx->sdma_min_payload_bytes,
+				tx->rzv_min_payload_bytes);
+		} else {
+			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Eager-SDMA range is %u-%u.\n", eager_sdma_floor,
+					   tx->rzv_min_payload_bytes - 1);
+		}
+	}
+#endif
 
 	int l_sdma_max_writevs_per_cycle;
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_writevs_per_cycle", &l_sdma_max_writevs_per_cycle);
@@ -3846,6 +3865,15 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 		opx_ep->gpu_ipc_min_threshold = (uint32_t) gpu_ipc_min_threshold;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_GPU_IPC_MIN was specified.  Set to %u\n",
 				   opx_ep->gpu_ipc_min_threshold);
+	}
+
+	int use_eager_sdma;
+	if (fi_param_get_bool(fi_opx_global.prov, "eager_sdma", &use_eager_sdma) == FI_SUCCESS) {
+		opx_ep->use_eager_sdma = (bool) use_eager_sdma;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_EAGER_SDMA was specified.  Set to %d\n", use_eager_sdma);
+	} else {
+		opx_ep->use_eager_sdma = false;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_EAGER_SDMA not set.  Using default setting of FALSE\n");
 	}
 #endif
 
