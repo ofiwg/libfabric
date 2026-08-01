@@ -1216,6 +1216,10 @@ OPX_INI
 		&fi_opx_provider, "gpu_ipc_min", FI_PARAM_INT,
 		"The minimum message length in bytes where GPU IPC will be used for intranode GPU buffers. Value must be >= %d. Defaults to %d.",
 		OPX_GPU_IPC_MIN_THRESHOLD_MIN, OPX_GPU_IPC_MIN_THRESHOLD_DEFAULT);
+	fi_param_define(
+		&fi_opx_provider, "eager_sdma", FI_PARAM_BOOL,
+		"Enables sending single-packet eager messages from device memory over SDMA rather than PIO, so the DMA engine reads the payload from device memory instead of the CPU. Applies to messages of at least %d bytes. Experimental. Defaults to FALSE.",
+		OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES);
 #endif
 	fi_param_define(
 		&fi_opx_provider, "route_control", FI_PARAM_STRING,

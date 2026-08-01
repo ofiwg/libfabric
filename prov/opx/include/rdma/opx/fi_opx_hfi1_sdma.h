@@ -209,6 +209,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 				    struct fi_opx_ep_tx *opx_tx, int writev_rc, struct iovec *iovs, const int num_iovs,
 				    const char *file, const char *func, const int line);
 int  fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *work);
+int  opx_hfi1_tx_send_egr_sdma_complete(union fi_opx_hfi1_deferred_work *work);
 void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx);
 void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx);
 
@@ -418,8 +419,10 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 }
 
 __OPX_FORCE_INLINE__
+/* dlid must stay opx_lid_t; narrowing it truncates 3-byte LIDs and keys the tx
+ * flow lookup on a bogus DLID. */
 void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry *we, struct fi_opx_completion_counter *cc,
-			      uint16_t dlid, uint16_t subctxt_rx, enum fi_hmem_iface iface, int hmem_device)
+			      opx_lid_t dlid, uint16_t subctxt_rx, enum fi_hmem_iface iface, int hmem_device)
 {
 	we->cc		= cc;
 	we->dlid	= dlid;
@@ -520,8 +523,12 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 	request->fill_index  = OPX_SDMA_FILL_INDEX_INVALID;
 	request->set_meminfo = set_meminfo;
 
-	/* Set the Acknowledge Request Bit if we're only sending one packet */
-	uint64_t set_ack_bit = (num_packets == 1) ? (uint64_t) htonl(0x80000000) : 0;
+	/* Only RZV_DATA uses the wire BTH AckReq bit; eager reliability is software-side. */
+	const uint8_t opcode = (OPX_SW_HFI1_TYPE(opx_ep->domain) & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ?
+				       source_scb->scb_9B.hdr.bth.opcode :
+				       source_scb->scb_16B.hdr.bth.opcode;
+	uint64_t      set_ack_bit =
+		     (num_packets == 1 && opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? (uint64_t) htonl(0x80000000) : 0;
 
 	request->iovecs[0].iov_base = req_info;
 
@@ -560,14 +567,19 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sd
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.replay_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== Enqueuing replay for SDMA Send\n");
+	/* Only RZV_DATA carries a dput header; other opcodes overlay these bytes. */
+	const union opx_hfi1_packet_hdr *hdr = OPX_REPLAY_HDR(replay, OPX_SW_HFI1_TYPE(opx_ep->domain));
+	const uint64_t			 last_packet_bytes =
+		  (hdr->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? hdr->dput.target.bytes : 0;
+
 	return opx_hfi1_sdma_enqueue_request(
 		opx_ep, we, &we->comp_state, &replay->scb, replay->iov, OPX_SDMA_REPLAY_DATA_IOV_COUNT,
 		1,			       // num_packets,
 		(payload_bytes + 63) & 0xFFC0, // Frag_size
 		FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, replay->hmem_iface, replay->hmem_device,
-		OPX_REPLAY_HDR(replay, OPX_SW_HFI1_TYPE(opx_ep->domain))->dput.target.bytes, // last packet bytes
-		0, // kdeth tid info unused for replays
-		0, // Not an SDMA WE
+		last_packet_bytes, // last packet bytes
+		0,		   // kdeth tid info unused for replays
+		0,		   // Not an SDMA WE
 		replay->tx_index);
 }
 
@@ -603,9 +615,9 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
 		if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-			we->packets[i].replay->scb.scb_9B.hdr.qw_9B[2] |= (uint64_t) htonl((uint32_t) psn);
+			OPX_HFI1_PACKET_SET_PSN(&we->packets[i].replay->scb.scb_9B.hdr, psn);
 		} else {
-			we->packets[i].replay->scb.scb_16B.hdr.qw_16B[3] |= (uint64_t) htonl((uint32_t) psn);
+			OPX_HFI1_PACKET_SET_PSN(&we->packets[i].replay->scb.scb_16B.hdr, psn);
 		}
 
 		we->packets[i].replay->sdma_we_use_count = we->bounce_buf.use_count;
