@@ -1976,6 +1976,13 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag)
 	if (!(ope->internal_flags & flag))
 		return 0;
 
+	/*
+	 * Strip stale FI_MORE: the flushing (non-FI_MORE) operation that followed
+	 * this ope may have already been posted while it sat in the queue. Replaying
+	 * FI_MORE now could leave WQEs staged with no later post to ring the doorbell.
+	 */
+	ope->fi_flags &= ~FI_MORE;
+
 	switch (flag) {
 	case EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE:
 		ret = efa_rdm_ope_repost_ope_queued_before_handshake(ope);
