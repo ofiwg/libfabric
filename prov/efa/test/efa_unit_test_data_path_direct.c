@@ -254,3 +254,107 @@ void test_efa_data_path_direct_write_high_pps_hint_set(void **state)
 	skip();
 #endif
 }
+
+/**
+ * @brief Verify that efa_set_sq_comp_wrid and efa_get_sq_comp_wrid
+ * correctly roundtrip a full 64-bit wr_id through the meta descriptor
+ * and TX completion descriptor when in 64-bit request ID mode.
+ */
+void test_efa_data_path_direct_64_bit_req_id_roundtrip(void **state)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_data_path_direct_wq wq = {0};
+	struct efa_io_tx_meta_desc meta_desc = {0};
+	struct efa_io_tx_cdesc tx_cqe = {0};
+	uint64_t test_wr_id = 0x123456789ABCDEF0ULL;
+	uint64_t recovered_wr_id;
+
+	wq.req_id_64_bit = true;
+
+	/* Set the 64-bit wr_id into the meta descriptor */
+	efa_set_sq_comp_wrid(&meta_desc, &wq, test_wr_id);
+
+	/* Simulate device echoing the req_id fields back in the CQE */
+	tx_cqe.common.req_id = meta_desc.req_id;
+	tx_cqe.req_id_ex = meta_desc.req_id_ex;
+
+	/* Recover the wr_id from the CQE */
+	recovered_wr_id = efa_get_sq_comp_wrid(&wq, &tx_cqe.common);
+
+	assert_int_equal(recovered_wr_id, test_wr_id);
+#else
+	skip();
+#endif
+}
+
+/**
+ * @brief Verify that efa_wq_cqe_finalize increments wqe_completed but
+ * does not touch the pool index when in 64-bit request ID mode.
+ */
+void test_efa_data_path_direct_64_bit_cqe_finalize_no_pool(void **state)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_qp *qp;
+	struct efa_data_path_direct_wq *sq_wq;
+	struct efa_io_cdesc_common fake_cqe = {0};
+	uint16_t pool_next_before;
+	uint32_t wqe_completed_before;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	qp = base_ep->qp;
+	sq_wq = &qp->data_path_direct_qp.sq.wq;
+
+	/* Force 64-bit mode */
+	sq_wq->req_id_64_bit = true;
+
+	pool_next_before = sq_wq->wrid_idx_pool_next;
+	wqe_completed_before = sq_wq->wqe_completed;
+
+	fake_cqe.req_id = 0x1234;
+	efa_wq_cqe_finalize(sq_wq, &fake_cqe);
+
+	/* wqe_completed should have incremented */
+	assert_int_equal(sq_wq->wqe_completed, wqe_completed_before + 1);
+
+	/* Pool next should NOT have changed */
+	assert_int_equal(sq_wq->wrid_idx_pool_next, pool_next_before);
+#else
+	skip();
+#endif
+}
+
+/**
+ * @brief Verify that efa_cqe_is_64_bit_comp returns true for SQ CQEs
+ * when req_id_64_bit is set, and false for RQ CQEs.
+ */
+void test_efa_data_path_direct_64_bit_comp_detection(void **state)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_qp *qp;
+	struct efa_io_cdesc_common fake_cqe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	qp = base_ep->qp;
+
+	/* Force 64-bit mode on SQ */
+	qp->data_path_direct_qp.sq.wq.req_id_64_bit = true;
+
+	/* SQ CQE should be detected as 64-bit */
+	EFA_SET(&fake_cqe.flags, EFA_IO_CDESC_COMMON_Q_TYPE, EFA_IO_SEND_QUEUE);
+	assert_true(efa_cqe_is_64_bit_comp(&fake_cqe, qp));
+
+	/* RQ CQE should not be detected as 64-bit */
+	EFA_SET(&fake_cqe.flags, EFA_IO_CDESC_COMMON_Q_TYPE, EFA_IO_RECV_QUEUE);
+	assert_false(efa_cqe_is_64_bit_comp(&fake_cqe, qp));
+#else
+	skip();
+#endif
+}
