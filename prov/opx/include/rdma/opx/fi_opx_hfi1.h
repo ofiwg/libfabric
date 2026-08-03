@@ -207,7 +207,7 @@ static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS_TID <= OPX_HFI1_SDMA_MAX_PKTS_TID,
 #define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN (64)		/* Min Value */
 #define FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX (INT_MAX - 1) /* Max Value */
 
-#define OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES (1024)
+#define OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES (512)
 
 /* HFISVC has a per-message setup cost that only pays off for large transfers. */
 #define OPX_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT (131072)
