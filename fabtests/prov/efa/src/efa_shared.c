@@ -295,21 +295,32 @@ out:
 	return ret;
 }
 
-int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
-			   struct fid_ep **local_eps, int local_n,
-			   struct fid_av *av, fi_addr_t *remote_addrs,
-			   int remote_n)
+/**
+ * efa_exchange_raw_addrs_oob - Swap raw endpoint addresses over the OOB socket
+ * @oob_sock: connected OOB socket
+ * @is_initiator: true on the side that sends first
+ * @local_eps: local endpoints whose addresses to publish
+ * @local_n: number of local endpoints
+ * @remote_buf: Output - caller-allocated, remote_n * FT_MAX_CTRL_MSG bytes,
+ *              receives the peer's addresses at FT_MAX_CTRL_MSG stride
+ * @remote_n: number of peer endpoints
+ *
+ * Exchanges only the raw address bytes; inserting them into an AV is left to
+ * the caller, which may need the same addresses in more than one AV.
+ *
+ * Returns: FI_SUCCESS on success, negative fi errno on failure
+ */
+int efa_exchange_raw_addrs_oob(int oob_sock, bool is_initiator,
+			       struct fid_ep **local_eps, int local_n,
+			       char *remote_buf, int remote_n)
 {
-	char *local_buf = NULL, *remote_buf = NULL;
+	char *local_buf;
 	size_t addrlen;
 	int i, ret;
 
 	local_buf = calloc(local_n, FT_MAX_CTRL_MSG);
-	remote_buf = calloc(remote_n, FT_MAX_CTRL_MSG);
-	if (!local_buf || !remote_buf) {
-		ret = -FI_ENOMEM;
-		goto out;
-	}
+	if (!local_buf)
+		return -FI_ENOMEM;
 
 	for (i = 0; i < local_n; i++) {
 		addrlen = FT_MAX_CTRL_MSG;
@@ -322,6 +333,7 @@ int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
 		}
 	}
 
+	/* Asymmetric order so the two sides do not both block on recv. */
 	if (is_initiator) {
 		ret = ft_sock_send(oob_sock, local_buf,
 				   (size_t) local_n * FT_MAX_CTRL_MSG);
@@ -329,8 +341,6 @@ int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
 			goto out;
 		ret = ft_sock_recv(oob_sock, remote_buf,
 				   (size_t) remote_n * FT_MAX_CTRL_MSG);
-		if (ret)
-			goto out;
 	} else {
 		ret = ft_sock_recv(oob_sock, remote_buf,
 				   (size_t) remote_n * FT_MAX_CTRL_MSG);
@@ -338,21 +348,60 @@ int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
 			goto out;
 		ret = ft_sock_send(oob_sock, local_buf,
 				   (size_t) local_n * FT_MAX_CTRL_MSG);
-		if (ret)
-			goto out;
 	}
+
+out:
+	free(local_buf);
+	return ret;
+}
+
+/**
+ * efa_insert_raw_addrs - Insert exchanged raw addresses into an AV
+ * @av: address vector to insert into
+ * @remote_buf: addresses as filled in by efa_exchange_raw_addrs_oob()
+ * @remote_n: number of peer endpoints
+ * @remote_addrs: Output - @p remote_n handles valid against @p av
+ *
+ * An fi_addr_t is only meaningful to the AV that produced it, so a caller with
+ * several AVs must insert the same addresses into each one.
+ *
+ * Returns: FI_SUCCESS on success, negative fi errno on failure
+ */
+int efa_insert_raw_addrs(struct fid_av *av, const char *remote_buf,
+			 int remote_n, fi_addr_t *remote_addrs)
+{
+	int i, ret;
 
 	for (i = 0; i < remote_n; i++) {
 		ret = ft_av_insert(av,
-				   remote_buf + (size_t) i * FT_MAX_CTRL_MSG,
+				   (void *) (remote_buf +
+					     (size_t) i * FT_MAX_CTRL_MSG),
 				   1, &remote_addrs[i], 0, NULL);
 		if (ret)
-			goto out;
+			return ret;
 	}
 
-	ret = FI_SUCCESS;
-out:
-	free(local_buf);
+	return FI_SUCCESS;
+}
+
+int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
+			   struct fid_ep **local_eps, int local_n,
+			   struct fid_av *av, fi_addr_t *remote_addrs,
+			   int remote_n)
+{
+	char *remote_buf;
+	int ret;
+
+	remote_buf = calloc(remote_n, FT_MAX_CTRL_MSG);
+	if (!remote_buf)
+		return -FI_ENOMEM;
+
+	ret = efa_exchange_raw_addrs_oob(oob_sock, is_initiator, local_eps,
+					 local_n, remote_buf, remote_n);
+	if (!ret)
+		ret = efa_insert_raw_addrs(av, remote_buf, remote_n,
+					   remote_addrs);
+
 	free(remote_buf);
 	return ret;
 }

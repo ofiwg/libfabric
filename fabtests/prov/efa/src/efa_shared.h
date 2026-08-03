@@ -46,6 +46,13 @@ int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
 			   struct fid_av *av, fi_addr_t *remote_addrs,
 			   int remote_n);
 
+int efa_exchange_raw_addrs_oob(int oob_sock, bool is_initiator,
+			       struct fid_ep **local_eps, int local_n,
+			       char *remote_buf, int remote_n);
+
+int efa_insert_raw_addrs(struct fid_av *av, const char *remote_buf,
+			 int remote_n, fi_addr_t *remote_addrs);
+
 int efa_select_domains(struct fi_info *hints, int want_n,
 		       const char *explicit_csv, char ***names);
 
