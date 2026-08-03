@@ -195,6 +195,7 @@ def test_rdm_pingpong_sread(cmdline_args, completion_semantic, memory_type_bi_di
 # do memory registrations on behalf of the application
 @pytest.mark.functional
 @pytest.mark.serial
+@pytest.mark.run_last
 def test_mr_exhaustion_rdm_pingpong(cmdline_args, completion_semantic):
     import os
     binpath = cmdline_args.binpath or ""
