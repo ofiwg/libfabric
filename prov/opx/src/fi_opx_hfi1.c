@@ -6579,7 +6579,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 	uint32_t dmabuf_supported = 0;
 #endif
 	if (opx_ep->use_hfisvc && !is_shm && (src_iface == FI_HMEM_SYSTEM || (opx_mr && dmabuf_supported)) &&
-	    !(caps & FI_MSG)) {
+	    !(caps & FI_MSG) && len >= opx_tx->hfisvc_min_payload_bytes) {
 		OPX_HFISVC_DEBUG_LOG("Sending RZV RTS HFI SVC\n");
 		return opx_hfi1_tx_rzv_rts_hfisvc(opx_ep, buf, len, tag, data, bth_rx, lrh_dlid_9B, do_cq_completion,
 						  user_context, dest_addr, caps, src_iface, src_device_id, opx_mr,
@@ -7083,7 +7083,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	uint32_t dmabuf_supported = 0;
 #endif
 	if (opx_ep->use_hfisvc && !is_shm && (src_iface == FI_HMEM_SYSTEM || (opx_mr && dmabuf_supported)) &&
-	    !(caps & FI_MSG)) {
+	    !(caps & FI_MSG) && len >= opx_tx->hfisvc_min_payload_bytes) {
 		OPX_HFISVC_DEBUG_LOG("Sending RZV RTS HFI SVC\n");
 		return opx_hfi1_tx_rzv_rts_hfisvc(opx_ep, buf, len, tag, data, bth_rx, lrh_dlid_16B, do_cq_completion,
 						  user_context, dest_addr, caps, src_iface, src_device_id, opx_mr,

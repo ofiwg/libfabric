@@ -1397,6 +1397,33 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	}
 #endif
 
+	int l_hfisvc_min_payload_bytes;
+	rc = fi_param_get_int(fi_opx_global.prov, "hfisvc_min_payload_bytes", &l_hfisvc_min_payload_bytes);
+	if (rc != FI_SUCCESS) {
+		l_hfisvc_min_payload_bytes = OPX_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+				   "FI_OPX_HFISVC_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
+				   l_hfisvc_min_payload_bytes);
+	} else if (l_hfisvc_min_payload_bytes < OPX_HFISVC_MIN_PAYLOAD_BYTES_MIN ||
+		   l_hfisvc_min_payload_bytes > OPX_HFISVC_MIN_PAYLOAD_BYTES_MAX) {
+		l_hfisvc_min_payload_bytes = OPX_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_HFISVC_MIN_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
+			OPX_HFISVC_MIN_PAYLOAD_BYTES_MIN, OPX_HFISVC_MIN_PAYLOAD_BYTES_MAX, l_hfisvc_min_payload_bytes);
+	} else {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_HFISVC_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
+				   l_hfisvc_min_payload_bytes);
+	}
+	tx->hfisvc_min_payload_bytes = l_hfisvc_min_payload_bytes;
+
+	/* This only picks between two rendezvous paths, so a value below rzv_min is
+	 * inert rather than pulling HFISVC into the eager band. */
+	if (tx->hfisvc_min_payload_bytes < tx->rzv_min_payload_bytes) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_HFISVC_MIN_PAYLOAD_BYTES(%u) is below FI_OPX_RZV_MIN_PAYLOAD_BYTES(%u), so the HFI Service will not be used until %u bytes.\n",
+			tx->hfisvc_min_payload_bytes, tx->rzv_min_payload_bytes, tx->rzv_min_payload_bytes);
+	}
+
 	int l_sdma_max_writevs_per_cycle;
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_writevs_per_cycle", &l_sdma_max_writevs_per_cycle);
 	if (rc != FI_SUCCESS) {
