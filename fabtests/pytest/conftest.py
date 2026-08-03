@@ -40,6 +40,19 @@ def pytest_addoption(parser):
                              help=option_helpmsg, default=option_default)
 
 
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(session, config, items):
+    '''
+        Establish the final test order for every provider. Implements the
+        logic to run tests that marked with the run_last marker to run
+        at the end of the session.
+    '''
+    run_last = [item for item in items if item.get_closest_marker("run_last")]
+    if run_last:
+        items[:] = [item for item in items
+                    if not item.get_closest_marker("run_last")] + run_last
+
+
 class CmdlineArgs:
 
     def __init__(self, request):

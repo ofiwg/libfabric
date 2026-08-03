@@ -283,9 +283,10 @@ def device_has_hw_cntr(host_id):
     return False
 
 
-@pytest.hookimpl(hookwrapper=True)
 def pytest_collection_modifyitems(session, config, items):
-    # Called after collection has been performed, may filter or re-order the items in-place
+    # Called after collection has been performed, deselects tests whose
+    # required binary or device support is missing. Test ordering is handled
+    # by the shared hook in the parent conftest.
     binpath = config.getoption("--binpath", default="") or ""
     server_id = config.getoption("--server-id", default="")
     client_id = config.getoption("--client-id", default="")
@@ -316,16 +317,6 @@ def pytest_collection_modifyitems(session, config, items):
     if deselected:
         config.hook.pytest_deselected(items=deselected)
         items[:] = remaining
-
-    # We use this hook to always run the MR exhaustion test at the end
-    mr_exhaustion_tests, other_tests = [], []
-    for item in items:
-        if "mr_exhaustion" in item.name:
-            mr_exhaustion_tests.append(item)
-        else:
-            other_tests.append(item)
-
-    yield other_tests + mr_exhaustion_tests
 
 
 @pytest.fixture(scope="function")
