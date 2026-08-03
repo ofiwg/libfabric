@@ -182,6 +182,14 @@ do {									\
 	((void *) rxm_buf_get_by_index(&(rxm_ep)->buf_pools[pool_type],		\
 				       (uint64_t) msg_id))
 
+/* A SAR msg_id carries a per-endpoint generation in its high 32 bits and the
+ * FIRST tx_buf index in the low ones, so a recycled index cannot alias a
+ * reassembly still in progress at the receiver.
+ */
+#define RXM_SAR_MSG_ID(gen, index)						\
+	((((uint64_t) (uint32_t) (gen)) << 32) | (uint32_t) (index))
+#define RXM_SAR_TX_INDEX(msg_id)	((size_t) ((msg_id) & 0xffffffffULL))
+
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 
@@ -715,6 +723,7 @@ struct rxm_ep {
 	size_t			sar_limit;
 	size_t			tx_credit;
 	size_t			min_multi_recv_size;
+	uint32_t		sar_msg_gen;
 
 	struct ofi_bufpool	*rx_pool;
 	struct ofi_bufpool	*tx_pool;
