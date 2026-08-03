@@ -1150,6 +1150,11 @@ OPX_INI
 		FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX,
 		FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
 	fi_param_define(
+		&fi_opx_provider, "hfisvc_min_payload_bytes", FI_PARAM_INT,
+		"The minimum message length in bytes where rendezvous will use HFISVC. For messages smaller than this threshold, rendezvous will use the applicable PIO or SDMA path. Value must be between %d and %d. Defaults to %d.",
+		OPX_HFISVC_MIN_PAYLOAD_BYTES_MIN, OPX_HFISVC_MIN_PAYLOAD_BYTES_MAX,
+		OPX_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT);
+	fi_param_define(
 		&fi_opx_provider, "sdma_max_writevs_per_cycle", FI_PARAM_INT,
 		"The maximum number of times that writev will be called during a single poll cycle. Value must be between %d and %d. Defaults to %d.",
 		1, OPX_SDMA_MAX_WRITEVS_PER_CYCLE, OPX_SDMA_DEFAULT_WRITEVS_PER_CYCLE);

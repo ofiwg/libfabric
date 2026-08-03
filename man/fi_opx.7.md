@@ -273,6 +273,16 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
     which effectively disables rendezvous for any payload that fits in
     multi-packet eager.
 
+*FI_OPX_HFISVC_MIN_PAYLOAD_BYTES*
+: Integer. The minimum message length in bytes where rendezvous will use the HFI Service.
+  For messages smaller than this threshold, rendezvous uses the applicable PIO or SDMA path. The HFI
+  Service carries a per-message setup cost that only pays off on large transfers.
+  Because this only selects between two rendezvous paths, the effective threshold is the
+  larger of this value and FI_OPX_RZV_MIN_PAYLOAD_BYTES; setting it lower than that does not
+  cause smaller messages to use the HFI Service.
+  This has no effect unless the HFI Service is enabled.
+  Value must be between 0 and 2147483646. Defaults to 131072.
+
 *FI_OPX_MP_EAGER*
 : Boolean (1/0, on/off, true/false, yes/no). Enables multi-packet eager. Defaults to 1 (enabled).
   Deprecated alias: FI_OPX_MP_EAGER_DISABLE (still honored, emits a deprecation warning). The two have
