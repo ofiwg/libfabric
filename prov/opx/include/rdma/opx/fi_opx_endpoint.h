@@ -256,8 +256,9 @@ struct fi_opx_ep_tx {
 	struct ofi_bufpool *rma_request_pool;
 	struct ofi_bufpool *sdma_work_pool;
 	uint32_t	    sdma_min_payload_bytes;
+	uint32_t	    hfisvc_min_payload_bytes;
 	uint32_t	    tid_min_payload_bytes;
-	uint64_t	    unused_cacheline6_1;
+	uint32_t	    unused_cacheline6_1;
 
 	/* == CACHE LINE 11 == */
 	struct opx_sdma_queue sdma_request_queue;
