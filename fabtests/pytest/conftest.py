@@ -1,5 +1,6 @@
 import builtins
 import os
+import random
 import re
 import shlex
 
@@ -40,13 +41,62 @@ def pytest_addoption(parser):
                              help=option_helpmsg, default=option_default)
 
 
+randomize_seed_key = pytest.StashKey[int]()
+
+def get_randomize_seed(config):
+    '''
+        the seed used to randomize the test order, or None when the test order
+        is not randomized
+    '''
+    return config.stash.get(randomize_seed_key, None)
+
+def pytest_configure(config):
+    if not config.getoption("--randomize-test-order"):
+        return
+
+    if hasattr(config, "workerinput"):
+        # xdist worker: use the seed the controller generated. Every worker
+        # collects the tests independently, so they must all shuffle the same
+        # way or xdist fails the run with "Different tests were collected".
+        seed = int(config.workerinput["randomize_seed"])
+    else:
+        seed = config.getoption("--randomize-seed")
+        if seed is None:
+            seed = random.Random().randrange(2 ** 31)
+
+    config.stash[randomize_seed_key] = seed
+
+def pytest_configure_node(node):
+    '''
+        xdist hook, called on the controller for each worker it starts. Not
+        called at all in a serial run.
+    '''
+    seed = get_randomize_seed(node.config)
+    if seed is not None:
+        node.workerinput["randomize_seed"] = seed
+
+def pytest_report_header(config):
+    seed = get_randomize_seed(config)
+    if seed is None:
+        return None
+
+    return "randomized test order, seed {} (reproduce with " \
+           "--randomize-test-order --randomize-seed={})".format(seed, seed)
+
 @pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(session, config, items):
     '''
         Establish the final test order for every provider. Implements the
         logic to run tests that marked with the run_last marker to run
         at the end of the session.
+
+        If --randomize-test-order is set, the collected tests are shuffled
+        first so that tests marked with run_last still run at the end.
     '''
+    seed = get_randomize_seed(config)
+    if seed is not None:
+        random.Random(seed).shuffle(items)
+
     run_last = [item for item in items if item.get_closest_marker("run_last")]
     if run_last:
         items[:] = [item for item in items
