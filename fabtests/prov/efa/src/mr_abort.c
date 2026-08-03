@@ -155,6 +155,21 @@ static int n_local_eps = 1;
 static int n_peer_eps = 1;
 
 /*
+ * Domain placement for the local endpoints. --eps-per-domain says how many
+ * endpoints to pack onto each domain, so the number of domains this side needs
+ * is ceil(n_local_eps / eps_per_domain). Zero means "all endpoints on one
+ * domain", the default. --domains names the domains to use, and is only
+ * meaningful alongside --eps-per-domain; without it the domains are picked from
+ * whatever the host provides.
+ *
+ * Both are local decisions: the two sides may end up on different domain
+ * counts, and neither needs to know the other's placement.
+ */
+static int eps_per_domain;
+static const char *domains_csv;
+static bool domain_opt_set;	/* -d was given */
+
+/*
  * Endpoint pairing built by build_ep_pairs(). Pairs are numbered by initiator
  * endpoint: there are num_initiator_eps of them and pair p is (initiator ep p,
  * target ep target_ep_for_pair[p]). Both sides build the identical array, so a pair
@@ -2074,12 +2089,31 @@ static int build_ep_pairs(void)
 	return 0;
 }
 
+/*
+ * Number of domains this side needs to hold its endpoints. eps_per_domain == 0
+ * means the caller did not ask for a spread, so everything goes on one domain.
+ */
+static int n_domains_needed(void)
+{
+	if (!eps_per_domain)
+		return 1;
+
+	return (n_local_eps + eps_per_domain - 1) / eps_per_domain;
+}
+
 static int setup_eps(void)
 {
 	int i, ret;
 
 	n_local_eps = opts.dst_addr ? num_initiator_eps : num_target_eps;
 	n_peer_eps = opts.dst_addr ? num_target_eps : num_initiator_eps;
+
+	if (n_domains_needed() > 1) {
+		FT_ERR("multi-domain endpoint placement is not yet implemented: "
+		       "%d endpoints at %d per domain needs %d domains",
+		       n_local_eps, eps_per_domain, n_domains_needed());
+		return -FI_EINVAL;
+	}
 
 	ret = build_ep_pairs();
 	if (ret)
@@ -2287,6 +2321,24 @@ int main(int argc, char **argv)
 			num_initiator_eps = atoi(optarg);
 			initiator_eps_set = true;
 			break;
+		case OPT_EPS_PER_DOMAIN:
+			eps_per_domain = atoi(optarg);
+			if (eps_per_domain < 1) {
+				FT_ERR("--eps-per-domain must be positive");
+				return EXIT_FAILURE;
+			}
+			break;
+		case OPT_DOMAINS:
+			domains_csv = optarg;
+			break;
+		/*
+		 * Handled here rather than falling through to ft_parseinfo()
+		 * alone so that --domains can reject being combined with it.
+		 */
+		case 'd':
+			domain_opt_set = true;
+			ft_parseinfo(op, optarg, hints, &opts);
+			break;
 		case 'W':
 			num_mrs = atoi(optarg);
 			break;
@@ -2413,6 +2465,23 @@ int main(int argc, char **argv)
 	if (num_target_eps < 1 || num_target_eps > EFA_MR_ABORT_MAX_EPS ||
 	    num_initiator_eps < 1 || num_initiator_eps > EFA_MR_ABORT_MAX_EPS) {
 		FT_ERR("endpoint counts must be 1-%d", EFA_MR_ABORT_MAX_EPS);
+		return EXIT_FAILURE;
+	}
+
+	/*
+	 * -d names a single domain and --domains names the set to spread over,
+	 * so honoring both is ambiguous. --domains without --eps-per-domain is
+	 * likewise ambiguous: it says which domains to use but not how to fill
+	 * them, and silently defaulting to "everything on the first" would
+	 * quietly ignore the rest of the list.
+	 */
+	if (domain_opt_set && domains_csv) {
+		FT_ERR("use -d OR --domains, not both");
+		return EXIT_FAILURE;
+	}
+
+	if (domains_csv && !eps_per_domain) {
+		FT_ERR("--domains requires --eps-per-domain");
 		return EXIT_FAILURE;
 	}
 
