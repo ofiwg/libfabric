@@ -1136,15 +1136,26 @@ union opx_hfi1_packet_hdr {
 		uint32_t reserved_2;
 		uint32_t key_dw_suffix;
 
-		/* QW[5-7] SW */
-		uint64_t psn_count;
-		uint64_t psn_start;
+		/* QW[5] SW */
+		uint32_t psn_count;
+		uint32_t psn_start;
+
+		/* QW[6] SW */
+		uint64_t flow_control_extension;
+
+		/* QW[7] SW */
 		uint64_t key; /* fi_opx_reliability_service_flow_key */
 
 		uint64_t reserved_n[7]; /* QW[8-14] SW */
 
 	} __attribute__((__packed__)) service; /* "reliability service" */
 } __attribute__((__packed__)) __attribute__((__aligned__(OPX_PKT_HDR_PAYLOAD_ALIGNMENT)));
+
+static_assert(offsetof(union opx_hfi1_packet_hdr, service.psn_count) == 40, "service PSN count must occupy DW10");
+static_assert(offsetof(union opx_hfi1_packet_hdr, service.psn_start) == 44, "service PSN start must occupy DW11");
+static_assert(offsetof(union opx_hfi1_packet_hdr, service.flow_control_extension) == 48,
+	      "service flow-control extension must occupy QW6");
+static_assert(offsetof(union opx_hfi1_packet_hdr, service.key) == 56, "service flow key must occupy QW7");
 
 #define OPX_HDR_SLID_9B(_hdr) ((union opx_hfi1_packet_hdr *) _hdr)->lrh_9b.slid
 #define OPX_HDR_SLID_16B(_hdr)                                        \

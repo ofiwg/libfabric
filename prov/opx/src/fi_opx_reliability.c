@@ -387,13 +387,14 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 	uint8_t		     tx_index = OPX_RELIABILITY_DECODE_TX_INDEX(key->slid);
 	struct fi_opx_ep_tx *opx_tx   = opx_ep->tx_contexts[tx_index];
 
-	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_tx);
-
-	union fi_opx_hfi1_pio_state pio_state = *opx_tx->pio_state;
-
 	// Prevent sending a packet that contains a PSN rollover.
 	const uint64_t psn_start_24 = psn_start & MAX_PSN;
 	const uint64_t psn_count_24 = MIN(psn_count, MAX_PSN - psn_start_24 + 1);
+	const uint64_t psn_qw	    = (psn_start_24 << 32) | psn_count_24;
+
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_tx);
+
+	union fi_opx_hfi1_pio_state pio_state = *opx_tx->pio_state;
 
 	const uint16_t credits_needed = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ? 1 : 2;
 	if (OFI_UNLIKELY(FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state) < credits_needed)) {
@@ -483,7 +484,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 						   OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
 					   model->hdr.qw_9B[0] | lrh_dlid_9B, model->hdr.qw_9B[1] | bth_rx,
 					   model->hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
-					   model->hdr.qw_9B[3] | key_dw_suffix, psn_count_24, psn_start_24,
+					   model->hdr.qw_9B[3] | key_dw_suffix, psn_qw, 0,
 					   key->qw_prefix); /* service.key */
 
 		// fi_opx_hfi1_dump_stl_packet_hdr((struct fi_opx_hfi1_stl_packet_hdr_9B *)&tmp[1], __func__, __LINE__);
@@ -512,7 +513,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 						   (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
 					   model_16B->hdr.qw_16B[2] | bth_rx,
 					   model_16B->hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
-					   model_16B->hdr.qw_16B[4] | key_dw_suffix, psn_count_24, psn_start_24);
+					   model_16B->hdr.qw_16B[4] | key_dw_suffix, psn_qw, 0);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
@@ -2059,6 +2060,7 @@ static void fi_opx_reliability_model_init_9B(struct fi_opx_domain *domain, struc
 		hdr->service.key_dw_suffix		   = 0;
 		hdr->service.psn_count			   = 0;
 		hdr->service.psn_start			   = 0;
+		hdr->service.flow_control_extension	   = 0;
 		hdr->service.key			   = 0;
 
 		/* Bake primary_lid into QW[3] spare bits so reliability
@@ -2152,6 +2154,7 @@ static void fi_opx_reliability_model_init_16B(struct fi_opx_domain *domain, stru
 	hdr->service.key_dw_suffix		   = 0;
 	hdr->service.psn_count			   = 0;
 	hdr->service.psn_start			   = 0;
+	hdr->service.flow_control_extension	   = 0;
 	hdr->service.key			   = 0;
 
 	/* Must come AFTER service struct writes to avoid clobbering primary_lid[11:7]. */

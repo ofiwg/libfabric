@@ -131,7 +131,7 @@ static void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep, const union opx
 	} else {
 		// Send the first ACK/NACK right away, it might be an RMA fence event
 		fi_opx_hfi1_rx_reliability_ping(
-			&opx_ep->ep_fid, service, &lookup_key.flow_key, psn_count, hdr->service.psn_start, slid,
+			&opx_ep->ep_fid, service, &lookup_key.flow_key, psn_count, psn_start, slid,
 			hdr->service.origin_reliability_subctxt_rx & OPX_SERVICE_SUBCTXT_RX_MASK);
 
 		ping_op = ofi_buf_alloc(service->rx.pending_rx_reliability_pool);
@@ -142,7 +142,7 @@ static void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep, const union opx
 			ping_op->key.flow_key	    = lookup_key.flow_key;
 			ping_op->psn_count	    = psn_count;
 			ping_op->psn_count_coalesce = 0;
-			ping_op->key.psn_start	    = hdr->service.psn_start;
+			ping_op->key.psn_start	    = psn_start;
 			ping_op->key.unused	    = 0;
 
 			HASH_ADD(hh, service->pending_rx_reliability_ops_hashmap, key, sizeof(ping_op->key), ping_op);
