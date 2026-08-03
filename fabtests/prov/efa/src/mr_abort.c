@@ -364,18 +364,25 @@ static int free_test_res(void)
 	return err;
 }
 
+/* Routing accessors, defined below with the rest of the pair helpers. */
+static struct fid_ep *op_local_ep(int mr_idx);
+static struct mr_abort_domain *op_dom(int mr_idx);
+
 static int register_mrs(uint64_t access)
 {
 	int i, ret;
 
 	for (i = 0; i < num_mrs; i++) {
+		struct mr_abort_domain *dom = op_dom(i);
+
 		if (slots[i].mr)
 			continue;
 
-		ret = ft_reg_mr(fi, slots[i].buf,
-				(size_t) ops_per_mr * opts.transfer_size,
-				access, slots[i].key, opts.iface,
-				opts.device, &slots[i].mr, &slots[i].desc);
+		ret = ft_reg_mr_dom(dom->domain, op_local_ep(i), fi,
+				    slots[i].buf,
+				    (size_t) ops_per_mr * opts.transfer_size,
+				    access, slots[i].key, opts.iface,
+				    opts.device, &slots[i].mr, &slots[i].desc);
 		if (ret) {
 			FT_PRINTERR("ft_reg_mr", ret);
 			return ret;
@@ -511,6 +518,16 @@ static struct fid_ep *op_local_ep(int mr_idx)
 static fi_addr_t op_peer_addr(int mr_idx)
 {
 	return peer_addr_for_pair(pair_idx_for_mr_idx(mr_idx));
+}
+
+/*
+ * The domain that owns slot mr_idx. A slot's MR (and its local desc, under
+ * FI_MR_LOCAL) is only valid against endpoints on the same domain, so it must
+ * be registered on the domain of the pair its ops run on.
+ */
+static struct mr_abort_domain *op_dom(int mr_idx)
+{
+	return &doms[dom_for_pair(pair_idx_for_mr_idx(mr_idx))];
 }
 
 static ssize_t post_rma_op(int op_idx, int mr_idx)
@@ -1222,9 +1239,10 @@ static int partial_post_one_slot(int mr_idx)
 	/* Unique key: slot keys occupy [BASE, BASE + num_mrs) */
 	extra_slot.key = MR_ABORT_KEY_BASE + num_mrs + mr_idx;
 
-	ret = ft_reg_mr(fi, extra_slot.buf, opts.transfer_size,
-			ft_info_to_mr_access(fi), extra_slot.key, opts.iface,
-			opts.device, &extra_slot.mr, &extra_slot.desc);
+	ret = ft_reg_mr_dom(op_dom(mr_idx)->domain, op_local_ep(mr_idx), fi,
+			    extra_slot.buf, opts.transfer_size,
+			    ft_info_to_mr_access(fi), extra_slot.key, opts.iface,
+			    opts.device, &extra_slot.mr, &extra_slot.desc);
 	if (ret) {
 		FT_PRINTERR("ft_reg_mr (extra)", ret);
 		return ret;
@@ -1370,9 +1388,10 @@ static int partial_target_one_slot(struct mr_slot *extra_slot, int mr_idx)
 		return ret;
 	extra_slot->key = MR_ABORT_KEY_BASE + num_mrs + mr_idx;
 
-	ret = ft_reg_mr(fi, extra_slot->buf, opts.transfer_size,
-			ft_info_to_mr_access(fi), extra_slot->key, opts.iface,
-			opts.device, &extra_slot->mr, &extra_slot->desc);
+	ret = ft_reg_mr_dom(op_dom(mr_idx)->domain, op_local_ep(mr_idx), fi,
+			    extra_slot->buf, opts.transfer_size,
+			    ft_info_to_mr_access(fi), extra_slot->key, opts.iface,
+			    opts.device, &extra_slot->mr, &extra_slot->desc);
 	if (ret) {
 		FT_PRINTERR("ft_reg_mr (extra)", ret);
 		return ret;
@@ -1455,14 +1474,25 @@ static int reuse_wait_one_comp(const char *what)
 }
 
 /*
- * Write + read round-trip on pair p. The buffer comes from slot p % num_mrs
- * because -W may leave fewer slots than pairs. Contains one ft_sync(), matched
- * by reuse_check_target().
+ * Number of pairs the reuse check exercises. Each pair reuses its own slot
+ * (slot == p), so the check is limited to pairs that own one: with -W smaller
+ * than the pair count only the first num_mrs pairs qualify. Reusing a foreign
+ * slot would hand pair p a desc registered on another pair's domain, which is
+ * invalid under FI_MR_LOCAL.
+ */
+static int n_reuse_pairs(void)
+{
+	return MIN(num_mrs, num_initiator_eps);
+}
+
+/*
+ * Write + read round-trip on pair p, using pair p's own slot. Contains one
+ * ft_sync(), matched by reuse_check_target().
  */
 static int reuse_check_one_pair(int p)
 {
 	struct fi_context2 reuse_ctx;
-	int slot = p % num_mrs;
+	int slot = p;
 	int ret;
 
 	/* Write */
@@ -1531,7 +1561,7 @@ static int reuse_check_initiator(void)
 	if (ret)
 		return ret;
 
-	for (i = 0; i < num_initiator_eps; i++) {
+	for (i = 0; i < n_reuse_pairs(); i++) {
 		ret = reuse_check_one_pair(i);
 		if (ret) {
 			FT_INFO("Reuse: pair %d FAIL\n", i);
@@ -1540,7 +1570,7 @@ static int reuse_check_initiator(void)
 	}
 
 	FT_INFO("Reuse: write ok, read ok on %d pair(s) ... PASS\n",
-		num_initiator_eps);
+		n_reuse_pairs());
 	return 0;
 }
 
@@ -1561,7 +1591,7 @@ static int reuse_check_target(void)
 		return ret;
 
 	/* One sync per pair, matching reuse_check_one_pair(). */
-	for (i = 0; i < num_initiator_eps; i++) {
+	for (i = 0; i < n_reuse_pairs(); i++) {
 		ret = ft_sync();
 		if (ret)
 			return ret;

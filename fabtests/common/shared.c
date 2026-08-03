@@ -441,9 +441,10 @@ int ft_get_dmabuf_from_iov(struct fi_mr_dmabuf *dmabuf,
 	return FI_SUCCESS;
 }
 
-int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
-	      uint64_t key, enum fi_hmem_iface iface, uint64_t device,
-	      struct fid_mr **mr, void **desc)
+int ft_reg_mr_dom(struct fid_domain *reg_domain, struct fid_ep *bind_ep,
+		  struct fi_info *fi, void *buf, size_t size, uint64_t access,
+		  uint64_t key, enum fi_hmem_iface iface, uint64_t device,
+		  struct fid_mr **mr, void **desc)
 {
 	struct fi_mr_attr attr = {0};
 	struct iovec iov = {0};
@@ -475,7 +476,7 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 	}
 
 	ft_fill_mr_attr(&iov, &dmabuf, 1, access, key, iface, device, &attr, flags);
-	ret = fi_mr_regattr(domain, &attr, flags, mr);
+	ret = fi_mr_regattr(reg_domain, &attr, flags, mr);
 	if (opts.options & FT_OPT_REG_DMABUF_MR)
 		ft_hmem_put_dmabuf_fd(iface, dmabuf_fd);
 	if (ret)
@@ -485,7 +486,7 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 		*desc = fi_mr_desc(*mr);
 
         if (fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
-		ret = fi_mr_bind(*mr, &ep->fid, 0);
+		ret = fi_mr_bind(*mr, &bind_ep->fid, 0);
 		if (ret)
 			return ret;
 
@@ -495,6 +496,14 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 	}
 
 	return FI_SUCCESS;
+}
+
+int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
+	      uint64_t key, enum fi_hmem_iface iface, uint64_t device,
+	      struct fid_mr **mr, void **desc)
+{
+	return ft_reg_mr_dom(domain, ep, fi, buf, size, access, key, iface,
+			     device, mr, desc);
 }
 
 static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
