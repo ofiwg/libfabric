@@ -565,9 +565,9 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sd
 		1,			       // num_packets,
 		(payload_bytes + 63) & 0xFFC0, // Frag_size
 		FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, replay->hmem_iface, replay->hmem_device,
-		replay->scb.scb_9B.hdr.dput.target.bytes, // last packet bytes
-		0,					  // kdeth tid info unused for replays
-		0,					  // Not an SDMA WE
+		OPX_REPLAY_HDR(replay, OPX_SW_HFI1_TYPE(opx_ep->domain))->dput.target.bytes, // last packet bytes
+		0, // kdeth tid info unused for replays
+		0, // Not an SDMA WE
 		replay->tx_index);
 }
 
