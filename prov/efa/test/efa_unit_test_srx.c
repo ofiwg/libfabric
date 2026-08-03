@@ -196,8 +196,6 @@ void test_efa_srx_foreach_unspec_skips_other_provider(void **state)
 	/* Enable directed receive so foreach_unspec will move resolved entries */
 	srx_ctx->dir_recv = true;
 
-	ofi_genlock_lock(srx_ctx->lock);
-
 	/* Allocate entries for the unspec msg queue */
 	msg_entry_efa = (struct util_rx_entry *) ofi_buf_alloc(srx_ctx->rx_pool);
 	assert_non_null(msg_entry_efa);
@@ -292,8 +290,6 @@ void test_efa_srx_foreach_unspec_skips_other_provider(void **state)
 	efa_peer_ops->discard_tag = test_foreach_unspec_discard_no_op;
 	shm_peer_ops->discard_msg = test_foreach_unspec_discard_no_op;
 	shm_peer_ops->discard_tag = test_foreach_unspec_discard_no_op;
-
-	ofi_genlock_unlock(srx_ctx->lock);
 
 	/* ep close will call util_srx_close which drains remaining entries */
 	fi_close(&resource->ep->fid);
