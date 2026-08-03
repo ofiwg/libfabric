@@ -150,7 +150,6 @@ static bool target_eps_set;
 static bool initiator_eps_set;
 
 static struct fid_ep *eps[EFA_MR_ABORT_MAX_EPS];
-static fi_addr_t *remote_ep_addrs;
 static int n_local_eps = 1;
 static int n_peer_eps = 1;
 
@@ -170,6 +169,28 @@ static const char *domains_csv;
 static bool domain_opt_set;	/* -d was given */
 static char **domain_names;	/* the n_domains names selected, or NULL */
 static int n_domains = 1;
+
+/*
+ * Resources belonging to one local domain. A CQ, AV and MR are all
+ * domain-scoped, so an endpoint can only use the ones from the domain it was
+ * opened on, and each domain needs its own set.
+ *
+ * doms[0] aliases the objects ft_init_fabric() already created rather than
+ * opening its own, which is what keeps the single-domain case identical to
+ * before this feature; teardown must therefore leave index 0 alone and let
+ * ft_free_res() close it. The one global fabric is shared by every domain.
+ */
+struct mr_abort_domain {
+	struct fid_domain *domain;
+	struct fid_cq *txcq;
+	struct fid_cq *rxcq;
+	struct fid_av *av;
+	struct fi_info *info;
+	/* n_peer_eps handles for this domain's AV; see efa_insert_raw_addrs() */
+	fi_addr_t *peer_addrs;
+};
+
+static struct mr_abort_domain doms[EFA_MR_ABORT_MAX_EPS];
 
 /*
  * Endpoint pairing built by build_ep_pairs(). Pairs are numbered by initiator
@@ -438,15 +459,39 @@ static char *slot_op_buf(int op_idx, int mr_idx)
 	return slots[mr_idx].buf + (size_t) op_in_mr * opts.transfer_size;
 }
 
-/* Each side picks the half of pair p that it owns. */
-static struct fid_ep *local_ep_for_pair(int p)
+/* The domain holding local endpoint i. */
+static int dom_of(int ep_idx)
 {
-	return eps[opts.dst_addr ? p : target_ep_for_pair[p]];
+	return eps_per_domain ? ep_idx / eps_per_domain : 0;
 }
 
+/* Each side picks the half of pair p that it owns. */
+static int local_ep_idx_for_pair(int p)
+{
+	return opts.dst_addr ? p : target_ep_for_pair[p];
+}
+
+static struct fid_ep *local_ep_for_pair(int p)
+{
+	return eps[local_ep_idx_for_pair(p)];
+}
+
+/* The domain that owns pair p's local endpoint, and hence its CQs, AV and MRs. */
+static int dom_for_pair(int p)
+{
+	return dom_of(local_ep_idx_for_pair(p));
+}
+
+/*
+ * The peer's address as seen by pair p's own domain: an fi_addr_t is only valid
+ * against the AV that produced it, so the same peer has a different handle in
+ * each local domain.
+ */
 static fi_addr_t peer_addr_for_pair(int p)
 {
-	return remote_ep_addrs[opts.dst_addr ? target_ep_for_pair[p] : p];
+	int peer_idx = opts.dst_addr ? target_ep_for_pair[p] : p;
+
+	return doms[dom_for_pair(p)].peer_addrs[peer_idx];
 }
 
 /*
@@ -2118,6 +2163,19 @@ static int select_domains(void)
 	n_domains = n_domains_needed();
 
 	/*
+	 * Counters live only on the global domain (ft_cntr_open() ignores the
+	 * extra ones), and this test drains CQs rather than reading counters, so
+	 * spreading endpoints across domains with -t counter would leave the
+	 * extra domains' endpoints with no completion object. Reject it rather
+	 * than silently drop the counters.
+	 */
+	if (n_domains > 1 &&
+	    (opts.options & (FT_OPT_TX_CNTR | FT_OPT_RX_CNTR))) {
+		FT_ERR("-t counter is not supported with multiple domains");
+		return -FI_EINVAL;
+	}
+
+	/*
 	 * Without a spread request there is nothing to select: hints carry
 	 * whatever -d asked for (if anything) and the provider picks.
 	 */
@@ -2136,51 +2194,164 @@ static int select_domains(void)
 	return 0;
 }
 
+/*
+ * Open domain d (d >= 1) alongside the global domain, sharing the one global
+ * fabric. domain_names[d] pins fi_getinfo() to that specific device; the CQ and
+ * AV attrs are the same ones ft_init_fabric() used for domain 0, so the extra
+ * domains are configured identically to it.
+ */
+static int open_extra_domain(int d)
+{
+	struct mr_abort_domain *dom = &doms[d];
+	struct fi_info *dup;
+	int ret;
+
+	dup = fi_dupinfo(hints);
+	if (!dup)
+		return -FI_ENOMEM;
+
+	free(dup->domain_attr->name);
+	dup->domain_attr->name = strdup(domain_names[d]);
+	if (!dup->domain_attr->name) {
+		fi_freeinfo(dup);
+		return -FI_ENOMEM;
+	}
+
+	ret = fi_getinfo(ft_fiversion, NULL, NULL, 0, dup, &dom->info);
+	fi_freeinfo(dup);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		return ret;
+	}
+
+	ret = fi_domain(fabric, dom->info, &dom->domain, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_domain", ret);
+		return ret;
+	}
+
+	/*
+	 * Mirror ft_alloc_ep_res()'s domain-0 CQ sizing: cq_attr.format was set
+	 * by run() and is shared, but its size is left at domain 0's rx CQ, so
+	 * set it per CQ from this domain's own tx/rx attrs. The test never uses
+	 * shared or counter completions with n_domains > 1 (rejected in main()),
+	 * so a plain tx/rx CQ pair per domain is enough.
+	 */
+	cq_attr.size = dom->info->tx_attr->size;
+	ret = fi_cq_open(dom->domain, &cq_attr, &dom->txcq, &dom->txcq);
+	if (ret) {
+		FT_PRINTERR("fi_cq_open", ret);
+		return ret;
+	}
+
+	cq_attr.size = dom->info->rx_attr->size;
+	ret = fi_cq_open(dom->domain, &cq_attr, &dom->rxcq, &dom->rxcq);
+	if (ret) {
+		FT_PRINTERR("fi_cq_open", ret);
+		return ret;
+	}
+
+	ret = fi_av_open(dom->domain, &av_attr, &dom->av, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_av_open", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int setup_eps(void)
 {
-	int i, ret;
-
-	if (n_domains > 1) {
-		FT_ERR("multi-domain endpoint placement is not yet implemented: "
-		       "%d endpoints at %d per domain needs %d domains",
-		       n_local_eps, eps_per_domain, n_domains);
-		return -FI_EINVAL;
-	}
+	char *remote_buf = NULL;
+	int i, d, ret;
 
 	ret = build_ep_pairs();
 	if (ret)
 		return ret;
 
-	remote_ep_addrs = calloc(n_peer_eps, sizeof(*remote_ep_addrs));
-	if (!remote_ep_addrs)
-		return -FI_ENOMEM;
+	/* Domain 0 aliases what ft_init_fabric() already opened. */
+	doms[0].domain = domain;
+	doms[0].txcq = txcq;
+	doms[0].rxcq = rxcq;
+	doms[0].av = av;
+	doms[0].info = fi;
 
-	eps[0] = ep;
-	for (i = 1; i < n_local_eps; i++) {
-		ret = fi_endpoint(domain, fi, &eps[i], NULL);
-		if (ret) {
-			FT_PRINTERR("fi_endpoint", ret);
-			return ret;
-		}
-		ret = ft_enable_ep(eps[i], eq, av, txcq, rxcq,
-				   txcntr, rxcntr, rma_cntr);
+	for (d = 1; d < n_domains; d++) {
+		ret = open_extra_domain(d);
 		if (ret)
 			return ret;
 	}
 
-	ret = efa_exchange_addrs_oob(oob_sock, opts.dst_addr != NULL,
-				     eps, n_local_eps, av, remote_ep_addrs,
-				     n_peer_eps);
-	if (ret)
-		return ret;
+	for (d = 0; d < n_domains; d++) {
+		doms[d].peer_addrs = calloc(n_peer_eps,
+					    sizeof(*doms[d].peer_addrs));
+		if (!doms[d].peer_addrs)
+			return -FI_ENOMEM;
+	}
 
-	remote_fi_addr = remote_ep_addrs[0];
-	return 0;
+	/*
+	 * Place endpoint i on its domain. eps[0] is the global ep on domain 0,
+	 * already enabled by ft_init_fabric(); the rest are opened here on the
+	 * domain dom_of(i) selects and bound to that domain's CQs and AV.
+	 * Counters are NULL for every domain: ft_cntr_open() only ever creates
+	 * them on the global domain, so binding one to a domain-1 endpoint would
+	 * fail. Nothing in this test reads counters (-t counter is rejected with
+	 * n_domains > 1).
+	 */
+	eps[0] = ep;
+	for (i = 1; i < n_local_eps; i++) {
+		d = dom_of(i);
+		ret = fi_endpoint(doms[d].domain, doms[d].info, &eps[i], NULL);
+		if (ret) {
+			FT_PRINTERR("fi_endpoint", ret);
+			return ret;
+		}
+		ret = ft_enable_ep(eps[i], eq, doms[d].av,
+				   doms[d].txcq, doms[d].rxcq, NULL, NULL, NULL);
+		if (ret)
+			return ret;
+	}
+
+	/*
+	 * Exchange raw peer addresses once, then insert them into every local
+	 * domain's AV: an fi_addr_t is only valid against the AV that produced
+	 * it, so a pair whose local endpoint lives on domain d must look its peer
+	 * up in doms[d].av.
+	 */
+	remote_buf = calloc(n_peer_eps, FT_MAX_CTRL_MSG);
+	if (!remote_buf)
+		return -FI_ENOMEM;
+
+	ret = efa_exchange_raw_addrs_oob(oob_sock, opts.dst_addr != NULL,
+					 eps, n_local_eps, remote_buf,
+					 n_peer_eps);
+	if (ret)
+		goto out;
+
+	for (d = 0; d < n_domains; d++) {
+		ret = efa_insert_raw_addrs(doms[d].av, remote_buf, n_peer_eps,
+					   doms[d].peer_addrs);
+		if (ret)
+			goto out;
+	}
+
+	/* Legacy alias: pair 0 lives on domain 0, peer 0. */
+	remote_fi_addr = doms[0].peer_addrs[0];
+out:
+	free(remote_buf);
+	return ret;
 }
 
+/*
+ * Close the extra domains and their resources (index 0 is owned by
+ * ft_free_res() and must be left alone), in the reverse of setup order: the
+ * endpoints on a domain must be closed before its CQs, AV and the domain
+ * itself. eps[0] is closed by ft_free_res(); teardown_eps() only handles the
+ * extra endpoints, and NULLs them so run()'s -A ep_first path stays idempotent.
+ */
 static void teardown_eps(void)
 {
-	int i;
+	int d, i;
 
 	for (i = 1; i < n_local_eps; i++) {
 		if (eps[i]) {
@@ -2188,8 +2359,23 @@ static void teardown_eps(void)
 			eps[i] = NULL;
 		}
 	}
-	free(remote_ep_addrs);
-	remote_ep_addrs = NULL;
+
+	for (d = 0; d < n_domains; d++) {
+		free(doms[d].peer_addrs);
+		doms[d].peer_addrs = NULL;
+	}
+
+	for (d = 1; d < n_domains; d++) {
+		FT_CLOSE_FID(doms[d].txcq);
+		FT_CLOSE_FID(doms[d].rxcq);
+		FT_CLOSE_FID(doms[d].av);
+		FT_CLOSE_FID(doms[d].domain);
+		if (doms[d].info) {
+			fi_freeinfo(doms[d].info);
+			doms[d].info = NULL;
+		}
+	}
+
 	free(target_ep_for_pair);
 	target_ep_for_pair = NULL;
 	efa_free_domain_names(domain_names);
