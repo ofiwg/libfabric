@@ -3767,8 +3767,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
 	 * EFA_RDM_TXE_READ_MSG_COUNTED when it sent the LONGREAD/RUNTREAD
 	 * RTM (flag and bump are set together). Simulate both. */
 	txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
-	efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight = 1;
-	in_flight_before = efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight;
+	ofi_atomic_set64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 1);
+	in_flight_before = ofi_atomic_get64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight);
 
 	/* Build the inbound PEER_ERROR_PKT pointing at our txe via send_id. */
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
@@ -3791,7 +3791,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
 	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
 
 	/* num_read_msg_in_flight decremented. */
-	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight,
+	assert_int_equal(ofi_atomic_get64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight),
 			 in_flight_before - 1);
 
 	/* User must see a TX CQ error with the clean, dedicated
@@ -4144,7 +4144,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state)
 
 	/* No txe/rxe allocated; num_read_msg_in_flight stays 0 so an
 	 * unguarded decrement would wrap it. */
-	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
+	assert_int_equal(ofi_atomic_get64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight), 0);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -4166,7 +4166,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state)
 	efa_rdm_pke_handle_peer_error_recv(pkt_entry);
 
 	/* Counter not touched (no underflow). */
-	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
+	assert_int_equal(ofi_atomic_get64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight), 0);
 
 	/* No user CQ error written. */
 	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
@@ -4353,7 +4353,7 @@ void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **s
 	/* Simulate efa_rdm_pke_handle_longread_rtm_sent(): the RTM was
 	 * accepted by the device, bumping the read counter. */
 	txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
-	efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight = 1;
+	ofi_atomic_set64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 1);
 
 	outstanding_before = ep->efa_outstanding_tx_ops;
 
@@ -4362,7 +4362,7 @@ void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **s
 	/* Marked, emitted (PEER_ERROR WR posted), counter balanced. */
 	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
-	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
+	assert_int_equal(ofi_atomic_get64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight), 0);
 	assert_false(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
 	assert_int_equal(txe->peer_error_prov_errno, FI_EFA_ERR_PKT_POST);
 
@@ -4386,7 +4386,7 @@ void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **s
 	 * regardless), but the never-bumped counter is left alone. */
 	assert_true(txe_unsent->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
 	assert_int_equal(ep->efa_outstanding_tx_ops, outstanding_before + 1);
-	assert_int_equal(efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 0);
+	assert_int_equal(ofi_atomic_get64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight), 0);
 }
 
 /**
