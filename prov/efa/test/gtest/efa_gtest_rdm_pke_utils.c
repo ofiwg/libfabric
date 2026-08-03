@@ -513,7 +513,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 		 * the "sent" handler only bumps (drained elsewhere), so repeated
 		 * builds in one test would see a growing absolute value. The
 		 * fresh peer per build makes its counter effectively a delta. */
-		uint64_t read_in_flight_before = domain->num_read_msg_in_flight;
+		uint64_t read_in_flight_before = ofi_atomic_get64(&domain->num_read_msg_in_flight);
 
 		switch (family) {
 		case EFA_TEST_RTM_FAM_MEDIUM:
@@ -535,7 +535,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 		out->bytes_sent = txe->bytes_sent;
 		out->bytes_acked = txe->bytes_acked;
 		out->num_read_msg_in_flight =
-			domain->num_read_msg_in_flight - read_in_flight_before;
+			ofi_atomic_get64(&domain->num_read_msg_in_flight) - read_in_flight_before;
 		out->num_runt_bytes_in_flight = peer->num_runt_bytes_in_flight;
 		out->txe_on_ope_list = 1;
 		efa_rdm_pke_release_tx(pkt_entry);
