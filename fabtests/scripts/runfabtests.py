@@ -41,6 +41,7 @@ def fabtests_testsets_to_pytest_markers(fabtests_testsets, run_mode=None):
 
     test_set = set()
     test_list = fabtests_testsets.split(",")
+    exclude_standard = False
 
     # use set() to remove duplicate test set
     for test in test_list:
@@ -49,6 +50,7 @@ def fabtests_testsets_to_pytest_markers(fabtests_testsets, run_mode=None):
             test_set.add("functional")
             test_set.add("short")
             test_set.add("ubertest_quick")
+            exclude_standard = True
         elif test =="ubertest":
             test_set.add("ubertest_quick")
         elif test == "all":
@@ -68,6 +70,9 @@ def fabtests_testsets_to_pytest_markers(fabtests_testsets, run_mode=None):
             markers = test[:]
         else:
             markers += " or " + test
+
+    if exclude_standard:
+        markers = "(" + markers + ") and (not standard)"
 
     if run_mode:
         if run_mode == "serial":

@@ -145,6 +145,16 @@ int ft_hmem_init(enum fi_hmem_iface iface)
 	return ret;
 }
 
+int ft_hmem_init_thread(enum fi_hmem_iface iface, uint64_t device)
+{
+	switch (iface) {
+	case FI_HMEM_CUDA:
+		return ft_cuda_init_thread(device);
+	default:
+		return FI_SUCCESS;
+	}
+}
+
 int ft_hmem_cleanup(enum fi_hmem_iface iface)
 {
 	int ret = FI_SUCCESS;
