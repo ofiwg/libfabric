@@ -210,7 +210,9 @@ rxm_init_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	rxm_ep_format_tx_buf_pkt(rxm_conn, total_len, op, data, tag, flags,
 				 &tx_buf->pkt);
 	if (seg_type == RXM_SAR_SEG_FIRST) {
-		*msg_id = tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
+		*msg_id = tx_buf->pkt.ctrl_hdr.msg_id =
+			RXM_SAR_MSG_ID(rxm_ep->sar_msg_gen++,
+				       ofi_buf_index(tx_buf));
 		/* tx_bufs are recycled without zeroing. */
 		tx_buf->sar.first_seg_done = false;
 		tx_buf->sar.last_seg_done = false;
