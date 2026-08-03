@@ -96,3 +96,9 @@ do_dmabuf_reg_for_hmem:
   type: boolean
   help: "Register hmem memory via dmabuf"
   longform: --do-dmabuf-reg-for-hmem
+randomize_test_order:
+  type: boolean
+  help: "Run the tests in a random order. Default: no"
+randomize_seed:
+  type: int
+  help: "Seed used to randomize the test order. Only meaningful together with\n--randomize-test-order. Defaults to a randomly generated seed, which is\nreported in the pytest header so a run can be reproduced."
