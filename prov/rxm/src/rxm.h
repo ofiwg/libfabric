@@ -87,7 +87,7 @@ union rxm_cm_data {
 		uint8_t op_version;
 		uint16_t port;
 		uint8_t flow_ctrl;
-		uint8_t padding;
+		uint8_t ep_idx;
 		uint32_t eager_limit;
 		uint32_t rx_size; /* used? */
 		uint64_t client_conn_id;
@@ -208,6 +208,7 @@ extern int rxm_passthru;
 extern int force_auto_progress;
 extern int rxm_use_write_rndv;
 extern int rxm_detect_hmem_iface;
+extern size_t rxm_num_msg_eps;
 extern enum fi_wait_obj def_wait_obj, def_tcp_wait_obj;
 
 struct rxm_ep;
@@ -256,6 +257,18 @@ struct rxm_conn {
 };
 
 void rxm_freeall_conns(struct rxm_ep *ep);
+
+static inline int rxm_get_ep_idx(struct rxm_conn *conn, struct fid *fid)
+{
+	uint8_t i;
+
+	for (i = 0; i < conn->num_msg_eps; i++)
+		if (conn->msg_eps[i] && &conn->msg_eps[i]->fid == fid)
+			return i;
+	return -1;
+}
+
+int rxm_send_connect(struct rxm_conn *conn, uint8_t idx);
 
 struct rxm_fabric {
 	struct util_fabric util_fabric;
