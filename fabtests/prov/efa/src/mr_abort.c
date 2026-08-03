@@ -168,6 +168,8 @@ static int n_peer_eps = 1;
 static int eps_per_domain;
 static const char *domains_csv;
 static bool domain_opt_set;	/* -d was given */
+static char **domain_names;	/* the n_domains names selected, or NULL */
+static int n_domains = 1;
 
 /*
  * Endpoint pairing built by build_ep_pairs(). Pairs are numbered by initiator
@@ -2101,17 +2103,47 @@ static int n_domains_needed(void)
 	return (n_local_eps + eps_per_domain - 1) / eps_per_domain;
 }
 
+/*
+ * Pick the domains this side will use, before ft_init_fabric() so that
+ * domain_names[0] becomes the domain ft_init_fabric() opens: the extra domains
+ * are opened alongside it in setup_eps(), leaving the single-domain path
+ * untouched.
+ */
+static int select_domains(void)
+{
+	int ret;
+
+	n_local_eps = opts.dst_addr ? num_initiator_eps : num_target_eps;
+	n_peer_eps = opts.dst_addr ? num_target_eps : num_initiator_eps;
+	n_domains = n_domains_needed();
+
+	/*
+	 * Without a spread request there is nothing to select: hints carry
+	 * whatever -d asked for (if anything) and the provider picks.
+	 */
+	if (n_domains == 1 && !domains_csv)
+		return 0;
+
+	ret = efa_select_domains(hints, n_domains, domains_csv, &domain_names);
+	if (ret)
+		return ret;
+
+	free(hints->domain_attr->name);
+	hints->domain_attr->name = strdup(domain_names[0]);
+	if (!hints->domain_attr->name)
+		return -FI_ENOMEM;
+
+	return 0;
+}
+
 static int setup_eps(void)
 {
 	int i, ret;
 
-	n_local_eps = opts.dst_addr ? num_initiator_eps : num_target_eps;
-	n_peer_eps = opts.dst_addr ? num_target_eps : num_initiator_eps;
-
-	if (n_domains_needed() > 1) {
+	if (n_domains > 1) {
 		FT_ERR("multi-domain endpoint placement is not yet implemented: "
 		       "%d endpoints at %d per domain needs %d domains",
-		       n_local_eps, eps_per_domain, n_domains_needed());
+		       n_local_eps, eps_per_domain, n_domains);
 		return -FI_EINVAL;
 	}
 
@@ -2160,6 +2192,8 @@ static void teardown_eps(void)
 	remote_ep_addrs = NULL;
 	free(target_ep_for_pair);
 	target_ep_for_pair = NULL;
+	efa_free_domain_names(domain_names);
+	domain_names = NULL;
 }
 
 static int run(void)
@@ -2171,6 +2205,10 @@ static int run(void)
 		cq_attr.format = FI_CQ_FORMAT_DATA;
 
 	opts.options |= FT_OPT_SKIP_ADDR_EXCH;
+
+	ret = select_domains();
+	if (ret)
+		return ret;
 
 	ret = ft_init_fabric();
 	if (ret)

@@ -46,4 +46,9 @@ int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
 			   struct fid_av *av, fi_addr_t *remote_addrs,
 			   int remote_n);
 
+int efa_select_domains(struct fi_info *hints, int want_n,
+		       const char *explicit_csv, char ***names);
+
+void efa_free_domain_names(char **names);
+
 #endif /* _EFA_SHARED_H */
