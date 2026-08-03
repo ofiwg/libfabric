@@ -419,8 +419,8 @@ rxm_ep_sar_tx_cleanup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
 					    tx_buf->pkt.ctrl_hdr.msg_id);
-	rxm_free_tx_buf(rxm_ep, first_tx_buf);
 	rxm_free_tx_buf(rxm_ep, tx_buf);
+	rxm_release_sar_first_tx_buf(rxm_ep, first_tx_buf);
 }
 
 struct rxm_deferred_tx_entry *

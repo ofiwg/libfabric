@@ -211,6 +211,9 @@ rxm_init_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				 &tx_buf->pkt);
 	if (seg_type == RXM_SAR_SEG_FIRST) {
 		*msg_id = tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
+		/* tx_bufs are recycled without zeroing. */
+		tx_buf->sar.first_seg_done = false;
+		tx_buf->sar.last_seg_done = false;
 	} else {
 		tx_buf->pkt.ctrl_hdr.msg_id = *msg_id;
 	}
@@ -324,7 +327,7 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return 0;
 
 free:
-	rxm_free_tx_buf(rxm_ep, first_tx_buf);
+	rxm_release_sar_first_tx_buf(rxm_ep, first_tx_buf);
 	return ret;
 defer:
 	def_tx = rxm_ep_alloc_deferred_tx_entry(rxm_ep,

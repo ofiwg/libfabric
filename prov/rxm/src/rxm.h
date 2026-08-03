@@ -531,6 +531,13 @@ struct rxm_tx_buf {
 	void *app_context;
 	uint64_t flags;
 
+	/* FIRST tx_buf only: FIRST and LAST may complete on different msg
+	 * endpoints, so the buffer is freed by whoever observes both. */
+	struct {
+		bool first_seg_done;
+		bool last_seg_done;
+	} sar;
+
 	union {
 		struct {
 			struct fid_mr *mr[RXM_IOV_LIMIT];
@@ -565,6 +572,18 @@ struct rxm_coll_buf {
 /* Used for application transmits, provides credit check */
 struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep);
 void rxm_free_tx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf);
+
+/* Called once the message is resolved, either because LAST completed or
+ * because the transfer was aborted. FIRST's own completion sets the other
+ * flag in rxm_complete_sar().
+ */
+static inline void
+rxm_release_sar_first_tx_buf(struct rxm_ep *ep, struct rxm_tx_buf *first_tx_buf)
+{
+	first_tx_buf->sar.last_seg_done = true;
+	if (first_tx_buf->sar.first_seg_done)
+		rxm_free_tx_buf(ep, first_tx_buf);
+}
 
 /* Context for collective operations */
 struct rxm_coll_buf *rxm_get_coll_buf(struct rxm_ep *ep);
