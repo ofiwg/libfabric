@@ -807,17 +807,30 @@ static int is_expected_err(struct fi_cq_err_entry *err,
  * manifests is as a hang, which is bounded by the caller's overall test
  * timeout (the pytest ClientServerTest timeout).
  */
-static int drain_cq_counted(struct fid_cq *cq, int expected,
-			    struct expected_err *err_list, int err_count)
+static int drain_cq_counted(int expected, struct expected_err *err_list,
+			    int err_count)
 {
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
 	struct op_ctx *o;
-	int idx, remaining, ret;
+	int idx, remaining, ret, d = 0;
+	struct fid_cq *cq;
 
 	remaining = expected;
 
+	/*
+	 * Poll every local domain's TX CQ round-robin: an op completes on the
+	 * CQ of the domain its endpoint lives on, so with endpoints spread
+	 * across domains the `expected` completions are split among the CQs.
+	 * The op_arr index bound below is unaffected -- op_arr is indexed by op,
+	 * not by CQ, so a completion identifies its op the same way regardless
+	 * of which domain's CQ reported it. With one domain this reduces to
+	 * polling the single global TX CQ.
+	 */
 	while (remaining > 0) {
+		cq = doms[d].txcq;
+		d = (d + 1) % n_domains;
+
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
 			o = container_of(comp.op_context,
@@ -908,23 +921,32 @@ static const char *side_str(void)
 	return close_side == CLOSE_INITIATOR ? "initiator" : "target";
 }
 
-/* Drain all available rxcq entries without blocking. */
+/* Drain all available rxcq entries, across every local domain, without blocking. */
 static int flush_rxcq(void)
 {
 	struct fi_cq_data_entry wc;
 	struct fi_cq_err_entry wc_err;
-	int ret;
+	int d, ret;
 
-	for (;;) {
-		ret = fi_cq_read(rxcq, &wc, 1);
-		if (ret == -FI_EAVAIL) {
-			memset(&wc_err, 0, sizeof(wc_err));
-			fi_cq_readerr(rxcq, &wc_err, 0);
-			FT_ERR("Unexpected target rxcq error:");
-			FT_CQ_ERR(rxcq, wc_err, NULL, 0);
-			return -FI_EOTHER;
-		} else if (ret <= 0) {
-			break;
+	/*
+	 * The initiator's writedata entries arrive on the target endpoint that
+	 * received them, so a remote CQ entry lands on that endpoint's domain.
+	 * Flush every local domain's RX CQ, not just the global one.
+	 */
+	for (d = 0; d < n_domains; d++) {
+		struct fid_cq *rx = doms[d].rxcq;
+
+		for (;;) {
+			ret = fi_cq_read(rx, &wc, 1);
+			if (ret == -FI_EAVAIL) {
+				memset(&wc_err, 0, sizeof(wc_err));
+				fi_cq_readerr(rx, &wc_err, 0);
+				FT_ERR("Unexpected target rxcq error:");
+				FT_CQ_ERR(rx, wc_err, NULL, 0);
+				return -FI_EOTHER;
+			} else if (ret <= 0) {
+				break;
+			}
 		}
 	}
 	return 0;
@@ -1086,11 +1108,11 @@ static int run_fill_abort_initiator(int iter)
 
 	/* Drain CQ */
 	if (close_side == CLOSE_TARGET)
-		ret = drain_cq_counted(txcq, total_posted,
+		ret = drain_cq_counted(total_posted,
 				       mr_abort_remote_close_errs,
 				       ARRAY_SIZE(mr_abort_remote_close_errs));
 	else
-		ret = drain_cq_counted(txcq, total_posted,
+		ret = drain_cq_counted(total_posted,
 				       mr_abort_local_close_errs,
 				       ARRAY_SIZE(mr_abort_local_close_errs));
 
@@ -1150,6 +1172,7 @@ static int run_fill_abort_target(void)
 {
 	struct fi_cq_data_entry comp;
 	struct fi_cq_err_entry err;
+	struct fid_cq *go_signal_rxcq;
 	uint64_t deadline;
 	int i, ret;
 
@@ -1173,15 +1196,20 @@ static int run_fill_abort_target(void)
 		return 0;
 	}
 
-	/* Wait for the single go signal */
+	/*
+	 * Wait for the single go signal. The initiator posts it on the pair
+	 * carrying SIGNAL_MR_IDX == 0, so it arrives on that pair's domain's RX
+	 * CQ; poll only that one.
+	 */
+	go_signal_rxcq = doms[dom_for_pair(pair_idx_for_mr_idx(0))].rxcq;
 	deadline = ft_gettime_ms() + CQ_FIRST_TIMEOUT_MS;
 	while (ft_gettime_ms() < deadline) {
-		ret = fi_cq_read(rxcq, &comp, 1);
+		ret = fi_cq_read(go_signal_rxcq, &comp, 1);
 		if (ret > 0)
 			break;
 		else if (ret == -FI_EAVAIL) {
 			memset(&err, 0, sizeof(err));
-			fi_cq_readerr(rxcq, &err, 0);
+			fi_cq_readerr(go_signal_rxcq, &err, 0);
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read (target rx)", ret);
 			return ret;
@@ -1360,7 +1388,7 @@ static int run_partial_close_initiator(void)
 			return ret;
 	}
 
-	ret = drain_cq_counted(txcq, 2 * num_mrs, mr_abort_local_close_errs,
+	ret = drain_cq_counted(2 * num_mrs, mr_abort_local_close_errs,
 			       ARRAY_SIZE(mr_abort_local_close_errs));
 	if (ret)
 		return ret;
@@ -1448,20 +1476,24 @@ cleanup:
  * show each local endpoint still works after the abort storm.
  */
 
-/* Block for one txcq completion; every reuse op must succeed outright. */
-static int reuse_wait_one_comp(const char *what)
+/*
+ * Block for one completion on @p cq; every reuse op must succeed outright.
+ * The reuse check posts one op at a time on a single pair, so its completion
+ * lands only on that pair's domain's TX CQ -- the caller passes it in.
+ */
+static int reuse_wait_one_comp(struct fid_cq *cq, const char *what)
 {
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
 	int ret;
 
 	do {
-		ret = fi_cq_read(txcq, &comp, 1);
+		ret = fi_cq_read(cq, &comp, 1);
 		if (ret == -FI_EAVAIL) {
 			memset(&err, 0, sizeof(err));
-			fi_cq_readerr(txcq, &err, 0);
+			fi_cq_readerr(cq, &err, 0);
 			FT_ERR("Unexpected CQ error during reuse %s:", what);
-			FT_CQ_ERR(txcq, err, NULL, 0);
+			FT_CQ_ERR(cq, err, NULL, 0);
 			return -err.err;
 		}
 	} while (ret == -FI_EAGAIN);
@@ -1492,6 +1524,7 @@ static int n_reuse_pairs(void)
 static int reuse_check_one_pair(int p)
 {
 	struct fi_context2 reuse_ctx;
+	struct fid_cq *cq = doms[dom_for_pair(p)].txcq;
 	int slot = p;
 	int ret;
 
@@ -1508,7 +1541,7 @@ static int reuse_check_one_pair(int p)
 		return ret;
 	}
 
-	ret = reuse_wait_one_comp("write");
+	ret = reuse_wait_one_comp(cq, "write");
 	if (ret)
 		return ret;
 
@@ -1529,25 +1562,31 @@ static int reuse_check_one_pair(int p)
 		return ret;
 	}
 
-	return reuse_wait_one_comp("read");
+	return reuse_wait_one_comp(cq, "read");
 }
 
 static int reuse_check_initiator(void)
 {
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
-	int i, ret;
+	int i, d, ret;
 
-	/* Drain any residual error entries from the abort test */
-	do {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret == -FI_EAVAIL) {
-			memset(&err, 0, sizeof(err));
-			fi_cq_readerr(txcq, &err, 0);
-			FT_INFO("Reuse drain: residual error %d (%s)\n",
-			       err.err, fi_strerror(err.err));
-		}
-	} while (ret != -FI_EAGAIN);
+	/*
+	 * Drain any residual error entries left by the abort test. The aborted
+	 * ops were spread across every local domain, so sweep each domain's TX
+	 * CQ until it goes idle rather than only the global one.
+	 */
+	for (d = 0; d < n_domains; d++) {
+		do {
+			ret = fi_cq_read(doms[d].txcq, &comp, 1);
+			if (ret == -FI_EAVAIL) {
+				memset(&err, 0, sizeof(err));
+				fi_cq_readerr(doms[d].txcq, &err, 0);
+				FT_INFO("Reuse drain: residual error %d (%s)\n",
+				       err.err, fi_strerror(err.err));
+			}
+		} while (ret != -FI_EAGAIN);
+	}
 
 	/* Close old MRs and re-register with both write and read access */
 	for (i = 0; i < num_mrs; i++)
@@ -1702,7 +1741,7 @@ static int run_send_abort_initiator(int iter)
 		{ .err = FI_EINVAL, .prov_errno = 5 },        /* local MR invalid */
 		{ .err = FI_ECANCELED, .prov_errno = 4127 },  /* peer abort: receiver detected the yanked source MR on its RDMA read and notified us via PEER_ERROR_PKT */
 	};
-	ret = drain_cq_counted(txcq, total_posted, send_initiator_errs,
+	ret = drain_cq_counted(total_posted, send_initiator_errs,
 			       ARRAY_SIZE(send_initiator_errs));
 	if (ret != 0)
 		return ret; /* drain_cq_counted hit unexpected error */
@@ -1760,10 +1799,11 @@ static int run_send_abort_initiator(int iter)
  * at its seeded depth (the buffer is app-owned and MUST go back). Retries
  * -FI_EAGAIN, draining the CQ to make room, until the deadline.
  */
-static int mr_abort_repost_recv(struct fid_cq *rxcq, struct op_ctx *o,
-				uint64_t deadline)
+static int mr_abort_repost_recv(struct op_ctx *o, uint64_t deadline)
 {
 	int repost_idx = (int) (o - op_arr);
+	/* Nudge progress on the domain this op reposts to. */
+	struct fid_cq *rxcq = op_dom(o->mr_idx)->rxcq;
 	int ret;
 
 	do {
@@ -1797,32 +1837,46 @@ static int target_recv_drain_one(struct expected_err *errs, int nerr,
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
 	struct op_ctx *o;
+	struct fid_cq *rx;
 	int ret;
 
-	ret = fi_cq_read(rxcq, &comp, 1);
+	/*
+	 * Recvs are spread across every local domain, so poll the domains'
+	 * RX CQs round-robin: one domain per call, advancing a persistent
+	 * cursor so no domain is starved. Each call still reaps at most one
+	 * entry and returns 1/0/<0, matching the caller's counting loops; with
+	 * one domain the cursor is always 0 and this is a plain global-rxcq
+	 * read.
+	 */
+	static int cursor;
+
+	rx = doms[cursor].rxcq;
+	cursor = (cursor + 1) % n_domains;
+
+	ret = fi_cq_read(rx, &comp, 1);
 	if (ret > 0) {
 		(*recv_ok)++;
 		o = container_of(comp.op_context, struct op_ctx, context);
-		ret = mr_abort_repost_recv(rxcq, o,
+		ret = mr_abort_repost_recv(o,
 					   ft_gettime_ms() + CQ_FIRST_TIMEOUT_MS);
 		if (ret)
 			return ret;
 		return 1;
 	} else if (ret == -FI_EAVAIL) {
 		memset(&err, 0, sizeof(err));
-		ret = fi_cq_readerr(rxcq, &err, 0);
+		ret = fi_cq_readerr(rx, &err, 0);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cq_readerr", ret);
 			return ret;
 		}
 		if (!is_expected_err(&err, errs, nerr)) {
 			FT_ERR("Unexpected target recv error:");
-			FT_CQ_ERR(rxcq, err, NULL, 0);
+			FT_CQ_ERR(rx, err, NULL, 0);
 			return -FI_EOTHER;
 		}
 		(*recv_canceled)++;
 		o = container_of(err.op_context, struct op_ctx, context);
-		ret = mr_abort_repost_recv(rxcq, o,
+		ret = mr_abort_repost_recv(o,
 					   ft_gettime_ms() + CQ_FIRST_TIMEOUT_MS);
 		if (ret)
 			return ret;
