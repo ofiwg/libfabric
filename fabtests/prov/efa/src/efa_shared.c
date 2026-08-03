@@ -17,6 +17,8 @@ static struct option efa_extra_opts[] = {
 	{"post-list", required_argument, NULL, OPT_POST_LIST},
 	{"num-eps", required_argument, NULL, OPT_NUM_EPS},
 	{"sl-low-latency", no_argument, NULL, OPT_SL_LOW_LATENCY},
+	{"eps-per-domain", required_argument, NULL, OPT_EPS_PER_DOMAIN},
+	{"domains", required_argument, NULL, OPT_DOMAINS},
 	{0, 0, 0, 0}
 };
 
@@ -52,6 +54,11 @@ void efa_longopts_usage(void)
 		"Number of endpoints/QPs (default: 1)");
 	FT_PRINT_OPTS_USAGE("--sl-low-latency",
 		"Enable FI_TC_LOW_LATENCY on all endpoints used in the test");
+	FT_PRINT_OPTS_USAGE("--eps-per-domain <n>",
+		"Endpoints to place on each local domain (default: all on one)");
+	FT_PRINT_OPTS_USAGE("--domains <d1,d2,...>",
+		"Domain names to spread endpoints across; requires "
+		"--eps-per-domain and excludes -d");
 	ft_longopts_usage();
 }
 
