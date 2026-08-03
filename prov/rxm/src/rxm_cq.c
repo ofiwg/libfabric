@@ -266,7 +266,7 @@ static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
 		break;
 	case RXM_SAR_SEG_LAST:
 		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
-						tx_buf->pkt.ctrl_hdr.msg_id);
+			RXM_SAR_TX_INDEX(tx_buf->pkt.ctrl_hdr.msg_id));
 		rxm_free_tx_buf(rxm_ep, tx_buf);
 		rxm_release_sar_first_tx_buf(rxm_ep, first_tx_buf);
 		return true;
