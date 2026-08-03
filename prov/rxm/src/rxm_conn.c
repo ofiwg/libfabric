@@ -56,6 +56,7 @@ static void rxm_close_conn(struct rxm_conn *conn)
 {
 	struct rxm_deferred_tx_entry *tx_entry;
 	struct fi_peer_rx_entry *rx_entry;
+	struct rxm_proto_info *proto_info;
 	struct rxm_rx_buf *buf;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "closing conn %p\n", conn);
@@ -76,8 +77,23 @@ static void rxm_close_conn(struct rxm_conn *conn)
 	}
 
 	while (!dlist_empty(&conn->deferred_sar_msgs)) {
-		rx_entry = (struct fi_peer_rx_entry*)conn->deferred_sar_msgs.next;
-		rx_entry->srx->owner_ops->free_entry(rx_entry);
+		proto_info = container_of(conn->deferred_sar_msgs.next,
+					  struct rxm_proto_info, sar.entry);
+		rx_entry = proto_info->sar.rx_entry;
+
+		while (!dlist_empty(&proto_info->sar.pkt_list)) {
+			buf = container_of(proto_info->sar.pkt_list.next,
+					   struct rxm_rx_buf, unexp_entry);
+			dlist_remove(&buf->unexp_entry);
+			rxm_free_rx_buf(buf);
+		}
+
+		dlist_remove(&proto_info->sar.entry);
+		ofi_buf_free(proto_info);
+
+		/* Once matched, the entry belongs to the owner. */
+		if (rx_entry && rx_entry->peer_context)
+			rx_entry->srx->owner_ops->free_entry(rx_entry);
 	}
 	if (conn->msg_eps) {
 		for (uint8_t i = 0; i < conn->num_msg_eps; i++) {
