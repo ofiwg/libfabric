@@ -1468,6 +1468,28 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	}
 	tx->hfisvc_min_payload_bytes = l_hfisvc_min_payload_bytes;
 
+#ifdef OPX_HMEM
+	int l_hmem_hfisvc_min_payload_bytes;
+	rc = fi_param_get_int(fi_opx_global.prov, "hmem_hfisvc_min_payload_bytes", &l_hmem_hfisvc_min_payload_bytes);
+	if (rc != FI_SUCCESS) {
+		l_hmem_hfisvc_min_payload_bytes = OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+				   "FI_OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
+				   l_hmem_hfisvc_min_payload_bytes);
+	} else if (l_hmem_hfisvc_min_payload_bytes < OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_MIN ||
+		   l_hmem_hfisvc_min_payload_bytes > OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_MAX) {
+		l_hmem_hfisvc_min_payload_bytes = OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
+			OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_MIN, OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_MAX,
+			l_hmem_hfisvc_min_payload_bytes);
+	} else {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
+				   l_hmem_hfisvc_min_payload_bytes);
+	}
+	opx_ep->hmem_hfisvc_min_payload_bytes = (uint32_t) l_hmem_hfisvc_min_payload_bytes;
+#endif
+
 	/* This only picks between two rendezvous paths, so a value below rzv_min is
 	 * inert rather than pulling HFISVC into the eager band. */
 	if (tx->hfisvc_min_payload_bytes < tx->rzv_min_payload_bytes) {
@@ -1475,6 +1497,14 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 			"FI_OPX_HFISVC_MIN_PAYLOAD_BYTES(%u) is below FI_OPX_RZV_MIN_PAYLOAD_BYTES(%u), so the HFI Service will not be used until %u bytes.\n",
 			tx->hfisvc_min_payload_bytes, tx->rzv_min_payload_bytes, tx->rzv_min_payload_bytes);
 	}
+#ifdef OPX_HMEM
+	if (opx_ep->hmem_hfisvc_min_payload_bytes < opx_ep->hmem_rzv_min_payload_bytes) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES(%u) is below FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES(%u), so the HFI Service will not be used for device-memory sends until %u bytes.\n",
+			opx_ep->hmem_hfisvc_min_payload_bytes, opx_ep->hmem_rzv_min_payload_bytes,
+			opx_ep->hmem_rzv_min_payload_bytes);
+	}
+#endif
 
 	int l_sdma_max_writevs_per_cycle;
 	rc = fi_param_get_int(fi_opx_global.prov, "sdma_max_writevs_per_cycle", &l_sdma_max_writevs_per_cycle);
