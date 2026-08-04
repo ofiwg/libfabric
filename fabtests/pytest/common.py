@@ -747,7 +747,7 @@ class ClientServerTest:
                              _is_linux_host(self._cmdline_args.server_id))
 
         if use_oob_readiness:
-            _wait_for_oob_port_free(self._cmdline_args.server_id, oob_port)
+            _ensure_no_oob_listener(self._cmdline_args.server_id, oob_port)
 
         with open(server_log_path, "w") as server_log_file:
             server_process = Popen(
