@@ -608,7 +608,8 @@ struct fi_opx_ep {
 	bool		   use_hfisvc;
 	bool		   use_eager_sdma;
 	uint32_t	   hmem_rzv_min_payload_bytes;
-	char		   unused_c[8];
+	uint32_t	   hmem_sdma_min_payload_bytes;
+	char		   unused_c[4];
 	uint32_t	   gpu_ipc_min_threshold;
 	enum fi_hmem_iface use_gpu_ipc;
 	ofi_spin_t	   lock; /* lock size varies based on ENABLE_DEBUG */
@@ -4584,6 +4585,12 @@ uint32_t opx_ep_tx_rzv_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx
 	return (iface == FI_HMEM_SYSTEM) ? opx_tx->rzv_min_payload_bytes : opx_ep->hmem_rzv_min_payload_bytes;
 }
 
+__OPX_FORCE_INLINE__
+uint32_t opx_ep_tx_sdma_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
+{
+	return (iface == FI_HMEM_SYSTEM) ? opx_tx->sdma_min_payload_bytes : opx_ep->hmem_sdma_min_payload_bytes;
+}
+
 ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr,
 				  uint64_t tag, void *user_context, const uint32_t data, const uint64_t tx_op_flags,
 				  const uint64_t caps, const enum ofi_reliability_kind reliability,
@@ -4662,7 +4669,8 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			if (opx_ep->use_eager_sdma && (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) &&
 			    is_contiguous && !(tx_op_flags & FI_INJECT) && ((total_len & 7) == 0) &&
 			    total_len >= OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES &&
-			    total_len >= opx_tx->sdma_min_payload_bytes && !fi_opx_hfi1_tx_is_shm(opx_ep, addr)) {
+			    total_len >= opx_ep_tx_sdma_min(opx_ep, opx_tx, hmem_iface) &&
+			    !fi_opx_hfi1_tx_is_shm(opx_ep, addr)) {
 				rc = opx_hfi1_tx_send_egr_sdma(ep, buf, total_len, addr, tag, context, data,
 							       tx_op_flags, caps, reliability, do_cq_completion,
 							       hmem_iface, hmem_device, hfi1_type);
