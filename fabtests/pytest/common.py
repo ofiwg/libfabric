@@ -6,6 +6,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import functools
 from datetime import datetime
 from subprocess import Popen, TimeoutExpired, run
@@ -27,6 +28,7 @@ bssh = "ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o BatchMode=yes
 OOB_POLL_INTERVAL_SEC = 0.5
 PORT_CLEAR_TIMEOUT_SEC = 10
 SERVER_LISTEN_TIMEOUT_SEC = 30
+OOB_KILL_CONFIRM_TIMEOUT_SEC = 15
 
 
 class SshConnectionError(Exception):
@@ -440,6 +442,35 @@ def _wait_for_oob_port_free(host_id, port):
         sleep(OOB_POLL_INTERVAL_SEC)
 
 
+def _oob_port_listener_pids(host_id, port):
+    """Return PIDs of processes listening on TCP port on host_id."""
+    output = _run_ssh_probe(host_id, "ss -ltnp")
+    suffix = ":{}".format(port)
+    pids = set()
+    for line in output.splitlines():
+        fields = line.split()
+        if len(fields) >= 4 and fields[3].endswith(suffix):
+            pids.update(int(pid) for pid in re.findall(r"pid=(\d+)", line))
+    return pids
+
+
+def _ensure_no_oob_listener(host_id, port):
+    """Kill any process still listening on the OOB port and confirm it died."""
+    for signal_name in ("TERM", "KILL"):
+        pids = _oob_port_listener_pids(host_id, port)
+        if not pids:
+            break
+        _run_ssh_probe(host_id, "kill -{} {} 2>/dev/null || true".format(signal_name, " ".join(str(pid) for pid in sorted(pids))))
+        deadline = time.time() + OOB_KILL_CONFIRM_TIMEOUT_SEC
+        while _oob_port_has_listener(host_id, port):
+            if time.time() >= deadline:
+                break
+            sleep(OOB_POLL_INTERVAL_SEC)
+    if _oob_port_has_listener(host_id, port):
+        raise RuntimeError(
+            "OOB port {} on {} is still held by a listener after cleanup attempts. Host may be unclean.".format(port, host_id))
+
+
 def _wait_for_server_listening(host_id, port, server_process,
                                server_log_path=None):
     """
@@ -727,76 +758,108 @@ class ClientServerTest:
                 universal_newlines=True,
             )
 
-        if use_oob_readiness:
-            _wait_for_server_listening(self._cmdline_args.server_id, oob_port,
-                                       server_process,
-                                       server_log_path=server_log_path)
-        else:
-            sleep(1)
-
-        client_returncode = -1
+        # From this point on the spawned server must be cleaned up on every exit path.
         try:
-            # Start client
-            # Retry on SSH connection error until server timeout
-            client_returncode = retry(
-                retry_on_exception=is_ssh_connection_error,
-                stop_max_delay=self._timeout * 1000,  # Convert to milliseconds
-                wait_fixed=CLIENT_RETRY_INTERVAL_MS,
-            )(self._run_client_command)(server_process, self._client_command, client_log_path).returncode
-        except Exception as e:
-            print("Client error: {}".format(e))
-            # Clean up server if client is terminated unexpectedly
-            server_process.terminate()
+            if use_oob_readiness:
+                _wait_for_server_listening(self._cmdline_args.server_id, oob_port,
+                                           server_process,
+                                           server_log_path=server_log_path)
+            else:
+                sleep(1)
 
-        server_timed_out = False
-        try:
-            server_process.wait(
-                timeout=self._timeout + SERVER_RESTART_DELAY_MS/1000)
-        except TimeoutExpired:
-            server_timed_out = True
+            client_returncode = -1
+            try:
+                # Start client
+                # Retry on SSH connection error until server timeout
+                client_returncode = retry(
+                    retry_on_exception=is_ssh_connection_error,
+                    stop_max_delay=self._timeout * 1000,  # Convert to milliseconds
+                    wait_fixed=CLIENT_RETRY_INTERVAL_MS,
+                )(self._run_client_command)(server_process, self._client_command, client_log_path).returncode
+            except Exception as e:
+                print("Client error: {}".format(e))
+                # Clean up server if client is terminated unexpectedly
+                server_process.terminate()
+
+            server_timed_out = False
+            try:
+                server_process.wait(
+                    timeout=self._timeout + SERVER_RESTART_DELAY_MS/1000)
+            except TimeoutExpired:
+                server_timed_out = True
+                server_process.terminate()
+                try:
+                    server_process.wait(timeout=SERVER_RESTART_DELAY_MS/1000)
+                except TimeoutExpired:
+                    server_process.kill()
+                    server_process.wait()
+
+            print("server_stdout:")
+            ssh_connection_error = False
+            output_ends_with_newline = True
+            with open(server_log_path, errors="replace") as server_log_file:
+                for line in server_log_file:
+                    print(line, end="")
+                    output_ends_with_newline = line.endswith("\n")
+                    if has_ssh_connection_err_msg(line):
+                        ssh_connection_error = True
+            if not output_ends_with_newline:
+                print("")
+
+            if ssh_connection_error:
+                print("encountered ssh connection issue!")
+                raise SshConnectionError()
+
+            print(f"server returncode: {server_process.returncode}")
+
+            if server_timed_out:
+                raise RuntimeError("Server timed out\n" + log_msg)
+
+            list_to_check_return_code = []
+            if not self._server_parameters['might_fail']:
+                list_to_check_return_code.append(server_process.returncode)
+            if not self._client_parameters['might_fail']:
+                list_to_check_return_code.append(client_returncode)
+
+            strict = self._cmdline_args.strict_fabtests_mode
+            has_failure = any(
+                check_returncode(returncode, strict)[0] == FAIL
+                for returncode in list_to_check_return_code)
+            if not has_failure:
+                remove_test_logs(server_log_path, client_log_path)
+
+            check_returncode_list(list_to_check_return_code, strict,
+                                  extra_fail_message=log_msg)
+        finally:
+            self._ensure_server_dead(server_process, oob_port if use_oob_readiness else None)
+
+    def _ensure_server_dead(self, server_process, oob_port):
+        """Guarantee the spawned server is gone before the test returns."""
+        local_was_alive = server_process.poll() is None
+        if local_was_alive:
             server_process.terminate()
             try:
-                server_process.wait(timeout=SERVER_RESTART_DELAY_MS/1000)
+                server_process.wait(timeout=10)
             except TimeoutExpired:
                 server_process.kill()
                 server_process.wait()
 
-        print("server_stdout:")
-        ssh_connection_error = False
-        output_ends_with_newline = True
-        with open(server_log_path, errors="replace") as server_log_file:
-            for line in server_log_file:
-                print(line, end="")
-                output_ends_with_newline = line.endswith("\n")
-                if has_ssh_connection_err_msg(line):
-                    ssh_connection_error = True
-        if not output_ends_with_newline:
-            print("")
+        if oob_port is None:
+            return
 
-        if ssh_connection_error:
-            print("encountered ssh connection issue!")
-            raise SshConnectionError()
+        exception_in_flight = sys.exc_info()[0] is not None
+        if not (local_was_alive or exception_in_flight):
+            # Happy path: the server exited on its own and nothing went wrong.
+            # Skip the extra SSH round trip to the server node.
+            return
 
-        print(f"server returncode: {server_process.returncode}")
-
-        if server_timed_out:
-            raise RuntimeError("Server timed out\n" + log_msg)
-
-        list_to_check_return_code = []
-        if not self._server_parameters['might_fail']:
-            list_to_check_return_code.append(server_process.returncode)
-        if not self._client_parameters['might_fail']:
-            list_to_check_return_code.append(client_returncode)
-
-        strict = self._cmdline_args.strict_fabtests_mode
-        has_failure = any(
-            check_returncode(returncode, strict)[0] == FAIL
-            for returncode in list_to_check_return_code)
-        if not has_failure:
-            remove_test_logs(server_log_path, client_log_path)
-
-        check_returncode_list(list_to_check_return_code, strict,
-                              extra_fail_message=log_msg)
+        try:
+            _ensure_no_oob_listener(self._cmdline_args.server_id, oob_port)
+        except Exception as e:
+            if exception_in_flight:
+                print("server cleanup failed: {}".format(e))
+            else:
+                raise
 
 
 class MultinodeTest(ClientServerTest):
