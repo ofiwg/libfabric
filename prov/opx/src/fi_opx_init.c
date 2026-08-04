@@ -1221,11 +1221,11 @@ OPX_INI
 		&fi_opx_provider, "gpu_ipc_min", FI_PARAM_INT,
 		"The minimum message length in bytes where GPU IPC will be used for intranode GPU buffers. Value must be >= %d. Defaults to %d.",
 		OPX_GPU_IPC_MIN_THRESHOLD_MIN, OPX_GPU_IPC_MIN_THRESHOLD_DEFAULT);
+#endif
 	fi_param_define(
 		&fi_opx_provider, "eager_sdma", FI_PARAM_BOOL,
-		"Enables sending single-packet eager messages from device memory over SDMA rather than PIO, so the DMA engine reads the payload from device memory instead of the CPU. Applies to messages of at least %d bytes. Experimental. Defaults to FALSE.",
+		"Enables sending single-packet eager messages over SDMA rather than PIO, so the DMA engine reads the payload instead of the CPU. Applies to messages of at least %d bytes. Experimental. Defaults to FALSE.",
 		OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES);
-#endif
 	fi_param_define(
 		&fi_opx_provider, "route_control", FI_PARAM_STRING,
 		"Specify the route control for each packet type. The format is <inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>. Each value can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. If Token ID (TID) is enabled then <rendezvous data packet value> must use in-order route controls. Default is `0:0:0:0:0:0` in-order route controls.");

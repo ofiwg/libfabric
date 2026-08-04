@@ -1394,7 +1394,6 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				   tx->sdma_min_payload_bytes);
 	}
 
-#ifdef OPX_HMEM
 	/* Eager-SDMA submits through the same engine, so the master disable wins.
 	 * Clearing it here rather than in the dispatch gate also keeps the pool
 	 * allocations in this function the single authority on SDMA availability. */
@@ -1417,7 +1416,6 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 					   tx->rzv_min_payload_bytes - 1);
 		}
 	}
-#endif
 
 	int l_hfisvc_min_payload_bytes;
 	rc = fi_param_get_int(fi_opx_global.prov, "hfisvc_min_payload_bytes", &l_hfisvc_min_payload_bytes);
@@ -3933,6 +3931,8 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 				   opx_ep->gpu_ipc_min_threshold);
 	}
 
+#endif
+
 	int use_eager_sdma;
 	if (fi_param_get_bool(fi_opx_global.prov, "eager_sdma", &use_eager_sdma) == FI_SUCCESS) {
 		opx_ep->use_eager_sdma = (bool) use_eager_sdma;
@@ -3941,7 +3941,6 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 		opx_ep->use_eager_sdma = false;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_EAGER_SDMA not set.  Using default setting of FALSE\n");
 	}
-#endif
 
 #ifndef OPX_DEV_OVERRIDE
 	if (opx_ep->use_expected_tid_rzv == OPX_TID_ENABLE_ON && !opx_is_tid_allowed(opx_domain)) {
