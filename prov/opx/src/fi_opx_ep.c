@@ -1404,6 +1404,28 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				   tx->sdma_min_payload_bytes);
 	}
 
+#ifdef OPX_HMEM
+	int l_hmem_sdma_min_payload_bytes;
+	rc = fi_param_get_int(fi_opx_global.prov, "hmem_sdma_min_payload_bytes", &l_hmem_sdma_min_payload_bytes);
+	if (rc != FI_SUCCESS) {
+		l_hmem_sdma_min_payload_bytes = OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+				   "FI_OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
+				   l_hmem_sdma_min_payload_bytes);
+	} else if (l_hmem_sdma_min_payload_bytes < OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_MIN ||
+		   l_hmem_sdma_min_payload_bytes > OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_MAX) {
+		l_hmem_sdma_min_payload_bytes = OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_DEFAULT;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
+			OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_MIN, OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_MAX,
+			l_hmem_sdma_min_payload_bytes);
+	} else {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
+				   l_hmem_sdma_min_payload_bytes);
+	}
+	opx_ep->hmem_sdma_min_payload_bytes = (uint32_t) l_hmem_sdma_min_payload_bytes;
+#endif
+
 	/* Eager-SDMA submits through the same engine, so the master disable wins.
 	 * Clearing it here rather than in the dispatch gate also keeps the pool
 	 * allocations in this function the single authority on SDMA availability. */
