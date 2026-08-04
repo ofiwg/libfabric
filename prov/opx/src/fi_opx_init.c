@@ -1156,6 +1156,13 @@ OPX_INI
 		"The minimum message length in bytes where SDMA will be used. For messages smaller than this threshold, the send will be completed using PIO. Value must be between %d and %d. Defaults to %d.",
 		FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX,
 		FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
+#ifdef OPX_HMEM
+	fi_param_define(
+		&fi_opx_provider, "hmem_sdma_min_payload_bytes", FI_PARAM_INT,
+		"The minimum message length in bytes where eager SDMA is used for sends whose buffer is device memory. The rendezvous data phase is not affected; it uses FI_OPX_SDMA_MIN_PAYLOAD_BYTES for every memory type. Value must be between %d and %d. Defaults to %d.",
+		OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_MIN, OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_MAX,
+		OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
+#endif
 	fi_param_define(
 		&fi_opx_provider, "hfisvc_min_payload_bytes", FI_PARAM_INT,
 		"The minimum message length in bytes where rendezvous will use HFISVC. For messages smaller than this threshold, rendezvous will use the applicable PIO or SDMA path. Value must be between %d and %d. Defaults to %d.",
