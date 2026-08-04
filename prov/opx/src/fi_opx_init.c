@@ -1135,6 +1135,13 @@ OPX_INI
 		&fi_opx_provider, "rzv_min_payload_bytes", FI_PARAM_INT,
 		"The minimum length in bytes where rendezvous will be used. For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager. Defaults to %d.",
 		OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT);
+#ifdef OPX_HMEM
+	fi_param_define(
+		&fi_opx_provider, "hmem_rzv_min_payload_bytes", FI_PARAM_INT,
+		"The minimum length in bytes where rendezvous is used for sends whose buffer is device memory. Value must be between %d and %d. Defaults to %d.",
+		OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MIN, OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MAX,
+		OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_DEFAULT);
+#endif
 	fi_param_define(
 		&fi_opx_provider, "sdma_bounce_buf_threshold", FI_PARAM_INT,
 		"The maximum message length in bytes that will be copied to the SDMA bounce buffer. For messages larger than this threshold, the send will not be completed until receiver has ACKed. Value must be between %d and %d. Defaults to %d.",

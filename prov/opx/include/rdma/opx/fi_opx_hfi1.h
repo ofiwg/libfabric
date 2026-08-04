@@ -107,8 +107,8 @@ struct fi_opx_ep_tx;
 
 /* Default for payload threshold size for RZV */
 #define OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT (OPX_MP_EGR_MAX_PAYLOAD_BYTES_DEFAULT + 1)
-#define OPX_RZV_MIN_PAYLOAD_BYTES_MIN (FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
-#define OPX_RZV_MIN_PAYLOAD_BYTES_MAX (OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX + 1) /* Max value */
+#define OPX_RZV_MIN_PAYLOAD_BYTES_MIN	  (FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES) /* Min value */
+#define OPX_RZV_MIN_PAYLOAD_BYTES_MAX	  (OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX + 1) /* Max value */
 
 #define OPX_GPU_IPC_MIN_THRESHOLD_DEFAULT (2048)
 #define OPX_GPU_IPC_MIN_THRESHOLD_MIN	  (0)
@@ -200,6 +200,19 @@ static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS_TID <= OPX_HFI1_SDMA_MAX_PKTS_TID,
 #define OPX_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT (OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT)
 #define OPX_HFISVC_MIN_PAYLOAD_BYTES_MIN     (0)
 #define OPX_HFISVC_MIN_PAYLOAD_BYTES_MAX     (INT_MAX - 1)
+
+/* Device-memory thresholds, selected when the send buffer is not host memory. This
+ * block only exists for HMEM builds; HAVE_CUDA or HAVE_ROCR is always true when
+ * OPX_HMEM is defined, so there is no host-default fallback arm to carry. */
+#ifdef OPX_HMEM
+#if HAVE_CUDA
+#define OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_DEFAULT (4096)
+#elif HAVE_ROCR
+#define OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_DEFAULT (8192)
+#endif
+#define OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MIN (OPX_RZV_MIN_PAYLOAD_BYTES_MIN)
+#define OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MAX (OPX_RZV_MIN_PAYLOAD_BYTES_MAX)
+#endif /* OPX_HMEM */
 
 /* Default for payload threshold size for TID */
 #ifndef OPX_TID_MIN_PAYLOAD_BYTES_DEFAULT
