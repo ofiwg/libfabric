@@ -200,16 +200,16 @@ struct fi_opx_ep_tx {
 	volatile uint64_t *pio_scb_first;    /* const; only eager and rendezvous */
 	struct slist	  *cq_completed_ptr;
 	uint32_t	   rzv_min_payload_bytes;
-	uint32_t	   mp_eager_max_payload_bytes;
-	uint16_t	   mp_eager_min_payload_bytes;
 	uint16_t	   mp_eager_chunk_size;
 	uint16_t	   pio_max_eager_tx_bytes;
 	uint16_t	   pio_flow_eager_tx_bytes;
+	uint16_t	   unused_cacheline0_1;
 	uint32_t	   rzv_striping_min_payload_bytes;
 	uint8_t		   do_cq_completion;
 	uint8_t		   force_credit_return;
 	uint8_t		   use_sdma;
-	uint8_t		   unused_cacheline1_1;
+	uint8_t		   mp_eager_disable;
+	uint8_t		   unused_cacheline0_2[4];
 
 	struct {
 		/* == CACHE LINE 1,2 == */
@@ -607,7 +607,8 @@ struct fi_opx_ep {
 	bool		   use_expected_tid_rzv;
 	bool		   use_hfisvc;
 	bool		   use_eager_sdma;
-	char		   unused_c[12];
+	uint32_t	   hmem_rzv_min_payload_bytes;
+	char		   unused_c[8];
 	uint32_t	   gpu_ipc_min_threshold;
 	enum fi_hmem_iface use_gpu_ipc;
 	ofi_spin_t	   lock; /* lock size varies based on ENABLE_DEBUG */
@@ -4577,6 +4578,12 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 				       hfi1_type, ctx_sharing);
 }
 
+__OPX_FORCE_INLINE__
+uint32_t opx_ep_tx_rzv_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
+{
+	return (iface == FI_HMEM_SYSTEM) ? opx_tx->rzv_min_payload_bytes : opx_ep->hmem_rzv_min_payload_bytes;
+}
+
 ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr,
 				  uint64_t tag, void *user_context, const uint32_t data, const uint64_t tx_op_flags,
 				  const uint64_t caps, const enum ofi_reliability_kind reliability,
@@ -4640,11 +4647,15 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	const uint64_t do_cq_completion = fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
 
-	if (total_len < opx_tx->rzv_min_payload_bytes) {
+	const uint32_t rzv_min = opx_ep_tx_rzv_min(opx_ep, opx_tx, hmem_iface);
+
+	if (total_len < rzv_min) {
 		if (total_len <= opx_tx->pio_flow_eager_tx_bytes) {
+#ifdef OPX_HMEM
 			if (opx_ep->use_hfisvc && hmem_iface != FI_HMEM_SYSTEM) {
 				opx_hfisvc_mr_lazy_open_if_deferred(opx_ep->domain, (struct fi_opx_mr *) desc);
 			}
+#endif
 			/* FI_INJECT is excluded because the payload iov points at the caller's
 			 * buffer until the replay retires; unaligned lengths stay on PIO because
 			 * SDMA cannot fill the inline tail the eager receive path expects. */
@@ -4679,11 +4690,8 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			return -FI_EAGAIN;
 		}
 
-		/* MP EGR benefits host/CUDA paths, but other device memory should use rendezvous. */
-		if (total_len <= opx_tx->mp_eager_max_payload_bytes && is_contiguous &&
-		    !fi_opx_hfi1_tx_is_shm(opx_ep, addr) && (caps & FI_TAGGED) &&
-		    (hmem_iface == FI_HMEM_SYSTEM || hmem_iface == FI_HMEM_CUDA)) {
-			assert(total_len >= opx_tx->mp_eager_min_payload_bytes);
+		if (!opx_tx->mp_eager_disable && is_contiguous && !fi_opx_hfi1_tx_is_shm(opx_ep, addr) &&
+		    (caps & FI_TAGGED) && (hmem_iface == FI_HMEM_SYSTEM || hmem_iface == FI_HMEM_CUDA)) {
 			rc = opx_hfi1_tx_send_try_mp_egr(ep, buf, len, addr, tag, context, data, lock_required,
 							 override_flags, tx_op_flags, caps, reliability,
 							 do_cq_completion, hmem_iface, hmem_device, hmem_handle,
