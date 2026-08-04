@@ -574,7 +574,6 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
 
-	assert(iface != FI_HMEM_SYSTEM);
 	assert(len <= OPX_HFI1_PKT_SIZE);
 	assert(hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B));
 	/* Unaligned would over-deliver on the receiver and over-read the source. */
