@@ -140,7 +140,8 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
   Valid values are 0 (disabled) and powers of 2 in the range of 1-32,768, inclusive.
 
-  Default setting is 64.
+  Default setting is 1 for AMD GPU (ROCr) HMEM builds, 64 otherwise. Eager SDMA send
+  completion is gated on the reliability ACK.
 
 *FI_OPX_RELIABILITY_MAX_UNCONGESTED_PINGS*
 : Integer. This setting controls how many PING requests the reliability/replay
@@ -232,12 +233,19 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   libraries built on OPA100 systems.
 
 *FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
-: Integer. The minimum length in bytes where SDMA will be used.
-  For messages smaller than this threshold, the send will be completed using PIO.
+: Integer. Applies to sends from host memory. The minimum length in bytes where SDMA will
+  be used. For messages smaller than this threshold, the send will be completed using PIO.
+  This threshold also applies to the rendezvous data phase, RMA, and atomic operations,
+  and to host-memory eager SDMA (see FI_OPX_EAGER_SDMA).
   Value must be between 64 and 2147483646. Defaults to 16385.
-  Note:  This setting may only have an impact on RMA and atomic operations unless
-  FI_OPX_RZV_MIN_PAYLOAD_BYTES is also adjusted.
 
+*FI_OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES*
+: Integer. Applies to sends from device (GPU) memory. The minimum length in bytes where
+  eager SDMA is used (see FI_OPX_EAGER_SDMA). Below this threshold an eligible eager send
+  uses PIO. The rendezvous data phase is not affected; it uses
+  FI_OPX_SDMA_MIN_PAYLOAD_BYTES for every memory type.
+  This only has an effect with HMEM enabled builds of OPX.
+  Value must be between 64 and 2147483646. Defaults to 4096 for CUDA builds, 512 for ROCr builds.
 
 *FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE*
 : Integer. The maximum number of times writev will be called during a single poll cycle.
@@ -261,27 +269,39 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Value must be between 4096 and 2147483646. Defaults to 4096.
 
 *FI_OPX_RZV_MIN_PAYLOAD_BYTES*
-: Integer. The minimum length in bytes where rendezvous will be used.
-  For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager.
-  Value must be between 64 and 65536.
-  The default, which applies to all memory types, is selected at build time based on the device-memory (HMEM) backend
-  that OPX was configured with:
+: Integer. Applies to sends from host memory. The minimum length in bytes where rendezvous
+  is used. Messages smaller than this threshold use eager or multi-packet eager.
+  Value must be between 64 and 65536. Defaults to 16385 in all builds.
 
-  - 4096  — HMEM builds with CUDA support
-  - 8192  — HMEM builds with AMD ROCR support
-  - 16385 — host-only builds (one byte above the multi-packet eager maximum),
-    which effectively disables rendezvous for any payload that fits in
-    multi-packet eager.
+*FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES*
+: Integer. Applies to sends from device (GPU) memory. The minimum length in bytes where
+  rendezvous is used. Messages smaller than this threshold use eager or multi-packet eager.
+  This only has an effect with HMEM enabled builds of OPX.
+  Value must be between 64 and 65536. Defaults to 4096 for CUDA builds, 8192 for ROCr builds.
 
 *FI_OPX_HFISVC_MIN_PAYLOAD_BYTES*
-: Integer. The minimum message length in bytes where rendezvous will use the HFI Service.
-  For messages smaller than this threshold, rendezvous uses the applicable PIO or SDMA path. The HFI
-  Service carries a per-message setup cost that only pays off on large transfers.
+: Integer. Applies to sends from host memory. The minimum message length in bytes where
+  rendezvous will use the HFI Service.
+  For messages smaller than this threshold, rendezvous uses the applicable PIO or SDMA path.
   Because this only selects between two rendezvous paths, the effective threshold is the
   larger of this value and FI_OPX_RZV_MIN_PAYLOAD_BYTES; setting it lower than that does not
   cause smaller messages to use the HFI Service.
   This has no effect unless the HFI Service is enabled.
-  Value must be between 0 and 2147483646. Defaults to 131072.
+  Value must be between 0 and 2147483646. Defaults to 16385.
+
+*FI_OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES*
+: Integer. Applies to sends from device (GPU) memory. The minimum message length in bytes
+  where rendezvous will use the HFI Service.
+  For messages smaller than this threshold, rendezvous uses the applicable PIO or SDMA path.
+  Device-memory sends additionally require a registered memory region and DMA-BUF support.
+  DMA-BUF is enabled by default and is controlled by FI_HMEM_CUDA_USE_DMABUF or
+  FI_HMEM_ROCR_USE_DMABUF; the platform must also support it. Without it, rendezvous uses
+  the applicable PIO or SDMA path regardless of size.
+  Because this only selects between two rendezvous paths, the effective threshold is the
+  larger of this value and FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES; setting it lower than that does
+  not cause smaller messages to use the HFI Service.
+  This only has an effect with HMEM enabled builds of OPX that also have HFI Service enabled.
+  Value must be between 0 and 2147483646. Defaults to 4096 for CUDA builds, 1048576 for ROCr builds.
 
 *FI_OPX_MP_EAGER*
 : Boolean (1/0, on/off, true/false, yes/no). Enables multi-packet eager. Defaults to 1 (enabled).
@@ -322,7 +342,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_DEV_REG_SEND_THRESHOLD*
 : Integer. The individual packet threshold where lengths above do not use a device
   registered copy when sending data from GPU.
-  The default threshold is 4096.
+  The default threshold is 512 for CUDA and ROCr builds, 4096 otherwise.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
 *FI_OPX_DEV_REG_RECV_THRESHOLD*
@@ -332,18 +352,17 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
 *FI_OPX_EAGER_SDMA*
-: Boolean (1/0, on/off, true/false, yes/no). Sends single-packet eager messages originating
-  in device memory over SDMA rather than PIO, so the DMA engine reads the payload from device
-  memory instead of the CPU. On GPUs where a CPU read of the host-visible device mapping is
-  far slower than a read of host memory, this is a substantial latency and bandwidth win in
-  the upper eager range.
-  Applies only to contiguous, non-FI_INJECT, quadword-aligned, off-node sends of at least 512
-  bytes that still fit in a single eager packet. Note that the message must also be at least
-  FI_OPX_SDMA_MIN_PAYLOAD_BYTES and below FI_OPX_RZV_MIN_PAYLOAD_BYTES to be eligible; with
-  the default values of those two thresholds, no message size satisfies both, so enabling this
-  alone has no effect unless FI_OPX_SDMA_MIN_PAYLOAD_BYTES is lowered as well.
-  Requires FI_OPX_SDMA to be enabled, which is the default.
-  Experimental. This only has an effect with HMEM enabled builds of OPX. Defaults to off.
+: Boolean (1/0, on/off, true/false, yes/no). Sends single-packet eager messages over SDMA
+  rather than PIO, so the DMA engine reads the payload instead of the CPU. Applies to sends
+  from both host and device (GPU) memory.
+  Eligibility is limited to contiguous, non-FI_INJECT, quadword-aligned, off-node sends of at
+  least 512 bytes that still fit in a single eager packet. The message must also be at least
+  the applicable SDMA minimum (FI_OPX_SDMA_MIN_PAYLOAD_BYTES for sends from host memory,
+  FI_OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES for sends from device memory) and below the applicable
+  rendezvous minimum (FI_OPX_RZV_MIN_PAYLOAD_BYTES or FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES,
+  respectively). At the default host thresholds the host-memory window is empty, so using
+  eager SDMA for host-memory sends requires lowering FI_OPX_SDMA_MIN_PAYLOAD_BYTES.
+  Defaults to on for AMD GPU (ROCr) HMEM builds, off otherwise.
 
 *FI_OPX_OPA100_INTEROP*
 : Boolean (1/0, on/off, true/false, yes/no). Indicates that the job requires OPA100
