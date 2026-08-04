@@ -354,7 +354,7 @@ def build_pr_test_stages() {
     def stages = [:]
     def timeout = "--timeout 90"
     def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
-    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID ${test_suite_pkg}"
+    def generic_pf = "--cluster-type manual_cluster --test-target libfabric --test-type pr --test-libfabric-pr $env.CHANGE_ID ${test_suite_pkg} --use-prebuilt-ami-with-efa-installer true"
     def pr_ci_tests = "--test-list test_pr_ci_fabtests test_run_efa_unit_tests"
     def pr_ci_tests_hpc = "--test-list test_pr_ci_fabtests test_pr_ci_imb test_run_efa_unit_tests"
 
@@ -419,7 +419,7 @@ def build_postmerge_test_stages() {
     def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
 
     def commit_selector = "--test-type commit --test-libfabric-commit ${env.GIT_COMMIT}"
-    def generic_pf = "--cluster-type manual_cluster --test-target libfabric ${commit_selector} ${test_suite_pkg}"
+    def generic_pf = "--cluster-type manual_cluster --test-target libfabric ${commit_selector} ${test_suite_pkg} --use-prebuilt-ami-with-efa-installer true"
 
     def efa_provider = "--test-libfabric-provider efa"
     def unit_tests_coverage = "--test-list 'test_run_efa_unit_tests[unittest-debug] and not asan' 'test_run_efa_unit_tests_gtest[unittest-debug] and not asan'"
