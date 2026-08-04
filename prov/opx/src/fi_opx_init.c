@@ -1118,7 +1118,9 @@ OPX_INI
 		OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT);
 	fi_param_define(
 		&fi_opx_provider, "reliability_service_pre_ack_rate", FI_PARAM_INT,
-		"The number of packets to receive from a particular sender before preemptively acknowledging them without waiting for a ping. Valid values are powers of 2 in the range of 0-32,768, where 0 indicates no preemptive acking. Defaults to 64.");
+		"The number of packets to receive from a particular sender before preemptively acknowledging them without waiting for a ping. Valid values are powers of 2 in the range of %d-%d, where 0 indicates no preemptive acking. Defaults to %d for this build; AMD GPU (ROCr) device-memory builds default to 1.",
+		OPX_RELIABILITY_PRE_ACK_RATE_MIN, OPX_RELIABILITY_PRE_ACK_RATE_MAX,
+		OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT);
 	fi_param_define(
 		&fi_opx_provider, "selinux", FI_PARAM_BOOL,
 		"Set to TRUE if you're running a security-enhanced Linux. This enables updating the Jkey used based on system settings. Defaults to FALSE.");
@@ -1133,7 +1135,7 @@ OPX_INI
 			OPX_MP_EGR_DISABLE_DEFAULT ? "TRUE" : "FALSE");
 	fi_param_define(
 		&fi_opx_provider, "rzv_min_payload_bytes", FI_PARAM_INT,
-		"The minimum length in bytes where rendezvous will be used. For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager. Defaults to %d.",
+		"The minimum length in bytes where rendezvous is used for sends whose buffer is host memory. Messages smaller than this threshold use eager or multi-packet eager. Defaults to %d.",
 		OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT);
 #ifdef OPX_HMEM
 	fi_param_define(
@@ -1153,7 +1155,7 @@ OPX_INI
 		"Deprecated. Use FI_OPX_SDMA instead. Disables SDMA offload hardware. Default is FALSE (SDMA Enabled).");
 	fi_param_define(
 		&fi_opx_provider, "sdma_min_payload_bytes", FI_PARAM_INT,
-		"The minimum message length in bytes where SDMA will be used. For messages smaller than this threshold, the send will be completed using PIO. Value must be between %d and %d. Defaults to %d.",
+		"The minimum message length in bytes where SDMA is used for sends whose buffer is host memory. For messages smaller than this threshold, the send is completed using PIO. Value must be between %d and %d. Defaults to %d.",
 		FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MIN, FI_OPX_SDMA_MIN_PAYLOAD_BYTES_MAX,
 		FI_OPX_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
 #ifdef OPX_HMEM
@@ -1165,7 +1167,7 @@ OPX_INI
 #endif
 	fi_param_define(
 		&fi_opx_provider, "hfisvc_min_payload_bytes", FI_PARAM_INT,
-		"The minimum message length in bytes where rendezvous will use HFISVC. For messages smaller than this threshold, rendezvous will use the applicable PIO or SDMA path. Value must be between %d and %d. Defaults to %d.",
+		"The minimum message length in bytes where rendezvous uses HFISVC for sends whose buffer is host memory. For messages smaller than this threshold, rendezvous uses the applicable PIO or SDMA path. Value must be between %d and %d. Defaults to %d.",
 		OPX_HFISVC_MIN_PAYLOAD_BYTES_MIN, OPX_HFISVC_MIN_PAYLOAD_BYTES_MAX,
 		OPX_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT);
 #ifdef OPX_HMEM
@@ -1245,8 +1247,8 @@ OPX_INI
 #endif
 	fi_param_define(
 		&fi_opx_provider, "eager_sdma", FI_PARAM_BOOL,
-		"Enables sending single-packet eager messages over SDMA rather than PIO, so the DMA engine reads the payload instead of the CPU. Applies to messages of at least %d bytes. Experimental. Defaults to FALSE.",
-		OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES);
+		"Enables sending single-packet eager messages over SDMA rather than PIO. Applies to sends from host or device memory of at least %d bytes. Defaults to %s for this build; AMD GPU (ROCr) device-memory builds default to TRUE.",
+		OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES, OPX_EAGER_SDMA_DEFAULT ? "TRUE" : "FALSE");
 	fi_param_define(
 		&fi_opx_provider, "route_control", FI_PARAM_STRING,
 		"Specify the route control for each packet type. The format is <inject packet type value>:<eager packet type value>:<multi-packet eager packet type value>:<dput packet type value>:<rendezvous control packet value>:<rendezvous data packet value>. Each value can range from 0-7. 0-3 is used for in-order and 4-7 is used for out-of-order. If Token ID (TID) is enabled then <rendezvous data packet value> must use in-order route controls. Default is `0:0:0:0:0:0` in-order route controls.");

@@ -174,6 +174,18 @@ union fi_opx_reliability_deferred_work {
 #define OPX_RELIABILITY_MAX_CONGESTED_PINGS_MAX	      (65535)
 #define OPX_RELIABILITY_MAX_CONGESTED_PINGS_DEFAULT   (4)
 
+/* Eager SDMA completions are gated on the reliability ACK. */
+#if OPX_HMEM_BACKEND_ROCR
+#define OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT (1)
+#else
+#define OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT (64)
+#endif
+#define OPX_RELIABILITY_PRE_ACK_RATE_MIN (0)
+#define OPX_RELIABILITY_PRE_ACK_RATE_MAX (32768)
+
+OPX_COMPILE_TIME_ASSERT(!OPX_EAGER_SDMA_DEFAULT || OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT == 1,
+			"A build that defaults eager SDMA on must default the pre-ACK rate to 1!");
+
 struct fi_opx_reliability_service {
 	/* == CACHE LINE 0 == */
 	uint64_t max_outstanding_bytes;
