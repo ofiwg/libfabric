@@ -2281,36 +2281,39 @@ void fi_opx_reliability_service_init(struct fi_opx_domain *domain, struct fi_opx
 	fi_opx_timer_now(&service->timestamp, &service->timer);
 
 	/*
-	 * How often to preemptively acknowledge packets.
-	 * The default is 64, which indicates send a
-	 * preemptive, non-solicited ACK after 64 packets received.
+	 * How often to preemptively acknowledge packets. The default is
+	 * OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT, which indicates send a
+	 * preemptive, non-solicited ACK after that many packets received.
 	 * Must be a power of 2, so that we can create an AND mask
 	 * that will quickly tell us whether or not to ack
 	 * Setting to 0 disables this feature
 	 */
-	int preemptive_ack_rate = 64;
+	int preemptive_ack_rate = OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT;
 	if (fi_param_get_int(fi_opx_global.prov, "reliability_service_pre_ack_rate", &preemptive_ack_rate) ==
 	    FI_SUCCESS) {
-		if (preemptive_ack_rate < 0 || preemptive_ack_rate > 32768) {
+		if (preemptive_ack_rate < OPX_RELIABILITY_PRE_ACK_RATE_MIN ||
+		    preemptive_ack_rate > OPX_RELIABILITY_PRE_ACK_RATE_MAX) {
 			FI_TRACE(
 				fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is outside the valid range of 0-32,768. Using default rate of 64\n",
-				preemptive_ack_rate);
-			preemptive_ack_rate = 64;
+				"FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is outside the valid range of %d-%d. Using default rate of %d\n",
+				preemptive_ack_rate, OPX_RELIABILITY_PRE_ACK_RATE_MIN, OPX_RELIABILITY_PRE_ACK_RATE_MAX,
+				OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT);
+			preemptive_ack_rate = OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT;
 		} else if (preemptive_ack_rate & (preemptive_ack_rate - 1)) {
 			FI_TRACE(
 				fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is not a power of 2. Using default rate of 64\n",
-				preemptive_ack_rate);
-			preemptive_ack_rate = 64;
+				"FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is not a power of 2. Using default rate of %d\n",
+				preemptive_ack_rate, OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT);
+			preemptive_ack_rate = OPX_RELIABILITY_PRE_ACK_RATE_DEFAULT;
 		} else {
 			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				 "Using environment-specified FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE of %d%s\n",
 				 preemptive_ack_rate, preemptive_ack_rate ? "" : " (disabled)");
 		}
 	} else {
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			 "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE not specified, using default value of 64\n");
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+				   "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE not specified, using default value of %d\n",
+				   preemptive_ack_rate);
 	}
 
 	/* Subtract 1 from the rate to give us the AND mask we want to use for PSN comparison. */

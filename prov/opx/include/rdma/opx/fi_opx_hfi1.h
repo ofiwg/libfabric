@@ -197,19 +197,35 @@ static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS_TID <= OPX_HFI1_SDMA_MAX_PKTS_TID,
 
 #define OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES (512)
 
+/* A build with both backends uses the CUDA values throughout. */
+#if defined(OPX_HMEM) && HAVE_CUDA
+#define OPX_HMEM_BACKEND_CUDA 1
+#define OPX_HMEM_BACKEND_ROCR 0
+#elif defined(OPX_HMEM) && HAVE_ROCR
+#define OPX_HMEM_BACKEND_CUDA 0
+#define OPX_HMEM_BACKEND_ROCR 1
+#else
+#define OPX_HMEM_BACKEND_CUDA 0
+#define OPX_HMEM_BACKEND_ROCR 0
+#endif
+
+#if OPX_HMEM_BACKEND_ROCR
+#define OPX_EAGER_SDMA_DEFAULT (true)
+#else
+#define OPX_EAGER_SDMA_DEFAULT (false)
+#endif
+
 #define OPX_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT (OPX_RZV_MIN_PAYLOAD_BYTES_DEFAULT)
 #define OPX_HFISVC_MIN_PAYLOAD_BYTES_MIN     (0)
 #define OPX_HFISVC_MIN_PAYLOAD_BYTES_MAX     (INT_MAX - 1)
 
-/* Device-memory thresholds, selected when the send buffer is not host memory. This
- * block only exists for HMEM builds; HAVE_CUDA or HAVE_ROCR is always true when
- * OPX_HMEM is defined, so there is no host-default fallback arm to carry. */
+/* Selected when the send buffer is not host memory. */
 #ifdef OPX_HMEM
-#if HAVE_CUDA
+#if OPX_HMEM_BACKEND_CUDA
 #define OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_DEFAULT	  (4096)
 #define OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_DEFAULT	  (4096)
 #define OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT (4096)
-#elif HAVE_ROCR
+#elif OPX_HMEM_BACKEND_ROCR
 #define OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_DEFAULT	  (8192)
 #define OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_DEFAULT	  (512)
 #define OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT (1048576)
