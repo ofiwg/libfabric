@@ -4705,7 +4705,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 		}
 
 		if (!opx_tx->mp_eager_disable && is_contiguous && !fi_opx_hfi1_tx_is_shm(opx_ep, addr) &&
-		    (caps & FI_TAGGED) && (hmem_iface == FI_HMEM_SYSTEM || hmem_iface == FI_HMEM_CUDA)) {
+		    (caps & FI_TAGGED)) {
 			rc = opx_hfi1_tx_send_try_mp_egr(ep, buf, len, addr, tag, context, data, lock_required,
 							 override_flags, tx_op_flags, caps, reliability,
 							 do_cq_completion, hmem_iface, hmem_device, hmem_handle,
