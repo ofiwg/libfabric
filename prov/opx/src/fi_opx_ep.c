@@ -1426,26 +1426,58 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	opx_ep->hmem_sdma_min_payload_bytes = (uint32_t) l_hmem_sdma_min_payload_bytes;
 #endif
 
-	/* Eager-SDMA submits through the same engine, so the master disable wins.
-	 * Clearing it here rather than in the dispatch gate also keeps the pool
-	 * allocations in this function the single authority on SDMA availability. */
+	/* Eager SDMA submits through the same engine, so the master disable wins. */
 	if (opx_ep->use_eager_sdma && !tx->use_sdma) {
 		opx_ep->use_eager_sdma = false;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"FI_OPX_EAGER_SDMA was requested but SDMA is disabled; eager sends will use PIO.\n");
 	}
 
-	/* At the default thresholds this window is empty. */
 	if (opx_ep->use_eager_sdma) {
-		const uint32_t eager_sdma_floor = MAX(OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES, tx->sdma_min_payload_bytes);
-		if (eager_sdma_floor >= tx->rzv_min_payload_bytes) {
+		const bool hw_supported = (OPX_SW_HFI1_TYPE(opx_ep->domain) & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) != 0;
+
+		/* Bounded above by the single-packet eager flow length. */
+		const uint32_t host_floor     = MAX(OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES, tx->sdma_min_payload_bytes);
+		const uint32_t host_end	      = MIN(tx->rzv_min_payload_bytes, tx->pio_flow_eager_tx_bytes + 1u);
+		const bool     host_reachable = hw_supported && host_floor < host_end;
+		bool	       reachable      = host_reachable;
+
+		if (host_reachable) {
+			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Eager-SDMA host memory range is %u-%u.\n", host_floor,
+					   host_end - 1);
+		}
+
+#ifdef OPX_HMEM
+		const uint32_t hmem_floor = MAX(OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES, opx_ep->hmem_sdma_min_payload_bytes);
+		const uint32_t hmem_end	  = MIN(opx_ep->hmem_rzv_min_payload_bytes, tx->pio_flow_eager_tx_bytes + 1u);
+		const bool     hmem_reachable = hw_supported && hmem_floor < hmem_end;
+		reachable		      = reachable || hmem_reachable;
+
+		if (hmem_reachable) {
+			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Eager-SDMA device memory range is %u-%u.\n", hmem_floor,
+					   hmem_end - 1);
+		}
+#endif
+
+		if (!reachable) {
+			if (!hw_supported) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"FI_OPX_EAGER_SDMA is enabled but this HFI does not support it; eager sends will use PIO.\n");
+			} else {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"FI_OPX_EAGER_SDMA is enabled but unreachable for host memory sends: it requires a message length in [%u, %u), which is empty. Lower FI_OPX_SDMA_MIN_PAYLOAD_BYTES (currently %u) below FI_OPX_RZV_MIN_PAYLOAD_BYTES (currently %u), keeping in mind it also governs TID and rendezvous data-phase selection.\n",
+					host_floor, host_end, tx->sdma_min_payload_bytes, tx->rzv_min_payload_bytes);
+#ifdef OPX_HMEM
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"FI_OPX_EAGER_SDMA is enabled but unreachable for device memory sends: it requires a message length in [%u, %u), which is empty. Lower FI_OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES (currently %u) below FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES (currently %u).\n",
+					hmem_floor, hmem_end, opx_ep->hmem_sdma_min_payload_bytes,
+					opx_ep->hmem_rzv_min_payload_bytes);
+#endif
+			}
+		} else if (opx_ep->reli_service->preemptive_ack_rate != 1) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_EAGER_SDMA is enabled but unreachable: it requires a message length in [%u, %u), which is empty. Lower FI_OPX_SDMA_MIN_PAYLOAD_BYTES (currently %u) below FI_OPX_RZV_MIN_PAYLOAD_BYTES (currently %u), keeping in mind it also governs TID and rendezvous data-phase selection.\n",
-				eager_sdma_floor, tx->rzv_min_payload_bytes, tx->sdma_min_payload_bytes,
-				tx->rzv_min_payload_bytes);
-		} else {
-			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Eager-SDMA range is %u-%u.\n", eager_sdma_floor,
-					   tx->rzv_min_payload_bytes - 1);
+				"FI_OPX_EAGER_SDMA is enabled and reachable, but FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE is %u. Eager SDMA completions are gated on the reliability ACK; set the rate to 1 to acknowledge every packet.\n",
+				opx_ep->reli_service->preemptive_ack_rate);
 		}
 	}
 
@@ -4000,8 +4032,9 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 		opx_ep->use_eager_sdma = (bool) use_eager_sdma;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_EAGER_SDMA was specified.  Set to %d\n", use_eager_sdma);
 	} else {
-		opx_ep->use_eager_sdma = false;
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_EAGER_SDMA not set.  Using default setting of FALSE\n");
+		opx_ep->use_eager_sdma = OPX_EAGER_SDMA_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_EAGER_SDMA not set.  Using default setting of %s\n",
+				   OPX_EAGER_SDMA_DEFAULT ? "TRUE" : "FALSE");
 	}
 
 #ifndef OPX_DEV_OVERRIDE
