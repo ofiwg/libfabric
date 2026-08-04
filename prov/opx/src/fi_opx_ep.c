@@ -1221,6 +1221,28 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	}
 	tx->rzv_min_payload_bytes = l_rzv_min_payload_bytes;
 
+#ifdef OPX_HMEM
+	int l_hmem_rzv_min_payload_bytes;
+	rc = fi_param_get_int(fi_opx_global.prov, "hmem_rzv_min_payload_bytes", &l_hmem_rzv_min_payload_bytes);
+	if (rc != FI_SUCCESS) {
+		l_hmem_rzv_min_payload_bytes = OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_DEFAULT;
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA,
+				   "FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES not set.  Using default setting of %d\n",
+				   l_hmem_rzv_min_payload_bytes);
+	} else if (l_hmem_rzv_min_payload_bytes < OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MIN ||
+		   l_hmem_rzv_min_payload_bytes > OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MAX) {
+		l_hmem_rzv_min_payload_bytes = OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_DEFAULT;
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Error: FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES was set but is outside min/max thresholds (%d-%d).  Using default setting of %d\n",
+			OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MIN, OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MAX,
+			l_hmem_rzv_min_payload_bytes);
+	} else {
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
+				   l_hmem_rzv_min_payload_bytes);
+	}
+	opx_ep->hmem_rzv_min_payload_bytes = (uint32_t) l_hmem_rzv_min_payload_bytes;
+#endif
+
 	// Retrieve the parameter for RZV multi-HFI striping min payload threshold
 	int l_rzv_striping_min_payload_bytes = OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES_DEFAULT;
 	rc = fi_param_get_int(fi_opx_global.prov, "rzv_striping_min_payload_bytes", &l_rzv_striping_min_payload_bytes);
@@ -1292,32 +1314,20 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 				   !l_mp_eager_disable);
 	}
 
-	if (l_rzv_min_payload_bytes <= l_pio_flow_eager_tx_bytes) {
-		OPX_LOG_OBSERVABLE(
-			FI_LOG_EP_DATA,
-			"Rendezvous min payload bytes (%d) <= Eager flow bytes (%lu), effectively disabling MP Eager.\n",
-			l_rzv_min_payload_bytes, l_pio_flow_eager_tx_bytes);
-		l_mp_eager_disable = OPX_MP_EGR_DISABLE_SET;
-	}
+	tx->mp_eager_disable = (uint8_t) (l_mp_eager_disable == OPX_MP_EGR_DISABLE_SET);
 
-	if (l_mp_eager_disable == OPX_MP_EGR_DISABLE_SET) {
+	if (tx->mp_eager_disable) {
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager is disabled.\n");
-		tx->mp_eager_max_payload_bytes = 0;
-		tx->mp_eager_min_payload_bytes = UINT16_MAX;
-		tx->mp_eager_chunk_size	       = UINT16_MAX;
+		tx->mp_eager_chunk_size = UINT16_MAX;
 	} else {
 		uint16_t max_chunk_size = (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) ?
 						  OPX_MP_EGR_MAX_CHUNK_SIZE_WFR :
 						  OPX_MP_EGR_MAX_CHUNK_SIZE_CN5K;
 
-		tx->mp_eager_max_payload_bytes = l_rzv_min_payload_bytes - 1;
-		tx->mp_eager_min_payload_bytes = l_pio_flow_eager_tx_bytes + 1;
-		tx->mp_eager_chunk_size	       = MIN(l_pio_flow_eager_tx_bytes, max_chunk_size);
+		tx->mp_eager_chunk_size = MIN(l_pio_flow_eager_tx_bytes, max_chunk_size);
 
 		// Chunk size needs to be a multiple of 64
 		assert((tx->mp_eager_chunk_size & 0x3F) == 0);
-		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager range is %hu-%u.\n",
-				   tx->mp_eager_min_payload_bytes, tx->mp_eager_max_payload_bytes);
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager chunk-size is %hu.\n", tx->mp_eager_chunk_size);
 	}
 
