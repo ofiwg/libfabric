@@ -1168,6 +1168,13 @@ OPX_INI
 		"The minimum message length in bytes where rendezvous will use HFISVC. For messages smaller than this threshold, rendezvous will use the applicable PIO or SDMA path. Value must be between %d and %d. Defaults to %d.",
 		OPX_HFISVC_MIN_PAYLOAD_BYTES_MIN, OPX_HFISVC_MIN_PAYLOAD_BYTES_MAX,
 		OPX_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT);
+#ifdef OPX_HMEM
+	fi_param_define(
+		&fi_opx_provider, "hmem_hfisvc_min_payload_bytes", FI_PARAM_INT,
+		"The minimum message length in bytes where rendezvous uses HFISVC for sends whose buffer is device memory. Also requires a registered memory region and DMA-BUF support. Its effective lower bound is FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES. Value must be between %d and %d. Defaults to %d.",
+		OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_MIN, OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_MAX,
+		OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT);
+#endif
 	fi_param_define(
 		&fi_opx_provider, "sdma_max_writevs_per_cycle", FI_PARAM_INT,
 		"The maximum number of times that writev will be called during a single poll cycle. Value must be between %d and %d. Defaults to %d.",

@@ -609,7 +609,7 @@ struct fi_opx_ep {
 	bool		   use_eager_sdma;
 	uint32_t	   hmem_rzv_min_payload_bytes;
 	uint32_t	   hmem_sdma_min_payload_bytes;
-	char		   unused_c[4];
+	uint32_t	   hmem_hfisvc_min_payload_bytes;
 	uint32_t	   gpu_ipc_min_threshold;
 	enum fi_hmem_iface use_gpu_ipc;
 	ofi_spin_t	   lock; /* lock size varies based on ENABLE_DEBUG */
@@ -4589,6 +4589,12 @@ __OPX_FORCE_INLINE__
 uint32_t opx_ep_tx_sdma_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
 {
 	return (iface == FI_HMEM_SYSTEM) ? opx_tx->sdma_min_payload_bytes : opx_ep->hmem_sdma_min_payload_bytes;
+}
+
+__OPX_FORCE_INLINE__
+uint32_t opx_ep_tx_hfisvc_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
+{
+	return (iface == FI_HMEM_SYSTEM) ? opx_tx->hfisvc_min_payload_bytes : opx_ep->hmem_hfisvc_min_payload_bytes;
 }
 
 ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr,
