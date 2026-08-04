@@ -4645,13 +4645,12 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			if (opx_ep->use_hfisvc && hmem_iface != FI_HMEM_SYSTEM) {
 				opx_hfisvc_mr_lazy_open_if_deferred(opx_ep->domain, (struct fi_opx_mr *) desc);
 			}
-#ifdef OPX_HMEM
 			/* FI_INJECT is excluded because the payload iov points at the caller's
 			 * buffer until the replay retires; unaligned lengths stay on PIO because
 			 * SDMA cannot fill the inline tail the eager receive path expects. */
 			if (opx_ep->use_eager_sdma && (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) &&
-			    is_contiguous && hmem_iface != FI_HMEM_SYSTEM && !(tx_op_flags & FI_INJECT) &&
-			    ((total_len & 7) == 0) && total_len >= OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES &&
+			    is_contiguous && !(tx_op_flags & FI_INJECT) && ((total_len & 7) == 0) &&
+			    total_len >= OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES &&
 			    total_len >= opx_tx->sdma_min_payload_bytes && !fi_opx_hfi1_tx_is_shm(opx_ep, addr)) {
 				rc = opx_hfi1_tx_send_egr_sdma(ep, buf, total_len, addr, tag, context, data,
 							       tx_op_flags, caps, reliability, do_cq_completion,
@@ -4662,7 +4661,6 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 				}
 				/* -FI_EAGAIN: fall through to the PIO eager path below. */
 			}
-#endif
 			rc = opx_ep_tx_send_try_eager(ep, buf, len, addr, tag, context, local_iov, niov, total_len,
 						      data, lock_required, is_contiguous, override_flags, tx_op_flags,
 						      caps, reliability, do_cq_completion, hmem_iface, hmem_device,
