@@ -2434,21 +2434,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	/* Read user-supplied env overrides before opening the HFI context.
 	 * Sentinel value -1 means "not set by user"; the HW-type-based default
 	 * is applied after the context is opened and OPX_HW_HFI1_TYPE is known. */
-	int dual_plane_env = -1;
-	{
-		const char *dp_env = getenv("_FI_OPX_DUAL_PLANE_");
-		if (dp_env != NULL) {
-			if (strcmp(dp_env, "1") == 0) {
-				dual_plane_env = 1;
-			} else if (strcmp(dp_env, "0") == 0) {
-				dual_plane_env = 0;
-			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-					"_FI_OPX_DUAL_PLANE_=%s is invalid. Must be 0 or 1. Using hardware default.\n",
-					dp_env);
-			}
-		}
-	}
+	int dual_plane_env = opx_parse_dual_plane_env();
 
 	int multi_hfi_striping_env = -1;
 	fi_param_get_bool(fi_opx_global.prov, "multi_hfi_striping", &multi_hfi_striping_env);
@@ -3052,7 +3038,18 @@ done:
 		secondary_plane_opened =
 			opx_open_secondary_different_plane(opx_ep, opx_domain, planes, sec_gid_filter,
 							   sec_gid_filter_count, primary_origin_rx, gid_filter_count);
+		/* Explicit user request (not just an HW default) failed; fail fast rather than
+		 * silently falling back to a lesser mode. */
+		if (!secondary_plane_opened && dual_plane_env == 1) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"_FI_OPX_DUAL_PLANE_=1 explicitly requested but no secondary HFI context could be "
+				"opened on any candidate plane; failing endpoint creation instead of silently "
+				"falling back to single-plane mode.\n");
+			errno = FI_ENOENT;
+			goto unlock;
+		}
 	}
+
 	if (!secondary_plane_opened && multi_hfi_striping) {
 		secondary_plane_opened = opx_open_secondary_same_plane(opx_ep, opx_domain, planes);
 	}
@@ -3067,8 +3064,15 @@ done:
 		opx_domain->hfi_local_info.lid[1]      = opx_domain->hfi_local_info.lid[0];
 		opx_domain->hfi_local_info.pbc_lid[1]  = opx_domain->hfi_local_info.pbc_lid[0];
 		opx_domain->hfi_local_info.hfi_unit[1] = opx_domain->hfi_local_info.hfi_unit[0];
-		FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
-		       "No secondary HFI context available; mirroring primary plane into planes[1] for address compatibility.\n");
+		if (dual_plane) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"No secondary HFI context available; mirroring primary plane into planes[1] "
+				"for address compatibility. Dual-plane was enabled by hardware default but "
+				"could not be honored.\n");
+		} else {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			       "No secondary HFI context available; mirroring primary plane into planes[1] for address compatibility.\n");
+		}
 	}
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL, "Endpoint enabled with %d TX context(s)\n",
