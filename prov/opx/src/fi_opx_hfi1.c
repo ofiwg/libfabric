@@ -212,15 +212,7 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl, struct fi_opx_hfi1_
 
 		// Multi-HFI striping consumes 2 contexts per endpoint (one per plane) instead of 1
 		// when explicitly enabled, so the available context count must be halved below.
-		int	    dual_plane_env = -1;
-		const char *dp_env	   = getenv("_FI_OPX_DUAL_PLANE_");
-		if (dp_env != NULL) {
-			if (strcmp(dp_env, "1") == 0) {
-				dual_plane_env = 1;
-			} else if (strcmp(dp_env, "0") == 0) {
-				dual_plane_env = 0;
-			}
-		}
+		int dual_plane_env	   = opx_parse_dual_plane_env();
 		int multi_hfi_striping_env = -1;
 		fi_param_get_bool(fi_opx_global.prov, "multi_hfi_striping", &multi_hfi_striping_env);
 

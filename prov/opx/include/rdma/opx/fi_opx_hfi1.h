@@ -903,6 +903,27 @@ enum opx_sriov_route opx_sriov_route_classify(struct fi_opx_domain *domain, opx_
 
 int parse_plane_gid_filter(const char *filter_str, uint64_t *gid_values, const int max_values);
 
+/* Parses _FI_OPX_DUAL_PLANE_ into its tri-state form: 1 (explicitly enabled),
+ * 0 (explicitly disabled), or -1 (unset/invalid; caller applies its own
+ * hardware-based default). Single source of truth for this encoding, shared
+ * by fi_opx_ep.c and fi_opx_hfi1.c. */
+static inline int opx_parse_dual_plane_env(void)
+{
+	const char *dp_env = getenv("_FI_OPX_DUAL_PLANE_");
+	if (dp_env == NULL) {
+		return -1;
+	}
+	if (strcmp(dp_env, "1") == 0) {
+		return 1;
+	}
+	if (strcmp(dp_env, "0") == 0) {
+		return 0;
+	}
+	FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+		"_FI_OPX_DUAL_PLANE_=%s is invalid. Must be 0 or 1. Using hardware default.\n", dp_env);
+	return -1;
+}
+
 struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t unique_job_key,
 						     const uint64_t *gid_filter, int gid_filter_count,
 						     int dual_plane_env);
