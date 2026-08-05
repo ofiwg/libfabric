@@ -162,7 +162,7 @@ typedef struct fid *fid_t;
 #define FI_AV_USER_ID		(1ULL << 41)
 #define FI_FIREWALL_ADDR	(1ULL << 42)
 #define FI_PEER			(1ULL << 43)
-/* #define FI_XPU_TRIGGER		(1ULL << 44) */
+#define FI_XPU			(1ULL << 44)
 
 #define FI_TAGGED_DIRECTED_RECV	(1ULL << 45)
 #define FI_TAGGED_MULTI_RECV	(1ULL << 46)
@@ -411,6 +411,8 @@ struct fi_rx_attr {
 	size_t			iov_limit;
 };
 
+struct fi_xpu_attr;
+
 struct fi_ep_attr {
 	enum fi_ep_type		type;
 	uint32_t		protocol;
@@ -425,6 +427,7 @@ struct fi_ep_attr {
 	size_t			rx_ctx_cnt;
 	size_t			auth_key_size;
 	uint8_t			*auth_key;
+	struct fi_xpu_attr	*xpu_attr;
 };
 
 struct fi_domain_attr {
