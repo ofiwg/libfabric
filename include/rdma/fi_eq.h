@@ -43,6 +43,8 @@
 #include <rdma/fi_errno.h>
 
 
+struct fi_xpu_attr;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -259,6 +261,7 @@ struct fi_cq_attr {
 	int			signaling_vector;
 	enum fi_cq_wait_cond	wait_cond;
 	struct fid_wait		*wait_set;	/* deprecated */
+	struct fi_xpu_attr	*xpu_attr;
 };
 
 struct fi_ops_cq {
@@ -275,6 +278,8 @@ struct fi_ops_cq {
 	int	(*signal)(struct fid_cq *cq);
 	const char * (*strerror)(struct fid_cq *cq, int prov_errno,
 			const void *err_data, char *buf, size_t len);
+	int	(*export_xpu)(struct fid_cq *cq, uint64_t flags,
+			void **xpu_cq, size_t *size);
 };
 
 struct fid_cq {
@@ -298,6 +303,7 @@ struct fi_cntr_attr {
 	enum fi_wait_obj	wait_obj;
 	struct fid_wait		*wait_set;	/* deprecated */
 	uint64_t		flags;
+	struct fi_xpu_attr	*xpu_attr;
 };
 
 struct fi_ops_cntr {
@@ -309,6 +315,8 @@ struct fi_ops_cntr {
 	int	(*wait)(struct fid_cntr *cntr, uint64_t threshold, int timeout);
 	int	(*adderr)(struct fid_cntr *cntr, uint64_t value);
 	int	(*seterr)(struct fid_cntr *cntr, uint64_t value);
+	int	(*export_xpu)(struct fid_cntr *cntr, uint64_t flags,
+			void **xpu_cntr, size_t *size);
 };
 
 struct fid_cntr {

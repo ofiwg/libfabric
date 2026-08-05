@@ -149,6 +149,7 @@ static int str2cap(char *inputstr, uint64_t *value)
 	ORCASE(FI_NAMED_RX_CTX);
 	ORCASE(FI_DIRECTED_RECV);
 	ORCASE(FI_HMEM);
+	ORCASE(FI_XPU);
 
 	fprintf(stderr, "error: Unrecognized capability: %s\n", inputstr);
 
