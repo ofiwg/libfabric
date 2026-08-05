@@ -235,15 +235,14 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
 : Integer. Applies to sends from host memory. The minimum length in bytes where SDMA will
   be used. For messages smaller than this threshold, the send will be completed using PIO.
-  This threshold also applies to the rendezvous data phase, RMA, and atomic operations,
-  and to host-memory eager SDMA (see FI_OPX_EAGER_SDMA).
+  This threshold also applies to the rendezvous data phase for host-memory sends, to RMA
+  and atomic operations, and to host-memory eager SDMA (see FI_OPX_EAGER_SDMA).
   Value must be between 64 and 2147483646. Defaults to 16385.
 
 *FI_OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES*
 : Integer. Applies to sends from device (GPU) memory. The minimum length in bytes where
-  eager SDMA is used (see FI_OPX_EAGER_SDMA). Below this threshold an eligible eager send
-  uses PIO. The rendezvous data phase is not affected; it uses
-  FI_OPX_SDMA_MIN_PAYLOAD_BYTES for every memory type.
+  SDMA is used. This covers eager SDMA (see FI_OPX_EAGER_SDMA) and the rendezvous data
+  phase. Below this threshold an eligible eager send uses PIO.
   This only has an effect with HMEM enabled builds of OPX.
   Value must be between 64 and 2147483646. Defaults to 4096 for CUDA builds, 512 for ROCr builds.
 
