@@ -1445,6 +1445,7 @@ ssize_t fi_opx_reliability_service_do_replay(struct fi_opx_ep *opx_ep, struct fi
 
 		int  i = 1;
 		bool write_extended_hdr_qws =
+			(replay->scb.scb_16B.hdr.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RMA_HFISVC_RTS) ||
 			(replay->scb.scb_16B.hdr.bth.opcode == FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH) ||
 			(FI_OPX_HFI_BTH_OPCODE_BASE_OPCODE(replay->scb.scb_16B.hdr.bth.opcode) ==
 			 FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);

@@ -32,6 +32,7 @@
 
 #include "rdma/opx/opx_hfisvc.h"
 #include "rdma/opx/fi_opx_endpoint.h"
+#include "rdma/opx/fi_opx_eq.h"
 #include "rdma/opx/opx_tracer.h"
 
 #if HAVE_HFISVC
@@ -86,8 +87,8 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		const uint64_t sbuf_len	       = params->iovs[i].len;
 		const uint64_t sbuf_offset     = params->iovs[i].offset;
 
-		struct fi_opx_rzv_completion *recv_rzv_comp =
-			(struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+		struct opx_hfisvc_xfer_completion *recv_rzv_comp =
+			(struct opx_hfisvc_xfer_completion *) ofi_buf_alloc(opx_ep->hfisvc.completion_pool);
 		if (OFI_UNLIKELY(recv_rzv_comp == NULL)) {
 			OPX_HFISVC_DEBUG_LOG("ENOMEM (recv_rzv_comp in deferred)\n");
 			params->cur_iov	 = i;
@@ -95,11 +96,13 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 			rc		 = -FI_EAGAIN;
 			break;
 		}
+		recv_rzv_comp->type	  = OPX_HFISVC_XFER_TYPE_RZV;
 		recv_rzv_comp->context	  = context;
 		recv_rzv_comp->access_key = (uint32_t) -1;
-		/* HFISVC recv uses the access_key union, not TID registration */
-		recv_rzv_comp->tid_registered  = 0;
-		recv_rzv_comp->tid_entry_count = 0;
+		recv_rzv_comp->len	  = 0;
+		recv_rzv_comp->cc	  = NULL;
+		recv_rzv_comp->opx_mr	  = NULL;
+		recv_rzv_comp->flags	  = 0;
 
 		struct hfisvc_client_completion completion = {
 			.flags		= OPX_HFISVC_CMPL_CQ,
@@ -235,4 +238,11 @@ int opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_co
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending[OPX_WORK_TYPE_HFISVC]);
 
 	return FI_SUCCESS;
+}
+
+void opx_hfisvc_mr_report_completion_error(struct fi_opx_mr *opx_mr)
+{
+	if (opx_mr != NULL && opx_mr->cntr != NULL) {
+		fi_cntr_adderr(&opx_mr->cntr->cntr_fid, 1);
+	}
 }
