@@ -2448,7 +2448,8 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep, struct fi_opx_hfi
 	    (params->dput_iov[0].bytes < opx_tx->tid_min_payload_bytes) ||
 	    (opcode != FI_OPX_HFI_DPUT_OPCODE_RZV && opcode != FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG) ||
 	    is_hmem_unified ||
-	    !fi_opx_hfi1_sdma_use_sdma(opx_ep, params->dput_iov[0].bytes, opcode, is_hmem, OPX_SHM_FALSE)) {
+	    !fi_opx_hfi1_sdma_use_sdma(opx_ep, params->dput_iov[0].bytes, opcode, params->dput_iov[0].sbuf_iface,
+				       OPX_SHM_FALSE)) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_tid_ineligible);
 		return 0;
 	}

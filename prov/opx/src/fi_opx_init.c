@@ -1161,7 +1161,7 @@ OPX_INI
 #ifdef OPX_HMEM
 	fi_param_define(
 		&fi_opx_provider, "hmem_sdma_min_payload_bytes", FI_PARAM_INT,
-		"The minimum message length in bytes where eager SDMA is used for sends whose buffer is device memory. The rendezvous data phase is not affected; it uses FI_OPX_SDMA_MIN_PAYLOAD_BYTES for every memory type. Value must be between %d and %d. Defaults to %d.",
+		"The minimum message length in bytes where SDMA is used for sends whose buffer is device memory. This covers eager SDMA (see FI_OPX_EAGER_SDMA) and the rendezvous data phase. Value must be between %d and %d. Defaults to %d.",
 		OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_MIN, OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_MAX,
 		OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_DEFAULT);
 #endif
