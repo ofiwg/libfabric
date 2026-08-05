@@ -38,8 +38,12 @@ int efa_conn_rdm_insert_shm_av(struct efa_av *av, struct efa_conn *conn);
 
 void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn);
 
-struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
-				uint64_t flags, void *context, bool insert_shm_av, bool insert_implicit_av);
+struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
+					uint64_t flags, void *context, bool insert_shm_av);
+
+struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
+					 uint64_t flags, void *context)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
 
 void efa_conn_release_reverse_av(struct efa_av *av, struct efa_conn *conn,
 				 bool release_from_implicit_av);
