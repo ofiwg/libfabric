@@ -476,6 +476,26 @@ ABI version starting with libfabric 2.5. Added new fields to the following attri
 *fi_domain_attr*
 : Added max_cntr_value, max_err_cntr_value
 
+## ABI 1.10
+
+ABI version starting with libfabric 2.6. Added xpu_attr field to the following
+attributes to support accelerator-initiated communication:
+
+*fi_ep_attr*
+: Added xpu_attr
+
+*fi_cq_attr*
+: Added xpu_attr
+
+*fi_cntr_attr*
+: Added xpu_attr
+
+*fi_av_attr*
+: Added xpu_attr
+
+*fi_mr_attr*
+: Added xpu_attr
+
 
 # SEE ALSO
 

@@ -320,6 +320,12 @@ be lost.  A counter value is considered stable if all previous
 updates using fi_cntr_set / fi_cntr_seterr and results of related operations
 are reflected in the observed value of the counter.
 
+## xpu_attr
+
+Pointer to struct fi_xpu_attr. When set along with the FI_XPU capability,
+indicates this object will be used for accelerator-initiated communication.
+See [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
