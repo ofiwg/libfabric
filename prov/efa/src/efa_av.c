@@ -559,7 +559,7 @@ int efa_av_insert_one_explicit(struct efa_av *av,
 	EFA_GENLOCK_UNLOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 
 	/* Address not found in either AV, allocate a new explicit entry */
-	conn = efa_conn_alloc(av, addr, flags, context, insert_shm_av, false);
+	conn = efa_conn_alloc_explicit(av, addr, flags, context, insert_shm_av);
 	if (!conn) {
 		*fi_addr = FI_ADDR_NOTAVAIL;
 		ofi_genlock_unlock(&av->util_av.lock);
@@ -645,7 +645,7 @@ int efa_av_insert_one_implicit(struct efa_av *av,
 	}
 
 	/* Address not found in either AV, allocate a new implicit entry */
-	conn = efa_conn_alloc(av, addr, flags, context, false, true);
+	conn = efa_conn_alloc_implicit(av, addr, flags, context);
 	if (!conn) {
 		*fi_addr = FI_ADDR_NOTAVAIL;
 		EFA_GENLOCK_UNLOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
