@@ -39,6 +39,7 @@
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_hfi1_version.h"
+#include "rdma/opx/opx_hfisvc_rma.h"
 
 #include <ofi_enosys.h>
 #include <errno.h>
@@ -769,9 +770,33 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	opx_readv_internal(opx_ep, &iov, 1, &hmem_handle, opx_addr, &addr_offset, &key, opx_tx->op_flags, opx_tx->cq,
-			   opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps,
-			   reliability, hfi1_type);
+#if HAVE_HFISVC
+	/* hfisvc one-sided GET is only taken for SYSTEM memory at/above the SDMA floor,
+	 * off-SHM, single-plane; HMEM reads stay on the traditional readv fallback in Phase-0 */
+	if (len >= opx_ep->tx->sdma_min_payload_bytes && opx_ep->use_hfisvc && hmem_iface == FI_HMEM_SYSTEM &&
+	    !fi_opx_hfi1_tx_is_shm(opx_ep, opx_addr) && opx_hfisvc_single_plane(opx_ep)) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.hfisvc);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		       "fi_read fast-path: taking hfisvc one-sided GET (len=%zu iface=SYSTEM)\n", len);
+		struct opx_rma_op_iov hfisvc_iov = {.hmem_iov	     = iov,
+						    .remote_auth_key = key,
+						    .remote_offset   = addr_offset};
+
+		opx_hfisvc_rma_invoke_send_rts(opx_ep, &hfisvc_iov, 1ul, opx_addr, 0ul, cc, FI_OPX_HFI_DPUT_OPCODE_GET,
+					       FI_VOID, FI_NOOP, lock_required, reliability, hfi1_type);
+	} else
+#endif
+	{
+#if HAVE_HFISVC
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.fallback_readv);
+		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+		       "fi_read fast-path: taking traditional readv fallback (len=%zu iface=%d use_hfisvc=%d)\n", len,
+		       (int) hmem_iface, (int) opx_ep->use_hfisvc);
+#endif
+		opx_readv_internal(opx_ep, &iov, 1, &hmem_handle, opx_addr, &addr_offset, &key, opx_tx->op_flags,
+				   opx_tx->cq, opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
+				   lock_required, caps, reliability, hfi1_type);
+	}
 
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 	return FI_SUCCESS;
@@ -939,6 +964,22 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		return ret;
 	}
 #endif
+
+	if (msg->iov_count == 1 && msg->rma_iov_count == 1) {
+		void *first_desc = msg->desc ? (*msg->desc) : NULL;
+
+		/* lock already held by this readmsg wrapper. fi_opx_read_internal
+		 * submits the read fire-and-forget and always returns FI_SUCCESS on
+		 * accepted submission; transient EAGAIN/ENOMEM is retried internally
+		 * via the deferred-work queue, and real delivery status is reported
+		 * through the CQ/completion-counter, not this return value. */
+		ssize_t rc = fi_opx_read_internal(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len, first_desc,
+						  msg->addr, msg->rma_iov[0].addr, msg->rma_iov[0].key, msg->context,
+						  FI_OPX_LOCK_NOT_REQUIRED, caps, reliability, hfi1_type);
+		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
+
+		return rc;
+	}
 
 	if (lock_required) {
 		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
@@ -1336,10 +1377,41 @@ static inline ssize_t fi_opx_rma_writedata(struct fid_ep *ep, const void *buf, s
 	return rc;
 }
 
+static inline ssize_t fi_opx_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count,
+				       fi_addr_t src_addr, uint64_t addr_offset, uint64_t key, void *context)
+{
+	struct fi_opx_ep *opx_ep	= container_of(ep, struct fi_opx_ep, ep_fid);
+	const int	  lock_required = fi_opx_threading_lock_required(opx_ep->threading, fi_opx_global.progress);
+	const uint64_t	  caps		= opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
+	ssize_t		  rc;
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== RMA READV (begin)\n");
+	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
+	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
+	if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
+		rc = fi_opx_readv_generic(ep, iov, desc, count, src_addr, addr_offset, key, context,
+					  FI_OPX_LOCK_NOT_REQUIRED, caps, OPX_RELIABILITY, OPX_HFI1_WFR);
+	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
+		rc = fi_opx_readv_generic(ep, iov, desc, count, src_addr, addr_offset, key, context,
+					  FI_OPX_LOCK_NOT_REQUIRED, caps, OPX_RELIABILITY, OPX_HFI1_MIXED_9B);
+	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
+		rc = fi_opx_readv_generic(ep, iov, desc, count, src_addr, addr_offset, key, context,
+					  FI_OPX_LOCK_NOT_REQUIRED, caps, OPX_RELIABILITY, OPX_HFI1_JKR);
+	} else {
+		assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
+		rc = fi_opx_readv_generic(ep, iov, desc, count, src_addr, addr_offset, key, context,
+					  FI_OPX_LOCK_NOT_REQUIRED, caps, OPX_RELIABILITY, OPX_HFI1_CYR);
+	}
+
+	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== RMA READV (end)\n");
+	return rc;
+}
+
 static struct fi_ops_rma fi_opx_ops_rma_default = {
 	.size	   = sizeof(struct fi_ops_rma),
 	.read	   = fi_opx_rma_read,
-	.readv	   = fi_no_rma_readv,
+	.readv	   = fi_opx_rma_readv,
 	.readmsg   = fi_opx_rma_readmsg,
 	.write	   = fi_opx_rma_write,
 	.inject	   = fi_opx_rma_inject_write,
@@ -1385,7 +1457,7 @@ FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull, OPX_REL
 	static struct fi_ops_rma FI_OPX_RMA_OPS_STRUCT_NAME(LOCK, CAPS, RELIABILITY, HFI1_TYPE) = {              \
 		.size	   = sizeof(struct fi_ops_rma),                                                          \
 		.read	   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, LOCK, CAPS, RELIABILITY, HFI1_TYPE),         \
-		.readv	   = fi_no_rma_readv,                                                                    \
+		.readv	   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readv, LOCK, CAPS, RELIABILITY, HFI1_TYPE),        \
 		.readmsg   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, LOCK, CAPS, RELIABILITY, HFI1_TYPE),      \
 		.write	   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, LOCK, CAPS, RELIABILITY, HFI1_TYPE),        \
 		.inject	   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, LOCK, CAPS, RELIABILITY, HFI1_TYPE), \

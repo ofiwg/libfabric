@@ -32,12 +32,18 @@
 #ifndef _FI_PROV_OPX_HFISVC_H_
 #define _FI_PROV_OPX_HFISVC_H_
 
+#include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
-#include <assert.h>
+
+#include "rdma/opx/fi_opx_compiler.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern int opx_hfisvc_log_enabled;
 
@@ -51,6 +57,40 @@ extern int opx_hfisvc_log_enabled;
 	} while (0)
 #else
 #define OPX_HFISVC_DEBUG_LOG(fmt, ...)
+#endif
+
+/* reserved for a future phase; do not remove */
+#define OPX_HFISVC_XFER_FLAG_FREE_ACCESS_KEY (1 << 0ul)
+
+enum opx_hfisvc_xfer_type {
+	OPX_HFISVC_XFER_TYPE_MR = 0,
+	OPX_HFISVC_XFER_TYPE_RZV,
+	OPX_HFISVC_XFER_TYPE_RMA_READ,
+	OPX_HFISVC_XFER_TYPE_RMA_WRITE,
+	OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH,
+	OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH_COMPARE,
+};
+
+struct opx_hfisvc_xfer_completion {
+	enum opx_hfisvc_xfer_type	  type;
+	uint32_t			  access_key;
+	size_t				  len;
+	struct opx_context		 *context;
+	struct fi_opx_completion_counter *cc;
+	struct fi_opx_mr		 *opx_mr;
+	struct fi_opx_ep		 *opx_ep;
+
+	uint8_t	 flags;
+	uint8_t	 unused_byte[7];
+	uint64_t unused_qw[1];
+} __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
+
+struct fi_opx_mr;
+
+void opx_hfisvc_mr_report_completion_error(struct fi_opx_mr *opx_mr);
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

@@ -384,6 +384,15 @@ static void fi_opx_ep_rx_tx_model_init(struct fi_opx_ep *opx_ep, struct fi_opx_h
 
 		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.rma_rts[tx_index].rma_rts_9B.hdr)), hfi1_type);
 
+#if HAVE_HFISVC
+		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B = opx_ep->rx->tx.rma_rts[tx_index].rma_rts_9B;
+		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr.bth.opcode =
+			FI_OPX_HFI_BTH_OPCODE_RMA_HFISVC_RTS;
+		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr.rma_rts.opcode = 0; /* set at runtime */
+
+		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr)), hfi1_type);
+#endif
+
 		/* DPUT packet model */
 
 		/* tagged model */
@@ -492,6 +501,15 @@ static void fi_opx_ep_rx_tx_model_init(struct fi_opx_ep *opx_ep, struct fi_opx_h
 		opx_ep->rx->tx.rma_rts[tx_index].rma_rts_16B.hdr.cts.target.opcode = FI_OPX_HFI_DPUT_OPCODE_PUT_CQ;
 
 		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.rma_rts[tx_index].rma_rts_16B.hdr)), hfi1_type);
+
+#if HAVE_HFISVC
+		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B = opx_ep->rx->tx.rma_rts[tx_index].rma_rts_16B;
+		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.bth.opcode =
+			FI_OPX_HFI_BTH_OPCODE_RMA_HFISVC_RTS;
+		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.rma_rts.opcode = 0; /* set at runtime */
+
+		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr)), hfi1_type);
+#endif
 
 		/* DPUT packet model */
 
@@ -1009,6 +1027,10 @@ static int fi_opx_close_ep(fid_t fid)
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
 					"Failed closing EP command queue for ctx %d, ret=%d\n", i, ret);
 			}
+		}
+		if (opx_ep->hfisvc.completion_pool) {
+			ofi_bufpool_destroy(opx_ep->hfisvc.completion_pool);
+			opx_ep->hfisvc.completion_pool = NULL;
 		}
 	}
 #endif
@@ -2995,6 +3017,19 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			}
 			opx_ep->init_rx_cq->use_hfisvc = 1;
 		}
+
+		int cp_rc =
+			ofi_bufpool_create(&opx_ep->hfisvc.completion_pool, sizeof(struct opx_hfisvc_xfer_completion),
+					   32, UINT_MAX, 2048, OFI_BUFPOOL_NO_ZERO);
+		if (cp_rc) {
+			opx_ep->hfisvc.completion_pool = NULL;
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Failed creating HFISVC completion pool, rc=%d\n",
+				cp_rc);
+			errno = FI_ENOMEM;
+			goto unlock;
+		}
+	} else {
+		opx_hfisvc_log_enabled = 0;
 	}
 done:
 #endif

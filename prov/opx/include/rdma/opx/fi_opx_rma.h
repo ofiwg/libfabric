@@ -45,6 +45,12 @@ extern "C" {
 
 #define OPX_NO_REMOTE_CQ_DATA 0
 
+struct opx_rma_op_iov {
+	uint64_t	       remote_auth_key;
+	size_t		       remote_offset;
+	struct fi_opx_hmem_iov hmem_iov;
+};
+
 __OPX_FORCE_INLINE__
 int fi_opx_check_rma(struct fi_opx_ep *opx_ep)
 {

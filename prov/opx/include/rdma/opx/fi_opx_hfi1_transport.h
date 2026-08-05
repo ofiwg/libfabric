@@ -143,6 +143,21 @@ void opx_cacheline_store_block(uint64_t dest[restrict 8], const uint64_t source[
 }
 
 __OPX_FORCE_INLINE__
+void opx_cacheline_store_qw(uint64_t dest[restrict 8], const uint64_t d0, const uint64_t d1, const uint64_t d2,
+			    const uint64_t d3, const uint64_t d4, const uint64_t d5, const uint64_t d6,
+			    const uint64_t d7)
+{
+	dest[0] = d0;
+	dest[1] = d1;
+	dest[2] = d2;
+	dest[3] = d3;
+	dest[4] = d4;
+	dest[5] = d5;
+	dest[6] = d6;
+	dest[7] = d7;
+}
+
+__OPX_FORCE_INLINE__
 void opx_cacheline_store_block_vol(struct fi_opx_domain *domain, volatile uint64_t dest[restrict 8],
 				   const uint64_t source[restrict 8])
 {
@@ -518,6 +533,56 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfi1_rma_rts_params, dput_iov) == FI
 OPX_COMPILE_TIME_ASSERT(sizeof(((struct opx_hfi1_rma_rts_params *) 0)->dput_iov) < OPX_HFI1_MAX_PKT_SIZE,
 			"sizeof(opx_hfi1_rma_rts_params->dput_iov) should be < MAX PACKET MTU!");
 
+struct opx_hfisvc_rma_rts_params {
+	/* == CACHE LINE 0 == */
+	struct fi_opx_work_elem		  work_elem; // 40 bytes
+	struct fi_opx_ep		 *opx_ep;
+	struct opx_context		 *context;
+	struct fi_opx_completion_counter *cc;
+
+	/* == CACHE LINE 1 == */
+	struct fi_opx_addr opx_target_addr;
+	uint64_t	   lrh_dlid;
+	uint64_t	   bth_subctxt_rx;
+	uint64_t	   pbc_dlid;
+
+	/* == CACHE LINE 2 == */
+	uint32_t		  data;
+	enum ofi_reliability_kind reliability;
+	enum opx_hfi1_type	  hfi1_type;
+	opx_lid_t		  origin_lid;
+
+	uint8_t dput_opcode;
+	uint8_t fi_datatype_dt;
+	uint8_t fi_op_opcode;
+	uint8_t target_hfi_unit;
+	/* single-plane invariant: plane_idx is always 0 in Phase-0 */
+	uint8_t	 plane_idx;
+	uint8_t	 recv_needs_doorbell_only;
+	uint16_t send_eagain_attempts;
+
+	uint64_t niov;
+	uint64_t cur_iov;
+	uint64_t iovs_with_keys;
+	uint64_t client_key;
+
+	uint64_t recv_eagain_attempts;
+
+	/* == CACHE LINE 3 == */
+	union opx_hfisvc_rma_iov hfisvc_iov[OPX_MAX_RMA_HFISVC_IOVS];
+	struct fi_opx_hmem_iov	 local_buf_iovs[OPX_MAX_RMA_HFISVC_IOVS];
+} __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
+OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfisvc_rma_rts_params, opx_target_addr) == FI_OPX_CACHE_LINE_SIZE,
+			"opx_hfisvc_rma_rts_params->opx_target_addr should start on cacheline 1!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfisvc_rma_rts_params, data) == (FI_OPX_CACHE_LINE_SIZE * 2),
+			"opx_hfisvc_rma_rts_params->data should start on cacheline 2!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct opx_hfisvc_rma_rts_params, hfisvc_iov) == (FI_OPX_CACHE_LINE_SIZE * 3),
+			"opx_hfisvc_rma_rts_params->hfisvc_iov should start on cacheline 3!");
+OPX_COMPILE_TIME_ASSERT(sizeof(((struct opx_hfisvc_rma_rts_params *) 0)->hfisvc_iov) < OPX_HFI1_MAX_PKT_SIZE,
+			"sizeof(opx_hfisvc_rma_rts_params->hfisvc_iov) should be < MAX PACKET MTU!");
+OPX_COMPILE_TIME_ASSERT(sizeof(((struct opx_hfisvc_rma_rts_params *) 0)->local_buf_iovs) < OPX_HFI1_MAX_PKT_SIZE,
+			"sizeof(opx_hfisvc_rma_rts_params->local_buf_iovs) should be < MAX PACKET MTU!");
+
 struct opx_hfi1_rx_ipc_rts_params {
 	/* == CACHE LINE 0 == */
 	struct fi_opx_work_elem work_elem; // 40 bytes
@@ -599,6 +664,7 @@ union fi_opx_hfi1_deferred_work {
 	struct fi_opx_hfi1_rx_dput_fence_params fence;
 	struct fi_opx_hfi1_rx_readv_params	readv;
 	struct opx_hfi1_rma_rts_params		rma_rts;
+	struct opx_hfisvc_rma_rts_params	hfisvc_rma_rts;
 	struct opx_hfi1_rx_ipc_rts_params	rx_ipc_rts;
 	struct opx_hfisvc_recv_rts_params	hfisvc_rts_params;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));

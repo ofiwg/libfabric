@@ -56,13 +56,14 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 	while (n > 0) {
 		OPX_HFISVC_DEBUG_LOG("HFIService: Polled %lu completions from mr_completion_queue!\n", n);
 		for (size_t i = 0; i < n; ++i) {
-			if (hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS) {
-				// TODO: FI_WARN, post some kind of error to the error queue
-				fprintf(stderr,
-					"(%d) %s:%s():%d Completion error: status was %d type=%d app_context=%lX\n",
-					getpid(), __FILE__, __func__, __LINE__, hfisvc_out[i].status,
-					hfisvc_out[i].type, hfisvc_out[i].app_context);
-				abort();
+			if (OFI_UNLIKELY(hfisvc_out[i].status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS)) {
+				struct fi_opx_mr *err_mr = (struct fi_opx_mr *) hfisvc_out[i].app_context;
+				FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+					"HFISVC MR completion error: status=%d type=%d app_context=%lX opx_mr=%p; MR op failed\n",
+					hfisvc_out[i].status, hfisvc_out[i].type, hfisvc_out[i].app_context,
+					(void *) err_mr);
+				opx_hfisvc_mr_report_completion_error(err_mr);
+				continue;
 			}
 			struct fi_opx_mr  *opx_mr    = (struct fi_opx_mr *) hfisvc_out[i].app_context;
 			hfisvc_client_mr_t mr_handle = hfisvc_out[i].type_mr.mr;
@@ -84,27 +85,20 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 				OPX_HFISVC_DEBUG_LOG("Notify completion opx_mr=%p imm_data=%lX\n", opx_mr,
 						     hfisvc_out[i].type_notify.imm_data);
 
-				// TODO: Use generic struct for hvisvc mr completion
-				struct opx_hfisvc_rzv_completion_tmp {
-					struct opx_context *context;
-					union {
-						struct {
-							uint64_t tid_length;
-							uint64_t tid_vaddr;
-						};
-						struct {
-							// uintptr_t app_context;
-							uint64_t unused;
-							uint32_t access_key;
-							uint32_t unused_also;
-						};
-					};
-					uint64_t byte_counter;
-					uint64_t bytes_accumulated;
-				} *rzv_comp =
-					(struct opx_hfisvc_rzv_completion_tmp *) hfisvc_out[i].type_notify.imm_data;
+				struct opx_hfisvc_xfer_completion *rzv_comp =
+					(struct opx_hfisvc_xfer_completion *) hfisvc_out[i].type_notify.imm_data;
+				if (rzv_comp == NULL) {
+					continue;
+				}
 
 				struct opx_context *context = rzv_comp->context;
+				if (context == NULL) {
+					OPX_HFISVC_DEBUG_LOG(
+						"STRIPE-MR-NOTIFY: MR notify completion for opx_mr=%p rzv_comp=%p context=NULL; skipping context completion work\n",
+						opx_mr, rzv_comp);
+					OPX_BUF_FREE(rzv_comp);
+					continue;
+				}
 				OPX_HFISVC_DEBUG_LOG(
 					"STRIPE-MR-NOTIFY: MR notify completion for opx_mr=%p rzv_comp=%p context=%p byte_counter=%lu -> %lu\n",
 					opx_mr, rzv_comp, context, context->byte_counter, context->byte_counter - 1);
@@ -164,8 +158,26 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 	opx_domain_deferred_work_do(opx_domain);
 }
 
-static inline int opx_mr_hfisvc_enqueue_deferred_close(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr,
-						       bool *suppress_free)
+__OPX_FORCE_INLINE__
+int opx_mr_hfisvc_check_state(struct fi_opx_mr *opx_mr)
+{
+	if (OFI_LIKELY(opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPENED)) {
+		return 0;
+	} else if (opx_mr->hfisvc.state > OPX_MR_HFISVC_STATE_OPENED) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+			"Error: Attempted to use MR %p that's in the process of closing: HFI service state is %d\n",
+			opx_mr, opx_mr->hfisvc.state);
+		return -FI_EFAULT;
+	}
+
+	opx_domain_hfisvc_poll(opx_mr->domain);
+
+	return -FI_EAGAIN;
+}
+
+__OPX_FORCE_INLINE__
+int opx_mr_hfisvc_enqueue_deferred_close(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr,
+					 bool *suppress_free)
 {
 	assert(opx_mr != NULL);
 

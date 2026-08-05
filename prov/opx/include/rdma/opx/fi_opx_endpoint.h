@@ -368,7 +368,7 @@ struct fi_opx_ep_rx {
 		volatile uint64_t *head_register;
 	} egrq __attribute__((__packed__));
 
-	/* == CACHE LINE 5 - 20 == */
+	/* == CACHE LINE 5 - 24 == */
 
 	/*
 	 * NOTE: These cachelines are shared between the application-facing
@@ -394,9 +394,13 @@ struct fi_opx_ep_rx {
 			struct fi_opx_hfi1_txe_scb_9B  rma_rts_9B;
 			struct fi_opx_hfi1_txe_scb_16B rma_rts_16B;
 		} rma_rts[OPX_MAX_TX_CONTEXTS];
+		union {
+			struct fi_opx_hfi1_txe_scb_9B  hfisvc_rma_rts_9B;
+			struct fi_opx_hfi1_txe_scb_16B hfisvc_rma_rts_16B;
+		} hfisvc_rma_rts[OPX_MAX_TX_CONTEXTS];
 	} tx;
 
-	/* == CACHE LINE 21 == */
+	/* == CACHE LINE 25 - 34 == */
 	struct {
 		struct opx_hwcontext_ctrl *hwcontext_ctrl;
 		// Head index into endpoint's software rx RHQ
@@ -410,14 +414,14 @@ struct fi_opx_ep_rx {
 		uint32_t	   last_egrbfr_index;
 		uint8_t		   subctxt;
 		uint8_t		   unused[3];
-		/* == CACHE LINE 22 == */
+		/* == CACHE LINE 26 == */
 		struct opx_subcontext_ureg *subcontext_ureg[HFI1_MAX_SHARED_CTXTS];
-		/* == CACHE LINE 23 == */
+		/* == CACHE LINE 27 - 34 == */
 		struct opx_software_rx_q soft_rx_qs[HFI1_MAX_SHARED_CTXTS];
 	} shd_ctx;
 
 	/* -- non-critical -- */
-	/* == CACHE LINE 31 == */
+	/* == CACHE LINE 35 == */
 	uint64_t	      min_multi_recv;
 	struct fi_opx_domain *domain;
 
@@ -444,10 +448,10 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, state) == (FI_OPX_CACHE_LI
 			"Offset of fi_opx_ep_rx->queue should start at cacheline 4!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, tx) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Offset of fi_opx_ep_rx->tx should start at cacheline 5!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, shd_ctx) == (FI_OPX_CACHE_LINE_SIZE * 21),
-			"Offset of fi_opx_ep_rx->shd_ctx should start at cacheline 21!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, min_multi_recv) == (FI_OPX_CACHE_LINE_SIZE * 31),
-			"Offset of fi_opx_ep_rx->min_multi_recv should start at cacheline 31!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, shd_ctx) == (FI_OPX_CACHE_LINE_SIZE * 25),
+			"Offset of fi_opx_ep_rx->shd_ctx should start at cacheline 25!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, min_multi_recv) == (FI_OPX_CACHE_LINE_SIZE * 35),
+			"Offset of fi_opx_ep_rx->min_multi_recv should start at cacheline 35!");
 
 struct fi_opx_daos_av_rank_key {
 	uint32_t rank;
@@ -577,6 +581,8 @@ struct fi_opx_ep {
 		 */
 		hfisvc_client_completion_queue_t *cq_completion_queue;
 
+		struct ofi_bufpool *completion_pool;
+
 		uint32_t rdma_read_count[OPX_MAX_TX_CONTEXTS];
 		uint32_t num_queues;
 
@@ -587,7 +593,7 @@ struct fi_opx_ep {
 		uint8_t unused_pad[(FI_OPX_CACHE_LINE_SIZE * 2) -
 				   (sizeof(hfisvc_client_command_queue_t) * OPX_MAX_TX_CONTEXTS +
 				    sizeof(hfisvc_client_completion_queue_t) * OPX_MAX_TX_CONTEXTS * 2 +
-				    sizeof(hfisvc_client_completion_queue_t *) +
+				    sizeof(hfisvc_client_completion_queue_t *) + sizeof(struct ofi_bufpool *) +
 				    sizeof(uint32_t) * OPX_MAX_TX_CONTEXTS + sizeof(uint32_t))];
 	} hfisvc;
 #else
@@ -1157,7 +1163,11 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 
 	OPX_HFISVC_DEBUG_LOG(
 		"Matched HFISVC RTS packet, recv context=%p lid %#x, sbuf_client_key=%u xfer_len=%lu niov=%u\n",
-		context, lid, sbuf_key, xfer_len, niov);
+		context,
+		((hfi1_type) & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ?
+			(opx_lid_t) __be16_to_cpu24((__be16) hdr->lrh_9B.slid) :
+			(opx_lid_t) __le24_to_cpu((hdr->lrh_16B.slid20 << 20) | hdr->lrh_16B.slid),
+		payload->rendezvous.hfisvc.iovs[0].client_key, xfer_len, niov);
 
 	struct fi_opx_mr *opx_mr    = NULL;
 	uint64_t	  do_dmabuf = (uint64_t) (context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM);
@@ -1181,7 +1191,8 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				abort();
 			}
 			OPX_HFISVC_DEBUG_LOG("rdma_read deferred state=%d context=%p recv_buf=%p sbuf_key=%u\n",
-					     opx_mr->hfisvc.state, context, recv_buf, sbuf_key);
+					     opx_mr->hfisvc.state, context, recv_buf,
+					     payload->rendezvous.hfisvc.iovs[0].client_key);
 
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.deferred);
 
@@ -1216,8 +1227,8 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			       i + 1, niov, sbuf_lid_masked, plane_idx, sbuf_client_key, sbuf_access_key, sbuf_len,
 			       sbuf_offset);
 
-			struct fi_opx_rzv_completion *recv_rzv_comp =
-				(struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+			struct opx_hfisvc_xfer_completion *recv_rzv_comp =
+				(struct opx_hfisvc_xfer_completion *) ofi_buf_alloc(opx_ep->hfisvc.completion_pool);
 			if (OFI_UNLIKELY(recv_rzv_comp == NULL)) {
 				OPX_HFISVC_DEBUG_LOG("ENOMEM (recv_rzv_comp)\n");
 				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
@@ -1233,11 +1244,14 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 				goto recv_rts_hfisvc_finish;
 			}
+			recv_rzv_comp->type	  = OPX_HFISVC_XFER_TYPE_RZV;
 			recv_rzv_comp->context	  = context;
 			recv_rzv_comp->access_key = (uint32_t) -1;
-			/* HFISVC recv uses the access_key union, not TID registration */
-			recv_rzv_comp->tid_registered  = 0;
-			recv_rzv_comp->tid_entry_count = 0;
+			recv_rzv_comp->len	  = 0;
+			recv_rzv_comp->cc	  = NULL;
+			recv_rzv_comp->opx_mr	  = NULL;
+			recv_rzv_comp->opx_ep	  = opx_ep;
+			recv_rzv_comp->flags	  = 0;
 
 			struct hfisvc_client_completion completion = {
 				.flags		= OPX_HFISVC_CMPL_CQ,
@@ -1300,8 +1314,8 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 
 		slist_insert_tail((struct slist_entry *) context, rx->cq_pending_ptr);
 	} else { /* truncation - unlikely */
-		OPX_HFISVC_DEBUG_LOG("Truncation for client_key %u! xfer_len=%lu recv_len=%lu\n", sbuf_key, xfer_len,
-				     recv_len);
+		OPX_HFISVC_DEBUG_LOG("Truncation for client_key %u! xfer_len=%lu recv_len=%lu\n",
+				     payload->rendezvous.hfisvc.iovs[0].client_key, xfer_len, recv_len);
 
 		context->byte_counter = niov;
 
@@ -1316,8 +1330,8 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
 			const uint32_t sbuf_client_key = payload->rendezvous.hfisvc.iovs[i].client_key;
 
-			struct fi_opx_rzv_completion *recv_rzv_comp =
-				(struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+			struct opx_hfisvc_xfer_completion *recv_rzv_comp =
+				(struct opx_hfisvc_xfer_completion *) ofi_buf_alloc(opx_ep->hfisvc.completion_pool);
 			if (OFI_UNLIKELY(recv_rzv_comp == NULL)) {
 				OPX_HFISVC_DEBUG_LOG("ENOMEM (recv_rzv_comp in truncation)\n");
 				union opx_hfisvc_iov trunc_iov = payload->rendezvous.hfisvc.iovs[i];
@@ -1335,11 +1349,14 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				}
 				continue;
 			}
+			recv_rzv_comp->type	  = OPX_HFISVC_XFER_TYPE_RZV;
 			recv_rzv_comp->context	  = context;
 			recv_rzv_comp->access_key = (uint32_t) -1;
-			/* HFISVC recv uses the access_key union, not TID registration */
-			recv_rzv_comp->tid_registered  = 0;
-			recv_rzv_comp->tid_entry_count = 0;
+			recv_rzv_comp->len	  = 0;
+			recv_rzv_comp->cc	  = NULL;
+			recv_rzv_comp->opx_mr	  = NULL;
+			recv_rzv_comp->opx_ep	  = opx_ep;
+			recv_rzv_comp->flags	  = 0;
 
 			struct hfisvc_client_completion completion = {
 				.flags		= OPX_HFISVC_CMPL_CQ,
@@ -2368,9 +2385,17 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 		uint64_t	  temp_key[2]	    = {[0] = hdr->cts.target.mr.key, [1] = 0ul};
 
 		HASH_FIND(hh, opx_ep->domain->mr_hashmap, &temp_key[0], sizeof(hdr->cts.target.mr.key), opx_mr);
+
 		// Permissions (TODO)
 		// check MR permissions
 		// nack on failed lookup
+#ifndef NDEBUG
+		if (opx_mr == NULL) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "(%d) %s:%s():%d ERROR: Lookup of MR for key=%016lX failed! Packet hdr key was %016lX\n",
+			       getpid(), __FILE__, __func__, __LINE__, temp_key[0], hdr->cts.target.mr.key);
+		}
+#endif
 		assert(opx_mr != NULL);
 
 #ifdef OPX_HMEM
@@ -2996,6 +3021,13 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep *opx_ep, const union 
 		     is_shm ? "SHM" : "HFI");
 }
 
+#if HAVE_HFISVC
+void opx_hfisvc_rma_invoke_recv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
+				    const union fi_opx_hfi1_packet_payload *const payload, const size_t payload_bytes,
+				    const int lock_required, const enum ofi_reliability_kind reliability,
+				    const enum opx_hfi1_type hfi1_type);
+#endif
+
 __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_non_eager(struct fid_ep *ep, const union opx_hfi1_packet_hdr *const hdr,
 					   const union fi_opx_hfi1_packet_payload *const payload,
@@ -3018,9 +3050,11 @@ void fi_opx_ep_rx_process_header_non_eager(struct fid_ep *ep, const union opx_hf
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_RMA_RTS) {
 		fi_opx_ep_rx_process_header_rma_rts(opx_ep, hdr, payload, is_shm, lock_required, reliability,
 						    hfi1_type);
-	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_ATOMIC) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "unimplemented opcode (%u); abort\n", opcode);
-		abort();
+#if HAVE_HFISVC
+	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_RMA_HFISVC_RTS) {
+		opx_hfisvc_rma_invoke_recv_rts(opx_ep, hdr, payload, payload_bytes, lock_required, reliability,
+					       hfi1_type);
+#endif
 	} else if (opcode == FI_OPX_HFI_BTH_OPCODE_UD) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "reliability exception with opcode %d, dropped\n", opcode);
 	} else {
@@ -3531,13 +3565,55 @@ __OPX_FORCE_INLINE__
 void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struct hfisvc_client_cq_entry *hfisvc_entry,
 						 int ctx_idx)
 {
-	struct fi_opx_rzv_completion *rzv_comp = (struct fi_opx_rzv_completion *) hfisvc_entry->app_context;
-	assert(rzv_comp);
-	struct opx_context *context = rzv_comp->context;
+	struct opx_hfisvc_xfer_completion *completion = (struct opx_hfisvc_xfer_completion *) hfisvc_entry->app_context;
+
+	if (OFI_UNLIKELY(completion == NULL)) {
+		if (OFI_UNLIKELY(hfisvc_entry->status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"HFISVC internal completion has NULL app_context with non-success status %d\n",
+				hfisvc_entry->status);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.internal_completion.error);
+
+			/* No user context to attach this failure to. Rather than silently continuing
+			 * (which could hang the application waiting on a completion that will never
+			 * arrive), post a generic error entry to the CQ error queue so libfabric/MPI
+			 * can observe and abort the job. */
+			struct opx_context *fatal_err_context =
+				(struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+			if (OFI_LIKELY(fatal_err_context != NULL)) {
+				fatal_err_context->next			   = NULL;
+				fatal_err_context->flags		   = 0;
+				fatal_err_context->len			   = 0;
+				fatal_err_context->buf			   = NULL;
+				fatal_err_context->data			   = 0;
+				fatal_err_context->tag			   = 0;
+				fatal_err_context->byte_counter		   = 0;
+				fatal_err_context->err_entry.flags	   = 0;
+				fatal_err_context->err_entry.len	   = 0;
+				fatal_err_context->err_entry.buf	   = NULL;
+				fatal_err_context->err_entry.data	   = 0;
+				fatal_err_context->err_entry.tag	   = 0;
+				fatal_err_context->err_entry.olen	   = 0;
+				fatal_err_context->err_entry.err	   = FI_EIO;
+				fatal_err_context->err_entry.prov_errno	   = hfisvc_entry->status;
+				fatal_err_context->err_entry.op_context	   = NULL;
+				fatal_err_context->err_entry.err_data	   = NULL;
+				fatal_err_context->err_entry.err_data_size = 0;
+				slist_insert_tail((struct slist_entry *) fatal_err_context, opx_ep->rx->cq_err_ptr);
+			} else {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"ctx_pool exhausted; HFISVC fatal internal-completion error not posted to EQ\n");
+				abort();
+			}
+		}
+		return;
+	}
+
+	struct opx_context *context = completion->context;
 	if (OFI_UNLIKELY(hfisvc_entry->status != HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS)) {
 		OPX_HFISVC_DEBUG_LOG(
 			"Error: HFISVC CQ completion status is %d for access_key=%u context=%p (was expecting 0/success)\n",
-			hfisvc_entry->status, rzv_comp->access_key, rzv_comp->context);
+			hfisvc_entry->status, completion->access_key, completion->context);
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.internal_completion.error);
 		if (context) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -3559,26 +3635,78 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.internal_completion.success);
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.completed);
 
-		if (context) {
-			OPX_HFISVC_DEBUG_LOG(
-				"STRIPE-COMPLETION: plane %d: rzv_comp=%p access_key=%d context=%p byte_counter=%lu -> %lu (will_free_key=%d)\n",
-				ctx_idx, rzv_comp, (int32_t) rzv_comp->access_key, rzv_comp->context,
-				rzv_comp->context->byte_counter, rzv_comp->context->byte_counter - 1,
-				(int32_t) rzv_comp->access_key >= 0);
+		switch (completion->type) {
+		case OPX_HFISVC_XFER_TYPE_RZV:
+			if (context) {
+				OPX_HFISVC_DEBUG_LOG(
+					"RZV-COMPLETION: plane %d: completion=%p access_key=%d context=%p byte_counter=%lu -> %lu (will_free_key=%d)\n",
+					ctx_idx, completion, (int32_t) completion->access_key, context,
+					context->byte_counter, context->byte_counter - 1,
+					(int32_t) completion->access_key >= 0);
 
-			assert(rzv_comp->context->byte_counter > 0);
-			rzv_comp->context->byte_counter -= 1;
-		} else {
-			OPX_HFISVC_DEBUG_LOG("STRIPE-COMPLETION: plane %d: rzv_comp=%p access_key=%d (no context)\n",
-					     ctx_idx, rzv_comp, (int32_t) rzv_comp->access_key);
+				assert(context->byte_counter > 0);
+				context->byte_counter -= 1;
+			} else {
+				OPX_HFISVC_DEBUG_LOG(
+					"RZV-COMPLETION: plane %d: completion=%p access_key=%d (no context)\n", ctx_idx,
+					completion, (int32_t) completion->access_key);
+			}
+
+			if ((int32_t) completion->access_key >= 0) {
+				opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[ctx_idx].access_key_set,
+							   completion->access_key,
+							   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain));
+			}
+			break;
+		case OPX_HFISVC_XFER_TYPE_RMA_READ:
+		case OPX_HFISVC_XFER_TYPE_RMA_WRITE: {
+			const uint64_t len = completion->len;
+			if (completion->cc) {
+				struct fi_opx_completion_counter *cc = completion->cc;
+				OPX_HFISVC_DEBUG_LOG(
+					"HFISVC RMA completion with completion counter: completion=%p access_key=%u xfer_len=%lu cc=%p byte_counter=%lu -> %lu\n",
+					completion, completion->access_key, len, cc, cc->byte_counter,
+					cc->byte_counter - len);
+				assert(len <= cc->byte_counter);
+				cc->byte_counter -= len;
+				if (cc->byte_counter == 0) {
+					cc->hit_zero(cc);
+				}
+			} else if (context) {
+				OPX_HFISVC_DEBUG_LOG(
+					"HFISVC RMA completion with context: completion=%p access_key=%u xfer_len=%lu context=%p byte_counter=%lu -> %lu\n",
+					completion, completion->access_key, len, context, context->byte_counter,
+					context->byte_counter - len);
+				assert(len <= context->byte_counter);
+				context->byte_counter -= len;
+			} else {
+				OPX_HFISVC_DEBUG_LOG(
+					"HFISVC RMA completion without context: completion=%p access_key=%u xfer_len=%lu\n",
+					completion, completion->access_key, len);
+			}
+
+			/* origin-side send keys (opx_mr == NULL) are transient and freed here;
+			 * target-side reuses the MR-owned key. RMA keys use plane 0 in Phase-0. */
+			if (completion->opx_mr == NULL) {
+				opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[0].access_key_set,
+							   completion->access_key,
+							   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain));
+			}
+			break;
+		}
+		case OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH:
+		case OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH_COMPARE:
+		case OPX_HFISVC_XFER_TYPE_MR:
+		default:
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"HFISVC internal completion has unsupported/corrupt xfer type %d\n", completion->type);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.internal_completion.error);
+			assert(0 && "Phase-0: unsupported hfisvc xfer type");
+			break;
 		}
 	}
 
-	if ((int32_t) rzv_comp->access_key >= 0) {
-		opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[ctx_idx].access_key_set, rzv_comp->access_key,
-					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain));
-	}
-	OPX_BUF_FREE(rzv_comp);
+	OPX_BUF_FREE(completion);
 }
 #endif
 

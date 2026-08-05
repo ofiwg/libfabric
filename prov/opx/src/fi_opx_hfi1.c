@@ -6101,8 +6101,8 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 
 	uint32_t			     access_key	  = (uint32_t) -1;
 	uint32_t			     access_key_1 = (uint32_t) -1;
-	struct fi_opx_rzv_completion	    *rzv_comp	  = NULL;
-	struct fi_opx_rzv_completion	    *rzv_comp_1	  = NULL;
+	struct opx_hfisvc_xfer_completion   *rzv_comp	  = NULL;
+	struct opx_hfisvc_xfer_completion   *rzv_comp_1	  = NULL;
 	struct opx_context		    *context	  = NULL;
 	struct fi_opx_reliability_tx_replay *replay	  = NULL;
 	union fi_opx_reliability_tx_psn	    *psn_ptr	  = NULL;
@@ -6153,27 +6153,34 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		}
 	}
 
-	rzv_comp = (struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+	rzv_comp = (struct opx_hfisvc_xfer_completion *) ofi_buf_alloc(opx_ep->hfisvc.completion_pool);
 	if (OFI_UNLIKELY(rzv_comp == NULL)) {
 		OPX_HFISVC_DEBUG_LOG("ENOMEM (rzv_comp)\n");
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.enomem_completion);
 		rc = -FI_ENOMEM;
 		goto err;
 	}
-	/* HFISVC send uses the access_key union, not TID registration */
-	rzv_comp->tid_registered  = 0;
-	rzv_comp->tid_entry_count = 0;
+	rzv_comp->type	 = OPX_HFISVC_XFER_TYPE_RZV;
+	rzv_comp->len	 = 0;
+	rzv_comp->cc	 = NULL;
+	rzv_comp->opx_mr = NULL;
+	rzv_comp->flags	 = 0;
+	rzv_comp->opx_ep = opx_ep;
 
 	if (do_stripe) {
-		rzv_comp_1 = (struct fi_opx_rzv_completion *) ofi_buf_alloc(opx_ep->rzv_completion_pool);
+		rzv_comp_1 = (struct opx_hfisvc_xfer_completion *) ofi_buf_alloc(opx_ep->hfisvc.completion_pool);
 		if (OFI_UNLIKELY(rzv_comp_1 == NULL)) {
 			OPX_HFISVC_DEBUG_LOG("ENOMEM (rzv_comp_1)\n");
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.enomem_completion);
 			rc = -FI_ENOMEM;
 			goto err;
 		}
-		rzv_comp_1->tid_registered  = 0;
-		rzv_comp_1->tid_entry_count = 0;
+		rzv_comp_1->type   = OPX_HFISVC_XFER_TYPE_RZV;
+		rzv_comp_1->len	   = 0;
+		rzv_comp_1->cc	   = NULL;
+		rzv_comp_1->opx_mr = NULL;
+		rzv_comp_1->flags  = 0;
+		rzv_comp_1->opx_ep = opx_ep;
 	}
 
 	const uint16_t credits_needed =
