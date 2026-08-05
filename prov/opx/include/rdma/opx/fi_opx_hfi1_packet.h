@@ -79,13 +79,13 @@ static_assert(((OPX_HFI1_DEFAULT_PKT_SIZE == 2048) || (OPX_HFI1_DEFAULT_PKT_SIZE
 #define FI_OPX_HFI1_PACKET_IMM (16)
 
 /* opcodes (0x00..0xBF) are reserved */
-#define FI_OPX_HFI_BTH_OPCODE_INVALID  (0xC0)
-#define FI_OPX_HFI_BTH_OPCODE_RZV_CTS  (0xC1)
-#define FI_OPX_HFI_BTH_OPCODE_RZV_DATA (0xC2)
-#define FI_OPX_HFI_BTH_OPCODE_RMA_RTS  (0xC3)
-#define FI_OPX_HFI_BTH_OPCODE_ATOMIC   (0xC4)
-#define FI_OPX_HFI_BTH_OPCODE_ACK      (0xC5)
-#define FI_OPX_HFI_BTH_OPCODE_UD       (0xC6) /* unreliabile datagram */
+#define FI_OPX_HFI_BTH_OPCODE_INVALID	     (0xC0)
+#define FI_OPX_HFI_BTH_OPCODE_RZV_CTS	     (0xC1)
+#define FI_OPX_HFI_BTH_OPCODE_RZV_DATA	     (0xC2)
+#define FI_OPX_HFI_BTH_OPCODE_RMA_RTS	     (0xC3)
+#define FI_OPX_HFI_BTH_OPCODE_RMA_HFISVC_RTS (0xC4)
+#define FI_OPX_HFI_BTH_OPCODE_ACK	     (0xC5)
+#define FI_OPX_HFI_BTH_OPCODE_UD	     (0xC6) /* unreliabile datagram */
 /* opcodes (0xC7..0xEE) are unused */
 
 #define FI_OPX_HFI_BTH_OPCODE_CQ_BIT  (0x01)
@@ -141,8 +141,13 @@ static const char *FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS[] = {
 	/* opcodes (0x00..0xBF) are reserved */
 	"FI_OPX_HFI_BTH_OPCODE_INVALID             ", "FI_OPX_HFI_BTH_OPCODE_RZV_CTS             ",
 	"FI_OPX_HFI_BTH_OPCODE_RZV_DATA            ", "FI_OPX_HFI_BTH_OPCODE_RMA_RTS             ",
-	"FI_OPX_HFI_BTH_OPCODE_ATOMIC              ", "FI_OPX_HFI_BTH_OPCODE_ACK                 ",
+	"FI_OPX_HFI_BTH_OPCODE_RMA_HFISVC_RTS      ", "FI_OPX_HFI_BTH_OPCODE_ACK                 ",
 	"FI_OPX_HFI_BTH_OPCODE_UD                  "};
+
+OPX_COMPILE_TIME_ASSERT(
+	(sizeof(FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS) / sizeof(char *) ==
+	 (FI_OPX_HFI_BTH_OPCODE_UD - FI_OPX_HFI_BTH_OPCODE_INVALID + 1)),
+	"FI_OPX_HFI_BTH_LOW_OPCODE_STRINGS must have one entry per low opcode (INVALID..UD), or dependent code needs updated");
 
 static const char *FI_OPX_HFI_BTH_HIGH_OPCODE_STRINGS[] = {
 	/* opcodes (0xC7..0xEE) are unused */
@@ -1038,7 +1043,10 @@ union opx_hfi1_packet_hdr {
 		uint16_t niov; /* number of non-contiguous buffers described in the packet payload */
 
 		/* QW[6-7] SW */
-		uint64_t  key;
+		union {
+			uint64_t key;
+			uint64_t origin_hfisvc_client_key;
+		};
 		uintptr_t rma_request_vaddr;
 
 		uint64_t reserved_n[7]; /* QW[8-14] SW */
@@ -1580,6 +1588,25 @@ union opx_hfisvc_iov {
 
 #define OPX_MAX_HFISVC_IOVS (OPX_HFI1_MAX_PKT_SIZE / sizeof(union opx_hfisvc_iov))
 
+union opx_hfisvc_rma_iov {
+	uint64_t qws[6];
+	struct {
+		uint64_t len;
+		uint64_t origin_offset;
+		uint64_t remote_offset;
+		uint64_t remote_auth_key;
+
+		uint32_t origin_hfisvc_client_key;
+		uint32_t origin_hfisvc_access_key;
+
+		/* header-scoped, not per-iov: recv derives dt/op from the RTS header */
+		enum fi_op	 op;
+		enum fi_datatype dt;
+	};
+} __attribute__((__packed__)) __attribute__((__aligned__(8)));
+
+#define OPX_MAX_RMA_HFISVC_IOVS (OPX_HFI1_MAX_PKT_SIZE / sizeof(union opx_hfisvc_rma_iov))
+
 struct fi_opx_hmem_iov {
 	uintptr_t	   buf;
 	uint64_t	   len;
@@ -1694,8 +1721,9 @@ union fi_opx_hfi1_packet_payload {
 		} hfisvc;
 	} rendezvous;
 
-	struct {
-		union opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
+	union {
+		union opx_hfi1_dput_iov	 iov[FI_OPX_MAX_DPUT_IOV];
+		union opx_hfisvc_rma_iov hfisvc_iovs[OPX_MAX_RMA_HFISVC_IOVS];
 	} rma_rts;
 
 	struct {
