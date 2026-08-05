@@ -48,6 +48,7 @@ opx_files =									\
 		prov/opx/src/fi_opx_tid_domain.c				\
 		prov/opx/src/opx_hmem_domain.c					\
 		prov/opx/src/opx_hfisvc.c					\
+		prov/opx/src/opx_hfisvc_rma.c					\
 		prov/opx/src/opx_hfisvc_mr.c					\
 		prov/opx/src/opx_tracer.c					\
 		prov/opx/src/opx_ipc.c						\
@@ -160,6 +161,7 @@ noinst_HEADERS = \
 	$(top_srcdir)/prov/opx/include/rdma/opx/opx_hfisvc.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/opx_hfisvc_poll.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/opx_hfisvc_keyset.h \
+	$(top_srcdir)/prov/opx/include/rdma/opx/opx_hfisvc_rma.h \
 	$(top_srcdir)/prov/opx/include/rdma/fi_direct_trigger.h \
 	$(top_srcdir)/prov/opx/include/rdma/fi_direct_atomic.h \
 	$(top_srcdir)/prov/opx/include/rdma/fi_direct.h \

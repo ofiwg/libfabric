@@ -368,6 +368,16 @@ struct fi_opx_debug_counters {
 		} rzv_recv_rts;
 
 		struct {
+			uint64_t enomem_completion;
+			uint64_t enomem_completion_dropped;
+		} rma_send_rts;
+
+		struct {
+			uint64_t hfisvc;
+			uint64_t fallback_readv;
+		} rma_read_path;
+
+		struct {
 			uint64_t alloc;
 			uint64_t alloc_enospc;
 			uint64_t free;
@@ -776,6 +786,11 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.lazy_mr_open);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.lazy_mr_open_error);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.eagain_lazy_mr_open);
+
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_send_rts.enomem_completion);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_send_rts.enomem_completion_dropped);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_read_path.hfisvc);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_read_path.fallback_readv);
 
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.access_key.alloc);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.access_key.alloc_enospc);
