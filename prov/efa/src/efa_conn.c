@@ -206,21 +206,19 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 }
 
 /**
- * @brief allocate an efa_conn object
- * caller of this function must obtain av->util_av.lock or av->util_av_implicit.lock
+ * @brief allocate an efa_conn object in the explicit AV
+ * caller of this function must hold av->util_av.lock
  *
  * @param[in]	av		efa address vector
  * @param[in]	raw_addr	raw efa address
  * @param[in]	flags		flags application passed to fi_av_insert
  * @param[in]	context		context application passed to fi_av_insert
  * @param[in]	insert_shm_av	whether insert address to shm av
- * @param[in]	insert_implicit_av	whether insert address to implicit AV
  * @return	on success, return a pointer to an efa_conn object
  *		otherwise, return NULL. errno will be set to a positive error code.
  */
-struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
-				uint64_t flags, void *context, bool insert_shm_av, bool insert_implicit_av)
-	OFI_TSA_NO_ANALYSIS // clang cannot reason about conditional locking statically
+struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
+					 uint64_t flags, void *context, bool insert_shm_av)
 {
 	struct util_av *util_av;
 	struct efa_cur_reverse_av **cur_reverse_av;
@@ -231,20 +229,14 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	fi_addr_t fi_addr;
 	int err;
 
+	assert(ofi_genlock_held(&av->util_av.lock));
+
 	if (flags & FI_SYNC_ERR)
 		memset(context, 0, sizeof(int));
 
-	if (insert_implicit_av) {
-		assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-		util_av = &av->util_av_implicit;
-		cur_reverse_av = &av->cur_reverse_av_implicit;
-		prv_reverse_av = &av->prv_reverse_av_implicit;
-	} else {
-		assert(ofi_genlock_held(&av->util_av.lock));
-		util_av = &av->util_av;
-		cur_reverse_av = &av->cur_reverse_av;
-		prv_reverse_av = &av->prv_reverse_av;
-	}
+	util_av = &av->util_av;
+	cur_reverse_av = &av->cur_reverse_av;
+	prv_reverse_av = &av->prv_reverse_av;
 
 	err = ofi_av_insert_addr(util_av, raw_addr, &fi_addr);
 	if (err) {
@@ -264,34 +256,18 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	assert(av->type == FI_AV_TABLE);
 
 	conn->av = av;
+	conn->fi_addr = fi_addr;
+	conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 
-	if (insert_implicit_av) {
-		conn->fi_addr = FI_ADDR_NOTAVAIL;
-		conn->implicit_fi_addr = fi_addr;
-		err = efa_av_implicit_av_lru_insert(av, conn);
-		if (err)
-			return NULL;
-	} else {
-		conn->fi_addr = fi_addr;
-		conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
-	}
-
-	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, insert_implicit_av);
+	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, false);
 	if (!conn->ah)
 		goto err_release;
 
-	if (insert_implicit_av)
-		dlist_insert_tail(&conn->ah_implicit_conn_list_entry,
-				  &conn->ah->implicit_conn_list);
-
 	conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	/*
-	 * The efa_conn_alloc() call can be made in two situations:
-	 * 1. application calls fi_av_insert API
-	 * 2. efa progress engine get a message from unknown peer through efa device,
-	 *    which means peer is not local or shm is disabled for transmission.
-	 * For situation 1, the shm av insertion should happen when the peer is local (insert_shm_av=1)
-	 * For situation 2, the shm av insertion shouldn't happen anyway (insert_shm_av=0).
+	 * The explicit AV insertion is triggered by application calling
+	 * fi_av_insert API. The shm av insertion should happen when the
+	 * peer is local (insert_shm_av=1).
 	 */
 	if (av->domain->info_type == EFA_INFO_RDM && insert_shm_av) {
 		err = efa_conn_rdm_insert_shm_av(av, conn);
@@ -313,14 +289,105 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	return conn;
 
 err_release:
-	if (conn->ah) {
-		if (insert_implicit_av)
-			dlist_remove(&conn->ah_implicit_conn_list_entry);
-		efa_ah_release(av->domain, conn->ah, insert_implicit_av);
-	}
+	if (conn->ah)
+		efa_ah_release(av->domain, conn->ah, false);
 
 	conn->ep_addr = NULL;
 	err = ofi_av_remove_addr(util_av, fi_addr);
+	if (err)
+		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n",
+			 err);
+
+	return NULL;
+}
+
+/**
+ * @brief allocate an efa_conn object in the implicit AV
+ * caller of this function must hold av->util_av_implicit.lock
+ *
+ * @param[in]	av		efa address vector
+ * @param[in]	raw_addr	raw efa address
+ * @param[in]	flags		flags application passed to fi_av_insert
+ * @param[in]	context		context application passed to fi_av_insert
+ * @return	on success, return a pointer to an efa_conn object
+ *		otherwise, return NULL. errno will be set to a positive error code.
+ */
+struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
+					 uint64_t flags, void *context)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+{
+	struct util_av *util_av_implicit;
+	struct util_av_entry *util_av_entry = NULL;
+	struct efa_av_entry *efa_av_entry = NULL;
+	struct efa_conn *conn;
+	fi_addr_t fi_addr;
+	int err;
+
+	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	assert(av->domain->info_type == EFA_INFO_RDM);
+
+	if (flags & FI_SYNC_ERR)
+		memset(context, 0, sizeof(int));
+
+	util_av_implicit = &av->util_av_implicit;
+
+	err = ofi_av_insert_addr(util_av_implicit, raw_addr, &fi_addr);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n",
+			 fi_strerror(err));
+		return NULL;
+	}
+
+	util_av_entry = ofi_bufpool_get_ibuf(util_av_implicit->av_entry_pool,
+					     fi_addr);
+	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
+	assert(efa_is_same_addr(raw_addr, (struct efa_ep_addr *)efa_av_entry->ep_addr));
+
+	conn = &efa_av_entry->conn;
+	memset(conn, 0, sizeof(*conn));
+	conn->ep_addr = (struct efa_ep_addr *)efa_av_entry->ep_addr;
+	assert(av->type == FI_AV_TABLE);
+
+	conn->av = av;
+	conn->fi_addr = FI_ADDR_NOTAVAIL;
+	conn->implicit_fi_addr = fi_addr;
+
+	err = efa_av_implicit_av_lru_insert(av, conn);
+	if (err)
+		return NULL;
+
+	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, true);
+	if (!conn->ah)
+		goto err_release;
+
+	dlist_insert_tail(&conn->ah_implicit_conn_list_entry,
+			  &conn->ah->implicit_conn_list);
+
+	conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	/*
+	 * The implicit AV insertion is triggered by the efa progress engine
+	 * receiving a message from an unknown peer through the efa device,
+	 * which means the peer is not local or shm is disabled for
+	 * transmission. Therefore shm av insertion should not happen here.
+	 */
+
+	err = efa_av_reverse_av_add(av, &av->cur_reverse_av_implicit, &av->prv_reverse_av_implicit, conn);
+	if (err) {
+		assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
+		efa_conn_rdm_deinit(av, conn);
+		goto err_release;
+	}
+
+	return conn;
+
+err_release:
+	if (conn->ah) {
+		dlist_remove(&conn->ah_implicit_conn_list_entry);
+		efa_ah_release(av->domain, conn->ah, true);
+	}
+
+	conn->ep_addr = NULL;
+	err = ofi_av_remove_addr(util_av_implicit, fi_addr);
 	if (err)
 		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n",
 			 err);
