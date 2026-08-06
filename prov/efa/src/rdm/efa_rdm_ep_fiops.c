@@ -1093,9 +1093,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 	 * otherwise there can be race condition that efa_rdm_domain_progress_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
 	 *
-	 * Destroying the self AH also requires the SRX lock
-	 * Destroying the self AH modifies the AH refcnts which can also
-	 * modified in the CQ read path by implicit-to-explicit AV entry conversion
 	 */
 	ofi_genlock_lock(&((struct efa_rdm_domain *) domain)->srx_lock);
 
@@ -1106,7 +1103,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 	efa_rdm_ep_remove_cntr_ibv_cq_poll_list(&efa_rdm_ep->base_ep);
 
 	if (efa_rdm_ep->self_ah)
-		efa_ah_release(efa_rdm_ep->base_ep.domain, efa_rdm_ep->self_ah, false);
+		efa_ah_release_self_ah(efa_rdm_ep->base_ep.domain, efa_rdm_ep->self_ah);
 
 	efa_rdm_ep_deregister_ibv_cqs(efa_rdm_ep);
 
@@ -1385,6 +1382,7 @@ int efa_rdm_ep_register_ibv_cqs(struct efa_rdm_ep *ep)
  */
 static inline
 int efa_rdm_ep_create_self_ah(struct efa_rdm_ep *rdm_ep)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 
 	rdm_ep->self_ah = efa_ah_alloc(rdm_ep->base_ep.domain, rdm_ep->base_ep.src_addr.raw, false);
@@ -1426,13 +1424,13 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		/* Acquire the SRX lock before creating self AH
+		/* Acquire the util_domain.lock before creating self AH
 		 * Creating the self AH modifies the AH refcnts which can also
 		 * modified in the CQ read path by implicit-to-explicit AV entry
 		 * conversion */
-		ofi_genlock_lock(&efa_rdm_ep_rdm_domain(ep)->srx_lock);
+		EFA_GENLOCK_LOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);              
 		ret = efa_rdm_ep_create_self_ah(ep);
-		ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(ep)->srx_lock);
+		EFA_GENLOCK_UNLOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);            
 		if (ret) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 			 "EFA RDM endpoint cannot create ah for its own address\n");

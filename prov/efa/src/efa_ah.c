@@ -9,8 +9,6 @@
 #include "rdm/efa_rdm_domain.h"
 #include <infiniband/efadv.h>
 
-void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
-
 /**
  * @brief Move the AH to the end of the LRU list to indicate that it is the
  * most recently used entry
@@ -25,10 +23,12 @@ void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
  */
 void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 					struct efa_ah *ah)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	struct efa_rdm_domain *rdm_domain;
 
 	assert(domain->info_type == EFA_INFO_RDM);
+	assert(ofi_genlock_held(&domain->util_domain.lock));
 
 	rdm_domain = (struct efa_rdm_domain *) domain;
 	assert(ah->implicit_refcnt > 0 || ah->explicit_refcnt > 0);
@@ -50,6 +50,7 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain,
 	struct efa_rdm_domain *rdm_domain;
 
 	assert(domain->info_type == EFA_INFO_RDM);
+	assert(ofi_genlock_held(&domain->util_domain.lock));
 	rdm_domain = (struct efa_rdm_domain *) domain;
 
 	dlist_foreach_container (&rdm_domain->ah_lru_list, struct efa_ah, ah_tmp,
@@ -127,6 +128,7 @@ static void efa_ah_warn_create_einval(struct efa_domain *domain, const uint8_t *
  */
 struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 			    bool insert_implicit_av)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	struct ibv_pd *ibv_pd = domain->ibv_pd;
 	struct efa_ah *efa_ah;
@@ -138,13 +140,11 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 
 	efa_ah = NULL;
 
-	ofi_genlock_lock(&domain->util_domain.lock);
 	HASH_FIND(hh, domain->ah_map, gid, EFA_GID_LEN, efa_ah);
 	if (efa_ah) {
 		insert_implicit_av ? efa_ah->implicit_refcnt++ : efa_ah->explicit_refcnt++;
 		if (domain->info_type == EFA_INFO_RDM)
 			efa_ah_implicit_av_lru_ah_move(domain, efa_ah);
-		ofi_genlock_unlock(&domain->util_domain.lock);
 		return efa_ah;
 	}
 
@@ -152,7 +152,6 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	if (!efa_ah) {
 		errno = FI_ENOMEM;
 		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah\n");
-		ofi_genlock_unlock(&domain->util_domain.lock);
 		return NULL;
 	}
 
@@ -219,18 +218,17 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	efa_ah->ahn = efa_ah_attr.ahn;
 	memcpy(efa_ah->gid, gid, EFA_GID_LEN);
 	HASH_ADD(hh, domain->ah_map, gid, EFA_GID_LEN, efa_ah);
-	ofi_genlock_unlock(&domain->util_domain.lock);
 	return efa_ah;
 
 err_destroy_ibv_ah:
 	ibv_destroy_ah(efa_ah->ibv_ah);
 err_free_efa_ah:
 	free(efa_ah);
-	ofi_genlock_unlock(&domain->util_domain.lock);
 	return NULL;
 }
 
 void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	int err;
 
@@ -255,8 +253,8 @@ void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah)
  */
 void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
 		    bool release_from_implicit_av)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
-	ofi_genlock_lock(&domain->util_domain.lock);
 #if ENABLE_DEBUG
 	struct efa_ah *tmp;
 
@@ -272,5 +270,33 @@ void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
 	if (ah->implicit_refcnt == 0 && ah->explicit_refcnt == 0) {
 		efa_ah_destroy_ah(domain, ah);
 	}
-	ofi_genlock_unlock(&domain->util_domain.lock);
+}
+
+/**
+ * @brief release the EP's self AH during endpoint close
+ *
+ * self_ah is used for local reads (host-to-GPU copies). It is only created
+ * with explicit_refcnt and never has implicit references.
+ *
+ * @param[in]	domain	efa_domain
+ * @param[in]	ah	the EP's self_ah object pointer
+ */
+void efa_ah_release_self_ah(struct efa_domain *domain, struct efa_ah *ah)
+	OFI_TSA_NO_ANALYSIS /* This function does not acquire the domain lock
+			     * because at this point the util_ep is already closed and 
+				 * the EP is no longer reachable from any data path. */
+{
+#if ENABLE_DEBUG
+	struct efa_ah *tmp;
+
+	HASH_FIND(hh, domain->ah_map, ah->gid, EFA_GID_LEN, tmp);
+	assert(tmp == ah);
+#endif
+	assert(ah->explicit_refcnt > 0);
+
+	ah->explicit_refcnt--;
+
+	if (ah->implicit_refcnt == 0 && ah->explicit_refcnt == 0) {
+		efa_ah_destroy_ah(domain, ah);
+	}
 }

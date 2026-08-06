@@ -160,16 +160,12 @@ int efa_conn_rdm_insert_shm_av(struct efa_av *av, struct efa_conn *conn)
 }
 
 /**
- * @brief release the rdm related resources of an efa_conn object. This function
- * requires the caller to take the SRX lock because this function modifies the
- * peer map and destroys peers which are accessed and modified in the CQ read
- * path.
+ * @brief release the rdm related resources of an efa_conn object.
  *
- * this function release the shm av entry and rdm peer;
+ * This function releases the shm av entry and rdm peer.
  *
  * @param[in]	av	address vector
  * @param[in]	conn	efa_conn object
- * peer
  */
 void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 {
@@ -218,6 +214,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
  */
 struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
 					 uint64_t flags, void *context, bool insert_shm_av)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	struct util_av *util_av;
 	struct efa_cur_reverse_av **cur_reverse_av;
@@ -278,10 +275,8 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 
 	err = efa_av_reverse_av_add(av, cur_reverse_av, prv_reverse_av, conn);
 	if (err) {
-		if (av->domain->info_type == EFA_INFO_RDM) {
-			assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
+		if (av->domain->info_type == EFA_INFO_RDM)
 			efa_conn_rdm_deinit(av, conn);
-		}
 		goto err_release;
 	}
 
@@ -314,6 +309,7 @@ err_release:
 struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
 					 uint64_t flags, void *context)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	struct util_av *util_av_implicit;
 	struct util_av_entry *util_av_entry = NULL;
@@ -372,7 +368,6 @@ struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *
 
 	err = efa_av_reverse_av_add(av, &av->cur_reverse_av_implicit, &av->prv_reverse_av_implicit, conn);
 	if (err) {
-		assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 		efa_conn_rdm_deinit(av, conn);
 		goto err_release;
 	}
@@ -394,39 +389,29 @@ err_release:
 	return NULL;
 }
 
-void efa_conn_release_reverse_av(struct efa_av *av, struct efa_conn *conn,
-				 bool release_from_implicit_av)
+void efa_conn_release_reverse_av_explicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
 {
-	if (release_from_implicit_av) {
-		assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-		efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
-					 &av->prv_reverse_av_implicit, conn);
-	} else {
-		assert(ofi_genlock_held(&av->util_av.lock));
-		efa_av_reverse_av_remove(&av->cur_reverse_av,
-					 &av->prv_reverse_av, conn);
-	}
+	assert(ofi_genlock_held(&av->util_av.lock));
+	efa_av_reverse_av_remove(&av->cur_reverse_av, &av->prv_reverse_av,
+				 conn);
 }
 
-void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
-			      bool release_from_implicit_av)
+void efa_conn_release_reverse_av_implicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
 {
-	struct util_av *util_av;
+	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
+				 &av->prv_reverse_av_implicit, conn);
+}
+
+static void efa_conn_release_util_av_common(struct util_av *util_av,
+					    struct efa_conn *conn, fi_addr_t fi_addr)
+{
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *efa_av_entry;
 	char gidstr[INET6_ADDRSTRLEN];
-	fi_addr_t fi_addr;
 	int err;
-
-	if (release_from_implicit_av) {
-		assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-		util_av = &av->util_av_implicit;
-		fi_addr = conn->implicit_fi_addr;
-	} else {
-		assert(ofi_genlock_held(&av->util_av.lock));
-		util_av = &av->util_av;
-		fi_addr = conn->fi_addr;
-	}
 
 	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
 	assert(util_av_entry);
@@ -445,23 +430,40 @@ void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
 	memset(efa_av_entry->ep_addr, 0, EFA_EP_ADDR_LEN);
 }
 
+void efa_conn_release_util_av_explicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
+{
+	assert(ofi_genlock_held(&av->util_av.lock));
+	efa_conn_release_util_av_common(&av->util_av, conn, conn->fi_addr);
+}
+
+void efa_conn_release_util_av_implicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+{
+	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	efa_conn_release_util_av_common(&av->util_av_implicit, conn, conn->implicit_fi_addr);
+}
+
 /**
  * @brief release an efa conn object
  * Caller of this function must obtain av->util_av.lock or
- * av->util_av_implicit.lock. This function obtains the SRX lock and is called
- * from the AV removal path.
+ * av->util_av_implicit.lock.
  *
  * @param[in]	av	address vector
  * @param[in]	conn	efa_conn object pointer
  * @param[in]	release_from_implicit_av		whether to release conn
  * from implicit AV
- * @param[in]	grab_srx_lock		whether to get the SRX lock before
- * destroying the peer struct
  */
 void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 		      bool release_from_implicit_av)
+	OFI_TSA_NO_ANALYSIS // util_domain.lock is not taken during AV remove and close
 {
-	efa_conn_release_reverse_av(av, conn, release_from_implicit_av);
+	if (release_from_implicit_av) {
+		efa_conn_release_reverse_av_implicit(av, conn);
+	} else {
+		efa_conn_release_reverse_av_explicit(av, conn);
+	}
+
 	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
 
@@ -470,30 +472,34 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 
 	efa_ah_release(av->domain, conn->ah, release_from_implicit_av);
 
-	efa_conn_release_util_av(av, conn, release_from_implicit_av);
+	if (release_from_implicit_av) {
+		efa_conn_release_util_av_implicit(av, conn);
+	} else {
+		efa_conn_release_util_av_explicit(av, conn);
+	}
 }
 
 /**
  * @brief release an efa conn object from the implicit AV
- * Caller of this function must obtain av->util_av_implicit.lock, the
- * util_domain lock, and the SRX lock. This function is called when
- * evicting an AH entry in the CQ read path.
+ * Caller of this function must obtain av->util_av_implicit.lock and the
+ * util_domain lock. This function is called when evicting an AH entry
+ * in the CQ read path.
  *
  * @param[in]	av	address vector
  * @param[in]	conn	efa_conn object pointer
  */
 void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *conn)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-	efa_conn_release_reverse_av(av, conn, true);
+	efa_conn_release_reverse_av_implicit(av, conn);
 
-	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 	efa_conn_rdm_deinit(av, conn);
 
 	assert(ofi_genlock_held(&av->domain->util_domain.lock));
 	dlist_remove(&conn->ah_implicit_conn_list_entry);
-	efa_conn_release_util_av(av, conn, true);
+	efa_conn_release_util_av_implicit(av, conn);
 	conn->ah->implicit_refcnt--;
 }
 
