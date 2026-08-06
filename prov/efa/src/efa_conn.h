@@ -47,13 +47,17 @@ struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
-void efa_conn_release_reverse_av_explicit(struct efa_av *av, struct efa_conn *conn);
+void efa_conn_release_reverse_av_explicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym);
 
-void efa_conn_release_reverse_av_implicit(struct efa_av *av, struct efa_conn *conn);
+void efa_conn_release_reverse_av_implicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
 
-void efa_conn_release_util_av_explicit(struct efa_av *av, struct efa_conn *conn);
+void efa_conn_release_util_av_explicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym);
 
-void efa_conn_release_util_av_implicit(struct efa_av *av, struct efa_conn *conn);
+void efa_conn_release_util_av_implicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
 
 void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 		      bool release_from_implicit_av);

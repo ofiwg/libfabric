@@ -390,6 +390,7 @@ err_release:
 }
 
 void efa_conn_release_reverse_av_explicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
 {
 	assert(ofi_genlock_held(&av->util_av.lock));
 	efa_av_reverse_av_remove(&av->cur_reverse_av, &av->prv_reverse_av,
@@ -397,6 +398,7 @@ void efa_conn_release_reverse_av_explicit(struct efa_av *av, struct efa_conn *co
 }
 
 void efa_conn_release_reverse_av_implicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
 {
 	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
@@ -429,12 +431,14 @@ static void efa_conn_release_util_av_common(struct util_av *util_av,
 }
 
 void efa_conn_release_util_av_explicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
 {
 	assert(ofi_genlock_held(&av->util_av.lock));
 	efa_conn_release_util_av_common(&av->util_av, conn, conn->fi_addr);
 }
 
 void efa_conn_release_util_av_implicit(struct efa_av *av, struct efa_conn *conn)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
 {
 	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 	efa_conn_release_util_av_common(&av->util_av_implicit, conn, conn->implicit_fi_addr);
