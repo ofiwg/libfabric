@@ -5,12 +5,42 @@ from common import (
     test_selected_by_marker,
 )
 
-memory_type_list = [
+# Memory types that yield a distinct permutation for a bi-directional
+# transfer. A bi-directional test moves data both ways, so <a>_to_<b> and
+# <b>_to_<a> drive the same code paths and only one of the pair is kept.
+memory_type_list_bi_dir = [
     pytest.param("host_to_host"),
     pytest.param("host_to_cuda", marks=pytest.mark.cuda_memory),
-    pytest.param("cuda_to_host", marks=pytest.mark.cuda_memory),
     pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
 ]
+
+# Every memory type. Only a uni-directional test needs cuda_to_host, which for
+# a bi-directional transfer is host_to_cuda with the endpoint roles swapped.
+memory_type_list = memory_type_list_bi_dir + [
+    pytest.param("cuda_to_host", marks=pytest.mark.cuda_memory),
+]
+
+
+@pytest.fixture(scope="module", params=["read", "writedata", "write"])
+def rma_operation_type(request):
+    return request.param
+
+
+@pytest.fixture(scope="module")
+def rma_bw_memory_type(memory_type, rma_operation_type):
+    is_test_bi_dir = rma_operation_type != "writedata"
+    if is_test_bi_dir and (memory_type not in [_.values[0] for _ in memory_type_list_bi_dir]):
+        pytest.skip("Duplicated memory type for bi-directional test")
+    return memory_type
+
+
+@pytest.fixture(scope="function")
+def rma_bw_completion_semantic(completion_semantic, rma_operation_type):
+    if completion_semantic != "delivery_complete" and rma_operation_type == "read":
+        # A read is not a transmission, so there is no difference between the
+        # delivery_complete and transmit_complete semantics.
+        pytest.skip("Duplicate completion semantic for fi_read test")
+    return completion_semantic
 
 
 def add_memory_type_parametrization(metafunc):
