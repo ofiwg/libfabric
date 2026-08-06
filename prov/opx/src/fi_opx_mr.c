@@ -42,6 +42,8 @@
 
 #include <ofi_enosys.h>
 
+#include <unistd.h>
+
 #define OPX_MR_CLOSE_MAX_WAIT_ITERS (1ul << 31)
 
 static uint64_t opx_prov_key_gen = 0;
@@ -64,11 +66,6 @@ static int fi_opx_close_mr(fid_t fid)
 		return ret;
 	}
 #endif
-	if (opx_mr->dmabuf_internal) {
-		ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
-		close(opx_mr->dmabuf.fd);
-	}
-
 	HASH_DEL(opx_domain->mr_hashmap, opx_mr);
 
 	if (opx_domain->mr_mode == 0 || (opx_domain->mr_mode & OFI_MR_SCALABLE)) {
@@ -81,6 +78,11 @@ static int fi_opx_close_mr(fid_t fid)
 
 	// suppress_free set when opx_mr will be freed by the hfisvc deferred close
 	if (!suppress_free) {
+		if (opx_mr->dmabuf_internal) {
+			ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
+			close(opx_mr->dmabuf.fd);
+		}
+		opx_mr->dmabuf.fd = -1;
 		free(opx_mr);
 	}
 	// opx_mr (the object passed in as fid) is now unusable
@@ -379,7 +381,14 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	opx_mr->attr.requested_key = opx_mr->mr_fid.key;
 
 	if (flags & FI_MR_DMABUF) {
-		assert(attr);
+		if (!attr || !attr->dmabuf) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "FI_MR_DMABUF requires fi_mr_attr dmabuf metadata\n");
+			free(opx_mr);
+			OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) FI_EINVAL, 0);
+			errno = FI_EINVAL;
+			return -FI_EINVAL;
+		}
+
 		opx_mr->attr.iface  = attr->iface;
 		opx_mr->attr.device = attr->device;
 		opx_mr->dmabuf	    = *attr->dmabuf;
@@ -399,12 +408,27 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	if (opx_domain->mr_mode == 0 || (opx_domain->mr_mode & OFI_MR_SCALABLE)) {
 		fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
 	}
-	HASH_ADD(hh, opx_domain->mr_hashmap, mr_fid.key, sizeof(opx_mr->mr_fid.key), opx_mr);
 #if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {
 		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPEN_DEFERRED;
+		if (flags & FI_MR_DMABUF) {
+			ret = opx_hfisvc_mr_lazy_open(opx_domain, opx_mr);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+					"Error starting HFISVC FI_MR_DMABUF MR open for opx_mr=%p fd=%d returned %d\n",
+					opx_mr, opx_mr->dmabuf.fd, ret);
+				if (opx_domain->mr_mode == 0 || (opx_domain->mr_mode & OFI_MR_SCALABLE)) {
+					(void) fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
+				}
+				free(opx_mr);
+				OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) (-ret), 0);
+				errno = -ret;
+				return ret;
+			}
+		}
 	}
 #endif
+	HASH_ADD(hh, opx_domain->mr_hashmap, mr_fid.key, sizeof(opx_mr->mr_fid.key), opx_mr);
 	*mr = &opx_mr->mr_fid;
 
 	OPX_TRACE_MR_END_SUCCESS(OPX_TRACE_EVENT_MR_REG, 0, 0);

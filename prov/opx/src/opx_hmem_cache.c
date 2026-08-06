@@ -592,11 +592,6 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	}
 #endif
 
-	if (opx_mr->dmabuf_internal) {
-		ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
-		close(opx_mr->dmabuf.fd);
-	}
-
 	if (opx_mr->domain->mr_mode & OFI_MR_SCALABLE) {
 		int ret = fi_opx_ref_dec(&opx_mr->domain->ref_cnt, "domain");
 		if (ret) {
@@ -607,6 +602,11 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 
 	// suppress_free set when opx_mr will be freed by the hfisvc deferred close
 	if (!suppress_free) {
+		if (opx_mr->dmabuf_internal) {
+			ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
+			close(opx_mr->dmabuf.fd);
+		}
+		opx_mr->dmabuf.fd = -1;
 		free(opx_mr);
 	}
 }
