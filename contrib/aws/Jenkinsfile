@@ -386,7 +386,7 @@ def build_pr_test_stages() {
     def c7i16x_lock_label   = "c7i16x"
 
     // Multi Node Tests - EFA
-    stages["2_hpc7g_alinux2023_efa"] = get_test_stage_with_lock("2_hpc7g_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa_hpc}")
+    stages["2_hpc7g_rhel9_efa"] = get_test_stage_with_lock("2_hpc7g_rhel9_efa", env.BUILD_TAG, "rhel9", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa_hpc}")
     stages["2_hpc8a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc8a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc8a.96xlarge", 2, "eu-north-1", hpc8a96x_lock_label, "--odcr cr-0c2007d91766881ab ${addl_args_efa_hpc}")
     stages["2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock("2_c7g_ubuntu2404_efa",   env.BUILD_TAG, "ubuntu2404", "c7g.16xlarge",   2, "us-west-2", c7g16x_lock_label,   "--odcr cr-03255c1eeaf9777db ${addl_args_efa}")
     stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
@@ -438,7 +438,7 @@ def build_postmerge_test_stages() {
     def g4dn16x_lock_label  = "g4dn16x"
 
     // only EFA provider needs to be tested for unit test coverage
-    stages["2_hpc7g_alinux2023_efa"] = get_test_stage_with_lock("2_hpc7g_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa}")
+    stages["2_hpc7g_rhel9_efa"] = get_test_stage_with_lock("2_hpc7g_rhel9_efa", env.BUILD_TAG, "rhel9", "hpc7g.16xlarge", 2, "us-east-1", hpc7g16x_lock_label, "--odcr cr-030a16bd086b7b3cf ${addl_args_efa}")
     stages["2_hpc8a_alinux2023_efa"] = get_test_stage_with_lock("2_hpc8a_alinux2023_efa", env.BUILD_TAG, "alinux2023", "hpc8a.96xlarge", 2, "eu-north-1", hpc8a96x_lock_label, "--odcr cr-0c2007d91766881ab ${addl_args_efa}")
     stages["2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock("2_c7g_ubuntu2404_efa",   env.BUILD_TAG, "ubuntu2404", "c7g.16xlarge",   2, "us-west-2", c7g16x_lock_label,   "--odcr cr-03255c1eeaf9777db ${addl_args_efa}")
     stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
