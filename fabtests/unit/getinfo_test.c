@@ -210,7 +210,7 @@ static int init_caps(struct fi_info *hints, uint64_t bits)
 
 #define PRIMARY_TX_CAPS	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMIC | \
 			 FI_MULTICAST | FI_NAMED_RX_CTX | FI_HMEM | \
-			 FI_COLLECTIVE)
+			 FI_COLLECTIVE | FI_RPC)
 #define PRIMARY_RX_CAPS (FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMIC | \
 			 FI_DIRECTED_RECV | FI_HMEM | FI_COLLECTIVE)
 
