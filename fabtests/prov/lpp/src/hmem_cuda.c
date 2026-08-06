@@ -76,7 +76,7 @@ int hmem_cuda_memcpy_d2h(void *dst, void *src, size_t len)
 {
 	cudaError_t ce;
 	if (!cuda_state.available) {
-		error("Cuda not initalized");
+		error("Cuda not initialized");
 		return -EOPNOTSUPP;
 	}
 
@@ -92,7 +92,7 @@ int hmem_cuda_memcpy_h2d(void *dst, void *src, size_t len)
 {
 	cudaError_t ce;
 	if (!cuda_state.available) {
-		error("Cuda not initalized");
+		error("Cuda not initialized");
 		return -EOPNOTSUPP;
 	}
 
@@ -109,7 +109,7 @@ int hmem_cuda_alloc(void *uaddr, size_t len)
 	cudaError_t curet;
 	const char *errstr;
 	if (!cuda_state.available) {
-		error("Cuda not initalized");
+		error("Cuda not initialized");
 		return -EOPNOTSUPP;
 	}
 
@@ -126,7 +126,7 @@ int hmem_cuda_alloc(void *uaddr, size_t len)
 void hmem_cuda_free(void *uaddr)
 {
 	if (!cuda_state.available) {
-		error("Cuda not initalized");
+		error("Cuda not initialized");
 		return;
 	}
 	cuda_state.fns.cudaFree(uaddr);
