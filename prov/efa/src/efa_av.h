@@ -68,8 +68,8 @@ struct efa_av {
 	 * prv_reverse_av is a map from (ahn + qpn + connid) to all previous efa_conns.
 	 * cur_reverse_av is faster to search because its key size is smaller
 	 */
-	struct efa_cur_reverse_av *cur_reverse_av;
-	struct efa_prv_reverse_av *prv_reverse_av;
+	struct efa_cur_reverse_av *cur_reverse_av OFI_TSA_GUARDED_BY(efa_util_av_lock_sym);
+	struct efa_prv_reverse_av *prv_reverse_av OFI_TSA_GUARDED_BY(efa_util_av_lock_sym);
 	struct util_av util_av;
 
 	/* implicit AV is used when receiving messages from peers not explicity
