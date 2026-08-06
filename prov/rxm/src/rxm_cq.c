@@ -257,15 +257,18 @@ static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
 	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 	switch (rxm_sar_get_seg_type(&tx_buf->pkt.ctrl_hdr)) {
 	case RXM_SAR_SEG_FIRST:
+		tx_buf->sar.first_seg_done = true;
+		if (tx_buf->sar.last_seg_done)
+			rxm_free_tx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_SAR_SEG_MIDDLE:
 		rxm_free_tx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_SAR_SEG_LAST:
 		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
-						tx_buf->pkt.ctrl_hdr.msg_id);
-		rxm_free_tx_buf(rxm_ep, first_tx_buf);
+			RXM_SAR_TX_INDEX(tx_buf->pkt.ctrl_hdr.msg_id));
 		rxm_free_tx_buf(rxm_ep, tx_buf);
+		rxm_release_sar_first_tx_buf(rxm_ep, first_tx_buf);
 		return true;
 	}
 
@@ -425,18 +428,34 @@ static void rxm_init_sar_proto(struct rxm_rx_buf *rx_buf)
 	proto_info->sar.conn = rx_buf->conn;
 	proto_info->sar.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 	proto_info->sar.total_recv_len = 0;
+	/* NULL when a non-FIRST segment arrived first; the entry is acquired
+	 * when FIRST shows up. */
 	proto_info->sar.rx_entry = rx_buf->peer_entry;
 
 	dlist_insert_tail(&proto_info->sar.entry,
 			  &rx_buf->conn->deferred_sar_msgs);
 
 	dlist_init(&proto_info->sar.pkt_list);
-	if (rx_buf->peer_entry->peer_context)
+	if (rx_buf->peer_entry && rx_buf->peer_entry->peer_context)
 		dlist_insert_tail(&rx_buf->unexp_entry,
 				  &proto_info->sar.pkt_list);
 
-
 	rx_buf->proto_info = proto_info;
+}
+
+/* A non-FIRST segment arrived first for its msg_id: start a reassembly with no
+ * SRX entry yet and hold on to the segment.
+ */
+static void rxm_defer_sar_proto(struct rxm_rx_buf *rx_buf)
+{
+	rx_buf->peer_entry = NULL;
+	rxm_init_sar_proto(rx_buf);
+	if (!rx_buf->proto_info)
+		return;
+
+	dlist_insert_tail(&rx_buf->unexp_entry,
+			  &rx_buf->proto_info->sar.pkt_list);
+	rxm_replace_rx_buf(rx_buf);
 }
 
 int rxm_process_seg_data(struct rxm_rx_buf *rx_buf)
@@ -479,57 +498,148 @@ int rxm_process_seg_data(struct rxm_rx_buf *rx_buf)
 	return done;
 }
 
+/* Copy the buffered segments into the matched receive buffer. Returns true if
+ * LAST was processed, in which case proto_info and rx_entry are gone.
+ */
+static bool rxm_sar_drain_pkt_list(struct rxm_proto_info *proto_info,
+				   struct fi_peer_rx_entry *rx_entry)
+{
+	struct rxm_rx_buf *seg_rx_buf, *first_pkt;
+
+	rx_entry->peer_context = NULL;
+
+	/* The running offset in rxm_process_seg_data() needs strict segment
+	 * order, so wait until FIRST is at the head. */
+	if (dlist_empty(&proto_info->sar.pkt_list))
+		return false;
+	first_pkt = container_of(proto_info->sar.pkt_list.next,
+				 struct rxm_rx_buf, unexp_entry);
+	if (rxm_sar_get_seg_type(&first_pkt->pkt.ctrl_hdr) != RXM_SAR_SEG_FIRST)
+		return false;
+
+	while (!dlist_empty(&proto_info->sar.pkt_list)) {
+		dlist_pop_front(&proto_info->sar.pkt_list,
+				struct rxm_rx_buf, seg_rx_buf, unexp_entry);
+		seg_rx_buf->peer_entry = rx_entry;
+		if (rxm_process_seg_data(seg_rx_buf))
+			return true;
+	}
+	return false;
+}
+
+/* Acquire the SRX entry for a deferred reassembly, once FIRST has arrived.
+ * *matched reports whether a posted receive was found or the entry had to be
+ * queued as unexpected.
+ */
+static struct fi_peer_rx_entry *
+rxm_sar_acquire_entry(struct rxm_rx_buf *rx_buf, bool *matched)
+{
+	struct fid_peer_srx *srx = rx_buf->ep->srx;
+	struct fi_peer_rx_entry *rx_entry = NULL;
+	struct fi_peer_match_attr match = {0};
+	int ret;
+
+	switch (rx_buf->pkt.hdr.op) {
+	case ofi_op_msg:
+		match.msg_size = rx_buf->pkt.hdr.size;
+		ret = srx->owner_ops->get_msg(srx, &match, &rx_entry);
+		break;
+	case ofi_op_tagged:
+		match.tag = rx_buf->pkt.hdr.tag;
+		match.msg_size = rx_buf->pkt.hdr.size;
+		ret = srx->owner_ops->get_tag(srx, &match, &rx_entry);
+		break;
+	default:
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unknown op!\n");
+		assert(0);
+		*matched = false;
+		return NULL;
+	}
+
+	rx_buf->proto_info->sar.rx_entry = rx_entry;
+
+	if (ret == -FI_ENOENT) {
+		rx_entry->peer_context = rx_buf;
+		rx_buf->peer_entry = rx_entry;
+		if (rx_buf->pkt.hdr.flags & FI_REMOTE_CQ_DATA) {
+			rx_entry->flags |= FI_REMOTE_CQ_DATA;
+			rx_entry->cq_data = rx_buf->pkt.hdr.data;
+		}
+		if (rx_buf->pkt.hdr.op == ofi_op_msg)
+			srx->owner_ops->queue_msg(rx_entry);
+		else
+			srx->owner_ops->queue_tag(rx_entry);
+		*matched = false;
+	} else {
+		rx_entry->peer_context = NULL;
+		*matched = true;
+	}
+	return rx_entry;
+}
+
 static void rxm_handle_seg_data(struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_proto_info *proto_info;
-	struct fi_peer_rx_entry *rx_entry;
+	struct rxm_proto_info *proto_info = rx_buf->proto_info;
+	struct fi_peer_rx_entry *rx_entry = proto_info->sar.rx_entry;
 	struct rxm_conn *conn;
+	struct rxm_rx_buf *seg_rx_buf;
 	uint64_t msg_id;
 	struct dlist_entry *entry;
+	bool matched;
 
-	if (dlist_empty(&rx_buf->proto_info->sar.pkt_list)) {
+	/* In-order arrival into a matched receive: copy straight in. */
+	if (rx_entry && dlist_empty(&proto_info->sar.pkt_list)) {
 		rxm_process_seg_data(rx_buf);
 		return;
 	}
 
-	proto_info = rx_buf->proto_info;
-	dlist_insert_tail(&rx_buf->unexp_entry, &proto_info->sar.pkt_list);
+	/* Keep the list in segment order: FIRST at the head, the rest, which
+	 * share one endpoint and so are already ordered, at the tail. */
+	if (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_FIRST)
+		dlist_insert_head(&rx_buf->unexp_entry, &proto_info->sar.pkt_list);
+	else
+		dlist_insert_tail(&rx_buf->unexp_entry, &proto_info->sar.pkt_list);
 	rxm_replace_rx_buf(rx_buf);
 
-	if ((rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_LAST))
-		dlist_remove(&proto_info->sar.entry);
-
-	rx_entry = rx_buf->peer_entry;
+	/* Capture before any drain: rx_buf may be copied and freed below. */
 	conn = rx_buf->conn;
 	msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 
+	/* Waiting on FIRST before the entry can be acquired. */
+	if (!rx_entry) {
+		if (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_FIRST)
+			return;
+		rx_entry = rxm_sar_acquire_entry(rx_buf, &matched);
+		if (!rx_entry || !matched)
+			return;
+	}
+
+	/* If still unmatched the entry stays queued, and the drain happens from
+	 * rxm_handle_unexp_sar() once a receive is posted. */
+	if (!rx_entry->peer_context) {
+		if (rxm_sar_drain_pkt_list(proto_info, rx_entry))
+			return;
+	}
+
 	dlist_foreach_container_safe(&conn->deferred_sar_segments,
-				     struct rxm_rx_buf, rx_buf,
+				     struct rxm_rx_buf, seg_rx_buf,
 				     unexp_entry, entry) {
-		if (!rxm_rx_buf_match_msg_id(&rx_buf->unexp_entry, &msg_id))
+		if (!rxm_rx_buf_match_msg_id(&seg_rx_buf->unexp_entry, &msg_id))
 			continue;
 
-		dlist_remove(&rx_buf->unexp_entry);
-		rx_buf->peer_entry = rx_entry;
-		if (rxm_process_seg_data(rx_buf))
+		dlist_remove(&seg_rx_buf->unexp_entry);
+		seg_rx_buf->peer_entry = rx_entry;
+		if (rxm_process_seg_data(seg_rx_buf))
 			break;
 	}
 }
 
 ssize_t rxm_handle_unexp_sar(struct fi_peer_rx_entry *peer_entry)
 {
-	struct rxm_proto_info *proto_info;
 	struct rxm_rx_buf *rx_buf;
 
 	rx_buf = (struct rxm_rx_buf *) peer_entry->peer_context;
-	proto_info = rx_buf->proto_info;
-
-	while (!dlist_empty(&proto_info->sar.pkt_list)) {
-		dlist_pop_front(&proto_info->sar.pkt_list,
-				struct rxm_rx_buf, rx_buf, unexp_entry);
-		rxm_process_seg_data(rx_buf);
-	}
-	peer_entry->peer_context = NULL;
+	rxm_sar_drain_pkt_list(rx_buf->proto_info, peer_entry);
 	return FI_SUCCESS;
 }
 
@@ -587,7 +697,7 @@ ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf)
 	rx_buf->peer_entry->msg_size = total_len;
 	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_READ);
 
-	ret = rxm_rndv_xfer(rx_buf->ep, rx_buf->conn->msg_ep,
+	ret = rxm_rndv_xfer(rx_buf->ep, rxm_conn_msg_ep(rx_buf->conn, NULL),
 			    rx_buf->remote_rndv_hdr,
 			    rx_buf->peer_entry->iov,
 			    rx_buf->peer_entry->desc,
@@ -653,7 +763,8 @@ static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 	else
 		RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_WRITE_TX_WAIT);
 
-	ret = rxm_rndv_xfer(rx_buf->ep, tx_buf->write_rndv.conn->msg_ep, rx_hdr,
+	ret = rxm_rndv_xfer(rx_buf->ep,
+			    rxm_conn_msg_ep(tx_buf->write_rndv.conn, NULL), rx_hdr,
 			    tx_buf->write_rndv.iov, tx_buf->write_rndv.desc,
 			    tx_buf->rma.count, total_len, tx_buf);
 
@@ -846,6 +957,7 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	}
 	rx_buf->peer_entry = rx_entry;
 
+	/* Only a FIRST segment gets here, so the new proto starts out empty. */
 	if (rx_buf->pkt.ctrl_hdr.type == rxm_ctrl_seg)
 		rxm_init_sar_proto(rx_buf);
 
@@ -877,10 +989,29 @@ static ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 	sar_entry = dlist_find_first_match(&rx_buf->conn->deferred_sar_msgs,
 					   rxm_sar_match_msg_id,
 					   &rx_buf->pkt.ctrl_hdr.msg_id);
-	if (!sar_entry)
+	if (!sar_entry) {
+		/* First arrival for this msg_id. */
+		if (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_FIRST) {
+			rxm_defer_sar_proto(rx_buf);
+			return 0;
+		}
 		return rxm_handle_recv_comp(rx_buf);
+	}
 
 	proto_info = container_of(sar_entry, struct rxm_proto_info, sar.entry);
+
+	/* A FIRST that finds a reassembly which already has an entry means the
+	 * sender reused the tx-buf index: the old message is only waiting to be
+	 * drained, and stays reachable through its queued entry. Unlink it from
+	 * the lookup list and start fresh. A reassembly without an entry is one
+	 * that has been waiting for this FIRST, so fall through to it. */
+	if (rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_FIRST &&
+	    proto_info->sar.rx_entry) {
+		dlist_remove(&proto_info->sar.entry);
+		dlist_init(&proto_info->sar.entry);
+		return rxm_handle_recv_comp(rx_buf);
+	}
+
 	rx_buf->peer_entry = proto_info->sar.rx_entry;
 	rx_buf->proto_info = proto_info;
 	rxm_handle_seg_data(rx_buf);
@@ -914,7 +1045,8 @@ static void rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 	buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->remote_index;
 	buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 
-	ret = fi_send(rx_buf->conn->msg_ep, &buf->pkt, sizeof(buf->pkt),
+	ret = fi_send(rxm_conn_msg_ep(rx_buf->conn, &buf->pkt),
+		      &buf->pkt, sizeof(buf->pkt),
 		      buf->hdr.desc, 0, rx_buf);
 	if (ret) {
 		if (ret == -FI_EAGAIN) {
@@ -969,8 +1101,8 @@ rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 	buf->pkt.ctrl_hdr.conn_id = tx_buf->pkt.ctrl_hdr.conn_id;
 	buf->pkt.ctrl_hdr.msg_id = tx_buf->pkt.ctrl_hdr.msg_id;
 
-	ret = fi_send(tx_buf->write_rndv.conn->msg_ep, &buf->pkt,
-		      sizeof(buf->pkt), buf->hdr.desc, 0, tx_buf);
+	ret = fi_send(rxm_conn_msg_ep(tx_buf->write_rndv.conn, &buf->pkt),
+		      &buf->pkt, sizeof(buf->pkt), buf->hdr.desc, 0, tx_buf);
 	if (ret) {
 		if (ret == -FI_EAGAIN) {
 			def_entry = rxm_ep_alloc_deferred_tx_entry(rxm_ep,
@@ -1033,8 +1165,9 @@ ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf)
 			  rx_buf->peer_entry->iov,
 			  rx_buf->peer_entry->count, rx_buf->mr);
 
-	ret = fi_send(rx_buf->conn->msg_ep, &buf->pkt, sizeof(buf->pkt) +
-		      sizeof(struct rxm_rndv_hdr), buf->hdr.desc, 0, rx_buf);
+	ret = fi_send(rxm_conn_msg_ep(rx_buf->conn, &buf->pkt), &buf->pkt,
+		      sizeof(buf->pkt) + sizeof(struct rxm_rndv_hdr),
+		      buf->hdr.desc, 0, rx_buf);
 	if (ret) {
 		if (ret == -FI_EAGAIN) {
 			def_entry = rxm_ep_alloc_deferred_tx_entry(rx_buf->ep,
@@ -1119,8 +1252,8 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 	atomic_hdr->result_len = htonl((uint32_t) result_len);
 
 	if (tot_len < rxm_ep->inject_limit) {
-		ret = fi_inject(rx_buf->conn->msg_ep, &resp_buf->pkt,
-				tot_len, 0);
+		ret = fi_inject(rxm_conn_msg_ep(rx_buf->conn, &resp_buf->pkt),
+				&resp_buf->pkt, tot_len, 0);
 		if (!ret)
 			ofi_buf_free(resp_buf);
 	} else {

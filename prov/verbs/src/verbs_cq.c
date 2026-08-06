@@ -214,6 +214,7 @@ vrb_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 
 int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 {
+	struct slist_entry *entry, *prev;
 	struct vrb_context *ctx;
 	struct vrb_ep *ep;
 	int ret;
@@ -231,9 +232,14 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 		if (ctx->op_queue == VRB_OP_SQ) {
 			ep = ctx->ep;
 			assert(ep);
-			assert(!slist_empty(&ep->sq_list));
-			assert(ep->sq_list.head == &ctx->entry);
-			(void) slist_remove_head(&ep->sq_list);
+			/* The completing send is on this ep's sq_list, but
+			 * not necessarily at its head. */
+			slist_foreach(&ep->sq_list, entry, prev) {
+				if (entry == &ctx->entry)
+					break;
+			}
+			assert(entry == &ctx->entry);
+			slist_remove(&ep->sq_list, &ctx->entry, prev);
 			ep->sq_credits++;
 
 			/* workaround incorrect opcode reported by verbs */
@@ -491,6 +497,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	struct vrb_domain *domain =
 		container_of(domain_fid, struct vrb_domain,
 			     util_domain.domain_fid);
+	struct ibv_device_attr device_attr;
 	size_t size;
 	int ret;
 	struct fi_cq_attr tmp_attr = *attr;
@@ -556,14 +563,18 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	size = attr->size ? attr->size : VERBS_DEF_CQ_SIZE;
 
 	/*
-	 * Verbs may throw an error if CQ size exceeds ibv_device_attr->max_cqe.
-	 * OFI doesn't expose CQ size to the apps because it's better to fix the
-	 * issue in the provider than the app dealing with it. The fix is to
-	 * open multiple verbs CQs and load balance "MSG EP to CQ binding"* among
-	 * them to avoid any CQ overflow.
-	 * Something like:
-	 * num_qp_per_cq = ibv_device_attr->max_cqe / (qp_send_wr + qp_recv_wr)
+	 * Verbs throws an error if CQ size exceeds ibv_device_attr->max_cqe.
+	 * A single CQ may back many QPs, so the requested size can legitimately
+	 * be larger than the device supports; clamp it rather than fail.
 	 */
+	if (domain->verbs && !ibv_query_device(domain->verbs, &device_attr) &&
+	    device_attr.max_cqe > 0 && size > (size_t) device_attr.max_cqe) {
+		VRB_WARN(FI_LOG_CQ,
+			 "CQ size %zu exceeds device max_cqe %d, clamping\n",
+			 size, device_attr.max_cqe);
+		size = (size_t) device_attr.max_cqe;
+	}
+
 	cq->cq = ibv_create_cq(domain->verbs, size, cq, cq->channel,
 			       comp_vector);
 	if (!cq->cq) {
