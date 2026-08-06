@@ -310,6 +310,105 @@ EC2.
 
 See [`fi_efa`(7)](https://ofiwg.github.io/libfabric/main/man/fi_efa.7.html) for more information.
 
+### cxi
+
+***
+
+The CXI provider enables libfabric on Cray's Slingshot network. Slingshot is
+comprised of the Rosetta switch and Cassini NIC. Slingshot is an
+Ethernet-compliant network. However, The provider takes advantage of proprietary
+extensions to support HPC applications.
+
+The CXI provider supports reliable, connection-less endpoint semantics. It
+supports two-sided messaging interfaces with message matching offloaded by the
+Cassini NIC. It also supports one-sided RMA and AMO interfaces, light-weight
+counting events, triggered operations (via the deferred work API), and
+fabric-accelerated small reductions.
+
+See the `fi_cxi(7)` man page for more details.
+
+#### Dependencies
+
+- The CXI Provider requires Cassini's optimized HPC protocol which is only
+  supported in combination with the Rosetta switch.
+
+- The provider uses the libCXI library for control operations and a set of
+  Cassini-specific header files to enable direct hardware access in the data path.
+
+### lpp
+
+***
+
+The `lpp` provider runs on FabreX PCIe networks. FabreX provides high
+performance RDMA capabilities which form the foundation of the LPP provider.
+Higher level primitives are implemented at the libfabric and LPP kernel module
+(KLPP) layers.
+
+See the `fi_lpp(7)` man page for more details.
+
+### ucx
+
+***
+
+The `ucx` provider runs over the UCX library that is currently supported by
+the NVIDIA Infiniband fabrics. The `ucx` provider makes use of the UCX tag
+matching API in order to implement a limited set of the libfabric data
+transfer APIs.
+
+See the `fi_ucx(7)` man page for more details.
+
+### sm2
+
+***
+
+The `sm2` provider is a second-generation shared memory provider that, like
+`shm`, enables applications to communicate between processes on the same
+system over shared memory. It only works on Linux platforms.
+
+### rxd
+
+***
+
+The `ofi_rxd` provider is a utility provider that supports RDM endpoints
+emulated over DGRAM endpoints of a core provider.
+
+See the `fi_rxd(7)` man page for more details.
+
+### mrail
+
+***
+
+The `ofi_mrail` provider is a utility provider that layers over an underlying
+provider to enable the use of multiple network ports (rails). This increases
+the total available bandwidth of an underlying provider. The current status of
+the mrail provider is experimental - not all libfabric features are supported
+and performance is not guaranteed.
+
+See the `fi_mrail(7)` man page for more details.
+
+### lnx
+
+***
+
+The LNX provider is designed to link two or more providers, allowing
+applications to seamlessly use multiple providers or NICs. It uses the
+libfabric peer infrastructure to aid in the use of the underlying providers,
+and is able to link any libfabric provider which supports the FI_PEER
+capability.
+
+See the `fi_lnx(7)` man page for more details.
+
+### hook
+
+***
+
+The hook provider is a utility provider that can intercept calls to any other
+provider. It is always available, but has zero impact on calls unless enabled.
+It is useful for providing performance data on selected calls or debugging
+information.
+
+See the `fi_hook(7)` man page for more details.
+
 ## WINDOWS Instructions
 
 It is possible to compile and link libfabric with windows applications.
@@ -344,26 +443,3 @@ It is possible to compile and link libfabric with windows applications.
   - choose C/C++ > General and add `<libfabricroot>\include` to "Additional include Directories"
   - choose Linker > Input and add `<libfabricroot>\x64\<yourconfigchoice>\libfabric.lib` to "Additional Dependencies"
   - depending on what you are building you may also need to copy `libfabric.dll` into the target folder of your own project.
-
-### cxi
-
-The CXI provider enables libfabric on Cray's Slingshot network. Slingshot is
-comprised of the Rosetta switch and Cassini NIC. Slingshot is an
-Ethernet-compliant network. However, The provider takes advantage of proprietary
-extensions to support HPC applications.
-
-The CXI provider supports reliable, connection-less endpoint semantics. It
-supports two-sided messaging interfaces with message matching offloaded by the
-Cassini NIC. It also supports one-sided RMA and AMO interfaces, light-weight
-counting events, triggered operations (via the deferred work API), and
-fabric-accelerated small reductions.
-
-See the `fi_cxi(7)` man page for more details.
-
-#### Dependencies
-
-- The CXI Provider requires Cassini's optimized HPC protocol which is only
-  supported in combination with the Rosetta switch.
-
-- The provider uses the libCXI library for control operations and a set of
-  Cassini-specific header files to enable direct hardware access in the data path.
