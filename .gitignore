@@ -75,6 +75,7 @@ fabtests/ubertest/fabtest
 fabtests/ubertest/fi_ubertest
 fabtests/common/check_hmem
 fabtests/regression/sighandler_test
+fabtests/regression/sighandler_chain_test
 fabtests/benchmarks/fi_*
 fabtests/component/sock_test
 fabtests/component/dmabuf-rdma/xe_*
