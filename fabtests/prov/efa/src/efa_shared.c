@@ -7,6 +7,8 @@
 #include <string.h>
 #include <getopt.h>
 
+#include <rdma/fi_cm.h>
+
 #include <shared.h>
 #include "efa_shared.h"
 
@@ -15,6 +17,8 @@ static struct option efa_extra_opts[] = {
 	{"post-list", required_argument, NULL, OPT_POST_LIST},
 	{"num-eps", required_argument, NULL, OPT_NUM_EPS},
 	{"sl-low-latency", no_argument, NULL, OPT_SL_LOW_LATENCY},
+	{"eps-per-domain", required_argument, NULL, OPT_EPS_PER_DOMAIN},
+	{"domains", required_argument, NULL, OPT_DOMAINS},
 	{0, 0, 0, 0}
 };
 
@@ -50,6 +54,11 @@ void efa_longopts_usage(void)
 		"Number of endpoints/QPs (default: 1)");
 	FT_PRINT_OPTS_USAGE("--sl-low-latency",
 		"Enable FI_TC_LOW_LATENCY on all endpoints used in the test");
+	FT_PRINT_OPTS_USAGE("--eps-per-domain <n>",
+		"Endpoints to place on each local domain (default: all on one)");
+	FT_PRINT_OPTS_USAGE("--domains <d1,d2,...>",
+		"Domain names to spread endpoints across; requires "
+		"--eps-per-domain and excludes -d");
 	ft_longopts_usage();
 }
 
@@ -100,4 +109,299 @@ int efa_calc_peer_distribution(int my_idx, int my_count, int peer_count,
 
 	*num_peers = n;
 	return FI_SUCCESS;
+}
+
+/*
+ * Collect the distinct domain names the provider offers for @p hints. Returns a
+ * NULL-terminated array of strdup'ed names, to be freed with
+ * efa_free_domain_names(). fi_getinfo returns one fi_info per (domain, ep type,
+ * ...) combination, so the same domain can appear several times; only the first
+ * occurrence of each name is kept.
+ */
+static int efa_list_domains(struct fi_info *hints, char ***names, int *n_found)
+{
+	struct fi_info *dup, *info = NULL, *cur;
+	char **arr = NULL;
+	int n = 0, cnt = 0, i, ret;
+
+	dup = fi_dupinfo(hints);
+	if (!dup)
+		return -FI_ENOMEM;
+
+	/*
+	 * Enumerate domains only: a specific name in hints would filter the
+	 * list down to that one domain, which is the opposite of what we want.
+	 */
+	free(dup->domain_attr->name);
+	dup->domain_attr->name = NULL;
+
+	ret = fi_getinfo(ft_fiversion, NULL, NULL, 0, dup, &info);
+	fi_freeinfo(dup);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		return ret;
+	}
+
+	for (cur = info; cur; cur = cur->next)
+		cnt++;
+
+	/* +1 for the NULL terminator */
+	arr = calloc(cnt + 1, sizeof(*arr));
+	if (!arr) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	for (cur = info; cur; cur = cur->next) {
+		bool seen = false;
+
+		if (!cur->domain_attr || !cur->domain_attr->name)
+			continue;
+
+		for (i = 0; i < n; i++) {
+			if (!strcmp(arr[i], cur->domain_attr->name)) {
+				seen = true;
+				break;
+			}
+		}
+		if (seen)
+			continue;
+
+		arr[n] = strdup(cur->domain_attr->name);
+		if (!arr[n]) {
+			ret = -FI_ENOMEM;
+			goto out_arr;
+		}
+		n++;
+	}
+
+	*names = arr;
+	*n_found = n;
+	ret = FI_SUCCESS;
+	goto out;
+
+out_arr:
+	while (--n >= 0)
+		free(arr[n]);
+	free(arr);
+out:
+	fi_freeinfo(info);
+	return ret;
+}
+
+void efa_free_domain_names(char **names)
+{
+	int i;
+
+	if (!names)
+		return;
+
+	for (i = 0; names[i]; i++)
+		free(names[i]);
+	free(names);
+}
+
+/**
+ * efa_select_domains - Pick the domains to spread endpoints across
+ * @hints: fi_info hints describing the fabric/provider to enumerate
+ * @want_n: number of domains needed
+ * @explicit_csv: comma-separated domain names to use, or NULL to pick
+ *                automatically from whatever the host offers
+ * @names: Output - NULL-terminated array of @p want_n strdup'ed domain names
+ *
+ * The first @p want_n names are used; any extras are reported and ignored, so
+ * one --domains list can serve several endpoint counts. Names given in
+ * @p explicit_csv are validated against what the provider actually offers, so a
+ * typo fails here with the list of real domains rather than later in fi_domain.
+ *
+ * Returns: FI_SUCCESS on success, -FI_ENODATA if fewer than @p want_n domains
+ * are available, -FI_EINVAL if a listed name does not exist, or -FI_ENOMEM.
+ *
+ * Note: Caller must free @p names with efa_free_domain_names()
+ */
+int efa_select_domains(struct fi_info *hints, int want_n,
+		       const char *explicit_csv, char ***names)
+{
+	char **avail = NULL, **want = NULL, **sel = NULL;
+	size_t want_cnt = 0;
+	int avail_n = 0, i, j, ret;
+
+	ret = efa_list_domains(hints, &avail, &avail_n);
+	if (ret)
+		return ret;
+
+	if (explicit_csv) {
+		want = ft_split_and_alloc(explicit_csv, ",", &want_cnt);
+		if (!want) {
+			ret = -FI_ENOMEM;
+			goto out;
+		}
+
+		if ((int) want_cnt < want_n) {
+			FT_ERR("--domains lists %zu domain(s) but %d are needed",
+			       want_cnt, want_n);
+			ret = -FI_EINVAL;
+			goto out;
+		}
+
+		/* Every name must exist, including the ones we will not use. */
+		for (i = 0; i < (int) want_cnt; i++) {
+			for (j = 0; j < avail_n; j++)
+				if (!strcmp(want[i], avail[j]))
+					break;
+			if (j == avail_n) {
+				FT_ERR("--domains: no such domain '%s'", want[i]);
+				FT_ERR("available domains:");
+				for (j = 0; j < avail_n; j++)
+					FT_ERR("  %s", avail[j]);
+				ret = -FI_EINVAL;
+				goto out;
+			}
+		}
+
+		if ((int) want_cnt > want_n)
+			FT_INFO("--domains lists %zu domain(s), using the first "
+				"%d", want_cnt, want_n);
+	} else if (avail_n < want_n) {
+		FT_ERR("found %d domain(s), need %d", avail_n, want_n);
+		ret = -FI_ENODATA;
+		goto out;
+	}
+
+	/* +1 for the NULL terminator */
+	sel = calloc(want_n + 1, sizeof(*sel));
+	if (!sel) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+
+	for (i = 0; i < want_n; i++) {
+		sel[i] = strdup(want ? want[i] : avail[i]);
+		if (!sel[i]) {
+			efa_free_domain_names(sel);
+			ret = -FI_ENOMEM;
+			goto out;
+		}
+	}
+
+	for (i = 0; i < want_n; i++)
+		FT_INFO("domain %d: %s", i, sel[i]);
+
+	*names = sel;
+	ret = FI_SUCCESS;
+out:
+	ft_free_string_array(want);
+	efa_free_domain_names(avail);
+	return ret;
+}
+
+/**
+ * efa_exchange_raw_addrs_oob - Swap raw endpoint addresses over the OOB socket
+ * @oob_sock: connected OOB socket
+ * @is_initiator: true on the side that sends first
+ * @local_eps: local endpoints whose addresses to publish
+ * @local_n: number of local endpoints
+ * @remote_buf: Output - caller-allocated, remote_n * FT_MAX_CTRL_MSG bytes,
+ *              receives the peer's addresses at FT_MAX_CTRL_MSG stride
+ * @remote_n: number of peer endpoints
+ *
+ * Exchanges only the raw address bytes; inserting them into an AV is left to
+ * the caller, which may need the same addresses in more than one AV.
+ *
+ * Returns: FI_SUCCESS on success, negative fi errno on failure
+ */
+int efa_exchange_raw_addrs_oob(int oob_sock, bool is_initiator,
+			       struct fid_ep **local_eps, int local_n,
+			       char *remote_buf, int remote_n)
+{
+	char *local_buf;
+	size_t addrlen;
+	int i, ret;
+
+	local_buf = calloc(local_n, FT_MAX_CTRL_MSG);
+	if (!local_buf)
+		return -FI_ENOMEM;
+
+	for (i = 0; i < local_n; i++) {
+		addrlen = FT_MAX_CTRL_MSG;
+		ret = fi_getname(&local_eps[i]->fid,
+				 local_buf + (size_t) i * FT_MAX_CTRL_MSG,
+				 &addrlen);
+		if (ret) {
+			FT_PRINTERR("fi_getname", ret);
+			goto out;
+		}
+	}
+
+	/* Asymmetric order so the two sides do not both block on recv. */
+	if (is_initiator) {
+		ret = ft_sock_send(oob_sock, local_buf,
+				   (size_t) local_n * FT_MAX_CTRL_MSG);
+		if (ret)
+			goto out;
+		ret = ft_sock_recv(oob_sock, remote_buf,
+				   (size_t) remote_n * FT_MAX_CTRL_MSG);
+	} else {
+		ret = ft_sock_recv(oob_sock, remote_buf,
+				   (size_t) remote_n * FT_MAX_CTRL_MSG);
+		if (ret)
+			goto out;
+		ret = ft_sock_send(oob_sock, local_buf,
+				   (size_t) local_n * FT_MAX_CTRL_MSG);
+	}
+
+out:
+	free(local_buf);
+	return ret;
+}
+
+/**
+ * efa_insert_raw_addrs - Insert exchanged raw addresses into an AV
+ * @av: address vector to insert into
+ * @remote_buf: addresses as filled in by efa_exchange_raw_addrs_oob()
+ * @remote_n: number of peer endpoints
+ * @remote_addrs: Output - @p remote_n handles valid against @p av
+ *
+ * An fi_addr_t is only meaningful to the AV that produced it, so a caller with
+ * several AVs must insert the same addresses into each one.
+ *
+ * Returns: FI_SUCCESS on success, negative fi errno on failure
+ */
+int efa_insert_raw_addrs(struct fid_av *av, const char *remote_buf,
+			 int remote_n, fi_addr_t *remote_addrs)
+{
+	int i, ret;
+
+	for (i = 0; i < remote_n; i++) {
+		ret = ft_av_insert(av,
+				   (void *) (remote_buf +
+					     (size_t) i * FT_MAX_CTRL_MSG),
+				   1, &remote_addrs[i], 0, NULL);
+		if (ret)
+			return ret;
+	}
+
+	return FI_SUCCESS;
+}
+
+int efa_exchange_addrs_oob(int oob_sock, bool is_initiator,
+			   struct fid_ep **local_eps, int local_n,
+			   struct fid_av *av, fi_addr_t *remote_addrs,
+			   int remote_n)
+{
+	char *remote_buf;
+	int ret;
+
+	remote_buf = calloc(remote_n, FT_MAX_CTRL_MSG);
+	if (!remote_buf)
+		return -FI_ENOMEM;
+
+	ret = efa_exchange_raw_addrs_oob(oob_sock, is_initiator, local_eps,
+					 local_n, remote_buf, remote_n);
+	if (!ret)
+		ret = efa_insert_raw_addrs(av, remote_buf, remote_n,
+					   remote_addrs);
+
+	free(remote_buf);
+	return ret;
 }

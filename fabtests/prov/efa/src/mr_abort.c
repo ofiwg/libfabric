@@ -73,6 +73,12 @@ enum test_mode {
 	TEST_TAGGED,
 };
 
+/* mr_abort-only long options, above the efa_shared and shared opt ranges. */
+enum {
+	OPT_NUM_TARGET_EPS = 512,
+	OPT_NUM_INITIATOR_EPS,
+};
+
 /*
  * Each MR slot can have ops_per_mr operations posted against it.
  * op_ctx tracks per-operation state; mr_slot tracks per-MR state.
@@ -134,6 +140,65 @@ static int close_ep_first;
 static int set_homogeneous_peers;
 static bool use_high_pps = false;
 static bool sl_low_latency = false;
+
+#define EFA_MR_ABORT_MAX_EPS 64
+
+static int num_target_eps = 1;
+static int num_initiator_eps = 1;
+static bool num_eps_set;
+static bool target_eps_set;
+static bool initiator_eps_set;
+
+static struct fid_ep *eps[EFA_MR_ABORT_MAX_EPS];
+static int n_local_eps = 1;
+static int n_peer_eps = 1;
+
+/*
+ * Domain placement for the local endpoints. --eps-per-domain says how many
+ * endpoints to pack onto each domain, so the number of domains this side needs
+ * is ceil(n_local_eps / eps_per_domain). Zero means "all endpoints on one
+ * domain", the default. --domains names the domains to use, and is only
+ * meaningful alongside --eps-per-domain; without it the domains are picked from
+ * whatever the host provides.
+ *
+ * Both are local decisions: the two sides may end up on different domain
+ * counts, and neither needs to know the other's placement.
+ */
+static int eps_per_domain;
+static const char *domains_csv;
+static bool domain_opt_set;	/* -d was given */
+static char **domain_names;	/* the n_domains names selected, or NULL */
+static int n_domains = 1;
+
+/*
+ * Resources belonging to one local domain. A CQ, AV and MR are all
+ * domain-scoped, so an endpoint can only use the ones from the domain it was
+ * opened on, and each domain needs its own set.
+ *
+ * doms[0] aliases the objects ft_init_fabric() already created rather than
+ * opening its own, which is what keeps the single-domain case identical to
+ * before this feature; teardown must therefore leave index 0 alone and let
+ * ft_free_res() close it. The one global fabric is shared by every domain.
+ */
+struct mr_abort_domain {
+	struct fid_domain *domain;
+	struct fid_cq *txcq;
+	struct fid_cq *rxcq;
+	struct fid_av *av;
+	struct fi_info *info;
+	/* n_peer_eps handles for this domain's AV; see efa_insert_raw_addrs() */
+	fi_addr_t *peer_addrs;
+};
+
+static struct mr_abort_domain doms[EFA_MR_ABORT_MAX_EPS];
+
+/*
+ * Endpoint pairing built by build_ep_pairs(). Pairs are numbered by initiator
+ * endpoint: there are num_initiator_eps of them and pair p is (initiator ep p,
+ * target ep target_ep_for_pair[p]). Both sides build the identical array, so a pair
+ * index names the same pair on both ends.
+ */
+static int *target_ep_for_pair;
 
 /*
  * -r <file>: replay a previously dumped close order instead of generating
@@ -211,9 +276,9 @@ static int max_ops(void)
 {
 	int n = num_mrs * ops_per_mr;
 
-	/* Partial test always uses 2 ops regardless of num_mrs */
-	if (test_mode == TEST_PARTIAL && n < 2)
-		n = 2;
+	/* The partial test posts 2 ops per slot, all outstanding at once */
+	if (test_mode == TEST_PARTIAL)
+		n = 2 * num_mrs;
 
 	/* Target-close posts an extra signal write before filling the queue */
 	if (close_side == CLOSE_TARGET)
@@ -299,18 +364,25 @@ static int free_test_res(void)
 	return err;
 }
 
+/* Routing accessors, defined below with the rest of the pair helpers. */
+static struct fid_ep *op_local_ep(int mr_idx);
+static struct mr_abort_domain *op_dom(int mr_idx);
+
 static int register_mrs(uint64_t access)
 {
 	int i, ret;
 
 	for (i = 0; i < num_mrs; i++) {
+		struct mr_abort_domain *dom = op_dom(i);
+
 		if (slots[i].mr)
 			continue;
 
-		ret = ft_reg_mr(fi, slots[i].buf,
-				(size_t) ops_per_mr * opts.transfer_size,
-				access, slots[i].key, opts.iface,
-				opts.device, &slots[i].mr, &slots[i].desc);
+		ret = ft_reg_mr_dom(dom->domain, op_local_ep(i), fi,
+				    slots[i].buf,
+				    (size_t) ops_per_mr * opts.transfer_size,
+				    access, slots[i].key, opts.iface,
+				    opts.device, &slots[i].mr, &slots[i].desc);
 		if (ret) {
 			FT_PRINTERR("ft_reg_mr", ret);
 			return ret;
@@ -394,11 +466,76 @@ static char *slot_op_buf(int op_idx, int mr_idx)
 	return slots[mr_idx].buf + (size_t) op_in_mr * opts.transfer_size;
 }
 
+/* The domain holding local endpoint i. */
+static int dom_of(int ep_idx)
+{
+	return eps_per_domain ? ep_idx / eps_per_domain : 0;
+}
+
+/* Each side picks the half of pair p that it owns. */
+static int local_ep_idx_for_pair(int p)
+{
+	return opts.dst_addr ? p : target_ep_for_pair[p];
+}
+
+static struct fid_ep *local_ep_for_pair(int p)
+{
+	return eps[local_ep_idx_for_pair(p)];
+}
+
+/* The domain that owns pair p's local endpoint, and hence its CQs, AV and MRs. */
+static int dom_for_pair(int p)
+{
+	return dom_of(local_ep_idx_for_pair(p));
+}
+
+/*
+ * The peer's address as seen by pair p's own domain: an fi_addr_t is only valid
+ * against the AV that produced it, so the same peer has a different handle in
+ * each local domain.
+ */
+static fi_addr_t peer_addr_for_pair(int p)
+{
+	int peer_idx = opts.dst_addr ? target_ep_for_pair[p] : p;
+
+	return doms[dom_for_pair(p)].peer_addrs[peer_idx];
+}
+
+/*
+ * Route an MR slot to a pair, round-robin, so a send and its matching recv
+ * land on the same pair.
+ */
+static int pair_idx_for_mr_idx(int mr_idx)
+{
+	return mr_idx % num_initiator_eps;
+}
+
+static struct fid_ep *op_local_ep(int mr_idx)
+{
+	return local_ep_for_pair(pair_idx_for_mr_idx(mr_idx));
+}
+
+static fi_addr_t op_peer_addr(int mr_idx)
+{
+	return peer_addr_for_pair(pair_idx_for_mr_idx(mr_idx));
+}
+
+/*
+ * The domain that owns slot mr_idx. A slot's MR (and its local desc, under
+ * FI_MR_LOCAL) is only valid against endpoints on the same domain, so it must
+ * be registered on the domain of the pair its ops run on.
+ */
+static struct mr_abort_domain *op_dom(int mr_idx)
+{
+	return &doms[dom_for_pair(pair_idx_for_mr_idx(mr_idx))];
+}
+
 static ssize_t post_rma_op(int op_idx, int mr_idx)
 {
 	uint64_t flags;
 	struct mr_slot *s = &slots[mr_idx];
 	struct op_ctx *o = &op_arr[op_idx];
+	struct fid_ep *lep = op_local_ep(mr_idx);
 	struct iovec msg_iov = {
 		.iov_base = s->buf,
 		.iov_len = opts.transfer_size,
@@ -412,7 +549,7 @@ static ssize_t post_rma_op(int op_idx, int mr_idx)
 		.msg_iov = &msg_iov,
 		.desc = &s->desc,
 		.iov_count = 1,
-		.addr = remote_fi_addr,
+		.addr = op_peer_addr(mr_idx),
 		.rma_iov = &rma_iov,
 		.rma_iov_count = 1,
 		.context = &o->context,
@@ -429,13 +566,13 @@ static ssize_t post_rma_op(int op_idx, int mr_idx)
 
 	switch (opts.rma_op) {
 	case FT_RMA_WRITE:
-		return fi_writemsg(ep, &msg, flags);
+		return fi_writemsg(lep, &msg, flags);
 	case FT_RMA_WRITEDATA:
 		msg.data = remote_cq_data;
 		flags |= FI_REMOTE_CQ_DATA;
-		return fi_writemsg(ep, &msg, flags);
+		return fi_writemsg(lep, &msg, flags);
 	case FT_RMA_READ:
-		return fi_readmsg(ep, &msg, flags);
+		return fi_readmsg(lep, &msg, flags);
 	default:
 		return -FI_EINVAL;
 	}
@@ -445,32 +582,34 @@ static ssize_t post_send_op(int op_idx, int mr_idx)
 {
 	struct mr_slot *s = &slots[mr_idx];
 	struct op_ctx *o = &op_arr[op_idx];
+	struct fid_ep *lep = op_local_ep(mr_idx);
 	char *buf = slot_op_buf(op_idx, mr_idx);
 
 	o->mr_idx = mr_idx;
 
 	if (test_mode == TEST_TAGGED)
-		return fi_tsend(ep, buf, opts.transfer_size, s->desc,
-				remote_fi_addr, 0xCAFE, &o->context);
+		return fi_tsend(lep, buf, opts.transfer_size, s->desc,
+				op_peer_addr(mr_idx), 0xCAFE, &o->context);
 	else
-		return fi_send(ep, buf, opts.transfer_size, s->desc,
-			       remote_fi_addr, &o->context);
+		return fi_send(lep, buf, opts.transfer_size, s->desc,
+			       op_peer_addr(mr_idx), &o->context);
 }
 
 static ssize_t post_recv_op(int op_idx, int mr_idx)
 {
 	struct mr_slot *s = &slots[mr_idx];
 	struct op_ctx *o = &op_arr[op_idx];
+	struct fid_ep *lep = op_local_ep(mr_idx);
 	char *buf = slot_op_buf(op_idx, mr_idx);
 
 	o->mr_idx = mr_idx;
 
 	if (test_mode == TEST_TAGGED)
-		return fi_trecv(ep, buf, opts.transfer_size, s->desc,
-				remote_fi_addr, 0xCAFE, 0, &o->context);
+		return fi_trecv(lep, buf, opts.transfer_size, s->desc,
+				op_peer_addr(mr_idx), 0xCAFE, 0, &o->context);
 	else
-		return fi_recv(ep, buf, opts.transfer_size, s->desc,
-			       remote_fi_addr, &o->context);
+		return fi_recv(lep, buf, opts.transfer_size, s->desc,
+			       op_peer_addr(mr_idx), &o->context);
 }
 
 static void shuffle(int *arr, int n)
@@ -668,17 +807,30 @@ static int is_expected_err(struct fi_cq_err_entry *err,
  * manifests is as a hang, which is bounded by the caller's overall test
  * timeout (the pytest ClientServerTest timeout).
  */
-static int drain_cq_counted(struct fid_cq *cq, int expected,
-			    struct expected_err *err_list, int err_count)
+static int drain_cq_counted(int expected, struct expected_err *err_list,
+			    int err_count)
 {
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
 	struct op_ctx *o;
-	int idx, remaining, ret;
+	int idx, remaining, ret, d = 0;
+	struct fid_cq *cq;
 
 	remaining = expected;
 
+	/*
+	 * Poll every local domain's TX CQ round-robin: an op completes on the
+	 * CQ of the domain its endpoint lives on, so with endpoints spread
+	 * across domains the `expected` completions are split among the CQs.
+	 * The op_arr index bound below is unaffected -- op_arr is indexed by op,
+	 * not by CQ, so a completion identifies its op the same way regardless
+	 * of which domain's CQ reported it. With one domain this reduces to
+	 * polling the single global TX CQ.
+	 */
 	while (remaining > 0) {
+		cq = doms[d].txcq;
+		d = (d + 1) % n_domains;
+
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
 			o = container_of(comp.op_context,
@@ -769,23 +921,32 @@ static const char *side_str(void)
 	return close_side == CLOSE_INITIATOR ? "initiator" : "target";
 }
 
-/* Drain all available rxcq entries without blocking. */
+/* Drain all available rxcq entries, across every local domain, without blocking. */
 static int flush_rxcq(void)
 {
 	struct fi_cq_data_entry wc;
 	struct fi_cq_err_entry wc_err;
-	int ret;
+	int d, ret;
 
-	for (;;) {
-		ret = fi_cq_read(rxcq, &wc, 1);
-		if (ret == -FI_EAVAIL) {
-			memset(&wc_err, 0, sizeof(wc_err));
-			fi_cq_readerr(rxcq, &wc_err, 0);
-			FT_ERR("Unexpected target rxcq error:");
-			FT_CQ_ERR(rxcq, wc_err, NULL, 0);
-			return -FI_EOTHER;
-		} else if (ret <= 0) {
-			break;
+	/*
+	 * The initiator's writedata entries arrive on the target endpoint that
+	 * received them, so a remote CQ entry lands on that endpoint's domain.
+	 * Flush every local domain's RX CQ, not just the global one.
+	 */
+	for (d = 0; d < n_domains; d++) {
+		struct fid_cq *rx = doms[d].rxcq;
+
+		for (;;) {
+			ret = fi_cq_read(rx, &wc, 1);
+			if (ret == -FI_EAVAIL) {
+				memset(&wc_err, 0, sizeof(wc_err));
+				fi_cq_readerr(rx, &wc_err, 0);
+				FT_ERR("Unexpected target rxcq error:");
+				FT_CQ_ERR(rx, wc_err, NULL, 0);
+				return -FI_EOTHER;
+			} else if (ret <= 0) {
+				break;
+			}
 		}
 	}
 	return 0;
@@ -878,13 +1039,20 @@ static int run_fill_abort_initiator(int iter)
 		 *
 		 * Use op_arr[0] as context so drain_cq_counted's container_of
 		 * resolves to a valid op_ctx.
+		 *
+		 * A control message, not a slot op: it borrows this slot's remote
+		 * key because a 0-byte write still needs a valid destination MR.
+		 * Which pair carries it does not matter -- the target closes all
+		 * its MRs on receipt.
 		 */
-		op_arr[0].mr_idx = 0;
-		ret = fi_writedata(ep, NULL, 0, NULL,
+		const int SIGNAL_MR_IDX = 0;
+
+		op_arr[0].mr_idx = SIGNAL_MR_IDX;
+		ret = fi_writedata(op_local_ep(SIGNAL_MR_IDX), NULL, 0, NULL,
 				   (uint64_t) 0xFFFF,
-				   remote_fi_addr,
-				   remote_arr[0].addr,
-				   remote_arr[0].key,
+				   op_peer_addr(SIGNAL_MR_IDX),
+				   remote_arr[SIGNAL_MR_IDX].addr,
+				   remote_arr[SIGNAL_MR_IDX].key,
 				   &op_arr[0].context);
 		if (ret) {
 			FT_PRINTERR("fi_writedata (signal)", ret);
@@ -940,11 +1108,11 @@ static int run_fill_abort_initiator(int iter)
 
 	/* Drain CQ */
 	if (close_side == CLOSE_TARGET)
-		ret = drain_cq_counted(txcq, total_posted,
+		ret = drain_cq_counted(total_posted,
 				       mr_abort_remote_close_errs,
 				       ARRAY_SIZE(mr_abort_remote_close_errs));
 	else
-		ret = drain_cq_counted(txcq, total_posted,
+		ret = drain_cq_counted(total_posted,
 				       mr_abort_local_close_errs,
 				       ARRAY_SIZE(mr_abort_local_close_errs));
 
@@ -1004,6 +1172,7 @@ static int run_fill_abort_target(void)
 {
 	struct fi_cq_data_entry comp;
 	struct fi_cq_err_entry err;
+	struct fid_cq *go_signal_rxcq;
 	uint64_t deadline;
 	int i, ret;
 
@@ -1027,15 +1196,20 @@ static int run_fill_abort_target(void)
 		return 0;
 	}
 
-	/* Wait for the single go signal */
+	/*
+	 * Wait for the single go signal. The initiator posts it on the pair
+	 * carrying SIGNAL_MR_IDX == 0, so it arrives on that pair's domain's RX
+	 * CQ; poll only that one.
+	 */
+	go_signal_rxcq = doms[dom_for_pair(pair_idx_for_mr_idx(0))].rxcq;
 	deadline = ft_gettime_ms() + CQ_FIRST_TIMEOUT_MS;
 	while (ft_gettime_ms() < deadline) {
-		ret = fi_cq_read(rxcq, &comp, 1);
+		ret = fi_cq_read(go_signal_rxcq, &comp, 1);
 		if (ret > 0)
 			break;
 		else if (ret == -FI_EAVAIL) {
 			memset(&err, 0, sizeof(err));
-			fi_cq_readerr(rxcq, &err, 0);
+			fi_cq_readerr(go_signal_rxcq, &err, 0);
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			FT_PRINTERR("fi_cq_read (target rx)", ret);
 			return ret;
@@ -1069,22 +1243,34 @@ static int run_fill_abort_target(void)
  *
  * Register 2 MRs on the same buffer. Post 1 write with each MR.
  * Close only the first MR. Verify: one op errors, the other completes.
- * Only runs on the initiator side.
+ *
+ * Runs once per slot, and num_mrs == num_initiator_eps here, so every pair is
+ * covered exactly once. Every pair posts and closes before any completion is
+ * reaped, so a close must only abort the ops on its own MR.
  */
-static int run_partial_close_initiator(void)
+
+/*
+ * Post both writes for one slot and close the alias MR. Slot mr_idx owns
+ * op_arr[2 * mr_idx] (op on the surviving slot MR) and op_arr[2 * mr_idx + 1]
+ * (op on the closed alias); max_ops() sizes op_arr to match.
+ */
+static int partial_post_one_slot(int mr_idx)
 {
 	struct mr_slot extra_slot = {0};
 	struct fi_rma_iov local_iov, remote_iov;
-	int i, completed_ok = 0, completed_err = 0, completed;
+	struct op_ctx *surviving = &op_arr[2 * mr_idx];
+	struct op_ctx *closed = &op_arr[2 * mr_idx + 1];
 	int ret;
 
-	/* Use slot 0's buffer for both MRs */
-	extra_slot.buf = slots[0].buf;
-	extra_slot.key = MR_ABORT_KEY_BASE + num_mrs; /* unique key */
+	/* Use this slot's buffer for both MRs */
+	extra_slot.buf = slots[mr_idx].buf;
+	/* Unique key: slot keys occupy [BASE, BASE + num_mrs) */
+	extra_slot.key = MR_ABORT_KEY_BASE + num_mrs + mr_idx;
 
-	ret = ft_reg_mr(fi, extra_slot.buf, opts.transfer_size,
-			ft_info_to_mr_access(fi), extra_slot.key, opts.iface,
-			opts.device, &extra_slot.mr, &extra_slot.desc);
+	ret = ft_reg_mr_dom(op_dom(mr_idx)->domain, op_local_ep(mr_idx), fi,
+			    extra_slot.buf, opts.transfer_size,
+			    ft_info_to_mr_access(fi), extra_slot.key, opts.iface,
+			    opts.device, &extra_slot.mr, &extra_slot.desc);
 	if (ret) {
 		FT_PRINTERR("ft_reg_mr (extra)", ret);
 		return ret;
@@ -1104,22 +1290,22 @@ static int run_partial_close_initiator(void)
 	if (ret)
 		goto close_extra;
 
-	/* Post write using slot 0's MR (will be closed) */
-	reset_test_state();
-	ret = fi_write(ep, slots[0].buf, opts.transfer_size,
-		       slots[0].desc, remote_fi_addr,
-		       remote_arr[0].addr, remote_arr[0].key,
-		       &op_arr[0].context);
+	/* Post write using this slot's MR (will survive) */
+	surviving->mr_idx = mr_idx;
+	ret = fi_write(op_local_ep(mr_idx), slots[mr_idx].buf,
+		       opts.transfer_size, slots[mr_idx].desc,
+		       op_peer_addr(mr_idx), remote_arr[mr_idx].addr,
+		       remote_arr[mr_idx].key, &surviving->context);
 	if (ret) {
-		FT_PRINTERR("fi_write (slot 0)", ret);
+		FT_PRINTERR("fi_write (slot MR)", ret);
 		goto close_extra;
 	}
 
-	/* Post write using extra MR (will survive) */
-	ret = fi_write(ep, extra_slot.buf, opts.transfer_size,
-		       extra_slot.desc, remote_fi_addr,
-		       remote_iov.addr, remote_iov.key,
-		       &op_arr[1].context);
+	/* Post write using extra MR (will be closed) */
+	closed->mr_idx = mr_idx;
+	ret = fi_write(op_local_ep(mr_idx), extra_slot.buf, opts.transfer_size,
+		       extra_slot.desc, op_peer_addr(mr_idx),
+		       remote_iov.addr, remote_iov.key, &closed->context);
 	if (ret) {
 		FT_PRINTERR("fi_write (extra)", ret);
 		goto close_extra;
@@ -1132,16 +1318,25 @@ static int run_partial_close_initiator(void)
 		goto close_extra;
 	}
 	extra_slot.mr = NULL;
+	return 0;
 
-	/* Drain both completions */
-	ret = drain_cq_counted(txcq, 2, mr_abort_local_close_errs,
-			       ARRAY_SIZE(mr_abort_local_close_errs));
-	if (ret != 0)
-		goto close_extra;
+close_extra:
+	FT_CLOSE_FID(extra_slot.mr);
+	return ret;
+}
+
+/* Verify slot mr_idx's two completions, already reaped by the caller's drain. */
+static int partial_check_one_slot(int mr_idx)
+{
+	struct op_ctx *surviving = &op_arr[2 * mr_idx];
+	struct op_ctx *closed = &op_arr[2 * mr_idx + 1];
+	int i, completed_ok = 0, completed_err = 0, completed;
 
 	for (i = 0; i < 2; i++) {
-		if (op_arr[i].completions) {
-			if (op_arr[i].status == 0)
+		struct op_ctx *o = i ? closed : surviving;
+
+		if (o->completions) {
+			if (o->status == 0)
 				completed_ok++;
 			else
 				completed_err++;
@@ -1150,104 +1345,248 @@ static int run_partial_close_initiator(void)
 	completed = completed_ok + completed_err;
 
 	/*
-	 * op_arr[0] used slots[0].mr (not closed) — must succeed.
-	 * op_arr[1] used extra_slot.mr (closed) — may succeed or fail.
+	 * surviving used slots[mr_idx].mr (not closed) — must succeed.
+	 * closed used extra_slot.mr (closed) — may succeed or fail.
 	 */
-	FT_INFO("Partial close: posted=2 ok=%d err=%d missing=%d "
-	       "surviving_op=%s closed_op=%s ... ",
-	       completed_ok, completed_err, 2 - completed,
-	       op_arr[0].completions == 0 ? "missing" :
-	       op_arr[0].completions > 1  ? "DOUBLE"  :
-		       (op_arr[0].status == 0 ? "ok" : "FAIL"),
-	       op_arr[1].completions == 0 ? "missing" :
-	       op_arr[1].completions > 1  ? "DOUBLE"  :
-		       (op_arr[1].status == 0 ? "ok" : "err"));
+	FT_INFO("Partial close: slot=%d pair=%d posted=2 ok=%d err=%d "
+	       "missing=%d surviving_op=%s closed_op=%s ... ",
+	       mr_idx, pair_idx_for_mr_idx(mr_idx), completed_ok, completed_err,
+	       2 - completed,
+	       surviving->completions == 0 ? "missing" :
+	       surviving->completions > 1  ? "DOUBLE"  :
+		       (surviving->status == 0 ? "ok" : "FAIL"),
+	       closed->completions == 0 ? "missing" :
+	       closed->completions > 1  ? "DOUBLE"  :
+		       (closed->status == 0 ? "ok" : "err"));
 
 	if (completed != 2) {
 		FT_INFO("FAIL (missing completions)\n");
-		ret = -FI_EOTHER;
-	} else if (op_arr[0].status != 0) {
+		return -FI_EOTHER;
+	}
+	if (surviving->status != 0) {
 		FT_INFO("FAIL (surviving MR op must not fail)\n");
-		ret = -FI_EOTHER;
-	} else {
-		FT_INFO("PASS\n");
-		ret = 0;
+		return -FI_EOTHER;
 	}
 
-	/* Sync with target so it can safely close its extra MR */
-	if (!ret)
-		ret = ft_sync();
-
-close_extra:
-	FT_CLOSE_FID(extra_slot.mr);
-	return ret;
+	FT_INFO("PASS\n");
+	return 0;
 }
 
-static int run_partial_close_target(void)
+/*
+ * One loop posts and closes on every pair, then one drain reaps all the
+ * completions at once and a second loop checks each pair's pair of ops.
+ */
+static int run_partial_close_initiator(void)
 {
-	struct mr_slot extra_slot = {0};
+	int mr_idx, ret;
+
+	reset_test_state();
+
+	for (mr_idx = 0; mr_idx < num_mrs; mr_idx++) {
+		ret = partial_post_one_slot(mr_idx);
+		if (ret)
+			return ret;
+	}
+
+	ret = drain_cq_counted(2 * num_mrs, mr_abort_local_close_errs,
+			       ARRAY_SIZE(mr_abort_local_close_errs));
+	if (ret)
+		return ret;
+
+	for (mr_idx = 0; mr_idx < num_mrs; mr_idx++) {
+		ret = partial_check_one_slot(mr_idx);
+		if (ret)
+			return ret;
+	}
+
+	/* Sync once the target's extra MRs are safe to close */
+	return ft_sync();
+}
+
+/* Target half of one slot: see partial_post_one_slot(). */
+static int partial_target_one_slot(struct mr_slot *extra_slot, int mr_idx)
+{
 	struct fi_rma_iov local_iov, remote_iov;
 	int ret;
 
 	/* Register an extra MR for the second write target */
-	ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &extra_slot.buf,
+	ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &extra_slot->buf,
 			    opts.transfer_size);
 	if (ret)
 		return ret;
-	extra_slot.key = MR_ABORT_KEY_BASE + num_mrs;
+	extra_slot->key = MR_ABORT_KEY_BASE + num_mrs + mr_idx;
 
-	ret = ft_reg_mr(fi, extra_slot.buf, opts.transfer_size,
-			ft_info_to_mr_access(fi), extra_slot.key, opts.iface,
-			opts.device, &extra_slot.mr, &extra_slot.desc);
+	ret = ft_reg_mr_dom(op_dom(mr_idx)->domain, op_local_ep(mr_idx), fi,
+			    extra_slot->buf, opts.transfer_size,
+			    ft_info_to_mr_access(fi), extra_slot->key, opts.iface,
+			    opts.device, &extra_slot->mr, &extra_slot->desc);
 	if (ret) {
 		FT_PRINTERR("ft_reg_mr (extra)", ret);
-		ft_hmem_free(opts.iface, extra_slot.buf);
 		return ret;
 	}
 
 	/* Exchange the extra key with initiator */
-	local_iov.key = fi_mr_key(extra_slot.mr);
+	local_iov.key = fi_mr_key(extra_slot->mr);
 	local_iov.addr = (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR) ?
-		(uintptr_t) extra_slot.buf : 0;
+		(uintptr_t) extra_slot->buf : 0;
 	local_iov.len = opts.transfer_size;
 
 	ret = ft_sock_recv(oob_sock, &remote_iov, sizeof(remote_iov));
 	if (!ret)
 		ret = ft_sock_send(oob_sock, &local_iov, sizeof(local_iov));
-	if (ret)
-		goto cleanup;
+	return ret;
+}
 
-	/* Wait for initiator to finish the partial close test */
+/*
+ * All the extra MRs must stay alive until the initiator has drained every
+ * completion, so register them all up front and close them after the sync.
+ */
+static int run_partial_close_target(void)
+{
+	struct mr_slot *extra_slots;
+	int mr_idx, ret;
+
+	extra_slots = calloc(num_mrs, sizeof(*extra_slots));
+	if (!extra_slots)
+		return -FI_ENOMEM;
+
+	for (mr_idx = 0; mr_idx < num_mrs; mr_idx++) {
+		ret = partial_target_one_slot(&extra_slots[mr_idx], mr_idx);
+		if (ret)
+			goto cleanup;
+	}
+
+	/* Wait for the initiator to finish posting, closing and draining */
 	ret = ft_sync();
 
 cleanup:
-	FT_CLOSE_FID(extra_slot.mr);
-	ft_hmem_free(opts.iface, extra_slot.buf);
+	for (mr_idx = 0; mr_idx < num_mrs; mr_idx++) {
+		FT_CLOSE_FID(extra_slots[mr_idx].mr);
+		if (extra_slots[mr_idx].buf)
+			ft_hmem_free(opts.iface, extra_slots[mr_idx].buf);
+	}
+	free(extra_slots);
 	return ret;
 }
 
 /*
  * Test 3: Endpoint reuse after abort
  *
- * Re-register MRs, do a normal write + read round-trip.
+ * Re-register MRs, then do a normal write + read round-trip on every pair to
+ * show each local endpoint still works after the abort storm.
  */
-static int reuse_check_initiator(void)
+
+/*
+ * Block for one completion on @p cq; every reuse op must succeed outright.
+ * The reuse check posts one op at a time on a single pair, so its completion
+ * lands only on that pair's domain's TX CQ -- the caller passes it in.
+ */
+static int reuse_wait_one_comp(struct fid_cq *cq, const char *what)
 {
-	struct fi_context2 reuse_ctx;
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
-	int i, ret;
+	int ret;
 
-	/* Drain any residual error entries from the abort test */
 	do {
-		ret = fi_cq_read(txcq, &comp, 1);
+		ret = fi_cq_read(cq, &comp, 1);
 		if (ret == -FI_EAVAIL) {
 			memset(&err, 0, sizeof(err));
-			fi_cq_readerr(txcq, &err, 0);
-			FT_INFO("Reuse drain: residual error %d (%s)\n",
-			       err.err, fi_strerror(err.err));
+			fi_cq_readerr(cq, &err, 0);
+			FT_ERR("Unexpected CQ error during reuse %s:", what);
+			FT_CQ_ERR(cq, err, NULL, 0);
+			return -err.err;
 		}
-	} while (ret != -FI_EAGAIN);
+	} while (ret == -FI_EAGAIN);
+	if (ret < 0) {
+		FT_PRINTERR("fi_cq_read (reuse)", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * Number of pairs the reuse check exercises. Each pair reuses its own slot
+ * (slot == p), so the check is limited to pairs that own one: with -W smaller
+ * than the pair count only the first num_mrs pairs qualify. Reusing a foreign
+ * slot would hand pair p a desc registered on another pair's domain, which is
+ * invalid under FI_MR_LOCAL.
+ */
+static int n_reuse_pairs(void)
+{
+	return MIN(num_mrs, num_initiator_eps);
+}
+
+/*
+ * Write + read round-trip on pair p, using pair p's own slot. Contains one
+ * ft_sync(), matched by reuse_check_target().
+ */
+static int reuse_check_one_pair(int p)
+{
+	struct fi_context2 reuse_ctx;
+	struct fid_cq *cq = doms[dom_for_pair(p)].txcq;
+	int slot = p;
+	int ret;
+
+	/* Write */
+	ret = ft_hmem_memset(opts.iface, opts.device, slots[slot].buf,
+			     0xAB, opts.transfer_size);
+	if (ret)
+		return ret;
+	ret = fi_write(local_ep_for_pair(p), slots[slot].buf, opts.transfer_size,
+		       slots[slot].desc, peer_addr_for_pair(p),
+		       remote_arr[slot].addr, remote_arr[slot].key, &reuse_ctx);
+	if (ret) {
+		FT_PRINTERR("fi_write (reuse)", ret);
+		return ret;
+	}
+
+	ret = reuse_wait_one_comp(cq, "write");
+	if (ret)
+		return ret;
+
+	ret = ft_sync();
+	if (ret)
+		return ret;
+
+	/* Read */
+	ret = ft_hmem_memset(opts.iface, opts.device, slots[slot].buf,
+			     0, opts.transfer_size);
+	if (ret)
+		return ret;
+	ret = fi_read(local_ep_for_pair(p), slots[slot].buf, opts.transfer_size,
+		      slots[slot].desc, peer_addr_for_pair(p),
+		      remote_arr[slot].addr, remote_arr[slot].key, &reuse_ctx);
+	if (ret) {
+		FT_PRINTERR("fi_read (reuse)", ret);
+		return ret;
+	}
+
+	return reuse_wait_one_comp(cq, "read");
+}
+
+static int reuse_check_initiator(void)
+{
+	struct fi_cq_tagged_entry comp;
+	struct fi_cq_err_entry err;
+	int i, d, ret;
+
+	/*
+	 * Drain any residual error entries left by the abort test. The aborted
+	 * ops were spread across every local domain, so sweep each domain's TX
+	 * CQ until it goes idle rather than only the global one.
+	 */
+	for (d = 0; d < n_domains; d++) {
+		do {
+			ret = fi_cq_read(doms[d].txcq, &comp, 1);
+			if (ret == -FI_EAVAIL) {
+				memset(&err, 0, sizeof(err));
+				fi_cq_readerr(doms[d].txcq, &err, 0);
+				FT_INFO("Reuse drain: residual error %d (%s)\n",
+				       err.err, fi_strerror(err.err));
+			}
+		} while (ret != -FI_EAGAIN);
+	}
 
 	/* Close old MRs and re-register with both write and read access */
 	for (i = 0; i < num_mrs; i++)
@@ -1261,67 +1600,16 @@ static int reuse_check_initiator(void)
 	if (ret)
 		return ret;
 
-	/* Write */
-	ret = ft_hmem_memset(opts.iface, opts.device, slots[0].buf,
-			     0xAB, opts.transfer_size);
-	if (ret)
-		return ret;
-	ret = fi_write(ep, slots[0].buf, opts.transfer_size,
-		       slots[0].desc, remote_fi_addr,
-		       remote_arr[0].addr, remote_arr[0].key, &reuse_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_write (reuse)", ret);
-		return ret;
-	}
-
-	do {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret == -FI_EAVAIL) {
-			memset(&err, 0, sizeof(err));
-			fi_cq_readerr(txcq, &err, 0);
-			FT_ERR("Unexpected CQ error during reuse write:");
-			FT_CQ_ERR(txcq, err, NULL, 0);
-			return -err.err;
+	for (i = 0; i < n_reuse_pairs(); i++) {
+		ret = reuse_check_one_pair(i);
+		if (ret) {
+			FT_INFO("Reuse: pair %d FAIL\n", i);
+			return ret;
 		}
-	} while (ret == -FI_EAGAIN);
-	if (ret < 0) {
-		FT_PRINTERR("fi_cq_read (reuse write)", ret);
-		return ret;
 	}
 
-	ret = ft_sync();
-	if (ret)
-		return ret;
-
-	/* Read */
-	ret = ft_hmem_memset(opts.iface, opts.device, slots[0].buf,
-			     0, opts.transfer_size);
-	if (ret)
-		return ret;
-	ret = fi_read(ep, slots[0].buf, opts.transfer_size,
-		      slots[0].desc, remote_fi_addr,
-		      remote_arr[0].addr, remote_arr[0].key, &reuse_ctx);
-	if (ret) {
-		FT_PRINTERR("fi_read (reuse)", ret);
-		return ret;
-	}
-
-	do {
-		ret = fi_cq_read(txcq, &comp, 1);
-		if (ret == -FI_EAVAIL) {
-			memset(&err, 0, sizeof(err));
-			fi_cq_readerr(txcq, &err, 0);
-			FT_ERR("Unexpected CQ error during reuse read:");
-			FT_CQ_ERR(txcq, err, NULL, 0);
-			return -err.err;
-		}
-	} while (ret == -FI_EAGAIN);
-	if (ret < 0) {
-		FT_PRINTERR("fi_cq_read (reuse read)", ret);
-		return ret;
-	}
-
-	FT_INFO("Reuse: write ok, read ok ... PASS\n");
+	FT_INFO("Reuse: write ok, read ok on %d pair(s) ... PASS\n",
+		n_reuse_pairs());
 	return 0;
 }
 
@@ -1341,12 +1629,13 @@ static int reuse_check_target(void)
 	if (ret)
 		return ret;
 
-	/* Sync after initiator's write */
-	ret = ft_sync();
-	if (ret)
-		return ret;
+	/* One sync per pair, matching reuse_check_one_pair(). */
+	for (i = 0; i < n_reuse_pairs(); i++) {
+		ret = ft_sync();
+		if (ret)
+			return ret;
+	}
 
-	/* Initiator does read, no sync needed — target just keeps MRs alive */
 	return 0;
 }
 
@@ -1452,7 +1741,7 @@ static int run_send_abort_initiator(int iter)
 		{ .err = FI_EINVAL, .prov_errno = 5 },        /* local MR invalid */
 		{ .err = FI_ECANCELED, .prov_errno = 4127 },  /* peer abort: receiver detected the yanked source MR on its RDMA read and notified us via PEER_ERROR_PKT */
 	};
-	ret = drain_cq_counted(txcq, total_posted, send_initiator_errs,
+	ret = drain_cq_counted(total_posted, send_initiator_errs,
 			       ARRAY_SIZE(send_initiator_errs));
 	if (ret != 0)
 		return ret; /* drain_cq_counted hit unexpected error */
@@ -1510,10 +1799,11 @@ static int run_send_abort_initiator(int iter)
  * at its seeded depth (the buffer is app-owned and MUST go back). Retries
  * -FI_EAGAIN, draining the CQ to make room, until the deadline.
  */
-static int mr_abort_repost_recv(struct fid_cq *rxcq, struct op_ctx *o,
-				uint64_t deadline)
+static int mr_abort_repost_recv(struct op_ctx *o, uint64_t deadline)
 {
 	int repost_idx = (int) (o - op_arr);
+	/* Nudge progress on the domain this op reposts to. */
+	struct fid_cq *rxcq = op_dom(o->mr_idx)->rxcq;
 	int ret;
 
 	do {
@@ -1547,32 +1837,46 @@ static int target_recv_drain_one(struct expected_err *errs, int nerr,
 	struct fi_cq_tagged_entry comp;
 	struct fi_cq_err_entry err;
 	struct op_ctx *o;
+	struct fid_cq *rx;
 	int ret;
 
-	ret = fi_cq_read(rxcq, &comp, 1);
+	/*
+	 * Recvs are spread across every local domain, so poll the domains'
+	 * RX CQs round-robin: one domain per call, advancing a persistent
+	 * cursor so no domain is starved. Each call still reaps at most one
+	 * entry and returns 1/0/<0, matching the caller's counting loops; with
+	 * one domain the cursor is always 0 and this is a plain global-rxcq
+	 * read.
+	 */
+	static int cursor;
+
+	rx = doms[cursor].rxcq;
+	cursor = (cursor + 1) % n_domains;
+
+	ret = fi_cq_read(rx, &comp, 1);
 	if (ret > 0) {
 		(*recv_ok)++;
 		o = container_of(comp.op_context, struct op_ctx, context);
-		ret = mr_abort_repost_recv(rxcq, o,
+		ret = mr_abort_repost_recv(o,
 					   ft_gettime_ms() + CQ_FIRST_TIMEOUT_MS);
 		if (ret)
 			return ret;
 		return 1;
 	} else if (ret == -FI_EAVAIL) {
 		memset(&err, 0, sizeof(err));
-		ret = fi_cq_readerr(rxcq, &err, 0);
+		ret = fi_cq_readerr(rx, &err, 0);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cq_readerr", ret);
 			return ret;
 		}
 		if (!is_expected_err(&err, errs, nerr)) {
 			FT_ERR("Unexpected target recv error:");
-			FT_CQ_ERR(rxcq, err, NULL, 0);
+			FT_CQ_ERR(rx, err, NULL, 0);
 			return -FI_EOTHER;
 		}
 		(*recv_canceled)++;
 		o = container_of(err.op_context, struct op_ctx, context);
-		ret = mr_abort_repost_recv(rxcq, o,
+		ret = mr_abort_repost_recv(o,
 					   ft_gettime_ms() + CQ_FIRST_TIMEOUT_MS);
 		if (ret)
 			return ret;
@@ -1880,6 +2184,288 @@ static int run_mr_abort_test(int is_initiator)
 	return ret;
 }
 
+/*
+ * Enumerate from the initiator's side on both sides: both know the endpoint
+ * counts, so both derive the same array with nothing exchanged over the wire.
+ * Since only 1:1 and incast are allowed (enforced in main()),
+ * efa_calc_peer_distribution() returns exactly one peer per initiator endpoint.
+ */
+static int build_ep_pairs(void)
+{
+	int i, n, ret;
+	int *target_ids;
+
+	target_ep_for_pair = calloc(num_initiator_eps, sizeof(*target_ep_for_pair));
+	if (!target_ep_for_pair)
+		return -FI_ENOMEM;
+
+	for (i = 0; i < num_initiator_eps; i++) {
+		ret = efa_calc_peer_distribution(i, num_initiator_eps,
+						 num_target_eps, &n,
+						 &target_ids);
+		if (ret)
+			return ret;
+
+		assert(n == 1);
+		target_ep_for_pair[i] = target_ids[0];
+		free(target_ids);
+	}
+
+	FT_INFO("endpoint pairing: %d initiator ep(s), %d target ep(s)",
+		num_initiator_eps, num_target_eps);
+	for (i = 0; i < num_initiator_eps; i++)
+		FT_DEBUG("  pair %d: initiator ep %d <-> target ep %d", i, i,
+			 target_ep_for_pair[i]);
+
+	return 0;
+}
+
+/*
+ * Number of domains this side needs to hold its endpoints. eps_per_domain == 0
+ * means the caller did not ask for a spread, so everything goes on one domain.
+ */
+static int n_domains_needed(void)
+{
+	if (!eps_per_domain)
+		return 1;
+
+	return (n_local_eps + eps_per_domain - 1) / eps_per_domain;
+}
+
+/*
+ * Pick the domains this side will use, before ft_init_fabric() so that
+ * domain_names[0] becomes the domain ft_init_fabric() opens: the extra domains
+ * are opened alongside it in setup_eps(), leaving the single-domain path
+ * untouched.
+ */
+static int select_domains(void)
+{
+	int ret;
+
+	n_local_eps = opts.dst_addr ? num_initiator_eps : num_target_eps;
+	n_peer_eps = opts.dst_addr ? num_target_eps : num_initiator_eps;
+	n_domains = n_domains_needed();
+
+	/*
+	 * Counters live only on the global domain (ft_cntr_open() ignores the
+	 * extra ones), and this test drains CQs rather than reading counters, so
+	 * spreading endpoints across domains with -t counter would leave the
+	 * extra domains' endpoints with no completion object. Reject it rather
+	 * than silently drop the counters.
+	 */
+	if (n_domains > 1 &&
+	    (opts.options & (FT_OPT_TX_CNTR | FT_OPT_RX_CNTR))) {
+		FT_ERR("-t counter is not supported with multiple domains");
+		return -FI_EINVAL;
+	}
+
+	/*
+	 * Without a spread request there is nothing to select: hints carry
+	 * whatever -d asked for (if anything) and the provider picks.
+	 */
+	if (n_domains == 1 && !domains_csv)
+		return 0;
+
+	ret = efa_select_domains(hints, n_domains, domains_csv, &domain_names);
+	if (ret)
+		return ret;
+
+	free(hints->domain_attr->name);
+	hints->domain_attr->name = strdup(domain_names[0]);
+	if (!hints->domain_attr->name)
+		return -FI_ENOMEM;
+
+	return 0;
+}
+
+/*
+ * Open domain d (d >= 1) alongside the global domain, sharing the one global
+ * fabric. domain_names[d] pins fi_getinfo() to that specific device; the CQ and
+ * AV attrs are the same ones ft_init_fabric() used for domain 0, so the extra
+ * domains are configured identically to it.
+ */
+static int open_extra_domain(int d)
+{
+	struct mr_abort_domain *dom = &doms[d];
+	struct fi_info *dup;
+	int ret;
+
+	dup = fi_dupinfo(hints);
+	if (!dup)
+		return -FI_ENOMEM;
+
+	free(dup->domain_attr->name);
+	dup->domain_attr->name = strdup(domain_names[d]);
+	if (!dup->domain_attr->name) {
+		fi_freeinfo(dup);
+		return -FI_ENOMEM;
+	}
+
+	ret = fi_getinfo(ft_fiversion, NULL, NULL, 0, dup, &dom->info);
+	fi_freeinfo(dup);
+	if (ret) {
+		FT_PRINTERR("fi_getinfo", ret);
+		return ret;
+	}
+
+	ret = fi_domain(fabric, dom->info, &dom->domain, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_domain", ret);
+		return ret;
+	}
+
+	/*
+	 * Mirror ft_alloc_ep_res()'s domain-0 CQ sizing: cq_attr.format was set
+	 * by run() and is shared, but its size is left at domain 0's rx CQ, so
+	 * set it per CQ from this domain's own tx/rx attrs. The test never uses
+	 * shared or counter completions with n_domains > 1 (rejected in main()),
+	 * so a plain tx/rx CQ pair per domain is enough.
+	 */
+	cq_attr.size = dom->info->tx_attr->size;
+	ret = fi_cq_open(dom->domain, &cq_attr, &dom->txcq, &dom->txcq);
+	if (ret) {
+		FT_PRINTERR("fi_cq_open", ret);
+		return ret;
+	}
+
+	cq_attr.size = dom->info->rx_attr->size;
+	ret = fi_cq_open(dom->domain, &cq_attr, &dom->rxcq, &dom->rxcq);
+	if (ret) {
+		FT_PRINTERR("fi_cq_open", ret);
+		return ret;
+	}
+
+	ret = fi_av_open(dom->domain, &av_attr, &dom->av, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_av_open", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int setup_eps(void)
+{
+	char *remote_buf = NULL;
+	int i, d, ret;
+
+	ret = build_ep_pairs();
+	if (ret)
+		return ret;
+
+	/* Domain 0 aliases what ft_init_fabric() already opened. */
+	doms[0].domain = domain;
+	doms[0].txcq = txcq;
+	doms[0].rxcq = rxcq;
+	doms[0].av = av;
+	doms[0].info = fi;
+
+	for (d = 1; d < n_domains; d++) {
+		ret = open_extra_domain(d);
+		if (ret)
+			return ret;
+	}
+
+	for (d = 0; d < n_domains; d++) {
+		doms[d].peer_addrs = calloc(n_peer_eps,
+					    sizeof(*doms[d].peer_addrs));
+		if (!doms[d].peer_addrs)
+			return -FI_ENOMEM;
+	}
+
+	/*
+	 * Place endpoint i on its domain. eps[0] is the global ep on domain 0,
+	 * already enabled by ft_init_fabric(); the rest are opened here on the
+	 * domain dom_of(i) selects and bound to that domain's CQs and AV.
+	 * Counters are NULL for every domain: ft_cntr_open() only ever creates
+	 * them on the global domain, so binding one to a domain-1 endpoint would
+	 * fail. Nothing in this test reads counters (-t counter is rejected with
+	 * n_domains > 1).
+	 */
+	eps[0] = ep;
+	for (i = 1; i < n_local_eps; i++) {
+		d = dom_of(i);
+		ret = fi_endpoint(doms[d].domain, doms[d].info, &eps[i], NULL);
+		if (ret) {
+			FT_PRINTERR("fi_endpoint", ret);
+			return ret;
+		}
+		ret = ft_enable_ep(eps[i], eq, doms[d].av,
+				   doms[d].txcq, doms[d].rxcq, NULL, NULL, NULL);
+		if (ret)
+			return ret;
+	}
+
+	/*
+	 * Exchange raw peer addresses once, then insert them into every local
+	 * domain's AV: an fi_addr_t is only valid against the AV that produced
+	 * it, so a pair whose local endpoint lives on domain d must look its peer
+	 * up in doms[d].av.
+	 */
+	remote_buf = calloc(n_peer_eps, FT_MAX_CTRL_MSG);
+	if (!remote_buf)
+		return -FI_ENOMEM;
+
+	ret = efa_exchange_raw_addrs_oob(oob_sock, opts.dst_addr != NULL,
+					 eps, n_local_eps, remote_buf,
+					 n_peer_eps);
+	if (ret)
+		goto out;
+
+	for (d = 0; d < n_domains; d++) {
+		ret = efa_insert_raw_addrs(doms[d].av, remote_buf, n_peer_eps,
+					   doms[d].peer_addrs);
+		if (ret)
+			goto out;
+	}
+
+	/* Legacy alias: pair 0 lives on domain 0, peer 0. */
+	remote_fi_addr = doms[0].peer_addrs[0];
+out:
+	free(remote_buf);
+	return ret;
+}
+
+/*
+ * Close the extra domains and their resources (index 0 is owned by
+ * ft_free_res() and must be left alone), in the reverse of setup order: the
+ * endpoints on a domain must be closed before its CQs, AV and the domain
+ * itself. eps[0] is closed by ft_free_res(); teardown_eps() only handles the
+ * extra endpoints, and NULLs them so run()'s -A ep_first path stays idempotent.
+ */
+static void teardown_eps(void)
+{
+	int d, i;
+
+	for (i = 1; i < n_local_eps; i++) {
+		if (eps[i]) {
+			fi_close(&eps[i]->fid);
+			eps[i] = NULL;
+		}
+	}
+
+	for (d = 0; d < n_domains; d++) {
+		free(doms[d].peer_addrs);
+		doms[d].peer_addrs = NULL;
+	}
+
+	for (d = 1; d < n_domains; d++) {
+		FT_CLOSE_FID(doms[d].txcq);
+		FT_CLOSE_FID(doms[d].rxcq);
+		FT_CLOSE_FID(doms[d].av);
+		FT_CLOSE_FID(doms[d].domain);
+		if (doms[d].info) {
+			fi_freeinfo(doms[d].info);
+			doms[d].info = NULL;
+		}
+	}
+
+	free(target_ep_for_pair);
+	target_ep_for_pair = NULL;
+	efa_free_domain_names(domain_names);
+	domain_names = NULL;
+}
+
 static int run(void)
 {
 	int ret;
@@ -1888,12 +2474,23 @@ static int run(void)
 	if (close_side == CLOSE_TARGET || opts.rma_op == FT_RMA_WRITEDATA)
 		cq_attr.format = FI_CQ_FORMAT_DATA;
 
+	opts.options |= FT_OPT_SKIP_ADDR_EXCH;
+
+	ret = select_domains();
+	if (ret)
+		return ret;
+
 	ret = ft_init_fabric();
+	if (ret)
+		return ret;
+
+	ret = setup_eps();
 	if (ret)
 		return ret;
 
 	if (set_homogeneous_peers) {
 		bool homogeneous = true;
+		int i;
 		/*
 		 * Tell the EP all peers are homogeneous so it skips the
 		 * handshake requirement before using an extra-feature,
@@ -1902,6 +2499,10 @@ static int run(void)
 		 * send, so the target is reliably owed -- and can enforce via
 		 * -X -- exactly one completion per op.
 		 *
+		 * Set on every local endpoint: the option is per-EP, so an EP
+		 * left without it would still handshake and make the -X contract
+		 * depend on which endpoint an op was routed to.
+		 *
 		 * Normally this option is set before fi_enable(), but
 		 * ft_init_fabric() has already enabled the EP. Setting it here
 		 * is still correct: EFA's setopt handler has no enable-state
@@ -1909,12 +2510,14 @@ static int run(void)
 		 * (efa_rdm_msg_post_rtm), not at enable. No send has been posted
 		 * yet at this point, so the value is in effect for every op.
 		 */
-		ret = fi_setopt(&ep->fid, FI_OPT_ENDPOINT,
-				FI_OPT_EFA_HOMOGENEOUS_PEERS,
-				&homogeneous, sizeof(homogeneous));
-		if (ret) {
-			FT_PRINTERR("fi_setopt(HOMOGENEOUS_PEERS)", ret);
-			return ret;
+		for (i = 0; i < n_local_eps; i++) {
+			ret = fi_setopt(&eps[i]->fid, FI_OPT_ENDPOINT,
+					FI_OPT_EFA_HOMOGENEOUS_PEERS,
+					&homogeneous, sizeof(homogeneous));
+			if (ret) {
+				FT_PRINTERR("fi_setopt(HOMOGENEOUS_PEERS)", ret);
+				return ret;
+			}
 		}
 	}
 
@@ -1927,10 +2530,20 @@ static int run(void)
 	/*
 	 * Target teardown order: EFA requires the endpoint to be closed
 	 * before recv buffer MRs can be deregistered. Use -A ep_first
-	 * to close the EP before freeing test MRs.
+	 * to close the EP before freeing test MRs. eps[0] == ep is closed
+	 * by ft_free_res(); the extra EPs are closed here.
 	 */
-	if (close_ep_first && !opts.dst_addr)
+	if (close_ep_first && !opts.dst_addr) {
+		int i;
+
+		for (i = 1; i < n_local_eps; i++) {
+			if (eps[i]) {
+				FT_CLOSE_FID(eps[i]);
+				eps[i] = NULL;
+			}
+		}
 		FT_CLOSE_FID(ep);
+	}
 
 	if (!ret)
 		ret = free_test_res();
@@ -1940,7 +2553,40 @@ static int run(void)
 	if (!ret)
 		ft_finalize();
 
+	teardown_eps();
+
 	return ret;
+}
+
+/* mr_abort-only options appended to the shared efa_long_opts table. */
+static struct option mr_abort_extra_opts[] = {
+	{"num-target-eps", required_argument, NULL, OPT_NUM_TARGET_EPS},
+	{"num-initiator-eps", required_argument, NULL, OPT_NUM_INITIATOR_EPS},
+	{0, 0, 0, 0}
+};
+
+static struct option *mr_abort_long_opts;
+
+static int build_mr_abort_long_opts(void)
+{
+	int efa_cnt, extra_cnt, i;
+
+	build_efa_long_opts();
+
+	for (efa_cnt = 0; efa_long_opts[efa_cnt].name; efa_cnt++)
+		;
+	extra_cnt = sizeof(mr_abort_extra_opts) / sizeof(mr_abort_extra_opts[0]) - 1;
+
+	mr_abort_long_opts = calloc(efa_cnt + extra_cnt + 1, sizeof(struct option));
+	if (!mr_abort_long_opts)
+		return -FI_ENOMEM;
+
+	for (i = 0; i < extra_cnt; i++)
+		mr_abort_long_opts[i] = mr_abort_extra_opts[i];
+	for (i = 0; i < efa_cnt; i++)
+		mr_abort_long_opts[extra_cnt + i] = efa_long_opts[i];
+
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -1952,7 +2598,8 @@ int main(int argc, char **argv)
 	opts.transfer_size = 4096; /* 4KB default — override with -S */
 	opts.iterations = 10;
 	opts.cqdata_op = 0;
-	build_efa_long_opts();
+	if (build_mr_abort_long_opts())
+		return EXIT_FAILURE;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -1962,13 +2609,43 @@ int main(int argc, char **argv)
 
 	while ((op = getopt_long(argc, argv,
 				 "W:N:C:R:T:A:r:XHh" CS_OPTS INFO_OPTS API_OPTS,
-				 efa_long_opts, &lopt_idx)) != -1) {
+				 mr_abort_long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		case OPT_HIGH_PPS:
 			use_high_pps = true;
 			break;
 		case OPT_SL_LOW_LATENCY:
 			sl_low_latency = true;
+			break;
+		case OPT_NUM_EPS:
+			num_target_eps = num_initiator_eps = atoi(optarg);
+			num_eps_set = true;
+			break;
+		case OPT_NUM_TARGET_EPS:
+			num_target_eps = atoi(optarg);
+			target_eps_set = true;
+			break;
+		case OPT_NUM_INITIATOR_EPS:
+			num_initiator_eps = atoi(optarg);
+			initiator_eps_set = true;
+			break;
+		case OPT_EPS_PER_DOMAIN:
+			eps_per_domain = atoi(optarg);
+			if (eps_per_domain < 1) {
+				FT_ERR("--eps-per-domain must be positive");
+				return EXIT_FAILURE;
+			}
+			break;
+		case OPT_DOMAINS:
+			domains_csv = optarg;
+			break;
+		/*
+		 * Handled here rather than falling through to ft_parseinfo()
+		 * alone so that --domains can reject being combined with it.
+		 */
+		case 'd':
+			domain_opt_set = true;
+			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case 'W':
 			num_mrs = atoi(optarg);
@@ -2069,6 +2746,11 @@ int main(int argc, char **argv)
 				"Aborted send/tagged ops are owed a target "
 				"recv completion (LONGCTS/LONGREAD); only "
 				"valid with -T send|tagged");
+			FT_PRINT_OPTS_USAGE("--num-target-eps <n>",
+				"Number of endpoints on the target side");
+			FT_PRINT_OPTS_USAGE("--num-initiator-eps <n>",
+				"Number of endpoints on the initiator side "
+				"(>= --num-target-eps; incast)");
 			efa_longopts_usage();
 			return EXIT_FAILURE;
 		}
@@ -2079,6 +2761,46 @@ int main(int argc, char **argv)
 
 	if (num_mrs <= 0 || ops_per_mr <= 0) {
 		FT_ERR("-W and -N must be positive");
+		return EXIT_FAILURE;
+	}
+
+	if (num_eps_set && (target_eps_set || initiator_eps_set)) {
+		FT_ERR("use --num-eps OR --num-target-eps/--num-initiator-eps, "
+		       "not both");
+		return EXIT_FAILURE;
+	}
+
+	if (num_target_eps < 1 || num_target_eps > EFA_MR_ABORT_MAX_EPS ||
+	    num_initiator_eps < 1 || num_initiator_eps > EFA_MR_ABORT_MAX_EPS) {
+		FT_ERR("endpoint counts must be 1-%d", EFA_MR_ABORT_MAX_EPS);
+		return EXIT_FAILURE;
+	}
+
+	/*
+	 * -d names a single domain and --domains names the set to spread over,
+	 * so honoring both is ambiguous. --domains without --eps-per-domain is
+	 * likewise ambiguous: it says which domains to use but not how to fill
+	 * them, and silently defaulting to "everything on the first" would
+	 * quietly ignore the rest of the list.
+	 */
+	if (domain_opt_set && domains_csv) {
+		FT_ERR("use -d OR --domains, not both");
+		return EXIT_FAILURE;
+	}
+
+	if (domains_csv && !eps_per_domain) {
+		FT_ERR("--domains requires --eps-per-domain");
+		return EXIT_FAILURE;
+	}
+
+	/*
+	 * Outcast would give an initiator endpoint more than one peer, so a pair
+	 * index would no longer name one pair. build_ep_pairs() relies on that.
+	 */
+	if (num_initiator_eps < num_target_eps) {
+		FT_ERR("outcast is not supported: --num-initiator-eps (%d) must be "
+		       ">= --num-target-eps (%d)", num_initiator_eps,
+		       num_target_eps);
 		return EXIT_FAILURE;
 	}
 
@@ -2129,9 +2851,9 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	/* Partial test only uses slot 0 + one extra MR */
+	/* One slot per pair; -W does not apply. */
 	if (test_mode == TEST_PARTIAL)
-		num_mrs = 1;
+		num_mrs = num_initiator_eps;
 
 	hints->caps = FI_MSG;
 	switch (test_mode) {
