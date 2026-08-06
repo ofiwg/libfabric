@@ -107,6 +107,8 @@ struct fi_ops_ep {
 			void *context);
 	ssize_t (*rx_size_left)(struct fid_ep *ep);
 	ssize_t (*tx_size_left)(struct fid_ep *ep);
+	int	(*export_xpu)(struct fid_ep *ep, uint64_t flags,
+			void **xpu_ep, size_t *size);
 };
 
 struct fi_ops_msg {

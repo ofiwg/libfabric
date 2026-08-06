@@ -70,6 +70,7 @@ struct fi_av_attr {
 	const char		*name;
 	void			*map_addr;
 	uint64_t		flags;
+	struct fi_xpu_attr	*xpu_attr;
 };
 
 struct fi_av_set_attr {
@@ -109,6 +110,8 @@ struct fi_ops_av {
 				   void *auth_key, size_t *auth_key_size);
 	int	(*set_user_id)(struct fid_av *av, fi_addr_t fi_addr,
 			       fi_addr_t user_id, uint64_t flags);
+	int	(*get_xpu_addr)(struct fid_av *av, fi_addr_t fi_addr,
+			void *buf, size_t *len);
 };
 
 struct fid_av {
@@ -185,6 +188,7 @@ struct fi_mr_attr {
 	size_t			page_size;
 	const struct fid_mr	*base_mr;
 	size_t			sub_mr_cnt;
+	struct fi_xpu_attr	*xpu_attr;
 };
 
 struct fi_mr_modify {
@@ -338,6 +342,8 @@ struct fi_ops_mr {
 			uint64_t flags, struct fid_mr **mr, void *context);
 	int	(*regattr)(struct fid *fid, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr);
+	int	(*get_xpu_desc)(struct fid_mr *mr,
+			void *buf, size_t *len);
 };
 
 /* Domain bind flags */

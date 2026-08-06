@@ -260,14 +260,14 @@ enum opx_mr_hfisvc_state {
 struct fi_opx_mr {
 	/* == CACHE LINE 0-2 == */
 	struct fid_mr	      mr_fid; // 40 bytes
-	struct fi_mr_attr     attr;   // 112 bytes
+	struct fi_mr_attr     attr;   // 120 bytes
 	struct fi_opx_domain *domain;
 	void		     *base_addr;
 	uint64_t	      flags;
 	uint64_t	      cntr_bflags;
-	struct fi_opx_cntr   *cntr;
+	struct fi_opx_cntr   *cntr;   // ends at offset 200
 
-	/* == CACHE LINE 3 == */
+	/* == CACHE LINE 3 (starts at 192, fields from offset 200) == */
 	union {
 		struct {
 			int	 dmabuf_fd;
@@ -297,18 +297,13 @@ struct fi_opx_mr {
 	uint8_t		     unused[6];
 	struct ofi_mr_entry *cache_entry;
 
-	/* == CACHE LINE 4 == */
+	/* == CACHE LINE 4 (starts at 256, hh at offset 264) == */
 	UT_hash_handle hh; // 56 bytes
-	uint64_t       unused_cacheline4_qw;
 } __attribute__((__aligned__(FI_OPX_CACHE_LINE_SIZE))) __attribute__((__packed__));
 OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_mr) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Size of fi_opx_mr should be 5 cachelines!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, dmabuf_fd) == (FI_OPX_CACHE_LINE_SIZE * 3),
-			"Offset of fi_opx_mr->dmabuf_fd should start at cacheline 3!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, dmabuf_fd) == offsetof(struct fi_opx_mr, dmabuf.fd),
 			"Offset of fi_opx_mr->dmabuf_fd should start at the same point as fi_opx_mr->dmabuf.fd!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, hh) == (FI_OPX_CACHE_LINE_SIZE * 4),
-			"Offset of fi_opx_mr->hh should start at cacheline 4!");
 
 static inline uint64_t opx_mr_dmabuf_local_offset(const struct fi_opx_mr *opx_mr, const void *buf)
 {

@@ -1019,6 +1019,12 @@ to report additional completions once the overrun occurs.
 Fabric errno values are defined in
 `rdma/fi_errno.h`.
 
+## xpu_attr
+
+Pointer to struct fi_xpu_attr. When set along with the FI_XPU capability,
+indicates this object will be used for accelerator-initiated communication.
+See [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),

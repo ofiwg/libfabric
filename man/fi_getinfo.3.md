@@ -465,6 +465,13 @@ additional optimizations.
   that FI_TRIGGER be set.  For additional details on XPU triggers see
   [`fi_trigger`(3)](fi_trigger.3.html).
 
+*FI_XPU*
+: Specifies that the endpoint should support accelerator-initiated
+  communication, where data transfers are posted directly from an
+  accelerator device (GPU, FPGA, or other XPU) without CPU involvement
+  in the data path. This capability requires FI_HMEM. See
+  [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 Capabilities may be grouped into three general categories: primary,
 secondary, and primary modifiers.  Primary capabilities must explicitly
 be requested by an application, and a provider must enable support for
