@@ -212,11 +212,15 @@ vrb_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	return cur ? cur : ret;
 }
 
-int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
+int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc, struct vrb_ep **ep_out,
+		void **recv_buf_out)
 {
 	struct vrb_context *ctx;
 	struct vrb_ep *ep;
 	int ret;
+
+	*ep_out = NULL;
+	*recv_buf_out = NULL;
 
 	assert(ofi_genlock_held(vrb_cq2_progress(cq)->active_lock));
 	do {
@@ -247,6 +251,8 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 			(void) slist_remove_head(&ep->rq_list);
 			if (wc->status)
 				wc->opcode = IBV_WC_RECV;
+			*ep_out = ep;
+			*recv_buf_out = ctx->recv_buf;
 		} else {
 			assert(ctx->op_queue == VRB_OP_SRQ);
 			wc->opcode = IBV_WC_RECV;
@@ -258,7 +264,78 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 	return ret;
 }
 
-void vrb_report_wc(struct vrb_cq *cq, struct ibv_wc *wc)
+static void vrb_dgram_build_src_ep_name_from_key(
+	const struct vrb_dgram_av_lookup_key_ht *key, struct vrb_ep *ep,
+	struct ofi_ib_ud_ep_name *name)
+{
+	memset(name, 0, sizeof(*name));
+	name->gid = key->gid;
+	name->qpn = key->qpn;
+	name->lid = key->lid;
+	name->sl = key->sl;
+	name->pkey = ep->ep_name.pkey;
+}
+
+static void vrb_dgram_cq_report_src_ep_name(struct vrb_cq *cq,
+					    struct ibv_wc *wc,
+					    struct vrb_ep *ep, void *recv_buf,
+					    uint64_t flags, size_t len,
+					    uint64_t data)
+{
+	struct vrb_dgram_av_lookup_key_ht key;
+	struct ibv_grh *grh = (struct ibv_grh *) recv_buf;
+	struct vrb_dgram_av *av;
+	fi_addr_t src_addr;
+
+	memset(&key, 0, sizeof(key));
+	key.gid = grh->sgid;
+	key.qpn = wc->src_qp;
+	key.lid = wc->slid;
+	key.sl = wc->sl;
+
+	av = container_of(ep->util_ep.av, struct vrb_dgram_av, util_av);
+	src_addr = vrb_dgram_av_reverse_lookup_ep_name(av, &key);
+
+	if (src_addr != FI_ADDR_NOTAVAIL) {
+		VRB_DBG(FI_LOG_CQ,
+			 "FI_SOURCE: reverse lookup hit, src_addr=%ld\n",
+			 (long) src_addr);
+		(void) ofi_cq_write_src(&cq->util_cq,
+					(void *) (uintptr_t) wc->wr_id, flags,
+					len, NULL, data, 0, src_addr);
+	} else if (cq->util_cq.domain->info_domain_caps & FI_SOURCE_ERR) {
+		struct ofi_ib_ud_ep_name src_name;
+		struct fi_cq_err_entry err_entry;
+
+		vrb_dgram_build_src_ep_name_from_key(&key, ep, &src_name);
+		VRB_DBG(FI_LOG_CQ,
+			 "FI_SOURCE_ERR: reverse lookup miss, writing error "
+			 "lid=%u qpn=%u err_data_size=%zu\n",
+			 src_name.lid, src_name.qpn, sizeof(src_name));
+
+		err_entry.op_context = (void *) (uintptr_t) wc->wr_id;
+		err_entry.flags = flags;
+		err_entry.len = len;
+		err_entry.buf = NULL;
+		err_entry.data = data;
+		err_entry.tag = 0;
+		err_entry.olen = 0;
+		err_entry.err = FI_EADDRNOTAVAIL;
+		err_entry.prov_errno = 0;
+		err_entry.err_data = &src_name;
+		err_entry.err_data_size = sizeof(src_name);
+		err_entry.src_addr = FI_ADDR_NOTAVAIL;
+
+		(void) ofi_cq_write_error(&cq->util_cq, &err_entry);
+	} else {
+		(void) ofi_cq_write_src(&cq->util_cq,
+					(void *) (uintptr_t) wc->wr_id, flags,
+					len, NULL, data, 0, FI_ADDR_NOTAVAIL);
+	}
+}
+
+void vrb_report_wc(struct vrb_cq *cq, struct ibv_wc *wc,
+		   struct vrb_ep *ep, void *recv_buf)
 {
 	struct fi_cq_err_entry err_entry;
 	uint64_t flags, data;
@@ -284,23 +361,34 @@ void vrb_report_wc(struct vrb_cq *cq, struct ibv_wc *wc)
 		(void) ofi_cq_write_error(&cq->util_cq, &err_entry);
 	} else {
 		vrb_get_cq_info(wc, &flags, &data, &len);
-		(void) ofi_cq_write(&cq->util_cq, (void *) (uintptr_t) wc->wr_id,
-				    flags, len, NULL, data, 0);
+
+		if (ep && ep->util_ep.type == FI_EP_DGRAM && recv_buf &&
+		    (wc->opcode == IBV_WC_RECV) &&
+		    (cq->util_cq.domain->info_domain_caps & FI_SOURCE)) {
+			vrb_dgram_cq_report_src_ep_name(cq, wc, ep, recv_buf,
+							flags, len, data);
+		} else {
+			(void) ofi_cq_write(&cq->util_cq,
+					    (void *) (uintptr_t) wc->wr_id,
+					    flags, len, NULL, data, 0);
+		}
 	}
 }
 
 void vrb_flush_cq(struct vrb_cq *cq)
 {
 	struct ibv_wc wc;
+	struct vrb_ep *ep;
+	void *recv_buf;
 	ssize_t ret;
 
 	assert(ofi_genlock_held(vrb_cq2_progress(cq)->active_lock));
 	while (1) {
-		ret = vrb_poll_cq(cq, &wc);
+		ret = vrb_poll_cq(cq, &wc, &ep, &recv_buf);
 		if (ret <= 0)
 			break;
 
-		vrb_report_wc(cq, &wc);
+		vrb_report_wc(cq, &wc, ep, recv_buf);
 	};
 }
 
@@ -619,7 +707,7 @@ int vrb_init_progress(struct vrb_progress *progress, struct fi_info *info)
 	/* Active lock will be needed when adding rdm ep support */
 	progress->active_lock = &progress->ep_lock;
 
-	ret = ofi_bufpool_create(&progress->ctx_pool, sizeof(struct fi_context),
+	ret = ofi_bufpool_create(&progress->ctx_pool, sizeof(struct vrb_context),
 				 16, 0, 1024, OFI_BUFPOOL_NO_TRACK);
 	if (ret)
 		goto err1;
