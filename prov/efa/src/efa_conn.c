@@ -389,39 +389,27 @@ err_release:
 	return NULL;
 }
 
-void efa_conn_release_reverse_av(struct efa_av *av, struct efa_conn *conn,
-				 bool release_from_implicit_av)
+void efa_conn_release_reverse_av_explicit(struct efa_av *av, struct efa_conn *conn)
 {
-	if (release_from_implicit_av) {
-		assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-		efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
-					 &av->prv_reverse_av_implicit, conn);
-	} else {
-		assert(ofi_genlock_held(&av->util_av.lock));
-		efa_av_reverse_av_remove(&av->cur_reverse_av,
-					 &av->prv_reverse_av, conn);
-	}
+	assert(ofi_genlock_held(&av->util_av.lock));
+	efa_av_reverse_av_remove(&av->cur_reverse_av, &av->prv_reverse_av,
+				 conn);
 }
 
-void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
-			      bool release_from_implicit_av)
+void efa_conn_release_reverse_av_implicit(struct efa_av *av, struct efa_conn *conn)
 {
-	struct util_av *util_av;
+	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
+				 &av->prv_reverse_av_implicit, conn);
+}
+
+static void efa_conn_release_util_av_common(struct util_av *util_av,
+					    struct efa_conn *conn, fi_addr_t fi_addr)
+{
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *efa_av_entry;
 	char gidstr[INET6_ADDRSTRLEN];
-	fi_addr_t fi_addr;
 	int err;
-
-	if (release_from_implicit_av) {
-		assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-		util_av = &av->util_av_implicit;
-		fi_addr = conn->implicit_fi_addr;
-	} else {
-		assert(ofi_genlock_held(&av->util_av.lock));
-		util_av = &av->util_av;
-		fi_addr = conn->fi_addr;
-	}
 
 	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
 	assert(util_av_entry);
@@ -440,6 +428,18 @@ void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
 	memset(efa_av_entry->ep_addr, 0, EFA_EP_ADDR_LEN);
 }
 
+void efa_conn_release_util_av_explicit(struct efa_av *av, struct efa_conn *conn)
+{
+	assert(ofi_genlock_held(&av->util_av.lock));
+	efa_conn_release_util_av_common(&av->util_av, conn, conn->fi_addr);
+}
+
+void efa_conn_release_util_av_implicit(struct efa_av *av, struct efa_conn *conn)
+{
+	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+	efa_conn_release_util_av_common(&av->util_av_implicit, conn, conn->implicit_fi_addr);
+}
+
 /**
  * @brief release an efa conn object
  * Caller of this function must obtain av->util_av.lock or
@@ -454,7 +454,12 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 		      bool release_from_implicit_av)
 	OFI_TSA_NO_ANALYSIS // util_domain.lock is not taken during AV remove and close
 {
-	efa_conn_release_reverse_av(av, conn, release_from_implicit_av);
+	if (release_from_implicit_av) {
+		efa_conn_release_reverse_av_implicit(av, conn);
+	} else {
+		efa_conn_release_reverse_av_explicit(av, conn);
+	}
+
 	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
 
@@ -463,7 +468,11 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 
 	efa_ah_release(av->domain, conn->ah, release_from_implicit_av);
 
-	efa_conn_release_util_av(av, conn, release_from_implicit_av);
+	if (release_from_implicit_av) {
+		efa_conn_release_util_av_implicit(av, conn);
+	} else {
+		efa_conn_release_util_av_explicit(av, conn);
+	}
 }
 
 /**
@@ -480,13 +489,13 @@ void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *con
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-	efa_conn_release_reverse_av(av, conn, true);
+	efa_conn_release_reverse_av_implicit(av, conn);
 
 	efa_conn_rdm_deinit(av, conn);
 
 	assert(ofi_genlock_held(&av->domain->util_domain.lock));
 	dlist_remove(&conn->ah_implicit_conn_list_entry);
-	efa_conn_release_util_av(av, conn, true);
+	efa_conn_release_util_av_implicit(av, conn);
 	conn->ah->implicit_refcnt--;
 }
 
