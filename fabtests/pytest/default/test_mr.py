@@ -7,6 +7,7 @@ def test_mr(cmdline_args):
     test = UnitTest(cmdline_args, "fi_mr_test")
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 @pytest.mark.parametrize("endpoint_type", ["msg", "rdm"])
 def test_multi_mr(cmdline_args, endpoint_type):

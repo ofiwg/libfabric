@@ -1,7 +1,7 @@
 import pytest
 
 @pytest.mark.parametrize("ubertest_test_type",
-                         [pytest.param("quick", marks=pytest.mark.ubertest_quick),
+                         [pytest.param("quick", marks=[pytest.mark.ubertest_quick, pytest.mark.pr_ci]),
                           pytest.param("all", marks=pytest.mark.ubertest_all),
                           pytest.param("verify", marks=pytest.mark.ubertest_verify)])
 def test_ubertest(cmdline_args, ubertest_test_type):

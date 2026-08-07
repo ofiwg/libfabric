@@ -1,5 +1,6 @@
 import pytest
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 @pytest.mark.parametrize("api_type", ["sendmsg", "post_tx"])
 @pytest.mark.parametrize("flag", ["inject", "inj_complete"])

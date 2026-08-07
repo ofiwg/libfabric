@@ -1,5 +1,6 @@
 import pytest
 
+@pytest.mark.pr_ci
 @pytest.mark.unit
 def test_rdm_g00n13s(cmdline_args):
     from common import UnitTest
@@ -13,12 +14,14 @@ def test_rdm(cmdline_args, completion_semantic):
     test = ClientServerTest(cmdline_args, "fi_rdm", completion_semantic=completion_semantic)
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_rdm_rma_event(cmdline_args):
     from common import ClientServerTest
     test = ClientServerTest(cmdline_args, "fi_rdm_rma_event")
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_rdm_rma_trigger(cmdline_args):
     from common import ClientServerTest
@@ -32,6 +35,7 @@ def test_rdm_tagged_peek(cmdline_args):
     test = ClientServerTest(cmdline_args, "fi_rdm_tagged_peek")
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_rdm_shared_av(cmdline_args):
     from common import ClientServerTest
@@ -57,6 +61,7 @@ def test_rdm_atomic(cmdline_args, iteration_type, completion_semantic):
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rdm_cntr_pingpong(cmdline_args, iteration_type):
     from common import ClientServerTest
     test = ClientServerTest(cmdline_args, "fi_rdm_cntr_pingpong", iteration_type)
@@ -87,6 +92,7 @@ def test_rdm_tagged_pingpong(cmdline_args, iteration_type,
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rdm_tagged_bw(cmdline_args, iteration_type, datacheck_type, completion_semantic):
     from common import ClientServerTest
     test = ClientServerTest(cmdline_args, "fi_rdm_tagged_bw", iteration_type,
@@ -96,6 +102,7 @@ def test_rdm_tagged_bw(cmdline_args, iteration_type, datacheck_type, completion_
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
+@pytest.mark.pr_ci
 def test_rdm_bw_mt(cmdline_args, iteration_type, datacheck_type, completion_semantic):
     from common import ClientServerTest
     test = ClientServerTest(cmdline_args, "fi_rdm_bw_mt -n 4", iteration_type,
