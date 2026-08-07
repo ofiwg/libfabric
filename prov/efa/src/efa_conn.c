@@ -286,6 +286,15 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 		goto err_release;
 	}
 
+	err = efa_av_array_insert(av->addr_to_conn_map, fi_addr, conn);
+	if (err) {
+		efa_conn_release_reverse_av(av, conn, false);
+		if (av->domain->info_type == EFA_INFO_RDM) {
+			assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
+			efa_conn_rdm_deinit(av, conn);
+		}
+		goto err_release;
+	}
 	return conn;
 
 err_release:
@@ -378,9 +387,16 @@ struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *
 		goto err_release;
 	}
 
+	err = efa_av_array_insert(av->addr_to_conn_map_implicit, fi_addr, conn);
+	if (err) {
+		efa_conn_release_reverse_av(av, conn, true);
+		efa_conn_rdm_deinit(av, conn);
+		goto err_release;
+	}
 	return conn;
 
 err_release:
+	dlist_remove(&conn->implicit_av_lru_entry);
 	if (conn->ah) {
 		dlist_remove(&conn->ah_implicit_conn_list_entry);
 		efa_ah_release(av->domain, conn->ah, true);
@@ -432,6 +448,12 @@ void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
 	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
 	assert(util_av_entry);
 	efa_av_entry = (struct efa_av_entry *) util_av_entry->data;
+
+	if (release_from_implicit_av) {
+		efa_av_array_insert(av->addr_to_conn_map_implicit, fi_addr, NULL);
+	} else {
+		efa_av_array_insert(av->addr_to_conn_map, fi_addr, NULL);
+	}
 
 	err = ofi_av_remove_addr(util_av, fi_addr);
 	if (err) {

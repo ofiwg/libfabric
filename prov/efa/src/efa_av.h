@@ -8,6 +8,7 @@
 #include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_peer.h"
 #include "efa_ah.h"
+#include "efa_av_array.h"
 #include "efa_conn.h"
 #include "efa_thread_annotations.h"
 
@@ -71,6 +72,8 @@ struct efa_av {
 	struct efa_cur_reverse_av *cur_reverse_av;
 	struct efa_prv_reverse_av *prv_reverse_av;
 	struct util_av util_av;
+	struct efa_av_array *addr_to_conn_map;
+	struct efa_av_array *addr_to_conn_map_implicit;
 
 	/* implicit AV is used when receiving messages from peers not explicity
 	 * inserted by the application

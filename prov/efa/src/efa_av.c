@@ -15,22 +15,10 @@
 #include "rdm/efa_rdm_fabric.h"
 #include "rdm/efa_rdm_pke_utils.h"
 
-static inline struct efa_conn *efa_av_addr_to_conn_impl(struct util_av *util_av,
-							fi_addr_t fi_addr)
-{
-	struct util_av_entry *util_av_entry;
-	struct efa_av_entry *efa_av_entry;
-
+static inline struct efa_conn *efa_av_addr_to_conn_impl(struct efa_av_array *conn_map, fi_addr_t fi_addr){
 	if (OFI_UNLIKELY(fi_addr == FI_ADDR_UNSPEC || fi_addr == FI_ADDR_NOTAVAIL))
 		return NULL;
-
-	if (OFI_LIKELY(ofi_bufpool_ibuf_is_valid(util_av->av_entry_pool, fi_addr)))
-		util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
-	else
-		return NULL;
-
-	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
-	return efa_av_entry->conn.ep_addr ? &efa_av_entry->conn : NULL;
+	return efa_av_array_at(conn_map, fi_addr);
 }
 
 /**
@@ -43,7 +31,7 @@ static inline struct efa_conn *efa_av_addr_to_conn_impl(struct util_av *util_av,
  */
 struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 {
-	return efa_av_addr_to_conn_impl(&av->util_av, fi_addr);
+	return efa_av_addr_to_conn_impl(av->addr_to_conn_map, fi_addr);
 }
 
 /**
@@ -56,7 +44,7 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
  */
 struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av, fi_addr_t fi_addr)
 {
-	return efa_av_addr_to_conn_impl(&av->util_av_implicit, fi_addr);
+	return efa_av_addr_to_conn_impl(av->addr_to_conn_map_implicit, fi_addr);
 }
 
 /**
@@ -399,6 +387,18 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	assert(efa_is_same_addr(
 		raw_addr, (struct efa_ep_addr *) explicit_av_entry->ep_addr));
 
+	/* Reserve under util_av.lock before moving implicit state so the final
+	 * publish cannot fail due to allocation and require a partial rollback. */
+	err = efa_av_array_insert(av->addr_to_conn_map, *fi_addr, NULL);
+	if (err) {
+		int cleanup_err;
+		cleanup_err = ofi_av_remove_addr(&av->util_av, *fi_addr);
+		if (cleanup_err)
+			EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n", cleanup_err);
+		/* Leave the address uninserted; the application may retry fi_av_insert(). */
+		return err;
+	}
+
 	/* Copy information from implicit conn to explicit conn */
 	explicit_conn = &explicit_av_entry->conn;
 	memset(explicit_conn, 0, sizeof(*explicit_conn));
@@ -408,6 +408,21 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	explicit_conn->fi_addr = *fi_addr;
 	explicit_conn->shm_fi_addr = implicit_conn->shm_fi_addr;
 	explicit_conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
+
+	err = efa_av_reverse_av_add(av, &av->cur_reverse_av, &av->prv_reverse_av, explicit_conn);
+	if (err) {
+		ofi_av_remove_addr(&av->util_av, *fi_addr);
+		return err;
+	}
+
+	/* Stop new lookups before removing the implicit connection. */
+	err = efa_av_array_insert(av->addr_to_conn_map_implicit, implicit_fi_addr, NULL);
+	if (OFI_UNLIKELY(err)) {
+		efa_conn_release_reverse_av(av, explicit_conn, false);
+		ofi_av_remove_addr(&av->util_av, *fi_addr);
+		return err;
+	}
+
 	HASH_ITER(hh, implicit_conn->ep_peer_map, map_entry, tmp) {
 		HASH_DELETE(hh, implicit_conn->ep_peer_map, map_entry);
 		HASH_ADD_PTR(explicit_conn->ep_peer_map, ep_ptr, map_entry);
@@ -430,10 +445,15 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
-	err = efa_av_reverse_av_add(av, &av->cur_reverse_av, &av->prv_reverse_av,
-				    explicit_conn);
-	if (err)
-		return err;
+	/*
+	 * The earlier efa_av_array_insert(..., NULL) makes this final publication non-failing.
+	 * Otherwise, failure here would require restoring the implicit AV entry at the same fi_addr,
+	 * reverse AV topology, peer-map ownership, and LRU position,
+	 * which the existing helpers cannot roll back safely.
+	 */
+	err = efa_av_array_insert(av->addr_to_conn_map, *fi_addr, explicit_conn);
+	assert(!err);
+	(void) err;
 
 	/* Handle AH LRU list and refcnt */
 	assert(!dlist_empty(&ah->implicit_conn_list));
@@ -903,6 +923,9 @@ static int efa_av_close(struct fid *fid)
 		free(ep_addr_hashable);
 	}
 
+	efa_av_array_destroy(av->addr_to_conn_map);
+	efa_av_array_destroy(av->addr_to_conn_map_implicit);
+
 	free(av);
 	return err;
 }
@@ -970,6 +993,13 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	av = calloc(1, sizeof(*av));
 	if (!av)
 		return -FI_ENOMEM;
+
+	ret = efa_av_array_init(&av->addr_to_conn_map);
+	if (ret)
+		goto err;
+	ret = efa_av_array_init(&av->addr_to_conn_map_implicit);
+	if (ret)
+		goto err;
 
 	if (attr->type == FI_AV_MAP) {
 		EFA_INFO(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
@@ -1048,6 +1078,8 @@ err_close_util_av_implicit:
 			 "Unable to close util_av_implicit: %s\n", fi_strerror(-retv));
 
 err:
+	efa_av_array_destroy(av->addr_to_conn_map);
+	efa_av_array_destroy(av->addr_to_conn_map_implicit);
 	free(av);
 	return ret;
 }

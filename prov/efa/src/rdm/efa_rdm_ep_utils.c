@@ -77,11 +77,10 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	struct efa_conn *conn;
 	struct efa_conn_ep_peer_map_entry *map_entry;
 	struct efa_rdm_peer *peer;
-
-	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));
-
+	
 	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
-
+	
+	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));//HASH_FIND_PTR is not thread safe. Could have HASH_ADD_PTR and HASH_DEL in other thread.
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
@@ -126,13 +125,13 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	struct efa_rdm_peer *peer;
 	struct efa_conn_ep_peer_map_entry *map_entry;
 
-	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));
-
+	
 	conn = efa_av_addr_to_conn_implicit(ep->base_ep.av, addr);
-
+	
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
-		return NULL;
-
+	return NULL;
+	
+	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));//TODO: remove if HASH_FIND_PTR, HASH_ADD_PTR and HASH_DEL are thread safe.
 	peer = efa_conn_ep_peer_map_lookup(conn, ep);
 	if (peer)
 		goto out;

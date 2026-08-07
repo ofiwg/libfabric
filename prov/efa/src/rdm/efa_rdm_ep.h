@@ -625,7 +625,6 @@ fi_addr_t efa_rdm_ep_get_explicit_shm_fi_addr(struct efa_rdm_ep *ep, fi_addr_t a
 {
 	struct efa_conn *conn;
 
-	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));
 	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
 	return conn ? conn->shm_fi_addr : FI_ADDR_NOTAVAIL;
 }
