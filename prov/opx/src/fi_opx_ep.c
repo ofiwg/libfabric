@@ -986,18 +986,6 @@ static int fi_opx_close_ep(fid_t fid)
 		}
 	}
 
-#if HAVE_HFISVC
-	/* Close secondary hfisvc ibv_context opened for single-plane striping */
-	struct fi_opx_domain *opx_domain = opx_ep->domain;
-	for (int i = 1; i < opx_domain->hfisvc.num_ctxs; i++) {
-		if (opx_domain->hfisvc.ctxs[i].fd_verbs >= 0) {
-			opx_hfi1_rdma_context_close(opx_domain->hfisvc.ctxs[i].ctx);
-			opx_domain->hfisvc.ctxs[i].ctx	    = NULL;
-			opx_domain->hfisvc.ctxs[i].fd_verbs = -1;
-		}
-	}
-#endif
-
 	if (opx_ep->hmem_copy_buf) {
 #if HAVE_CUDA
 		ofi_cudaFreeHost(opx_ep->hmem_copy_buf);
@@ -1031,6 +1019,18 @@ static int fi_opx_close_ep(fid_t fid)
 		if (opx_ep->hfisvc.completion_pool) {
 			ofi_bufpool_destroy(opx_ep->hfisvc.completion_pool);
 			opx_ep->hfisvc.completion_pool = NULL;
+		}
+	}
+	/* Close secondary hfisvc ibv_context opened for single-plane striping.
+	 * Must run AFTER the per-ctx command/completion queues above are closed:
+	 * those queues were opened against ctxs[i].ctx, so closing the ibv_context
+	 * first orphans the queue fds and the queue close returns -EBADF for i>=1. */
+	struct fi_opx_domain *opx_domain = opx_ep->domain;
+	for (int i = 1; i < opx_domain->hfisvc.num_ctxs; i++) {
+		if (opx_domain->hfisvc.ctxs[i].fd_verbs >= 0) {
+			opx_hfi1_rdma_context_close(opx_domain->hfisvc.ctxs[i].ctx);
+			opx_domain->hfisvc.ctxs[i].ctx	    = NULL;
+			opx_domain->hfisvc.ctxs[i].fd_verbs = -1;
 		}
 	}
 #endif
