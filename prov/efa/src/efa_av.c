@@ -43,7 +43,7 @@ static inline struct efa_conn *efa_av_addr_to_conn_impl(struct util_av *util_av,
  */
 struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 {
-	return efa_av_addr_to_conn_impl(&av->util_av, fi_addr);
+	return efa_av_conn_map_lookup(av->addr_to_conn_map, fi_addr);
 }
 
 /**
@@ -399,6 +399,15 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	assert(efa_is_same_addr(
 		raw_addr, (struct efa_ep_addr *) explicit_av_entry->ep_addr));
 
+	/* Reserve the lookup map slot up front so the final publication cannot fail */
+	err = efa_av_conn_map_reserve(av->addr_to_conn_map, *fi_addr);
+	if (err) {
+		int cleanup_err = ofi_av_remove_addr(&av->util_av, *fi_addr);
+		if (cleanup_err)
+			EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n", cleanup_err);
+		return err;
+	}
+
 	/* Copy information from implicit conn to explicit conn */
 	explicit_conn = &explicit_av_entry->conn;
 	memset(explicit_conn, 0, sizeof(*explicit_conn));
@@ -434,6 +443,9 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 				    explicit_conn);
 	if (err)
 		return err;
+
+	/* Publish the fully initialized conn for lock-free lookup */
+	efa_av_conn_map_publish(av->addr_to_conn_map, *fi_addr, explicit_conn);
 
 	/* Handle AH LRU list and refcnt */
 	assert(!dlist_empty(&ah->implicit_conn_list));
@@ -903,6 +915,8 @@ static int efa_av_close(struct fid *fid)
 		free(ep_addr_hashable);
 	}
 
+	efa_av_array_destroy(av->addr_to_conn_map);
+
 	free(av);
 	return err;
 }
@@ -970,6 +984,10 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	av = calloc(1, sizeof(*av));
 	if (!av)
 		return -FI_ENOMEM;
+
+	ret = efa_av_array_init(&av->addr_to_conn_map);
+	if (ret)
+		goto err;
 
 	if (attr->type == FI_AV_MAP) {
 		EFA_INFO(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
@@ -1048,6 +1066,7 @@ err_close_util_av_implicit:
 			 "Unable to close util_av_implicit: %s\n", fi_strerror(-retv));
 
 err:
+	efa_av_array_destroy(av->addr_to_conn_map);
 	free(av);
 	return ret;
 }
