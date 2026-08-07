@@ -1,5 +1,6 @@
 import pytest
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_cm_data(cmdline_args):
     from common import ClientServerTest

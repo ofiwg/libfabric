@@ -1,11 +1,13 @@
 import pytest
 
+@pytest.mark.pr_ci
 @pytest.mark.unit
 def test_dgram_g00n13s(cmdline_args):
     from common import UnitTest
     test = UnitTest(cmdline_args, "fi_dgram g00n13s", is_negative=True)
     test.run()
 
+@pytest.mark.pr_ci
 @pytest.mark.functional
 def test_dgram(cmdline_args):
     from common import ClientServerTest
