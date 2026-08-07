@@ -417,6 +417,13 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	explicit_conn->fi_addr = *fi_addr;
 	explicit_conn->shm_fi_addr = implicit_conn->shm_fi_addr;
 	explicit_conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
+
+	err = efa_av_reverse_av_add(av, &av->cur_reverse_av, &av->prv_reverse_av, explicit_conn);
+	if (err) {
+		ofi_av_remove_addr(&av->util_av, *fi_addr);
+		return err;
+	}
+
 	HASH_ITER(hh, implicit_conn->ep_peer_map, map_entry, tmp) {
 		HASH_DELETE(hh, implicit_conn->ep_peer_map, map_entry);
 		HASH_ADD_PTR(explicit_conn->ep_peer_map, ep_ptr, map_entry);
@@ -438,11 +445,6 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 			 fi_strerror(err));
 		return err;
 	}
-
-	err = efa_av_reverse_av_add(av, &av->cur_reverse_av, &av->prv_reverse_av,
-				    explicit_conn);
-	if (err)
-		return err;
 
 	/* Publish the fully initialized conn for lock-free lookup */
 	efa_av_conn_map_publish(av->addr_to_conn_map, *fi_addr, explicit_conn);
