@@ -249,6 +249,15 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
 	assert(efa_is_same_addr(raw_addr, (struct efa_ep_addr *)efa_av_entry->ep_addr));
 
+	/* Reserve the lock-free lookup map slot up front so the final publication cannot fail */
+	err = efa_av_conn_map_reserve(av->addr_to_conn_map, fi_addr);
+	if (err) {
+		err = ofi_av_remove_addr(util_av, fi_addr);
+		if (err)
+			EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n", err);
+		return NULL;
+	}
+
 	conn = &efa_av_entry->conn;
 	memset(conn, 0, sizeof(*conn));
 	conn->ep_addr = (struct efa_ep_addr *)efa_av_entry->ep_addr;
@@ -284,6 +293,9 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 		}
 		goto err_release;
 	}
+
+	/* Publish the fully initialized conn for lock-free lookup */
+	efa_av_conn_map_publish(av->addr_to_conn_map, fi_addr, conn);
 
 	return conn;
 
@@ -431,6 +443,12 @@ void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
 	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
 	assert(util_av_entry);
 	efa_av_entry = (struct efa_av_entry *) util_av_entry->data;
+
+	/* Unpublish the conn from the lock-free lookup map before releasing
+	 * the fi_addr back to the entry pool for reuse. The implicit AV has
+	 * no lock-free lookup map. */
+	if (!release_from_implicit_av)
+		efa_av_conn_map_publish(av->addr_to_conn_map, fi_addr, NULL);
 
 	err = ofi_av_remove_addr(util_av, fi_addr);
 	if (err) {

@@ -8,6 +8,7 @@
 #include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_peer.h"
 #include "efa_ah.h"
+#include "efa_av_array.h"
 #include "efa_conn.h"
 #include "efa_thread_annotations.h"
 
@@ -71,6 +72,7 @@ struct efa_av {
 	struct efa_cur_reverse_av *cur_reverse_av;
 	struct efa_prv_reverse_av *prv_reverse_av;
 	struct util_av util_av;
+	struct efa_av_array *addr_to_conn_map;
 
 	/* implicit AV is used when receiving messages from peers not explicity
 	 * inserted by the application
@@ -94,6 +96,34 @@ int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *addr,
 int efa_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 			       fi_addr_t *fi_addr, uint64_t flags,
 			       void *context);
+
+static inline int efa_av_conn_map_reserve(struct efa_av_array *conn_map, fi_addr_t fi_addr){
+	if (OFI_UNLIKELY(fi_addr > conn_map->max_idx)) {
+		EFA_WARN(FI_LOG_AV, "fi_addr %" PRIu64 " exceeds the maximum supported AV size (%u)\n", fi_addr, conn_map->max_idx + 1);
+		return -FI_EINVAL;
+	}
+
+	return efa_av_array_insert(conn_map, (unsigned) fi_addr, NULL);
+}
+
+static inline void efa_av_conn_map_publish(struct efa_av_array *conn_map, fi_addr_t fi_addr, struct efa_conn *conn){
+	int err;
+
+	assert(fi_addr <= conn_map->max_idx);
+
+	ofi_wmb();
+
+	err = efa_av_array_insert(conn_map, (unsigned) fi_addr, conn);
+	assert(!err);
+	(void) err; /* suppress unused variable warning in release builds */
+}
+
+static inline struct efa_conn *efa_av_conn_map_lookup(struct efa_av_array *conn_map, fi_addr_t fi_addr){
+	if (OFI_UNLIKELY(fi_addr > conn_map->max_idx))
+		return NULL;
+
+	return efa_av_array_at(conn_map, (unsigned) fi_addr);
+}
 
 struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
 struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av,
