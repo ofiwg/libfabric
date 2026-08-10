@@ -293,6 +293,7 @@ struct fi_atomic_attr;
 struct fi_cq_attr;
 struct fi_cntr_attr;
 struct fi_collective_attr;
+struct fi_xpu_attr;
 
 struct fi_ops_domain {
 	size_t	size;
@@ -322,6 +323,9 @@ struct fi_ops_domain {
 			struct fi_collective_attr *attr, uint64_t flags);
 	int	(*endpoint2)(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, uint64_t flags, void *context);
+	int	(*xpu_ctx)(struct fid_domain *domain,
+			struct fi_xpu_attr *attr,
+			struct fid_xpu_ctx **ctx, void *context);
 };
 
 /* Memory registration flags */
