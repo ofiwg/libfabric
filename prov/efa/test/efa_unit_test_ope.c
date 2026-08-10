@@ -531,15 +531,16 @@ void test_efa_rdm_txe_handle_error_not_write_cq(void **state)
  * When a multi-segment fi_send/fi_write/fi_read posts some segments
  * and then fails on a later segment, the synchronous error return to
  * the app is the sole error report for that op. The partial-post fix
- * sets EFA_RDM_TXE_NO_COMPLETION on the txe so the success-completion
- * path does not report a spurious CQ entry or counter when the
- * in-flight segment(s) eventually drain. If one of those in-flight
- * segments fails instead of succeeds, efa_rdm_txe_handle_error must
- * also honor EFA_RDM_TXE_NO_COMPLETION, or the app sees a duplicate
- * error report (one synchronous, one via the error CQ).
+ * sets EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER on the txe
+ * so the success-completion path does not report a spurious CQ entry
+ * or counter when the in-flight segment(s) eventually drain. If one
+ * of those in-flight segments fails instead of succeeds,
+ * efa_rdm_txe_handle_error must also honor that flag combination, or
+ * the app sees a duplicate error report (one synchronous, one via the
+ * error CQ).
  *
  * These three tests cover each op type and assert: no error CQ entry
- * when NO_COMPLETION is set. The counter bump is guarded by the same
+ * when both flags are set. The counter bump is guarded by the same
  * conditional, so suppressing the CQ write suppresses both.
  */
 static
@@ -552,15 +553,16 @@ void test_efa_rdm_txe_handle_error_suppressed_impl(struct efa_resource *resource
 
 	txe = efa_unit_test_alloc_txe(resource, op);
 	assert_non_null(txe);
-	txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
+	txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION |
+			       EFA_RDM_TXE_NO_COUNTER;
 
 	efa_rdm_txe_handle_error(txe, FI_ENOTCONN,
 				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
 
 	/*
-	 * No error CQ entry and no regular CQ entry: NO_COMPLETION
-	 * short-circuits before ofi_cq_write_error() and
-	 * efa_cntr_report_error().
+	 * No error CQ entry and no regular CQ entry: the
+	 * NO_COMPLETION | NO_COUNTER combination short-circuits before
+	 * ofi_cq_write_error() and efa_cntr_report_error().
 	 */
 	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), -FI_EAGAIN);
 	assert_int_equal(fi_cq_readerr(resource->cq, &cq_err, 0), -FI_EAGAIN);
@@ -596,12 +598,14 @@ void test_efa_rdm_txe_handle_error_suppressed_send(void **state)
  * All fi_inject* entry points (fi_inject, fi_injectdata, fi_tinject,
  * fi_tinjectdata, fi_inject_write, fi_inject_writedata,
  * fi_inject_atomic) set EFA_RDM_TXE_NO_COMPLETION on the txe to
- * suppress the success CQ per inject semantics, but also set
- * FI_INJECT in fi_flags. Per the libfabric fi_msg/fi_rma man pages,
- * an inject op that succeeds synchronously but later fails
- * asynchronously MUST still report an error CQ entry. Verify that
- * efa_rdm_txe_handle_error does NOT suppress the error CQ when
- * FI_INJECT is set, even though NO_COMPLETION is also set.
+ * suppress the success CQ per inject semantics, but do NOT set
+ * EFA_RDM_TXE_NO_COUNTER (a successful inject still counts). Per the
+ * libfabric fi_msg/fi_rma man pages, an inject op that succeeds
+ * synchronously but later fails asynchronously MUST still report an
+ * error CQ entry. Verify that efa_rdm_txe_handle_error does NOT
+ * suppress the error CQ when only NO_COMPLETION is set: suppression
+ * requires the NO_COMPLETION | NO_COUNTER combination used by the
+ * synchronous-error paths.
  */
 void test_efa_rdm_txe_handle_error_inject_still_reports_cq_error(void **state)
 {
@@ -626,6 +630,58 @@ void test_efa_rdm_txe_handle_error_inject_still_reports_cq_error(void **state)
 			 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
 
 	efa_rdm_txe_release(txe);
+}
+
+/*
+ * This test reports success for a write txe with a bound FI_WRITE
+ * counter, then drives handle_error, and asserts: exactly one success
+ * CQ entry, counter == 1, no error CQ entry, error counter == 0.
+ */
+void test_efa_rdm_txe_handle_error_after_success_reported(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe;
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr cntr_attr = {0};
+	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err = {0};
+
+	/* Bind a counter with FI_WRITE before enabling the endpoint */
+	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM,
+							EFA_FABRIC_NAME);
+	assert_int_equal(fi_cntr_open(resource->domain, &cntr_attr, &cntr, NULL), 0);
+	assert_int_equal(fi_ep_bind(resource->ep, &cntr->fid, FI_WRITE), 0);
+	assert_int_equal(fi_enable(resource->ep), 0);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_write);
+	assert_non_null(txe);
+
+	/* Report the success completion: one CQ entry, one counter bump,
+	 * and the txe is latched as fully reported. */
+	efa_rdm_txe_report_completion(txe);
+
+	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), 1);
+	assert_int_equal(fi_cntr_read(cntr), 1);
+	assert_true(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION);
+	assert_true(txe->internal_flags & EFA_RDM_TXE_NO_COUNTER);
+
+	/* A straggler WR for the same txe now fails asynchronously */
+	efa_rdm_txe_handle_error(txe, FI_ENOTCONN,
+				 EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
+
+	/* The app already has this op's final status: no error CQ entry,
+	 * no error counter bump, no additional success entries. */
+	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), -FI_EAGAIN);
+	assert_int_equal(fi_cq_readerr(resource->cq, &cq_err, 0), -FI_EAGAIN);
+	assert_int_equal(fi_cntr_read(cntr), 1);
+	assert_int_equal(fi_cntr_readerr(cntr), 0);
+
+	efa_rdm_txe_release(txe);
+
+	/* ep must be closed before the counter */
+	fi_close(&resource->ep->fid);
+	resource->ep = NULL;
+	fi_close(&cntr->fid);
 }
 
 void test_efa_rdm_rxe_handle_error_write_cq(void **state)

@@ -40,13 +40,15 @@ def test_rma_bw_small_tx_rx(cmdline_args, rma_operation_type, rma_bw_completion_
 @pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.message_sizes(default_efa=RANGE_SIZES, default_efa_direct=DIRECT_RMA_SIZES)
 @pytest.mark.functional
-def test_rma_bw_range(cmdline_args, rma_operation_type, rma_bw_completion_semantic, message_sizes, rma_bw_memory_type, rma_fabric):
+def test_rma_bw_range(cmdline_args, rma_operation_type, rma_bw_completion_semantic, message_sizes, rma_bw_memory_type, rma_fabric, completion_type):
+    if completion_type == "counter" and rma_operation_type == "writedata":
+        pytest.skip("writedata target cannot track remote-write completions with counters")
     command = "fi_rma_bw -e rdm"
     command = command + " -o " + rma_operation_type
     # rma_bw test with data verification takes longer to finish
     timeout = max(1080, cmdline_args.timeout)
     efa_run_client_server_test(cmdline_args, command, "short", rma_bw_completion_semantic,
-                               rma_bw_memory_type, message_sizes,
+                               rma_bw_memory_type, message_sizes, completion_type=completion_type,
                                timeout=timeout, fabric=rma_fabric)
 
 
