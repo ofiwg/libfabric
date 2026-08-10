@@ -162,7 +162,7 @@ typedef struct fid *fid_t;
 #define FI_AV_USER_ID		(1ULL << 41)
 #define FI_FIREWALL_ADDR	(1ULL << 42)
 #define FI_PEER			(1ULL << 43)
-/* #define FI_XPU_TRIGGER		(1ULL << 44) */
+#define FI_XPU			(1ULL << 44)
 
 #define FI_TAGGED_DIRECTED_RECV	(1ULL << 45)
 #define FI_TAGGED_MULTI_RECV	(1ULL << 46)
