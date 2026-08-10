@@ -836,3 +836,95 @@ int fi_getinfo_1_8(uint32_t version, const char *node, const char *service,
 	return ret;
 }
 COMPAT_SYMVER(fi_getinfo_1_8, fi_getinfo, FABRIC_1.8);
+
+/*
+ * ABI 1.9
+ */
+struct fi_ep_attr_1_9 {
+	enum fi_ep_type		type;
+	uint32_t		protocol;
+	uint32_t		protocol_version;
+	size_t			max_msg_size;
+	size_t			msg_prefix_size;
+	size_t			max_order_raw_size;
+	size_t			max_order_war_size;
+	size_t			max_order_waw_size;
+	uint64_t		mem_tag_format;
+	size_t			tx_ctx_cnt;
+	size_t			rx_ctx_cnt;
+	size_t			auth_key_size;
+	uint8_t			*auth_key;
+};
+
+#define fi_tx_attr_1_9 fi_tx_attr_1_8
+#define fi_rx_attr_1_9 fi_rx_attr_1_8
+#define fi_domain_attr_1_9 fi_domain_attr_1_8
+#define fi_fabric_attr_1_9 fi_fabric_attr_1_8
+#define fid_nic_1_9 fid_nic_1_8
+
+struct fi_info_1_9 {
+        struct fi_info            *next;
+        uint64_t                  caps;
+        uint64_t                  mode;
+        uint32_t                  addr_format;
+        size_t                    src_addrlen;
+        size_t                    dest_addrlen;
+        void                      *src_addr;
+        void                      *dest_addr;
+        fid_t                     handle;
+        struct fi_tx_attr_1_9     *tx_attr;
+        struct fi_rx_attr_1_9     *rx_attr;
+        struct fi_ep_attr_1_9     *ep_attr;
+        struct fi_domain_attr_1_9 *domain_attr;
+        struct fi_fabric_attr_1_9 *fabric_attr;
+        struct fid_nic_1_9        *nic;
+};
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+void fi_freeinfo_1_9(struct fi_info_1_9 *info)
+{
+	fi_freeinfo((struct fi_info *) info);
+}
+COMPAT_SYMVER(fi_freeinfo_1_9, fi_freeinfo, FABRIC_1.9);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+struct fi_info_1_9 *fi_dupinfo_1_9(const struct fi_info_1_9 *info)
+{
+	struct fi_info *dup, *base;
+
+	if (!info)
+		return (struct fi_info_1_9 *) ofi_allocinfo_internal();
+
+	ofi_dup_info(base, info);
+	if (base == NULL)
+		return NULL;
+
+	dup = fi_dupinfo(base);
+
+	ofi_free_info(base);
+	return (struct fi_info_1_9 *) dup;
+}
+COMPAT_SYMVER(fi_dupinfo_1_9, fi_dupinfo, FABRIC_1.9);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+int fi_getinfo_1_9(uint32_t version, const char *node, const char *service,
+		   uint64_t flags, const struct fi_info_1_9 *hints_1_9,
+		   struct fi_info_1_9 **info)
+{
+	struct fi_info *hints;
+	int ret;
+
+	if (hints_1_9) {
+		hints = (struct fi_info *) fi_dupinfo_1_9(hints_1_9);
+		if (!hints)
+			return -FI_ENOMEM;
+	} else {
+		hints = NULL;
+	}
+	ret = fi_getinfo(version, node, service, flags, hints,
+			 (struct fi_info **) info);
+	fi_freeinfo(hints);
+
+	return ret;
+}
+COMPAT_SYMVER(fi_getinfo_1_9, fi_getinfo, FABRIC_1.9);
