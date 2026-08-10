@@ -111,6 +111,7 @@ struct fid_pep;
 struct fid_stx;
 struct fid_mr;
 struct fid_nic;
+struct fid_xpu_ctx;
 
 typedef struct fid *fid_t;
 
@@ -425,6 +426,7 @@ struct fi_ep_attr {
 	size_t			rx_ctx_cnt;
 	size_t			auth_key_size;
 	uint8_t			*auth_key;
+	struct fid_xpu_ctx	*xpu_ctx;
 };
 
 struct fi_domain_attr {
