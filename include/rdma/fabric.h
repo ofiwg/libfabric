@@ -112,6 +112,9 @@ struct fid_stx;
 struct fid_mr;
 struct fid_nic;
 struct fid_xpu_ctx;
+struct fid_xpu_ep;
+struct fid_xpu_cq;
+struct fid_xpu_cntr;
 
 typedef struct fid *fid_t;
 
