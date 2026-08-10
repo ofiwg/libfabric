@@ -12,6 +12,17 @@ extern "C" {
 #endif
 
 /*
+ * Cooperative scope hints — specifies the set of threads issuing the
+ * same operation collectively.
+ */
+enum {
+	FI_XPU_WORK_ITEM,
+	FI_XPU_SUBGROUP,
+	FI_XPU_WORK_GROUP,
+	FI_XPU_DEVICE,
+};
+
+/*
  * Flags for fi_xpu_ops callbacks.
  */
 
