@@ -34,6 +34,7 @@ struct test_opts {
 	/* Number of times for receiver to recycle endpoints */
 	int receiver_ep_recycling;
 	bool remove_av;
+	bool av_lookup;
 	bool shared_av;
 	bool shared_cq;
 	enum { OP_MSG_UNTAGGED = 0, OP_MSG_TAGGED, OP_RMA_WRITEDATA } op_type;
@@ -49,6 +50,7 @@ static struct test_opts topts = {
 	.sender_ep_recycling = 1, // Default to 1 recycling for sender
 	.receiver_ep_recycling = 1, // Default to 1 recycling for receiver
 	.remove_av = false, // Default: do not remove old AV
+	.av_lookup = false,
 	.shared_av = false, // Default: 1 AV per EP
 	.shared_cq = false, // Default: 1 CQ per EP
 	.op_type = OP_MSG_UNTAGGED,
@@ -62,6 +64,7 @@ enum {
 	OPT_SENDER_EP_CYCLES,
 	OPT_RECEIVER_EP_CYCLES,
 	OPT_REMOVE_AV,
+	OPT_AV_LOOKUP,
 	OPT_SHARED_AV,
 	OPT_SHARED_CQ,
 	OPT_OP_TYPE,
@@ -75,6 +78,7 @@ static struct option test_long_opts[] = {
 	{"sender-ep-cycles", required_argument, NULL, OPT_SENDER_EP_CYCLES},
 	{"receiver-ep-cycles", required_argument, NULL, OPT_RECEIVER_EP_CYCLES},
 	{"remove-av", no_argument, NULL, OPT_REMOVE_AV},
+	{"av-lookup", no_argument, NULL, OPT_AV_LOOKUP},
 	{"shared-av", no_argument, NULL, OPT_SHARED_AV},
 	{"shared-cq", no_argument, NULL, OPT_SHARED_CQ},
 	{"op-type", required_argument, NULL, OPT_OP_TYPE},
@@ -217,6 +221,7 @@ struct worker_context {
 	struct fid_av *av;
 	struct context_pool pool;
 	uint16_t worker_id;
+	size_t av_remove_count;
 };
 struct fid_cq *shared_cq = NULL;
 struct fid_av *shared_av = NULL;
@@ -454,6 +459,26 @@ static int wait_for_comp(struct fid_cq *cq, int num_completions)
 	return completed;
 }
 
+static int verify_av_lookup(struct worker_context *ctx, fi_addr_t fi_addr, const char *expected_addr, uint16_t peer_idx){
+	char lookup_addr[MAX_EP_ADDR_LEN];
+	size_t lookup_addr_len = sizeof(lookup_addr);
+	int ret;
+
+	ret = fi_av_lookup(ctx->av, fi_addr, lookup_addr, &lookup_addr_len);
+	if (ret) {
+		fprintf(stderr, "Sender %u: fi_av_lookup failed for peer %u: %s\n", ctx->worker_id, peer_idx, fi_strerror(-ret));
+		return ret;
+	}
+
+	if (lookup_addr_len > sizeof(lookup_addr) ||
+	    memcmp(lookup_addr, expected_addr, lookup_addr_len)) {
+		fprintf(stderr, "Sender %u: fi_av_lookup returned an invalid address for peer %u\n", ctx->worker_id, peer_idx);
+		return -FI_EOTHER;
+	}
+
+	return 0;
+}
+
 static void *run_sender_worker(void *arg)
 {
 	struct worker_context *ctx = (struct worker_context*) arg;
@@ -548,6 +573,7 @@ static void *run_sender_worker(void *arg)
 						FT_PRINTERR("fi_av_remove", ret);
 						goto out;
 					}
+					ctx->av_remove_count++;
 				}
 				memcpy(ep_addr[msg.info.peer_idx], msg.info.ep_addr, MAX_EP_ADDR_LEN);
 				memcpy(&peer_rma[msg.info.peer_idx], &msg.info.rma, sizeof(struct rma_info));
@@ -585,6 +611,13 @@ static void *run_sender_worker(void *arg)
 			// an update to worker's control queue if the one was pending.
 			sched_yield();
 			continue;
+		}
+
+		if (topts.av_lookup) {
+			ret = verify_av_lookup(ctx, fi_addr[peer_idx],
+					       ep_addr[peer_idx], peer_idx);
+			if (ret)
+				goto out;
 		}
 
 		// Post one operation
@@ -1090,6 +1123,18 @@ out:
 		}
 		free(threads);
 	}
+	if (!ret && workers && topts.av_lookup && topts.remove_av) {
+		size_t av_remove_count = 0;
+
+		for (int i = 0; i < topts.num_sender_workers; i++)
+			av_remove_count += workers[i].av_remove_count;
+
+		printf("Sender: Completed %zu AV removals during lookup stress\n", av_remove_count);
+		if (av_remove_count < topts.num_sender_workers) {
+			fprintf(stderr, "AV lookup stress did not apply enough address updates\n");
+			ret = -FI_EOTHER;
+		}
+	}
 	if (channels) {
 		for (int i = 0; i < topts.num_sender_workers; i++) {
 			ep_message_queue_destroy(&channels[i]);
@@ -1278,6 +1323,10 @@ static void print_test_usage(void)
 	FT_PRINT_OPTS_USAGE("--receiver-ep-cycles <N>",
 			    "number of receiver endpoint recycling iterations "
 			    "(default: 1)");
+	FT_PRINT_OPTS_USAGE("--remove-av",
+			    "remove old AV entries before updates (default: off)");
+	FT_PRINT_OPTS_USAGE("--av-lookup",
+			    "lookup the active peer before each send (default: off)");
 	FT_PRINT_OPTS_USAGE("--shared-av",
 			    "use shared AV among workers (default: off)");
 	FT_PRINT_OPTS_USAGE("--shared-cq",
@@ -1342,6 +1391,9 @@ static int parse_test_opts(int argc, char **argv)
 		case OPT_REMOVE_AV:
 			topts.remove_av = true;
 			break;
+		case OPT_AV_LOOKUP:
+			topts.av_lookup = true;
+			break;
 		case OPT_SHARED_AV:
 			topts.shared_av = true;
 			break;
@@ -1405,6 +1457,13 @@ int main(int argc, char **argv)
 	ret = parse_test_opts(argc, argv);
 	if (ret)
 		goto out;
+
+	if (topts.av_lookup &&
+	    (!topts.shared_av || topts.num_sender_workers < 2)) {
+		fprintf(stderr, "--av-lookup requires --shared-av and at least 2 sender workers\n");
+		ret = -1;
+		goto out;
+	}
 
 	// Set up hints
 	if (opts.threading == FI_THREAD_COMPLETION && topts.shared_cq) {
