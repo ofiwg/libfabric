@@ -210,10 +210,12 @@ out:
 			 * via efa_rdm_pke_handle_rma_read_completion(). Suppress
 			 * the application-visible completion: we are returning
 			 * an error to the caller, so the completion handler must
-			 * not write a CQ entry or bump the counter for this op.
+			 * not write a CQ entry (NO_COMPLETION) nor bump the
+			 * counter (NO_COUNTER) for this op.
 			 */
 			txe->bytes_read_total_len = txe->bytes_read_submitted;
-			txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
+			txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION |
+					       EFA_RDM_TXE_NO_COUNTER;
 		}
 	}
 
@@ -466,10 +468,12 @@ static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep
 			 * via efa_rdm_pke_handle_rma_completion(). Suppress the
 			 * application-visible completion: we are returning an
 			 * error to the caller, so the completion handler must
-			 * not write a CQ entry or bump the counter for this op.
+			 * not write a CQ entry (NO_COMPLETION) nor bump the
+			 * counter (NO_COUNTER) for this op.
 			 */
 			txe->bytes_write_total_len = txe->bytes_write_submitted;
-			txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
+			txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION |
+					       EFA_RDM_TXE_NO_COUNTER;
 		}
 	}
 out:

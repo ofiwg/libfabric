@@ -336,14 +336,34 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 /**
  * @brief flag to indicate an ope does not need to report completion to user
  *
- * This flag is used to by emulated injection and #efa_rdm_ep_trigger_handshake
+ * This flag suppresses the success CQ entry; counters are still
+ * updated unless #EFA_RDM_TXE_NO_COUNTER is also set.
+ *
+ * It is used by emulated injection (per inject semantics, the op
+ * completes without a CQ entry but still counts as a completed
+ * transfer), by #efa_rdm_ep_trigger_handshake, and by the partial-post
+ * error paths (see #EFA_RDM_TXE_NO_COUNTER).
  */
 #define EFA_RDM_TXE_NO_COMPLETION	BIT_ULL(17)
 /**
  * @brief flag to indicate an ope does not need to increase counter
  *
- * This flag is used to implement #efa_rdm_ep_trigger_handshake
+ * This flag suppresses the counter update; a CQ entry is still
+ * written unless #EFA_RDM_TXE_NO_COMPLETION is also set.
  *
+ * It is used by #efa_rdm_ep_trigger_handshake, and by the partial-post
+ * error paths of efa_rdm_rma_generic_writemsg() /
+ * efa_rdm_rma_generic_readmsg(): those paths report the error to the
+ * app synchronously (via the return value of the data transfer call)
+ * and set EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER so the
+ * in-flight segments' deferred completions are fully silent.
+ *
+ * A non-internal txe with both flags set is an op whose error was
+ * already returned synchronously: efa_rdm_txe_handle_error() relies on
+ * this combination to suppress the duplicate error CQ entry and error
+ * counter. Inject ops set only EFA_RDM_TXE_NO_COMPLETION, so an inject
+ * op that fails asynchronously still writes the error CQ entry required
+ * by fi_msg(3) / fi_rma(3).
  */
 #define EFA_RDM_TXE_NO_COUNTER		BIT_ULL(18)
 
