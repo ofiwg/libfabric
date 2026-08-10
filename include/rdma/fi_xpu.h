@@ -11,6 +11,18 @@ extern "C" {
 #endif
 
 /*
+ * Flags for fi_xpu_ops callbacks.
+ */
+
+/* alloc: allocation must be exportable as a DMA-BUF fd */
+#define FI_XPU_ALLOC_DMABUF	(1ULL << 0)
+
+/* import: host address is PCIe BAR MMIO (device I/O memory) */
+#define FI_XPU_IMPORT_IOMEMORY	(1ULL << 0)
+/* import: resulting pointer must be accessible from XPU kernels */
+#define FI_XPU_IMPORT_DEVICEMAP	(1ULL << 1)
+
+/*
  * XPU Memory Operations
  */
 struct fi_xpu_ops {
