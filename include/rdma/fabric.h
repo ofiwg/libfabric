@@ -250,6 +250,7 @@ enum fi_av_type {
 #define FI_MR_ENDPOINT		(1 << 9)
 #define FI_MR_HMEM		(1 << 10)
 #define FI_MR_COLLECTIVE	(1 << 11)
+#define FI_MR_XPU_DESC		(1 << 12)
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
@@ -672,6 +673,13 @@ struct fi_mr_raw_attr {
 	size_t		*key_size;
 };
 
+struct fi_mr_xpu_desc {
+	void			*buf;
+	size_t			*len;
+	uint64_t		flags;
+	struct fid_xpu_ctx	*ctx;
+};
+
 struct fi_mr_map_raw {
 	uint64_t	flags;
 	uint64_t	base_addr;
@@ -703,6 +711,7 @@ enum {
 	FI_SET_VAL,		/* struct fi_fid_var */
 	FI_EXPORT_FID,		/* struct fi_fid_export */
 	FI_GET_FD, 		/* int */
+	FI_GET_MR_XPU_DESC,	/* fi_mr_xpu_desc */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)
