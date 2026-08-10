@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-07\-07" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-08\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -448,6 +448,7 @@ struct fi_efa_wq_attr {
     uint32_t num_entries;
     uint32_t *doorbell;
     uint32_t max_batch;
+    uint16_t caps;
 };
 \f[R]
 .fi
@@ -466,6 +467,16 @@ Queue doorbell.
 .TP
 \f[I]max_batch\f[R]
 Maximum batch size for queue submissions.
+.TP
+\f[I]caps\f[R]
+Work queue capabilities:
+.RS
+.PP
+FI_EFA_WQ_CAPS_64_BIT_REQ_ID Work queue supports posting requests with
+64-bit IDs.
+When set, the associated completion queue is guaranteed to return 64-bit
+request IDs as well.
+.RE
 .SS Return value
 .PP
 \f[B]query_qp_wqs()\f[R] returns 0 on success, or the value of errno on
