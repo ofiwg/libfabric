@@ -107,6 +107,8 @@ struct fi_ops_ep {
 			void *context);
 	ssize_t (*rx_size_left)(struct fid_ep *ep);
 	ssize_t (*tx_size_left)(struct fid_ep *ep);
+	int	(*export_xpu)(struct fid_ep *ep, uint64_t flags,
+			struct fid_xpu_ep *xpu_ep);
 };
 
 struct fi_ops_msg {
@@ -358,6 +360,13 @@ fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t dest_addr)
 {
 	return ep->msg->injectdata(ep, buf, len, data, dest_addr);
+}
+
+static inline int
+fi_ep_export_xpu(struct fid_ep *ep, uint64_t flags,
+		 struct fid_xpu_ep *xpu_ep)
+{
+	return ep->ops->export_xpu(ep, flags, xpu_ep);
 }
 
 #endif
