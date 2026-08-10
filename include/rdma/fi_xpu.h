@@ -5,6 +5,7 @@
 #define FI_XPU_H
 
 #include <rdma/fabric.h>
+#include <rdma/fi_domain.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,6 +45,53 @@ struct fi_xpu_attr {
 	uint64_t		device;
 	struct fi_xpu_ops	*ops;
 };
+
+/*
+ * XPU Context capability flags — returned by fi_xpu_ctx_query()
+ * to indicate which XPU objects the provider supports.
+ */
+#define FI_XPU_CAP_EP		(1ULL << 0)
+#define FI_XPU_CAP_CQ		(1ULL << 1)
+#define FI_XPU_CAP_CNTR		(1ULL << 2)
+
+/*
+ * XPU Context Attribute — output from fi_xpu_ctx_query()
+ */
+struct fi_xpu_ctx_attr {
+	uint64_t		caps;
+	size_t			av_addr_size;
+	size_t			mr_desc_size;
+};
+
+/*
+ * XPU Context Operations and Object
+ */
+struct fi_ops_xpu_ctx {
+	size_t	size;
+	int	(*query)(struct fid_xpu_ctx *ctx,
+			struct fi_xpu_ctx_attr *attr);
+};
+
+struct fid_xpu_ctx {
+	struct fid			fid;
+	struct fi_ops_xpu_ctx		*ops;
+};
+
+/*
+ * Inline wrappers
+ */
+static inline int
+fi_xpu_ctx(struct fid_domain *domain, struct fi_xpu_attr *attr,
+	   struct fid_xpu_ctx **ctx, void *context)
+{
+	return domain->ops->xpu_ctx(domain, attr, ctx, context);
+}
+
+static inline int
+fi_xpu_ctx_query(struct fid_xpu_ctx *ctx, struct fi_xpu_ctx_attr *attr)
+{
+	return ctx->ops->query(ctx, attr);
+}
 
 #ifdef __cplusplus
 }
