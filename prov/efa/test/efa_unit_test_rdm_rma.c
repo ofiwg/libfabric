@@ -1154,3 +1154,115 @@ void test_efa_rdm_rma_should_write_using_rdma_self_no_p2p(void **state)
 
 	g_efa_selected_device_list[0].device_caps = efa_device_caps_orig;
 }
+
+/**
+ * @brief Test that a successful inject RDMA write bumps the write counter
+ *
+ * The inject entry points (fi_inject_write / fi_inject_writedata) set 
+ * NO_COMPLETION
+ * on the txe to suppress the success CQ entry per inject semantics, but
+ * the op still counts as a completed transfer, so the FI_WRITE counter
+ * must be incremented when the device write completes.
+ *
+ * This test binds a counter with FI_WRITE, issues fi_inject_write over
+ * device RDMA (mocked efa_qp_post_write), drives the completion through
+ * the real completion handler, and asserts: counter == 1, no CQ entry,
+ * txe released.
+ */
+void test_efa_rdm_rma_inject_write_bumps_tx_counter(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_pke *inflight_pke;
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr cntr_attr = {0};
+	struct fi_cq_data_entry cq_entry;
+	fi_addr_t addr;
+	struct efa_ep_addr raw_addr;
+	size_t raw_addr_len = sizeof(raw_addr);
+	uint64_t wr_id;
+	char buf[32] = {0};
+	bool shm_permitted = false;
+	int ret;
+
+	/* Skip test on platforms that don't support RDMA write. */
+	if (!efa_device_support_rdma_write()) {
+		skip();
+		return;
+	}
+
+	/*
+	 * Mirror efa_unit_test_resource_construct_rdm_shm_disabled(), but
+	 * bind a counter before enabling the endpoint.
+	 */
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(resource->hints);
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM,
+						    FI_VERSION(1, 14),
+						    resource->hints, false, true);
+	ret = fi_setopt(&resource->ep->fid, FI_OPT_ENDPOINT,
+			FI_OPT_SHARED_MEMORY_PERMITTED, &shm_permitted,
+			sizeof(shm_permitted));
+	assert_int_equal(ret, 0);
+
+	ret = fi_cntr_open(resource->domain, &cntr_attr, &cntr, NULL);
+	assert_int_equal(ret, 0);
+	ret = fi_ep_bind(resource->ep, &cntr->fid, FI_WRITE);
+	assert_int_equal(ret, 0);
+
+	ret = fi_enable(resource->ep);
+	assert_int_equal(ret, 0);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+
+	/* Set up peer with RDMA write support */
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE |
+				EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
+
+	efa_rdm_ep->use_device_rdma = true;
+
+	/* Mock: the device write posts successfully */
+	g_efa_unit_test_mocks.efa_qp_post_write = &efa_mock_efa_qp_post_write_return_mock;
+	will_return(efa_mock_efa_qp_post_write_return_mock, 0);
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	ret = fi_inject_write(resource->ep, buf, sizeof(buf), addr,
+			      0x87654321, 123456);
+	assert_int_equal(ret, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+
+	/* No counter update before the device completion arrives */
+	assert_int_equal(fi_cntr_read(cntr), 0);
+
+	/* Drive the device completion through the real completion handler */
+	wr_id = (uint64_t) g_ibv_submitted_wr_id_vec[0];
+	inflight_pke = efa_rdm_cq_get_pke_from_wr_id_solicited(wr_id);
+	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, inflight_pke);
+	efa_rdm_pke_handle_rma_completion(inflight_pke);
+
+	/* The write counter must be bumped exactly once... */
+	assert_int_equal(fi_cntr_read(cntr), 1);
+
+	/* ...without a CQ entry (inject semantics)... */
+	assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1), -FI_EAGAIN);
+
+	/* ...and the txe must be released (no leak) */
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
+	assert_int_equal(peer->efa_outstanding_tx_ops, 0);
+
+	/* ep must be closed before the counter */
+	fi_close(&resource->ep->fid);
+	resource->ep = NULL;
+	fi_close(&cntr->fid);
+}

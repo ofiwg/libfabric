@@ -596,8 +596,16 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 				txe->local_read_pkt_entry = NULL;
 			} else {
 				assert(txe && txe->cq_entry.flags & FI_READ);
-				if (!(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION))
-					efa_rdm_txe_report_completion(txe);
+				/*
+				 * efa_rdm_txe_report_completion() honors
+				 * EFA_RDM_TXE_NO_COMPLETION and
+				 * EFA_RDM_TXE_NO_COUNTER, so a txe whose
+				 * error was already returned synchronously
+				 * (both flags, set by
+				 * efa_rdm_rma_generic_readmsg()) stays
+				 * appropriately silent here.
+				 */
+				efa_rdm_txe_report_completion(txe);
 			}
 
 			efa_rdm_txe_release(txe);
@@ -680,12 +688,10 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 		txe = context_pkt_entry->ope;
 		txe->bytes_write_completed += rma_context_pkt->seg_size;
 		if (txe->bytes_write_completed == txe->bytes_write_total_len) {
-			if (!(txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION)) {
-				if (txe->fi_flags & FI_COMPLETION)
-					efa_rdm_txe_report_completion(txe);
-				else
-					efa_cntr_report_tx_completion(&context_pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
-			}
+			if (txe->fi_flags & FI_COMPLETION)
+				efa_rdm_txe_report_completion(txe);
+			else if (!(txe->internal_flags & EFA_RDM_TXE_NO_COUNTER))
+				efa_cntr_report_tx_completion(&context_pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
 			efa_rdm_txe_release(txe);
 		}
 		break;
