@@ -810,7 +810,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			break;
 		}
 
-		efa_conn_release(av, conn, false);
+		efa_conn_release_explicit(av, conn);
 	}
 
 	if (i < count) {
@@ -851,21 +851,21 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 
 	ofi_genlock_lock(&av->util_av.lock);
 	HASH_ITER(hh, av->cur_reverse_av, cur_entry, curtmp) {
-		efa_conn_release(av, cur_entry->conn, false);
+		efa_conn_release_explicit(av, cur_entry->conn);
 	}
 
 	HASH_ITER(hh, av->prv_reverse_av, prv_entry, prvtmp) {
-		efa_conn_release(av, prv_entry->conn, false);
+		efa_conn_release_explicit(av, prv_entry->conn);
 	}
 	ofi_genlock_unlock(&av->util_av.lock);
 
 	EFA_GENLOCK_LOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	HASH_ITER(hh, av->cur_reverse_av_implicit, cur_entry, curtmp) {
-		efa_conn_release(av, cur_entry->conn, true);
+		efa_conn_release_implicit(av, cur_entry->conn);
 	}
 
 	HASH_ITER(hh, av->prv_reverse_av_implicit, prv_entry, prvtmp) {
-		efa_conn_release(av, prv_entry->conn, true);
+		efa_conn_release_implicit(av, prv_entry->conn);
 	}
 	EFA_GENLOCK_UNLOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 
