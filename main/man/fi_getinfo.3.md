@@ -735,6 +735,21 @@ via fi_freeinfo().
 *FI_ENOSYS*
 : Indicates that requested version is newer than the library being used.
 
+# ENVIRONMENT VARIABLES
+
+The following environment variables affect the behavior of `fi_getinfo`.
+
+*FI_ADDR_FORMAT*
+: Filter `fi_getinfo` results to only return entries matching the specified
+  address format.  When set, any fi_info entry whose addr_format does not
+  match the specified value is removed from the results.  Valid values
+  correspond to the constants defined in the _Addressing formats_ section.
+  By default, no filtering is applied.
+  This variable is intended as a fallback mechanism for environments
+  where the application or middleware cannot be modified.  Applications
+  and upper layers should prefer selecting an appropriate address format
+  through `fi_getinfo` hints.
+
 # NOTES
 
 Various libfabric calls, including fi_getinfo, take a struct fi_info as
