@@ -109,6 +109,9 @@ struct fi_ops_av {
 				   void *auth_key, size_t *auth_key_size);
 	int	(*set_user_id)(struct fid_av *av, fi_addr_t fi_addr,
 			       fi_addr_t user_id, uint64_t flags);
+	int	(*lookup2)(struct fid_av *av, fi_addr_t fi_addr,
+			void *buf, size_t *len, uint64_t flags,
+			struct fid_xpu_ctx *ctx);
 };
 
 struct fid_av {
@@ -503,6 +506,18 @@ static inline int fi_mr_enable(struct fid_mr *mr)
 }
 
 static inline int
+fi_mr_get_xpu_desc(struct fid_mr *mr, void *buf, size_t *len, uint64_t flags,
+		   struct fid_xpu_ctx *ctx)
+{
+	struct fi_mr_xpu_desc desc;
+	desc.buf = buf;
+	desc.len = len;
+	desc.flags = flags;
+	desc.ctx = ctx;
+	return fi_control(&mr->fid, FI_GET_MR_XPU_DESC, &desc);
+}
+
+static inline int
 fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	   struct fid_av **av, void *context)
 {
@@ -580,6 +595,15 @@ fi_av_set_user_id(struct fid_av *av, fi_addr_t fi_addr, fi_addr_t user_id,
 {
 	return FI_CHECK_OP(av->ops, struct fi_ops_av, set_user_id) ?
 		av->ops->set_user_id(av, fi_addr, user_id, flags) : -FI_ENOSYS;
+}
+
+static inline int
+fi_av_lookup2(struct fid_av *av, fi_addr_t fi_addr,
+	      void *buf, size_t *len, uint64_t flags,
+	      struct fid_xpu_ctx *ctx)
+{
+	return FI_CHECK_OP(av->ops, struct fi_ops_av, lookup2) ?
+		av->ops->lookup2(av, fi_addr, buf, len, flags, ctx) : -FI_ENOSYS;
 }
 
 static inline fi_addr_t
