@@ -1095,32 +1095,28 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	}
 
 	/*
-	 * When the op was reported as failed to the caller synchronously
+	 * EFA_RDM_TXE_NO_COMPLETION and EFA_RDM_TXE_NO_COUNTER are both set
+	 * when either:
+	 *  - the op was reported as failed to the caller synchronously
 	 * (via the return value of fi_write/fi_read after a partial
-	 * multi-segment post failure), EFA_RDM_TXE_NO_COMPLETION is set
-	 * on the txe to suppress the deferred CQ/counter report for the
-	 * in-flight segment's later completion. Honor that here in the
-	 * async error path too, so the app does not see a duplicate
-	 * error report.
+	 * multi-segment post failure)
+	 *  - the op has already reported outcome appropriately, and future
+	 * attempts should be suppressed
 	 *
-	 * fi_inject/fi_tinject/fi_inject_write/fi_inject_writedata/
-	 * fi_inject_atomic also set EFA_RDM_TXE_NO_COMPLETION (success
-	 * CQ is suppressed per inject semantics), but per the libfabric
-	 * man page fi_inject MUST still report an error CQ if the async
-	 * completion fails. Exclude inject ops from this suppression by
-	 * checking FI_INJECT in fi_flags.
+	 * inject ops (fi_inject/fi_tinject/fi_inject_write/fi_inject_writedata/
+	 * fi_inject_atomic) set only EFA_RDM_TXE_NO_COMPLETION (success
+	 * CQ is suppressed per inject semantics, but the op still counts),
+	 * so an inject op that fails asynchronously still writes the error
+	 * CQ entry required by the fi_msg(3)/fi_rma(3) man pages.
 	 *
-	 * This FI_INJECT discriminator is safe because inject ops are
-	 * bounded by efa_rdm_ep->base_ep.inject_rma_size (and for msg
-	 * inject, inject_size) and always fit in a single packet, so the
-	 * partial-post double-free scenario in efa_rdm_rma_generic_writemsg
-	 * / efa_rdm_rma_generic_readmsg cannot arise for an inject txe.
-	 * A txe that has both FI_INJECT and NO_COMPLETION set is therefore
-	 * always an inject op that needs the error CQ, never a partial-
-	 * post op that needs to be suppressed.
+	 * The only other txe that carries both flags is the handshake
+	 * trigger txe, which is EFA_RDM_OPE_INTERNAL and was already
+	 * handled by the internal-op early return above. Any new op that
+	 * sets both flags has already reported outcome, or must be an op whose
+	 * error is reported to the app synchronously.
 	 */
 	if ((txe->internal_flags & EFA_RDM_TXE_NO_COMPLETION) &&
-	    !(txe->fi_flags & FI_INJECT))
+	    (txe->internal_flags & EFA_RDM_TXE_NO_COUNTER))
 		return;
 
 	if (efa_rdm_txe_mark_peer_abort_if_needed(txe, prov_errno, prev_state)) {
@@ -1333,8 +1329,9 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 		}
 	}
 
-	efa_cntr_report_tx_completion(&txe->ep->base_ep.util_ep, txe->cq_entry.flags);
-	txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION;
+	if (!(txe->internal_flags & EFA_RDM_TXE_NO_COUNTER))
+		efa_cntr_report_tx_completion(&txe->ep->base_ep.util_ep, txe->cq_entry.flags);
+	txe->internal_flags |= EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
 	return;
 }
 
