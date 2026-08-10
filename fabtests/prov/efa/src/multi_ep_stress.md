@@ -148,6 +148,7 @@ The test stresses the provider through:
 4. **Resource contention**: Optional shared CQ/AV increases lock contention
 5. **Random timing**: Sleep intervals create non-deterministic interleaving
 6. **High message volume**: Configurable message count per endpoint lifecycle
+7. **Concurrent AV lookup**: Optional lookups run while other workers update a shared AV
 
 ## Configuration Options
 
@@ -159,6 +160,7 @@ The test stresses the provider through:
 | `--sender-ep-cycles` | Sender endpoint recycle count | 1 |
 | `--receiver-ep-cycles` | Receiver endpoint recycle count | 1 |
 | `--remove-av` | Remove old AV if AV update received | off |
+| `--av-lookup` | Look up the active peer before each send | off |
 | `--shared-av` | Use shared address vector | off |
 | `--shared-cq` | Use shared completion queue | off |
 | `--op-type` | Operation type (untagged/tagged/writedata) | untagged |
