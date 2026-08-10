@@ -195,6 +195,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 		}
 	}
 
+	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
 	HASH_ITER(hh, conn->ep_peer_map, peer_map_entry, tmp) {
 		dlist_remove(&peer_map_entry->peer.ep_peer_list_entry);
 		efa_rdm_peer_destruct(&peer_map_entry->peer, peer_map_entry->ep_ptr);
@@ -461,6 +462,9 @@ void efa_conn_release_util_av(struct efa_av *av, struct efa_conn *conn,
 void efa_conn_release(struct efa_av *av, struct efa_conn *conn,
 		      bool release_from_implicit_av)
 {
+	assert(av->domain->info_type != EFA_INFO_RDM ||
+	       ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
+
 	efa_conn_release_reverse_av(av, conn, release_from_implicit_av);
 	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
