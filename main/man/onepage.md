@@ -18533,6 +18533,13 @@ The ofi_rxm provider checks for the following environment variables.
     by RxM. Note that no extra memory registration is performed with
     this option. (default: false)
 
+*FI_OFI_RXM_NUM_MSG_EPS*
+:   Number of MSG endpoints (and underlying connections/QPs) to open per
+    RxM peer connection. Values greater than 1 spread traffic across
+    multiple QPs in a round-robin fashion, which can improve throughput
+    on hardware that benefits from multiple QPs per peer. The value is
+    clamped to the range \[1, 255\]. (default: 1)
+
 # Tuning
 
 ## Bandwidth
