@@ -306,6 +306,7 @@ void test_efa_rdm_txe_handle_error_suppressed_write(void **state);
 void test_efa_rdm_txe_handle_error_suppressed_read(void **state);
 void test_efa_rdm_txe_handle_error_suppressed_send(void **state);
 void test_efa_rdm_txe_handle_error_inject_still_reports_cq_error(void **state);
+void test_efa_rdm_txe_handle_error_after_success_reported(void **state);
 void test_efa_rdm_rxe_handle_error_write_cq(void **state);
 void test_efa_rdm_rxe_handle_error_not_write_cq(void **state);
 void test_efa_rdm_rxe_map(void **state);
@@ -623,6 +624,7 @@ void test_efa_rdm_rma_post_remote_write_partial_fail_no_txe_release(void **state
 void test_efa_rdm_rma_post_remote_read_partial_fail_no_txe_release(void **state);
 void test_efa_rdm_rma_partial_post_retry_no_double_free(void **state);
 void test_efa_rdm_rma_partial_post_retry_no_double_free_read(void **state);
+void test_efa_rdm_rma_inject_write_bumps_tx_counter(void **state);
 void test_efa_rdm_msg_send_multi_pkt_sendv_fail_no_inflight(void **state);
 void test_efa_ibv_post_write_processing_hints_with_high_pps(void **state);
 void test_efa_ibv_post_write_processing_hints_without_high_pps(void **state);
