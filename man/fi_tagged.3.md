@@ -15,6 +15,12 @@ fi_trecv / fi_trecvv / fi_trecvmsg
 fi_tsend / fi_tsendv / fi_tsendmsg / fi_tinject / fi_tsenddata
 :   Initiate an operation to send a message
 
+fi_xpu_tsend
+:   Initiate a tagged send operation from an XPU.
+
+fi_xpu_trecv
+:   Post a tagged receive buffer from an XPU.
+
 # SYNOPSIS
 
 ```c
@@ -49,6 +55,16 @@ ssize_t fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr, uint64_t tag);
+
+#include <rdma/fi_xpu_device.h>
+
+int fi_xpu_tsend(struct fid_xpu_ep *ep, const void *buf, size_t len,
+    void *desc, uint64_t data, void *dest_addr, uint64_t tag, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_trecv(struct fid_xpu_ep *ep, void *buf, size_t len, void *desc,
+    void *src_addr, uint64_t tag, uint64_t ignore, void *context,
+    uint64_t flags, int scope);
 ```
 
 # ARGUMENTS
@@ -106,6 +122,12 @@ ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 : User specified pointer to associate with the operation.  This parameter is
   ignored if the operation will not generate a successful completion, unless
   an op flag specifies the context parameter be used for required input.
+
+*scope*
+: Cooperative threading scope for device-side operations. Specifies the set
+  of threads issuing the same operation collectively. Only used by
+  fi_xpu_tsend and fi_xpu_trecv. See [`fi_xpu`(3)](fi_xpu.3.html) for
+  details.
 
 # DESCRIPTION
 
@@ -235,6 +257,15 @@ The fi_trecvmsg call supports posting buffers over both connected and
 connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags.  The fi_trecvmsg function
 takes a struct fi_msg_tagged as input.
+
+## fi_xpu_tsend / fi_xpu_trecv
+
+The fi_xpu_tsend and fi_xpu_trecv calls are device-side equivalents
+of the host tagged message operations. They operate on an exported
+endpoint handle and include tag matching parameters. The tag and
+ignore parameters function identically to their host-side
+counterparts. See [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU
+programming model.
 
 # FLAGS
 
