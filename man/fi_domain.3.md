@@ -733,6 +733,12 @@ The following are support primary capabilities:
   the peer API flow. The domain must support importing owner_ops when opening
   a CQ, counter, and shared receive queue.
 
+*FI_XPU*
+: Indicates that the domain supports XPU-initiated communication, i.e. the
+  ability to create an XPU context (see [`fi_xpu`(3)](fi_xpu.3.html)) and
+  export endpoints, completion queues, and counters allocated from the domain
+  for data path access by an XPU. See [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 The following are supported secondary capabilities:
 
 *FI_LOCAL_COMM*
