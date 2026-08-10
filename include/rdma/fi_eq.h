@@ -276,6 +276,8 @@ struct fi_ops_cq {
 	int	(*signal)(struct fid_cq *cq);
 	const char * (*strerror)(struct fid_cq *cq, int prov_errno,
 			const void *err_data, char *buf, size_t len);
+	int	(*export_xpu)(struct fid_cq *cq, uint64_t flags,
+			struct fid_xpu_cq *xpu_cq);
 };
 
 struct fid_cq {
@@ -311,6 +313,8 @@ struct fi_ops_cntr {
 	int	(*wait)(struct fid_cntr *cntr, uint64_t threshold, int timeout);
 	int	(*adderr)(struct fid_cntr *cntr, uint64_t value);
 	int	(*seterr)(struct fid_cntr *cntr, uint64_t value);
+	int	(*export_xpu)(struct fid_cntr *cntr, uint64_t flags,
+			struct fid_xpu_cntr *xpu_cntr);
 };
 
 struct fid_cntr {
@@ -479,6 +483,20 @@ static inline int
 fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
 	return cntr->ops->wait(cntr, threshold, timeout);
+}
+
+static inline int
+fi_cq_export_xpu(struct fid_cq *cq, uint64_t flags,
+		 struct fid_xpu_cq *xpu_cq)
+{
+	return cq->ops->export_xpu(cq, flags, xpu_cq);
+}
+
+static inline int
+fi_cntr_export_xpu(struct fid_cntr *cntr, uint64_t flags,
+		   struct fid_xpu_cntr *xpu_cntr)
+{
+	return cntr->ops->export_xpu(cntr, flags, xpu_cntr);
 }
 
 #endif
