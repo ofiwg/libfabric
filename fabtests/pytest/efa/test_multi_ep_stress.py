@@ -113,3 +113,23 @@ def test_multi_ep_stress_thread_completion_shared_av_ep_recycling(cmdline_args):
     cmd = f"fi_efa_multi_ep_stress --threading completion --shared-av --sender-workers 4 --receiver-workers 4 --sender-ep-cycles 5 --receiver-ep-cycles 5"
     test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
     test.run()
+
+@pytest.mark.unstable
+def test_multi_ep_stress_thread_completion_shared_av_lookup_remove(cmdline_args):
+    # Each sender looks up its active peer while other senders remove and reinsert distinct peer addresses in the shared AV.
+    cmd = "fi_efa_multi_ep_stress --threading completion --shared-av --remove-av --av-lookup " \
+          "--sender-workers 4 --receiver-workers 4 --sender-ep-cycles 5 " \
+          "--receiver-ep-cycles 5"
+    test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa",
+                            additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
+    test.run()
+
+@pytest.mark.unstable
+def test_multi_ep_stress_thread_completion_shared_av_shm_lookup_remove(cmdline_args):
+    # Public fi_av_lookup uses util_av.lock. With SHM enabled, fi_send also performs the explicit SHM address lookup before acquiring srx_lock.
+    cmd = "fi_efa_multi_ep_stress --threading completion --shared-av --remove-av --av-lookup " \
+          "--sender-workers 4 --receiver-workers 4 --sender-ep-cycles 5 " \
+          "--receiver-ep-cycles 5"
+    test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa",
+                            additional_env="FI_EFA_ENABLE_SHM_TRANSFER=1")
+    test.run()
