@@ -784,6 +784,10 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	if (av->type != FI_AV_TABLE)
 		return -FI_EINVAL;
 
+	/* The order in which the util AV and SRX locks are acquired must match
+	 in the AV insertion, removal and CQ read paths to prevent deadlocks */
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_lock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
 	ofi_genlock_lock(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
 		conn = efa_av_addr_to_conn(av, fi_addr[i]);
@@ -801,6 +805,8 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	}
 
 	ofi_genlock_unlock(&av->util_av.lock);
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_unlock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
 	return err;
 }
 
@@ -825,6 +831,11 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	struct efa_cur_reverse_av *cur_entry, *curtmp;
 	struct efa_prv_reverse_av *prv_entry, *prvtmp;
 
+	/* The order in which the util AV and SRX locks are acquired must match
+	 in the AV insertion, removal and CQ read paths to prevent deadlocks */
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_lock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
+
 	ofi_genlock_lock(&av->util_av.lock);
 
 	HASH_ITER(hh, av->cur_reverse_av, cur_entry, curtmp) {
@@ -848,6 +859,9 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	}
 
 	EFA_GENLOCK_UNLOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+
+	if (av->domain->info_type == EFA_INFO_RDM)
+		ofi_genlock_unlock(&((struct efa_rdm_domain *) av->domain)->srx_lock);
 }
 
 static int efa_av_close(struct fid *fid)
