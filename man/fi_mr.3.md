@@ -43,6 +43,9 @@ fi_mr_enable
 fi_hmem_ze_device
 : Returns an hmem device identifier for a level zero driver and device.
 
+fi_mr_get_xpu_desc
+:   Retrieve a memory region descriptor with extended options.
+
 # SYNOPSIS
 
 ```c
@@ -81,6 +84,9 @@ int fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov,
 int fi_mr_enable(struct fid_mr *mr);
 
 int fi_hmem_ze_device(int driver_index, int device_index);
+
+int fi_mr_get_xpu_desc(struct fid_mr *mr, void *buf, size_t *len,
+    uint64_t flags, struct fid_xpu_ctx *ctx);
 ```
 
 # ARGUMENTS
@@ -362,6 +368,19 @@ The following apply to memory registration.
   desc parameter is NULL, any required local memory registration will be handled
   by the provider.
 
+*FI_MR_XPU_DESC*
+: This bit is associated with the FI_XPU capability. It indicates whether an
+  XPU-usable memory descriptor is required for data transfers initiated by an
+  XPU (see [`fi_xpu`(3)](fi_xpu.3.html)).
+
+  When FI_MR_XPU_DESC is set, an application that registers a buffer used by an
+  XPU data transfer must obtain an XPU descriptor with fi_mr_get_xpu_desc() and
+  pass it into the device-side data transfer calls. This is the XPU analog of
+  FI_MR_LOCAL for host-side calls.
+
+  When FI_MR_XPU_DESC is unset, XPU data transfer calls do not require a
+  descriptor and the application need not call fi_mr_get_xpu_desc().
+
 *Basic Memory Registration* (deprecated)
 : Basic memory registration was deprecated in libfabric version 1.5, but
   is supported for backwards compatibility.  Basic memory registration
@@ -476,6 +495,27 @@ MEMORY REGISTRATION CACHE section.
 Obtains the local memory descriptor associated with a MR.
 The memory registration must have completed successfully before invoking
 this call.
+
+## fi_mr_get_xpu_desc
+
+The fi_mr_get_xpu_desc call retrieves a provider-specific raw descriptor
+(e.g., the hardware lkey) for the MR into a caller-supplied buffer.
+The caller allocates buf and sets *len to the buffer size on input; on
+output *len is set to the number of bytes written. If the buffer is too
+small, -FI_ETOOSMALL is returned and *len is set to the required size.
+
+When called with FI_XPU flag and a valid fid_xpu_ctx, the returned
+descriptor is usable by the XPU when posting work requests. The needed
+size can also be obtained through the mr_desc_size field of
+fi_xpu_ctx_attr from fi_xpu_ctx_query.
+
+For non-XPU use cases, applications are encouraged to use fi_mr_desc
+instead, which returns the descriptor pointer directly.
+
+The MR is not bound to an XPU context — it is a shared domain-level
+resource. The same MR can be queried with different XPU contexts.
+
+See [`fi_xpu`(3)](fi_xpu.3.html) for details.
 
 ## fi_mr_key
 
@@ -1008,6 +1048,10 @@ semantics, including the impact of memory domains.
 
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.
+
+fi_mr_get_xpu_desc returns -FI_ETOOSMALL if the provided buffer is too small;
+*len is updated to the required size. Returns -FI_EINVAL if an invalid
+XPU context is provided.
 
 Fabric errno values are defined in
 `rdma/fi_errno.h`.

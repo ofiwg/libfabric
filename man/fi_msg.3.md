@@ -16,6 +16,12 @@ fi_send / fi_sendv / fi_sendmsg
 fi_inject / fi_senddata
 :   Initiate an operation to send a message
 
+fi_xpu_send
+:   Initiate a send operation from an XPU.
+
+fi_xpu_recv
+:   Post a receive buffer from an XPU.
+
 # SYNOPSIS
 
 ```c
@@ -47,6 +53,15 @@ ssize_t fi_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr);
+
+#include <rdma/fi_xpu_device.h>
+
+int fi_xpu_send(struct fid_xpu_ep *ep, const void *buf, size_t len,
+    void *desc, uint64_t data, void *dest_addr, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_recv(struct fid_xpu_ep *ep, void *buf, size_t len, void *desc,
+    void *src_addr, void *context, uint64_t flags, int scope);
 ```
 
 # ARGUMENTS
@@ -98,6 +113,12 @@ ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 : User specified pointer to associate with the operation.  This parameter is
   ignored if the operation will not generate a successful completion, unless
   an op flag specifies the context parameter be used for required input.
+
+*scope*
+: Cooperative threading scope for device-side operations. Specifies the set
+  of threads issuing the same operation collectively. Only used by
+  fi_xpu_send and fi_xpu_recv. See [`fi_xpu`(3)](fi_xpu.3.html) for
+  details.
 
 # DESCRIPTION
 
@@ -216,6 +237,18 @@ The fi_recvmsg call supports posting buffers over both connected and
 connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags.  The fi_recvmsg function
 takes a struct fi_msg as input.
+
+## fi_xpu_send / fi_xpu_recv
+
+The fi_xpu_send and fi_xpu_recv calls are device-side equivalents of
+the host message operations, callable from XPU kernel code. They
+operate on an exported endpoint handle obtained from fi_ep_export_xpu.
+The desc parameter is a raw descriptor from fi_mr_get_xpu_desc with FI_XPU,
+and dest_addr/src_addr are raw addresses from fi_av_lookup2 with
+FI_XPU. The scope parameter specifies the cooperative threading scope
+(FI_XPU_WORK_ITEM, FI_XPU_SUBGROUP, FI_XPU_WORK_GROUP, or
+FI_XPU_DEVICE). See [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU
+programming model.
 
 # FLAGS
 

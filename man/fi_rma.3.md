@@ -16,6 +16,12 @@ fi_write / fi_writev / fi_writemsg
 fi_inject_write / fi_writedata
 :   Initiate a write to remote memory
 
+fi_xpu_write
+:   Initiate an RMA write operation from an XPU.
+
+fi_xpu_read
+:   Initiate an RMA read operation from an XPU.
+
 # SYNOPSIS
 
 ```c
@@ -51,6 +57,16 @@ ssize_t fi_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
+
+#include <rdma/fi_xpu_device.h>
+
+int fi_xpu_write(struct fid_xpu_ep *ep, const void *buf, size_t len,
+    void *desc, uint64_t data, void *dest_addr, uint64_t addr, uint64_t key,
+    void *context, uint64_t flags, int scope);
+
+int fi_xpu_read(struct fid_xpu_ep *ep, void *buf, size_t len, void *desc,
+    void *src_addr, uint64_t addr, uint64_t key,
+    void *context, uint64_t flags, int scope);
 ```
 
 # ARGUMENTS
@@ -105,6 +121,12 @@ ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 : User specified pointer to associate with the operation.  This parameter is
   ignored if the operation will not generate a successful completion, unless
   an op flag specifies the context parameter be used for required input.
+
+*scope*
+: Cooperative threading scope for device-side operations. Specifies the set
+  of threads issuing the same operation collectively. Only used by
+  fi_xpu_write and fi_xpu_read. See [`fi_xpu`(3)](fi_xpu.3.html) for
+  details.
 
 # DESCRIPTION
 
@@ -215,6 +237,14 @@ The fi_readmsg call supports data transfers over both connected and
 connectionless endpoints, with the ability to control the read operation
 per call through the use of flags.  The fi_readmsg function takes a
 struct fi_msg_rma as input.
+
+## fi_xpu_write / fi_xpu_read
+
+The fi_xpu_write and fi_xpu_read calls are device-side equivalents of
+the host RMA operations. They operate on an exported endpoint handle
+and use raw addresses and keys. The addr and key parameters specify
+the remote memory address and access key respectively. See
+[`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
 
 # FLAGS
 

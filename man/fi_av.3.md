@@ -34,6 +34,9 @@ fi_av_lookup_auth_key
 fi_av_set_user_id
 : Set the user-defined fi_addr_t for an inserted fi_addr_t.
 
+fi_av_lookup2
+:   Look up an address vector entry with extended options.
+
 # SYNOPSIS
 
 ```c
@@ -79,6 +82,10 @@ int fi_av_lookup_auth_key(struct fid_av *av, fi_addr_t addr,
 
 int fi_av_set_user_id(struct fid_av *av, fi_addr_t fi_addr,
       fi_addr_t user_id, uint64_t flags);
+
+int fi_av_lookup2(struct fid_av *av, fi_addr_t fi_addr,
+    void *buf, size_t *len, uint64_t flags,
+    struct fid_xpu_ctx *ctx);
 ```
 
 # ARGUMENTS
@@ -523,6 +530,24 @@ addr buffer. If the actual address is larger than what can fit into the buffer,
 it will be truncated.  On output, addrlen is set to the size of the buffer
 needed to store the address, which may be larger than the input value.
 
+## fi_av_lookup2
+
+The fi_av_lookup2 call is an extended version of fi_av_lookup that
+accepts flags and an optional XPU context. When called with flags set
+to FI_XPU and a valid fid_xpu_ctx, the call retrieves a
+provider-specific raw address usable by the XPU when posting work
+requests. The size of the returned data is av_addr_size from
+fi_xpu_ctx_query. When called without FI_XPU (flags = 0, ctx = NULL),
+the call behaves identically to fi_av_lookup. The caller allocates buf
+and sets *len to the buffer size on input; on output *len is set to
+the number of bytes written.
+
+The AV is not bound to an XPU context — it remains a host-only,
+domain-level resource. The same AV can be queried with different XPU
+contexts to get device-specific representations.
+
+See [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 ## fi_rx_addr
 
 This function is used to convert an endpoint address, returned by
@@ -721,6 +746,10 @@ FI_ADDR_NOTAVAIL.
 
 All other calls return FI_SUCCESS on success, or a negative value corresponding
 to fabric errno on error.  Fabric errno values are defined in `rdma/fi_errno.h`.
+
+fi_av_lookup2 returns -FI_ETOOSMALL if the provided buffer is too small;
+*len is updated to the required size. Returns -FI_EINVAL if an invalid
+fi_addr or XPU context is provided.
 
 # SEE ALSO
 

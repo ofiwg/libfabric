@@ -460,10 +460,11 @@ additional optimizations.
   and/or FI_ATOMIC be set.
 
 *FI_XPU*
-: Specifies that the endpoint should support transfers that may be initiated
-  from heterogenous computation devices, such as GPUs.  This flag requires
-  that FI_TRIGGER be set.  For additional details on XPU triggers see
-  [`fi_trigger`(3)](fi_trigger.3.html).
+: Requests support for data path operations initiated from heterogeneous
+  computation devices, such as GPUs. At the endpoint level, indicates the
+  endpoint should support such operations; at the domain level, indicates the
+  domain supports creating an XPU context. See
+  [`fi_xpu`(3)](fi_xpu.3.html) for details.
 
 Capabilities may be grouped into three general categories: primary,
 secondary, and primary modifiers.  Primary capabilities must explicitly
