@@ -450,13 +450,18 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	dlist_foreach(&av->util_av.ep_list, entry) {
 		ep = container_of(entry, struct efa_rdm_ep, base_ep.util_ep.av_entry);
 		/* move from implicit to explicit peer map, using new fi_addr */
+		EFA_GENLOCK_LOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
 		peer = efa_rdm_ep_peer_map_remove(ep->fi_addr_to_peer_map_implicit,
 					       implicit_fi_addr);
 		if (peer) {
 			peer->conn = explicit_conn;
-			efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map,
-						*fi_addr, peer);
+			if (efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map,
+						       *fi_addr, peer))
+				EFA_WARN(FI_LOG_AV,
+					 "Failed to insert peer into explicit map for addr %lu\n",
+					 *fi_addr);
 		}
+		EFA_GENLOCK_UNLOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
 		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 		peer_srx->owner_ops->foreach_unspec_addr(peer_srx, &efa_av_get_addr_from_peer_rx_entry);
 	}

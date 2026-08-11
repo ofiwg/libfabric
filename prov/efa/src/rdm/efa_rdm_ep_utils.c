@@ -46,7 +46,6 @@ int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 	return efa_conn ? efa_conn->ah->ahn : -1;
 }
 
-
 int efa_rdm_ep_peer_map_init(struct efa_av_array **arr)
 {
 	return efa_av_array_init(arr);
@@ -74,7 +73,7 @@ struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_add
 
 /**
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
- * the explicit AV, this function is a thread-safe version of efa_rdm_ep_get_peer_explicit
+ * the explicit AV
  *
  * @param[in]		ep		endpoint
  * @param[in]		addr 		libfabric address
@@ -82,17 +81,14 @@ struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_add
  */
 struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
-	struct efa_rdm_peer *peer;
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(ep)->srx_lock);
-	peer = efa_rdm_ep_get_peer_explicit(ep, addr);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(ep)->srx_lock);
-	return peer;
+	return efa_rdm_ep_get_peer_explicit(ep, addr);
 }
 
 
 /**
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
- * the explicit AV, this function must be called inside an SRX lock
+ * the explicit AV. The map is read without a lock; a peer is created on a miss
+ * under the endpoint lock.
  *
  * @param[in]		ep		endpoint
  * @param[in]		addr 		libfabric address
@@ -103,11 +99,11 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	struct efa_conn *conn;
 	struct efa_rdm_peer *peer;
 
-	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));
-
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
+	/* Path 1 (common case): the peer is already in the map. Keep this
+	 * lookup lock-free -- if we find the peer, just return it. */
 	peer = efa_rdm_ep_peer_map_lookup(ep->fi_addr_to_peer_map, addr);
 	if (peer)
 		return peer;
@@ -116,16 +112,30 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	if (OFI_UNLIKELY(!conn))
 		return NULL;
 
+	/* Path 2: the peer is not in the map. Take the lock, then create the
+	 * peer and insert it. */
+	EFA_GENLOCK_LOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
+
+	/* Path 2.1: two writers can race here -- both looked up, neither found
+	 * the peer, so both would try to insert. Re-check under the lock; if
+	 * another writer already inserted it, use theirs rather than insert a
+	 * duplicate. */
+	peer = efa_rdm_ep_peer_map_lookup(ep->fi_addr_to_peer_map, addr);
+	if (peer)
+		goto unlock;
+
 	EFA_INFO(FI_LOG_EP_DATA, "Creating peer for addr %lu\n", addr);
 	peer = ofi_buf_alloc(ep->efa_rdm_peer_pool);
 	if (OFI_UNLIKELY(!peer)) {
 		EFA_WARN(FI_LOG_EP_DATA, "Cannot allocate peer for addr %lu\n", addr);
-		return NULL;
+		goto unlock;
 	}
+	assert(peer);
 
 	if (efa_rdm_peer_construct(peer, ep, conn)) {
 		ofi_buf_free(peer);
-		return NULL;
+		peer = NULL;
+		goto unlock;
 	}
 
 	if (efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map, addr, peer)) {
@@ -133,9 +143,11 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 			 "Failed to insert peer into map for addr %lu\n", addr);
 		efa_rdm_peer_destruct(peer, ep);
 		ofi_buf_free(peer);
-		return NULL;
+		peer = NULL;
 	}
 
+unlock:
+	EFA_GENLOCK_UNLOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
 	return peer;
 }
 
@@ -152,29 +164,44 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	struct efa_conn *conn;
 	struct efa_rdm_peer *peer;
 
-	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(ep)->srx_lock));
-
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
+	/*
+	 * The endpoint lock protects the peer map; the implicit-AV lock
+	 * protects peer->conn and its implicit-LRU entry (touched by the LRU
+	 * move below).
+	 *
+	 * We hold the implicit-AV lock across the whole function to prevent a
+	 * concurrent fi_av_insert from promoting an implicit to explicit peer at
+	 * the same time. Otherwise, the promotion could free the implicit conn
+	 * and cause the LRU move to operate on a now-bad pointer.
+	 *
+	 * Follows locking order: implicit-AV -> endpoint.
+	 */
+	EFA_GENLOCK_LOCK(&ep->base_ep.av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	EFA_GENLOCK_LOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
+
 	peer = efa_rdm_ep_peer_map_lookup(ep->fi_addr_to_peer_map_implicit, addr);
 	if (peer)
-		goto out;
+		goto unlock_ep;
 
 	conn = efa_av_addr_to_conn_implicit(ep->base_ep.av, addr);
 	if (OFI_UNLIKELY(!conn))
-		return NULL;
+		goto unlock_ep;
 
 	EFA_INFO(FI_LOG_EP_DATA, "Creating peer for addr %lu\n", addr);
 	peer = ofi_buf_alloc(ep->efa_rdm_peer_pool);
 	if (OFI_UNLIKELY(!peer)) {
 		EFA_WARN(FI_LOG_EP_DATA, "Cannot allocate peer for addr %lu\n", addr);
-		return NULL;
+		goto unlock_ep;
 	}
+	assert(peer);
 
 	if (efa_rdm_peer_construct(peer, ep, conn)) {
 		ofi_buf_free(peer);
-		return NULL;
+		peer = NULL;
+		goto unlock_ep;
 	}
 
 	if (efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map_implicit, addr, peer)) {
@@ -182,14 +209,17 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 			 "Failed to insert peer into map for addr %lu\n", addr);
 		efa_rdm_peer_destruct(peer, ep);
 		ofi_buf_free(peer);
-		return NULL;
+		peer = NULL;
 	}
 
-out:
-	assert(peer);
-	/* Move to the front of the LRU list */
-	EFA_GENLOCK_LOCK(&ep->base_ep.av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->conn);
+unlock_ep:
+	EFA_GENLOCK_UNLOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
+
+	/* Move to the front of the LRU list; peer->conn stays valid under the
+	 * implicit-AV lock held here. */
+	if (peer)
+		efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->conn);
+
 	EFA_GENLOCK_UNLOCK(&ep->base_ep.av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	return peer;
 }
