@@ -15,7 +15,7 @@ void efa_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah);
  * @brief Move the AH to the end of the LRU list to indicate that it is the
  * most recently used entry
  *
- * This function is not called in the efa_rdm_ep_get_peer so that we don't add
+ * This function is not called in efa_rdm_ep_get_peer_explicit so that we don't add
  * extra latency to the critical path with explicit AV insertion. We use the LRU
  * list to remove AH entries with only implicit AV entries, so it is OK to do
  * that.

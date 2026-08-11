@@ -15,6 +15,7 @@
 *.vc.db
 *.vc.opendb
 *.log
+*.trs
 *.exe
 *.lib
 *.dll
@@ -103,3 +104,7 @@ prov/efa/docs/doxygen/latex
 # Rust
 /target
 /Cargo.lock
+
+# EFA test binaries (build outputs)
+prov/efa/test/gtest/efa_gtest
+prov/efa/test/efa_unit_test

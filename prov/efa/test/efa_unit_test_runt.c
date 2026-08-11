@@ -39,7 +39,7 @@ void test_efa_rdm_peer_get_runt_size_impl(
 	raw_addr.qkey = 0x1234;
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	peer->num_runt_bytes_in_flight = peer_num_runt_bytes_in_flight;
 
 	mock_mr.efa_mr.iface = iface;
@@ -307,7 +307,7 @@ void test_efa_rdm_peer_select_readbase_rtm_impl(
 	raw_addr.qkey = 0x1234;
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	peer->num_runt_bytes_in_flight = peer_num_runt_bytes_in_flight;
 
 	mock_mr.efa_mr.iface = iface;

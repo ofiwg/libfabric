@@ -29,7 +29,7 @@ int efa_test_drive_rxe_unexp_handle_error(struct fid_ep *ep, void *op_context,
 	if (ret != 1)
 		return -FI_EINVAL;
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	if (!peer)
 		return -FI_EINVAL;
 
@@ -76,7 +76,7 @@ int efa_test_queue_op_with_fi_more(struct fid_ep *ep_fid, struct fid_av *av_fid,
 	if (fi_av_insert(av_fid, &raw_addr, 1, &peer_addr, 0, NULL) != 1)
 		return -FI_EINVAL;
 
-	qop->peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	qop->peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	if (!qop->peer)
 		return -FI_EINVAL;
 	/* REQ already sent, so enforce_handshake queues instead of posting a

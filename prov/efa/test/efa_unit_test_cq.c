@@ -104,7 +104,7 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 	peer->host_id = peer_host_id;
 
@@ -303,7 +303,7 @@ void test_rdm_cq_handshake_bad_send_status_impl(void **state, int prov_errno, bo
 
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 	/* Peer host id is uninitialized before handshake */
 	assert_int_equal(peer->host_id, 0);
@@ -892,7 +892,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	assert_int_equal(ret, 1);
 
 	/* Skip handshake */
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 

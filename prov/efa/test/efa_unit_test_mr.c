@@ -2034,7 +2034,7 @@ void test_efa_rdm_mr_gen_check_cancels_rnr_queued_ope(void **state)
 	assert_int_equal(ret, 1);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 
 	/* Mock a successful send, the packet is tracked as submitted */
@@ -2119,7 +2119,7 @@ void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
 	assert_int_equal(ret, 1);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 
 	/* Mock a successful send, the initial RTM goes out */
