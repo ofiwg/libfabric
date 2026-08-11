@@ -292,7 +292,6 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_rdm_pke_utils.c \
 	prov/efa/test/gtest/efa_gtest_conn.cc \
 	prov/efa/test/gtest/efa_gtest_ah_utils.c \
-	prov/efa/test/gtest/efa_gtest_ah_utils.c \
 	prov/efa/test/gtest/efa_gtest_ah.cc \
 	prov/efa/test/gtest/efa_gtest_av_array.cc \
 	prov/efa/test/gtest/efa_gtest_av_array_utils.c \
