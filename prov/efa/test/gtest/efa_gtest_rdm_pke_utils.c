@@ -18,7 +18,7 @@ int efa_test_rtm_read_nack_missing_rxe(struct fid_ep *ep, fi_addr_t peer_addr,
 {
 	struct efa_rdm_ep *efa_rdm_ep =
 		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	struct efa_rdm_pke *pke;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 
@@ -97,7 +97,7 @@ int efa_test_failed_reorder_msg_releases_rx_pkt(struct fid_ep *ep,
 {
 	struct efa_rdm_ep *efa_rdm_ep =
 		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	struct efa_rdm_pke *pke;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	uint32_t msg_id;
@@ -146,7 +146,7 @@ int efa_test_failed_reorder_msg_overflow_releases_rx_pkt_and_entry(
 {
 	struct efa_rdm_ep *efa_rdm_ep =
 		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	struct efa_rdm_pke *pke;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	uint32_t msg_id;
@@ -249,7 +249,7 @@ static struct efa_rdm_ope *efa_test_rtm_alloc_txe(struct efa_rdm_ep *ep,
 	if (efa_test_av_insert_self(&ep->base_ep.util_ep.ep_fid, av,
 				    &peer_addr) != 1)
 		return NULL;
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 
 	iov.iov_base = buf;
 	iov.iov_len = len;

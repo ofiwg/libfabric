@@ -87,7 +87,7 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 	mock_mr.efa_mr.iface = iface;
 
 	struct efa_rdm_ep *efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, 0);
 
 	memset(&mock_txe, 0, sizeof(mock_txe));
 	mock_txe.total_len = total_len;
@@ -315,7 +315,7 @@ void test_efa_rdm_ope_post_write_0_byte(void **state)
 	assert_int_equal(ret, 1);
 
 	struct efa_rdm_ep *efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, 0);
 
 	efa_unit_test_buff_construct(&local_buff, resource, 4096 /* buff_size */);
 	memset(&mock_txe, 0, sizeof(mock_txe));
@@ -791,7 +791,7 @@ void test_efa_rdm_rxe_map(void **state)
 	/* efa_unit_test_alloc_rxe only inserts one address.
 	 * So fi_addr is guaranteed to be 0
 	 */
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, 0);
 
 	efa_rdm_rxe_map_insert(&peer->rxe_map, rxe->msg_id, rxe);
 	assert_true(rxe->rxe_map == &peer->rxe_map);
@@ -1395,7 +1395,7 @@ void test_efa_rdm_atomic_compare_desc_persistence(void **state)
 	assert_int_equal(ret, 1);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	peer->is_local = false;
 
@@ -2254,7 +2254,7 @@ void test_efa_rdm_rxe_peer_abort_writes_error_completion_at_drain(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Post a recv and match it. */
@@ -2406,7 +2406,7 @@ void test_efa_rdm_rxe_mark_peer_aborted_multi_recv_writes_err(
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
 				      0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	/* 1. Post a multi-recv. */
@@ -2637,7 +2637,7 @@ static struct efa_rdm_ope *build_matched_rxe(struct efa_resource *resource)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	iov = calloc(1, sizeof(*iov));
@@ -2809,7 +2809,7 @@ void test_efa_rdm_pke_handle_tx_error_longread_tagged_peer_aborts(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Post a tagged recv. */
@@ -2891,7 +2891,7 @@ void test_efa_rdm_rxe_emit_peer_error_emits_pkt(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Mark the peer as supporting PEER_ERROR_PKT. */
@@ -3011,7 +3011,7 @@ void test_efa_rdm_rxe_emit_peer_error_multi_recv_emits_pkt(
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
 				      0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Mark peer as supporting PEER_ERROR_PKT. */
@@ -3142,7 +3142,7 @@ void test_efa_rdm_rxe_emit_peer_error_skips_on_peer_ep_closed(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Even though the peer advertises support, an ABORT prov_errno
@@ -3233,7 +3233,7 @@ void test_efa_rdm_rxe_emit_peer_error_with_homogeneous_peers(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 	/* No HANDSHAKE_RECEIVED, no extra_info bit set. */
 	assert_false(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
@@ -3316,7 +3316,7 @@ void test_efa_rdm_rxe_emit_peer_error_skips_when_no_handshake(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 	assert_false(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
 
@@ -3388,7 +3388,7 @@ void test_efa_rdm_pke_handle_send_completion_peer_error_releases_rxe(void **stat
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_msg);
@@ -3463,7 +3463,7 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Build an rxe in the post-mark, awaiting-PEER_ERROR_PKT-completion
@@ -3562,7 +3562,7 @@ void test_efa_rdm_rxe_emit_peer_error_reentry_safe(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
@@ -3651,7 +3651,7 @@ void test_efa_rdm_pke_handle_tx_error_sibling_read_wr_does_not_release_rxe(
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
 				      0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_msg);
@@ -3835,7 +3835,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Post + match a recv to build the rxe. */
@@ -3930,7 +3930,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Post + match a tagged recv. */
@@ -4647,7 +4647,7 @@ void test_efa_rdm_pke_handle_rma_read_completion_drains_recovered_rxe(
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
 				      0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	iov.iov_base = buf;
@@ -4771,7 +4771,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 			 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	iov.iov_base = buf;
@@ -4920,7 +4920,7 @@ static void run_medium_inbound_peer_abort(struct efa_resource *resource,
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
 				      0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	iov.iov_base = buf;
@@ -5058,7 +5058,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped(voi
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
 				      0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
@@ -5124,7 +5124,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down(
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr,
 				      0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Allocate the inbound PEER_ERROR pke early (efa_rx_pkt_pool has

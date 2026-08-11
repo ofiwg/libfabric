@@ -117,7 +117,7 @@ void test_efa_rdm_msg_send_multi_pkt_sendv_fail_no_inflight(
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 
 	/*

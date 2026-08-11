@@ -116,13 +116,13 @@ void test_efa_domain_peer_list_cleared(void **state)
 	assert_int_equal(num_addr, 1);
 
 	// Create peers through normal code path
-	peer1 = efa_rdm_ep_get_peer(efa_rdm_ep1, addr1);
+	peer1 = efa_rdm_ep_get_peer_explicit(efa_rdm_ep1, addr1);
 	assert_non_null(peer1);
-	peer2 = efa_rdm_ep_get_peer(efa_rdm_ep1, addr2);
+	peer2 = efa_rdm_ep_get_peer_explicit(efa_rdm_ep1, addr2);
 	assert_non_null(peer2);
-	peer3 = efa_rdm_ep_get_peer(efa_rdm_ep2, addr3);
+	peer3 = efa_rdm_ep_get_peer_explicit(efa_rdm_ep2, addr3);
 	assert_non_null(peer3);
-	peer4 = efa_rdm_ep_get_peer(efa_rdm_ep2, addr4);
+	peer4 = efa_rdm_ep_get_peer_explicit(efa_rdm_ep2, addr4);
 	assert_non_null(peer4);
 
 	// Manually add peers to domain lists to simulate the conditions
