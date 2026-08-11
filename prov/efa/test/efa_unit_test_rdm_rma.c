@@ -277,7 +277,7 @@ void test_efa_rdm_rma_should_write_using_rdma_unsolicited_write_recv_not_match(
 	 * Fake a peer that has made handshake and
 	 * does not support unsolicited write recv
 	 */
-	peer = efa_rdm_ep_get_peer(ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE;
 	peer->extra_info[0] &= ~EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
@@ -497,7 +497,7 @@ void test_efa_rdm_rma_post_remote_write_partial_fail_no_txe_release(
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE |
 				EFA_RDM_EXTRA_FEATURE_RDMA_READ |
@@ -620,7 +620,7 @@ void test_efa_rdm_rma_partial_post_retry_no_double_free(
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE |
 				EFA_RDM_EXTRA_FEATURE_RDMA_READ |
@@ -739,7 +739,7 @@ void test_efa_rdm_rma_post_remote_read_partial_fail_no_txe_release(
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_READ;
 	/* Match device versions so efa_rdm_interop_rdma_read returns true */
@@ -866,7 +866,7 @@ void test_efa_rdm_rma_partial_post_retry_no_double_free_read(
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_READ;
 	vendor_part_id_orig = g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
@@ -1225,7 +1225,7 @@ void test_efa_rdm_rma_inject_write_bumps_tx_counter(void **state)
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE |
 				EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;

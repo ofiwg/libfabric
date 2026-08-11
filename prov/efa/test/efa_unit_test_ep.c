@@ -134,7 +134,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(void **state, uint64_t local_hos
 
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 	/* Peer host id is uninitialized before handshake */
 	assert_int_equal(peer->host_id, 0);
@@ -477,7 +477,7 @@ void test_efa_rdm_ep_rma_queue_before_handshake(void **state, int op)
 	 * a REQ packet has been sent to the peer (so no need to send again)
 	 * handshake has not been received, so we do not know whether the peer support DC
 	 */
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	/* Do not use shm in this unit test because we are testing efa rma path */
 	peer->conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
@@ -547,7 +547,7 @@ void test_efa_rdm_ep_trigger_handshake(void **state)
 
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	/* No txe should have been allocated yet */
@@ -615,7 +615,7 @@ void test_efa_rdm_txe_construct_splits_internal_flags(void **state)
 	raw_addr.qkey = 0x1234;
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL);
 	assert_int_equal(ret, 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 
 	msg.msg_iov = &iov;
 	msg.iov_count = 1;
@@ -1087,7 +1087,7 @@ void test_efa_rdm_ep_handshake_receive_peer_user_recv_qp(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Construct a handshake packet that mimics an old peer with zcpy enabled */
@@ -1168,7 +1168,7 @@ void test_efa_rdm_ep_handshake_receive_peer_no_user_recv_qp(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -1213,7 +1213,7 @@ void test_efa_rdm_ep_handshake_receive_hmem_p2p_supported(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -1257,7 +1257,7 @@ void test_efa_rdm_ep_handshake_receive_hmem_p2p_not_supported(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -1301,7 +1301,7 @@ void test_efa_rdm_ep_handshake_receive_hmem_legacy_peer(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -1425,7 +1425,7 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(void **state)
 	 * a REQ packet has been sent to the peer (so no need to send again)
 	 * handshake has not been received, so we do not know whether the peer support DC
 	 */
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	peer->is_local = false;
 
@@ -2157,7 +2157,7 @@ void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion(void *
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Allocate a packet entry for the test */

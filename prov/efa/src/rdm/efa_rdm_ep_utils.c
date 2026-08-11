@@ -73,20 +73,6 @@ struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_add
 
 /**
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
- * the explicit AV
- *
- * @param[in]		ep		endpoint
- * @param[in]		addr 		libfabric address
- * @returns pointer to #efa_rdm_peer
- */
-struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
-{
-	return efa_rdm_ep_get_peer_explicit(ep, addr);
-}
-
-
-/**
- * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
  * the explicit AV. The map is read without a lock; a peer is created on a miss
  * under the endpoint lock.
  *

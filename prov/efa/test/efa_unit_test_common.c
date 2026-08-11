@@ -432,7 +432,7 @@ struct efa_rdm_ope *efa_unit_test_alloc_txe(struct efa_resource *resource, uint3
 
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 
 	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
 	if (!txe)
@@ -458,7 +458,7 @@ struct efa_rdm_ope *efa_unit_test_alloc_rxe(struct efa_resource *resource, uint3
 
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, 0);
 
 	/* TODO - peer struct might need more info */
 	return efa_rdm_ep_alloc_rxe(efa_rdm_ep, peer, op);
@@ -485,7 +485,7 @@ void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr
 
 	/* Mark peer as handshake received and enable RDMA write/read */
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, *addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, *addr);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE | EFA_RDM_EXTRA_FEATURE_RDMA_READ | EFA_RDM_EXTRA_FEATURE_UNSOLICITED_WRITE_RECV;
 }

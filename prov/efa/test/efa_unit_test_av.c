@@ -302,7 +302,7 @@ void test_av_reinsertion(void **state)
 	assert_int_equal(err, 0);
 	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, fi_addr);
 	assert_int_equal(peer->conn->fi_addr, fi_addr);
 	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
 
@@ -319,7 +319,7 @@ void test_av_reinsertion(void **state)
 	assert_int_equal(err, 0);
 	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, fi_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, fi_addr);
 	assert_int_equal(peer->conn->fi_addr, fi_addr);
 	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
 
@@ -508,7 +508,7 @@ void test_av_implicit_to_explicit(void **state)
 	assert_int_equal(err, 0);
 	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, explicit_fi_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, explicit_fi_addr);
 	assert_int_equal(peer->conn->fi_addr, explicit_fi_addr);
 	assert_int_equal(peer->conn->implicit_fi_addr, FI_ADDR_NOTAVAIL);
 	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
@@ -907,7 +907,7 @@ void test_ah_lru_eviction_impl(bool explicit)
 	if (explicit) {
 		err = fi_av_insert(av_fid[0], &raw_addr[1], 1, &fi_addr, 0, NULL);
 		assert_int_equal(err, 1);
-		peer = efa_rdm_ep_get_peer(efa_rdm_ep[0], fi_addr);
+		peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep[0], fi_addr);
 	} else {
 		ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep[0])->srx_lock);
 		err = efa_av_insert_one_implicit(efa_av[0], &raw_addr[1], &fi_addr, 0, NULL);

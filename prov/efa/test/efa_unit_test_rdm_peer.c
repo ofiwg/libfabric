@@ -41,7 +41,7 @@ void test_efa_rdm_peer_reorder_msg_impl(struct efa_resource *resource,
 	raw_addr.qkey = 0x1234;
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
@@ -191,7 +191,7 @@ void test_efa_rdm_peer_move_overflow_pke_to_recvwin_impl(
 	raw_addr.qkey = 0x1234;
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
-	*peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	*peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(*peer);
 
 	*pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
@@ -307,7 +307,7 @@ void test_efa_rdm_peer_append_overflow_pke_to_recvwin(void **state) {
 	raw_addr.qkey = 0x1234;
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	alloc_pke_in_overflow_list(efa_rdm_ep, &pkt_entry2, peer, raw_addr, EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE + EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE / 2);
@@ -360,7 +360,7 @@ void test_efa_rdm_peer_recvwin_queue_or_append_pke(void **state)
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
@@ -431,7 +431,7 @@ void test_efa_rdm_peer_destruct_clears_rnr_flag(void **state)
 	wr_id = (uint64_t) g_ibv_submitted_wr_id_vec[0];
 	pkt_entry = efa_rdm_cq_get_pke_from_wr_id(ibv_cq, wr_id);
 
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Simulate RNR: record completion and queue for retransmit */
@@ -497,7 +497,7 @@ void test_efa_rdm_peer_abort_ooo_in_overflow(void **state)
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* Place a pke in the overflow list with msg_id beyond the window. */
@@ -535,7 +535,7 @@ void test_efa_rdm_peer_abort_ooo_in_recvwin(void **state)
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* Queue an OOO pke into the recvwin at msg_id = 3 (exp is 0). */
@@ -600,7 +600,7 @@ void test_efa_rdm_peer_abort_ooo_recvwin_drain_progresses(void **state)
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* This test borrows two rx-pool pkes (pke1, pke2) that the drain
@@ -681,7 +681,7 @@ void test_efa_rdm_peer_abort_ooo_miss(void **state)
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* msg_id 42 is nowhere in the reorder state. */
@@ -758,7 +758,7 @@ void test_efa_rdm_peer_skip_aborted_msg_id_never_arrived_unblocks_window(
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* pke1, pke2 and the PEER_ERROR abort marker packet are all rx-pool
@@ -837,7 +837,7 @@ void test_efa_rdm_peer_skip_aborted_msg_id_head_advances(void **state)
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* One rx-pool pke (the abort marker) is released by the drain. */
@@ -881,7 +881,7 @@ void test_efa_rdm_peer_skip_aborted_msg_id_already_processed_noop(
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* The abort marker packet is released immediately (case 1), counting
@@ -925,7 +925,7 @@ void test_efa_rdm_peer_skip_aborted_msg_id_buffered_abort_markers(
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* Three rx-pool pkes are allocated and returned to the pool by the
@@ -1002,7 +1002,7 @@ void test_efa_rdm_peer_skip_aborted_msg_id_abort_marker_behind_head(
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* Three abort marker packets are queued and later drained, each
@@ -1086,7 +1086,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0, NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* pke1 (buffered) and the SKIP packet are rx-pool pkes the drain
@@ -1189,7 +1189,7 @@ void test_efa_rdm_peer_abort_ooo_msg_overflow_multi_segment(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0,
 				      NULL), 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, addr);
 	assert_non_null(peer);
 
 	/* Window expects msg_id 0; these ids are out of window -> overflow. */

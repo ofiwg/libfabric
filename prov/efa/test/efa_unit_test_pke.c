@@ -141,7 +141,7 @@ void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state)
     raw_addr.qkey = 0x1234;
     numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
     assert_int_equal(numaddr, 1);
-    peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+    peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
     assert_non_null(peer);
 
     /* Construct a txe with read nack flag added */
@@ -247,7 +247,7 @@ void test_efa_rdm_pke_alloc_rta_rxe(void **state)
 		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
 		1);
 
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, 0);
 	pke->peer = peer;
 
 	rxe = efa_rdm_pke_alloc_rta_rxe(pke, ofi_op_atomic);
@@ -293,7 +293,7 @@ void test_efa_rdm_pke_alloc_rtw_rxe(void **state)
 	/* Clean the flags to avoid having garbage value */
 	base_hdr->flags = 0;
 
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, 0);
 	pke->peer = peer;
 
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pke);
@@ -342,7 +342,7 @@ void test_efa_rdm_pke_alloc_rtr_rxe(void **state)
 	/* Clean the flags to avoid having garbage value */
 	base_hdr->flags = 0;
 
-	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, 0);
+	struct efa_rdm_peer *peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, 0);
 	pke->peer = peer;
 
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pke);
@@ -417,7 +417,7 @@ void test_efa_rdm_pke_flag_tracking(void **state)
 	raw_addr.qkey = 0x1234;
 	numaddr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
 	assert_int_equal(numaddr, 1);
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
 	/* Create a txe */
