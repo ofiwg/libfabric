@@ -6,6 +6,8 @@
 #ifndef EFA_GTEST_AV_ARRAY_UTILS_H
 #define EFA_GTEST_AV_ARRAY_UTILS_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -16,11 +18,15 @@ struct efa_av_array;
 struct efa_av_array *efa_test_av_array_create(void);
 /* Create with a custom max_idx; NULL if the value is rejected. */
 struct efa_av_array *efa_test_av_array_create_max(unsigned max_idx);
+/* Create with explicit attr fields; NULL if rejected. 0 selects defaults. */
+struct efa_av_array *efa_test_av_array_create_attr(unsigned max_idx,
+						   unsigned inline_size,
+						   unsigned chunk_size);
 void efa_test_av_array_destroy(struct efa_av_array *arr);
 
-int efa_test_av_array_insert(struct efa_av_array *arr, unsigned index,
+int efa_test_av_array_insert(struct efa_av_array *arr, uint64_t index,
 			     void *entry);
-void *efa_test_av_array_at(struct efa_av_array *arr, unsigned index);
+void *efa_test_av_array_at(struct efa_av_array *arr, uint64_t index);
 
 /* Non-zero once the array has allocated its chunk table. */
 int efa_test_av_array_has_chunk_table(struct efa_av_array *arr);
@@ -29,7 +35,7 @@ int efa_test_av_array_count(struct efa_av_array *arr);
 /* Iterate, stopping at the first entry equal to target; 1 if found, else 0. */
 int efa_test_av_array_iter_first_hit(struct efa_av_array *arr, void *target);
 
-extern const int efa_test_av_array_fast_cutoff;
+extern const int efa_test_av_array_inline_size;
 extern const int efa_test_av_array_chunk_size;
 extern const int efa_test_av_array_max_idx_ceiling;
 extern const int efa_test_av_array_default_max_idx;

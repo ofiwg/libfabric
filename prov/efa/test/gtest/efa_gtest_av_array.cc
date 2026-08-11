@@ -31,7 +31,7 @@ class EfaAvArrayTest : public Test
 			efa_test_av_array_destroy(arr);
 	}
 
-	int cutoff() { return efa_test_av_array_fast_cutoff; }
+	int cutoff() { return efa_test_av_array_inline_size; }
 	int chunk() { return efa_test_av_array_chunk_size; }
 };
 
@@ -222,6 +222,33 @@ TEST_F(EfaAvArrayTest, iter_stops_early)
 	EXPECT_EQ(efa_test_av_array_insert(arr, 1, entry_ptr(8)), 0);
 	EXPECT_EQ(efa_test_av_array_insert(arr, cutoff() + 5, entry_ptr(8)), 0);
 	EXPECT_EQ(efa_test_av_array_iter_first_hit(arr, entry_ptr(8)), 1);
+}
+
+/* Custom inline_size/chunk_size stores and reads back across the inline region
+ * and multiple chunks (exercises the barrier paths). */
+TEST_F(EfaAvArrayTest, custom_attr_concurrent_safe_roundtrip)
+{
+	const unsigned inl = 4, chk = 8;
+	struct efa_av_array *a = efa_test_av_array_create_attr(1000, inl, chk);
+	ASSERT_NE(a, nullptr);
+
+	/* Inline region. */
+	EXPECT_EQ(efa_test_av_array_insert(a, inl - 1, entry_ptr(1)), 0);
+	EXPECT_EQ(efa_test_av_array_at(a, inl - 1), entry_ptr(1));
+	EXPECT_EQ(efa_test_av_array_has_chunk_table(a), 0);
+
+	/* First chunk-region index allocates the chunk table. */
+	EXPECT_EQ(efa_test_av_array_insert(a, inl, entry_ptr(2)), 0);
+	EXPECT_EQ(efa_test_av_array_has_chunk_table(a), 1);
+	EXPECT_EQ(efa_test_av_array_at(a, inl), entry_ptr(2));
+
+	/* An index several chunks in reads back and does not disturb the others. */
+	EXPECT_EQ(efa_test_av_array_insert(a, inl + 2 * chk + 1, entry_ptr(3)), 0);
+	EXPECT_EQ(efa_test_av_array_at(a, inl + 2 * chk + 1), entry_ptr(3));
+	EXPECT_EQ(efa_test_av_array_at(a, inl + chk), nullptr);
+	EXPECT_EQ(efa_test_av_array_count(a), 3);
+
+	efa_test_av_array_destroy(a);
 }
 
 /* Destroying a NULL array is a no-op. */

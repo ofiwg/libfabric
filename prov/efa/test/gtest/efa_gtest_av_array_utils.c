@@ -4,7 +4,7 @@
 #include "efa_gtest_av_array_utils.h"
 #include "efa_av_array.h"
 
-const int efa_test_av_array_fast_cutoff = EFA_AV_ARRAY_FAST_CUTOFF;
+const int efa_test_av_array_inline_size = EFA_AV_ARRAY_INLINE_SIZE;
 const int efa_test_av_array_chunk_size = EFA_AV_ARRAY_CHUNK_SIZE;
 const int efa_test_av_array_max_idx_ceiling = EFA_AV_ARRAY_MAX_IDX_CEILING;
 const int efa_test_av_array_default_max_idx = EFA_AV_ARRAY_DEFAULT_MAX_IDX;
@@ -29,18 +29,33 @@ struct efa_av_array *efa_test_av_array_create_max(unsigned max_idx)
 	return arr;
 }
 
+struct efa_av_array *efa_test_av_array_create_attr(unsigned max_idx,
+						   unsigned inline_size,
+						   unsigned chunk_size)
+{
+	struct efa_av_array *arr;
+	struct efa_av_array_attr attr = {0};
+
+	attr.max_idx = max_idx;
+	attr.inline_size = inline_size;
+	attr.chunk_size = chunk_size;
+	if (efa_av_array_init_attr(&arr, &attr))
+		return NULL;
+	return arr;
+}
+
 void efa_test_av_array_destroy(struct efa_av_array *arr)
 {
 	efa_av_array_destroy(arr);
 }
 
-int efa_test_av_array_insert(struct efa_av_array *arr, unsigned index,
+int efa_test_av_array_insert(struct efa_av_array *arr, uint64_t index,
 			     void *entry)
 {
 	return efa_av_array_insert(arr, index, entry);
 }
 
-void *efa_test_av_array_at(struct efa_av_array *arr, unsigned index)
+void *efa_test_av_array_at(struct efa_av_array *arr, uint64_t index)
 {
 	return efa_av_array_at(arr, index);
 }
