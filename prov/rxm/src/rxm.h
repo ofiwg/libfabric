@@ -270,6 +270,9 @@ static inline int rxm_get_ep_idx(struct rxm_conn *conn, struct fid *fid)
 {
 	uint8_t i;
 
+	if (!conn->msg_eps)
+		return -1;
+
 	for (i = 0; i < conn->num_msg_eps; i++)
 		if (conn->msg_eps[i] && &conn->msg_eps[i]->fid == fid)
 			return i;
@@ -959,9 +962,9 @@ rxm_free_rx_buf(struct rxm_rx_buf *rx_buf)
 		rx_buf->data = &rx_buf->pkt.data;
 	}
 
-	/* Discard rx buffer if its msg_ep was closed */
+	/* Discard rx buffer if the msg ep it was posted to was closed */
 	if (rx_buf->repost && (rx_buf->ep->msg_srx ||
-	     (rx_buf->conn->msg_eps && rx_buf->conn->msg_eps[0]))) {
+	     rxm_get_ep_idx(rx_buf->conn, &rx_buf->rx_ep->fid) >= 0)) {
 		rxm_post_recv(rx_buf);
 	} else {
 		ofi_buf_free(rx_buf);
