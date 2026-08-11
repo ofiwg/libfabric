@@ -95,13 +95,14 @@ static void rxm_close_conn(struct rxm_conn *conn)
 		if (rx_entry && rx_entry->peer_context)
 			rx_entry->srx->owner_ops->free_entry(rx_entry);
 	}
+
+	rxm_flush_msg_cq(conn->ep);
 	if (conn->msg_eps) {
 		for (uint8_t i = 0; i < conn->num_msg_eps; i++) {
 			if (conn->msg_eps[i])
 				fi_close(&conn->msg_eps[i]->fid);
 		}
 	}
-	rxm_flush_msg_cq(conn->ep);
 	dlist_remove_init(&conn->loopback_entry);
 	free(conn->msg_eps);
 	conn->msg_eps = NULL;
@@ -609,6 +610,12 @@ void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 	       "processing connected for handle: %p ep %d\n", conn, idx);
 
 	assert(ofi_genlock_held(&conn->ep->util_ep.lock));
+
+	/* The msg ep may have been dropped after this event was queued;
+	 * without this we index msg_eps[-1] and write states[-1].
+	 */
+	if (idx < 0)
+		return;
 
 	if (idx == 0 && conn->states[0] == RXM_CM_CONNECTING) {
 		conn->remote_index = rxm_peer_index(cm_entry->data.accept.
