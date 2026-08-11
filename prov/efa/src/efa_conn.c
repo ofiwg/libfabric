@@ -200,11 +200,10 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 		}
 	}
 
-	assert(ofi_genlock_held(&((struct efa_rdm_domain *) av->domain)->srx_lock));
-
 	/* since an efa_conn is all connections to a specific remote ep,
 	 * we must walk all local ep peer maps and remove the connection
 	 * to the remote ep */
+	ofi_genlock_lock(&av->util_av.ep_list_lock);
 	dlist_foreach_safe(&av->util_av.ep_list, entry, tmp) {
 		ep = container_of(entry, struct efa_rdm_ep,
 				  base_ep.util_ep.av_entry);
@@ -215,12 +214,15 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 			peer_map = ep->fi_addr_to_peer_map_implicit;
 			fi_addr = conn->implicit_fi_addr;
 		}
+		EFA_GENLOCK_LOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
 		peer = efa_rdm_ep_peer_map_remove(peer_map, fi_addr);
 		if (peer) {
 			efa_rdm_peer_destruct(peer, ep);
 			ofi_buf_free(peer);
 		}
+		EFA_GENLOCK_UNLOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
 	}
+	ofi_genlock_unlock(&av->util_av.ep_list_lock);
 }
 
 /**
