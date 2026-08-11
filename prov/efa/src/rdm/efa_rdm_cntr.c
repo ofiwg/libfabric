@@ -28,8 +28,8 @@ static uint64_t efa_rdm_cntr_read(struct fid_cntr *cntr_fid)
 	/*
 	 * keep srx_lock for ofi_cntr_read because the registered
 	 * progress callback (efa_rdm_cntr_progress) drives ibv_cq polling,
-	 * and the CQ poll path calls efa_rdm_ep_get_peer_explicit which
-	 * asserts srx_lock is held.
+	 * and the CQ poll path looks up peers and the implicit AV, which the
+	 * datapath serializes under srx_lock.
 	 */
 	ret = ofi_cntr_read(cntr_fid);
 	ofi_genlock_unlock(&((struct efa_rdm_domain *) domain)->srx_lock);
@@ -53,8 +53,8 @@ static uint64_t efa_rdm_cntr_readerr(struct fid_cntr *cntr_fid)
 	/*
 	 * keep srx_lock for ofi_cntr_readerr because the registered
 	 * progress callback (efa_rdm_cntr_progress) drives ibv_cq polling,
-	 * and the CQ poll path calls efa_rdm_ep_get_peer_explicit which
-	 * asserts srx_lock is held.
+	 * and the CQ poll path looks up peers and the implicit AV, which the
+	 * datapath serializes under srx_lock.
 	 */
 	ret = ofi_cntr_readerr(cntr_fid);
 	ofi_genlock_unlock(&((struct efa_rdm_domain *) domain)->srx_lock);
