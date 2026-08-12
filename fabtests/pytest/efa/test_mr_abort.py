@@ -24,6 +24,12 @@ BASE_MESSAGE_SIZES = [
     10485760,
 ]
 
+# The high PPS WQE hint only accelerates writes <= 8KB, but writes up to
+# 64KB marked high-pps exercise special handling that routes them back to
+# the default processing path. Request high PPS for writes up to 64KB to
+# utilize both paths; larger sizes add no new coverage.
+HIGH_PPS_MAX_WRITE_SIZE = 65536
+
 # The low latency service level only accelerates write WQEs <= 128 bytes,
 # but request it for writes up to 8 KiB so a single run mixes the
 # accelerated (<= 128B) and non-accelerated flows.
@@ -39,7 +45,9 @@ def combined_msg_size_params():
 
             if (rma_op == "write" or rma_op == "writedata"):
                 # High PPS parametrization is only applicable for RDMA writes
-                high_pps_vals = [True, False]
+                # up to 64KB
+                if size <= HIGH_PPS_MAX_WRITE_SIZE:
+                    high_pps_vals = [True, False]
 
                 # Low latency SL is only applicable for RDMA writes up to 8 KiB
                 if size <= SL_LOW_LATENCY_MAX_WRITE_SIZE:
