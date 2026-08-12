@@ -169,7 +169,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	}
 
 	struct fi_opx_reliability_tx_replay *replay;
-	union fi_opx_reliability_tx_psn	    *psn_ptr;
+	struct fi_opx_reliability_tx_flow   *flow;
 	int32_t				     psn;
 
 	const struct fi_opx_addr addr = params->opx_target_addr;
@@ -177,7 +177,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
-		&psn_ptr, &replay, params->reliability, hfi1_type);
+		&flow, &replay, params->reliability, hfi1_type);
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_RMA_END_EAGAIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
@@ -273,7 +273,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay, params->reliability,
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, params->reliability,
 							     OPX_SW_HFI1_TYPE(opx_ep->domain));
 
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);

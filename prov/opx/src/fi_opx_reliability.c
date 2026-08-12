@@ -254,6 +254,12 @@ void fi_opx_reliability_inc_throttle_maxo(struct fid_ep *ep)
 		container_of(ep, struct fi_opx_ep, ep_fid)->debug_counters.reliability_ping.throttled_max_outstanding);
 }
 
+void fi_opx_reliability_inc_throttle_maxp(struct fid_ep *ep)
+{
+	FI_OPX_DEBUG_COUNTERS_INC(
+		container_of(ep, struct fi_opx_ep, ep_fid)->debug_counters.reliability_ping.throttled_max_packets);
+}
+
 #ifdef OPX_DAOS
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode(struct fid_ep				    *ep,
@@ -623,10 +629,8 @@ void fi_opx_hfi1_rx_reliability_ping(struct fid_ep *ep, struct fi_opx_reliabilit
 		return;
 	}
 
-	struct fi_opx_reliability_rx_flow **value_ptr =
-		(struct fi_opx_reliability_rx_flow **) fi_opx_rbt_value_ptr(service->rx.rx_flow_rbtree, itr);
-
-	struct fi_opx_reliability_rx_flow *flow = *value_ptr;
+	struct fi_opx_reliability_rx_flow *flow =
+		(struct fi_opx_reliability_rx_flow *) fi_opx_rbt_value(service->rx.rx_flow_rbtree, itr);
 
 	if (OFI_UNLIKELY(flow->next_psn == 0)) {
 		ssize_t rc __attribute__((unused));
@@ -876,15 +880,15 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 	void *itr = NULL;
 
 	/* search for existing unack'd flows */
-	itr = fi_opx_rbt_find(service->tx.tx_flow_outstanding_pkts_rbtree, (void *) key);
+	itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) key);
 
 	ASSERT_FLOW_FOUND(itr, key, "Invalid key psn_start = %lx, psn_count = %lx, stop_psn = %lx\n", psn_start,
 			  psn_count, psn_stop);
 
-	struct fi_opx_reliability_tx_replay **value_ptr = (struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(
-		service->tx.tx_flow_outstanding_pkts_rbtree, itr);
+	struct fi_opx_reliability_tx_flow *tx_flow =
+		(struct fi_opx_reliability_tx_flow *) fi_opx_rbt_value(service->tx.tx_flow_rbtree, itr);
 
-	struct fi_opx_reliability_tx_replay *head = *value_ptr;
+	struct fi_opx_reliability_tx_replay *head = tx_flow->replay_head;
 
 	if (OFI_UNLIKELY(head == NULL)) {
 		/*
@@ -914,15 +918,22 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 					  ", H: %d, T: %d\n",
 					  psn_start, psn_count, psn_stop, head_psn, tail_psn);
 #endif
+
+#ifndef NDEBUG
+		size_t total_replay_bytes      = 0;
+		size_t total_replay_pkts       = 0;
+		size_t prior_outstanding_bytes = tx_flow->outstanding_bytes;
+		size_t prior_outstanding_pkts  = tx_flow->outstanding_pkts;
+#endif
 		/* retire all queue elements */
-		*value_ptr = NULL;
+		tx_flow->replay_head	    = NULL;
+		tx_flow->outstanding_bytes  = 0;
+		tx_flow->outstanding_pkts   = 0;
+		tx_flow->psn.psn.throttle   = 0;
+		tx_flow->psn.psn.nack_count = 0;
 
 		struct fi_opx_reliability_tx_replay *next = NULL;
 		struct fi_opx_reliability_tx_replay *tmp  = head;
-
-		/* Clear any throttling. */
-		tmp->psn_ptr->psn.throttle   = 0;
-		tmp->psn_ptr->psn.nack_count = 0;
 
 		do {
 			assert(!tmp->acked);
@@ -962,6 +973,7 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 				}
 			}
 
+#ifndef NDEBUG
 			uint16_t lrh_pktlen_le;
 			size_t	 total_bytes;
 
@@ -973,8 +985,9 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 				lrh_pktlen_le = tmp->scb.scb_16B.hdr.lrh_16B.pktlen;
 				total_bytes   = (lrh_pktlen_le - 1) * 8; /* do not copy the trailing icrc */
 			}
-			tmp->psn_ptr->psn.bytes_outstanding -= total_bytes;
-			assert((int32_t) tmp->psn_ptr->psn.bytes_outstanding >= 0);
+			total_replay_bytes += total_bytes;
+			total_replay_pkts++;
+#endif
 
 			/* If the replay is pinned, then don't free it and just mark it as ACK'd. It is the
 			   responsibility of the pinner to free it after it's ACK'd */
@@ -990,6 +1003,11 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 			tmp = next;
 
 		} while (tmp != head);
+
+#ifndef NDEBUG
+		assert(total_replay_bytes == prior_outstanding_bytes);
+		assert(total_replay_pkts == prior_outstanding_pkts);
+#endif
 
 		OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_ACK_RECV, 0, 0);
 		return;
@@ -1061,15 +1079,12 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 
 	if (start == head) {
 		if (halt == start) {
-			*value_ptr = NULL;
-			/* Clear any nack throttling.
-			 * Only release the NACK throttle when an ACK fully drains
-			 * the replay queue (halt == start).
-			 */
-			start->psn_ptr->psn.throttle   = 0;
-			start->psn_ptr->psn.nack_count = 0;
+			tx_flow->replay_head = NULL;
+			/* Clear any nack throttling. */
+			tx_flow->psn.psn.throttle   = 0;
+			tx_flow->psn.psn.nack_count = 0;
 		} else {
-			*value_ptr = (struct fi_opx_reliability_tx_replay *) halt;
+			tx_flow->replay_head = (struct fi_opx_reliability_tx_replay *) halt;
 		}
 	}
 
@@ -1138,8 +1153,10 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 			lrh_pktlen_le = tmp->scb.scb_16B.hdr.lrh_16B.pktlen;
 			total_bytes   = (lrh_pktlen_le - 1) * 8; /* do not copy the trailing icrc */
 		}
-		tmp->psn_ptr->psn.bytes_outstanding -= total_bytes;
-		assert((int32_t) tmp->psn_ptr->psn.bytes_outstanding >= 0);
+		tx_flow->outstanding_pkts--;
+		tx_flow->outstanding_bytes -= total_bytes;
+		assert((int32_t) tx_flow->outstanding_pkts >= 0);
+		assert((int32_t) tx_flow->outstanding_bytes >= 0);
 
 		/* If the replay is pinned, then don't free it and just mark it as ACK'd. It is the
 		   responsibility of the pinner to free it after it's ACK'd */
@@ -1156,7 +1173,7 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 
 	} while (tmp != halt);
 
-	assert((*value_ptr == NULL) || (*value_ptr)->next != NULL);
+	assert(tx_flow->replay_head == NULL || tx_flow->replay_head->next != NULL);
 	OPX_TRACE_RELI_END_SUCCESS(OPX_TRACE_EVENT_RELI_ACK_RECV, 0, 0);
 }
 
@@ -1197,11 +1214,11 @@ ssize_t fi_opx_reliability_sdma_replay_complete(union fi_opx_reliability_deferre
 			   flow has nothing left outstanding; the bytes_outstanding==0
 			   guard is flooding-safe (no unacked replays remain). psn_ptr
 			   lives in tx_flow_rbtree; capture before freeing the replay. */
-			union fi_opx_reliability_tx_psn *psn_ptr = we->replay->psn_ptr;
+			struct fi_opx_reliability_tx_flow *tx_flow = we->replay->flow;
 			fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, we->replay);
-			if (psn_ptr->psn.bytes_outstanding == 0) {
-				psn_ptr->psn.throttle	= 0;
-				psn_ptr->psn.nack_count = 0;
+			if (tx_flow->outstanding_bytes == 0) {
+				tx_flow->psn.psn.throttle   = 0;
+				tx_flow->psn.psn.nack_count = 0;
 			}
 
 #ifdef OPX_RELIABILITY_DEBUG
@@ -1608,7 +1625,7 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 	const uint64_t psn_stop = psn_start + psn_count - 1;
 
 	INC_PING_STAT(NACKS_RECV, *key, psn_start, psn_count);
-	if (psn_start > psn_stop) {
+	if (OFI_UNLIKELY(psn_start > psn_stop)) {
 		fprintf(stderr,
 			"%s:%s():%d (%016lx %08x) invalid nack received; psn_start = %lu, psn_count = %lu, psn_stop = %lu\n",
 			__FILE__, __func__, __LINE__, key->qw_prefix, key->dw_suffix, psn_start, psn_count, psn_stop);
@@ -1621,14 +1638,13 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 	void *itr = NULL;
 
 	/* search for existing unack'd flows */
-	itr = fi_opx_rbt_find(service->tx.tx_flow_outstanding_pkts_rbtree, (void *) key);
+	itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) key);
 	ASSERT_FLOW_FOUND(itr, key, "Invalid key psn_start = %lx, psn_count = %lx, psn_stop = %lx\n", psn_start,
 			  psn_count, psn_stop);
 
-	struct fi_opx_reliability_tx_replay **value_ptr = (struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(
-		service->tx.tx_flow_outstanding_pkts_rbtree, itr);
-
-	struct fi_opx_reliability_tx_replay *head = *value_ptr;
+	struct fi_opx_reliability_tx_flow *tx_flow =
+		(struct fi_opx_reliability_tx_flow *) fi_opx_rbt_value(service->tx.tx_flow_rbtree, itr);
+	struct fi_opx_reliability_tx_replay *head = tx_flow->replay_head;
 
 	if (OFI_UNLIKELY(head == NULL)) {
 		/*
@@ -1714,7 +1730,7 @@ void fi_opx_hfi1_rx_reliability_nack(struct fid_ep *ep, struct fi_opx_reliabilit
 				  start_psn, (uint32_t) FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(stop, hfi1_type)));
 
 	// Turn on throttling for this flow while we catch up on replays
-	start->psn_ptr->psn.nack_count = 1;
+	tx_flow->psn.psn.nack_count = 1;
 
 	union fi_opx_reliability_deferred_work	       *work	       = NULL;
 	struct fi_opx_reliability_tx_pio_replay_params *params	       = NULL;
@@ -1829,45 +1845,37 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_reliability_send_ping(struct fid_ep *ep, struct fi_opx_reliability_service *service, RbtIterator itr,
 				     const union fi_opx_reliability_service_flow_key *key)
 {
-	struct fi_opx_ep		     *opx_ep	= container_of(ep, struct fi_opx_ep, ep_fid);
-	const enum opx_hfi1_type	      hfi1_type = OPX_SW_HFI1_TYPE(opx_ep->domain);
-	struct fi_opx_reliability_tx_replay **value_ptr;
-	struct fi_opx_reliability_tx_replay  *head;
-	uint64_t			      rx;
-	uint64_t			      psn_start;
-	uint64_t			      psn_stop;
-	uint64_t			      psn_count;
-	ssize_t				      rc;
-	opx_lid_t			      primary_dlid;
+	struct fi_opx_ep	*opx_ep	   = container_of(ep, struct fi_opx_ep, ep_fid);
+	const enum opx_hfi1_type hfi1_type = OPX_SW_HFI1_TYPE(opx_ep->domain);
 
 	OPX_TRACE_RELI_BEGIN(OPX_TRACE_EVENT_RELI_PING, 0, 0);
-	value_ptr = (struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(
-		service->tx.tx_flow_outstanding_pkts_rbtree, itr);
+	struct fi_opx_reliability_tx_flow *tx_flow =
+		(struct fi_opx_reliability_tx_flow *) fi_opx_rbt_value(service->tx.tx_flow_rbtree, itr);
 
-	head = *value_ptr;
+	struct fi_opx_reliability_tx_replay *head = tx_flow->replay_head;
 
 	if (OFI_UNLIKELY(head == NULL)) {
 		OPX_TRACE_RELI_END_ERROR(OPX_TRACE_EVENT_RELI_PING, 0, 0);
 		return OPX_RELIABILITY_PING_NO_REPLAYS;
 	}
 
-	rx = (uint64_t) head->target_reliability_subctxt_rx;
+	uint64_t rx = (uint64_t) head->target_reliability_subctxt_rx;
 
-	primary_dlid = OPX_RELIABILITY_DECODE_LID(key->dlid);
+	opx_lid_t primary_dlid = OPX_RELIABILITY_DECODE_LID(key->dlid);
 
 	/* psn_start will always be 24-bit max number here */
-	psn_start = FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(head, hfi1_type));
-	psn_stop  = FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(head->prev, hfi1_type));
+	uint64_t psn_start = FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(head, hfi1_type));
+	uint64_t psn_stop  = FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(head->prev, hfi1_type));
 
 	/* if the PSN of the tail is less than the PSN of the head, the
 	 * PSN has rolled over. In that case, truncate the ping range
 	 * to avoid rollover confusion.
 	 */
-	psn_count = ((psn_start > psn_stop) ? MAX_PSN : psn_stop) - psn_start + 1;
+	uint64_t psn_count = ((psn_start > psn_stop) ? MAX_PSN : psn_stop) - psn_start + 1;
 
-	rc = fi_opx_hfi1_tx_reliability_inject(ep, key, primary_dlid, rx, psn_start, psn_count,
-					       FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING, OPX_SW_HFI1_TYPE(opx_ep->domain),
-					       OPX_IS_CTX_SHARING_ENABLED);
+	ssize_t rc = fi_opx_hfi1_tx_reliability_inject(ep, key, primary_dlid, rx, psn_start, psn_count,
+						       FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING,
+						       OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_IS_CTX_SHARING_ENABLED);
 
 	INC_PING_STAT_COND(rc == FI_SUCCESS, PINGS_SENT, *key, psn_start, psn_count);
 
@@ -1893,10 +1901,10 @@ void fi_reliability_service_ping_remote(struct fid_ep *ep, struct fi_opx_reliabi
 
 	const union fi_opx_reliability_service_flow_key *start_key = service->ping_start_key;
 	if (start_key) {
-		itr	      = fi_opx_rbt_find(service->tx.tx_flow_outstanding_pkts_rbtree, (void *) start_key);
+		itr	      = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) start_key);
 		start_key_itr = itr;
 	} else {
-		itr	      = rbtBegin(service->tx.tx_flow_outstanding_pkts_rbtree);
+		itr	      = fi_opx_rbt_begin(service->tx.tx_flow_rbtree);
 		start_key_itr = NULL;
 	}
 
@@ -1907,7 +1915,7 @@ void fi_reliability_service_ping_remote(struct fid_ep *ep, struct fi_opx_reliabi
 		rc = fi_opx_reliability_send_ping(ep, service, itr, key_ptr);
 
 		/* advance to the next dlid */
-		itr = rbtNext(service->tx.tx_flow_outstanding_pkts_rbtree, itr);
+		itr = fi_opx_rbt_next(service->tx.tx_flow_rbtree, itr);
 
 		if (rc == OPX_RELIABILITY_PING_SENT) {
 			++num_pings;
@@ -1943,7 +1951,7 @@ void fi_reliability_service_ping_remote(struct fid_ep *ep, struct fi_opx_reliabi
 	}
 
 	/* Wrap back around from the beginning of the tree and iterate until we've hit the starting key */
-	itr = rbtBegin(service->tx.tx_flow_outstanding_pkts_rbtree);
+	itr = fi_opx_rbt_begin(service->tx.tx_flow_rbtree);
 
 	while (itr && itr != start_key_itr && rc && num_pings < max_pings) {
 		fi_opx_rbt_key(itr, (void **) &key_ptr);
@@ -1951,7 +1959,7 @@ void fi_reliability_service_ping_remote(struct fid_ep *ep, struct fi_opx_reliabi
 		rc = fi_opx_reliability_send_ping(ep, service, itr, key_ptr);
 
 		/* advance to the next dlid */
-		itr = rbtNext(service->tx.tx_flow_outstanding_pkts_rbtree, itr);
+		itr = fi_opx_rbt_next(service->tx.tx_flow_rbtree, itr);
 
 		if (rc == OPX_RELIABILITY_PING_SENT) {
 			++num_pings;
@@ -2201,9 +2209,8 @@ void fi_opx_reliability_service_init(struct fi_opx_domain *domain, struct fi_opx
 				      __cpu_to_be16(hfi1->subctxt << 8 | hfi1->info.rxe.id) :
 				      __cpu_to_be16(hfi1->subctxt << 9 | hfi1->info.rxe.id);
 
-	service->rx.rx_flow_rbtree		    = rbtNew(fi_opx_reliability_compare);
-	service->tx.tx_flow_outstanding_pkts_rbtree = rbtNew(fi_opx_reliability_compare);
-	service->tx.tx_flow_rbtree		    = rbtNew(fi_opx_reliability_compare);
+	service->rx.rx_flow_rbtree = rbtNew(fi_opx_reliability_compare);
+	service->tx.tx_flow_rbtree = rbtNew(fi_opx_reliability_compare);
 
 	/*
 	 * The replay pools are used for the main send path. The pools have
@@ -2222,6 +2229,15 @@ void fi_opx_reliability_service_init(struct fi_opx_domain *domain, struct fi_opx
 				  FI_OPX_CACHE_LINE_SIZE,		       // byte alignment
 				  FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS,     // max # of elements
 				  FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS,     // # of elements to allocate at once
+				  OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_NO_ZERO); // flags
+
+	// TX Flow pool for allocating TX Flow entries. Every reliability flow needs one of these
+	// for keeping track of outstanding packets, bytes, replays and PSNs.
+	(void) ofi_bufpool_create(&(service->tx.flow_pool),
+				  sizeof(struct fi_opx_reliability_tx_flow),   // element size
+				  sizeof(struct fi_opx_reliability_tx_flow),   // byte alignment
+				  0,					       // max # of elements
+				  512,					       // # of elements to allocate at once
 				  OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_NO_ZERO); // flags
 
 	// Flow key pool for allocating reliability flow keys to be used in new rbtree entries.
@@ -2473,10 +2489,6 @@ void fi_opx_reliability_service_fini(struct fi_opx_reliability_service *service)
 		ofi_bufpool_destroy(service->rx.sdma_replay_request_pool);
 	}
 
-	if (service->tx.tx_flow_outstanding_pkts_rbtree) {
-		rbtDelete(service->tx.tx_flow_outstanding_pkts_rbtree);
-	}
-
 	if (service->tx.replay_pool) {
 		ofi_bufpool_destroy(service->tx.replay_pool);
 		service->tx.replay_pool = NULL;
@@ -2484,6 +2496,10 @@ void fi_opx_reliability_service_fini(struct fi_opx_reliability_service *service)
 	if (service->tx.replay_iov_pool) {
 		ofi_bufpool_destroy(service->tx.replay_iov_pool);
 		service->tx.replay_iov_pool = NULL;
+	}
+	if (service->tx.flow_pool) {
+		ofi_bufpool_destroy(service->tx.flow_pool);
+		service->tx.flow_pool = NULL;
 	}
 
 	if (service->rx.rx_flow_rbtree) {

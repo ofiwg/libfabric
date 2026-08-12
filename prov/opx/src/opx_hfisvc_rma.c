@@ -212,15 +212,15 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 	}
 
 	struct fi_opx_reliability_tx_replay *replay;
-	union fi_opx_reliability_tx_psn	    *psn_ptr;
+	struct fi_opx_reliability_tx_flow   *flow;
 	int32_t				     psn;
 
 	const struct fi_opx_addr addr = params->opx_target_addr;
 
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
-		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, 0, &psn_ptr,
-		&replay, params->reliability, hfi1_type);
+		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, 0, &flow, &replay,
+		params->reliability, hfi1_type);
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "HFISVC_RMA_SEND_RTS");
@@ -308,13 +308,13 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_ep->tx);
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay,
+		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
 								     params->reliability, OPX_HFI1_WFR);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
-		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay,
+		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
 								     params->reliability, OPX_HFI1_JKR);
 	} else {
-		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, psn_ptr, replay,
+		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
 								     params->reliability, OPX_HFI1_CYR);
 	}
 

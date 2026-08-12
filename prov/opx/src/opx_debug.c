@@ -96,7 +96,7 @@ static void opx_debug_dump_rx_flow(struct fi_opx_ep *opx_ep, pid_t my_pid, FILE 
 		"(%d) # --------------------------------------------------------------------------------------------- #\n",
 		my_pid);
 
-	RbtIterator itr = (RbtIterator) rbtBegin(opx_ep->reli_service->rx.rx_flow_rbtree);
+	RbtIterator itr = (RbtIterator) fi_opx_rbt_begin(opx_ep->reli_service->rx.rx_flow_rbtree);
 
 	while (itr) {
 		NodeType			  *node_type  = (NodeType *) itr;
@@ -123,7 +123,7 @@ static void opx_debug_dump_rx_flow(struct fi_opx_ep *opx_ep, pid_t my_pid, FILE 
 			flow_entry->key->dst_subctxt_rx, flow_entry->next_psn, ue_count, ue_first_psn, ue_last_psn,
 			(uintptr_t) flow_entry->uepkt);
 
-		itr = (RbtIterator) rbtNext(opx_ep->reli_service->rx.rx_flow_rbtree, itr);
+		itr = (RbtIterator) fi_opx_rbt_next(opx_ep->reli_service->rx.rx_flow_rbtree, itr);
 	}
 	fprintf(output,
 		"(%d) #################################################################################################\n",
@@ -136,7 +136,7 @@ static void opx_debug_dump_tx_flow(struct fi_opx_ep *opx_ep, pid_t my_pid, FILE 
 		"(%d) ################################### TX Flow RB Tree ######################################################\n",
 		my_pid);
 	fprintf(output,
-		"(%d) #                                                                Bytes      Replay         Replays       #\n",
+		"(%d) #                                                              Pkts/Bytes   Replay         Replays       #\n",
 		my_pid);
 	fprintf(output,
 		"(%d) # Flow Key                     Next PSN  Throttle  Nack_Count  Outstanding  Count   First PSN   Last PSN #\n",
@@ -145,61 +145,54 @@ static void opx_debug_dump_tx_flow(struct fi_opx_ep *opx_ep, pid_t my_pid, FILE 
 		"(%d) # ------------------------------------------------------------------------------------------------------ #\n",
 		my_pid);
 
-	RbtIterator itr = (RbtIterator) rbtBegin(opx_ep->reli_service->tx.tx_flow_outstanding_pkts_rbtree);
+	RbtIterator itr = (RbtIterator) fi_opx_rbt_begin(opx_ep->reli_service->tx.tx_flow_rbtree);
 
 	while (itr) {
-		NodeType   *node_type  = (NodeType *) itr;
-		RbtIterator itr2       = (RbtIterator) rbtFind(opx_ep->reli_service->tx.tx_flow_rbtree, node_type->key);
-		NodeType   *node_type2 = (NodeType *) itr2;
-		union fi_opx_reliability_tx_psn *psn_ptr = (union fi_opx_reliability_tx_psn *) &node_type2->val;
+		NodeType			  *node_type = (NodeType *) itr;
+		struct fi_opx_reliability_tx_flow *tx_flow   = (struct fi_opx_reliability_tx_flow *) node_type->val;
+		union fi_opx_reliability_tx_psn	  *psn_ptr   = &tx_flow->psn;
 		union fi_opx_reliability_service_flow_key *flow_key =
 			(union fi_opx_reliability_service_flow_key *) node_type->key;
 
-		fprintf(output, "(%d) # [%06X.%04X.%06X.%04X]     %06X   %4u    %8u    %8u  ", my_pid, flow_key->slid,
-			flow_key->src_subctxt_rx, flow_key->dlid, flow_key->dst_subctxt_rx, psn_ptr->psn.psn,
-			psn_ptr->psn.throttle, psn_ptr->psn.nack_count, psn_ptr->psn.bytes_outstanding);
+		fprintf(output, "(%d) # [%06X.%04X.%06X.%04X]     %06X   %4u    %8u    %8u/%8u  ", my_pid,
+			flow_key->slid, flow_key->src_subctxt_rx, flow_key->dlid, flow_key->dst_subctxt_rx,
+			psn_ptr->psn.psn, psn_ptr->psn.throttle, psn_ptr->psn.nack_count, tx_flow->outstanding_pkts,
+			tx_flow->outstanding_bytes);
 
-		if (node_type->val) {
+		struct fi_opx_reliability_tx_replay *replay	  = tx_flow->replay_head;
+		struct fi_opx_reliability_tx_replay *first_replay = replay;
+		if (replay) {
 			int32_t	 last_psn     = -1;
 			uint32_t replay_count = 0;
 
-			struct fi_opx_reliability_tx_replay *replay =
-				(struct fi_opx_reliability_tx_replay *) node_type->val;
-			int32_t psn	  = opx_debug_get_replay_psn(replay, OPX_SW_HFI1_TYPE(opx_ep->domain));
-			int32_t first_psn = psn;
+			int32_t first_psn = opx_debug_get_replay_psn(replay, OPX_SW_HFI1_TYPE(opx_ep->domain));
 
-			struct fi_opx_reliability_tx_replay *first_replay = NULL;
-			while (replay != first_replay) {
+			do {
 				++replay_count;
-				psn	 = opx_debug_get_replay_psn(replay, OPX_SW_HFI1_TYPE(opx_ep->domain));
-				last_psn = psn;
+				last_psn = opx_debug_get_replay_psn(replay, OPX_SW_HFI1_TYPE(opx_ep->domain));
 
-				if (!first_replay) {
-					first_replay = replay;
-				}
 				replay = replay->next;
-			}
+			} while (replay != first_replay);
 			fprintf(output, "   %6u    %06X      %06X   #\n", replay_count, first_psn, last_psn);
 
 			/* head replay state decides lost-SDMA-completion
 			 * (pinned + comp_state QUEUED/PENDING_WRITEV) vs RX-never-ACK
 			 * (!pinned + bytes_outstanding>0) at hang time. */
-			struct fi_opx_reliability_tx_replay *head =
-				(struct fi_opx_reliability_tx_replay *) node_type->val;
 			int head_comp_state = -1;
-			if (head->use_sdma && head->sdma_we) {
-				head_comp_state =
-					(int) ((struct fi_opx_hfi1_sdma_work_entry *) head->sdma_we)->comp_state;
+			if (first_replay->use_sdma && first_replay->sdma_we) {
+				head_comp_state = (int) ((struct fi_opx_hfi1_sdma_work_entry *) first_replay->sdma_we)
+							  ->comp_state;
 			}
 			fprintf(output,
 				"(%d) #   HEAD replay: pinned=%d acked=%d use_sdma=%d use_iov=%d nack_count=%u sdma_we=%p comp_state=%d (0=FREE,1=PENDING_WRITEV,2=QUEUED,3=COMPLETE,4=ERROR)\n",
-				my_pid, head->pinned, head->acked, head->use_sdma, head->use_iov, head->nack_count,
-				head->sdma_we, head_comp_state);
+				my_pid, first_replay->pinned, first_replay->acked, first_replay->use_sdma,
+				first_replay->use_iov, first_replay->nack_count, first_replay->sdma_we,
+				head_comp_state);
 		} else {
 			fprintf(output, "        0       N/A         N/A   #\n");
 		}
 
-		itr = (RbtIterator) rbtNext(opx_ep->reli_service->tx.tx_flow_outstanding_pkts_rbtree, itr);
+		itr = (RbtIterator) fi_opx_rbt_next(opx_ep->reli_service->tx.tx_flow_rbtree, itr);
 	}
 	fprintf(output,
 		"(%d) ##########################################################################################################\n",
