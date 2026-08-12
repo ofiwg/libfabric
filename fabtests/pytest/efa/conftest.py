@@ -104,6 +104,28 @@ def add_fabric_and_message_size_parametrization(metafunc, fabric_marker, sizes_m
     metafunc.parametrize("message_sizes", sizes)
 
 
+def pick_preferred_memory_flavor(candidates, detected):
+    """
+    Flavor selection for @pytest.mark.memory_type(..., prefer_accelerator=True):
+    pick one memory flavor at test generation time to reduce the test count.
+
+    Returns the detected accelerator memory types when the endpoints have an
+    accelerator, host memory otherwise.  If detection fails, return everything.
+
+    Anything other than host_to_host counts as an accelerator flavor. With a
+    candidate list containing mixed flavors (host_to_cuda, cuda_to_host, ...),
+    every detected mixed flavor is kept alongside the device_to_device one.
+    """
+    host_only = [p for p in candidates if p.values[0] == "host_to_host"]
+
+    if detected is None:
+        # detection unavailable: run every candidate
+        return candidates
+
+    accelerator = [p for p in detected if p.values[0] != "host_to_host"]
+    return accelerator or host_only
+
+
 def add_memory_type_parametrization(metafunc, memory_type_marker):
     """
     Parametrize the memory_type fixture at collection time from the test's
@@ -113,6 +135,9 @@ def add_memory_type_parametrization(metafunc, memory_type_marker):
     Fallback (no coverage regression): if --server-id/--client-id are not
     provided or device detection fails, every candidate memory type is
     included and the runtime skip in common.py remains the safety net.
+
+    prefer_accelerator=True picks one memory flavor at generation time to
+    reduce the test count; see pick_preferred_memory_flavor().
     """
 
     if "memory_type" not in metafunc.fixturenames:
@@ -127,21 +152,27 @@ def add_memory_type_parametrization(metafunc, memory_type_marker):
         )
 
     candidates = memory_type_marker.args[0]
+    prefer_accelerator = memory_type_marker.kwargs.get("prefer_accelerator", False)
 
     server_id = metafunc.config.getoption("--server-id", default=None)
     client_id = metafunc.config.getoption("--client-id", default=None)
 
-    if not server_id or not client_id:
-        params = candidates
-    else:
+    # detected is None when device detection could not run
+    detected = None
+    if server_id and client_id:
         try:
-            params = [
+            detected = [
                 param for param in candidates
                 if client_server_have_device(param.values[0], server_id, client_id)
             ]
         except Exception:
-            # Fallback to all memory types when detection/SSH fails
-            params = candidates
+            # Fallback when detection/SSH fails
+            detected = None
+
+    if prefer_accelerator:
+        params = pick_preferred_memory_flavor(candidates, detected)
+    else:
+        params = candidates if detected is None else detected
 
     metafunc.parametrize("memory_type", params, scope="module")
 
@@ -236,32 +267,32 @@ def rx_cq_data_cli(request, fabric, rma_operation_type):
 def cuda_memory_type_validation(cmdline_args):
     """
     Validate CUDA memory type configuration against hardware capabilities at session startup.
-    
+
     Args:
         cmdline_args: Command line arguments containing dmabuf configuration.
-        
+
     Returns:
         None
-        
+
     Notes:
         - Skips tests if user specified non-dmabuf but hardware only supports DMA_BUF_ONLY
         - Only validates if CUDA tests are being run
     """
     # Check if CUDA tests are being run via expression
     print("Running cuda_memory_type_validation() validation checks!")
-    
+
     cuda_support: CudaMemorySupport = get_cuda_memory_support(
-                                            cmdline_args=cmdline_args, 
+                                            cmdline_args=cmdline_args,
                                             ip=cmdline_args.server_id
                                         )
 
     if cuda_support == CudaMemorySupport.NOT_INITIALIZED:
         pytest.fail("CUDA memory support never initialized")
-    
+
     do_dmabuf = cmdline_args.do_dmabuf_reg_for_hmem
-    
+
     print(f"Correctly defined dma buf mode {do_dmabuf} and return {cuda_support}!")
-    
+
     return
 
 
@@ -270,7 +301,7 @@ def cuda_validation_fixture(request, cmdline_args):
     """Auto-run CUDA validation if CUDA tests are present."""
     # Check if the current test has cuda_memory mark
     has_cuda_mark = any(mark.name == 'cuda_memory' for mark in request.node.iter_markers())
-    
+
     if has_cuda_mark:
         cuda_memory_type_validation(cmdline_args)
     else:
