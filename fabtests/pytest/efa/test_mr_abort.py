@@ -15,6 +15,9 @@ MR_ABORT_NUM_MRS = 2046
 
 BASE_MESSAGE_SIZES = [
     64,
+    # 128B is the largest write WQE the low latency service level
+    # accelerates; only low-latency cases are generated at this size
+    128,
     4096,
     65536,
     1048576,
@@ -54,6 +57,11 @@ def combined_msg_size_params():
                     # high_pps and sl_low_latency are mutually exclusive:
                     # do not generate test cases with both enabled
                     if high_pps_val and sl_low_latency_val:
+                        continue
+
+                    # 128B exists only to pin the low latency SL firmware
+                    # boundary; skip every other combination at that size
+                    if size == 128 and not sl_low_latency_val:
                         continue
 
                     id = f"{rma_op}-{size}"
