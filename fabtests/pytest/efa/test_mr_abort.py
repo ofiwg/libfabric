@@ -21,7 +21,10 @@ BASE_MESSAGE_SIZES = [
     10485760,
 ]
 
-SL_LOW_LATENCY_MAX_WRITE_SIZE = 128
+# The low latency service level only accelerates write WQEs <= 128 bytes,
+# but request it for writes up to 8 KiB so a single run mixes the
+# accelerated (<= 128B) and non-accelerated flows.
+SL_LOW_LATENCY_MAX_WRITE_SIZE = 8192
 
 
 def combined_msg_size_params():
@@ -35,8 +38,8 @@ def combined_msg_size_params():
                 # High PPS parametrization is only applicable for RDMA writes
                 high_pps_vals = [True, False]
 
-                # Low latency SL is only applicable for small RDMA writes
-                if size < SL_LOW_LATENCY_MAX_WRITE_SIZE:
+                # Low latency SL is only applicable for RDMA writes up to 8 KiB
+                if size <= SL_LOW_LATENCY_MAX_WRITE_SIZE:
                     sl_low_latency_vals = [True, False]
 
             marks = []
@@ -91,7 +94,7 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
 
     if sl_low_latency:
         assert(rma_op != "read")
-        assert(message_size < 128)
+        assert(message_size <= SL_LOW_LATENCY_MAX_WRITE_SIZE)
         command += " --sl-low-latency"
 
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type)
@@ -117,7 +120,7 @@ def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
 
     if sl_low_latency:
         assert(rma_op != "read")
-        assert(message_size < 128)
+        assert(message_size <= SL_LOW_LATENCY_MAX_WRITE_SIZE)
         command += " --sl-low-latency"
 
     test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type)
