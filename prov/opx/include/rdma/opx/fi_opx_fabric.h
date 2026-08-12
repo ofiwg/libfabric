@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2021,2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,9 +35,6 @@
 
 #ifdef FI_OPX_FABRIC_HFI1
 #include "rdma/opx/fi_opx_hfi1_fabric.h"
-
-#define FI_OPX_FABRIC_TX_CONNECT fi_opx_hfi1_tx_connect
-
 #endif
 
 #endif /* _FI_PROV_OPX_FABRIC_H_ */

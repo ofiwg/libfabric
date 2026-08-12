@@ -2009,39 +2009,6 @@ ssize_t fi_opx_check_tx_rctxt(struct fi_opx_ep *opx_ep, fi_addr_t peer)
 	return rc;
 }
 
-ssize_t fi_opx_hfi1_tx_connect(struct fi_opx_ep *opx_ep, struct fi_opx_addr peer)
-{
-	ssize_t rc = FI_SUCCESS;
-
-	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
-		if (opx_lid_is_shm(opx_ep->domain, OPX_LID_PLANE_KEY(opx_ep->domain, peer.planes[OPX_PRIMARY_PLANE].lid,
-								     peer.tx_index))) {
-			char	 buffer[128];
-			uint8_t	 hfi_unit	 = peer.planes[OPX_PRIMARY_PLANE].hfi1_unit;
-			uint16_t hfi1_subctxt_rx = peer.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx;
-			int	 inst		 = 0;
-			uint32_t segment_index	 = OPX_SHM_SEGMENT_INDEX(hfi_unit, hfi1_subctxt_rx);
-
-#ifdef OPX_DAOS
-			/* HFI Rank Support:  Rank and PID included in the SHM file name */
-			if (opx_ep->daos_info.hfi_rank_enabled) {
-				rx_index = opx_shm_daos_rank_index(opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst);
-				inst	 = opx_ep->daos_info.rank_inst;
-				segment_index = rx_index;
-			}
-#endif
-
-			snprintf(buffer, sizeof(buffer), OPX_SHM_FILE_NAME_PREFIX_FORMAT,
-				 opx_ep->domain->unique_job_key_str, hfi_unit, inst);
-
-			rc = opx_shm_tx_connect(&opx_ep->shm, (const char *const) buffer, segment_index,
-						hfi1_subctxt_rx, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
-		}
-	}
-
-	return rc;
-}
-
 int opx_hfi1_rx_rzv_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_rzv_rts_params *params	  = &work->rx_rzv_rts;
