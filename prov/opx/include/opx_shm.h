@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016-2018 Intel Corporation. All rights reserved.
- * Copyright (c) 2021-2025 Cornelis Networks.
+ * Copyright (c) 2021-2026 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -116,7 +116,11 @@ struct opx_shm_rx {
 	uint32_t		     unused_padding;
 	char			     segment_key[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
 
+#ifdef OPX_DAOS
+	/* Only the DAOS reliability path resynchronizes intra-node connections;
+	   the array is ~512 KB, so keep it out of the common (non-DAOS) build. */
 	struct opx_shm_resynch resynch_connection[OPX_SHM_MAX_CONN_NUM];
+#endif
 };
 
 extern struct dlist_entry shm_tx_list;
@@ -175,10 +179,12 @@ static inline ssize_t opx_shm_rx_init(struct opx_shm_rx *rx, struct fi_provider 
 	rx->segment_size = 0;
 	rx->prov	 = prov;
 
+#ifdef OPX_DAOS
 	for (int i = 0; i < OPX_SHM_MAX_CONN_NUM; ++i) {
 		rx->resynch_connection[i].completed = false;
 		rx->resynch_connection[i].counter   = 0;
 	}
+#endif
 
 	snprintf(rx->segment_key, OPX_SHM_SEGMENT_NAME_MAX_LENGTH, OPX_SHM_SEGMENT_NAME_PREFIX "%s.%hu", unique_job_key,
 		 subctxt_rx);
