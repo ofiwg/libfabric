@@ -160,7 +160,7 @@ struct fi_opx_hfi1_sdma_work_entry {
 	/* ==== CACHELINE 0 ==== */
 	struct fi_opx_hfi1_sdma_work_entry *next;
 	struct fi_opx_completion_counter   *cc;
-	union fi_opx_reliability_tx_psn	   *psn_ptr;
+	struct fi_opx_reliability_tx_flow  *flow;
 	struct {
 		int		   device;
 		enum fi_hmem_iface iface;
@@ -352,7 +352,7 @@ struct fi_opx_hfi1_sdma_work_entry *fi_opx_hfi1_sdma_get_idle_we(struct fi_opx_e
 	entry->comp_state	    = OPX_SDMA_COMP_FREE;
 	entry->num_packets	    = 0;
 	entry->total_payload	    = 0;
-	entry->psn_ptr		    = NULL;
+	entry->flow		    = NULL;
 	entry->in_use		    = true;
 	entry->pending_bounce_buf   = false;
 	entry->first_ack_time_ns    = 0;
@@ -406,7 +406,7 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 			sdma_we->comp_state	   = OPX_SDMA_COMP_FREE;
 			sdma_we->num_packets	   = 0;
 			sdma_we->total_payload	   = 0;
-			sdma_we->psn_ptr	   = NULL;
+			sdma_we->flow		   = NULL;
 			sdma_we->first_ack_time_ns = 0;
 			++sdma_we->bounce_buf.use_count;
 			OPX_TRACE_SDMA_INSTANT(OPX_TRACE_EVENT_SDMA_GET_REUSED_WE, 0, 0);
@@ -611,7 +611,7 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 	int32_t psn;
 	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, opx_ep->reli_service,
 					     opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, we->dlid, we->subctxt_rx,
-					     we->tx_index, &we->psn_ptr, we->num_packets);
+					     we->tx_index, &we->flow, we->num_packets);
 
 	uint32_t fragsize = 0;
 	for (int i = 0; i < we->num_packets; ++i) {
@@ -626,7 +626,7 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 		we->packets[i].replay->sdma_we		 = replay_back_ptr;
 		we->packets[i].replay->hmem_iface	 = we->hmem.iface;
 		we->packets[i].replay->hmem_device	 = we->hmem.device;
-		fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, we->psn_ptr,
+		fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, we->flow,
 								       we->packets[i].replay, cc, we->packets[i].length,
 								       reliability, hfi1_type);
 		psn = (psn + 1) & MAX_PSN;
