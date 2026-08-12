@@ -40,18 +40,18 @@ def combined_msg_size_params():
     for rma_op in ["write", "read", "writedata"]:
         for size in BASE_MESSAGE_SIZES:
 
-            high_pps_vals = [None]
-            sl_low_latency_vals = [None]
+            use_high_pps_vals = [None]
+            use_sl_low_latency_vals = [None]
 
             if (rma_op == "write" or rma_op == "writedata"):
                 # High PPS parametrization is only applicable for RDMA writes
                 # up to 64KB
                 if size <= HIGH_PPS_MAX_WRITE_SIZE:
-                    high_pps_vals = [True, False]
+                    use_high_pps_vals = [True, False]
 
                 # Low latency SL is only applicable for RDMA writes up to 8 KiB
                 if size <= SL_LOW_LATENCY_MAX_WRITE_SIZE:
-                    sl_low_latency_vals = [True, False]
+                    use_sl_low_latency_vals = [True, False]
 
             marks = []
             if size == 10485760:
@@ -60,28 +60,28 @@ def combined_msg_size_params():
                 # parallel workers
                 marks = [pytest.mark.serial]
 
-            for high_pps_val in high_pps_vals:
-                for sl_low_latency_val in sl_low_latency_vals:
+            for use_high_pps in use_high_pps_vals:
+                for use_sl_low_latency in use_sl_low_latency_vals:
                     # high_pps and sl_low_latency are mutually exclusive:
                     # do not generate test cases with both enabled
-                    if high_pps_val and sl_low_latency_val:
+                    if use_high_pps and use_sl_low_latency:
                         continue
 
                     # 128B exists only to pin the low latency SL firmware
                     # boundary; skip every other combination at that size
-                    if size == 128 and not sl_low_latency_val:
+                    if size == 128 and not use_sl_low_latency:
                         continue
 
                     id = f"{rma_op}-{size}"
 
-                    if high_pps_val is not None:
-                        id += f"-high_pps-{high_pps_val}"
+                    if use_high_pps is not None:
+                        id += f"-high_pps-{use_high_pps}"
 
-                    if sl_low_latency_val is not None:
-                        id += f"-sl_low_lat-{sl_low_latency_val}"
+                    if use_sl_low_latency is not None:
+                        id += f"-sl_low_lat-{use_sl_low_latency}"
 
-                    yield pytest.param(size, rma_op, high_pps_val,
-                                       sl_low_latency_val, marks=marks, id=id)
+                    yield pytest.param(size, rma_op, use_high_pps,
+                                       use_sl_low_latency, marks=marks, id=id)
 
 
 # --- Test: abort (RMA) ---
