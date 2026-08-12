@@ -3012,8 +3012,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	}
 
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
-		opx_shm_tx_init(&opx_ep->shm, fi_opx_global.prov, opx_ep->hfi->daos_info.rank,
-				opx_ep->hfi->daos_info.rank_inst);
+		opx_shm_tx_init(&opx_ep->shm, fi_opx_global.prov, opx_ep->domain->unique_job_key_str,
+				opx_ep->hfi->daos_info.rank, opx_ep->hfi->daos_info.rank_inst);
 		opx_ep->tx->shm = &opx_ep->shm;
 	}
 	/* Assert the local hfi was saved to the domain by rx init.
@@ -4752,11 +4752,11 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, struct fi_o
 				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst);
 		}
 
-		rc = FI_OPX_FABRIC_TX_CONNECT(opx_ep, peers[n]);
-		if (OFI_UNLIKELY(rc)) {
-			OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_TX_CONNECT, (uint64_t) (-rc), (uint64_t) n);
-			break;
-		}
+		/*
+		 * Intra-node peer segments are mapped lazily on first send by
+		 * opx_shm_tx_next() rather than eagerly here, so a rank only maps
+		 * the peers it actually communicates with.
+		 */
 	}
 
 #ifdef OPX_TRACER_ENABLED

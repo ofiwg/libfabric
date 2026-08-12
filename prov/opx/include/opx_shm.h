@@ -99,6 +99,13 @@ struct opx_shm_tx {
 	struct ofi_bufpool *shm_info_bufpool;
 	uint32_t	    rank;
 	uint32_t	    rank_inst;
+	/*
+	 * Job key of the local endpoint, saved at init so opx_shm_tx_next() can
+	 * rebuild a peer's segment name and connect lazily on first send (see
+	 * the connect-on-miss path below) instead of relying on an eager
+	 * per-peer mapping established at address-vector insert time.
+	 */
+	char job_key[OPX_JOB_KEY_STR_SIZE];
 };
 
 struct opx_shm_resynch {
@@ -290,8 +297,8 @@ struct opx_shm_info *opx_shm_rbt_get_shm_info(struct opx_shm_tx *tx, const uint3
 	return shm_info;
 }
 
-static inline ssize_t opx_shm_tx_init(struct opx_shm_tx *tx, struct fi_provider *prov, uint32_t hfi_rank,
-				      uint32_t hfi_rank_inst)
+static inline ssize_t opx_shm_tx_init(struct opx_shm_tx *tx, struct fi_provider *prov, const char *const unique_job_key,
+				      uint32_t hfi_rank, uint32_t hfi_rank_inst)
 {
 	tx->shm_info_rbtree = rbtNew(opx_shm_rbtree_compare);
 
@@ -305,6 +312,8 @@ static inline ssize_t opx_shm_tx_init(struct opx_shm_tx *tx, struct fi_provider 
 	tx->prov      = prov;
 	tx->rank      = hfi_rank;
 	tx->rank_inst = hfi_rank_inst;
+	strncpy(tx->job_key, unique_job_key, OPX_JOB_KEY_STR_SIZE - 1);
+	tx->job_key[OPX_JOB_KEY_STR_SIZE - 1] = '\0';
 
 	dlist_insert_head(&tx->list_entry, &shm_tx_list); // add to signal handler list.
 
@@ -463,9 +472,33 @@ static inline void *opx_shm_tx_next(struct opx_shm_tx *tx, uint8_t peer_hfi_unit
 	struct opx_shm_info *shm_info = opx_shm_rbt_get_shm_info(tx, segment_index);
 
 	if (OFI_UNLIKELY(shm_info == NULL || shm_info->fifo_segment == NULL)) {
-		*rc = -FI_EIO;
-		FI_WARN(tx->prov, FI_LOG_FABRIC, "SHM segment index %u FIFO not initialized.\n", segment_index);
-		return NULL;
+		/*
+		 * First send to this intra-node peer: map its segment now
+		 * (lazily) rather than eagerly at address-vector insert time.
+		 * A connect error (peer still initializing, or map failure) is
+		 * propagated for the caller to retry.
+		 */
+		char buffer[OPX_JOB_KEY_STR_SIZE + 32];
+#ifdef OPX_DAOS
+		int inst = use_rank ? (int) rank_inst : 0;
+#else
+		int inst = 0;
+#endif
+		snprintf(buffer, sizeof(buffer), OPX_SHM_FILE_NAME_PREFIX_FORMAT, tx->job_key, peer_hfi_unit, inst);
+
+		ssize_t crc = opx_shm_tx_connect(tx, (const char *const) buffer, segment_index, peer_rx_index,
+						 FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
+		if (crc != FI_SUCCESS) {
+			*rc = crc;
+			return NULL;
+		}
+
+		shm_info = opx_shm_rbt_get_shm_info(tx, segment_index);
+		if (OFI_UNLIKELY(shm_info == NULL || shm_info->fifo_segment == NULL)) {
+			*rc = -FI_EIO;
+			FI_WARN(tx->prov, FI_LOG_FABRIC, "SHM segment index %u FIFO not initialized.\n", segment_index);
+			return NULL;
+		}
 	}
 
 	struct opx_shm_fifo_segment *tx_fifo_segment = shm_info->fifo_segment;
