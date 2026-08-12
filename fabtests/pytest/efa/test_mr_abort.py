@@ -48,6 +48,10 @@ def combined_msg_size_params():
 
             for high_pps_val in high_pps_vals:
                 for sl_low_latency_val in sl_low_latency_vals:
+                    # high_pps and sl_low_latency are mutually exclusive:
+                    # do not generate test cases with both enabled
+                    if high_pps_val and sl_low_latency_val:
+                        continue
 
                     id = f"{rma_op}-{size}"
 
