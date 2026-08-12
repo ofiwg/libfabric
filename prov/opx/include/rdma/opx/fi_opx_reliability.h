@@ -212,7 +212,7 @@ struct fi_opx_reliability_service {
 	struct {
 		struct ofi_bufpool *replay_iov_pool;
 		struct ofi_bufpool *replay_pool;
-		RbtHandle	    tx_flow_outstanding_pkts_rbtree;
+		struct ofi_bufpool *flow_pool;
 		RbtHandle	    tx_flow_rbtree;
 		uint64_t	    unused[4];
 	} tx;
@@ -310,7 +310,7 @@ struct fi_opx_reliability_tx_replay {
 	struct fi_opx_reliability_tx_replay *next;
 	struct fi_opx_reliability_tx_replay *prev;
 	uint64_t			     target_reliability_subctxt_rx;
-	union fi_opx_reliability_tx_psn	    *psn_ptr;
+	struct fi_opx_reliability_tx_flow   *flow;
 	struct fi_opx_completion_counter    *cc_ptr;
 	uint64_t			     cc_dec;
 	union {
@@ -450,6 +450,36 @@ void fi_opx_rbt_key_value(RbtHandle h, RbtIterator it, void **key, void **val)
 	*val = i->val;
 }
 
+__OPX_FORCE_INLINE__
+void *fi_opx_rbt_value(RbtHandle h, RbtIterator it)
+{
+	return ((NodeType *) it)->val;
+}
+
+__OPX_FORCE_INLINE__
+RbtIterator fi_opx_rbt_next(RbtHandle h, RbtIterator it)
+{
+	RbtType	 *rbt = h;
+	NodeType *i   = it;
+
+	if (i->right != &rbt->sentinel) {
+		// go right 1, then left to the end
+		for (i = i->right; i->left != &rbt->sentinel; i = i->left)
+			;
+	} else {
+		// while you're the right child, chain up parent link
+		NodeType *p = i->parent;
+		while (p && i == p->right) {
+			i = p;
+			p = p->parent;
+		}
+
+		// return the "inorder" node
+		i = p;
+	}
+	return i != &rbt->sentinel ? i : NULL;
+}
+
 /*
  * Initialize the reliability service
  */
@@ -492,9 +522,19 @@ union fi_opx_reliability_tx_psn {
 		uint64_t psn : 24;
 		uint64_t throttle : 8;
 		uint64_t nack_count : 8;
-		uint64_t bytes_outstanding : 24;
+		uint64_t unused : 24;
 	} psn;
 } __attribute__((__packed__));
+
+struct fi_opx_reliability_tx_flow {
+	union fi_opx_reliability_tx_psn	     psn;
+	struct fi_opx_reliability_tx_replay *replay_head;
+	uint32_t			     outstanding_bytes;
+	uint32_t			     outstanding_pkts;
+	uint32_t			     max_outstanding_bytes;
+	uint32_t			     max_outstanding_pkts;
+	uint64_t			     unused_padding[4];
+} __attribute__((__packed__)) __attribute__((aligned(64)));
 
 // TODO - make these tunable.
 #ifndef FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS
@@ -604,52 +644,6 @@ union fi_opx_reliability_tx_psn {
 #define PSN_HIGH_WINDOW (PSN_WINDOW_SIZE - PSN_LOW_WINDOW)
 #define PSN_AGE_LIMIT	0x0000000000F00000ull
 
-static inline void opx_reliability_service_append_replay(struct fi_opx_reliability_service   *service,
-							 struct fi_opx_reliability_tx_replay *replay, opx_lid_t slid,
-							 opx_lid_t dlid, uint16_t src_subctxt_rx,
-							 uint16_t dst_subctxt_rx, const enum opx_hfi1_type hfi1_type)
-{
-	union fi_opx_reliability_service_flow_key key = {
-		.slid		= OPX_RELIABILITY_ENCODE_LID_TX(slid, replay->tx_index),
-		.src_subctxt_rx = src_subctxt_rx,
-		.dlid		= OPX_RELIABILITY_ENCODE_LID_TX(dlid, replay->tx_index),
-		.dst_subctxt_rx = dst_subctxt_rx,
-	};
-
-	void *itr = NULL;
-
-	OPX_RELIABILITY_DEBUG_LOG(&key, "(tx) packet psn=%08u posted opcode=%02x.\n",
-				  FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR_TYPE(replay, hfi1_type)),
-				  replay->scb.scb_16B.hdr.bth.opcode);
-
-	ASSERT_FLOW_EXISTS(service->tx.tx_flow_rbtree, &key,
-			   "Error trying to register replay for flow that doesn't exist!\n");
-
-	/* search for existing unack'd flows */
-	itr = fi_opx_rbt_find(service->tx.tx_flow_outstanding_pkts_rbtree, (void *) &key);
-
-	ASSERT_FLOW_FOUND(itr, &key, "Error trying to register replay for flow that doesn't exist!");
-
-	struct fi_opx_reliability_tx_replay **value_ptr = (struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(
-		service->tx.tx_flow_outstanding_pkts_rbtree, itr);
-
-	struct fi_opx_reliability_tx_replay *head = *value_ptr;
-
-	if (head == NULL) {
-		/* the existing flow does not have any un-ack'd replay buffers */
-		replay->prev = replay;
-		replay->next = replay;
-		*value_ptr   = replay;
-
-	} else {
-		/* insert this replay at the end of the list */
-		replay->prev	 = head->prev;
-		replay->next	 = head;
-		head->prev->next = replay;
-		head->prev	 = replay;
-	}
-}
-
 #ifdef OPX_RELIABILITY_TEST
 
 #define FI_PSN_TO_DROP 0xfffff0
@@ -717,11 +711,9 @@ size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_domain		      *d
 }
 
 __OPX_FORCE_INLINE__
-union fi_opx_reliability_tx_psn *opx_reliability_create_tx_flow(struct fi_opx_reliability_service *service,
-								const union fi_opx_reliability_service_flow_key *key)
+struct fi_opx_reliability_tx_flow *opx_reliability_create_tx_flow(struct fi_opx_reliability_service *service,
+								  const union fi_opx_reliability_service_flow_key *key)
 {
-	union fi_opx_reliability_tx_psn value = {.value = 0};
-
 	union fi_opx_reliability_service_flow_key *rbt_key =
 		(union fi_opx_reliability_service_flow_key *) ofi_buf_alloc(service->flow_key_pool);
 	if (OFI_UNLIKELY(!rbt_key)) {
@@ -729,34 +721,42 @@ union fi_opx_reliability_tx_psn *opx_reliability_create_tx_flow(struct fi_opx_re
 		return NULL;
 	}
 
+	struct fi_opx_reliability_tx_flow *tx_flow =
+		(struct fi_opx_reliability_tx_flow *) ofi_buf_alloc(service->tx.flow_pool);
+	if (OFI_UNLIKELY(!tx_flow)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Out of memory for opx reliability tx flow.\n");
+		OPX_BUF_FREE(rbt_key);
+		return NULL;
+	}
+
+	tx_flow->psn.value	       = 0;
+	tx_flow->replay_head	       = NULL;
+	tx_flow->outstanding_bytes     = 0;
+	tx_flow->outstanding_pkts      = 0;
+	tx_flow->max_outstanding_bytes = service->max_outstanding_bytes;
+	tx_flow->max_outstanding_pkts  = UINT32_MAX;
+
 	*rbt_key = *key;
 
-	RbtStatus rbt_rc = rbtInsert(service->tx.tx_flow_rbtree, (void *) rbt_key, (void *) value.value);
+	RbtStatus rbt_rc = rbtInsert(service->tx.tx_flow_rbtree, (void *) rbt_key, (void *) tx_flow);
 
 	if (OFI_UNLIKELY(rbt_rc != RBT_STATUS_OK)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error creating TX Flow: Could not insert flow into tx flow red black tree, rbtInsert() returned %d\n",
 			rbt_rc);
-		OPX_BUF_FREE(rbt_key);
-		return NULL;
-	}
-
-	rbt_rc = rbtInsert(service->tx.tx_flow_outstanding_pkts_rbtree, (void *) rbt_key, NULL);
-	if (OFI_UNLIKELY(rbt_rc != RBT_STATUS_OK)) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"Error creating TX Flow: Could not initialize entry in tx flow's outstanding replay red black tree, rbtInsert() returned %d\n",
-			rbt_rc);
-		void *itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) rbt_key);
-		rbtErase(service->tx.tx_flow_rbtree, itr);
+		OPX_BUF_FREE(tx_flow);
 		OPX_BUF_FREE(rbt_key);
 		return NULL;
 	}
 
 	OPX_RELIABILITY_DEBUG_LOG(rbt_key, "(tx) Flow created.\n");
 
+#ifndef NDEBUG
 	void *itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) rbt_key);
 	assert(itr);
-	return (union fi_opx_reliability_tx_psn *) fi_opx_rbt_value_ptr(service->tx.tx_flow_rbtree, itr);
+	assert((struct fi_opx_reliability_tx_flow *) fi_opx_rbt_value(service->tx.tx_flow_rbtree, itr) == tx_flow);
+#endif
+	return tx_flow;
 }
 
 __OPX_FORCE_INLINE__
@@ -836,7 +836,7 @@ static inline unsigned fi_opx_reliability_rx_check(struct fi_opx_reliability_ser
 			return OPX_RELIABILITY_FLOW_ERROR;
 		}
 	} else {
-		flow = *((struct fi_opx_reliability_rx_flow **) fi_opx_rbt_value_ptr(service->rx.rx_flow_rbtree, itr));
+		flow = (struct fi_opx_reliability_rx_flow *) fi_opx_rbt_value(service->rx.rx_flow_rbtree, itr);
 	}
 
 	if (((flow->next_psn & MAX_PSN) == psn) && (flow->uepkt == NULL)) {
@@ -893,11 +893,12 @@ int32_t fi_opx_reliability_tx_max_nacks()
 void fi_opx_reliability_inc_throttle_count(struct fid_ep *ep);
 void fi_opx_reliability_inc_throttle_nacks(struct fid_ep *ep);
 void fi_opx_reliability_inc_throttle_maxo(struct fid_ep *ep);
+void fi_opx_reliability_inc_throttle_maxp(struct fid_ep *ep);
 
 __OPX_FORCE_INLINE__
 int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_reliability_service *service,
 					     const opx_lid_t slid, const opx_lid_t dlid, uint16_t dst_origin_rx,
-					     uint8_t tx_index, union fi_opx_reliability_tx_psn **psn_ptr,
+					     uint8_t tx_index, struct fi_opx_reliability_tx_flow **tx_flow,
 					     uint32_t psns_to_get, uint32_t bytes_per_packet)
 {
 	OPX_TRACE_SDMA_BEGIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get, 0);
@@ -911,14 +912,19 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 	};
 	void *itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) &key);
 	if (OFI_UNLIKELY(!itr)) {
-		*psn_ptr = opx_reliability_create_tx_flow(service, &key);
-		if (OFI_UNLIKELY((*psn_ptr) == NULL)) {
+		*tx_flow = opx_reliability_create_tx_flow(service, &key);
+		if (OFI_UNLIKELY((*tx_flow) == NULL)) {
 			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_TX_FLOW_CREATE_FAIL, 0, 0);
 			return -1;
 		}
 	} else {
-		*psn_ptr = (union fi_opx_reliability_tx_psn *) fi_opx_rbt_value_ptr(service->tx.tx_flow_rbtree, itr);
+		*tx_flow = (struct fi_opx_reliability_tx_flow *) fi_opx_rbt_value(service->tx.tx_flow_rbtree, itr);
 	}
+
+	struct fi_opx_reliability_tx_flow *flow_ptr		  = *tx_flow;
+	union fi_opx_reliability_tx_psn	  *psn_ptr		  = &flow_ptr->psn;
+	uint32_t			   flow_outstanding_bytes = flow_ptr->outstanding_bytes;
+	uint32_t			   flow_outstanding_pkts  = flow_ptr->outstanding_pkts;
 
 	/*
 	 * We can leverage the fact that every packet needs a packet sequence
@@ -927,44 +933,54 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 	 * If the throttle is on, or if the # of bytes outstanding exceeds
 	 * a threshold, return an error.
 	 */
-	if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
+	if (OFI_UNLIKELY(psn_ptr->psn.throttle != 0)) {
 		/* Release a stale throttle when nothing is outstanding.
 		 * bytes_outstanding==0 means every packet (incl. retransmits) is
 		 * ACK'd, so it is flooding-safe to clear and self-heals a throttle
 		 * any retire path failed to release. A new NACK will re-arm it. */
-		if ((*psn_ptr)->psn.bytes_outstanding == 0) {
-			(*psn_ptr)->psn.throttle   = 0;
-			(*psn_ptr)->psn.nack_count = 0;
+		if (flow_outstanding_bytes == 0) {
+			psn_ptr->psn.throttle	= 0;
+			psn_ptr->psn.nack_count = 0;
 		} else {
 			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, 0);
 			return -1;
 		}
 	}
-	if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
-		(*psn_ptr)->psn.throttle = 1;
+	if (OFI_UNLIKELY(psn_ptr->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
+		psn_ptr->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_nacks(ep);
 		OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, 0);
 		return -1;
 	}
-	uint32_t max_outstanding = service->max_outstanding_bytes;
-	if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > max_outstanding)) {
-		(*psn_ptr)->psn.throttle = 1;
+	uint32_t max_outstanding_bytes = flow_ptr->max_outstanding_bytes;
+	if (OFI_UNLIKELY(flow_outstanding_bytes > max_outstanding_bytes)) {
+		psn_ptr->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_maxo(ep);
 		OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, 0);
 		return -1;
 	}
+	uint32_t max_outstanding_pkts = flow_ptr->max_outstanding_pkts;
+	if (OFI_UNLIKELY(flow_outstanding_pkts > max_outstanding_pkts)) {
+		psn_ptr->psn.throttle = 1;
+		fi_opx_reliability_inc_throttle_count(ep);
+		fi_opx_reliability_inc_throttle_maxp(ep);
+		OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, 0);
+		return -1;
+	}
 
-	const uint32_t bytes_avail = max_outstanding - (*psn_ptr)->psn.bytes_outstanding;
+	const uint32_t bytes_avail_pkts = (max_outstanding_bytes - flow_outstanding_bytes) / bytes_per_packet;
+	const uint32_t pkts_avail	= max_outstanding_pkts - flow_outstanding_pkts;
+
 	OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get, 0);
-	return MIN(bytes_avail / bytes_per_packet, psns_to_get);
+	return MIN(psns_to_get, MIN(pkts_avail, bytes_avail_pkts));
 }
 
 __OPX_FORCE_INLINE__
 int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliability_service *service,
 				       const opx_lid_t slid, const opx_lid_t dlid, const uint16_t dst_subctxt_rx,
-				       uint8_t tx_index, union fi_opx_reliability_tx_psn **psn_ptr,
+				       uint8_t tx_index, struct fi_opx_reliability_tx_flow **tx_flow,
 				       uint32_t psns_to_get)
 {
 	assert(psns_to_get && psns_to_get <= MAX(OPX_HFI1_SDMA_MAX_PKTS_TID, OPX_HFI1_SDMA_MAX_PKTS));
@@ -979,48 +995,59 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 
 	void *itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) &key);
 	if (OFI_UNLIKELY(!itr)) {
-		*psn_ptr = opx_reliability_create_tx_flow(service, &key);
-		if (OFI_UNLIKELY((*psn_ptr) == NULL)) {
-			return -1;
-		}
-	} else {
-		*psn_ptr = (union fi_opx_reliability_tx_psn *) fi_opx_rbt_value_ptr(service->tx.tx_flow_rbtree, itr);
-		union fi_opx_reliability_tx_psn psn_value = **psn_ptr;
-
-		/*
-		 * We can leverage the fact that every packet needs a packet sequence
-		 * number before it can be sent to implement some simple throttling.
-		 *
-		 * If the throttle is on, or if the # of bytes outstanding exceeds
-		 * a threshold, return an error.
-		 */
-		if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
-			/* Release a stale throttle when nothing is
-			 * outstanding (bytes_outstanding==0 => all packets ACK'd).
-			 * Flooding-safe self-heal; a new NACK re-arms it. */
-			if ((*psn_ptr)->psn.bytes_outstanding == 0) {
-				(*psn_ptr)->psn.throttle   = 0;
-				(*psn_ptr)->psn.nack_count = 0;
-			} else {
-				return -1;
-			}
-		}
-		if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
-			(*psn_ptr)->psn.throttle = 1;
-			fi_opx_reliability_inc_throttle_count(ep);
-			fi_opx_reliability_inc_throttle_nacks(ep);
-			return -1;
-		}
-		if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > service->max_outstanding_bytes)) {
-			(*psn_ptr)->psn.throttle = 1;
-			fi_opx_reliability_inc_throttle_count(ep);
-			fi_opx_reliability_inc_throttle_maxo(ep);
+		*tx_flow = opx_reliability_create_tx_flow(service, &key);
+		if (OFI_UNLIKELY((*tx_flow) == NULL)) {
 			return -1;
 		}
 
-		psn		    = psn_value.psn.psn;
-		(*psn_ptr)->psn.psn = (psn_value.psn.psn + psns_to_get) & MAX_PSN;
+		return psn;
 	}
+
+	struct fi_opx_reliability_tx_flow *flow_ptr		  = *tx_flow;
+	union fi_opx_reliability_tx_psn	  *psn_ptr		  = &flow_ptr->psn;
+	uint32_t			   flow_outstanding_bytes = flow_ptr->outstanding_bytes;
+	uint32_t			   flow_outstanding_pkts  = flow_ptr->outstanding_pkts;
+
+	/*
+	 * We can leverage the fact that every packet needs a packet sequence
+	 * number before it can be sent to implement some simple throttling.
+	 *
+	 * If the throttle is on, or if the # of bytes outstanding exceeds
+	 * a threshold, return an error.
+	 */
+	if (OFI_UNLIKELY(psn_ptr->psn.throttle != 0)) {
+		/* Release a stale throttle when nothing is
+		 * outstanding (bytes_outstanding==0 => all packets ACK'd).
+		 * Flooding-safe self-heal; a new NACK re-arms it. */
+		if (flow_outstanding_bytes == 0) {
+			psn_ptr->psn.throttle	= 0;
+			psn_ptr->psn.nack_count = 0;
+		} else {
+			return -1;
+		}
+	}
+	if (OFI_UNLIKELY(psn_ptr->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
+		psn_ptr->psn.throttle = 1;
+		fi_opx_reliability_inc_throttle_count(ep);
+		fi_opx_reliability_inc_throttle_nacks(ep);
+		return -1;
+	}
+	if (OFI_UNLIKELY(flow_outstanding_bytes > flow_ptr->max_outstanding_bytes)) {
+		psn_ptr->psn.throttle = 1;
+		fi_opx_reliability_inc_throttle_count(ep);
+		fi_opx_reliability_inc_throttle_maxo(ep);
+		return -1;
+	}
+	if (OFI_UNLIKELY(flow_outstanding_pkts > flow_ptr->max_outstanding_pkts)) {
+		psn_ptr->psn.throttle = 1;
+		fi_opx_reliability_inc_throttle_count(ep);
+		fi_opx_reliability_inc_throttle_maxp(ep);
+		return -1;
+	}
+
+	union fi_opx_reliability_tx_psn psn_value = *psn_ptr;
+	psn					  = psn_value.psn.psn;
+	psn_ptr->psn.psn			  = (psn_value.psn.psn + psns_to_get) & MAX_PSN;
 
 	return psn;
 }
@@ -1032,8 +1059,9 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
  * return it so that we don't end up with a gap in PSNs.
  */
 __OPX_FORCE_INLINE__
-void fi_opx_reliability_tx_return_psn(union fi_opx_reliability_tx_psn *psn_ptr, uint32_t return_psn)
+void fi_opx_reliability_tx_return_psn(struct fi_opx_reliability_tx_flow *flow, uint32_t return_psn)
 {
+	union fi_opx_reliability_tx_psn *psn_ptr = &flow->psn;
 	assert(((psn_ptr->psn.psn - 1) & MAX_PSN) == return_psn);
 	psn_ptr->psn.psn = (psn_ptr->psn.psn - 1) & MAX_PSN;
 }
@@ -1073,7 +1101,7 @@ fi_opx_reliability_service_replay_allocate(struct fi_opx_reliability_service *se
 __OPX_FORCE_INLINE__
 int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliability_service *service,
 				      const opx_lid_t slid, const opx_lid_t dlid, const uint16_t dst_subctxt_rx,
-				      uint8_t tx_index, union fi_opx_reliability_tx_psn **psn_ptr,
+				      uint8_t tx_index, struct fi_opx_reliability_tx_flow **tx_flow,
 				      struct fi_opx_reliability_tx_replay **replay,
 				      const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
 {
@@ -1086,14 +1114,16 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 
 	void *itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) &key);
 	if (OFI_UNLIKELY(!itr)) {
-		*psn_ptr = opx_reliability_create_tx_flow(service, &key);
-		if (OFI_UNLIKELY((*psn_ptr) == NULL)) {
+		*tx_flow = opx_reliability_create_tx_flow(service, &key);
+		if (OFI_UNLIKELY((*tx_flow) == NULL)) {
 			return -1;
 		}
 	} else {
-		*psn_ptr = (union fi_opx_reliability_tx_psn *) fi_opx_rbt_value_ptr(service->tx.tx_flow_rbtree, itr);
+		*tx_flow = (struct fi_opx_reliability_tx_flow *) fi_opx_rbt_value(service->tx.tx_flow_rbtree, itr);
 	}
-	union fi_opx_reliability_tx_psn psn_value = **psn_ptr;
+	struct fi_opx_reliability_tx_flow *flow_ptr		  = *tx_flow;
+	union fi_opx_reliability_tx_psn	  *psn_ptr		  = &flow_ptr->psn;
+	uint32_t			   flow_outstanding_bytes = flow_ptr->outstanding_bytes;
 
 	/*
 	 * We can leverage the fact that every packet needs a packet sequence
@@ -1102,27 +1132,33 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 	 * If the throttle is on, or if the # of bytes outstanding exceeds
 	 * a threshold, return an error.
 	 */
-	if (OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
+	if (OFI_UNLIKELY(psn_ptr->psn.throttle != 0)) {
 		/* Release a stale throttle when nothing is
 		 * outstanding (bytes_outstanding==0 => all packets ACK'd).
 		 * Flooding-safe self-heal; a new NACK re-arms it. */
-		if ((*psn_ptr)->psn.bytes_outstanding == 0) {
-			(*psn_ptr)->psn.throttle   = 0;
-			(*psn_ptr)->psn.nack_count = 0;
+		if (flow_outstanding_bytes == 0) {
+			psn_ptr->psn.throttle	= 0;
+			psn_ptr->psn.nack_count = 0;
 		} else {
 			return -1;
 		}
 	}
-	if (OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
-		(*psn_ptr)->psn.throttle = 1;
+	if (OFI_UNLIKELY(psn_ptr->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
+		psn_ptr->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_nacks(ep);
 		return -1;
 	}
-	if (OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > service->max_outstanding_bytes)) {
-		(*psn_ptr)->psn.throttle = 1;
+	if (OFI_UNLIKELY(flow_outstanding_bytes > flow_ptr->max_outstanding_bytes)) {
+		psn_ptr->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count(ep);
 		fi_opx_reliability_inc_throttle_maxo(ep);
+		return -1;
+	}
+	if (OFI_UNLIKELY(flow_ptr->outstanding_pkts > flow_ptr->max_outstanding_pkts)) {
+		psn_ptr->psn.throttle = 1;
+		fi_opx_reliability_inc_throttle_count(ep);
+		fi_opx_reliability_inc_throttle_maxp(ep);
 		return -1;
 	}
 
@@ -1131,8 +1167,9 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 		return -1;
 	}
 
-	const uint32_t psn  = psn_value.psn.psn;
-	(*psn_ptr)->psn.psn = (psn_value.psn.psn + 1) & MAX_PSN;
+	union fi_opx_reliability_tx_psn psn_value = *psn_ptr;
+	const uint32_t			psn	  = psn_value.psn.psn;
+	psn_ptr->psn.psn			  = (psn_value.psn.psn + 1) & MAX_PSN;
 
 	return psn;
 }
@@ -1149,38 +1186,32 @@ static inline void fi_opx_reliability_service_replay_deallocate(struct fi_opx_re
 
 __OPX_FORCE_INLINE__
 void fi_opx_reliability_service_replay_register_with_update(struct fi_opx_reliability_service	*service,
-							    union fi_opx_reliability_tx_psn	*psn_ptr,
+							    struct fi_opx_reliability_tx_flow	*flow,
 							    struct fi_opx_reliability_tx_replay *replay,
 							    struct fi_opx_completion_counter *counter, uint64_t value,
 							    const enum ofi_reliability_kind reliability_kind,
 							    const enum opx_hfi1_type	    hfi1_type)
 {
-	uint16_t  lrh_pktlen_le;
-	size_t	  total_bytes;
-	opx_lid_t hdr_dlid;
-	opx_lid_t hdr_slid;
-	uint16_t  hdr_dst_subctxt_rx;
+	uint16_t lrh_pktlen_le;
+	size_t	 total_bytes;
+	uint16_t hdr_dst_subctxt_rx;
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
 		total_bytes   = (lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
 		/* Use unified accessor: DPUT packets carry primary_lid in QW[4],
 		 * non-DPUT packets carry it in QW[3]. The accessor checks opcode. */
-		hdr_slid	   = FI_OPX_HFI1_PACKET_PRIMARY_LID(&replay->scb.scb_9B.hdr);
-		hdr_dlid	   = (opx_lid_t) __be16_to_cpu24((__be16) replay->scb.scb_9B.hdr.lrh_9B.dlid);
 		hdr_dst_subctxt_rx = replay->scb.scb_9B.hdr.bth.subctxt_rx & OPX_BTH_SUBCTXT_RX_MASK;
 	} else {
 		lrh_pktlen_le	   = replay->scb.scb_16B.hdr.lrh_16B.pktlen;
 		total_bytes	   = (lrh_pktlen_le - 1) * 8; /* do not copy the trailing icrc */
-		hdr_slid	   = FI_OPX_HFI1_PACKET_PRIMARY_LID(&replay->scb.scb_16B.hdr);
-		hdr_dlid	   = (opx_lid_t) __le24_to_cpu(replay->scb.scb_16B.hdr.lrh_16B.dlid20 << 20 |
-							       replay->scb.scb_16B.hdr.lrh_16B.dlid);
 		hdr_dst_subctxt_rx = replay->scb.scb_16B.hdr.bth.subctxt_rx & OPX_BTH_SUBCTXT_RX_MASK;
 	}
 
-	psn_ptr->psn.bytes_outstanding += total_bytes;
+	flow->outstanding_pkts++;
+	flow->outstanding_bytes += total_bytes;
 	replay->target_reliability_subctxt_rx = hdr_dst_subctxt_rx;
-	replay->psn_ptr			      = psn_ptr;
+	replay->flow			      = flow;
 	replay->cc_ptr			      = counter;
 	replay->cc_dec			      = value;
 
@@ -1195,13 +1226,26 @@ void fi_opx_reliability_service_replay_register_with_update(struct fi_opx_reliab
 		}
 	}
 #endif
-	opx_reliability_service_append_replay(service, replay, hdr_slid, hdr_dlid, service->subctxt_rx,
-					      hdr_dst_subctxt_rx, hfi1_type);
+	struct fi_opx_reliability_tx_replay *head = flow->replay_head;
+
+	if (head == NULL) {
+		/* the existing flow does not have any un-ack'd replay buffers */
+		replay->prev	  = replay;
+		replay->next	  = replay;
+		flow->replay_head = replay;
+
+	} else {
+		/* insert this replay at the end of the list */
+		replay->prev	 = head->prev;
+		replay->next	 = head;
+		head->prev->next = replay;
+		head->prev	 = replay;
+	}
 }
 
 __OPX_FORCE_INLINE__
 void fi_opx_reliability_service_replay_register_no_update(struct fi_opx_reliability_service   *service,
-							  union fi_opx_reliability_tx_psn     *psn_ptr,
+							  struct fi_opx_reliability_tx_flow   *flow,
 							  struct fi_opx_reliability_tx_replay *replay,
 							  const enum ofi_reliability_kind      reliability_kind,
 							  const enum opx_hfi1_type	       hfi1_type)
@@ -1212,7 +1256,7 @@ void fi_opx_reliability_service_replay_register_no_update(struct fi_opx_reliabil
 	// be used instead.
 	assert(!replay->use_iov);
 
-	fi_opx_reliability_service_replay_register_with_update(service, psn_ptr, replay, NULL, 0UL, reliability_kind,
+	fi_opx_reliability_service_replay_register_with_update(service, flow, replay, NULL, 0UL, reliability_kind,
 							       hfi1_type);
 }
 

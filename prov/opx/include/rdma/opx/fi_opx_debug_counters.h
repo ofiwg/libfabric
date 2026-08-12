@@ -235,6 +235,7 @@ struct fi_opx_debug_counters {
 
 		uint64_t uepkt_received;
 		uint64_t throttled_max_outstanding;
+		uint64_t throttled_max_packets;
 		uint64_t throttled_nacks;
 		uint64_t throttled;
 	} reliability_ping;
@@ -573,6 +574,7 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.uepkt_received);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.throttled_max_outstanding);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.throttled_max_packets);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.throttled_nacks);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.throttled);
 #endif
