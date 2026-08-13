@@ -290,19 +290,37 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 	if (av->domain->info_type == EFA_INFO_RDM && insert_shm_av) {
 		err = efa_conn_rdm_insert_shm_av(av, conn);
 		if (err) {
-			errno = -err;
+			EFA_WARN(FI_LOG_AV, "Failed to insert fi_addr %" PRIu64
+				" into shm provider's AV: %s\n", fi_addr, fi_strerror(-err));
 			goto err_release;
 		}
 	}
 
-	err = efa_av_reverse_av_add(av, cur_reverse_av, prv_reverse_av, conn);
+	err = efa_av_array_insert(av->addr_to_conn_map, fi_addr, conn);
 	if (err) {
-		if (av->domain->info_type == EFA_INFO_RDM)
-			efa_conn_rdm_deinit(av, conn);
-		goto err_release;
+		EFA_WARN(FI_LOG_AV, "Failed to insert connection for fi_addr %" PRIu64
+			" into array: %s\n",
+			fi_addr, fi_strerror(-err));
+		goto err_rdm_deinit;
 	}
 
+	err = efa_av_reverse_av_add(av, cur_reverse_av, prv_reverse_av, conn);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "Failed to insert connection for fi_addr %" PRIu64
+			" into reverse AV: %s\n", fi_addr, fi_strerror(-err));
+		err = efa_av_array_insert(av->addr_to_conn_map, fi_addr, NULL);
+		if (err) {
+			EFA_WARN(FI_LOG_AV, "While processing previous failure, failed to remove connection for fi_addr %" PRIu64
+				" from array: %s\n", fi_addr, fi_strerror(-err));
+		}
+		goto err_rdm_deinit;
+	}
 	return conn;
+
+err_rdm_deinit:
+	if (av->domain->info_type == EFA_INFO_RDM) {
+		efa_conn_rdm_deinit(av, conn);
+	}
 
 err_release:
 	if (conn->ah)
@@ -394,9 +412,17 @@ struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *
 		goto err_release;
 	}
 
+	err = efa_av_array_insert(av->addr_to_conn_map_implicit, fi_addr, conn);
+	if (err) {
+		efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
+					 &av->prv_reverse_av_implicit, conn);
+		efa_conn_rdm_deinit(av, conn);
+		goto err_release;
+	}
 	return conn;
 
 err_release:
+	dlist_remove(&conn->implicit_av_lru_entry);
 	if (conn->ah) {
 		dlist_remove(&conn->ah_implicit_conn_list_entry);
 		efa_ah_release(av->domain, conn->ah, true);
@@ -411,8 +437,8 @@ err_release:
 	return NULL;
 }
 
-static void efa_conn_release_util_av(struct util_av *util_av,
-					    struct efa_conn *conn, fi_addr_t fi_addr)
+static void efa_conn_release_util_av(struct efa_av_array *conn_map, struct util_av *util_av,
+				    struct efa_conn *conn, fi_addr_t fi_addr)
 {
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *efa_av_entry;
@@ -422,6 +448,13 @@ static void efa_conn_release_util_av(struct util_av *util_av,
 	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
 	assert(util_av_entry);
 	efa_av_entry = (struct efa_av_entry *) util_av_entry->data;
+
+	err = efa_av_array_insert(conn_map, fi_addr, NULL);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "Failed to remove connection for explicit fi_addr %" PRIu64
+			" from array: %s\n", fi_addr, fi_strerror(-err));
+	}
+
 
 	err = ofi_av_remove_addr(util_av, fi_addr);
 	if (err) {
@@ -456,7 +489,7 @@ void efa_conn_release_explicit(struct efa_av *av, struct efa_conn *conn)
 		efa_conn_rdm_deinit(av, conn);
 
 	efa_ah_release(av->domain, conn->ah, false);
-	efa_conn_release_util_av(&av->util_av, conn, conn->fi_addr);
+	efa_conn_release_util_av(av->addr_to_conn_map, &av->util_av, conn, conn->fi_addr);
 }
 
 /**
@@ -479,7 +512,7 @@ void efa_conn_release_implicit(struct efa_av *av, struct efa_conn *conn)
 
 	dlist_remove(&conn->ah_implicit_conn_list_entry);
 	efa_ah_release(av->domain, conn->ah, true);
-	efa_conn_release_util_av(&av->util_av_implicit, conn, conn->implicit_fi_addr);
+	efa_conn_release_util_av(av->addr_to_conn_map_implicit, &av->util_av_implicit, conn, conn->implicit_fi_addr);
 }
 
 /**
@@ -504,6 +537,6 @@ void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *con
 	assert(ofi_genlock_held(&av->domain->util_domain.lock));
 	dlist_remove(&conn->ah_implicit_conn_list_entry);
 
-	efa_conn_release_util_av(&av->util_av_implicit, conn, conn->implicit_fi_addr);
+	efa_conn_release_util_av(av->addr_to_conn_map_implicit, &av->util_av_implicit, conn, conn->implicit_fi_addr);
 	conn->ah->implicit_refcnt--;
 }
