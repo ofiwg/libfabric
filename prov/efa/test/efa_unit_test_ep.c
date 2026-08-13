@@ -2326,10 +2326,8 @@ void test_efa_rdm_ep_get_explicit_shm_fi_addr(void **state)
 	raw_addr.qkey = 0x1234;
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	/* Test with valid peer address that has same GID */
 	shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, peer_addr);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 
 	/* Verify the function returns a valid shm_fi_addr */
 	assert_int_not_equal(shm_addr, FI_ADDR_NOTAVAIL);
@@ -2361,9 +2359,7 @@ void test_efa_rdm_ep_get_explicit_shm_fi_addr_no_shm(void **state)
 	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
 	/* Test the function returns FI_ADDR_NOTAVAIL when no shm resources */
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, peer_addr);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	assert_int_equal(shm_addr, FI_ADDR_NOTAVAIL);
 }
 
