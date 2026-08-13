@@ -478,7 +478,8 @@ void test_av_implicit_to_explicit(void **state)
 	size_t raw_addr_len = sizeof(struct efa_ep_addr);
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
-	fi_addr_t explicit_fi_addr, test_addr;
+	struct efa_conn *explicit_conn;
+	fi_addr_t implicit_fi_addr, explicit_fi_addr, test_addr;
 	struct efa_av *av;
 	uint32_t ahn;
 	int err;
@@ -489,6 +490,9 @@ void test_av_implicit_to_explicit(void **state)
 
 	/* Generate a peer with random QPN and QKEY and insert it into the implicit AV */
 	peer = test_av_get_peer_from_implicit_av(resource);
+	implicit_fi_addr = peer->conn->implicit_fi_addr;
+	assert_ptr_equal(efa_av_addr_to_conn_implicit(av, implicit_fi_addr),
+			 peer->conn);
 
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(err, 0);
@@ -501,6 +505,11 @@ void test_av_implicit_to_explicit(void **state)
 	raw_addr.qpn = peer->conn->ep_addr->qpn;
 	raw_addr.qkey = peer->conn->ep_addr->qkey;
 	err = fi_av_insert(resource->av, &raw_addr, 1, &explicit_fi_addr, 0, NULL);
+	assert_int_equal(err, 1);
+	assert_null(efa_av_addr_to_conn_implicit(av, implicit_fi_addr));
+	explicit_conn = efa_av_addr_to_conn(av, explicit_fi_addr);
+	assert_non_null(explicit_conn);
+	assert_ptr_equal(peer->conn, explicit_conn);
 	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
 
 	err = fi_av_lookup(resource->av, explicit_fi_addr, &raw_addr_2, &raw_addr_len);
@@ -525,6 +534,7 @@ void test_av_implicit_to_explicit(void **state)
 
 	err = fi_av_remove(resource->av, &explicit_fi_addr, 1, 0);
 	assert_int_equal(err, 0);
+	assert_null(efa_av_addr_to_conn(av, explicit_fi_addr));
 	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
 }
 
