@@ -258,12 +258,12 @@ struct fi_opx_av {
  *                       HFI service to let us know it's done.
  * OPENED              : This MR is registered with HFI service, and may be used for DMA operations in HFI service
  *                       using its access_key.
- * PENDING_OPEN_CLOSE  : A request to close this MR with HFI service has been submitted, and we're waiting
- *                       for a completion from HFI service to let us know the MR register is done.
- * PENDING_KEY_ALLOC_CLOSE : A request to close this MR with HFI service has been submitted, and we're waiting
- *                       for a completion from HFI service to let us know the access_key is assigned.
- * PENDING_KEY_ENABLE_CLOSE : A request to close this MR with HFI service has been submitted, and we're waiting
- *                       for a completion from HFI service to let us know the key is enabled.
+ * PENDING_OPEN_CLOSE  : The MR-open request is still pending after close was requested. The open completion
+ *                       supplies the MR handle, after which deferred close work submits the MR-close request.
+ * PENDING_KEY_ALLOC_CLOSE : Close was requested while access-key allocation was pending. No HFI service command
+ *                       is outstanding; deferred close work, not MR CQ polling, submits the MR-close request.
+ * PENDING_KEY_ENABLE_CLOSE : The persistent-access enable request is still pending after close was requested.
+ *                       The enable completion transitions to OPENED, after which deferred close work disables it.
  * PENDING_KEY_DISABLE : A request to deregister the access_key associated with this MR has been submitted to
  *                       HFI service, and we're waiting for a completion from HFI service to let us know it's done.
  * PENDING_DEREGISTER  : The access_key has been successfully deregistered from HFI service and freed, and now
