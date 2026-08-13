@@ -78,9 +78,10 @@ struct opx_hmem_domain {
 	uint32_t dmabuf_supported;
 };
 
-int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked);
-int opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric, struct fi_info *info,
-			 struct opx_hmem_domain **opx_hmem_domain);
+void opx_hmem_cleanup_mr_cache(struct opx_hmem_domain *hmem_domain, int locked);
+int  opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked);
+int  opx_hmem_open_domain(struct opx_hmem_fabric *hmem_fabric, struct fi_info *info,
+			  struct opx_hmem_domain **opx_hmem_domain);
 
 int opx_hmem_close_fabric(struct opx_hmem_fabric *opx_hmem_fabric);
 int opx_hmem_open_fabric(struct opx_hmem_fabric **opx_hmem_fabric);
