@@ -55,11 +55,62 @@
 #include "rdma/opx/opx_hfisvc.h"
 #include "rdma/opx/opx_hfisvc_poll.h"
 
-#define OPX_DOMAIN_HFISVC_NOT_INITIALIZED (0x7FFFFFFFFFFFFFFEll)
+#define OPX_DOMAIN_HFISVC_NOT_INITIALIZED	  (0x7FFFFFFFFFFFFFFEll)
+#define OPX_DOMAIN_DEFERRED_WORK_DRAIN_TIMEOUT_MS 1000ul
 
 #if HAVE_HFISVC
 /* OPX does not ibverbs directly, dlopen/dlsym only */
 #include <dlfcn.h>
+#endif
+
+#ifdef OPX_HMEM
+static void opx_domain_release_hmem_cache_refs(struct fi_opx_domain *opx_domain)
+{
+	if (!opx_domain->hmem_domain || !opx_domain->hmem_domain->hmem_cache) {
+		return;
+	}
+
+	for (;;) {
+		struct fi_opx_mr *opx_mr;
+		bool		  released = false;
+
+		for (opx_mr = opx_domain->mr_hashmap; opx_mr; opx_mr = opx_mr->hh.next) {
+			struct ofi_mr_entry *entry = opx_mr->cache_entry;
+
+			if (!entry || entry->use_cnt <= 0) {
+				continue;
+			}
+
+			ofi_mr_cache_delete(opx_domain->hmem_domain->hmem_cache, entry);
+			released = true;
+			break;
+		}
+
+		if (!released) {
+			return;
+		}
+	}
+}
+#endif
+
+#if HAVE_HFISVC
+static int opx_domain_drain_deferred_work(struct fi_opx_domain *opx_domain)
+{
+	uint64_t timeout = ofi_gettime_ms() + OPX_DOMAIN_DEFERRED_WORK_DRAIN_TIMEOUT_MS;
+
+	while (!slist_empty(&opx_domain->deferred_work_queue) && ofi_gettime_ms() < timeout) {
+		opx_domain_hfisvc_poll(opx_domain);
+	}
+
+	if (OFI_UNLIKELY(!slist_empty(&opx_domain->deferred_work_queue))) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+			"[HFISVC] Timed out draining deferred MR close work after %lu ms; preserving domain queues for retry\n",
+			OPX_DOMAIN_DEFERRED_WORK_DRAIN_TIMEOUT_MS);
+		return -FI_EBUSY;
+	}
+
+	return 0;
+}
 #endif
 
 static int fi_opx_close_domain(fid_t fid)
@@ -84,13 +135,19 @@ static int fi_opx_close_domain(fid_t fid)
 
 	opx_close_tid_domain(opx_domain->tid_domain, OPX_TID_NO_LOCK_ON_CLEANUP);
 	opx_domain->tid_domain = NULL;
+
 #ifdef OPX_HMEM
-	opx_hmem_close_domain(opx_domain->hmem_domain, OPX_HMEM_NO_LOCK_ON_CLEANUP);
-	opx_domain->hmem_domain = NULL;
+	opx_domain_release_hmem_cache_refs(opx_domain);
+	opx_hmem_cleanup_mr_cache(opx_domain->hmem_domain, OPX_HMEM_NO_LOCK_ON_CLEANUP);
 #endif
 
 #if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {
+		ret = opx_domain_drain_deferred_work(opx_domain);
+		if (ret) {
+			return ret;
+		}
+
 		/* Drain outstanding access keys for all contexts */
 		for (int i = 0; i < opx_domain->hfisvc.num_ctxs; i++) {
 			while (opx_hfisvc_keyset_outstanding(opx_domain->hfisvc.ctxs[i].access_key_set)) {
@@ -100,20 +157,12 @@ static int fi_opx_close_domain(fid_t fid)
 	}
 #endif
 
-	if (!slist_empty(&opx_domain->deferred_work_queue)) {
-		struct opx_domain_deferred_work *work_item =
-			(struct opx_domain_deferred_work *) slist_remove_head(&opx_domain->deferred_work_queue);
+#ifdef OPX_HMEM
+	opx_hmem_close_domain(opx_domain->hmem_domain, OPX_HMEM_NO_LOCK_ON_CLEANUP);
+	opx_domain->hmem_domain = NULL;
+#endif
 
-		while (work_item) {
-			if (work_item->opx_mr && work_item->work_fn == opx_hfisvc_mr_deferred_close) {
-				free(work_item->opx_mr);
-			}
-			OPX_BUF_FREE(work_item);
-			work_item =
-				(struct opx_domain_deferred_work *) slist_remove_head(&opx_domain->deferred_work_queue);
-		}
-	}
-
+	assert(slist_empty(&opx_domain->deferred_work_queue));
 	ofi_bufpool_destroy(opx_domain->deferred_work_pool);
 #if HAVE_HFISVC
 	if (opx_domain->use_hfisvc) {

@@ -134,7 +134,7 @@ int opx_hmem_open_fabric(struct opx_hmem_fabric **hmem_fabric)
  * we still want to do our best to free storage. In non-error cases,
  * locked is always 0.
  */
-int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked)
+void opx_hmem_cleanup_mr_cache(struct opx_hmem_domain *hmem_domain, int locked)
 {
 	if (hmem_domain->hmem_cache) {
 		if (!locked) {
@@ -143,6 +143,11 @@ int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked)
 		free(hmem_domain->hmem_cache);
 		hmem_domain->hmem_cache = NULL;
 	}
+}
+
+int opx_hmem_close_domain(struct opx_hmem_domain *hmem_domain, int locked)
+{
+	opx_hmem_cleanup_mr_cache(hmem_domain, locked);
 
 	dlist_remove(&hmem_domain->list_entry);
 
