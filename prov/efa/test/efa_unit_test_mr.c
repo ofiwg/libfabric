@@ -3,6 +3,7 @@
 
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
+#include "rdm/efa_rdm_cq.h"
 
 static void test_efa_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
 			int mr_reg_count, int mr_reg_size)
@@ -2163,6 +2164,8 @@ void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
 	assert_int_equal(txe->state, EFA_RDM_OPE_SEND);
 	assert_true(txe->window > 0);
 	assert_false(dlist_empty(&efa_rdm_ep->ope_longcts_send_list));
+	assert_true(efa_rdm_ep->needs_progress);
+	assert_false(dlist_empty(&efa_rdm_cq->progress_ep_list));
 
 	/* Close the MR while the ope is waiting to drip CTSDATA */
 	assert_int_equal(fi_close(&mr->fid), 0);

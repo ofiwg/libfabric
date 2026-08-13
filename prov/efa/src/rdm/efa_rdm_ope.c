@@ -2034,6 +2034,7 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 	case -FI_EAGAIN:
 		dlist_insert_tail(&ope->queued_entry,
 				  &ope->ep->ope_queued_list);
+		efa_rdm_ep_enqueue_progress_list(ope->ep);
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_READ;
 		err = 0;
 		break;
@@ -2301,6 +2302,7 @@ ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
 		ope->queued_ctrl_type = pkt_type;
 		dlist_insert_tail(&ope->queued_entry,
 				  &ope->ep->ope_queued_list);
+		efa_rdm_ep_enqueue_progress_list(ope->ep);
 		err = 0;
 	}
 

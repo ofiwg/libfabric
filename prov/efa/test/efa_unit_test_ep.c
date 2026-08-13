@@ -440,6 +440,7 @@ void test_efa_rdm_ep_rma_queue_before_handshake(void **state, int op)
 {
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_cq *efa_rdm_cq;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(struct efa_ep_addr);
 	fi_addr_t peer_addr;
@@ -492,6 +493,10 @@ void test_efa_rdm_ep_rma_queue_before_handshake(void **state, int op)
 	txe = container_of(efa_rdm_ep->ope_queued_list.next, struct efa_rdm_ope, queued_entry);
 	assert_true((txe->op == op));
 	assert_true(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
+
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+	assert_true(efa_rdm_ep->needs_progress);
+	assert_false(dlist_empty(&efa_rdm_cq->progress_ep_list));
 
 	/* Fill remaining slots up to the limit (1 already queued) */
 	for (i = 1; i < EFA_RDM_MAX_QUEUED_OPE_BEFORE_HANDSHAKE; i++) {
@@ -2442,4 +2447,141 @@ void test_efa_base_ep_construct_info_and_util_ep_initialized(void **state)
 
 	/* Reset the mock */
 	g_efa_unit_test_mocks.calloc_fail_nmemb = 0;
+}
+
+/**
+ * @brief Verify that efa_rdm_ep_enqueue_progress_list correctly adds the EP
+ * to the CQ's progress_ep_list, is idempotent on repeated calls, and that
+ * efa_rdm_ep_progress_peers_and_queues removes the EP when all queued work
+ * lists are empty.
+ */
+void test_efa_rdm_ep_progress_list_enqueue_and_dequeue(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_cq *efa_rdm_cq;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_cq = container_of(resource->cq, struct efa_rdm_cq, efa_cq.util_cq.cq_fid.fid);
+
+	assert_false(efa_rdm_ep->needs_progress);
+	assert_true(dlist_empty(&efa_rdm_cq->progress_ep_list));
+
+	efa_rdm_ep_enqueue_progress_list(efa_rdm_ep);
+	assert_true(efa_rdm_ep->needs_progress);
+	assert_false(dlist_empty(&efa_rdm_cq->progress_ep_list));
+
+	/* Calling again is idempotent: EP is still on list exactly once */
+	efa_rdm_ep_enqueue_progress_list(efa_rdm_ep);
+	assert_true(efa_rdm_ep->needs_progress);
+	assert_false(dlist_empty(&efa_rdm_cq->progress_ep_list));
+
+	/*
+	 * With all internal queued-work lists empty, calling
+	 * efa_rdm_ep_progress_peers_and_queues should remove the EP
+	 * from the progress list.
+	 */
+	assert_true(dlist_empty(&efa_rdm_ep->peer_backoff_list));
+	assert_true(dlist_empty(&efa_rdm_ep->handshake_queued_peer_list));
+	assert_true(dlist_empty(&efa_rdm_ep->ope_queued_list));
+	assert_true(dlist_empty(&efa_rdm_ep->ope_longcts_send_list));
+
+	efa_rdm_ep_progress_peers_and_queues(efa_rdm_ep);
+
+	assert_false(efa_rdm_ep->needs_progress);
+	assert_true(dlist_empty(&efa_rdm_cq->progress_ep_list));
+}
+
+/**
+ * @brief Verify that the endpoint level peer lists get cleared when an endpoint is closed
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_efa_rdm_ep_peer_list_cleared(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct fid_ep *ep1, *ep2;
+	struct efa_rdm_ep *efa_rdm_ep1, *efa_rdm_ep2;
+	struct efa_rdm_peer *peer1, *peer2, *peer3, *peer4;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t addr1, addr2, addr3, addr4;
+	int err, num_addr;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	// Create two endpoints
+	err = fi_endpoint(resource->domain, resource->info, &ep1, NULL);
+	assert_int_equal(err, 0);
+	err = fi_endpoint(resource->domain, resource->info, &ep2, NULL);
+	assert_int_equal(err, 0);
+
+	// Bind endpoints to AV and enable them
+	err = fi_ep_bind(ep1, &resource->av->fid, 0);
+	assert_int_equal(err, 0);
+	err = fi_ep_bind(ep2, &resource->av->fid, 0);
+	assert_int_equal(err, 0);
+	err = fi_ep_bind(ep1, &resource->cq->fid, FI_SEND | FI_RECV);
+	assert_int_equal(err, 0);
+	err = fi_ep_bind(ep2, &resource->cq->fid, FI_SEND | FI_RECV);
+	assert_int_equal(err, 0);
+	err = fi_enable(ep1);
+	assert_int_equal(err, 0);
+	err = fi_enable(ep2);
+	assert_int_equal(err, 0);
+
+	efa_rdm_ep1 = container_of(ep1, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep2 = container_of(ep2, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	// Get base address and create different addresses
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+
+	// Insert addresses to create peers
+	raw_addr.qpn = 1; raw_addr.qkey = 0x1234;
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &addr1, 0, NULL);
+	assert_int_equal(num_addr, 1);
+
+	raw_addr.qpn = 2; raw_addr.qkey = 0x5678;
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &addr2, 0, NULL);
+	assert_int_equal(num_addr, 1);
+
+	raw_addr.qpn = 3; raw_addr.qkey = 0x9abc;
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &addr3, 0, NULL);
+	assert_int_equal(num_addr, 1);
+
+	raw_addr.qpn = 4; raw_addr.qkey = 0xdef0;
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &addr4, 0, NULL);
+	assert_int_equal(num_addr, 1);
+
+	// Create peers through normal code path
+	peer1 = efa_rdm_ep_get_peer_explicit(efa_rdm_ep1, addr1);
+	assert_non_null(peer1);
+	peer2 = efa_rdm_ep_get_peer_explicit(efa_rdm_ep1, addr2);
+	assert_non_null(peer2);
+	peer3 = efa_rdm_ep_get_peer_explicit(efa_rdm_ep2, addr3);
+	assert_non_null(peer3);
+	peer4 = efa_rdm_ep_get_peer_explicit(efa_rdm_ep2, addr4);
+	assert_non_null(peer4);
+
+	// Manually add peers to endpoint lists to simulate the conditions
+	dlist_insert_tail(&peer1->handshake_queued_entry, &efa_rdm_ep1->handshake_queued_peer_list);
+	peer1->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
+	dlist_insert_tail(&peer2->rnr_backoff_entry, &efa_rdm_ep1->peer_backoff_list);
+	peer2->flags |= EFA_RDM_PEER_IN_BACKOFF;
+	dlist_insert_tail(&peer3->handshake_queued_entry, &efa_rdm_ep2->handshake_queued_peer_list);
+	peer3->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
+	dlist_insert_tail(&peer4->rnr_backoff_entry, &efa_rdm_ep2->peer_backoff_list);
+	peer4->flags |= EFA_RDM_PEER_IN_BACKOFF;
+
+	efa_rdm_ep_enqueue_progress_list(efa_rdm_ep1);
+	efa_rdm_ep_enqueue_progress_list(efa_rdm_ep2);
+	assert_true(efa_rdm_ep1->needs_progress);
+	assert_true(efa_rdm_ep2->needs_progress);
+
+	// Close endpoints - this should clear the endpoint lists
+	fi_close(&ep1->fid);
+	fi_close(&ep2->fid);
 }

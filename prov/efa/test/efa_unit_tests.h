@@ -456,7 +456,6 @@ void test_efa_fabric_open_ops_feature_unknown(void **state);
 void test_efa_domain_info_type_efa_rdm(void **state);
 void test_efa_domain_rdm_no_bounce_buffer(void **state);
 void test_efa_domain_rdm_attr_mr_allocated(void **state);
-void test_efa_domain_peer_list_cleared(void **state);
 void test_efa_domain_rdm_mr_ops(void **state);
 void test_efa_domain_mr_cache_enabled(void **state);
 void test_efa_domain_mr_cache_disabled_with_mr_local(void **state);
@@ -662,6 +661,8 @@ void test_efa_rdm_ep_ibv_create_ah_failure(void **state);
 void test_efa_rdm_ep_setopt_cq_flow_control(void **state);
 void test_efa_direct_ep_setopt_cq_flow_control_no_rx_cq_data(void **state);
 void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data(void **state);
+void test_efa_rdm_ep_progress_list_enqueue_and_dequeue(void **state);
+void test_efa_rdm_ep_peer_list_cleared(void **state);
 
 /* begin efa_unit_test_data_path_direct.c */
 void test_efa_data_path_direct_rdma_read_multiple_sge_fail(void **state);

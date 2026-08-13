@@ -309,6 +309,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_requested_limits, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_base_ep_construct_ibv_qp_init_attr_ex_efa_use_device_limits, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_base_ep_construct_ibv_qp_init_attr_ex_dgram, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_progress_list_enqueue_and_dequeue, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_ep_peer_list_cleared, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_ep.c */
 
 		/* begin efa_unit_test_cq.c */
@@ -599,7 +601,6 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_domain_info_type_efa_rdm, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_rdm_no_bounce_buffer, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_rdm_attr_mr_allocated, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_efa_domain_peer_list_cleared, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_rdm_mr_ops, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_enabled, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_mr_cache_disabled_with_mr_local, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

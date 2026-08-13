@@ -558,6 +558,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 	if (!(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
 		dlist_insert_tail(&ope->queued_entry, &ep->ope_queued_list);
+		efa_rdm_ep_enqueue_progress_list(ep);
 	}
 	if (!(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT)) {
 		/* This is the first time this packet encountered RNR,
@@ -585,6 +586,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 	peer->flags |= EFA_RDM_PEER_IN_BACKOFF;
 	dlist_insert_tail(&peer->rnr_backoff_entry,
 			  &ep->peer_backoff_list);
+	efa_rdm_ep_enqueue_progress_list(ep);
 
 	peer->rnr_backoff_begin_ts = ofi_gettime_us();
 	if (peer->rnr_backoff_wait_time == 0) {
@@ -773,6 +775,7 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_pe
 		peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
 		dlist_insert_tail(&peer->handshake_queued_entry,
 				  &ep->handshake_queued_peer_list);
+		efa_rdm_ep_enqueue_progress_list(ep);
 		return;
 	}
 
@@ -1073,9 +1076,28 @@ int efa_rdm_ep_enforce_handshake_for_txe(struct efa_rdm_ep *ep, struct efa_rdm_o
 	if (!(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)) {
 		txe->internal_flags |= EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE;
 		dlist_insert_tail(&txe->queued_entry, &ep->ope_queued_list);
+		efa_rdm_ep_enqueue_progress_list(ep);
 		ep->ope_queued_before_handshake_cnt++;
 	}
 	return FI_SUCCESS;
+}
+
+void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep)
+{
+	struct efa_rdm_cq *cq;
+
+	if (ep->needs_progress)
+		return;
+
+	ep->needs_progress = true;
+
+	if (ep->base_ep.util_ep.tx_cq) {
+		cq = container_of(ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);
+	} else {
+		assert(ep->base_ep.util_ep.rx_cq);
+		cq = container_of(ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, efa_cq.util_cq);
+	}
+	dlist_insert_tail(&ep->progress_ep_entry, &cq->progress_ep_list);
 }
 
 void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
@@ -1191,5 +1213,15 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 							 FI_EFA_ERR_PKT_POST);
 			}
 		}
+	}
+
+	/* If all lists are now empty, remove EP from CQ's progress list */
+	if (ep->needs_progress &&
+	    dlist_empty(&ep->peer_backoff_list) &&
+	    dlist_empty(&ep->handshake_queued_peer_list) &&
+	    dlist_empty(&ep->ope_queued_list) &&
+	    dlist_empty(&ep->ope_longcts_send_list)) {
+		dlist_remove(&ep->progress_ep_entry);
+		ep->needs_progress = false;
 	}
 }
