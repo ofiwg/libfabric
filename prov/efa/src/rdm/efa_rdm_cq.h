@@ -12,6 +12,8 @@ struct efa_rdm_cq {
 	struct efa_cq efa_cq;
 	struct fid_cq *shm_cq;
 	struct dlist_entry ibv_cq_poll_list;
+	/* list of EPs that have queued work needing progress */
+	struct dlist_entry progress_ep_list;
 	size_t entry_size;
 	bool need_to_scan_ep_list;
 };

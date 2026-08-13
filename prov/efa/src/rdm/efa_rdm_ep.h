@@ -142,6 +142,10 @@ struct efa_rdm_ep {
 	struct dlist_entry peer_backoff_list;
 	/* list of #efa_rdm_peer that will retry posting handshake pkt */
 	struct dlist_entry handshake_queued_peer_list;
+	/* linked into efa_rdm_cq->progress_ep_list when this EP has queued work */
+	struct dlist_entry progress_ep_entry;
+	/* whether this EP is on the CQ's progress_ep_list */
+	bool needs_progress;
 
 	/* fi_addr-indexed maps from this endpoint to its peers,
 	 * one for the explicit AV and one for the implicit AV. Peers are
@@ -232,6 +236,8 @@ struct efa_rdm_ep {
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
 
 void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep);
+
+void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep);
 
 #define efa_rdm_rx_flags(efa_rdm_ep) ((efa_rdm_ep)->base_ep.util_ep.rx_op_flags)
 #define efa_rdm_tx_flags(efa_rdm_ep) ((efa_rdm_ep)->base_ep.util_ep.tx_op_flags)

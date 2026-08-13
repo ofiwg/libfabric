@@ -270,6 +270,7 @@ void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
 	if (ope->state != EFA_RDM_OPE_SEND) {
 		ope->state = EFA_RDM_OPE_SEND;
 		dlist_insert_tail(&ope->entry, &ep->ope_longcts_send_list);
+		efa_rdm_ep_enqueue_progress_list(ep);
 	}
 }
 
@@ -485,6 +486,7 @@ void efa_rdm_pke_handle_readrsp_sent(struct efa_rdm_pke *pkt_entry)
 
 		rxe->state = EFA_RDM_OPE_SEND;
 		dlist_insert_tail(&rxe->entry, &pkt_entry->ep->ope_longcts_send_list);
+		efa_rdm_ep_enqueue_progress_list(pkt_entry->ep);
 	}
 }
 

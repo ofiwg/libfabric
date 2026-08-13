@@ -1176,7 +1176,9 @@ void test_efa_rdm_ope_ack_packet_tracking_wait_send_common(void **state, int pkt
 	assert_false(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
 
 	/* Poll the cq via wait_send */
+	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
+	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 
 	/* The cq poll should remove the rxe from the list */
 	assert_true(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
@@ -1228,7 +1230,9 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 	 * Then it will not try to poll the cq again because of the peer becomes
 	 * unresponsive. See logic in efa_rdm_ep_close_should_wait_send()
 	 */
+	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
+	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	assert_true(!!(rxe->peer->flags & EFA_RDM_PEER_UNRESP));
 
 	/* Now posting another ctrl packet against the same unresponsive peer */
@@ -1244,7 +1248,9 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 	will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
 
 	/* Kick off the second wait_send, which should NOT try to progress more because of the unresp peer */
+	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
+	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_posted_ack_list), 1);
 }
 
