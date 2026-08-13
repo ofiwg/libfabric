@@ -1787,7 +1787,7 @@ void test_efa_rdm_mr_gen_bumps_on_close(void **state)
  * Verify that efa_rdm_mr_gen_check_ope skips the gen check for an RXE
  * queued with EFA_RDM_OPE_QUEUED_CTRL (CTS packet). On the receiver side
  * of a long CTS operation, if posting the CTS fails with -FI_EAGAIN the
- * RXE is added to ope_queued_list. When efa_rdm_domain_progress_peers_and_queues
+ * RXE is added to ope_queued_list. When efa_rdm_ep_progress_peers_and_queues
  * processes this entry it calls efa_rdm_mr_gen_check_ope, which must
  * return true without reading ope->desc_gen (since the check is TXE-only).
  */
@@ -1796,13 +1796,11 @@ void test_efa_rdm_mr_gen_check_ope_skips_rxe_queued_ctrl_cts(void **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ep *efa_rdm_ep;
-	struct efa_rdm_domain *rdm_domain;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
 				  base_ep.util_ep.ep_fid);
-	rdm_domain = efa_rdm_ep_rdm_domain(efa_rdm_ep);
 
 	/* Allocate RXE simulating receiver side of a long CTS operation */
 	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_msg);
@@ -1821,10 +1819,10 @@ void test_efa_rdm_mr_gen_check_ope_skips_rxe_queued_ctrl_cts(void **state)
 	/* Simulate EAGAIN on CTS post: set QUEUED_CTRL and add to queue */
 	rxe->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
 	rxe->queued_ctrl_type = EFA_RDM_CTS_PKT;
-	dlist_insert_tail(&rxe->queued_entry, &rdm_domain->ope_queued_list);
+	dlist_insert_tail(&rxe->queued_entry, &efa_rdm_ep->ope_queued_list);
 
 	assert_int_equal(
-		efa_unit_test_get_dlist_length(&rdm_domain->ope_queued_list), 1);
+		efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_queued_list), 1);
 
 	/*
 	 * Directly invoke efa_rdm_mr_gen_check_ope on the RXE.
@@ -2164,7 +2162,7 @@ void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
 	/* Verify ope is on the longcts list */
 	assert_int_equal(txe->state, EFA_RDM_OPE_SEND);
 	assert_true(txe->window > 0);
-	assert_false(dlist_empty(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list));
+	assert_false(dlist_empty(&efa_rdm_ep->ope_longcts_send_list));
 
 	/* Close the MR while the ope is waiting to drip CTSDATA */
 	assert_int_equal(fi_close(&mr->fid), 0);

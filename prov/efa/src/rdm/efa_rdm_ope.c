@@ -2033,7 +2033,7 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 	switch (err) {
 	case -FI_EAGAIN:
 		dlist_insert_tail(&ope->queued_entry,
-				  &efa_rdm_ep_rdm_domain(ope->ep)->ope_queued_list);
+				  &ope->ep->ope_queued_list);
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_READ;
 		err = 0;
 		break;
@@ -2300,7 +2300,7 @@ ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
 		ope->queued_ctrl_type = pkt_type;
 		dlist_insert_tail(&ope->queued_entry,
-				  &efa_rdm_ep_rdm_domain(ope->ep)->ope_queued_list);
+				  &ope->ep->ope_queued_list);
 		err = 0;
 	}
 
@@ -2382,7 +2382,7 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag)
 		 * The source MR was closed since dispatch (gen check failed).
 		 * This is a peer/MR abort, not a packet-post failure, so report
 		 * the dedicated peer-abort reason code -- matching
-		 * efa_rdm_domain_progress_peers_and_queues().
+		 * efa_rdm_ep_progress_peers_and_queues().
 		 */
 		ret = -FI_ECANCELED;
 		prov_errno = FI_EFA_ERR_PEER_ABORTED;

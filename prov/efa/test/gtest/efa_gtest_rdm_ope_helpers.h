@@ -34,7 +34,7 @@ struct efa_test_queued_op {
 
 /**
  * @brief Issue a send/read/write with FI_MORE to a peer with no handshake yet,
- * so the op is queued on the domain's ope_queued_list instead of posted.
+ * so the op is queued on the endpoint's ope_queued_list instead of posted.
  */
 int efa_test_queue_op_with_fi_more(struct fid_ep *ep, struct fid_av *av,
 				   struct fid_domain *domain, int op_kind,

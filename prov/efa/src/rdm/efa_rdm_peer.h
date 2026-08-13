@@ -118,8 +118,8 @@ struct efa_rdm_peer {
 	uint64_t rnr_backoff_begin_ts;	/**< timestamp for RNR backoff period begin */
 	uint64_t rnr_backoff_wait_time;	/**< how long the RNR backoff period last */
 	int rnr_queued_pkt_cnt;		/**< queued RNR packet count */
-	struct dlist_entry rnr_backoff_entry;	/**< linked to efa_domain->peer_backoff_list */
-	struct dlist_entry handshake_queued_entry; /**< linked with efa_domain->handshake_queued_peer_list */
+	struct dlist_entry rnr_backoff_entry;	/**< linked to efa_rdm_ep->peer_backoff_list */
+	struct dlist_entry handshake_queued_entry; /**< linked with efa_rdm_ep->handshake_queued_peer_list */
 	struct dlist_entry txe_list; /**< a list of txe related to this peer */
 	struct dlist_entry rxe_list; /**< a list of rxe related to this peer */
 	struct dlist_entry overflow_pke_list; /**< a list of out-of-order pke that overflow the current recvwin */
