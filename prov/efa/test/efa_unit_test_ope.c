@@ -824,12 +824,12 @@ void test_efa_rdm_rxe_list_removal(void **state)
 
 	/* insert to lists */
 	rxe->state = EFA_RDM_OPE_SEND;
-	dlist_insert_tail(&rxe->entry, &efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list);
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
+	dlist_insert_tail(&rxe->entry, &efa_rdm_ep->ope_longcts_send_list);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_longcts_send_list), 1);
 
 	/* Lists should be empty after releasing the ope */
 	efa_rdm_rxe_release(rxe);
-	dlist_empty(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list);
+	dlist_empty(&efa_rdm_ep->ope_longcts_send_list);
 }
 
 void test_efa_rdm_txe_list_removal(void **state)
@@ -848,17 +848,17 @@ void test_efa_rdm_txe_list_removal(void **state)
 
 	/* insert to lists */
 	txe->state = EFA_RDM_OPE_SEND;
-	dlist_insert_tail(&txe->entry, &efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list);
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
+	dlist_insert_tail(&txe->entry, &efa_rdm_ep->ope_longcts_send_list);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_longcts_send_list), 1);
 
 	txe->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
-	dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list);
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list), 1);
+	dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep->ope_queued_list);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_queued_list), 1);
 
 	/* Lists should be empty after releasing the ope */
 	efa_rdm_txe_release(txe);
-	assert_true(dlist_empty(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list));
-	assert_true(dlist_empty(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list));
+	assert_true(dlist_empty(&efa_rdm_ep->ope_longcts_send_list));
+	assert_true(dlist_empty(&efa_rdm_ep->ope_queued_list));
 }
 
 void test_efa_rdm_txe_prepare_local_read_pkt_entry(void **state)
@@ -929,10 +929,10 @@ void test_efa_rdm_txe_handle_error_queue_flags_cleanup(void **state)
 
 	/* Set up txe with queued flags */
 	txe->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
-	dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list);
+	dlist_insert_tail(&txe->queued_entry, &efa_rdm_ep->ope_queued_list);
 
 	/* Verify txe is in queued list */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list), 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_queued_list), 1);
 	assert_true(txe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL);
 
 	/* Handle error - this should clean up queue flags */
@@ -940,7 +940,7 @@ void test_efa_rdm_txe_handle_error_queue_flags_cleanup(void **state)
 
 	/* Verify queue flags are cleaned up */
 	assert_false(txe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL);
-	assert_true(dlist_empty(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list));
+	assert_true(dlist_empty(&efa_rdm_ep->ope_queued_list));
 
 	/* Release should not cause duplicate dlist_remove */
 	efa_rdm_txe_release(txe);
@@ -964,10 +964,10 @@ void test_efa_rdm_rxe_handle_error_queue_flags_cleanup(void **state)
 
 	/* Set up rxe with queued flags */
 	rxe->internal_flags |= EFA_RDM_OPE_QUEUED_READ;
-	dlist_insert_tail(&rxe->queued_entry, &efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list);
+	dlist_insert_tail(&rxe->queued_entry, &efa_rdm_ep->ope_queued_list);
 
 	/* Verify rxe is in queued list */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list), 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_queued_list), 1);
 	assert_true(rxe->internal_flags & EFA_RDM_OPE_QUEUED_READ);
 
 	/* Handle error - this should clean up queue flags */
@@ -975,7 +975,7 @@ void test_efa_rdm_rxe_handle_error_queue_flags_cleanup(void **state)
 
 	/* Verify queue flags are cleaned up */
 	assert_false(rxe->internal_flags & EFA_RDM_OPE_QUEUED_READ);
-	assert_true(dlist_empty(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_queued_list));
+	assert_true(dlist_empty(&efa_rdm_ep->ope_queued_list));
 
 	/* Release should not cause duplicate dlist_remove */
 	efa_rdm_rxe_release(rxe);
@@ -1001,16 +1001,16 @@ void test_efa_rdm_txe_handle_error_duplicate_prevention(void **state)
 
 	/* Set txe to EFA_RDM_OPE_SEND state and add to longcts_send_list */
 	txe->state = EFA_RDM_OPE_SEND;
-	dlist_insert_tail(&txe->entry, &efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list);
+	dlist_insert_tail(&txe->entry, &efa_rdm_ep->ope_longcts_send_list);
 
 	/* Verify txe is in the list */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_longcts_send_list), 1);
 
 	/* First error handling call */
 	efa_rdm_txe_handle_error(txe, FI_ENOTCONN, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
 
 	/* Verify txe is removed from list and in error state */
-	assert_true(dlist_empty(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list));
+	assert_true(dlist_empty(&efa_rdm_ep->ope_longcts_send_list));
 	assert_int_equal(txe->state, EFA_RDM_OPE_ERR);
 
 	/* Second error handling call should be a no-op */
@@ -1040,16 +1040,16 @@ void test_efa_rdm_rxe_handle_error_duplicate_prevention(void **state)
 
 	/* Set rxe to EFA_RDM_OPE_SEND state and add to longcts_send_list */
 	rxe->state = EFA_RDM_OPE_SEND;
-	dlist_insert_tail(&rxe->entry, &efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list);
+	dlist_insert_tail(&rxe->entry, &efa_rdm_ep->ope_longcts_send_list);
 
 	/* Verify rxe is in the list */
-	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list), 1);
+	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_longcts_send_list), 1);
 
 	/* First error handling call */
 	efa_rdm_rxe_handle_error(rxe, FI_ENOTCONN, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE);
 
 	/* Verify rxe is removed from list and in error state */
-	assert_true(dlist_empty(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list));
+	assert_true(dlist_empty(&efa_rdm_ep->ope_longcts_send_list));
 	assert_int_equal(rxe->state, EFA_RDM_OPE_ERR);
 
 	/* Second error handling call should be a no-op */
@@ -1536,7 +1536,7 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 	/* Set txe state based on packet type */
 	if (pkt_type == EFA_RDM_CTSDATA_PKT) {
 		txe->state = EFA_RDM_OPE_SEND;
-		dlist_insert_tail(&txe->entry, &efa_rdm_ep_rdm_domain(efa_rdm_ep)->ope_longcts_send_list);
+		dlist_insert_tail(&txe->entry, &efa_rdm_ep->ope_longcts_send_list);
 	} else {
 		txe->state = EFA_RDM_TXE_REQ;
 	}
@@ -4089,7 +4089,7 @@ void test_efa_rdm_txe_handle_error_emits_peer_error_on_invalid_lkey(void **state
 	/* Simulate the LONGCTS_*RTM has already been linked into
 	 * the longcts send list. The error handler removes it. */
 	dlist_insert_tail(&txe->entry,
-			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+			  &ep->ope_longcts_send_list);
 
 	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
@@ -4156,7 +4156,7 @@ void test_efa_rdm_txe_handle_error_emits_peer_error_on_canceled(void **state)
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
 
 	dlist_insert_tail(&txe->entry,
-			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+			  &ep->ope_longcts_send_list);
 
 	outstanding_before = ep->efa_outstanding_tx_ops;
 
@@ -4410,7 +4410,7 @@ void test_efa_rdm_txe_handle_error_no_emit_when_peer_unsupported(void **state)
 	peer->extra_info[0] = 0;
 
 	dlist_insert_tail(&txe->entry,
-			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+			  &ep->ope_longcts_send_list);
 
 	outstanding_before = ep->efa_outstanding_tx_ops;
 
@@ -4464,7 +4464,7 @@ void test_efa_rdm_txe_handle_error_emits_peer_error_with_homogeneous_peers(void 
 	assert_false(efa_rdm_peer_support_peer_error(peer));
 
 	dlist_insert_tail(&txe->entry,
-			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+			  &ep->ope_longcts_send_list);
 
 	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
@@ -4516,7 +4516,7 @@ void test_efa_rdm_txe_handle_error_skips_peer_error_when_no_handshake(void **sta
 	assert_false(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
 
 	dlist_insert_tail(&txe->entry,
-			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+			  &ep->ope_longcts_send_list);
 
 	outstanding_before = ep->efa_outstanding_tx_ops;
 
@@ -4797,7 +4797,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 	 * dlist_remove(&rxe->entry) for the OPE_SEND state.
 	 */
 	dlist_insert_tail(&rxe->entry,
-			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+			  &ep->ope_longcts_send_list);
 	rxe->peer_rxe = peer_rxe;
 
 	/* Simulate a CTS in flight on this rxe (window refill). */
@@ -5737,7 +5737,7 @@ void test_efa_rdm_pke_handle_tx_error_longcts_abort_drains_txe(
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
 	dlist_insert_tail(&txe->entry,
-			  &efa_rdm_ep_rdm_domain(ep)->ope_longcts_send_list);
+			  &ep->ope_longcts_send_list);
 
 	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);

@@ -1110,13 +1110,11 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	struct dlist_entry *item;
 	struct efa_rdm_cq *efa_rdm_cq;
 	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
-	struct efa_rdm_domain *rdm_domain;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct fid_list_entry *fid_entry;
 
 	ofi_genlock_lock(&cq->ep_list_lock);
 	efa_rdm_cq = container_of(cq, struct efa_rdm_cq, efa_cq.util_cq);
-	rdm_domain = (struct efa_rdm_domain *) container_of(efa_rdm_cq->efa_cq.util_cq.domain, struct efa_domain, util_domain);
 
 	/**
 	 * TODO: It's better to just post the initial batch of internal rx pkts during ep enable
@@ -1139,7 +1137,12 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
-	efa_rdm_domain_progress_peers_and_queues(rdm_domain);
+
+	dlist_foreach(&cq->ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+		efa_rdm_ep_progress_peers_and_queues(efa_rdm_ep);
+	}
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
