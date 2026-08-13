@@ -36,7 +36,7 @@ HIGH_PPS_MAX_WRITE_SIZE = 65536
 SL_LOW_LATENCY_MAX_WRITE_SIZE = 8192
 
 
-def combined_msg_size_params():
+def rma_case_params():
     for rma_op in ["write", "read", "writedata"]:
         for size in BASE_MESSAGE_SIZES:
 
@@ -84,22 +84,40 @@ def combined_msg_size_params():
                                        use_sl_low_latency, marks=marks, id=id)
 
 
+def abort_case_params():
+    """
+    Expand rma_case_params() with the (cancel_order, ops_per_mr)
+    combinations that actually run for each message size.
+
+    The 10 MiB size only runs with reverse cancel order on 1 operation per
+    MR to save run time; every other size runs the full cross product.
+    """
+    for p in rma_case_params():
+        size = p.values[0]
+        if size == 10485760:
+            cases = [("reverse", 1)]
+        else:
+            cases = [(cancel_order, ops_per_mr)
+                     for cancel_order in ("reverse", "random")
+                     for ops_per_mr in (1, 4)]
+        for cancel_order, ops_per_mr in cases:
+            yield pytest.param(*p.values, cancel_order, ops_per_mr,
+                               marks=p.marks,
+                               id=f"{p.id}-{cancel_order}-ops_{ops_per_mr}")
+
+
 # --- Test: abort (RMA) ---
 @pytest.mark.functional
 @pytest.mark.fabric(params=["efa-direct"])  # TODO add test for efa fabric
-@pytest.mark.parametrize("cancel_order", ["reverse", "random"])
 @pytest.mark.parametrize("close_side", ["initiator", "target"])
-@pytest.mark.parametrize("ops_per_mr", [1, 4])
 @pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
-@pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
-                         list(combined_msg_size_params()))
+@pytest.mark.parametrize(
+    "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
+    list(abort_case_params()))
 def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr,
                   high_pps, sl_low_latency, message_size, memory_type):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
-
-    if message_size == 10485760 and (cancel_order == 'random' or ops_per_mr == 4):
-        pytest.skip("fi_mr_abort 10MB test only runs with reverse cancel order on 1 operation per MR to save run time")
 
     command = (f"fi_mr_abort -T abort -o {rma_op} -C {cancel_order}"
                f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
@@ -122,7 +140,7 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
 @pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
 @pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
 @pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
-                         list(combined_msg_size_params()))
+                         list(rma_case_params()))
 def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
                           sl_low_latency, message_size, memory_type):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
