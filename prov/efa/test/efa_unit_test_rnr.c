@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "rdm/efa_rdm_cq.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
 
@@ -63,6 +64,8 @@ void test_efa_rnr_queue_and_resend_impl(void **state, uint32_t op)
 	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, EFA_RDM_PKE_RNR_RETRANSMIT);
 	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 1);
 	assert_int_equal(efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 1);
+	assert_true(efa_rdm_ep->needs_progress);
+	assert_false(dlist_empty(&efa_rdm_cq->progress_ep_list));
 
 	ret = efa_rdm_ep_post_queued_pkts(efa_rdm_ep, &txe->queued_pkts);
 	assert_int_equal(ret, 0);

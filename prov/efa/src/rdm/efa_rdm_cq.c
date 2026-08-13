@@ -889,6 +889,7 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	size_t i = 0;
 	struct efa_rdm_ep *ep = NULL;
 	struct efa_cq *efa_cq = container_of(ibv_cq, struct efa_cq, ibv_cq);
+	struct efa_rdm_cq *efa_rdm_cq = (struct efa_rdm_cq *)efa_cq;
 	struct efa_domain *efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
 
 	struct dlist_entry rx_progressed_ep_list, *tmp;
@@ -922,6 +923,12 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		dlist_remove(&ep->entry);
 	}
 	assert(dlist_empty(&rx_progressed_ep_list));
+
+	dlist_foreach_container_safe(&efa_rdm_cq->progress_ep_list,
+				     struct efa_rdm_ep, ep,
+				     progress_ep_entry, tmp) {
+		efa_rdm_ep_progress_peers_and_queues(ep);
+	}
 
 	return err;
 }
@@ -1138,11 +1145,6 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 	}
 
-	dlist_foreach(&cq->ep_list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-		efa_rdm_ep_progress_peers_and_queues(efa_rdm_ep);
-	}
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
@@ -1272,6 +1274,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	attr->size = MAX(rdm_domain->rdm_cq_size, attr->size);
 
 	dlist_init(&cq->ibv_cq_poll_list);
+	dlist_init(&cq->progress_ep_list);
 	cq->need_to_scan_ep_list = false;
 
 	ret = ofi_cq_init(&efa_prov, domain, attr, &cq->efa_cq.util_cq,
