@@ -38,6 +38,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <assert.h>
+#include <inttypes.h>
 
 #include "rdma/opx/fi_opx_compiler.h"
 #include "rdma/opx/fi_opx_domain.h"
@@ -45,6 +46,53 @@
 #include "rdma/opx/opx_hfisvc.h"
 
 #if HAVE_HFISVC
+
+__OPX_FORCE_INLINE__
+void opx_hfisvc_mr_process_notification(struct fi_opx_mr *opx_mr, const struct hfisvc_client_cq_entry *hfisvc_entry)
+{
+	assert((opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPENED &&
+		hfisvc_entry->type_notify.access_key == opx_mr->hfisvc.access_key) ||
+	       opx_mr->hfisvc.state != OPX_MR_HFISVC_STATE_OPENED);
+
+	OPX_HFISVC_DEBUG_LOG("Notify completion opx_mr=%p state=%d imm_data=%p\n", opx_mr, opx_mr->hfisvc.state,
+			     hfisvc_entry->type_notify.imm_data);
+
+	struct opx_hfisvc_xfer_completion *rzv_comp =
+		(struct opx_hfisvc_xfer_completion *) hfisvc_entry->type_notify.imm_data;
+	if (rzv_comp == NULL) {
+		return;
+	}
+
+	struct opx_context *context = rzv_comp->context;
+	if (context == NULL) {
+		OPX_HFISVC_DEBUG_LOG(
+			"STRIPE-MR-NOTIFY: MR notify completion for opx_mr=%p rzv_comp=%p context=NULL; skipping context completion work\n",
+			opx_mr, rzv_comp);
+		OPX_BUF_FREE(rzv_comp);
+		return;
+	}
+
+	OPX_HFISVC_DEBUG_LOG(
+		"STRIPE-MR-NOTIFY: MR notify completion for opx_mr=%p rzv_comp=%p context=%p byte_counter=%lu -> %lu\n",
+		opx_mr, rzv_comp, context, context->byte_counter, context->byte_counter - 1);
+
+	assert(context->byte_counter > 0);
+	context->byte_counter -= 1;
+	OPX_BUF_FREE(rzv_comp);
+}
+
+__OPX_FORCE_INLINE__
+bool opx_hfisvc_mr_validate_access_key(const struct fi_opx_mr *opx_mr, uint32_t access_key)
+{
+	if (OFI_UNLIKELY(access_key != opx_mr->hfisvc.access_key)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+			"HFISVC MR completion access key mismatch: opx_mr=%p state=%d expected=%u actual=%u\n", opx_mr,
+			opx_mr->hfisvc.state, opx_mr->hfisvc.access_key, access_key);
+		return false;
+	}
+
+	return true;
+}
 
 __OPX_FORCE_INLINE__
 void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
@@ -65,90 +113,95 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 				opx_hfisvc_mr_report_completion_error(err_mr);
 				continue;
 			}
-			struct fi_opx_mr  *opx_mr    = (struct fi_opx_mr *) hfisvc_out[i].app_context;
-			hfisvc_client_mr_t mr_handle = hfisvc_out[i].type_mr.mr;
+			struct fi_opx_mr *opx_mr = (struct fi_opx_mr *) hfisvc_out[i].app_context;
 
-			assert(hfisvc_out[i].status == HFISVC_CLIENT_CQ_ENTRY_STATUS_SUCCESS);
+			if (hfisvc_out[i].type == HFI1_HFISVC_CQ_ENTRY_TYPE_NOTIFY) {
+				/* Queued NOTIFY entries may arrive after close begins; they never advance the MR
+				 * lifecycle. */
+				opx_hfisvc_mr_process_notification(opx_mr, &hfisvc_out[i]);
+				continue;
+			} else if (hfisvc_out[i].type == HFI1_HFISVC_CQ_ENTRY_TYPE_MR) {
+				hfisvc_client_mr_t mr_handle = hfisvc_out[i].type_mr.mr;
 
-			if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_OPEN) {
-				OPX_HFISVC_DEBUG_LOG(
-					"MR State transition opx_mr=%p hfisvc.mr_handle=%u state=PENDING_OPEN -> KEY_ALLOC\n",
-					opx_mr, (uint32_t) mr_handle);
-				opx_mr->hfisvc.mr_handle = mr_handle;
-				opx_mr->hfisvc.state	 = OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC;
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE) {
-				OPX_HFISVC_DEBUG_LOG(
-					"MR State transition opx_mr=%p state=PENDING_KEY_ENABLE -> OPENED\n", opx_mr);
-				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPENED;
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPENED) {
-				assert(hfisvc_out[i].type_notify.access_key == opx_mr->hfisvc.access_key);
-				OPX_HFISVC_DEBUG_LOG("Notify completion opx_mr=%p imm_data=%lX\n", opx_mr,
-						     hfisvc_out[i].type_notify.imm_data);
-
-				struct opx_hfisvc_xfer_completion *rzv_comp =
-					(struct opx_hfisvc_xfer_completion *) hfisvc_out[i].type_notify.imm_data;
-				if (rzv_comp == NULL) {
-					continue;
-				}
-
-				struct opx_context *context = rzv_comp->context;
-				if (context == NULL) {
+				if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_OPEN) {
 					OPX_HFISVC_DEBUG_LOG(
-						"STRIPE-MR-NOTIFY: MR notify completion for opx_mr=%p rzv_comp=%p context=NULL; skipping context completion work\n",
-						opx_mr, rzv_comp);
-					OPX_BUF_FREE(rzv_comp);
+						"MR State transition opx_mr=%p hfisvc.mr_handle=%u state=PENDING_OPEN -> KEY_ALLOC\n",
+						opx_mr, (uint32_t) mr_handle);
+					opx_mr->hfisvc.mr_handle = mr_handle;
+					opx_mr->hfisvc.state	 = OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC;
+				} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_CLOSE) {
+					if (OFI_UNLIKELY(mr_handle != opx_mr->hfisvc.mr_handle)) {
+						FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+							"HFISVC MR completion handle mismatch: opx_mr=%p state=%d expected=%u actual=%u\n",
+							opx_mr, opx_mr->hfisvc.state,
+							(uint32_t) opx_mr->hfisvc.mr_handle, (uint32_t) mr_handle);
+						opx_hfisvc_mr_report_completion_error(opx_mr);
+						continue;
+					}
+					OPX_HFISVC_DEBUG_LOG(
+						"MR State transition opx_mr=%p state=PENDING_CLOSE -> CLOSED\n",
+						opx_mr);
+					opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_CLOSED;
+				} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_OPEN_CLOSE) {
+					OPX_HFISVC_DEBUG_LOG(
+						"MR State transition opx_mr=%p hfisvc.mr_handle=%u state=PENDING_OPEN with CLOSE_ISSUED -> PENDING_DEREGISTER\n",
+						opx_mr, (uint32_t) mr_handle);
+					opx_mr->hfisvc.mr_handle = mr_handle;
+					opx_mr->hfisvc.state	 = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
+				} else {
+					FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+						"Unexpected HFISVC MR completion state for type=%d: opx_mr=%p state=%d status=%d\n",
+						hfisvc_out[i].type, opx_mr, opx_mr->hfisvc.state, hfisvc_out[i].status);
+					opx_hfisvc_mr_report_completion_error(opx_mr);
 					continue;
 				}
-				OPX_HFISVC_DEBUG_LOG(
-					"STRIPE-MR-NOTIFY: MR notify completion for opx_mr=%p rzv_comp=%p context=%p byte_counter=%lu -> %lu\n",
-					opx_mr, rzv_comp, context, context->byte_counter, context->byte_counter - 1);
+			} else if (hfisvc_out[i].type == HFI1_HFISVC_CQ_ENTRY_TYPE_DEFAULT) {
+				uint32_t access_key = hfisvc_out[i].type_default.access_key;
 
-				assert(context->byte_counter > 0);
-				context->byte_counter -= 1;
-
-				OPX_BUF_FREE(rzv_comp);
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE) {
-				opx_hfisvc_keyset_free_key(opx_domain->hfisvc.ctxs[0].access_key_set,
-							   opx_mr->hfisvc.access_key,
-							   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_domain));
-				opx_mr->hfisvc.access_key = (uint32_t) -1;
-				OPX_HFISVC_DEBUG_LOG(
-					"MR State transition opx_mr=%p state=PENDING_KEY_DISABLE -> PENDING_DEREGISTER\n",
-					opx_mr);
-				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_DEREGISTER) {
-				OPX_HFISVC_DEBUG_LOG(
-					"MR State transition opx_mr=%p state=PENDING_DEREGISTER -> PENDING_CLOSE\n",
-					opx_mr);
-				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_CLOSE;
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_CLOSE) {
-				OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_CLOSE -> CLOSED\n",
-						     opx_mr);
-				assert(opx_mr->hfisvc.mr_handle == mr_handle);
-				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_CLOSED;
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_OPEN_CLOSE) {
-				OPX_HFISVC_DEBUG_LOG(
-					"MR State transition opx_mr=%p hfisvc.mr_handle=%u state=PENDING_OPEN with CLOSE_ISSUED -> PENDING_DEREGISTER\n",
-					opx_mr, (uint32_t) mr_handle);
-				opx_mr->hfisvc.mr_handle = mr_handle;
-				opx_mr->hfisvc.state	 = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ALLOC_CLOSE) {
-				OPX_HFISVC_DEBUG_LOG(
-					"MR State transition opx_mr=%p hfisvc.mr_handle=%u state=PENDING_KEY_ALLOC with CLOSE_ISSUED -> PENDING_DEREGISTER\n",
-					opx_mr, (uint32_t) opx_mr->hfisvc.mr_handle);
-				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
-			} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE_CLOSE) {
-				OPX_HFISVC_DEBUG_LOG(
-					"MR State transition opx_mr=%p state=PENDING_KEY_ENABLE with CLOSE_ISSUED -> OPENED\n",
-					opx_mr);
-				opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPENED;
+				if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE) {
+					if (OFI_UNLIKELY(!opx_hfisvc_mr_validate_access_key(opx_mr, access_key))) {
+						opx_hfisvc_mr_report_completion_error(opx_mr);
+						continue;
+					}
+					OPX_HFISVC_DEBUG_LOG(
+						"MR State transition opx_mr=%p state=PENDING_KEY_ENABLE -> OPENED\n",
+						opx_mr);
+					opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPENED;
+				} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE) {
+					if (OFI_UNLIKELY(!opx_hfisvc_mr_validate_access_key(opx_mr, access_key))) {
+						opx_hfisvc_mr_report_completion_error(opx_mr);
+						continue;
+					}
+					opx_hfisvc_keyset_free_key(opx_domain->hfisvc.ctxs[0].access_key_set,
+								   opx_mr->hfisvc.access_key,
+								   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_domain));
+					opx_mr->hfisvc.access_key = (uint32_t) -1;
+					OPX_HFISVC_DEBUG_LOG(
+						"MR State transition opx_mr=%p state=PENDING_KEY_DISABLE -> PENDING_DEREGISTER\n",
+						opx_mr);
+					opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_DEREGISTER;
+				} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE_CLOSE) {
+					if (OFI_UNLIKELY(!opx_hfisvc_mr_validate_access_key(opx_mr, access_key))) {
+						opx_hfisvc_mr_report_completion_error(opx_mr);
+						continue;
+					}
+					OPX_HFISVC_DEBUG_LOG(
+						"MR State transition opx_mr=%p state=PENDING_KEY_ENABLE with CLOSE_ISSUED -> OPENED\n",
+						opx_mr);
+					opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPENED;
+				} else {
+					FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+						"Unexpected HFISVC MR completion state for type=%d: opx_mr=%p state=%d status=%d\n",
+						hfisvc_out[i].type, opx_mr, opx_mr->hfisvc.state, hfisvc_out[i].status);
+					opx_hfisvc_mr_report_completion_error(opx_mr);
+					continue;
+				}
 			} else {
-				// TODO: FI_WARN, post some kind of error to the error queue
-				fprintf(stderr,
-					"(%d) %s:%s():%d Got unexpected completion for opx_mr=%p state=%d completion: type=%d status=%d\n",
-					getpid(), __FILE__, __func__, __LINE__, opx_mr, opx_mr->hfisvc.state,
-					hfisvc_out[i].type, hfisvc_out[i].status);
-				assert(0);
+				FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+					"Unexpected HFISVC MR completion type: opx_mr=%p state=%d type=%d status=%d\n",
+					opx_mr, opx_mr->hfisvc.state, hfisvc_out[i].type, hfisvc_out[i].status);
+				opx_hfisvc_mr_report_completion_error(opx_mr);
+				continue;
 			}
 		}
 		n = (*opx_domain->hfisvc.cq_read)(opx_domain->hfisvc.mr_completion_queue, 0ul /* flags */, hfisvc_out,
