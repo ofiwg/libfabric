@@ -122,7 +122,7 @@ struct efa_rdm_ope {
 
 	struct fi_cq_tagged_entry cq_entry;
 
-	/* entry is linked with ope_longcts_send_list in efa_domain */
+	/* entry is linked with ope_longcts_send_list in efa_rdm_ep */
 	struct dlist_entry entry;
 
 	/* ep_entry is linked to base_ep.ope_list */
@@ -131,7 +131,7 @@ struct efa_rdm_ope {
 	/* ack_list_entry is linked to ope_posted_ack_list in efa_rdm_ep */
 	struct dlist_entry ack_list_entry;
 
-	/* queued_entry is linked with ope_queued_list in efa_domain */
+	/* queued_entry is linked with ope_queued_list in efa_rdm_ep */
 	struct dlist_entry queued_entry;
 
 	/* Queued packets due to TX queue full or RNR backoff */

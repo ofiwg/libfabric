@@ -367,6 +367,10 @@ err_free:
 void efa_rdm_ep_init_linked_lists(struct efa_rdm_ep *ep)
 {
 	dlist_init(&ep->rx_posted_buf_list);
+	dlist_init(&ep->ope_queued_list);
+	dlist_init(&ep->ope_longcts_send_list);
+	dlist_init(&ep->peer_backoff_list);
+	dlist_init(&ep->handshake_queued_peer_list);
 #if ENABLE_DEBUG
 	dlist_init(&ep->ope_recv_list);
 	dlist_init(&ep->rx_pkt_list);
@@ -904,12 +908,9 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
 	struct efa_rdm_ope *ope;
-	struct efa_rdm_domain *rdm_domain = efa_rdm_ep_rdm_domain(ep);
-
-	assert(rdm_domain->efa_domain.info->ep_attr->type == FI_EP_RDM);
 
 	/* Update timers for peers that are in backoff list*/
-	dlist_foreach_container_safe(&rdm_domain->peer_backoff_list,
+	dlist_foreach_container_safe(&ep->peer_backoff_list,
 			struct efa_rdm_peer, peer, rnr_backoff_entry, tmp) {
 		if (ofi_gettime_us() >= peer->rnr_backoff_begin_ts +
 					peer->rnr_backoff_wait_time) {
@@ -918,25 +919,23 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 		}
 	}
 
-	dlist_foreach_container_safe(&rdm_domain->ope_queued_list,
+	dlist_foreach_container_safe(&ep->ope_queued_list,
 			struct efa_rdm_ope, ope, queued_entry, tmp) {
-		if (ope->ep == ep) {
-			switch (efa_rdm_pke_get_ctrl_pkt_type_from_queued_ope(ope)) {
-			case EFA_RDM_RECEIPT_PKT:
-			case EFA_RDM_EOR_PKT:
-				if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_RNR))
-					continue;
-				if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
-					continue;
-				break;
-			default:
-				/* Release all other queued OPEs */
-				if (ope->type == EFA_RDM_TXE)
-					efa_rdm_txe_release(ope);
-				else
-					efa_rdm_rxe_release(ope);
-				break;
-			}
+		switch (efa_rdm_pke_get_ctrl_pkt_type_from_queued_ope(ope)) {
+		case EFA_RDM_RECEIPT_PKT:
+		case EFA_RDM_EOR_PKT:
+			if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_RNR))
+				continue;
+			if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
+				continue;
+			break;
+		default:
+			/* Release all other queued OPEs */
+			if (ope->type == EFA_RDM_TXE)
+				efa_rdm_txe_release(ope);
+			else
+				efa_rdm_rxe_release(ope);
+			break;
 		}
 	}
 }
@@ -1094,7 +1093,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 
 	/**
 	 * The QP destroy and op entries clean up must be in the same lock,
-	 * otherwise there can be race condition that efa_rdm_domain_progress_peers_and_queues
+	 * otherwise there can be race condition that efa_rdm_ep_progress_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
 	 *
 	 */

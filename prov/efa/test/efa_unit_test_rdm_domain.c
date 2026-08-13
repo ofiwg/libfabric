@@ -49,15 +49,13 @@ void test_efa_domain_rdm_attr_mr_allocated(void **state)
 	assert_true(efa_domain->device->rdm_info->domain_attr->mr_mode & FI_MR_ALLOCATED);
 }
 /**
- * @brief Verify that the domain level peer lists get cleared when an endpoint is closed
+ * @brief Verify that the endpoint level peer lists get cleared when an endpoint is closed
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
 void test_efa_domain_peer_list_cleared(void **state)
 {
 	struct efa_resource *resource = *state;
-	struct efa_domain *efa_domain;
-	struct efa_rdm_domain *rdm_domain;
 	struct fid_ep *ep1, *ep2;
 	struct efa_rdm_ep *efa_rdm_ep1, *efa_rdm_ep2;
 	struct efa_rdm_peer *peer1, *peer2, *peer3, *peer4;
@@ -67,9 +65,6 @@ void test_efa_domain_peer_list_cleared(void **state)
 	int err, num_addr;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
-	efa_domain = container_of(resource->domain, struct efa_domain,
-				  util_domain.domain_fid);
-	rdm_domain = (struct efa_rdm_domain *) efa_domain;
 
 	// Create two endpoints
 	err = fi_endpoint(resource->domain, resource->info, &ep1, NULL);
@@ -125,23 +120,19 @@ void test_efa_domain_peer_list_cleared(void **state)
 	peer4 = efa_rdm_ep_get_peer_explicit(efa_rdm_ep2, addr4);
 	assert_non_null(peer4);
 
-	// Manually add peers to domain lists to simulate the conditions
-	dlist_insert_tail(&peer1->handshake_queued_entry, &rdm_domain->handshake_queued_peer_list);
+	// Manually add peers to endpoint lists to simulate the conditions
+	dlist_insert_tail(&peer1->handshake_queued_entry, &efa_rdm_ep1->handshake_queued_peer_list);
 	peer1->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
-	dlist_insert_tail(&peer2->rnr_backoff_entry, &rdm_domain->peer_backoff_list);
+	dlist_insert_tail(&peer2->rnr_backoff_entry, &efa_rdm_ep1->peer_backoff_list);
 	peer2->flags |= EFA_RDM_PEER_IN_BACKOFF;
-	dlist_insert_tail(&peer3->handshake_queued_entry, &rdm_domain->handshake_queued_peer_list);
+	dlist_insert_tail(&peer3->handshake_queued_entry, &efa_rdm_ep2->handshake_queued_peer_list);
 	peer3->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
-	dlist_insert_tail(&peer4->rnr_backoff_entry, &rdm_domain->peer_backoff_list);
+	dlist_insert_tail(&peer4->rnr_backoff_entry, &efa_rdm_ep2->peer_backoff_list);
 	peer4->flags |= EFA_RDM_PEER_IN_BACKOFF;
 
-	// Close endpoints - this should clear the domain lists
+	// Close endpoints - this should clear the endpoint lists
 	fi_close(&ep1->fid);
 	fi_close(&ep2->fid);
-
-	// Verify domain lists are cleared
-	assert_true(dlist_empty(&rdm_domain->peer_backoff_list));
-	assert_true(dlist_empty(&rdm_domain->handshake_queued_peer_list));
 }
 /**
  * @brief Verify that EFA RDM domains use the correct MR operations

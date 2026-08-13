@@ -134,6 +134,14 @@ struct efa_rdm_ep {
 	struct ofi_bufpool *rx_atomrsp_pool;
 	/* list of pre-posted recv buffers */
 	struct dlist_entry rx_posted_buf_list;
+	/* queued op entries */
+	struct dlist_entry ope_queued_list;
+	/* tx/rx_entries used by long CTS msg/write/read protocol which have data to be sent */
+	struct dlist_entry ope_longcts_send_list;
+	/* list of #efa_rdm_peer that are in backoff due to RNR */
+	struct dlist_entry peer_backoff_list;
+	/* list of #efa_rdm_peer that will retry posting handshake pkt */
+	struct dlist_entry handshake_queued_peer_list;
 
 	/* fi_addr-indexed maps from this endpoint to its peers,
 	 * one for the explicit AV and one for the implicit AV. Peers are
@@ -222,6 +230,8 @@ struct efa_rdm_ep {
 };
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
+
+void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep);
 
 #define efa_rdm_rx_flags(efa_rdm_ep) ((efa_rdm_ep)->base_ep.util_ep.rx_op_flags)
 #define efa_rdm_tx_flags(efa_rdm_ep) ((efa_rdm_ep)->base_ep.util_ep.tx_op_flags)

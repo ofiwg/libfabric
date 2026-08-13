@@ -18,15 +18,6 @@ struct efa_rdm_domain {
 	size_t			rdm_cq_size;
 	/* number of rdma-read messages in flight */
 	uint64_t		num_read_msg_in_flight;
-	/* queued op entries */
-	struct dlist_entry ope_queued_list;
-	/* tx/rx_entries used by long CTS msg/write/read protocol
-         * which have data to be sent */
-	struct dlist_entry ope_longcts_send_list;
-	/* list of #efa_rdm_peer that are in backoff due to RNR */
-	struct dlist_entry peer_backoff_list;
-	/* list of #efa_rdm_peer that will retry posting handshake pkt */
-	struct dlist_entry handshake_queued_peer_list;
 	/* LRU list of AH entries in this domain */
 	struct dlist_entry ah_lru_list OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
 };
@@ -49,8 +40,6 @@ static inline bool efa_is_cache_available(struct efa_rdm_domain *rdm_domain)
 
 int efa_rdm_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			struct fid_domain **domain_fid, void *context);
-
-void efa_rdm_domain_progress_peers_and_queues(struct efa_rdm_domain *rdm_domain);
 
 static inline void efa_rdm_domain_ope_list_lock(struct efa_rdm_domain *rdm_domain)
 {

@@ -6,7 +6,6 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "rdm/efa_rdm_ep.h"
-#include "rdm/efa_rdm_domain.h"
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_cq.h"
@@ -55,7 +54,6 @@ int efa_test_queue_op_with_fi_more(struct fid_ep *ep_fid, struct fid_av *av_fid,
 {
 	struct efa_rdm_ep *ep = container_of(ep_fid, struct efa_rdm_ep,
 					     base_ep.util_ep.ep_fid);
-	struct efa_rdm_domain *rdm_domain = efa_rdm_ep_rdm_domain(ep);
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t peer_addr = FI_ADDR_NOTAVAIL;
@@ -131,9 +129,9 @@ int efa_test_queue_op_with_fi_more(struct fid_ep *ep_fid, struct fid_av *av_fid,
 	if (ret)
 		return ret;
 
-	if (dlist_empty(&rdm_domain->ope_queued_list))
+	if (dlist_empty(&ep->ope_queued_list))
 		return -FI_EINVAL;
-	qop->txe = container_of(rdm_domain->ope_queued_list.next,
+	qop->txe = container_of(ep->ope_queued_list.next,
 				struct efa_rdm_ope, queued_entry);
 	if (!(qop->txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE))
 		return -FI_EINVAL;
