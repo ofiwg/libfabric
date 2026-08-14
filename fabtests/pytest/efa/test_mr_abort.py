@@ -6,12 +6,25 @@ from efa.efa_common import memory_type_list_symm
 pytestmark = pytest.mark.pre_release
 
 
-# fi_mr_abort fabtest will allocate MR_ABORT_NUM_MRS and attempt
-# to post N transfers per MR until the provider returns -FI_EAGAIN
-# or we posted transactions for each MR. A larger number corresponds
-# to increased load on the NIC and increased memory preassure on the
-# instance.
-MR_ABORT_NUM_MRS = 2046
+# fi_mr_abort allocates -W MRs and posts -N transfers per MR, so a run
+# submits up to W*N operations per iteration; more in-flight operations
+# means more NIC load and memory pressure. Every test opens
+# MR_ABORT_NUM_EPS endpoints per side, packed MR_ABORT_EPS_PER_DOMAIN to
+# a domain, and MRs (and thus their ops) are distributed round-robin
+# across the initiator endpoints. Cap the in-flight operations at
+# MR_ABORT_MAX_OPS_PER_ITER by deriving -W from -N
+MR_ABORT_NUM_EPS = 4
+MR_ABORT_EPS_PER_DOMAIN = 4
+MR_ABORT_OPS_PER_EP = 512
+MR_ABORT_MAX_OPS_PER_ITER = MR_ABORT_NUM_EPS * MR_ABORT_OPS_PER_EP
+
+MR_ABORT_EP_ARGS = (f" --num-eps {MR_ABORT_NUM_EPS}"
+                    f" --eps-per-domain {MR_ABORT_EPS_PER_DOMAIN}")
+
+
+def mr_abort_num_mrs(ops_per_mr):
+    """-W value that keeps ops per iteration at MR_ABORT_MAX_OPS_PER_ITER."""
+    return MR_ABORT_MAX_OPS_PER_ITER // ops_per_mr
 
 BASE_MESSAGE_SIZES = [
     64,
@@ -120,8 +133,8 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
     command = (f"fi_mr_abort -T abort -o {rma_op} -C {cancel_order}"
-               f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
-               f" -S {message_size}")
+               f" -R {close_side} -N {ops_per_mr} -W {mr_abort_num_mrs(ops_per_mr)}"
+               f" -S {message_size}{MR_ABORT_EP_ARGS}")
     if high_pps:
         assert(rma_op != "read")
         command += " --high-pps"
@@ -146,7 +159,8 @@ def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
-    command = (f"fi_mr_abort -T partial -o {rma_op} -S {message_size}")
+    command = (f"fi_mr_abort -T partial -o {rma_op} -S {message_size}"
+               f"{MR_ABORT_EP_ARGS}")
 
     if high_pps:
         assert(rma_op != "read")
@@ -358,8 +372,9 @@ def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
     # one completion per send.
     homogeneous_flag = " -H" if protocol == "LONGREAD" else ""
     command = (f"fi_mr_abort -T {send_op} -C {cancel_order}"
-               f" -R {close_side} -N {ops_per_mr} -W {MR_ABORT_NUM_MRS}"
-               f" -S {message_size}{owe_flag}{homogeneous_flag}  -A ep_first")
+               f" -R {close_side} -N {ops_per_mr} -W {mr_abort_num_mrs(ops_per_mr)}"
+               f" -S {message_size}{owe_flag}{homogeneous_flag}"
+               f"{MR_ABORT_EP_ARGS}  -A ep_first")
     test = ClientServerTest(cmdline_args, command, timeout=360, fabric=fabric,
                             memory_type=memory_type, additional_env=env)
     test.run()
