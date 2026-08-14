@@ -452,7 +452,7 @@ void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry *we, struct fi_
 __OPX_FORCE_INLINE__
 void opx_hfi1_dput_sdma_we_set_dmabuf(struct fi_opx_hfi1_dput_params *params)
 {
-#if defined(OPX_HMEM) && OPX_HAVE_SDMA_DMABUF
+#if defined(OPX_HMEM) && OPX_HAVE_DMABUF
 	if (params->dmabuf_src_mr) {
 		params->sdma_we->dmabuf_fd   = params->dmabuf_src_mr->dmabuf.fd;
 		params->sdma_we->dmabuf_base = (uintptr_t) params->dmabuf_src_mr->dmabuf.base_addr;
@@ -525,7 +525,7 @@ void opx_hfi1_sdma_kern_memtype(struct fi_opx_ep *opx_ep, const enum fi_hmem_ifa
 				uint64_t *context0)
 {
 #ifdef OPX_HMEM
-#if OPX_HAVE_SDMA_DMABUF
+#if OPX_HAVE_DMABUF
 	if (dmabuf_fd != OPX_SDMA_NO_DMABUF_FD && (opx_ep->hfi->runtime_flags & HFI1_CAP_DMABUF)) {
 		*kern_memtype = HFI1_MEMINFO_TYPE_DMABUF;
 		*context0     = (uint64_t) (unsigned int) dmabuf_fd;

@@ -5621,7 +5621,7 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 	 * the source MR up from the address, iface and device echoed back in it.
 	 * After dput_sdma_init(): only the SDMA path releases this reference.
 	 */
-#if defined(OPX_HMEM) && OPX_HAVE_SDMA_DMABUF
+#if defined(OPX_HMEM) && OPX_HAVE_DMABUF
 	if (dput_iov[0].sbuf_iface != FI_HMEM_SYSTEM && (opx_ep->hfi->runtime_flags & HFI1_CAP_DMABUF) &&
 	    params->work_elem.work_type == OPX_WORK_TYPE_SDMA && !is_shm) {
 		struct fi_opx_mr *src_mr = (struct fi_opx_mr *) (uintptr_t) dput_iov[0].sbuf_dmabuf_mr;
