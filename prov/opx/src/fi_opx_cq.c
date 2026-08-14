@@ -145,7 +145,8 @@ static int fi_opx_close_cq(fid_t fid)
 
 	int		  ret;
 	struct fi_opx_cq *opx_cq = container_of(fid, struct fi_opx_cq, cq_fid);
-	const int lock_required	 = fi_opx_threading_lock_required(opx_cq->domain->threading, fi_opx_global.progress);
+	const int	  lock_required =
+		fi_opx_threading_lock_required(opx_cq->domain->util_domain.threading, fi_opx_global.progress);
 
 	if (lock_required) {
 		fi_opx_lock(&opx_cq->lock);
@@ -571,7 +572,7 @@ void fi_opx_cq_finalize_ops(struct fid_ep *ep)
 
 	if (opx_cq) {
 		opx_cq->cq_fid.ops = fi_opx_cq_select_ops(
-			opx_cq->format, opx_cq->domain->threading, fi_opx_select_reliability(opx_ep),
+			opx_cq->format, opx_cq->domain->util_domain.threading, fi_opx_select_reliability(opx_ep),
 			opx_ep->hfi->info.rxe.hdrq.elemcnt, opx_cq->ep_comm_caps, opx_cq->domain->data_progress,
 			OPX_SW_HFI1_TYPE(opx_cq->domain), OPX_IS_CTX_SHARING_ENABLED, opx_ep->hfi->info.rxe.hdrq.elemsz,
 			OPX_HW_HFI1_TYPE(opx_cq->domain), flow_control_mode);
@@ -580,7 +581,7 @@ void fi_opx_cq_finalize_ops(struct fid_ep *ep)
 	if (opx_ep->tx->cq && (opx_ep->tx->cq != opx_ep->rx->cq)) {
 		opx_cq		   = opx_ep->tx->cq;
 		opx_cq->cq_fid.ops = fi_opx_cq_select_ops(
-			opx_cq->format, opx_cq->domain->threading, fi_opx_select_reliability(opx_ep),
+			opx_cq->format, opx_cq->domain->util_domain.threading, fi_opx_select_reliability(opx_ep),
 			opx_ep->hfi->info.rxe.hdrq.elemcnt, opx_cq->ep_comm_caps, opx_cq->domain->data_progress,
 			OPX_SW_HFI1_TYPE(opx_cq->domain), OPX_IS_CTX_SHARING_ENABLED, opx_ep->hfi->info.rxe.hdrq.elemsz,
 			OPX_HW_HFI1_TYPE(opx_cq->domain), flow_control_mode);

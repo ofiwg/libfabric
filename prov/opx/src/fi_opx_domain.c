@@ -210,12 +210,12 @@ static int fi_opx_close_domain(fid_t fid)
 	}
 #endif
 
+	ofi_domain_close(&opx_domain->util_domain);
+
 	ret = fi_opx_ref_finalize(&opx_domain->ref_cnt, "domain");
 	if (ret) {
 		return ret;
 	}
-
-	ofi_atomic_dec32(&opx_domain->fabric->util_fabric.ref);
 
 	FI_OPX_DEBUG_COUNTERS_PRINT(opx_domain->debug_counters);
 
@@ -255,6 +255,9 @@ static inline void opx_util_domain_cleanup(struct fi_opx_domain *opx_domain)
 		opx_domain->hmem_domain = NULL;
 	}
 #endif
+	if (opx_domain->util_domain.fabric) {
+		ofi_domain_close(&opx_domain->util_domain);
+	}
 }
 
 uint32_t opx_domain_get_ctx_cnt(int hfi, int port)
@@ -447,7 +450,7 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 			struct fi_opx_domain *opx_domain =
 				container_of(hints->domain, struct fi_opx_domain, domain_fid);
 
-			domain_attr->threading	   = opx_domain->threading;
+			domain_attr->threading	   = opx_domain->util_domain.threading;
 			domain_attr->resource_mgmt = opx_domain->resource_mgmt;
 			domain_attr->tx_ctx_cnt	   = fi_opx_domain_get_tx_max(hints->domain);
 			domain_attr->rx_ctx_cnt	   = fi_opx_domain_get_rx_max(hints->domain);
@@ -679,7 +682,6 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 #endif
 
 	/* fill in default domain attributes */
-	opx_domain->threading	  = fi_opx_global.default_domain_attr->threading;
 	opx_domain->resource_mgmt = fi_opx_global.default_domain_attr->resource_mgmt;
 	opx_domain->data_progress = fi_opx_global.default_domain_attr->data_progress;
 
@@ -692,7 +694,6 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 		if (ret) {
 			goto err;
 		}
-		opx_domain->threading	  = info->domain_attr->threading;
 		opx_domain->resource_mgmt = info->domain_attr->resource_mgmt;
 		if (fi_opx_global.progress == FI_PROGRESS_UNSPEC) {
 			opx_domain->data_progress = info->domain_attr->data_progress;
@@ -707,6 +708,14 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	opx_domain->domain_fid.fid.context = context;
 	opx_domain->domain_fid.fid.ops	   = &fi_opx_fi_ops;
 	opx_domain->domain_fid.ops	   = &fi_opx_domain_ops;
+
+	ret = ofi_domain_init(&opx_fabric->util_fabric.fabric_fid, info, &opx_domain->util_domain, context,
+			      OFI_LOCK_NOOP);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "ofi_domain_init failed for util_domain\n");
+		errno = -ret;
+		goto err;
+	}
 
 	opx_domain->progress_affinity_str = NULL;
 	get_param_check = fi_param_get_str(fi_opx_global.prov, "prog_affinity", &opx_domain->progress_affinity_str);
@@ -809,8 +818,6 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	slist_init(&opx_domain->deferred_work_queue);
 	ofi_bufpool_create(&opx_domain->deferred_work_pool, sizeof(struct opx_domain_deferred_work), 32, UINT_MAX, 2048,
 			   OFI_BUFPOOL_NO_ZERO);
-
-	ofi_atomic_inc32(&opx_fabric->util_fabric.ref);
 
 	*dom = &opx_domain->domain_fid;
 

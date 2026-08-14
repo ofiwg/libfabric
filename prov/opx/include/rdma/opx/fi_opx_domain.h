@@ -115,9 +115,7 @@ struct fi_opx_domain {
 	struct fid_domain     domain_fid;
 	struct fi_opx_fabric *fabric;
 
-	enum fi_threading     threading;
 	enum fi_resource_mgmt resource_mgmt;
-	int		      mr_mode;
 	enum fi_progress      data_progress;
 
 	uuid_t unique_job_key;
@@ -144,6 +142,8 @@ struct fi_opx_domain {
 #ifdef OPX_HMEM
 	struct opx_hmem_domain *hmem_domain;
 #endif
+
+	struct util_domain util_domain;
 
 #if HAVE_HFISVC
 	struct {

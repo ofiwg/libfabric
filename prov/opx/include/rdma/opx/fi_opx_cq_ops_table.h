@@ -73,7 +73,7 @@ static ssize_t fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			return -errno;
 		}
 
-		const enum fi_threading threading = opx_cq->domain->threading;
+		const enum fi_threading threading = opx_cq->domain->util_domain.threading;
 		const int lock_required		  = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 		fi_opx_lock_if_required(&opx_cq->lock, lock_required);
