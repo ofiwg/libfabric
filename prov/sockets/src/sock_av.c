@@ -553,7 +553,8 @@ static struct fi_ops_av sock_am_ops = {
 	.insertsym = sock_av_insertsym,
 	.remove = sock_av_remove,
 	.lookup = sock_av_lookup,
-	.straddr = sock_av_straddr
+	.straddr = sock_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static struct fi_ops_av sock_at_ops = {
@@ -563,7 +564,8 @@ static struct fi_ops_av sock_at_ops = {
 	.insertsym = sock_av_insertsym,
 	.remove = sock_av_remove,
 	.lookup = sock_av_lookup,
-	.straddr = sock_av_straddr
+	.straddr = sock_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static int sock_verify_av_attr(struct fi_av_attr *attr)

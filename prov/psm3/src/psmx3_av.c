@@ -951,6 +951,7 @@ static struct fi_ops_av psmx3_av_ops = {
 	.remove = psmx3_av_remove,
 	.lookup = psmx3_av_lookup,
 	.straddr = psmx3_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static struct fi_ops_av psmx3_av_map_ops = {
@@ -961,6 +962,7 @@ static struct fi_ops_av psmx3_av_map_ops = {
 	.remove = psmx3_av_map_remove,
 	.lookup = psmx3_av_map_lookup,
 	.straddr = psmx3_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 DIRECT_FN

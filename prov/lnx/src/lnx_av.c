@@ -399,6 +399,7 @@ static struct fi_ops_av lnx_av_ops = {
 	.insertsym = fi_no_av_insertsym,
 	.lookup = lnx_av_lookup,
 	.straddr = lnx_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,

@@ -336,6 +336,7 @@ static struct fi_ops_av rxd_av_ops = {
 	.remove = rxd_av_remove,
 	.lookup = rxd_av_lookup,
 	.straddr = rxd_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static int rxd_av_close(struct fid *fid)

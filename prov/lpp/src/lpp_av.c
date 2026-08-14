@@ -56,6 +56,7 @@ static const struct fi_ops_av lpp_av_ops = {
 	.remove    = fi_no_av_remove,
 	.lookup    = lpp_fi_av_lookup,
 	.straddr   = lpp_fi_av_straddr,
+	.lookup2   = ofi_av_lookup2,
 };
 
 static const struct fi_av_attr lpp_default_av_attrs = {

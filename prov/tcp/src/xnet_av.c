@@ -198,6 +198,7 @@ static struct fi_ops_av xnet_mplex_av_ops = {
 	.lookup = xnet_mplex_av_lookup,
 	.straddr = ofi_ip_av_straddr,
 	.av_set = fi_no_av_set,
+	.lookup2 = ofi_av_lookup2,
 };
 
 int xnet_mplex_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
