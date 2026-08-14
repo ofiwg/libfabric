@@ -2,3 +2,8 @@
 #
 # benign suppression: persistent glibc allocation
 leak:_dlerror_run
+
+# benign suppression: glibc dlopen bookkeeping from libfabric core's
+# one-time dynamically-loaded provider registration (fi_ini). The DSO is
+# intentionally never dlclose'd; observed on aarch64 (ubuntu2204).
+leak:ofi_reg_dl_prov
