@@ -307,8 +307,10 @@ unsigned opx_hmem_iov_init(const void *buf, const size_t len, const void *desc, 
  */
 static const unsigned OPX_HMEM_KERN_MEM_TYPE[4] = {
 #ifdef OPX_HMEM
-	HFI1_MEMINFO_TYPE_SYSTEM, HFI1_MEMINFO_TYPE_NVIDIA, 2, /* HFI1_MEMINFO_TYPE_AMD */
-	1						       /* FI_HMEM_ZE: legacy ZE dma-buf type */
+	[FI_HMEM_SYSTEM] = HFI1_MEMINFO_TYPE_SYSTEM,
+	[FI_HMEM_CUDA]	 = HFI1_MEMINFO_TYPE_NVIDIA,
+	[FI_HMEM_ROCR]	 = HFI1_MEMINFO_TYPE_AMD,
+	[FI_HMEM_ZE]	 = 1, /* legacy ZE dma-buf type */
 #endif
 };
 
