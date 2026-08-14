@@ -255,7 +255,7 @@ int fi_opx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr, struc
 
 	opx_cntr->domain = (struct fi_opx_domain *) domain;
 
-	opx_cntr->threading	= opx_cntr->domain->threading;
+	opx_cntr->threading	= opx_cntr->domain->util_domain.threading;
 	opx_cntr->lock_required = fi_opx_threading_lock_required(opx_cntr->threading, fi_opx_global.progress);
 
 	/* ---- allocate and initialize the "std" and "err" counters ---- */

@@ -539,7 +539,7 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		 * MR-relative. */
 		const uintptr_t mr_base_va	   = (uintptr_t) opx_mr->iov.iov_base;
 		const uintptr_t mr_base_addr	   = (uintptr_t) opx_mr->base_addr;
-		const bool	virt_addr	   = (opx_mr->domain->mr_mode & FI_MR_VIRT_ADDR) != 0;
+		const bool	virt_addr	   = (opx_mr->domain->util_domain.mr_mode & FI_MR_VIRT_ADDR) != 0;
 		const uintptr_t expected_base_addr = virt_addr ? 0 : mr_base_va;
 		const bool	base_addr_valid	   = (mr_base_addr == expected_base_addr);
 		const uintptr_t va_bias		   = virt_addr ? mr_base_va : 0;

@@ -2975,9 +2975,9 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	opx_ep->rx->mem		   = mem;
 	fi_opx_ref_init(&opx_ep->rx->ref_cnt, 1, "rx context");
 
-	opx_ep->threading = (uint8_t) opx_domain->threading;
+	opx_ep->threading = (uint8_t) opx_domain->util_domain.threading;
 	opx_ep->av_type	  = (uint8_t) opx_ep->av->type;
-	opx_ep->mr_mode	  = (uint32_t) opx_domain->mr_mode;
+	opx_ep->mr_mode	  = (uint32_t) opx_domain->util_domain.mr_mode;
 
 	// Check data structure alignments
 	uintptr_t alignment_check = (uintptr_t) opx_ep;
@@ -3616,7 +3616,7 @@ static ssize_t fi_opx_cancel(fid_t fid, void *context)
 	struct fi_opx_ep *opx_ep = container_of(fid, struct fi_opx_ep, ep_fid);
 
 	if (IS_PROGRESS_MANUAL(opx_ep->domain)) {
-		const enum fi_threading threading = opx_ep->domain->threading;
+		const enum fi_threading threading = opx_ep->domain->util_domain.threading;
 		const int lock_required		  = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 		fi_opx_lock_if_required(&opx_ep->lock, lock_required);

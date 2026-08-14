@@ -504,7 +504,8 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 	opx_mr->flags			    = entry->info.flags;
 	struct opx_hmem_domain *hmem_domain = (struct opx_hmem_domain *) cache->domain;
 	opx_mr->domain			    = hmem_domain->opx_domain;
-	opx_mr->base_addr = hmem_domain->opx_domain->mr_mode & FI_MR_VIRT_ADDR ? 0 : entry->info.iov.iov_base;
+	opx_mr->base_addr =
+		hmem_domain->opx_domain->util_domain.mr_mode & FI_MR_VIRT_ADDR ? 0 : entry->info.iov.iov_base;
 
 	assert(opx_mr->attr.iface == FI_HMEM_CUDA || opx_mr->attr.iface == FI_HMEM_ROCR);
 
@@ -597,7 +598,7 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	}
 #endif
 
-	if (opx_mr->domain->mr_mode & OFI_MR_SCALABLE) {
+	if (opx_mr->domain->util_domain.mr_mode & OFI_MR_SCALABLE) {
 		int ret = fi_opx_ref_dec(&opx_mr->domain->ref_cnt, "domain");
 		if (ret) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR,

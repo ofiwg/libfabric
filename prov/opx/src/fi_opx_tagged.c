@@ -185,7 +185,7 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 ssize_t fi_opx_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags)
 {
 	struct fi_opx_ep       *opx_ep	      = container_of(ep, struct fi_opx_ep, ep_fid);
-	const enum fi_threading threading     = opx_ep->domain->threading;
+	const enum fi_threading threading     = opx_ep->domain->util_domain.threading;
 	const int		lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 	ssize_t			rc	      = 0;
 
@@ -397,7 +397,7 @@ int __attribute__((cold)) fi_opx_enable_tagged_ops(struct fid_ep *ep)
 		return 0;
 	}
 
-	const enum fi_threading threading = opx_ep->domain->threading;
+	const enum fi_threading threading = opx_ep->domain->util_domain.threading;
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		opx_ep->ep_fid.tagged = &fi_opx_no_tagged_ops;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Unknown thread mode, tagged ops not enabled on EP\n");

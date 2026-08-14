@@ -198,7 +198,7 @@ int __attribute__((cold)) fi_opx_enable_msg_ops(struct fid_ep *ep)
 		return -FI_EOPNOTSUPP;
 	}
 
-	const enum fi_threading threading = opx_ep->domain->threading;
+	const enum fi_threading threading = opx_ep->domain->util_domain.threading;
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		return -FI_EINVAL;
 	}
