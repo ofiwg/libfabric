@@ -77,6 +77,7 @@ enum test_mode {
 enum {
 	OPT_NUM_TARGET_EPS = 512,
 	OPT_NUM_INITIATOR_EPS,
+	OPT_PARTIAL_SPLIT_EPS,
 };
 
 /*
@@ -140,6 +141,15 @@ static int close_ep_first;
 static int set_homogeneous_peers;
 static bool use_high_pps = false;
 static bool sl_low_latency = false;
+
+/*
+ * -T partial only: post each slot's two aliased-MR writes from two different
+ * initiator endpoints -- the surviving op from the slot's own pair endpoint,
+ * the to-be-canceled op from the next pair's endpoint. Verifies that closing
+ * an MR only aborts that MR's op even when the two ops entered the device
+ * through different QPs. Requires --num-initiator-eps >= 2.
+ */
+static bool partial_split_eps = false;
 
 #define EFA_MR_ABORT_MAX_EPS 64
 
@@ -1247,12 +1257,25 @@ static int run_fill_abort_target(void)
  * Runs once per slot, and num_mrs == num_initiator_eps here, so every pair is
  * covered exactly once. Every pair posts and closes before any completion is
  * reaped, so a close must only abort the ops on its own MR.
+ *
+ * --partial-split-eps additionally posts each slot's two ops through two
+ * different initiator endpoints (see partial_post_one_slot), so the
+ * close-only-aborts-its-own-MR property is also checked across QPs.
  */
 
 /*
  * Post both writes for one slot and close the alias MR. Slot mr_idx owns
  * op_arr[2 * mr_idx] (op on the surviving slot MR) and op_arr[2 * mr_idx + 1]
  * (op on the closed alias); max_ops() sizes op_arr to match.
+ *
+ * With --partial-split-eps the two writes enter the device through different
+ * QPs: the surviving op from the slot's own pair endpoint, the to-be-canceled
+ * op from the next pair's endpoint. Both still target the same remote
+ * endpoint -- pair mr_idx's target EP -- because the remote MRs live on that
+ * EP's domain, so its rkeys are only valid there. The alias MR is registered
+ * on the split endpoint's domain so the split endpoint can send from it, and
+ * the target address is resolved through the split endpoint's domain's AV
+ * (an fi_addr_t is only valid against the AV that produced it).
  */
 static int partial_post_one_slot(int mr_idx)
 {
@@ -1260,14 +1283,30 @@ static int partial_post_one_slot(int mr_idx)
 	struct fi_rma_iov local_iov, remote_iov;
 	struct op_ctx *surviving = &op_arr[2 * mr_idx];
 	struct op_ctx *closed = &op_arr[2 * mr_idx + 1];
+	struct fid_ep *closed_ep;
+	struct fid_domain *closed_dom;
+	fi_addr_t closed_peer_addr;
 	int ret;
+
+	if (partial_split_eps) {
+		int split_ep_idx = (mr_idx + 1) % num_initiator_eps;
+
+		closed_ep = eps[split_ep_idx];
+		closed_dom = doms[dom_of(split_ep_idx)].domain;
+		closed_peer_addr = doms[dom_of(split_ep_idx)]
+				.peer_addrs[target_ep_for_pair[mr_idx]];
+	} else {
+		closed_ep = op_local_ep(mr_idx);
+		closed_dom = op_dom(mr_idx)->domain;
+		closed_peer_addr = op_peer_addr(mr_idx);
+	}
 
 	/* Use this slot's buffer for both MRs */
 	extra_slot.buf = slots[mr_idx].buf;
 	/* Unique key: slot keys occupy [BASE, BASE + num_mrs) */
 	extra_slot.key = MR_ABORT_KEY_BASE + num_mrs + mr_idx;
 
-	ret = ft_reg_mr_dom(op_dom(mr_idx)->domain, op_local_ep(mr_idx), fi,
+	ret = ft_reg_mr_dom(closed_dom, closed_ep, fi,
 			    extra_slot.buf, opts.transfer_size,
 			    ft_info_to_mr_access(fi), extra_slot.key, opts.iface,
 			    opts.device, &extra_slot.mr, &extra_slot.desc);
@@ -1303,8 +1342,8 @@ static int partial_post_one_slot(int mr_idx)
 
 	/* Post write using extra MR (will be closed) */
 	closed->mr_idx = mr_idx;
-	ret = fi_write(op_local_ep(mr_idx), extra_slot.buf, opts.transfer_size,
-		       extra_slot.desc, op_peer_addr(mr_idx),
+	ret = fi_write(closed_ep, extra_slot.buf, opts.transfer_size,
+		       extra_slot.desc, closed_peer_addr,
 		       remote_iov.addr, remote_iov.key, &closed->context);
 	if (ret) {
 		FT_PRINTERR("fi_write (extra)", ret);
@@ -2562,6 +2601,7 @@ static int run(void)
 static struct option mr_abort_extra_opts[] = {
 	{"num-target-eps", required_argument, NULL, OPT_NUM_TARGET_EPS},
 	{"num-initiator-eps", required_argument, NULL, OPT_NUM_INITIATOR_EPS},
+	{"partial-split-eps", no_argument, NULL, OPT_PARTIAL_SPLIT_EPS},
 	{0, 0, 0, 0}
 };
 
@@ -2628,6 +2668,9 @@ int main(int argc, char **argv)
 		case OPT_NUM_INITIATOR_EPS:
 			num_initiator_eps = atoi(optarg);
 			initiator_eps_set = true;
+			break;
+		case OPT_PARTIAL_SPLIT_EPS:
+			partial_split_eps = true;
 			break;
 		case OPT_EPS_PER_DOMAIN:
 			eps_per_domain = atoi(optarg);
@@ -2751,6 +2794,11 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE("--num-initiator-eps <n>",
 				"Number of endpoints on the initiator side "
 				"(>= --num-target-eps; incast)");
+			FT_PRINT_OPTS_USAGE("--partial-split-eps",
+				"-T partial only: post the surviving and "
+				"to-be-canceled ops from two different "
+				"initiator endpoints (requires >= 2 "
+				"initiator endpoints)");
 			efa_longopts_usage();
 			return EXIT_FAILURE;
 		}
@@ -2837,6 +2885,17 @@ int main(int argc, char **argv)
 		FT_ERR("Target-close (-R target) is not supported for "
 		       "the partial test (-T partial): it only closes a "
 		       "local MR on the initiator");
+		return EXIT_FAILURE;
+	}
+
+	if (partial_split_eps && test_mode != TEST_PARTIAL) {
+		FT_ERR("--partial-split-eps is only valid with -T partial");
+		return EXIT_FAILURE;
+	}
+
+	if (partial_split_eps && num_initiator_eps < 2) {
+		FT_ERR("--partial-split-eps requires at least 2 initiator "
+		       "endpoints (have %d)", num_initiator_eps);
 		return EXIT_FAILURE;
 	}
 

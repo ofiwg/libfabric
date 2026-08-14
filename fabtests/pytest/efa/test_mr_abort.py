@@ -152,15 +152,35 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
 @pytest.mark.functional
 @pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
 @pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
+@pytest.mark.parametrize("split_eps", [False, True],
+                         ids=["same_ep", "split_eps"])
 @pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
                          list(rma_case_params()))
 def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
-                          sl_low_latency, message_size, memory_type):
+                          sl_low_latency, message_size, memory_type,
+                          split_eps):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("fi_mr_abort not supported with efa with SHM")
 
     command = (f"fi_mr_abort -T partial -o {rma_op} -S {message_size}"
                f"{MR_ABORT_EP_ARGS}")
+
+    if split_eps:
+        # Post each slot's surviving and to-be-canceled ops from two
+        # different initiator endpoints, so an MR close must not disturb
+        # in-flight ops on another QP.
+        if MR_ABORT_NUM_EPS < 2:
+            # No second endpoint to split across; fi_mr_abort rejects it.
+            pytest.skip("--partial-split-eps requires at least 2 "
+                        "initiator endpoints")
+        if MR_ABORT_EPS_PER_DOMAIN < MR_ABORT_NUM_EPS:
+            # With more than one domain the wrap-around split pair
+            # (last endpoint -> endpoint 0) always crosses domains, so
+            # the test would exercise cross-NIC rather than
+            # cross-QP-same-NIC behavior.
+            pytest.skip("--partial-split-eps needs all endpoints on one "
+                        "domain so every split op pair shares a domain")
+        command += " --partial-split-eps"
 
     if high_pps:
         assert(rma_op != "read")
