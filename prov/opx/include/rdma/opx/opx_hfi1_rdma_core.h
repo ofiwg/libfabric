@@ -80,7 +80,7 @@ struct fi_opx_hfi1_context;
 extern int32_t (*opx_fn_hfi1_free_tid)(struct fi_opx_hfi1_context *context, uint64_t tidlist, uint32_t tidcnt);
 
 extern int32_t (*opx_fn_hfi1_update_tid)(struct fi_opx_hfi1_context *context, uint64_t vaddr, uint32_t *length,
-					 uint64_t tidlist, uint32_t *tidcnt, uint16_t flags);
+					 uint64_t tidlist, uint32_t *tidcnt, uint16_t flags, uint64_t tid_context);
 
 /* De-register/Free tid */
 __OPX_FORCE_INLINE__
@@ -101,13 +101,14 @@ int32_t opx_hfi1_wrapper_free_tid(struct fi_opx_hfi1_context *context, uint64_t 
 /* Register/update tid */
 __OPX_FORCE_INLINE__
 int32_t opx_hfi1_wrapper_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, uint32_t *length,
-				    uint64_t tidlist, uint32_t *tidcnt, uint16_t flags)
+				    uint64_t tidlist, uint32_t *tidcnt, uint16_t flags, uint64_t tid_context)
 {
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		     "[HFI1-DIRECT] context %p, vaddr %#lX, length %u, tidlist %#lX, tidcnt %u, flags %#X\n", context,
-		     vaddr, *length, tidlist, *tidcnt, flags);
+	FI_DBG_TRACE(
+		fi_opx_global.prov, FI_LOG_EP_DATA,
+		"[HFI1-DIRECT] context %p, vaddr %#lX, length %u, tidlist %#lX, tidcnt %u, flags %#X, tid_context %#lX\n",
+		context, vaddr, *length, tidlist, *tidcnt, flags, tid_context);
 	OPX_TRACE_TID_BEGIN(OPX_TRACE_EVENT_TID_UPDATE, vaddr, (uint64_t) *length);
-	int32_t ret = (*opx_fn_hfi1_update_tid)(context, vaddr, length, tidlist, tidcnt, flags);
+	int32_t ret = (*opx_fn_hfi1_update_tid)(context, vaddr, length, tidlist, tidcnt, flags, tid_context);
 	if (OFI_LIKELY(ret == 0)) {
 		OPX_TRACE_TID_END_SUCCESS(OPX_TRACE_EVENT_TID_UPDATE, vaddr, (uint64_t) *tidcnt);
 	} else {
