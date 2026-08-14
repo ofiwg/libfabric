@@ -552,7 +552,11 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	struct fi_opx_mr *opx_mr;
 	memcpy(&opx_mr, entry->data, sizeof(struct fi_opx_mr *));
 
-	HASH_DEL(opx_mr->domain->mr_hashmap, opx_mr);
+	/* HASH_DEL() on a never-added element frees the entire table. */
+	if (opx_mr->in_hashmap) {
+		HASH_DEL(opx_mr->domain->mr_hashmap, opx_mr);
+		opx_mr->in_hashmap = 0;
+	}
 
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "OPX_DEBUG_ENTRY entry %p, data %p opx_domain %p\n", entry, opx_mr,
 	       opx_mr->domain);
