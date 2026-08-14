@@ -11,20 +11,21 @@ pytestmark = pytest.mark.pre_release
 # means more NIC load and memory pressure. Every test opens
 # MR_ABORT_NUM_EPS endpoints per side, packed MR_ABORT_EPS_PER_DOMAIN to
 # a domain, and MRs (and thus their ops) are distributed round-robin
-# across the initiator endpoints. Cap the in-flight operations at
-# MR_ABORT_MAX_OPS_PER_ITER by deriving -W from -N
+# across the initiator endpoints. Cap the load per endpoint at
+# MR_ABORT_OPS_PER_EP by deriving -W from -N and the endpoint count, so
+# every domain carries MR_ABORT_EPS_PER_DOMAIN * MR_ABORT_OPS_PER_EP
+# ops per iteration regardless of how many domains a test spreads over.
 MR_ABORT_NUM_EPS = 4
 MR_ABORT_EPS_PER_DOMAIN = 4
 MR_ABORT_OPS_PER_EP = 512
-MR_ABORT_MAX_OPS_PER_ITER = MR_ABORT_NUM_EPS * MR_ABORT_OPS_PER_EP
 
 MR_ABORT_EP_ARGS = (f" --num-eps {MR_ABORT_NUM_EPS}"
                     f" --eps-per-domain {MR_ABORT_EPS_PER_DOMAIN}")
 
 
-def mr_abort_num_mrs(ops_per_mr):
-    """-W value that keeps ops per iteration at MR_ABORT_MAX_OPS_PER_ITER."""
-    return MR_ABORT_MAX_OPS_PER_ITER // ops_per_mr
+def mr_abort_num_mrs(ops_per_mr, num_eps=MR_ABORT_NUM_EPS):
+    """-W value that keeps the load at MR_ABORT_OPS_PER_EP ops per endpoint."""
+    return num_eps * MR_ABORT_OPS_PER_EP // ops_per_mr
 
 BASE_MESSAGE_SIZES = [
     64,
@@ -182,6 +183,61 @@ def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
                         "domain so every split op pair shares a domain")
         command += " --partial-split-eps"
 
+    if high_pps:
+        assert(rma_op != "read")
+        command += " --high-pps"
+
+    if sl_low_latency:
+        assert(rma_op != "read")
+        assert(message_size <= SL_LOW_LATENCY_MAX_WRITE_SIZE)
+        command += " --sl-low-latency"
+
+    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type)
+    test.run()
+
+
+# --- Test: incast (many initiator EPs, one target EP) ---
+MR_ABORT_INCAST_NUM_DOMAINS = 4
+MR_ABORT_INCAST_INITIATOR_EPS = (MR_ABORT_INCAST_NUM_DOMAINS *
+                                 MR_ABORT_EPS_PER_DOMAIN)
+
+
+@pytest.mark.functional
+@pytest.mark.fabric(params=["efa-direct"])  # TODO add test for efa fabric
+@pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
+@pytest.mark.parametrize(
+    "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
+    list(abort_case_params()))
+def test_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order, ops_per_mr,
+                         high_pps, sl_low_latency, message_size, memory_type,
+                         num_domains):
+    """
+    Incast: 16 initiator endpoints, 4 per EFA NIC across 4 NICs, all
+    targeting a single endpoint on a separate platform. Skipped when
+    either host has fewer than 4 EFA NICs.
+
+    The load is per-domain: each NIC carries the same 4-endpoint,
+    512-ops-per-endpoint load as the single-domain tests, so the lone
+    target endpoint absorbs a 4-NIC incast.
+
+    Only the initiator close is exercised: a high incast only makes sense
+    to cancel on the transmit side.
+    """
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("mr_abort incast test requires two platforms")
+
+    if num_domains < MR_ABORT_INCAST_NUM_DOMAINS:
+        pytest.skip(f"mr_abort incast test requires at least "
+                    f"{MR_ABORT_INCAST_NUM_DOMAINS} EFA NICs")
+
+    command = (f"fi_mr_abort -T abort -o {rma_op} -C {cancel_order}"
+               f" -R initiator -N {ops_per_mr}"
+               f" -W {mr_abort_num_mrs(ops_per_mr, MR_ABORT_INCAST_INITIATOR_EPS)}"
+               f" -S {message_size}"
+               f" --num-initiator-eps {MR_ABORT_INCAST_INITIATOR_EPS}"
+               f" --num-target-eps 1"
+               f" --eps-per-domain {MR_ABORT_EPS_PER_DOMAIN}"
+               f" -I 3")
     if high_pps:
         assert(rma_op != "read")
         command += " --high-pps"
