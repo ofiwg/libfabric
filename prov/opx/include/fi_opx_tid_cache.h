@@ -133,5 +133,5 @@ void opx_deregister_entries_for_rzv(struct fi_opx_ep *opx_ep, struct ofi_mr_entr
  * returns non-zero on failure
  */
 int opx_register_for_rzv(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov *cur_addr_range,
-			 struct opx_tid_addr_block *tid_addr_block);
+			 struct opx_tid_addr_block *tid_addr_block, const struct opx_tid_dmabuf_ref *dmabuf);
 #endif /* _FI_PROV_OPX_TID_CACHE_H_ */

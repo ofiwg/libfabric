@@ -305,6 +305,13 @@ struct opx_tid_mr {
 	struct opx_mr_tid_info tid_info;
 };
 
+/* Scalars, not a region pointer: registration must not depend on the region
+ * outliving the transfer. */
+struct opx_tid_dmabuf_ref {
+	int	  fd;
+	uintptr_t base;
+};
+
 struct opx_tid_addr_block {
 	struct iovec target_iov;
 	uint32_t     offset;

@@ -2717,7 +2717,11 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 
 	struct opx_tid_addr_block tid_addr_block = {};
 
-	int register_rc = opx_register_for_rzv(params->opx_ep, &params->tid_info.cur_addr_range, &tid_addr_block);
+	const struct opx_tid_dmabuf_ref dmabuf_ref = {.fd = params->dmabuf_fd, .base = (uintptr_t) params->dmabuf_base};
+	const struct opx_tid_dmabuf_ref *dmabuf	   = (params->dmabuf_fd != OPX_SDMA_NO_DMABUF_FD) ? &dmabuf_ref : NULL;
+
+	int register_rc =
+		opx_register_for_rzv(params->opx_ep, &params->tid_info.cur_addr_range, &tid_addr_block, dmabuf);
 
 	/* TID has been disabled for this endpoint, fall back to rendezvous */
 	if (OFI_UNLIKELY(register_rc == -FI_EPERM)) {
@@ -3418,6 +3422,20 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 	params->opcode				 = opcode;
 	params->elided_head.bytes		 = 0;
 	params->elided_tail.bytes		 = 0;
+	params->dmabuf_fd			 = OPX_SDMA_NO_DMABUF_FD;
+	params->dmabuf_base			 = 0UL;
+
+#ifdef OPX_HMEM
+	/* The region is reachable here, but not from TID registration. */
+	if (target_context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+		const struct fi_opx_mr *dst_mr =
+			((struct fi_opx_hmem_info *) target_context->hmem_info_qws)->dmabuf.opx_mr;
+		if (dst_mr && dst_mr->dmabuf.fd != OPX_SDMA_NO_DMABUF_FD) {
+			params->dmabuf_fd   = dst_mr->dmabuf.fd;
+			params->dmabuf_base = (uint64_t) dst_mr->dmabuf.base_addr;
+		}
+	}
+#endif
 
 	if (opx_hfi1_rx_rzv_rts_tid_eligible(opx_ep, params, niov, immediate_data, immediate_end_bytes, is_hmem,
 					     ((struct fi_opx_hmem_info *) target_context->hmem_info_qws)->is_unified,
