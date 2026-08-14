@@ -308,6 +308,7 @@ struct fi_opx_debug_counters {
 		uint64_t tid_update_fail;
 		uint64_t tid_update_success;
 		uint64_t tid_update_success_partial;
+		uint64_t tid_update_dmabuf_downgraded;
 		uint64_t tid_rcv_pkts;
 		uint64_t tid_rcv_pkts_replays;
 		uint64_t rts_tid_ineligible;
@@ -619,6 +620,7 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_update_fail);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_update_success);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_update_success_partial);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_update_dmabuf_downgraded);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_rcv_pkts);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_rcv_pkts_replays);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_tid_ineligible);
