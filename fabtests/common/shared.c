@@ -3286,7 +3286,7 @@ int ft_fork_child(void)
 	}
 
 	if (ft_child_pid == 0) {
-		exit(0);
+		_Exit(0);
 	}
 
 	return 0;
