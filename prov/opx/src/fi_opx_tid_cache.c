@@ -130,7 +130,8 @@ static const char *OPX_TID_CACHE_ENTRY_STATUS[] = {
  * Hold the cache->lock across registering the TIDs  */
 __OPX_FORCE_INLINE__
 int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length, enum fi_hmem_iface tid_iface, uint64_t tid_device,
-			    struct fi_opx_ep *opx_ep, struct opx_mr_tid_info *tid_info)
+			    struct fi_opx_ep *opx_ep, const struct opx_tid_dmabuf_ref *dmabuf,
+			    struct opx_mr_tid_info *tid_info)
 {
 	uint64_t flags = (uint64_t) OPX_HMEM_KERN_MEM_TYPE[tid_iface];
 
@@ -534,7 +535,7 @@ void opx_cache_free_entry(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry
 __OPX_FORCE_INLINE__
 int opx_register_tid_region_retryable(struct ofi_mr_cache *cache, uint64_t tid_vaddr, uint64_t tid_length,
 				      enum fi_hmem_iface tid_iface, uint64_t tid_device, struct fi_opx_ep *opx_ep,
-				      struct opx_mr_tid_info *tid_info)
+				      const struct opx_tid_dmabuf_ref *dmabuf, struct opx_mr_tid_info *tid_info)
 {
 	int ret;
 
@@ -545,7 +546,7 @@ int opx_register_tid_region_retryable(struct ofi_mr_cache *cache, uint64_t tid_v
 	/* Hold the cache->lock across registering the TIDs  */
 	pthread_mutex_lock(&cache->lock);
 	{
-		ret = opx_register_tid_region(tid_vaddr, tid_length, tid_iface, tid_device, opx_ep, tid_info);
+		ret = opx_register_tid_region(tid_vaddr, tid_length, tid_iface, tid_device, opx_ep, dmabuf, tid_info);
 	}
 	pthread_mutex_unlock(&cache->lock);
 
@@ -562,7 +563,7 @@ int opx_register_tid_region_retryable(struct ofi_mr_cache *cache, uint64_t tid_v
 			pthread_mutex_lock(&cache->lock);
 			{
 				ret = opx_register_tid_region(tid_vaddr, tid_length, tid_iface, tid_device, opx_ep,
-							      tid_info);
+							      dmabuf, tid_info);
 			}
 			pthread_mutex_unlock(&cache->lock);
 		}
@@ -588,7 +589,7 @@ int opx_register_tid_region_retryable(struct ofi_mr_cache *cache, uint64_t tid_v
  */
 __OPX_FORCE_INLINE__
 int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *info, struct ofi_mr_entry **entry,
-		       struct fi_opx_ep *opx_ep)
+		       struct fi_opx_ep *opx_ep, const struct opx_tid_dmabuf_ref *dmabuf)
 {
 	/* Assert precondition that the lock is held with a trylock assert */
 	assert(pthread_mutex_trylock(&mm_lock) == EBUSY);
@@ -630,7 +631,7 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 	const size_t register_max_len = opx_ep->hfi->ctrl->__hfi_tidexpcnt * OPX_TID_PAGE_SIZE[info->iface];
 	ret			      = opx_register_tid_region_retryable(cache, (uint64_t) info->iov.iov_base,
 									  MIN(info->iov.iov_len, register_max_len), info->iface, info->device,
-									  opx_ep, tid_info);
+									  opx_ep, dmabuf, tid_info);
 	if (ret) {
 		/* Failed, tid_info->ninfo will be zero */
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "opx_register_tid_region failed with return code %d (%s)\n", ret,
@@ -693,9 +694,10 @@ error:
 
 __OPX_FORCE_INLINE__
 int opx_tid_register_and_cache_entry(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
-				     struct ofi_mr_entry **entry, struct fi_opx_ep *opx_ep)
+				     struct ofi_mr_entry **entry, struct fi_opx_ep *opx_ep,
+				     const struct opx_tid_dmabuf_ref *dmabuf)
 {
-	int ret = opx_tid_cache_crte(cache, info, entry, opx_ep);
+	int ret = opx_tid_cache_crte(cache, info, entry, opx_ep, dmabuf);
 	if (OFI_UNLIKELY(ret != FI_SUCCESS && (*entry) != NULL)) {
 		/*crte returns an entry even if tid update failed */
 		/* Unlock for free/return */
@@ -1019,7 +1021,7 @@ enum opx_tid_cache_entry_status opx_tid_cache_build_overlap_chain(struct fi_opx_
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_cache_miss);
 
 	cur_entry = NULL;
-	int rc	  = opx_tid_register_and_cache_entry(cache, &find_info, &cur_entry, opx_ep);
+	int rc	  = opx_tid_register_and_cache_entry(cache, &find_info, &cur_entry, opx_ep, dmabuf);
 
 	if (rc == FI_SUCCESS) {
 		result->entries[result->entry_count++] = cur_entry;
@@ -1458,7 +1460,7 @@ void opx_deregister_entries_for_rzv(struct fi_opx_ep *opx_ep, struct ofi_mr_entr
 
 __OPX_FORCE_INLINE__
 int opx_tid_get_tids_for_range(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov *cur_addr_range,
-			       struct opx_tid_addr_block *tid_addr_block)
+			       struct opx_tid_addr_block *tid_addr_block, const struct opx_tid_dmabuf_ref *dmabuf)
 {
 	int ret = FI_SUCCESS;
 
@@ -1507,7 +1509,7 @@ int opx_tid_get_tids_for_range(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov 
 
 		/* No entry found, create it. */
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_ENTRY_NOT_FOUND\n");
-		int rc = opx_tid_register_and_cache_entry(tid_cache, &find_info, &entry, opx_ep);
+		int rc = opx_tid_register_and_cache_entry(tid_cache, &find_info, &entry, opx_ep, dmabuf);
 
 		/* opx_register_tid_region was done in add region, check result */
 		if (rc != FI_SUCCESS) {
@@ -1569,16 +1571,17 @@ register_end:
 
 __OPX_FORCE_INLINE__
 int opx_tid_get_tids_for_initial_range(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov *cur_addr_range,
-				       struct opx_tid_addr_block *tid_addr_block)
+				       struct opx_tid_addr_block       *tid_addr_block,
+				       const struct opx_tid_dmabuf_ref *dmabuf)
 {
-	int ret = opx_tid_get_tids_for_range(opx_ep, cur_addr_range, tid_addr_block);
+	int ret = opx_tid_get_tids_for_range(opx_ep, cur_addr_range, tid_addr_block, dmabuf);
 
 	// If we failed, try flushing the LRU to free up some TIDs and retry.
 	if (ret == -FI_EAGAIN) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_cache_flush_lru);
 		if (opx_tid_cache_flush_all(opx_ep->domain->tid_domain->tid_cache, true, false)) {
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_cache_flush_lru_helped);
-			ret = opx_tid_get_tids_for_range(opx_ep, cur_addr_range, tid_addr_block);
+			ret = opx_tid_get_tids_for_range(opx_ep, cur_addr_range, tid_addr_block, dmabuf);
 		}
 	}
 
@@ -1588,7 +1591,7 @@ int opx_tid_get_tids_for_initial_range(struct fi_opx_ep *opx_ep, struct fi_opx_h
 __OPX_FORCE_INLINE__
 int opx_tid_get_tids_for_remaining_range(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov *cur_addr_range,
 					 struct opx_tid_addr_block *tid_addr_block, uintptr_t cur_addr_range_end,
-					 uintptr_t target_range_end)
+					 uintptr_t target_range_end, const struct opx_tid_dmabuf_ref *dmabuf)
 {
 	struct fi_opx_hmem_iov next_addr_range = {.buf	  = target_range_end,
 						  .len	  = cur_addr_range_end - target_range_end,
@@ -1601,7 +1604,7 @@ int opx_tid_get_tids_for_remaining_range(struct fi_opx_ep *opx_ep, struct fi_opx
 	int ret		= FI_SUCCESS;
 
 	while (target_range_end < cur_addr_range_end &&
-	       ((ret = opx_tid_get_tids_for_range(opx_ep, &next_addr_range, &next_tid_block)) == FI_SUCCESS)) {
+	       ((ret = opx_tid_get_tids_for_range(opx_ep, &next_addr_range, &next_tid_block, dmabuf)) == FI_SUCCESS)) {
 		// If we got at least one FI_SUCCESS, then we want to ultimately
 		// return FI_SUCCESS, even if we get a subsequent failure.
 		ret_and_val = 0;
@@ -1634,12 +1637,12 @@ int opx_tid_get_tids_for_remaining_range(struct fi_opx_ep *opx_ep, struct fi_opx
 }
 
 int opx_register_for_rzv(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov *cur_addr_range,
-			 struct opx_tid_addr_block *tid_addr_block)
+			 struct opx_tid_addr_block *tid_addr_block, const struct opx_tid_dmabuf_ref *dmabuf)
 {
 	uintptr_t cur_addr_range_end = cur_addr_range->buf + cur_addr_range->len;
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.reg_for_rzv_get_initial);
-	int ret = opx_tid_get_tids_for_initial_range(opx_ep, cur_addr_range, tid_addr_block);
+	int ret = opx_tid_get_tids_for_initial_range(opx_ep, cur_addr_range, tid_addr_block, dmabuf);
 
 	if (ret != FI_SUCCESS) {
 		return ret;
@@ -1653,7 +1656,7 @@ int opx_register_for_rzv(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov *cur_a
 		   for more tids and they will be added to the tid addr block but an EAGAIN here should
 		   not be returned on partial success */
 		opx_tid_get_tids_for_remaining_range(opx_ep, cur_addr_range, tid_addr_block, cur_addr_range_end,
-						     target_end);
+						     target_end, dmabuf);
 	}
 
 	/* A single rzv_comp can own at most OPX_RZV_MAX_TID_ENTRIES
