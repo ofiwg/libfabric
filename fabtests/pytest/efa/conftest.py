@@ -16,6 +16,7 @@ from efa_common import (
     support_cq_interrupts,
     CudaMemorySupport,
     get_cuda_memory_support,
+    get_efa_device_names,
     memory_type_list_bi_dir,
 )
 
@@ -372,3 +373,25 @@ def support_sread(cmdline_args):
             support_cq_interrupts(cmdline_args.client_id))
 
 
+@pytest.fixture(scope="session")
+def num_domains(cmdline_args):
+    """
+    Number of EFA domains (NICs) a test can spread endpoints across.
+
+    This is the smaller of the two hosts' device counts: each peer opens
+    domains from its own device list, so a heterogeneous pair can only spread
+    as far as the host with fewer devices.
+
+    Session-scoped so the device lookup runs once per xdist worker instead of
+    once per test; cmdline_args is session-scoped too, so it can be used here.
+    """
+    server_id = cmdline_args.server_id
+    client_id = cmdline_args.client_id
+
+    counts = [len(get_efa_device_names(host_id))
+              for host_id in dict.fromkeys(filter(None, (server_id, client_id)))]
+
+    if not counts or not min(counts):
+        pytest.skip("could not determine the EFA device count on both hosts")
+
+    return min(counts)
