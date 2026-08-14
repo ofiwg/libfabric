@@ -1003,6 +1003,8 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 		return psn;
 	}
 
+	*tx_flow = (struct fi_opx_reliability_tx_flow *) fi_opx_rbt_value(service->tx.tx_flow_rbtree, itr);
+
 	struct fi_opx_reliability_tx_flow *flow_ptr		  = *tx_flow;
 	union fi_opx_reliability_tx_psn	  *psn_ptr		  = &flow_ptr->psn;
 	uint32_t			   flow_outstanding_bytes = flow_ptr->outstanding_bytes;
