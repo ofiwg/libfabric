@@ -13,30 +13,41 @@ pytestmark = pytest.mark.pre_release
 # instance.
 MR_ABORT_NUM_MRS = 2046
 
+MSG_SIZE_64B = 64
+MSG_SIZE_128B = 128
+MSG_SIZE_4KIB = 4096
+MSG_SIZE_8KIB = 8192
+MSG_SIZE_64KIB = 65536
+MSG_SIZE_128KIB = 131072
+MSG_SIZE_256KIB = 262144
+MSG_SIZE_1MIB = 1048576
+MSG_SIZE_10MIB = 10485760
+
 BASE_MESSAGE_SIZES = [
-    64,
+    MSG_SIZE_64B,
     # 128B is the largest write WQE the low latency service level
     # accelerates; only low-latency cases are generated at this size
-    128,
-    4096,
-    65536,
-    1048576,
-    10485760,
+    MSG_SIZE_128B,
+    MSG_SIZE_4KIB,
+    MSG_SIZE_64KIB,
+    MSG_SIZE_1MIB,
+    MSG_SIZE_10MIB,
 ]
 
 # The high PPS WQE hint only accelerates writes <= 8KB, but writes up to
 # 64KB marked high-pps exercise special handling that routes them back to
 # the default processing path. Request high PPS for writes up to 64KB to
 # utilize both paths; larger sizes add no new coverage.
-HIGH_PPS_MAX_WRITE_SIZE = 65536
+HIGH_PPS_MAX_WRITE_SIZE = MSG_SIZE_64KIB
 
 # The low latency service level only accelerates write WQEs <= 128 bytes,
 # but request it for writes up to 8 KiB so a single run mixes the
 # accelerated (<= 128B) and non-accelerated flows.
-SL_LOW_LATENCY_MAX_WRITE_SIZE = 8192
+SL_LOW_LATENCY_MAX_WRITE_SIZE = MSG_SIZE_8KIB
 
 
 def rma_case_params():
+    params = []
     for rma_op in ["write", "read", "writedata"]:
         for size in BASE_MESSAGE_SIZES:
 
@@ -54,7 +65,7 @@ def rma_case_params():
                     use_sl_low_latency_vals = [True, False]
 
             marks = []
-            if size == 10485760:
+            if size == MSG_SIZE_10MIB:
                 # 10 MiB: large transfers consume far more memory/NIC resources
                 # Run this size serially to avoid resource contention with
                 # parallel workers
@@ -69,7 +80,7 @@ def rma_case_params():
 
                     # 128B exists only to pin the low latency SL firmware
                     # boundary; skip every other combination at that size
-                    if size == 128 and not use_sl_low_latency:
+                    if size == MSG_SIZE_128B and not use_sl_low_latency:
                         continue
 
                     id = f"{rma_op}-{size}"
@@ -80,8 +91,10 @@ def rma_case_params():
                     if use_sl_low_latency is not None:
                         id += f"-sl_low_lat-{use_sl_low_latency}"
 
-                    yield pytest.param(size, rma_op, use_high_pps,
-                                       use_sl_low_latency, marks=marks, id=id)
+                    params.append(pytest.param(size, rma_op, use_high_pps,
+                                               use_sl_low_latency, marks=marks,
+                                               id=id))
+    return params
 
 
 def abort_case_params():
@@ -92,18 +105,20 @@ def abort_case_params():
     The 10 MiB size only runs with reverse cancel order on 1 operation per
     MR to save run time; every other size runs the full cross product.
     """
+    params = []
     for p in rma_case_params():
         size = p.values[0]
-        if size == 10485760:
+        if size == MSG_SIZE_10MIB:
             cases = [("reverse", 1)]
         else:
             cases = [(cancel_order, ops_per_mr)
                      for cancel_order in ("reverse", "random")
                      for ops_per_mr in (1, 4)]
         for cancel_order, ops_per_mr in cases:
-            yield pytest.param(*p.values, cancel_order, ops_per_mr,
-                               marks=p.marks,
-                               id=f"{p.id}-{cancel_order}-ops_{ops_per_mr}")
+            params.append(pytest.param(*p.values, cancel_order, ops_per_mr,
+                                       marks=p.marks,
+                                       id=f"{p.id}-{cancel_order}-ops_{ops_per_mr}"))
+    return params
 
 
 # --- Test: abort (RMA) ---
@@ -113,7 +128,7 @@ def abort_case_params():
 @pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
 @pytest.mark.parametrize(
     "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
-    list(abort_case_params()))
+    abort_case_params())
 def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, ops_per_mr,
                   high_pps, sl_low_latency, message_size, memory_type):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
@@ -140,7 +155,7 @@ def test_mr_abort(cmdline_args, rma_fabric, rma_op, cancel_order, close_side, op
 @pytest.mark.fabric(params=["efa-direct"]) # TODO add test for efa fabric
 @pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
 @pytest.mark.parametrize("message_size, rma_op, high_pps, sl_low_latency",
-                         list(rma_case_params()))
+                         rma_case_params())
 def test_mr_abort_partial(cmdline_args, rma_fabric, rma_op, high_pps,
                           sl_low_latency, message_size, memory_type):
     if rma_fabric == "efa" and cmdline_args.server_id == cmdline_args.client_id:
@@ -193,10 +208,10 @@ def determine_settings_for_proto(protocol, memory_type, fabric):
     """
     # Host-memory defaults (efa.h): eager_max ~= MTU - headers (~8 KB),
     # max_medium_msg_size = 65536, min_read_msg_size = 1048576.
-    EAGER_SIZE = 4096            # < eager_max -> EAGER
-    MEDIUM_SIZE = 65536          # 8 MTU-sized packets, == default medium_max -> MEDIUM
-    LARGE_SIZE = 1048576         # 1 MiB, > medium_max -> LONGCTS / read-base
-    RUNT_ONLY_SIZE = 131072      # <= runt budget so no trailing READ is posted
+    EAGER_SIZE = MSG_SIZE_4KIB            # < eager_max -> EAGER
+    MEDIUM_SIZE = MSG_SIZE_64KIB          # 8 MTU-sized packets, == default medium_max -> MEDIUM
+    LARGE_SIZE = MSG_SIZE_1MIB            # 1 MiB, > medium_max -> LONGCTS / read-base
+    RUNT_ONLY_SIZE = MSG_SIZE_128KIB      # <= runt budget so no trailing READ is posted
 
     # Representative size per protocol, used both for the host+efa pinned
     # path and the fallback path.
@@ -305,7 +320,7 @@ SEND_PROTOCOLS = ["EAGER", "MEDIUM", "LONGCTS", "LONGREAD",
                   "RUNTREAD-LONGREAD", "RUNTREAD-NOREAD"]
 
 # efa-direct max send size is 8KB
-EFA_DIRECT_MAX_SEND_SIZE = 8192
+EFA_DIRECT_MAX_SEND_SIZE = MSG_SIZE_8KIB
 
 
 def send_case_params():
@@ -318,6 +333,7 @@ def send_case_params():
     TODO take the fabric into account once the efa fabric is added; tagged
     sends and the larger protocols apply there.
     """
+    params = []
     for tagged in [False]:
         for protocol in SEND_PROTOCOLS:
             # memory_type is irrelevant for the size lookup on efa-direct:
@@ -327,8 +343,9 @@ def send_case_params():
                 protocol, "host_to_host", "efa-direct")
             if message_size > EFA_DIRECT_MAX_SEND_SIZE:
                 continue
-            yield pytest.param(tagged, protocol,
-                               id=f"tagged_{tagged}-{protocol}")
+            params.append(pytest.param(tagged, protocol,
+                                       id=f"tagged_{tagged}-{protocol}"))
+    return params
 
 
 @pytest.mark.functional
@@ -337,7 +354,7 @@ def send_case_params():
 # TODO add "target" once efa supports canceling posted RX buffers
 @pytest.mark.parametrize("close_side", ["initiator"])
 @pytest.mark.parametrize("ops_per_mr", [1, 4])
-@pytest.mark.parametrize("tagged, protocol", list(send_case_params()))
+@pytest.mark.parametrize("tagged, protocol", send_case_params())
 @pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)  # TODO run both system + hmem memory cases on the efa fabric
 def test_mr_abort_send(cmdline_args, fabric, cancel_order, close_side,
                        ops_per_mr, tagged, protocol, memory_type):
