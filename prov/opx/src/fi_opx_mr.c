@@ -191,6 +191,17 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	}
 #endif
 
+	/* Fail here rather than at a later transfer: an unaligned base yields an
+	 * unaligned buffer-object offset, which the kernel rejects when it pins. */
+	if ((flags & FI_MR_DMABUF) && attr && attr->dmabuf && attr->dmabuf->base_addr &&
+	    !ofi_is_addr_aligned(attr->dmabuf->base_addr, OPX_HFI1_TID_PAGESIZE)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "dma-buf base address %p is not %u-byte aligned\n",
+			attr->dmabuf->base_addr, (unsigned) OPX_HFI1_TID_PAGESIZE);
+		OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) FI_EINVAL, 0);
+		errno = FI_EINVAL;
+		return -errno;
+	}
+
 #if HAVE_HFISVC
 	/* HFISVC pins the memory region eagerly at registration time via the
 	 * kernel hfi1_mem_region_pin path. A NULL base address cannot be pinned
