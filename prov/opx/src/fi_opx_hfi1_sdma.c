@@ -208,7 +208,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 			const unsigned meminfo_idx   = 0;
 			const unsigned hfi1_mem_type = HFI1_MEMINFO_TYPE_ENTRY_GET(meminfo->types, meminfo_idx);
 
-#if OPX_HAVE_SDMA_DMABUF
+#if OPX_HAVE_DMABUF
 			is_dmabuf_req = (hfi1_mem_type == HFI1_MEMINFO_TYPE_DMABUF);
 #endif
 			/* A 4-bit field from the request: bounds-check it. */
