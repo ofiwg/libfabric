@@ -123,7 +123,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		AC_DEFINE_UNQUOTED(OPX_RELIABILITY, [$OPX_RELIABILITY], [fabric direct reliability])
 
 		opx_happy=1
-		opx_sdma_dmabuf=0
+		opx_dmabuf=0
 		FI_CHECK_PACKAGE([opx_uuid],
 			[uuid/uuid.h],
 			[uuid],
@@ -294,7 +294,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 					[AC_MSG_NOTICE([hfi1 driver version is GPU-compatible... yes])
 				])
 			])
-			dnl DMA-BUF user-SDMA pinning support.
+			dnl DMA-BUF pinning, for both user SDMA and expected receive.
 			dnl Must not clear opx_happy: OPX still builds against
 			dnl headers predating the DMA-BUF backend.
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
@@ -308,18 +308,18 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 					#endif
 				]])],
 				[
-					AC_MSG_NOTICE([hfi1_user.h DMA-BUF user-SDMA support... yes])
-					opx_sdma_dmabuf=1
+					AC_MSG_NOTICE([hfi1_user.h DMA-BUF user-SDMA and expected-receive support... yes])
+					opx_dmabuf=1
 				],
-				[AC_MSG_NOTICE([hfi1_user.h DMA-BUF user-SDMA support... no])])
+				[AC_MSG_NOTICE([hfi1_user.h DMA-BUF user-SDMA and expected-receive support... no])])
 
 			AS_IF([test $opx_happy -eq 1],[
 				AC_MSG_NOTICE([Appending OPX_HMEM to opx_CPPFLAGS])
 				opx_CPPFLAGS="$opx_CPPFLAGS -DOPX_HMEM"
 			])
 		])
-		AC_DEFINE_UNQUOTED([OPX_HAVE_SDMA_DMABUF], [$opx_sdma_dmabuf],
-			[Define to 1 if hfi1 headers support DMA-BUF user-SDMA pinning])
+		AC_DEFINE_UNQUOTED([OPX_HAVE_DMABUF], [$opx_dmabuf],
+			[Define to 1 if hfi1 headers support DMA-BUF pinning for user SDMA and expected receive])
 
 
 		AS_IF([test $opx_happy -eq 1], [

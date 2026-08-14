@@ -4780,7 +4780,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	const uint64_t do_cq_completion = fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
 
-#if defined(OPX_HMEM) && OPX_HAVE_SDMA_DMABUF
+#if defined(OPX_HMEM) && OPX_HAVE_DMABUF
 	/*
 	 * A dma-buf SDMA request carries a buffer-object-relative offset, formed
 	 * downstream as (VA - dmabuf.base_addr). Validate the pairing here, at the
@@ -4815,7 +4815,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			if (opx_ep->use_hfisvc && hmem_iface != FI_HMEM_SYSTEM) {
 				opx_hfisvc_mr_lazy_open_if_deferred(opx_ep->domain, (struct fi_opx_mr *) desc);
 			}
-#if OPX_HAVE_SDMA_DMABUF
+#if OPX_HAVE_DMABUF
 			if (desc && hmem_iface != FI_HMEM_SYSTEM && (opx_ep->hfi->runtime_flags & HFI1_CAP_DMABUF)) {
 				const struct fi_opx_mr *src_mr = (const struct fi_opx_mr *) desc;
 
