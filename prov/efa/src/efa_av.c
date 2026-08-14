@@ -823,7 +823,8 @@ static struct fi_ops_av efa_av_ops = {
 	.insertsym = fi_no_av_insertsym,
 	.remove = efa_av_remove,
 	.lookup = efa_av_lookup,
-	.straddr = efa_av_straddr
+	.straddr = efa_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static void efa_av_close_reverse_av(struct efa_av *av)

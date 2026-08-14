@@ -157,6 +157,7 @@ static struct fi_ops_av mrail_av_ops = {
 	.remove = mrail_av_remove,
 	.lookup = mrail_av_lookup,
 	.straddr = mrail_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static struct fi_ops mrail_av_fi_ops = {

@@ -1027,6 +1027,9 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 bool ofi_ip_av_is_valid(struct fid_av *av_fid, fi_addr_t fi_addr);
 int ofi_ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 		     void *addr, size_t *addrlen);
+
+int ofi_av_lookup2(struct fid_av *av, fi_addr_t fi_addr, void *buf,
+		   size_t *len, uint64_t flags, struct fid_xpu_ctx *ctx);
 int ofi_ip_av_insertsym(struct fid_av *av_fid, const char *node,
 			size_t nodecnt, const char *service, size_t svccnt,
 			fi_addr_t *fi_addr, uint64_t flags, void *context);

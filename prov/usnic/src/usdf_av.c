@@ -54,6 +54,7 @@
 #include "rdma/fi_errno.h"
 #include "ofi_enosys.h"
 #include "ofi.h"
+#include "ofi_util.h"
 
 #include "usnic_direct.h"
 #include "usnic_ip_utils.h"
@@ -688,7 +689,8 @@ static struct fi_ops_av usdf_am_ops_async = {
 	.insertsym = fi_no_av_insertsym,
 	.remove = usdf_am_remove,
 	.lookup = usdf_am_lookup,
-	.straddr = usdf_av_straddr
+	.straddr = usdf_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static struct fi_ops_av usdf_am_ops_sync = {
@@ -698,7 +700,8 @@ static struct fi_ops_av usdf_am_ops_sync = {
 	.insertsym = fi_no_av_insertsym,
 	.remove = usdf_am_remove,
 	.lookup = usdf_am_lookup,
-	.straddr = usdf_av_straddr
+	.straddr = usdf_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static int usdf_av_process_attr(struct fi_av_attr *attr)

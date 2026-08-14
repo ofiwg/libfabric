@@ -221,6 +221,7 @@ static struct fi_ops_av vrb_dgram_av_ops = {
 	.remove		= vrb_dgram_av_remove,
 	.lookup		= vrb_dgram_av_lookup,
 	.straddr	= vrb_dgram_av_straddr,
+	.lookup2	= ofi_av_lookup2,
 };
 
 int vrb_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,

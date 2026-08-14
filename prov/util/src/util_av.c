@@ -938,6 +938,15 @@ int ofi_ip_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	return 0;
 }
 
+int ofi_av_lookup2(struct fid_av *av, fi_addr_t fi_addr, void *buf,
+		   size_t *len, uint64_t flags, struct fid_xpu_ctx *ctx)
+{
+	if (flags == 0)
+		return fi_av_lookup(av, fi_addr, buf, len);
+
+	return -FI_ENOSYS;
+}
+
 const char *
 ofi_ip_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
 {
@@ -952,6 +961,7 @@ static struct fi_ops_av ip_av_ops = {
 	.remove = ofi_ip_av_remove,
 	.lookup = ofi_ip_av_lookup,
 	.straddr = ofi_ip_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static int ip_av_close(struct fid *av_fid)

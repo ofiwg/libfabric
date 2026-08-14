@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 #include "ofi_hook.h"
+#include "ofi_util.h"
 #include "ofi_prov.h"
 #include "ofi_iov.h"
 #include <config.h>
@@ -1320,6 +1321,7 @@ static struct fi_ops_av trace_av_ops = {
 	.remove = trace_av_remove,
 	.lookup = trace_av_lookup,
 	.straddr = trace_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 /* domain ops */

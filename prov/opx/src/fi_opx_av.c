@@ -466,7 +466,8 @@ static struct fi_ops_av fi_opx_av_ops = {.size	    = sizeof(struct fi_ops_av),
 					 .insertsym = fi_opx_av_insertsym,
 					 .remove    = fi_opx_av_remove,
 					 .lookup    = fi_opx_av_lookup,
-					 .straddr   = fi_opx_av_straddr};
+					 .straddr   = fi_opx_av_straddr,
+					 .lookup2   = ofi_av_lookup2};
 
 int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_av **av, void *context)
 {
