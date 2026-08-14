@@ -377,9 +377,8 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	err = ofi_av_insert_addr(&av->util_av, raw_addr, fi_addr);
 	if (err) {
 		EFA_WARN(FI_LOG_AV,
-			 "ofi_av_insert_addr into explicit AV failed! Error "
-			 "message: %s\n",
-			 fi_strerror(err));
+			 "Failed to insert implicit fi_addr %" PRIu64 " into explicit util AV: %s\n",
+			 implicit_fi_addr, fi_strerror(-err));
 		return err;
 	}
 
@@ -433,10 +432,8 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 
 	err = ofi_av_remove_addr(&av->util_av_implicit, implicit_fi_addr);
 	if (err) {
-		EFA_WARN(FI_LOG_AV,
-			 "ofi_av_remove_addr from implicit AV failed! Error "
-			 "message: %s\n",
-			 fi_strerror(err));
+		EFA_WARN(FI_LOG_AV, "Failed to remove implicit fi_addr %" PRIu64 " from implicit util AV: %s\n",
+			 implicit_fi_addr, fi_strerror(-err));
 		return err;
 	}
 
@@ -892,13 +889,13 @@ static int efa_av_close(struct fid *fid)
 	err = ofi_av_close(&av->util_av);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_AV, "Failed to close util av: %s\n",
-			fi_strerror(err));
+			fi_strerror(-err));
 	}
 
 	err = ofi_av_close(&av->util_av_implicit);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_AV, "Failed to close implicit util av: %s\n",
-			fi_strerror(err));
+			fi_strerror(-err));
 	}
 
 	if (av->domain->info_type == EFA_INFO_RDM) {
@@ -907,7 +904,7 @@ static int efa_av_close(struct fid *fid)
 			if (OFI_UNLIKELY(err)) {
 				EFA_WARN(FI_LOG_AV,
 					 "Failed to close shm av: %s\n",
-					 fi_strerror(err));
+					 fi_strerror(-err));
 			}
 		}
 		HASH_ITER(hh, av->evicted_peers_hashset, ep_addr_hashable, tmp) {

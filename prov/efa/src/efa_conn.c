@@ -258,8 +258,7 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 
 	err = ofi_av_insert_addr(util_av, raw_addr, &fi_addr);
 	if (err) {
-		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n",
-			 fi_strerror(err));
+		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n", fi_strerror(-err));
 		return NULL;
 	}
 
@@ -329,8 +328,8 @@ err_release:
 	conn->ep_addr = NULL;
 	err = ofi_av_remove_addr(util_av, fi_addr);
 	if (err)
-		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n",
-			 err);
+		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed for fi_addr %" PRIu64
+			": %s\n", fi_addr, fi_strerror(-err));
 
 	return NULL;
 }
@@ -368,8 +367,7 @@ struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *
 
 	err = ofi_av_insert_addr(util_av_implicit, raw_addr, &fi_addr);
 	if (err) {
-		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n",
-			 fi_strerror(err));
+		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n", fi_strerror(-err));
 		return NULL;
 	}
 
@@ -431,8 +429,8 @@ err_release:
 	conn->ep_addr = NULL;
 	err = ofi_av_remove_addr(util_av_implicit, fi_addr);
 	if (err)
-		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n",
-			 err);
+		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed for implicit fi_addr %" PRIu64
+			": %s\n", fi_addr, fi_strerror(-err));
 
 	return NULL;
 }
@@ -451,14 +449,14 @@ static void efa_conn_release_util_av(struct efa_av_array *conn_map, struct util_
 
 	err = efa_av_array_insert(conn_map, fi_addr, NULL);
 	if (err) {
-		EFA_WARN(FI_LOG_AV, "Failed to remove connection for explicit fi_addr %" PRIu64
-			" from array: %s\n", fi_addr, fi_strerror(-err));
+		EFA_WARN(FI_LOG_AV, "Failed to remove connection for fi_addr %" PRIu64
+			 " from array: %s\n", fi_addr, fi_strerror(-err));
 	}
-
 
 	err = ofi_av_remove_addr(util_av, fi_addr);
 	if (err) {
-		EFA_WARN(FI_LOG_AV, "ofi_av_remove_addr failed! err=%d\n", err);
+		EFA_WARN(FI_LOG_AV, "ofi_av_remove_addr failed for fi_addr %" PRIu64
+			 ": %s\n", fi_addr, fi_strerror(-err));
 	}
 
 	inet_ntop(AF_INET6, conn->ep_addr->raw, gidstr, INET6_ADDRSTRLEN);
