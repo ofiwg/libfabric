@@ -125,6 +125,56 @@ static const char *OPX_TID_CACHE_ENTRY_STATUS[] = {
 
 /* RBMAP compare functions. */
 
+/*
+ * A dma-buf registration takes the descriptor in the context and a
+ * buffer-object offset as the address. Every other type takes a context of
+ * zero, which the kernel enforces, and the virtual address.
+ */
+__OPX_FORCE_INLINE__
+void opx_tid_kern_memtype(struct fi_opx_ep *opx_ep, const enum fi_hmem_iface tid_iface, const uint64_t tid_vaddr,
+			  const struct opx_tid_dmabuf_ref *dmabuf, uint64_t *kern_memtype, uint64_t *tid_context,
+			  uint64_t *kern_vaddr)
+{
+#if defined(OPX_HMEM) && OPX_HAVE_DMABUF
+	/* The kernel imports any exporter's descriptor, so availability selects
+	 * the type, not the vendor runtime. */
+	if (dmabuf && dmabuf->fd != OPX_SDMA_NO_DMABUF_FD && (opx_ep->hfi->runtime_flags & HFI1_CAP_DMABUF)) {
+		const uint64_t bo_offset = tid_vaddr - (uint64_t) dmabuf->base;
+
+		/* An address below the base underflows into a wild offset, and an
+		 * unaligned one is rejected by the pin. Both are provider bugs, so
+		 * assert in debug; the caller aligns the address and registration
+		 * rejects an unaligned base. Enforce them in release too, because
+		 * opx_register_for_rzv() walks a multi-chunk range against one
+		 * snapshotted base, so a later chunk can violate what the first
+		 * satisfied. Unlike the send side this fails closed for free: the
+		 * per-vendor path below is a correct outcome, only slower. */
+		assert(tid_vaddr >= (uint64_t) dmabuf->base);
+		assert((bo_offset & (OPX_HFI1_TID_PAGESIZE - 1)) == 0);
+
+		if (OFI_LIKELY(tid_vaddr >= (uint64_t) dmabuf->base &&
+			       (bo_offset & (OPX_HFI1_TID_PAGESIZE - 1)) == 0)) {
+			*kern_memtype = HFI1_MEMINFO_TYPE_DMABUF;
+			*tid_context  = (uint64_t) (unsigned int) dmabuf->fd;
+			*kern_vaddr   = bo_offset;
+			return;
+		}
+
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+			"TID address %#lx is not a %u-byte aligned offset above the dma-buf base %#lx; using the per-vendor type\n",
+			tid_vaddr, (unsigned) OPX_HFI1_TID_PAGESIZE, (uint64_t) dmabuf->base);
+	}
+
+	/* A descriptor the kernel cannot take: the pin is rejected and the
+	 * receive falls back to non-TID rendezvous, at a bandwidth cost. */
+	FI_OPX_DEBUG_COUNTERS_INC_COND(dmabuf && dmabuf->fd != OPX_SDMA_NO_DMABUF_FD,
+				       opx_ep->debug_counters.expected_receive.tid_update_dmabuf_downgraded);
+#endif
+	*kern_memtype = (uint64_t) OPX_HMEM_KERN_MEM_TYPE[tid_iface];
+	*tid_context  = 0UL;
+	*kern_vaddr   = tid_vaddr;
+}
+
 /* Register/TID Update (pin) the pages.
  *
  * Hold the cache->lock across registering the TIDs  */
@@ -133,15 +183,20 @@ int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length, enum fi_hme
 			    struct fi_opx_ep *opx_ep, const struct opx_tid_dmabuf_ref *dmabuf,
 			    struct opx_mr_tid_info *tid_info)
 {
-	uint64_t flags = (uint64_t) OPX_HMEM_KERN_MEM_TYPE[tid_iface];
+	uint64_t flags;
+	uint64_t tid_context;
+	uint64_t kern_vaddr;
 
 	/* Parameters must be aligned for expected receive */
 	assert(tid_vaddr == (tid_vaddr & -(int64_t) OPX_TID_PAGE_SIZE[tid_iface]));
 	assert(tid_length == (tid_length & -(int64_t) OPX_TID_PAGE_SIZE[tid_iface]));
 
+	opx_tid_kern_memtype(opx_ep, tid_iface, tid_vaddr, dmabuf, &flags, &tid_context, &kern_vaddr);
+
 	/* Assert precondition that the lock is held with a trylock assert */
 	assert(pthread_mutex_trylock(&opx_ep->tid_domain->tid_cache->lock) == EBUSY);
-	FI_DBG(fi_opx_global.prov, FI_LOG_MR, "vaddr %p, length %lu\n", (void *) tid_vaddr, tid_length);
+	FI_DBG(fi_opx_global.prov, FI_LOG_MR, "vaddr %p, length %lu, memtype %lu, context %#lX\n", (void *) tid_vaddr,
+	       tid_length, flags, tid_context);
 
 	uint32_t length_chunk = (uint32_t) tid_length;
 	assert((tid_info->tid_length == 0) && (tid_info->tid_vaddr == 0));
@@ -152,11 +207,13 @@ int opx_register_tid_region(uint64_t tid_vaddr, uint64_t tid_length, enum fi_hme
 	FI_OPX_DEBUG_COUNTERS_INC_COND(tid_iface > FI_HMEM_SYSTEM, opx_ep->debug_counters.hmem.tid_update);
 
 	uint32_t tidcnt_chunk = FI_OPX_MAX_DPUT_TIDPAIRS;
-	int	 ret	      = opx_hfi1_wrapper_update_tid(opx_ep->hfi, tid_vaddr, /* input */
-							    &length_chunk,	    /* input/output*/
-							    (uint64_t) tidlist, /* input/output ptr cast as uint64_t */
-							    &tidcnt_chunk,	/* output */
-							    flags);
+	/* tid_info keeps the virtual address: that is the cache key and what the
+	 * CTS carries. */
+	int ret = opx_hfi1_wrapper_update_tid(opx_ep->hfi, kern_vaddr, /* input */
+					      &length_chunk,	       /* input/output*/
+					      (uint64_t) tidlist,      /* input/output ptr cast as uint64_t */
+					      &tidcnt_chunk,	       /* output */
+					      flags, tid_context);
 
 	if (ret) { // ERROR, no TIDs were registered
 
@@ -925,7 +982,8 @@ enum opx_tid_cache_entry_status opx_tid_cache_build_overlap_chain(struct fi_opx_
 								  struct ofi_mr_info			find_info,
 								  const enum opx_tid_cache_entry_status initial_find,
 								  struct ofi_mr_entry		       *initial_entry,
-								  struct opx_tid_cache_chain	       *result)
+								  struct opx_tid_cache_chain	       *result,
+								  const struct opx_tid_dmabuf_ref      *dmabuf)
 {
 	assert(initial_find == OPX_TID_CACHE_ENTRY_OVERLAP_LEFT || initial_find == OPX_TID_CACHE_ENTRY_OVERLAP_RIGHT);
 
@@ -1544,7 +1602,8 @@ int opx_tid_get_tids_for_range(struct fi_opx_ep *opx_ep, struct fi_opx_hmem_iov 
 						  tid_addr_block);
 	} else { // OVERLAP_LEFT or OVERLAP_RIGHT
 		struct opx_tid_cache_chain overlap_chain;
-		find = opx_tid_cache_build_overlap_chain(opx_ep, tid_cache, find_info, find, entry, &overlap_chain);
+		find = opx_tid_cache_build_overlap_chain(opx_ep, tid_cache, find_info, find, entry, &overlap_chain,
+							 dmabuf);
 
 		if (OFI_UNLIKELY(find == OPX_TID_CACHE_ENTRY_IN_USE)) {
 			ret = -FI_EPERM;

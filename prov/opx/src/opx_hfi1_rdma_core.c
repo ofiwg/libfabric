@@ -84,15 +84,15 @@
 /* TID function pointers */
 int32_t (*opx_fn_hfi1_free_tid)(struct fi_opx_hfi1_context *context, uint64_t tidlist, uint32_t tidcnt);
 int32_t (*opx_fn_hfi1_update_tid)(struct fi_opx_hfi1_context *context, uint64_t vaddr, uint32_t *length,
-				  uint64_t tidlist, uint32_t *tidcnt, uint16_t flags);
+				  uint64_t tidlist, uint32_t *tidcnt, uint16_t flags, uint64_t tid_context);
 
 /* TID function prototypes */
 int32_t opx_hfi1_rdma_free_tid(struct fi_opx_hfi1_context *context, uint64_t tidlist, uint32_t tidcnt);
 int32_t opx_hfi_free_tid(struct fi_opx_hfi1_context *context, uint64_t tidlist, uint32_t tidcnt);
 int32_t opx_hfi1_rdma_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, uint32_t *length,
-				 uint64_t tidlist, uint32_t *tidcnt, uint16_t flags);
+				 uint64_t tidlist, uint32_t *tidcnt, uint16_t flags, uint64_t tid_context);
 int32_t opx_hfi_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, uint32_t *length, uint64_t tidlist,
-			   uint32_t *tidcnt, uint16_t flags);
+			   uint32_t *tidcnt, uint16_t flags, uint64_t tid_context);
 
 #if HAVE_HFI1_DIRECT_VERBS == 1 /* Enabled in the build */
 /* Define the new interfaces and structures */
@@ -682,7 +682,7 @@ static int opx_hfi1_rdma_reset_context(struct fi_opx_hfi1_context *context)
 }
 
 int32_t opx_hfi1_rdma_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, uint32_t *length,
-				 uint64_t tidlist, uint32_t *tidcnt, uint16_t flags)
+				 uint64_t tidlist, uint32_t *tidcnt, uint16_t flags, uint64_t tid_context)
 {
 	assert(opx_rdma_ops.hfi1_direct_verbs_enabled);
 	struct ibv_context *ibv_context = (struct ibv_context *) context->ibv_context;
@@ -694,7 +694,7 @@ int32_t opx_hfi1_rdma_update_tid(struct fi_opx_hfi1_context *context, uint64_t v
 	struct hfi1_tid_update_cmd cmd = {};
 	struct hfi1_tid_update_rsp rsp = {};
 
-	cmd.context = 0ULL;
+	cmd.context = tid_context;
 	cmd.flags   = flags;
 	cmd.length  = *length;
 	cmd.tidcnt  = *tidcnt;
@@ -813,7 +813,7 @@ bool opx_hfi1_rdma_op_initialize(const bool use_new_tid_ops)
 }
 
 int32_t opx_hfi1_rdma_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, uint32_t *length,
-				 uint64_t tidlist, uint32_t *tidcnt, uint16_t flags)
+				 uint64_t tidlist, uint32_t *tidcnt, uint16_t flags, uint64_t tid_context)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFI1-DIRECT] !HAVE_HFI1_DIRECT_VERBS\n");
 	return -1U;
@@ -1073,7 +1073,7 @@ int opx_hfi1_wrapper_reset_context(struct fi_opx_hfi1_context *context)
 /* Returns 0 on success, else -1 with errno set.
    See full description at declaration */
 int32_t opx_hfi_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, uint32_t *length, uint64_t tidlist,
-			   uint32_t *tidcnt, uint16_t flags)
+			   uint32_t *tidcnt, uint16_t flags, uint64_t tid_context)
 {
 	struct hfi1_cmd	  cmd;
 	struct _hfi_ctrl *ctrl = context->ctrl;
@@ -1095,7 +1095,7 @@ int32_t opx_hfi_update_tid(struct fi_opx_hfi1_context *context, uint64_t vaddr, 
 #ifdef OPX_HMEM
 	cmd.type	= OPX_HFI_CMD_TID_UPDATE_V3;
 	tidinfo.flags	= flags;
-	tidinfo.context = 0ull;
+	tidinfo.context = tid_context;
 #else
 	cmd.type = OPX_HFI_CMD_TID_UPDATE; /* HFI1_IOCTL_TID_UPDATE */
 #endif
