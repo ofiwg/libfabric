@@ -66,7 +66,11 @@ static int fi_opx_close_mr(fid_t fid)
 		return ret;
 	}
 #endif
-	HASH_DEL(opx_domain->mr_hashmap, opx_mr);
+	/* HASH_DEL() on a never-added element frees the entire table. */
+	if (opx_mr->in_hashmap) {
+		HASH_DEL(opx_domain->mr_hashmap, opx_mr);
+		opx_mr->in_hashmap = 0;
+	}
 
 	if (opx_domain->mr_mode == 0 || (opx_domain->mr_mode & OFI_MR_SCALABLE)) {
 		ret = fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
@@ -333,6 +337,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					fi_opx_ref_inc(&opx_mr->domain->ref_cnt, "domain");
 				}
 				HASH_ADD(hh, opx_domain->mr_hashmap, mr_fid.key, sizeof(opx_mr->mr_fid.key), opx_mr);
+				opx_mr->in_hashmap = 1;
 			} else {
 				OPX_TRACE_MR_INSTANT(OPX_TRACE_EVENT_MR_CACHE_HIT, (uint64_t) iov->iov_base,
 						     iov->iov_len);
@@ -429,7 +434,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	}
 #endif
 	HASH_ADD(hh, opx_domain->mr_hashmap, mr_fid.key, sizeof(opx_mr->mr_fid.key), opx_mr);
-	*mr = &opx_mr->mr_fid;
+	opx_mr->in_hashmap = 1;
+	*mr		   = &opx_mr->mr_fid;
 
 	OPX_TRACE_MR_END_SUCCESS(OPX_TRACE_EVENT_MR_REG, 0, 0);
 	return 0;
