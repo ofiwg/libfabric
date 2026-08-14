@@ -820,6 +820,7 @@ static struct fi_ops_av cxip_av_fid_ops = {
 	.insert_auth_key = cxip_av_insert_auth_key,
 	.lookup_auth_key = cxip_av_lookup_auth_key,
 	.set_user_id = cxip_av_set_user_id,
+	.lookup2 = ofi_av_lookup2,
 };
 
 static struct fi_ops cxip_av_fi_ops = {

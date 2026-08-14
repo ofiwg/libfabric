@@ -31,6 +31,7 @@
  */
 
 #include <stdlib.h>
+#include "ofi_util.h"
 #include "ofi_hook.h"
 
 
@@ -99,6 +100,7 @@ static struct fi_ops_av hook_av_ops = {
 	.remove = hook_av_remove,
 	.lookup = hook_av_lookup,
 	.straddr = hook_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 int hook_av_open(struct fid_domain *domain, struct fi_av_attr *attr,

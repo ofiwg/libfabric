@@ -260,6 +260,7 @@ static struct fi_ops_av ucx_av_ops = {
 	.insertsym = fi_no_av_insertsym,
 	.straddr = fi_no_av_straddr,
 	.av_set = fi_no_av_set,
+	.lookup2 = ofi_av_lookup2,
 };
 
 int ucx_av_open(struct fid_domain *fi_domain, struct fi_av_attr *attr,

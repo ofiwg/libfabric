@@ -437,6 +437,7 @@ static struct fi_ops_av rxm_av_ops = {
 	.lookup = rxm_av_lookup,
 	.straddr = rxm_av_straddr,
 	.av_set = rxm_av_set,
+	.lookup2 = ofi_av_lookup2,
 };
 
 int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,

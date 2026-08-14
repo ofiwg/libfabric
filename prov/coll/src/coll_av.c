@@ -63,6 +63,7 @@ static struct fi_ops_av coll_av_ops = {
 	.lookup = fi_no_av_lookup,
 	.straddr = fi_no_av_straddr,
 	.av_set = coll_av_set,
+	.lookup2 = ofi_av_lookup2,
 };
 
 int coll_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,

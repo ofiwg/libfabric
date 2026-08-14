@@ -545,6 +545,7 @@ static struct fi_ops_av smr_av_ops = {
 	.remove = smr_av_remove,
 	.lookup = smr_av_lookup,
 	.straddr = smr_av_straddr,
+	.lookup2 = ofi_av_lookup2,
 };
 
 int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
