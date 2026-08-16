@@ -43,6 +43,14 @@
 					  FI_ORDER_WAW | FI_ORDER_WAR |  \
 					  FI_ORDER_SAR | FI_ORDER_SAW)
 
+/* Ordering that survives when a connection spans several msg endpoints:
+ * receive matching happens on packets pinned to msg ep 0, while RMA and
+ * rendezvous payload are round-robined over mutually unordered connections.
+ */
+#define RXM_MQP_MSG_ORDER (FI_ORDER_SAS | FI_ORDER_ATOMIC_RAR |		\
+			   FI_ORDER_ATOMIC_RAW | FI_ORDER_ATOMIC_WAR |	\
+			   FI_ORDER_ATOMIC_WAW)
+
 #define RXM_PASSTHRU_CAPS (FI_MSG | FI_RMA | FI_SEND | FI_RECV |	\
 			   FI_READ | FI_WRITE | FI_REMOTE_READ |	\
 			   FI_REMOTE_WRITE | FI_HMEM)
@@ -391,10 +399,29 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	return 0;
 }
 
+/* Applied to the base infos, so ofi_check_info rejects hints asking for more,
+ * and to the returned infos, which rxm_info_to_rxm fills in from the core
+ * provider. max_order_*_size qualifies RAW / WAR / WAW, so it goes too.
+ */
+static void rxm_trim_msg_order(struct fi_info *info)
+{
+	info->tx_attr->msg_order &= RXM_MQP_MSG_ORDER;
+	info->rx_attr->msg_order &= RXM_MQP_MSG_ORDER;
+	info->ep_attr->max_order_raw_size = 0;
+	info->ep_attr->max_order_war_size = 0;
+	info->ep_attr->max_order_waw_size = 0;
+}
+
 static void rxm_init_infos(void)
 {
 	struct fi_info *cur;
 	size_t buf_size, tx_size = 0, rx_size = 0;
+
+	fi_param_get_size_t(&rxm_prov, "num_msg_eps", &rxm_num_msg_eps);
+	if (rxm_num_msg_eps < 1)
+		rxm_num_msg_eps = 1;
+	if (rxm_num_msg_eps > UINT8_MAX)
+		rxm_num_msg_eps = UINT8_MAX;
 
 	/* Historically, 'buffer_size' was the name given for the eager message
 	 * size.  Maintain the name for backwards compatability.
@@ -425,8 +452,11 @@ static void rxm_init_infos(void)
 		rxm_def_rx_size = rx_size;
 
 	for (cur = (struct fi_info *) rxm_util_prov.info; cur; cur = cur->next) {
-		if (!rxm_passthru_info(cur))
+		if (!rxm_passthru_info(cur)) {
 			cur->tx_attr->inject_size = rxm_buffer_size;
+			if (rxm_num_msg_eps > 1)
+				rxm_trim_msg_order(cur);
+		}
 		if (tx_size)
 			cur->tx_attr->size = tx_size;
 		if (rx_size)
@@ -446,6 +476,9 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 
 		if (rxm_passthru_info(cur))
 			continue;
+
+		if (rxm_num_msg_eps > 1)
+			rxm_trim_msg_order(cur);
 
 		/* Remove the following caps if they are not requested as they
 		 * may affect performance in fast-path */
@@ -713,6 +746,10 @@ RXM_INI
 	fi_param_define(&rxm_prov, "num_msg_eps", FI_PARAM_SIZE_T,
 			"Number of msg endpoints, and hence underlying "
 			"connections and QPs, to open per rxm connection. "
+			"Values greater than 1 reduce the guaranteed message "
+			"ordering to FI_ORDER_SAS and the atomic ordering "
+			"bits, since RMA is spread over unordered "
+			"connections. "
 			"Values are clamped to the range [1, 255]. "
 			"(default: 1)");
 
@@ -748,11 +785,6 @@ RXM_INI
 
 	fi_param_get_bool(&rxm_prov, "detect_hmem_iface", &rxm_detect_hmem_iface);
 	fi_param_get_bool(&rxm_prov, "rescan", &rxm_rescan);
-	fi_param_get_size_t(&rxm_prov, "num_msg_eps", &rxm_num_msg_eps);
-	if (rxm_num_msg_eps < 1)
-		rxm_num_msg_eps = 1;
-	if (rxm_num_msg_eps > UINT8_MAX)
-		rxm_num_msg_eps = UINT8_MAX;
 
 #if HAVE_RXM_DL
 	ofi_mem_init();
