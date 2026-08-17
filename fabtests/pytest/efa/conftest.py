@@ -464,6 +464,7 @@ def pytest_collection_modifyitems(session, config, items):
                     "Could not determine hw_cntr support: ssh to {} failed after "
                     "retries. Refusing to silently deselect hw_cntr tests.".format(host_id))
     have_gda = os.path.exists(os.path.join(binpath, "fi_efa_gda"))
+    have_xpu = os.path.exists(os.path.join(binpath, "fi_efa_xpu"))
     have_comp_action = os.path.exists(os.path.join(binpath, "fi_efa_rma_bw"))
     do_dmabuf = config.getoption("do_dmabuf_reg_for_hmem", default=False)
     if have_comp_action and any(item.get_closest_marker("comp_action") for item in items):
@@ -531,6 +532,8 @@ def pytest_collection_modifyitems(session, config, items):
         if "hw_cntr" in markers and not have_hw_cntr:
             deselected.append(item)
         elif "gda" in markers and not have_gda:
+            deselected.append(item)
+        elif "xpu" in markers and not have_xpu:
             deselected.append(item)
         elif "fi_wr" in markers and not have_fi_wr:
             deselected.append(item)
