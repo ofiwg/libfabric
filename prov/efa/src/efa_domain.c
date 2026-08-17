@@ -36,6 +36,7 @@ static struct fi_ops_domain efa_domain_ops = {
 	.av_open = efa_av_open,
 	.cq_open = efa_cq_open,
 	.endpoint = efa_ep_open,
+	.endpoint2 = efa_ep_open2,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = efa_cntr_open,
 	.poll_open = fi_no_poll_open,
