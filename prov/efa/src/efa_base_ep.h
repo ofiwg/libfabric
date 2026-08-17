@@ -74,6 +74,7 @@ int efa_query_max_sq_depth(struct ibv_context *ctx, uint32_t sq_depth_flags,
 #endif /* HAVE_INLINE_BUF_SIZE_EX */
 
 struct efa_av;
+struct efa_xpu_ep_state;
 
 struct efa_recv_wr {
 	/** @brief Work request struct used by rdma-core */
@@ -135,6 +136,9 @@ struct efa_base_ep {
 	struct dlist_entry ope_list;
 
 	/* entry for efa_domain->base_ep_list */
+	/* XPU resources handed out by fi_ep_export_xpu(), released on close */
+	struct efa_xpu_ep_state *xpu_state;
+
 	struct dlist_entry base_ep_entry;
 };
 
@@ -154,6 +158,9 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 size_t efa_base_ep_get_max_sq_depth(struct efa_base_ep *base_ep);
 
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
+
+int efa_ep_open2(struct fid_domain *domain_fid, struct fi_info *user_info,
+		 struct fid_ep **ep_fid, uint64_t flags, void *context);
 
 int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context);

@@ -12,6 +12,7 @@
 #include "efa_hw_cntr.h"
 #include "efa_cq.h"
 #include "efa_domain_util.h"
+#include "efa_xpu.h"
 
 
 struct dlist_entry g_efa_domain_list;
@@ -34,6 +35,7 @@ static struct fi_ops_domain efa_domain_ops = {
 	.av_open = efa_av_open,
 	.cq_open = efa_cq_open,
 	.endpoint = efa_ep_open,
+	.endpoint2 = efa_ep_open2,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = efa_cntr_open,
 	.poll_open = fi_no_poll_open,
@@ -41,6 +43,7 @@ static struct fi_ops_domain efa_domain_ops = {
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = fi_no_query_atomic,
 	.query_collective = fi_no_query_collective,
+	.xpu_ctx = efa_xpu_ctx_open,
 };
 
 /**

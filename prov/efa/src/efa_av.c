@@ -11,6 +11,11 @@
 
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_xpu.h"
+#include <rdma/fi_xpu_device_efa.h>
+#include "rdm/efa_rdm_domain.h"
+#include "rdm/efa_rdm_fabric.h"
+#include "rdm/efa_rdm_pke_utils.h"
 
 
 struct efa_av_entry *efa_av_addr_to_entry_impl(struct efa_av_array *entry_map,
@@ -516,6 +521,44 @@ const char *efa_av_straddr(struct fid_av *av_fid, const void *addr,
 	return ofi_straddr(buf, len, FI_ADDR_EFA, addr);
 }
 
+int efa_av_lookup2(struct fid_av *av, fi_addr_t fi_addr,
+		   void *buf, size_t *len, uint64_t flags,
+		   struct fid_xpu_ctx *ctx)
+{
+	struct efa_av *efa_av;
+	struct efa_av_entry *av_entry;
+	struct efa_ep_addr *ep_addr;
+	struct efa_xpu_peer *peer;
+
+	if (!av || !buf || !len)
+		return -FI_EINVAL;
+
+	if (*len < sizeof(struct efa_xpu_peer))
+		return -FI_ETOOSMALL;
+
+	efa_av = container_of(av, struct efa_av, util_av.av_fid);
+
+	/* Resolve fi_addr to the AV entry */
+	av_entry = (struct efa_av_entry *)
+		ofi_av_get_addr(&efa_av->util_av, fi_addr);
+	if (!av_entry)
+		return -FI_EINVAL;
+
+	if (!av_entry->ah)
+		return -FI_ENODATA;
+
+	ep_addr = efa_av_entry_ep_addr(av_entry);
+	peer = (struct efa_xpu_peer *)buf;
+	memset(peer, 0, sizeof(*peer));
+
+	/* AH number and destination QP identify the peer on EFA hardware */
+	peer->ahn = av_entry->ah->ahn;
+	peer->remote_qpn = ep_addr->qpn;
+	peer->remote_qkey = ep_addr->qkey;
+
+	*len = sizeof(struct efa_xpu_peer);
+	return 0;
+}
 
 static struct fi_ops_av efa_av_ops = {
 	.size = sizeof(struct fi_ops_av),
@@ -525,7 +568,7 @@ static struct fi_ops_av efa_av_ops = {
 	.remove = efa_av_remove,
 	.lookup = efa_av_lookup,
 	.straddr = efa_av_straddr,
-	.lookup2 = ofi_av_lookup2,
+	.lookup2 = efa_av_lookup2,
 };
 
 
