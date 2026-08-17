@@ -15,7 +15,7 @@ def test_dgram_pingpong(cmdline_args, iteration_type, message_sizes):
     # dgram is unreliable, therefore it is expected that receiver does not always get all the messages
     # when that happened, the test will return -FI_ENODATA
     # Disable the strict mode to mark such return code as pass
-    cmdline_args_copy = copy.copy(cmdline_args)
+    cmdline_args_copy = copy.deepcopy(cmdline_args)
     cmdline_args_copy.strict_fabtests_mode = False
 
     client_tx_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "tx_bytes")
