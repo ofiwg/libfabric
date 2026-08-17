@@ -48,6 +48,8 @@ struct cuda_ops {
 	cudaError_t (*cudaFree)(void *ptr);
 	cudaError_t (*cudaFreeHost)(void *ptr);
 	cudaError_t (*cudaMemset)(void *ptr, int value, size_t count);
+	cudaError_t (*cudaStreamCreate)(cudaStream_t *pStream);
+	cudaError_t (*cudaStreamDestroy)(cudaStream_t stream);
 	const char *(*cudaGetErrorName)(cudaError_t error);
 	const char *(*cudaGetErrorString)(cudaError_t error);
 	cudaError_t (*cudaSetDevice)(int device);
@@ -280,6 +282,20 @@ int ft_cuda_init(void)
 		goto err_dlclose_cuda;
 	}
 
+	cuda_ops.cudaStreamCreate = dlsym(cudart_handle,
+					  STRINGIFY(cudaStreamCreate));
+	if (!cuda_ops.cudaStreamCreate) {
+		FT_ERR("Failed to find cudaStreamCreate");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cudaStreamDestroy = dlsym(cudart_handle,
+					   STRINGIFY(cudaStreamDestroy));
+	if (!cuda_ops.cudaStreamDestroy) {
+		FT_ERR("Failed to find cudaStreamDestroy");
+		goto err_dlclose_cuda;
+	}
+
 	cuda_ops.cudaGetErrorName = dlsym(cudart_handle, STRINGIFY(cudaGetErrorName));
 	if (!cuda_ops.cudaGetErrorName) {
 		FT_ERR("Failed to find cudaGetErrorName");
@@ -487,6 +503,34 @@ int ft_cuda_memset(uint64_t device, void *buf, int value, size_t size)
 	return -FI_EIO;
 }
 
+int ft_cuda_stream_create(void **stream)
+{
+	cudaError_t cuda_ret;
+	cudaStream_t cuda_stream;
+
+	cuda_ret = cuda_ops.cudaStreamCreate(&cuda_stream);
+	if (cuda_ret != cudaSuccess) {
+		CUDA_ERR(cuda_ret, "cudaStreamCreate failed");
+		return -FI_EIO;
+	}
+
+	*stream = (void *) cuda_stream;
+	return FI_SUCCESS;
+}
+
+int ft_cuda_stream_destroy(void *stream)
+{
+	cudaError_t cuda_ret;
+
+	cuda_ret = cuda_ops.cudaStreamDestroy((cudaStream_t) stream);
+	if (cuda_ret != cudaSuccess) {
+		CUDA_ERR(cuda_ret, "cudaStreamDestroy failed");
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
+}
+
 int ft_cuda_copy_to_hmem(uint64_t device, void *dst, const void *src,
 			 size_t size)
 {
@@ -650,6 +694,16 @@ int ft_cuda_free_host(void *buf)
 }
 
 int ft_cuda_memset(uint64_t device, void *buf, int value, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_cuda_stream_create(void **stream)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_cuda_stream_destroy(void *stream)
 {
 	return -FI_ENOSYS;
 }
