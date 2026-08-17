@@ -100,7 +100,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 
 	/* Path 2: the peer is not in the map. Take the lock, then create the
 	 * peer and insert it. */
-	EFA_GENLOCK_LOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
+	EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 
 	/* Path 2.1: two writers can race here -- both looked up, neither found
 	 * the peer, so both would try to insert. Re-check under the lock; if
@@ -133,7 +133,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	}
 
 unlock:
-	EFA_GENLOCK_UNLOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
+	EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 	return peer;
 }
 
@@ -169,7 +169,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	 */
 	EFA_GENLOCK_LOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
 	EFA_GENLOCK_LOCK(&ep->base_ep.av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	EFA_GENLOCK_LOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
+	EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 
 	peer = efa_rdm_ep_peer_map_lookup(ep->fi_addr_to_peer_map_implicit, addr);
 	if (peer)
@@ -202,7 +202,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	}
 
 unlock_ep:
-	EFA_GENLOCK_UNLOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
+	EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 
 	/* Move to the front of the LRU list; peer->conn stays valid under the
 	 * implicit-AV lock held here. */
