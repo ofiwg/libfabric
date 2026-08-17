@@ -958,6 +958,32 @@ static void efa_rdm_pke_peer_error_handle_rxe(struct efa_rdm_ope *rxe,
 }
 
 /**
+ * @brief find an rxe by msg_id on the peer's rxe_list.
+ *
+ * Only mulreq (medium/runtread) rxes are inserted into the rxe_map for
+ * segment routing, but a msg_id-only PEER_ERROR still needs to find a
+ * matched or unexpected rxe of any protocol -- e.g. an unexpected eager
+ * message whose sender aborted after the data already landed.
+ *
+ * @param[in] peer    peer the PEER_ERROR arrived from
+ * @param[in] msg_id  per-peer message id named by the PEER_ERROR
+ * @return the rxe with a matching msg_id, or NULL if none exists
+ */
+static struct efa_rdm_ope *
+efa_rdm_pke_peer_error_find_rxe_via_msg_id(struct efa_rdm_peer *peer, uint32_t msg_id)
+{
+	struct efa_rdm_ope *rxe;
+
+	dlist_foreach_container(&peer->rxe_list, struct efa_rdm_ope, rxe,
+				peer_entry) {
+		if (rxe->msg_id == msg_id)
+			return rxe;
+	}
+
+	return NULL;
+}
+
+/**
  * @brief Receiver-side dispatcher for inbound EFA_RDM_PEER_ERROR_PKT.
  *
  * A device TX error does not prove the data never reached the peer, so the
@@ -1048,6 +1074,18 @@ void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
 
 	ope = efa_rdm_rxe_map_lookup(&pkt_entry->peer->rxe_map, err_hdr->msg_id);
 	if (ope && ope->type == EFA_RDM_RXE) {
+		efa_rdm_pke_peer_error_handle_rxe(ope, err_hdr->prov_errno);
+		goto out;
+	}
+
+	/*
+	 * rxe_map only holds mulreq rxes; fall back to scanning the peer's
+	 * rxe_list so non-mulreq rxes are found too (e.g. an unexpected
+	 * eager rxe must be reaped so the aborted message does not stay
+	 * matchable by a later recv).
+	 */
+	ope = efa_rdm_pke_peer_error_find_rxe_via_msg_id(pkt_entry->peer, err_hdr->msg_id);
+	if (ope) {
 		efa_rdm_pke_peer_error_handle_rxe(ope, err_hdr->prov_errno);
 		goto out;
 	}
