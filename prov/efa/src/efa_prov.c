@@ -117,6 +117,38 @@ static int efa_util_prov_initialize()
 			prov_info_direct->tx_attr->caps |= FI_WR;
 			prov_info_direct->rx_attr->caps |= FI_WR;
 		}
+		/*
+		 * FI_XPU (GPU-initiated communication) is only supported on the
+		 * efa-direct path, and only on a device that runs it: a kernel
+		 * drives the rings the direct data path drives, so a device using
+		 * sub completion queues, or a process that turned the path off,
+		 * has none to hand over. Advertise it here for such a device, so
+		 * that fi_getinfo() with FI_XPU in hints can match efa-direct.
+		 * Whether this device and firmware will actually hand their rings
+		 * to a kernel is what the queue geometry queries answer, so an
+		 * export that cannot be served fails then, rather than being
+		 * predicted here. FI_XPU is in neither capability mask, so an
+		 * application that does not ask for it never gets it back (see
+		 * efa_user_info.c).
+		 */
+#if HAVE_EFA_DATA_PATH_DIRECT
+		if (efa_device_support_data_path_direct(&g_efa_selected_device_list[i])) {
+			prov_info_direct->caps |= FI_XPU;
+			prov_info_direct->domain_attr->caps |= FI_XPU;
+			/*
+			 * One XPU context per domain, the 1:1 domain-to-XPU
+			 * mapping fi_domain(3) defines for this field (0 would
+			 * mean no XPU support at all). That is what this phase
+			 * implements: one context binding one NIC to one device.
+			 * Sharing a domain among several GPUs would need more
+			 * than one, and with it a per-context home for the
+			 * exported state, since each device has its own
+			 * allocator and its own address space for the same
+			 * rings.
+			 */
+			prov_info_direct->domain_attr->max_xpu_ctx_cnt = 1;
+		}
+#endif
 
 		if (!head) {
 			head = prov_info_direct;
