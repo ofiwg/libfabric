@@ -1926,7 +1926,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct cxip_domain *cxi_domain;
 	struct cxip_fabric *fab;
-	struct cxip_addr *src_addr;
+	struct cxip_nic_attr *nic_attr;
 	uint32_t seed;
 	int ret;
 
@@ -1968,8 +1968,8 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		CXIP_WARN("Invalid fi_info\n");
 		goto close_util_dom;
 	}
-	src_addr = (struct cxip_addr *)info->src_addr;
-	cxi_domain->nic_addr = src_addr->nic;
+	nic_attr = (struct cxip_nic_attr *)info->nic->prov_attr;
+	cxi_domain->nic_addr = nic_attr->addr;
 
 	if (info->domain_attr->auth_key) {
 		/* Auth key size is verified in ofi_prov_check_info(). */
