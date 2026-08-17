@@ -1605,20 +1605,14 @@ static int cxip_validate_iface_auth_key(struct cxip_if *iface,
 
 int cxip_check_auth_key_info(struct fi_info *info)
 {
-	struct cxip_addr *src_addr;
+	struct cxip_nic_attr *nic_attr = (struct cxip_nic_attr *)info->nic->prov_attr;
 	struct cxip_if *iface;
 	int ret;
 
-	src_addr = (struct cxip_addr *)info->src_addr;
-	if (!src_addr) {
-		CXIP_WARN("NULL src_addr in fi_info\n");
-		return -FI_EINVAL;
-	}
-
-	ret = cxip_get_if(src_addr->nic, &iface);
+	ret = cxip_get_if(nic_attr->addr, &iface);
 	if (ret) {
 		CXIP_WARN("cxip_get_if with NIC %#x failed: %d:%s\n",
-				src_addr->nic, ret, fi_strerror(-ret));
+				nic_attr->addr, ret, fi_strerror(-ret));
 		return ret;
 	}
 
