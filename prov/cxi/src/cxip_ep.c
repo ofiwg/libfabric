@@ -1455,8 +1455,7 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	int ret;
 	struct cxip_ep_obj *ep_obj;
 	uint32_t txc_tclass = FI_TC_UNSPEC;
-	uint32_t nic;
-	uint32_t pid;
+	struct cxip_addr ep_addr;
 	int i;
 
 	if (!hints || !hints->ep_attr || !hints->tx_attr || !hints->rx_attr)
@@ -1477,16 +1476,16 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	if (ret)
 		return ret;
 
-	nic = cxip_dom->nic_addr;
+	ep_addr.nic = cxip_dom->nic_addr;
 	if (hints->src_addr) {
 		struct cxip_addr *src = hints->src_addr;
-		if (src->nic != nic) {
+		if (src->nic != ep_addr.nic) {
 			CXIP_WARN("bad src_addr NIC value\n");
 			return -FI_EINVAL;
 		}
-		pid = src->pid;
+		ep_addr.pid = src->pid;
 	} else {
-		pid = C_PID_ANY;
+		ep_addr.pid = C_PID_ANY;
 	}
 
 	ep_obj = calloc(1, sizeof(struct cxip_ep_obj));
@@ -1515,8 +1514,8 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 		ofi_genlock_init(&ep_obj->lock, OFI_LOCK_SPINLOCK);
 
 	ep_obj->domain = cxip_dom;
-	ep_obj->src_addr.nic = nic;
-	ep_obj->src_addr.pid = pid;
+	ep_obj->src_addr.nic = ep_addr.nic;
+	ep_obj->src_addr.pid = ep_addr.pid;
 	ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
 
 	/* Default to allowing non-dev reg copy APIs unless the caller
