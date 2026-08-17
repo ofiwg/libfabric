@@ -564,9 +564,16 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->efa_rx_pkts_held = 0;
 	efa_rdm_ep->efa_outstanding_tx_ops = 0;
 
-	ret = efa_rdm_ep_create_buffer_pools(efa_rdm_ep);
+	ret = ofi_genlock_init(&efa_rdm_ep->ctrl_lock,
+			       ofi_thread_level(efa_rdm_ep->base_ep.util_ep.domain->threading) <=
+			       ofi_thread_level(FI_THREAD_COMPLETION) ?
+			       OFI_LOCK_MUTEX : OFI_LOCK_NOOP);
 	if (ret)
 		goto err_close_shm_ep;
+
+	ret = efa_rdm_ep_create_buffer_pools(efa_rdm_ep);
+	if (ret)
+		goto err_destroy_ctrl_lock;
 
 	efa_rdm_ep_init_linked_lists(efa_rdm_ep);
 
@@ -639,6 +646,8 @@ err_free_pke_vec:
 	free(efa_rdm_ep->pke_vec);
 err_destroy_buffer_pools:
 	efa_rdm_ep_destroy_buffer_pools(efa_rdm_ep);
+err_destroy_ctrl_lock:
+	ofi_genlock_destroy(&efa_rdm_ep->ctrl_lock);
 err_close_shm_ep:
 	if (efa_rdm_ep->shm_ep) {
 		retv = fi_close(&efa_rdm_ep->shm_ep->fid);
@@ -1142,6 +1151,8 @@ static int efa_rdm_ep_close(struct fid *fid)
 		retv = ret;
 
 	efa_rdm_ep_destroy_buffer_pools(efa_rdm_ep);
+
+	ofi_genlock_destroy(&efa_rdm_ep->ctrl_lock);
 
 	if (efa_rdm_ep->pke_vec)
 		free(efa_rdm_ep->pke_vec);

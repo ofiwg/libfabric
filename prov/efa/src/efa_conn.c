@@ -211,13 +211,13 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 			peer_map = ep->fi_addr_to_peer_map_implicit;
 			fi_addr = conn->implicit_fi_addr;
 		}
-		EFA_GENLOCK_LOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
+		EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 		peer = efa_rdm_ep_peer_map_remove(peer_map, fi_addr);
 		if (peer) {
 			efa_rdm_peer_destruct(peer, ep);
 			ofi_buf_free(peer);
 		}
-		EFA_GENLOCK_UNLOCK(&ep->base_ep.util_ep.lock, efa_util_ep_lock_sym);
+		EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 	}
 	ofi_genlock_unlock(&av->util_av.ep_list_lock);
 }
