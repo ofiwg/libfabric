@@ -56,6 +56,9 @@ endif BUILD_EFA_RDMA_CHECKER
 if EFAGDA
 bin_PROGRAMS += prov/efa/src/fi_efa_gda
 endif EFAGDA
+if EFA_XPU
+bin_PROGRAMS += prov/efa/src/efa_xpu/fi_efa_xpu
+endif EFA_XPU
 if HAVE_EFADV_CREATE_COMP_CNTR
 bin_PROGRAMS += prov/efa/src/fi_efa_hw_cntr
 endif HAVE_EFADV_CREATE_COMP_CNTR
@@ -162,6 +165,24 @@ $(srcdir)/prov/efa/src/efagda/libefagda.so:
 clean-local:
 	$(MAKE) -C $(srcdir)/prov/efa/src/efagda EFA_DP_DIRECT=$(EFA_DP_DIRECT) clean
 endif EFAGDA
+
+if EFA_XPU
+prov_efa_src_efa_xpu_fi_efa_xpu_SOURCES = prov/efa/src/efa_xpu/efa_xpu.c
+prov_efa_src_efa_xpu_fi_efa_xpu_CPPFLAGS = $(AM_CPPFLAGS) -I$(srcdir)/prov/efa/src/efa_xpu
+prov_efa_src_efa_xpu_fi_efa_xpu_LDFLAGS = -L$(srcdir)/prov/efa/src/efa_xpu \
+    -Wl,-rpath=$(abs_srcdir)/prov/efa/src/efa_xpu
+prov_efa_src_efa_xpu_fi_efa_xpu_LDADD = -lefaxpukernels libfabtests.la
+EXTRA_prov_efa_src_efa_xpu_fi_efa_xpu_DEPENDENCIES = $(srcdir)/prov/efa/src/efa_xpu/libefaxpukernels.so
+
+# Name the sources, or make keeps a stale library once one exists.
+$(srcdir)/prov/efa/src/efa_xpu/libefaxpukernels.so: \
+    $(srcdir)/prov/efa/src/efa_xpu/efa_xpu_kernels.cu \
+    $(srcdir)/prov/efa/src/efa_xpu/efa_xpu_kernels.h
+	$(MAKE) -C $(srcdir)/prov/efa/src/efa_xpu
+
+clean-local-fi-xpu:
+	$(MAKE) -C $(srcdir)/prov/efa/src/efa_xpu clean
+endif EFA_XPU
 
 EXTRA_DIST += prov/efa/src/efagda
 
