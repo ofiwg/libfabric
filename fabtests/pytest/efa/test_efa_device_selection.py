@@ -48,7 +48,7 @@ def test_efa_device_selection(cmdline_args, fabric, selection_approach):
             server_domain_name = server_device_name + "-" + suffix
             client_domain_name = client_device_name + "-" + suffix
 
-            cmdline_args_copy = copy.copy(cmdline_args)
+            cmdline_args_copy = copy.deepcopy(cmdline_args)
             if selection_approach == "domain name":
                 cmdline_args_copy.additional_server_arguments = "-d " + server_domain_name
                 cmdline_args_copy.additional_client_arguments = "-d " + client_domain_name

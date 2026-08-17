@@ -331,7 +331,7 @@ class UnitTest:
             failing_warn_msgs = [failing_warn_msgs]
 
         if failing_warn_msgs:
-            self._cmdline_args = copy.copy(cmdline_args)
+            self._cmdline_args = copy.deepcopy(cmdline_args)
             self._cmdline_args.append_environ("FI_LOG_LEVEL=warn")
         else:
             self._cmdline_args = cmdline_args
@@ -811,7 +811,7 @@ class MultinodeTest(ClientServerTest):
         self._server_base_command = cmdline_args.populate_command(server_base_command, "server", self._timeout)
         self._client_base_command_list = []
         for client_hostname in client_hostname_list:
-            cmdline_args_copy = copy.copy(cmdline_args)
+            cmdline_args_copy = copy.deepcopy(cmdline_args)
             cmdline_args_copy.client_id = client_hostname
             self._client_base_command_list.append(cmdline_args_copy.populate_command(client_base_command, "client", self._timeout))
         self._run_client_asynchronously = run_client_asynchronously
