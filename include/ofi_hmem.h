@@ -39,6 +39,7 @@
 #endif
 
 #include <rdma/fi_domain.h>
+#include <rdma/fi_xpu.h>
 #include <stdbool.h>
 #include "ofi_mr.h"
 
@@ -151,6 +152,13 @@ struct ofi_hmem_ops {
 	int (*get_dmabuf_fd)(const void *addr, uint64_t size, int *fd,
 			     uint64_t *offset);
 	int (*put_dmabuf_fd)(int fd);
+	int (*dev_alloc)(uint64_t device, uint64_t size, uint64_t alignment,
+			 uint64_t flags, void **addr, int *fd,
+			 uint64_t *offset);
+	int (*dev_import)(uint64_t device, void *host_addr, uint64_t size,
+			  uint64_t flags, void **dev_addr);
+	int (*dev_unimport)(uint64_t device, void *host_addr);
+	void (*dev_free)(uint64_t device, void *addr);
 };
 
 extern struct ofi_hmem_ops hmem_ops[];
@@ -221,6 +229,12 @@ int cuda_get_base_addr(const void *ptr, size_t len, void **base, size_t *size);
 bool cuda_is_ipc_enabled(void);
 int cuda_get_ipc_handle_size(size_t *size);
 bool cuda_is_gdrcopy_enabled(void);
+int cuda_dev_alloc(uint64_t device, uint64_t size, uint64_t alignment,
+		   uint64_t flags, void **addr, int *fd, uint64_t *offset);
+int cuda_dev_import(uint64_t device, void *host_addr, uint64_t size,
+		    uint64_t flags, void **dev_addr);
+int cuda_dev_unimport(uint64_t device, void *host_addr);
+void cuda_dev_free(uint64_t device, void *addr);
 bool cuda_is_dmabuf_supported(void);
 bool cuda_is_dmabuf_requested(void);
 int cuda_get_dmabuf_fd(const void *addr, uint64_t size, int *fd,
@@ -402,6 +416,29 @@ static inline bool ofi_hmem_no_is_ipc_enabled(void)
 	return false;
 }
 
+static inline int ofi_hmem_no_dev_alloc(uint64_t device, uint64_t size,
+					uint64_t alignment, uint64_t flags,
+					void **addr, int *fd, uint64_t *offset)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_hmem_no_dev_import(uint64_t device, void *host_addr,
+					 uint64_t size, uint64_t flags,
+					 void **dev_addr)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_hmem_no_dev_unimport(uint64_t device, void *host_addr)
+{
+	return -FI_ENOSYS;
+}
+
+static inline void ofi_hmem_no_dev_free(uint64_t device, void *addr)
+{
+}
+
 static inline int ofi_hmem_no_get_dmabuf_fd(const void *addr, uint64_t size,
 					    int *fd, uint64_t *offset)
 {
@@ -517,5 +554,14 @@ int ofi_hmem_dev_reg_copy_from_hmem(enum fi_hmem_iface iface, uint64_t handle,
 int ofi_hmem_get_dmabuf_fd(enum fi_hmem_iface, const void *addr, uint64_t size,
 			   int *fd, uint64_t *offset);
 int ofi_hmem_put_dmabuf_fd(enum fi_hmem_iface iface, int fd);
+int ofi_hmem_dev_alloc(enum fi_hmem_iface iface, uint64_t device,
+		       uint64_t size, uint64_t alignment, uint64_t flags,
+		       void **addr, int *fd, uint64_t *offset);
+int ofi_hmem_dev_import(enum fi_hmem_iface iface, uint64_t device,
+			void *host_addr, uint64_t size, uint64_t flags,
+			void **dev_addr);
+int ofi_hmem_dev_unimport(enum fi_hmem_iface iface, uint64_t device,
+			  void *host_addr);
+void ofi_hmem_dev_free(enum fi_hmem_iface iface, uint64_t device, void *addr);
 bool ofi_hmem_is_dmabuf_env_var_enabled(enum fi_hmem_iface iface);
 #endif /* _OFI_HMEM_H_ */
