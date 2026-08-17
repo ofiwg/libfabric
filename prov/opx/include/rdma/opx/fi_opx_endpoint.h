@@ -5276,6 +5276,78 @@ bool opx_hfisvc_hmem_force_pio(struct fi_opx_ep *opx_ep, const enum fi_hmem_ifac
 #endif
 }
 
+/* Route a node-local send into the imported shm peer endpoint.  OPX is built
+ * with FABRIC_DIRECT, so the fi_tsend()/fi_send() call macros resolve to OPX's
+ * own provider functions; the shm endpoint must therefore be driven through its
+ * ops vtable directly.  When a CQ completion is requested we hand shm an
+ * OPX-owned opx_context (never the app context) because opx_peer_cq_write()
+ * completes that opx_context in place on the OPX CQ, and smr hands this same
+ * pointer back on the tx completion. */
+__OPX_FORCE_INLINE__
+ssize_t opx_shm_tx_send(struct fi_opx_ep *opx_ep, const void *buf, size_t len, fi_addr_t shm_addr, uint64_t tag,
+			void *context, const uint32_t data, const uint64_t caps, const unsigned is_contiguous,
+			const uint64_t do_cq_completion, const uint64_t tx_op_flags)
+{
+	struct iovec	    contig_iov;
+	const struct iovec *iov;
+	size_t		    iov_count;
+
+	if (is_contiguous) { /* constant compile time expression */
+		contig_iov.iov_base = (void *) buf;
+		contig_iov.iov_len  = len;
+		iov		    = &contig_iov;
+		iov_count	    = 1;
+	} else {
+		iov	  = (const struct iovec *) buf;
+		iov_count = len;
+	}
+
+	uint64_t flags	     = 0;
+	void	*shm_context = NULL;
+
+	if (do_cq_completion) {
+		struct opx_context *ctx = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+		if (OFI_UNLIKELY(ctx == NULL)) {
+			return -FI_ENOMEM;
+		}
+		ctx->err_entry.err	  = 0;
+		ctx->err_entry.op_context = context;
+		shm_context		  = ctx;
+		flags |= FI_COMPLETION;
+	}
+
+	if (tx_op_flags & FI_REMOTE_CQ_DATA) {
+		flags |= FI_REMOTE_CQ_DATA;
+	}
+
+	ssize_t rc;
+	if (caps & FI_TAGGED) {
+		struct fi_msg_tagged msg = {.msg_iov   = iov,
+					    .desc      = NULL,
+					    .iov_count = iov_count,
+					    .addr      = shm_addr,
+					    .tag       = tag,
+					    .ignore    = 0,
+					    .context   = shm_context,
+					    .data      = data};
+		rc			 = opx_ep->shm_ep->tagged->sendmsg(opx_ep->shm_ep, &msg, flags);
+	} else {
+		struct fi_msg msg = {.msg_iov	= iov,
+				     .desc	= NULL,
+				     .iov_count = iov_count,
+				     .addr	= shm_addr,
+				     .context	= shm_context,
+				     .data	= data};
+		rc		  = opx_ep->shm_ep->msg->sendmsg(opx_ep->shm_ep, &msg, flags);
+	}
+
+	if (OFI_UNLIKELY(rc != FI_SUCCESS) && shm_context) {
+		ofi_buf_free(shm_context);
+	}
+
+	return rc;
+}
+
 static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 						 fi_addr_t dest_addr, uint64_t tag, void *context, const uint32_t data,
 						 const int lock_required, const unsigned is_contiguous,
@@ -5333,6 +5405,14 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 	}
 
 	const uint64_t do_cq_completion = fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
+
+	if (opx_ep->shm_ep && opx_ep->av && opx_ep->av->shm_fi_addr &&
+	    opx_ep->av->shm_fi_addr[dest_addr] != FI_ADDR_NOTAVAIL) {
+		rc = opx_shm_tx_send(opx_ep, buf, len, opx_ep->av->shm_fi_addr[dest_addr], tag, context, data, caps,
+				     is_contiguous, do_cq_completion, tx_op_flags);
+		OPX_TRACE_TX_END_RC(OPX_TRACE_EVENT_TX_SEND, rc, 0, 0);
+		return rc;
+	}
 
 #if defined(OPX_HMEM) && OPX_HAVE_DMABUF
 	/*
@@ -5508,6 +5588,16 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 	assert(dest_addr != FI_ADDR_UNSPEC);
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const struct fi_opx_addr addr = FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
+
+	if (opx_ep->shm_ep && opx_ep->av && opx_ep->av->shm_fi_addr &&
+	    opx_ep->av->shm_fi_addr[dest_addr] != FI_ADDR_NOTAVAIL) {
+		fi_addr_t shm_addr = opx_ep->av->shm_fi_addr[dest_addr];
+		ssize_t	  shm_rc   = (caps & FI_TAGGED) ?
+					     opx_ep->shm_ep->tagged->inject(opx_ep->shm_ep, buf, len, shm_addr, tag) :
+					     opx_ep->shm_ep->msg->inject(opx_ep->shm_ep, buf, len, shm_addr);
+		OPX_TRACE_TX_END_RC(OPX_TRACE_EVENT_TX_INJECT, shm_rc, 0, 0);
+		return shm_rc;
+	}
 
 	const ssize_t rc = FI_OPX_FABRIC_TX_INJECT(ep, buf, len, addr, tag, data, lock_required, tx_op_flags, caps,
 						   reliability, flow_control_mode, hfi1_type, ctx_sharing);

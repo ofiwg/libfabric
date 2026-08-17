@@ -133,23 +133,27 @@ static struct fi_ops fi_opx_fi_ops = {.size	= sizeof(struct fi_ops),
 				      .ops_open = fi_no_ops_open};
 
 /* Register the same buffer against the shm peer domain so a node-local
- * operation offloaded to the shm peer can be given a valid shm desc.  Only
- * device (HMEM) buffers need it; host buffers are copied by shm without a
- * desc.  Failure is non-fatal: shm_mr stays NULL and offload falls back to a
- * NULL desc, which is correct for host memory. */
+ * operation offloaded to the shm peer resolves against a valid shm MR: RMA
+ * needs the peer to look up the target key, and HMEM needs a translatable
+ * desc.  Failure is non-fatal: shm_mr stays NULL and offload falls back to the
+ * OPX descriptor/key, which is correct for host memory. */
 static void opx_mr_reg_shm(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr, uint64_t flags)
 {
-	if (!opx_domain->shm_domain || opx_mr->attr.iface == FI_HMEM_SYSTEM) {
+	if (!opx_domain->shm_domain) {
 		return;
 	}
 
 	struct fi_mr_attr shm_attr  = opx_mr->attr;
-	uint64_t	  shm_flags = flags | FI_HMEM_DEVICE_ONLY;
+	uint64_t	  shm_flags = flags;
+
+	if (opx_mr->attr.iface != FI_HMEM_SYSTEM) {
+		shm_flags |= FI_HMEM_DEVICE_ONLY;
+	}
 
 	int ret = fi_mr_regattr(opx_domain->shm_domain, &shm_attr, shm_flags, &opx_mr->shm_mr);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-			"shm peer MR registration failed (%d); intra-node HMEM offload disabled for this MR\n", ret);
+			"shm peer MR registration failed (%d); intra-node offload disabled for this MR\n", ret);
 		opx_mr->shm_mr = NULL;
 	}
 }

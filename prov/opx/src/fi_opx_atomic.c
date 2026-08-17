@@ -456,6 +456,26 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
+	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[dst_addr] != FI_ADDR_NOTAVAIL) {
+		/* fi_opx_atomic_internal() would set cc->cntr on the native path; the
+		 * shm route bypasses it, so set it here (write op) so fi_opx_hit_zero()
+		 * increments the OPX write counter. */
+		cc->cntr			   = opx_ep->write_cntr;
+		const struct fi_ioc	   msg_iov = {.addr = (void *) buf, .count = count};
+		const struct fi_rma_ioc	   rma_iov = {.addr = addr, .count = count, .key = key};
+		const struct fi_msg_atomic m	   = {.msg_iov	     = &msg_iov,
+						      .desc	     = NULL,
+						      .iov_count     = 1,
+						      .addr	     = opx_ep->av->shm_fi_addr[dst_addr],
+						      .rma_iov	     = &rma_iov,
+						      .rma_iov_count = 1,
+						      .datatype	     = datatype,
+						      .op	     = op,
+						      .context	     = cc,
+						      .data	     = 0};
+		return opx_ep->shm_ep->atomic->writemsg(opx_ep->shm_ep, &m, opx_tx->op_flags | FI_COMPLETION);
+	}
+
 	size_t xfer __attribute__((unused));
 	xfer = fi_opx_atomic_internal(opx_ep, buf, count, opx_addr, addr, key, datatype, op, cc, 0, NULL, 0, NULL,
 				      opx_tx->op_flags, lock_required, caps, reliability, hfi1_type, ctx_sharing);
@@ -515,6 +535,25 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep, const struct fi_msg_at
 	cc->cq	     = cq;
 	cc->context  = context;
 	cc->hit_zero = fi_opx_hit_zero;
+
+	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[msg->addr] != FI_ADDR_NOTAVAIL) {
+		cc->cntr = opx_ep->write_cntr;
+		void *shm_desc[FI_OPX_IOV_LIMIT];
+		if (msg->desc) {
+			opx_get_desc_for_shm((int) msg->iov_count, msg->desc, shm_desc);
+		}
+		const struct fi_msg_atomic m = {.msg_iov       = msg->msg_iov,
+						.desc	       = msg->desc ? shm_desc : NULL,
+						.iov_count     = msg->iov_count,
+						.addr	       = opx_ep->av->shm_fi_addr[msg->addr],
+						.rma_iov       = msg->rma_iov,
+						.rma_iov_count = msg->rma_iov_count,
+						.datatype      = datatype,
+						.op	       = op,
+						.context       = cc,
+						.data	       = msg->data};
+		return opx_ep->shm_ep->atomic->writemsg(opx_ep->shm_ep, &m, flags | FI_COMPLETION);
+	}
 
 	const size_t dtsize = sizeofdt(datatype);
 
@@ -625,6 +664,26 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	cc->cq		       = cq;
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
+
+	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[msg->addr] != FI_ADDR_NOTAVAIL) {
+		cc->cntr = opx_ep->read_cntr;
+		void *shm_desc[FI_OPX_IOV_LIMIT];
+		if (msg->desc) {
+			opx_get_desc_for_shm((int) msg->iov_count, msg->desc, shm_desc);
+		}
+		const struct fi_msg_atomic m = {.msg_iov       = msg->msg_iov,
+						.desc	       = msg->desc ? shm_desc : NULL,
+						.iov_count     = msg->iov_count,
+						.addr	       = opx_ep->av->shm_fi_addr[msg->addr],
+						.rma_iov       = msg->rma_iov,
+						.rma_iov_count = msg->rma_iov_count,
+						.datatype      = datatype,
+						.op	       = op,
+						.context       = cc,
+						.data	       = msg->data};
+		return opx_ep->shm_ep->atomic->readwritemsg(opx_ep->shm_ep, &m, resultv, NULL, result_count,
+							    flags | FI_COMPLETION);
+	}
 
 	if (op != FI_ATOMIC_READ) { /* likely */
 
@@ -786,6 +845,26 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
+	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[msg->addr] != FI_ADDR_NOTAVAIL) {
+		cc->cntr = opx_ep->read_cntr;
+		void *shm_desc[FI_OPX_IOV_LIMIT];
+		if (msg->desc) {
+			opx_get_desc_for_shm((int) msg->iov_count, msg->desc, shm_desc);
+		}
+		const struct fi_msg_atomic m = {.msg_iov       = msg->msg_iov,
+						.desc	       = msg->desc ? shm_desc : NULL,
+						.iov_count     = msg->iov_count,
+						.addr	       = opx_ep->av->shm_fi_addr[msg->addr],
+						.rma_iov       = msg->rma_iov,
+						.rma_iov_count = msg->rma_iov_count,
+						.datatype      = datatype,
+						.op	       = op,
+						.context       = cc,
+						.data	       = msg->data};
+		return opx_ep->shm_ep->atomic->compwritemsg(opx_ep->shm_ep, &m, comparev, NULL, compare_count, resultv,
+							    NULL, result_count, flags | FI_COMPLETION);
+	}
+
 	while (msg_iov_dtcount != 0 && rma_iov_dtcount != 0 && rst_iov_dtcount != 0 && cmp_iov_dtcount != 0) {
 		const size_t count_requested = MIN4(msg_iov_dtcount, rma_iov_dtcount, rst_iov_dtcount, cmp_iov_dtcount);
 
@@ -884,6 +963,30 @@ ssize_t fi_opx_fetch_compare_atomic_generic(struct fid_ep *ep, const void *buf, 
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
+	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[dest_addr] != FI_ADDR_NOTAVAIL) {
+		cc->cntr			   = opx_ep->read_cntr;
+		const struct fi_ioc	   msg_iov = {.addr = (void *) buf, .count = count};
+		const struct fi_rma_ioc	   rma_iov = {.addr = addr, .count = count, .key = key};
+		struct fi_ioc		   resultv = {.addr = result, .count = count};
+		const struct fi_msg_atomic m	   = {.msg_iov	     = &msg_iov,
+						      .desc	     = NULL,
+						      .iov_count     = 1,
+						      .addr	     = opx_ep->av->shm_fi_addr[dest_addr],
+						      .rma_iov	     = &rma_iov,
+						      .rma_iov_count = 1,
+						      .datatype	     = datatype,
+						      .op	     = op,
+						      .context	     = cc,
+						      .data	     = 0};
+		if (compare) {
+			const struct fi_ioc comparev = {.addr = (void *) compare, .count = count};
+			return opx_ep->shm_ep->atomic->compwritemsg(opx_ep->shm_ep, &m, &comparev, NULL, 1, &resultv,
+								    NULL, 1, opx_tx->op_flags | FI_COMPLETION);
+		}
+		return opx_ep->shm_ep->atomic->readwritemsg(opx_ep->shm_ep, &m, &resultv, NULL, 1,
+							    opx_tx->op_flags | FI_COMPLETION);
+	}
+
 	size_t xfer __attribute__((unused));
 	xfer = fi_opx_atomic_internal(opx_ep, buf, count, opx_addr, addr, key, datatype, op, cc, 1, result,
 				      compare != NULL, compare, opx_tx->op_flags, lock_required, caps, reliability,
@@ -950,6 +1053,23 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	cc->context	       = NULL;
 	cc->hit_zero	       = fi_opx_hit_zero;
 	cc->cntr	       = opx_ep->write_cntr;
+
+	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[dest_addr] != FI_ADDR_NOTAVAIL) {
+		const struct fi_ioc	   msg_iov = {.addr = (void *) buf, .count = count};
+		const struct fi_rma_ioc	   rma_iov = {.addr = addr, .count = count, .key = key};
+		const struct fi_msg_atomic m	   = {.msg_iov	     = &msg_iov,
+						      .desc	     = NULL,
+						      .iov_count     = 1,
+						      .addr	     = opx_ep->av->shm_fi_addr[dest_addr],
+						      .rma_iov	     = &rma_iov,
+						      .rma_iov_count = 1,
+						      .datatype	     = datatype,
+						      .op	     = op,
+						      .context	     = cc,
+						      .data	     = 0};
+		return opx_ep->shm_ep->atomic->writemsg(opx_ep->shm_ep, &m,
+							opx_tx->op_flags | FI_INJECT | FI_COMPLETION);
+	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== ATOMIC INJECT WRITE (begin)\n");
