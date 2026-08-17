@@ -64,7 +64,11 @@ void opx_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 
 	shm_hints->caps = app_info->caps & ~FI_REMOTE_COMM;
 
-	shm_hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR;
+	/* Match OPX's offset-based RMA addressing (OPX advertises mr_mode
+	 * without FI_MR_VIRT_ADDR): a node-local RMA carries a 0-based offset
+	 * that the shm peer resolves against the target MR, so do not request
+	 * FI_MR_VIRT_ADDR (that would put shm in fast-rma/absolute-VA mode). */
+	shm_hints->domain_attr->mr_mode = 0;
 	if (app_info->caps & FI_HMEM) {
 		shm_hints->domain_attr->mr_mode |= FI_MR_HMEM;
 	}

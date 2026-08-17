@@ -62,6 +62,10 @@ static int fi_opx_close_av(fid_t fid)
 		free(opx_av->table_addr);
 		opx_av->table_addr = NULL;
 	}
+	if (opx_av->shm_fi_addr) {
+		free(opx_av->shm_fi_addr);
+		opx_av->shm_fi_addr = NULL;
+	}
 
 	ret = fi_opx_ref_dec(&opx_av->domain->ref_cnt, "domain");
 	if (ret) {
@@ -123,9 +127,21 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 					errno = FI_ENOMEM;
 					return -errno;
 				}
+				opx_av->shm_fi_addr = malloc(sizeof(fi_addr_t) * opx_av->table_count);
+				if (opx_av->shm_fi_addr == NULL) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
+					free(opx_av->table_addr);
+					opx_av->table_addr = NULL;
+					errno		   = FI_ENOMEM;
+					return -errno;
+				}
+				for (uint32_t s = 0; s < opx_av->table_count; ++s) {
+					opx_av->shm_fi_addr[s] = FI_ADDR_NOTAVAIL;
+				}
 			}
 			if ((count + opx_av->addr_count) > opx_av->table_count) {
-				struct fi_opx_addr *opx_addr = opx_av->table_addr;
+				struct fi_opx_addr *opx_addr	 = opx_av->table_addr;
+				fi_addr_t	   *old_shm_addr = opx_av->shm_fi_addr;
 				assert(opx_addr != NULL);   /* realloc - can't be null */
 				assert(opx_av->addr_count); /* relloc - can't be zero */
 				opx_av->table_count = count + opx_av->table_count;
@@ -138,6 +154,21 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 				memcpy(opx_av->table_addr, opx_addr, sizeof(struct fi_opx_addr) * opx_av->addr_count);
 				free(opx_addr);
 				opx_addr = NULL;
+
+				opx_av->shm_fi_addr = malloc(sizeof(fi_addr_t) * opx_av->table_count);
+				if (opx_av->shm_fi_addr == NULL) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
+					free(old_shm_addr);
+					old_shm_addr = NULL;
+					errno	     = FI_ENOMEM;
+					return -errno;
+				}
+				memcpy(opx_av->shm_fi_addr, old_shm_addr, sizeof(fi_addr_t) * opx_av->addr_count);
+				for (uint32_t s = opx_av->addr_count; s < opx_av->table_count; ++s) {
+					opx_av->shm_fi_addr[s] = FI_ADDR_NOTAVAIL;
+				}
+				free(old_shm_addr);
+				old_shm_addr = NULL;
 			}
 			struct fi_opx_addr *opx_addr = opx_av->table_addr;
 			/* append <count> to table, starting at <addr_count> */
@@ -216,6 +247,32 @@ static int fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count, f
 					}
 				} else {
 					opx_addr[t].tx_index = OPX_PRIMARY_PLANE;
+				}
+
+				opx_av->shm_fi_addr[t] = FI_ADDR_NOTAVAIL;
+				if (ep_tx != NULL && ep_tx->shm_ep != NULL &&
+				    opx_lid_is_shm(ep_tx->domain,
+						   OPX_LID_PLANE_KEY(ep_tx->domain,
+								     opx_addr[t].planes[OPX_PRIMARY_PLANE].lid,
+								     OPX_PRIMARY_PLANE))) {
+					char shm_name[OPX_JOB_KEY_STR_SIZE + 32];
+					snprintf(shm_name, sizeof(shm_name), "%s.%hhu.%hu",
+						 ep_tx->domain->unique_job_key_str,
+						 opx_addr[t].planes[OPX_PRIMARY_PLANE].hfi1_unit,
+						 opx_addr[t].planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx);
+					/* shm supports FI_AV_USER_ID: &shm_fi_addr[t] is input
+					 * (the OPX fi_addr, recorded so shm reports it back on
+					 * completions) and output (the shm-internal fi_addr used
+					 * for transmissions through shm_ep). */
+					opx_av->shm_fi_addr[t] = t;
+					ssize_t sret = fi_av_insert(ep_tx->shm_av, shm_name, 1, &opx_av->shm_fi_addr[t],
+								    FI_AV_USER_ID, NULL);
+					if (sret != 1) {
+						FI_WARN(fi_opx_global.prov, FI_LOG_AV,
+							"fi_av_insert into shm AV failed (%zd) for %s; intra-node offload disabled for this peer\n",
+							sret, shm_name);
+						opx_av->shm_fi_addr[t] = FI_ADDR_NOTAVAIL;
+					}
 				}
 			}
 
@@ -538,6 +595,7 @@ int fi_opx_av_open(struct fid_domain *dom, struct fi_av_attr *attr, struct fid_a
 	opx_av->addr_count  = 0;
 	opx_av->table_addr  = NULL; /* table is separately allocated*/
 	opx_av->table_count = 0;    /* count allocated */
+	opx_av->shm_fi_addr = NULL;
 
 	*av = &opx_av->av_fid;
 

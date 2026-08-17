@@ -242,9 +242,14 @@ struct fi_opx_av {
 
 	struct fi_opx_ep   *ep_tx;
 	struct fi_opx_addr *table_addr; /* allocated buffer to free */
-	uint64_t	    rx_ctx_bits;
-	uint32_t	    table_count; /* table, not av, count */
-	uint32_t	    pad;	 /* explicit tail padding to 8-byte alignment (96 bytes) */
+	/* Parallel to table_addr and indexed by the same OPX fi_addr: holds the
+	 * shm-provider fi_addr for each node-local peer (FI_ADDR_NOTAVAIL when the
+	 * peer is not shm-reachable).  The TX path uses this as the forward map to
+	 * route node-local sends into the imported shm peer endpoint. */
+	fi_addr_t *shm_fi_addr;
+	uint64_t   rx_ctx_bits;
+	uint32_t   table_count; /* table, not av, count */
+	uint32_t   pad;		/* explicit tail padding to 8-byte alignment */
 };
 
 /**

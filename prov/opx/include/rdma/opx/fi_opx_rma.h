@@ -387,6 +387,56 @@ ssize_t opx_rma_get_context(struct fi_opx_ep *opx_ep, const void *user_context, 
 	return FI_SUCCESS;
 }
 
+/* Route a node-local RMA op through the imported shm peer.  OPX is FABRIC_DIRECT,
+ * so the fi_writemsg/fi_readmsg macros resolve to OPX's own ops; drive the shm
+ * peer's vtable directly.  The OPX completion counter (cc) is handed to shm as
+ * the op context and FI_COMPLETION is forced so shm always calls back through
+ * opx_peer_cq_write(), which fires cc->hit_zero() once for the whole transfer. */
+__OPX_FORCE_INLINE__
+ssize_t opx_shm_rma_writemsg(struct fi_opx_ep *opx_ep, const fi_addr_t shm_addr, const struct iovec *msg_iov,
+			     void **desc, const size_t iov_count, const struct fi_rma_iov *rma_iov,
+			     const size_t rma_iov_count, const uint64_t data, struct fi_opx_completion_counter *cc,
+			     const uint64_t flags)
+{
+	void *shm_desc[FI_OPX_IOV_LIMIT];
+	if (desc) {
+		opx_get_desc_for_shm((int) iov_count, desc, shm_desc);
+	}
+
+	struct fi_msg_rma msg = {.msg_iov	= msg_iov,
+				 .desc		= desc ? shm_desc : NULL,
+				 .iov_count	= iov_count,
+				 .addr		= shm_addr,
+				 .rma_iov	= rma_iov,
+				 .rma_iov_count = rma_iov_count,
+				 .context	= cc,
+				 .data		= data};
+
+	return opx_ep->shm_ep->rma->writemsg(opx_ep->shm_ep, &msg, flags | FI_COMPLETION);
+}
+
+__OPX_FORCE_INLINE__
+ssize_t opx_shm_rma_readmsg(struct fi_opx_ep *opx_ep, const fi_addr_t shm_addr, const struct iovec *msg_iov,
+			    void **desc, const size_t iov_count, const struct fi_rma_iov *rma_iov,
+			    const size_t rma_iov_count, struct fi_opx_completion_counter *cc, const uint64_t flags)
+{
+	void *shm_desc[FI_OPX_IOV_LIMIT];
+	if (desc) {
+		opx_get_desc_for_shm((int) iov_count, desc, shm_desc);
+	}
+
+	struct fi_msg_rma msg = {.msg_iov	= msg_iov,
+				 .desc		= desc ? shm_desc : NULL,
+				 .iov_count	= iov_count,
+				 .addr		= shm_addr,
+				 .rma_iov	= rma_iov,
+				 .rma_iov_count = rma_iov_count,
+				 .context	= cc,
+				 .data		= 0};
+
+	return opx_ep->shm_ep->rma->readmsg(opx_ep->shm_ep, &msg, flags | FI_COMPLETION);
+}
+
 ssize_t fi_opx_inject_write_generic(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dst_addr,
 				    uint64_t addr_offset, uint64_t key, int lock_required, const uint64_t caps,
 				    const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type);

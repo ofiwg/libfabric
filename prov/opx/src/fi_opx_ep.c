@@ -3579,7 +3579,11 @@ static int opx_srx_get_match(struct fid_peer_srx *srx, struct fi_peer_match_attr
 		rx_entry->peer_entry.count    = context->buf ? 1 : 0;
 		rx_entry->peer_entry.context  = context;
 		rx_entry->peer_entry.msg_size = (context->len < attr->msg_size) ? context->len : attr->msg_size;
-		*entry			      = &rx_entry->peer_entry;
+		/* Carry the posted receive's completion semantics: shm's
+		 * smr_complete_rx() silently drops the completion unless the entry
+		 * flags request FI_COMPLETION (or FI_REMOTE_CQ_DATA). */
+		rx_entry->peer_entry.flags |= context->flags & (FI_COMPLETION | FI_REMOTE_CQ_DATA);
+		*entry = &rx_entry->peer_entry;
 		return FI_SUCCESS;
 	}
 
@@ -3681,6 +3685,7 @@ int fi_opx_ep_process_context_match_shm_unexp(struct fi_opx_ep *opx_ep, const ui
 		peer_entry->count	  = context->buf ? 1 : 0;
 		peer_entry->context	  = context;
 		peer_entry->msg_size	  = (context->len < peer_entry->msg_size) ? context->len : peer_entry->msg_size;
+		peer_entry->flags |= context->flags & (FI_COMPLETION | FI_REMOTE_CQ_DATA);
 
 		/* start_tag/start_msg consumes the receive and posts its own (error)
 		 * completion, so a non-zero return is not "no match": propagating it would
@@ -3835,13 +3840,28 @@ static int fi_opx_ep_peek_shm_unexp(struct fi_opx_ep *opx_ep, const uint64_t kin
 }
 
 /* shm deposits an intra-node completion back through here.  The incoming
- * context is the struct opx_context OPX stashed in peer_entry.context when it
- * matched the receive (opx_srx_get_match / _match_shm_unexp), so complete it in
- * place onto the app-visible OPX CQ instead of allocating a new one. */
+ * context is the struct opx_context OPX stashed at match/send time, so complete
+ * it in place instead of allocating a new one.  fid.context is the owning
+ * opx_ep; route to tx->cq for sends and rx->cq for receives, since the two may
+ * be distinct fi_opx_cq objects. */
 static ssize_t opx_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t flags, size_t len, void *buf,
 				 uint64_t data, uint64_t tag, fi_addr_t src)
 {
-	struct fi_opx_cq   *opx_cq = cq->fid.context;
+	struct fi_opx_ep *opx_ep = cq->fid.context;
+
+	/* shm-routed RMA and atomics pass the OPX completion counter as their op
+	 * context (see opx_shm_rma_writemsg/readmsg and the atomic shm-route
+	 * blocks): drive the existing OPX counter and CQ machinery so the
+	 * shm-offloaded op completes exactly like the native path.  shm always
+	 * transfers the whole op as a single completion. */
+	if (flags & (FI_RMA | FI_ATOMIC)) {
+		struct fi_opx_completion_counter *cc = (struct fi_opx_completion_counter *) context;
+		cc->byte_counter		     = 0;
+		cc->hit_zero(cc);
+		return 0;
+	}
+
+	struct fi_opx_cq   *opx_cq = (flags & FI_SEND) ? opx_ep->tx->cq : opx_ep->rx->cq;
 	struct opx_context *ctx	   = context;
 
 	/* Preserve FI_OPX_CQ_CONTEXT_MULTIRECV: opx_srx_get_match pre-marks a
@@ -3873,7 +3893,8 @@ static ssize_t opx_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t
 
 static ssize_t opx_peer_cq_writeerr(struct fid_peer_cq *cq, const struct fi_cq_err_entry *err_entry)
 {
-	struct fi_opx_cq   *opx_cq = cq->fid.context;
+	struct fi_opx_ep   *opx_ep = cq->fid.context;
+	struct fi_opx_cq   *opx_cq = (err_entry->flags & FI_SEND) ? opx_ep->tx->cq : opx_ep->rx->cq;
 	struct opx_context *ctx	   = err_entry->op_context;
 
 	ctx->err_entry	  = *err_entry;
@@ -3957,7 +3978,7 @@ static int fi_opx_enable_shm_peer(struct fi_opx_ep *opx_ep)
 		return -FI_ENOMEM;
 	}
 	opx_ep->shm_peer_cq->fid.fclass	 = FI_CLASS_PEER_CQ;
-	opx_ep->shm_peer_cq->fid.context = opx_ep->rx->cq;
+	opx_ep->shm_peer_cq->fid.context = opx_ep;
 	opx_ep->shm_peer_cq->owner_ops	 = &opx_peer_cq_owner_ops;
 
 	struct fi_peer_cq_context peer_cq_context = {.size = sizeof(peer_cq_context), .cq = opx_ep->shm_peer_cq};
