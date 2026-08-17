@@ -42,10 +42,10 @@ struct efa_ah;
 	   uint32_t inlen),                                                    \
 	  (ibv_ah, attr, inlen))                                               \
 	X(int, efa_av_reverse_av_add,                                          \
-	  (struct efa_av * av, struct efa_cur_reverse_av * *cur_reverse_av,    \
+	  (struct efa_cur_reverse_av * *cur_reverse_av,                        \
 	   struct efa_prv_reverse_av * *prv_reverse_av,                        \
 	   struct efa_conn * conn),                                            \
-	  (av, cur_reverse_av, prv_reverse_av, conn))                          \
+	  (cur_reverse_av, prv_reverse_av, conn))                              \
 	X(int, efa_ibv_cq_start_poll,                                          \
 	  (struct efa_ibv_cq * ibv_cq, struct ibv_poll_cq_attr * attr),        \
 	  (ibv_cq, attr))                                                      \

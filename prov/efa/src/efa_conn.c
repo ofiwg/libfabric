@@ -303,7 +303,7 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 		goto err_rdm_deinit;
 	}
 
-	err = efa_av_reverse_av_add(av, cur_reverse_av, prv_reverse_av, conn);
+	err = efa_av_reverse_av_add(cur_reverse_av, prv_reverse_av, conn);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert connection for fi_addr %" PRIu64
 			" into reverse AV: %s\n", fi_addr, fi_strerror(-err));
@@ -404,7 +404,7 @@ struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *
 	 * transmission. Therefore shm av insertion should not happen here.
 	 */
 
-	err = efa_av_reverse_av_add(av, &av->cur_reverse_av_implicit, &av->prv_reverse_av_implicit, conn);
+	err = efa_av_reverse_av_add(&av->cur_reverse_av_implicit, &av->prv_reverse_av_implicit, conn);
 	if (err) {
 		efa_conn_rdm_deinit(av, conn);
 		goto err_release;
