@@ -42,7 +42,7 @@ static int ofi_check_cntr_attr(const struct fi_provider *prov,
 	if (!attr)
 		return FI_SUCCESS;
 
-        if (attr->flags && attr->flags != FI_PEER) {
+        if (attr->flags & ~(FI_PEER | FI_XPU)) {
 		FI_WARN(prov, FI_LOG_CNTR, "unsupported flags\n");
 		return -FI_EINVAL;
 	}
