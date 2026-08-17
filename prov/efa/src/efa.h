@@ -77,8 +77,6 @@
 #define EFA_INFO_TYPE_IS_DGRAM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_DGRAM))
 
-#define EFA_DGRAM_CONNID (0x0)
-
 #define EFA_DEF_POOL_ALIGNMENT (8)
 #define EFA_MEM_ALIGNMENT (64)
 

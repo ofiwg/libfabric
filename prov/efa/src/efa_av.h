@@ -113,8 +113,7 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 
 fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
-int efa_av_reverse_av_add(struct efa_av *av,
-			  struct efa_cur_reverse_av **cur_reverse_av,
+int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
 			  struct efa_prv_reverse_av **prv_reverse_av,
 			  struct efa_conn *conn);
 
