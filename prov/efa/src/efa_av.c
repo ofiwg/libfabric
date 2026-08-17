@@ -224,15 +224,13 @@ void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 /*
  * @brief Add newly insert address to the reverse AVs
  *
- * @param[in]		av		EFA AV object
  * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
  * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
  * @param[in]		conn		efa_conn object
  * @return		On success, return 0.
  * 			Otherwise, return a negative libfabric error code
  */
-int efa_av_reverse_av_add(struct efa_av *av,
-				 struct efa_cur_reverse_av **cur_reverse_av,
+int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
 				 struct efa_prv_reverse_av **prv_reverse_av,
 				 struct efa_conn *conn)
 {
@@ -262,10 +260,6 @@ int efa_av_reverse_av_add(struct efa_av *av,
 		return 0;
 	}
 
-	/* We used a static connid for all dgram endpoints, therefore cur_entry should always be NULL,
-	 * and only RDM endpoint can reach here. hence the following assertion
-	 */
-	assert(av->domain->info_type == EFA_INFO_RDM);
 	prv_entry = malloc(sizeof(*prv_entry));
 	if (!prv_entry) {
 		EFA_WARN(FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry\n");
@@ -409,7 +403,7 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
-	err = efa_av_reverse_av_add(av, &av->cur_reverse_av, &av->prv_reverse_av, explicit_conn);
+	err = efa_av_reverse_av_add(&av->cur_reverse_av, &av->prv_reverse_av, explicit_conn);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert explicit connection for fi_addr %" PRIu64 " into reverse AV: %s\n",
 			 *fi_addr, fi_strerror(-err));
@@ -489,9 +483,6 @@ static inline int efa_av_insert_one_validate(struct efa_av *av,
 		*fi_addr = FI_ADDR_NOTAVAIL;
 		return -FI_EADDRNOTAVAIL;
 	}
-
-	if (av->domain->info_type == EFA_INFO_DGRAM)
-		addr->qkey = EFA_DGRAM_CONNID;
 
 	memset(raw_gid_str, 0, INET6_ADDRSTRLEN);
 	if (!inet_ntop(AF_INET6, addr->raw, raw_gid_str, INET6_ADDRSTRLEN)) {

@@ -197,7 +197,17 @@ static int efa_read_random(struct efa_device *device, uint32_t *val)
 }
 #endif
 
-static uint32_t efa_generate_rdm_connid(struct efa_device *device)
+/**
+ * @brief Generate a random QKEY for a QP
+ *
+ * The QKEY doubles as the connection ID (connid) that distinguishes two
+ * endpoints sharing the same GID and QPN, so it is generated the same way
+ * for every endpoint type.
+ *
+ * @param[in]	device	efa device
+ * @return	the generated QKEY
+ */
+static uint32_t efa_generate_qkey(struct efa_device *device)
 {
 	uint32_t val;
 
@@ -570,9 +580,7 @@ int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
 	}
 #endif
 
-	qp->qkey = (base_ep->util_ep.type == FI_EP_DGRAM) ?
-			   EFA_DGRAM_CONNID :
-			   efa_generate_rdm_connid(base_ep->domain->device);
+	qp->qkey = efa_generate_qkey(base_ep->domain->device);
 	err = efa_base_ep_modify_qp_rst2rts(base_ep, qp);
 	if (err)
 		return err;
