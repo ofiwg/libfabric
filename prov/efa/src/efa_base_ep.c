@@ -8,6 +8,7 @@
 #include "efa_cntr.h"
 #include "rdm/efa_rdm_protocol.h"
 #include "efa_data_path_direct.h"
+#include "efa_xpu.h"
 
 int efa_query_max_inline_data(struct ibv_context *ctx, uint32_t flags)
 {
@@ -258,6 +259,12 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 	/* We need to free the util_ep first to avoid race conditions
 	 * with other threads progressing the cq. */
 	efa_base_ep_close_util_ep(base_ep);
+
+	/*
+	 * Give the XPU its resources back while the QP whose queues they map
+	 * is still alive.
+	 */
+	efa_xpu_ep_detach(base_ep);
 
 	err = efa_base_ep_destruct_qp(base_ep);
 

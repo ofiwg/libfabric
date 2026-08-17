@@ -7,6 +7,7 @@
 #include "efa_cntr.h"
 #include "efa_hw_cntr.h"
 #include "efa_cq.h"
+#include "efa_xpu.h"
 
 int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 {
@@ -59,7 +60,8 @@ static struct fi_ops_cntr efa_cntr_ops = {
 	.adderr = ofi_cntr_adderr,
 	.set = ofi_cntr_set,
 	.seterr = ofi_cntr_seterr,
-	.wait = efa_cntr_wait
+	.wait = efa_cntr_wait,
+	.export_xpu = efa_cntr_export_xpu,
 };
 
 static int efa_cntr_close(struct fid *fid)
@@ -67,6 +69,9 @@ static int efa_cntr_close(struct fid *fid)
 	struct efa_cntr *cntr;
 
 	cntr = container_of(fid, struct efa_cntr, util_cntr.cntr_fid.fid);
+
+	if (cntr->xpu_state)
+		efa_xpu_cntr_state_destroy(cntr->xpu_state);
 
 	efa_cntr_destruct(cntr);
 	free(cntr);
@@ -138,6 +143,114 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 #if HAVE_EFADV_CREATE_COMP_CNTR
 	{
 		struct efadv_comp_cntr_init_attr efa_cc_attr = {0};
+
+		/*
+		 * XPU (FI_XPU) counter: allocate GPU HBM for the completion and
+		 * error counters and pass their dmabuf fds to
+		 * efadv_create_comp_cntr via EFADV external memory, so the NIC
+		 * writes counter values directly into device memory the XPU
+		 * kernel can read. Mirrors the FI_ACC path on fi_accelerator.
+		 */
+		if (attr && (attr->flags & FI_XPU) && attr->xpu_ctx) {
+			struct fi_cntr_attr xpu_attr = *attr;
+			void *comp_ptr = NULL;
+			void *err_ptr = NULL;
+			int comp_fd = -1, err_fd = -1;
+			uint64_t comp_offset = 0, err_offset = 0;
+
+			/* Strip FI_XPU before passing to hw_cntr_open (it
+			 * rejects unknown flags). */
+			xpu_attr.flags &= ~FI_XPU;
+
+			/* Completion counter (8 bytes) on device. */
+			ret = efa_xpu_mem_alloc(attr->xpu_ctx, 8, 0,
+						FI_XPU_ALLOC_DMABUF, &comp_ptr,
+						&comp_fd, &comp_offset);
+			if (ret) {
+				EFA_WARN(FI_LOG_CNTR,
+					 "Failed to allocate device HBM for "
+					 "comp counter: %d\n", ret);
+				if (comp_ptr) {
+					efa_xpu_mem_put_fd(attr->xpu_ctx,
+							   comp_fd);
+					efa_xpu_mem_free(attr->xpu_ctx,
+							 comp_ptr);
+				}
+				free(cntr);
+				return ret;
+			}
+
+			/* Error counter (8 bytes) on device. */
+			ret = efa_xpu_mem_alloc(attr->xpu_ctx, 8, 0,
+						FI_XPU_ALLOC_DMABUF, &err_ptr,
+						&err_fd, &err_offset);
+			if (ret) {
+				EFA_WARN(FI_LOG_CNTR,
+					 "Failed to allocate device HBM for "
+					 "err counter: %d\n", ret);
+				efa_xpu_mem_put_fd(attr->xpu_ctx, comp_fd);
+				efa_xpu_mem_free(attr->xpu_ctx, comp_ptr);
+				free(cntr);
+				return ret;
+			}
+
+			/* Configure efadv external DMABUF for both counters. */
+			efa_cc_attr.flags |=
+				EFADV_COMP_CNTR_INIT_WITH_COMP_EXTERNAL_MEM;
+			efa_cc_attr.comp_cntr_ext_mem.type =
+				EFADV_MEMORY_LOCATION_DMABUF;
+			efa_cc_attr.comp_cntr_ext_mem.dmabuf.fd = comp_fd;
+			efa_cc_attr.comp_cntr_ext_mem.dmabuf.offset =
+				comp_offset;
+
+			efa_cc_attr.flags |=
+				EFADV_COMP_CNTR_INIT_WITH_ERR_EXTERNAL_MEM;
+			efa_cc_attr.err_cntr_ext_mem.type =
+				EFADV_MEMORY_LOCATION_DMABUF;
+			efa_cc_attr.err_cntr_ext_mem.dmabuf.fd = err_fd;
+			efa_cc_attr.err_cntr_ext_mem.dmabuf.offset = err_offset;
+
+			ret = efa_hw_cntr_open(domain, &xpu_attr, cntr,
+					       cntr_fid, context, &efa_cc_attr);
+			/*
+			 * The counters were created over the dmabufs and the
+			 * NIC holds its own reference to each, so these copies
+			 * of the fds have done their job, whether or not the
+			 * counter came up.
+			 */
+			efa_xpu_mem_put_fd(attr->xpu_ctx, comp_fd);
+			efa_xpu_mem_put_fd(attr->xpu_ctx, err_fd);
+			if (ret) {
+				EFA_WARN(FI_LOG_CNTR,
+					 "FI_XPU counter requires a hardware "
+					 "counter, but efa_hw_cntr_open failed: "
+					 "%d (%s). The hw counter must be "
+					 "enabled with FI_EFA_USE_HW_CNTR=1.\n",
+					 ret, fi_strerror(-ret));
+				efa_xpu_mem_free(attr->xpu_ctx, comp_ptr);
+				efa_xpu_mem_free(attr->xpu_ctx, err_ptr);
+				free(cntr);
+				return ret;
+			}
+
+			/* Store XPU state for later fi_cntr_export_xpu(). */
+			cntr->xpu_state =
+				efa_xpu_cntr_state_create(attr->xpu_ctx);
+			if (!cntr->xpu_state) {
+				efa_xpu_mem_free(attr->xpu_ctx, comp_ptr);
+				efa_xpu_mem_free(attr->xpu_ctx, err_ptr);
+				fi_close(&cntr->util_cntr.cntr_fid.fid);
+				return -FI_ENOMEM;
+			}
+			cntr->xpu_state->cntr_value_dev = comp_ptr;
+			cntr->xpu_state->cntr_alloc_addr = comp_ptr;
+			cntr->xpu_state->cntr_err_dev = err_ptr;
+			cntr->xpu_state->cntr_err_alloc_addr = err_ptr;
+			cntr->comp_use_device_mem = true;
+			cntr->err_use_device_mem = true;
+
+			return FI_SUCCESS;
+		}
 
 		ret = efa_hw_cntr_open(domain, attr, cntr, cntr_fid, context, &efa_cc_attr);
 		if (!ret) {
