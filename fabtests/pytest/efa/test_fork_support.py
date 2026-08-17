@@ -7,7 +7,7 @@ import pytest
 def test_fork_support(cmdline_args, completion_semantic, environment_variable, fabric):
     from common import ClientServerTest
     import copy
-    cmdline_args_copy = copy.copy(cmdline_args)
+    cmdline_args_copy = copy.deepcopy(cmdline_args)
 
     cmdline_args_copy.append_environ("{}=1".format(environment_variable))
     test = ClientServerTest(cmdline_args_copy, "fi_rdm_bw -K",

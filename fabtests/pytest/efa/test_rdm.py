@@ -115,7 +115,7 @@ def test_rdm_tagged_bw_no_inject_range(cmdline_args, completion_semantic, messag
 @pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=43", "FI_EFA_RX_SIZE=51"]])
 @pytest.mark.memory_type(memory_type_list_all)
 def test_rdm_tagged_bw_small_tx_rx(cmdline_args, completion_semantic, memory_type, completion_type, env_vars):
-    cmdline_args_copy = copy.copy(cmdline_args)
+    cmdline_args_copy = copy.deepcopy(cmdline_args)
     for env_var in env_vars:
         cmdline_args_copy.append_environ(env_var)
     # Use a window size larger than tx/rx size
@@ -126,7 +126,7 @@ def test_rdm_tagged_bw_small_tx_rx(cmdline_args, completion_semantic, memory_typ
 @pytest.mark.functional
 @pytest.mark.memory_type(memory_type_list_all)
 def test_rdm_tagged_bw_small_recv_window(cmdline_args, completion_semantic, memory_type, completion_type):
-    cmdline_args_copy = copy.copy(cmdline_args)
+    cmdline_args_copy = copy.deepcopy(cmdline_args)
     cmdline_args_copy.append_environ("FI_EFA_RECVWIN_SIZE=1")
     efa_run_client_server_test(cmdline_args_copy, "fi_rdm_tagged_bw -W 128", "short",
                                completion_semantic, memory_type, "all", completion_type=completion_type,
@@ -147,7 +147,7 @@ def test_rdm_tagged_bw_use_fi_more(cmdline_args, completion_semantic, memory_typ
 @pytest.mark.pr_ci
 @pytest.mark.memory_type(memory_type_list_all)
 def test_rdm_atomic(cmdline_args, iteration_type, completion_semantic, memory_type):
-    from copy import copy
+    from copy import deepcopy
 
     from common import ClientServerTest
 
@@ -157,7 +157,7 @@ def test_rdm_atomic(cmdline_args, iteration_type, completion_semantic, memory_ty
     # the rdm_atomic test's run time has a high variance when running single c6gn instance.
     # the issue is tracked in:  https://github.com/ofiwg/libfabric/issues/7002
     # to mitigate the issue, set the maximum timeout of fi_rdm_atomic to 1800 seconds.
-    cmdline_args_copy = copy(cmdline_args)
+    cmdline_args_copy = deepcopy(cmdline_args)
     command = "fi_rdm_atomic"  + " " + perf_progress_model_cli
     test = ClientServerTest(cmdline_args_copy, "fi_rdm_atomic", iteration_type, completion_semantic,
                             memory_type=memory_type, timeout=1800, fabric="efa")
@@ -166,8 +166,6 @@ def test_rdm_atomic(cmdline_args, iteration_type, completion_semantic, memory_ty
 @pytest.mark.pr_ci
 @pytest.mark.functional
 def test_rdm_tagged_peek(cmdline_args):
-    from copy import copy
-
     from common import ClientServerTest
 
     test = ClientServerTest(cmdline_args, "fi_rdm_tagged_peek", timeout=1800)
