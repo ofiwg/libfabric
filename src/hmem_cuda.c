@@ -82,6 +82,9 @@ CUresult CUDAAPI cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice de
 	_(cuCtxDestroy)			\
 	_(cuMemAlloc)			\
 	_(cuMemFree)			\
+	_(cuMemHostRegister)		\
+	_(cuMemHostUnregister)		\
+	_(cuMemHostGetDevicePointer)	\
 	_(cuStreamCreate)		\
 	_(cuStreamDestroy)		\
 	_(cuStreamSynchronize)		\
@@ -179,6 +182,11 @@ static struct {
 	CUresult (*cuCtxDestroy)(CUcontext ctx);
 	CUresult (*cuMemAlloc)(CUdeviceptr *dptr, size_t bytesize);
 	CUresult (*cuMemFree)(CUdeviceptr dptr);
+	CUresult (*cuMemHostRegister)(void *p, size_t byte_size,
+				      unsigned int flags);
+	CUresult (*cuMemHostUnregister)(void *p);
+	CUresult (*cuMemHostGetDevicePointer)(CUdeviceptr *pdptr, void *p,
+					      unsigned int flags);
 	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
 					unsigned int flags);
 	cudaError_t (*cudaHostUnregister)(void *ptr);
@@ -1086,6 +1094,106 @@ int cuda_get_ipc_handle_size(size_t *size)
 }
 
 /*
+ * alignment is not passed on: cudaMalloc aligns to at least the device texture
+ * alignment, 256 bytes on every device CUDA supports, which covers every
+ * alignment libfabric asks a device allocation for.
+ */
+int cuda_dev_alloc(uint64_t device, uint64_t size, uint64_t alignment,
+		   uint64_t flags, void **addr, int *fd, uint64_t *offset)
+{
+	cudaError_t cuda_ret;
+	int ret;
+
+	if (flags & FI_XPU_ALLOC_DMABUF && (!fd || !offset)) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"A dmabuf allocation needs somewhere to return the "
+			"fd and offset\n");
+		return -FI_EINVAL;
+	}
+
+	if (fd)
+		*fd = -1;
+	if (offset)
+		*offset = 0;
+
+	cuda_ret = ofi_cudaMalloc(addr, size);
+	if (cuda_ret != cudaSuccess) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"cudaMalloc failed: %s:%s\n",
+			ofi_cudaGetErrorName(cuda_ret),
+			ofi_cudaGetErrorString(cuda_ret));
+		return -FI_ENOMEM;
+	}
+
+	if (flags & FI_XPU_ALLOC_DMABUF) {
+		ret = cuda_get_dmabuf_fd(*addr, size, fd, offset);
+		if (ret) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed to export a dmabuf fd for a device "
+				"allocation: %d\n", ret);
+			ofi_cudaFree(*addr);
+			*addr = NULL;
+			return ret;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+void cuda_dev_free(uint64_t device, void *addr)
+{
+	ofi_cudaFree(addr);
+}
+
+int cuda_dev_import(uint64_t device, void *host_addr, uint64_t size,
+		    uint64_t flags, void **dev_addr)
+{
+	CUresult cu_ret;
+	unsigned int reg_flags = 0;
+	CUdeviceptr dev_ptr = 0;
+
+	if (flags & FI_XPU_IMPORT_IOMEMORY)
+		reg_flags |= CU_MEMHOSTREGISTER_IOMEMORY;
+
+	if (flags & FI_XPU_IMPORT_DEVICEMAP)
+		reg_flags |= CU_MEMHOSTREGISTER_DEVICEMAP;
+
+	cu_ret = cuda_ops.cuMemHostRegister(host_addr, size, reg_flags);
+	if (cu_ret != CUDA_SUCCESS &&
+	    cu_ret != CUDA_ERROR_HOST_MEMORY_ALREADY_REGISTERED) {
+		CUDA_DRIVER_LOG_ERR(cu_ret, "cuMemHostRegister");
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"cuMemHostRegister failed: addr=%p size=%zu "
+			"reg_flags=%#x\n", host_addr, (size_t) size,
+			reg_flags);
+		return -FI_EIO;
+	}
+
+	cu_ret = cuda_ops.cuMemHostGetDevicePointer(&dev_ptr, host_addr, 0);
+	if (cu_ret != CUDA_SUCCESS) {
+		CUDA_DRIVER_LOG_ERR(cu_ret, "cuMemHostGetDevicePointer");
+		cuda_ops.cuMemHostUnregister(host_addr);
+		return -FI_EIO;
+	}
+
+	*dev_addr = (void *) dev_ptr;
+	return FI_SUCCESS;
+}
+
+int cuda_dev_unimport(uint64_t device, void *host_addr)
+{
+	CUresult cu_ret;
+
+	cu_ret = cuda_ops.cuMemHostUnregister(host_addr);
+	if (cu_ret != CUDA_SUCCESS) {
+		CUDA_DRIVER_LOG_ERR(cu_ret, "cuMemHostUnregister");
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
+}
+
+/*
  * Async copy event: wraps a CUDA stream + event for non-blocking IPC copies.
  * Pool of CUDA stream+event pairs for async IPC copies.
  * Fixed-size array of pre-created stream+event pairs, assigned round-robin.
@@ -1391,6 +1499,27 @@ bool cuda_is_ipc_enabled(void)
 }
 
 int cuda_get_ipc_handle_size(size_t *size)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_dev_alloc(uint64_t device, uint64_t size, uint64_t alignment,
+		   uint64_t flags, void **addr, int *fd, uint64_t *offset)
+{
+	return -FI_ENOSYS;
+}
+
+void cuda_dev_free(uint64_t device, void *addr)
+{
+}
+
+int cuda_dev_import(uint64_t device, void *host_addr, uint64_t size,
+		    uint64_t flags, void **dev_addr)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_dev_unimport(uint64_t device, void *host_addr)
 {
 	return -FI_ENOSYS;
 }
