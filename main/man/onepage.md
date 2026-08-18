@@ -16233,7 +16233,8 @@ DGRAM endpoints do not support wait objects.
     for a detailed comparison of `efa` vs `efa-direct` fabrics.
 
 *Threading*
-:   Both RDM and DGRAM endpoints supports *FI_THREAD_SAFE*.
+:   Both RDM and DGRAM endpoints supports *FI_THREAD_SAFE*,
+    *FI_THREAD_COMPLETION*, *FI_THREAD_DOMAIN*.
 
 *Completion counters*
 :   The `efa-direct` fabric supports hardware completion counters backed
