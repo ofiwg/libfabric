@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-08\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-08\-18" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -125,7 +125,8 @@ See efa_fabric_comparison for a detailed comparison of \f[V]efa\f[R] vs
 \f[V]efa-direct\f[R] fabrics.
 .TP
 \f[I]Threading\f[R]
-Both RDM and DGRAM endpoints supports \f[I]FI_THREAD_SAFE\f[R].
+Both RDM and DGRAM endpoints supports \f[I]FI_THREAD_SAFE\f[R],
+\f[I]FI_THREAD_COMPLETION\f[R], \f[I]FI_THREAD_DOMAIN\f[R].
 .TP
 \f[I]Completion counters\f[R]
 The \f[V]efa-direct\f[R] fabric supports hardware completion counters
