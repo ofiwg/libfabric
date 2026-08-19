@@ -739,6 +739,12 @@ struct fi_opx_ep {
 	enum fi_hmem_iface use_gpu_ipc;
 	ofi_spin_t	   lock; /* lock size varies based on ENABLE_DEBUG */
 
+	/* Hot shm-peer handles kept on this cacheline (not the cold FI_PEER block
+	 * below): shm_ep gates the intra-node path on every send/inject/atomic/rma,
+	 * shm_cq is progressed on every poll.  Both NULL when no shm peer. */
+	struct fid_ep *shm_ep;
+	struct fid_cq *shm_cq;
+
 	/* Init-only fields (cold): set during bind/enable, never on hot path */
 	struct fi_opx_cntr		       *init_send_cntr;
 	struct fi_opx_cntr		       *init_recv_cntr;
@@ -759,7 +765,17 @@ struct fi_opx_ep {
 
 	struct opx_shm_tx shm;
 
-	/* == CACHE LINE 7+ == */
+	/* FI_PEER owner state (init/teardown only): the shm peer endpoint plus the
+	 * shared receive context imported into it.  All NULL when no shm peer. */
+	struct fi_info	    *shm_info;
+	struct fid_av	    *shm_av;
+	struct fid_ep	    *shm_srx;
+	struct fid_ep	    *peer_srx_ep;
+	struct fid_peer_srx *shm_peer_srx;
+	/* OPX-owned peer CQ handed to shm (fi_peer_cq_context.cq): shm deposits
+	 * its intra-node completions through this fid_peer_cq's owner_ops. */
+	struct fid_peer_cq *shm_peer_cq;
+
 	struct fi_opx_ep_daos_info daos_info; /* 18 bytes */
 #ifdef FLIGHT_RECORDER_ENABLE
 	struct flight_recorder *fr;
@@ -4337,6 +4353,12 @@ void fi_opx_ep_rx_poll_internal(struct fid_ep *ep, const uint64_t caps, const en
 			     "===================================== RELIABILITY SERVICE WORK PENDING\n");
 		fi_opx_reliability_service_process_pending(opx_ep->reli_service);
 	}
+
+	/* Progress the shm peer: reading with count 0 drives shm to write any
+	 * intra-node completions into the OPX CQ via the owner peer_cq. */
+	if (opx_ep->shm_ep) {
+		fi_cq_read(opx_ep->shm_cq, NULL, 0);
+	}
 }
 
 static inline void fi_opx_ep_rx_poll(struct fid_ep *ep, const uint64_t caps,
@@ -4402,6 +4424,9 @@ int fi_opx_ep_cancel_context(struct fi_opx_ep *opx_ep, const uint64_t cancel_con
 
 	return FI_SUCCESS;
 }
+
+int fi_opx_ep_process_context_match_shm_unexp(struct fi_opx_ep *opx_ep, const uint64_t kind,
+					      struct opx_context *context);
 
 __OPX_FORCE_INLINE__
 int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const uint64_t static_flags,
@@ -4495,6 +4520,12 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep *opx_ep, const u
 		fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, &opx_ep->rx->queue[kind].ue);
 #endif
 
+		return 0;
+	}
+
+	if (opx_ep->shm_ep && fi_opx_ep_process_context_match_shm_unexp(opx_ep, kind, context) == 0) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "matched a buffered shm-peer send; completed via shm peer\n");
 		return 0;
 	}
 

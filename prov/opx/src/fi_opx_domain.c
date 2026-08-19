@@ -48,6 +48,7 @@
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "opx_shm_cache.h"
+#include "opx_shm_peer.h"
 
 #include <ofi_enosys.h>
 
@@ -210,7 +211,12 @@ static int fi_opx_close_domain(fid_t fid)
 	}
 #endif
 
+	if (opx_domain->shm_domain) {
+		fi_close(&opx_domain->shm_domain->fid);
+		opx_domain->shm_domain = NULL;
+	}
 	ofi_domain_close(&opx_domain->util_domain);
+	ofi_genlock_destroy(&opx_domain->srx_lock);
 
 	ret = fi_opx_ref_finalize(&opx_domain->ref_cnt, "domain");
 	if (ret) {
@@ -255,8 +261,13 @@ static inline void opx_util_domain_cleanup(struct fi_opx_domain *opx_domain)
 		opx_domain->hmem_domain = NULL;
 	}
 #endif
-	if (opx_domain->util_domain.fabric) {
+	if (opx_domain->shm_domain) {
+		fi_close(&opx_domain->shm_domain->fid);
+		opx_domain->shm_domain = NULL;
+	}
+	if (opx_domain->util_domain_initialized) {
 		ofi_domain_close(&opx_domain->util_domain);
+		ofi_genlock_destroy(&opx_domain->srx_lock);
 	}
 }
 
@@ -715,6 +726,31 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "ofi_domain_init failed for util_domain\n");
 		errno = -ret;
 		goto err;
+	}
+	ofi_genlock_init(&opx_domain->srx_lock, OFI_LOCK_NOOP);
+	opx_domain->util_domain_initialized = true;
+
+	struct fi_info *shm_info = NULL;
+	opx_shm_info_create(info, &shm_info);
+	if (shm_info) {
+		if (!opx_fabric->shm_fabric) {
+			ret = fi_fabric(shm_info->fabric_attr, &opx_fabric->shm_fabric,
+					opx_fabric->util_fabric.fabric_fid.fid.context);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+					"fi_fabric failed for shm peer provider; intra-node offload disabled\n");
+				opx_fabric->shm_fabric = NULL;
+			}
+		}
+		if (opx_fabric->shm_fabric) {
+			ret = fi_domain(opx_fabric->shm_fabric, shm_info, &opx_domain->shm_domain, NULL);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+					"fi_domain failed for shm peer provider; intra-node offload disabled\n");
+				opx_domain->shm_domain = NULL;
+			}
+		}
+		fi_freeinfo(shm_info);
 	}
 
 	opx_domain->progress_affinity_str = NULL;

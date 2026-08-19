@@ -60,6 +60,12 @@
 
 /* Per-node shm cache used to run the HFI driver-version check once per node. */
 #include "opx_shm_cache.h"
+#include "opx_shm_peer.h"
+
+/* FI_PEER: OPX owns the shared receive context imported into the shm peer. */
+#include <ofi_util.h>
+#include <ofi_iov.h>
+#include <rdma/providers/fi_peer.h>
 
 #include "rdma/opx/fi_opx_fabric.h"
 
@@ -642,6 +648,9 @@ static void fi_opx_reliability_service_teardown(struct fi_opx_ep *opx_ep)
 	opx_flow_control_process_release();
 }
 
+static void fi_opx_close_shm_peer(struct fi_opx_ep *opx_ep);
+static void fi_opx_close_srx(struct fi_opx_ep *opx_ep);
+
 static int fi_opx_close_ep(fid_t fid)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "close ep\n");
@@ -704,6 +713,15 @@ static int fi_opx_close_ep(fid_t fid)
 		       "Cleaning up endpoint's rx shared memory (%p)\n", &opx_ep->rx->shm);
 		dlist_remove_first_match(&shm_rx_list, opx_shm_match, (void *) &opx_ep->rx->shm);
 		opx_shm_rx_fini(&opx_ep->rx->shm);
+	}
+
+	fi_opx_close_shm_peer(opx_ep);
+	if (opx_ep->peer_srx_ep) {
+		fi_opx_close_srx(opx_ep);
+	}
+	if (opx_ep->shm_info) {
+		fi_freeinfo(opx_ep->shm_info);
+		opx_ep->shm_info = NULL;
 	}
 
 	/* Purge the tid cache of leftover entries for this ep
@@ -3416,6 +3434,583 @@ err:;
 	return -saved_errno;
 }
 
+/* OPX-native FI_PEER owner SRX (option 1: shm-only, no LID->fi_addr reverse
+ * map).  Owner ops match shm sends directly against the posted receives OPX
+ * already keeps on opx_ep->rx->queue[kind].mq; unmatched shm sends park on
+ * unexp[kind] until a later fi_recv/fi_trecv drains them.  peer_srx MUST stay
+ * first: util_get_peer_srx() casts fid.context to it, and fi_opx_enable_shm_peer()
+ * memcpy's it into shm_peer_srx so shm calls back into OPX owner_ops. */
+struct opx_srx_ctx {
+	struct fid_peer_srx peer_srx;
+	struct fi_opx_ep   *opx_ep;
+	struct dlist_entry  unexp[2]; /* indexed by FI_OPX_KIND_TAG / _MSG */
+	struct ofi_bufpool *rx_pool;
+};
+
+/* peer_entry MUST stay first for container_of() recovery in the owner ops.
+ * iov/desc are owned here; the peer only borrows fi_peer_rx_entry::iov. */
+struct opx_srx_rx_entry {
+	struct fi_peer_rx_entry peer_entry;
+	struct iovec		iov[FI_OPX_IOV_LIMIT];
+	void		       *desc[FI_OPX_IOV_LIMIT];
+	uint64_t		ignore;
+	struct dlist_entry	list_entry;
+};
+
+/* Match a shm send (fi_peer_match_attr) against a posted OPX receive
+ * (opx_context).  Both attr->addr and context->src_addr are real fi_addrs
+ * (shm supplies one via FI_AV_USER_ID, OPX stores one on directed recvs), so
+ * this is a direct compare with no LID->fi_addr reverse map.  Either side being
+ * FI_ADDR_UNSPEC degrades to tag-only, matching OPX's native is_match(). */
+static inline int opx_srx_match_context(const struct fi_peer_match_attr *attr, const struct opx_context *context)
+{
+	if (attr->addr != FI_ADDR_UNSPEC && context->src_addr != FI_ADDR_UNSPEC && attr->addr != context->src_addr) {
+		return 0;
+	}
+	return ofi_match_tag(context->tag, context->ignore, attr->tag);
+}
+
+static inline struct opx_srx_rx_entry *opx_srx_alloc_entry(struct opx_srx_ctx *srx_ctx, struct fid_peer_srx *srx,
+							   const struct fi_peer_match_attr *attr, uint64_t flags)
+{
+	struct opx_srx_rx_entry *rx_entry = (struct opx_srx_rx_entry *) ofi_buf_alloc(srx_ctx->rx_pool);
+	if (OFI_UNLIKELY(rx_entry == NULL)) {
+		return NULL;
+	}
+
+	memset(rx_entry, 0, sizeof(*rx_entry));
+	/* peer_entry.srx must be the peer's srx (shm_peer_srx), not OPX's own,
+	 * so a later start_{tag,msg} dispatches to shm's peer_ops. */
+	rx_entry->peer_entry.srx      = srx;
+	rx_entry->peer_entry.addr     = attr->addr;
+	rx_entry->peer_entry.tag      = attr->tag;
+	rx_entry->peer_entry.msg_size = attr->msg_size;
+	rx_entry->peer_entry.flags    = flags;
+	return rx_entry;
+}
+
+/* Owner side of the FI_PEER contract: shm calls this to locate a posted OPX
+ * receive for an incoming intra-node send.  Walk queue[kind].mq (the same
+ * single match queue OPX's native fabric path uses), and on a hit splice the
+ * matched opx_context out and hand its buffer to the peer via a wrapper whose
+ * peer_entry.context stashes the opx_context so start_{tag,msg} can complete it
+ * on the OPX CQ.  On a miss, return an empty wrapper and -FI_ENOENT; shm then
+ * stashes its cmd_ctx in peer_context and calls queue_{tag,msg}. */
+static int opx_srx_get_match(struct fid_peer_srx *srx, struct fi_peer_match_attr *attr, struct fi_peer_rx_entry **entry,
+			     const uint64_t kind, uint64_t flags)
+{
+	struct opx_srx_ctx	*srx_ctx = srx->ep_fid.fid.context;
+	struct fi_opx_ep	*opx_ep	 = srx_ctx->opx_ep;
+	struct slist		*mq	 = &opx_ep->rx->queue[kind].mq;
+	struct opx_context	*context = (struct opx_context *) mq->head;
+	struct opx_context	*prev	 = NULL;
+	struct opx_srx_rx_entry *rx_entry;
+
+	while (context && !opx_srx_match_context(attr, context)) {
+		prev	= context;
+		context = context->next;
+	}
+
+	rx_entry = opx_srx_alloc_entry(srx_ctx, srx, attr, flags);
+	if (OFI_UNLIKELY(rx_entry == NULL)) {
+		return -FI_ENOMEM;
+	}
+
+	if (context && (context->flags & FI_MULTI_RECV)) {
+		/* Multi-recv: carve one message out of the posted buffer instead of
+		 * consuming it whole.  Hand shm an iov at the current offset and
+		 * complete through a fresh per-message context that points back at
+		 * the original (opx_context.multi_recv_context) so fi_opx_cq_fill
+		 * reports the application's op_context.  The original stays parked
+		 * on the match queue, its buffer advanced, until the remaining
+		 * space drops below min_multi_recv. */
+		const size_t send_len = attr->msg_size;
+		if (send_len > context->len) {
+			/* This send does not fit the remaining space: leave the
+			 * buffer posted and report unmatched so shm queues the send
+			 * unexpected rather than overrunning the buffer. */
+			rx_entry->peer_entry.owner_context = srx_ctx;
+			*entry				   = &rx_entry->peer_entry;
+			return -FI_ENOENT;
+		}
+
+		struct opx_context *per_ctx = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+		if (OFI_UNLIKELY(per_ctx == NULL)) {
+			ofi_buf_free(rx_entry);
+			return -FI_ENOMEM;
+		}
+		per_ctx->flags		    = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV;
+		per_ctx->multi_recv_context = context;
+		per_ctx->next		    = NULL;
+
+		rx_entry->iov[0].iov_base     = context->buf;
+		rx_entry->iov[0].iov_len      = send_len;
+		rx_entry->peer_entry.iov      = rx_entry->iov;
+		rx_entry->peer_entry.count    = 1;
+		rx_entry->peer_entry.context  = per_ctx;
+		rx_entry->peer_entry.msg_size = send_len;
+		/* A placed multi-recv message always completes; shm drops it
+		 * otherwise (see opx_srx_get_match single-recv path). */
+		rx_entry->peer_entry.flags |= FI_COMPLETION | (context->flags & FI_REMOTE_CQ_DATA);
+
+		context->buf = (void *) ((uintptr_t) context->buf + send_len);
+		context->len -= send_len;
+
+		if (context->len < opx_ep->rx->min_multi_recv) {
+			/* Buffer exhausted: unlink it now so no later send matches a
+			 * released buffer, and mark it so the per-message completion
+			 * in opx_peer_cq_write emits the trailing FI_MULTI_RECV
+			 * release afterwards (preserving message-then-release order). */
+			slist_remove(mq, (struct slist_entry *) context, (struct slist_entry *) prev);
+			context->next	      = NULL;
+			context->byte_counter = (uint64_t) -1;
+		}
+
+		*entry = &rx_entry->peer_entry;
+		return FI_SUCCESS;
+	}
+
+	if (context) {
+		slist_remove(mq, (struct slist_entry *) context, (struct slist_entry *) prev);
+
+		rx_entry->iov[0].iov_base     = context->buf;
+		rx_entry->iov[0].iov_len      = context->len;
+		rx_entry->peer_entry.iov      = rx_entry->iov;
+		rx_entry->peer_entry.count    = context->buf ? 1 : 0;
+		rx_entry->peer_entry.context  = context;
+		rx_entry->peer_entry.msg_size = (context->len < attr->msg_size) ? context->len : attr->msg_size;
+		*entry			      = &rx_entry->peer_entry;
+		return FI_SUCCESS;
+	}
+
+	/* No posted receive yet: owner_context lets queue_{tag,msg} recover the
+	 * SRX so it can park this wrapper on the right unexp[kind] list. */
+	rx_entry->peer_entry.owner_context = srx_ctx;
+	*entry				   = &rx_entry->peer_entry;
+	return -FI_ENOENT;
+}
+
+static int opx_srx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match_attr *attr, struct fi_peer_rx_entry **entry)
+{
+	return opx_srx_get_match(srx, attr, entry, FI_OPX_KIND_TAG, FI_TAGGED | FI_RECV);
+}
+
+static int opx_srx_get_msg(struct fid_peer_srx *srx, struct fi_peer_match_attr *attr, struct fi_peer_rx_entry **entry)
+{
+	return opx_srx_get_match(srx, attr, entry, FI_OPX_KIND_MSG, FI_MSG | FI_RECV);
+}
+
+static int opx_srx_queue(struct fi_peer_rx_entry *entry, const uint64_t kind)
+{
+	struct opx_srx_ctx	*srx_ctx  = entry->owner_context;
+	struct opx_srx_rx_entry *rx_entry = container_of(entry, struct opx_srx_rx_entry, peer_entry);
+
+	dlist_insert_tail(&rx_entry->list_entry, &srx_ctx->unexp[kind]);
+	return FI_SUCCESS;
+}
+
+static int opx_srx_queue_tag(struct fi_peer_rx_entry *entry)
+{
+	return opx_srx_queue(entry, FI_OPX_KIND_TAG);
+}
+
+static int opx_srx_queue_msg(struct fi_peer_rx_entry *entry)
+{
+	return opx_srx_queue(entry, FI_OPX_KIND_MSG);
+}
+
+static void opx_srx_free_entry(struct fi_peer_rx_entry *entry)
+{
+	struct opx_srx_rx_entry *rx_entry = container_of(entry, struct opx_srx_rx_entry, peer_entry);
+
+	ofi_buf_free(rx_entry);
+}
+
+static void opx_srx_foreach_unspec_addr(struct fid_peer_srx *srx, fi_addr_t (*get_addr)(struct fi_peer_rx_entry *))
+{
+	struct opx_srx_ctx	*srx_ctx = srx->ep_fid.fid.context;
+	struct opx_srx_rx_entry *rx_entry;
+	int			 kind;
+
+	for (kind = 0; kind < 2; kind++) {
+		dlist_foreach_container (&srx_ctx->unexp[kind], struct opx_srx_rx_entry, rx_entry, list_entry) {
+			if (rx_entry->peer_entry.addr == FI_ADDR_UNSPEC) {
+				rx_entry->peer_entry.addr = get_addr(&rx_entry->peer_entry);
+			}
+		}
+	}
+}
+
+static struct fi_ops_srx_owner opx_srx_owner_ops = {
+	.size		     = sizeof(struct fi_ops_srx_owner),
+	.get_msg	     = opx_srx_get_msg,
+	.get_tag	     = opx_srx_get_tag,
+	.queue_msg	     = opx_srx_queue_msg,
+	.queue_tag	     = opx_srx_queue_tag,
+	.free_entry	     = opx_srx_free_entry,
+	.foreach_unspec_addr = opx_srx_foreach_unspec_addr,
+};
+
+int fi_opx_ep_process_context_match_shm_unexp(struct fi_opx_ep *opx_ep, const uint64_t kind,
+					      struct opx_context *context)
+{
+	struct opx_srx_ctx *srx_ctx = opx_ep->peer_srx_ep->fid.context;
+	struct dlist_entry *item, *tmp;
+
+	if (dlist_empty(&srx_ctx->unexp[kind])) {
+		return -FI_ENOENT;
+	}
+
+	dlist_foreach_safe (&srx_ctx->unexp[kind], item, tmp) {
+		struct opx_srx_rx_entry *rx_entry   = container_of(item, struct opx_srx_rx_entry, list_entry);
+		struct fi_peer_rx_entry *peer_entry = &rx_entry->peer_entry;
+
+		if (peer_entry->addr != FI_ADDR_UNSPEC && context->src_addr != FI_ADDR_UNSPEC &&
+		    peer_entry->addr != context->src_addr) {
+			continue;
+		}
+		if (!ofi_match_tag(context->tag, context->ignore, peer_entry->tag)) {
+			continue;
+		}
+
+		dlist_remove(item);
+
+		rx_entry->iov[0].iov_base = context->buf;
+		rx_entry->iov[0].iov_len  = context->len;
+		peer_entry->iov		  = rx_entry->iov;
+		peer_entry->count	  = context->buf ? 1 : 0;
+		peer_entry->context	  = context;
+		peer_entry->msg_size	  = (context->len < peer_entry->msg_size) ? context->len : peer_entry->msg_size;
+
+		/* start_tag/start_msg consumes the receive and posts its own (error)
+		 * completion, so a non-zero return is not "no match": propagating it would
+		 * let the caller re-queue an already consumed context.  Report match as done. */
+		int rc = (kind == FI_OPX_KIND_TAG) ? peer_entry->srx->peer_ops->start_tag(peer_entry) :
+						     peer_entry->srx->peer_ops->start_msg(peer_entry);
+		if (rc) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				     "shm peer start_%s returned %d; receive already consumed, not re-queuing\n",
+				     (kind == FI_OPX_KIND_TAG) ? "tag" : "msg", rc);
+		}
+		return 0;
+	}
+
+	return -FI_ENOENT;
+}
+
+/* Multi-receive against the shm unexpected queue.  When a FI_MULTI_RECV buffer
+ * is posted, the fabric path only carves intra-node sends out of OPX's native
+ * unexpected packet queue; this mirrors that for sends the shm peer buffered
+ * (parked on srx_ctx->unexp[FI_OPX_KIND_MSG]) before the buffer was posted.
+ * Each fitting entry is handed a slice of the buffer at the current offset and
+ * dispatched through shm's start_msg, which copies the saved data and completes
+ * through opx_peer_cq_write() with a per-message context; the buffer is advanced
+ * synchronously.  Returns 1 if the buffer was exhausted (the trailing
+ * FI_MULTI_RECV release was already emitted, so the caller must stop and not
+ * park the context), 0 otherwise. */
+static int fi_opx_ep_multi_recv_shm_unexp(struct fi_opx_ep *opx_ep, struct opx_context *context)
+{
+	if (!opx_ep->shm_ep) {
+		return 0;
+	}
+
+	struct opx_srx_ctx *srx_ctx = opx_ep->peer_srx_ep->fid.context;
+	struct dlist_entry *item, *tmp;
+
+	dlist_foreach_safe (&srx_ctx->unexp[FI_OPX_KIND_MSG], item, tmp) {
+		struct opx_srx_rx_entry *rx_entry   = container_of(item, struct opx_srx_rx_entry, list_entry);
+		struct fi_peer_rx_entry *peer_entry = &rx_entry->peer_entry;
+
+		if (peer_entry->addr != FI_ADDR_UNSPEC && context->src_addr != FI_ADDR_UNSPEC &&
+		    peer_entry->addr != context->src_addr) {
+			continue;
+		}
+
+		const size_t send_len = peer_entry->msg_size;
+		if (send_len > context->len) {
+			continue;
+		}
+
+		/* Allocate before unlinking so an allocation failure leaves the
+		 * entry queued for a later retry. */
+		struct opx_context *per_ctx = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+		if (OFI_UNLIKELY(per_ctx == NULL)) {
+			return 0;
+		}
+		per_ctx->flags		    = FI_RECV | FI_MSG | FI_OPX_CQ_CONTEXT_MULTIRECV;
+		per_ctx->multi_recv_context = context;
+		per_ctx->next		    = NULL;
+
+		dlist_remove(item);
+
+		rx_entry->iov[0].iov_base = context->buf;
+		rx_entry->iov[0].iov_len  = send_len;
+		peer_entry->iov		  = rx_entry->iov;
+		peer_entry->count	  = 1;
+		peer_entry->context	  = per_ctx;
+		peer_entry->msg_size	  = send_len;
+		peer_entry->flags |= FI_COMPLETION | (context->flags & FI_REMOTE_CQ_DATA);
+
+		context->buf = (void *) ((uintptr_t) context->buf + send_len);
+		context->len -= send_len;
+
+		if (context->len < opx_ep->rx->min_multi_recv) {
+			/* Buffer exhausted: mark it so opx_peer_cq_write() emits the
+			 * trailing FI_MULTI_RECV release after this per-message
+			 * completion, then dispatch and stop.  The context is not on
+			 * the match queue yet, so nothing to unlink. */
+			context->byte_counter = (uint64_t) -1;
+			int rc		      = peer_entry->srx->peer_ops->start_msg(peer_entry);
+			if (rc) {
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					     "shm peer start_msg returned %d; multi-recv slice already consumed\n", rc);
+			}
+			return 1;
+		}
+
+		int rc = peer_entry->srx->peer_ops->start_msg(peer_entry);
+		if (rc) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				     "shm peer start_msg returned %d; multi-recv slice already consumed\n", rc);
+		}
+	}
+
+	return 0;
+}
+
+/* Owner-side FI_PEEK (optionally with FI_CLAIM or FI_DISCARD) against the shm
+ * unexpected queue.  The fabric peek path in fi_opx_ep_rx_process_context_noinline
+ * only scans OPX's native unexpected packet queue; this mirrors it for messages
+ * the shm peer delivered before a matching receive was posted (parked on
+ * srx_ctx->unexp[kind] by opx_srx_queue).  Returns FI_SUCCESS when a match was
+ * found and a completion enqueued, or -FI_ENOENT so the caller falls through to
+ * the FI_ENOMSG error path. */
+static int fi_opx_ep_peek_shm_unexp(struct fi_opx_ep *opx_ep, const uint64_t kind, struct opx_context *context,
+				    const uint64_t rx_op_flags, const int lock_required)
+{
+	struct opx_srx_ctx *srx_ctx = opx_ep->peer_srx_ep->fid.context;
+	struct dlist_entry *item, *tmp;
+
+	dlist_foreach_safe (&srx_ctx->unexp[kind], item, tmp) {
+		struct opx_srx_rx_entry *rx_entry   = container_of(item, struct opx_srx_rx_entry, list_entry);
+		struct fi_peer_rx_entry *peer_entry = &rx_entry->peer_entry;
+
+		if (peer_entry->addr != FI_ADDR_UNSPEC && context->src_addr != FI_ADDR_UNSPEC &&
+		    peer_entry->addr != context->src_addr) {
+			continue;
+		}
+		if (!ofi_match_tag(context->tag, context->ignore, peer_entry->tag)) {
+			continue;
+		}
+
+		context->len	      = peer_entry->msg_size;
+		context->tag	      = peer_entry->tag;
+		context->data	      = peer_entry->cq_data;
+		context->byte_counter = 0;
+
+		if (rx_op_flags & (FI_CLAIM | FI_DISCARD)) {
+			dlist_remove(&rx_entry->list_entry);
+			if (rx_op_flags & FI_CLAIM) {
+				/* Save the claimed entry for a later stand-alone FI_CLAIM.
+				 * internal[1] discriminates a shm entry (non-NULL) from a
+				 * fabric unexpected packet (NULL). */
+				struct fi_context *op_context = (struct fi_context *) context->err_entry.op_context;
+				op_context->internal[0]	      = rx_entry;
+				op_context->internal[1]	      = srx_ctx;
+			} else {
+				if (kind == FI_OPX_KIND_TAG) {
+					peer_entry->srx->peer_ops->discard_tag(peer_entry);
+				} else {
+					peer_entry->srx->peer_ops->discard_msg(peer_entry);
+				}
+				opx_srx_free_entry(peer_entry);
+			}
+		}
+
+		fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context, lock_required);
+		return FI_SUCCESS;
+	}
+
+	return -FI_ENOENT;
+}
+
+/* shm deposits an intra-node completion back through here.  The incoming
+ * context is the struct opx_context OPX stashed in peer_entry.context when it
+ * matched the receive (opx_srx_get_match / _match_shm_unexp), so complete it in
+ * place onto the app-visible OPX CQ instead of allocating a new one. */
+static ssize_t opx_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t flags, size_t len, void *buf,
+				 uint64_t data, uint64_t tag, fi_addr_t src)
+{
+	struct fi_opx_cq   *opx_cq = cq->fid.context;
+	struct opx_context *ctx	   = context;
+
+	/* Preserve FI_OPX_CQ_CONTEXT_MULTIRECV: opx_srx_get_match pre-marks a
+	 * per-message context so fi_opx_cq_fill reports the multi-recv buffer's
+	 * op_context; shm's flags do not carry that bit. */
+	ctx->flags	  = flags | (ctx->flags & FI_OPX_CQ_CONTEXT_MULTIRECV);
+	ctx->len	  = len;
+	ctx->buf	  = buf;
+	ctx->data	  = data;
+	ctx->tag	  = tag;
+	ctx->byte_counter = 0;
+
+	ssize_t rc = fi_opx_cq_enqueue_completed(opx_cq, ctx, FI_OPX_LOCK_NOT_REQUIRED);
+
+	if (ctx->flags & FI_OPX_CQ_CONTEXT_MULTIRECV) {
+		/* opx_srx_get_match sets byte_counter to -1 on the original buffer
+		 * context once it is exhausted; emit its FI_MULTI_RECV release now,
+		 * after the per-message completion, to preserve app-visible order. */
+		struct opx_context *orig = (struct opx_context *) ctx->multi_recv_context;
+		if (orig->byte_counter == (uint64_t) -1) {
+			orig->byte_counter = 0;
+			orig->next	   = NULL;
+			fi_opx_cq_enqueue_completed(opx_ep->rx->cq, orig, FI_OPX_LOCK_NOT_REQUIRED);
+		}
+	}
+
+	return rc;
+}
+
+static ssize_t opx_peer_cq_writeerr(struct fid_peer_cq *cq, const struct fi_cq_err_entry *err_entry)
+{
+	struct fi_opx_cq   *opx_cq = cq->fid.context;
+	struct opx_context *ctx	   = err_entry->op_context;
+
+	ctx->err_entry	  = *err_entry;
+	ctx->byte_counter = 0;
+
+	return fi_opx_cq_enqueue_err(opx_cq, ctx, FI_OPX_LOCK_NOT_REQUIRED);
+}
+
+static struct fi_ops_cq_owner opx_peer_cq_owner_ops = {
+	.size	  = sizeof(struct fi_ops_cq_owner),
+	.write	  = opx_peer_cq_write,
+	.writeerr = opx_peer_cq_writeerr,
+};
+
+static void fi_opx_close_shm_peer(struct fi_opx_ep *opx_ep)
+{
+	/* Close the shm endpoint first so it unbinds its AV, CQ, and SRX; closing
+	 * those objects while still bound triggers a spurious "AV is busy" warning. */
+	if (opx_ep->shm_ep) {
+		fi_close(&opx_ep->shm_ep->fid);
+		opx_ep->shm_ep = NULL;
+	}
+	if (opx_ep->shm_srx) {
+		fi_close(&opx_ep->shm_srx->fid);
+		opx_ep->shm_srx = NULL;
+	}
+	if (opx_ep->shm_peer_srx) {
+		free(opx_ep->shm_peer_srx);
+		opx_ep->shm_peer_srx = NULL;
+	}
+	if (opx_ep->shm_cq) {
+		fi_close(&opx_ep->shm_cq->fid);
+		opx_ep->shm_cq = NULL;
+	}
+	/* Free the OPX-owned peer CQ only after shm_cq is closed: shm held it as
+	 * its owner peer_cq while open.  A FI_PEER-opened cq never fi_close's the
+	 * adopted owner peer_cq, so OPX owns this free. */
+	if (opx_ep->shm_peer_cq) {
+		free(opx_ep->shm_peer_cq);
+		opx_ep->shm_peer_cq = NULL;
+	}
+	if (opx_ep->shm_av) {
+		fi_close(&opx_ep->shm_av->fid);
+		opx_ep->shm_av = NULL;
+	}
+}
+
+/* Separate helper (not inlined into fi_opx_close_ep) so struct opx_srx_ctx and
+ * struct opx_srx_rx_entry, declared further down this file, are in scope. */
+static void fi_opx_close_srx(struct fi_opx_ep *opx_ep)
+{
+	struct opx_srx_ctx *srx_ctx = opx_ep->peer_srx_ep->fid.context;
+
+	for (int kind = 0; kind < 2; kind++) {
+		struct opx_srx_rx_entry *rx_entry;
+		struct dlist_entry	*item, *tmp;
+		dlist_foreach_safe (&srx_ctx->unexp[kind], item, tmp) {
+			rx_entry = container_of(item, struct opx_srx_rx_entry, list_entry);
+			dlist_remove(item);
+			ofi_buf_free(rx_entry);
+		}
+	}
+	ofi_bufpool_destroy(srx_ctx->rx_pool);
+	free(srx_ctx);
+	opx_ep->peer_srx_ep = NULL;
+}
+
+static int fi_opx_enable_shm_peer(struct fi_opx_ep *opx_ep)
+{
+	struct fi_opx_domain *opx_domain = opx_ep->domain;
+	int		      ret;
+
+	struct fi_av_attr av_attr = {.type = FI_AV_TABLE};
+	ret			  = fi_av_open(opx_domain->shm_domain, &av_attr, &opx_ep->shm_av, NULL);
+	if (ret) {
+		return ret;
+	}
+
+	opx_ep->shm_peer_cq = calloc(1, sizeof(*opx_ep->shm_peer_cq));
+	if (!opx_ep->shm_peer_cq) {
+		return -FI_ENOMEM;
+	}
+	opx_ep->shm_peer_cq->fid.fclass	 = FI_CLASS_PEER_CQ;
+	opx_ep->shm_peer_cq->fid.context = opx_ep->rx->cq;
+	opx_ep->shm_peer_cq->owner_ops	 = &opx_peer_cq_owner_ops;
+
+	struct fi_peer_cq_context peer_cq_context = {.size = sizeof(peer_cq_context), .cq = opx_ep->shm_peer_cq};
+	struct fi_cq_attr	  cq_attr	  = {.format   = FI_CQ_FORMAT_UNSPEC,
+						     .size     = opx_ep->shm_info->rx_attr->size,
+						     .wait_obj = FI_WAIT_NONE,
+						     .flags    = FI_PEER};
+	ret = fi_cq_open(opx_domain->shm_domain, &cq_attr, &opx_ep->shm_cq, &peer_cq_context);
+	if (ret) {
+		return ret;
+	}
+
+	ret = fi_ep_bind(opx_ep->shm_ep, &opx_ep->shm_av->fid, 0);
+	if (ret) {
+		return ret;
+	}
+
+	ret = fi_ep_bind(opx_ep->shm_ep, &opx_ep->shm_cq->fid, FI_SEND | FI_RECV);
+	if (ret) {
+		return ret;
+	}
+
+	opx_ep->shm_peer_srx = calloc(1, sizeof(*opx_ep->shm_peer_srx));
+	if (!opx_ep->shm_peer_srx) {
+		return -FI_ENOMEM;
+	}
+	memcpy(opx_ep->shm_peer_srx, util_get_peer_srx(opx_ep->peer_srx_ep), sizeof(*opx_ep->shm_peer_srx));
+
+	struct fi_peer_srx_context peer_srx_context = {.size = sizeof(peer_srx_context), .srx = opx_ep->shm_peer_srx};
+	struct fi_rx_attr	   peer_srx_attr    = {.op_flags = FI_PEER};
+	ret = fi_srx_context(opx_domain->shm_domain, &peer_srx_attr, &opx_ep->shm_srx, &peer_srx_context);
+	if (ret) {
+		return ret;
+	}
+
+	char   shm_name[OPX_JOB_KEY_STR_SIZE + 32];
+	size_t shm_name_len = snprintf(shm_name, sizeof(shm_name), "%s.%hhu.%hu", opx_domain->unique_job_key_str,
+				       opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_unit,
+				       opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx) +
+			      1;
+	ret = fi_setname(&opx_ep->shm_ep->fid, shm_name, shm_name_len);
+	if (ret) {
+		return ret;
+	}
+
+	ret = fi_ep_bind(opx_ep->shm_ep, &opx_ep->shm_srx->fid, 0);
+	if (ret) {
+		return ret;
+	}
+
+	return fi_enable(opx_ep->shm_ep);
+}
+
 static int fi_opx_enable_ep(struct fid_ep *ep)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "enable ep\n");
@@ -3458,6 +4053,38 @@ static int fi_opx_enable_ep(struct fid_ep *ep)
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "failed to enable rma ops\n");
 		return ret;
+	}
+
+	/* ep_fid.fid.context must point back at srx_ctx: opx_srx_get_match()/foreach
+	 * and util_get_peer_srx() (in fi_opx_enable_shm_peer) recover it that way. */
+	struct opx_srx_ctx *srx_ctx = calloc(1, sizeof(*srx_ctx));
+	if (!srx_ctx) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "failed to allocate shared receive context\n");
+		return -FI_ENOMEM;
+	}
+	srx_ctx->peer_srx.owner_ops	     = &opx_srx_owner_ops;
+	srx_ctx->peer_srx.ep_fid.fid.fclass  = FI_CLASS_SRX_CTX;
+	srx_ctx->peer_srx.ep_fid.fid.context = srx_ctx;
+	srx_ctx->opx_ep			     = opx_ep;
+	dlist_init(&srx_ctx->unexp[FI_OPX_KIND_TAG]);
+	dlist_init(&srx_ctx->unexp[FI_OPX_KIND_MSG]);
+
+	ret = ofi_bufpool_create(&srx_ctx->rx_pool, sizeof(struct opx_srx_rx_entry), 64, UINT_MAX,
+				 OPX_EP_RX_CTX_BLOCKSIZE, 0);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "failed to create shared receive context pool (%d)\n", ret);
+		free(srx_ctx);
+		return ret;
+	}
+	opx_ep->peer_srx_ep = &srx_ctx->peer_srx.ep_fid;
+
+	if (opx_ep->shm_ep) {
+		ret = fi_opx_enable_shm_peer(opx_ep);
+		if (ret) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"failed to enable shm peer endpoint (%d); intra-node offload disabled\n", ret);
+			fi_opx_close_shm_peer(opx_ep);
+		}
 	}
 
 	/* connect any inserted table (av) addresses */
@@ -4395,6 +5022,20 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] Inline RTS edge is %s.\n",
 		opx_ep->use_hfisvc_inline_edge ? "enabled" : "disabled");
 
+	if (opx_domain->shm_domain) {
+		opx_shm_info_create(info, &opx_ep->shm_info);
+		if (opx_ep->shm_info) {
+			ret = fi_endpoint(opx_domain->shm_domain, opx_ep->shm_info, &opx_ep->shm_ep, opx_ep);
+			if (ret) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"Failed to open shm peer endpoint (%d); intra-node offload disabled\n", ret);
+				fi_freeinfo(opx_ep->shm_info);
+				opx_ep->shm_info = NULL;
+				opx_ep->shm_ep	 = NULL;
+			}
+		}
+	}
+
 	*ep = &opx_ep->ep_fid;
 
 	opx_debug_ep_list_append(opx_ep);
@@ -4487,12 +5128,19 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 					struct fi_context *op_context =
 						(struct fi_context *) context->err_entry.op_context;
 					op_context->internal[0] = uepkt;
+					op_context->internal[1] = NULL;
 				} else {
 					OPX_BUF_FREE(uepkt);
 				}
 			}
 
 			fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context, lock_required);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
+			return;
+		}
+
+		if (opx_ep->shm_ep &&
+		    fi_opx_ep_peek_shm_unexp(opx_ep, kind, context, rx_op_flags, lock_required) == FI_SUCCESS) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
 			return;
 		}
@@ -4527,7 +5175,51 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		 *
 		 * complete the receive for this "claimed" message ... */
 
-		struct fi_context	     *op_context  = (struct fi_context *) context->err_entry.op_context;
+		struct fi_context *op_context = (struct fi_context *) context->err_entry.op_context;
+
+		if (opx_ep->shm_ep && op_context->internal[1] != NULL) {
+			struct opx_srx_rx_entry *rx_entry   = op_context->internal[0];
+			struct fi_peer_rx_entry *peer_entry = &rx_entry->peer_entry;
+			op_context->internal[0]		    = NULL;
+			op_context->internal[1]		    = NULL;
+
+			if (rx_op_flags & FI_DISCARD) {
+				if (kind == FI_OPX_KIND_TAG) {
+					peer_entry->srx->peer_ops->discard_tag(peer_entry);
+				} else {
+					peer_entry->srx->peer_ops->discard_msg(peer_entry);
+				}
+				context->len	      = peer_entry->msg_size;
+				context->tag	      = peer_entry->tag;
+				context->data	      = peer_entry->cq_data;
+				context->byte_counter = 0;
+				/* The peer discard only releases shm's command context; the
+				 * owner still owns this wrapper (already removed from unexp
+				 * at FI_PEEK|FI_CLAIM time), so return it to the pool here. */
+				opx_srx_free_entry(peer_entry);
+				fi_opx_enqueue_completed(opx_ep->rx->cq_completed_ptr, context, lock_required);
+			} else {
+				rx_entry->iov[0].iov_base = context->buf;
+				rx_entry->iov[0].iov_len  = context->len;
+				peer_entry->iov		  = rx_entry->iov;
+				peer_entry->count	  = context->buf ? 1 : 0;
+				peer_entry->context	  = context;
+				peer_entry->msg_size =
+					(context->len < peer_entry->msg_size) ? context->len : peer_entry->msg_size;
+				/* A claimed receive always reports a completion; the bare
+				 * FI_CLAIM context carries no FI_COMPLETION, so request it
+				 * explicitly or shm's smr_complete_rx() would drop it. */
+				peer_entry->flags |= FI_COMPLETION | (context->flags & FI_REMOTE_CQ_DATA);
+				if (kind == FI_OPX_KIND_TAG) {
+					peer_entry->srx->peer_ops->start_tag(peer_entry);
+				} else {
+					peer_entry->srx->peer_ops->start_msg(peer_entry);
+				}
+			}
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
+			return;
+		}
+
 		struct fi_opx_hfi1_ue_packet *claimed_pkt = op_context->internal[0];
 		op_context->internal[0]			  = NULL;
 
@@ -4688,6 +5380,14 @@ fi_opx_ep_rx_process_context_noinline(struct fi_opx_ep *opx_ep, const uint64_t s
 		}
 
 		FI_OPX_DEBUG_COUNTERS_INC_COND(!found_packet, opx_ep->debug_counters.match.default_not_found);
+
+		/* Also carve any sends the shm peer buffered before this buffer was
+		 * posted.  If that exhausts the buffer, the trailing FI_MULTI_RECV
+		 * release was already emitted, so do not park the context. */
+		if (fi_opx_ep_multi_recv_shm_unexp(opx_ep, context)) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
+			return;
+		}
 
 		/*
 		 * no unexpected headers were matched; add this match
