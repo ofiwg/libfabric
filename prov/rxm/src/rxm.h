@@ -516,6 +516,10 @@ struct rxm_rx_buf {
 	struct dlist_entry repost_entry;
 	struct dlist_entry unexp_entry;
 	struct rxm_conn *conn;		/* msg ep data was received on */
+	/* Conn owning rx_ep's msg_eps[] slot.  Unlike conn, the data path
+	 * never re-points it.  Unused on the msg_srx path, where rx_ep is
+	 * the shared context and has no owning conn. */
+	struct rxm_conn *rx_ep_conn;
 	struct fi_peer_rx_entry *peer_entry;
 	struct rxm_proto_info *proto_info;
 	uint64_t comp_flags;
@@ -962,9 +966,11 @@ rxm_free_rx_buf(struct rxm_rx_buf *rx_buf)
 		rx_buf->data = &rx_buf->pkt.data;
 	}
 
-	/* Discard rx buffer if the msg ep it was posted to was closed */
+	/* Discard rx buffer if the msg ep it was posted to was closed.  Ask
+	 * the owning conn: the SAR path re-points rx_buf->conn at the wire
+	 * header's conn, so it would miss a perfectly open ep. */
 	if (rx_buf->repost && (rx_buf->ep->msg_srx ||
-	     rxm_get_ep_idx(rx_buf->conn, &rx_buf->rx_ep->fid) >= 0)) {
+	     rxm_get_ep_idx(rx_buf->rx_ep_conn, &rx_buf->rx_ep->fid) >= 0)) {
 		rxm_post_recv(rx_buf);
 	} else {
 		ofi_buf_free(rx_buf);
