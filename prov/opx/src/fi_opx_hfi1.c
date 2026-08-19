@@ -4881,6 +4881,12 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 					params->compare_iov.device);
 				sbuf_tmp	= params->sdma_we->bounce_buf.buf;
 				replay_use_sdma = false;
+
+				/* The payload now lives in host memory, so the
+				 * work entry must stop advertising device
+				 * memory to the kernel. */
+				params->sdma_we->hmem.iface  = FI_HMEM_SYSTEM;
+				params->sdma_we->hmem.device = 0;
 			} else {
 				sbuf_tmp	= sbuf;
 				replay_use_sdma = (dput_iov[i].sbuf_iface != FI_HMEM_SYSTEM);
@@ -5256,6 +5262,12 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 						   dput_iov[i].sbuf_handle, OPX_HMEM_DEV_REG_SEND_THRESHOLD,
 						   dput_iov[i].sbuf_iface, dput_iov[i].sbuf_device);
 				sbuf_tmp = params->sdma_we->bounce_buf.buf;
+
+				/* The payload now lives in host memory, so the
+				 * work entry must stop advertising device
+				 * memory to the kernel. */
+				params->sdma_we->hmem.iface  = FI_HMEM_SYSTEM;
+				params->sdma_we->hmem.device = 0;
 			} else {
 				sbuf_tmp = sbuf;
 			}
