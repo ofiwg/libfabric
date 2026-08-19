@@ -608,6 +608,10 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 
 	// suppress_free set when opx_mr will be freed by the hfisvc deferred close
 	if (!suppress_free) {
+		if (opx_mr->shm_mr) {
+			fi_close(&opx_mr->shm_mr->fid);
+			opx_mr->shm_mr = NULL;
+		}
 		opx_mr_release_dmabuf_fd(opx_mr);
 		free(opx_mr);
 	}
