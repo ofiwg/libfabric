@@ -98,6 +98,8 @@ struct fi_opx_fabric {
 #ifdef OPX_HMEM
 	struct opx_hmem_fabric *hmem_fabric;
 #endif
+
+	struct fid_fabric *shm_fabric;
 };
 
 struct fi_opx_node {
@@ -144,6 +146,9 @@ struct fi_opx_domain {
 #endif
 
 	struct util_domain util_domain;
+	struct fid_domain *shm_domain;
+	struct ofi_genlock srx_lock;
+	bool		   util_domain_initialized;
 
 #if HAVE_HFISVC
 	struct {
