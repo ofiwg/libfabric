@@ -263,6 +263,17 @@ MR_ABORT_INCAST_INITIATOR_EPS = (MR_ABORT_INCAST_NUM_DOMAINS *
                                  MR_ABORT_EPS_PER_DOMAIN)
 
 
+def incast_case_params():
+    """
+    abort_case_params() without the 10 MiB size. The buffer footprint is
+    W * ops_per_mr * message_size per side, all on one device when -D is
+    used, and the incast -W (8192) needs 80 GiB at 10 MiB -- more than an
+    accelerator device pool (a trn2 HBM bank is ~24 GB). The 4-endpoint
+    abort test already covers 10 MiB.
+    """
+    return [p for p in abort_case_params() if p.values[0] != MSG_SIZE_10MIB]
+
+
 def run_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order,
                         ops_per_mr, high_pps, sl_low_latency, message_size,
                         memory_type, num_domains):
@@ -312,7 +323,7 @@ def run_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order,
 @pytest.mark.memory_type(memory_type_list_symm, prefer_accelerator=True)
 @pytest.mark.parametrize(
     "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
-    abort_case_params())
+    incast_case_params())
 def test_mr_abort_incast_efa_direct(cmdline_args, rma_fabric, rma_op,
                                     cancel_order, ops_per_mr, high_pps,
                                     sl_low_latency, message_size, memory_type,
@@ -327,7 +338,7 @@ def test_mr_abort_incast_efa_direct(cmdline_args, rma_fabric, rma_op,
 @pytest.mark.memory_type(memory_type_list_symm)
 @pytest.mark.parametrize(
     "message_size, rma_op, high_pps, sl_low_latency, cancel_order, ops_per_mr",
-    abort_case_params())
+    incast_case_params())
 def test_mr_abort_incast_efa(cmdline_args, rma_fabric, rma_op, cancel_order,
                              ops_per_mr, high_pps, sl_low_latency,
                              message_size, memory_type, num_domains):
