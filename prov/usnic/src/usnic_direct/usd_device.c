@@ -246,6 +246,27 @@ usd_devid_to_pid(uint32_t vendor_id, uint32_t device_id)
         // Beaumont
         pid = "UCSC-MLOM-C100-04";
         break;
+    case 0x0305:
+        pid = "UCSX-ML-V6Q50G";
+        break;
+    case 0x0306:
+        pid = "UCSX-ML-V6D200G";
+        break;
+    case 0x0307:
+        pid = "UCSC-M-V6Q50G";
+        break;
+    case 0x0308:
+        pid = "UCSC-M-V6D200G";
+        break;
+    case 0x0309:
+        pid = "UCSX-ME-V6Q50G";
+        break;
+    case 0x030a:
+        pid = "UCSC-P-V6Q50G";
+        break;
+    case 0x030b:
+        pid = "UCSC-P-V6D200G";
+        break;
 
     default:
         pid = "Unknown Cisco Device";
@@ -353,6 +374,27 @@ usd_devid_to_nicname(uint32_t vendor_id, uint32_t device_id)
     case 0x024b:
         // Beaumont
         nicname = "VIC 1497";
+        break;
+    case 0x0305:
+        nicname = "VIC 16420";
+        break;
+    case 0x0306:
+        nicname = "VIC 16230";
+        break;
+    case 0x0307:
+        nicname = "VIC 16427";
+        break;
+    case 0x0308:
+        nicname = "VIC 16237";
+        break;
+    case 0x0309:
+        nicname = "VIC 16422";
+        break;
+    case 0x030a:
+        nicname = "VIC 16425";
+        break;
+    case 0x030b:
+        nicname = "VIC 16235";
         break;
 
     default:
