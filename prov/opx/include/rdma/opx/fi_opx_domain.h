@@ -369,7 +369,9 @@ struct fi_opx_mr {
 
 	/* == CACHE LINE 4 == */
 	UT_hash_handle hh; // 56 bytes
-	uint64_t       unused_cacheline4_qw;
+	/* Parallel shm-peer-domain registration; translates the OPX desc to an shm
+	 * desc for fi_peer offload. NULL when there is no shm peer. */
+	struct fid_mr *shm_mr;
 } __attribute__((__aligned__(FI_OPX_CACHE_LINE_SIZE))) __attribute__((__packed__));
 OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_mr) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Size of fi_opx_mr should be 5 cachelines!");
@@ -379,6 +381,16 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, dmabuf_fd) == offsetof(struct
 			"Offset of fi_opx_mr->dmabuf_fd should start at the same point as fi_opx_mr->dmabuf.fd!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_mr, hh) == (FI_OPX_CACHE_LINE_SIZE * 4),
 			"Offset of fi_opx_mr->hh should start at cacheline 4!");
+
+/* An OPX descriptor is a struct fi_opx_mr* the shm peer cannot interpret;
+ * translate each to the parallel shm_mr's descriptor (NULL stays NULL). */
+static inline void opx_get_desc_for_shm(int count, void **desc, void **shm_desc)
+{
+	for (int i = 0; i < count; ++i) {
+		struct fi_opx_mr *opx_mr = (struct fi_opx_mr *) (desc ? desc[i] : NULL);
+		shm_desc[i]		 = (opx_mr && opx_mr->shm_mr) ? fi_mr_desc(opx_mr->shm_mr) : NULL;
+	}
+}
 
 static inline uint64_t opx_mr_dmabuf_local_offset(const struct fi_opx_mr *opx_mr, const void *buf)
 {

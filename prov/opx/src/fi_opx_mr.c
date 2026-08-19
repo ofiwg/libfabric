@@ -84,6 +84,10 @@ static int fi_opx_close_mr(fid_t fid)
 
 	// suppress_free set when opx_mr will be freed by the hfisvc deferred close
 	if (!suppress_free) {
+		if (opx_mr->shm_mr) {
+			fi_close(&opx_mr->shm_mr->fid);
+			opx_mr->shm_mr = NULL;
+		}
 		opx_mr_release_dmabuf_fd(opx_mr);
 		free(opx_mr);
 	}
@@ -127,6 +131,28 @@ static struct fi_ops fi_opx_fi_ops = {.size	= sizeof(struct fi_ops),
 				      .bind	= fi_opx_bind_mr,
 				      .control	= fi_no_control,
 				      .ops_open = fi_no_ops_open};
+
+/* Register the same buffer against the shm peer domain so a node-local
+ * operation offloaded to the shm peer can be given a valid shm desc.  Only
+ * device (HMEM) buffers need it; host buffers are copied by shm without a
+ * desc.  Failure is non-fatal: shm_mr stays NULL and offload falls back to a
+ * NULL desc, which is correct for host memory. */
+static void opx_mr_reg_shm(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr, uint64_t flags)
+{
+	if (!opx_domain->shm_domain || opx_mr->attr.iface == FI_HMEM_SYSTEM) {
+		return;
+	}
+
+	struct fi_mr_attr shm_attr  = opx_mr->attr;
+	uint64_t	  shm_flags = flags | FI_HMEM_DEVICE_ONLY;
+
+	int ret = fi_mr_regattr(opx_domain->shm_domain, &shm_attr, shm_flags, &opx_mr->shm_mr);
+	if (ret) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+			"shm peer MR registration failed (%d); intra-node HMEM offload disabled for this MR\n", ret);
+		opx_mr->shm_mr = NULL;
+	}
+}
 
 static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *iov, size_t count, uint64_t access,
 					 uint64_t offset, uint64_t requested_key, uint64_t flags, struct fid_mr **mr,
@@ -383,6 +409,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 				    (opx_mr->domain->util_domain.mr_mode & OFI_MR_SCALABLE)) {
 					fi_opx_ref_inc(&opx_mr->domain->ref_cnt, "domain");
 				}
+				opx_mr_reg_shm(opx_domain, opx_mr, flags);
 				HASH_ADD(hh, opx_domain->mr_hashmap, mr_fid.key, sizeof(opx_mr->mr_fid.key), opx_mr);
 				opx_mr->in_hashmap = 1;
 			} else {
@@ -512,6 +539,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		}
 	}
 #endif
+	opx_mr_reg_shm(opx_domain, opx_mr, flags);
 	HASH_ADD(hh, opx_domain->mr_hashmap, mr_fid.key, sizeof(opx_mr->mr_fid.key), opx_mr);
 	opx_mr->in_hashmap = 1;
 	*mr		   = &opx_mr->mr_fid;
