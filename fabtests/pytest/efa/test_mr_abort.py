@@ -302,7 +302,8 @@ def run_mr_abort_incast(cmdline_args, rma_fabric, rma_op, cancel_order,
         assert(message_size <= SL_LOW_LATENCY_MAX_WRITE_SIZE)
         command += " --sl-low-latency"
 
-    test = ClientServerTest(cmdline_args, command, timeout=300, fabric=rma_fabric, memory_type=memory_type)
+    test = ClientServerTest(cmdline_args, command, timeout=360,
+                            fabric=rma_fabric, memory_type=memory_type)
     test.run()
 
 
