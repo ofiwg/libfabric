@@ -3466,8 +3466,7 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 #ifdef OPX_HMEM
 	/* The region is reachable here, but not from TID registration. */
 	if (target_context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
-		const struct fi_opx_mr *dst_mr =
-			((struct fi_opx_hmem_info *) target_context->hmem_info_qws)->dmabuf.opx_mr;
+		const struct fi_opx_mr *dst_mr = ((struct fi_opx_hmem_info *) target_context->hmem_info_qws)->opx_mr;
 		if (dst_mr && dst_mr->dmabuf.fd != OPX_SDMA_NO_DMABUF_FD) {
 			params->dmabuf_fd   = dst_mr->dmabuf.fd;
 			params->dmabuf_base = (uint64_t) dst_mr->dmabuf.base_addr;

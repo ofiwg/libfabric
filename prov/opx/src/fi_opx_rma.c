@@ -323,18 +323,31 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	cc->context			     = NULL;
 	cc->hit_zero			     = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[dst_addr] != FI_ADDR_NOTAVAIL) {
-		const struct iovec	msg_iov = {.iov_base = (void *) buf, .iov_len = len};
-		const struct fi_rma_iov rma_iov = {.addr = addr_offset, .len = len, .key = key};
-		ssize_t rc = opx_shm_rma_writemsg(opx_ep, opx_ep->av->shm_fi_addr[dst_addr], &msg_iov, NULL, 1,
-						  &rma_iov, 1, OPX_NO_REMOTE_CQ_DATA, cc, 0);
-		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_INJECT_WRITE, 0, 0);
-		return rc;
-	}
-
 	struct fi_opx_hmem_iov iov;
 	uint64_t	       handle;
 	const uint64_t	       is_hmem = opx_hmem_iov_init(buf, len, NULL, &iov, &handle);
+
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, dst_addr, &shm_addr)) {
+		/* fi_inject_write carries no descriptor, so the shm/sm2 peer cannot learn the
+		 * operand iface. Stage a device (GPU) operand into a host bounce buffer and hand
+		 * that to the peer; the peer copies it out synchronously before writemsg returns,
+		 * so the stack buffer is safe. Host operands are passed through untouched. */
+		uint8_t	    hmem_buf[FI_OPX_HFI1_PACKET_IMM];
+		const void *shm_buf = buf;
+		if (is_hmem) {
+			assert(len <= sizeof(hmem_buf));
+			OPX_HMEM_COPY_FROM(hmem_buf, buf, len, handle, OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET, iov.iface,
+					   iov.device);
+			shm_buf = hmem_buf;
+		}
+		const struct iovec	msg_iov = {.iov_base = (void *) shm_buf, .iov_len = len};
+		const struct fi_rma_iov rma_iov = {.addr = addr_offset, .len = len, .key = key};
+		ssize_t			rc	= opx_shm_rma_writemsg(opx_ep, shm_addr, &msg_iov, NULL, 1, &rma_iov, 1,
+								       OPX_NO_REMOTE_CQ_DATA, cc, 0);
+		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_INJECT_WRITE, 0, 0);
+		return rc;
+	}
 
 	opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr_offset, key, cc, FI_VOID, FI_NOOP,
 			   opx_tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
@@ -419,12 +432,12 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[dst_addr] != FI_ADDR_NOTAVAIL) {
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, dst_addr, &shm_addr)) {
 		const struct iovec	msg_iov = {.iov_base = (void *) buf, .iov_len = len};
 		const struct fi_rma_iov rma_iov = {.addr = addr_offset, .len = len, .key = key};
-		ssize_t			rc =
-			opx_shm_rma_writemsg(opx_ep, opx_ep->av->shm_fi_addr[dst_addr], &msg_iov, desc ? &desc : NULL,
-					     1, &rma_iov, 1, data, cc, op_flags & FI_REMOTE_CQ_DATA);
+		ssize_t rc = opx_shm_rma_writemsg(opx_ep, shm_addr, &msg_iov, desc ? &desc : NULL, 1, &rma_iov, 1, data,
+						  cc, op_flags & FI_REMOTE_CQ_DATA);
 		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITE, 0, 0);
 		return rc;
 	}
@@ -513,10 +526,11 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[dst_addr] != FI_ADDR_NOTAVAIL) {
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, dst_addr, &shm_addr)) {
 		const struct fi_rma_iov rma_iov = {.addr = addr_offset, .len = cc->initial_byte_count, .key = key};
-		ssize_t rc = opx_shm_rma_writemsg(opx_ep, opx_ep->av->shm_fi_addr[dst_addr], iov, desc, count, &rma_iov,
-						  1, OPX_NO_REMOTE_CQ_DATA, cc, 0);
+		ssize_t			rc	= opx_shm_rma_writemsg(opx_ep, shm_addr, iov, desc, count, &rma_iov, 1,
+								       OPX_NO_REMOTE_CQ_DATA, cc, 0);
 		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITEV, 0, 0);
 		return rc;
 	}
@@ -668,10 +682,11 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	cc->context  = context;
 	cc->hit_zero = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[msg->addr] != FI_ADDR_NOTAVAIL) {
-		ssize_t rc = opx_shm_rma_writemsg(opx_ep, opx_ep->av->shm_fi_addr[msg->addr], msg->msg_iov,
-						  (void **) msg->desc, msg->iov_count, msg->rma_iov, msg->rma_iov_count,
-						  msg->data, cc, flags & FI_REMOTE_CQ_DATA);
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, msg->addr, &shm_addr)) {
+		ssize_t rc = opx_shm_rma_writemsg(opx_ep, shm_addr, msg->msg_iov, (void **) msg->desc, msg->iov_count,
+						  msg->rma_iov, msg->rma_iov_count, msg->data, cc,
+						  flags & FI_REMOTE_CQ_DATA);
 		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITEMSG, 0, 0);
 		return rc;
 	}
@@ -812,11 +827,12 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[src_addr] != FI_ADDR_NOTAVAIL) {
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, src_addr, &shm_addr)) {
 		const struct iovec	msg_iov = {.iov_base = buf, .iov_len = len};
 		const struct fi_rma_iov rma_iov = {.addr = addr_offset, .len = len, .key = key};
-		ssize_t			rc = opx_shm_rma_readmsg(opx_ep, opx_ep->av->shm_fi_addr[src_addr], &msg_iov,
-						 desc ? &desc : NULL, 1, &rma_iov, 1, cc, 0);
+		ssize_t			rc =
+			opx_shm_rma_readmsg(opx_ep, shm_addr, &msg_iov, desc ? &desc : NULL, 1, &rma_iov, 1, cc, 0);
 		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 		return rc;
 	}
@@ -946,10 +962,10 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 		return 0;
 	}
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[src_addr] != FI_ADDR_NOTAVAIL) {
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, src_addr, &shm_addr)) {
 		const struct fi_rma_iov rma_iov = {.addr = addr_offset, .len = cc->initial_byte_count, .key = key};
-		ssize_t rc = opx_shm_rma_readmsg(opx_ep, opx_ep->av->shm_fi_addr[src_addr], iov, desc, count, &rma_iov,
-						 1, cc, 0);
+		ssize_t rc = opx_shm_rma_readmsg(opx_ep, shm_addr, iov, desc, count, &rma_iov, 1, cc, 0);
 		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 		return rc;
 	}
@@ -1154,10 +1170,10 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	cc->context  = context;
 	cc->hit_zero = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[msg->addr] != FI_ADDR_NOTAVAIL) {
-		ssize_t rc = opx_shm_rma_readmsg(opx_ep, opx_ep->av->shm_fi_addr[msg->addr], msg->msg_iov,
-						 (void **) msg->desc, msg->iov_count, msg->rma_iov, msg->rma_iov_count,
-						 cc, flags);
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, msg->addr, &shm_addr)) {
+		ssize_t rc = opx_shm_rma_readmsg(opx_ep, shm_addr, msg->msg_iov, (void **) msg->desc, msg->iov_count,
+						 msg->rma_iov, msg->rma_iov_count, cc, flags);
 		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 		return rc;
 	}

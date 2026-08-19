@@ -3489,6 +3489,22 @@ static inline struct opx_srx_rx_entry *opx_srx_alloc_entry(struct opx_srx_ctx *s
 	return rx_entry;
 }
 
+/* Hand shm the parallel shm_mr descriptor (it cannot interpret an OPX
+ * struct fi_opx_mr *).  Both the general GPU and dmabuf receive paths stash the
+ * app MR pointer on the opx_context, so translate for either.  Host receives
+ * correctly leave peer_entry.desc NULL. */
+static inline void opx_srx_set_hmem_desc(struct opx_srx_rx_entry *rx_entry, struct opx_context *context)
+{
+#ifdef OPX_HMEM
+	if (context->flags & (FI_OPX_CQ_CONTEXT_HMEM | FI_OPX_CQ_CONTEXT_DMABUF_HMEM)) {
+		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) &context->hmem_info_qws[0];
+		void			*app_desc  = hmem_info->opx_mr;
+		opx_get_desc_for_shm(1, &app_desc, rx_entry->desc);
+		rx_entry->peer_entry.desc = rx_entry->desc;
+	}
+#endif
+}
+
 /* Owner side of the FI_PEER contract: shm calls this to locate a posted OPX
  * receive for an incoming intra-node send.  Walk queue[kind].mq (the same
  * single match queue OPX's native fabric path uses), and on a hit splice the
@@ -3552,6 +3568,7 @@ static int opx_srx_get_match(struct fid_peer_srx *srx, struct fi_peer_match_attr
 		/* A placed multi-recv message always completes; shm drops it
 		 * otherwise (see opx_srx_get_match single-recv path). */
 		rx_entry->peer_entry.flags |= FI_COMPLETION | (context->flags & FI_REMOTE_CQ_DATA);
+		opx_srx_set_hmem_desc(rx_entry, context);
 
 		context->buf = (void *) ((uintptr_t) context->buf + send_len);
 		context->len -= send_len;
@@ -3583,6 +3600,7 @@ static int opx_srx_get_match(struct fid_peer_srx *srx, struct fi_peer_match_attr
 		 * smr_complete_rx() silently drops the completion unless the entry
 		 * flags request FI_COMPLETION (or FI_REMOTE_CQ_DATA). */
 		rx_entry->peer_entry.flags |= context->flags & (FI_COMPLETION | FI_REMOTE_CQ_DATA);
+		opx_srx_set_hmem_desc(rx_entry, context);
 		*entry = &rx_entry->peer_entry;
 		return FI_SUCCESS;
 	}
@@ -3686,6 +3704,7 @@ int fi_opx_ep_process_context_match_shm_unexp(struct fi_opx_ep *opx_ep, const ui
 		peer_entry->context	  = context;
 		peer_entry->msg_size	  = (context->len < peer_entry->msg_size) ? context->len : peer_entry->msg_size;
 		peer_entry->flags |= context->flags & (FI_COMPLETION | FI_REMOTE_CQ_DATA);
+		opx_srx_set_hmem_desc(rx_entry, context);
 
 		/* start_tag/start_msg consumes the receive and posts its own (error)
 		 * completion, so a non-zero return is not "no match": propagating it would
@@ -3755,6 +3774,7 @@ static int fi_opx_ep_multi_recv_shm_unexp(struct fi_opx_ep *opx_ep, struct opx_c
 		peer_entry->context	  = per_ctx;
 		peer_entry->msg_size	  = send_len;
 		peer_entry->flags |= FI_COMPLETION | (context->flags & FI_REMOTE_CQ_DATA);
+		opx_srx_set_hmem_desc(rx_entry, context);
 
 		context->buf = (void *) ((uintptr_t) context->buf + send_len);
 		context->len -= send_len;

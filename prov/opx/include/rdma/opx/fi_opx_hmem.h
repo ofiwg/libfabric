@@ -59,14 +59,11 @@ enum opx_hmem_return_code {
 #endif
 
 struct fi_opx_hmem_info {
-	union {
-		struct {
-			uint64_t device;
-		} gpu;
-		struct {
-			struct fi_opx_mr *opx_mr;
-		} dmabuf;
-	};
+	/* The posted receive's registration.  Native receive copies derive the
+	 * device id on demand via opx_hmem_get_attr_device(); the shm-peer owner
+	 * path needs the MR pointer to translate the descriptor for the peer (see
+	 * opx_srx_set_hmem_desc). */
+	struct fi_opx_mr  *opx_mr;
 	uint64_t	   hmem_dev_reg_handle;
 	enum fi_hmem_iface iface;
 	uint8_t		   is_unified;
@@ -148,12 +145,16 @@ enum fi_hmem_iface opx_hmem_get_mr_iface(const struct fi_opx_mr *desc, uint64_t 
 {
 #ifdef OPX_HMEM
 	if (desc && !desc->hmem_unified) {
-		*device = opx_hmem_get_attr_device(desc->attr.iface, &desc->attr);
+		if (device) {
+			*device = opx_hmem_get_attr_device(desc->attr.iface, &desc->attr);
+		}
 		*handle = (uint64_t) desc->attr.hmem_data;
 		return desc->attr.iface;
 	}
 #endif
-	*device = 0ul;
+	if (device) {
+		*device = 0ul;
+	}
 	*handle = OPX_HMEM_NO_HANDLE;
 	return FI_HMEM_SYSTEM;
 }

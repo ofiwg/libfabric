@@ -398,6 +398,12 @@ ssize_t opx_shm_rma_writemsg(struct fi_opx_ep *opx_ep, const fi_addr_t shm_addr,
 			     const size_t rma_iov_count, const uint64_t data, struct fi_opx_completion_counter *cc,
 			     const uint64_t flags)
 {
+	/* shm_desc[] is sized to the advertised iov_limit; reject an over-length
+	 * app iov_count rather than overrun it while translating descriptors. */
+	if (OFI_UNLIKELY(iov_count > FI_OPX_IOV_LIMIT)) {
+		return -FI_EINVAL;
+	}
+
 	void *shm_desc[FI_OPX_IOV_LIMIT];
 	if (desc) {
 		opx_get_desc_for_shm((int) iov_count, desc, shm_desc);
@@ -420,6 +426,12 @@ ssize_t opx_shm_rma_readmsg(struct fi_opx_ep *opx_ep, const fi_addr_t shm_addr, 
 			    void **desc, const size_t iov_count, const struct fi_rma_iov *rma_iov,
 			    const size_t rma_iov_count, struct fi_opx_completion_counter *cc, const uint64_t flags)
 {
+	/* shm_desc[] is sized to the advertised iov_limit; reject an over-length
+	 * app iov_count rather than overrun it while translating descriptors. */
+	if (OFI_UNLIKELY(iov_count > FI_OPX_IOV_LIMIT)) {
+		return -FI_EINVAL;
+	}
+
 	void *shm_desc[FI_OPX_IOV_LIMIT];
 	if (desc) {
 		opx_get_desc_for_shm((int) iov_count, desc, shm_desc);

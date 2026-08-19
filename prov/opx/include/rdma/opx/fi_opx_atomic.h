@@ -51,8 +51,8 @@
 			struct fid_ep *ep, const void *buf, size_t count, void *desc, fi_addr_t dst_addr,              \
 			uint64_t addr, uint64_t key, enum fi_datatype datatype, enum fi_op op, void *context)          \
 	{                                                                                                              \
-		return fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context, LOCK, CAPS,   \
-					     RELIABILITY, HFI1_TYPE, CTX_SHARING);                                     \
+		return fi_opx_atomic_generic(ep, buf, count, desc, dst_addr, addr, key, datatype, op, context, LOCK,   \
+					     CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING);                               \
 	}                                                                                                              \
 	static inline ssize_t                                                                                          \
 		fi_opx_inject_atomic_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(   \

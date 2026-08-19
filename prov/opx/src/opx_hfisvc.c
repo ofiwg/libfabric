@@ -122,7 +122,7 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		const uintptr_t sender_rzv_comp = params->iovs[i].rzv_comp_vaddr;
 
 		if (context->flags & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
-			struct fi_opx_mr *opx_mr = ((struct fi_opx_hmem_info *) context->hmem_info_qws)->dmabuf.opx_mr;
+			struct fi_opx_mr *opx_mr = ((struct fi_opx_hmem_info *) context->hmem_info_qws)->opx_mr;
 			assert(opx_mr);
 			if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPEN_DEFERRED) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_recv_rts.lazy_mr_open);
