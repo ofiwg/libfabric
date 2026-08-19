@@ -76,8 +76,10 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
 	rx_buf->rx_ep = rx_ep;
 	rx_buf->repost = true;
 
-	if (!rxm_ep->msg_srx)
-		rx_buf->conn = rx_ep->fid.context;
+	if (!rxm_ep->msg_srx) {
+		/* rxm_open_msg_ep() passes the conn as the endpoint context. */
+		rx_buf->conn = rx_buf->rx_ep_conn = rx_ep->fid.context;
+	}
 
 	return rx_buf;
 }
