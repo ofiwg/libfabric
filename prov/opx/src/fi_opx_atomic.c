@@ -417,8 +417,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 	return count;
 }
 
-ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, fi_addr_t dst_addr, uint64_t addr,
-			      uint64_t key, enum fi_datatype datatype, enum fi_op op, void *user_context,
+ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, void *desc, fi_addr_t dst_addr,
+			      uint64_t addr, uint64_t key, enum fi_datatype datatype, enum fi_op op, void *user_context,
 			      const int lock_required, const uint64_t caps, const enum ofi_reliability_kind reliability,
 			      const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
@@ -456,17 +456,23 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[dst_addr] != FI_ADDR_NOTAVAIL) {
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, dst_addr, &shm_addr)) {
 		/* fi_opx_atomic_internal() would set cc->cntr on the native path; the
 		 * shm route bypasses it, so set it here (write op) so fi_opx_hit_zero()
 		 * increments the OPX write counter. */
-		cc->cntr			   = opx_ep->write_cntr;
+		/* fi_opx_atomic_internal() would set cc->cntr on the native path; the
+		 * shm route bypasses it, so set it here (write op) so fi_opx_hit_zero()
+		 * increments the OPX write counter. */
+		cc->cntr = opx_ep->write_cntr;
+		void *shm_desc[1];
+		opx_get_desc_for_shm(1, &desc, shm_desc);
 		const struct fi_ioc	   msg_iov = {.addr = (void *) buf, .count = count};
 		const struct fi_rma_ioc	   rma_iov = {.addr = addr, .count = count, .key = key};
 		const struct fi_msg_atomic m	   = {.msg_iov	     = &msg_iov,
-						      .desc	     = NULL,
+						      .desc	     = desc ? shm_desc : NULL,
 						      .iov_count     = 1,
-						      .addr	     = opx_ep->av->shm_fi_addr[dst_addr],
+						      .addr	     = shm_addr,
 						      .rma_iov	     = &rma_iov,
 						      .rma_iov_count = 1,
 						      .datatype	     = datatype,
@@ -536,7 +542,8 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep, const struct fi_msg_at
 	cc->context  = context;
 	cc->hit_zero = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[msg->addr] != FI_ADDR_NOTAVAIL) {
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, msg->addr, &shm_addr)) {
 		cc->cntr = opx_ep->write_cntr;
 		void *shm_desc[FI_OPX_IOV_LIMIT];
 		if (msg->desc) {
@@ -545,7 +552,7 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep, const struct fi_msg_at
 		const struct fi_msg_atomic m = {.msg_iov       = msg->msg_iov,
 						.desc	       = msg->desc ? shm_desc : NULL,
 						.iov_count     = msg->iov_count,
-						.addr	       = opx_ep->av->shm_fi_addr[msg->addr],
+						.addr	       = shm_addr,
 						.rma_iov       = msg->rma_iov,
 						.rma_iov_count = msg->rma_iov_count,
 						.datatype      = datatype,
@@ -665,7 +672,8 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[msg->addr] != FI_ADDR_NOTAVAIL) {
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, msg->addr, &shm_addr)) {
 		cc->cntr = opx_ep->read_cntr;
 		void *shm_desc[FI_OPX_IOV_LIMIT];
 		if (msg->desc) {
@@ -674,7 +682,7 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 		const struct fi_msg_atomic m = {.msg_iov       = msg->msg_iov,
 						.desc	       = msg->desc ? shm_desc : NULL,
 						.iov_count     = msg->iov_count,
-						.addr	       = opx_ep->av->shm_fi_addr[msg->addr],
+						.addr	       = shm_addr,
 						.rma_iov       = msg->rma_iov,
 						.rma_iov_count = msg->rma_iov_count,
 						.datatype      = datatype,
@@ -845,7 +853,8 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[msg->addr] != FI_ADDR_NOTAVAIL) {
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, msg->addr, &shm_addr)) {
 		cc->cntr = opx_ep->read_cntr;
 		void *shm_desc[FI_OPX_IOV_LIMIT];
 		if (msg->desc) {
@@ -854,7 +863,7 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep, const struct fi_ms
 		const struct fi_msg_atomic m = {.msg_iov       = msg->msg_iov,
 						.desc	       = msg->desc ? shm_desc : NULL,
 						.iov_count     = msg->iov_count,
-						.addr	       = opx_ep->av->shm_fi_addr[msg->addr],
+						.addr	       = shm_addr,
 						.rma_iov       = msg->rma_iov,
 						.rma_iov_count = msg->rma_iov_count,
 						.datatype      = datatype,
@@ -963,15 +972,25 @@ ssize_t fi_opx_fetch_compare_atomic_generic(struct fid_ep *ep, const void *buf, 
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[dest_addr] != FI_ADDR_NOTAVAIL) {
-		cc->cntr			   = opx_ep->read_cntr;
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, dest_addr, &shm_addr)) {
+		cc->cntr = opx_ep->read_cntr;
+		/* Translate the OPX HMEM descriptors to shm-peer descriptors so the shm/sm2
+		 * peer sees the operand iface (a GPU operand would otherwise look like host
+		 * memory to the peer and silently corrupt). opx_get_desc_for_shm is NULL-safe. */
+		void *shm_desc[1];
+		void *shm_compare_desc[1];
+		void *shm_result_desc[1];
+		opx_get_desc_for_shm(1, &desc, shm_desc);
+		opx_get_desc_for_shm(1, &compare_desc, shm_compare_desc);
+		opx_get_desc_for_shm(1, &result_desc, shm_result_desc);
 		const struct fi_ioc	   msg_iov = {.addr = (void *) buf, .count = count};
 		const struct fi_rma_ioc	   rma_iov = {.addr = addr, .count = count, .key = key};
 		struct fi_ioc		   resultv = {.addr = result, .count = count};
 		const struct fi_msg_atomic m	   = {.msg_iov	     = &msg_iov,
-						      .desc	     = NULL,
+						      .desc	     = desc ? shm_desc : NULL,
 						      .iov_count     = 1,
-						      .addr	     = opx_ep->av->shm_fi_addr[dest_addr],
+						      .addr	     = shm_addr,
 						      .rma_iov	     = &rma_iov,
 						      .rma_iov_count = 1,
 						      .datatype	     = datatype,
@@ -980,10 +999,12 @@ ssize_t fi_opx_fetch_compare_atomic_generic(struct fid_ep *ep, const void *buf, 
 						      .data	     = 0};
 		if (compare) {
 			const struct fi_ioc comparev = {.addr = (void *) compare, .count = count};
-			return opx_ep->shm_ep->atomic->compwritemsg(opx_ep->shm_ep, &m, &comparev, NULL, 1, &resultv,
-								    NULL, 1, opx_tx->op_flags | FI_COMPLETION);
+			return opx_ep->shm_ep->atomic->compwritemsg(
+				opx_ep->shm_ep, &m, &comparev, compare_desc ? shm_compare_desc : NULL, 1, &resultv,
+				result_desc ? shm_result_desc : NULL, 1, opx_tx->op_flags | FI_COMPLETION);
 		}
-		return opx_ep->shm_ep->atomic->readwritemsg(opx_ep->shm_ep, &m, &resultv, NULL, 1,
+		return opx_ep->shm_ep->atomic->readwritemsg(opx_ep->shm_ep, &m, &resultv,
+							    result_desc ? shm_result_desc : NULL, 1,
 							    opx_tx->op_flags | FI_COMPLETION);
 	}
 
@@ -1054,13 +1075,32 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	cc->hit_zero	       = fi_opx_hit_zero;
 	cc->cntr	       = opx_ep->write_cntr;
 
-	if (opx_ep->shm_ep && opx_ep->av->shm_fi_addr && opx_ep->av->shm_fi_addr[dest_addr] != FI_ADDR_NOTAVAIL) {
-		const struct fi_ioc	   msg_iov = {.addr = (void *) buf, .count = count};
+	struct fi_opx_hmem_iov iov;
+	uint64_t	       handle;
+	const uint64_t	       is_hmem =
+		(const uint64_t) opx_hmem_iov_init(buf, count * sizeofdt(datatype), NULL, &iov, &handle);
+
+	fi_addr_t shm_addr;
+	if (opx_ep_shm_reachable(opx_ep, dest_addr, &shm_addr)) {
+		/* fi_inject_atomic carries no descriptor, so the shm/sm2 peer cannot learn the
+		 * operand iface. Stage a device (GPU) operand into a host bounce buffer and hand
+		 * that to the peer; the peer copies it out synchronously before writemsg returns,
+		 * so the stack buffer is safe. Host operands are passed through untouched. */
+		const size_t operand_len = count * sizeofdt(datatype);
+		uint8_t	     hmem_buf[FI_OPX_HFI1_PACKET_IMM];
+		const void  *shm_buf = buf;
+		if (is_hmem) {
+			assert(operand_len <= sizeof(hmem_buf));
+			OPX_HMEM_COPY_FROM(hmem_buf, buf, operand_len, handle, OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET,
+					   iov.iface, iov.device);
+			shm_buf = hmem_buf;
+		}
+		const struct fi_ioc	   msg_iov = {.addr = (void *) shm_buf, .count = count};
 		const struct fi_rma_ioc	   rma_iov = {.addr = addr, .count = count, .key = key};
 		const struct fi_msg_atomic m	   = {.msg_iov	     = &msg_iov,
 						      .desc	     = NULL,
 						      .iov_count     = 1,
-						      .addr	     = opx_ep->av->shm_fi_addr[dest_addr],
+						      .addr	     = shm_addr,
 						      .rma_iov	     = &rma_iov,
 						      .rma_iov_count = 1,
 						      .datatype	     = datatype,
@@ -1073,11 +1113,6 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== ATOMIC INJECT WRITE (begin)\n");
-
-	struct fi_opx_hmem_iov iov;
-	uint64_t	       handle;
-	const uint64_t	       is_hmem =
-		(const uint64_t) opx_hmem_iov_init(buf, count * sizeofdt(datatype), NULL, &iov, &handle);
 
 	opx_write_internal(opx_ep, &iov, 1, OPX_NO_REMOTE_CQ_DATA, opx_dst_addr, addr, key, cc, datatype, op,
 			   opx_tx->op_flags | FI_INJECT, is_hmem, handle, lock_required, caps, reliability, hfi1_type);
@@ -1105,39 +1140,39 @@ ssize_t fi_opx_atomic(struct fid_ep *ep, const void *buf, size_t count, void *de
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
-			rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context,
+			rc = fi_opx_atomic_generic(ep, buf, count, desc, dst_addr, addr, key, datatype, op, context,
 						   FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY,
 						   OPX_HFI1_WFR, OPX_CTX_SHARING_ON);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
-			rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context,
+			rc = fi_opx_atomic_generic(ep, buf, count, desc, dst_addr, addr, key, datatype, op, context,
 						   FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY,
 						   OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
-			rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context,
+			rc = fi_opx_atomic_generic(ep, buf, count, desc, dst_addr, addr, key, datatype, op, context,
 						   FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY,
 						   OPX_HFI1_JKR, OPX_CTX_SHARING_ON);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
-			rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context,
+			rc = fi_opx_atomic_generic(ep, buf, count, desc, dst_addr, addr, key, datatype, op, context,
 						   FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY,
 						   OPX_HFI1_CYR, OPX_CTX_SHARING_ON);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
-			rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context,
+			rc = fi_opx_atomic_generic(ep, buf, count, desc, dst_addr, addr, key, datatype, op, context,
 						   FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY,
 						   OPX_HFI1_WFR, OPX_CTX_SHARING_OFF);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
-			rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context,
+			rc = fi_opx_atomic_generic(ep, buf, count, desc, dst_addr, addr, key, datatype, op, context,
 						   FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY,
 						   OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
-			rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context,
+			rc = fi_opx_atomic_generic(ep, buf, count, desc, dst_addr, addr, key, datatype, op, context,
 						   FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY,
 						   OPX_HFI1_JKR, OPX_CTX_SHARING_OFF);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
-			rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op, context,
+			rc = fi_opx_atomic_generic(ep, buf, count, desc, dst_addr, addr, key, datatype, op, context,
 						   FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY,
 						   OPX_HFI1_CYR, OPX_CTX_SHARING_OFF);
 		}

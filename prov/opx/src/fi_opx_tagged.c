@@ -105,12 +105,11 @@ ssize_t fi_opx_trecvmsg_generic(struct fid_ep *ep, const struct fi_msg_tagged *m
 		hmem_info->iface	       = hmem_iface;
 		hmem_info->hmem_dev_reg_handle = hmem_handle;
 		hmem_info->is_unified	       = ((struct fi_opx_mr *) msg->desc[0])->hmem_unified;
+		hmem_info->opx_mr	       = ((struct fi_opx_mr *) msg->desc[0]);
 		if (opx_ep->use_hfisvc && opx_ep->domain->hmem_domain->dmabuf_supported) {
-			hmem_info->dmabuf.opx_mr = ((struct fi_opx_mr *) msg->desc[0]);
-			context->flags		 = flags | FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
+			context->flags = flags | FI_OPX_CQ_CONTEXT_DMABUF_HMEM;
 		} else {
-			hmem_info->gpu.device = hmem_device;
-			context->flags	      = flags | FI_OPX_CQ_CONTEXT_HMEM;
+			context->flags = flags | FI_OPX_CQ_CONTEXT_HMEM;
 		}
 	} else {
 		hmem_iface		  = FI_HMEM_SYSTEM;
