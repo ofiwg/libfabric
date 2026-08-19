@@ -42,9 +42,106 @@
 #include "shared.h"
 #include "benchmark_shared.h"
 
+/* Per-size status exchanged with the peer over the reliable OOB socket. */
+#define FT_DGRAM_STATUS_OK	0
+#define FT_DGRAM_STATUS_TIMEOUT	1
+
+/*
+ * After a per-size timeout, realign completion accounting so the next size
+ * starts even. CQ mode: bump the software cntr to the posted seq. Counter mode:
+ * the provider counter can't be written, so lower seq to what it observed
+ * (success + error); otherwise it stays behind seq and every size times out.
+ */
+static void ft_dgram_reconcile_counters(void)
+{
+	struct fi_cq_err_entry comp;
+	int ret;
+
+	/* Drain late completions so they don't leak into the next size. CQs
+	 * exist even in counter mode (bound FI_SELECTIVE_COMPLETION). */
+	if (txcq) {
+		do {
+			ret = fi_cq_read(txcq, &comp, 1);
+			if (ret == -FI_EAVAIL)
+				(void) fi_cq_readerr(txcq, &comp, 0);
+		} while (ret > 0 || ret == -FI_EAVAIL);
+	}
+	if (rxcq) {
+		do {
+			ret = fi_cq_read(rxcq, &comp, 1);
+			if (ret == -FI_EAVAIL)
+				(void) fi_cq_readerr(rxcq, &comp, 0);
+		} while (ret > 0 || ret == -FI_EAVAIL);
+	}
+
+	if (opts.options & FT_OPT_TX_CQ) {
+		tx_cq_cntr = tx_seq;
+	} else if (txcntr) {
+		tx_seq = fi_cntr_read(txcntr) + fi_cntr_readerr(txcntr);
+		tx_cq_cntr = tx_seq;
+	}
+
+	if (opts.options & FT_OPT_RX_CQ) {
+		rx_cq_cntr = rx_seq;
+	} else if (rxcntr) {
+		rx_seq = fi_cntr_read(rxcntr) + fi_cntr_readerr(rxcntr);
+		rx_cq_cntr = rx_seq;
+	}
+}
+
+/*
+ * OOB barrier between sizes: exchange local status and return TIMEOUT if either
+ * peer timed out. Keeps both sides in lock-step so neither sends to a torn-down
+ * QP.
+ */
+static int ft_dgram_size_barrier(int local_status)
+{
+	int peer_status;
+
+	peer_status = ft_sock_sync(oob_sock, local_status);
+	if (peer_status < 0)
+		return peer_status;
+
+	return (local_status == FT_DGRAM_STATUS_TIMEOUT ||
+		peer_status == FT_DGRAM_STATUS_TIMEOUT) ?
+		       FT_DGRAM_STATUS_TIMEOUT : FT_DGRAM_STATUS_OK;
+}
+
+/*
+ * Run pingpong for one size. A -FI_ENODATA timeout is recoverable: reconcile
+ * state, sync with the peer, and continue. *timed_out reflects either peer.
+ * Any other error is fatal.
+ */
+static int run_one_size(bool *timed_out)
+{
+	int ret, status;
+
+	ret = pingpong();
+	if (ret && ret != -FI_ENODATA)
+		return ret;
+
+	if (ret == -FI_ENODATA) {
+		fprintf(stderr,
+			"Receive timed out for message size %zu; "
+			"skipping to next size\n", opts.transfer_size);
+		ft_dgram_reconcile_counters();
+		status = FT_DGRAM_STATUS_TIMEOUT;
+	} else {
+		status = FT_DGRAM_STATUS_OK;
+	}
+
+	status = ft_dgram_size_barrier(status);
+	if (status < 0)
+		return status;
+
+	*timed_out = (status == FT_DGRAM_STATUS_TIMEOUT);
+	return 0;
+}
+
 static int run(void)
 {
 	int i, ret;
+	bool timed_out, any_timed_out = false;
 
 	ret = ft_init_fabric();
 	if (ret)
@@ -64,18 +161,26 @@ static int run(void)
 				continue;
 			opts.transfer_size = test_size[i].size;
 			init_test(&opts, test_name, sizeof(test_name));
-			ret = pingpong();
+			ret = run_one_size(&timed_out);
 			if (ret)
 				return ret;
+			any_timed_out |= timed_out;
 		}
 	} else {
 		init_test(&opts, test_name, sizeof(test_name));
-		ret = pingpong();
+		ret = run_one_size(&timed_out);
 		if (ret)
 			return ret;
+		any_timed_out |= timed_out;
 	}
 
-	return ft_finalize();
+	ret = ft_finalize();
+	if (ret)
+		return ret;
+
+	/* Every size was attempted and both peers tore down together. Report a
+	 * distinct status if any size timed out so the harness can flag it. */
+	return any_timed_out ? -FI_ENODATA : 0;
 }
 
 int main(int argc, char **argv)
