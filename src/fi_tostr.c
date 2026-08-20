@@ -408,6 +408,8 @@ ofi_tostr_ep_attr(char *buf, size_t len, const struct fi_ep_attr *attr,
 
 	ofi_strncatf(buf, len, "%s%sauth_key_size: %zu\n", prefix, TAB,
 		     attr->auth_key_size);
+	ofi_strncatf(buf, len, "%s%sxpu_ctx: %p\n", prefix, TAB,
+		     (void *) attr->xpu_ctx);
 }
 
 static void
@@ -551,6 +553,8 @@ ofi_tostr_domain_attr(char *buf, size_t len, const struct fi_domain_attr *attr,
 		     attr->max_cntr_value);
 	ofi_strncatf(buf, len, "%s%smax_err_cntr_value: %lu\n", prefix, TAB,
 		     attr->max_err_cntr_value);
+	ofi_strncatf(buf, len, "%s%smax_xpu_ctx_cnt: %zu\n", prefix, TAB,
+		     attr->max_xpu_ctx_cnt);
 }
 
 static void
@@ -839,6 +843,7 @@ ofi_tostr_cq_attr(char *buf, size_t len, const struct fi_cq_attr *attr)
 	ofi_strncatf(buf, len, "%swait_cond: ", TAB);
 	ofi_tostr_cq_wait_cond(buf, len, attr->wait_cond);
 	ofi_strncatf(buf, len, "\n");
+	ofi_strncatf(buf, len, "%sxpu_ctx: %p\n", TAB, (void *) attr->xpu_ctx);
 }
 
 static void ofi_tostr_mr_access(char *buf, size_t len, uint64_t access)
@@ -904,6 +909,7 @@ ofi_tostr_cntr_attr(char *buf, size_t len, const struct fi_cntr_attr *attr)
 	ofi_tostr_wait_obj(buf, len, attr->wait_obj);
 	ofi_strncatf(buf, len, "\n");
 	ofi_strncatf(buf, len, "%sflags: 0x%lx\n", TAB, attr->flags);
+	ofi_strncatf(buf, len, "%sxpu_ctx: %p\n", TAB, (void *) attr->xpu_ctx);
 }
 
 static void
