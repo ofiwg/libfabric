@@ -1009,7 +1009,7 @@ int util_srx_close(struct fid *fid)
 	if (!srx)
 		return -FI_EINVAL;
 
-	ofi_genlock_lock(srx->lock);
+	assert(ofi_genlock_held(srx->lock));
 	(void)ofi_array_iter(&srx->src_recv_queues, srx, util_cleanup_queues);
 	(void)ofi_array_iter(&srx->src_trecv_queues, srx, util_cleanup_queues);
 	ofi_array_destroy(&srx->src_recv_queues);
@@ -1072,7 +1072,6 @@ int util_srx_close(struct fid *fid)
 	ofi_atomic_dec32(&srx->cq->ref);
 	ofi_bufpool_destroy(srx->rx_pool);
 
-	ofi_genlock_unlock(srx->lock);
 	ofi_genlock_destroy(&srx->unspec_lock);
 	free(srx);
 
