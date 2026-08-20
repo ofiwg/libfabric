@@ -72,6 +72,13 @@
 #define OPX_TID_ENABLE_ON  1
 #define OPX_TID_ENABLE_OFF 0
 
+#if HAVE_HFISVC
+#define OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC_DEFAULT 10
+#define OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC_MAX     3600
+#define OPX_HFISVC_RMA_ABS_CAP_MULTIPLIER	      6ull
+#define OPX_NS_PER_SEC				      1000000000ull
+#endif
+
 ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, struct fi_opx_addr *peers,
 			     struct fi_opx_extended_addr *peers_ext);
 
@@ -385,12 +392,12 @@ static void fi_opx_ep_rx_tx_model_init(struct fi_opx_ep *opx_ep, struct fi_opx_h
 		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.rma_rts[tx_index].rma_rts_9B.hdr)), hfi1_type);
 
 #if HAVE_HFISVC
-		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B = opx_ep->rx->tx.rma_rts[tx_index].rma_rts_9B;
-		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr.bth.opcode =
+		opx_ep->rx->tx.hfisvc_rma_rts[tx_index].hfisvc_rma_rts_9B = opx_ep->rx->tx.rma_rts[tx_index].rma_rts_9B;
+		opx_ep->rx->tx.hfisvc_rma_rts[tx_index].hfisvc_rma_rts_9B.hdr.bth.opcode =
 			FI_OPX_HFI_BTH_OPCODE_RMA_HFISVC_RTS;
-		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr.rma_rts.opcode = 0; /* set at runtime */
+		opx_ep->rx->tx.hfisvc_rma_rts[tx_index].hfisvc_rma_rts_9B.hdr.rma_rts.opcode = 0; /* set at runtime */
 
-		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr)), hfi1_type);
+		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.hfisvc_rma_rts[tx_index].hfisvc_rma_rts_9B.hdr)), hfi1_type);
 #endif
 
 		/* DPUT packet model */
@@ -503,12 +510,13 @@ static void fi_opx_ep_rx_tx_model_init(struct fi_opx_ep *opx_ep, struct fi_opx_h
 		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.rma_rts[tx_index].rma_rts_16B.hdr)), hfi1_type);
 
 #if HAVE_HFISVC
-		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B = opx_ep->rx->tx.rma_rts[tx_index].rma_rts_16B;
-		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.bth.opcode =
+		opx_ep->rx->tx.hfisvc_rma_rts[tx_index].hfisvc_rma_rts_16B =
+			opx_ep->rx->tx.rma_rts[tx_index].rma_rts_16B;
+		opx_ep->rx->tx.hfisvc_rma_rts[tx_index].hfisvc_rma_rts_16B.hdr.bth.opcode =
 			FI_OPX_HFI_BTH_OPCODE_RMA_HFISVC_RTS;
-		opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.rma_rts.opcode = 0; /* set at runtime */
+		opx_ep->rx->tx.hfisvc_rma_rts[tx_index].hfisvc_rma_rts_16B.hdr.rma_rts.opcode = 0; /* set at runtime */
 
-		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr)), hfi1_type);
+		OPX_DEBUG_PRINT_HDR((&(opx_ep->rx->tx.hfisvc_rma_rts[tx_index].hfisvc_rma_rts_16B.hdr)), hfi1_type);
 #endif
 
 		/* DPUT packet model */
@@ -817,6 +825,11 @@ static int fi_opx_close_ep(fid_t fid)
 		opx_ep->reli_service = NULL;
 	}
 
+#if HAVE_HFISVC
+	/* every watched hfisvc-GET cc must have been unlinked (completed or error-settled) by now */
+	assert(dlist_empty(&opx_ep->rma_watch_list));
+#endif
+
 	if (opx_ep->rma_counter_pool) {
 		ofi_bufpool_destroy(opx_ep->rma_counter_pool);
 	}
@@ -1021,10 +1034,7 @@ static int fi_opx_close_ep(fid_t fid)
 			opx_ep->hfisvc.completion_pool = NULL;
 		}
 	}
-	/* Close secondary hfisvc ibv_context opened for single-plane striping.
-	 * Must run AFTER the per-ctx command/completion queues above are closed:
-	 * those queues were opened against ctxs[i].ctx, so closing the ibv_context
-	 * first orphans the queue fds and the queue close returns -EBADF for i>=1. */
+	/* close secondary hfisvc ibv_context AFTER its queues; closing it first orphans the queue fds (-EBADF) */
 	struct fi_opx_domain *opx_domain = opx_ep->domain;
 	for (int i = 1; i < opx_domain->hfisvc.num_ctxs; i++) {
 		if (opx_domain->hfisvc.ctxs[i].fd_verbs >= 0) {
@@ -2342,6 +2352,15 @@ static bool opx_open_secondary_different_plane(struct fi_opx_ep *opx_ep, struct 
 		struct fi_opx_hfi1_context *sec_hfi = NULL;
 		struct fi_opx_ep_tx	   *sec_tx  = NULL;
 
+		/* Fixed-size plane arrays and per-plane hfisvc slots index by num_tx_contexts;
+		 * stop at the cap so extra discovered planes can't overflow or under-seed silently. */
+		if (opx_ep->num_tx_contexts >= OPX_MAX_TX_CONTEXTS) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+				"Reached OPX_MAX_TX_CONTEXTS (%d); ignoring remaining secondary planes\n",
+				OPX_MAX_TX_CONTEXTS);
+			break;
+		}
+
 		sec_hfi = fi_opx_hfi1_context_open_unit(&opx_ep->ep_fid, opx_domain->unique_job_key, planes[i].hfi_unit,
 							OPX_SEND_ONLY_TRUE);
 		if (!sec_hfi) {
@@ -2447,6 +2466,8 @@ static bool opx_open_secondary_different_plane(struct fi_opx_ep *opx_ep, struct 
 
 		opx_ep->num_tx_contexts++;
 
+		/* Seeds this plane's slot; interior-plane seeding contract documented at OPX_MAX_TX_CONTEXTS
+		 * (fi_opx.h). */
 		fi_opx_ep_rx_tx_model_init(opx_ep, sec_hfi, opx_ep->num_tx_contexts - 1,
 
 					   opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
@@ -3933,6 +3954,42 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 
 	ofi_bufpool_create(&opx_ep->rzv_completion_pool, sizeof(struct fi_opx_rzv_completion), 0, UINT_MAX, 2048,
 			   OFI_BUFPOOL_NO_ZERO);
+
+#if HAVE_HFISVC
+	/* derive the GET watchdog stall window / absolute cap (ns) from the timeout knob; window==0=off */
+	dlist_init(&opx_ep->rma_watch_list);
+
+	int	l_hfisvc_rma_timeout_sec;
+	ssize_t rc_wd =
+		fi_param_get_int(fi_opx_global.prov, "hfisvc_rma_completion_timeout_sec", &l_hfisvc_rma_timeout_sec);
+	if (rc_wd != FI_SUCCESS) {
+		l_hfisvc_rma_timeout_sec = OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC_DEFAULT;
+	} else if (l_hfisvc_rma_timeout_sec < 0) {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC was set to a negative value (%d); treating as 0 (watchdog disabled).\n",
+			l_hfisvc_rma_timeout_sec);
+		l_hfisvc_rma_timeout_sec = 0;
+	} else if (l_hfisvc_rma_timeout_sec > OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC_MAX) {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC value %d exceeds maximum %d; clamping to %d.\n",
+			l_hfisvc_rma_timeout_sec, OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC_MAX,
+			OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC_MAX);
+		l_hfisvc_rma_timeout_sec = OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC_MAX;
+	}
+
+	if (l_hfisvc_rma_timeout_sec > 0) {
+		opx_ep->hfisvc_rma_stall_window_ns = (uint64_t) l_hfisvc_rma_timeout_sec * OPX_NS_PER_SEC;
+		opx_ep->hfisvc_rma_abs_cap_ns = opx_ep->hfisvc_rma_stall_window_ns * OPX_HFISVC_RMA_ABS_CAP_MULTIPLIER;
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"hfisvc-RMA GET completion watchdog enabled: stall window %ds (%lu ns), absolute cap %lu ns.\n",
+			l_hfisvc_rma_timeout_sec, opx_ep->hfisvc_rma_stall_window_ns, opx_ep->hfisvc_rma_abs_cap_ns);
+	} else {
+		opx_ep->hfisvc_rma_stall_window_ns = 0;
+		opx_ep->hfisvc_rma_abs_cap_ns	   = 0;
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"hfisvc-RMA GET completion watchdog disabled (FI_OPX_HFISVC_RMA_COMPLETION_TIMEOUT_SEC=0).\n");
+	}
+#endif
 
 	ofi_spin_init(&opx_ep->lock);
 

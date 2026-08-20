@@ -122,6 +122,10 @@ enum ofi_reliability_app_kind { OFI_RELIABILITY_APP_KIND_MPI = 0, OFI_RELIABILIT
 #define OPX_RELIABILITY_MAX_OUTSTANDING_BYTES_MAX (144u << 20)
 #endif
 
+/* hfisvc-RMA watchdog flag bits; host-only, never on the wire */
+#define OPX_CC_WATCH_LINKED    (1u << 0)
+#define OPX_CC_WATCH_TIMED_OUT (1u << 1)
+
 struct fi_opx_completion_counter {
 	struct fi_opx_completion_counter *next;
 	union {
@@ -136,6 +140,13 @@ struct fi_opx_completion_counter {
 		void		   *container;
 	};
 	void (*hit_zero)(struct fi_opx_completion_counter *);
+
+	/* hfisvc-RMA watchdog state; host-only tail */
+	struct dlist_entry rma_watch;
+	uint64_t	   watch_submit_ns;
+	ssize_t		   watch_last_bc;
+	uint64_t	   watch_stall_deadline_ns;
+	uint8_t		   watch_flags;
 };
 
 union fi_opx_reliability_deferred_work;
