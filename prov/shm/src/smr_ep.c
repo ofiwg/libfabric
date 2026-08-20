@@ -886,6 +886,12 @@ create_shm:
 			ep->util_ep.ep_fid.msg = &smr_no_recv_msg_ops;
 			ep->util_ep.ep_fid.tagged = &smr_no_recv_tag_ops;
 		}
+
+		if (ep->srx->ep_fid.fid.fclass == FI_CLASS_SRX_CTX &&
+		    ep->srx->ep_fid.fid.context)
+			ep->srx_lock = ((struct util_srx_ctx *)
+						ep->srx->ep_fid.fid.context)->lock;
+
 		smr_ep_map_all_peers(ep);
 
 		if (smr_env.use_dsa_sar)
@@ -1022,6 +1028,10 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ep->util_ep.ep_fid.msg = &smr_msg_ops;
 	ep->util_ep.ep_fid.tagged = &smr_tag_ops;
+
+	/* Default the serialization lock to the endpoint's own lock. It is
+	 * updated to the SRX context lock at FI_ENABLE once ep->srx is set. */
+	ep->srx_lock = &ep->util_ep.lock;
 
 	ret = smr_create_pools(ep, info);
 	if (ret)
