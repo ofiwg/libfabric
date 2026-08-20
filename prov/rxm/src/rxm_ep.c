@@ -177,8 +177,11 @@ free_rx_pool:
  * has not yet been called */
 static void rxm_ep_txrx_res_close(struct rxm_ep *ep)
 {
-	if (ep->srx && ep->util_ep.ep_fid.msg != &rxm_no_recv_msg_ops)
+	if (ep->srx && ep->util_ep.ep_fid.msg != &rxm_no_recv_msg_ops) {
+		ofi_genlock_lock(&ep->util_ep.lock);
 		(void) util_srx_close(&ep->srx->ep_fid.fid);
+		ofi_genlock_unlock(&ep->util_ep.lock);
+	}
 
 	if (ep->rx_pool) {
 		ofi_bufpool_destroy(ep->rx_pool);

@@ -639,13 +639,13 @@ static int smr_ep_close(struct fid *fid)
 		ep->srx->owner_ops->free_entry(cmd_ctx->rx_entry);
 		ofi_buf_free(cmd_ctx);
 	}
-	ofi_genlock_unlock(&ep->util_ep.lock);
 
 	if (ep->srx) {
 		/* shm is an owner provider */
 		if (ep->util_ep.ep_fid.msg != &smr_no_recv_msg_ops)
 			(void) util_srx_close(&ep->srx->ep_fid.fid);
 	}
+	ofi_genlock_unlock(&ep->util_ep.lock);
 
 	ofi_endpoint_close(&ep->util_ep);
 

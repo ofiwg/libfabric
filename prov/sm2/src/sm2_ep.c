@@ -356,8 +356,11 @@ static int sm2_ep_close(struct fid *fid)
 
 	cleanup_shm_resources(ep);
 
-	if (ep->srx && ep->util_ep.ep_fid.msg != &sm2_no_recv_msg_ops)
+	if (ep->srx && ep->util_ep.ep_fid.msg != &sm2_no_recv_msg_ops) {
+		ofi_genlock_lock(&ep->util_ep.lock);
 		(void) util_srx_close(&ep->srx->fid);
+		ofi_genlock_unlock(&ep->util_ep.lock);
+	}
 
 	ofi_endpoint_close(&ep->util_ep);
 

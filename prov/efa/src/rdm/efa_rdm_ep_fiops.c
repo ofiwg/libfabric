@@ -1103,12 +1103,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 				efa_rdm_rxe_release(rxe);
 		}
 		/*
-		* Drop srx_lock here since util_srx_close acquires it
-		* internally, so calling it while holding the lock would
-		* self-deadlock.
-		*/
-		ofi_genlock_unlock(&((struct efa_rdm_domain *) domain)->srx_lock);
-		/*
 		* util_srx_close will clean all efa_rdm_rxes that are
 		* associated with peer_rx_entries in unexp msg/tag lists.
 		* It also decrements the ref count of rx cq. So it must
@@ -1117,8 +1111,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 		*/
 		util_srx_close(&efa_rdm_ep->peer_srx_ep->fid);
 		efa_rdm_ep->peer_srx_ep = NULL;
-
-		ofi_genlock_lock(&((struct efa_rdm_domain *) domain)->srx_lock);
 	}
 
 	/* We need to free the util_ep first to avoid race conditions
