@@ -218,6 +218,7 @@ struct worker_context {
 	struct ep_message_queue *control_queue;
 	struct fid_ep *ep;
 	struct fid_cq *cq;
+	struct fid_eq *eq;
 	struct fid_av *av;
 	struct context_pool pool;
 	uint16_t worker_id;
@@ -284,6 +285,11 @@ static void cleanup_endpoint(struct worker_context *ctx)
 		assert(ret == FI_SUCCESS);
 		ctx->ep = NULL;
 	}
+	if (ctx->eq) {
+		ret = fi_close(&ctx->eq->fid);
+		assert(ret == FI_SUCCESS);
+		ctx->eq = NULL;
+	}
 	if (!topts.shared_av && ctx->av) {
 		ret = fi_close(&ctx->av->fid);
 		assert(ret == FI_SUCCESS);
@@ -337,6 +343,12 @@ static int setup_endpoint(struct worker_context *ctx, uint64_t total_ops)
 		}
 	}
 
+	ret = fi_eq_open(fabric, &eq_attr, &ctx->eq, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_eq_open", ret);
+		goto error;
+	}
+
 	ret = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_SEND | FI_RECV);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind", ret);
@@ -349,7 +361,7 @@ static int setup_endpoint(struct worker_context *ctx, uint64_t total_ops)
 		goto error;
 	}
 
-	ret = fi_ep_bind(ctx->ep, &eq->fid, 0);
+	ret = fi_ep_bind(ctx->ep, &ctx->eq->fid, 0);
 	if (ret) {
 		FT_PRINTERR("fi_ep_bind(eq)", ret);
 		goto error;
@@ -370,6 +382,7 @@ error:
 /**
  * wait_for_comp - Poll completion queue until expected completions arrive
  * @cq: Completion queue to poll
+ * @eq: Event queue associated with the endpoint
  * @num_completions: Number of completions to wait for
  *
  * Polls the specified completion queue until the requested number of
@@ -380,7 +393,7 @@ error:
  * Returns: Number of completions successfully received (may be less than
  *          requested if timeout expires or error occurs)
  */
-static int wait_for_comp(struct fid_cq *cq, int num_completions)
+static int wait_for_comp(struct fid_cq *cq, struct fid_eq *eq, int num_completions)
 {
 	static pthread_mutex_t shared_cq_lock = PTHREAD_MUTEX_INITIALIZER;
 	struct fi_cq_data_entry comp;
@@ -668,7 +681,7 @@ static void *run_sender_worker(void *arg)
 			if (ret == 0) {
 				break;
 			} else if (ret == -FI_EAGAIN) {
-				comp_ret = wait_for_comp(ctx->cq, 1);
+				comp_ret = wait_for_comp(ctx->cq, ctx->eq, 1);
 				if (comp_ret < 0) {
 					fprintf(stderr,
 						"Sender %d: peer endpoint closed, exiting now\n",
@@ -709,7 +722,7 @@ static void *run_sender_worker(void *arg)
 					"completions\n",
 					ctx->worker_id, cycle);
 				uint64_t ops_pending =  ops_total_in_this_cycle - ops_completed_in_this_cycle;
-				comp_ret = wait_for_comp(ctx->cq, ops_pending);
+				comp_ret = wait_for_comp(ctx->cq, ctx->eq, ops_pending);
 				if (comp_ret < 0) {
 					fprintf(stderr,
 						"Sender %d: peer endpoint closed, exiting now\n",
@@ -900,7 +913,7 @@ static void *run_receiver_worker(void *arg)
 				printf("Receiver %u EP cycle %d: Waiting for "
 					"completions\n",
 					ctx->worker_id, cycle);
-				ops_completed += wait_for_comp(ctx->cq, ops_total_in_this_cycle);
+				ops_completed += wait_for_comp(ctx->cq, ctx->eq, ops_total_in_this_cycle);
 			} else {
 				printf("Receiver %u EP cycle %d: Not waiting for "
 					"completions\n",
