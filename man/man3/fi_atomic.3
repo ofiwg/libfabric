@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_atomic" "3" "2026\-04\-27" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_atomic" "3" "2026\-08\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -34,6 +34,15 @@ initial value.
 fi_atomicvalid / fi_fetch_atomicvalid / fi_compare_atomicvalid /
 fi_query_atomic : Indicates if a provider supports a specific atomic
 operation
+.TP
+fi_xpu_atomic
+Initiate an atomic operation from an XPU.
+.TP
+fi_xpu_fetch_atomic
+Initiate a fetch-atomic operation from an XPU.
+.TP
+fi_xpu_compare_atomic
+Initiate a compare-and-swap atomic operation from an XPU.
 .SH SYNOPSIS
 .IP
 .nf
@@ -104,6 +113,26 @@ int fi_compare_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
 int fi_query_atomic(struct fid_domain *domain,
     enum fi_datatype datatype, enum fi_op op,
     struct fi_atomic_attr *attr, uint64_t flags);
+
+#include <rdma/fi_xpu_device.h>
+
+int fi_xpu_atomic(struct fid_xpu_ep *ep, const void *buf, size_t count,
+    void *desc, void *dest_addr, uint64_t addr, uint64_t key,
+    int datatype, int op, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_fetch_atomic(struct fid_xpu_ep *ep, const void *buf, size_t count,
+    void *desc, void *result, void *result_desc,
+    void *dest_addr, uint64_t addr, uint64_t key,
+    int datatype, int op, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_compare_atomic(struct fid_xpu_ep *ep, const void *buf,
+    size_t count, void *desc, const void *compare, void *compare_desc,
+    void *result, void *result_desc,
+    void *dest_addr, uint64_t addr, uint64_t key,
+    int datatype, int op, void *context,
+    uint64_t flags, int scope);
 \f[R]
 .fi
 .SH ARGUMENTS
@@ -160,6 +189,13 @@ User specified pointer to associate with the operation.
 This parameter is ignored if the operation will not generate a
 successful completion, unless an op flag specifies the context parameter
 be used for required input.
+.TP
+\f[I]scope\f[R]
+Cooperative threading scope for device-side operations.
+Specifies the set of threads issuing the same operation collectively.
+Only used by fi_xpu_atomic, fi_xpu_fetch_atomic, and
+fi_xpu_compare_atomic.
+See \f[V]fi_xpu\f[R](3) for details.
 .SH DESCRIPTION
 .PP
 Atomic transfers are used to read and update data located in remote
@@ -654,6 +690,15 @@ concurrently being updated by NIC based atomics may leave the
 region\[cq]s data in an unknown state.
 The results of a first actor\[cq]s atomic operations must be visible to
 a second actor prior to the second actor issuing its own atomics.
+.SS fi_xpu_atomic / fi_xpu_fetch_atomic / fi_xpu_compare_atomic
+.PP
+The fi_xpu_atomic, fi_xpu_fetch_atomic, and fi_xpu_compare_atomic calls
+are device-side equivalents of the host atomic operations.
+They operate on an exported endpoint handle and use raw addresses and
+keys.
+The datatype and op parameters specify the data type and atomic
+operation respectively, matching the host-side enum values.
+See \f[V]fi_xpu\f[R](3) for the overall XPU programming model.
 .SH FLAGS
 .PP
 The fi_atomicmsg, fi_fetch_atomicmsg, and fi_compare_atomicmsg calls

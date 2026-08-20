@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_domain" "3" "2026\-02\-11" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_domain" "3" "2026\-08\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -943,6 +943,13 @@ Specifies that the domain must support importing resources to be used in
 the the peer API flow.
 The domain must support importing owner_ops when opening a CQ, counter,
 and shared receive queue.
+.TP
+\f[I]FI_XPU\f[R]
+Indicates that the domain supports XPU-initiated communication,
+i.e.\ the ability to create an XPU context (see \f[V]fi_xpu\f[R](3)) and
+export endpoints, completion queues, and counters allocated from the
+domain for data path access by an XPU.
+See \f[V]fi_xpu\f[R](3) for details.
 .PP
 The following are supported secondary capabilities:
 .TP
