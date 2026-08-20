@@ -77,8 +77,7 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 						   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 
 			if (OFI_UNLIKELY(++params->send_eagain_attempts >= OPX_HFISVC_RMA_MAX_EAGAIN_ATTEMPTS)) {
-				/* only drop-and-drain when no registered run is pending, else the RTS iov index desyncs
-				 */
+				/* drop-drain only when no registered run is pending, else the RTS iov index desyncs */
 				if (params->iovs_with_keys == 0) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 						"HFISVC send completion_pool stuck exhausted after %u attempts; iov dropped\n",
@@ -90,7 +89,7 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 						assert(drop_len <= params->cc->byte_counter);
 						params->cc->byte_counter -= drop_len;
 						if (params->cc->byte_counter == 0) {
-							params->cc->hit_zero(params->cc);
+							opx_hfisvc_rma_cc_hit_zero(params->cc);
 						}
 					}
 					++cur_iov;
@@ -129,8 +128,7 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 				break;
 			}
 
-			/* hard error: drop-drain this iov (only safe with no registered run pending,
-			 * else the RTS iov index desyncs) and continue */
+			/* hard error: drop-drain this iov (only safe with no registered run pending) */
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "hfisvc cmd_dma_access failed rc=%d; iov dropped\n",
 				rc);
 			if (params->iovs_with_keys == 0) {
@@ -139,7 +137,7 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 					assert(drop_len <= params->cc->byte_counter);
 					params->cc->byte_counter -= drop_len;
 					if (params->cc->byte_counter == 0) {
-						params->cc->hit_zero(params->cc);
+						opx_hfisvc_rma_cc_hit_zero(params->cc);
 					}
 				}
 				++cur_iov;
@@ -155,8 +153,7 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 		++cur_iov;
 	}
 
-	/* ring the doorbell only if this pass registered a new buffer; on failure the
-	 * registration commands were not committed, so roll them back and return EAGAIN */
+	/* ring the doorbell only if this pass registered a new buffer; roll back on failure */
 	if (params->iovs_with_keys > pre_registered) {
 		int rc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[plane_idx].ctx);
 		if (OFI_UNLIKELY(rc != 0)) {
@@ -245,15 +242,17 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 
 		opx_cacheline_store_qw(
 			replay->scb.qws,
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
-				params->pbc_dlid | OPX_PBC_LOOPBACK(opx_ep->domain, params->pbc_dlid, hfi1_type, 0),
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr.qw_9B[0] | params->lrh_dlid |
-				((uint64_t) lrh_dws << 32),
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr.qw_9B[1] | params->bth_subctxt_rx,
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr.qw_9B[2] | psn,
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr.qw_9B[3] | params->data,
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_9B.hdr.qw_9B[4] | dt64 | op64 | pkt_niov |
-				dput_opcode,
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_9B.qw0 |
+				OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid |
+				OPX_PBC_LOOPBACK(opx_ep->domain, params->pbc_dlid, hfi1_type, 0),
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_9B.hdr.qw_9B[0] |
+				params->lrh_dlid | ((uint64_t) lrh_dws << 32),
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_9B.hdr.qw_9B[1] |
+				params->bth_subctxt_rx,
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_9B.hdr.qw_9B[2] | psn,
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_9B.hdr.qw_9B[3] | params->data,
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_9B.hdr.qw_9B[4] | dt64 | op64 |
+				pkt_niov | dput_opcode,
 			params->client_key, 0ul /* params->rma_req */);
 
 		union opx_hfisvc_rma_iov *replay_iovs = (union opx_hfisvc_rma_iov *) replay->payload;
@@ -274,21 +273,24 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 
 		opx_cacheline_store_qw(
 			replay->scb.qws,
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
-				params->pbc_dlid | OPX_PBC_LOOPBACK(opx_ep->domain, params->pbc_dlid, hfi1_type, 0),
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.qw_16B[0] |
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_16B.qw0 |
+				OPX_PBC_LEN(pbc_dws, hfi1_type) | params->pbc_dlid |
+				OPX_PBC_LOOPBACK(opx_ep->domain, params->pbc_dlid, hfi1_type, 0),
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_16B.hdr.qw_16B[0] |
 				((uint64_t) (params->lrh_dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
 				 << OPX_LRH_JKR_16B_DLID_SHIFT_16B) |
 				((uint64_t) lrh_qws << 20),
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.qw_16B[1] |
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_16B.hdr.qw_16B[1] |
 				((uint64_t) ((params->lrh_dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
 					     OPX_LRH_JKR_16B_DLID20_SHIFT_16B)) |
 				(uint64_t) (params->bth_subctxt_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.qw_16B[2] | params->bth_subctxt_rx,
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.qw_16B[3] | psn,
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.qw_16B[4] | params->data,
-			opx_ep->rx->tx.hfisvc_rma_rts[0].hfisvc_rma_rts_16B.hdr.qw_16B[5] | dt64 | op64 | pkt_niov |
-				dput_opcode,
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_16B.hdr.qw_16B[2] |
+				params->bth_subctxt_rx,
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_16B.hdr.qw_16B[3] | psn,
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_16B.hdr.qw_16B[4] |
+				params->data,
+			opx_ep->rx->tx.hfisvc_rma_rts[params->plane_idx].hfisvc_rma_rts_16B.hdr.qw_16B[5] | dt64 |
+				op64 | pkt_niov | dput_opcode,
 			/* | has_cq_data */
 			params->client_key);
 
@@ -353,13 +355,11 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 	int rc = 0;
 
-	/* FI_SUCCESS requires a committed doorbell this call; commands_pending tracks
-	 * whether any command was queued (a fully-dropped batch needs no doorbell) */
+	/* FI_SUCCESS needs a committed doorbell; commands_pending tracks whether any command was queued */
 	bool doorbell_committed = false;
 	bool commands_pending	= false;
 
-	/* doorbell-only retry: a prior pass issued every command but the committing
-	 * doorbell failed; re-ring the doorbell only to avoid double-queueing */
+	/* doorbell-only retry: a prior pass queued every command but the committing doorbell failed */
 	if (OFI_UNLIKELY(params->recv_needs_doorbell_only)) {
 		int drc = (*opx_ep->domain->hfisvc.doorbell)(opx_ep->domain->hfisvc.ctxs[plane_idx].ctx);
 		if (OFI_UNLIKELY(drc != 0)) {
@@ -420,6 +420,48 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 			++cur_iov;
 			continue;
+		}
+
+		/* target-only MR starts OPEN_DEFERRED; enqueue its initial open so a GET/PUT cannot spin unopened */
+		if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPEN_DEFERRED) {
+			rc = opx_hfisvc_mr_lazy_open(opx_ep->domain, opx_mr);
+			if (rc) {
+				/* PUT_CQ: drain the dropped iov's len; a GET has no target-side context to drain */
+				if (has_cq_data && params->context != NULL) {
+					params->context->byte_counter -= hfisvc_iov->len;
+				}
+
+				struct opx_context *err_context =
+					(struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+				if (OFI_LIKELY(err_context != NULL)) {
+					err_context->next = NULL;
+					err_context->flags =
+						FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
+					err_context->len		     = 0;
+					err_context->buf		     = NULL;
+					err_context->data		     = params->data;
+					err_context->tag		     = 0;
+					err_context->byte_counter	     = 0;
+					err_context->err_entry.flags	     = err_context->flags;
+					err_context->err_entry.len	     = 0;
+					err_context->err_entry.buf	     = NULL;
+					err_context->err_entry.data	     = params->data;
+					err_context->err_entry.tag	     = 0;
+					err_context->err_entry.olen	     = 0;
+					err_context->err_entry.err	     = FI_EIO;
+					err_context->err_entry.prov_errno    = FI_EIO;
+					err_context->err_entry.op_context    = NULL;
+					err_context->err_entry.err_data	     = NULL;
+					err_context->err_entry.err_data_size = 0;
+					slist_insert_tail((struct slist_entry *) err_context, opx_ep->rx->cq_err_ptr);
+				} else {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"ctx_pool exhausted; HFISVC RMA lazy-open error not posted to EQ\n");
+				}
+
+				++cur_iov;
+				continue;
+			}
 		}
 
 		rc = opx_mr_hfisvc_check_state(opx_mr);
@@ -516,13 +558,23 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 			continue;
 		}
 
-		/* bounds-check [remote_offset, +len) against the MR extent (overflow-safe) */
-		const uint64_t mr_len = opx_mr->attr.mr_iov[0].iov_len;
-		if (OFI_UNLIKELY(hfisvc_iov->remote_offset > mr_len ||
-				 hfisvc_iov->len > mr_len - hfisvc_iov->remote_offset)) {
+		/* Gate VA translation on FI_MR_VIRT_ADDR (not base_addr==0), and reject any MR whose base_addr
+		 * disagrees so a mode mismatch can't skew va_bias. VIRT_ADDR: remote_offset is absolute VA; else
+		 * MR-relative. */
+		const uintptr_t mr_base_va	   = (uintptr_t) opx_mr->iov.iov_base;
+		const uintptr_t mr_base_addr	   = (uintptr_t) opx_mr->base_addr;
+		const bool	virt_addr	   = (opx_mr->domain->mr_mode & FI_MR_VIRT_ADDR) != 0;
+		const uintptr_t expected_base_addr = virt_addr ? 0 : mr_base_va;
+		const bool	base_addr_valid	   = (mr_base_addr == expected_base_addr);
+		const uintptr_t va_bias		   = virt_addr ? mr_base_va : 0;
+		const uint64_t	mr_len		   = opx_mr->attr.mr_iov[0].iov_len;
+		const uint64_t	mr_offset	   = (uint64_t) (hfisvc_iov->remote_offset - va_bias);
+		if (OFI_UNLIKELY(!base_addr_valid || hfisvc_iov->remote_offset < va_bias || mr_offset > mr_len ||
+				 hfisvc_iov->len > mr_len - mr_offset)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"HFISVC RMA %s out of MR bounds: offset=%lu len=%lu mr_len=%lu; iov dropped\n",
-				write_to_origin ? "GET" : "PUT", hfisvc_iov->remote_offset, hfisvc_iov->len, mr_len);
+				"HFISVC RMA %s out of MR bounds: mr_offset=%lu len=%lu mr_len=%lu (remote_offset=%lu); iov dropped\n",
+				write_to_origin ? "GET" : "PUT", mr_offset, hfisvc_iov->len, mr_len,
+				(uint64_t) hfisvc_iov->remote_offset);
 
 			/* PUT_CQ: keep draining byte_counter on the dropped iov */
 			if (has_cq_data && params->context != NULL) {
@@ -636,14 +688,14 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				params->origin_lid,
 				hfisvc_iov->origin_hfisvc_client_key, // origin's client key
 				hfisvc_iov->len, 0ul /* immediate data */, hfisvc_iov->origin_hfisvc_access_key,
-				hfisvc_iov->origin_offset, opx_mr->hfisvc.mr_handle, hfisvc_iov->remote_offset);
+				hfisvc_iov->origin_offset, opx_mr->hfisvc.mr_handle, mr_offset);
 		} else {
 			rc = opx_ep->domain->hfisvc.cmd_rdma_read(
 				opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */,
 				params->origin_lid,
 				hfisvc_iov->origin_hfisvc_client_key, // origin's client key
 				hfisvc_iov->len, 0ul /* immediate data */, hfisvc_iov->origin_hfisvc_access_key,
-				hfisvc_iov->origin_offset, opx_mr->hfisvc.mr_handle, hfisvc_iov->remote_offset);
+				hfisvc_iov->origin_offset, opx_mr->hfisvc.mr_handle, mr_offset);
 		}
 
 		if (OFI_UNLIKELY(rc)) {
@@ -772,10 +824,11 @@ void opx_hfisvc_rma_invoke_recv_rts(struct fi_opx_ep *opx_ep, const union opx_hf
 	params->data	    = hdr->match.ofi_data;
 	params->dput_opcode = hdr->rma_rts.opcode;
 
-	params->client_key		 = (uint64_t) hdr->rma_rts.origin_hfisvc_client_key;
-	params->reliability		 = reliability;
-	params->hfi1_type		 = hfi1_type;
-	params->plane_idx		 = 0;
+	params->client_key  = (uint64_t) hdr->rma_rts.origin_hfisvc_client_key;
+	params->reliability = reliability;
+	params->hfi1_type   = hfi1_type;
+	/* target replies on the primary plane; correctness comes from the origin's client_key + RTS SLID */
+	params->plane_idx		 = OPX_PRIMARY_PLANE;
 	params->recv_eagain_attempts	 = 0;
 	params->recv_needs_doorbell_only = 0;
 
