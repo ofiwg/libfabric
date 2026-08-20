@@ -752,7 +752,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 		return -FI_ENOMEM;
 	}
 
-	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	struct fi_opx_completion_counter *cc = opx_cc_alloc(opx_ep);
 	if (OFI_UNLIKELY(cc == NULL)) {
 		if (context) {
 			OPX_BUF_FREE(context);
@@ -771,10 +771,9 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	cc->hit_zero	       = fi_opx_hit_zero;
 
 #if HAVE_HFISVC
-	/* hfisvc one-sided GET is only taken for SYSTEM memory at/above the SDMA floor,
-	 * off-SHM, single-plane; HMEM reads stay on the traditional readv fallback in Phase-0 */
+	/* hfisvc GET only for off-SHM SYSTEM at/above the SDMA floor; HMEM uses the readv fallback */
 	if (len >= opx_ep->tx->sdma_min_payload_bytes && opx_ep->use_hfisvc && hmem_iface == FI_HMEM_SYSTEM &&
-	    !fi_opx_hfi1_tx_is_shm(opx_ep, opx_addr) && opx_hfisvc_single_plane(opx_ep)) {
+	    !fi_opx_hfi1_tx_is_shm(opx_ep, opx_addr)) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.hfisvc);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "fi_read fast-path: taking hfisvc one-sided GET (len=%zu iface=SYSTEM)\n", len);
@@ -782,6 +781,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 						    .remote_auth_key = key,
 						    .remote_offset   = addr_offset};
 
+		opx_hfisvc_rma_watch_register(opx_ep, cc);
 		opx_hfisvc_rma_invoke_send_rts(opx_ep, &hfisvc_iov, 1ul, opx_addr, 0ul, cc, FI_OPX_HFI_DPUT_OPCODE_GET,
 					       FI_VOID, FI_NOOP, lock_required, reliability, hfi1_type);
 	} else
@@ -854,11 +854,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 
 	const uint64_t tx_op_flags = opx_tx->op_flags;
 
-	uint64_t addr_v[8] = {addr_offset, addr_offset, addr_offset, addr_offset,
-			      addr_offset, addr_offset, addr_offset, addr_offset};
-	uint64_t key_v[8]  = {key, key, key, key, key, key, key, key};
-
-	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	struct fi_opx_completion_counter *cc = opx_cc_alloc(opx_ep);
 	if (OFI_UNLIKELY(cc == NULL)) {
 		if (context) {
 			OPX_BUF_FREE(context);
@@ -880,53 +876,72 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 	cc->context	       = context;
 	cc->hit_zero	       = fi_opx_hit_zero;
 
-	uint64_t	       hmem_device;
-	enum fi_hmem_iface     hmem_iface;
-	uint64_t	       hmem_handle[8];
-	struct fi_opx_hmem_iov hmem_iovs[8];
-
-	/* max 8 descriptors (iovecs) per readv_internal */
-	struct fi_opx_mr **mr_ptr_array = (struct fi_opx_mr **) desc;
-	const size_t	   full_count	= count >> 3;
-	for (index = 0; index < full_count; index += 8) {
-		for (int i = 0; i < 8; ++i) {
-			struct fi_opx_mr *mr_ptr;
-			if (mr_ptr_array != NULL) {
-				mr_ptr = *mr_ptr_array;
-				++mr_ptr_array;
-			} else {
-				mr_ptr = NULL;
-			}
-			hmem_iface	    = opx_hmem_get_mr_iface(mr_ptr, &hmem_device, &hmem_handle[i]);
-			hmem_iovs[i].buf    = (uintptr_t) iov[index + i].iov_base;
-			hmem_iovs[i].len    = iov[index + i].iov_len;
-			hmem_iovs[i].iface  = hmem_iface;
-			hmem_iovs[i].device = hmem_device;
-		}
-		opx_readv_internal(opx_ep, hmem_iovs, 8, hmem_handle, opx_addr, addr_v, key_v, 0, NULL, NULL, cc,
-				   FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps, reliability,
-				   hfi1_type);
+	/* empty readv issues no iov so hit_zero never fires; settle now to avoid a leaked cc */
+	if (OFI_UNLIKELY(count == 0)) {
+		cc->hit_zero(cc);
+		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READV, 0, 0);
+		return 0;
 	}
 
-	/* if 'partial_ndesc' is zero, the opx_readv_internal() will fence */
-	const size_t partial_ndesc = count & 0x07ull;
-	for (int i = 0; i < partial_ndesc; ++i) {
-		struct fi_opx_mr *mr_ptr;
+#if HAVE_HFISVC
+	if (opx_ep->use_hfisvc && !fi_opx_hfi1_tx_is_shm(opx_ep, opx_addr) && count <= OPX_MAX_RMA_HFISVC_IOVS &&
+	    cc->byte_counter >= opx_ep->tx->sdma_min_payload_bytes) {
+		struct fi_opx_mr    **mr_arr = (struct fi_opx_mr **) desc;
+		struct opx_rma_op_iov hfisvc_iovs[OPX_MAX_RMA_HFISVC_IOVS];
+		uint64_t	      remote_offset = addr_offset;
+		int		      eligible	    = 1;
+		for (size_t i = 0; i < count; ++i) {
+			uint64_t	   dev, hdl;
+			enum fi_hmem_iface ifc = opx_hmem_get_mr_iface(mr_arr ? mr_arr[i] : NULL, &dev, &hdl);
+			if (ifc != FI_HMEM_SYSTEM) {
+				eligible = 0;
+				break;
+			}
+			hfisvc_iovs[i].hmem_iov.buf    = (uintptr_t) iov[i].iov_base;
+			hfisvc_iovs[i].hmem_iov.len    = iov[i].iov_len;
+			hfisvc_iovs[i].hmem_iov.iface  = FI_HMEM_SYSTEM;
+			hfisvc_iovs[i].hmem_iov.device = dev;
+			hfisvc_iovs[i].remote_auth_key = key;
+			hfisvc_iovs[i].remote_offset   = remote_offset;
+			remote_offset += iov[i].iov_len;
+		}
+		if (eligible) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.hfisvc);
+			opx_hfisvc_rma_watch_register(opx_ep, cc);
+			opx_hfisvc_rma_invoke_send_rts(opx_ep, hfisvc_iovs, count, opx_addr, 0ul, cc,
+						       FI_OPX_HFI_DPUT_OPCODE_GET, FI_VOID, FI_NOOP, lock_required,
+						       reliability, hfi1_type);
+			OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READV, 0, 0);
+			return 0;
+		}
+	}
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.fallback_readv);
+#endif
+
+	/* fi_readv scatters N local iovs over ONE remote region; one iov per call, completion args on the final iov */
+	struct fi_opx_mr **mr_ptr_array	   = (struct fi_opx_mr **) desc;
+	uint64_t	   cur_addr_offset = addr_offset;
+	for (index = 0; index < count; ++index) {
+		struct fi_opx_mr *mr_ptr = NULL;
 		if (mr_ptr_array != NULL) {
 			mr_ptr = *mr_ptr_array;
 			++mr_ptr_array;
-		} else {
-			mr_ptr = NULL;
 		}
-		hmem_iface	    = opx_hmem_get_mr_iface(mr_ptr, &hmem_device, &hmem_handle[i]);
-		hmem_iovs[i].buf    = (uintptr_t) iov[index + i].iov_base;
-		hmem_iovs[i].len    = iov[index + i].iov_len;
-		hmem_iovs[i].iface  = hmem_iface;
-		hmem_iovs[i].device = hmem_device;
+		struct fi_opx_hmem_iov hmem_iov;
+		uint64_t	       hmem_handle_i;
+		opx_hmem_iov_init(iov[index].iov_base, iov[index].iov_len, mr_ptr, &hmem_iov, &hmem_handle_i);
+
+		const int		  last	  = (index == count - 1);
+		const uint64_t		  flags_i = last ? tx_op_flags : 0;
+		const struct fi_opx_cq	 *cq_i	  = last ? opx_tx->cq : NULL;
+		const struct fi_opx_cntr *cntr_i  = last ? opx_ep->read_cntr : NULL;
+
+		opx_readv_internal(opx_ep, &hmem_iov, 1, &hmem_handle_i, opx_addr, &cur_addr_offset, &key, flags_i,
+				   cq_i, cntr_i, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps,
+				   reliability, hfi1_type);
+
+		cur_addr_offset += iov[index].iov_len;
 	}
-	opx_readv_internal(opx_ep, hmem_iovs, partial_ndesc, hmem_handle, opx_addr, addr_v, key_v, tx_op_flags,
-			   opx_tx->cq, opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
-			   lock_required, caps, reliability, hfi1_type);
 
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 	return 0;
@@ -968,11 +983,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	if (msg->iov_count == 1 && msg->rma_iov_count == 1) {
 		void *first_desc = msg->desc ? (*msg->desc) : NULL;
 
-		/* lock already held by this readmsg wrapper. fi_opx_read_internal
-		 * submits the read fire-and-forget and always returns FI_SUCCESS on
-		 * accepted submission; transient EAGAIN/ENOMEM is retried internally
-		 * via the deferred-work queue, and real delivery status is reported
-		 * through the CQ/completion-counter, not this return value. */
+		/* lock already held; read_internal submits fire-and-forget, real status comes via the CQ/cc */
 		ssize_t rc = fi_opx_read_internal(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len, first_desc,
 						  msg->addr, msg->rma_iov[0].addr, msg->rma_iov[0].key, msg->context,
 						  FI_OPX_LOCK_NOT_REQUIRED, caps, reliability, hfi1_type);
@@ -998,6 +1009,23 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 		return -FI_ENOMEM;
 	}
+	/* reject a msg whose local vs remote byte totals differ; the fallback re-chunk would abort() */
+	{
+		size_t local_total = 0, remote_total = 0;
+		for (size_t vi = 0; vi < msg->iov_count; ++vi) {
+			local_total += msg->msg_iov[vi].iov_len;
+		}
+		for (size_t ri = 0; ri < msg->rma_iov_count; ++ri) {
+			remote_total += msg->rma_iov[ri].len;
+		}
+		if (OFI_UNLIKELY(local_total != remote_total)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"fi_readmsg local total %zu != remote total %zu; rejecting\n", local_total,
+				remote_total);
+			OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
+			return -FI_EINVAL;
+		}
+	}
 
 	/* for fi_read*(), the 'src' is the remote data */
 	size_t	     src_iov_index = 0;
@@ -1011,15 +1039,11 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	const size_t dst_iov_count = msg->iov_count;
 	uint64_t     dst_iov_bytes = msg->msg_iov[0].iov_len;
 	void	    *dst_iov_vaddr = msg->msg_iov[0].iov_base;
-
-	size_t		       niov;
-	struct fi_opx_hmem_iov iov[8];
-	uint64_t	       addr[8];
-	uint64_t	       key[8];
-	uint64_t	       hmem_handle[8];
+	/* dst_iov_count is used only in asserts; silence -Wunused under NDEBUG */
+	OFI_UNUSED(dst_iov_count);
 
 	ssize_t				  index;
-	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	struct fi_opx_completion_counter *cc = opx_cc_alloc(opx_ep);
 	if (OFI_UNLIKELY(cc == NULL)) {
 		if (context) {
 			OPX_BUF_FREE(context);
@@ -1048,94 +1072,95 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	cc->context  = context;
 	cc->hit_zero = fi_opx_hit_zero;
 
+#if HAVE_HFISVC
+	/* hfisvc GET needs a 1:1 local/remote iov mapping; unequal counts/lengths take the readv fallback */
+	if (opx_ep->use_hfisvc && !fi_opx_hfi1_tx_is_shm(opx_ep, opx_src_addr) &&
+	    msg->iov_count == msg->rma_iov_count && msg->iov_count <= OPX_MAX_RMA_HFISVC_IOVS &&
+	    cc->byte_counter >= opx_ep->tx->sdma_min_payload_bytes) {
+		struct fi_opx_mr    **mr_arr = (struct fi_opx_mr **) msg->desc;
+		struct opx_rma_op_iov hfisvc_iovs[OPX_MAX_RMA_HFISVC_IOVS];
+		int		      eligible = 1;
+		for (index = 0; index < msg->iov_count; ++index) {
+			uint64_t	   dev, hdl;
+			enum fi_hmem_iface ifc = opx_hmem_get_mr_iface(mr_arr ? mr_arr[index] : NULL, &dev, &hdl);
+			if (ifc != FI_HMEM_SYSTEM || msg->msg_iov[index].iov_len != msg->rma_iov[index].len) {
+				eligible = 0;
+				break;
+			}
+			hfisvc_iovs[index].hmem_iov.buf	   = (uintptr_t) msg->msg_iov[index].iov_base;
+			hfisvc_iovs[index].hmem_iov.len	   = msg->msg_iov[index].iov_len;
+			hfisvc_iovs[index].hmem_iov.iface  = FI_HMEM_SYSTEM;
+			hfisvc_iovs[index].hmem_iov.device = dev;
+			hfisvc_iovs[index].remote_auth_key = msg->rma_iov[index].key;
+			hfisvc_iovs[index].remote_offset   = msg->rma_iov[index].addr;
+		}
+		if (eligible) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.hfisvc);
+			opx_hfisvc_rma_watch_register(opx_ep, cc);
+			opx_hfisvc_rma_invoke_send_rts(opx_ep, hfisvc_iovs, msg->iov_count, opx_src_addr, 0ul, cc,
+						       FI_OPX_HFI_DPUT_OPCODE_GET, FI_VOID, FI_NOOP, lock_required,
+						       reliability, hfi1_type);
+			OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
+			return 0;
+		}
+	}
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.fallback_readv);
+#endif
+
+	/* chunk src/dst iov streams one iov per call; completion args only on the terminal chunk */
 	struct fi_opx_mr **mr_ptr_array = (struct fi_opx_mr **) msg->desc;
 	while (src_iov_index < src_iov_count) {
-		for (niov = 0; niov < 8; ++niov) {
-			struct fi_opx_mr *mr_ptr;
-			if (mr_ptr_array != NULL) {
-				mr_ptr = *mr_ptr_array;
-				++mr_ptr_array;
-			} else {
-				mr_ptr = NULL;
-			}
-			const size_t len = (dst_iov_bytes <= src_iov_bytes) ? dst_iov_bytes : src_iov_bytes;
-			opx_hmem_iov_init(dst_iov_vaddr, len, mr_ptr, &iov[niov], &hmem_handle[niov]);
-			addr[niov] = src_iov_addr;
-			key[niov]  = src_iov_key;
-
-			dst_iov_bytes -= len;
-			src_iov_bytes -= len;
-
-			if (src_iov_bytes == 0) {
-				/* all done with this src rma iovec */
-
-				if (src_iov_index == (src_iov_count - 1)) {
-					/* this is the last src rma iovec .. perform
-					 * read with completion processing and return
-					 *
-					 * the 'dst_iov_bytes' must be zero and it must
-					 * be the last dst iovec as well */
-					assert(dst_iov_bytes == 0);
-					assert(dst_iov_index == (dst_iov_count - 1));
-#ifndef NDEBUG
-					for (index = 0; index < niov + 1; index++) {
-						totsize_issued += iov[index].len;
-					}
-					assert(totsize_issued <= totsize);
-#endif
-					opx_readv_internal(opx_ep, iov, niov + 1, hmem_handle, opx_src_addr, addr, key,
-							   flags, cq, opx_ep->read_cntr, /* enable_cq, enable_cntr */
-							   cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET,
-							   lock_required, caps, reliability, hfi1_type);
-
-					OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
-					return 0;
-
-				} else {
-					/* advance to next src rma iovec */
-					++src_iov_index;
-					src_iov_bytes = msg->rma_iov[src_iov_index].len;
-					src_iov_addr  = msg->rma_iov[src_iov_index].addr;
-					src_iov_key   = msg->rma_iov[src_iov_index].key;
-				}
-			} else {
-				src_iov_addr += len;
-			}
-
-			if (dst_iov_bytes == 0) {
-				/* all done with this dst iovec */
-
-				if (dst_iov_index == (dst_iov_count - 1)) {
-					/* this is the last dst iovec .. do nothing since
-					 * the 'src_iov_bytes' must be zero and it must
-					 * be the last src rma iovec as well */
-					assert(src_iov_bytes == 0);
-					assert(src_iov_index == (src_iov_count - 1));
-
-					/* in fact, it should be impossible to get here */
-					assert(0);
-				} else {
-					/* advance to next dst iovec */
-					++dst_iov_index;
-					dst_iov_bytes = msg->msg_iov[dst_iov_index].iov_len;
-					dst_iov_vaddr = msg->msg_iov[dst_iov_index].iov_base;
-				}
-			} else {
-				dst_iov_vaddr = (void *) ((uintptr_t) dst_iov_vaddr + len);
-			}
-
-		} /* end for */
-#ifndef NDEBUG
-		for (index = 0; index < 8; index++) {
-			totsize_issued += iov[index].len;
+		struct fi_opx_mr *mr_ptr = NULL;
+		if (mr_ptr_array != NULL) {
+			mr_ptr = *mr_ptr_array;
+			++mr_ptr_array;
 		}
+		const size_t len = (dst_iov_bytes <= src_iov_bytes) ? dst_iov_bytes : src_iov_bytes;
+
+		struct fi_opx_hmem_iov hmem_iov;
+		uint64_t	       hmem_handle_i;
+		opx_hmem_iov_init(dst_iov_vaddr, len, mr_ptr, &hmem_iov, &hmem_handle_i);
+		const uint64_t addr_i = src_iov_addr;
+		const uint64_t key_i  = src_iov_key;
+
+		dst_iov_bytes -= len;
+		src_iov_bytes -= len;
+
+		const int terminal = (src_iov_bytes == 0 && src_iov_index == (src_iov_count - 1));
+#ifndef NDEBUG
+		totsize_issued += len;
 		assert(totsize_issued <= totsize);
 #endif
-		opx_readv_internal(opx_ep, iov, 8, hmem_handle, opx_src_addr, addr, key, 0, NULL,
-				   NULL, /* disable_cq, disable_cntr */
-				   cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps, reliability,
+		opx_readv_internal(opx_ep, &hmem_iov, 1, &hmem_handle_i, opx_src_addr, &addr_i, &key_i,
+				   terminal ? flags : 0, terminal ? cq : NULL, terminal ? opx_ep->read_cntr : NULL, cc,
+				   FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps, reliability,
 				   hfi1_type);
 
+		if (terminal) {
+			assert(dst_iov_bytes == 0);
+			assert(dst_iov_index == (dst_iov_count - 1));
+			OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
+			return 0;
+		}
+
+		if (src_iov_bytes == 0) {
+			/* advance to next src rma iovec */
+			++src_iov_index;
+			src_iov_bytes = msg->rma_iov[src_iov_index].len;
+			src_iov_addr  = msg->rma_iov[src_iov_index].addr;
+			src_iov_key   = msg->rma_iov[src_iov_index].key;
+		} else {
+			src_iov_addr += len;
+		}
+
+		if (dst_iov_bytes == 0) {
+			assert(dst_iov_index != (dst_iov_count - 1));
+			++dst_iov_index;
+			dst_iov_bytes = msg->msg_iov[dst_iov_index].iov_len;
+			dst_iov_vaddr = msg->msg_iov[dst_iov_index].iov_base;
+		} else {
+			dst_iov_vaddr = (void *) ((uintptr_t) dst_iov_vaddr + len);
+		}
 	} /* end while */
 
 	/* should never get here */

@@ -1323,6 +1323,15 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 			fi_reliability_service_ping_remote(ep, service);
 
 #if HAVE_HFISVC
+			/* GET watchdog sweep on the ping tick; dlist_empty keeps the common case free */
+			if (!dlist_empty(&opx_ep->rma_watch_list)) {
+				union fi_opx_timer_stamp sweep_stamp;
+				uint64_t		 now_ns = fi_opx_timer_now_ns(&sweep_stamp, &service->timer);
+				opx_hfisvc_rma_watch_sweep(opx_ep, now_ns);
+			}
+#endif
+
+#if HAVE_HFISVC
 #ifdef OPX_HFISVC_RELIABILITY_DOORBELL
 			if (opx_ep->use_hfisvc) {
 				/* Ring doorbell once per context that has pending completions.

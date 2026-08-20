@@ -186,6 +186,8 @@ static const char *const OPX_HFI1_PACKET_STR[] = {
 OPX_COMPILE_TIME_ASSERT((OPX_MAX_HFIS & 3) == 0, "OPX_MAX_HFIS must be a multiple of 4!\n");
 OPX_COMPILE_TIME_ASSERT(sizeof(opx_lid_t) == sizeof(uint32_t), "opx_lid_t must remain 32-bit");
 
+/* Plane cap (source of truth). hfisvc RMA seeds per-plane RTS/keyset slots {0, num_tx_contexts-1};
+ * raising >2 requires seeding all interior planes (enforced by _Static_assert in opx_hfisvc_rma.h). */
 #define OPX_MAX_TX_CONTEXTS (2)
 OPX_COMPILE_TIME_ASSERT(OPX_MAX_TX_CONTEXTS <= (1 << (31 - OPX_LID_PLANE_SHIFT)),
 			"OPX_LID_PLANE_KEY: not enough bits for plane index");
