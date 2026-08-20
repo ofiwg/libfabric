@@ -225,7 +225,7 @@ static ssize_t smr_generic_atomic(
 	rx_id = smr_peer_data(ep->region)[tx_id].id;
 	peer_smr = smr_peer_region(ep, tx_id);
 
-	ofi_genlock_lock(&ep->util_ep.lock);
+	ofi_genlock_lock(ep->srx_lock);
 	if (smr_peer_data(ep->region)[tx_id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -315,7 +315,7 @@ static ssize_t smr_generic_atomic(
 			"unable to process tx completion\n");
 
 unlock:
-	ofi_genlock_unlock(&ep->util_ep.lock);
+	ofi_genlock_unlock(ep->srx_lock);
 	return ret;
 }
 
@@ -411,7 +411,7 @@ static ssize_t smr_atomic_inject(
 	peer_id = smr_peer_data(ep->region)[id].id;
 	peer_smr = smr_peer_region(ep, id);
 
-	ofi_genlock_lock(&ep->util_ep.lock);
+	ofi_genlock_lock(ep->srx_lock);
 	if (smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -452,7 +452,7 @@ static ssize_t smr_atomic_inject(
 	smr_cmd_queue_commit(ce, pos);
 	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_atomic);
 unlock:
-	ofi_genlock_unlock(&ep->util_ep.lock);
+	ofi_genlock_unlock(ep->srx_lock);
 	return ret;
 }
 

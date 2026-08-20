@@ -95,7 +95,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	rx_id = smr_peer_data(ep->region)[tx_id].id;
 	peer_smr = smr_peer_region(ep, tx_id);
 
-	ofi_genlock_lock(&ep->util_ep.lock);
+	ofi_genlock_lock(ep->srx_lock);
 	if (smr_peer_data(ep->region)[tx_id].sar_status)
 		goto unlock;
 
@@ -149,7 +149,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	}
 
 unlock:
-	ofi_genlock_unlock(&ep->util_ep.lock);
+	ofi_genlock_unlock(ep->srx_lock);
 	return ret;
 }
 
@@ -220,7 +220,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	rx_id = smr_peer_data(ep->region)[tx_id].id;
 	peer_smr = smr_peer_region(ep, tx_id);
 
-	ofi_genlock_lock(&ep->util_ep.lock);
+	ofi_genlock_lock(ep->srx_lock);
 	if (smr_peer_data(ep->region)[tx_id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -248,7 +248,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, op);
 
 unlock:
-	ofi_genlock_unlock(&ep->util_ep.lock);
+	ofi_genlock_unlock(ep->srx_lock);
 	return ret;
 }
 

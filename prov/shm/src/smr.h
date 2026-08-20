@@ -45,6 +45,7 @@ struct smr_ep {
 	uint64_t		msg_id;
 	struct smr_region	*volatile region;
 	struct fid_peer_srx	*srx;
+	struct ofi_genlock	*srx_lock;
 	struct smr_map		*map;
 	struct ofi_bufpool	*cmd_ctx_pool;
 	struct ofi_bufpool	*unexp_buf_pool;
