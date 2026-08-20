@@ -24,6 +24,15 @@ fi_atomicvalid / fi_fetch_atomicvalid / fi_compare_atomicvalid /
 fi_query_atomic
 : Indicates if a provider supports a specific atomic operation
 
+fi_xpu_atomic
+:   Initiate an atomic operation from an XPU.
+
+fi_xpu_fetch_atomic
+:   Initiate a fetch-atomic operation from an XPU.
+
+fi_xpu_compare_atomic
+:   Initiate a compare-and-swap atomic operation from an XPU.
+
 # SYNOPSIS
 
 ```c
@@ -93,6 +102,26 @@ int fi_compare_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
 int fi_query_atomic(struct fid_domain *domain,
     enum fi_datatype datatype, enum fi_op op,
     struct fi_atomic_attr *attr, uint64_t flags);
+
+#include <rdma/fi_xpu_device.h>
+
+int fi_xpu_atomic(struct fid_xpu_ep *ep, const void *buf, size_t count,
+    void *desc, void *dest_addr, uint64_t addr, uint64_t key,
+    int datatype, int op, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_fetch_atomic(struct fid_xpu_ep *ep, const void *buf, size_t count,
+    void *desc, void *result, void *result_desc,
+    void *dest_addr, uint64_t addr, uint64_t key,
+    int datatype, int op, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_compare_atomic(struct fid_xpu_ep *ep, const void *buf,
+    size_t count, void *desc, const void *compare, void *compare_desc,
+    void *result, void *result_desc,
+    void *dest_addr, uint64_t addr, uint64_t key,
+    int datatype, int op, void *context,
+    uint64_t flags, int scope);
 ```
 
 # ARGUMENTS
@@ -146,6 +175,12 @@ int fi_query_atomic(struct fid_domain *domain,
 : User specified pointer to associate with the operation.  This parameter is
   ignored if the operation will not generate a successful completion, unless
   an op flag specifies the context parameter be used for required input.
+
+*scope*
+: Cooperative threading scope for device-side operations. Specifies the set
+  of threads issuing the same operation collectively. Only used by
+  fi_xpu_atomic, fi_xpu_fetch_atomic, and fi_xpu_compare_atomic. See
+  [`fi_xpu`(3)](fi_xpu.3.html) for details.
 
 # DESCRIPTION
 
@@ -590,6 +625,15 @@ concurrently being updated by NIC based atomics may leave the region's
 data in an unknown state.  The results of a first actor's atomic operations
 must be visible to a second actor prior to the second actor issuing its
 own atomics.
+
+## fi_xpu_atomic / fi_xpu_fetch_atomic / fi_xpu_compare_atomic
+
+The fi_xpu_atomic, fi_xpu_fetch_atomic, and fi_xpu_compare_atomic
+calls are device-side equivalents of the host atomic operations. They
+operate on an exported endpoint handle and use raw addresses and keys.
+The datatype and op parameters specify the data type and atomic
+operation respectively, matching the host-side enum values. See
+[`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
 
 # FLAGS
 

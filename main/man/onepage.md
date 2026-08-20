@@ -3781,6 +3781,15 @@ fi_atomicvalid / fi_fetch_atomicvalid / fi_compare_atomicvalid /
 fi_query_atomic : Indicates if a provider supports a specific atomic
 operation
 
+fi_xpu_atomic
+:   Initiate an atomic operation from an XPU.
+
+fi_xpu_fetch_atomic
+:   Initiate a fetch-atomic operation from an XPU.
+
+fi_xpu_compare_atomic
+:   Initiate a compare-and-swap atomic operation from an XPU.
+
 # SYNOPSIS
 
 ``` c
@@ -3850,6 +3859,26 @@ int fi_compare_atomicvalid(struct fid_ep *ep, enum fi_datatype datatype,
 int fi_query_atomic(struct fid_domain *domain,
     enum fi_datatype datatype, enum fi_op op,
     struct fi_atomic_attr *attr, uint64_t flags);
+
+#include <rdma/fi_xpu_device.h>
+
+int fi_xpu_atomic(struct fid_xpu_ep *ep, const void *buf, size_t count,
+    void *desc, void *dest_addr, uint64_t addr, uint64_t key,
+    int datatype, int op, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_fetch_atomic(struct fid_xpu_ep *ep, const void *buf, size_t count,
+    void *desc, void *result, void *result_desc,
+    void *dest_addr, uint64_t addr, uint64_t key,
+    int datatype, int op, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_compare_atomic(struct fid_xpu_ep *ep, const void *buf,
+    size_t count, void *desc, const void *compare, void *compare_desc,
+    void *result, void *result_desc,
+    void *dest_addr, uint64_t addr, uint64_t key,
+    int datatype, int op, void *context,
+    uint64_t flags, int scope);
 ```
 
 # ARGUMENTS
@@ -3905,6 +3934,12 @@ int fi_query_atomic(struct fid_domain *domain,
     parameter is ignored if the operation will not generate a successful
     completion, unless an op flag specifies the context parameter be
     used for required input.
+
+*scope*
+:   Cooperative threading scope for device-side operations. Specifies
+    the set of threads issuing the same operation collectively. Only
+    used by fi_xpu_atomic, fi_xpu_fetch_atomic, and
+    fi_xpu_compare_atomic. See [`fi_xpu`(3)](fi_xpu.3.html) for details.
 
 # DESCRIPTION
 
@@ -4343,6 +4378,15 @@ data in an unknown state. The results of a first actor's atomic
 operations must be visible to a second actor prior to the second actor
 issuing its own atomics.
 
+## fi_xpu_atomic / fi_xpu_fetch_atomic / fi_xpu_compare_atomic
+
+The fi_xpu_atomic, fi_xpu_fetch_atomic, and fi_xpu_compare_atomic calls
+are device-side equivalents of the host atomic operations. They operate
+on an exported endpoint handle and use raw addresses and keys. The
+datatype and op parameters specify the data type and atomic operation
+respectively, matching the host-side enum values. See
+[`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
+
 # FLAGS
 
 The fi_atomicmsg, fi_fetch_atomicmsg, and fi_compare_atomicmsg calls
@@ -4488,6 +4532,9 @@ fi_av_lookup_auth_key
 fi_av_set_user_id
 :   Set the user-defined fi_addr_t for an inserted fi_addr_t.
 
+fi_av_lookup2
+:   Look up an address vector entry with extended options.
+
 # SYNOPSIS
 
 ``` c
@@ -4533,6 +4580,10 @@ int fi_av_lookup_auth_key(struct fid_av *av, fi_addr_t addr,
 
 int fi_av_set_user_id(struct fid_av *av, fi_addr_t fi_addr,
       fi_addr_t user_id, uint64_t flags);
+
+int fi_av_lookup2(struct fid_av *av, fi_addr_t fi_addr,
+    void *buf, size_t *len, uint64_t flags,
+    struct fid_xpu_ctx *ctx);
 ```
 
 # ARGUMENTS
@@ -4993,6 +5044,23 @@ than what can fit into the buffer, it will be truncated. On output,
 addrlen is set to the size of the buffer needed to store the address,
 which may be larger than the input value.
 
+## fi_av_lookup2
+
+The fi_av_lookup2 call is an extended version of fi_av_lookup that
+accepts flags and an optional XPU context. When called with flags set to
+FI_XPU and a valid fid_xpu_ctx, the call retrieves a provider-specific
+raw address usable by the XPU when posting work requests. The size of
+the returned data is av_addr_size from fi_xpu_ctx_query. When called
+without FI_XPU (flags = 0, ctx = NULL), the call behaves identically to
+fi_av_lookup. The caller allocates buf and sets *len to the buffer size
+on input; on output *len is set to the number of bytes written.
+
+The AV is not bound to an XPU context --- it remains a host-only,
+domain-level resource. The same AV can be queried with different XPU
+contexts to get device-specific representations.
+
+See [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 ## fi_rx_addr
 
 This function is used to convert an endpoint address, returned by
@@ -5195,6 +5263,10 @@ FI_ADDR_NOTAVAIL.
 All other calls return FI_SUCCESS on success, or a negative value
 corresponding to fabric errno on error. Fabric errno values are defined
 in `rdma/fi_errno.h`.
+
+fi_av_lookup2 returns -FI_ETOOSMALL if the provided buffer is too small;
+\*len is updated to the required size. Returns -FI_EINVAL if an invalid
+fi_addr or XPU context is provided.
 
 # SEE ALSO
 
@@ -5762,6 +5834,9 @@ fi_cntr_set
 fi_cntr_wait
 :   Wait for a counter to be greater or equal to a threshold value
 
+fi_cntr_export_xpu
+:   Export a counter for XPU device-side access.
+
 # SYNOPSIS
 
 ``` c
@@ -5786,6 +5861,9 @@ int fi_cntr_seterr(struct fid_cntr *cntr, uint64_t value);
 
 int fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
     int timeout);
+
+int fi_cntr_export_xpu(struct fid_cntr *cntr, uint64_t flags,
+    struct fid_xpu_cntr *xpu_cntr);
 ```
 
 # ARGUMENTS
@@ -5842,6 +5920,7 @@ struct fi_cntr_attr {
     enum fi_wait_obj     wait_obj;  /* requested wait object */
     struct fid_wait     *wait_set;  /* optional wait set, deprecated */
     uint64_t             flags;     /* operation flags */
+    struct fid_xpu_ctx  *xpu_ctx;   /* optional XPU context */
 };
 ```
 
@@ -5928,7 +6007,18 @@ struct fi_cntr_attr {
     counters. This field is ignored if wait_obj is not FI_WAIT_SET.
 
 *flags*
-:   Flags are reserved for future use, and must be set to 0.
+:   Flags that apply to the counter. Set `FI_XPU` to create a counter
+    for XPU device-side access. Must be set to 0 if XPU is not used.
+
+*xpu_ctx*
+:   Optional pointer to an XPU context created via `fi_xpu_ctx`. When
+    set together with `FI_XPU` in the flags field, the counter is
+    created for XPU device-side access. Counter values on such a counter
+    can only be read or waited on using device-side functions. Host-side
+    read operations are not available. The counter is exported via
+    `fi_cntr_export_xpu` for device-side use. See
+    [`fi_xpu`(3)](fi_xpu.3.html) for details. This field must be NULL if
+    the counter is not created with FI_XPU.
 
 ## fi_close
 
@@ -6027,6 +6117,16 @@ error value associated with the counter remains unchanged.
 It is invalid for applications to call this function if the counter has
 been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
 
+## fi_cntr_export_xpu
+
+The fi_cntr_export_xpu call exports a counter for XPU access. The
+counter must have been created with an XPU context set in fi_cntr_attr.
+The caller provides a struct fid_xpu_cntr which the provider fills with
+fclass, prov_id, and prov_ctx (see [`fi_xpu`(3)](fi_xpu.3.html) for
+provider dispatch details). The application must copy the structure to
+device-accessible memory before passing it to device-side counter
+functions (fi_xpu_cntr_read, fi_xpu_cntr_wait).
+
 # RETURN VALUES
 
 Returns 0 on success. On error, a negative value corresponding to fabric
@@ -6034,6 +6134,12 @@ errno is returned.
 
 fi_cntr_read / fi_cntr_readerr
 :   Returns the current value of the counter.
+
+fi_cntr_export_xpu
+:   Returns 0 on success. On error, returns a negative fabric errno.
+    Returns -FI_ENOSYS if the provider does not support exporting the
+    counter for XPU access. Returns -FI_EINVAL if the counter was not
+    created with an XPU context.
 
 Fabric errno values are defined in `rdma/fi_errno.h`.
 
@@ -6689,6 +6795,9 @@ fi_cq_signal
 fi_cq_strerror
 :   Converts provider specific error information into a printable string
 
+fi_cq_export_xpu
+:   Export a completion queue for XPU device-side access.
+
 # SYNOPSIS
 
 ``` c
@@ -6719,6 +6828,9 @@ int fi_cq_signal(struct fid_cq *cq);
 
 const char * fi_cq_strerror(struct fid_cq *cq, int prov_errno,
       const void *err_data, char *buf, size_t len);
+
+int fi_cq_export_xpu(struct fid_cq *cq, uint64_t flags,
+    struct fid_xpu_cq *xpu_cq);
 ```
 
 # ARGUMENTS
@@ -6798,6 +6910,7 @@ struct fi_cq_attr {
     int                  signaling_vector; /* interrupt affinity */
     enum fi_cq_wait_cond wait_cond; /* wait condition format */
     struct fid_wait     *wait_set;  /* optional wait set, deprecated */
+    struct fid_xpu_ctx  *xpu_ctx;   /* optional XPU context */
 };
 ```
 
@@ -6964,6 +7077,13 @@ This field is ignored if wait_obj is set to FI_WAIT_NONE.
     event and completion queues. This field is ignored if wait_obj is
     not FI_WAIT_SET.
 
+*xpu_ctx*
+:   Optional pointer to an XPU context created via `fi_xpu_ctx`. When
+    set together with `FI_XPU` in the flags field, the CQ is created for
+    XPU device-side access. See [`fi_xpu`(3)](fi_xpu.3.html) for
+    details. This field must be NULL if the CQ is not created with
+    FI_XPU.
+
 ## fi_close
 
 The fi_close call releases all resources associated with a completion
@@ -6995,6 +7115,13 @@ commands are usable with a CQ.
 :   This command retrieves the type of wait object associated with the
     CQ. The `fi_control` arg parameter should be an address where the
     wait object type will be written.
+
+When `FI_XPU` is set in `fi_cq_attr->flags` and `fi_cq_attr->xpu_ctx`
+points to an open XPU context (see [`fi_xpu`(3)](fi_xpu.3.html)), the CQ
+is created for XPU device-side access. Completion entries on such a CQ
+can only be read using device-side functions. Host-side read operations
+are not available. The CQ is exported via `fi_cq_export_xpu` for
+device-side use.
 
 ## fi_cq_read
 
@@ -7135,6 +7262,17 @@ The fi_cq_signal call will unblock any thread waiting in fi_cq_sread or
 fi_cq_sreadfrom. This may be used to wake-up a thread that is blocked
 waiting to read a completion operation. The fi_cq_signal operation is
 only available if the CQ was configured with a wait object.
+
+## fi_cq_export_xpu
+
+The fi_cq_export_xpu call exports a completion queue for XPU-side
+polling. The CQ must have been created with an XPU context set in
+fi_cq_attr. The caller provides a struct fid_xpu_cq which the provider
+fills with fclass, prov_id, and prov_ctx (see
+[`fi_xpu`(3)](fi_xpu.3.html) for provider dispatch details). The
+application must copy the structure to device-accessible memory before
+passing it to device-side completion functions (fi_xpu_cq_read,
+fi_xpu_cq_readerr).
 
 # COMPLETION FIELDS
 
@@ -7706,12 +7844,17 @@ from the CQ, returns -FI_EAGAIN.
 : Returns a character string interpretation of the provider specific
 error returned with a completion.
 
+## fi_cq_export_xpu
+
+: Returns 0 on success. On error, returns a negative fabric errno.
+Returns -FI_ENOSYS if the provider does not support exporting the CQ for
+XPU access. Returns -FI_EINVAL if the CQ was not created with an XPU
+context.
+
 Fabric errno values are defined in `rdma/fi_errno.h`.
 
 # SEE ALSO
 
-[`fi_getinfo`(3)](fi_getinfo.3.html),
-[`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html), [`fi_eq`(3)](fi_eq.3.html),
 [`fi_cntr`(3)](fi_cntr.3.html), [`fi_poll`(3)](fi_poll.3.html)
 
@@ -8477,6 +8620,13 @@ memory regions can be limited to specific authorization keys.
     used in the the peer API flow. The domain must support importing
     owner_ops when opening a CQ, counter, and shared receive queue.
 
+*FI_XPU*
+:   Indicates that the domain supports XPU-initiated communication,
+    i.e. the ability to create an XPU context (see
+    [`fi_xpu`(3)](fi_xpu.3.html)) and export endpoints, completion
+    queues, and counters allocated from the domain for data path access
+    by an XPU. See [`fi_xpu`(3)](fi_xpu.3.html) for details.
+
 The following are supported secondary capabilities:
 
 *FI_LOCAL_COMM*
@@ -8674,6 +8824,9 @@ fi_rx_size_left / fi_tx_size_left (DEPRECATED)
     without an operation returning -FI_EAGAIN. This functions have been
     deprecated and will be removed in a future version of the library.
 
+fi_ep_export_xpu
+:   Export an endpoint for XPU device-side access.
+
 # SYNOPSIS
 
 ``` c
@@ -8738,6 +8891,9 @@ uint8_t fi_tc_dscp_get(uint32_t tclass);
 DEPRECATED ssize_t fi_rx_size_left(struct fid_ep *ep);
 
 DEPRECATED ssize_t fi_tx_size_left(struct fid_ep *ep);
+
+int fi_ep_export_xpu(struct fid_ep *ep, uint64_t flags,
+    struct fid_xpu_ep *xpu_ep);
 ```
 
 # ARGUMENTS
@@ -8875,9 +9031,18 @@ that had been used.
 
 ## fi_endpoint2
 
-Similar to fi_endpoint, buf accepts an extra parameter *flags*. Mainly
-used for opening endpoints that use peer transfer feature. See
-[`fi_peer`(3)](fi_peer.3.html)
+Similar to fi_endpoint, but accepts an extra parameter *flags*. Used for
+opening endpoints that use peer transfer feature (see
+[`fi_peer`(3)](fi_peer.3.html)) or XPU-initiated communication.
+
+When `FI_XPU` is set in flags and `fi_ep_attr->xpu_ctx` points to an
+open XPU context (see [`fi_xpu`(3)](fi_xpu.3.html)), the endpoint is
+created for XPU device-side data transfer. Data transfer operations on
+such an EP are only available to the given XPU. Control functions such
+as `fi_ep_bind`, `fi_enable`, `fi_setopt`, and CM operations remain host
+CPU-only. The EP may be bound to XPU CQs and XPU counters created with
+the same XPU context. Once bound and enabled, the EP is exported via
+`fi_ep_export_xpu` for device-side use.
 
 ## fi_close
 
@@ -9323,8 +9488,8 @@ transmit and receive context attributes as shown below.
 protocol; uint32_t protocol_version; size_t max_msg_size; size_t
 msg_prefix_size; size_t max_order_raw_size; size_t max_order_war_size;
 size_t max_order_waw_size; uint64_t mem_tag_format; size_t tx_ctx_cnt;
-size_t rx_ctx_cnt; size_t auth_key_size; uint8_t \*auth_key; }; {%
-endhighlight %}
+size_t rx_ctx_cnt; size_t auth_key_size; uint8_t *auth_key; struct
+fid_xpu_ctx *xpu_ctx; }; {% endhighlight %}
 
 ## type - Endpoint Type
 
@@ -9676,6 +9841,14 @@ authorization key will be used if auth_key_size is set to 0. This field
 is ignored unless the fabric is opened with API version 1.5 or greater.
 
 If the domain is opened with FI_AV_AUTH_KEY, auth_key is must be NULL.
+
+## xpu_ctx - XPU Context
+
+Optional pointer to an XPU context created via `fi_xpu_ctx`. When set
+together with `FI_XPU` in the flags parameter of `fi_endpoint2`, the
+endpoint is created for XPU device-side data transfer. See
+[`fi_xpu`(3)](fi_xpu.3.html) for details. This field must be NULL if the
+endpoint is not created with FI_XPU.
 
 # TRANSMIT CONTEXT ATTRIBUTES
 
@@ -10247,6 +10420,16 @@ file descriptor that is signaled whenever the endpoint is ready to send
 and/or receive data. The file descriptor may be retrieved using
 fi_control.
 
+## fi_ep_export_xpu
+
+The fi_ep_export_xpu call exports an enabled endpoint for XPU access.
+The caller provides a struct fid_xpu_ep which the provider fills with
+fclass, prov_id, and prov_ctx (see [`fi_xpu`(3)](fi_xpu.3.html) for
+provider dispatch details). The application must copy the structure to
+device-accessible memory before passing it to device-side data transfer
+functions. The ep must have been created with FI_XPU and be in the
+enabled state.
+
 # OPERATION FLAGS
 
 Operation flags are obtained by OR-ing the following flags together.
@@ -10374,6 +10557,14 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 
 *-FI_EOPBADSTATE*
 :   The endpoint's state does not permit the requested operation.
+
+*-FI_ENOSYS*
+:   Returned by fi_ep_export_xpu if the provider does not support
+    exporting the endpoint for XPU access.
+
+*-FI_EINVAL*
+:   Returned by fi_ep_export_xpu if the endpoint was not created with
+    FI_XPU or is not in the enabled state.
 
 # SEE ALSO
 
@@ -11843,10 +12034,11 @@ send-only or receive-only.
     and/or FI_ATOMIC be set.
 
 *FI_XPU*
-:   Specifies that the endpoint should support transfers that may be
-    initiated from heterogenous computation devices, such as GPUs. This
-    flag requires that FI_TRIGGER be set. For additional details on XPU
-    triggers see [`fi_trigger`(3)](fi_trigger.3.html).
+:   Requests support for data path operations initiated from
+    heterogeneous computation devices, such as GPUs. At the endpoint
+    level, indicates the endpoint should support such operations; at the
+    domain level, indicates the domain supports creating an XPU context.
+    See [`fi_xpu`(3)](fi_xpu.3.html) for details.
 
 Capabilities may be grouped into three general categories: primary,
 secondary, and primary modifiers. Primary capabilities must explicitly
@@ -12180,6 +12372,12 @@ fi_recv / fi_recvv / fi_recvmsg
 fi_send / fi_sendv / fi_sendmsg fi_inject / fi_senddata : Initiate an
 operation to send a message
 
+fi_xpu_send
+:   Initiate a send operation from an XPU.
+
+fi_xpu_recv
+:   Post a receive buffer from an XPU.
+
 # SYNOPSIS
 
 ``` c
@@ -12211,6 +12409,15 @@ ssize_t fi_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
     uint64_t data, fi_addr_t dest_addr);
+
+#include <rdma/fi_xpu_device.h>
+
+int fi_xpu_send(struct fid_xpu_ep *ep, const void *buf, size_t len,
+    void *desc, uint64_t data, void *dest_addr, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_recv(struct fid_xpu_ep *ep, void *buf, size_t len, void *desc,
+    void *src_addr, void *context, uint64_t flags, int scope);
 ```
 
 # ARGUMENTS
@@ -12267,6 +12474,12 @@ ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
     parameter is ignored if the operation will not generate a successful
     completion, unless an op flag specifies the context parameter be
     used for required input.
+
+*scope*
+:   Cooperative threading scope for device-side operations. Specifies
+    the set of threads issuing the same operation collectively. Only
+    used by fi_xpu_send and fi_xpu_recv. See
+    [`fi_xpu`(3)](fi_xpu.3.html) for details.
 
 # DESCRIPTION
 
@@ -12380,6 +12593,18 @@ The fi_recvmsg call supports posting buffers over both connected and
 connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags. The fi_recvmsg function
 takes a struct fi_msg as input.
+
+## fi_xpu_send / fi_xpu_recv
+
+The fi_xpu_send and fi_xpu_recv calls are device-side equivalents of the
+host message operations, callable from XPU kernel code. They operate on
+an exported endpoint handle obtained from fi_ep_export_xpu. The desc
+parameter is a raw descriptor from fi_mr_get_xpu_desc with FI_XPU, and
+dest_addr/src_addr are raw addresses from fi_av_lookup2 with FI_XPU. The
+scope parameter specifies the cooperative threading scope
+(FI_XPU_WORK_ITEM, FI_XPU_SUBGROUP, FI_XPU_WORK_GROUP, or
+FI_XPU_DEVICE). See [`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU
+programming model.
 
 # FLAGS
 
@@ -12571,6 +12796,9 @@ fi_hmem_ze_device
 :   Returns an hmem device identifier for a level zero driver and
     device.
 
+fi_mr_get_xpu_desc
+:   Retrieve a memory region descriptor with extended options.
+
 # SYNOPSIS
 
 ``` c
@@ -12609,6 +12837,9 @@ int fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov,
 int fi_mr_enable(struct fid_mr *mr);
 
 int fi_hmem_ze_device(int driver_index, int device_index);
+
+int fi_mr_get_xpu_desc(struct fid_mr *mr, void *buf, size_t *len,
+    uint64_t flags, struct fid_xpu_ctx *ctx);
 ```
 
 # ARGUMENTS
@@ -12897,6 +13128,19 @@ operations is optional. Applications may optionally pass in a valid desc
 parameter. If the desc parameter is NULL, any required local memory
 registration will be handled by the provider.
 
+*FI_MR_XPU_DESC*
+:   This bit is associated with the FI_XPU capability. It indicates
+    whether an XPU-usable memory descriptor is required for data
+    transfers initiated by an XPU (see [`fi_xpu`(3)](fi_xpu.3.html)).
+
+When FI_MR_XPU_DESC is set, an application that registers a buffer used
+by an XPU data transfer must obtain an XPU descriptor with
+fi_mr_get_xpu_desc() and pass it into the device-side data transfer
+calls. This is the XPU analog of FI_MR_LOCAL for host-side calls.
+
+When FI_MR_XPU_DESC is unset, XPU data transfer calls do not require a
+descriptor and the application need not call fi_mr_get_xpu_desc().
+
 *Basic Memory Registration* (deprecated)
 :   Basic memory registration was deprecated in libfabric version 1.5,
     but is supported for backwards compatibility. Basic memory
@@ -13010,6 +13254,27 @@ MEMORY REGISTRATION CACHE section.
 
 Obtains the local memory descriptor associated with a MR. The memory
 registration must have completed successfully before invoking this call.
+
+## fi_mr_get_xpu_desc
+
+The fi_mr_get_xpu_desc call retrieves a provider-specific raw descriptor
+(e.g., the hardware lkey) for the MR into a caller-supplied buffer. The
+caller allocates buf and sets *len to the buffer size on input; on
+output *len is set to the number of bytes written. If the buffer is too
+small, -FI_ETOOSMALL is returned and \*len is set to the required size.
+
+When called with FI_XPU flag and a valid fid_xpu_ctx, the returned
+descriptor is usable by the XPU when posting work requests. The needed
+size can also be obtained through the mr_desc_size field of
+fi_xpu_ctx_attr from fi_xpu_ctx_query.
+
+For non-XPU use cases, applications are encouraged to use fi_mr_desc
+instead, which returns the descriptor pointer directly.
+
+The MR is not bound to an XPU context --- it is a shared domain-level
+resource. The same MR can be queried with different XPU contexts.
+
+See [`fi_xpu`(3)](fi_xpu.3.html) for details.
 
 ## fi_mr_key
 
@@ -13560,6 +13825,10 @@ domains.
 
 Returns 0 on success. On error, a negative value corresponding to fabric
 errno is returned.
+
+fi_mr_get_xpu_desc returns -FI_ETOOSMALL if the provided buffer is too
+small; \*len is updated to the required size. Returns -FI_EINVAL if an
+invalid XPU context is provided.
 
 Fabric errno values are defined in `rdma/fi_errno.h`.
 
@@ -15219,6 +15488,12 @@ fi_read / fi_readv / fi_readmsg
 fi_write / fi_writev / fi_writemsg fi_inject_write / fi_writedata :
 Initiate a write to remote memory
 
+fi_xpu_write
+:   Initiate an RMA write operation from an XPU.
+
+fi_xpu_read
+:   Initiate an RMA read operation from an XPU.
+
 # SYNOPSIS
 
 ``` c
@@ -15254,6 +15529,16 @@ ssize_t fi_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
     uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
+
+#include <rdma/fi_xpu_device.h>
+
+int fi_xpu_write(struct fid_xpu_ep *ep, const void *buf, size_t len,
+    void *desc, uint64_t data, void *dest_addr, uint64_t addr, uint64_t key,
+    void *context, uint64_t flags, int scope);
+
+int fi_xpu_read(struct fid_xpu_ep *ep, void *buf, size_t len, void *desc,
+    void *src_addr, uint64_t addr, uint64_t key,
+    void *context, uint64_t flags, int scope);
 ```
 
 # ARGUMENTS
@@ -15311,6 +15596,12 @@ ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
     parameter is ignored if the operation will not generate a successful
     completion, unless an op flag specifies the context parameter be
     used for required input.
+
+*scope*
+:   Cooperative threading scope for device-side operations. Specifies
+    the set of threads issuing the same operation collectively. Only
+    used by fi_xpu_write and fi_xpu_read. See
+    [`fi_xpu`(3)](fi_xpu.3.html) for details.
 
 # DESCRIPTION
 
@@ -15422,6 +15713,14 @@ connectionless endpoints, with the ability to control the read operation
 per call through the use of flags. The fi_readmsg function takes a
 struct fi_msg_rma as input.
 
+## fi_xpu_write / fi_xpu_read
+
+The fi_xpu_write and fi_xpu_read calls are device-side equivalents of
+the host RMA operations. They operate on an exported endpoint handle and
+use raw addresses and keys. The addr and key parameters specify the
+remote memory address and access key respectively. See
+[`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
+
 # FLAGS
 
 The fi_readmsg and fi_writemsg calls allow the user to specify flags
@@ -15520,6 +15819,12 @@ fi_trecv / fi_trecvv / fi_trecvmsg
 fi_tsend / fi_tsendv / fi_tsendmsg / fi_tinject / fi_tsenddata
 :   Initiate an operation to send a message
 
+fi_xpu_tsend
+:   Initiate a tagged send operation from an XPU.
+
+fi_xpu_trecv
+:   Post a tagged receive buffer from an XPU.
+
 # SYNOPSIS
 
 ``` c
@@ -15554,6 +15859,16 @@ ssize_t fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
     uint64_t data, fi_addr_t dest_addr, uint64_t tag);
+
+#include <rdma/fi_xpu_device.h>
+
+int fi_xpu_tsend(struct fid_xpu_ep *ep, const void *buf, size_t len,
+    void *desc, uint64_t data, void *dest_addr, uint64_t tag, void *context,
+    uint64_t flags, int scope);
+
+int fi_xpu_trecv(struct fid_xpu_ep *ep, void *buf, size_t len, void *desc,
+    void *src_addr, uint64_t tag, uint64_t ignore, void *context,
+    uint64_t flags, int scope);
 ```
 
 # ARGUMENTS
@@ -15616,6 +15931,12 @@ ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
     parameter is ignored if the operation will not generate a successful
     completion, unless an op flag specifies the context parameter be
     used for required input.
+
+*scope*
+:   Cooperative threading scope for device-side operations. Specifies
+    the set of threads issuing the same operation collectively. Only
+    used by fi_xpu_tsend and fi_xpu_trecv. See
+    [`fi_xpu`(3)](fi_xpu.3.html) for details.
 
 # DESCRIPTION
 
@@ -15743,6 +16064,14 @@ The fi_trecvmsg call supports posting buffers over both connected and
 connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags. The fi_trecvmsg function
 takes a struct fi_msg_tagged as input.
+
+## fi_xpu_tsend / fi_xpu_trecv
+
+The fi_xpu_tsend and fi_xpu_trecv calls are device-side equivalents of
+the host tagged message operations. They operate on an exported endpoint
+handle and include tag matching parameters. The tag and ignore
+parameters function identically to their host-side counterparts. See
+[`fi_xpu`(3)](fi_xpu.3.html) for the overall XPU programming model.
 
 # FLAGS
 
