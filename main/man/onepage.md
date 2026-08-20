@@ -18818,6 +18818,21 @@ fi_info hints parameter specifies FI_ATOMIC. If FI_ATOMIC is requested,
 message order FI_ORDER_RAR, FI_ORDER_RAW, FI_ORDER_WAR, FI_ORDER_WAW,
 FI_ORDER_SAR, and FI_ORDER_SAW can not be supported.
 
+## Message ordering limitations with multiple MSG endpoints
+
+When FI_OFI_RXM_NUM_MSG_EPS is greater than 1, a peer connection spans
+several MSG endpoints, and hence several core provider connections that
+are unordered with respect to each other. Message, tagged and atomic
+transfers are issued on the first endpoint, so they remain ordered
+relative to each other, but RMA and rendezvous payload are spread across
+the remaining endpoints. Only FI_ORDER_SAS, FI_ORDER_ATOMIC_RAR,
+FI_ORDER_ATOMIC_RAW, FI_ORDER_ATOMIC_WAR and FI_ORDER_ATOMIC_WAW are
+reported, and max_order_raw_size, max_order_war_size and
+max_order_waw_size are reported as 0. fi_getinfo returns -FI_ENODATA if
+the hints request ordering beyond this. Applications that need an RMA
+operation to be ordered against a later transfer must wait for its
+completion instead.
+
 ## Miscellaneous limitations
 
 -   RxM protocol peers should have same endian-ness otherwise
@@ -18896,8 +18911,10 @@ The ofi_rxm provider checks for the following environment variables.
 :   Number of MSG endpoints (and underlying connections/QPs) to open per
     RxM peer connection. Values greater than 1 spread traffic across
     multiple QPs in a round-robin fashion, which can improve throughput
-    on hardware that benefits from multiple QPs per peer. The value is
-    clamped to the range \[1, 255\]. (default: 1)
+    on hardware that benefits from multiple QPs per peer. Values greater
+    than 1 also reduce the message ordering the provider guarantees, see
+    the message ordering limitations above. The value is clamped to the
+    range \[1, 255\]. (default: 1)
 
 # Tuning
 
