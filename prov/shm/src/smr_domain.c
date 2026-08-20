@@ -36,10 +36,11 @@ extern struct fi_ops_srx_peer smr_srx_peer_ops;
 
 static int smr_srx_close(struct fid *fid)
 {
-	struct smr_domain *domain = container_of(fid, struct smr_domain,
-						 rx_ep.fid);
+	struct smr_peer_srx *peer_srx = container_of(fid, struct smr_peer_srx,
+						rx_ep.fid);
 
-	ofi_atomic_dec32(&domain->util_domain.ref);
+	ofi_atomic_dec32(&peer_srx->domain->util_domain.ref);
+	free(peer_srx);
 
 	return FI_SUCCESS;
 }
@@ -82,19 +83,24 @@ static int smr_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 			   struct fid_ep **rx_ep, void *context)
 {
 	struct smr_domain *smr_domain;
+	struct smr_peer_srx *peer_srx;
 
 	smr_domain = container_of(domain, struct smr_domain,
 				  util_domain.domain_fid);
 
 	if (attr->op_flags & FI_PEER) {
-		smr_domain->srx = ((struct fi_peer_srx_context *)
-					(context))->srx;
-		smr_domain->srx->peer_ops = &smr_srx_peer_ops;
-		smr_domain->rx_ep.msg = &smr_srx_msg_ops;
-		smr_domain->rx_ep.tagged = &smr_srx_tagged_ops;
-		smr_domain->rx_ep.fid.ops = &smr_srx_fi_ops;
-		smr_domain->rx_ep.fid.fclass = FI_CLASS_SRX_CTX;
-		*rx_ep = &smr_domain->rx_ep;
+		peer_srx = calloc(1, sizeof(*peer_srx));
+		if (!peer_srx)
+			return -FI_ENOMEM;
+
+		peer_srx->domain = smr_domain;
+		peer_srx->srx = ((struct fi_peer_srx_context *) context)->srx;
+		peer_srx->srx->peer_ops = &smr_srx_peer_ops;
+		peer_srx->rx_ep.msg = &smr_srx_msg_ops;
+		peer_srx->rx_ep.tagged = &smr_srx_tagged_ops;
+		peer_srx->rx_ep.fid.ops = &smr_srx_fi_ops;
+		peer_srx->rx_ep.fid.fclass = FI_CLASS_SRX_CTX;
+		*rx_ep = &peer_srx->rx_ep;
 		ofi_atomic_inc32(&smr_domain->util_domain.ref);
 		return FI_SUCCESS;
 	}
