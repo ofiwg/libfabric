@@ -213,6 +213,7 @@ struct fi_domain_attr {
 	uint32_t              max_group_id;
 	uint64_t              max_cntr_value;
 	uint64_t              max_err_cntr_value;
+	size_t                max_xpu_ctx_cnt;
 };
 ```
 
@@ -857,6 +858,14 @@ return a value larger than the one requested.
 Applications must manage error counter values that approach this limit.
 See [`fi_cntr`(3)](fi_cntr.3.html) for details on counter limit handling
 responsibilities.
+
+## Maximum XPU Context Count (max_xpu_ctx_cnt)
+
+The number of XPU contexts the domain supports for XPU-initiated communication
+(the FI_XPU capability). A value of 0 indicates the domain does not support
+XPU-initiated communication; a value of 1 indicates a 1:1 mapping between the
+domain and an XPU. This field is an output of fi_getinfo. See
+[`fi_xpu`(3)](fi_xpu.3.html) for details on the XPU API and context model.
 
 # RETURN VALUE
 
