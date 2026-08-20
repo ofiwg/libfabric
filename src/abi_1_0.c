@@ -856,9 +856,42 @@ struct fi_ep_attr_1_9 {
 	uint8_t			*auth_key;
 };
 
+struct fi_domain_attr_1_9 {
+	struct fid_domain	*domain;
+	char			*name;
+	enum fi_threading	threading;
+	enum fi_progress	control_progress;
+	enum fi_progress	data_progress;
+	enum fi_resource_mgmt	resource_mgmt;
+	enum fi_av_type		av_type;
+	int			mr_mode;
+	size_t			mr_key_size;
+	size_t			cq_data_size;
+	size_t			cq_cnt;
+	size_t			ep_cnt;
+	size_t			tx_ctx_cnt;
+	size_t			rx_ctx_cnt;
+	size_t			max_ep_tx_ctx;
+	size_t			max_ep_rx_ctx;
+	size_t			max_ep_stx_ctx;
+	size_t			max_ep_srx_ctx;
+	size_t			cntr_cnt;
+	size_t			mr_iov_limit;
+	uint64_t		caps;
+	uint64_t		mode;
+	uint8_t			*auth_key;
+	size_t 			auth_key_size;
+	size_t			max_err_data;
+	size_t			mr_cnt;
+	uint32_t		tclass;
+	size_t			max_ep_auth_key;
+	uint32_t		max_group_id;
+	uint64_t		max_cntr_value;
+	uint64_t		max_err_cntr_value;
+};
+
 #define fi_tx_attr_1_9 fi_tx_attr_1_8
 #define fi_rx_attr_1_9 fi_rx_attr_1_8
-#define fi_domain_attr_1_9 fi_domain_attr_1_8
 #define fi_fabric_attr_1_9 fi_fabric_attr_1_8
 #define fid_nic_1_9 fid_nic_1_8
 
