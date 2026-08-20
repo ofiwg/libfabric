@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_getinfo" "3" "2026\-08\-10" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_getinfo" "3" "2026\-08\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -523,10 +523,12 @@ writes against remote memory regions.
 This flag requires that FI_RMA and/or FI_ATOMIC be set.
 .TP
 \f[I]FI_XPU\f[R]
-Specifies that the endpoint should support transfers that may be
-initiated from heterogenous computation devices, such as GPUs.
-This flag requires that FI_TRIGGER be set.
-For additional details on XPU triggers see \f[V]fi_trigger\f[R](3).
+Requests support for data path operations initiated from heterogeneous
+computation devices, such as GPUs.
+At the endpoint level, indicates the endpoint should support such
+operations; at the domain level, indicates the domain supports creating
+an XPU context.
+See \f[V]fi_xpu\f[R](3) for details.
 .PP
 Capabilities may be grouped into three general categories: primary,
 secondary, and primary modifiers.

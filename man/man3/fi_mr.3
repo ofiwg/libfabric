@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_mr" "3" "2026\-05\-26" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_mr" "3" "2026\-08\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -54,6 +54,9 @@ Enables a memory region for use.
 .TP
 fi_hmem_ze_device
 Returns an hmem device identifier for a level zero driver and device.
+.TP
+fi_mr_get_xpu_desc
+Retrieve a memory region descriptor with extended options.
 .SH SYNOPSIS
 .IP
 .nf
@@ -93,6 +96,9 @@ int fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov,
 int fi_mr_enable(struct fid_mr *mr);
 
 int fi_hmem_ze_device(int driver_index, int device_index);
+
+int fi_mr_get_xpu_desc(struct fid_mr *mr, void *buf, size_t *len,
+    uint64_t flags, struct fid_xpu_ctx *ctx);
 \f[R]
 .fi
 .SH ARGUMENTS
@@ -402,6 +408,20 @@ Applications may optionally pass in a valid desc parameter.
 If the desc parameter is NULL, any required local memory registration
 will be handled by the provider.
 .TP
+\f[I]FI_MR_XPU_DESC\f[R]
+This bit is associated with the FI_XPU capability.
+It indicates whether an XPU-usable memory descriptor is required for
+data transfers initiated by an XPU (see \f[V]fi_xpu\f[R](3)).
+.PP
+When FI_MR_XPU_DESC is set, an application that registers a buffer used
+by an XPU data transfer must obtain an XPU descriptor with
+fi_mr_get_xpu_desc() and pass it into the device-side data transfer
+calls.
+This is the XPU analog of FI_MR_LOCAL for host-side calls.
+.PP
+When FI_MR_XPU_DESC is unset, XPU data transfer calls do not require a
+descriptor and the application need not call fi_mr_get_xpu_desc().
+.TP
 \f[I]Basic Memory Registration\f[R] (deprecated)
 Basic memory registration was deprecated in libfabric version 1.5, but
 is supported for backwards compatibility.
@@ -529,6 +549,28 @@ REGISTRATION CACHE section.
 Obtains the local memory descriptor associated with a MR.
 The memory registration must have completed successfully before invoking
 this call.
+.SS fi_mr_get_xpu_desc
+.PP
+The fi_mr_get_xpu_desc call retrieves a provider-specific raw descriptor
+(e.g., the hardware lkey) for the MR into a caller-supplied buffer.
+The caller allocates buf and sets \f[I]len to the buffer size on input;
+on output \f[R]len is set to the number of bytes written.
+If the buffer is too small, -FI_ETOOSMALL is returned and *len is set to
+the required size.
+.PP
+When called with FI_XPU flag and a valid fid_xpu_ctx, the returned
+descriptor is usable by the XPU when posting work requests.
+The needed size can also be obtained through the mr_desc_size field of
+fi_xpu_ctx_attr from fi_xpu_ctx_query.
+.PP
+For non-XPU use cases, applications are encouraged to use fi_mr_desc
+instead, which returns the descriptor pointer directly.
+.PP
+The MR is not bound to an XPU context \[em] it is a shared domain-level
+resource.
+The same MR can be queried with different XPU contexts.
+.PP
+See \f[V]fi_xpu\f[R](3) for details.
 .SS fi_mr_key
 .PP
 Returns the remote protection key associated with a MR.
@@ -1095,6 +1137,10 @@ including the impact of memory domains.
 .PP
 Returns 0 on success.
 On error, a negative value corresponding to fabric errno is returned.
+.PP
+fi_mr_get_xpu_desc returns -FI_ETOOSMALL if the provided buffer is too
+small; *len is updated to the required size.
+Returns -FI_EINVAL if an invalid XPU context is provided.
 .PP
 Fabric errno values are defined in \f[V]rdma/fi_errno.h\f[R].
 .SH ERRORS
