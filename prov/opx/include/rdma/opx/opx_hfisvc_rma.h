@@ -60,12 +60,6 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work);
 /* bounded-retry cap: past this a stuck iov is dropped-and-drained */
 #define OPX_HFISVC_RMA_MAX_EAGAIN_ATTEMPTS (16384ul)
 
-/* RMA path uses hfisvc plane [0], so it is only safe on a single-plane endpoint */
-static inline bool opx_hfisvc_single_plane(struct fi_opx_ep *opx_ep)
-{
-	return opx_ep->domain->hfisvc.num_ctxs == 1;
-}
-
 __OPX_FORCE_INLINE__
 void opx_hfisvc_rma_invoke_send_rts(struct fi_opx_ep *opx_ep, const struct opx_rma_op_iov *iov, const size_t niov,
 				    const struct fi_opx_addr opx_target_addr, const uint64_t ofi_data,
@@ -76,7 +70,17 @@ void opx_hfisvc_rma_invoke_send_rts(struct fi_opx_ep *opx_ep, const struct opx_r
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "HFISVC_RMA_INVOKE_SND_RTS");
 	OPX_HFISVC_DEBUG_LOG("HFISVC invoke send RTS with %lu IOVs, dput_opcode=%s\n", niov,
 			     opx_hfi1_dput_opcode_to_string((uint8_t) dput_opcode));
-	assert(opx_hfisvc_single_plane(opx_ep));
+	/* tx_index selects a per-plane RTS template/keyset; bound by both extents (they diverge under single-plane
+	 * striping) and clamp to OPX_PRIMARY_PLANE on any out-of-range index. Enforces the seeding contract
+	 * documented at OPX_MAX_TX_CONTEXTS (fi_opx.h). */
+	_Static_assert(OPX_MAX_TX_CONTEXTS <= 2, "plane_idx seeded-slot proof needs OPX_MAX_TX_CONTEXTS <= 2");
+	uint8_t plane_idx = (opx_ep->domain->hfisvc.num_ctxs > 1) ? opx_target_addr.tx_index : OPX_PRIMARY_PLANE;
+	if (OFI_UNLIKELY(plane_idx >= opx_ep->domain->hfisvc.num_ctxs || plane_idx >= opx_ep->num_tx_contexts)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"HFISVC tx_index %u out of range (num_ctxs=%d num_tx_contexts=%u); clamping to primary plane\n",
+			(unsigned) plane_idx, opx_ep->domain->hfisvc.num_ctxs, (unsigned) opx_ep->num_tx_contexts);
+		plane_idx = OPX_PRIMARY_PLANE;
+	}
 	assert(op == FI_NOOP || op < OFI_ATOMIC_OP_LAST);
 	assert(dt == FI_VOID || dt < OFI_DATATYPE_LAST);
 	assert(hfi1_type == OPX_HFI1_JKR || hfi1_type == OPX_HFI1_CYR || hfi1_type == OPX_HFI1_WFR ||
@@ -115,13 +119,13 @@ void opx_hfisvc_rma_invoke_send_rts(struct fi_opx_ep *opx_ep, const struct opx_r
 	params->dput_opcode	     = dput_opcode;
 	params->fi_datatype_dt	     = dt;
 	params->fi_op_opcode	     = op;
-	params->client_key	     = (uint64_t) opx_ep->domain->hfisvc.ctxs[0].client_key;
+	params->client_key	     = (uint64_t) opx_ep->domain->hfisvc.ctxs[plane_idx].client_key;
 	params->cur_iov		     = 0;
 	params->iovs_with_keys	     = 0;
 	params->send_eagain_attempts = 0;
 	params->reliability	     = reliability;
 	params->hfi1_type	     = hfi1_type;
-	params->plane_idx	     = 0;
+	params->plane_idx	     = plane_idx;
 
 	assert(niov <= OPX_MAX_RMA_HFISVC_IOVS);
 	for (int i = 0; i < niov; ++i) {

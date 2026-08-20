@@ -1101,6 +1101,9 @@ OPX_INI
 		OPX_DEFAULT_JOB_KEY_STR);
 	fi_param_define(&fi_opx_provider, "force_cpuaffinity", FI_PARAM_BOOL,
 			"Causes the thread to bind itself to the cpu core it is running on. Defaults to FALSE.");
+	fi_param_define(
+		&fi_opx_provider, "hfisvc_rma_completion_timeout_sec", FI_PARAM_INT,
+		"Origin-side hfisvc one-sided RMA (GET) completion watchdog: seconds of no-forward-progress before a wedged GET is error-completed with FI_EIO instead of hanging. 0 disables the watchdog. Default 10.");
 	fi_param_define(&fi_opx_provider, "reliability_service_usec_max", FI_PARAM_INT,
 			"The number of microseconds between pings for un-acknowledged packets. Defaults to 500 usec.");
 	fi_param_define(

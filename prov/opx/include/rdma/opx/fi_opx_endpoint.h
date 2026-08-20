@@ -635,6 +635,11 @@ struct fi_opx_ep {
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS;
 
+	/* Origin-side hfisvc-RMA GET completion watchdog (cold, post-layout-assert) */
+	struct dlist_entry rma_watch_list;
+	uint64_t	   hfisvc_rma_stall_window_ns;
+	uint64_t	   hfisvc_rma_abs_cap_ns;
+
 	void *mem;
 } __attribute((aligned(L2_CACHE_LINE_SIZE)));
 
@@ -2458,6 +2463,120 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep *opx_ep, const union o
 }
 
 __OPX_FORCE_INLINE__
+struct fi_opx_completion_counter *opx_cc_alloc(struct fi_opx_ep *opx_ep)
+{
+	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	if (OFI_LIKELY(cc != NULL)) {
+		/* pool is NO_ZERO: clear watch_flags so unlink no-ops on an unregistered cc */
+		cc->watch_flags = 0;
+	}
+	return cc;
+}
+
+#if HAVE_HFISVC
+/* Idempotent unlink from rma_watch_list, gated by OPX_CC_WATCH_LINKED */
+__OPX_FORCE_INLINE__
+void opx_hfisvc_rma_watch_unlink(struct fi_opx_completion_counter *cc)
+{
+	if (cc->watch_flags & OPX_CC_WATCH_LINKED) {
+		dlist_remove(&cc->rma_watch);
+		cc->watch_flags &= ~OPX_CC_WATCH_LINKED;
+	}
+}
+
+/* Link a submitted hfisvc GET cc; deadline uses the reliability timer ns basis (sweep clock) */
+__OPX_FORCE_INLINE__
+void opx_hfisvc_rma_watch_register(struct fi_opx_ep *opx_ep, struct fi_opx_completion_counter *cc)
+{
+	if (opx_ep->hfisvc_rma_stall_window_ns == 0) {
+		return;
+	}
+	union fi_opx_timer_stamp now_stamp;
+	uint64_t		 now = fi_opx_timer_now_ns(&now_stamp, &opx_ep->reli_service->timer);
+
+	cc->watch_submit_ns	    = now;
+	cc->watch_last_bc	    = cc->byte_counter;
+	cc->watch_stall_deadline_ns = now + opx_ep->hfisvc_rma_stall_window_ns;
+	cc->watch_flags |= OPX_CC_WATCH_LINKED;
+	dlist_insert_tail(&cc->rma_watch, &opx_ep->rma_watch_list);
+}
+
+/* Sole terminal for a settled GET cc: reclaim if the watchdog already error-completed it, else complete normally (freed
+ * only at byte_counter==0, so no in-flight completion can reference a freed cc) */
+__OPX_FORCE_INLINE__
+void opx_hfisvc_rma_cc_hit_zero(struct fi_opx_completion_counter *cc)
+{
+	opx_hfisvc_rma_watch_unlink(cc);
+	if (cc->watch_flags & OPX_CC_WATCH_TIMED_OUT) {
+		OPX_BUF_FREE(cc);
+	} else {
+		cc->hit_zero(cc);
+	}
+}
+
+/* Watchdog error path: deliver one FI_EIO, mark TIMED_OUT, unlink; do NOT free (late completions still reference cc;
+ * the terminal reclaims it at byte_counter==0) */
+__OPX_FORCE_INLINE__
+void opx_hfisvc_rma_cc_error_settle(struct fi_opx_ep *opx_ep, struct fi_opx_completion_counter *cc, int err)
+{
+	opx_hfisvc_rma_watch_unlink(cc);
+	cc->watch_flags |= OPX_CC_WATCH_TIMED_OUT;
+
+	FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"HFISVC GET watchdog force-completed with error %d after stall (no forward progress within the completion window); %lu bytes still outstanding\n",
+		err, cc->byte_counter);
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_watchdog.timed_out);
+
+	struct opx_context *ctx = cc->context;
+	if (cc->cntr) {
+		fi_cntr_add((struct fid_cntr *) cc->cntr, 1);
+		fi_cntr_adderr((struct fid_cntr *) cc->cntr, 1);
+	}
+	if (cc->cq && ctx) {
+		ctx->next		     = NULL;
+		ctx->byte_counter	     = 0;
+		ctx->err_entry.flags	     = ctx->flags;
+		ctx->err_entry.len	     = 0;
+		ctx->err_entry.buf	     = NULL;
+		ctx->err_entry.data	     = 0;
+		ctx->err_entry.tag	     = 0;
+		ctx->err_entry.olen	     = 0;
+		ctx->err_entry.err	     = err;
+		ctx->err_entry.prov_errno    = err;
+		ctx->err_entry.err_data	     = NULL;
+		ctx->err_entry.err_data_size = 0;
+		opx_enqueue_err_from_pending(opx_ep->tx->cq_pending_ptr, opx_ep->tx->cq_err_ptr, ctx);
+	} else if (ctx) {
+		OPX_BUF_FREE(ctx);
+	}
+	/* context consumed above; null it so the reclaim terminal cannot double-complete */
+	cc->context = NULL;
+}
+
+/* FI_EIO any watched GET stalled past its deadline; remove-safe walk (settle unlinks the node) */
+__OPX_FORCE_INLINE__
+void opx_hfisvc_rma_watch_sweep(struct fi_opx_ep *opx_ep, uint64_t now_ns)
+{
+	struct fi_opx_completion_counter *cc;
+	struct dlist_entry		 *tmp;
+
+	dlist_foreach_container_safe (&opx_ep->rma_watch_list, struct fi_opx_completion_counter, cc, rma_watch, tmp) {
+		assert(cc->watch_flags & OPX_CC_WATCH_LINKED);
+
+		if (cc->byte_counter < cc->watch_last_bc) {
+			cc->watch_last_bc	    = cc->byte_counter;
+			cc->watch_stall_deadline_ns = now_ns + opx_ep->hfisvc_rma_stall_window_ns;
+			continue;
+		} else if (now_ns > cc->watch_stall_deadline_ns ||
+			   (opx_ep->hfisvc_rma_abs_cap_ns != 0 &&
+			    now_ns > cc->watch_submit_ns + opx_ep->hfisvc_rma_abs_cap_ns)) {
+			opx_hfisvc_rma_cc_error_settle(opx_ep, cc, FI_EIO);
+		}
+	}
+}
+#endif
+
+__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_rma_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
 					 const union fi_opx_hfi1_packet_payload *const payload, const unsigned is_shm,
 					 const int lock_required, const enum ofi_reliability_kind reliability,
@@ -3576,10 +3695,8 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 				hfisvc_entry->status);
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.internal_completion.error);
 
-			/* No user context to attach this failure to. Rather than silently continuing
-			 * (which could hang the application waiting on a completion that will never
-			 * arrive), post a generic error entry to the CQ error queue so libfabric/MPI
-			 * can observe and abort the job. */
+			/* no user context for this failure; post a generic CQ error so the job can abort instead of
+			 * hanging */
 			struct opx_context *fatal_err_context =
 				(struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
 			if (OFI_LIKELY(fatal_err_context != NULL)) {
@@ -3672,7 +3789,7 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 				assert(len <= cc->byte_counter);
 				cc->byte_counter -= len;
 				if (cc->byte_counter == 0) {
-					cc->hit_zero(cc);
+					opx_hfisvc_rma_cc_hit_zero(cc);
 				}
 			} else if (context) {
 				OPX_HFISVC_DEBUG_LOG(
@@ -3687,10 +3804,11 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 					completion, completion->access_key, len);
 			}
 
-			/* origin-side send keys (opx_mr == NULL) are transient and freed here;
-			 * target-side reuses the MR-owned key. RMA keys use plane 0 in Phase-0. */
+			/* origin-side send keys (opx_mr == NULL) are transient and freed here; target-side reuses
+			 * the MR-owned key. Freed on the plane the completion arrived on (ctx_idx), matching the
+			 * per-plane allocation in opx_hfisvc_rma_send_rts (ctxs[plane_idx]). */
 			if (completion->opx_mr == NULL) {
-				opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[0].access_key_set,
+				opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[ctx_idx].access_key_set,
 							   completion->access_key,
 							   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain));
 			}
