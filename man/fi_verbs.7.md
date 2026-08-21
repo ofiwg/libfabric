@@ -227,6 +227,9 @@ The verbs provider checks for the following environment variables.
   PCIe address followed by a NIC name, seperated by a single space. Empty
   lines and lines starting with "#" are ignored.
 
+*FI_VERBS_USE_FLOW_CTRL*
+: Enable credit based flow control. Requires RxM to work. (default: yes)
+
 ### Variables specific to MSG endpoints
 
 *FI_VERBS_IFACE*
