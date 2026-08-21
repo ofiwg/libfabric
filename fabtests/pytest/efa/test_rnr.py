@@ -14,7 +14,7 @@ def test_rnr_read_cq_error(cmdline_args, fabric):
     # and the test will return FI_ENOSYS.
     # Disable the strict mode for this test explicitly to mark it as skipped
     # in this case.
-    cmdline_args_copy = copy.deepcopy(cmdline_args)
+    cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.strict_fabtests_mode = False
     test = ClientServerTest(cmdline_args_copy, "fi_efa_rnr_read_cq_error", fabric=fabric)
     test.run()
@@ -63,7 +63,7 @@ def test_rnr_queue_resend(cmdline_args, packet_type):
     # and the test will return FI_ENOSYS.
     # Disable the strict mode for this test explicitly to mark it as skipped
     # in this case.
-    cmdline_args_copy = copy.deepcopy(cmdline_args)
+    cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.strict_fabtests_mode = False
     test = ClientServerTest(cmdline_args_copy,
             "fi_efa_rnr_queue_resend " + packet_type_option_map[packet_type], fabric="efa")

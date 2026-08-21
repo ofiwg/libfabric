@@ -28,7 +28,7 @@ def test_rma_bw(cmdline_args, iteration_type, rma_operation_type, rma_bw_complet
 @pytest.mark.parametrize("env_vars", [["FI_EFA_TX_SIZE=64"], ["FI_EFA_RX_SIZE=64"], ["FI_EFA_TX_SIZE=64", "FI_EFA_RX_SIZE=64"]])
 @pytest.mark.memory_type(memory_type_list_all)
 def test_rma_bw_small_tx_rx(cmdline_args, rma_operation_type, rma_bw_completion_semantic, rma_bw_memory_type, env_vars, rma_fabric, message_sizes):
-    cmdline_args_copy = copy.deepcopy(cmdline_args)
+    cmdline_args_copy = copy.copy(cmdline_args)
     for env_var in env_vars:
         cmdline_args_copy.append_environ(env_var)
     # Use a window size larger than tx/rx size

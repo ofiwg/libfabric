@@ -21,7 +21,7 @@ def test_mr_hmem(cmdline_args, hmem_type, fabric):
     if hmem_type == "neuron" and not has_neuron(cmdline_args.server_id):
         pytest.skip("no neuron device")
 
-    cmdline_args_copy = copy.deepcopy(cmdline_args)
+    cmdline_args_copy = copy.copy(cmdline_args)
 
     test_command = f"fi_mr_test -D {hmem_type} -f {fabric}"
 
@@ -47,7 +47,7 @@ def test_efa_mr_hmem(cmdline_args, hmem_type, fabric):
     if not cmdline_args.do_dmabuf_reg_for_hmem:
         pytest.skip("This test tests neuron get_dmabuf_fd_vX and needs dmabuf to be enabled and working to test these apis")
 
-    cmdline_args_copy = copy.deepcopy(cmdline_args)
+    cmdline_args_copy = copy.copy(cmdline_args)
 
     test_command = f"fi_efa_mr_test -D neuron -f {fabric}"
 
