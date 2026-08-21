@@ -50,12 +50,23 @@ vrb_dgram_verify_av_flags(struct util_av *av, uint64_t flags)
 	return FI_SUCCESS;
 }
 
+fi_addr_t vrb_dgram_av_reverse_lookup_ep_name(
+	struct vrb_dgram_av *av, const struct vrb_dgram_av_lookup_key_ht *key)
+{
+	struct vrb_dgram_av_entry *av_entry = NULL;
+	HASH_FIND(reverse_lookup_handle_ht, av->raw_addr_to_av_addr_ht, key,
+		  sizeof(*key), av_entry);
+	return av_entry ? (fi_addr_t) (uintptr_t) av_entry : FI_ADDR_NOTAVAIL;
+}
+
 static int
 vrb_dgram_av_insert_addr(struct vrb_dgram_av *av, const void *addr,
 			    fi_addr_t *fi_addr, void *context)
 {
 	int ret;
+	fi_addr_t existing_name; 
 	struct vrb_dgram_av_entry *av_entry;
+	struct vrb_dgram_av_lookup_key_ht reverse_lookup_key;
 	struct vrb_domain *domain =
 		container_of(av->util_av.domain, struct vrb_domain, util_domain);
 
@@ -66,6 +77,19 @@ vrb_dgram_av_insert_addr(struct vrb_dgram_av *av, const void *addr,
 		.src_path_bits = 0,
 		.port_num = 1,
 	};
+
+	memset(&reverse_lookup_key, 0, sizeof(reverse_lookup_key));
+	reverse_lookup_key.gid = ((struct ofi_ib_ud_ep_name *) addr)->gid;
+	reverse_lookup_key.qpn = ((struct ofi_ib_ud_ep_name *) addr)->qpn;
+	reverse_lookup_key.lid = ((struct ofi_ib_ud_ep_name *) addr)->lid;
+	reverse_lookup_key.sl = ((struct ofi_ib_ud_ep_name *) addr)->sl;
+	existing_name =
+		vrb_dgram_av_reverse_lookup_ep_name(av, &reverse_lookup_key);
+	if (existing_name != FI_ADDR_NOTAVAIL) {
+		if (fi_addr)
+			*fi_addr = existing_name;
+		return 0;
+	}
 
 	if (((struct ofi_ib_ud_ep_name *)addr)->gid.global.interface_id) {
 		ah_attr.is_global = 1;
@@ -92,8 +116,15 @@ vrb_dgram_av_insert_addr(struct vrb_dgram_av *av, const void *addr,
 			   "Unable to create Address Handle, errno - %d\n", errno);
 		goto fn2;
 	}
-	av_entry->addr = *(struct ofi_ib_ud_ep_name *)addr;
+	av_entry->addr = *(struct ofi_ib_ud_ep_name *) addr;
+	av_entry->reverse_lookup_key.gid = av_entry->addr.gid;
+	av_entry->reverse_lookup_key.qpn = av_entry->addr.qpn;
+	av_entry->reverse_lookup_key.lid = av_entry->addr.lid;
+	av_entry->reverse_lookup_key.sl = av_entry->addr.sl;
 	dlist_insert_tail(&av_entry->list_entry, &av->av_entry_list);
+	HASH_ADD(reverse_lookup_handle_ht, av->raw_addr_to_av_addr_ht,
+		 reverse_lookup_key, sizeof(av_entry->reverse_lookup_key),
+		 av_entry);
 
 	if (fi_addr)
 		*fi_addr = (fi_addr_t)(uintptr_t)av_entry;
@@ -133,14 +164,16 @@ static int vrb_dgram_av_insert(struct fid_av *av_fid, const void *addr,
 	return success_cnt;
 }
 
-static inline void
-vrb_dgram_av_remove_addr(struct vrb_dgram_av_entry *av_entry)
+static inline void vrb_dgram_av_remove_addr(struct vrb_dgram_av *av,
+					    struct vrb_dgram_av_entry *av_entry)
 {
 	int ret = ibv_destroy_ah(av_entry->ah);
 	if (ret)
 		VRB_WARN(FI_LOG_AV,
 			   "AH Destroying failed with status - %d\n",
 			   ret);
+	HASH_DELETE(reverse_lookup_handle_ht, av->raw_addr_to_av_addr_ht,
+		    av_entry);
 	dlist_remove(&av_entry->list_entry);
 	free(av_entry);
 }
@@ -159,7 +192,7 @@ static int vrb_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	for (i = count - 1; i >= 0; i--) {
 		struct vrb_dgram_av_entry *av_entry =
 			(struct vrb_dgram_av_entry *) (uintptr_t) fi_addr[i];
-		vrb_dgram_av_remove_addr(av_entry);
+		vrb_dgram_av_remove_addr(av, av_entry);
 	}
 	return FI_SUCCESS;
 }
@@ -198,7 +231,7 @@ static int vrb_dgram_av_close(struct fid *av_fid)
 		av_entry = container_of(av->av_entry_list.next,
 					struct vrb_dgram_av_entry,
 					list_entry);
-		vrb_dgram_av_remove_addr(av_entry);
+		vrb_dgram_av_remove_addr(av, av_entry);
 	}
 
 	free(av);
