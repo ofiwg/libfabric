@@ -17,7 +17,7 @@ import pytest
 
 
 perf_progress_model_cli = "--data-progress manual --control-progress unified"
-SERVER_RESTART_DELAY_MS = 10_1000
+SERVER_RESTART_DELAY_MS = 10_000
 CLIENT_RETRY_INTERVAL_MS = 1_000
 
 # Shared non-interactive SSH command.
