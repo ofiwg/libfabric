@@ -54,7 +54,7 @@ static bool vrb_flow_ctrl_available(struct fid_ep *ep_fid)
 	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 
 	// only enable if we are not using SRQ
-	return (!ep->srx && ep->util_ep.type == FI_EP_MSG);
+	return (!ep->srx && ep->util_ep.type == FI_EP_MSG && vrb_gl_data.use_flow_ctrl);
 }
 
 static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)

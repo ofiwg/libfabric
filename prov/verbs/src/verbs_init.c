@@ -70,6 +70,7 @@ struct vrb_gl_data vrb_gl_data = {
 	.nic_affinity_policy	= "none",
 	.affinity_device	= NULL,
 	.nic_affinity_config	= NULL,
+	.use_flow_ctrl		= 1,
 };
 
 struct vrb_dev_preset {
@@ -789,6 +790,13 @@ static int vrb_read_params(void)
 			      "Path to NIC affinity configuration file for 'manual' policy. ",
 			      &vrb_gl_data.nic_affinity_config)) {
 		VRB_WARN(FI_LOG_CORE, "Invalid value of nic_affinity_config\n");
+		return -FI_EINVAL;
+	}
+
+	if (vrb_get_param_bool("use_flow_ctrl", "Enable credit based flow control. "
+			       "Requires RxM to work. Yes by default.",
+			       &vrb_gl_data.use_flow_ctrl)) {
+		VRB_WARN(FI_LOG_CORE, "Invalid value of use_flow_ctrl\n");
 		return -FI_EINVAL;
 	}
 
