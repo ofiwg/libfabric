@@ -38,6 +38,10 @@ fi_control
 fi_getopt / fi_setopt
 :   Get or set endpoint options.
 
+fi_prepare_wr / fi_queue_wr / fi_flush_wr
+:   Stage, submit, and flush work requests using the Work Request API.
+    See [`fi_wr`(3)](fi_wr.3.html).
+
 fi_rx_context / fi_tx_context / fi_srx_context  / fi_stx_context
 :   Open a transmit or receive context.
 
@@ -108,6 +112,12 @@ int fi_getopt(struct fid *ep, int level, int optname,
 
 int fi_setopt(struct fid *ep, int level, int optname,
     const void *optval, size_t optlen);
+
+int fi_prepare_wr(struct fid_ep *ep, struct fi_wr_attr *work);
+
+int fi_queue_wr(struct fid_ep *ep, struct fi_wr_attr *work);
+
+int fi_flush_wr(struct fid_ep *ep);
 
 uint32_t fi_tc_dscp_set(uint8_t dscp);
 
@@ -490,6 +500,17 @@ assigned to an endpoint.
   flags OR'ed in. The given flags will override the previous transmit and receive
   attributes that were set when the endpoint was created.
   Valid control flags are defined below.
+
+## fi_prepare_wr / fi_queue_wr / fi_flush_wr
+
+These calls implement the Work Request (WR) API, a staged, lower-level
+alternative to the monolithic data transfer calls (fi_send, fi_write, etc.).
+fi_prepare_wr constructs a work request into a caller-provided buffer,
+fi_queue_wr stages a prepared request with the endpoint, and fi_flush_wr
+commits all queued requests to the provider. They are inline wrappers over the
+corresponding fi_control commands (FI_PREPARE_WORK, FI_QUEUE_WORK,
+FI_FLUSH_WORK) issued on the endpoint. Support is advertised through the FI_WR
+capability. See [`fi_wr`(3)](fi_wr.3.html) for the full description.
 
 ## fi_getopt / fi_setopt
 
@@ -1780,3 +1801,4 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 [`fi_tagged`(3)](fi_tagged.3.html),
 [`fi_rma`(3)](fi_rma.3.html)
 [`fi_peer`(3)](fi_peer.3.html)
+[`fi_wr`(3)](fi_wr.3.html)
