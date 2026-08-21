@@ -314,6 +314,7 @@ static int xnet_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 		return ret;
 
 free:
+	xnet_conn_unlink_pep(conn);
 	free(conn);
 	return FI_SUCCESS;
 }
@@ -394,6 +395,7 @@ int xnet_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	pep->sock = INVALID_SOCKET;
 	pep->state = XNET_IDLE;
+	dlist_init(&pep->conn_list);
 
 	if (info->src_addr) {
 		ret = xnet_pep_sock_create(pep);
