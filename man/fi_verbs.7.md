@@ -219,6 +219,9 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_NIC_AFFINITY_CONFIG*
 : Path to NIC affinity configuration file for 'manual' policy.
 
+*FI_VERBS_USE_FLOW_CTRL*
+: Enable credit based flow control. Requires RxM to work. (default: yes)
+
 ### Variables specific to MSG endpoints
 
 *FI_VERBS_IFACE*
