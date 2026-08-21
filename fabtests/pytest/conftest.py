@@ -286,7 +286,7 @@ class CmdlineArgs:
 
         return command
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def cmdline_args(request):
     return CmdlineArgs(request)
 

@@ -36,7 +36,7 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
 
     message_size = 1024
 
-    cmdline_args_copy = copy.deepcopy(cmdline_args)
+    cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.append_environ("FI_EFA_USE_DEVICE_RDMA=1")
     cmdline_args_copy.append_environ(f"{cntrl_env_var}=1000")
     cmdline_args_copy.append_environ("FI_EFA_RUNT_SIZE=0")
