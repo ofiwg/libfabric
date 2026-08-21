@@ -781,7 +781,7 @@ static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 				struct util_cntr, cntr_fid.fid), flags);
 		break;
 	case FI_CLASS_SRX_CTX:
-		ep->srx = container_of(bfid, struct smr_domain, rx_ep.fid)->srx;
+		ep->srx = container_of(bfid, struct smr_peer_srx, rx_ep.fid)->srx;
 		break;
 	default:
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "invalid fid class\n");

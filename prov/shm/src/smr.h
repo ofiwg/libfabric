@@ -209,7 +209,11 @@ struct smr_domain {
 	struct util_domain	util_domain;
 	bool			fast_rma;
 	struct ofi_mr_cache	*ipc_cache;
+};
+
+struct smr_peer_srx {
 	struct fid_ep		rx_ep;
+	struct smr_domain	*domain;
 	struct fid_peer_srx	*srx;
 };
 
