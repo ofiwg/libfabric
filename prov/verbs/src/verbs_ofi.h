@@ -218,6 +218,8 @@ extern struct vrb_gl_data {
 	char	*nic_affinity_policy;
 	char	*affinity_device;
 	char	*nic_affinity_config;
+
+	int	use_flow_ctrl;
 } vrb_gl_data;
 
 struct verbs_addr {
