@@ -369,6 +369,9 @@ void xnet_accept_sock(struct xnet_pep *pep)
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "accepting socket\n");
 	assert(xnet_progress_locked(pep->progress));
 
+	if (pep->state != XNET_LISTENING)
+		return;
+
 	conn = calloc(1, sizeof(*conn));
 	if (!conn) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
