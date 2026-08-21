@@ -47,6 +47,7 @@ memory_type_list_neuron_to_neuron = [
 # Generic (shared) size lists live in fabtests/pytest/common.py.
 DIRECT_SIZES = ["r:0,4,32", "r:0,1024,8192"]
 REMOTE_EXIT_SIZES = [65536, 131072, 1048576]
+REMOTE_EXIT_SIZES_DIRECT = [4096]
 # Use the default behavior of the test, so pass None.
 DGRAM_DEFAULT = [None]
 DGRAM_PR_CI = ["l:16,128,8192"]
