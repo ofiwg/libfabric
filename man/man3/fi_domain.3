@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_domain" "3" "2026\-08\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_domain" "3" "2026\-08\-21" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -230,6 +230,7 @@ struct fi_domain_attr {
     uint32_t              max_group_id;
     uint64_t              max_cntr_value;
     uint64_t              max_err_cntr_value;
+    size_t                max_xpu_ctx_cnt;
 };
 \f[R]
 .fi
@@ -1075,6 +1076,15 @@ The provider may return a value larger than the one requested.
 Applications must manage error counter values that approach this limit.
 See \f[V]fi_cntr\f[R](3) for details on counter limit handling
 responsibilities.
+.SS Maximum XPU Context Count (max_xpu_ctx_cnt)
+.PP
+The number of XPU contexts the domain supports for XPU-initiated
+communication (the FI_XPU capability).
+A value of 0 indicates the domain does not support XPU-initiated
+communication; a value of 1 indicates a 1:1 mapping between the domain
+and an XPU.
+This field is an output of fi_getinfo.
+See \f[V]fi_xpu\f[R](3) for details on the XPU API and context model.
 .SH RETURN VALUE
 .PP
 Returns 0 on success.
