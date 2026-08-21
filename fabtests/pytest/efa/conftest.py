@@ -374,7 +374,7 @@ def support_sread(cmdline_args):
 
 
 @pytest.fixture(scope="session")
-def num_domains(cmdline_args):
+def num_domains(request):
     """
     Number of EFA domains (NICs) a test can spread endpoints across.
 
@@ -383,10 +383,11 @@ def num_domains(cmdline_args):
     as far as the host with fewer devices.
 
     Session-scoped so the device lookup runs once per xdist worker instead of
-    once per test; cmdline_args is session-scoped too, so it can be used here.
+    once per test. The server/client ids are read from the session scoped request
+    fixture
     """
-    server_id = cmdline_args.server_id
-    client_id = cmdline_args.client_id
+    server_id = request.config.getoption("--server-id")
+    client_id = request.config.getoption("--client-id")
 
     counts = [len(get_efa_device_names(host_id))
               for host_id in dict.fromkeys(filter(None, (server_id, client_id)))]
