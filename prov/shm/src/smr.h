@@ -107,41 +107,12 @@ static inline uintptr_t smr_peer_to_peer(struct smr_ep *ep,
 	return (uintptr_t) peer_smr->base_addr + offset;
 }
 
-static inline uintptr_t smr_peer_to_owner(struct smr_ep *ep,
-					  struct smr_region *peer_smr,
-					  int64_t id, uintptr_t local_ptr)
-{
-	uint64_t offset = local_ptr - (uintptr_t) peer_smr;
-
-	return (uintptr_t) peer_smr->base_addr + offset;
-}
-
 static inline void smr_return_cmd(struct smr_ep *ep, struct smr_cmd *cmd)
 {
 	struct smr_region *peer_smr = smr_peer_region(ep, cmd->hdr.rx_id);
-	uintptr_t peer_ptr;
-	int64_t pos;
-	struct smr_return_entry *queue_entry;
-	int ret;
 
-	ret = smr_return_queue_next(smr_return_queue(peer_smr), &queue_entry,
-				    &pos);
-	if (ret == -FI_ENOENT) {
-		/* return queue runs in parallel to command stack
-		 * ie we will never run out of space
-		 */
-		assert(0);
-		return;
-	}
-
-	peer_ptr = smr_peer_to_owner(ep, peer_smr, cmd->hdr.rx_id,
-				     (uintptr_t) cmd);
-	assert(peer_ptr >= (uintptr_t) peer_smr->base_addr &&
-	       peer_ptr < (uintptr_t) peer_smr->base_addr +
-	       peer_smr->total_size);
-	queue_entry->ptr = peer_ptr;
-
-	smr_return_queue_commit(queue_entry, pos);
+	smr_fifo_write(smr_return_queue(peer_smr), (uintptr_t) peer_smr,
+		       (uintptr_t)cmd);
 }
 
 extern struct fi_provider smr_prov;
