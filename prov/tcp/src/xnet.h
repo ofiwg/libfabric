@@ -152,6 +152,7 @@ struct xnet_port_range {
 struct xnet_conn_handle {
 	struct fid		fid;
 	struct xnet_pep		*pep;
+	struct xnet_progress	*progress;
 	SOCKET			sock;
 	bool			endian_match;
 	struct ofi_sockapi	*sockapi;
