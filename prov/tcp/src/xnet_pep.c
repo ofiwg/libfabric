@@ -54,6 +54,7 @@ static int xnet_pep_close(struct fid *fid)
 
 	if (pep->state == XNET_LISTENING) {
 		ofi_genlock_lock(&pep->progress->ep_lock);
+		pep->state = XNET_IDLE;
 		if (xnet_io_uring) {
 			ret = xnet_uring_cancel(pep->progress,
 						&pep->progress->rx_uring,
