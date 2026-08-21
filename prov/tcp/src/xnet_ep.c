@@ -392,6 +392,7 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	}
 
 	/* Only free conn on success; on failure, app may try to reject */
+	xnet_conn_unlink_pep(conn);
 	free(conn);
 	return 0;
 }
