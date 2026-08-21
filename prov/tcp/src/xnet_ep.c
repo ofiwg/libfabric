@@ -196,6 +196,7 @@ xnet_enable_keepalive(struct xnet_ep *ep)
 		goto out;
 	}
 
+#ifdef TCP_KEEPINTVL
 	ret = setsockopt(ep->bsock.sock, IPPROTO_TCP, TCP_KEEPINTVL, (const void *)&keep_intvl,
 			 sizeof(keep_intvl));
 	if (ret) {
@@ -203,7 +204,9 @@ xnet_enable_keepalive(struct xnet_ep *ep)
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "set TCP_KEEPINTVL failed %d", ret);
 		goto out;
 	}
+#endif
 
+#ifdef TCP_KEEPCNT
 	ret = setsockopt(ep->bsock.sock, IPPROTO_TCP, TCP_KEEPCNT, (const void *)&keep_cnt,
 			 sizeof(keep_cnt));
 	if (ret) {
@@ -211,6 +214,7 @@ xnet_enable_keepalive(struct xnet_ep *ep)
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "set SO_KEEPALIVE failed %d", ret);
 		goto out;
 	}
+#endif
 
 	FI_INFO(&xnet_prov, FI_LOG_EP_CTRL, "%p KEEPALIVE idle %d intvl %d cnt %d\n",
 		ep, idle_time, keep_intvl, keep_cnt);
