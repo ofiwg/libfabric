@@ -152,10 +152,16 @@ struct xnet_port_range {
 struct xnet_conn_handle {
 	struct fid		fid;
 	struct xnet_pep		*pep;
+	struct xnet_progress	*progress;
 	SOCKET			sock;
 	bool			endian_match;
 	struct ofi_sockapi	*sockapi;
 	struct ofi_sockctx	rx_sockctx;
+	/* Linked on pep->conn_list until FI_CONNREQ is written or the
+	 * handle is freed.  pep is cleared when the handle leaves that
+	 * list so later progress cannot dereference a closed PEP.
+	 */
+	struct dlist_entry	pep_entry;
 };
 
 struct xnet_pep {
@@ -165,10 +171,13 @@ struct xnet_pep {
 	SOCKET			sock;
 	enum xnet_state		state;
 	struct ofi_sockctx	pollin_sockctx;
+	/* Unpublished connection handles (TCP accept done, no FI_CONNREQ). */
+	struct dlist_entry	conn_list;
 };
 
 int xnet_listen(struct xnet_pep *pep, struct xnet_progress *progress);
 void xnet_accept_sock(struct xnet_pep *pep);
+void xnet_conn_unlink_pep(struct xnet_conn_handle *conn);
 void xnet_connect_done(struct xnet_ep *ep);
 void xnet_req_done(struct xnet_ep *ep);
 int xnet_send_cm_msg(struct xnet_ep *ep);

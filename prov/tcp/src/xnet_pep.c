@@ -41,19 +41,60 @@
 #include <errno.h>
 
 
+/* Abort unpublished connection handles before freeing the PEP.  Handles
+ * that already published FI_CONNREQ were unlinked from conn_list and are
+ * owned by the app (accept/reject).
+ */
+static void xnet_pep_abort_conns(struct xnet_pep *pep)
+{
+	struct xnet_conn_handle *conn;
+	struct dlist_entry *tmp;
+	struct dlist_entry abort_list;
+
+	/* Splice first.  uring cancel can progress other CQEs, which
+	 * must not walk or unlink entries while we iterate.
+	 */
+	dlist_init(&abort_list);
+	dlist_foreach_container_safe(&pep->conn_list, struct xnet_conn_handle,
+				     conn, pep_entry, tmp) {
+		if (!xnet_io_uring && conn->sock != INVALID_SOCKET)
+			xnet_halt_sock(pep->progress, conn->sock);
+		dlist_remove_init(&conn->pep_entry);
+		dlist_insert_tail(&conn->pep_entry, &abort_list);
+	}
+
+	/* Cancel first so a CQE for one handle cannot fire after
+	 * another handle on this list has already been freed.
+	 */
+	dlist_foreach_container_safe(&abort_list, struct xnet_conn_handle,
+				     conn, pep_entry, tmp) {
+		if (xnet_io_uring && conn->rx_sockctx.uring_sqe_inuse) {
+			(void) xnet_uring_cancel(pep->progress,
+						 &pep->progress->rx_uring,
+						 &conn->rx_sockctx,
+						 &conn->fid);
+		}
+	}
+
+	dlist_foreach_container_safe(&abort_list, struct xnet_conn_handle,
+				     conn, pep_entry, tmp) {
+		dlist_remove_init(&conn->pep_entry);
+		ofi_close_socket(conn->sock);
+		xnet_conn_unlink_pep(conn);
+		free(conn);
+	}
+}
+
 static int xnet_pep_close(struct fid *fid)
 {
 	struct xnet_pep *pep;
 	int ret;
 
 	pep = container_of(fid, struct xnet_pep, util_pep.pep_fid.fid);
-	/* TODO: We need to abort any outstanding active connection requests.
-	 * The xnet_conn_handle points back to the pep and will dereference
-	 * the freed memory if we continue.
-	 */
 
 	if (pep->state == XNET_LISTENING) {
 		ofi_genlock_lock(&pep->progress->ep_lock);
+		pep->state = XNET_IDLE;
 		if (xnet_io_uring) {
 			ret = xnet_uring_cancel(pep->progress,
 						&pep->progress->rx_uring,
@@ -63,9 +104,14 @@ static int xnet_pep_close(struct fid *fid)
 			xnet_halt_sock(pep->progress, pep->sock);
 			ret = 0;
 		}
-		ofi_genlock_unlock(&pep->progress->ep_lock);
-		if (ret)
+
+		if (ret) {
+			ofi_genlock_unlock(&pep->progress->ep_lock);
 			return ret;
+		} else {
+			xnet_pep_abort_conns(pep);
+			ofi_genlock_unlock(&pep->progress->ep_lock);
+		}
 	}
 
 	ofi_close_socket(pep->sock);
@@ -313,6 +359,7 @@ static int xnet_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 		return ret;
 
 free:
+	xnet_conn_unlink_pep(conn);
 	free(conn);
 	return FI_SUCCESS;
 }
@@ -393,6 +440,7 @@ int xnet_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 
 	pep->sock = INVALID_SOCKET;
 	pep->state = XNET_IDLE;
+	dlist_init(&pep->conn_list);
 
 	if (info->src_addr) {
 		ret = xnet_pep_sock_create(pep);

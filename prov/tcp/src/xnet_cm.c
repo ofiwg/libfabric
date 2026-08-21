@@ -38,6 +38,19 @@
 #include <sys/types.h>
 #include <ofi_util.h>
 
+/* Remove the handle from pep->conn_list and drop the PEP pointer so later
+ * progress cannot dereference a closed PEP.  Safe if the handle was never
+ * inserted (pep_entry is then a self-linked empty node).
+ */
+void xnet_conn_unlink_pep(struct xnet_conn_handle *conn)
+{
+	if (!conn->pep)
+		return;
+
+	dlist_remove_init(&conn->pep_entry);
+	conn->pep = NULL;
+}
+
 /* The underlying socket has the POLLIN event set.  The entire
  * CM message should be readable, as it fits within a single MTU
  * and is the first data transferred over the socket.
@@ -251,12 +264,18 @@ void xnet_handle_conn(struct xnet_conn_handle *conn, bool error)
 {
 	struct xnet_cm_msg msg;
 	struct xnet_cm_entry cm_entry;
+	struct xnet_pep *pep;
 	socklen_t len;
 	uint16_t datalen;
 	int ret;
 
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "Receiving connect request\n");
-	assert(xnet_progress_locked(conn->pep->progress));
+
+	pep = conn->pep;
+	if (!pep || pep->state != XNET_LISTENING)
+		return;
+
+	assert(xnet_progress_locked(pep->progress));
 
 	if (error) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "socket error\n");
@@ -272,12 +291,12 @@ void xnet_handle_conn(struct xnet_conn_handle *conn, bool error)
 		goto close;
 	}
 
-	cm_entry.fid = &conn->pep->util_pep.pep_fid.fid;
-	cm_entry.info = fi_dupinfo(conn->pep->info);
+	cm_entry.fid = &pep->util_pep.pep_fid.fid;
+	cm_entry.info = fi_dupinfo(pep->info);
 	if (!cm_entry.info)
 		goto close;
 
-	cm_entry.info->dest_addrlen = conn->pep->info->src_addrlen;
+	cm_entry.info->dest_addrlen = pep->info->src_addrlen;
 	len = (socklen_t) cm_entry.info->dest_addrlen;
 
 	free(cm_entry.info->dest_addr);
@@ -299,7 +318,7 @@ void xnet_handle_conn(struct xnet_conn_handle *conn, bool error)
 	if (datalen)
 		memcpy(cm_entry.data, msg.data, datalen);
 
-	ret = xnet_eq_write(conn->pep->util_pep.eq,
+	ret = xnet_eq_write(pep->util_pep.eq,
 			    FI_CONNREQ, &cm_entry,
 			    sizeof(struct fi_eq_cm_entry) + datalen, 0);
 	if (ret < 0) {
@@ -307,12 +326,17 @@ void xnet_handle_conn(struct xnet_conn_handle *conn, bool error)
 		goto freeinfo;
 	}
 
+	/* App now owns accept/reject via conn->sock.  Unlink so pep
+	 * close will not abort this handle or free pep under it.
+	 */
+	xnet_conn_unlink_pep(conn);
 	return;
 
 freeinfo:
 	fi_freeinfo(cm_entry.info);
 close:
 	ofi_close_socket(conn->sock);
+	xnet_conn_unlink_pep(conn);
 	free(conn);
 }
 
@@ -369,6 +393,9 @@ void xnet_accept_sock(struct xnet_pep *pep)
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "accepting socket\n");
 	assert(xnet_progress_locked(pep->progress));
 
+	if (pep->state != XNET_LISTENING)
+		return;
+
 	conn = calloc(1, sizeof(*conn));
 	if (!conn) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
@@ -377,17 +404,24 @@ void xnet_accept_sock(struct xnet_pep *pep)
 	}
 
 	conn->fid.fclass = FI_CLASS_CONNREQ;
-	/* TODO: We need to hold a reference on the pep to defer destruction */
 	conn->pep = pep;
+	conn->progress = pep->progress;
 	conn->sockapi = &pep->progress->sockapi;
 	ofi_sockctx_init(&conn->rx_sockctx, &conn->fid);
+	dlist_init(&conn->pep_entry);
 
 	ret = conn->sockapi->accept(conn->sockapi, pep->sock, NULL, 0,
 				    &conn->rx_sockctx);
 	if (ret < 0) {
 		conn->sock = INVALID_SOCKET;
-		if (ret == -OFI_EINPROGRESS_URING)
+		if (ret == -OFI_EINPROGRESS_URING) {
+			/* Accept is in-flight.  Track the handle so
+			 * pep close can cancel it.
+			 */
+			dlist_insert_tail(&conn->pep_entry,
+					  &pep->conn_list);
 			return;
+		}
 
 		/* FIXME: handle EAGAIN */
 
@@ -403,10 +437,12 @@ void xnet_accept_sock(struct xnet_pep *pep)
 	if (ret)
 		goto close;
 
+	dlist_insert_tail(&conn->pep_entry, &pep->conn_list);
 	return;
 
 close:
 	ofi_close_socket(conn->sock);
 free:
+	xnet_conn_unlink_pep(conn);
 	free(conn);
 }

@@ -1326,11 +1326,19 @@ static void xnet_uring_run_ep(struct xnet_ep *ep, struct ofi_sockctx *sockctx,
 
 static void xnet_uring_run_conn(struct xnet_conn_handle *conn, int res)
 {
-	if (res >= 0) {
+	if (res >= 0)
 		conn->sock = res;
+
+	/* PEP close changes the state before canceling the accept. */
+	if (!conn->pep || conn->pep->state != XNET_LISTENING)
+		return;
+
+	if (res >= 0) {
 		xnet_handle_conn(conn, false);
 	} else {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "accept socket error\n");
+		ofi_close_socket(conn->sock);
+		xnet_conn_unlink_pep(conn);
 		free(conn);
 	}
 }
@@ -1491,10 +1499,10 @@ static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)
 static void
 xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr)
 {
-	assert(xnet_progress_locked(conn->pep->progress));
+	assert(xnet_progress_locked(conn->progress));
 
 	/* Don't monitor the socket until the user calls fi_accept */
-	xnet_halt_sock(conn->pep->progress, conn->sock);
+	xnet_halt_sock(conn->progress, conn->sock);
 	xnet_handle_conn(conn, perr);
 }
 
