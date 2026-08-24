@@ -974,16 +974,14 @@ void efa_rdm_txe_progress_peer_abort_if_drained(struct efa_rdm_ope *txe)
 void efa_rdm_txe_release_read_msg_slot(struct efa_rdm_ope *txe)
 {
 	struct efa_rdm_domain *domain;
-	int64_t num_read_msg_in_flight;
 
 	if (!(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED))
 		return;
 	txe->internal_flags &= ~EFA_RDM_TXE_READ_MSG_COUNTED;
 
 	domain = efa_rdm_ep_rdm_domain(txe->ep);
-	num_read_msg_in_flight = ofi_atomic_dec64(&domain->num_read_msg_in_flight);
-	assert(num_read_msg_in_flight >= 0);
-	(void) num_read_msg_in_flight;
+	assert(domain->num_read_msg_in_flight > 0);
+	domain->num_read_msg_in_flight -= 1;
 }
 
 /**
