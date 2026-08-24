@@ -206,6 +206,11 @@ Set to 0 for the maximum device inline size to be used.
 \f[I]FI_VERBS_MIN_RNR_TIMER\f[R]
 Set min_rnr_timer QP attribute (0 - 31) (default: 12)
 .TP
+\f[I]FI_VERBS_USE_ODP\f[R]
+Enable on-demand paging memory registrations, if supported.
+This is currently required to register DAX file system mmapped memory.
+(default: no)
+.TP
 \f[I]FI_VERBS_CQREAD_BUNCH_SIZE\f[R]
 The number of entries to be read from the verbs completion queue at a
 time (default: 8).
@@ -251,6 +256,11 @@ The configuration file can have any number of lines.
 Each line consists of a PCIe address followed by a NIC name, seperated
 by a single space.
 Empty lines and lines starting with \[lq]#\[rq] are ignored.
+.TP
+\f[I]FI_VERBS_USE_FLOW_CTRL\f[R]
+Enable credit based flow control.
+Requires RxM to work.
+(default: yes)
 .SS Variables specific to MSG endpoints
 .TP
 \f[I]FI_VERBS_IFACE\f[R]
@@ -264,7 +274,7 @@ The NS thread is used to resolve IP-addresses to provider specific
 addresses (default: 1, if \[lq]OMPI_COMM_WORLD_RANK\[rq] and
 \[lq]PMI_RANK\[rq] environment variables aren\[cq]t defined)
 .TP
-\f[I]FI_VERBS_NAME_SERVER_PORT\f[R]
+\f[I]FI_VERBS_DGRAM_NAME_SERVER_PORT\f[R]
 The port on which Name Server thread listens incoming connections and
 requests (default: 5678)
 .SS Environment variables notes
