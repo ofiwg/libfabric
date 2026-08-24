@@ -14,25 +14,15 @@
 static uint64_t efa_rdm_cntr_read(struct fid_cntr *cntr_fid)
 {
 	struct efa_rdm_cntr *efa_rdm_cntr;
-	struct efa_domain *domain;
 	uint64_t ret;
 
 	efa_rdm_cntr = container_of(cntr_fid, struct efa_rdm_cntr, efa_cntr.util_cntr.cntr_fid);
-	domain = container_of(efa_rdm_cntr->efa_cntr.util_cntr.domain, struct efa_domain, util_domain);
 
 	/* Flush SHM completions into the peer counter before reading */
-	ofi_genlock_lock(&((struct efa_rdm_domain *) domain)->srx_lock);
 	if (efa_rdm_cntr->shm_cntr)
 		fi_cntr_read(efa_rdm_cntr->shm_cntr);
 
-	/*
-	 * keep srx_lock for ofi_cntr_read because the registered
-	 * progress callback (efa_rdm_cntr_progress) drives ibv_cq polling,
-	 * and the CQ poll path looks up peers and the implicit AV, which the
-	 * datapath serializes under srx_lock.
-	 */
 	ret = ofi_cntr_read(cntr_fid);
-	ofi_genlock_unlock(&((struct efa_rdm_domain *) domain)->srx_lock);
 
 	return ret;
 }
@@ -40,24 +30,14 @@ static uint64_t efa_rdm_cntr_read(struct fid_cntr *cntr_fid)
 static uint64_t efa_rdm_cntr_readerr(struct fid_cntr *cntr_fid)
 {
 	struct efa_rdm_cntr *efa_rdm_cntr;
-	struct efa_domain *domain;
 	uint64_t ret;
 
 	efa_rdm_cntr = container_of(cntr_fid, struct efa_rdm_cntr, efa_cntr.util_cntr.cntr_fid);
-	domain = container_of(efa_rdm_cntr->efa_cntr.util_cntr.domain, struct efa_domain, util_domain);
 
-	ofi_genlock_lock(&((struct efa_rdm_domain *) domain)->srx_lock);
 	if (efa_rdm_cntr->shm_cntr)
 		fi_cntr_read(efa_rdm_cntr->shm_cntr);
 
-	/*
-	 * keep srx_lock for ofi_cntr_readerr because the registered
-	 * progress callback (efa_rdm_cntr_progress) drives ibv_cq polling,
-	 * and the CQ poll path looks up peers and the implicit AV, which the
-	 * datapath serializes under srx_lock.
-	 */
 	ret = ofi_cntr_readerr(cntr_fid);
-	ofi_genlock_unlock(&((struct efa_rdm_domain *) domain)->srx_lock);
 
 	return ret;
 }
@@ -123,8 +103,10 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 		dlist_foreach(&cntr->ep_list, item) {
 			fid_entry = container_of(item, struct fid_list_entry, entry);
 			efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+			ofi_genlock_lock(&efa_rdm_ep->srx_lock);
 			if (efa_rdm_ep->base_ep.efa_qp_enabled)
 				efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
+			ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 		}
 		efa_rdm_cntr->need_to_scan_ep_list = false;
 	}

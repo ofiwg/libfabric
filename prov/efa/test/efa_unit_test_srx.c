@@ -52,21 +52,18 @@ void test_efa_srx_cq(void **state)
         assert_true((void *) &srx_ctx->cq->cq_fid == (void *) resource->cq);
 }
 
-/* This test verified that srx_lock created in efa_domain is correctly passed to srx */
+/* This test verified that the per-ep util_ep lock is correctly passed to srx */
 void test_efa_srx_lock(void **state)
 {
         struct efa_resource *resource = *state;
         struct efa_rdm_ep *efa_rdm_ep;
         struct util_srx_ctx *srx_ctx;
-        struct efa_domain *efa_domain;
 
         efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
         efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
         srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
-        efa_domain = container_of(resource->domain, struct efa_domain,
-				  util_domain.domain_fid.fid);
-        assert_true(((void *) srx_ctx->lock == (void *) &((struct efa_rdm_domain *) efa_domain)->srx_lock));
+        assert_true(((void *) srx_ctx->lock == (void *) &efa_rdm_ep->srx_lock));
 }
 
 
