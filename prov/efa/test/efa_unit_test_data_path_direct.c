@@ -139,7 +139,9 @@ void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
 	pool_next_before = sq_wq->wrid_idx_pool_next;
 
 	/* Get a dev_req_id — should have gen bits set */
+	ofi_genlock_lock(sq_wq->wqlock);
 	dev_req_id = efa_wq_get_dev_req_id(sq_wq, test_wr_id);
+	ofi_genlock_unlock(sq_wq->wqlock);
 
 	/* The generation bits should be present */
 	assert_int_equal(dev_req_id & sq_wq->gen_mask, sq_wq->shifted_gen);

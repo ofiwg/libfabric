@@ -467,7 +467,15 @@ static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 	assert(tx_cq->data_path_direct_enabled ==
 	       rx_cq->data_path_direct_enabled);
 	if (tx_cq->data_path_direct_enabled) {
-		ret = efa_data_path_direct_qp_initialize(base_ep->qp);
+		struct ofi_genlock *wqlock;
+		if (EFA_INFO_TYPE_IS_RDM(base_ep->info)) {
+			struct efa_rdm_ep *efa_rdm_ep = container_of(
+				base_ep, struct efa_rdm_ep, base_ep);
+			wqlock = &efa_rdm_ep->srx_lock;
+		} else {
+			wqlock = &base_ep->util_ep.lock;
+		}
+		ret = efa_data_path_direct_qp_initialize(base_ep->qp, wqlock);
 		if (ret) {
 			efa_base_ep_destruct_qp_unsafe(base_ep);
 			return ret;
