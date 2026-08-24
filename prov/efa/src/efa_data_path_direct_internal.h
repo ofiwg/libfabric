@@ -92,6 +92,14 @@ efa_wq_get_next_wrid_idx(struct efa_data_path_direct_wq *wq, uint64_t wr_id)
 {
 	uint32_t wrid_idx;
 
+	/*
+	 * The wrid translation table (wrid[]/wrid_idx_pool/wrid_idx_pool_next)
+	 * is shared with the completion path (efa_wq_cqe_finalize). The caller
+	 * must hold wq->wqlock so post and completion serialize on one lock;
+	 * otherwise a wrid_idx can resolve to the wrong wr_id/pkt_entry.
+	 */
+	assert(ofi_genlock_held(wq->wqlock));
+
 	/* Get the next wrid index to be used from the free index pool */
 	wrid_idx = wq->wrid_idx_pool[wq->wrid_idx_pool_next];
 	wq->wrid[wrid_idx] = wr_id;
