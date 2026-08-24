@@ -10,7 +10,6 @@
 struct efa_rdm_domain {
 	struct efa_domain	efa_domain;
 
-	struct ofi_genlock	srx_lock; /* shared among peer providers */
 	struct fid_domain	*shm_domain;
 	struct ofi_mr_cache	*cache;
 	size_t			mtu_size;
