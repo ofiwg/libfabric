@@ -968,8 +968,17 @@ static void efa_rdm_pke_peer_error_handle_rxe(struct efa_rdm_ope *rxe,
 	 * Matched to a posted recv: owed a completion. Mark peer-aborted and
 	 * attempt the drain-gated release (a no-op while any WR still
 	 * references the rxe, e.g. an in-flight LONGCTS/RUNTREAD READ).
+	 * A declined rxe is left alone and the packet is dropped.
 	 */
-	efa_rdm_rxe_mark_peer_aborted(rxe, prov_errno);
+	if (!efa_rdm_rxe_mark_peer_aborted_if_needed(rxe, prov_errno)) {
+		EFA_WARN(FI_LOG_CQ,
+			 "PEER_ERROR resolved to rxe %p (op=%u), which is not "
+			 "a two-sided recv. A PEER_ERROR is never emitted for "
+			 "an emulated op.\n", rxe, rxe->op);
+		efa_base_ep_write_eq_error(&rxe->ep->base_ep, FI_EIO,
+					   FI_EFA_ERR_INVALID_PKT_TYPE);
+		return;
+	}
 	efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 }
 
