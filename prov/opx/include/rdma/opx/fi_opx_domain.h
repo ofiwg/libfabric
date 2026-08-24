@@ -287,6 +287,20 @@ enum opx_mr_hfisvc_state {
 	OPX_MR_HFISVC_STATE_PENDING_CLOSE	     = (1 << 10),
 	OPX_MR_HFISVC_STATE_CLOSED		     = (1 << 11)
 };
+/*
+ * Who owns opx_mr->dmabuf.fd, and therefore how it must be released.
+ *
+ * BORROWED   : the caller's fd. OPX must not release it, and must not retain it
+ *              past registration - the caller may close it at any point.
+ * EXPORTED   : obtained from ofi_hmem_get_dmabuf_fd(). Released by
+ *              ofi_hmem_put_dmabuf_fd(), which closes the descriptor itself.
+ * DUPLICATED : a private copy of a caller fd. Released by close().
+ */
+/* Must be negative: fd 0 is legal. */
+#define OPX_SDMA_NO_DMABUF_FD (-1)
+
+enum opx_mr_dmabuf_owner { OPX_MR_DMABUF_BORROWED = 0, OPX_MR_DMABUF_EXPORTED, OPX_MR_DMABUF_DUPLICATED };
+
 #define OPX_MR_HFISVC_STATE_CLOSE_SHIFT 4
 OPX_COMPILE_TIME_ASSERT((OPX_MR_HFISVC_STATE_PENDING_OPEN << OPX_MR_HFISVC_STATE_CLOSE_SHIFT) ==
 				OPX_MR_HFISVC_STATE_PENDING_OPEN_CLOSE,
@@ -334,8 +348,8 @@ struct fi_opx_mr {
 		uint32_t		 padding;
 	} hfisvc;
 	uint8_t		     hmem_unified;
-	uint8_t		     dmabuf_internal; /* 1 if OPX created dmabuf fd and must close it */
-	uint8_t		     in_hashmap;      /* 1 once linked into domain->mr_hashmap */
+	uint8_t		     dmabuf_owner; /* enum opx_mr_dmabuf_owner */
+	uint8_t		     in_hashmap;   /* 1 once linked into domain->mr_hashmap */
 	uint8_t		     unused[5];
 	struct ofi_mr_entry *cache_entry;
 
@@ -391,6 +405,35 @@ static inline uint32_t fi_opx_domain_get_rx_max(struct fid_domain *domain)
 
 int opx_hfisvc_mr_deferred_open(struct opx_domain_deferred_work *work);
 int opx_hfisvc_mr_deferred_close(struct opx_domain_deferred_work *work);
+
+/*
+ * Release opx_mr->dmabuf.fd according to its owner. Must be called from every
+ * path that reaches the final free of an opx_mr, including rollback paths.
+ * Idempotent.
+ */
+__OPX_FORCE_INLINE__
+void opx_mr_release_dmabuf_fd(struct fi_opx_mr *opx_mr)
+{
+	if (opx_mr->dmabuf.fd == OPX_SDMA_NO_DMABUF_FD) {
+		return;
+	}
+
+	switch (opx_mr->dmabuf_owner) {
+	case OPX_MR_DMABUF_EXPORTED:
+		/* Closes the descriptor itself. */
+		ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
+		break;
+	case OPX_MR_DMABUF_DUPLICATED:
+		close(opx_mr->dmabuf.fd);
+		break;
+	case OPX_MR_DMABUF_BORROWED:
+	default:
+		break;
+	}
+
+	opx_mr->dmabuf.fd    = OPX_SDMA_NO_DMABUF_FD;
+	opx_mr->dmabuf_owner = OPX_MR_DMABUF_BORROWED;
+}
 
 #if HAVE_HFISVC
 int opx_hfisvc_mr_lazy_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr);
