@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_verbs" "7" "2026\-05\-22" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_verbs" "7" "2026\-08\-24" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -232,13 +232,25 @@ the corresponding kernel driver.
 .TP
 \f[I]FI_VERBS_NIC_AFFINITY_POLICY\f[R]
 NIC affinity policy for ordering NICs in fi_getinfo results.
+Supported options are \[lq]manual\[rq], \[lq]auto\[rq] or
+\[lq]none\[rq].
+When set to \[lq]manual\[rq], NIC affinity mapping is specified in a
+configuration file (see FI_VERBS_NIC_AFFINITY_CONFIG).
+When set to \[lq]auto\[rq] NIC affinity mapping is determined
+automatically based on the information provided by \f[V]hwloc\f[R].
+In either case, the mapping key is supplied via
+FI_VERBS_AFFINITY_DEVICE.
 (default: none)
 .TP
 \f[I]FI_VERBS_AFFINITY_DEVICE\f[R]
 PCI address of device for NIC affinity.
 .TP
 \f[I]FI_VERBS_NIC_AFFINITY_CONFIG\f[R]
-Path to NIC affinity configuration file for `manual' policy.
+Path to NIC affinity configuration file for the \[lq]manual\[rq] policy.
+The configuration file can have any number of lines.
+Each line consists of a PCIe address followed by a NIC name, seperated
+by a single space.
+Empty lines and lines starting with \[lq]#\[rq] are ignored.
 .SS Variables specific to MSG endpoints
 .TP
 \f[I]FI_VERBS_IFACE\f[R]
