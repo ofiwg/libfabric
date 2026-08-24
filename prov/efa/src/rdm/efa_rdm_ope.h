@@ -4,6 +4,8 @@
 #ifndef _EFA_RDM_OPE_H
 #define _EFA_RDM_OPE_H
 
+#include <assert.h>
+
 #include "efa_rdm_pke.h"
 
 #define EFA_RDM_IOV_LIMIT		(4)
@@ -15,6 +17,13 @@ enum efa_rdm_ope_type {
 	EFA_RDM_TXE = 1, /**< this ope is for an TX operation */
 	EFA_RDM_RXE,     /**< this ope is for an RX operation */
 };
+
+/*
+ * These values are serialized in efa_rdm_peer_error_hdr
+ * (emitter_ope_type), so they are wire format and may never change.
+ */
+static_assert(EFA_RDM_TXE == 1 && EFA_RDM_RXE == 2,
+	      "efa_rdm_ope_type values are serialized in efa_rdm_peer_error_hdr");
 
 /**
  * @brief EFA RDM operation entry (ope)'s state
@@ -383,21 +392,25 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 #define EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED	BIT_ULL(21)
 
 /**
- * @brief flag to indicate a sender-side LONGCTS peer-abort must be
- *        signalled to the receiver by per-peer msg_id rather than by the
- *        receiver's ope index.
+ * @brief flag: this txe bumped num_read_msg_in_flight.
  *
- * Set in efa_rdm_txe_handle_error() when a LONGCTS two-sided RTM is
- * aborted before its first CTS arrives (state still EFA_RDM_TXE_REQ), so
- * txe->rx_id (the receiver's rxe index, learned only from the CTS) is not
- * yet valid. efa_rdm_pke_init_peer_error_for_ope() reads this flag and
- * encodes the PEER_ERROR_PKT with op_id = txe->msg_id and
- * EFA_RDM_PEER_ERROR_REF_MSG_ID_SKIP (bytes_acked is always 0 in this
- * case -- no CTSDATA was acked), so the receiver marks the msg_id aborted
- * and advances its reorder window without producing a completion (no recv
- * was ever matched, since no CTS was exchanged).
+ * Set at every site that bumps the counter (LONGREAD RTM sent; first
+ * segment of a tail-read RUNTREAD sent); consumed, exactly once per
+ * txe, by whichever decrement site resolves the transfer first --
+ * EOR, READ_NACK, or PEER_ERROR receipt, or the sender-side abort
+ * path -- via efa_rdm_txe_release_read_msg_slot(). An RTM canceled before
+ * its first post never set the flag.
  */
-#define EFA_RDM_TXE_PEER_ERROR_BY_MSG_ID	BIT_ULL(22)
+#define EFA_RDM_TXE_READ_MSG_COUNTED		BIT_ULL(22)
+
+/**
+ * @brief release this txe's num_read_msg_in_flight slot, if it holds one.
+ *
+ * Test-and-clears EFA_RDM_TXE_READ_MSG_COUNTED so concurrent resolution
+ * paths (receiver's terminal packet vs. sender-side abort) decrement
+ * exactly once between them. No-op for a txe that never bumped.
+ */
+void efa_rdm_txe_release_read_msg_slot(struct efa_rdm_ope *txe);
 
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 

@@ -136,6 +136,20 @@ to an aborted TX operation, and its peer connection is functioning normally, the
 is guaranteed to write a CQ error for the matched receive.  If the peer endpoint is closed, or
 if the peer dies, the corresponding matched TX/RX completions may never complete.
 
+Peer notification and remote-side cleanup on MR abort apply to send and tagged
+operations only. Device RMA operations that reference a closed MR need no peer
+cleanup: the initiator receives a local error completion and no provider state
+exists on the peer. Emulated RMA and atomic operations are not supported:
+closing an MR referenced by an in-flight emulated operation leads to undefined
+behavior.
+
+MR abort behavior is undefined unless both participants in the transaction are
+using libfabric version 2.7.0 or later. An older peer cannot distinguish a
+control message belonging to the current transfer from one belonging to an
+earlier, aborted transfer, so aborting transfers when either side runs an
+older version risks corrupting the communication state between the two
+endpoints.
+
 # LIMITATIONS
 
 ## Completion events
