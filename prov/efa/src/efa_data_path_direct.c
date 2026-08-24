@@ -56,19 +56,21 @@
  * - Configuring doorbell register access
  *
  * @param efa_qp Pointer to the EFA queue pair to initialize
+ * @param wqlock Lock that serializes access to the send/recv work-queue wrid
+ *               translation table (wrid[]/wrid_idx_pool).
  * @return 0 on success, negative error code on failure
  *
  * @note This function requires that the underlying IBV queue pair has
  *       been successfully created before being called
  */
-int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp)
+int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp,
+				       struct ofi_genlock *wqlock)
 {
 	/**
 	 * Called during efa_base_ep_create_qp.
 	 * See also rdma-core/providers/efa/verbs.c: efa_setup_qp
 	 */
 	struct efa_data_path_direct_qp *direct_qp = &efa_qp->data_path_direct_qp;
-	struct efa_base_ep *base_ep = efa_qp->base_ep;
 
 	struct efadv_wq_attr sq_attr = {0}; /* Send queue attributes from hardware */
 	struct efadv_wq_attr rq_attr = {0}; /* Receive queue attributes from hardware */
@@ -92,7 +94,7 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp)
 	direct_qp->rq.wq.max_batch = rq_attr.max_batch;
 	/* Initialize receive work queue management structures */
 	efa_data_path_direct_wq_initialize(&direct_qp->rq.wq, rq_attr.num_entries,
-			   false, &base_ep->util_ep.lock);
+			   false, wqlock);
 
 	/* Configure send queue with hardware attributes */
 	direct_qp->sq.desc = sq_attr.buffer;          /* Hardware SQ buffer */
@@ -108,7 +110,7 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp)
 #endif
 	/* Initialize send work queue management structures */
 	efa_data_path_direct_wq_initialize(&direct_qp->sq.wq, sq_attr.num_entries,
-			   sq_req_id_64_bit, &base_ep->util_ep.lock);
+			   sq_req_id_64_bit, wqlock);
 
 	/* Mirror efa_qp_init_indices functionality - indices already initialized */
 
