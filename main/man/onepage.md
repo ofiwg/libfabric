@@ -20044,6 +20044,11 @@ The verbs provider checks for the following environment variables.
 *FI_VERBS_MIN_RNR_TIMER*
 :   Set min_rnr_timer QP attribute (0 - 31) (default: 12)
 
+*FI_VERBS_USE_ODP*
+:   Enable on-demand paging memory registrations, if supported. This is
+    currently required to register DAX file system mmapped memory.
+    (default: no)
+
 *FI_VERBS_CQREAD_BUNCH_SIZE*
 :   The number of entries to be read from the verbs completion queue at
     a time (default: 8).
@@ -20083,6 +20088,10 @@ The verbs provider checks for the following environment variables.
     of a PCIe address followed by a NIC name, seperated by a single
     space. Empty lines and lines starting with "\#" are ignored.
 
+*FI_VERBS_USE_FLOW_CTRL*
+:   Enable credit based flow control. Requires RxM to work. (default:
+    yes)
+
 ### Variables specific to MSG endpoints
 
 *FI_VERBS_IFACE*
@@ -20097,7 +20106,7 @@ The verbs provider checks for the following environment variables.
     addresses (default: 1, if "OMPI_COMM_WORLD_RANK" and "PMI_RANK"
     environment variables aren't defined)
 
-*FI_VERBS_NAME_SERVER_PORT*
+*FI_VERBS_DGRAM_NAME_SERVER_PORT*
 :   The port on which Name Server thread listens incoming connections
     and requests (default: 5678)
 
