@@ -23,7 +23,7 @@ static void mark_then_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno)
 		efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 		return;
 	}
-	efa_rdm_rxe_mark_peer_aborted(rxe, prov_errno);
+	efa_rdm_rxe_mark_peer_aborted_if_needed(rxe, prov_errno);
 	efa_rdm_rxe_emit_peer_error(rxe, prov_errno);
 	efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 }
@@ -2222,7 +2222,7 @@ void test_efa_rdm_msg_send_0_byte_with_inject_flag(void **state)
  *        work until WR drain, then writes a clean RX error completion
  *        (FI_ECANCELED / FI_EFA_ERR_PEER_ABORTED) and reaps the rxe.
  *
- * Asserts the two-stage contract: efa_rdm_rxe_mark_peer_aborted() does
+ * Asserts the two-stage contract: efa_rdm_rxe_mark_peer_aborted_if_needed() does
  * nothing application-visible (no CQ entry while a WR is outstanding),
  * and efa_rdm_rxe_release_peer_abort_if_drained() is a no-op until
  * efa_outstanding_tx_ops reaches 0, at which point it writes the error
@@ -2294,7 +2294,7 @@ void test_efa_rdm_rxe_peer_abort_writes_error_completion_at_drain(void **state)
 
 	/* First failure: mark only. No CQ entry, peer_rxe untouched,
 	 * rxe still alive. */
-	efa_rdm_rxe_mark_peer_aborted(rxe,
+	efa_rdm_rxe_mark_peer_aborted_if_needed(rxe,
 		EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
 	assert_true(rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
 	assert_non_null(rxe->peer_rxe);
@@ -2334,7 +2334,7 @@ void test_efa_rdm_rxe_peer_abort_writes_error_completion_at_drain(void **state)
  *      via the standard SRX free_entry path (simulating what happens
  *      when the receive completes normally).
  *   2. Carves a child for message #2 and runs it through
- *      efa_rdm_rxe_mark_peer_aborted + drain as if its in-protocol
+ *      efa_rdm_rxe_mark_peer_aborted_if_needed + drain as if its in-protocol
  *      device op failed with a peer-clean abort
  *      (REMOTE_ERROR_BAD_ADDRESS).
  *
@@ -2494,7 +2494,7 @@ void test_efa_rdm_rxe_mark_peer_aborted_multi_recv_writes_err(
 	 *    release entry is produced -- the buffer stays alive for a
 	 *    potential third message. (Releasing the rxe frees it, so it
 	 *    must not be dereferenced afterward.) */
-	efa_rdm_rxe_mark_peer_aborted(
+	efa_rdm_rxe_mark_peer_aborted_if_needed(
 		rxe2, EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
 	efa_rdm_rxe_release_peer_abort_if_drained(rxe2);
 
@@ -6214,3 +6214,192 @@ void test_efa_rdm_ctsdata_send_completion_aborting_txe_no_completion(void **stat
 
 	efa_rdm_pke_release_tx(pkt_entry);
 }
+
+/*
+ * Every wire protocol the provider emulates, with the ope op each one runs
+ * on. RTW is an emulated fi_write, RTR an emulated fi_read (the responder
+ * side runs as ofi_op_read_rsp), and the RTA family the emulated atomics.
+ * None of them may enter the peer-abort path.
+ */
+struct efa_unit_test_emulated_proto {
+	int protocol;
+	uint32_t tx_op;		/* op on the initiator's txe */
+	uint32_t rx_op;		/* op on the target's rxe */
+	uint64_t cq_flags;
+	const char *name;
+};
+
+static const struct efa_unit_test_emulated_proto efa_unit_test_emulated_protos[] = {
+	{ EFA_RDM_EAGER_RTW_PKT, ofi_op_write, ofi_op_write,
+	  FI_RMA | FI_WRITE, "EAGER_RTW" },
+	{ EFA_RDM_DC_EAGER_RTW_PKT, ofi_op_write, ofi_op_write,
+	  FI_RMA | FI_WRITE, "DC_EAGER_RTW" },
+	{ EFA_RDM_LONGCTS_RTW_PKT, ofi_op_write, ofi_op_write,
+	  FI_RMA | FI_WRITE, "LONGCTS_RTW" },
+	{ EFA_RDM_DC_LONGCTS_RTW_PKT, ofi_op_write, ofi_op_write,
+	  FI_RMA | FI_WRITE, "DC_LONGCTS_RTW" },
+	{ EFA_RDM_LONGREAD_RTW_PKT, ofi_op_write, ofi_op_write,
+	  FI_RMA | FI_WRITE, "LONGREAD_RTW" },
+	{ EFA_RDM_SHORT_RTR_PKT, ofi_op_read_req, ofi_op_read_rsp,
+	  FI_RMA | FI_READ, "SHORT_RTR" },
+	{ EFA_RDM_LONGCTS_RTR_PKT, ofi_op_read_req, ofi_op_read_rsp,
+	  FI_RMA | FI_READ, "LONGCTS_RTR" },
+	{ EFA_RDM_WRITE_RTA_PKT, ofi_op_atomic, ofi_op_atomic,
+	  FI_ATOMIC | FI_WRITE, "WRITE_RTA" },
+	{ EFA_RDM_DC_WRITE_RTA_PKT, ofi_op_atomic, ofi_op_atomic,
+	  FI_ATOMIC | FI_WRITE, "DC_WRITE_RTA" },
+	{ EFA_RDM_FETCH_RTA_PKT, ofi_op_atomic_fetch, ofi_op_atomic_fetch,
+	  FI_ATOMIC | FI_READ, "FETCH_RTA" },
+	{ EFA_RDM_COMPARE_RTA_PKT, ofi_op_atomic_compare, ofi_op_atomic_compare,
+	  FI_ATOMIC | FI_READ, "COMPARE_RTA" },
+};
+
+/**
+ * @brief An emulated RMA/atomic rxe whose RDMA READ failed must not be
+ *        peer-aborted.
+ *
+ * An emulated fi_write selects LONGREAD RTW, so the target pulls the payload
+ * with RDMA READs and its rxe has the same WR shape as a two-sided recv.
+ * This is the fi_efa_rdm_remote_exit_early -o writedata assert on hardware
+ * without device RDMA write. Driven for every emulated protocol; each must
+ * take the ordinary error path.
+ */
+void test_efa_rdm_pke_handle_tx_error_emulated_rxe_read_not_peer_aborted(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *rxe;
+	struct fi_cq_data_entry cq_entry;
+	struct fi_eq_err_entry eq_err_entry;
+	size_t outstanding_before;
+	size_t i;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	for (i = 0; i < ARRAY_SIZE(efa_unit_test_emulated_protos); i++) {
+		const struct efa_unit_test_emulated_proto *proto =
+			&efa_unit_test_emulated_protos[i];
+
+		rxe = efa_unit_test_alloc_rxe(resource, proto->rx_op);
+		assert_non_null(rxe);
+		/* Mirror the real emulated-RMA rxe allocators
+		 * (efa_rdm_pke_alloc_rtw_rxe / _rta_rxe / _rtr_rxe): these
+		 * rxes are provider-internal. */
+		rxe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+		rxe->protocol = proto->protocol;
+		rxe->total_len = 1024;
+
+		outstanding_before = ep->efa_outstanding_tx_ops;
+
+		/* A receiver-initiated RDMA READ of this rxe fails because
+		 * the peer withdrew mid-protocol. */
+		run_longread_read_error(resource, rxe,
+					EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT);
+
+		/* Not classified as a peer abort: no mark, so no emit and no
+		 * drain-gated release can run against it. */
+		if (rxe->internal_flags & (EFA_RDM_OPE_PEER_ABORT_PENDING |
+					   EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED))
+			fail_msg("%s rxe entered the peer-abort path",
+				 proto->name);
+
+		/* No PEER_ERROR_PKT was posted on the peer's behalf. */
+		if (ep->efa_outstanding_tx_ops != outstanding_before)
+			fail_msg("%s rxe emitted a PEER_ERROR_PKT",
+				 proto->name);
+
+		/* The ordinary rxe error path ran instead. */
+		assert_int_equal(rxe->state, EFA_RDM_OPE_ERR);
+
+		/* Internal rxe: the failure surfaces on the EQ, and the user
+		 * CQ stays empty (no bogus FI_ECANCELED for an RMA op). */
+		assert_int_equal(fi_cq_read(resource->cq, &cq_entry, 1),
+				 -FI_EAGAIN);
+		memset(&eq_err_entry, 0, sizeof(eq_err_entry));
+		assert_int_equal(fi_eq_readerr(resource->eq, &eq_err_entry, 0),
+				 sizeof(eq_err_entry));
+		assert_int_equal(eq_err_entry.prov_errno,
+				 EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT);
+
+		efa_rdm_rxe_release(rxe);
+	}
+}
+
+/**
+ * @brief TX side: a canceled source MR on an emulated RMA/atomic txe must
+ *        report an ordinary error, never a peer abort.
+ *
+ * Driven for every emulated protocol, plus one adversarial case that pairs an
+ * emulated op with a two-sided RTM protocol so the op scope check is the only
+ * thing left that can prevent the emit. The peer advertises PEER_ERROR
+ * support throughout.
+ */
+void test_efa_rdm_txe_handle_error_emulated_canceled_not_peer_aborted(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+	struct fi_cq_err_entry err_entry;
+	size_t outstanding_before;
+	size_t i;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* One extra iteration for the adversarial RTM-protocol case. */
+	for (i = 0; i <= ARRAY_SIZE(efa_unit_test_emulated_protos); i++) {
+		bool adversarial = (i == ARRAY_SIZE(efa_unit_test_emulated_protos));
+		const struct efa_unit_test_emulated_proto *proto =
+			adversarial ? &efa_unit_test_emulated_protos[0]
+				    : &efa_unit_test_emulated_protos[i];
+		const char *name = adversarial ? "emulated op on an RTM protocol"
+					       : proto->name;
+
+		txe = efa_unit_test_alloc_txe(resource, proto->tx_op);
+		assert_non_null(txe);
+		txe->state = EFA_RDM_TXE_REQ;
+		txe->cq_entry.flags = proto->cq_flags;
+		txe->cq_entry.op_context = (void *) 0xd4;
+		txe->total_len = 1048576;
+		txe->protocol = adversarial ? EFA_RDM_LONGREAD_MSGRTM_PKT
+					    : proto->protocol;
+
+		peer = txe->peer;
+		assert_non_null(peer);
+		peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+		peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+		efa_unit_test_txe_simulate_source_mr_canceled(txe);
+
+		outstanding_before = ep->efa_outstanding_tx_ops;
+
+		efa_rdm_txe_handle_error(txe, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+
+		/* Not marked, nothing emitted. */
+		if (txe->internal_flags & (EFA_RDM_OPE_PEER_ABORT_PENDING |
+					   EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED))
+			fail_msg("%s txe entered the peer-abort path", name);
+		if (ep->efa_outstanding_tx_ops != outstanding_before)
+			fail_msg("%s txe emitted a PEER_ERROR_PKT", name);
+
+		/* The ordinary TX error CQ entry was written, with the real
+		 * error rather than the peer-abort pair. */
+		memset(&err_entry, 0, sizeof(err_entry));
+		assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), 1);
+		assert_int_equal(err_entry.err, FI_ECANCELED);
+		assert_int_equal(err_entry.prov_errno, FI_EFA_ERR_PKT_POST);
+
+		/* efa_unit_test_txe_simulate_source_mr_canceled() faked
+		 * iov_count/desc[0] to drive the gen check; txe->mr[] was
+		 * never populated, so clear the count before release (which
+		 * would otherwise fi_close() uninitialized mr slots). */
+		txe->iov_count = 0;
+		txe->desc[0] = NULL;
+		efa_rdm_txe_release(txe);
+	}
+}
+

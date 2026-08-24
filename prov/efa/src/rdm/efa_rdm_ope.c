@@ -707,20 +707,31 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
  * the completion and release are deferred to
  * efa_rdm_rxe_release_peer_abort_if_drained() at WR drain.
  *
+ * This is the receiver's single decision point for entering the abort path,
+ * the mirror of efa_rdm_txe_mark_peer_abort_if_needed(). Callers must honor
+ * the return value: emit and drain both require the mark.
+ *
  * @param[in,out] rxe        failing user-posted recv rxe
  * @param[in]     prov_errno underlying device prov_errno (for logging)
+ * @return true if the rxe is peer-aborting (marked here or already marked);
+ *         false if it is out of scope, in which case nothing was modified
  */
-void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno)
+bool efa_rdm_rxe_mark_peer_aborted_if_needed(struct efa_rdm_ope *rxe, int prov_errno)
 {
 	assert(rxe);
 	assert(rxe->type == EFA_RDM_RXE);
 
-	if (rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
-		return;
-
 	/* Emulated RMA/atomic ops are not supported on the PEER_ERROR path */
-	if (rxe->op != ofi_op_msg && rxe->op != ofi_op_tagged)
-		return;
+	if (!efa_rdm_ope_is_peer_abort_capable(rxe)) {
+		EFA_INFO(FI_LOG_CQ,
+			 "Peer abort of rxe %p declined: op=%u is not a "
+			 "two-sided recv; using the ordinary error path.\n",
+			 rxe, rxe->op);
+		return false;
+	}
+
+	if (rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
+		return true;
 
 	EFA_INFO(FI_LOG_CQ,
 		 "Peer-abort marked on rxe %p (op=%u, device prov_errno=%d %s); "
@@ -730,6 +741,8 @@ void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno)
 	/* The drain helper owns this rxe's completion + release once every
 	 * WR using it as wr_id has drained. */
 	rxe->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING;
+
+	return true;
 }
 
 /**
@@ -751,7 +764,7 @@ void efa_rdm_rxe_release_peer_abort_if_drained(struct efa_rdm_ope *rxe)
 	/*
 	 * Precondition: callers only invoke this on an rxe already marked
 	 * peer-aborting -- either behind an explicit PENDING gate or right
-	 * after efa_rdm_rxe_mark_peer_aborted(). The idempotent "no-op until
+	 * after efa_rdm_rxe_mark_peer_aborted_if_needed(). The idempotent "no-op until
 	 * the WRs drain" behavior is provided by the checks below.
 	 */
 	assert(rxe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
@@ -1018,8 +1031,8 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
 	if (OFI_LIKELY(efa_rdm_mr_gen_check_ope(txe)))
 		return false;
 
-	/* MR Abort is only supported for send/tagged operations */
-	if  (txe->op != ofi_op_msg && txe->op != ofi_op_tagged)
+	/* Emulated 1-sided operations are not supported by MR Abort */
+	if (!efa_rdm_ope_is_peer_abort_capable(txe))
 		return false;
 
 	/*

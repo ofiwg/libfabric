@@ -271,7 +271,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 /**
  * @brief The peer-abort machinery owns this ope's drain-gated cleanup.
  *
- * Set on the first peer-abort failure (rxe: efa_rdm_rxe_mark_peer_aborted();
+ * Set on the first peer-abort failure (rxe: efa_rdm_rxe_mark_peer_aborted_if_needed();
  * txe: the sender-side abort paths) -- one shared bit since an ope is only ever
  * one type, sticky until free. Once every WR using the ope as wr_id has drained
  * (efa_outstanding_tx_ops == 0, nothing queued), the type's drain helper writes
@@ -414,6 +414,18 @@ void efa_rdm_txe_release_read_msg_slot(struct efa_rdm_ope *txe);
 
 #define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
 
+/**
+ * @brief Whether an ope is in scope for the peer-abort (MR abort) protocol.
+ *
+ * Only msg/tagged ops are: they own a per-peer msg_id and owe exactly one
+ * terminal completion. Emulated RMA and atomic ops are not supported, and
+ * device RMA needs no efa protocol cleanup.
+ */
+static inline bool efa_rdm_ope_is_peer_abort_capable(struct efa_rdm_ope *ope)
+{
+	return ope->op == ofi_op_msg || ope->op == ofi_op_tagged;
+}
+
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
 
 int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe,
@@ -427,7 +439,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
 
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
 
-void efa_rdm_rxe_mark_peer_aborted(struct efa_rdm_ope *rxe, int prov_errno);
+bool efa_rdm_rxe_mark_peer_aborted_if_needed(struct efa_rdm_ope *rxe, int prov_errno);
 
 void efa_rdm_rxe_emit_peer_error(struct efa_rdm_ope *rxe, int prov_errno);
 

@@ -540,17 +540,17 @@ void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int prov_errno)
 			efa_rdm_pke_release_tx(pkt_entry);
 			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
 		} else if (efa_rdm_pkt_is_rxe_remote_read(pkt_entry) &&
-			   efa_rdm_prov_errno_is_peer_abort(prov_errno)) {
+			   efa_rdm_prov_errno_is_peer_abort(prov_errno) &&
+			   efa_rdm_rxe_mark_peer_aborted_if_needed(pkt_entry->ope,
+							 prov_errno)) {
 			struct efa_rdm_ope *rxe = pkt_entry->ope;
 			/*
 			 * First peer-abort failure on this rxe: receiver-side
 			 * RDMA READ (LONGREAD/RUNTREAD) failed because the peer
-			 * withdrew mid-protocol. Mark the rxe peer-aborted
-			 * and notify the sender so it can reap its txe.
+			 * withdrew mid-protocol. The mark accepted the rxe, so
+			 * notify the sender so it can reap its txe. A declined
+			 * mark falls through to the ordinary error path below.
 			 */
-			assert(!(rxe->internal_flags &
-				 EFA_RDM_OPE_PEER_ABORT_PENDING));
-			efa_rdm_rxe_mark_peer_aborted(rxe, prov_errno);
 			efa_rdm_rxe_emit_peer_error(rxe, prov_errno);
 			efa_rdm_pke_release_tx(pkt_entry);
 			efa_rdm_rxe_release_peer_abort_if_drained(rxe);
