@@ -193,6 +193,11 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 
 		enum fi_hmem_iface hmem_iface  = FI_HMEM_SYSTEM;
 		uint64_t	   hmem_device = 0ul;
+		/*
+		 * DMABUF redefines two fields: context[0] is an fd, and the
+		 * payload iovec base is a BO-relative offset.
+		 */
+		bool is_dmabuf_req = false;
 #ifdef OPX_HMEM
 		if (meminfo_set) {
 			struct sdma_req_meminfo *meminfo = (struct sdma_req_meminfo *) (req_info + 1);
@@ -202,12 +207,28 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 			// index 0 (the first payload IOV, or iov[1]).
 			const unsigned meminfo_idx   = 0;
 			const unsigned hfi1_mem_type = HFI1_MEMINFO_TYPE_ENTRY_GET(meminfo->types, meminfo_idx);
-			hmem_iface		     = (enum fi_hmem_iface) OPX_HMEM_OFI_MEM_TYPE[hfi1_mem_type];
-			hmem_device		     = meminfo->context[0];
-			fprintf(stderr,
-				"(%d) [%d] hmem_iface=%u hmem_device=%lu meminfo->types=%#16.16llX meminfo->context[0]=%#16.16llX meminfo->context[15]=%#16.16llX\n",
-				pid, req_num, hmem_iface, hmem_device, meminfo->types, meminfo->context[0],
-				meminfo->context[15]);
+
+#if OPX_HAVE_SDMA_DMABUF
+			is_dmabuf_req = (hfi1_mem_type == HFI1_MEMINFO_TYPE_DMABUF);
+#endif
+			/* A 4-bit field from the request: bounds-check it. */
+			if (hfi1_mem_type < ARRAY_SIZE(OPX_HMEM_OFI_MEM_TYPE)) {
+				hmem_iface = (enum fi_hmem_iface) OPX_HMEM_OFI_MEM_TYPE[hfi1_mem_type];
+			} else if (!is_dmabuf_req) {
+				fprintf(stderr, "(%d) [%d] ERROR: unrecognized meminfo type %u\n", pid, req_num,
+					hfi1_mem_type);
+			}
+			if (is_dmabuf_req) {
+				fprintf(stderr,
+					"(%d) [%d] DMABUF request: dmabuf_fd=%lld (context[0] is an fd, NOT a device ordinal) meminfo->types=%#16.16llX\n",
+					pid, req_num, (long long) meminfo->context[0], meminfo->types);
+			} else {
+				hmem_device = meminfo->context[0];
+				fprintf(stderr,
+					"(%d) [%d] hmem_iface=%u hmem_device=%lu meminfo->types=%#16.16llX meminfo->context[0]=%#16.16llX meminfo->context[15]=%#16.16llX\n",
+					pid, req_num, hmem_iface, hmem_device, meminfo->types, meminfo->context[0],
+					meminfo->context[15]);
+			}
 		}
 #endif
 		fprintf(stderr, "(%d) [%d] PBC: %#16.16lX\n", pid, req_num, header_vec->scb.scb_9B.qw0);
@@ -220,18 +241,26 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 						    func, line);
 		}
 
-		fprintf(stderr, "(%d) [%d] req data iov=%p len=%lu\n", pid, req_num, iov_ptr[1].iov_base,
-			iov_ptr[1].iov_len);
-
-		if (hmem_iface == FI_HMEM_SYSTEM) {
-			fprintf(stderr, "(%d) [%d] First 8 bytes of %p == %#16.16lX\n", pid, req_num,
-				iov_ptr[1].iov_base, *((uint64_t *) iov_ptr[1].iov_base));
+		if (is_dmabuf_req) {
+			/* An offset, not an address: must not be read through. */
+			fprintf(stderr,
+				"(%d) [%d] req data bo_offset=0x%lx len=%lu (payload not dumped: base is a BO offset)\n",
+				pid, req_num, (uintptr_t) iov_ptr[1].iov_base, iov_ptr[1].iov_len);
 		} else {
-			uint64_t first_qw;
-			opx_copy_from_hmem(hmem_iface, hmem_device, OPX_HMEM_NO_HANDLE, &first_qw, iov_ptr[1].iov_base,
-					   sizeof(uint64_t), OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
-			fprintf(stderr, "(%d) [%d] First 8 bytes of %p == %#16.16lX\n", pid, req_num,
-				iov_ptr[1].iov_base, first_qw);
+			fprintf(stderr, "(%d) [%d] req data iov=%p len=%lu\n", pid, req_num, iov_ptr[1].iov_base,
+				iov_ptr[1].iov_len);
+
+			if (hmem_iface == FI_HMEM_SYSTEM) {
+				fprintf(stderr, "(%d) [%d] First 8 bytes of %p == %#16.16lX\n", pid, req_num,
+					iov_ptr[1].iov_base, *((uint64_t *) iov_ptr[1].iov_base));
+			} else {
+				uint64_t first_qw;
+				opx_copy_from_hmem(hmem_iface, hmem_device, OPX_HMEM_NO_HANDLE, &first_qw,
+						   iov_ptr[1].iov_base, sizeof(uint64_t),
+						   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);
+				fprintf(stderr, "(%d) [%d] First 8 bytes of %p == %#16.16lX\n", pid, req_num,
+					iov_ptr[1].iov_base, first_qw);
+			}
 		}
 
 		if (req_info_iovs > 2) {
@@ -569,7 +598,8 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 				  uint64_t tag, void *user_context, const uint32_t data, const uint64_t tx_op_flags,
 				  const uint64_t caps, const enum ofi_reliability_kind reliability,
 				  const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
-				  const uint64_t hmem_device, const enum opx_hfi1_type hfi1_type)
+				  const uint64_t hmem_device, const int dmabuf_fd, const uintptr_t dmabuf_base,
+				  const enum opx_hfi1_type hfi1_type)
 {
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
@@ -623,6 +653,7 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 	work->work_elem.payload_copy	  = NULL;
 	work->work_elem.complete	  = false;
 	work->dput.opx_ep		  = opx_ep;
+	work->dput.dmabuf_src_mr	  = NULL;
 	slist_init(&work->dput.sdma_reqs);
 
 	struct fi_opx_completion_counter *user_cc =
@@ -706,6 +737,10 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 	/* Not owned by init_we. */
 	we->tx_index	   = dest_addr.tx_index;
 	we->use_bounce_buf = false;
+	if (dmabuf_fd != OPX_SDMA_NO_DMABUF_FD) {
+		we->dmabuf_fd	= dmabuf_fd;
+		we->dmabuf_base = dmabuf_base;
+	}
 	fi_opx_hfi1_sdma_add_packet(we, replay, len);
 
 	const uint32_t fragsize = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type);

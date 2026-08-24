@@ -486,7 +486,7 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 		errno = FI_ENOMEM;
 		return -errno;
 	}
-	memcpy(entry->data, &opx_mr, sizeof(struct fi_opx_mr *));
+	*((struct fi_opx_mr **) entry->data) = opx_mr;
 
 	opx_mr->cache_entry	   = entry;
 	opx_mr->mr_fid.mem_desc	   = opx_mr;
@@ -496,7 +496,7 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 	opx_mr->mr_fid.key	   = FI_KEY_NOTAVAIL;
 	opx_mr->iov		   = entry->info.iov;
 	opx_mr->attr.mr_iov	   = &opx_mr->iov;
-	opx_mr->dmabuf_fd	   = -1;
+	opx_mr->dmabuf_fd	   = OPX_SDMA_NO_DMABUF_FD;
 	opx_mr->attr.iov_count	   = FI_OPX_IOV_LIMIT;
 	// opx_mr->attr.offset is set in the normal path
 	opx_mr->attr.access		    = access;
@@ -550,7 +550,7 @@ int opx_hmem_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *e
 void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
 	struct fi_opx_mr *opx_mr;
-	memcpy(&opx_mr, entry->data, sizeof(struct fi_opx_mr *));
+	opx_mr = *((struct fi_opx_mr **) entry->data);
 
 	/* HASH_DEL() on a never-added element frees the entire table. */
 	if (opx_mr->in_hashmap) {
@@ -569,7 +569,8 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 	assert(entry->use_cnt == 0);
 
 	/* Is this region current?  deregister it */
-	assert(opx_mr->dmabuf_fd != -1 || ((opx_mr->iov.iov_len == iov_len) && (opx_mr->iov.iov_base == iov_base)));
+	assert(opx_mr->dmabuf_fd != OPX_SDMA_NO_DMABUF_FD ||
+	       ((opx_mr->iov.iov_len == iov_len) && (opx_mr->iov.iov_base == iov_base)));
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "ENTRY cache %p, entry %p, data %p, iov_base %p, iov_len %zu\n", cache,
 	       entry, opx_mr, iov_base, iov_len);
 	if (opx_mr->attr.hmem_data) {
@@ -606,11 +607,7 @@ void opx_hmem_cache_delete_region(struct ofi_mr_cache *cache, struct ofi_mr_entr
 
 	// suppress_free set when opx_mr will be freed by the hfisvc deferred close
 	if (!suppress_free) {
-		if (opx_mr->dmabuf_internal) {
-			ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
-			close(opx_mr->dmabuf.fd);
-		}
-		opx_mr->dmabuf.fd = -1;
+		opx_mr_release_dmabuf_fd(opx_mr);
 		free(opx_mr);
 	}
 }

@@ -182,6 +182,12 @@ struct fi_opx_hfi1_sdma_work_entry {
 	uint64_t first_ack_time_ns;
 
 	/* ==== CACHELINE 1 ==== */
+	int	  dmabuf_fd;
+	uint32_t  unused_dmabuf_padding;
+	uintptr_t dmabuf_base;
+	uint64_t  unused_cacheline1_qw[6];
+
+	/* ==== CACHELINE 2 ==== */
 	struct fi_opx_hfi1_sdma_packet packets[OPX_HFI1_SDMA_MAX_PKTS_TID];
 
 	struct {
@@ -191,8 +197,10 @@ struct fi_opx_hfi1_sdma_work_entry {
 		uint8_t				 buf[FI_OPX_HFI1_SDMA_WE_BUF_LEN];
 	} bounce_buf;
 };
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_hfi1_sdma_work_entry, packets) == FI_OPX_CACHE_LINE_SIZE,
-			"Offset of fi_opx_hfi1_sdma_work_entry->packets should start at cacheline 1!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_hfi1_sdma_work_entry, dmabuf_fd) == FI_OPX_CACHE_LINE_SIZE,
+			"Offset of fi_opx_hfi1_sdma_work_entry->dmabuf_fd should start at cacheline 1!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_hfi1_sdma_work_entry, packets) == FI_OPX_CACHE_LINE_SIZE * 2,
+			"Offset of fi_opx_hfi1_sdma_work_entry->packets should start at cacheline 2!");
 
 struct fi_opx_hfi1_sdma_replay_work_entry {
 	struct fi_opx_hfi1_sdma_replay_work_entry *next;
@@ -265,6 +273,12 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dpu
 				const uint32_t tidoffset, const uint32_t ntidpairs, const uint32_t *const tidpairs,
 				const uint64_t is_hmem, const enum opx_hfi1_type hfi1_type)
 {
+#ifdef OPX_HMEM
+	/* The work pool does not zero, and the CTS sets this only for a dma-buf
+	 * send. */
+	params->dmabuf_src_mr = NULL;
+#endif
+
 	if (!fi_opx_hfi1_sdma_use_sdma(opx_ep, length, params->opcode, params->dput_iov[0].sbuf_iface,
 				       params->is_shm)) {
 		if (hfi1_type == OPX_HFI1_JKR) {
@@ -432,6 +446,20 @@ void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry *we, struct fi_
 	we->comp_state	= OPX_SDMA_COMP_FREE;
 	we->hmem.iface	= iface;
 	we->hmem.device = hmem_device;
+	we->dmabuf_fd	= OPX_SDMA_NO_DMABUF_FD;
+}
+
+__OPX_FORCE_INLINE__
+void opx_hfi1_dput_sdma_we_set_dmabuf(struct fi_opx_hfi1_dput_params *params)
+{
+#if defined(OPX_HMEM) && OPX_HAVE_SDMA_DMABUF
+	if (params->dmabuf_src_mr) {
+		params->sdma_we->dmabuf_fd   = params->dmabuf_src_mr->dmabuf.fd;
+		params->sdma_we->dmabuf_base = (uintptr_t) params->dmabuf_src_mr->dmabuf.base_addr;
+	}
+#else
+	(void) params;
+#endif
 }
 
 __OPX_FORCE_INLINE__
@@ -454,7 +482,7 @@ void fi_opx_hfi1_sdma_add_packet(struct fi_opx_hfi1_sdma_work_entry *we, struct 
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_set_meminfo(struct sdma_req_info *req_info, const uint64_t set_meminfo,
-				  const enum fi_hmem_iface iface, const uint64_t device)
+				  const unsigned kern_memtype, const uint64_t context0)
 {
 #ifdef OPX_HMEM
 	if (set_meminfo) {
@@ -462,12 +490,12 @@ void fi_opx_hfi1_sdma_set_meminfo(struct sdma_req_info *req_info, const uint64_t
 		// setting meminfo, and it will be the fist one:
 		// index 0 (the first payload IOV, or iov[1]).
 		const unsigned		 meminfo_idx = 0;
-		const unsigned		 type	     = OPX_HMEM_KERN_MEM_TYPE[iface];
+		const unsigned		 type	     = kern_memtype;
 		struct sdma_req_meminfo *meminfo     = (struct sdma_req_meminfo *) (req_info + 1);
 		meminfo->types			     = 0;
 		HFI1_MEMINFO_TYPE_ENTRY_SET(meminfo->types, meminfo_idx, type);
 
-		meminfo->context[0]  = device; // meminfo_idx
+		meminfo->context[0]  = context0; // meminfo_idx
 		meminfo->context[1]  = 0;
 		meminfo->context[2]  = 0;
 		meminfo->context[3]  = 0;
@@ -487,12 +515,37 @@ void fi_opx_hfi1_sdma_set_meminfo(struct sdma_req_info *req_info, const uint64_t
 #endif
 }
 
+/*
+ * The kernel type is not derivable from the iface: the same iface uses DMABUF
+ * with an fd in context[0], or the per-vendor type with a device ordinal.
+ */
+__OPX_FORCE_INLINE__
+void opx_hfi1_sdma_kern_memtype(struct fi_opx_ep *opx_ep, const enum fi_hmem_iface hmem_iface,
+				const uint64_t hmem_device, const int dmabuf_fd, unsigned *kern_memtype,
+				uint64_t *context0)
+{
+#ifdef OPX_HMEM
+#if OPX_HAVE_SDMA_DMABUF
+	if (dmabuf_fd != OPX_SDMA_NO_DMABUF_FD && (opx_ep->hfi->runtime_flags & HFI1_CAP_DMABUF)) {
+		*kern_memtype = HFI1_MEMINFO_TYPE_DMABUF;
+		*context0     = (uint64_t) (unsigned int) dmabuf_fd;
+		return;
+	}
+#endif
+	*kern_memtype = OPX_HMEM_KERN_MEM_TYPE[hmem_iface];
+	*context0     = hmem_device;
+#else
+	*kern_memtype = 0;
+	*context0     = 0;
+#endif
+}
+
 __OPX_FORCE_INLINE__
 int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 				  enum opx_sdma_comp_state     *requester_comp_state,
 				  union opx_hfi1_txe_scb_union *source_scb, struct iovec *iovs, const uint16_t num_iovs,
 				  const uint16_t num_packets, const uint16_t frag_size, const uint16_t req_control_bits,
-				  const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
+				  const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device, const int dmabuf_fd,
 				  const uint64_t last_packet_bytes, const uint32_t kdeth, const uint8_t is_sdma_we,
 				  const uint8_t tx_index)
 {
@@ -509,8 +562,12 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 
 	const uint8_t set_meminfo = (hmem_iface > FI_HMEM_SYSTEM) ? 1 : 0;
 
+	unsigned kern_memtype;
+	uint64_t context0;
+	opx_hfi1_sdma_kern_memtype(opx_ep, hmem_iface, hmem_device, dmabuf_fd, &kern_memtype, &context0);
+
 	struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&request->header_vec, set_meminfo);
-	fi_opx_hfi1_sdma_set_meminfo(req_info, set_meminfo, hmem_iface, hmem_device);
+	fi_opx_hfi1_sdma_set_meminfo(req_info, set_meminfo, kern_memtype, context0);
 
 	req_info->ctrl = req_control_bits | ((num_iovs + 1) << HFI1_SDMA_REQ_IOVCNT_SHIFT) |
 			 OPX_SDMA_REQ_SET_MEMINFO[set_meminfo];
@@ -574,15 +631,37 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sd
 	const uint64_t			 last_packet_bytes =
 		  (hdr->bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) ? hdr->dput.target.bytes : 0;
 
-	return opx_hfi1_sdma_enqueue_request(
-		opx_ep, we, &we->comp_state, &replay->scb, replay->iov, OPX_SDMA_REPLAY_DATA_IOV_COUNT,
-		1,			       // num_packets,
-		(payload_bytes + 63) & 0xFFC0, // Frag_size
-		FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, replay->hmem_iface, replay->hmem_device,
-		last_packet_bytes, // last packet bytes
-		0,		   // kdeth tid info unused for replays
-		0,		   // Not an SDMA WE
-		replay->tx_index);
+	/* A copy, because only the SDMA request takes a buffer-object offset:
+	 * replay->iov keeps the VA, which the PIO replay path dereferences. */
+	struct iovec payload_iov = *replay->iov;
+
+	if (replay->dmabuf_fd == OPX_SDMA_NO_DMABUF_FD) {
+		/* A device replay with no descriptor reverts to the per-vendor pin
+		 * path, which fails if HFISVC already holds the buffer. sdma_we is
+		 * set only for a bounce buffer, whose host copy dma-buf cannot name
+		 * and which is therefore not a downgrade. */
+		FI_OPX_DEBUG_COUNTERS_INC_COND(replay->hmem_iface != FI_HMEM_SYSTEM && replay->sdma_we == NULL,
+					       opx_ep->debug_counters.hmem.sdma_replay_dmabuf_downgraded);
+	} else {
+		assert((uintptr_t) payload_iov.iov_base >= replay->dmabuf_base);
+		if (OFI_UNLIKELY((uintptr_t) payload_iov.iov_base < replay->dmabuf_base)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"DMABUF replay VA %p is below BO base %#lx; rejecting request\n", payload_iov.iov_base,
+				replay->dmabuf_base);
+			return -FI_EINVAL;
+		}
+		payload_iov.iov_base = (void *) ((uintptr_t) payload_iov.iov_base - replay->dmabuf_base);
+	}
+
+	return opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state, &replay->scb, &payload_iov,
+					     OPX_SDMA_REPLAY_DATA_IOV_COUNT,
+					     1,				    // num_packets,
+					     (payload_bytes + 63) & 0xFFC0, // Frag_size
+					     FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, replay->hmem_iface,
+					     replay->hmem_device, replay->dmabuf_fd, last_packet_bytes,
+					     0, // kdeth tid info unused for replays
+					     0, // Not an SDMA WE
+					     replay->tx_index);
 }
 
 __OPX_FORCE_INLINE__
@@ -626,6 +705,11 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 		we->packets[i].replay->sdma_we		 = replay_back_ptr;
 		we->packets[i].replay->hmem_iface	 = we->hmem.iface;
 		we->packets[i].replay->hmem_device	 = we->hmem.device;
+		/* A bounce buffer holds host memory, which DMABUF cannot name.
+		 * The base goes with the descriptor: a live offset paired with
+		 * no descriptor would misdescribe a host buffer. */
+		we->packets[i].replay->dmabuf_fd   = we->use_bounce_buf ? OPX_SDMA_NO_DMABUF_FD : we->dmabuf_fd;
+		we->packets[i].replay->dmabuf_base = we->use_bounce_buf ? 0UL : we->dmabuf_base;
 		fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, we->flow,
 								       we->packets[i].replay, cc, we->packets[i].length,
 								       reliability, hfi1_type);
@@ -642,16 +726,41 @@ __OPX_FORCE_INLINE__
 void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we, uint32_t fragsize,
 				uint64_t last_packet_bytes)
 {
+	const int dmabuf_fd = we->use_bounce_buf ? OPX_SDMA_NO_DMABUF_FD : we->dmabuf_fd;
+
+	/* A copy: replay->iov keeps the VA for the PIO replay path. */
 	struct iovec payload_iov = {.iov_base = we->packets[0].replay->iov->iov_base,
 				    .iov_len  = (we->total_payload + 7) & -8};
+	if (dmabuf_fd != OPX_SDMA_NO_DMABUF_FD) {
+		/*
+		 * No fallback: the per-vendor path is what cannot pin an
+		 * already-pinned BO, so a downgrade would hide the cause.
+		 */
+		/* fi_opx_ep_tx_send_internal() rejected any send whose buffer sits
+		 * below its MR's BO base, and every chunk VA here is at or above
+		 * that buffer, so this cannot underflow. Reaching it means the MR
+		 * changed under an accepted operation: the replays are already
+		 * registered and the RTS is already on the wire, leaving no way to
+		 * retire the request, and a wrapped offset would hand the kernel a
+		 * wild address. */
+		assert((uintptr_t) we->packets[0].replay->iov->iov_base >= we->dmabuf_base);
+		if (OFI_UNLIKELY((uintptr_t) we->packets[0].replay->iov->iov_base < we->dmabuf_base)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"DMABUF payload VA %p is below BO base %#lx, aborting\n",
+				we->packets[0].replay->iov->iov_base, we->dmabuf_base);
+			abort();
+		}
+		payload_iov.iov_base = (void *) ((uintptr_t) we->packets[0].replay->iov->iov_base - we->dmabuf_base);
+	}
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.nontid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== Enqueuing non-tid request for SDMA Send.\n");
+
 	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state, &we->packets[0].replay->scb, &payload_iov,
 				      OPX_SDMA_NONTID_DATA_IOV_COUNT, we->num_packets, fragsize,
 				      FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, we->hmem.iface, we->hmem.device,
-				      last_packet_bytes,
+				      dmabuf_fd, last_packet_bytes,
 				      0, // kdeth tid info unused
 				      1, // This is an SDMA work entry
 				      we->tx_index);
@@ -684,18 +793,37 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 	       (int) FI_OPX_EXP_TID_GET((tidpair), IDX), tidoffset,
 	       tidOMshift ? tidoffset << KDETH_OM_LARGE_SHIFT : tidoffset << KDETH_OM_SMALL_SHIFT);
 
-	size_t	     tid_iov_len	 = ((end_tid_idx - start_tid_idx) + 1) * sizeof(uint32_t);
-	struct iovec payload_tid_iovs[2] = {
-		{.iov_base = we->packets[0].replay->iov->iov_base, .iov_len = (we->total_payload + 7) & -8},
-		{.iov_base = &tidpairs[start_tid_idx], .iov_len = tid_iov_len}};
+	size_t tid_iov_len = ((end_tid_idx - start_tid_idx) + 1) * sizeof(uint32_t);
+
+	const int dmabuf_fd = we->use_bounce_buf ? OPX_SDMA_NO_DMABUF_FD : we->dmabuf_fd;
+
+	/* Only iovs[0]; iovs[1] carries TID pairs, which are host memory. */
+	void *payload_base = we->packets[0].replay->iov->iov_base;
+	if (dmabuf_fd != OPX_SDMA_NO_DMABUF_FD) {
+		/* Unreachable for the same reason as the non-TID path above, and
+		 * additionally unrecoverable: the target has TID entries mapped
+		 * against this transfer that are only released on data completion. */
+		assert((uintptr_t) payload_base >= we->dmabuf_base);
+		if (OFI_UNLIKELY((uintptr_t) payload_base < we->dmabuf_base)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"DMABUF payload VA %p is below BO base %#lx, aborting\n", payload_base,
+				we->dmabuf_base);
+			abort();
+		}
+		payload_base = (void *) ((uintptr_t) payload_base - we->dmabuf_base);
+	}
+
+	struct iovec payload_tid_iovs[2] = {{.iov_base = payload_base, .iov_len = (we->total_payload + 7) & -8},
+					    {.iov_base = &tidpairs[start_tid_idx], .iov_len = tid_iov_len}};
 
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.tid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== Enqueuing tid request for SDMA Send\n");
+
 	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state, &we->packets[0].replay->scb, payload_tid_iovs,
 				      OPX_SDMA_TID_DATA_IOV_COUNT, we->num_packets, fragsize,
 				      FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS, we->hmem.iface, we->hmem.device,
-				      last_packet_bytes, kdeth,
+				      dmabuf_fd, last_packet_bytes, kdeth,
 				      1, // This is an SDMA work entry
 				      we->tx_index);
 }

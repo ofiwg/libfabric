@@ -1543,8 +1543,10 @@ union opx_hfi1_dput_iov {
 		uint64_t	   sbuf_device;
 		enum fi_hmem_iface rbuf_iface;
 		enum fi_hmem_iface sbuf_iface;
-		uint64_t	   pad;
-		uint64_t	   sbuf_handle;
+		/* Origin-local source MR, echoed back to the origin in the CTS.
+		 * Meaningful only when the origin set it on a dma-buf send. */
+		uint64_t sbuf_dmabuf_mr;
+		uint64_t sbuf_handle;
 	};
 };
 
@@ -1668,7 +1670,10 @@ struct opx_payload_rzv_contig {
 	uint64_t  src_iface;
 	uint64_t  immediate_info;
 	uintptr_t origin_byte_counter_vaddr;
-	uint64_t  unused;
+	/* Origin-local source MR. The target echoes it back in the CTS so the
+	 * origin can recover the dma-buf descriptor it registered the send with.
+	 * Zero when the send is not dma-buf described. */
+	uint64_t src_dmabuf_mr;
 
 	/* ==== CACHE LINE 1 (WFR/9B only) ==== */
 	union {

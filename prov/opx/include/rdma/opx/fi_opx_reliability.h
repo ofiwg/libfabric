@@ -342,7 +342,10 @@ struct fi_opx_reliability_tx_replay {
 	uint32_t	   sdma_we_use_count;
 	enum fi_hmem_iface hmem_iface;
 	uint64_t	   hmem_device;
-	uint64_t	   unused3[5];
+	int		   dmabuf_fd;
+	uint32_t	   unused_dmabuf_pad;
+	uintptr_t	   dmabuf_base;
+	uint64_t	   unused3[3];
 
 #ifndef NDEBUG
 	/* == CACHE LINE == */
@@ -1103,6 +1106,8 @@ fi_opx_reliability_service_replay_allocate(struct fi_opx_reliability_service *se
 #endif
 		return_value->hmem_iface  = FI_HMEM_SYSTEM;
 		return_value->hmem_device = 0;
+		return_value->dmabuf_fd	  = OPX_SDMA_NO_DMABUF_FD;
+		return_value->dmabuf_base = 0;
 
 		// This will implicitly set return_value->iov correctly
 		return_value->payload = (uint64_t *) &return_value->data;

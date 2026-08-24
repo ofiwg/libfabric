@@ -48,6 +48,10 @@
 
 #include "rdma/opx/opx_hfisvc_poll.h"
 
+#ifdef OPX_HMEM
+#include "opx_hmem_cache.h"
+#endif
+
 #include "fi_opx_hfi_select.h"
 #include "rdma/opx/opx_hfi1_cn5000.h"
 
@@ -2589,10 +2593,12 @@ union fi_opx_hfi1_deferred_work *opx_hfi1_rx_rzv_rts_tid_prep_cts(union fi_opx_h
 	cts_params->dput_iov[0].sbuf_iface  = params->dput_iov[params->cur_iov].sbuf_iface;
 	cts_params->dput_iov[0].sbuf_device = params->dput_iov[params->cur_iov].sbuf_device;
 	cts_params->dput_iov[0].sbuf_handle = params->dput_iov[params->cur_iov].sbuf_handle;
-	cts_params->dput_iov[0].rbuf	    = params->tid_info.cur_addr_range.buf;
-	cts_params->dput_iov[0].sbuf	    = adjusted_source_buf;
-	cts_params->dput_iov[0].bytes	    = cur_addr_range_tid_len;
-	cts_params->dst_vaddr		    = params->tid_info.cur_addr_range.buf;
+	/* Every chunk of a multi-CTS transfer names the same source region. */
+	cts_params->dput_iov[0].sbuf_dmabuf_mr = params->dput_iov[params->cur_iov].sbuf_dmabuf_mr;
+	cts_params->dput_iov[0].rbuf	       = params->tid_info.cur_addr_range.buf;
+	cts_params->dput_iov[0].sbuf	       = adjusted_source_buf;
+	cts_params->dput_iov[0].bytes	       = cur_addr_range_tid_len;
+	cts_params->dst_vaddr		       = params->tid_info.cur_addr_range.buf;
 
 	cts_params->rzv_comp->tid_vaddr		= params->tid_info.cur_addr_range.buf;
 	cts_params->rzv_comp->tid_length	= cur_addr_range_tid_len;
@@ -3291,9 +3297,9 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 			    uintptr_t origin_byte_counter_vaddr, struct opx_context *const target_context,
 			    const uintptr_t dst_vaddr, const enum fi_hmem_iface dst_iface, const uint64_t dst_device,
 			    const uint64_t immediate_data, const uint64_t immediate_end_bytes,
-			    const struct fi_opx_hmem_iov *src_iovs, uint8_t opcode, const unsigned is_shm,
-			    const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
-			    const enum opx_hfi1_type hfi1_type)
+			    const struct fi_opx_hmem_iov *src_iovs, const uint64_t src_dmabuf_mr, uint8_t opcode,
+			    const unsigned is_shm, const enum ofi_reliability_kind reliability,
+			    const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type)
 {
 	/*
 	 * Note: RX_RZV_RTS tracing is done in the caller (fi_opx_endpoint.h) where
@@ -3324,6 +3330,9 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 		params->dput_iov[i].rbuf_device = dst_device;
 		params->dput_iov[i].bytes	= src_iov->len;
 		params->dput_iov[i].sbuf_handle = 0; // Set this properly after implementing gdrcopy intranode fallback
+		/* Echoed back to the origin in the CTS. Zero unless the origin
+		 * described this send with a dma-buf memory region. */
+		params->dput_iov[i].sbuf_dmabuf_mr = src_dmabuf_mr;
 		rbuf_offset += src_iov->len;
 		++src_iov;
 	}
@@ -4817,6 +4826,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 				fi_opx_hfi1_sdma_init_we(params->sdma_we, params->cc, params->slid, subctxt_rx,
 							 dput_iov[i].sbuf_iface, (int) dput_iov[i].sbuf_device);
 				params->sdma_we->tx_index = params->tx_index;
+				opx_hfi1_dput_sdma_we_set_dmabuf(params);
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
@@ -5199,6 +5209,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 				fi_opx_hfi1_sdma_init_we(params->sdma_we, params->cc, params->slid, params->origin_rx,
 							 dput_iov[i].sbuf_iface, (int) dput_iov[i].sbuf_device);
 				params->sdma_we->tx_index = params->tx_index;
+				opx_hfi1_dput_sdma_we_set_dmabuf(params);
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
@@ -5602,7 +5613,24 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 
 	assert((ntidpairs == 0) || (niov == 1));
 	assert(origin_byte_counter == NULL || iov_total_bytes <= *origin_byte_counter);
+
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, tidoffset, ntidpairs, tidpairs, is_hmem, hfi1_type);
+
+	/*
+	 * The send-side descriptor is gone by the time the CTS arrives, so look
+	 * the source MR up from the address, iface and device echoed back in it.
+	 * After dput_sdma_init(): only the SDMA path releases this reference.
+	 */
+#if defined(OPX_HMEM) && OPX_HAVE_SDMA_DMABUF
+	if (dput_iov[0].sbuf_iface != FI_HMEM_SYSTEM && (opx_ep->hfi->runtime_flags & HFI1_CAP_DMABUF) &&
+	    params->work_elem.work_type == OPX_WORK_TYPE_SDMA && !is_shm) {
+		struct fi_opx_mr *src_mr = (struct fi_opx_mr *) (uintptr_t) dput_iov[0].sbuf_dmabuf_mr;
+
+		if (src_mr && src_mr->dmabuf.fd != OPX_SDMA_NO_DMABUF_FD) {
+			params->dmabuf_src_mr = src_mr;
+		}
+	}
+#endif
 
 	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_shm, opx_ep->debug_counters.hmem.dput_rzv_intranode);
 	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_shm &&
@@ -6751,7 +6779,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 		contiguous->src_iface			  = (uint64_t) src_iface;
 		contiguous->immediate_info		  = immediate_info.qw0;
 		contiguous->origin_byte_counter_vaddr	  = origin_byte_counter_vaddr;
-		contiguous->unused			  = 0;
+		contiguous->src_dmabuf_mr		  = 0; /* shm: dma-buf sends never take this path */
 
 		if (immediate_total) {
 			uint8_t *sbuf;
@@ -6938,7 +6966,7 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 				  (uintptr_t) buf + immediate_total, /* src_vaddr */
 				  (len - immediate_total),	     /* src_len */
 				  src_device_id, (uint64_t) src_iface, immediate_info.qw0, origin_byte_counter_vaddr,
-				  0 /* unused */);
+				  (uint64_t) (uintptr_t) opx_mr); /* src_dmabuf_mr */
 
 	/* consume one credit for the rendezvous payload metadata */
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -7285,7 +7313,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 		contiguous->src_iface			  = (uint64_t) src_iface;
 		contiguous->immediate_info		  = immediate_info.qw0;
 		contiguous->origin_byte_counter_vaddr	  = origin_byte_counter_vaddr;
-		contiguous->unused			  = 0;
+		contiguous->src_dmabuf_mr		  = 0; /* shm: dma-buf sends never take this path */
 
 		if (immediate_total) {
 			uint8_t *sbuf;
@@ -7469,7 +7497,7 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 				  (uint64_t) src_iface,		     /* rzv.contiguous.src_iface                 */
 				  immediate_info.qw0,		     /* rzv.contiguous.immediate_info            */
 				  origin_byte_counter_vaddr,	     /* rzv.contiguous.origin_byte_counter_vaddr */
-				  -1UL /* unused */);		     /* rzv.contiguous.unused[0]                 */
+				  (uint64_t) (uintptr_t) opx_mr);    /* rzv.contiguous.src_dmabuf_mr             */
 
 	/* consume one credit for the rendezvous payload metadata */
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);

@@ -251,11 +251,7 @@ int opx_hfisvc_mr_deferred_close(struct opx_domain_deferred_work *work)
 	struct fi_opx_mr *opx_mr = work->opx_mr;
 
 	if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_CLOSED) {
-		if (opx_mr->dmabuf_internal) {
-			ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
-			close(opx_mr->dmabuf.fd);
-		}
-		opx_mr->dmabuf.fd = -1;
+		opx_mr_release_dmabuf_fd(opx_mr);
 		free(opx_mr);
 		work->opx_mr = NULL;
 		return FI_SUCCESS;

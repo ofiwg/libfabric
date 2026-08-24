@@ -328,9 +328,9 @@ void fi_opx_hfi1_rx_rzv_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packe
 			    uintptr_t origin_byte_counter_vaddr, struct opx_context *const target_context,
 			    const uintptr_t dst_vaddr, const enum fi_hmem_iface dst_iface, const uint64_t dst_device,
 			    const uint64_t immediate_data, const uint64_t immediate_end_bytes,
-			    const struct fi_opx_hmem_iov *src_iovs, uint8_t opcode, const unsigned is_shm,
-			    const enum ofi_reliability_kind reliability, const uint32_t u32_extended_rx,
-			    const enum opx_hfi1_type hfi1_type);
+			    const struct fi_opx_hmem_iov *src_iovs, const uint64_t src_dmabuf_mr, uint8_t opcode,
+			    const unsigned is_shm, const enum ofi_reliability_kind reliability,
+			    const uint32_t u32_extended_rx, const enum opx_hfi1_type hfi1_type);
 
 #ifdef OPX_HMEM
 void opx_hfi1_rx_ipc_rts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr *const hdr,
@@ -410,7 +410,10 @@ struct fi_opx_hfi1_dput_params {
 
 	struct fi_opx_hmem_iov compare_iov;
 	uint8_t		       inject_data[FI_OPX_HFI1_PACKET_IMM];
-	uint32_t	       unused_padding[3];
+	uint32_t	       unused_padding;
+	/* Source MR, recovered from the CTS, holding the dma-buf fd for the
+	 * transfer. Borrowed: the application owns it for the send's lifetime. */
+	struct fi_opx_mr *dmabuf_src_mr;
 	/* Either FI_OPX_MAX_DPUT_IOV iov's or
 	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
 	union {
@@ -423,6 +426,8 @@ struct fi_opx_hfi1_dput_params {
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_hfi1_dput_params, compare_iov) & 7) == 0,
 			"compare_iov not 8-byte aligned!");
+OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_hfi1_dput_params, dmabuf_src_mr) & 7) == 0,
+			"dmabuf_src_mr not 8-byte aligned!");
 OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_hfi1_dput_params, iov) & 63) == 0, "iov not 64-byte aligned!");
 
 struct fi_opx_hfi1_rx_rzv_rts_params {

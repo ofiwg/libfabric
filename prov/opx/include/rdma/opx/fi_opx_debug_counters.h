@@ -493,6 +493,7 @@ struct fi_opx_debug_counters {
 		uint64_t dput_rzv_pio;
 		uint64_t dput_rzv_sdma;
 		uint64_t dput_rzv_tid;
+		uint64_t sdma_replay_dmabuf_downgraded;
 
 		uint64_t posted_recv_msg;
 		uint64_t posted_recv_tag;
@@ -753,6 +754,7 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.dput_rzv_pio);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.dput_rzv_sdma);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.dput_rzv_tid);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.sdma_replay_dmabuf_downgraded);
 
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.posted_recv_msg);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.posted_recv_tag);
