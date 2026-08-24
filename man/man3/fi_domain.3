@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_domain" "3" "2026\-08\-21" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_domain" "3" "2026\-08\-24" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -281,7 +281,7 @@ applications and multi-threaded applications using standard endpoints
 which desire lockless operation.
 Applications must serialize access to all objects under the same domain.
 This includes endpoints, transmit and receive contexts, completion
-queues and counters, and registered memory regions.
+queues and counters, address vectors, and registered memory regions.
 .TP
 \f[I]FI_THREAD_ENDPOINT\f[R] (deprecated)
 The endpoint threading model is similar to FI_THREAD_FID, but with the
