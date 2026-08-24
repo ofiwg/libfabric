@@ -29,32 +29,6 @@ int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
 	return 0;
 }
 
-static inline void efa_base_ep_lock_cq(struct efa_base_ep *base_ep)
-{
-	struct efa_cq *tx_cq, *rx_cq;
-
-	tx_cq = efa_base_ep_get_tx_cq(base_ep);
-	rx_cq = efa_base_ep_get_rx_cq(base_ep);
-
-	if (rx_cq)
-		ofi_genlock_lock(&rx_cq->util_cq.ep_list_lock);
-	if (tx_cq && tx_cq != rx_cq)
-		ofi_genlock_lock(&tx_cq->util_cq.ep_list_lock);
-}
-
-static inline void efa_base_ep_unlock_cq(struct efa_base_ep *base_ep)
-{
-	struct efa_cq *tx_cq, *rx_cq;
-
-	tx_cq = efa_base_ep_get_tx_cq(base_ep);
-	rx_cq = efa_base_ep_get_rx_cq(base_ep);
-
-	if (tx_cq && tx_cq != rx_cq)
-		ofi_genlock_unlock(&tx_cq->util_cq.ep_list_lock);
-	if (rx_cq)
-		ofi_genlock_unlock(&rx_cq->util_cq.ep_list_lock);
-}
-
 int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 {
 	/*
@@ -66,9 +40,9 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 	 * Lock ordering: device lock -> CQ locks -> QP operations
 	 */
 	EFA_GENLOCK_LOCK(&base_ep->domain->device->qp_table_lock, efa_qp_table_lock_sym);
-	efa_base_ep_lock_cq(base_ep);
+	efa_cq_lock_ep_list(base_ep);
 	efa_base_ep_destruct_qp_unsafe(base_ep);
-	efa_base_ep_unlock_cq(base_ep);
+	efa_cq_unlock_ep_list(base_ep);
 	EFA_GENLOCK_UNLOCK(&base_ep->domain->device->qp_table_lock, efa_qp_table_lock_sym);
 	return 0;
 }
@@ -1082,7 +1056,7 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep)
 	 * Lock ordering: device lock -> CQ locks -> QP operations
 	 */
 	EFA_GENLOCK_LOCK(&ep->domain->device->qp_table_lock, efa_qp_table_lock_sym);
-	efa_base_ep_lock_cq(ep);
+	efa_cq_lock_ep_list(ep);
 	err = efa_base_ep_create_qp(ep, &scq->ibv_cq, &rcq->ibv_cq);
 	if (err)
 		goto out;
@@ -1090,7 +1064,7 @@ int efa_base_ep_create_and_enable_qp(struct efa_base_ep *ep)
 	err = efa_base_ep_enable(ep);
 
 out:
-	efa_base_ep_unlock_cq(ep);
+	efa_cq_unlock_ep_list(ep);
 	EFA_GENLOCK_UNLOCK(&ep->domain->device->qp_table_lock, efa_qp_table_lock_sym);
 	return err;
 }

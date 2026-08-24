@@ -49,6 +49,32 @@ extern struct fi_ops_cq efa_cq_bypass_util_cq_ops;
 
 extern struct fi_ops efa_cq_fi_ops;
 
+static inline void efa_cq_lock_ep_list(struct efa_base_ep *base_ep)
+{
+	struct efa_cq *tx_cq, *rx_cq;
+
+	tx_cq = efa_base_ep_get_tx_cq(base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(base_ep);
+
+	if (rx_cq)
+		ofi_genlock_lock(&rx_cq->util_cq.ep_list_lock);
+	if (tx_cq && tx_cq != rx_cq)
+		ofi_genlock_lock(&tx_cq->util_cq.ep_list_lock);
+}
+
+static inline void efa_cq_unlock_ep_list(struct efa_base_ep *base_ep)
+{
+	struct efa_cq *tx_cq, *rx_cq;
+
+	tx_cq = efa_base_ep_get_tx_cq(base_ep);
+	rx_cq = efa_base_ep_get_rx_cq(base_ep);
+
+	if (tx_cq && tx_cq != rx_cq)
+		ofi_genlock_unlock(&tx_cq->util_cq.ep_list_lock);
+	if (rx_cq)
+		ofi_genlock_unlock(&rx_cq->util_cq.ep_list_lock);
+}
+
 /*
  * Control header with completion data. CQ data length is static.
  */

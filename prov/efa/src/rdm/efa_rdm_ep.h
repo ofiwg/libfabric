@@ -59,6 +59,8 @@ struct efa_rdm_ep_queued_copy {
 struct efa_rdm_ep {
 	struct efa_base_ep base_ep;
 
+	struct ofi_genlock srx_lock;
+
 	/* self_ah necessary for local reads when application does not insert
 	 * its own address into the AV */
 	struct efa_ah *self_ah;

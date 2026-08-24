@@ -1482,6 +1482,7 @@ void test_efa_rdm_ep_rx_refill_impl(void **state, int threshold, int rx_size)
 	assert_int_equal(efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep), rx_size);
 
 	/* Grow the rx pool and post rx pkts */
+	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
 	efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep));
 
@@ -1517,7 +1518,7 @@ void test_efa_rdm_ep_rx_refill_impl(void **state, int threshold, int rx_size)
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, rx_size - MIN(rx_size, threshold));
 
 	efa_rdm_ep_bulk_post_internal_rx_pkts(efa_rdm_ep);
-
+	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 	/**
 	 * efa_rx_pkts_to_post == min(FI_EFA_RX_REFILL_THRESHOLD, FI_EFA_RX_SIZE)
 	 * pkts should be refilled

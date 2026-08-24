@@ -996,6 +996,8 @@ void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 {
 	int err;
 
+	assert(ofi_genlock_held(&ep->srx_lock));
+
 	if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0 && ep->efa_rx_pkts_held == 0) {
 		/* All of efa_rx_pkts_posted, efa_rx_pkts_to_post and
 		 * efa_rx_pkts_held equal to 0 means

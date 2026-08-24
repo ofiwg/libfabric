@@ -13,7 +13,7 @@
  * (efa-rdm) for setup that doesn't depend on which extended struct embeds
  * the base efa_domain.
  *
- * Caller must allocate efa_domain, initialize srx_lock, and validate the
+ * Caller must allocate efa_domain and validate the
  * info type before calling. After this returns 0 the caller installs
  * path-specific ops tables, runs path-specific init, and then calls
  * efa_domain_finalize_base.

@@ -1167,18 +1167,20 @@ void test_efa_rdm_ope_ack_packet_tracking_wait_send_common(void **state, int pkt
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_cq *efa_cq;
 
 	test_efa_rdm_ope_ack_packet_tracking_common(resource, pkt_type, 0, IBV_WC_SUCCESS, 0, &rxe);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
 
 	/* It should post a RECEIPT packet and add the rxe to the list */
 	assert_false(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
 
 	/* Poll the cq via wait_send */
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 
 	/* The cq poll should remove the rxe from the list */
 	assert_true(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
@@ -1219,10 +1221,12 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_ope *rxe, *rxe2;
+	struct efa_cq *efa_cq;
 
 	test_efa_rdm_ope_ack_packet_tracking_common(resource, pkt_type, 0, IBV_WC_GENERAL_ERR, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, &rxe);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
 
 	/*
 	 * Call the 1st efa_rdm_ep_wait_send.
@@ -1230,9 +1234,9 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 	 * Then it will not try to poll the cq again because of the peer becomes
 	 * unresponsive. See logic in efa_rdm_ep_close_should_wait_send()
 	 */
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 	assert_true(!!(rxe->peer->flags & EFA_RDM_PEER_UNRESP));
 
 	/* Now posting another ctrl packet against the same unresponsive peer */
@@ -1248,9 +1252,9 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 	will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
 
 	/* Kick off the second wait_send, which should NOT try to progress more because of the unresp peer */
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_posted_ack_list), 1);
 }
 

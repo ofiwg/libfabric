@@ -123,7 +123,6 @@ int efa_rdm_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	struct efa_rdm_domain *rdm_domain;
 	struct efa_domain *efa_domain;
 	int ret = 0, err;
-	bool use_lock;
 
 	/* DGRAM is also served by the "efa" fabric but uses the base
 	 * struct and base ops. Forward to the base path.
@@ -145,21 +144,9 @@ int efa_rdm_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 	efa_domain = &rdm_domain->efa_domain;
 
-	/* Initialize srx_lock first so efa_rdm_domain_close can always destroy it */
-    use_lock = ofi_thread_level(info->domain_attr->threading) ==
-           ofi_thread_level(FI_THREAD_SAFE);
-	err = ofi_genlock_init(&rdm_domain->srx_lock, use_lock ? OFI_LOCK_MUTEX : OFI_LOCK_NONE);
-	if (err) {
-		EFA_WARN(FI_LOG_DOMAIN, "srx lock init failed! err: %d\n", err);
-		free(rdm_domain);
-		*domain_fid = NULL;
-		return err;
-	}
-
 	if (!EFA_INFO_TYPE_IS_RDM(info)) {
 		EFA_WARN(FI_LOG_DOMAIN,
 			 "efa_rdm_domain_open called with non-rdm info\n");
-		ofi_genlock_destroy(&rdm_domain->srx_lock);
 		free(rdm_domain);
 		*domain_fid = NULL;
 		return -FI_EINVAL;
@@ -244,7 +231,6 @@ static int efa_rdm_domain_close(fid_t fid)
 
 	efa_domain_destruct(efa_domain);
 
-	ofi_genlock_destroy(&rdm_domain->srx_lock);
 	free(rdm_domain);
 	return 0;
 }
