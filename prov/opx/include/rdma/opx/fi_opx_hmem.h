@@ -301,21 +301,31 @@ unsigned opx_hmem_iov_init(const void *buf, const size_t len, const void *desc, 
 #endif
 }
 
+/*
+ * Indexed by fi_hmem_iface. The FI_HMEM_ZE entry's type 1 is Level Zero's own
+ * dma-buf export, not HFI1_MEMINFO_TYPE_DMABUF.
+ */
 static const unsigned OPX_HMEM_KERN_MEM_TYPE[4] = {
 #ifdef OPX_HMEM
 	HFI1_MEMINFO_TYPE_SYSTEM, HFI1_MEMINFO_TYPE_NVIDIA, 2, /* HFI1_MEMINFO_TYPE_AMD */
-	1						       /* HFI1_MEMINFO_TYPE_DMABUF */
+	1						       /* FI_HMEM_ZE: legacy ZE dma-buf type */
 #endif
 };
 
-static const unsigned OPX_HMEM_OFI_MEM_TYPE[4] = {
+/*
+ * Indexed by the kernel meminfo type, a 4-bit field decoded out of a request, so
+ * callers must bounds-check before indexing. There is deliberately no
+ * HFI1_MEMINFO_TYPE_DMABUF entry: fi_hmem_iface names the owning vendor
+ * runtime, and a dma-buf request does not identify one.
+ */
 #ifdef OPX_HMEM
-	FI_HMEM_SYSTEM, /* HFI1_MEMINFO_TYPE_SYSTEM */
-	FI_HMEM_ZE,	/* HFI1_MEMINFO_TYPE_DMABUF */
-	FI_HMEM_ROCR,	/* HFI1_MEMINFO_TYPE_AMD    */
-	FI_HMEM_CUDA	/* HFI1_MEMINFO_TYPE_NVIDIA */
-#endif
+static const unsigned OPX_HMEM_OFI_MEM_TYPE[] = {
+	[HFI1_MEMINFO_TYPE_SYSTEM] = FI_HMEM_SYSTEM,
+	[HFI1_MEMINFO_TYPE_NVIDIA] = FI_HMEM_CUDA,
+	[HFI1_MEMINFO_TYPE_AMD]	   = FI_HMEM_ROCR,
+	[1]			   = FI_HMEM_ZE, /* legacy ZE dma-buf type */
 };
+#endif
 
 #ifdef OPX_HMEM
 #define OPX_HMEM_COPY_FROM(dst, src, len, handle, threshold, src_iface, src_device)                  \

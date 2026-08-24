@@ -1487,6 +1487,7 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 						 0UL,		     /* immediate_data */
 						 0UL,		     /* immediate_end_block_count */
 						 &payload->rendezvous.noncontiguous.iov[0],
+						 0UL, /* no source MR: dma-buf sends are contiguous only */
 						 FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG, is_shm,
 						 reliability, /* compile-time constant expression */
 						 u32_ext_rx, hfi1_type);
@@ -1528,8 +1529,8 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 				(uintptr_t) (rbuf + immediate_total), /* receive buffer virtual address */
 				FI_HMEM_SYSTEM,			      /* receive buffer iface */
 				0UL,				      /* receive buffer device */
-				immediate_total, immediate_tail, src_dst_iov, FI_OPX_HFI_DPUT_OPCODE_RZV, is_shm,
-				reliability, /* compile-time constant expression */
+				immediate_total, immediate_tail, src_dst_iov, contiguous->src_dmabuf_mr,
+				FI_OPX_HFI_DPUT_OPCODE_RZV, is_shm, reliability, /* compile-time constant expression */
 				u32_ext_rx, hfi1_type);
 
 			opx_ep_copy_immediate_data(opx_ep, immediate_info, contiguous, immediate_byte_count,
@@ -1640,8 +1641,8 @@ void fi_opx_handle_recv_rts(const union opx_hfi1_packet_hdr *const	  hdr,
 			FI_OPX_FABRIC_RX_RZV_RTS(
 				opx_ep, hdr, payload, origin_rx, 1, contiguous->origin_byte_counter_vaddr, context,
 				(uintptr_t) (rbuf + immediate_total), rbuf_iface, rbuf_device, immediate_total,
-				immediate_tail, src_dst_iov, FI_OPX_HFI_DPUT_OPCODE_RZV, is_shm,
-				reliability, /* compile-time constant expression */
+				immediate_tail, src_dst_iov, contiguous->src_dmabuf_mr, FI_OPX_HFI_DPUT_OPCODE_RZV,
+				is_shm, reliability, /* compile-time constant expression */
 				u32_ext_rx, hfi1_type);
 
 			opx_ep_copy_immediate_data(opx_ep, immediate_info, contiguous, immediate_byte_count,
@@ -4719,7 +4720,8 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 				  uint64_t tag, void *user_context, const uint32_t data, const uint64_t tx_op_flags,
 				  const uint64_t caps, const enum ofi_reliability_kind reliability,
 				  const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
-				  const uint64_t hmem_device, const enum opx_hfi1_type hfi1_type);
+				  const uint64_t hmem_device, const int dmabuf_fd, const uintptr_t dmabuf_base,
+				  const enum opx_hfi1_type hfi1_type);
 
 static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 						 fi_addr_t dest_addr, uint64_t tag, void *context, const uint32_t data,
@@ -4778,14 +4780,52 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	const uint64_t do_cq_completion = fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
 
+#if defined(OPX_HMEM) && OPX_HAVE_SDMA_DMABUF
+	/*
+	 * A dma-buf SDMA request carries a buffer-object-relative offset, formed
+	 * downstream as (VA - dmabuf.base_addr). Validate the pairing here, at the
+	 * only point that can still refuse the operation: past this call the eager
+	 * path has taken a replay and the rendezvous path has put an RTS on the
+	 * wire, and neither the deferred-work loop nor the reliability layer has a
+	 * way to retire a request that can never succeed.
+	 */
+	if (is_contiguous && total_len && desc && hmem_iface != FI_HMEM_SYSTEM &&
+	    (opx_ep->hfi->runtime_flags & HFI1_CAP_DMABUF)) {
+		const struct fi_opx_mr *chk_mr = (const struct fi_opx_mr *) desc;
+
+		if (chk_mr->dmabuf.fd != OPX_SDMA_NO_DMABUF_FD &&
+		    OFI_UNLIKELY((uintptr_t) buf < (uintptr_t) chk_mr->dmabuf.base_addr)) {
+			assert((uintptr_t) buf >= (uintptr_t) chk_mr->dmabuf.base_addr);
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"DMABUF send buffer %p is below the memory region's BO base %p; rejecting send\n", buf,
+				chk_mr->dmabuf.base_addr);
+			OPX_TRACE_TX_END_ERROR(OPX_TRACE_EVENT_TX_SEND, 0, 0);
+			return -FI_EINVAL;
+		}
+	}
+#endif
+
 	const uint32_t rzv_min = opx_ep_tx_rzv_min(opx_ep, opx_tx, hmem_iface);
 
 	if (total_len < rzv_min) {
 		if (total_len <= opx_tx->pio_flow_eager_tx_bytes) {
+			int	  eager_dmabuf_fd   = OPX_SDMA_NO_DMABUF_FD;
+			uintptr_t eager_dmabuf_base = 0;
 #ifdef OPX_HMEM
 			if (opx_ep->use_hfisvc && hmem_iface != FI_HMEM_SYSTEM) {
 				opx_hfisvc_mr_lazy_open_if_deferred(opx_ep->domain, (struct fi_opx_mr *) desc);
 			}
+#if OPX_HAVE_SDMA_DMABUF
+			if (desc && hmem_iface != FI_HMEM_SYSTEM && (opx_ep->hfi->runtime_flags & HFI1_CAP_DMABUF)) {
+				const struct fi_opx_mr *src_mr = (const struct fi_opx_mr *) desc;
+
+				if (src_mr->dmabuf.fd != OPX_SDMA_NO_DMABUF_FD) {
+					assert(src_mr->dmabuf.fd >= 0);
+					eager_dmabuf_fd	  = src_mr->dmabuf.fd;
+					eager_dmabuf_base = (uintptr_t) src_mr->dmabuf.base_addr;
+				}
+			}
+#endif
 #endif
 			/* FI_INJECT is excluded because the payload iov points at the caller's
 			 * buffer until the replay retires; unaligned lengths stay on PIO because
@@ -4797,7 +4837,8 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			    !fi_opx_hfi1_tx_is_shm(opx_ep, addr)) {
 				rc = opx_hfi1_tx_send_egr_sdma(ep, buf, total_len, addr, tag, context, data,
 							       tx_op_flags, caps, reliability, do_cq_completion,
-							       hmem_iface, hmem_device, hfi1_type);
+							       hmem_iface, hmem_device, eager_dmabuf_fd,
+							       eager_dmabuf_base, hfi1_type);
 				if (OFI_LIKELY(rc == FI_SUCCESS)) {
 					OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 					return FI_SUCCESS;

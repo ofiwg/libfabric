@@ -43,6 +43,8 @@
 #include <ofi_enosys.h>
 
 #include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
 
 #define OPX_MR_CLOSE_MAX_WAIT_ITERS (1ul << 31)
 
@@ -82,11 +84,7 @@ static int fi_opx_close_mr(fid_t fid)
 
 	// suppress_free set when opx_mr will be freed by the hfisvc deferred close
 	if (!suppress_free) {
-		if (opx_mr->dmabuf_internal) {
-			ofi_hmem_put_dmabuf_fd(opx_mr->attr.iface, opx_mr->dmabuf.fd);
-			close(opx_mr->dmabuf.fd);
-		}
-		opx_mr->dmabuf.fd = -1;
+		opx_mr_release_dmabuf_fd(opx_mr);
 		free(opx_mr);
 	}
 	// opx_mr (the object passed in as fid) is now unusable
@@ -202,7 +200,8 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	 * Reject these cases up front with a libfabric-level error rather than
 	 * letting them propagate to a kernel-side failure or a silent
 	 * truncation. TODO: document this limit along with HFISVC */
-	if (opx_domain->use_hfisvc && (!iov->iov_base || iov->iov_len > UINT32_MAX)) {
+	if (opx_domain->use_hfisvc && (!iov->iov_base || iov->iov_len > UINT32_MAX ||
+				       ((flags & FI_MR_DMABUF) && attr && attr->dmabuf && !attr->dmabuf->base_addr))) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 			"HFISVC cannot register MR with iov_base=%p iov_len=%zu (NULL base or len > UINT32_MAX is unsupported by HFISVC pinning)\n",
 			iov->iov_base, iov->iov_len);
@@ -242,21 +241,30 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 			errno = FI_EINVAL;
 			return -errno;
 		}
+	} else if ((flags & FI_MR_DMABUF) && attr) {
+		hmem_iface  = attr->iface;
+		hmem_device = opx_hmem_get_attr_device(hmem_iface, attr);
 	} else {
 		hmem_iface = opx_hmem_get_ptr_iface(iov->iov_base, &hmem_device, &hmem_unified);
 	}
 
-	if ((hmem_iface == FI_HMEM_CUDA || hmem_iface == FI_HMEM_ROCR) && (flags & FI_MR_DMABUF) == 0) {
+	const struct fi_mr_dmabuf *app_dmabuf =
+		((flags & FI_MR_DMABUF) && attr && attr->dmabuf && attr->dmabuf->base_addr) ? attr->dmabuf : NULL;
+
+	if ((hmem_iface == FI_HMEM_CUDA || hmem_iface == FI_HMEM_ROCR) &&
+	    (((flags & FI_MR_DMABUF) == 0) || app_dmabuf)) {
 		struct ofi_mr_entry *entry;
 		struct ofi_mr_info   info = {.iface	   = hmem_iface,
 					     .hmem_unified = hmem_unified ? 1 : 0,
 					     .device	   = hmem_device,
-					     .iov.iov_base = iov->iov_base,
-					     .iov.iov_len  = iov->iov_len,
+					     .iov.iov_base = app_dmabuf ?
+								     (char *) app_dmabuf->base_addr + app_dmabuf->offset :
+								     iov->iov_base,
+					     .iov.iov_len  = app_dmabuf ? app_dmabuf->len : iov->iov_len,
 					     .flags	   = flags};
 		OPX_TRACE_MR_BEGIN(OPX_TRACE_EVENT_MR_CACHE_SEARCH, 0, 0);
 		if (!ofi_mr_cache_search(opx_domain->hmem_domain->hmem_cache, &info, &entry)) {
-			memcpy(&opx_mr, entry->data, sizeof(struct fi_opx_mr *));
+			opx_mr	      = *((struct fi_opx_mr **) entry->data);
 			opx_mr->flags = flags;
 			/* Whenever we have a cache miss, we initialize the KEY to FI_KEY_NOTAVAIL.
 			 * Thus, we know a new entry was created if the key is not set. If the key is set,
@@ -281,6 +289,32 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 						OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) FI_EINVAL, 0);
 						return -errno;
 					}
+					if (app_dmabuf) {
+						int dup_fd = fcntl(app_dmabuf->fd, F_DUPFD_CLOEXEC, 0);
+
+						if (dup_fd < 0) {
+							int saved_errno = errno;
+							FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+								"Unable to duplicate dma-buf fd %d (%s)\n",
+								app_dmabuf->fd, strerror(saved_errno));
+							ofi_mr_cache_delete(opx_domain->hmem_domain->hmem_cache, entry);
+							OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_CACHE_SEARCH,
+									       (uint64_t) saved_errno, 0);
+							OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG,
+									       (uint64_t) saved_errno, 0);
+							errno = saved_errno;
+							return -saved_errno;
+						}
+
+						opx_mr->dmabuf	     = *app_dmabuf;
+						opx_mr->dmabuf.fd    = dup_fd;
+						opx_mr->dmabuf_owner = OPX_MR_DMABUF_DUPLICATED;
+						opx_mr->attr.iface   = hmem_iface;
+						opx_mr->attr.dmabuf  = &opx_mr->dmabuf;
+						opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPEN_DEFERRED;
+						goto dmabuf_ready;
+					}
+
 					size_t	  size;
 					uintptr_t base;
 					int	  fd;
@@ -311,7 +345,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					       "ofi_hmem_get_dmabuf_fd buf=%p, len=%lu, iface=%u, offset=%lu, fd=%d\n",
 					       iov->iov_base, iov->iov_len, hmem_iface, dmabuf_offset, fd);
 
-					opx_mr->dmabuf_internal	 = 1;
+					opx_mr->dmabuf_owner	 = OPX_MR_DMABUF_EXPORTED;
 					opx_mr->dmabuf.fd	 = fd;
 					opx_mr->dmabuf.offset	 = dmabuf_offset;
 					opx_mr->dmabuf.len	 = size;
@@ -319,6 +353,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 					opx_mr->attr.iface	 = hmem_iface;
 					opx_mr->attr.dmabuf	 = &opx_mr->dmabuf;
 					opx_mr->hfisvc.state	 = OPX_MR_HFISVC_STATE_OPEN_DEFERRED;
+				dmabuf_ready:;
 				}
 #endif
 				opx_mr->hfisvc.access_key = (uint32_t) -1;
@@ -374,6 +409,9 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	opx_mr->attr.iface = FI_HMEM_SYSTEM;
 #endif
 
+	/* calloc leaves this 0, which is a legal descriptor. */
+	opx_mr->dmabuf.fd = OPX_SDMA_NO_DMABUF_FD;
+
 	opx_mr->mr_fid.mem_desc	   = opx_mr;
 	opx_mr->mr_fid.fid.fclass  = FI_CLASS_MR;
 	opx_mr->mr_fid.fid.context = context;
@@ -388,6 +426,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 	if (flags & FI_MR_DMABUF) {
 		if (!attr || !attr->dmabuf) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "FI_MR_DMABUF requires fi_mr_attr dmabuf metadata\n");
+			opx_mr_release_dmabuf_fd(opx_mr);
 			free(opx_mr);
 			OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) FI_EINVAL, 0);
 			errno = FI_EINVAL;
@@ -398,8 +437,34 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 		opx_mr->attr.device = attr->device;
 		opx_mr->dmabuf	    = *attr->dmabuf;
 		opx_mr->attr.dmabuf = &opx_mr->dmabuf;
+
+		/*
+		 * The caller may close its descriptor as soon as this returns,
+		 * and the number can then be recycled for an unrelated buffer.
+		 * Take a private copy: the sends this MR serves, and any
+		 * retransmission of them, name the buffer by fd.
+		 */
+		if (opx_mr->dmabuf.fd != OPX_SDMA_NO_DMABUF_FD) {
+			assert(opx_mr->dmabuf.fd >= 0);
+			int dup_fd = fcntl(opx_mr->dmabuf.fd, F_DUPFD_CLOEXEC, 0);
+
+			if (dup_fd < 0) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+					"Unable to duplicate dma-buf fd %d for opx_mr=%p (%s)\n", opx_mr->dmabuf.fd,
+					opx_mr, strerror(errno));
+				int saved_errno	  = errno;
+				opx_mr->dmabuf.fd = OPX_SDMA_NO_DMABUF_FD;
+				free(opx_mr);
+				OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) saved_errno, 0);
+				errno = saved_errno;
+				return -saved_errno;
+			}
+
+			opx_mr->dmabuf.fd    = dup_fd;
+			opx_mr->dmabuf_owner = OPX_MR_DMABUF_DUPLICATED;
+		}
 	} else {
-		opx_mr->dmabuf.fd      = -1;
+		opx_mr->dmabuf.fd      = OPX_SDMA_NO_DMABUF_FD;
 		opx_mr->iov	       = *iov;
 		opx_mr->attr.mr_iov    = &opx_mr->iov;
 		opx_mr->attr.iov_count = FI_OPX_IOV_LIMIT;
@@ -425,6 +490,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid, const struct iovec *io
 				if (opx_domain->mr_mode == 0 || (opx_domain->mr_mode & OFI_MR_SCALABLE)) {
 					(void) fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
 				}
+				opx_mr_release_dmabuf_fd(opx_mr);
 				free(opx_mr);
 				OPX_TRACE_MR_END_ERROR(OPX_TRACE_EVENT_MR_REG, (uint64_t) (-ret), 0);
 				errno = -ret;
