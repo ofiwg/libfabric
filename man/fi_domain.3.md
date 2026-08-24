@@ -262,7 +262,7 @@ resources and interfaces enable a provider to eliminate lower-level locks.
   and multi-threaded applications using standard endpoints which desire lockless
   operation.  Applications must serialize access to all objects
   under the same domain.  This includes endpoints, transmit and receive contexts,
-  completion queues and counters, and registered memory regions.
+  completion queues and counters, address vectors, and registered memory regions.
 
 *FI_THREAD_ENDPOINT* (deprecated)
 : The endpoint threading model is similar to FI_THREAD_FID, but with
