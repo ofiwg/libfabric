@@ -20067,13 +20067,21 @@ The verbs provider checks for the following environment variables.
 
 *FI_VERBS_NIC_AFFINITY_POLICY*
 :   NIC affinity policy for ordering NICs in fi_getinfo results.
-    (default: none)
+    Supported options are "manual", "auto" or "none". When set to
+    "manual", NIC affinity mapping is specified in a configuration file
+    (see FI_VERBS_NIC_AFFINITY_CONFIG). When set to "auto" NIC affinity
+    mapping is determined automatically based on the information
+    provided by `hwloc`. In either case, the mapping key is supplied via
+    FI_VERBS_AFFINITY_DEVICE. (default: none)
 
 *FI_VERBS_AFFINITY_DEVICE*
 :   PCI address of device for NIC affinity.
 
 *FI_VERBS_NIC_AFFINITY_CONFIG*
-:   Path to NIC affinity configuration file for 'manual' policy.
+:   Path to NIC affinity configuration file for the "manual" policy. The
+    configuration file can have any number of lines. Each line consists
+    of a PCIe address followed by a NIC name, seperated by a single
+    space. Empty lines and lines starting with "\#" are ignored.
 
 ### Variables specific to MSG endpoints
 
