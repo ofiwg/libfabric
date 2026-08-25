@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-08\-21" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-08\-25" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -182,6 +182,22 @@ its peer connection is functioning normally, the receiver side is
 guaranteed to write a CQ error for the matched receive.
 If the peer endpoint is closed, or if the peer dies, the corresponding
 matched TX/RX completions may never complete.
+.PP
+Peer notification and remote-side cleanup on MR abort apply to send and
+tagged operations only.
+Device RMA operations that reference a closed MR need no peer cleanup:
+the initiator receives a local error completion and no provider state
+exists on the peer.
+Emulated RMA and atomic operations are not supported: closing an MR
+referenced by an in-flight emulated operation leads to undefined
+behavior.
+.PP
+MR abort behavior is undefined unless both participants in the
+transaction are using libfabric version 2.7.0 or later.
+An older peer cannot distinguish a control message belonging to the
+current transfer from one belonging to an earlier, aborted transfer, so
+aborting transfers when either side runs an older version risks
+corrupting the communication state between the two endpoints.
 .SH LIMITATIONS
 .SS Completion events
 .IP \[bu] 2
