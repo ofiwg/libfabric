@@ -49,6 +49,7 @@ main](https://github.com/ofiwg/libfabric/tree/main).
   * [fi_tagged(3)](fi_tagged.3.html)
   * [fi_trigger(3)](fi_trigger.3.html)
   * [fi_version(3)](fi_version.3.html)
+  * [fi_xpu(3)](fi_xpu.3.html)
 
 * Provider details
   * [fi_efa(7)](fi_efa.7.html)
