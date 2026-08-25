@@ -392,6 +392,7 @@ def build_pr_test_stages() {
     stages["2_c7gn_ubuntu2204_efa"]  = get_test_stage_with_lock("2_c7gn_ubuntu2204_efa",  env.BUILD_TAG, "ubuntu2204", "c7gn.16xlarge",  2, "us-west-2", c7gn16x_lock_label,  "--odcr cr-0522a3037fa741630 ${addl_args_efa}")
     stages["2_c8gn_alinux2023_efa"]  = get_test_stage_with_lock("2_c8gn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "c8gn.16xlarge",  2, "us-west-2", c8gn16x_lock_label,  "--odcr cr-0698f5e644dab6868 ${addl_args_efa}")
     stages["2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock("2_hpc6a_rhel8_efa",      env.BUILD_TAG, "rhel8",      "hpc6a.48xlarge", 2, "eu-north-1", hpc6a48x_lock_label, "--odcr cr-0adaf0b7d34d510dc ${addl_args_efa_hpc_dso}")
+    stages["2_c5n_ubuntu2604_efa"]   = get_test_stage_with_lock("2_c5n_ubuntu2604_efa",   env.BUILD_TAG, "ubuntu2604", "c5n.18xlarge",   2, "us-east-1", c5n18x_lock_label,   "--odcr cr-03c9932f13d83e2d9 ${addl_args_efa}")
 
     // Multi Node Tests - Accelerator EFA
     // Use g4dn.12xlarge (4 GPUs) for the EFA CUDA stage to avoid the
