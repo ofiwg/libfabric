@@ -101,6 +101,7 @@
 					 FI_COMPLETION | \
 					 FI_MORE | \
 					 FI_FENCE | \
+					 FI_REMOTE_CQ_DATA | \
 					 CXIP_TX_COMP_MODES)
 #define CXIP_READMSG_ALLOWED_FLAGS	(FI_COMPLETION | \
 					 FI_MORE | \
