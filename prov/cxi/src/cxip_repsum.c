@@ -158,9 +158,9 @@ void cxip_dbl_to_rep(struct cxip_repsum *x, double d)
  */
 void cxip_rep_to_dbl(double *d, const struct cxip_repsum *x)
 {
-	int i, m;
+	double q;
+	int i;
 
-	*d = 0.0;
 	switch (x->M) {
 		case MNaN:	// quiet NaN only
 			*d = NAN;
@@ -172,11 +172,22 @@ void cxip_rep_to_dbl(double *d, const struct cxip_repsum *x)
 			*d = INFINITY;
 			return;
 	}
-	m = x->M;
-	for (i = Kt-1; i >= 0; i--) {
-		*d += scalbn(1.0*(int64_t)x->T[i], W*m);
-		m--;
-	}
+
+	/*
+	 * Reconstruct the value using Horner's method, anchored to the most
+	 * significant bin. This keeps every intermediate value in the normal
+	 * (non-subnormal) range until a single, final scaling is applied.
+	 *
+	 * Summing each bin independently with scalbn() can produce subnormal
+	 * partial terms even when the final result is a normal, fully
+	 * representable double. On platforms that flush subnormals to zero
+	 * (FTZ/DAZ), those partial terms are silently dropped, discarding the
+	 * low-order bits of the result.
+	 */
+	q = 0.0;
+	for (i = 0; i < Kt; i++)
+		q = (double)x->T[i] + scalbn(q, -W);
+	*d = scalbn(q, W * x->M);
 }
 
 /**
