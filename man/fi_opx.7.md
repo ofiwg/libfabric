@@ -399,9 +399,12 @@ or underruns.  Default is false.
   The local rank count is read from the first of the following environment variables that is set:
   MPI_LOCALNRANKS, OMPI_COMM_WORLD_LOCAL_SIZE, LOCAL_WORLD_SIZE, SLURM_NTASKS_PER_NODE, or CCL_LOCAL_SIZE.
   If none of these are set, the auto default behaves as if there is 1 local rank (context sharing not enabled).
-  On CN6000/CYR hardware the auto default never enables context sharing, since dual-plane
-  support and context sharing are mutually exclusive and dual-plane is enabled by default
-  on that generation; set FI_OPX_CONTEXT_SHARING=1 explicitly to enable it on CN6000/CYR.
+  The auto default never enables context sharing whenever dual-plane or multi-HFI striping
+  will be in effect for this context open, since these features are mutually exclusive with
+  context sharing: this includes CN6000/CYR hardware (dual-plane is enabled by default on that
+  generation), an explicit _FI_OPX_DUAL_PLANE_=1 or FI_OPX_MULTI_HFI_STRIPING=1 override on any
+  generation, and a dual-plane send-only secondary context. Set FI_OPX_CONTEXT_SHARING=1
+  explicitly to opt in for these cases.
 
 *FI_OPX_ENDPOINTS_PER_HFI_CONTEXT*
 : Integer. Specify how many endpoints should share a single HFI context. Valid values are from 2 to 8.
