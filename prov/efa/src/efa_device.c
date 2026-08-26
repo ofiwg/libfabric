@@ -29,6 +29,50 @@
 #endif
 
 /**
+ * @brief return whether the passed ibv_device appears to be an EFA device
+ *
+ * @param ibv_device[in] pointer to the ibv_device
+ *
+ * This is implemented without needing permissions on the device itself; only
+ * need permissions on the sysfs metadata files. EFA-ness is determined by
+ * vendor ID.
+ *
+ * @return true if device vendor ID matches EFA ID
+ */
+#ifndef _WIN32
+static bool efa_device_is_efa(struct ibv_device *ibv_device)
+{
+	char *path = NULL;
+	char buf[16] = {0};
+	int fd;
+	ssize_t n;
+
+	if (asprintf(&path, "%s/device/vendor", ibv_device->ibdev_path) < 0) {
+		return false;
+	}
+
+	fd = open(path, O_RDONLY | O_CLOEXEC);
+	free(path);
+	if (fd < 0) {
+		return false;
+	}
+
+	n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+	if (n <= 0) {
+		return false;
+	}
+
+	return strtoul(buf, NULL, 16) == 0x1d0f;
+}
+#else
+static bool efa_device_is_efa(struct ibv_device *ibv_device)
+{
+	return true;
+}
+#endif
+
+/**
  * @brief initialize data members of a struct of efa_device until the gid
  *
  * @param	efa_device[in,out]	pointer to a struct efa_device
@@ -325,19 +369,31 @@ int efa_device_list_initialize(void)
 					   ibv_device_list[device_idx]);
 
 		if (err) {
-			/* efa_device_construct returns -EOPNOTSUPP for non-EFA devices */
+			/* efa_device_construct returns -EOPNOTSUPP for non-EFA
+			 * devices */
 			if (err == -EOPNOTSUPP) {
 				EFA_DBG(FI_LOG_FABRIC,
-					"Ignoring non-EFA device (device_idx: %d, err: %d)\n", device_idx, err);
+					"Ignoring non-EFA device (device_idx: "
+					"%d, err: %d)\n",
+					device_idx, err);
 				continue;
 			}
 
-			EFA_WARN(FI_LOG_FABRIC,
-				 "efa_device_construct_gid failed for device_idx %d, err=%d\n",
-				 device_idx, err);
+			if (efa_device_is_efa(ibv_device_list[device_idx])) {
+				EFA_WARN(FI_LOG_FABRIC,
+					 "efa_device_construct_gid failed for "
+					 "EFA device %s device_idx %d: %s "
+					 "(%d)\n",
+					 ibv_device_list[device_idx]->name,
+					 device_idx, strerror(-err), err);
+			} else {
+				EFA_DBG(FI_LOG_FABRIC,
+					"Skipping unopenable non-EFA device "
+					"%s, err=%d\n",
+					ibv_device_list[device_idx]->name, err);
+			}
 
-			ret = err;
-			goto err_free;
+			continue;
 		}
 
 		memcpy(&g_efa_ibv_gid_list[g_efa_ibv_gid_cnt], cur_device.ibv_gid.raw, sizeof(union ibv_gid));
