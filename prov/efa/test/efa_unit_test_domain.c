@@ -604,3 +604,43 @@ void test_efa_domain_gda_ops_rejected_for_dgram(void **state)
 			  (void **)&efa_gda_ops, NULL);
 	assert_int_equal(ret, -FI_EOPNOTSUPP);
 }
+
+/**
+ * @brief Verify util_domain.lock uses no-op locking with FI_THREAD_DOMAIN and
+ *        FI_PROGRESS_CONTROL_UNIFIED
+ *
+ * @param[in] state struct efa_resource managed by the framework
+ */
+void test_efa_domain_lock_type_no_op(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(resource->hints);
+	resource->hints->domain_attr->progress = FI_PROGRESS_CONTROL_UNIFIED;
+	resource->hints->domain_attr->threading = FI_THREAD_DOMAIN;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(2, 0), resource->hints, false, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert_int_equal(efa_domain->util_domain.lock.lock_type, OFI_LOCK_NOOP);
+}
+
+/**
+ * @brief Verify util_domain.lock uses mutex locking with just FI_THREAD_DOMAIN
+ *
+ * @param[in] state struct efa_resource managed by the framework
+ */
+void test_efa_domain_lock_type_mutex(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_domain *efa_domain;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(resource->hints);
+	resource->hints->domain_attr->threading = FI_THREAD_DOMAIN;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, FI_VERSION(2, 0), resource->hints, false, true);
+
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	assert_int_equal(efa_domain->util_domain.lock.lock_type, OFI_LOCK_MUTEX);
+}

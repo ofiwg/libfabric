@@ -600,6 +600,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_installs_base_domain_ops_efa_direct, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_open_installs_base_domain_ops_dgram, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_domain_gda_ops_rejected_for_dgram, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_lock_type_no_op, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_domain_lock_type_mutex, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		/* end efa_unit_test_domain.c */
 
 		/* begin efa_unit_test_rdm_domain.c */

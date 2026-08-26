@@ -55,6 +55,7 @@ int efa_domain_init_base(struct efa_domain *efa_domain,
 			 void *context)
 	OFI_TSA_NO_ANALYSIS
 {
+	enum ofi_lock_type lock_type;
 	int err;
 
 	/* This list_entry is not the head of the list. But we initialize it
@@ -66,8 +67,14 @@ int efa_domain_init_base(struct efa_domain *efa_domain,
 	efa_domain->fabric = container_of(fabric_fid, struct efa_fabric,
 					  util_fabric.fabric_fid);
 
+	lock_type = info->domain_attr->threading == FI_THREAD_DOMAIN &&
+			    info->domain_attr->control_progress ==
+				    FI_PROGRESS_CONTROL_UNIFIED ?
+			    OFI_LOCK_NOOP :
+			    OFI_LOCK_MUTEX;
+
 	err = ofi_domain_init(fabric_fid, info, &efa_domain->util_domain,
-			      context, OFI_LOCK_MUTEX);
+			      context, lock_type);
 	if (err)
 		return err;
 
