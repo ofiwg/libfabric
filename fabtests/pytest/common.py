@@ -22,6 +22,7 @@ CLIENT_RETRY_INTERVAL_MS = 1_000
 
 # Shared non-interactive SSH command.
 bssh = "ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o BatchMode=yes"
+bssh_tty = bssh + " -tt"
 
 # Polling limits for Linux xdist OOB port readiness.
 OOB_POLL_INTERVAL_SEC = 0.5

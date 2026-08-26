@@ -8,7 +8,7 @@ import yaml
 
 import pytest
 
-from common import bssh
+from common import bssh, bssh_tty
 
 
 def get_option_longform(option_name, option_params):
@@ -195,7 +195,8 @@ class CmdlineArgs:
         host_id = self.client_id if host_type == "client" else self.server_id
 
         command = f"timeout {timeout} /bin/bash --login -c {shlex.quote(command)}"
-        command = f"{bssh} {host_id} {shlex.quote(command)}"
+        ssh_command = bssh_tty if host_type in ("server", "client") else bssh
+        command = f"{ssh_command} {host_id} {shlex.quote(command)}"
 
         return command
 
