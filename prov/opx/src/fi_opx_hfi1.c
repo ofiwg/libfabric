@@ -6108,8 +6108,8 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 				   const uint32_t data, uint64_t bth_rx, uint64_t lrh_dlid,
 				   const uint64_t do_cq_completion, void *user_context, struct fi_opx_addr addr,
 				   const uint64_t caps, const enum fi_hmem_iface src_iface,
-				   const uint64_t src_device_id, struct fi_opx_mr *opx_mr, uint64_t tx_op_flags,
-				   const bool ctx_sharing, const enum opx_hfi1_type hfi1_type)
+				   const uint64_t src_device_id, const uint64_t src_handle, struct fi_opx_mr *opx_mr,
+				   uint64_t tx_op_flags, const bool ctx_sharing, const enum opx_hfi1_type hfi1_type)
 {
 #if HAVE_HFISVC
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -6615,8 +6615,8 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 	    !(caps & FI_MSG) && len >= opx_ep_tx_hfisvc_min(opx_ep, opx_tx, src_iface)) {
 		OPX_HFISVC_DEBUG_LOG("Sending RZV RTS HFI SVC\n");
 		return opx_hfi1_tx_rzv_rts_hfisvc(opx_ep, buf, len, tag, data, bth_rx, lrh_dlid_9B, do_cq_completion,
-						  user_context, dest_addr, caps, src_iface, src_device_id, opx_mr,
-						  tx_op_flags, ctx_sharing, hfi1_type);
+						  user_context, dest_addr, caps, src_iface, src_device_id, src_handle,
+						  opx_mr, tx_op_flags, ctx_sharing, hfi1_type);
 	}
 #endif
 	OPX_HFISVC_DEBUG_LOG("Sending RZV RTS NORMAL\n");
@@ -7119,8 +7119,8 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	    !(caps & FI_MSG) && len >= opx_ep_tx_hfisvc_min(opx_ep, opx_tx, src_iface)) {
 		OPX_HFISVC_DEBUG_LOG("Sending RZV RTS HFI SVC\n");
 		return opx_hfi1_tx_rzv_rts_hfisvc(opx_ep, buf, len, tag, data, bth_rx, lrh_dlid_16B, do_cq_completion,
-						  user_context, dest_addr, caps, src_iface, src_device_id, opx_mr,
-						  tx_op_flags, ctx_sharing, hfi1_type);
+						  user_context, dest_addr, caps, src_iface, src_device_id, src_handle,
+						  opx_mr, tx_op_flags, ctx_sharing, hfi1_type);
 	}
 #endif
 	OPX_HFISVC_DEBUG_LOG("Sending RZV RTS NORMAL\n");
