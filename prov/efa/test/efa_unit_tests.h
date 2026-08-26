@@ -449,6 +449,8 @@ void test_efa_domain_dgram_mr_ops(void **state);
 void test_efa_domain_open_installs_base_domain_ops_efa_direct(void **state);
 void test_efa_domain_open_installs_base_domain_ops_dgram(void **state);
 void test_efa_domain_gda_ops_rejected_for_dgram(void **state);
+void test_efa_domain_lock_type_no_op(void **state);
+void test_efa_domain_lock_type_mutex(void **state);
 /* end efa_unit_test_domain.c */
 
 /* begin efa_unit_test_fabric.c */
