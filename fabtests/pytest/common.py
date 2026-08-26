@@ -462,12 +462,21 @@ def _wait_for_server_listening(host_id, port, server_process,
     deadline = time.time() + SERVER_LISTEN_TIMEOUT_SEC
     while True:
         if server_process.poll() is not None:
+            output = server_output()
+            if has_ssh_connection_err_msg(output):
+                raise SshConnectionError()
             raise RuntimeError(
                 "Server exited (returncode {}) before listening on OOB port "
                 "{}. Server output:\n{}".format(
-                    server_process.returncode, port, server_output()))
-        if _oob_port_has_listener(host_id, port):
-            return
+                    server_process.returncode, port, output))
+        try:
+            if _oob_port_has_listener(host_id, port):
+                return
+        except SshConnectionError:
+            if time.time() >= deadline:
+                raise
+            print("SSH probe rejected; retrying")
+
         if time.time() >= deadline:
             server_process.terminate()
             server_process.wait()
