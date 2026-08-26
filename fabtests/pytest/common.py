@@ -720,10 +720,9 @@ class ClientServerTest:
 
         with open(server_log_path, "w") as server_log_file:
             server_process = Popen(
-                self._server_command,
+                shlex.split(self._server_command),
                 stdout=server_log_file,
                 stderr=subprocess.STDOUT,
-                shell=True,
                 universal_newlines=True,
             )
 
