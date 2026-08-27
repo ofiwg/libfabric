@@ -2092,9 +2092,11 @@ static int getaddr(char *node, char *service,
 	hints->addr_format = fi->addr_format;
 
 	if (flags & FI_SOURCE) {
+		free(hints->src_addr);
 		ret = dupaddr(&hints->src_addr, &hints->src_addrlen,
 				fi->src_addr, fi->src_addrlen);
 	} else {
+		free(hints->dest_addr);
 		ret = dupaddr(&hints->dest_addr, &hints->dest_addrlen,
 				fi->dest_addr, fi->dest_addrlen);
 	}
