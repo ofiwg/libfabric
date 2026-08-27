@@ -333,8 +333,8 @@ struct efa_rdm_peer_error_hdr *efa_rdm_pke_get_peer_error_hdr(struct efa_rdm_pke
 
 int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
 				uint32_t msg_id, uint32_t op_id,
-				bool op_id_valid, uint32_t emitter_ope_type,
-				int prov_errno, uint32_t connid);
+				uint32_t emitter_ope_type, int prov_errno,
+				uint32_t connid);
 
 int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *ope);

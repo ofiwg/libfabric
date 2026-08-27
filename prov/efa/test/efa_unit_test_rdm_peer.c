@@ -732,9 +732,8 @@ static int deliver_peer_error_skip(struct efa_rdm_ep *efa_rdm_ep,
 	/* msg_id-only packet (no op_id hint): the receiver decides -- with no
 	 * matched rxe it advances the reorder window past msg_id. */
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_FLUSHED;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -1149,9 +1148,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(
 	/* msg_id-only (no op_id hint): the dispatcher finds no matched rxe and
 	 * routes to the abort-marker path, consuming the packet. */
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = 0;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_FLUSHED;
 	err_hdr->connid = raw_addr.qkey;
 	skip_pkt->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);

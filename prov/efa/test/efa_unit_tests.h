@@ -562,6 +562,7 @@ void test_efa_rdm_rxe_release_purges_queued_blocking_copy(void **state);
 void test_efa_rdm_prov_errno_is_peer_abort(void **state);
 void test_efa_rdm_pkt_is_rxe_remote_read(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state);
+void test_efa_rdm_pke_init_peer_error_for_ope_unlearned_op_id(void **state);
 void test_efa_rdm_pke_handle_cts_recv_grants_window(void **state);
 void test_efa_rdm_pke_handle_cts_recv_drops_stale_id(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id(void **state);
