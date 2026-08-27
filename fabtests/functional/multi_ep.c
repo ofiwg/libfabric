@@ -424,6 +424,7 @@ static int setup_client_ep(int idx)
 static int setup_server_ep(int idx)
 {
 	int ret, av_bind_idx = idx, cq_bind_idx = idx;
+	struct fi_info *prev_fi = fi;
 
 	if (shared_cq)
 		cq_bind_idx = 0;
@@ -434,6 +435,9 @@ static int setup_server_ep(int idx)
 	ret = ft_retrieve_conn_req(eq, &fi);
 	if (ret)
 		goto failed_accept;
+
+	if (prev_fi)
+		fi_freeinfo(prev_fi);
 
 	ret = fi_endpoint(domain, fi, &eps[idx], NULL);
 	if (ret) {
