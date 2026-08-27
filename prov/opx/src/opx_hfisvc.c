@@ -84,8 +84,17 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 		const uint32_t sbuf_access_key = params->iovs[i].access_key;
 		const uint32_t sbuf_client_key = params->iovs[i].client_key;
-		const uint64_t sbuf_len	       = params->iovs[i].len;
-		const uint64_t sbuf_offset     = params->iovs[i].offset;
+		/* Edge bytes were already placed by the caller before it
+		 * deferred; the DMA covers only the aligned interior, and
+		 * params->recv_buf was advanced past the head. Both are 0 unless
+		 * this is IOV 0 of a dma-buf transfer into an unaligned dest.
+		 * Anchored to the transfer's first iov, not to this resumption's
+		 * first iteration: cur_iov advances on re-deferral, and trimming
+		 * against it would re-apply the head to a later iov. */
+		const uint64_t edge_head   = (i == 0) ? params->edge_head_bytes : 0u;
+		const uint64_t edge_tail   = (i == 0) ? params->edge_tail_bytes : 0u;
+		const uint64_t sbuf_len	   = params->iovs[i].len - edge_head - edge_tail;
+		const uint64_t sbuf_offset = params->iovs[i].offset + edge_head;
 
 		struct opx_hfisvc_xfer_completion *recv_rzv_comp =
 			(struct opx_hfisvc_xfer_completion *) ofi_buf_alloc(opx_ep->hfisvc.completion_pool);
@@ -211,7 +220,8 @@ int opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work)
 }
 
 int opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_context *context, const uint32_t niov,
-					 const void *recv_buf, const union opx_hfisvc_iov *iovs)
+					 const void *recv_buf, const union opx_hfisvc_iov *iovs,
+					 const uint32_t edge_head_bytes, const uint32_t edge_tail_bytes)
 {
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	if (OFI_UNLIKELY(work == NULL)) {
@@ -230,6 +240,8 @@ int opx_hfisvc_deferred_recv_rts_enqueue(struct fi_opx_ep *opx_ep, struct opx_co
 	params->niov				  = niov;
 	params->cur_iov				  = 0;
 	params->recv_buf			  = (void *) recv_buf;
+	params->edge_head_bytes			  = edge_head_bytes;
+	params->edge_tail_bytes			  = edge_tail_bytes;
 
 	for (int i = 0; i < niov; ++i) {
 		params->iovs[i] = iovs[i];

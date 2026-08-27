@@ -1590,6 +1590,54 @@ union opx_hfisvc_iov {
 
 #define OPX_MAX_HFISVC_IOVS (OPX_HFI1_MAX_PKT_SIZE / sizeof(union opx_hfisvc_iov))
 
+/*
+ * hfisvc rendezvous inline edge data. TID writes the destination only on a
+ * qword boundary, so sub-qword bytes at either end of an unaligned receive
+ * buffer arrive out of band here instead of being read by the kernel. The
+ * receiver consumes only what its own alignment requires.
+ */
+#define OPX_HFISVC_EDGE_HEAD_MAX (8)
+#define OPX_HFISVC_EDGE_TAIL_MAX (7)
+
+/* Largest head or tail the receiver can ask for. HEAD_MAX above is a slot
+ * size, not a bound: an 8-byte edge would mean an aligned destination, where
+ * no edge is placed at all. */
+#define OPX_HFISVC_EDGE_BYTES_MAX (7)
+
+union opx_hfisvc_edge {
+	uint64_t qws[2];
+	struct {
+		/* Head is left-justified, tail right-justified, and both are
+		 * 1..7 bytes: an 8-byte edge would mean an aligned destination,
+		 * where no edge is placed. head_bytes is sized 8 anyway so the
+		 * sender can fill it with one aligned qword store. */
+		uint8_t head_bytes[OPX_HFISVC_EDGE_HEAD_MAX];
+		uint8_t tail_bytes[OPX_HFISVC_EDGE_TAIL_MAX];
+		uint8_t unused;
+	};
+} __attribute__((__packed__, __aligned__(8)));
+
+static_assert(sizeof(union opx_hfisvc_edge) == 16, "union opx_hfisvc_edge must be exactly 2 qwords!");
+
+/*
+ * niov only ever carries 1 or 2, so the high bits are free. A flag rather than
+ * a new BTH opcode because the hfisvc opcode block is full: IS_HFISVC() is a
+ * mask test against 0xFC and all four of 0xFC..0xFF are taken.
+ */
+#define OPX_HFISVC_RTS_FLAG_INLINE_EDGE	    (0x80000000u)
+#define OPX_HFISVC_RTS_NIOV_MASK	    (~OPX_HFISVC_RTS_FLAG_INLINE_EDGE)
+#define OPX_HFISVC_RTS_GET_NIOV(niov_field) ((niov_field) & OPX_HFISVC_RTS_NIOV_MASK)
+#define OPX_HFISVC_RTS_HAS_EDGE(niov_field) (((niov_field) & OPX_HFISVC_RTS_FLAG_INLINE_EDGE) != 0)
+
+/* The edge rides after the last transmitted iov, not at a fixed struct offset:
+ * only `niov` iovs are on the wire. Sender, replay and receiver share this. */
+#define OPX_HFISVC_EDGE_QW_BASE(niov) ((size_t) (niov) * (sizeof(union opx_hfisvc_iov) >> 3))
+
+/* Only emitted for niov == 1, so slot 1 must exist and must fit the edge. */
+static_assert(OPX_MAX_HFISVC_IOVS >= 2, "hfisvc inline edge needs an iov slot after iovs[0]!");
+static_assert(sizeof(union opx_hfisvc_iov) >= sizeof(union opx_hfisvc_edge),
+	      "hfisvc inline edge must fit within one iov slot!");
+
 union opx_hfisvc_rma_iov {
 	uint64_t qws[6];
 	struct {
@@ -1722,6 +1770,7 @@ union fi_opx_hfi1_packet_payload {
 		} ipc;
 
 		struct {
+			/* An edge, when present, overlays iovs[niov]. */
 			union opx_hfisvc_iov iovs[OPX_MAX_HFISVC_IOVS];
 		} hfisvc;
 	} rendezvous;

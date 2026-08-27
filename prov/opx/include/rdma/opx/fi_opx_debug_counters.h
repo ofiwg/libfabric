@@ -356,6 +356,8 @@ struct fi_opx_debug_counters {
 			uint64_t lazy_mr_open_error;
 			uint64_t eagain_lazy_mr_open;
 			uint64_t reg_dma_buf;
+			uint64_t inline_edge;
+			uint64_t inline_edge_error;
 		} rzv_send_rts;
 
 		struct {
@@ -367,6 +369,8 @@ struct fi_opx_debug_counters {
 			uint64_t lazy_mr_open_error;
 			uint64_t eagain_lazy_mr_open;
 			uint64_t completed;
+			uint64_t inline_edge;
+			uint64_t inline_edge_error;
 		} rzv_recv_rts;
 
 		struct {
@@ -783,6 +787,8 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.eagain_hfisvc);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.enomem_completion);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.enomem_context);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.inline_edge);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.inline_edge_error);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.lazy_mr_open);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.lazy_mr_open_error);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_send_rts.eagain_lazy_mr_open);
@@ -791,6 +797,8 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.rdma_read);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.truncation_rdma_read);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.completed);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.inline_edge);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.inline_edge_error);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.deferred);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.eagain_hfisvc);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rzv_recv_rts.lazy_mr_open);

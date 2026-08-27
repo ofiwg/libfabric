@@ -6125,6 +6125,21 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 					  1 :
 					  0;
 
+	/* Decided ahead of the credit preflight: on 16B the edge needs a third
+	 * SCB. The source reads happen later, past the failure paths. */
+#if HAVE_HFISVC_DMABUF
+	/* The receiver only places the edge when a non-empty aligned interior
+	 * remains (head + tail + 8 <= xfer_len). Alignment is a property of the
+	 * receiver's buffer, so gate on the worst case here: head and tail are
+	 * each at most 7, never 8, since an 8-byte edge means an aligned
+	 * destination and no edge at all. */
+	bool has_edge = (opx_mr && opx_mr->dmabuf.fd != -1 && src_iface != FI_HMEM_SYSTEM &&
+			 xfer_len >= (OPX_HFISVC_EDGE_BYTES_MAX + OPX_HFISVC_EDGE_BYTES_MAX + 8));
+#else
+	const bool has_edge = false;
+#endif
+	assert(!(has_edge && do_stripe));
+
 	uint32_t			     access_key	  = (uint32_t) -1;
 	uint32_t			     access_key_1 = (uint32_t) -1;
 	struct opx_hfisvc_xfer_completion   *rzv_comp	  = NULL;
@@ -6209,8 +6224,10 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		rzv_comp_1->opx_ep = opx_ep;
 	}
 
+	/* 1 for RTS header, 1 for rendezvous metadata, 1 more if striping, and
+	 * 1 more for the edge on 16B, which has only one free payload qword. */
 	const uint16_t credits_needed =
-		2 + do_stripe; /* 1 for RTS header, 1 for rendezvous metadata, 1 more if striping */
+		2 + do_stripe + ((has_edge && (hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_CYR))) ? 1 : 0);
 
 	uint16_t credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &tx->force_credit_return, credits_needed);
 	if (OFI_UNLIKELY(credits_available < credits_needed)) {
@@ -6420,9 +6437,47 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		hfisvc_iovs[0].sender_lid     = OPX_LID_PLANE_KEY(opx_ep->domain, tx->hfi->lid, 0);
 		hfisvc_iovs[0].rzv_comp_vaddr = (uintptr_t) rzv_comp;
 	}
+
+	/* Read through the device-registered host aperture already mapped. The
+	 * receiver takes only what its alignment needs; ship the full slot. */
+	union opx_hfisvc_edge edge	 = {0};
+	uint32_t	      niov_field = niov;
+#if HAVE_HFISVC_DMABUF
+	if (has_edge) {
+		/* On failure drop the edge rather than ship uninitialized stack
+		 * bytes; the kernel then latches them the slow way. */
+		int hrc = opx_copy_from_hmem(src_iface, src_device_id, src_handle, opx_ep->hmem_copy_buf, buf,
+					     OPX_HFISVC_EDGE_HEAD_MAX, OPX_HMEM_DEV_REG_SEND_THRESHOLD);
+		if (OFI_LIKELY(hrc == FI_SUCCESS)) {
+			edge.qws[0] = *((const uint64_t *) opx_ep->hmem_copy_buf);
+
+			hrc = opx_copy_from_hmem(src_iface, src_device_id, src_handle, opx_ep->hmem_copy_buf,
+						 (const void *) ((uintptr_t) buf + xfer_len - OPX_HFISVC_EDGE_TAIL_MAX),
+						 OPX_HFISVC_EDGE_TAIL_MAX, OPX_HMEM_DEV_REG_SEND_THRESHOLD);
+			if (OFI_LIKELY(hrc == FI_SUCCESS)) {
+				/* Tail HMEM copy is only 7 bytes; the 8th byte lands in
+				 * edge.unused with scratch contents. Harmless -- the
+				 * receiver never reads past tail_bytes[TAIL_MAX - tail]. */
+				edge.qws[1] = *((const uint64_t *) opx_ep->hmem_copy_buf);
+			}
+		}
+
+		if (OFI_UNLIKELY(hrc != FI_SUCCESS)) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.inline_edge_error);
+			has_edge = false;
+		} else {
+			niov_field |= OPX_HFISVC_RTS_FLAG_INLINE_EDGE;
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.inline_edge);
+		}
+	}
+#endif
+	assert(has_edge == OPX_HFISVC_RTS_HAS_EDGE(niov_field));
+
 	assert(!(hfi1_type & OPX_HFI1_WFR));
 	if (hfi1_type & (OPX_HFI1_JKR | OPX_HFI1_CYR)) {
-		const uint64_t pbc_dws = 2 + 30 + (do_stripe << 4);
+		/* +4 dws for the 2 edge qwords: the length counts payload bytes,
+		 * not SCBs. */
+		const uint64_t pbc_dws = 2 + 30 + (do_stripe << 4) + (has_edge ? 4 : 0);
 		const uint16_t lrh_qws = (pbc_dws - 2) >> 1;
 		const uint64_t opcode =
 			(uint64_t) ((caps & FI_MSG) ? ((tx_op_flags & FI_REMOTE_CQ_DATA) ?
@@ -6432,7 +6487,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 							       FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ :
 							       FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC));
 		const uint64_t niov_client_key =
-			((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.ctxs[plane_idx].client_key;
+			((uint64_t) niov_field << 32) | (uint64_t) opx_ep->domain->hfisvc.ctxs[plane_idx].client_key;
 
 		const uint64_t		 pbc_dlid = OPX_PBC_DLID(addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 		volatile uint64_t *const scb	  = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
@@ -6458,9 +6513,13 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_first, pio_state);
 
+		/* 16B spends payload qword 0 on the tag, leaving one free qword
+		 * after iov0: the edge takes it and spills qws[1] to the next
+		 * SCB, otherwise it carries iov1 for the striped case. */
 		opx_cacheline_copy_qw_vol(opx_ep->domain, scb_payload, &replay->scb.qws[8], tag, hfisvc_iovs[0].qws[0],
 					  hfisvc_iovs[0].qws[1], hfisvc_iovs[0].qws[2], hfisvc_iovs[0].qws[3],
-					  hfisvc_iovs[0].qws[4], hfisvc_iovs[0].qws[5], hfisvc_iovs[1].qws[0]);
+					  hfisvc_iovs[0].qws[4], hfisvc_iovs[0].qws[5],
+					  has_edge ? edge.qws[0] : hfisvc_iovs[1].qws[0]);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
@@ -6471,10 +6530,20 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 						   hfisvc_iovs[1].qws[5], OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
 						   OPX_JKR_16B_PAD_QWORD);
 			FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+		} else if (has_edge) {
+			/* Spill: only edge.qws[1] remains. Accounted for in
+			 * credits_needed above. */
+			volatile uint64_t *scb_edge = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_first, pio_state);
+			opx_cacheline_store_qw_vol(opx_ep->domain, scb_edge, edge.qws[1], OPX_JKR_16B_PAD_QWORD,
+						   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+						   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD);
+			FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 		}
 	} else {
 		assert(hfi1_type & OPX_HFI1_MIXED_9B);
-		const uint64_t pbc_dws	= 2 + 30 - 2 - 2 + (do_stripe << 4);
+		/* +4 dws for the 2 edge qwords. No extra SCB here: 9B carries
+		 * the tag in its header SCB, leaving two free payload qwords. */
+		const uint64_t pbc_dws	= 2 + 30 - 2 - 2 + (do_stripe << 4) + (has_edge ? 4 : 0);
 		const uint16_t lrh_dws	= __cpu_to_be16(pbc_dws - 2 + 1);
 		const uint64_t pbc_dlid = OPX_PBC_DLID(addr.planes[0].lid, hfi1_type);
 		const uint64_t opcode =
@@ -6485,7 +6554,7 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 							       FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC_CQ :
 							       FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS_HFISVC));
 		const uint64_t niov_client_key =
-			((uint64_t) niov << 32) | (uint64_t) opx_ep->domain->hfisvc.ctxs[plane_idx].client_key;
+			((uint64_t) niov_field << 32) | (uint64_t) opx_ep->domain->hfisvc.ctxs[plane_idx].client_key;
 
 		volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
 		opx_cacheline_copy_qw_vol(
@@ -6501,10 +6570,13 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 
 		volatile uint64_t *scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_first, pio_state);
 
-		opx_cacheline_copy_qw_vol(opx_ep->domain, scb_payload, &replay->scb.qws[8], hfisvc_iovs[0].qws[0],
-					  hfisvc_iovs[0].qws[1], hfisvc_iovs[0].qws[2], hfisvc_iovs[0].qws[3],
-					  hfisvc_iovs[0].qws[4], hfisvc_iovs[0].qws[5], hfisvc_iovs[1].qws[0],
-					  hfisvc_iovs[1].qws[1]);
+		/* iov0 occupies qwords 0..5; the last two slots carry either the
+		 * edge or the head of iov1, never both -- has_edge implies
+		 * niov == 1. No extra SCB and no extra credit on this format. */
+		opx_cacheline_copy_qw_vol(
+			opx_ep->domain, scb_payload, &replay->scb.qws[8], hfisvc_iovs[0].qws[0], hfisvc_iovs[0].qws[1],
+			hfisvc_iovs[0].qws[2], hfisvc_iovs[0].qws[3], hfisvc_iovs[0].qws[4], hfisvc_iovs[0].qws[5],
+			has_edge ? edge.qws[0] : hfisvc_iovs[1].qws[0], has_edge ? edge.qws[1] : hfisvc_iovs[1].qws[1]);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
@@ -6527,6 +6599,14 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		for (int i = 0; i < qws_in_iov; i++) {
 			payload[i + qws_in_iov] = hfisvc_iovs[1].qws[i];
 		}
+	}
+
+	/* The replay must mirror the wire payload, or a retransmit would still
+	 * advertise the flag and the receiver would read stale bytes. */
+	if (has_edge) {
+		const size_t edge_qw_base = OPX_HFISVC_EDGE_QW_BASE(niov);
+		payload[edge_qw_base]	  = edge.qws[0];
+		payload[edge_qw_base + 1] = edge.qws[1];
 	}
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
