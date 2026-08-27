@@ -130,12 +130,18 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
 int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
-			  struct efa_prv_reverse_av **prv_reverse_av,
 			  struct efa_av_entry *entry);
 
-void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
-				    struct efa_prv_reverse_av **prv_reverse_av,
-				    struct efa_av_entry *entry);
+int efa_rdm_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
+			      struct efa_prv_reverse_av **prv_reverse_av,
+			      struct efa_av_entry *entry);
+
+bool efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
+			      struct efa_av_entry *entry);
+
+void efa_rdm_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
+				  struct efa_prv_reverse_av **prv_reverse_av,
+				  struct efa_av_entry *entry);
 
 void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 					struct efa_conn *conn)

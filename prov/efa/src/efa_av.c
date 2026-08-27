@@ -237,21 +237,18 @@ void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 }
 
 /*
- * @brief Add newly insert address to the reverse AVs
+ * @brief base reverse-AV add: add/replace the entry in cur_reverse_av
  *
  * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
- * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
- * @param[in]		conn		efa_conn object
+ * @param[in]		entry		efa_av_entry object
  * @return		On success, return 0.
  * 			Otherwise, return a negative libfabric error code
  */
 int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
-				 struct efa_prv_reverse_av **prv_reverse_av,
 				 struct efa_av_entry *entry)
 {
 	struct efa_conn *conn = &entry->conn;
 	struct efa_cur_reverse_av *cur_entry;
-	struct efa_prv_reverse_av *prv_entry;
 	struct efa_cur_reverse_av_key cur_key;
 
 	memset(&cur_key, 0, sizeof(cur_key));
@@ -276,45 +273,71 @@ int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
 		return 0;
 	}
 
-	prv_entry = malloc(sizeof(*prv_entry));
-	if (!prv_entry) {
-		EFA_WARN(FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry\n");
-		return -FI_ENOMEM;
-	}
-
-	prv_entry->key.ahn = cur_key.ahn;
-	prv_entry->key.qpn = cur_key.qpn;
-	prv_entry->key.connid = cur_entry->entry->conn.ep_addr->qkey;
-	prv_entry->entry = cur_entry->entry;
-	HASH_ADD(hh, *prv_reverse_av, key, sizeof(prv_entry->key), prv_entry);
-
 	cur_entry->entry = entry;
 	return 0;
 }
 
 /*
- * @brief Remove an address from the reverse AVs during fi_av_remove
+ * @brief RDM reverse-AV add: base cur add/replace plus connid-keyed prv preserve
  *
- * The address is not removed from the prv_reverse_av if it is found in
- * cur_reverse_av. Keeping the address in prv_reverse_av helps avoid QPN
- * collisions.
+ * A (ahn, qpn) collision means a QP number was reused. Only the RDM protocol
+ * disambiguates reused QPNs via the connid-keyed prv_reverse_av, so the previous
+ * connection is preserved there before the base cur slot is overwritten. The
+ * efa-direct reverse lookup reads cur_reverse_av only and uses the base variant.
  *
- * @param[in]		av		EFA AV object
  * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
  * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
- * @param[in]		conn		efa_conn object
+ * @param[in]		entry		efa_av_entry object
  * @return		On success, return 0.
  * 			Otherwise, return a negative libfabric error code
  */
-void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
-				    struct efa_prv_reverse_av **prv_reverse_av,
+int efa_rdm_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
+				     struct efa_prv_reverse_av **prv_reverse_av,
+				     struct efa_av_entry *entry)
+{
+	struct efa_conn *conn = &entry->conn;
+	struct efa_cur_reverse_av *cur_entry;
+	struct efa_prv_reverse_av *prv_entry;
+	struct efa_cur_reverse_av_key cur_key;
+
+	memset(&cur_key, 0, sizeof(cur_key));
+	cur_key.ahn = conn->ah->ahn;
+	cur_key.qpn = conn->ep_addr->qpn;
+	cur_entry = NULL;
+
+	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
+	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
+	if (cur_entry) {
+		prv_entry = malloc(sizeof(*prv_entry));
+		if (!prv_entry) {
+			EFA_WARN(FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry\n");
+			return -FI_ENOMEM;
+		}
+
+		prv_entry->key.ahn = cur_key.ahn;
+		prv_entry->key.qpn = cur_key.qpn;
+		prv_entry->key.connid = cur_entry->entry->conn.ep_addr->qkey;
+		prv_entry->entry = cur_entry->entry;
+		HASH_ADD(hh, *prv_reverse_av, key, sizeof(prv_entry->key), prv_entry);
+	}
+
+	return efa_av_reverse_av_add(cur_reverse_av, entry);
+}
+
+/*
+ * @brief base reverse-AV remove: drop the entry from cur_reverse_av if current
+ *
+ * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
+ * @param[in]		entry		efa_av_entry object
+ * @return		true if the entry was the current one for its (ahn, qpn)
+ *			and was removed from cur_reverse_av; false otherwise.
+ */
+bool efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 				    struct efa_av_entry *entry)
 {
 	struct efa_conn *conn = &entry->conn;
 	struct efa_cur_reverse_av *cur_reverse_av_entry;
-	struct efa_prv_reverse_av *prv_reverse_av_entry;
 	struct efa_cur_reverse_av_key cur_key;
-	struct efa_prv_reverse_av_key prv_key;
 
 	memset(&cur_key, 0, sizeof(cur_key));
 	cur_key.ahn = conn->ah->ahn;
@@ -325,18 +348,43 @@ void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 	if (cur_reverse_av_entry && cur_reverse_av_entry->entry == entry) {
 		HASH_DEL(*cur_reverse_av, cur_reverse_av_entry);
 		free(cur_reverse_av_entry);
-	} else {
-		memset(&prv_key, 0, sizeof(prv_key));
-		prv_key.ahn = conn->ah->ahn;
-		prv_key.qpn = conn->ep_addr->qpn;
-		prv_key.connid = conn->ep_addr->qkey;
-		HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key),
-			  prv_reverse_av_entry);
-		assert(prv_reverse_av_entry &&
-		       prv_reverse_av_entry->entry == entry);
-		HASH_DEL(*prv_reverse_av, prv_reverse_av_entry);
-		free(prv_reverse_av_entry);
+		return true;
 	}
+	return false;
+}
+
+/*
+ * @brief RDM reverse-AV remove: base cur remove, else drop from prv_reverse_av
+ *
+ * If the entry is no longer the current one for its (ahn, qpn) it was demoted
+ * into the connid-keyed prv_reverse_av; remove it from there. efa-direct never
+ * populates prv_reverse_av and uses the base variant.
+ *
+ * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
+ * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
+ * @param[in]		entry		efa_av_entry object
+ */
+void efa_rdm_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
+					 struct efa_prv_reverse_av **prv_reverse_av,
+					 struct efa_av_entry *entry)
+{
+	struct efa_conn *conn = &entry->conn;
+	struct efa_prv_reverse_av *prv_reverse_av_entry;
+	struct efa_prv_reverse_av_key prv_key;
+
+	if (efa_av_reverse_av_remove(cur_reverse_av, entry))
+		return;
+
+	memset(&prv_key, 0, sizeof(prv_key));
+	prv_key.ahn = conn->ah->ahn;
+	prv_key.qpn = conn->ep_addr->qpn;
+	prv_key.connid = conn->ep_addr->qkey;
+	HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key),
+		  prv_reverse_av_entry);
+	assert(prv_reverse_av_entry &&
+	       prv_reverse_av_entry->entry == entry);
+	HASH_DEL(*prv_reverse_av, prv_reverse_av_entry);
+	free(prv_reverse_av_entry);
 }
 
 
@@ -420,7 +468,8 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
-	err = efa_av_reverse_av_add(&av->cur_reverse_av, &av->prv_reverse_av, explicit_av_entry);
+	err = efa_rdm_av_reverse_av_add(&av->cur_reverse_av, &av->prv_reverse_av,
+					explicit_av_entry);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert explicit connection for fi_addr %" PRIu64 " into reverse AV: %s\n",
 			 *fi_addr, fi_strerror(-err));
@@ -434,9 +483,9 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 	}
 
 	/* Handle reverse AV and AV ref counts */
-	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
-				 &av->prv_reverse_av_implicit,
-				 container_of(implicit_conn, struct efa_av_entry, conn));
+	efa_rdm_av_reverse_av_remove(&av->cur_reverse_av_implicit,
+				     &av->prv_reverse_av_implicit,
+				     container_of(implicit_conn, struct efa_av_entry, conn));
 
 	dlist_remove(&implicit_conn->implicit_av_lru_entry);
 	err = efa_av_array_insert(av->addr_to_conn_map_implicit, implicit_fi_addr, NULL);
