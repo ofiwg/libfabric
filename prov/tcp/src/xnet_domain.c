@@ -311,6 +311,7 @@ static int xnet_mplex_domain_close(fid_t fid)
 
 	ofi_genlock_destroy(&domain->subdomain_list_lock);
 	xnet_close_progress(&domain->progress);
+	fi_freeinfo(domain->subdomain_info);
 	ofi_domain_close(&domain->util_domain);
 	free(domain);
 	return FI_SUCCESS;
