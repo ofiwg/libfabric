@@ -1079,6 +1079,118 @@ void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state)
 }
 
 /**
+ * @brief Build a CTS packet entry naming @p send_id, as if just received.
+ */
+static struct efa_rdm_pke *
+efa_unit_test_alloc_cts_pke(struct efa_rdm_ep *ep, uint32_t send_id,
+			    uint64_t recv_length)
+{
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_cts_hdr *cts_hdr;
+
+	pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pke);
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+
+	cts_hdr = (struct efa_rdm_cts_hdr *) pke->wiredata;
+	cts_hdr->type = EFA_RDM_CTS_PKT;
+	cts_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	cts_hdr->flags = 0;
+	cts_hdr->send_id = send_id;
+	cts_hdr->recv_id = 0;
+	cts_hdr->recv_length = recv_length;
+
+	return pke;
+}
+
+/**
+ * @brief Verify a CTS grants its window to the ope its id names.
+ *
+ * A CTS names a txe in the longcts msg and write directions and an rxe in the
+ * emulated longcts read direction, and the two pools have independent index
+ * spaces, so both have to resolve from the id alone.
+ */
+void test_efa_rdm_pke_handle_cts_recv_grants_window(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	efa_rdm_pke_handle_cts_recv(
+		efa_unit_test_alloc_cts_pke(ep, txe->tx_id, 4096));
+	assert_int_equal(txe->window, 4096);
+	assert_int_equal(txe->state, EFA_RDM_OPE_SEND);
+
+	/* the emulated longcts read direction, where a CTS names an rxe */
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_read_rsp);
+	assert_non_null(rxe);
+	efa_rdm_pke_handle_cts_recv(
+		efa_unit_test_alloc_cts_pke(ep, rxe->rx_id, 2048));
+	assert_int_equal(rxe->window, 2048);
+	assert_int_equal(rxe->state, EFA_RDM_OPE_SEND);
+
+	efa_rdm_txe_release(txe);
+	efa_rdm_rxe_release(rxe);
+}
+
+/**
+ * @brief Verify a CTS naming a released txe is dropped, not misapplied.
+ *
+ * A CTS is never retransmitted, so it can arrive after its sender gave up on
+ * the transfer and the pool handed the txe's slot to an unrelated one. The
+ * new occupant must be left exactly as it was.
+ */
+void test_efa_rdm_pke_handle_cts_recv_drops_stale_id(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *reused;
+	uint32_t stale_id;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	stale_id = txe->tx_id;
+	efa_rdm_txe_release(txe);
+
+	/* nothing holds the slot, so the CTS has nowhere to land */
+	efa_rdm_pke_handle_cts_recv(
+		efa_unit_test_alloc_cts_pke(ep, stale_id, 4096));
+	assert_true(dlist_empty(&ep->ope_longcts_send_list));
+
+	/* the slot's next occupant must not inherit the grant */
+	reused = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(reused);
+	assert_int_equal(efa_rdm_txe_id_index(reused->tx_id),
+			 efa_rdm_txe_id_index(stale_id));
+	assert_int_not_equal(reused->tx_id, stale_id);
+
+	efa_rdm_pke_handle_cts_recv(
+		efa_unit_test_alloc_cts_pke(ep, stale_id, 4096));
+	assert_int_equal(reused->window, 0);
+	assert_int_equal(reused->state, EFA_RDM_TXE_REQ);
+	assert_true(dlist_empty(&ep->ope_longcts_send_list));
+
+	/* the same CTS with the current id is applied */
+	efa_rdm_pke_handle_cts_recv(
+		efa_unit_test_alloc_cts_pke(ep, reused->tx_id, 4096));
+	assert_int_equal(reused->window, 4096);
+	assert_int_equal(reused->state, EFA_RDM_OPE_SEND);
+
+	efa_rdm_txe_release(reused);
+}
+
+/**
  * @brief Verify efa_rdm_pke_init_peer_error_for_ope() emits msg_id ONLY
  *        (no op_id hint) for a medium txe.
  *
