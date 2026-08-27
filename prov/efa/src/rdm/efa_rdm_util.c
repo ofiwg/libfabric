@@ -42,7 +42,7 @@ bool efa_rdm_get_use_device_rdma(uint32_t fabric_api_version)
 		}
 
 		if (default_val && !hw_support) {
-			fprintf(stderr, "EFA device with vendor id %x unexpectedly has "
+			fprintf(stderr, "EFA device with part id %x unexpectedly has "
 				"no RDMA support. Application will abort().\n",
 				vendor_part_id);
 			abort();
