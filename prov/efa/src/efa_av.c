@@ -1012,6 +1012,42 @@ int efa_av_init_util_av(struct efa_domain *efa_domain,
 			   util_av, context);
 }
 
+/**
+ * @brief initialize the shared (base) fields of an efa_av
+ *
+ * Initialize the explicit forward AV array, the explicit util AV (sized by
+ * the caller-supplied entry_size), and the owning domain and AV type. The
+ * cur_reverse_av map starts empty (NULL) and is populated on insert. This is
+ * the shared base of efa_av_open for both the efa-direct and RDM paths.
+ *
+ * @param[out]	av		efa address vector
+ * @param[in]	efa_domain	owning domain
+ * @param[in]	attr		AV attr application passed to fi_av_open
+ * @param[in]	context		context application passed to fi_av_open
+ * @param[in]	entry_size	util_av entry context length (path dependent)
+ * @return	On success, return 0. On failure, a negative libfabric error code.
+ */
+static int efa_av_init_base(struct efa_av *av, struct efa_domain *efa_domain,
+			    struct fi_av_attr *attr, void *context,
+			    size_t entry_size)
+{
+	int ret;
+
+	ret = efa_av_array_init(&av->addr_to_conn_map);
+	if (ret)
+		return ret;
+
+	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context, entry_size);
+	if (ret) {
+		efa_av_array_destroy(av->addr_to_conn_map);
+		return ret;
+	}
+
+	av->domain = efa_domain;
+	av->type = attr->type;
+	return 0;
+}
+
 int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		struct fid_av **av_fid, void *context)
 {
@@ -1044,13 +1080,6 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (!av)
 		return -FI_ENOMEM;
 
-	ret = efa_av_array_init(&av->addr_to_conn_map);
-	if (ret)
-		goto err;
-	ret = efa_av_array_init(&av->addr_to_conn_map_implicit);
-	if (ret)
-		goto err;
-
 	if (attr->type == FI_AV_MAP) {
 		EFA_INFO(FI_LOG_AV, "FI_AV_MAP is deprecated in Libfabric 2.x. Please use FI_AV_TABLE. "
 					"EFA provider will now switch to using FI_AV_TABLE.\n");
@@ -1063,15 +1092,19 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				&universe_size) == FI_SUCCESS)
 		attr->count = MAX(attr->count, universe_size);
 
+	ret = efa_av_init_base(av, efa_domain, attr, context,
+			       sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN);
+	if (ret)
+		goto err_free;
+
+	ret = efa_av_array_init(&av->addr_to_conn_map_implicit);
+	if (ret)
+		goto err_destruct_base;
+
 	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av_implicit, context,
 				  sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN);
 	if (ret)
-		goto err;
-
-	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context,
-				  sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN);
-	if (ret)
-		goto err_close_util_av_implicit;
+		goto err_destroy_implicit_map;
 
 	if (efa_domain->info_type == EFA_INFO_RDM && efa_domain->fabric &&
 	    ((struct efa_rdm_fabric *) efa_domain->fabric)->shm_fabric) {
@@ -1089,21 +1122,19 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				 "The requested av size is beyond"
 				 " shm supported maximum av size: %s\n",
 				 fi_strerror(-ret));
-			goto err_close_util_av;
+			goto err_close_util_av_implicit;
 		}
 		av_attr.count = efa_env.shm_av_size;
 		assert(av_attr.type == FI_AV_TABLE);
 		ret = fi_av_open(rdm_domain->shm_domain, &av_attr,
 				 &av->shm_rdm_av, context);
 		if (ret)
-			goto err_close_util_av;
+			goto err_close_util_av_implicit;
 	}
 
 	EFA_INFO(FI_LOG_AV, "fi_av_attr:%" PRId64 "\n",
 			attr->flags);
 
-	av->domain = efa_domain;
-	av->type = attr->type;
 	av->implicit_av_size = efa_env.implicit_av_size;
 	av->shm_used = 0;
 
@@ -1117,21 +1148,23 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	return 0;
 
-err_close_util_av:
-	retv = ofi_av_close(&av->util_av);
-	if (retv)
-		EFA_WARN(FI_LOG_AV,
-			 "Unable to close util_av: %s\n", fi_strerror(-retv));
-
 err_close_util_av_implicit:
 	retv = ofi_av_close(&av->util_av_implicit);
 	if (retv)
 		EFA_WARN(FI_LOG_AV,
 			 "Unable to close util_av_implicit: %s\n", fi_strerror(-retv));
 
-err:
-	efa_av_array_destroy(av->addr_to_conn_map);
+err_destroy_implicit_map:
 	efa_av_array_destroy(av->addr_to_conn_map_implicit);
+
+err_destruct_base:
+	retv = ofi_av_close(&av->util_av);
+	if (retv)
+		EFA_WARN(FI_LOG_AV,
+			 "Unable to close util_av: %s\n", fi_strerror(-retv));
+	efa_av_array_destroy(av->addr_to_conn_map);
+
+err_free:
 	free(av);
 	return ret;
 }

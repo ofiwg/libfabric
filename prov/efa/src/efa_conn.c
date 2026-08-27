@@ -234,15 +234,84 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
  * @return	on success, return a pointer to an efa_conn object
  *		otherwise, return NULL. errno will be set to a positive error code.
  */
+static void efa_av_entry_release_explicit(struct efa_av *av, struct efa_av_entry *entry,
+				 fi_addr_t fi_addr)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
+
+/**
+ * @brief create a base explicit AV entry
+ *
+ * Insert the raw address into the explicit util AV, initialize the base
+ * efa_av_entry fields (ep_addr, fi_addr) and its base AH, and register the
+ * entry in the explicit addr map. Reverse-AV indexing (base cur_reverse_av or
+ * the rdm cur+prv variant) and RDM-only state (the owning AV back-pointer,
+ * implicit/shm addresses, and shm AV insertion) are layered on by the caller.
+ * Caller must hold util_domain.lock and util_av.lock.
+ *
+ * @param[in]	av		efa address vector
+ * @param[in]	raw_addr	raw efa address
+ * @param[out]	fi_addr_out	on success, the assigned explicit fi_addr
+ * @return	on success, a pointer to the efa_av_entry; otherwise NULL.
+ */
+static struct efa_av_entry *efa_av_entry_alloc_explicit(struct efa_av *av,
+					       struct efa_ep_addr *raw_addr,
+					       fi_addr_t *fi_addr_out)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+{
+	struct util_av *util_av = &av->util_av;
+	struct util_av_entry *util_av_entry;
+	struct efa_av_entry *efa_av_entry;
+	struct efa_conn *conn;
+	fi_addr_t fi_addr;
+	int err;
+
+	err = ofi_av_insert_addr(util_av, raw_addr, &fi_addr);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n", fi_strerror(-err));
+		return NULL;
+	}
+
+	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
+	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
+	assert(efa_is_same_addr(raw_addr, (struct efa_ep_addr *)efa_av_entry->ep_addr));
+
+	conn = &efa_av_entry->conn;
+	memset(conn, 0, sizeof(*conn));
+	conn->ep_addr = (struct efa_ep_addr *)efa_av_entry->ep_addr;
+	assert(av->type == FI_AV_TABLE);
+	conn->fi_addr = fi_addr;
+
+	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, false, sizeof(struct efa_ah));
+	if (!conn->ah)
+		goto err_remove_addr;
+
+	err = efa_av_array_insert(av->addr_to_conn_map, fi_addr, conn);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "Failed to insert connection for fi_addr %" PRIu64
+			" into array: %s\n", fi_addr, fi_strerror(-err));
+		goto err_release_ah;
+	}
+
+	*fi_addr_out = fi_addr;
+	return efa_av_entry;
+
+err_release_ah:
+	efa_ah_release(av->domain, conn->ah, false);
+err_remove_addr:
+	conn->ep_addr = NULL;
+	err = ofi_av_remove_addr(util_av, fi_addr);
+	if (err)
+		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed for fi_addr %" PRIu64
+			": %s\n", fi_addr, fi_strerror(-err));
+	return NULL;
+}
+
 struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
 					 uint64_t flags, void *context, bool insert_shm_av)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
-	struct util_av *util_av;
-	struct efa_cur_reverse_av **cur_reverse_av;
-	struct efa_prv_reverse_av **prv_reverse_av;
-	struct util_av_entry *util_av_entry = NULL;
-	struct efa_av_entry *efa_av_entry = NULL;
+	struct efa_av_entry *efa_av_entry;
 	struct efa_conn *conn;
 	fi_addr_t fi_addr;
 	int err;
@@ -252,35 +321,28 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 	if (flags & FI_SYNC_ERR)
 		memset(context, 0, sizeof(int));
 
-	util_av = &av->util_av;
-	cur_reverse_av = &av->cur_reverse_av;
-	prv_reverse_av = &av->prv_reverse_av;
+	efa_av_entry = efa_av_entry_alloc_explicit(av, raw_addr, &fi_addr);
+	if (!efa_av_entry)
+		return NULL;
 
-	err = ofi_av_insert_addr(util_av, raw_addr, &fi_addr);
+	conn = &efa_av_entry->conn;
+
+	if (av->domain->info_type == EFA_INFO_RDM)
+		err = efa_rdm_av_reverse_av_add(&av->cur_reverse_av,
+						&av->prv_reverse_av, efa_av_entry);
+	else
+		err = efa_av_reverse_av_add(&av->cur_reverse_av, efa_av_entry);
 	if (err) {
-		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n", fi_strerror(-err));
+		EFA_WARN(FI_LOG_AV, "Failed to insert connection for fi_addr %" PRIu64
+			" into reverse AV: %s\n", fi_addr, fi_strerror(-err));
+		efa_av_entry_release_explicit(av, efa_av_entry, fi_addr);
 		return NULL;
 	}
 
-	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool,
-					     fi_addr);
-	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
-	assert(efa_is_same_addr(raw_addr, (struct efa_ep_addr *)efa_av_entry->ep_addr));
-
-	conn = &efa_av_entry->conn;
-	memset(conn, 0, sizeof(*conn));
-	conn->ep_addr = (struct efa_ep_addr *)efa_av_entry->ep_addr;
-	assert(av->type == FI_AV_TABLE);
-
 	conn->av = av;
-	conn->fi_addr = fi_addr;
 	conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
-
-	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, false, sizeof(struct efa_ah));
-	if (!conn->ah)
-		goto err_release;
-
 	conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
+
 	/*
 	 * The explicit AV insertion is triggered by application calling
 	 * fi_av_insert API. The shm av insertion should happen when the
@@ -291,51 +353,14 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 		if (err) {
 			EFA_WARN(FI_LOG_AV, "Failed to insert fi_addr %" PRIu64
 				" into shm provider's AV: %s\n", fi_addr, fi_strerror(-err));
-			goto err_release;
+			efa_rdm_av_reverse_av_remove(&av->cur_reverse_av,
+						     &av->prv_reverse_av, efa_av_entry);
+			efa_av_entry_release_explicit(av, efa_av_entry, fi_addr);
+			return NULL;
 		}
 	}
 
-	err = efa_av_array_insert(av->addr_to_conn_map, fi_addr, conn);
-	if (err) {
-		EFA_WARN(FI_LOG_AV, "Failed to insert connection for fi_addr %" PRIu64
-			" into array: %s\n",
-			fi_addr, fi_strerror(-err));
-		goto err_rdm_deinit;
-	}
-
-	if (av->domain->info_type == EFA_INFO_RDM)
-		err = efa_rdm_av_reverse_av_add(cur_reverse_av, prv_reverse_av,
-						efa_av_entry);
-	else
-		err = efa_av_reverse_av_add(cur_reverse_av, efa_av_entry);
-	if (err) {
-		EFA_WARN(FI_LOG_AV, "Failed to insert connection for fi_addr %" PRIu64
-			" into reverse AV: %s\n", fi_addr, fi_strerror(-err));
-		err = efa_av_array_insert(av->addr_to_conn_map, fi_addr, NULL);
-		if (err) {
-			EFA_WARN(FI_LOG_AV, "While processing previous failure, failed to remove connection for fi_addr %" PRIu64
-				" from array: %s\n", fi_addr, fi_strerror(-err));
-		}
-		goto err_rdm_deinit;
-	}
 	return conn;
-
-err_rdm_deinit:
-	if (av->domain->info_type == EFA_INFO_RDM) {
-		efa_conn_rdm_deinit(av, conn);
-	}
-
-err_release:
-	if (conn->ah)
-		efa_ah_release(av->domain, conn->ah, false);
-
-	conn->ep_addr = NULL;
-	err = ofi_av_remove_addr(util_av, fi_addr);
-	if (err)
-		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed for fi_addr %" PRIu64
-			": %s\n", fi_addr, fi_strerror(-err));
-
-	return NULL;
 }
 
 /**
@@ -473,6 +498,29 @@ static void efa_conn_release_util_av(struct efa_av_array *conn_map, struct util_
 }
 
 /**
+ * @brief release the base resources of an explicit AV entry
+ *
+ * Release the entry's base AH and remove it from the explicit addr map and util
+ * AV (clearing its raw address). Reverse-AV removal and RDM-only teardown (shm
+ * AV, per-endpoint peer maps) are handled by the caller before calling this.
+ * Caller must hold util_domain.lock and util_av.lock.
+ *
+ * @param[in]	av	 address vector
+ * @param[in]	entry	 efa_av_entry to release
+ * @param[in]	fi_addr	 the entry's explicit fi_addr
+ */
+static void efa_av_entry_release_explicit(struct efa_av *av, struct efa_av_entry *entry,
+				 fi_addr_t fi_addr)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+{
+	struct efa_conn *conn = &entry->conn;
+
+	efa_ah_release(av->domain, conn->ah, false);
+	efa_conn_release_util_av(av->addr_to_conn_map, &av->util_av, conn, fi_addr);
+}
+
+/**
  * @brief release an efa conn object from the explicit AV
  *
  * Caller must hold util_domain.lock and util_av.lock.
@@ -495,8 +543,8 @@ void efa_conn_release_explicit(struct efa_av *av, struct efa_conn *conn)
 	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
 
-	efa_ah_release(av->domain, conn->ah, false);
-	efa_conn_release_util_av(av->addr_to_conn_map, &av->util_av, conn, conn->fi_addr);
+	efa_av_entry_release_explicit(av, container_of(conn, struct efa_av_entry, conn),
+			     conn->fi_addr);
 }
 
 /**
