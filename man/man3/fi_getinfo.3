@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_getinfo" "3" "2025\-10\-31" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_getinfo" "3" "2026\-08\-27" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -814,6 +814,23 @@ Indicates that there was insufficient memory to complete the operation.
 .TP
 \f[I]FI_ENOSYS\f[R]
 Indicates that requested version is newer than the library being used.
+.SH ENVIRONMENT VARIABLES
+.PP
+The following environment variables affect the behavior of
+\f[V]fi_getinfo\f[R].
+.TP
+\f[I]FI_ADDR_FORMAT\f[R]
+Filter \f[V]fi_getinfo\f[R] results to only return entries matching the
+specified address format.
+When set, any fi_info entry whose addr_format does not match the
+specified value is removed from the results.
+Valid values correspond to the constants defined in the \f[I]Addressing
+formats\f[R] section.
+By default, no filtering is applied.
+This variable is intended as a fallback mechanism for environments where
+the application or middleware cannot be modified.
+Applications and upper layers should prefer selecting an appropriate
+address format through \f[V]fi_getinfo\f[R] hints.
 .SH NOTES
 .PP
 Various libfabric calls, including fi_getinfo, take a struct fi_info as
