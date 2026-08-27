@@ -297,10 +297,9 @@ EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_read_nack_hdr, 16);
  * error can fire while the data still arrives at the peer, so only the
  * receiving side's local state can decide the outcome. msg_id (with the
  * packet's source peer) always uniquely names the transfer; op_id is an
- * optional ope-pool index owned by the packet's receiver that avoids a
- * linear msg_id search, but pooled opes are freed and reused, so it is
- * usable only when op_id_valid is set and the resolved ope still names
- * this msg_id.
+ * optional ope id owned by the packet's receiver that avoids a linear msg_id
+ * search, and is usable only when op_id_valid is set and the id still
+ * resolves to the ope that created it.
  */
 struct efa_rdm_peer_error_hdr {
 	EFA_RDM_BASE_HEADER();
