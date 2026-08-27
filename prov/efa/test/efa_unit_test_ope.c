@@ -1007,6 +1007,134 @@ void test_efa_rdm_ope_txe_pool_cap_adjusted(void **state)
 	efa_env.rdm_txe_pool_size = saved;
 }
 
+
+/**
+ * @brief Verify a txe id stops resolving once its txe is released.
+ *
+ * The pool hands the slot straight to the next txe, so an id a peer is still
+ * echoing back -- a CTS for a transfer the sender already gave up on -- must
+ * not resolve to the slot's new occupant.
+ */
+void test_efa_rdm_txe_id_rejects_stale_id(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *reused;
+	uint32_t stale_id;
+	uint8_t stale_gen;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	stale_id = txe->tx_id;
+	stale_gen = txe->gen;
+	assert_ptr_equal(efa_rdm_ep_live_txe_from_id(ep, stale_id), txe);
+
+	efa_rdm_txe_release(txe);
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, stale_id));
+
+	reused = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(reused);
+	assert_int_equal(efa_rdm_txe_id_index(reused->tx_id),
+			 efa_rdm_txe_id_index(stale_id));
+	assert_int_equal(reused->gen, (uint8_t) (stale_gen + 1));
+	assert_int_not_equal(reused->tx_id, stale_id);
+
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, stale_id));
+	assert_ptr_equal(efa_rdm_ep_live_txe_from_id(ep, reused->tx_id), reused);
+
+	efa_rdm_txe_release(reused);
+}
+
+/**
+ * @brief Verify ids that name no live txe are rejected.
+ */
+void test_efa_rdm_txe_id_rejects_bad_ids(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* an id the peer never told us */
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, EFA_RDM_OPE_ID_INVALID));
+
+	/* an rxe id: a legal index, but of the other pool */
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_msg);
+	assert_non_null(rxe);
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, rxe->rx_id));
+	efa_rdm_rxe_release(rxe);
+
+	/* a slot holding no txe */
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, efa_env.rdm_txe_pool_size - 1));
+}
+
+/**
+ * @brief Verify a packet naming a released txe is dropped, not applied.
+ *
+ * The pool hands a released txe's slot to the next transfer, so a RECEIPT
+ * still on the wire names an unrelated txe by index. Resolving it through the
+ * generation check has to drop the packet rather than report a completion for
+ * a transfer that never finished.
+ */
+void test_efa_rdm_pke_receipt_drops_stale_txe_id(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *reused;
+	struct efa_rdm_pke *receipt_pke;
+	struct efa_rdm_receipt_hdr *receipt_hdr;
+	size_t pkts_to_post;
+	uint32_t stale_id;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	stale_id = txe->tx_id;
+	efa_rdm_txe_release(txe);
+
+	/* The next txe takes the same slot, so the stale id names it by index. */
+	reused = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(reused);
+	assert_int_equal(efa_rdm_txe_id_index(stale_id),
+			 efa_rdm_txe_id_index(reused->tx_id));
+	assert_int_not_equal(stale_id, reused->tx_id);
+
+	receipt_pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+					EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(receipt_pke);
+	receipt_pke->ep = ep;
+	receipt_hdr = efa_rdm_pke_get_receipt_hdr(receipt_pke);
+	receipt_hdr->type = EFA_RDM_RECEIPT_PKT;
+	receipt_hdr->tx_id = stale_id;
+
+	pkts_to_post = ep->efa_rx_pkts_to_post;
+	efa_rdm_pke_handle_receipt_recv(receipt_pke);
+
+	/* The reused txe must not be credited with the stale transfer's ack. */
+	assert_false(reused->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED);
+	assert_int_equal(reused->bytes_acked, 0);
+
+	/* The drop path released the packet rather than leaking it. */
+	assert_int_equal(ep->efa_rx_pkts_to_post, pkts_to_post + 1);
+
+	/* Restore the rx pkt accounting that releasing the pke disturbed. */
+	ep->efa_rx_pkts_to_post = 0;
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+	ep->efa_rx_pkts_held = 0;
+
+	efa_rdm_txe_release(reused);
+}
+
 void test_efa_rdm_rxe_map(void **state)
 {
 	struct efa_resource *resource = *state;

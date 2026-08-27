@@ -78,7 +78,16 @@ enum efa_rdm_cuda_copy_method {
  */
 struct efa_rdm_ope {
 	enum efa_rdm_ope_type type;
-	uint8_t gen; /**< generation counter, incremented on release for use-after-free detection */
+	/**
+	 * @brief generation of this pool slot
+	 *
+	 * Bumped on release and preserved across the release-time poisoning,
+	 * so it tells this occupant of the slot from any earlier one. A pke
+	 * snapshots it to catch a stale ope back-pointer, and a txe id carries
+	 * it so a peer's id stops resolving once the slot moves on. That second
+	 * use is not debug only, so this must stay correct in release builds.
+	 */
+	uint8_t gen;
 
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
