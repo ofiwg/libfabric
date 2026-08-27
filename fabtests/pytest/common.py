@@ -929,6 +929,34 @@ def test_selected_by_marker(config, test_markers, name):
     return with_marker and not without_marker
 
 
+def filter_memory_types_for_pr_ci(candidates):
+    """
+    Reduce a memory type candidate list to what the PR CI suite runs.
+
+    PR CI only needs the symmetric permutations: the device_to_device flavors
+    (cuda_to_cuda, neuron_to_neuron, ...) plus host_to_host as the fallback for
+    endpoints without an accelerator.  The mixed host<->device permutations
+    (host_to_cuda, cuda_to_host, ...) exercise the same hmem paths with one
+    endpoint on host memory and are covered by the default (non PR CI) runs.
+
+    host_to_host is kept here regardless of what the endpoints have; dropping
+    it when an accelerator is present is left to
+    pick_preferred_memory_flavor(), which is the only place with device
+    detection results.
+
+    Returns the input unchanged when no symmetric permutation exists, so a
+    test declaring only mixed memory types keeps its coverage instead of
+    being parametrized with an empty list.
+    """
+    symmetric = []
+    for param in candidates:
+        source, destination = param.values[0].split("_to_")
+        if source == destination:
+            symmetric.append(param)
+
+    return symmetric or candidates
+
+
 def client_server_have_device(memory_token, server_id, client_id):
     """
     Return True if both client and server endpoints named in a memory-type

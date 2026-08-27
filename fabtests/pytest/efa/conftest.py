@@ -5,6 +5,7 @@ import time
 from retrying import retry
 from common import (
     client_server_have_device,
+    filter_memory_types_for_pr_ci,
     num_hmem_devices,
     test_selected_by_marker,
     has_ssh_connection_err_msg,
@@ -127,7 +128,7 @@ def pick_preferred_memory_flavor(candidates, detected):
     return accelerator or host_only
 
 
-def add_memory_type_parametrization(metafunc, memory_type_marker):
+def add_memory_type_parametrization(metafunc, memory_type_marker, test_type):
     """
     Parametrize the memory_type fixture at collection time from the test's
     @pytest.mark.memory_type(...) declaration, dropping any permutation whose
@@ -136,6 +137,12 @@ def add_memory_type_parametrization(metafunc, memory_type_marker):
     Fallback (no coverage regression): if --server-id/--client-id are not
     provided or device detection fails, every candidate memory type is
     included and the runtime skip in common.py remains the safety net.
+
+    For test_type "pr_ci" only the symmetric permutations are kept
+    (host_to_host, cuda_to_cuda, neuron_to_neuron, ...); see
+    filter_memory_types_for_pr_ci().  PR CI also implies
+    prefer_accelerator=True, so host_to_host runs only on endpoints without
+    an accelerator.
 
     prefer_accelerator=True picks one memory flavor at generation time to
     reduce the test count; see pick_preferred_memory_flavor().
@@ -154,6 +161,13 @@ def add_memory_type_parametrization(metafunc, memory_type_marker):
 
     candidates = memory_type_marker.args[0]
     prefer_accelerator = memory_type_marker.kwargs.get("prefer_accelerator", False)
+
+    # PR CI runs device_to_device only, so drop the mixed permutations before
+    # the (SSH based) device detection below, and fall back to host_to_host
+    # only when the endpoints have no accelerator.
+    if test_type == "pr_ci":
+        candidates = filter_memory_types_for_pr_ci(candidates)
+        prefer_accelerator = True
 
     server_id = metafunc.config.getoption("--server-id", default=None)
     client_id = metafunc.config.getoption("--client-id", default=None)
@@ -201,7 +215,7 @@ def pytest_generate_tests(metafunc):
 
     # parametrize memory_type from its marker, dropping permutations
     # whose device is absent on the owning endpoint
-    add_memory_type_parametrization(metafunc, memory_type_marker)
+    add_memory_type_parametrization(metafunc, memory_type_marker, test_type)
 
 hmem_type_list = [
     pytest.param("cuda", marks=pytest.mark.cuda_memory),
