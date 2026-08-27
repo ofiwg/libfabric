@@ -111,6 +111,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 {
 	int i, err = 0;
+	uint8_t gen;
 	struct dlist_entry *tmp;
 	struct efa_rdm_pke *pkt_entry;
 
@@ -157,12 +158,15 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		txe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
 	}
 
-	txe->gen++;
-	txe->gen &= EFA_RDM_GEN_MASK;
+	/* Bump the slot generation so any id this txe handed the peer stops
+	 * resolving, and carry it across the poisoning: it is the only thing
+	 * that tells such an id from one naming the slot's next occupant. */
+	gen = txe->gen + 1;
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(txe,
 			      sizeof(struct efa_rdm_ope));
 #endif
+	txe->gen = gen;
 	ofi_buf_free(txe);
 }
 
@@ -176,6 +180,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 	struct efa_rdm_pke *pkt_entry;
 	struct dlist_entry *tmp;
 	int i, err;
+	uint8_t gen;
 
 	if (rxe->peer)
 		dlist_remove(&rxe->peer_entry);
@@ -225,12 +230,13 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 		rxe->internal_flags &= ~EFA_RDM_OPE_QUEUED_FLAGS;
 	}
 
-	rxe->gen++;
-	rxe->gen &= EFA_RDM_GEN_MASK;
+	/* carried across the poisoning for the same reason as a txe's */
+	gen = rxe->gen + 1;
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(rxe,
 			      sizeof(struct efa_rdm_ope));
 #endif
+	rxe->gen = gen;
 	ofi_buf_free(rxe);
 }
 
