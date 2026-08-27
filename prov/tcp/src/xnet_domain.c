@@ -177,8 +177,9 @@ xnet_mplex_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 {
 	struct xnet_domain *domain;
 	struct fid_list_entry *item;
-	struct fid_mr *sub_mr_fid;
+	struct xnet_domain *subdomain;
 	struct ofi_mr *mr;
+	uint64_t sub_key;
 	int ret;
 
 	domain = container_of(fid, struct xnet_domain,
@@ -190,10 +191,23 @@ xnet_mplex_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr = container_of(*mr_fid, struct ofi_mr, mr_fid.fid);
 	mr->mr_fid.fid.ops = &xnet_mplex_mr_fi_ops;
 
+	/* Register directly into each subdomain's mr map, rather than
+	 * creating a separate fid_mr per subdomain (as done for a normal
+	 * fi_mr_regattr()).  The subdomain only needs the mr map entry to
+	 * translate keys; there's no fid to expose to the application, and
+	 * no fid means nothing to leak -- the mr map entries are freed when
+	 * the subdomain's mr map is destroyed or when the entry is removed
+	 * from xnet_subdomains_mr_close().
+	 */
 	ofi_genlock_lock(&domain->subdomain_list_lock);
 	dlist_foreach_container(&domain->subdomain_list,
 				struct fid_list_entry, item, entry) {
-		ret = xnet_mr_regattr(item->fid, attr, flags, &sub_mr_fid);
+		subdomain = container_of(item->fid, struct xnet_domain,
+					 util_domain.domain_fid.fid);
+		ofi_genlock_lock(&subdomain->util_domain.lock);
+		ret = ofi_mr_map_insert(&subdomain->util_domain.mr_map, attr,
+					&sub_key, mr, flags);
+		ofi_genlock_unlock(&subdomain->util_domain.lock);
 		if (ret) {
 			FI_WARN(&xnet_prov, FI_LOG_MR,
 				"Failed to reg mr (%" PRIu64 ") from subdomain (%p)\n",
@@ -203,6 +217,8 @@ xnet_mplex_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			(void) ofi_mr_close(&(*mr_fid)->fid);
 			break;
 		}
+
+		ofi_atomic_inc32(&subdomain->util_domain.ref);
 	}
 
 	ofi_genlock_unlock(&domain->subdomain_list_lock);
