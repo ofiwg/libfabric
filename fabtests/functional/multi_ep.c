@@ -72,10 +72,7 @@ static void free_ep_res()
 	int i;
 
 	for (i = 0; i < num_eps; i++) {
-		if (!fi)
-			continue;
-
-		if (fi->domain_attr->mr_mode & FI_MR_RAW)
+		if (fi && fi->domain_attr->mr_mode & FI_MR_RAW)
 			(void) fi_mr_unmap_key(domain, peer_iovs[i].key);
 
 		FT_CLOSE_FID(send_mrs[i]);
