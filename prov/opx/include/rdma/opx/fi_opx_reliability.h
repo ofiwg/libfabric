@@ -1014,6 +1014,8 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 			return -1;
 		}
 
+		/* Reserve the initial range; the returned PSN remains its base. */
+		(*tx_flow)->psn.psn.psn = psns_to_get & MAX_PSN;
 		return psn;
 	}
 
