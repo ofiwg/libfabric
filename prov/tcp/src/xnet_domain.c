@@ -310,6 +310,7 @@ static int xnet_mplex_domain_close(fid_t fid)
 	ofi_genlock_unlock(&domain->subdomain_list_lock);
 
 	ofi_genlock_destroy(&domain->subdomain_list_lock);
+	xnet_close_progress(&domain->progress);
 	ofi_domain_close(&domain->util_domain);
 	free(domain);
 	return FI_SUCCESS;
@@ -370,10 +371,21 @@ static int xnet_domain_mplex_open(struct fid_fabric *fabric_fid, struct fi_info 
 	if (ret)
 		goto close;
 
+	/* The mplex domain itself never runs a progress engine -- only its
+	 * subdomains do.  However, an srx context may be created against
+	 * this domain (and later closed) before it has been associated
+	 * with a subdomain (e.g. if endpoint enable fails or never
+	 * happens), so we still need a valid, initialized progress
+	 * instance to avoid dereferencing a NULL active_lock.
+	 */
+	ret = xnet_init_progress(&domain->progress, info);
+	if (ret)
+		goto free_subdomain_lock;
+
 	domain->subdomain_info = fi_dupinfo(info);
 	if (!domain->subdomain_info) {
 		ret = -FI_ENOMEM;
-		goto free_lock;
+		goto close_progress;
 	}
 
 	domain->subdomain_info->domain_attr->threading = FI_THREAD_DOMAIN;
@@ -386,7 +398,9 @@ static int xnet_domain_mplex_open(struct fid_fabric *fabric_fid, struct fi_info 
 	*domain_fid = &domain->util_domain.domain_fid;
 	return FI_SUCCESS;
 
-free_lock:
+close_progress:
+	xnet_close_progress(&domain->progress);
+free_subdomain_lock:
 	ofi_genlock_destroy(&domain->subdomain_list_lock);
 close:
 	ofi_domain_close(&domain->util_domain);
