@@ -3783,8 +3783,7 @@ void test_efa_rdm_pke_handle_send_completion_peer_error_releases_rxe(void **stat
 	err_hdr->emitter_ope_type = EFA_RDM_RXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
-	err_hdr->op_id = 0xdead;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT;
 	err_hdr->connid = 0xc0ffee;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -3873,7 +3872,7 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state)
 		err_hdr->emitter_ope_type = EFA_RDM_RXE;
 		err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 		err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-		err_hdr->op_id_valid = 0;
+		err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	}
 
 	ep->efa_outstanding_tx_ops++;
@@ -4150,7 +4149,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 1;
 	err_hdr->msg_id = txe->msg_id;
 	err_hdr->op_id = txe->tx_id;
 	err_hdr->emitter_ope_type = EFA_RDM_RXE;
@@ -4255,9 +4253,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe(void **state)
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = rxe->msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -4355,9 +4352,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged(void **state)
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = rxe->msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -4468,9 +4464,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_eager_unexpected_tears_down(
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -4524,7 +4519,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state)
 	err_hdr->emitter_ope_type = EFA_RDM_RXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 1;
 	err_hdr->msg_id = 0xffffffff;
 	err_hdr->op_id = 0xffffffff;	/* far out of range */
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
@@ -5494,9 +5488,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = rxe->msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	err_pkt->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -5644,9 +5637,8 @@ static void run_medium_inbound_peer_abort(struct efa_resource *resource,
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -5751,9 +5743,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped(voi
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = 0x7;	/* never inserted, but in-window */
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -5854,9 +5845,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down(
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);

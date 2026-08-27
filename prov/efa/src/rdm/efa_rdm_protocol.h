@@ -296,16 +296,15 @@ EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_read_nack_hdr, 16);
  * identifiers, never a verdict about what the remote must do: a device TX
  * error can fire while the data still arrives at the peer, so only the
  * receiving side's local state can decide the outcome. msg_id (with the
- * packet's source peer) always uniquely names the transfer; op_id is an
+ * packet's source peer) always uniquely names the transfer. op_id is an
  * optional ope id owned by the packet's receiver that avoids a linear msg_id
- * search, and is usable only when op_id_valid is set and the id still
- * resolves to the ope that created it.
+ * search. It holds EFA_RDM_OPE_ID_INVALID when the emitter knows no id, and
+ * is usable only when it still resolves to the ope that created it.
  */
 struct efa_rdm_peer_error_hdr {
 	EFA_RDM_BASE_HEADER();
 	uint32_t msg_id;      /* per-peer msg_id of the aborted transfer (always valid) */
-	uint32_t op_id;       /* peer-owned ope index; usable iff op_id_valid != 0 */
-	uint32_t op_id_valid; /* nonzero iff op_id is usable */
+	uint32_t op_id;       /* peer-owned ope id, or EFA_RDM_OPE_ID_INVALID */
 	uint32_t emitter_ope_type; /* enum efa_rdm_ope_type of the emitting side: EFA_RDM_TXE (1) or EFA_RDM_RXE (2) */
 	uint32_t prov_errno;  /* the prov_errno that triggered the abort, for logging */
 	union {
@@ -314,7 +313,7 @@ struct efa_rdm_peer_error_hdr {
 	};
 };
 
-EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_peer_error_hdr, 28);
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_peer_error_hdr, 24);
 
 /**
  * @brief header format of ATOMRSP packet. (Packet Type ID 8)
