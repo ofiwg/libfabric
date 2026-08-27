@@ -257,7 +257,7 @@ static struct efa_rdm_ope *efa_test_rtm_alloc_txe(struct efa_rdm_ep *ep,
 	msg.iov_count = 1;
 	msg.addr = peer_addr;
 
-	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
 	if (!txe)
 		return NULL;
 	efa_rdm_txe_construct(txe, ep, peer, &msg, op, 0, 0);

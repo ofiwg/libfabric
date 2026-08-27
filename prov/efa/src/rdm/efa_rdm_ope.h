@@ -241,6 +241,9 @@ struct efa_rdm_ope {
 #define EFA_RDM_TXE_POOL_MAX_CNT \
 	((size_t) 1 << EFA_RDM_TXE_ID_INDEX_BITS)
 
+/* Default cap on concurrent tx operations, see FI_EFA_RDM_TXE_POOL_SIZE. */
+#define EFA_RDM_TXE_POOL_SIZE_DEFAULT	(8192)
+
 static_assert((EFA_RDM_OPE_ID_INVALID & EFA_RDM_OPE_ID_TAG) != 0,
 	      "the sentinel must be txe tagged so no rxe id can reach it");
 static_assert(EFA_RDM_RXE_POOL_MAX_CNT - 1 <= EFA_RDM_OPE_ID_MASK,
@@ -250,6 +253,8 @@ static_assert((EFA_RDM_TXE_ID_GEN_MASK & EFA_RDM_TXE_ID_INDEX_MASK) == 0,
 static_assert((EFA_RDM_OPE_ID_TAG | EFA_RDM_TXE_ID_GEN_MASK |
 	       EFA_RDM_TXE_ID_INDEX_MASK) < EFA_RDM_OPE_ID_INVALID,
 	      "the largest txe id must stop short of the sentinel");
+static_assert(EFA_RDM_TXE_POOL_SIZE_DEFAULT <= EFA_RDM_TXE_POOL_MAX_CNT,
+	      "the default txe pool cap must fit in a txe id");
 static_assert(sizeof(((struct efa_rdm_ope *) NULL)->gen) == sizeof(uint8_t),
 	      "the generation field must match the width of ope::gen");
 
