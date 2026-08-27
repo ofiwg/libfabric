@@ -37,6 +37,18 @@ struct efa_av_entry {
 	struct efa_conn		conn;
 };
 
+/**
+ * @brief return the raw endpoint address stored in an efa_av_entry
+ *
+ * The raw address is stored as a byte array whose first element is required
+ * to be ep_addr by the util_av implementation. This accessor provides a typed
+ * view over those bytes so callers do not need to reach through efa_conn.
+ */
+static inline struct efa_ep_addr *efa_av_entry_ep_addr(struct efa_av_entry *entry)
+{
+	return (struct efa_ep_addr *) entry->ep_addr;
+}
+
 struct efa_cur_reverse_av_key {
 	uint16_t ahn;
 	uint16_t qpn;
@@ -44,7 +56,7 @@ struct efa_cur_reverse_av_key {
 
 struct efa_cur_reverse_av {
 	struct efa_cur_reverse_av_key key;
-	struct efa_conn *conn;
+	struct efa_av_entry *entry;
 	UT_hash_handle hh;
 };
 
@@ -56,7 +68,7 @@ struct efa_prv_reverse_av_key {
 
 struct efa_prv_reverse_av {
 	struct efa_prv_reverse_av_key key;
-	struct efa_conn *conn;
+	struct efa_av_entry *entry;
 	UT_hash_handle hh;
 };
 
@@ -104,6 +116,10 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
 struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av,
 					      fi_addr_t fi_addr);
 
+struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr);
+
+int efa_av_is_valid_address(struct efa_ep_addr *addr);
+
 fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn,
 				    uint16_t qpn, struct efa_rdm_pke *pkt_entry);
 
@@ -115,11 +131,11 @@ fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
 int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
 			  struct efa_prv_reverse_av **prv_reverse_av,
-			  struct efa_conn *conn);
+			  struct efa_av_entry *entry);
 
 void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 				    struct efa_prv_reverse_av **prv_reverse_av,
-				    struct efa_conn *conn);
+				    struct efa_av_entry *entry);
 
 void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
 					struct efa_conn *conn)
