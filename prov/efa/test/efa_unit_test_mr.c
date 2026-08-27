@@ -627,6 +627,59 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(void **state)
 }
 
 /**
+ * @brief Verify the efa-direct ope pools cap each direction separately.
+ */
+void test_efa_direct_ope_pools_capped(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_direct_ope **ope;
+	size_t i, allocated, max_txe, max_rxe;
+
+	efa_env.track_mr = 1;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM,
+					 EFA_DIRECT_FABRIC_NAME);
+	base_ep = container_of(resource->ep, struct efa_base_ep,
+			       util_ep.ep_fid);
+
+	/* each pool is capped at the QP's own depth for that direction */
+	max_txe = efa_base_ep_get_tx_pool_size(base_ep);
+	max_rxe = efa_base_ep_get_rx_pool_size(base_ep);
+	assert_true(max_txe > 0);
+	assert_true(max_rxe > 0);
+
+	ope = calloc(MAX(max_txe, max_rxe) + 1, sizeof(*ope));
+	assert_non_null(ope);
+
+	for (allocated = 0; allocated < max_txe + 1; allocated++) {
+		ope[allocated] = ofi_buf_alloc(base_ep->txe_pool);
+		if (!ope[allocated])
+			break;
+	}
+	assert_int_equal(allocated, max_txe);
+	for (i = 0; i < allocated; i++)
+		ofi_buf_free(ope[i]);
+
+	for (allocated = 0; allocated < max_rxe + 1; allocated++) {
+		ope[allocated] = ofi_buf_alloc(base_ep->rxe_pool);
+		if (!ope[allocated])
+			break;
+	}
+	assert_int_equal(allocated, max_rxe);
+	for (i = 0; i < allocated; i++)
+		ofi_buf_free(ope[i]);
+
+	free(ope);
+
+	/* Close ep before restoring track_mr so efa_ep_close tears the pools
+	 * down the same way it created them. */
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+	efa_env.track_mr = 0;
+}
+
+/**
  * @brief Test that closing an MR with outstanding direct operations prints
  * warning and clears the desc reference.
  *
@@ -658,7 +711,7 @@ void test_efa_mr_close_warn_outstanding_direct_ope(void **state)
 	efa_mr = container_of(mr, struct efa_mr, mr_fid);
 
 	/* Simulate an outstanding direct operation referencing this MR */
-	direct_ope = ofi_buf_alloc(base_ep->ope_pool);
+	direct_ope = ofi_buf_alloc(base_ep->txe_pool);
 	assert_non_null(direct_ope);
 	direct_ope->iov_count = 1;
 	direct_ope->desc[0] = efa_mr;
@@ -720,13 +773,13 @@ void test_efa_mr_close_warn_outstanding_direct_ope_multi_ep(void **state)
 	efa_mr = container_of(mr, struct efa_mr, mr_fid);
 
 	/* Simulate outstanding direct operations on both EPs referencing the same MR */
-	direct_ope1 = ofi_buf_alloc(base_ep1->ope_pool);
+	direct_ope1 = ofi_buf_alloc(base_ep1->txe_pool);
 	assert_non_null(direct_ope1);
 	direct_ope1->iov_count = 1;
 	direct_ope1->desc[0] = efa_mr;
 	dlist_insert_tail(&direct_ope1->entry, &base_ep1->ope_list);
 
-	direct_ope2 = ofi_buf_alloc(base_ep2->ope_pool);
+	direct_ope2 = ofi_buf_alloc(base_ep2->txe_pool);
 	assert_non_null(direct_ope2);
 	direct_ope2->iov_count = 1;
 	direct_ope2->desc[0] = efa_mr;

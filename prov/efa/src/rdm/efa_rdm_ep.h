@@ -273,8 +273,8 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 /**
  * @brief look up the ope named by an ope id the peer echoed back
  *
- * The id's tag says which kind minted it, which is also what says where its
- * pool index lives.
+ * The two pools have independent index spaces, so the pool comes from the
+ * id's own tag.
  *
  * @param[in] ep	endpoint that minted @p ope_id
  * @param[in] ope_id	ope id read out of a received packet
@@ -283,16 +283,17 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 static inline struct efa_rdm_ope *
 efa_rdm_ep_get_ope_from_ope_id(struct efa_rdm_ep *ep, uint32_t ope_id)
 {
-	struct efa_rdm_ope *ope;
-	bool is_rxe = efa_rdm_ope_id_is_rxe(ope_id);
-	size_t index = is_rxe ? efa_rdm_rxe_id_index(ope_id)
-			      : efa_rdm_txe_id_index(ope_id);
+	size_t index;
 
-	assert(ofi_bufpool_ibuf_is_valid(ep->base_ep.ope_pool, index));
-	ope = ofi_bufpool_get_ibuf(ep->base_ep.ope_pool, index);
-	assert(ope->type == (is_rxe ? EFA_RDM_RXE : EFA_RDM_TXE));
+	if (efa_rdm_ope_id_is_rxe(ope_id)) {
+		index = efa_rdm_rxe_id_index(ope_id);
+		assert(ofi_bufpool_ibuf_is_valid(ep->base_ep.rxe_pool, index));
+		return ofi_bufpool_get_ibuf(ep->base_ep.rxe_pool, index);
+	}
 
-	return ope;
+	index = efa_rdm_txe_id_index(ope_id);
+	assert(ofi_bufpool_ibuf_is_valid(ep->base_ep.txe_pool, index));
+	return ofi_bufpool_get_ibuf(ep->base_ep.txe_pool, index);
 }
 
 void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
