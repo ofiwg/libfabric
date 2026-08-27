@@ -146,6 +146,7 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 {
 	int ret;
+	size_t min_pool_size, max_pool_size, txe_pool_size;
 	uint64_t tx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
 	uint64_t rx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
 
@@ -241,22 +242,53 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		goto err_free;
 
 	/*
-	 * Operation entries are tracked on the shared base_ep.ope_list, so
-	 * they are allocated from the shared base_ep.ope_pool. Unlike
-	 * efa-direct, efa-rdm always needs this pool: it backs live tx/rx
-	 * operation entries, not just the FI_EFA_TRACK_MR in-flight check.
-	 * While one pool serves both kinds it must respect the stricter of the
-	 * two id bounds, which is the txe one.
+	 * Both pools link their entries on the shared base_ep.ope_list. The
+	 * txe pool is capped by FI_EFA_RDM_TXE_POOL_SIZE so that a txe id can
+	 * index it. The rxe pool absorbs unexpected messages, so it keeps the
+	 * much wider EFA_RDM_RXE_POOL_MAX_CNT bound, which is there only to
+	 * keep an rxe id a usable pool index.
 	 */
-	ret = ofi_bufpool_create(&ep->base_ep.ope_pool,
+	/* FI_EFA_RDM_TXE_POOL_SIZE is a request. The pool still has to back
+	 * the tx size the endpoint advertises, and still cannot outgrow what a
+	 * txe id can index, so adjust a request that does not fit and say so. */
+	max_pool_size = EFA_RDM_TXE_POOL_MAX_CNT;
+	min_pool_size = MIN(roundup_power_of_two(ep->base_ep.info->tx_attr->size),
+			    max_pool_size);
+	txe_pool_size = efa_env.rdm_txe_pool_size;
+	if (txe_pool_size < min_pool_size) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "FI_EFA_RDM_TXE_POOL_SIZE %zu is below the %zu entries tx_attr->size needs, using %zu\n",
+			 txe_pool_size, min_pool_size, min_pool_size);
+		txe_pool_size = min_pool_size;
+	}
+
+	if (txe_pool_size > max_pool_size) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "FI_EFA_RDM_TXE_POOL_SIZE %zu exceeds the %zu entries a txe id can index, using %zu\n",
+			 txe_pool_size, max_pool_size, max_pool_size);
+		txe_pool_size = max_pool_size;
+	}
+
+	ret = ofi_bufpool_create(&ep->base_ep.txe_pool,
 				 sizeof(struct efa_rdm_ope),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
-				 EFA_RDM_TXE_POOL_MAX_CNT,
-				 ep->base_ep.info->tx_attr->size + ep->base_ep.info->rx_attr->size, 0);
+				 txe_pool_size, min_pool_size, 0);
 	if (ret)
 		goto err_free;
 
-	ret = ofi_bufpool_grow(ep->base_ep.ope_pool);
+	ret = ofi_bufpool_grow(ep->base_ep.txe_pool);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_create(&ep->base_ep.rxe_pool,
+				 sizeof(struct efa_rdm_ope),
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
+				 EFA_RDM_RXE_POOL_MAX_CNT,
+				 ep->base_ep.info->rx_attr->size, 0);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_grow(ep->base_ep.rxe_pool);
 	if (ret)
 		goto err_free;
 
@@ -326,8 +358,11 @@ err_free:
 	if (ep->map_entry_pool)
 		ofi_bufpool_destroy(ep->map_entry_pool);
 
-	if (ep->base_ep.ope_pool)
-		ofi_bufpool_destroy(ep->base_ep.ope_pool);
+	if (ep->base_ep.txe_pool)
+		ofi_bufpool_destroy(ep->base_ep.txe_pool);
+
+	if (ep->base_ep.rxe_pool)
+		ofi_bufpool_destroy(ep->base_ep.rxe_pool);
 
 	if (ep->overflow_pke_pool)
 		ofi_bufpool_destroy(ep->overflow_pke_pool);
@@ -857,8 +892,11 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	efa_av_array_destroy(efa_rdm_ep->fi_addr_to_peer_map);
 	efa_av_array_destroy(efa_rdm_ep->fi_addr_to_peer_map_implicit);
 
-	if (efa_rdm_ep->base_ep.ope_pool)
-		ofi_bufpool_destroy(efa_rdm_ep->base_ep.ope_pool);
+	if (efa_rdm_ep->base_ep.txe_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->base_ep.txe_pool);
+
+	if (efa_rdm_ep->base_ep.rxe_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->base_ep.rxe_pool);
 
 	if (efa_rdm_ep->overflow_pke_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->overflow_pke_pool);

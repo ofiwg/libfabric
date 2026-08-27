@@ -191,7 +191,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		goto out;
 	}
 
-	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		goto out;
@@ -744,7 +744,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
  *
  * @returns
  * Pointer to the allocated RX entry.
- * If endpoint's operation entry pool (ope_pool) has been exhausted,
+ * If endpoint's rx operation entry pool (rxe_pool) has been exhausted,
  * return NULL
  */
 struct efa_rdm_ope *
@@ -839,7 +839,7 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
  *
  * @returns
  * Pointer to the allocated RX entry.
- * If endpoint's operation entry pool (ope_pool) has been exhausted,
+ * If endpoint's rx operation entry pool (rxe_pool) has been exhausted,
  * return NULL
  */
 struct efa_rdm_ope *
