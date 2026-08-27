@@ -1159,7 +1159,9 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 	void			  *recv_buf = context->buf;
 	struct fi_opx_ep_rx *const rx	    = opx_ep->rx;
 
-	const uint32_t niov = hdr->rzv_rts.niov;
+	/* Bit 31 of the wire niov field carries OPX_HFISVC_RTS_FLAG_INLINE_EDGE;
+	 * mask it off before using this as a count. */
+	const uint32_t niov = OPX_HFISVC_RTS_GET_NIOV(hdr->rzv_rts.niov);
 
 	uint64_t xfer_len = hdr->rzv_rts.message_length;
 
@@ -1189,8 +1191,9 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			context->flags |= FI_RECV | FI_OPX_HFI_BTH_OPCODE_GET_CQ_FLAG(opcode) |
 					  FI_OPX_HFI_BTH_OPCODE_GET_MSG_FLAG(opcode);
 
-			int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(opx_ep, context, niov, recv_buf,
-									       &payload->rendezvous.hfisvc.iovs[0]);
+			/* Deferred before the edge block runs: nothing placed yet. */
+			int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
+				opx_ep, context, niov, recv_buf, &payload->rendezvous.hfisvc.iovs[0], 0, 0);
 			if (OFI_UNLIKELY(deferred_rc)) {
 				fprintf(stderr,
 					"(%d) %s:%s():%d Error: Couldn't create deferred work to handle rendezvous receive (%d), aborting.\n",
@@ -1220,14 +1223,110 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 		OPX_HFISVC_DEBUG_LOG("STRIPE-RECV: Matched RTS with niov=%u xfer_len=%lu context=%p byte_counter=%lu\n",
 				     niov, xfer_len, context, context->byte_counter);
 
+		/*
+		 * Inline edge data (STL-79510).
+		 *
+		 * TID can only land the destination on a qword boundary. When our
+		 * receive buffer is not qword-aligned, place the sub-qword head and
+		 * tail from the RTS ourselves and hand the DMA engine only the
+		 * aligned interior. The two edge regions are disjoint from that
+		 * interior, so they can be written immediately -- no ordering
+		 * against the transfer completion is required.
+		 *
+		 * The sender ships the slot unconditionally for a dma-buf source
+		 * because it cannot know our alignment; an aligned receiver simply
+		 * ignores it. Striping is disabled for dma-buf sources, so niov is
+		 * always 1 here whenever the flag is set.
+		 */
+		uint64_t edge_head_bytes = 0;
+		uint64_t edge_tail_bytes = 0;
+#ifdef OPX_HMEM
+		if (OPX_HFISVC_RTS_HAS_EDGE(hdr->rzv_rts.niov) && do_dmabuf) {
+			const uint64_t dst_offset = opx_mr_dmabuf_local_offset(opx_mr, recv_buf);
+
+			edge_head_bytes = (8 - (dst_offset & 0x7)) & 0x7;
+			edge_tail_bytes = (dst_offset + xfer_len) & 0x7;
+
+			/*
+			 * The DMA must remain non-empty: the sender only frees its
+			 * access key when it sees a completion for the read, so a
+			 * transfer delivered entirely out of band would leak the key
+			 * (see the 1-byte scratch reads on the truncation path below
+			 * for the same constraint). A transfer too small to leave an
+			 * aligned interior after both edges keeps the kernel latch
+			 * path instead -- correct, just not accelerated. Sizes this
+			 * small never reach hfisvc under the shipped thresholds.
+			 */
+			if (edge_head_bytes + edge_tail_bytes + 8 > xfer_len) {
+				edge_head_bytes = 0;
+				edge_tail_bytes = 0;
+			}
+
+			if (edge_head_bytes || edge_tail_bytes) {
+				/* The edge rides immediately after the last transmitted
+				 * iov, not at a fixed struct offset -- only `niov` iovs
+				 * are on the wire. Same expression the sender used. */
+				const union opx_hfisvc_edge *const edge =
+					(const union opx_hfisvc_edge *) (const void *) &payload->rendezvous.hfisvc
+						.iovs[niov];
+				struct fi_opx_hmem_info *const hmem_info =
+					(struct fi_opx_hmem_info *) context->hmem_info_qws;
+				const uint64_t device = hmem_info->dmabuf.opx_mr->attr.device.reserved;
+				int	       erc    = FI_SUCCESS;
+
+				if (edge_head_bytes) {
+					erc = opx_copy_to_hmem(hmem_info->iface, device, hmem_info->hmem_dev_reg_handle,
+							       recv_buf, edge->head_bytes, edge_head_bytes,
+							       OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				}
+				if (erc == FI_SUCCESS && edge_tail_bytes) {
+					/* tail_bytes holds the last OPX_HFISVC_EDGE_TAIL_MAX bytes of
+					 * the transfer; the ones we want are its final
+					 * edge_tail_bytes. */
+					erc = opx_copy_to_hmem(
+						hmem_info->iface, device, hmem_info->hmem_dev_reg_handle,
+						(void *) ((uintptr_t) recv_buf + xfer_len - edge_tail_bytes),
+						&edge->tail_bytes[OPX_HFISVC_EDGE_TAIL_MAX - edge_tail_bytes],
+						edge_tail_bytes, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				}
+
+				if (OFI_UNLIKELY(erc != FI_SUCCESS)) {
+					/* Placement failed. Do NOT shrink the DMA to an
+					 * interior whose edges were never written -- that
+					 * silently corrupts the user's buffer. Fall back to
+					 * the full transfer and let the kernel latch the
+					 * edges the slow way. A partially-written head is
+					 * rewritten by the full DMA, so this is safe. */
+					FI_OPX_DEBUG_COUNTERS_INC(
+						opx_ep->debug_counters.hfisvc.rzv_recv_rts.inline_edge_error);
+					edge_head_bytes = 0;
+					edge_tail_bytes = 0;
+				} else {
+					FI_OPX_DEBUG_COUNTERS_INC(
+						opx_ep->debug_counters.hfisvc.rzv_recv_rts.inline_edge);
+				}
+			}
+		}
+#endif
+
+		recv_buf = (void *) ((uintptr_t) recv_buf + edge_head_bytes);
+
 		for (int i = 0; i < niov; ++i) {
 			const uint8_t plane_idx = OPX_LID_PLANE_GET_IDX(payload->rendezvous.hfisvc.iovs[i].sender_lid);
 			const opx_lid_t sbuf_lid_masked =
 				OPX_LID_PLANE_GET_LID(payload->rendezvous.hfisvc.iovs[i].sender_lid);
 			const uint32_t sbuf_access_key = payload->rendezvous.hfisvc.iovs[i].access_key;
 			const uint32_t sbuf_client_key = payload->rendezvous.hfisvc.iovs[i].client_key;
-			const uint64_t sbuf_len	       = payload->rendezvous.hfisvc.iovs[i].len;
-			const uint64_t sbuf_offset     = payload->rendezvous.hfisvc.iovs[i].offset;
+			/* Edges were placed above; the DMA covers only the aligned
+			 * interior. The head belongs to the first iov and the tail
+			 * to the last, so trim only those. Both counts are 0 unless
+			 * this is a single-IOV dma-buf transfer into an unaligned
+			 * destination. */
+			const uint64_t iov_edge_head = (i == 0) ? edge_head_bytes : 0;
+			const uint64_t iov_edge_tail = ((uint32_t) i == (niov - 1)) ? edge_tail_bytes : 0;
+			const uint64_t sbuf_len =
+				payload->rendezvous.hfisvc.iovs[i].len - iov_edge_head - iov_edge_tail;
+			const uint64_t sbuf_offset = payload->rendezvous.hfisvc.iovs[i].offset + iov_edge_head;
 
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "STRIPE-RECV: [IOV %d/%d] sbuf_lid_masked=%u plane_idx=%u sbuf_client_key=%u sbuf_access_key=%u sbuf_len=%lu sbuf_offset=%lu\n",
@@ -1239,7 +1338,9 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 			if (OFI_UNLIKELY(recv_rzv_comp == NULL)) {
 				OPX_HFISVC_DEBUG_LOG("ENOMEM (recv_rzv_comp)\n");
 				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
-					opx_ep, context, niov - i, recv_buf, &payload->rendezvous.hfisvc.iovs[i]);
+					opx_ep, context, niov - i, recv_buf, &payload->rendezvous.hfisvc.iovs[i],
+					(i == 0) ? (uint32_t) edge_head_bytes : 0u,
+					(i == 0) ? (uint32_t) edge_tail_bytes : 0u);
 				if (OFI_UNLIKELY(deferred_rc)) {
 					fprintf(stderr,
 						"(%d) %s:%s():%d Error: Couldn't create deferred work to handle rendezvous receive (%d), aborting.\n",
@@ -1287,7 +1388,9 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 				OPX_BUF_FREE(recv_rzv_comp);
 
 				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
-					opx_ep, context, niov - i, recv_buf, &payload->rendezvous.hfisvc.iovs[i]);
+					opx_ep, context, niov - i, recv_buf, &payload->rendezvous.hfisvc.iovs[i],
+					(i == 0) ? (uint32_t) edge_head_bytes : 0u,
+					(i == 0) ? (uint32_t) edge_tail_bytes : 0u);
 				if (OFI_UNLIKELY(deferred_rc)) {
 					fprintf(stderr,
 						"(%d) %s:%s():%d Error: Couldn't create deferred work to handle rendezvous receive (%d), aborting.\n",
@@ -1346,7 +1449,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 
 				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
 					opx_ep, context, niov, &opx_trunc_scratch_buf,
-					(const union opx_hfisvc_iov *) &trunc_iov);
+					(const union opx_hfisvc_iov *) &trunc_iov, 0, 0);
 
 				if (OFI_UNLIKELY(deferred_rc)) {
 					fprintf(stderr,
@@ -1393,7 +1496,7 @@ void fi_opx_handle_recv_rts_hfisvc(const union opx_hfi1_packet_hdr *const	 hdr,
 
 				int deferred_rc = opx_hfisvc_deferred_recv_rts_enqueue(
 					opx_ep, context, niov, &opx_trunc_scratch_buf,
-					(const union opx_hfisvc_iov *) &trunc_iov);
+					(const union opx_hfisvc_iov *) &trunc_iov, 0, 0);
 
 				if (OFI_UNLIKELY(deferred_rc)) {
 					fprintf(stderr,
