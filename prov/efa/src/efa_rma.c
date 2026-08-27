@@ -66,8 +66,7 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 	efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
 						       FI_RMA | FI_READ);
 	if (efa_env.track_mr && efa_ctx) {
-		direct_ope = efa_direct_ope_alloc(
-			base_ep, efa_ctx, NULL, msg);
+		direct_ope = efa_direct_txe_alloc(base_ep, efa_ctx, NULL, msg);
 		if (!direct_ope) {
 			EFA_WARN(FI_LOG_EP_DATA,
 				 "Failed to allocate direct TX operation entry for MR tracking\n");
@@ -228,8 +227,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
 						       FI_RMA | FI_WRITE);
 	if (efa_env.track_mr && efa_ctx) {
-		direct_ope = efa_direct_ope_alloc(
-			base_ep, efa_ctx, NULL, msg);
+		direct_ope = efa_direct_txe_alloc(base_ep, efa_ctx, NULL, msg);
 		if (!direct_ope) {
 			EFA_WARN(FI_LOG_EP_DATA,
 				 "Failed to allocate direct TX operation entry for MR tracking\n");

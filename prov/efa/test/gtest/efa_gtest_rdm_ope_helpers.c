@@ -265,7 +265,7 @@ int efa_test_queue_ope_with_flag(struct fid_ep *ep_fid, struct fid_av *av_fid,
 	msg.iov_count = 1;
 	msg.addr = peer_addr;
 
-	qop->txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	qop->txe = ofi_buf_alloc(ep->base_ep.txe_pool);
 	if (!qop->txe)
 		return -FI_ENOMEM;
 	efa_rdm_txe_construct(qop->txe, ep, qop->peer, &msg, ofi_op_msg, 0, 0);

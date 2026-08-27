@@ -149,7 +149,7 @@ void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state)
     msg.iov_count = 1;
     msg.msg_iov = &iov;
     msg.desc = NULL;
-    txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
+    txe = ofi_buf_alloc(efa_rdm_ep->base_ep.txe_pool);
     assert_non_null(txe);
     efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
     txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
@@ -425,7 +425,7 @@ void test_efa_rdm_pke_flag_tracking(void **state)
 	msg.iov_count = 1;
 	msg.msg_iov = &iov;
 	msg.desc = NULL;
-	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.txe_pool);
 	assert_non_null(txe);
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
 
