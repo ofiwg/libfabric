@@ -47,7 +47,7 @@ int efa_direct_ope_pool_create(struct efa_base_ep *base_ep);
 void efa_direct_ope_pool_destroy(struct efa_base_ep *base_ep);
 
 /**
- * @brief Allocate and record an operation entry
+ * @brief Allocate and record a tx operation entry, for a send or an RMA
  *
  * Acquires efa_domain->util_domain.lock to protect the ope_list.
  * This is the same lock used by efa_mr_close when iterating across all EPs.
@@ -58,10 +58,24 @@ void efa_direct_ope_pool_destroy(struct efa_base_ep *base_ep);
  * @param[in] msg_rma		RMA message, or NULL if msg is provided
  * @return pointer to allocated entry, or NULL if tracking disabled or allocation fails
  */
-struct efa_direct_ope *efa_direct_ope_alloc(struct efa_base_ep *base_ep,
-						    struct efa_context *context,
-						    const struct fi_msg *msg,
-						    const struct fi_msg_rma *msg_rma);
+struct efa_direct_ope *efa_direct_txe_alloc(struct efa_base_ep *base_ep,
+					    struct efa_context *context,
+					    const struct fi_msg *msg,
+					    const struct fi_msg_rma *msg_rma);
+
+/**
+ * @brief Allocate and record an rx operation entry
+ *
+ * Acquires efa_domain->util_domain.lock to protect the ope_list.
+ *
+ * @param[in,out] base_ep	base endpoint
+ * @param[in] context		pointer to already-filled efa_context (from efa_fill_context)
+ * @param[in] msg		message being received
+ * @return pointer to allocated entry, or NULL if tracking disabled or allocation fails
+ */
+struct efa_direct_ope *efa_direct_rxe_alloc(struct efa_base_ep *base_ep,
+					    struct efa_context *context,
+					    const struct fi_msg *msg);
 
 /**
  * @brief Release an operation entry

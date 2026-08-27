@@ -67,6 +67,8 @@ struct efa_env {
 	 * the refill will be skipped.
 	 */
 	size_t internal_rx_refill_threshold;
+	/* Cap on the efa-rdm txe pool, see FI_EFA_RDM_TXE_POOL_SIZE. */
+	size_t rdm_txe_pool_size;
 	int use_data_path_direct;
 	/**
 	 * The maximum size of the implicit AV used to store AV entries of peers
