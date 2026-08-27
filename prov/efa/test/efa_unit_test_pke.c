@@ -1017,11 +1017,11 @@ void test_efa_rdm_pkt_is_rxe_remote_read(void **state)
  * @brief Verify efa_rdm_pke_init_peer_error_for_ope() sets the optional
  *        op_id hint only for the RX->TX direction.
  *
- * The wire always carries msg_id; op_id is an optional hint, usable only
- * when the op_id_valid field is nonzero:
+ * The wire always carries msg_id. op_id is an optional hint, set to
+ * EFA_RDM_OPE_ID_INVALID when the emitter knows no id.
  *   - rxe (LONGREAD direction, receiver -> sender): op_id = rxe->tx_id,
- *     always set (the RTM carried it, and the TX side needs it to resolve
- *     its txe).
+ *     set once the RTM carried it (the TX side needs it to resolve its
+ *     txe).
  *   - txe (sender -> receiver): the sender never learns the receiver's
  *     rxe index, so the emit is always msg_id-only (no hint).
  */
@@ -1050,7 +1050,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state)
 	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &rxe), 0);
 	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
 	assert_int_equal(hdr->type, EFA_RDM_PEER_ERROR_PKT);
-	assert_true(hdr->op_id_valid);
+	assert_int_not_equal(hdr->op_id, EFA_RDM_OPE_ID_INVALID);
 	assert_int_equal(hdr->op_id, rxe.tx_id);
 	assert_int_equal(hdr->msg_id, rxe.msg_id);
 	assert_int_equal(hdr->emitter_ope_type, EFA_RDM_RXE);
@@ -1070,11 +1070,47 @@ void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state)
 	assert_non_null(pkt_entry);
 	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
 	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
-	assert_false(hdr->op_id_valid);
+	assert_int_equal(hdr->op_id, EFA_RDM_OPE_ID_INVALID);
 	assert_int_equal(hdr->msg_id, txe.msg_id);
 	assert_int_equal(hdr->emitter_ope_type, EFA_RDM_TXE);
 	assert_int_equal(hdr->prov_errno,
 			 EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY);
+	efa_rdm_pke_release_tx(pkt_entry);
+}
+
+/**
+ * @brief Verify an rxe that never learned the sender's id emits msg_id only.
+ *
+ * op_id is a hint the receiver only has once a REQ packet carried it. An
+ * unlearned id must be advertised as unusable rather than shipped as a
+ * number the sender would resolve against an unrelated txe.
+ */
+void test_efa_rdm_pke_init_peer_error_for_ope_unlearned_op_id(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_peer_error_hdr *hdr;
+	struct efa_rdm_ope rxe = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	rxe.type = EFA_RDM_RXE;
+	rxe.ep = ep;
+	rxe.tx_id = EFA_RDM_OPE_ID_INVALID;
+	rxe.msg_id = 0x42;
+	rxe.peer_error_prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pkt_entry);
+	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &rxe), 0);
+	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
+	assert_int_equal(hdr->op_id, EFA_RDM_OPE_ID_INVALID);
+	assert_int_equal(hdr->msg_id, rxe.msg_id);
+	assert_int_equal(hdr->emitter_ope_type, EFA_RDM_RXE);
 	efa_rdm_pke_release_tx(pkt_entry);
 }
 
@@ -1230,7 +1266,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id(void **state)
 		assert_int_equal(
 			efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
 		hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
-		assert_false(hdr->op_id_valid);
+		assert_int_equal(hdr->op_id, EFA_RDM_OPE_ID_INVALID);
 		assert_int_equal(hdr->msg_id, txe.msg_id);
 		assert_int_equal(hdr->emitter_ope_type, EFA_RDM_TXE);
 		assert_int_equal(hdr->prov_errno,
@@ -1285,7 +1321,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_runtread(void **state)
 		assert_int_equal(
 			efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
 		hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
-		assert_false(hdr->op_id_valid);
+		assert_int_equal(hdr->op_id, EFA_RDM_OPE_ID_INVALID);
 		assert_int_equal(hdr->msg_id, txe.msg_id);
 		assert_int_equal(hdr->emitter_ope_type, EFA_RDM_TXE);
 		efa_rdm_pke_release_tx(pkt_entry);
@@ -1324,7 +1360,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_eager_skip(void **state)
 	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
 	hdr = efa_rdm_pke_get_peer_error_hdr(pkt_entry);
 	assert_int_equal(hdr->type, EFA_RDM_PEER_ERROR_PKT);
-	assert_false(hdr->op_id_valid);
+	assert_int_equal(hdr->op_id, EFA_RDM_OPE_ID_INVALID);
 	assert_int_equal(hdr->msg_id, txe.msg_id);
 	assert_int_equal(hdr->emitter_ope_type, EFA_RDM_TXE);
 	assert_int_equal(hdr->prov_errno,
