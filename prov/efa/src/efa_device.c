@@ -28,6 +28,26 @@
 #include "efawin.h"
 #endif
 
+#ifndef _WIN32
+static int read_sysfs_value(char *path)
+{
+	char buf[16] = {0};
+	int fd;
+	ssize_t n;
+
+	fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd < 0) {
+		return 0;
+	}
+
+	n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+	if (n <= 0) {
+		return 0;
+	}
+	return strtoul(buf, NULL, 16);
+}
+
 /**
  * @brief return whether the passed ibv_device appears to be an EFA device
  *
@@ -35,35 +55,31 @@
  *
  * This is implemented without needing permissions on the device itself; only
  * need permissions on the sysfs metadata files. EFA-ness is determined by
- * vendor ID.
+ * vendor and device ID.
  *
- * @return true if device vendor ID matches EFA ID
+ * @return true if device vendor ID matches Amazon's, and part ID matches 0xefa*
  */
-#ifndef _WIN32
 static bool efa_device_is_efa(struct ibv_device *ibv_device)
 {
 	char *path = NULL;
-	char buf[16] = {0};
-	int fd;
-	ssize_t n;
 
 	if (asprintf(&path, "%s/device/vendor", ibv_device->ibdev_path) < 0) {
 		return false;
 	}
 
-	fd = open(path, O_RDONLY | O_CLOEXEC);
+	int vendor_id = read_sysfs_value(path);
 	free(path);
-	if (fd < 0) {
+	if (vendor_id != 0x1d0f) {
 		return false;
 	}
 
-	n = read(fd, buf, sizeof(buf) - 1);
-	close(fd);
-	if (n <= 0) {
+	if (asprintf(&path, "%s/device/device", ibv_device->ibdev_path) < 0) {
 		return false;
 	}
+	int device_id = read_sysfs_value(path);
+	free(path);
 
-	return strtoul(buf, NULL, 16) == 0x1d0f;
+	return device_id >= 0xefa0 && device_id <= 0xefaf;
 }
 #else
 static bool efa_device_is_efa(struct ibv_device *ibv_device)
