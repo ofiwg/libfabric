@@ -50,6 +50,21 @@ struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av, fi_addr_t fi_ad
 }
 
 /**
+ * @brief find the efa_av_entry using fi_addr in the explicit AV
+ *
+ * @param[in]	av	efa av
+ * @param[in]	fi_addr	fi_addr
+ * @return	if address is valid, return pointer to the efa_av_entry
+ * 		otherwise, return NULL
+ */
+struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
+{
+	struct efa_conn *conn = efa_av_addr_to_conn(av, fi_addr);
+
+	return conn ? container_of(conn, struct efa_av_entry, conn) : NULL;
+}
+
+/**
  * @brief find fi_addr for efa endpoint
  *
  * @param[in]	av	address vector
@@ -70,7 +85,7 @@ fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
 	HASH_FIND(hh, av->cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
 
-	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->conn->fi_addr : FI_ADDR_NOTAVAIL;
+	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->entry->conn.fi_addr : FI_ADDR_NOTAVAIL;
 }
 
 static inline struct efa_conn *
@@ -101,7 +116,7 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
 		 * the pkt_entry is allocated from a buffer user posted that
 		 * doesn't expect any pkt hdr.
 		 */
-		return cur_entry->conn;
+		return &cur_entry->entry->conn;
 	}
 
 	connid = efa_rdm_pke_connid_ptr(pkt_entry);
@@ -114,11 +129,11 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
 			      "The communication can continue but it is "
 			      "encouraged to use\n"
 			      "a newer version of libfabric\n");
-		return cur_entry->conn;
+		return &cur_entry->entry->conn;
 	}
 
-	if (OFI_LIKELY(*connid == cur_entry->conn->ep_addr->qkey))
-		return cur_entry->conn;
+	if (OFI_LIKELY(*connid == cur_entry->entry->conn.ep_addr->qkey))
+		return &cur_entry->entry->conn;
 
 	/* the packet is from a previous peer, look for its address from the
 	 * prv_reverse_av */
@@ -127,7 +142,7 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
 	prv_key.connid = *connid;
 	HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key), prv_entry);
 
-	return OFI_LIKELY(!!prv_entry) ? prv_entry->conn : NULL;
+	return OFI_LIKELY(!!prv_entry) ? &prv_entry->entry->conn : NULL;
 };
 
 /**
@@ -188,7 +203,7 @@ fi_addr_t efa_av_reverse_lookup_rdm_implicit(struct efa_av *av, uint16_t ahn,
 	return implicit_fi_addr;
 }
 
-static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
+int efa_av_is_valid_address(struct efa_ep_addr *addr)
 {
 	struct efa_ep_addr all_zeros = { 0 };
 
@@ -232,8 +247,9 @@ void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
  */
 int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
 				 struct efa_prv_reverse_av **prv_reverse_av,
-				 struct efa_conn *conn)
+				 struct efa_av_entry *entry)
 {
+	struct efa_conn *conn = &entry->conn;
 	struct efa_cur_reverse_av *cur_entry;
 	struct efa_prv_reverse_av *prv_entry;
 	struct efa_cur_reverse_av_key cur_key;
@@ -254,7 +270,7 @@ int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
 
 		cur_entry->key.ahn = cur_key.ahn;
 		cur_entry->key.qpn = cur_key.qpn;
-		cur_entry->conn = conn;
+		cur_entry->entry = entry;
 		HASH_ADD(hh, *cur_reverse_av, key, sizeof(cur_key), cur_entry);
 
 		return 0;
@@ -268,11 +284,11 @@ int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
 
 	prv_entry->key.ahn = cur_key.ahn;
 	prv_entry->key.qpn = cur_key.qpn;
-	prv_entry->key.connid = cur_entry->conn->ep_addr->qkey;
-	prv_entry->conn = cur_entry->conn;
+	prv_entry->key.connid = cur_entry->entry->conn.ep_addr->qkey;
+	prv_entry->entry = cur_entry->entry;
 	HASH_ADD(hh, *prv_reverse_av, key, sizeof(prv_entry->key), prv_entry);
 
-	cur_entry->conn = conn;
+	cur_entry->entry = entry;
 	return 0;
 }
 
@@ -292,8 +308,9 @@ int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
  */
 void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 				    struct efa_prv_reverse_av **prv_reverse_av,
-				    struct efa_conn *conn)
+				    struct efa_av_entry *entry)
 {
+	struct efa_conn *conn = &entry->conn;
 	struct efa_cur_reverse_av *cur_reverse_av_entry;
 	struct efa_prv_reverse_av *prv_reverse_av_entry;
 	struct efa_cur_reverse_av_key cur_key;
@@ -305,7 +322,7 @@ void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
 	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key),
 		  cur_reverse_av_entry);
-	if (cur_reverse_av_entry && cur_reverse_av_entry->conn == conn) {
+	if (cur_reverse_av_entry && cur_reverse_av_entry->entry == entry) {
 		HASH_DEL(*cur_reverse_av, cur_reverse_av_entry);
 		free(cur_reverse_av_entry);
 	} else {
@@ -316,7 +333,7 @@ void efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 		HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key),
 			  prv_reverse_av_entry);
 		assert(prv_reverse_av_entry &&
-		       prv_reverse_av_entry->conn == conn);
+		       prv_reverse_av_entry->entry == entry);
 		HASH_DEL(*prv_reverse_av, prv_reverse_av_entry);
 		free(prv_reverse_av_entry);
 	}
@@ -403,7 +420,7 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
-	err = efa_av_reverse_av_add(&av->cur_reverse_av, &av->prv_reverse_av, explicit_conn);
+	err = efa_av_reverse_av_add(&av->cur_reverse_av, &av->prv_reverse_av, explicit_av_entry);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert explicit connection for fi_addr %" PRIu64 " into reverse AV: %s\n",
 			 *fi_addr, fi_strerror(-err));
@@ -418,7 +435,8 @@ static int efa_conn_implicit_to_explicit(struct efa_av *av,
 
 	/* Handle reverse AV and AV ref counts */
 	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
-				 &av->prv_reverse_av_implicit, implicit_conn);
+				 &av->prv_reverse_av_implicit,
+				 container_of(implicit_conn, struct efa_av_entry, conn));
 
 	dlist_remove(&implicit_conn->implicit_av_lru_entry);
 	err = efa_av_array_insert(av->addr_to_conn_map_implicit, implicit_fi_addr, NULL);
@@ -846,21 +864,21 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	HASH_ITER(hh, av->cur_reverse_av, cur_entry, curtmp) {
-		efa_conn_release_explicit(av, cur_entry->conn);
+		efa_conn_release_explicit(av, &cur_entry->entry->conn);
 	}
 
 	HASH_ITER(hh, av->prv_reverse_av, prv_entry, prvtmp) {
-		efa_conn_release_explicit(av, prv_entry->conn);
+		efa_conn_release_explicit(av, &prv_entry->entry->conn);
 	}
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
 	EFA_GENLOCK_LOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	HASH_ITER(hh, av->cur_reverse_av_implicit, cur_entry, curtmp) {
-		efa_conn_release_implicit(av, cur_entry->conn);
+		efa_conn_release_implicit(av, &cur_entry->entry->conn);
 	}
 
 	HASH_ITER(hh, av->prv_reverse_av_implicit, prv_entry, prvtmp) {
-		efa_conn_release_implicit(av, prv_entry->conn);
+		efa_conn_release_implicit(av, &prv_entry->entry->conn);
 	}
 	EFA_GENLOCK_UNLOCK(&av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 
@@ -933,12 +951,13 @@ static struct fi_ops efa_av_fi_ops = {
 int efa_av_init_util_av(struct efa_domain *efa_domain,
 			struct fi_av_attr *attr,
 			struct util_av *util_av,
-			void *context)
+			void *context,
+			size_t context_len)
 {
 	struct util_av_attr util_attr;
 
 	util_attr.addrlen = EFA_EP_ADDR_LEN;
-	util_attr.context_len = sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN;
+	util_attr.context_len = context_len;
 	util_attr.flags = 0;
 	return ofi_av_init(&efa_domain->util_domain, attr, &util_attr,
 			   util_av, context);
@@ -995,11 +1014,13 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				&universe_size) == FI_SUCCESS)
 		attr->count = MAX(attr->count, universe_size);
 
-	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av_implicit, context);
+	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av_implicit, context,
+				  sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN);
 	if (ret)
 		goto err;
 
-	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context);
+	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context,
+				  sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN);
 	if (ret)
 		goto err_close_util_av_implicit;
 

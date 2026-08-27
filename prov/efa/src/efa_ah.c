@@ -127,7 +127,7 @@ static void efa_ah_warn_create_einval(struct efa_domain *domain, const uint8_t *
  * @param[in]	gid	GID
  */
 struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
-			    bool insert_implicit_av)
+			    bool insert_implicit_av, size_t alloc_size)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	struct ibv_pd *ibv_pd = domain->ibv_pd;
@@ -137,6 +137,7 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 	int err;
 
 	assert(!insert_implicit_av || domain->info_type == EFA_INFO_RDM);
+	assert(alloc_size >= sizeof(struct efa_ah));
 
 	efa_ah = NULL;
 
@@ -148,7 +149,7 @@ struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 		return efa_ah;
 	}
 
-	efa_ah = malloc(sizeof(struct efa_ah));
+	efa_ah = malloc(alloc_size);
 	if (!efa_ah) {
 		errno = FI_ENOMEM;
 		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah\n");

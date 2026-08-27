@@ -276,7 +276,7 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 	conn->fi_addr = fi_addr;
 	conn->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 
-	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, false);
+	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, false, sizeof(struct efa_ah));
 	if (!conn->ah)
 		goto err_release;
 
@@ -303,7 +303,7 @@ struct efa_conn *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *
 		goto err_rdm_deinit;
 	}
 
-	err = efa_av_reverse_av_add(cur_reverse_av, prv_reverse_av, conn);
+	err = efa_av_reverse_av_add(cur_reverse_av, prv_reverse_av, efa_av_entry);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert connection for fi_addr %" PRIu64
 			" into reverse AV: %s\n", fi_addr, fi_strerror(-err));
@@ -389,7 +389,7 @@ struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *
 	if (err)
 		return NULL;
 
-	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, true);
+	conn->ah = efa_ah_alloc(av->domain, raw_addr->raw, true, sizeof(struct efa_ah));
 	if (!conn->ah)
 		goto err_release;
 
@@ -404,7 +404,7 @@ struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *
 	 * transmission. Therefore shm av insertion should not happen here.
 	 */
 
-	err = efa_av_reverse_av_add(&av->cur_reverse_av_implicit, &av->prv_reverse_av_implicit, conn);
+	err = efa_av_reverse_av_add(&av->cur_reverse_av_implicit, &av->prv_reverse_av_implicit, efa_av_entry);
 	if (err) {
 		efa_conn_rdm_deinit(av, conn);
 		goto err_release;
@@ -413,7 +413,7 @@ struct efa_conn *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *
 	err = efa_av_array_insert(av->addr_to_conn_map_implicit, fi_addr, conn);
 	if (err) {
 		efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
-					 &av->prv_reverse_av_implicit, conn);
+					 &av->prv_reverse_av_implicit, efa_av_entry);
 		efa_conn_rdm_deinit(av, conn);
 		goto err_release;
 	}
@@ -481,7 +481,7 @@ void efa_conn_release_explicit(struct efa_av *av, struct efa_conn *conn)
 {
 	assert(ofi_genlock_held(&av->util_av.lock));
 	efa_av_reverse_av_remove(&av->cur_reverse_av, &av->prv_reverse_av,
-				 conn);
+				 container_of(conn, struct efa_av_entry, conn));
 
 	if (av->domain->info_type == EFA_INFO_RDM)
 		efa_conn_rdm_deinit(av, conn);
@@ -504,7 +504,8 @@ void efa_conn_release_implicit(struct efa_av *av, struct efa_conn *conn)
 {
 	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
-				 &av->prv_reverse_av_implicit, conn);
+				 &av->prv_reverse_av_implicit,
+				 container_of(conn, struct efa_av_entry, conn));
 
 	efa_conn_rdm_deinit(av, conn);
 
@@ -528,7 +529,8 @@ void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_conn *con
 {
 	assert(EFA_GENLOCK_HELD(&av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 	efa_av_reverse_av_remove(&av->cur_reverse_av_implicit,
-				 &av->prv_reverse_av_implicit, conn);
+				 &av->prv_reverse_av_implicit,
+				 container_of(conn, struct efa_av_entry, conn));
 
 	efa_conn_rdm_deinit(av, conn);
 

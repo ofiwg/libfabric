@@ -1431,7 +1431,7 @@ int efa_rdm_ep_create_self_ah(struct efa_rdm_ep *rdm_ep)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 
-	rdm_ep->self_ah = efa_ah_alloc(rdm_ep->base_ep.domain, rdm_ep->base_ep.src_addr.raw, false);
+	rdm_ep->self_ah = efa_ah_alloc(rdm_ep->base_ep.domain, rdm_ep->base_ep.src_addr.raw, false, sizeof(struct efa_ah));
 
 	return rdm_ep->self_ah ? 0 : -FI_EINVAL;
 }

@@ -32,7 +32,7 @@ void efa_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
 struct efa_ah *efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
-			    bool insert_implicit_av)
+			    bool insert_implicit_av, size_t alloc_size)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
 void efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
