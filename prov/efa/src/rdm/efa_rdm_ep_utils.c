@@ -39,11 +39,11 @@ struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
 	struct efa_av *efa_av;
-	struct efa_conn *efa_conn;
+	struct efa_av_entry *entry;
 
 	efa_av = ep->base_ep.av;
-	efa_conn = efa_av_addr_to_conn(efa_av, addr);
-	return efa_conn ? efa_conn->ah->ahn : -1;
+	entry = efa_av_addr_to_entry(efa_av, addr);
+	return entry ? entry->ah->ahn : -1;
 }
 
 int efa_rdm_ep_peer_map_init(struct efa_av_array **arr)
@@ -82,7 +82,7 @@ struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_add
  */
 struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
-	struct efa_conn *conn;
+	struct efa_av_entry *entry;
 	struct efa_rdm_peer *peer;
 
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
@@ -94,8 +94,8 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	if (peer)
 		return peer;
 
-	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
-	if (OFI_UNLIKELY(!conn))
+	entry = efa_av_addr_to_entry(ep->base_ep.av, addr);
+	if (OFI_UNLIKELY(!entry))
 		return NULL;
 
 	/* Path 2: the peer is not in the map. Take the lock, then create the
@@ -118,7 +118,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	}
 	assert(peer);
 
-	if (efa_rdm_peer_construct(peer, ep, conn)) {
+	if (efa_rdm_peer_construct(peer, ep, container_of(entry, struct efa_rdm_av_entry, efa_av_entry))) {
 		ofi_buf_free(peer);
 		peer = NULL;
 		goto unlock;
@@ -147,7 +147,7 @@ unlock:
  */
 struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
-	struct efa_conn *conn;
+	struct efa_rdm_av_entry *av_entry;
 	struct efa_rdm_peer *peer;
 
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
@@ -175,8 +175,8 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	if (peer)
 		goto unlock_ep;
 
-	conn = efa_av_addr_to_conn_implicit(ep->base_ep.av, addr);
-	if (OFI_UNLIKELY(!conn))
+	av_entry = efa_av_addr_to_entry_implicit(ep->base_ep.av, addr);
+	if (OFI_UNLIKELY(!av_entry))
 		goto unlock_ep;
 
 	EFA_INFO(FI_LOG_EP_DATA, "Creating peer for addr %lu\n", addr);
@@ -187,7 +187,7 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	}
 	assert(peer);
 
-	if (efa_rdm_peer_construct(peer, ep, conn)) {
+	if (efa_rdm_peer_construct(peer, ep, av_entry)) {
 		ofi_buf_free(peer);
 		peer = NULL;
 		goto unlock_ep;
@@ -207,7 +207,7 @@ unlock_ep:
 	/* Move to the front of the LRU list; peer->conn stays valid under the
 	 * implicit-AV lock held here. */
 	if (peer)
-		efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->conn);
+		efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->av_entry);
 
 	EFA_GENLOCK_UNLOCK(&ep->base_ep.av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	EFA_GENLOCK_UNLOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
@@ -601,7 +601,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 			"initializing backoff timeout for peer fi_addr: "
 			"%" PRIu64 " implicit fi_addr: %" PRIu64
 			" timeout: %ld rnr_queued_pkts: %d\n",
-			peer->conn->fi_addr, peer->conn->implicit_fi_addr,
+			peer->av_entry->efa_av_entry.fi_addr, peer->av_entry->implicit_fi_addr,
 			peer->rnr_backoff_wait_time, peer->rnr_queued_pkt_cnt);
 	} else {
 		peer->rnr_backoff_wait_time = MIN(peer->rnr_backoff_wait_time * 2,
@@ -610,7 +610,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 			"increasing backoff timeout for peer fi_addr: %" PRIu64
 			" implicit fi_addr %" PRIu64
 			" to %ld rnr_queued_pkts: %d\n",
-			peer->conn->fi_addr, peer->conn->implicit_fi_addr,
+			peer->av_entry->efa_av_entry.fi_addr, peer->av_entry->implicit_fi_addr,
 			peer->rnr_backoff_wait_time, peer->rnr_queued_pkt_cnt);
 	}
 }
@@ -644,7 +644,7 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 			     (peer->flags & EFA_RDM_PEER_REQ_SENT)))
 		return 0;
 
-	msg.addr = peer->conn->fi_addr;
+	msg.addr = peer->av_entry->efa_av_entry.fi_addr;
 
 	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
@@ -782,7 +782,7 @@ void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_pe
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Failed to post HANDSHAKE to peer fi_addr: %ld implicit fi_addr %ld. %s\n",
-			peer->conn->fi_addr, peer->conn->implicit_fi_addr, fi_strerror(-err));
+			peer->av_entry->efa_av_entry.fi_addr, peer->av_entry->implicit_fi_addr, fi_strerror(-err));
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_PEER_HANDSHAKE);
 		return;
 	}
@@ -1169,8 +1169,8 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 			EFA_WARN(FI_LOG_EP_CTRL,
 				 "Failed to post HANDSHAKE to peer fi_addr: "
 				 "%ld implicit fi_addr: %ld. %s\n",
-				 peer->conn->fi_addr,
-				 peer->conn->implicit_fi_addr,
+				 peer->av_entry->efa_av_entry.fi_addr,
+				 peer->av_entry->implicit_fi_addr,
 				 fi_strerror(-ret));
 			efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_PEER_HANDSHAKE);
 			continue;

@@ -9,7 +9,6 @@
 #include "rdm/efa_rdm_peer.h"
 #include "efa_ah.h"
 #include "efa_av_array.h"
-#include "efa_conn.h"
 #include "efa_thread_annotations.h"
 
 #define EFA_MIN_AV_SIZE (16384)
@@ -34,15 +33,35 @@ struct efa_ep_addr_hashable {
  * ep_addr */
 struct efa_av_entry {
 	uint8_t			ep_addr[EFA_EP_ADDR_LEN];
-	struct efa_conn		conn;
+	struct efa_ah		*ah;
+	fi_addr_t		fi_addr;
 };
+
+/**
+ * @brief RDM address vector entry
+ *
+ * Embeds the base efa_av_entry as its first member and adds the RDM-only state
+ * that used to live in struct efa_conn. (Defined here for now; it moves to
+ * rdm/efa_rdm_av.h when the AV code is split.)
+ */
+struct efa_rdm_av_entry {
+	struct efa_av_entry	efa_av_entry;
+	struct efa_av		*av;
+	fi_addr_t		implicit_fi_addr;
+	fi_addr_t		shm_fi_addr;
+	struct dlist_entry	implicit_av_lru_entry;
+	struct dlist_entry	ah_implicit_conn_list_entry OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
+};
+
+_Static_assert(offsetof(struct efa_rdm_av_entry, efa_av_entry) == 0,
+	       "efa_av_entry must be the first member of efa_rdm_av_entry");
 
 /**
  * @brief return the raw endpoint address stored in an efa_av_entry
  *
  * The raw address is stored as a byte array whose first element is required
  * to be ep_addr by the util_av implementation. This accessor provides a typed
- * view over those bytes so callers do not need to reach through efa_conn.
+ * view over those bytes.
  */
 static inline struct efa_ep_addr *efa_av_entry_ep_addr(struct efa_av_entry *entry)
 {
@@ -84,8 +103,8 @@ struct efa_av {
 	struct efa_cur_reverse_av *cur_reverse_av OFI_TSA_GUARDED_BY(efa_util_av_lock_sym);
 	struct efa_prv_reverse_av *prv_reverse_av OFI_TSA_GUARDED_BY(efa_util_av_lock_sym);
 	struct util_av util_av;
-	struct efa_av_array *addr_to_conn_map;
-	struct efa_av_array *addr_to_conn_map_implicit;
+	struct efa_av_array *addr_to_entry_map;
+	struct efa_av_array *addr_to_entry_map_implicit;
 
 	/* implicit AV is used when receiving messages from peers not explicity
 	 * inserted by the application
@@ -112,11 +131,9 @@ int efa_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 			       void *context)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
-struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
-struct efa_conn *efa_av_addr_to_conn_implicit(struct efa_av *av,
-					      fi_addr_t fi_addr);
-
 struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr);
+struct efa_rdm_av_entry *efa_av_addr_to_entry_implicit(struct efa_av *av,
+						       fi_addr_t fi_addr);
 
 int efa_av_is_valid_address(struct efa_ep_addr *addr);
 
@@ -144,7 +161,7 @@ void efa_rdm_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
 				  struct efa_av_entry *entry);
 
 void efa_av_implicit_av_lru_conn_move(struct efa_av *av,
-					struct efa_conn *conn)
+					struct efa_rdm_av_entry *av_entry)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
 
 #endif

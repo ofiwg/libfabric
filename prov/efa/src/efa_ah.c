@@ -44,7 +44,7 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain,
 					      bool insert_implicit_av)
 	OFI_TSA_NO_ANALYSIS // clang cannot reason about conditional locking statically
 {
-	struct efa_conn *conn_to_release;
+	struct efa_rdm_av_entry *av_entry_to_release;
 	struct efa_ah *ah_tmp, *ah_to_release = NULL;
 	struct dlist_entry *tmp;
 	struct efa_rdm_domain *rdm_domain;
@@ -71,23 +71,23 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain,
 	assert(ah_to_release->implicit_refcnt > 0);
 
 	dlist_foreach_container_safe(&ah_to_release->implicit_conn_list,
-				      struct efa_conn, conn_to_release,
+				      struct efa_rdm_av_entry, av_entry_to_release,
 				      ah_implicit_conn_list_entry, tmp) {
 
-		assert(conn_to_release->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
-		       conn_to_release->fi_addr == FI_ADDR_NOTAVAIL);
+		assert(av_entry_to_release->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
+		       av_entry_to_release->efa_av_entry.fi_addr == FI_ADDR_NOTAVAIL);
 
 		/*
 		 * The implicit insert path already holds util_av_implicit.lock.
 		 * The explicit insert path does not, so acquire it here.
 		 */
 		if (!insert_implicit_av)
-			EFA_GENLOCK_LOCK(&conn_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+			EFA_GENLOCK_LOCK(&av_entry_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 		else
-			assert(EFA_GENLOCK_HELD(&conn_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-		efa_conn_release_implicit_ah_unsafe(conn_to_release->av, conn_to_release);
+			assert(EFA_GENLOCK_HELD(&av_entry_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym));
+		efa_conn_release_implicit_ah_unsafe(av_entry_to_release->av, av_entry_to_release);
 		if (!insert_implicit_av)
-			EFA_GENLOCK_UNLOCK(&conn_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+			EFA_GENLOCK_UNLOCK(&av_entry_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	}
 
 	if (ah_to_release->implicit_refcnt == 0 &&
