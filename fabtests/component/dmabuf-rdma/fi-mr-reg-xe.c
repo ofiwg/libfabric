@@ -132,8 +132,7 @@ err_out:
 
 void dereg_dmabuf_mr(struct nic *nic)
 {
-	if (nic->bufs.dmabuf_mr[0])
-		fi_close(&nic->bufs.dmabuf_mr[0]->fid);
+	DMABUF_CLOSE_FID(nic->bufs.dmabuf_mr[0]);
 }
 
 static void print_opts()
