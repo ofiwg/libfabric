@@ -80,6 +80,24 @@ struct fi_info *efa_domain_get_prov_info(struct efa_domain *efa_domain, enum fi_
 	return (ep_type == FI_EP_RDM) ? efa_domain->device->rdm_info : efa_domain->device->dgram_info;
 }
 
+/**
+ * @brief select the lock type for a domain based on its threading model
+ *
+ * When the domain is not FI_THREAD_SAFE, applications must serialize access 
+ * to all objects that are associated by a common completion mechanism so a 
+ * no-op lock is sufficient. Otherwise a real mutex is required.
+ *
+ * @param	domain[in]		EFA domain
+ * @return	OFI_LOCK_NOOP if the domain does not require FI_THREAD_SAFE
+ *		locking, OFI_LOCK_MUTEX otherwise
+ */
+static inline
+enum ofi_lock_type efa_domain_data_progress_lock_type(struct efa_domain *domain)
+{
+	return domain->util_domain.threading != FI_THREAD_SAFE ?
+	       OFI_LOCK_NOOP : OFI_LOCK_MUTEX;
+}
+
 static inline
 bool efa_domain_support_rnr_retry_modify(struct efa_domain *domain)
 {
