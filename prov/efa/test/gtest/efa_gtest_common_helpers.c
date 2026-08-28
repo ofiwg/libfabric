@@ -170,9 +170,9 @@ struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
 {
 	struct efa_av *efa_av =
 		container_of(av, struct efa_av, util_av.av_fid);
-	struct efa_conn *conn = efa_av_addr_to_conn_implicit(efa_av, fi_addr);
+	struct efa_rdm_av_entry *av_entry = efa_av_addr_to_entry_implicit(efa_av, fi_addr);
 
-	return conn ? conn->ah->ibv_ah : NULL;
+	return av_entry ? av_entry->efa_av_entry.ah->ibv_ah : NULL;
 }
 
 static struct efa_rdm_domain *efa_test_rdm_domain(struct fid_domain *domain)

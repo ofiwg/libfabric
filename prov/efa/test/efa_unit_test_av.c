@@ -303,8 +303,8 @@ void test_av_reinsertion(void **state)
 	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
 
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, fi_addr);
-	assert_int_equal(peer->conn->fi_addr, fi_addr);
-	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
+	assert_int_equal(peer->av_entry->efa_av_entry.fi_addr, fi_addr);
+	assert_int_equal(efa_is_same_addr(&raw_addr, efa_av_entry_ep_addr(&peer->av_entry->efa_av_entry)), 1);
 
 	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
 	assert_int_equal(err, 0);
@@ -320,8 +320,8 @@ void test_av_reinsertion(void **state)
 	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
 
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, fi_addr);
-	assert_int_equal(peer->conn->fi_addr, fi_addr);
-	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
+	assert_int_equal(peer->av_entry->efa_av_entry.fi_addr, fi_addr);
+	assert_int_equal(efa_is_same_addr(&raw_addr, efa_av_entry_ep_addr(&peer->av_entry->efa_av_entry)), 1);
 
 	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
 	assert_int_equal(err, 0);
@@ -440,9 +440,9 @@ static struct efa_rdm_peer *test_av_get_peer_from_implicit_av(struct efa_resourc
 
 	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
 
-	assert_int_equal(peer->conn->implicit_fi_addr, implicit_fi_addr);
-	assert_int_equal(peer->conn->fi_addr, FI_ADDR_NOTAVAIL);
-	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
+	assert_int_equal(peer->av_entry->implicit_fi_addr, implicit_fi_addr);
+	assert_int_equal(peer->av_entry->efa_av_entry.fi_addr, FI_ADDR_NOTAVAIL);
+	assert_int_equal(efa_is_same_addr(&raw_addr, efa_av_entry_ep_addr(&peer->av_entry->efa_av_entry)), 1);
 
 	test_addr = efa_av_reverse_lookup_rdm_implicit(av, ahn, raw_addr.qpn, NULL);
 	assert_int_equal(test_addr, implicit_fi_addr);
@@ -478,7 +478,7 @@ void test_av_implicit_to_explicit(void **state)
 	size_t raw_addr_len = sizeof(struct efa_ep_addr);
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
-	struct efa_conn *explicit_conn;
+	struct efa_av_entry *explicit_entry;
 	fi_addr_t implicit_fi_addr, explicit_fi_addr, test_addr;
 	struct efa_av *av;
 	uint32_t ahn;
@@ -490,9 +490,9 @@ void test_av_implicit_to_explicit(void **state)
 
 	/* Generate a peer with random QPN and QKEY and insert it into the implicit AV */
 	peer = test_av_get_peer_from_implicit_av(resource);
-	implicit_fi_addr = peer->conn->implicit_fi_addr;
-	assert_ptr_equal(efa_av_addr_to_conn_implicit(av, implicit_fi_addr),
-			 peer->conn);
+	implicit_fi_addr = peer->av_entry->implicit_fi_addr;
+	assert_ptr_equal(efa_av_addr_to_entry_implicit(av, implicit_fi_addr),
+			 peer->av_entry);
 
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(err, 0);
@@ -502,14 +502,14 @@ void test_av_implicit_to_explicit(void **state)
 	peer->flags |= EFA_RDM_PEER_IN_BACKOFF;
 
 	/* Insert explicitly */
-	raw_addr.qpn = peer->conn->ep_addr->qpn;
-	raw_addr.qkey = peer->conn->ep_addr->qkey;
+	raw_addr.qpn = efa_av_entry_ep_addr(&peer->av_entry->efa_av_entry)->qpn;
+	raw_addr.qkey = efa_av_entry_ep_addr(&peer->av_entry->efa_av_entry)->qkey;
 	err = fi_av_insert(resource->av, &raw_addr, 1, &explicit_fi_addr, 0, NULL);
 	assert_int_equal(err, 1);
-	assert_null(efa_av_addr_to_conn_implicit(av, implicit_fi_addr));
-	explicit_conn = efa_av_addr_to_conn(av, explicit_fi_addr);
-	assert_non_null(explicit_conn);
-	assert_ptr_equal(peer->conn, explicit_conn);
+	assert_null(efa_av_addr_to_entry_implicit(av, implicit_fi_addr));
+	explicit_entry = efa_av_addr_to_entry(av, explicit_fi_addr);
+	assert_non_null(explicit_entry);
+	assert_ptr_equal(&peer->av_entry->efa_av_entry, explicit_entry);
 	test_av_verify_av_hash_cnt(av, 1, 0, 0, 0);
 
 	err = fi_av_lookup(resource->av, explicit_fi_addr, &raw_addr_2, &raw_addr_len);
@@ -517,9 +517,9 @@ void test_av_implicit_to_explicit(void **state)
 	assert_int_equal(efa_is_same_addr(&raw_addr, &raw_addr_2), 1);
 
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, explicit_fi_addr);
-	assert_int_equal(peer->conn->fi_addr, explicit_fi_addr);
-	assert_int_equal(peer->conn->implicit_fi_addr, FI_ADDR_NOTAVAIL);
-	assert_int_equal(efa_is_same_addr(&raw_addr, peer->conn->ep_addr), 1);
+	assert_int_equal(peer->av_entry->efa_av_entry.fi_addr, explicit_fi_addr);
+	assert_int_equal(peer->av_entry->implicit_fi_addr, FI_ADDR_NOTAVAIL);
+	assert_int_equal(efa_is_same_addr(&raw_addr, efa_av_entry_ep_addr(&peer->av_entry->efa_av_entry)), 1);
 
 	ahn = efa_rdm_ep->self_ah->ahn;
 	test_addr = efa_av_reverse_lookup_rdm(av, ahn, raw_addr.qpn, NULL);
@@ -534,27 +534,27 @@ void test_av_implicit_to_explicit(void **state)
 
 	err = fi_av_remove(resource->av, &explicit_fi_addr, 1, 0);
 	assert_int_equal(err, 0);
-	assert_null(efa_av_addr_to_conn(av, explicit_fi_addr));
+	assert_null(efa_av_addr_to_entry(av, explicit_fi_addr));
 	test_av_verify_av_hash_cnt(av, 0, 0, 0, 0);
 }
 
 static void test_av_implicit_av_verify_lru_list_first_last_elements(
-	struct efa_av *av, struct efa_conn *first_conn_expected,
-	struct efa_conn *last_conn_expected)
+	struct efa_av *av, struct efa_rdm_av_entry *first_expected,
+	struct efa_rdm_av_entry *last_expected)
 {
 	struct dlist_entry *first_entry, *last_entry;
-	struct efa_conn *first_conn_actual, *last_conn_actual;
+	struct efa_rdm_av_entry *first_actual, *last_actual;
 
 	first_entry = av->implicit_av_lru_list.next;
 	last_entry = av->implicit_av_lru_list.prev;
 
-	first_conn_actual = container_of(first_entry, struct efa_conn,
+	first_actual = container_of(first_entry, struct efa_rdm_av_entry,
 					 implicit_av_lru_entry);
-	last_conn_actual = container_of(last_entry, struct efa_conn,
+	last_actual = container_of(last_entry, struct efa_rdm_av_entry,
 					implicit_av_lru_entry);
 
-	assert_ptr_equal(first_conn_actual, first_conn_expected);
-	assert_ptr_equal(last_conn_actual, last_conn_expected);
+	assert_ptr_equal(first_actual, first_expected);
+	assert_ptr_equal(last_actual, last_expected);
 }
 
 /**
@@ -582,63 +582,63 @@ void test_av_implicit_av_lru_insertion(void **state)
 	test_av_verify_av_hash_cnt(av, 0, 0, 1, 0);
 
 	/* Expected LRU list: HEAD->peer0 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer0->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer0->av_entry);
 
 	/* Manually insert second address into implicit AV */
 	peer1 = test_av_get_peer_from_implicit_av(resource);
 	test_av_verify_av_hash_cnt(av, 0, 0, 2, 0);
 
 	/* Expected LRU list: HEAD->peer0->peer1 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer1->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer1->av_entry);
 
 	/* Manually insert third address into implicit AV */
 	peer2 = test_av_get_peer_from_implicit_av(resource);
 	test_av_verify_av_hash_cnt(av, 0, 0, 3, 0);
 
 	/* Expected LRU list: HEAD->peer0->peer1->peer2 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer2->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer2->av_entry);
 
 
 	/* Access peer0 through the CQ read path */
 	ahn = efa_rdm_ep->self_ah->ahn;
 	implicit_fi_addr = efa_av_reverse_lookup_rdm_implicit(
-		av, ahn, peer0->conn->ep_addr->qpn, NULL);
+		av, ahn, efa_av_entry_ep_addr(&peer0->av_entry->efa_av_entry)->qpn, NULL);
 	assert_int_equal(implicit_fi_addr, 0);
 
 	/* Expected LRU list: HEAD->peer1->peer2->peer0 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer1->conn, peer0->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer1->av_entry, peer0->av_entry);
 
 	/* Access peer2 through the CQ read path */
 	ahn = efa_rdm_ep->self_ah->ahn;
 	implicit_fi_addr = efa_av_reverse_lookup_rdm_implicit(
-		av, ahn, peer2->conn->ep_addr->qpn, NULL);
+		av, ahn, efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry)->qpn, NULL);
 	assert_int_equal(implicit_fi_addr, 2);
 
 	/* Expected LRU list: HEAD->peer1->peer0->peer2 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer1->conn, peer2->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer1->av_entry, peer2->av_entry);
 
 
 	/* Access peer1 through repeated AV insertion path */
 	ofi_genlock_lock(&av->domain->util_domain.lock);
-	err = efa_av_insert_one_implicit(av, peer1->conn->ep_addr, &implicit_fi_addr, 0, NULL);
+	err = efa_av_insert_one_implicit(av, efa_av_entry_ep_addr(&peer1->av_entry->efa_av_entry), &implicit_fi_addr, 0, NULL);
 	ofi_genlock_unlock(&av->domain->util_domain.lock);
 	assert_int_equal(err, 0);
 	assert_int_equal(implicit_fi_addr, 1);
 	test_av_verify_av_hash_cnt(av, 0, 0, 3, 0);
 
 	/* Expected LRU list: HEAD->peer0->peer2->peer1 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer1->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer1->av_entry);
 
 	/* Access peer2 through repeated AV insertion path */
 	ofi_genlock_lock(&av->domain->util_domain.lock);
-	err = efa_av_insert_one_implicit(av, peer2->conn->ep_addr, &implicit_fi_addr, 0, NULL);
+	err = efa_av_insert_one_implicit(av, efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry), &implicit_fi_addr, 0, NULL);
 	ofi_genlock_unlock(&av->domain->util_domain.lock);
 	assert_int_equal(err, 0);
 	assert_int_equal(implicit_fi_addr, 2);
 	test_av_verify_av_hash_cnt(av, 0, 0, 3, 0);
 
 	/* Expected LRU list: HEAD->peer0->peer1->peer2 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer2->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer2->av_entry);
 }
 
 /**
@@ -670,50 +670,50 @@ void test_av_implicit_av_lru_eviction(void **state)
 	test_av_verify_av_hash_cnt(av, 0, 0, 1, 0);
 
 	/* Expected LRU list: HEAD->peer0 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer0->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer0->av_entry);
 
 	/* Manually insert second address into implicit AV */
 	peer1 = test_av_get_peer_from_implicit_av(resource);
 	test_av_verify_av_hash_cnt(av, 0, 0, 2, 0);
 
 	/* Expected LRU list: HEAD->peer0->peer1 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer1->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer1->av_entry);
 
 	/* Access peer0 through the CQ read path */
 	ahn = efa_rdm_ep->self_ah->ahn;
 	implicit_fi_addr = efa_av_reverse_lookup_rdm_implicit(
-		av, ahn, peer0->conn->ep_addr->qpn, NULL);
+		av, ahn, efa_av_entry_ep_addr(&peer0->av_entry->efa_av_entry)->qpn, NULL);
 	assert_int_equal(implicit_fi_addr, 0);
 
 	/* Expected LRU list: HEAD->peer1->peer0 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer1->conn, peer0->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer1->av_entry, peer0->av_entry);
 
 	/* Manually insert third address into implicit AV */
 	peer2 = test_av_get_peer_from_implicit_av(resource);
 	test_av_verify_av_hash_cnt(av, 0, 0, 2, 0);
 
 	/* Expected LRU list: HEAD->peer0->peer2 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer2->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer2->av_entry);
 
 	/* Verify that peer1 is evicted and added to the evicted hashmap */
 	assert_int_equal(HASH_CNT(hh, av->evicted_peers_hashset), 1);
-	HASH_FIND(hh, av->evicted_peers_hashset, peer1->conn->ep_addr,
+	HASH_FIND(hh, av->evicted_peers_hashset, efa_av_entry_ep_addr(&peer1->av_entry->efa_av_entry),
 		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
 	assert_non_null(efa_ep_addr_hashable);
-	assert_int_equal(efa_is_same_addr(peer1->conn->ep_addr,
+	assert_int_equal(efa_is_same_addr(efa_av_entry_ep_addr(&peer1->av_entry->efa_av_entry),
 					  &efa_ep_addr_hashable->addr),
 			 1);
 
 	/* Access peer0 through repeated AV insertion path */
 	ofi_genlock_lock(&av->domain->util_domain.lock);
-	err = efa_av_insert_one_implicit(av, peer0->conn->ep_addr, &implicit_fi_addr, 0, NULL);
+	err = efa_av_insert_one_implicit(av, efa_av_entry_ep_addr(&peer0->av_entry->efa_av_entry), &implicit_fi_addr, 0, NULL);
 	ofi_genlock_unlock(&av->domain->util_domain.lock);
 	assert_int_equal(err, 0);
 	assert_int_equal(implicit_fi_addr, 0);
 	test_av_verify_av_hash_cnt(av, 0, 0, 2, 0);
 
 	/* Expected LRU list: HEAD->peer2->peer0 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer2->conn, peer0->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer2->av_entry, peer0->av_entry);
 
 	/* Manually insert fourth address into implicit AV */
 	peer3 = test_av_get_peer_from_implicit_av(resource);
@@ -721,15 +721,15 @@ void test_av_implicit_av_lru_eviction(void **state)
 
 	/* Verify that peer2 is evicted and added to the evicted hashmap */
 	assert_int_equal(HASH_CNT(hh, av->evicted_peers_hashset), 2);
-	HASH_FIND(hh, av->evicted_peers_hashset, peer2->conn->ep_addr,
+	HASH_FIND(hh, av->evicted_peers_hashset, efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry),
 		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
 	assert_non_null(efa_ep_addr_hashable);
-	assert_int_equal(efa_is_same_addr(peer2->conn->ep_addr,
+	assert_int_equal(efa_is_same_addr(efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry),
 					  &efa_ep_addr_hashable->addr),
 			 1);
 
 	/* Expected LRU list: HEAD->peer0->peer3 */
-	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->conn, peer3->conn);
+	test_av_implicit_av_verify_lru_list_first_last_elements(av, peer0->av_entry, peer3->av_entry);
 }
 
 /**
@@ -780,7 +780,7 @@ void test_ah_refcnt(void **state)
 
 	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, fi_addr);
 
-	efa_ah = peer->conn->ah;
+	efa_ah = peer->av_entry->efa_av_entry.ah;
 
 	assert_int_equal(g_ibv_ah_cnt, 2);
 
@@ -905,7 +905,7 @@ void test_ah_lru_eviction_impl(bool explicit)
 	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep[0], fi_addr);
 
 	assert_int_equal(HASH_CNT(hh, efa_domain[0]->ah_map), 1);
-	efa_ah = peer->conn->ah;
+	efa_ah = peer->av_entry->efa_av_entry.ah;
 	assert_int_equal(efa_ah->implicit_refcnt, 1);
 	assert_int_equal(efa_ah->explicit_refcnt, 0);
 
@@ -922,7 +922,7 @@ void test_ah_lru_eviction_impl(bool explicit)
 
 	assert_int_equal(HASH_CNT(hh, efa_domain[0]->ah_map), 1);
 
-	efa_ah = peer->conn->ah;
+	efa_ah = peer->av_entry->efa_av_entry.ah;
 	if (explicit) {
 		assert_int_equal(efa_ah->implicit_refcnt, 0);
 		assert_int_equal(efa_ah->explicit_refcnt, 1);

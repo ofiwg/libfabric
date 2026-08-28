@@ -493,17 +493,17 @@ raw_addr_found:
 		 "[%s]:[%" PRIu16 "]:[%" PRIu32 "] fi_addr: %" PRIu64
 		 " implicit AV: %s\n",
 		 gid_str_cdesc, efa_ep_addr.qpn, efa_ep_addr.qkey,
-		 peer->conn->fi_addr != FI_ADDR_NOTAVAIL ?
-			peer->conn->fi_addr : peer->conn->implicit_fi_addr,
-		 peer->conn->implicit_fi_addr != FI_ADDR_NOTAVAIL ?
+		 peer->av_entry->efa_av_entry.fi_addr != FI_ADDR_NOTAVAIL ?
+			peer->av_entry->efa_av_entry.fi_addr : peer->av_entry->implicit_fi_addr,
+		 peer->av_entry->implicit_fi_addr != FI_ADDR_NOTAVAIL ?
 			"true" : "false");
 
 out:
 	assert(peer);
-	assert((peer->conn->fi_addr != FI_ADDR_NOTAVAIL &&
-		peer->conn->implicit_fi_addr == FI_ADDR_NOTAVAIL) ||
-	       (peer->conn->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
-		peer->conn->fi_addr == FI_ADDR_NOTAVAIL));
+	assert((peer->av_entry->efa_av_entry.fi_addr != FI_ADDR_NOTAVAIL &&
+		peer->av_entry->implicit_fi_addr == FI_ADDR_NOTAVAIL) ||
+	       (peer->av_entry->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
+		peer->av_entry->efa_av_entry.fi_addr == FI_ADDR_NOTAVAIL));
 	return peer;
 }
 
@@ -578,8 +578,8 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		EFA_WARN(FI_LOG_CQ,
 			 "Peer fi_addr: %ld implicit fi_addr %ld is requesting "
 			 "feature %d, which this EP does not support.\n",
-			 pkt_entry->peer->conn->fi_addr,
-			 pkt_entry->peer->conn->implicit_fi_addr,
+			 pkt_entry->peer->av_entry->efa_av_entry.fi_addr,
+			 pkt_entry->peer->av_entry->implicit_fi_addr,
 			 base_hdr->type);
 
 		assert(0 && "invalid REQ packet type");
@@ -693,7 +693,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-				   pkt_entry->ope->peer ? pkt_entry->ope->peer->conn->fi_addr : FI_ADDR_NOTAVAIL,
+				   pkt_entry->ope->peer ? pkt_entry->ope->peer->av_entry->efa_av_entry.fi_addr : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
 	}
 #endif
@@ -763,7 +763,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-				   pkt_entry->ope->peer ? pkt_entry->ope->peer->conn->fi_addr : FI_ADDR_NOTAVAIL,
+				   pkt_entry->ope->peer ? pkt_entry->ope->peer->av_entry->efa_av_entry.fi_addr : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
 	}
 #endif
