@@ -2181,17 +2181,36 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			slist_insert_tail((struct slist_entry *) context, rx->cq_completed_ptr);
 
 		} else if (OFI_LIKELY(send_len <= recv_len)) {
+			const bool hmem_direct_recv = is_hmem && payload;
+
+			struct fi_opx_hmem_info *hmem_info   = NULL;
+			uint64_t		 hmem_device = 0;
 			if (is_hmem) {
+				hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
+				if (is_hmem & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
+					hmem_device = hmem_info->dmabuf.opx_mr->attr.device.reserved;
+				} else {
+					hmem_device = hmem_info->gpu.device;
+				}
+			}
+
+			if (is_hmem && !hmem_direct_recv) {
 				recv_buf = (void *) opx_ep->hmem_copy_buf;
 			}
 
 			if (xfer_bytes_tail) {
+				if (hmem_direct_recv) {
+					opx_copy_to_hmem(hmem_info->iface, hmem_device, hmem_info->hmem_dev_reg_handle,
+							 recv_buf, (const void *) &hdr->send.xfer_tail, xfer_bytes_tail,
+							 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				} else {
 #pragma GCC diagnostic ignored "-Wnonnull"
-				memcpy(recv_buf, (void *) &hdr->send.xfer_tail, xfer_bytes_tail);
+					memcpy(recv_buf, (void *) &hdr->send.xfer_tail, xfer_bytes_tail);
+				}
 				recv_buf = (void *) ((uint8_t *) recv_buf + xfer_bytes_tail);
 			}
 
-			if (send_len != xfer_bytes_tail) {
+			if (!hmem_direct_recv && send_len != xfer_bytes_tail) {
 				uint64_t      *recv_buf_qw	 = (uint64_t *) recv_buf;
 				uint64_t      *payload_qw	 = (uint64_t *) payload;
 				const unsigned payload_qws_total = hdr->send.payload_qws_total;
@@ -2202,15 +2221,12 @@ void opx_ep_complete_receive_operation(struct fid_ep *ep, const union opx_hfi1_p
 			}
 
 			if (is_hmem) {
-				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) context->hmem_info_qws;
-				uint64_t		 device;
-				if (is_hmem & FI_OPX_CQ_CONTEXT_DMABUF_HMEM) {
-					device = hmem_info->dmabuf.opx_mr->attr.device.reserved;
-				} else {
-					device = hmem_info->gpu.device;
-				}
-				opx_copy_to_hmem(hmem_info->iface, device, hmem_info->hmem_dev_reg_handle, context->buf,
-						 opx_ep->hmem_copy_buf, send_len, OPX_HMEM_DEV_REG_RECV_THRESHOLD);
+				opx_copy_to_hmem(hmem_info->iface, hmem_device, hmem_info->hmem_dev_reg_handle,
+						 hmem_direct_recv ? recv_buf : context->buf,
+						 hmem_direct_recv ? (const void *) payload :
+								    (const void *) opx_ep->hmem_copy_buf,
+						 hmem_direct_recv ? (send_len - xfer_bytes_tail) : send_len,
+						 OPX_HMEM_DEV_REG_RECV_THRESHOLD);
 				FI_OPX_DEBUG_COUNTERS_INC_COND(
 					is_shm,
 					opx_ep->debug_counters.hmem.intranode
