@@ -30,7 +30,7 @@ class EfaConnTest : public Test
 };
 
 /**
- * @brief efa_conn_alloc unwinds the conn via efa_conn_rdm_deinit when
+ * @brief efa_conn_alloc unwinds the conn via efa_rdm_av_entry_deinit when
  * efa_av_reverse_av_add fails, so the insert fails cleanly.
  */
 TEST_F(EfaConnTest, alloc_reverse_av_add_failure_rdm_cleanup)
