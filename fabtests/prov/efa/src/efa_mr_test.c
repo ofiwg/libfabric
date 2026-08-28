@@ -99,7 +99,7 @@ static int test_unaligned_mr(uint64_t offset)
 	} else if (should_fail && !ret) {
 		printf("FAIL: unaligned VA offset=%" PRIu64 " - passed unexpectedly (nrt_get_dmabuf_fd() v1)\n",
 		       offset);
-		fi_close(&mr->fid);
+		FT_CLOSE_FID(mr);
 		return -FI_EINVAL;
 	} else if (!should_fail && ret) {
 		printf("FAIL: unaligned VA offset=%" PRIu64 " - ft_reg_mr failed: %s\n",

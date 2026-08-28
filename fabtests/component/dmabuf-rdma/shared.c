@@ -875,37 +875,20 @@ void finalize_ofi(void)
 
 skip_raw_key_cleanup:
 	for (i = 0; i < me.num_nics; i++) {
-		if (nics[i].sync_buf.mr[0])
-			fi_close((fid_t)nics[i].sync_buf.mr[0]);
+		DMABUF_CLOSE_FID(nics[i].sync_buf.mr[0]);
 
 		for (j = 0; j < options.max_ranks; j++) {
-			if (nics[i].proxy_bufs.mr[j])
-				fi_close((fid_t)nics[i].proxy_bufs.mr[j]);
-
-			if (nics[i].bufs.mr[j])
-				fi_close((fid_t)nics[i].bufs.mr[j]);
+			DMABUF_CLOSE_FID(nics[i].proxy_bufs.mr[j]);
+			DMABUF_CLOSE_FID(nics[i].bufs.mr[j]);
 		}
 
-		if (nics[i].ep)
-			fi_close((fid_t)nics[i].ep);
-
-		if (nics[i].av)
-			fi_close((fid_t)nics[i].av);
-
-		if (nics[i].cq)
-			fi_close((fid_t)nics[i].cq);
-
-		if (nics[i].domain)
-			fi_close((fid_t)nics[i].domain);
-
-		if (nics[i].pep)
-			fi_close((fid_t)nics[i].pep);
-
-		if(nics[i].eq)
-			fi_close((fid_t)nics[i].eq);
-
-		if (nics[i].fabric)
-			fi_close((fid_t)nics[i].fabric);
+		DMABUF_CLOSE_FID(nics[i].ep);
+		DMABUF_CLOSE_FID(nics[i].av);
+		DMABUF_CLOSE_FID(nics[i].cq);
+		DMABUF_CLOSE_FID(nics[i].domain);
+		DMABUF_CLOSE_FID(nics[i].pep);
+		DMABUF_CLOSE_FID(nics[i].eq);
+		DMABUF_CLOSE_FID(nics[i].fabric);
 
 		if (nics[i].fi)
 			fi_freeinfo(nics[i].fi);
