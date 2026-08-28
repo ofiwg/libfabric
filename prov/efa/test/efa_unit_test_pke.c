@@ -1220,3 +1220,157 @@ void test_efa_rdm_pke_init_peer_error_for_ope_eager_skip(void **state)
 	efa_rdm_pke_release_tx(pkt_entry);
 }
 
+
+/**
+ * @brief Verify efa_rdm_pke_copy_payload_to_ope routes Neuron (Trainium)
+ * receive buffers through the RDMA local-read path rather than a CPU/HMEM copy.
+ *
+ * On trn2 a CPU (nrt) copy of the host bounce buffer into HBM is not ordered
+ * against a later EFA access (different PCIe paths); moving the data with an
+ * RDMA local read keeps it on the EFA/sidelink path. This test locks in the
+ * dispatch: for a FI_HMEM_NEURON receive MR, copy_payload_to_ope must call
+ * efa_rdm_rxe_post_local_read_or_queue (which invokes efa_rdm_pke_read and, on
+ * success, holds the rx pkt and creates an internal read txe), not the blocking
+ * hmem copy. efa_rdm_pke_read is mocked so no real device read is issued.
+ */
+static void test_efa_rdm_pke_copy_payload_neuron_uses_rdma_read_impl(
+	struct efa_resource *resource, int pke_read_return)
+{
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_mr neuron_mr = {0};
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t peer_addr;
+	char buf[16];
+	size_t held_before, to_post_before;
+	ssize_t ret;
+	struct iovec iov = {
+		.iov_base = buf,
+		.iov_len = sizeof buf
+	};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+
+	/* Insert a peer so the recv-completion path has a valid
+	 * rxe->peer->conn to report the completion against. */
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
+	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
+	assert_non_null(peer);
+
+	/*
+	 * Drive the real copy_payload_to_ope and local-read path; only
+	 * efa_rdm_pke_read is mocked (it is in a different translation unit than
+	 * efa_rdm_rxe_post_local_read_or_queue, so it can be wrapped).
+	 */
+	g_efa_unit_test_mocks.efa_rdm_pke_read = &efa_mock_efa_rdm_pke_read_return_mock;
+
+	/* Fake an rdma-read-capable device so the local-read path is taken. */
+	efa_rdm_ep_domain(efa_rdm_ep)->device->max_rdma_size = efa_env.efa_read_segment_size;
+
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	pkt_entry->payload = pkt_entry->wiredata;
+	pkt_entry->payload_size = sizeof buf;
+
+	/*
+	 * copy_payload_to_ope reads the base header type via
+	 * efa_rdm_pke_get_segment_offset, which asserts the type carries data.
+	 * Stamp an eager MSGRTM header: a data-bearing type with no seg_offset
+	 * field, so the offset resolves to 0.
+	 */
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
+	base_hdr->type = EFA_RDM_EAGER_MSGRTM_PKT;
+
+	rxe = efa_rdm_ep_alloc_rxe(efa_rdm_ep, peer, ofi_op_tagged);
+	assert_non_null(rxe);
+
+	/* Receive buffer described by a Neuron (Trainium HBM) memory region. */
+	neuron_mr.efa_mr.iface = FI_HMEM_NEURON;
+	rxe->desc[0] = &neuron_mr.efa_mr;
+	rxe->iov_count = 1;
+	rxe->iov[0] = iov;
+	rxe->cq_entry.len = sizeof buf;
+	rxe->total_len = sizeof buf;
+	efa_rdm_pke_set_ope(pkt_entry, rxe);
+
+	/* No internal read txe should exist before the copy is dispatched. */
+	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
+
+	held_before = efa_rdm_ep->efa_rx_pkts_held;
+	to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
+
+	will_return(efa_mock_efa_rdm_pke_read_return_mock, pke_read_return);
+
+	ret = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
+	assert_int_equal(ret, pke_read_return);
+
+	if (pke_read_return == FI_SUCCESS) {
+		struct efa_rdm_pke *context_pkt;
+		struct efa_rdm_ope *txe;
+
+		/*
+		 * RDMA local read was posted: the rx pkt is held pending read
+		 * completion and an internal read txe was created. This proves
+		 * the neuron branch used the RDMA path, not a CPU copy (a CPU
+		 * copy would neither hold the pkt nor create a txe).
+		 */
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, held_before + 1);
+		assert_true(pkt_entry->flags & EFA_RDM_PKE_HELD_BY_PROGRESS);
+
+		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 1);
+		txe = efa_unit_test_get_first_ope(efa_rdm_ep, EFA_RDM_TXE);
+		assert_non_null(txe);
+		assert_true(txe->internal_flags & EFA_RDM_OPE_INTERNAL);
+		assert_ptr_equal(txe->local_read_pkt_entry, pkt_entry);
+
+		/* Drive the read completion to release the held pkt and txe. */
+		txe->local_read_pkt_entry->payload_size = sizeof buf;
+		context_pkt = ofi_bufpool_get_ibuf(efa_rdm_ep->efa_tx_pkt_pool, 0);
+		context_pkt->flags |= EFA_RDM_PKE_LOCAL_READ;
+		efa_rdm_pke_handle_rma_completion(context_pkt);
+
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, held_before);
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 1);
+		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
+	} else {
+		/*
+		 * On a failed post, the local-read path owns and releases the rx
+		 * pkt and tears down the internal txe. The caller must not
+		 * release the pkt again.
+		 */
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_held, held_before);
+		assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 1);
+		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
+	}
+}
+
+/**
+ * @brief Neuron receive buffers dispatch to RDMA local read (success path).
+ */
+void test_efa_rdm_pke_copy_payload_neuron_uses_rdma_read(void **state)
+{
+	struct efa_resource *resource = *state;
+
+	test_efa_rdm_pke_copy_payload_neuron_uses_rdma_read_impl(resource, FI_SUCCESS);
+}
+
+/**
+ * @brief Neuron receive buffers dispatch to RDMA local read; a failed post is
+ * reported to the caller and the rx pkt is released by the local-read path.
+ */
+void test_efa_rdm_pke_copy_payload_neuron_rdma_read_error(void **state)
+{
+	struct efa_resource *resource = *state;
+
+	test_efa_rdm_pke_copy_payload_neuron_uses_rdma_read_impl(resource, -FI_ENOMR);
+}

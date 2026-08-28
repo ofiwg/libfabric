@@ -519,6 +519,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_skip_unblocks_window(void *
 /* end of efa_unit_test_rdm_peer.c */
 
 /* begin of efa_unit_test_pke.c */
+void test_efa_rdm_pke_copy_payload_neuron_uses_rdma_read(void **state);
+void test_efa_rdm_pke_copy_payload_neuron_rdma_read_error(void **state);
 void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state);
 void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state);
 void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state);
