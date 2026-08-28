@@ -101,7 +101,7 @@ struct efa_rdm_peer {
 	 */
 	bool p2p_supported;
 	uint32_t device_version;	/**< EFA device version */
-	struct efa_conn *conn;		/**< pointer to efa_conn struct in the av entry */
+	struct efa_rdm_av_entry *av_entry;		/**< pointer to the efa_rdm_av_entry in the av */
 	uint64_t host_id; 		/* Optional peer host id. Default 0 */
 	/**
 	 * @brief reorder buffer
@@ -259,9 +259,9 @@ bool efa_rdm_peer_need_connid(struct efa_rdm_peer *peer)
 	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
 }
 
-struct efa_conn;
+struct efa_rdm_av_entry;
 
-int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn);
+int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_av_entry *av_entry);
 
 void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
 
@@ -284,6 +284,6 @@ int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_e
 /* Macro for getting peer address string */
 #define EFA_RDM_GET_PEER_ADDR_STR(ep, peer, peer_addr_str) \
 	char peer_addr_str[OFI_ADDRSTRLEN] = {0}; \
-	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->conn->fi_addr, peer_addr_str, &(size_t){sizeof peer_addr_str});
+	efa_base_ep_get_peer_raw_addr_str(&ep->base_ep, peer->av_entry->efa_av_entry.fi_addr, peer_addr_str, &(size_t){sizeof peer_addr_str});
 
 #endif /* EFA_RDM_PEER_H */
