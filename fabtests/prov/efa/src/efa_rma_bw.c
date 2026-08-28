@@ -519,10 +519,8 @@ static int run(void)
 
 	ret = ft_finalize();
 out:
-	for (i = 1; i < num_eps; i++) {
-		if (eps[i])
-			fi_close(&eps[i]->fid);
-	}
+	for (i = 1; i < num_eps; i++)
+		FT_CLOSE_FID(eps[i]);
 	return ret;
 }
 

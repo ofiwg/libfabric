@@ -162,7 +162,7 @@ int create_ext_cq(void **cq_buffer, struct fid_cq **cq_ext,
 	return ret;
 
 close_cq:
-	fi_close(&(*cq_ext)->fid);
+	FT_CLOSE_FID(*cq_ext);
 free_buf:
 	ft_hmem_free(opts.iface, *cq_buffer);
 	*cq_buffer = NULL;
@@ -636,10 +636,8 @@ int main(int argc, char **argv)
 		efa_cuda_destroy_qp(gda_qp);
 	// qp need to be destroyed before closing cq
 	FT_CLOSE_FID(gda_ep);
-	if (txcq_ext)
-		fi_close(&txcq_ext->fid);
-	if (rxcq_ext)
-		fi_close(&rxcq_ext->fid);
+	FT_CLOSE_FID(txcq_ext);
+	FT_CLOSE_FID(rxcq_ext);
 
 	cleanup_ret = ft_free_res();
 	return ft_exit_code(ret ? ret : cleanup_ret);

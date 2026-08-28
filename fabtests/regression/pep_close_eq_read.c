@@ -76,18 +76,12 @@ static int report(const char *call, int ret)
 
 static void close_resources(struct test_resources *r)
 {
-	if (r->ep)
-		fi_close(&r->ep->fid);
-	if (r->cq)
-		fi_close(&r->cq->fid);
-	if (r->pep)
-		fi_close(&r->pep->fid);
-	if (r->domain)
-		fi_close(&r->domain->fid);
-	if (r->eq)
-		fi_close(&r->eq->fid);
-	if (r->fabric)
-		fi_close(&r->fabric->fid);
+	FT_CLOSE_FID(r->ep);
+	FT_CLOSE_FID(r->cq);
+	FT_CLOSE_FID(r->pep);
+	FT_CLOSE_FID(r->domain);
+	FT_CLOSE_FID(r->eq);
+	FT_CLOSE_FID(r->fabric);
 	if (r->info)
 		fi_freeinfo(r->info);
 	memset(r, 0, sizeof(*r));

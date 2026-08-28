@@ -35,6 +35,19 @@
 #include "util.h"
 #include "ofi_ctx_pool.h"
 
+#define DMABUF_CLOSE_FID(fd)						\
+	do {								\
+		int ret;						\
+		if ((fd)) {						\
+			ret = fi_close(&(fd)->fid);			\
+			if (ret)					\
+				fprintf(stderr,				\
+					"fi_close(%s): %s (%d)\n",	\
+					#fd, fi_strerror(-ret), ret);	\
+			(fd) = NULL;					\
+		}							\
+	} while (0)
+
 #define MAX_NICS		8
 #define MAX_SIZE		(4 * 1024 * 1024)
 #define MIN_PROXY_BLOCK		(131072)

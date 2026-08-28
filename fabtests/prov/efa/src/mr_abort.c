@@ -2477,10 +2477,7 @@ static void teardown_eps(void)
 	int d, i;
 
 	for (i = 1; i < n_local_eps; i++) {
-		if (eps[i]) {
-			fi_close(&eps[i]->fid);
-			eps[i] = NULL;
-		}
+		FT_CLOSE_FID(eps[i]);
 	}
 
 	for (d = 0; d < n_domains; d++) {

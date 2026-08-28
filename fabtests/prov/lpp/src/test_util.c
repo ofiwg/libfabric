@@ -172,13 +172,13 @@ void util_teardown(struct rank_info *ri, struct rank_info *pri)
 	for (int i = 0; i < MAX_EP_INFO; i++) {
 		struct ep_info *ep_info = &ri->ep_info[i];
 		if (ep_info->valid) {
-			fi_close(&ep_info->fid->fid);
-			fi_close(&ep_info->stx->fid);
-			fi_close(&ep_info->tx_cq_fid->fid);
-			fi_close(&ep_info->rx_cq_fid->fid);
-			fi_close(&ep_info->tx_cntr_fid->fid);
-			fi_close(&ep_info->rx_cntr_fid->fid);
-			fi_close(&ep_info->av->fid);
+			FT_CLOSE_FID(ep_info->fid);
+			FT_CLOSE_FID(ep_info->stx);
+			FT_CLOSE_FID(ep_info->tx_cq_fid);
+			FT_CLOSE_FID(ep_info->rx_cq_fid);
+			FT_CLOSE_FID(ep_info->tx_cntr_fid);
+			FT_CLOSE_FID(ep_info->rx_cntr_fid);
+			FT_CLOSE_FID(ep_info->av);
 		}
 		ep_info->valid = 0;
 	}
@@ -187,7 +187,7 @@ void util_teardown(struct rank_info *ri, struct rank_info *pri)
 		struct mr_info *mr_info = &ri->mr_info[i];
 		if (mr_info->valid) {
 			if (!mr_info->skip_reg) {
-				fi_close(&mr_info->fid->fid);
+				FT_CLOSE_FID(mr_info->fid);
 			}
 			if (mr_info->uaddr != NULL) {
 				free_mr_uaddr(mr_info);
@@ -195,8 +195,8 @@ void util_teardown(struct rank_info *ri, struct rank_info *pri)
 		}
 		mr_info->valid = 0;
 	}
-	fi_close(&ri->domain->fid);
-	fi_close(&ri->fabric->fid);
+	FT_CLOSE_FID(ri->domain);
+	FT_CLOSE_FID(ri->fabric);
 	fi_freeinfo(ri->fi);
 	if (pri != NULL) {
 		put_peer_rank_info(pri);
