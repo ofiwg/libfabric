@@ -123,6 +123,8 @@ int efa_rdm_cq_close(struct fid *fid)
 	ret = efa_cq_destroy_comp_channel(&cq->efa_cq);
 	if (ret)
 		return ret;
+
+	ofi_genlock_destroy(&cq->progress_ep_list_lock);
 	free(cq);
 	return retv;
 }
@@ -924,11 +926,13 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	}
 	assert(dlist_empty(&rx_progressed_ep_list));
 
+	ofi_genlock_lock(&efa_rdm_cq->progress_ep_list_lock);
 	dlist_foreach_container_safe(&efa_rdm_cq->progress_ep_list,
 				     struct efa_rdm_ep, ep,
 				     progress_ep_entry, tmp) {
 		efa_rdm_ep_progress_peers_and_queues(ep);
 	}
+	ofi_genlock_unlock(&efa_rdm_cq->progress_ep_list_lock);
 
 	return err;
 }
@@ -1277,11 +1281,16 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	dlist_init(&cq->progress_ep_list);
 	cq->need_to_scan_ep_list = false;
 
+	ret = ofi_genlock_init(&cq->progress_ep_list_lock,
+			       efa_domain_data_progress_lock_type(&rdm_domain->efa_domain));
+	if (ret)
+		goto free;
+
 	ret = ofi_cq_init(&efa_prov, domain, attr, &cq->efa_cq.util_cq,
 			  &efa_rdm_cq_progress, context);
 
 	if (ret)
-		goto free;
+		goto destroy_progress_lock;
 
 	ret = efa_rdm_cq_init_entry_size(cq, attr->format);
 	if (ret)
@@ -1340,6 +1349,8 @@ close_util_cq:
 	if (retv)
 		EFA_WARN(FI_LOG_CQ, "Unable to close util cq: %s\n",
 			 fi_strerror(-retv));
+destroy_progress_lock:
+	ofi_genlock_destroy(&cq->progress_ep_list_lock);
 free:
 	free(cq);
 	return ret;

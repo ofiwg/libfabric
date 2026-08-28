@@ -1074,6 +1074,12 @@ static int efa_rdm_ep_close(struct fid *fid)
 	domain = efa_rdm_ep_domain(efa_rdm_ep);
 
 	/**
+	 * Hold cq.ep_list_lock so the cq progress cannot run concurrently, 
+	 * which prevents the deadlock of srx_lock -> progress_ep_list_lock.
+	 */
+	efa_cq_lock_ep_list(&efa_rdm_ep->base_ep);
+
+	/**
 	 * The QP destroy and op entries clean up must be in the same lock,
 	 * otherwise there can be race condition that efa_rdm_ep_progress_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
@@ -1082,10 +1088,8 @@ static int efa_rdm_ep_close(struct fid *fid)
 	if (efa_rdm_ep->base_ep.efa_qp_enabled)
 		efa_rdm_ep_wait_send(efa_rdm_ep);
 
-	if (efa_rdm_ep->needs_progress) {
-		dlist_remove(&efa_rdm_ep->progress_ep_entry);
-		efa_rdm_ep->needs_progress = false;
-	}
+	efa_rdm_ep_dequeue_progress_list(efa_rdm_ep);
+	efa_cq_unlock_ep_list(&efa_rdm_ep->base_ep);
 
 	if (efa_rdm_ep->peer_srx_ep) {
 		/*
