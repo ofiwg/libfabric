@@ -462,6 +462,26 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
 	if (efa_mr_is_cuda(desc))
 		return efa_rdm_pke_copy_payload_to_cuda(pke, ope);
 
+	/*
+	 * Always use local read to copy bounce buffers to Neuron memory.
+	 *
+	 * During a runting read copy, the EFA NIC->HBM transfers (RDMA read
+	 * segment), host driven copies from host memory to HBM (runted
+	 * segments), and the EFA NIC->host memory transfers (writing the
+	 * completion descriptor) all take different PCIe paths. So a successful
+	 * completion written to the host memory is not ordered against the data
+	 * landing in the HBM buffer.
+	 *
+	 * To enforce ordering, the applications write to a semaphore in the HBM
+	 * after receiving the host completion. When the semaphore write is EFA
+	 * driven (e.g. RDMA write), the host driven copy and semaphore write are
+	 * no longer ordered. By using an EFA driven local read to copy the
+	 * bounce buffers, we can guarantee that the semaphore write always
+	 * arrives after the data transfer has completed.
+	 */
+	if (efa_mr_is_neuron(desc))
+		return efa_rdm_rxe_post_local_read_or_queue(ope, segment_offset, pke, pke->payload, pke->payload_size);
+
 	if (efa_mr_is_hmem(desc))
 		return efa_rdm_pke_queued_copy_payload_to_hmem(pke, ope);
 
