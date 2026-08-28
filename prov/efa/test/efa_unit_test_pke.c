@@ -1406,7 +1406,7 @@ static void test_efa_rdm_pke_copy_payload_neuron_uses_rdma_read_impl(
 				  base_ep.util_ep.ep_fid);
 
 	/* Insert a peer so the recv-completion path has a valid
-	 * rxe->peer->conn to report the completion against. */
+	 * rxe->peer->av_entry to report the completion against. */
 	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;

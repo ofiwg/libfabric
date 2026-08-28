@@ -6809,7 +6809,7 @@ static void efa_unit_test_deliver_eager_rtm(struct efa_resource *resource,
 	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
 
 	pkt_attr.msg_id = msg_id;
-	pkt_attr.connid = peer->conn->ep_addr->qkey;
+	pkt_attr.connid = efa_av_entry_ep_addr(&peer->av_entry->efa_av_entry)->qkey;
 	pkt_attr.tag = tag;
 	if (tagged)
 		efa_unit_test_eager_tagrtm_pkt_construct(pkt_entry, &pkt_attr);
