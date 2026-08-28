@@ -14,7 +14,7 @@
 struct efa_av;
 struct efa_cur_reverse_av;
 struct efa_prv_reverse_av;
-struct efa_conn;
+struct efa_av_entry;
 struct ofi_mr_map;
 struct fi_mr_attr;
 struct efa_ibv_cq;
