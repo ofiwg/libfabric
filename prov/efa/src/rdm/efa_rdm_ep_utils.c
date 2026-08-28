@@ -1082,6 +1082,15 @@ int efa_rdm_ep_enforce_handshake_for_txe(struct efa_rdm_ep *ep, struct efa_rdm_o
 	return FI_SUCCESS;
 }
 
+static inline struct efa_rdm_cq *efa_rdm_ep_get_progress_cq(struct efa_rdm_ep *ep)
+{
+	if (ep->base_ep.util_ep.tx_cq)
+		return container_of(ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);
+
+	assert(ep->base_ep.util_ep.rx_cq);
+	return container_of(ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, efa_cq.util_cq);
+}
+
 void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep)
 {
 	struct efa_rdm_cq *cq;
@@ -1091,13 +1100,36 @@ void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep)
 
 	ep->needs_progress = true;
 
-	if (ep->base_ep.util_ep.tx_cq) {
-		cq = container_of(ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);
-	} else {
-		assert(ep->base_ep.util_ep.rx_cq);
-		cq = container_of(ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, efa_cq.util_cq);
-	}
+	cq = efa_rdm_ep_get_progress_cq(ep);
+	/**
+	 * The CQ read path's progress loop walks the list in the opposite order,
+	 * progress_ep_list_lock -> srx_lock. That inversion is safe because the two
+	 * paths operate on disjoint sets of EPs:
+	 *   - enqueue only takes progress_ep_list_lock when the EP is NOT already on
+	 *     the list (guarded by needs_progress); if it is already on the list it
+	 *     early-returns without touching progress_ep_list_lock at all;
+	 *   - the progress loop only takes an EP's srx_lock for EPs that ARE on the
+	 *     list.
+	 */
+	ofi_genlock_lock(&cq->progress_ep_list_lock);
 	dlist_insert_tail(&ep->progress_ep_entry, &cq->progress_ep_list);
+	ofi_genlock_unlock(&cq->progress_ep_list_lock);
+}
+
+void efa_rdm_ep_dequeue_progress_list(struct efa_rdm_ep *ep)
+{
+	struct efa_rdm_cq *cq;
+
+	assert(ofi_genlock_held(&ep->srx_lock));
+	if (!ep->needs_progress)
+		return;
+
+	ep->needs_progress = false;
+
+	cq = efa_rdm_ep_get_progress_cq(ep);
+	ofi_genlock_lock(&cq->progress_ep_list_lock);
+	dlist_remove(&ep->progress_ep_entry);
+	ofi_genlock_unlock(&cq->progress_ep_list_lock);
 }
 
 void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
