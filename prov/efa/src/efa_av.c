@@ -142,15 +142,14 @@ efa_av_reverse_lookup_rdm_conn(struct efa_cur_reverse_av **cur_reverse_av,
  */
 fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn,
 				    uint16_t qpn, struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_NO_ANALYSIS // Not taking util_av.lock on the fast path
 {
 	struct efa_conn *conn;
 	fi_addr_t fi_addr;
 
-	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	conn = efa_av_reverse_lookup_rdm_conn(
 		&av->cur_reverse_av, &av->prv_reverse_av, ahn, qpn, pkt_entry);
 	fi_addr = (OFI_LIKELY(!!conn)) ? conn->fi_addr : FI_ADDR_NOTAVAIL;
-	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
 	return fi_addr;
 }
