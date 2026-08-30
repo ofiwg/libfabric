@@ -140,7 +140,8 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
   Valid values are 0 (disabled) and powers of 2 in the range of 1-32,768, inclusive.
 
-  Default setting is 64.
+  Default setting is 1 for AMD GPU (ROCr) HMEM builds, 64 otherwise. Eager SDMA send
+  completion is gated on the reliability ACK.
 
 *FI_OPX_RELIABILITY_MAX_UNCONGESTED_PINGS*
 : Integer. This setting controls how many PING requests the reliability/replay
@@ -201,7 +202,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
   The logic used will always be the first valid in a selector list. For example, `default` and
   `fixed` will match all callers, so if either are in the beginning of a selector list, you will
-  only use `fixed` or `default` regardles of if there are any more selectors.
+  only use `fixed` or `default` regardless of if there are any more selectors.
 
   Examples:
   - `FI_OPX_HFI_SELECT=0` all callers will open contexts on HFI 0.
@@ -215,16 +216,15 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 : Integer. HFI1 port number.  If the specified port is not available, a default active port will be selected.
   Special value 0 indicates any available port. Defaults to port 1 on OPA100 and any port on CN5000.
 
-*FI_OPX_DELIVERY_COMPLETION_THRESHOLD*
-: Integer. Will be deprecated. Please use FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD.
-
 *FI_OPX_SDMA_BOUNCE_BUF_THRESHOLD*
 : Integer. The maximum message length in bytes that will be copied to the SDMA bounce buffer.
   For messages larger than this threshold, the send will not be completed until receiver
   has ACKed. Value must be between 16385 and 2147483646. Defaults to 16385.
 
-*FI_OPX_SDMA_DISABLE*
-: Boolean (1/0, on/off, true/false, yes/no). Disables SDMA offload hardware. Default is 0.
+*FI_OPX_SDMA*
+: Boolean (1/0, on/off, true/false, yes/no). Enables SDMA offload hardware. Defaults to 1 (SDMA enabled).
+  Deprecated alias: FI_OPX_SDMA_DISABLE (still honored, emits a deprecation warning). The two have
+  inverted meaning: FI_OPX_SDMA=0 is equivalent to the old FI_OPX_SDMA_DISABLE=1.
 
 *FI_OPX_MAX_PKT_SIZE*
 : Integer. Set the maximum packet size which must be less than or equal to the driver's
@@ -233,12 +233,18 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   libraries built on OPA100 systems.
 
 *FI_OPX_SDMA_MIN_PAYLOAD_BYTES*
-: Integer. The minimum length in bytes where SDMA will be used.
-  For messages smaller than this threshold, the send will be completed using PIO.
+: Integer. Applies to sends from host memory. The minimum length in bytes where SDMA will
+  be used. For messages smaller than this threshold, the send will be completed using PIO.
+  This threshold also applies to the rendezvous data phase for host-memory sends, to RMA
+  and atomic operations, and to host-memory eager SDMA (see FI_OPX_EAGER_SDMA).
   Value must be between 64 and 2147483646. Defaults to 16385.
-  Note:  This setting may only have an impact on RMA and atomic operations unless
-  FI_OPX_RZV_MIN_PAYLOAD_BYTES is also adjusted.
 
+*FI_OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES*
+: Integer. Applies to sends from device (GPU) memory. The minimum length in bytes where
+  SDMA is used. This covers eager SDMA (see FI_OPX_EAGER_SDMA) and the rendezvous data
+  phase. Below this threshold an eligible eager send uses PIO.
+  This only has an effect with HMEM enabled builds of OPX.
+  Value must be between 64 and 2147483646. Defaults to 4096 for CUDA builds, 512 for ROCr builds.
 
 *FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE*
 : Integer. The maximum number of times writev will be called during a single poll cycle.
@@ -262,35 +268,56 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Value must be between 4096 and 2147483646. Defaults to 4096.
 
 *FI_OPX_RZV_MIN_PAYLOAD_BYTES*
-: Integer. The minimum length in bytes where rendezvous will be used.
-  For messages smaller than this threshold, the send will first try to be completed using eager or multi-packet eager.
-  Value must be between 64 and 65536.
-  The default, which applies to all memory types, is selected at build time based on the device-memory (HMEM) backend
-  that OPX was configured with:
+: Integer. Applies to sends from host memory. The minimum length in bytes where rendezvous
+  is used. Messages smaller than this threshold use eager or multi-packet eager.
+  Value must be between 64 and 65536. Defaults to 16385 in all builds.
 
-  - 4096  — HMEM builds with CUDA support
-  - 8192  — HMEM builds with AMD ROCR support
-  - 16385 — host-only builds (one byte above the multi-packet eager maximum),
-    which effectively disables rendezvous for any payload that fits in
-    multi-packet eager.
+*FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES*
+: Integer. Applies to sends from device (GPU) memory. The minimum length in bytes where
+  rendezvous is used. Messages smaller than this threshold use eager or multi-packet eager.
+  This only has an effect with HMEM enabled builds of OPX.
+  Value must be between 64 and 65536. Defaults to 4096 for CUDA builds, 8192 for ROCr builds.
 
-*FI_OPX_MP_EAGER_DISABLE*
-: Boolean (1/0, on/off, true/false, yes/no). Disables multi-packet eager. Defaults to 0.
+*FI_OPX_HFISVC_MIN_PAYLOAD_BYTES*
+: Integer. Applies to sends from host memory. The minimum message length in bytes where
+  rendezvous will use the HFI Service.
+  For messages smaller than this threshold, rendezvous uses the applicable PIO or SDMA path.
+  Because this only selects between two rendezvous paths, the effective threshold is the
+  larger of this value and FI_OPX_RZV_MIN_PAYLOAD_BYTES; setting it lower than that does not
+  cause smaller messages to use the HFI Service.
+  This has no effect unless the HFI Service is enabled.
+  Value must be between 0 and 2147483646. Defaults to 16385.
 
-*FI_OPX_TID_DISABLE*
-: Boolean (1/0, on/off, true/false, yes/no). Disables using Token ID (TID). Defaults to 0.
+*FI_OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES*
+: Integer. Applies to sends from device (GPU) memory. The minimum message length in bytes
+  where rendezvous will use the HFI Service.
+  For messages smaller than this threshold, rendezvous uses the applicable PIO or SDMA path.
+  Device-memory sends additionally require a registered memory region and DMA-BUF support.
+  DMA-BUF is enabled by default and is controlled by FI_HMEM_CUDA_USE_DMABUF or
+  FI_HMEM_ROCR_USE_DMABUF; the platform must also support it. Without it, rendezvous uses
+  the applicable PIO or SDMA path regardless of size.
+  Because this only selects between two rendezvous paths, the effective threshold is the
+  larger of this value and FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES; setting it lower than that does
+  not cause smaller messages to use the HFI Service.
+  This only has an effect with HMEM enabled builds of OPX that also have HFI Service enabled.
+  Value must be between 0 and 2147483646. Defaults to 4096 for CUDA builds, 1048576 for ROCr builds.
 
-*FI_OPX_EXPECTED_RECEIVE_ENABLE*
-: Deprecated. Use FI_OPX_TID_DISABLE instead.
+*FI_OPX_MP_EAGER*
+: Boolean (1/0, on/off, true/false, yes/no). Enables multi-packet eager. Defaults to 1 (enabled).
+  Deprecated alias: FI_OPX_MP_EAGER_DISABLE (still honored, emits a deprecation warning). The two have
+  inverted meaning: FI_OPX_MP_EAGER=0 is equivalent to the old FI_OPX_MP_EAGER_DISABLE=1.
+
+*FI_OPX_TID*
+: Boolean (1/0, on/off, true/false, yes/no). Enables using Token ID (TID). Defaults to 1 (TID enabled).
+  Deprecated alias: FI_OPX_TID_DISABLE (still honored, emits a deprecation warning). The two have
+  inverted meaning: FI_OPX_TID=0 is equivalent to the old FI_OPX_TID_DISABLE=1.
+  The deprecated FI_OPX_EXPECTED_RECEIVE_ENABLE has been removed; use FI_OPX_TID instead.
 
 *FI_OPX_PROG_AFFINITY*
 : String. This sets the affinity to be used for any progress threads. Set as a colon-separated
   triplet as `start:end:stride`, where stride controls the interval between selected cores.
   For example, `1:5:2` will have cores 1, 3, and 5 as valid cores for progress threads. By default
   no affinity is set.
-
-*FI_OPX_AUTO_PROGRESS_INTERVAL_USEC*
-: Deprecated/ignored. Auto progress threads are now interrupt-driven and only poll when data is available.
 
 *FI_OPX_PKEY*
 : Integer. Partition key, a 2 byte positive integer. Default is the Pkey in the index 0 of the
@@ -306,10 +333,15 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   This only has an effect with HMEM enabled builds of OPX.
   Defaults to on.
 
+*FI_OPX_GPU_IPC_MIN*
+: Integer. The minimum message length in bytes where GPU IPC will be used for intranode GPU buffers.
+  This only has an effect with HMEM enabled builds of OPX and when FI_OPX_GPU_IPC_INTRANODE is enabled.
+  Value must be >= 0. Defaults to 2048.
+
 *FI_OPX_DEV_REG_SEND_THRESHOLD*
 : Integer. The individual packet threshold where lengths above do not use a device
   registered copy when sending data from GPU.
-  The default threshold is 4096.
+  The default threshold is 512 for CUDA and ROCr builds, 4096 otherwise.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
 *FI_OPX_DEV_REG_RECV_THRESHOLD*
@@ -317,6 +349,19 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   registered copy when receiving data into GPU.
   The default threshold is 8192.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
+
+*FI_OPX_EAGER_SDMA*
+: Boolean (1/0, on/off, true/false, yes/no). Sends single-packet eager messages over SDMA
+  rather than PIO, so the DMA engine reads the payload instead of the CPU. Applies to sends
+  from both host and device (GPU) memory.
+  Eligibility is limited to contiguous, non-FI_INJECT, quadword-aligned, off-node sends of at
+  least 512 bytes that still fit in a single eager packet. The message must also be at least
+  the applicable SDMA minimum (FI_OPX_SDMA_MIN_PAYLOAD_BYTES for sends from host memory,
+  FI_OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES for sends from device memory) and below the applicable
+  rendezvous minimum (FI_OPX_RZV_MIN_PAYLOAD_BYTES or FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES,
+  respectively). At the default host thresholds the host-memory window is empty, so using
+  eager SDMA for host-memory sends requires lowering FI_OPX_SDMA_MIN_PAYLOAD_BYTES.
+  Defaults to on for AMD GPU (ROCr) HMEM builds, off otherwise.
 
 *FI_OPX_OPA100_INTEROP*
 : Boolean (1/0, on/off, true/false, yes/no). Indicates that the job requires OPA100
@@ -332,10 +377,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 
   Default is in-order (`0:0:0:0:0:0`) route controls.
 
-*FI_OPX_SHM_ENABLE*
+*FI_OPX_SHM*
 : Boolean (1/0, on/off, true/false, yes/no). Enables shm across all ports and hfi units
   on the node. Setting it to NO disables shm except peers with same lid and same
   hfi1 (loopback).  Defaults to: "YES"
+  Deprecated alias: FI_OPX_SHM_ENABLE (still honored, emits a deprecation warning).
 
 *FI_OPX_LINK_DOWN_WAIT_TIME_MAX_SEC*
 : Integer. The maximum time in seconds to wait for a link to come back up. Default is 70 seconds.
@@ -346,17 +392,32 @@ this will cause a segfault when mmapped memory is illegally accessed through buf
 or underruns.  Default is false.
 
 *FI_OPX_CONTEXT_SHARING*
-: Boolean (1/0, on/off, true/false, yes/no). Enables context sharing in OPX. Defaults to FALSE (1 HFI context per endpoint).
+: Boolean (1/0, on/off, true/false, yes/no). Enables or disables context sharing in OPX. Defaults to auto, which enables
+  context sharing only when the number of local ranks exceeds the total number of HFI contexts available on the node
+  (summed across all active HFI units). Setting this to true or false always enables or disables context sharing
+  regardless of local rank count.
+  The local rank count is read from the first of the following environment variables that is set:
+  MPI_LOCALNRANKS, OMPI_COMM_WORLD_LOCAL_SIZE, LOCAL_WORLD_SIZE, SLURM_NTASKS_PER_NODE, or CCL_LOCAL_SIZE.
+  If none of these are set, the auto default behaves as if there is 1 local rank (context sharing not enabled).
+  The auto default never enables context sharing whenever dual-plane or multi-HFI striping
+  will be in effect for this context open, since these features are mutually exclusive with
+  context sharing: this includes CN6000/CYR hardware (dual-plane is enabled by default on that
+  generation), an explicit _FI_OPX_DUAL_PLANE_=1 or FI_OPX_MULTI_HFI_STRIPING=1 override on any
+  generation, and a dual-plane send-only secondary context. Set FI_OPX_CONTEXT_SHARING=1
+  explicitly to opt in for these cases.
 
 *FI_OPX_ENDPOINTS_PER_HFI_CONTEXT*
 : Integer. Specify how many endpoints should share a single HFI context. Valid values are from 2 to 8.
-  Default is to determine optimal value based on the number of contexts available on the system and number of processors online.
+  Default is to determine an optimal value based on the number of contexts available on the system and
+  the local rank count (see FI_OPX_CONTEXT_SHARING), falling back to the number of processors online if
+  the local rank count cannot be determined. Middleware that opens more than one endpoint per rank
+  (e.g. some SHMEM configurations) may need to override this default explicitly.
   Only applicable if context sharing is enabled. Otherwise this value is ignored.
 
 *FI_OPX_MULTI_HFI_STRIPING*
 : Boolean (0/1, on/off, true/false, yes/no). Enable or disable multi-HFI data striping for
   rendezvous (RZV) transfers over HFISVC. When enabled, OPX stripes large RZV transfers across
-  multiple HFI contexts for increased bandwidth. 
+  multiple HFI contexts for increased bandwidth.
   Default: 1 on CN6000, 0 on CN5000. Not supported on OPA-100 hardware.
 
 *FI_OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES*
@@ -364,6 +425,24 @@ or underruns.  Default is false.
   payload smaller than this threshold use a single HFI rail even when striping is enabled.
   Only effective when FI_OPX_MULTI_HFI_STRIPING=1. Not supported on OPA-100 hardware.
   Default: 65536 (64 KiB).
+
+# TRACING
+
+The OPX provider includes an optional per-process performance tracing facility. The following
+environment variables control it. They are read directly from the environment (not as
+fi_param values) and are intended for development and performance debugging.
+
+*FI_OPX_TRACER_OUT_PATH*
+: String. Specify the directory path used to output per-process performance tracing log files.
+  When unset, tracing output is disabled (default: none).
+
+*FI_OPX_TRACER_BUFFER_SIZE*
+: Integer. Size in bytes of the in-memory per-process trace buffer. The value is clamped to the
+  provider's supported minimum, maximum, and default buffer sizes.
+
+*FI_OPX_TRACER_FILTER*
+: String. Filter expression selecting which trace events are recorded. When unset, no filter is
+  applied.
 
 # SEE ALSO
 
