@@ -36,6 +36,11 @@
  * selected.
  */
 struct efa_rdm_proto {
+	/* Human readable protocol name, e.g. "eager". Used for tracing the
+	 * outcome of protocol selection and in unit test assertions.
+	 */
+	char name[32];
+
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given

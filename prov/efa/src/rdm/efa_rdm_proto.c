@@ -83,6 +83,9 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		if (selected_proto->can_use_protocol_for_send(
 			    txe, req_pkt_type, header_flags, iface)) {
 			*proto = selected_proto;
+			EFA_DBG(FI_LOG_EP_DATA,
+				"Selected the %s protocol for a %zu byte send\n",
+				selected_proto->name, txe->total_len);
 			return FI_SUCCESS;
 		}
 	}
