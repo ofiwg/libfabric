@@ -898,6 +898,11 @@ struct fi_opx_reliability_tx_flow *opx_reliability_create_tx_flow(struct fi_opx_
 	assert(itr);
 	assert((struct fi_opx_reliability_tx_flow *) fi_opx_rbt_value(service->tx.tx_flow_rbtree, itr) == tx_flow);
 #endif
+	if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+		const int ret = opx_flow_control_tx_flow_init_RCCC(opx_ep, tx_flow, key);
+		assert(ret == FI_SUCCESS);
+		(void) ret;
+	}
 	return tx_flow;
 }
 
@@ -944,6 +949,37 @@ fi_opx_reliability_create_rx_flow(struct fi_opx_reliability_service		  *service,
 	return flow;
 }
 
+#define OPX_FLOW_CONTROL_RX_GOVERNED_DPUT_MASK                                                                 \
+	((UINT32_C(1) << FI_OPX_HFI_DPUT_OPCODE_RZV) | (UINT32_C(1) << FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG) | \
+	 (UINT32_C(1) << FI_OPX_HFI_DPUT_OPCODE_RZV_TID) | (UINT32_C(1) << FI_OPX_HFI_DPUT_OPCODE_PUT) |       \
+	 (UINT32_C(1) << FI_OPX_HFI_DPUT_OPCODE_PUT_CQ) | (UINT32_C(1) << FI_OPX_HFI_DPUT_OPCODE_GET) |        \
+	 (UINT32_C(1) << FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH) |                                                \
+	 (UINT32_C(1) << FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH))
+
+/* RX mirror of the TX admission classes: every arrival that consumed a
+ * sender credit must be counted exactly once or RESET_ACK withholding
+ * (grant - observed - retired == 0) never converges.  All BTH opcodes at or
+ * above MP_EAGER_NTH (0xEB) are governed admission classes (MP-eager,
+ * inject, eager, rendezvous RTS); RZV_CTS covers the rendezvous/ETRUNC/RMA/
+ * readv CTS templates, which all reserve; RZV_DATA counts every reserving
+ * DPUT opcode — the RZV family plus the RMA/atomic data opcodes.  FENCE
+ * stays out (SHM-only side channel, never reserves) and IPC stays out
+ * (intranode, never reserves). */
+__OPX_FORCE_INLINE__
+bool opx_flow_control_rx_packet_governed(const uint8_t opcode, const union opx_hfi1_packet_hdr *const hdr)
+{
+	if (OFI_LIKELY(opcode >= FI_OPX_HFI_BTH_OPCODE_MP_EAGER_NTH)) {
+		return true;
+	}
+	if (opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) {
+		const uint8_t dput_opcode = FI_OPX_HFI_DPUT_GET_OPCODE(hdr->dput.target.opcode_origin_rx);
+
+		return ((OPX_FLOW_CONTROL_RX_GOVERNED_DPUT_MASK >> dput_opcode) & 1u) != 0u;
+	}
+	return opcode == FI_OPX_HFI_BTH_OPCODE_RZV_CTS || opcode == FI_OPX_HFI_BTH_OPCODE_RMA_RTS ||
+	       opcode == FI_OPX_HFI_BTH_OPCODE_RMA_HFISVC_RTS;
+}
+
 /*
  * returns OPX_RELIABILITY_SUCCESS if this packet is expected
  * returns OPX_RELIABILITY_FLOW_ERROR if there was a problem creating the RX flow
@@ -985,7 +1021,7 @@ static inline unsigned fi_opx_reliability_rx_check(struct fi_opx_reliability_ser
 	if (((flow->next_psn & MAX_PSN) == psn) && (flow->uepkt == NULL)) {
 		OPX_RELIABILITY_DEBUG_LOG(&key, "(rx) packet psn=%08u received.\n", psn);
 		flow->next_psn += 1;
-		(*flow_ptr) = NULL;
+		(*flow_ptr) = flow;
 		return OPX_RELIABILITY_SUCCESS;
 	}
 
@@ -1126,6 +1162,35 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 	const uint32_t bytes_avail_pkts = (max_outstanding_bytes - flow_outstanding_bytes) / bytes_per_packet;
 	const uint32_t pkts_avail	= max_outstanding_pkts - flow_outstanding_pkts;
 
+	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
+		/* RCCC admission is all-or-nothing: a batch reservation charges
+		 * exactly psns_to_get credits, so a partial PSN result would
+		 * strand the difference.  Admit records demand (and emits a
+		 * CREDIT_REQUEST on a cold window) before reserve charges. */
+		assert(reservation_record_out != NULL);
+		*reservation_record_out = NULL;
+		if (OFI_UNLIKELY(MIN(pkts_avail, bytes_avail_pkts) < psns_to_get)) {
+			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, MIN(pkts_avail, bytes_avail_pkts),
+						  psns_to_get);
+			return -1;
+		}
+		struct fi_opx_ep *opx_ep = (struct fi_opx_ep *) ep;
+		if (OFI_UNLIKELY(opx_flow_control_rccc_tx_admit(opx_ep, flow_ptr, psns_to_get) !=
+				 OPX_FLOW_CONTROL_OK)) {
+			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, psns_to_get);
+			return -1;
+		}
+		if (OFI_UNLIKELY(opx_flow_control_tx_reserve_RCCC(opx_ep, flow_ptr, packet_class, psns_to_get,
+								  reservation_record_out) != OPX_FLOW_CONTROL_OK)) {
+			assert(*reservation_record_out == NULL);
+			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, psns_to_get);
+			return -1;
+		}
+		assert(*reservation_record_out != NULL);
+		OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get, 0);
+		return (int32_t) psns_to_get;
+	}
+
 	OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get, 0);
 	return MIN(psns_to_get, MIN(pkts_avail, bytes_avail_pkts));
 }
@@ -1261,6 +1326,51 @@ fi_opx_reliability_service_replay_allocate(struct fi_opx_reliability_service *se
 }
 
 __OPX_FORCE_INLINE__
+void opx_reliability_replay_bind_RCCC(struct fi_opx_reliability_tx_replay *replay, void *reservation_record)
+{
+	assert(replay != NULL);
+	assert(reservation_record != NULL);
+	assert(replay->flow_control_reservation_record == NULL);
+	/* Record-free single-packet reservations leave the replay unbound:
+	 * settle dispatch gates on a non-NULL record, so singles ride the
+	 * no-op branch and NACK replay cannot double-complete. */
+	if (OPX_FLOW_CONTROL_IS_SINGLE(reservation_record)) {
+		return;
+	}
+	replay->flow_control_reservation_record = reservation_record;
+	replay->flow_control_generation		= OPX_RELIABILITY_FLOW_CONTROL_DEBUG_GENERATION ?
+							  opx_flow_control_tx_record_generation_RCCC(reservation_record) :
+							  0u;
+}
+
+__OPX_FORCE_INLINE__
+void fi_opx_reliability_ack_settle_RCCC(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_tx_replay *replay)
+{
+	assert(opx_ep != NULL);
+	assert(replay != NULL);
+	assert(replay->flow_control_reservation_record != NULL);
+#if OPX_RELIABILITY_FLOW_CONTROL_DEBUG_GENERATION
+	assert(replay->flow_control_generation ==
+	       opx_flow_control_tx_record_generation_RCCC(replay->flow_control_reservation_record));
+#endif
+	void *reservation_record = replay->flow_control_reservation_record;
+
+	replay->flow_control_reservation_record = NULL;
+	opx_flow_control_tx_complete_packet_RCCC(opx_ep, reservation_record);
+}
+
+__OPX_FORCE_INLINE__
+void fi_opx_reliability_ack_settle_dispatch(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_tx_replay *replay)
+{
+	/* Record-free singles (the dominant eager/inject case) and all NONE
+	 * traffic leave the record NULL, so non-NULL (multi-packet batches)
+	 * is genuinely the unlikely arm. */
+	if (OFI_UNLIKELY(replay->flow_control_reservation_record != NULL)) {
+		fi_opx_reliability_ack_settle_RCCC(opx_ep, replay);
+	}
+}
+
+__OPX_FORCE_INLINE__
 int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliability_service *service,
 				      const opx_lid_t slid, const opx_lid_t dlid, const uint16_t dst_subctxt_rx,
 				      uint8_t tx_index, struct fi_opx_reliability_tx_flow **tx_flow,
@@ -1325,8 +1435,29 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 		return -1;
 	}
 
+	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
+		/* Fused admit + record-free single-packet charge: every
+		 * get_replay caller sends exactly one packet, and the flow is
+		 * already resolved here, so the separate pre-admit (with its
+		 * second rbtree find) and the pooled reservation record are
+		 * both skipped. */
+		assert(reservation_record_out != NULL);
+		*reservation_record_out = NULL;
+		if (OFI_UNLIKELY(opx_flow_control_tx_admit_reserve_single((struct fi_opx_ep *) ep, flow_ptr,
+									  reservation_record_out) !=
+				 OPX_FLOW_CONTROL_OK)) {
+			assert(*reservation_record_out == NULL);
+			return -1;
+		}
+		assert(*reservation_record_out != NULL);
+	}
+
 	*replay = fi_opx_reliability_service_replay_allocate(service, false);
 	if (*replay == NULL) {
+		if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
+			opx_flow_control_tx_cancel_RCCC((struct fi_opx_ep *) ep, *reservation_record_out);
+			*reservation_record_out = NULL;
+		}
 		return -1;
 	}
 
@@ -1335,6 +1466,33 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 	psn_ptr->psn.psn			  = (psn_value.psn.psn + 1) & MAX_PSN;
 
 	return psn;
+}
+
+__OPX_FORCE_INLINE__
+void fi_opx_reliability_cancel_record(const enum opx_flow_control_mode flow_control_mode, struct fi_opx_ep *opx_ep,
+				      void **reservation_record)
+{
+	assert(reservation_record != NULL);
+	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC && *reservation_record != NULL) {
+		opx_flow_control_tx_cancel_RCCC(opx_ep, *reservation_record);
+		*reservation_record = NULL;
+	}
+}
+
+/* Cold admission-failure classifier: a terminal current-generation Capacity
+ * Reject must surface as FI_ENOSPC rather than collapse into FI_EAGAIN;
+ * every other admission failure (throttle, pool exhaustion, credit
+ * shortage) remains FI_EAGAIN.  Takes the flow by address so NONE-mode
+ * callers never read the pointer; the RCCC branch constant-folds away for
+ * compile-time NONE template modes. */
+__OPX_FORCE_INLINE__
+ssize_t fi_opx_reliability_tx_admission_error(const enum opx_flow_control_mode		flow_control_mode,
+					      struct fi_opx_reliability_tx_flow *const *tx_flow)
+{
+	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC && opx_flow_control_tx_capacity_rejected(*tx_flow)) {
+		return -FI_ENOSPC;
+	}
+	return -FI_EAGAIN;
 }
 
 static inline void fi_opx_reliability_service_replay_deallocate(struct fi_opx_reliability_service *service
@@ -1357,6 +1515,10 @@ void fi_opx_reliability_service_replay_register_with_update(
 	uint16_t lrh_pktlen_le;
 	size_t	 total_bytes;
 	uint16_t hdr_dst_subctxt_rx;
+
+	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
+		opx_reliability_replay_bind_RCCC(replay, reservation_record);
+	}
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		lrh_pktlen_le = ntohs(replay->scb.scb_9B.hdr.lrh_9B.pktlen);
@@ -1402,6 +1564,10 @@ void fi_opx_reliability_service_replay_register_with_update(
 		replay->next	 = head;
 		head->prev->next = replay;
 		head->prev	 = replay;
+	}
+
+	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
+		opx_flow_control_tx_register_packet_RCCC(opx_ep, reservation_record);
 	}
 }
 
