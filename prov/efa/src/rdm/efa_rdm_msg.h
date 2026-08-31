@@ -56,6 +56,9 @@ uint64_t efa_rdm_msg_get_tx_flags(struct efa_rdm_ep *ep, uint64_t fi_flags)
 
 ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe,
 				    struct efa_rdm_proto *proto);
+
+ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
+				     struct efa_rdm_ope *txe);
 /*
  * The following 2 OP structures are defined in efa_rdm_msg.c and is
  * used by #efa_rdm_ep_open()

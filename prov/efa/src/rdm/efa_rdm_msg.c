@@ -107,51 +107,131 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 }
 
 /**
- * @brief Post an already-filled TXE using the new protocol path.
+ * @brief Send the packet entries a protocol's construct_tx_pkes() just built.
  *
- * Used by the retry path after handshake completes and by the normal
- * send path. The TXE must already be filled by efa_rdm_proto_txe_fill.
+ * Shared by fresh send (#efa_rdm_msg_post_rtm_proto) and repost
+ * (#efa_rdm_msg_repost_rtm_proto) paths. This function assumes that
+ * ep->send_pkt_entry_vec and ep->send_pkt_entry_vec_size are set.
+ * It posts the pkes to the device and rolls back the packet entries
+ * if the post failed.
+ *
+ * @param[in,out]	ep		endpoint
+ * @param[in,out]	txe		send operation whose packets were
+ *					constructed
+ * @param[in]		proto		protocol that constructed them
+ * @param[in]		pke_send_flags	flags construct_tx_pkes() asked for when
+ *					posting, currently either 0 or FI_MORE
+ * @return 0 on success, negative errno on failure. On failure the packet
+ *	   entries have been released and the caller still owns only the txe.
  */
-ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
-				    struct efa_rdm_ope *txe,
-				    struct efa_rdm_proto *proto)
+static inline ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
+						 struct efa_rdm_ope *txe,
+						 struct efa_rdm_proto *proto,
+						 uint64_t pke_send_flags)
 {
 	ssize_t err;
-	uint64_t pke_send_flags = 0;
 	int i;
 
-	err = proto->construct_tx_pkes(
-		ep, txe->peer, NULL, txe->op, txe->tag,
-		txe->fi_flags, txe->internal_flags, txe, &pke_send_flags);
-	if (err)
-		return err;
-
 	assert(efa_rdm_pkt_type_is_rtm(txe->req_pkt_type));
+
+	/* There has to be at least one packet to post */
+	assert(ep->send_pkt_entry_vec_size > 0);
 
 	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
 				ep->send_pkt_entry_vec_size,
 				pke_send_flags);
 	if (err) {
-		/*
-		 * Nothing reached the device, so this function still owns the
-		 * packet entries construct_tx_pkes() built. Release them, as
-		 * efa_rdm_ope_post_send() does on the old path; the caller only
-		 * owns the txe.
-		 */
 		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
 			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 		return err;
 	}
 
-	/*
-	 * Mark the peer as having received a REQ, matching what
-	 * efa_rdm_ope_post_send() does on the old path. Doing it here rather
-	 * than in the caller also covers the repost after a handshake.
-	 */
 	txe->peer->flags |= EFA_RDM_PEER_REQ_SENT;
 
 	proto->handle_tx_pkes_posted(ep, txe);
 	return FI_SUCCESS;
+}
+
+/**
+ * @brief Post a fresh send on the refactored protocol path.
+ *
+ * Called only from efa_rdm_msg_generic_send(), on a txe that
+ * efa_rdm_proto_txe_fill() has just filled and that has never been handed to
+ * the protocol before. The repost after a pre-handshake queue is a separate
+ * entry point, #efa_rdm_msg_repost_rtm_proto, because its contract differs.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation, filled by efa_rdm_proto_txe_fill
+ * @param[in]		proto	protocol selected for this operation
+ * @return 0 on success, negative errno on failure. On failure the caller
+ *	   releases the txe and rolls back peer->next_msg_id.
+ */
+ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
+				    struct efa_rdm_ope *txe,
+				    struct efa_rdm_proto *proto)
+{
+	uint64_t pke_send_flags = 0;
+	ssize_t err;
+
+	assert(txe->proto == proto);
+
+	err = proto->construct_tx_pkes(
+		ep, txe->peer, txe->op, txe->tag,
+		txe->fi_flags, txe->internal_flags, txe, &pke_send_flags);
+	if (err)
+		return err;
+
+	return efa_rdm_msg_send_constructed_pkes(ep, txe, proto,
+						 pke_send_flags);
+}
+
+/**
+ * @brief Repost a send that was queued before the handshake completed.
+ *
+ * Called only from efa_rdm_ope_repost_ope_queued_before_handshake(), once the
+ * peer's handshake has arrived.
+ *
+ * The same rule binds what this function does before construct_tx_pkes(): the
+ * available-TX-packet check below returns -FI_EAGAIN without reaching the
+ * protocol at all, so the next attempt starts again from the top. That is why
+ * the protocol reselect it runs first is a plain assignment.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	queued send operation, whose txe->proto this
+ *				function may replace
+ * @return 0 on success, negative errno on failure. -FI_EAGAIN leaves the txe
+ *	   queued for another attempt.
+ */
+ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
+				     struct efa_rdm_ope *txe)
+{
+	struct efa_rdm_proto *proto;
+	uint64_t pke_send_flags = 0;
+	ssize_t err;
+
+	assert(txe->proto);
+	assert(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
+	assert(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+
+	/*
+	 * Now that we have the handshake from the peer, we know for sure if we
+	 * are talking to an old peer that is in zero-copy receive mode.
+	 * So we have to check again if we need to use the zero-copy protocol.
+	 */
+	efa_rdm_proto_zero_copy_reselect_queued_before_handshake(txe);
+	proto = txe->proto;
+
+	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
+		return -FI_EAGAIN;
+
+	err = proto->construct_tx_pkes(
+		ep, txe->peer, txe->op, txe->tag,
+		txe->fi_flags, txe->internal_flags, txe, &pke_send_flags);
+	if (err)
+		return err;
+
+	return efa_rdm_msg_send_constructed_pkes(ep, txe, proto,
+						 pke_send_flags);
 }
 
 /**

@@ -230,8 +230,7 @@ static int efa_test_proto_medium_build(struct efa_test_proto_ctx *ctx,
 		proto = txe->proto;
 	}
 
-	/* No fi_msg, exactly as the repost path calls it. */
-	out->ret = proto->construct_tx_pkes(ep, ctx->peer, NULL, txe->op,
+	out->ret = proto->construct_tx_pkes(ep, ctx->peer, txe->op,
 					    txe->tag, txe->fi_flags,
 					    txe->internal_flags, txe,
 					    &pke_send_flags);

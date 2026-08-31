@@ -80,6 +80,9 @@ struct efa_rdm_proto {
 	 * handle the TX completion of that pke. This function also constructs
 	 * and returns the txe.
 	 *
+	 * construct_tx_pkes() must be idempotent. This function can run more than
+	 * once for the same operation if the txe gets queued in the ep->ope_queued_list.
+	 *
 	 * pke_send_flags is an output: the flags to pass to
 	 * efa_rdm_pke_sendv() when posting the packets (currently either 0 or
 	 * FI_MORE). A protocol sets FI_MORE only when it honors the caller's
@@ -88,8 +91,8 @@ struct efa_rdm_proto {
 	 */
 	int (*construct_tx_pkes)(struct efa_rdm_ep *ep,
 				 struct efa_rdm_peer *peer,
-				 const struct fi_msg *msg, uint32_t op,
-				 uint64_t tag, uint64_t flags,
+				 uint32_t op, uint64_t tag,
+				 uint64_t flags,
 				 uint32_t internal_flags,
 				 struct efa_rdm_ope *txe,
 				 uint64_t *pke_send_flags);
