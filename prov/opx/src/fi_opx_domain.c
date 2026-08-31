@@ -636,26 +636,28 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	opx_domain->hmem_domain		    = opx_hmem_domain;
 	opx_domain->hmem_domain->opx_domain = opx_domain;
 
-	size_t env_var_threshold;
-	get_param_check = fi_param_get_size_t(fi_opx_global.prov, "dev_reg_send_threshold", &env_var_threshold);
+	int env_var_threshold;
+	get_param_check = fi_param_get_int(fi_opx_global.prov, "dev_reg_send_threshold", &env_var_threshold);
 	if (get_param_check == FI_SUCCESS) {
-		if (env_var_threshold <= OPX_HMEM_DEV_REG_THRESHOLD_MAX) {
+		if (env_var_threshold >= OPX_HMEM_DEV_REG_THRESHOLD_MIN &&
+		    env_var_threshold <= OPX_HMEM_DEV_REG_THRESHOLD_MAX) {
 			opx_domain->hmem_domain->devreg_copy_from_threshold = env_var_threshold;
 		} else {
 			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-				"FI_OPX_DEV_REG_SEND_THRESHOLD must be an integer >= %u and <= %u. Using default value (%u) instead of %zu\n",
+				"FI_OPX_DEV_REG_SEND_THRESHOLD must be an integer >= %u and <= %u. Using default value (%u) instead of %d\n",
 				OPX_HMEM_DEV_REG_THRESHOLD_MIN, OPX_HMEM_DEV_REG_THRESHOLD_MAX,
 				OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT, env_var_threshold);
 		}
 	}
 
-	get_param_check = fi_param_get_size_t(fi_opx_global.prov, "dev_reg_recv_threshold", &env_var_threshold);
+	get_param_check = fi_param_get_int(fi_opx_global.prov, "dev_reg_recv_threshold", &env_var_threshold);
 	if (get_param_check == FI_SUCCESS) {
-		if (env_var_threshold <= OPX_HMEM_DEV_REG_THRESHOLD_MAX) {
+		if (env_var_threshold >= OPX_HMEM_DEV_REG_THRESHOLD_MIN &&
+		    env_var_threshold <= OPX_HMEM_DEV_REG_THRESHOLD_MAX) {
 			opx_domain->hmem_domain->devreg_copy_to_threshold = env_var_threshold;
 		} else {
 			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
-				"FI_OPX_DEV_REG_RECV_THRESHOLD must be an integer >= %u and <= %u. Using default value (%u) instead of %zu\n",
+				"FI_OPX_DEV_REG_RECV_THRESHOLD must be an integer >= %u and <= %u. Using default value (%u) instead of %d\n",
 				OPX_HMEM_DEV_REG_THRESHOLD_MIN, OPX_HMEM_DEV_REG_THRESHOLD_MAX,
 				OPX_HMEM_DEV_REG_RECV_THRESHOLD_DEFAULT, env_var_threshold);
 		}
