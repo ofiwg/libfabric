@@ -4,6 +4,16 @@ dnl SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All ri
 dnl
 dnl Configure specific to the fabtests Amazon EFA provider
 
+dnl The efa fabtests are only usable, and only buildable, when libfabric was
+dnl built with the efa provider: the efa extension header is installed with it.
+AS_IF([test x"$enable_efa" = x"yes"],
+      [AC_CHECK_HEADER([rdma/fi_ext_efa.h], [],
+              [enable_efa=no
+               AC_MSG_NOTICE([EFA fabtests are disabled: <rdma/fi_ext_efa.h> dnl
+not found, libfabric was built without the efa provider])])])
+
+AM_CONDITIONAL([ENABLE_EFA], [test x"$enable_efa" = x"yes"])
+
 
 dnl Checks for presence of efadv verbs. Needed for building tests that calls efadv verbs.
 have_efadv=0
