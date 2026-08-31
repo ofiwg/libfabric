@@ -10,6 +10,7 @@
 #include <ofi_iov.h>
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_conn.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
 #include "efa_rdm_atomic.h"
@@ -147,6 +148,7 @@ unlock:
  */
 struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(ep->base_ep.av));
 	struct efa_rdm_av_entry *av_entry;
 	struct efa_rdm_peer *peer;
 
@@ -154,10 +156,10 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 		return NULL;
 
 	/*
-	 * The util_domain.lock is required for efa_av_implicit_av_lru_conn_move, 
+	 * The util_domain.lock is required for efa_rdm_av_implicit_av_lru_move,
 	 * which modifies domain->ah_lru_list.
 	 * The endpoint lock protects the peer map; the implicit-AV lock
-	 * protects peer->conn and its implicit-LRU entry (touched by the LRU
+	 * protects peer->av_entry and its implicit-LRU entry (touched by the LRU
 	 * move below).
 	 *
 	 * We hold the implicit-AV lock across the whole function to prevent a
@@ -168,14 +170,14 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	 * Follows locking order: util_domain -> implicit-AV -> endpoint.
 	 */
 	EFA_GENLOCK_LOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
-	EFA_GENLOCK_LOCK(&ep->base_ep.av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 
 	peer = efa_rdm_ep_peer_map_lookup(ep->fi_addr_to_peer_map_implicit, addr);
 	if (peer)
 		goto unlock_ep;
 
-	av_entry = efa_av_addr_to_entry_implicit(ep->base_ep.av, addr);
+	av_entry = efa_rdm_av_addr_to_entry_implicit(ep->base_ep.av, addr);
 	if (OFI_UNLIKELY(!av_entry))
 		goto unlock_ep;
 
@@ -204,12 +206,12 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 unlock_ep:
 	EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 
-	/* Move to the front of the LRU list; peer->conn stays valid under the
+	/* Move to the front of the LRU list; peer->av_entry stays valid under the
 	 * implicit-AV lock held here. */
 	if (peer)
-		efa_av_implicit_av_lru_conn_move(ep->base_ep.av, peer->av_entry);
+		efa_rdm_av_implicit_av_lru_move(ep->base_ep.av, peer->av_entry);
 
-	EFA_GENLOCK_UNLOCK(&ep->base_ep.av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	EFA_GENLOCK_UNLOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
 	return peer;
 }

@@ -3,6 +3,7 @@
 
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_conn.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_utils.h"

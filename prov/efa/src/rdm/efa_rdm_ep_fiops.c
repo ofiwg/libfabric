@@ -3,6 +3,7 @@
 
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_conn.h"
 #include "efa_rdm_ep.h"
 #include "efa_rdm_fabric.h"
 #include "efa_rdm_cq.h"
@@ -702,8 +703,8 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 
 		/* Bind shm provider endpoint & shm av */
 		if (efa_rdm_ep->shm_ep) {
-			assert(av->shm_rdm_av);
-			ret = fi_ep_bind(efa_rdm_ep->shm_ep, &av->shm_rdm_av->fid, flags);
+			assert(((struct efa_rdm_av *)(av))->shm_rdm_av);
+			ret = fi_ep_bind(efa_rdm_ep->shm_ep, &((struct efa_rdm_av *)(av))->shm_rdm_av->fid, flags);
 			if (ret)
 				return ret;
 		}
@@ -1269,13 +1270,13 @@ int efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
 	}
 
 	efa_av = efa_rdm_ep->base_ep.av;
-	if (efa_av->shm_rdm_av) {
-		ret = fi_close(&efa_av->shm_rdm_av->fid);
+	if (((struct efa_rdm_av *)(efa_av))->shm_rdm_av) {
+		ret = fi_close(&((struct efa_rdm_av *)(efa_av))->shm_rdm_av->fid);
 		if (ret) {
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm av: %s\n", fi_strerror(-ret));
 			retv = ret;
 		}
-		efa_av->shm_rdm_av = NULL;
+		((struct efa_rdm_av *)(efa_av))->shm_rdm_av = NULL;
 	}
 
 	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);

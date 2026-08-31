@@ -6,31 +6,81 @@
 
 #include "ofi_util.h"
 #include "efa_av.h"
-#include "rdm/efa_rdm_peer.h"
 #include "efa_thread_annotations.h"
 
-int efa_conn_rdm_insert_shm_av(struct efa_av *av, struct efa_rdm_av_entry *av_entry);
+struct efa_rdm_pke;
 
-void efa_conn_rdm_deinit(struct efa_av *av, struct efa_rdm_av_entry *av_entry);
+/**
+ * @brief RDM address vector
+ *
+ * Embeds the base efa_av as its first member and adds the RDM-only state: the
+ * implicit AV (peers that send to us before the application inserts them), the
+ * connid-aware previous-connection reverse maps, the SHM sub-AV, the implicit
+ * AV LRU eviction list and the evicted-peers hashset. (Defined here for now;
+ * it moves to rdm/efa_rdm_av.h when the AV code is relocated.)
+ */
+struct efa_rdm_av {
+	struct efa_av efa_av;
 
-struct efa_av_entry *efa_conn_alloc_explicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
-					uint64_t flags, void *context, bool insert_shm_av)
+	struct fid_av *shm_rdm_av;
+	size_t shm_used;
+
+	/* prv_reverse_av is a map from (ahn + qpn + connid) to all previous
+	 * efa_av_entries, used only by the connid-aware RDM reverse lookup. */
+	struct efa_prv_reverse_av *prv_reverse_av OFI_TSA_GUARDED_BY(efa_util_av_lock_sym);
+
+	/* implicit AV is used when receiving messages from peers not explicitly
+	 * inserted by the application */
+	struct util_av util_av_implicit;
+	struct efa_av_array *addr_to_entry_map_implicit;
+	struct efa_cur_reverse_av *cur_reverse_av_implicit;
+	struct efa_prv_reverse_av *prv_reverse_av_implicit;
+
+	size_t implicit_av_size;
+	struct dlist_entry implicit_av_lru_list OFI_TSA_GUARDED_BY(efa_implicit_av_lock_sym);
+	struct efa_ep_addr_hashable *evicted_peers_hashset OFI_TSA_GUARDED_BY(efa_implicit_av_lock_sym);
+};
+
+_Static_assert(offsetof(struct efa_rdm_av, efa_av) == 0,
+	       "efa_av must be the first member of efa_rdm_av");
+
+struct efa_av_entry *efa_av_entry_alloc_explicit(struct efa_av *av,
+						 struct efa_ep_addr *raw_addr,
+						 fi_addr_t *fi_addr_out)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
-struct efa_rdm_av_entry *efa_conn_alloc_implicit(struct efa_av *av, struct efa_ep_addr *raw_addr,
-					 uint64_t flags, void *context)
+void efa_av_entry_remove_from_util_av(struct efa_av_array *entry_map,
+				      struct util_av *util_av,
+				      struct efa_av_entry *entry,
+				      fi_addr_t fi_addr);
+
+void efa_av_entry_release_explicit(struct efa_av *av, struct efa_av_entry *entry,
+				   fi_addr_t fi_addr)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
+
+struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
+						   struct efa_ep_addr *raw_addr,
+						   uint64_t flags, void *context)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
+
+struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
+						   struct efa_ep_addr *raw_addr,
+						   uint64_t flags, void *context)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
-void efa_conn_release_explicit(struct efa_av *av, struct efa_av_entry *entry)
+void efa_rdm_av_entry_release_explicit(struct efa_av *av,
+				 struct efa_rdm_av_entry *av_entry)
 	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
-void efa_conn_release_implicit(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
+void efa_rdm_av_entry_release_implicit(struct efa_av *av,
+				 struct efa_rdm_av_entry *av_entry)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
-void efa_conn_release_implicit_ah_unsafe(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
+void efa_rdm_av_entry_release_implicit_ah_unsafe(struct efa_av *av,
+					   struct efa_rdm_av_entry *av_entry)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 

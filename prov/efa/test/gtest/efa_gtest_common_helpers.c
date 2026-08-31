@@ -61,7 +61,7 @@ fi_addr_t efa_test_av_insert_new_ah(struct fid_ep *ep, struct fid_av *av)
 	efa_test_fabricate_addr(ep, &raw_addr);
 
 	ofi_genlock_lock(&efa_av->domain->util_domain.lock);
-	err = efa_av_insert_one_implicit(efa_av, &raw_addr, &fi_addr, 0, NULL);
+	err = efa_rdm_av_insert_one_implicit(efa_av, &raw_addr, &fi_addr, 0, NULL);
 	ofi_genlock_unlock(&efa_av->domain->util_domain.lock);
 
 	if (err)
@@ -170,7 +170,7 @@ struct ibv_ah *efa_test_implicit_addr_to_ibv_ah(struct fid_av *av,
 {
 	struct efa_av *efa_av =
 		container_of(av, struct efa_av, util_av.av_fid);
-	struct efa_rdm_av_entry *av_entry = efa_av_addr_to_entry_implicit(efa_av, fi_addr);
+	struct efa_rdm_av_entry *av_entry = efa_rdm_av_addr_to_entry_implicit(efa_av, fi_addr);
 
 	return av_entry ? av_entry->efa_av_entry.ah->ibv_ah : NULL;
 }

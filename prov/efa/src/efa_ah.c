@@ -85,7 +85,7 @@ static inline int efa_ah_implicit_av_evict_ah(struct efa_domain *domain,
 			EFA_GENLOCK_LOCK(&av_entry_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 		else
 			assert(EFA_GENLOCK_HELD(&av_entry_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-		efa_conn_release_implicit_ah_unsafe(av_entry_to_release->av, av_entry_to_release);
+		efa_rdm_av_entry_release_implicit_ah_unsafe(&av_entry_to_release->av->efa_av, av_entry_to_release);
 		if (!insert_implicit_av)
 			EFA_GENLOCK_UNLOCK(&av_entry_to_release->av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	}
