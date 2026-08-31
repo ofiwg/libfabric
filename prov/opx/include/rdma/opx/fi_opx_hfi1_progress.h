@@ -833,6 +833,15 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 	union opx_hfi1_packet_hdr *hdr	  = (packet) ? (union opx_hfi1_packet_hdr *) packet->data : NULL;
 	opx_lid_t		   slid;
 
+	/* Cap the per-visit SHM drain only when RCCC flow control is selected:
+	 * with many same-HFI senders an unbounded SHM drain starves the
+	 * receiver's own HFI header-queue service and the ASIC overflows
+	 * regardless of sender admission.  Under NONE the unbounded drain is
+	 * faster, so the cap is not applied there. */
+	const uint64_t shm_poll_max =
+		OFI_LIKELY(opx_ep->flow_control_mode != OPX_FLOW_CONTROL_MODE_RCCC) ? UINT64_MAX : 256u;
+	uint64_t poll_count = 0;
+
 	while (hdr != NULL) {
 		const uint8_t opcode = hdr->bth.opcode;
 
@@ -942,6 +951,9 @@ static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_requir
 		}
 
 		opx_shm_rx_advance(&opx_ep->rx->shm, (void *) hdr, pos);
+		if (++poll_count >= shm_poll_max) {
+			break;
+		}
 		packet = opx_shm_rx_next(&opx_ep->rx->shm, &pos);
 		hdr    = (packet) ? (union opx_hfi1_packet_hdr *) packet->data : NULL;
 	}
