@@ -31,6 +31,7 @@
 
 #if HAVE_EFA_DATA_PATH_DIRECT
 
+#include "ofi_atom.h"
 #include "efa_io_defs.h"
 #include "efa_io_regs_defs.h"
 
@@ -67,7 +68,7 @@ struct efa_data_path_direct_wq {
 	uint32_t wqe_cnt;       /**< Total number of work queue entries */
 	uint32_t wqe_size;      /**< Size of each work queue entry in bytes */
 	uint32_t wqe_posted;    /**< Number of work requests posted */
-	uint32_t wqe_completed; /**< Number of work requests completed */
+	ofi_atomic32_t wqe_available; /**< Number of available work queue entries */
 	uint16_t pc;            /**< Producer counter for device queue indexing */
 	uint16_t desc_mask;     /**< Mask for wrapping queue indices */
 	bool req_id_64_bit;	/**< WQ supports 64-bit request IDs */

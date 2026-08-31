@@ -80,7 +80,7 @@ static inline int efa_data_path_direct_post_recv(struct efa_qp *qp,
 		}
 
 		req_id = efa_wq_get_dev_req_id(wq, wr->wr_id);
-		wq->wqe_posted++;
+		efa_wq_consume_slot(wq);
 
 		/* Default init of the rx buffer */
 		EFA_SET(&lkey_ctrl, EFA_IO_RX_DESC_FIRST, 1);
