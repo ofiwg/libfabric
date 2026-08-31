@@ -62,7 +62,7 @@ int efa_test_av_insert_self(struct fid_ep *ep, struct fid_av *av,
 			    fi_addr_t *addr);
 
 /**
- * @brief Insert a fabricated-GID peer via efa_av_insert_one_implicit.
+ * @brief Insert a fabricated-GID peer via efa_rdm_av_insert_one_implicit.
  */
 fi_addr_t efa_test_av_insert_new_ah(struct fid_ep *ep, struct fid_av *av);
 
