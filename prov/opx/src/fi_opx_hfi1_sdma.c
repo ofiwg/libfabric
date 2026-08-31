@@ -145,6 +145,11 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 	OPX_TRACE_SDMA_INSTANT(OPX_TRACE_EVENT_SDMA_ERROR, (uint64_t) errno, (uint64_t) writev_rc);
 	const pid_t pid = getpid();
 
+	/* Attempt link-down recovery before the RCCC fail-stop: a transient
+	 * link bounce must recover the same way it does under mode none.
+	 * The registered replays retransmit once the link returns, so the
+	 * RCCC ledger stays consistent.  Only a genuinely unexplained writev
+	 * failure after replay registration is unrecoverable. */
 	if (errno == ECOMM || errno == EINTR || errno == EFAULT) {
 		int err = fi_opx_context_check_status(hfi, OPX_SW_HFI1_TYPE(opx_ep->domain), opx_ep, opx_tx,
 						      OPX_IS_CTX_SHARING_ENABLED);
@@ -152,6 +157,10 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Link down detected\n");
 			return;
 		}
+	}
+	if (flow_control_registered) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "RCCC SDMA writev failed after replay registration\n");
+		abort();
 	}
 
 	fprintf(stderr, "(%d) %s:%s():%d ERROR: SDMA Abort errno=%d (%s)\n", pid, file, func, line, errno,

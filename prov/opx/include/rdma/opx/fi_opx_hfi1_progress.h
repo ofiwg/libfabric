@@ -194,6 +194,15 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_
 			break;
 		case FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP:
 			break;
+		case FI_OPX_HFI_UD_OPCODE_FLOW_CONTROL_REQUEST:
+		case FI_OPX_HFI_UD_OPCODE_FLOW_CONTROL_FEEDBACK: {
+			const bool	request_direction    = ud_opcode == FI_OPX_HFI_UD_OPCODE_FLOW_CONTROL_REQUEST;
+			const opx_lid_t control_primary_slid = primary_slid != 0u ? primary_slid : slid;
+
+			(void) opx_flow_control_wire_receive(opx_ep, request_direction, hdr, slid, dlid,
+							     control_primary_slid);
+			break;
+		}
 #ifdef OPX_DAOS
 		case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH:
 			fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service,
@@ -274,6 +283,12 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, uint64_t *p_rh
 									    pkt_tx_index, psn, &flow, primary_slid, dlid);
 
 	if (OFI_LIKELY(rc == OPX_RELIABILITY_SUCCESS)) {
+		/* The reservation pool is non-NULL only on RCCC endpoints, so
+		 * the NULL check is the runtime flow-control gate. */
+		if (OFI_UNLIKELY(opx_ep->flow_control_reservation_pool != NULL) &&
+		    opx_flow_control_rx_packet_governed(opcode, hdr)) {
+			opx_flow_control_rx_first_accept(opx_ep, flow, (uint32_t) (psn & MAX_PSN));
+		}
 		return -1;
 	}
 

@@ -1100,6 +1100,8 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 #endif
 			next = tmp->next;
 
+			fi_opx_reliability_ack_settle_dispatch(opx_ep, tmp);
+
 			const uint64_t			  dec	 = tmp->cc_dec;
 			struct fi_opx_completion_counter *cc_ptr = tmp->cc_ptr;
 			if (cc_ptr) {
@@ -1272,6 +1274,8 @@ void fi_opx_hfi1_rx_reliability_ack(struct fid_ep *ep, struct fi_opx_reliability
 #endif
 		struct fi_opx_reliability_tx_replay *next = tmp->next;
 
+		fi_opx_reliability_ack_settle_dispatch(opx_ep, tmp);
+
 		const uint64_t			  dec	 = tmp->cc_dec;
 		struct fi_opx_completion_counter *cc_ptr = tmp->cc_ptr;
 		if (cc_ptr) {
@@ -1358,6 +1362,7 @@ ssize_t fi_opx_reliability_sdma_replay_complete(union fi_opx_reliability_deferre
 		   already been removed from the replay ring and we need
 		   to free it here */
 		if (we->replay->acked) {
+			assert(we->replay->flow_control_reservation_record == NULL);
 			OPX_RELIABILITY_DEBUG_LOG(
 				params->flow_key,
 				"(tx) packet psn=%08u replay over SDMA complete and ACK'd, freeing replay\n",
@@ -1741,6 +1746,7 @@ ssize_t fi_opx_reliability_pio_replay(union fi_opx_reliability_deferred_work *wo
 
 	for (int i = params->start_index; i < params->num_replays; ++i) {
 		if (params->replays[i]->acked) {
+			assert(params->replays[i]->flow_control_reservation_record == NULL);
 			OPX_RELIABILITY_DEBUG_LOG(
 				params->flow_key, "(tx) psn=%08u replay already ACK'd, skipping deferred replay\n",
 				FI_OPX_HFI1_PACKET_PSN(OPX_REPLAY_HDR(params->replays[i], hfi1_type)));
@@ -2817,6 +2823,16 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 		OPX_RELIABILITY_DEBUG_LOG(flow->key, "(rx) packet psn=%08u received (process out-of-order).\n", psn);
 		service->process_fn(ep, hdr, payload);
 
+		/* Acceptance site 2 of 3: an in-order arrival that reached the
+		 * exception path only because uepkts were queued.  Same
+		 * reservation-pool runtime gate as the fast path. */
+		struct fi_opx_ep *first_accept_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+
+		if (OFI_UNLIKELY(first_accept_ep->flow_control_reservation_pool != NULL) &&
+		    opx_flow_control_rx_packet_governed(opcode, hdr)) {
+			opx_flow_control_rx_first_accept(first_accept_ep, flow, psn);
+		}
+
 		if (!(psn & service->preemptive_ack_rate_mask) && psn) {
 			uint8_t tx_idx = FI_OPX_HFI1_PACKET_TX_INDEX(hdr);
 			fi_opx_hfi1_rx_reliability_send_pre_acks(
@@ -2834,6 +2850,17 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 		while ((uepkt != NULL) && (next_psn == uepkt->psn)) {
 			if (!uepkt->processed) {
 				service->process_fn(ep, &uepkt->hdr, uepkt->payload);
+			}
+
+			/* Acceptance site 3 of 3: queued uepkts are
+			 * PSN-accepted here exactly once, including ones the
+			 * RZV_DATA early-process path already delivered
+			 * (uepkt->processed): release accounting follows PSN
+			 * acceptance, not payload delivery. */
+			if (OFI_UNLIKELY(first_accept_ep->flow_control_reservation_pool != NULL) &&
+			    opx_flow_control_rx_packet_governed(uepkt->hdr.bth.opcode, &uepkt->hdr)) {
+				opx_flow_control_rx_first_accept(first_accept_ep, flow,
+								 (uint32_t) (next_psn & MAX_PSN));
 			}
 
 			OPX_RELIABILITY_DEBUG_LOG(flow->key, "(rx) packet %08lu delivered.\n", next_psn);

@@ -41,30 +41,6 @@
 
 #include <ofi_enosys.h>
 
-/* RCCC table selection is cold; this leaf rejects HMEM without adding a mode branch to receive posting. */
-__OPX_FORCE_INLINE__ ssize_t fi_opx_rccc_trecv_generic(struct fid_ep *ep, void *buf, size_t len, void *desc,
-						       fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context,
-						       const int lock_required, const uint64_t static_flags,
-						       const enum ofi_reliability_kind reliability,
-						       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
-{
-	uint64_t hmem_device;
-	uint64_t hmem_handle;
-
-	(void) ctx_sharing;
-	if (opx_hmem_get_mr_iface(desc, &hmem_device, &hmem_handle) != FI_HMEM_SYSTEM) {
-		return -FI_EOPNOTSUPP;
-	}
-
-	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
-	ssize_t rc = fi_opx_ep_rx_recv_internal(opx_ep, buf, len, desc, src_addr, tag, ignore, context,
-						FI_OPX_LOCK_NOT_REQUIRED, static_flags, reliability, hfi1_type);
-	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
-
-	return rc;
-}
-
 /*
  * \note The opx provider asserts the following mode bits which affect
  * 	the behavior of this routine:
@@ -313,25 +289,6 @@ OPX_FLOW_CONTROL_TAGGED_SPECIALIZATION_CATALOG(FI_OPX_TAGGED_SPECIALIZATION_FUNC
 
 OPX_FLOW_CONTROL_TAGGED_SPECIALIZATION_CATALOG(FI_OPX_TAGGED_OPS_STRUCT)
 
-static ssize_t fi_opx_rccc_initialization_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags)
-{
-	if (msg == NULL || (msg->iov_count != 0 && msg->msg_iov == NULL) ||
-	    (flags & (FI_MULTI_RECV | FI_PEEK | FI_CLAIM | FI_DISCARD))) {
-		return -FI_EOPNOTSUPP;
-	}
-	for (size_t index = 0; index < msg->iov_count; ++index) {
-		uint64_t hmem_device;
-		uint64_t hmem_handle;
-
-		if (opx_hmem_get_mr_iface(msg->desc ? msg->desc[index] : NULL, &hmem_device, &hmem_handle) !=
-		    FI_HMEM_SYSTEM) {
-			return -FI_EOPNOTSUPP;
-		}
-	}
-
-	return fi_opx_trecvmsg(ep, msg, flags);
-}
-
 #pragma GCC diagnostic pop
 
 ssize_t fi_opx_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore, uint64_t flags, fi_addr_t *src_addr,
@@ -364,7 +321,7 @@ static struct fi_ops_tagged fi_opx_no_tagged_ops = {.size	= sizeof(struct fi_ops
 								  OFI_RELIABILITY_KIND_ONLOAD, HFI1_TYPE, CTX_SHARING, \
 								  RCCC),                                               \
 		.recvv	    = fi_no_tagged_recvv,                                                                      \
-		.recvmsg    = fi_opx_rccc_initialization_trecvmsg,                                                     \
+		.recvmsg    = fi_opx_trecvmsg,                                                                         \
 		.send	    = FI_OPX_TAGGED_SPECIALIZED_FUNC_NAME(tsend, LOCK, 0x0018000000000000ull,                  \
 								  OFI_RELIABILITY_KIND_ONLOAD, HFI1_TYPE, CTX_SHARING, \
 								  RCCC),                                               \

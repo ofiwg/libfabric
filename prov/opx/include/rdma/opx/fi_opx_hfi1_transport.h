@@ -905,10 +905,16 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
 		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			fi_opx_reliability_cancel_record(flow_control_mode, opx_ep, &reservation_record);
+		}
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_INJECT_HFI, len, tag);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		opx_tx->pio_state->qw0 = pio_state.qw0;
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			return fi_opx_reliability_tx_admission_error(flow_control_mode, &flow);
+		}
 		return -FI_EAGAIN;
 	}
 	replay->tx_index = dest_addr.tx_index;
@@ -1289,8 +1295,14 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
 		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			fi_opx_reliability_cancel_record(flow_control_mode, opx_ep, &reservation_record);
+		}
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			return fi_opx_reliability_tx_admission_error(flow_control_mode, &flow);
+		}
 		return -FI_EAGAIN;
 	}
 
@@ -1589,8 +1601,14 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
 		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			fi_opx_reliability_cancel_record(flow_control_mode, opx_ep, &reservation_record);
+		}
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			return fi_opx_reliability_tx_admission_error(flow_control_mode, &flow);
+		}
 		return -FI_EAGAIN;
 	}
 
@@ -2214,10 +2232,16 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
 		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			fi_opx_reliability_cancel_record(flow_control_mode, opx_ep, &reservation_record);
+		}
 		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_EAGAIN (end)\n");
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			return fi_opx_reliability_tx_admission_error(flow_control_mode, &flow);
+		}
 		return -FI_EAGAIN;
 	}
 	replay->tx_index = dest_addr.tx_index;
@@ -2377,9 +2401,15 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
 		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			fi_opx_reliability_cancel_record(flow_control_mode, opx_ep, &reservation_record);
+		}
 		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_EAGER_HFI, len, tag);
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			return fi_opx_reliability_tx_admission_error(flow_control_mode, &flow);
+		}
 		return -FI_EAGAIN;
 	}
 	replay->tx_index = dest_addr.tx_index;
@@ -3233,22 +3263,6 @@ ssize_t opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_t
 			      const uint64_t do_cq_completion, const enum fi_hmem_iface hmem_iface,
 			      const uint64_t hmem_device, const uint64_t hmem_handle,
 			      const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
-
-__OPX_FORCE_INLINE__
-ssize_t opx_hfi1_tx_sendv_rzv_selected(struct fid_ep *ep, const struct iovec *iov, size_t niov, size_t total_len,
-				       struct fi_opx_addr dest_addr, uint64_t tag, void *user_context,
-				       const uint32_t data, int lock_required, const unsigned override_flags,
-				       const uint64_t tx_op_flags, const uint64_t dest_rx, const uint64_t caps,
-				       const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
-				       const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
-				       const uint64_t hmem_handle, const enum opx_flow_control_mode flow_control_mode,
-				       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
-{
-	(void) flow_control_mode;
-	return opx_hfi1_tx_sendv_rzv(ep, iov, niov, total_len, dest_addr, tag, user_context, data, lock_required,
-				     override_flags, tx_op_flags, dest_rx, caps, reliability, do_cq_completion,
-				     hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
-}
 
 ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr, uint64_t tag,
 			     void *user_context, const uint32_t data, int lock_required, const unsigned override_flags,

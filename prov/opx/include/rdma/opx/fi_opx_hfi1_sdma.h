@@ -731,10 +731,12 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 	/* Since we already verified that enough PSNs were available for
 	   the send we're about to do, we shouldn't need to check the
 	   returned PSN here before proceeding */
-	int32_t psn;
-	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, opx_ep->reli_service,
-					     opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, we->dlid, we->subctxt_rx,
-					     we->tx_index, &we->flow, we->num_packets);
+	int32_t psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, opx_ep->reli_service,
+						     opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, we->dlid,
+						     we->subctxt_rx, we->tx_index, &we->flow, we->num_packets);
+
+	const enum opx_flow_control_mode sdma_flow_control_mode =
+		reservation_record != NULL ? OPX_FLOW_CONTROL_MODE_RCCC : OPX_FLOW_CONTROL_MODE_NONE;
 
 	uint32_t fragsize = 0;
 	for (int i = 0; i < we->num_packets; ++i) {
@@ -756,7 +758,8 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 		we->packets[i].replay->dmabuf_base = we->use_bounce_buf ? 0UL : we->dmabuf_base;
 		fi_opx_reliability_service_replay_register_with_update(
 			opx_ep->reli_service, we->flow, we->packets[i].replay, cc, we->packets[i].length, reliability,
-			hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
+			hfi1_type, sdma_flow_control_mode, opx_ep, reservation_record);
+
 		psn = (psn + 1) & MAX_PSN;
 	}
 
@@ -987,6 +990,50 @@ void opx_hfi1_sdma_flush(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_
 	assert(rc == FI_SUCCESS || we->comp_state == OPX_SDMA_COMP_ERROR);
 	assert(rc != FI_SUCCESS || we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
 	(void) rc;
+	assert(we->next == NULL);
+	slist_insert_tail((struct slist_entry *) we, sdma_reqs);
+}
+
+__OPX_FORCE_INLINE__
+void opx_hfi1_sdma_flush_rccc(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we, struct slist *sdma_reqs,
+			      struct opx_sdma_request *request, void *reservation_record,
+			      enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
+{
+	assert(we->comp_state == OPX_SDMA_COMP_FREE);
+	assert(we->num_packets > 0);
+	assert(request != NULL);
+	assert(reservation_record != NULL);
+
+	uint32_t fragsize = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type, reservation_record);
+	uint64_t last_packet_bytes = we->packets[we->num_packets - 1].length;
+
+	assert(last_packet_bytes != 0);
+	opx_hfi1_sdma_enqueue_dput_preallocated(opx_ep, request, we, fragsize, last_packet_bytes, true);
+	assert(we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
+	assert(we->next == NULL);
+	slist_insert_tail((struct slist_entry *) we, sdma_reqs);
+}
+
+__OPX_FORCE_INLINE__
+void opx_hfi1_sdma_flush_tid_rccc(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we,
+				  struct slist *sdma_reqs, struct opx_sdma_request *request, void *reservation_record,
+				  struct iovec *tid_iov, uint32_t start_tid_idx, uint32_t end_tid_idx,
+				  uint32_t tidOMshift, uint32_t tidoffset, enum ofi_reliability_kind reliability,
+				  const enum opx_hfi1_type hfi1_type)
+{
+	assert(we->comp_state == OPX_SDMA_COMP_FREE);
+	assert(we->num_packets > 0);
+	assert(we->total_payload == (we->total_payload & -4));
+	assert(request != NULL);
+	assert(reservation_record != NULL);
+
+	uint32_t fragsize = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type, reservation_record);
+	uint64_t last_packet_bytes = we->packets[we->num_packets - 1].length;
+
+	assert(last_packet_bytes != 0);
+	opx_hfi1_sdma_enqueue_dput_tid_preallocated(opx_ep, request, we, fragsize, last_packet_bytes, tid_iov,
+						    start_tid_idx, end_tid_idx, tidOMshift, tidoffset, true);
+	assert(we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
 	assert(we->next == NULL);
 	slist_insert_tail((struct slist_entry *) we, sdma_reqs);
 }

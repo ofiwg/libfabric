@@ -210,16 +210,24 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int32_t				     psn;
 
-	const struct fi_opx_addr addr = params->opx_target_addr;
+	const struct fi_opx_addr	 addr		   = params->opx_target_addr;
+	const enum opx_flow_control_mode flow_control_mode = opx_ep->flow_control_mode;
+
+	/* The HFISVC RTS is the only governed packet on this path: the data
+	 * itself moves by service-side rdma_read/write and never lands in the
+	 * receiver's RX queue, but 0xC4 is RX-classified governed, so the RTS
+	 * must reserve or the flow's withholding never converges. */
 
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, 0, &flow, &replay,
-		params->reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, NULL);
+		params->reliability, hfi1_type, flow_control_mode, &reservation_record);
 
 	if (OFI_UNLIKELY(psn == -1)) {
+		fi_opx_reliability_cancel_record(flow_control_mode, opx_ep, &reservation_record);
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "HFISVC_RMA_SEND_RTS");
 		OPX_HFISVC_DEBUG_LOG("HFISVC EAGAIN (PSN/replay) for rma_send_rts for %s work item=%p!\n",
 				     opx_hfi1_dput_opcode_to_string(params->dput_opcode), work);
@@ -312,15 +320,15 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
 								     params->reliability, OPX_HFI1_WFR,
-								     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
+								     flow_control_mode, opx_ep, reservation_record);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
 								     params->reliability, OPX_HFI1_JKR,
-								     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
+								     flow_control_mode, opx_ep, reservation_record);
 	} else {
 		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
 								     params->reliability, OPX_HFI1_CYR,
-								     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
+								     flow_control_mode, opx_ep, reservation_record);
 	}
 
 	if (cur_iov == niov) {

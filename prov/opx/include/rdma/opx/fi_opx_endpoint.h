@@ -4118,6 +4118,12 @@ void fi_opx_ep_rx_poll_internal(struct fid_ep *ep, const uint64_t caps, const en
 	opx_ep_hfisvc_poll_queues(opx_ep);
 
 	fi_opx_ep_do_pending_work(opx_ep);
+	/* The control work lists are populated only on RCCC endpoints, so this
+	 * check is the runtime flow-control gate for the sweep. */
+	if (opx_ep->flow_control_tx_work_head != NULL || opx_ep->flow_control_rx_work_head != NULL) {
+		opx_flow_control_rccc_control_sweep(
+			opx_ep, fi_opx_timer_now_ns(&opx_ep->reli_service->timestamp, &opx_ep->reli_service->timer));
+	}
 
 	if (!slist_empty(&opx_ep->reli_service->rx.work_pending)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -4820,6 +4826,34 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	const uint64_t pbc_dlid			   = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 	void	      *mp_eager_reservation_record = NULL;
 
+	if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+		const size_t requested_packets = (len + opx_tx->mp_eager_chunk_size - 1u) / opx_tx->mp_eager_chunk_size;
+		if (OFI_UNLIKELY(requested_packets > UINT32_MAX)) {
+			return -FI_EAGAIN;
+		}
+		union fi_opx_reliability_service_flow_key key = {
+			.slid		= OPX_RELIABILITY_ENCODE_LID_TX(opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+									dest_addr.tx_index),
+			.src_subctxt_rx = opx_ep->reli_service->subctxt_rx,
+			.dlid		= OPX_RELIABILITY_ENCODE_LID_TX(dest_addr.planes[OPX_PRIMARY_PLANE].lid,
+									dest_addr.tx_index),
+			.dst_subctxt_rx = dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+		};
+		void *iterator = fi_opx_rbt_find(opx_ep->reli_service->tx.tx_flow_rbtree, (void *) &key);
+		struct fi_opx_reliability_tx_flow *flow =
+			iterator == NULL ? opx_reliability_create_tx_flow(opx_ep->reli_service, &key, opx_ep,
+									  OPX_FLOW_CONTROL_MODE_RCCC) :
+					   fi_opx_rbt_value(opx_ep->reli_service->tx.tx_flow_rbtree, iterator);
+		if (OFI_UNLIKELY(flow == NULL ||
+				 opx_flow_control_rccc_tx_admit(opx_ep, flow, (uint32_t) requested_packets) !=
+					 OPX_FLOW_CONTROL_OK ||
+				 opx_flow_control_tx_reserve_RCCC(
+					 opx_ep, flow, OPX_FLOW_CONTROL_PACKET_MP_EAGER, (uint32_t) requested_packets,
+					 &mp_eager_reservation_record) != OPX_FLOW_CONTROL_OK)) {
+			return -FI_EAGAIN;
+		}
+	}
+
 	/* Write the first packet */
 	uint32_t first_packet_psn;
 	size_t	 payload_bytes_sent;
@@ -4835,6 +4869,9 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 		mp_eager_reservation_record, hfi1_type, ctx_sharing);
 
 	if (rc != FI_SUCCESS) {
+		if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE) {
+			opx_flow_control_tx_cancel_RCCC(opx_ep, mp_eager_reservation_record);
+		}
 		FI_OPX_DEBUG_COUNTERS_INC_COND(rc == -FI_ENOBUFS,
 					       opx_ep->debug_counters.mp_eager.send_first_eagain_credits);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(rc != -FI_ENOBUFS,
@@ -5071,20 +5108,22 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			/* FI_INJECT is excluded because the payload iov points at the caller's
 			 * buffer until the replay retires; unaligned lengths stay on PIO because
 			 * SDMA cannot fill the inline tail the eager receive path expects. */
-			if (opx_ep->use_eager_sdma && (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) &&
-			    is_contiguous && !(tx_op_flags & FI_INJECT) && ((total_len & 7) == 0) &&
-			    total_len >= OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES &&
-			    total_len >= opx_ep_tx_sdma_min(opx_ep, opx_tx, hmem_iface) &&
-			    !fi_opx_hfi1_tx_is_shm(opx_ep, addr)) {
-				rc = opx_hfi1_tx_send_egr_sdma(ep, buf, total_len, addr, tag, context, data,
-							       tx_op_flags, caps, reliability, do_cq_completion,
-							       hmem_iface, hmem_device, eager_dmabuf_fd,
-							       eager_dmabuf_base, hfi1_type);
-				if (OFI_LIKELY(rc == FI_SUCCESS)) {
-					OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
-					return FI_SUCCESS;
+			if (flow_control_mode == OPX_FLOW_CONTROL_MODE_NONE) {
+				if (opx_ep->use_eager_sdma && (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) &&
+				    is_contiguous && !(tx_op_flags & FI_INJECT) && ((total_len & 7) == 0) &&
+				    total_len >= OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES &&
+				    total_len >= opx_ep_tx_sdma_min(opx_ep, opx_tx, hmem_iface) &&
+				    !fi_opx_hfi1_tx_is_shm(opx_ep, addr)) {
+					rc = opx_hfi1_tx_send_egr_sdma(ep, buf, total_len, addr, tag, context, data,
+								       tx_op_flags, caps, reliability, do_cq_completion,
+								       hmem_iface, hmem_device, eager_dmabuf_fd,
+								       eager_dmabuf_base, hfi1_type);
+					if (OFI_LIKELY(rc == FI_SUCCESS)) {
+						OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
+						return FI_SUCCESS;
+					}
+					/* -FI_EAGAIN: fall through to the PIO eager path below. */
 				}
-				/* -FI_EAGAIN: fall through to the PIO eager path below. */
 			}
 			rc = opx_ep_tx_send_try_eager(ep, buf, len, addr, tag, context, local_iov, niov, total_len,
 						      data, lock_required, is_contiguous, override_flags, tx_op_flags,

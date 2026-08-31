@@ -87,8 +87,7 @@ static int __attribute__((cold)) opx_flow_control_rccc_parse_u64(const char *nam
 	return FI_SUCCESS;
 }
 
-/* unused until the selection enablement change wires the caller */
-static int __attribute__((cold, unused)) opx_flow_control_rccc_profile_configure(void)
+static int __attribute__((cold)) opx_flow_control_rccc_profile_configure(void)
 {
 	struct opx_flow_control_rccc_tx_profile profile = {
 		.ffirst = 256u,
@@ -246,10 +245,11 @@ static int opx_flow_control_initialize_mode(enum opx_flow_control_mode mode, siz
 		}
 		return ret;
 	case OPX_FLOW_CONTROL_MODE_RCCC:
-		/* The RCCC engine is compiled but not yet wired into the send
-		 * and receive paths; selection fails closed until the final
-		 * enablement change flips this to the profile configure. */
-		return -FI_EOPNOTSUPP;
+		ret = opx_flow_control_rccc_profile_configure();
+		if (ret == FI_SUCCESS) {
+			*state_size = OPX_FLOW_CONTROL_STATE_SIZE;
+		}
+		return ret;
 	case OPX_FLOW_CONTROL_MODE_CONFORMANCE:
 		return -FI_EOPNOTSUPP;
 	default:

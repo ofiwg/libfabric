@@ -158,6 +158,8 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	/* C89: declare tx_index at top of block for array indexing */
 	const uint8_t tx_index = params->opx_target_addr.tx_index;
 
+	const enum opx_flow_control_mode flow_control_mode = opx_ep->flow_control_mode;
+
 	OPX_SHD_CTX_PIO_LOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
 	union fi_opx_hfi1_pio_state pio_state = *opx_tx->pio_state;
@@ -172,6 +174,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int32_t				     psn;
 
 	const struct fi_opx_addr addr = params->opx_target_addr;
@@ -179,12 +182,13 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
-		&flow, &replay, params->reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, NULL);
+		&flow, &replay, params->reliability, hfi1_type, flow_control_mode, &reservation_record);
 
 	if (OFI_UNLIKELY(psn == -1)) {
+		fi_opx_reliability_cancel_record(flow_control_mode, opx_ep, &reservation_record);
 		OPX_TRACE_RMA_END_EAGAIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
 		OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
-		return -FI_EAGAIN;
+		return fi_opx_reliability_tx_admission_error(flow_control_mode, &flow);
 	}
 	replay->tx_index = addr.tx_index;
 
@@ -276,8 +280,8 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, params->reliability,
-							     OPX_SW_HFI1_TYPE(opx_ep->domain),
-							     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
+							     OPX_SW_HFI1_TYPE(opx_ep->domain), flow_control_mode,
+							     opx_ep, reservation_record);
 
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
 	return FI_SUCCESS;

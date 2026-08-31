@@ -426,6 +426,27 @@ or underruns.  Default is false.
   Only effective when FI_OPX_MULTI_HFI_STRIPING=1. Not supported on OPA-100 hardware.
   Default: 65536 (64 KiB).
 
+*FI_OPX_FLOW_CONTROL*
+: String. Selects the flow-control mode for the process. The selection is made once, when the
+  first OPX endpoint is enabled, and is then fixed for the lifetime of the process. All
+  subsequent endpoints in the same process use the cached result.
+
+  Recognized values:
+
+  - `none`: No flow-control work is performed on packet send or receive paths. This is the
+    default when the variable is unset.
+  - `rccc`: Receiver-controlled credit-based flow control. Senders reserve receiver capacity
+    before transmitting on remote HFI paths; the receiver grants credit windows and admission
+    is governed per flow. Intranode shared-memory traffic is not governed.
+  - `conformance`: Recognized but not available in this build. Endpoint initialization fails.
+
+  Any value that is not one of the above, including an empty string, is rejected. Endpoint
+  initialization fails with an error and no fallback to `none` occurs. Because the result is
+  cached process-wide, a failed selection causes all subsequent endpoint initializations in the
+  same process to fail with the same error.
+
+  Default: unset, which selects `none`.
+
 # TRACING
 
 The OPX provider includes an optional per-process performance tracing facility. The following
