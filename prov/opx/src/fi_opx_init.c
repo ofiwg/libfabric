@@ -1294,6 +1294,10 @@ OPX_INI
 		"The minimum payload size in bytes for rendezvous transfers to use multi-HFI striping. Transfers below this threshold use a single rail. Default: %d.",
 		OPX_RZV_STRIPING_MIN_PAYLOAD_BYTES_DEFAULT);
 
+	fi_param_define(
+		&fi_opx_provider, "flow_control", FI_PARAM_STRING,
+		"Select flow control mode: none (default; no flow control) or rccc. Invalid or unavailable selections fail provider initialization.");
+
 	/* Track TID and HMEM domains so caches can be cleared on exit */
 	dlist_init(&fi_opx_global.tid_domain_list);
 #ifdef OPX_HMEM

@@ -583,7 +583,18 @@ struct fi_opx_ep_daos_info {
  *   FI_CLASS_RX_CTX
  *   -- no FI_CLASS_SRX_CTX
  */
+int  opx_flow_control_reservation_pool_create(struct ofi_bufpool **pool);
+int  opx_flow_control_reservation_pool_capacity_verify(const struct ofi_bufpool		       *pool,
+						       const struct fi_opx_reliability_service *service,
+						       size_t				       *capacity_out);
+void opx_flow_control_reservation_pool_destroy(struct ofi_bufpool **pool);
+
 struct opx_flow_control_rccc_scheduler;
+int  opx_flow_control_rccc_scheduler_create(struct opx_flow_control_rccc_scheduler **scheduler);
+int  opx_flow_control_rccc_scheduler_shared_attach(struct opx_flow_control_rccc_scheduler *scheduler,
+						   const char *job_key_str, uint32_t hfi_unit, uint32_t context_number,
+						   uint32_t subctxt, uint32_t subctxt_cnt);
+void opx_flow_control_rccc_scheduler_destroy(struct opx_flow_control_rccc_scheduler **scheduler);
 
 struct fi_opx_ep {
 	/* == CACHE LINE 0,1 == */
