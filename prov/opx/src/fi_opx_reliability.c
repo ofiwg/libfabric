@@ -48,6 +48,54 @@
 #include <execinfo.h>
 #include <limits.h>
 
+#define OPX_RELIABILITY_FLOW_CONTROL_STATE_SIZE_SUPPORTED(state_size) \
+	((state_size) == OPX_FLOW_CONTROL_NONE_STATE_SIZE || (state_size) == OPX_FLOW_CONTROL_STATE_SIZE)
+
+static int __attribute__((cold)) opx_reliability_flow_pool_geometry(size_t base_size, size_t state_size,
+								    size_t alignment, size_t chunk_count,
+								    size_t *user_size)
+{
+	size_t entry_size;
+	size_t size;
+
+	if (user_size == NULL || alignment == 0 || (alignment & (alignment - 1)) != 0 || chunk_count == SIZE_MAX) {
+		return -FI_EINVAL;
+	}
+
+	if (!OPX_RELIABILITY_FLOW_CONTROL_STATE_SIZE_SUPPORTED(state_size)) {
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (state_size > SIZE_MAX - base_size) {
+		return -FI_EOVERFLOW;
+	}
+	size = base_size + state_size;
+
+	if (size > SIZE_MAX - sizeof(struct ofi_bufpool_hdr)) {
+		return -FI_EOVERFLOW;
+	}
+	entry_size = size + sizeof(struct ofi_bufpool_hdr);
+
+#ifndef NDEBUG
+	if (entry_size > SIZE_MAX - sizeof(struct ofi_bufpool_ftr)) {
+		return -FI_EOVERFLOW;
+	}
+	entry_size += sizeof(struct ofi_bufpool_ftr);
+#endif
+
+	if (entry_size > SIZE_MAX - (alignment - 1)) {
+		return -FI_EOVERFLOW;
+	}
+	entry_size = (entry_size + alignment - 1) & ~(alignment - 1);
+
+	if (entry_size > SIZE_MAX / (chunk_count + 1)) {
+		return -FI_EOVERFLOW;
+	}
+
+	*user_size = size;
+	return FI_SUCCESS;
+}
+
 #ifdef OPX_DEBUG_COUNTERS_RELIABILITY_PING
 /*
  * Names of ping stats for ping debug.
@@ -383,6 +431,111 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep				     *ep,
 	return FI_SUCCESS;
 }
 #endif
+
+ssize_t fi_opx_hfi1_tx_flow_control_reliability_inject(struct fid_ep				       *ep,
+						       const union fi_opx_reliability_service_flow_key *key,
+						       const struct opx_flow_control_wire_envelope     *envelope,
+						       const opx_lid_t dlid, const uint16_t reliability_rx,
+						       const enum opx_flow_control_wire_direction direction,
+						       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+{
+	uint64_t qwords[OPX_FLOW_CONTROL_WIRE_QWORD_COUNT];
+
+	if (OFI_UNLIKELY(ep == NULL ||
+			 container_of(ep, struct fi_opx_ep, ep_fid)->flow_control_reservation_pool == NULL)) {
+		return -FI_EOPNOTSUPP;
+	}
+	if (OFI_UNLIKELY(key == NULL || envelope == NULL || key->qw_prefix != envelope->key ||
+			 envelope->direction != direction ||
+			 (direction == OPX_FLOW_CONTROL_WIRE_DIRECTION_REQUEST &&
+			  (OPX_RELIABILITY_DECODE_LID(key->dlid) != dlid || key->dst_subctxt_rx != reliability_rx)) ||
+			 (direction == OPX_FLOW_CONTROL_WIRE_DIRECTION_FEEDBACK &&
+			  (OPX_RELIABILITY_DECODE_LID(key->slid) != dlid || key->src_subctxt_rx != reliability_rx)) ||
+			 opx_flow_control_wire_envelope_pack(envelope, qwords) != OPX_FLOW_CONTROL_WIRE_OK)) {
+		return -FI_EINVAL;
+	}
+
+	struct fi_opx_ep *opx_ep   = container_of(ep, struct fi_opx_ep, ep_fid);
+	const uint8_t	  tx_index = OPX_RELIABILITY_DECODE_TX_INDEX(key->slid);
+
+	if (OFI_UNLIKELY(opx_ep->reli_service == NULL || opx_ep->domain == NULL ||
+			 hfi1_type != OPX_SW_HFI1_TYPE(opx_ep->domain) || tx_index >= opx_ep->num_tx_contexts ||
+			 opx_ep->tx_contexts[tx_index] == NULL)) {
+		return -FI_EINVAL;
+	}
+
+	struct fi_opx_ep_tx *opx_tx = opx_ep->tx_contexts[tx_index];
+
+	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_tx);
+
+	union fi_opx_hfi1_pio_state pio_state	     = *opx_tx->pio_state;
+	const uint16_t		    credits_needed   = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ? 1u : 2u;
+	const uint16_t		    credits_required = credits_needed + opx_flow_control_rccc_control_headroom_get();
+
+	if (OFI_UNLIKELY(FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state) < credits_required)) {
+		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_tx->pio_credits_addr);
+		if (FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state) < credits_required) {
+			opx_tx->pio_state->qw0 = pio_state.qw0;
+			OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+			return -FI_EAGAIN;
+		}
+	}
+
+	const uint64_t		 bth_rx	       = (uint64_t) reliability_rx << OPX_BTH_SUBCTXT_RX_SHIFT;
+	const uint64_t		 key_dw_suffix = (uint64_t) key->dw_suffix << 32;
+	const uint64_t		 pbc_dlid      = OPX_PBC_DLID(dlid, hfi1_type);
+	volatile uint64_t *const scb	       = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_sop_first, pio_state);
+
+	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
+		const struct fi_opx_hfi1_txe_scb_9B *const model =
+			direction == OPX_FLOW_CONTROL_WIRE_DIRECTION_REQUEST ?
+				&opx_ep->reli_service->flow_control_request_model_9B[tx_index] :
+				&opx_ep->reli_service->flow_control_feedback_model_9B[tx_index];
+		const uint64_t lrh_dlid_9B = FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(dlid);
+
+		opx_cacheline_store_qw_vol(opx_ep->domain, scb,
+					   model->qw0 | OPX_PBC_CR(0x1, hfi1_type) | pbc_dlid |
+						   OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
+					   model->hdr.qw_9B[0] | lrh_dlid_9B, model->hdr.qw_9B[1] | bth_rx,
+					   model->hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
+					   model->hdr.qw_9B[3] | key_dw_suffix, qwords[0], qwords[1], qwords[2]);
+
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+	} else {
+		const struct fi_opx_hfi1_txe_scb_16B *const model =
+			direction == OPX_FLOW_CONTROL_WIRE_DIRECTION_REQUEST ?
+				&opx_ep->reli_service->flow_control_request_model_16B[tx_index] :
+				&opx_ep->reli_service->flow_control_feedback_model_16B[tx_index];
+
+		opx_cacheline_store_qw_vol(opx_ep->domain, scb,
+					   model->qw0 | OPX_PBC_CR(1, hfi1_type) | pbc_dlid |
+						   OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
+					   model->hdr.qw_16B[0] | ((uint64_t) (dlid & OPX_LRH_JKR_16B_DLID_MASK_16B)
+								   << OPX_LRH_JKR_16B_DLID_SHIFT_16B),
+					   model->hdr.qw_16B[1] |
+						   ((uint64_t) (dlid & OPX_LRH_JKR_16B_DLID20_MASK_16B) >>
+						    OPX_LRH_JKR_16B_DLID20_SHIFT_16B) |
+						   (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
+					   model->hdr.qw_16B[2] | bth_rx,
+					   model->hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
+					   model->hdr.qw_16B[4] | key_dw_suffix, qwords[0], qwords[1]);
+
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+		volatile uint64_t *const scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_tx->pio_scb_first, pio_state);
+
+		opx_cacheline_store_qw_vol(opx_ep->domain, scb_payload, qwords[2], OPX_JKR_16B_PAD_QWORD,
+					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD,
+					   OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD, OPX_JKR_16B_PAD_QWORD);
+
+		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+	}
+
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_tx->pio_credits_addr);
+	opx_tx->pio_state->qw0 = pio_state.qw0;
+	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
+	return FI_SUCCESS;
+}
 
 ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_reliability_service_flow_key *key,
 					  const opx_lid_t dlid, const uint64_t reliability_rx, const uint64_t psn_start,
@@ -2090,6 +2243,13 @@ static void fi_opx_reliability_model_init_9B(struct fi_opx_domain *domain, struc
 		service->nack_model_9B[tx_index].hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK;
 
 		OPX_DEBUG_PRINT_HDR((&(service->nack_model_9B[tx_index].hdr)), hfi1_type);
+
+		service->flow_control_request_model_9B[tx_index] = service->ping_model_9B[tx_index];
+		service->flow_control_request_model_9B[tx_index].hdr.ud.opcode =
+			FI_OPX_HFI_UD_OPCODE_FLOW_CONTROL_REQUEST;
+		service->flow_control_feedback_model_9B[tx_index] = service->ping_model_9B[tx_index];
+		service->flow_control_feedback_model_9B[tx_index].hdr.ud.opcode =
+			FI_OPX_HFI_UD_OPCODE_FLOW_CONTROL_FEEDBACK;
 	}
 }
 
@@ -2182,6 +2342,11 @@ static void fi_opx_reliability_model_init_16B(struct fi_opx_domain *domain, stru
 	service->nack_model_16B[tx_index].hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK;
 
 	OPX_DEBUG_PRINT_HDR((&(service->nack_model_16B[tx_index].hdr)), hfi1_type);
+
+	service->flow_control_request_model_16B[tx_index]		 = service->ping_model_16B[tx_index];
+	service->flow_control_request_model_16B[tx_index].hdr.ud.opcode	 = FI_OPX_HFI_UD_OPCODE_FLOW_CONTROL_REQUEST;
+	service->flow_control_feedback_model_16B[tx_index]		 = service->ping_model_16B[tx_index];
+	service->flow_control_feedback_model_16B[tx_index].hdr.ud.opcode = FI_OPX_HFI_UD_OPCODE_FLOW_CONTROL_FEEDBACK;
 }
 
 void fi_opx_reliability_model_init_plane(struct fi_opx_domain *domain, struct fi_opx_reliability_service *service,
@@ -2200,6 +2365,40 @@ void fi_opx_reliability_service_init(struct fi_opx_domain *domain, struct fi_opx
 	assert(hfi1 != NULL);
 	assert(service != NULL);
 	assert(process_fn != NULL);
+
+	size_t flow_control_state_size;
+	size_t tx_flow_size;
+	size_t rx_flow_size;
+	int    flow_pool_flags;
+	int    ret;
+
+	ret = opx_flow_control_selected_state_size(&flow_control_state_size);
+	if (OFI_UNLIKELY(ret != FI_SUCCESS)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Flow-control state sizing failed at reliability service init: %s (%d)\n", fi_strerror(-ret),
+			ret);
+		abort();
+	}
+	flow_pool_flags = OFI_BUFPOOL_NO_TRACK;
+	if (flow_control_state_size == OPX_FLOW_CONTROL_NONE_STATE_SIZE) {
+		flow_pool_flags |= OFI_BUFPOOL_NO_ZERO;
+	}
+	ret = opx_reliability_flow_pool_geometry(sizeof(struct fi_opx_reliability_tx_flow), flow_control_state_size,
+						 _Alignof(struct fi_opx_reliability_tx_flow),
+						 OPX_RELIABILITY_TX_FLOW_CHUNK_COUNT, &tx_flow_size);
+	if (OFI_UNLIKELY(ret != FI_SUCCESS)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "TX flow pool geometry failed: state_size=%zu %s (%d)\n",
+			flow_control_state_size, fi_strerror(-ret), ret);
+		abort();
+	}
+	ret = opx_reliability_flow_pool_geometry(sizeof(struct fi_opx_reliability_rx_flow), flow_control_state_size,
+						 _Alignof(struct fi_opx_reliability_rx_flow),
+						 OPX_RELIABILITY_RX_FLOW_CHUNK_COUNT, &rx_flow_size);
+	if (OFI_UNLIKELY(ret != FI_SUCCESS)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "RX flow pool geometry failed: state_size=%zu %s (%d)\n",
+			flow_control_state_size, fi_strerror(-ret), ret);
+		abort();
+	}
 
 	service->lid	    = hfi1->lid;
 	service->kind	    = reliability_kind;
@@ -2234,18 +2433,19 @@ void fi_opx_reliability_service_init(struct fi_opx_domain *domain, struct fi_opx
 	// TX Flow pool for allocating TX Flow entries. Every reliability flow needs one of these
 	// for keeping track of outstanding packets, bytes, replays and PSNs.
 	(void) ofi_bufpool_create(&(service->tx.flow_pool),
-				  sizeof(struct fi_opx_reliability_tx_flow),   // element size
-				  sizeof(struct fi_opx_reliability_tx_flow),   // byte alignment
+				  tx_flow_size,				       // element size
+				  _Alignof(struct fi_opx_reliability_tx_flow), // byte alignment
 				  0,					       // max # of elements
-				  512,					       // # of elements to allocate at once
-				  OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_NO_ZERO); // flags
+				  OPX_RELIABILITY_TX_FLOW_CHUNK_COUNT,	       // # of elements to allocate at once
+				  flow_pool_flags);			       // flags
+	assert(service->tx.flow_pool->attr.size == tx_flow_size);
 
 	// Flow key pool for allocating reliability flow keys to be used in new rbtree entries.
 	(void) ofi_bufpool_create(&(service->flow_key_pool),
 				  sizeof(union fi_opx_reliability_service_flow_key), // element size
 				  sizeof(void *),				     // byte alignment
 				  0,						     // max # of elements
-				  2048,					       // # of elements to allocate at once
+				  OPX_RELIABILITY_RX_FLOW_CHUNK_COUNT,	       // # of elements to allocate at once
 				  OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_NO_ZERO); // flags
 
 	/*
@@ -2253,11 +2453,12 @@ void fi_opx_reliability_service_init(struct fi_opx_domain *domain, struct fi_opx
 	 * in the rx_flow_rbtree and accessed with a reliability flow key.
 	 */
 	(void) ofi_bufpool_create(&(service->rx.rx_flow_pool),
-				  sizeof(struct fi_opx_reliability_rx_flow),   // element size
-				  sizeof(void *),			       // byte alignment
+				  rx_flow_size,				       // element size
+				  _Alignof(struct fi_opx_reliability_rx_flow), // byte alignment
 				  0,					       // max # of elements
-				  2048,					       // # of elements to allocate at once
-				  OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_NO_ZERO); // flags
+				  OPX_RELIABILITY_RX_FLOW_CHUNK_COUNT,	       // # of elements to allocate at once
+				  flow_pool_flags);			       // flags
+	assert(service->rx.rx_flow_pool->attr.size == rx_flow_size);
 
 #ifdef OPX_RELIABILITY_DEBUG
 	fprintf(stderr, "%s:%s():%d replay_pool = %p\n", __FILE__, __func__, __LINE__, service->tx.replay_pool);
@@ -2539,7 +2740,6 @@ bool opx_reliability_rx_process_check(struct fi_opx_reliability_service *service
 {
 	const uint8_t dput_opcode = FI_OPX_HFI_DPUT_GET_OPCODE(hdr->dput.target.opcode_origin_rx);
 
-	/* Process some RZV DATA opcodes immediately/OOO. */
 	if ((opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) &&
 	    ((dput_opcode == FI_OPX_HFI_DPUT_OPCODE_RZV) || (dput_opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) ||
 	     (dput_opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG))) {

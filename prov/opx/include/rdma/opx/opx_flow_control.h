@@ -199,4 +199,83 @@ _Static_assert(_Alignof(struct opx_flow_control_state) == OPX_FLOW_CONTROL_STATE
 
 _Static_assert(OPX_FLOW_CONTROL_NONE_STATE_SIZE == 0u, "flow-control NONE state-size contract");
 
+int						      opx_flow_control_process_acquire(void);
+void						      opx_flow_control_process_release(void);
+enum opx_flow_control_mode			      opx_flow_control_selected_mode(void);
+int						      opx_flow_control_selected_state_size(size_t *state_size);
+const struct opx_flow_control_rccc_tx_profile	     *opx_flow_control_rccc_tx_profile_get(void);
+const struct opx_flow_control_rccc_scheduler_profile *opx_flow_control_rccc_scheduler_profile_get(void);
+uint16_t					      opx_flow_control_rccc_control_headroom_get(void);
+uint16_t					      opx_flow_control_rccc_max_control_emits_get(void);
+const char					     *opx_flow_control_mode_name(enum opx_flow_control_mode mode);
+
+int  opx_flow_control_context_init(struct fi_opx_hfi1_context *context);
+void opx_flow_control_context_fini(struct fi_opx_hfi1_context *context);
+int  opx_flow_control_endpoint_init(struct fi_opx_ep *opx_ep);
+void opx_flow_control_endpoint_fini(struct fi_opx_ep *opx_ep);
+int  opx_flow_control_tx_flow_init(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_tx_flow *flow,
+				   const union fi_opx_reliability_service_flow_key *key);
+void opx_flow_control_tx_flow_fini(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_tx_flow *flow);
+enum opx_flow_control_result opx_flow_control_rccc_tx_admit(struct fi_opx_ep		      *opx_ep,
+							    struct fi_opx_reliability_tx_flow *flow,
+							    uint32_t			       requested_packets);
+enum opx_flow_control_result opx_flow_control_rccc_tx_eager_admit(struct fi_opx_ep *opx_ep, uint32_t dlid,
+								  uint16_t dst_subctxt_rx, uint8_t tx_index,
+								  uint32_t requested_packets);
+void opx_flow_control_rccc_tx_work_enqueue(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_tx_flow *flow);
+void opx_flow_control_rccc_control_sweep(struct fi_opx_ep *opx_ep, uint64_t now_ns);
+int  opx_flow_control_rx_flow_init(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow);
+void opx_flow_control_rx_flow_fini(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow);
+/* Called once per accepted governed-class PSN (original or replay) at each
+ * reliability acceptance site; PSN-ordered acceptance (the next_psn advance)
+ * guarantees exactly-once, so the release table needs no per-PSN dedup. */
+void opx_flow_control_rx_first_accept(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow, uint32_t psn);
+
+/* Single-packet reservations skip the record pool entirely: completion-side
+ * accounting never touches the flow's credit terms (records only drive
+ * recycling), so a 1-packet record is pure per-send overhead (measured 3x
+ * message-rate loss at tiny sizes).  The reservation seam instead carries the
+ * flow pointer with bit 0 set - records are cacheline-aligned so the bit is
+ * free - and commit/cancel branch on the tag.  The replay's record field
+ * stays NULL for singles, so ACK settle no-ops and NACK replay cannot
+ * double-complete by construction. */
+#define OPX_FLOW_CONTROL_SINGLE_TAG(flow)    ((void *) (((uintptr_t) (flow)) | 1ul))
+#define OPX_FLOW_CONTROL_IS_SINGLE(record)   ((((uintptr_t) (record)) & 1ul) != 0u)
+#define OPX_FLOW_CONTROL_SINGLE_FLOW(record) ((struct fi_opx_reliability_tx_flow *) (((uintptr_t) (record)) & ~1ul))
+
+enum opx_flow_control_result opx_flow_control_tx_admit_reserve_single(struct fi_opx_ep			*opx_ep,
+								      struct fi_opx_reliability_tx_flow *flow,
+								      void **reservation_record_out);
+enum opx_flow_control_result opx_flow_control_tx_reserve(struct fi_opx_ep		   *opx_ep,
+							 struct fi_opx_reliability_tx_flow *flow,
+							 enum opx_flow_control_packet_class packet_class,
+							 uint32_t requested_packets, void **reservation_record_out);
+void	 opx_flow_control_tx_reduce_reservation(struct fi_opx_ep *opx_ep, void *reservation_record, uint32_t new_count);
+void	 opx_flow_control_tx_register_packet(struct fi_opx_ep *opx_ep, void *reservation_record);
+void	 opx_flow_control_tx_complete_packet(struct fi_opx_ep *opx_ep, void *reservation_record);
+void	 opx_flow_control_tx_cancel(struct fi_opx_ep *opx_ep, void *reservation_record);
+uint64_t opx_flow_control_tx_record_generation(const void *reservation_record);
+bool	 opx_flow_control_tx_capacity_rejected(const struct fi_opx_reliability_tx_flow *flow);
+
+enum opx_flow_control_result opx_flow_control_piggyback_write(enum opx_flow_control_carrier	   carrier,
+							      const struct opx_flow_control_state *state,
+							      union opx_hfi1_packet_hdr		  *header);
+enum opx_flow_control_result opx_flow_control_piggyback_read(enum opx_flow_control_carrier    carrier,
+							     const union opx_hfi1_packet_hdr *header,
+							     struct opx_flow_control_state   *state);
+enum opx_flow_control_result opx_flow_control_wire_send(struct fi_opx_ep *opx_ep, bool request_direction,
+							const union fi_opx_reliability_service_flow_key *key,
+							const struct opx_flow_control_wire_envelope	*envelope);
+enum opx_flow_control_result opx_flow_control_wire_receive(struct fi_opx_ep *opx_ep, bool request_direction,
+							   const union opx_hfi1_packet_hdr *header, uint32_t outer_slid,
+							   uint32_t outer_dlid, uint32_t primary_slid);
+void			     opx_flow_control_progress(struct fi_opx_ep *opx_ep, uint64_t now_ns);
+void			     opx_flow_control_context_progress(struct fi_opx_ep *opx_ep, uint64_t now_ns);
+void opx_flow_control_report_fault(struct fi_opx_ep *opx_ep, enum opx_flow_control_fault_scope scope, uint32_t reason);
+
+void opx_flow_control_dump_process(FILE *output);
+void opx_flow_control_dump_context(const struct fi_opx_hfi1_context *context, FILE *output);
+void opx_flow_control_dump_tx_flow(const struct fi_opx_reliability_tx_flow *flow, FILE *output);
+void opx_flow_control_dump_rx_flow(const struct fi_opx_reliability_rx_flow *flow, FILE *output);
+
 #endif

@@ -46,6 +46,8 @@
 #include "rdma/opx/fi_opx_timer.h"
 
 #include "rdma/opx/opx_flow_control.h"
+#include "rdma/opx/opx_flow_control_inline.h"
+#include "rdma/opx/opx_flow_control_wire.h"
 #include "rdma/opx/opx_tracer.h"
 
 #ifdef OPX_RELIABILITY_DEBUG
@@ -1016,6 +1018,13 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 					  const opx_lid_t dlid, const uint64_t reliability_rx, const uint64_t psn_start,
 					  const uint64_t psn_count, const uint64_t opcode,
 					  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
+
+ssize_t fi_opx_hfi1_tx_flow_control_reliability_inject(struct fid_ep				       *ep,
+						       const union fi_opx_reliability_service_flow_key *key,
+						       const struct opx_flow_control_wire_envelope     *envelope,
+						       const opx_lid_t dlid, const uint16_t reliability_rx,
+						       const enum opx_flow_control_wire_direction direction,
+						       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
 
 void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const opx_lid_t dlid,
 					      const uint16_t reliability_subctxt_rx, const uint64_t psn_start,

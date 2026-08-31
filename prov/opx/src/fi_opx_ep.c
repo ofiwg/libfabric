@@ -626,6 +626,21 @@ void opx_ep_free_match_queued_contexts(struct fi_opx_ep *opx_ep)
 	       "Freed %d contexts from tag match queue, %d contexts from msg match queue\n", tag_count, msg_count);
 }
 
+static void fi_opx_reliability_service_teardown(struct fi_opx_ep *opx_ep)
+{
+	if (opx_ep->flow_control_reservation_pool != NULL) {
+		opx_flow_control_tx_flows_quiesce(opx_ep);
+	}
+	opx_flow_control_rccc_scheduler_destroy(&opx_ep->flow_control_scheduler);
+	opx_flow_control_reservation_pool_destroy(&opx_ep->flow_control_reservation_pool);
+	opx_ep->flow_control_reservation_capacity = 0u;
+	opx_flow_control_endpoint_fini(opx_ep);
+	fi_opx_reliability_service_fini(opx_ep->reli_service);
+	free(opx_ep->reli_service->mem);
+	opx_ep->reli_service = NULL;
+	opx_flow_control_process_release();
+}
+
 static int fi_opx_close_ep(fid_t fid)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "close ep\n");
@@ -821,9 +836,7 @@ static int fi_opx_close_ep(fid_t fid)
 		opx_ep->rx = NULL;
 	}
 	if (opx_ep->reli_service) {
-		fi_opx_reliability_service_fini(opx_ep->reli_service);
-		free(opx_ep->reli_service->mem);
-		opx_ep->reli_service = NULL;
+		fi_opx_reliability_service_teardown(opx_ep);
 	}
 
 #if HAVE_HFISVC
@@ -2800,13 +2813,80 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	memset(opx_ep->reli_service, 0, sizeof(struct fi_opx_reliability_service));
 	opx_ep->reli_service->mem = mem;
 
-	opx_ep->flow_control_mode = OPX_FLOW_CONTROL_MODE_NONE;
+	int ret = opx_flow_control_process_acquire();
+	if (ret != FI_SUCCESS) {
+		free(opx_ep->reli_service->mem);
+		opx_ep->reli_service = NULL;
+		errno		     = -ret;
+		goto err;
+	}
+
+	ret = opx_flow_control_endpoint_init(opx_ep);
+	if (ret != FI_SUCCESS) {
+		free(opx_ep->reli_service->mem);
+		opx_ep->reli_service = NULL;
+		opx_flow_control_process_release();
+		errno = -ret;
+		goto err;
+	}
+
+	/* Cache the process-wide mode in the endpoint: it can never change
+	 * for the life of the endpoint, and the cached copy lets hot paths
+	 * skip the mutex-protected opx_flow_control_selected_mode() lookup. */
+	opx_ep->flow_control_mode = opx_flow_control_selected_mode();
 
 	enum ofi_reliability_kind kind = fi_opx_select_reliability(opx_ep);
 
 	if (OFI_RELIABILITY_KIND_ONLOAD == kind) {
 		fi_opx_reliability_service_init(opx_ep->domain, opx_ep->reli_service, opx_ep->hfi,
 						fi_opx_ep_rx_reliability_process_packet, OFI_RELIABILITY_KIND_ONLOAD);
+		if (opx_ep->flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
+			opx_ep->flow_control_tx_work_head = NULL;
+			opx_ep->flow_control_tx_work_tail = NULL;
+			opx_ep->flow_control_rx_work_head = NULL;
+			opx_ep->flow_control_rx_work_tail = NULL;
+			opx_ep->flow_control_scheduler	  = NULL;
+			ret = opx_flow_control_reservation_pool_create(&opx_ep->flow_control_reservation_pool);
+			if (ret != FI_SUCCESS) {
+				errno = -ret;
+				goto err;
+			}
+			ret = opx_flow_control_reservation_pool_capacity_verify(
+				opx_ep->flow_control_reservation_pool, opx_ep->reli_service,
+				&opx_ep->flow_control_reservation_capacity);
+			if (ret != FI_SUCCESS) {
+				opx_flow_control_reservation_pool_destroy(&opx_ep->flow_control_reservation_pool);
+				errno = -ret;
+				goto err;
+			}
+			ret = opx_flow_control_rccc_scheduler_create(&opx_ep->flow_control_scheduler);
+			if (ret != FI_SUCCESS) {
+				opx_flow_control_reservation_pool_destroy(&opx_ep->flow_control_reservation_pool);
+				errno = -ret;
+				goto err;
+			}
+			/* Every member of an HFI-context-sharing group grants
+			 * against the same physical receive context, so RCCC
+			 * must share one capacity ledger across the group; a
+			 * failed attach fails the enable closed rather than
+			 * over-granting with independent per-member ledgers. */
+			if (OPX_IS_CTX_SHARING_ENABLED) {
+				ret = opx_flow_control_rccc_scheduler_shared_attach(
+					opx_ep->flow_control_scheduler, opx_domain->unique_job_key_str,
+					opx_ep->hfi->hfi_unit, opx_ep->hfi->ctrl->ctxt_info.ctxt, opx_ep->hfi->subctxt,
+					opx_ep->hfi->subctxt_cnt);
+				if (ret != FI_SUCCESS) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+						"RCCC shared scheduler attach failed for context-sharing group: %s (%d)\n",
+						fi_strerror(-ret), ret);
+					opx_flow_control_rccc_scheduler_destroy(&opx_ep->flow_control_scheduler);
+					opx_flow_control_reservation_pool_destroy(
+						&opx_ep->flow_control_reservation_pool);
+					errno = -ret;
+					goto err;
+				}
+			}
+		}
 	} else {
 		/* invalid reliability kind */
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Invalid reliability kind: %u\n", kind);
@@ -3234,7 +3314,15 @@ unlock:
 	if (tx_cq_lock_held) {
 		fi_opx_unlock(&opx_ep->init_tx_cq->lock);
 	}
-err:
+err:;
+	/* Every jump here sets errno to the real failure code; capture it
+	 * before teardown, which may clobber errno, so the caller sees the
+	 * actual error instead of a hardcoded -FI_EPERM. */
+	const int saved_errno = errno != 0 ? errno : FI_EPERM;
+
+	if (opx_ep->reli_service) {
+		fi_opx_reliability_service_teardown(opx_ep);
+	}
 	// Placeholder functions to be uncommented when they do more than return 0
 	/*
 	fi_opx_finalize_cm_ops(&opx_ep->ep_fid.fid);
@@ -3243,7 +3331,8 @@ err:
 	fi_opx_finalize_tagged_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_atomic_ops(&opx_ep->ep_fid);
 	*/
-	return -1;
+	errno = saved_errno;
+	return -saved_errno;
 }
 
 static int fi_opx_enable_ep(struct fid_ep *ep)
@@ -3255,37 +3344,39 @@ static int fi_opx_enable_ep(struct fid_ep *ep)
 	ret			 = fi_opx_check_ep(opx_ep);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ep enable failed\n");
-		return -errno;
+		/* Propagate ret, not -errno: errno may be stale/zero here,
+		 * which would mask this failure as false success. */
+		return ret;
 	}
 
 	ret = fi_opx_open_command_queues(opx_ep);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "failed to assign command queues\n");
-		return -errno;
+		return ret;
 	}
 
 	ret = fi_opx_enable_msg_ops(ep);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "failed to enable msg ops\n");
-		return -errno;
+		return ret;
 	}
 
 	ret = fi_opx_enable_rma_ops(ep);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "failed to enable rma ops\n");
-		return -errno;
+		return ret;
 	}
 
 	ret = fi_opx_enable_atomic_ops(ep);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "failed to enable rma ops\n");
-		return -errno;
+		return ret;
 	}
 
 	ret = fi_opx_enable_tagged_ops(ep);
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "failed to enable rma ops\n");
-		return -errno;
+		return ret;
 	}
 
 	/* connect any inserted table (av) addresses */
