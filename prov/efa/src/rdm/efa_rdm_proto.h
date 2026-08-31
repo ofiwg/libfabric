@@ -65,10 +65,18 @@ struct efa_rdm_proto {
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
-	 * TX operation. use_p2p reports whether peer-to-peer access is
-	 * available; the read based protocols need it.
+	 * TX operation.
+	 *
+	 * @param[in] txe		tracks the send operation
+	 * @param[in] peer		peer the operation is addressed to
+	 * @param[in] req_pkt_type	REQ packet type this protocol would use
+	 * @param[in] header_flags	optional headers the REQ will carry
+	 * @param[in] iface		HMEM interface of the source buffer
+	 * @param[in] use_p2p		whether the device can access the source
+	 *				buffer directly.
 	 */
 	bool (*can_use_protocol)(struct efa_rdm_ope *txe,
+				 struct efa_rdm_peer *peer,
 				 int req_pkt_type, uint16_t header_flags,
 				 int iface, bool use_p2p);
 
