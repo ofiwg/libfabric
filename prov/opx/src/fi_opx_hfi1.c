@@ -6306,8 +6306,9 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	 * receiver's buffer, so gate on the worst case here: head and tail are
 	 * each at most 7, never 8, since an 8-byte edge means an aligned
 	 * destination and no edge at all. */
-	bool has_edge = (opx_mr && opx_mr->dmabuf.fd != -1 && src_iface != FI_HMEM_SYSTEM &&
-			 xfer_len >= (OPX_HFISVC_EDGE_BYTES_MAX + OPX_HFISVC_EDGE_BYTES_MAX + 8));
+	bool has_edge =
+		(opx_ep->use_hfisvc_inline_edge && opx_mr && opx_mr->dmabuf.fd != -1 && src_iface != FI_HMEM_SYSTEM &&
+		 xfer_len >= (OPX_HFISVC_EDGE_BYTES_MAX + OPX_HFISVC_EDGE_BYTES_MAX + 8));
 #else
 	const bool has_edge = false;
 #endif
