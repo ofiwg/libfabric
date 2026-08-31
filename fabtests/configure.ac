@@ -66,7 +66,9 @@ AS_IF([test x"$enable_efa" = x"yes"],
              [enable_efa=no
              AC_MSG_NOTICE([EFA fabtests are disabled: require 64-bit Linux])])])
 
-AM_CONDITIONAL([ENABLE_EFA], [test x"$enable_efa" = x"yes"])
+dnl ENABLE_EFA is defined in prov/efa/configure.m4, included at the end of this
+dnl file, so that the check for the libfabric efa extension header runs after
+dnl --with-libfabric has been processed.
 
 AC_ARG_ENABLE([lpp],
 	[AS_HELP_STRING([--enable-lpp],
