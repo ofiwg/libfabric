@@ -106,24 +106,26 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 }
 
 /**
- * @brief Post an already-filled TXE using the new protocol path.
+ * @brief Send the packet entries a protocol's construct_tx_pkes() just built.
  *
- * Used by the retry path after handshake completes and by the normal
- * send path. The TXE must already be filled by efa_rdm_proto_txe_fill.
+ * Shared tail of the fresh-send (#efa_rdm_msg_post_rtm_proto) and repost
+ * (#efa_rdm_msg_repost_rtm_proto) paths: hand ep->send_pkt_entry_vec to the
+ * device, roll back the packet entries if nothing reached it, and do the
+ * post-send bookkeeping both paths owe.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation whose packets were constructed
+ * @param[in]		proto	protocol that constructed them
+ * @return 0 on success, negative errno on failure. On failure the packet
+ *	   entries have been released and the caller still owns only the txe.
  */
-ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
-				    struct efa_rdm_ope *txe,
-				    struct efa_rdm_proto *proto)
+static ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
+						 struct efa_rdm_ope *txe,
+						 struct efa_rdm_proto *proto)
 {
 	ssize_t err;
 	uint64_t pke_send_flags = 0;
 	int i;
-
-	err = proto->construct_tx_pkes(
-		ep, txe->peer, NULL, txe->op, txe->tag,
-		txe->fi_flags, txe->internal_flags, txe);
-	if (err)
-		return err;
 
 	/*
 	 * construct_tx_pkes() must record the wire protocol it built the packet
@@ -152,13 +154,92 @@ ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
 
 	/*
 	 * Mark the peer as having received a REQ, matching what
-	 * efa_rdm_ope_post_send() does on the old path. Doing it here rather
-	 * than in the caller also covers the repost after a handshake.
+	 * efa_rdm_ope_post_send() does on the old path. Both the fresh send and
+	 * the repost after a handshake go through here, so both are covered.
 	 */
 	txe->peer->flags |= EFA_RDM_PEER_REQ_SENT;
 
 	proto->handle_tx_pkes_posted(ep, txe);
 	return FI_SUCCESS;
+}
+
+/**
+ * @brief Post a fresh send on the refactored protocol path.
+ *
+ * Called only from efa_rdm_msg_generic_send(), on a txe that
+ * efa_rdm_proto_txe_fill() has just filled and that has never been handed to
+ * the protocol before. The repost after a pre-handshake queue is a separate
+ * entry point, #efa_rdm_msg_repost_rtm_proto, because its contract differs.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation, filled by efa_rdm_proto_txe_fill
+ * @param[in]		proto	protocol selected for this operation
+ * @return 0 on success, negative errno on failure. On failure the caller
+ *	   releases the txe and rolls back peer->next_msg_id.
+ */
+ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
+				    struct efa_rdm_ope *txe,
+				    struct efa_rdm_proto *proto)
+{
+	ssize_t err;
+
+	assert(txe->proto == proto);
+
+	/*
+	 * msg is deliberately NULL: the repost path has no fi_msg to offer, so
+	 * construct_tx_pkes() must read the operation off the txe on both paths
+	 * or it would behave differently on a repost.
+	 */
+	err = proto->construct_tx_pkes(
+		ep, txe->peer, NULL, txe->op, txe->tag,
+		txe->fi_flags, txe->internal_flags, txe);
+	if (err)
+		return err;
+
+	return efa_rdm_msg_send_constructed_pkes(ep, txe, proto);
+}
+
+/**
+ * @brief Repost a send that was queued before the handshake completed.
+ *
+ * Called only from efa_rdm_ope_repost_ope_queued_before_handshake(), once the
+ * peer's handshake has arrived. Contract, which every protocol's
+ * construct_tx_pkes() must honour:
+ *
+ * - There is no fi_msg. Everything must come off the txe.
+ * - One-shot setup the first attempt already did must not run again:
+ *   txe->msg_id was assigned (and peer->next_msg_id bumped) by
+ *   efa_rdm_msg_generic_send() and must be reused as-is.
+ * - construct_tx_pkes() must be idempotent. This function can run more than
+ *   once on the same txe: if it returns -FI_EAGAIN the txe stays on
+ *   ep->ope_queued_list and efa_rdm_ope_process_queued_ope() retries it. So
+ *   assignments (txe->protocol = x, flags |= y) are fine but accumulating
+ *   writes (bytes_sent +=, bytes_runt +=) are not.
+ * - handle_tx_pkes_posted() must run on every successful post, since the
+ *   first attempt never reached the device.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	queued send operation
+ * @return 0 on success, negative errno on failure. -FI_EAGAIN leaves the txe
+ *	   queued for another attempt.
+ */
+ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
+				     struct efa_rdm_ope *txe)
+{
+	struct efa_rdm_proto *proto = txe->proto;
+	ssize_t err;
+
+	assert(proto);
+	assert(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
+	assert(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+
+	err = proto->construct_tx_pkes(
+		ep, txe->peer, NULL, txe->op, txe->tag,
+		txe->fi_flags, txe->internal_flags, txe);
+	if (err)
+		return err;
+
+	return efa_rdm_msg_send_constructed_pkes(ep, txe, proto);
 }
 
 /**

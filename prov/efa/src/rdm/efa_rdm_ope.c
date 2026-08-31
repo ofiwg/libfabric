@@ -2412,7 +2412,7 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	case ofi_op_msg: /* fall through */
 	case ofi_op_tagged:
 		if (ope->proto)
-			return efa_rdm_msg_post_rtm_proto(ope->ep, ope, ope->proto);
+			return efa_rdm_msg_repost_rtm_proto(ope->ep, ope);
 		return efa_rdm_msg_post_rtm(ope->ep, ope);
 	case ofi_op_write:
 		return efa_rdm_rma_post_write(ope->ep, ope);
