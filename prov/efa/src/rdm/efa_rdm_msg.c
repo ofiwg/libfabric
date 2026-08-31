@@ -340,8 +340,17 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	/* First try to use the refactored code path */
 	err = efa_rdm_proto_select_send_protocol(ep, peer, msg, op, fi_flags, txe,
 						 &proto);
-	if (err)
+	if (err) {
+		/*
+		 * Selection can fail before the txe is constructed, e.g. when
+		 * p2p is required but unavailable for the source buffer. An
+		 * unconstructed txe is on no list and owns no memory
+		 * registration, so return it straight to the pool instead of
+		 * through efa_rdm_txe_release().
+		 */
+		ofi_buf_free(txe);
 		goto out;
+	}
 
 	/* If a protocol is found, use it. Otherwise, fall back to the old code
 	 * path */

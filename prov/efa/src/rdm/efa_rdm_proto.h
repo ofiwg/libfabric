@@ -45,10 +45,26 @@ struct efa_rdm_proto {
 
 	/* This function determines whether the protocol can be used for a given
 	 * send operation.
+	 *
+	 * @param[in] txe		send operation. iov, desc, iov_count and
+	 *				total_len are already filled in.
+	 * @param[in] peer		peer the operation is addressed to. The read
+	 *				based protocols need it to check the peer's
+	 *				RDMA read support and, for runt read, the
+	 *				peer's in flight runt byte accounting.
+	 * @param[in] req_pkt_type	REQ packet type this protocol would use
+	 * @param[in] header_flags	optional headers the REQ will carry
+	 * @param[in] iface		HMEM interface of the source buffer
+	 * @param[in] use_p2p		whether the device can access the source
+	 *				buffer directly, as returned by
+	 *				efa_rdm_ep_use_p2p_for_mr(). The read
+	 *				based protocols require it.
 	 */
 	bool (*can_use_protocol_for_send)(struct efa_rdm_ope *txe,
+					  struct efa_rdm_peer *peer,
 					  int req_pkt_type,
-					  uint16_t header_flags, int iface);
+					  uint16_t header_flags, int iface,
+					  bool use_p2p);
 
 	/* This function will allocate the pkes that need to be sent for a given
 	 * TX operation. At the end of this function, ep->send_pkt_entry_vec

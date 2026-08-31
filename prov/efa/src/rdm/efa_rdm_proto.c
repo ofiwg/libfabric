@@ -3,8 +3,42 @@
 
 #include "efa_rdm_proto.h"
 #include "efa.h"
+#include "efa_rdm_domain.h"
+#include "efa_rdm_ope.h"
 #include "efa_rdm_proto_eager.h"
 #include "efa_rdm_msg.h"
+
+/**
+ * @brief Undo the memory registrations the selection loop made.
+ *
+ * efa_rdm_ope_try_fill_desc() registers the source buffer so a read based
+ * protocol can be evaluated. When no protocol is selected the caller falls back
+ * to the legacy send path, whose efa_rdm_txe_construct() clears txe->mr without
+ * closing it, so nothing would ever release those registrations. Hand them back
+ * here instead.
+ *
+ * Only the slots the selection loop registered are touched: txe->mr[] was
+ * zeroed before the loop, so a non-NULL entry is one this code owns, and the
+ * matching txe->desc[] entry was NULL before try_fill_desc filled it.
+ */
+static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
+{
+	int i, err;
+
+	for (i = 0; i < txe->iov_count; ++i) {
+		if (!txe->mr[i])
+			continue;
+
+		err = fi_close((struct fid *) txe->mr[i]);
+		if (OFI_UNLIKELY(err))
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "mr dereg failed during protocol selection. err=%d\n",
+				 err);
+
+		txe->mr[i] = NULL;
+		txe->desc[i] = NULL;
+	}
+}
 
 /* List of supported protocols.
  * The protocols listed here will be tried in the order they're listed.
@@ -20,12 +54,9 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 				       uint64_t flags, struct efa_rdm_ope *txe,
 				       struct efa_rdm_proto **proto)
 {
-	/* TODO: Handle memory registration of user buffers.
-	 * If MR fails, switch to a different protocol.
-	 */
-
 	struct efa_rdm_proto *selected_proto;
-	int req_pkt_type, iface;
+	int req_pkt_type, iface, err;
+	bool use_p2p, mr_attempted = false;
 	uint16_t header_flags = 0;
 	uint64_t effective_flags;
 
@@ -61,6 +92,17 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			((struct efa_mr *) msg->desc[0])->iface :
 			FI_HMEM_SYSTEM;
 
+	/*
+	 * The read based protocols can only be used when the device can access
+	 * the source buffer directly, so resolve p2p availability once here
+	 * instead of in each predicate. A negative return means the transfer
+	 * cannot be performed at all.
+	 */
+	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
+	if (err < 0)
+		return err;
+	use_p2p = err;
+
 	/* Logic copied from efa_rdm_txe_max_req_data_capacity */
 	if (efa_rdm_peer_need_raw_addr_hdr(peer))
 		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
@@ -77,11 +119,22 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			selected_proto, op, effective_flags, peer);
 
 		/* All protocols other than the eager protocol can benefit from
-		 * registering the application buffers.
-		 * TODO: Move function to efa_rdm_proto.c
+		 * registering the application buffers: the read based protocols
+		 * cannot be used at all without a registered source buffer, and
+		 * the others avoid a bounce copy. Eager is the first protocol
+		 * tried, so by the time this runs eager has already been ruled
+		 * out.
+		 * TODO: Move efa_rdm_ope_try_fill_desc to efa_rdm_proto.c
 		 */
+		if (!mr_attempted && selected_proto != &efa_rdm_proto_eager) {
+			if (efa_is_cache_available(efa_rdm_ep_rdm_domain(ep)))
+				efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
+			mr_attempted = true;
+		}
+
 		if (selected_proto->can_use_protocol_for_send(
-			    txe, req_pkt_type, header_flags, iface)) {
+			    txe, peer, req_pkt_type, header_flags, iface,
+			    use_p2p)) {
 			*proto = selected_proto;
 			EFA_DBG(FI_LOG_EP_DATA,
 				"Selected the %s protocol for a %zu byte send\n",
@@ -96,6 +149,9 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	 * (headerless) peer reaches here for any message too large for eager,
 	 * which is a legal application call.
 	 */
+	if (mr_attempted)
+		efa_rdm_proto_release_selection_mrs(txe);
+
 	*proto = NULL;
 	return FI_SUCCESS;
 }
