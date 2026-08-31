@@ -683,6 +683,7 @@ void test_efa_data_path_direct_qp_gen_increments_across_qps(void **state);
 void test_efa_data_path_direct_write_high_pps_hint_set(void **state);
 void test_efa_data_path_direct_64_bit_req_id_roundtrip(void **state);
 void test_efa_data_path_direct_64_bit_cqe_finalize_no_pool(void **state);
+void test_efa_data_path_direct_sq_slot_lifecycle(void **state);
 void test_efa_data_path_direct_64_bit_comp_detection(void **state);
 /* end efa_unit_test_data_path_direct.c */
 
