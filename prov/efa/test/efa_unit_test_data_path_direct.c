@@ -129,6 +129,7 @@ void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
 	uint32_t wrid_idx;
 	uint64_t test_wr_id = 0xDEADBEEF;
 	uint16_t pool_next_before;
+	int32_t wqe_available_before;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
@@ -137,9 +138,14 @@ void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
 	sq_wq = &qp->data_path_direct_qp.sq.wq;
 
 	pool_next_before = sq_wq->wrid_idx_pool_next;
+	wqe_available_before = ofi_atomic_get32(&sq_wq->wqe_available);
 
 	/* Get a dev_req_id — should have gen bits set */
+	ofi_genlock_lock(sq_wq->wqlock);
 	dev_req_id = efa_wq_get_dev_req_id(sq_wq, test_wr_id);
+	efa_wq_consume_slot(sq_wq);
+	ofi_genlock_unlock(sq_wq->wqlock);
+	assert_int_equal(ofi_atomic_get32(&sq_wq->wqe_available), wqe_available_before - 1);
 
 	/* The generation bits should be present */
 	assert_int_equal(dev_req_id & sq_wq->gen_mask, sq_wq->shifted_gen);
@@ -160,6 +166,7 @@ void test_efa_data_path_direct_dev_req_id_roundtrip(void **state)
 
 	/* Pool next should be back to original */
 	assert_int_equal(sq_wq->wrid_idx_pool_next, pool_next_before);
+	assert_int_equal(ofi_atomic_get32(&sq_wq->wqe_available), wqe_available_before);
 #else
 	skip();
 #endif
@@ -288,8 +295,8 @@ void test_efa_data_path_direct_64_bit_req_id_roundtrip(void **state)
 }
 
 /**
- * @brief Verify that efa_wq_cqe_finalize increments wqe_completed but
- * does not touch the pool index when in 64-bit request ID mode.
+ * @brief Verify that efa_wq_cqe_finalize releases a WQE without touching th
+ * pool in 64-bit request ID mode.
  */
 void test_efa_data_path_direct_64_bit_cqe_finalize_no_pool(void **state)
 {
@@ -300,7 +307,7 @@ void test_efa_data_path_direct_64_bit_cqe_finalize_no_pool(void **state)
 	struct efa_data_path_direct_wq *sq_wq;
 	struct efa_io_cdesc_common fake_cqe = {0};
 	uint16_t pool_next_before;
-	uint32_t wqe_completed_before;
+	int32_t wqe_available_before;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
 
@@ -312,15 +319,62 @@ void test_efa_data_path_direct_64_bit_cqe_finalize_no_pool(void **state)
 	sq_wq->req_id_64_bit = true;
 
 	pool_next_before = sq_wq->wrid_idx_pool_next;
-	wqe_completed_before = sq_wq->wqe_completed;
+	wqe_available_before = ofi_atomic_get32(&sq_wq->wqe_available);
+	efa_wq_consume_slot(sq_wq);
+	assert_int_equal(ofi_atomic_get32(&sq_wq->wqe_available), wqe_available_before - 1);
 
 	fake_cqe.req_id = 0x1234;
 	efa_wq_cqe_finalize(sq_wq, &fake_cqe);
 
-	/* wqe_completed should have incremented */
-	assert_int_equal(sq_wq->wqe_completed, wqe_completed_before + 1);
+	/* The completed WQE should be available for posting again. */
+	assert_int_equal(ofi_atomic_get32(&sq_wq->wqe_available), wqe_available_before);
 
 	/* Pool next should NOT have changed */
+	assert_int_equal(sq_wq->wrid_idx_pool_next, pool_next_before);
+#else
+	skip();
+#endif
+}
+
+/**
+ * @brief Verify that consuming the last SQ slot blocks another post until
+ * completion processing releases the slot.
+ */
+void test_efa_data_path_direct_sq_slot_lifecycle(void **state)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_resource *resource = *state;
+	struct efa_base_ep *base_ep;
+	struct efa_qp *qp;
+	struct efa_data_path_direct_wq *sq_wq;
+	struct efa_io_cdesc_common fake_cqe = {0};
+	uint16_t pool_next_before;
+	uint32_t wqe_posted_before;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+
+	base_ep = container_of(resource->ep, struct efa_base_ep, util_ep.ep_fid);
+	qp = base_ep->qp;
+	sq_wq = &qp->data_path_direct_qp.sq.wq;
+
+	sq_wq->req_id_64_bit = true;
+	pool_next_before = sq_wq->wrid_idx_pool_next;
+	wqe_posted_before = sq_wq->wqe_posted;
+	ofi_atomic_set32(&sq_wq->wqe_available, 1);
+
+	assert_int_equal(ofi_atomic_get32(&sq_wq->wqe_available), 1);
+	assert_int_equal(efa_post_send_validate(qp), 0);
+
+	efa_wq_consume_slot(sq_wq);
+	assert_int_equal(sq_wq->wqe_posted, wqe_posted_before + 1);
+	assert_int_equal(ofi_atomic_get32(&sq_wq->wqe_available), 0);
+	assert_int_equal(efa_post_send_validate(qp), ENOMEM);
+
+	efa_wq_cqe_finalize(sq_wq, &fake_cqe);
+
+	assert_int_equal(ofi_atomic_get32(&sq_wq->wqe_available), 1);
+	assert_int_equal(sq_wq->wqe_posted, wqe_posted_before + 1);
+	assert_int_equal(efa_post_send_validate(qp), 0);
 	assert_int_equal(sq_wq->wrid_idx_pool_next, pool_next_before);
 #else
 	skip();
