@@ -139,7 +139,8 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 
 void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_context *hfi,
 				    struct fi_opx_ep_tx *opx_tx, int writev_rc, struct iovec *iovs, const int num_iovs,
-				    const char *file, const char *func, const int line)
+				    const bool flow_control_registered, const char *file, const char *func,
+				    const int line)
 {
 	OPX_TRACE_SDMA_INSTANT(OPX_TRACE_EVENT_SDMA_ERROR, (uint64_t) errno, (uint64_t) writev_rc);
 	const pid_t pid = getpid();
@@ -438,7 +439,8 @@ void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx
 
 __OPX_FORCE_INLINE__
 int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, struct iovec *iovecs, int iovs_used,
-			 uint16_t avail, uint16_t fill_index, const char *file, const char *func, const int line)
+			 uint16_t avail, uint16_t fill_index, const bool flow_control_registered, const char *file,
+			 const char *func, const int line)
 {
 	opx_tx->hfi->info.sdma.fill_index	 = fill_index;
 	opx_tx->hfi->info.sdma.available_counter = avail;
@@ -466,8 +468,8 @@ int opx_hfi1_sdma_writev(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, 
 	OPX_COUNTERS_RECORD_MEASURE(writev_time_ns, opx_ep->debug_counters.sdma.writev_all);
 
 	if (writev_rc <= 0) {
-		fi_opx_hfi1_sdma_handle_errors(opx_ep, opx_tx->hfi, opx_tx, writev_rc, iovecs, iovs_used, file, func,
-					       line);
+		fi_opx_hfi1_sdma_handle_errors(opx_ep, opx_tx->hfi, opx_tx, writev_rc, iovecs, iovs_used,
+					       flow_control_registered, file, func, line);
 	}
 
 	return (writev_rc);
@@ -486,10 +488,11 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_t
 	assert(!slist_empty(&queue->list));
 
 	struct iovec iovecs[OPX_SDMA_HFI_MAX_IOVS_PER_WRITE];
-	int	     iovs_used	= 0;
-	int	     iovs_free	= opx_tx->sdma_max_iovs_per_writev;
-	uint16_t     avail	= opx_tx->hfi->info.sdma.available_counter;
-	uint16_t     fill_index = opx_tx->hfi->info.sdma.fill_index;
+	int	     iovs_used		     = 0;
+	int	     iovs_free		     = opx_tx->sdma_max_iovs_per_writev;
+	uint16_t     avail		     = opx_tx->hfi->info.sdma.available_counter;
+	uint16_t     fill_index		     = opx_tx->hfi->info.sdma.fill_index;
+	bool	     flow_control_registered = false;
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(sdma_start_ns);
 	OPX_COUNTERS_TIME_NS(sdma_start_ns, &opx_ep->debug_counters);
@@ -508,15 +511,16 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_t
 		if (iovs_free < request->num_iovs)
 #endif
 		{
-			int err = opx_hfi1_sdma_writev(opx_ep, opx_tx, iovecs, iovs_used, avail, fill_index, __FILE__,
-						       __func__, __LINE__);
+			int err = opx_hfi1_sdma_writev(opx_ep, opx_tx, iovecs, iovs_used, avail, fill_index,
+						       flow_control_registered, __FILE__, __func__, __LINE__);
 			if (err < 0) {
 				/* Error occured in writev. Add the request back to queue */
 				slist_insert_head((struct slist_entry *) request, &queue->list);
 				return;
 			}
-			iovs_used = 0;
-			iovs_free = opx_tx->sdma_max_iovs_per_writev;
+			iovs_used		= 0;
+			iovs_free		= opx_tx->sdma_max_iovs_per_writev;
+			flow_control_registered = false;
 			OPX_COUNTERS_TIME_NS(sdma_start_ns, &opx_ep->debug_counters);
 		}
 
@@ -542,6 +546,7 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_t
 		}
 		iovs_used += request->num_iovs;
 		iovs_free -= request->num_iovs;
+		flow_control_registered |= request->flow_control_registered;
 		queue->num_iovs -= request->num_iovs;
 		--queue->num_reqs;
 
@@ -552,7 +557,8 @@ void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_t
 
 	assert(iovs_used);
 
-	opx_hfi1_sdma_writev(opx_ep, opx_tx, iovecs, iovs_used, avail, fill_index, __FILE__, __func__, __LINE__);
+	opx_hfi1_sdma_writev(opx_ep, opx_tx, iovecs, iovs_used, avail, fill_index, flow_control_registered, __FILE__,
+			     __func__, __LINE__);
 
 	queue->slots_avail = avail;
 }
@@ -743,10 +749,11 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 	}
 	fi_opx_hfi1_sdma_add_packet(we, replay, len);
 
-	const uint32_t fragsize = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type);
+	const uint32_t fragsize = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type, NULL);
 
-	opx_hfi1_sdma_enqueue_dput(opx_ep, we, fragsize, len);
-	assert(we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
+	int enqueue_rc = opx_hfi1_sdma_enqueue_dput(opx_ep, we, fragsize, len);
+	assert(enqueue_rc != FI_SUCCESS || we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
+	(void) enqueue_rc;
 	assert(we->next == NULL);
 	slist_insert_tail((struct slist_entry *) we, &work->dput.sdma_reqs);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_tx->work_pending_completion);

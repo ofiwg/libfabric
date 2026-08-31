@@ -44,6 +44,7 @@
 #include "rdma/opx/fi_opx_match.h"
 #include "rdma/opx/opx_hfisvc.h"
 #include "rdma/opx/opx_debug.h"
+#include "rdma/opx/opx_flow_control.h"
 #include "rdma/opx/opx_tracer.h"
 
 #include <ofi_enosys.h>
@@ -2799,6 +2800,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	memset(opx_ep->reli_service, 0, sizeof(struct fi_opx_reliability_service));
 	opx_ep->reli_service->mem = mem;
 
+	opx_ep->flow_control_mode = OPX_FLOW_CONTROL_MODE_NONE;
+
 	enum ofi_reliability_kind kind = fi_opx_select_reliability(opx_ep);
 
 	if (OFI_RELIABILITY_KIND_ONLOAD == kind) {
@@ -4826,14 +4829,14 @@ ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, struct fi_o
 	return rc;
 }
 
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON)
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON)
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON)
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_ON)
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF)
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)
-FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON, NONE)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON, NONE)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON, NONE)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_ON, NONE)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF, NONE)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF, NONE)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF, NONE)
+FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF, NONE)
 
 ssize_t fi_opx_send_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t len, void *desc, fi_addr_t dest_addr,
 				  void *context)
@@ -4843,38 +4846,38 @@ ssize_t fi_opx_send_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t len
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
-												  dest_addr, context);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, dest_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON)(
-				ep, buf, len, desc, dest_addr, context);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, dest_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
-												  dest_addr, context);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, dest_addr, context);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
-												  dest_addr, context);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, dest_addr, context);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
-												   dest_addr, context);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, dest_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF)(
-				ep, buf, len, desc, dest_addr, context);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, dest_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
-												   dest_addr, context);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, dest_addr, context);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(send, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
-												   dest_addr, context);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, dest_addr, context);
 		}
 	}
 	return (ssize_t) -FI_EPERM;
@@ -4888,38 +4891,38 @@ ssize_t fi_opx_recv_FABRIC_DIRECT(struct fid_ep *ep, void *buf, size_t len, void
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
-												  src_addr, context);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, src_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON)(
-				ep, buf, len, desc, src_addr, context);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, src_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
-												  src_addr, context);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, src_addr, context);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR, OPX_CTX_SHARING_ON)(ep, buf, len, desc,
-												  src_addr, context);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, src_addr, context);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
-												   src_addr, context);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, src_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF)(
-				ep, buf, len, desc, src_addr, context);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, src_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
-												   src_addr, context);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, src_addr, context);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recv, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)(ep, buf, len, desc,
-												   src_addr, context);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, src_addr, context);
 		}
 	}
 	return (ssize_t) -FI_EPERM;
@@ -4932,38 +4935,38 @@ ssize_t fi_opx_inject_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t l
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR,
-								OPX_CTX_SHARING_ON)(ep, buf, len, dest_addr);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, dest_addr);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B,
-								OPX_CTX_SHARING_ON)(ep, buf, len, dest_addr);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, dest_addr);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR,
-								OPX_CTX_SHARING_ON)(ep, buf, len, dest_addr);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, dest_addr);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR,
-								OPX_CTX_SHARING_ON)(ep, buf, len, dest_addr);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, dest_addr);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR,
-								OPX_CTX_SHARING_OFF)(ep, buf, len, dest_addr);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, dest_addr);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B,
-								OPX_CTX_SHARING_OFF)(ep, buf, len, dest_addr);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, dest_addr);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR,
-								OPX_CTX_SHARING_OFF)(ep, buf, len, dest_addr);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, dest_addr);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(inject, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR,
-								OPX_CTX_SHARING_OFF)(ep, buf, len, dest_addr);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, dest_addr);
 		}
 	}
 	return (ssize_t) -FI_EPERM;
@@ -4976,30 +4979,35 @@ ssize_t fi_opx_recvmsg_FABRIC_DIRECT(struct fid_ep *ep, const struct fi_msg *msg
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(ep, msg, flags);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_ON, NONE)(ep, msg, flags);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON)(ep, msg, flags);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON,
+								NONE)(ep, msg, flags);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(ep, msg, flags);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_ON, NONE)(ep, msg, flags);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR, OPX_CTX_SHARING_ON)(ep, msg, flags);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_ON, NONE)(ep, msg, flags);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(ep, msg, flags);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, msg, flags);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF)(ep, msg, flags);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF,
+								NONE)(ep, msg, flags);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(ep, msg, flags);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, msg, flags);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(recvmsg, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)(ep, msg, flags);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, msg, flags);
 		}
 	}
 	return (ssize_t) -FI_EPERM;
@@ -5013,38 +5021,38 @@ ssize_t fi_opx_senddata_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(
-				ep, buf, len, desc, data, dest_addr, context);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, data, dest_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON)(
-				ep, buf, len, desc, data, dest_addr, context);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, data, dest_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(
-				ep, buf, len, desc, data, dest_addr, context);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, data, dest_addr, context);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR, OPX_CTX_SHARING_ON)(
-				ep, buf, len, desc, data, dest_addr, context);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, desc, data, dest_addr, context);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(
-				ep, buf, len, desc, data, dest_addr, context);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, data, dest_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF)(
-				ep, buf, len, desc, data, dest_addr, context);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, data, dest_addr, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(
-				ep, buf, len, desc, data, dest_addr, context);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, data, dest_addr, context);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(senddata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)(
-				ep, buf, len, desc, data, dest_addr, context);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, desc, data, dest_addr, context);
 		}
 	}
 	return (ssize_t) -FI_EPERM;
@@ -5058,38 +5066,38 @@ ssize_t fi_opx_injectdata_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR,
-								OPX_CTX_SHARING_ON)(ep, buf, len, data, dest_addr);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, data, dest_addr);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B,
-								OPX_CTX_SHARING_ON)(ep, buf, len, data, dest_addr);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, data, dest_addr);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR,
-								OPX_CTX_SHARING_ON)(ep, buf, len, data, dest_addr);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, data, dest_addr);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR,
-								OPX_CTX_SHARING_ON)(ep, buf, len, data, dest_addr);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_ON,
+								NONE)(ep, buf, len, data, dest_addr);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_WFR,
-								OPX_CTX_SHARING_OFF)(ep, buf, len, data, dest_addr);
+								OPX_HFI1_WFR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, data, dest_addr);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_MIXED_9B,
-								OPX_CTX_SHARING_OFF)(ep, buf, len, data, dest_addr);
+								OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, data, dest_addr);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_JKR,
-								OPX_CTX_SHARING_OFF)(ep, buf, len, data, dest_addr);
+								OPX_HFI1_JKR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, data, dest_addr);
 		} else {
 			return FI_OPX_MSG_SPECIALIZED_FUNC_NAME(injectdata, OPX_LOCK, OPX_EP_CAPS, OPX_RELIABILITY,
-								OPX_HFI1_CYR,
-								OPX_CTX_SHARING_OFF)(ep, buf, len, data, dest_addr);
+								OPX_HFI1_CYR, OPX_CTX_SHARING_OFF,
+								NONE)(ep, buf, len, data, dest_addr);
 		}
 	}
 	return (ssize_t) -FI_EPERM;

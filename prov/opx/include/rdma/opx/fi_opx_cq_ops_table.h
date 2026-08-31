@@ -36,6 +36,7 @@
 #include <ofi_enosys.h>
 #include "rdma/fi_eq.h"
 #include "rdma/opx/fi_opx_eq.h"
+#include "rdma/opx/opx_flow_control_specialization.h"
 
 #define FI_OPX_COMMS_NONE	  0x0000000000000000ull
 #define FI_OPX_COMMS_LOCAL	  0x0008000000000000ull
@@ -53,8 +54,9 @@
  * built with the CYR mask constants but the MIXED_9B protocol/header token. */
 #define OPX_HFI1_TYPE_COUNT 5
 
-typedef struct fi_ops_cq op_matrix_t[FI_CQ_FORMAT_COUNT][1 /* OFI_RELIABILITY_KIND_ONLOAD */][FI_OPX_COMMS_COUNT]
-				    [OPX_HFI1_TYPE_COUNT][2 /* CTX_SHARING ON or OFF */];
+typedef struct fi_ops_cq op_matrix_t[OPX_FLOW_CONTROL_CQ_SPECIALIZATION_MODE_COUNT][FI_CQ_FORMAT_COUNT]
+				    [1 /* OFI_RELIABILITY_KIND_ONLOAD */][FI_OPX_COMMS_COUNT][OPX_HFI1_TYPE_COUNT]
+				    [2 /* CTX_SHARING ON or OFF */];
 
 static ssize_t fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
 {
@@ -115,16 +117,13 @@ static const char *fi_opx_cq_strerror(struct fid_cq *cq, int prov_errno, const v
 	return NULL;
 }
 
-#define FI_OPX_CQ_OPS_STRUCT_NAME(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING) \
-	fi_opx_ops_cq_##FORMAT##_##LOCK##_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING
-
-#define FI_OPX_CQ_OPS_STRUCT_INIT(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING)                        \
+#define FI_OPX_CQ_OPS_STRUCT_INIT(FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)          \
 	{                                                                                                               \
 		.size	   = sizeof(struct fi_ops_cq),                                                                  \
 		.read	   = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_read, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, \
-							     CTX_SHARING),                                              \
+							     CTX_SHARING, FLOW_CONTROL),                                \
 		.readfrom  = FI_OPX_CQ_SPECIALIZED_FUNC_NAME(cq_readfrom, FORMAT, LOCK, RELIABILITY, MASK, CAPS,        \
-							     HFI1_TYPE, CTX_SHARING),                                   \
+							     HFI1_TYPE, CTX_SHARING, FLOW_CONTROL),                     \
 		.readerr   = fi_opx_cq_readerr,                                                                         \
 		.sread	   = fi_opx_cq_sread,                                                                           \
 		.sreadfrom = fi_opx_cq_sreadfrom,                                                                       \

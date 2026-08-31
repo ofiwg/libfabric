@@ -137,7 +137,8 @@ struct opx_sdma_request {
 	enum opx_sdma_comp_state  *comp_state;
 	struct opx_sdma_comp_entry comp_entry;
 	uint8_t			   is_sdma_we;
-	uint8_t			   unused_0[3];
+	bool			   flow_control_registered;
+	uint8_t			   unused_0[2];
 	uint16_t		   fill_index;
 	uint8_t			   num_iovs;
 	uint8_t			   set_meminfo;
@@ -215,7 +216,8 @@ void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc);
 void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc);
 void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_context *hfi,
 				    struct fi_opx_ep_tx *opx_tx, int writev_rc, struct iovec *iovs, const int num_iovs,
-				    const char *file, const char *func, const int line);
+				    const bool flow_control_registered, const char *file, const char *func,
+				    const int line);
 int  fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *work);
 int  opx_hfi1_tx_send_egr_sdma_complete(union fi_opx_hfi1_deferred_work *work);
 void opx_hfi1_sdma_process_requests(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx);
@@ -541,26 +543,47 @@ void opx_hfi1_sdma_kern_memtype(struct fi_opx_ep *opx_ep, const enum fi_hmem_ifa
 }
 
 __OPX_FORCE_INLINE__
-int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
-				  enum opx_sdma_comp_state     *requester_comp_state,
-				  union opx_hfi1_txe_scb_union *source_scb, struct iovec *iovs, const uint16_t num_iovs,
-				  const uint16_t num_packets, const uint16_t frag_size, const uint16_t req_control_bits,
-				  const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device, const int dmabuf_fd,
-				  const uint64_t last_packet_bytes, const uint32_t kdeth, const uint8_t is_sdma_we,
-				  const uint8_t tx_index)
+struct opx_sdma_request *opx_hfi1_sdma_request_allocate(struct fi_opx_ep *opx_ep, const uint8_t tx_index)
 {
-	assert(!(frag_size & 0x3F)); // frag_size should be multiple of 64
-	assert(num_iovs <= FI_OPX_HFI1_SDMA_WE_IOVS && num_iovs > 0);
-
 	struct fi_opx_ep_tx	*opx_tx	 = opx_ep->tx_contexts[tx_index];
 	struct opx_sdma_request *request = (struct opx_sdma_request *) ofi_buf_alloc(opx_tx->sdma_request_pool);
 
-	if (OFI_UNLIKELY(request == NULL)) {
+	if (OFI_LIKELY(request != NULL)) {
+		request->next			  = NULL;
+		request->requester		  = NULL;
+		request->comp_state		  = NULL;
+		request->comp_entry.status	  = FREE;
+		request->comp_entry.errcode	  = 0;
+		request->comp_entry.start_time_ns = 0u;
+		request->comp_entry.end_time_ns	  = 0u;
+		request->is_sdma_we		  = 0;
+		request->flow_control_registered  = false;
+		request->fill_index		  = OPX_SDMA_FILL_INDEX_INVALID;
+		request->num_iovs		  = 0;
+		request->set_meminfo		  = 0;
+	} else {
 		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA, "ERROR allocating opx_sdma_request!\n");
-		return -FI_ENOMEM;
 	}
+	return request;
+}
 
-	const uint8_t set_meminfo = (hmem_iface > FI_HMEM_SYSTEM) ? 1 : 0;
+__OPX_FORCE_INLINE__
+void opx_hfi1_sdma_enqueue_request_preallocated(struct fi_opx_ep *opx_ep, struct opx_sdma_request *request,
+						void *requester, enum opx_sdma_comp_state *requester_comp_state,
+						union opx_hfi1_txe_scb_union *source_scb, struct iovec *iovs,
+						const uint16_t num_iovs, const uint16_t num_packets,
+						const uint16_t frag_size, const uint16_t req_control_bits,
+						const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
+						const int dmabuf_fd, const uint64_t last_packet_bytes,
+						const uint32_t kdeth, const uint8_t is_sdma_we,
+						const bool flow_control_registered, const uint8_t tx_index)
+{
+	assert(request != NULL);
+	assert(!(frag_size & 0x3F)); // frag_size should be multiple of 64
+	assert(num_iovs <= FI_OPX_HFI1_SDMA_WE_IOVS && num_iovs > 0);
+
+	struct fi_opx_ep_tx *opx_tx	 = opx_ep->tx_contexts[tx_index];
+	const uint8_t	     set_meminfo = (hmem_iface > FI_HMEM_SYSTEM) ? 1 : 0;
 
 	unsigned kern_memtype;
 	uint64_t context0;
@@ -575,12 +598,13 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 	req_info->npkts	   = num_packets;
 	req_info->comp_idx = OPX_SDMA_FILL_INDEX_INVALID;
 
-	request->num_iovs    = num_iovs + 1;
-	request->requester   = requester;
-	request->is_sdma_we  = is_sdma_we;
-	request->comp_state  = requester_comp_state;
-	request->fill_index  = OPX_SDMA_FILL_INDEX_INVALID;
-	request->set_meminfo = set_meminfo;
+	request->num_iovs		 = num_iovs + 1;
+	request->requester		 = requester;
+	request->is_sdma_we		 = is_sdma_we;
+	request->flow_control_registered = flow_control_registered;
+	request->comp_state		 = requester_comp_state;
+	request->fill_index		 = OPX_SDMA_FILL_INDEX_INVALID;
+	request->set_meminfo		 = set_meminfo;
 
 	/* Only RZV_DATA uses the wire BTH AckReq bit; eager reliability is software-side. */
 	const uint8_t opcode = (OPX_SW_HFI1_TYPE(opx_ep->domain) & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ?
@@ -612,7 +636,26 @@ int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
 	opx_tx->sdma_request_queue.num_iovs += request->num_iovs;
 
 	*requester_comp_state = OPX_SDMA_COMP_PENDING_WRITEV;
+}
 
+__OPX_FORCE_INLINE__
+int opx_hfi1_sdma_enqueue_request(struct fi_opx_ep *opx_ep, void *requester,
+				  enum opx_sdma_comp_state     *requester_comp_state,
+				  union opx_hfi1_txe_scb_union *source_scb, struct iovec *iovs, const uint16_t num_iovs,
+				  const uint16_t num_packets, const uint16_t frag_size, const uint16_t req_control_bits,
+				  const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device, const int dmabuf_fd,
+				  const uint64_t last_packet_bytes, const uint32_t kdeth, const uint8_t is_sdma_we,
+				  const uint8_t tx_index)
+{
+	struct opx_sdma_request *request = opx_hfi1_sdma_request_allocate(opx_ep, tx_index);
+
+	if (OFI_UNLIKELY(request == NULL)) {
+		return -FI_ENOMEM;
+	}
+	opx_hfi1_sdma_enqueue_request_preallocated(opx_ep, request, requester, requester_comp_state, source_scb, iovs,
+						   num_iovs, num_packets, frag_size, req_control_bits, hmem_iface,
+						   hmem_device, dmabuf_fd, last_packet_bytes, kdeth, is_sdma_we, false,
+						   tx_index);
 	return FI_SUCCESS;
 }
 
@@ -666,7 +709,8 @@ int opx_hfi1_sdma_enqueue_replay(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sd
 
 __OPX_FORCE_INLINE__
 uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we,
-					const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
+					const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
+					void *reservation_record)
 {
 	struct fi_opx_completion_counter *cc;
 	void				 *replay_back_ptr;
@@ -710,9 +754,9 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 		 * no descriptor would misdescribe a host buffer. */
 		we->packets[i].replay->dmabuf_fd   = we->use_bounce_buf ? OPX_SDMA_NO_DMABUF_FD : we->dmabuf_fd;
 		we->packets[i].replay->dmabuf_base = we->use_bounce_buf ? 0UL : we->dmabuf_base;
-		fi_opx_reliability_service_replay_register_with_update(opx_ep->reli_service, we->flow,
-								       we->packets[i].replay, cc, we->packets[i].length,
-								       reliability, hfi1_type);
+		fi_opx_reliability_service_replay_register_with_update(
+			opx_ep->reli_service, we->flow, we->packets[i].replay, cc, we->packets[i].length, reliability,
+			hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
 		psn = (psn + 1) & MAX_PSN;
 	}
 
@@ -723,8 +767,9 @@ uint16_t opx_hfi1_sdma_register_replays(struct fi_opx_ep *opx_ep, struct fi_opx_
 }
 
 __OPX_FORCE_INLINE__
-void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we, uint32_t fragsize,
-				uint64_t last_packet_bytes)
+void opx_hfi1_sdma_enqueue_dput_preallocated(struct fi_opx_ep *opx_ep, struct opx_sdma_request *request,
+					     struct fi_opx_hfi1_sdma_work_entry *we, uint32_t fragsize,
+					     uint64_t last_packet_bytes, const bool flow_control_registered)
 {
 	const int dmabuf_fd = we->use_bounce_buf ? OPX_SDMA_NO_DMABUF_FD : we->dmabuf_fd;
 
@@ -756,21 +801,100 @@ void opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdm
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.nontid_requests);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== Enqueuing non-tid request for SDMA Send.\n");
-
-	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state, &we->packets[0].replay->scb, &payload_iov,
-				      OPX_SDMA_NONTID_DATA_IOV_COUNT, we->num_packets, fragsize,
-				      FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS, we->hmem.iface, we->hmem.device,
-				      dmabuf_fd, last_packet_bytes,
-				      0, // kdeth tid info unused
-				      1, // This is an SDMA work entry
-				      we->tx_index);
+	opx_hfi1_sdma_enqueue_request_preallocated(opx_ep, request, we, &we->comp_state, &we->packets[0].replay->scb,
+						   &payload_iov, OPX_SDMA_NONTID_DATA_IOV_COUNT, we->num_packets,
+						   fragsize, FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS,
+						   we->hmem.iface, we->hmem.device, dmabuf_fd, last_packet_bytes,
+						   0, // kdeth tid info unused
+						   1, // This is an SDMA work entry
+						   flow_control_registered, we->tx_index);
 }
 
 __OPX_FORCE_INLINE__
-void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we, uint32_t fragsize,
-				    uint64_t last_packet_bytes, struct iovec *tid_iov, /* not an array */
-				    uint32_t start_tid_idx, uint32_t end_tid_idx, uint32_t tidOMshift,
-				    uint32_t tidoffset)
+int opx_hfi1_sdma_enqueue_dput(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we, uint32_t fragsize,
+			       uint64_t last_packet_bytes)
+{
+	struct opx_sdma_request *request = opx_hfi1_sdma_request_allocate(opx_ep, we->tx_index);
+
+	if (OFI_UNLIKELY(request == NULL)) {
+		/* The replays were already registered, so reliability will
+		 * retransmit the data.  Mark the work entry failed so the
+		 * completion reaper retires it instead of it sitting in
+		 * COMP_FREE masquerading as a successful enqueue. */
+		we->comp_state = OPX_SDMA_COMP_ERROR;
+		return -FI_ENOMEM;
+	}
+	opx_hfi1_sdma_enqueue_dput_preallocated(opx_ep, request, we, fragsize, last_packet_bytes, false);
+	return FI_SUCCESS;
+}
+
+__OPX_FORCE_INLINE__
+void opx_hfi1_sdma_enqueue_dput_tid_preallocated(struct fi_opx_ep *opx_ep, struct opx_sdma_request *request,
+						 struct fi_opx_hfi1_sdma_work_entry *we, uint32_t fragsize,
+						 uint64_t last_packet_bytes, struct iovec *tid_iov, /* not an array */
+						 uint32_t start_tid_idx, uint32_t end_tid_idx, uint32_t tidOMshift,
+						 uint32_t tidoffset, const bool flow_control_registered)
+{
+	uint32_t *tidpairs = NULL;
+
+	/* tid packet lengths should have been aligned.*/
+	assert(start_tid_idx < tid_iov->iov_len / sizeof(uint32_t));
+	assert(end_tid_idx < tid_iov->iov_len / sizeof(uint32_t));
+	assert(end_tid_idx >= start_tid_idx);
+	assert(((end_tid_idx - start_tid_idx) + 1) <= OPX_SDMA_MAX_TIDS_PER_REQUEST);
+	tidpairs = (uint32_t *) tid_iov->iov_base;
+
+	uint32_t tidpair = tidpairs[start_tid_idx];
+	uint32_t kdeth	 = (FI_OPX_HFI1_KDETH_TIDCTRL & FI_OPX_EXP_TID_GET((tidpair), CTRL))
+			 << FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT;
+	kdeth |= (FI_OPX_HFI1_KDETH_TID & FI_OPX_EXP_TID_GET((tidpair), IDX)) << FI_OPX_HFI1_KDETH_TID_SHIFT;
+	kdeth |= tidOMshift;
+	kdeth |= tidoffset;
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+	       "kdeth %#X, tid    [%u]=%#8.8X LEN %u, CTRL %u, IDX %u, offset %#X %#X\n", kdeth, 0, tidpair,
+	       (int) FI_OPX_EXP_TID_GET((tidpair), LEN), (int) FI_OPX_EXP_TID_GET((tidpair), CTRL),
+	       (int) FI_OPX_EXP_TID_GET((tidpair), IDX), tidoffset,
+	       tidOMshift ? tidoffset << KDETH_OM_LARGE_SHIFT : tidoffset << KDETH_OM_SMALL_SHIFT);
+
+	size_t tid_iov_len = ((end_tid_idx - start_tid_idx) + 1) * sizeof(uint32_t);
+
+	const int dmabuf_fd = we->use_bounce_buf ? OPX_SDMA_NO_DMABUF_FD : we->dmabuf_fd;
+
+	/* Only iovs[0]; iovs[1] carries TID pairs, which are host memory. */
+	void *payload_base = we->packets[0].replay->iov->iov_base;
+	if (dmabuf_fd != OPX_SDMA_NO_DMABUF_FD) {
+		/* Unreachable for the same reason as the non-TID path above, and
+		 * additionally unrecoverable: the target has TID entries mapped
+		 * against this transfer that are only released on data completion. */
+		assert((uintptr_t) payload_base >= we->dmabuf_base);
+		if (OFI_UNLIKELY((uintptr_t) payload_base < we->dmabuf_base)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"DMABUF payload VA %p is below BO base %#lx, aborting\n", payload_base,
+				we->dmabuf_base);
+			abort();
+		}
+		payload_base = (void *) ((uintptr_t) payload_base - we->dmabuf_base);
+	}
+
+	struct iovec payload_tid_iovs[2] = {{.iov_base = payload_base, .iov_len = (we->total_payload + 7) & -8},
+					    {.iov_base = &tidpairs[start_tid_idx], .iov_len = tid_iov_len}};
+
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.tid_requests);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "===================================== Enqueuing tid request for SDMA Send\n");
+	opx_hfi1_sdma_enqueue_request_preallocated(opx_ep, request, we, &we->comp_state, &we->packets[0].replay->scb,
+						   payload_tid_iovs, OPX_SDMA_TID_DATA_IOV_COUNT, we->num_packets,
+						   fragsize, FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS,
+						   we->hmem.iface, we->hmem.device, dmabuf_fd, last_packet_bytes, kdeth,
+						   1, // This is an SDMA work entry
+						   flow_control_registered, we->tx_index);
+}
+
+__OPX_FORCE_INLINE__
+int opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry *we, uint32_t fragsize,
+				   uint64_t last_packet_bytes, struct iovec *tid_iov, /* not an array */
+				   uint32_t start_tid_idx, uint32_t end_tid_idx, uint32_t tidOMshift,
+				   uint32_t tidoffset)
 {
 	uint32_t *tidpairs = NULL;
 
@@ -820,12 +944,19 @@ void opx_hfi1_sdma_enqueue_dput_tid(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== Enqueuing tid request for SDMA Send\n");
 
-	opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state, &we->packets[0].replay->scb, payload_tid_iovs,
-				      OPX_SDMA_TID_DATA_IOV_COUNT, we->num_packets, fragsize,
-				      FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS, we->hmem.iface, we->hmem.device,
-				      dmabuf_fd, last_packet_bytes, kdeth,
-				      1, // This is an SDMA work entry
-				      we->tx_index);
+	int rc = opx_hfi1_sdma_enqueue_request(opx_ep, we, &we->comp_state, &we->packets[0].replay->scb,
+					       payload_tid_iovs, OPX_SDMA_TID_DATA_IOV_COUNT, we->num_packets, fragsize,
+					       FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS, we->hmem.iface,
+					       we->hmem.device, dmabuf_fd, last_packet_bytes, kdeth,
+					       1, // This is an SDMA work entry
+					       we->tx_index);
+	if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+		/* The replays are already registered; reliability retransmits
+		 * the data.  Mark the work entry failed so the completion
+		 * reaper retires it instead of leaving it in COMP_FREE. */
+		we->comp_state = OPX_SDMA_COMP_ERROR;
+	}
+	return rc;
 }
 
 __OPX_FORCE_INLINE__
@@ -840,19 +971,22 @@ void opx_hfi1_sdma_flush(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_
 	/* no padding for tid, should have been aligned.*/
 	assert(!use_tid || (use_tid && we->total_payload == ((we->total_payload) & -4)));
 
-	uint32_t fragsize	   = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type);
+	uint32_t fragsize	   = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type, NULL);
 	uint64_t last_packet_bytes = we->packets[we->num_packets - 1].length;
 
 	assert(last_packet_bytes != 0);
 
+	int rc;
 	if (use_tid) {
-		opx_hfi1_sdma_enqueue_dput_tid(opx_ep, we, fragsize, last_packet_bytes, tid_iov, start_tid_idx,
-					       end_tid_idx, tidOMshift, tidoffset);
+		rc = opx_hfi1_sdma_enqueue_dput_tid(opx_ep, we, fragsize, last_packet_bytes, tid_iov, start_tid_idx,
+						    end_tid_idx, tidOMshift, tidoffset);
 	} else {
-		opx_hfi1_sdma_enqueue_dput(opx_ep, we, fragsize, last_packet_bytes);
+		rc = opx_hfi1_sdma_enqueue_dput(opx_ep, we, fragsize, last_packet_bytes);
 	}
 
-	assert(we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
+	assert(rc == FI_SUCCESS || we->comp_state == OPX_SDMA_COMP_ERROR);
+	assert(rc != FI_SUCCESS || we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
+	(void) rc;
 	assert(we->next == NULL);
 	slist_insert_tail((struct slist_entry *) we, sdma_reqs);
 }

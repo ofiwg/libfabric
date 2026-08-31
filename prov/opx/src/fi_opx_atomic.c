@@ -35,6 +35,8 @@
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_rma.h"
 #include "rdma/opx/fi_opx.h"
+#include "rdma/opx/opx_flow_control.h"
+#include "rdma/opx/opx_flow_control_specialization.h"
 #include "rdma/opx/opx_tracer.h"
 #include <ofi_enosys.h>
 #include <complex.h>
@@ -1477,7 +1479,17 @@ err:
 	return -errno;
 }
 
-int fi_opx_enable_atomic_ops(struct fid_ep *ep)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+
+#define FI_OPX_ATOMIC_SPECIALIZATION_FUNCTIONS(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL) \
+	FI_OPX_ATOMIC_SPECIALIZED_FUNC(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)
+
+OPX_FLOW_CONTROL_ATOMIC_SPECIALIZATION_CATALOG(FI_OPX_ATOMIC_SPECIALIZATION_FUNCTIONS)
+
+#pragma GCC diagnostic pop
+
+int __attribute__((cold)) fi_opx_enable_atomic_ops(struct fid_ep *ep)
 {
 	struct fi_opx_ep *opx_ep;
 	opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -1490,29 +1502,22 @@ int fi_opx_enable_atomic_ops(struct fid_ep *ep)
 		/* atomic ops not enabled on this endpoint */
 		return 0;
 	}
-	/* fill in atomic formats */
+
+	const enum opx_flow_control_mode flow_control_mode = opx_ep->flow_control_mode;
+	if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE && flow_control_mode != OPX_FLOW_CONTROL_MODE_RCCC) {
+		return -FI_EOPNOTSUPP;
+	}
 
 	return 0;
 err:
 	errno = FI_EINVAL;
 	return -errno;
-	return 0;
 }
 
 int fi_opx_finalize_atomic_ops(struct fid_ep *ep)
 {
 	return 0;
 }
-
-FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON)
-FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_ON)
-FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON)
-FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_ON)
-
-FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)
-FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B, OPX_CTX_SHARING_OFF)
-FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)
-FI_OPX_ATOMIC_SPECIALIZED_FUNC(OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)
 
 ssize_t fi_opx_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t count, void *desc, fi_addr_t dest_addr,
 				    uint64_t addr, uint64_t key, enum fi_datatype datatype, enum fi_op op,
@@ -1523,41 +1528,49 @@ ssize_t fi_opx_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t c
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON,
+								   NONE)(ep, buf, count, desc, dest_addr, addr, key,
+									 datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
-				atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
-				OPX_CTX_SHARING_ON)(ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
+								   OPX_CTX_SHARING_ON, NONE)(
+				ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON,
+								   NONE)(ep, buf, count, desc, dest_addr, addr, key,
+									 datatype, op, context);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_ON,
+								   NONE)(ep, buf, count, desc, dest_addr, addr, key,
+									 datatype, op, context);
 		}
 
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF,
+								   NONE)(ep, buf, count, desc, dest_addr, addr, key,
+									 datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
-				atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
-				OPX_CTX_SHARING_OFF)(ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
+								   OPX_CTX_SHARING_OFF, NONE)(
+				ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF,
+								   NONE)(ep, buf, count, desc, dest_addr, addr, key,
+									 datatype, op, context);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF,
+								   NONE)(ep, buf, count, desc, dest_addr, addr, key,
+									 datatype, op, context);
 		}
 	}
 
@@ -1572,41 +1585,41 @@ ssize_t fi_opx_inject_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, s
 
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, dest_addr, addr, key, datatype, op);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				inject_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR,
+				OPX_CTX_SHARING_ON, NONE)(ep, buf, count, dest_addr, addr, key, datatype, op);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
 				inject_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
-				OPX_CTX_SHARING_ON)(ep, buf, count, dest_addr, addr, key, datatype, op);
+				OPX_CTX_SHARING_ON, NONE)(ep, buf, count, dest_addr, addr, key, datatype, op);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, dest_addr, addr, key, datatype, op);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				inject_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR,
+				OPX_CTX_SHARING_ON, NONE)(ep, buf, count, dest_addr, addr, key, datatype, op);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, dest_addr, addr, key, datatype, op);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				inject_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR,
+				OPX_CTX_SHARING_ON, NONE)(ep, buf, count, dest_addr, addr, key, datatype, op);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, dest_addr, addr, key, datatype, op);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				inject_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR,
+				OPX_CTX_SHARING_OFF, NONE)(ep, buf, count, dest_addr, addr, key, datatype, op);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
 				inject_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
-				OPX_CTX_SHARING_OFF)(ep, buf, count, dest_addr, addr, key, datatype, op);
+				OPX_CTX_SHARING_OFF, NONE)(ep, buf, count, dest_addr, addr, key, datatype, op);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, dest_addr, addr, key, datatype, op);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				inject_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR,
+				OPX_CTX_SHARING_OFF, NONE)(ep, buf, count, dest_addr, addr, key, datatype, op);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(inject_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, dest_addr, addr, key, datatype, op);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				inject_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR,
+				OPX_CTX_SHARING_OFF, NONE)(ep, buf, count, dest_addr, addr, key, datatype, op);
 		}
 	}
 
@@ -1623,42 +1636,48 @@ ssize_t fi_opx_fetch_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, si
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, desc, result, result_desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON,
+								   NONE)(ep, buf, count, desc, result, result_desc,
+									 dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, 0x0018000000000000ull,
 								   OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
-								   OPX_CTX_SHARING_ON)(
+								   OPX_CTX_SHARING_ON, NONE)(
 				ep, buf, count, desc, result, result_desc, dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, desc, result, result_desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON,
+								   NONE)(ep, buf, count, desc, result, result_desc,
+									 dest_addr, addr, key, datatype, op, context);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, desc, result, result_desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_ON,
+								   NONE)(ep, buf, count, desc, result, result_desc,
+									 dest_addr, addr, key, datatype, op, context);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, desc, result, result_desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF,
+								   NONE)(ep, buf, count, desc, result, result_desc,
+									 dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, 0x0018000000000000ull,
 								   OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
-								   OPX_CTX_SHARING_OFF)(
+								   OPX_CTX_SHARING_OFF, NONE)(
 				ep, buf, count, desc, result, result_desc, dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, desc, result, result_desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF,
+								   NONE)(ep, buf, count, desc, result, result_desc,
+									 dest_addr, addr, key, datatype, op, context);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(fetch_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, desc, result, result_desc, dest_addr, addr, key, datatype, op, context);
+								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF,
+								   NONE)(ep, buf, count, desc, result, result_desc,
+									 dest_addr, addr, key, datatype, op, context);
 		}
 	}
 }
@@ -1673,49 +1692,49 @@ ssize_t fi_opx_compare_atomic_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, 
 
 	if (OPX_IS_CTX_SHARING_ENABLED) {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr, key,
-				datatype, op, context);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				compare_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR,
+				OPX_CTX_SHARING_ON, NONE)(ep, buf, count, desc, compare, compare_desc, result,
+							  result_desc, dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
 				compare_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
-				OPX_CTX_SHARING_ON)(ep, buf, count, desc, compare, compare_desc, result, result_desc,
-						    dest_addr, addr, key, datatype, op, context);
+				OPX_CTX_SHARING_ON, NONE)(ep, buf, count, desc, compare, compare_desc, result,
+							  result_desc, dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr, key,
-				datatype, op, context);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				compare_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR,
+				OPX_CTX_SHARING_ON, NONE)(ep, buf, count, desc, compare, compare_desc, result,
+							  result_desc, dest_addr, addr, key, datatype, op, context);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_ON)(
-				ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr, key,
-				datatype, op, context);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				compare_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR,
+				OPX_CTX_SHARING_ON, NONE)(ep, buf, count, desc, compare, compare_desc, result,
+							  result_desc, dest_addr, addr, key, datatype, op, context);
 		}
 	} else {
 		if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_WFR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr, key,
-				datatype, op, context);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				compare_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR,
+				OPX_CTX_SHARING_OFF, NONE)(ep, buf, count, desc, compare, compare_desc, result,
+							   result_desc, dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
 				compare_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B,
-				OPX_CTX_SHARING_OFF)(ep, buf, count, desc, compare, compare_desc, result, result_desc,
-						     dest_addr, addr, key, datatype, op, context);
+				OPX_CTX_SHARING_OFF, NONE)(ep, buf, count, desc, compare, compare_desc, result,
+							   result_desc, dest_addr, addr, key, datatype, op, context);
 		} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_JKR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr, key,
-				datatype, op, context);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				compare_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR,
+				OPX_CTX_SHARING_OFF, NONE)(ep, buf, count, desc, compare, compare_desc, result,
+							   result_desc, dest_addr, addr, key, datatype, op, context);
 		} else {
 			assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
-			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(compare_atomic, OPX_LOCK, 0x0018000000000000ull,
-								   OPX_RELIABILITY, OPX_HFI1_CYR, OPX_CTX_SHARING_OFF)(
-				ep, buf, count, desc, compare, compare_desc, result, result_desc, dest_addr, addr, key,
-				datatype, op, context);
+			return FI_OPX_ATOMIC_SPECIALIZED_FUNC_NAME(
+				compare_atomic, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR,
+				OPX_CTX_SHARING_OFF, NONE)(ep, buf, count, desc, compare, compare_desc, result,
+							   result_desc, dest_addr, addr, key, datatype, op, context);
 		}
 	}
 }

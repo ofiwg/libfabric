@@ -217,7 +217,7 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, 0, &flow, &replay,
-		params->reliability, hfi1_type);
+		params->reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, NULL);
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACER_TRACE(OPX_TRACER_END_EAGAIN, "HFISVC_RMA_SEND_RTS");
@@ -311,13 +311,16 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
-								     params->reliability, OPX_HFI1_WFR);
+								     params->reliability, OPX_HFI1_WFR,
+								     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
-								     params->reliability, OPX_HFI1_JKR);
+								     params->reliability, OPX_HFI1_JKR,
+								     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
 	} else {
 		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
-								     params->reliability, OPX_HFI1_CYR);
+								     params->reliability, OPX_HFI1_CYR,
+								     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
 	}
 
 	if (cur_iov == niov) {

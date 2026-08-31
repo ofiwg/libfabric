@@ -2029,7 +2029,8 @@ int opx_hfi1_rx_rzv_rts_send_cts_shm(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_hfi1_rx_rzv_rts_params *params	  = &work->rx_rzv_rts;
 	struct fi_opx_ep		     *opx_ep	  = params->opx_ep;
 	const uint64_t			      lrh_dlid_9B = params->lrh_dlid;
-	const uint64_t bth_subctxt_rx			  = ((uint64_t) params->origin_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
+
+	const uint64_t bth_subctxt_rx = ((uint64_t) params->origin_rx) << OPX_BTH_SUBCTXT_RX_SHIFT;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, SHM -- RENDEZVOUS RTS (begin)\n");
@@ -2199,13 +2200,14 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
 	/* Use primary plane LID for slid to match RX-side flow key encoding */
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service,
-					    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
-					    params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
-					    OPX_SW_HFI1_TYPE(opx_ep->domain));
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
+		params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
+		OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_FLOW_CONTROL_MODE_NONE, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (EAGAIN psn/replay) (params=%p rzv_comp=%p context=%p)\n",
@@ -2268,7 +2270,8 @@ int opx_hfi1_rx_rzv_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, params->reliability,
-							     OPX_SW_HFI1_TYPE(opx_ep->domain));
+							     OPX_SW_HFI1_TYPE(opx_ep->domain),
+							     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (end) (params=%p rzv_comp=%p context=%p)\n",
@@ -2328,13 +2331,14 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
 	/* Use primary plane LID for slid to match RX-side flow key encoding */
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service,
-					    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
-					    params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
-					    OPX_SW_HFI1_TYPE(opx_ep->domain));
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
+		params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
+		OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_FLOW_CONTROL_MODE_NONE, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (EAGAIN psn/replay) (params=%p rzv_comp=%p context=%p)\n",
@@ -2411,7 +2415,8 @@ int opx_hfi1_rx_rzv_rts_send_cts_16B(union fi_opx_hfi1_deferred_work *work)
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, params->reliability,
-							     OPX_HFI1_JKR);
+							     OPX_HFI1_JKR, OPX_FLOW_CONTROL_MODE_NONE, opx_ep,
+							     reservation_record);
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rzv_comp, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS %s RTS (end) (params=%p rzv_comp=%p context=%p)\n",
@@ -2587,6 +2592,7 @@ union fi_opx_hfi1_deferred_work *opx_hfi1_rx_rzv_rts_tid_prep_cts(union fi_opx_h
 		cts_params			     = &cts_work->rx_rzv_rts;
 		cts_params->rzv_comp		     = rzv_comp;
 		cts_params->rzv_comp->context	     = params->rzv_comp->context;
+
 	} else {
 		cts_work   = work;
 		cts_params = params;
@@ -2803,6 +2809,10 @@ int opx_hfi1_rx_rzv_rts_tid_setup(union fi_opx_hfi1_deferred_work *work)
 
 	union fi_opx_hfi1_deferred_work *cts_work =
 		opx_hfi1_rx_rzv_rts_tid_prep_cts(work, params, &tid_addr_block, cur_addr_range_tid_len, last_cts);
+	if (OFI_UNLIKELY(cts_work == NULL)) {
+		opx_deregister_entries_for_rzv(params->opx_ep, tid_addr_block.entries, tid_addr_block.entry_count);
+		return opx_hfi1_rx_rzv_rts_tid_fallback(work, params);
+	}
 
 	if (last_cts) {
 		assert(cts_work == work);
@@ -3073,12 +3083,13 @@ int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service,
-					    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
-					    params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
-					    OPX_SW_HFI1_TYPE(opx_ep->domain));
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
+		params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
+		OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_FLOW_CONTROL_MODE_NONE, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (EAGAIN psn/replay)\n");
@@ -3114,7 +3125,8 @@ int opx_hfi1_rx_rzv_rts_send_etrunc(union fi_opx_hfi1_deferred_work *work)
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, params->reliability,
-							     OPX_SW_HFI1_TYPE(opx_ep->domain));
+							     OPX_SW_HFI1_TYPE(opx_ep->domain),
+							     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (end)");
@@ -3159,12 +3171,13 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service,
-					    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
-					    params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
-					    OPX_SW_HFI1_TYPE(opx_ep->domain));
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
+		params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
+		OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_FLOW_CONTROL_MODE_NONE, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (EAGAIN psn/replay)\n");
@@ -3210,8 +3223,10 @@ int opx_hfi1_rx_rzv_rts_send_etrunc_16B(union fi_opx_hfi1_deferred_work *work)
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
+
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, params->reliability,
-							     OPX_SW_HFI1_TYPE(opx_ep->domain));
+							     OPX_SW_HFI1_TYPE(opx_ep->domain),
+							     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RENDEZVOUS EAGER RTS ETRUNC (end)");
@@ -3884,12 +3899,13 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service,
-					    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
-					    params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
-					    OPX_SW_HFI1_TYPE(opx_ep->domain));
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
+		params->origin_rx, params->tx_index, &flow, &replay, params->reliability,
+		OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_FLOW_CONTROL_MODE_NONE, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -3980,7 +3996,8 @@ int opx_hfi1_rx_rma_rts_send_cts(union fi_opx_hfi1_deferred_work *work)
 	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, params->reliability,
-							     hfi1_type);
+							     hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, opx_ep,
+							     reservation_record);
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RZV_CTS, (uint64_t) params->rma_req, 0);
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 	       "===================================== RECV, HFI -- RMA RTS (end) (params=%p rma_req=%p context=%p)\n",
@@ -4151,12 +4168,13 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service,
-					    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
-					    params->dest_rx, params->tx_index, &flow, &replay, params->reliability,
-					    OPX_SW_HFI1_TYPE(opx_ep->domain));
+	psn = fi_opx_reliability_get_replay(
+		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid, params->slid,
+		params->dest_rx, params->tx_index, &flow, &replay, params->reliability,
+		OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_FLOW_CONTROL_MODE_NONE, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "===================================== SEND, HFI -- RMA RTS (EAGAIN psn/replay) (params=%p origin_rma_req=%p cc=%p) opcode=%d\n",
@@ -4258,14 +4276,17 @@ int opx_hfi1_tx_rma_rts(union fi_opx_hfi1_deferred_work *work)
 	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 	if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
-		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
-								     params->reliability, OPX_HFI1_WFR);
+		fi_opx_reliability_service_replay_register_no_update(
+			opx_ep->reli_service, flow, replay, params->reliability, OPX_HFI1_WFR,
+			OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
-		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
-								     params->reliability, OPX_HFI1_JKR);
+		fi_opx_reliability_service_replay_register_no_update(
+			opx_ep->reli_service, flow, replay, params->reliability, OPX_HFI1_JKR,
+			OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 	} else {
-		fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
-								     params->reliability, OPX_HFI1_CYR);
+		fi_opx_reliability_service_replay_register_no_update(
+			opx_ep->reli_service, flow, replay, params->reliability, OPX_HFI1_CYR,
+			OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 	}
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_RMA_RTS, 0, 0);
@@ -4367,6 +4388,39 @@ int opx_hfi1_tx_rma_rts_shm(union fi_opx_hfi1_deferred_work *work)
 
 	params->work_elem.complete = true;
 	return FI_SUCCESS;
+}
+
+/* Returns the total packet count for the unsent iov range, or 0 when the
+ * range is malformed (an empty residual) or the count overflows 32 bits.
+ * Unused until the RCCC send/receive hookup change wires the caller. */
+__OPX_FORCE_INLINE__ __attribute__((unused)) uint32_t opx_hfi1_dput_packet_count(
+	const union opx_hfi1_dput_iov *iov, const uint32_t niov, const uint32_t cur_iov, const uint64_t bytes_sent,
+	const uint64_t max_bytes_per_packet, const enum opx_hfi1_type hfi1_type)
+{
+	const uint64_t framing_bytes = (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) ? 0u : 16u;
+	uint64_t       packet_count  = 0u;
+
+	assert(iov != NULL);
+	assert(niov != 0u);
+	assert(cur_iov < niov);
+	assert(max_bytes_per_packet > framing_bytes);
+	assert(bytes_sent < iov[cur_iov].bytes);
+
+	const uint64_t payload_bytes_per_packet = max_bytes_per_packet - framing_bytes;
+	for (uint32_t index = cur_iov; index < niov; ++index) {
+		const uint64_t sent_in_iov = index == cur_iov ? bytes_sent : 0u;
+		const uint64_t residual	   = iov[index].bytes - sent_in_iov;
+
+		if (residual == 0u) {
+			return 0u;
+		}
+		packet_count += residual / payload_bytes_per_packet + ((residual % payload_bytes_per_packet) != 0u);
+		if (packet_count > UINT32_MAX) {
+			return 0u;
+		}
+	}
+
+	return (uint32_t) packet_count;
 }
 
 __OPX_FORCE_INLINE__
@@ -4546,12 +4600,14 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 
 				struct fi_opx_reliability_tx_replay *replay;
 				struct fi_opx_reliability_tx_flow   *flow;
+				void				    *reservation_record = NULL;
 				int64_t				     psn;
 
 				psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, opx_ep->reli_service,
 								    opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 								    params->slid, subctxt_rx, params->tx_index, &flow,
-								    &replay, reliability, hfi1_type);
+								    &replay, reliability, hfi1_type,
+								    OPX_FLOW_CONTROL_MODE_NONE, &reservation_record);
 				if (OFI_UNLIKELY(psn == -1)) {
 					OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 					return -FI_EAGAIN;
@@ -4624,7 +4680,8 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 						}
 						fi_opx_reliability_service_replay_register_with_update(
 							opx_ep->reli_service, flow, replay, cc, bytes_sent, reliability,
-							OPX_HFI1_WFR);
+							OPX_HFI1_WFR, OPX_FLOW_CONTROL_MODE_NONE, opx_ep,
+							reservation_record);
 					} else if (hfi1_type & OPX_HFI1_JKR) {
 						if (bytes_to_send == bytes_sent) {
 							replay->scb.scb_16B.hdr.qw_16B[3] |=
@@ -4634,7 +4691,8 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 						}
 						fi_opx_reliability_service_replay_register_with_update(
 							opx_ep->reli_service, flow, replay, cc, bytes_sent, reliability,
-							OPX_HFI1_JKR);
+							OPX_HFI1_JKR, OPX_FLOW_CONTROL_MODE_NONE, opx_ep,
+							reservation_record);
 					} else {
 						if (bytes_to_send == bytes_sent) {
 							replay->scb.scb_16B.hdr.qw_16B[3] |=
@@ -4644,7 +4702,8 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 						}
 						fi_opx_reliability_service_replay_register_with_update(
 							opx_ep->reli_service, flow, replay, cc, bytes_sent, reliability,
-							OPX_HFI1_CYR);
+							OPX_HFI1_CYR, OPX_FLOW_CONTROL_MODE_NONE, opx_ep,
+							reservation_record);
 					}
 
 					fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
@@ -4654,13 +4713,16 @@ int fi_opx_hfi1_do_dput(union fi_opx_hfi1_deferred_work *work, const enum opx_hf
 
 					if (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) {
 						fi_opx_reliability_service_replay_register_no_update(
-							opx_ep->reli_service, flow, replay, reliability, OPX_HFI1_WFR);
+							opx_ep->reli_service, flow, replay, reliability, OPX_HFI1_WFR,
+							OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 					} else if (hfi1_type & OPX_HFI1_JKR) {
 						fi_opx_reliability_service_replay_register_no_update(
-							opx_ep->reli_service, flow, replay, reliability, OPX_HFI1_JKR);
+							opx_ep->reli_service, flow, replay, reliability, OPX_HFI1_JKR,
+							OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 					} else {
 						fi_opx_reliability_service_replay_register_no_update(
-							opx_ep->reli_service, flow, replay, reliability, OPX_HFI1_CYR);
+							opx_ep->reli_service, flow, replay, reliability, OPX_HFI1_CYR,
+							OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 					}
 				}
 				OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
@@ -4896,7 +4958,7 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(
 				&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 				params->slid, params->origin_rx, params->tx_index, &params->sdma_we->flow, packet_count,
-				max_eager_bytes);
+				max_eager_bytes, OPX_FLOW_CONTROL_MODE_NONE, OPX_FLOW_CONTROL_PACKET_RENDEZVOUS, NULL);
 
 			if (psns_avail < (int64_t) packet_count) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
@@ -5256,7 +5318,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(
 				&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 				params->slid, params->origin_rx, params->tx_index, &params->sdma_we->flow, packet_count,
-				max_dput_bytes);
+				max_dput_bytes, OPX_FLOW_CONTROL_MODE_NONE, OPX_FLOW_CONTROL_PACKET_RENDEZVOUS, NULL);
 
 			if (psns_avail < (int64_t) packet_count) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
@@ -5939,12 +6001,14 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
-		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type);
+		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE,
+		&reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		if (OFI_LIKELY(do_cq_completion)) {
 			OPX_BUF_FREE(context);
@@ -6091,8 +6155,8 @@ ssize_t	 opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability,
-							     hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability, hfi1_type,
+							     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 
 	if (OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_completion_rzv(opx_tx, context, total_len, lock_required, tag, caps);
@@ -6140,14 +6204,15 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 #endif
 	assert(!(has_edge && do_stripe));
 
-	uint32_t			     access_key	  = (uint32_t) -1;
-	uint32_t			     access_key_1 = (uint32_t) -1;
-	struct opx_hfisvc_xfer_completion   *rzv_comp	  = NULL;
-	struct opx_hfisvc_xfer_completion   *rzv_comp_1	  = NULL;
-	struct opx_context		    *context	  = NULL;
-	struct fi_opx_reliability_tx_replay *replay	  = NULL;
-	struct fi_opx_reliability_tx_flow   *flow	  = NULL;
-	ssize_t				     rc		  = FI_SUCCESS;
+	uint32_t			     access_key		= (uint32_t) -1;
+	uint32_t			     access_key_1	= (uint32_t) -1;
+	struct opx_hfisvc_xfer_completion   *rzv_comp		= NULL;
+	struct opx_hfisvc_xfer_completion   *rzv_comp_1		= NULL;
+	struct opx_context		    *context		= NULL;
+	struct fi_opx_reliability_tx_replay *replay		= NULL;
+	struct fi_opx_reliability_tx_flow   *flow		= NULL;
+	void				    *reservation_record = NULL;
+	ssize_t				     rc			= FI_SUCCESS;
 
 	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, tx);
 	union fi_opx_hfi1_pio_state pio_state = *tx->pio_state;
@@ -6268,7 +6333,8 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	int64_t psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
-		&flow, &replay, OFI_RELIABILITY_KIND_ONLOAD, hfi1_type);
+		&flow, &replay, OFI_RELIABILITY_KIND_ONLOAD, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE,
+		&reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_HFISVC_DEBUG_LOG("EAGAIN (PSN)\n");
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.eagain_psn);
@@ -6610,7 +6676,8 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 	}
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay,
-							     OFI_RELIABILITY_KIND_ONLOAD, hfi1_type);
+							     OFI_RELIABILITY_KIND_ONLOAD, hfi1_type,
+							     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 
 	tx->pio_state->qw0 = pio_state.qw0;
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(tx->pio_credits_addr);
@@ -6985,12 +7052,14 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
-		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type);
+		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE,
+		&reservation_record);
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		if (OFI_LIKELY(do_cq_completion)) {
@@ -7152,8 +7221,8 @@ ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, str
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability,
-							     hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability, hfi1_type,
+							     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 
 	if (OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_completion_rzv(opx_ep->tx, context, len, lock_required, tag, caps);
@@ -7516,12 +7585,14 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
-		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type);
+		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE,
+		&reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		if (OFI_LIKELY(do_cq_completion)) {
 			OPX_BUF_FREE(context);
@@ -7735,8 +7806,8 @@ ssize_t opx_hfi1_tx_send_rzv_16B(struct fid_ep *ep, const void *buf, size_t len,
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability,
-							     hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability, hfi1_type,
+							     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, reservation_record);
 
 	if (OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_completion_rzv(opx_tx, context, len, lock_required, tag, caps);
