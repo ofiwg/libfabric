@@ -6,6 +6,544 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+
+v2.7.0, Tue Sept 15, 2026
+=========================
+
+## Core ##
+
+- hmem/rocr: Report device ordinal from rocr_is_addr_valid
+- build: Add CUDA/ROCm build toggles to RPM spec files
+- man: List address vectors in FI_THREAD_DOMAIN serialization
+- man: Fix typo and add missing parameter description to fi_verbs page
+- man: Add more details to verbs NIC affinity setting parameters
+- Print xpu attrs in fi_tostr
+- Fix the missing ABI bump for fi_domain_attr
+- Add default fi_av_lookup2 support to all providers
+- Add fi_xpu.h and fi_xpu_device.h to build specs
+- man: Add fi_xpu man page and document XPU semantics
+- Add device-side XPU API header
+- Add fi_av_lookup2 and fi_mr_get_desc with XPU context
+- Add EP/CQ/CNTR export_xpu functions
+- Add fid_xpu_ctx to EP/CQ/CNTR attrs
+- Add fid_xpu_ctx and domain creation/query
+- Add XPU memory callback flags
+- Add XPU attribute and ops structures
+- Add FI_XPU capability flag
+- README: Add missing provider descriptions
+- getinfo: Add environment controlled FI_ADDR_FORMAT filter
+- man: Document FI_OFI_RXM_NUM_MSG_EPS
+- Add ofi_rmb and an include guard to ofi_mb.h
+- configure: Add --enable-thread-safety-analysis option
+- config/fi_provider.m4: Don't link dl providers in pkgconfig
+- core: Add ofi_get_local_rank_info() shared local rank/count utility
+- configure.ac: Remove unused compile flag
+- hmem_cuda: Skip cuMemGetAddressRange in cuda_get_dmabuf_fd
+- hmem/cuda: Implement async copy operations for CUDA
+- common: Skip point-to-point ifaces in ofi_get_list_of_addr
+- src/fabric: Free providers in reverse list order
+- hmem/cuda: Expose CUDA driver fns for ctx/memory management
+- configure.ac: Add --enable-coverage flag for code coverage
+- ofi_atomic_queue: Clean up assignment in \_head
+
+## CXI ##
+
+- Allow FI_REMOTE_CQ_DATA on fi_writemsg
+- Support extended NIDs used by SR-IOV VFs
+- Fix criterion put_red_pkt_distrib test
+- Extend timeout for sw_max_recv msg test
+
+## EFA ##
+
+- Make util_domain lock noop under FI_PROGRESS_CONTROL_UNIFIED
+- Include device ID in EFA-ness descriminator
+- Fix mis-stated vendor ID -> part ID
+- Continue initializing devices if one fails
+- Add lsan suppression for ofi_reg_dl_prov
+- Let the receiver's mark decide whether to peer-abort
+- Make domain->num_read_msg_in_flight atomic
+- Make srx_lock OFI_LOCK_NONE for FI_THREAD_COMPLETION
+- Document MR abort peer version requirement and scope in fi_efa(7)
+- Document the PEER_ERROR receiver-decides model
+- Correct PEER_ERROR introduction version to libfabric 2.7
+- Defer pre-handshake peer-abort emits until the handshake
+- Peer-abort canceled LONGREAD RTMs and balance read counter
+- Keep aborted overflow pkes as in-place abort markers
+- Purge queued blocking copies when releasing an rxe
+- Resolve PEER_ERROR rxes via the peer's rxe_list
+- Rework PEER_ERROR to a receiver-decides model
+- Factor out rxe PEER_ERROR handling
+- Add emitter ope type to the PEER_ERROR packet
+- Assert non-NULL peer in deferred peer-abort TX completion
+- Update supported threading models in man page
+- Change write lock for ep peer map
+- Unify QKEY generation across all endpoint types
+- Remove stale bug-history comments
+- Add progress_ep_list to skip idle EPs in CQ progress
+- Move queued progress lists from domain to endpoint
+- Fix error signs passed to fi_strerror
+- Remove srx lock from SHM address lookup
+- Make connection lookup safe during AV growth
+- Make efa_av_array concurrent safe
+- Add thread safety analysis for util_av.lock
+- Split efa_conn_release into explicit and implicit
+- Add thread safety analysis for AH fields
+- Remove srx lock from AV operations and EP enable
+- Remove the efa_rdm_ep_get_peer passthrough wrapper
+- Make explicit peer-map reads lock-free and annotate writes
+- Make the peer map a per-endpoint fi_addr-indexed array
+- Fix missing counter increment in inject
+- Split efa_conn_alloc into explicit and implicit functions
+- Add efa_av_array unit tests
+- Add efa_av_array, a lock-free fi_addr-indexed pointer array
+- Remove redundant lock around foreach_unspec_addr
+- Add unit tests for 64-bit request ID support
+- Add QP support for handling 64-bit SQ req IDs
+- Add CQ support for handling 64-bit req ID CQEs
+- Add support for EFA WQ caps in query domain
+- Fix rxe->desc assert that always evaluates to true
+- Turn on hardware counter by default
+- Strip stale FI_MORE when processing queued opes
+- Protect evicted_peers_hashset with util_av_implicit.lock
+- Add thread safety annotation for implicit_av_lru_list
+- Protect implicit_av_lru_list with util_av_implicit.lock
+- Add unit tests for rdm_pke_rtm sent and send_completion handlers
+- test: Add unit tests for tclass handling
+- Honor tclass set in hints before fi_getinfo
+- Improve gtest malloc failure injection
+- Add gtest unit tests for efa_cq_poll_ibv_cq
+- Refactor efa_rdm_cq_get_peer_for_pkt_entry
+- Add missing thread safty annotation for qp_table
+- Fix deadlock in efa_ah_alloc nomem release
+- Warn when user requests hardware counter but not satisfied
+- Use ibv_query_comp_cntr_caps for device max cntr values
+- Remove release_from_implicit_av from efa_conn_release_ah_unsafe
+- Acquire util_av_implicit.lock inside AH eviction path
+- Split efa_av_insert_one to reduce AV lock contention
+- Move EFA long opts to efa_shared.h
+- Add unit tests covering rdm_pke_rtm init functions
+- Fix overwrite in copy_to_hmem_iov
+- Remove VA_OPT from gmock header
+- Refactor av-insert related gtest utils
+- Add gtest unit tests for efa_rma_post_read
+- Fix global device count corruption in unit test
+- Decouple cmocka and gtest test suites
+- Add AGENTS.md for EFA gtest unit tests
+- Add arming mechanism to EFA gtest mocks
+- Reorganize EFA gtest mock X-macro
+- Fix erroneous direct_ope release on success
+- Fix hw counter unit test bugs
+- Annotate the device QP table under qp_table_lock
+- Add Clang thread safety analysis tooling
+- Add HMEM p2p capability to handshake protocol
+- Rename efa_rdm_ep_use_p2p to efa_rdm_ep_use_p2p_for_mr
+- Remove unused variable ‘enable_high_pps_orig’
+- Fix missing argument of efa_ibv_post_write
+- Fix missing pkt_entry release in peer_reorder_msg
+- Validate qp_table entry before nullifying
+- Fix leak in rdm_cntr_open
+- Fix buffer overwrite in efa_write_error_msg
+- Do not copy rxe op_context into cq error if unexpected
+- Remove the pps feature flag gate
+- Add lsan suppression file
+- Fix typos
+- Fix use-after-free in rdm_pke_release_cloned
+- Surface mr_map_insert error in mr_reg_impl
+- Remove unused fields used_explicit and used_implicit from efa_av
+- Fix null dereference bugs in rdm_pke_rtm
+- Suppress false-positive Coverity findings
+- Fix Coverity null-deref, overflow, and unchecked-return findings
+- Remove coverage and coverage-clean targets
+- Document MR-abort behavior in fi_efa.7
+- Documentation update for peer-abort handling
+- Emit PEER_ERROR_PKT by msg_id for medium/eager/runtread abort
+- Handle inbound PEER_ERROR_PKT by msg_id, unblock reorder window
+- Emit and handle PEER_ERROR_PKT for LONGCTS source-MR cancel
+- Emit PEER_ERROR_PKT from receiver-side abort handler
+- Route peer-aborted READ failures through the abort handler
+- Add efa_rdm_rxe_mark_peer_aborted() and drain-deferred completion
+- Add EFA_RDM_PEER_ERROR_PKT control packet
+- Add peer-abort prov_errno classifier and reason code
+- Bump pkt_entry gen before completion handler
+- Add unit tests for MR abort scenarios
+- Add device refcount to prevent use-after-free during fi_fini
+- Test runtread truncation frees the whole rx chain
+- Improve documentation of existing gtests
+- Update LSan suppresion list for aarch64
+- Update ibv_qp_attach_comp_cntr_op names
+- Resolve confliction for moving ope_pool/ope_list into efa_base_ep and unify op tracking
+- Fix double free of rx pkt on receive copy error path
+- Remove EFA_INFO_TYPE_IS_DIRECT branching in efa_base_ep_create_qp
+- Add DGRAM unit test for construct_ibv_qp_init_attr_ex
+- Move ope_pool/ope_list into efa_base_ep and unify op tracking
+- Add unit tests for MR gen check
+- Only check MR gen for TXEs
+- rdm: MR gen check on RDM data path
+- Advertise FI_HMEM when hints == NULL
+- Add gtest unit tests for efa_ah_alloc ENOMEM eviction path
+- Move RDM fabric code into rdm/efa_rdm_fabric.{c,h}
+- Split the fabric component into efa_fabric and efa_rdm_fabric
+- Move fabric tests to a dedicated file
+- Record selected wire protocol on the ope
+- rdm: Bump MR gen before deregistration
+- rdm: Use safe list iteration for ope_longcts_send_list
+- Remove extra whitespace in efa_rdm_ope.c
+- Move mr_pool init out of base domain init
+- Split efa_rdm_domain and efa_domain into separate files
+- Split the domain component into efa_domain and efa_rdm_domain
+- Reorder efa_domain struct into base and extended groups
+- Gate efa_domain cache access on RDM domain type
+- Gate ah_lru_list access on RDM domain type
+- cntr: Remove counter locking from efa-direct path
+- rdm: Fix queued_before_handshake counter on error path
+- rdm: Use cached efa_mr->lkey on RDM data path
+- Use cached efa_mr->lkey on efa-direct data path
+- rdm: Capture MR generation on efa_rdm_ope at dispatch
+- rdm: Add gen bump and validity helpers for MR generation
+- Add generation counter to efa_rdm_mr
+- rdm: Allocate struct efa_rdm_mr from the per-domain bufpool
+- rdm: Add per-domain struct efa_rdm_mr bufpool
+- Add cached lkey to struct efa_mr
+- Allocate struct efa_mr from the per-domain bufpool
+- Add per-domain struct efa_mr bufpool
+- Fix bugs in the efa_conn_alloc cleanup path
+- Add gMock unit testing infrastructure
+- Cast wr_id through uintptr_t before pointer casts in efa_cq
+- Add unit test for CUDA context management
+- Explicitly manage CUDA ctx when probing p2p
+- Add missing \n to log statements
+- Fix 0-byte RDMA write stack overflow on efa-direct
+- Derive EP inject sizes per data path and device caps
+- Fix efa_rdm_srx_update_rxe() parameter doc comment
+- Fix ope use-after-free on send completion after peer removal
+- Add generation counter to efa_rdm_ope for use-after-free detection
+- Rename EFA_RDM_PACKET_GEN_MASK to EFA_RDM_GEN_MASK
+- Fix ope use-after-free across all protocols
+- Support inline RDMA write in verbs path
+- test: Fix deprecated will_return_maybe warning
+- Unit tests for wide WQE support
+- Set EP inject sizes from fi_info for wide WQE support
+- Onboard 128-byte wide WQE format in data path direct
+- Support wide WQE inject_size in fi_getinfo
+- configure: Query inline_buf_size_ex for wide WQE support
+- Add 128-byte WQE structs to efa_io_defs.h
+- Add the `make coverage` and `make coverage-clean` targets
+- Fix cmocka linker flag leaking into libfabric.la
+- Implement minimal GoogleTest framework
+- Add unit test for efa_rdm_ep_flush_queued_blocking_copy_to_hmem().
+- Fix rx-pool pkt leak on copy-size mismatch
+- Remove trailing white spaces from EFA
+- test: NULL resource pointers after close in destruct
+- test: Fix uninitialized stack variables in unit tests
+
+## LNX ##
+
+- Fix Makefile.include fi_la_LDFLAGS
+- Add missing dl env variables
+
+## Mrail ##
+
+- Use ofi_get_local_rank_info() for local rank lookup
+
+## OPX ##
+
+- Fix out-of-tree build
+- Skip context-sharing auto-detect whenever dual-plane or striping is in effect
+- Reserve initial eager SDMA PSN range
+- Register TID regions through dma-buf
+- Carry the receive dma-buf descriptor to TID registration
+- Reject an unaligned application dma-buf base address
+- Widen the dma-buf configure probe to cover expected receive
+- Never dlclose rdma-core verbs libraries
+- Use dma-buf to describe device memory for user SDMA
+- Multi-IOV RMA read + multirail over HFI Service
+- Clear the device iface when a payload is staged to host memory
+- Map intra-node TX shm segments lazily on first send
+- Compile out the DAOS-only intra-node resync table in non-DAOS builds
+- Do not unlink a memory region that was never linked
+- Populate the tx flow handle on an rbtree hit
+- Drain deferred HFISVC MR closes during domain teardown
+- Dispatch HFISVC MR completions by type
+- Consolidate reliability tx rbtrees
+- Fix HFISVC EP teardown order (close queues before secondary ibv_context)
+- Demote benign init-time banners from warn to info
+- Select the SDMA threshold from the send buffer interface
+- Document host and device protocol thresholds
+- Enable tuned HMEM defaults
+- Allow HMEM multi-packet eager
+- Add HMEM HFISVC threshold
+- Add HMEM SDMA threshold
+- Add HMEM rendezvous threshold
+- Unify host protocol thresholds
+- Enable eager SDMA for host memory
+- Lower ROCr device registration send threshold
+- Eager-open HFISVC MRs for caller dmabufs
+- Fail fast when explicit dual-plane request cannot be honored
+- Implement one-sided RMA Read with HFI service
+- Lower eager-SDMA floor to 512 bytes
+- Add FI_OPX_HFISVC_MIN_PAYLOAD_BYTES threshold
+- Add eager-over-SDMA path for device memory
+- Fix 16B SDMA replay reading 9B header offset
+- Vectorize receive-side atomic helpers
+- Use uint32_t for psn_start and count in reliability packets
+- Cache HFI driver-version check in per-node shm
+- Add per-node shared-memory run-once cache utility
+- Scope PPN auto-enable context count to the pinned HFI unit/port
+- Start HFISVC open MRs before eager dispatch
+- Use separate completion queue for ephemeral MR registrations
+- Lazy-open HFISVC MRs for eager HFI sends
+- Fix hdrq_mask for 256B hrdq_entsize for CYR
+- Release HFI user context on endpoint close
+- Use CUDA stream and event types directly
+- Check all HFISVC dlsym lookups
+- Move HFISVC close helper to poll header
+- Move HFISVC access key counters to domain
+- Add FI_HMEM_DEVICE_ONLY MR support
+- Support single GID filter for single-plane context allocation
+- Lazy-open HFISVC MRs on first use
+- Ensure at least 2 endpoints per HFI context in PPN default
+- Fall back to device-level context count when per-port sysfs is missing
+- Count HFI contexts per-port, not per-unit
+- Use local rank count instead of nproc for ctx sharing default
+- Deterministically balance context-sharing port assignment
+- Read local rank ID alongside local rank count
+- Auto-enable context sharing based on PPN
+- Fix dest_addr handling in fi_getinfo hints
+- Several minor optimizations
+- Simplify redundant free_context check in CQ pending drain
+- Remove unnecessary 8-byte rounding in multi-recv buffer accounting
+- Fix "capabilites" typo in log messages
+- Set errno on invalid OPX node address
+- Handle tagged peek discard
+- Always support local and remote communication
+- Report receive cancel flags
+- Fix multi-recv buffer accounting
+- Strip completion flag from RX CQ entries
+- Narrow getinfo caps and MR modes
+- Validate getinfo caps and MR hints
+- Avoid sharing default domain name
+- Initialize unbound CQ operations
+- Use util event queues
+- Embed util fabric
+- ROCm Revert lower GDRcopy threshold/MP Eager
+- Replace ep_tx array in fi_opx_av with a plain pointer
+- Scale domain context counts by local rank count
+- Derive domain context counts at runtime
+- Standardize environment variables
+- Replace HFISVC keyset allocator with randomized bitmap + mremap
+- Ignore invalid driver MTU size
+- Fall back to memhooks when kdreg2 module not loaded
+- Add SDMA queue ring size workaround back in
+- Detect hfisvc CQ completion flag macro at configure time
+- Preserve concrete endpoint type for wildcard hints
+- Fix HOST->ROCm rzv sender origin byte-counter strand
+- Use versioned SONAME for dlopen of libhfi1verbs and libibverbs
+- Fall back from non-retryable TID failures
+- Restore drain-to-zero throttle release
+- Fix kdreg2 TID-cache leak on split rzv
+- Fix rzv_comp leak on TID->eager fallback
+- Extend SIGUSR2 with replay + cq_pending
+- Fix kdreg2 soft-hang
+- Bound kdreg2 TID-setup EAGAIN retries with eager fallback
+- Fix kdreg2 TID-cache multi-overlap free abort
+- Keep HFISVC libhfi1verbs handle domain-owned
+- OPX IPC CUDA Performance Updates
+- Initialize HFISVC client before opening MR queues
+- Fix ROCr partial-page GPU rendezvous hang
+- Drop direct HIP dependency from ROCR builds
+- ROCR async copy for GPU-IPC receive of non-hipMalloc memory
+- Add TID prefault workaround
+- Initialize deferred HFISVC receive contexts
+- Make OPENED MR notify non-owning for rzv completion
+
+## PSM2 ##
+
+- Use ofi_get_local_rank_info() to normalize MPI env vars
+
+## PSM3 ##
+
+- Use ofi_get_local_rank_info() for local rank/count lookup
+
+## RXM ##
+
+- Reduce the ordering claimed with multiple msg endpoints
+- Ask the ep-owning conn, not rx_buf->conn, whether rx_ep is still open
+- Fix the msg_ep use-after-free at connection teardown
+- Size the shared MSG CQ for all msg_ep slots
+- Reassemble out-of-order SAR segments
+- Tag SAR msg_ids with a per-endpoint generation
+- Free the SAR FIRST tx_buf only after both sends complete
+- Add round-robin msg_ep selector with SAR pinning
+- Open a distinct QP per msg_ep slot on demand
+- Track CM state per msg_ep slot
+- Route TX operations through a msg_ep selector
+- Remove redundant lock around foreach_unspec_addr
+
+## SHM ##
+
+- Fix data race in smr_srx_context()
+- Remove redundant lock around foreach_unspec_addr
+- Force sync IPC copy when buffering unexpected messages
+- Handle async IPC copy errors in progress
+- Route CUDA IPC through async copy path
+- Fix double cmd-return for async IPC protocol
+
+## SM2 ##
+
+- Remove redundant lock around foreach_unspec_addr
+- Fix NULL ipc_cache crash in host-to-device CMA path
+
+## TCP ##
+
+- Fix mr leak in xnet_mplex_mr_regattr()
+- Free subdomain_info in xnet_mplex_domain_close()
+- Fix SEGV in xnet_srx_close() for multiplexed rdm domains
+- Abort connections when closing a PEP
+- Track unpublished connection handles
+- Keep progress with connection handles
+- Reject connections after PEP close
+- Reject invalid RMA iov counts from peers
+
+## UCX ##
+
+- Choose correct UCS_THREAD_MODE based on FI_THREAD mode
+- Fix setting FI_UCX_TLS
+
+## USNIC ##
+
+- Add VIC 16000-series device names
+
+## Util ##
+
+- Require callers to hold srx lock in util_srx_close
+- Add dedicated lock for unspec unexpected queues
+- Add NULL checks in fabric init path
+
+## Verbs ##
+
+- Add a knob to turn on/off flow control
+- Remove completed send from sq_list by identity
+- Avoid deadlock in flow control send_credits
+- Probe dmabuf support per-device via ibv_reg_dmabuf_mr()
+- Enable HMEM support for RoCE interfaces
+
+## Fabtests ##
+
+- efa: Only build efa tests if libfabric has the efa provider
+- efa: Skip the slowest device memory unexpected_msg case in PR CI
+- Add check for fi_close return value
+- multi_ep: Free previous fi before overwriting in setup_server_ep
+- multi_ep: Fix leak of tx/rx buffers when fi is NULL in free_ep_res
+- Fix memory leak of previously duplicated addr in getaddr()
+- Add PEP close regression test
+- pytest: Always clean up the server process
+- pytest: Tie remote tests to SSH sessions
+- pytest: Retry SSH failures while waiting for the server
+- pytest: Launch server without a shell wrapper
+- dgram_pingpong: Recover from per-size receive timeout
+- pytest: Fix server restart delay 101sec -> 10sec
+- efa: Give each worker EP its own EQ
+- pytest: Derive server/client id in num_domains from request
+- efa: Do not run mr_abort incast at 10MB
+- efa: Increase mr_abort incast timeout to 360s
+- efa: Small mr abort readability fixes
+- efa: Add MR abort incast test across multiple NICs
+- efa: Add split-endpoint mode to the MR abort partial test
+- efa: Run MR abort tests with 4 endpoints and 2048 ops per iteration
+- Call `_Exit()` in forked child
+- efa: Add concurrent AV lookup stress coverage
+- efa: Parameterize MR abort 10MiB cases instead of skipping
+- efa: Parameterize MR abort send cases instead of skipping
+- efa: Generate one memory flavor for MR abort on efa-direct
+- efa: Rename MR abort parametrization variables for clarity
+- efa: Cap high PPS MR abort writes at 64KB
+- efa: Add 128B low latency case to MR abort fabtest
+- efa: Request low latency SL for MR abort writes up to 8KB
+- efa: Do not combine high PPS and low latency SL in MR abort test
+- efa: Drain per-domain CQs in MR abort test
+- efa: Register MR abort test MRs on their pair's domain
+- Add ft_reg_mr_dom() taking an explicit domain and endpoint
+- efa: Open per-domain resources for MR abort test
+- efa: Select the domains to spread endpoints across
+- efa: Add --domains and --eps-per-domain options
+- pytest: Complete pr_ci coverage for the shm, sm2 and default suites
+- pytest: Deduplicate shm rma_bw test permutations
+- lpp: Fix CUDA initialization diagnostics
+- efa: Route partial and reuse tests over endpoint pairs
+- efa: Route RMA and send/tagged aborts over endpoint pairs
+- efa: Add endpoint pairing for MR abort test
+- shm,sm2: Filter memory types at collection by device availability
+- efa: Decouple memory type from copy_method in runt read test
+- efa: Annotate tests with memory_type markers
+- efa: Add memory_type marker to filter cases at collection
+- Add --randomize-test-order to run tests in a random order
+- Fix MR exhaustion test not running at the end
+- pytest/efa: Enhance the fi_more test
+- Add --sync-comp option to toggle inband sync completion semantic
+- efa: Add low latency SL parametrization to MR abort fabtest
+- efa: Combine message size, RMA op and high PPS parameters
+- efa: Move peer calculation to efa_shared.c
+- efa: Minor fixes for MR abort fabtest
+- efa: Add high PPS option for MR abort fabtest
+- efa: Fix IndexError in CUDA EFA device selection
+- efa: Tighten MR Abort Acceptable CQ Errors
+- pytest: Gate xdist OOB startup on port readiness
+- scripts: Match opt-in marks as words in -t/-m expressions
+- pytest: Save client-server output to log files
+- efa: Deselect hardware counter tests if device does not support it
+- pytest/efa: Mark mr abort tests as pre_release
+- scripts: Skip opt-in marked tests unless explicitly requested
+- scripts: Add -m marker expression option to runfabtests.py
+- pytest: Exclude standard iteration tests from quick testset
+- efa: Add short iteration type for test_rdm_bw_mt_thread_completion
+- pytest: Correctly handle dmabuf registrations with gdrcopy
+- component/dmabuf-rdma: Add title line above data output
+- Remove unused function ft_cuda_get_base_addr
+- efa/multi_ep_stress: Fix default threading mode
+- efa: Fix mmap test to use real hw rdma capability as gate
+- sm2,shm: Only run av xfer test on rdm eps
+- efa: Skip MR Abort tests due to bug
+- efa: Update mr_abort print statements
+- efa: Do not fail mr_abort target on cross-iteration stragglers
+- efa: Detect duplicate TX completions via per-op count
+- efa: Make mr_abort TX completion accounting a real check
+- efa: Only enforce -X RX completions for LONGREAD mr_abort
+- efa: Add LONGREAD mr_abort stage with -X enforcement
+- efa: Only drain RX in mr_abort phase 1 under manual progress
+- Initialize CUDA context on worker threads in rdm_bw_mt
+- hmem: Add ft_hmem_init_thread for per-thread CUDA context setup
+- efa: Test hardware cntr in GDA fabtests
+- efa: Add pytest marker for hw_cntr
+- multi_ep: Don't clear src_addr for client eps
+- Add machine readable output in rdm_bw_mt
+- efa: Add rdm_bw_mt test with FI_THREAD_COMPLETION
+- Add FI_THREAD_COMPLETION support to rdm_bw_mt test
+- efa: Increase mr_abort idle timeout
+- efa: Use counted CQ drain except for indeterminate sends
+- verbs: Prevent use of uninitialized pointer
+- pytest/efa: Mark all multi-ep-stress tests as unstable
+- efa: Fix coverity warning about error handling
+- efa: Add missing PEER_ABORTED error code to abort test
+- efa: Add FI_THREAD_COMPLETION as an option to multi_ep_stress
+- efa: Add EQ to multi_ep_stress
+- pytest: Mark multi_ep_stress tests as functional
+- efa: Reject -T partial with -R target in fi_mr_abort
+- efa: Standardize fi_mr_abort RMA abort/partial errors
+- pytest/efa: Skip fi_mr_abort RMA tests when RMA unsupported
+- pytest/efa: Temporarily remove efa_rma_bw multi_ep test case
+- pytest: Add EFA test coverage for fi_mr_abort
+- efa: Add fi_mr_abort test for MR close during in-flight operations
+- pytest/efa: Enable 0-byte RMA testing for efa-direct
+- rma_pingpong: Remove 0 byte restriction for writedata and read
+- efa: Drain completions within warmup iterations
+- efa: Fix the UAF bug in efa_rma_bw
+- efa: Add multi-QP support for efa_rma_bw
+- efa: Parametrize wide WQE test with data_path_direct toggle
+- efa: Add wide WQE RMA pingpong test for efa-direct
+- efa: Delete multi_ep_mt test
+- efa/pytest: Move multi_ep_stress to stable
+
+
 v2.6.0, Mon June 22, 2026
 =========================
 
