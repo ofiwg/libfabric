@@ -43,6 +43,10 @@
 #include <stdio.h>
 #include <sys/utsname.h>
 
+#if defined(__x86_64__) || defined(__amd64__)
+#include <immintrin.h>
+#endif
+
 #define HSA_MAX_SIGNALS 512
 #define HSA_MAX_STREAMS (HSA_MAX_SIGNALS / MAX_NUM_ASYNC_OP)
 #define D2H_THRESHOLD	16384
@@ -71,6 +75,10 @@ OFI_DECLARE_FREESTACK(struct ofi_hsa_signal_info, rocm_ipc_signal_fs);
 static ofi_spin_t fs_lock;
 static struct rocm_ipc_stream_fs *ipc_stream_fs = NULL;
 static struct rocm_ipc_signal_fs *ipc_signal_fs = NULL;
+
+#if defined(__x86_64__) || defined(__amd64__)
+static bool rocr_have_sse4_1;
+#endif
 
 struct hsa_ops {
 	hsa_status_t (*hsa_memory_copy)(void *dst, const void *src,
@@ -1217,6 +1225,10 @@ int rocr_hmem_init(void)
 	if (ret != FI_SUCCESS)
 		return ret;
 
+#if defined(__x86_64__) || defined(__amd64__)
+	rocr_have_sse4_1 = ofi_cpu_supports(1, OFI_SSE4_1_REG, OFI_SSE4_1_BIT);
+#endif
+
 	hsa_ret = ofi_hsa_init();
 	if (hsa_ret != HSA_STATUS_SUCCESS)
 		goto fail;
@@ -1316,6 +1328,54 @@ struct rocr_dev_reg_handle {
 	void *base_host;
 };
 
+#if defined(__x86_64__) || defined(__amd64__)
+/*
+ * A discrete GPU's host-visible aperture is write-combining, where an
+ * ordinary load is much more expensive than a streaming one. The hint is
+ * ignored on the cached mapping a CPU-attached GPU gets.
+ *
+ * Requires a 16-byte aligned source and a size that is a whole number of
+ * 16-byte units, so every byte read lies within [src, src + size) and the
+ * whole copy is streamed. See rocr_copy_from_aperture() for why partially
+ * streamed copies are not worth doing.
+ */
+static inline void rocr_stream_copy_from_aperture(void *dest, const void *src,
+						  size_t size)
+{
+	uint8_t *d = dest;
+	const uint8_t *s = src;
+
+	assert(!(((uintptr_t) s) & 15) && !(size & 15));
+
+	while (size) {
+		/* The intrinsic takes a non-const pointer but only reads. */
+		_mm_storeu_si128((__m128i *) d,
+				 _mm_stream_load_si128((__m128i *) (uintptr_t) s));
+		d += 16;
+		s += 16;
+		size -= 16;
+	}
+}
+#endif /* __x86_64__ || __amd64__ */
+
+static inline void rocr_copy_from_aperture(void *dest, const void *src, size_t size)
+{
+#if defined(__x86_64__) || defined(__amd64__)
+	/*
+	 * Only a fully aligned copy is streamed. A leading or trailing
+	 * fragment has to be read with an ordinary load, and on this mapping
+	 * one such load costs about as much as the streaming loop it would be
+	 * attached to, so a partially streamed copy is slower than not
+	 * streaming at all.
+	 */
+	if (rocr_have_sse4_1 && size && !(size & 15) && !(((uintptr_t) src) & 15)) {
+		rocr_stream_copy_from_aperture(dest, src, size);
+		return;
+	}
+#endif
+	memcpy(dest, src, size);
+}
+
 int rocr_dev_register(const void *addr, size_t size, uint64_t *handle)
 {
 	hsa_amd_pointer_info_t hsa_info = {
@@ -1381,7 +1441,7 @@ int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 	offset = (uintptr_t) src - (uintptr_t) rocr_handle->base_dev;
 	host_src = (void *) ((uintptr_t) rocr_handle->base_host + offset);
 
-	memcpy(dest, host_src, size);
+	rocr_copy_from_aperture(dest, host_src, size);
 
 	return FI_SUCCESS;
 }

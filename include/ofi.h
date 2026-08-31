@@ -289,6 +289,10 @@ enum {
 	OFI_CLFLUSHOPT_BIT	= (1 << 23),
 	OFI_CLFLUSH_REG		= 3,
 	OFI_CLFLUSH_BIT		= (1 << 19),
+	/* _REG indexes the cpuid result as EAX/EBX/ECX/EDX, so 2 is ECX:
+	 * SSE4.1 is leaf-1 ECX[19], unrelated to CLFLUSH's leaf-1 EDX[19]. */
+	OFI_SSE4_1_REG		= 2,
+	OFI_SSE4_1_BIT		= (1 << 19),
 };
 
 int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit);
