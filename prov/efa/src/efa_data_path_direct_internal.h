@@ -417,10 +417,43 @@ EFA_ALWAYS_INLINE void efa_wq_put_wrid_idx(struct efa_data_path_direct_wq *wq,
 }
 
 /**
- * @brief Finalize a CQE by updating completion counter and returning pool index
+ * @brief Release a work queue entry after completion
  *
- * Always increments wqe_completed. Only returns the pool index when
- * not in 64-bit request ID mode.
+ * @param wq Pointer to the work queue structure
+ */
+EFA_ALWAYS_INLINE void
+efa_wq_release_slot(struct efa_data_path_direct_wq *wq)
+{
+	int32_t available = ofi_atomic_inc32(&wq->wqe_available);
+
+	assert(available <= wq->wqe_cnt);
+	(void) available;
+}
+
+/**
+ * @brief Consume an available work queue entry
+ *
+ * Posting paths serialize wqe_posted with the wqlock.
+ *
+ * @param wq Pointer to the work queue structure
+ */
+EFA_ALWAYS_INLINE void efa_wq_consume_slot(struct efa_data_path_direct_wq *wq)
+{
+	int32_t available;
+
+	wq->wqe_posted++;
+	available = ofi_atomic_dec32(&wq->wqe_available);
+	assert(available >= 0);
+	(void) available;
+}
+
+
+/**
+ * @brief Finalize a CQE by releasing its work queue entry
+ *
+ * In 64-bit request ID mode, no WR-ID pool is shared with the posting path, so
+ * the completion only needs to atomically release the work queue entry. Legacy
+ * request IDs still require the work queue lock while returning the pool index.
  *
  * @param wq Pointer to the work queue structure
  * @param cqe Pointer to the completion queue entry
@@ -428,10 +461,14 @@ EFA_ALWAYS_INLINE void efa_wq_put_wrid_idx(struct efa_data_path_direct_wq *wq,
 EFA_ALWAYS_INLINE void efa_wq_cqe_finalize(struct efa_data_path_direct_wq *wq,
 					    struct efa_io_cdesc_common *cqe)
 {
+	if (wq->req_id_64_bit) {
+		efa_wq_release_slot(wq);
+		return;
+	}
+
 	ofi_genlock_lock(wq->wqlock);
-	wq->wqe_completed++;
-	if (!wq->req_id_64_bit)
-		efa_wq_put_wrid_idx(wq, cqe->req_id & ~wq->gen_mask);
+	efa_wq_put_wrid_idx(wq, cqe->req_id & ~wq->gen_mask);
+	efa_wq_release_slot(wq);
 	ofi_genlock_unlock(wq->wqlock);
 }
 
@@ -456,8 +493,10 @@ efa_data_path_direct_wq_initialize(struct efa_data_path_direct_wq *wq,
 
 	wq->wqe_cnt = wqe_cnt;
 	wq->desc_mask = wqe_cnt - 1; /* Assumes wqe_cnt is power of 2 */
+	wq->wqe_posted = 0;
 	wq->pc = 0; /* Initialize producer counter */
 	wq->req_id_64_bit = req_id_64_bit;
+	ofi_atomic_initialize32(&wq->wqe_available, wqe_cnt);
 
 	if (!req_id_64_bit) {
 		/* Allocate work request ID array */
@@ -574,23 +613,22 @@ EFA_ALWAYS_INLINE void efa_data_path_direct_set_sgl(struct efa_io_tx_buf_desc *t
  * @brief Validate that a send operation can be posted
  *
  * Checks if the send queue has available space for a new work request.
- * Prevents queue overflow by comparing posted vs completed work requests.
+ * Prevents queue overflow by checking the available work queue entry count.
  *
  * @param qp Pointer to the EFA queue pair
  * @return 0 if send can be posted, ENOMEM if queue is full
  */
 EFA_ALWAYS_INLINE int efa_post_send_validate(struct efa_qp *qp)
 {
+	struct efa_data_path_direct_wq *wq = &qp->data_path_direct_qp.sq.wq;
+	int32_t wqe_available = ofi_atomic_get32(&wq->wqe_available);
 	/* Check if send queue is full */
-	if (OFI_UNLIKELY(qp->data_path_direct_qp.sq.wq.wqe_posted -
-				 qp->data_path_direct_qp.sq.wq.wqe_completed ==
-			 qp->data_path_direct_qp.sq.wq.wqe_cnt)) {
+	if (OFI_UNLIKELY(wqe_available <= 0)) {
 		EFA_DBG(FI_LOG_EP_DATA,
 			"SQ[%u] is full wqe_posted[%u] wqe_completed[%u] "
 			"wqe_cnt[%u]\n",
-			qp->qp_num, qp->data_path_direct_qp.sq.wq.wqe_posted,
-			qp->data_path_direct_qp.sq.wq.wqe_completed,
-			qp->data_path_direct_qp.sq.wq.wqe_cnt);
+			qp->qp_num, wq->wqe_posted, wq->wqe_posted - (wq->wqe_cnt - wqe_available),
+			wq->wqe_cnt);
 		return ENOMEM;
 	}
 
@@ -601,7 +639,7 @@ EFA_ALWAYS_INLINE int efa_post_send_validate(struct efa_qp *qp)
  * @brief Validate that a receive operation can be posted
  *
  * Checks if the receive queue has available space for a new work request.
- * Prevents queue overflow by comparing posted vs completed work requests.
+ * Prevents queue overflow by checking the available work queue entry count.
  *
  * @param qp Pointer to the EFA queue pair
  * @param wr Pointer to the receive work request (currently unused)
@@ -610,17 +648,15 @@ EFA_ALWAYS_INLINE int efa_post_send_validate(struct efa_qp *qp)
 EFA_ALWAYS_INLINE int efa_post_recv_validate(struct efa_qp *qp,
 					  struct ibv_recv_wr *wr)
 {
+	struct efa_data_path_direct_wq *wq = &qp->data_path_direct_qp.rq.wq;
+	int32_t wqe_available = ofi_atomic_get32(&wq->wqe_available);
 	/* Check if receive queue is full */
-	if (OFI_UNLIKELY(qp->data_path_direct_qp.rq.wq.wqe_posted -
-				 qp->data_path_direct_qp.rq.wq.wqe_completed ==
-			 qp->data_path_direct_qp.rq.wq.wqe_cnt)) {
+	if (OFI_UNLIKELY(wqe_available <= 0)) {
 		EFA_WARN(FI_LOG_EP_DATA,
 			 "RQ[%u] is full wqe_posted[%u] wqe_completed[%u] "
 			 "wqe_cnt[%u]\n",
-			 qp->ibv_qp->qp_num,
-			 qp->data_path_direct_qp.rq.wq.wqe_posted,
-			 qp->data_path_direct_qp.rq.wq.wqe_completed,
-			 qp->data_path_direct_qp.rq.wq.wqe_cnt);
+			 qp->ibv_qp->qp_num, wq->wqe_posted, wq->wqe_posted - (wq->wqe_cnt - wqe_available),
+			 wq->wqe_cnt);
 		return ENOMEM;
 	}
 
@@ -652,8 +688,9 @@ EFA_ALWAYS_INLINE void efa_set_common_ctrl_flags(struct efa_io_tx_meta_desc *des
 /**
  * @brief Advance the send queue posting index
  *
- * Updates the send queue indices after posting a work request. Increments
- * the producer counter and handles phase bit changes when the queue wraps.
+ * Updates the send queue indices after posting a work request. Consumes a work
+ * queue entry, increments the producer counter, and handles phase bit changes
+ * when the queue wraps.
  *
  * @param sq Pointer to the send queue structure
  */
@@ -661,7 +698,7 @@ EFA_ALWAYS_INLINE void efa_sq_advance_post_idx(struct efa_data_path_direct_sq *s
 {
 	struct efa_data_path_direct_wq *wq = &sq->wq;
 
-	wq->wqe_posted++; /* Increment posted work request count */
+	efa_wq_consume_slot(wq);
 	wq->pc++; /* Advance producer counter */
 
 	/* Check for queue wraparound and advance phase if needed */
