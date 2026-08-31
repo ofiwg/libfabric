@@ -302,6 +302,15 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   This only has an effect with HMEM enabled builds of OPX that also have HFI Service enabled.
   Value must be between 0 and 2147483646. Defaults to 4096 for CUDA builds, 1048576 for ROCr builds.
 
+*FI_OPX_HFISVC_INLINE_EDGE*
+: Boolean (0/1, on/off, true/false, yes/no). For unaligned device (GPU) memory transfers over
+  the HFI Service, carry the unaligned edge bytes inline in the rendezvous request-to-send.
+  This lets the receiver place those bytes itself, at the cost of the sender reading them
+  from the source buffer before it can send the request-to-send.
+  A sender with either setting interoperates with an unmodified peer.
+  This only has an effect with HMEM enabled builds of OPX that also have HFI Service enabled.
+  Defaults to 0 (disabled).
+
 *FI_OPX_MP_EAGER*
 : Boolean (1/0, on/off, true/false, yes/no). Enables multi-packet eager. Defaults to 1 (enabled).
   Deprecated alias: FI_OPX_MP_EAGER_DISABLE (still honored, emits a deprecation warning). The two have

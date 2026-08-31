@@ -4300,11 +4300,19 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 			opx_ep->use_hfisvc = true;
 		}
 	}
+	int inline_edge = 0;
+	if (fi_param_get_bool(fi_opx_global.prov, "hfisvc_inline_edge", &inline_edge) != FI_SUCCESS) {
+		inline_edge = 0;
+	}
+	opx_ep->use_hfisvc_inline_edge = (bool) inline_edge;
 #else
-	opx_ep->use_hfisvc = false;
+	opx_ep->use_hfisvc	       = false;
+	opx_ep->use_hfisvc_inline_edge = false;
 #endif
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] HFI Service is %s for bulk transfers.\n",
 		opx_ep->use_hfisvc ? "enabled" : "disabled");
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "[HFISVC] Inline RTS edge is %s.\n",
+		opx_ep->use_hfisvc_inline_edge ? "enabled" : "disabled");
 
 	*ep = &opx_ep->ep_fid;
 

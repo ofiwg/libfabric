@@ -715,7 +715,9 @@ struct fi_opx_ep {
 	bool		   use_prefault_write;
 	bool		   use_expected_tid_rzv;
 	bool		   use_hfisvc;
+	bool		   use_hfisvc_inline_edge;
 	bool		   use_eager_sdma;
+	uint8_t		   unused_cl7[3];
 	uint32_t	   hmem_rzv_min_payload_bytes;
 	uint32_t	   hmem_sdma_min_payload_bytes;
 	uint32_t	   hmem_hfisvc_min_payload_bytes;
