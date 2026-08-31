@@ -40,6 +40,8 @@
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_hfi1_version.h"
 #include "rdma/opx/opx_hfisvc_rma.h"
+#include "rdma/opx/opx_flow_control.h"
+#include "rdma/opx/opx_flow_control_specialization.h"
 
 #include <ofi_enosys.h>
 #include <errno.h>
@@ -177,7 +179,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
-		&flow, &replay, params->reliability, hfi1_type);
+		&flow, &replay, params->reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, NULL);
 
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_RMA_END_EAGAIN(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
@@ -274,7 +276,8 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	OPX_SHD_CTX_PIO_UNLOCK(OPX_IS_CTX_SHARING_ENABLED, opx_tx);
 
 	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, params->reliability,
-							     OPX_SW_HFI1_TYPE(opx_ep->domain));
+							     OPX_SW_HFI1_TYPE(opx_ep->domain),
+							     OPX_FLOW_CONTROL_MODE_NONE, opx_ep, NULL);
 
 	OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_DO_READV, 0, 0);
 	return FI_SUCCESS;
@@ -1460,52 +1463,40 @@ err:
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
 
-FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR)
-FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR)
+#define FI_OPX_RMA_SPECIALIZATION_FUNCTIONS(LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL) \
+	FI_OPX_RMA_SPECIALIZED_FUNC(LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL)
 
-FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B)
-FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B)
+OPX_FLOW_CONTROL_RMA_SPECIALIZATION_CATALOG(FI_OPX_RMA_SPECIALIZATION_FUNCTIONS)
 
-FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR)
-FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR)
+#define FI_OPX_RMA_OPS_STRUCT_NAME(LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL) \
+	FI_OPX_RMA_OPS_STRUCT_NAME_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL)
 
-FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR)
-FI_OPX_RMA_SPECIALIZED_FUNC(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR)
+#define FI_OPX_RMA_OPS_STRUCT_NAME_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL) \
+	fi_opx_ops_rma_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##FLOW_CONTROL
 
-#define FI_OPX_RMA_OPS_STRUCT_NAME(LOCK, CAPS, RELIABILITY, HFI1_TYPE) \
-	FI_OPX_RMA_OPS_STRUCT_NAME_(LOCK, CAPS, RELIABILITY, HFI1_TYPE)
+#define FI_OPX_RMA_OPS_STRUCT(LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL)                                        \
+	static struct fi_ops_rma FI_OPX_RMA_OPS_STRUCT_NAME(LOCK, CAPS, RELIABILITY, HFI1_TYPE,                        \
+							    FLOW_CONTROL) __attribute__((used)) = {                    \
+		.size  = sizeof(struct fi_ops_rma),                                                                    \
+		.read  = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL),     \
+		.readv = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readv, LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL),    \
+		.readmsg =                                                                                             \
+			FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL),   \
+		.write	= FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL),   \
+		.inject = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, LOCK, CAPS, RELIABILITY, HFI1_TYPE,           \
+							   FLOW_CONTROL),                                              \
+		.writev = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writev, LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL),  \
+		.writemsg =                                                                                            \
+			FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writemsg, LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL),  \
+		.writedata =                                                                                           \
+			FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writedata, LOCK, CAPS, RELIABILITY, HFI1_TYPE, FLOW_CONTROL), \
+	};
 
-#define FI_OPX_RMA_OPS_STRUCT_NAME_(LOCK, CAPS, RELIABILITY, HFI1_TYPE) \
-	fi_opx_ops_rma_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE
-
-#define FI_OPX_RMA_OPS_STRUCT(LOCK, CAPS, RELIABILITY, HFI1_TYPE)                                                \
-	static struct fi_ops_rma FI_OPX_RMA_OPS_STRUCT_NAME(LOCK, CAPS, RELIABILITY, HFI1_TYPE) = {              \
-		.size	   = sizeof(struct fi_ops_rma),                                                          \
-		.read	   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, LOCK, CAPS, RELIABILITY, HFI1_TYPE),         \
-		.readv	   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readv, LOCK, CAPS, RELIABILITY, HFI1_TYPE),        \
-		.readmsg   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, LOCK, CAPS, RELIABILITY, HFI1_TYPE),      \
-		.write	   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, LOCK, CAPS, RELIABILITY, HFI1_TYPE),        \
-		.inject	   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, LOCK, CAPS, RELIABILITY, HFI1_TYPE), \
-		.writev	   = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writev, LOCK, CAPS, RELIABILITY, HFI1_TYPE),       \
-		.writemsg  = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writemsg, LOCK, CAPS, RELIABILITY, HFI1_TYPE),     \
-		.writedata = FI_OPX_RMA_SPECIALIZED_FUNC_NAME(writedata, LOCK, CAPS, RELIABILITY, HFI1_TYPE),    \
-	}
-
-FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR);
-FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR);
-
-FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B);
-FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B);
-
-FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
-FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
-
-FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR);
-FI_OPX_RMA_OPS_STRUCT(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR);
+OPX_FLOW_CONTROL_RMA_SPECIALIZATION_CATALOG(FI_OPX_RMA_OPS_STRUCT)
 
 #pragma GCC diagnostic pop
 
-int fi_opx_enable_rma_ops(struct fid_ep *ep)
+int __attribute__((cold)) fi_opx_enable_rma_ops(struct fid_ep *ep)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -1523,6 +1514,11 @@ int fi_opx_enable_rma_ops(struct fid_ep *ep)
 		return 0;
 	}
 
+	const enum opx_flow_control_mode flow_control_mode = opx_ep->flow_control_mode;
+	if (flow_control_mode != OPX_FLOW_CONTROL_MODE_NONE && flow_control_mode != OPX_FLOW_CONTROL_MODE_RCCC) {
+		return -FI_EOPNOTSUPP;
+	}
+
 	const enum fi_threading threading = opx_ep->domain->threading;
 
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
@@ -1531,40 +1527,65 @@ int fi_opx_enable_rma_ops(struct fid_ep *ep)
 		goto err;
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
+	const int  lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
+	const bool rccc		 = flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC;
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 		if (!lock_required) {
-			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(
-				FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_WFR);
+			opx_ep->ep_fid.rma =
+				rccc ? &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_WFR, RCCC) :
+				       &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_WFR, NONE);
 		} else {
-			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
-									 OPX_RELIABILITY, OPX_HFI1_WFR);
+			opx_ep->ep_fid.rma =
+				rccc ? &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_WFR, RCCC) :
+				       &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_WFR, NONE);
 		}
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 		if (!lock_required) {
-			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(
-				FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_MIXED_9B);
+			opx_ep->ep_fid.rma =
+				rccc ? &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_MIXED_9B, RCCC) :
+				       &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_MIXED_9B, NONE);
 		} else {
-			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
-									 OPX_RELIABILITY, OPX_HFI1_MIXED_9B);
+			opx_ep->ep_fid.rma =
+				rccc ? &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_MIXED_9B, RCCC) :
+				       &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_MIXED_9B, NONE);
 		}
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 		if (!lock_required) {
-			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(
-				FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_JKR);
+			opx_ep->ep_fid.rma =
+				rccc ? &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_JKR, RCCC) :
+				       &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_JKR, NONE);
 		} else {
-			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
-									 OPX_RELIABILITY, OPX_HFI1_JKR);
+			opx_ep->ep_fid.rma =
+				rccc ? &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_JKR, RCCC) :
+				       &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_JKR, NONE);
 		}
 	} else {
 		assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
 		if (!lock_required) {
-			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(
-				FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR);
+			opx_ep->ep_fid.rma =
+				rccc ? &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_CYR, RCCC) :
+				       &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_CYR, NONE);
 		} else {
-			opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
-									 OPX_RELIABILITY, OPX_HFI1_CYR);
+			opx_ep->ep_fid.rma =
+				rccc ? &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_CYR, RCCC) :
+				       &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED, 0x0018000000000000ull,
+								   OPX_RELIABILITY, OPX_HFI1_CYR, NONE);
 		}
 	}
 
@@ -1585,21 +1606,21 @@ ssize_t fi_opx_write_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t le
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, buf, len, desc, dest_addr, addr_offset, key,
-								      context);
+							OPX_HFI1_WFR,
+							NONE)(ep, buf, len, desc, dest_addr, addr_offset, key, context);
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_MIXED_9B)(ep, buf, len, desc, dest_addr, addr_offset,
-									   key, context);
+							OPX_HFI1_MIXED_9B,
+							NONE)(ep, buf, len, desc, dest_addr, addr_offset, key, context);
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, buf, len, desc, dest_addr, addr_offset, key,
-								      context);
+							OPX_HFI1_JKR,
+							NONE)(ep, buf, len, desc, dest_addr, addr_offset, key, context);
 	}
 
 	assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
-	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-						OPX_HFI1_CYR)(ep, buf, len, desc, dest_addr, addr_offset, key, context);
+	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(write, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR,
+						NONE)(ep, buf, len, desc, dest_addr, addr_offset, key, context);
 }
 
 ssize_t fi_opx_inject_write_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr,
@@ -1610,17 +1631,18 @@ ssize_t fi_opx_inject_write_FABRIC_DIRECT(struct fid_ep *ep, const void *buf, si
 
 	if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, buf, len, dest_addr, addr_offset, key);
+							OPX_HFI1_WFR, NONE)(ep, buf, len, dest_addr, addr_offset, key);
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_MIXED_9B)(ep, buf, len, dest_addr, addr_offset, key);
+							OPX_HFI1_MIXED_9B,
+							NONE)(ep, buf, len, dest_addr, addr_offset, key);
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, buf, len, dest_addr, addr_offset, key);
+							OPX_HFI1_JKR, NONE)(ep, buf, len, dest_addr, addr_offset, key);
 	}
 	assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
 	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(inject_write, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-						OPX_HFI1_CYR)(ep, buf, len, dest_addr, addr_offset, key);
+						OPX_HFI1_CYR, NONE)(ep, buf, len, dest_addr, addr_offset, key);
 }
 
 ssize_t fi_opx_read_FABRIC_DIRECT(struct fid_ep *ep, void *buf, size_t len, void *desc, fi_addr_t src_addr,
@@ -1630,20 +1652,20 @@ ssize_t fi_opx_read_FABRIC_DIRECT(struct fid_ep *ep, void *buf, size_t len, void
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, buf, len, desc, src_addr, addr_offset, key,
-								      context);
+							OPX_HFI1_WFR,
+							NONE)(ep, buf, len, desc, src_addr, addr_offset, key, context);
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_MIXED_9B)(ep, buf, len, desc, src_addr, addr_offset,
-									   key, context);
+							OPX_HFI1_MIXED_9B,
+							NONE)(ep, buf, len, desc, src_addr, addr_offset, key, context);
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, buf, len, desc, src_addr, addr_offset, key,
-								      context);
+							OPX_HFI1_JKR,
+							NONE)(ep, buf, len, desc, src_addr, addr_offset, key, context);
 	}
 	assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
-	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-						OPX_HFI1_CYR)(ep, buf, len, desc, src_addr, addr_offset, key, context);
+	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(read, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR,
+						NONE)(ep, buf, len, desc, src_addr, addr_offset, key, context);
 }
 
 ssize_t fi_opx_readmsg_FABRIC_DIRECT(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
@@ -1652,15 +1674,15 @@ ssize_t fi_opx_readmsg_FABRIC_DIRECT(struct fid_ep *ep, const struct fi_msg_rma 
 	/* Non-inlined functions should just use the runtime HFI1 type check, no optimizations */
 	if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_WFR) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_WFR)(ep, msg, flags);
+							OPX_HFI1_WFR, NONE)(ep, msg, flags);
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_MIXED_9B) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_MIXED_9B)(ep, msg, flags);
+							OPX_HFI1_MIXED_9B, NONE)(ep, msg, flags);
 	} else if (OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_JKR) {
 		return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-							OPX_HFI1_JKR)(ep, msg, flags);
+							OPX_HFI1_JKR, NONE)(ep, msg, flags);
 	}
 	assert(OPX_SW_HFI1_TYPE(opx_ep->domain) & OPX_HFI1_CYR);
-	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY,
-						OPX_HFI1_CYR)(ep, msg, flags);
+	return FI_OPX_RMA_SPECIALIZED_FUNC_NAME(readmsg, OPX_LOCK, 0x0018000000000000ull, OPX_RELIABILITY, OPX_HFI1_CYR,
+						NONE)(ep, msg, flags);
 }

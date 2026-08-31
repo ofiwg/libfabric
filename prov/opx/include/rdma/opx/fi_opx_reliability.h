@@ -33,6 +33,9 @@
 #ifndef _FI_PROV_OPX_RELIABILITY_H_
 #define _FI_PROV_OPX_RELIABILITY_H_
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/fi_opx_internal.h"
@@ -42,6 +45,7 @@
 
 #include "rdma/opx/fi_opx_timer.h"
 
+#include "rdma/opx/opx_flow_control.h"
 #include "rdma/opx/opx_tracer.h"
 
 #ifdef OPX_RELIABILITY_DEBUG
@@ -245,12 +249,17 @@ struct fi_opx_reliability_service {
 	struct fi_opx_pending_rx_reliability_op		*pending_rx_reliability_ops_hashmap;
 	const union fi_opx_reliability_service_flow_key *ping_start_key;
 
-	struct fi_opx_hfi1_txe_scb_9B  ping_model_9B[OPX_MAX_TX_CONTEXTS];
-	struct fi_opx_hfi1_txe_scb_9B  ack_model_9B[OPX_MAX_TX_CONTEXTS];
-	struct fi_opx_hfi1_txe_scb_9B  nack_model_9B[OPX_MAX_TX_CONTEXTS];
-	struct fi_opx_hfi1_txe_scb_16B ping_model_16B[OPX_MAX_TX_CONTEXTS];
-	struct fi_opx_hfi1_txe_scb_16B ack_model_16B[OPX_MAX_TX_CONTEXTS];
-	struct fi_opx_hfi1_txe_scb_16B nack_model_16B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_9B		       ping_model_9B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_9B		       ack_model_9B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_9B		       nack_model_9B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_16B		       ping_model_16B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_16B		       ack_model_16B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_16B		       nack_model_16B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_9B		       flow_control_request_model_9B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_9B		       flow_control_feedback_model_9B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_16B		       flow_control_request_model_16B[OPX_MAX_TX_CONTEXTS];
+	struct fi_opx_hfi1_txe_scb_16B		       flow_control_feedback_model_16B[OPX_MAX_TX_CONTEXTS];
+	struct opx_flow_control_rccc_feedback_counters flow_control_feedback_counters;
 
 	/* -- not critical; only for debug, init/fini, etc. -- */
 	uint16_t		  drop_count;
@@ -293,11 +302,42 @@ union fi_opx_reliability_service_flow_key {
 
 #define OPX_RELIABILITY_DECODE_TX_INDEX(encoded_lid) ((uint8_t) ((encoded_lid) >> 24))
 
+struct fi_opx_ep;
+struct fi_opx_rzv_completion;
+
 struct fi_opx_reliability_rx_flow {
 	uint64_t				   next_psn;
 	union fi_opx_reliability_service_flow_key *key;
 	struct fi_opx_reliability_rx_uepkt	  *uepkt;
+	struct fi_opx_reliability_rx_flow	  *flow_control_work_next;
 };
+
+void opx_flow_control_tx_flows_quiesce(struct fi_opx_ep *opx_ep);
+
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_rx_flow, next_psn) == 0,
+			"Reliability RX flow next_psn layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_rx_flow, key) == 8,
+			"Reliability RX flow key layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_rx_flow, uepkt) == 16,
+			"Reliability RX flow uepkt layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_rx_flow, flow_control_work_next) == 24,
+			"Reliability RX flow control-work link layout changed");
+OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_reliability_rx_flow) == 32, "Reliability RX flow base size changed");
+OPX_COMPILE_TIME_ASSERT(_Alignof(struct fi_opx_reliability_rx_flow) == 8, "Reliability RX flow base alignment changed");
+OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_reliability_rx_flow) % OPX_FLOW_CONTROL_STATE_ALIGNMENT == 0,
+			"Reliability RX flow tail alignment changed");
+
+__OPX_FORCE_INLINE__
+void *opx_flow_control_rx_flow_state(struct fi_opx_reliability_rx_flow *flow)
+{
+	return (uint8_t *) flow + sizeof(struct fi_opx_reliability_rx_flow);
+}
+
+__OPX_FORCE_INLINE__
+const void *opx_flow_control_rx_flow_state_const(const struct fi_opx_reliability_rx_flow *flow)
+{
+	return (const uint8_t *) flow + sizeof(struct fi_opx_reliability_rx_flow);
+}
 
 struct fi_opx_pending_rx_reliability_op_key {
 	uint64_t				  psn_start;
@@ -315,6 +355,12 @@ struct fi_opx_pending_rx_reliability_op {
 	uint8_t					    unused[2];
 	UT_hash_handle				    hh; /* makes this structure hashable */
 };
+
+#ifndef NDEBUG
+#define OPX_RELIABILITY_FLOW_CONTROL_DEBUG_GENERATION 1
+#else
+#define OPX_RELIABILITY_FLOW_CONTROL_DEBUG_GENERATION 0
+#endif
 
 struct fi_opx_reliability_tx_replay {
 	/* == CACHE LINE 0 == */
@@ -345,7 +391,9 @@ struct fi_opx_reliability_tx_replay {
 	int		   dmabuf_fd;
 	uint32_t	   unused_dmabuf_pad;
 	uintptr_t	   dmabuf_base;
-	uint64_t	   unused3[3];
+	void		  *flow_control_reservation_record;
+	uint64_t	   flow_control_generation;
+	uint64_t	   unused3[1];
 
 #ifndef NDEBUG
 	/* == CACHE LINE == */
@@ -368,8 +416,34 @@ struct fi_opx_reliability_tx_replay {
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, sdma_we) == FI_OPX_CACHE_LINE_SIZE,
 			"Reliability Replay sdma_we should start on first cacheline!");
-OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_reliability_tx_replay, scb) & (FI_OPX_CACHE_LINE_SIZE - 1)) == 0,
-			"Reliability Replay scb must be 64-byte aligned!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, flow_control_reservation_record) ==
+				(FI_OPX_CACHE_LINE_SIZE + (sizeof(uint64_t) * 5)),
+			"Reliability Replay flow-control reservation-record offset changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, flow_control_generation) ==
+				(FI_OPX_CACHE_LINE_SIZE + (sizeof(uint64_t) * 6)),
+			"Reliability Replay flow-control generation offset changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, unused3) ==
+				(FI_OPX_CACHE_LINE_SIZE + (sizeof(uint64_t) * 7)),
+			"Reliability Replay unused tail offset changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, unused3) +
+					sizeof(((struct fi_opx_reliability_tx_replay *) 0)->unused3) ==
+				(FI_OPX_CACHE_LINE_SIZE * 2),
+			"Reliability Replay replacement region must end on the second cacheline");
+#ifndef NDEBUG
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, orig_payload) == (FI_OPX_CACHE_LINE_SIZE * 2),
+			"Reliability Replay debug payload offset changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, scb) == (FI_OPX_CACHE_LINE_SIZE * 3),
+			"Reliability Replay debug scb offset changed");
+OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_reliability_tx_replay) == (FI_OPX_CACHE_LINE_SIZE * 5),
+			"Reliability Replay debug size changed");
+#else
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, scb) == (FI_OPX_CACHE_LINE_SIZE * 2),
+			"Reliability Replay release scb offset changed");
+OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_reliability_tx_replay) == (FI_OPX_CACHE_LINE_SIZE * 4),
+			"Reliability Replay release size changed");
+#endif
+OPX_COMPILE_TIME_ASSERT(_Alignof(struct fi_opx_reliability_tx_replay) == FI_OPX_CACHE_LINE_SIZE,
+			"Reliability Replay alignment changed");
 
 // Begin rbtree implementation
 // Import and inline data structures from the red-black tree implementation
@@ -540,6 +614,8 @@ union fi_opx_reliability_tx_psn {
 	} psn;
 } __attribute__((__packed__));
 
+struct opx_flow_control_rccc_reservation_record;
+
 struct fi_opx_reliability_tx_flow {
 	union fi_opx_reliability_tx_psn	     psn;
 	struct fi_opx_reliability_tx_replay *replay_head;
@@ -547,8 +623,49 @@ struct fi_opx_reliability_tx_flow {
 	uint32_t			     outstanding_pkts;
 	uint32_t			     max_outstanding_bytes;
 	uint32_t			     max_outstanding_pkts;
-	uint64_t			     unused_padding[4];
+	struct {
+		struct opx_flow_control_rccc_reservation_record *committed_head;
+		struct opx_flow_control_rccc_reservation_record *committed_tail;
+		struct fi_opx_reliability_tx_flow		*work_next;
+	} flow_control;
+	uint64_t unused_padding;
 } __attribute__((__packed__)) __attribute__((aligned(64)));
+
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_flow, psn) == 0,
+			"Reliability TX flow PSN layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_flow, replay_head) == 8,
+			"Reliability TX flow replay-head layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_flow, outstanding_bytes) == 16,
+			"Reliability TX flow outstanding-byte layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_flow, outstanding_pkts) == 20,
+			"Reliability TX flow outstanding-packet layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_flow, max_outstanding_bytes) == 24,
+			"Reliability TX flow maximum-byte layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_flow, max_outstanding_pkts) == 28,
+			"Reliability TX flow maximum-packet layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_flow, flow_control.committed_head) == 32,
+			"Reliability TX flow committed-record head layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_flow, flow_control.committed_tail) == 40,
+			"Reliability TX flow committed-record tail layout changed");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_flow, flow_control.work_next) == 48,
+			"Reliability TX flow control-work link layout changed");
+OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_reliability_tx_flow) == 64, "Reliability TX flow base size changed");
+OPX_COMPILE_TIME_ASSERT(_Alignof(struct fi_opx_reliability_tx_flow) == 64,
+			"Reliability TX flow base alignment changed");
+OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_reliability_tx_flow) % OPX_FLOW_CONTROL_STATE_ALIGNMENT == 0,
+			"Reliability TX flow tail alignment changed");
+
+__OPX_FORCE_INLINE__
+void *opx_flow_control_tx_flow_state(struct fi_opx_reliability_tx_flow *flow)
+{
+	return (uint8_t *) flow + sizeof(struct fi_opx_reliability_tx_flow);
+}
+
+__OPX_FORCE_INLINE__
+const void *opx_flow_control_tx_flow_state_const(const struct fi_opx_reliability_tx_flow *flow)
+{
+	return (const uint8_t *) flow + sizeof(struct fi_opx_reliability_tx_flow);
+}
 
 // TODO - make these tunable.
 #ifndef FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS
@@ -583,6 +700,10 @@ struct fi_opx_reliability_tx_flow {
 #ifndef OPX_RELIABILITY_RX_MAX_PRE_NACK
 #define OPX_RELIABILITY_RX_MAX_PRE_NACK (1)
 #endif
+
+// Tx & Rx Flow chunk counts to allocate at once in their respective buf pools
+#define OPX_RELIABILITY_TX_FLOW_CHUNK_COUNT (512)
+#define OPX_RELIABILITY_RX_FLOW_CHUNK_COUNT (2048)
 
 /*
  * For incoming packets:
@@ -726,7 +847,9 @@ size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_domain		      *d
 
 __OPX_FORCE_INLINE__
 struct fi_opx_reliability_tx_flow *opx_reliability_create_tx_flow(struct fi_opx_reliability_service *service,
-								  const union fi_opx_reliability_service_flow_key *key)
+								  const union fi_opx_reliability_service_flow_key *key,
+								  struct fi_opx_ep		  *opx_ep,
+								  const enum opx_flow_control_mode flow_control_mode)
 {
 	union fi_opx_reliability_service_flow_key *rbt_key =
 		(union fi_opx_reliability_service_flow_key *) ofi_buf_alloc(service->flow_key_pool);
@@ -743,12 +866,15 @@ struct fi_opx_reliability_tx_flow *opx_reliability_create_tx_flow(struct fi_opx_
 		return NULL;
 	}
 
-	tx_flow->psn.value	       = 0;
-	tx_flow->replay_head	       = NULL;
-	tx_flow->outstanding_bytes     = 0;
-	tx_flow->outstanding_pkts      = 0;
-	tx_flow->max_outstanding_bytes = service->max_outstanding_bytes;
-	tx_flow->max_outstanding_pkts  = UINT32_MAX;
+	tx_flow->psn.value		     = 0;
+	tx_flow->replay_head		     = NULL;
+	tx_flow->outstanding_bytes	     = 0;
+	tx_flow->outstanding_pkts	     = 0;
+	tx_flow->max_outstanding_bytes	     = service->max_outstanding_bytes;
+	tx_flow->max_outstanding_pkts	     = UINT32_MAX;
+	tx_flow->flow_control.committed_head = NULL;
+	tx_flow->flow_control.committed_tail = NULL;
+	tx_flow->flow_control.work_next	     = NULL;
 
 	*rbt_key = *key;
 
@@ -795,9 +921,10 @@ fi_opx_reliability_create_rx_flow(struct fi_opx_reliability_service		  *service,
 
 	*rbt_key = *key;
 
-	flow->next_psn = 0;
-	flow->key      = rbt_key;
-	flow->uepkt    = NULL;
+	flow->next_psn		     = 0;
+	flow->key		     = rbt_key;
+	flow->uepkt		     = NULL;
+	flow->flow_control_work_next = NULL;
 
 	RbtStatus rbt_rc = rbtInsert(service->rx.rx_flow_rbtree, (void *) rbt_key, (void *) flow);
 
@@ -913,7 +1040,10 @@ __OPX_FORCE_INLINE__
 int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_reliability_service *service,
 					     const opx_lid_t slid, const opx_lid_t dlid, uint16_t dst_origin_rx,
 					     uint8_t tx_index, struct fi_opx_reliability_tx_flow **tx_flow,
-					     uint32_t psns_to_get, uint32_t bytes_per_packet)
+					     uint32_t psns_to_get, uint32_t bytes_per_packet,
+					     const enum opx_flow_control_mode	      flow_control_mode,
+					     const enum opx_flow_control_packet_class packet_class,
+					     void				    **reservation_record_out)
 {
 	OPX_TRACE_SDMA_BEGIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get, 0);
 	assert(psns_to_get && psns_to_get <= MAX(OPX_HFI1_SDMA_MAX_PKTS_TID, OPX_HFI1_SDMA_MAX_PKTS));
@@ -926,7 +1056,7 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 	};
 	void *itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) &key);
 	if (OFI_UNLIKELY(!itr)) {
-		*tx_flow = opx_reliability_create_tx_flow(service, &key);
+		*tx_flow = opx_reliability_create_tx_flow(service, &key, (struct fi_opx_ep *) ep, flow_control_mode);
 		if (OFI_UNLIKELY((*tx_flow) == NULL)) {
 			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_TX_FLOW_CREATE_FAIL, 0, 0);
 			return -1;
@@ -1009,7 +1139,8 @@ int32_t fi_opx_reliability_tx_next_psn(struct fid_ep *ep, struct fi_opx_reliabil
 
 	void *itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) &key);
 	if (OFI_UNLIKELY(!itr)) {
-		*tx_flow = opx_reliability_create_tx_flow(service, &key);
+		*tx_flow = opx_reliability_create_tx_flow(service, &key, (struct fi_opx_ep *) ep,
+							  OPX_FLOW_CONTROL_MODE_NONE);
 		if (OFI_UNLIKELY((*tx_flow) == NULL)) {
 			return -1;
 		}
@@ -1096,13 +1227,15 @@ fi_opx_reliability_service_replay_allocate(struct fi_opx_reliability_service *se
 		return_value = (struct fi_opx_reliability_tx_replay *) ofi_buf_alloc(service->tx.replay_iov_pool);
 	}
 	if (OFI_LIKELY(return_value != NULL)) {
-		return_value->tx_index	 = 0;
-		return_value->nack_count = 0;
-		return_value->pinned	 = false;
-		return_value->acked	 = false;
-		return_value->use_sdma	 = false;
-		return_value->use_iov	 = use_iov;
-		return_value->sdma_we	 = NULL;
+		return_value->tx_index			      = 0;
+		return_value->nack_count		      = 0;
+		return_value->flow_control_reservation_record = NULL;
+		return_value->flow_control_generation	      = 0u;
+		return_value->pinned			      = false;
+		return_value->acked			      = false;
+		return_value->use_sdma			      = false;
+		return_value->use_iov			      = use_iov;
+		return_value->sdma_we			      = NULL;
 #ifndef NDEBUG
 		memset(return_value->orig_payload, 0x2B, 64);
 #endif
@@ -1123,7 +1256,8 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 				      const opx_lid_t slid, const opx_lid_t dlid, const uint16_t dst_subctxt_rx,
 				      uint8_t tx_index, struct fi_opx_reliability_tx_flow **tx_flow,
 				      struct fi_opx_reliability_tx_replay **replay,
-				      const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
+				      const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
+				      const enum opx_flow_control_mode flow_control_mode, void **reservation_record_out)
 {
 	union fi_opx_reliability_service_flow_key key = {
 		.slid		= OPX_RELIABILITY_ENCODE_LID_TX(slid, tx_index),
@@ -1134,7 +1268,7 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 
 	void *itr = fi_opx_rbt_find(service->tx.tx_flow_rbtree, (void *) &key);
 	if (OFI_UNLIKELY(!itr)) {
-		*tx_flow = opx_reliability_create_tx_flow(service, &key);
+		*tx_flow = opx_reliability_create_tx_flow(service, &key, (struct fi_opx_ep *) ep, flow_control_mode);
 		if (OFI_UNLIKELY((*tx_flow) == NULL)) {
 			return -1;
 		}
@@ -1205,12 +1339,11 @@ static inline void fi_opx_reliability_service_replay_deallocate(struct fi_opx_re
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_reliability_service_replay_register_with_update(struct fi_opx_reliability_service	*service,
-							    struct fi_opx_reliability_tx_flow	*flow,
-							    struct fi_opx_reliability_tx_replay *replay,
-							    struct fi_opx_completion_counter *counter, uint64_t value,
-							    const enum ofi_reliability_kind reliability_kind,
-							    const enum opx_hfi1_type	    hfi1_type)
+void fi_opx_reliability_service_replay_register_with_update(
+	struct fi_opx_reliability_service *service, struct fi_opx_reliability_tx_flow *flow,
+	struct fi_opx_reliability_tx_replay *replay, struct fi_opx_completion_counter *counter, uint64_t value,
+	const enum ofi_reliability_kind reliability_kind, const enum opx_hfi1_type hfi1_type,
+	const enum opx_flow_control_mode flow_control_mode, struct fi_opx_ep *opx_ep, void *reservation_record)
 {
 	uint16_t lrh_pktlen_le;
 	size_t	 total_bytes;
@@ -1268,7 +1401,9 @@ void fi_opx_reliability_service_replay_register_no_update(struct fi_opx_reliabil
 							  struct fi_opx_reliability_tx_flow   *flow,
 							  struct fi_opx_reliability_tx_replay *replay,
 							  const enum ofi_reliability_kind      reliability_kind,
-							  const enum opx_hfi1_type	       hfi1_type)
+							  const enum opx_hfi1_type	       hfi1_type,
+							  const enum opx_flow_control_mode     flow_control_mode,
+							  struct fi_opx_ep *opx_ep, void *reservation_record)
 {
 	// If this replay is pointing to an outside buffer instead of us copying
 	// the payload into the replay's bounce buffer, there needs to be a completion
@@ -1277,7 +1412,8 @@ void fi_opx_reliability_service_replay_register_no_update(struct fi_opx_reliabil
 	assert(!replay->use_iov);
 
 	fi_opx_reliability_service_replay_register_with_update(service, flow, replay, NULL, 0UL, reliability_kind,
-							       hfi1_type);
+							       hfi1_type, flow_control_mode, opx_ep,
+							       reservation_record);
 }
 
 ssize_t fi_opx_reliability_service_do_replay_sdma(struct fid_ep *ep, struct fi_opx_reliability_service *service,

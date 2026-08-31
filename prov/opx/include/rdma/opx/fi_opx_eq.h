@@ -43,55 +43,59 @@
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/opx_hfisvc.h"
 #include "rdma/opx/opx_hfisvc_poll.h"
+#include "rdma/opx/opx_flow_control.h"
 #include "rdma/opx/opx_tracer.h"
 
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
  * operands of the token pasting operator are not expanded */
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING) \
-	FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING)
+#define FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL) \
+	FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING)              \
-	__OPX_FORCE_INLINE__ ssize_t                                                                                  \
-		fi_opx_cq_read_##FORMAT##_0_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING(            \
-			struct fid_cq *cq, void *buf, size_t count)                                                   \
-	{                                                                                                             \
-		return fi_opx_cq_read_generic_non_locking(cq, buf, count, FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, \
-							  CTX_SHARING);                                               \
-	}                                                                                                             \
-	__OPX_FORCE_INLINE__ ssize_t                                                                                  \
-		fi_opx_cq_readfrom_##FORMAT##_0_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING(        \
-			struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)                              \
-	{                                                                                                             \
-		return fi_opx_cq_readfrom_generic_non_locking(cq, buf, count, src_addr, FORMAT, RELIABILITY, MASK,    \
-							      CAPS, HFI1_TYPE, CTX_SHARING);                          \
+#define FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)          \
+	__OPX_FORCE_INLINE__ ssize_t                                                                                            \
+		fi_opx_cq_read_##FORMAT##_0_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(     \
+			struct fid_cq *cq, void *buf, size_t count)                                                             \
+	{                                                                                                                       \
+		return fi_opx_cq_read_generic_non_locking(cq, buf, count, FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE,           \
+							  CTX_SHARING);                                                         \
+	}                                                                                                                       \
+	__OPX_FORCE_INLINE__ ssize_t                                                                                            \
+		fi_opx_cq_readfrom_##FORMAT##_0_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL( \
+			struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)                                        \
+	{                                                                                                                       \
+		return fi_opx_cq_readfrom_generic_non_locking(cq, buf, count, src_addr, FORMAT, RELIABILITY, MASK,              \
+							      CAPS, HFI1_TYPE, CTX_SHARING);                                    \
 	}
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING) \
-	FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING)
+#define FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL) \
+	FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING)                 \
-	__OPX_FORCE_INLINE__ ssize_t                                                                                 \
-		fi_opx_cq_read_##FORMAT##_1_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING(           \
-			struct fid_cq *cq, void *buf, size_t count)                                                  \
-	{                                                                                                            \
-		return fi_opx_cq_read_generic_locking(cq, buf, count, FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE,    \
-						      CTX_SHARING);                                                  \
-	}                                                                                                            \
-	__OPX_FORCE_INLINE__ ssize_t                                                                                 \
-		fi_opx_cq_readfrom_##FORMAT##_1_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING(       \
-			struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)                             \
-	{                                                                                                            \
-		return fi_opx_cq_readfrom_generic_locking(cq, buf, count, src_addr, FORMAT, RELIABILITY, MASK, CAPS, \
-							  HFI1_TYPE, CTX_SHARING);                                   \
+#define FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)              \
+	__OPX_FORCE_INLINE__ ssize_t                                                                                            \
+		fi_opx_cq_read_##FORMAT##_1_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(     \
+			struct fid_cq *cq, void *buf, size_t count)                                                             \
+	{                                                                                                                       \
+		return fi_opx_cq_read_generic_locking(cq, buf, count, FORMAT, RELIABILITY, MASK, CAPS, HFI1_TYPE,               \
+						      CTX_SHARING);                                                             \
+	}                                                                                                                       \
+	__OPX_FORCE_INLINE__ ssize_t                                                                                            \
+		fi_opx_cq_readfrom_##FORMAT##_1_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL( \
+			struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)                                        \
+	{                                                                                                                       \
+		return fi_opx_cq_readfrom_generic_locking(cq, buf, count, src_addr, FORMAT, RELIABILITY, MASK, CAPS,            \
+							  HFI1_TYPE, CTX_SHARING);                                              \
 	}
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_NAME(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING) \
-	FI_OPX_CQ_SPECIALIZED_FUNC_NAME_(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING)
+#define FI_OPX_CQ_SPECIALIZED_FUNC_NAME(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING,  \
+					FLOW_CONTROL)                                                         \
+	FI_OPX_CQ_SPECIALIZED_FUNC_NAME_(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING, \
+					 FLOW_CONTROL)
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_NAME_(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING) \
-	fi_opx_##TYPE##_##FORMAT##_##LOCK##_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING
+#define FI_OPX_CQ_SPECIALIZED_FUNC_NAME_(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS, HFI1_TYPE, CTX_SHARING, \
+					 FLOW_CONTROL)                                                        \
+	fi_opx_##TYPE##_##FORMAT##_##LOCK##_##RELIABILITY##_##MASK##_##CAPS##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL
 
 #ifdef __cplusplus
 extern "C" {
@@ -191,32 +195,38 @@ int fi_opx_cq_enqueue_err(struct fi_opx_cq *opx_cq, struct opx_context *context,
 struct fi_ops_cq *fi_opx_cq_select_non_locking_2048_ops(const enum fi_cq_format		format,
 							const enum ofi_reliability_kind reliability,
 							const uint64_t comm_caps, const uint32_t hfi1_type,
-							const bool ctx_sharing);
+							const bool			 ctx_sharing,
+							const enum opx_flow_control_mode flow_control_mode);
 
 struct fi_ops_cq *fi_opx_cq_select_non_locking_8192_ops(const enum fi_cq_format		format,
 							const enum ofi_reliability_kind reliability,
 							const uint64_t comm_caps, const uint32_t hfi1_type,
-							const bool ctx_sharing);
+							const bool			 ctx_sharing,
+							const enum opx_flow_control_mode flow_control_mode);
 
 struct fi_ops_cq *fi_opx_cq_select_non_locking_runtime_ops(const enum fi_cq_format	   format,
 							   const enum ofi_reliability_kind reliability,
 							   const uint64_t comm_caps, const uint32_t hfi1_type,
-							   const bool ctx_sharing);
+							   const bool			    ctx_sharing,
+							   const enum opx_flow_control_mode flow_control_mode);
 
 struct fi_ops_cq *fi_opx_cq_select_locking_2048_ops(const enum fi_cq_format	    format,
 						    const enum ofi_reliability_kind reliability,
 						    const uint64_t comm_caps, const uint32_t hfi1_type,
-						    const bool ctx_sharing);
+						    const bool			     ctx_sharing,
+						    const enum opx_flow_control_mode flow_control_mode);
 
 struct fi_ops_cq *fi_opx_cq_select_locking_8192_ops(const enum fi_cq_format	    format,
 						    const enum ofi_reliability_kind reliability,
 						    const uint64_t comm_caps, const uint32_t hfi1_type,
-						    const bool ctx_sharing);
+						    const bool			     ctx_sharing,
+						    const enum opx_flow_control_mode flow_control_mode);
 
 struct fi_ops_cq *fi_opx_cq_select_locking_runtime_ops(const enum fi_cq_format	       format,
 						       const enum ofi_reliability_kind reliability,
 						       const uint64_t comm_caps, const uint32_t hfi1_type,
-						       const bool ctx_sharing);
+						       const bool			ctx_sharing,
+						       const enum opx_flow_control_mode flow_control_mode);
 
 void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 

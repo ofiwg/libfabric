@@ -73,6 +73,10 @@
  * FI_INJECT_COMPLETE when possible.
  */
 
+static inline void fi_opx_ep_rx_poll(struct fid_ep *ep, const uint64_t caps,
+				     const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
+				     const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
+
 // Function for performing FI_INJECT_COMPLETIONs.
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep, void *user_context, const size_t len,
@@ -771,7 +775,8 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr,
 			      uint64_t tag, const uint32_t data, int lock_required, const uint64_t tx_op_flags,
 			      const uint64_t caps, const enum ofi_reliability_kind reliability,
-			      const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+			      const enum opx_flow_control_mode flow_control_mode, const enum opx_hfi1_type hfi1_type,
+			      const bool ctx_sharing)
 {
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
@@ -892,12 +897,13 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, dest_addr.tx_index,
-					    &flow, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(
+		ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_INJECT_HFI, len, tag);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
@@ -999,8 +1005,8 @@ ssize_t fi_opx_hfi1_tx_inject(struct fid_ep *ep, const void *buf, size_t len, st
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability,
-							     hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability, hfi1_type,
+							     flow_control_mode, opx_ep, reservation_record);
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_INJECT_HFI, len, tag);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== INJECT, HFI (end)\n");
@@ -1216,7 +1222,8 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 			      const uint64_t caps, const enum ofi_reliability_kind reliability,
 			      const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
 			      const uint64_t hmem_device, const uint64_t hmem_handle,
-			      const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+			      const enum opx_flow_control_mode flow_control_mode, const enum opx_hfi1_type hfi1_type,
+			      const bool ctx_sharing)
 {
 	assert(lock_required == 0);
 	struct fi_opx_ep    *opx_ep	       = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -1275,11 +1282,12 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
-	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, dest_addr.tx_index,
-					    &flow, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(
+		ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
@@ -1353,8 +1361,8 @@ ssize_t opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t
 						   &iov_base_offset)) { /* In/Out:  start offset, returns offset */
 	} // copy until done
 
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability,
-							     hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability, hfi1_type,
+							     flow_control_mode, opx_ep, reservation_record);
 
 	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 
@@ -1505,6 +1513,7 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 				  const uint64_t caps, const enum ofi_reliability_kind reliability,
 				  const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
 				  const uint64_t hmem_device, const uint64_t hmem_handle,
+				  const enum opx_flow_control_mode flow_control_mode,
 				  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	assert(lock_required == 0);
@@ -1572,12 +1581,13 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, dest_addr.tx_index,
-					    &flow, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(
+		ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_SENDV_EAGER_HFI, 0, 0);
@@ -1657,8 +1667,8 @@ ssize_t opx_hfi1_tx_sendv_egr_16B(struct fid_ep *ep, const struct iovec *iov, si
 						   &iov_base_offset)) { /* In/Out:  start offset, returns offset */
 	} // copy until done
 
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability,
-							     hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability, hfi1_type,
+							     flow_control_mode, opx_ep, reservation_record);
 
 	fi_opx_reliability_service_do_replay(opx_ep, opx_ep->reli_service, replay);
 
@@ -1687,24 +1697,28 @@ ssize_t opx_hfi1_tx_sendv_egr_select(struct fid_ep *ep, const struct iovec *iov,
 				     const uint64_t caps, const enum ofi_reliability_kind reliability,
 				     const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
 				     const uint64_t hmem_device, const uint64_t hmem_handle,
+				     const enum opx_flow_control_mode flow_control_mode,
 				     const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	if (hfi1_type & OPX_HFI1_WFR) {
 		return opx_hfi1_tx_sendv_egr(ep, iov, niov, total_len, dest_addr, tag, context, data, lock_required,
 					     override_flags, tx_op_flags, caps, reliability, do_cq_completion, iface,
-					     hmem_device, hmem_handle, OPX_HFI1_WFR, ctx_sharing);
+					     hmem_device, hmem_handle, flow_control_mode, OPX_HFI1_WFR, ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		return opx_hfi1_tx_sendv_egr_16B(ep, iov, niov, total_len, dest_addr, tag, context, data, lock_required,
 						 override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-						 iface, hmem_device, hmem_handle, OPX_HFI1_JKR, ctx_sharing);
+						 iface, hmem_device, hmem_handle, flow_control_mode, OPX_HFI1_JKR,
+						 ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_CYR) {
 		return opx_hfi1_tx_sendv_egr_16B(ep, iov, niov, total_len, dest_addr, tag, context, data, lock_required,
 						 override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-						 iface, hmem_device, hmem_handle, OPX_HFI1_CYR, ctx_sharing);
+						 iface, hmem_device, hmem_handle, flow_control_mode, OPX_HFI1_CYR,
+						 ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_MIXED_9B) {
 		return opx_hfi1_tx_sendv_egr(ep, iov, niov, total_len, dest_addr, tag, context, data, lock_required,
 					     override_flags, tx_op_flags, caps, reliability, do_cq_completion, iface,
-					     hmem_device, hmem_handle, OPX_HFI1_MIXED_9B, ctx_sharing);
+					     hmem_device, hmem_handle, flow_control_mode, OPX_HFI1_MIXED_9B,
+					     ctx_sharing);
 	}
 	abort();
 	return (ssize_t) -1L;
@@ -2096,12 +2110,11 @@ ssize_t fi_opx_hfi1_tx_egr_store_payload_tail(struct fi_opx_ep *opx_ep, struct f
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep, const struct fi_opx_addr addr,
-					       struct fi_opx_reliability_tx_replay *replay,
-					       struct fi_opx_reliability_tx_flow *flow, const ssize_t xfer_bytes_tail,
-					       const void *buf, const size_t payload_qws_total,
-					       const enum ofi_reliability_kind reliability,
-					       const enum opx_hfi1_type	       hfi1_type)
+void fi_opx_hfi1_tx_send_egr_write_replay_data(
+	struct fi_opx_ep *opx_ep, const struct fi_opx_addr addr, struct fi_opx_reliability_tx_replay *replay,
+	struct fi_opx_reliability_tx_flow *flow, const ssize_t xfer_bytes_tail, const void *buf,
+	const size_t payload_qws_total, const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
+	const enum opx_flow_control_mode flow_control_mode, void *reservation_record)
 {
 	uint64_t *buf_qws	 = (uint64_t *) ((uintptr_t) buf + xfer_bytes_tail);
 	uint64_t *payload_qws	 = replay->payload;
@@ -2118,8 +2131,8 @@ void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep, const s
 		payload_qws[i] = buf_qws[i];
 	}
 
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability,
-							     hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability, hfi1_type,
+							     flow_control_mode, opx_ep, reservation_record);
 }
 
 __OPX_FORCE_INLINE__
@@ -2128,7 +2141,8 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 			     const uint64_t tx_op_flags, const uint64_t caps,
 			     const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 			     const enum fi_hmem_iface iface, const uint64_t hmem_device, const uint64_t hmem_handle,
-			     const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+			     const enum opx_flow_control_mode flow_control_mode, const enum opx_hfi1_type hfi1_type,
+			     const bool ctx_sharing)
 {
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
@@ -2192,12 +2206,13 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int32_t				     psn;
 
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
-		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type);
+		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "SEND, HFI -- EAGER FI_EAGAIN (end)\n");
@@ -2255,10 +2270,10 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 	/* update the hfi txe state */
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
-	OPX_TRACE_PIO_END_SUCCESS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
-
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, dest_addr, replay, flow, xfer_bytes_tail, buf,
-						  payload_qws_total, reliability, hfi1_type);
+						  payload_qws_total, reliability, hfi1_type, flow_control_mode,
+						  reservation_record);
+	OPX_TRACE_PIO_END_SUCCESS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 
 	ssize_t rc;
 	if (OFI_LIKELY(do_cq_completion)) {
@@ -2280,7 +2295,8 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 				 const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
 				 const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 				 const enum fi_hmem_iface iface, const uint64_t hmem_device, const uint64_t hmem_handle,
-				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+				 const enum opx_flow_control_mode flow_control_mode, const enum opx_hfi1_type hfi1_type,
+				 const bool ctx_sharing)
 {
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
@@ -2353,12 +2369,13 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	struct fi_opx_reliability_tx_replay *replay;
 	struct fi_opx_reliability_tx_flow   *flow;
+	void				    *reservation_record = NULL;
 	int64_t				     psn;
 
-	psn = fi_opx_reliability_get_replay(ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].lid,
-					    dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, dest_addr.tx_index,
-					    &flow, &replay, reliability, hfi1_type);
+	psn = fi_opx_reliability_get_replay(
+		ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+		dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+		dest_addr.tx_index, &flow, &replay, reliability, hfi1_type, flow_control_mode, &reservation_record);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_TRACE_PIO_END_EAGAIN(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
@@ -2378,6 +2395,9 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 	}
 #endif
 
+	uint64_t    *buf_qws = (uint64_t *) ((uintptr_t) buf + xfer_bytes_tail);
+	const size_t first_block_qws =
+		full_block_credits_needed ? OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS : payload_qws_total;
 #ifndef NDEBUG
 	unsigned credits_consumed =
 #endif
@@ -2385,20 +2405,15 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 						       lrh_dlid_16B, lrh_qws, pbc_dlid, pbc_dws, len, xfer_bytes_tail,
 						       payload_qws_total, psn, data, tag, tx_op_flags, caps, hfi1_type,
 						       dest_addr.tx_index);
-
-	uint64_t *buf_qws = (uint64_t *) ((uintptr_t) buf + xfer_bytes_tail);
-
-	assert(hfi1_type & OPX_HFI1_CNX000);
-
-	/* write one block of PIO non-SOP, either one full block (8 qws) or the partial qws/block */
-	const size_t first_block_qws =
-		full_block_credits_needed ? OPX_JKR_16B_PAYLOAD_AFTER_HDR_QWS : payload_qws_total;
-
 #ifndef NDEBUG
 	credits_consumed +=
 #endif
 		opx_hfi1_tx_store_16B_hdr_extension(opx_ep, opx_tx, &pio_state, replay->scb.qws, tag, first_block_qws,
 						    buf_qws);
+
+	assert(hfi1_type & OPX_HFI1_CNX000);
+
+	/* write one block of PIO non-SOP, either one full block (8 qws) or the partial qws/block */
 
 	buf_qws = buf_qws + first_block_qws;
 	/* adjust full or partial for what we just consumed */
@@ -2436,12 +2451,11 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 
 	/* update the hfi txe state */
 	opx_tx->pio_state->qw0 = pio_state.qw0;
-
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
-	OPX_TRACE_PIO_END_SUCCESS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
-
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, dest_addr, replay, flow, xfer_bytes_tail, buf,
-						  payload_qws_total, reliability, hfi1_type);
+						  payload_qws_total, reliability, hfi1_type, flow_control_mode,
+						  reservation_record);
+	OPX_TRACE_PIO_END_SUCCESS(OPX_TRACE_EVENT_PIO_SEND, len, (uint64_t) total_credits_needed);
 
 	ssize_t rc;
 	if (OFI_LIKELY(do_cq_completion)) {
@@ -2463,27 +2477,27 @@ ssize_t opx_hfi1_tx_send_egr_select(struct fid_ep *ep, const void *buf, size_t l
 				    const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
 				    const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 				    const enum fi_hmem_iface iface, const uint64_t hmem_device,
-				    const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type,
-				    const bool ctx_sharing)
+				    const uint64_t hmem_handle, const enum opx_flow_control_mode flow_control_mode,
+				    const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	if (hfi1_type & OPX_HFI1_WFR) {
 		return opx_hfi1_tx_send_egr(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
 					    tx_op_flags, caps, reliability, do_cq_completion, iface, hmem_device,
-					    hmem_handle, OPX_HFI1_WFR, ctx_sharing);
+					    hmem_handle, flow_control_mode, OPX_HFI1_WFR, ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_MIXED_9B) {
 		return opx_hfi1_tx_send_egr(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
 					    tx_op_flags, caps, reliability, do_cq_completion, iface, hmem_device,
-					    hmem_handle, OPX_HFI1_MIXED_9B, ctx_sharing);
+					    hmem_handle, flow_control_mode, OPX_HFI1_MIXED_9B, ctx_sharing);
 	} else if (hfi1_type & OPX_HFI1_JKR) {
 		return opx_hfi1_tx_send_egr_16B(ep, buf, len, dest_addr, tag, context, data, lock_required,
 						override_flags, tx_op_flags, caps, reliability, do_cq_completion, iface,
-						hmem_device, hmem_handle, OPX_HFI1_JKR, ctx_sharing);
+						hmem_device, hmem_handle, flow_control_mode, OPX_HFI1_JKR, ctx_sharing);
 	}
 
 	assert(hfi1_type & OPX_HFI1_CYR);
 	return opx_hfi1_tx_send_egr_16B(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
 					tx_op_flags, caps, reliability, do_cq_completion, iface, hmem_device,
-					hmem_handle, OPX_HFI1_CYR, ctx_sharing);
+					hmem_handle, flow_control_mode, OPX_HFI1_CYR, ctx_sharing);
 }
 
 /*
@@ -2686,6 +2700,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(
 	const struct fi_opx_addr addr, uint64_t tag, const uint32_t data, int lock_required, const uint64_t tx_op_flags,
 	const uint64_t caps, const enum ofi_reliability_kind reliability, uint32_t *psn_out, size_t *payload_bytes_sent,
 	const enum fi_hmem_iface iface, const uint64_t hmem_device, const uint64_t hmem_handle,
+	const enum opx_flow_control_mode flow_control_mode, void *mp_eager_reservation_record,
 	const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	assert(lock_required == 0);
@@ -2714,7 +2729,7 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
-		&flow, &replay, reliability, hfi1_type);
+		&flow, &replay, reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, NULL);
 	if (OFI_UNLIKELY(psn == -1)) {
 		opx_tx->pio_state->qw0 = pio_state.qw0;
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
@@ -2821,9 +2836,9 @@ ssize_t opx_hfi1_tx_send_mp_egr_first_common(
 	/* update the hfi txe state */
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
-
 	fi_opx_hfi1_tx_send_egr_write_replay_data(opx_ep, addr, replay, flow, 0, (uint64_t *) buf_ptr,
-						  payload_qws_total, reliability, hfi1_type);
+						  payload_qws_total, reliability, hfi1_type, flow_control_mode,
+						  mp_eager_reservation_record);
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_FIRST_HFI, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		     "===================================== SEND, HFI -- MULTI-PACKET EAGER FIRST (end)\n");
@@ -2838,7 +2853,9 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, struct fi_opx_e
 				       const uint32_t payload_offset, const ssize_t len, const uint32_t mp_egr_uid,
 				       const uint64_t pbc_dlid, const uint64_t bth_subctxt_rx,
 				       const uint64_t lrh_dlid_9B, const struct fi_opx_addr addr, int lock_required,
-				       const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
+				       const enum ofi_reliability_kind	reliability,
+				       const enum opx_flow_control_mode flow_control_mode,
+				       void *mp_eager_reservation_record, const enum opx_hfi1_type hfi1_type,
 				       const bool ctx_sharing)
 {
 	assert(lock_required == 0);
@@ -2880,7 +2897,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, struct fi_opx_e
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
-		&flow, &replay, reliability, hfi1_type);
+		&flow, &replay, reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, NULL);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
@@ -2959,8 +2976,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth(struct fi_opx_ep *opx_ep, struct fi_opx_e
 	/* update the hfi txe state */
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability,
-							     hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability, hfi1_type,
+							     flow_control_mode, opx_ep, mp_eager_reservation_record);
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2975,7 +2992,9 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, struct fi_o
 					   const uint64_t pbc_dlid, const uint64_t bth_subctxt_rx,
 					   const uint64_t lrh_dlid_16B, const struct fi_opx_addr addr,
 					   int lock_required, const enum ofi_reliability_kind reliability,
-					   const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+					   const enum opx_flow_control_mode flow_control_mode,
+					   void *mp_eager_reservation_record, const enum opx_hfi1_type hfi1_type,
+					   const bool ctx_sharing)
 {
 	assert(lock_required == 0);
 
@@ -3033,7 +3052,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, struct fi_o
 	psn = fi_opx_reliability_get_replay(
 		&opx_ep->ep_fid, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
 		addr.planes[OPX_PRIMARY_PLANE].lid, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, addr.tx_index,
-		&flow, &replay, reliability, hfi1_type);
+		&flow, &replay, reliability, hfi1_type, OPX_FLOW_CONTROL_MODE_NONE, NULL);
 	if (OFI_UNLIKELY(psn == -1)) {
 		OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
 		OPX_TRACE_TX_END_EAGAIN(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
@@ -3137,9 +3156,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth_16B(struct fi_opx_ep *opx_ep, struct fi_o
 	opx_tx->pio_state->qw0 = pio_state.qw0;
 
 	OPX_SHD_CTX_PIO_UNLOCK(ctx_sharing, opx_tx);
-
-	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability,
-							     hfi1_type);
+	fi_opx_reliability_service_replay_register_no_update(opx_ep->reli_service, flow, replay, reliability, hfi1_type,
+							     flow_control_mode, opx_ep, mp_eager_reservation_record);
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_MP_EAGER_NTH, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -3216,6 +3234,22 @@ ssize_t opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, size_t
 			      const uint64_t hmem_device, const uint64_t hmem_handle,
 			      const enum opx_hfi1_type hfi1_type, const bool ctx_sharing);
 
+__OPX_FORCE_INLINE__
+ssize_t opx_hfi1_tx_sendv_rzv_selected(struct fid_ep *ep, const struct iovec *iov, size_t niov, size_t total_len,
+				       struct fi_opx_addr dest_addr, uint64_t tag, void *user_context,
+				       const uint32_t data, int lock_required, const unsigned override_flags,
+				       const uint64_t tx_op_flags, const uint64_t dest_rx, const uint64_t caps,
+				       const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
+				       const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
+				       const uint64_t hmem_handle, const enum opx_flow_control_mode flow_control_mode,
+				       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+{
+	(void) flow_control_mode;
+	return opx_hfi1_tx_sendv_rzv(ep, iov, niov, total_len, dest_addr, tag, user_context, data, lock_required,
+				     override_flags, tx_op_flags, dest_rx, caps, reliability, do_cq_completion,
+				     hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+}
+
 ssize_t opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr, uint64_t tag,
 			     void *user_context, const uint32_t data, int lock_required, const unsigned override_flags,
 			     const uint64_t tx_op_flags, const uint64_t dest_rx, const uint64_t caps,
@@ -3239,8 +3273,10 @@ ssize_t opx_hfi1_tx_send_rzv_select(struct fid_ep *ep, const void *buf, size_t l
 				    const uint64_t caps, const enum ofi_reliability_kind reliability,
 				    const uint64_t do_cq_completion, const enum fi_hmem_iface hmem_iface,
 				    const uint64_t hmem_device, const uint64_t hmem_handle, struct fi_opx_mr *opx_mr,
+				    const enum opx_flow_control_mode flow_control_mode,
 				    const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
+	(void) flow_control_mode;
 	if (hfi1_type & OPX_HFI1_WFR) {
 		return opx_hfi1_tx_send_rzv(ep, buf, len, dest_addr, tag, context, data, lock_required, override_flags,
 					    tx_op_flags, dest_rx, caps, reliability, do_cq_completion, hmem_iface,

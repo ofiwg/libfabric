@@ -83,64 +83,157 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 #define FI_OPX_EP_AV_ADDR(ep, addr) ep->tx->av_addr[addr]
 #define FI_OPX_EP_TX(opx_ep, addr)  (opx_ep->tx_contexts[(addr).tx_index])
 
+#define FI_OPX_MSG_INJECT_SPECIALIZED_NONE(ep, buf, len, dest_addr, lock, caps, reliability, hfi1_type, ctx_sharing) \
+	fi_opx_ep_tx_inject(ep, buf, len, dest_addr, 0, 0, lock, 0, caps | FI_MSG, reliability,                      \
+			    OPX_FLOW_CONTROL_MODE_NONE, hfi1_type, ctx_sharing)
+#define FI_OPX_MSG_INJECT_SPECIALIZED_RCCC(ep, buf, len, dest_addr, lock, caps, reliability, hfi1_type, ctx_sharing) \
+	fi_opx_ep_tx_inject(ep, buf, len, dest_addr, 0, 0, lock, 0, caps | FI_MSG, reliability,                      \
+			    OPX_FLOW_CONTROL_MODE_RCCC, hfi1_type, ctx_sharing)
+#define FI_OPX_MSG_INJECT_SPECIALIZED(FLOW_CONTROL, ep, buf, len, dest_addr, lock, caps, reliability, hfi1_type,  \
+				      ctx_sharing)                                                                \
+	FI_OPX_MSG_INJECT_SPECIALIZED_(FLOW_CONTROL, ep, buf, len, dest_addr, lock, caps, reliability, hfi1_type, \
+				       ctx_sharing)
+#define FI_OPX_MSG_INJECT_SPECIALIZED_(FLOW_CONTROL, ep, buf, len, dest_addr, lock, caps, reliability, hfi1_type, \
+				       ctx_sharing)                                                               \
+	FI_OPX_MSG_INJECT_SPECIALIZED_##FLOW_CONTROL(ep, buf, len, dest_addr, lock, caps, reliability, hfi1_type, \
+						     ctx_sharing)
+
+#define FI_OPX_MSG_SENDDATA_SPECIALIZED_NONE(ep, buf, len, desc, data, dest_addr, context, lock, caps, reliability, \
+					     hfi1_type, ctx_sharing)                                                \
+	fi_opx_ep_tx_send(ep, buf, len, desc, dest_addr, 0, context, data, lock, OPX_CONTIG_TRUE,                   \
+			  OPX_FLAGS_OVERRIDE_FALSE, FI_REMOTE_CQ_DATA, caps | FI_MSG, reliability,                  \
+			  OPX_FLOW_CONTROL_MODE_NONE, hfi1_type, ctx_sharing)
+#define FI_OPX_MSG_SENDDATA_SPECIALIZED_RCCC(ep, buf, len, desc, data, dest_addr, context, lock, caps, reliability, \
+					     hfi1_type, ctx_sharing)                                                \
+	fi_opx_ep_tx_send(ep, buf, len, desc, dest_addr, 0, context, data, lock, OPX_CONTIG_TRUE,                   \
+			  OPX_FLAGS_OVERRIDE_FALSE, FI_REMOTE_CQ_DATA, caps | FI_MSG, reliability,                  \
+			  OPX_FLOW_CONTROL_MODE_RCCC, hfi1_type, ctx_sharing)
+#define FI_OPX_MSG_SENDDATA_SPECIALIZED(FLOW_CONTROL, ep, buf, len, desc, data, dest_addr, context, lock, caps,  \
+					reliability, hfi1_type, ctx_sharing)                                     \
+	FI_OPX_MSG_SENDDATA_SPECIALIZED_(FLOW_CONTROL, ep, buf, len, desc, data, dest_addr, context, lock, caps, \
+					 reliability, hfi1_type, ctx_sharing)
+#define FI_OPX_MSG_SENDDATA_SPECIALIZED_(FLOW_CONTROL, ep, buf, len, desc, data, dest_addr, context, lock, caps, \
+					 reliability, hfi1_type, ctx_sharing)                                    \
+	FI_OPX_MSG_SENDDATA_SPECIALIZED_##FLOW_CONTROL(ep, buf, len, desc, data, dest_addr, context, lock, caps, \
+						       reliability, hfi1_type, ctx_sharing)
+
+#define FI_OPX_MSG_INJECTDATA_SPECIALIZED_NONE(ep, buf, len, data, dest_addr, lock, caps, reliability, hfi1_type,  \
+					       ctx_sharing)                                                        \
+	fi_opx_ep_tx_inject(ep, buf, len, dest_addr, 0, data, lock, FI_REMOTE_CQ_DATA, caps | FI_MSG, reliability, \
+			    OPX_FLOW_CONTROL_MODE_NONE, hfi1_type, ctx_sharing)
+#define FI_OPX_MSG_INJECTDATA_SPECIALIZED_RCCC(ep, buf, len, data, dest_addr, lock, caps, reliability, hfi1_type,  \
+					       ctx_sharing)                                                        \
+	fi_opx_ep_tx_inject(ep, buf, len, dest_addr, 0, data, lock, FI_REMOTE_CQ_DATA, caps | FI_MSG, reliability, \
+			    OPX_FLOW_CONTROL_MODE_RCCC, hfi1_type, ctx_sharing)
+#define FI_OPX_MSG_INJECTDATA_SPECIALIZED(FLOW_CONTROL, ep, buf, len, data, dest_addr, lock, caps, reliability,  \
+					  hfi1_type, ctx_sharing)                                                \
+	FI_OPX_MSG_INJECTDATA_SPECIALIZED_(FLOW_CONTROL, ep, buf, len, data, dest_addr, lock, caps, reliability, \
+					   hfi1_type, ctx_sharing)
+#define FI_OPX_MSG_INJECTDATA_SPECIALIZED_(FLOW_CONTROL, ep, buf, len, data, dest_addr, lock, caps, reliability, \
+					   hfi1_type, ctx_sharing)                                               \
+	FI_OPX_MSG_INJECTDATA_SPECIALIZED_##FLOW_CONTROL(ep, buf, len, data, dest_addr, lock, caps, reliability, \
+							 hfi1_type, ctx_sharing)
+
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
  * operands of the token pasting operator are not expanded */
 
-#define FI_OPX_MSG_SPECIALIZED_FUNC(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING) \
-	FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING)
+#define FI_OPX_MSG_SPECIALIZED_FUNC(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL) \
+	FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)
 
-#define FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING)                                \
-	static inline ssize_t fi_opx_send_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(             \
-		struct fid_ep *ep, const void *buf, size_t len, void *desc, fi_addr_t dest_addr, void *context)      \
+#define FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)                  \
+	static inline ssize_t                                                                                        \
+		fi_opx_send_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(          \
+			struct fid_ep *ep, const void *buf, size_t len, void *desc, fi_addr_t dest_addr,             \
+			void *context)                                                                               \
 	{                                                                                                            \
 		return fi_opx_ep_tx_send(ep, buf, len, desc, dest_addr, 0, context, 0, LOCK, /* lock_required */     \
 					 1,						     /* is_contiguous */     \
 					 0,						     /* override_flags */    \
 					 0,						     /* flags */             \
-					 CAPS | FI_MSG, RELIABILITY, HFI1_TYPE, CTX_SHARING);                        \
+					 CAPS | FI_MSG, RELIABILITY, OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL),      \
+					 HFI1_TYPE, CTX_SHARING);                                                    \
 	}                                                                                                            \
-	static inline ssize_t fi_opx_recv_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(             \
-		struct fid_ep *ep, void *buf, size_t len, void *desc, fi_addr_t src_addr, void *context)             \
+	static inline ssize_t                                                                                        \
+		fi_opx_recv_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(          \
+			struct fid_ep *ep, void *buf, size_t len, void *desc, fi_addr_t src_addr, void *context)     \
 	{                                                                                                            \
 		return fi_opx_recv_generic(ep, buf, len, desc, src_addr, 0, (uint64_t) - 1, context, LOCK, FI_MSG,   \
 					   RELIABILITY, HFI1_TYPE, CTX_SHARING);                                     \
 	}                                                                                                            \
-	static inline ssize_t fi_opx_inject_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(           \
-		struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr)                                 \
+	static inline ssize_t                                                                                        \
+		fi_opx_inject_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(        \
+			struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr)                         \
 	{                                                                                                            \
-		return fi_opx_ep_tx_inject(ep, buf, len, dest_addr, 0, 0, LOCK, /* lock_required */                  \
-					   0,					/* flags */                          \
-					   CAPS | FI_MSG, RELIABILITY, HFI1_TYPE, CTX_SHARING);                      \
+		return FI_OPX_MSG_INJECT_SPECIALIZED(FLOW_CONTROL, ep, buf, len, dest_addr, LOCK, CAPS, RELIABILITY, \
+						     HFI1_TYPE, CTX_SHARING);                                        \
 	}                                                                                                            \
-	static inline ssize_t fi_opx_recvmsg_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(          \
-		struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)                                         \
+	static inline ssize_t                                                                                        \
+		fi_opx_recvmsg_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(       \
+			struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)                                 \
 	{                                                                                                            \
 		return fi_opx_recvmsg_generic(ep, msg, flags, LOCK, RELIABILITY, HFI1_TYPE, CTX_SHARING);            \
 	}                                                                                                            \
-	static inline ssize_t fi_opx_senddata_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(         \
-		struct fid_ep *ep, const void *buf, size_t len, void *desc, uint64_t data, fi_addr_t dest_addr,      \
-		void *context)                                                                                       \
+	static inline ssize_t                                                                                        \
+		fi_opx_senddata_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(      \
+			struct fid_ep *ep, const void *buf, size_t len, void *desc, uint64_t data,                   \
+			fi_addr_t dest_addr, void *context)                                                          \
 	{                                                                                                            \
-		return fi_opx_ep_tx_send(ep, buf, len, desc, dest_addr, 0, context, data, LOCK, /* lock_required */  \
-					 1,							/* is_contiguous */  \
-					 0,							/* override_flags */ \
-					 FI_REMOTE_CQ_DATA,					/* flags */          \
-					 CAPS | FI_MSG, RELIABILITY, HFI1_TYPE, CTX_SHARING);                        \
+		return FI_OPX_MSG_SENDDATA_SPECIALIZED(FLOW_CONTROL, ep, buf, len, desc, data, dest_addr, context,   \
+						       LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING);             \
 	}                                                                                                            \
-	static inline ssize_t fi_opx_injectdata_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING(       \
-		struct fid_ep *ep, const void *buf, size_t len, uint64_t data, fi_addr_t dest_addr)                  \
+	static inline ssize_t                                                                                        \
+		fi_opx_injectdata_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(    \
+			struct fid_ep *ep, const void *buf, size_t len, uint64_t data, fi_addr_t dest_addr)          \
 	{                                                                                                            \
-		return fi_opx_ep_tx_inject(ep, buf, len, dest_addr, 0, data, LOCK, /* lock_required */               \
-					   FI_REMOTE_CQ_DATA,			   /* flags */                       \
-					   CAPS | FI_MSG, RELIABILITY, HFI1_TYPE, CTX_SHARING);                      \
+		return FI_OPX_MSG_INJECTDATA_SPECIALIZED(FLOW_CONTROL, ep, buf, len, data, dest_addr, LOCK, CAPS,    \
+							 RELIABILITY, HFI1_TYPE, CTX_SHARING);                       \
 	}
 
-#define FI_OPX_MSG_SPECIALIZED_FUNC_NAME(TYPE, LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING) \
-	FI_OPX_MSG_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING)
+/* Only the message operation tables bind sendv/sendmsg specializations; the
+ * FABRIC_DIRECT expansions consume just the base set, so keeping these in a
+ * separate macro avoids unused-function definitions in that unit. */
+#define FI_OPX_MSG_OPS_SPECIALIZED_FUNC(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL) \
+	FI_OPX_MSG_OPS_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)
 
-#define FI_OPX_MSG_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING) \
-	fi_opx_##TYPE##_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING
+#define FI_OPX_MSG_OPS_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)              \
+	FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)                  \
+	static inline ssize_t                                                                                        \
+		fi_opx_sendv_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(         \
+			struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count, fi_addr_t dest_addr,  \
+			void *context)                                                                               \
+	{                                                                                                            \
+		if (count == 1) {                                                                                    \
+			return fi_opx_ep_tx_send(ep, iov->iov_base, iov->iov_len, desc, dest_addr, 0, context, 0,    \
+						 LOCK, OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_FALSE, 0, CAPS | FI_MSG,  \
+						 RELIABILITY, OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL), HFI1_TYPE,  \
+						 CTX_SHARING);                                                       \
+		}                                                                                                    \
+		return fi_opx_ep_tx_send(ep, iov, count, desc, dest_addr, 0, context, 0, LOCK, OPX_CONTIG_FALSE,     \
+					 OPX_FLAGS_OVERRIDE_FALSE, 0, CAPS | FI_MSG, RELIABILITY,                    \
+					 OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL), HFI1_TYPE, CTX_SHARING);         \
+	}                                                                                                            \
+	static inline ssize_t                                                                                        \
+		fi_opx_sendmsg_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(       \
+			struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)                                 \
+	{                                                                                                            \
+		if (msg->iov_count == 1) {                                                                           \
+			return fi_opx_ep_tx_send(ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, msg->desc,       \
+						 msg->addr, 0, msg->context, msg->data, LOCK, OPX_CONTIG_TRUE,       \
+						 OPX_FLAGS_OVERRIDE_TRUE, flags, CAPS | FI_MSG, RELIABILITY,         \
+						 OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL), HFI1_TYPE, CTX_SHARING); \
+		}                                                                                                    \
+		return fi_opx_ep_tx_send(ep, msg->msg_iov, msg->iov_count, msg->desc, msg->addr, 0, msg->context,    \
+					 msg->data, LOCK, OPX_CONTIG_FALSE, OPX_FLAGS_OVERRIDE_TRUE, flags,          \
+					 CAPS | FI_MSG, RELIABILITY, OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL),      \
+					 HFI1_TYPE, CTX_SHARING);                                                    \
+	}
+
+#define FI_OPX_MSG_SPECIALIZED_FUNC_NAME(TYPE, LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL) \
+	FI_OPX_MSG_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)
+
+#define FI_OPX_MSG_SPECIALIZED_FUNC_NAME_(TYPE, LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL) \
+	fi_opx_##TYPE##_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL
 
 enum fi_opx_ep_state { FI_OPX_EP_UNINITIALIZED = 0, FI_OPX_EP_INITITALIZED_DISABLED, FI_OPX_EP_INITITALIZED_ENABLED };
 
@@ -490,6 +583,8 @@ struct fi_opx_ep_daos_info {
  *   FI_CLASS_RX_CTX
  *   -- no FI_CLASS_SRX_CTX
  */
+struct opx_flow_control_rccc_scheduler;
+
 struct fi_opx_ep {
 	/* == CACHE LINE 0,1 == */
 	struct fid_ep			   ep_fid; /* 11 qws */
@@ -526,7 +621,10 @@ struct fi_opx_ep {
 	uint16_t	     num_tx_contexts;
 	uint8_t	 threading;
 	uint8_t	 av_type;
-	uint32_t unused_cl3_pad;
+	/* Process-wide flow-control mode, cached at endpoint enable (it can
+	 * never change for the life of the endpoint) so hot paths avoid the
+	 * locked opx_flow_control_selected_mode() lookup. */
+	enum opx_flow_control_mode flow_control_mode;
 
 	/* == CACHE LINE 4 == */
 	/* Init-only fields: fi_info, CQ/counter bindings */
@@ -615,12 +713,19 @@ struct fi_opx_ep {
 	ofi_spin_t	   lock; /* lock size varies based on ENABLE_DEBUG */
 
 	/* Init-only fields (cold): set during bind/enable, never on hot path */
-	struct fi_opx_cntr *init_send_cntr;
-	struct fi_opx_cntr *init_recv_cntr;
-	uint64_t	    tx_cq_bflags;
-	bool		    is_tx_cq_bound;
-	bool		    is_rx_cq_bound;
-	uint8_t		    unused_cl6[6];
+	struct fi_opx_cntr		       *init_send_cntr;
+	struct fi_opx_cntr		       *init_recv_cntr;
+	uint64_t				tx_cq_bflags;
+	bool					is_tx_cq_bound;
+	bool					is_rx_cq_bound;
+	uint8_t					unused_cl6[6];
+	struct ofi_bufpool		       *flow_control_reservation_pool;
+	size_t					flow_control_reservation_capacity;
+	struct fi_opx_reliability_tx_flow      *flow_control_tx_work_head;
+	struct fi_opx_reliability_tx_flow      *flow_control_tx_work_tail;
+	struct fi_opx_reliability_rx_flow      *flow_control_rx_work_head;
+	struct fi_opx_reliability_rx_flow      *flow_control_rx_work_tail;
+	struct opx_flow_control_rccc_scheduler *flow_control_scheduler;
 
 	/* Multi-plane: secondary HFI contexts (init/teardown only, not hot-path) */
 	struct fi_opx_hfi1_context *hfi_contexts[OPX_MAX_TX_CONTEXTS];
@@ -4550,6 +4655,35 @@ uint64_t fi_opx_ep_tx_do_cq_completion(struct fi_opx_ep *opx_ep, const unsigned 
 	       ((flags & (FI_SELECTIVE_COMPLETION | FI_TRANSMIT)) == FI_TRANSMIT);
 }
 
+#ifndef FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES
+#define FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES (1)
+#endif
+
+__OPX_FORCE_INLINE__
+uint32_t opx_ep_tx_rzv_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
+{
+	return (iface == FI_HMEM_SYSTEM) ? opx_tx->rzv_min_payload_bytes : opx_ep->hmem_rzv_min_payload_bytes;
+}
+
+__OPX_FORCE_INLINE__
+uint32_t opx_ep_tx_sdma_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
+{
+	return (iface == FI_HMEM_SYSTEM) ? opx_tx->sdma_min_payload_bytes : opx_ep->hmem_sdma_min_payload_bytes;
+}
+
+__OPX_FORCE_INLINE__
+uint32_t opx_ep_tx_hfisvc_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
+{
+	return (iface == FI_HMEM_SYSTEM) ? opx_tx->hfisvc_min_payload_bytes : opx_ep->hmem_hfisvc_min_payload_bytes;
+}
+
+ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr,
+				  uint64_t tag, void *user_context, const uint32_t data, const uint64_t tx_op_flags,
+				  const uint64_t caps, const enum ofi_reliability_kind reliability,
+				  const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
+				  const uint64_t hmem_device, const int dmabuf_fd, const uintptr_t dmabuf_base,
+				  const enum opx_hfi1_type hfi1_type);
+
 __OPX_FORCE_INLINE__
 void fi_opx_ep_tx_cq_completion_rzv(struct fi_opx_ep_tx *opx_tx, void *context, const size_t len,
 				    const int lock_required, const uint64_t tag, const uint64_t caps)
@@ -4580,8 +4714,10 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, struct fi_op
 					  uint32_t *payload_offset, ssize_t *payload_remaining,
 					  const uint32_t mp_egr_id, const size_t chunk_size, const uint64_t pbc_dlid,
 					  const uint64_t bth_rx, const uint64_t lrh_dlid, const struct fi_opx_addr addr,
-					  const enum ofi_reliability_kind reliability,
-					  const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+					  const enum ofi_reliability_kind  reliability,
+					  const enum opx_flow_control_mode flow_control_mode,
+					  void *mp_eager_reservation_record, const enum opx_hfi1_type hfi1_type,
+					  const bool ctx_sharing)
 {
 	ssize_t	 remaining = *payload_remaining;
 	uint32_t offset	   = *payload_offset;
@@ -4592,15 +4728,18 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, struct fi_op
 		if (hfi1_type == OPX_HFI1_WFR) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, chunk_size, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_WFR, ctx_sharing);
+							    reliability, flow_control_mode, mp_eager_reservation_record,
+							    OPX_HFI1_WFR, ctx_sharing);
 		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, chunk_size, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing);
+							    reliability, flow_control_mode, mp_eager_reservation_record,
+							    OPX_HFI1_MIXED_9B, ctx_sharing);
 		} else {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
 				opx_ep, opx_tx, (void *) buf, offset, chunk_size, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid,
-				addr, FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
+				addr, FI_OPX_LOCK_NOT_REQUIRED, reliability, flow_control_mode,
+				mp_eager_reservation_record, OPX_HFI1_JKR, ctx_sharing);
 		}
 
 		if (rc != FI_SUCCESS) {
@@ -4617,15 +4756,18 @@ ssize_t opx_hfi1_tx_send_mp_egr_remaining(struct fi_opx_ep *opx_ep, struct fi_op
 		if (hfi1_type == OPX_HFI1_WFR) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, remaining, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_WFR, ctx_sharing);
+							    reliability, flow_control_mode, mp_eager_reservation_record,
+							    OPX_HFI1_WFR, ctx_sharing);
 		} else if (hfi1_type == OPX_HFI1_MIXED_9B) {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth(opx_ep, opx_tx, (void *) buf, offset, remaining, mp_egr_id,
 							    pbc_dlid, bth_rx, lrh_dlid, addr, FI_OPX_LOCK_NOT_REQUIRED,
-							    reliability, OPX_HFI1_MIXED_9B, ctx_sharing);
+							    reliability, flow_control_mode, mp_eager_reservation_record,
+							    OPX_HFI1_MIXED_9B, ctx_sharing);
 		} else {
 			rc = fi_opx_hfi1_tx_send_mp_egr_nth_16B(
 				opx_ep, opx_tx, (void *) buf, offset, remaining, mp_egr_id, pbc_dlid, bth_rx, lrh_dlid,
-				addr, FI_OPX_LOCK_NOT_REQUIRED, reliability, OPX_HFI1_JKR, ctx_sharing);
+				addr, FI_OPX_LOCK_NOT_REQUIRED, reliability, flow_control_mode,
+				mp_eager_reservation_record, OPX_HFI1_JKR, ctx_sharing);
 		}
 		if (rc != FI_SUCCESS) {
 			goto mp_egr_eagain;
@@ -4650,8 +4792,8 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 				    const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
 				    const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 				    const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
-				    const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type,
-				    const bool ctx_sharing)
+				    const uint64_t hmem_handle, const enum opx_flow_control_mode flow_control_mode,
+				    const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
@@ -4661,10 +4803,11 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 
 	const uint64_t bth_subctxt_rx = ((uint64_t) dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx)
 					<< OPX_BTH_SUBCTXT_RX_SHIFT;
-	const uint64_t lrh_dlid = hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B) ?
-					  FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(dest_addr.planes[OPX_PRIMARY_PLANE].lid) :
-					  dest_addr.planes[OPX_PRIMARY_PLANE].lid;
-	const uint64_t pbc_dlid = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
+	const uint64_t lrh_dlid			   = hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B) ?
+							     FI_OPX_ADDR_TO_HFI1_LRH_DLID_9B(dest_addr.planes[OPX_PRIMARY_PLANE].lid) :
+							     dest_addr.planes[OPX_PRIMARY_PLANE].lid;
+	const uint64_t pbc_dlid			   = OPX_PBC_DLID(dest_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
+	void	      *mp_eager_reservation_record = NULL;
 
 	/* Write the first packet */
 	uint32_t first_packet_psn;
@@ -4677,7 +4820,8 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	rc = opx_hfi1_tx_send_mp_egr_first_common(
 		opx_ep, opx_tx, (void **) &buf_bytes_ptr, len, opx_ep->hmem_copy_buf, pbc_dlid, bth_subctxt_rx,
 		lrh_dlid, dest_addr, tag, data, lock_required, tx_op_flags, caps, reliability, &first_packet_psn,
-		&payload_bytes_sent, hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+		&payload_bytes_sent, hmem_iface, hmem_device, hmem_handle, flow_control_mode,
+		mp_eager_reservation_record, hfi1_type, ctx_sharing);
 
 	if (rc != FI_SUCCESS) {
 		FI_OPX_DEBUG_COUNTERS_INC_COND(rc == -FI_ENOBUFS,
@@ -4704,7 +4848,8 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 
 	rc = opx_hfi1_tx_send_mp_egr_remaining(opx_ep, opx_tx, &buf_bytes_ptr, &payload_offset, &payload_remaining,
 					       first_packet_psn, chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid,
-					       dest_addr, reliability, hfi1_type, ctx_sharing);
+					       dest_addr, reliability, flow_control_mode, mp_eager_reservation_record,
+					       hfi1_type, ctx_sharing);
 
 	while (rc != FI_SUCCESS) {
 		FI_OPX_DEBUG_COUNTERS_INC_COND(rc == -FI_ENOBUFS,
@@ -4722,7 +4867,8 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 
 		rc = opx_hfi1_tx_send_mp_egr_remaining(
 			opx_ep, opx_tx, &buf_bytes_ptr, &payload_offset, &payload_remaining, first_packet_psn,
-			chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid, dest_addr, reliability, hfi1_type, ctx_sharing);
+			chunk_size, pbc_dlid, bth_subctxt_rx, lrh_dlid, dest_addr, reliability, flow_control_mode,
+			mp_eager_reservation_record, hfi1_type, ctx_sharing);
 	}
 
 	if (OFI_LIKELY(do_cq_completion)) {
@@ -4734,10 +4880,6 @@ ssize_t opx_hfi1_tx_send_try_mp_egr(struct fid_ep *ep, const void *buf, size_t l
 	return FI_SUCCESS;
 }
 
-#ifndef FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES
-#define FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES (1)
-#endif
-
 __OPX_FORCE_INLINE__
 ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len, const struct fi_opx_addr addr,
 				 uint64_t tag, void *context, const struct iovec *local_iov, size_t niov,
@@ -4746,17 +4888,19 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 				 const uint64_t tx_op_flags, const uint64_t caps,
 				 const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 				 const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device,
-				 const uint64_t hmem_handle, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+				 const uint64_t hmem_handle, const enum opx_flow_control_mode flow_control_mode,
+				 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	ssize_t rc;
 	if (is_contiguous) {
 		rc = OPX_FABRIC_TX_SEND_EGR(ep, buf, len, addr, tag, context, data, lock_required, override_flags,
 					    tx_op_flags, caps, reliability, do_cq_completion, hmem_iface, hmem_device,
-					    hmem_handle, hfi1_type, ctx_sharing);
+					    hmem_handle, flow_control_mode, hfi1_type, ctx_sharing);
 	} else {
 		rc = OPX_FABRIC_TX_SENDV_EGR(ep, local_iov, niov, total_len, addr, tag, context, data, lock_required,
 					     override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-					     hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+					     hmem_iface, hmem_device, hmem_handle, flow_control_mode, hfi1_type,
+					     ctx_sharing);
 	}
 
 	if (OFI_LIKELY(rc == FI_SUCCESS)) {
@@ -4772,12 +4916,13 @@ ssize_t opx_ep_tx_send_try_eager(struct fid_ep *ep, const void *buf, size_t len,
 		if (is_contiguous) {
 			rc = OPX_FABRIC_TX_SEND_EGR(ep, buf, len, addr, tag, context, data, lock_required,
 						    override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-						    hmem_iface, hmem_device, hmem_handle, hfi1_type, ctx_sharing);
+						    hmem_iface, hmem_device, hmem_handle, flow_control_mode, hfi1_type,
+						    ctx_sharing);
 		} else {
 			rc = OPX_FABRIC_TX_SENDV_EGR(ep, local_iov, niov, total_len, addr, tag, context, data,
 						     lock_required, override_flags, tx_op_flags, caps, reliability,
-						     do_cq_completion, hmem_iface, hmem_device, hmem_handle, hfi1_type,
-						     ctx_sharing);
+						     do_cq_completion, hmem_iface, hmem_device, hmem_handle,
+						     flow_control_mode, hfi1_type, ctx_sharing);
 		}
 	} while (rc == -FI_ENOBUFS && loop++ < FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES);
 
@@ -4791,13 +4936,14 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 			   const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
 			   const enum ofi_reliability_kind reliability, const uint64_t do_cq_completion,
 			   const enum fi_hmem_iface hmem_iface, const uint64_t hmem_device, const uint64_t hmem_handle,
-			   struct fi_opx_mr *opx_mr, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+			   struct fi_opx_mr *opx_mr, const enum opx_flow_control_mode flow_control_mode,
+			   const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	if (is_contiguous) {
 		return OPX_FABRIC_TX_SEND_RZV(ep, buf, len, addr, tag, context, data, lock_required, override_flags,
 					      tx_op_flags, addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx, caps,
 					      reliability, do_cq_completion, hmem_iface, hmem_device, hmem_handle,
-					      opx_mr, hfi1_type, ctx_sharing);
+					      opx_mr, flow_control_mode, hfi1_type, ctx_sharing);
 	}
 
 	return OPX_FABRIC_TX_SENDV_RZV(ep, local_iov, niov, total_len, addr, tag, context, data, lock_required,
@@ -4806,36 +4952,12 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 				       hfi1_type, ctx_sharing);
 }
 
-__OPX_FORCE_INLINE__
-uint32_t opx_ep_tx_rzv_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
-{
-	return (iface == FI_HMEM_SYSTEM) ? opx_tx->rzv_min_payload_bytes : opx_ep->hmem_rzv_min_payload_bytes;
-}
-
-__OPX_FORCE_INLINE__
-uint32_t opx_ep_tx_sdma_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
-{
-	return (iface == FI_HMEM_SYSTEM) ? opx_tx->sdma_min_payload_bytes : opx_ep->hmem_sdma_min_payload_bytes;
-}
-
-__OPX_FORCE_INLINE__
-uint32_t opx_ep_tx_hfisvc_min(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx *opx_tx, const enum fi_hmem_iface iface)
-{
-	return (iface == FI_HMEM_SYSTEM) ? opx_tx->hfisvc_min_payload_bytes : opx_ep->hmem_hfisvc_min_payload_bytes;
-}
-
-ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len, struct fi_opx_addr dest_addr,
-				  uint64_t tag, void *user_context, const uint32_t data, const uint64_t tx_op_flags,
-				  const uint64_t caps, const enum ofi_reliability_kind reliability,
-				  const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
-				  const uint64_t hmem_device, const int dmabuf_fd, const uintptr_t dmabuf_base,
-				  const enum opx_hfi1_type hfi1_type);
-
 static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 						 fi_addr_t dest_addr, uint64_t tag, void *context, const uint32_t data,
 						 const int lock_required, const unsigned is_contiguous,
 						 const unsigned override_flags, const uint64_t tx_op_flags,
 						 const uint64_t caps, const enum ofi_reliability_kind reliability,
+						 const enum opx_flow_control_mode flow_control_mode,
 						 const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== SEND (begin)\n");
@@ -4956,7 +5078,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			rc = opx_ep_tx_send_try_eager(ep, buf, len, addr, tag, context, local_iov, niov, total_len,
 						      data, lock_required, is_contiguous, override_flags, tx_op_flags,
 						      caps, reliability, do_cq_completion, hmem_iface, hmem_device,
-						      hmem_handle, hfi1_type, ctx_sharing);
+						      hmem_handle, flow_control_mode, hfi1_type, ctx_sharing);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
 				OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -4976,7 +5098,7 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			rc = opx_hfi1_tx_send_try_mp_egr(ep, buf, len, addr, tag, context, data, lock_required,
 							 override_flags, tx_op_flags, caps, reliability,
 							 do_cq_completion, hmem_iface, hmem_device, hmem_handle,
-							 hfi1_type, ctx_sharing);
+							 flow_control_mode, hfi1_type, ctx_sharing);
 			if (OFI_LIKELY(rc == FI_SUCCESS)) {
 				OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -4994,8 +5116,8 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 
 	rc = opx_ep_tx_send_rzv(ep, buf, len, addr, tag, context, local_iov, niov, total_len, data, lock_required,
 				is_contiguous, override_flags, tx_op_flags, caps, reliability, do_cq_completion,
-				hmem_iface, hmem_device, hmem_handle, (struct fi_opx_mr *) desc, hfi1_type,
-				ctx_sharing);
+				hmem_iface, hmem_device, hmem_handle, (struct fi_opx_mr *) desc, flow_control_mode,
+				hfi1_type, ctx_sharing);
 
 	OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "===================================== SEND (end)\n");
@@ -5007,7 +5129,8 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_tx_send(struct fid_ep *ep, const void *buf, size_t len, void *desc, fi_addr_t dest_addr, uint64_t tag,
 			  void *context, const uint32_t data, const int lock_required, const unsigned is_contiguous,
 			  const unsigned override_flags, const uint64_t tx_op_flags, const uint64_t caps,
-			  const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type,
+			  const enum ofi_reliability_kind  reliability,
+			  const enum opx_flow_control_mode flow_control_mode, const enum opx_hfi1_type hfi1_type,
 			  const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -5016,7 +5139,7 @@ ssize_t fi_opx_ep_tx_send(struct fid_ep *ep, const void *buf, size_t len, void *
 
 	ssize_t rc = fi_opx_ep_tx_send_internal(ep, buf, len, desc, dest_addr, tag, context, data,
 						FI_OPX_LOCK_NOT_REQUIRED, is_contiguous, override_flags, tx_op_flags,
-						caps, reliability, hfi1_type, ctx_sharing);
+						caps, reliability, flow_control_mode, hfi1_type, ctx_sharing);
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 
@@ -5027,6 +5150,7 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
 				     const uint32_t data, const int lock_required, const uint64_t tx_op_flags,
 				     const uint64_t caps, const enum ofi_reliability_kind reliability,
+				     const enum opx_flow_control_mode flow_control_mode,
 				     const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	// Exactly one of FI_MSG or FI_TAGGED should be on
@@ -5044,7 +5168,7 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 						  0,	// data
 						  lock_required, OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_TRUE,
 						  FI_SELECTIVE_COMPLETION, // op flags to turn off context
-						  caps, reliability, hfi1_type, ctx_sharing);
+						  caps, reliability, flow_control_mode, hfi1_type, ctx_sharing);
 	} else {
 		assert(len <= FI_OPX_HFI1_PACKET_IMM);
 	}
@@ -5059,7 +5183,7 @@ ssize_t fi_opx_ep_tx_inject_internal(struct fid_ep *ep, const void *buf, size_t 
 	const struct fi_opx_addr addr = FI_OPX_EP_AV_ADDR(opx_ep, dest_addr);
 
 	const ssize_t rc = FI_OPX_FABRIC_TX_INJECT(ep, buf, len, addr, tag, data, lock_required, tx_op_flags, caps,
-						   reliability, hfi1_type, ctx_sharing);
+						   reliability, flow_control_mode, hfi1_type, ctx_sharing);
 
 	if (OFI_UNLIKELY(rc == -FI_EAGAIN)) {
 		// In this case we are probably out of replay buffers. To deal
@@ -5079,14 +5203,16 @@ __OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_tx_inject(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
 			    const uint32_t data, const int lock_required, const uint64_t tx_op_flags,
 			    const uint64_t caps, const enum ofi_reliability_kind reliability,
-			    const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
+			    const enum opx_flow_control_mode flow_control_mode, const enum opx_hfi1_type hfi1_type,
+			    const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
-	ssize_t rc = fi_opx_ep_tx_inject_internal(ep, buf, len, dest_addr, tag, data, FI_OPX_LOCK_NOT_REQUIRED,
-						  tx_op_flags, caps, reliability, hfi1_type, ctx_sharing);
+	ssize_t rc =
+		fi_opx_ep_tx_inject_internal(ep, buf, len, dest_addr, tag, data, FI_OPX_LOCK_NOT_REQUIRED, tx_op_flags,
+					     caps, reliability, flow_control_mode, hfi1_type, ctx_sharing);
 
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 
