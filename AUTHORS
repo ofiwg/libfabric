@@ -22,9 +22,11 @@ Anas Mousa <anasmous@amazon.com>
 Anatoliy Rozanov <anatoliy.rozanov@intel.com>
 Andrew Friedley <andrew.friedley@intel.com>
 Andrey Lobanov <andrey.lobanov@intel.com>
+Andriy Kot <andriy.kot@cornelisnetworks.com>
 Anthony Zinger <anthony.zinger@hpe.com>
 Ao Li <aolia@amazon.com>
 Archana Venkatesha <archana.venkatesha@cornelisnetworks.com>
+Armando Vinciguerra <armando.vinciguerra@cornelisnetworks.com>
 Arun C Ilango <arun.ilango@intel.com>
 arun ilango <a-ilango@users.noreply.github.com>
 Arun Ilango <arun.ilango@intel.com>
@@ -52,6 +54,8 @@ Breyer, Scott <scott.breyer@intel.com>
 Brian Barrett <bbarrett@amazon.com>
 Brian J. Murrell <brian@interlinx.bc.ca>
 Brian Li <brian14708@gmail.com>
+Brian Molnar <brian.molnar@cornelisnetworks.com>
+Brian Zhao <brianzzj@amazon.com>
 bwilsoncn <bwilson@cornelisnetworks.com>
 Cabrera, Jorge <jorge.cabrera@intel.com>
 Cameron Bytheway <bythewc@amazon.com>
@@ -74,6 +78,7 @@ Chuck Fossen <chuckf@cray.com>
 Chuck Fossen <chuckf@hpe.com>
 Cody D'Ambrosio <cody.dambrosio@hpe.com>
 Cody Mann <cody.mann@cornelisnetworks.com>
+Cole Garrison <cole.garrison.005@gmail.com>
 Coni Gehler <cgehler@cray.com>
 ct-clmsn <ct.clmsn@gmail.com>
 Dan Cherniavsky <dchern@amazon.com>
@@ -112,6 +117,7 @@ Evan Harvey <eharvey@lanl.gov>
 Evgeny Leksikov <evgeny.leksikov@intel.com>
 Ezra Kissel <ezkissel@indiana.edu>
 Firas Jahjah <firasj@amazon.com>
+Fnu Harishjitu Saseendran <fnu.harishjitu.saseendran@intel.com>
 Frank Zago <fzago@cray.com>
 Franz Pöschel <franz.poeschel@gmail.com>
 fullerdj <fullerdj@users.noreply.github.com>
@@ -130,6 +136,7 @@ Greg Inozemtsev <ginozemt@amazon.com>
 Grzegorz Morys <grzegorz.morys@gmail.com>
 Haiyue Wang <haiyuewa@163.com>
 Hefty <sean.hefty@intel.com>
+hemu77 <shemanth307@gmail.com>
 Holger Hoffstätte <holger@applied-asynchrony.com>
 Honggang Li <honli@redhat.com>
 Howard Pritchard <howardp@lanl.gov>
@@ -139,6 +146,7 @@ Ignacio Hernandez <ignacio.hernandez@intel.com>
 Ilia Sotnikov <isotnikov@vdura.com>
 Ira Weiny <ira.weiny@intel.com>
 Itai Masuari <imasuari@habana.ai>
+Itai Masuari <itai.masuari@intel.com>
 iziemba <57813515+iziemba@users.noreply.github.com>
 Jack Morrison <jack.morrison@cornelisnetworks.com>
 Jaime Arteaga <jaime.a.arteaga.molina@intel.com>
@@ -185,6 +193,7 @@ jose <jose@cst-fs.(none)>
 jose <jose@cstnh-8.(none)>
 Josh Fisher <josh.fisher@cornelisnetworks.com>
 JoZie <JoZie@users.noreply.github.com>
+jroznova <jroznova@intel.com>
 jroznova <julia.roznova@intel.com>
 Juee Himalbhai Desai <juee.himalbhai.desai@intel.com>
 k0zmo <k0zmo@outlook.com>
@@ -198,6 +207,7 @@ Kevan Rehm <krehm@cray.com>
 Kevan rehm <krehm@cray.com>
 Kevin Ji <1146876+kevinji@users.noreply.github.com>
 Kevin Ji <kji@anthropic.com>
+kpayson64 <kpayson64@users.noreply.github.com>
 kseager <kayla.seager@intel.com>
 kumarsuresh-hpe <kumar.suresh@hpe.com>
 Kyle Gerheiser <kyle.gerheiser@intel.com>
@@ -255,6 +265,7 @@ Noam Beer <nbeer@habana.ai>
 Oblomov, Sergey <hoopoepg@gmail.com>
 Oblomov, Sergey <sergey.oblomov@intel.com>
 OFIWG Bot <ofiwg@lists.openfabrics.org>
+Oleg Khovayko <oleg.khovayko@cornelisnetworks.com>
 Olga Weiss <olga.weiss@hpe.com>
 Olivier Serres <oserres@google.com>
 orbea <orbea@riseup.net>
@@ -288,6 +299,7 @@ Ralf Juengling <ralfjuen@amazon.com>
 Reese Faucette <rfaucett@cisco.com>
 Rich Welch <rlwelch@amazon.com>
 Richard Halkyard <rhalkyard@cray.com>
+Richard Halkyard <richard.halkyard@hpe.com>
 Rob Latham <robl@mcs.anl.gov>
 Robert Wespetal <wesper@amazon.com>
 Roger Connaughty <roger.connaughty@hpe.com>
@@ -298,6 +310,7 @@ Ryan Hankins <ryan.hankins@hpe.com>
 Rémi Dehenne <remi.dehenne@cea.fr>
 Sai Sunku <sunkusa@amazon.com>
 Sannikov, Alexander <alexander.sannikov@intel.com>
+Satish Kharat <satishkh@cisco.com>
 Sayantan Sur <sayantan.sur@intel.com>
 Scott Breyer <scott.breyer@intel.com>
 Sean Hefty <sean.hefty@intel.com>
@@ -331,6 +344,7 @@ Sylvain Didelot <sdidelot@ddn.com>
 szegel <szegel@ip-10-0-2-236.corp.pcluster.com>
 Tadeusz Struk <tstruk@gigaio.com>
 Tal Avraham <talavr@amazon.com>
+Tal Yehoshua <talyeho@amazon.com>
 Tang, Jingyin <jytang@amazon.com>
 Terrence Mitchem <terrence.mitchem@hpe.com>
 Thananon Patinyasakdikul <apatinya@cisco.com>
@@ -373,6 +387,7 @@ Yin Li <yinliq@amazon.com>
 yohann <yohann.burette@intel.com>
 Yohann Burette <yohann.burette@intel.com>
 Yonatan Goldhirsh <ygold@amazon.com>
+Yonatan Nachum <ynachum@amazon.com>
 Yulu Jia <yulu.jia@intel.com>
 Zach <ztiffany@cray.com>
 Zach Dworkin <zachary.dworkin@gmail.com>
