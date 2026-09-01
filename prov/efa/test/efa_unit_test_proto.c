@@ -331,6 +331,276 @@ void test_proto_eager_assigns_msg_id(void **state)
 }
 
 /**
+ * @brief The zero-copy protocol's construct_tx_pkes() builds one headerless PKE
+ *        bound for the peer's user_recv_qp.
+ *
+ * The protocol is not in efa_rdm_protocols[], so this drives its
+ * construct_tx_pkes() the way efa_rdm_msg_generic_send() does: no selection
+ * loop, just efa_rdm_proto_txe_init_buffers() followed by
+ * efa_rdm_proto_txe_fill().
+ */
+void test_proto_zero_copy_construct_pkes(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pke;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	uint64_t pke_send_flags;
+	int err;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	efa_unit_test_buff_construct(&send_buff, resource, 64);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	/* Mark peer as expecting zero-copy transfer */
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
+	peer->user_recv_qp.qpn = 99;
+	peer->user_recv_qp.qkey = 0xABCD;
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+
+	/* Fill the txe as efa_rdm_msg_generic_send() would for such a peer. */
+	efa_rdm_proto_txe_init_buffers(ep, &msg, txe);
+	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0,
+			       &efa_rdm_proto_zero_copy);
+	txe->msg_id = peer->next_msg_id++;
+
+	err = efa_rdm_proto_zero_copy.construct_tx_pkes(ep, peer, ofi_op_msg,
+							0, 0, 0, txe,
+							&pke_send_flags);
+	assert_int_equal(err, 0);
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+
+	/* Verify headerless packet properties */
+	pke = ep->send_pkt_entry_vec[0];
+	assert_true(pke->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP);
+	assert_true(pke->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
+	assert_int_equal(pke->pkt_size, 64);
+	assert_int_equal(pke->payload_size, 64);
+	assert_ptr_equal(pke->ope, txe);
+	assert_non_null(pke->handle_pke);
+
+	/*
+	 * No header carries the packet type, but the txe still has to record it
+	 * or the peer-abort protocol stops recognizing this send as an RTM.
+	 */
+	assert_int_equal(txe->req_pkt_type, EFA_RDM_EAGER_MSGRTM_PKT);
+
+	ofi_buf_free(pke);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief A send queued before the handshake switches to the zero-copy protocol
+ *        when the handshake reveals a headerless peer.
+ *
+ * Whether a peer accepts only headerless packets is carried in its handshake, so
+ * a send dispatched before the handshake arrived selected a protocol from
+ * efa_rdm_protocols[], every one of which writes a REQ header. The repost must
+ * revisit that choice; otherwise the headered packet lands on the peer's control
+ * QP, which a peer in zero-copy receive mode rejects.
+ */
+void test_proto_zero_copy_reselected_after_handshake(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pkt_entry;
+	struct fi_cq_tagged_entry cq_entry;
+	struct fi_cq_err_entry err_entry;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	int ret;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	efa_unit_test_buff_construct(&send_buff, resource, 64);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	ep->peer_may_have_zcpy_rx = true;
+
+	/*
+	 * The handshake trigger and the queued send's repost each post at least
+	 * once, and the progress engine may retry, so let every post succeed.
+	 */
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		&efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	/* The send is queued because the handshake has not arrived yet. */
+	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	assert_int_equal(ret, 0);
+	assert_int_equal(ep->ope_queued_before_handshake_cnt, 1);
+
+	txe = container_of(ep->ope_queued_list.next, struct efa_rdm_ope,
+			   queued_entry);
+	assert_ptr_equal(txe->proto, &efa_rdm_proto_eager);
+
+	/* The handshake arrives and reports the peer is in zero-copy mode. */
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
+	peer->user_recv_qp.qpn = 99;
+	peer->user_recv_qp.qkey = 0xABCD;
+
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	assert_int_equal(ep->ope_queued_before_handshake_cnt, 0);
+	assert_true(dlist_empty(&ep->ope_queued_list));
+
+	/* The reposted packet is headerless and bound for the user_recv_qp. */
+	assert_ptr_equal(txe->proto, &efa_rdm_proto_zero_copy);
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+	pkt_entry = ep->send_pkt_entry_vec[0];
+	assert_ptr_equal(pkt_entry->ope, txe);
+	assert_true(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP);
+	assert_true(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
+
+	/* The reselect is not an abort: no error completion was written. */
+	memset(&err_entry, 0, sizeof(err_entry));
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief A whole fi_send() to a peer that expects zero-copy data transfer runs
+ *        on the refactored protocol path, from selection to send completion.
+ *
+ * The legacy send path used to own this case: mainline forces the handshake in
+ * efa_rdm_msg_post_rtm(), then efa_rdm_pke_fill_data() notices the peer wants
+ * headerless data and stamps the flags on the packet. Both are gone, so the
+ * zero-copy protocol has to carry the case end to end -- the per-peer dispatch
+ * in efa_rdm_msg_generic_send(), the headerless packet its construct_tx_pkes()
+ * builds, the user_recv_qp routing efa_rdm_pke_sendv() derives from the packet
+ * flags, and a send completion that must reach the protocol callback rather than
+ * the headerless arm of the pkt_type switch.
+ */
+void test_proto_zero_copy_send_end_to_end(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pkt_entry;
+	struct fi_cq_err_entry err_entry;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	int err;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	efa_unit_test_buff_construct(&send_buff, resource, 64);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	/*
+	 * An old peer that unilaterally enabled zero-copy receive: the endpoint
+	 * knows a peer might, and this one advertised its dedicated receive QP
+	 * in its handshake. With the handshake in hand the send goes out
+	 * immediately instead of being queued.
+	 */
+	ep->peer_may_have_zcpy_rx = true;
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
+	peer->user_recv_qp.qpn = 99;
+	peer->user_recv_qp.qkey = 0xABCD;
+
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		&efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	err = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 1);
+
+	/* One headerless packet: every byte on the wire is user data. */
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+	pkt_entry = ep->send_pkt_entry_vec[0];
+	assert_true(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP);
+	assert_true(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
+	assert_int_equal(pkt_entry->pkt_size, send_buff.size);
+	assert_int_equal(pkt_entry->payload_size, send_buff.size);
+	assert_non_null(pkt_entry->handle_pke);
+
+	/*
+	 * txe->req_pkt_type must still record the wire protocol even though no
+	 * header carries it, or the peer-abort protocol would not recognize this
+	 * send as a two-sided RTM.
+	 */
+	txe = pkt_entry->ope;
+	assert_non_null(txe);
+	assert_int_equal(txe->req_pkt_type, EFA_RDM_EAGER_MSGRTM_PKT);
+
+	/*
+	 * Go through efa_rdm_pke_handle_send_completion() rather than calling
+	 * the callback directly: a headerless packet has no base header to
+	 * switch on, so the protocol callback has to be dispatched before the
+	 * packet type is ever consulted. It does its own
+	 * efa_rdm_ep_record_tx_op_completed().
+	 */
+	efa_rdm_pke_handle_send_completion(pkt_entry);
+
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
+	memset(&err_entry, 0, sizeof(err_entry));
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
  * @brief Test that a send is queued before handshake and dequeued after
  * handshake completes when the peer may have zero-copy mode enabled.
  */
@@ -539,156 +809,6 @@ void test_proto_eager_construct_pkes_failure_rolls_back_msg_id(
 	/* Rolled back exactly once, and the txe was released exactly once. */
 	assert_int_equal(peer->next_msg_id, initial_msg_id);
 	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
-
-	efa_unit_test_buff_destruct(&send_buff);
-}
-
-/**
- * @brief Test that the zero-copy protocol's construct_tx_pkes produces a
- * headerless PKE with the EFA_RDM_PKE_SEND_TO_USER_RECV_QP flag.
- */
-void test_proto_zero_copy_construct_pkes(void **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_unit_test_buff send_buff;
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_peer *peer;
-	struct efa_rdm_ope *txe;
-	fi_addr_t peer_addr;
-	struct efa_ep_addr raw_addr = {0};
-	size_t raw_addr_len = sizeof(raw_addr);
-	struct fi_msg msg = {0};
-	struct iovec iov;
-	int err;
-	uint64_t pke_send_flags;
-
-	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
-	efa_unit_test_buff_construct(&send_buff, resource, 64);
-
-	ep = container_of(resource->ep, struct efa_rdm_ep,
-			  base_ep.util_ep.ep_fid);
-
-	assert_int_equal(
-		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
-	raw_addr.qpn = 1;
-	raw_addr.qkey = 0x1234;
-	assert_int_equal(
-		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
-		1);
-
-	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
-	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
-	/* Mark peer as expecting zero-copy transfer */
-	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
-	peer->user_recv_qp.qpn = 99;
-	peer->user_recv_qp.qkey = 0xABCD;
-
-	iov.iov_base = send_buff.buff;
-	iov.iov_len = send_buff.size;
-	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
-				    (void **) &send_buff.mr);
-
-	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
-	assert_non_null(txe);
-
-	/* Fill TXE as generic_send would before calling construct_tx_pkes */
-	efa_rdm_proto_txe_init_buffers(ep, &msg, txe);
-	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0,
-			       &efa_rdm_proto_zero_copy);
-	txe->msg_id = peer->next_msg_id++;
-
-	err = efa_rdm_proto_zero_copy.construct_tx_pkes(ep, peer,
-							ofi_op_msg, 0, 0, 0,
-							txe, &pke_send_flags);
-	assert_int_equal(err, 0);
-	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
-
-	/* Verify headerless packet properties */
-	struct efa_rdm_pke *pke = ep->send_pkt_entry_vec[0];
-	assert_true(pke->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP);
-	assert_true(pke->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
-	assert_int_equal(pke->pkt_size, 64);
-	assert_int_equal(pke->payload_size, 64);
-
-	ofi_buf_free(pke);
-	efa_unit_test_buff_destruct(&send_buff);
-}
-
-/**
- * @brief A send queued before the handshake switches to the zero-copy protocol
- *        when the handshake reveals a headerless peer.
- *
- * Whether a peer accepts only headerless packets is carried in its handshake,
- * so a send dispatched before the handshake arrived selected a protocol that
- * writes a REQ header. The repost must revisit that choice; otherwise the
- * headered packet lands on the peer's control QP, which a peer in zero-copy
- * receive mode rejects.
- */
-void test_proto_zero_copy_reselected_after_handshake(void **state)
-{
-	struct efa_resource *resource = *state;
-	struct efa_unit_test_buff send_buff;
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_peer *peer;
-	struct efa_rdm_ope *txe;
-	struct efa_rdm_pke *pkt_entry;
-	struct fi_cq_tagged_entry cq_entry;
-	fi_addr_t peer_addr;
-	struct efa_ep_addr raw_addr = {0};
-	size_t raw_addr_len = sizeof(raw_addr);
-	int ret;
-
-	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
-	efa_unit_test_buff_construct(&send_buff, resource, 64);
-
-	ep = container_of(resource->ep, struct efa_rdm_ep,
-			  base_ep.util_ep.ep_fid);
-
-	assert_int_equal(
-		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
-	raw_addr.qpn = 1;
-	raw_addr.qkey = 0x1234;
-	assert_int_equal(
-		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
-		1);
-
-	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
-	peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_RECEIVED;
-	ep->peer_may_have_zcpy_rx = true;
-
-	/* Let every post succeed; see test_proto_eager_queue_dequeue_handshake. */
-	g_efa_unit_test_mocks.efa_qp_post_send =
-		&efa_mock_efa_qp_post_send_return_mock;
-	will_return_int_always(efa_mock_efa_qp_post_send_return_mock, 0);
-
-	/* The send is queued because the handshake has not arrived yet. */
-	ret = fi_send(resource->ep, send_buff.buff, send_buff.size,
-		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
-	assert_int_equal(ret, 0);
-	assert_int_equal(ep->ope_queued_before_handshake_cnt, 1);
-
-	txe = container_of(ep->ope_queued_list.next, struct efa_rdm_ope,
-			   queued_entry);
-	assert_ptr_equal(txe->proto, &efa_rdm_proto_eager);
-
-	/* The handshake arrives and reports the peer is in zero-copy mode. */
-	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
-	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
-	peer->user_recv_qp.qpn = 99;
-	peer->user_recv_qp.qkey = 0xABCD;
-
-	ret = fi_cq_read(resource->cq, &cq_entry, 1);
-	assert_int_equal(ret, -FI_EAGAIN);
-
-	assert_int_equal(ep->ope_queued_before_handshake_cnt, 0);
-	assert_true(dlist_empty(&ep->ope_queued_list));
-
-	/* The reposted packet is headerless and bound for the user_recv_qp. */
-	assert_ptr_equal(txe->proto, &efa_rdm_proto_zero_copy);
-	pkt_entry = ep->send_pkt_entry_vec[0];
-	assert_ptr_equal(pkt_entry->ope, txe);
-	assert_true(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP);
-	assert_true(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
 
 	efa_unit_test_buff_destruct(&send_buff);
 }

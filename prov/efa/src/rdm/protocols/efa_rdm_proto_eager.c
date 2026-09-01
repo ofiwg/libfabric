@@ -39,6 +39,17 @@ static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_ope *txe,
 {
 	size_t max_data_offset, max_rtm_data_capacity;
 
+	/*
+	 * Synapse AI buffers can only be carried by a read based protocol. The
+	 * legacy selector expressed that by checking the read protocols first
+	 * and setting min_read_msg_size to 1 for the interface, so anything with
+	 * a payload took a read protocol and only a zero length message reached
+	 * eager. The registry is ordered eager-first, so decline here instead to
+	 * keep that behaviour.
+	 */
+	if (iface == FI_HMEM_SYNAPSEAI && txe->total_len > 0)
+		return false;
+
 	/* TODO: For emulated read and atomics, need to consider RMA
 	 * IOVs in the header
 	 * https://github.com/ofiwg/libfabric/blob/cff899c9ef6dd823a1e3b35d3205622013c6eb6c/prov/efa/src/rdm/efa_rdm_pkt_type.c#L101-L103
