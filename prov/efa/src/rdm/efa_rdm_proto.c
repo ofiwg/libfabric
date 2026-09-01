@@ -43,9 +43,12 @@ static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
 /* List of supported protocols.
  * The protocols listed here will be tried in the order they're listed.
  * The first protocol that can be used for the TX operation will be used.
+ * The NULL sentinel terminates the iteration in
+ * efa_rdm_proto_select_send_protocol().
  */
-struct efa_rdm_proto *efa_rdm_protocols[] = {
+struct efa_rdm_proto *efa_rdm_protocols[EFA_RDM_MAX_PROTO] = {
 	&efa_rdm_proto_eager,
+	NULL, /* Sentinel used to stop iteration */
 };
 
 int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
@@ -112,8 +115,11 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	if (flags & FI_REMOTE_CQ_DATA)
 		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
 
-	for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
+	for (int i = 0; i < EFA_RDM_MAX_PROTO; ++i) {
 		selected_proto = efa_rdm_protocols[i];
+
+		if (!selected_proto)
+			break;
 
 		req_pkt_type = efa_rdm_proto_req_pkt_type(
 			selected_proto, op, effective_flags, peer);

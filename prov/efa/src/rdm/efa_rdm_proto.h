@@ -7,6 +7,12 @@
 #include "efa.h"
 #include "efa_rdm_pkt_type.h"
 
+/* The EFA provider has five protocols (eager, medium, runt read, long read and
+ * long CTS). Size the registry a little larger to hold the NULL sentinel that
+ * terminates it plus room for future protocols.
+ */
+#define EFA_RDM_MAX_PROTO 8
+
 /**
  * @brief Interface for EFA RDM protocols.
  *
@@ -95,6 +101,14 @@ struct efa_rdm_proto {
 	int req_pkt_type_dc;
 	int req_pkt_type_tagged_dc;
 };
+
+/* Registry of the supported protocols, in priority order, terminated by a NULL
+ * sentinel. Iterate with the sentinel, not with ARRAY_SIZE(): the array is
+ * declared here with an explicit size so that ARRAY_SIZE() in a translation
+ * unit other than efa_rdm_proto.c would silently return EFA_RDM_MAX_PROTO
+ * rather than the number of registered protocols.
+ */
+extern struct efa_rdm_proto *efa_rdm_protocols[EFA_RDM_MAX_PROTO];
 
 /**
  * @brief Select the appropriate send protocol for a TX operation.
