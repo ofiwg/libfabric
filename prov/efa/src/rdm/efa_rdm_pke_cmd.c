@@ -95,27 +95,9 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
-	/*
-	 * The long CTS protocol moved to the refactored code path
-	 * (efa_rdm_proto_longcts), so a fresh long CTS send never reaches these
-	 * arms. The one remaining legacy caller is the read NACK fallback in
-	 * efa_rdm_pke_handle_read_nack_recv(), which continues a read protocol as
-	 * long CTS after the receiver failed to register its buffer, and still
-	 * posts through efa_rdm_ope_post_send_or_queue(). Its REQ carries no data
-	 * (the runt packets already delivered the head of the message and the
-	 * long CTS header has no segment offset field), which is what the
-	 * EFA_RDM_OPE_READ_NACK branch of efa_rdm_pke_init_rtm_with_payload()
-	 * arranges. These arms go away with that fallback.
-	 */
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -163,16 +145,9 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
-	/* Read NACK fallback only; see the non-DC long CTS arms above. */
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
 		EFA_RDM_PROTO_MOVED("Eager write");
@@ -249,11 +224,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		/* Read NACK fallback only; a fresh long CTS send accounts for
-		 * its REQ in efa_rdm_proto_longcts_handle_tx_pkes_posted(). See
-		 * the long CTS arms of efa_rdm_pke_fill_data(). */
-		assert(pkt_entry->ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -638,11 +609,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		/* Read NACK fallback only: a fresh long CTS send carries
-		 * efa_rdm_proto_longcts_handle_rtm_send_completion() on the
-		 * packet entry and returned above. See the long CTS arms of
-		 * efa_rdm_pke_fill_data(). */
-		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -696,10 +663,12 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
 	/*
-	 * The DC long CTS RTM types stay listed here even though a fresh DC
-	 * long CTS send now carries a handle_pke callback and returns before
-	 * this switch: the read NACK fallback still reaches them (see the long
-	 * CTS arms of efa_rdm_pke_fill_data).
+	 * The DC long CTS RTM packet types are unreachable here: the protocol
+	 * moved to the refactored code path, and its packets carry a handle_pke
+	 * callback that returns before this switch. The read NACK fallback, the
+	 * last thing that still drove a DC long CTS RTM through here, moved with
+	 * it. They stay listed so the fetch/compare atomic types above keep
+	 * falling through to the shared DC release code below.
 	 *
 	 * FETCH_RTA_PKT and COMPARE_RTA_PKT have no body of their own, so
 	 * nothing but comments and further case labels may sit between them and

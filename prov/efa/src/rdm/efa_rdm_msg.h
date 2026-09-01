@@ -59,6 +59,12 @@ ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep, struct efa_rdm_ope *tx
 
 ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
 				     struct efa_rdm_ope *txe);
+
+ssize_t efa_rdm_msg_post_read_nack_rtm_proto(struct efa_rdm_ep *ep,
+					     struct efa_rdm_ope *txe);
+
+ssize_t efa_rdm_msg_post_read_nack_rtm_proto_or_queue(struct efa_rdm_ep *ep,
+						      struct efa_rdm_ope *txe);
 /*
  * The following 2 OP structures are defined in efa_rdm_msg.c and is
  * used by #efa_rdm_ep_open()

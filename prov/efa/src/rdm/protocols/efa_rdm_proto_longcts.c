@@ -85,7 +85,17 @@ void efa_rdm_proto_longcts_handle_tx_pkes_posted(struct efa_rdm_ep *ep,
 {
 	assert(ep->send_pkt_entry_vec_size == 1);
 
-	txe->bytes_sent = ep->send_pkt_entry_vec[0]->payload_size;
+	/*
+	 * A read NACK continuation's REQ carries no data, and txe->bytes_sent
+	 * already covers what the read protocol's REQ packets delivered
+	 * (bytes_runt for runt read, zero for long read). Leave it alone: the
+	 * CTSDATA stream picks up from exactly there.
+	 */
+	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK)
+		assert(ep->send_pkt_entry_vec[0]->payload_size == 0);
+	else
+		txe->bytes_sent = ep->send_pkt_entry_vec[0]->payload_size;
+
 	assert(txe->bytes_sent < txe->total_len);
 
 	/*
@@ -152,10 +162,6 @@ void efa_rdm_proto_longcts_handle_rtm_send_completion(
 	 * the packet's own header, which this branch already reads for the assert
 	 * and which construct_tx_pkes() wrote from the same value it set
 	 * EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED from.
-	 *
-	 * That fallback still posts through the legacy path
-	 * (efa_rdm_pke_handle_read_nack_recv), so nothing reaches this callback
-	 * with a zero payload yet; the check is here for when it is ported.
 	 */
 	if (pkt_entry->payload_size == 0) {
 		assert(efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->flags &
@@ -202,8 +208,16 @@ void efa_rdm_proto_longcts_handle_rtm_send_completion(
  * the rest of the message follows as CTSDATA packets, which are not this
  * function's business.
  *
+ * With EFA_RDM_OPE_READ_NACK set on the txe this instead builds the REQ that
+ * continues a read protocol whose receiver could not register its buffer. That
+ * REQ carries no data at all: the read protocol's REQ packets already delivered
+ * txe->bytes_sent bytes and the long CTS header has no segment offset field to
+ * describe where a payload would belong, so everything still owed goes out as
+ * CTSDATA packets. See #efa_rdm_msg_post_read_nack_rtm_proto.
+ *
  * Writes to the txe are all idempotent, because a txe queued before the
- * handshake is reposted through this same function.
+ * handshake -- or a continuation REQ that hit -FI_EAGAIN -- is reposted through
+ * this same function.
  *
  * On success, ep->send_pkt_entry_vec holds the packet entry and
  * ep->send_pkt_entry_vec_size is 1.
@@ -220,7 +234,7 @@ int efa_rdm_proto_longcts_construct_tx_pkes(struct efa_rdm_ep *ep,
 {
 	int ret, req_pkt_type, iface;
 	size_t hdr_size, rtm_payload_size, memory_alignment;
-	bool tagged, delivery_complete_requested;
+	bool tagged, delivery_complete_requested, read_nack;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_longcts_rtm_base_hdr *rtm_hdr;
 
@@ -244,20 +258,43 @@ int efa_rdm_proto_longcts_construct_tx_pkes(struct efa_rdm_ep *ep,
 	assert(!(flags & FI_INJECT));
 
 	tagged = (op == ofi_op_tagged);
+	read_nack = txe->internal_flags & EFA_RDM_OPE_READ_NACK;
 
-	/*
-	 * Protocol selection recorded the REQ packet type its predicate was
-	 * evaluated against, so write the header for exactly that type instead of
-	 * deriving it a second time. Reading the recorded type is what keeps the
-	 * header from drifting away from the type the message was sized against.
-	 *
-	 * The field is also what the peer-abort (MR abort) protocol reads back to
-	 * tell a two-sided RTM from an operation it does not handle, so a send
-	 * that reached this function with it unset would silently lose abort
-	 * notification and park the peer's reorder window on this msg_id forever.
-	 * See efa_rdm_txe_mark_peer_abort_if_needed().
-	 */
-	req_pkt_type = txe->req_pkt_type;
+	if (read_nack) {
+		/*
+		 * A read NACK continuation must keep whatever delivery semantics
+		 * the original send asked for, so derive the REQ type from the
+		 * operation's own flags. Neither of the ways a fresh send gets it
+		 * works here: txe->req_pkt_type still names the read protocol's
+		 * REQ, because that is what protocol selection ran for, and
+		 * efa_rdm_proto_req_pkt_type() also declines the delivery complete
+		 * variant for a peer in zero-copy receive mode, which is right for
+		 * a fresh send (a headerless REQ has nowhere to put the send_id)
+		 * but wrong here, where the REQ is always headered.
+		 *
+		 * Record it on the txe in place of the read protocol's type, next
+		 * to the header it describes. The peer-abort (MR abort) protocol
+		 * reads it back to tell a two-sided RTM from an operation it does
+		 * not handle, and a stale read protocol type would name a
+		 * transfer that is no longer on the wire. See
+		 * efa_rdm_txe_mark_peer_abort_if_needed().
+		 */
+		req_pkt_type = ((flags & FI_DELIVERY_COMPLETE) ?
+					efa_rdm_proto_longcts.req_pkt_type_dc :
+					efa_rdm_proto_longcts.req_pkt_type) +
+			       tagged;
+		txe->req_pkt_type = req_pkt_type;
+	} else {
+		/*
+		 * Protocol selection recorded the REQ packet type its predicate
+		 * was evaluated against, so write the header for exactly that type
+		 * instead of deriving it a second time. Reading the recorded type
+		 * is what keeps the header from drifting away from the type the
+		 * message was sized against.
+		 */
+		req_pkt_type = txe->req_pkt_type;
+	}
+
 	delivery_complete_requested =
 		(req_pkt_type == efa_rdm_proto_longcts.req_pkt_type_dc ||
 		 req_pkt_type == efa_rdm_proto_longcts.req_pkt_type_tagged_dc);
@@ -290,6 +327,15 @@ int efa_rdm_proto_longcts_construct_tx_pkes(struct efa_rdm_ep *ep,
 	rtm_hdr->send_id = txe->tx_id;
 	rtm_hdr->credit_request = efa_env.tx_min_credits;
 
+	/*
+	 * Tell the receiver this REQ continues a transfer it already has an rxe
+	 * for. Without it the receiver would allocate a second rxe for this
+	 * msg_id and slide its receive window again, since the read protocol's
+	 * RTM already consumed this msg_id. See efa_rdm_pke_proc_msgrtm().
+	 */
+	if (read_nack)
+		rtm_hdr->hdr.flags |= EFA_RDM_REQ_READ_NACK;
+
 	if (tagged) {
 		rtm_hdr->hdr.flags |= EFA_RDM_REQ_TAGGED;
 		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
@@ -301,18 +347,29 @@ int efa_rdm_proto_longcts_construct_tx_pkes(struct efa_rdm_ep *ep,
 	 * rather than from the packet type.
 	 */
 	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
-	iface = txe->desc[0] ? ((struct efa_mr *) txe->desc[0])->iface :
-			       FI_HMEM_SYSTEM;
-	memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
-	rtm_payload_size = (ep->mtu_size - hdr_size) & ~(memory_alignment - 1);
-	assert(rtm_payload_size > 0);
-	/*
-	 * Every protocol that can carry a whole message in REQ packets is tried
-	 * before this one, so the REQ can only ever hold part of the message.
-	 * efa_rdm_proto_longcts_handle_tx_pkes_posted() and the send completion
-	 * callback both rely on that.
-	 */
-	assert(rtm_payload_size < txe->total_len);
+	if (read_nack) {
+		/*
+		 * A continuation REQ carries no data: the read protocol's REQ
+		 * packets already delivered txe->bytes_sent bytes and this header
+		 * has no segment offset field to describe a payload at that
+		 * offset, so the CTSDATA packets carry everything still owed.
+		 */
+		rtm_payload_size = 0;
+	} else {
+		iface = txe->desc[0] ? ((struct efa_mr *) txe->desc[0])->iface :
+				       FI_HMEM_SYSTEM;
+		memory_alignment = efa_rdm_ep_get_memory_alignment(ep, iface);
+		rtm_payload_size = (ep->mtu_size - hdr_size) &
+				   ~(memory_alignment - 1);
+		assert(rtm_payload_size > 0);
+		/*
+		 * Every protocol that can carry a whole message in REQ packets is
+		 * tried before this one, so the REQ can only ever hold part of the
+		 * message. efa_rdm_proto_longcts_handle_tx_pkes_posted() and the
+		 * send completion callback both rely on that.
+		 */
+		assert(rtm_payload_size < txe->total_len);
+	}
 
 	ret = efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, hdr_size, 0,
 						rtm_payload_size);
@@ -321,8 +378,9 @@ int efa_rdm_proto_longcts_construct_tx_pkes(struct efa_rdm_ep *ep,
 
 	ep->send_pkt_entry_vec_size = 1;
 	EFA_DBG(FI_LOG_EP_DATA,
-		"longcts protocol: posting 1 pke, payload_size %zu, total_len %zu, msg_id %" PRIu32
+		"longcts protocol%s: posting 1 pke, payload_size %zu, total_len %zu, msg_id %" PRIu32
 		"\n",
+		read_nack ? " (read NACK continuation)" : "",
 		pkt_entry->payload_size, txe->total_len, txe->msg_id);
 
 	return FI_SUCCESS;
