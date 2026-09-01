@@ -1326,6 +1326,9 @@ int rocr_host_unregister(void *ptr)
 struct rocr_dev_reg_handle {
 	void *base_dev;
 	void *base_host;
+	/* Host bounds of the registration, zero if not established. */
+	uintptr_t reg_host_start;
+	uintptr_t reg_host_end;
 };
 
 #if defined(__x86_64__) || defined(__amd64__)
@@ -1336,8 +1339,7 @@ struct rocr_dev_reg_handle {
  *
  * Requires a 16-byte aligned source and a size that is a whole number of
  * 16-byte units, so every byte read lies within [src, src + size) and the
- * whole copy is streamed. See rocr_copy_from_aperture() for why partially
- * streamed copies are not worth doing.
+ * whole copy is streamed.
  */
 static inline void rocr_stream_copy_from_aperture(void *dest, const void *src,
 						  size_t size)
@@ -1356,21 +1358,66 @@ static inline void rocr_stream_copy_from_aperture(void *dest, const void *src,
 		size -= 16;
 	}
 }
+
+/*
+ * Same as rocr_stream_copy_from_aperture() for any source and size, widening
+ * the read to whole 16-byte units. The caller must bound the widened window.
+ * The scratch buffer also stops the compiler narrowing a partly consumed load.
+ */
+static inline void rocr_stream_copy_from_aperture_unaligned(void *dest,
+							    const void *src,
+							    size_t size)
+{
+	uint8_t *d = dest;
+	const uint8_t *s = src;
+	size_t lead = ((uintptr_t) s) & 15;
+	uint8_t scratch[16] __attribute__((aligned(16)));
+
+	if (lead) {
+		size_t take = MIN(16 - lead, size);
+
+		_mm_store_si128((__m128i *) scratch,
+				_mm_stream_load_si128((__m128i *) (uintptr_t) (s - lead)));
+		memcpy(d, scratch + lead, take);
+		d += take;
+		s += take;
+		size -= take;
+	}
+
+	while (size >= 16) {
+		_mm_storeu_si128((__m128i *) d,
+				 _mm_stream_load_si128((__m128i *) (uintptr_t) s));
+		d += 16;
+		s += 16;
+		size -= 16;
+	}
+
+	if (size) {
+		_mm_store_si128((__m128i *) scratch,
+				_mm_stream_load_si128((__m128i *) (uintptr_t) s));
+		memcpy(d, scratch, size);
+	}
+}
 #endif /* __x86_64__ || __amd64__ */
 
-static inline void rocr_copy_from_aperture(void *dest, const void *src, size_t size)
+static inline void rocr_copy_from_aperture(struct rocr_dev_reg_handle *handle,
+					   void *dest, const void *src, size_t size)
 {
 #if defined(__x86_64__) || defined(__amd64__)
-	/*
-	 * Only a fully aligned copy is streamed. A leading or trailing
-	 * fragment has to be read with an ordinary load, and on this mapping
-	 * one such load costs about as much as the streaming loop it would be
-	 * attached to, so a partially streamed copy is slower than not
-	 * streaming at all.
-	 */
-	if (rocr_have_sse4_1 && size && !(size & 15) && !(((uintptr_t) src) & 15)) {
-		rocr_stream_copy_from_aperture(dest, src, size);
-		return;
+	if (OFI_LIKELY(rocr_have_sse4_1 && size)) {
+		uintptr_t s = (uintptr_t) src;
+
+		if (!(s & 15) && !(size & 15)) {
+			rocr_stream_copy_from_aperture(dest, src, size);
+			return;
+		}
+
+		/* Zero bounds fail this and fall through to memcpy. */
+		if ((s & ~(uintptr_t) 15) >= handle->reg_host_start &&
+		    ((s + size + 15) & ~(uintptr_t) 15) <= handle->reg_host_end) {
+			rocr_stream_copy_from_aperture_unaligned(dest, src, size);
+			return;
+		}
 	}
 #endif
 	memcpy(dest, src, size);
@@ -1403,6 +1450,29 @@ int rocr_dev_register(const void *addr, size_t size, uint64_t *handle)
 
 	rocr_handle->base_dev = hsa_info.agentBaseAddress;
 	rocr_handle->base_host = hsa_info.hostBaseAddress;
+
+	/*
+	 * Left zero unless the registration is wholly inside the allocation,
+	 * which disables widening. addr is a device address, so the offset is
+	 * taken from the device base and applied to the host base.
+	 */
+	rocr_handle->reg_host_start = 0;
+	rocr_handle->reg_host_end = 0;
+
+	if (hsa_info.agentBaseAddress && hsa_info.sizeInBytes &&
+	    (uintptr_t) addr >= (uintptr_t) hsa_info.agentBaseAddress) {
+		uintptr_t off = (uintptr_t) addr -
+				(uintptr_t) hsa_info.agentBaseAddress;
+
+		if (off < hsa_info.sizeInBytes &&
+		    size <= hsa_info.sizeInBytes - off) {
+			rocr_handle->reg_host_start =
+				(uintptr_t) hsa_info.hostBaseAddress + off;
+			rocr_handle->reg_host_end =
+				rocr_handle->reg_host_start + size;
+		}
+	}
+
 	*handle = (uint64_t) rocr_handle;
 
 	return FI_SUCCESS;
@@ -1441,7 +1511,7 @@ int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 	offset = (uintptr_t) src - (uintptr_t) rocr_handle->base_dev;
 	host_src = (void *) ((uintptr_t) rocr_handle->base_host + offset);
 
-	rocr_copy_from_aperture(dest, host_src, size);
+	rocr_copy_from_aperture(rocr_handle, dest, host_src, size);
 
 	return FI_SUCCESS;
 }
