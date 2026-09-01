@@ -95,21 +95,25 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
+	/*
+	 * The long CTS protocol moved to the refactored code path
+	 * (efa_rdm_proto_longcts), so a fresh long CTS send never reaches these
+	 * arms. The one remaining legacy caller is the read NACK fallback in
+	 * efa_rdm_pke_handle_read_nack_recv(), which continues a read protocol as
+	 * long CTS after the receiver failed to register its buffer, and still
+	 * posts through efa_rdm_ope_post_send_or_queue(). Its REQ carries no data
+	 * (the runt packets already delivered the head of the message and the
+	 * long CTS header has no segment offset field), which is what the
+	 * EFA_RDM_OPE_READ_NACK branch of efa_rdm_pke_init_rtm_with_payload()
+	 * arranges. These arms go away with that fallback.
+	 */
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
+		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		assert(data_size == -1);
 		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
 		break;
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
+		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		assert(data_size == -1);
 		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
 		break;
@@ -159,21 +163,14 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
+	/* Read NACK fallback only; see the non-DC long CTS arms above. */
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
+		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		assert(data_size == -1);
 		ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, ope);
 		break;
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS tagged RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
+		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		assert(data_size == -1);
 		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
 		break;
@@ -252,6 +249,10 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
+		/* Read NACK fallback only; a fresh long CTS send accounts for
+		 * its REQ in efa_rdm_proto_longcts_handle_tx_pkes_posted(). See
+		 * the long CTS arms of efa_rdm_pke_fill_data(). */
+		assert(pkt_entry->ope->internal_flags & EFA_RDM_OPE_READ_NACK);
 		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
@@ -637,6 +638,10 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
+		/* Read NACK fallback only: a fresh long CTS send carries
+		 * efa_rdm_proto_longcts_handle_rtm_send_completion() on the
+		 * packet entry and returned above. See the long CTS arms of
+		 * efa_rdm_pke_fill_data(). */
 		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
@@ -690,6 +695,21 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
+	/*
+	 * The DC long CTS RTM types stay listed here even though a fresh DC
+	 * long CTS send now carries a handle_pke callback and returns before
+	 * this switch: the read NACK fallback still reaches them (see the long
+	 * CTS arms of efa_rdm_pke_fill_data).
+	 *
+	 * FETCH_RTA_PKT and COMPARE_RTA_PKT have no body of their own, so
+	 * nothing but comments and further case labels may sit between them and
+	 * the shared DC release code below: turning one of these labels into a
+	 * tripwire, or inserting any statement here, severs the atomics' path to
+	 * it. Move a migrated protocol's DC labels out to their own
+	 * EFA_RDM_PROTO_MOVED() arm instead, as the eager and medium protocols'
+	 * are; the group cannot become empty, because EFA_RDM_DC_WRITE_RTA_PKT
+	 * and EFA_RDM_DC_LONGCTS_RTW_PKT are atomic and RMA types that stay.
+	 */
 	case EFA_RDM_DC_WRITE_RTA_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:

@@ -7,6 +7,7 @@
 #include "efa_rdm_ope.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longcts.h"
 #include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_medium.h"
 #include "protocols/efa_rdm_proto_runtread.h"
@@ -55,6 +56,10 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_medium,
 	&efa_rdm_proto_runtread,
 	&efa_rdm_proto_longread,
+	/* Long CTS must be last: it can always be used, so any protocol listed
+	 * after it would never be reached.
+	 */
+	&efa_rdm_proto_longcts,
 };
 
 /*
@@ -187,8 +192,14 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	}
 
 	/*
-	 * No protocol matched, so release any MRs that were registered
-	 * TODO: Remove after all protocols moved to new code path
+	 * No protocol matched, so the caller falls back to the old code path and
+	 * the MRs the selection loop registered must be released.
+	 *
+	 * This is unreachable now that the long CTS protocol is registered: it
+	 * can always be used, so it always matches. The arm stays until the
+	 * legacy send path is deleted, since letting the fall-through silently
+	 * leak the selection loop's memory registrations would be worse than
+	 * keeping the (now dead) rollback.
 	 */
 	if (mr_attempted)
 		efa_rdm_proto_release_selection_mrs(txe);
