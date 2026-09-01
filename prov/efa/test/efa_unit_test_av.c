@@ -102,8 +102,8 @@ static void efa_ah_cnt_av_impl(void **state, bool efa_fabric, bool multi_av)
 	HASH_FIND(hh, efa_domain->ah_map, raw_addr.raw, EFA_GID_LEN, efa_ah);
 	if (efa_fabric) {
 		assert_non_null(efa_ah);
-		assert_int_equal(efa_ah->explicit_refcnt, efa_fabric ? 1 : 0);
-		assert_int_equal(efa_ah->implicit_refcnt, 0);
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->explicit_refcnt, efa_fabric ? 1 : 0);
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->implicit_refcnt, 0);
 	} else {
 		assert_null(efa_ah);
 	}
@@ -139,8 +139,13 @@ static void efa_ah_cnt_av_impl(void **state, bool efa_fabric, bool multi_av)
 
 	/* So far we should still have 1 ah, and its refcnt is 3 for efa fabric (including self AH) and 2 for efa-direct fabric) */
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
-	assert_int_equal(efa_ah->explicit_refcnt, efa_fabric ? 3 : 2);
-	assert_int_equal(efa_ah->implicit_refcnt, 0);
+	if (efa_fabric) {
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->explicit_refcnt, 3);
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->implicit_refcnt, 0);
+	} else {
+		/* efa-direct AH is a base efa_ah with only the shared reference count */
+		assert_int_equal(efa_ah->refcnt, 2);
+	}
 
 	if (multi_av) {
 		/* ah refcnt should be decremented to 1 after av close */
@@ -155,8 +160,8 @@ static void efa_ah_cnt_av_impl(void **state, bool efa_fabric, bool multi_av)
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), efa_fabric ? 1 : 0);
 	if (efa_fabric) {
 		/* efa_ah is still alive because self-AH holds a reference */
-		assert_int_equal(efa_ah->explicit_refcnt, 1);
-		assert_int_equal(efa_ah->implicit_refcnt, 0);
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->explicit_refcnt, 1);
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->implicit_refcnt, 0);
 	}
 	/* else: efa_ah has been freed, do not dereference */
 
@@ -754,8 +759,8 @@ void test_ah_refcnt(void **state)
 
 	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_dont_create_self_ah;
 	g_efa_unit_test_mocks.ibv_destroy_ah = &efa_mock_ibv_destroy_ah_dont_create_self_ah;
-	g_efa_unit_test_mocks.efa_ah_alloc = &efa_mock_efa_ah_alloc_dont_create_self_ah;
-	g_efa_unit_test_mocks.efa_ah_release = &efa_mock_efa_ah_release_dont_create_self_ah;
+	g_efa_unit_test_mocks.efa_rdm_ah_alloc = &efa_mock_efa_rdm_ah_alloc_dont_create_self_ah;
+	g_efa_unit_test_mocks.efa_rdm_ah_release = &efa_mock_efa_rdm_ah_release_dont_create_self_ah;
 
 	g_self_ah_cnt = 1;
 	g_ibv_ah_limit = g_self_ah_cnt + allowed_ahs;
@@ -785,8 +790,8 @@ void test_ah_refcnt(void **state)
 	assert_int_equal(g_ibv_ah_cnt, 2);
 
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
-	assert_int_equal(efa_ah->explicit_refcnt, 0);
-	assert_int_equal(efa_ah->implicit_refcnt, 1);
+	assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->explicit_refcnt, 0);
+	assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->implicit_refcnt, 1);
 
 	/* Move implicit AV entry to explicit AV entry */
 	err = fi_av_insert(resource->av, &raw_addr, 1, &fi_addr, 0, NULL);
@@ -795,8 +800,8 @@ void test_ah_refcnt(void **state)
 	assert_int_equal(g_ibv_ah_cnt, 2);
 
 	assert_int_equal(HASH_CNT(hh, efa_domain->ah_map), 1);
-	assert_int_equal(efa_ah->explicit_refcnt, 1);
-	assert_int_equal(efa_ah->implicit_refcnt, 0);
+	assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->explicit_refcnt, 1);
+	assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->implicit_refcnt, 0);
 
 	err = fi_av_remove(resource->av, &fi_addr, 1, 0);
 	assert_int_equal(err, 0);
@@ -841,8 +846,8 @@ void test_ah_lru_eviction_impl(bool explicit)
 
 	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_dont_create_self_ah;
 	g_efa_unit_test_mocks.ibv_destroy_ah = &efa_mock_ibv_destroy_ah_dont_create_self_ah;
-	g_efa_unit_test_mocks.efa_ah_alloc = &efa_mock_efa_ah_alloc_dont_create_self_ah;
-	g_efa_unit_test_mocks.efa_ah_release = &efa_mock_efa_ah_release_dont_create_self_ah;
+	g_efa_unit_test_mocks.efa_rdm_ah_alloc = &efa_mock_efa_rdm_ah_alloc_dont_create_self_ah;
+	g_efa_unit_test_mocks.efa_rdm_ah_release = &efa_mock_efa_rdm_ah_release_dont_create_self_ah;
 
 	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
 	fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0, hints, &info);
@@ -906,8 +911,8 @@ void test_ah_lru_eviction_impl(bool explicit)
 
 	assert_int_equal(HASH_CNT(hh, efa_domain[0]->ah_map), 1);
 	efa_ah = peer->av_entry->efa_av_entry.ah;
-	assert_int_equal(efa_ah->implicit_refcnt, 1);
-	assert_int_equal(efa_ah->explicit_refcnt, 0);
+	assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->implicit_refcnt, 1);
+	assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->explicit_refcnt, 0);
 
 	if (explicit) {
 		err = fi_av_insert(av_fid[0], &raw_addr[1], 1, &fi_addr, 0, NULL);
@@ -924,11 +929,11 @@ void test_ah_lru_eviction_impl(bool explicit)
 
 	efa_ah = peer->av_entry->efa_av_entry.ah;
 	if (explicit) {
-		assert_int_equal(efa_ah->implicit_refcnt, 0);
-		assert_int_equal(efa_ah->explicit_refcnt, 1);
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->implicit_refcnt, 0);
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->explicit_refcnt, 1);
 	} else {
-		assert_int_equal(efa_ah->implicit_refcnt, 1);
-		assert_int_equal(efa_ah->explicit_refcnt, 0);
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->implicit_refcnt, 1);
+		assert_int_equal(((struct efa_rdm_ah *)(efa_ah))->explicit_refcnt, 0);
 	}
 
 	if (explicit) {
