@@ -6,6 +6,7 @@
 #include "efa_rdm_domain.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_medium.h"
 #include "efa_rdm_msg.h"
 
 /**
@@ -47,6 +48,7 @@ static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
  */
 static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
+	&efa_rdm_proto_medium,
 };
 
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,
@@ -118,14 +120,7 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		return err;
 	use_p2p = err;
 
-	/* Logic copied from efa_rdm_txe_max_req_data_capacity */
-	if (efa_rdm_peer_need_raw_addr_hdr(peer))
-		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
-	else if (efa_rdm_peer_need_connid(peer))
-		header_flags |= EFA_RDM_PKT_CONNID_HDR;
-
-	if (flags & FI_REMOTE_CQ_DATA)
-		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
+	header_flags = efa_rdm_proto_req_header_flags(peer, effective_flags);
 
 	for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
 		selected_proto = efa_rdm_protocols[i];
