@@ -34,29 +34,69 @@ def fabric_present(string, fabric):
     raise ValueError(f"Unknown fabric: {fabric!r}")
 
 
+# PR CI test types, most specific first. A per test type marker kwarg
+# (memory_type(pr_ci_hmem=...), message_sizes(pr_ci_hmem_efa=...)) is looked up
+# in this order, so an HMEM run falls back to the plain PR CI declaration when a
+# test does not need a different HMEM matrix.
+TEST_TYPE_FALLBACKS = {
+    "pr_ci_hmem": ("pr_ci_hmem", "pr_ci"),
+    "pr_ci": ("pr_ci",),
+    "default": ("default",),
+}
+
+
 def get_test_type(test_markers, config):
     """
-    Return 'pr_ci' if this test is being collected because of the pr_ci marker,
-    else 'default'.
+    Return the test type the current run selected this test with:
+    'pr_ci_hmem' for the PR CI suite on an accelerator instance, 'pr_ci' for the
+    PR CI suite elsewhere, else 'default'.
+
+    The type is decided by which marker caused the test to be selected, so the
+    harness controls it with -t (runfabtests) / -m (pytest) and no hardware
+    detection is involved.
     """
+    if test_selected_by_marker(config, test_markers, "pr_ci_hmem"):
+        return "pr_ci_hmem"
     if test_selected_by_marker(config, test_markers, "pr_ci"):
         return "pr_ci"
     return "default"
 
 
+def marker_kwarg_for_test_type(marker, test_type, suffix=""):
+    """
+    Return (kwarg_name, value) for the most specific test type a marker declares,
+    or (None, None). suffix lets the message_sizes marker key on fabric too, e.g.
+    test_type 'pr_ci_hmem' + suffix '_efa' looks up 'pr_ci_hmem_efa' then
+    'pr_ci_efa'.
+    """
+    for candidate in TEST_TYPE_FALLBACKS.get(test_type, (test_type,)):
+        name = candidate + suffix
+        if name in marker.kwargs:
+            return name, marker.kwargs[name]
+    return None, None
+
+
+FABRIC_KWARG_SUFFIX = {"efa": "_efa", "efa-direct": "_efa_direct"}
+
+
 def choose_message_sizes_for_fabric_test_type(fabric, test_type, sizes_marker, nodeid):
     """
-    Return all matching message-size lists for (fabric, test_type) from a
+    Return the message-size list for (fabric, test_type) from a
     @pytest.mark.message_sizes marker.
     example:
     @pytest.mark.message_sizes(default_efa=PERF_SIZES, pr_ci_efa=DIRECT_RMA_SIZES)
                    ^sizes marker   ^kwarg_name   ^kwarg_sizes
+
+    A kwarg name is <test_type>_<fabric>, matched exactly, walking the test type
+    fallback chain: an HMEM PR CI run uses the pr_ci_* sizes unless the test
+    declares pr_ci_hmem_* ones. Matching the whole name matters because
+    'pr_ci' is a prefix of 'pr_ci_hmem'.
     """
-    sizes = []
-    for kwarg_name, kwarg_sizes in sizes_marker.kwargs.items():
-        # add message sizes if they match both the fabric and the test type
-        if fabric_present(kwarg_name, fabric) and test_type in kwarg_name:
-            sizes.extend(kwarg_sizes)
+    suffix = FABRIC_KWARG_SUFFIX.get(fabric)
+    if suffix is None:
+        raise ValueError(f"Unknown fabric: {fabric!r}")
+
+    _, sizes = marker_kwarg_for_test_type(sizes_marker, test_type, suffix)
     if not sizes:
         raise ValueError(
             f"@pytest.mark.message_sizes on {nodeid} is missing a kwarg for "
@@ -64,6 +104,40 @@ def choose_message_sizes_for_fabric_test_type(fabric, test_type, sizes_marker, n
             f"(have {sorted(sizes_marker.kwargs)})"
         )
     return sizes
+
+
+def kwarg_test_type(kwarg_name):
+    """
+    Return the test type part of a message_sizes kwarg name, i.e. the name with
+    its trailing _<fabric> stripped: 'pr_ci_hmem_efa_direct' -> 'pr_ci_hmem'.
+    """
+    for suffix in sorted(FABRIC_KWARG_SUFFIX.values(), key=len, reverse=True):
+        if kwarg_name.endswith(suffix):
+            return kwarg_name[: -len(suffix)]
+    return kwarg_name
+
+
+def choose_message_sizes_for_test_type(test_type, sizes_marker, nodeid):
+    """
+    Return the message-size list for test_type from a @pytest.mark.message_sizes
+    marker on a test with no fabric parametrization.
+
+    The test type part of each kwarg name is compared exactly, walking the
+    fallback chain, so an HMEM PR CI run uses the pr_ci_* sizes unless the test
+    declares pr_ci_hmem_* ones, and 'pr_ci' never matches a 'pr_ci_hmem_*'
+    kwarg by prefix.
+    """
+    for candidate in TEST_TYPE_FALLBACKS.get(test_type, (test_type,)):
+        sizes = []
+        for kwarg_name, kwarg_sizes in sizes_marker.kwargs.items():
+            if kwarg_test_type(kwarg_name) == candidate:
+                sizes.extend(kwarg_sizes)
+        if sizes:
+            return sizes
+    raise ValueError(
+        f"@pytest.mark.message_sizes on {nodeid} has "
+        f"no kwarg naming {test_type!r} (have {sorted(sizes_marker.kwargs)})"
+    )
 
 
 def add_fabric_and_message_size_parametrization(metafunc, fabric_marker, sizes_marker, test_type):
@@ -91,16 +165,9 @@ def add_fabric_and_message_size_parametrization(metafunc, fabric_marker, sizes_m
         return
 
     # no fabric param, just add message sizes parametrization based on test type
-    sizes = []
-    for k, kwarg_sizes in sizes_marker.kwargs.items():
-        if test_type in k:
-            sizes.extend(kwarg_sizes)
-    if not sizes:
-        raise ValueError(
-            f"@pytest.mark.message_sizes on {metafunc.definition.nodeid} has "
-            f"no kwarg naming {test_type!r} (have {sorted(sizes_marker.kwargs)})"
-        )
-    metafunc.parametrize("message_sizes", sizes)
+    metafunc.parametrize("message_sizes",
+                         choose_message_sizes_for_test_type(test_type, sizes_marker,
+                                                            metafunc.definition.nodeid))
 
 
 def client_server_have_device(memory_token, server_id, client_id):
@@ -122,11 +189,22 @@ def client_server_have_device(memory_token, server_id, client_id):
     return True
 
 
-def add_memory_type_parametrization(metafunc, memory_type_marker):
+def add_memory_type_parametrization(metafunc, memory_type_marker, test_type):
     """
     Parametrize the memory_type fixture at collection time from the test's
     @pytest.mark.memory_type(...) declaration, dropping any permutation whose
     device is absent on the owning endpoint.
+
+    The candidate list is the one the marker declares for the running test type,
+    most specific first:
+
+        @pytest.mark.memory_type(memory_type_list_all,             # default runs
+                                 pr_ci=memory_type_list_symm,      # PR CI
+                                 pr_ci_hmem=memory_type_list_all)  # PR CI, GPU
+
+    A missing kwarg falls back to the less specific one and finally to the
+    positional list, so forgetting a kwarg widens coverage rather than silently
+    dropping it.
 
     Fallback (no coverage regression): if --server-id/--client-id are not
     provided or device detection fails, every candidate memory type is
@@ -144,7 +222,10 @@ def add_memory_type_parametrization(metafunc, memory_type_marker):
             f"but is missing @pytest.mark.memory_type(...)"
         )
 
-    candidates = memory_type_marker.args[0]
+
+    _, candidates = marker_kwarg_for_test_type(memory_type_marker, test_type)
+    if candidates is None:
+        candidates = memory_type_marker.args[0]
 
     server_id = metafunc.config.getoption("--server-id", default=None)
     client_id = metafunc.config.getoption("--client-id", default=None)
@@ -187,7 +268,7 @@ def pytest_generate_tests(metafunc):
 
     # parametrize memory_type from its marker, dropping permutations
     # whose device is absent on the owning endpoint
-    add_memory_type_parametrization(metafunc, memory_type_marker)
+    add_memory_type_parametrization(metafunc, memory_type_marker, test_type)
 
 hmem_type_list = [
     pytest.param("cuda", marks=pytest.mark.cuda_memory),

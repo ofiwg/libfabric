@@ -34,6 +34,15 @@ memory_type_list_symm = [
     pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
 ]
 
+# Device memory only, no host_to_host. The PR CI default for an accelerator
+# instance: host memory is covered by the accelerator free instances in the PR
+# CI matrix, so an accelerator instance only needs the device permutations.
+memory_type_list_device_to_device = [
+    pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+    pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
+]
+
 # Single memory type lists for tests that run only one.
 memory_type_list_cuda_to_cuda = [
     pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
