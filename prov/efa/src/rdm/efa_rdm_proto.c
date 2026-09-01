@@ -6,6 +6,7 @@
 #include "efa_rdm_domain.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_medium.h"
 #include "efa_rdm_msg.h"
 
 /**
@@ -48,6 +49,7 @@ static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
  */
 struct efa_rdm_proto *efa_rdm_protocols[EFA_RDM_MAX_PROTO] = {
 	&efa_rdm_proto_eager,
+	&efa_rdm_proto_medium,
 	NULL, /* Sentinel used to stop iteration */
 };
 

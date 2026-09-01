@@ -9,10 +9,12 @@
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
+#include "rdm/efa_rdm_pke_req.h"
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_proto_eager.h"
+#include "rdm/efa_rdm_proto_medium.h"
 
 int efa_test_rtm_read_nack_missing_rxe(struct fid_ep *ep, fi_addr_t peer_addr,
 				       int tagged, ssize_t *ret)
@@ -313,6 +315,58 @@ static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
 	return 0;
 }
 
+/*
+ * Build one segment of a medium RTM message the way the medium protocol does.
+ *
+ * Like eager, the medium protocol moved to the refactored code path
+ * (efa_rdm_proto_medium_construct_tx_pkes), which allocates its own packet
+ * entries and so cannot stamp a caller-supplied one. This mirrors the header and
+ * payload it writes for a single segment, so the assertions below still describe
+ * the medium wire format.
+ */
+static ssize_t efa_test_rtm_init_medium(struct efa_rdm_pke *pkt_entry,
+					struct efa_rdm_ope *txe,
+					enum efa_test_rtm_variant variant,
+					size_t segment_offset, size_t data_size)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+
+	if (EFA_TEST_RTM_IS_DC(variant))
+		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	/* The DC and non-DC medium headers share this prefix. */
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(pkt_entry);
+	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->msg_id = txe->msg_id;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		rtm_hdr->flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	if (EFA_TEST_RTM_IS_DC(variant)) {
+		struct efa_rdm_dc_medium_rtm_base_hdr *h =
+			efa_rdm_pke_get_dc_medium_rtm_base_hdr(pkt_entry);
+
+		h->send_id = txe->tx_id;
+		h->msg_length = txe->total_len;
+		h->seg_offset = segment_offset;
+	} else {
+		struct efa_rdm_medium_rtm_base_hdr *h =
+			efa_rdm_pke_get_medium_rtm_base_hdr(pkt_entry);
+
+		h->msg_length = txe->total_len;
+		h->seg_offset = segment_offset;
+	}
+
+	return efa_rdm_pke_init_payload_from_ope(
+		pkt_entry, txe, efa_rdm_pke_get_req_hdr_size(pkt_entry),
+		segment_offset, data_size);
+}
+
 void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 			     enum efa_test_rtm_variant variant,
 			     struct efa_test_rtm_init_result *out)
@@ -361,24 +415,12 @@ void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 		out->ret = efa_test_rtm_init_eager(pkt_entry, txe, variant);
 		break;
 	case EFA_TEST_RTM_MEDIUM_MSG:
-		out->ret = efa_rdm_pke_init_medium_msgrtm(
-			pkt_entry, txe, EFA_TEST_RTM_MEDIUM_SEG,
-			EFA_TEST_RTM_MEDIUM_DATA);
-		break;
 	case EFA_TEST_RTM_MEDIUM_TAG:
-		out->ret = efa_rdm_pke_init_medium_tagrtm(
-			pkt_entry, txe, EFA_TEST_RTM_MEDIUM_SEG,
-			EFA_TEST_RTM_MEDIUM_DATA);
-		break;
 	case EFA_TEST_RTM_DC_MEDIUM_MSG:
-		out->ret = efa_rdm_pke_init_dc_medium_msgrtm(
-			pkt_entry, txe, EFA_TEST_RTM_MEDIUM_SEG,
-			EFA_TEST_RTM_MEDIUM_DATA);
-		break;
 	case EFA_TEST_RTM_DC_MEDIUM_TAG:
-		out->ret = efa_rdm_pke_init_dc_medium_tagrtm(
-			pkt_entry, txe, EFA_TEST_RTM_MEDIUM_SEG,
-			EFA_TEST_RTM_MEDIUM_DATA);
+		out->ret = efa_test_rtm_init_medium(pkt_entry, txe, variant,
+						   EFA_TEST_RTM_MEDIUM_SEG,
+						   EFA_TEST_RTM_MEDIUM_DATA);
 		break;
 	case EFA_TEST_RTM_LONGCTS_MSG:
 		out->ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, txe);
@@ -511,7 +553,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer *peer;
-	bool eager_released_pkt_entry = false;
+	bool callback_released_pkt_entry = false;
 	static char buf[EFA_TEST_RTM_LONG_LEN];
 
 	memset(out, 0, sizeof(*out));
@@ -557,7 +599,13 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 
 		switch (family) {
 		case EFA_TEST_RTM_FAM_MEDIUM:
-			efa_rdm_pke_handle_medium_rtm_sent(pkt_entry);
+			/*
+			 * The refactored medium protocol posts every packet of
+			 * the message in one go, so its post-send hook accounts
+			 * for the whole message rather than for one packet.
+			 */
+			efa_rdm_proto_medium_handle_tx_pkes_posted(efa_rdm_ep,
+								   txe);
 			break;
 		case EFA_TEST_RTM_FAM_LONGCTS:
 			efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
@@ -602,11 +650,15 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 		 */
 		pkt_entry->handle_pke =
 			&efa_rdm_proto_eager_handle_rtm_send_completion;
-		eager_released_pkt_entry = true;
+		callback_released_pkt_entry = true;
 		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_MEDIUM:
-		efa_rdm_pke_handle_medium_rtm_send_completion(pkt_entry);
+		/* Also refactored; see the eager case above. */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_medium_handle_rtm_send_completion;
+		callback_released_pkt_entry = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_LONGCTS:
 		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
@@ -627,10 +679,10 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	out->num_runt_bytes_in_flight = peer->num_runt_bytes_in_flight;
 	if (out->txe_on_ope_list) {
 		out->bytes_acked = txe->bytes_acked;
-		if (!eager_released_pkt_entry)
+		if (!callback_released_pkt_entry)
 			efa_rdm_pke_release_tx(pkt_entry);
 		efa_rdm_txe_release(txe);
-	} else if (!eager_released_pkt_entry) {
+	} else if (!callback_released_pkt_entry) {
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
 }
