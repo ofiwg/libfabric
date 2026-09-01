@@ -56,6 +56,7 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
 	&efa_rdm_proto_runtread,
+	&efa_rdm_proto_longread,
 };
 
 /*
@@ -191,13 +192,6 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	iface = (msg->desc && msg->desc[0]) ?
 			((struct efa_mr *) msg->desc[0])->iface :
 			FI_HMEM_SYSTEM;
-
-	/* Synapse AI only supports long read */
-	if (iface == FI_HMEM_SYNAPSEAI) {
-		*proto = NULL;
-		txe->proto = NULL;
-		return 0;
-	}
 
 	/*
 	 * The read based protocols can only be used when the device can access

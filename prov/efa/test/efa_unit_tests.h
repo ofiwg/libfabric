@@ -21,6 +21,7 @@
 #include "efa_unit_test_mocks.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
 
 /**
@@ -897,5 +898,9 @@ void test_proto_select_runtread_for_large_msg(void **state);
 void test_proto_select_declines_runtread_for_delivery_complete(void **state);
 void test_proto_runtread_construct_pkes_carries_read_iov(void **state);
 void test_proto_runtread_construct_pkes_is_idempotent(void **state);
+void test_proto_select_longread_for_large_msg(void **state);
+void test_proto_select_declines_longread_without_mr(void **state);
+void test_proto_longread_construct_pkes_single_pke(void **state);
+void test_proto_longread_construct_pkes_is_idempotent(void **state);
 
 #endif
