@@ -77,8 +77,8 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.ibv_create_ah = __real_ibv_create_ah,
 		.ibv_destroy_ah = __real_ibv_destroy_ah,
 		.efadv_query_device = __real_efadv_query_device,
-		.efa_ah_alloc = __real_efa_ah_alloc,
-		.efa_ah_release = __real_efa_ah_release,
+		.efa_rdm_ah_alloc = __real_efa_rdm_ah_alloc,
+		.efa_rdm_ah_release = __real_efa_rdm_ah_release,
 #if HAVE_EFADV_CQ_EX
 		.efadv_create_cq = __real_efadv_create_cq,
 #endif
