@@ -1,5 +1,5 @@
 from efa.efa_common import (efa_run_client_server_test, DIRECT_SIZES,
-                            memory_type_list_all, memory_type_list_bi_dir)
+                            memory_type_list_all, memory_type_list_bi_dir, memory_type_list_device_to_device)
 from common import (perf_progress_model_cli,
                     PERF_SIZES, PERF_PR_CI, RANGE_SIZES, INJECT_SIZES)
 
@@ -39,7 +39,8 @@ def test_rdm_bw_functional_efa(cmdline_args, completion_semantic):
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 @pytest.mark.pr_ci
-@pytest.mark.memory_type(memory_type_list_bi_dir)
+@pytest.mark.pr_ci_hmem
+@pytest.mark.memory_type(memory_type_list_bi_dir, pr_ci_hmem=memory_type_list_all)
 def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic,
                       memory_type, completion_type, fabric, message_sizes):
     command = "fi_rdm_pingpong"  + " " + perf_progress_model_cli
@@ -71,7 +72,8 @@ def test_rdm_pingpong_no_inject_range(cmdline_args, completion_semantic, message
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 @pytest.mark.pr_ci
-@pytest.mark.memory_type(memory_type_list_bi_dir)
+@pytest.mark.pr_ci_hmem
+@pytest.mark.memory_type(memory_type_list_bi_dir, pr_ci_hmem=memory_type_list_device_to_device)
 def test_rdm_tagged_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type, completion_type, message_sizes):
     command = "fi_rdm_tagged_pingpong"  + " " + perf_progress_model_cli
     efa_run_client_server_test(cmdline_args, command, iteration_type,
@@ -144,7 +146,8 @@ def test_rdm_tagged_bw_use_fi_more(cmdline_args, completion_semantic, memory_typ
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 @pytest.mark.pr_ci
-@pytest.mark.memory_type(memory_type_list_all)
+@pytest.mark.pr_ci_hmem
+@pytest.mark.memory_type(memory_type_list_all, pr_ci_hmem=memory_type_list_device_to_device)
 def test_rdm_atomic(cmdline_args, iteration_type, completion_semantic, memory_type):
     from copy import copy
 
@@ -221,7 +224,8 @@ def test_mr_exhaustion_rdm_pingpong(cmdline_args, completion_semantic):
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 @pytest.mark.pr_ci
-@pytest.mark.memory_type(memory_type_list_bi_dir)
+@pytest.mark.pr_ci_hmem
+@pytest.mark.memory_type(memory_type_list_bi_dir, pr_ci_hmem=memory_type_list_device_to_device)
 def test_rdm_pingpong_no_mr_local(cmdline_args, iteration_type, completion_semantic,
                       memory_type, completion_type, mr_cache, message_sizes):
     command = "fi_rdm_pingpong -M mr_local"  + " " + perf_progress_model_cli
@@ -241,7 +245,8 @@ def test_rdm_pingpong_no_mr_local(cmdline_args, iteration_type, completion_seman
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 @pytest.mark.pr_ci
-@pytest.mark.memory_type(memory_type_list_bi_dir)
+@pytest.mark.pr_ci_hmem
+@pytest.mark.memory_type(memory_type_list_bi_dir, pr_ci_hmem=memory_type_list_device_to_device)
 def test_rma_pingpong_no_mr_local(cmdline_args, iteration_type, completion_semantic,
                       memory_type, mr_cache, message_sizes):
     command = "fi_rma_pingpong -o writedata -M mr_local"  + " " + perf_progress_model_cli
