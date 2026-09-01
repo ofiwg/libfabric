@@ -279,8 +279,6 @@ int efa_rdm_peer_queue_aborted_msg_marker(struct efa_rdm_peer *peer, struct efa_
 
 size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
 
-int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_ope *ope);
-
 /* Macro for getting peer address string */
 #define EFA_RDM_GET_PEER_ADDR_STR(ep, peer, peer_addr_str) \
 	char peer_addr_str[OFI_ADDRSTRLEN] = {0}; \

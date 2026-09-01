@@ -40,7 +40,7 @@
  * Unlike the runt read protocol, a FI_DELIVERY_COMPLETE send is not ruled out:
  * long read is delivery complete by nature -- the sender's completion is driven
  * by the receiver's EOR -- which is why it has no separate DC REQ type and why
- * mainline's efa_rdm_peer_select_readbase_rtm() falls back to it for a DC send.
+ * the legacy read based selector fell back to it for a DC send.
  */
 static bool efa_rdm_proto_longread_can_use_for_send(struct efa_rdm_ope *txe,
 						    struct efa_rdm_peer *peer,

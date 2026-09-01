@@ -37,9 +37,9 @@
  * enough to be worth a read, a source buffer the device can read from directly,
  * a peer that supports RDMA read, and a non-zero runt allowance for that peer.
  *
- * This mirrors the two mainline predicates it replaces: the readbase arm of
- * efa_rdm_msg_select_rtm() and the runt arm of
- * efa_rdm_peer_select_readbase_rtm().
+ * This is the conjunction of the two legacy predicates it replaces: the read
+ * based arm of the old RTM selector and the runt arm of the old read based
+ * selector, both of which this series deletes.
  */
 static bool efa_rdm_proto_runtread_can_use_for_send(struct efa_rdm_ope *txe,
 						    struct efa_rdm_peer *peer,
@@ -72,9 +72,9 @@ static bool efa_rdm_proto_runtread_can_use_for_send(struct efa_rdm_ope *txe,
 
 	/*
 	 * There is no delivery complete variant of the runt read REQ, so a DC
-	 * send has to use a read protocol that has one. Mainline makes the same
-	 * call in efa_rdm_peer_select_readbase_rtm(), which falls back to long
-	 * read when FI_DELIVERY_COMPLETE is set.
+	 * send has to use a read protocol that has one. The legacy read based
+	 * selector made the same call, falling back to long read when
+	 * FI_DELIVERY_COMPLETE is set.
 	 */
 	if (txe->fi_flags & FI_DELIVERY_COMPLETE)
 		return false;
