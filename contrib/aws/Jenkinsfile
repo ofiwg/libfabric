@@ -134,10 +134,8 @@ def get_cluster_name(build_tag, os, instance_type) {
  *   Core:      src/, include/
  *   Tests:     fabtests/
  *   CI:        contrib/aws/
- *   Build:     Makefile.am, configure.ac, autogen.sh, config/
- *   Windows:   libfabric.vcxproj, libfabric.sln, Libfabric.Build.Default.props,
- *              libfabric.def, *.vcxproj.filters, strerror.vcxproj, pingpong.vcxproj,
- *              info.vcxproj, libfabric.pc.in, libfabric.map.in, libfabric.spec.in
+ *   Build:     Makefile.am, configure.ac, autogen.sh, config/, libfabric.pc.in,
+ *              libfabric.map.in, libfabric.spec.in
  */
 @Field def ci_skip_paths = [
     // Documentation
@@ -159,6 +157,21 @@ def get_cluster_name(build_tag, os, instance_type) {
     ".appveyor.yml",
     ".appveyor.ps1",
     ".travis.yml",
+    // Windows-only files 
+    "src/windows/",
+    "include/windows/",
+    "fabtests/common/windows/",
+    "fabtests/include/windows/",
+    "fabtests/fabtests.sln",
+    "fabtests/fabtests.vcxproj",
+    "prov/efa/src/windows/",
+    "libfabric.sln",
+    "libfabric.vcxproj",
+    "libfabric.def",
+    "Libfabric.Build.Default.props",
+    "info.vcxproj",
+    "pingpong.vcxproj",
+    "strerror.vcxproj",
     // Providers excluded from AWS CI (unlisted providers will trigger CI)
     "prov/cxi/",
     "prov/lnx/",
@@ -217,30 +230,6 @@ def post_build_actions() {
     regions.each { region ->
         sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
     }
-    // Windows Cluster, has a different name
-    sh """
-        . ${venv_path}/bin/activate
-        ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name WindowsLibfabricCi_${env.CHANGE_ID}_*
-    """
-}
-
-def get_single_node_windows_test_stage_with_lock(stage_name, lock_label) {
-    /*
-     * Get Windows Stage
-     */
-    return {
-        stage("${stage_name}") {
-            lock(label: lock_label, quantity: 1) {
-                sh """
-                    . ${venv_path}/bin/activate;
-                    cd ${portafiducia_path}/scripts;
-                    export PULL_REQUEST_ID=${env.CHANGE_ID};
-                    env AWS_DEFAULT_REGION=us-west-2 ./test_orchestrator_windows.py --odcr cr-0cdbaaac459287611 --ci public --s3-bucket-name libfabric-ci-windows-prod-test-output --pull-request-id ${env.CHANGE_ID};
-                """
-            }
-        }
-    }
-
 }
 
 def get_test_stage_with_lock(stage_name, build_tag, os, instance_type, instance_count, region, lock_label, addl_args) {
@@ -371,9 +360,6 @@ pipeline {
                     // Use g4dn.12xlarge (4 GPUs) for the EFA CUDA stage to avoid the
                     // single-GPU worker oversubscription that hangs the EFA progress engine.
                     stages["2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock("2_g4dn_alinux2023_efa",  env.BUILD_TAG, "alinux2023", "g4dn.12xlarge",  2, "us-east-1",      g4dn12x_lock_label, "--odcr cr-06968bbb5916ec4d3 ${addl_args_efa}")
-
-                    // Single Node Windows Test
-                    stages["EFA_Windows_Test"] = get_single_node_windows_test_stage_with_lock("EFA_Windows_Test", c5n18x_lock_label)
 
                     // Multi Node Tests - Other Providers
                     stages["2_c7i_alinux2023_tcp"]      = get_test_stage_with_lock("2_c7i_alinux2023_tcp",      env.BUILD_TAG, "alinux2023", "c7i.16xlarge", 2, "us-west-2", c7i16x_lock_label, "--odcr cr-02f365311e1143b20 ${addl_args_tcp}")
