@@ -800,6 +800,11 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		txe->req_pkt_type = delivery_complete_requested ?
 				EFA_RDM_DC_LONGCTS_TAGRTM_PKT :
 				EFA_RDM_LONGCTS_TAGRTM_PKT;
+		/* Long CTS message is not migrated yet, so clear the protocol
+		 * and let efa_rdm_ope_post_ctrl() build it on the legacy path.
+		 * TODO: set proto = longcts_rtm during longcts_rtm implementation
+		 */
+		txe->proto = NULL;
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
 		if (OFI_UNLIKELY(err))
 			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
@@ -811,6 +816,11 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		txe->req_pkt_type = delivery_complete_requested ?
 				EFA_RDM_DC_LONGCTS_MSGRTM_PKT :
 				EFA_RDM_LONGCTS_MSGRTM_PKT;
+		/* Long CTS message is not migrated yet, so clear the protocol
+		 * and let efa_rdm_ope_post_ctrl() build it on the legacy path.
+		 * TODO: set proto = longcts_rtm during longcts_rtm implementation
+		 */
+		txe->proto = NULL;
 		err = efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
 		if (OFI_UNLIKELY(err))
 			efa_rdm_txe_handle_error(txe, -err, FI_EFA_ERR_PKT_POST);
