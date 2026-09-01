@@ -7,6 +7,7 @@
 #include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_srx.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_longread.h"
 #include "ofi_util.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
@@ -4756,8 +4757,8 @@ void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **s
 	txe->req_pkt_type = EFA_RDM_LONGREAD_TAGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
-	/* Simulate efa_rdm_pke_handle_longread_rtm_sent(): the RTM was
-	 * accepted by the device, bumping the read counter. */
+	/* Simulate efa_rdm_proto_longread_handle_tx_pkes_posted(): the RTM
+	 * was accepted by the device, bumping the read counter. */
 	txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
 	ofi_atomic_set64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 1);
 

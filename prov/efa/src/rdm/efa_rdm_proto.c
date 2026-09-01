@@ -7,6 +7,7 @@
 #include "efa_rdm_ope.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_medium.h"
 #include "protocols/efa_rdm_proto_runtread.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
@@ -53,6 +54,7 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
 	&efa_rdm_proto_runtread,
+	&efa_rdm_proto_longread,
 };
 
 /*
