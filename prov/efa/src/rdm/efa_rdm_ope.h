@@ -425,7 +425,21 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 void efa_rdm_txe_release_read_msg_slot(struct efa_rdm_ope *txe);
 
-#define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
+/**
+ * @brief flag: this txe's read NACK long CTS continuation REQ is queued.
+ *
+ * A read based protocol whose receiver could not register its buffer continues
+ * as long CTS (see #EFA_RDM_OPE_READ_NACK). That continuation REQ is posted on
+ * the refactored protocol path, so it needs its own queued flag: unlike
+ * EFA_RDM_OPE_QUEUED_CTRL, whose retry arm goes through the legacy
+ * efa_rdm_ope_post_send(), this one is retried through
+ * efa_rdm_msg_post_read_nack_rtm_proto().
+ *
+ * While set, the txe is on ep->ope_queued_list.
+ */
+#define EFA_RDM_OPE_QUEUED_READ_NACK		BIT_ULL(23)
+
+#define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE | EFA_RDM_OPE_QUEUED_READ_NACK)
 
 /**
  * @brief Whether an ope is in scope for the peer-abort (MR abort) protocol.

@@ -846,4 +846,5 @@ void test_proto_select_longcts_for_large_msg(void **state);
 void test_proto_longcts_construct_pkes_single_pke(void **state);
 void test_proto_longcts_construct_pkes_is_idempotent(void **state);
 void test_proto_longcts_send_completion_peer_abort(void **state);
+void test_proto_longcts_read_nack_continues_on_refactored_path(void **state);
 #endif

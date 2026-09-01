@@ -1164,6 +1164,9 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 			continue;
 		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
 			continue;
+		if (efa_rdm_ope_process_queued_ope(ope,
+						   EFA_RDM_OPE_QUEUED_READ_NACK))
+			continue;
 		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_READ))
 			continue;
 	}

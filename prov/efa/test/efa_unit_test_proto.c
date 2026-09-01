@@ -3,6 +3,7 @@
  * rights reserved. */
 
 #include "efa_unit_tests.h"
+#include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_proto.h"
 #include "rdm/efa_rdm_proto_eager.h"
@@ -1979,5 +1980,141 @@ void test_proto_longcts_send_completion_peer_abort(void **state)
 	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
 	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
 
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief A read NACK continues the message as long CTS on the refactored path.
+ *
+ * The receiver of a read based protocol that cannot register its receive buffer
+ * answers with a EFA_RDM_READ_NACK_PKT, and the sender finishes the message with
+ * the long CTS protocol instead. That continuation is not a fresh send: the
+ * msg_id is spent, the runt packets already delivered txe->bytes_sent bytes and
+ * the receiver already has an rxe for this msg_id. So the REQ must carry no
+ * payload, must not move bytes_sent, and must set EFA_RDM_REQ_READ_NACK on the
+ * wire -- without it the receiver allocates a second rxe for the msg_id and
+ * slides its receive window a second time.
+ */
+void test_proto_longcts_read_nack_continues_on_refactored_path(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *runt_pkes[EFA_UNIT_TEST_PROTO_MAX_PKES];
+	struct efa_rdm_pke *nack_pke, *req_pke;
+	struct efa_rdm_read_nack_hdr *nack_hdr;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_longcts_rtm_base_hdr *longcts_hdr;
+	fi_addr_t peer_addr;
+	uint32_t saved_vendor_part_id;
+	size_t i, runt_pke_cnt, bytes_sent_before, rx_pkts_to_post_before;
+	int err;
+
+	ep = setup_proto_runtread_test(resource, &send_buff, &peer_addr, &peer,
+				       &saved_vendor_part_id);
+
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		&efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	err = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	restore_proto_runtread_device_version(saved_vendor_part_id);
+	assert_int_equal(err, 0);
+
+	/*
+	 * Snapshot the runt packets before anything else: the continuation REQ
+	 * reuses ep->send_pkt_entry_vec.
+	 */
+	runt_pke_cnt = ep->send_pkt_entry_vec_size;
+	assert_true(runt_pke_cnt > 1);
+	assert_true(runt_pke_cnt <= EFA_UNIT_TEST_PROTO_MAX_PKES);
+	for (i = 0; i < runt_pke_cnt; ++i)
+		runt_pkes[i] = ep->send_pkt_entry_vec[i];
+
+	txe = runt_pkes[0]->ope;
+	assert_non_null(txe);
+	assert_int_equal(txe->protocol, EFA_RDM_RUNTREAD_MSGRTM_PKT);
+	assert_true(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
+	bytes_sent_before = txe->bytes_sent;
+	assert_int_equal(bytes_sent_before, txe->bytes_runt);
+	assert_true(bytes_sent_before < txe->total_len);
+
+	/* The receiver failed to register its buffer and sent a READ NACK. */
+	nack_pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				     EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(nack_pke);
+	nack_pke->peer = peer;
+	nack_hdr = (struct efa_rdm_read_nack_hdr *) nack_pke->wiredata;
+	nack_hdr->type = EFA_RDM_READ_NACK_PKT;
+	nack_hdr->send_id = txe->tx_id;
+
+	/*
+	 * An rx packet entry is normally only allocated by the progress engine,
+	 * which accounts for it. Allocating one by hand does not, but releasing it
+	 * does, so snapshot the counter and put it back afterwards or
+	 * efa_rdm_ep_post_internal_rx_pkts() trips its accounting assertion on
+	 * the next progress.
+	 */
+	rx_pkts_to_post_before = ep->efa_rx_pkts_to_post;
+	efa_rdm_pke_handle_read_nack_recv(nack_pke);
+	ep->efa_rx_pkts_to_post = rx_pkts_to_post_before;
+
+	/* The fallback goes through the refactored long CTS protocol. */
+	assert_true(txe->internal_flags & EFA_RDM_OPE_READ_NACK);
+	assert_ptr_equal(txe->proto, &efa_rdm_proto_longcts);
+	assert_int_equal(txe->protocol, EFA_RDM_LONGCTS_MSGRTM_PKT);
+
+	/*
+	 * The domain read slot is handed back, or every later message on this
+	 * domain would decline to runt.
+	 */
+	assert_false(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
+	assert_int_equal(ofi_atomic_get64(
+				 &efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight),
+			 0);
+
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+	req_pke = ep->send_pkt_entry_vec[0];
+	assert_non_null(req_pke);
+	assert_ptr_equal(req_pke->handle_pke,
+			 &efa_rdm_proto_longcts_handle_rtm_send_completion);
+	assert_ptr_equal(req_pke->ope, txe);
+
+	/*
+	 * No payload, and bytes_sent still marks the end of the runt, so the
+	 * CTSDATA stream resumes exactly where the runt packets stopped.
+	 */
+	assert_int_equal(req_pke->payload_size, 0);
+	assert_int_equal(txe->bytes_sent, bytes_sent_before);
+
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(req_pke);
+	assert_int_equal(rtm_hdr->type, EFA_RDM_LONGCTS_MSGRTM_PKT);
+	assert_true(rtm_hdr->flags & EFA_RDM_REQ_READ_NACK);
+	assert_int_equal(rtm_hdr->msg_id, txe->msg_id);
+
+	longcts_hdr = efa_rdm_pke_get_longcts_rtm_base_hdr(req_pke);
+	assert_int_equal(longcts_hdr->msg_length, txe->total_len);
+	assert_int_equal(longcts_hdr->send_id, txe->tx_id);
+
+	/* Drain every WR: the runt packets first, then the payload-free REQ. */
+	for (i = 0; i < runt_pke_cnt; ++i) {
+		efa_rdm_ep_record_tx_op_completed(ep, runt_pkes[i]);
+		runt_pkes[i]->handle_pke(runt_pkes[i]);
+	}
+	efa_rdm_ep_record_tx_op_completed(ep, req_pke);
+	req_pke->handle_pke(req_pke);
+
+	/*
+	 * The message is not finished -- the CTSDATA packets that carry the rest
+	 * are still owed -- so no completion may have been written and the txe
+	 * must still be alive.
+	 */
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 1);
+	assert_int_equal(fi_cq_read(resource->cq, NULL, 1), -FI_EAGAIN);
+
+	efa_rdm_txe_release(txe);
 	efa_unit_test_buff_destruct(&send_buff);
 }

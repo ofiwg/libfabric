@@ -22,6 +22,7 @@
 #include "efa_mr.h"
 #include "efa_rdm_proto.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_longcts.h"
 #include "efa_rdm_tracepoint.h"
 
 /**
@@ -168,6 +169,34 @@ static ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
 }
 
 /**
+ * @brief Build a txe's packet entries and hand them to the device.
+ *
+ * The body every refactored send entry point shares. msg is deliberately NULL:
+ * only the fresh-send path has an fi_msg to offer, so construct_tx_pkes() must
+ * read the operation off the txe on all paths or it would behave differently on
+ * a repost or a continuation.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation
+ * @param[in]		proto	protocol to build and post with
+ * @return 0 on success, negative errno on failure. On failure no packet entry
+ *	   survives and the caller still owns only the txe.
+ */
+static ssize_t efa_rdm_msg_construct_and_send(struct efa_rdm_ep *ep,
+					      struct efa_rdm_ope *txe,
+					      struct efa_rdm_proto *proto)
+{
+	ssize_t err;
+
+	err = proto->construct_tx_pkes(ep, txe->peer, NULL, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe);
+	if (err)
+		return err;
+
+	return efa_rdm_msg_send_constructed_pkes(ep, txe, proto);
+}
+
+/**
  * @brief Post a fresh send on the refactored protocol path.
  *
  * Called only from efa_rdm_msg_generic_send(), on a txe that
@@ -185,22 +214,9 @@ ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
 				    struct efa_rdm_ope *txe,
 				    struct efa_rdm_proto *proto)
 {
-	ssize_t err;
-
 	assert(txe->proto == proto);
 
-	/*
-	 * msg is deliberately NULL: the repost path has no fi_msg to offer, so
-	 * construct_tx_pkes() must read the operation off the txe on both paths
-	 * or it would behave differently on a repost.
-	 */
-	err = proto->construct_tx_pkes(
-		ep, txe->peer, NULL, txe->op, txe->tag,
-		txe->fi_flags, txe->internal_flags, txe);
-	if (err)
-		return err;
-
-	return efa_rdm_msg_send_constructed_pkes(ep, txe, proto);
+	return efa_rdm_msg_construct_and_send(ep, txe, proto);
 }
 
 /**
@@ -231,19 +247,73 @@ ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
 				     struct efa_rdm_ope *txe)
 {
 	struct efa_rdm_proto *proto = txe->proto;
-	ssize_t err;
 
 	assert(proto);
 	assert(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
 	assert(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
 
-	err = proto->construct_tx_pkes(
-		ep, txe->peer, NULL, txe->op, txe->tag,
-		txe->fi_flags, txe->internal_flags, txe);
-	if (err)
-		return err;
+	return efa_rdm_msg_construct_and_send(ep, txe, proto);
+}
 
-	return efa_rdm_msg_send_constructed_pkes(ep, txe, proto);
+/**
+ * @brief Post the long CTS REQ that continues a read protocol after a read NACK.
+ *
+ * A read based protocol whose receiver could not register its receive buffer
+ * gets a EFA_RDM_READ_NACK_PKT back, and the sender finishes the message with
+ * the long CTS protocol instead. The txe is mid-flight: its msg_id is spent, its
+ * read protocol REQ packets already delivered txe->bytes_sent bytes, and the
+ * receiver already has an rxe for this msg_id. So this is neither a fresh send
+ * nor a pre-handshake repost, and it gets its own entry point:
+ *
+ * - The REQ carries no data and must not move txe->bytes_sent. That is
+ *   efa_rdm_proto_longcts_construct_tx_pkes()'s job; it keys off
+ *   EFA_RDM_OPE_READ_NACK, and also sets the matching EFA_RDM_REQ_READ_NACK wire
+ *   flag so the receiver reuses its rxe instead of allocating one and does not
+ *   slide its receive window a second time on this msg_id.
+ * - It can run more than once on the same txe, because a -FI_EAGAIN leaves the
+ *   txe queued with EFA_RDM_OPE_QUEUED_READ_NACK for
+ *   efa_rdm_ope_process_queued_ope() to retry, so construct_tx_pkes() must stay
+ *   idempotent here too.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation that received the read NACK
+ * @return 0 on success, negative errno on failure.
+ */
+ssize_t efa_rdm_msg_post_read_nack_rtm_proto(struct efa_rdm_ep *ep,
+					     struct efa_rdm_ope *txe)
+{
+	assert(txe->internal_flags & EFA_RDM_OPE_READ_NACK);
+	assert(txe->proto == &efa_rdm_proto_longcts);
+
+	return efa_rdm_msg_construct_and_send(ep, txe, txe->proto);
+}
+
+/**
+ * @brief Post a read NACK long CTS continuation REQ, or queue it for retry.
+ *
+ * The long CTS counterpart of efa_rdm_ope_post_send_or_queue(): out of packet
+ * entries or device queue space is not an error here, because the inbound NACK
+ * has already been consumed and there is nobody left to return -FI_EAGAIN to.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation that received the read NACK
+ * @return 0 on success or when queued, negative errno on a hard failure.
+ */
+ssize_t efa_rdm_msg_post_read_nack_rtm_proto_or_queue(struct efa_rdm_ep *ep,
+						      struct efa_rdm_ope *txe)
+{
+	ssize_t err;
+
+	err = efa_rdm_msg_post_read_nack_rtm_proto(ep, txe);
+	if (err == -FI_EAGAIN) {
+		assert(!(txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR));
+		txe->internal_flags |= EFA_RDM_OPE_QUEUED_READ_NACK;
+		dlist_insert_tail(&txe->queued_entry, &ep->ope_queued_list);
+		efa_rdm_ep_enqueue_progress_list(ep);
+		err = 0;
+	}
+
+	return err;
 }
 
 /**

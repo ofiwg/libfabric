@@ -2461,6 +2461,10 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag)
 		case EFA_RDM_OPE_QUEUED_CTRL:
 			ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
 			break;
+		case EFA_RDM_OPE_QUEUED_READ_NACK:
+			assert(ope->type == EFA_RDM_TXE);
+			ret = efa_rdm_msg_post_read_nack_rtm_proto(ope->ep, ope);
+			break;
 		case EFA_RDM_OPE_QUEUED_READ:
 			ret = efa_rdm_ope_post_read(ope);
 			break;

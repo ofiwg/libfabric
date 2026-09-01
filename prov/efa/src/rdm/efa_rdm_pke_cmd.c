@@ -98,27 +98,9 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 		assert(0 && "Medium protocol moved to refactored code path");
 		break;
-	/*
-	 * The long CTS protocol moved to the refactored code path
-	 * (efa_rdm_proto_longcts), so a fresh long CTS send never reaches these
-	 * arms. The one remaining legacy caller is the read NACK fallback in
-	 * efa_rdm_pke_handle_read_nack_recv(), which continues a read protocol as
-	 * long CTS after the receiver failed to register its buffer, and still
-	 * posts through efa_rdm_ope_post_send_or_queue(). Its REQ carries no data
-	 * (the runt packets already delivered the head of the message and the
-	 * long CTS header has no segment offset field), which is what the
-	 * EFA_RDM_OPE_READ_NACK branch of efa_rdm_pke_init_rtm_with_payload()
-	 * arranges. These arms go away with that fallback.
-	 */
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -168,16 +150,9 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
 		assert(0 && "Medium protocol moved to refactored code path");
 		break;
-	/* Read NACK fallback only; see the non-DC long CTS arms above. */
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		assert(ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -255,11 +230,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		/* Read NACK fallback only; a fresh long CTS send accounts for
-		 * its REQ in efa_rdm_proto_longcts_handle_tx_pkes_posted(). See
-		 * the long CTS arms of efa_rdm_pke_fill_data(). */
-		assert(pkt_entry->ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -648,11 +619,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		/* Read NACK fallback only: a fresh long CTS send carries
-		 * efa_rdm_proto_longcts_handle_rtm_send_completion() on the
-		 * packet entry and returned above. See the long CTS arms of
-		 * efa_rdm_pke_fill_data(). */
-		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
@@ -707,17 +674,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
 	/*
-	 * The DC eager and DC medium packet types are unreachable here: both
-	 * protocols moved to the refactored code path, and their packets carry a
-	 * handle_pke callback that returns before this switch. They stay
-	 * listed so the fetch/compare atomic types above keep falling through
-	 * to the shared DC release code below.
-	 *
-	 * The DC long CTS RTM types are only still reachable through the read
-	 * NACK fallback (see the long CTS arms of efa_rdm_pke_fill_data); a fresh
-	 * DC long CTS send also returns above. Either way, do not turn any of
+	 * The DC eager, DC medium and DC long CTS RTM packet types are all
+	 * unreachable here: those protocols moved to the refactored code path,
+	 * and their packets carry a handle_pke callback that returns before this
+	 * switch. They stay listed so the fetch/compare atomic types above keep
+	 * falling through to the shared DC release code below. Do not turn any of
 	 * these labels into an assert: that would sever the atomics' path to the
-	 * release code below.
+	 * release code.
 	 */
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:

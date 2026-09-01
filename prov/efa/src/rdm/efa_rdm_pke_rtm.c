@@ -73,9 +73,10 @@ size_t efa_rdm_pke_get_rtm_msg_length(struct efa_rdm_pke *pkt_entry)
  *
  * @details
  * As the name indicate, this function is applied to RTM packets
- * that will carry payload (user data), which include EAGER, MEDIUM,
- * LONGCTS and RUNTREAD RTM (both DC and non-DC, tag and non-tag).
- * It is not applied to LONGREAD RTM.
+ * that will carry payload (user data). Every protocol that uses such a
+ * packet has moved to the refactored code path and writes its own header,
+ * so this is now only used by the unit and gtest suites to reproduce the
+ * eager wire format.
  *
  * @param[in,out]	pkt_entry	RTM packet entry
  * @param[in]		pkt_type	RTM packet type
@@ -103,17 +104,7 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
 	rtm_hdr->msg_id = txe->msg_id;
 
-	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK)
-		rtm_hdr->flags |= EFA_RDM_REQ_READ_NACK;
-
-	/* If this RTM packet is sent after the runting read protocol has failed
-	because of a MR registration limit on the receiver, we don't want to
-	send any data with the RTM packet. This is because the runting read RTM
-	packets have already delivered some of the data and the long CTS RTM
-	packet does not have a seg_offset field */
-	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK) {
-		data_size = 0;
-	} else if (data_size == -1) {
+	if (data_size == -1) {
 		data_size = MIN(txe->total_len - segment_offset,
 				txe->ep->mtu_size - efa_rdm_pke_get_req_hdr_size(pkt_entry));
 
@@ -640,171 +631,6 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 	}
 
 	return ret;
-}
-
-/**
- * @brief initialize a LONGCTS RTM packet
- *
- * @details
- * This function is used by all 4 types of LONGCTS RTM
- *
- * @param[in,out]	pkt_entry	LONGCTS RTM packet entry
- * @param[in]		pkt_type	packe type, must be one of:
- *					EFA_RDM_LONGCTS_MSGRTM_PKT,
- *					EFA_RDM_LONGCTS_TAGGRTM_PKT,
- *					EFA_RDM_DC_LONGCTS_MSGRTM_PKT,
- *					EFA_RDM_DC_LONGCTS_TAGRTM_PKT,
- * @param[in]		txe		TX entry
- */
-int efa_rdm_pke_init_longcts_rtm_common(struct efa_rdm_pke *pkt_entry,
-					int pkt_type,
-					struct efa_rdm_ope *txe)
-{
-	struct efa_rdm_longcts_rtm_base_hdr *rtm_hdr;
-	int ret;
-
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, pkt_type, txe, 0, -1);
-	if (ret)
-		return ret;
-
-	rtm_hdr = efa_rdm_pke_get_longcts_rtm_base_hdr(pkt_entry);
-	rtm_hdr->msg_length = txe->total_len;
-	rtm_hdr->send_id = txe->tx_id;
-	rtm_hdr->credit_request = efa_env.tx_min_credits;
-	return 0;
-}
-
-/**
- * @brief initialize a EFA_RDM_LONGCTS_MSGRTM packet
- *
- * @param[in,out]	pkt_entry	EFA_RDM_LONGCTS_MSGRTM packet entry
- * @param[in]		txe		TX entry
- */
-ssize_t efa_rdm_pke_init_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
-					struct efa_rdm_ope *txe)
-{
-	return efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
-						   EFA_RDM_LONGCTS_MSGRTM_PKT,
-						   txe);
-}
-
-/**
- * @brief initialize a EFA_RDM_LONGCTS_TAGRTM packet
- *
- * @param[in,out]	pkt_entry	EFA_RDM_LONGCTS_TAGRTM packet entry
- * @param[in]		txe		TX entry
- */
-ssize_t efa_rdm_pke_init_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
-				    struct efa_rdm_ope *txe)
-{
-	struct efa_rdm_base_hdr *base_hdr;
-	int ret;
-
-	ret = efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
-						  EFA_RDM_LONGCTS_TAGRTM_PKT,
-						  txe);
-	if (ret)
-		return ret;
-
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
-	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
-	return 0;
-}
-
-/**
- * @brief initialize a EFA_RDM_DC_LONGCTS_MSGRTM packet
- *
- * @param[in,out]	pkt_entry	EFA_RDM_DC_LONGCTS_TAGRTM packet entry
- * @param[in]		txe		TX entry
- */
-ssize_t efa_rdm_pke_init_dc_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
-					   struct efa_rdm_ope *txe)
-{
-	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	return efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
-						   EFA_RDM_DC_LONGCTS_MSGRTM_PKT,
-						   txe);
-}
-
-/**
- * @brief initialize a EFA_RDM_DC_LONGCTS_TAGRTM packet
- *
- * @param[in,out]	pkt_entry	EFA_RDM_DC_MEDIUM_TAGRTM packet entry
- * @param[in]		txe		TX entry
- */
-ssize_t efa_rdm_pke_init_dc_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
-					   struct efa_rdm_ope *txe)
-{
-	struct efa_rdm_base_hdr *base_hdr;
-	int ret;
-
-	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	ret = efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
-						  EFA_RDM_DC_LONGCTS_TAGRTM_PKT,
-						  txe);
-	if (ret)
-		return ret;
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
-	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
-	return 0;
-}
-
-/**
- * @brief handle the event that a LONGCTS RTM has been sent
- *
- * this function applies to all 4 types of LONGCTS RTM
- *
- * @param[in,out]		pkt_entry	LONGCTS RTM packet entry
- */
-void efa_rdm_pke_handle_longcts_rtm_sent(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *txe;
-
-	txe = pkt_entry->ope;
-	txe->bytes_sent += pkt_entry->payload_size;
-	assert(txe->bytes_sent < txe->total_len);
-
-	if (efa_is_cache_available(efa_rdm_ep_rdm_domain(pkt_entry->ep)))
-		efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
-}
-
-/**
- * @brief handle the event that a LONGCTS RTM has been sent
- *
- * this function only applies to non DC version of LONGCTS RTM
- *
- * @param[in,out]		pkt_entry	LONGCTS RTM packet entry
- */
-void efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *txe;
-
-	/**
-	 * A zero-payload longcts rtm pkt currently should only happen when it's
-	 * used for the READ NACK protocol. In this case, this pkt doesn't
-	 * contribute to the send completion, and the associated tx entry
-	 * may be released earlier as the CTSDATA pkts have already kicked off
-	 * and finished the send.
-	 */
-	if (pkt_entry->payload_size == 0) {
-		assert(efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->flags & EFA_RDM_REQ_READ_NACK);
-		return;
-	}
-
-	txe = pkt_entry->ope;
-
-	txe->bytes_acked += pkt_entry->payload_size;
-	/* An aborting txe's single completion + release are owned by the
-	 * peer-abort drain helper. This success completion is a WR drain, so
-	 * drive it (a no-op until the txe's last WR drains, then it emits the
-	 * PEER_ERROR_PKT / writes the one completion); otherwise take the
-	 * normal full-completion path. */
-	if (txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
-		efa_rdm_txe_progress_peer_abort_if_drained(txe);
-	else if (txe->total_len == txe->bytes_acked)
-		efa_rdm_ope_handle_send_completed(txe);
 }
 
 /**

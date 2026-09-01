@@ -879,6 +879,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_proto_longcts_construct_pkes_single_pke, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_longcts_construct_pkes_is_idempotent, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_proto_longcts_send_completion_peer_abort, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_proto_longcts_read_nack_continues_on_refactored_path, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
