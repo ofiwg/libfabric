@@ -16,10 +16,10 @@
  * @brief Undo the memory registrations the selection loop made.
  *
  * efa_rdm_ope_try_fill_desc() registers the source buffer so a read based
- * protocol can be evaluated. When no protocol is selected the caller falls back
- * to the legacy send path, whose efa_rdm_txe_construct() clears txe->mr without
- * closing it, so nothing would ever release those registrations. Hand them back
- * here instead.
+ * protocol can be evaluated. When no protocol is selected the caller returns the
+ * txe straight to the pool with ofi_buf_free(), because an unconstructed txe
+ * cannot go through efa_rdm_txe_release(), and only the latter closes txe->mr.
+ * Hand the registrations back here instead.
  *
  * Only the slots the selection loop registered are touched: txe->mr[] was
  * zeroed before the loop, so a non-NULL entry is one this code owns, and the
@@ -168,18 +168,21 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	}
 
 	/*
-	 * No protocol matched, so the caller falls back to the old code path.
-	 * This is unreachable now that the long CTS protocol is registered: it
-	 * can always be used, so it always matches. The arm stays until the
-	 * legacy send path is deleted, since letting the fall-through silently
-	 * leak the selection loop's memory registrations would be worse than
-	 * keeping the (now dead) rollback.
+	 * No protocol matched. Unreachable while the long CTS protocol is
+	 * registered, since it can always be used, and there is no legacy send
+	 * path left to fall back to. Kept as a safety net for a registry that
+	 * loses its catch-all protocol: report the failure to the application
+	 * rather than posting nothing.
 	 */
+	EFA_WARN(FI_LOG_EP_DATA,
+		 "No protocol can carry a %zu byte send to peer %" PRIu64 "\n",
+		 txe->total_len, peer->conn->fi_addr);
+
 	if (mr_attempted)
 		efa_rdm_proto_release_selection_mrs(txe);
 
 	*proto = NULL;
-	return FI_SUCCESS;
+	return -FI_EOPNOTSUPP;
 }
 
 /* Utility funcions */

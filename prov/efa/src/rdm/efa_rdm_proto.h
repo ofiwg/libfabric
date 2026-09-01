@@ -126,8 +126,10 @@ extern struct efa_rdm_proto *efa_rdm_protocols[EFA_RDM_MAX_PROTO];
  * @param[in]  op     Operation type (ofi_op_msg or ofi_op_tagged)
  * @param[in]  flags  Operation flags (FI_INJECT, FI_DELIVERY_COMPLETE, etc.)
  * @param[out] txe    Pre-allocated TXE, partially initialized on return
- * @param[out] proto  Selected protocol, or NULL if none matched
- * @return 0 on success, negative errno on failure
+ * @param[out] proto  Selected protocol. Never NULL on success: the long CTS
+ *                    protocol is registered last and can always be used.
+ * @return 0 on success, negative errno on failure. -FI_EOPNOTSUPP if no
+ *         registered protocol can carry the operation.
  */
 int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 				       struct efa_rdm_peer *peer,

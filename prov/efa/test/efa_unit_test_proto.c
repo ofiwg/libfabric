@@ -390,6 +390,103 @@ void test_proto_eager_construct_pkes_zero_copy(void **state)
 }
 
 /**
+ * @brief A whole fi_send() to a peer that expects zero-copy data transfer runs
+ *        on the refactored protocol path, from selection to send completion.
+ *
+ * The legacy send path used to own this case: mainline forces the handshake in
+ * efa_rdm_msg_post_rtm(), then efa_rdm_pke_fill_data() notices the peer wants
+ * headerless data and stamps the flags on the packet. Both are gone, so the
+ * eager protocol has to carry the case end to end -- protocol selection, the
+ * headerless packet its construct_tx_pkes() builds, the user_recv_qp routing
+ * efa_rdm_pke_sendv() derives from the packet flags, and a send completion that
+ * must reach the protocol callback rather than the headerless arm of the
+ * pkt_type switch.
+ */
+void test_proto_eager_send_zero_copy_end_to_end(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pkt_entry;
+	struct fi_cq_err_entry err_entry;
+	fi_addr_t peer_addr;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	int err;
+
+	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
+	efa_unit_test_buff_construct(&send_buff, resource, 64);
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_int_equal(
+		fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(
+		fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL),
+		1);
+
+	/*
+	 * An old peer that unilaterally enabled zero-copy receive: the endpoint
+	 * knows a peer might, and this one advertised its dedicated receive QP
+	 * in its handshake. With the handshake in hand the send goes out
+	 * immediately instead of being queued.
+	 */
+	ep->peer_may_have_zcpy_rx = true;
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_REQUEST_USER_RECV_QP;
+	peer->user_recv_qp.qpn = 99;
+	peer->user_recv_qp.qkey = 0xABCD;
+
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		&efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	err = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 1);
+
+	/* One headerless packet: every byte on the wire is user data. */
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+	pkt_entry = ep->send_pkt_entry_vec[0];
+	assert_true(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP);
+	assert_true(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
+	assert_int_equal(pkt_entry->pkt_size, send_buff.size);
+	assert_int_equal(pkt_entry->payload_size, send_buff.size);
+	assert_non_null(pkt_entry->handle_pke);
+
+	/*
+	 * txe->protocol must still record the wire protocol even though no
+	 * header carries it, or the peer-abort protocol would not recognize this
+	 * send as a two-sided RTM.
+	 */
+	txe = pkt_entry->ope;
+	assert_non_null(txe);
+	assert_int_equal(txe->protocol, EFA_RDM_EAGER_MSGRTM_PKT);
+
+	/*
+	 * Go through efa_rdm_pke_handle_send_completion() rather than calling
+	 * the callback directly: a headerless packet has no base header to
+	 * switch on, so the protocol callback has to be dispatched before the
+	 * packet type is ever consulted. It does its own
+	 * efa_rdm_ep_record_tx_op_completed().
+	 */
+	efa_rdm_pke_handle_send_completion(pkt_entry);
+
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
+	memset(&err_entry, 0, sizeof(err_entry));
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
  * @brief Test that a send is queued before handshake and dequeued after
  * handshake completes when the peer may have zero-copy mode enabled.
  */
