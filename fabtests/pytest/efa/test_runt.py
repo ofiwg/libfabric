@@ -103,16 +103,18 @@ def run_runt_read_functional(cmdline_args, memory_type, copy_method):
 # efa-direct does not have runt read so skip this test
 @pytest.mark.serial
 @pytest.mark.functional
-@pytest.mark.memory_type(memory_type_list_cuda_to_cuda)
+@pytest.mark.memory_type(memory_type_list_cuda_to_cuda, pr_ci_hmem=memory_type_list_cuda_to_cuda)
 @pytest.mark.parametrize("copy_method", ["gdrcopy", "localread"])
 @pytest.mark.pr_ci
+@pytest.mark.pr_ci_hmem
 def test_runt_read_functional_cuda(cmdline_args, memory_type, copy_method):
     run_runt_read_functional(cmdline_args, memory_type, copy_method)
 
 
 @pytest.mark.serial
 @pytest.mark.functional
-@pytest.mark.memory_type(memory_type_list_neuron_to_neuron)
+@pytest.mark.memory_type(memory_type_list_neuron_to_neuron, pr_ci_hmem=memory_type_list_neuron_to_neuron)
 @pytest.mark.pr_ci
+@pytest.mark.pr_ci_hmem
 def test_runt_read_functional_neuron(cmdline_args, memory_type):
     run_runt_read_functional(cmdline_args, memory_type, copy_method=None)
