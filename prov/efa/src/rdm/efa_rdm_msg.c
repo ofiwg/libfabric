@@ -56,13 +56,12 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	assert(EFA_RDM_EAGER_MSGRTM_PKT + 1 == EFA_RDM_EAGER_TAGRTM_PKT);
 	assert(EFA_RDM_MEDIUM_MSGRTM_PKT + 1 == EFA_RDM_MEDIUM_TAGRTM_PKT);
 	assert(EFA_RDM_LONGCTS_MSGRTM_PKT + 1 == EFA_RDM_LONGCTS_TAGRTM_PKT);
-	assert(EFA_RDM_LONGREAD_MSGRTM_PKT + 1 == EFA_RDM_LONGREAD_TAGRTM_PKT);
 	assert(EFA_RDM_DC_EAGER_MSGRTM_PKT + 1 == EFA_RDM_DC_EAGER_TAGRTM_PKT);
 	assert(EFA_RDM_DC_MEDIUM_MSGRTM_PKT + 1 == EFA_RDM_DC_MEDIUM_TAGRTM_PKT);
 	assert(EFA_RDM_DC_LONGCTS_MSGRTM_PKT + 1 == EFA_RDM_DC_LONGCTS_TAGRTM_PKT);
 
 	int tagged;
-	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm, iface;
+	int eager_rtm, medium_rtm, longcts_rtm, iface;
 	size_t eager_rtm_max_data_size;
 	bool delivery_complete_requested;
 
@@ -88,31 +87,19 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 
 	eager_rtm_max_data_size = efa_rdm_txe_max_req_data_capacity(efa_rdm_ep, txe, eager_rtm);
 
-	readbase_rtm = efa_rdm_peer_select_readbase_rtm(txe->peer, efa_rdm_ep, txe);
-
 	/*
-	 * The runt read protocol moved to the refactored code path
-	 * (efa_rdm_proto_runtread), so this fallback must never build a runt read
-	 * REQ: its init, sent and send completion handlers are gone and the
-	 * remaining efa_rdm_pke_cmd.c arms assert.
+	 * Both read based protocols moved to the refactored code path
+	 * (efa_rdm_proto_runtread and efa_rdm_proto_longread), so this fallback
+	 * no longer considers them at all: their init, sent and send completion
+	 * handlers are gone and the remaining efa_rdm_pke_cmd.c arms assert.
 	 *
-	 * Reaching here with the runt read type means the refactored predicate
-	 * declined the send even though the conditions below hold. That is only
-	 * possible when a source iov could not be registered, since the
-	 * refactored predicate requires every iov registered while the check
-	 * below settles for a usable MR cache. Long read is what mainline falls
-	 * back to in that case anyway, once its own registration attempt returns
-	 * -FI_ENOMR.
+	 * The refactored predicates decline a read protocol in exactly one case
+	 * this function would still have picked one: a source iov that could not
+	 * be registered, since they require every iov registered while the old
+	 * check settled for a usable MR cache. Long CTS is where mainline ends up
+	 * in that case anyway, once the read protocol's own registration attempt
+	 * returns -FI_ENOMR and efa_rdm_ope_post_send_fallback() retries.
 	 */
-	if (efa_rdm_pkt_type_is_runtread(readbase_rtm))
-		readbase_rtm = EFA_RDM_LONGREAD_MSGRTM_PKT + tagged;
-
-	if (use_p2p &&
-	    txe->total_len >= g_efa_hmem_info[iface].min_read_msg_size &&
-	    efa_rdm_interop_rdma_read(efa_rdm_ep, txe->peer) &&
-	    (txe->desc[0] || efa_is_cache_available(efa_rdm_ep_rdm_domain(efa_rdm_ep))))
-		return readbase_rtm;
-
 	if (txe->total_len <= eager_rtm_max_data_size)
 		return eager_rtm;
 

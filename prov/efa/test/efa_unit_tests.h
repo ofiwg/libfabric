@@ -838,4 +838,8 @@ void test_proto_select_runtread_for_large_msg(void **state);
 void test_proto_select_declines_runtread_for_delivery_complete(void **state);
 void test_proto_runtread_construct_pkes_carries_read_iov(void **state);
 void test_proto_runtread_construct_pkes_is_idempotent(void **state);
+void test_proto_select_longread_for_large_msg(void **state);
+void test_proto_select_declines_longread_without_mr(void **state);
+void test_proto_longread_construct_pkes_single_pke(void **state);
+void test_proto_longread_construct_pkes_is_idempotent(void **state);
 #endif

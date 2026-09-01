@@ -6,6 +6,7 @@
 #include "efa_rdm_domain.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_longread.h"
 #include "efa_rdm_proto_medium.h"
 #include "efa_rdm_proto_runtread.h"
 #include "efa_rdm_msg.h"
@@ -52,6 +53,7 @@ struct efa_rdm_proto *efa_rdm_protocols[EFA_RDM_MAX_PROTO] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
 	&efa_rdm_proto_runtread,
+	&efa_rdm_proto_longread,
 	NULL, /* Sentinel used to stop iteration */
 };
 

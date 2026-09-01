@@ -14,6 +14,7 @@
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_proto_eager.h"
+#include "rdm/efa_rdm_proto_longread.h"
 #include "rdm/efa_rdm_proto_medium.h"
 #include "rdm/efa_rdm_proto_runtread.h"
 
@@ -369,6 +370,50 @@ static ssize_t efa_test_rtm_init_medium(struct efa_rdm_pke *pkt_entry,
 }
 
 /*
+ * Build a long read RTM packet the way the long read protocol does.
+ *
+ * Like the protocols above, the long read protocol moved to the refactored code
+ * path (efa_rdm_proto_longread_construct_tx_pkes), which allocates its own packet
+ * entry and so cannot stamp a caller-supplied one. This mirrors the header and
+ * read iov array it writes, so the assertions below still describe the long read
+ * wire format. There is no payload: the read iov array is the whole body.
+ */
+static ssize_t efa_test_rtm_init_longread(struct efa_rdm_pke *pkt_entry,
+					  struct efa_rdm_ope *txe,
+					  enum efa_test_rtm_variant variant)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
+	struct fi_rma_iov *read_iov;
+	size_t hdr_size;
+	ssize_t ret;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry);
+	rtm_hdr->hdr.flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->hdr.msg_id = txe->msg_id;
+	rtm_hdr->msg_length = txe->total_len;
+	rtm_hdr->send_id = txe->tx_id;
+	rtm_hdr->read_iov_count = txe->iov_count;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		rtm_hdr->hdr.flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
+	read_iov = (struct fi_rma_iov *) (pkt_entry->wiredata + hdr_size);
+	ret = efa_rdm_txe_prepare_to_be_read(txe, read_iov);
+	if (ret)
+		return ret;
+
+	pkt_entry->pkt_size =
+		hdr_size + txe->iov_count * sizeof(struct fi_rma_iov);
+	return 0;
+}
+
+/*
  * Build one segment of a runt read RTM message the way the runt read protocol
  * does.
  *
@@ -485,10 +530,8 @@ void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 		out->ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, txe);
 		break;
 	case EFA_TEST_RTM_LONGREAD_MSG:
-		out->ret = efa_rdm_pke_init_longread_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_LONGREAD_TAG:
-		out->ret = efa_rdm_pke_init_longread_tagrtm(pkt_entry, txe);
+		out->ret = efa_test_rtm_init_longread(pkt_entry, txe, variant);
 		break;
 	case EFA_TEST_RTM_RUNTREAD_MSG:
 	case EFA_TEST_RTM_RUNTREAD_TAG:
@@ -648,7 +691,12 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 			efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
 			break;
 		case EFA_TEST_RTM_FAM_LONGREAD:
-			efa_rdm_pke_handle_longread_rtm_sent(pkt_entry);
+			/*
+			 * The refactored long read protocol takes the domain's
+			 * read slot from its post-send hook, once per message.
+			 */
+			efa_rdm_proto_longread_handle_tx_pkes_posted(efa_rdm_ep,
+								    txe);
 			break;
 		case EFA_TEST_RTM_FAM_RUNTREAD:
 			/*
@@ -716,7 +764,11 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_LONGREAD:
-		/* no dedicated completion handler */
+		/* Also refactored; see the eager case above. */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_longread_handle_rtm_send_completion;
+		callback_released_pkt_entry = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	}
 
