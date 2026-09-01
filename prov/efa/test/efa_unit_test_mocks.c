@@ -21,7 +21,7 @@ int g_ibv_ah_limit = 1024;
 int g_ibv_ah_cnt = 0;
 int g_self_ah_cnt = 1;
 struct ibv_ah g_dummy_ah;
-struct efa_ah g_dummy_efa_ah = {0};
+struct efa_rdm_ah g_dummy_efa_ah = {0};
 
 void efa_ibv_ah_limit_cnt_reset()
 {
@@ -73,41 +73,42 @@ int efa_mock_ibv_destroy_ah_dont_create_self_ah(struct ibv_ah *ibv_ah)
 	return  __real_ibv_destroy_ah(ibv_ah);
 }
 
-struct efa_ah *efa_mock_efa_ah_alloc_return_null(struct efa_domain *domain, const uint8_t *gid,
+struct efa_ah *efa_mock_efa_rdm_ah_alloc_return_null(struct efa_domain *domain, const uint8_t *gid,
 			    bool insert_implicit_av)
 {
 	return NULL;
 }
 
-struct efa_ah *efa_mock_efa_ah_alloc_dont_create_self_ah(struct efa_domain *domain, const uint8_t *gid,
+struct efa_ah *efa_mock_efa_rdm_ah_alloc_dont_create_self_ah(struct efa_domain *domain, const uint8_t *gid,
 			    bool insert_implicit_av)
 {
-	/* Intercept the self AH call in efa_ah_alloc and do not call
+	/* Intercept the self AH call in efa_rdm_ah_alloc and do not call
 	 * ibv_create_ah or modify the AH map etc */
 	if (g_ibv_ah_cnt < g_self_ah_cnt) {
 		g_ibv_ah_cnt++;
 
-		g_dummy_efa_ah.ibv_ah = &g_dummy_ah;
-		g_dummy_efa_ah.ahn = -1;
-		memset(g_dummy_efa_ah.gid, 0, sizeof(g_dummy_efa_ah.gid));
+		g_dummy_efa_ah.efa_ah.ibv_ah = &g_dummy_ah;
+		g_dummy_efa_ah.efa_ah.ahn = -1;
+		g_dummy_efa_ah.efa_ah.refcnt = 1;
+		memset(g_dummy_efa_ah.efa_ah.gid, 0, sizeof(g_dummy_efa_ah.efa_ah.gid));
 		g_dummy_efa_ah.explicit_refcnt = 1;
 		g_dummy_efa_ah.implicit_refcnt = 0;
-		return &g_dummy_efa_ah;
+		return &g_dummy_efa_ah.efa_ah;
 	} else {
-		return __real_efa_ah_alloc(domain, gid, insert_implicit_av);
+		return __real_efa_rdm_ah_alloc(domain, gid, insert_implicit_av);
 	}
 }
 
-void efa_mock_efa_ah_release_dont_create_self_ah(struct efa_domain *domain,
+void efa_mock_efa_rdm_ah_release_dont_create_self_ah(struct efa_domain *domain,
 						 struct efa_ah *ah,
 						 bool release_from_implicit_av)
 {
-	/* Intercept the self AH destruct call in efa_ah_release and do not call
+	/* Intercept the self AH destruct call in efa_rdm_ah_release and do not call
 	 * ibv_destroy_ah or modify the AH map etc */
 	if (g_ibv_ah_cnt <= g_self_ah_cnt)
 		g_ibv_ah_cnt--;
 	else
-		return  __real_efa_ah_release(domain, ah, release_from_implicit_av);
+		return  __real_efa_rdm_ah_release(domain, ah, release_from_implicit_av);
 }
 
 int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibv_ctx,
@@ -393,8 +394,8 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.ibv_create_ah = __real_ibv_create_ah,
 	.ibv_destroy_ah = __real_ibv_destroy_ah,
 	.efadv_query_device = __real_efadv_query_device,
-	.efa_ah_alloc = __real_efa_ah_alloc,
-	.efa_ah_release = __real_efa_ah_release,
+	.efa_rdm_ah_alloc = __real_efa_rdm_ah_alloc,
+	.efa_rdm_ah_release = __real_efa_rdm_ah_release,
 #if HAVE_EFADV_CQ_EX
 	.efadv_create_cq = __real_efadv_create_cq,
 #endif
@@ -576,16 +577,16 @@ int __wrap_efadv_query_device(struct ibv_context *ibv_ctx, struct efadv_device_a
 	return g_efa_unit_test_mocks.efadv_query_device(ibv_ctx, attr, inlen);
 }
 
-struct efa_ah *__wrap_efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
+struct efa_ah *__wrap_efa_rdm_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 			      bool insert_implicit_av)
 {
-	return g_efa_unit_test_mocks.efa_ah_alloc(domain, gid, insert_implicit_av);
+	return g_efa_unit_test_mocks.efa_rdm_ah_alloc(domain, gid, insert_implicit_av);
 }
 
-void __wrap_efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
+void __wrap_efa_rdm_ah_release(struct efa_domain *domain, struct efa_ah *ah,
 			   bool release_from_implicit_av)
 {
-	return g_efa_unit_test_mocks.efa_ah_release(domain, ah,
+	return g_efa_unit_test_mocks.efa_rdm_ah_release(domain, ah,
 						    release_from_implicit_av);
 }
 

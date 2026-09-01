@@ -1212,7 +1212,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 	 */
 	if (efa_rdm_ep->self_ah) {
 		EFA_GENLOCK_LOCK(&domain->util_domain.lock, efa_util_domain_lock_sym);
-		efa_ah_release(domain, efa_rdm_ep->self_ah, false);
+		efa_rdm_ah_release(domain, efa_rdm_ep->self_ah, false);
 		EFA_GENLOCK_UNLOCK(&domain->util_domain.lock, efa_util_domain_lock_sym);
 	}
 
@@ -1474,7 +1474,7 @@ int efa_rdm_ep_create_self_ah(struct efa_rdm_ep *rdm_ep)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 
-	rdm_ep->self_ah = efa_ah_alloc(rdm_ep->base_ep.domain, rdm_ep->base_ep.src_addr.raw, false);
+	rdm_ep->self_ah = efa_rdm_ah_alloc(rdm_ep->base_ep.domain, rdm_ep->base_ep.src_addr.raw, false);
 
 	return rdm_ep->self_ah ? 0 : -FI_EINVAL;
 }
