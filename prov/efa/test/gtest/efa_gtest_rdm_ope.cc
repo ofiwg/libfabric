@@ -156,6 +156,136 @@ INSTANTIATE_TEST_SUITE_P(QueuedOps, EfaRdmOpeQueuedFiMoreTest,
 				 }
 			 });
 
+/**
+ * @brief Covers what efa_rdm_ope_process_queued_ope() does with a queued ope
+ * either side of the -FI_EAGAIN early return: leave it untouched, or clear its
+ * flag, dequeue it, and give back its before-handshake slot.
+ *
+ * Both tests queue a send with FI_MORE to a peer that has not handshaked.
+ */
+class EfaRdmOpeProcessQueuedTest : public Test
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+
+		struct fi_info *hints = efa_test_alloc_default_hints(
+			FI_EP_RDM, EFA_FABRIC_NAME);
+		ASSERT_NE(hints, nullptr);
+		hints->caps |= FI_MSG;
+
+		ASSERT_NO_FATAL_FAILURE(
+			efa_test_resource_construct(&resource, hints));
+		ASSERT_NE(resource.ep, nullptr);
+
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_F(EfaRdmOpeProcessQueuedTest, derives_before_handshake_flag)
+{
+	struct efa_test_queued_op qop = {};
+	struct efa_test_process_queued_result res = {};
+
+	ASSERT_EQ(efa_test_queue_op_with_fi_more(resource.ep, resource.av,
+						 resource.domain,
+						 EFA_TEST_QUEUED_OP_SEND, &qop),
+		  0);
+
+	ASSERT_EQ(efa_test_process_queued_ope_derives_before_handshake_flag(
+			  &qop, &res),
+		  0);
+
+	/* Dispatched to the before-handshake repost, which short-circuits */
+	EXPECT_EQ(res.ret, -FI_EAGAIN);
+	/* Reaching the dispatch means the FI_MORE strip ran */
+	EXPECT_FALSE(res.fi_more_still_set);
+	/* On EAGAIN the ope stays flagged, queued, and counted */
+	EXPECT_TRUE(res.before_handshake_flag_set);
+	EXPECT_FALSE(res.queued_list_empty);
+	EXPECT_EQ(res.before_handshake_cnt, 1u);
+
+	efa_test_queued_op_cleanup(&qop, 0);
+}
+
+/*
+ * On a successful dispatch the derived flag also drives the bookkeeping: the
+ * bit is cleared, the ope leaves ope_queued_list, and the before-handshake
+ * counter gives back the slot the queueing path took.
+ */
+TEST_F(EfaRdmOpeProcessQueuedTest, success_clears_flag_dequeues_and_releases_slot)
+{
+	struct efa_test_queued_op qop = {};
+	struct efa_test_process_queued_result res = {};
+	uintptr_t wr_id = 0;
+
+	ASSERT_EQ(efa_test_queue_op_with_fi_more(resource.ep, resource.av,
+						 resource.domain,
+						 EFA_TEST_QUEUED_OP_SEND, &qop),
+		  0);
+
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+		.WillOnce(DoAll(SaveArg<5>(&wr_id), Return(0)));
+
+	ASSERT_EQ(efa_test_process_queued_ope_after_handshake_result(&qop, &res),
+		  0);
+
+	EXPECT_EQ(res.ret, 0);
+	EXPECT_FALSE(res.any_queued_flag_set);
+	EXPECT_TRUE(res.queued_list_empty);
+	EXPECT_EQ(res.before_handshake_cnt, 0u);
+
+	efa_test_queued_op_cleanup(&qop, wr_id);
+}
+
+/*
+ * Third outcome: the source MR was closed while the op sat on the queue. The
+ * gen check fails before any arm is dispatched, so the op is canceled rather
+ * than reposted, and it must be reported as a peer/MR abort -- FI_ECANCELED
+ * with the dedicated abort reason code, not the packet-post failure code the
+ * other error paths use.
+ */
+TEST_F(EfaRdmOpeProcessQueuedTest, mr_abort_cancels_without_dispatch)
+{
+	struct efa_test_queued_op qop = {};
+	struct efa_test_process_queued_result res = {};
+	struct fi_cq_err_entry err_entry = {};
+
+	ASSERT_EQ(efa_test_queue_ope_with_flag(resource.ep, resource.av,
+					       EFA_TEST_QUEUED_FLAG_CTRL, &qop),
+		  0);
+	efa_test_simulate_source_mr_canceled(&qop);
+
+	/* A canceled op must reach neither a dispatch arm nor the wire */
+	EFA_EXPECT_CALL(mock_efa, efa_rdm_ep_post_queued_pkts).Times(0);
+	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
+	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_read).Times(0);
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
+
+	ASSERT_EQ(efa_test_process_queued_flag_op(&qop, &res), 0);
+
+	EXPECT_EQ(res.ret, -FI_ECANCELED);
+	/* The error handler took the ope off the queue */
+	EXPECT_FALSE(res.any_queued_flag_set);
+	EXPECT_TRUE(res.queued_list_empty);
+
+	ASSERT_EQ(fi_cq_readerr(resource.cq, &err_entry, 0), 1);
+	EXPECT_EQ(err_entry.err, FI_ECANCELED);
+	EXPECT_EQ(err_entry.prov_errno, efa_test_peer_abort_prov_errno());
+
+	efa_test_queued_op_cleanup(&qop, 0);
+}
+
 /*
  * The flag is no longer supplied by the caller, so the bit pattern alone
  * selects the dispatch arm. Each flag must reach its own post routine and no
