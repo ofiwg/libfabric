@@ -5,7 +5,7 @@
 
 #include "efa.h"
 #include "efa_ah.h"
-#include "efa_conn.h"
+#include "rdm/efa_rdm_av.h"
 #include "rdm/efa_rdm_domain.h"
 #include <infiniband/efadv.h>
 

@@ -3,7 +3,7 @@
 
 #include "efa.h"
 #include "efa_av.h"
-#include "efa_conn.h"
+#include "efa_rdm_av.h"
 #include "efa_rdm_ep.h"
 #include "efa_rdm_fabric.h"
 #include "efa_rdm_cq.h"
