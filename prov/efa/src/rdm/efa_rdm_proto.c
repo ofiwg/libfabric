@@ -19,10 +19,10 @@
  * @brief Undo the memory registrations the selection loop made.
  *
  * efa_rdm_ope_try_fill_desc() registers the source buffer so a read based
- * protocol can be evaluated. When no protocol is selected the caller falls back
- * to the legacy send path, whose efa_rdm_txe_construct() clears txe->mr without
- * closing it, so nothing would ever release those registrations. Hand them back
- * here instead.
+ * protocol can be evaluated. When no protocol is selected the caller returns the
+ * txe straight to the pool with ofi_buf_free(), because an unconstructed txe
+ * cannot go through efa_rdm_txe_release(), and only the latter closes txe->mr.
+ * Hand the registrations back here instead.
  *
  * TODO: Remove after all protocols are migrated to the new code path
  */
@@ -241,14 +241,18 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			return FI_SUCCESS;
 		}
 
-		// TODO: fail the send operation after all protocols are migrated.
+		/*
+		 * Every send protocol is registered now, so a name that matched
+		 * nothing is simply not a protocol and there is no legacy path
+		 * left to fall back to. Fail the operation rather than silently
+		 * ignoring the request and sending over a protocol the user
+		 * asked not to use.
+		 */
 		EFA_WARN(FI_LOG_EP_DATA,
-			 "FI_EFA_RDM_FORCE_SEND_PROTO=%s does not name a send protocol "
-			 "that supports the new code path. Falling back to the old code "
-			 "path\n", efa_env.rdm_force_send_proto);
+			 "FI_EFA_RDM_FORCE_SEND_PROTO=%s does not name a send protocol\n",
+			 efa_env.rdm_force_send_proto);
 		*proto = NULL;
-		txe->proto = NULL;
-		return FI_SUCCESS;
+		return -FI_EOPNOTSUPP;
 	}
 
 	for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
@@ -286,21 +290,21 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	}
 
 	/*
-	 * No protocol matched, so the caller falls back to the old code path and
-	 * the MRs the selection loop registered must be released.
-	 *
-	 * This is unreachable now that the long CTS protocol is registered: it
-	 * can always be used, so it always matches. The arm stays until the
-	 * legacy send path is deleted, since letting the fall-through silently
-	 * leak the selection loop's memory registrations would be worse than
-	 * keeping the (now dead) rollback.
+	 * No protocol matched. Unreachable while the long CTS protocol is
+	 * registered, since it can always be used, and there is no legacy send
+	 * path left to fall back to. Kept as a safety net for a registry that
+	 * loses its catch-all protocol: report the failure to the application
+	 * rather than posting nothing.
 	 */
+	EFA_WARN(FI_LOG_EP_DATA,
+		 "No protocol can carry a %zu byte send to peer %" PRIu64 "\n",
+		 txe->total_len, peer->av_entry->efa_av_entry.fi_addr);
+
 	if (mr_attempted)
 		efa_rdm_proto_release_selection_mrs(txe);
 
 	*proto = NULL;
-	txe->proto = NULL;
-	return FI_SUCCESS;
+	return -FI_EOPNOTSUPP;
 }
 
 /* Utility funcions */

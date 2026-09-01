@@ -2329,53 +2329,15 @@ handle_err:
 	for (i = 0; i < pkt_entry_cnt_allocated; ++i)
 		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 
-	return efa_rdm_ope_post_send_fallback(ope, pkt_type, err);
-}
-
-/**
- * @brief Fallback to a different message type if a packet send fails.
- *
- * Currently, this function is only used in the read nack protocol. If a long read or
- * runting read RTM packet fails to send because of a memory registration failure, it
- * will send a long CTS RTM packet.
- *
- * @param[in]   ope            pointer to efa_rdm_ope. (either a txe or an rxe)
- * @param[in]   pkt_type       packet type that failed to send
- * @param[in]   err		       error code of the original failure
- * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
- *             -FI_EAGAIN      temporarily  out of resource
- */
-ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
-					   int pkt_type, ssize_t err)
-{
-	bool delivery_complete_requested = ope->fi_flags & FI_DELIVERY_COMPLETE;
-
-	if (err == -FI_ENOMR) {
-		/* Long read and runting read protocols could fail because of a
-		 * lack of memory registrations. In that case, we retry with
-		 * long CTS protocol
-		 */
-		switch (pkt_type) {
-		case EFA_RDM_LONGREAD_MSGRTM_PKT:
-		case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-			EFA_INFO(FI_LOG_EP_CTRL,
-				 "Sender fallback to long CTS untagged "
-				 "protocol because memory registration limit "
-				 "was reached on the sender\n");
-			return efa_rdm_ope_post_send_or_queue(
-				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_MSGRTM_PKT : EFA_RDM_LONGCTS_MSGRTM_PKT);
-		case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-			EFA_INFO(FI_LOG_EP_CTRL,
-				 "Sender fallback to long CTS tagged protocol "
-				 "because memory registration limit was "
-				 "reached on the sender\n");
-			return efa_rdm_ope_post_send_or_queue(
-				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_TAGRTM_PKT : EFA_RDM_LONGCTS_TAGRTM_PKT);
-		default:
-			return err;
-		}
-	}
+	/*
+	 * There is no protocol fallback here anymore. The only one that ever
+	 * existed retried a long read or runting read RTM as a long CTS RTM when
+	 * the source buffer could not be registered, and no RTM reaches this
+	 * function now that every two-sided protocol builds its own packets. The
+	 * read based protocols decline the operation up front instead, in
+	 * efa_rdm_proto_{longread,runtread}_can_use_for_send(), so selection
+	 * moves on to long CTS before a single packet is allocated.
+	 */
 	return err;
 }
 
@@ -2486,18 +2448,12 @@ static ssize_t efa_rdm_ope_post_ctrl(struct efa_rdm_ope *ope, int pkt_type)
 		return efa_rdm_ope_post_nonreq_ctrl(ope, pkt_type);
 
 	/*
-	 * A long CTS RTM can also arrive here for an operation that is changing
-	 * protocol: efa_rdm_ope_post_send_fallback() retries a read RTM whose
-	 * source buffer could not be registered, and
-	 * efa_rdm_pke_handle_read_nack_recv() continues a read whose receiver
-	 * could not register its buffer. Both rewrite ope->req_pkt_type to the
-	 * long CTS type, and the latter clears ope->proto, because the read
-	 * protocol that selection chose cannot write a long CTS REQ. The former
-	 * is unreachable: the read protocols now decline an operation whose iovs
-	 * cannot all be registered in can_use_protocol(), before a packet is
-	 * allocated, and the legacy efa_rdm_msg_post_rtm() that could still hand
-	 * a protocol-less RTM to efa_rdm_ope_post_send() is itself unreachable
-	 * now that selection always returns a protocol.
+	 * Every two-sided send carries the protocol that
+	 * efa_rdm_proto_select_send_protocol() picked for it, so a REQ with a
+	 * protocol is always posted through it. The one operation that changes
+	 * protocol mid-flight, the long CTS continuation of a read whose receiver
+	 * could not register its buffer, has its own two-sided entry point in
+	 * efa_rdm_msg_post_read_nack_rtm_proto_or_queue().
 	 */
 	if (ope->proto) {
 		assert(ope->type == EFA_RDM_TXE);
@@ -2512,8 +2468,8 @@ static ssize_t efa_rdm_ope_post_ctrl(struct efa_rdm_ope *ope, int pkt_type)
 	}
 
 	/*
-	 * One-sided operations (RMA and atomics) and the read NACK continuation
-	 * above still build their REQ packets here.
+	 * One-sided operations (RMA and atomics) still build their REQ packets
+	 * here, including the emulated long CTS write a read NACK falls back to.
 	 *
 	 * TODO: drop this fallback once those protocols are registered too.
 	 */
@@ -2567,9 +2523,13 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	switch (ope->op) {
 	case ofi_op_msg: /* fall through */
 	case ofi_op_tagged:
-		if (ope->proto)
-			return efa_rdm_msg_repost_rtm_proto(ope->ep, ope);
-		return efa_rdm_msg_post_rtm(ope->ep, ope);
+		/*
+		 * Every two-sided send goes out on the refactored path, so a
+		 * queued txe always carries the protocol that
+		 * efa_rdm_proto_select_send_protocol() picked for it.
+		 */
+		assert(ope->proto);
+		return efa_rdm_msg_repost_rtm_proto(ope->ep, ope);
 	case ofi_op_write:
 		return efa_rdm_rma_post_write(ope->ep, ope);
 	case ofi_op_read_req:

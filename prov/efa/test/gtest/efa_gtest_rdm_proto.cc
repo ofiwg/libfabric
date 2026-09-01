@@ -354,7 +354,8 @@ class EfaRdmProtoForceTest : public TestWithParam<EfaRdmProtoForceCase>
 /**
  * @brief FI_EFA_RDM_FORCE_SEND_PROTO replaces the size decision with a name
  * match, so the named protocol is selected whether or not the size suits it,
- * and a name no registered protocol answers to fails the send.
+ * and a name no registered protocol answers to fails the send with
+ * -FI_EOPNOTSUPP -- there is no legacy path left to fall back to.
  *
  * Overriding the size decision is the point: no threshold can steer a message
  * that fits in one packet away from eager, which claims it first.
@@ -369,10 +370,8 @@ TEST_P(EfaRdmProtoForceTest, forced_name_replaces_the_size_decision)
 						   c.len, &res),
 		  0);
 
-	// TODO: after all protocols are migrated, protocol selection should
-	// fail with -FI_EINVAL
 	if (!c.expected_proto) {
-		EXPECT_EQ(res.ret, FI_SUCCESS);
+		EXPECT_EQ(res.ret, -FI_EOPNOTSUPP);
 		EXPECT_STREQ(res.proto_name, "");
 		return;
 	}

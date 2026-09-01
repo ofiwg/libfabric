@@ -140,7 +140,9 @@ struct efa_rdm_proto {
  * different protocol.
  *
  * FI_EFA_RDM_FORCE_SEND_PROTO forces the use of a given protocol selected by
- * name.
+ * name. A name that matches no registered protocol fails the operation rather
+ * than falling back, so a typo cannot silently send over a protocol the
+ * application asked not to use.
  *
  * @param[in]  ep     Endpoint
  * @param[in]  peer   Peer to send to
@@ -148,12 +150,10 @@ struct efa_rdm_proto {
  * @param[in]  op     Operation type (ofi_op_msg or ofi_op_tagged)
  * @param[in]  flags  Operation flags (FI_INJECT, FI_DELIVERY_COMPLETE, etc.)
  * @param[out] txe    Pre-allocated TXE, partially initialized on return
- * @param[out] proto  Selected protocol, or NULL if none matched
- * @return 0 on success, negative errno if the operation cannot be carried at
- *	   all. Finding no protocol by size is not a failure : it returns 0 with
-       *proto NULL, and the caller falls back to the old send path.
- *     TODO: Fail send operation when FI_EFA_RDM_FORCE_SEND_PROTO is set but
- *     does not match any of the implemented protocols.
+ * @param[out] proto  Selected protocol. Never NULL on success: the long CTS
+ *                    protocol is registered last and can always be used.
+ * @return 0 on success, negative errno on failure. -FI_EOPNOTSUPP if no
+ *         registered protocol can carry the operation.
  */
 int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 				       struct efa_rdm_peer *peer,
