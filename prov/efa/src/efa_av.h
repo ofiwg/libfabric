@@ -42,25 +42,6 @@ _Static_assert(offsetof(struct efa_av_entry, ep_addr) == 0,
 	       "ep_addr must be the first member of efa_av_entry");
 
 /**
- * @brief RDM address vector entry
- *
- * Embeds the base efa_av_entry as its first member and adds the RDM-only state
- * that used to live in struct efa_conn. (Defined here for now; it moves to
- * rdm/efa_rdm_av.h when the AV code is split.)
- */
-struct efa_rdm_av_entry {
-	struct efa_av_entry	efa_av_entry;
-	struct efa_rdm_av	*av;
-	fi_addr_t		implicit_fi_addr;
-	fi_addr_t		shm_fi_addr;
-	struct dlist_entry	implicit_av_lru_entry;
-	struct dlist_entry	ah_implicit_conn_list_entry OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
-};
-
-_Static_assert(offsetof(struct efa_rdm_av_entry, efa_av_entry) == 0,
-	       "efa_av_entry must be the first member of efa_rdm_av_entry");
-
-/**
  * @brief return the raw endpoint address stored in an efa_av_entry
  *
  * The raw address is stored as a byte array whose first element is required
@@ -99,7 +80,7 @@ struct efa_prv_reverse_av {
  * @brief base address vector
  *
  * Holds the efa-direct-only forward and reverse AV state. The RDM layer embeds
- * this as the first member of struct efa_rdm_av (see efa_conn.h) and layers on
+ * this as the first member of struct efa_rdm_av (see rdm/efa_rdm_av.h) and layers on
  * the implicit AV, SHM AV, connid-aware reverse lookup and per-endpoint peer
  * maps.
  */
@@ -161,34 +142,18 @@ int efa_av_init_util_av(struct efa_domain *efa_domain,
 int efa_av_init_base(struct efa_av *av, struct efa_domain *efa_domain,
 		     struct fi_av_attr *attr, void *context, size_t entry_size);
 
-int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		    struct fid_av **av_fid, void *context);
-
-int efa_rdm_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
-			      struct efa_prv_reverse_av **prv_reverse_av,
-			      struct efa_av_entry *entry);
-
-void efa_rdm_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
-				  struct efa_prv_reverse_av **prv_reverse_av,
-				  struct efa_av_entry *entry);
-
-int efa_rdm_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
-				   fi_addr_t *fi_addr, uint64_t flags,
-				   void *context)
+struct efa_av_entry *efa_av_entry_alloc_explicit(struct efa_av *av,
+						 struct efa_ep_addr *raw_addr,
+						 fi_addr_t *fi_addr_out)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
-struct efa_rdm_av_entry *efa_rdm_av_addr_to_entry_implicit(struct efa_av *av,
-							   fi_addr_t fi_addr);
+void efa_av_entry_remove_from_util_av(struct efa_av_array *entry_map,
+				      struct util_av *util_av,
+				      struct efa_av_entry *entry,
+				      fi_addr_t fi_addr);
 
-fi_addr_t efa_rdm_av_reverse_lookup(struct efa_av *av, uint16_t ahn,
-				    uint16_t qpn, struct efa_rdm_pke *pkt_entry);
-
-fi_addr_t efa_rdm_av_reverse_lookup_implicit(struct efa_av *av, uint16_t ahn,
-					     uint16_t qpn,
-					     struct efa_rdm_pke *pkt_entry);
-
-void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
-				     struct efa_rdm_av_entry *av_entry)
-	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym);
+void efa_av_entry_release_explicit(struct efa_av *av, struct efa_av_entry *entry,
+				   fi_addr_t fi_addr)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
 
 #endif

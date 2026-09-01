@@ -16,7 +16,7 @@
 #include <cmocka.h>
 #include "stdio.h"
 #include "efa.h"
-#include "efa_conn.h"
+#include "rdm/efa_rdm_av.h"
 #include "efa_unit_test_mocks.h"
 
 /**
