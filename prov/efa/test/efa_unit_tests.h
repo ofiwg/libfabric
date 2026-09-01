@@ -426,8 +426,6 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_128_multiple_alignment(void **s
 void test_efa_rdm_peer_get_runt_size_cuda_memory_non_128_multiple_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_smaller_than_128_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len_128_alignment(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_no_runt(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_do_runt(void **state);
 void test_efa_rdm_pke_get_available_copy_methods_align128(void **state);
 
 /* begin efa_unit_test_domain.c */

@@ -1183,9 +1183,9 @@ void test_proto_select_runtread_for_large_msg(void **state)
  * The runt read REQ has no delivery complete variant -- there is nowhere to
  * report the receipt against -- so a FI_DELIVERY_COMPLETE send has to use a
  * different protocol even when every other condition for runting holds.
- * Mainline makes the same call in efa_rdm_peer_select_readbase_rtm(), falling
- * back to long read -- which is delivery complete by nature -- and so does the
- * refactored registry, since long read is the next entry after runt read.
+ * The legacy read based selector made the same call, falling back to long read
+ * -- which is delivery complete by nature -- and so does the refactored
+ * registry, since long read is the next entry after runt read.
  */
 void test_proto_select_declines_runtread_for_delivery_complete(void **state)
 {
