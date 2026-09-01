@@ -4,8 +4,36 @@
 
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_proto.h"
+#include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_medium.h"
+#include "rdm/protocols/efa_rdm_proto_runtread.h"
 #include "rdm/protocols/efa_rdm_proto_zero_copy.h"
+
+/*
+ * A size that is too large for a single eager packet (the device MTU is a few
+ * KB) but well within the medium threshold (64KB for system memory), so the
+ * medium protocol is selected and has to split the message into several
+ * packets.
+ */
+#define EFA_UNIT_TEST_PROTO_MEDIUM_LEN 16384
+
+/*
+ * Sizes for the runt read tests: past the medium threshold so medium declines,
+ * and comfortably larger than the runt below so the receiver still has a tail to
+ * read -- which is what makes this the runt read protocol rather than a plain
+ * multi-packet send.
+ */
+#define EFA_UNIT_TEST_PROTO_RUNTREAD_LEN 131072
+#define EFA_UNIT_TEST_PROTO_RUNT_SIZE	 32768
+
+/*
+ * Upper bound for the per-test arrays that snapshot a medium message's packet
+ * entries. The medium protocol needs ceil(len / (mtu - hdr)) of them, which is
+ * a handful for the size above on any EFA device; the tests assert the fit
+ * rather than trusting it.
+ */
+#define EFA_UNIT_TEST_PROTO_MAX_PKES 64
 
 /* Tests from efa_unit_test_proto_select.c */
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
@@ -650,5 +678,854 @@ void test_proto_zero_copy_reselected_after_handshake(void **state)
 	assert_true(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP);
 	assert_true(pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR);
 
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/*
+ * Simulate the source MR being closed mid-transfer (its generation bumped)
+ * so efa_rdm_mr_gen_check_ope() reports the MR was canceled -- the
+ * precondition the sender peer-abort path
+ * (efa_rdm_txe_mark_peer_abort_if_needed) requires before it will mark the
+ * txe and drive the PEER_ERROR emit/drain.
+ */
+static void efa_unit_test_proto_simulate_source_mr_canceled(struct efa_rdm_ope *txe)
+{
+	static struct efa_rdm_mr stale_source_mr;
+
+	stale_source_mr.gen = 1;	/* current MR generation */
+	txe->iov_count = 1;
+	txe->desc[0] = &stale_source_mr;
+	txe->desc_gen[0] = 2;		/* dispatch-time snapshot, now stale */
+}
+
+/**
+ * @brief Set up an endpoint and a handshake-completed peer for a medium
+ *        protocol test, and register a source buffer too large for eager.
+ */
+static struct efa_rdm_ep *
+setup_proto_medium_test(struct efa_resource *resource,
+			struct efa_unit_test_buff *send_buff,
+			fi_addr_t *peer_addr, struct efa_rdm_peer **peer)
+{
+	struct efa_rdm_ep *ep;
+
+	ep = setup_proto_select_test(resource, peer_addr);
+	efa_unit_test_buff_construct(send_buff, resource,
+				     EFA_UNIT_TEST_PROTO_MEDIUM_LEN);
+
+	*peer = efa_rdm_ep_get_peer_explicit(ep, *peer_addr);
+	(*peer)->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	/*
+	 * The medium protocol only makes sense for a message that needs more
+	 * than one packet but still fits in the REQ packets, so make sure the
+	 * test size really is in that band on this device.
+	 */
+	assert_true(EFA_UNIT_TEST_PROTO_MEDIUM_LEN > ep->mtu_size);
+	assert_true(EFA_UNIT_TEST_PROTO_MEDIUM_LEN <=
+		    g_efa_hmem_info[FI_HMEM_SYSTEM].max_medium_msg_size);
+
+	return ep;
+}
+
+/**
+ * @brief Test that the medium protocol is selected for a message that is too
+ *        large for eager but within the interface's medium threshold.
+ */
+void test_proto_select_medium_for_medium_msg(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_medium_test(resource, &send_buff, &peer_addr, &peer);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_non_null(proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_medium);
+
+	ofi_buf_free(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief The medium protocol fans the message out over several packets whose
+ *        segments tile the whole message exactly once.
+ *
+ * Each packet must carry the callback and the ope back-reference, the total
+ * message length, and its own segment offset -- the receiver reassembles from
+ * those two header fields alone, so a gap or an overlap silently corrupts the
+ * peer's copy.
+ */
+void test_proto_medium_construct_pkes_multiple_pkes(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_rdm_medium_rtm_base_hdr *rtm_hdr;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	size_t i, expected_offset = 0;
+	uint64_t pke_send_flags;
+	int err;
+
+	ep = setup_proto_medium_test(resource, &send_buff, &peer_addr, &peer);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+
+	/* Drive the same sequence efa_rdm_msg_generic_send() drives. */
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_ptr_equal(proto, &efa_rdm_proto_medium);
+
+	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0, proto);
+	txe->msg_id = peer->next_msg_id++;
+
+	err = proto->construct_tx_pkes(ep, peer, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	assert_int_equal(err, 0);
+
+	/* A single packet would mean eager should have won the selection. */
+	assert_true(ep->send_pkt_entry_vec_size > 1);
+
+	/*
+	 * The peer-abort protocol reads txe->req_pkt_type to tell a two-sided RTM
+	 * from an operation it does not handle.
+	 */
+	assert_int_equal(txe->req_pkt_type, EFA_RDM_MEDIUM_MSGRTM_PKT);
+
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i) {
+		struct efa_rdm_pke *pke = ep->send_pkt_entry_vec[i];
+
+		assert_non_null(pke);
+		assert_ptr_equal(pke->handle_pke,
+				 &efa_rdm_proto_medium_handle_rtm_send_completion);
+		assert_ptr_equal(pke->ope, txe);
+		assert_true(pke->payload_size > 0);
+
+		rtm_hdr = efa_rdm_pke_get_medium_rtm_base_hdr(pke);
+		assert_int_equal(rtm_hdr->msg_length, txe->total_len);
+		assert_int_equal(rtm_hdr->seg_offset, expected_offset);
+		expected_offset += pke->payload_size;
+	}
+
+	/* The REQ packets carry the whole message, with no gaps. */
+	assert_int_equal(expected_offset, txe->total_len);
+
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+	efa_rdm_txe_release(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief The medium protocol's construct_tx_pkes() is idempotent, so a txe
+ *        queued before the handshake can be reposted.
+ *
+ * efa_rdm_msg_repost_rtm_proto() re-enters construct_tx_pkes() on a txe the
+ * first attempt already set up, and efa_rdm_ope_process_queued_ope() retries a
+ * txe that returned -FI_EAGAIN without clearing its queued state, so the second
+ * call must produce exactly the same packets. An accumulating write (the
+ * mainline medium path did bytes_sent += payload_size per packet) would make the
+ * message look partly sent and the segment offsets drift past the buffer.
+ */
+void test_proto_medium_construct_pkes_is_idempotent(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	size_t i, first_pke_cnt, first_seg_offsets[EFA_UNIT_TEST_PROTO_MAX_PKES];
+	uint64_t first_bytes_sent;
+	uint32_t first_protocol;
+	uint64_t pke_send_flags;
+	int err;
+
+	ep = setup_proto_medium_test(resource, &send_buff, &peer_addr, &peer);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_ptr_equal(proto, &efa_rdm_proto_medium);
+
+	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0, proto);
+	txe->msg_id = peer->next_msg_id++;
+
+	err = proto->construct_tx_pkes(ep, peer, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	assert_int_equal(err, 0);
+
+	first_pke_cnt = ep->send_pkt_entry_vec_size;
+	assert_true(first_pke_cnt > 1);
+	assert_true(first_pke_cnt <= EFA_UNIT_TEST_PROTO_MAX_PKES);
+	for (i = 0; i < first_pke_cnt; ++i) {
+		first_seg_offsets[i] =
+			efa_rdm_pke_get_medium_rtm_base_hdr(
+				ep->send_pkt_entry_vec[i])->seg_offset;
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+	}
+	first_protocol = txe->req_pkt_type;
+
+	/*
+	 * The first attempt never reached the device, but the post-send hook
+	 * runs on the repost, so mimic a first attempt that did publish its
+	 * accounting -- that is the state an accumulating write would corrupt.
+	 */
+	proto->handle_tx_pkes_posted(ep, txe);
+	first_bytes_sent = txe->bytes_sent;
+	assert_int_equal(first_bytes_sent, txe->total_len);
+
+	/* The repost, exactly as efa_rdm_msg_repost_rtm_proto does it. */
+	err = proto->construct_tx_pkes(ep, peer, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	assert_int_equal(err, 0);
+
+	assert_int_equal(ep->send_pkt_entry_vec_size, first_pke_cnt);
+	assert_int_equal(txe->req_pkt_type, first_protocol);
+	for (i = 0; i < first_pke_cnt; ++i)
+		assert_int_equal(efa_rdm_pke_get_medium_rtm_base_hdr(
+					 ep->send_pkt_entry_vec[i])->seg_offset,
+				 first_seg_offsets[i]);
+
+	proto->handle_tx_pkes_posted(ep, txe);
+	assert_int_equal(txe->bytes_sent, first_bytes_sent);
+
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+	efa_rdm_txe_release(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief A medium message is only completed once every one of its packets has
+ *        reported its send completion.
+ *
+ * The one medium callback accumulates each packet's payload_size into
+ * txe->bytes_acked and only finishes the operation when that reaches
+ * txe->total_len, so an early completion has to leave the txe on the endpoint's
+ * list. Releasing it there would free a txe that the packets still in flight
+ * hold a reference to.
+ *
+ * Nothing else covers that arm: the peer-abort test below drives the
+ * EFA_RDM_OPE_PEER_ABORT_PENDING branch, which returns before it, and the eager
+ * protocol's completion test only ever has one packet to complete.
+ */
+void test_proto_medium_send_completion_tracks_bytes_acked(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *data_pkes[EFA_UNIT_TEST_PROTO_MAX_PKES];
+	fi_addr_t peer_addr;
+	size_t i, pke_cnt, acked = 0;
+	int err;
+
+	ep = setup_proto_medium_test(resource, &send_buff, &peer_addr, &peer);
+
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		&efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	err = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 1);
+
+	/* Snapshot the packets: each callback releases the one it was given. */
+	pke_cnt = ep->send_pkt_entry_vec_size;
+	assert_true(pke_cnt > 1);
+	assert_true(pke_cnt <= EFA_UNIT_TEST_PROTO_MAX_PKES);
+	for (i = 0; i < pke_cnt; ++i) {
+		data_pkes[i] = ep->send_pkt_entry_vec[i];
+		assert_non_null(data_pkes[i]);
+	}
+
+	txe = data_pkes[0]->ope;
+	assert_non_null(txe);
+	assert_int_equal(txe->total_len, send_buff.size);
+	assert_int_equal(txe->bytes_acked, 0);
+
+	for (i = 0; i < pke_cnt; ++i) {
+		/* The callback releases the packet, so read it beforehand. */
+		size_t payload_size = data_pkes[i]->payload_size;
+
+		assert_true(payload_size > 0);
+		efa_rdm_ep_record_tx_op_completed(ep, data_pkes[i]);
+		data_pkes[i]->handle_pke(data_pkes[i]);
+		acked += payload_size;
+
+		if (i + 1 < pke_cnt) {
+			/*
+			 * Partly acknowledged: the count moved but the txe is
+			 * still owned by the packets yet to complete.
+			 */
+			assert_int_equal(txe->bytes_acked, acked);
+			assert_int_equal(
+				efa_unit_test_get_ope_list_length(ep,
+								  EFA_RDM_TXE),
+				1);
+		}
+	}
+
+	/* The last packet acknowledged the whole message and reaped the txe. */
+	assert_int_equal(acked, send_buff.size);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief A medium txe whose source MR was closed mid-transfer is completed
+ *        exactly once by the peer-abort drain helper, even though its remaining
+ *        packets complete successfully.
+ *
+ * This is the scenario the EFA_RDM_OPE_PEER_ABORT_PENDING branch in the medium
+ * send completion callback exists for, and the reason that branch is not dead
+ * code the way it would be for the single packet eager protocol: one medium
+ * message is several packets sharing one txe, so an early failure can mark the
+ * txe peer-aborting while the later packets are still in flight and go on to
+ * report success.
+ *
+ * Without the branch, the first such success walks into
+ * efa_rdm_ope_handle_send_completed(), which asserts the flag is clear (debug)
+ * and double-completes the txe (release). Verifies instead that every success
+ * routes to the drain helper, which stays silent until the last data WR
+ * retires, then emits one PEER_ERROR_PKT so the peer can unblock its reorder
+ * window, and finally writes exactly one FI_ECANCELED /
+ * FI_EFA_ERR_PEER_ABORTED CQ error entry.
+ */
+void test_proto_medium_send_completion_peer_abort(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_pke *data_pkes[EFA_UNIT_TEST_PROTO_MAX_PKES];
+	struct fi_cq_err_entry err_entry;
+	fi_addr_t peer_addr;
+	size_t i, pke_cnt;
+	int err, ret;
+
+	ep = setup_proto_medium_test(resource, &send_buff, &peer_addr, &peer);
+	/* The peer must advertise PEER_ERROR support or the emit is skipped. */
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		&efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	err = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 1);
+
+	/*
+	 * Snapshot the data packets: emitting the PEER_ERROR_PKT reuses
+	 * ep->send_pkt_entry_vec, so it is only safe to read before the drain.
+	 */
+	pke_cnt = ep->send_pkt_entry_vec_size;
+	assert_true(pke_cnt > 1);
+	assert_true(pke_cnt <= EFA_UNIT_TEST_PROTO_MAX_PKES);
+	for (i = 0; i < pke_cnt; ++i) {
+		data_pkes[i] = ep->send_pkt_entry_vec[i];
+		assert_non_null(data_pkes[i]->handle_pke);
+	}
+
+	txe = data_pkes[0]->ope;
+	assert_non_null(txe);
+	assert_true(efa_rdm_pkt_type_is_rtm(txe->req_pkt_type));
+
+	/*
+	 * The application closes the source MR while the send is in flight.
+	 * The error path marks the txe peer-aborting; because every data WR is
+	 * still outstanding, the drain helper defers the emit.
+	 */
+	efa_unit_test_proto_simulate_source_mr_canceled(txe);
+	efa_rdm_txe_handle_error(txe, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_false(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+
+	memset(&err_entry, 0, sizeof(err_entry));
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+
+	/*
+	 * Every in-flight data WR now completes successfully. Only the last one
+	 * drains the txe, so only it may emit; the earlier ones must be silent
+	 * rather than taking the normal completion path.
+	 */
+	for (i = 0; i < pke_cnt; ++i) {
+		efa_rdm_ep_record_tx_op_completed(ep, data_pkes[i]);
+		data_pkes[i]->handle_pke(data_pkes[i]);
+
+		if (i + 1 < pke_cnt) {
+			assert_false(txe->internal_flags &
+				     EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+			assert_int_equal(
+				fi_cq_readerr(resource->cq, &err_entry, 0),
+				-FI_EAGAIN);
+		}
+	}
+
+	/* The last data WR emitted the PEER_ERROR_PKT and kept the txe alive. */
+	assert_true(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 1);
+	/* Still withheld: the completion waits for the PEER_ERROR_PKT to drain. */
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+
+	/*
+	 * The PEER_ERROR_PKT's own send completion releases the txe and writes
+	 * the single peer-abort error completion.
+	 */
+	pkt_entry = ep->send_pkt_entry_vec[0];
+	efa_rdm_pke_handle_send_completion(pkt_entry);
+
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(err_entry.err, FI_ECANCELED);
+	assert_int_equal(err_entry.prov_errno, FI_EFA_ERR_PEER_ABORTED);
+
+	/* Exactly one completion, and the txe is reaped. */
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
+
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief Set up an endpoint and a peer that the runt read protocol can be used
+ *        with, and register a source buffer larger than the runt.
+ *
+ * Runting has only been qualified for the HMEM interfaces, so host memory has a
+ * runt size of 0 by default and would never select the protocol. Overriding the
+ * FI_HMEM_SYSTEM thresholds keeps this coverage runnable on an instance with no
+ * GPU; efa_unit_test_mocks_teardown() restores g_efa_hmem_info from its backup
+ * after every test, so the overrides do not leak.
+ *
+ * The spoofed device generation does have to be put back by hand, via
+ * restore_proto_runtread_device_version(), which the caller must call as soon as
+ * protocol selection is done -- cmocka longjmps out of a failing assertion, so
+ * restoring at the end of a test would leak into every later test.
+ *
+ * Skips the test on a platform whose device cannot do RDMA read, since the whole
+ * protocol is predicated on the receiver reading the tail.
+ */
+static struct efa_rdm_ep *
+setup_proto_runtread_test(struct efa_resource *resource,
+			  struct efa_unit_test_buff *send_buff,
+			  fi_addr_t *peer_addr, struct efa_rdm_peer **peer,
+			  uint32_t *saved_vendor_part_id)
+{
+	struct efa_hmem_info *info = &g_efa_hmem_info[FI_HMEM_SYSTEM];
+	struct efa_rdm_ep *ep;
+
+	if (!efa_device_support_rdma_read()) {
+		skip();
+		return NULL;
+	}
+
+	ep = setup_proto_select_test(resource, peer_addr);
+	efa_unit_test_buff_construct(send_buff, resource,
+				     EFA_UNIT_TEST_PROTO_RUNTREAD_LEN);
+
+	*peer = efa_rdm_ep_get_peer_explicit(ep, *peer_addr);
+	(*peer)->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	(*peer)->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_READ;
+
+	/*
+	 * efa_rdm_interop_rdma_read() also compares the two sides' device
+	 * generations, so make them agree.
+	 */
+	*saved_vendor_part_id = g_efa_selected_device_list[0].ibv_attr.vendor_part_id;
+	g_efa_selected_device_list[0].ibv_attr.vendor_part_id = 0xEFA1;
+	(*peer)->device_version = 0xEFA1;
+	ep->use_device_rdma = true;
+
+	info->runt_size = EFA_UNIT_TEST_PROTO_RUNT_SIZE;
+	info->min_read_msg_size = EFA_UNIT_TEST_PROTO_RUNTREAD_LEN;
+
+	/* The medium protocol is tried first and must decline this size. */
+	assert_true(EFA_UNIT_TEST_PROTO_RUNTREAD_LEN > info->max_medium_msg_size);
+
+	return ep;
+}
+
+static void restore_proto_runtread_device_version(uint32_t saved_vendor_part_id)
+{
+	g_efa_selected_device_list[0].ibv_attr.vendor_part_id =
+		saved_vendor_part_id;
+}
+
+/**
+ * @brief Test that the runt read protocol is selected for a message past the
+ *        interface's minimum read size when the source buffer is registered.
+ */
+void test_proto_select_runtread_for_large_msg(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	uint32_t saved_vendor_part_id;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_runtread_test(resource, &send_buff, &peer_addr, &peer,
+				       &saved_vendor_part_id);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	restore_proto_runtread_device_version(saved_vendor_part_id);
+
+	assert_int_equal(err, 0);
+	assert_non_null(proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_runtread);
+
+	ofi_buf_free(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief A delivery complete send never selects the runt read protocol.
+ *
+ * The runt read REQ has no delivery complete variant -- there is nowhere to
+ * report the receipt against -- so a FI_DELIVERY_COMPLETE send has to use a
+ * different protocol even when every other condition for runting holds.
+ * Mainline makes the same call in efa_rdm_peer_select_readbase_rtm().
+ *
+ * Long read, which is what mainline falls back to, has not been migrated yet, so
+ * today no protocol matches and the send takes the legacy path. Once long read
+ * is registered this must select it instead of the runt read protocol.
+ */
+void test_proto_select_declines_runtread_for_delivery_complete(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	uint32_t saved_vendor_part_id;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_runtread_test(resource, &send_buff, &peer_addr, &peer,
+				       &saved_vendor_part_id);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg,
+						 FI_DELIVERY_COMPLETE, txe,
+						 &proto);
+	restore_proto_runtread_device_version(saved_vendor_part_id);
+
+	assert_int_equal(err, 0);
+	assert_ptr_not_equal(proto, &efa_rdm_proto_runtread);
+	assert_null(proto);
+
+	ofi_buf_free(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief The runt read protocol sends the runt over several REQ packets, each
+ *        carrying the read iov array the receiver needs for the tail.
+ *
+ * The receiver reassembles the runt from msg_length and seg_offset and learns
+ * where the rest of the message lives from runt_length plus the read iov array
+ * that follows the header, so a gap in the segments or a missing iov silently
+ * corrupts its copy.
+ */
+void test_proto_runtread_construct_pkes_carries_read_iov(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_rdm_runtread_rtm_base_hdr *rtm_hdr;
+	fi_addr_t peer_addr;
+	uint32_t saved_vendor_part_id;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	size_t i, expected_offset = 0;
+	uint64_t pke_send_flags;
+	int err;
+
+	ep = setup_proto_runtread_test(resource, &send_buff, &peer_addr, &peer,
+				       &saved_vendor_part_id);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+
+	/* Drive the same sequence efa_rdm_msg_generic_send() drives. */
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_ptr_equal(proto, &efa_rdm_proto_runtread);
+
+	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0, proto);
+	txe->msg_id = peer->next_msg_id++;
+
+	err = proto->construct_tx_pkes(ep, peer, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	restore_proto_runtread_device_version(saved_vendor_part_id);
+	assert_int_equal(err, 0);
+
+	/*
+	 * The runt is only the head of the message; if it covered all of it the
+	 * medium protocol should have won the selection.
+	 */
+	assert_int_equal(txe->bytes_runt, EFA_UNIT_TEST_PROTO_RUNT_SIZE);
+	assert_true(txe->bytes_runt < txe->total_len);
+	assert_true(ep->send_pkt_entry_vec_size > 1);
+	assert_true(ep->send_pkt_entry_vec_size <= EFA_UNIT_TEST_PROTO_MAX_PKES);
+
+	/*
+	 * The peer-abort protocol reads txe->req_pkt_type to tell a two-sided RTM
+	 * from an operation it does not handle.
+	 */
+	assert_int_equal(txe->req_pkt_type, EFA_RDM_RUNTREAD_MSGRTM_PKT);
+
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i) {
+		struct efa_rdm_pke *pke = ep->send_pkt_entry_vec[i];
+		struct fi_rma_iov *read_iov;
+
+		assert_non_null(pke);
+		assert_ptr_equal(
+			pke->handle_pke,
+			&efa_rdm_proto_runtread_handle_rtm_send_completion);
+		assert_ptr_equal(pke->ope, txe);
+		assert_true(pke->payload_size > 0);
+
+		rtm_hdr = efa_rdm_pke_get_runtread_rtm_base_hdr(pke);
+		assert_int_equal(rtm_hdr->msg_length, txe->total_len);
+		assert_int_equal(rtm_hdr->runt_length, txe->bytes_runt);
+		assert_int_equal(rtm_hdr->send_id, txe->tx_id);
+		assert_int_equal(rtm_hdr->read_iov_count, txe->iov_count);
+		assert_int_equal(rtm_hdr->seg_offset, expected_offset);
+
+		/* The read iov array sits immediately after the REQ header. */
+		read_iov = (struct fi_rma_iov *) (pke->wiredata +
+						  efa_rdm_pke_get_req_hdr_size(pke));
+		assert_int_equal(read_iov[0].addr, (uint64_t) send_buff.buff);
+		assert_int_equal(read_iov[0].len, send_buff.size);
+		assert_int_equal(read_iov[0].key, fi_mr_key(send_buff.mr));
+
+		expected_offset += pke->payload_size;
+	}
+
+	/* The REQ packets carry exactly the runt, no more and no less. */
+	assert_int_equal(expected_offset, txe->bytes_runt);
+
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+	efa_rdm_txe_release(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief The runt read protocol's construct_tx_pkes() and post-send hook are
+ *        idempotent, so a txe queued before the handshake can be reposted.
+ *
+ * efa_rdm_msg_repost_rtm_proto() re-enters construct_tx_pkes() on a txe the
+ * first attempt already set up, and efa_rdm_ope_process_queued_ope() retries a
+ * txe that returned -FI_EAGAIN without clearing its queued state, so the second
+ * call must produce exactly the same packets. This is a sharper hazard than for
+ * the medium protocol: the runt size is computed from the peer's remaining runt
+ * allowance, which the first attempt itself consumes, so recomputing it would
+ * shrink the runt while the segment offsets already on the wire assume the old
+ * one.
+ *
+ * The post-send hook must not double count either. bytes_sent is an assignment,
+ * and the domain's read slot is guarded by EFA_RDM_TXE_READ_MSG_COUNTED so the
+ * single release site cannot leave the counter stuck above zero -- which would
+ * make every later message on the domain skip runting.
+ *
+ * peer->num_runt_bytes_in_flight is deliberately left as an accumulator: it is
+ * balanced by the per-packet send completions, and in production the hook only
+ * runs once per message because a repost only happens for an attempt whose
+ * packets never reached the device.
+ */
+void test_proto_runtread_construct_pkes_is_idempotent(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL, *second_proto = NULL;
+	struct efa_rdm_ope *second_txe;
+	fi_addr_t peer_addr;
+	uint32_t saved_vendor_part_id;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	size_t i, first_pke_cnt, first_seg_offsets[EFA_UNIT_TEST_PROTO_MAX_PKES];
+	size_t first_bytes_runt;
+	uint64_t first_bytes_sent;
+	uint32_t first_protocol;
+	uint64_t pke_send_flags;
+	int err;
+
+	ep = setup_proto_runtread_test(resource, &send_buff, &peer_addr, &peer,
+				       &saved_vendor_part_id);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_ptr_equal(proto, &efa_rdm_proto_runtread);
+
+	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0, proto);
+	txe->msg_id = peer->next_msg_id++;
+
+	err = proto->construct_tx_pkes(ep, peer, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	assert_int_equal(err, 0);
+
+	first_pke_cnt = ep->send_pkt_entry_vec_size;
+	assert_true(first_pke_cnt > 1);
+	assert_true(first_pke_cnt <= EFA_UNIT_TEST_PROTO_MAX_PKES);
+	for (i = 0; i < first_pke_cnt; ++i) {
+		first_seg_offsets[i] =
+			efa_rdm_pke_get_runtread_rtm_base_hdr(
+				ep->send_pkt_entry_vec[i])->seg_offset;
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+	}
+	first_protocol = txe->req_pkt_type;
+	first_bytes_runt = txe->bytes_runt;
+
+	/*
+	 * The first attempt never reached the device, but the post-send hook
+	 * runs on the repost, so mimic a first attempt that did publish its
+	 * accounting -- that is the state a non-idempotent write would corrupt.
+	 */
+	proto->handle_tx_pkes_posted(ep, txe);
+	first_bytes_sent = txe->bytes_sent;
+	assert_int_equal(first_bytes_sent, txe->bytes_runt);
+	assert_true(txe->internal_flags & EFA_RDM_TXE_READ_MSG_COUNTED);
+	assert_int_equal(ofi_atomic_get64(
+				 &efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight),
+			 1);
+
+	/* The repost, exactly as efa_rdm_msg_repost_rtm_proto does it. */
+	err = proto->construct_tx_pkes(ep, peer, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	assert_int_equal(err, 0);
+
+	assert_int_equal(ep->send_pkt_entry_vec_size, first_pke_cnt);
+	assert_int_equal(txe->req_pkt_type, first_protocol);
+	assert_int_equal(txe->bytes_runt, first_bytes_runt);
+	for (i = 0; i < first_pke_cnt; ++i)
+		assert_int_equal(efa_rdm_pke_get_runtread_rtm_base_hdr(
+					 ep->send_pkt_entry_vec[i])->seg_offset,
+				 first_seg_offsets[i]);
+
+	proto->handle_tx_pkes_posted(ep, txe);
+	assert_int_equal(txe->bytes_sent, first_bytes_sent);
+	assert_int_equal(ofi_atomic_get64(
+				 &efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight),
+			 1);
+
+	/*
+	 * With a read message in flight on the domain, the next send must not
+	 * pick a read based protocol at all.
+	 */
+	second_txe = ofi_buf_alloc(ep->base_ep.txe_pool);
+	assert_non_null(second_txe);
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 second_txe, &second_proto);
+	restore_proto_runtread_device_version(saved_vendor_part_id);
+	assert_int_equal(err, 0);
+	assert_ptr_not_equal(second_proto, &efa_rdm_proto_runtread);
+	ofi_buf_free(second_txe);
+
+	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+	efa_rdm_txe_release_read_msg_slot(txe);
+	efa_rdm_txe_release(txe);
 	efa_unit_test_buff_destruct(&send_buff);
 }

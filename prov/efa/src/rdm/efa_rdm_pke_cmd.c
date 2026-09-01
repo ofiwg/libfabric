@@ -122,12 +122,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_longread_tagrtm(pkt_entry, ope);
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_runtread_msgrtm(pkt_entry, ope, data_offset, data_size);
-		break;
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_runtread_tagrtm(pkt_entry, ope, data_offset, data_size);
+		EFA_RDM_PROTO_MOVED("Runt read");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		EFA_RDM_PROTO_MOVED("Eager write");
@@ -268,7 +264,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_runtread_rtm_sent(pkt_entry, peer);
+		EFA_RDM_PROTO_MOVED("Runt read");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		EFA_RDM_PROTO_MOVED("Eager write");
@@ -669,7 +665,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Runt read");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
