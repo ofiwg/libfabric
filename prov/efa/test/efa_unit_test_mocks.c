@@ -21,7 +21,7 @@ int g_ibv_ah_limit = 1024;
 int g_ibv_ah_cnt = 0;
 int g_self_ah_cnt = 1;
 struct ibv_ah g_dummy_ah;
-struct efa_ah g_dummy_efa_ah = {0};
+struct efa_rdm_ah g_dummy_efa_ah = {0};
 
 void efa_ibv_ah_limit_cnt_reset()
 {
@@ -74,40 +74,38 @@ int efa_mock_ibv_destroy_ah_dont_create_self_ah(struct ibv_ah *ibv_ah)
 }
 
 struct efa_ah *efa_mock_efa_ah_alloc_return_null(struct efa_domain *domain, const uint8_t *gid,
-			    bool insert_implicit_av, size_t alloc_size)
+			    size_t alloc_size)
 {
 	return NULL;
 }
 
 struct efa_ah *efa_mock_efa_ah_alloc_dont_create_self_ah(struct efa_domain *domain, const uint8_t *gid,
-			    bool insert_implicit_av, size_t alloc_size)
+			    size_t alloc_size)
 {
 	/* Intercept the self AH call in efa_ah_alloc and do not call
 	 * ibv_create_ah or modify the AH map etc */
 	if (g_ibv_ah_cnt < g_self_ah_cnt) {
 		g_ibv_ah_cnt++;
 
-		g_dummy_efa_ah.ibv_ah = &g_dummy_ah;
-		g_dummy_efa_ah.ahn = -1;
-		memset(g_dummy_efa_ah.gid, 0, sizeof(g_dummy_efa_ah.gid));
-		g_dummy_efa_ah.explicit_refcnt = 1;
-		g_dummy_efa_ah.implicit_refcnt = 0;
-		return &g_dummy_efa_ah;
+		g_dummy_efa_ah.efa_ah.ibv_ah = &g_dummy_ah;
+		g_dummy_efa_ah.efa_ah.ahn = -1;
+		g_dummy_efa_ah.efa_ah.refcnt = 1;
+		memset(g_dummy_efa_ah.efa_ah.gid, 0, sizeof(g_dummy_efa_ah.efa_ah.gid));
+		return &g_dummy_efa_ah.efa_ah;
 	} else {
-		return __real_efa_ah_alloc(domain, gid, insert_implicit_av, alloc_size);
+		return __real_efa_ah_alloc(domain, gid, alloc_size);
 	}
 }
 
 void efa_mock_efa_ah_release_dont_create_self_ah(struct efa_domain *domain,
-						 struct efa_ah *ah,
-						 bool release_from_implicit_av)
+						 struct efa_ah *ah)
 {
 	/* Intercept the self AH destruct call in efa_ah_release and do not call
 	 * ibv_destroy_ah or modify the AH map etc */
 	if (g_ibv_ah_cnt <= g_self_ah_cnt)
 		g_ibv_ah_cnt--;
 	else
-		return  __real_efa_ah_release(domain, ah, release_from_implicit_av);
+		return  __real_efa_ah_release(domain, ah);
 }
 
 int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibv_ctx,
@@ -577,16 +575,14 @@ int __wrap_efadv_query_device(struct ibv_context *ibv_ctx, struct efadv_device_a
 }
 
 struct efa_ah *__wrap_efa_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
-			      bool insert_implicit_av, size_t alloc_size)
+			      size_t alloc_size)
 {
-	return g_efa_unit_test_mocks.efa_ah_alloc(domain, gid, insert_implicit_av, alloc_size);
+	return g_efa_unit_test_mocks.efa_ah_alloc(domain, gid, alloc_size);
 }
 
-void __wrap_efa_ah_release(struct efa_domain *domain, struct efa_ah *ah,
-			   bool release_from_implicit_av)
+void __wrap_efa_ah_release(struct efa_domain *domain, struct efa_ah *ah)
 {
-	return g_efa_unit_test_mocks.efa_ah_release(domain, ah,
-						    release_from_implicit_av);
+	return g_efa_unit_test_mocks.efa_ah_release(domain, ah);
 }
 
 struct ibv_cq_ex *efa_mock_create_cq_ex_return_null(struct ibv_context *context, struct ibv_cq_init_attr_ex *init_attr)

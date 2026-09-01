@@ -202,7 +202,7 @@ struct efa_av_entry *efa_av_entry_alloc_explicit(struct efa_av *av,
 	assert(av->type == FI_AV_TABLE);
 	efa_av_entry->fi_addr = fi_addr;
 
-	efa_av_entry->ah = efa_ah_alloc(av->domain, raw_addr->raw, false, sizeof(struct efa_ah));
+	efa_av_entry->ah = efa_ah_alloc(av->domain, raw_addr->raw, sizeof(struct efa_ah));
 	if (!efa_av_entry->ah)
 		goto err_remove_addr;
 
@@ -217,7 +217,7 @@ struct efa_av_entry *efa_av_entry_alloc_explicit(struct efa_av *av,
 	return efa_av_entry;
 
 err_release_ah:
-	efa_ah_release(av->domain, efa_av_entry->ah, false);
+	efa_ah_release(av->domain, efa_av_entry->ah);
 err_remove_addr:
 	err = ofi_av_remove_addr(util_av, fi_addr);
 	if (err)
@@ -240,7 +240,7 @@ void efa_av_entry_release_explicit(struct efa_av *av, struct efa_av_entry *entry
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
 	efa_av_reverse_av_remove(&av->cur_reverse_av, entry);
-	efa_ah_release(av->domain, entry->ah, false);
+	efa_ah_release(av->domain, entry->ah);
 	efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
 					 entry, fi_addr);
 }
