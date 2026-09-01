@@ -6,6 +6,7 @@
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_proto.h"
 #include "rdm/efa_rdm_proto_eager.h"
+#include "rdm/efa_rdm_proto_longcts.h"
 #include "rdm/efa_rdm_proto_longread.h"
 #include "rdm/efa_rdm_proto_medium.h"
 #include "rdm/efa_rdm_proto_runtread.h"
@@ -26,6 +27,14 @@
  */
 #define EFA_UNIT_TEST_PROTO_RUNTREAD_LEN 131072
 #define EFA_UNIT_TEST_PROTO_RUNT_SIZE	 32768
+
+/*
+ * Size for the long CTS tests: past the medium threshold so medium declines.
+ * The read based protocols decline for a different reason -- the peer does not
+ * advertise RDMA read support -- so long CTS, the last entry in the registry, is
+ * what the send lands on.
+ */
+#define EFA_UNIT_TEST_PROTO_LONGCTS_LEN 131072
 
 /*
  * Upper bound for the per-test arrays that snapshot a medium message's packet
@@ -1642,5 +1651,333 @@ void test_proto_longread_construct_pkes_is_idempotent(void **state)
 	efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[0]);
 	efa_rdm_txe_release_read_msg_slot(txe);
 	efa_rdm_txe_release(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief Set up an endpoint and a handshake-completed peer that no read based
+ *        protocol can be used with, and register a source buffer past the medium
+ *        threshold.
+ *
+ * The peer deliberately does not advertise EFA_RDM_EXTRA_FEATURE_RDMA_READ, so
+ * efa_rdm_interop_rdma_read() is false and both read protocols decline no matter
+ * what the interface thresholds are. That is the real shape of a send to a peer
+ * without device RDMA read, and it leaves long CTS -- which needs nothing from
+ * the peer beyond the baseline protocol -- as the only match.
+ */
+static struct efa_rdm_ep *
+setup_proto_longcts_test(struct efa_resource *resource,
+			 struct efa_unit_test_buff *send_buff,
+			 fi_addr_t *peer_addr, struct efa_rdm_peer **peer)
+{
+	struct efa_rdm_ep *ep;
+
+	ep = setup_proto_select_test(resource, peer_addr);
+	efa_unit_test_buff_construct(send_buff, resource,
+				     EFA_UNIT_TEST_PROTO_LONGCTS_LEN);
+
+	*peer = efa_rdm_ep_get_peer_explicit(ep, *peer_addr);
+	(*peer)->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+
+	/* Eager and medium are tried first and must both decline this size. */
+	assert_true(EFA_UNIT_TEST_PROTO_LONGCTS_LEN > ep->mtu_size);
+	assert_true(EFA_UNIT_TEST_PROTO_LONGCTS_LEN >
+		    g_efa_hmem_info[FI_HMEM_SYSTEM].max_medium_msg_size);
+
+	return ep;
+}
+
+/**
+ * @brief Test that the long CTS protocol is selected for a large message when no
+ *        other protocol can be used.
+ */
+void test_proto_select_longcts_for_large_msg(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_longcts_test(resource, &send_buff, &peer_addr, &peer);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_ptr_equal(proto, &efa_rdm_proto_longcts);
+
+	ofi_buf_free(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief The long CTS protocol sends exactly one REQ carrying the head of the
+ *        message plus a credit request.
+ *
+ * The receiver learns the message length from the header, copies the REQ's
+ * payload as the first segment, and answers with a CTS sized from
+ * credit_request; the rest of the message follows as CTSDATA packets keyed off
+ * send_id. A wrong msg_length, send_id or payload size silently corrupts the
+ * transfer or stalls it.
+ */
+void test_proto_longcts_construct_pkes_single_pke(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_rdm_longcts_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_pke *pke;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_longcts_test(resource, &send_buff, &peer_addr, &peer);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	assert_non_null(txe);
+
+	/* Drive the same sequence efa_rdm_msg_generic_send() drives. */
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_ptr_equal(proto, &efa_rdm_proto_longcts);
+
+	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0, proto);
+	txe->msg_id = peer->next_msg_id++;
+
+	err = proto->construct_tx_pkes(ep, peer, NULL, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe);
+	assert_int_equal(err, 0);
+
+	/* Long CTS sends one unsolicited REQ; the CTS paces everything after. */
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+
+	/*
+	 * The peer-abort protocol reads txe->protocol to tell a two-sided RTM
+	 * from an operation it does not handle.
+	 */
+	assert_int_equal(txe->protocol, EFA_RDM_LONGCTS_MSGRTM_PKT);
+
+	pke = ep->send_pkt_entry_vec[0];
+	assert_non_null(pke);
+	assert_ptr_equal(pke->handle_pke,
+			 &efa_rdm_proto_longcts_handle_rtm_send_completion);
+	assert_ptr_equal(pke->ope, txe);
+
+	/* The REQ carries the head of the message, never all of it. */
+	assert_true(pke->payload_size > 0);
+	assert_true(pke->payload_size < txe->total_len);
+
+	rtm_hdr = efa_rdm_pke_get_longcts_rtm_base_hdr(pke);
+	assert_int_equal(rtm_hdr->msg_length, txe->total_len);
+	assert_int_equal(rtm_hdr->send_id, txe->tx_id);
+	assert_int_equal(rtm_hdr->credit_request, efa_env.tx_min_credits);
+
+	efa_rdm_pke_release_tx(pke);
+	efa_rdm_txe_release(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief The long CTS protocol's construct_tx_pkes() and post-send hook are
+ *        idempotent, so a txe queued before the handshake can be reposted.
+ *
+ * efa_rdm_msg_repost_rtm_proto() re-enters construct_tx_pkes() on a txe the
+ * first attempt already set up, and efa_rdm_ope_process_queued_ope() retries a
+ * txe that returned -FI_EAGAIN without clearing its queued state.
+ *
+ * The header writes are all assignments, so the hazard is bytes_sent: the
+ * mainline long CTS path accumulated it per packet
+ * (efa_rdm_pke_handle_longcts_rtm_sent), and a second accumulation would make
+ * the CTSDATA stream resume past the end of the REQ's segment and skip that much
+ * of the message.
+ */
+void test_proto_longcts_construct_pkes_is_idempotent(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	size_t first_payload_size;
+	uint32_t first_protocol;
+	int err;
+
+	ep = setup_proto_longcts_test(resource, &send_buff, &peer_addr, &peer);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	assert_int_equal(err, 0);
+	assert_ptr_equal(proto, &efa_rdm_proto_longcts);
+
+	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0, proto);
+	txe->msg_id = peer->next_msg_id++;
+
+	err = proto->construct_tx_pkes(ep, peer, NULL, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe);
+	assert_int_equal(err, 0);
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+	first_payload_size = ep->send_pkt_entry_vec[0]->payload_size;
+	first_protocol = txe->protocol;
+
+	/*
+	 * The first attempt never reached the device, but the post-send hook runs
+	 * on the repost, so mimic a first attempt that did publish its
+	 * accounting -- that is the state an accumulating write would corrupt.
+	 */
+	proto->handle_tx_pkes_posted(ep, txe);
+	assert_int_equal(txe->bytes_sent, first_payload_size);
+	efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[0]);
+
+	/* The repost, with no fi_msg, exactly as efa_rdm_msg_repost_rtm_proto. */
+	err = proto->construct_tx_pkes(ep, peer, NULL, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe);
+	assert_int_equal(err, 0);
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+	assert_int_equal(txe->protocol, first_protocol);
+	assert_int_equal(ep->send_pkt_entry_vec[0]->payload_size,
+			 first_payload_size);
+	assert_int_equal(efa_rdm_pke_get_longcts_rtm_base_hdr(
+				 ep->send_pkt_entry_vec[0])->msg_length,
+			 txe->total_len);
+
+	proto->handle_tx_pkes_posted(ep, txe);
+	assert_int_equal(txe->bytes_sent, first_payload_size);
+
+	efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[0]);
+	efa_rdm_txe_release(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief A long CTS txe whose source MR was closed while its REQ was in flight
+ *        is completed exactly once by the peer-abort drain helper, even though
+ *        the REQ completes successfully.
+ *
+ * This is what the EFA_RDM_OPE_PEER_ABORT_PENDING branch in the long CTS send
+ * completion callback exists for, and the reason it is not dead code the way it
+ * would be for the single packet eager protocol: one long CTS message is the REQ
+ * plus a stream of CTSDATA packets sharing one txe, so bytes_acked is still
+ * short of total_len when the REQ completes. Without the branch that success
+ * matches neither arm, so nothing drains the txe and the operation never
+ * completes at all.
+ *
+ * Verifies instead that the success routes to the drain helper, which -- this
+ * being the txe's last outstanding WR -- emits one PEER_ERROR_PKT so the peer
+ * can unblock its reorder window, and then writes exactly one FI_ECANCELED /
+ * FI_EFA_ERR_PEER_ABORTED CQ error entry when that packet's own send completes.
+ */
+void test_proto_longcts_send_completion_peer_abort(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_pke *req_pke;
+	struct fi_cq_err_entry err_entry;
+	fi_addr_t peer_addr;
+	int err, ret;
+
+	ep = setup_proto_longcts_test(resource, &send_buff, &peer_addr, &peer);
+	/* The peer must advertise PEER_ERROR support or the emit is skipped. */
+	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
+
+	g_efa_unit_test_mocks.efa_qp_post_send =
+		&efa_mock_efa_qp_post_send_return_mock;
+	will_return_int_maybe(efa_mock_efa_qp_post_send_return_mock, 0);
+
+	err = fi_send(resource->ep, send_buff.buff, send_buff.size,
+		      fi_mr_desc(send_buff.mr), peer_addr, NULL);
+	assert_int_equal(err, 0);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 1);
+
+	/*
+	 * Snapshot the REQ: emitting the PEER_ERROR_PKT reuses
+	 * ep->send_pkt_entry_vec, so it is only safe to read before the drain.
+	 */
+	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
+	req_pke = ep->send_pkt_entry_vec[0];
+	assert_non_null(req_pke->handle_pke);
+
+	txe = req_pke->ope;
+	assert_non_null(txe);
+	assert_int_equal(txe->protocol, EFA_RDM_LONGCTS_MSGRTM_PKT);
+	/* The message is only partly on the wire, which is the whole point. */
+	assert_true(req_pke->payload_size < txe->total_len);
+
+	/*
+	 * The application closes the source MR while the send is in flight. The
+	 * error path marks the txe peer-aborting; because the REQ's WR is still
+	 * outstanding, the drain helper defers the emit.
+	 */
+	efa_unit_test_proto_simulate_source_mr_canceled(txe);
+	efa_rdm_txe_handle_error(txe, FI_ECANCELED, FI_EFA_ERR_PKT_POST);
+	assert_true(txe->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING);
+	assert_false(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+
+	memset(&err_entry, 0, sizeof(err_entry));
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+
+	/* The REQ completes successfully, draining the txe's last WR. */
+	efa_rdm_ep_record_tx_op_completed(ep, req_pke);
+	req_pke->handle_pke(req_pke);
+
+	assert_true(txe->internal_flags & EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 1);
+	/* Still withheld: the completion waits for the PEER_ERROR_PKT to drain. */
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+
+	/*
+	 * The PEER_ERROR_PKT's own send completion releases the txe and writes
+	 * the single peer-abort error completion.
+	 */
+	pkt_entry = ep->send_pkt_entry_vec[0];
+	efa_rdm_pke_handle_send_completion(pkt_entry);
+
+	ret = fi_cq_readerr(resource->cq, &err_entry, 0);
+	assert_int_equal(ret, 1);
+	assert_int_equal(err_entry.err, FI_ECANCELED);
+	assert_int_equal(err_entry.prov_errno, FI_EFA_ERR_PEER_ABORTED);
+
+	/* Exactly one completion, and the txe is reaped. */
+	assert_int_equal(fi_cq_readerr(resource->cq, &err_entry, 0), -FI_EAGAIN);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 0);
+
 	efa_unit_test_buff_destruct(&send_buff);
 }

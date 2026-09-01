@@ -6,6 +6,7 @@
 #include "efa_rdm_domain.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_longcts.h"
 #include "efa_rdm_proto_longread.h"
 #include "efa_rdm_proto_medium.h"
 #include "efa_rdm_proto_runtread.h"
@@ -54,6 +55,10 @@ struct efa_rdm_proto *efa_rdm_protocols[EFA_RDM_MAX_PROTO] = {
 	&efa_rdm_proto_medium,
 	&efa_rdm_proto_runtread,
 	&efa_rdm_proto_longread,
+	/* Long CTS must be last: it can always be used, so any protocol listed
+	 * after it would never be reached.
+	 */
+	&efa_rdm_proto_longcts,
 	NULL, /* Sentinel used to stop iteration */
 };
 
@@ -163,10 +168,12 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	}
 
 	/*
-	 * No protocol matched, so the message is larger than a single eager
-	 * packet and the caller falls back to the old code path. A zero-copy
-	 * (headerless) peer reaches here for any message too large for eager,
-	 * which is a legal application call.
+	 * No protocol matched, so the caller falls back to the old code path.
+	 * This is unreachable now that the long CTS protocol is registered: it
+	 * can always be used, so it always matches. The arm stays until the
+	 * legacy send path is deleted, since letting the fall-through silently
+	 * leak the selection loop's memory registrations would be worse than
+	 * keeping the (now dead) rollback.
 	 */
 	if (mr_attempted)
 		efa_rdm_proto_release_selection_mrs(txe);

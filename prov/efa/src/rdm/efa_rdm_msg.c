@@ -249,6 +249,12 @@ ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
 /**
  * @brief Post a RTM packet for a TX entry using the old code path.
  *
+ * Unreachable since the long CTS protocol moved to the refactored code path:
+ * efa_rdm_proto_select_send_protocol() now always returns a protocol, because
+ * long CTS can always be used, so efa_rdm_msg_generic_send() never takes the
+ * fallback and no two-sided txe is ever queued without a protocol. This function
+ * and efa_rdm_msg_select_rtm() go away with the rest of the legacy send path.
+ *
  * @param[in,out]	ep		endpoint
  * @param[in,out]	txe	information of the send operation.
  * @retval		0 if packet(s) was posted successfully.
