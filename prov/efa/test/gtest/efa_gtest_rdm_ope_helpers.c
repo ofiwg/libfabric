@@ -7,6 +7,7 @@
 #include "efa_av.h"
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_ope.h"
+#include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_cq.h"
@@ -186,10 +187,47 @@ static void efa_test_fill_process_queued_result(
 	struct efa_rdm_ep *ep, struct efa_rdm_ope *txe,
 	struct efa_test_process_queued_result *res)
 {
+	res->before_handshake_flag_set =
+		!!(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
 	res->any_queued_flag_set =
 		!!(txe->internal_flags & EFA_RDM_OPE_QUEUED_FLAGS);
 	res->queued_list_empty = dlist_empty(&ep->ope_queued_list);
+	res->fi_more_still_set = !!(txe->fi_flags & FI_MORE);
 	res->before_handshake_cnt = ep->ope_queued_before_handshake_cnt;
+}
+
+int efa_test_process_queued_ope_derives_before_handshake_flag(
+	struct efa_test_queued_op *qop,
+	struct efa_test_process_queued_result *res)
+{
+	struct efa_rdm_ep *ep = container_of(qop->ep, struct efa_rdm_ep,
+					     base_ep.util_ep.ep_fid);
+
+	if (!qop->txe || !qop->peer)
+		return -FI_EINVAL;
+	if (qop->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)
+		return -FI_EINVAL;
+	if (!(qop->txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE))
+		return -FI_EINVAL;
+
+	res->ret = efa_rdm_ope_process_queued_ope(qop->txe);
+	efa_test_fill_process_queued_result(ep, qop->txe, res);
+	return 0;
+}
+
+int efa_test_process_queued_ope_after_handshake_result(
+	struct efa_test_queued_op *qop,
+	struct efa_test_process_queued_result *res)
+{
+	struct efa_rdm_ep *ep = container_of(qop->ep, struct efa_rdm_ep,
+					     base_ep.util_ep.ep_fid);
+
+	if (!qop->txe || !qop->peer)
+		return -FI_EINVAL;
+
+	res->ret = efa_test_process_queued_ope_after_handshake(qop);
+	efa_test_fill_process_queued_result(ep, qop->txe, res);
+	return 0;
 }
 
 int efa_test_queue_ope_with_flag(struct fid_ep *ep_fid, struct fid_av *av_fid,
@@ -282,4 +320,24 @@ int efa_test_process_queued_flag_op(struct efa_test_queued_op *qop,
 	res->ret = efa_rdm_ope_process_queued_ope(qop->txe);
 	efa_test_fill_process_queued_result(ep, qop->txe, res);
 	return 0;
+}
+
+void efa_test_simulate_source_mr_canceled(struct efa_test_queued_op *qop)
+{
+	/*
+	 * Mirrors the cmocka helper: a source MR whose current generation no
+	 * longer matches the snapshot taken when the op was dispatched, which
+	 * is how a closed MR presents to the repost path.
+	 */
+	static struct efa_rdm_mr stale_source_mr;
+
+	stale_source_mr.gen = 1;
+	qop->txe->iov_count = 1;
+	qop->txe->desc[0] = &stale_source_mr;
+	qop->txe->desc_gen[0] = 2;
+}
+
+int efa_test_peer_abort_prov_errno(void)
+{
+	return FI_EFA_ERR_PEER_ABORTED;
 }
