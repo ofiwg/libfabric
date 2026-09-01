@@ -2485,9 +2485,20 @@ static ssize_t efa_rdm_ope_post_ctrl(struct efa_rdm_ope *ope, int pkt_type)
 	if (!efa_rdm_pkt_type_is_req(pkt_type))
 		return efa_rdm_ope_post_nonreq_ctrl(ope, pkt_type);
 
-	/* TODO: after the long CTS protocol is moved, verify that the long CTS
-	 * RTM packets that come from efa_rdm_ope_post_send_fallback are handled
-	 * correctly  */
+	/*
+	 * A long CTS RTM can also arrive here for an operation that is changing
+	 * protocol: efa_rdm_ope_post_send_fallback() retries a read RTM whose
+	 * source buffer could not be registered, and
+	 * efa_rdm_pke_handle_read_nack_recv() continues a read whose receiver
+	 * could not register its buffer. Both rewrite ope->req_pkt_type to the
+	 * long CTS type, and the latter clears ope->proto, because the read
+	 * protocol that selection chose cannot write a long CTS REQ. The former
+	 * is unreachable: the read protocols now decline an operation whose iovs
+	 * cannot all be registered in can_use_protocol(), before a packet is
+	 * allocated, and the legacy efa_rdm_msg_post_rtm() that could still hand
+	 * a protocol-less RTM to efa_rdm_ope_post_send() is itself unreachable
+	 * now that selection always returns a protocol.
+	 */
 	if (ope->proto) {
 		assert(ope->type == EFA_RDM_TXE);
 		/* post_rtm_proto reads txe->req_pkt_type, not pkt_type. */
@@ -2500,7 +2511,12 @@ static ssize_t efa_rdm_ope_post_ctrl(struct efa_rdm_ope *ope, int pkt_type)
 		return efa_rdm_msg_post_rtm_proto(ope->ep, ope, ope->proto);
 	}
 
-	/* TODO: drop this fallback once every protocol is registered. */
+	/*
+	 * One-sided operations (RMA and atomics) and the read NACK continuation
+	 * above still build their REQ packets here.
+	 *
+	 * TODO: drop this fallback once those protocols are registered too.
+	 */
 	return efa_rdm_ope_post_send(ope, pkt_type);
 }
 
