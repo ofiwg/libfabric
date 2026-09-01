@@ -90,6 +90,23 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 
 	readbase_rtm = efa_rdm_peer_select_readbase_rtm(txe->peer, efa_rdm_ep, txe);
 
+	/*
+	 * The runt read protocol moved to the refactored code path
+	 * (efa_rdm_proto_runtread), so this fallback must never build a runt read
+	 * REQ: its init, sent and send completion handlers are gone and the
+	 * remaining efa_rdm_pke_cmd.c arms assert.
+	 *
+	 * Reaching here with the runt read type means the refactored predicate
+	 * declined the send even though the conditions below hold. That is only
+	 * possible when a source iov could not be registered, since the
+	 * refactored predicate requires every iov registered while the check
+	 * below settles for a usable MR cache. Long read is what mainline falls
+	 * back to in that case anyway, once its own registration attempt returns
+	 * -FI_ENOMR.
+	 */
+	if (efa_rdm_pkt_type_is_runtread(readbase_rtm))
+		readbase_rtm = EFA_RDM_LONGREAD_MSGRTM_PKT + tagged;
+
 	if (use_p2p &&
 	    txe->total_len >= g_efa_hmem_info[iface].min_read_msg_size &&
 	    efa_rdm_interop_rdma_read(efa_rdm_ep, txe->peer) &&

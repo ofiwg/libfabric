@@ -15,6 +15,7 @@
 #include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_proto_eager.h"
 #include "rdm/efa_rdm_proto_medium.h"
+#include "rdm/efa_rdm_proto_runtread.h"
 
 int efa_test_rtm_read_nack_missing_rxe(struct fid_ep *ep, fi_addr_t peer_addr,
 				       int tagged, ssize_t *ret)
@@ -367,6 +368,55 @@ static ssize_t efa_test_rtm_init_medium(struct efa_rdm_pke *pkt_entry,
 		segment_offset, data_size);
 }
 
+/*
+ * Build one segment of a runt read RTM message the way the runt read protocol
+ * does.
+ *
+ * Like eager and medium, the runt read protocol moved to the refactored code
+ * path (efa_rdm_proto_runtread_construct_tx_pkes), which allocates its own
+ * packet entries and so cannot stamp a caller-supplied one. This mirrors the
+ * header, read iov array and payload it writes for a single segment, so the
+ * assertions below still describe the runt read wire format.
+ */
+static ssize_t efa_test_rtm_init_runtread(struct efa_rdm_pke *pkt_entry,
+					  struct efa_rdm_ope *txe,
+					  enum efa_test_rtm_variant variant,
+					  size_t segment_offset, size_t data_size)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_runtread_rtm_base_hdr *rtm_hdr;
+	struct fi_rma_iov *read_iov;
+	size_t hdr_size;
+	ssize_t ret;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	rtm_hdr = efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry);
+	rtm_hdr->hdr.flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->hdr.msg_id = txe->msg_id;
+	rtm_hdr->msg_length = txe->total_len;
+	rtm_hdr->send_id = txe->tx_id;
+	rtm_hdr->seg_offset = segment_offset;
+	rtm_hdr->runt_length = txe->bytes_runt;
+	rtm_hdr->read_iov_count = txe->iov_count;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		rtm_hdr->hdr.flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
+	read_iov = (struct fi_rma_iov *) (pkt_entry->wiredata + hdr_size);
+	ret = efa_rdm_txe_prepare_to_be_read(txe, read_iov);
+	if (ret)
+		return ret;
+
+	return efa_rdm_pke_init_payload_from_ope(
+		pkt_entry, txe,
+		hdr_size + txe->iov_count * sizeof(struct fi_rma_iov),
+		segment_offset, data_size);
+}
+
 void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 			     enum efa_test_rtm_variant variant,
 			     struct efa_test_rtm_init_result *out)
@@ -441,13 +491,9 @@ void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 		out->ret = efa_rdm_pke_init_longread_tagrtm(pkt_entry, txe);
 		break;
 	case EFA_TEST_RTM_RUNTREAD_MSG:
-		out->ret = efa_rdm_pke_init_runtread_msgrtm(
-			pkt_entry, txe, EFA_TEST_RTM_RUNT_SEG,
-			EFA_TEST_RTM_RUNT_DATA);
-		break;
 	case EFA_TEST_RTM_RUNTREAD_TAG:
-		out->ret = efa_rdm_pke_init_runtread_tagrtm(
-			pkt_entry, txe, EFA_TEST_RTM_RUNT_SEG,
+		out->ret = efa_test_rtm_init_runtread(
+			pkt_entry, txe, variant, EFA_TEST_RTM_RUNT_SEG,
 			EFA_TEST_RTM_RUNT_DATA);
 		break;
 	}
@@ -541,7 +587,7 @@ static int efa_test_txe_on_ope_list(struct efa_rdm_ep *ep,
 void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 			     enum efa_test_rtm_variant variant,
 			     enum efa_test_rtm_sent_op op, size_t payload_size,
-			     size_t bytes_already, size_t seg_offset,
+			     size_t bytes_already,
 			     struct efa_test_rtm_sent_result *out)
 {
 	struct efa_rdm_ep *efa_rdm_ep =
@@ -581,15 +627,6 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	pkt_entry->peer = peer;
 	pkt_entry->payload_size = payload_size;
 
-	/* only the runtread send handler checks seg_offset */
-	if (family == EFA_TEST_RTM_FAM_RUNTREAD) {
-		struct efa_rdm_base_hdr *base_hdr =
-			(struct efa_rdm_base_hdr *) pkt_entry->wiredata;
-		base_hdr->type = efa_test_rtm_pkt_type(variant);
-		efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry)->seg_offset =
-			seg_offset;
-	}
-
 	if (op == EFA_TEST_RTM_OP_SENT) {
 		/* Report deltas: num_read_msg_in_flight is a domain counter that
 		 * the "sent" handler only bumps (drained elsewhere), so repeated
@@ -614,7 +651,15 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 			efa_rdm_pke_handle_longread_rtm_sent(pkt_entry);
 			break;
 		case EFA_TEST_RTM_FAM_RUNTREAD:
-			efa_rdm_pke_handle_runtread_rtm_sent(pkt_entry, peer);
+			/*
+			 * The refactored runt read protocol posts the whole runt
+			 * in one go, so its post-send hook accounts for
+			 * bytes_runt rather than for one packet, and it bumps the
+			 * read count once per message instead of on the first
+			 * segment.
+			 */
+			efa_rdm_proto_runtread_handle_tx_pkes_posted(efa_rdm_ep,
+								    txe);
 			break;
 		case EFA_TEST_RTM_FAM_EAGER:
 			break;
@@ -664,7 +709,11 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_RUNTREAD:
-		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
+		/* Also refactored; see the eager case above. */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_runtread_handle_rtm_send_completion;
+		callback_released_pkt_entry = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_LONGREAD:
 		/* no dedicated completion handler */
