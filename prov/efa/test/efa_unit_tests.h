@@ -893,4 +893,9 @@ void test_proto_eager_send_completion_releases_txe(void **state);
 void test_proto_eager_assigns_msg_id(void **state);
 void test_proto_eager_queued_before_handshake_survives_mr_gen_check(void **state);
 void test_proto_eager_construct_pkes_failure_rolls_back_msg_id(void **state);
+void test_proto_select_runtread_for_large_msg(void **state);
+void test_proto_select_declines_runtread_for_delivery_complete(void **state);
+void test_proto_runtread_construct_pkes_carries_read_iov(void **state);
+void test_proto_runtread_construct_pkes_is_idempotent(void **state);
+
 #endif

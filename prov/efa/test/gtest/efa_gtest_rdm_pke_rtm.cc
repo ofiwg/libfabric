@@ -217,7 +217,7 @@ TEST_F(EfaRtmTxSentTest, medium_sent_and_completion_boundary)
 	efa_test_rtm_sent_build(resource.ep, resource.av,
 				EFA_TEST_RTM_MEDIUM_MSG, EFA_TEST_RTM_OP_SENT,
 				/*payload_size=*/EFA_TEST_RTM_LONG_LEN,
-				/*bytes_already=*/0, 0, &res);
+				/*bytes_already=*/0, &res);
 	EXPECT_EQ(res.bytes_sent, EFA_TEST_RTM_LONG_LEN);
 
 	/* request completion mid-transfer: bytes_acked advances but no
@@ -225,7 +225,7 @@ TEST_F(EfaRtmTxSentTest, medium_sent_and_completion_boundary)
 	efa_test_rtm_sent_build(
 		resource.ep, resource.av, EFA_TEST_RTM_MEDIUM_MSG,
 		EFA_TEST_RTM_OP_COMPLETION, /*payload_size=*/kChunk,
-		/*bytes_already=*/0, 0, &res);
+		/*bytes_already=*/0, &res);
 	EXPECT_EQ(res.bytes_acked, kChunk);
 	EXPECT_FALSE(res.send_completed);
 	EXPECT_TRUE(res.txe_on_ope_list);
@@ -237,7 +237,7 @@ TEST_F(EfaRtmTxSentTest, medium_sent_and_completion_boundary)
 				EFA_TEST_RTM_MEDIUM_MSG,
 				EFA_TEST_RTM_OP_COMPLETION,
 				/*payload_size=*/EFA_TEST_RTM_LONG_LEN,
-				/*bytes_already=*/0, 0, &res);
+				/*bytes_already=*/0, &res);
 	EXPECT_TRUE(res.send_completed);
 	EXPECT_FALSE(res.txe_on_ope_list);
 	EXPECT_TRUE(res.cq_has_completion);
@@ -251,7 +251,7 @@ TEST_F(EfaRtmTxSentTest, eager_completion_single_shot)
 	efa_test_rtm_sent_build(resource.ep, resource.av, EFA_TEST_RTM_EAGER_MSG,
 				EFA_TEST_RTM_OP_COMPLETION,
 				/*payload_size=*/EFA_TEST_RTM_LONG_LEN,
-				/*bytes_already=*/0, 0, &res);
+				/*bytes_already=*/0, &res);
 	EXPECT_TRUE(res.send_completed);
 	EXPECT_FALSE(res.txe_on_ope_list);
 	EXPECT_TRUE(res.cq_has_completion);
@@ -264,14 +264,14 @@ TEST_F(EfaRtmTxSentTest, longcts_sent_and_completion_boundary)
 	efa_test_rtm_sent_build(resource.ep, resource.av,
 				EFA_TEST_RTM_LONGCTS_MSG, EFA_TEST_RTM_OP_SENT,
 				/*payload_size=*/kChunk,
-				/*bytes_already=*/kChunk, 0, &res);
+				/*bytes_already=*/kChunk, &res);
 	EXPECT_EQ(res.bytes_sent, 2 * kChunk);
 
 	efa_test_rtm_sent_build(resource.ep, resource.av,
 				EFA_TEST_RTM_LONGCTS_MSG,
 				EFA_TEST_RTM_OP_COMPLETION,
 				/*payload_size=*/EFA_TEST_RTM_LONG_LEN,
-				/*bytes_already=*/0, 0, &res);
+				/*bytes_already=*/0, &res);
 	EXPECT_TRUE(res.send_completed);
 	EXPECT_TRUE(res.cq_has_completion);
 }
@@ -285,32 +285,29 @@ TEST_F(EfaRtmTxSentTest, longread_sent_bumps_in_flight_read)
 
 	efa_test_rtm_sent_build(resource.ep, resource.av,
 				EFA_TEST_RTM_LONGREAD_MSG, EFA_TEST_RTM_OP_SENT,
-				/*payload_size=*/0, /*bytes_already=*/0, 0,
-				&res);
+				/*payload_size=*/0, /*bytes_already=*/0, &res);
 	EXPECT_EQ(res.num_read_msg_in_flight, 1u);
 }
 
 /**
- * @brief runtread sent accrues bytes_sent and the peer's runt-in-flight
- * bytes, and bumps the in-flight read count only for the first segment
+ * @brief runtread "sent" publishes the whole runt and takes a read slot
+ *
+ * The refactored runt read protocol posts every packet of the runt in one go,
+ * so its post-send hook accounts for bytes_runt rather than for one packet, and
+ * it takes the domain's read slot once per message (the runt here is only the
+ * head of the message, so the receiver still has to read the tail).
  */
-TEST_F(EfaRtmTxSentTest, runtread_sent_first_segment)
+TEST_F(EfaRtmTxSentTest, runtread_sent_publishes_whole_runt)
 {
 	struct efa_test_rtm_sent_result res;
 
 	efa_test_rtm_sent_build(resource.ep, resource.av,
 				EFA_TEST_RTM_RUNTREAD_MSG, EFA_TEST_RTM_OP_SENT,
 				/*payload_size=*/kChunk, /*bytes_already=*/0,
-				/*seg_offset=*/0, &res);
-	EXPECT_EQ(res.bytes_sent, kChunk);
-	EXPECT_EQ(res.num_runt_bytes_in_flight, (int64_t) kChunk);
+				&res);
+	EXPECT_EQ(res.bytes_sent, EFA_TEST_RTM_RUNT_LEN);
+	EXPECT_EQ(res.num_runt_bytes_in_flight, (int64_t) EFA_TEST_RTM_RUNT_LEN);
 	EXPECT_EQ(res.num_read_msg_in_flight, 1u);
-
-	efa_test_rtm_sent_build(resource.ep, resource.av,
-				EFA_TEST_RTM_RUNTREAD_MSG, EFA_TEST_RTM_OP_SENT,
-				/*payload_size=*/kChunk, /*bytes_already=*/0,
-				/*seg_offset=*/kChunk, &res);
-	EXPECT_EQ(res.num_read_msg_in_flight, 0u);
 }
 
 TEST_F(EfaRtmTxSentTest, runtread_completion_boundary)
@@ -323,7 +320,7 @@ TEST_F(EfaRtmTxSentTest, runtread_completion_boundary)
 				EFA_TEST_RTM_RUNTREAD_MSG,
 				EFA_TEST_RTM_OP_COMPLETION,
 				/*payload_size=*/EFA_TEST_RTM_LONG_LEN,
-				/*bytes_already=*/0, 0, &res);
+				/*bytes_already=*/0, &res);
 	EXPECT_TRUE(res.send_completed);
 	EXPECT_EQ(res.num_runt_bytes_in_flight, 0);
 	EXPECT_TRUE(res.cq_has_completion);

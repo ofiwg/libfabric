@@ -776,6 +776,16 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_pke_release_rx(pkt_entry);
 	txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 
+	/*
+	 * The operation is changing protocol, so it can no longer be posted by
+	 * the read protocol that selection chose: its construct_tx_pkes() only
+	 * knows how to write its own REQ type. Drop the protocol so
+	 * efa_rdm_ope_post_ctrl() builds the long CTS continuation on the legacy
+	 * path, which is still where the long CTS arms of efa_rdm_pke_fill_data()
+	 * handle a read NACK.
+	 */
+	txe->proto = NULL;
+
 	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
 
 	if (txe->op == ofi_op_write) {
