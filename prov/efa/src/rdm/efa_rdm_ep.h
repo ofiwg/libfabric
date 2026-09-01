@@ -8,7 +8,7 @@
 #include "efa.h"
 #include "efa_tp.h"
 #include "efa_rdm_peer.h"
-#include "efa_conn.h"
+#include "efa_rdm_av.h"
 #include "efa_base_ep.h"
 #include "efa_rdm_rxe_map.h"
 #include "efa_rdm_mr.h"
