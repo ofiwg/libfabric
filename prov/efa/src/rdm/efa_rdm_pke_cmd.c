@@ -91,12 +91,9 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		abort();
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
-		break;
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
+		assert(0 && "Medium protocol moved to refactored code path");
+		abort();
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 		/* The data_offset will be non-zero when the long CTS RTM packet
@@ -170,12 +167,9 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		abort();
 		break;
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_dc_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
-		break;
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_dc_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
+		assert(0 && "Medium protocol moved to refactored code path");
+		abort();
 		break;
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 		/* The data_offset will be non-zero when the DC long CTS RTM packet
@@ -266,7 +260,8 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		efa_rdm_pke_handle_medium_rtm_sent(pkt_entry);
+		assert(0 && "Medium protocol moved to refactored code path");
+		abort();
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
@@ -651,7 +646,10 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
-		efa_rdm_pke_handle_medium_rtm_send_completion(pkt_entry);
+	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
+	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
+		assert(0 && "Medium protocol moved to refactored code path");
+		abort();
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
@@ -719,8 +717,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
-	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
-	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_DC_EAGER_RTW_PKT:
 	case EFA_RDM_DC_WRITE_RTA_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
@@ -734,11 +730,11 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 */
 		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		/*
-		 * A DC medium transfer aborting on source-MR cancel never
-		 * receives its RECEIPT, so the ready-for-release check stays
-		 * false. Take the deferred PEER_ERROR_PKT decision instead.
-		 * Guarded by PENDING (only ever set on medium txes), so
-		 * non-medium DC ops are untouched.
+		 * A DC transfer aborting on source-MR cancel never receives its
+		 * RECEIPT, so the ready-for-release check stays false. Take the
+		 * deferred PEER_ERROR_PKT decision instead. Guarded by PENDING,
+		 * which is only ever set on a peer-aborting txe, so healthy DC
+		 * ops are untouched.
 		 */
 		if (pkt_entry->ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
 			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);

@@ -125,6 +125,51 @@ efa_rdm_proto_handle_tx_pkes_posted_no_op(struct efa_rdm_ep *ep,
 };
 
 /**
+ * @brief The option headers a REQ packet for this operation will carry.
+ *
+ * Must agree with efa_rdm_pke_init_req_hdr_common(), which is what actually
+ * writes them: a REQ carries the raw address header on the first message to a
+ * peer, or the connid header once a handshake has said the peer wants one -
+ * never both - plus the CQ data header when the operation carries remote CQ
+ * data.
+ *
+ * @param[in] peer	peer the REQ is addressed to
+ * @param[in] flags	effective operation flags, i.e. what txe->fi_flags holds
+ */
+static inline uint16_t
+efa_rdm_proto_req_header_flags(struct efa_rdm_peer *peer, uint64_t flags)
+{
+	uint16_t header_flags = 0;
+
+	if (efa_rdm_peer_need_raw_addr_hdr(peer))
+		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
+	else if (efa_rdm_peer_need_connid(peer))
+		header_flags |= EFA_RDM_PKT_CONNID_HDR;
+
+	if (flags & FI_REMOTE_CQ_DATA)
+		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
+
+	return header_flags;
+}
+
+/**
+ * @brief How much application data one REQ packet of this type can carry.
+ *
+ * @param[in] ep		endpoint, for the MTU
+ * @param[in] req_pkt_type	REQ packet type that will be written
+ * @param[in] header_flags	as returned by efa_rdm_proto_req_header_flags()
+ */
+static inline size_t
+efa_rdm_proto_max_req_data_capacity(struct efa_rdm_ep *ep, int req_pkt_type,
+				    uint16_t header_flags)
+{
+	/* A two-sided send carries no RMA iov in its header. */
+	return ep->mtu_size - efa_rdm_pkt_type_get_req_hdr_size(
+				      req_pkt_type, header_flags,
+				      0 /* rma_iov_count */);
+}
+
+/**
  * @brief Pick the REQ packet type a protocol uses for an operation.
  *
  * The tagged and delivery-complete variants of a REQ packet type are laid out
