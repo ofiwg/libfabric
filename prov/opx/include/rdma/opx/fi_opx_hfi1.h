@@ -227,7 +227,9 @@ static_assert(OPX_HFI1_SDMA_DEFAULT_PKTS_TID <= OPX_HFI1_SDMA_MAX_PKTS_TID,
 #define OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT (4096)
 #elif OPX_HMEM_BACKEND_ROCR
 #define OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_DEFAULT	  (8192)
-#define OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_DEFAULT	  (512)
+/* One past the device-registered send threshold, which is compared with <=,
+ * so the lengths that threshold covers reach the copy and not eager SDMA. */
+#define OPX_HMEM_SDMA_MIN_PAYLOAD_BYTES_DEFAULT	  (OPX_HMEM_DEV_REG_SEND_THRESHOLD_DEFAULT + 1)
 #define OPX_HMEM_HFISVC_MIN_PAYLOAD_BYTES_DEFAULT (16384)
 #endif
 

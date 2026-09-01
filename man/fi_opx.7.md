@@ -244,7 +244,9 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   SDMA is used. This covers eager SDMA (see FI_OPX_EAGER_SDMA) and the rendezvous data
   phase. Below this threshold an eligible eager send uses PIO.
   This only has an effect with HMEM enabled builds of OPX.
-  Value must be between 64 and 2147483646. Defaults to 4096 for CUDA builds, 512 for ROCr builds.
+  Value must be between 64 and 2147483646. Defaults to 4096 for CUDA builds, and one past
+  FI_OPX_DEV_REG_SEND_THRESHOLD for ROCr builds so that the device-registered copy covers
+  the lengths below it.
 
 *FI_OPX_SDMA_MAX_WRITEVS_PER_CYCLE*
 : Integer. The maximum number of times writev will be called during a single poll cycle.
@@ -350,7 +352,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 *FI_OPX_DEV_REG_SEND_THRESHOLD*
 : Integer. The individual packet threshold where lengths above do not use a device
   registered copy when sending data from GPU.
-  The default threshold is 512 for CUDA and ROCr builds, 4096 otherwise.
+  The default threshold is 512 for CUDA builds, 2048 for ROCr builds, and 4096 otherwise.
   This has no meaning if Libfabric was not configured with GDRCopy or ROCR support.
 
 *FI_OPX_DEV_REG_RECV_THRESHOLD*
