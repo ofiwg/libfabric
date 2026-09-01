@@ -911,4 +911,8 @@ void test_proto_atomic_compare_responder_iov(void **state);
 void test_proto_atomic_fetch_compare_responder_rejects_invalid_op_datatype(
 	void **state);
 void test_proto_atomic_read_responder_accepts_read_only_mr(void **state);
+void test_proto_select_runtread_for_large_msg(void **state);
+void test_proto_select_declines_runtread_for_delivery_complete(void **state);
+void test_proto_runtread_construct_pkes_carries_read_iov(void **state);
+void test_proto_runtread_construct_pkes_is_idempotent(void **state);
 #endif
