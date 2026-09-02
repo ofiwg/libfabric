@@ -88,3 +88,27 @@ void efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	*proto = NULL;
 	txe->proto = NULL;
 }
+
+/* Utility funcions */
+
+void efa_rdm_proto_txe_fill(struct efa_rdm_ope *txe, struct efa_rdm_ep *ep,
+			    struct efa_rdm_peer *peer, const struct fi_msg *msg,
+			    uint32_t op, uint64_t tag, uint64_t flags,
+			    uint32_t internal_flags, struct efa_rdm_proto *proto)
+{
+	/*
+	 * txe->mr, txe->desc and the MR generation snapshot were already
+	 * populated by efa_rdm_proto_select_send_protocol(), which needs them
+	 * to decide whether a protocol can be used, so use the construct
+	 * helper that leaves them alone.
+	 */
+	efa_rdm_txe_construct_common(txe, ep, peer, msg, op, flags,
+				     internal_flags);
+
+	txe->proto = proto;
+
+	if (op == ofi_op_tagged) {
+		txe->cq_entry.tag = tag;
+		txe->tag = tag;
+	}
+}
