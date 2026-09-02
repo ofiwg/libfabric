@@ -33,7 +33,7 @@
 #define _FI_PROV_OPX_HFISVC_RMA_H_
 
 #include "rdma/opx/opx_hfisvc.h"
-#include "rdma/opx/fi_opx_rma.h"
+#include "rdma/opx/opx_rma_types.h"
 #include "rdma/opx/fi_opx_hfi1_transport.h"
 
 #ifdef __cplusplus
@@ -60,13 +60,16 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work);
 /* bounded-retry cap: past this a stuck iov is dropped-and-drained */
 #define OPX_HFISVC_RMA_MAX_EAGAIN_ATTEMPTS (16384ul)
 
+/* Caller supplies the deferred-work buffer so this call cannot fail on allocation. */
 __OPX_FORCE_INLINE__
-void opx_hfisvc_rma_invoke_send_rts(struct fi_opx_ep *opx_ep, const struct opx_rma_op_iov *iov, const size_t niov,
+void opx_hfisvc_rma_invoke_send_rts(struct fi_opx_ep *opx_ep, union fi_opx_hfi1_deferred_work *work,
+				    const struct opx_rma_op_iov *iov, const size_t niov,
 				    const struct fi_opx_addr opx_target_addr, const uint64_t ofi_data,
 				    struct fi_opx_completion_counter *cc, const uint64_t dput_opcode,
 				    const enum fi_datatype dt, const enum fi_op op, const int lock_required,
 				    const enum ofi_reliability_kind reliability, const enum opx_hfi1_type hfi1_type)
 {
+	assert(work != NULL);
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "HFISVC_RMA_INVOKE_SND_RTS");
 	OPX_HFISVC_DEBUG_LOG("HFISVC invoke send RTS with %lu IOVs, dput_opcode=%s\n", niov,
 			     opx_hfi1_dput_opcode_to_string((uint8_t) dput_opcode));
@@ -96,9 +99,6 @@ void opx_hfisvc_rma_invoke_send_rts(struct fi_opx_ep *opx_ep, const struct opx_r
 	}
 	uint64_t pbc_dlid = OPX_PBC_DLID(opx_target_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 
-	union fi_opx_hfi1_deferred_work *work =
-		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
-	assert(work != NULL);
 	struct opx_hfisvc_rma_rts_params *params = &work->hfisvc_rma_rts;
 	params->work_elem.slist_entry.next	 = NULL;
 	params->work_elem.completion_action	 = NULL;
@@ -117,8 +117,8 @@ void opx_hfisvc_rma_invoke_send_rts(struct fi_opx_ep *opx_ep, const struct opx_r
 	params->niov		     = niov;
 	params->data		     = ofi_data;
 	params->dput_opcode	     = dput_opcode;
-	params->fi_datatype_dt	     = dt;
-	params->fi_op_opcode	     = op;
+	params->fi_datatype_dt	     = (dt == FI_VOID) ? (FI_VOID - 1) : dt;
+	params->fi_op_opcode	     = (op == FI_NOOP) ? (FI_NOOP - 1) : op;
 	params->client_key	     = (uint64_t) opx_ep->domain->hfisvc.ctxs[plane_idx].client_key;
 	params->cur_iov		     = 0;
 	params->iovs_with_keys	     = 0;
