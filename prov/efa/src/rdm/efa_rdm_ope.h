@@ -317,6 +317,20 @@ static inline uint32_t efa_rdm_ope_get_ope_id(struct efa_rdm_ope *ope)
 	       ((uint32_t) ope->gen << EFA_RDM_TXE_ID_GEN_SHIFT) |
 	       (uint32_t) index;
 }
+/**
+ * @brief Initialize the txe fields that every TX path needs.
+ *
+ * Does not touch txe->mr, txe->desc or the MR generation snapshot: the
+ * refactored protocol path populates those before the txe is filled, so that
+ * protocol selection can attempt memory registration. Callers that have not
+ * already populated them must use efa_rdm_txe_construct() instead.
+ */
+void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
+				  struct efa_rdm_ep *ep,
+				  struct efa_rdm_peer *peer,
+				  const struct fi_msg *msg,
+				  uint32_t op, uint64_t fi_flags,
+				  uint32_t internal_flags);
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   struct efa_rdm_ep *ep,
