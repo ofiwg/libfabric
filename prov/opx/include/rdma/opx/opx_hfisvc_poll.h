@@ -111,6 +111,30 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 					hfisvc_out[i].status, hfisvc_out[i].type, hfisvc_out[i].app_context,
 					(void *) err_mr);
 				opx_hfisvc_mr_report_completion_error(err_mr);
+				/* An MR-type error completion is terminal: no retry will succeed. Drive the MR
+				 * to a terminal state so it stops blocking domain teardown. The reachable states
+				 * for a TYPE_MR error are the open- and close-request phases:
+				 *   PENDING_OPEN       : open failed and the app still owns the fid_mr. There is no
+				 *                        MR handle to close, so neutralize the orphaned deferred-open
+				 *                        work item and move to OPEN_FAILED; fi_close() later frees it.
+				 *   PENDING_OPEN_CLOSE : open failed after close was requested; the deferred-close
+				 *   PENDING_CLOSE      : close failed. Either way the deferred-close worker reclaims
+				 *                        the MR once it observes CLOSED. */
+				if (err_mr != NULL && hfisvc_out[i].type == HFI1_HFISVC_CQ_ENTRY_TYPE_MR) {
+					if (err_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_OPEN) {
+						OPX_HFISVC_DEBUG_LOG(
+							"Terminal MR open error advanced opx_mr=%p state=PENDING_OPEN -> OPEN_FAILED\n",
+							err_mr);
+						opx_domain_deferred_work_neutralize_mr(opx_domain, err_mr);
+						err_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPEN_FAILED;
+					} else if (err_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_OPEN_CLOSE ||
+						   err_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_CLOSE) {
+						OPX_HFISVC_DEBUG_LOG(
+							"Terminal MR error advanced opx_mr=%p state=0x%x -> CLOSED\n",
+							err_mr, err_mr->hfisvc.state);
+						err_mr->hfisvc.state = OPX_MR_HFISVC_STATE_CLOSED;
+					}
+				}
 				continue;
 			}
 			struct fi_opx_mr *opx_mr = (struct fi_opx_mr *) hfisvc_out[i].app_context;

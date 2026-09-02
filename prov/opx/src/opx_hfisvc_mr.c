@@ -225,6 +225,12 @@ int opx_hfisvc_mr_deferred_open(struct opx_domain_deferred_work *work)
 #if HAVE_HFISVC
 	struct fi_opx_mr *opx_mr = work->opx_mr;
 
+	/* Neutralized by a terminal MR-open error (see opx_domain_hfisvc_poll); the MR may already be
+	 * freed, so retire this work item without dereferencing it. */
+	if (opx_mr == NULL) {
+		return FI_SUCCESS;
+	}
+
 	if (opx_mr->hfisvc.state >= OPX_MR_HFISVC_STATE_OPENED) {
 		work->opx_mr = NULL;
 		return FI_SUCCESS;

@@ -271,6 +271,12 @@ struct fi_opx_av {
  * PENDING_CLOSE       : A request to deregister this MR with HFI service has been submitted, and we're waiting
  *                       for a completion from HFI service to let us know it's done.
  * CLOSED              : The MR has been fully deregisterd with HFI service, and may be closed/freed.
+ * OPEN_FAILED         : The HFI service MR-open completed with an error, so no MR handle or access_key was
+ *                       ever assigned and no MR-close is owed to HFI service. The application still owns the
+ *                       fid_mr, so the MR is left allocated (holding only its dma-buf fd) until the
+ *                       application calls fi_close(), which releases the fd and frees it exactly once.
+ *                       This is a terminal state (numerically > OPENED) so opx_mr_hfisvc_check_state()
+ *                       rejects further use with -FI_EFAULT instead of spinning -FI_EAGAIN.
  */
 enum opx_mr_hfisvc_state {
 	OPX_MR_HFISVC_STATE_NOT_REGISTERED	     = 0,
@@ -285,7 +291,8 @@ enum opx_mr_hfisvc_state {
 	OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE	     = (1 << 8),
 	OPX_MR_HFISVC_STATE_PENDING_DEREGISTER	     = (1 << 9),
 	OPX_MR_HFISVC_STATE_PENDING_CLOSE	     = (1 << 10),
-	OPX_MR_HFISVC_STATE_CLOSED		     = (1 << 11)
+	OPX_MR_HFISVC_STATE_CLOSED		     = (1 << 11),
+	OPX_MR_HFISVC_STATE_OPEN_FAILED		     = (1 << 12)
 };
 /*
  * Who owns opx_mr->dmabuf.fd, and therefore how it must be released.
@@ -526,6 +533,25 @@ void opx_domain_deferred_work_do(struct fi_opx_domain *opx_domain)
 			prev_item = work_item;
 			work_item = work_item->next;
 		}
+	}
+}
+
+/* Detach opx_mr from any deferred work items still queued for it without freeing or dequeuing them.
+ * A terminally failed MR-open leaves an orphaned deferred-open work item pointing at opx_mr; nulling
+ * its back-reference lets that work item self-retire (see opx_hfisvc_mr_deferred_open) so it can never
+ * dereference opx_mr after fi_close() frees it. Runs on the single-threaded per-domain poll path, so
+ * it is ordered against enqueue/drain of the same queue. */
+__OPX_FORCE_INLINE__
+void opx_domain_deferred_work_neutralize_mr(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_mr)
+{
+	struct opx_domain_deferred_work *work_item =
+		(struct opx_domain_deferred_work *) opx_domain->deferred_work_queue.head;
+
+	while (work_item) {
+		if (work_item->opx_mr == opx_mr) {
+			work_item->opx_mr = NULL;
+		}
+		work_item = work_item->next;
 	}
 }
 
