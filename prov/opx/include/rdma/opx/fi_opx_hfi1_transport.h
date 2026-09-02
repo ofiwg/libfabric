@@ -1785,7 +1785,7 @@ ssize_t opx_hfi1_tx_send_egr_shm(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 #ifdef OPX_HMEM
-	if (iface != FI_HMEM_SYSTEM) {
+	if (len && iface != FI_HMEM_SYSTEM) {
 		opx_copy_from_hmem(iface, hmem_device, hmem_handle, opx_ep->hmem_copy_buf, buf, len,
 				   OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 		buf = opx_ep->hmem_copy_buf;
@@ -1880,7 +1880,7 @@ ssize_t opx_hfi1_tx_send_egr_shm_16B(struct fid_ep *ep, const void *buf, size_t 
 	}
 
 #ifdef OPX_HMEM
-	if (iface != FI_HMEM_SYSTEM) {
+	if (len && iface != FI_HMEM_SYSTEM) {
 		opx_copy_from_hmem(iface, hmem_device, hmem_handle, opx_ep->hmem_copy_buf, buf, len,
 				   OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 		buf = opx_ep->hmem_copy_buf;
@@ -2247,7 +2247,7 @@ ssize_t opx_hfi1_tx_send_egr(struct fid_ep *ep, const void *buf, size_t len, str
 	replay->tx_index = dest_addr.tx_index;
 
 #ifdef OPX_HMEM
-	if (iface != FI_HMEM_SYSTEM) {
+	if (len && iface != FI_HMEM_SYSTEM) {
 		opx_copy_from_hmem(iface, hmem_device, hmem_handle, opx_ep->hmem_copy_buf, buf, len,
 				   OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 		buf = opx_ep->hmem_copy_buf;
@@ -2415,7 +2415,7 @@ ssize_t opx_hfi1_tx_send_egr_16B(struct fid_ep *ep, const void *buf, size_t len,
 	replay->tx_index = dest_addr.tx_index;
 
 #ifdef OPX_HMEM
-	if (iface != FI_HMEM_SYSTEM) {
+	if (len && iface != FI_HMEM_SYSTEM) {
 		opx_copy_from_hmem(iface, hmem_device, hmem_handle, opx_ep->hmem_copy_buf, buf, len,
 				   OPX_HMEM_DEV_REG_SEND_THRESHOLD);
 		buf = opx_ep->hmem_copy_buf;
