@@ -524,7 +524,7 @@ void test_efa_mr_ofi_to_ibv_access_no_access(void **state)
 {
 	int ibv_access;
 
-	ibv_access = efa_mr_ofi_to_ibv_access(0, true, true);
+	ibv_access = efa_mr_ofi_to_ibv_access(0, true, true, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ);
 }
 
@@ -536,22 +536,22 @@ void test_efa_mr_ofi_to_ibv_access_one_flag(void **state)
 {
 	int ibv_access;
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_SEND, true, true);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_SEND, true, true, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_REMOTE_READ);
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_RECV, true, true);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_RECV, true, true, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE);
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_READ, true, true);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_READ, true, true, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE);
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_WRITE, true, true);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_WRITE, true, true, 0);
 	assert_int_equal(ibv_access, 0);
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_READ, true, true);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_READ, true, true, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_REMOTE_READ);
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_WRITE, true, true);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_WRITE, true, true, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
 }
 
@@ -562,10 +562,10 @@ void test_efa_mr_ofi_to_ibv_access_read_not_supported(void **state)
 {
 	int ibv_access;
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_READ, false, false);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_READ, false, false, 0);
 	assert_int_equal(ibv_access, 0);
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_READ, false, false);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_READ, false, false, 0);
 	assert_int_equal(ibv_access, 0);
 }
 
@@ -578,10 +578,10 @@ void test_efa_mr_ofi_to_ibv_access_write_not_supported(void **state)
 {
 	int ibv_access;
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_WRITE, true, false);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_WRITE, true, false, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_REMOTE_READ);
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_WRITE, true, false);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_WRITE, true, false, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE);
 }
 
@@ -596,7 +596,7 @@ void test_efa_mr_ofi_to_ibv_access_remote_read_write_read_only_supported(void **
 {
 	int ibv_access;
 
-	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_READ | FI_REMOTE_WRITE, true, false);
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_REMOTE_READ | FI_REMOTE_WRITE, true, false, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_REMOTE_READ | IBV_ACCESS_LOCAL_WRITE);
 }
 
@@ -610,7 +610,7 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_supported(void **state)
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
 
-	ibv_access = efa_mr_ofi_to_ibv_access(all_flags, true, true);
+	ibv_access = efa_mr_ofi_to_ibv_access(all_flags, true, true, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE);
 }
 
@@ -622,7 +622,7 @@ void test_efa_mr_ofi_to_ibv_access_all_flags_not_supported(void **state)
 	int ibv_access;
 	uint64_t all_flags = FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE;
 
-	ibv_access = efa_mr_ofi_to_ibv_access(all_flags, false, false);
+	ibv_access = efa_mr_ofi_to_ibv_access(all_flags, false, false, 0);
 	assert_int_equal(ibv_access, IBV_ACCESS_LOCAL_WRITE);
 }
 
@@ -2184,4 +2184,59 @@ void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
 	assert_int_equal(cq_err_entry.err, FI_ECANCELED);
 
 	free(buf);
+}
+
+/**
+ * @brief Test efa_mr_ofi_to_ibv_access sets IBV_ACCESS_RELAXED_ORDERING only
+ * when FI_EFA_MR_RELAXED_ORDERING is passed in flags.
+ */
+void test_efa_mr_ofi_to_ibv_access_relaxed_ordering(void **state)
+{
+	int ibv_access;
+
+	/* Without the flag, relaxed ordering is not set. */
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_SEND | FI_RECV, true, true, 0);
+	assert_false(ibv_access & IBV_ACCESS_RELAXED_ORDERING);
+
+	/* With the flag, relaxed ordering is added on top of the access bits
+	 * the ofi access would otherwise produce. */
+	ibv_access = efa_mr_ofi_to_ibv_access(FI_SEND | FI_RECV, true, true,
+					      FI_EFA_MR_RELAXED_ORDERING);
+	assert_true(ibv_access & IBV_ACCESS_RELAXED_ORDERING);
+	assert_int_equal(ibv_access & ~IBV_ACCESS_RELAXED_ORDERING,
+			 IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ);
+}
+
+/**
+ * @brief FI_EFA_MR_RELAXED_ORDERING is accepted by efa_mr_regattr_validate on
+ * both the efa-direct and efa (RDM) fabrics.
+ */
+static void test_efa_mr_relaxed_ordering_validate_impl(struct efa_resource *resource,
+						       char *fabric_name,
+						       int expected_ret)
+{
+	char buf[64];
+	struct iovec iov = { .iov_base = buf, .iov_len = sizeof buf };
+	struct fi_mr_attr attr = {0};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, fabric_name);
+
+	attr.mr_iov = &iov;
+	attr.iov_count = 1;
+	attr.access = FI_SEND | FI_RECV;
+	attr.iface = FI_HMEM_SYSTEM;
+
+	assert_int_equal(efa_mr_regattr_validate(&resource->domain->fid, &attr,
+						 FI_EFA_MR_RELAXED_ORDERING),
+			 expected_ret);
+}
+
+void test_efa_mr_relaxed_ordering_validate_direct(void **state)
+{
+	test_efa_mr_relaxed_ordering_validate_impl(*state, EFA_DIRECT_FABRIC_NAME, 0);
+}
+
+void test_efa_mr_relaxed_ordering_validate_rdm(void **state)
+{
+	test_efa_mr_relaxed_ordering_validate_impl(*state, EFA_FABRIC_NAME, 0);
 }
