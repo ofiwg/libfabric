@@ -123,6 +123,12 @@ int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
 		       ep->efa_rnr_queued_pkt_cnt >
 	       0);
 
+	/*
+	 * A peer that only accepts headerless packets uses the zero-copy
+	 * protocol; this protocol always writes a REQ header.
+	 */
+	assert(!efa_rdm_peer_expects_zero_hdr_data_transfer(peer));
+
 	tagged = (op == ofi_op_tagged);
 
 	req_pkt_type = efa_rdm_proto_req_pkt_type(&efa_rdm_proto_eager, op,

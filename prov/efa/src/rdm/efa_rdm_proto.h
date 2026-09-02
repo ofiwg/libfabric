@@ -133,12 +133,10 @@ static inline int efa_rdm_proto_req_pkt_type(struct efa_rdm_proto *proto,
 	bool delivery_complete_requested;
 
 	/*
-	 * An injected send completes as soon as the buffer is reusable, and a
-	 * headerless send has nowhere to put the DC send_id, so neither can use
-	 * the delivery complete variant.
+	 * An injected send completes as soon as the buffer is reusable, so it
+	 * cannot use the delivery complete variant.
 	 */
-	if (flags & FI_INJECT ||
-	    efa_rdm_peer_expects_zero_hdr_data_transfer(peer))
+	if (flags & FI_INJECT)
 		delivery_complete_requested = false;
 	else
 		delivery_complete_requested = flags & FI_DELIVERY_COMPLETE;

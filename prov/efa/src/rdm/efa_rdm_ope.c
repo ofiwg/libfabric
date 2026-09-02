@@ -14,6 +14,7 @@
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_mr.h"
 #include "efa_rdm_cq.h"
+#include "efa_rdm_proto_zero_copy.h"
 
 void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 				  struct efa_rdm_ep *ep,
@@ -2411,6 +2412,12 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	switch (ope->op) {
 	case ofi_op_msg: /* fall through */
 	case ofi_op_tagged:
+		if (ope->proto) {
+			efa_rdm_proto_zero_copy_reselect_queued_before_handshake(
+				ope);
+			return efa_rdm_msg_post_rtm_proto(ope->ep, ope,
+							  ope->proto);
+		}
 		return efa_rdm_msg_post_rtm(ope->ep, ope);
 	case ofi_op_write:
 		return efa_rdm_rma_post_write(ope->ep, ope);

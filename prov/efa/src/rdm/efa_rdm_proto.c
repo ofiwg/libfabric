@@ -4,6 +4,7 @@
 #include "efa_rdm_proto.h"
 #include "efa.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_msg.h"
 
 /* List of supported protocols.
  * The protocols listed here will be tried in the order they're listed.
@@ -45,6 +46,21 @@ void efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	struct efa_rdm_proto *selected_proto;
 	int req_pkt_type, iface;
 	uint16_t header_flags = 0;
+	uint64_t effective_flags;
+
+	/*
+	 * efa_rdm_msg_generic_send() sends a peer that only accepts headerless
+	 * packets straight to the zero-copy protocol, so every protocol
+	 * considered here writes a REQ header.
+	 */
+	assert(!efa_rdm_peer_expects_zero_hdr_data_transfer(peer));
+
+	/*
+	 * Resolve the endpoint's tx_op_flags now: an endpoint-level
+	 * FI_DELIVERY_COMPLETE must steer protocol selection just as a
+	 * per-operation flag does.
+	 */
+	effective_flags = efa_rdm_msg_get_tx_flags(ep, flags);
 
 	efa_rdm_proto_txe_init_buffers(ep, msg, txe);
 
@@ -64,8 +80,8 @@ void efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
 		selected_proto = efa_rdm_protocols[i];
 
-		req_pkt_type = efa_rdm_proto_req_pkt_type(selected_proto, op,
-							  flags, peer);
+		req_pkt_type = efa_rdm_proto_req_pkt_type(
+			selected_proto, op, effective_flags, peer);
 
 		/* All protocols other than the eager protocol can benefit from
 		 * registering the application buffers.
@@ -81,9 +97,7 @@ void efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 
 	/*
 	 * No protocol matched, so the message is larger than a single eager
-	 * packet and the caller falls back to the old code path. A zero-copy
-	 * (headerless) peer reaches here for any message too large for eager,
-	 * which is a legal application call.
+	 * packet and the caller falls back to the old code path.
 	 */
 	*proto = NULL;
 	txe->proto = NULL;
