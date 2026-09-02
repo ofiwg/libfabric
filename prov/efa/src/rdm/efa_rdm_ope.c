@@ -14,6 +14,7 @@
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_mr.h"
 #include "efa_rdm_cq.h"
+#include "efa_rdm_proto_zero_copy.h"
 
 void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 				  struct efa_rdm_ep *ep,
@@ -2418,6 +2419,8 @@ ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
  */
 ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 {
+	size_t available_tx_pkts;
+
 	assert(ope->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
 
 	if (!(ope->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
@@ -2426,6 +2429,17 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	switch (ope->op) {
 	case ofi_op_msg: /* fall through */
 	case ofi_op_tagged:
+		if (ope->proto) {
+			efa_rdm_proto_zero_copy_reselect_queued_before_handshake(
+				ope);
+			available_tx_pkts =
+				efa_rdm_ep_get_available_tx_pkts(ope->ep);
+
+			if (available_tx_pkts == 0)
+				return -FI_EAGAIN;
+			return efa_rdm_msg_post_rtm_proto(ope->ep, ope,
+							  ope->proto);
+		}
 		return efa_rdm_msg_post_rtm(ope->ep, ope);
 	case ofi_op_write:
 		return efa_rdm_rma_post_write(ope->ep, ope);
