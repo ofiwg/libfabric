@@ -143,4 +143,16 @@ struct fi_efa_feature_ops {
  */
 #define FI_EFA_WR_HIGH_PPS (1ULL << 60)
 
+/*
+ * Request relaxed ordering for a memory region. This flag can be passed in the
+ * 'flags' argument of fi_mr_reg*().
+ *
+ * By default, the EFA device issues all data transactions to a memory region
+ * (RDMA reads, RDMA writes, and receives) with strict ordering, so the TX
+ * completion of an operation guarantees that subsequent operations to the same
+ * endpoint appear at the target after it. When FI_EFA_MR_RELAXED_ORDERING is
+ * set, that ordering guarantee is lost.
+ */
+#define FI_EFA_MR_RELAXED_ORDERING (1ULL << 60)
+
 #endif /* _FI_EXT_EFA_H_ */
