@@ -319,6 +319,27 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	 * the peer's user_recv_qp and route packets accordingly. The eager
 	 * protocol's construct_tx_pkes() writes the headerless packet once the
 	 * handshake has told us the peer expects one.
+	 *
+	 * This is the only reason a two-sided send ever waits for a handshake.
+	 * The read based protocols need the peer's EFA_RDM_EXTRA_FEATURE_RDMA_READ
+	 * bit, but they do not need a handshake step here: their predicates go
+	 * through efa_rdm_interop_rdma_read(), which reports no support until the
+	 * handshake arrives (or, when ep->homogeneous_peers is set, reports this
+	 * endpoint's own support without consulting the peer at all). So the
+	 * selection either picks a read protocol outright or declines it and lands
+	 * on long CTS, which needs nothing from the peer beyond the baseline
+	 * protocol.
+	 *
+	 * The legacy efa_rdm_msg_post_rtm() had a second
+	 * efa_rdm_ep_enforce_handshake_for_txe() call for a chosen rtm_type whose
+	 * EFA_RDM_PKT_TYPE_REQ_INFO_VEC entry named an extra feature. That call was
+	 * unreachable for anything but a self peer, and deliberately has no
+	 * counterpart here: the only extra feature it ever gated was RDMA read, and
+	 * its guard (!ep->homogeneous_peers && !EFA_RDM_PEER_HANDSHAKE_RECEIVED)
+	 * contradicted the efa_rdm_interop_rdma_read() check that the legacy
+	 * selector had already applied before it could return a read based type.
+	 * A large first send to a cold peer therefore went out over long CTS on the
+	 * legacy path too; this is mainline behaviour, not a change.
 	 */
 	if (ep->peer_may_have_zcpy_rx &&
 	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))

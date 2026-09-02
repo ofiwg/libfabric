@@ -1178,6 +1178,121 @@ void test_proto_select_runtread_for_large_msg(void **state)
 }
 
 /**
+ * @brief Before a handshake, a send that would otherwise runt or read falls back
+ *        to long CTS instead of waiting for the handshake.
+ *
+ * Protocol selection never triggers or waits for a handshake. Both read based
+ * predicates go through efa_rdm_interop_rdma_read(), which reports no support
+ * until the peer's handshake has advertised
+ * EFA_RDM_EXTRA_FEATURE_RDMA_READ, so they decline and the send lands on long
+ * CTS, which needs nothing from the peer beyond the baseline protocol.
+ *
+ * This matches the legacy path: its read based arm was gated on the very same
+ * efa_rdm_interop_rdma_read() call, so its enforce-handshake step could not be
+ * reached for a non-self peer either, and a large first send to a cold peer went
+ * out over long CTS there too.
+ */
+void test_proto_select_longcts_before_handshake(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	uint32_t saved_vendor_part_id;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_runtread_test(resource, &send_buff, &peer_addr, &peer,
+				       &saved_vendor_part_id);
+
+	/*
+	 * Everything else about this send is the runt read case above; only the
+	 * handshake is missing. A peer we have not heard from advertises nothing.
+	 */
+	peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] = 0;
+	assert_false(ep->homogeneous_peers);
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	restore_proto_runtread_device_version(saved_vendor_part_id);
+
+	assert_int_equal(err, 0);
+	assert_non_null(proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_longcts);
+
+	ofi_buf_free(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
+ * @brief A homogeneous-peers endpoint selects the runt read protocol before the
+ *        handshake.
+ *
+ * efa_rdm_interop_rdma_read() reports this endpoint's own RDMA read support,
+ * without consulting peer->extra_info, when ep->homogeneous_peers is set. So the
+ * read based predicates hold from the very first send and no handshake step is
+ * needed to reach them -- which is why the fi_mr_abort tests use
+ * FI_OPT_EFA_HOMOGENEOUS_PEERS to pin a read protocol.
+ *
+ * The legacy path behaved identically: its enforce-handshake step for an
+ * extra-feature packet type was guarded by !ep->homogeneous_peers.
+ */
+void test_proto_select_runtread_before_handshake_with_homogeneous_peers(
+	void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff send_buff;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_proto *proto = NULL;
+	fi_addr_t peer_addr;
+	uint32_t saved_vendor_part_id;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	int err;
+
+	ep = setup_proto_runtread_test(resource, &send_buff, &peer_addr, &peer,
+				       &saved_vendor_part_id);
+
+	peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_RECEIVED;
+	peer->extra_info[0] = 0;
+	ep->homogeneous_peers = true;
+
+	iov.iov_base = send_buff.buff;
+	iov.iov_len = send_buff.size;
+	efa_unit_test_construct_msg(&msg, &iov, 1, peer_addr, NULL, 0,
+				    (void **) &send_buff.mr);
+
+	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	assert_non_null(txe);
+
+	err = efa_rdm_proto_select_send_protocol(ep, peer, &msg, ofi_op_msg, 0,
+						 txe, &proto);
+	restore_proto_runtread_device_version(saved_vendor_part_id);
+
+	assert_int_equal(err, 0);
+	assert_non_null(proto);
+	assert_ptr_equal(proto, &efa_rdm_proto_runtread);
+
+	ofi_buf_free(txe);
+	efa_unit_test_buff_destruct(&send_buff);
+}
+
+/**
  * @brief A delivery complete send never selects the runt read protocol.
  *
  * The runt read REQ has no delivery complete variant -- there is nowhere to

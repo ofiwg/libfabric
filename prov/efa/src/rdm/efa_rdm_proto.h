@@ -120,6 +120,12 @@ extern struct efa_rdm_proto *efa_rdm_protocols[EFA_RDM_MAX_PROTO];
  * protocols are appropriate but MR fails, it will automatically switch to a
  * different protocol.
  *
+ * Selection never triggers or waits for a handshake. A predicate that needs an
+ * extra feature from the peer reports "cannot use" until the handshake has
+ * advertised it, so a send issued before the handshake simply lands on a
+ * protocol that needs nothing extra. See the comment on the sole remaining
+ * enforce-handshake call in efa_rdm_msg_generic_send().
+ *
  * @param[in]  ep     Endpoint
  * @param[in]  peer   Peer to send to
  * @param[in]  msg    Message descriptor from application
