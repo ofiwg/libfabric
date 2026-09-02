@@ -357,3 +357,97 @@ void test_efa_rdm_peer_construct_robuf_failure(void **state)
 	ofi_buf_free(buf);
 	ofi_bufpool_destroy(tiny_pool);
 }
+
+/**
+ * @brief Verify free_entry() unwinds nothing for an entry that was never queued
+ *
+ * get_msg()/get_tag() hand the peer an entry along with -FI_ENOENT, and the
+ * peer is free to give it straight back if it cannot allocate what it needs to
+ * process the message later. Such an entry sits on no queue, so releasing it
+ * must not touch the queue it would have been placed on, in either the
+ * directed or the unspec case.
+ */
+static void test_efa_srx_free_unqueued_entry_common(struct efa_resource *resource,
+						    bool tagged, bool dir_recv)
+{
+	struct fi_peer_match_attr attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct util_unexp_peer *unexp_peer;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	bool msg_queue_empty, tag_queue_empty;
+	struct util_srx_ctx *srx_ctx;
+	struct efa_rdm_ep *efa_rdm_ep;
+	fi_addr_t addr;
+	int cnt, ret;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
+	srx_ctx->dir_recv = dir_recv;
+
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr,
+				    &raw_addr_len), 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &addr, 0,
+				      NULL), 1);
+
+	attr.addr = addr;
+	attr.msg_size = 32;
+	attr.tag = tagged ? 0x1234abcd : 0;
+
+	/* Sample the state under the lock the owner ops require, and assert on
+	 * it after unlocking, so a failed assertion cannot strand the lock and
+	 * deadlock the teardown. */
+	ofi_genlock_lock(srx_ctx->lock);
+
+	/* No receive is posted, so the entry comes back unmatched */
+	if (tagged)
+		ret = srx_ctx->peer_srx.owner_ops->get_tag(&srx_ctx->peer_srx,
+							   &attr, &peer_rxe);
+	else
+		ret = srx_ctx->peer_srx.owner_ops->get_msg(&srx_ctx->peer_srx,
+							   &attr, &peer_rxe);
+
+	/* Hand it straight back, as a peer that cannot proceed must */
+	if (ret == -FI_ENOENT && peer_rxe)
+		srx_ctx->peer_srx.owner_ops->free_entry(peer_rxe);
+
+	unexp_peer = ofi_array_at(&srx_ctx->src_unexp_peers, addr);
+	cnt = unexp_peer ? unexp_peer->cnt : -1;
+	msg_queue_empty = dlist_empty(&srx_ctx->unspec_unexp_msg_queue);
+	tag_queue_empty = dlist_empty(&srx_ctx->unspec_unexp_tag_queue);
+
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	assert_int_equal(ret, -FI_ENOENT);
+	assert_non_null(peer_rxe);
+
+	/* Neither queue may have been charged for an entry never on one */
+	assert_int_equal(cnt, 0);
+	assert_true(msg_queue_empty);
+	assert_true(tag_queue_empty);
+}
+
+void test_efa_srx_free_unqueued_entry_msg(void **state)
+{
+	test_efa_srx_free_unqueued_entry_common(*state, false, true);
+}
+
+void test_efa_srx_free_unqueued_entry_tagged(void **state)
+{
+	test_efa_srx_free_unqueued_entry_common(*state, true, true);
+}
+
+void test_efa_srx_free_unqueued_entry_msg_no_dir_recv(void **state)
+{
+	test_efa_srx_free_unqueued_entry_common(*state, false, false);
+}
+
+void test_efa_srx_free_unqueued_entry_tagged_no_dir_recv(void **state)
+{
+	test_efa_srx_free_unqueued_entry_common(*state, true, false);
+}
