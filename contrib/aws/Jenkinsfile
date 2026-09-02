@@ -310,6 +310,120 @@ def post_build_actions() {
     }
 }
 
+/*
+ * Persistent Manual Cluster (PMC) configuration tables and helpers.
+ * These stages run as non-blocking (catchError) so failures only mark
+ * the stage UNSTABLE without failing the overall build.
+ */
+def prci_instance_configuration(cluster_key) {
+    def cluster_configs = [
+        "c5n": [
+            "instance_type": "c5n.18xlarge", "os": "ubuntu2604", "region": "us-east-1",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-c5n", "lock_label": "c5n-ub26-iad", "odcr": "cr-0840c3658685922d7"
+        ],
+        "c7g-ub22": [
+            "instance_type": "c7g.16xlarge", "os": "ubuntu2204", "region": "us-east-1",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-c7g-ub22", "lock_label": "c7g-ub22-iad", "odcr": "cr-080a4b46f2dee3e68"
+        ],
+        "c7g-ub24": [
+            "instance_type": "c7g.16xlarge", "os": "ubuntu2404", "region": "us-east-1",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-c7g-ub24", "lock_label": "c7g-ub24-iad", "odcr": "cr-080a4b46f2dee3e68"
+        ],
+        "hpc7g": [
+            "instance_type": "hpc7g.16xlarge", "os": "rhel9", "region": "us-east-1",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-hpc7g", "lock_label": "hpc7g-rhel9-iad", "odcr": "cr-03b7960af7a068137"
+        ],
+        "g4dn": [
+            "instance_type": "g4dn.12xlarge", "os": "alinux2023", "region": "us-west-2",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-g4dn", "lock_label": "g4dn-al2023-pdx", "odcr": "cr-0ecc166aa3cf426c4"
+        ],
+        "hpc8a": [
+            "instance_type": "hpc8a.96xlarge", "os": "alinux2023", "region": "eu-north-1",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-hpc8a", "lock_label": "hpc8a-al2023-arn", "odcr": "cr-0da2533b74b177889"
+        ],
+        "hpc6a": [
+            "instance_type": "hpc6a.48xlarge", "os": "rhel8", "region": "eu-north-1",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-hpc6a", "lock_label": "hpc6a-rhel8-arn", "odcr": "cr-02035535e281fe4ac"
+        ],
+        "c8gn": [
+            "instance_type": "c8gn.16xlarge", "os": "alinux2023", "region": "us-west-2",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-c8gn", "lock_label": "c8gn-al2023-pdx", "odcr": "cr-067ffa4bdaf34fdde"
+        ],
+        "c7i": [
+            "instance_type": "c7i.16xlarge", "os": "alinux2023", "region": "us-west-2",
+            "cluster_name": "LibfabricPRCI-PersistentManualCluster-c7i", "lock_label": "c7i-al2023-pdx", "odcr": "cr-0a4fa04a57c59bce6"
+        ]
+    ]
+    return cluster_configs.get(cluster_key, null)
+}
+
+def manage_jenkins_lock_ip_mapping_read(region, cluster_name, locked_resource_prefix) {
+    return sh(
+        script: ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/manage_jenkins_lock_ip_mapping.py --region ${region} --cluster-name ${cluster_name} --operation read --locked-resource-prefix ${locked_resource_prefix}",
+        returnStdout: true
+    ).trim()
+}
+
+def run_test_orchestrator_once_persistent(run_name, cluster_name, os, instance_type, instance_count, region, public_ip_addresses, addl_args) {
+    def args = "--os ${os} --container-os ${os} --instance-type ${instance_type} --instance-count ${instance_count} --region ${region}"
+    args += " --cluster-name ${cluster_name} --cluster-type manual_cluster"
+    args += " --public-ip-addresses ${public_ip_addresses}"
+    args += " ${addl_args}"
+    args += " --perf-metrics-path outputs"
+    args += " --junit-xml outputs/${run_name}.xml"
+    sh ". ${venv_path}/bin/activate; cd ${portafiducia_path}/tests && STAGE_NAME='" + run_name + "' ./test_orchestrator.py ${args}"
+}
+
+def get_test_stage_with_lock_persistent(stage_name, cluster_key, lock_count, addl_args) {
+    def instance_info = prci_instance_configuration(cluster_key)
+    if (instance_info == null) {
+        error("No prci_instance_configuration entry for cluster key: ${cluster_key}")
+    }
+    return {
+        stage("${stage_name}") {
+            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE', catchInterruptions: false) {
+                lock(label: instance_info.lock_label, quantity: lock_count, variable: 'LOCKED_RESOURCE') {
+                    echo "Acquired lock resource(s): ${env.LOCKED_RESOURCE}"
+                    def public_ip_addresses = env.LOCKED_RESOURCE.tokenize(',').collect { resource ->
+                        manage_jenkins_lock_ip_mapping_read(instance_info.region, instance_info.cluster_name, resource)
+                    }.join(' ')
+                    run_test_orchestrator_once_persistent(stage_name, instance_info.cluster_name, instance_info.os, instance_info.instance_type, lock_count, instance_info.region, public_ip_addresses, addl_args)
+                }
+            }
+        }
+    }
+}
+
+def build_pmc_test_stages() {
+    def stages = [:]
+    def timeout = "--timeout 120"
+    def test_suite_pkg = "--test-suite-package subspace_nightly_tests --owner subspace"
+    def job_args = "--job-name '${env.JOB_NAME}' --job-url ${env.BUILD_URL}"
+    def persistent_manual_cluster_addl_args = " --keep-cluster --skip-fixture-setup --skip-health-checks --use-existing-installer --enable-placement-group false --lean-cluster-setup --use-prebuilt-ami-with-efa-installer true --cleanup-pf-directory true --libfabric-prci true --enable-live-log true"
+    def container_addl_args = " --test-in-containers-on-ec2"
+
+    def pr_selector = is_post_merge() ? "--test-type commit --test-libfabric-commit ${env.GIT_COMMIT}"
+                                       : "--test-type pr --test-libfabric-pr $env.CHANGE_ID"
+    def generic_pf = "--test-target libfabric ${pr_selector} ${test_suite_pkg}"
+
+    def efa_addl_args = "${timeout} ${generic_pf} --test-libfabric-provider efa --test-list test_pr_ci_fabtests test_run_efa_unit_tests ${job_args}${persistent_manual_cluster_addl_args}${container_addl_args}"
+    def tcp_addl_args = "${timeout} ${generic_pf} --test-libfabric-provider tcp --enable-efa false --test-list test_pr_ci_fabtests test_run_efa_unit_tests ${job_args}${persistent_manual_cluster_addl_args}${container_addl_args}"
+    def sm2_addl_args = "${timeout} ${generic_pf} --test-libfabric-provider sm2 --enable-efa false --test-list test_pr_ci_fabtests test_run_efa_unit_tests ${job_args}${persistent_manual_cluster_addl_args}${container_addl_args}"
+
+    stages["pmc_2_c5n_ubuntu2604_efa"]   = get_test_stage_with_lock_persistent("pmc_2_c5n_ubuntu2604_efa",   "c5n",      2, efa_addl_args)
+    stages["pmc_2_c7g_ubuntu2204_efa"]   = get_test_stage_with_lock_persistent("pmc_2_c7g_ubuntu2204_efa",   "c7g-ub22", 2, efa_addl_args)
+    stages["pmc_2_c7g_ubuntu2404_efa"]   = get_test_stage_with_lock_persistent("pmc_2_c7g_ubuntu2404_efa",   "c7g-ub24", 2, efa_addl_args)
+    stages["pmc_2_hpc7g_rhel9_efa"]      = get_test_stage_with_lock_persistent("pmc_2_hpc7g_rhel9_efa",      "hpc7g",    2, efa_addl_args)
+    stages["pmc_2_g4dn_alinux2023_efa"]  = get_test_stage_with_lock_persistent("pmc_2_g4dn_alinux2023_efa",  "g4dn",     2, efa_addl_args)
+    stages["pmc_2_hpc8a_alinux2023_efa"] = get_test_stage_with_lock_persistent("pmc_2_hpc8a_alinux2023_efa", "hpc8a",    2, efa_addl_args)
+    stages["pmc_2_hpc6a_rhel8_efa"]      = get_test_stage_with_lock_persistent("pmc_2_hpc6a_rhel8_efa",      "hpc6a",    2, efa_addl_args)
+    stages["pmc_2_c8gn_alinux2023_efa"]  = get_test_stage_with_lock_persistent("pmc_2_c8gn_alinux2023_efa",  "c8gn",     2, efa_addl_args)
+    stages["pmc_2_c7i_alinux2023_tcp"]   = get_test_stage_with_lock_persistent("pmc_2_c7i_alinux2023_tcp",   "c7i",      2, tcp_addl_args)
+    stages["pmc_1_g4dn_alinux2023_sm2"]  = get_test_stage_with_lock_persistent("pmc_1_g4dn_alinux2023_sm2",  "g4dn",     1, sm2_addl_args)
+
+    return stages
+}
+
 def get_single_node_windows_test_stage_with_lock(stage_name, lock_label) {
     /*
      * Get Windows Stage
@@ -511,6 +625,8 @@ pipeline {
                 script {
                     def stages = is_post_merge() ? build_postmerge_test_stages()
                                                  : build_pr_test_stages()
+                    // Add PMC stages (non-blocking) to run in parallel with existing stages
+                    stages = stages + build_pmc_test_stages()
                     parallel stages
                 }
             }
