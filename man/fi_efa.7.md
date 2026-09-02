@@ -256,6 +256,19 @@ in the `flags` argument of data transfer calls such as `fi_writemsg()`.
   (e.g., `fi_writemsg()`) to hint the device to optimize for higher message
   rate.
 
+# PROVIDER SPECIFIC MR FLAGS
+
+The EFA provider defines provider-specific flags that can be passed in the
+`flags` argument of `fi_mr_reg*()`.
+
+*FI_EFA_MR_RELAXED_ORDERING*
+: Request relaxed ordering for the memory region. By default, the EFA device
+  issues all data transactions to a memory region (RDMA reads, RDMA writes, and
+  receives) with strict ordering, so that the TX completion of an operation
+  guarantees that subsequent operations to the same endpoint appear at the
+  target after it. When FI_EFA_MR_RELAXED_ORDERING is specified, that ordering
+  guarantee is lost.
+
 # PROVIDER SPECIFIC OPERATION EXTENSIONS
 The efa provider exports extensions for operations that are not provided
 by the standard libfabric interface. These extensions are available via

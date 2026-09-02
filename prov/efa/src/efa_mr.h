@@ -83,7 +83,8 @@ static inline bool efa_mr_is_rocr(struct efa_mr *efa_mr)
 
 int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
 			     bool device_support_rdma_read,
-			     bool device_support_rdma_write);
+			     bool device_support_rdma_write,
+			     uint64_t flags);
 
 /**
  * @brief Warn about MR descriptor references in an in-flight operation
