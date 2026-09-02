@@ -730,8 +730,15 @@ int fi_opx_domain(struct fid_fabric *fabric, struct fi_info *info, struct fid_do
 	ofi_genlock_init(&opx_domain->srx_lock, OFI_LOCK_NOOP);
 	opx_domain->util_domain_initialized = true;
 
+	int shm_use_peer = 0;
+	fi_param_get_bool(fi_opx_global.prov, "shm_use_peer", &shm_use_peer);
+	FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "Intra-node transport: %s\n",
+		shm_use_peer ? "fi_shm peer (FI_PEER)" : "native OPX shm");
+
 	struct fi_info *shm_info = NULL;
-	opx_shm_info_create(info, &shm_info);
+	if (shm_use_peer) {
+		opx_shm_info_create(info, &shm_info);
+	}
 	if (shm_info) {
 		if (!opx_fabric->shm_fabric) {
 			ret = fi_fabric(shm_info->fabric_attr, &opx_fabric->shm_fabric,

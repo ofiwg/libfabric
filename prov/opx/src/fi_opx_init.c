@@ -1231,6 +1231,9 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "link_down_wait_time_max_sec", FI_PARAM_INT,
 			"The maximum time in seconds to wait for a link to come back up. Default is %d\n",
 			OPX_LINK_DOWN_WAIT_TIME_MAX_SEC_DEFAULT);
+	fi_param_define(
+		&fi_opx_provider, "shm_use_peer", FI_PARAM_BOOL,
+		"Selects the intra-node transport. When FALSE (default) OPX uses its native shared-memory ring. When TRUE OPX routes node-local traffic through the fi_shm provider imported as a FI_PEER. Defaults to FALSE.");
 #ifdef OPX_HMEM
 	fi_param_define(
 		&fi_opx_provider, "dev_reg_send_threshold", FI_PARAM_INT,
