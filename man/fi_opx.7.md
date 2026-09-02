@@ -398,6 +398,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   hfi1 (loopback).  Defaults to: "YES"
   Deprecated alias: FI_OPX_SHM_ENABLE (still honored, emits a deprecation warning).
 
+*FI_OPX_SHM_USE_PEER*
+: Boolean (1/0, on/off, true/false, yes/no). Selects the intra-node transport. When NO
+  (default) OPX uses its native shared-memory ring. When YES OPX routes node-local traffic
+  through the shm provider imported as a FI_PEER.  Defaults to: "NO"
+
 *FI_OPX_LINK_DOWN_WAIT_TIME_MAX_SEC*
 : Integer. The maximum time in seconds to wait for a link to come back up. Default is 70 seconds.
 
