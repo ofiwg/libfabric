@@ -16772,6 +16772,8 @@ int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
     void **ops, void *context);
 ```
 
+### FI_EFA_DOMAIN_OPS
+
 Requesting `FI_EFA_DOMAIN_OPS` in `name` returns `ops` as the pointer to
 the function table `fi_efa_ops_domain` defined as follows:
 
@@ -16826,9 +16828,11 @@ struct fi_efa_mr_attr {
 **query_mr()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).
 
+### FI_EFA_GDA_OPS
+
 To enable GPU Direct Async (GDA), which allows the GPU to interact
 directly with the NIC, request `FI_EFA_GDA_OPS` in the `name` parameter
-with efa-direct fabirc. This returns `ops` as a pointer to the function
+with efa-direct fabric. This returns `ops` as a pointer to the function
 table `fi_efa_ops_gda` defined as follows:
 
 ``` c
@@ -17103,6 +17107,68 @@ struct fi_efa_comp_cntr_init_attr {
 
 **cntr_open_ext()** returns 0 on success, or a negative value on
 failure.
+
+### FI_EFA_MODIFY_EP_OPS
+
+To modify endpoint attributes at runtime, request `FI_EFA_MODIFY_EP_OPS`
+in the `name` parameter. This is only supported on the `efa-direct`
+fabric; on any other fabric `fi_open_ops` returns `-FI_EOPNOTSUPP`. This
+returns `ops` as a pointer to the function table `fi_efa_ops_modify_ep`
+defined as follows:
+
+``` c
+struct fi_efa_ops_modify_ep {
+    int (*modify_ep)(struct fid_ep *ep, struct fi_efa_ep_attr *ep_attr,
+             uint64_t attr_mask);
+};
+```
+
+#### modify_ep
+
+This op modifies attributes on the endpoint. The `attr_mask` parameter
+specifies which attributes to modify. The endpoint must already be
+enabled.
+
+``` c
+enum {
+    FI_EFA_EP_ATTR_QKEY = 1 << 0,
+};
+
+struct fi_efa_ep_attr {
+    uint32_t qkey;
+};
+```
+
+*attr_mask*
+
+:   A bitwise OR of the attributes to modify. An `attr_mask` of 0 is a
+    successful no-op. Currently supported:
+
+    FI_EFA_EP_ATTR_QKEY: Modify the queue key. The new value is taken
+    from `ep_attr->qkey` and must be less than 0x80000000, since
+    0x80000000 and above is the privileged queue key range. On success,
+    `fi_getname` reports the new queue key. The application is
+    responsible for re-exchanging addresses with its peers after a
+    successful call. Only supported by the efa-direct fabric.
+
+        A concurrent call to fi_getname may return an incorrect adresss.
+        Applications are responsible for serializing any fi_getname calls
+        with the modify_ep call.
+
+Unsupported flags in `attr_mask` will cause the call to return
+`-FI_EOPNOTSUPP`.
+
+#### Return value
+
+**modify_ep()** returns 0 on success, or a negative error code on
+failure:
+
+-   `-FI_EINVAL`: NULL endpoint or ep_attr, fid is not an endpoint,
+    endpoint not enabled, or a queue key in the privileged range.
+-   `-FI_EOPNOTSUPP`: Unsupported flags in `attr_mask`, or the endpoint
+    does not belong to an `efa-direct` domain.
+
+On failure, no attribute is modified.
 
 ## Fabric Operation Extension
 
