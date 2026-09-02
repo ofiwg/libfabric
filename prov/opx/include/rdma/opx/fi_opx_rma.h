@@ -318,7 +318,9 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 		params->target_hfi_unit		= opx_dst_addr.planes[OPX_PRIMARY_PLANE].hfi1_unit;
 		params->tx_index		= opx_dst_addr.tx_index;
 
-		fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem, hfi1_type);
+		/* The RMA-write path never plumbs a source dma-buf MR (sbuf_dmabuf_mr),
+		 * so no exported fd can reach the SDMA meminfo here. */
+		fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem, hfi1_type, false);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_shm, opx_ep->debug_counters.hmem.rma_write_intranode);
 		FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_shm, opx_ep->debug_counters.hmem.rma_write_hfi);
 	}

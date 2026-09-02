@@ -2439,8 +2439,12 @@ int opx_hfi1_rx_rzv_rts_tid_eligible(struct fi_opx_ep *opx_ep, struct fi_opx_hfi
 	    (params->dput_iov[0].bytes < opx_tx->tid_min_payload_bytes) ||
 	    (opcode != FI_OPX_HFI_DPUT_OPCODE_RZV && opcode != FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG) ||
 	    is_hmem_unified ||
+	    /* have_dmabuf_fd is assumed true here: the source MR's exported dma-buf fd
+	     * is not knowable at RTS time (resolved on the sender at CTS). The
+	     * HFI1_CAP_DMABUF gate still forces PIO on a dma-buf-incapable driver, and
+	     * the authoritative fd-gated decision is remade at CTS. */
 	    !fi_opx_hfi1_sdma_use_sdma(opx_ep, params->dput_iov[0].bytes, opcode, params->dput_iov[0].sbuf_iface,
-				       OPX_SHM_FALSE)) {
+				       OPX_SHM_FALSE, true)) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_tid_ineligible);
 		return 0;
 	}
@@ -5811,7 +5815,16 @@ fi_opx_hfi1_rx_rzv_cts(struct fi_opx_ep *opx_ep, const union opx_hfi1_packet_hdr
 	assert((ntidpairs == 0) || (niov == 1));
 	assert(origin_byte_counter == NULL || iov_total_bytes <= *origin_byte_counter);
 
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, tidoffset, ntidpairs, tidpairs, is_hmem, hfi1_type);
+	bool have_dmabuf_fd = false;
+#if defined(OPX_HMEM) && OPX_HAVE_DMABUF
+	{
+		struct fi_opx_mr *src_mr = (struct fi_opx_mr *) (uintptr_t) dput_iov[0].sbuf_dmabuf_mr;
+		have_dmabuf_fd		 = (src_mr && src_mr->dmabuf.fd != OPX_SDMA_NO_DMABUF_FD);
+	}
+#endif
+
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, tidoffset, ntidpairs, tidpairs, is_hmem, hfi1_type,
+				   have_dmabuf_fd);
 
 	/*
 	 * The send-side descriptor is gone by the time the CTS arrives, so look

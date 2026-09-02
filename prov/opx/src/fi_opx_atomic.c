@@ -198,7 +198,9 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME, hfi1_type, ctx_sharing);
 
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, buf_iov->len, 0, 0, NULL, is_hmem, hfi1_type);
+	/* The atomic path never plumbs a source dma-buf MR, so no exported fd can reach
+	 * the SDMA meminfo here. */
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, buf_iov->len, 0, 0, NULL, is_hmem, hfi1_type, false);
 
 	int rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
