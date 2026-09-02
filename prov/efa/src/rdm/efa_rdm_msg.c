@@ -784,6 +784,10 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 	if (ret == FI_SUCCESS) { /* A matched rxe is found */
 		rxe = efa_rdm_msg_alloc_matched_rxe_for_rtm(ep, *pkt_entry_ptr, peer_rxe, ofi_op_msg);
 		if (OFI_UNLIKELY(!rxe)) {
+			/* This entry is ours to release: get_msg() handed it over
+			 * and nothing else tracks it. It is marked matched, so
+			 * free_entry() just returns it to the srx pool. */
+			peer_srx->owner_ops->free_entry(peer_rxe);
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
@@ -803,6 +807,9 @@ efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 		 */
 		rxe = efa_rdm_msg_alloc_unexp_rxe_for_rtm(ep, pkt_entry_ptr, ofi_op_msg);
 		if (OFI_UNLIKELY(!rxe)) {
+			/* This entry is ours to release: get_msg() handed it
+			 * over and we never queued it. */
+			peer_srx->owner_ops->free_entry(peer_rxe);
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
@@ -873,6 +880,10 @@ efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 	if (ret == FI_SUCCESS) { /* A matched rxe is found */
 		rxe = efa_rdm_msg_alloc_matched_rxe_for_rtm(ep, *pkt_entry_ptr, peer_rxe, ofi_op_tagged);
 		if (OFI_UNLIKELY(!rxe)) {
+			/* This entry is ours to release: get_tag() handed it over
+			 * and nothing else tracks it. It is marked matched, so
+			 * free_entry() just returns it to the srx pool. */
+			peer_srx->owner_ops->free_entry(peer_rxe);
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
@@ -891,6 +902,9 @@ efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 		 */
 		rxe = efa_rdm_msg_alloc_unexp_rxe_for_rtm(ep, pkt_entry_ptr, ofi_op_tagged);
 		if (OFI_UNLIKELY(!rxe)) {
+			/* This entry is ours to release: get_tag() handed it
+			 * over and we never queued it. */
+			peer_srx->owner_ops->free_entry(peer_rxe);
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
