@@ -393,10 +393,11 @@ void test_proto_eager_construct_pkes_zero_copy(void **state)
  * @brief A whole fi_send() to a peer that expects zero-copy data transfer runs
  *        on the refactored protocol path, from selection to send completion.
  *
- * The legacy send path used to own this case: mainline forces the handshake in
- * efa_rdm_msg_post_rtm(), then efa_rdm_pke_fill_data() notices the peer wants
- * headerless data and stamps the flags on the packet. Both are gone, so the
- * eager protocol has to carry the case end to end -- protocol selection, the
+ * The legacy send path used to own this case: it forced the handshake before
+ * posting, then efa_rdm_pke_fill_data() noticed the peer wants headerless data
+ * and stamped the flags on the packet. That path is gone -- the handshake gate
+ * now lives in efa_rdm_msg_generic_send() and nothing stamps the flags outside
+ * the protocols, so the eager protocol carries the rest end to end: the
  * headerless packet its construct_tx_pkes() builds, the user_recv_qp routing
  * efa_rdm_pke_sendv() derives from the packet flags, and a send completion that
  * must reach the protocol callback rather than the headerless arm of the
@@ -1648,8 +1649,9 @@ void test_proto_select_longread_for_large_msg(void **state)
  * The receiver reads every source iov out of the read iov array the REQ carries,
  * so an iov the device cannot read from has no representation on the wire.
  * construct_tx_pkes() would have to abandon the send with -FI_ENOMR, and the
- * refactored path has no equivalent of efa_rdm_ope_post_send_fallback(), so the
- * predicate has to decline up front and let the send fall through to long CTS.
+ * refactored path has no -FI_ENOMR retry that re-posts the send over long CTS
+ * the way the legacy send path did, so the predicate has to decline up front
+ * and let the send fall through to long CTS.
  */
 void test_proto_select_declines_longread_without_mr(void **state)
 {

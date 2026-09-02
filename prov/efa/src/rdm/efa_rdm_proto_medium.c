@@ -185,8 +185,9 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 	 * A peer in zero-copy (headerless) receive mode is not ruled out: only
 	 * the eager REQ has a headerless form, so a message too large for eager
 	 * goes to such a peer with ordinary medium headers on the ordinary QP.
-	 * That is what the legacy path does too -- efa_rdm_msg_select_rtm()
-	 * picks the medium RTM and efa_rdm_pke_fill_data() only sets the
+	 * The eager protocol's construct_tx_pkes() is the only one that stamps
+	 * EFA_RDM_PKE_HAS_NO_BASE_HDR, and the legacy send path behaved the same
+	 * way: it selected the medium RTM for such a peer and only set the
 	 * headerless flags for EFA_RDM_EAGER_MSGRTM_PKT.
 	 */
 	assert(!(flags & FI_INJECT));
