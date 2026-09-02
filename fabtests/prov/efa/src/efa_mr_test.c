@@ -35,6 +35,7 @@
 #include <getopt.h>
 #include <shared.h>
 #include <hmem.h>
+#include <rdma/fi_ext_efa.h>
 
 #define DEFAULT_BUF_SIZE 4096
 #define MIN_BUF_SIZE 1024
@@ -62,6 +63,46 @@ static int test_aligned_mr(void)
 	ret = fi_close(&mr->fid);
 	if (ret) {
 		printf("FAIL: aligned VA - fi_close failed: %s\n",
+		       fi_strerror(-ret));
+		return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * Register a MR with the EFA-specific FI_EFA_MR_RELAXED_ORDERING flag and
+ * verify registration succeeds. The flag is honored on the efa-direct fabric
+ * and silently ignored on the efa fabric, so registration must succeed either
+ * way.
+ */
+static int test_relaxed_ordering_mr(void)
+{
+	struct fi_mr_attr attr = {0};
+	struct fi_mr_dmabuf dmabuf = {0};
+	struct iovec iov;
+	struct fid_mr *mr;
+	uint64_t flags = FI_EFA_MR_RELAXED_ORDERING;
+	int ret;
+
+	iov.iov_base = buf;
+	iov.iov_len = buf_size;
+
+	ft_fill_mr_attr(&iov, &dmabuf, 1, FI_SEND | FI_RECV, FT_MR_KEY,
+			opts.iface, opts.device, &attr, flags);
+
+	ret = fi_mr_regattr(domain, &attr, flags, &mr);
+	if (ret) {
+		printf("FAIL: relaxed ordering - fi_mr_regattr failed: %s\n",
+		       fi_strerror(-ret));
+		return ret;
+	}
+
+	printf("PASS: relaxed ordering\n");
+
+	ret = fi_close(&mr->fid);
+	if (ret) {
+		printf("FAIL: relaxed ordering - fi_close failed: %s\n",
 		       fi_strerror(-ret));
 		return ret;
 	}
@@ -138,6 +179,10 @@ static int run_tests(void)
 	if (ret)
 		failed++;
 
+	ret = test_relaxed_ordering_mr();
+	if (ret)
+		failed++;
+
 	/* Generate test offsets from 1 to buf_size-1 */
 	step = (buf_size - 2) / (NUM_UNALIGNED_TESTS - 1);
 	for (i = 0; i < NUM_UNALIGNED_TESTS; i++) {
@@ -151,7 +196,7 @@ static int run_tests(void)
 	}
 
 	printf("\nTest Summary: %d/%d tests passed\n",
-	       NUM_UNALIGNED_TESTS + 1 - failed, NUM_UNALIGNED_TESTS + 1);
+	       NUM_UNALIGNED_TESTS + 2 - failed, NUM_UNALIGNED_TESTS + 2);
 
 	return failed > 0 ? -1 : 0;
 }
