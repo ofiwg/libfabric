@@ -662,6 +662,11 @@ err_close_shm_ep:
 	}
 err_destroy_lock:
 	ofi_genlock_destroy(&efa_rdm_ep->srx_lock);
+	/* shm_info is built to open the shm ep, so it unwinds with it */
+	if (efa_rdm_ep->shm_info) {
+		fi_freeinfo(efa_rdm_ep->shm_info);
+		efa_rdm_ep->shm_info = NULL;
+	}
 err_destroy_base_ep:
 	efa_base_ep_destruct(&efa_rdm_ep->base_ep);
 err_free_ep:
