@@ -824,6 +824,13 @@ static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		if (mr_attr.iface != FI_HMEM_SYSTEM)
 			shm_flags |= FI_HMEM_DEVICE_ONLY;
 
+		/*
+		 * FI_EFA_MR_RELAXED_ORDERING is an EFA-device-specific hint; the
+		 * shm provider does not understand it, so strip it from the shm
+		 * MR registration.
+		 */
+		shm_flags &= ~FI_EFA_MR_RELAXED_ORDERING;
+
 		shm_attr.hmem_data = efa_rdm_mr->hmem_data;
 		ret = fi_mr_regattr(rdm_domain->shm_domain,
 				    &shm_attr, shm_flags,

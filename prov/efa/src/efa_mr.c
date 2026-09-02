@@ -89,6 +89,8 @@ int efa_mr_regattr_validate(struct fid *fid, const struct fi_mr_attr *attr,
 	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)))
 		supported_flags |= FI_MR_DMABUF;
 
+	supported_flags |= FI_EFA_MR_RELAXED_ORDERING;
+
 	if (flags & (~supported_flags)) {
 		EFA_WARN(FI_LOG_MR, "Unsupported flag type. requested"
 			 "[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
@@ -442,13 +444,16 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr,
 
 /*
  * Set ofi_access to FI_SEND | FI_RECV if not already set,
- * Convert ofi_access flags to ibv_access flags.
+ * Convert ofi_access flags to ibv_access flags. The EFA-specific @flags
+ * (as passed to fi_mr_regattr) can request additional access attributes, e.g.
+ * FI_EFA_MR_RELAXED_ORDERING maps to IBV_ACCESS_RELAXED_ORDERING.
  * TODO: Figure out how to split this call for efa-direct and efa-protocol
  * (support emulation) access modes
  */
 int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
 			     bool device_support_rdma_read,
-			     bool device_support_rdma_write)
+			     bool device_support_rdma_write,
+			     uint64_t flags)
 {
 	int ibv_access = 0;
 
@@ -478,6 +483,11 @@ int efa_mr_ofi_to_ibv_access(uint64_t ofi_access,
 		 * should be allowed only if local write is allowed. */
 		ibv_access |= IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE;
 
+	/* Opt-in relaxed PCIe ordering. Without this flag the region keeps
+	 * EFA's default (strict) ordering. */
+	if (flags & FI_EFA_MR_RELAXED_ORDERING)
+		ibv_access |= IBV_ACCESS_RELAXED_ORDERING;
+
 	return ibv_access;
 }
 
@@ -489,6 +499,7 @@ int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_at
 {
 	int64_t reg_sz, reg_ct;
 	int ret = 0;
+	int ibv_access;
 	bool device_support_rdma_read = false;
 	bool device_support_rdma_write = false;
 
@@ -505,12 +516,13 @@ int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const struct fi_mr_at
 	device_support_rdma_write = efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
 #endif
 
+	ibv_access = efa_mr_ofi_to_ibv_access(mr_attr->access,
+					      device_support_rdma_read,
+					      device_support_rdma_write,
+					      flags);
+
 	efa_mr->ibv_mr = efa_mr_reg_ibv_mr(
-		efa_mr, (struct fi_mr_attr *)mr_attr,
-		efa_mr_ofi_to_ibv_access(mr_attr->access,
-					 device_support_rdma_read,
-					 device_support_rdma_write),
-		flags);
+		efa_mr, (struct fi_mr_attr *)mr_attr, ibv_access, flags);
 	if (!efa_mr->ibv_mr) {
 		/* error path that doesn't call ibv_reg doesn't set errno */
 		if (!errno)
