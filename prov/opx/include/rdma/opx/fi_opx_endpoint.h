@@ -1148,14 +1148,42 @@ void opx_enqueue_err_from_pending(struct slist *pending, struct slist *err, stru
 	struct slist_entry *prev;
 	struct slist_entry *cur;
 
+	/* Every caller must resolve `pending`/`err` from the SAME rx/tx side that originally enqueued
+	 * `context` onto a pending queue (rx-> for target-side PUT_CQ contexts allocated in
+	 * opx_hfisvc_rma_recv_rts(); tx-> for origin-side GET-watchdog contexts allocated on the send
+	 * path). The two lifecycles are currently disjoint by construction (see call sites), but nothing
+	 * short of this assert enforces it: if a context ends up on the wrong side, the foreach below
+	 * silently no-ops (treating "not found" as "already reaped") and a real terminal error is dropped
+	 * as a false CQ success. Fail loudly in debug builds instead of masking the mismatch.
+	 * Reference: PR review, cn-agent-workforce finding 5aaa7be6854c55fa + belynam follow-up. */
+	bool found = false;
 	slist_foreach (pending, cur, prev) {
 		if (cur == (struct slist_entry *) context) {
 			slist_remove(pending, cur, prev);
+			slist_insert_tail((struct slist_entry *) context, err);
+			found = true;
 			break;
 		}
 	}
+	assert(found && "context not found on the expected pending queue; caller passed the wrong "
+			"rx/tx side, or this context was never enqueued as pending");
+	/* NDEBUG builds: fall back to skip-if-absent behavior (already moved/reaped) rather than UB. */
+	(void) found;
+}
 
-	slist_insert_tail((struct slist_entry *) context, err);
+__OPX_FORCE_INLINE__
+void opx_hfisvc_rma_context_drain_and_route(struct fi_opx_ep *opx_ep, struct opx_context *context, uint64_t len)
+{
+	/* len > byte_counter can only happen from an accounting bug (double-drain, miscounted iov, etc.);
+	 * data integrity is already compromised at that point and a warn-and-continue band-aid would hide
+	 * it. Match the existing OPX convention: assert() in debug builds, and in optimized builds accept
+	 * the (should-never-happen) wrap/stall rather than pay a per-completion branch for a condition
+	 * that must not occur. Reference: PR review, belynam. */
+	assert(len <= context->byte_counter);
+	context->byte_counter -= len;
+	if (context->byte_counter == 0 && context->err_entry.err != 0) {
+		opx_enqueue_err_from_pending(opx_ep->rx->cq_pending_ptr, opx_ep->rx->cq_err_ptr, context);
+	}
 }
 
 __OPX_FORCE_INLINE__
@@ -3991,7 +4019,7 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 			context->err_entry.err_data	 = NULL;
 			context->err_entry.err_data_size = 0;
 			context->byte_counter		 = 0;
-			opx_enqueue_err_from_pending(opx_ep->tx->cq_pending_ptr, opx_ep->tx->cq_err_ptr, context);
+			opx_enqueue_err_from_pending(opx_ep->rx->cq_pending_ptr, opx_ep->rx->cq_err_ptr, context);
 		}
 	} else {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.internal_completion.success);
@@ -4039,8 +4067,7 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 					"HFISVC RMA completion with context: completion=%p access_key=%u xfer_len=%lu context=%p byte_counter=%lu -> %lu\n",
 					completion, completion->access_key, len, context, context->byte_counter,
 					context->byte_counter - len);
-				assert(len <= context->byte_counter);
-				context->byte_counter -= len;
+				opx_hfisvc_rma_context_drain_and_route(opx_ep, context, len);
 			} else {
 				OPX_HFISVC_DEBUG_LOG(
 					"HFISVC RMA completion without context: completion=%p access_key=%u xfer_len=%lu\n",

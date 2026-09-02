@@ -37,6 +37,59 @@
 #include "rdma/opx/opx_hfisvc_rma.h"
 
 #if HAVE_HFISVC
+/* Standalone CQ error for a dropped iov with no shared PUT_CQ context (plain PUT / GET). */
+static inline void opx_hfisvc_rma_post_standalone_err(struct fi_opx_ep *opx_ep, uint64_t flags, uint64_t data, int err,
+						      int prov_errno)
+{
+	struct opx_context *err_context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
+	if (OFI_UNLIKELY(err_context == NULL)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "ctx_pool exhausted; HFISVC RMA error not posted to EQ\n");
+		return;
+	}
+	err_context->next		     = NULL;
+	err_context->flags		     = flags;
+	err_context->len		     = 0;
+	err_context->buf		     = NULL;
+	err_context->data		     = data;
+	err_context->tag		     = 0;
+	err_context->byte_counter	     = 0;
+	err_context->err_entry.flags	     = flags;
+	err_context->err_entry.len	     = 0;
+	err_context->err_entry.buf	     = NULL;
+	err_context->err_entry.data	     = data;
+	err_context->err_entry.tag	     = 0;
+	err_context->err_entry.olen	     = 0;
+	err_context->err_entry.err	     = err;
+	err_context->err_entry.prov_errno    = prov_errno;
+	err_context->err_entry.op_context    = NULL;
+	err_context->err_entry.err_data	     = NULL;
+	err_context->err_entry.err_data_size = 0;
+	slist_insert_tail((struct slist_entry *) err_context, opx_ep->rx->cq_err_ptr);
+}
+
+/* PUT_CQ dropped iov: sticky error (first failure wins) with data from the canonical params->data;
+ * flags/len keep PUT_CQ semantics (FI_REMOTE_CQ_DATA retained, len = bytes), unlike the standalone path. */
+static inline void opx_hfisvc_rma_putcq_drop(struct fi_opx_ep *opx_ep, struct opx_context *context, uint64_t data,
+					     uint64_t len, int err, int prov_errno)
+{
+	/* data is invariant across every iov of one PUT_CQ op (all share params->data == context->data, both
+	 * sourced from hdr->match.ofi_data), so latch the whole err_entry together on the first failure. */
+	assert((context->flags & FI_REMOTE_CQ_DATA) && context->data == data);
+	if (context->err_entry.err == 0) {
+		context->err_entry.flags	 = context->flags;
+		context->err_entry.len		 = context->len;
+		context->err_entry.buf		 = context->buf;
+		context->err_entry.data		 = data;
+		context->err_entry.tag		 = context->tag;
+		context->err_entry.olen		 = 0;
+		context->err_entry.err		 = err;
+		context->err_entry.prov_errno	 = prov_errno;
+		context->err_entry.err_data	 = NULL;
+		context->err_entry.err_data_size = 0;
+	}
+	opx_hfisvc_rma_context_drain_and_route(opx_ep, context, len);
+}
+
 int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 {
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "HFISVC_RMA_SEND_RTS");
@@ -398,35 +451,12 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				mr_key);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				     "===================================== RECV -- RMA HFISVC RTS - failed (end)\n");
-			/* PUT_CQ: drain the dropped iov's len so the CQ completion can still reach zero */
+			const uint64_t drop_flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
 			if (has_cq_data && params->context != NULL) {
-				params->context->byte_counter -= hfisvc_iov->len;
-			}
-
-			struct opx_context *err_context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
-			if (OFI_LIKELY(err_context != NULL)) {
-				err_context->next  = NULL;
-				err_context->flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-				err_context->len   = 0;
-				err_context->buf   = NULL;
-				err_context->data  = params->data;
-				err_context->tag   = 0;
-				err_context->byte_counter	     = 0;
-				err_context->err_entry.flags	     = err_context->flags;
-				err_context->err_entry.len	     = 0;
-				err_context->err_entry.buf	     = NULL;
-				err_context->err_entry.data	     = params->data;
-				err_context->err_entry.tag	     = 0;
-				err_context->err_entry.olen	     = 0;
-				err_context->err_entry.err	     = FI_EIO;
-				err_context->err_entry.prov_errno    = FI_EIO;
-				err_context->err_entry.op_context    = NULL;
-				err_context->err_entry.err_data	     = NULL;
-				err_context->err_entry.err_data_size = 0;
-				slist_insert_tail((struct slist_entry *) err_context, opx_ep->rx->cq_err_ptr);
+				opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data, hfisvc_iov->len,
+							  FI_EIO, FI_EIO);
 			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"ctx_pool exhausted; HFISVC RMA MR-miss error not posted to EQ\n");
+				opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EIO, FI_EIO);
 			}
 
 			++cur_iov;
@@ -437,37 +467,14 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_OPEN_DEFERRED) {
 			rc = opx_hfisvc_mr_lazy_open(opx_ep->domain, opx_mr);
 			if (rc) {
-				/* PUT_CQ: drain the dropped iov's len; a GET has no target-side context to drain */
+				const uint64_t drop_flags =
+					FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
 				if (has_cq_data && params->context != NULL) {
-					params->context->byte_counter -= hfisvc_iov->len;
-				}
-
-				struct opx_context *err_context =
-					(struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
-				if (OFI_LIKELY(err_context != NULL)) {
-					err_context->next = NULL;
-					err_context->flags =
-						FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-					err_context->len		     = 0;
-					err_context->buf		     = NULL;
-					err_context->data		     = params->data;
-					err_context->tag		     = 0;
-					err_context->byte_counter	     = 0;
-					err_context->err_entry.flags	     = err_context->flags;
-					err_context->err_entry.len	     = 0;
-					err_context->err_entry.buf	     = NULL;
-					err_context->err_entry.data	     = params->data;
-					err_context->err_entry.tag	     = 0;
-					err_context->err_entry.olen	     = 0;
-					err_context->err_entry.err	     = FI_EIO;
-					err_context->err_entry.prov_errno    = FI_EIO;
-					err_context->err_entry.op_context    = NULL;
-					err_context->err_entry.err_data	     = NULL;
-					err_context->err_entry.err_data_size = 0;
-					slist_insert_tail((struct slist_entry *) err_context, opx_ep->rx->cq_err_ptr);
+					opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data,
+								  hfisvc_iov->len, FI_EIO, FI_EIO);
 				} else {
-					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"ctx_pool exhausted; HFISVC RMA lazy-open error not posted to EQ\n");
+					opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EIO,
+									   FI_EIO);
 				}
 
 				++cur_iov;
@@ -486,36 +493,14 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 					"HFISVC RMA MR key (%lu) stuck non-OPENED after %lu attempts; iov dropped\n",
 					mr_key, (uint64_t) params->recv_eagain_attempts);
 
+				const uint64_t drop_flags =
+					FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
 				if (has_cq_data && params->context != NULL) {
-					params->context->byte_counter -= hfisvc_iov->len;
-				}
-
-				struct opx_context *werr_context =
-					(struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
-				if (OFI_LIKELY(werr_context != NULL)) {
-					werr_context->next = NULL;
-					werr_context->flags =
-						FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-					werr_context->len		      = 0;
-					werr_context->buf		      = NULL;
-					werr_context->data		      = params->data;
-					werr_context->tag		      = 0;
-					werr_context->byte_counter	      = 0;
-					werr_context->err_entry.flags	      = werr_context->flags;
-					werr_context->err_entry.len	      = 0;
-					werr_context->err_entry.buf	      = NULL;
-					werr_context->err_entry.data	      = params->data;
-					werr_context->err_entry.tag	      = 0;
-					werr_context->err_entry.olen	      = 0;
-					werr_context->err_entry.err	      = FI_EIO;
-					werr_context->err_entry.prov_errno    = FI_EIO;
-					werr_context->err_entry.op_context    = NULL;
-					werr_context->err_entry.err_data      = NULL;
-					werr_context->err_entry.err_data_size = 0;
-					slist_insert_tail((struct slist_entry *) werr_context, opx_ep->rx->cq_err_ptr);
+					opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data,
+								  hfisvc_iov->len, FI_EIO, FI_EIO);
 				} else {
-					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-						"ctx_pool exhausted; HFISVC RMA MR-wedge error not posted to EQ\n");
+					opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EIO,
+									   FI_EIO);
 				}
 
 				++cur_iov;
@@ -534,35 +519,13 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				write_to_origin ? "GET" : "PUT", mr_key,
 				write_to_origin ? "FI_REMOTE_READ" : "FI_REMOTE_WRITE", (uint64_t) opx_mr->attr.access);
 
-			/* PUT_CQ: keep draining byte_counter on the dropped iov */
+			const uint64_t drop_flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
 			if (has_cq_data && params->context != NULL) {
-				params->context->byte_counter -= hfisvc_iov->len;
-			}
-
-			struct opx_context *err_context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
-			if (OFI_LIKELY(err_context != NULL)) {
-				err_context->next  = NULL;
-				err_context->flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-				err_context->len   = 0;
-				err_context->buf   = NULL;
-				err_context->data  = params->data;
-				err_context->tag   = 0;
-				err_context->byte_counter	     = 0;
-				err_context->err_entry.flags	     = err_context->flags;
-				err_context->err_entry.len	     = 0;
-				err_context->err_entry.buf	     = NULL;
-				err_context->err_entry.data	     = params->data;
-				err_context->err_entry.tag	     = 0;
-				err_context->err_entry.olen	     = 0;
-				err_context->err_entry.err	     = FI_EACCES;
-				err_context->err_entry.prov_errno    = FI_EACCES;
-				err_context->err_entry.op_context    = NULL;
-				err_context->err_entry.err_data	     = NULL;
-				err_context->err_entry.err_data_size = 0;
-				slist_insert_tail((struct slist_entry *) err_context, opx_ep->rx->cq_err_ptr);
+				opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data, hfisvc_iov->len,
+							  FI_EACCES, FI_EACCES);
 			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"ctx_pool exhausted; HFISVC RMA permission error not posted to EQ\n");
+				opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EACCES,
+								   FI_EACCES);
 			}
 
 			++cur_iov;
@@ -587,35 +550,13 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				write_to_origin ? "GET" : "PUT", mr_offset, hfisvc_iov->len, mr_len,
 				(uint64_t) hfisvc_iov->remote_offset);
 
-			/* PUT_CQ: keep draining byte_counter on the dropped iov */
+			const uint64_t drop_flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
 			if (has_cq_data && params->context != NULL) {
-				params->context->byte_counter -= hfisvc_iov->len;
-			}
-
-			struct opx_context *berr_context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
-			if (OFI_LIKELY(berr_context != NULL)) {
-				berr_context->next  = NULL;
-				berr_context->flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-				berr_context->len   = 0;
-				berr_context->buf   = NULL;
-				berr_context->data  = params->data;
-				berr_context->tag   = 0;
-				berr_context->byte_counter	      = 0;
-				berr_context->err_entry.flags	      = berr_context->flags;
-				berr_context->err_entry.len	      = 0;
-				berr_context->err_entry.buf	      = NULL;
-				berr_context->err_entry.data	      = params->data;
-				berr_context->err_entry.tag	      = 0;
-				berr_context->err_entry.olen	      = 0;
-				berr_context->err_entry.err	      = FI_EACCES;
-				berr_context->err_entry.prov_errno    = FI_EACCES;
-				berr_context->err_entry.op_context    = NULL;
-				berr_context->err_entry.err_data      = NULL;
-				berr_context->err_entry.err_data_size = 0;
-				slist_insert_tail((struct slist_entry *) berr_context, opx_ep->rx->cq_err_ptr);
+				opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data, hfisvc_iov->len,
+							  FI_EACCES, FI_EACCES);
 			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"ctx_pool exhausted; HFISVC RMA bounds error not posted to EQ\n");
+				opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EACCES,
+								   FI_EACCES);
 			}
 
 			++cur_iov;
@@ -635,37 +576,14 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 						"HFISVC RMA completion_pool stuck exhausted after %lu attempts; iov dropped\n",
 						(uint64_t) params->recv_eagain_attempts);
 
+					const uint64_t drop_flags =
+						FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
 					if (has_cq_data && params->context != NULL) {
-						params->context->byte_counter -= hfisvc_iov->len;
-					}
-
-					struct opx_context *cerr_context =
-						(struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
-					if (OFI_LIKELY(cerr_context != NULL)) {
-						cerr_context->next = NULL;
-						cerr_context->flags =
-							FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-						cerr_context->len		      = 0;
-						cerr_context->buf		      = NULL;
-						cerr_context->data		      = params->data;
-						cerr_context->tag		      = 0;
-						cerr_context->byte_counter	      = 0;
-						cerr_context->err_entry.flags	      = cerr_context->flags;
-						cerr_context->err_entry.len	      = 0;
-						cerr_context->err_entry.buf	      = NULL;
-						cerr_context->err_entry.data	      = params->data;
-						cerr_context->err_entry.tag	      = 0;
-						cerr_context->err_entry.olen	      = 0;
-						cerr_context->err_entry.err	      = FI_EIO;
-						cerr_context->err_entry.prov_errno    = FI_EIO;
-						cerr_context->err_entry.op_context    = NULL;
-						cerr_context->err_entry.err_data      = NULL;
-						cerr_context->err_entry.err_data_size = 0;
-						slist_insert_tail((struct slist_entry *) cerr_context,
-								  opx_ep->rx->cq_err_ptr);
+						opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data,
+									  hfisvc_iov->len, FI_EIO, FI_EIO);
 					} else {
-						FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-							"ctx_pool exhausted; HFISVC RMA completion-wedge error not posted to EQ\n");
+						opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data,
+										   FI_EIO, FI_EIO);
 					}
 
 					++cur_iov;
@@ -724,34 +642,12 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				OPX_BUF_FREE(internal_completion);
 			}
 
+			const uint64_t drop_flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
 			if (has_cq_data && params->context != NULL) {
-				params->context->byte_counter -= hfisvc_iov->len;
-			}
-
-			struct opx_context *err_context = (struct opx_context *) ofi_buf_alloc(opx_ep->rx->ctx_pool);
-			if (OFI_LIKELY(err_context != NULL)) {
-				err_context->next  = NULL;
-				err_context->flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-				err_context->len   = 0;
-				err_context->buf   = NULL;
-				err_context->data  = params->data;
-				err_context->tag   = 0;
-				err_context->byte_counter	     = 0;
-				err_context->err_entry.flags	     = err_context->flags;
-				err_context->err_entry.len	     = 0;
-				err_context->err_entry.buf	     = NULL;
-				err_context->err_entry.data	     = params->data;
-				err_context->err_entry.tag	     = 0;
-				err_context->err_entry.olen	     = 0;
-				err_context->err_entry.err	     = FI_EIO;
-				err_context->err_entry.prov_errno    = rc;
-				err_context->err_entry.op_context    = NULL;
-				err_context->err_entry.err_data	     = NULL;
-				err_context->err_entry.err_data_size = 0;
-				slist_insert_tail((struct slist_entry *) err_context, opx_ep->rx->cq_err_ptr);
+				opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data, hfisvc_iov->len,
+							  FI_EIO, rc);
 			} else {
-				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"ctx_pool exhausted; HFISVC RMA cmd error not posted to EQ\n");
+				opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EIO, rc);
 			}
 
 			++cur_iov;
@@ -845,10 +741,10 @@ void opx_hfisvc_rma_invoke_recv_rts(struct fi_opx_ep *opx_ep, const union opx_hf
 
 	const enum fi_datatype dt = (enum fi_datatype) hdr->rma_rts.dt;
 	const enum fi_op       op = (enum fi_op) hdr->rma_rts.op;
-	assert(op == FI_NOOP || op < OFI_ATOMIC_OP_LAST);
-	assert(dt == FI_VOID || dt < OFI_DATATYPE_LAST);
-	params->fi_datatype_dt = dt == FI_VOID ? FI_VOID - 1 : dt;
-	params->fi_op_opcode   = op == FI_NOOP ? FI_NOOP - 1 : op;
+	assert(op == FI_NOOP - 1 || op < OFI_ATOMIC_OP_LAST);
+	assert(dt == FI_VOID - 1 || dt < OFI_DATATYPE_LAST);
+	params->fi_datatype_dt = dt;
+	params->fi_op_opcode   = op;
 
 	/* clamp wire-controlled niov so it cannot overflow the fixed-size hfisvc_iov[] */
 	if (OFI_UNLIKELY(hdr->rma_rts.niov > OPX_MAX_RMA_HFISVC_IOVS)) {

@@ -38,18 +38,16 @@
 #include "rdma/opx/fi_opx_rma_ops.h"
 #include "rdma/opx/fi_opx_hfi1_transport.h"
 #include "rdma/opx/fi_opx_hfi1_sdma.h"
+#include "rdma/opx/opx_rma_types.h"
+#if HAVE_HFISVC
+#include "rdma/opx/opx_hfisvc_rma.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define OPX_NO_REMOTE_CQ_DATA 0
-
-struct opx_rma_op_iov {
-	uint64_t	       remote_auth_key;
-	size_t		       remote_offset;
-	struct fi_opx_hmem_iov hmem_iov;
-};
 
 __OPX_FORCE_INLINE__
 int fi_opx_check_rma(struct fi_opx_ep *opx_ep)
@@ -206,6 +204,28 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	}
 	uint64_t slid	  = opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid;
 	uint64_t pbc_dlid = OPX_PBC_DLID(opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
+
+#if HAVE_HFISVC
+	/* hfisvc plain write for off-SHM SYSTEM at/above the SDMA floor; writedata rides PUT_CQ, inject bypasses. */
+	if (!(tx_op_flags & FI_INJECT) && op == FI_NOOP && iov->len >= opx_ep->tx->sdma_min_payload_bytes &&
+	    opx_ep->use_hfisvc && iov->iface == FI_HMEM_SYSTEM && !is_shm) {
+		assert(work != NULL);
+		const uint64_t cq_data		 = tx_op_flags & FI_REMOTE_CQ_DATA;
+		const uint64_t dput_opcode	 = cq_data ? FI_OPX_HFI_DPUT_OPCODE_PUT_CQ : FI_OPX_HFI_DPUT_OPCODE_PUT;
+		const uint64_t hfisvc_data	 = cq_data ? data : 0ul;
+		struct opx_rma_op_iov hfisvc_iov = {.hmem_iov	     = *iov,
+						    .remote_auth_key = key,
+						    .remote_offset   = addr_offset};
+
+		opx_hfisvc_rma_watch_register(opx_ep, cc);
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_write_path.hfisvc);
+		opx_hfisvc_rma_invoke_send_rts(opx_ep, work, &hfisvc_iov, 1ul, opx_dst_addr, hfisvc_data, cc,
+					       dput_opcode, dt, op, lock_required, reliability, hfi1_type);
+		OPX_TRACE_RMA_END_SUCCESS(OPX_TRACE_EVENT_RMA_WRITE_INTERNAL, iov->len, 0);
+		return;
+	}
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_write_path.fallback_dput);
+#endif
 
 	if (tx_op_flags & FI_REMOTE_CQ_DATA) {
 		struct fi_opx_rma_request *rma_req = ofi_buf_alloc(opx_tx->rma_request_pool);

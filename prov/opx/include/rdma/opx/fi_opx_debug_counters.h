@@ -384,6 +384,11 @@ struct fi_opx_debug_counters {
 		} rma_read_path;
 
 		struct {
+			uint64_t hfisvc;
+			uint64_t fallback_dput;
+		} rma_write_path;
+
+		struct {
 			uint64_t timed_out;
 		} rma_watchdog;
 
@@ -809,6 +814,8 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_send_rts.enomem_completion_dropped);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_read_path.hfisvc);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_read_path.fallback_readv);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_write_path.hfisvc);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_write_path.fallback_dput);
 
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hfisvc.rma_watchdog.timed_out);
 
