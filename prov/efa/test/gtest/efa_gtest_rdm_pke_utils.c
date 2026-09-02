@@ -9,9 +9,15 @@
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_ope.h"
 #include "rdm/efa_rdm_pke.h"
+#include "rdm/efa_rdm_pke_req.h"
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_protocol.h"
+#include "rdm/efa_rdm_proto_eager.h"
+#include "rdm/efa_rdm_proto_longcts.h"
+#include "rdm/efa_rdm_proto_longread.h"
+#include "rdm/efa_rdm_proto_medium.h"
+#include "rdm/efa_rdm_proto_runtread.h"
 
 int efa_test_rtm_read_nack_missing_rxe(struct fid_ep *ep, fi_addr_t peer_addr,
 				       int tagged, ssize_t *ret)
@@ -268,6 +274,248 @@ static struct efa_rdm_ope *efa_test_rtm_alloc_txe(struct efa_rdm_ep *ep,
 	return txe;
 }
 
+/*
+ * Build an eager RTM packet the way the eager protocol does.
+ *
+ * The eager protocol moved to the refactored code path
+ * (efa_rdm_proto_eager_construct_tx_pkes), which allocates its own packet
+ * entry and so cannot stamp a caller-supplied one. This mirrors the header and
+ * payload it writes, so the assertions below still describe the eager wire
+ * format.
+ */
+static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
+				       struct efa_rdm_ope *txe,
+				       enum efa_test_rtm_variant variant)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+
+	if (pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR) {
+		/* Headerless: raw payload, no protocol header at all. */
+		efa_rdm_pke_set_ope(pkt_entry, txe);
+		pkt_entry->peer = txe->peer;
+		return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, 0, 0,
+							 txe->total_len);
+	}
+
+	if (EFA_TEST_RTM_IS_DC(variant))
+		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	/* The DC and non-DC eager headers share this prefix. */
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(pkt_entry);
+	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->msg_id = txe->msg_id;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		rtm_hdr->flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	/* Only the DC eager header carries send_id. */
+	if (EFA_TEST_RTM_IS_DC(variant))
+		efa_rdm_pke_get_dc_eager_rtm_base_hdr(pkt_entry)->send_id =
+			txe->tx_id;
+
+	/*
+	 * An eager message fits in one packet by definition, so the whole
+	 * message is the payload and no segment alignment is needed.
+	 */
+	return efa_rdm_pke_init_payload_from_ope(
+		pkt_entry, txe, efa_rdm_pke_get_req_hdr_size(pkt_entry), 0,
+		txe->total_len);
+}
+
+/*
+ * Build one segment of a medium RTM message the way the medium protocol does.
+ *
+ * Like eager, the medium protocol moved to the refactored code path
+ * (efa_rdm_proto_medium_construct_tx_pkes), which allocates its own packet
+ * entries and so cannot stamp a caller-supplied one. This mirrors the header and
+ * payload it writes for a single segment, so the assertions below still describe
+ * the medium wire format.
+ */
+static ssize_t efa_test_rtm_init_medium(struct efa_rdm_pke *pkt_entry,
+					struct efa_rdm_ope *txe,
+					enum efa_test_rtm_variant variant,
+					size_t segment_offset, size_t data_size)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+
+	if (EFA_TEST_RTM_IS_DC(variant))
+		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	/* The DC and non-DC medium headers share this prefix. */
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(pkt_entry);
+	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->msg_id = txe->msg_id;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		rtm_hdr->flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	if (EFA_TEST_RTM_IS_DC(variant)) {
+		struct efa_rdm_dc_medium_rtm_base_hdr *h =
+			efa_rdm_pke_get_dc_medium_rtm_base_hdr(pkt_entry);
+
+		h->send_id = txe->tx_id;
+		h->msg_length = txe->total_len;
+		h->seg_offset = segment_offset;
+	} else {
+		struct efa_rdm_medium_rtm_base_hdr *h =
+			efa_rdm_pke_get_medium_rtm_base_hdr(pkt_entry);
+
+		h->msg_length = txe->total_len;
+		h->seg_offset = segment_offset;
+	}
+
+	return efa_rdm_pke_init_payload_from_ope(
+		pkt_entry, txe, efa_rdm_pke_get_req_hdr_size(pkt_entry),
+		segment_offset, data_size);
+}
+
+/*
+ * Build a long CTS RTM packet the way the long CTS protocol does.
+ *
+ * Like the protocols above, the long CTS protocol moved to the refactored code
+ * path (efa_rdm_proto_longcts_construct_tx_pkes), which allocates its own packet
+ * entry and so cannot stamp a caller-supplied one. This mirrors the header and
+ * the head-of-message payload it writes, so the assertions below still describe
+ * the long CTS wire format.
+ */
+static ssize_t efa_test_rtm_init_longcts(struct efa_rdm_pke *pkt_entry,
+					 struct efa_rdm_ope *txe,
+					 enum efa_test_rtm_variant variant)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_longcts_rtm_base_hdr *rtm_hdr;
+	size_t hdr_size, memory_alignment, rtm_payload_size;
+
+	if (EFA_TEST_RTM_IS_DC(variant))
+		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	/* The DC and non-DC long CTS headers have the same layout. */
+	rtm_hdr = efa_rdm_pke_get_longcts_rtm_base_hdr(pkt_entry);
+	rtm_hdr->hdr.flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->hdr.msg_id = txe->msg_id;
+	rtm_hdr->msg_length = txe->total_len;
+	rtm_hdr->send_id = txe->tx_id;
+	rtm_hdr->credit_request = efa_env.tx_min_credits;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		rtm_hdr->hdr.flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
+	memory_alignment = efa_rdm_ep_get_memory_alignment(txe->ep, FI_HMEM_SYSTEM);
+	rtm_payload_size =
+		(txe->ep->mtu_size - hdr_size) & ~(memory_alignment - 1);
+
+	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, hdr_size, 0,
+						 rtm_payload_size);
+}
+
+/*
+ * Build a long read RTM packet the way the long read protocol does.
+ *
+ * Like the protocols above, the long read protocol moved to the refactored code
+ * path (efa_rdm_proto_longread_construct_tx_pkes), which allocates its own packet
+ * entry and so cannot stamp a caller-supplied one. This mirrors the header and
+ * read iov array it writes, so the assertions below still describe the long read
+ * wire format. There is no payload: the read iov array is the whole body.
+ */
+static ssize_t efa_test_rtm_init_longread(struct efa_rdm_pke *pkt_entry,
+					  struct efa_rdm_ope *txe,
+					  enum efa_test_rtm_variant variant)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
+	struct fi_rma_iov *read_iov;
+	size_t hdr_size;
+	ssize_t ret;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry);
+	rtm_hdr->hdr.flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->hdr.msg_id = txe->msg_id;
+	rtm_hdr->msg_length = txe->total_len;
+	rtm_hdr->send_id = txe->tx_id;
+	rtm_hdr->read_iov_count = txe->iov_count;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		rtm_hdr->hdr.flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
+	read_iov = (struct fi_rma_iov *) (pkt_entry->wiredata + hdr_size);
+	ret = efa_rdm_txe_prepare_to_be_read(txe, read_iov);
+	if (ret)
+		return ret;
+
+	pkt_entry->pkt_size =
+		hdr_size + txe->iov_count * sizeof(struct fi_rma_iov);
+	return 0;
+}
+
+/*
+ * Build one segment of a runt read RTM message the way the runt read protocol
+ * does.
+ *
+ * Like eager and medium, the runt read protocol moved to the refactored code
+ * path (efa_rdm_proto_runtread_construct_tx_pkes), which allocates its own
+ * packet entries and so cannot stamp a caller-supplied one. This mirrors the
+ * header, read iov array and payload it writes for a single segment, so the
+ * assertions below still describe the runt read wire format.
+ */
+static ssize_t efa_test_rtm_init_runtread(struct efa_rdm_pke *pkt_entry,
+					  struct efa_rdm_ope *txe,
+					  enum efa_test_rtm_variant variant,
+					  size_t segment_offset, size_t data_size)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	struct efa_rdm_runtread_rtm_base_hdr *rtm_hdr;
+	struct fi_rma_iov *read_iov;
+	size_t hdr_size;
+	ssize_t ret;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	rtm_hdr = efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry);
+	rtm_hdr->hdr.flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->hdr.msg_id = txe->msg_id;
+	rtm_hdr->msg_length = txe->total_len;
+	rtm_hdr->send_id = txe->tx_id;
+	rtm_hdr->seg_offset = segment_offset;
+	rtm_hdr->runt_length = txe->bytes_runt;
+	rtm_hdr->read_iov_count = txe->iov_count;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		rtm_hdr->hdr.flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
+	read_iov = (struct fi_rma_iov *) (pkt_entry->wiredata + hdr_size);
+	ret = efa_rdm_txe_prepare_to_be_read(txe, read_iov);
+	if (ret)
+		return ret;
+
+	return efa_rdm_pke_init_payload_from_ope(
+		pkt_entry, txe,
+		hdr_size + txe->iov_count * sizeof(struct fi_rma_iov),
+		segment_offset, data_size);
+}
+
 void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 			     enum efa_test_rtm_variant variant,
 			     struct efa_test_rtm_init_result *out)
@@ -310,63 +558,33 @@ void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 		pkt_entry->flags |= EFA_RDM_PKE_HAS_NO_BASE_HDR;
 		/* fallthrough */
 	case EFA_TEST_RTM_EAGER_MSG:
-		out->ret = efa_rdm_pke_init_eager_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_EAGER_TAG:
-		out->ret = efa_rdm_pke_init_eager_tagrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_DC_EAGER_MSG:
-		out->ret = efa_rdm_pke_init_dc_eager_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_DC_EAGER_TAG:
-		out->ret = efa_rdm_pke_init_dc_eager_tagrtm(pkt_entry, txe);
+		out->ret = efa_test_rtm_init_eager(pkt_entry, txe, variant);
 		break;
 	case EFA_TEST_RTM_MEDIUM_MSG:
-		out->ret = efa_rdm_pke_init_medium_msgrtm(
-			pkt_entry, txe, EFA_TEST_RTM_MEDIUM_SEG,
-			EFA_TEST_RTM_MEDIUM_DATA);
-		break;
 	case EFA_TEST_RTM_MEDIUM_TAG:
-		out->ret = efa_rdm_pke_init_medium_tagrtm(
-			pkt_entry, txe, EFA_TEST_RTM_MEDIUM_SEG,
-			EFA_TEST_RTM_MEDIUM_DATA);
-		break;
 	case EFA_TEST_RTM_DC_MEDIUM_MSG:
-		out->ret = efa_rdm_pke_init_dc_medium_msgrtm(
-			pkt_entry, txe, EFA_TEST_RTM_MEDIUM_SEG,
-			EFA_TEST_RTM_MEDIUM_DATA);
-		break;
 	case EFA_TEST_RTM_DC_MEDIUM_TAG:
-		out->ret = efa_rdm_pke_init_dc_medium_tagrtm(
-			pkt_entry, txe, EFA_TEST_RTM_MEDIUM_SEG,
-			EFA_TEST_RTM_MEDIUM_DATA);
+		out->ret = efa_test_rtm_init_medium(pkt_entry, txe, variant,
+						   EFA_TEST_RTM_MEDIUM_SEG,
+						   EFA_TEST_RTM_MEDIUM_DATA);
 		break;
 	case EFA_TEST_RTM_LONGCTS_MSG:
-		out->ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_LONGCTS_TAG:
-		out->ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_DC_LONGCTS_MSG:
-		out->ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_DC_LONGCTS_TAG:
-		out->ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, txe);
+		out->ret = efa_test_rtm_init_longcts(pkt_entry, txe, variant);
 		break;
 	case EFA_TEST_RTM_LONGREAD_MSG:
-		out->ret = efa_rdm_pke_init_longread_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_LONGREAD_TAG:
-		out->ret = efa_rdm_pke_init_longread_tagrtm(pkt_entry, txe);
+		out->ret = efa_test_rtm_init_longread(pkt_entry, txe, variant);
 		break;
 	case EFA_TEST_RTM_RUNTREAD_MSG:
-		out->ret = efa_rdm_pke_init_runtread_msgrtm(
-			pkt_entry, txe, EFA_TEST_RTM_RUNT_SEG,
-			EFA_TEST_RTM_RUNT_DATA);
-		break;
 	case EFA_TEST_RTM_RUNTREAD_TAG:
-		out->ret = efa_rdm_pke_init_runtread_tagrtm(
-			pkt_entry, txe, EFA_TEST_RTM_RUNT_SEG,
+		out->ret = efa_test_rtm_init_runtread(
+			pkt_entry, txe, variant, EFA_TEST_RTM_RUNT_SEG,
 			EFA_TEST_RTM_RUNT_DATA);
 		break;
 	}
@@ -460,7 +678,7 @@ static int efa_test_txe_on_ope_list(struct efa_rdm_ep *ep,
 void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 			     enum efa_test_rtm_variant variant,
 			     enum efa_test_rtm_sent_op op, size_t payload_size,
-			     size_t bytes_already, size_t seg_offset,
+			     size_t bytes_already,
 			     struct efa_test_rtm_sent_result *out)
 {
 	struct efa_rdm_ep *efa_rdm_ep =
@@ -472,6 +690,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer *peer;
+	bool callback_released_pkt_entry = false;
 	static char buf[EFA_TEST_RTM_LONG_LEN];
 
 	memset(out, 0, sizeof(*out));
@@ -499,15 +718,6 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	pkt_entry->peer = peer;
 	pkt_entry->payload_size = payload_size;
 
-	/* only the runtread send handler checks seg_offset */
-	if (family == EFA_TEST_RTM_FAM_RUNTREAD) {
-		struct efa_rdm_base_hdr *base_hdr =
-			(struct efa_rdm_base_hdr *) pkt_entry->wiredata;
-		base_hdr->type = efa_test_rtm_pkt_type(variant);
-		efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry)->seg_offset =
-			seg_offset;
-	}
-
 	if (op == EFA_TEST_RTM_OP_SENT) {
 		/* Report deltas: num_read_msg_in_flight is a domain counter that
 		 * the "sent" handler only bumps (drained elsewhere), so repeated
@@ -517,16 +727,44 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 
 		switch (family) {
 		case EFA_TEST_RTM_FAM_MEDIUM:
-			efa_rdm_pke_handle_medium_rtm_sent(pkt_entry);
+			/*
+			 * The refactored medium protocol posts every packet of
+			 * the message in one go, so its post-send hook accounts
+			 * for the whole message rather than for one packet.
+			 */
+			efa_rdm_proto_medium_handle_tx_pkes_posted(efa_rdm_ep,
+								   txe);
 			break;
 		case EFA_TEST_RTM_FAM_LONGCTS:
-			efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
+			/*
+			 * The refactored long CTS protocol reads the REQ's
+			 * payload size off the packet vector it just posted, and
+			 * assigns bytes_sent rather than accumulating it; the
+			 * CTSDATA stream takes over from there.
+			 */
+			efa_rdm_ep->send_pkt_entry_vec[0] = pkt_entry;
+			efa_rdm_ep->send_pkt_entry_vec_size = 1;
+			efa_rdm_proto_longcts_handle_tx_pkes_posted(efa_rdm_ep,
+								   txe);
 			break;
 		case EFA_TEST_RTM_FAM_LONGREAD:
-			efa_rdm_pke_handle_longread_rtm_sent(pkt_entry);
+			/*
+			 * The refactored long read protocol takes the domain's
+			 * read slot from its post-send hook, once per message.
+			 */
+			efa_rdm_proto_longread_handle_tx_pkes_posted(efa_rdm_ep,
+								    txe);
 			break;
 		case EFA_TEST_RTM_FAM_RUNTREAD:
-			efa_rdm_pke_handle_runtread_rtm_sent(pkt_entry, peer);
+			/*
+			 * The refactored runt read protocol posts the whole runt
+			 * in one go, so its post-send hook accounts for
+			 * bytes_runt rather than for one packet, and it bumps the
+			 * read count once per message instead of on the first
+			 * segment.
+			 */
+			efa_rdm_proto_runtread_handle_tx_pkes_posted(efa_rdm_ep,
+								    txe);
 			break;
 		case EFA_TEST_RTM_FAM_EAGER:
 			break;
@@ -554,19 +792,44 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 
 	switch (family) {
 	case EFA_TEST_RTM_FAM_EAGER:
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
+		/*
+		 * The eager protocol moved to the refactored code path, where
+		 * the send completion handler lives on the packet entry. It
+		 * releases the packet entry itself, unlike the handlers below,
+		 * so remember not to release it again.
+		 */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_eager_handle_rtm_send_completion;
+		callback_released_pkt_entry = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_MEDIUM:
-		efa_rdm_pke_handle_medium_rtm_send_completion(pkt_entry);
+		/* Also refactored; see the eager case above. */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_medium_handle_rtm_send_completion;
+		callback_released_pkt_entry = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_LONGCTS:
-		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
+		/* Also refactored; see the eager case above. */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_longcts_handle_rtm_send_completion;
+		callback_released_pkt_entry = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_RUNTREAD:
-		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
+		/* Also refactored; see the eager case above. */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_runtread_handle_rtm_send_completion;
+		callback_released_pkt_entry = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_LONGREAD:
-		/* no dedicated completion handler */
+		/* Also refactored; see the eager case above. */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_longread_handle_rtm_send_completion;
+		callback_released_pkt_entry = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	}
 
@@ -578,9 +841,10 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	out->num_runt_bytes_in_flight = peer->num_runt_bytes_in_flight;
 	if (out->txe_on_ope_list) {
 		out->bytes_acked = txe->bytes_acked;
-		efa_rdm_pke_release_tx(pkt_entry);
+		if (!callback_released_pkt_entry)
+			efa_rdm_pke_release_tx(pkt_entry);
 		efa_rdm_txe_release(txe);
-	} else {
+	} else if (!callback_released_pkt_entry) {
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
 }

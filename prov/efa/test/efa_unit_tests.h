@@ -14,8 +14,9 @@
 #include <stddef.h>
 #include <setjmp.h>
 #include <cmocka.h>
-#include "stdio.h"
+#include <stdio.h>
 #include "efa.h"
+#include "efa_rdm_pke_cmd.h"
 #include "efa_unit_test_mocks.h"
 
 /**
@@ -425,8 +426,6 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_128_multiple_alignment(void **s
 void test_efa_rdm_peer_get_runt_size_cuda_memory_non_128_multiple_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_smaller_than_128_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len_128_alignment(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_no_runt(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_do_runt(void **state);
 void test_efa_rdm_pke_get_available_copy_methods_align128(void **state);
 
 /* begin efa_unit_test_domain.c */
@@ -585,6 +584,9 @@ void test_efa_msg_sendmsg_multi_iov_second_desc_hmem_fails(void **state);
 void test_efa_msg_sendmsg_inject_with_large_msg_fails(void **state);
 void test_efa_msg_inject_with_large_msg_fails(void **state);
 void test_efa_rdm_msg_send_0_byte_with_inject_flag(void **state);
+void test_efa_rdm_msg_get_tx_flags(void **state);
+void test_efa_rdm_msg_send_dc_eager_pkt_type(void **state);
+void test_efa_rdm_msg_send_selective_completion(void **state);
 void test_efa_rdm_msg_send_0_byte_no_shm(void **state);
 void test_efa_rdm_msg_sendv_0_byte_no_shm(void **state);
 void test_efa_rdm_msg_sendmsg_0_byte_no_shm(void **state);
@@ -758,7 +760,6 @@ void test_efa_rdm_rma_should_read_using_rdma_homogeneous_with_p2p(void **state);
 void test_efa_rdm_rma_should_write_using_rdma_peer_p2p_false_returns_false(void **state);
 void test_efa_rdm_rma_should_write_using_rdma_self_no_p2p(void **state);
 /* end efa_unit_test_rdm_rma.c */
-
 static inline
 void efa_unit_test_set_hw_cntr_max_values(struct efa_domain *efa_domain)
 {
@@ -773,11 +774,9 @@ int efa_unit_test_get_dlist_length(struct dlist_entry *head)
 {
 	int i = 0;
 	struct dlist_entry *item;
-
 	dlist_foreach(head, item) {
 		i++;
 	}
-
 	return i;
 }
 
@@ -821,5 +820,34 @@ struct efa_rdm_ope *efa_unit_test_get_first_ope(struct efa_rdm_ep *ep,
 }
 
 void efa_unit_test_rdm_0byte_prep(struct efa_resource *resource, fi_addr_t *addr);
-
+/* Protocol TX path tests */
+void test_proto_select_eager_for_small_msg(void **state);
+void test_proto_select_eager_for_zero_len_msg(void **state);
+void test_proto_eager_construct_pkes_single_pke(void **state);
+void test_proto_eager_construct_pkes_zero_copy(void **state);
+void test_proto_eager_send_zero_copy_end_to_end(void **state);
+void test_proto_eager_queue_dequeue_handshake(void **state);
+void test_proto_eager_send_completion_releases_txe(void **state);
+void test_proto_eager_assigns_msg_id(void **state);
+void test_proto_eager_queued_before_handshake_survives_mr_gen_check(void **state);
+void test_proto_eager_construct_pkes_failure_rolls_back_msg_id(void **state);
+void test_proto_select_medium_for_medium_msg(void **state);
+void test_proto_medium_construct_pkes_multiple_pkes(void **state);
+void test_proto_medium_construct_pkes_is_idempotent(void **state);
+void test_proto_medium_send_completion_peer_abort(void **state);
+void test_proto_select_runtread_for_large_msg(void **state);
+void test_proto_select_longcts_before_handshake(void **state);
+void test_proto_select_runtread_before_handshake_with_homogeneous_peers(void **state);
+void test_proto_select_declines_runtread_for_delivery_complete(void **state);
+void test_proto_runtread_construct_pkes_carries_read_iov(void **state);
+void test_proto_runtread_construct_pkes_is_idempotent(void **state);
+void test_proto_select_longread_for_large_msg(void **state);
+void test_proto_select_declines_longread_without_mr(void **state);
+void test_proto_longread_construct_pkes_single_pke(void **state);
+void test_proto_longread_construct_pkes_is_idempotent(void **state);
+void test_proto_select_longcts_for_large_msg(void **state);
+void test_proto_longcts_construct_pkes_single_pke(void **state);
+void test_proto_longcts_construct_pkes_is_idempotent(void **state);
+void test_proto_longcts_send_completion_peer_abort(void **state);
+void test_proto_longcts_read_nack_continues_on_refactored_path(void **state);
 #endif

@@ -6,6 +6,8 @@
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_srx.h"
+#include "rdm/efa_rdm_proto_eager.h"
+#include "rdm/efa_rdm_proto_longread.h"
 #include "ofi_util.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
@@ -1564,6 +1566,19 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		struct efa_rdm_ctsdata_hdr *ctsdata_hdr = efa_rdm_pke_get_ctsdata_hdr(req_pkt_entry);
 		ctsdata_hdr->seg_length = 0;
 	}
+	/*
+	 * The eager and long read protocols were migrated to the refactored code
+	 * path, where the send completion handler lives on the packet entry
+	 * instead of being looked up by packet type.
+	 */
+	if (pkt_type == EFA_RDM_DC_EAGER_MSGRTM_PKT ||
+	    pkt_type == EFA_RDM_DC_EAGER_TAGRTM_PKT)
+		req_pkt_entry->handle_pke =
+			&efa_rdm_proto_eager_handle_rtm_dc_send_completion;
+	else if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT ||
+		 pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT)
+		req_pkt_entry->handle_pke =
+			&efa_rdm_proto_longread_handle_rtm_send_completion;
 
 	/* Create response packet entry (not needed for RTR which uses efa_rdm_ope_handle_recv_completed) */
 	if (pkt_type != EFA_RDM_SHORT_RTR_PKT && pkt_type != EFA_RDM_LONGCTS_RTR_PKT) {
@@ -4354,8 +4369,8 @@ void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **s
 	txe->protocol = EFA_RDM_LONGREAD_TAGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
-	/* Simulate efa_rdm_pke_handle_longread_rtm_sent(): the RTM was
-	 * accepted by the device, bumping the read counter. */
+	/* Simulate efa_rdm_proto_longread_handle_tx_pkes_posted(): the RTM
+	 * was accepted by the device, bumping the read counter. */
 	txe->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
 	ofi_atomic_set64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight, 1);
 
@@ -5174,9 +5189,10 @@ static void run_rtm_tx_error_with_type(struct efa_resource *resource,
 	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = txe->peer;
 
-	/* Mirror efa_rdm_msg_post_rtm: the selected protocol is recorded
-	 * on the txe. The forged txe bypasses post_rtm, so set it here so
-	 * the PEER_ERROR ref_kind derivation sees the right protocol. */
+	/* Mirror what every protocol's construct_tx_pkes() does: record the
+	 * wire protocol on the txe. The forged txe bypasses the send path, so
+	 * set it here so the PEER_ERROR ref_kind derivation sees the right
+	 * protocol. */
 	txe->protocol = pkt_type;
 
 	base_hdr = (struct efa_rdm_base_hdr *) pkt_entry->wiredata;

@@ -15,15 +15,13 @@
 #include "efa_rdm_mr.h"
 #include "efa_rdm_cq.h"
 
-void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
-			   struct efa_rdm_ep *ep,
-			   struct efa_rdm_peer *peer,
-			   const struct fi_msg *msg,
-			   uint32_t op, uint64_t fi_flags,
-			   uint32_t internal_flags)
+void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
+				  struct efa_rdm_ep *ep,
+				  struct efa_rdm_peer *peer,
+				  const struct fi_msg *msg,
+				  uint32_t op, uint64_t fi_flags,
+				  uint32_t internal_flags)
 {
-	uint64_t tx_op_flags;
-
 	txe->ep = ep;
 	txe->type = EFA_RDM_TXE;
 	txe->op = op;
@@ -48,15 +46,9 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->efa_outstanding_tx_ops = 0;
 	dlist_init(&txe->queued_pkts);
 
+	txe->proto = NULL;
+
 	memcpy(txe->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
-	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
-	efa_rdm_mr_gen_init_ope_desc(txe);
-	if (msg->desc) {
-		memcpy(txe->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
-		efa_rdm_mr_gen_capture_in_ope_desc(txe);
-	} else {
-		memset(txe->desc, 0, sizeof(*txe->desc) * msg->iov_count);
-	}
 
 	/* cq_entry on completion */
 	txe->cq_entry.op_context = msg->context;
@@ -66,12 +58,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->total_len = ofi_total_iov_len(txe->iov, txe->iov_count);
 
 	/* set flags */
-	assert(ep->base_ep.util_ep.tx_msg_flags == 0 ||
-	       ep->base_ep.util_ep.tx_msg_flags == FI_COMPLETION);
-	tx_op_flags = ep->base_ep.util_ep.tx_op_flags;
-	if (ep->base_ep.util_ep.tx_msg_flags == 0)
-		tx_op_flags &= ~FI_COMPLETION;
-	txe->fi_flags = fi_flags | tx_op_flags;
+	txe->fi_flags = efa_rdm_msg_get_tx_flags(ep, fi_flags);
 	txe->bytes_runt = 0;
 	txe->local_read_pkt_entry = NULL;
 	dlist_init(&txe->entry);
@@ -104,6 +91,26 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	efa_rdm_domain_ope_list_lock(efa_rdm_ep_rdm_domain(ep));
 	dlist_insert_tail(&txe->ep_entry, &ep->base_ep.ope_list);
 	efa_rdm_domain_ope_list_unlock(efa_rdm_ep_rdm_domain(ep));
+}
+
+void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
+			   struct efa_rdm_ep *ep,
+			   struct efa_rdm_peer *peer,
+			   const struct fi_msg *msg,
+			   uint32_t op, uint64_t fi_flags,
+			   uint32_t internal_flags)
+{
+	efa_rdm_txe_construct_common(txe, ep, peer, msg, op, fi_flags,
+				     internal_flags);
+
+	memset(txe->mr, 0, sizeof(*txe->mr) * msg->iov_count);
+	efa_rdm_mr_gen_init_ope_desc(txe);
+	if (msg->desc) {
+		memcpy(txe->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
+		efa_rdm_mr_gen_capture_in_ope_desc(txe);
+	} else {
+		memset(txe->desc, 0, sizeof(*txe->desc) * msg->iov_count);
+	}
 }
 
 void efa_rdm_txe_release(struct efa_rdm_ope *txe)
@@ -2307,53 +2314,15 @@ handle_err:
 	for (i = 0; i < pkt_entry_cnt_allocated; ++i)
 		efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
 
-	return efa_rdm_ope_post_send_fallback(ope, pkt_type, err);
-}
-
-/**
- * @brief Fallback to a different message type if a packet send fails.
- *
- * Currently, this function is only used in the read nack protocol. If a long read or
- * runting read RTM packet fails to send because of a memory registration failure, it
- * will send a long CTS RTM packet.
- *
- * @param[in]   ope            pointer to efa_rdm_ope. (either a txe or an rxe)
- * @param[in]   pkt_type       packet type that failed to send
- * @param[in]   err		       error code of the original failure
- * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
- *             -FI_EAGAIN      temporarily  out of resource
- */
-ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
-					   int pkt_type, ssize_t err)
-{
-	bool delivery_complete_requested = ope->fi_flags & FI_DELIVERY_COMPLETE;
-
-	if (err == -FI_ENOMR) {
-		/* Long read and runting read protocols could fail because of a
-		 * lack of memory registrations. In that case, we retry with
-		 * long CTS protocol
-		 */
-		switch (pkt_type) {
-		case EFA_RDM_LONGREAD_MSGRTM_PKT:
-		case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-			EFA_INFO(FI_LOG_EP_CTRL,
-				 "Sender fallback to long CTS untagged "
-				 "protocol because memory registration limit "
-				 "was reached on the sender\n");
-			return efa_rdm_ope_post_send_or_queue(
-				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_MSGRTM_PKT : EFA_RDM_LONGCTS_MSGRTM_PKT);
-		case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-			EFA_INFO(FI_LOG_EP_CTRL,
-				 "Sender fallback to long CTS tagged protocol "
-				 "because memory registration limit was "
-				 "reached on the sender\n");
-			return efa_rdm_ope_post_send_or_queue(
-				ope, delivery_complete_requested ?  EFA_RDM_DC_LONGCTS_TAGRTM_PKT : EFA_RDM_LONGCTS_TAGRTM_PKT);
-		default:
-			return err;
-		}
-	}
+	/*
+	 * There is no protocol fallback here anymore. The only one that ever
+	 * existed retried a long read or runting read RTM as a long CTS RTM when
+	 * the source buffer could not be registered, and no RTM reaches this
+	 * function now that every two-sided protocol builds its own packets. The
+	 * read based protocols decline the operation up front instead, in
+	 * efa_rdm_proto_{longread,runtread}_can_use_for_send(), so selection
+	 * moves on to long CTS before a single packet is allocated.
+	 */
 	return err;
 }
 
@@ -2404,7 +2373,13 @@ ssize_t efa_rdm_ope_repost_ope_queued_before_handshake(struct efa_rdm_ope *ope)
 	switch (ope->op) {
 	case ofi_op_msg: /* fall through */
 	case ofi_op_tagged:
-		return efa_rdm_msg_post_rtm(ope->ep, ope);
+		/*
+		 * Every two-sided send goes out on the refactored path, so a
+		 * queued txe always carries the protocol that
+		 * efa_rdm_proto_select_send_protocol() picked for it.
+		 */
+		assert(ope->proto);
+		return efa_rdm_msg_repost_rtm_proto(ope->ep, ope);
 	case ofi_op_write:
 		return efa_rdm_rma_post_write(ope->ep, ope);
 	case ofi_op_read_req:
@@ -2451,6 +2426,10 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope, uint32_t flag)
 			break;
 		case EFA_RDM_OPE_QUEUED_CTRL:
 			ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
+			break;
+		case EFA_RDM_OPE_QUEUED_READ_NACK:
+			assert(ope->type == EFA_RDM_TXE);
+			ret = efa_rdm_msg_post_read_nack_rtm_proto(ope->ep, ope);
 			break;
 		case EFA_RDM_OPE_QUEUED_READ:
 			ret = efa_rdm_ope_post_read(ope);

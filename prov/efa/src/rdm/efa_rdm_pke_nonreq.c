@@ -9,6 +9,7 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_peer.h"
+#include "efa_rdm_proto_longcts.h"
 
 #include "efa_rdm_tracepoint.h"
 
@@ -839,24 +840,20 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 				EFA_RDM_DC_LONGCTS_RTW_PKT :
 				EFA_RDM_LONGCTS_RTW_PKT;
 		efa_rdm_ope_post_send_or_queue(txe, txe->protocol);
-	} else if (txe->op == ofi_op_tagged) {
-		EFA_INFO(FI_LOG_EP_CTRL,
-			 "Sender fallback to long CTS tagged "
-			 "protocol because memory registration limit "
-			 "was reached on the receiver\n");
-		txe->protocol = delivery_complete_requested ?
-				EFA_RDM_DC_LONGCTS_TAGRTM_PKT :
-				EFA_RDM_LONGCTS_TAGRTM_PKT;
-		efa_rdm_ope_post_send_or_queue(txe, txe->protocol);
 	} else {
 		EFA_INFO(FI_LOG_EP_CTRL,
-			 "Sender fallback to long CTS untagged "
+			 "Sender fallback to long CTS %s "
 			 "protocol because memory registration limit "
-			 "was reached on the receiver\n");
-		txe->protocol = delivery_complete_requested ?
-				EFA_RDM_DC_LONGCTS_MSGRTM_PKT :
-				EFA_RDM_LONGCTS_MSGRTM_PKT;
-		efa_rdm_ope_post_send_or_queue(txe, txe->protocol);
+			 "was reached on the receiver\n",
+			 (txe->op == ofi_op_tagged) ? "tagged" : "untagged");
+		/*
+		 * Continue the message with the long CTS protocol on the
+		 * refactored code path. It picks the REQ packet type (including
+		 * the delivery complete variant) and records it in txe->protocol
+		 * next to the header it writes, so nothing is set here.
+		 */
+		txe->proto = &efa_rdm_proto_longcts;
+		efa_rdm_msg_post_read_nack_rtm_proto_or_queue(txe->ep, txe);
 	}
 }
 

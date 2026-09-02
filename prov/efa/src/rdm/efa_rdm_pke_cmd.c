@@ -91,54 +91,24 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_receipt(pkt_entry, ope);
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_eager_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_eager_tagrtm(pkt_entry, ope);
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
-		break;
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
+		assert(0 && "Medium protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_longread_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_longread_tagrtm(pkt_entry, ope);
+		assert(0 && "Long read protocol moved to refactored code path");
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_runtread_msgrtm(pkt_entry, ope, data_offset, data_size);
-		break;
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_runtread_tagrtm(pkt_entry, ope, data_offset, data_size);
+		assert(0 && "Runt read protocol moved to refactored code path");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -173,38 +143,16 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_compare_rta(pkt_entry, ope);
 		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_dc_eager_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_dc_eager_tagrtm(pkt_entry, ope);
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_dc_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
-		break;
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_dc_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
+		assert(0 && "Medium protocol moved to refactored code path");
 		break;
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS tagged RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -270,27 +218,27 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		/* nothing to do */
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		efa_rdm_pke_handle_medium_rtm_sent(pkt_entry);
+		assert(0 && "Medium protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_longread_rtm_sent(pkt_entry);
+		assert(0 && "Long read protocol moved to refactored code path");
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_runtread_rtm_sent(pkt_entry, peer);
+		assert(0 && "Runt read protocol moved to refactored code path");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		/* nothing to do when EAGER RTW is sent */
@@ -314,8 +262,10 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
+		assert(0 && "Eager protocol moved to refactored code path");
+		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
-		/* nothing to do for DC EAGER RTM/RTW */
+		/* nothing to do for DC EAGER RTW */
 		break;
 	case EFA_RDM_CTSDATA_PKT:
 		efa_rdm_pke_handle_ctsdata_sent(pkt_entry);
@@ -603,10 +553,27 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
 
-	/* These pkts are eager pkts withour hdrs */
-	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
-		efa_rdm_pke_release_tx(pkt_entry);
+	/*
+	 * A protocol migrated to the refactored code path stores its send
+	 * completion handler on the packet entry, so no packet type lookup is
+	 * needed. The pkt_type switch below serves the protocols that have not
+	 * been migrated yet.
+	 *
+	 * This check must come before the headerless (zero hdr) handling below:
+	 * a refactored eager packet sent to the peer's dedicated receive QP has
+	 * both the callback and EFA_RDM_PKE_SEND_TO_USER_RECV_QP set, and the
+	 * callback is what owns its completion.
+	 *
+	 * The callback owns the packet entry from here on: it may release the
+	 * entry and even synchronously repost that buffer as a new work
+	 * request, so pkt_entry must not be touched after it returns. This is
+	 * why efa_rdm_cq_process_wc() bumps pkt_entry->gen before calling this
+	 * function.
+	 *
+	 * TODO: remove this check once every protocol is migrated.
+	 */
+	if (pkt_entry->handle_pke) {
+		pkt_entry->handle_pke(pkt_entry);
 		return;
 	}
 
@@ -644,39 +611,23 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
-		efa_rdm_pke_handle_medium_rtm_send_completion(pkt_entry);
+		assert(0 && "Medium protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
+		assert(0 && "Long CTS protocol moved to refactored code path");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		/* For long read, the txe is released either here or in
-		 * efa_rdm_pke_handle_eor_recv(), whichever happens last.
-		 * Release here if EOR already arrived.
-		 */
-		assert(pkt_entry->ope);
-		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
-			efa_rdm_txe_release(pkt_entry->ope);
-		/*
-		 * Peer-abort race: an inbound PEER_ERROR_PKT may have marked
-		 * this txe (source MR canceled, receiver's READ failed) while
-		 * this RTM SEND was still outstanding. The abort deferred the
-		 * free to WR drain; now that this WR has drained, reap it.
-		 * No-op for a healthy transfer (flag never set).
-		 */
-		else if (pkt_entry->ope->internal_flags &
-			 EFA_RDM_OPE_PEER_ABORT_PENDING)
-			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
+		assert(0 && "Long read protocol moved to refactored code path");
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
+		assert(0 && "Runt read protocol moved to refactored code path");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
@@ -692,7 +643,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		assert(pkt_entry->ope);
 		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
 			efa_rdm_txe_release(pkt_entry->ope);
-		/* Peer-abort race: see EFA_RDM_LONGREAD_*RTM_PKT above. */
+		/*
+		 * Peer-abort race: an inbound PEER_ERROR_PKT may have marked
+		 * this txe (source MR canceled, target's READ failed) while
+		 * this RTW SEND was still outstanding. The abort deferred the
+		 * free to WR drain; now that this WR has drained, reap it.
+		 * No-op for a healthy transfer (flag never set).
+		 */
 		else if (pkt_entry->ope->internal_flags &
 			 EFA_RDM_OPE_PEER_ABORT_PENDING)
 			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
@@ -716,6 +673,15 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
+	/*
+	 * The DC eager, DC medium and DC long CTS RTM packet types are all
+	 * unreachable here: those protocols moved to the refactored code path,
+	 * and their packets carry a handle_pke callback that returns before this
+	 * switch. They stay listed so the fetch/compare atomic types above keep
+	 * falling through to the shared DC release code below. Do not turn any of
+	 * these labels into an assert: that would sever the atomics' path to the
+	 * release code.
+	 */
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
@@ -733,11 +699,11 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 */
 		efa_rdm_pke_assert_ope_valid(pkt_entry);
 		/*
-		 * A DC medium transfer aborting on source-MR cancel never
-		 * receives its RECEIPT, so the ready-for-release check stays
-		 * false. Take the deferred PEER_ERROR_PKT decision instead.
-		 * Guarded by PENDING (only ever set on medium txes), so
-		 * non-medium DC ops are untouched.
+		 * A DC transfer aborting on source-MR cancel never receives its
+		 * RECEIPT, so the ready-for-release check stays false. Take the
+		 * deferred PEER_ERROR_PKT decision instead. Guarded by PENDING,
+		 * which is only ever set on a peer-aborting txe, so healthy DC
+		 * ops are untouched.
 		 */
 		if (pkt_entry->ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING)
 			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);

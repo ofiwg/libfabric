@@ -19,6 +19,10 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_req.h"
 
+#include "efa_mr.h"
+#include "efa_rdm_proto.h"
+#include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_longcts.h"
 #include "efa_rdm_tracepoint.h"
 
 /**
@@ -34,131 +38,209 @@
  */
 
 /**
- * @brief select a two-sided protocol for the send operation
+ * @brief Send the packet entries a protocol's construct_tx_pkes() just built.
  *
- * @param [in]		efa_rdm_ep		endpoint
- * @param [in]		txe	contains information of the send operation
- * @param [in]		use_p2p		whether p2p can be used
- * @return		the RTM packet type of the two-sided protocol. Four
- *                      types of protocol can be used: eager, medium, longcts, longread.
- *                      Each protocol has tagged/non-tagged version. Some protocols has a DC version.
- * @related		efa_rdm_ep
+ * Shared tail of the fresh-send (#efa_rdm_msg_post_rtm_proto) and repost
+ * (#efa_rdm_msg_repost_rtm_proto) paths: hand ep->send_pkt_entry_vec to the
+ * device, roll back the packet entries if nothing reached it, and do the
+ * post-send bookkeeping both paths owe.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation whose packets were constructed
+ * @param[in]		proto	protocol that constructed them
+ * @return 0 on success, negative errno on failure. On failure the packet
+ *	   entries have been released and the caller still owns only the txe.
  */
-int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *txe, int use_p2p)
+static ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
+						 struct efa_rdm_ope *txe,
+						 struct efa_rdm_proto *proto)
 {
+	ssize_t err;
+	uint64_t pke_send_flags = 0;
+	int i;
+
 	/*
-	 * For performance consideration, this function assume the tagged rtm packet type id is
-	 * always the correspondent message rtm packet type id + 1, thus the assertion here.
+	 * construct_tx_pkes() must record the wire protocol it built the packet
+	 * headers for. The peer-abort (MR abort) protocol reads txe->protocol to
+	 * tell a two-sided RTM from an operation it does not handle, so leaving
+	 * it unset would silently disable abort notification for this send and
+	 * park the peer's reorder window on this msg_id forever. See
+	 * efa_rdm_txe_mark_peer_abort_if_needed().
 	 */
-	assert(EFA_RDM_EAGER_MSGRTM_PKT + 1 == EFA_RDM_EAGER_TAGRTM_PKT);
-	assert(EFA_RDM_MEDIUM_MSGRTM_PKT + 1 == EFA_RDM_MEDIUM_TAGRTM_PKT);
-	assert(EFA_RDM_LONGCTS_MSGRTM_PKT + 1 == EFA_RDM_LONGCTS_TAGRTM_PKT);
-	assert(EFA_RDM_LONGREAD_MSGRTM_PKT + 1 == EFA_RDM_LONGREAD_TAGRTM_PKT);
-	assert(EFA_RDM_DC_EAGER_MSGRTM_PKT + 1 == EFA_RDM_DC_EAGER_TAGRTM_PKT);
-	assert(EFA_RDM_DC_MEDIUM_MSGRTM_PKT + 1 == EFA_RDM_DC_MEDIUM_TAGRTM_PKT);
-	assert(EFA_RDM_DC_LONGCTS_MSGRTM_PKT + 1 == EFA_RDM_DC_LONGCTS_TAGRTM_PKT);
+	assert(efa_rdm_pkt_type_is_rtm(txe->protocol));
 
-	int tagged;
-	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm, iface;
-	size_t eager_rtm_max_data_size;
-	bool delivery_complete_requested;
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
+				ep->send_pkt_entry_vec_size,
+				pke_send_flags);
+	if (err) {
+		/*
+		 * Nothing reached the device, so this function still owns the
+		 * packet entries construct_tx_pkes() built. Release them, as
+		 * efa_rdm_ope_post_send() does on the old path; the caller only
+		 * owns the txe.
+		 */
+		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+		return err;
+	}
 
-	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
-	tagged = (txe->op == ofi_op_tagged);
-	assert(tagged == 0 || tagged == 1);
+	/*
+	 * Mark the peer as having received a REQ, matching what
+	 * efa_rdm_ope_post_send() does on the old path. Both the fresh send and
+	 * the repost after a handshake go through here, so both are covered.
+	 */
+	txe->peer->flags |= EFA_RDM_PEER_REQ_SENT;
 
-	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->iface : FI_HMEM_SYSTEM;
-
-	if (txe->fi_flags & FI_INJECT || efa_rdm_peer_expects_zero_hdr_data_transfer(txe->peer))
-		delivery_complete_requested = false;
-	else
-		delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
-
-	eager_rtm = (delivery_complete_requested) ? EFA_RDM_DC_EAGER_MSGRTM_PKT + tagged
-						  : EFA_RDM_EAGER_MSGRTM_PKT + tagged;
-
-	medium_rtm = (delivery_complete_requested) ? EFA_RDM_DC_MEDIUM_MSGRTM_PKT + tagged
-						   :  EFA_RDM_MEDIUM_MSGRTM_PKT + tagged;
-
-	longcts_rtm = (delivery_complete_requested) ? EFA_RDM_DC_LONGCTS_MSGRTM_PKT + tagged
-						    : EFA_RDM_LONGCTS_MSGRTM_PKT + tagged;
-
-	eager_rtm_max_data_size = efa_rdm_txe_max_req_data_capacity(efa_rdm_ep, txe, eager_rtm);
-
-	readbase_rtm = efa_rdm_peer_select_readbase_rtm(txe->peer, efa_rdm_ep, txe);
-
-	if (use_p2p &&
-	    txe->total_len >= g_efa_hmem_info[iface].min_read_msg_size &&
-	    efa_rdm_interop_rdma_read(efa_rdm_ep, txe->peer) &&
-	    (txe->desc[0] || efa_is_cache_available(efa_rdm_ep_rdm_domain(efa_rdm_ep))))
-		return readbase_rtm;
-
-	if (txe->total_len <= eager_rtm_max_data_size)
-		return eager_rtm;
-
-	if (txe->total_len <= g_efa_hmem_info[iface].max_medium_msg_size)
-		return medium_rtm;
-
-	return longcts_rtm;
+	proto->handle_tx_pkes_posted(ep, txe);
+	return FI_SUCCESS;
 }
 
 /**
- * @brief post RTM packet(s) for a send operation
+ * @brief Build a txe's packet entries and hand them to the device.
  *
- * @param[in,out]	ep		endpoint
- * @param[in,out]	txe	information of the send operation.
- * @retval		0 if packet(s) was posted successfully.
- * @retval		-FI_ENOSUPP if the send operation requires an extra feature,
- * 			which peer does not support.
- * @retval		-FI_EAGAIN for temporary out of resources for send
+ * The body every refactored send entry point shares. msg is deliberately NULL:
+ * only the fresh-send path has an fi_msg to offer, so construct_tx_pkes() must
+ * read the operation off the txe on all paths or it would behave differently on
+ * a repost or a continuation.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation
+ * @param[in]		proto	protocol to build and post with
+ * @return 0 on success, negative errno on failure. On failure no packet entry
+ *	   survives and the caller still owns only the txe.
  */
-ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
+static ssize_t efa_rdm_msg_construct_and_send(struct efa_rdm_ep *ep,
+					      struct efa_rdm_ope *txe,
+					      struct efa_rdm_proto *proto)
 {
 	ssize_t err;
-	int rtm_type, use_p2p;
 
-	assert(txe->peer);
-
-	/*
-	 * For backwards compatibility: if an old peer could have zero-copy
-	 * receive enabled, we must complete handshake before sending so we
-	 * can discover the peer's user_recv_qp and route packets accordingly.
-	 */
-	if (ep->peer_may_have_zcpy_rx &&
-	    !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
-	}
-
-	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
-	if (err < 0)
+	err = proto->construct_tx_pkes(ep, txe->peer, NULL, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe);
+	if (err)
 		return err;
 
-	use_p2p = err;
+	return efa_rdm_msg_send_constructed_pkes(ep, txe, proto);
+}
 
-	rtm_type = efa_rdm_msg_select_rtm(ep, txe, use_p2p);
-	assert(rtm_type >= EFA_RDM_REQ_PKT_BEGIN);
-	txe->protocol = rtm_type;
+/**
+ * @brief Post a fresh send on the refactored protocol path.
+ *
+ * Called only from efa_rdm_msg_generic_send(), on a txe that
+ * efa_rdm_proto_txe_fill() has just filled and that has never been handed to
+ * the protocol before. The repost after a pre-handshake queue is a separate
+ * entry point, #efa_rdm_msg_repost_rtm_proto, because its contract differs.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation, filled by efa_rdm_proto_txe_fill
+ * @param[in]		proto	protocol selected for this operation
+ * @return 0 on success, negative errno on failure. On failure the caller
+ *	   releases the txe and rolls back peer->next_msg_id.
+ */
+ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
+				    struct efa_rdm_ope *txe,
+				    struct efa_rdm_proto *proto)
+{
+	assert(txe->proto == proto);
 
-	if (rtm_type < EFA_RDM_EXTRA_REQ_PKT_BEGIN) {
-		/* rtm requires only baseline feature, which peer should always support. */
-		return efa_rdm_ope_post_send(txe, rtm_type);
+	return efa_rdm_msg_construct_and_send(ep, txe, proto);
+}
+
+/**
+ * @brief Repost a send that was queued before the handshake completed.
+ *
+ * Called only from efa_rdm_ope_repost_ope_queued_before_handshake(), once the
+ * peer's handshake has arrived. Contract, which every protocol's
+ * construct_tx_pkes() must honour:
+ *
+ * - There is no fi_msg. Everything must come off the txe.
+ * - One-shot setup the first attempt already did must not run again:
+ *   txe->msg_id was assigned (and peer->next_msg_id bumped) by
+ *   efa_rdm_msg_generic_send() and must be reused as-is.
+ * - construct_tx_pkes() must be idempotent. This function can run more than
+ *   once on the same txe: if it returns -FI_EAGAIN the txe stays on
+ *   ep->ope_queued_list and efa_rdm_ope_process_queued_ope() retries it. So
+ *   assignments (txe->protocol = x, flags |= y) are fine but accumulating
+ *   writes (bytes_sent +=, bytes_runt +=) are not.
+ * - handle_tx_pkes_posted() must run on every successful post, since the
+ *   first attempt never reached the device.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	queued send operation
+ * @return 0 on success, negative errno on failure. -FI_EAGAIN leaves the txe
+ *	   queued for another attempt.
+ */
+ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
+				     struct efa_rdm_ope *txe)
+{
+	struct efa_rdm_proto *proto = txe->proto;
+
+	assert(proto);
+	assert(txe->internal_flags & EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE);
+	assert(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+
+	return efa_rdm_msg_construct_and_send(ep, txe, proto);
+}
+
+/**
+ * @brief Post the long CTS REQ that continues a read protocol after a read NACK.
+ *
+ * A read based protocol whose receiver could not register its receive buffer
+ * gets a EFA_RDM_READ_NACK_PKT back, and the sender finishes the message with
+ * the long CTS protocol instead. The txe is mid-flight: its msg_id is spent, its
+ * read protocol REQ packets already delivered txe->bytes_sent bytes, and the
+ * receiver already has an rxe for this msg_id. So this is neither a fresh send
+ * nor a pre-handshake repost, and it gets its own entry point:
+ *
+ * - The REQ carries no data and must not move txe->bytes_sent. That is
+ *   efa_rdm_proto_longcts_construct_tx_pkes()'s job; it keys off
+ *   EFA_RDM_OPE_READ_NACK, and also sets the matching EFA_RDM_REQ_READ_NACK wire
+ *   flag so the receiver reuses its rxe instead of allocating one and does not
+ *   slide its receive window a second time on this msg_id.
+ * - It can run more than once on the same txe, because a -FI_EAGAIN leaves the
+ *   txe queued with EFA_RDM_OPE_QUEUED_READ_NACK for
+ *   efa_rdm_ope_process_queued_ope() to retry, so construct_tx_pkes() must stay
+ *   idempotent here too.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation that received the read NACK
+ * @return 0 on success, negative errno on failure.
+ */
+ssize_t efa_rdm_msg_post_read_nack_rtm_proto(struct efa_rdm_ep *ep,
+					     struct efa_rdm_ope *txe)
+{
+	assert(txe->internal_flags & EFA_RDM_OPE_READ_NACK);
+	assert(txe->proto == &efa_rdm_proto_longcts);
+
+	return efa_rdm_msg_construct_and_send(ep, txe, txe->proto);
+}
+
+/**
+ * @brief Post a read NACK long CTS continuation REQ, or queue it for retry.
+ *
+ * The long CTS counterpart of efa_rdm_ope_post_send_or_queue(): out of packet
+ * entries or device queue space is not an error here, because the inbound NACK
+ * has already been consumed and there is nobody left to return -FI_EAGAIN to.
+ *
+ * @param[in,out]	ep	endpoint
+ * @param[in,out]	txe	send operation that received the read NACK
+ * @return 0 on success or when queued, negative errno on a hard failure.
+ */
+ssize_t efa_rdm_msg_post_read_nack_rtm_proto_or_queue(struct efa_rdm_ep *ep,
+						      struct efa_rdm_ope *txe)
+{
+	ssize_t err;
+
+	err = efa_rdm_msg_post_read_nack_rtm_proto(ep, txe);
+	if (err == -FI_EAGAIN) {
+		assert(!(txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR));
+		txe->internal_flags |= EFA_RDM_OPE_QUEUED_READ_NACK;
+		dlist_insert_tail(&txe->queued_entry, &ep->ope_queued_list);
+		efa_rdm_ep_enqueue_progress_list(ep);
+		err = 0;
 	}
 
-	/*
-	 * rtm_type requires an extra feature, which peer might not support.
-	 *
-	 * Check handshake packet from peer to verify support status.
-	 */
-	if (!ep->homogeneous_peers && !(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		int ex_feature = EFA_RDM_PKT_TYPE_REQ_INFO_VEC[rtm_type].ex_feature_flag;
-		if (ex_feature)
-			return efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
-	}
-
-	if (!ep->homogeneous_peers && !efa_rdm_pkt_type_is_supported_by_peer(rtm_type, txe->peer))
-		return -FI_EOPNOTSUPP;
-
-	return efa_rdm_ope_post_send(txe, rtm_type);
+	return err;
 }
 
 static inline
@@ -170,6 +252,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
 	size_t available_tx_pkts;
+	struct efa_rdm_proto *proto;
 
 	efa_rdm_tracepoint(send_begin_msg_context,
 		    (size_t) msg->context, (size_t) msg->addr);
@@ -197,14 +280,29 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		goto out;
 	}
 
-	efa_rdm_txe_construct(txe, ep, peer, msg, op, fi_flags, internal_flags);
-	if (op == ofi_op_tagged) {
-		txe->cq_entry.tag = tag;
-		txe->tag = tag;
+	err = efa_rdm_proto_select_send_protocol(ep, peer, msg, op, fi_flags, txe,
+						 &proto);
+	if (err) {
+		/*
+		 * Selection can fail before the txe is constructed, e.g. when
+		 * p2p is required but unavailable for the source buffer. An
+		 * unconstructed txe is on no list and owns no memory
+		 * registration, so return it straight to the pool instead of
+		 * through efa_rdm_txe_release().
+		 */
+		ofi_buf_free(txe);
+		goto out;
 	}
 
-	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
+	/*
+	 * Selection only succeeds with a protocol: the long CTS protocol is
+	 * registered last and can always be used, so there is no protocol-less
+	 * send path left to fall back to.
+	 */
+	assert(proto);
 
+	efa_rdm_proto_txe_fill(txe, ep, peer, msg, op, tag, fi_flags,
+			       internal_flags, proto);
 	txe->msg_id = peer->next_msg_id++;
 
 	EFA_DBG(FI_LOG_EP_DATA,
@@ -215,7 +313,40 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	efa_rdm_tracepoint(send_begin, txe->msg_id,
 		    (size_t) txe->cq_entry.op_context, txe->total_len);
 
-	err = efa_rdm_msg_post_rtm(ep, txe);
+	/*
+	 * For backwards compatibility: if the peer may have zero-copy receive
+	 * enabled, we must complete handshake before sending so we can discover
+	 * the peer's user_recv_qp and route packets accordingly. The eager
+	 * protocol's construct_tx_pkes() writes the headerless packet once the
+	 * handshake has told us the peer expects one.
+	 *
+	 * This is the only reason a two-sided send ever waits for a handshake.
+	 * The read based protocols need the peer's EFA_RDM_EXTRA_FEATURE_RDMA_READ
+	 * bit, but they do not need a handshake step here: their predicates go
+	 * through efa_rdm_interop_rdma_read(), which reports no support until the
+	 * handshake arrives (or, when ep->homogeneous_peers is set, reports this
+	 * endpoint's own support without consulting the peer at all). So the
+	 * selection either picks a read protocol outright or declines it and lands
+	 * on long CTS, which needs nothing from the peer beyond the baseline
+	 * protocol.
+	 *
+	 * The legacy efa_rdm_msg_post_rtm() had a second
+	 * efa_rdm_ep_enforce_handshake_for_txe() call for a chosen rtm_type whose
+	 * EFA_RDM_PKT_TYPE_REQ_INFO_VEC entry named an extra feature. That call was
+	 * unreachable for anything but a self peer, and deliberately has no
+	 * counterpart here: the only extra feature it ever gated was RDMA read, and
+	 * its guard (!ep->homogeneous_peers && !EFA_RDM_PEER_HANDSHAKE_RECEIVED)
+	 * contradicted the efa_rdm_interop_rdma_read() check that the legacy
+	 * selector had already applied before it could return a read based type.
+	 * A large first send to a cold peer therefore went out over long CTS on the
+	 * legacy path too; this is mainline behaviour, not a change.
+	 */
+	if (ep->peer_may_have_zcpy_rx &&
+	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+		err = efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
+	else
+		err = efa_rdm_msg_post_rtm_proto(ep, txe, proto);
+
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_txe_release(txe);
 		peer->next_msg_id--;

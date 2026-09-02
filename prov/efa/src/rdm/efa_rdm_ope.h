@@ -82,6 +82,7 @@ struct efa_rdm_ope {
 
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
+	struct efa_rdm_proto *proto; /**< protocol used by the refactored send path; NULL in the old code path */
 
 	uint32_t tx_id;
 	uint32_t rx_id;
@@ -195,11 +196,8 @@ struct efa_rdm_ope {
 	/**
 	 * @brief The wire protocol (REQ packet type) selected for this ope.
 	 *
-	 * An EFA_RDM_*_PKT type id (e.g. EFA_RDM_MEDIUM_MSGRTM_PKT). Recorded
-	 * where the two-sided protocol is decided (efa_rdm_msg_select_rtm) or
-	 * switched (the read-NACK longcts fallback) -- the only points it
-	 * changes; the queued/RNR re-post path replays the same type, so it
-	 * stays valid across re-posts. 0 if none selected yet.
+	 * TODO: Use the proto field once all protocols are migrated to the
+	 * refactored code path.
 	 */
 	uint32_t protocol;
 
@@ -213,6 +211,21 @@ struct efa_rdm_ope {
 	 */
 	int peer_error_prov_errno;
 };
+
+/**
+ * @brief Initialize the txe fields that every TX path needs.
+ *
+ * Does not touch txe->mr, txe->desc or the MR generation snapshot: the
+ * refactored protocol path populates those before the txe is filled, so that
+ * protocol selection can attempt memory registration. Callers that have not
+ * already populated them must use efa_rdm_txe_construct() instead.
+ */
+void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
+				  struct efa_rdm_ep *ep,
+				  struct efa_rdm_peer *peer,
+				  const struct fi_msg *msg,
+				  uint32_t op, uint64_t fi_flags,
+				  uint32_t internal_flags);
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   struct efa_rdm_ep *ep,
@@ -412,7 +425,21 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 void efa_rdm_txe_release_read_msg_slot(struct efa_rdm_ope *txe);
 
-#define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE)
+/**
+ * @brief flag: this txe's read NACK long CTS continuation REQ is queued.
+ *
+ * A read based protocol whose receiver could not register its buffer continues
+ * as long CTS (see #EFA_RDM_OPE_READ_NACK). That continuation REQ is posted on
+ * the refactored protocol path, so it needs its own queued flag: unlike
+ * EFA_RDM_OPE_QUEUED_CTRL, whose retry arm goes through the legacy
+ * efa_rdm_ope_post_send(), this one is retried through
+ * efa_rdm_msg_post_read_nack_rtm_proto().
+ *
+ * While set, the txe is on ep->ope_queued_list.
+ */
+#define EFA_RDM_OPE_QUEUED_READ_NACK		BIT_ULL(23)
+
+#define EFA_RDM_OPE_QUEUED_FLAGS (EFA_RDM_OPE_QUEUED_RNR | EFA_RDM_OPE_QUEUED_CTRL | EFA_RDM_OPE_QUEUED_READ | EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE | EFA_RDM_OPE_QUEUED_READ_NACK)
 
 /**
  * @brief Whether an ope is in scope for the peer-abort (MR abort) protocol.
@@ -542,9 +569,6 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope, int pkt_type,
 					 size_t *pkt_entry_data_size_vec);
 
 ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type);
-
-ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
-					   int pkt_type, ssize_t err);
 
 ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type);
 

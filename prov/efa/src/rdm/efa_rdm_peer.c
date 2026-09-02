@@ -559,29 +559,3 @@ size_t efa_rdm_peer_get_runt_size(struct efa_rdm_peer *peer,
 	 */
 	return (runt_size & ~(memory_alignment - 1));
 }
-
-/**
- * @brief Determine which Read based protocol to use for a given peer
- *
- * @param[in] peer		rdm peer
- * @param[in] ep		efa rdm ep
- * @param[in] efa_rdm_ope	efa rdm ope
- * @return The read-based protocol to use based on inputs.
- */
-int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer,
-				     struct efa_rdm_ep *ep, struct efa_rdm_ope *ope)
-{
-	int op = ope->op;
-
-	assert(op == ofi_op_tagged || op == ofi_op_msg);
-
-	if (ofi_atomic_get64(&efa_rdm_ep_rdm_domain(ep)->num_read_msg_in_flight) == 0 &&
-	    efa_rdm_peer_get_runt_size(peer, ep, ope) > 0 &&
-	    !(ope->fi_flags & FI_DELIVERY_COMPLETE)) {
-		return (op == ofi_op_tagged) ? EFA_RDM_RUNTREAD_TAGRTM_PKT
-					     : EFA_RDM_RUNTREAD_MSGRTM_PKT;
-	} else {
-		return (op == ofi_op_tagged) ? EFA_RDM_LONGREAD_TAGRTM_PKT
-					     : EFA_RDM_LONGREAD_MSGRTM_PKT;
-	}
-}

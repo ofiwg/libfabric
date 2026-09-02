@@ -179,13 +179,12 @@ struct efa_test_rtm_sent_result {
  * @param[in]	op	sent vs send-completion handler
  * @param[in]	payload_size	bytes carried by this packet
  * @param[in]	bytes_already	txe->bytes_sent/bytes_acked before the call
- * @param[in]	seg_offset	runtread seg_offset header field (ignored else)
  * @param[out]	out	observable counters after the call
  */
 void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 			     enum efa_test_rtm_variant variant,
 			     enum efa_test_rtm_sent_op op, size_t payload_size,
-			     size_t bytes_already, size_t seg_offset,
+			     size_t bytes_already,
 			     struct efa_test_rtm_sent_result *out);
 
 #ifdef __cplusplus
