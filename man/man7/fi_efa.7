@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-08\-25" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-09\-02" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -345,6 +345,7 @@ int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
     void **ops, void *context);
 \f[R]
 .fi
+.SS FI_EFA_DOMAIN_OPS
 .PP
 Requesting \f[V]FI_EFA_DOMAIN_OPS\f[R] in \f[V]name\f[R] returns
 \f[V]ops\f[R] as the pointer to the function table
@@ -406,10 +407,11 @@ It is only valid when \f[V]ic_id_validity\f[R] has the
 .PP
 \f[B]query_mr()\f[R] returns 0 on success, or the value of errno on
 failure (which indicates the failure reason).
+.SS FI_EFA_GDA_OPS
 .PP
 To enable GPU Direct Async (GDA), which allows the GPU to interact
 directly with the NIC, request \f[V]FI_EFA_GDA_OPS\f[R] in the
-\f[V]name\f[R] parameter with efa-direct fabirc.
+\f[V]name\f[R] parameter with efa-direct fabric.
 This returns \f[V]ops\f[R] as a pointer to the function table
 \f[V]fi_efa_ops_gda\f[R] defined as follows:
 .IP
@@ -693,6 +695,79 @@ Offset within the DMA-BUF.
 .PP
 \f[B]cntr_open_ext()\f[R] returns 0 on success, or a negative value on
 failure.
+.SS FI_EFA_MODIFY_EP_OPS
+.PP
+To modify endpoint attributes at runtime, request
+\f[V]FI_EFA_MODIFY_EP_OPS\f[R] in the \f[V]name\f[R] parameter.
+This is only supported on the \f[V]efa-direct\f[R] fabric; on any other
+fabric \f[V]fi_open_ops\f[R] returns \f[V]-FI_EOPNOTSUPP\f[R].
+This returns \f[V]ops\f[R] as a pointer to the function table
+\f[V]fi_efa_ops_modify_ep\f[R] defined as follows:
+.IP
+.nf
+\f[C]
+struct fi_efa_ops_modify_ep {
+    int (*modify_ep)(struct fid_ep *ep, struct fi_efa_ep_attr *ep_attr,
+             uint64_t attr_mask);
+};
+\f[R]
+.fi
+.SS modify_ep
+.PP
+This op modifies attributes on the endpoint.
+The \f[V]attr_mask\f[R] parameter specifies which attributes to modify.
+The endpoint must already be enabled.
+.IP
+.nf
+\f[C]
+enum {
+    FI_EFA_EP_ATTR_QKEY = 1 << 0,
+};
+
+struct fi_efa_ep_attr {
+    uint32_t qkey;
+};
+\f[R]
+.fi
+.TP
+\f[I]attr_mask\f[R]
+A bitwise OR of the attributes to modify.
+An \f[V]attr_mask\f[R] of 0 is a successful no-op.
+Currently supported:
+.RS
+.PP
+FI_EFA_EP_ATTR_QKEY: Modify the queue key.
+The new value is taken from \f[V]ep_attr->qkey\f[R] and must be less
+than 0x80000000, since 0x80000000 and above is the privileged queue key
+range.
+On success, \f[V]fi_getname\f[R] reports the new queue key.
+The application is responsible for re-exchanging addresses with its
+peers after a successful call.
+Only supported by the efa-direct fabric.
+.IP
+.nf
+\f[C]
+A concurrent call to fi_getname may return an incorrect adresss.
+Applications are responsible for serializing any fi_getname calls
+with the modify_ep call.
+\f[R]
+.fi
+.RE
+.PP
+Unsupported flags in \f[V]attr_mask\f[R] will cause the call to return
+\f[V]-FI_EOPNOTSUPP\f[R].
+.SS Return value
+.PP
+\f[B]modify_ep()\f[R] returns 0 on success, or a negative error code on
+failure:
+.IP \[bu] 2
+\f[V]-FI_EINVAL\f[R]: NULL endpoint or ep_attr, fid is not an endpoint,
+endpoint not enabled, or a queue key in the privileged range.
+.IP \[bu] 2
+\f[V]-FI_EOPNOTSUPP\f[R]: Unsupported flags in \f[V]attr_mask\f[R], or
+the endpoint does not belong to an \f[V]efa-direct\f[R] domain.
+.PP
+On failure, no attribute is modified.
 .SS Fabric Operation Extension
 .PP
 Fabric operation extension is obtained by calling \f[V]fi_open_ops\f[R]
