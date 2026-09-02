@@ -5,6 +5,7 @@
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
+#include "rdm/efa_rdm_proto_eager.h"
 #include "rdm/efa_rdm_proto_longcts.h"
 
 
@@ -34,17 +35,19 @@ void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state)
 	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
 	assert_non_null(txe);
 
-	/* Allocate and init a TX pkt_entry */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
-	assert_non_null(pkt_entry);
-
 	/*
-	 * The eager protocol moved to the refactored code path, so build the
-	 * packet with the shared RTM helper rather than an eager-specific init.
+	 * Build the eager REQ the way the eager protocol does: it moved to the
+	 * refactored code path, so it allocates its own packet entry and
+	 * publishes it in ep->send_pkt_entry_vec.
 	 */
-	err = efa_rdm_pke_init_rtm_with_payload(
-		pkt_entry, EFA_RDM_EAGER_MSGRTM_PKT, txe, 0, -1);
+	err = efa_rdm_proto_eager_construct_tx_pkes(efa_rdm_ep, txe->peer, NULL,
+						    txe->op, txe->tag,
+						    txe->fi_flags,
+						    txe->internal_flags, txe);
 	assert_int_equal(err, 0);
+	assert_int_equal(efa_rdm_ep->send_pkt_entry_vec_size, 1);
+	pkt_entry = efa_rdm_ep->send_pkt_entry_vec[0];
+	assert_non_null(pkt_entry);
 
 	/* Simulate device submission */
 	efa_rdm_ep_record_tx_op_submitted(efa_rdm_ep, pkt_entry);
@@ -89,17 +92,19 @@ void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state)
 	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
 	assert_non_null(txe);
 
-	/* Allocate and init a TX pkt_entry */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
-	assert_non_null(pkt_entry);
-
 	/*
-	 * The eager protocol moved to the refactored code path, so build the
-	 * packet with the shared RTM helper rather than an eager-specific init.
+	 * Build the eager REQ the way the eager protocol does: it moved to the
+	 * refactored code path, so it allocates its own packet entry and
+	 * publishes it in ep->send_pkt_entry_vec.
 	 */
-	err = efa_rdm_pke_init_rtm_with_payload(
-		pkt_entry, EFA_RDM_EAGER_MSGRTM_PKT, txe, 0, -1);
+	err = efa_rdm_proto_eager_construct_tx_pkes(efa_rdm_ep, txe->peer, NULL,
+						    txe->op, txe->tag,
+						    txe->fi_flags,
+						    txe->internal_flags, txe);
 	assert_int_equal(err, 0);
+	assert_int_equal(efa_rdm_ep->send_pkt_entry_vec_size, 1);
+	pkt_entry = efa_rdm_ep->send_pkt_entry_vec[0];
+	assert_non_null(pkt_entry);
 
 	/* Simulate device submission */
 	efa_rdm_ep_record_tx_op_submitted(efa_rdm_ep, pkt_entry);

@@ -288,7 +288,7 @@ static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
 				       enum efa_test_rtm_variant variant)
 {
 	int pkt_type = efa_test_rtm_pkt_type(variant);
-	ssize_t ret;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 
 	if (pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR) {
 		/* Headerless: raw payload, no protocol header at all. */
@@ -301,12 +301,15 @@ static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
 	if (EFA_TEST_RTM_IS_DC(variant))
 		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, pkt_type, txe, 0, -1);
-	if (ret)
-		return ret;
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
+
+	/* The DC and non-DC eager headers share this prefix. */
+	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(pkt_entry);
+	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->msg_id = txe->msg_id;
 
 	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
-		efa_rdm_pke_get_base_hdr(pkt_entry)->flags |= EFA_RDM_REQ_TAGGED;
+		rtm_hdr->flags |= EFA_RDM_REQ_TAGGED;
 		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
 	}
 
@@ -315,7 +318,13 @@ static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
 		efa_rdm_pke_get_dc_eager_rtm_base_hdr(pkt_entry)->send_id =
 			txe->tx_id;
 
-	return 0;
+	/*
+	 * An eager message fits in one packet by definition, so the whole
+	 * message is the payload and no segment alignment is needed.
+	 */
+	return efa_rdm_pke_init_payload_from_ope(
+		pkt_entry, txe, efa_rdm_pke_get_req_hdr_size(pkt_entry), 0,
+		txe->total_len);
 }
 
 /*
