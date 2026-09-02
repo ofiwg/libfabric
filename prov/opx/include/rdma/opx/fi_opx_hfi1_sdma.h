@@ -225,11 +225,15 @@ void opx_hfi1_sdma_process_pending(struct fi_opx_ep *opx_ep, struct fi_opx_ep_tx
 
 __OPX_FORCE_INLINE__
 bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep, uint64_t total_bytes, const uint32_t opcode,
-			       const enum fi_hmem_iface sbuf_iface, const bool is_shm)
+			       const enum fi_hmem_iface sbuf_iface, const bool is_shm, const bool have_dmabuf_fd)
 {
 	/* This function should never be called for fence and error/truncation
 	   opcodes. All other DPUT_OPCODEs are now supported for SDMA. */
 	assert(opcode != FI_OPX_HFI_DPUT_OPCODE_FENCE && opcode != FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
+
+	if (opx_hfisvc_hmem_force_pio(opx_ep, sbuf_iface, have_dmabuf_fd)) {
+		return false;
+	}
 
 	return !is_shm &&
 	       (opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID ||
@@ -273,7 +277,7 @@ void fi_opx_hfi1_sdma_init_cc(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dput_
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dput_params *params, const uint64_t length,
 				const uint32_t tidoffset, const uint32_t ntidpairs, const uint32_t *const tidpairs,
-				const uint64_t is_hmem, const enum opx_hfi1_type hfi1_type)
+				const uint64_t is_hmem, const enum opx_hfi1_type hfi1_type, const bool have_dmabuf_fd)
 {
 #ifdef OPX_HMEM
 	/* The work pool does not zero, and the CTS sets this only for a dma-buf
@@ -281,8 +285,8 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_dpu
 	params->dmabuf_src_mr = NULL;
 #endif
 
-	if (!fi_opx_hfi1_sdma_use_sdma(opx_ep, length, params->opcode, params->dput_iov[0].sbuf_iface,
-				       params->is_shm)) {
+	if (!fi_opx_hfi1_sdma_use_sdma(opx_ep, length, params->opcode, params->dput_iov[0].sbuf_iface, params->is_shm,
+				       have_dmabuf_fd)) {
 		if (hfi1_type == OPX_HFI1_JKR) {
 			params->work_elem.work_fn = fi_opx_hfi1_do_dput_jkr;
 		} else if (hfi1_type == OPX_HFI1_CYR) {

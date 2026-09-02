@@ -5045,6 +5045,43 @@ ssize_t opx_ep_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, const
 				       hfi1_type, ctx_sharing);
 }
 
+/*
+ * A device-memory transfer under HFISVC requires an exported dma-buf fd.
+ * If the driver does not advertise HFI1_CAP_DMABUF or if this transfer does
+ * not carry a usable exported dma-buf fd for device-memory, the transfer will
+ * be forced onto PIO instead of SDMA.  HFI1_CAP_DMABUF is only declared by
+ * the kernel header when dma-buf user-SDMA is supported, so in a non-dma-buf
+ * build dmabuf_sdma_ok stays false and device HFISVC sends always fall back to PIO.
+ */
+__OPX_FORCE_INLINE__
+bool opx_hfisvc_hmem_force_pio(struct fi_opx_ep *opx_ep, const enum fi_hmem_iface iface, const bool have_dmabuf_fd)
+{
+#if HAVE_HFISVC && defined(OPX_HMEM)
+	if (iface != FI_HMEM_SYSTEM && opx_ep->use_hfisvc) {
+		bool dmabuf_sdma_ok = false;
+#if OPX_HAVE_DMABUF
+		dmabuf_sdma_ok = (opx_ep->hfi->runtime_flags & HFI1_CAP_DMABUF) && have_dmabuf_fd;
+#else
+		(void) have_dmabuf_fd;
+#endif
+		if (!dmabuf_sdma_ok) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.sdma_forced_pio_hfisvc);
+			FI_WARN_ONCE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				     "HFISVC device-memory transfer lacks HFI1_CAP_DMABUF or a usable exported "
+				     "dma-buf fd; forcing PIO instead of SDMA. GPU transfer bandwidth may be "
+				     "reduced until a dma-buf-capable hfi1 driver is loaded.\n");
+			return true;
+		}
+	}
+	return false;
+#else
+	(void) opx_ep;
+	(void) iface;
+	(void) have_dmabuf_fd;
+	return false;
+#endif
+}
+
 static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 						 fi_addr_t dest_addr, uint64_t tag, void *context, const uint32_t data,
 						 const int lock_required, const unsigned is_contiguous,
@@ -5154,8 +5191,11 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			 * buffer until the replay retires; unaligned lengths stay on PIO because
 			 * SDMA cannot fill the inline tail the eager receive path expects. */
 			if (flow_control_mode == OPX_FLOW_CONTROL_MODE_NONE) {
-				if (opx_ep->use_eager_sdma && (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) &&
-				    is_contiguous && !(tx_op_flags & FI_INJECT) && ((total_len & 7) == 0) &&
+				const bool opx_hmem_sdma_blocked = opx_hfisvc_hmem_force_pio(
+					opx_ep, hmem_iface, eager_dmabuf_fd != OPX_SDMA_NO_DMABUF_FD);
+				if (opx_ep->use_eager_sdma && !opx_hmem_sdma_blocked &&
+				    (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) && is_contiguous &&
+				    !(tx_op_flags & FI_INJECT) && ((total_len & 7) == 0) &&
 				    total_len >= OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES &&
 				    total_len >= opx_ep_tx_sdma_min(opx_ep, opx_tx, hmem_iface) &&
 				    !fi_opx_hfi1_tx_is_shm(opx_ep, addr)) {
