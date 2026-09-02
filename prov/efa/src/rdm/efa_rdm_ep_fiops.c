@@ -655,6 +655,11 @@ err_close_shm_ep:
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm EP: %s\n",
 				fi_strerror(-retv));
 	}
+	/* shm_info is built to open the shm ep, so it unwinds with it */
+	if (efa_rdm_ep->shm_info) {
+		fi_freeinfo(efa_rdm_ep->shm_info);
+		efa_rdm_ep->shm_info = NULL;
+	}
 err_destroy_base_ep:
 	efa_base_ep_destruct(&efa_rdm_ep->base_ep);
 err_free_ep:
