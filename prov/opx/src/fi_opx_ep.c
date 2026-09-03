@@ -1260,7 +1260,8 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	tx->rzv_min_payload_bytes = l_rzv_min_payload_bytes;
 
 #ifdef OPX_HMEM
-	int l_hmem_rzv_min_payload_bytes;
+	bool hmem_rzv_min_explicit = false;
+	int  l_hmem_rzv_min_payload_bytes;
 	rc = fi_param_get_int(fi_opx_global.prov, "hmem_rzv_min_payload_bytes", &l_hmem_rzv_min_payload_bytes);
 	if (rc != FI_SUCCESS) {
 		l_hmem_rzv_min_payload_bytes = OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_DEFAULT;
@@ -1275,6 +1276,7 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 			OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MIN, OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MAX,
 			l_hmem_rzv_min_payload_bytes);
 	} else {
+		hmem_rzv_min_explicit = true;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES was specified.  Set to %d\n",
 				   l_hmem_rzv_min_payload_bytes);
 	}
@@ -1334,6 +1336,24 @@ static int fi_opx_ep_tx_init(struct fi_opx_ep *opx_ep, struct fi_opx_domain *opx
 	tx->pio_flow_eager_tx_bytes = l_pio_flow_eager_tx_bytes;
 
 	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Set pio_flow_eager_tx_bytes to %d \n", tx->pio_flow_eager_tx_bytes);
+
+#if defined(OPX_HMEM) && OPX_HMEM_BACKEND_ROCR
+	/* A device send at or below the flow eager threshold can use eager SDMA,
+	 * which beats rendezvous; above it the only eager form is multi-packet,
+	 * which loses to rendezvous. Put the rendezvous threshold one past the
+	 * flow eager threshold so each length takes the faster of the two. That
+	 * threshold comes from the PIO credit count and the packet size, so it
+	 * cannot be expressed as a constant. */
+	if (!hmem_rzv_min_explicit) {
+		uint32_t derived = (uint32_t) l_pio_flow_eager_tx_bytes + 1u;
+
+		if (derived >= OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MIN && derived <= OPX_HMEM_RZV_MIN_PAYLOAD_BYTES_MAX) {
+			opx_ep->hmem_rzv_min_payload_bytes = derived;
+		}
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Set hmem_rzv_min_payload_bytes to %u\n",
+				   opx_ep->hmem_rzv_min_payload_bytes);
+	}
+#endif
 
 	// Set the multi-packet eager max message length
 	int l_mp_eager_disable;

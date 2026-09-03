@@ -278,7 +278,11 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
 : Integer. Applies to sends from device (GPU) memory. The minimum length in bytes where
   rendezvous is used. Messages smaller than this threshold use eager or multi-packet eager.
   This only has an effect with HMEM enabled builds of OPX.
-  Value must be between 64 and 65536. Defaults to 4096 for CUDA builds, 8192 for ROCr builds.
+  Value must be between 64 and 65536. Defaults to 4096 for CUDA builds. For ROCr builds the
+  default is one byte past the PIO flow eager threshold, so that every length eager SDMA can
+  carry uses it and longer messages use rendezvous rather than multi-packet eager. That
+  threshold depends on the PIO credit count and the packet size, so the resulting default is
+  hardware dependent and is commonly 10241.
 
 *FI_OPX_HFISVC_MIN_PAYLOAD_BYTES*
 : Integer. Applies to sends from host memory. The minimum message length in bytes where
