@@ -1295,6 +1295,11 @@ enum util_rx_entry_status {
 	   application posted fi_recv calls that have not yet been matched to
 	   packets from peer endpoints */
 	RX_ENTRY_POSTED = 0,
+	/* rx entries with status RX_ENTRY_UNEXP_UNQUEUED were handed to the
+	   peer by get_msg/get_tag along with -FI_ENOENT, but the peer has not
+	   called queue_msg/queue_tag on them yet. They are on no queue, so
+	   their d_entry/s_entry union holds no link to unwind */
+	RX_ENTRY_UNEXP_UNQUEUED,
 	/* rx entries with status RX_ENTRY_UNEXP are associated with
 	   packets from peer endpoints that have not yet been matched to
 	   application posted fi_recv */
