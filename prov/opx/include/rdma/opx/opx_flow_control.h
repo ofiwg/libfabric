@@ -113,10 +113,47 @@ struct fi_opx_reliability_rx_flow;
 union fi_opx_reliability_service_flow_key;
 union opx_hfi1_packet_hdr;
 
-#define OPX_FLOW_CONTROL_NONE_STATE_SIZE  0u
-#define OPX_FLOW_CONTROL_STATE_ALIGNMENT  8u
-#define OPX_FLOW_CONTROL_MODE_STATE_BYTES 112u
-#define OPX_FLOW_CONTROL_STATE_SIZE	  128u
+/* Every _OFFSET macro below is a hard ABI mirror of a struct field layout
+ * owned by opx_flow_control_rccc_private.h, consumed by inline fast-path
+ * memcpy leaves in TUs that do not include the private header.  Each one is
+ * pinned by a _Static_assert against the real offsetof() in the private
+ * header, which is compiled unconditionally via opx_flow_control_rccc.c, so
+ * any struct reorder fails the build rather than silently corrupting the
+ * fast path.  Never change an offset here without its private-header assert. */
+#define OPX_FLOW_CONTROL_NONE_STATE_SIZE			0u
+#define OPX_FLOW_CONTROL_STATE_ALIGNMENT			8u
+#define OPX_FLOW_CONTROL_MODE_STATE_BYTES			112u
+#define OPX_FLOW_CONTROL_STATE_SIZE				128u
+#define OPX_FLOW_CONTROL_RCCC_TX_AVAILABLE_CREDITS_OFFSET	12u
+#define OPX_FLOW_CONTROL_RCCC_TX_HELD_CREDITS_OFFSET		16u
+#define OPX_FLOW_CONTROL_RCCC_TX_DESIRED_WINDOW_OFFSET		24u
+#define OPX_FLOW_CONTROL_RCCC_TX_BLOCK_REASON_OFFSET		26u
+#define OPX_FLOW_CONTROL_RCCC_TX_FLAGS_OFFSET			27u
+#define OPX_FLOW_CONTROL_RCCC_RX_GRANT_OFFSET			8u
+#define OPX_FLOW_CONTROL_RCCC_RX_OBSERVED_OFFSET		12u
+#define OPX_FLOW_CONTROL_RCCC_RX_RETIRED_ACCEPTED_OFFSET	20u
+#define OPX_FLOW_CONTROL_RCCC_RX_SCHEDULER_STATE_OFFSET		24u
+#define OPX_FLOW_CONTROL_RCCC_RX_FLAGS_OFFSET			25u
+#define OPX_FLOW_CONTROL_RCCC_RX_PERMISSION_CONTRIBUTION_OFFSET 48u
+#define OPX_FLOW_CONTROL_RCCC_RX_CONSUMED_EPOCH_OFFSET		108u
+#define OPX_FLOW_CONTROL_RCCC_SCHEDULER_OUTSTANDING_OFFSET	0u
+#define OPX_FLOW_CONTROL_RCCC_SCHEDULER_SHARED_RELEASE_OFFSET	8u
+#define OPX_FLOW_CONTROL_RCCC_SCHEDULER_SHARED_LEDGER_OFFSET	16u
+#define OPX_FLOW_CONTROL_RCCC_SCHEDULER_CONSUMED_TOTAL_OFFSET	24u
+
+#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING	UINT8_C(0x01)
+#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING		UINT8_C(0x04)
+#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_ACTIVITY_PENDING	UINT8_C(0x08)
+#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED UINT8_C(0x20)
+#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_ON_WORK_LIST	UINT8_C(0x80)
+
+#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_RECLAIMED UINT8_C(0x01)
+
+#define OPX_FLOW_CONTROL_RCCC_FAST_BLOCK_NONE	   0u
+#define OPX_FLOW_CONTROL_RCCC_FAST_SCHEDULER_BOUND 2u
+
+#define OPX_FLOW_CONTROL_RCCC_SERIAL_MASK	UINT32_C(0x00FFFFFF)
+#define OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE UINT32_C(0x00800000)
 
 struct opx_flow_control_state {
 	uint8_t	 lifecycle;
@@ -229,7 +266,8 @@ void opx_flow_control_rx_flow_fini(struct fi_opx_ep *opx_ep, struct fi_opx_relia
 /* Called once per accepted governed-class PSN (original or replay) at each
  * reliability acceptance site; PSN-ordered acceptance (the next_psn advance)
  * guarantees exactly-once, so the release table needs no per-PSN dedup. */
-void opx_flow_control_rx_first_accept(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow, uint32_t psn);
+void opx_flow_control_rx_first_accept_slow(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow,
+					   uint32_t psn);
 
 /* Single-packet reservations skip the record pool entirely: completion-side
  * accounting never touches the flow's credit terms (records only drive
@@ -239,9 +277,11 @@ void opx_flow_control_rx_first_accept(struct fi_opx_ep *opx_ep, struct fi_opx_re
  * free - and commit/cancel branch on the tag.  The replay's record field
  * stays NULL for singles, so ACK settle no-ops and NACK replay cannot
  * double-complete by construction. */
-#define OPX_FLOW_CONTROL_SINGLE_TAG(flow)    ((void *) (((uintptr_t) (flow)) | 1ul))
-#define OPX_FLOW_CONTROL_IS_SINGLE(record)   ((((uintptr_t) (record)) & 1ul) != 0u)
-#define OPX_FLOW_CONTROL_SINGLE_FLOW(record) ((struct fi_opx_reliability_tx_flow *) (((uintptr_t) (record)) & ~1ul))
+#define OPX_FLOW_CONTROL_UNGOVERNED_RECORD     ((void *) 2ul)
+#define OPX_FLOW_CONTROL_IS_UNGOVERNED(record) ((record) == OPX_FLOW_CONTROL_UNGOVERNED_RECORD)
+#define OPX_FLOW_CONTROL_SINGLE_TAG(flow)      ((void *) (((uintptr_t) (flow)) | 1ul))
+#define OPX_FLOW_CONTROL_IS_SINGLE(record)     ((((uintptr_t) (record)) & 1ul) != 0u)
+#define OPX_FLOW_CONTROL_SINGLE_FLOW(record)   ((struct fi_opx_reliability_tx_flow *) (((uintptr_t) (record)) & ~1ul))
 
 enum opx_flow_control_result opx_flow_control_tx_admit_reserve_single(struct fi_opx_ep			*opx_ep,
 								      struct fi_opx_reliability_tx_flow *flow,
@@ -257,12 +297,11 @@ void	 opx_flow_control_tx_cancel(struct fi_opx_ep *opx_ep, void *reservation_rec
 uint64_t opx_flow_control_tx_record_generation(const void *reservation_record);
 bool	 opx_flow_control_tx_capacity_rejected(const struct fi_opx_reliability_tx_flow *flow);
 
-enum opx_flow_control_result opx_flow_control_piggyback_write(enum opx_flow_control_carrier	   carrier,
-							      const struct opx_flow_control_state *state,
-							      union opx_hfi1_packet_hdr		  *header);
+uint64_t opx_flow_control_piggyback_write(enum opx_flow_control_carrier carrier, struct fi_opx_ep *opx_ep,
+					  const union fi_opx_reliability_service_flow_key *key);
 enum opx_flow_control_result opx_flow_control_piggyback_read(enum opx_flow_control_carrier    carrier,
-							     const union opx_hfi1_packet_hdr *header,
-							     struct opx_flow_control_state   *state);
+							     struct fi_opx_ep		     *opx_ep,
+							     const union opx_hfi1_packet_hdr *header);
 enum opx_flow_control_result opx_flow_control_wire_send(struct fi_opx_ep *opx_ep, bool request_direction,
 							const union fi_opx_reliability_service_flow_key *key,
 							const struct opx_flow_control_wire_envelope	*envelope);

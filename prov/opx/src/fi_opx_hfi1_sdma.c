@@ -614,7 +614,8 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 				  const uint64_t caps, const enum ofi_reliability_kind reliability,
 				  const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
 				  const uint64_t hmem_device, const int dmabuf_fd, const uintptr_t dmabuf_base,
-				  const enum opx_hfi1_type hfi1_type)
+				  const enum opx_flow_control_mode flow_control_mode,
+				  const enum opx_hfi1_type	   hfi1_type)
 {
 	struct fi_opx_ep    *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, dest_addr);
@@ -721,6 +722,45 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 		fi_opx_hfi1_sdma_return_we(opx_ep, we);
 		return -FI_EAGAIN;
 	}
+	/* RCCC batch admission: reserve the single-packet prefix and take the
+	 * reservation record through the same seam DPUT SDMA uses.  The record
+	 * commits per packet inside opx_hfi1_sdma_register_replays(), and the
+	 * SDMA request is preallocated here so a request-pool failure can still
+	 * cancel the reservation -- registration is the point of no return (a
+	 * post-registration writev failure fail-stops). */
+	void			*reservation_record = NULL;
+	struct opx_sdma_request *request	    = NULL;
+	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
+		const int32_t psns_avail = fi_opx_reliability_tx_available_psns(
+			ep, opx_ep->reli_service, opx_ep->rx->self.planes[OPX_PRIMARY_PLANE].lid,
+			dest_addr.planes[OPX_PRIMARY_PLANE].lid, dest_addr.planes[OPX_PRIMARY_PLANE].hfi1_subctxt_rx,
+			dest_addr.tx_index, &we->flow, 1u, (uint32_t) len, flow_control_mode,
+			OPX_FLOW_CONTROL_PACKET_EAGER, &reservation_record);
+		if (OFI_UNLIKELY(psns_avail < 1)) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eager_eagain_psn);
+			fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, replay);
+			if (context) {
+				OPX_BUF_FREE(context);
+			}
+			OPX_BUF_FREE(user_cc);
+			OPX_BUF_FREE(work);
+			fi_opx_hfi1_sdma_return_we(opx_ep, we);
+			return -FI_EAGAIN;
+		}
+		request = opx_hfi1_sdma_request_allocate(opx_ep, dest_addr.tx_index);
+		if (OFI_UNLIKELY(request == NULL)) {
+			opx_flow_control_tx_cancel_RCCC(opx_ep, reservation_record);
+			fi_opx_reliability_service_replay_deallocate(opx_ep->reli_service, replay);
+			if (context) {
+				OPX_BUF_FREE(context);
+			}
+			OPX_BUF_FREE(user_cc);
+			OPX_BUF_FREE(work);
+			fi_opx_hfi1_sdma_return_we(opx_ep, we);
+			return -FI_EAGAIN;
+		}
+	}
+
 	replay->use_sdma = true;
 	replay->tx_index = dest_addr.tx_index;
 
@@ -758,11 +798,16 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 	}
 	fi_opx_hfi1_sdma_add_packet(we, replay, len);
 
-	const uint32_t fragsize = opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type, NULL);
+	const uint32_t fragsize =
+		opx_hfi1_sdma_register_replays(opx_ep, we, reliability, hfi1_type, reservation_record);
 
-	int enqueue_rc = opx_hfi1_sdma_enqueue_dput(opx_ep, we, fragsize, len);
-	assert(enqueue_rc != FI_SUCCESS || we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
-	(void) enqueue_rc;
+	if (request != NULL) {
+		opx_hfi1_sdma_enqueue_dput_preallocated(opx_ep, request, we, fragsize, len, true);
+	} else {
+		int enqueue_rc = opx_hfi1_sdma_enqueue_dput(opx_ep, we, fragsize, len);
+		assert(enqueue_rc != FI_SUCCESS || we->comp_state == OPX_SDMA_COMP_PENDING_WRITEV);
+		(void) enqueue_rc;
+	}
 	assert(we->next == NULL);
 	slist_insert_tail((struct slist_entry *) we, &work->dput.sdma_reqs);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_tx->work_pending_completion);

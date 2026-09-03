@@ -52,6 +52,7 @@ opx_files =									\
 		prov/opx/src/opx_hfisvc_mr.c					\
 		prov/opx/src/opx_hfisvc_atomic.c				\
 		prov/opx/src/opx_tracer.c					\
+		prov/opx/src/opx_telemetry_oracle.c				\
 		prov/opx/src/opx_ipc.c						\
 		prov/opx/src/opx_debug.c					\
 		prov/opx/src/opx_flow_control.c					\
@@ -173,6 +174,7 @@ noinst_HEADERS = \
 	$(top_srcdir)/prov/opx/include/rdma/opx/opx_hfisvc_rma.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/opx_rma_types.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/opx_rndtsc.h \
+	$(top_srcdir)/prov/opx/include/rdma/opx/opx_telemetry_oracle.h \
 	$(top_srcdir)/prov/opx/include/rdma/opx/fi_opx_atomic_clones.h \
 	$(top_srcdir)/prov/opx/include/rdma/fi_direct_trigger.h \
 	$(top_srcdir)/prov/opx/include/rdma/fi_direct_atomic.h \

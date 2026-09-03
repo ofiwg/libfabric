@@ -441,28 +441,34 @@ ssize_t fi_opx_hfi1_tx_flow_control_reliability_inject(struct fid_ep				       *
 {
 	uint64_t qwords[OPX_FLOW_CONTROL_WIRE_QWORD_COUNT];
 
-	if (OFI_UNLIKELY(ep == NULL ||
-			 container_of(ep, struct fi_opx_ep, ep_fid)->flow_control_reservation_pool == NULL)) {
-		return -FI_EOPNOTSUPP;
-	}
-	if (OFI_UNLIKELY(key == NULL || envelope == NULL || key->qw_prefix != envelope->key ||
-			 envelope->direction != direction ||
-			 (direction == OPX_FLOW_CONTROL_WIRE_DIRECTION_REQUEST &&
-			  (OPX_RELIABILITY_DECODE_LID(key->dlid) != dlid || key->dst_subctxt_rx != reliability_rx)) ||
-			 (direction == OPX_FLOW_CONTROL_WIRE_DIRECTION_FEEDBACK &&
-			  (OPX_RELIABILITY_DECODE_LID(key->slid) != dlid || key->src_subctxt_rx != reliability_rx)) ||
-			 opx_flow_control_wire_envelope_pack(envelope, qwords) != OPX_FLOW_CONTROL_WIRE_OK)) {
-		return -FI_EINVAL;
-	}
+	/* Callers (opx_flow_control_wire_send) guarantee valid, self-consistent
+	   arguments on an enabled endpoint; a violation here is a code bug, so
+	   these are asserts rather than runtime checks the hot path pays for. */
+	assert(ep != NULL);
+	assert(key != NULL);
+	assert(envelope != NULL);
+	assert(key->qw_prefix == envelope->key);
+	assert(envelope->direction == direction);
+	assert(direction != OPX_FLOW_CONTROL_WIRE_DIRECTION_REQUEST ||
+	       (OPX_RELIABILITY_DECODE_LID(key->dlid) == dlid && key->dst_subctxt_rx == reliability_rx));
+	assert(direction != OPX_FLOW_CONTROL_WIRE_DIRECTION_FEEDBACK ||
+	       (OPX_RELIABILITY_DECODE_LID(key->slid) == dlid && key->src_subctxt_rx == reliability_rx));
+
+	/* The pack call fills qwords and must execute in optimized builds; only
+	   its (bug-indicating) failure result is demoted to an assert. */
+	const enum opx_flow_control_wire_result pack_result = opx_flow_control_wire_envelope_pack(envelope, qwords);
+	assert(pack_result == OPX_FLOW_CONTROL_WIRE_OK);
+	(void) pack_result;
 
 	struct fi_opx_ep *opx_ep   = container_of(ep, struct fi_opx_ep, ep_fid);
 	const uint8_t	  tx_index = OPX_RELIABILITY_DECODE_TX_INDEX(key->slid);
 
-	if (OFI_UNLIKELY(opx_ep->reli_service == NULL || opx_ep->domain == NULL ||
-			 hfi1_type != OPX_SW_HFI1_TYPE(opx_ep->domain) || tx_index >= opx_ep->num_tx_contexts ||
-			 opx_ep->tx_contexts[tx_index] == NULL)) {
-		return -FI_EINVAL;
-	}
+	assert(opx_ep->flow_control_reservation_pool != NULL);
+	assert(opx_ep->reli_service != NULL);
+	assert(opx_ep->domain != NULL);
+	assert(hfi1_type == OPX_SW_HFI1_TYPE(opx_ep->domain));
+	assert(tx_index < opx_ep->num_tx_contexts);
+	assert(opx_ep->tx_contexts[tx_index] != NULL);
 
 	struct fi_opx_ep_tx *opx_tx = opx_ep->tx_contexts[tx_index];
 
@@ -550,6 +556,18 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 	const uint64_t psn_start_24 = psn_start & MAX_PSN;
 	const uint64_t psn_count_24 = MIN(psn_count, MAX_PSN - psn_start_24 + 1);
 	const uint64_t psn_qw	    = (psn_start_24 << 32) | psn_count_24;
+
+	uint64_t flow_control_qw6 = 0u;
+
+	if (opx_ep_flow_control_active(opx_ep)) {
+		if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK) {
+			flow_control_qw6 =
+				opx_flow_control_piggyback_write(OPX_FLOW_CONTROL_CARRIER_RELIABILITY_ACK, opx_ep, key);
+		} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING) {
+			flow_control_qw6 = opx_flow_control_piggyback_write(OPX_FLOW_CONTROL_CARRIER_RELIABILITY_PING,
+									    opx_ep, key);
+		}
+	}
 
 	OPX_SHD_CTX_PIO_LOCK(ctx_sharing, opx_tx);
 
@@ -643,7 +661,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 						   OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, tx_index),
 					   model->hdr.qw_9B[0] | lrh_dlid_9B, model->hdr.qw_9B[1] | bth_rx,
 					   model->hdr.qw_9B[2] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
-					   model->hdr.qw_9B[3] | key_dw_suffix, psn_qw, 0,
+					   model->hdr.qw_9B[3] | key_dw_suffix, psn_qw, flow_control_qw6,
 					   key->qw_prefix); /* service.key */
 
 		// fi_opx_hfi1_dump_stl_packet_hdr((struct fi_opx_hfi1_stl_packet_hdr_9B *)&tmp[1], __func__, __LINE__);
@@ -672,7 +690,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject(struct fid_ep *ep, const union fi_opx_
 						   (uint64_t) (bth_rx >> OPX_LRH_JKR_BTH_RX_ENTROPY_SHIFT_16B),
 					   model_16B->hdr.qw_16B[2] | bth_rx,
 					   model_16B->hdr.qw_16B[3] | FI_OPX_PKT_TX_INDEX_TO_QW3(tx_index),
-					   model_16B->hdr.qw_16B[4] | key_dw_suffix, psn_qw, 0);
+					   model_16B->hdr.qw_16B[4] | key_dw_suffix, psn_qw, flow_control_qw6);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
@@ -2824,12 +2842,10 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 		service->process_fn(ep, hdr, payload);
 
 		/* Acceptance site 2 of 3: an in-order arrival that reached the
-		 * exception path only because uepkts were queued.  Same
-		 * reservation-pool runtime gate as the fast path. */
+		 * exception path only because uepkts were queued. */
 		struct fi_opx_ep *first_accept_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
-		if (OFI_UNLIKELY(first_accept_ep->flow_control_reservation_pool != NULL) &&
-		    opx_flow_control_rx_packet_governed(opcode, hdr)) {
+		if (opx_ep_flow_control_active(first_accept_ep) && opx_flow_control_rx_packet_governed(opcode, hdr)) {
 			opx_flow_control_rx_first_accept(first_accept_ep, flow, psn);
 		}
 
@@ -2857,7 +2873,7 @@ void fi_opx_reliability_rx_exception(struct fi_opx_reliability_service *service,
 			 * RZV_DATA early-process path already delivered
 			 * (uepkt->processed): release accounting follows PSN
 			 * acceptance, not payload delivery. */
-			if (OFI_UNLIKELY(first_accept_ep->flow_control_reservation_pool != NULL) &&
+			if (opx_ep_flow_control_active(first_accept_ep) &&
 			    opx_flow_control_rx_packet_governed(uepkt->hdr.bth.opcode, &uepkt->hdr)) {
 				opx_flow_control_rx_first_accept(first_accept_ep, flow,
 								 (uint32_t) (next_psn & MAX_PSN));

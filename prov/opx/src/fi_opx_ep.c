@@ -631,6 +631,7 @@ static void fi_opx_reliability_service_teardown(struct fi_opx_ep *opx_ep)
 	if (opx_ep->flow_control_reservation_pool != NULL) {
 		opx_flow_control_tx_flows_quiesce(opx_ep);
 	}
+	opx_flow_control_rx_flows_reclaim(opx_ep);
 	opx_flow_control_rccc_scheduler_destroy(&opx_ep->flow_control_scheduler);
 	opx_flow_control_reservation_pool_destroy(&opx_ep->flow_control_reservation_pool);
 	opx_ep->flow_control_reservation_capacity = 0u;
@@ -669,7 +670,6 @@ static int fi_opx_close_ep(fid_t fid)
 		}
 		fi_opx_lock(&opx_ep->lock);
 	}
-	FI_OPX_DEBUG_COUNTERS_PRINT(opx_ep->debug_counters);
 
 	if (opx_ep->reli_service && opx_ep->reli_service->kind == OFI_RELIABILITY_KIND_ONLOAD) {
 		struct fi_opx_reliability_service *service   = opx_ep->reli_service;
@@ -838,6 +838,7 @@ static int fi_opx_close_ep(fid_t fid)
 	if (opx_ep->reli_service) {
 		fi_opx_reliability_service_teardown(opx_ep);
 	}
+	FI_OPX_DEBUG_COUNTERS_PRINT(opx_ep->debug_counters);
 
 #if HAVE_HFISVC
 	/* every watched hfisvc-GET cc must have been unlinked (completed or error-settled) by now */
@@ -2871,7 +2872,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 				errno = -ret;
 				goto err;
 			}
-			ret = opx_flow_control_rccc_scheduler_create(&opx_ep->flow_control_scheduler);
+			ret = opx_flow_control_rccc_scheduler_create(&opx_ep->flow_control_scheduler,
+								     opx_ep->hfi->info.rxe.hdrq.elemcnt);
 			if (ret != FI_SUCCESS) {
 				opx_flow_control_reservation_pool_destroy(&opx_ep->flow_control_reservation_pool);
 				errno = -ret;

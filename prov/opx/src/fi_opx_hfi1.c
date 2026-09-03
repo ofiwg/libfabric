@@ -5012,7 +5012,20 @@ int fi_opx_hfi1_do_dput_sdma(union fi_opx_hfi1_deferred_work *work, const enum o
 				params->slid, params->origin_rx, params->tx_index, &params->sdma_we->flow, packet_count,
 				max_eager_bytes, sdma_admission_mode, sdma_packet_class, &reservation_record);
 
-			if (psns_avail < (int64_t) packet_count) {
+			if (sdma_admission_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
+				if (psns_avail > 0) {
+					packet_count = MIN(packet_count, (uint64_t) psns_avail);
+				} else {
+					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
+					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+					       "%p:===================================== SEND DPUT SDMA, !PSN FI_EAGAIN\n",
+					       params);
+					OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT,
+								  (uint64_t) target_byte_counter_vaddr, 0);
+					return fi_opx_reliability_tx_admission_error(sdma_admission_mode,
+										     &params->sdma_we->flow);
+				}
+			} else if (psns_avail < (int64_t) packet_count) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 				       "%p:===================================== SEND DPUT SDMA, !PSN FI_EAGAIN\n",
@@ -5392,8 +5405,9 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 				packet_count = (bytes_to_send + (OPX_HFI1_TID_PAGESIZE - 1)) / OPX_HFI1_TID_PAGESIZE;
 				packet_count = MIN(packet_count, max_pkts_per_req);
 			}
-			/* RCCC admission owns the original batch size.  Generation clipping
-			 * may shorten only this writev, not the reservation request. */
+			/* RCCC admission may first shrink the reservation to the positive
+			 * credit window.  Generation clipping can then shorten this writev;
+			 * the existing staged-packet reduction returns that suffix. */
 			const uint32_t original_packet_count = (uint32_t) packet_count;
 			void	      *reservation_record    = NULL;
 			const int32_t  psns_avail	     = fi_opx_reliability_tx_available_psns(
@@ -5402,7 +5416,19 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 				    original_packet_count, max_dput_bytes, tid_sdma_admission_mode,
 				    OPX_FLOW_CONTROL_PACKET_RENDEZVOUS, &reservation_record);
 
-			if (psns_avail < (int64_t) original_packet_count) {
+			if (tid_sdma_admission_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
+				if (psns_avail > 0) {
+					packet_count = MIN(packet_count, (uint64_t) psns_avail);
+				} else {
+					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
+					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+					       "%p:===================================== SEND DPUT SDMA TID, !PSN FI_EAGAIN\n",
+					       params);
+					OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT, psns_avail, packet_count);
+					return fi_opx_reliability_tx_admission_error(tid_sdma_admission_mode,
+										     &params->sdma_we->flow);
+				}
+			} else if (psns_avail < (int64_t) original_packet_count) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
 				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 				       "%p:===================================== SEND DPUT SDMA TID, !PSN FI_EAGAIN\n",
@@ -5618,7 +5644,7 @@ int fi_opx_hfi1_do_dput_sdma_tid(union fi_opx_hfi1_deferred_work *work, const en
 				OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_DPUT, 3, 0);
 				return -FI_EAGAIN;
 			}
-			if (OFI_UNLIKELY(staged_packets < original_packet_count) && reservation_record != NULL) {
+			if (OFI_UNLIKELY(staged_packets < (uint32_t) psns_avail) && reservation_record != NULL) {
 				opx_flow_control_tx_reduce_reservation_RCCC(opx_ep, reservation_record, staged_packets);
 			}
 

@@ -55,21 +55,6 @@ enum opx_flow_control_wire_direction {
 	OPX_FLOW_CONTROL_WIRE_DIRECTION_FEEDBACK
 };
 
-enum opx_flow_control_wire_carrier_category {
-	OPX_FLOW_CONTROL_WIRE_CARRIER_RELIABILITY = 1,
-	OPX_FLOW_CONTROL_WIRE_CARRIER_REQUEST_BINDING,
-	OPX_FLOW_CONTROL_WIRE_CARRIER_RESPONSE_BINDING,
-	OPX_FLOW_CONTROL_WIRE_CARRIER_INELIGIBLE,
-	OPX_FLOW_CONTROL_WIRE_CARRIER_REPLAY
-};
-
-enum opx_flow_control_wire_generation_source {
-	OPX_FLOW_CONTROL_WIRE_GENERATION_NONE = 0,
-	OPX_FLOW_CONTROL_WIRE_GENERATION_EMBEDDED,
-	OPX_FLOW_CONTROL_WIRE_GENERATION_INDEPENDENT,
-	OPX_FLOW_CONTROL_WIRE_GENERATION_PRESERVED
-};
-
 struct opx_flow_control_wire_qw6 {
 	uint32_t value;
 	uint32_t generation;
@@ -86,15 +71,6 @@ struct opx_flow_control_wire_envelope {
 	uint8_t	 flags;
 	uint8_t	 direction;
 	uint8_t	 reserved[4];
-};
-
-struct opx_flow_control_wire_carrier_metadata {
-	uint8_t category;
-	uint8_t generation_source;
-	uint8_t extension_eligible;
-	uint8_t preserve_base_semantics;
-	uint8_t preserve_encoded_extension;
-	uint8_t reserved[3];
 };
 
 _Static_assert(offsetof(struct opx_flow_control_wire_qw6, value) == 0u, "generic QW6 value offset");
@@ -116,26 +92,6 @@ _Static_assert(offsetof(struct opx_flow_control_wire_envelope, reserved) == 28u,
 	       "generic wire-envelope reserved offset");
 _Static_assert(sizeof(struct opx_flow_control_wire_envelope) == 32u, "generic wire-envelope layout");
 
-_Static_assert(offsetof(struct opx_flow_control_wire_carrier_metadata, category) == 0u,
-	       "carrier metadata category offset");
-_Static_assert(offsetof(struct opx_flow_control_wire_carrier_metadata, generation_source) == 1u,
-	       "carrier metadata generation-source offset");
-_Static_assert(offsetof(struct opx_flow_control_wire_carrier_metadata, extension_eligible) == 2u,
-	       "carrier metadata eligibility offset");
-_Static_assert(offsetof(struct opx_flow_control_wire_carrier_metadata, preserve_base_semantics) == 3u,
-	       "carrier metadata base-semantics offset");
-_Static_assert(offsetof(struct opx_flow_control_wire_carrier_metadata, preserve_encoded_extension) == 4u,
-	       "carrier metadata preservation offset");
-_Static_assert(offsetof(struct opx_flow_control_wire_carrier_metadata, reserved) == 5u,
-	       "carrier metadata reserved offset");
-_Static_assert(sizeof(struct opx_flow_control_wire_carrier_metadata) == 8u, "carrier metadata layout");
-
-void				  opx_flow_control_wire_qw6_absent(uint64_t *qw6);
-enum opx_flow_control_wire_result opx_flow_control_wire_qw6_pack(const struct opx_flow_control_wire_qw6 *fields,
-								 uint64_t				*qw6);
-enum opx_flow_control_wire_result opx_flow_control_wire_qw6_unpack(uint64_t			     qw6,
-								   struct opx_flow_control_wire_qw6 *fields);
-
 enum opx_flow_control_wire_result
 opx_flow_control_wire_envelope_validate(const struct opx_flow_control_wire_envelope *envelope);
 enum opx_flow_control_wire_result
@@ -145,9 +101,5 @@ enum opx_flow_control_wire_result
 opx_flow_control_wire_envelope_unpack(const uint64_t			     qwords[OPX_FLOW_CONTROL_WIRE_QWORD_COUNT],
 				      enum opx_flow_control_wire_direction   direction,
 				      struct opx_flow_control_wire_envelope *envelope);
-
-enum opx_flow_control_wire_result
-opx_flow_control_wire_carrier_metadata(enum opx_flow_control_carrier		      carrier,
-				       struct opx_flow_control_wire_carrier_metadata *metadata);
 
 #endif

@@ -151,41 +151,39 @@ uint64_t opx_flow_control_tx_record_generation_RCCC(const void *reservation_reco
 }
 
 __OPX_FORCE_INLINE__
-enum opx_flow_control_result opx_flow_control_piggyback_write_NONE(enum opx_flow_control_carrier	carrier,
-								   const struct opx_flow_control_state *state,
-								   union opx_hfi1_packet_hdr	       *header)
+uint64_t opx_flow_control_piggyback_write_NONE(enum opx_flow_control_carrier carrier, struct fi_opx_ep *opx_ep,
+					       const union fi_opx_reliability_service_flow_key *key)
 {
 	(void) carrier;
-	(void) state;
-	(void) header;
-	return OPX_FLOW_CONTROL_OK;
+	(void) opx_ep;
+	(void) key;
+	return 0u;
 }
 
 __OPX_FORCE_INLINE__
 enum opx_flow_control_result opx_flow_control_piggyback_read_NONE(enum opx_flow_control_carrier	   carrier,
-								  const union opx_hfi1_packet_hdr *header,
-								  struct opx_flow_control_state	  *state)
+								  struct fi_opx_ep		  *opx_ep,
+								  const union opx_hfi1_packet_hdr *header)
 {
 	(void) carrier;
+	(void) opx_ep;
 	(void) header;
-	(void) state;
 	return OPX_FLOW_CONTROL_OK;
 }
 
 __OPX_FORCE_INLINE__
-enum opx_flow_control_result opx_flow_control_piggyback_write_RCCC(enum opx_flow_control_carrier	carrier,
-								   const struct opx_flow_control_state *state,
-								   union opx_hfi1_packet_hdr	       *header)
+uint64_t opx_flow_control_piggyback_write_RCCC(enum opx_flow_control_carrier carrier, struct fi_opx_ep *opx_ep,
+					       const union fi_opx_reliability_service_flow_key *key)
 {
-	return opx_flow_control_piggyback_write(carrier, state, header);
+	return opx_flow_control_piggyback_write(carrier, opx_ep, key);
 }
 
 __OPX_FORCE_INLINE__
 enum opx_flow_control_result opx_flow_control_piggyback_read_RCCC(enum opx_flow_control_carrier	   carrier,
-								  const union opx_hfi1_packet_hdr *header,
-								  struct opx_flow_control_state	  *state)
+								  struct fi_opx_ep		  *opx_ep,
+								  const union opx_hfi1_packet_hdr *header)
 {
-	return opx_flow_control_piggyback_read(carrier, header, state);
+	return opx_flow_control_piggyback_read(carrier, opx_ep, header);
 }
 
 __OPX_FORCE_INLINE__

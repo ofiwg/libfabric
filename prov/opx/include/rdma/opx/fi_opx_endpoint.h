@@ -590,10 +590,17 @@ int  opx_flow_control_reservation_pool_capacity_verify(const struct ofi_bufpool	
 void opx_flow_control_reservation_pool_destroy(struct ofi_bufpool **pool);
 
 struct opx_flow_control_rccc_scheduler;
-int  opx_flow_control_rccc_scheduler_create(struct opx_flow_control_rccc_scheduler **scheduler);
+int  opx_flow_control_rccc_scheduler_create(struct opx_flow_control_rccc_scheduler **scheduler, uint32_t rcvhdrq_cnt);
 int  opx_flow_control_rccc_scheduler_shared_attach(struct opx_flow_control_rccc_scheduler *scheduler,
 						   const char *job_key_str, uint32_t hfi_unit, uint32_t context_number,
 						   uint32_t subctxt, uint32_t subctxt_cnt);
+void opx_flow_control_rccc_scheduler_occupancy_set(struct opx_flow_control_rccc_scheduler *scheduler,
+						   uint32_t occupancy, bool drain_maxed, uint64_t now_ns);
+bool opx_flow_control_rccc_shared_sample_due(struct opx_flow_control_rccc_scheduler *scheduler, uint64_t *mono_now_out);
+void opx_flow_control_rccc_shared_sample_publish(struct opx_flow_control_rccc_scheduler *scheduler, uint32_t backlog,
+						 uint64_t mono_now);
+void opx_flow_control_rccc_shared_occupancy_consume(struct opx_flow_control_rccc_scheduler *scheduler,
+						    uint64_t				    sweep_now_ns);
 void opx_flow_control_rccc_scheduler_destroy(struct opx_flow_control_rccc_scheduler **scheduler);
 
 struct fi_opx_ep {
@@ -780,6 +787,103 @@ OPX_COMPILE_TIME_ASSERT(sizeof(((struct fi_opx_ep *) 0)->hfisvc) == (FI_OPX_CACH
 #endif
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, use_prefault_write) == (FI_OPX_CACHE_LINE_SIZE * 7),
 			"Offset of fi_opx_ep->use_prefault_write should start at cacheline 7!");
+
+/* The pool pointer is the fail-closed runtime gate (non-NULL only once RCCC enable
+ * fully succeeds). Deliberately left UNANNOTATED for branch prediction: the value is
+ * endpoint-constant, so the predictor learns it perfectly, whereas a static
+ * LIKELY/UNLIKELY would mis-bias one of the two supported deployments. */
+__OPX_FORCE_INLINE__
+bool opx_ep_flow_control_active(const struct fi_opx_ep *opx_ep)
+{
+	return opx_ep->flow_control_reservation_pool != NULL;
+}
+
+__OPX_FORCE_INLINE__
+void *opx_flow_control_rccc_rx_field(struct fi_opx_reliability_rx_flow *flow, size_t offset)
+{
+	return (uint8_t *) opx_flow_control_rx_flow_state(flow) + offsetof(struct opx_flow_control_state, mode_state) +
+	       offset;
+}
+
+__OPX_FORCE_INLINE__
+void opx_flow_control_rx_first_accept(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow, uint32_t psn)
+{
+	uint8_t *const scheduler_state =
+		opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_SCHEDULER_STATE_OFFSET);
+	uint8_t *const flags = opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_FLAGS_OFFSET);
+	uint32_t       grant;
+	uint32_t       observed;
+	uint32_t       retired_accepted;
+	uint32_t       outstanding;
+	uint64_t       permission_contribution;
+	uint32_t       consumed_epoch;
+	uint8_t	      *scheduler;
+	uint64_t       scheduler_outstanding;
+	uint32_t       scheduler_consumed_total;
+	void	      *scheduler_shared_ledger;
+	uint64_t       scheduler_shared_release;
+
+	(void) psn;
+	assert(opx_ep != NULL);
+	assert(opx_ep->reli_service != NULL);
+	assert(opx_ep->flow_control_scheduler != NULL);
+	if (*scheduler_state != OPX_FLOW_CONTROL_RCCC_FAST_SCHEDULER_BOUND ||
+	    (*flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_RECLAIMED) != 0u) {
+		opx_flow_control_rx_first_accept_slow(opx_ep, flow, psn);
+		return;
+	}
+	memcpy(&grant, opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_GRANT_OFFSET), sizeof(grant));
+	memcpy(&observed, opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_OBSERVED_OFFSET),
+	       sizeof(observed));
+	memcpy(&retired_accepted,
+	       opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_RETIRED_ACCEPTED_OFFSET),
+	       sizeof(retired_accepted));
+	memcpy(&permission_contribution,
+	       opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_PERMISSION_CONTRIBUTION_OFFSET),
+	       sizeof(permission_contribution));
+	scheduler = (uint8_t *) opx_ep->flow_control_scheduler;
+	memcpy(&scheduler_outstanding, scheduler + OPX_FLOW_CONTROL_RCCC_SCHEDULER_OUTSTANDING_OFFSET,
+	       sizeof(scheduler_outstanding));
+	outstanding = (grant - observed - retired_accepted) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
+	if (OFI_UNLIKELY(outstanding == 0u || outstanding >= OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE ||
+			 permission_contribution == 0u || scheduler_outstanding == 0u)) {
+		opx_flow_control_rx_first_accept_slow(opx_ep, flow, psn);
+		return;
+	}
+
+	observed = (observed + 1u) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
+	memcpy(opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_OBSERVED_OFFSET), &observed,
+	       sizeof(observed));
+	memcpy(&consumed_epoch, opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_CONSUMED_EPOCH_OFFSET),
+	       sizeof(consumed_epoch));
+	if (consumed_epoch != UINT32_MAX) {
+		consumed_epoch++;
+		memcpy(opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_CONSUMED_EPOCH_OFFSET),
+		       &consumed_epoch, sizeof(consumed_epoch));
+	}
+	memcpy(&scheduler_consumed_total, scheduler + OPX_FLOW_CONTROL_RCCC_SCHEDULER_CONSUMED_TOTAL_OFFSET,
+	       sizeof(scheduler_consumed_total));
+	if (scheduler_consumed_total != UINT32_MAX) {
+		scheduler_consumed_total++;
+		memcpy(scheduler + OPX_FLOW_CONTROL_RCCC_SCHEDULER_CONSUMED_TOTAL_OFFSET, &scheduler_consumed_total,
+		       sizeof(scheduler_consumed_total));
+	}
+	scheduler_outstanding--;
+	memcpy(scheduler + OPX_FLOW_CONTROL_RCCC_SCHEDULER_OUTSTANDING_OFFSET, &scheduler_outstanding,
+	       sizeof(scheduler_outstanding));
+	permission_contribution--;
+	memcpy(opx_flow_control_rccc_rx_field(flow, OPX_FLOW_CONTROL_RCCC_RX_PERMISSION_CONTRIBUTION_OFFSET),
+	       &permission_contribution, sizeof(permission_contribution));
+	memcpy(&scheduler_shared_ledger, scheduler + OPX_FLOW_CONTROL_RCCC_SCHEDULER_SHARED_LEDGER_OFFSET,
+	       sizeof(scheduler_shared_ledger));
+	if (OFI_UNLIKELY(scheduler_shared_ledger != NULL)) {
+		memcpy(&scheduler_shared_release, scheduler + OPX_FLOW_CONTROL_RCCC_SCHEDULER_SHARED_RELEASE_OFFSET,
+		       sizeof(scheduler_shared_release));
+		scheduler_shared_release++;
+		memcpy(scheduler + OPX_FLOW_CONTROL_RCCC_SCHEDULER_SHARED_RELEASE_OFFSET, &scheduler_shared_release,
+		       sizeof(scheduler_shared_release));
+	}
+}
 
 /*
  * A 'scalable endpoint' may not be directly specified in a data movement
@@ -4800,7 +4904,8 @@ ssize_t opx_hfi1_tx_send_egr_sdma(struct fid_ep *ep, const void *buf, size_t len
 				  const uint64_t caps, const enum ofi_reliability_kind reliability,
 				  const uint64_t do_cq_completion, const enum fi_hmem_iface iface,
 				  const uint64_t hmem_device, const int dmabuf_fd, const uintptr_t dmabuf_base,
-				  const enum opx_hfi1_type hfi1_type);
+				  const enum opx_flow_control_mode flow_control_mode,
+				  const enum opx_hfi1_type	   hfi1_type);
 
 __OPX_FORCE_INLINE__
 void fi_opx_ep_tx_cq_completion_rzv(struct fi_opx_ep_tx *opx_tx, void *context, const size_t len,
@@ -5246,25 +5351,23 @@ static inline ssize_t fi_opx_ep_tx_send_internal(struct fid_ep *ep, const void *
 			/* FI_INJECT is excluded because the payload iov points at the caller's
 			 * buffer until the replay retires; unaligned lengths stay on PIO because
 			 * SDMA cannot fill the inline tail the eager receive path expects. */
-			if (flow_control_mode == OPX_FLOW_CONTROL_MODE_NONE) {
-				const bool opx_hmem_sdma_blocked = opx_hfisvc_hmem_force_pio(
-					opx_ep, hmem_iface, eager_dmabuf_fd != OPX_SDMA_NO_DMABUF_FD);
-				if (opx_ep->use_eager_sdma && !opx_hmem_sdma_blocked &&
-				    (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) && is_contiguous &&
-				    !(tx_op_flags & FI_INJECT) && ((total_len & 7) == 0) &&
-				    total_len >= OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES &&
-				    total_len >= opx_ep_tx_sdma_min(opx_ep, opx_tx, hmem_iface) &&
-				    !fi_opx_hfi1_tx_is_shm(opx_ep, addr)) {
-					rc = opx_hfi1_tx_send_egr_sdma(ep, buf, total_len, addr, tag, context, data,
-								       tx_op_flags, caps, reliability, do_cq_completion,
-								       hmem_iface, hmem_device, eager_dmabuf_fd,
-								       eager_dmabuf_base, hfi1_type);
-					if (OFI_LIKELY(rc == FI_SUCCESS)) {
-						OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
-						return FI_SUCCESS;
-					}
-					/* -FI_EAGAIN: fall through to the PIO eager path below. */
+			const bool opx_hmem_sdma_blocked =
+				opx_hfisvc_hmem_force_pio(opx_ep, hmem_iface, eager_dmabuf_fd != OPX_SDMA_NO_DMABUF_FD);
+			if (opx_ep->use_eager_sdma && !opx_hmem_sdma_blocked &&
+			    (hfi1_type & (OPX_HFI1_WFR | OPX_HFI1_MIXED_9B)) && is_contiguous &&
+			    !(tx_op_flags & FI_INJECT) && ((total_len & 7) == 0) &&
+			    total_len >= OPX_EAGER_SDMA_MIN_PAYLOAD_BYTES &&
+			    total_len >= opx_ep_tx_sdma_min(opx_ep, opx_tx, hmem_iface) &&
+			    !fi_opx_hfi1_tx_is_shm(opx_ep, addr)) {
+				rc = opx_hfi1_tx_send_egr_sdma(ep, buf, total_len, addr, tag, context, data,
+							       tx_op_flags, caps, reliability, do_cq_completion,
+							       hmem_iface, hmem_device, eager_dmabuf_fd,
+							       eager_dmabuf_base, flow_control_mode, hfi1_type);
+				if (OFI_LIKELY(rc == FI_SUCCESS)) {
+					OPX_TRACE_TX_END_SUCCESS(OPX_TRACE_EVENT_TX_SEND, 0, 0);
+					return FI_SUCCESS;
 				}
+				/* -FI_EAGAIN: fall through to the PIO eager path below. */
 			}
 			rc = opx_ep_tx_send_try_eager(ep, buf, len, addr, tag, context, local_iov, niov, total_len,
 						      data, lock_required, is_contiguous, override_flags, tx_op_flags,

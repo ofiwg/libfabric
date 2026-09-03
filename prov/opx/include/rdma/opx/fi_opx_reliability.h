@@ -315,6 +315,7 @@ struct fi_opx_reliability_rx_flow {
 };
 
 void opx_flow_control_tx_flows_quiesce(struct fi_opx_ep *opx_ep);
+void opx_flow_control_rx_flows_reclaim(struct fi_opx_ep *opx_ep);
 
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_rx_flow, next_psn) == 0,
 			"Reliability RX flow next_psn layout changed");
@@ -667,6 +668,32 @@ __OPX_FORCE_INLINE__
 const void *opx_flow_control_tx_flow_state_const(const struct fi_opx_reliability_tx_flow *flow)
 {
 	return (const uint8_t *) flow + sizeof(struct fi_opx_reliability_tx_flow);
+}
+
+/* Typed read of the RCCC TX available-credit count from the opaque mode-state
+ * overlay.  The RCCC state layout is private to the flow-control engine; this
+ * header sees it only as a byte blob, so the field is read by documented
+ * offset (compile-asserted against the real struct in
+ * opx_flow_control_rccc_private.h).  The fixed-size memcpy is the
+ * aliasing-safe access idiom and compiles to a single 32-bit load at -O1+,
+ * never an outline call. */
+__OPX_FORCE_INLINE__
+uint32_t opx_flow_control_rccc_tx_available_credits(const struct fi_opx_reliability_tx_flow *flow)
+{
+	uint32_t available_credits;
+	memcpy(&available_credits,
+	       (const uint8_t *) opx_flow_control_tx_flow_state_const(flow) +
+		       offsetof(struct opx_flow_control_state, mode_state) +
+		       OPX_FLOW_CONTROL_RCCC_TX_AVAILABLE_CREDITS_OFFSET,
+	       sizeof(available_credits));
+	return available_credits;
+}
+
+__OPX_FORCE_INLINE__
+void *opx_flow_control_rccc_tx_field(struct fi_opx_reliability_tx_flow *flow, size_t offset)
+{
+	return (uint8_t *) opx_flow_control_tx_flow_state(flow) + offsetof(struct opx_flow_control_state, mode_state) +
+	       offset;
 }
 
 // TODO - make these tunable.
@@ -1163,32 +1190,39 @@ int32_t fi_opx_reliability_tx_available_psns(struct fid_ep *ep, struct fi_opx_re
 	const uint32_t pkts_avail	= max_outstanding_pkts - flow_outstanding_pkts;
 
 	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
-		/* RCCC admission is all-or-nothing: a batch reservation charges
-		 * exactly psns_to_get credits, so a partial PSN result would
-		 * strand the difference.  Admit records demand (and emits a
-		 * CREDIT_REQUEST on a cold window) before reserve charges. */
+		/* RCCC reservation stays all-or-nothing, but a positive standing
+		 * window may be smaller than an SDMA/TID batch.  Reserve the
+		 * available prefix so the caller can shorten this writev; preserve
+		 * the original cold-window demand when no credits exist so the first
+		 * CREDIT_REQUEST still advertises the full batch. */
 		assert(reservation_record_out != NULL);
-		*reservation_record_out = NULL;
-		if (OFI_UNLIKELY(MIN(pkts_avail, bytes_avail_pkts) < psns_to_get)) {
+		*reservation_record_out		      = NULL;
+		struct fi_opx_ep *opx_ep	      = (struct fi_opx_ep *) ep;
+		const uint32_t	  available_credits   = opx_flow_control_rccc_tx_available_credits(flow_ptr);
+		uint32_t	  psns_to_get_clamped = psns_to_get;
+
+		if (available_credits != 0u && psns_to_get_clamped > available_credits) {
+			psns_to_get_clamped = available_credits;
+		}
+		if (OFI_UNLIKELY(MIN(pkts_avail, bytes_avail_pkts) < psns_to_get_clamped)) {
 			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, MIN(pkts_avail, bytes_avail_pkts),
-						  psns_to_get);
+						  psns_to_get_clamped);
 			return -1;
 		}
-		struct fi_opx_ep *opx_ep = (struct fi_opx_ep *) ep;
-		if (OFI_UNLIKELY(opx_flow_control_rccc_tx_admit(opx_ep, flow_ptr, psns_to_get) !=
+		if (OFI_UNLIKELY(opx_flow_control_rccc_tx_admit(opx_ep, flow_ptr, psns_to_get_clamped) !=
 				 OPX_FLOW_CONTROL_OK)) {
-			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, psns_to_get);
+			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, psns_to_get_clamped);
 			return -1;
 		}
-		if (OFI_UNLIKELY(opx_flow_control_tx_reserve_RCCC(opx_ep, flow_ptr, packet_class, psns_to_get,
+		if (OFI_UNLIKELY(opx_flow_control_tx_reserve_RCCC(opx_ep, flow_ptr, packet_class, psns_to_get_clamped,
 								  reservation_record_out) != OPX_FLOW_CONTROL_OK)) {
 			assert(*reservation_record_out == NULL);
-			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, psns_to_get);
+			OPX_TRACE_SDMA_END_EAGAIN(OPX_TRACE_EVENT_SDMA_GET_PSNS, 0, psns_to_get_clamped);
 			return -1;
 		}
 		assert(*reservation_record_out != NULL);
-		OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get, 0);
-		return (int32_t) psns_to_get;
+		OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get_clamped, 0);
+		return (int32_t) psns_to_get_clamped;
 	}
 
 	OPX_TRACE_SDMA_END_SUCCESS(OPX_TRACE_EVENT_SDMA_GET_PSNS, psns_to_get, 0);
@@ -1333,8 +1367,10 @@ void opx_reliability_replay_bind_RCCC(struct fi_opx_reliability_tx_replay *repla
 	assert(replay->flow_control_reservation_record == NULL);
 	/* Record-free single-packet reservations leave the replay unbound:
 	 * settle dispatch gates on a non-NULL record, so singles ride the
-	 * no-op branch and NACK replay cannot double-complete. */
-	if (OPX_FLOW_CONTROL_IS_SINGLE(reservation_record)) {
+	 * no-op branch and NACK replay cannot double-complete.  Ungoverned
+	 * (fail-open) admissions carry no ledger state and stay unbound the
+	 * same way. */
+	if (OPX_FLOW_CONTROL_IS_SINGLE(reservation_record) || OPX_FLOW_CONTROL_IS_UNGOVERNED(reservation_record)) {
 		return;
 	}
 	replay->flow_control_reservation_record = reservation_record;
@@ -1438,14 +1474,50 @@ int32_t fi_opx_reliability_get_replay(struct fid_ep *ep, struct fi_opx_reliabili
 	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC) {
 		/* Fused admit + record-free single-packet charge: every
 		 * get_replay caller sends exactly one packet, and the flow is
-		 * already resolved here, so the separate pre-admit (with its
-		 * second rbtree find) and the pooled reservation record are
-		 * both skipped. */
+		 * already resolved here, so the pooled reservation record is
+		 * skipped. */
+		struct fi_opx_ep *const opx_ep = (struct fi_opx_ep *) ep;
+		uint8_t			tx_flags;
+		uint32_t		available_credits;
+		uint32_t		held_credits;
+		uint16_t		desired_window;
+
 		assert(reservation_record_out != NULL);
 		*reservation_record_out = NULL;
-		if (OFI_UNLIKELY(opx_flow_control_tx_admit_reserve_single((struct fi_opx_ep *) ep, flow_ptr,
-									  reservation_record_out) !=
-				 OPX_FLOW_CONTROL_OK)) {
+		memcpy(&tx_flags, opx_flow_control_rccc_tx_field(flow_ptr, OPX_FLOW_CONTROL_RCCC_TX_FLAGS_OFFSET),
+		       sizeof(tx_flags));
+		memcpy(&available_credits,
+		       opx_flow_control_rccc_tx_field(flow_ptr, OPX_FLOW_CONTROL_RCCC_TX_AVAILABLE_CREDITS_OFFSET),
+		       sizeof(available_credits));
+		memcpy(&desired_window,
+		       opx_flow_control_rccc_tx_field(flow_ptr, OPX_FLOW_CONTROL_RCCC_TX_DESIRED_WINDOW_OFFSET),
+		       sizeof(desired_window));
+		if ((tx_flags &
+		     (OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING | OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING |
+		      OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED | OPX_FLOW_CONTROL_RCCC_TX_FLAG_ON_WORK_LIST)) ==
+			    OPX_FLOW_CONTROL_RCCC_TX_FLAG_ON_WORK_LIST &&
+		    available_credits != 0u && (available_credits - 1u) >= ((uint32_t) desired_window >> 1)) {
+			uint8_t block_reason = OPX_FLOW_CONTROL_RCCC_FAST_BLOCK_NONE;
+
+			tx_flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_ACTIVITY_PENDING;
+			memcpy(opx_flow_control_rccc_tx_field(flow_ptr, OPX_FLOW_CONTROL_RCCC_TX_FLAGS_OFFSET),
+			       &tx_flags, sizeof(tx_flags));
+			memcpy(opx_flow_control_rccc_tx_field(flow_ptr, OPX_FLOW_CONTROL_RCCC_TX_BLOCK_REASON_OFFSET),
+			       &block_reason, sizeof(block_reason));
+			available_credits--;
+			memcpy(opx_flow_control_rccc_tx_field(flow_ptr,
+							      OPX_FLOW_CONTROL_RCCC_TX_AVAILABLE_CREDITS_OFFSET),
+			       &available_credits, sizeof(available_credits));
+			memcpy(&held_credits,
+			       opx_flow_control_rccc_tx_field(flow_ptr, OPX_FLOW_CONTROL_RCCC_TX_HELD_CREDITS_OFFSET),
+			       sizeof(held_credits));
+			assert(held_credits != UINT32_MAX);
+			held_credits++;
+			memcpy(opx_flow_control_rccc_tx_field(flow_ptr, OPX_FLOW_CONTROL_RCCC_TX_HELD_CREDITS_OFFSET),
+			       &held_credits, sizeof(held_credits));
+			*reservation_record_out = OPX_FLOW_CONTROL_SINGLE_TAG(flow_ptr);
+		} else if (OFI_UNLIKELY(opx_flow_control_tx_admit_reserve_single(
+						opx_ep, flow_ptr, reservation_record_out) != OPX_FLOW_CONTROL_OK)) {
 			assert(*reservation_record_out == NULL);
 			return -1;
 		}
@@ -1479,19 +1551,17 @@ void fi_opx_reliability_cancel_record(const enum opx_flow_control_mode flow_cont
 	}
 }
 
-/* Cold admission-failure classifier: a terminal current-generation Capacity
- * Reject must surface as FI_ENOSPC rather than collapse into FI_EAGAIN;
- * every other admission failure (throttle, pool exhaustion, credit
- * shortage) remains FI_EAGAIN.  Takes the flow by address so NONE-mode
- * callers never read the pointer; the RCCC branch constant-folds away for
- * compile-time NONE template modes. */
+/* Capacity rejects are retryable (non-terminal), so every admission
+ * failure surfaces as FI_EAGAIN; a rejected flow's request stays pending
+ * and re-emits on the capacity retry cadence.  The
+ * opx_flow_control_tx_capacity_rejected classifier is retained as the
+ * planned fail-open overflow-lane trigger. */
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_reliability_tx_admission_error(const enum opx_flow_control_mode		flow_control_mode,
 					      struct fi_opx_reliability_tx_flow *const *tx_flow)
 {
-	if (flow_control_mode == OPX_FLOW_CONTROL_MODE_RCCC && opx_flow_control_tx_capacity_rejected(*tx_flow)) {
-		return -FI_ENOSPC;
-	}
+	(void) flow_control_mode;
+	(void) tx_flow;
 	return -FI_EAGAIN;
 }
 
