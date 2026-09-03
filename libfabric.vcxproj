@@ -915,6 +915,7 @@
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtm.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_proto.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_proto_eager.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_proto_zero_copy.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rta.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtw.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtr.c" />
@@ -1043,6 +1044,7 @@
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pke_nonreq.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_proto.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_proto_eager.h" />
+    <ClInclude Include="prov\efa\src\rdm\efa_rdm_proto_zero_copy.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_atomic.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_msg.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pke.h" />

@@ -51,11 +51,6 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 {
 	int ret = 0;
 
-	if (efa_rdm_peer_expects_zero_hdr_data_transfer(ope->peer) &&
-	    pkt_type == EFA_RDM_EAGER_MSGRTM_PKT) {
-		pkt_entry->flags |= EFA_RDM_PKE_SEND_TO_USER_RECV_QP | EFA_RDM_PKE_HAS_NO_BASE_HDR;
-	}
-
 	/* Only 3 categories of packets has data_size and data_offset:
 	 * data packet, medium req and runtread req.
 	 *
