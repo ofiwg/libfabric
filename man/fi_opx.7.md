@@ -302,7 +302,7 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   larger of this value and FI_OPX_HMEM_RZV_MIN_PAYLOAD_BYTES; setting it lower than that does
   not cause smaller messages to use the HFI Service.
   This only has an effect with HMEM enabled builds of OPX that also have HFI Service enabled.
-  Value must be between 0 and 2147483646. Defaults to 4096 for CUDA builds, 1048576 for ROCr builds.
+  Value must be between 0 and 2147483646. Defaults to 4096 for CUDA builds, 16384 for ROCr builds.
 
 *FI_OPX_HFISVC_INLINE_EDGE*
 : Boolean (0/1, on/off, true/false, yes/no). For unaligned device (GPU) memory transfers over
