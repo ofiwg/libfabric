@@ -49,6 +49,7 @@
 #define OPX_DEBUG_COUNTERS_RHF
 #define OPX_DEBUG_COUNTERS_HMEM
 #define OPX_DEBUG_COUNTERS_HFISVC
+#define OPX_DEBUG_COUNTERS_FLOW_CONTROL
 #endif
 
 #if !defined(OPX_DEBUG_COUNTERS_RELIABILITY_PING) && defined(OPX_DUMP_PINGS)
@@ -96,7 +97,7 @@ static inline void opx_counters_print_unit(pid_t pid, char *name, uint64_t value
 
 #define FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, name, size)                                    \
 	{                                                                                           \
-		char n[32];                                                                         \
+		char n[64];                                                                         \
 		for (int i = 0; i < (size); ++i) {                                                  \
 			sprintf(n, "%s[%d]", #name, i);                                             \
 			opx_counters_print_unit(pid, n, counters->name[i], OPX_COUNTERS_UNIT_NONE); \
@@ -254,6 +255,7 @@ struct fi_opx_debug_counters {
 		uint64_t eager_eagain_cc;
 		uint64_t eager_eagain_context;
 		uint64_t eager_eagain_replay;
+		uint64_t eager_eagain_psn;
 		uint64_t tid_requests;
 		uint64_t replay_requests;
 		uint64_t proc_reqs_calls;
@@ -493,6 +495,36 @@ struct fi_opx_debug_counters {
 		uint64_t flowseqerr;
 	} rhf;
 
+#ifdef OPX_DEBUG_COUNTERS_FLOW_CONTROL
+	struct {
+		uint64_t kind_sent[9];
+		uint64_t kind_received[9];
+		uint64_t drain_entries;
+		uint64_t drain_forced_exits;
+		uint64_t drain_bypass_grants;
+		uint64_t grant_emit_fused;
+		uint64_t grant_emit_deferred;
+		uint64_t grant_pass_budget_breaks;
+		uint64_t ledger_cap_clamps;
+		uint64_t hot_flows_high_watermark;
+		uint64_t window_ceiling_hist[4];
+		uint64_t teardown_reclaimed_flows;
+		uint64_t teardown_reclaimed_permissions;
+		uint64_t piggyback_ping_sent;
+		uint64_t piggyback_ping_received;
+		uint64_t piggyback_ack_sent;
+		uint64_t piggyback_ack_received;
+		uint64_t piggyback_rts_sent;
+		uint64_t piggyback_rts_received;
+		uint64_t piggyback_cts_sent;
+		uint64_t piggyback_cts_received;
+		uint64_t piggyback_feedback_suppressed;
+		uint64_t capacity_reject_parked;
+		uint64_t slot_releases;
+		uint64_t ungoverned_admissions;
+	} flow_control;
+#endif
+
 	struct {
 		struct fi_opx_debug_counters_typed_txr hfi;
 		struct fi_opx_debug_counters_typed_txr intranode;
@@ -604,6 +636,7 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_cc);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_context);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_replay);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eager_eagain_psn);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.tid_requests);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.replay_requests);
 	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.proc_reqs_calls);
@@ -754,6 +787,34 @@ static inline void fi_opx_debug_counters_print(struct fi_opx_debug_counters *cou
 	fprintf(stderr, "\n");
 #endif
 
+#ifdef OPX_DEBUG_COUNTERS_FLOW_CONTROL
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, flow_control.kind_sent, 9);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, flow_control.kind_received, 9);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.drain_entries);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.drain_forced_exits);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.drain_bypass_grants);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.grant_emit_fused);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.grant_emit_deferred);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.grant_pass_budget_breaks);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.ledger_cap_clamps);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.hot_flows_high_watermark);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, flow_control.window_ceiling_hist, 4);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.teardown_reclaimed_flows);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.teardown_reclaimed_permissions);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.piggyback_ping_sent);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.piggyback_ping_received);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.piggyback_ack_sent);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.piggyback_ack_received);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.piggyback_rts_sent);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.piggyback_rts_received);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.piggyback_cts_sent);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.piggyback_cts_received);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.piggyback_feedback_suppressed);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.capacity_reject_parked);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.slot_releases);
+	FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, flow_control.ungoverned_admissions);
+#endif
+
 #ifdef OPX_DEBUG_COUNTERS_HMEM
 	const int tag = 0;
 	const int msg = 1;
@@ -867,7 +928,7 @@ static inline void fi_opx_debug_counters_init(struct fi_opx_debug_counters *coun
 	defined(OPX_DEBUG_COUNTERS_RELIABILITY) || defined(OPX_DEBUG_COUNTERS_SDMA) ||                              \
 	defined(OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE) || defined(OPX_DEBUG_COUNTERS_RECV) ||                         \
 	defined(OPX_DEBUG_COUNTERS_RHF) || defined(OPX_DEBUG_COUNTERS_HMEM) || defined(OPX_DEBUG_COUNTERS_MATCH) || \
-	defined(OPX_DEBUG_COUNTERS_HFISVC)
+	defined(OPX_DEBUG_COUNTERS_HFISVC) || defined(OPX_DEBUG_COUNTERS_FLOW_CONTROL)
 
 #define FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS struct fi_opx_debug_counters debug_counters
 #define FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(x)   uint64_t x = 0

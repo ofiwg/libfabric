@@ -255,7 +255,7 @@ opx_flow_control_rccc_scheduler_shared_attach(struct opx_flow_control_rccc_sched
 					      const char *job_key_str, uint32_t hfi_unit, uint32_t context_number,
 					      uint32_t subctxt, uint32_t subctxt_cnt)
 {
-	const struct opx_flow_control_rccc_scheduler_profile *profile = opx_flow_control_rccc_scheduler_profile_get();
+	const struct opx_flow_control_rccc_scheduler_profile *profile;
 	const struct opx_flow_control_rccc_tx_profile	     *tx_profile = opx_flow_control_rccc_tx_profile_get();
 	struct opx_flow_control_rccc_scheduler_geometry	      geometry;
 	struct opx_flow_control_rccc_scheduler_member	     *member;
@@ -266,19 +266,19 @@ opx_flow_control_rccc_scheduler_shared_attach(struct opx_flow_control_rccc_sched
 	int						      fd;
 	int						      written;
 
-	if (scheduler == NULL || profile == NULL || tx_profile == NULL || job_key_str == NULL ||
-	    scheduler->shared_header != NULL || subctxt_cnt < 2u ||
-	    subctxt_cnt > FI_OPX_FLOW_CONTROL_SCHEDULER_MAX_MEMBERS || subctxt >= subctxt_cnt) {
+	if (scheduler == NULL || tx_profile == NULL || job_key_str == NULL || scheduler->shared_header != NULL ||
+	    subctxt_cnt < 2u || subctxt_cnt > FI_OPX_FLOW_CONTROL_SCHEDULER_MAX_MEMBERS || subctxt >= subctxt_cnt) {
 		return -FI_EINVAL;
 	}
+	profile = &scheduler->profile;
 	/* The context capacity is statically partitioned: each member grants
 	 * only against its 1/member_count share.  Members run independent
 	 * DRR passes, so an unpartitioned shared pool splits between flows
 	 * that each need a full admission batch atomically and can never
 	 * consolidate - an absorbing livelock (proven at max_outstanding=64,
 	 * 2 members, 64-packet TID batches: the pool wedges 62/2).  A share
-	 * below fmax could still leave a single batch ungrantable, so such
-	 * geometry fails the attach closed. */
+	 * below fmax could still leave a single batch ungrantable, so the
+	 * capacity-derived default intentionally fails shared attach closed. */
 	const uint64_t member_share = profile->max_outstanding_permissions / subctxt_cnt;
 
 	if (member_share < tx_profile->fmax) {
@@ -365,6 +365,8 @@ opx_flow_control_rccc_scheduler_shared_attach(struct opx_flow_control_rccc_sched
 	scheduler->shared_base			       = base;
 	scheduler->shared_header		       = header;
 	scheduler->shared_ledger		       = &header->ledger;
+	scheduler->shared_telemetry		       = &header->telemetry;
+	scheduler->telemetry_sample_interval_ns	       = profile->telemetry_health_deadline_ns / 10u;
 	scheduler->shared_length		       = geometry.mapping_length;
 	scheduler->shared_member_index		       = subctxt;
 	scheduler->shared_member_count		       = subctxt_cnt;
@@ -372,9 +374,10 @@ opx_flow_control_rccc_scheduler_shared_attach(struct opx_flow_control_rccc_sched
 
 	member = opx_flow_control_rccc_shared_member(scheduler, subctxt);
 	if (member->identity.state == OPX_FLOW_CONTROL_RCCC_MEMBER_JOINED) {
-		scheduler->shared_base	 = NULL;
-		scheduler->shared_header = NULL;
-		scheduler->shared_ledger = NULL;
+		scheduler->shared_base	    = NULL;
+		scheduler->shared_header    = NULL;
+		scheduler->shared_ledger    = NULL;
+		scheduler->shared_telemetry = NULL;
 		munmap(base, geometry.mapping_length);
 		return -FI_EBUSY;
 	}
@@ -405,37 +408,194 @@ opx_flow_control_rccc_scheduler_shared_detach(struct opx_flow_control_rccc_sched
 		atomic_fetch_sub_explicit(&scheduler->shared_ledger->tracked_used, scheduler->tracked_used,
 					  memory_order_acq_rel);
 	}
+	/* Graceful teardown bulk-releases this member's still-BOUND flows;
+	 * ungraceful member death remains the shared mapping's pre-existing
+	 * no-recovery exposure. */
+	if (scheduler->local_bound_flows != 0u) {
+		assert(atomic_load_explicit(&scheduler->shared_ledger->active_bound_flows, memory_order_relaxed) >=
+		       scheduler->local_bound_flows);
+		atomic_fetch_sub_explicit(&scheduler->shared_ledger->active_bound_flows, scheduler->local_bound_flows,
+					  memory_order_acq_rel);
+	}
+	if (scheduler->local_demand_active_flows != 0u) {
+		assert(atomic_load_explicit(&scheduler->shared_ledger->demand_active_flows, memory_order_relaxed) >=
+		       scheduler->local_demand_active_flows);
+		atomic_fetch_sub_explicit(&scheduler->shared_ledger->demand_active_flows,
+					  scheduler->local_demand_active_flows, memory_order_acq_rel);
+	}
+	if (scheduler->local_hot_flows != 0u) {
+		assert(atomic_load_explicit(&scheduler->shared_ledger->hot_flows, memory_order_relaxed) >=
+		       scheduler->local_hot_flows);
+		atomic_fetch_sub_explicit(&scheduler->shared_ledger->hot_flows, scheduler->local_hot_flows,
+					  memory_order_acq_rel);
+	}
 	remaining = atomic_fetch_sub_explicit(&scheduler->shared_ledger->attached_count, 1u, memory_order_acq_rel);
 	munmap(scheduler->shared_base, scheduler->shared_length);
 	if (remaining == 1u) {
 		shm_unlink(scheduler->shared_name);
 	}
-	scheduler->shared_base	 = NULL;
-	scheduler->shared_header = NULL;
-	scheduler->shared_ledger = NULL;
-	scheduler->shared_length = 0u;
+	scheduler->shared_base	    = NULL;
+	scheduler->shared_header    = NULL;
+	scheduler->shared_ledger    = NULL;
+	scheduler->shared_telemetry = NULL;
+	scheduler->shared_length    = 0u;
 }
 
-int __attribute__((cold)) opx_flow_control_rccc_scheduler_create(struct opx_flow_control_rccc_scheduler **scheduler)
+int __attribute__((cold)) opx_flow_control_rccc_scheduler_create(struct opx_flow_control_rccc_scheduler **scheduler,
+								 uint32_t				  rcvhdrq_cnt)
 {
 	const struct opx_flow_control_rccc_scheduler_profile *profile = opx_flow_control_rccc_scheduler_profile_get();
 	const struct opx_flow_control_rccc_tx_profile	     *tx_profile = opx_flow_control_rccc_tx_profile_get();
 	struct opx_flow_control_rccc_scheduler		     *created;
+	uint64_t					      base_margin;
+	uint64_t					      control_headroom;
+	uint64_t					      drr_quantum;
+	uint64_t					      high_water;
+	uint64_t					      low_water;
+	uint64_t					      max_outstanding;
+	uint64_t					      physical_capacity;
+	uint64_t					      usable_capacity;
 	const uint32_t					      ffirst = tx_profile != NULL ? tx_profile->ffirst : 0u;
 
-	if (scheduler == NULL || *scheduler != NULL || profile == NULL || ffirst == 0u ||
-	    profile->decision_capacity < ffirst || profile->reject_capacity < ffirst ||
-	    profile->tracked_capacity == 0u || profile->max_outstanding_permissions == 0u ||
-	    profile->max_outstanding_permissions >= OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE ||
-	    profile->drr_quantum == 0u || profile->drr_quantum > profile->max_outstanding_permissions ||
-	    profile->quarantine_deadline_ns == 0u || profile->minimum_packet_rate_q16_per_ns == 0u ||
-	    profile->maximum_elapsed_ns == 0u) {
+	if (scheduler == NULL || *scheduler != NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: output must be nonnull and empty (output=%p current=%p)\n",
+			(void *) scheduler, scheduler != NULL ? (void *) *scheduler : NULL);
 		return -FI_EINVAL;
 	}
-	created = calloc(1u, sizeof(*created));
-	if (created == NULL) {
+	if (profile == NULL || tx_profile == NULL) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: process profiles must be initialized (scheduler_profile=%p tx_profile=%p)\n",
+			(const void *) profile, (const void *) tx_profile);
+		return -FI_EINVAL;
+	}
+	if (ffirst == 0u || profile->decision_capacity < ffirst || profile->reject_capacity < ffirst ||
+	    profile->tracked_capacity == 0u || profile->quarantine_deadline_ns == 0u ||
+	    profile->telemetry_health_deadline_ns == 0u || profile->minimum_packet_rate_q16_per_ns == 0u ||
+	    profile->maximum_elapsed_ns == 0u || profile->grant_emits == 0u || profile->window_cap_min < 8u ||
+	    profile->window_epoch_ns == 0u || profile->hot_entry_streak == 0u ||
+	    profile->hot_entry_streak > UINT8_MAX || profile->hot_exit_streak == 0u ||
+	    profile->hot_exit_streak > UINT8_MAX || profile->hot_absolute_floor == 0u ||
+	    profile->hot_consumed_floor == 0u || profile->storm_request_floor == 0u ||
+	    profile->idle_decay_streak == 0u || profile->idle_decay_streak > UINT8_MAX) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: ffirst=%u decision=%u reject=%u tracked=%u grant_emits=%u quarantine=%lu telemetry=%lu packet_rate=%lu elapsed=%lu window_cap_min=%u epoch_ns=%lu hot_entry=%u hot_exit=%u hot_floor=%u idle_decay=%u\n",
+			ffirst, profile->decision_capacity, profile->reject_capacity, profile->tracked_capacity,
+			profile->grant_emits, (unsigned long) profile->quarantine_deadline_ns,
+			(unsigned long) profile->telemetry_health_deadline_ns,
+			(unsigned long) profile->minimum_packet_rate_q16_per_ns,
+			(unsigned long) profile->maximum_elapsed_ns, profile->window_cap_min,
+			(unsigned long) profile->window_epoch_ns, profile->hot_entry_streak, profile->hot_exit_streak,
+			profile->hot_absolute_floor, profile->idle_decay_streak);
+		return -FI_EINVAL;
+	}
+	if (profile->window_cap_min > tx_profile->fmax) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: window_cap_min %u exceeds fmax %u\n",
+			profile->window_cap_min, tx_profile->fmax);
+		return -FI_EINVAL;
+	}
+	if ((uint64_t) profile->capacity_guard > (uint64_t) rcvhdrq_cnt / 2u) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: capacity_guard %u exceeds rcvhdrq_cnt/2 %u\n",
+			profile->capacity_guard, rcvhdrq_cnt / 2u);
+		return -FI_EINVAL;
+	}
+
+	/* T101 uses the WS01-qualified guard band because the physical ring
+	 * stopped 7-12 entries before elemcnt under hard overflow. */
+	physical_capacity = (uint64_t) rcvhdrq_cnt - profile->capacity_guard;
+	base_margin	  = (physical_capacity + 9u) / 10u;
+	if (base_margin < 8u) {
+		base_margin = 8u;
+	}
+	control_headroom = opx_flow_control_rccc_control_headroom_get();
+	if (base_margin > physical_capacity || control_headroom > physical_capacity - base_margin) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: base_margin %lu + control_headroom %lu exceeds physical_capacity %lu\n",
+			(unsigned long) base_margin, (unsigned long) control_headroom,
+			(unsigned long) physical_capacity);
+		return -FI_EINVAL;
+	}
+	usable_capacity = physical_capacity - base_margin - control_headroom;
+	if (usable_capacity < 64u) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: usable_capacity %lu is below 64 (physical=%lu margin=%lu headroom=%lu)\n",
+			(unsigned long) usable_capacity, (unsigned long) physical_capacity, (unsigned long) base_margin,
+			(unsigned long) control_headroom);
+		return -FI_EINVAL;
+	}
+	if (profile->window_cap_min > usable_capacity) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: window_cap_min %u exceeds usable_capacity %lu\n",
+			profile->window_cap_min, (unsigned long) usable_capacity);
+		return -FI_EINVAL;
+	}
+	if (profile->duty_drain_floor > usable_capacity) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: duty_drain_floor %lu exceeds usable_capacity %lu\n",
+			(unsigned long) profile->duty_drain_floor, (unsigned long) usable_capacity);
+		return -FI_EINVAL;
+	}
+	low_water  = usable_capacity / 2u;
+	high_water = (usable_capacity * 3u) / 4u;
+	if (low_water >= high_water || high_water > usable_capacity) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: low %lu < high %lu <= usable %lu is false\n",
+			(unsigned long) low_water, (unsigned long) high_water, (unsigned long) usable_capacity);
+		return -FI_EINVAL;
+	}
+	if (profile->max_outstanding_permissions == 0u) {
+		/* The permission ledger is a windowing resource, not the
+		 * overflow bound: occupancy watermarks and the rate curve own
+		 * overflow protection (proven zero-overflow with the ledger at
+		 * both 659 and 65536), while a ring-derived ledger starves
+		 * multi-flow windowing - at physical-high-headroom (~659 for a
+		 * 2048 ring) np=4 Allreduce ran ~600x slower than at 65536
+		 * because no peer flow could hold a standing window against
+		 * fmax.  Size the ledger for flow concurrency instead: one
+		 * full window per trackable flow, which also keeps the
+		 * per-member share >= fmax after sharing-attach division at
+		 * every member count up to the 8-member maximum.  The product
+		 * can exceed the 24-bit serial half-range at large tracked
+		 * sizings; a derived (not user-set) value clamps rather than
+		 * failing enable, since the ledger only needs enough headroom
+		 * for concurrent windows, not one per lifetime flow.  At high
+		 * non-shared fan-in, the grant pass applies the receive-ring
+		 * runtime backstop described there. */
+		max_outstanding = (uint64_t) profile->tracked_capacity * tx_profile->fmax;
+		if (max_outstanding >= OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE) {
+			max_outstanding = (uint64_t) OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE - 1u;
+		}
+	} else {
+		max_outstanding = profile->max_outstanding_permissions;
+	}
+	if (max_outstanding == 0u || max_outstanding >= OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: 1 <= max_outstanding %lu < serial_half_range %u is false\n",
+			(unsigned long) max_outstanding, OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE);
+		return -FI_EINVAL;
+	}
+	drr_quantum = profile->drr_quantum;
+	if (drr_quantum == 0u) {
+		drr_quantum = max_outstanding / 4u;
+		if (drr_quantum < 64u) {
+			drr_quantum = 64u;
+		}
+	}
+	if (drr_quantum > max_outstanding) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC scheduler constraint invalid: drr_quantum %lu exceeds max_outstanding %lu\n",
+			(unsigned long) drr_quantum, (unsigned long) max_outstanding);
+		return -FI_EINVAL;
+	}
+
+	/* The scheduler struct is cacheline-aligned for hot/cold line
+	 * separation, which calloc does not guarantee. */
+	if (posix_memalign((void **) &created, L2_CACHE_LINE_SIZE, sizeof(*created)) != 0) {
 		return -FI_ENOMEM;
 	}
+	memset(created, 0, sizeof(*created));
 	created->decisions = calloc(profile->decision_capacity, sizeof(*created->decisions));
 	created->rejects   = calloc(profile->reject_capacity, sizeof(*created->rejects));
 	if (created->decisions == NULL || created->rejects == NULL) {
@@ -444,10 +604,97 @@ int __attribute__((cold)) opx_flow_control_rccc_scheduler_create(struct opx_flow
 		free(created);
 		return -FI_ENOMEM;
 	}
-	created->profile	       = *profile;
+	created->profile			     = *profile;
+	created->profile.max_outstanding_permissions = max_outstanding;
+	created->profile.drr_quantum		     = drr_quantum;
+	created->profile.duty_drain_floor =
+		profile->duty_drain_floor != 0u ? created->profile.duty_drain_floor : usable_capacity / 4u;
+	created->low_water	       = (uint32_t) low_water;
+	created->high_water	       = (uint32_t) high_water;
+	created->physical_capacity     = (uint32_t) physical_capacity;
+	created->usable_capacity       = (uint32_t) usable_capacity;
 	created->allocation_generation = 1u;
-	*scheduler		       = created;
+	created->decision_free_head    = OPX_FLOW_CONTROL_RCCC_DECISION_FREE_END;
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
+		"RCCC scheduler geometry: rcvhdrq=%u guard=%u physical=%u margin=%lu headroom=%lu usable=%u low=%u high=%u max_outstanding=%lu drr_quantum=%lu\n",
+		rcvhdrq_cnt, profile->capacity_guard, created->physical_capacity, (unsigned long) base_margin,
+		(unsigned long) control_headroom, created->usable_capacity, created->low_water, created->high_water,
+		(unsigned long) created->profile.max_outstanding_permissions,
+		(unsigned long) created->profile.drr_quantum);
+	*scheduler = created;
 	return FI_SUCCESS;
+}
+
+void opx_flow_control_rccc_scheduler_occupancy_set(struct opx_flow_control_rccc_scheduler *scheduler,
+						   uint32_t occupancy, bool drain_maxed, uint64_t now_ns)
+{
+	scheduler->occupancy		     = occupancy;
+	scheduler->occupancy_sample_ns	     = now_ns;
+	scheduler->occupancy_sampling_active = true;
+	if (drain_maxed) {
+		if (scheduler->maxed_drain_streak != UINT8_MAX) {
+			scheduler->maxed_drain_streak++;
+		}
+		scheduler->quiet_drain_streak = 0u;
+	} else {
+		if (scheduler->quiet_drain_streak != UINT8_MAX) {
+			scheduler->quiet_drain_streak++;
+		}
+		scheduler->maxed_drain_streak = 0u;
+	}
+}
+
+/* Caller must hold the RHQ hardware context lock: due-ness gates the
+ * lock-held backlog scan so the whole sharing group performs at most one
+ * scan per cadence interval, and the CLOCK_MONOTONIC read (comparable
+ * across member processes, unlike the per-process cycle-timer ns base)
+ * returned through mono_now_out is reused by the publish. */
+bool opx_flow_control_rccc_shared_sample_due(struct opx_flow_control_rccc_scheduler *scheduler, uint64_t *mono_now_out)
+{
+	if (scheduler->shared_telemetry == NULL) {
+		return false;
+	}
+	const uint64_t sample =
+		atomic_load_explicit(&scheduler->shared_telemetry->occupancy_sample, memory_order_relaxed);
+	const uint64_t mono_now = opx_flow_control_rccc_monotonic_ns();
+
+	*mono_now_out = mono_now;
+	if ((sample & OPX_FLOW_CONTROL_RCCC_TELEMETRY_VALID) &&
+	    opx_flow_control_rccc_telemetry_age_ns(sample, mono_now) < scheduler->telemetry_sample_interval_ns) {
+		return false;
+	}
+	return true;
+}
+
+void opx_flow_control_rccc_shared_sample_publish(struct opx_flow_control_rccc_scheduler *scheduler, uint32_t backlog,
+						 uint64_t mono_now)
+{
+	atomic_store_explicit(&scheduler->shared_telemetry->occupancy_sample,
+			      opx_flow_control_rccc_telemetry_pack(backlog, mono_now), memory_order_relaxed);
+}
+
+/* Translates the shared CLOCK_MONOTONIC-stamped sample into this process's
+ * sweep time base (sample_ns = sweep_now - age) so the grant pass's
+ * telemetry-health deadline check works unchanged; sampling_active latches
+ * on the first consumed sample, after which staleness fails closed. */
+void opx_flow_control_rccc_shared_occupancy_consume(struct opx_flow_control_rccc_scheduler *scheduler,
+						    uint64_t				    sweep_now_ns)
+{
+	const uint64_t sample =
+		atomic_load_explicit(&scheduler->shared_telemetry->occupancy_sample, memory_order_relaxed);
+
+	if (!(sample & OPX_FLOW_CONTROL_RCCC_TELEMETRY_VALID)) {
+		return;
+	}
+	if (sample == scheduler->telemetry_last_sample) {
+		return;
+	}
+	scheduler->telemetry_last_sample = sample;
+
+	const uint64_t age_ns = opx_flow_control_rccc_telemetry_age_ns(sample, opx_flow_control_rccc_monotonic_ns());
+
+	opx_flow_control_rccc_scheduler_occupancy_set(scheduler, opx_flow_control_rccc_telemetry_backlog(sample), false,
+						      (age_ns < sweep_now_ns) ? (sweep_now_ns - age_ns) : 0u);
 }
 
 void __attribute__((cold)) opx_flow_control_rccc_scheduler_destroy(struct opx_flow_control_rccc_scheduler **scheduler)
@@ -456,8 +703,10 @@ void __attribute__((cold)) opx_flow_control_rccc_scheduler_destroy(struct opx_fl
 		return;
 	}
 	/* Endpoint teardown parallels the reservation-pool live-record
-	 * invariant: an unquiesced ledger means permissions were granted
-	 * that were never observed/settled/reclaimed - fail closed. */
+	 * invariant: opx_flow_control_rx_flows_reclaim has already
+	 * force-released every flow's remaining contribution, so a nonzero
+	 * ledger here means the per-flow contribution sum diverged from the
+	 * aggregate (the ledger_reconcile invariant) - fail closed. */
 	if ((*scheduler)->outstanding_permissions != 0u) {
 		abort();
 	}
@@ -675,9 +924,11 @@ bool opx_flow_control_rccc_tx_profile_is_valid(const struct opx_flow_control_rcc
 {
 	return profile != NULL && profile->ffirst != 0u && profile->ffirst <= profile->fmax &&
 	       profile->fmax <= OPX_FLOW_CONTROL_RCCC_FMAX_LIMIT && profile->idle_retire_delay_ns != 0u &&
-	       opx_flow_control_rccc_retry_initial_is_valid(profile->request_retry_initial_us) &&
-	       opx_flow_control_rccc_retry_initial_is_valid(profile->retirement_retry_initial_us) &&
-	       opx_flow_control_rccc_retry_initial_is_valid(profile->reset_retry_initial_us);
+	       profile->retry_cap_us >= OPX_FLOW_CONTROL_RCCC_RETRY_INITIAL_MIN_US &&
+	       opx_flow_control_rccc_retry_initial_is_valid(profile->request_retry_initial_us, profile->retry_cap_us) &&
+	       opx_flow_control_rccc_retry_initial_is_valid(profile->retirement_retry_initial_us,
+							    profile->retry_cap_us) &&
+	       opx_flow_control_rccc_retry_initial_is_valid(profile->reset_retry_initial_us, profile->retry_cap_us);
 }
 
 int opx_flow_control_rccc_tx_window_open(struct opx_flow_control_rccc_tx_state	       *tx_state,
@@ -706,11 +957,48 @@ static void opx_flow_control_rccc_tx_window_grow(struct opx_flow_control_rccc_tx
 	tx_state->flags &= (uint8_t) ~OPX_FLOW_CONTROL_RCCC_TX_FLAG_WINDOW_GROWTH_ARMED;
 }
 
+static bool opx_flow_control_rccc_tx_force(struct opx_flow_control_rccc_tx_state *tx_state)
+{
+	const bool progress_seen =
+		(tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_GRANT_SINCE_EMIT) != 0u ||
+		(tx_state->request_retry.progress_flags & OPX_FLOW_CONTROL_RCCC_RETRY_RETIREMENT_SEEN) != 0u;
+
+	if (!progress_seen || (tx_state->request_retry.progress_flags & OPX_FLOW_CONTROL_RCCC_RETRY_REARMED) != 0u) {
+		return false;
+	}
+	tx_state->control_deadline_ns = 0u;
+	tx_state->request_retry.progress_flags |=
+		OPX_FLOW_CONTROL_RCCC_RETRY_FORCE_EMIT | OPX_FLOW_CONTROL_RCCC_RETRY_REARMED;
+	return true;
+}
+
+static void opx_flow_control_rccc_tx_target_rearm(struct opx_flow_control_rccc_tx_state *tx_state)
+{
+	const uint32_t pending_demand = (tx_state->target - tx_state->grant) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
+	const uint32_t threshold      = MIN(MAX((uint32_t) tx_state->desired_window / 4u, 1u), MAX(pending_demand, 1u));
+
+	if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING) == 0u ||
+	    tx_state->request_retry.active == 0u ||
+	    opx_flow_control_rccc_serial_classify(tx_state->target_advertised_checkpoint, tx_state->target) !=
+		    OPX_FLOW_CONTROL_RCCC_SERIAL_NEWER ||
+	    ((tx_state->target - tx_state->target_advertised_checkpoint) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK) <
+		    threshold) {
+		return;
+	}
+	/* Force at most one immediate emission per grant epoch when a
+	 * quarter-window, bounded by pending demand, is unadvertised.  Preserve
+	 * active/delay so forced emissions advance the existing backoff ramp. */
+	if (opx_flow_control_rccc_tx_force(tx_state)) {
+		tx_state->target_advertised_checkpoint = tx_state->target;
+	}
+}
+
 enum opx_flow_control_result opx_flow_control_rccc_tx_demand(struct opx_flow_control_rccc_tx_state	   *tx_state,
 							     const struct opx_flow_control_rccc_tx_profile *profile,
 							     uint32_t requested_packets)
 {
 	uint32_t candidate_target;
+	bool	 request_was_pending;
 
 	assert(tx_state != NULL);
 	assert(profile != NULL);
@@ -746,16 +1034,25 @@ enum opx_flow_control_result opx_flow_control_rccc_tx_demand(struct opx_flow_con
 				tx_state->target = candidate_target;
 			}
 			tx_state->flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING;
-			tx_state->control_deadline_ns  = 0u;
-			tx_state->request_retry.active = 0u;
+			tx_state->target_advertised_checkpoint = tx_state->target;
+			tx_state->control_deadline_ns	       = 0u;
+			tx_state->request_retry.active	       = 0u;
+			tx_state->request_retry.progress_flags = 0u;
 		}
+		opx_flow_control_rccc_tx_target_rearm(tx_state);
 		return OPX_FLOW_CONTROL_OK;
 	}
 	if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED) != 0u) {
-		/* The reject was terminal for this generation; the first
-		 * subsequent governed send with no usable credit initiates
-		 * RESET and still reports FI_ENOSPC upward. */
+		/* Rejected-and-parked: the capacity retry timer owns the
+		 * cadence.  Advancing target here would trip the rearm's
+		 * force-emission against a receiver known to be full.  A
+		 * park outliving the fail-open deadline admits ungoverned
+		 * (baseline behavior, never starve) while the retry keeps
+		 * probing for readmission. */
 		tx_state->block_reason = OPX_FLOW_CONTROL_RCCC_BLOCK_CAPACITY;
+		if ((tx_state->request_retry.progress_flags & OPX_FLOW_CONTROL_RCCC_RETRY_UNGOVERNED) != 0u) {
+			return OPX_FLOW_CONTROL_OK;
+		}
 		return OPX_FLOW_CONTROL_DEFER;
 	}
 	if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_WINDOW_GROWTH_ARMED) != 0u) {
@@ -766,10 +1063,20 @@ enum opx_flow_control_result opx_flow_control_rccc_tx_demand(struct opx_flow_con
 	    OPX_FLOW_CONTROL_RCCC_SERIAL_NEWER) {
 		tx_state->target = candidate_target;
 	}
-	if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING) == 0u) {
+	request_was_pending = (tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING) != 0u;
+	if (!request_was_pending) {
 		tx_state->flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING;
-		tx_state->control_deadline_ns  = 0u;
-		tx_state->request_retry.active = 0u;
+		tx_state->target_advertised_checkpoint = tx_state->target;
+		tx_state->control_deadline_ns	       = 0u;
+		tx_state->request_retry.active	       = 0u;
+		tx_state->request_retry.progress_flags = 0u;
+	}
+	opx_flow_control_rccc_tx_target_rearm(tx_state);
+	/* A blocked send with no new target information still owes one prompt
+	 * refresh per grant epoch; otherwise it inherits the stale capped retry
+	 * deadline across collective phases. */
+	if (request_was_pending && tx_state->target == tx_state->target_advertised_checkpoint) {
+		opx_flow_control_rccc_tx_force(tx_state);
 	}
 	tx_state->block_reason = OPX_FLOW_CONTROL_RCCC_BLOCK_NO_CREDIT;
 	return OPX_FLOW_CONTROL_DEFER;
@@ -779,11 +1086,21 @@ static void opx_flow_control_rccc_tx_idle_retire(struct opx_flow_control_rccc_tx
 {
 	tx_state->retired	    = opx_flow_control_rccc_serial_add(tx_state->retired, tx_state->available_credits);
 	tx_state->available_credits = 0u;
-	if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING) == 0u &&
-	    (tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING) == 0u) {
-		tx_state->flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING;
-		tx_state->control_deadline_ns	  = 0u;
-		tx_state->retirement_retry.active = 0u;
+	if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING) == 0u) {
+		if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING) == 0u) {
+			tx_state->flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING;
+			tx_state->control_deadline_ns	  = 0u;
+			tx_state->retirement_retry.active = 0u;
+		}
+	} else {
+		/* The advanced retirement is new wire information a pending
+		 * request will carry, but the request's deadline can sit at the
+		 * backoff cap from an earlier phase; a reawakening flow then
+		 * waits out the whole capped period before the receiver learns
+		 * anything.  Pull the deadline forward without touching the
+		 * ramp or the force epoch, so the prompt emission still
+		 * advances the existing backoff. */
+		tx_state->control_deadline_ns = 0u;
 	}
 	opx_flow_control_rccc_tx_invariant_check(tx_state);
 }
@@ -809,6 +1126,11 @@ opx_flow_control_rccc_tx_progress(struct opx_flow_control_rccc_tx_state		*tx_sta
 	intent->target		   = tx_state->target;
 	intent->retired		   = tx_state->retired;
 	intent->request_generation = opx_flow_control_rccc_serial_add(tx_state->request_generation, 1u);
+	if (OFI_UNLIKELY((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED) != 0u) &&
+	    (tx_state->request_retry.progress_flags & OPX_FLOW_CONTROL_RCCC_RETRY_UNGOVERNED) == 0u &&
+	    now_ns >= tx_state->reset_deadline_ns) {
+		tx_state->request_retry.progress_flags |= OPX_FLOW_CONTROL_RCCC_RETRY_UNGOVERNED;
+	}
 	if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING) != 0u) {
 		if (tx_state->reset_retry.active == 0u || now_ns >= tx_state->reset_deadline_ns) {
 			intent->kind = OPX_FLOW_CONTROL_RCCC_TX_EMIT_RESET;
@@ -819,6 +1141,25 @@ opx_flow_control_rccc_tx_progress(struct opx_flow_control_rccc_tx_state		*tx_sta
 	}
 	if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING) != 0u &&
 	    (tx_state->request_retry.active == 0u || now_ns >= tx_state->control_deadline_ns)) {
+		/* A grant or settled retirement proves the receiver received the
+		 * pending demand and is progressing it, so another request adds pure
+		 * control load to the ring the window protects.  Unsettled retirement
+		 * instead makes kind-3 productive and must bypass deferral.  Otherwise,
+		 * defer once per progress epoch; a full quiet retry period still
+		 * re-emits for request-loss or receiver-failure recovery. */
+		if (tx_state->retired == tx_state->retired_acked && tx_state->request_retry.active != 0u &&
+		    (tx_state->request_retry.progress_flags & OPX_FLOW_CONTROL_RCCC_RETRY_FORCE_EMIT) == 0u &&
+		    ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_GRANT_SINCE_EMIT) != 0u ||
+		     (tx_state->request_retry.progress_flags & OPX_FLOW_CONTROL_RCCC_RETRY_RETIREMENT_SEEN) != 0u) &&
+		    (tx_state->request_retry.progress_flags & OPX_FLOW_CONTROL_RCCC_RETRY_PROGRESS_DEFERRED) == 0u) {
+			/* Keep GRANT_SINCE_EMIT set so a delayed Capacity Reject for
+			 * this request generation remains superseded by the grant. */
+			tx_state->request_retry.progress_flags |= OPX_FLOW_CONTROL_RCCC_RETRY_PROGRESS_DEFERRED;
+			tx_state->control_deadline_ns =
+				now_ns + (uint64_t) tx_state->request_retry.delay_us * UINT64_C(1000);
+			intent->kind = OPX_FLOW_CONTROL_RCCC_TX_EMIT_NONE;
+			return OPX_FLOW_CONTROL_RCCC_TX_EMIT_NONE;
+		}
 		intent->kind = OPX_FLOW_CONTROL_RCCC_TX_EMIT_CREDIT_REQUEST;
 		return OPX_FLOW_CONTROL_RCCC_TX_EMIT_CREDIT_REQUEST;
 	}
@@ -843,7 +1184,13 @@ void opx_flow_control_rccc_tx_emitted(struct opx_flow_control_rccc_tx_state	    
 	switch (kind) {
 	case OPX_FLOW_CONTROL_RCCC_TX_EMIT_CREDIT_REQUEST:
 		tx_state->request_generation = opx_flow_control_rccc_serial_add(tx_state->request_generation, 1u);
+		tx_state->target_advertised_checkpoint = tx_state->target;
 		tx_state->flags &= (uint8_t) ~OPX_FLOW_CONTROL_RCCC_TX_FLAG_GRANT_SINCE_EMIT;
+		/* REARMED survives the forced emission; only a NEWER grant starts
+		 * the next force epoch.  UNGOVERNED survives too: only a grant
+		 * or RESET_ACK restores governance, not the retry itself. */
+		tx_state->request_retry.progress_flags &=
+			OPX_FLOW_CONTROL_RCCC_RETRY_REARMED | OPX_FLOW_CONTROL_RCCC_RETRY_UNGOVERNED;
 		retry = &tx_state->request_retry;
 		break;
 	case OPX_FLOW_CONTROL_RCCC_TX_EMIT_RETIREMENT:
@@ -865,7 +1212,7 @@ void opx_flow_control_rccc_tx_emitted(struct opx_flow_control_rccc_tx_state	    
 		    (tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING) == 0u) {
 			tx_state->flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_WINDOW_GROWTH_ARMED;
 		}
-		opx_flow_control_rccc_retry_next(retry->delay_us, &retry->delay_us);
+		opx_flow_control_rccc_retry_next(retry->delay_us, profile->retry_cap_us, &retry->delay_us);
 	}
 	if (kind == OPX_FLOW_CONTROL_RCCC_TX_EMIT_RESET) {
 		tx_state->reset_deadline_ns = now_ns + (uint64_t) retry->delay_us * UINT64_C(1000);
@@ -911,6 +1258,11 @@ opx_flow_control_rccc_tx_feedback_apply(struct opx_flow_control_rccc_tx_state	  
 
 	assert(tx_state != NULL);
 	assert(profile != NULL);
+	/* Grants dropped here while RESETTING are unrecoverable by design
+	 * (grants are monotonic, no recall); the receiver's kind-5 handler
+	 * force-releases the resulting granted-but-never-applied residue
+	 * when it closes the epoch, so this drop is load-bearing for the
+	 * RESET convergence contract. */
 	if (generation != tx_state->epoch || (tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING) != 0u) {
 		opx_flow_control_rccc_feedback_count(counters, OPX_FLOW_CONTROL_RCCC_SERIAL_STALE);
 		return OPX_FLOW_CONTROL_RCCC_SERIAL_STALE;
@@ -933,6 +1285,9 @@ opx_flow_control_rccc_tx_feedback_apply(struct opx_flow_control_rccc_tx_state	  
 		tx_state->grant = grant;
 		tx_state->flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_GRANT_SINCE_EMIT |
 				   OPX_FLOW_CONTROL_RCCC_TX_FLAG_WINDOW_GROWTH_ARMED;
+		tx_state->request_retry.progress_flags &= (uint8_t) ~(
+			OPX_FLOW_CONTROL_RCCC_RETRY_FORCE_EMIT | OPX_FLOW_CONTROL_RCCC_RETRY_REARMED |
+			OPX_FLOW_CONTROL_RCCC_RETRY_PROGRESS_DEFERRED | OPX_FLOW_CONTROL_RCCC_RETRY_UNGOVERNED);
 		tx_state->flags &= (uint8_t) ~OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED;
 		if (tx_state->block_reason == OPX_FLOW_CONTROL_RCCC_BLOCK_CAPACITY ||
 		    tx_state->block_reason == OPX_FLOW_CONTROL_RCCC_BLOCK_NO_CREDIT) {
@@ -941,7 +1296,8 @@ opx_flow_control_rccc_tx_feedback_apply(struct opx_flow_control_rccc_tx_state	  
 		if (tx_state->grant == tx_state->target &&
 		    (tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING) != 0u) {
 			tx_state->flags &= (uint8_t) ~OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING;
-			tx_state->request_retry.active = 0u;
+			tx_state->request_retry.active	       = 0u;
+			tx_state->request_retry.progress_flags = 0u;
 			if (tx_state->retired != tx_state->retired_acked) {
 				/* Retirement settlement outlives the request:
 				 * re-arm the shared control channel from the
@@ -972,6 +1328,8 @@ opx_flow_control_rccc_tx_feedback_apply(struct opx_flow_control_rccc_tx_state	  
 			return OPX_FLOW_CONTROL_RCCC_SERIAL_INVALID;
 		}
 		tx_state->retired_acked = retired_acked_value;
+		tx_state->request_retry.progress_flags |= OPX_FLOW_CONTROL_RCCC_RETRY_RETIREMENT_SEEN;
+		tx_state->request_retry.progress_flags &= (uint8_t) ~OPX_FLOW_CONTROL_RCCC_RETRY_PROGRESS_DEFERRED;
 		if (tx_state->retired_acked == tx_state->retired) {
 			tx_state->flags &= (uint8_t) ~OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING;
 			tx_state->retirement_retry.active = 0u;
@@ -983,7 +1341,7 @@ opx_flow_control_rccc_tx_feedback_apply(struct opx_flow_control_rccc_tx_state	  
 enum opx_flow_control_result
 opx_flow_control_rccc_tx_capacity_reject(struct opx_flow_control_rccc_tx_state	       *tx_state,
 					 const struct opx_flow_control_rccc_tx_profile *profile, uint32_t generation,
-					 struct opx_flow_control_rccc_feedback_counters *counters)
+					 uint64_t now_ns, struct opx_flow_control_rccc_feedback_counters *counters)
 {
 	enum opx_flow_control_rccc_serial_classification classification;
 
@@ -1009,15 +1367,22 @@ opx_flow_control_rccc_tx_capacity_reject(struct opx_flow_control_rccc_tx_state	 
 	      OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING)) != 0u) {
 		return OPX_FLOW_CONTROL_DEFER;
 	}
+	/* Capacity rejects are retryable: the request stays pending and the
+	 * retry restarts at the backoff cap - a full receiver is a
+	 * job-phase-scale condition, so sub-cap probes only add control
+	 * load.  Zeroed progress_flags keep the once-per-progress-epoch
+	 * deferral from swallowing the capacity retry.  Retirement rides the
+	 * retried kind-3 (value[1]), so no dedicated retirement arming. */
 	tx_state->flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED;
-	tx_state->flags &= (uint8_t) ~OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING;
-	tx_state->request_retry.active = 0u;
-	tx_state->block_reason	       = OPX_FLOW_CONTROL_RCCC_BLOCK_CAPACITY;
-	if (tx_state->retired != tx_state->retired_acked) {
-		tx_state->flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING;
-		tx_state->control_deadline_ns	  = 0u;
-		tx_state->retirement_retry.active = 0u;
-	}
+	tx_state->block_reason		       = OPX_FLOW_CONTROL_RCCC_BLOCK_CAPACITY;
+	tx_state->request_retry.delay_us       = profile->retry_cap_us;
+	tx_state->request_retry.active	       = 1u;
+	tx_state->request_retry.progress_flags = 0u;
+	tx_state->control_deadline_ns	       = now_ns + (uint64_t) profile->retry_cap_us * UINT64_C(1000);
+	/* reset_deadline_ns is dead storage while parked (RESETTING is
+	 * mutually exclusive with the park), so it carries the fail-open
+	 * deadline. */
+	tx_state->reset_deadline_ns = now_ns + OPX_FLOW_CONTROL_RCCC_UNGOVERNED_DELAY_NS;
 	return OPX_FLOW_CONTROL_OK;
 }
 
@@ -1036,12 +1401,13 @@ opx_flow_control_rccc_tx_reset_begin(struct opx_flow_control_rccc_tx_state	   *t
 		OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING | OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED |
 		OPX_FLOW_CONTROL_RCCC_TX_FLAG_GRANT_SINCE_EMIT | OPX_FLOW_CONTROL_RCCC_TX_FLAG_WINDOW_GROWTH_ARMED);
 	tx_state->flags |= OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING;
-	tx_state->desired_window       = (uint16_t) profile->ffirst;
-	tx_state->request_retry.active = 0u;
-	tx_state->reset_retry.active   = 0u;
-	tx_state->reset_retry.delay_us = profile->reset_retry_initial_us;
-	tx_state->reset_deadline_ns    = now_ns;
-	tx_state->block_reason	       = OPX_FLOW_CONTROL_RCCC_BLOCK_RESET;
+	tx_state->desired_window	       = (uint16_t) profile->ffirst;
+	tx_state->request_retry.active	       = 0u;
+	tx_state->request_retry.progress_flags = 0u;
+	tx_state->reset_retry.active	       = 0u;
+	tx_state->reset_retry.delay_us	       = profile->reset_retry_initial_us;
+	tx_state->reset_deadline_ns	       = now_ns;
+	tx_state->block_reason		       = OPX_FLOW_CONTROL_RCCC_BLOCK_RESET;
 	return OPX_FLOW_CONTROL_OK;
 }
 
@@ -1056,32 +1422,39 @@ enum opx_flow_control_result opx_flow_control_rccc_tx_reset_ack(struct opx_flow_
 	}
 	assert(tx_state->desired_window == profile->ffirst);
 	assert(tx_state->held_credits == 0u);
-	tx_state->epoch		      = opx_flow_control_rccc_serial_add(tx_state->epoch, 1u);
-	tx_state->grant		      = 0u;
-	tx_state->target	      = 0u;
-	tx_state->retired	      = 0u;
-	tx_state->retired_acked	      = 0u;
-	tx_state->available_credits   = 0u;
-	tx_state->committed_originals = 0u;
-	tx_state->fault_contained     = 0u;
-	tx_state->request_generation  = 0u;
+	tx_state->epoch			       = opx_flow_control_rccc_serial_add(tx_state->epoch, 1u);
+	tx_state->grant			       = 0u;
+	tx_state->target		       = 0u;
+	tx_state->retired		       = 0u;
+	tx_state->retired_acked		       = 0u;
+	tx_state->available_credits	       = 0u;
+	tx_state->committed_originals	       = 0u;
+	tx_state->fault_contained	       = 0u;
+	tx_state->request_generation	       = 0u;
+	tx_state->target_advertised_checkpoint = 0u;
 	tx_state->flags &=
 		(uint8_t) ~(OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING | OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING |
 			    OPX_FLOW_CONTROL_RCCC_TX_FLAG_WINDOW_GROWTH_ARMED);
-	tx_state->reset_retry.active = 0u;
-	tx_state->block_reason	     = OPX_FLOW_CONTROL_RCCC_BLOCK_NONE;
+	tx_state->request_retry.progress_flags = 0u;
+	tx_state->reset_retry.active	       = 0u;
+	tx_state->block_reason		       = OPX_FLOW_CONTROL_RCCC_BLOCK_NONE;
 	opx_flow_control_rccc_tx_invariant_check(tx_state);
 	return OPX_FLOW_CONTROL_OK;
 }
 
 static inline bool opx_flow_control_rccc_tx_work_needed(const struct opx_flow_control_rccc_tx_state *tx_state)
 {
+	/* A capacity-rejected flow always keeps its request pending, so no
+	 * separate CAPACITY_REJECTED work-list clause is needed.  A settled
+	 * flow with an open granted epoch (nonzero grant, everything retired
+	 * and acked) stays listed so the sweep can idle-close it, releasing
+	 * the receiver's tracked/decision slots. */
+	assert((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED) == 0u ||
+	       (tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING) != 0u);
 	return (tx_state->flags &
 		(OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING | OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING |
 		 OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING)) != 0u ||
-	       tx_state->available_credits != 0u ||
-	       ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED) != 0u &&
-		tx_state->block_reason == OPX_FLOW_CONTROL_RCCC_BLOCK_CAPACITY);
+	       tx_state->available_credits != 0u || tx_state->grant != 0u;
 }
 
 void opx_flow_control_rccc_tx_work_enqueue(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_tx_flow *flow)
@@ -1116,12 +1489,15 @@ enum opx_flow_control_result opx_flow_control_rccc_tx_admit(struct fi_opx_ep		  
 	assert(opx_ep != NULL);
 	assert(flow != NULL);
 	assert(profile != NULL);
-	/* Demand is advisory: a message needing more packets than one batch
-	 * request may carry (fmax >= MAX_BATCH_REQUEST is validated at init)
-	 * asks for the maximum and re-demands from the deferred-work requeue
-	 * when the per-packet reservations exhaust the granted window. */
-	if (requested_packets > OPX_FLOW_CONTROL_RCCC_MAX_BATCH_REQUEST) {
-		requested_packets = OPX_FLOW_CONTROL_RCCC_MAX_BATCH_REQUEST;
+	/* Demand is advisory: clamp each request to both the transport batch
+	 * ceiling and the configured grant window, then re-demand as the
+	 * per-packet reservations exhaust that window. */
+	const uint32_t batch_request = profile->fmax < OPX_FLOW_CONTROL_RCCC_MAX_BATCH_REQUEST ?
+					       profile->fmax :
+					       OPX_FLOW_CONTROL_RCCC_MAX_BATCH_REQUEST;
+
+	if (requested_packets > batch_request) {
+		requested_packets = batch_request;
 	}
 	tx_state = opx_flow_control_rccc_tx_state(flow);
 	result	 = opx_flow_control_rccc_tx_demand(tx_state, profile, requested_packets);
@@ -1169,9 +1545,8 @@ static int opx_flow_control_rccc_tx_flow_init(struct fi_opx_reliability_tx_flow	
 	struct opx_flow_control_rccc_tx_state *tx_state = opx_flow_control_rccc_tx_state(flow);
 	*tx_state					= (struct opx_flow_control_rccc_tx_state) {0};
 	tx_state->flow_key				= *key;
-	if (profile == NULL || opx_flow_control_rccc_tx_window_open(tx_state, profile) != FI_SUCCESS) {
-		return -FI_EINVAL;
-	}
+	assert(profile != NULL);
+	(void) opx_flow_control_rccc_tx_window_open(tx_state, profile);
 	return FI_SUCCESS;
 }
 
@@ -1329,6 +1704,58 @@ static inline void opx_flow_control_rccc_ledger_release(struct opx_flow_control_
 	}
 }
 
+/* Slot eviction at epoch close: the ACCEPT decision record recycles onto
+ * the free list (decision_used stays a high-water mark) and the tracked
+ * entry returns to the pool, converting tracked_used from a lifetime-peer
+ * bound into a concurrent-active bound.  Every caller guarantees
+ * permission_contribution == 0, so the shared owner-claim release-store
+ * publishes strictly after this member's contribution is provably zero.
+ * scheduler.generation zeroes so a rebind re-claims through the full
+ * decide_accept gate; replay safety needs no decision record because
+ * epoch_snapshot/SNAPSHOT_VALID survive in the rx_state overlay and
+ * classify a late kind-3 for the closed epoch STALE before any lookup. */
+static void opx_flow_control_rccc_rx_slot_release(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow)
+{
+	struct opx_flow_control_rccc_scheduler *scheduler = opx_ep->flow_control_scheduler;
+	struct opx_flow_control_rccc_rx_state  *rx_state  = opx_flow_control_rccc_rx_state(flow);
+
+	if (rx_state->scheduler.generation == 0u) {
+		return;
+	}
+	assert(rx_state->permission_contribution == 0u);
+	if (rx_state->decision_slot < scheduler->decision_used) {
+		struct opx_flow_control_rccc_decision_record *record = &scheduler->decisions[rx_state->decision_slot];
+
+		if (record->occupied != 0u && record->key.flow_key.qw_prefix == flow->key->qw_prefix &&
+		    record->key.flow_key.dw_suffix == flow->key->dw_suffix) {
+			record->occupied	      = 0u;
+			record->state		      = OPX_FLOW_CONTROL_RCCC_DECISION_EMPTY;
+			record->free_next	      = scheduler->decision_free_head;
+			scheduler->decision_free_head = rx_state->decision_slot;
+		}
+	}
+	/* The local tracked_used mirrors this member's share in both modes
+	 * (shared_detach bulk-subtracts it from the aggregate at destroy), so
+	 * it must decrement here too or detach would double-subtract. */
+	assert(scheduler->tracked_used != 0u);
+	scheduler->tracked_used--;
+	if (scheduler->shared_ledger != NULL) {
+		struct opx_flow_control_rccc_scheduler_flow_owner *owner =
+			opx_flow_control_rccc_shared_flow_owner(scheduler, rx_state->scheduler.slot);
+
+		if (atomic_load_explicit(&owner->claim, memory_order_relaxed) == rx_state->scheduler.generation) {
+			owner->flow_key_prefix = 0u;
+			owner->flow_key_suffix = 0u;
+			atomic_store_explicit(&owner->claim, 0u, memory_order_release);
+		}
+		assert(atomic_load_explicit(&scheduler->shared_ledger->tracked_used, memory_order_relaxed) != 0u);
+		atomic_fetch_sub_explicit(&scheduler->shared_ledger->tracked_used, 1u, memory_order_release);
+	}
+	rx_state->scheduler.generation = 0u;
+	rx_state->scheduler.slot       = 0u;
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.slot_releases);
+}
+
 /* Withholding convergence: the closing epoch's RESET_ACK is releasable only
  * when grant - observed - retired_accepted == 0 under 24-bit serial rules.
  * The rebase retains the closed epoch as the serial snapshot (the ACK echoes
@@ -1356,18 +1783,15 @@ static void opx_flow_control_rccc_rx_reset_drain_check(struct fi_opx_ep			 *opx_
 	rx_state->drr_deficit		 = 0;
 	rx_state->quarantine_deadline_ns = 0u;
 	rx_state->scheduler_state	 = OPX_FLOW_CONTROL_RCCC_SCHEDULER_DORMANT;
-	rx_state->flags =
-		OPX_FLOW_CONTROL_RCCC_RX_FLAG_RESET_ACK_PENDING | OPX_FLOW_CONTROL_RCCC_RX_FLAG_SNAPSHOT_VALID;
+	opx_flow_control_rccc_rx_flags_replace(opx_ep->flow_control_scheduler, rx_state,
+					       OPX_FLOW_CONTROL_RCCC_RX_FLAG_RESET_ACK_PENDING |
+						       OPX_FLOW_CONTROL_RCCC_RX_FLAG_SNAPSHOT_VALID);
+	opx_flow_control_rccc_rx_slot_release(opx_ep, flow);
 	opx_flow_control_rccc_rx_work_enqueue(opx_ep, flow);
 }
 
-/* Release-state table: the first accepted copy of a governed
- * packet releases exactly one permission while BOUND, RESETTING, or
- * pre-reclaim QUARANTINED; an arrival on an unbound (DORMANT/PREPARING)
- * entry, beyond the outstanding window, or after quarantine reclaim is a
- * flow-local protocol fault that releases zero.  Duplicates never reach
- * acceptance, so exactly-once needs no per-PSN state here. */
-void opx_flow_control_rx_first_accept(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow, uint32_t psn)
+void opx_flow_control_rx_first_accept_slow(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow,
+					   uint32_t psn)
 {
 	struct opx_flow_control_rccc_rx_state *rx_state = opx_flow_control_rccc_rx_state(flow);
 
@@ -1387,6 +1811,12 @@ void opx_flow_control_rx_first_accept(struct fi_opx_ep *opx_ep, struct fi_opx_re
 			break;
 		}
 		rx_state->observed = opx_flow_control_rccc_serial_add(rx_state->observed, 1u);
+		if (rx_state->consumed_epoch != UINT32_MAX) {
+			rx_state->consumed_epoch++;
+		}
+		if (opx_ep->flow_control_scheduler->consumed_total_epoch != UINT32_MAX) {
+			opx_ep->flow_control_scheduler->consumed_total_epoch++;
+		}
 		opx_flow_control_rccc_ledger_release(opx_ep->flow_control_scheduler, rx_state, 1u);
 		if (OFI_UNLIKELY(rx_state->scheduler_state == OPX_FLOW_CONTROL_RCCC_SCHEDULER_RESETTING)) {
 			opx_flow_control_rccc_rx_reset_drain_check(opx_ep, flow);
@@ -1435,10 +1865,13 @@ opx_flow_control_rccc_decide_accept(struct opx_flow_control_rccc_scheduler	    *
 		return OPX_FLOW_CONTROL_OK;
 	}
 	/* Capacity gates precede every mutation so a rejected bind leaves
-	 * the pools untouched (model decide_accept contract).  Sharing:
-	 * tracked capacity is context-wide, taken from the shared counter
-	 * with a bounded CAS after the local gates pass. */
-	if (scheduler->decision_used >= scheduler->profile.decision_capacity ||
+	 * the pools untouched (model decide_accept contract).  decision_used
+	 * is a high-water mark: released records recycle through the free
+	 * list before the append region grows.  Sharing: tracked capacity is
+	 * context-wide, taken from the shared counter with a bounded CAS
+	 * after the local gates pass. */
+	if ((scheduler->decision_free_head == OPX_FLOW_CONTROL_RCCC_DECISION_FREE_END &&
+	     scheduler->decision_used >= scheduler->profile.decision_capacity) ||
 	    (consume_tracked && scheduler->tracked_used >= scheduler->profile.tracked_capacity)) {
 		return OPX_FLOW_CONTROL_DEFER;
 	}
@@ -1446,59 +1879,202 @@ opx_flow_control_rccc_decide_accept(struct opx_flow_control_rccc_scheduler	    *
 	    !opx_flow_control_rccc_shared_tracked_reserve(scheduler)) {
 		return OPX_FLOW_CONTROL_DEFER;
 	}
-	record			   = &scheduler->decisions[scheduler->decision_used];
+	if (scheduler->decision_free_head != OPX_FLOW_CONTROL_RCCC_DECISION_FREE_END) {
+		*decision_slot		      = scheduler->decision_free_head;
+		record			      = &scheduler->decisions[scheduler->decision_free_head];
+		scheduler->decision_free_head = record->free_next;
+	} else {
+		*decision_slot = scheduler->decision_used;
+		record	       = &scheduler->decisions[scheduler->decision_used];
+		scheduler->decision_used++;
+	}
+	/* Key-stamp before publish: occupied flips last so a reused record
+	 * is never findable under its previous key. */
 	record->key		   = *key;
 	record->request_generation = request_generation;
-	record->reject_slot	   = 0u;
+	record->free_next	   = 0u;
 	record->state		   = OPX_FLOW_CONTROL_RCCC_DECISION_ACCEPT;
-	record->occupied	   = 1u;
 	record->grant_seen	   = 0u;
-	*decision_slot		   = scheduler->decision_used;
-	scheduler->decision_used++;
+	record->occupied	   = 1u;
 	if (consume_tracked) {
 		scheduler->tracked_used++;
 	}
 	return OPX_FLOW_CONTROL_OK;
 }
 
-static inline enum opx_flow_control_result opx_flow_control_rccc_decide_capacity_reject(
-	struct opx_flow_control_rccc_scheduler *scheduler, const struct opx_flow_control_rccc_decision_key *key,
-	uint32_t request_generation, enum opx_flow_control_rccc_capacity_reason reason, uint32_t limit,
-	uint32_t observed, uint32_t *reject_slot)
+static inline void opx_flow_control_rccc_demand_active_inc(struct opx_flow_control_rccc_scheduler *scheduler)
 {
-	struct opx_flow_control_rccc_decision_record *record = opx_flow_control_rccc_decision_find(scheduler, key);
-	struct opx_flow_control_rccc_reject_record   *reject;
+	assert(scheduler->local_demand_active_flows < UINT32_MAX);
+	scheduler->local_demand_active_flows++;
+	if (scheduler->shared_ledger != NULL) {
+		assert(atomic_load_explicit(&scheduler->shared_ledger->demand_active_flows, memory_order_relaxed) <
+		       UINT32_MAX);
+		atomic_fetch_add_explicit(&scheduler->shared_ledger->demand_active_flows, 1u, memory_order_relaxed);
+	} else {
+		assert(scheduler->demand_active_flows < UINT32_MAX);
+		scheduler->demand_active_flows++;
+	}
+}
 
-	if (record != NULL) {
-		if (OFI_UNLIKELY(record->state != OPX_FLOW_CONTROL_RCCC_DECISION_REJECT)) {
-			return OPX_FLOW_CONTROL_FAULT;
+static inline void opx_flow_control_rccc_demand_active_dec(struct opx_flow_control_rccc_scheduler *scheduler)
+{
+	assert(scheduler->local_demand_active_flows != 0u);
+	scheduler->local_demand_active_flows--;
+	if (scheduler->shared_ledger != NULL) {
+		assert(atomic_load_explicit(&scheduler->shared_ledger->demand_active_flows, memory_order_relaxed) !=
+		       0u);
+		atomic_fetch_sub_explicit(&scheduler->shared_ledger->demand_active_flows, 1u, memory_order_relaxed);
+	} else {
+		assert(scheduler->demand_active_flows != 0u);
+		scheduler->demand_active_flows--;
+	}
+}
+
+static inline void opx_flow_control_rccc_hot_inc(struct opx_flow_control_rccc_scheduler *scheduler)
+{
+	assert(scheduler->local_hot_flows < UINT32_MAX);
+	scheduler->local_hot_flows++;
+	if (scheduler->shared_ledger != NULL) {
+		assert(atomic_load_explicit(&scheduler->shared_ledger->hot_flows, memory_order_relaxed) < UINT32_MAX);
+		atomic_fetch_add_explicit(&scheduler->shared_ledger->hot_flows, 1u, memory_order_relaxed);
+	} else {
+		assert(scheduler->hot_flows < UINT32_MAX);
+		scheduler->hot_flows++;
+	}
+}
+
+static inline void opx_flow_control_rccc_hot_dec(struct opx_flow_control_rccc_scheduler *scheduler)
+{
+	assert(scheduler->local_hot_flows != 0u);
+	scheduler->local_hot_flows--;
+	if (scheduler->shared_ledger != NULL) {
+		assert(atomic_load_explicit(&scheduler->shared_ledger->hot_flows, memory_order_relaxed) != 0u);
+		atomic_fetch_sub_explicit(&scheduler->shared_ledger->hot_flows, 1u, memory_order_relaxed);
+	} else {
+		assert(scheduler->hot_flows != 0u);
+		scheduler->hot_flows--;
+	}
+}
+
+static inline void opx_flow_control_rccc_rx_window_state_init(struct opx_flow_control_rccc_scheduler *scheduler,
+							      struct opx_flow_control_rccc_rx_state  *rx_state)
+{
+	rx_state->window_ceiling     = scheduler->profile.window_cap_min;
+	rx_state->demand_peak_epoch  = 0u;
+	rx_state->consumed_epoch     = 0u;
+	rx_state->window_epoch_stamp = scheduler->window_epoch;
+	rx_state->hot		     = 0u;
+	rx_state->hi_streak	     = 0u;
+	rx_state->lo_streak	     = 0u;
+	rx_state->idle_streak	     = 0u;
+}
+
+/* Cold-ramp + hot-set window classification, processed lazily per flow when
+ * the scheduler's window epoch has advanced past the flow's stamp.  Hot
+ * entry and retention require BOTH a backlog leg (peak pending
+ * target - grant over the epoch clears hot_absolute_floor - proves
+ * standing sender demand) and a throughput leg (accepted packets per
+ * epoch clear hot_consumed_floor - proves the receiver is actually
+ * servicing the flow).  Both thresholds are absolute constants
+ * independent of the ceiling, so classification cannot be ramp-raced;
+ * a flow with qualifying backlog also does not cold-ramp that epoch,
+ * which parks incast flows at the small initial ceiling until the
+ * consumed leg confirms them.  Entry is fast and exit slow so collective
+ * phase boundaries do not flap membership; an idle ceiling decays by
+ * halves so a workload flip cannot ride a stale fmax ceiling for long. */
+static inline void opx_flow_control_rccc_rx_window_epoch_update(struct fi_opx_ep		       *opx_ep,
+								struct opx_flow_control_rccc_scheduler *scheduler,
+								struct opx_flow_control_rccc_rx_state  *rx_state,
+								uint32_t elapsed_epochs, bool congested)
+{
+	const struct opx_flow_control_rccc_scheduler_profile *profile	 = &scheduler->profile;
+	const struct opx_flow_control_rccc_tx_profile	     *tx_profile = opx_flow_control_rccc_tx_profile_get();
+	const bool backlog_hi = rx_state->demand_peak_epoch >= profile->hot_absolute_floor;
+	const bool serviced   = rx_state->consumed_epoch >= profile->hot_consumed_floor;
+
+	(void) opx_ep;
+	if (backlog_hi && serviced) {
+		if (rx_state->hi_streak != UINT8_MAX) {
+			rx_state->hi_streak++;
 		}
-		*reject_slot = record->reject_slot;
-		return OPX_FLOW_CONTROL_OK;
+		rx_state->idle_streak = 0u;
+		if (rx_state->hot == 0u && rx_state->hi_streak >= profile->hot_entry_streak) {
+			rx_state->hot = 1u;
+			opx_flow_control_rccc_hot_inc(scheduler);
+		}
+	} else {
+		rx_state->hi_streak = 0u;
+		if (backlog_hi) {
+			rx_state->idle_streak = 0u;
+		}
 	}
-	if (scheduler->decision_used >= scheduler->profile.decision_capacity ||
-	    scheduler->reject_used >= scheduler->profile.reject_capacity) {
-		return OPX_FLOW_CONTROL_DEFER;
+	/* Hot RETENTION requires both legs: backlog proves standing sender
+	 * demand and the consumed leg proves the receiver is servicing it.
+	 * Backlog alone is endogenous - withheld grants inflate pending, so
+	 * a division-induced micro-window storm keeps every flow looking
+	 * demand-heavy (measured at np=256: all 192 peers hot, ceilings
+	 * floored, Alltoallv rows at 13.5 ms).  Withholding also collapses
+	 * consumption, so storm-classified flows fail the consumed leg and
+	 * exit within hot_exit_streak epochs, division releases, and the
+	 * ramp resumes - the fixed point self-recovers.  True incast holds
+	 * both legs (measured 100 pkts/ms/flow at 15-to-1 and ~24 at 63-to-1
+	 * against the floor of 8) and stays stably hot.  Receiver-imposed
+	 * stalls are exempt from the exit evidence: a DRAINING duty episode
+	 * stops grants and a congested pass means delivery itself is
+	 * backlogged - exiting hot flows during either re-opens fmax windows
+	 * at exactly the wrong moment (measured as a 4-6x overflow regression
+	 * at 15-to-1 without the exemptions). */
+	if (rx_state->hot != 0u) {
+		if ((backlog_hi && serviced) || congested ||
+		    scheduler->duty_state == OPX_FLOW_CONTROL_RCCC_DUTY_DRAINING) {
+			rx_state->lo_streak = 0u;
+		} else {
+			if (rx_state->lo_streak != UINT8_MAX) {
+				rx_state->lo_streak++;
+			}
+			if (rx_state->lo_streak >= profile->hot_exit_streak) {
+				rx_state->hot	    = 0u;
+				rx_state->lo_streak = 0u;
+				opx_flow_control_rccc_hot_dec(scheduler);
+			}
+		}
 	}
-	record			   = &scheduler->decisions[scheduler->decision_used];
-	reject			   = &scheduler->rejects[scheduler->reject_used];
-	record->key		   = *key;
-	record->request_generation = request_generation;
-	record->reject_slot	   = scheduler->reject_used;
-	record->state		   = OPX_FLOW_CONTROL_RCCC_DECISION_REJECT;
-	record->occupied	   = 1u;
-	record->grant_seen	   = 0u;
-	reject->key		   = *key;
-	reject->request_generation = request_generation;
-	reject->limit		   = limit;
-	reject->observed	   = observed;
-	reject->fi_errno	   = FI_ENOSPC;
-	reject->reason		   = (uint8_t) reason;
-	reject->occupied	   = 1u;
-	*reject_slot		   = scheduler->reject_used;
-	scheduler->decision_used++;
-	scheduler->reject_used++;
-	return OPX_FLOW_CONTROL_OK;
+	if (!backlog_hi) {
+		if (rx_state->demand_peak_epoch == 0u && rx_state->consumed_epoch == 0u) {
+			const uint32_t bumped = (uint32_t) rx_state->idle_streak + elapsed_epochs;
+
+			rx_state->idle_streak = bumped > UINT8_MAX ? UINT8_MAX : (uint8_t) bumped;
+			if (rx_state->idle_streak >= profile->idle_decay_streak) {
+				rx_state->idle_streak = 0u;
+				if ((rx_state->window_ceiling >> 1) >= profile->window_cap_min) {
+					rx_state->window_ceiling >>= 1;
+				}
+			}
+		} else {
+			rx_state->idle_streak = 0u;
+		}
+	}
+	/* The ramp freezes on the backlog leg alone: a flow with standing
+	 * demand must not grow its ceiling while the consumed leg is still
+	 * accumulating classification evidence, or the ramp outruns the
+	 * classifier (measured at 15-to-1: freezing only on the full AND
+	 * roughly doubled overflow versus freezing on backlog alone).  The
+	 * receiver-global storm mode bypasses the freeze: a control-retry
+	 * storm inflates backlog on every flow while granting almost
+	 * nothing, and the only exit is growing the windows. */
+	if (rx_state->hot == 0u && (!backlog_hi || scheduler->storm_mode != 0u) && !congested &&
+	    rx_state->window_ceiling < tx_profile->fmax) {
+		const uint32_t doubled = rx_state->window_ceiling << 1;
+
+		rx_state->window_ceiling = doubled < tx_profile->fmax ? doubled : tx_profile->fmax;
+	}
+	rx_state->demand_peak_epoch = 0u;
+	rx_state->consumed_epoch    = 0u;
+	FI_OPX_DEBUG_COUNTERS_INC(
+		opx_ep->debug_counters.flow_control.window_ceiling_hist[rx_state->window_ceiling <= 64u	  ? 0 :
+									rx_state->window_ceiling <= 256u  ? 1 :
+									rx_state->window_ceiling <= 1024u ? 2 :
+													    3]);
 }
 
 static inline void opx_flow_control_rccc_ledger_charge(struct opx_flow_control_rccc_scheduler *scheduler,
@@ -1550,8 +2126,15 @@ static inline bool opx_flow_control_rccc_shared_tracked_reserve(struct opx_flow_
 #ifndef NDEBUG
 static inline void opx_flow_control_rccc_ledger_reconcile(struct fi_opx_ep *opx_ep)
 {
-	struct opx_flow_control_rccc_scheduler *scheduler    = opx_ep->flow_control_scheduler;
-	uint64_t				contribution = 0u;
+	struct opx_flow_control_rccc_scheduler *scheduler	 = opx_ep->flow_control_scheduler;
+	uint64_t				contribution	 = 0u;
+	uint32_t				demand_active	 = 0u;
+	uint32_t				hot		 = 0u;
+	uint32_t				slot_holders	 = 0u;
+	uint32_t				occupied	 = 0u;
+	uint32_t				feedback_pending = 0u;
+	uint32_t				reject_pending	 = 0u;
+	uint32_t				index;
 	RbtIterator				itr;
 
 	if (scheduler == NULL || opx_ep->reli_service == NULL || opx_ep->reli_service->rx.rx_flow_rbtree == NULL) {
@@ -1562,9 +2145,40 @@ static inline void opx_flow_control_rccc_ledger_reconcile(struct fi_opx_ep *opx_
 		struct fi_opx_reliability_rx_flow *flow =
 			fi_opx_rbt_value(opx_ep->reli_service->rx.rx_flow_rbtree, itr);
 
-		contribution += opx_flow_control_rccc_rx_state(flow)->permission_contribution;
+		struct opx_flow_control_rccc_rx_state *rx_state = opx_flow_control_rccc_rx_state(flow);
+
+		contribution += rx_state->permission_contribution;
+		if (rx_state->scheduler.generation != 0u) {
+			slot_holders++;
+		}
+		if (rx_state->scheduler_state == OPX_FLOW_CONTROL_RCCC_SCHEDULER_BOUND &&
+		    rx_state->target != rx_state->grant) {
+			demand_active++;
+		}
+		if (rx_state->hot != 0u) {
+			hot++;
+		}
+		if ((rx_state->flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING) != 0u) {
+			feedback_pending++;
+		}
+		if ((rx_state->flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING) != 0u) {
+			reject_pending++;
+		}
+	}
+	for (index = 0u; index < scheduler->decision_used; ++index) {
+		if (scheduler->decisions[index].occupied != 0u) {
+			occupied++;
+		}
 	}
 	assert(contribution == scheduler->outstanding_permissions);
+	assert(occupied == slot_holders);
+	assert(feedback_pending == scheduler->feedback_pending_count);
+	assert(reject_pending == scheduler->reject_pending_count);
+	if (scheduler->shared_ledger == NULL) {
+		assert(slot_holders == scheduler->tracked_used);
+		assert(demand_active == scheduler->demand_active_flows);
+		assert(hot == scheduler->hot_flows);
+	}
 }
 #endif
 
@@ -1587,6 +2201,7 @@ opx_flow_control_rccc_rx_retirement_settle(struct fi_opx_ep *opx_ep, struct opx_
 		}
 		rx_state->retired_accepted = retired;
 		rx_state->retired	   = retired;
+		rx_state->flags |= OPX_FLOW_CONTROL_RCCC_RX_FLAG_RETIREMENT_ACK_PENDING;
 		opx_flow_control_rccc_ledger_release(opx_ep->flow_control_scheduler, rx_state, delta);
 		return OPX_FLOW_CONTROL_OK;
 	}
@@ -1599,10 +2214,15 @@ opx_flow_control_rccc_rx_retirement_settle(struct fi_opx_ep *opx_ep, struct opx_
 
 /* Fresh kind-3 on an unbound flow: STALE/DUPLICATE epochs against the
  * retained snapshot are dropped (the interim issuer's blind epoch adoption
- * defect), then the sticky decision pool either binds the pairing
- * (PREPARING is instantaneous under process-local single-threaded
- * authority) or records a Capacity Reject for kind-8 emission.  A replayed
- * kind-3 for a decided pairing refreshes only the echoed reply serial. */
+ * defect), then the decision pool either binds the pairing (PREPARING is
+ * instantaneous under process-local single-threaded authority) or the
+ * capacity shortfall is answered STATELESSLY: no decision/reject slot is
+ * burned, the kind-8 is built from rx_state fields alone, and a retried
+ * kind-3 re-runs the same admission - recomputing the same reject while
+ * full and upgrading to ACCEPT the moment capacity frees.  One-directional
+ * stickiness is preserved by construction: an ACCEPT record replays
+ * verbatim, and ACCEPT-after-reject is always safe because grants are
+ * receiver-authoritative from zero. */
 static enum opx_flow_control_result
 opx_flow_control_rccc_rx_bind(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow,
 			      const struct opx_flow_control_wire_envelope    *envelope,
@@ -1623,22 +2243,6 @@ opx_flow_control_rccc_rx_bind(struct fi_opx_ep *opx_ep, struct fi_opx_reliabilit
 			return OPX_FLOW_CONTROL_DEFER;
 		}
 	}
-	/* Sticky replay: a decided pairing always gets its original outcome.
-	 * A retried kind-3 against a rejected pairing re-emits the kind-8
-	 * echoing the retry's reply serial instead of re-evaluating. */
-	{
-		const struct opx_flow_control_rccc_decision_record *existing =
-			opx_flow_control_rccc_decision_find(scheduler, &key);
-
-		if (existing != NULL && existing->state == OPX_FLOW_CONTROL_RCCC_DECISION_REJECT) {
-			scheduler->rejects[existing->reject_slot].request_generation = envelope->value[2];
-			rx_state->reject_slot					     = existing->reject_slot;
-			rx_state->request_generation				     = envelope->value[2];
-			rx_state->flags |= OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING;
-			opx_flow_control_rccc_rx_work_enqueue(opx_ep, flow);
-			return OPX_FLOW_CONTROL_OK;
-		}
-	}
 	result = opx_flow_control_rccc_decide_accept(scheduler, &key, envelope->value[2],
 						     rx_state->scheduler.generation == 0u, &slot);
 	if (OFI_UNLIKELY(result == OPX_FLOW_CONTROL_FAULT)) {
@@ -1646,26 +2250,9 @@ opx_flow_control_rccc_rx_bind(struct fi_opx_ep *opx_ep, struct fi_opx_reliabilit
 		return OPX_FLOW_CONTROL_FAULT;
 	}
 	if (result == OPX_FLOW_CONTROL_DEFER) {
-		const enum opx_flow_control_rccc_capacity_reason reason =
-			scheduler->decision_used >= scheduler->profile.decision_capacity ?
-				OPX_FLOW_CONTROL_RCCC_CAPACITY_REASON_DECISION :
-				OPX_FLOW_CONTROL_RCCC_CAPACITY_REASON_TRACKED;
-		const uint32_t limit	= reason == OPX_FLOW_CONTROL_RCCC_CAPACITY_REASON_DECISION ?
-						  scheduler->profile.decision_capacity :
-						  scheduler->profile.tracked_capacity;
-		const uint32_t observed = reason == OPX_FLOW_CONTROL_RCCC_CAPACITY_REASON_DECISION ?
-						  scheduler->decision_used :
-						  scheduler->tracked_used;
-
-		result = opx_flow_control_rccc_decide_capacity_reject(scheduler, &key, envelope->value[2], reason,
-								      limit, observed, &slot);
-		if (result != OPX_FLOW_CONTROL_OK) {
-			return result;
-		}
-		scheduler->rejects[slot].request_generation = envelope->value[2];
-		rx_state->reject_slot			    = slot;
-		rx_state->request_generation		    = envelope->value[2];
-		rx_state->flags |= OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING;
+		rx_state->rejected_epoch     = envelope->generation;
+		rx_state->request_generation = envelope->value[2];
+		opx_flow_control_rccc_rx_pending_set(scheduler, rx_state, OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING);
 		opx_flow_control_rccc_rx_work_enqueue(opx_ep, flow);
 		return OPX_FLOW_CONTROL_OK;
 	}
@@ -1702,9 +2289,80 @@ opx_flow_control_rccc_rx_bind(struct fi_opx_ep *opx_ep, struct fi_opx_reliabilit
 	rx_state->retired_accepted   = 0u;
 	rx_state->decision_slot	     = slot;
 	rx_state->request_generation = envelope->value[2];
-	rx_state->scheduler_state    = OPX_FLOW_CONTROL_RCCC_SCHEDULER_BOUND;
-	rx_state->flags |= OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING;
+	/* BOUND is entered only here and left only by RESET below; quarantine
+	 * reclaim operates on RESETTING flows, so this transition pair owns the
+	 * live-flow counters for the whole state-machine lifetime. */
+	rx_state->scheduler_state = OPX_FLOW_CONTROL_RCCC_SCHEDULER_BOUND;
+	opx_flow_control_rccc_rx_window_state_init(scheduler, rx_state);
+	opx_flow_control_rccc_demand_active_inc(scheduler);
+	assert(scheduler->local_bound_flows < UINT32_MAX);
+	scheduler->local_bound_flows++;
+	if (scheduler->shared_ledger != NULL) {
+		assert(atomic_load_explicit(&scheduler->shared_ledger->active_bound_flows, memory_order_relaxed) <
+		       UINT32_MAX);
+		atomic_fetch_add_explicit(&scheduler->shared_ledger->active_bound_flows, 1u, memory_order_relaxed);
+	} else {
+		assert(scheduler->active_bound_flows < UINT32_MAX);
+		scheduler->active_bound_flows++;
+	}
+	opx_flow_control_rccc_rx_pending_set(scheduler, rx_state, OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING);
 	opx_flow_control_rccc_rx_work_enqueue(opx_ep, flow);
+	return OPX_FLOW_CONTROL_OK;
+}
+
+static enum opx_flow_control_rccc_serial_classification
+opx_flow_control_rccc_rx_target_apply(struct fi_opx_ep *opx_ep, struct opx_flow_control_rccc_rx_state *rx_state,
+				      uint32_t target, struct opx_flow_control_rccc_feedback_counters *counters)
+{
+	const struct opx_flow_control_rccc_tx_profile	      *profile = opx_flow_control_rccc_tx_profile_get();
+	const enum opx_flow_control_rccc_serial_classification classification =
+		opx_flow_control_rccc_serial_classify(rx_state->target, target);
+
+	opx_flow_control_rccc_feedback_count(counters, classification);
+	if (classification == OPX_FLOW_CONTROL_RCCC_SERIAL_NEWER) {
+		const uint32_t delta = (target - rx_state->target) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
+
+		if (OFI_UNLIKELY(delta > profile->fmax)) {
+			opx_flow_control_rccc_feedback_count(counters, OPX_FLOW_CONTROL_RCCC_SERIAL_INVALID);
+			return OPX_FLOW_CONTROL_RCCC_SERIAL_INVALID;
+		}
+		if (rx_state->target == rx_state->grant) {
+			opx_flow_control_rccc_demand_active_inc(opx_ep->flow_control_scheduler);
+		}
+		rx_state->target = target;
+	}
+	return classification;
+}
+
+/* Piggybacked-target ingestion (PING QW6).  Deliberately narrower than the
+ * dedicated kind-3 path: no request_epoch increment (the storm detector's
+ * standalone-request signature must stay undiluted), no DORMANT bind (the
+ * decision path needs the request-generation echo and reject handling that
+ * only a dedicated request carries), no retirement, no feedback-pending
+ * response (stale/duplicate piggybacks are silent).  A newer target
+ * enqueues the flow so the grant pass visits it. */
+enum opx_flow_control_result opx_flow_control_rccc_rx_target_piggyback(struct fi_opx_ep			 *opx_ep,
+								       struct fi_opx_reliability_rx_flow *flow,
+								       uint32_t generation, uint32_t target)
+{
+	struct opx_flow_control_rccc_rx_state	       *rx_state = opx_flow_control_rccc_rx_state(flow);
+	struct opx_flow_control_rccc_feedback_counters *counters =
+		&opx_ep->reli_service->flow_control_feedback_counters;
+	enum opx_flow_control_rccc_serial_classification classification;
+
+	if (rx_state->scheduler_state != OPX_FLOW_CONTROL_RCCC_SCHEDULER_BOUND || rx_state->epoch != generation) {
+		opx_flow_control_rccc_feedback_count(counters, OPX_FLOW_CONTROL_RCCC_SERIAL_STALE);
+		return OPX_FLOW_CONTROL_OK;
+	}
+	classification = opx_flow_control_rccc_rx_target_apply(opx_ep, rx_state, target, counters);
+	if (classification == OPX_FLOW_CONTROL_RCCC_SERIAL_AMBIGUOUS ||
+	    classification == OPX_FLOW_CONTROL_RCCC_SERIAL_INVALID) {
+		return OPX_FLOW_CONTROL_FAULT;
+	}
+	if (classification == OPX_FLOW_CONTROL_RCCC_SERIAL_NEWER) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.piggyback_ping_received);
+		opx_flow_control_rccc_rx_work_enqueue(opx_ep, flow);
+	}
 	return OPX_FLOW_CONTROL_OK;
 }
 
@@ -1712,23 +2370,28 @@ enum opx_flow_control_result opx_flow_control_rccc_rx_control(struct fi_opx_ep		
 							      struct fi_opx_reliability_rx_flow		  *flow,
 							      const struct opx_flow_control_wire_envelope *envelope)
 {
-	const struct opx_flow_control_rccc_tx_profile	*profile = opx_flow_control_rccc_tx_profile_get();
 	struct opx_flow_control_rccc_feedback_counters	*counters;
 	struct opx_flow_control_rccc_rx_state		*rx_state;
 	enum opx_flow_control_rccc_serial_classification classification;
 	enum opx_flow_control_result			 result;
-	uint32_t					 delta;
 	uint32_t					 outstanding;
 
 	assert(opx_ep != NULL);
 	assert(opx_ep->reli_service != NULL);
 	assert(flow != NULL);
 	assert(envelope != NULL);
-	assert(profile != NULL);
+	assert(opx_flow_control_rccc_tx_profile_get() != NULL);
 	counters = &opx_ep->reli_service->flow_control_feedback_counters;
 	rx_state = opx_flow_control_rccc_rx_state(flow);
 	switch (envelope->kind) {
 	case OPX_FLOW_CONTROL_RCCC_KIND_CREDIT_REQUEST:
+		/* Standalone request arrivals feed the storm detector; keep
+		 * this count distinct from any future piggybacked carrier so
+		 * the retry-storm signature stays undiluted. */
+		if (opx_ep->flow_control_scheduler != NULL &&
+		    opx_ep->flow_control_scheduler->request_epoch != UINT32_MAX) {
+			opx_ep->flow_control_scheduler->request_epoch++;
+		}
 		if (rx_state->scheduler_state == OPX_FLOW_CONTROL_RCCC_SCHEDULER_DORMANT) {
 			if (OFI_UNLIKELY(envelope->generation == 0u || envelope->value[0] == 0u)) {
 				opx_flow_control_rccc_feedback_count(counters, OPX_FLOW_CONTROL_RCCC_SERIAL_INVALID);
@@ -1741,18 +2404,9 @@ enum opx_flow_control_result opx_flow_control_rccc_rx_control(struct fi_opx_ep		
 			opx_flow_control_rccc_feedback_count(counters, OPX_FLOW_CONTROL_RCCC_SERIAL_STALE);
 			return OPX_FLOW_CONTROL_DEFER;
 		}
-		classification = opx_flow_control_rccc_serial_classify(rx_state->target, envelope->value[0]);
-		opx_flow_control_rccc_feedback_count(counters, classification);
-		if (classification == OPX_FLOW_CONTROL_RCCC_SERIAL_NEWER) {
-			delta = (envelope->value[0] - rx_state->target) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
-
-			if (OFI_UNLIKELY(delta > profile->fmax)) {
-				opx_flow_control_rccc_feedback_count(counters, OPX_FLOW_CONTROL_RCCC_SERIAL_INVALID);
-				return OPX_FLOW_CONTROL_FAULT;
-			}
-			rx_state->target = envelope->value[0];
-		} else if (classification != OPX_FLOW_CONTROL_RCCC_SERIAL_DUPLICATE &&
-			   classification != OPX_FLOW_CONTROL_RCCC_SERIAL_STALE) {
+		classification = opx_flow_control_rccc_rx_target_apply(opx_ep, rx_state, envelope->value[0], counters);
+		if (classification == OPX_FLOW_CONTROL_RCCC_SERIAL_AMBIGUOUS ||
+		    classification == OPX_FLOW_CONTROL_RCCC_SERIAL_INVALID) {
 			return OPX_FLOW_CONTROL_FAULT;
 		}
 		rx_state->request_generation = envelope->value[2];
@@ -1760,7 +2414,8 @@ enum opx_flow_control_result opx_flow_control_rccc_rx_control(struct fi_opx_ep		
 		if (result != OPX_FLOW_CONTROL_OK) {
 			return result;
 		}
-		rx_state->flags |= OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING;
+		opx_flow_control_rccc_rx_pending_set(opx_ep->flow_control_scheduler, rx_state,
+						     OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING);
 		break;
 	case OPX_FLOW_CONTROL_RCCC_KIND_RETIREMENT:
 		if ((rx_state->scheduler_state != OPX_FLOW_CONTROL_RCCC_SCHEDULER_BOUND &&
@@ -1777,7 +2432,8 @@ enum opx_flow_control_result opx_flow_control_rccc_rx_control(struct fi_opx_ep		
 			opx_flow_control_rccc_rx_reset_drain_check(opx_ep, flow);
 			return OPX_FLOW_CONTROL_OK;
 		}
-		rx_state->flags |= OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING;
+		opx_flow_control_rccc_rx_pending_set(opx_ep->flow_control_scheduler, rx_state,
+						     OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING);
 		break;
 	case OPX_FLOW_CONTROL_RCCC_KIND_RESET:
 		if (OFI_UNLIKELY(envelope->generation == 0u)) {
@@ -1820,10 +2476,54 @@ enum opx_flow_control_result opx_flow_control_rccc_rx_control(struct fi_opx_ep		
 			}
 			outstanding = (rx_state->grant - rx_state->observed - rx_state->retired_accepted) &
 				      OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
-			rx_state->pending_epoch		 = opx_flow_control_rccc_serial_add(rx_state->epoch, 1u);
-			rx_state->scheduler_state	 = OPX_FLOW_CONTROL_RCCC_SCHEDULER_RESETTING;
+			if (outstanding != 0u) {
+				/* RESET is the sender's terminal ledger statement:
+				 * its emit predicate (committed FIFO drained,
+				 * retirement acked) means every consumed credit was
+				 * delivered and counted before this kind-5 was
+				 * sent.  The residue is exactly the
+				 * granted-but-never-applied window - kind-6 grants
+				 * lost on the unreliable control plane or dropped
+				 * STALE while the sender was already RESETTING -
+				 * which the sender can never consume or retire, so
+				 * withholding the ACK on it can never converge
+				 * (this livelocked 15->1 incast: 411K RESETs
+				 * unanswered).  Force-release it: the permissions
+				 * return to the ledger (a release, not a leak) and
+				 * the epoch closes convergently. */
+				assert(outstanding < OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE);
+				assert(rx_state->permission_contribution == outstanding);
+				opx_flow_control_rccc_ledger_release(opx_ep->flow_control_scheduler, rx_state,
+								     (uint32_t) outstanding);
+				rx_state->retired_accepted =
+					(rx_state->grant - rx_state->observed) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
+				outstanding = 0u;
+			}
+			rx_state->pending_epoch = opx_flow_control_rccc_serial_add(rx_state->epoch, 1u);
+			if (rx_state->target != rx_state->grant) {
+				opx_flow_control_rccc_demand_active_dec(opx_ep->flow_control_scheduler);
+			}
+			if (rx_state->hot != 0u) {
+				rx_state->hot = 0u;
+				opx_flow_control_rccc_hot_dec(opx_ep->flow_control_scheduler);
+			}
+			rx_state->scheduler_state = OPX_FLOW_CONTROL_RCCC_SCHEDULER_RESETTING;
+			assert(opx_ep->flow_control_scheduler->local_bound_flows != 0u);
+			opx_ep->flow_control_scheduler->local_bound_flows--;
+			if (opx_ep->flow_control_scheduler->shared_ledger != NULL) {
+				assert(atomic_load_explicit(
+					       &opx_ep->flow_control_scheduler->shared_ledger->active_bound_flows,
+					       memory_order_relaxed) != 0u);
+				atomic_fetch_sub_explicit(
+					&opx_ep->flow_control_scheduler->shared_ledger->active_bound_flows, 1u,
+					memory_order_relaxed);
+			} else {
+				assert(opx_ep->flow_control_scheduler->active_bound_flows != 0u);
+				opx_ep->flow_control_scheduler->active_bound_flows--;
+			}
 			rx_state->quarantine_deadline_ns = 0u;
-			rx_state->flags &= (uint8_t) ~OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING;
+			opx_flow_control_rccc_rx_pending_clear(opx_ep->flow_control_scheduler, rx_state,
+							       OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING);
 			if (outstanding == 0u) {
 				opx_flow_control_rccc_rx_reset_drain_check(opx_ep, flow);
 				return OPX_FLOW_CONTROL_OK;
@@ -1834,9 +2534,57 @@ enum opx_flow_control_result opx_flow_control_rccc_rx_control(struct fi_opx_ep		
 				opx_flow_control_rccc_feedback_count(counters, OPX_FLOW_CONTROL_RCCC_SERIAL_STALE);
 				return OPX_FLOW_CONTROL_DEFER;
 			}
-			/* Duplicate RESET while withholding: idempotent
-			 * no-op - the ACK is not yet releasable. */
+			/* Duplicate RESET while draining: settle the retirement
+			 * echo and force-release any residue exactly as the
+			 * BOUND arm does, so a flow left withholding by an
+			 * earlier code version (or a settle race) converges on
+			 * the retry instead of deferring silently forever. */
+			result = opx_flow_control_rccc_rx_retirement_settle(opx_ep, rx_state, envelope->value[1],
+									    counters);
+			if (result != OPX_FLOW_CONTROL_OK) {
+				return result;
+			}
+			outstanding = (rx_state->grant - rx_state->observed - rx_state->retired_accepted) &
+				      OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
+			if (outstanding != 0u) {
+				assert(outstanding < OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE);
+				assert(rx_state->permission_contribution == outstanding);
+				opx_flow_control_rccc_ledger_release(opx_ep->flow_control_scheduler, rx_state,
+								     (uint32_t) outstanding);
+				rx_state->retired_accepted =
+					(rx_state->grant - rx_state->observed) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
+			}
+			opx_flow_control_rccc_rx_reset_drain_check(opx_ep, flow);
 			return OPX_FLOW_CONTROL_OK;
+		case OPX_FLOW_CONTROL_RCCC_SCHEDULER_QUARANTINED:
+			/* Quarantine already force-released this flow's
+			 * contribution and slot, so the RESET is answerable
+			 * immediately.  DUPLICATE (the quarantined epoch) or
+			 * NEWER (peer restart) rebases to DORMANT and ACKs -
+			 * without this arm a quarantined peer's RESETs fall
+			 * through unanswered forever and the peer can never
+			 * rebind (rx_bind accepts kind-3 from DORMANT only). */
+			classification = opx_flow_control_rccc_serial_classify(rx_state->epoch, envelope->generation);
+			if (classification != OPX_FLOW_CONTROL_RCCC_SERIAL_DUPLICATE &&
+			    classification != OPX_FLOW_CONTROL_RCCC_SERIAL_NEWER) {
+				opx_flow_control_rccc_feedback_count(counters, OPX_FLOW_CONTROL_RCCC_SERIAL_STALE);
+				return OPX_FLOW_CONTROL_DEFER;
+			}
+			assert(rx_state->permission_contribution == 0u);
+			rx_state->epoch_snapshot	 = envelope->generation;
+			rx_state->epoch			 = opx_flow_control_rccc_serial_add(envelope->generation, 1u);
+			rx_state->pending_epoch		 = 0u;
+			rx_state->target		 = 0u;
+			rx_state->grant			 = 0u;
+			rx_state->observed		 = 0u;
+			rx_state->retired		 = 0u;
+			rx_state->retired_accepted	 = 0u;
+			rx_state->quarantine_deadline_ns = 0u;
+			rx_state->scheduler_state	 = OPX_FLOW_CONTROL_RCCC_SCHEDULER_DORMANT;
+			opx_flow_control_rccc_rx_flags_replace(opx_ep->flow_control_scheduler, rx_state,
+							       OPX_FLOW_CONTROL_RCCC_RX_FLAG_RESET_ACK_PENDING |
+								       OPX_FLOW_CONTROL_RCCC_RX_FLAG_SNAPSHOT_VALID);
+			break;
 		default:
 			opx_flow_control_rccc_feedback_count(counters, OPX_FLOW_CONTROL_RCCC_SERIAL_STALE);
 			return OPX_FLOW_CONTROL_DEFER;
@@ -1873,14 +2621,12 @@ enum opx_flow_control_result opx_flow_control_rccc_rx_emit_pending(struct fi_opx
 			opx_flow_control_rccc_serial_add(rx_state->epoch, OPX_FLOW_CONTROL_RCCC_SERIAL_MASK);
 		envelope.kind = OPX_FLOW_CONTROL_RCCC_KIND_RESET_ACK;
 	} else if (pending_flag == OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING) {
-		const struct opx_flow_control_rccc_scheduler *scheduler = opx_ep->flow_control_scheduler;
-
 		/* Kind-8 wire shape: generation carries the
-		 * request_generation reply serial, value[0] echoes the
-		 * rejected epoch, and reason/limit/observed stay local. */
-		assert(scheduler != NULL && rx_state->reject_slot < scheduler->profile.reject_capacity);
+		 * request_generation reply serial and value[0] echoes the
+		 * rejected epoch - both from rx_state alone (stateless
+		 * rejects burn no decision/reject slots). */
 		envelope.generation = rx_state->request_generation;
-		envelope.value[0]   = scheduler->rejects[rx_state->reject_slot].key.epoch;
+		envelope.value[0]   = rx_state->rejected_epoch;
 		envelope.flags	    = OPX_FLOW_CONTROL_WIRE_FLAG_TERMINAL;
 		envelope.kind	    = OPX_FLOW_CONTROL_RCCC_KIND_CAPACITY_REJECT;
 	} else {
@@ -1891,7 +2637,15 @@ enum opx_flow_control_result opx_flow_control_rccc_rx_emit_pending(struct fi_opx
 	}
 	result = opx_flow_control_wire_send(opx_ep, false, flow->key, &envelope);
 	if (result == OPX_FLOW_CONTROL_OK) {
-		rx_state->flags &= (uint8_t) ~pending_flag;
+		if (pending_flag == OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING ||
+		    pending_flag == OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING) {
+			opx_flow_control_rccc_rx_pending_clear(opx_ep->flow_control_scheduler, rx_state, pending_flag);
+		} else {
+			rx_state->flags &= (uint8_t) ~pending_flag;
+		}
+		if (pending_flag != OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING) {
+			rx_state->flags &= (uint8_t) ~OPX_FLOW_CONTROL_RCCC_RX_FLAG_RETIREMENT_ACK_PENDING;
+		}
 	}
 	return result;
 }
@@ -1947,10 +2701,22 @@ static void opx_flow_control_rccc_tx_sweep_pass(struct fi_opx_ep *opx_ep, uint64
 		enum opx_flow_control_rccc_tx_emission		kind;
 		struct opx_flow_control_rccc_tx_emission_intent intent;
 
-		if (reset_pass && (tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED) != 0u &&
-		    tx_state->block_reason == OPX_FLOW_CONTROL_RCCC_BLOCK_CAPACITY &&
+		/* Idle-close: a fully settled open epoch (no pending
+		 * control, no credits, no replays, retirement acked) that
+		 * has sat idle for two idle-retire periods RESETs, so the
+		 * receiver's RESET-drain releases the tracked/decision
+		 * slots - converting tracked capacity into a
+		 * concurrent-active bound.  The jittered reset backoff
+		 * staggers churn-boundary RESET bursts. */
+		if (reset_pass && tx_state->grant != 0u &&
+		    (tx_state->flags &
+		     (OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING | OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING |
+		      OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING | OPX_FLOW_CONTROL_RCCC_TX_FLAG_ACTIVITY_PENDING)) ==
+			    0u &&
 		    tx_state->available_credits == 0u && tx_state->held_credits == 0u &&
-		    flow->flow_control.committed_head == NULL) {
+		    tx_state->retired == tx_state->retired_acked && flow->flow_control.committed_head == NULL &&
+		    now_ns - tx_state->activity_time_ns >=
+			    2u * opx_flow_control_rccc_tx_profile_get()->idle_retire_delay_ns) {
 			(void) opx_flow_control_rccc_tx_reset_begin(tx_state, opx_flow_control_rccc_tx_profile_get(),
 								    now_ns);
 		}
@@ -2035,10 +2801,10 @@ static void opx_flow_control_rccc_rx_sweep_pass(struct fi_opx_ep *opx_ep, uint8_
 static void opx_flow_control_rccc_rx_quarantine_check(struct fi_opx_ep *opx_ep, struct fi_opx_reliability_rx_flow *flow,
 						      uint64_t now_ns)
 {
-	const struct opx_flow_control_rccc_scheduler_profile *profile  = opx_flow_control_rccc_scheduler_profile_get();
+	const struct opx_flow_control_rccc_scheduler_profile *profile  = &opx_ep->flow_control_scheduler->profile;
 	struct opx_flow_control_rccc_rx_state		     *rx_state = opx_flow_control_rccc_rx_state(flow);
 
-	if (rx_state->scheduler_state != OPX_FLOW_CONTROL_RCCC_SCHEDULER_RESETTING || profile == NULL) {
+	if (rx_state->scheduler_state != OPX_FLOW_CONTROL_RCCC_SCHEDULER_RESETTING) {
 		return;
 	}
 	if (rx_state->quarantine_deadline_ns == 0u) {
@@ -2051,71 +2817,353 @@ static void opx_flow_control_rccc_rx_quarantine_check(struct fi_opx_ep *opx_ep, 
 	opx_flow_control_rccc_ledger_release(opx_ep->flow_control_scheduler, rx_state,
 					     (uint32_t) rx_state->permission_contribution);
 	rx_state->scheduler_state = OPX_FLOW_CONTROL_RCCC_SCHEDULER_QUARANTINED;
-	rx_state->flags		  = OPX_FLOW_CONTROL_RCCC_RX_FLAG_RECLAIMED;
+	opx_flow_control_rccc_rx_flags_replace(opx_ep->flow_control_scheduler, rx_state,
+					       OPX_FLOW_CONTROL_RCCC_RX_FLAG_RECLAIMED);
+	opx_flow_control_rccc_rx_slot_release(opx_ep, flow);
 	opx_ep->reli_service->flow_control_feedback_counters.invalid++;
 }
 
-/* DRR grant tier: Q16.16 accrual (synthetic full rate) sets a
- * bulk budget separate from the control-emission budget; each listed BOUND
- * flow with unmet demand earns one quantum per visit and receives
- * min(demand, deficit, ledger headroom, budget).  Deficits carry across
- * polls; the ledger cap is the aggregate outstanding-permission bound. */
+/* Teardown reclaim: the RX mirror of opx_flow_control_tx_flows_quiesce.
+ * Grants are monotonic and the wire has no receiver-initiated recall, so a
+ * sender whose traffic simply stops (e.g. a time-budget-truncated benchmark
+ * finalizing promptly) leaves its granted-but-unconsumed window outstanding
+ * forever.  At endpoint teardown no further retirement can arrive; each
+ * flow's remaining contribution is force-reclaimed exactly as quarantine
+ * reclaim does (receiver-silent epoch close, no RESET_ACK - the quarantine
+ * precedent).  This is expected protocol convergence for truncated peers,
+ * not a peer fault, so it feeds dedicated census counters rather than
+ * invalid.  Bound-flow/demand/hot counter bookkeeping is intentionally
+ * skipped: scheduler_shared_detach bulk-releases this member's shared
+ * counters at destroy, and no grant pass runs after this point. */
+void opx_flow_control_rx_flows_reclaim(struct fi_opx_ep *opx_ep)
+{
+	struct opx_flow_control_rccc_scheduler *scheduler	      = opx_ep->flow_control_scheduler;
+	uint64_t				reclaimed_flows	      = 0u;
+	uint64_t				reclaimed_permissions = 0u;
+	RbtIterator				itr;
+
+	if (scheduler == NULL || opx_ep->reli_service == NULL || opx_ep->reli_service->rx.rx_flow_rbtree == NULL) {
+		return;
+	}
+	for (itr = fi_opx_rbt_begin(opx_ep->reli_service->rx.rx_flow_rbtree); itr != NULL;
+	     itr = fi_opx_rbt_next(opx_ep->reli_service->rx.rx_flow_rbtree, itr)) {
+		struct fi_opx_reliability_rx_flow *flow =
+			fi_opx_rbt_value(opx_ep->reli_service->rx.rx_flow_rbtree, itr);
+
+		struct opx_flow_control_rccc_rx_state *rx_state = opx_flow_control_rccc_rx_state(flow);
+
+		if (rx_state->permission_contribution != 0u) {
+			reclaimed_flows++;
+			reclaimed_permissions += rx_state->permission_contribution;
+			opx_flow_control_rccc_ledger_release(scheduler, rx_state,
+							     (uint32_t) rx_state->permission_contribution);
+			rx_state->scheduler_state = OPX_FLOW_CONTROL_RCCC_SCHEDULER_QUARANTINED;
+		}
+		opx_flow_control_rccc_rx_flags_replace(scheduler, rx_state, OPX_FLOW_CONTROL_RCCC_RX_FLAG_RECLAIMED);
+		opx_flow_control_rccc_rx_slot_release(opx_ep, flow);
+	}
+	if (reclaimed_flows != 0u) {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_CTRL,
+			"RCCC teardown reclaimed %lu outstanding permissions across %lu flows\n",
+			(unsigned long) reclaimed_permissions, (unsigned long) reclaimed_flows);
+		FI_OPX_DEBUG_COUNTERS_INC_N(reclaimed_flows,
+					    opx_ep->debug_counters.flow_control.teardown_reclaimed_flows);
+		FI_OPX_DEBUG_COUNTERS_INC_N(reclaimed_permissions,
+					    opx_ep->debug_counters.flow_control.teardown_reclaimed_permissions);
+	}
+}
+
+/* DRR grant tier: occupancy-scaled Q16.16 accrual sets a bulk budget
+ * separate from the control-emission budget; each listed BOUND flow with
+ * unmet demand earns one quantum per visit and receives min(demand, deficit,
+ * ledger headroom, ring-share window headroom, budget).  Deficits carry
+ * across polls; cap-pinned flows do not bank deficit while awaiting relief. */
 static void opx_flow_control_rccc_rx_grant_pass(struct fi_opx_ep *opx_ep, uint64_t now_ns)
 {
-	struct opx_flow_control_rccc_scheduler *scheduler = opx_ep->flow_control_scheduler;
-	struct fi_opx_reliability_rx_flow      *flow;
-	__uint128_t				product;
-	uint64_t				elapsed_ns;
-	uint64_t				accrued;
-	uint64_t				bulk_budget;
+	struct opx_flow_control_rccc_scheduler	      *scheduler  = opx_ep->flow_control_scheduler;
+	const struct opx_flow_control_rccc_tx_profile *tx_profile = opx_flow_control_rccc_tx_profile_get();
+	struct fi_opx_reliability_rx_flow	      *flow;
+	__uint128_t				       product;
+	uint64_t				       elapsed_ns;
+	uint64_t				       accrued;
+	uint64_t				       bulk_budget;
+	uint64_t				       effective_ledger_bound;
+	uint32_t				       bound_flows;
+	uint32_t				       hot_flows;
+	uint32_t				       rate_q16;
+	uint32_t				       occupancy     = 0u;
+	uint32_t				       bypass_budget = 8u;
+	uint16_t				       grant_emit_budget;
+	bool					       occupancy_sample_fresh = false;
+	bool					       ledger_cap_active      = false;
+	bool					       congested;
 
 	if (scheduler == NULL) {
 		return;
 	}
+	assert(tx_profile != NULL);
+	grant_emit_budget = scheduler->profile.grant_emits;
+	assert(grant_emit_budget != 0u);
 	if (scheduler->accrual_last_ns == 0u) {
 		scheduler->accrual_last_ns = now_ns;
 		return;
 	}
-	elapsed_ns		   = now_ns - scheduler->accrual_last_ns;
+	elapsed_ns = now_ns - scheduler->accrual_last_ns;
+	/* Advance on every visit so releasing a stopped latch cannot accrue a catch-up burst. */
 	scheduler->accrual_last_ns = now_ns;
 	if (elapsed_ns > scheduler->profile.maximum_elapsed_ns) {
 		elapsed_ns = scheduler->profile.maximum_elapsed_ns;
 	}
-	product = (__uint128_t) elapsed_ns * scheduler->profile.minimum_packet_rate_q16_per_ns *
-		  OPX_FLOW_CONTROL_RCCC_Q16_ONE;
-	accrued				 = scheduler->accrual_remainder_q16 + (uint64_t) (product >> 16);
-	bulk_budget			 = accrued >> 16;
+	bound_flows =
+		scheduler->shared_ledger != NULL ?
+			atomic_load_explicit(&scheduler->shared_ledger->active_bound_flows, memory_order_relaxed) :
+			scheduler->active_bound_flows;
+	/* The hot-set sum-of-windows defense degenerates once
+	 * usable_capacity / hot_flows falls below window_cap_min: the floor then
+	 * admits window_cap_min * bound_flows outstanding permissions, which can
+	 * exceed the receive ring.  At the same high-fan-in gate used to exempt
+	 * np2/single-stream shapes from hot-set division, cap the aggregate ledger
+	 * at the usable ring so it restores Sigma(in-flight) <= usable_capacity.
+	 * This clamp only tightens the configured bound, including an explicit
+	 * user value; it never raises a smaller bound.  Context-sharing members do
+	 * share one physical receive ring, but their grant authorities use static
+	 * per-member shares while the shared atomic is accounting-only.  Applying
+	 * one member's full-ring cap independently would still permit one ring per
+	 * member, so a correct shared aggregate clamp is deferred.  The proven
+	 * 48-flow anomaly used non-shared contexts. */
+	effective_ledger_bound = scheduler->profile.max_outstanding_permissions;
+	if (scheduler->shared_ledger == NULL && bound_flows >= scheduler->profile.hot_min_flows &&
+	    effective_ledger_bound > scheduler->usable_capacity) {
+		effective_ledger_bound = scheduler->usable_capacity;
+		ledger_cap_active      = true;
+	}
+	if (!scheduler->occupancy_sampling_active) {
+		/* No sample consumed yet (sharing groups before the first
+		 * published sample arrives): full-rate accrual until the
+		 * sampler latches active, then staleness fails closed. */
+		rate_q16 = OPX_FLOW_CONTROL_RCCC_Q16_ONE;
+	} else if (scheduler->occupancy_sample_ns == 0u ||
+		   now_ns - scheduler->occupancy_sample_ns > scheduler->profile.telemetry_health_deadline_ns) {
+		/* Polling is required to reach this pass, so sampler expiry cannot trigger
+		 * the otherwise-required receive-context failure machinery here. */
+		rate_q16 = 0u;
+	} else {
+		occupancy_sample_fresh = true;
+		occupancy	       = scheduler->occupancy;
+		/* A stopped rate remains latched until a sample is strictly below low water. */
+		if (scheduler->rate_latched != 0u) {
+			if (occupancy < scheduler->low_water) {
+				scheduler->rate_latched = 0u;
+				rate_q16		= OPX_FLOW_CONTROL_RCCC_Q16_ONE;
+			} else {
+				rate_q16 = 0u;
+			}
+		} else if (occupancy >= scheduler->high_water) {
+			scheduler->rate_latched = 1u;
+			rate_q16		= 0u;
+		} else if (occupancy <= scheduler->low_water) {
+			rate_q16 = OPX_FLOW_CONTROL_RCCC_Q16_ONE;
+		} else {
+			rate_q16 = (uint32_t) ((((uint64_t) (scheduler->high_water - occupancy)) << 16) /
+					       (scheduler->high_water - scheduler->low_water));
+		}
+	}
+	if (scheduler->profile.duty_min_flows != 0u) {
+		if (scheduler->duty_state == OPX_FLOW_CONTROL_RCCC_DUTY_NORMAL) {
+			/* Shared samplers do not publish drain effort yet, so sharing
+			 * enters conservatively from the persistent crest latch alone. */
+			const bool drain_pressure =
+				scheduler->shared_ledger != NULL ?
+					scheduler->rate_latched != 0u :
+					scheduler->maxed_drain_streak >= scheduler->profile.duty_streak_k;
+			const bool congested = scheduler->rate_latched != 0u ||
+					       (occupancy_sample_fresh && occupancy >= scheduler->high_water);
+
+			if (drain_pressure && congested && bound_flows >= scheduler->profile.duty_min_flows) {
+				scheduler->duty_state	  = OPX_FLOW_CONTROL_RCCC_DUTY_DRAINING;
+				scheduler->drain_enter_ns = now_ns;
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.drain_entries);
+			}
+		} else {
+			/* Sustained arrival pressure makes consecutive quiet polls
+			 * unachievable because every visit maxes the drain bound.  The
+			 * permission floor already bounds unarrived traffic below low water.
+			 * The deadline is both the liveness escape and the duty-period bound:
+			 * a service-bound episode holds grants for at most one period so its
+			 * re-saturation burst stays small instead of accumulating over a
+			 * coarse long stop. */
+			const bool drained = scheduler->outstanding_permissions <= scheduler->profile.duty_drain_floor;
+			const bool forced  = now_ns - scheduler->drain_enter_ns > scheduler->profile.duty_deadline_ns;
+
+			if (drained) {
+				scheduler->duty_state = OPX_FLOW_CONTROL_RCCC_DUTY_NORMAL;
+			} else if (forced) {
+				scheduler->duty_state = OPX_FLOW_CONTROL_RCCC_DUTY_NORMAL;
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.drain_forced_exits);
+			}
+		}
+	}
+	accrued = scheduler->accrual_remainder_q16;
+	if (scheduler->duty_state != OPX_FLOW_CONTROL_RCCC_DUTY_DRAINING && rate_q16 != 0u) {
+		product = (__uint128_t) elapsed_ns * scheduler->profile.minimum_packet_rate_q16_per_ns * rate_q16;
+		accrued += (uint64_t) (product >> 16);
+	}
+	bulk_budget = scheduler->duty_state == OPX_FLOW_CONTROL_RCCC_DUTY_DRAINING ? 0u : accrued >> 16;
 	scheduler->accrual_remainder_q16 = accrued & UINT64_C(0xFFFF);
+	/* Cold-ramp + hot-set governor: grants are monotonic within an epoch,
+	 * so the initial grant arithmetic is the only effective incast defense
+	 * (both fixed big ceilings and reactive scaling were falsified on
+	 * hardware - by the time any signal fires the ring-dwarfing window sum
+	 * is already granted).  Every flow's private ceiling starts small and
+	 * ramps toward fmax while cold; only flows measured consuming real
+	 * windows join the hot set and split the usable ring, so tiny-demand
+	 * collectives at high peer count never see division and the
+	 * micro-grant control storms cannot re-form.  Congestion freezes cold
+	 * ramps; the hot share bounds Sigma(hot windows) <= usable ring by
+	 * construction, independent of the trough-biased occupancy sampler.
+	 * Drain pressure stays out of this predicate: a sustained two-party
+	 * stream maxes every poll's drain bound while the ring is healthy, and
+	 * slamming on it pinned np2 Biband at the minimum window (-44%). */
+	congested = scheduler->rate_latched != 0u || (occupancy_sample_fresh && occupancy >= scheduler->high_water);
+	if (scheduler->window_epoch_start_ns == 0u) {
+		scheduler->window_epoch_start_ns = now_ns;
+	} else if (now_ns - scheduler->window_epoch_start_ns >= scheduler->profile.window_epoch_ns) {
+		/* Control-storm detector: standalone credit-request arrivals
+		 * outnumbering serviced data packets is the retry-storm
+		 * signature - healthy senders emit one request per exhausted
+		 * window, so requests are structurally bounded by
+		 * consumption/window (15-to-1 measures ~24 requests against
+		 * ~1500 consumed per epoch), while a micro-window storm
+		 * measured 187M standalone requests against ~0.2 consumed
+		 * per flow-epoch at np=256.  While storm mode holds, the
+		 * per-flow backlog ramp freeze is bypassed so ceilings can
+		 * grow to dissolve the storm; two-epoch hysteresis on both
+		 * edges keeps a transient receiver stall from flapping it. */
+		const bool storm_raw = scheduler->request_epoch >= scheduler->profile.storm_request_floor &&
+				       scheduler->request_epoch > scheduler->consumed_total_epoch;
+
+		if (storm_raw) {
+			scheduler->storm_off_streak = 0u;
+			if (scheduler->storm_on_streak != UINT8_MAX) {
+				scheduler->storm_on_streak++;
+			}
+			if (scheduler->storm_on_streak >= 2u) {
+				scheduler->storm_mode = 1u;
+			}
+		} else {
+			scheduler->storm_on_streak = 0u;
+			if (scheduler->storm_off_streak != UINT8_MAX) {
+				scheduler->storm_off_streak++;
+			}
+			if (scheduler->storm_off_streak >= 2u) {
+				scheduler->storm_mode = 0u;
+			}
+		}
+		scheduler->request_epoch	 = 0u;
+		scheduler->consumed_total_epoch	 = 0u;
+		scheduler->window_epoch_start_ns = now_ns;
+		scheduler->window_epoch++;
+	}
+	hot_flows = scheduler->shared_ledger != NULL ?
+			    atomic_load_explicit(&scheduler->shared_ledger->hot_flows, memory_order_relaxed) :
+			    scheduler->hot_flows;
+	FI_OPX_DEBUG_COUNTERS_MAX_OF(opx_ep->debug_counters.flow_control.hot_flows_high_watermark,
+				     (uint64_t) hot_flows);
+	if (congested) {
+		scheduler->hot_ceiling = scheduler->profile.window_cap_min;
+	} else if (hot_flows < scheduler->profile.hot_min_flows) {
+		/* At low fan-in the fair share drops below the loopback BDP
+		 * and taxes sustained bidirectional traffic (np2 Biband
+		 * measured -46% at share = usable/2) while the occupancy
+		 * curve already governs so few senders; division starts at
+		 * the same fan-in the duty-cycler requires. */
+		scheduler->hot_ceiling = tx_profile->fmax;
+	} else {
+		scheduler->hot_ceiling = scheduler->usable_capacity / hot_flows;
+		if (scheduler->hot_ceiling < scheduler->profile.window_cap_min) {
+			scheduler->hot_ceiling = scheduler->profile.window_cap_min;
+		}
+		if (scheduler->hot_ceiling > tx_profile->fmax) {
+			scheduler->hot_ceiling = tx_profile->fmax;
+		}
+	}
 	for (flow = opx_ep->flow_control_rx_work_head; flow != NULL; flow = flow->flow_control_work_next) {
 		struct opx_flow_control_rccc_rx_state *rx_state = opx_flow_control_rccc_rx_state(flow);
-		uint64_t			       ledger_space =
-			scheduler->profile.max_outstanding_permissions - scheduler->outstanding_permissions;
+		uint64_t ledger_space = effective_ledger_bound > scheduler->outstanding_permissions ?
+						effective_ledger_bound - scheduler->outstanding_permissions :
+						0u;
 		uint64_t demand;
 		uint64_t grant_count;
+		uint64_t window_headroom;
+		uint64_t flow_ceiling;
 
+		if (grant_emit_budget == 0u) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.grant_pass_budget_breaks);
+			break;
+		}
 		opx_flow_control_rccc_rx_quarantine_check(opx_ep, flow, now_ns);
-		if (bulk_budget == 0u || ledger_space == 0u) {
+		if (ledger_space == 0u) {
+			if (ledger_cap_active) {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.ledger_cap_clamps);
+			}
 			break;
 		}
 		if (rx_state->scheduler_state != OPX_FLOW_CONTROL_RCCC_SCHEDULER_BOUND ||
 		    rx_state->target == rx_state->grant) {
 			continue;
 		}
+#ifndef NDEBUG
+		assert(rx_state->permission_contribution ==
+		       ((rx_state->grant - rx_state->observed - rx_state->retired_accepted) &
+			OPX_FLOW_CONTROL_RCCC_SERIAL_MASK));
+#endif
 		demand = (rx_state->target - rx_state->grant) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
 		if (demand >= OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE) {
 			opx_ep->reli_service->flow_control_feedback_counters.invalid++;
 			continue;
 		}
-		assert(rx_state->drr_deficit <= INT64_MAX - (int64_t) scheduler->profile.drr_quantum);
-		rx_state->drr_deficit += (int64_t) scheduler->profile.drr_quantum;
-		grant_count = demand;
-		if (grant_count > (uint64_t) rx_state->drr_deficit) {
+		if ((uint32_t) demand > rx_state->demand_peak_epoch) {
+			rx_state->demand_peak_epoch = (uint32_t) demand;
+		}
+		if (rx_state->window_epoch_stamp != scheduler->window_epoch) {
+			opx_flow_control_rccc_rx_window_epoch_update(
+				opx_ep, scheduler, rx_state, scheduler->window_epoch - rx_state->window_epoch_stamp,
+				congested);
+			rx_state->window_epoch_stamp = scheduler->window_epoch;
+		}
+		flow_ceiling	= rx_state->hot != 0u ? scheduler->hot_ceiling : rx_state->window_ceiling;
+		window_headroom = flow_ceiling > rx_state->permission_contribution ?
+					  flow_ceiling - rx_state->permission_contribution :
+					  0u;
+		if (window_headroom == 0u) {
+			continue;
+		}
+		if (scheduler->duty_state == OPX_FLOW_CONTROL_RCCC_DUTY_DRAINING) {
+			if (bypass_budget == 0u || demand > 4u || rx_state->permission_contribution > 4u) {
+				continue;
+			}
+			grant_count = MIN(demand, UINT64_C(4));
+			bypass_budget--;
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.drain_bypass_grants);
+		} else {
+			if (bulk_budget == 0u) {
+				break;
+			}
+			assert(rx_state->drr_deficit <= INT64_MAX - (int64_t) scheduler->profile.drr_quantum);
+			rx_state->drr_deficit += (int64_t) scheduler->profile.drr_quantum;
+			grant_count = demand;
+		}
+		if (scheduler->duty_state != OPX_FLOW_CONTROL_RCCC_DUTY_DRAINING &&
+		    grant_count > (uint64_t) rx_state->drr_deficit) {
 			grant_count = (uint64_t) rx_state->drr_deficit;
 		}
 		if (grant_count > ledger_space) {
 			grant_count = ledger_space;
 		}
-		if (grant_count > bulk_budget) {
+		if (grant_count > window_headroom) {
+			grant_count = window_headroom;
+		}
+		if (scheduler->duty_state != OPX_FLOW_CONTROL_RCCC_DUTY_DRAINING && grant_count > bulk_budget) {
 			grant_count = bulk_budget;
 		}
 		if (grant_count == 0u) {
@@ -2125,10 +3173,30 @@ static void opx_flow_control_rccc_rx_grant_pass(struct fi_opx_ep *opx_ep, uint64
 			opx_flow_control_rccc_shared_ledger_charge(scheduler, grant_count);
 		}
 		rx_state->grant = opx_flow_control_rccc_serial_add(rx_state->grant, (uint32_t) grant_count);
-		rx_state->drr_deficit -= (int64_t) grant_count;
+		if (rx_state->grant == rx_state->target) {
+			opx_flow_control_rccc_demand_active_dec(scheduler);
+		}
+		if (scheduler->duty_state != OPX_FLOW_CONTROL_RCCC_DUTY_DRAINING) {
+			rx_state->drr_deficit -= (int64_t) grant_count;
+			bulk_budget -= grant_count;
+		}
 		opx_flow_control_rccc_ledger_charge(scheduler, rx_state, (uint32_t) grant_count);
-		bulk_budget -= grant_count;
-		rx_state->flags |= OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING;
+		opx_flow_control_rccc_rx_pending_set(scheduler, rx_state,
+						     OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING);
+		if (opx_flow_control_rccc_rx_emit_pending(
+			    opx_ep, flow, OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING) == OPX_FLOW_CONTROL_OK) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.grant_emit_fused);
+			grant_emit_budget--;
+			if (grant_emit_budget == 0u) {
+				/* Stop minting when the fused delivery budget is exhausted;
+				 * residual work must reach the wire before more grants exist. */
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.grant_pass_budget_breaks);
+				break;
+			}
+		} else {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.grant_emit_deferred);
+			break;
+		}
 	}
 }
 
@@ -2136,15 +3204,22 @@ void opx_flow_control_rccc_control_sweep(struct fi_opx_ep *opx_ep, uint64_t now_
 {
 	uint16_t budget = opx_flow_control_rccc_max_control_emits_get();
 
-	if (opx_ep == NULL || opx_flow_control_rccc_tx_profile_get() == NULL || budget == 0u) {
+	assert(opx_ep != NULL);
+	assert(opx_flow_control_rccc_tx_profile_get() != NULL);
+	if (budget == 0u) {
 		return;
 	}
 	opx_flow_control_rccc_shared_release_fold(opx_ep->flow_control_scheduler);
 	opx_flow_control_rccc_tx_sweep_pass(opx_ep, now_ns, true, &budget);
 	opx_flow_control_rccc_rx_sweep_pass(opx_ep, OPX_FLOW_CONTROL_RCCC_RX_FLAG_RESET_ACK_PENDING, &budget);
+	/* Leftovers from prior sweeps must deliver before new grants are minted. */
+	if (opx_ep->flow_control_scheduler->feedback_pending_count != 0u) {
+		opx_flow_control_rccc_rx_sweep_pass(opx_ep, OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING, &budget);
+	}
 	opx_flow_control_rccc_rx_grant_pass(opx_ep, now_ns);
-	opx_flow_control_rccc_rx_sweep_pass(opx_ep, OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING, &budget);
-	opx_flow_control_rccc_rx_sweep_pass(opx_ep, OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING, &budget);
+	if (opx_ep->flow_control_scheduler->reject_pending_count != 0u) {
+		opx_flow_control_rccc_rx_sweep_pass(opx_ep, OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING, &budget);
+	}
 	opx_flow_control_rccc_tx_sweep_pass(opx_ep, now_ns, false, &budget);
 #ifndef NDEBUG
 	opx_flow_control_rccc_ledger_reconcile(opx_ep);
@@ -2167,19 +3242,25 @@ enum opx_flow_control_result opx_flow_control_tx_admit_reserve_single(struct fi_
 	assert(opx_ep != NULL);
 	assert(flow != NULL);
 	assert(reservation_record_out != NULL);
+	assert(profile != NULL);
 	*reservation_record_out = NULL;
-	if (profile == NULL) {
-		return OPX_FLOW_CONTROL_FAULT;
-	}
-	tx_state = opx_flow_control_rccc_tx_state(flow);
-	result	 = opx_flow_control_rccc_tx_demand(tx_state, profile, 1u);
+	tx_state		= opx_flow_control_rccc_tx_state(flow);
+	result			= opx_flow_control_rccc_tx_demand(tx_state, profile, 1u);
 	if (result != OPX_FLOW_CONTROL_FAULT && opx_flow_control_rccc_tx_work_needed(tx_state)) {
 		opx_flow_control_rccc_tx_work_enqueue(opx_ep, flow);
 	}
 	if (result != OPX_FLOW_CONTROL_OK) {
 		return result;
 	}
-	assert(tx_state->available_credits != 0u);
+	/* OK with zero credits is exactly the fail-open lane: the packet
+	 * admits without touching the credit ledger (identical to the
+	 * FLOW_CONTROL=none baseline) via the sentinel record every
+	 * registration/settle/cancel consumer no-ops on. */
+	if (OFI_UNLIKELY(tx_state->available_credits == 0u)) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.ungoverned_admissions);
+		*reservation_record_out = OPX_FLOW_CONTROL_UNGOVERNED_RECORD;
+		return OPX_FLOW_CONTROL_OK;
+	}
 	tx_state->available_credits--;
 	tx_state->held_credits++;
 	*reservation_record_out = OPX_FLOW_CONTROL_SINGLE_TAG(flow);
@@ -2203,6 +3284,12 @@ enum opx_flow_control_result opx_flow_control_tx_reserve(struct fi_opx_ep		   *o
 	*reservation_record_out = NULL;
 	tx_state		= opx_flow_control_rccc_tx_state(flow);
 	if (tx_state->available_credits < requested_packets) {
+		if (OFI_UNLIKELY((tx_state->request_retry.progress_flags & OPX_FLOW_CONTROL_RCCC_RETRY_UNGOVERNED) !=
+				 0u)) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.ungoverned_admissions);
+			*reservation_record_out = OPX_FLOW_CONTROL_UNGOVERNED_RECORD;
+			return OPX_FLOW_CONTROL_OK;
+		}
 		return OPX_FLOW_CONTROL_DEFER;
 	}
 	assert(opx_ep->flow_control_reservation_pool != NULL);
@@ -2234,6 +3321,9 @@ void opx_flow_control_tx_reduce_reservation(struct fi_opx_ep *opx_ep, void *rese
 	struct opx_flow_control_rccc_tx_state		*tx_state;
 
 	assert(record != NULL);
+	if (OPX_FLOW_CONTROL_IS_UNGOVERNED(reservation_record)) {
+		return;
+	}
 	opx_flow_control_rccc_reservation_validate(record, opx_ep, record->generation);
 	tx_state = opx_flow_control_rccc_tx_state(record->flow_identity);
 	opx_flow_control_rccc_reservation_reduce(opx_ep, tx_state, record, record->generation, new_count);
@@ -2246,6 +3336,9 @@ void opx_flow_control_tx_register_packet(struct fi_opx_ep *opx_ep, void *reserva
 	bool						 first_commit;
 
 	assert(record != NULL);
+	if (OPX_FLOW_CONTROL_IS_UNGOVERNED(reservation_record)) {
+		return;
+	}
 	if (OPX_FLOW_CONTROL_IS_SINGLE(reservation_record)) {
 		tx_state = opx_flow_control_rccc_tx_state(OPX_FLOW_CONTROL_SINGLE_FLOW(reservation_record));
 		assert(tx_state->held_credits != 0u);
@@ -2297,6 +3390,9 @@ void opx_flow_control_tx_cancel(struct fi_opx_ep *opx_ep, void *reservation_reco
 	struct opx_flow_control_rccc_tx_state		*tx_state;
 
 	assert(record != NULL);
+	if (OPX_FLOW_CONTROL_IS_UNGOVERNED(reservation_record)) {
+		return;
+	}
 	if (OPX_FLOW_CONTROL_IS_SINGLE(reservation_record)) {
 		tx_state = opx_flow_control_rccc_tx_state(OPX_FLOW_CONTROL_SINGLE_FLOW(reservation_record));
 		assert(tx_state->held_credits != 0u);

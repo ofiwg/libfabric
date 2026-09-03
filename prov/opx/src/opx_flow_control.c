@@ -99,6 +99,7 @@ static int __attribute__((cold)) opx_flow_control_rccc_profile_configure(void)
 		.request_retry_initial_us    = OPX_FLOW_CONTROL_RCCC_RETRY_DEFAULT_US,
 		.retirement_retry_initial_us = OPX_FLOW_CONTROL_RCCC_RETRY_DEFAULT_US,
 		.reset_retry_initial_us	     = OPX_FLOW_CONTROL_RCCC_RETRY_DEFAULT_US,
+		.retry_cap_us		     = OPX_FLOW_CONTROL_RCCC_RETRY_CAP_US_DEFAULT,
 	};
 	uint64_t value;
 
@@ -124,6 +125,7 @@ static int __attribute__((cold)) opx_flow_control_rccc_profile_configure(void)
 					    retirement_retry_initial_us, UINT16_MAX);
 	OPX_FLOW_CONTROL_RCCC_PROFILE_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_RESET_RETRY_INITIAL_US_", reset_retry_initial_us,
 					    UINT16_MAX);
+	OPX_FLOW_CONTROL_RCCC_PROFILE_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_RETRY_CAP_US_", retry_cap_us, UINT16_MAX);
 #undef OPX_FLOW_CONTROL_RCCC_PROFILE_PARSE
 	if (opx_flow_control_rccc_parse_u64("_FI_OPX_FLOW_CONTROL_RCCC_CONTROL_HEADROOM_", 8u, &value) != FI_SUCCESS) {
 		return -FI_EINVAL;
@@ -145,43 +147,86 @@ static int __attribute__((cold)) opx_flow_control_rccc_profile_configure(void)
 		return -FI_EINVAL;
 	}
 	opx_flow_control_rccc_max_control_emits = (uint16_t) value;
-	if (!opx_flow_control_rccc_tx_profile_is_valid(&profile) || profile.ffirst == 0u ||
-	    profile.fmax < OPX_FLOW_CONTROL_RCCC_MAX_BATCH_REQUEST) {
+	if (opx_flow_control_rccc_parse_u64("_FI_OPX_FLOW_CONTROL_RCCC_GRANT_EMITS_", 8u, &value) != FI_SUCCESS ||
+	    value == 0u || value > UINT16_MAX) {
+		return -FI_EINVAL;
+	}
+	if (!opx_flow_control_rccc_tx_profile_is_valid(&profile) || profile.ffirst == 0u) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-			"Invalid RCCC TX profile: ffirst=%u fmax=%u (ffirst must be nonzero and <= fmax; fmax must be >= %u)\n",
-			profile.ffirst, profile.fmax, OPX_FLOW_CONTROL_RCCC_MAX_BATCH_REQUEST);
+			"Invalid RCCC TX profile: ffirst=%u fmax=%u (ffirst must be nonzero and <= fmax)\n",
+			profile.ffirst, profile.fmax);
 		return -FI_EINVAL;
 	}
 
-	/* Scheduler geometry.  Every value is validated and invalid geometry
-	 * fails RCCC initialization closed.  The occupancy input is synthetic
-	 * full-rate (no hysteretic occupancy curve yet), so the accrual rate
-	 * constant only needs to keep the grant tier from starving the
-	 * per-poll bulk budget. */
+	/* Capacity geometry is completed from the endpoint's receive-header
+	 * queue at enable.  Non-sharing RCCC endpoints sample occupancy after
+	 * each RHQ drain; context sharing remains sampler-inactive at full rate.
+	 * Tracked/decision pools are append-only with sticky per-epoch rejects:
+	 * the 65th distinct peer flow at the old tracked default of 64
+	 * livelocked 256-rank jobs in a permanent CREDIT_REQUEST/CAPACITY_REJECT
+	 * storm.  1024 tracked flows covers realistic per-receiver peer counts;
+	 * decisions/rejects sized above it because rejects consume both pools. */
 	struct opx_flow_control_rccc_scheduler_profile scheduler_profile = {
-		.max_outstanding_permissions = UINT64_C(65536),
-		/* Measured: quantum 1024 halves the large bidirectional
-		 * bandwidth gap at 2-4 MB; 256 quantized a hot flow's window
-		 * fill across multiple grant-pass visits. */
-		.drr_quantum			= UINT64_C(1024),
+		/* Zero means derive per endpoint; an explicit zero override is invalid. */
+		.max_outstanding_permissions	= 0u,
+		.drr_quantum			= 0u,
 		.quarantine_deadline_ns		= UINT64_C(100000000),
+		.telemetry_health_deadline_ns	= UINT64_C(10000000),
 		.minimum_packet_rate_q16_per_ns = UINT64_C(65536),
 		.maximum_elapsed_ns		= UINT64_C(1000000),
-		.tracked_capacity		= 64u,
-		.decision_capacity		= 1024u,
-		.reject_capacity		= 1024u,
+		.tracked_capacity		= 1024u,
+		.decision_capacity		= 4096u,
+		.reject_capacity		= 4096u,
+		.capacity_guard			= 16u,
+		.grant_emits			= (uint16_t) value,
+		/* Cold-ramp + hot-set window governor.  Grants are monotonic
+		 * within an epoch, so the first grant IS the admission policy:
+		 * every flow starts at window_cap_min and doubles per clean
+		 * window epoch toward fmax while cold (a flow that never
+		 * consumes its window keeps growing - collectives), while a
+		 * flow consuming at least half its ceiling (and the absolute
+		 * floor, to keep tiny windows from qualifying) for
+		 * hot_entry_streak consecutive epochs is clamped to the usable
+		 * ring divided by the hot count (sustained incast).  Division
+		 * therefore never applies to tiny-demand flows - the
+		 * micro-grant control storms that pure divisors caused at high
+		 * peer counts cannot re-form.  The epoch is time-based and
+		 * must be long enough for a saturating flow's per-epoch
+		 * consumption to clear the absolute floor at the receiver's
+		 * per-flow service rate (measured: ~100K pkts/s/flow at
+		 * 15-to-1 loopback, so 1 ms sees ~100); shorter epochs let the
+		 * cold ramp reach fmax before any flow can classify hot.
+		 * Entry is fast and exit slow so phase boundaries do not flap
+		 * membership; idle decay halves an unused ceiling so a
+		 * workload flip cannot ride a stale fmax ceiling for long. */
+		.window_cap_min	     = 64u,
+		.window_epoch_ns     = UINT64_C(1000000),
+		.hot_entry_streak    = 2u,
+		.hot_exit_streak     = 4u,
+		.hot_absolute_floor  = 32u,
+		.hot_consumed_floor  = 8u,
+		.hot_min_flows	     = 4u,
+		.storm_request_floor = 256u,
+		.idle_decay_streak   = 16u,
+		.duty_min_flows	     = 4u,
+		.duty_streak_k	     = 3u,
+		.duty_drain_floor    = 0u,
+		.duty_deadline_ns    = UINT64_C(1000000),
 	};
-#define OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE(name, field, limit)                                                 \
-	do {                                                                                                      \
-		if (opx_flow_control_rccc_parse_u64(name, scheduler_profile.field, &value) != FI_SUCCESS) {       \
-			return -FI_EINVAL;                                                                        \
-		}                                                                                                 \
-		if (value == 0u || value > (limit)) {                                                             \
-			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC, "%s value %lu outside valid range [1, %lu]\n", \
-				name, value, (uint64_t) (limit));                                                 \
-			return -FI_EINVAL;                                                                        \
-		}                                                                                                 \
-		scheduler_profile.field = value;                                                                  \
+#define OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE(name, field, limit)                                   \
+	do {                                                                                        \
+		if (getenv(name) != NULL) {                                                         \
+			if (opx_flow_control_rccc_parse_u64(name, 0u, &value) != FI_SUCCESS) {      \
+				return -FI_EINVAL;                                                  \
+			}                                                                           \
+			if (value == 0u || value > (limit)) {                                       \
+				FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,                          \
+					"%s value %lu outside valid range [1, %lu]\n", name, value, \
+					(uint64_t) (limit));                                        \
+				return -FI_EINVAL;                                                  \
+			}                                                                           \
+			scheduler_profile.field = value;                                            \
+		}                                                                                   \
 	} while (0)
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_MAX_OUTSTANDING_", max_outstanding_permissions,
 					      (uint64_t) OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE - 1u);
@@ -189,17 +234,50 @@ static int __attribute__((cold)) opx_flow_control_rccc_profile_configure(void)
 					      (uint64_t) OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE - 1u);
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_QUARANTINE_NS_", quarantine_deadline_ns,
 					      UINT64_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_TELEMETRY_DEADLINE_NS_",
+					      telemetry_health_deadline_ns, UINT64_MAX);
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_TRACKED_", tracked_capacity, UINT32_MAX);
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_DECISIONS_", decision_capacity, UINT32_MAX);
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_REJECTS_", reject_capacity, UINT32_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_WINDOW_CAP_MIN_", window_cap_min, UINT32_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_WINDOW_EPOCH_NS_", window_epoch_ns,
+					      UINT64_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_HOT_ENTRY_STREAK_", hot_entry_streak,
+					      UINT8_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_HOT_EXIT_STREAK_", hot_exit_streak, UINT8_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_HOT_ABSOLUTE_FLOOR_", hot_absolute_floor,
+					      UINT32_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_HOT_CONSUMED_FLOOR_", hot_consumed_floor,
+					      UINT32_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_HOT_MIN_FLOWS_", hot_min_flows, UINT32_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_STORM_REQUEST_FLOOR_", storm_request_floor,
+					      UINT32_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_IDLE_DECAY_STREAK_", idle_decay_streak,
+					      UINT8_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_DUTY_STREAK_K_", duty_streak_k, UINT32_MAX);
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE("_FI_OPX_FLOW_CONTROL_RCCC_DUTY_DEADLINE_NS_", duty_deadline_ns,
+					      UINT64_MAX);
 #undef OPX_FLOW_CONTROL_RCCC_SCHEDULER_PARSE
+	if (opx_flow_control_rccc_parse_u64("_FI_OPX_FLOW_CONTROL_RCCC_DUTY_MIN_FLOWS_", 4u, &value) != FI_SUCCESS ||
+	    value > UINT32_MAX) {
+		return -FI_EINVAL;
+	}
+	scheduler_profile.duty_min_flows = (uint32_t) value;
+	if (opx_flow_control_rccc_parse_u64("_FI_OPX_FLOW_CONTROL_RCCC_DUTY_DRAIN_FLOOR_", 0u, &value) != FI_SUCCESS) {
+		return -FI_EINVAL;
+	}
+	scheduler_profile.duty_drain_floor = value;
+	if (scheduler_profile.window_cap_min < 8u ||
+	    opx_flow_control_rccc_parse_u64("_FI_OPX_FLOW_CONTROL_RCCC_CAPACITY_GUARD_", 16u, &value) != FI_SUCCESS ||
+	    value > UINT32_MAX) {
+		return -FI_EINVAL;
+	}
+	scheduler_profile.capacity_guard = (uint32_t) value;
 	if (scheduler_profile.decision_capacity < profile.ffirst ||
-	    scheduler_profile.reject_capacity < profile.ffirst ||
-	    scheduler_profile.drr_quantum > scheduler_profile.max_outstanding_permissions) {
+	    scheduler_profile.reject_capacity < profile.ffirst) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
-			"Invalid RCCC scheduler geometry: decisions=%u rejects=%u (each must be >= ffirst %u), quantum=%lu (must be <= max outstanding %lu)\n",
-			scheduler_profile.decision_capacity, scheduler_profile.reject_capacity, profile.ffirst,
-			scheduler_profile.drr_quantum, scheduler_profile.max_outstanding_permissions);
+			"Invalid RCCC scheduler geometry: decisions=%u rejects=%u (each must be >= ffirst %u)\n",
+			scheduler_profile.decision_capacity, scheduler_profile.reject_capacity, profile.ffirst);
 		return -FI_EINVAL;
 	}
 	opx_flow_control_rccc_scheduler_profile = scheduler_profile;

@@ -62,6 +62,9 @@
 #include "fi_opx_reliability.h"
 #include "rdma/opx/fi_opx_flight_recorder.h"
 #include "rdma/opx/opx_tracer.h"
+#ifdef OPX_TELEMETRY_ORACLE
+#include "rdma/opx/opx_telemetry_oracle.h"
+#endif
 
 #define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS	    (fi_opx_global.rcvhdrq_entry_dws)
 #define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS_MIN (0x20ul)
@@ -126,6 +129,10 @@ static void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep, const union opx
 	 * Coalesce a ping op if we find it, otherwise allocate a ping op and add it as a new item to the hash of
 	 * pending ops
 	 */
+	if (opx_ep_flow_control_active(opx_ep)) {
+		(void) opx_flow_control_piggyback_read(OPX_FLOW_CONTROL_CARRIER_RELIABILITY_PING, opx_ep, hdr);
+	}
+
 	if (ping_op) {
 		ping_op->psn_count_coalesce = MAX(ping_op->psn_count_coalesce, psn_count);
 	} else {
@@ -159,6 +166,9 @@ void fi_opx_hfi1_handle_ud_ack(struct fi_opx_ep *opx_ep, const union opx_hfi1_pa
 	const uint64_t					psn_start = hdr->service.psn_start;
 
 	fi_opx_hfi1_rx_reliability_ack(&opx_ep->ep_fid, opx_ep->reli_service, &key, psn_count, psn_start);
+	if (opx_ep_flow_control_active(opx_ep)) {
+		(void) opx_flow_control_piggyback_read(OPX_FLOW_CONTROL_CARRIER_RELIABILITY_ACK, opx_ep, hdr);
+	}
 }
 
 __OPX_FORCE_INLINE__
@@ -283,10 +293,7 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep, uint64_t *p_rh
 									    pkt_tx_index, psn, &flow, primary_slid, dlid);
 
 	if (OFI_LIKELY(rc == OPX_RELIABILITY_SUCCESS)) {
-		/* The reservation pool is non-NULL only on RCCC endpoints, so
-		 * the NULL check is the runtime flow-control gate. */
-		if (OFI_UNLIKELY(opx_ep->flow_control_reservation_pool != NULL) &&
-		    opx_flow_control_rx_packet_governed(opcode, hdr)) {
+		if (opx_ep_flow_control_active(opx_ep) && opx_flow_control_rx_packet_governed(opcode, hdr)) {
 			opx_flow_control_rx_first_accept(opx_ep, flow, (uint32_t) (psn & MAX_PSN));
 		}
 		return -1;
@@ -1224,8 +1231,89 @@ unsigned opx_process_soft_rx_q(struct fi_opx_ep *opx_ep, uint8_t subctxt, const 
 	return 0; /* zero packets were processed */
 }
 
+/*
+ * Receive header queue (RHQ) backlog sampler.
+ *
+ * Speculative RHF-sequence look-ahead from the consumer head: counts
+ * already-written-but-undrained ring entries without consuming packets and
+ * without reading a CSR. Entry validity uses the same criterion the consumer
+ * poll applies (OPX_RHF_SEQ_MATCH), so the count is exactly the number of
+ * packets the next poll pass could accept. Returns backlog depth in ring
+ * entries (0..elemcnt); free slots = elemcnt - backlog. Scans at most elemcnt
+ * entries so backlog and elemcnt share scale.
+ *
+ * Cost is one volatile 64-bit load (one cacheline at the 128-byte entry
+ * stride) per backlogged entry, bounded by elemcnt. Sampled after a drain,
+ * the expected cost is a single mismatching load.
+ *
+ * Ownership: reads rx->state.hdrq.{head,rhf_seq}, which this endpoint owns
+ * exclusively whenever context sharing is off. HFISVC does not affect that
+ * ownership: the service moves bulk data service-side and never consumes from
+ * or perturbs the user receive context, and its RTS/CTS control packets ride
+ * the RHQ as ordinary governed traffic, so the sampler remains valid with
+ * HFISVC enabled. Under context sharing the hardware ring head/seq live in
+ * shd_ctx.hwcontext_ctrl and belong to the RHQ-lock holder; a sharing-group
+ * caller would have to hold that lock and sample the shared state instead.
+ *
+ * This is a software ground-truth occupancy source for receive-side
+ * flow-control telemetry: unlike sender-side credit accounting it observes
+ * everything physically occupying the ring, including control traffic, NACK
+ * replays, and receiver-stall queue growth. It has no callers on the NONE
+ * path.
+ */
 __OPX_FORCE_INLINE__
-void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
+uint32_t opx_hfi1_sample_rx_backlog_from(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask,
+					 const enum opx_hfi1_type hfi1_type, const uint64_t hdrq_head,
+					 const uint64_t hdrq_rhf_seq)
+{
+	const uint32_t elemcnt	= opx_ep->hfi->info.rxe.hdrq.elemcnt;
+	const uint32_t elemlast = opx_ep->hfi->info.rxe.hdrq.elemlast;
+
+	/* The consumer head is stored un-wrapped: after the ring's last entry
+	 * is consumed it equals elemlast + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS,
+	 * one entry PAST the end of the RHF array. Mirror the read-time
+	 * normalization fi_opx_hfi1_poll_once() applies (mask when a
+	 * compile-time mask is selected, compare against elemlast otherwise) —
+	 * without it the first speculative RHF load dereferences past the ring
+	 * mapping and faults when the adjacent page is unmapped. */
+	uint64_t spec_offset;
+	if (hdrq_mask != FI_OPX_HDRQ_MASK_RUNTIME) {
+		assert(hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
+		spec_offset = hdrq_head & hdrq_mask;
+	} else {
+		spec_offset = (hdrq_head > elemlast) ? 0 : hdrq_head;
+	}
+	uint64_t spec_seq = hdrq_rhf_seq;
+
+	uint32_t backlog = 0;
+
+	for (uint32_t i = 0; i < elemcnt; ++i) {
+		const volatile uint64_t rhf = *(volatile uint64_t *) (opx_ep->rx->hdrq.rhf_base + spec_offset);
+		if (!OPX_RHF_SEQ_MATCH(spec_seq, rhf, hfi1_type)) {
+			break;
+		}
+		backlog++;
+		spec_seq = OPX_RHF_SEQ_INCREMENT(spec_seq, hfi1_type);
+		if (hdrq_mask != FI_OPX_HDRQ_MASK_RUNTIME) {
+			spec_offset = (spec_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS) & hdrq_mask;
+		} else {
+			spec_offset = (spec_offset >= elemlast) ? 0 : (spec_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS);
+		}
+	}
+
+	return backlog;
+}
+
+__OPX_FORCE_INLINE__
+uint32_t opx_hfi1_sample_rx_backlog(struct fi_opx_ep *opx_ep, const uint64_t hdrq_mask,
+				    const enum opx_hfi1_type hfi1_type)
+{
+	return opx_hfi1_sample_rx_backlog_from(opx_ep, hdrq_mask, hfi1_type, opx_ep->rx->state.hdrq.head,
+					       opx_ep->rx->state.hdrq.rhf_seq);
+}
+
+__OPX_FORCE_INLINE__
+bool opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask,
 		       const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -1233,6 +1321,7 @@ void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliab
 	static const unsigned hfi1_poll_max   = 256;
 	unsigned	      hfi1_poll_count = 0;
 	unsigned	      packets	      = 0;
+	bool		      drain_maxed     = false;
 
 #if HAVE_HFISVC
 	uint32_t start_rdma_read_count[OPX_MAX_TX_CONTEXTS];
@@ -1267,16 +1356,39 @@ void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliab
 				packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask,
 								hfi1_type, OPX_CTX_SHARING_ON);
 			} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
+			drain_maxed = packets > 0 && hfi1_poll_count >= hfi1_poll_max;
+			/* Post-drain occupancy sample while the RHQ lock is
+			 * already held: the shared head/seq are only coherent
+			 * under this lock, and the cadence gate (deadline/10)
+			 * bounds the scan cost to one member per interval. */
+			if (opx_ep->flow_control_scheduler != NULL) {
+				uint64_t sample_mono_ns;
+				if (opx_flow_control_rccc_shared_sample_due(opx_ep->flow_control_scheduler,
+									    &sample_mono_ns)) {
+					opx_flow_control_rccc_shared_sample_publish(
+						opx_ep->flow_control_scheduler,
+						opx_hfi1_sample_rx_backlog_from(
+							opx_ep, hdrq_mask, hfi1_type,
+							opx_ep->rx->shd_ctx.hwcontext_ctrl->hdrq_head,
+							opx_ep->rx->shd_ctx.hwcontext_ctrl->rx_hdrq_rhf_seq),
+						sample_mono_ns);
+				}
+			}
 			opx_shared_rx_context_unlock(opx_ep->rx->shd_ctx.hwcontext_ctrl);
 		} else {
 			OPX_TRACE_LOCK_INSTANT(OPX_TRACE_EVENT_LOCK_CONTENTION,
 					       (uint64_t) opx_ep->rx->shd_ctx.hwcontext_ctrl, 0);
 		}
 	} else {
+#ifdef OPX_TELEMETRY_ORACLE
+		/* Pre-drain sampling preserves load backlog and resume-after-stall full-ring states. */
+		opx_telemetry_oracle_sample(opx_ep, hdrq_mask, hfi1_type);
+#endif
 		do {
 			packets = fi_opx_hfi1_poll_once(ep, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, hfi1_type,
 							ctx_sharing);
 		} while ((packets > 0) && (hfi1_poll_count++ < hfi1_poll_max));
+		drain_maxed = packets > 0 && hfi1_poll_count >= hfi1_poll_max;
 	}
 
 #if HAVE_HFISVC
@@ -1289,6 +1401,7 @@ void opx_hfi1_poll_hfi(struct fid_ep *ep, const enum ofi_reliability_kind reliab
 		}
 	}
 #endif
+	return drain_maxed;
 }
 
 __OPX_FORCE_INLINE__
@@ -1306,12 +1419,25 @@ void fi_opx_hfi1_poll_many(struct fid_ep *ep, const int lock_required, const uin
 	}
 
 	if ((caps & FI_REMOTE_COMM) || (caps == 0)) {
-		opx_hfi1_poll_hfi(ep, reliability, hdrq_mask, hfi1_type, ctx_sharing);
+		const bool drain_maxed = opx_hfi1_poll_hfi(ep, reliability, hdrq_mask, hfi1_type, ctx_sharing);
 
 		struct fi_opx_reliability_service *service   = opx_ep->reli_service;
 		union fi_opx_timer_state	  *timer     = &service->timer;
 		union fi_opx_timer_stamp	  *timestamp = &service->timestamp;
-		uint64_t			   compare   = fi_opx_timer_now(timestamp, timer);
+
+		if (opx_ep->flow_control_scheduler != NULL) {
+			if (!ctx_sharing) {
+				opx_flow_control_rccc_scheduler_occupancy_set(
+					opx_ep->flow_control_scheduler,
+					opx_hfi1_sample_rx_backlog(opx_ep, hdrq_mask, hfi1_type), drain_maxed,
+					fi_opx_timer_now_ns(timestamp, timer));
+			} else {
+				opx_flow_control_rccc_shared_occupancy_consume(opx_ep->flow_control_scheduler,
+									       fi_opx_timer_now_ns(timestamp, timer));
+			}
+		}
+
+		uint64_t compare = fi_opx_timer_now(timestamp, timer);
 
 		for (int tx_idx = 0; tx_idx < opx_ep->num_tx_contexts; tx_idx++) {
 			struct fi_opx_hfi1_context *context = opx_ep->hfi_contexts[tx_idx];

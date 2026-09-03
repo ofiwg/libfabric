@@ -112,12 +112,12 @@ _Static_assert((UINT64_C(0xf) << OPX_FLOW_CONTROL_WIRE_ENVELOPE_QW6_RESERVED_SHI
 _Static_assert(OPX_FLOW_CONTROL_WIRE_VERSION == FI_OPX_HFI_UD_FLOW_CONTROL_VERSION,
 	       "generic flow-control wire version");
 
-static int opx_flow_control_wire_mode_valid(uint8_t mode)
+static inline int opx_flow_control_wire_mode_valid(uint8_t mode)
 {
 	return mode != UINT8_MAX;
 }
 
-static int opx_flow_control_wire_flags_valid(uint8_t direction, uint8_t flags)
+static inline int opx_flow_control_wire_flags_valid(uint8_t direction, uint8_t flags)
 {
 	const uint8_t allowed = OPX_FLOW_CONTROL_WIRE_FLAG_RESPONSE_REQUESTED | OPX_FLOW_CONTROL_WIRE_FLAG_TERMINAL;
 
@@ -133,7 +133,7 @@ static int opx_flow_control_wire_flags_valid(uint8_t direction, uint8_t flags)
 	return 0;
 }
 
-static int opx_flow_control_wire_bytes_zero(const uint8_t *bytes, size_t count)
+static inline int opx_flow_control_wire_bytes_zero(const uint8_t *bytes, size_t count)
 {
 	size_t index;
 
@@ -145,23 +145,20 @@ static int opx_flow_control_wire_bytes_zero(const uint8_t *bytes, size_t count)
 	return 1;
 }
 
-void opx_flow_control_wire_qw6_absent(uint64_t *qw6)
-{
-	if (qw6 != NULL) {
-		*qw6 = 0u;
-	}
-}
-
-enum opx_flow_control_wire_result opx_flow_control_wire_qw6_pack(const struct opx_flow_control_wire_qw6 *fields,
-								 uint64_t				*qw6)
+static inline enum opx_flow_control_wire_result
+opx_flow_control_wire_qw6_pack(const struct opx_flow_control_wire_qw6 *fields, uint64_t *qw6)
 {
 	uint64_t encoded;
 
-	if (fields == NULL || qw6 == NULL || fields->value > OPX_FLOW_CONTROL_WIRE_LOW_24_MASK ||
-	    fields->generation > OPX_FLOW_CONTROL_WIRE_LOW_24_MASK || !opx_flow_control_wire_mode_valid(fields->mode) ||
-	    !opx_flow_control_wire_bytes_zero(fields->reserved, sizeof(fields->reserved))) {
-		return OPX_FLOW_CONTROL_WIRE_INVALID;
-	}
+	/* Both callers (the piggyback writers) build fields from internal
+	 * 24-bit RCCC serials with a fixed mode; a violation is a code bug,
+	 * so assert instead of paying per-encode validation in production. */
+	assert(fields != NULL);
+	assert(qw6 != NULL);
+	assert(fields->value <= OPX_FLOW_CONTROL_WIRE_LOW_24_MASK);
+	assert(fields->generation <= OPX_FLOW_CONTROL_WIRE_LOW_24_MASK);
+	assert(opx_flow_control_wire_mode_valid(fields->mode));
+	assert(opx_flow_control_wire_bytes_zero(fields->reserved, sizeof(fields->reserved)));
 
 	encoded = ((uint64_t) fields->value << OPX_FLOW_CONTROL_WIRE_QW6_VALUE_SHIFT) |
 		  ((uint64_t) fields->generation << OPX_FLOW_CONTROL_WIRE_QW6_GENERATION_SHIFT) |
@@ -172,26 +169,25 @@ enum opx_flow_control_wire_result opx_flow_control_wire_qw6_pack(const struct op
 	return OPX_FLOW_CONTROL_WIRE_OK;
 }
 
-enum opx_flow_control_wire_result opx_flow_control_wire_qw6_unpack(uint64_t			     qw6,
-								   struct opx_flow_control_wire_qw6 *fields)
+static inline enum opx_flow_control_wire_result
+opx_flow_control_wire_qw6_unpack(uint64_t qw6, struct opx_flow_control_wire_qw6 *fields)
 {
 	struct opx_flow_control_wire_qw6 decoded = {0};
-	uint8_t				 version;
 
-	if (fields == NULL) {
-		return OPX_FLOW_CONTROL_WIRE_INVALID;
-	}
+	assert(fields != NULL);
 	if (qw6 == 0u) {
 		return OPX_FLOW_CONTROL_WIRE_ABSENT;
 	}
 
-	version = (uint8_t) ((qw6 >> OPX_FLOW_CONTROL_WIRE_QW6_VERSION_SHIFT) & OPX_FLOW_CONTROL_WIRE_VERSION_MASK);
+	/* Mixed OPX versions within a job are unsupported: every peer packs
+	 * with this build's layout, so a present QW6 is well-formed by
+	 * construction and the layout checks are debug-only. */
+	assert((qw6 >> OPX_FLOW_CONTROL_WIRE_QW6_RESERVED_SHIFT) == 0u);
+	assert(((qw6 >> OPX_FLOW_CONTROL_WIRE_QW6_VALID_SHIFT) & UINT64_C(1)) != 0u);
+	assert(((qw6 >> OPX_FLOW_CONTROL_WIRE_QW6_VERSION_SHIFT) & OPX_FLOW_CONTROL_WIRE_VERSION_MASK) ==
+	       OPX_FLOW_CONTROL_WIRE_VERSION);
 	decoded.mode = (uint8_t) ((qw6 >> OPX_FLOW_CONTROL_WIRE_QW6_MODE_SHIFT) & OPX_FLOW_CONTROL_WIRE_MODE_MASK);
-	if ((qw6 >> OPX_FLOW_CONTROL_WIRE_QW6_RESERVED_SHIFT) != 0u ||
-	    ((qw6 >> OPX_FLOW_CONTROL_WIRE_QW6_VALID_SHIFT) & UINT64_C(1)) == 0u ||
-	    version != OPX_FLOW_CONTROL_WIRE_VERSION || !opx_flow_control_wire_mode_valid(decoded.mode)) {
-		return OPX_FLOW_CONTROL_WIRE_INVALID;
-	}
+	assert(opx_flow_control_wire_mode_valid(decoded.mode));
 
 	decoded.value = (uint32_t) ((qw6 >> OPX_FLOW_CONTROL_WIRE_QW6_VALUE_SHIFT) & OPX_FLOW_CONTROL_WIRE_LOW_24_MASK);
 	decoded.generation =
@@ -221,9 +217,10 @@ opx_flow_control_wire_envelope_pack(const struct opx_flow_control_wire_envelope 
 {
 	uint64_t encoded[OPX_FLOW_CONTROL_WIRE_QWORD_COUNT];
 
-	if (qwords == NULL || opx_flow_control_wire_envelope_validate(envelope) != OPX_FLOW_CONTROL_WIRE_OK) {
-		return OPX_FLOW_CONTROL_WIRE_INVALID;
-	}
+	/* The only caller (the flow-control injector) packs envelopes built
+	 * by the internal RCCC emit paths; validation is debug-only here. */
+	assert(qwords != NULL);
+	assert(opx_flow_control_wire_envelope_validate(envelope) == OPX_FLOW_CONTROL_WIRE_OK);
 
 	encoded[0] = ((uint64_t) envelope->value[0] << OPX_FLOW_CONTROL_WIRE_QW5_VALUE_SHIFT) |
 		     ((uint64_t) envelope->mode << OPX_FLOW_CONTROL_WIRE_QW5_MODE_SHIFT) |
@@ -244,18 +241,21 @@ opx_flow_control_wire_envelope_unpack(const uint64_t			     qwords[OPX_FLOW_CONT
 				      struct opx_flow_control_wire_envelope *envelope)
 {
 	struct opx_flow_control_wire_envelope decoded = {0};
-	uint8_t				      version;
 
-	if (qwords == NULL || envelope == NULL) {
-		return OPX_FLOW_CONTROL_WIRE_INVALID;
-	}
+	assert(qwords != NULL);
+	assert(envelope != NULL);
 
-	version = (uint8_t) ((qwords[1] >> OPX_FLOW_CONTROL_WIRE_ENVELOPE_QW6_VERSION_SHIFT) &
-			     OPX_FLOW_CONTROL_WIRE_VERSION_MASK);
-	if ((qwords[1] >> OPX_FLOW_CONTROL_WIRE_ENVELOPE_QW6_RESERVED_SHIFT) != 0u ||
-	    version != OPX_FLOW_CONTROL_WIRE_VERSION) {
-		return OPX_FLOW_CONTROL_WIRE_INVALID;
-	}
+	/* Mixed OPX versions within a job are unsupported: every peer packs
+	 * with this build's layout, so the version/reserved layout checks are
+	 * debug-only, matching opx_flow_control_wire_qw6_unpack.  This does
+	 * not relax semantic validation of wire input: the decode below masks
+	 * every multi-bit field, and the caller's runtime kind gate
+	 * (opx_flow_control_rccc_wire_kind_valid) rejects any mode, kind, or
+	 * flags value that envelope_validate would have - before the kind is
+	 * ever used as a counter index. */
+	assert((qwords[1] >> OPX_FLOW_CONTROL_WIRE_ENVELOPE_QW6_RESERVED_SHIFT) == 0u);
+	assert(((qwords[1] >> OPX_FLOW_CONTROL_WIRE_ENVELOPE_QW6_VERSION_SHIFT) & OPX_FLOW_CONTROL_WIRE_VERSION_MASK) ==
+	       OPX_FLOW_CONTROL_WIRE_VERSION);
 
 	decoded.value[0] =
 		(uint32_t) ((qwords[0] >> OPX_FLOW_CONTROL_WIRE_QW5_VALUE_SHIFT) & OPX_FLOW_CONTROL_WIRE_LOW_24_MASK);
@@ -273,100 +273,175 @@ opx_flow_control_wire_envelope_unpack(const uint64_t			     qwords[OPX_FLOW_CONT
 				       OPX_FLOW_CONTROL_WIRE_MODE_MASK);
 	decoded.direction = (uint8_t) direction;
 	decoded.key	  = qwords[2];
-	if (opx_flow_control_wire_envelope_validate(&decoded) != OPX_FLOW_CONTROL_WIRE_OK) {
-		return OPX_FLOW_CONTROL_WIRE_INVALID;
-	}
+	assert(opx_flow_control_wire_envelope_validate(&decoded) == OPX_FLOW_CONTROL_WIRE_OK);
 
 	*envelope = decoded;
 	return OPX_FLOW_CONTROL_WIRE_OK;
 }
 
-static struct opx_flow_control_wire_carrier_metadata
-opx_flow_control_wire_make_carrier_metadata(enum opx_flow_control_wire_carrier_category	 category,
-					    enum opx_flow_control_wire_generation_source generation_source,
-					    uint8_t extension_eligible, uint8_t preserve_base_semantics,
-					    uint8_t preserve_encoded_extension)
+static uint64_t opx_flow_control_piggyback_write_ack(struct fi_opx_ep				     *opx_ep,
+						     const union fi_opx_reliability_service_flow_key *key)
 {
-	struct opx_flow_control_wire_carrier_metadata metadata = {0};
+	struct opx_flow_control_wire_qw6 fields = {0};
+	uint64_t			 qw6;
+	void				*iterator;
 
-	metadata.category		    = (uint8_t) category;
-	metadata.generation_source	    = (uint8_t) generation_source;
-	metadata.extension_eligible	    = extension_eligible;
-	metadata.preserve_base_semantics    = preserve_base_semantics;
-	metadata.preserve_encoded_extension = preserve_encoded_extension;
-	return metadata;
+	assert(opx_ep->reli_service != NULL);
+	assert(opx_ep->reli_service->rx.rx_flow_rbtree != NULL);
+	iterator = fi_opx_rbt_find(opx_ep->reli_service->rx.rx_flow_rbtree, (void *) key);
+	if (OFI_UNLIKELY(iterator == NULL)) {
+		return 0u;
+	}
+	struct fi_opx_reliability_rx_flow *flow = fi_opx_rbt_value(opx_ep->reli_service->rx.rx_flow_rbtree, iterator);
+	struct opx_flow_control_rccc_rx_state *rx_state =
+		(struct opx_flow_control_rccc_rx_state *) ((struct opx_flow_control_state *)
+								   opx_flow_control_rx_flow_state(flow))
+			->mode_state;
+
+	if (rx_state->scheduler_state != OPX_FLOW_CONTROL_RCCC_SCHEDULER_BOUND) {
+		return 0u;
+	}
+	fields.value	  = rx_state->grant;
+	fields.generation = rx_state->epoch;
+	fields.mode	  = OPX_FLOW_CONTROL_MODE_RCCC;
+	(void) opx_flow_control_wire_qw6_pack(&fields, &qw6);
+	if ((rx_state->flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING) != 0u &&
+	    (rx_state->flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_RETIREMENT_ACK_PENDING) == 0u) {
+		opx_flow_control_rccc_rx_pending_clear(opx_ep->flow_control_scheduler, rx_state,
+						       OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING);
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.piggyback_feedback_suppressed);
+	}
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.piggyback_ack_sent);
+	return qw6;
 }
 
-enum opx_flow_control_wire_result
-opx_flow_control_wire_carrier_metadata(enum opx_flow_control_carrier		      carrier,
-				       struct opx_flow_control_wire_carrier_metadata *metadata)
+/* PING-target encode uses CHECKPOINT-ONLY coupling: a successful encode
+ * advances target_advertised_checkpoint (this demand is now advertised, so
+ * the demand-bounded rearm does not force a redundant immediate dedicated
+ * emission) but never touches the retry timer, backoff, or
+ * request_generation - the still-armed dedicated retry re-emits the LIVE
+ * target, so a lost PING costs exactly what a lost dedicated kind-3 costs
+ * today.  request_generation must not advance here: its increment is the
+ * kind-8 reject-echo serial that only a dedicated emission establishes. */
+static uint64_t opx_flow_control_piggyback_write_ping(struct fi_opx_ep				      *opx_ep,
+						      const union fi_opx_reliability_service_flow_key *key)
 {
-	struct opx_flow_control_wire_carrier_metadata selected;
+	struct opx_flow_control_wire_qw6 fields = {0};
+	uint64_t			 qw6;
+	void				*iterator;
 
-	if (metadata == NULL) {
-		return OPX_FLOW_CONTROL_WIRE_INVALID;
+	assert(opx_ep->reli_service != NULL);
+	assert(opx_ep->reli_service->tx.tx_flow_rbtree != NULL);
+	iterator = fi_opx_rbt_find(opx_ep->reli_service->tx.tx_flow_rbtree, (void *) key);
+	if (OFI_UNLIKELY(iterator == NULL)) {
+		return 0u;
 	}
+	struct fi_opx_reliability_tx_flow *flow = fi_opx_rbt_value(opx_ep->reli_service->tx.tx_flow_rbtree, iterator);
+	struct opx_flow_control_rccc_tx_state *tx_state =
+		(struct opx_flow_control_rccc_tx_state *) ((struct opx_flow_control_state *)
+								   opx_flow_control_tx_flow_state(flow))
+			->mode_state;
 
+	if ((tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING) == 0u ||
+	    (tx_state->flags & OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING) != 0u || tx_state->epoch == 0u ||
+	    tx_state->target == 0u) {
+		return 0u;
+	}
+	fields.value	  = tx_state->target;
+	fields.generation = tx_state->epoch;
+	fields.mode	  = OPX_FLOW_CONTROL_MODE_RCCC;
+	(void) opx_flow_control_wire_qw6_pack(&fields, &qw6);
+	tx_state->target_advertised_checkpoint = tx_state->target;
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.piggyback_ping_sent);
+	return qw6;
+}
+
+/* ACK carries the receiver's grant; PING carries the sender's pending
+ * target.  Grant piggybacks additionally suppress the queued dedicated
+ * FEEDBACK when the retirement-ack guard is clear (kind-6 value[1] carries
+ * the accepted retirement, which never rides a piggyback).  Loss recovery
+ * for either carrier is the existing dedicated retry/resend machinery.
+ * Absent (0) on every other carrier: RTS/CTS lack the in-band generation
+ * the spec requires.  The sent counters are owned here per the
+ * debug-counters contract: they count encodes, not carrier packets. */
+uint64_t opx_flow_control_piggyback_write(enum opx_flow_control_carrier carrier, struct fi_opx_ep *opx_ep,
+					  const union fi_opx_reliability_service_flow_key *key)
+{
 	switch (carrier) {
-	case OPX_FLOW_CONTROL_CARRIER_RELIABILITY_PING:
 	case OPX_FLOW_CONTROL_CARRIER_RELIABILITY_ACK:
-		selected = opx_flow_control_wire_make_carrier_metadata(OPX_FLOW_CONTROL_WIRE_CARRIER_RELIABILITY,
-								       OPX_FLOW_CONTROL_WIRE_GENERATION_EMBEDDED, 1u,
-								       1u, 0u);
-		break;
-	case OPX_FLOW_CONTROL_CARRIER_MSG_RZV_RTS:
-	case OPX_FLOW_CONTROL_CARRIER_TAG_RZV_RTS:
-	case OPX_FLOW_CONTROL_CARRIER_RMA_RTS:
-		selected = opx_flow_control_wire_make_carrier_metadata(OPX_FLOW_CONTROL_WIRE_CARRIER_REQUEST_BINDING,
-								       OPX_FLOW_CONTROL_WIRE_GENERATION_INDEPENDENT, 0u,
-								       1u, 0u);
-		break;
-	case OPX_FLOW_CONTROL_CARRIER_MEMORY_REGION_CTS:
-	case OPX_FLOW_CONTROL_CARRIER_RMA_CTS:
-	case OPX_FLOW_CONTROL_CARRIER_FENCE_CTS:
-		selected = opx_flow_control_wire_make_carrier_metadata(OPX_FLOW_CONTROL_WIRE_CARRIER_RESPONSE_BINDING,
-								       OPX_FLOW_CONTROL_WIRE_GENERATION_INDEPENDENT, 0u,
-								       1u, 0u);
-		break;
-	case OPX_FLOW_CONTROL_CARRIER_VADDR_CTS:
-	case OPX_FLOW_CONTROL_CARRIER_TID_VADDR_CTS:
-	case OPX_FLOW_CONTROL_CARRIER_HFISVC_RZV_RTS:
-	case OPX_FLOW_CONTROL_CARRIER_DPUT:
-		selected = opx_flow_control_wire_make_carrier_metadata(
-			OPX_FLOW_CONTROL_WIRE_CARRIER_INELIGIBLE, OPX_FLOW_CONTROL_WIRE_GENERATION_NONE, 0u, 1u, 0u);
-		break;
-	case OPX_FLOW_CONTROL_CARRIER_REPLAYED_ORIGINAL:
-		selected = opx_flow_control_wire_make_carrier_metadata(
-			OPX_FLOW_CONTROL_WIRE_CARRIER_REPLAY, OPX_FLOW_CONTROL_WIRE_GENERATION_PRESERVED, 0u, 1u, 1u);
-		break;
-	case OPX_FLOW_CONTROL_CARRIER_UNSPECIFIED:
-	case OPX_FLOW_CONTROL_CARRIER_COUNT:
+		return opx_flow_control_piggyback_write_ack(opx_ep, key);
+	case OPX_FLOW_CONTROL_CARRIER_RELIABILITY_PING:
+		return opx_flow_control_piggyback_write_ping(opx_ep, key);
 	default:
-		return OPX_FLOW_CONTROL_WIRE_INVALID;
+		return 0u;
 	}
-
-	*metadata = selected;
-	return OPX_FLOW_CONTROL_WIRE_OK;
 }
 
-enum opx_flow_control_result opx_flow_control_piggyback_write(enum opx_flow_control_carrier	   carrier,
-							      const struct opx_flow_control_state *state,
-							      union opx_hfi1_packet_hdr		  *header)
-{
-	(void) carrier;
-	(void) state;
-	(void) header;
-	return OPX_FLOW_CONTROL_FAULT;
-}
-
+/* Piggybacked values are optional and silent: stale/duplicate/unknown-flow
+ * decodes are counted diagnostically and ignored - never a resend trigger,
+ * never a DEFER (there is no replay for a piggyback).  The received
+ * counters increment only when a genuinely newer value is accepted.  The
+ * ACK grant-only apply passes the flow's own retired_acked so the
+ * retirement settlement block classifies DUPLICATE and is skipped:
+ * retirement never rides a piggyback carrier.  The PING target routes to
+ * the dedicated-narrower piggyback ingestion, which never binds and never
+ * feeds the storm detector's standalone-request count. */
 enum opx_flow_control_result opx_flow_control_piggyback_read(enum opx_flow_control_carrier    carrier,
-							     const union opx_hfi1_packet_hdr *header,
-							     struct opx_flow_control_state   *state)
+							     struct fi_opx_ep		     *opx_ep,
+							     const union opx_hfi1_packet_hdr *header)
 {
-	(void) carrier;
-	(void) header;
-	(void) state;
-	return OPX_FLOW_CONTROL_FAULT;
+	struct opx_flow_control_wire_qw6	  fields;
+	union fi_opx_reliability_service_flow_key key;
+	enum opx_flow_control_wire_result	  wire_result;
+	void					 *iterator;
+
+	if (carrier != OPX_FLOW_CONTROL_CARRIER_RELIABILITY_ACK &&
+	    carrier != OPX_FLOW_CONTROL_CARRIER_RELIABILITY_PING) {
+		return OPX_FLOW_CONTROL_OK;
+	}
+	wire_result = opx_flow_control_wire_qw6_unpack(header->service.flow_control_extension, &fields);
+	if (wire_result == OPX_FLOW_CONTROL_WIRE_ABSENT) {
+		return OPX_FLOW_CONTROL_OK;
+	}
+	assert(opx_ep->reli_service != NULL);
+	/* Both pack sites hardcode RCCC; any other mode in a present QW6 is a
+	 * code bug, not wire input. */
+	assert(fields.mode == OPX_FLOW_CONTROL_MODE_RCCC);
+
+	key.qw_prefix = header->service.key;
+	key.dw_suffix = header->service.key_dw_suffix;
+	if (carrier == OPX_FLOW_CONTROL_CARRIER_RELIABILITY_PING) {
+		iterator = fi_opx_rbt_find(opx_ep->reli_service->rx.rx_flow_rbtree, (void *) &key);
+		if (OFI_UNLIKELY(iterator == NULL)) {
+			opx_ep->reli_service->flow_control_feedback_counters.invalid++;
+			return OPX_FLOW_CONTROL_OK;
+		}
+		return opx_flow_control_rccc_rx_target_piggyback(
+			opx_ep, fi_opx_rbt_value(opx_ep->reli_service->rx.rx_flow_rbtree, iterator), fields.generation,
+			fields.value);
+	}
+	iterator = fi_opx_rbt_find(opx_ep->reli_service->tx.tx_flow_rbtree, (void *) &key);
+	if (OFI_UNLIKELY(iterator == NULL)) {
+		opx_ep->reli_service->flow_control_feedback_counters.invalid++;
+		return OPX_FLOW_CONTROL_OK;
+	}
+	struct fi_opx_reliability_tx_flow *flow = fi_opx_rbt_value(opx_ep->reli_service->tx.tx_flow_rbtree, iterator);
+	struct opx_flow_control_rccc_tx_state *tx_state =
+		(struct opx_flow_control_rccc_tx_state *) ((struct opx_flow_control_state *)
+								   opx_flow_control_tx_flow_state(flow))
+			->mode_state;
+	const struct opx_flow_control_rccc_tx_profile *profile = opx_flow_control_rccc_tx_profile_get();
+
+	/* RCCC initialization latches for the process lifetime, so the profile
+	 * cannot be NULL on any path gated by flow_control_reservation_pool. */
+	assert(profile != NULL);
+	if (opx_flow_control_rccc_tx_feedback_apply(
+		    tx_state, profile, fields.value, tx_state->retired_acked, fields.generation,
+		    &opx_ep->reli_service->flow_control_feedback_counters) == OPX_FLOW_CONTROL_RCCC_SERIAL_NEWER) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.piggyback_ack_received);
+		opx_flow_control_rccc_tx_work_enqueue(opx_ep, flow);
+	}
+	return OPX_FLOW_CONTROL_OK;
 }
 
 enum opx_flow_control_result opx_flow_control_wire_send(struct fi_opx_ep *opx_ep, bool request_direction,
@@ -404,6 +479,8 @@ enum opx_flow_control_result opx_flow_control_wire_send(struct fi_opx_ep *opx_ep
 							    direction, OPX_SW_HFI1_TYPE(opx_ep->domain),
 							    OPX_IS_CTX_SHARING_ENABLED);
 	if (rc == FI_SUCCESS) {
+		assert(envelope->kind < 9u);
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.kind_sent[envelope->kind]);
 		return OPX_FLOW_CONTROL_OK;
 	}
 	return OFI_LIKELY(rc == -FI_EAGAIN) ? OPX_FLOW_CONTROL_DEFER : OPX_FLOW_CONTROL_FAULT;
@@ -501,12 +578,14 @@ enum opx_flow_control_result opx_flow_control_wire_receive(struct fi_opx_ep *opx
 		opx_ep->reli_service->flow_control_feedback_counters.invalid++;
 		return OPX_FLOW_CONTROL_FAULT;
 	}
+	assert(envelope.kind < 9u);
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.kind_received[envelope.kind]);
 	if (request_direction) {
 		struct fi_opx_reliability_rx_flow *flow;
 		enum opx_flow_control_result	   result;
 
 		iterator = fi_opx_rbt_find(opx_ep->reli_service->rx.rx_flow_rbtree, (void *) &key);
-		if (iterator == NULL) {
+		if (OFI_UNLIKELY(iterator == NULL)) {
 			if (envelope.kind != OPX_FLOW_CONTROL_RCCC_KIND_CREDIT_REQUEST) {
 				return OPX_FLOW_CONTROL_DEFER;
 			}
@@ -529,7 +608,7 @@ enum opx_flow_control_result opx_flow_control_wire_receive(struct fi_opx_ep *opx
 	}
 
 	iterator = fi_opx_rbt_find(opx_ep->reli_service->tx.tx_flow_rbtree, (void *) &key);
-	if (iterator == NULL) {
+	if (OFI_UNLIKELY(iterator == NULL)) {
 		opx_ep->reli_service->flow_control_feedback_counters.invalid++;
 		return OPX_FLOW_CONTROL_DEFER;
 	}
@@ -539,9 +618,7 @@ enum opx_flow_control_result opx_flow_control_wire_receive(struct fi_opx_ep *opx
 								   opx_flow_control_tx_flow_state(flow))
 			->mode_state;
 	const struct opx_flow_control_rccc_tx_profile *profile = opx_flow_control_rccc_tx_profile_get();
-	if (profile == NULL) {
-		return OPX_FLOW_CONTROL_FAULT;
-	}
+	assert(profile != NULL);
 	switch (envelope.kind) {
 	case OPX_FLOW_CONTROL_RCCC_KIND_FEEDBACK:
 		(void) opx_flow_control_rccc_tx_feedback_apply(tx_state, profile, envelope.value[0], envelope.value[1],
@@ -559,8 +636,12 @@ enum opx_flow_control_result opx_flow_control_wire_receive(struct fi_opx_ep *opx
 			opx_ep->reli_service->flow_control_feedback_counters.invalid++;
 			return OPX_FLOW_CONTROL_FAULT;
 		}
-		(void) opx_flow_control_rccc_tx_capacity_reject(tx_state, profile, envelope.generation,
-								&opx_ep->reli_service->flow_control_feedback_counters);
+		if (opx_flow_control_rccc_tx_capacity_reject(
+			    tx_state, profile, envelope.generation,
+			    fi_opx_timer_now_ns(&opx_ep->reli_service->timestamp, &opx_ep->reli_service->timer),
+			    &opx_ep->reli_service->flow_control_feedback_counters) == OPX_FLOW_CONTROL_OK) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.flow_control.capacity_reject_parked);
+		}
 		break;
 	default:
 		return OPX_FLOW_CONTROL_FAULT;

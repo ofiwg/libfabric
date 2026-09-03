@@ -53,12 +53,9 @@ void opx_flow_control_reservation_pool_destroy(struct ofi_bufpool **pool);
 #define OPX_FLOW_CONTROL_RCCC_MAX_BATCH_REQUEST \
 	((OPX_MP_EGR_MAX_PAYLOAD_BYTES_MAX + FI_OPX_CACHE_LINE_SIZE - 1u) / FI_OPX_CACHE_LINE_SIZE)
 
-#define OPX_FLOW_CONTROL_RCCC_SERIAL_MASK	UINT32_C(0x00FFFFFF)
-#define OPX_FLOW_CONTROL_RCCC_SERIAL_HALF_RANGE UINT32_C(0x00800000)
-
 #define OPX_FLOW_CONTROL_RCCC_RETRY_INITIAL_MIN_US UINT16_C(1)
 #define OPX_FLOW_CONTROL_RCCC_RETRY_DEFAULT_US	   UINT16_C(8)
-#define OPX_FLOW_CONTROL_RCCC_RETRY_CAP_US	   UINT16_C(500)
+#define OPX_FLOW_CONTROL_RCCC_RETRY_CAP_US_DEFAULT UINT16_C(4000)
 
 /* The desired window is stored as a 16-bit count, so approved profiles must
  * keep Fmax within it; replay-pool capacity bounds it far below this anyway. */
@@ -72,29 +69,27 @@ void opx_flow_control_reservation_pool_destroy(struct ofi_bufpool **pool);
  * The envelope generation slot carries the epoch for kinds 3-7 and the
  * request_generation serial for kind 8, whose value[0] echoes the epoch so a
  * late old-epoch reject cannot alias a rebased request_generation. */
-#define OPX_FLOW_CONTROL_RCCC_KIND_CREDIT_REQUEST  UINT8_C(3)
-#define OPX_FLOW_CONTROL_RCCC_KIND_RETIREMENT	   UINT8_C(4)
-#define OPX_FLOW_CONTROL_RCCC_KIND_RESET	   UINT8_C(5)
-#define OPX_FLOW_CONTROL_RCCC_KIND_FEEDBACK	   UINT8_C(6)
-#define OPX_FLOW_CONTROL_RCCC_KIND_RESET_ACK	   UINT8_C(7)
-#define OPX_FLOW_CONTROL_RCCC_KIND_CAPACITY_REJECT UINT8_C(8)
-
-#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_REQUEST_PENDING	  UINT8_C(0x01)
+#define OPX_FLOW_CONTROL_RCCC_KIND_CREDIT_REQUEST	  UINT8_C(3)
+#define OPX_FLOW_CONTROL_RCCC_KIND_RETIREMENT		  UINT8_C(4)
+#define OPX_FLOW_CONTROL_RCCC_KIND_RESET		  UINT8_C(5)
+#define OPX_FLOW_CONTROL_RCCC_KIND_FEEDBACK		  UINT8_C(6)
+#define OPX_FLOW_CONTROL_RCCC_KIND_RESET_ACK		  UINT8_C(7)
+#define OPX_FLOW_CONTROL_RCCC_KIND_CAPACITY_REJECT	  UINT8_C(8)
 #define OPX_FLOW_CONTROL_RCCC_TX_FLAG_RETIREMENT_PENDING  UINT8_C(0x02)
-#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_RESETTING		  UINT8_C(0x04)
-#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_ACTIVITY_PENDING	  UINT8_C(0x08)
 #define OPX_FLOW_CONTROL_RCCC_TX_FLAG_WINDOW_GROWTH_ARMED UINT8_C(0x10)
-#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_CAPACITY_REJECTED	  UINT8_C(0x20)
 #define OPX_FLOW_CONTROL_RCCC_TX_FLAG_GRANT_SINCE_EMIT	  UINT8_C(0x40)
-#define OPX_FLOW_CONTROL_RCCC_TX_FLAG_ON_WORK_LIST	  UINT8_C(0x80)
-#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_RECLAIMED		  UINT8_C(0x01)
-#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING	  UINT8_C(0x02)
-#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_SNAPSHOT_VALID	  UINT8_C(0x04)
-#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING	  UINT8_C(0x40)
-#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_RESET_ACK_PENDING	  UINT8_C(0x80)
 
-#define FI_OPX_FLOW_CONTROL_SCHEDULER_ABI_MAGIC		UINT64_C(0x484353434658504F)
-#define FI_OPX_FLOW_CONTROL_SCHEDULER_ABI_VERSION	UINT32_C(1)
+#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING	     UINT8_C(0x02)
+#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_SNAPSHOT_VALID	     UINT8_C(0x04)
+#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_RETIREMENT_ACK_PENDING UINT8_C(0x08)
+#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING	     UINT8_C(0x40)
+#define OPX_FLOW_CONTROL_RCCC_RX_FLAG_RESET_ACK_PENDING	     UINT8_C(0x80)
+
+#define FI_OPX_FLOW_CONTROL_SCHEDULER_ABI_MAGIC UINT64_C(0x484353434658504F)
+/* v6: tracked/decision slots recycle at epoch close - a mixed
+ * append-only/recycling sharing group would corrupt the shared tracked
+ * accounting, so the version alone fences the two populations apart. */
+#define FI_OPX_FLOW_CONTROL_SCHEDULER_ABI_VERSION	UINT32_C(6)
 #define FI_OPX_FLOW_CONTROL_SCHEDULER_ABI_ENDIAN_LITTLE UINT32_C(1)
 #define FI_OPX_FLOW_CONTROL_SCHEDULER_ABI_ALIGNMENT	64u
 #define FI_OPX_FLOW_CONTROL_SCHEDULER_ABI_MASK		(FI_OPX_FLOW_CONTROL_SCHEDULER_ABI_ALIGNMENT - 1)
@@ -124,7 +119,7 @@ enum opx_flow_control_rccc_serial_classification {
 };
 
 enum opx_flow_control_rccc_block_reason {
-	OPX_FLOW_CONTROL_RCCC_BLOCK_NONE = 0,
+	OPX_FLOW_CONTROL_RCCC_BLOCK_NONE = OPX_FLOW_CONTROL_RCCC_FAST_BLOCK_NONE,
 	OPX_FLOW_CONTROL_RCCC_BLOCK_NO_CREDIT,
 	OPX_FLOW_CONTROL_RCCC_BLOCK_BYTE_THROTTLE,
 	OPX_FLOW_CONTROL_RCCC_BLOCK_PIO,
@@ -139,10 +134,12 @@ enum opx_flow_control_rccc_block_reason {
 enum opx_flow_control_rccc_scheduler_state {
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_DORMANT = 0,
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_PREPARING,
-	OPX_FLOW_CONTROL_RCCC_SCHEDULER_BOUND,
+	OPX_FLOW_CONTROL_RCCC_SCHEDULER_BOUND = OPX_FLOW_CONTROL_RCCC_FAST_SCHEDULER_BOUND,
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_RESETTING,
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_QUARANTINED
 };
+
+enum opx_flow_control_rccc_duty_state { OPX_FLOW_CONTROL_RCCC_DUTY_NORMAL = 0, OPX_FLOW_CONTROL_RCCC_DUTY_DRAINING };
 
 enum opx_flow_control_rccc_scheduler_initialization_state {
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_UNINITIALIZED = 0,
@@ -162,21 +159,27 @@ enum opx_flow_control_rccc_scheduler_mapping_result {
 	OPX_FLOW_CONTROL_RCCC_SCHEDULER_MAPPING_STATE
 };
 
+#define OPX_FLOW_CONTROL_RCCC_RETRY_PROGRESS_DEFERRED UINT8_C(0x01)
+#define OPX_FLOW_CONTROL_RCCC_RETRY_RETIREMENT_SEEN   UINT8_C(0x02)
+#define OPX_FLOW_CONTROL_RCCC_RETRY_FORCE_EMIT	      UINT8_C(0x04)
+#define OPX_FLOW_CONTROL_RCCC_RETRY_REARMED	      UINT8_C(0x08)
+#define OPX_FLOW_CONTROL_RCCC_RETRY_UNGOVERNED	      UINT8_C(0x10)
+
+/* Fail-open deadline: twice the default receiver quarantine period.  A
+ * capacity park outliving this admits ungoverned (baseline behavior)
+ * rather than starving; the kind-3 retry keeps running so the first
+ * grant or RESET_ACK restores governance. */
+#define OPX_FLOW_CONTROL_RCCC_UNGOVERNED_DELAY_NS UINT64_C(200000000)
+
 struct opx_flow_control_rccc_retry {
 	uint16_t delay_us;
 	uint8_t	 active;
-	uint8_t	 reserved;
+	uint8_t	 progress_flags;
 };
 
 struct opx_flow_control_rccc_scheduler_reference {
 	uint32_t slot;
 	uint64_t generation;
-};
-
-struct opx_flow_control_rccc_tombstone {
-	union fi_opx_reliability_service_flow_key flow_key;
-	uint32_t				  last_epoch;
-	uint64_t				  terminal_time_ns;
 };
 
 enum opx_flow_control_rccc_reservation_state {
@@ -236,7 +239,7 @@ struct opx_flow_control_rccc_tx_state {
 	uint32_t				  fault_contained;
 	uint32_t				  reserved_backlog;
 	uint32_t				  reserved_committed_unreturned;
-	uint32_t				  reserved_requested;
+	uint32_t				  target_advertised_checkpoint;
 	union fi_opx_reliability_service_flow_key flow_key;
 	uint32_t				  reserved0;
 };
@@ -248,7 +251,16 @@ struct opx_flow_control_rccc_tx_state {
  * echoed as the kind-8 envelope generation.  decision_slot/reject_slot are
  * back-references into the endpoint scheduler's fixed pools.  pending_epoch
  * holds the proposed epoch while RESET_ACK withholding drains outstanding
- * grants. */
+ * grants.
+ *
+ * window_ceiling/demand_peak_epoch/consumed_epoch/streaks/hot implement
+ * the cold-ramp + hot-set window governor: every flow starts at
+ * window_cap_min and doubles its private ceiling per clean window epoch
+ * toward fmax while cold; a flow whose pending demand reaches the absolute
+ * floor AND whose accepted-packet consumption clears the throughput floor
+ * for hot_entry_streak consecutive epochs classifies hot and is clamped to
+ * the usable-ring fair share among hot flows instead (and never cold-ramps
+ * while qualifying, so classification cannot race the ramp). */
 struct opx_flow_control_rccc_rx_state {
 	uint32_t					 epoch;
 	uint32_t					 target;
@@ -267,10 +279,16 @@ struct opx_flow_control_rccc_rx_state {
 	uint32_t					 epoch_snapshot;
 	uint32_t					 request_generation;
 	uint32_t					 decision_slot;
-	uint32_t					 reject_slot;
-	uint8_t						 reserved_scheduler[16];
+	uint32_t					 rejected_epoch;
+	uint32_t					 window_ceiling;
+	uint32_t					 demand_peak_epoch;
+	uint32_t					 window_epoch_stamp;
+	uint8_t						 hot;
+	uint8_t						 hi_streak;
+	uint8_t						 lo_streak;
+	uint8_t						 idle_streak;
 	uint32_t					 pending_epoch;
-	uint32_t					 reserved2;
+	uint32_t					 consumed_epoch;
 };
 
 enum opx_flow_control_rccc_capacity_reason {
@@ -296,12 +314,14 @@ struct opx_flow_control_rccc_decision_key {
 struct opx_flow_control_rccc_decision_record {
 	struct opx_flow_control_rccc_decision_key key;
 	uint32_t				  request_generation;
-	uint32_t				  reject_slot;
+	uint32_t				  free_next;
 	uint8_t					  state;
 	uint8_t					  occupied;
 	uint8_t					  grant_seen;
 	uint8_t					  reserved;
 };
+
+#define OPX_FLOW_CONTROL_RCCC_DECISION_FREE_END UINT32_MAX
 
 /* Reject detail (reason/limit/observed/FI_ENOSPC) is local-only evidence;
  * the kind-8 wire carries only {request_generation, epoch echo, TERMINAL}. */
@@ -316,33 +336,97 @@ struct opx_flow_control_rccc_reject_record {
 	uint8_t					  reserved[2];
 };
 
+/* Descending field sizes: no interior padding. */
 struct opx_flow_control_rccc_scheduler_profile {
 	uint64_t max_outstanding_permissions;
 	uint64_t drr_quantum;
 	uint64_t quarantine_deadline_ns;
+	uint64_t telemetry_health_deadline_ns;
 	uint64_t minimum_packet_rate_q16_per_ns;
 	uint64_t maximum_elapsed_ns;
+	uint64_t window_epoch_ns;
+	uint64_t duty_drain_floor;
+	uint64_t duty_deadline_ns;
 	uint32_t tracked_capacity;
 	uint32_t decision_capacity;
 	uint32_t reject_capacity;
-	uint32_t reserved;
+	uint32_t capacity_guard;
+	uint32_t window_cap_min;
+	uint32_t hot_entry_streak;
+	uint32_t hot_exit_streak;
+	uint32_t hot_absolute_floor;
+	uint32_t hot_consumed_floor;
+	uint32_t hot_min_flows;
+	uint32_t storm_request_floor;
+	uint32_t idle_decay_streak;
+	uint32_t duty_min_flows;
+	uint32_t duty_streak_k;
+	uint16_t grant_emits;
+	uint16_t reserved0;
 };
 
 /* Live interior of the header's ledger block (offset 384).
  * RX flows are member-owned under OPX context sharing (the hardware-RHQ
  * poller forwards every packet to its owner's software RHQ), so per-flow
- * state never races cross-process; the only cross-member state is this
- * aggregate ledger and the tracked-capacity counter, both lock-free
- * atomics.  attached_count is the mapping lifecycle refcount: the last
- * detacher unlinks the segment.  No robust/member-death handling exists -
+ * state never races cross-process; the cross-member state here is the
+ * aggregate ledger plus tracked-capacity and active-BOUND-flow counters,
+ * all lock-free atomics.  attached_count is the mapping lifecycle refcount:
+ * the last detacher unlinks the segment.  No robust/member-death handling exists -
  * a member dying while attached leaks the segment until job cleanup,
  * matching the exposure of the pre-existing context-sharing spinlocks. */
 struct opx_flow_control_rccc_scheduler_shared_ledger {
 	_Atomic uint64_t outstanding_permissions;
 	_Atomic uint32_t tracked_used;
 	_Atomic uint32_t attached_count;
-	uint8_t		 reserved[112];
+	_Atomic uint32_t active_bound_flows;
+	_Atomic uint32_t demand_active_flows;
+	_Atomic uint32_t hot_flows;
+	uint8_t		 reserved[100];
 };
+
+/* Live interior of the header's telemetry block (offset 256, introduced in
+ * ABI v2; the live bound-flow ledger field advances the mapping to ABI v3).
+ * Single shared occupancy sample for the whole context-sharing group.
+ * The backlog scan runs inside a member's already-held RHQ hardware lock
+ * (opx_hwcontext_ctrl.context_lock), so producer-side mutual exclusion is
+ * inherited; the seqlock-free publish packs {backlog, sample_ns} into one
+ * atomic u64 (backlog needs at most 21 bits for the 19-bit-DW-offset rings;
+ * ns truncated to 43 bits ~ 2.4 h wrap, compared under a 10 ms deadline)
+ * so lock-free consumers can never observe a torn occupancy/timestamp
+ * pair.  Cadence: producers skip the scan unless the published sample is
+ * older than deadline/10, bounding the lock-held MMIO/scan cost to O(1)
+ * per context per cadence period regardless of member count. */
+#define OPX_FLOW_CONTROL_RCCC_TELEMETRY_NS_BITS	      43u
+#define OPX_FLOW_CONTROL_RCCC_TELEMETRY_NS_MASK	      ((UINT64_C(1) << OPX_FLOW_CONTROL_RCCC_TELEMETRY_NS_BITS) - 1u)
+#define OPX_FLOW_CONTROL_RCCC_TELEMETRY_BACKLOG_SHIFT OPX_FLOW_CONTROL_RCCC_TELEMETRY_NS_BITS
+#define OPX_FLOW_CONTROL_RCCC_TELEMETRY_BACKLOG_MASK  UINT64_C(0xFFFFF)
+#define OPX_FLOW_CONTROL_RCCC_TELEMETRY_VALID	      (UINT64_C(1) << 63)
+
+struct opx_flow_control_rccc_scheduler_shared_telemetry {
+	_Atomic uint64_t occupancy_sample;
+	uint8_t		 reserved[120];
+};
+
+static inline uint64_t opx_flow_control_rccc_telemetry_pack(uint32_t backlog, uint64_t now_ns)
+{
+	assert(backlog <= OPX_FLOW_CONTROL_RCCC_TELEMETRY_BACKLOG_MASK);
+	return OPX_FLOW_CONTROL_RCCC_TELEMETRY_VALID |
+	       ((uint64_t) backlog << OPX_FLOW_CONTROL_RCCC_TELEMETRY_BACKLOG_SHIFT) |
+	       (now_ns & OPX_FLOW_CONTROL_RCCC_TELEMETRY_NS_MASK);
+}
+
+static inline uint32_t opx_flow_control_rccc_telemetry_backlog(uint64_t sample)
+{
+	return (uint32_t) ((sample >> OPX_FLOW_CONTROL_RCCC_TELEMETRY_BACKLOG_SHIFT) &
+			   OPX_FLOW_CONTROL_RCCC_TELEMETRY_BACKLOG_MASK);
+}
+
+/* Age of a truncated 43-bit sample timestamp against a full ns clock,
+ * correct across the 2.4 h wrap for any real age below half the wrap. */
+static inline uint64_t opx_flow_control_rccc_telemetry_age_ns(uint64_t sample, uint64_t now_ns)
+{
+	return (now_ns - sample) & OPX_FLOW_CONTROL_RCCC_TELEMETRY_NS_MASK;
+}
 
 #define OPX_FLOW_CONTROL_RCCC_MEMBER_EMPTY  UINT32_C(0)
 #define OPX_FLOW_CONTROL_RCCC_MEMBER_JOINED UINT32_C(1)
@@ -364,34 +448,144 @@ struct opx_flow_control_rccc_scheduler_member_identity {
  * slots.  outstanding_permissions is the aggregate ledger, updated
  * incrementally with the masked 24-bit delta at each grant/observe/settle/
  * reclaim event and never re-derived from per-flow masked subtractions.
- * Under context sharing (shared_header != NULL) the authoritative ledger
- * and tracked counter live in the shared mapping; the local fields mirror
- * only this member's own contribution for the teardown and NDEBUG
+ * Under context sharing (shared_header != NULL) the authoritative ledger,
+ * tracked counter, and BOUND-flow count live in the shared mapping; the local
+ * fields mirror only this member's own contribution for teardown and NDEBUG
  * reconcile invariants.  Decisions/rejects stay process-local even when
  * sharing: member-owned RX flows mean sticky decisions never need
  * cross-process coherence (the mapping's decision/reject regions are sized
- * and zeroed but inactive). */
+ * and zeroed but inactive).
+ * The public RX fast leaf touches only the four compile-pinned ledger fields;
+ * their offsets are part of the inlining contract and must move with this
+ * private layout. */
 struct opx_flow_control_rccc_scheduler {
-	struct opx_flow_control_rccc_scheduler_profile	      profile;
+	/* Cachelines 0-2: mutated at packet/poll rate, ordered by descending
+	 * size within the group so there is no interior padding.  Line 0
+	 * leads with the four compile-pinned fast-leaf fields. */
 	uint64_t					      outstanding_permissions;
+	uint64_t					      shared_release_pending;
+	struct opx_flow_control_rccc_scheduler_shared_ledger *shared_ledger;
+	uint32_t					      consumed_total_epoch;
+	uint32_t					      occupancy;
+	uint32_t					      rate_latched;
+	uint32_t					      window_epoch;
 	uint64_t					      accrual_remainder_q16;
 	uint64_t					      accrual_last_ns;
+	uint64_t					      occupancy_sample_ns;
+	uint64_t					      window_epoch_start_ns;
+	uint64_t					      drain_enter_ns;
+	uint64_t					      telemetry_last_sample;
 	uint64_t					      allocation_generation;
+	uint32_t					      hot_flows;
+	uint32_t					      local_hot_flows;
+	uint32_t					      hot_ceiling;
+	uint32_t					      request_epoch;
 	uint32_t					      tracked_used;
 	uint32_t					      decision_used;
+	uint32_t					      decision_free_head;
 	uint32_t					      reject_used;
-	uint32_t					      reserved;
-	struct opx_flow_control_rccc_decision_record	     *decisions;
-	struct opx_flow_control_rccc_reject_record	     *rejects;
-	uint8_t						     *shared_base;
-	struct opx_flow_control_rccc_scheduler_header	     *shared_header;
-	struct opx_flow_control_rccc_scheduler_shared_ledger *shared_ledger;
-	size_t						      shared_length;
-	uint32_t					      shared_member_index;
-	uint32_t					      shared_member_count;
-	uint64_t					      shared_release_pending;
-	char						      shared_name[128];
-};
+	uint32_t					      active_bound_flows;
+	uint32_t					      local_bound_flows;
+	uint32_t					      demand_active_flows;
+	uint32_t					      local_demand_active_flows;
+	uint32_t					      feedback_pending_count;
+	uint32_t					      reject_pending_count;
+	uint8_t						      storm_mode;
+	uint8_t						      storm_on_streak;
+	uint8_t						      storm_off_streak;
+	uint8_t						      duty_state;
+	uint8_t						      maxed_drain_streak;
+	uint8_t						      quiet_drain_streak;
+	bool						      occupancy_sampling_active;
+	uint8_t						      reserved0;
+
+	/* Cacheline 3 onward: set at create/attach, read-only thereafter.
+	 * The alignment attribute keeps the hot lines to themselves. */
+	struct opx_flow_control_rccc_scheduler_profile		 profile __attribute__((aligned(L2_CACHE_LINE_SIZE)));
+	struct opx_flow_control_rccc_decision_record		*decisions;
+	struct opx_flow_control_rccc_reject_record		*rejects;
+	uint8_t							*shared_base;
+	struct opx_flow_control_rccc_scheduler_header		*shared_header;
+	struct opx_flow_control_rccc_scheduler_shared_telemetry *shared_telemetry;
+	uint64_t						 telemetry_sample_interval_ns;
+	size_t							 shared_length;
+	uint32_t						 low_water;
+	uint32_t						 high_water;
+	uint32_t						 physical_capacity;
+	uint32_t						 usable_capacity;
+	uint32_t						 shared_member_index;
+	uint32_t						 shared_member_count;
+	char							 shared_name[128];
+} __attribute__((aligned(L2_CACHE_LINE_SIZE)));
+
+static inline void opx_flow_control_rccc_rx_pending_set(struct opx_flow_control_rccc_scheduler *scheduler,
+							struct opx_flow_control_rccc_rx_state  *rx_state,
+							uint8_t					pending_flag)
+{
+	assert(scheduler != NULL);
+	assert(pending_flag == OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING ||
+	       pending_flag == OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING);
+	if ((rx_state->flags & pending_flag) != 0u) {
+		return;
+	}
+	if (pending_flag == OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING) {
+		assert(scheduler->feedback_pending_count != UINT32_MAX);
+		scheduler->feedback_pending_count++;
+	} else {
+		assert(scheduler->reject_pending_count != UINT32_MAX);
+		scheduler->reject_pending_count++;
+	}
+	rx_state->flags |= pending_flag;
+}
+
+static inline void opx_flow_control_rccc_rx_pending_clear(struct opx_flow_control_rccc_scheduler *scheduler,
+							  struct opx_flow_control_rccc_rx_state	 *rx_state,
+							  uint8_t				  pending_flag)
+{
+	assert(scheduler != NULL);
+	assert(pending_flag == OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING ||
+	       pending_flag == OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING);
+	if ((rx_state->flags & pending_flag) == 0u) {
+		return;
+	}
+	if (pending_flag == OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING) {
+		assert(scheduler->feedback_pending_count != 0u);
+		scheduler->feedback_pending_count--;
+	} else {
+		assert(scheduler->reject_pending_count != 0u);
+		scheduler->reject_pending_count--;
+	}
+	rx_state->flags &= (uint8_t) ~pending_flag;
+}
+
+/* Whole-flags rewrites can silently discard pending work; route them through
+ * this helper so both endpoint counters follow every tracked bit transition. */
+static inline void opx_flow_control_rccc_rx_flags_replace(struct opx_flow_control_rccc_scheduler *scheduler,
+							  struct opx_flow_control_rccc_rx_state	 *rx_state,
+							  uint8_t				  flags)
+{
+	if ((rx_state->flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING) !=
+	    (flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING)) {
+		if ((flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING) != 0u) {
+			opx_flow_control_rccc_rx_pending_set(scheduler, rx_state,
+							     OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING);
+		} else {
+			opx_flow_control_rccc_rx_pending_clear(scheduler, rx_state,
+							       OPX_FLOW_CONTROL_RCCC_RX_FLAG_FEEDBACK_PENDING);
+		}
+	}
+	if ((rx_state->flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING) !=
+	    (flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING)) {
+		if ((flags & OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING) != 0u) {
+			opx_flow_control_rccc_rx_pending_set(scheduler, rx_state,
+							     OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING);
+		} else {
+			opx_flow_control_rccc_rx_pending_clear(scheduler, rx_state,
+							       OPX_FLOW_CONTROL_RCCC_RX_FLAG_REJECT_PENDING);
+		}
+	}
+	rx_state->flags = flags;
+}
 
 #define OPX_FLOW_CONTROL_RCCC_Q16_ONE UINT32_C(65536)
 
@@ -483,11 +677,11 @@ struct opx_flow_control_rccc_scheduler_header {
 	uint64_t	 membership_generation;
 	uint8_t		 reserved3[40];
 
-	uint8_t						     reserved_telemetry[128];
-	struct opx_flow_control_rccc_scheduler_shared_ledger ledger;
-	uint8_t						     reserved_scheduler[128];
-	uint8_t						     reserved_mutex[128];
-	uint8_t						     reserved_journal[256];
+	struct opx_flow_control_rccc_scheduler_shared_telemetry telemetry;
+	struct opx_flow_control_rccc_scheduler_shared_ledger	ledger;
+	uint8_t							reserved_scheduler[128];
+	uint8_t							reserved_mutex[128];
+	uint8_t							reserved_journal[256];
 } __attribute__((aligned(FI_OPX_FLOW_CONTROL_SCHEDULER_ABI_ALIGNMENT)));
 
 struct opx_flow_control_rccc_scheduler_geometry {
@@ -634,8 +828,8 @@ opx_flow_control_rccc_scheduler_mapping_validate(const uint8_t *mapping_base, si
 	    !opx_flow_control_rccc_scheduler_bytes_are_zero(header->reserved1, sizeof(header->reserved1)) ||
 	    header->reserved2 != 0u ||
 	    !opx_flow_control_rccc_scheduler_bytes_are_zero(header->reserved3, sizeof(header->reserved3)) ||
-	    !opx_flow_control_rccc_scheduler_bytes_are_zero(header->reserved_telemetry,
-							    sizeof(header->reserved_telemetry)) ||
+	    !opx_flow_control_rccc_scheduler_bytes_are_zero(header->telemetry.reserved,
+							    sizeof(header->telemetry.reserved)) ||
 	    !opx_flow_control_rccc_scheduler_bytes_are_zero(header->ledger.reserved, sizeof(header->ledger.reserved)) ||
 	    !opx_flow_control_rccc_scheduler_bytes_are_zero(header->reserved_scheduler,
 							    sizeof(header->reserved_scheduler)) ||
@@ -754,23 +948,21 @@ static inline uint32_t opx_flow_control_rccc_serial_add(uint32_t serial, uint32_
 	return (serial + delta) & OPX_FLOW_CONTROL_RCCC_SERIAL_MASK;
 }
 
-static inline bool opx_flow_control_rccc_retry_initial_is_valid(uint32_t initial_delay_us)
+static inline bool opx_flow_control_rccc_retry_initial_is_valid(uint32_t initial_delay_us, uint16_t retry_cap_us)
 {
-	return initial_delay_us >= OPX_FLOW_CONTROL_RCCC_RETRY_INITIAL_MIN_US &&
-	       initial_delay_us <= OPX_FLOW_CONTROL_RCCC_RETRY_CAP_US;
+	return initial_delay_us >= OPX_FLOW_CONTROL_RCCC_RETRY_INITIAL_MIN_US && initial_delay_us <= retry_cap_us;
 }
 
-static inline bool opx_flow_control_rccc_retry_next(uint16_t delay_us, uint16_t *next_delay_us)
+static inline bool opx_flow_control_rccc_retry_next(uint16_t delay_us, uint16_t retry_cap_us, uint16_t *next_delay_us)
 {
 	uint32_t doubled;
 
-	if (next_delay_us == NULL || !opx_flow_control_rccc_retry_initial_is_valid(delay_us)) {
+	if (next_delay_us == NULL || !opx_flow_control_rccc_retry_initial_is_valid(delay_us, retry_cap_us)) {
 		return false;
 	}
 
-	doubled = (uint32_t) delay_us * 2u;
-	*next_delay_us =
-		doubled < OPX_FLOW_CONTROL_RCCC_RETRY_CAP_US ? (uint16_t) doubled : OPX_FLOW_CONTROL_RCCC_RETRY_CAP_US;
+	doubled	       = (uint32_t) delay_us * 2u;
+	*next_delay_us = doubled < retry_cap_us ? (uint16_t) doubled : retry_cap_us;
 	return true;
 }
 
@@ -813,7 +1005,7 @@ struct opx_flow_control_rccc_tx_profile {
 	uint16_t request_retry_initial_us;
 	uint16_t retirement_retry_initial_us;
 	uint16_t reset_retry_initial_us;
-	uint16_t reserved;
+	uint16_t retry_cap_us;
 };
 
 enum opx_flow_control_rccc_tx_emission {
@@ -852,7 +1044,7 @@ opx_flow_control_rccc_tx_feedback_apply(struct opx_flow_control_rccc_tx_state	  
 enum opx_flow_control_result
 opx_flow_control_rccc_tx_capacity_reject(struct opx_flow_control_rccc_tx_state	       *tx_state,
 					 const struct opx_flow_control_rccc_tx_profile *profile, uint32_t generation,
-					 struct opx_flow_control_rccc_feedback_counters *counters);
+					 uint64_t now_ns, struct opx_flow_control_rccc_feedback_counters *counters);
 enum opx_flow_control_result
 			     opx_flow_control_rccc_tx_reset_begin(struct opx_flow_control_rccc_tx_state		*tx_state,
 								  const struct opx_flow_control_rccc_tx_profile *profile, uint64_t now_ns);
@@ -865,6 +1057,9 @@ int opx_flow_control_rccc_scheduler_shared_attach(struct opx_flow_control_rccc_s
 enum opx_flow_control_result opx_flow_control_rccc_rx_control(struct fi_opx_ep				  *opx_ep,
 							      struct fi_opx_reliability_rx_flow		  *flow,
 							      const struct opx_flow_control_wire_envelope *envelope);
+enum opx_flow_control_result opx_flow_control_rccc_rx_target_piggyback(struct fi_opx_ep			 *opx_ep,
+								       struct fi_opx_reliability_rx_flow *flow,
+								       uint32_t generation, uint32_t target);
 enum opx_flow_control_result opx_flow_control_rccc_rx_emit_pending(struct fi_opx_ep		     *opx_ep,
 								   struct fi_opx_reliability_rx_flow *flow,
 								   uint8_t			      pending_flag);
@@ -952,8 +1147,10 @@ _Static_assert(offsetof(struct opx_flow_control_rccc_scheduler_header, members_o
 	       "RCCC scheduler offset block offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_scheduler_header, initialization_state) == 192u,
 	       "RCCC scheduler initialization block offset");
-_Static_assert(offsetof(struct opx_flow_control_rccc_scheduler_header, reserved_telemetry) == 256u,
+_Static_assert(offsetof(struct opx_flow_control_rccc_scheduler_header, telemetry) == 256u,
 	       "RCCC scheduler telemetry block offset");
+_Static_assert(sizeof(struct opx_flow_control_rccc_scheduler_shared_telemetry) == 128u,
+	       "RCCC scheduler shared telemetry must fill the header telemetry block");
 _Static_assert(offsetof(struct opx_flow_control_rccc_scheduler_header, ledger) == 384u,
 	       "RCCC scheduler ledger block offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_scheduler_header, reserved_scheduler) == 512u,
@@ -969,6 +1166,7 @@ _Static_assert(offsetof(struct opx_flow_control_rccc_retry, delay_us) == 0u, "RC
 _Static_assert(sizeof(((struct opx_flow_control_rccc_retry *) 0)->delay_us) == sizeof(uint16_t),
 	       "RCCC retry delay width");
 _Static_assert(offsetof(struct opx_flow_control_rccc_retry, active) == 2u, "RCCC retry active offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_retry, progress_flags) == 3u, "RCCC retry progress-flags offset");
 
 _Static_assert(offsetof(struct opx_flow_control_rccc_scheduler_reference, slot) == 0u, "RCCC scheduler slot offset");
 _Static_assert(sizeof(((struct opx_flow_control_rccc_scheduler_reference *) 0)->slot) == sizeof(uint32_t),
@@ -978,17 +1176,6 @@ _Static_assert(offsetof(struct opx_flow_control_rccc_scheduler_reference, genera
 _Static_assert(sizeof(((struct opx_flow_control_rccc_scheduler_reference *) 0)->generation) == sizeof(uint64_t),
 	       "RCCC scheduler generation width");
 _Static_assert(sizeof(struct opx_flow_control_rccc_scheduler_reference) == 16u, "RCCC scheduler reference size");
-
-_Static_assert(offsetof(struct opx_flow_control_rccc_tombstone, flow_key) == 0u, "RCCC tombstone key offset");
-_Static_assert(sizeof(((struct opx_flow_control_rccc_tombstone *) 0)->flow_key) ==
-		       sizeof(union fi_opx_reliability_service_flow_key),
-	       "RCCC tombstone key width");
-_Static_assert(offsetof(struct opx_flow_control_rccc_tombstone, last_epoch) == 12u, "RCCC tombstone epoch offset");
-_Static_assert(sizeof(((struct opx_flow_control_rccc_tombstone *) 0)->last_epoch) == sizeof(uint32_t),
-	       "RCCC tombstone epoch width");
-_Static_assert(offsetof(struct opx_flow_control_rccc_tombstone, terminal_time_ns) == 16u,
-	       "RCCC tombstone terminal-time offset");
-_Static_assert(sizeof(struct opx_flow_control_rccc_tombstone) == 24u, "RCCC tombstone size");
 
 _Static_assert(offsetof(struct opx_flow_control_rccc_reservation_record, opx_ep) == 0u,
 	       "RCCC reservation endpoint offset");
@@ -1036,17 +1223,28 @@ _Static_assert(sizeof(struct opx_flow_control_rccc_tx_state) == OPX_FLOW_CONTROL
 	       "RCCC TX state size");
 _Static_assert(_Alignof(struct opx_flow_control_rccc_tx_state) <= OPX_FLOW_CONTROL_STATE_ALIGNMENT,
 	       "RCCC TX state alignment");
-_Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, available_credits) == 12u,
+_Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, available_credits) ==
+		       OPX_FLOW_CONTROL_RCCC_TX_AVAILABLE_CREDITS_OFFSET,
 	       "RCCC TX available-credit offset");
-_Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, flags) == 27u, "RCCC TX flags offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, held_credits) ==
+		       OPX_FLOW_CONTROL_RCCC_TX_HELD_CREDITS_OFFSET,
+	       "RCCC TX held-credit offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, desired_window) ==
+		       OPX_FLOW_CONTROL_RCCC_TX_DESIRED_WINDOW_OFFSET,
+	       "RCCC TX desired-window offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, block_reason) ==
+		       OPX_FLOW_CONTROL_RCCC_TX_BLOCK_REASON_OFFSET,
+	       "RCCC TX block-reason offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, flags) == OPX_FLOW_CONTROL_RCCC_TX_FLAGS_OFFSET,
+	       "RCCC TX flags offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, request_retry) == 32u, "RCCC TX request-retry offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, activity_time_ns) == 56u,
 	       "RCCC TX activity-time offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, fault_contained) == 80u,
 	       "RCCC TX fault-contained offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, flow_key) == 96u, "RCCC TX flow-key offset");
-_Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, reserved_requested) == 92u,
-	       "RCCC TX reserved-requested offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_tx_state, target_advertised_checkpoint) == 92u,
+	       "RCCC TX target-advertised-checkpoint offset");
 _Static_assert(sizeof(((struct opx_flow_control_rccc_tx_state *) 0)->flow_key) ==
 		       sizeof(union fi_opx_reliability_service_flow_key),
 	       "RCCC TX flow-key width");
@@ -1055,14 +1253,42 @@ _Static_assert(sizeof(struct opx_flow_control_rccc_rx_state) == OPX_FLOW_CONTROL
 	       "RCCC RX state size");
 _Static_assert(_Alignof(struct opx_flow_control_rccc_rx_state) <= OPX_FLOW_CONTROL_STATE_ALIGNMENT,
 	       "RCCC RX state alignment");
+_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, grant) == OPX_FLOW_CONTROL_RCCC_RX_GRANT_OFFSET,
+	       "RCCC RX grant offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, observed) == OPX_FLOW_CONTROL_RCCC_RX_OBSERVED_OFFSET,
+	       "RCCC RX observed offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, retired_accepted) ==
+		       OPX_FLOW_CONTROL_RCCC_RX_RETIRED_ACCEPTED_OFFSET,
+	       "RCCC RX retired-accepted offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, scheduler_state) ==
+		       OPX_FLOW_CONTROL_RCCC_RX_SCHEDULER_STATE_OFFSET,
+	       "RCCC RX scheduler-state offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, flags) == OPX_FLOW_CONTROL_RCCC_RX_FLAGS_OFFSET,
+	       "RCCC RX flags offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, scheduler) == 32u, "RCCC RX scheduler-reference offset");
-_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, permission_contribution) == 48u,
+_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, permission_contribution) ==
+		       OPX_FLOW_CONTROL_RCCC_RX_PERMISSION_CONTRIBUTION_OFFSET,
 	       "RCCC RX contribution offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, epoch_snapshot) == 72u, "RCCC RX epoch-snapshot offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, request_generation) == 76u,
 	       "RCCC RX request-generation offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, decision_slot) == 80u, "RCCC RX decision-slot offset");
-_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, reject_slot) == 84u, "RCCC RX reject-slot offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, rejected_epoch) == 84u, "RCCC RX rejected-epoch offset");
 _Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, pending_epoch) == 104u, "RCCC RX pending-epoch offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_rx_state, consumed_epoch) ==
+		       OPX_FLOW_CONTROL_RCCC_RX_CONSUMED_EPOCH_OFFSET,
+	       "RCCC RX consumed-epoch offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_scheduler, outstanding_permissions) ==
+		       OPX_FLOW_CONTROL_RCCC_SCHEDULER_OUTSTANDING_OFFSET,
+	       "RCCC scheduler outstanding-permissions offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_scheduler, consumed_total_epoch) ==
+		       OPX_FLOW_CONTROL_RCCC_SCHEDULER_CONSUMED_TOTAL_OFFSET,
+	       "RCCC scheduler consumed-total offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_scheduler, shared_ledger) ==
+		       OPX_FLOW_CONTROL_RCCC_SCHEDULER_SHARED_LEDGER_OFFSET,
+	       "RCCC scheduler shared-ledger offset");
+_Static_assert(offsetof(struct opx_flow_control_rccc_scheduler, shared_release_pending) ==
+		       OPX_FLOW_CONTROL_RCCC_SCHEDULER_SHARED_RELEASE_OFFSET,
+	       "RCCC scheduler shared-release offset");
 
 #endif
