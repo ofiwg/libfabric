@@ -362,6 +362,23 @@ static const unsigned OPX_HMEM_OFI_MEM_TYPE[] = {
 		}                                                                                         \
 	} while (0)
 
+/* Same as OPX_HMEM_ATOMIC_DISPATCH, but the device-memory bounce buffer is caller-supplied
+ * (bounce_buf, capacity) instead of a fixed OPX_HFI1_MAX_PKT_SIZE stack array, for callers whose
+ * len can exceed that size (e.g. the hfisvc atomic apply path, capped at OPX_HFISVC_ATOMIC_STAGING_MAX). */
+#define OPX_HMEM_ATOMIC_DISPATCH_SIZED(src, dst, len, dt, op, dst_iface, dst_device, bounce_buf, capacity)  \
+	do {                                                                                                \
+		if (dst_iface == FI_HMEM_SYSTEM) {                                                          \
+			fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);                                   \
+		} else {                                                                                    \
+			assert((len) <= (capacity));                                                        \
+			opx_copy_from_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, bounce_buf, dst, len, \
+					   OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);                             \
+			fi_opx_rx_atomic_dispatch(src, bounce_buf, len, dt, op);                            \
+			opx_copy_to_hmem(dst_iface, dst_device, OPX_HMEM_NO_HANDLE, dst, bounce_buf, len,   \
+					 OPX_HMEM_DEV_REG_THRESHOLD_NOT_SET);                               \
+		}                                                                                           \
+	} while (0)
+
 #else
 
 #define OPX_HMEM_COPY_FROM(dst, src, len, handle, threshold, src_iface, src_device) \
@@ -379,6 +396,14 @@ static const unsigned OPX_HMEM_OFI_MEM_TYPE[] = {
 #define OPX_HMEM_ATOMIC_DISPATCH(src, dst, len, dt, op, dst_iface, dst_device) \
 	do {                                                                   \
 		fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);              \
+	} while (0)
+
+#define OPX_HMEM_ATOMIC_DISPATCH_SIZED(src, dst, len, dt, op, dst_iface, dst_device, bounce_buf, capacity) \
+	do {                                                                                               \
+		(void) dst_iface;                                                                          \
+		(void) bounce_buf;                                                                         \
+		(void) capacity;                                                                           \
+		fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);                                          \
 	} while (0)
 
 #endif // OPX_HMEM

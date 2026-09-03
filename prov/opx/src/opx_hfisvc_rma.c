@@ -90,6 +90,17 @@ static inline void opx_hfisvc_rma_putcq_drop(struct fi_opx_ep *opx_ep, struct op
 	opx_hfisvc_rma_context_drain_and_route(opx_ep, context, len);
 }
 
+/* Route a dropped iov to the sticky PUT_CQ error or a standalone CQ error. */
+static inline void opx_hfisvc_rma_drop(struct fi_opx_ep *opx_ep, struct opx_hfisvc_rma_rts_params *params,
+				       uint64_t drop_flags, uint64_t len, bool has_cq_data, int err, int prov_errno)
+{
+	if (has_cq_data && params->context != NULL) {
+		opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data, len, err, prov_errno);
+	} else {
+		opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, err, prov_errno);
+	}
+}
+
 int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 {
 	OPX_TRACER_TRACE(OPX_TRACER_BEGIN, "HFISVC_RMA_SEND_RTS");
@@ -163,7 +174,7 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 
 		struct hfisvc_client_completion completion = {
 			.flags		= OPX_HFISVC_CMPL_CQ,
-			.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
+			.cq.handle	= opx_ep->hfisvc.emr_completion_queues[plane_idx],
 			.cq.app_context = (uint64_t) internal_completion,
 		};
 
@@ -417,6 +428,17 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 	const bool write_to_origin = (params->dput_opcode == FI_OPX_HFI_DPUT_OPCODE_GET);
 	const bool has_cq_data	   = (params->dput_opcode == FI_OPX_HFI_DPUT_OPCODE_PUT_CQ);
 
+	/* PUT/PUT_CQ carrying a real op (not the FI_NOOP-1 plain-PUT sentinel) => target-side atomic write */
+	const bool is_atomic_write = (params->dput_opcode == FI_OPX_HFI_DPUT_OPCODE_PUT ||
+				      params->dput_opcode == FI_OPX_HFI_DPUT_OPCODE_PUT_CQ) &&
+				     (params->fi_op_opcode != (FI_NOOP - 1));
+
+	/* fetch: iov[0] = atomic target+operand, iov[1] = origin result buffer (pre-op value) */
+	const bool is_fetch = (params->dput_opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH);
+
+	/* compare-fetch adds iov[2] = compare operand pulled into staging after the swap operand */
+	const bool is_cmp_fetch = (params->dput_opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH);
+
 	int rc = 0;
 
 	/* FI_SUCCESS needs a committed doorbell; commands_pending tracks whether any command was queued */
@@ -452,12 +474,7 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				     "===================================== RECV -- RMA HFISVC RTS - failed (end)\n");
 			const uint64_t drop_flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-			if (has_cq_data && params->context != NULL) {
-				opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data, hfisvc_iov->len,
-							  FI_EIO, FI_EIO);
-			} else {
-				opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EIO, FI_EIO);
-			}
+			opx_hfisvc_rma_drop(opx_ep, params, drop_flags, hfisvc_iov->len, has_cq_data, FI_EIO, FI_EIO);
 
 			++cur_iov;
 			continue;
@@ -469,13 +486,8 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 			if (rc) {
 				const uint64_t drop_flags =
 					FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-				if (has_cq_data && params->context != NULL) {
-					opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data,
-								  hfisvc_iov->len, FI_EIO, FI_EIO);
-				} else {
-					opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EIO,
-									   FI_EIO);
-				}
+				opx_hfisvc_rma_drop(opx_ep, params, drop_flags, hfisvc_iov->len, has_cq_data, FI_EIO,
+						    FI_EIO);
 
 				++cur_iov;
 				continue;
@@ -487,21 +499,16 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 		if (OFI_UNLIKELY(rc)) {
 			OPX_HFISVC_DEBUG_LOG("MR State check failed for opx_mr=%p, state=%d, rc=%d\n", opx_mr,
 					     opx_mr->hfisvc.state, rc);
-			/* bound MR-PENDING retries so a never-OPENED MR cannot wedge a PUT_CQ counter forever */
-			if (OFI_UNLIKELY(++params->recv_eagain_attempts >= OPX_HFISVC_RMA_MAX_EAGAIN_ATTEMPTS)) {
+			/* a still-opening MR is transient: keep retrying so the open completion is never lost;
+			 * only a closing MR (EFAULT) is a hard drop */
+			if (rc == -FI_EFAULT) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"HFISVC RMA MR key (%lu) stuck non-OPENED after %lu attempts; iov dropped\n",
-					mr_key, (uint64_t) params->recv_eagain_attempts);
+					"HFISVC RMA MR key (%lu) unusable (closing); iov dropped\n", mr_key);
 
 				const uint64_t drop_flags =
 					FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-				if (has_cq_data && params->context != NULL) {
-					opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data,
-								  hfisvc_iov->len, FI_EIO, FI_EIO);
-				} else {
-					opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EIO,
-									   FI_EIO);
-				}
+				opx_hfisvc_rma_drop(opx_ep, params, drop_flags, hfisvc_iov->len, has_cq_data, FI_EIO,
+						    FI_EIO);
 
 				++cur_iov;
 				continue;
@@ -520,13 +527,8 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				write_to_origin ? "FI_REMOTE_READ" : "FI_REMOTE_WRITE", (uint64_t) opx_mr->attr.access);
 
 			const uint64_t drop_flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-			if (has_cq_data && params->context != NULL) {
-				opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data, hfisvc_iov->len,
-							  FI_EACCES, FI_EACCES);
-			} else {
-				opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EACCES,
-								   FI_EACCES);
-			}
+			opx_hfisvc_rma_drop(opx_ep, params, drop_flags, hfisvc_iov->len, has_cq_data, FI_EACCES,
+					    FI_EACCES);
 
 			++cur_iov;
 			continue;
@@ -551,15 +553,273 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 				(uint64_t) hfisvc_iov->remote_offset);
 
 			const uint64_t drop_flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-			if (has_cq_data && params->context != NULL) {
-				opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data, hfisvc_iov->len,
-							  FI_EACCES, FI_EACCES);
-			} else {
-				opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EACCES,
-								   FI_EACCES);
-			}
+			opx_hfisvc_rma_drop(opx_ep, params, drop_flags, hfisvc_iov->len, has_cq_data, FI_EACCES,
+					    FI_EACCES);
 
 			++cur_iov;
+			continue;
+		}
+
+		if (is_atomic_write) {
+			/* stage the operand into a local VA; the apply MR = op(MR, operand) runs on completion */
+			if (OFI_UNLIKELY(hfisvc_iov->len > OPX_HFISVC_ATOMIC_STAGING_MAX)) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFISVC atomic-write len %lu exceeds staging capacity; iov dropped\n",
+					hfisvc_iov->len);
+				opx_hfisvc_rma_drop(opx_ep, params, FI_RMA | FI_REMOTE_WRITE, hfisvc_iov->len,
+						    has_cq_data, FI_EIO, FI_EIO);
+				++cur_iov;
+				continue;
+			}
+
+			uint8_t *staging = (uint8_t *) ofi_buf_alloc(opx_ep->hfisvc.atomic_staging_pool);
+			struct opx_hfisvc_atomic_op *aop =
+				(struct opx_hfisvc_atomic_op *) ofi_buf_alloc(opx_ep->hfisvc.atomic_op_pool);
+			if (OFI_UNLIKELY(staging == NULL || aop == NULL)) {
+				if (staging) {
+					OPX_BUF_FREE(staging);
+				}
+				if (aop) {
+					OPX_BUF_FREE(aop);
+				}
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFISVC atomic staging/op pool exhausted; retrying RTS\n");
+				if (OFI_UNLIKELY(++params->recv_eagain_attempts >=
+						 OPX_HFISVC_RMA_MAX_EAGAIN_ATTEMPTS)) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"HFISVC atomic pool stuck exhausted after %lu attempts; iov dropped\n",
+						(uint64_t) params->recv_eagain_attempts);
+					opx_hfisvc_rma_drop(opx_ep, params, FI_RMA | FI_REMOTE_WRITE, hfisvc_iov->len,
+							    has_cq_data, FI_EIO, FI_EIO);
+					++cur_iov;
+					continue;
+				}
+				goto recv_rts_eagain;
+			}
+
+			aop->staging	  = staging;
+			aop->target_vaddr = (uint8_t *) opx_mr->iov.iov_base + mr_offset;
+			aop->apply_len	  = hfisvc_iov->len;
+			aop->opx_mr	  = opx_mr;
+			aop->cc		  = NULL;
+			aop->context	  = params->context;
+			aop->dt		  = (enum fi_datatype) params->fi_datatype_dt;
+			aop->op		  = (enum fi_op) params->fi_op_opcode;
+			aop->pending	  = 0;
+
+			struct opx_hfisvc_xfer_completion *internal_completion =
+				(struct opx_hfisvc_xfer_completion *) ofi_buf_alloc(opx_ep->hfisvc.completion_pool);
+			if (OFI_UNLIKELY(internal_completion == NULL)) {
+				OPX_BUF_FREE(staging);
+				OPX_BUF_FREE(aop);
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFISVC completion_pool exhausted; retrying RTS\n");
+				if (OFI_UNLIKELY(++params->recv_eagain_attempts >=
+						 OPX_HFISVC_RMA_MAX_EAGAIN_ATTEMPTS)) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"HFISVC RMA completion_pool stuck exhausted after %lu attempts; iov dropped\n",
+						(uint64_t) params->recv_eagain_attempts);
+					opx_hfisvc_rma_drop(opx_ep, params, FI_RMA | FI_REMOTE_WRITE, hfisvc_iov->len,
+							    has_cq_data, FI_EIO, FI_EIO);
+					++cur_iov;
+					continue;
+				}
+				goto recv_rts_eagain;
+			}
+
+			internal_completion->type	= OPX_HFISVC_XFER_TYPE_ATOMIC_WRITE;
+			internal_completion->access_key = opx_mr->hfisvc.access_key;
+			internal_completion->context	= params->context;
+			internal_completion->cc		= NULL;
+			internal_completion->opx_mr	= opx_mr;
+			internal_completion->opx_ep	= opx_ep;
+			internal_completion->len	= hfisvc_iov->len;
+			internal_completion->flags	= 0;
+			internal_completion->atomic_op	= aop;
+
+			struct hfisvc_client_completion completion = {
+				.flags		= OPX_HFISVC_CMPL_CQ,
+				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
+				.cq.app_context = (uint64_t) internal_completion,
+			};
+
+			rc = (*opx_ep->domain->hfisvc.cmd_rdma_read_va)(
+				opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */,
+				params->origin_lid, hfisvc_iov->origin_hfisvc_client_key, (uint32_t) hfisvc_iov->len,
+				0ul /* immediate data */, hfisvc_iov->origin_hfisvc_access_key,
+				hfisvc_iov->origin_offset, staging);
+
+			if (OFI_UNLIKELY(rc)) {
+				OPX_BUF_FREE(internal_completion);
+				OPX_BUF_FREE(staging);
+				OPX_BUF_FREE(aop);
+				if (OFI_LIKELY(rc == -FI_EAGAIN)) {
+					break;
+				}
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"hfisvc cmd_rdma_read_va (atomic-write) failed rc=%d; iov dropped\n", rc);
+				opx_hfisvc_rma_drop(opx_ep, params, FI_RMA | FI_REMOTE_WRITE, hfisvc_iov->len,
+						    has_cq_data, FI_EIO, rc);
+				++cur_iov;
+				continue;
+			}
+
+			commands_pending = true;
+			++cur_iov;
+			continue;
+		}
+
+		if (is_fetch || is_cmp_fetch) {
+			/* fetch/compare-fetch is a serial state machine keyed on iov[0]/iov[1] (+iov[2] compare);
+			 * the RTS must carry every iov the state machine walks */
+			const uint64_t fetch_niov = is_cmp_fetch ? 3ul : 2ul;
+			if (OFI_UNLIKELY(niov != fetch_niov)) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFISVC atomic-fetch malformed niov %lu (expected %lu); RTS dropped\n", niov,
+					fetch_niov);
+				opx_hfisvc_rma_post_standalone_err(opx_ep, FI_RMA | FI_REMOTE_READ, params->data,
+								   FI_EIO, FI_EIO);
+				break;
+			}
+			union opx_hfisvc_rma_iov *op_iov  = &params->hfisvc_iov[0];
+			union opx_hfisvc_rma_iov *res_iov = &params->hfisvc_iov[1];
+			union opx_hfisvc_rma_iov *cmp_iov = is_cmp_fetch ? &params->hfisvc_iov[2] : NULL;
+
+			/* compare-fetch stages [swap|compare] contiguously so the span is both operands; bound it to
+			 * the staging buffer and require matching operand lens so the CSWAP/MSWAP apply re-indexes
+			 * the compare half correctly */
+			const uint64_t staging_span = is_cmp_fetch ? op_iov->len + cmp_iov->len : op_iov->len;
+			if (OFI_UNLIKELY(staging_span > OPX_HFISVC_ATOMIC_STAGING_MAX ||
+					 (is_cmp_fetch && cmp_iov->len != op_iov->len))) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFISVC atomic-fetch operand span %lu invalid (staging max %lu); iov dropped\n",
+					staging_span, (uint64_t) OPX_HFISVC_ATOMIC_STAGING_MAX);
+				opx_hfisvc_rma_post_standalone_err(opx_ep, FI_RMA | FI_REMOTE_READ, params->data,
+								   FI_EIO, FI_EIO);
+				cur_iov += fetch_niov;
+				continue;
+			}
+
+			/* step B reads res_iov->len bytes from the target MR at mr_offset; the per-iov gate only
+			 * validated op_iov (iov[0]), so bound res_iov (iov[1]) against the same MR window */
+			if (OFI_UNLIKELY(res_iov->len > mr_len - mr_offset)) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFISVC atomic-fetch result len %lu out of MR bounds (mr_offset=%lu mr_len=%lu); iov dropped\n",
+					res_iov->len, mr_offset, mr_len);
+				opx_hfisvc_rma_post_standalone_err(opx_ep, FI_RMA | FI_REMOTE_READ, params->data,
+								   FI_EACCES, FI_EACCES);
+				cur_iov += fetch_niov;
+				continue;
+			}
+
+			uint8_t *staging = (uint8_t *) ofi_buf_alloc(opx_ep->hfisvc.atomic_staging_pool);
+			struct opx_hfisvc_atomic_op *aop =
+				(struct opx_hfisvc_atomic_op *) ofi_buf_alloc(opx_ep->hfisvc.atomic_op_pool);
+			if (OFI_UNLIKELY(staging == NULL || aop == NULL)) {
+				if (staging) {
+					OPX_BUF_FREE(staging);
+				}
+				if (aop) {
+					OPX_BUF_FREE(aop);
+				}
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFISVC atomic staging/op pool exhausted; retrying RTS\n");
+				if (OFI_UNLIKELY(++params->recv_eagain_attempts >=
+						 OPX_HFISVC_RMA_MAX_EAGAIN_ATTEMPTS)) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"HFISVC atomic pool stuck exhausted after %lu attempts; iov dropped\n",
+						(uint64_t) params->recv_eagain_attempts);
+					opx_hfisvc_rma_post_standalone_err(opx_ep, FI_RMA | FI_REMOTE_READ,
+									   params->data, FI_EIO, FI_EIO);
+					cur_iov += fetch_niov;
+					continue;
+				}
+				goto recv_rts_eagain;
+			}
+
+			aop->staging	      = staging;
+			aop->target_vaddr     = (uint8_t *) opx_mr->iov.iov_base + mr_offset;
+			aop->apply_len	      = op_iov->len;
+			aop->opx_mr	      = opx_mr;
+			aop->cc		      = NULL;
+			aop->context	      = params->context;
+			aop->dt		      = (enum fi_datatype) params->fi_datatype_dt;
+			aop->op		      = (enum fi_op) params->fi_op_opcode;
+			aop->op_client_key    = op_iov->origin_hfisvc_client_key;
+			aop->op_access_key    = op_iov->origin_hfisvc_access_key;
+			aop->op_origin_offset = op_iov->origin_offset;
+			aop->origin_lid	      = params->origin_lid;
+			aop->op_len	      = (uint32_t) op_iov->len;
+			aop->pending	      = 1;
+
+			if (is_cmp_fetch) {
+				aop->op2_client_key    = cmp_iov->origin_hfisvc_client_key;
+				aop->op2_access_key    = cmp_iov->origin_hfisvc_access_key;
+				aop->op2_origin_offset = cmp_iov->origin_offset;
+				aop->op2_len	       = (uint32_t) cmp_iov->len;
+			}
+
+			struct opx_hfisvc_xfer_completion *internal_completion =
+				(struct opx_hfisvc_xfer_completion *) ofi_buf_alloc(opx_ep->hfisvc.completion_pool);
+			if (OFI_UNLIKELY(internal_completion == NULL)) {
+				OPX_BUF_FREE(staging);
+				OPX_BUF_FREE(aop);
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFISVC completion_pool exhausted; retrying RTS\n");
+				if (OFI_UNLIKELY(++params->recv_eagain_attempts >=
+						 OPX_HFISVC_RMA_MAX_EAGAIN_ATTEMPTS)) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"HFISVC RMA completion_pool stuck exhausted after %lu attempts; iov dropped\n",
+						(uint64_t) params->recv_eagain_attempts);
+					opx_hfisvc_rma_post_standalone_err(opx_ep, FI_RMA | FI_REMOTE_READ,
+									   params->data, FI_EIO, FI_EIO);
+					cur_iov += fetch_niov;
+					continue;
+				}
+				goto recv_rts_eagain;
+			}
+
+			internal_completion->type	= is_cmp_fetch ? OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH_COMPARE :
+									 OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH;
+			internal_completion->access_key = opx_mr->hfisvc.access_key;
+			internal_completion->context	= params->context;
+			internal_completion->cc		= NULL;
+			internal_completion->opx_mr	= opx_mr;
+			internal_completion->opx_ep	= opx_ep;
+			internal_completion->len	= res_iov->len;
+			internal_completion->flags	= 0;
+			internal_completion->atomic_op	= aop;
+
+			struct hfisvc_client_completion completion = {
+				.flags		= OPX_HFISVC_CMPL_CQ,
+				.cq.handle	= opx_ep->hfisvc.internal_completion_queues[plane_idx],
+				.cq.app_context = (uint64_t) internal_completion,
+			};
+
+			/* step B first: push the pre-op MR value to the origin result buffer before applying the op */
+			rc = opx_ep->domain->hfisvc.cmd_rdma_write(
+				opx_ep->hfisvc.command_queues[plane_idx], completion, 0ul /* flags */,
+				params->origin_lid, res_iov->origin_hfisvc_client_key, (uint32_t) res_iov->len,
+				0ul /* immediate data */, res_iov->origin_hfisvc_access_key, res_iov->origin_offset,
+				opx_mr->hfisvc.mr_handle, mr_offset);
+
+			if (OFI_UNLIKELY(rc)) {
+				OPX_BUF_FREE(internal_completion);
+				OPX_BUF_FREE(staging);
+				OPX_BUF_FREE(aop);
+				if (OFI_LIKELY(rc == -FI_EAGAIN)) {
+					break;
+				}
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"hfisvc cmd_rdma_write (atomic-fetch result) failed rc=%d; iov dropped\n", rc);
+				opx_hfisvc_rma_post_standalone_err(opx_ep, FI_RMA | FI_REMOTE_READ, params->data,
+								   FI_EIO, rc);
+				cur_iov += fetch_niov;
+				continue;
+			}
+
+			commands_pending = true;
+			cur_iov += fetch_niov;
 			continue;
 		}
 
@@ -578,13 +838,8 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 
 					const uint64_t drop_flags =
 						FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-					if (has_cq_data && params->context != NULL) {
-						opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data,
-									  hfisvc_iov->len, FI_EIO, FI_EIO);
-					} else {
-						opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data,
-										   FI_EIO, FI_EIO);
-					}
+					opx_hfisvc_rma_drop(opx_ep, params, drop_flags, hfisvc_iov->len, has_cq_data,
+							    FI_EIO, FI_EIO);
 
 					++cur_iov;
 					continue;
@@ -643,12 +898,7 @@ int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work)
 			}
 
 			const uint64_t drop_flags = FI_RMA | (write_to_origin ? FI_REMOTE_READ : FI_REMOTE_WRITE);
-			if (has_cq_data && params->context != NULL) {
-				opx_hfisvc_rma_putcq_drop(opx_ep, params->context, params->data, hfisvc_iov->len,
-							  FI_EIO, rc);
-			} else {
-				opx_hfisvc_rma_post_standalone_err(opx_ep, drop_flags, params->data, FI_EIO, rc);
-			}
+			opx_hfisvc_rma_drop(opx_ep, params, drop_flags, hfisvc_iov->len, has_cq_data, FI_EIO, rc);
 
 			++cur_iov;
 			continue;
@@ -741,8 +991,16 @@ void opx_hfisvc_rma_invoke_recv_rts(struct fi_opx_ep *opx_ep, const union opx_hf
 
 	const enum fi_datatype dt = (enum fi_datatype) hdr->rma_rts.dt;
 	const enum fi_op       op = (enum fi_op) hdr->rma_rts.op;
-	assert(op == FI_NOOP - 1 || op < OFI_ATOMIC_OP_LAST);
-	assert(dt == FI_VOID - 1 || dt < OFI_DATATYPE_LAST);
+	/* wire-controlled op/dt index the atomic dispatch table; plain RMA carries the FI_NOOP-1/FI_VOID-1 sentinel */
+	if (OFI_UNLIKELY(!(op == FI_NOOP - 1 || op < OFI_ATOMIC_OP_LAST) ||
+			 !(dt == FI_VOID - 1 || dt < OFI_DATATYPE_LAST))) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"HFISVC RMA RTS op/dt out of range (op=%u dt=%u); malformed packet dropped\n", (unsigned) op,
+			(unsigned) dt);
+		OPX_BUF_FREE(work);
+		OPX_TRACER_TRACE(OPX_TRACER_END_ERROR, "HFISVC_RMA_INVOKE_RCV_RTS");
+		return;
+	}
 	params->fi_datatype_dt = dt;
 	params->fi_op_opcode   = op;
 

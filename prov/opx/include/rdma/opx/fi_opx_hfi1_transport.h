@@ -679,6 +679,27 @@ struct opx_hfisvc_recv_rts_params {
 	union opx_hfisvc_iov iovs[OPX_MAX_HFISVC_IOVS];
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
+struct opx_hfisvc_atomic_op;
+struct opx_hfisvc_xfer_completion;
+
+struct opx_hfisvc_atomic_stage_params {
+	struct fi_opx_work_elem work_elem;
+	struct fi_opx_ep       *opx_ep;
+	/* target-side apply state; owns aop->staging until the terminal apply or a never-queued hard fail */
+	struct opx_hfisvc_atomic_op	  *aop;
+	struct opx_hfisvc_xfer_completion *ic;
+	uint8_t				  *dst;
+	uint64_t			   origin_off;
+	uint32_t			   op_key;
+	uint32_t			   acc_key;
+	uint32_t			   pull_len;
+	uint32_t			   origin_lid;
+	int				   ctx_idx;
+	uint32_t			   eagain_attempts;
+	/* command already queued; only the committing doorbell is still pending (do not re-issue the read) */
+	uint8_t needs_doorbell_only;
+} __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
+
 union fi_opx_hfi1_deferred_work {
 	struct fi_opx_work_elem			work_elem;
 	struct fi_opx_hfi1_dput_params		dput;
@@ -689,6 +710,7 @@ union fi_opx_hfi1_deferred_work {
 	struct opx_hfisvc_rma_rts_params	hfisvc_rma_rts;
 	struct opx_hfi1_rx_ipc_rts_params	rx_ipc_rts;
 	struct opx_hfisvc_recv_rts_params	hfisvc_rts_params;
+	struct opx_hfisvc_atomic_stage_params	hfisvc_atomic_stage;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 int  opx_hfisvc_deferred_recv_rts(union fi_opx_hfi1_deferred_work *work);

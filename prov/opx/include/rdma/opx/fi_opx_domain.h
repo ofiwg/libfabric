@@ -352,7 +352,9 @@ struct fi_opx_mr {
 		};
 		enum opx_mr_hfisvc_state state;
 		uint32_t		 access_key;
-		uint32_t		 padding;
+		/* set when a queued MR command's doorbell was refused; the deferred work fn re-rings only */
+		uint8_t needs_doorbell;
+		uint8_t pad[3];
 	} hfisvc;
 	uint8_t		     hmem_unified;
 	uint8_t		     dmabuf_owner; /* enum opx_mr_dmabuf_owner */

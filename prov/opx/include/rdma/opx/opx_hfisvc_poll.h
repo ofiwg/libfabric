@@ -190,7 +190,8 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 					OPX_HFISVC_DEBUG_LOG(
 						"MR State transition opx_mr=%p state=PENDING_KEY_ENABLE -> OPENED\n",
 						opx_mr);
-					opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPENED;
+					opx_mr->hfisvc.state	      = OPX_MR_HFISVC_STATE_OPENED;
+					opx_mr->hfisvc.needs_doorbell = 0;
 				} else if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE) {
 					if (OFI_UNLIKELY(!opx_hfisvc_mr_validate_access_key(opx_mr, access_key))) {
 						opx_hfisvc_mr_report_completion_error(opx_mr);
@@ -212,7 +213,8 @@ void opx_domain_hfisvc_poll(struct fi_opx_domain *opx_domain)
 					OPX_HFISVC_DEBUG_LOG(
 						"MR State transition opx_mr=%p state=PENDING_KEY_ENABLE with CLOSE_ISSUED -> OPENED\n",
 						opx_mr);
-					opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_OPENED;
+					opx_mr->hfisvc.state	      = OPX_MR_HFISVC_STATE_OPENED;
+					opx_mr->hfisvc.needs_doorbell = 0;
 				} else {
 					FI_WARN(fi_opx_global.prov, FI_LOG_MR,
 						"Unexpected HFISVC MR completion state for type=%d: opx_mr=%p state=%d status=%d\n",

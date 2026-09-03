@@ -1048,6 +1048,18 @@ static int fi_opx_close_ep(fid_t fid)
 			ofi_bufpool_destroy(opx_ep->hfisvc.completion_pool);
 			opx_ep->hfisvc.completion_pool = NULL;
 		}
+		if (opx_ep->hfisvc.atomic_staging_pool) {
+			ofi_bufpool_destroy(opx_ep->hfisvc.atomic_staging_pool);
+			opx_ep->hfisvc.atomic_staging_pool = NULL;
+		}
+		if (opx_ep->hfisvc.atomic_op_pool) {
+			ofi_bufpool_destroy(opx_ep->hfisvc.atomic_op_pool);
+			opx_ep->hfisvc.atomic_op_pool = NULL;
+		}
+		if (opx_ep->hfisvc.atomic_apply_scratch) {
+			free(opx_ep->hfisvc.atomic_apply_scratch);
+			opx_ep->hfisvc.atomic_apply_scratch = NULL;
+		}
 	}
 	/* close secondary hfisvc ibv_context AFTER its queues; closing it first orphans the queue fds (-EBADF) */
 	struct fi_opx_domain *opx_domain = opx_ep->domain;
@@ -3211,6 +3223,51 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			opx_ep->hfisvc.completion_pool = NULL;
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Failed creating HFISVC completion pool, rc=%d\n",
 				cp_rc);
+			errno = FI_ENOMEM;
+			goto unlock;
+		}
+
+		OPX_COMPILE_TIME_ASSERT(OPX_HFISVC_ATOMIC_STAGING_MAX <= UINT32_MAX,
+					"atomic staging cap must fit a uint32 RDMA read length");
+		int asp_rc = ofi_bufpool_create(&opx_ep->hfisvc.atomic_staging_pool, OPX_HFISVC_ATOMIC_STAGING_MAX, 32,
+						UINT_MAX, 1, OFI_BUFPOOL_NO_ZERO);
+		if (asp_rc) {
+			opx_ep->hfisvc.atomic_staging_pool = NULL;
+			ofi_bufpool_destroy(opx_ep->hfisvc.completion_pool);
+			opx_ep->hfisvc.completion_pool = NULL;
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Failed creating HFISVC atomic staging pool, rc=%d\n", asp_rc);
+			errno = FI_ENOMEM;
+			goto unlock;
+		}
+
+		int aop_rc = ofi_bufpool_create(&opx_ep->hfisvc.atomic_op_pool, sizeof(struct opx_hfisvc_atomic_op), 32,
+						UINT_MAX, 2048, OFI_BUFPOOL_NO_ZERO);
+		if (aop_rc) {
+			opx_ep->hfisvc.atomic_op_pool = NULL;
+			ofi_bufpool_destroy(opx_ep->hfisvc.atomic_staging_pool);
+			opx_ep->hfisvc.atomic_staging_pool = NULL;
+			ofi_bufpool_destroy(opx_ep->hfisvc.completion_pool);
+			opx_ep->hfisvc.completion_pool = NULL;
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Failed creating HFISVC atomic op pool, rc=%d\n",
+				aop_rc);
+			errno = FI_ENOMEM;
+			goto unlock;
+		}
+
+		/* single persistent device-memory bounce buffer for the atomic apply step; the
+		 * completion poller is single-threaded and serializes RMW application, so one
+		 * buffer shared across ops (rather than a bufpool) is sufficient. */
+		opx_ep->hfisvc.atomic_apply_scratch = malloc(OPX_HFISVC_ATOMIC_STAGING_MAX);
+		if (opx_ep->hfisvc.atomic_apply_scratch == NULL) {
+			ofi_bufpool_destroy(opx_ep->hfisvc.atomic_op_pool);
+			opx_ep->hfisvc.atomic_op_pool = NULL;
+			ofi_bufpool_destroy(opx_ep->hfisvc.atomic_staging_pool);
+			opx_ep->hfisvc.atomic_staging_pool = NULL;
+			ofi_bufpool_destroy(opx_ep->hfisvc.completion_pool);
+			opx_ep->hfisvc.completion_pool = NULL;
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Failed allocating HFISVC atomic apply scratch buffer\n");
 			errno = FI_ENOMEM;
 			goto unlock;
 		}

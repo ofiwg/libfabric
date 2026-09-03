@@ -34,6 +34,7 @@
 #include "rdma/opx/fi_opx_atomic.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_rma.h"
+#include "rdma/opx/opx_hfisvc_rma.h"
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/opx_flow_control.h"
 #include "rdma/opx/opx_flow_control_specialization.h"
@@ -120,6 +121,47 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 			       const uint64_t is_shm, const enum opx_hfi1_type hfi1_type, const bool ctx_sharing)
 {
 	struct fi_opx_ep_tx *opx_tx = FI_OPX_EP_TX(opx_ep, opx_dst_addr);
+
+#if HAVE_HFISVC
+	/* hfisvc atomic fetch and compare-fetch for off-SHM SYSTEM at/above the SDMA floor. iov[1] carries the
+	 * pre-op result buffer; compare-fetch adds iov[2] for the compare operand pulled into target staging. */
+	const bool hfisvc_cmp_fetch = (opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH);
+	const bool hfisvc_fetch	    = (opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH);
+	/* the caller doubled buf_iov->len for compare-fetch to pack [swap|compare]; recover the single-operand len */
+	const uint64_t hfisvc_operand_len = hfisvc_cmp_fetch ? (buf_iov->len >> 1) : buf_iov->len;
+	if ((hfisvc_fetch || hfisvc_cmp_fetch) && !is_shm && opx_ep->use_hfisvc && cc != NULL &&
+	    !(tx_op_flags & FI_INJECT) && buf_iov->len <= OPX_HFISVC_ATOMIC_STAGING_MAX &&
+	    buf_iov->iface == FI_HMEM_SYSTEM && fetch_iov->iface == FI_HMEM_SYSTEM &&
+	    (!hfisvc_cmp_fetch || compare_iov->iface == FI_HMEM_SYSTEM) &&
+	    hfisvc_operand_len >= opx_ep_tx_hfisvc_min(opx_ep, opx_ep->tx, buf_iov->iface)) {
+		union fi_opx_hfi1_deferred_work *hfisvc_work =
+			(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_tx->work_pending_pool);
+		assert(hfisvc_work != NULL);
+		struct opx_rma_op_iov hfisvc_iov[3] = {
+			{.remote_auth_key = key, .remote_offset = addr_offset, .hmem_iov = *buf_iov},
+			{.remote_auth_key = 0ul, .remote_offset = 0ul, .hmem_iov = *fetch_iov}};
+		hfisvc_iov[0].hmem_iov.len = hfisvc_operand_len;
+		size_t hfisvc_niov	   = 2ul;
+
+		/* each origin access-once window drains cc on completion, so account for the result push (and the
+		   compare pull for compare-fetch) or cc frees before the later completions land. */
+		cc->byte_counter += fetch_iov->len;
+		if (hfisvc_cmp_fetch) {
+			/* target re-indexes the compare operand at staging[op_len], so the swap and compare
+			   operands must be equal length or the receiver silently drops the RTS */
+			assert(compare_iov->len == hfisvc_operand_len);
+			hfisvc_iov[2].hmem_iov = *compare_iov;
+			cc->byte_counter += compare_iov->len;
+			hfisvc_niov = 3ul;
+		}
+		cc->initial_byte_count = cc->byte_counter;
+
+		opx_hfisvc_rma_watch_register(opx_ep, cc);
+		opx_hfisvc_rma_invoke_send_rts(opx_ep, hfisvc_work, hfisvc_iov, hfisvc_niov, opx_dst_addr, 0ul, cc,
+					       opcode, dt, op, lock_required, reliability, hfi1_type);
+		return;
+	}
+#endif
 
 	if (tx_op_flags & FI_INJECT) {
 		assert((tx_op_flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)) !=
@@ -271,9 +313,31 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 		opx_hmem_iov_init(fetch_vaddr, buf_len, NULL, &fetch_iov, &hmem_handle);
 
 		cc->cntr = opx_ep->read_cntr;
-		opx_readv_internal(opx_ep, &fetch_iov, 1, &hmem_handle, opx_dst_addr, &addr, &key, opx_tx->op_flags,
-				   opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype, op, FI_OPX_HFI_DPUT_OPCODE_GET,
-				   lock_required, caps, reliability, hfi1_type);
+#if HAVE_HFISVC
+		/* FI_ATOMIC_READ is a plain GET into the result buffer; route it through hfisvc like fi_read. */
+		if (buf_len >= opx_ep_tx_hfisvc_min(opx_ep, opx_ep->tx, fetch_iov.iface) && opx_ep->use_hfisvc &&
+		    fetch_iov.iface == FI_HMEM_SYSTEM && !fi_opx_hfi1_tx_is_shm(opx_ep, opx_dst_addr)) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.hfisvc);
+			struct opx_rma_op_iov		 hfisvc_iov = {.remote_auth_key = key,
+								       .remote_offset	= addr,
+								       .hmem_iov	= fetch_iov};
+			union fi_opx_hfi1_deferred_work *work =
+				(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_tx->work_pending_pool);
+			assert(work != NULL);
+			opx_hfisvc_rma_watch_register(opx_ep, cc);
+			opx_hfisvc_rma_invoke_send_rts(opx_ep, work, &hfisvc_iov, 1ul, opx_dst_addr, 0ul, cc,
+						       FI_OPX_HFI_DPUT_OPCODE_GET, FI_VOID, FI_NOOP, lock_required,
+						       reliability, hfi1_type);
+		} else
+#endif
+		{
+#if HAVE_HFISVC
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.fallback_readv);
+#endif
+			opx_readv_internal(opx_ep, &fetch_iov, 1, &hmem_handle, opx_dst_addr, &addr, &key,
+					   opx_tx->op_flags, opx_ep->rx->cq, opx_ep->read_cntr, cc, datatype, op,
+					   FI_OPX_HFI_DPUT_OPCODE_GET, lock_required, caps, reliability, hfi1_type);
+		}
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "===================================== ATOMIC READ (end)\n");
 		return count;
