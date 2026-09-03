@@ -104,7 +104,7 @@ static struct util_rx_entry *util_init_unexp(struct util_srx_ctx *srx,
 	if (!util_entry)
 		return NULL;
 
-	util_entry->status = RX_ENTRY_UNEXP;
+	util_entry->status = RX_ENTRY_UNEXP_UNQUEUED;
 	util_entry->peer_entry.owner_context = NULL;
 	util_entry->peer_entry.msg_size = attr->msg_size;
 	util_entry->peer_entry.addr = attr->addr;
@@ -345,7 +345,8 @@ static int util_queue_msg(struct fi_peer_rx_entry *rx_entry)
 	assert(ofi_genlock_held(srx_ctx->lock));
 
 	util_entry = container_of(rx_entry, struct util_rx_entry, peer_entry);
-	assert(util_entry->status == RX_ENTRY_UNEXP);
+	assert(util_entry->status == RX_ENTRY_UNEXP_UNQUEUED);
+	util_entry->status = RX_ENTRY_UNEXP;
 	if (!srx_ctx->dir_recv || rx_entry->addr == FI_ADDR_UNSPEC) {
 		ofi_genlock_lock(&srx_ctx->unspec_lock);
 		dlist_insert_tail(&util_entry->d_entry,
@@ -372,7 +373,8 @@ static int util_queue_tag(struct fi_peer_rx_entry *rx_entry)
 	assert(ofi_genlock_held(srx_ctx->lock));
 
 	util_entry = container_of(rx_entry, struct util_rx_entry, peer_entry);
-	assert(util_entry->status == RX_ENTRY_UNEXP);
+	assert(util_entry->status == RX_ENTRY_UNEXP_UNQUEUED);
+	util_entry->status = RX_ENTRY_UNEXP;
 	if (!srx_ctx->dir_recv || rx_entry->addr == FI_ADDR_UNSPEC) {
 		ofi_genlock_lock(&srx_ctx->unspec_lock);
 		dlist_insert_tail(&util_entry->d_entry,
@@ -418,6 +420,8 @@ static void util_free_entry(struct fi_peer_rx_entry *entry)
 		}
 	}
 
+	/* Only a queued entry carries RX_ENTRY_UNEXP, so an entry the peer
+	 * never queued needs nothing unwound here. */
 	if (util_entry->status == RX_ENTRY_UNEXP) {
 		if (util_entry->peer_entry.addr == FI_ADDR_UNSPEC) {
 			dlist_remove(&util_entry->d_entry);
