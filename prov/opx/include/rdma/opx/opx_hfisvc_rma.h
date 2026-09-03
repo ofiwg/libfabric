@@ -57,9 +57,6 @@ extern "C" {
 int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work);
 int opx_hfisvc_rma_recv_rts(union fi_opx_hfi1_deferred_work *work);
 
-/* bounded-retry cap: past this a stuck iov is dropped-and-drained */
-#define OPX_HFISVC_RMA_MAX_EAGAIN_ATTEMPTS (16384ul)
-
 /* Caller supplies the deferred-work buffer so this call cannot fail on allocation. */
 __OPX_FORCE_INLINE__
 void opx_hfisvc_rma_invoke_send_rts(struct fi_opx_ep *opx_ep, union fi_opx_hfi1_deferred_work *work,

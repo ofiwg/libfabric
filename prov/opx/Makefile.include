@@ -50,6 +50,7 @@ opx_files =									\
 		prov/opx/src/opx_hfisvc.c					\
 		prov/opx/src/opx_hfisvc_rma.c					\
 		prov/opx/src/opx_hfisvc_mr.c					\
+		prov/opx/src/opx_hfisvc_atomic.c				\
 		prov/opx/src/opx_tracer.c					\
 		prov/opx/src/opx_ipc.c						\
 		prov/opx/src/opx_debug.c					\

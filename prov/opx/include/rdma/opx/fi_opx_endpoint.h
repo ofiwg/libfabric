@@ -653,57 +653,62 @@ struct fi_opx_ep {
 	   ofi_spin_t size (which varies between DEBUG and RELEASE builds).
 	   Sized to exactly 128 bytes (two cachelines). */
 #if HAVE_HFISVC
-	struct {
-		/**
-		 * @brief Command queues used by this endpoint to submit commands to the hfisvc
-		 * (one per plane for dual-plane support)
-		 */
-		hfisvc_client_command_queue_t command_queues[OPX_MAX_TX_CONTEXTS];
+	/* The inner anonymous struct holds the hfisvc members; the cacheline_pad union arm
+	   fills the struct out to the two-cacheline (128 byte) budget without hand-summing
+	   member sizes. sizeof(hfisvc) == max(sizeof(inner), 128), so the size assert below
+	   fires loudly if a future member ever overflows two cachelines. */
+	union {
+		struct {
+			/**
+			 * @brief Command queues used by this endpoint to submit commands to the hfisvc
+			 * (one per plane for dual-plane support)
+			 */
+			hfisvc_client_command_queue_t command_queues[OPX_MAX_TX_CONTEXTS];
 
-		/**
-		 * @brief Completion queues used by the endpoint for handling completions from the
-		 * hfisvc where we need to do additional work. For example, we may need to free certain
-		 * resources before sending a completion up to the user/middleware.
-		 * (one per plane for dual-plane support)
-		 */
-		hfisvc_client_completion_queue_t internal_completion_queues[OPX_MAX_TX_CONTEXTS];
+			/**
+			 * @brief Completion queues used by the endpoint for handling completions from the
+			 * hfisvc where we need to do additional work. For example, we may need to free certain
+			 * resources before sending a completion up to the user/middleware.
+			 * (one per plane for dual-plane support)
+			 */
+			hfisvc_client_completion_queue_t internal_completion_queues[OPX_MAX_TX_CONTEXTS];
 
-		/**
-		 * @brief Completion queues used EXCLUSIVELY for ephemeral memory registration
-		 * completions (cmd_dma_access_once_va), kept separate from
-		 * internal_completion_queues (used for rdma_read/rdma_write/RZV target-side
-		 * completions). HFISVC divides its total in-flight completion limit across
-		 * completion queues, so segregating initiator-side (ephemeral registration)
-		 * completions from target-side (rdma_read) completions here avoids a live-lock
-		 * in biband traffic where both ranks are simultaneously sending and receiving:
-		 * without this separation, both ranks could exhaust the shared in-flight limit
-		 * on rdma_read (EAGAIN) with neither able to make progress, since freeing space
-		 * requires the other rank's rdma_read to complete.
-		 * (one per plane for dual-plane support)
-		 */
-		hfisvc_client_completion_queue_t emr_completion_queues[OPX_MAX_TX_CONTEXTS];
+			/**
+			 * @brief Completion queues used EXCLUSIVELY for ephemeral memory registration
+			 * completions (cmd_dma_access_once_va), kept separate from
+			 * internal_completion_queues (used for rdma_read/rdma_write/RZV target-side
+			 * completions). HFISVC divides its total in-flight completion limit across
+			 * completion queues, so segregating initiator-side (ephemeral registration)
+			 * completions from target-side (rdma_read) completions here avoids a live-lock
+			 * in biband traffic where both ranks are simultaneously sending and receiving:
+			 * without this separation, both ranks could exhaust the shared in-flight limit
+			 * on rdma_read (EAGAIN) with neither able to make progress, since freeing space
+			 * requires the other rank's rdma_read to complete.
+			 * (one per plane for dual-plane support)
+			 */
+			hfisvc_client_completion_queue_t emr_completion_queues[OPX_MAX_TX_CONTEXTS];
 
-		/**
-		 * @brief Pointer to the CQ's hfisvc completion queue. Use this completion queue
-		 * when no further action is needed before bubbling up the completion to
-		 * the user/middleware.
-		 */
-		hfisvc_client_completion_queue_t *cq_completion_queue;
+			/**
+			 * @brief Pointer to the CQ's hfisvc completion queue. Use this completion queue
+			 * when no further action is needed before bubbling up the completion to
+			 * the user/middleware.
+			 */
+			hfisvc_client_completion_queue_t *cq_completion_queue;
 
-		struct ofi_bufpool *completion_pool;
+			struct ofi_bufpool *completion_pool;
+			struct ofi_bufpool *atomic_staging_pool;
+			struct ofi_bufpool *atomic_op_pool;
 
-		uint32_t rdma_read_count[OPX_MAX_TX_CONTEXTS];
-		uint32_t num_queues;
+			/* Persistent OPX_HFISVC_ATOMIC_STAGING_MAX-sized bounce buffer for device-memory
+			 * atomic apply in the (single-threaded) completion poller; allocated once at
+			 * endpoint-open, not per-op, since the poller serializes RMW application. */
+			uint8_t *atomic_apply_scratch;
 
-		/* Explicit padding to fill out the two-cacheline (128 byte) budget; the
-		   compiler does not automatically pad this struct to that size. Computed
-		   from the sizes of the preceding members so it (and the size assert
-		   below) automatically stays correct if OPX_MAX_TX_CONTEXTS ever changes. */
-		uint8_t unused_pad[(FI_OPX_CACHE_LINE_SIZE * 2) -
-				   (sizeof(hfisvc_client_command_queue_t) * OPX_MAX_TX_CONTEXTS +
-				    sizeof(hfisvc_client_completion_queue_t) * OPX_MAX_TX_CONTEXTS * 2 +
-				    sizeof(hfisvc_client_completion_queue_t *) + sizeof(struct ofi_bufpool *) +
-				    sizeof(uint32_t) * OPX_MAX_TX_CONTEXTS + sizeof(uint32_t))];
+			uint32_t rdma_read_count[OPX_MAX_TX_CONTEXTS];
+			uint32_t num_queues;
+		};
+
+		uint8_t cacheline_pad[FI_OPX_CACHE_LINE_SIZE * 2];
 	} hfisvc;
 #else
 	/* Placeholder to maintain cacheline alignment when hfisvc is disabled */
@@ -4021,6 +4026,20 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 			context->byte_counter		 = 0;
 			opx_enqueue_err_from_pending(opx_ep->rx->cq_pending_ptr, opx_ep->rx->cq_err_ptr, context);
 		}
+		/* a failed atomic op must not apply; free its staging + side state to avoid a leak (push-first
+		 * means a fetch failure leaves the MR unmodified) */
+		if ((completion->type == OPX_HFISVC_XFER_TYPE_ATOMIC_WRITE ||
+		     completion->type == OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH ||
+		     completion->type == OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH_COMPARE) &&
+		    completion->atomic_op) {
+			struct opx_hfisvc_atomic_op *aop = completion->atomic_op;
+			/* a fault at any staged step (pre-op push, operand pull) leaves atomic_op set; free once */
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"HFISVC atomic op failed (type=%d stage=%u); RMW not applied\n", (int) completion->type,
+				(unsigned) aop->pending);
+			OPX_BUF_FREE(aop->staging);
+			OPX_BUF_FREE(aop);
+		}
 	} else {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.internal_completion.success);
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rzv_send_rts.completed);
@@ -4084,8 +4103,45 @@ void opx_ep_hfisvc_poll_proc_internal_completion(struct fi_opx_ep *opx_ep, struc
 			}
 			break;
 		}
+		case OPX_HFISVC_XFER_TYPE_ATOMIC_WRITE: {
+			struct opx_hfisvc_atomic_op *aop = completion->atomic_op;
+			uint64_t		     hmem_device;
+			uint64_t		     hmem_handle;
+			enum fi_hmem_iface hmem_iface = opx_hmem_get_mr_iface(aop->opx_mr, &hmem_device, &hmem_handle);
+			(void) hmem_iface; /* unused when OPX_HMEM is not built */
+			/* single-threaded poller serializes the RMW; no lock needed (matches two-sided dput atomic) */
+			assert(aop->apply_len <= OPX_HFISVC_ATOMIC_STAGING_MAX);
+			OPX_HMEM_ATOMIC_DISPATCH_SIZED(
+				aop->staging, aop->target_vaddr, aop->apply_len, aop->dt, aop->op, hmem_iface,
+				hmem_device, opx_ep->hfisvc.atomic_apply_scratch, OPX_HFISVC_ATOMIC_STAGING_MAX);
+
+			const uint64_t len = completion->len;
+			if (completion->cc) {
+				struct fi_opx_completion_counter *cc = completion->cc;
+				assert(len <= cc->byte_counter);
+				cc->byte_counter -= len;
+				if (cc->byte_counter == 0) {
+					opx_hfisvc_rma_cc_hit_zero(cc);
+				}
+			} else if (context) {
+				opx_hfisvc_rma_context_drain_and_route(opx_ep, context, len);
+			}
+
+			/* target-side atomic-write reuses the MR-owned key; only free a transient send key */
+			if (completion->opx_mr == NULL) {
+				opx_hfisvc_keyset_free_key(opx_ep->domain->hfisvc.ctxs[ctx_idx].access_key_set,
+							   completion->access_key,
+							   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep->domain));
+			}
+
+			OPX_BUF_FREE(aop->staging);
+			OPX_BUF_FREE(aop);
+			break;
+		}
 		case OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH:
 		case OPX_HFISVC_XFER_TYPE_ATOMIC_FETCH_COMPARE:
+			opx_hfisvc_atomic_poll_advance(opx_ep, completion, context, ctx_idx);
+			break;
 		case OPX_HFISVC_XFER_TYPE_MR:
 		default:
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,

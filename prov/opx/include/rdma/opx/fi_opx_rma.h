@@ -206,9 +206,13 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 	uint64_t pbc_dlid = OPX_PBC_DLID(opx_dst_addr.planes[OPX_PRIMARY_PLANE].lid, hfi1_type);
 
 #if HAVE_HFISVC
-	/* hfisvc plain write for off-SHM SYSTEM at/above the SDMA floor; writedata rides PUT_CQ, inject bypasses. */
-	if (!(tx_op_flags & FI_INJECT) && op == FI_NOOP && iov->len >= opx_ep->tx->sdma_min_payload_bytes &&
-	    opx_ep->use_hfisvc && iov->iface == FI_HMEM_SYSTEM && !is_shm) {
+	/* hfisvc write for off-SHM SYSTEM at/above the floor; a real op (atomic-write) is staged on the target so it
+	 * is capped at OPX_HFISVC_ATOMIC_STAGING_MAX and oversized falls back to two-sided, but a plain write
+	 * (op == FI_NOOP) lands directly in the target MR with no staging and is uncapped; writedata rides PUT_CQ,
+	 * inject bypasses. */
+	if (!is_shm && opx_ep->use_hfisvc && (op == FI_NOOP || iov->len <= OPX_HFISVC_ATOMIC_STAGING_MAX) &&
+	    !(tx_op_flags & FI_INJECT) && iov->iface == FI_HMEM_SYSTEM &&
+	    iov->len >= opx_ep_tx_hfisvc_min(opx_ep, opx_ep->tx, iov->iface)) {
 		assert(work != NULL);
 		const uint64_t cq_data		 = tx_op_flags & FI_REMOTE_CQ_DATA;
 		const uint64_t dput_opcode	 = cq_data ? FI_OPX_HFI_DPUT_OPCODE_PUT_CQ : FI_OPX_HFI_DPUT_OPCODE_PUT;

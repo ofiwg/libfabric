@@ -779,8 +779,8 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 
 #if HAVE_HFISVC
 	/* hfisvc GET only for off-SHM SYSTEM at/above the SDMA floor; HMEM uses the readv fallback */
-	if (len >= opx_ep->tx->sdma_min_payload_bytes && opx_ep->use_hfisvc && hmem_iface == FI_HMEM_SYSTEM &&
-	    !fi_opx_hfi1_tx_is_shm(opx_ep, opx_addr)) {
+	if (opx_ep->use_hfisvc && hmem_iface == FI_HMEM_SYSTEM && !fi_opx_hfi1_tx_is_shm(opx_ep, opx_addr) &&
+	    len >= opx_ep_tx_hfisvc_min(opx_ep, opx_ep->tx, hmem_iface)) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.hfisvc);
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		       "fi_read fast-path: taking hfisvc one-sided GET (len=%zu iface=SYSTEM)\n", len);
@@ -904,7 +904,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 
 #if HAVE_HFISVC
 	if (opx_ep->use_hfisvc && !fi_opx_hfi1_tx_is_shm(opx_ep, opx_addr) && count <= OPX_MAX_RMA_HFISVC_IOVS &&
-	    cc->byte_counter >= opx_ep->tx->sdma_min_payload_bytes) {
+	    cc->byte_counter >= opx_ep_tx_hfisvc_min(opx_ep, opx_ep->tx, FI_HMEM_SYSTEM)) {
 		struct fi_opx_mr    **mr_arr = (struct fi_opx_mr **) desc;
 		struct opx_rma_op_iov hfisvc_iovs[OPX_MAX_RMA_HFISVC_IOVS];
 		uint64_t	      remote_offset = addr_offset;
@@ -1106,7 +1106,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	/* hfisvc GET needs a 1:1 local/remote iov mapping; unequal counts/lengths take the readv fallback */
 	if (opx_ep->use_hfisvc && !fi_opx_hfi1_tx_is_shm(opx_ep, opx_src_addr) &&
 	    msg->iov_count == msg->rma_iov_count && msg->iov_count <= OPX_MAX_RMA_HFISVC_IOVS &&
-	    cc->byte_counter >= opx_ep->tx->sdma_min_payload_bytes) {
+	    cc->byte_counter >= opx_ep_tx_hfisvc_min(opx_ep, opx_ep->tx, FI_HMEM_SYSTEM)) {
 		struct fi_opx_mr    **mr_arr = (struct fi_opx_mr **) msg->desc;
 		struct opx_rma_op_iov hfisvc_iovs[OPX_MAX_RMA_HFISVC_IOVS];
 		int		      eligible = 1;

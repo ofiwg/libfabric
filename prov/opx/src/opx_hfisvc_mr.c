@@ -87,10 +87,15 @@ void opx_hfisvc_mr_open(struct fi_opx_domain *opx_domain, struct fi_opx_mr *opx_
 	if (ret) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Error opening opx_mr=%p buf=%p-%p iface=%d\n", opx_mr, base,
 			(void *) ((uintptr_t) base + len), opx_mr->attr.iface);
-	} else {
-		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx);
-		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=NOT_REGISTERED -> PENDING_OPEN\n", opx_mr);
-		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_OPEN;
+		return;
+	}
+
+	OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=NOT_REGISTERED -> PENDING_OPEN\n", opx_mr);
+	opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_OPEN;
+
+	/* the command is queued; ring once and defer any re-ring so we never re-issue cmd_mr_open */
+	if (OFI_UNLIKELY((*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx))) {
+		opx_mr->hfisvc.needs_doorbell = 1;
 	}
 }
 
@@ -148,13 +153,18 @@ int opx_hfisvc_mr_enable_access_key(struct fi_opx_domain *opx_domain, struct fi_
 					   FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_domain));
 		return -FI_EAGAIN;
 	}
-	(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx);
+
 	opx_mr->hfisvc.access_key = access_key;
 
 	OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p key=%u state=PENDING_KEY_ALLOC -> PENDING_KEY_ENABLE\n",
 			     opx_mr, opx_mr->hfisvc.access_key);
 
 	opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_KEY_ENABLE;
+
+	/* the enable is queued; ring once and defer any re-ring so we never re-issue or re-alloc the key */
+	if (OFI_UNLIKELY((*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx))) {
+		opx_mr->hfisvc.needs_doorbell = 1;
+	}
 
 	return 0;
 }
@@ -181,9 +191,11 @@ void opx_hfisvc_mr_disable_access_key(struct fi_opx_domain *opx_domain, struct f
 						       opx_mr->dmabuf.offset),
 				     ret);
 	} else {
-		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx);
 		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=OPEN -> PENDING_KEY_DISABLE\n", opx_mr);
 		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_KEY_DISABLE;
+		if (OFI_UNLIKELY((*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx))) {
+			opx_mr->hfisvc.needs_doorbell = 1;
+		}
 	}
 }
 
@@ -212,10 +224,12 @@ void opx_hfisvc_mr_deregister_mr(struct fi_opx_domain *opx_domain, struct fi_opx
 						    (void *) ((uintptr_t) opx_mr->dmabuf.base_addr +
 							      opx_mr->dmabuf.len + opx_mr->dmabuf.offset));
 	} else {
-		(*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx);
 		OPX_HFISVC_DEBUG_LOG("MR State transition opx_mr=%p state=PENDING_DEREGISTER -> PENDING_CLOSE\n",
 				     opx_mr);
 		opx_mr->hfisvc.state = OPX_MR_HFISVC_STATE_PENDING_CLOSE;
+		if (OFI_UNLIKELY((*opx_domain->hfisvc.doorbell)(opx_domain->hfisvc.ctxs[0].ctx))) {
+			opx_mr->hfisvc.needs_doorbell = 1;
+		}
 	}
 }
 #endif
@@ -229,6 +243,13 @@ int opx_hfisvc_mr_deferred_open(struct opx_domain_deferred_work *work)
 	 * freed, so retire this work item without dereferencing it. */
 	if (opx_mr == NULL) {
 		return FI_SUCCESS;
+	}
+
+	if (opx_mr->hfisvc.needs_doorbell) {
+		if ((*opx_mr->domain->hfisvc.doorbell)(opx_mr->domain->hfisvc.ctxs[0].ctx) == 0) {
+			opx_mr->hfisvc.needs_doorbell = 0;
+		}
+		return -FI_EAGAIN;
 	}
 
 	if (opx_mr->hfisvc.state >= OPX_MR_HFISVC_STATE_OPENED) {
@@ -255,6 +276,13 @@ int opx_hfisvc_mr_deferred_close(struct opx_domain_deferred_work *work)
 {
 #if HAVE_HFISVC
 	struct fi_opx_mr *opx_mr = work->opx_mr;
+
+	if (opx_mr->hfisvc.needs_doorbell) {
+		if ((*opx_mr->domain->hfisvc.doorbell)(opx_mr->domain->hfisvc.ctxs[0].ctx) == 0) {
+			opx_mr->hfisvc.needs_doorbell = 0;
+		}
+		return -FI_EAGAIN;
+	}
 
 	if (opx_mr->hfisvc.state == OPX_MR_HFISVC_STATE_CLOSED) {
 		opx_mr_release_dmabuf_fd(opx_mr);
