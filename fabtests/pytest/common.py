@@ -618,6 +618,16 @@ class ClientServerTest:
         if self._cmdline_args.do_dmabuf_reg_for_hmem:
             command += " -R"
 
+            # runfabtests always selects the EFA NIC closest to the CUDA device
+            # (get_efa_device_name_for_cuda_device), which is the GPU-local
+            # (PCIe-attached) NIC. That NIC requires the PCIe CUDA dmabuf
+            # mapping type, so request it whenever we export a CUDA dmabuf fd
+            # (i.e. under -R). The runfabtests user does not need to know about
+            # this; standalone fabtests binaries expose --use-cuda-pcie-mapping
+            # for callers that select the NIC themselves.
+            if host_memory_type == "cuda":
+                command += " --use-cuda-pcie-mapping"
+
         if "PYTEST_XDIST_WORKER" in os.environ:
             worker_id = int(os.environ["PYTEST_XDIST_WORKER"].replace("gw", ""))
             hmem_device_id = worker_id % num_hmem
