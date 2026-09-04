@@ -615,6 +615,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 	struct efa_ah *ah;
 	uint32_t qpn, qkey;
 	uint64_t wr_id;
+	uint64_t flags = 0;
 
 	ep = pkt_entry->ep;
 	assert(ep);
@@ -640,7 +641,15 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
 
 	wr_id = efa_rdm_pke_get_wr_id(pkt_entry);
 
-	err = efa_qp_post_read(qp, &sge, 1, remote_key, remote_buf, wr_id, 0,
+	/*
+	 * A read posted for an rxe belongs to a receive-side protocol such as
+	 * longread. Such a read request should not have FI_MORE set.
+	 */
+	assert(txe->type == EFA_RDM_TXE || !(txe->fi_flags & FI_MORE));
+	if (txe->fi_flags & FI_MORE)
+        flags |= FI_MORE;
+
+	err = efa_qp_post_read(qp, &sge, 1, remote_key, remote_buf, wr_id, flags,
 			       ah, qpn, qkey);
 
 #if ENABLE_DEBUG
