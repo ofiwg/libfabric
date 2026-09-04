@@ -35,6 +35,7 @@ class EfaRtmRecvTest : public TestWithParam<bool>
 			  1);
 
 		MockEfa::set(&mock_efa);
+		efa_test_arm_inert_data_path(mock_efa);
 	}
 
 	void TearDown() override
