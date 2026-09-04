@@ -153,6 +153,14 @@ int efa_test_device_supports_fi_wr(void)
 	return efa_device_support_data_path_direct(&g_efa_selected_device_list[0]);
 }
 
+int efa_test_device_supports_rdma_read(void)
+{
+	if (g_efa_selected_device_cnt <= 0)
+		return 0;
+
+	return efa_device_support_rdma_read();
+}
+
 size_t efa_test_ope_list_count(struct fid_ep *ep)
 {
 	struct efa_base_ep *base_ep =

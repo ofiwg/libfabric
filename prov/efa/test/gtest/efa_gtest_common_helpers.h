@@ -44,6 +44,11 @@ int efa_test_device_supports_rma(void);
 int efa_test_device_supports_fi_wr(void);
 
 /**
+ * @brief Whether the real selected EFA device advertises RDMA read.
+ */
+int efa_test_device_supports_rdma_read(void);
+
+/**
  * @brief Set efa_env.track_mr and return its previous value.
  */
 int efa_test_set_track_mr(int value);
