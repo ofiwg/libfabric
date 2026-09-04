@@ -34,6 +34,7 @@ class EfaCqTest : public Test
 		qp_num = efa_test_get_qp_num(resource.ep);
 
 		MockEfa::set(&mock_efa);
+		efa_test_arm_inert_data_path(mock_efa);
 	}
 
 	void TearDown() override
@@ -163,6 +164,7 @@ class EfaCQPollTest : public Test
 		qp_num = efa_test_get_qp_num(resource.ep);
 
 		MockEfa::set(&mock_efa);
+		efa_test_arm_inert_data_path(mock_efa);
 	}
 
 	void TearDown() override
