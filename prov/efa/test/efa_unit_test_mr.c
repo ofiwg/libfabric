@@ -2149,7 +2149,7 @@ void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
 	cts_pke->ep = efa_rdm_ep;
 	cts_hdr = (struct efa_rdm_cts_hdr *)cts_pke->wiredata;
 	cts_hdr->type = EFA_RDM_CTS_PKT;
-	cts_hdr->send_id = ofi_buf_index(txe);
+	cts_hdr->send_id = txe->tx_id;
 	cts_hdr->recv_id = 0;
 	cts_hdr->recv_length = 4096;
 
