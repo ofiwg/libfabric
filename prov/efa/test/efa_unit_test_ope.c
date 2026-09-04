@@ -6,6 +6,7 @@
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_srx.h"
+#include "rdm/efa_rdm_proto_eager.h"
 #include "ofi_util.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
@@ -1565,6 +1566,8 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		ctsdata_hdr->seg_length = 0;
 	}
 
+	efa_unit_test_set_pke_handler(req_pkt_entry);
+
 	/* Create response packet entry (not needed for RTR which uses efa_rdm_ope_handle_recv_completed) */
 	if (pkt_type != EFA_RDM_SHORT_RTR_PKT && pkt_type != EFA_RDM_LONGCTS_RTR_PKT) {
 		resp_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
@@ -1844,6 +1847,7 @@ static void test_efa_rdm_ope_longcts_cts_release_common(struct efa_resource *res
 	cts_pkt_entry->peer = ope->peer;
 	struct efa_rdm_base_hdr *cts_hdr = (struct efa_rdm_base_hdr *)cts_pkt_entry->wiredata;
 	cts_hdr->type = EFA_RDM_CTS_PKT;
+	efa_unit_test_set_pke_handler(cts_pkt_entry);
 
 	if (is_txe)
 		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 1);
@@ -1982,6 +1986,7 @@ static void test_efa_rdm_rxe_dc_longcts_write_cts_receipt_order_common(
 	cts_pkt_entry->peer = rxe->peer;
 	struct efa_rdm_base_hdr *cts_hdr = (struct efa_rdm_base_hdr *)cts_pkt_entry->wiredata;
 	cts_hdr->type = EFA_RDM_CTS_PKT;
+	efa_unit_test_set_pke_handler(cts_pkt_entry);
 
 	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_RXE), 1);
 
@@ -3425,6 +3430,7 @@ void test_efa_rdm_pke_handle_send_completion_peer_error_releases_rxe(void **stat
 	ep->efa_outstanding_tx_ops++;
 	rxe->efa_outstanding_tx_ops++;
 	outstanding_before = ep->efa_outstanding_tx_ops;
+	efa_unit_test_set_pke_handler(pkt_entry);
 
 	/* Drive the send-completion path. */
 	efa_rdm_pke_handle_send_completion(pkt_entry);
@@ -5114,6 +5120,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 	efa_rdm_pke_set_ope(cts_pkt, rxe);
 	cts_pkt->peer = peer;
 	((struct efa_rdm_base_hdr *) cts_pkt->wiredata)->type = EFA_RDM_CTS_PKT;
+	efa_unit_test_set_pke_handler(cts_pkt);
 	ep->efa_outstanding_tx_ops += 1;
 	peer->efa_outstanding_tx_ops += 1;
 	rxe->efa_outstanding_tx_ops += 1;

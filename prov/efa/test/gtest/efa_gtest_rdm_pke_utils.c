@@ -12,6 +12,7 @@
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_protocol.h"
+#include "rdm/efa_rdm_proto_eager.h"
 
 int efa_test_rtm_read_nack_missing_rxe(struct fid_ep *ep, fi_addr_t peer_addr,
 				       int tagged, ssize_t *ret)
@@ -268,6 +269,50 @@ static struct efa_rdm_ope *efa_test_rtm_alloc_txe(struct efa_rdm_ep *ep,
 	return txe;
 }
 
+/*
+ * Build an eager RTM packet the way the eager protocol does.
+ *
+ * The eager protocol moved to the refactored code path
+ * (efa_rdm_proto_eager_construct_tx_pkes), which allocates its own packet
+ * entry and so cannot stamp a caller-supplied one. This mirrors the header and
+ * payload it writes, so the assertions below still describe the eager wire
+ * format.
+ */
+static ssize_t efa_test_rtm_init_eager(struct efa_rdm_pke *pkt_entry,
+				       struct efa_rdm_ope *txe,
+				       enum efa_test_rtm_variant variant)
+{
+	int pkt_type = efa_test_rtm_pkt_type(variant);
+	ssize_t ret;
+
+	if (pkt_entry->flags & EFA_RDM_PKE_HAS_NO_BASE_HDR) {
+		/* Headerless: raw payload, no protocol header at all. */
+		efa_rdm_pke_set_ope(pkt_entry, txe);
+		pkt_entry->peer = txe->peer;
+		return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, 0, 0,
+							 txe->total_len);
+	}
+
+	if (EFA_TEST_RTM_IS_DC(variant))
+		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+
+	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, pkt_type, txe, 0, -1);
+	if (ret)
+		return ret;
+
+	if (EFA_TEST_RTM_IS_TAGGED(variant)) {
+		efa_rdm_pke_get_base_hdr(pkt_entry)->flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	/* Only the DC eager header carries send_id. */
+	if (EFA_TEST_RTM_IS_DC(variant))
+		efa_rdm_pke_get_dc_eager_rtm_base_hdr(pkt_entry)->send_id =
+			txe->tx_id;
+
+	return 0;
+}
+
 void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 			     enum efa_test_rtm_variant variant,
 			     struct efa_test_rtm_init_result *out)
@@ -310,16 +355,10 @@ void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 		pkt_entry->flags |= EFA_RDM_PKE_HAS_NO_BASE_HDR;
 		/* fallthrough */
 	case EFA_TEST_RTM_EAGER_MSG:
-		out->ret = efa_rdm_pke_init_eager_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_EAGER_TAG:
-		out->ret = efa_rdm_pke_init_eager_tagrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_DC_EAGER_MSG:
-		out->ret = efa_rdm_pke_init_dc_eager_msgrtm(pkt_entry, txe);
-		break;
 	case EFA_TEST_RTM_DC_EAGER_TAG:
-		out->ret = efa_rdm_pke_init_dc_eager_tagrtm(pkt_entry, txe);
+		out->ret = efa_test_rtm_init_eager(pkt_entry, txe, variant);
 		break;
 	case EFA_TEST_RTM_MEDIUM_MSG:
 		out->ret = efa_rdm_pke_init_medium_msgrtm(
@@ -472,6 +511,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer *peer;
+	bool pkt_entry_released = false;
 	static char buf[EFA_TEST_RTM_LONG_LEN];
 
 	memset(out, 0, sizeof(*out));
@@ -554,7 +594,16 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 
 	switch (family) {
 	case EFA_TEST_RTM_FAM_EAGER:
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
+		/*
+		 * The eager protocol moved to the refactored code path, where
+		 * the send completion handler lives on the packet entry. It
+		 * releases the packet entry itself, unlike the handlers below,
+		 * so remember not to release it again.
+		 */
+		pkt_entry->handle_pke =
+			&efa_rdm_proto_eager_handle_rtm_send_completion;
+		pkt_entry_released = true;
+		pkt_entry->handle_pke(pkt_entry);
 		break;
 	case EFA_TEST_RTM_FAM_MEDIUM:
 		efa_rdm_pke_handle_medium_rtm_send_completion(pkt_entry);
@@ -578,9 +627,10 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	out->num_runt_bytes_in_flight = peer->num_runt_bytes_in_flight;
 	if (out->txe_on_ope_list) {
 		out->bytes_acked = txe->bytes_acked;
-		efa_rdm_pke_release_tx(pkt_entry);
+		if (!pkt_entry_released)
+			efa_rdm_pke_release_tx(pkt_entry);
 		efa_rdm_txe_release(txe);
-	} else {
+	} else if (!pkt_entry_released) {
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
 }

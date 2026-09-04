@@ -36,8 +36,14 @@ void test_efa_rdm_pke_handle_send_completion_peer_removed(void **state)
 	/* Allocate and init a TX pkt_entry */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
+	efa_unit_test_set_pke_handler(pkt_entry);
 
-	err = efa_rdm_pke_init_eager_msgrtm(pkt_entry, txe);
+	/*
+	 * The eager protocol moved to the refactored code path, so build the
+	 * packet with the shared RTM helper rather than an eager-specific init.
+	 */
+	err = efa_rdm_pke_init_rtm_with_payload(
+		pkt_entry, EFA_RDM_EAGER_MSGRTM_PKT, txe, 0, -1);
 	assert_int_equal(err, 0);
 
 	/* Simulate device submission */
@@ -87,7 +93,12 @@ void test_efa_rdm_pke_handle_tx_error_peer_removed(void **state)
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 
-	err = efa_rdm_pke_init_eager_msgrtm(pkt_entry, txe);
+	/*
+	 * The eager protocol moved to the refactored code path, so build the
+	 * packet with the shared RTM helper rather than an eager-specific init.
+	 */
+	err = efa_rdm_pke_init_rtm_with_payload(
+		pkt_entry, EFA_RDM_EAGER_MSGRTM_PKT, txe, 0, -1);
 	assert_int_equal(err, 0);
 
 	/* Simulate device submission */

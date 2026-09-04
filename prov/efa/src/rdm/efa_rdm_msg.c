@@ -19,6 +19,10 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_req.h"
 
+#include "efa_mr.h"
+#include "efa_rdm_proto.h"
+#include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_zero_copy.h"
 #include "efa_rdm_tracepoint.h"
 
 /**
@@ -103,14 +107,79 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 }
 
 /**
- * @brief post RTM packet(s) for a send operation
+ * @brief Post an already-filled TXE using the new protocol path.
+ *
+ * Used by the retry path after handshake completes and by the normal
+ * send path. The TXE must already be filled by efa_rdm_proto_txe_fill.
+ */
+ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
+				    struct efa_rdm_ope *txe,
+				    struct efa_rdm_proto *proto)
+{
+	ssize_t err;
+	uint64_t pke_send_flags = 0;
+	int i;
+
+	err = proto->construct_tx_pkes(
+		ep, txe->peer, NULL, txe->op, txe->tag,
+		txe->fi_flags, txe->internal_flags, txe);
+	if (err)
+		return err;
+
+	/*
+	 * Required for the MR abort path
+	 * TODO: Move MR abort path to use txe->proto
+	 */
+	assert(efa_rdm_pkt_type_is_rtm(txe->protocol));
+
+	/**
+	 * We currently respect FI_MORE only for eager pkt type because
+	 * 1. For some non-REQ pkts like CTSDATA, its current implementation
+	 * relies on the logic that efa_rdm_ope_post_send always rings the doorbell,
+	 * because the ep progress call will keep calling this function until
+	 * ope->window is 0, but ope->window will only be decremented after
+	 * the CTSDATA pkts are actually posted to rdma-core.
+	 * 2. For non-eager REQ packets, we already send multiple pkts that contain
+	 * data and make the firmware saturated, there is no meaning to queue
+	 * pkts in this case.
+	 */
+	if (txe->fi_flags & FI_MORE && proto == &efa_rdm_proto_eager)
+		pke_send_flags |= FI_MORE;
+
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
+				ep->send_pkt_entry_vec_size,
+				pke_send_flags);
+	if (err) {
+		/*
+		 * Nothing reached the device, so this function still owns the
+		 * packet entries construct_tx_pkes() built. Release them, as
+		 * efa_rdm_ope_post_send() does on the old path; the caller only
+		 * owns the txe.
+		 */
+		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+		return err;
+	}
+
+	/*
+	 * Mark the peer as having received a REQ, matching what
+	 * efa_rdm_ope_post_send() does on the old path. Doing it here rather
+	 * than in the caller also covers the repost after a handshake.
+	 */
+	txe->peer->flags |= EFA_RDM_PEER_REQ_SENT;
+
+	proto->handle_tx_pkes_posted(ep, txe);
+	return FI_SUCCESS;
+}
+
+/**
+ * @brief Post a RTM packet for a TX entry using the old code path.
  *
  * @param[in,out]	ep		endpoint
  * @param[in,out]	txe	information of the send operation.
  * @retval		0 if packet(s) was posted successfully.
  * @retval		-FI_ENOSUPP if the send operation requires an extra feature,
  * 			which peer does not support.
- * @retval		-FI_EAGAIN for temporary out of resources for send
  */
 ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
@@ -170,6 +239,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
 	size_t available_tx_pkts;
+	struct efa_rdm_proto *proto;
 
 	efa_rdm_tracepoint(send_begin_msg_context,
 		    (size_t) msg->context, (size_t) msg->addr);
@@ -197,6 +267,56 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 		goto out;
 	}
 
+	/* First try to use the refactored code path.
+	 *
+	 * A peer with zero-copy receive enabled rejects any packet that carries
+	 * a protocol header, so the zero-copy protocol is its only option: go
+	 * straight to it. Keeping it out of efa_rdm_protocols[] spares every
+	 * other send a walk past a protocol it can never use.
+	 */
+	if (efa_rdm_peer_expects_zero_hdr_data_transfer(peer)) {
+		proto = &efa_rdm_proto_zero_copy;
+		efa_rdm_proto_txe_init_buffers(ep, msg, txe);
+	} else {
+		efa_rdm_proto_select_send_protocol(ep, peer, msg, op, fi_flags,
+						   txe, &proto);
+	}
+
+	/* If a protocol is found, use it. Otherwise, fall back to the old code
+	 * path */
+	if (proto) {
+		efa_rdm_proto_txe_fill(txe, ep, peer, msg, op, tag, fi_flags,
+				       internal_flags, proto);
+		txe->msg_id = peer->next_msg_id++;
+
+		/*
+		 * For backwards compatibility: if the peer may have zero-copy
+		 * receive enabled, we must complete handshake before sending so
+		 * we can discover the peer's user_recv_qp and route packets
+		 * accordingly. The protocol selected above assumed the peer
+		 * accepts headers, so the repost after the handshake revisits
+		 * that choice; see
+		 * efa_rdm_proto_zero_copy_reselect_queued_before_handshake().
+		 */
+		if (ep->peer_may_have_zcpy_rx &&
+		    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+			err = efa_rdm_ep_enforce_handshake_for_txe(ep, txe);
+			if (err) {
+				efa_rdm_txe_release(txe);
+				peer->next_msg_id--;
+			}
+			goto out;
+		}
+
+		err = efa_rdm_msg_post_rtm_proto(ep, txe, proto);
+		if (err) {
+			efa_rdm_txe_release(txe);
+			peer->next_msg_id--;
+		}
+		goto out;
+	}
+
+	/* Fallback to the old code path */
 	efa_rdm_txe_construct(txe, ep, peer, msg, op, fi_flags, internal_flags);
 	if (op == ofi_op_tagged) {
 		txe->cq_entry.tag = tag;

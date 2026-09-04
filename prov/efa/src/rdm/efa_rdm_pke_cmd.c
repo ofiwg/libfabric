@@ -91,12 +91,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_receipt(pkt_entry, ope);
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_eager_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_eager_tagrtm(pkt_entry, ope);
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
@@ -173,12 +169,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_compare_rta(pkt_entry, ope);
 		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_dc_eager_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_dc_eager_tagrtm(pkt_entry, ope);
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
@@ -270,7 +262,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		/* nothing to do */
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
@@ -314,8 +306,10 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
+		assert(0 && "Eager protocol moved to refactored code path");
+		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
-		/* nothing to do for DC EAGER RTM/RTW */
+		/* nothing to do for DC EAGER RTW */
 		break;
 	case EFA_RDM_CTSDATA_PKT:
 		efa_rdm_pke_handle_ctsdata_sent(pkt_entry);
@@ -603,12 +597,19 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	/* Unless a pkt entry is from a removed peer (ope is already released), its ope must be valid */
 	efa_rdm_pke_assert_ope_valid(pkt_entry);
 
-	/* These pkts are eager pkts withour hdrs */
-	if (pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP) {
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
-		efa_rdm_pke_release_tx(pkt_entry);
+	/*
+	 * Check if the pke is from a protocol that has migrated to the
+	 * refactored code path
+	 *
+	 * TODO: remove this check once every protocol is migrated.
+	 */
+	if (pkt_entry->handle_pke) {
+		pkt_entry->handle_pke(pkt_entry);
 		return;
 	}
+
+	/* Zero-copy path is moved to the refactored code path */
+	assert(!(pkt_entry->flags & EFA_RDM_PKE_SEND_TO_USER_RECV_QP));
 
 	/* Start handling pkts with hdrs */
 	switch (efa_rdm_pkt_type_of(pkt_entry)) {
@@ -644,7 +645,9 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
+	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
+	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
+		assert(0 && "Eager protocol moved to refactored code path");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
@@ -716,8 +719,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
-	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
-	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_DC_EAGER_RTW_PKT:
