@@ -1340,9 +1340,17 @@ struct rocr_dev_reg_handle {
  * Requires a 16-byte aligned source and a size that is a whole number of
  * 16-byte units, so every byte read lies within [src, src + size) and the
  * whole copy is streamed.
+ *
+ * MOVNTDQA is an SSE4.1 instruction, and its intrinsic is always_inline, so
+ * the enclosing function must be compiled for a target that has it. The
+ * baseline x86-64 target does not, which is what a compiler defaults to
+ * unless told otherwise. Name the target on the function rather than for the
+ * translation unit, so the runtime probe below still guards every use and the
+ * rest of the file stays baseline.
  */
-static inline void rocr_stream_copy_from_aperture(void *dest, const void *src,
-						  size_t size)
+__attribute__((target("sse4.1")))
+static void rocr_stream_copy_from_aperture(void *dest, const void *src,
+					   size_t size)
 {
 	uint8_t *d = dest;
 	const uint8_t *s = src;
@@ -1364,9 +1372,10 @@ static inline void rocr_stream_copy_from_aperture(void *dest, const void *src,
  * the read to whole 16-byte units. The caller must bound the widened window.
  * The scratch buffer also stops the compiler narrowing a partly consumed load.
  */
-static inline void rocr_stream_copy_from_aperture_unaligned(void *dest,
-							    const void *src,
-							    size_t size)
+__attribute__((target("sse4.1")))
+static void rocr_stream_copy_from_aperture_unaligned(void *dest,
+						     const void *src,
+						     size_t size)
 {
 	uint8_t *d = dest;
 	const uint8_t *s = src;
