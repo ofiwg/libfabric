@@ -1907,6 +1907,8 @@ static int fi_opx_ep_rx_init(struct fi_opx_ep *opx_ep)
 			hwctxt_ctrl->rx_hdrq_rhf_seq   = OPX_RHF_SEQ_INIT_VAL(OPX_SW_HFI1_TYPE(opx_ep->domain));
 			hwctxt_ctrl->last_egrbfr_index = 0;
 			hwctxt_ctrl->hfi_frozen_count  = 0;
+			memset(hwctxt_ctrl->forward_stall_count, 0, sizeof(hwctxt_ctrl->forward_stall_count));
+			memset(hwctxt_ctrl->forward_drop_count, 0, sizeof(hwctxt_ctrl->forward_drop_count));
 
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			       "Hardware RHQ shared state: hdrq_head=%lu, rx_hdrq_rhf_seq=%lx, last_egrbfr_index=%u\n",
