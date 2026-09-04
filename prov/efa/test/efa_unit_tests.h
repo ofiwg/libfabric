@@ -320,6 +320,8 @@ void test_efa_rdm_txe_handle_error_inject_still_reports_cq_error(void **state);
 void test_efa_rdm_txe_handle_error_after_success_reported(void **state);
 void test_efa_rdm_rxe_handle_error_write_cq(void **state);
 void test_efa_rdm_rxe_handle_error_not_write_cq(void **state);
+void test_efa_rdm_ope_id_carries_ope_type(void **state);
+void test_efa_rdm_txe_id_bits_split(void **state);
 void test_efa_rdm_ope_peer_id_invalid_until_learned(void **state);
 void test_efa_rdm_srx_entry_released_matched_msg(void **state);
 void test_efa_rdm_srx_entry_released_unmatched_msg(void **state);
