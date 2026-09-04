@@ -387,6 +387,115 @@ int efa_mock_efa_qp_post_send_verify_handshake_pkt_local_host_id_and_save_wr(str
 	return mock_int();
 }
 
+/*
+ * Inert data path mocks: the defaults installed by the group setup, since an
+ * unmocked data path op would now reach the real device.
+ */
+int efa_mock_efa_qp_post_recv_no_op(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad)
+{
+	return 0;
+}
+
+int efa_mock_efa_qp_post_send_no_op(struct efa_qp *qp, const struct ibv_sge *sge_list,
+				    const struct ibv_data_buf *inline_data_list, size_t iov_count,
+				    bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags,
+				    struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
+{
+	return 0;
+}
+
+int efa_mock_efa_qp_post_read_no_op(struct efa_qp *qp, const struct ibv_sge *sge_list,
+				    size_t sge_count, uint32_t remote_key, uint64_t remote_addr,
+				    uintptr_t wr_id, uint64_t flags, struct efa_ah *ah,
+				    uint32_t qpn, uint32_t qkey)
+{
+	return 0;
+}
+
+int efa_mock_efa_qp_post_write_no_op(struct efa_qp *qp, const struct ibv_sge *sge_list,
+				     size_t sge_count, const struct ibv_data_buf *inline_data_list,
+				     bool use_inline, uint32_t remote_key, uint64_t remote_addr,
+				     uintptr_t wr_id, uint64_t data, uint64_t flags,
+				     struct efa_ah *ah, uint32_t qpn, uint32_t qkey)
+{
+	return 0;
+}
+
+/* Report no completion, so nothing in a test binary ever reaps a CQE. */
+int efa_mock_efa_ibv_cq_start_poll_no_cqe(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr)
+{
+	return ENOENT;
+}
+
+int efa_mock_efa_ibv_cq_next_poll_no_cqe(struct efa_ibv_cq *ibv_cq)
+{
+	return ENOENT;
+}
+
+enum ibv_wc_opcode efa_mock_efa_ibv_cq_wc_read_opcode_no_op(struct efa_ibv_cq *ibv_cq)
+{
+	return 0;
+}
+
+void efa_mock_efa_ibv_cq_end_poll_no_op(struct efa_ibv_cq *ibv_cq)
+{
+}
+
+uint32_t efa_mock_efa_ibv_cq_wc_read_qp_num_no_op(struct efa_ibv_cq *ibv_cq)
+{
+	return 0;
+}
+
+uint32_t efa_mock_efa_ibv_cq_wc_read_vendor_err_no_op(struct efa_ibv_cq *ibv_cq)
+{
+	return 0;
+}
+
+uint32_t efa_mock_efa_ibv_cq_wc_read_src_qp_no_op(struct efa_ibv_cq *ibv_cq)
+{
+	return 0;
+}
+
+uint32_t efa_mock_efa_ibv_cq_wc_read_slid_no_op(struct efa_ibv_cq *ibv_cq)
+{
+	return 0;
+}
+
+uint32_t efa_mock_efa_ibv_cq_wc_read_byte_len_no_op(struct efa_ibv_cq *ibv_cq)
+{
+	return 0;
+}
+
+unsigned int efa_mock_efa_ibv_cq_wc_read_wc_flags_no_op(struct efa_ibv_cq *ibv_cq)
+{
+	return 0;
+}
+
+__be32 efa_mock_efa_ibv_cq_wc_read_imm_data_no_op(struct efa_ibv_cq *ibv_cq)
+{
+	return 0;
+}
+
+bool efa_mock_efa_ibv_cq_wc_is_unsolicited_no_op(struct efa_ibv_cq *ibv_cq)
+{
+	return false;
+}
+
+int efa_mock_efa_ibv_cq_wc_read_sgid_no_op(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid)
+{
+	return ENOSYS;
+}
+
+int efa_mock_efa_ibv_get_cq_event_no_op(struct efa_ibv_cq *ibv_cq, void **cq_context)
+{
+	return 0;
+}
+
+int efa_mock_efa_ibv_req_notify_cq_no_op(struct efa_ibv_cq *ibv_cq, int solicited_only)
+{
+	return 0;
+}
+
 struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.local_host_id = 0,
 	.peer_host_id = 0,
@@ -419,25 +528,25 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
 
 	/* EFA data path ops real function assignments */
-	.efa_qp_post_recv = __real_efa_qp_post_recv,
-	.efa_qp_post_send = __real_efa_qp_post_send,
-	.efa_qp_post_read = __real_efa_qp_post_read,
-	.efa_qp_post_write = __real_efa_qp_post_write,
-	.efa_ibv_cq_start_poll = __real_efa_ibv_cq_start_poll,
-	.efa_ibv_cq_next_poll = __real_efa_ibv_cq_next_poll,
-	.efa_ibv_cq_wc_read_opcode = __real_efa_ibv_cq_wc_read_opcode,
-	.efa_ibv_cq_end_poll = __real_efa_ibv_cq_end_poll,
-	.efa_ibv_cq_wc_read_qp_num = __real_efa_ibv_cq_wc_read_qp_num,
-	.efa_ibv_cq_wc_read_vendor_err = __real_efa_ibv_cq_wc_read_vendor_err,
-	.efa_ibv_cq_wc_read_src_qp = __real_efa_ibv_cq_wc_read_src_qp,
-	.efa_ibv_cq_wc_read_slid = __real_efa_ibv_cq_wc_read_slid,
-	.efa_ibv_cq_wc_read_byte_len = __real_efa_ibv_cq_wc_read_byte_len,
-	.efa_ibv_cq_wc_read_wc_flags = __real_efa_ibv_cq_wc_read_wc_flags,
-	.efa_ibv_cq_wc_read_imm_data = __real_efa_ibv_cq_wc_read_imm_data,
-	.efa_ibv_cq_wc_is_unsolicited = __real_efa_ibv_cq_wc_is_unsolicited,
-	.efa_ibv_cq_wc_read_sgid = __real_efa_ibv_cq_wc_read_sgid,
-	.efa_ibv_get_cq_event = __real_efa_ibv_get_cq_event,
-	.efa_ibv_req_notify_cq = __real_efa_ibv_req_notify_cq,
+	.efa_qp_post_recv = efa_mock_efa_qp_post_recv_no_op,
+	.efa_qp_post_send = efa_mock_efa_qp_post_send_no_op,
+	.efa_qp_post_read = efa_mock_efa_qp_post_read_no_op,
+	.efa_qp_post_write = efa_mock_efa_qp_post_write_no_op,
+	.efa_ibv_cq_start_poll = efa_mock_efa_ibv_cq_start_poll_no_cqe,
+	.efa_ibv_cq_next_poll = efa_mock_efa_ibv_cq_next_poll_no_cqe,
+	.efa_ibv_cq_wc_read_opcode = efa_mock_efa_ibv_cq_wc_read_opcode_no_op,
+	.efa_ibv_cq_end_poll = efa_mock_efa_ibv_cq_end_poll_no_op,
+	.efa_ibv_cq_wc_read_qp_num = efa_mock_efa_ibv_cq_wc_read_qp_num_no_op,
+	.efa_ibv_cq_wc_read_vendor_err = efa_mock_efa_ibv_cq_wc_read_vendor_err_no_op,
+	.efa_ibv_cq_wc_read_src_qp = efa_mock_efa_ibv_cq_wc_read_src_qp_no_op,
+	.efa_ibv_cq_wc_read_slid = efa_mock_efa_ibv_cq_wc_read_slid_no_op,
+	.efa_ibv_cq_wc_read_byte_len = efa_mock_efa_ibv_cq_wc_read_byte_len_no_op,
+	.efa_ibv_cq_wc_read_wc_flags = efa_mock_efa_ibv_cq_wc_read_wc_flags_no_op,
+	.efa_ibv_cq_wc_read_imm_data = efa_mock_efa_ibv_cq_wc_read_imm_data_no_op,
+	.efa_ibv_cq_wc_is_unsolicited = efa_mock_efa_ibv_cq_wc_is_unsolicited_no_op,
+	.efa_ibv_cq_wc_read_sgid = efa_mock_efa_ibv_cq_wc_read_sgid_no_op,
+	.efa_ibv_get_cq_event = efa_mock_efa_ibv_get_cq_event_no_op,
+	.efa_ibv_req_notify_cq = efa_mock_efa_ibv_req_notify_cq_no_op,
 
 #if HAVE_EFADV_QUERY_MR
 	.efadv_query_mr = __real_efadv_query_mr,
