@@ -161,6 +161,22 @@ struct fi_triggered_context2 {
 	} trigger;
 };
 
+struct fi_wr_attr {
+	enum fi_op_type				op_type;
+
+	union {
+		struct fi_op_msg		*msg;
+		struct fi_op_tagged		*tagged;
+		struct fi_op_rma		*rma;
+		struct fi_op_atomic		*atomic;
+		struct fi_op_fetch_atomic	*fetch_atomic;
+		struct fi_op_compare_atomic	*compare_atomic;
+	} op;
+
+	void					*wr_buf;
+	size_t					wr_len;
+};
+
 struct fi_deferred_work {
 	struct fi_context2			context;
 
