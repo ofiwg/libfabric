@@ -196,37 +196,39 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 #define FI_OPX_MSG_OPS_SPECIALIZED_FUNC(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL) \
 	FI_OPX_MSG_OPS_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)
 
-#define FI_OPX_MSG_OPS_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)              \
-	FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)                  \
-	static inline ssize_t                                                                                        \
-		fi_opx_sendv_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(         \
-			struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count, fi_addr_t dest_addr,  \
-			void *context)                                                                               \
-	{                                                                                                            \
-		if (count == 1) {                                                                                    \
-			return fi_opx_ep_tx_send(ep, iov->iov_base, iov->iov_len, desc, dest_addr, 0, context, 0,    \
-						 LOCK, OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_FALSE, 0, CAPS | FI_MSG,  \
-						 RELIABILITY, OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL), HFI1_TYPE,  \
-						 CTX_SHARING);                                                       \
-		}                                                                                                    \
-		return fi_opx_ep_tx_send(ep, iov, count, desc, dest_addr, 0, context, 0, LOCK, OPX_CONTIG_FALSE,     \
-					 OPX_FLAGS_OVERRIDE_FALSE, 0, CAPS | FI_MSG, RELIABILITY,                    \
-					 OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL), HFI1_TYPE, CTX_SHARING);         \
-	}                                                                                                            \
-	static inline ssize_t                                                                                        \
-		fi_opx_sendmsg_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(       \
-			struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)                                 \
-	{                                                                                                            \
-		if (msg->iov_count == 1) {                                                                           \
-			return fi_opx_ep_tx_send(ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, msg->desc,       \
-						 msg->addr, 0, msg->context, msg->data, LOCK, OPX_CONTIG_TRUE,       \
-						 OPX_FLAGS_OVERRIDE_TRUE, flags, CAPS | FI_MSG, RELIABILITY,         \
-						 OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL), HFI1_TYPE, CTX_SHARING); \
-		}                                                                                                    \
-		return fi_opx_ep_tx_send(ep, msg->msg_iov, msg->iov_count, msg->desc, msg->addr, 0, msg->context,    \
-					 msg->data, LOCK, OPX_CONTIG_FALSE, OPX_FLAGS_OVERRIDE_TRUE, flags,          \
-					 CAPS | FI_MSG, RELIABILITY, OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL),      \
-					 HFI1_TYPE, CTX_SHARING);                                                    \
+#define FI_OPX_MSG_OPS_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)               \
+	FI_OPX_MSG_SPECIALIZED_FUNC_(LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL)                   \
+	static inline ssize_t                                                                                         \
+		fi_opx_sendv_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(          \
+			struct fid_ep *ep, const struct iovec *iov, void **desc, size_t count, fi_addr_t dest_addr,   \
+			void *context)                                                                                \
+	{                                                                                                             \
+		void *desc0 = desc ? desc[0] : NULL;                                                                  \
+		if (count == 1) {                                                                                     \
+			return fi_opx_ep_tx_send(ep, iov->iov_base, iov->iov_len, desc0, dest_addr, 0, context, 0,    \
+						 LOCK, OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_FALSE, 0, CAPS | FI_MSG,   \
+						 RELIABILITY, OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL), HFI1_TYPE,   \
+						 CTX_SHARING);                                                        \
+		}                                                                                                     \
+		return fi_opx_ep_tx_send(ep, iov, count, desc0, dest_addr, 0, context, 0, LOCK, OPX_CONTIG_FALSE,     \
+					 OPX_FLAGS_OVERRIDE_FALSE, 0, CAPS | FI_MSG, RELIABILITY,                     \
+					 OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL), HFI1_TYPE, CTX_SHARING);          \
+	}                                                                                                             \
+	static inline ssize_t                                                                                         \
+		fi_opx_sendmsg_##LOCK##_##CAPS##_##RELIABILITY##_##HFI1_TYPE##_##CTX_SHARING##_##FLOW_CONTROL(        \
+			struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)                                  \
+	{                                                                                                             \
+		void *desc0 = msg->desc ? msg->desc[0] : NULL;                                                        \
+		if (msg->iov_count == 1) {                                                                            \
+			return fi_opx_ep_tx_send(ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, desc0, msg->addr, \
+						 0, msg->context, msg->data, LOCK, OPX_CONTIG_TRUE,                   \
+						 OPX_FLAGS_OVERRIDE_TRUE, flags, CAPS | FI_MSG, RELIABILITY,          \
+						 OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL), HFI1_TYPE, CTX_SHARING);  \
+		}                                                                                                     \
+		return fi_opx_ep_tx_send(ep, msg->msg_iov, msg->iov_count, desc0, msg->addr, 0, msg->context,         \
+					 msg->data, LOCK, OPX_CONTIG_FALSE, OPX_FLAGS_OVERRIDE_TRUE, flags,           \
+					 CAPS | FI_MSG, RELIABILITY, OPX_FLOW_CONTROL_MODE_VALUE(FLOW_CONTROL),       \
+					 HFI1_TYPE, CTX_SHARING);                                                     \
 	}
 
 #define FI_OPX_MSG_SPECIALIZED_FUNC_NAME(TYPE, LOCK, CAPS, RELIABILITY, HFI1_TYPE, CTX_SHARING, FLOW_CONTROL) \
