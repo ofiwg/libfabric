@@ -245,11 +245,13 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	 * they are allocated from the shared base_ep.ope_pool. Unlike
 	 * efa-direct, efa-rdm always needs this pool: it backs live tx/rx
 	 * operation entries, not just the FI_EFA_TRACK_MR in-flight check.
+	 * While one pool serves both kinds it must respect the stricter of the
+	 * two id bounds, which is the txe one.
 	 */
 	ret = ofi_bufpool_create(&ep->base_ep.ope_pool,
 				 sizeof(struct efa_rdm_ope),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
-				 0, /* no limit for max_cnt */
+				 EFA_RDM_TXE_POOL_MAX_CNT,
 				 ep->base_ep.info->tx_attr->size + ep->base_ep.info->rx_attr->size, 0);
 	if (ret)
 		goto err_free;

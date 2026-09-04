@@ -27,7 +27,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->ep = ep;
 	txe->type = EFA_RDM_TXE;
 	txe->op = op;
-	txe->tx_id = ofi_buf_index(txe);
+	txe->tx_id = efa_rdm_ope_get_ope_id(txe);
 	/* the receiver's id is only learned from its first CTS */
 	txe->rx_id = EFA_RDM_OPE_ID_INVALID;
 	txe->state = EFA_RDM_TXE_REQ;

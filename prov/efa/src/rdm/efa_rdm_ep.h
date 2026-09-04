@@ -270,6 +270,31 @@ struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_add
 struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 					   struct efa_rdm_peer *peer, uint32_t op);
 
+/**
+ * @brief look up the ope named by an ope id the peer echoed back
+ *
+ * The id's tag says which kind minted it, which is also what says where its
+ * pool index lives.
+ *
+ * @param[in] ep	endpoint that minted @p ope_id
+ * @param[in] ope_id	ope id read out of a received packet
+ * @return the ope named by @p ope_id
+ */
+static inline struct efa_rdm_ope *
+efa_rdm_ep_get_ope_from_ope_id(struct efa_rdm_ep *ep, uint32_t ope_id)
+{
+	struct efa_rdm_ope *ope;
+	bool is_rxe = efa_rdm_ope_id_is_rxe(ope_id);
+	size_t index = is_rxe ? efa_rdm_rxe_id_index(ope_id)
+			      : efa_rdm_txe_id_index(ope_id);
+
+	assert(ofi_bufpool_ibuf_is_valid(ep->base_ep.ope_pool, index));
+	ope = ofi_bufpool_get_ibuf(ep->base_ep.ope_pool, index);
+	assert(ope->type == (is_rxe ? EFA_RDM_RXE : EFA_RDM_TXE));
+
+	return ope;
+}
+
 void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);

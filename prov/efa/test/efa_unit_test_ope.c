@@ -770,6 +770,68 @@ void test_efa_rdm_rxe_handle_error_not_write_cq(void **state)
 }
 
 /**
+ * @brief Verify an ope id says which kind of ope it names.
+ *
+ * The tag has to survive the round trip through a packet field and the index
+ * has to come back intact, since a lookup recovers the ope from the id alone.
+ */
+void test_efa_rdm_ope_id_carries_ope_type(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe, *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_msg);
+	assert_non_null(rxe);
+
+	assert_false(efa_rdm_ope_id_is_rxe(txe->tx_id));
+	assert_true(efa_rdm_ope_id_is_rxe(rxe->rx_id));
+
+	assert_int_equal(efa_rdm_txe_id_index(txe->tx_id), ofi_buf_index(txe));
+	assert_int_equal(efa_rdm_rxe_id_index(rxe->rx_id), ofi_buf_index(rxe));
+
+	efa_rdm_txe_release(txe);
+	efa_rdm_rxe_release(rxe);
+}
+
+/**
+ * @brief Verify a txe id splits into a pool index and a slot generation.
+ *
+ * The split is fixed, so the index field is wider than the pool cap needs and
+ * the masks are what keep the two halves out of each other.
+ */
+void test_efa_rdm_txe_id_bits_split(void **state)
+{
+	uint32_t id;
+
+	/* the two fields are disjoint and fit below the tag, with a bit spare */
+	assert_int_equal(EFA_RDM_TXE_ID_GEN_MASK & EFA_RDM_TXE_ID_INDEX_MASK, 0);
+	assert_true((EFA_RDM_TXE_ID_GEN_MASK | EFA_RDM_TXE_ID_INDEX_MASK) <
+		    EFA_RDM_OPE_ID_TAG >> 1);
+	assert_int_equal(EFA_RDM_TXE_POOL_MAX_CNT,
+			 (size_t) 1 << EFA_RDM_TXE_ID_INDEX_BITS);
+
+	/* an id round trips through both accessors */
+	id = (7u << EFA_RDM_TXE_ID_GEN_SHIFT) | 42u;
+	assert_int_equal(efa_rdm_txe_id_index(id), 42);
+	assert_int_equal(efa_rdm_txe_id_gen(id), 7);
+
+	/* the widest legal pair does not bleed into the other half */
+	id = EFA_RDM_TXE_ID_GEN_MASK | EFA_RDM_TXE_ID_INDEX_MASK;
+	assert_int_equal(efa_rdm_txe_id_index(id), EFA_RDM_TXE_ID_INDEX_MASK);
+	assert_int_equal(efa_rdm_txe_id_gen(id),
+			 EFA_RDM_TXE_ID_GEN_MASK >> EFA_RDM_TXE_ID_GEN_SHIFT);
+	assert_true(id < EFA_RDM_OPE_ID_INVALID);
+	assert_true(id < EFA_RDM_OPE_ID_TAG);	/* gen and index alone */
+
+	/* a generation never reaches the index, whatever the cap in use */
+	assert_int_equal(efa_rdm_txe_id_index(EFA_RDM_TXE_ID_GEN_MASK), 0);
+}
+
+/**
  * @brief Verify a fresh ope names itself, but not yet its peer.
  *
  * The id a side creates for itself is always legal. The peer's id is only
