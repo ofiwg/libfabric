@@ -90,6 +90,7 @@ struct efa_unit_test_buff {
 struct efa_unit_test_eager_rtm_pkt_attr {
 	uint32_t msg_id;
 	uint32_t connid;
+	uint64_t tag;
 };
 
 struct efa_unit_test_handshake_pkt_attr {
@@ -105,6 +106,7 @@ void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_re
 void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff);
 
 void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr);
+void efa_unit_test_eager_tagrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr);
 
 void efa_unit_test_construct_handshake_pkt_for_receive(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr);
 
@@ -318,6 +320,11 @@ void test_efa_rdm_txe_handle_error_inject_still_reports_cq_error(void **state);
 void test_efa_rdm_txe_handle_error_after_success_reported(void **state);
 void test_efa_rdm_rxe_handle_error_write_cq(void **state);
 void test_efa_rdm_rxe_handle_error_not_write_cq(void **state);
+void test_efa_rdm_ope_peer_id_invalid_until_learned(void **state);
+void test_efa_rdm_srx_entry_released_matched_msg(void **state);
+void test_efa_rdm_srx_entry_released_unmatched_msg(void **state);
+void test_efa_rdm_srx_entry_released_matched_tagged(void **state);
+void test_efa_rdm_srx_entry_released_unmatched_tagged(void **state);
 void test_efa_rdm_rxe_map(void **state);
 void test_efa_rdm_rxe_list_removal(void **state);
 void test_efa_rdm_txe_list_removal(void **state);
