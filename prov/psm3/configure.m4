@@ -129,7 +129,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
 
         AC_MSG_CHECKING([for -mavx2 support (recommended)])
         save_CFLAGS=$CFLAGS
-        CFLAGS="$PSM3_STRIP_OPTFLAGS -O0"
+        CFLAGS="$PSM3_STRIP_OPTFLAGS -mavx2 -O0"
         AC_LINK_IFELSE(
             [AC_LANG_PROGRAM(
                 [[#include <immintrin.h>]],
