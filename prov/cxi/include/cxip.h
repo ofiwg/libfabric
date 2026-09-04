@@ -3775,6 +3775,7 @@ static inline bool cxip_coll_prod_trace_true(void)
 #define CXIP_FATAL(fmt, ...)					\
 	do {							\
 		CXIP_LOG(fmt, ##__VA_ARGS__);			\
+		fflush(stderr);					\
 		abort();					\
 	} while (0)
 
