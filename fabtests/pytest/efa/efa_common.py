@@ -9,6 +9,49 @@ from collections import deque
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
 from retrying import retry
 
+# EFA-specific memory type lists for the @pytest.mark.memory_type decorator.
+# The bi-directional set; uni-directional tests add the *_to_host entries.
+memory_type_list_bi_dir = [
+    pytest.param("host_to_host"),
+    pytest.param("host_to_cuda", marks=pytest.mark.cuda_memory),
+    pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
+    pytest.param("host_to_neuron", marks=pytest.mark.neuron_memory),
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+    pytest.param("host_to_rocr", marks=pytest.mark.rocr_memory),
+    pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
+]
+
+memory_type_list_all = memory_type_list_bi_dir + [
+    pytest.param("cuda_to_host", marks=pytest.mark.cuda_memory),
+    pytest.param("neuron_to_host", marks=pytest.mark.neuron_memory),
+    pytest.param("rocr_to_host", marks=pytest.mark.rocr_memory),
+]
+
+memory_type_list_symm = [
+    pytest.param("host_to_host"),
+    pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+    pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
+]
+
+# Device memory only, no host_to_host. The PR CI default for an accelerator
+# instance: host memory is covered by the accelerator free instances in the PR
+# CI matrix, so an accelerator instance only needs the device permutations.
+memory_type_list_device_to_device = [
+    pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+    pytest.param("rocr_to_rocr", marks=pytest.mark.rocr_memory),
+]
+
+# Single memory type lists for tests that run only one.
+memory_type_list_cuda_to_cuda = [
+    pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory),
+]
+
+memory_type_list_neuron_to_neuron = [
+    pytest.param("neuron_to_neuron", marks=pytest.mark.neuron_memory),
+]
+
 # EFA-specific message size lists for @pytest.mark.message_sizes decorator.
 # Generic (shared) size lists live in fabtests/pytest/common.py.
 DIRECT_SIZES = ["r:0,4,32", "r:0,1024,8192"]
