@@ -8,6 +8,7 @@
 #include "config.h"
 #include "efa.h"
 #include "efa_av.h"
+#include "efa_rdm_av.h"
 #include "efa_domain_util.h"
 #include "efa_rdm_cntr.h"
 #include "efa_rdm_cq.h"
@@ -31,7 +32,7 @@ static struct fi_ops efa_ops_domain_fid_rdm = {
 
 static struct fi_ops_domain efa_domain_ops_rdm = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = efa_av_open,
+	.av_open = efa_rdm_av_open,
 	.cq_open = efa_rdm_cq_open,
 	.endpoint = efa_rdm_ep_open,
 	.scalable_ep = fi_no_scalable_ep,

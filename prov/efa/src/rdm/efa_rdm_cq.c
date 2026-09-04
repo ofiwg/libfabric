@@ -6,6 +6,7 @@
 #include "efa_data_path_ops.h"
 #include "ofi_util.h"
 #include "efa_av.h"
+#include "efa_rdm_av.h"
 #include "efa_cntr.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
@@ -202,7 +203,7 @@ static void efa_rdm_cq_proc_ibv_recv_rdma_with_imm_completion(
 	if (ep->base_ep.util_ep.caps & FI_SOURCE) {
 
 		/* Only check the explicit AV when writing completions */
-		src_addr = efa_av_reverse_lookup_rdm(efa_av,
+		src_addr = efa_rdm_av_reverse_lookup(efa_av,
 						efa_ibv_cq_wc_read_slid(ibv_cq),
 						efa_ibv_cq_wc_read_src_qp(ibv_cq),
 						NULL);
@@ -349,6 +350,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 				  struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_av *efa_av = ep->base_ep.av;
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(ep->base_ep.av));
 	fi_addr_t explicit_fi_addr, implicit_fi_addr;
 	struct efa_ep_addr efa_ep_addr = {0};
 	struct efa_ep_addr_hashable *efa_ep_addr_hashable = NULL;
@@ -387,7 +389,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 
 	/* Step 1: Check explicit AV with GID and QPN */
 	explicit_fi_addr =
-		efa_av_reverse_lookup_rdm(efa_av, gid, qpn, pkt_entry);
+		efa_rdm_av_reverse_lookup(efa_av, gid, qpn, pkt_entry);
 
 	if (explicit_fi_addr != FI_ADDR_NOTAVAIL) {
 		EFA_DBG(FI_LOG_CQ,
@@ -417,7 +419,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 
 	/* Step 4: Check implicit AV with GID and QPN (slow path) */
 	implicit_fi_addr =
-		efa_av_reverse_lookup_rdm_implicit(efa_av, gid, qpn, pkt_entry);
+		efa_rdm_av_reverse_lookup_implicit(efa_av, gid, qpn, pkt_entry);
 
 	if (implicit_fi_addr != FI_ADDR_NOTAVAIL) {
 		EFA_DBG(FI_LOG_CQ,
@@ -438,10 +440,10 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	 * TODO: continue communication with peer by saving the previous state
 	 * and restoring it
 	 */
-	EFA_GENLOCK_LOCK(&efa_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	HASH_FIND(hh, ep->base_ep.av->evicted_peers_hashset, &efa_ep_addr,
+	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	HASH_FIND(hh, rdm_av->evicted_peers_hashset, &efa_ep_addr,
 		  sizeof(struct efa_ep_addr), efa_ep_addr_hashable);
-	EFA_GENLOCK_UNLOCK(&efa_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	if (OFI_UNLIKELY(!!efa_ep_addr_hashable)) {
 		EFA_WARN(FI_LOG_CQ, "Received packet from peer already evicted "
 				    "from the implicit AV\n");
@@ -449,7 +451,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	}
 
 	/* Step 6: Check implicit AV for the raw address */
-	implicit_fi_addr = ofi_av_lookup_fi_addr(&ep->base_ep.av->util_av_implicit,
+	implicit_fi_addr = ofi_av_lookup_fi_addr(&rdm_av->util_av_implicit,
 						 (void *) &efa_ep_addr);
 	if (implicit_fi_addr != FI_ADDR_NOTAVAIL) {
 		peer = efa_rdm_ep_get_peer_implicit(ep, implicit_fi_addr);
@@ -470,7 +472,7 @@ efa_rdm_cq_get_peer_for_pkt_entry(struct efa_rdm_ep *ep,
 	 * are modified during av insert.
 	 */
 	EFA_GENLOCK_LOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
-	ret = efa_av_insert_one_implicit(ep->base_ep.av, &efa_ep_addr, &implicit_fi_addr,
+	ret = efa_rdm_av_insert_one_implicit(ep->base_ep.av, &efa_ep_addr, &implicit_fi_addr,
 				0, NULL);
 	EFA_GENLOCK_UNLOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
 	if (OFI_UNLIKELY(ret != 0)) {
@@ -493,17 +495,17 @@ raw_addr_found:
 		 "[%s]:[%" PRIu16 "]:[%" PRIu32 "] fi_addr: %" PRIu64
 		 " implicit AV: %s\n",
 		 gid_str_cdesc, efa_ep_addr.qpn, efa_ep_addr.qkey,
-		 peer->conn->fi_addr != FI_ADDR_NOTAVAIL ?
-			peer->conn->fi_addr : peer->conn->implicit_fi_addr,
-		 peer->conn->implicit_fi_addr != FI_ADDR_NOTAVAIL ?
+		 peer->av_entry->efa_av_entry.fi_addr != FI_ADDR_NOTAVAIL ?
+			peer->av_entry->efa_av_entry.fi_addr : peer->av_entry->implicit_fi_addr,
+		 peer->av_entry->implicit_fi_addr != FI_ADDR_NOTAVAIL ?
 			"true" : "false");
 
 out:
 	assert(peer);
-	assert((peer->conn->fi_addr != FI_ADDR_NOTAVAIL &&
-		peer->conn->implicit_fi_addr == FI_ADDR_NOTAVAIL) ||
-	       (peer->conn->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
-		peer->conn->fi_addr == FI_ADDR_NOTAVAIL));
+	assert((peer->av_entry->efa_av_entry.fi_addr != FI_ADDR_NOTAVAIL &&
+		peer->av_entry->implicit_fi_addr == FI_ADDR_NOTAVAIL) ||
+	       (peer->av_entry->implicit_fi_addr != FI_ADDR_NOTAVAIL &&
+		peer->av_entry->efa_av_entry.fi_addr == FI_ADDR_NOTAVAIL));
 	return peer;
 }
 
@@ -578,8 +580,8 @@ static void efa_rdm_cq_handle_recv_completion(struct efa_ibv_cq *ibv_cq, struct 
 		EFA_WARN(FI_LOG_CQ,
 			 "Peer fi_addr: %ld implicit fi_addr %ld is requesting "
 			 "feature %d, which this EP does not support.\n",
-			 pkt_entry->peer->conn->fi_addr,
-			 pkt_entry->peer->conn->implicit_fi_addr,
+			 pkt_entry->peer->av_entry->efa_av_entry.fi_addr,
+			 pkt_entry->peer->av_entry->implicit_fi_addr,
 			 base_hdr->type);
 
 		assert(0 && "invalid REQ packet type");
@@ -693,7 +695,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-				   pkt_entry->ope->peer ? pkt_entry->ope->peer->conn->fi_addr : FI_ADDR_NOTAVAIL,
+				   pkt_entry->ope->peer ? pkt_entry->ope->peer->av_entry->efa_av_entry.fi_addr : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
 	}
 #endif
@@ -763,7 +765,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 		efa_rdm_tracepoint(poll_cq_ope, pkt_entry->ope->msg_id,
 				   (size_t) pkt_entry->ope->cq_entry.op_context,
 				   pkt_entry->ope->total_len, pkt_entry->ope->cq_entry.tag,
-				   pkt_entry->ope->peer ? pkt_entry->ope->peer->conn->fi_addr : FI_ADDR_NOTAVAIL,
+				   pkt_entry->ope->peer ? pkt_entry->ope->peer->av_entry->efa_av_entry.fi_addr : FI_ADDR_NOTAVAIL,
 				   efa_rdm_pkt_type_of_pke(pkt_entry));
 	}
 #endif
