@@ -54,7 +54,8 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 	OFI_UNUSED(len);
 
 	tx_entry = rxd_tx_entry_init_common(ep, addr, op, iov, iov_count, 0,
-					    data, flags, context, &base_hdr, &ptr);
+					    data, flags, context, NULL,
+					    &base_hdr, &ptr);
 	if (!tx_entry)
 		return NULL;
 
