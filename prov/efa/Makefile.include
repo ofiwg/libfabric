@@ -260,6 +260,7 @@ prov_efa_test_efa_unit_test_LDFLAGS = -static $(cmocka_rpath) $(efa_LDFLAGS) $(c
 					-Wl,--wrap=efa_qp_post_send \
 					-Wl,--wrap=efa_qp_post_read \
 					-Wl,--wrap=efa_qp_post_write \
+					-Wl,--wrap=efa_ibv_cq_is_empty_unlocked \
 					-Wl,--wrap=efa_ibv_cq_start_poll \
 					-Wl,--wrap=efa_ibv_cq_next_poll \
 					-Wl,--wrap=efa_ibv_cq_next_poll_unsafe \
