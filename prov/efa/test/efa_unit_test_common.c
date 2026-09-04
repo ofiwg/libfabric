@@ -363,6 +363,29 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
 	pkt_entry->pkt_size = sizeof(base_hdr) + sizeof(opt_connid_hdr);
 }
 
+void efa_unit_test_eager_tagrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr)
+{
+	struct efa_rdm_eager_tagrtm_hdr base_hdr = {0};
+	struct efa_rdm_req_opt_connid_hdr opt_connid_hdr = {0};
+	uint32_t *connid = NULL;
+
+	base_hdr.hdr.version = EFA_RDM_PROTOCOL_VERSION;
+	base_hdr.hdr.type = EFA_RDM_EAGER_TAGRTM_PKT;
+	/* a tagged rtm carries msg_id too, so it sets both request flags */
+	base_hdr.hdr.flags |= EFA_RDM_PKT_CONNID_HDR | EFA_RDM_REQ_MSG |
+			      EFA_RDM_REQ_TAGGED;
+	base_hdr.hdr.msg_id = attr->msg_id;
+	base_hdr.tag = attr->tag;
+	memcpy(pkt_entry->wiredata, &base_hdr, sizeof(struct efa_rdm_eager_tagrtm_hdr));
+	assert_int_equal(efa_rdm_pke_get_base_hdr(pkt_entry)->type, EFA_RDM_EAGER_TAGRTM_PKT);
+	assert_int_equal(efa_rdm_pke_get_req_base_hdr_size(pkt_entry), sizeof(struct efa_rdm_eager_tagrtm_hdr));
+	opt_connid_hdr.connid = attr->connid;
+	memcpy(pkt_entry->wiredata + sizeof(struct efa_rdm_eager_tagrtm_hdr), &opt_connid_hdr, sizeof(struct efa_rdm_req_opt_connid_hdr));
+	connid = efa_rdm_pke_connid_ptr(pkt_entry);
+	assert_int_equal(*connid, attr->connid);
+	pkt_entry->pkt_size = sizeof(base_hdr) + sizeof(opt_connid_hdr);
+}
+
 #define APPEND_OPT_HANDSHAKE_FIELD(field, opt_flag)			\
         if (attr->field) {						\
                 struct efa_rdm_handshake_opt_##field##_hdr *_hdr =	\
