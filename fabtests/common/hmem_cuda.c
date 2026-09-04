@@ -556,7 +556,16 @@ int ft_cuda_get_dmabuf_fd(void *buf, size_t len,
 
 	flags = 0;
 #if HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE
-	flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
+	/*
+	 * The PCIe DMA-BUF mapping type is only requested when the user opts in
+	 * with --use-cuda-pcie-mapping. On platforms where the same GPU is
+	 * reachable over both GPU-local (PCIe-attached) and CPU-mediated (C2C)
+	 * NICs (e.g. GB200), the PCIe mapping only works for GPU-local NICs; a
+	 * CPU-mediated NIC needs the default mapping (flags = 0). The caller
+	 * selects the correct mapping for the NIC/GPU pair under test.
+	 */
+	if (opts.options & FT_OPT_CUDA_PCIE_MAPPING)
+		flags = CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE;
 # endif /* HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE */
 	cuda_ret = cuda_ops.cuMemGetHandleForAddressRange(
 						(void *)dmabuf_fd,

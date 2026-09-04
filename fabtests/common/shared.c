@@ -4612,6 +4612,11 @@ void ft_longopts_usage()
 		"commit_complete");
 	FT_PRINT_OPTS_USAGE("--fi-version <major.minor>",
 			    "libfabric API version passed to fi_getinfo");
+	FT_PRINT_OPTS_USAGE("--use-cuda-pcie-mapping",
+		"Request the PCIe DMA-BUF mapping type\n"
+		"(CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE) when\n"
+		"fetching the CUDA dmabuf fd. Use for GPU-local\n"
+		"(PCIe-attached) NICs; omit for CPU-mediated (C2C) NICs.");
 }
 
 int debug_assert;
@@ -4630,6 +4635,7 @@ struct option long_opts[] = {
 	{"expect-error", required_argument, NULL, LONG_OPT_EXPECT_ERROR},
 	{"sync-comp", required_argument, NULL, LONG_OPT_SYNC_COMP},
 	{"fi-version", required_argument, NULL, LONG_OPT_FI_VERSION},
+	{"use-cuda-pcie-mapping", no_argument, NULL, LONG_OPT_USE_CUDA_PCIE_MAPPING},
 	{NULL, 0, NULL, 0},
 };
 
@@ -4728,6 +4734,9 @@ int ft_parse_long_opts(int op, char *optarg)
 		return 0;
 	case LONG_OPT_FI_VERSION:
 		return ft_parse_fi_version_string(optarg);
+	case LONG_OPT_USE_CUDA_PCIE_MAPPING:
+		opts.options |= FT_OPT_CUDA_PCIE_MAPPING;
+		return 0;
 	default:
 		return EXIT_FAILURE;
 	}
