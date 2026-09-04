@@ -214,6 +214,10 @@ struct efa_rdm_ope {
 	int peer_error_prov_errno;
 };
 
+/* Every bit set is reserved as an ope id that is never legal, so a peer-owned
+ * id that has not been learned yet cannot be mistaken for a pool index. */
+#define EFA_RDM_OPE_ID_INVALID		UINT32_MAX
+
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			   struct efa_rdm_ep *ep,
 		      	   struct efa_rdm_peer *peer,

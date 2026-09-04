@@ -242,6 +242,8 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, struct efa_rdm_p
 	rxe->protocol = 0;
 	rxe->fi_flags = 0;
 	rxe->rx_id = ofi_buf_index(rxe);
+	/* the sender's id is only learned from its REQ packet */
+	rxe->tx_id = EFA_RDM_OPE_ID_INVALID;
 	rxe->iov_count = 0;
 	memset(rxe->mr, 0, sizeof(*rxe->mr) * EFA_RDM_IOV_LIMIT);
 
