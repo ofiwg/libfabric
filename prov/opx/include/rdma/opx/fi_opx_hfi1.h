@@ -577,6 +577,11 @@ struct opx_hwcontext_ctrl {
 	uint64_t	   rx_hdrq_rhf_seq; /* rhf seq for the hw hdrq shared by all subctxts */
 	uint64_t	   hdrq_head;	    /* software copy of head */
 	uint64_t	   hfi_frozen_count;
+	/* Indexed by destination subctxt. forward_stall_count tracks consecutive
+	 * full-queue observations (reset on success); forward_drop_count is
+	 * incremented only once the retry budget below is exhausted. */
+	uint64_t forward_stall_count[HFI1_MAX_SHARED_CTXTS];
+	uint64_t forward_drop_count[HFI1_MAX_SHARED_CTXTS];
 } __attribute__((aligned(64)));
 
 /* Locking macros for shared PIO state when context sharing is in use. */

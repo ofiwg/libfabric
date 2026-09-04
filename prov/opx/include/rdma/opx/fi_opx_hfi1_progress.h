@@ -81,6 +81,10 @@
 #define FI_OPX_HFI1_HDRQ_UPDATE_MASK FI_OPX_HFI1_HDRQ_UPDATE_MASK_32
 #endif
 
+#ifndef OPX_FORWARD_STALL_MAX_RETRIES
+#define OPX_FORWARD_STALL_MAX_RETRIES (1024)
+#endif
+
 OPX_COMPILE_TIME_ASSERT((FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE_MASK_32) ||
 				(FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE_MASK_64) ||
 				(FI_OPX_HFI1_HDRQ_UPDATE_MASK == FI_OPX_HFI1_HDRQ_UPDATE_MASK_128) ||
@@ -564,6 +568,35 @@ void opx_write_rhf_to_subctxt(struct opx_subcontext_ureg *sub_ureg, uint64_t *rh
 }
 
 __OPX_FORCE_INLINE__
+void opx_forward_drop_and_advance(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, uint64_t *p_hdrq_head,
+				  uint32_t *p_last_egrbfr_index, const uint64_t hw_hdrq_offset,
+				  const uint64_t hw_rhf_seq, const uint64_t rhf_rcvd, uint64_t *stall_count,
+				  uint8_t subctxt, const enum opx_hfi1_type hfi1_type)
+{
+	*stall_count = 0;
+	opx_ep->rx->shd_ctx.hwcontext_ctrl->forward_drop_count[subctxt]++;
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "Dropped a packet forwarding into shared-context subctxt %u after %u full-queue retries "
+		     "(forward_drop_count[%u]=%lu).\n",
+		     subctxt, OPX_FORWARD_STALL_MAX_RETRIES, subctxt,
+		     opx_ep->rx->shd_ctx.hwcontext_ctrl->forward_drop_count[subctxt]);
+
+	if (OPX_RHF_IS_USE_EGR_BUF(rhf_rcvd, hfi1_type)) {
+		const uint32_t egrbfr_index = OPX_RHF_EGR_INDEX(rhf_rcvd, hfi1_type);
+		if (OFI_UNLIKELY(*p_last_egrbfr_index != egrbfr_index)) {
+			OPX_HFI1_BAR_UREG_STORE(opx_ep->domain, opx_ep->rx->egrq.head_register,
+						(const uint64_t) *p_last_egrbfr_index);
+			*p_last_egrbfr_index = egrbfr_index;
+		}
+	}
+
+	*p_rhf_seq   = OPX_RHF_SEQ_INCREMENT(hw_rhf_seq, hfi1_type);
+	*p_hdrq_head = hw_hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
+	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hw_hdrq_offset, opx_ep->rx->hdrq.head_register);
+}
+
+__OPX_FORCE_INLINE__
 int opx_forward_shared_context(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, uint64_t *p_hdrq_head,
 			       uint32_t *p_last_egrbfr_index, const uint64_t hw_hdrq_offset, const uint64_t hw_rhf_seq,
 			       const uint64_t rhf_rcvd, const union opx_hfi1_packet_hdr *const hdr, uint8_t subctxt,
@@ -587,9 +620,14 @@ int opx_forward_shared_context(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, ui
 
 	volatile uint32_t *rhf_ptr_dest = s_rx_q->rhf_base + rhq_tail;
 	uint64_t	   rhf_new	= rhf_rcvd;
+	uint64_t	  *stall_count	= &opx_ep->rx->shd_ctx.hwcontext_ctrl->forward_stall_count[subctxt];
 
-	// Drop packet if RHQ is full
 	if (next_rhq_tail == rhq_head) {
+		if (++(*stall_count) < OPX_FORWARD_STALL_MAX_RETRIES) {
+			return 0;
+		}
+		opx_forward_drop_and_advance(opx_ep, p_rhf_seq, p_hdrq_head, p_last_egrbfr_index, hw_hdrq_offset,
+					     hw_rhf_seq, rhf_rcvd, stall_count, subctxt, hfi1_type);
 		return 0;
 	}
 
@@ -597,11 +635,21 @@ int opx_forward_shared_context(struct fi_opx_ep *opx_ep, uint64_t *p_rhf_seq, ui
 		int retVal = opx_write_eager_pkt_to_subctxt(opx_ep, sub_ureg, rhf_rcvd, rhf_ptr_dest, &rhf_new, subctxt,
 							    p_last_egrbfr_index, hdr, hfi1_type);
 		if (OFI_UNLIKELY(retVal == 0)) {
+			if (++(*stall_count) < OPX_FORWARD_STALL_MAX_RETRIES) {
+				return 0;
+			}
+			/* opx_write_eager_pkt_to_subctxt() already released the eager index on
+			 * its own retVal==0 path, so this call's egr-release check is a no-op. */
+			opx_forward_drop_and_advance(opx_ep, p_rhf_seq, p_hdrq_head, p_last_egrbfr_index,
+						     hw_hdrq_offset, hw_rhf_seq, rhf_rcvd, stall_count, subctxt,
+						     hfi1_type);
 			return 0;
 		}
 	} else {
 		opx_write_header_to_subctxt(s_rx_q, rhf_rcvd, rhf_ptr_dest, hdr, rhq_tail, hfi1_type);
 	}
+
+	*stall_count = 0;
 
 	// Ensure memory writes are visible before writing rhf seq and tail
 	fi_opx_compiler_msync_writes();

@@ -422,6 +422,16 @@ static void opx_debug_dump_endpoint(struct fi_opx_ep *opx_ep)
 	opx_debug_dump_rx_flow(opx_ep, my_pid, output);
 	opx_debug_dump_tx_flow(opx_ep, my_pid, output);
 
+	if (OPX_IS_CTX_SHARING_ENABLED) {
+		const uint8_t self_subctxt = opx_ep->rx->shd_ctx.subctxt;
+		fprintf(output, "(%d) shd_ctx.subctxt                                                   : %02X\n",
+			my_pid, self_subctxt);
+		fprintf(output, "(%d) shd_ctx.hwcontext_ctrl->forward_stall_count[self]                 : %lu\n",
+			my_pid, opx_ep->rx->shd_ctx.hwcontext_ctrl->forward_stall_count[self_subctxt]);
+		fprintf(output, "(%d) shd_ctx.hwcontext_ctrl->forward_drop_count[self]                  : %lu\n",
+			my_pid, opx_ep->rx->shd_ctx.hwcontext_ctrl->forward_drop_count[self_subctxt]);
+	}
+
 	opx_debug_dump_backtrace(output);
 
 	fclose(output);
