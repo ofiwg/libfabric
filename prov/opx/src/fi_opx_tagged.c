@@ -221,6 +221,7 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 	ssize_t rc;
+	void   *desc0 = msg->desc ? msg->desc[0] : NULL;
 
 	if (niov == 0) {
 		if (!msg->context) {
@@ -229,20 +230,20 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint
 							  opx_ep->reli_service->kind, OPX_FLOW_CONTROL_MODE_NONE,
 							  OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_IS_CTX_SHARING_ENABLED);
 		} else {
-			rc = fi_opx_ep_tx_send_internal(ep, 0, 0, msg->desc, msg->addr, msg->tag, msg->context,
-							msg->data, FI_OPX_LOCK_NOT_REQUIRED, OPX_CONTIG_TRUE,
+			rc = fi_opx_ep_tx_send_internal(ep, 0, 0, desc0, msg->addr, msg->tag, msg->context, msg->data,
+							FI_OPX_LOCK_NOT_REQUIRED, OPX_CONTIG_TRUE,
 							OPX_FLAGS_OVERRIDE_TRUE, flags, FI_TAGGED,
 							opx_ep->reli_service->kind, OPX_FLOW_CONTROL_MODE_NONE,
 							OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_IS_CTX_SHARING_ENABLED);
 		}
 	} else if (niov == 1) {
-		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, msg->desc, msg->addr,
+		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len, desc0, msg->addr,
 						msg->tag, msg->context, msg->data, FI_OPX_LOCK_NOT_REQUIRED,
 						OPX_CONTIG_TRUE, OPX_FLAGS_OVERRIDE_TRUE, flags, FI_TAGGED,
 						opx_ep->reli_service->kind, OPX_FLOW_CONTROL_MODE_NONE,
 						OPX_SW_HFI1_TYPE(opx_ep->domain), OPX_IS_CTX_SHARING_ENABLED);
 	} else {
-		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov, msg->iov_count, msg->desc, msg->addr, msg->tag,
+		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov, msg->iov_count, desc0, msg->addr, msg->tag,
 						msg->context, msg->data, FI_OPX_LOCK_NOT_REQUIRED, OPX_CONTIG_FALSE,
 						OPX_FLAGS_OVERRIDE_TRUE, flags, FI_TAGGED, opx_ep->reli_service->kind,
 						OPX_FLOW_CONTROL_MODE_NONE, OPX_SW_HFI1_TYPE(opx_ep->domain),

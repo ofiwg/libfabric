@@ -206,6 +206,7 @@ int opx_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_ha
 #endif
 
 	default:
+		assert(iface > FI_HMEM_SYSTEM && iface < OFI_HMEM_MAX);
 		OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_OFI_COPY_TO, len, 0);
 		ret = ofi_copy_to_hmem(iface, device, dest, src, len);
 		OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_OFI_COPY_TO, len, 0);
@@ -264,6 +265,7 @@ int opx_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device, uint64_t hmem_
 #endif
 
 	default:
+		assert(iface > FI_HMEM_SYSTEM && iface < OFI_HMEM_MAX);
 		OPX_TRACE_HMEM_BEGIN(OPX_TRACE_EVENT_HMEM_OFI_COPY_FROM, len, 0);
 		ret = ofi_copy_from_hmem(iface, device, dest, src, len);
 		OPX_TRACE_HMEM_END_SUCCESS(OPX_TRACE_EVENT_HMEM_OFI_COPY_FROM, len, 0);
