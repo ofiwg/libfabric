@@ -121,6 +121,7 @@ _efa_headers = \
 	prov/efa/src/efa_env.h \
 	prov/efa/src/fi_ext_efa.h \
 	prov/efa/src/efa_data_path_ops.h \
+	prov/efa/src/efa_data_path_ops_body.h \
 	prov/efa/src/efa_io_defs.h \
 	prov/efa/src/efa_io_regs_defs.h \
 	prov/efa/src/efa_data_path_direct_structs.h \
@@ -300,6 +301,8 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_rdm_pke.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_ope_helpers.c \
 	prov/efa/test/gtest/efa_gtest_rdm_ope.cc \
+	prov/efa/test/gtest/efa_gtest_fi_more_helpers.c \
+	prov/efa/test/gtest/efa_gtest_fi_more.cc \
 	prov/efa/test/gtest/efa_gtest_cq.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_cntr.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_peer.cc \
@@ -345,6 +348,7 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=efa_ibv_cq_wc_read_byte_len \
 	-Wl,--wrap=efa_ibv_cq_wc_read_src_qp \
 	-Wl,--wrap=efa_ibv_cq_wc_read_slid \
+	-Wl,--wrap=efa_ibv_cq_wc_is_unsolicited \
 	-Wl,--wrap=efa_rdm_pke_clone \
 	-Wl,--wrap=efa_qp_post_recv \
 	-Wl,--wrap=efa_qp_post_send \
