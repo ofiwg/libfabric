@@ -59,6 +59,8 @@ struct efa_rdm_ep_queued_copy {
 struct efa_rdm_ep {
 	struct efa_base_ep base_ep;
 
+	struct ofi_genlock srx_lock;
+
 	/* self_ah necessary for local reads when application does not insert
 	 * its own address into the AV */
 	struct efa_ah *self_ah;
@@ -241,6 +243,8 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep);
 
 void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep);
 
+void efa_rdm_ep_dequeue_progress_list(struct efa_rdm_ep *ep);
+
 void efa_rdm_ep_purge_queued_blocking_copy_for_rxe(struct efa_rdm_ope *rxe);
 
 #define efa_rdm_rx_flags(efa_rdm_ep) ((efa_rdm_ep)->base_ep.util_ep.rx_op_flags)
@@ -265,6 +269,114 @@ struct efa_rdm_peer *efa_rdm_ep_peer_map_remove(struct efa_av_array *arr, fi_add
 
 struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 					   struct efa_rdm_peer *peer, uint32_t op);
+
+/**
+ * @brief resolve a txe id, rejecting one that no longer names its own txe
+ *
+ * A txe id is only a hint until it is checked. The pool slot it names is
+ * handed to an unrelated transfer as soon as the original txe is released, so
+ * an id that outlived its txe must be rejected rather than applied to the
+ * slot's new occupant. This is the only way to turn a txe id off the wire
+ * into a txe, since resolving one without checking the generation would
+ * discard the very bits that catch a recycled slot.
+ *
+ * @param[in] ep	endpoint that created @p txe_id
+ * @param[in] txe_id	txe id read out of a received packet
+ * @return the txe that created @p txe_id, or NULL if it is no longer live
+ */
+static inline struct efa_rdm_ope *
+efa_rdm_ep_live_txe_from_id(struct efa_rdm_ep *ep, uint32_t txe_id)
+{
+	struct efa_rdm_ope *txe;
+	size_t index;
+
+	if (txe_id == EFA_RDM_OPE_ID_INVALID || efa_rdm_ope_id_is_rxe(txe_id)) {
+		EFA_DBG(FI_LOG_EP_DATA,
+			"ep %p: txe id %u does not name a txe\n", ep, txe_id);
+		return NULL;
+	}
+
+	index = efa_rdm_txe_id_index(txe_id);
+	if (!ofi_bufpool_ibuf_is_valid(ep->base_ep.txe_pool, index)) {
+		EFA_DBG(FI_LOG_EP_DATA,
+			"ep %p: txe id %u names txe pool slot %zu, which holds no txe\n",
+			ep, txe_id, index);
+		return NULL;
+	}
+
+	txe = ofi_bufpool_get_ibuf(ep->base_ep.txe_pool, index);
+	assert(txe->type == EFA_RDM_TXE);
+
+	if (txe->gen != efa_rdm_txe_id_gen(txe_id)) {
+		EFA_DBG(FI_LOG_EP_DATA,
+			"ep %p: txe id %u is from generation %u, but txe pool slot %zu is on generation %u\n",
+			ep, txe_id, efa_rdm_txe_id_gen(txe_id), index,
+			(unsigned) txe->gen);
+		return NULL;
+	}
+
+	return txe;
+}
+
+/**
+ * @brief look up the ope named by an ope id the peer echoed back
+ *
+ * The two pools have independent index spaces, so the pool comes from the
+ * id's own tag.
+ *
+ * @param[in] ep	endpoint that minted @p ope_id
+ * @param[in] ope_id	ope id read out of a received packet
+ * @return the ope named by @p ope_id
+ */
+static inline struct efa_rdm_ope *
+efa_rdm_ep_get_ope_from_ope_id(struct efa_rdm_ep *ep, uint32_t ope_id)
+{
+	size_t index;
+
+	if (efa_rdm_ope_id_is_rxe(ope_id)) {
+		index = efa_rdm_rxe_id_index(ope_id);
+		assert(ofi_bufpool_ibuf_is_valid(ep->base_ep.rxe_pool, index));
+		return ofi_bufpool_get_ibuf(ep->base_ep.rxe_pool, index);
+	}
+
+	index = efa_rdm_txe_id_index(ope_id);
+	assert(ofi_bufpool_ibuf_is_valid(ep->base_ep.txe_pool, index));
+	return ofi_bufpool_get_ibuf(ep->base_ep.txe_pool, index);
+}
+
+/**
+ * @brief resolve an ope id, rejecting one that no longer names its own ope
+ *
+ * Same contract as efa_rdm_ep_live_txe_from_id(), for the ids whose pool is
+ * only known from the tag. An rxe id carries no generation, so its pool slot
+ * is only checked for still holding a live rxe.
+ *
+ * @param[in] ep	endpoint that created @p ope_id
+ * @param[in] ope_id	ope id read out of a received packet
+ * @return the ope that created @p ope_id, or NULL if it is no longer live
+ */
+static inline struct efa_rdm_ope *
+efa_rdm_ep_live_ope_from_id(struct efa_rdm_ep *ep, uint32_t ope_id)
+{
+	struct efa_rdm_ope *ope;
+	size_t index;
+
+	if (!efa_rdm_ope_id_is_rxe(ope_id))
+		return efa_rdm_ep_live_txe_from_id(ep, ope_id);
+
+	index = efa_rdm_rxe_id_index(ope_id);
+	if (!ofi_bufpool_ibuf_is_valid(ep->base_ep.rxe_pool, index)) {
+		EFA_DBG(FI_LOG_EP_DATA,
+			"ep %p: rxe id %u names rxe pool slot %zu, which holds no rxe\n",
+			ep, ope_id, index);
+		return NULL;
+	}
+
+	ope = ofi_bufpool_get_ibuf(ep->base_ep.rxe_pool, index);
+	assert(ope->type == EFA_RDM_RXE);
+
+	return ope;
+}
 
 void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 

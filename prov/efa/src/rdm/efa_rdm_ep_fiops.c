@@ -146,6 +146,7 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 {
 	int ret;
+	size_t min_pool_size, max_pool_size, txe_pool_size;
 	uint64_t tx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
 	uint64_t rx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
 
@@ -241,20 +242,53 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		goto err_free;
 
 	/*
-	 * Operation entries are tracked on the shared base_ep.ope_list, so
-	 * they are allocated from the shared base_ep.ope_pool. Unlike
-	 * efa-direct, efa-rdm always needs this pool: it backs live tx/rx
-	 * operation entries, not just the FI_EFA_TRACK_MR in-flight check.
+	 * Both pools link their entries on the shared base_ep.ope_list. The
+	 * txe pool is capped by FI_EFA_RDM_TXE_POOL_SIZE so that a txe id can
+	 * index it. The rxe pool absorbs unexpected messages, so it keeps the
+	 * much wider EFA_RDM_RXE_POOL_MAX_CNT bound, which is there only to
+	 * keep an rxe id a usable pool index.
 	 */
-	ret = ofi_bufpool_create(&ep->base_ep.ope_pool,
+	/* FI_EFA_RDM_TXE_POOL_SIZE is a request. The pool still has to back
+	 * the tx size the endpoint advertises, and still cannot outgrow what a
+	 * txe id can index, so adjust a request that does not fit and say so. */
+	max_pool_size = EFA_RDM_TXE_POOL_MAX_CNT;
+	min_pool_size = MIN(roundup_power_of_two(ep->base_ep.info->tx_attr->size),
+			    max_pool_size);
+	txe_pool_size = efa_env.rdm_txe_pool_size;
+	if (txe_pool_size < min_pool_size) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "FI_EFA_RDM_TXE_POOL_SIZE %zu is below the %zu entries tx_attr->size needs, using %zu\n",
+			 txe_pool_size, min_pool_size, min_pool_size);
+		txe_pool_size = min_pool_size;
+	}
+
+	if (txe_pool_size > max_pool_size) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "FI_EFA_RDM_TXE_POOL_SIZE %zu exceeds the %zu entries a txe id can index, using %zu\n",
+			 txe_pool_size, max_pool_size, max_pool_size);
+		txe_pool_size = max_pool_size;
+	}
+
+	ret = ofi_bufpool_create(&ep->base_ep.txe_pool,
 				 sizeof(struct efa_rdm_ope),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
-				 0, /* no limit for max_cnt */
-				 ep->base_ep.info->tx_attr->size + ep->base_ep.info->rx_attr->size, 0);
+				 txe_pool_size, min_pool_size, 0);
 	if (ret)
 		goto err_free;
 
-	ret = ofi_bufpool_grow(ep->base_ep.ope_pool);
+	ret = ofi_bufpool_grow(ep->base_ep.txe_pool);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_create(&ep->base_ep.rxe_pool,
+				 sizeof(struct efa_rdm_ope),
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
+				 EFA_RDM_RXE_POOL_MAX_CNT,
+				 ep->base_ep.info->rx_attr->size, 0);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_grow(ep->base_ep.rxe_pool);
 	if (ret)
 		goto err_free;
 
@@ -324,8 +358,11 @@ err_free:
 	if (ep->map_entry_pool)
 		ofi_bufpool_destroy(ep->map_entry_pool);
 
-	if (ep->base_ep.ope_pool)
-		ofi_bufpool_destroy(ep->base_ep.ope_pool);
+	if (ep->base_ep.txe_pool)
+		ofi_bufpool_destroy(ep->base_ep.txe_pool);
+
+	if (ep->base_ep.rxe_pool)
+		ofi_bufpool_destroy(ep->base_ep.rxe_pool);
 
 	if (ep->overflow_pke_pool)
 		ofi_bufpool_destroy(ep->overflow_pke_pool);
@@ -489,6 +526,11 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err_free_ep;
 
+	ret = ofi_genlock_init(&efa_rdm_ep->srx_lock,
+			       efa_domain_data_progress_lock_type(efa_domain));
+	if (ret)
+		goto err_destroy_base_ep;
+
 	if (rdm_domain->shm_domain) {
 		efa_rdm_ep->shm_info = NULL;
 		efa_shm_info_create(info, &efa_rdm_ep->shm_info);
@@ -496,7 +538,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 			ret = fi_endpoint(rdm_domain->shm_domain, efa_rdm_ep->shm_info,
 					  &efa_rdm_ep->shm_ep, efa_rdm_ep);
 			if (ret)
-				goto err_destroy_base_ep;
+				goto err_destroy_lock;
 		} else {
 			efa_rdm_ep->shm_ep = NULL;
 		}
@@ -654,6 +696,13 @@ err_close_shm_ep:
 		if (retv)
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm EP: %s\n",
 				fi_strerror(-retv));
+	}
+err_destroy_lock:
+	ofi_genlock_destroy(&efa_rdm_ep->srx_lock);
+	/* shm_info is built to open the shm ep, so it unwinds with it */
+	if (efa_rdm_ep->shm_info) {
+		fi_freeinfo(efa_rdm_ep->shm_info);
+		efa_rdm_ep->shm_info = NULL;
 	}
 err_destroy_base_ep:
 	efa_base_ep_destruct(&efa_rdm_ep->base_ep);
@@ -843,8 +892,11 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	efa_av_array_destroy(efa_rdm_ep->fi_addr_to_peer_map);
 	efa_av_array_destroy(efa_rdm_ep->fi_addr_to_peer_map_implicit);
 
-	if (efa_rdm_ep->base_ep.ope_pool)
-		ofi_bufpool_destroy(efa_rdm_ep->base_ep.ope_pool);
+	if (efa_rdm_ep->base_ep.txe_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->base_ep.txe_pool);
+
+	if (efa_rdm_ep->base_ep.rxe_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->base_ep.rxe_pool);
 
 	if (efa_rdm_ep->overflow_pke_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->overflow_pke_pool);
@@ -904,12 +956,15 @@ bool efa_rdm_ep_close_should_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 	struct efa_rdm_ope *ope;
 	struct dlist_entry *entry;
 
+	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
 	dlist_foreach(&efa_rdm_ep->ope_posted_ack_list, entry) {
 		ope = container_of(entry, struct efa_rdm_ope, ack_list_entry);
 		if (ope->peer && !(ope->peer->flags & EFA_RDM_PEER_UNRESP)) {
+			ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 			return true;
 		}
 	}
+	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 
 	return false;
 }
@@ -920,6 +975,7 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 	struct dlist_entry *tmp;
 	struct efa_rdm_ope *ope;
 
+	ofi_genlock_lock(&ep->srx_lock);
 	/* Update timers for peers that are in backoff list*/
 	dlist_foreach_container_safe(&ep->peer_backoff_list,
 			struct efa_rdm_peer, peer, rnr_backoff_entry, tmp) {
@@ -935,10 +991,7 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 		switch (efa_rdm_pke_get_ctrl_pkt_type_from_queued_ope(ope)) {
 		case EFA_RDM_RECEIPT_PKT:
 		case EFA_RDM_EOR_PKT:
-			if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_RNR))
-				continue;
-			if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
-				continue;
+			efa_rdm_ope_process_queued_ope(ope);
 			break;
 		default:
 			/* Release all other queued OPEs */
@@ -949,6 +1002,7 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 			break;
 		}
 	}
+	ofi_genlock_unlock(&ep->srx_lock);
 }
 
 /*
@@ -958,9 +1012,9 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
  * complete. Only polls CQ when there are operations with
  * posted RECEIPT or EOR packets from responsive peers.
  *
- * The caller must hold the domain's srx_lock. This function
- * polls the CQ and progresses queued operations, both of which
- * require the srx_lock to be held.
+ * This function polls the tx/rx CQs and progresses queued operations
+ * until all inflight sends complete. It manages locking internally in the
+ * order ep_list_lock -> srx_lock.
  *
  * @param[in]	efa_rdm_ep		endpoint
  * @return 	no return
@@ -969,8 +1023,6 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
 	struct efa_cq *tx_cq, *rx_cq;
 
-	assert(ofi_genlock_held(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock));
-
 	tx_cq = efa_base_ep_get_tx_cq(&efa_rdm_ep->base_ep);
 	rx_cq = efa_base_ep_get_rx_cq(&efa_rdm_ep->base_ep);
 
@@ -978,7 +1030,7 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 		/* poll cq until empty */
 		if (tx_cq)
 			efa_rdm_cq_poll_ibv_cq_closing_ep(&tx_cq->ibv_cq, efa_rdm_ep);
-		if (rx_cq)
+		if (rx_cq && rx_cq != tx_cq)
 			efa_rdm_cq_poll_ibv_cq_closing_ep(&rx_cq->ibv_cq, efa_rdm_ep);
 		progress_queues_closing_ep(efa_rdm_ep);
 	}
@@ -1074,18 +1126,22 @@ static int efa_rdm_ep_close(struct fid *fid)
 	domain = efa_rdm_ep_domain(efa_rdm_ep);
 
 	/**
+	 * Hold cq.ep_list_lock so the cq progress cannot run concurrently, 
+	 * which prevents the deadlock of srx_lock -> progress_ep_list_lock.
+	 */
+	efa_cq_lock_ep_list(&efa_rdm_ep->base_ep);
+
+	if (efa_rdm_ep->base_ep.efa_qp_enabled)
+		efa_rdm_ep_wait_send(efa_rdm_ep);
+	/**
 	 * The QP destroy and op entries clean up must be in the same lock,
 	 * otherwise there can be race condition that efa_rdm_ep_progress_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
 	 */
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
-	if (efa_rdm_ep->base_ep.efa_qp_enabled)
-		efa_rdm_ep_wait_send(efa_rdm_ep);
+	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
 
-	if (efa_rdm_ep->needs_progress) {
-		dlist_remove(&efa_rdm_ep->progress_ep_entry);
-		efa_rdm_ep->needs_progress = false;
-	}
+	efa_rdm_ep_dequeue_progress_list(efa_rdm_ep);
+	efa_cq_unlock_ep_list(&efa_rdm_ep->base_ep);
 
 	if (efa_rdm_ep->peer_srx_ep) {
 		/*
@@ -1108,6 +1164,9 @@ static int efa_rdm_ep_close(struct fid *fid)
 		* It also decrements the ref count of rx cq. So it must
 		* be called before we clean up the ibv cq poll list which
 		* relies on the correct ref count of tx/rx cq.
+		*
+		* util_srx_close expects the caller to hold srx_lock, so
+		* it is called while the lock is held.
 		*/
 		util_srx_close(&efa_rdm_ep->peer_srx_ep->fid);
 		efa_rdm_ep->peer_srx_ep = NULL;
@@ -1118,17 +1177,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 	efa_base_ep_close_util_ep(&efa_rdm_ep->base_ep);
 
 	efa_rdm_ep_remove_cntr_ibv_cq_poll_list(&efa_rdm_ep->base_ep);
-
-	/*
-	 * Destroying the self AH also requires the util_domain.lock, 
-	 * because it modifies the AH refcnts which can also be
-	 * modified in the CQ read path by implicit-to-explicit AV entry conversion
-	 */
-	if (efa_rdm_ep->self_ah) {
-		EFA_GENLOCK_LOCK(&domain->util_domain.lock, efa_util_domain_lock_sym);
-		efa_ah_release(domain, efa_rdm_ep->self_ah, false);
-		EFA_GENLOCK_UNLOCK(&domain->util_domain.lock, efa_util_domain_lock_sym);
-	}
 
 	efa_rdm_ep_deregister_ibv_cqs(efa_rdm_ep);
 
@@ -1153,8 +1201,21 @@ static int efa_rdm_ep_close(struct fid *fid)
 	if (efa_rdm_ep->send_pkt_entry_vec_data_sizes)
 		free(efa_rdm_ep->send_pkt_entry_vec_data_sizes);
 
-	ofi_genlock_unlock(&((struct efa_rdm_domain *) domain)->srx_lock);
+	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 
+	/*
+	 * Destroying the self AH also requires the util_domain.lock,
+	 * because it modifies the AH refcnts which can also be
+	 * modified in the CQ read path by implicit-to-explicit AV entry conversion.
+	 *
+	 */
+	if (efa_rdm_ep->self_ah) {
+		EFA_GENLOCK_LOCK(&domain->util_domain.lock, efa_util_domain_lock_sym);
+		efa_ah_release(domain, efa_rdm_ep->self_ah, false);
+		EFA_GENLOCK_UNLOCK(&domain->util_domain.lock, efa_util_domain_lock_sym);
+	}
+
+	ofi_genlock_destroy(&efa_rdm_ep->srx_lock);
 	free(efa_rdm_ep);
 	return retv;
 }

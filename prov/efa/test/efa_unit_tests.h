@@ -90,6 +90,7 @@ struct efa_unit_test_buff {
 struct efa_unit_test_eager_rtm_pkt_attr {
 	uint32_t msg_id;
 	uint32_t connid;
+	uint64_t tag;
 };
 
 struct efa_unit_test_handshake_pkt_attr {
@@ -105,6 +106,7 @@ void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_re
 void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff);
 
 void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr);
+void efa_unit_test_eager_tagrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr);
 
 void efa_unit_test_construct_handshake_pkt_for_receive(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr);
 
@@ -290,6 +292,10 @@ void test_efa_srx_cq(void **state);
 void test_efa_srx_lock(void **state);
 void test_efa_srx_unexp_pkt(void **state);
 void test_efa_srx_foreach_unspec_skips_other_provider(void **state);
+void test_efa_srx_free_unqueued_entry_msg(void **state);
+void test_efa_srx_free_unqueued_entry_tagged(void **state);
+void test_efa_srx_free_unqueued_entry_msg_no_dir_recv(void **state);
+void test_efa_srx_free_unqueued_entry_tagged_no_dir_recv(void **state);
 void test_efa_rdm_peer_construct_robuf_failure(void **state);
 void test_efa_rnr_queue_and_resend_msg(void **state);
 void test_efa_rnr_queue_and_resend_tagged(void **state);
@@ -314,6 +320,23 @@ void test_efa_rdm_txe_handle_error_inject_still_reports_cq_error(void **state);
 void test_efa_rdm_txe_handle_error_after_success_reported(void **state);
 void test_efa_rdm_rxe_handle_error_write_cq(void **state);
 void test_efa_rdm_rxe_handle_error_not_write_cq(void **state);
+void test_efa_rdm_ope_peer_id_invalid_until_learned(void **state);
+void test_efa_rdm_srx_entry_released_matched_msg(void **state);
+void test_efa_rdm_srx_entry_released_unmatched_msg(void **state);
+void test_efa_rdm_srx_entry_released_matched_tagged(void **state);
+void test_efa_rdm_srx_entry_released_unmatched_tagged(void **state);
+void test_efa_rdm_ope_id_carries_ope_type(void **state);
+void test_efa_rdm_ope_id_selects_pool(void **state);
+void test_efa_rdm_ope_txe_pool_capped(void **state);
+void test_efa_rdm_ope_rxe_pool_cap_fails_recv(void **state);
+void test_efa_rdm_ope_txe_pool_cap_fails_send(void **state);
+void test_efa_direct_ope_pools_capped(void **state);
+void test_efa_rdm_ope_txe_pool_cap_from_env(void **state);
+void test_efa_rdm_ope_txe_pool_cap_adjusted(void **state);
+void test_efa_rdm_txe_id_bits_split(void **state);
+void test_efa_rdm_txe_id_rejects_stale_id(void **state);
+void test_efa_rdm_txe_id_rejects_bad_ids(void **state);
+void test_efa_rdm_pke_receipt_drops_stale_txe_id(void **state);
 void test_efa_rdm_rxe_map(void **state);
 void test_efa_rdm_rxe_list_removal(void **state);
 void test_efa_rdm_txe_list_removal(void **state);
@@ -539,6 +562,9 @@ void test_efa_rdm_rxe_release_purges_queued_blocking_copy(void **state);
 void test_efa_rdm_prov_errno_is_peer_abort(void **state);
 void test_efa_rdm_pkt_is_rxe_remote_read(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state);
+void test_efa_rdm_pke_init_peer_error_for_ope_unlearned_op_id(void **state);
+void test_efa_rdm_pke_handle_cts_recv_grants_window(void **state);
+void test_efa_rdm_pke_handle_cts_recv_drops_stale_id(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_runtread(void **state);
 void test_efa_rdm_pke_init_peer_error_for_ope_eager_skip(void **state);

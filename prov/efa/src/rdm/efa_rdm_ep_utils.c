@@ -227,7 +227,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, struct efa_rdm_p
 {
 	struct efa_rdm_ope *rxe;
 
-	rxe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	rxe = ofi_buf_alloc(ep->base_ep.rxe_pool);
 	if (OFI_UNLIKELY(!rxe)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "RX entries exhausted\n");
 		return NULL;
@@ -241,7 +241,9 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, struct efa_rdm_p
 	rxe->internal_flags = 0;
 	rxe->protocol = 0;
 	rxe->fi_flags = 0;
-	rxe->rx_id = ofi_buf_index(rxe);
+	rxe->rx_id = efa_rdm_ope_get_ope_id(rxe);
+	/* the sender's id is only learned from its REQ packet */
+	rxe->tx_id = EFA_RDM_OPE_ID_INVALID;
 	rxe->iov_count = 0;
 	memset(rxe->mr, 0, sizeof(*rxe->mr) * EFA_RDM_IOV_LIMIT);
 
@@ -646,7 +648,7 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 
 	msg.addr = peer->conn->fi_addr;
 
-	txe = ofi_buf_alloc(ep->base_ep.ope_pool);
+	txe = ofi_buf_alloc(ep->base_ep.txe_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;
@@ -996,6 +998,8 @@ void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 {
 	int err;
 
+	assert(ofi_genlock_held(&ep->srx_lock));
+
 	if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0 && ep->efa_rx_pkts_held == 0) {
 		/* All of efa_rx_pkts_posted, efa_rx_pkts_to_post and
 		 * efa_rx_pkts_held equal to 0 means
@@ -1082,6 +1086,15 @@ int efa_rdm_ep_enforce_handshake_for_txe(struct efa_rdm_ep *ep, struct efa_rdm_o
 	return FI_SUCCESS;
 }
 
+static inline struct efa_rdm_cq *efa_rdm_ep_get_progress_cq(struct efa_rdm_ep *ep)
+{
+	if (ep->base_ep.util_ep.tx_cq)
+		return container_of(ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);
+
+	assert(ep->base_ep.util_ep.rx_cq);
+	return container_of(ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, efa_cq.util_cq);
+}
+
 void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep)
 {
 	struct efa_rdm_cq *cq;
@@ -1091,13 +1104,36 @@ void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep)
 
 	ep->needs_progress = true;
 
-	if (ep->base_ep.util_ep.tx_cq) {
-		cq = container_of(ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, efa_cq.util_cq);
-	} else {
-		assert(ep->base_ep.util_ep.rx_cq);
-		cq = container_of(ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, efa_cq.util_cq);
-	}
+	cq = efa_rdm_ep_get_progress_cq(ep);
+	/**
+	 * The CQ read path's progress loop walks the list in the opposite order,
+	 * progress_ep_list_lock -> srx_lock. That inversion is safe because the two
+	 * paths operate on disjoint sets of EPs:
+	 *   - enqueue only takes progress_ep_list_lock when the EP is NOT already on
+	 *     the list (guarded by needs_progress); if it is already on the list it
+	 *     early-returns without touching progress_ep_list_lock at all;
+	 *   - the progress loop only takes an EP's srx_lock for EPs that ARE on the
+	 *     list.
+	 */
+	ofi_genlock_lock(&cq->progress_ep_list_lock);
 	dlist_insert_tail(&ep->progress_ep_entry, &cq->progress_ep_list);
+	ofi_genlock_unlock(&cq->progress_ep_list_lock);
+}
+
+void efa_rdm_ep_dequeue_progress_list(struct efa_rdm_ep *ep)
+{
+	struct efa_rdm_cq *cq;
+
+	assert(ofi_genlock_held(&ep->srx_lock));
+	if (!ep->needs_progress)
+		return;
+
+	ep->needs_progress = false;
+
+	cq = efa_rdm_ep_get_progress_cq(ep);
+	ofi_genlock_lock(&cq->progress_ep_list_lock);
+	dlist_remove(&ep->progress_ep_entry);
+	ofi_genlock_unlock(&cq->progress_ep_list_lock);
 }
 
 void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
@@ -1158,14 +1194,7 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
 			continue;
 
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_BEFORE_HANDSHAKE))
-			continue;
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_RNR))
-			continue;
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_CTRL))
-			continue;
-		if (efa_rdm_ope_process_queued_ope(ope, EFA_RDM_OPE_QUEUED_READ))
-			continue;
+		efa_rdm_ope_process_queued_ope(ope);
 	}
 	/*
 	 * Send data packets until window or data queue is exhausted.

@@ -44,7 +44,8 @@
  * @note This function is called during queue pair creation and requires
  *       that the underlying hardware queue pair has been successfully created
  */
-int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp);
+int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp,
+				       struct ofi_genlock *wqlock);
 
 /**
  * @brief Initialize direct completion queue operations for a completion queue

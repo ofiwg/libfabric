@@ -769,6 +769,372 @@ void test_efa_rdm_rxe_handle_error_not_write_cq(void **state)
 	efa_rdm_rxe_release(rxe);
 }
 
+/**
+ * @brief Verify an ope id says which kind of ope it names.
+ *
+ * The tag has to survive the round trip through a packet field and the index
+ * has to come back intact, since a lookup recovers the ope from the id alone.
+ */
+void test_efa_rdm_ope_id_carries_ope_type(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe, *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_msg);
+	assert_non_null(rxe);
+
+	assert_false(efa_rdm_ope_id_is_rxe(txe->tx_id));
+	assert_true(efa_rdm_ope_id_is_rxe(rxe->rx_id));
+
+	assert_int_equal(efa_rdm_txe_id_index(txe->tx_id), ofi_buf_index(txe));
+	assert_int_equal(efa_rdm_rxe_id_index(rxe->rx_id), ofi_buf_index(rxe));
+
+	efa_rdm_txe_release(txe);
+	efa_rdm_rxe_release(rxe);
+}
+
+/**
+ * @brief Verify a txe id splits into a pool index and a slot generation.
+ *
+ * The split is fixed, so the index field is wider than the pool cap needs and
+ * the masks are what keep the two halves out of each other.
+ */
+void test_efa_rdm_txe_id_bits_split(void **state)
+{
+	uint32_t id;
+
+	/* the two fields are disjoint and fit below the tag, with a bit spare */
+	assert_int_equal(EFA_RDM_TXE_ID_GEN_MASK & EFA_RDM_TXE_ID_INDEX_MASK, 0);
+	assert_true((EFA_RDM_TXE_ID_GEN_MASK | EFA_RDM_TXE_ID_INDEX_MASK) <
+		    EFA_RDM_OPE_ID_TAG >> 1);
+	assert_int_equal(EFA_RDM_TXE_POOL_MAX_CNT,
+			 (size_t) 1 << EFA_RDM_TXE_ID_INDEX_BITS);
+
+	/* an id round trips through both accessors */
+	id = (7u << EFA_RDM_TXE_ID_GEN_SHIFT) | 42u;
+	assert_int_equal(efa_rdm_txe_id_index(id), 42);
+	assert_int_equal(efa_rdm_txe_id_gen(id), 7);
+
+	/* the widest legal pair does not bleed into the other half */
+	id = EFA_RDM_TXE_ID_GEN_MASK | EFA_RDM_TXE_ID_INDEX_MASK;
+	assert_int_equal(efa_rdm_txe_id_index(id), EFA_RDM_TXE_ID_INDEX_MASK);
+	assert_int_equal(efa_rdm_txe_id_gen(id),
+			 EFA_RDM_TXE_ID_GEN_MASK >> EFA_RDM_TXE_ID_GEN_SHIFT);
+	assert_true(id < EFA_RDM_OPE_ID_INVALID);
+	assert_true(id < EFA_RDM_OPE_ID_TAG);	/* gen and index alone */
+
+	/* a generation never reaches the index, whatever the cap in use */
+	assert_int_equal(efa_rdm_txe_id_index(EFA_RDM_TXE_ID_GEN_MASK), 0);
+}
+
+/**
+ * @brief Verify a fresh ope names itself, but not yet its peer.
+ *
+ * The id a side creates for itself is always legal. The peer's id is only
+ * learned from the wire, so until a packet carries it the field must read
+ * back as the reserved invalid id rather than as whatever the pool last
+ * left there.
+ */
+void test_efa_rdm_ope_peer_id_invalid_until_learned(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ope *txe, *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	assert_int_not_equal(txe->tx_id, EFA_RDM_OPE_ID_INVALID);
+	assert_int_equal(txe->rx_id, EFA_RDM_OPE_ID_INVALID);
+	efa_rdm_txe_release(txe);
+
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_msg);
+	assert_non_null(rxe);
+	assert_int_not_equal(rxe->rx_id, EFA_RDM_OPE_ID_INVALID);
+	assert_int_equal(rxe->tx_id, EFA_RDM_OPE_ID_INVALID);
+	efa_rdm_rxe_release(rxe);
+}
+
+
+/**
+ * @brief Verify an ope id resolves to the pool it was minted from.
+ *
+ * txes and rxes come from separate pools with independent index spaces, so
+ * the two can share a pool index and only the tag in the id tells them
+ * apart.
+ */
+void test_efa_rdm_ope_id_selects_pool(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_msg);
+	assert_non_null(rxe);
+
+	assert_int_equal(ofi_buf_index(txe), ofi_buf_index(rxe));
+	assert_int_not_equal(txe->tx_id, rxe->rx_id);
+
+	assert_ptr_equal(efa_rdm_ep_get_ope_from_ope_id(ep, txe->tx_id), txe);
+	assert_ptr_equal(efa_rdm_ep_get_ope_from_ope_id(ep, rxe->rx_id), rxe);
+
+	efa_rdm_txe_release(txe);
+	efa_rdm_rxe_release(rxe);
+}
+
+/**
+ * @brief Verify the txe pool never hands out an index past its cap.
+ *
+ * A txe id has room for a pool index only because the pool is capped.
+ */
+void test_efa_rdm_ope_txe_pool_capped(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope **txe;
+	size_t i, allocated, pool_size = efa_env.rdm_txe_pool_size;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = calloc(pool_size + 1, sizeof(*txe));
+	assert_non_null(txe);
+
+	for (allocated = 0; allocated < pool_size + 1; allocated++) {
+		txe[allocated] = ofi_buf_alloc(ep->base_ep.txe_pool);
+		if (!txe[allocated])
+			break;
+		assert_true(ofi_buf_index(txe[allocated]) < pool_size);
+	}
+	assert_int_equal(allocated, pool_size);
+
+	for (i = 0; i < allocated; i++)
+		ofi_buf_free(txe[i]);
+	free(txe);
+}
+
+/**
+ * @brief Verify FI_EFA_RDM_TXE_POOL_SIZE sizes the txe pool when the request fits
+ *
+ * A request between what tx_attr->size needs and what a txe id can index is
+ * taken as given. That the cap is then enforced is covered by
+ * test_efa_rdm_ope_txe_pool_cap_fails_send().
+ */
+void test_efa_rdm_ope_txe_pool_cap_from_env(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	size_t saved = efa_env.rdm_txe_pool_size;
+
+	efa_env.rdm_txe_pool_size = 16384;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	assert_true(16384 >= roundup_power_of_two(ep->base_ep.info->tx_attr->size));
+	assert_true(16384 <= EFA_RDM_TXE_POOL_MAX_CNT);
+	assert_int_equal(ep->base_ep.txe_pool->attr.max_cnt, 16384);
+
+	efa_env.rdm_txe_pool_size = saved;
+}
+
+/**
+ * @brief Open an endpoint with a FI_EFA_RDM_TXE_POOL_SIZE request, report the cap used
+ */
+static size_t efa_unit_test_txe_pool_cap(struct efa_resource *resource,
+					 size_t request)
+{
+	struct efa_rdm_ep *ep;
+	struct fid_ep *ep_fid;
+	size_t cap;
+
+	efa_env.rdm_txe_pool_size = request;
+	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep_fid,
+				     NULL),
+			 0);
+	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	cap = ep->base_ep.txe_pool->attr.max_cnt;
+	assert_int_equal(fi_close(&ep_fid->fid), 0);
+
+	return cap;
+}
+
+/**
+ * @brief Verify a FI_EFA_RDM_TXE_POOL_SIZE that does not fit is adjusted, not refused
+ *
+ * The knob cannot be honoured below what tx_attr->size needs, nor above what a
+ * txe id can index. Endpoint creation still succeeds in both cases, because
+ * refusing it would turn a tuning value into a hard failure.
+ */
+void test_efa_rdm_ope_txe_pool_cap_adjusted(void **state)
+{
+	struct efa_resource *resource = *state;
+	size_t saved = efa_env.rdm_txe_pool_size;
+	size_t min_pool_size;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(resource->hints);
+	assert_int_equal(fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0ULL,
+				    resource->hints, &resource->info), 0);
+	assert_int_equal(fi_fabric(resource->info->fabric_attr,
+				   &resource->fabric, NULL), 0);
+	assert_int_equal(fi_domain(resource->fabric, resource->info,
+				   &resource->domain, NULL), 0);
+
+	min_pool_size = roundup_power_of_two(resource->info->tx_attr->size);
+
+	/* below what tx_attr->size needs, so raised to it. 0 is not a
+	 * special case, it is just the smallest such request. */
+	assert_int_equal(efa_unit_test_txe_pool_cap(resource, 0), min_pool_size);
+
+	/* past what a txe id can index, so lowered to the limit */
+	assert_int_equal(efa_unit_test_txe_pool_cap(resource,
+						   EFA_RDM_TXE_POOL_MAX_CNT + 1),
+			 EFA_RDM_TXE_POOL_MAX_CNT);
+
+	efa_env.rdm_txe_pool_size = saved;
+}
+
+
+/**
+ * @brief Verify a txe id stops resolving once its txe is released.
+ *
+ * The pool hands the slot straight to the next txe, so an id a peer is still
+ * echoing back -- a CTS for a transfer the sender already gave up on -- must
+ * not resolve to the slot's new occupant.
+ */
+void test_efa_rdm_txe_id_rejects_stale_id(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *reused;
+	uint32_t stale_id;
+	uint8_t stale_gen;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	stale_id = txe->tx_id;
+	stale_gen = txe->gen;
+	assert_ptr_equal(efa_rdm_ep_live_txe_from_id(ep, stale_id), txe);
+
+	efa_rdm_txe_release(txe);
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, stale_id));
+
+	reused = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(reused);
+	assert_int_equal(efa_rdm_txe_id_index(reused->tx_id),
+			 efa_rdm_txe_id_index(stale_id));
+	assert_int_equal(reused->gen, (uint8_t) (stale_gen + 1));
+	assert_int_not_equal(reused->tx_id, stale_id);
+
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, stale_id));
+	assert_ptr_equal(efa_rdm_ep_live_txe_from_id(ep, reused->tx_id), reused);
+
+	efa_rdm_txe_release(reused);
+}
+
+/**
+ * @brief Verify ids that name no live txe are rejected.
+ */
+void test_efa_rdm_txe_id_rejects_bad_ids(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *rxe;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* an id the peer never told us */
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, EFA_RDM_OPE_ID_INVALID));
+
+	/* an rxe id: a legal index, but of the other pool */
+	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_msg);
+	assert_non_null(rxe);
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, rxe->rx_id));
+	efa_rdm_rxe_release(rxe);
+
+	/* a slot holding no txe */
+	assert_null(efa_rdm_ep_live_txe_from_id(ep, efa_env.rdm_txe_pool_size - 1));
+}
+
+/**
+ * @brief Verify a packet naming a released txe is dropped, not applied.
+ *
+ * The pool hands a released txe's slot to the next transfer, so a RECEIPT
+ * still on the wire names an unrelated txe by index. Resolving it through the
+ * generation check has to drop the packet rather than report a completion for
+ * a transfer that never finished.
+ */
+void test_efa_rdm_pke_receipt_drops_stale_txe_id(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_ope *txe, *reused;
+	struct efa_rdm_pke *receipt_pke;
+	struct efa_rdm_receipt_hdr *receipt_hdr;
+	size_t pkts_to_post;
+	uint32_t stale_id;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(txe);
+	stale_id = txe->tx_id;
+	efa_rdm_txe_release(txe);
+
+	/* The next txe takes the same slot, so the stale id names it by index. */
+	reused = efa_unit_test_alloc_txe(resource, ofi_op_msg);
+	assert_non_null(reused);
+	assert_int_equal(efa_rdm_txe_id_index(stale_id),
+			 efa_rdm_txe_id_index(reused->tx_id));
+	assert_int_not_equal(stale_id, reused->tx_id);
+
+	receipt_pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+					EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(receipt_pke);
+	receipt_pke->ep = ep;
+	receipt_hdr = efa_rdm_pke_get_receipt_hdr(receipt_pke);
+	receipt_hdr->type = EFA_RDM_RECEIPT_PKT;
+	receipt_hdr->tx_id = stale_id;
+
+	pkts_to_post = ep->efa_rx_pkts_to_post;
+	efa_rdm_pke_handle_receipt_recv(receipt_pke);
+
+	/* The reused txe must not be credited with the stale transfer's ack. */
+	assert_false(reused->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED);
+	assert_int_equal(reused->bytes_acked, 0);
+
+	/* The drop path released the packet rather than leaking it. */
+	assert_int_equal(ep->efa_rx_pkts_to_post, pkts_to_post + 1);
+
+	/* Restore the rx pkt accounting that releasing the pke disturbed. */
+	ep->efa_rx_pkts_to_post = 0;
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+	ep->efa_rx_pkts_held = 0;
+
+	efa_rdm_txe_release(reused);
+}
+
 void test_efa_rdm_rxe_map(void **state)
 {
 	struct efa_resource *resource = *state;
@@ -881,7 +1247,7 @@ void test_efa_rdm_txe_prepare_local_read_pkt_entry(void **state)
 	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep, NULL), 0);
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.txe_pool);
 	assert_non_null(txe);
 	efa_rdm_txe_construct(txe, efa_rdm_ep, NULL, &msg, ofi_op_msg, 0, 0);
 
@@ -1167,18 +1533,20 @@ void test_efa_rdm_ope_ack_packet_tracking_wait_send_common(void **state, int pkt
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_cq *efa_cq;
 
 	test_efa_rdm_ope_ack_packet_tracking_common(resource, pkt_type, 0, IBV_WC_SUCCESS, 0, &rxe);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
 
 	/* It should post a RECEIPT packet and add the rxe to the list */
 	assert_false(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
 
 	/* Poll the cq via wait_send */
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 
 	/* The cq poll should remove the rxe from the list */
 	assert_true(dlist_empty(&efa_rdm_ep->ope_posted_ack_list));
@@ -1219,10 +1587,12 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_ope *rxe, *rxe2;
+	struct efa_cq *efa_cq;
 
 	test_efa_rdm_ope_ack_packet_tracking_common(resource, pkt_type, 0, IBV_WC_GENERAL_ERR, EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE, &rxe);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	efa_cq = container_of(resource->cq, struct efa_cq, util_cq.cq_fid);
 
 	/*
 	 * Call the 1st efa_rdm_ep_wait_send.
@@ -1230,9 +1600,9 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 	 * Then it will not try to poll the cq again because of the peer becomes
 	 * unresponsive. See logic in efa_rdm_ep_close_should_wait_send()
 	 */
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 	assert_true(!!(rxe->peer->flags & EFA_RDM_PEER_UNRESP));
 
 	/* Now posting another ctrl packet against the same unresponsive peer */
@@ -1248,9 +1618,9 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 	will_return_int_maybe(efa_mock_efa_ibv_cq_start_poll_return_mock, ENOENT);
 
 	/* Kick off the second wait_send, which should NOT try to progress more because of the unresp peer */
-	ofi_genlock_lock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
-	ofi_genlock_unlock(&efa_rdm_ep_rdm_domain(efa_rdm_ep)->srx_lock);
+	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_posted_ack_list), 1);
 }
 
@@ -3413,8 +3783,7 @@ void test_efa_rdm_pke_handle_send_completion_peer_error_releases_rxe(void **stat
 	err_hdr->emitter_ope_type = EFA_RDM_RXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
-	err_hdr->op_id = 0xdead;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_ABORT;
 	err_hdr->connid = 0xc0ffee;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -3503,7 +3872,7 @@ void test_efa_rdm_pke_handle_tx_error_peer_error_pkt_releases_rxe(void **state)
 		err_hdr->emitter_ope_type = EFA_RDM_RXE;
 		err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 		err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-		err_hdr->op_id_valid = 0;
+		err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	}
 
 	ep->efa_outstanding_tx_ops++;
@@ -3780,7 +4149,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longread_fails_txe(void **state)
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 1;
 	err_hdr->msg_id = txe->msg_id;
 	err_hdr->op_id = txe->tx_id;
 	err_hdr->emitter_ope_type = EFA_RDM_RXE;
@@ -3885,9 +4253,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe(void **state)
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = rxe->msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -3903,8 +4270,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_reaps_rxe(void **state)
 	/* The receiver's matched recv gets a clean peer-abort error. */
 	assert_cq_peer_aborted_error(resource);
 }
-
-
 
 /**
  * @brief LONGCTS direction with a tagged rxe: PEER_ERROR_PKT recv
@@ -3987,9 +4352,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_tagged(void **state)
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = rxe->msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -4100,9 +4464,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_eager_unexpected_tears_down(
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -4156,7 +4519,6 @@ void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state)
 	err_hdr->emitter_ope_type = EFA_RDM_RXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 1;
 	err_hdr->msg_id = 0xffffffff;
 	err_hdr->op_id = 0xffffffff;	/* far out of range */
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
@@ -5126,9 +5488,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = rxe->msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	err_pkt->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -5276,9 +5637,8 @@ static void run_medium_inbound_peer_abort(struct efa_resource *resource,
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -5383,9 +5743,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_msg_id_not_found_dropped(voi
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = 0x7;	/* never inserted, but in-window */
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -5486,9 +5845,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_medium_unexpected_tears_down(
 	err_hdr->emitter_ope_type = EFA_RDM_TXE;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = 0;
 	err_hdr->msg_id = msg_id;
-	err_hdr->op_id = 0;
+	err_hdr->op_id = EFA_RDM_OPE_ID_INVALID;
 	err_hdr->prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	err_hdr->connid = 0xbeef;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_peer_error_hdr);
@@ -6403,3 +6761,227 @@ void test_efa_rdm_txe_handle_error_emulated_canceled_not_peer_aborted(void **sta
 	}
 }
 
+
+/**
+ * @brief Stand a two entry pool in for one of the endpoint's ope pools
+ *
+ * The real cap is far too large to reach in a test. What the id space relies on
+ * is that a cap exists, not what it is, so a pool with the same entry size and
+ * a cap of two exercises the same exhaustion path.
+ */
+static void efa_unit_test_shrink_ope_pool(struct ofi_bufpool **pool)
+{
+	ofi_bufpool_destroy(*pool);
+	/* a test leaves entries held on purpose, so opt out of the tracking
+	 * that would make destroying the pool complain about them */
+	assert_int_equal(ofi_bufpool_create(pool, sizeof(struct efa_rdm_ope),
+					    EFA_RDM_BUFPOOL_ALIGNMENT, 2, 2,
+					    OFI_BUFPOOL_NO_TRACK),
+			 0);
+}
+
+/**
+ * @brief Hand the endpoint an eager MSGRTM as if the device had received it
+ *
+ * Mirrors what efa_rdm_cq.c does once it has resolved the packet's peer, which
+ * is the point where the receive path needs an rxe.
+ */
+static void efa_unit_test_deliver_eager_rtm(struct efa_resource *resource,
+					    struct efa_rdm_peer *peer,
+					    uint32_t msg_id, bool tagged,
+					    uint64_t tag)
+{
+	struct efa_unit_test_eager_rtm_pkt_attr pkt_attr = {0};
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry;
+
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	assert_non_null(pkt_entry);
+	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
+
+	pkt_attr.msg_id = msg_id;
+	pkt_attr.connid = peer->conn->ep_addr->qkey;
+	pkt_attr.tag = tag;
+	if (tagged)
+		efa_unit_test_eager_tagrtm_pkt_construct(pkt_entry, &pkt_attr);
+	else
+		efa_unit_test_eager_msgrtm_pkt_construct(pkt_entry, &pkt_attr);
+
+	pkt_entry->peer = peer;
+	/* the cq holds this across a received packet, and the srx matching
+	 * reached from here asserts that it is held */
+	ofi_genlock_lock(&ep->srx_lock);
+	efa_rdm_pke_proc_received(pkt_entry);
+	ofi_genlock_unlock(&ep->srx_lock);
+}
+
+
+/**
+ * @brief fi_send reports FI_EAGAIN once the txe pool has hit its cap
+ *
+ * A txe is held for the life of the transfer, so a capped pool eventually has
+ * nothing left to hand out. fi_send has a caller to answer, so it must report
+ * that as FI_EAGAIN for the application to retry rather than proceed without a
+ * txe and mint an id from a slot it does not own.
+ */
+void test_efa_rdm_ope_txe_pool_cap_fails_send(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	fi_addr_t addr;
+
+	efa_unit_test_rdm_0byte_prep(resource, &addr);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	/* the endpoint's own pool is bounded, which is what the id space
+	 * relies on; the value of the bound is checked elsewhere */
+	assert_true(ep->base_ep.txe_pool->attr.max_cnt > 0);
+	efa_unit_test_shrink_ope_pool(&ep->base_ep.txe_pool);
+
+	/* neither send completes, so each one holds its txe */
+	assert_int_equal(fi_send(resource->ep, NULL, 0, NULL, addr, NULL), 0);
+	assert_int_equal(fi_send(resource->ep, NULL, 0, NULL, addr, NULL), 0);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 2);
+
+	/* tx packets are still available, so only the txe pool can fail here */
+	assert_true(efa_rdm_ep_get_available_tx_pkts(ep) > 0);
+	assert_int_equal(fi_send(resource->ep, NULL, 0, NULL, addr, NULL),
+			 -FI_EAGAIN);
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_TXE), 2);
+}
+
+/**
+ * @brief A receive reports FI_ENOBUFS once the rxe pool has hit its cap
+ *
+ * An unexpected message holds its rxe until a receive is posted to match it, so
+ * a capped pool eventually has nothing left for the next arrival. The receive
+ * path has no caller to answer, so it must report the failure on the event
+ * queue and drop the packet rather than proceed without an rxe.
+ */
+void test_efa_rdm_ope_rxe_pool_cap_fails_recv(void **state)
+{
+	struct efa_resource *resource = *state;
+	char recv_buff[64];
+	struct fi_eq_err_entry eq_err_entry;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ep *ep;
+	fi_addr_t addr;
+	uint32_t msg_id;
+
+	efa_unit_test_rdm_0byte_prep(resource, &addr);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	peer = efa_rdm_ep_get_peer_explicit(ep, addr);
+	assert_non_null(peer);
+
+	assert_int_equal(ep->base_ep.rxe_pool->attr.max_cnt,
+			 EFA_RDM_RXE_POOL_MAX_CNT);
+	efa_unit_test_shrink_ope_pool(&ep->base_ep.rxe_pool);
+
+	/* the one posted receive takes the first arrival, and the arrivals
+	 * behind it go unexpected, so each one holds an rxe */
+	assert_int_equal(fi_recv(resource->ep, recv_buff, sizeof(recv_buff),
+				 NULL, addr, NULL),
+			 0);
+
+	/* the first arrival is matched and completes, so it gives its rxe back.
+	 * The next two go unexpected and hold theirs, filling the pool, which
+	 * leaves the fourth with nothing to allocate. */
+	for (msg_id = 0; msg_id < 4; msg_id++)
+		efa_unit_test_deliver_eager_rtm(resource, peer, msg_id, false, 0);
+
+	assert_int_equal(efa_unit_test_get_ope_list_length(ep, EFA_RDM_RXE), 2);
+	assert_int_equal(fi_eq_readerr(resource->eq, &eq_err_entry, 0),
+			 sizeof(eq_err_entry));
+	assert_int_equal(eq_err_entry.err, FI_ENOBUFS);
+	assert_int_equal(eq_err_entry.prov_errno,
+			 FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+
+}
+/**
+ * @brief Verify a failed rxe allocation still releases the srx entry
+ *
+ * efa_rdm_msg_proc_rtm_rta() owns the peer rx entry from the moment get_msg()
+ * or get_tag() hands it over, so every path that then fails to allocate an rxe
+ * has to give it back. A matched entry is released outright; an unmatched one
+ * is queued first, because free_entry() undoes that accounting unconditionally.
+ * Getting either wrong leaks the entry and trips the outstanding entry check in
+ * util_srx_close() when the endpoint closes, which is what this exercises.
+ */
+static void test_efa_rdm_srx_entry_released_common(struct efa_resource *resource,
+						   bool tagged, bool matched)
+{
+	const uint64_t tag = 0x1234abcd;
+	struct efa_rdm_ope *held[64];
+	struct fi_eq_err_entry eq_err_entry;
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ep *ep;
+	char recv_buff[64];
+	size_t n = 0;
+	fi_addr_t addr;
+
+	efa_unit_test_rdm_0byte_prep(resource, &addr);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+	peer = efa_rdm_ep_get_peer_explicit(ep, addr);
+	assert_non_null(peer);
+
+	/* a posted receive decides which branch the arrival takes */
+	if (matched) {
+		if (tagged)
+			assert_int_equal(fi_trecv(resource->ep, recv_buff,
+						  sizeof(recv_buff), NULL, addr,
+						  tag, 0, NULL),
+					 0);
+		else
+			assert_int_equal(fi_recv(resource->ep, recv_buff,
+						 sizeof(recv_buff), NULL, addr,
+						 NULL),
+					 0);
+	}
+
+	/* drain the pool so the arrival cannot get an rxe at all */
+	efa_unit_test_shrink_ope_pool(&ep->base_ep.rxe_pool);
+	while (n < ARRAY_SIZE(held) &&
+	       (held[n] = ofi_buf_alloc(ep->base_ep.rxe_pool)))
+		n++;
+	assert_true(n > 0);
+	assert_true(n < ARRAY_SIZE(held));
+
+	efa_unit_test_deliver_eager_rtm(resource, peer, 0, tagged, tag);
+
+	/* the failure is reported, and the srx entry must not have leaked */
+	assert_int_equal(fi_eq_readerr(resource->eq, &eq_err_entry, 0),
+			 sizeof(eq_err_entry));
+	assert_int_equal(eq_err_entry.err, FI_ENOBUFS);
+	assert_int_equal(eq_err_entry.prov_errno,
+			 FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+
+	while (n--)
+		ofi_buf_free(held[n]);
+}
+
+void test_efa_rdm_srx_entry_released_matched_msg(void **state)
+{
+	test_efa_rdm_srx_entry_released_common(*state, false, true);
+}
+
+void test_efa_rdm_srx_entry_released_unmatched_msg(void **state)
+{
+	test_efa_rdm_srx_entry_released_common(*state, false, false);
+}
+
+void test_efa_rdm_srx_entry_released_matched_tagged(void **state)
+{
+	test_efa_rdm_srx_entry_released_common(*state, true, true);
+}
+
+void test_efa_rdm_srx_entry_released_unmatched_tagged(void **state)
+{
+	test_efa_rdm_srx_entry_released_common(*state, true, false);
+}

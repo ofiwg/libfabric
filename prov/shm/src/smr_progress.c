@@ -1506,10 +1506,17 @@ void smr_ep_progress(struct util_ep *util_ep)
 	if (!ep->region)
 		return;
 
-	/* ep->util_ep.lock is used to serialize the message/tag matching.
+	/* ep->srx_lock is used to serialize the message/tag matching.
 	 * We keep the lock until the matching is complete. This will
 	 * ensure that commands are matched in the order they are
 	 * received, if there are multiple progress threads.
+	 *
+	 * This is the SRX context's lock. When shm owns the SRX it is
+	 * shm's own endpoint lock; when shm is a peer provider it is the
+	 * owner-provided lock. Locking it here satisfies the util_srx
+	 * owner ops (get/queue/free_entry) which assert this lock is held,
+	 * and lets shm self-serialize without the owner needing to hold
+	 * shm's endpoint lock across fi_cq_read().
 	 *
 	 * This lock should be low cost because it's only used by this
 	 * single process. It is also optimized to be a noop if
@@ -1518,7 +1525,7 @@ void smr_ep_progress(struct util_ep *util_ep)
 	 * Other processes are free to post on the queue without the need
 	 * for locking the queue.
 	 */
-	ofi_genlock_lock(&ep->util_ep.lock);
+	ofi_genlock_lock(ep->srx_lock);
 
 	if (smr_env.use_dsa_sar)
 		smr_dsa_progress(ep);
@@ -1534,5 +1541,5 @@ void smr_ep_progress(struct util_ep *util_ep)
 	 * independent of any action by the provider */
 	ep->smr_progress_async(ep);
 
-	ofi_genlock_unlock(&ep->util_ep.lock);
+	ofi_genlock_unlock(ep->srx_lock);
 }

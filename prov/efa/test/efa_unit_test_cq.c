@@ -1073,7 +1073,7 @@ static void test_efa_cq_read_prep(struct efa_resource *resource,
 	ibv_cqx = ibv_cq->ibv_cq_ex;
 
 	if (efa_env.track_mr && ctx) {
-		direct_ope = ofi_buf_alloc(base_ep->ope_pool);
+		direct_ope = ofi_buf_alloc(base_ep->txe_pool);
 		assert_non_null(direct_ope);
 		direct_ope->context = ctx;
 		dlist_insert_tail(&direct_ope->entry, &base_ep->ope_list);
@@ -2352,17 +2352,17 @@ void test_efa_cq_read_mixed_success_error(void **state)
 
 	/* Allocate direct_ope entries when track_mr is enabled */
 	if (efa_env.track_mr) {
-		direct_ope1 = ofi_buf_alloc(base_ep->ope_pool);
+		direct_ope1 = ofi_buf_alloc(base_ep->txe_pool);
 		assert_non_null(direct_ope1);
 		direct_ope1->context = efa_context1;
 		dlist_insert_tail(&direct_ope1->entry, &base_ep->ope_list);
 
-		direct_ope2 = ofi_buf_alloc(base_ep->ope_pool);
+		direct_ope2 = ofi_buf_alloc(base_ep->txe_pool);
 		assert_non_null(direct_ope2);
 		direct_ope2->context = efa_context2;
 		dlist_insert_tail(&direct_ope2->entry, &base_ep->ope_list);
 
-		direct_ope3 = ofi_buf_alloc(base_ep->ope_pool);
+		direct_ope3 = ofi_buf_alloc(base_ep->txe_pool);
 		assert_non_null(direct_ope3);
 		direct_ope3->context = efa_context3;
 		dlist_insert_tail(&direct_ope3->entry, &base_ep->ope_list);

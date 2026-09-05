@@ -632,7 +632,7 @@ void test_efa_rdm_txe_construct_splits_internal_flags(void **state)
 	 * EFA_RDM_* flags are fine: we only assert that every requested
 	 * bit is set in its own field.
 	 */
-	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.txe_pool);
 	assert_non_null(txe);
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg,
 			      fi_flags_in, internal_flags_in);
@@ -648,7 +648,7 @@ void test_efa_rdm_txe_construct_splits_internal_flags(void **state)
 	 * should be set implicitly (catches a regression where the construct
 	 * fn OR's in a default internal flag).
 	 */
-	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->base_ep.txe_pool);
 	assert_non_null(txe);
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg,
 			      fi_flags_in, 0);
@@ -1482,6 +1482,7 @@ void test_efa_rdm_ep_rx_refill_impl(void **state, int threshold, int rx_size)
 	assert_int_equal(efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep), rx_size);
 
 	/* Grow the rx pool and post rx pkts */
+	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
 	efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep));
 
@@ -1517,7 +1518,7 @@ void test_efa_rdm_ep_rx_refill_impl(void **state, int threshold, int rx_size)
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_posted, rx_size - MIN(rx_size, threshold));
 
 	efa_rdm_ep_bulk_post_internal_rx_pkts(efa_rdm_ep);
-
+	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 	/**
 	 * efa_rx_pkts_to_post == min(FI_EFA_RX_REFILL_THRESHOLD, FI_EFA_RX_SIZE)
 	 * pkts should be refilled

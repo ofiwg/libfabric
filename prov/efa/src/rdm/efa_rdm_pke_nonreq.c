@@ -275,7 +275,19 @@ void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
 
 	ep = pkt_entry->ep;
 	cts_pkt = (struct efa_rdm_cts_hdr *)pkt_entry->wiredata;
-	ope = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, cts_pkt->send_id);
+
+	/*
+	 * Drop a CTS whose id no longer names the operation that created it.
+	 */
+	ope = efa_rdm_ep_live_ope_from_id(ep, cts_pkt->send_id);
+	if (OFI_UNLIKELY(!ope)) {
+		EFA_INFO(FI_LOG_CQ,
+			 "CTS names ope id %" PRIu32 ", which no longer holds "
+			 "the operation that requested it. Dropping the CTS.\n",
+			 cts_pkt->send_id);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
 
 	ope->rx_id = cts_pkt->recv_id;
 	ope->window = cts_pkt->recv_length;
@@ -448,8 +460,7 @@ void efa_rdm_pke_handle_ctsdata_recv(struct efa_rdm_pke *pkt_entry)
 
 	data_hdr = efa_rdm_pke_get_ctsdata_hdr(pkt_entry);
 
-	ope = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool,
-				   data_hdr->recv_id);
+	ope = efa_rdm_ep_get_ope_from_ope_id(pkt_entry->ep, data_hdr->recv_id);
 
 	hdr_size = sizeof(struct efa_rdm_ctsdata_hdr);
 	if (data_hdr->flags & EFA_RDM_PKT_CONNID_HDR)
@@ -528,7 +539,14 @@ void efa_rdm_pke_handle_readrsp_recv(struct efa_rdm_pke *pkt_entry)
 
 	readrsp_pkt = (struct efa_rdm_readrsp_pkt *)pkt_entry->wiredata;
 	readrsp_hdr = &readrsp_pkt->hdr;
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, readrsp_hdr->recv_id);
+	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, readrsp_hdr->recv_id);
+	if (!txe) {
+		EFA_INFO(FI_LOG_CQ,
+			 "READRSP names a read that is no longer live, dropping it\n");
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
 	assert(txe->cq_entry.flags & FI_READ);
 	txe->rx_id = readrsp_hdr->send_id;
 	efa_rdm_pke_proc_ctsdata(pkt_entry, txe,
@@ -789,7 +807,13 @@ void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 	eor_hdr = (struct efa_rdm_eor_hdr *)pkt_entry->wiredata;
 
 	/* pre-post buf used here, so can NOT track back to txe with x_entry */
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, eor_hdr->send_id);
+	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, eor_hdr->send_id);
+	if (!txe) {
+		EFA_INFO(FI_LOG_CQ,
+			 "EOR names a send that is no longer live, dropping it\n");
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
 
 	efa_rdm_txe_release_read_msg_slot(txe);
 
@@ -822,7 +846,13 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 
 	nack_hdr = (struct efa_rdm_read_nack_hdr *) pkt_entry->wiredata;
 
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, nack_hdr->send_id);
+	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, nack_hdr->send_id);
+	if (!txe) {
+		EFA_INFO(FI_LOG_CQ,
+			 "READ_NACK names a send that is no longer live, dropping it\n");
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
 
 	efa_rdm_txe_release_read_msg_slot(txe);
 
@@ -867,8 +897,7 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
  *
  * @param[out] pkt_entry   packet entry whose wiredata will be filled
  * @param[in]  msg_id      per-peer msg_id of the aborted transfer (always valid)
- * @param[in]  op_id       optional peer-owned ope index (valid iff op_id_valid)
- * @param[in]  op_id_valid whether op_id carries a usable peer-owned ope index
+ * @param[in]  op_id       peer-owned ope id, or EFA_RDM_OPE_ID_INVALID
  * @param[in]  emitter_ope_type  the emitting side's enum efa_rdm_ope_type
  * @param[in]  prov_errno  the prov_errno that triggered the abort
  * @param[in]  connid      local endpoint's connection ID (qkey)
@@ -876,8 +905,8 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
  */
 int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
 				uint32_t msg_id, uint32_t op_id,
-				bool op_id_valid, uint32_t emitter_ope_type,
-				int prov_errno, uint32_t connid)
+				uint32_t emitter_ope_type, int prov_errno,
+				uint32_t connid)
 {
 	struct efa_rdm_peer_error_hdr *err_hdr;
 
@@ -885,7 +914,6 @@ int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
 	err_hdr->type = EFA_RDM_PEER_ERROR_PKT;
 	err_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	err_hdr->flags = EFA_RDM_PKT_CONNID_HDR;
-	err_hdr->op_id_valid = op_id_valid ? 1 : 0;
 	err_hdr->msg_id = msg_id;
 	err_hdr->op_id = op_id;
 	err_hdr->emitter_ope_type = emitter_ope_type;
@@ -905,21 +933,19 @@ int efa_rdm_pke_init_peer_error(struct efa_rdm_pke *pkt_entry,
 int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *ope)
 {
-	uint32_t op_id = 0;
-	bool op_id_valid = false;
+	uint32_t op_id = EFA_RDM_OPE_ID_INVALID;
 	uint32_t connid;
 
 	if (ope->type == EFA_RDM_RXE) {
-		/* An aborting receiver (read-based protocols): the peer's txe
-		 * index (learned from the RTM) is always known and is required
-		 * for the TX side to resolve its txe. */
+		/* An aborting receiver in the read based protocols carries the
+		 * peer's txe id, learned from the RTM, which the TX side needs
+		 * to resolve its txe. It is still the sentinel if no RTM ever
+		 * carried one. */
 		op_id = ope->tx_id;
-		op_id_valid = true;
 	} else {
+		/* An aborting sender never learns the receiver's rxe id, so
+		 * msg_id is the only key it can offer. */
 		assert(ope->type == EFA_RDM_TXE);
-		/* An aborting sender: msg_id is the primary key; the sender
-		 * never learns the receiver's rxe index, so no op_id hint is
-		 * attached. */
 	}
 
 	connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
@@ -927,7 +953,7 @@ int efa_rdm_pke_init_peer_error_for_ope(struct efa_rdm_pke *pkt_entry,
 	efa_rdm_pke_set_ope(pkt_entry, ope);
 	pkt_entry->peer = ope->peer;
 	return efa_rdm_pke_init_peer_error(pkt_entry, ope->msg_id, op_id,
-					   op_id_valid, ope->type,
+					   ope->type,
 					   ope->peer_error_prov_errno, connid);
 }
 
@@ -1028,59 +1054,53 @@ void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *ope = NULL;
 
 	EFA_INFO(FI_LOG_CQ,
-		 "Received PEER_ERROR_PKT (msg_id=%u op_id=%u op_id_valid=%d "
+		 "Received PEER_ERROR_PKT (msg_id=%u op_id=%u "
 		 "emitter_ope_type=%d prov_errno=%d  %s)\n",
-		 err_hdr->msg_id, err_hdr->op_id, err_hdr->op_id_valid, err_hdr->emitter_ope_type, err_hdr->prov_errno,
+		 err_hdr->msg_id, err_hdr->op_id, err_hdr->emitter_ope_type, err_hdr->prov_errno,
 		 efa_strerror(err_hdr->prov_errno));
 
 	/*
 	 * The transfer's receiver is aborting (emitter_ope_type == RXE): its
-	 * RDMA READ failed. The wire carries our
-	 * txe index (the emitter learned it from the RTM); trust it only if
-	 * the slot is still allocated (ofi_bufpool_get_ibuf() does not
-	 * bounds-check), still a txe, and still this transfer (pooled opes
-	 * are freed and reused). An unresolved hint means the txe already
-	 * cleaned up locally: drop the packet. Never fall through to msg_id
-	 * resolution -- TX and RX msg_id spaces are independent counters,
-	 * and misrouting one into the receive reorder state would corrupt
-	 * it.
+	 * RDMA READ failed. The wire carries our txe id, which the emitter
+	 * learned from the RTM, so trust it only if it still resolves to a
+	 * live txe of the generation that created it and still to this
+	 * transfer. An id the emitter never learned is the sentinel, which
+	 * resolves to nothing, and either way an unresolved hint means the txe
+	 * already cleaned up locally so the packet is dropped. Never fall
+	 * through to msg_id resolution, because TX and RX msg_id spaces are
+	 * independent counters and misrouting one into the receive reorder
+	 * state would corrupt it.
 	 */
 	if (err_hdr->emitter_ope_type == EFA_RDM_RXE) {
-		if (err_hdr->op_id_valid &&
-		    ofi_bufpool_ibuf_is_valid(ep->base_ep.ope_pool,
-					      err_hdr->op_id)) {
-			ope = ofi_bufpool_get_ibuf(ep->base_ep.ope_pool,
-						   err_hdr->op_id);
-			if (ope->type == EFA_RDM_TXE &&
-			    ope->msg_id == err_hdr->msg_id) {
-				if (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
-					EFA_INFO(FI_LOG_CQ,
-						 "PEER_ERROR for a txe already "
-						 "peer-aborting; dropping.\n");
-					goto out;
-				}
-
-				/*
-				 * A PEER_ERROR is sent in place of the EOR, so
-				 * mirror the EOR recv bookkeeping the success
-				 * path would have done.
-				 */
-				efa_rdm_txe_release_read_msg_slot(ope);
-
-				/*
-				 * Mark aborted and EMITTED (we owe no PEER_ERROR
-				 * back), then let handle_error drive the
-				 * drain-gated TX error completion once every WR
-				 * referencing this txe has drained (e.g. a
-				 * RUNTREAD whose runt sends are still
-				 * outstanding).
-				 */
-				ope->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING |
-						       EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED;
-				efa_rdm_txe_handle_error(ope, FI_ECANCELED,
-							 FI_EFA_ERR_PEER_ABORTED);
+		ope = efa_rdm_ep_live_txe_from_id(ep, err_hdr->op_id);
+		if (ope && ope->msg_id == err_hdr->msg_id) {
+			if (ope->internal_flags & EFA_RDM_OPE_PEER_ABORT_PENDING) {
+				EFA_INFO(FI_LOG_CQ,
+					 "PEER_ERROR for a txe already "
+					 "peer-aborting; dropping.\n");
 				goto out;
 			}
+
+			/*
+			 * A PEER_ERROR is sent in place of the EOR, so
+			 * mirror the EOR recv bookkeeping the success
+			 * path would have done.
+			 */
+			efa_rdm_txe_release_read_msg_slot(ope);
+
+			/*
+			 * Mark aborted and EMITTED (we owe no PEER_ERROR
+			 * back), then let handle_error drive the
+			 * drain-gated TX error completion once every WR
+			 * referencing this txe has drained (e.g. a
+			 * RUNTREAD whose runt sends are still
+			 * outstanding).
+			 */
+			ope->internal_flags |= EFA_RDM_OPE_PEER_ABORT_PENDING |
+					       EFA_RDM_PEER_ERROR_EMITTED_OR_SKIPPED;
+			efa_rdm_txe_handle_error(ope, FI_ECANCELED,
+						 FI_EFA_ERR_PEER_ABORTED);
+			goto out;
 		}
 		EFA_INFO(FI_LOG_CQ,
 			 "PEER_ERROR for a txe that has already cleaned up, "
@@ -1090,8 +1110,8 @@ void efa_rdm_pke_handle_peer_error_recv(struct efa_rdm_pke *pkt_entry)
 
 	/*
 	 * The transfer's sender is aborting (emitter_ope_type == TXE). The
-	 * sender never learns the receiver's rxe index, so the packet
-	 * carries no usable hint; resolve from local state by msg_id.
+	 * sender never learns the receiver's rxe id, so the packet carries no
+	 * usable hint and the rxe is resolved from local state by msg_id.
 	 */
 	assert(err_hdr->emitter_ope_type == EFA_RDM_TXE);
 	assert(pkt_entry->peer);
@@ -1177,11 +1197,11 @@ void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 
 	receipt_hdr = efa_rdm_pke_get_receipt_hdr(pkt_entry);
 	/* Retrieve the txe that will be written into TX CQ*/
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool,
-				   receipt_hdr->tx_id);
+	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, receipt_hdr->tx_id);
 	if (!txe) {
-		EFA_WARN(FI_LOG_CQ,
-			"Failed to retrive the txe when hadling receipt packet.\n");
+		EFA_INFO(FI_LOG_CQ,
+			 "RECEIPT names a send that is no longer live, dropping it\n");
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -1257,7 +1277,22 @@ void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry)
 
 	atomrsp_pkt = (struct efa_rdm_atomrsp_pkt *)pkt_entry->wiredata;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
-	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->base_ep.ope_pool, atomrsp_hdr->recv_id);
+	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, atomrsp_hdr->recv_id);
+	if (!txe) {
+		/* MR abort covers only msg and tagged operations, so an atomic
+		 * that went away mid-transfer leaves nothing to apply this
+		 * response to. Surface it rather than dropping quietly. */
+		EFA_WARN(FI_LOG_CQ,
+			 "ATOMRSP names ope id %" PRIu32 ", which no longer "
+			 "holds the atomic that requested it. Dropping the "
+			 "ATOMRSP. MR abort does not support atomics.\n",
+			 atomrsp_hdr->recv_id);
+		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep,
+					   FI_EOPNOTSUPP,
+					   FI_EFA_ERR_PEER_ABORTED);
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
 
 	ret = efa_copy_to_hmem_iov(txe->atomic_ex.result_desc, txe->atomic_ex.resp_iov,
 	                           txe->atomic_ex.resp_iov_count, atomrsp_pkt->data,
