@@ -30,6 +30,78 @@
 #include "efa_data_path_direct_entry.h"
 #endif
 
+/*
+ * EFA_PROD_STATIC_INLINE is defined to "static inline" in a production build
+ *
+ * Unit test build defines it to nothing, allowing the functions to be mocked
+ * A separate EFA_DATA_PATH_OPS_EMIT_BODIES macro is needed to pick out the
+ * TU that will emit the function bodies. Only one TU is allowed to define it.
+ * which is prov/efa/test/efa_unit_test_data_path_ops.c.
+ * Every other translation unit sees the declarations alone, so its calls are
+ * undefined references and are therefore wrappable.
+ */
+#if EFA_UNIT_TEST
+#define EFA_PROD_STATIC_INLINE
+#else
+#define EFA_PROD_STATIC_INLINE static inline
+#endif
+
+/* Static inline forward declarations in production, external prototypes in unit tests */
+EFA_PROD_STATIC_INLINE int efa_ibv_post_send(struct efa_qp *qp, const struct ibv_sge *sge_list,
+		      const struct ibv_data_buf *inline_data_list,
+		      size_t data_count, bool use_inline, uintptr_t wr_id,
+		      uint64_t data, uint64_t flags, struct efa_ah *ah,
+		      uint32_t qpn, uint32_t qkey);
+EFA_PROD_STATIC_INLINE int efa_ibv_post_read(struct efa_qp *qp, const struct ibv_sge *sge_list,
+		      size_t sge_count, uint32_t remote_key,
+		      uint64_t remote_addr, uintptr_t wr_id, uint64_t flags,
+		      struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+EFA_PROD_STATIC_INLINE int efa_ibv_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list,
+		       size_t sge_count,
+		       const struct ibv_data_buf *inline_data_list,
+		       bool use_inline, uint32_t remote_key,
+		       uint64_t remote_addr, uintptr_t wr_id, uint64_t data,
+		       uint64_t flags, struct efa_ah *ah, uint32_t qpn,
+		       uint32_t qkey, const struct efa_comp_action_wr *sig);
+EFA_PROD_STATIC_INLINE int efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad);
+EFA_PROD_STATIC_INLINE int efa_qp_post_send(struct efa_qp *qp, const struct ibv_sge *sge_list,
+		      const struct ibv_data_buf *inline_data_list,
+		      size_t iov_count, bool use_inline, uintptr_t wr_id,
+		      uint64_t data, uint64_t flags, struct efa_ah *ah,
+		      uint32_t qpn, uint32_t qkey);
+EFA_PROD_STATIC_INLINE int efa_qp_post_read(struct efa_qp *qp, const struct ibv_sge *sge_list,
+		      size_t sge_count, uint32_t remote_key,
+		      uint64_t remote_addr, uintptr_t wr_id, uint64_t flags,
+		      struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+EFA_PROD_STATIC_INLINE int efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count,
+		       const struct ibv_data_buf *inline_data_list, bool use_inline,
+		       uint32_t remote_key, uint64_t remote_addr,
+		       uintptr_t wr_id, uint64_t data,
+		       uint64_t flags, struct efa_ah *ah, uint32_t qpn,
+		       uint32_t qkey,
+		       const struct efa_comp_action_wr *sig);
+EFA_PROD_STATIC_INLINE bool efa_ibv_cq_is_empty_unlocked(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
+EFA_PROD_STATIC_INLINE int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE int efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE void efa_ibv_cq_end_poll(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE void efa_ibv_cq_end_poll_unsafe(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_qp_num(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_vendor_err(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_src_qp(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_slid(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_byte_len(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE unsigned int efa_ibv_cq_wc_read_wc_flags(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE __be32 efa_ibv_cq_wc_read_imm_data(struct efa_ibv_cq *ibv_cq);
+EFA_PROD_STATIC_INLINE bool efa_ibv_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq);
+
+EFA_PROD_STATIC_INLINE int efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid);
+
+EFA_PROD_STATIC_INLINE int efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_context);
+EFA_PROD_STATIC_INLINE int efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited_only);
+
+#if !EFA_UNIT_TEST || defined(EFA_DATA_PATH_OPS_EMIT_BODIES)
 
 #if HAVE_EFADV_COMP_ACTION
 /*
@@ -77,7 +149,7 @@ efa_ibv_attach_comp_actions(struct efa_qp *qp,
 /**
  * @brief RDMA-core version of send operation using ibv_* APIs
  */
-static inline int
+EFA_PROD_STATIC_INLINE int
 efa_ibv_post_send(
 		struct efa_qp *qp,
 		const struct ibv_sge *sge_list,
@@ -127,7 +199,7 @@ efa_ibv_post_send(
 /**
  * @brief RDMA-core version of RDMA read operation using ibv_* APIs
  */
-static inline int
+EFA_PROD_STATIC_INLINE int
 efa_ibv_post_read(
 		struct efa_qp *qp,
 		const struct ibv_sge *sge_list,
@@ -165,7 +237,7 @@ efa_ibv_post_read(
 /**
  * @brief RDMA-core version of RDMA write operation using ibv_* APIs
  */
-static inline int
+EFA_PROD_STATIC_INLINE int
 efa_ibv_post_write(
 		struct efa_qp *qp,
 		const struct ibv_sge *sge_list,
@@ -225,51 +297,8 @@ efa_ibv_post_write(
 }
 
 
-#if EFA_UNIT_TEST
-/* For unit tests, declare functions that are defined in efa_unit_test_data_path_ops.c */
-int efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad);
-int efa_qp_post_send(struct efa_qp *qp, const struct ibv_sge *sge_list,
-		      const struct ibv_data_buf *inline_data_list,
-		      size_t iov_count, bool use_inline, uintptr_t wr_id,
-		      uint64_t data, uint64_t flags, struct efa_ah *ah,
-		      uint32_t qpn, uint32_t qkey);
-int efa_qp_post_read(struct efa_qp *qp, const struct ibv_sge *sge_list,
-		      size_t sge_count, uint32_t remote_key,
-		      uint64_t remote_addr, uintptr_t wr_id, uint64_t flags,
-		      struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
-int efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count,
-		       const struct ibv_data_buf *inline_data_list, bool use_inline,
-		       uint32_t remote_key, uint64_t remote_addr,
-		       uintptr_t wr_id, uint64_t data,
-		       uint64_t flags, struct efa_ah *ah, uint32_t qpn,
-		       uint32_t qkey,
-		       const struct efa_comp_action_wr *sig);
-bool efa_ibv_cq_is_empty_unlocked(struct efa_ibv_cq *ibv_cq);
-int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
-int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq);
-int efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq);
-enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq);
-void efa_ibv_cq_end_poll(struct efa_ibv_cq *ibv_cq);
-void efa_ibv_cq_end_poll_unsafe(struct efa_ibv_cq *ibv_cq);
-uint32_t efa_ibv_cq_wc_read_qp_num(struct efa_ibv_cq *ibv_cq);
-uint32_t efa_ibv_cq_wc_read_vendor_err(struct efa_ibv_cq *ibv_cq);
-uint32_t efa_ibv_cq_wc_read_src_qp(struct efa_ibv_cq *ibv_cq);
-uint32_t efa_ibv_cq_wc_read_slid(struct efa_ibv_cq *ibv_cq);
-uint32_t efa_ibv_cq_wc_read_byte_len(struct efa_ibv_cq *ibv_cq);
-unsigned int efa_ibv_cq_wc_read_wc_flags(struct efa_ibv_cq *ibv_cq);
-__be32 efa_ibv_cq_wc_read_imm_data(struct efa_ibv_cq *ibv_cq);
-bool efa_ibv_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq);
-
-int efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid);
-
-int efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_context);
-int efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited_only);
-
-#else
-/* For production, define static inline functions */
-
 /* QP wrapper functions */
-static inline int efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad)
+EFA_PROD_STATIC_INLINE int efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (qp->data_path_direct_enabled)
@@ -281,7 +310,7 @@ static inline int efa_qp_post_recv(struct efa_qp *qp, struct ibv_recv_wr *wr, st
 /**
  * @brief Wrapper for send operations - chooses between direct and IBV paths
  */
-static inline int
+EFA_PROD_STATIC_INLINE int
 efa_qp_post_send(struct efa_qp *qp,
                  const struct ibv_sge *sge_list,
                  const struct ibv_data_buf *inline_data_list,
@@ -308,7 +337,7 @@ efa_qp_post_send(struct efa_qp *qp,
 /**
  * @brief Wrapper for RDMA read operations - chooses between direct and IBV paths
  */
-static inline int
+EFA_PROD_STATIC_INLINE int
 efa_qp_post_read(struct efa_qp *qp,
                  const struct ibv_sge *sge_list,
                  size_t sge_count,
@@ -334,7 +363,7 @@ efa_qp_post_read(struct efa_qp *qp,
 /**
  * @brief Wrapper for RDMA write operations - chooses between direct and IBV paths
  */
-static inline int
+EFA_PROD_STATIC_INLINE int
 efa_qp_post_write(struct efa_qp *qp,
                   const struct ibv_sge *sge_list,
                   size_t sge_count,
@@ -369,7 +398,7 @@ efa_qp_post_write(struct efa_qp *qp,
  * Lock-free emptiness check. Only data path direct can peek at the next CQE
  * without consuming it, so the rdma-core path always reports "not empty".
  */
-static inline EFA_TSAN_IGNORE_RACY_READS bool
+EFA_PROD_STATIC_INLINE EFA_TSAN_IGNORE_RACY_READS bool
 efa_ibv_cq_is_empty_unlocked(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
@@ -379,7 +408,7 @@ efa_ibv_cq_is_empty_unlocked(struct efa_ibv_cq *ibv_cq)
 	return false;
 }
 
-static inline int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr)
+EFA_PROD_STATIC_INLINE int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -388,7 +417,7 @@ static inline int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_po
 	return ibv_start_poll(ibv_cq->ibv_cq_ex, attr);
 }
 
-static inline int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -397,7 +426,7 @@ static inline int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq)
 	return ibv_next_poll(ibv_cq->ibv_cq_ex);
 }
 
-static inline int efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE int efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -406,7 +435,7 @@ static inline int efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq)
 	return ibv_next_poll(ibv_cq->ibv_cq_ex);
 }
 
-static inline enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -415,7 +444,7 @@ static inline enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ib
 	return ibv_wc_read_opcode(ibv_cq->ibv_cq_ex);
 }
 
-static inline void efa_ibv_cq_end_poll(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE void efa_ibv_cq_end_poll(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled) {
@@ -426,7 +455,7 @@ static inline void efa_ibv_cq_end_poll(struct efa_ibv_cq *ibv_cq)
 	ibv_end_poll(ibv_cq->ibv_cq_ex);
 }
 
-static inline void efa_ibv_cq_end_poll_unsafe(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE void efa_ibv_cq_end_poll_unsafe(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled) {
@@ -437,7 +466,7 @@ static inline void efa_ibv_cq_end_poll_unsafe(struct efa_ibv_cq *ibv_cq)
 	ibv_end_poll(ibv_cq->ibv_cq_ex);
 }
 
-static inline uint32_t efa_ibv_cq_wc_read_qp_num(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_qp_num(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -446,7 +475,7 @@ static inline uint32_t efa_ibv_cq_wc_read_qp_num(struct efa_ibv_cq *ibv_cq)
 	return ibv_wc_read_qp_num(ibv_cq->ibv_cq_ex);
 }
 
-static inline uint32_t efa_ibv_cq_wc_read_vendor_err(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_vendor_err(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -455,7 +484,7 @@ static inline uint32_t efa_ibv_cq_wc_read_vendor_err(struct efa_ibv_cq *ibv_cq)
 	return ibv_wc_read_vendor_err(ibv_cq->ibv_cq_ex);
 }
 
-static inline uint32_t efa_ibv_cq_wc_read_src_qp(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_src_qp(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -464,7 +493,7 @@ static inline uint32_t efa_ibv_cq_wc_read_src_qp(struct efa_ibv_cq *ibv_cq)
 	return ibv_wc_read_src_qp(ibv_cq->ibv_cq_ex);
 }
 
-static inline uint32_t efa_ibv_cq_wc_read_slid(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_slid(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -473,7 +502,7 @@ static inline uint32_t efa_ibv_cq_wc_read_slid(struct efa_ibv_cq *ibv_cq)
 	return ibv_wc_read_slid(ibv_cq->ibv_cq_ex);
 }
 
-static inline uint32_t efa_ibv_cq_wc_read_byte_len(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE uint32_t efa_ibv_cq_wc_read_byte_len(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -482,7 +511,7 @@ static inline uint32_t efa_ibv_cq_wc_read_byte_len(struct efa_ibv_cq *ibv_cq)
 	return ibv_wc_read_byte_len(ibv_cq->ibv_cq_ex);
 }
 
-static inline unsigned int efa_ibv_cq_wc_read_wc_flags(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE unsigned int efa_ibv_cq_wc_read_wc_flags(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -491,7 +520,7 @@ static inline unsigned int efa_ibv_cq_wc_read_wc_flags(struct efa_ibv_cq *ibv_cq
 	return ibv_wc_read_wc_flags(ibv_cq->ibv_cq_ex);
 }
 
-static inline __be32 efa_ibv_cq_wc_read_imm_data(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE __be32 efa_ibv_cq_wc_read_imm_data(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -501,7 +530,7 @@ static inline __be32 efa_ibv_cq_wc_read_imm_data(struct efa_ibv_cq *ibv_cq)
 }
 
 
-static inline bool efa_ibv_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq)
+EFA_PROD_STATIC_INLINE bool efa_ibv_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -514,7 +543,7 @@ static inline bool efa_ibv_cq_wc_is_unsolicited(struct efa_ibv_cq *ibv_cq)
 #endif
 }
 
-static inline int efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid)
+EFA_PROD_STATIC_INLINE int efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled)
@@ -528,7 +557,7 @@ static inline int efa_ibv_cq_wc_read_sgid(struct efa_ibv_cq *ibv_cq, union ibv_g
 #endif
 }
 
-static inline int efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_context)
+EFA_PROD_STATIC_INLINE int efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_context)
 {
 	struct ibv_cq *cq = ibv_cq_ex_to_cq(ibv_cq->ibv_cq_ex);
 #if HAVE_EFA_DATA_PATH_DIRECT && HAVE_EFADV_CQ_ATTR_DB
@@ -542,7 +571,7 @@ static inline int efa_ibv_get_cq_event(struct efa_ibv_cq *ibv_cq, void **cq_cont
 #endif
 }
 
-static inline int efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited_only)
+EFA_PROD_STATIC_INLINE int efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited_only)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT && HAVE_EFADV_CQ_ATTR_DB
 	if (ibv_cq->data_path_direct_enabled)
@@ -556,7 +585,7 @@ static inline int efa_ibv_req_notify_cq(struct efa_ibv_cq *ibv_cq, int solicited
 }
 
 
-#endif /* EFA_UNIT_TEST */
+#endif /* bodies */
 
 /**
  * @brief Check whether a completion consumes recv buffer
