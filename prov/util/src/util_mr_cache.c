@@ -314,6 +314,27 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 		goto free;
 	}
 
+	/* subscribe_unlocked monitors must not subscribe under mm_lock;
+	 * subscribe first, publish under the lock only if still live.
+	 */
+	bool subscribed_unlocked = false;
+
+	if (monitor->subscribe_unlocked) {
+		assert(monitor->subscription_live);
+		ret = ofi_monitor_subscribe(monitor, info->iov.iov_base,
+					    info->iov.iov_len,
+					    &(*entry)->hmem_info);
+		if (ret) {
+			pthread_mutex_lock(&mm_lock);
+			cache->uncached_cnt++;
+			cache->uncached_size += (*entry)->info.iov.iov_len;
+			ofi_rbnode_free(&cache->tree, rbnode);
+			pthread_mutex_unlock(&mm_lock);
+			return 0;
+		}
+		subscribed_unlocked = true;
+	}
+
 	pthread_mutex_lock(&mm_lock);
 	cur = ofi_mr_rbt_find(&cache->tree, info);
 	if (cur) {
@@ -321,7 +342,13 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 		goto unlock;
 	}
 
-	if (ofi_mr_cache_full(cache)) {
+	/* Region freed during the unlocked subscribe: leave the MR uncached */
+	if (subscribed_unlocked &&
+	    !monitor->subscription_live(monitor, info->iov.iov_base,
+					info->iov.iov_len)) {
+		cache->uncached_cnt++;
+		cache->uncached_size += (*entry)->info.iov.iov_len;
+	} else if (ofi_mr_cache_full(cache)) {
 		cache->uncached_cnt++;
 		cache->uncached_size += info->iov.iov_len;
 	} else {
@@ -336,13 +363,17 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 		cache->cached_cnt++;
 		cache->cached_size += info->iov.iov_len;
 
-		ret = ofi_monitor_subscribe(monitor, info->iov.iov_base,
-					    info->iov.iov_len,
-					    &(*entry)->hmem_info);
-		if (ret) {
-			util_mr_uncache_entry_storage(cache, *entry);
-			cache->uncached_cnt++;
-			cache->uncached_size += (*entry)->info.iov.iov_len;
+		if (!subscribed_unlocked) {
+			ret = ofi_monitor_subscribe(monitor,
+						    info->iov.iov_base,
+						    info->iov.iov_len,
+						    &(*entry)->hmem_info);
+			if (ret) {
+				util_mr_uncache_entry_storage(cache, *entry);
+				cache->uncached_cnt++;
+				cache->uncached_size +=
+					(*entry)->info.iov.iov_len;
+			}
 		}
 	}
 	pthread_mutex_unlock(&mm_lock);

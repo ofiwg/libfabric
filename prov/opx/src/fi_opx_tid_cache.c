@@ -702,6 +702,24 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 		goto error;
 	}
 
+	/* subscribe_unlocked monitors must not subscribe under mm_lock;
+	 * subscribe now (mm_lock is dropped here), recheck before publishing.
+	 */
+	bool subscribed_unlocked = false;
+
+	if (monitor->subscribe_unlocked) {
+		assert(monitor->subscription_live);
+		ret = ofi_monitor_subscribe(monitor, info->iov.iov_base, info->iov.iov_len, &(*entry)->hmem_info);
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "MONITOR SUBSCRIBE FAILED UNCACHED ERROR  %d (%s)\n",
+				ret, strerror(ret));
+			ofi_rbnode_free(&cache->tree, rbnode);
+			pthread_mutex_lock(&mm_lock);
+			goto error;
+		}
+		subscribed_unlocked = true;
+	}
+
 	/* re-acquire mm_lock */
 	pthread_mutex_lock(&mm_lock);
 
@@ -710,6 +728,17 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 	       (uint64_t) info->iov.iov_base, (uint64_t) info->iov.iov_base + (uint64_t) info->iov.iov_len,
 	       (uint64_t) info->iov.iov_len, tid_info->tid_vaddr, tid_info->tid_vaddr + tid_info->tid_length,
 	       tid_info->tid_length);
+
+	/* The region may have been freed during the unlocked subscribe above.
+	 * Publishing it now would leave an unmonitored entry in the tree.
+	 */
+	if (subscribed_unlocked && !monitor->subscription_live(monitor, info->iov.iov_base, info->iov.iov_len)) {
+		FI_DBG(fi_opx_global.prov, FI_LOG_MR,
+		       "Region unmonitored before publication, leaving TID entry uncached\n");
+		ofi_rbnode_free(&cache->tree, rbnode);
+		ret = -FI_EAGAIN;
+		goto error;
+	}
 
 	(*entry)->info.iov.iov_base = (void *) tid_info->tid_vaddr;
 	(*entry)->info.iov.iov_len  = tid_info->tid_length;
@@ -730,12 +759,14 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache, const struct ofi_mr_info *inf
 	cache->cached_cnt++;
 	cache->cached_size += tid_info->tid_length;
 
-	ret = ofi_monitor_subscribe(monitor, info->iov.iov_base, info->iov.iov_len, &(*entry)->hmem_info);
-	if (OFI_UNLIKELY(ret)) {
-		opx_mr_uncache_entry_storage(cache, *entry);
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "MONITOR SUBSCRIBE FAILED UNCACHED ERROR  %d (%s)\n", ret,
-			strerror(ret));
-		goto error;
+	if (!subscribed_unlocked) {
+		ret = ofi_monitor_subscribe(monitor, info->iov.iov_base, info->iov.iov_len, &(*entry)->hmem_info);
+		if (OFI_UNLIKELY(ret)) {
+			opx_mr_uncache_entry_storage(cache, *entry);
+			FI_WARN(fi_opx_global.prov, FI_LOG_MR, "MONITOR SUBSCRIBE FAILED UNCACHED ERROR  %d (%s)\n",
+				ret, strerror(ret));
+			goto error;
+		}
 	}
 	OPX_DEBUG_EXIT((*entry), OPX_TID_CACHE_ENTRY_FOUND);
 	return FI_SUCCESS;
