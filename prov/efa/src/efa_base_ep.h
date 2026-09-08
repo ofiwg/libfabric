@@ -74,12 +74,27 @@ struct efa_recv_wr {
 	struct ibv_sge sge[2];
 };
 
+/*
+ * FI_CONTEXT2 mode of an endpoint (and of the CQ it is bound to). efa-direct
+ * can only use the caller-supplied context buffer when USE_CONTEXT2. Otherwise
+ * the provider must not dereference the context buffer, so features that depend
+ * on it (inject, selective completion, MR tracking) are disabled. UNASSIGNED is
+ * used only by a CQ before its first endpoint is enabled; an endpoint is always
+ * NO_CONTEXT or USE_CONTEXT2.
+ */
+enum context_mode {
+	UNASSIGNED,
+	NO_CONTEXT,
+	USE_CONTEXT2,
+};
+
 struct efa_base_ep {
 	struct util_ep util_ep;
 	struct efa_domain *domain;
 	struct efa_qp *qp;
 	struct efa_av *av;
 	struct fi_info *info;
+	enum context_mode context_mode;
 	size_t rnr_retry;
 	struct efa_ep_addr src_addr;
 
