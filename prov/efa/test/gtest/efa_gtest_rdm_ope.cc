@@ -394,3 +394,81 @@ INSTANTIATE_TEST_SUITE_P(QueuedFlags, EfaRdmOpeQueuedFlagDispatchTest,
 					 return "read";
 				 }
 			 });
+
+class EfaRdmOpeLocalReadAbortTest : public Test
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+
+	void SetUp() override
+	{
+		memset(&resource, 0, sizeof(resource));
+
+		ASSERT_NO_FATAL_FAILURE(efa_test_resource_construct(
+			&resource, efa_test_alloc_default_hints(
+					   FI_EP_RDM, EFA_FABRIC_NAME)));
+		ASSERT_NE(resource.ep, nullptr);
+
+		/* Checked after construct: the device list is only populated
+		 * by fi_getinfo. */
+		if (!efa_test_device_supports_rma())
+			GTEST_SKIP()
+				<< "device does not support RDMA read+write";
+
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+TEST_F(EfaRdmOpeLocalReadAbortTest, abort_waits_for_local_read_copy)
+{
+	struct efa_test_local_read_abort state = {};
+	struct fi_cq_err_entry err_entry = {};
+	void *op_context = (void *) 0xc0ffee;
+	struct efa_rdm_pke *ctx_pkt = nullptr;
+
+	EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_read)
+		.WillOnce(DoAll(SaveArg<0>(&ctx_pkt), Return(0)));
+
+	ASSERT_EQ(efa_test_abort_waits_for_local_read_copy_setup(
+			  resource.ep, resource.av, op_context, &state),
+		  0);
+
+	EXPECT_EQ(efa_test_ope_list_rxe_count(resource.ep), 1);
+	EXPECT_EQ(fi_cq_readerr(resource.cq, &err_entry, 0), -FI_EAGAIN);
+
+	ASSERT_NE(ctx_pkt, nullptr);
+	efa_test_abort_waits_for_local_read_copy_retire(&state, ctx_pkt);
+
+	EXPECT_EQ(efa_test_ope_list_rxe_count(resource.ep), 0);
+	ASSERT_EQ(fi_cq_readerr(resource.cq, &err_entry, 0), 1);
+	EXPECT_EQ(err_entry.err, FI_ECANCELED);
+	EXPECT_EQ(err_entry.prov_errno, efa_test_peer_abort_prov_errno());
+	EXPECT_EQ(err_entry.op_context, op_context);
+	EXPECT_EQ(err_entry.flags, (uint64_t) (FI_RECV | FI_MSG));
+	EXPECT_EQ(fi_cq_readerr(resource.cq, &err_entry, 0), -FI_EAGAIN);
+}
+
+TEST_F(EfaRdmOpeLocalReadAbortTest, abort_without_local_read_copy_completes_now)
+{
+	struct efa_test_local_read_abort state = {};
+	struct fi_cq_err_entry err_entry = {};
+	void *op_context = (void *) 0xdecaf;
+
+	ASSERT_EQ(efa_test_abort_without_local_read_copy_completes_now(
+			  resource.ep, resource.av, op_context, &state),
+		  0);
+
+	EXPECT_EQ(efa_test_ope_list_rxe_count(resource.ep), 0);
+	ASSERT_EQ(fi_cq_readerr(resource.cq, &err_entry, 0), 1);
+	EXPECT_EQ(err_entry.err, FI_ECANCELED);
+	EXPECT_EQ(err_entry.prov_errno, efa_test_peer_abort_prov_errno());
+	EXPECT_EQ(err_entry.op_context, op_context);
+	EXPECT_EQ(err_entry.flags, (uint64_t) (FI_RECV | FI_MSG));
+}

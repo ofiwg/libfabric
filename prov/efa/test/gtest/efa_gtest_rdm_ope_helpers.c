@@ -13,6 +13,10 @@
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_peer.h"
 #include "rdm/efa_rdm_protocol.h"
+#include "rdm/efa_rdm_pke_nonreq.h"
+#include "rdm/efa_rdm_rma.h"
+#include "rdm/efa_rdm_srx.h"
+#include "ofi_util.h"
 
 int efa_test_drive_rxe_unexp_handle_error(struct fid_ep *ep, void *op_context,
 					  int err, int *prov_errno_out)
@@ -340,4 +344,197 @@ void efa_test_simulate_source_mr_canceled(struct efa_test_queued_op *qop)
 int efa_test_peer_abort_prov_errno(void)
 {
 	return FI_EFA_ERR_PEER_ABORTED;
+}
+
+/**
+ * @brief Build a recv matched through the SRX, so the abort path has a
+ * peer_rxe to return and the caller's op_context to report.
+ */
+static int efa_test_alloc_matched_rxe(struct efa_rdm_ep *ep, struct fid_av *av,
+				      char *buf, size_t len, void *op_context,
+				      struct efa_rdm_ope **rxe_out)
+{
+	struct util_srx_ctx *srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+	struct fid_peer_srx *peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+	struct fi_peer_match_attr match_attr = {0};
+	struct fi_peer_rx_entry *peer_rxe = NULL;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer;
+	fi_addr_t peer_addr = 0;
+	struct iovec iov;
+	void *desc = NULL;
+	int ret;
+
+	ret = efa_test_av_insert_self(&ep->base_ep.util_ep.ep_fid, av,
+				      &peer_addr);
+	if (ret != 1)
+		return -FI_EINVAL;
+
+	peer = efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	if (!peer)
+		return -FI_EINVAL;
+
+	iov.iov_base = buf;
+	iov.iov_len = len;
+	ret = util_srx_generic_recv(ep->peer_srx_ep, &iov, &desc, 1,
+				    FI_ADDR_UNSPEC, op_context, 0);
+	if (ret)
+		return ret;
+
+	match_attr.addr = FI_ADDR_UNSPEC;
+	match_attr.msg_size = len;
+
+	ofi_genlock_lock(srx_ctx->lock);
+	ret = peer_srx->owner_ops->get_msg(peer_srx, &match_attr, &peer_rxe);
+	if (ret || !peer_rxe) {
+		ofi_genlock_unlock(srx_ctx->lock);
+		return ret ? ret : -FI_EINVAL;
+	}
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, peer, ofi_op_msg);
+	if (!rxe) {
+		ofi_genlock_unlock(srx_ctx->lock);
+		return -FI_ENOMEM;
+	}
+
+	rxe->state = EFA_RDM_RXE_MATCHED;
+	rxe->peer_rxe = peer_rxe;
+	rxe->cq_entry.op_context = peer_rxe->context;
+	rxe->cq_entry.flags = FI_RECV | FI_MSG;
+	rxe->cq_entry.len = len;
+	rxe->total_len = len;
+	rxe->iov_count = 1;
+	rxe->iov[0] = iov;
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	*rxe_out = rxe;
+	return 0;
+}
+
+static void efa_test_mark_and_drain(struct efa_rdm_ep *ep,
+				    struct efa_rdm_ope *rxe)
+{
+	struct util_srx_ctx *srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+
+	ofi_genlock_lock(srx_ctx->lock);
+	efa_rdm_rxe_mark_peer_aborted_if_needed(
+		rxe, EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS);
+	efa_rdm_rxe_release_peer_abort_if_drained(rxe);
+	ofi_genlock_unlock(srx_ctx->lock);
+}
+
+static struct efa_rdm_ope *efa_test_find_local_read_txe(struct efa_rdm_ep *ep,
+						       struct efa_rdm_pke *pke)
+{
+	struct efa_rdm_ope *ope;
+	struct dlist_entry *item;
+
+	dlist_foreach(&ep->base_ep.ope_list, item) {
+		ope = container_of(item, struct efa_rdm_ope, ep_entry);
+		if (ope->type == EFA_RDM_TXE &&
+		    ope->local_read_pkt_entry == pke)
+			return ope;
+	}
+
+	return NULL;
+}
+
+int efa_test_ope_list_rxe_count(struct fid_ep *ep)
+{
+	struct efa_rdm_ep *efa_rdm_ep =
+		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct efa_rdm_ope *ope;
+	struct dlist_entry *item;
+	int count = 0;
+
+	dlist_foreach(&efa_rdm_ep->base_ep.ope_list, item) {
+		ope = container_of(item, struct efa_rdm_ope, ep_entry);
+		if (ope->type == EFA_RDM_RXE)
+			count++;
+	}
+
+	return count;
+}
+
+int efa_test_abort_waits_for_local_read_copy_setup(
+	struct fid_ep *ep, struct fid_av *av, void *op_context,
+	struct efa_test_local_read_abort *state)
+{
+	struct efa_rdm_ep *efa_rdm_ep =
+		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	static struct efa_rdm_mr hmem_mr;
+	int ret;
+
+	state->ep = ep;
+	ret = efa_test_alloc_matched_rxe(efa_rdm_ep, av, state->buf,
+					 sizeof(state->buf), op_context,
+					 &state->rxe);
+	if (ret)
+		return ret;
+
+	/* An rx pool packet is registered, so the copy read needs no read-copy
+	 * clone (which would require an FI_HMEM domain). */
+	state->data_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep,
+						  efa_rdm_ep->efa_rx_pkt_pool,
+						  EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	if (!state->data_pkt_entry)
+		return -FI_ENOMEM;
+
+	state->data_pkt_entry->payload = state->data_pkt_entry->wiredata;
+	state->data_pkt_entry->payload_size = sizeof(state->buf);
+	efa_rdm_pke_set_ope(state->data_pkt_entry, state->rxe);
+
+	/* The copy read is only taken for device memory. */
+	hmem_mr.efa_mr.iface = FI_HMEM_CUDA;
+	state->rxe->desc[0] = &hmem_mr;
+
+	ret = efa_rdm_rxe_post_local_read_or_queue(state->rxe, 0,
+						   state->data_pkt_entry,
+						   state->data_pkt_entry->payload,
+						   sizeof(state->buf));
+	if (ret)
+		return ret;
+
+	state->read_txe = efa_test_find_local_read_txe(efa_rdm_ep,
+						      state->data_pkt_entry);
+	if (!state->read_txe)
+		return -FI_EINVAL;
+
+	efa_test_mark_and_drain(efa_rdm_ep, state->rxe);
+	return 0;
+}
+
+void efa_test_abort_waits_for_local_read_copy_retire(
+	struct efa_test_local_read_abort *state,
+	struct efa_rdm_pke *ctx_pkt_entry)
+{
+	struct efa_rdm_ep *ep = container_of(state->ep, struct efa_rdm_ep,
+					     base_ep.util_ep.ep_fid);
+	struct util_srx_ctx *srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+
+	/* efa_rdm_pke_read() would have set this when it posted the WR. */
+	ctx_pkt_entry->flags |= EFA_RDM_PKE_LOCAL_READ;
+
+	ofi_genlock_lock(srx_ctx->lock);
+	efa_rdm_pke_handle_rma_completion(ctx_pkt_entry);
+	ofi_genlock_unlock(srx_ctx->lock);
+}
+
+int efa_test_abort_without_local_read_copy_completes_now(
+	struct fid_ep *ep, struct fid_av *av, void *op_context,
+	struct efa_test_local_read_abort *state)
+{
+	struct efa_rdm_ep *efa_rdm_ep =
+		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	int ret;
+
+	state->ep = ep;
+	ret = efa_test_alloc_matched_rxe(efa_rdm_ep, av, state->buf,
+					 sizeof(state->buf), op_context,
+					 &state->rxe);
+	if (ret)
+		return ret;
+
+	efa_test_mark_and_drain(efa_rdm_ep, state->rxe);
+	return 0;
 }
