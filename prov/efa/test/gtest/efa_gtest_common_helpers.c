@@ -7,6 +7,8 @@
 #include "efa_mr.h"
 #include "efa_device.h"
 #include "rdm/efa_rdm_ep.h"
+#include "rdm/efa_rdm_mr.h"
+#include "ofi_mr.h"
 #include "efa_gtest_common_helpers.h"
 
 void efa_test_fabricate_addr(struct fid_ep *ep, struct efa_ep_addr *addr)
@@ -220,4 +222,19 @@ void efa_test_util_domain_unlock(struct fid_domain *domain)
 		domain, struct efa_domain, util_domain.domain_fid);
 
 	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+}
+
+/*
+ * The gdrcopy device-registration handle bit (OFI_HMEM_DATA_DEV_REG_HANDLE) is
+ * defined in ofi_mr.h, which cannot be included from C++ (it transitively pulls
+ * in _Complex types). Expose it to the C++ tests via this C helper.
+ */
+uint64_t efa_test_ofi_hmem_data_dev_reg_handle(void)
+{
+	return OFI_HMEM_DATA_DEV_REG_HANDLE;
+}
+
+uint64_t efa_test_rdm_mr_shm_flags(uint64_t mr_flags, enum fi_hmem_iface iface)
+{
+	return efa_rdm_mr_shm_flags(mr_flags, iface);
 }
