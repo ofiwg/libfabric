@@ -4,6 +4,7 @@
 #include "efa_gtest_common_helpers.h"
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
+#include "fi_ext_efa.h"
 #include <gtest/gtest.h>
 
 using testing::Return;
@@ -67,4 +68,79 @@ TEST_F(EfaRdmMrTest, reg_map_insert_failure_propagates_error)
 
 	if (mr)
 		fi_close(&mr->fid);
+}
+
+
+/*
+ * Regression coverage for the FI_EFA_MR_RELAXED_ORDERING bit assignment.
+ *
+ * FI_EFA_MR_RELAXED_ORDERING (an EFA-specific hint stripped before the shm MR
+ * registration) must not share a bit with OFI_HMEM_DATA_DEV_REG_HANDLE (the
+ * gdrcopy device-registration handle flag stored in efa_rdm_mr->flags). If they
+ * ever alias, deriving the shm flags would clear the gdrcopy handle bit, which
+ * on the intra-node (shm) CUDA path silently drops the fast GDRCopy copy in
+ * favor of the slower cudaMemcpy fallback.
+ */
+
+/**
+ * @brief The two flags must occupy distinct bits. This is the root-cause guard.
+ */
+TEST_F(EfaRdmMrTest, relaxed_ordering_bit_distinct_from_gdrcopy_handle_bit)
+{
+	EXPECT_EQ(FI_EFA_MR_RELAXED_ORDERING &
+			  efa_test_ofi_hmem_data_dev_reg_handle(),
+		  0u)
+		<< "FI_EFA_MR_RELAXED_ORDERING aliases the gdrcopy handle bit "
+		   "OFI_HMEM_DATA_DEV_REG_HANDLE";
+}
+
+/**
+ * @brief Deriving the shm MR flags for a CUDA region that has the gdrcopy
+ * handle bit set must strip FI_EFA_MR_RELAXED_ORDERING while preserving the
+ * gdrcopy handle bit (and adding FI_HMEM_DEVICE_ONLY for device memory).
+ */
+TEST_F(EfaRdmMrTest, shm_flags_preserve_gdrcopy_handle_when_relaxed_ordering_set)
+{
+	uint64_t gdrcopy_bit = efa_test_ofi_hmem_data_dev_reg_handle();
+	uint64_t mr_flags = gdrcopy_bit | FI_EFA_MR_RELAXED_ORDERING;
+
+	uint64_t shm_flags =
+		efa_test_rdm_mr_shm_flags(mr_flags, FI_HMEM_CUDA);
+
+	/* The gdrcopy handle bit survives into the shm flags. */
+	EXPECT_NE(shm_flags & gdrcopy_bit, 0u)
+		<< "shm flag derivation erased the gdrcopy handle bit";
+	/* The EFA-specific relaxed-ordering hint is stripped. */
+	EXPECT_EQ(shm_flags & FI_EFA_MR_RELAXED_ORDERING, 0u)
+		<< "FI_EFA_MR_RELAXED_ORDERING leaked into shm flags";
+	/* Device memory is marked device-only for shm. */
+	EXPECT_NE(shm_flags & FI_HMEM_DEVICE_ONLY, 0u);
+}
+
+/**
+ * @brief Without the gdrcopy handle bit, deriving shm flags must not
+ * spuriously introduce it, and must still strip the relaxed-ordering hint.
+ */
+TEST_F(EfaRdmMrTest, shm_flags_no_gdrcopy_handle_when_bit_absent)
+{
+	uint64_t gdrcopy_bit = efa_test_ofi_hmem_data_dev_reg_handle();
+
+	uint64_t shm_flags = efa_test_rdm_mr_shm_flags(
+		FI_EFA_MR_RELAXED_ORDERING, FI_HMEM_CUDA);
+
+	EXPECT_EQ(shm_flags & gdrcopy_bit, 0u);
+	EXPECT_EQ(shm_flags & FI_EFA_MR_RELAXED_ORDERING, 0u);
+}
+
+/**
+ * @brief For host (system) memory, shm flags must not set FI_HMEM_DEVICE_ONLY
+ * and must still strip the relaxed-ordering hint.
+ */
+TEST_F(EfaRdmMrTest, shm_flags_host_memory_not_device_only)
+{
+	uint64_t shm_flags = efa_test_rdm_mr_shm_flags(
+		FI_EFA_MR_RELAXED_ORDERING, FI_HMEM_SYSTEM);
+
+	EXPECT_EQ(shm_flags & FI_HMEM_DEVICE_ONLY, 0u);
+	EXPECT_EQ(shm_flags & FI_EFA_MR_RELAXED_ORDERING, 0u);
 }
