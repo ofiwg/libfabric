@@ -553,6 +553,34 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 }
 
 /**
+ * @brief advertise FI_CONTEXT2 for an efa base-ep (efa-direct or DGRAM) info
+ *
+ * Advertises FI_CONTEXT2 when the application requested it (or passed NULL
+ * hints). Without FI_CONTEXT2 the endpoint runs without touching the caller's
+ * context buffer, which also disables inject; a nonzero inject_size hint
+ * therefore cannot be satisfied and the info is rejected.
+ *
+ * @param	info[in,out]	info to be updated
+ * @param	hints[in]	user provided hints
+ * @return	0 to keep the info, -FI_ENODATA if the caller should skip it
+ */
+static int efa_user_info_set_context2(struct fi_info *info,
+				      const struct fi_info *hints)
+{
+	if (!hints || (hints->mode & FI_CONTEXT2)) {
+		info->mode |= FI_CONTEXT2;
+		info->tx_attr->mode |= FI_CONTEXT2;
+		info->rx_attr->mode |= FI_CONTEXT2;
+		return 0;
+	}
+
+	if (hints->tx_attr && hints->tx_attr->inject_size)
+		return -FI_ENODATA;
+	info->tx_attr->inject_size = 0;
+	return 0;
+}
+
+/**
  * @brief update EFA direct info to match user hints
  *
  * the input info is a duplicate of prov info, which matches
@@ -568,6 +596,11 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 static
 int efa_user_info_alter_direct(int version, struct fi_info *info, const struct fi_info *hints)
 {
+	int ret = efa_user_info_set_context2(info, hints);
+	if (ret)
+		return ret;
+	bool use_context2 = info->mode & FI_CONTEXT2;
+
 	/*
 	 * FI_HMEM is a primary capability. When user explicitly
 	 * requested it, verify support. When no hints, advertise if supported.
@@ -644,51 +677,51 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		info->rx_attr->caps &= ~OFI_RX_RMA_CAPS;
 	}
 	/*
-	 * Handle inject_size hint for larger inline data support.
-	 *
-	 * prov_info advertises inline_buf_size_ex as inject_size so that
-	 * ofi_check_info allows larger inline data size. Here we adjust the
-	 * tx queue depth based on what the user requested, since larger
-	 * inline data reduces the maximum number of send queue entries.
+	 * A larger inline (inject) size reduces the number of send queue
+	 * entries, so when the application requests one, cap the tx queue depth
+	 * to what the device supports for that size. Only meaningful with
+	 * FI_CONTEXT2; inject is unavailable otherwise.
 	 */
-	struct efa_device *device = &g_efa_selected_device_list[0];
-	uint16_t inline_buf_size = device->efa_attr.inline_buf_size;
+	if (use_context2) {
+		struct efa_device *device = &g_efa_selected_device_list[0];
+		uint16_t inline_buf_size = device->efa_attr.inline_buf_size;
 
-	if (!hints || !hints->tx_attr || !hints->tx_attr->inject_size) {
-		/* No hint: default to inline_buf_size */
-		info->tx_attr->inject_size = inline_buf_size;
-	} else if (hints->tx_attr->inject_size > inline_buf_size) {
-		/* Wide WQE: query actual tx depth */
+		if (!hints || !hints->tx_attr || !hints->tx_attr->inject_size) {
+			/* No hint: default to inline_buf_size */
+			info->tx_attr->inject_size = inline_buf_size;
+		} else if (hints->tx_attr->inject_size > inline_buf_size) {
+			/* Wide WQE: query actual tx depth */
 #if HAVE_INLINE_BUF_SIZE_EX
-		struct efadv_sq_depth_attr sq_attr = {0};
-		int max_sq_depth;
+			struct efadv_sq_depth_attr sq_attr = {0};
+			int max_sq_depth;
 
-		sq_attr.max_inline_data = hints->tx_attr->inject_size;
-		sq_attr.flags = EFADV_SQ_DEPTH_ATTR_INLINE_WRITE;
-		max_sq_depth = efadv_get_max_sq_depth(device->ibv_ctx,
-						      &sq_attr,
-						      sizeof(sq_attr));
-		if (max_sq_depth < 0) {
-			EFA_INFO(FI_LOG_CORE,
-				 "efadv_get_max_sq_depth failed: %d\n",
-				 max_sq_depth);
-			return -FI_ENODATA;
-		}
-		if (hints->tx_attr->size > max_sq_depth) {
-			EFA_INFO(FI_LOG_CORE,
-				 "Requested TX SQ depth (%zu) exceeds maximum depth (%d)"
-				 " for inline size %zu\n",
-				 hints->tx_attr->size, max_sq_depth,
-				 hints->tx_attr->inject_size);
-			return -FI_ENODATA;
-		}
-		info->tx_attr->size = max_sq_depth;
+			sq_attr.max_inline_data = hints->tx_attr->inject_size;
+			sq_attr.flags = EFADV_SQ_DEPTH_ATTR_INLINE_WRITE;
+			max_sq_depth = efadv_get_max_sq_depth(device->ibv_ctx,
+							      &sq_attr,
+							      sizeof(sq_attr));
+			if (max_sq_depth < 0) {
+				EFA_INFO(FI_LOG_CORE,
+					 "efadv_get_max_sq_depth failed: %d\n",
+					 max_sq_depth);
+				return -FI_ENODATA;
+			}
+			if (hints->tx_attr->size > max_sq_depth) {
+				EFA_INFO(FI_LOG_CORE,
+					 "Requested TX SQ depth (%zu) exceeds maximum depth (%d)"
+					 " for inline size %zu\n",
+					 hints->tx_attr->size, max_sq_depth,
+					 hints->tx_attr->inject_size);
+				return -FI_ENODATA;
+			}
+			info->tx_attr->size = max_sq_depth;
 #else
-		return -FI_ENODATA;
+			return -FI_ENODATA;
 #endif
+		}
+		/* inject_size <= inline_buf_size: no adjustment needed,
+		 * ofi_alter_info will set inject_size from hints */
 	}
-	/* inject_size <= inline_buf_size: no adjustment needed,
-	 * ofi_alter_info will set inject_size from hints */
 	/*
 	 * Handle user-provided hints and adapt the info object passed back up
 	 * based on EFA-specific constraints.
@@ -839,6 +872,19 @@ int efa_get_user_info(uint32_t version, const char *node,
 
 		if (EFA_INFO_TYPE_IS_DIRECT(prov_info)) {
 			ret = efa_user_info_alter_direct(version, dupinfo, hints);
+			if (ret) {
+				fi_freeinfo(dupinfo);
+				continue;
+			}
+		}
+
+		/*
+		 * DGRAM runs on the same efa base endpoint as efa-direct, so it
+		 * advertises FI_CONTEXT2 conditionally the same way (efa-direct
+		 * handles this inside efa_user_info_alter_direct()).
+		 */
+		if (EFA_INFO_TYPE_IS_DGRAM(prov_info)) {
+			ret = efa_user_info_set_context2(dupinfo, hints);
 			if (ret) {
 				fi_freeinfo(dupinfo);
 				continue;

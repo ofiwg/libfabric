@@ -40,6 +40,8 @@ static inline void efa_cq_direct_ope_release(struct efa_cq *efa_cq,
 	struct efa_base_ep *base_ep;
 
 	if (efa_env.track_mr && ibv_cq->ibv_cq_ex->wr_id) {
+		/* track_mr requires FI_CONTEXT2 (enforced at efa_ep_enable). */
+		assert(ibv_cq->context_mode == USE_CONTEXT2);
 		efa_domain = container_of(efa_cq->util_cq.domain, struct efa_domain, util_domain);
 		base_ep = efa_ibv_cq_get_base_ep_from_cur_cqe(ibv_cq, efa_domain);
 		efa_direct_ope_release(base_ep,
@@ -51,9 +53,16 @@ static void efa_cq_read_context_entry(struct efa_ibv_cq *ibv_cq, void *buf, int 
 {
 	struct fi_cq_entry *entry = buf;
 
-	if (efa_env.track_mr && ibv_cq->ibv_cq_ex->wr_id)
+	if (efa_env.track_mr && ibv_cq->ibv_cq_ex->wr_id) {
+		/* track_mr requires FI_CONTEXT2 (enforced at efa_ep_enable). */
+		assert(ibv_cq->context_mode == USE_CONTEXT2);
 		entry->op_context = ((struct efa_direct_ope *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id)->context;
-	else
+	} else
+		/*
+		 * Echo wr_id as op_context without dereferencing: it is the
+		 * caller's context (the raw context in no-FI_CONTEXT2 mode, or
+		 * the efa_context when track_mr is off).
+		 */
 		entry->op_context = (void *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id;
 }
 
@@ -64,7 +73,11 @@ void efa_cq_read_entry_common(struct efa_ibv_cq *cq, struct fi_cq_msg_entry *ent
 	struct efa_direct_ope *direct_ope;
 
 	if (!efa_cq_wc_is_unsolicited(cq) && ibv_cqx->wr_id) {
-		if (efa_env.track_mr) {
+		if (cq->context_mode != USE_CONTEXT2) {
+			/* No FI_CONTEXT2 means no context buffer */
+			entry->op_context = (void *)(uintptr_t)ibv_cqx->wr_id;
+			entry->flags = efa_cq_opcode_to_fi_flags(opcode);
+		} else if (efa_env.track_mr) {
 			direct_ope = (struct efa_direct_ope *)(uintptr_t)ibv_cqx->wr_id;
 			entry->op_context = direct_ope->context;
 			entry->flags = (opcode == IBV_WC_RECV_RDMA_WITH_IMM) ? efa_cq_opcode_to_fi_flags(opcode) : direct_ope->context->completion_flags;
@@ -139,7 +152,10 @@ static inline void efa_cq_fill_err_entry(struct efa_ibv_cq *ibv_cq, struct fi_cq
 	case IBV_WC_SEND: /* fall through */
 	case IBV_WC_RDMA_WRITE: /* fall through */
 	case IBV_WC_RDMA_READ:
-		if (!ibv_cq->ibv_cq_ex->wr_id) {
+		if (ibv_cq->context_mode != USE_CONTEXT2 || !ibv_cq->ibv_cq_ex->wr_id) {
+			/* No FI_CONTEXT2 means no context buffer so the
+			 * peer address is unavailable for these opcodes
+			 */
 			addr = FI_ADDR_NOTAVAIL;
 		} else if (efa_env.track_mr) {
 			addr = ((struct efa_direct_ope *)(uintptr_t)ibv_cq->ibv_cq_ex->wr_id)->context->addr;
@@ -222,15 +238,22 @@ static void efa_cq_handle_tx_completion(struct efa_base_ep *base_ep,
 	int ret = 0;
 	struct ibv_cq_ex *ibv_cq_ex = ibv_cq->ibv_cq_ex;
 
-	/* NULL wr_id means no FI_COMPLETION flag */
-	if (!ibv_cq_ex->wr_id)
+	/*
+	 * In FI_CONTEXT2 mode a NULL wr_id means the op did not request a
+	 * completion. Without FI_CONTEXT2, inject and selective completion are
+	 * disabled, so always generate a completion.
+	 */
+	if (ibv_cq->context_mode == USE_CONTEXT2 && !ibv_cq_ex->wr_id)
 		return;
 
 	efa_tracepoint(handle_tx_completion, ibv_cq_ex->wr_id);
 
-	if (efa_env.track_mr)
+	if (efa_env.track_mr) {
+		/* track_mr requires FI_CONTEXT2 (enforced at efa_ep_enable). */
+		assert(ibv_cq->context_mode == USE_CONTEXT2);
 		efa_direct_ope_release(base_ep,
 			(struct efa_direct_ope *)(uintptr_t)ibv_cq_ex->wr_id);
+	}
 
 	/* TX completions should not send peer address to util_cq */
 	if (base_ep->util_ep.caps & FI_SOURCE)
@@ -267,15 +290,22 @@ static void efa_cq_handle_rx_completion(struct efa_base_ep *base_ep,
 	fi_addr_t src_addr;
 	int ret = 0;
 
-	/* NULL wr_id means no FI_COMPLETION flag */
-	if (!ibv_cq_ex->wr_id)
+	/*
+	 * In FI_CONTEXT2 mode a NULL wr_id means the op did not request a
+	 * completion. Without FI_CONTEXT2, inject and selective completion are
+	 * disabled, so always generate a completion.
+	 */
+	if (ibv_cq->context_mode == USE_CONTEXT2 && !ibv_cq_ex->wr_id)
 		return;
 
 	efa_tracepoint(handle_rx_completion, ibv_cq_ex->wr_id);
 
-	if (efa_env.track_mr)
+	if (efa_env.track_mr) {
+		/* track_mr requires FI_CONTEXT2 (enforced at efa_ep_enable). */
+		assert(ibv_cq->context_mode == USE_CONTEXT2);
 		efa_direct_ope_release(base_ep,
 			(struct efa_direct_ope *)(uintptr_t)ibv_cq_ex->wr_id);
+	}
 
 	if (base_ep->util_ep.caps & FI_SOURCE) {
 		src_addr = efa_av_reverse_lookup(base_ep->av,
@@ -803,9 +833,15 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		/**
 		 * Only populate the cqes when:
 		 * 1. It is IBV_WC_RECV_RDMA_WITH_IMM which is the target side of the rdma write with imm
-		 * 2. It is a solicited wc and having wr_id (efa_context) which means it needs a completion.
+		 * 2. It is a solicited wc with a wr_id.
+		 * 3. Without FI_CONTEXT2, inject and selective completion are
+		 *    disabled, so every solicited wc must produce a completion
+		 *    even when wr_id is 0 (the application may pass a NULL
+		 *    context).
 		 */
-		if ((!efa_cq_wc_is_unsolicited(ibv_cq) && ibv_cq->ibv_cq_ex->wr_id ) || opcode == IBV_WC_RECV_RDMA_WITH_IMM) {
+		if ((!efa_cq_wc_is_unsolicited(ibv_cq) &&
+		     (ibv_cq->ibv_cq_ex->wr_id || ibv_cq->context_mode != USE_CONTEXT2)) ||
+		    opcode == IBV_WC_RECV_RDMA_WITH_IMM) {
 			efa_tracepoint(handle_completion, ibv_cq->ibv_cq_ex->wr_id, opcode);
 			efa_cq->read_entry(ibv_cq, (void *)((uintptr_t) buf + num_cqe * efa_cq->entry_size), opcode);
 			if (src_addr)
@@ -1047,6 +1083,11 @@ int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
 	};
 
 	ibv_cq->unsolicited_write_recv_enabled = false;
+	/*
+	 * UNASSIGNED until efa_base_ep_create_qp() sets the mode from the first
+	 * endpoint enabled on this CQ.
+	 */
+	ibv_cq->context_mode = UNASSIGNED;
 #if HAVE_CAPS_UNSOLICITED_WRITE_RECV
 	if (efa_use_unsolicited_write_recv())
 		efadv_cq_init_attr.wc_flags |= EFADV_WC_EX_WITH_IS_UNSOLICITED;
@@ -1134,6 +1175,7 @@ int efa_cq_open_ibv_cq(struct fi_cq_attr *attr,
 
 	ibv_cq->data_path_direct_enabled = false;
 	ibv_cq->unsolicited_write_recv_enabled = false;
+	ibv_cq->context_mode = UNASSIGNED;
 	return efa_cq_open_ibv_cq_with_ibv_create_cq_ex(
 		&init_attr_ex, ibv_ctx, &ibv_cq->ibv_cq_ex, &ibv_cq->ibv_cq_ex_type);
 }
