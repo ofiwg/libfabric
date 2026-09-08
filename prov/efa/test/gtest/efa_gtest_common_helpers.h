@@ -144,6 +144,18 @@ int efa_test_util_domain_trylock(struct fid_domain *domain);
  */
 void efa_test_util_domain_unlock(struct fid_domain *domain);
 
+/**
+ * @brief Value of OFI_HMEM_DATA_DEV_REG_HANDLE (the gdrcopy handle bit), which
+ * lives in ofi_mr.h and is not includable from C++.
+ */
+uint64_t efa_test_ofi_hmem_data_dev_reg_handle(void);
+
+/**
+ * @brief Wrapper around the product efa_rdm_mr_shm_flags() so the shm MR flag
+ * derivation can be exercised from C++ tests.
+ */
+uint64_t efa_test_rdm_mr_shm_flags(uint64_t mr_flags, enum fi_hmem_iface iface);
+
 #ifdef __cplusplus
 }
 #endif
