@@ -2225,6 +2225,13 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 	} else {
 		/*Local RDMA read posted*/
 		efa_rdm_pke_mark_held(txe->local_read_pkt_entry);
+		/*
+		 * TODO: post the copy read on the rxe instead of an internal
+		 * txe, so the rxe's own WR accounting covers it and this
+		 * explicit reference is unnecessary.
+		 */
+		/* Keep the rxe alive until this copy lands in its buffer. */
+		rxe->efa_outstanding_tx_ops++;
 	}
 	return err;
 }

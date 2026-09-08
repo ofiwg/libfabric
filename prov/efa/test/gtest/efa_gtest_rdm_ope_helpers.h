@@ -33,6 +33,7 @@ enum efa_test_queued_flag_kind {
 
 struct efa_rdm_ope;
 struct efa_rdm_peer;
+struct efa_rdm_pke;
 
 struct efa_test_queued_op {
 	struct fid_ep *ep;
@@ -129,6 +130,50 @@ void efa_test_simulate_source_mr_canceled(struct efa_test_queued_op *qop);
  * from the packet-post failure code the other error paths use.
  */
 int efa_test_peer_abort_prov_errno(void);
+
+/**
+ * @brief State of a matched recv that is peer-aborting, so a test can retire
+ * its local-read payload copy after the abort has been decided.
+ */
+struct efa_test_local_read_abort {
+	struct fid_ep *ep;
+	struct efa_rdm_ope *rxe;
+	struct efa_rdm_ope *read_txe;
+	struct efa_rdm_pke *data_pkt_entry;
+	char buf[16];
+};
+
+/** @brief Count the rxes still on the endpoint's ope list. */
+int efa_test_ope_list_rxe_count(struct fid_ep *ep);
+
+/**
+ * @brief Peer-abort a matched recv whose local-read payload copy is still
+ * outstanding, and attempt the drain once. The caller must arm
+ * efa_rdm_pke_read so no WR reaches the device, and keep its packet argument
+ * for the retire call.
+ *
+ * @return 0 if @p state was filled, negative otherwise.
+ */
+int efa_test_abort_waits_for_local_read_copy_setup(
+	struct fid_ep *ep, struct fid_av *av, void *op_context,
+	struct efa_test_local_read_abort *state);
+
+/**
+ * @brief Complete the copy read through its read-context packet, which drops
+ * the copy's rxe reference and re-drives the abort drain.
+ */
+void efa_test_abort_waits_for_local_read_copy_retire(
+	struct efa_test_local_read_abort *state,
+	struct efa_rdm_pke *ctx_pkt_entry);
+
+/**
+ * @brief Peer-abort a matched recv that has no payload copy outstanding.
+ *
+ * @return 0 on success, negative otherwise.
+ */
+int efa_test_abort_without_local_read_copy_completes_now(
+	struct fid_ep *ep, struct fid_av *av, void *op_context,
+	struct efa_test_local_read_abort *state);
 
 #ifdef __cplusplus
 }
