@@ -23,6 +23,7 @@ struct efa_ibv_cq {
 #endif
 	struct ibv_comp_channel	*channel;
 	bool unsolicited_write_recv_enabled;
+	enum context_mode context_mode;
 };
 
 struct efa_ibv_cq_poll_list_entry {
