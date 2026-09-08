@@ -67,7 +67,7 @@ struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type, char *fabric_
 	/* Use a minimal caps that efa / efa-direct should always support */
 	hints->domain_attr->mr_mode = MR_MODE_BITS;
 
-	/* EFA direct and dgram paths require FI_CONTEXT2 */
+	/* efa-direct and DGRAM default to FI_CONTEXT2 here but no longer require it */
 	if (!fabric_name || !strcasecmp(fabric_name, EFA_DIRECT_FABRIC_NAME))
 		hints->mode |= FI_CONTEXT2;
 
