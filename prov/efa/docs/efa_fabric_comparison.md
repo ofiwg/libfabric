@@ -213,13 +213,13 @@ consistent with the FI_MSG iov limit.
 | `FI_ASYNC_IOV`            |   |          |
 | `FI_BUFFERED_RECV`        |   |          |
 | `FI_CONTEXT`              |   |          |
-| `FI_CONTEXT2`             |   |R         |
+| `FI_CONTEXT2`             |   |O         |
 | `FI_LOCAL_MR (compat)`    |   |          |
 | `FI_MSG_PREFIX`           |  |          |
 | `FI_RX_CQ_DATA`           |   |O         |
 
 Feature comparison:
-- **FI_CONTEXT2**: efa-direct requires this mode, efa fabric doesn't
+- **FI_CONTEXT2**: efa-direct accepts this optional mode; without it fi_inject, FI_SELECTIVE_COMPLETION, and FI_EFA_TRACK_MR are unavailable. efa fabric doesn't use it
 - **FI_MSG_PREFIX**: efa fabric DGRAM endpoint requires FI_MSG_PREFIX due to the 40-byte prefix requirement per IBV_QPT_UD spec
 - **FI_RX_CQ_DATA**: efa-direct accepts this optional mode, meaning operations carrying CQ data consume an RX buffer on responder side
 

@@ -94,19 +94,24 @@ static inline ssize_t efa_post_recv(struct efa_base_ep *base_ep, const struct fi
 	wr = &base_ep->efa_recv_wr_vec[wr_index].wr;
 	wr->num_sge = msg->iov_count;
 	wr->sg_list = base_ep->efa_recv_wr_vec[wr_index].sge;
-	efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
-				   FI_RECV | FI_MSG);
-	if (efa_env.track_mr && efa_ctx) {
-		direct_ope = efa_direct_rxe_alloc(base_ep, efa_ctx, msg);
-		if (!direct_ope) {
-			EFA_WARN(FI_LOG_EP_DATA,
-				 "Failed to allocate direct RX operation entry for MR tracking\n");
-			err = -FI_EAGAIN;
-			goto out_err;
-		}
-		wr->wr_id = (uintptr_t) direct_ope;
+	if (base_ep->context_mode != USE_CONTEXT2) {
+		/* No FI_CONTEXT2: no buffer, just copy value */
+		wr->wr_id = (uintptr_t) msg->context;
 	} else {
-		wr->wr_id = (uintptr_t) efa_ctx;
+		efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
+					   FI_RECV | FI_MSG);
+		if (efa_env.track_mr && efa_ctx) {
+			direct_ope = efa_direct_rxe_alloc(base_ep, efa_ctx, msg);
+			if (!direct_ope) {
+				EFA_WARN(FI_LOG_EP_DATA,
+					 "Failed to allocate direct RX operation entry for MR tracking\n");
+				err = -FI_EAGAIN;
+				goto out_err;
+			}
+			wr->wr_id = (uintptr_t) direct_ope;
+		} else {
+			wr->wr_id = (uintptr_t) efa_ctx;
+		}
 	}
 
 	for (i = 0; i < msg->iov_count; i++) {
@@ -244,19 +249,24 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	ofi_genlock_lock(&base_ep->util_ep.lock);
 
 	/* Prepare work request ID */
-	efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
-				   FI_SEND | FI_MSG);
-	if (efa_env.track_mr && efa_ctx) {
-		direct_ope = efa_direct_txe_alloc(base_ep, efa_ctx, msg, NULL);
-		if (!direct_ope) {
-			EFA_WARN(FI_LOG_EP_DATA,
-				 "Failed to allocate direct TX operation entry for MR tracking\n");
-			ret = -FI_EAGAIN;
-			goto out_err;
-		}
-		wr_id = (uintptr_t) direct_ope;
+	if (base_ep->context_mode != USE_CONTEXT2) {
+		/* No FI_CONTEXT2: no buffer, just copy value */
+		wr_id = (uintptr_t) msg->context;
 	} else {
-		wr_id = (uintptr_t) efa_ctx;
+		efa_ctx = efa_fill_context(msg->context, msg->addr, flags,
+					   FI_SEND | FI_MSG);
+		if (efa_env.track_mr && efa_ctx) {
+			direct_ope = efa_direct_txe_alloc(base_ep, efa_ctx, msg, NULL);
+			if (!direct_ope) {
+				EFA_WARN(FI_LOG_EP_DATA,
+					 "Failed to allocate direct TX operation entry for MR tracking\n");
+				ret = -FI_EAGAIN;
+				goto out_err;
+			}
+			wr_id = (uintptr_t) direct_ope;
+		} else {
+			wr_id = (uintptr_t) efa_ctx;
+		}
 	}
 
 	/* Handle 0-byte send with inline path and 0 SGEs */
@@ -403,6 +413,10 @@ static ssize_t efa_ep_msg_inject(struct fid_ep *ep_fid, const void *buf, size_t 
 	struct fi_msg msg;
 	struct iovec iov;
 
+	/* inject is unavailable without FI_CONTEXT2 */
+	if (base_ep->context_mode != USE_CONTEXT2)
+		return -FI_ENOSYS;
+
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, NULL, 1, dest_addr, NULL, 0);
 
@@ -416,6 +430,10 @@ static ssize_t efa_ep_msg_injectdata(struct fid_ep *ep_fid, const void *buf,
 	struct efa_base_ep *base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 	struct fi_msg msg;
 	struct iovec iov;
+
+	/* inject is unavailable without FI_CONTEXT2 */
+	if (base_ep->context_mode != USE_CONTEXT2)
+		return -FI_ENOSYS;
 
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, NULL, 1, dest_addr, NULL, data);

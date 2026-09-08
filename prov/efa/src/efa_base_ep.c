@@ -696,6 +696,9 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 		return -FI_ENOMEM;
 	}
 
+	base_ep->context_mode = (base_ep->info->mode & FI_CONTEXT2) ?
+		USE_CONTEXT2 : NO_CONTEXT;
+
 	/* This is SRD qp's default behavior */
 	base_ep->rnr_retry = EFA_RNR_INFINITE_RETRY;
 

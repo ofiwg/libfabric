@@ -238,9 +238,11 @@ void efa_prov_info_set_tx_rx_attr(struct fi_info *prov_info,
 		*prov_info->rx_attr	= efa_dgrm_rx_attr;
 	}
 
-	/* efa-direct and DGRAM paths require FI_CONTEXT2 */
-	prov_info->tx_attr->mode |= FI_CONTEXT2;
-	prov_info->rx_attr->mode |= FI_CONTEXT2;
+	/*
+	 * Neither efa-direct nor DGRAM requires FI_CONTEXT2 unconditionally; it
+	 * is advertised conditionally in efa_get_user_info() based on whether
+	 * the application requested it (or passed NULL hints).
+	 */
 
 	prov_info->tx_attr->inject_size = device->efa_attr.inline_buf_size;
 #if HAVE_INLINE_BUF_SIZE_EX
@@ -481,8 +483,6 @@ int efa_prov_info_alloc(struct fi_info **prov_info_ptr,
 	if (!prov_info)
 		return -FI_ENOMEM;
 
-	prov_info->mode |= FI_CONTEXT2; 	/* EFA direct path requires FI_CONTEXT2 mode */
-
 	if (ep_type == FI_EP_RDM) {
 		prov_info->caps	= EFA_RDM_CAPS;
 
@@ -585,7 +585,7 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 
 	prov_info_rdm->caps |= efa_rdm_added_tx_caps | efa_rdm_added_rx_caps | efa_domain_caps;
 
-	/* efa-direct requires FI_CONTEXT2 but RDM doesn't. So unset FI_CONTEXT2 */
+	/* RDM never uses FI_CONTEXT2; efa-direct opts in separately. Unset it. */
 	prov_info_rdm->mode &= ~FI_CONTEXT2;
 	prov_info_rdm->tx_attr->mode &= ~FI_CONTEXT2;
 	prov_info_rdm->rx_attr->mode &= ~FI_CONTEXT2;

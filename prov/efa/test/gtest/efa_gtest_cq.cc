@@ -489,3 +489,144 @@ TEST_F(EfaCQPollTest, stops_at_cqe_to_process)
 	int ret = efa_cq_poll_ibv_cq(2, ibv_cq);
 	EXPECT_EQ(ret, 0);
 }
+
+/**
+ * @brief Completion-path fixture for an efa-direct endpoint opened WITHOUT
+ * FI_CONTEXT2. In this mode the CQ must never dereference wr_id as a context
+ * buffer: op_context is echoed verbatim and completion flags are derived from
+ * the CQE opcode. Identical to EfaCQPollTest except the FI_CONTEXT2 bit is
+ * cleared from the hints.
+ */
+class EfaCQPollNoContext2Test : public Test
+{
+	protected:
+	struct efa_resource resource = {};
+	StrictMock<MockEfa> mock_efa;
+	struct efa_ibv_cq *ibv_cq = nullptr;
+	uint32_t qp_num = 0;
+
+	void SetUp() override
+	{
+		struct fi_info *hints = efa_test_alloc_default_hints(
+			FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+		ASSERT_NE(hints, nullptr);
+		/* Drop FI_CONTEXT2 so the endpoint runs in no-context2 mode. */
+		hints->mode &= ~FI_CONTEXT2;
+
+		memset(&resource, 0, sizeof(resource));
+		efa_test_resource_construct(&resource, hints);
+		ASSERT_NE(resource.cq, nullptr);
+		/* The returned info must not require FI_CONTEXT2. */
+		ASSERT_EQ(resource.info->mode & FI_CONTEXT2, (uint64_t) 0);
+		ibv_cq = efa_test_get_ibv_cq(resource.cq);
+		ASSERT_NE(ibv_cq, nullptr);
+		qp_num = efa_test_get_qp_num(resource.ep);
+
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+		efa_test_resource_destruct(&resource);
+	}
+};
+
+class EfaCQPollNoContext2TxTest :
+	public EfaCQPollNoContext2Test,
+	public WithParamInterface<enum ibv_wc_opcode>
+{
+	protected:
+	static uint64_t expected_flags(enum ibv_wc_opcode opcode)
+	{
+		switch (opcode) {
+		case IBV_WC_SEND:
+			return FI_SEND | FI_MSG;
+		case IBV_WC_RDMA_READ:
+			return FI_RMA | FI_READ;
+		case IBV_WC_RDMA_WRITE:
+			return FI_RMA | FI_WRITE;
+		default:
+			return 0;
+		}
+	}
+};
+
+/**
+ * @brief With a non-NULL context, the no-context2 completion path echoes the
+ * raw context pointer as op_context and derives flags from the opcode. The
+ * context buffer's completion_flags is poisoned with a value that can never be
+ * opcode-derived, so a stray dereference would be caught.
+ */
+TEST_P(EfaCQPollNoContext2TxTest, echoes_context_and_derives_flags_from_opcode)
+{
+	enum ibv_wc_opcode opcode = GetParam();
+	const uint64_t poison = 0xdead;
+	struct efa_context *ctx = efa_test_alloc_context(poison, 0x42);
+	ASSERT_NE(ctx, nullptr);
+
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll).WillOnce(Return(0));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_qp_num)
+		.WillRepeatedly(Return(qp_num));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_opcode)
+		.WillRepeatedly(Return(opcode));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_wc_flags)
+		.WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_byte_len)
+		.WillRepeatedly(Return(64));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_next_poll).WillOnce(Return(ENOENT));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_end_poll).Times(1);
+
+	efa_test_set_ibv_cq_ex(ibv_cq, 0, (uint64_t) (uintptr_t) ctx);
+
+	int ret = efa_cq_poll_ibv_cq(10, ibv_cq);
+	EXPECT_EQ(ret, ENOENT);
+
+	struct fi_cq_data_entry entry = {};
+	ASSERT_EQ(efa_test_cq_read_staged_data_entry(resource.cq, &entry), 1);
+	/* op_context is the raw context pointer, echoed verbatim. */
+	EXPECT_EQ(entry.op_context, (void *) ctx);
+	/* flags come from the opcode, NOT ctx->completion_flags. */
+	EXPECT_EQ(entry.flags, expected_flags(opcode));
+	EXPECT_NE(entry.flags, poison);
+	EXPECT_EQ(entry.len, (size_t) 64);
+
+	free(ctx);
+}
+
+/**
+ * @brief Without FI_CONTEXT2, inject and selective completion are disabled, so
+ * even a NULL context (wr_id == 0) must still produce a completion (op_context
+ * NULL, flags from the opcode). This guards the efa_cq_poll_ibv_cq path.
+ */
+TEST_P(EfaCQPollNoContext2TxTest, null_context_still_writes_completion)
+{
+	enum ibv_wc_opcode opcode = GetParam();
+
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_start_poll).WillOnce(Return(0));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_qp_num)
+		.WillRepeatedly(Return(qp_num));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_opcode)
+		.WillRepeatedly(Return(opcode));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_wc_flags)
+		.WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_wc_read_byte_len)
+		.WillRepeatedly(Return(64));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_next_poll).WillOnce(Return(ENOENT));
+	EFA_EXPECT_CALL(mock_efa, efa_ibv_cq_end_poll).Times(1);
+
+	efa_test_set_ibv_cq_ex(ibv_cq, 0, 0);
+
+	int ret = efa_cq_poll_ibv_cq(10, ibv_cq);
+	EXPECT_EQ(ret, ENOENT);
+
+	struct fi_cq_data_entry entry = {};
+	ASSERT_EQ(efa_test_cq_read_staged_data_entry(resource.cq, &entry), 1);
+	EXPECT_EQ(entry.op_context, nullptr);
+	EXPECT_EQ(entry.flags, expected_flags(opcode));
+	EXPECT_EQ(entry.len, (size_t) 64);
+}
+
+INSTANTIATE_TEST_SUITE_P(TxOpcodes, EfaCQPollNoContext2TxTest,
+			 Values(IBV_WC_SEND, IBV_WC_RDMA_READ,
+				IBV_WC_RDMA_WRITE));

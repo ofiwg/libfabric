@@ -5,6 +5,7 @@
 #include "efa_gtest_common_helpers.h"
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
+#include <cstring>
 #include <gtest/gtest.h>
 #include <rdma/fi_rma.h>
 
@@ -225,4 +226,70 @@ TEST_F(EfaRmaTest, write_track_mr_keeps_direct_ope_alive)
 	EXPECT_EQ(ret, 0);
 
 	EXPECT_EQ(efa_test_ope_list_count(resource.ep), 1u);
+}
+
+/**
+ * @brief Without FI_CONTEXT2, efa_rma_post_read must NOT touch the caller's
+ * context buffer: it echoes the raw context pointer as wr_id and never calls
+ * efa_fill_context.
+ */
+TEST_F(EfaRmaTest, read_no_context2_echoes_context_and_leaves_buffer_untouched)
+{
+	struct fi_context2 ctx;
+	struct fi_context2 expected;
+	memset(&ctx, 0xAB, sizeof(ctx));
+	memset(&expected, 0xAB, sizeof(expected));
+
+	struct fi_info *hints = make_hints();
+	ASSERT_NE(hints, nullptr);
+	hints->mode &= ~FI_CONTEXT2;
+
+	ASSERT_NO_FATAL_FAILURE(construct(hints));
+	reg_buffer(4096);
+
+	auto wr_id_is_ctx = Truly([&ctx](uintptr_t wr_id) {
+		return wr_id == (uintptr_t) &ctx;
+	});
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_read, _, _, 1, kRemoteKey,
+			kRemoteAddr, wr_id_is_ctx, _, _, _, _)
+		.WillOnce(Return(0));
+
+	int ret = fi_read(resource.ep, local_buf, 4096, local_desc, peer_addr,
+			  kRemoteAddr, kRemoteKey, &ctx);
+	EXPECT_EQ(ret, 0);
+
+	EXPECT_EQ(memcmp(&ctx, &expected, sizeof(ctx)), 0);
+	EXPECT_EQ(efa_test_ope_list_count(resource.ep), 0u);
+}
+
+/**
+ * @brief Same guarantee for efa_rma_post_write without FI_CONTEXT2.
+ */
+TEST_F(EfaRmaTest, write_no_context2_echoes_context_and_leaves_buffer_untouched)
+{
+	struct fi_context2 ctx;
+	struct fi_context2 expected;
+	memset(&ctx, 0xAB, sizeof(ctx));
+	memset(&expected, 0xAB, sizeof(expected));
+
+	struct fi_info *hints = make_hints();
+	ASSERT_NE(hints, nullptr);
+	hints->mode &= ~FI_CONTEXT2;
+
+	ASSERT_NO_FATAL_FAILURE(construct(hints));
+	reg_buffer(4096);
+
+	auto wr_id_is_ctx = Truly([&ctx](uintptr_t wr_id) {
+		return wr_id == (uintptr_t) &ctx;
+	});
+	EFA_EXPECT_CALL(mock_efa, efa_qp_post_write, _, _, 1, _, _, kRemoteKey,
+			kRemoteAddr, wr_id_is_ctx, _, _, _, _, _)
+		.WillOnce(Return(0));
+
+	int ret = fi_write(resource.ep, local_buf, 4096, local_desc, peer_addr,
+			   kRemoteAddr, kRemoteKey, &ctx);
+	EXPECT_EQ(ret, 0);
+
+	EXPECT_EQ(memcmp(&ctx, &expected, sizeof(ctx)), 0);
+	EXPECT_EQ(efa_test_ope_list_count(resource.ep), 0u);
 }

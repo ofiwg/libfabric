@@ -225,6 +225,34 @@ static int efa_ep_close(fid_t fid)
 	return 0;
 }
 
+/**
+ * @brief Commit the endpoint's FI_CONTEXT2 mode onto a CQ it is binding to
+ *
+ * All endpoints sharing a CQ must agree on FI_CONTEXT2 mode: the completion
+ * path interprets wr_id differently for each mode, so a single CQ cannot serve
+ * both. The first endpoint bound commits the CQ's mode; a later endpoint of a
+ * different mode is rejected. The mode is never reset (a late completion could
+ * otherwise dereference a context the new mode doesn't own).
+ *
+ * @param ep		efa base endpoint
+ * @param ibv_cq	CQ being bound
+ * @return 0 on success, -FI_EOPNOTSUPP if the endpoint's mode conflicts with a
+ *         mode already committed on the CQ
+ */
+static int efa_ep_commit_cq_context_mode(struct efa_base_ep *ep,
+					 struct efa_ibv_cq *ibv_cq)
+{
+	if (ibv_cq->context_mode != UNASSIGNED &&
+	    ibv_cq->context_mode != ep->context_mode) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "CQ is already in use by an endpoint with a different "
+			 "FI_CONTEXT2 mode\n");
+		return -FI_EINVAL;
+	}
+	ibv_cq->context_mode = ep->context_mode;
+	return 0;
+}
+
 static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct efa_base_ep *ep;
@@ -250,6 +278,24 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		efa_domain = container_of(cq->util_cq.domain, struct efa_domain, util_domain);
 		if (ep->domain != efa_domain)
 			return -FI_EINVAL;
+
+		/*
+		 * Selective completion requires the provider to suppress
+		 * completions per-operation, which efa-direct implements via the
+		 * caller-supplied context buffer. Without FI_CONTEXT2 there is no
+		 * such buffer, so selective completion cannot be honored.
+		 */
+		if ((flags & FI_SELECTIVE_COMPLETION) &&
+		    ep->context_mode != USE_CONTEXT2) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "FI_SELECTIVE_COMPLETION requires FI_CONTEXT2 "
+				 "for efa-direct endpoints\n");
+			return -FI_EOPNOTSUPP;
+		}
+
+		ret = efa_ep_commit_cq_context_mode(ep, &cq->ibv_cq);
+		if (ret)
+			return ret;
 
 		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
 		if (ret)
@@ -338,6 +384,16 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 	int err;
 
 	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+
+	/* No context2 means no context buffer, which the mr tracking
+	 * builds on top of
+	 */
+	if (efa_env.track_mr && base_ep->context_mode != USE_CONTEXT2) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "FI_EFA_TRACK_MR is not supported for efa-direct "
+			 "endpoints without FI_CONTEXT2\n");
+		return -FI_EOPNOTSUPP;
+	}
 
 	err = efa_base_ep_create_and_enable_qp(base_ep);
 	if (err)
