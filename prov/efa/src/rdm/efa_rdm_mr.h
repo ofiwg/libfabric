@@ -61,6 +61,12 @@ int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov
 			  struct fid_mr **mr, void *context);
 
 /**
+ * @brief Derive the flags to use for the shm MR registration from the flags
+ * stored on an efa_rdm_mr. Exposed for unit testing.
+ */
+uint64_t efa_rdm_mr_shm_flags(uint64_t mr_flags, enum fi_hmem_iface iface);
+
+/**
  * @brief Advance the MR generation counter, skipping EFA_RDM_MR_INVALID_GEN_VALUE.
  *
  * EFA_RDM_MR_INVALID_GEN_VALUE is reserved as a sentinel in ope->desc_gen[]

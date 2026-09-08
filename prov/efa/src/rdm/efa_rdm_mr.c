@@ -774,6 +774,41 @@ int efa_rdm_mr_cache_regv(struct fid_domain *domain_fid, const struct iovec *iov
 }
 
 
+/**
+ * @brief Derive the flags to use for the shm MR registration from the flags
+ * stored on the efa_rdm_mr.
+ *
+ * The shm provider does not understand EFA-device-specific hints, so any such
+ * hint (e.g. FI_EFA_MR_RELAXED_ORDERING) is stripped here. Device memory is
+ * marked with FI_HMEM_DEVICE_ONLY so shm can handle it correctly.
+ *
+ * This is factored out (rather than inlined in efa_rdm_mr_regattr) so the flag
+ * derivation can be unit tested directly. In particular it guards against a
+ * regression where stripping an EFA-specific bit would also clear an unrelated
+ * internal bit such as OFI_HMEM_DATA_DEV_REG_HANDLE (the gdrcopy handle flag)
+ * if the two ever shared a bit position.
+ *
+ * @param[in] mr_flags	the flags stored on efa_rdm_mr->flags
+ * @param[in] iface	the memory interface of the region
+ * @return the flags to pass to fi_mr_regattr for the shm MR
+ */
+uint64_t efa_rdm_mr_shm_flags(uint64_t mr_flags, enum fi_hmem_iface iface)
+{
+	uint64_t shm_flags = mr_flags;
+
+	if (iface != FI_HMEM_SYSTEM)
+		shm_flags |= FI_HMEM_DEVICE_ONLY;
+
+	/*
+	 * FI_EFA_MR_RELAXED_ORDERING is an EFA-device-specific hint; the shm
+	 * provider does not understand it, so strip it from the shm MR
+	 * registration.
+	 */
+	shm_flags &= ~FI_EFA_MR_RELAXED_ORDERING;
+
+	return shm_flags;
+}
+
 /* RDM MR registration - handles SHM integration and advanced features */
 static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			      uint64_t flags, struct fid_mr **mr_fid)
@@ -818,18 +853,9 @@ static int efa_rdm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	/* RDM-specific: SHM MR registration */
 	if (rdm_domain->shm_domain) {
-		uint64_t shm_flags = efa_rdm_mr->flags;
+		uint64_t shm_flags = efa_rdm_mr_shm_flags(efa_rdm_mr->flags,
+							  mr_attr.iface);
 		struct fi_mr_attr shm_attr = mr_attr;
-
-		if (mr_attr.iface != FI_HMEM_SYSTEM)
-			shm_flags |= FI_HMEM_DEVICE_ONLY;
-
-		/*
-		 * FI_EFA_MR_RELAXED_ORDERING is an EFA-device-specific hint; the
-		 * shm provider does not understand it, so strip it from the shm
-		 * MR registration.
-		 */
-		shm_flags &= ~FI_EFA_MR_RELAXED_ORDERING;
 
 		shm_attr.hmem_data = efa_rdm_mr->hmem_data;
 		ret = fi_mr_regattr(rdm_domain->shm_domain,
