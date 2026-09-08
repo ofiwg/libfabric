@@ -45,21 +45,30 @@ struct rocr_mm_entry {
 	struct iovec iov;
 	struct ofi_rbnode *node;
 	struct dlist_entry entry;
+	bool registering;
+	bool invalidated;
 };
 
 struct rocr_mm {
 	struct ofi_mem_monitor mm;
 	struct ofi_rbmap *dev_region_tree;
+
+	/* Only tree access nests under mm_lock; no HSA calls or allocation. */
+	pthread_mutex_t lock;
+	/* Serializes subscriptions and teardown outside mm_lock. */
+	pthread_mutex_t registration_lock;
 };
 
 static int rocr_mm_start(struct ofi_mem_monitor *monitor);
 static void rocr_mm_stop(struct ofi_mem_monitor *monitor);
+static void rocr_mm_init(struct ofi_mem_monitor *monitor);
+static void rocr_mm_cleanup(struct ofi_mem_monitor *monitor);
 static int rocr_mm_subscribe(struct ofi_mem_monitor *monitor, const void *addr,
 			     size_t len, union ofi_mr_hmem_info *hmem_info);
-static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
-				const void *addr, size_t len,
-				union ofi_mr_hmem_info *hmem_info,
-				struct dlist_entry *free_list);
+static bool rocr_mm_subscription_live(struct ofi_mem_monitor *monitor,
+				      const void *addr, size_t len);
+static void rocr_mm_detach_region(const void *addr, size_t len,
+				  struct dlist_entry *detached);
 static bool rocr_mm_valid(struct ofi_mem_monitor *monitor,
 			   const struct ofi_mr_info *info,
 			   struct ofi_mr_entry *entry);
@@ -72,12 +81,14 @@ static bool rocr_mm_valid(struct ofi_mem_monitor *monitor,
 static struct rocr_mm rocr_mm = {
 	.mm = {
 		.iface = FI_HMEM_ROCR,
-		.init = ofi_monitor_init,
-		.cleanup = ofi_monitor_cleanup,
+		.init = rocr_mm_init,
+		.cleanup = rocr_mm_cleanup,
 		.start = rocr_mm_start,
 		.stop = rocr_mm_stop,
 		.subscribe = rocr_mm_subscribe,
 		.unsubscribe = ofi_monitor_unsubscribe_no_op,
+		.subscribe_unlocked = true,
+		.subscription_live = rocr_mm_subscription_live,
 		.valid = rocr_mm_valid,
 		.name = "rocr",
 	},
@@ -117,6 +128,8 @@ static struct rocr_mm_entry *rocr_mm_entry_get_root(void)
  * region tree which contains the address within an entry's monitored range.
  * Thus, we only need an address instead of an address and length when
  * searching.
+ *
+ * Callers must hold rocr_mm.lock.
  */
 static struct rocr_mm_entry *rocr_mm_entry_find(const void *addr)
 {
@@ -134,196 +147,220 @@ static struct rocr_mm_entry *rocr_mm_entry_find(const void *addr)
 
 /* Pointer to ROCR memory monitor entry can never be returned as user data. This
  * could lead to use-after-free. Instead, address and length is always returned.
- * Unsubscribe will attempt to lookup the corresponding ROCR memory monitor
- * entry and will free the entry if found.
+ *
+ * Two stages so rocr_mm.lock and mm_lock are never held together: detach
+ * entries under rocr_mm.lock, then notify MR caches under mm_lock. A racing
+ * unlocked subscribe either fails its subscription_live() recheck (stage 1
+ * already detached the region) or has its published entry evicted by stage 2.
  */
 static void rocr_mm_dealloc_cb(void *addr, void *user_data)
 {
 	size_t len = (size_t) user_data;
-	DEFINE_LIST(free_list);
+	DEFINE_LIST(detached);
 	struct rocr_mm_entry *entry;
+
+	pthread_mutex_lock(&rocr_mm.lock);
+	if (rocr_mm.dev_region_tree)
+		rocr_mm_detach_region(addr, len, &detached);
+	pthread_mutex_unlock(&rocr_mm.lock);
+
+	if (dlist_empty(&detached))
+		return;
 
 	pthread_rwlock_rdlock(&mm_list_rwlock);
 	pthread_mutex_lock(&mm_lock);
-	rocr_mm_unsubscribe(rocr_monitor, addr, len, NULL, &free_list);
+	dlist_foreach_container(&detached, struct rocr_mm_entry, entry, entry)
+		ofi_monitor_notify(rocr_monitor, entry->iov.iov_base,
+				   entry->iov.iov_len);
 	pthread_mutex_unlock(&mm_lock);
 	pthread_rwlock_unlock(&mm_list_rwlock);
 
-	while (!dlist_empty(&free_list)) {
-		dlist_pop_front(&free_list, struct rocr_mm_entry, entry, entry);
+	/* free() can reenter the memhooks munmap intercept, which takes
+	 * mm_lock, so free only after both locks are dropped.
+	 */
+	while (!dlist_empty(&detached)) {
+		dlist_pop_front(&detached, struct rocr_mm_entry, entry, entry);
 		free(entry);
 	}
 }
 
-static void rocr_mm_entry_delete(struct rocr_mm_entry *entry)
+static void rocr_mm_entry_deregister(struct rocr_mm_entry *entry)
 {
 	hsa_status_t hsa_ret __attribute__((unused));
 
-	FI_DBG(&core_prov, FI_LOG_MR,
-	       "ROCR buffer address %p length %lu monitor entry freed\n",
-	       entry->iov.iov_base, entry->iov.iov_len);
-
-	/* Two return codes are expected. HSA_STATUS_SUCCESS is returned if the
-	 * deallocation callback was not triggered and the entry is freed.
-	 * HSA_STATUS_ERROR_INVALID_ARGUMENT is returned if the deallocation
-	 * callback was triggered and the entry is freed. Any other return code
-	 * puts the monitor in an unknown state and is fatal.
-	 */
+	/* A callback already taken by ROCr is no longer registered. */
 	hsa_ret = ofi_hsa_amd_dereg_dealloc_cb(entry->iov.iov_base,
 					       rocr_mm_dealloc_cb);
 	assert(hsa_ret == HSA_STATUS_SUCCESS ||
 	       hsa_ret == HSA_STATUS_ERROR_INVALID_ARGUMENT);
-
-	ofi_rbmap_delete(rocr_mm.dev_region_tree, entry->node);
 }
 
-static void rocr_mm_entry_free(struct rocr_mm_entry *entry)
-{
-	rocr_mm_entry_delete(entry);
-	free(entry);
-}
-
-/* Each ROCR memory monitor entry is sized to the entire user-allocated ROCR
- * memory region. A single deallocation callback is registered for the memory
- * region. This callback is called when the user frees the ROCR memory region.
+/* One callback per full ROCR allocation. Caller holds registration_lock,
+ * never rocr_mm.lock across HSA calls or allocation.
  */
-static int rocr_mm_entry_alloc(const void *addr, struct rocr_mm_entry **entry)
+static int rocr_mm_entry_alloc(const void *addr, struct iovec *iov)
 {
 	hsa_amd_pointer_info_t hsa_info = {
 		.size = sizeof(hsa_info),
 	};
+	struct rocr_mm_entry *entry;
+	struct ofi_rbnode *node;
 	hsa_status_t hsa_ret;
 	int ret;
 
-	*entry = malloc(sizeof(**entry));
-	if (!*entry) {
-		ret = -FI_ENOMEM;
-		goto err;
-	}
-
-	/* Determine full ROCR memory region size. */
 	hsa_ret = ofi_hsa_amd_pointer_info((void *) addr, &hsa_info, NULL, NULL,
 					   NULL);
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to perform hsa_amd_pointer_info: %s\n",
 			ofi_hsa_status_to_string(hsa_ret));
-		ret = -FI_EIO;
-		goto err_free_entry;
+		return -FI_EIO;
 	}
 
 	if (hsa_info.type != HSA_EXT_POINTER_TYPE_HSA) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Cannot monitor non-HSA allocated memory\n");
-		ret = -FI_EINVAL;
-		goto err_free_entry;
+		return -FI_EINVAL;
 	}
 
-	(*entry)->iov.iov_base = hsa_info.agentBaseAddress;
-	(*entry)->iov.iov_len = hsa_info.sizeInBytes;
+	entry = calloc(1, sizeof(*entry));
+	if (!entry)
+		return -FI_ENOMEM;
 
-	ret = ofi_rbmap_insert(rocr_mm.dev_region_tree,
-			       (void *) &(*entry)->iov,
-			       (void *) *entry, &(*entry)->node);
+	/* Take a recycled node under the tree lock, allocate outside it. */
+	pthread_mutex_lock(&rocr_mm.lock);
+	node = rocr_mm.dev_region_tree->free_list ?
+		ofi_rbnode_alloc(rocr_mm.dev_region_tree) : NULL;
+	pthread_mutex_unlock(&rocr_mm.lock);
+	if (!node)
+		node = malloc(sizeof(*node));
+	if (!node) {
+		free(entry);
+		return -FI_ENOMEM;
+	}
+
+	entry->iov.iov_base = hsa_info.agentBaseAddress;
+	entry->iov.iov_len = hsa_info.sizeInBytes;
+	entry->registering = true;
+	*iov = entry->iov;
+
+	/* Publish a pending entry before HSA can invoke its callback. */
+	pthread_mutex_lock(&rocr_mm.lock);
+	ret = ofi_rbmap_insert_at(rocr_mm.dev_region_tree, &entry->iov,
+				 entry, &entry->node, node);
+	pthread_mutex_unlock(&rocr_mm.lock);
 	if (ret) {
-		FI_WARN(&core_prov, FI_LOG_MR,
-			"Failed to insert into RB tree: %s\n", strerror(ret));
-		goto err_free_entry;
+		free(node);
+		free(entry);
+		return ret;
 	}
 
-	/* Register a deallocation callback for this ROCR memory region. */
-	hsa_ret = ofi_hsa_amd_reg_dealloc_cb(hsa_info.agentBaseAddress,
+	hsa_ret = ofi_hsa_amd_reg_dealloc_cb(iov->iov_base,
 					     rocr_mm_dealloc_cb,
-					     (void *) hsa_info.sizeInBytes);
-	if (hsa_ret != HSA_STATUS_SUCCESS) {
+					     (void *) iov->iov_len);
+
+	pthread_mutex_lock(&rocr_mm.lock);
+	entry->registering = false;
+	if (entry->invalidated) {
+		ret = -FI_EAGAIN;
+	} else if (hsa_ret != HSA_STATUS_SUCCESS) {
+		ofi_rbmap_delete(rocr_mm.dev_region_tree, entry->node);
+		ret = -FI_EIO;
+	}
+	pthread_mutex_unlock(&rocr_mm.lock);
+
+	if (ret)
+		free(entry);
+	if (hsa_ret != HSA_STATUS_SUCCESS)
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to perform hsa_amd_register_deallocation_callback: %s\n",
 			ofi_hsa_status_to_string(hsa_ret));
-
-		ret = -FI_EIO;
-		goto err_rbmap_delete_entry;
-	}
-
-	FI_DBG(&core_prov, FI_LOG_MR,
-	       "ROCR buffer address %p length %lu monitor entry allocated\n",
-	       hsa_info.agentBaseAddress, hsa_info.sizeInBytes);
-
-	return FI_SUCCESS;
-
-err_rbmap_delete_entry:
-	ofi_rbmap_delete(rocr_mm.dev_region_tree, (*entry)->node);
-err_free_entry:
-	free(*entry);
-err:
-	*entry = NULL;
 	return ret;
+}
+
+static void rocr_mm_init(struct ofi_mem_monitor *monitor)
+{
+	pthread_mutex_init(&rocr_mm.lock, NULL);
+	pthread_mutex_init(&rocr_mm.registration_lock, NULL);
+	ofi_monitor_init(monitor);
+}
+
+static void rocr_mm_cleanup(struct ofi_mem_monitor *monitor)
+{
+	ofi_monitor_cleanup(monitor);
+	pthread_mutex_destroy(&rocr_mm.registration_lock);
+	pthread_mutex_destroy(&rocr_mm.lock);
 }
 
 static int rocr_mm_start(struct ofi_mem_monitor *monitor)
 {
-	rocr_mm.dev_region_tree = ofi_rbmap_create(rocr_rbmap_compare);
-	if (!rocr_mm.dev_region_tree)
-		return -FI_ENOMEM;
-	return FI_SUCCESS;
+	struct ofi_rbmap *tree;
+
+	pthread_mutex_lock(&rocr_mm.registration_lock);
+	tree = ofi_rbmap_create(rocr_rbmap_compare);
+	pthread_mutex_lock(&rocr_mm.lock);
+	rocr_mm.dev_region_tree = tree;
+	pthread_mutex_unlock(&rocr_mm.lock);
+	pthread_mutex_unlock(&rocr_mm.registration_lock);
+
+	return tree ? FI_SUCCESS : -FI_ENOMEM;
 }
 
 static void rocr_mm_stop(struct ofi_mem_monitor *monitor)
 {
 	struct rocr_mm_entry *entry;
+	struct ofi_rbmap *tree;
+	DEFINE_LIST(detached);
 
-	while ((entry = rocr_mm_entry_get_root()))
-		rocr_mm_entry_free(entry);
+	pthread_mutex_lock(&rocr_mm.registration_lock);
+	pthread_mutex_lock(&rocr_mm.lock);
+	while ((entry = rocr_mm_entry_get_root())) {
+		ofi_rbmap_delete(rocr_mm.dev_region_tree, entry->node);
+		dlist_insert_tail(&entry->entry, &detached);
+	}
+	tree = rocr_mm.dev_region_tree;
+	rocr_mm.dev_region_tree = NULL;
+	pthread_mutex_unlock(&rocr_mm.lock);
 
-	assert(ofi_rbmap_empty(rocr_mm.dev_region_tree));
-
-	ofi_rbmap_destroy(rocr_mm.dev_region_tree);
+	while (!dlist_empty(&detached)) {
+		dlist_pop_front(&detached, struct rocr_mm_entry, entry, entry);
+		rocr_mm_entry_deregister(entry);
+		free(entry);
+	}
+	ofi_rbmap_destroy(tree);
+	pthread_mutex_unlock(&rocr_mm.registration_lock);
 }
 
-static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
-				const void *addr, size_t len,
-				union ofi_mr_hmem_info *hmem_info,
-				struct dlist_entry *free_list)
+/* ROCr has already consumed these callbacks. Detach under rocr_mm.lock;
+ * the caller notifies caches and frees entries after dropping it.
+ */
+static void rocr_mm_detach_region(const void *addr, size_t len,
+				  struct dlist_entry *detached)
 {
 	struct rocr_mm_entry *entry;
 	size_t cur_len = len;
 	void *cur_addr = (void *) addr;
 	void *next_addr;
 
-	/* The user unsubscribe region may span multiple ROCR memory regions.
-	 * Each ROCR memory region needs to be freed and MR caches notified.
-	 */
+	/* The freed region may span multiple ROCR memory regions. */
 	while (cur_len) {
 		entry = rocr_mm_entry_find(cur_addr);
 		if (!entry)
 			break;
 
-		ofi_monitor_notify(rocr_monitor, entry->iov.iov_base,
-				   entry->iov.iov_len);
-
-		FI_DBG(&core_prov, FI_LOG_MR,
-		       "ROCR buffer address %p length %lu unsubscribed\n",
-		       entry->iov.iov_base, entry->iov.iov_len);
-
 		next_addr = (void *) ((uintptr_t) ofi_iov_end(&entry->iov) + 1);
 
-		/* Since unsubscribed is called with mm_lock held, calling free
-		 * may result in deadlocks if memhooks is used. To prevent this,
-		 * entries are placed on a list to be freed later.
-		 *
-		 * Entry still needs to be deleted.
-		 */
-		rocr_mm_entry_delete(entry);
-		dlist_insert_tail(&entry->entry, free_list);
+		ofi_rbmap_delete(rocr_mm.dev_region_tree, entry->node);
+		/* The registering thread still owns a pending entry. */
+		if (entry->registering)
+			entry->invalidated = true;
+		else
+			dlist_insert_tail(&entry->entry, detached);
 
 		cur_len -= MIN((uintptr_t) next_addr - (uintptr_t) cur_addr,
 			       cur_len);
 		cur_addr = next_addr;
 	}
-
-	if (cur_len)
-		FI_WARN(&core_prov, FI_LOG_MR,
-			"Failed to completely unsubscribe from address %p length %lu\n",
-			addr, len);
 }
 
 /* Subscribe is designed to monitor entire ROCR memory regions even if the user
@@ -338,36 +375,85 @@ static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
  *
  * Note: The ROCR memory monitor does not impose a limit on the number of ROCR
  * memory regions which can be monitored.
+ *
+ * Runs without mm_lock (subscribe_unlocked): hsa_amd_pointer_info() takes
+ * hsakmt's FMM lock, and an FMM-lock holder can reenter libfabric through the
+ * munmap intercept and block on mm_lock, so subscribing under mm_lock
+ * deadlocks. Never call ROCr/HSA while holding mm_lock.
  */
 static int rocr_mm_subscribe(struct ofi_mem_monitor *monitor, const void *addr,
 			     size_t len, union ofi_mr_hmem_info *hmem_info)
 {
 	struct rocr_mm_entry *entry;
+	struct iovec iov;
 	int ret = FI_SUCCESS;
 	size_t cur_len = len;
 	void *cur_addr = (void *) addr;
 	void *next_addr;
+	bool found;
 
-	/* The user subscribe region may span multiple ROCR memory regions. For
-	 * this case, each ROCR memory region needs to be monitored. This
-	 * requires allocating a ROCR memory monitor entry for each ROCR memory
-	 * region.
-	 */
+	/* Serialize duplicate registrations without blocking subscription_live. */
+	pthread_mutex_lock(&rocr_mm.registration_lock);
+	pthread_mutex_lock(&rocr_mm.lock);
+	if (!rocr_mm.dev_region_tree) {
+		pthread_mutex_unlock(&rocr_mm.lock);
+		ret = -FI_ENOSYS;
+		goto out;
+	}
+	pthread_mutex_unlock(&rocr_mm.lock);
+
 	while (cur_len) {
+		pthread_mutex_lock(&rocr_mm.lock);
 		entry = rocr_mm_entry_find(cur_addr);
-		if (entry) {
-			FI_DBG(&core_prov, FI_LOG_MR,
-			"Reusing monitored ROCR buffer address %p length %lu\n",
-			entry->iov.iov_base, entry->iov.iov_len);
-		} else {
-			/* On error, previous allocated entries are not cleaned
-			 * up. This is harmless since these entries will either
-			 * be cleaned up when the user frees the ROCR memory
-			 * region or the memory monitor is stopped.
-			 */
-			ret = rocr_mm_entry_alloc(cur_addr, &entry);
+		found = entry != NULL;
+		if (found)
+			iov = entry->iov;
+		pthread_mutex_unlock(&rocr_mm.lock);
+		if (!found) {
+			ret = rocr_mm_entry_alloc(cur_addr, &iov);
 			if (ret != FI_SUCCESS)
 				break;
+		}
+
+		next_addr = (void *) ((uintptr_t) ofi_iov_end(&iov) + 1);
+		cur_len -= MIN((uintptr_t) next_addr - (uintptr_t) cur_addr,
+			       cur_len);
+		cur_addr = next_addr;
+	}
+out:
+	pthread_mutex_unlock(&rocr_mm.registration_lock);
+
+	FI_LOG(&core_prov, ret ? FI_LOG_WARN : FI_LOG_DEBUG, FI_LOG_MR,
+	       "ROCR buffer address %p length %lu subscribe status: %s\n", addr,
+	       len, fi_strerror(-ret));
+
+	return ret;
+}
+
+/* Called under mm_lock; only tree access runs under rocr_mm.lock.
+ * Pending callback registrations cannot authorize cache publication.
+ */
+static bool rocr_mm_subscription_live(struct ofi_mem_monitor *monitor,
+				      const void *addr, size_t len)
+{
+	struct rocr_mm_entry *entry;
+	size_t cur_len = len;
+	void *cur_addr = (void *) addr;
+	void *next_addr;
+	bool live = true;
+
+	pthread_mutex_lock(&rocr_mm.lock);
+
+	if (!rocr_mm.dev_region_tree) {
+		pthread_mutex_unlock(&rocr_mm.lock);
+		return false;
+	}
+
+	while (cur_len) {
+		entry = rocr_mm_entry_find(cur_addr);
+		if (!entry || entry->registering) {
+			live = false;
+			break;
 		}
 
 		next_addr = (void *) ((uintptr_t) ofi_iov_end(&entry->iov) + 1);
@@ -376,11 +462,14 @@ static int rocr_mm_subscribe(struct ofi_mem_monitor *monitor, const void *addr,
 		cur_addr = next_addr;
 	}
 
-	FI_LOG(&core_prov, ret ? FI_LOG_WARN : FI_LOG_DEBUG, FI_LOG_MR,
-	       "ROCR buffer address %p length %lu subscribe status: %s\n", addr,
-	       len, fi_strerror(-ret));
+	pthread_mutex_unlock(&rocr_mm.lock);
 
-	return ret;
+	if (!live)
+		FI_DBG(&core_prov, FI_LOG_MR,
+		       "ROCR buffer address %p length %lu unmonitored before publication, leaving MR uncached\n",
+		       addr, len);
+
+	return live;
 }
 
 static bool rocr_mm_valid(struct ofi_mem_monitor *monitor,

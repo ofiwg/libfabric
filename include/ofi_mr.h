@@ -185,6 +185,18 @@ struct ofi_mem_monitor {
 			    const void *addr, size_t len,
 			    union ofi_mr_hmem_info *hmem_info);
 
+	/* subscribe() calls into a device runtime and must not run under
+	 * mm_lock. Not for monitors with per-MR state in hmem_info (kdreg2).
+	 * Setting this requires supplying subscription_live.
+	 */
+	bool subscribe_unlocked;
+
+	/* Recheck under mm_lock that an unlocked subscribe is still live
+	 * before publishing the cache entry. Required with subscribe_unlocked.
+	 */
+	bool (*subscription_live)(struct ofi_mem_monitor *notifier,
+				  const void *addr, size_t len);
+
 	/* Valid is a memory monitor operation used to query a memory monitor to
 	 * see if the memory monitor's view of the buffer is still valid. If the
 	 * memory monitor's view of the buffer is no longer valid (e.g. the
