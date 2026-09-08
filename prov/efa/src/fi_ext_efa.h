@@ -154,7 +154,7 @@ struct fi_efa_feature_ops {
  * endpoint appear at the target after it. When FI_EFA_MR_RELAXED_ORDERING is
  * set, that ordering guarantee is lost.
  */
-#define FI_EFA_MR_RELAXED_ORDERING (1ULL << 60)
+#define FI_EFA_MR_RELAXED_ORDERING (1ULL << 61)
 
 
 enum {
