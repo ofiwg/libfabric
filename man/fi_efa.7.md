@@ -113,6 +113,34 @@ The following features are supported:
   make progress and free CQ space before retrying the operation, regardless of whether
   FI_SELECTIVE_COMPLETION is set. Failure to do so will result in CQ overrun.
 
+# COMPLETION SEMANTICS
+
+Completion ordering and data visibility are only well-defined for transfers
+that target the same memory domain. When heterogeneous memory (e.g. GPU or
+Neuron/Trainium HBM) is in use, the memory domain a transfer targets may differ
+from the memory domain the completion is written to (completions are written to
+system memory), so observing a completion does not by itself guarantee the
+payload is visible in device memory. See [`fi_cq`(3)](fi_cq.3.html) for the
+general description of completion semantics with heterogeneous memory.
+
+For Neuron (Trainium) HBM receive buffers, the EFA provider closes this gap on
+the provider side. The provider copies received payloads into HBM using an EFA
+(RDMA) local read rather than a host-driven (CPU) copy, keeping the data
+movement on the same NIC/sidelink path as subsequent NIC-driven operations.
+This restores ordering between the receive and later NIC-driven accesses to the
+same HBM region: after an application observes the receive completion from
+libfabric, a NIC-driven read or write it issues to that HBM buffer (for
+example, an RDMA write of a semaphore into HBM to signal a consumer) is
+guaranteed to be ordered after the received data has landed. Note that this
+guarantee applies to NIC-driven (EFA) accesses issued after the completion; it
+does not cover host-driven (CPU) accesses to HBM, which take a different path
+and are not ordered against the received data by this mechanism.
+
+This ordering also depends on the memory region being registered with strict
+ordering. Registering the region with *FI_EFA_MR_RELAXED_ORDERING* (see
+PROVIDER SPECIFIC MR FLAGS) removes this guarantee, so an application that
+relies on the above ordering must not set that flag on the target region.
+
 # MR ABORTING
 
 On the `efa` fabric of an *FI_EP_RDM* endpoint, an application can abort an
