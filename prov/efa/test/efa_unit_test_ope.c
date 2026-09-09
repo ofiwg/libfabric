@@ -902,11 +902,16 @@ void test_efa_rdm_ope_txe_pool_capped(void **state)
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope **txe;
-	size_t i, allocated, pool_size = efa_env.rdm_txe_pool_size;
+	size_t saved = efa_env.rdm_txe_pool_size;
+	size_t i, allocated, pool_size;
 
+	/* the default cap is too large to exhaust here */
+	efa_env.rdm_txe_pool_size = 1024;
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	efa_env.rdm_txe_pool_size = saved;
 	ep = container_of(resource->ep, struct efa_rdm_ep,
 			  base_ep.util_ep.ep_fid);
+	pool_size = ep->base_ep.txe_pool->attr.max_cnt;
 
 	txe = calloc(pool_size + 1, sizeof(*txe));
 	assert_non_null(txe);
