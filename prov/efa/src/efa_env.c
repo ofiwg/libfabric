@@ -18,7 +18,7 @@ struct efa_env efa_env = {
 	.recvwin_size = EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE,
 	.ooo_pool_chunk_size = 64,
 	.unexp_pool_chunk_size = 1024,
-	.readcopy_pool_size = 256,
+	.readcopy_pool_size = 8192,
 	.atomrsp_pool_size = 1024,
 	.cq_size = 8192,
 	.max_memcpy_size = 4096,
@@ -189,7 +189,8 @@ void efa_env_define()
 	fi_param_define(&efa_prov, "recvwin_size", FI_PARAM_INT,
 			"Defines the size of sliding receive window. (Default: 16384)");
 	fi_param_define(&efa_prov, "readcopy_pool_size", FI_PARAM_INT,
-			"Defines the size of readcopy packet pool size. (Default: 256)");
+			"Defines the size of readcopy packet pool size. (Default: %d)",
+			efa_env.readcopy_pool_size);
 	fi_param_define(&efa_prov, "cq_size", FI_PARAM_INT,
 			"Define the size of completion queue. (Default: 8192)");
 	fi_param_define(&efa_prov, "mr_cache_enable", FI_PARAM_BOOL,

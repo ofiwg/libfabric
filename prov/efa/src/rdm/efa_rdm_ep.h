@@ -35,6 +35,11 @@ struct efa_rdm_ep_queued_copy {
 #define EFA_RDM_MAX_QUEUED_COPY (8)
 
 /*
+ * Entries the readcopy packet pool starts at and grows by.
+ */
+#define EFA_RDM_READCOPY_POOL_CHUNK_SIZE (256)
+
+/*
  * The default memory alignment
  */
 #define EFA_RDM_EP_DEFAULT_MEMORY_ALIGNMENT (8)

@@ -214,8 +214,9 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		ret = efa_rdm_ep_create_pke_pool(
 			ep,
 			true, /* need memory registration */
-			efa_env.readcopy_pool_size,
-			efa_env.readcopy_pool_size, /* max_cnt==chunk_cnt means pool is not allowed to grow */
+			MIN(EFA_RDM_READCOPY_POOL_CHUNK_SIZE,
+			    efa_env.readcopy_pool_size),
+			efa_env.readcopy_pool_size, /* the pool grows a chunk at a time up to this cap */
 			EFA_RDM_EP_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
 			0,
 			&ep->rx_readcopy_pkt_pool);
