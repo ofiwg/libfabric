@@ -251,7 +251,11 @@ struct efa_rdm_ope {
 	((size_t) 1 << EFA_RDM_TXE_ID_INDEX_BITS)
 
 /* Default cap on concurrent tx operations, see FI_EFA_RDM_TXE_POOL_SIZE. */
-#define EFA_RDM_TXE_POOL_SIZE_DEFAULT	(8192)
+/* TODO: lower this in the future. */
+#define EFA_RDM_TXE_POOL_SIZE_DEFAULT	EFA_RDM_TXE_POOL_MAX_CNT
+
+/* Entries the txe pool starts at and grows by. */
+#define EFA_RDM_TXE_POOL_CHUNK_SIZE	(8192)
 
 static_assert((EFA_RDM_OPE_ID_INVALID & EFA_RDM_OPE_ID_TAG) != 0,
 	      "the sentinel must be txe tagged so no rxe id can reach it");
