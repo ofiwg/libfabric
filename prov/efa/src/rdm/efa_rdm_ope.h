@@ -202,7 +202,7 @@ struct efa_rdm_ope {
 	struct efa_rdm_pke *local_read_pkt_entry;
 
 	/**
-	 * @brief The wire protocol (REQ packet type) selected for this ope.
+	 * @brief The REQ packet type selected for this ope.
 	 *
 	 * An EFA_RDM_*_PKT type id (e.g. EFA_RDM_MEDIUM_MSGRTM_PKT). Recorded
 	 * where the two-sided protocol is decided (efa_rdm_msg_select_rtm) or
@@ -210,7 +210,7 @@ struct efa_rdm_ope {
 	 * changes; the queued/RNR re-post path replays the same type, so it
 	 * stays valid across re-posts. 0 if none selected yet.
 	 */
-	uint32_t protocol;
+	uint32_t req_pkt_type;
 
 	/**
 	 * @brief Provider errno to attach when emitting an EFA_RDM_PEER_ERROR_PKT
