@@ -12,6 +12,7 @@ struct efa_rdm_cq {
 	struct efa_cq efa_cq;
 	struct fid_cq *shm_cq;
 	struct dlist_entry ibv_cq_poll_list;
+	struct ofi_genlock ibv_cq_poll_list_lock;
 	/* list of EPs that have queued work needing progress */
 	struct dlist_entry progress_ep_list;
 	struct ofi_genlock progress_ep_list_lock;

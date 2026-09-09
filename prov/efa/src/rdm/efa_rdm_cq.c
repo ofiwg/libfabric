@@ -124,6 +124,7 @@ int efa_rdm_cq_close(struct fid *fid)
 	if (ret)
 		return ret;
 
+	ofi_genlock_destroy(&cq->ibv_cq_poll_list_lock);
 	ofi_genlock_destroy(&cq->progress_ep_list_lock);
 	free(cq);
 	return retv;
@@ -1019,7 +1020,7 @@ static int efa_rdm_cq_poll_events(struct efa_rdm_cq *cq, int timeout)
 		return ret;
 
 	/* Drain events and re-arm notifications */
-	ofi_genlock_lock(&cq->efa_cq.util_cq.ep_list_lock);
+	ofi_genlock_lock(&cq->ibv_cq_poll_list_lock);
 	dlist_foreach(&cq->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		if (!poll_list_entry->cq || !poll_list_entry->cq->channel)
@@ -1037,7 +1038,7 @@ static int efa_rdm_cq_poll_events(struct efa_rdm_cq *cq, int timeout)
 			break;
 		}
 	}
-	ofi_genlock_unlock(&cq->efa_cq.util_cq.ep_list_lock);
+	ofi_genlock_unlock(&cq->ibv_cq_poll_list_lock);
 
 	return ret;
 }
@@ -1167,19 +1168,21 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		}
 		efa_rdm_cq->need_to_scan_ep_list = false;
 	}
+	ofi_genlock_unlock(&cq->ep_list_lock);
 
+	/* Taking cq->ep_list_lock would deadlock in two ways:
+	 * 1. efa_cq_lock_ep_list() always locks rx before tx.
+	 * 2. another thread reading the other cq takes the two locks in the opposite order.
+	 */
+	ofi_genlock_lock(&efa_rdm_cq->ibv_cq_poll_list_lock);
 	dlist_foreach(&efa_rdm_cq->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		efa_cq = container_of(poll_list_entry->cq, struct efa_cq, ibv_cq);
-		if (&efa_cq->util_cq.ep_list_lock != &cq->ep_list_lock) {
-			ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
-			(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
-			ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
-		} else {
-			(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
-		}
+		ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
+		ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 	}
-	ofi_genlock_unlock(&cq->ep_list_lock);
+	ofi_genlock_unlock(&efa_rdm_cq->ibv_cq_poll_list_lock);
 }
 
 /**
@@ -1316,11 +1319,16 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto free;
 
+	ret = ofi_genlock_init(&cq->ibv_cq_poll_list_lock,
+			       efa_domain_data_progress_lock_type(&rdm_domain->efa_domain));
+	if (ret)
+		goto destroy_progress_lock;
+
 	ret = ofi_cq_init(&efa_prov, domain, attr, &cq->efa_cq.util_cq,
 			  &efa_rdm_cq_progress, context);
 
 	if (ret)
-		goto destroy_progress_lock;
+		goto destroy_poll_list_lock;
 
 	ret = efa_rdm_cq_init_entry_size(cq, attr->format);
 	if (ret)
@@ -1379,6 +1387,8 @@ close_util_cq:
 	if (retv)
 		EFA_WARN(FI_LOG_CQ, "Unable to close util cq: %s\n",
 			 fi_strerror(-retv));
+destroy_poll_list_lock:
+	ofi_genlock_destroy(&cq->ibv_cq_poll_list_lock);
 destroy_progress_lock:
 	ofi_genlock_destroy(&cq->progress_ep_list_lock);
 free:
