@@ -30,6 +30,9 @@
  * This is not called on the explicit AV insertion critical path so that we
  * don't add extra latency there. The LRU list is only used to pick AH entries
  * with only implicit AV entries for eviction, so that is OK.
+ *
+ * @param[in]	domain	efa domain
+ * @param[in]	ah	address handle
  */
 static void efa_rdm_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 					struct efa_ah *ah)
@@ -54,6 +57,9 @@ static void efa_rdm_ah_implicit_av_lru_ah_move(struct efa_domain *domain,
 /**
  * @brief destroy an RDM AH: unlink it from the domain's AH LRU list, then run
  * the base teardown. LRU-list membership is RDM-only state.
+ *
+ * @param[in]	domain	efa domain
+ * @param[in]	ah	address handle
  */
 static void efa_rdm_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
@@ -66,6 +72,9 @@ static void efa_rdm_ah_destroy_ah(struct efa_domain *domain, struct efa_ah *ah)
 
 /**
  * @brief evict an AH that has only implicit AV entries to free device resources
+ *
+ * @param[in]	domain	efa domain
+ * @param[in]	insert_implicit_av	true when inserting for an implicit AV entry
  */
 static int efa_rdm_ah_implicit_av_evict_ah(struct efa_domain *domain,
 					   bool insert_implicit_av)
@@ -134,6 +143,10 @@ static int efa_rdm_ah_implicit_av_evict_ah(struct efa_domain *domain,
  * base portion via efa_ah_base_construct and sets up the RDM-only policy: split
  * explicit/implicit reference counts, the per-domain AH LRU list and OOM
  * eviction of implicit-only AHs.
+ *
+ * @param[in]	domain	efa domain
+ * @param[in]	gid	GID
+ * @param[in]	insert_implicit_av	true when inserting for an implicit AV entry
  */
 struct efa_ah *efa_rdm_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 				bool insert_implicit_av)
@@ -194,6 +207,10 @@ struct efa_ah *efa_rdm_ah_alloc(struct efa_domain *domain, const uint8_t *gid,
 
 /**
  * @brief release an RDM AH reference (split refcnt + LRU unlink + base release)
+ *
+ * @param[in]	domain	efa domain
+ * @param[in]	ah	address handle
+ * @param[in]	release_from_implicit_av	true when releasing an implicit-AV reference
  */
 void efa_rdm_ah_release(struct efa_domain *domain, struct efa_ah *ah,
 			bool release_from_implicit_av)
@@ -251,6 +268,9 @@ static bool efa_rdm_av_is_local_peer(struct efa_av *av, const void *addr)
 /**
  * @brief Add the entry to the implicit AV LRU list; if the list is full, evict
  * the least recently used entry at the front and add the latest one.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
  */
 static inline int efa_rdm_av_implicit_av_lru_insert(struct efa_av *av,
 						    struct efa_rdm_av_entry *av_entry)
@@ -306,6 +326,9 @@ out:
 
 /**
  * @brief Insert the address into SHM provider's AV for RDM endpoints
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
  */
 static int efa_rdm_av_entry_insert_shm_av(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
 {
@@ -356,6 +379,9 @@ static int efa_rdm_av_entry_insert_shm_av(struct efa_av *av, struct efa_rdm_av_e
 
 /**
  * @brief release the rdm related resources of an efa_rdm_av_entry (shm + peers)
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
  */
 static void efa_rdm_av_entry_deinit(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
 {
@@ -414,6 +440,11 @@ static void efa_rdm_av_entry_deinit(struct efa_av *av, struct efa_rdm_av_entry *
 /**
  * @brief allocate an explicit efa_rdm_av_entry (base entry + rdm state + shm).
  * caller of this function must hold av->util_av.lock
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	raw_addr	raw endpoint address being inserted
+ * @param[in]	flags	flags passed to fi_av_insert
+ * @param[in]	context	user context associated with the address
  */
 struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 						   struct efa_ep_addr *raw_addr,
@@ -501,6 +532,11 @@ err_remove_addr:
 /**
  * @brief allocate an efa_rdm_av_entry in the implicit AV (RDM only).
  * caller of this function must hold av->util_av_implicit.lock
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	raw_addr	raw endpoint address being inserted
+ * @param[in]	flags	flags passed to fi_av_insert
+ * @param[in]	context	user context associated with the address
  */
 struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 						   struct efa_ep_addr *raw_addr,
@@ -588,6 +624,9 @@ err_release:
 /**
  * @brief release an explicit efa_rdm_av_entry (rdm teardown + base teardown).
  * Caller must hold util_domain + util_av.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
  */
 void efa_rdm_av_entry_release_explicit(struct efa_av *av,
 				 struct efa_rdm_av_entry *av_entry)
@@ -610,6 +649,9 @@ void efa_rdm_av_entry_release_explicit(struct efa_av *av,
 
 /**
  * @brief release an efa_rdm_av_entry from the implicit AV
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
  */
 void efa_rdm_av_entry_release_implicit(struct efa_av *av, struct efa_rdm_av_entry *av_entry)
 	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
@@ -635,6 +677,9 @@ void efa_rdm_av_entry_release_implicit(struct efa_av *av, struct efa_rdm_av_entr
 
 /**
  * @brief release an implicit efa_rdm_av_entry during AH eviction
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
  */
 void efa_rdm_av_entry_release_implicit_ah_unsafe(struct efa_av *av,
 					   struct efa_rdm_av_entry *av_entry)
@@ -805,6 +850,9 @@ fi_addr_t efa_rdm_av_reverse_lookup_implicit(struct efa_av *av, uint16_t ahn,
  *
  * Moving the entry to the tail marks it as the most recently used implicit AV
  * entry.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	av_entry	efa_rdm_av_entry
  */
 void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
 				     struct efa_rdm_av_entry *av_entry)
