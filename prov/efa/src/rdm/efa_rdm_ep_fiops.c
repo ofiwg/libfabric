@@ -1131,6 +1131,12 @@ static int efa_rdm_ep_close(struct fid *fid)
 	domain = efa_rdm_ep_domain(efa_rdm_ep);
 
 	/**
+	 * efa_rdm_cq_progress takes ep_list_lock -> srx_lock,
+	 * efa_base_ep_create_and_enable_qp and efa_base_ep_destruct_qp take qp_table_lock -> ep_list_lock,
+	 * so the locking order here has to be qp_table_lock -> ep_list_lock -> srx_lock.
+	 */
+	EFA_GENLOCK_LOCK(&domain->device->qp_table_lock, efa_qp_table_lock_sym);
+	/**
 	 * Hold cq.ep_list_lock so the cq progress cannot run concurrently, 
 	 * which prevents the deadlock of srx_lock -> progress_ep_list_lock.
 	 */
@@ -1146,7 +1152,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
 
 	efa_rdm_ep_dequeue_progress_list(efa_rdm_ep);
-	efa_cq_unlock_ep_list(&efa_rdm_ep->base_ep);
 
 	if (efa_rdm_ep->peer_srx_ep) {
 		/*
@@ -1177,8 +1182,17 @@ static int efa_rdm_ep_close(struct fid *fid)
 		efa_rdm_ep->peer_srx_ep = NULL;
 	}
 
+	efa_base_ep_destruct_qp_unsafe(&efa_rdm_ep->base_ep);
+
+	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+	efa_cq_unlock_ep_list(&efa_rdm_ep->base_ep);
+	EFA_GENLOCK_UNLOCK(&domain->device->qp_table_lock, efa_qp_table_lock_sym);
+
 	/* We need to free the util_ep first to avoid race conditions
-	 * with other threads progressing the cq. */
+	 * with other threads progressing the cq.
+	 *
+	 * ofi_endpoint_close() takes both cq ep_list_locks itself, so this must
+	 * run after the hold above is released. */
 	efa_base_ep_close_util_ep(&efa_rdm_ep->base_ep);
 
 	efa_rdm_ep_remove_cntr_ibv_cq_poll_list(&efa_rdm_ep->base_ep);
@@ -1205,8 +1219,6 @@ static int efa_rdm_ep_close(struct fid *fid)
 		free(efa_rdm_ep->send_pkt_entry_vec);
 	if (efa_rdm_ep->send_pkt_entry_vec_data_sizes)
 		free(efa_rdm_ep->send_pkt_entry_vec_data_sizes);
-
-	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 
 	/*
 	 * Destroying the self AH also requires the util_domain.lock,
