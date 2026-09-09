@@ -19,6 +19,7 @@ static struct option efa_extra_opts[] = {
 	{"sl-low-latency", no_argument, NULL, OPT_SL_LOW_LATENCY},
 	{"eps-per-domain", required_argument, NULL, OPT_EPS_PER_DOMAIN},
 	{"domains", required_argument, NULL, OPT_DOMAINS},
+	{"mr-relaxed-ordering", no_argument, NULL, OPT_MR_RELAXED_ORDERING},
 	{0, 0, 0, 0}
 };
 
@@ -59,6 +60,8 @@ void efa_longopts_usage(void)
 	FT_PRINT_OPTS_USAGE("--domains <d1,d2,...>",
 		"Domain names to spread endpoints across; requires "
 		"--eps-per-domain and excludes -d");
+	FT_PRINT_OPTS_USAGE("--mr-relaxed-ordering",
+		"Register memory regions with FI_EFA_MR_RELAXED_ORDERING");
 	ft_longopts_usage();
 }
 
