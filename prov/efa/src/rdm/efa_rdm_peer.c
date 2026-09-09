@@ -15,7 +15,7 @@
  *
  * @param[in,out]	peer	rdm peer
  * @param[in]		ep	rdm endpoint
- * @param[in]		conn	efa conn object
+ * @param[in]		av_entry	efa_rdm_av_entry backing the peer
  * @relates efa_rdm_peer
  */
 int efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_rdm_av_entry *av_entry)
