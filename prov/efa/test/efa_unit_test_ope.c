@@ -4544,7 +4544,7 @@ void test_efa_rdm_pke_handle_peer_error_recv_invalid_op_id_dropped(void **state)
  * so efa_rdm_mr_gen_check_ope() reports the MR was canceled -- the
  * precondition the sender peer-abort path (efa_rdm_txe_mark_peer_abort_if_needed)
  * requires before it will mark the txe and drive the PEER_ERROR emit/drain.
- * The caller must also set txe->protocol to the aborting RTM type.
+ * The caller must also set txe->req_pkt_type to the aborting RTM type.
  */
 static void efa_unit_test_txe_simulate_source_mr_canceled(struct efa_rdm_ope *txe)
 {
@@ -4594,7 +4594,7 @@ void test_efa_rdm_txe_handle_error_emits_peer_error_on_invalid_lkey(void **state
 	dlist_insert_tail(&txe->entry,
 			  &ep->ope_longcts_send_list);
 
-	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	txe->req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
 	/* Simulate a CTSDATA WR still in flight so handle_error's drain is a
@@ -4663,7 +4663,7 @@ void test_efa_rdm_txe_handle_error_emits_peer_error_on_canceled(void **state)
 
 	outstanding_before = ep->efa_outstanding_tx_ops;
 
-	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	txe->req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
 	/* Simulate the call site in efa_domain.c: after the gen check
@@ -4714,7 +4714,7 @@ void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **s
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
 
-	txe->protocol = EFA_RDM_LONGREAD_TAGRTM_PKT;
+	txe->req_pkt_type = EFA_RDM_LONGREAD_TAGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
 	/* Simulate efa_rdm_pke_handle_longread_rtm_sent(): the RTM was
@@ -4742,7 +4742,7 @@ void test_efa_rdm_txe_handle_error_longread_emits_and_balances_read_cnt(void **s
 	txe_unsent->total_len = 65536;
 	txe_unsent->peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	txe_unsent->peer->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_PEER_ERROR;
-	txe_unsent->protocol = EFA_RDM_LONGREAD_TAGRTM_PKT;
+	txe_unsent->req_pkt_type = EFA_RDM_LONGREAD_TAGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe_unsent);
 
 	outstanding_before = ep->efa_outstanding_tx_ops;
@@ -4789,7 +4789,7 @@ void test_efa_rdm_txe_peer_abort_pre_handshake_defers_emit(void **state)
 	txe->cq_entry.flags = FI_SEND | FI_TAGGED;
 	txe->cq_entry.op_context = (void *) 0xe6;
 	txe->total_len = 65536;
-	txe->protocol = EFA_RDM_LONGCTS_TAGRTM_PKT;
+	txe->req_pkt_type = EFA_RDM_LONGCTS_TAGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
 	/* The peer's handshake has NOT arrived: support is unknown. */
@@ -4889,7 +4889,7 @@ void test_efa_rdm_txe_handle_error_eager_prepost_cancel_emits_skip(void **state)
 	 * in TXE_REQ (no CTS, no OPE_SEND), protocol records the selected
 	 * EAGER type. */
 	txe->state = EFA_RDM_TXE_REQ;
-	txe->protocol = EFA_RDM_EAGER_MSGRTM_PKT;
+	txe->req_pkt_type = EFA_RDM_EAGER_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
 	txe->cq_entry.op_context = (void *) 0xa1;
@@ -4951,7 +4951,7 @@ void test_efa_rdm_txe_handle_error_longcts_prepost_cancel_emits_skip(void **stat
 	/* LONGCTS RTM aborted before its first CTS: still in TXE_REQ (no
 	 * OPE_SEND), no CTSDATA acked, protocol records the LONGCTS type. */
 	txe->state = EFA_RDM_TXE_REQ;
-	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	txe->req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
 	txe->cq_entry.op_context = (void *) 0xc3;
@@ -5022,7 +5022,7 @@ void test_efa_rdm_txe_handle_error_runtread_prepost_cancel_emits_skip(void **sta
 	 * type. Only runt-only runtread is sender-signalled; runtread WITH a
 	 * tail READ is detected receiver-side and is not emitted here. */
 	txe->state = EFA_RDM_TXE_REQ;
-	txe->protocol = EFA_RDM_RUNTREAD_MSGRTM_PKT;
+	txe->req_pkt_type = EFA_RDM_RUNTREAD_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 	txe->cq_entry.flags = FI_SEND | FI_MSG;
 	txe->cq_entry.op_context = (void *) 0xb4;
@@ -5139,7 +5139,7 @@ void test_efa_rdm_txe_handle_error_emits_peer_error_with_homogeneous_peers(void 
 	dlist_insert_tail(&txe->entry,
 			  &ep->ope_longcts_send_list);
 
-	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	txe->req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
 	outstanding_before = ep->efa_outstanding_tx_ops;
@@ -5539,7 +5539,7 @@ static void run_rtm_tx_error_with_type(struct efa_resource *resource,
 	/* Mirror efa_rdm_msg_post_rtm: the selected protocol is recorded
 	 * on the txe. The forged txe bypasses post_rtm, so set it here so
 	 * the PEER_ERROR ref_kind derivation sees the right protocol. */
-	txe->protocol = pkt_type;
+	txe->req_pkt_type = pkt_type;
 
 	base_hdr = (struct efa_rdm_base_hdr *) pkt_entry->wiredata;
 	base_hdr->type = pkt_type;
@@ -6424,7 +6424,7 @@ void test_efa_rdm_pke_handle_tx_error_longcts_abort_drains_txe(
 	dlist_insert_tail(&txe->entry,
 			  &ep->ope_longcts_send_list);
 
-	txe->protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	txe->req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	efa_unit_test_txe_simulate_source_mr_canceled(txe);
 
 	/* efa_rdm_txe_construct (via the helper) already links the txe on
@@ -6651,7 +6651,7 @@ void test_efa_rdm_pke_handle_tx_error_emulated_rxe_read_not_peer_aborted(void **
 		 * (efa_rdm_pke_alloc_rtw_rxe / _rta_rxe / _rtr_rxe): these
 		 * rxes are provider-internal. */
 		rxe->internal_flags |= EFA_RDM_OPE_INTERNAL;
-		rxe->protocol = proto->protocol;
+		rxe->req_pkt_type = proto->protocol;
 		rxe->total_len = 1024;
 
 		outstanding_before = ep->efa_outstanding_tx_ops;
@@ -6728,7 +6728,7 @@ void test_efa_rdm_txe_handle_error_emulated_canceled_not_peer_aborted(void **sta
 		txe->cq_entry.flags = proto->cq_flags;
 		txe->cq_entry.op_context = (void *) 0xd4;
 		txe->total_len = 1048576;
-		txe->protocol = adversarial ? EFA_RDM_LONGREAD_MSGRTM_PKT
+		txe->req_pkt_type = adversarial ? EFA_RDM_LONGREAD_MSGRTM_PKT
 					    : proto->protocol;
 
 		peer = txe->peer;

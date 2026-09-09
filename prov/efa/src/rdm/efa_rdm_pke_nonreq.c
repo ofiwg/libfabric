@@ -877,28 +877,28 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Sender fallback to emulated long CTS write "
 			 "protocol because p2p is not available\n");
-		txe->protocol = delivery_complete_requested ?
+		txe->req_pkt_type = delivery_complete_requested ?
 				EFA_RDM_DC_LONGCTS_RTW_PKT :
 				EFA_RDM_LONGCTS_RTW_PKT;
-		efa_rdm_ope_post_send_or_queue(txe, txe->protocol);
+		efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
 	} else if (txe->op == ofi_op_tagged) {
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Sender fallback to long CTS tagged "
 			 "protocol because memory registration limit "
 			 "was reached on the receiver\n");
-		txe->protocol = delivery_complete_requested ?
+		txe->req_pkt_type = delivery_complete_requested ?
 				EFA_RDM_DC_LONGCTS_TAGRTM_PKT :
 				EFA_RDM_LONGCTS_TAGRTM_PKT;
-		efa_rdm_ope_post_send_or_queue(txe, txe->protocol);
+		efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
 	} else {
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Sender fallback to long CTS untagged "
 			 "protocol because memory registration limit "
 			 "was reached on the receiver\n");
-		txe->protocol = delivery_complete_requested ?
+		txe->req_pkt_type = delivery_complete_requested ?
 				EFA_RDM_DC_LONGCTS_MSGRTM_PKT :
 				EFA_RDM_LONGCTS_MSGRTM_PKT;
-		efa_rdm_ope_post_send_or_queue(txe, txe->protocol);
+		efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
 	}
 }
 

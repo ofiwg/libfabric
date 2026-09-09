@@ -38,7 +38,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	}
 
 	txe->internal_flags = internal_flags;
-	txe->protocol = 0;
+	txe->req_pkt_type = 0;
 	txe->bytes_received = 0;
 	txe->bytes_copied = 0;
 	txe->bytes_acked = 0;
@@ -1050,7 +1050,7 @@ static bool efa_rdm_txe_mark_peer_abort_if_needed(struct efa_rdm_ope *txe,
 	 * its own; abandoning a canceled one without notifying the peer
 	 * parks the peer's reorder window on that msg_id forever.
 	 */
-	if (!efa_rdm_pkt_type_is_rtm(txe->protocol))
+	if (!efa_rdm_pkt_type_is_rtm(txe->req_pkt_type))
 		return false;
 
 	txe->peer_error_prov_errno = prov_errno;

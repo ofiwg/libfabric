@@ -1062,7 +1062,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state)
 	 * rxe index, so the emit is msg_id-only (no op_id hint). */
 	txe.type = EFA_RDM_TXE;
 	txe.ep = ep;
-	txe.protocol = EFA_RDM_LONGCTS_MSGRTM_PKT;
+	txe.req_pkt_type = EFA_RDM_LONGCTS_MSGRTM_PKT;
 	txe.msg_id = 0x43;
 	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
@@ -1254,7 +1254,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id(void **state)
 
 	txe.type = EFA_RDM_TXE;
 	txe.ep = ep;
-	txe.protocol = EFA_RDM_MEDIUM_MSGRTM_PKT;
+	txe.req_pkt_type = EFA_RDM_MEDIUM_MSGRTM_PKT;
 	txe.msg_id = 0x99;
 	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 
@@ -1307,7 +1307,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_runtread(void **state)
 
 	txe.type = EFA_RDM_TXE;
 	txe.ep = ep;
-	txe.protocol = EFA_RDM_RUNTREAD_MSGRTM_PKT;
+	txe.req_pkt_type = EFA_RDM_RUNTREAD_MSGRTM_PKT;
 	txe.msg_id = 0x99;
 	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 
@@ -1350,7 +1350,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_eager_skip(void **state)
 
 	txe.type = EFA_RDM_TXE;
 	txe.ep = ep;
-	txe.protocol = EFA_RDM_EAGER_MSGRTM_PKT;
+	txe.req_pkt_type = EFA_RDM_EAGER_MSGRTM_PKT;
 	txe.msg_id = 0x99;
 	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 
