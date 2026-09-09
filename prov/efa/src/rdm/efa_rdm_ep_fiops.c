@@ -146,7 +146,7 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 {
 	int ret;
-	size_t min_pool_size, max_pool_size, txe_pool_size;
+	size_t min_pool_size, max_pool_size, txe_pool_size, chunk_size;
 	uint64_t tx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
 	uint64_t rx_pkt_pool_base_flags = OFI_BUFPOOL_NO_TRACK;
 
@@ -269,10 +269,13 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		txe_pool_size = max_pool_size;
 	}
 
+	chunk_size = MIN(MAX(EFA_RDM_TXE_POOL_CHUNK_SIZE, min_pool_size),
+			 txe_pool_size);
+
 	ret = ofi_bufpool_create(&ep->base_ep.txe_pool,
 				 sizeof(struct efa_rdm_ope),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
-				 txe_pool_size, min_pool_size, 0);
+				 txe_pool_size, chunk_size, 0);
 	if (ret)
 		goto err_free;
 
