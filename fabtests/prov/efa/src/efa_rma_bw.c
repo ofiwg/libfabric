@@ -64,6 +64,7 @@
  *   -o write|writedata|read  Select RMA operation (default: write).
  *   --post-list <n>   Batch n posts per doorbell using FI_MORE (default: 1).
  *   -q <n>, --num-eps <n>  Number of endpoints/QPs (default: 1).
+ *   --mr-relaxed-ordering  Register MRs with FI_EFA_MR_RELAXED_ORDERING.
  */
 
 #include <stdio.h>
@@ -103,6 +104,7 @@ static struct efa_rma_bw_ctx *rx_ctx_pool;
 static int use_high_pps;
 static int post_list = 1;
 static int num_eps = 1;
+static int use_mr_relaxed_ordering;
 static struct fid_ep *eps[EFA_RMA_BW_MAX_EPS];
 static fi_addr_t remote_addrs[EFA_RMA_BW_MAX_EPS];
 
@@ -563,6 +565,9 @@ int main(int argc, char **argv)
 				return EXIT_FAILURE;
 			}
 			break;
+		case OPT_MR_RELAXED_ORDERING:
+			use_mr_relaxed_ordering = 1;
+			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0],
@@ -604,6 +609,13 @@ int main(int argc, char **argv)
 		printf("High PPS mode: ENABLED\n");
 	else
 		printf("High PPS mode: DISABLED\n");
+
+	if (use_mr_relaxed_ordering) {
+		ft_mr_reg_flags |= FI_EFA_MR_RELAXED_ORDERING;
+		FT_INFO("MR relaxed ordering: ENABLED");
+	} else {
+		FT_INFO("MR relaxed ordering: DISABLED");
+	}
 
 	printf("RMA op: %s\n", op_str);
 	printf("Num EPs: %d\n", num_eps);
