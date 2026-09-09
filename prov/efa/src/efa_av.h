@@ -47,6 +47,8 @@ _Static_assert(offsetof(struct efa_av_entry, ep_addr) == 0,
  * The raw address is stored as a byte array whose first element is required
  * to be ep_addr by the util_av implementation. This accessor provides a typed
  * view over those bytes.
+ *
+ * @param[in]	entry	efa_av_entry
  */
 static inline struct efa_ep_addr *efa_av_entry_ep_addr(struct efa_av_entry *entry)
 {
