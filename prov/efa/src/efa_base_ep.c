@@ -63,18 +63,20 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 	assert(!rx_cq || ofi_genlock_held(&rx_cq->util_cq.ep_list_lock));
 	assert(ofi_genlock_held(&base_ep->domain->device->qp_table_lock));
 
-	if (qp) {
-		domain = qp->base_ep->domain;
-		qp_num = qp->qp_num;
-		efa_cq_invalidate_cur_wq(tx_cq, qp);
-		if (rx_cq != tx_cq)
-			efa_cq_invalidate_cur_wq(rx_cq, qp);
-		efa_qp_destruct(qp);
-		qp_table_slot = &domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1];
-		assert(!*qp_table_slot || *qp_table_slot == qp);
-		*qp_table_slot = NULL;
-		base_ep->qp = NULL;
-	}
+	if (!qp)
+		return 0;
+
+	domain = qp->base_ep->domain;
+	qp_num = qp->qp_num;
+	efa_cq_invalidate_cur_wq(tx_cq, qp);
+	if (rx_cq != tx_cq)
+		efa_cq_invalidate_cur_wq(rx_cq, qp);
+	efa_qp_destruct(qp);
+	qp_table_slot = &domain->device->qp_table[qp_num & domain->device->qp_table_sz_m1];
+	assert(!*qp_table_slot || *qp_table_slot == qp);
+	*qp_table_slot = NULL;
+	base_ep->qp = NULL;
+	base_ep->efa_qp_enabled = false;
 
 	/* Drain the CQ after destroying the QP
 	 *
@@ -116,9 +118,9 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 {
 	int err;
 
-	if (efa_env.track_mr && base_ep->efa_qp_enabled) {
+	if (efa_env.track_mr) {
 		ofi_genlock_lock(&base_ep->domain->util_domain.lock);
-		dlist_remove(&base_ep->base_ep_entry);
+		dlist_remove_init(&base_ep->base_ep_entry);
 		ofi_genlock_unlock(&base_ep->domain->util_domain.lock);
 	}
 
@@ -725,6 +727,7 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 	base_ep->txe_pool = NULL;
 	base_ep->rxe_pool = NULL;
 	dlist_init(&base_ep->ope_list);
+	dlist_init(&base_ep->base_ep_entry);
 	return 0;
 }
 
