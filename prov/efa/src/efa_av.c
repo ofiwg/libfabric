@@ -24,6 +24,9 @@ struct efa_av_entry *efa_av_addr_to_entry_impl(struct efa_av_array *entry_map,
 
 /**
  * @brief find the efa_av_entry using fi_addr in the explicit AV
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	fi_addr	fi_addr of the AV entry
  */
 struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
 {
@@ -162,6 +165,11 @@ bool efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
  *
  * Shared by the base explicit release path and the RDM implicit release paths
  * (each supplies its own addr map and util AV).
+ *
+ * @param[in]	entry_map	addr-to-entry map
+ * @param[in]	util_av	util AV the entry belongs to
+ * @param[in]	entry	efa_av_entry
+ * @param[in]	fi_addr	fi_addr of the AV entry
  */
 void efa_av_entry_remove_from_util_av(struct efa_av_array *entry_map,
 				      struct util_av *util_av,
@@ -228,6 +236,10 @@ int efa_av_entry_base_construct(struct efa_av *av, struct efa_av_entry *entry,
  * allocate its AH and initialize the base fields via efa_av_entry_base_construct.
  * Reverse-AV indexing and RDM-only state are layered on by the caller.
  * Caller must hold util_domain.lock and util_av.lock.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	raw_addr	raw endpoint address being inserted
+ * @param[out]	fi_addr_out	returns the fi_addr assigned to the entry
  */
 struct efa_av_entry *efa_av_entry_alloc_explicit(struct efa_av *av,
 						 struct efa_ep_addr *raw_addr,
@@ -279,6 +291,10 @@ err_remove_addr:
  * util AV (clearing its raw address). Reverse-AV removal and RDM-only teardown
  * are handled by the caller before calling this. Caller must hold
  * util_domain.lock and util_av.lock.
+ *
+ * @param[in]	av	efa address vector
+ * @param[in]	entry	efa_av_entry
+ * @param[in]	fi_addr	fi_addr of the AV entry
  */
 void efa_av_entry_release_explicit(struct efa_av *av, struct efa_av_entry *entry,
 				   fi_addr_t fi_addr)
