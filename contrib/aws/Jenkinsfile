@@ -313,7 +313,11 @@ def post_build_actions() {
     def regions = ["us-east-1", "eu-north-1", "us-west-2", "ap-southeast-4"]
     def cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
     regions.each { region ->
-        sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
+        try {
+            sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
+        } catch (Exception e) {
+            echo "Warning: Failed to cleanup resources in ${region}: ${e.getMessage()}"
+        }
     }
 }
 
