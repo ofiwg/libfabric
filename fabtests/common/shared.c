@@ -80,6 +80,7 @@ uint64_t remote_cq_data = 0;
 uint64_t tx_seq, rx_seq, tx_cq_cntr, rx_cq_cntr;
 uint32_t ft_fiversion = FT_FIVERSION;
 int (*ft_mr_alloc_func)(void);
+uint64_t ft_mr_reg_flags = 0;
 uint64_t ft_tag = 0;
 int ft_parent_proc = 0;
 pid_t ft_child_pid = 0;
@@ -461,6 +462,7 @@ int ft_reg_mr_dom(struct fid_domain *reg_domain, struct fid_ep *bind_ep,
 	iov.iov_len = size;
 
 	flags = (iface) ? FI_HMEM_DEVICE_ONLY : 0;
+	flags |= ft_mr_reg_flags;
 
 	if (opts.options & FT_OPT_REG_DMABUF_MR) {
 		ret = ft_hmem_get_dmabuf_fd(iface, buf, size,

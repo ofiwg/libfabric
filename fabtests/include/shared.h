@@ -303,6 +303,7 @@ int ft_sock_recv(int fd, void *msg, size_t len);
 int ft_sock_sync(int fd, int value);
 void ft_sock_shutdown(int fd);
 extern int (*ft_mr_alloc_func)(void);
+extern uint64_t ft_mr_reg_flags;
 extern uint64_t ft_tag;
 extern int ft_parent_proc;
 extern int ft_socket_pair[2];
