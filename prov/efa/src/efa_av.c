@@ -44,18 +44,13 @@ struct efa_av_entry *efa_av_addr_to_entry(struct efa_av *av, fi_addr_t fi_addr)
  * 		If no such peer exists, return FI_ADDR_NOTAVAIL
  */
 fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn)
-	OFI_TSA_NO_ANALYSIS // DGRAM uses FI_THREAD_DOMAIN, efa direct doesn't acquire the lock
 {
-	struct efa_cur_reverse_av *cur_entry;
-	struct efa_cur_reverse_av_key cur_key;
+	struct efa_av_entry *cur_entry;
 
-	memset(&cur_key, 0, sizeof(cur_key));
-	cur_key.ahn = ahn;
-	cur_key.qpn = qpn;
-	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
-	HASH_FIND(hh, av->cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
+	cur_entry = efa_av_array_at(av->cur_reverse_av,
+				    efa_av_reverse_av_key(ahn, qpn));
 
-	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->entry->fi_addr : FI_ADDR_NOTAVAIL;
+	return (OFI_LIKELY(!!cur_entry)) ? cur_entry->fi_addr : FI_ADDR_NOTAVAIL;
 }
 
 
@@ -67,96 +62,66 @@ int efa_av_is_valid_address(struct efa_ep_addr *addr)
 }
 
 
+/**
+ * @brief allocate a current reverse AV
+ *
+ * The array spans the whole 32-bit (ahn, qpn) key space so that no key is
+ * rejected. Its chunk table and chunks are allocated on demand, and the bit
+ * interleaving in efa_av_reverse_av_key keeps live keys clustered, so only a
+ * handful of chunks are ever touched.
+ *
+ * @param[out]	cur_reverse_av	set to the new array, or NULL on failure
+ * @return	0 on success, a negative libfabric error code on failure
+ */
+int efa_av_reverse_av_init(struct efa_av_array **cur_reverse_av)
+{
+	struct efa_av_array_attr attr = {0};
+
+	attr.max_idx = EFA_REVERSE_AV_MAX_IDX;
+	return efa_av_array_init_attr(cur_reverse_av, &attr);
+}
+
+
 /*
  * @brief base reverse-AV add: add/replace the entry in cur_reverse_av
  *
- * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
- * @param[in]		entry		efa_av_entry object
- * @return		On success, return 0.
- * 			Otherwise, return a negative libfabric error code
+ * @param[in]	cur_reverse_av	reverse AV indexed by efa_av_reverse_av_key()
+ * @param[in]	entry		efa_av_entry object
+ * @return	On success, return 0.
+ * 		Otherwise, return a negative libfabric error code
  */
-/**
- * @brief find the cur_reverse_av record for an AV entry, building its key
- *
- * Shared by the efa-direct (efa_av_reverse_av_add) and rdm
- * (efa_rdm_av_reverse_av_add) add paths: build the (ahn, qpn) key for entry and
- * look it up in cur_reverse_av. Each caller then inserts or updates the record
- * (the rdm path first snapshots any displaced entry into prv_reverse_av).
- *
- * @param[in]	cur_reverse_av	reverse AV keyed by (ahn, qpn)
- * @param[in]	entry		efa_av_entry being added
- * @param[out]	cur_key		filled with the (ahn, qpn) key for entry
- * @return	the existing cur_reverse_av record for the key, or NULL if none
- */
-struct efa_cur_reverse_av *
-efa_base_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
-			   struct efa_av_entry *entry,
-			   struct efa_cur_reverse_av_key *cur_key)
-{
-	struct efa_cur_reverse_av *cur_entry = NULL;
-
-	memset(cur_key, 0, sizeof(*cur_key));
-	cur_key->ahn = entry->ah->ahn;
-	cur_key->qpn = efa_av_entry_ep_addr(entry)->qpn;
-
-	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
-	HASH_FIND(hh, *cur_reverse_av, cur_key, sizeof(*cur_key), cur_entry);
-	return cur_entry;
-}
-
-int efa_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
+int efa_av_reverse_av_add(struct efa_av_array *cur_reverse_av,
 				 struct efa_av_entry *entry)
 {
-	struct efa_cur_reverse_av *cur_entry;
-	struct efa_cur_reverse_av_key cur_key;
-
-	cur_entry = efa_base_av_reverse_av_add(cur_reverse_av, entry, &cur_key);
-	if (!cur_entry) {
-		cur_entry = malloc(sizeof(*cur_entry));
-		if (!cur_entry) {
-			EFA_WARN(FI_LOG_AV, "Cannot allocate memory for cur_reverse_av entry\n");
-			return -FI_ENOMEM;
-		}
-
-		cur_entry->key.ahn = cur_key.ahn;
-		cur_entry->key.qpn = cur_key.qpn;
-		cur_entry->entry = entry;
-		HASH_ADD(hh, *cur_reverse_av, key, sizeof(cur_key), cur_entry);
-
-		return 0;
-	}
-
-	cur_entry->entry = entry;
-	return 0;
+	return efa_av_array_insert(cur_reverse_av,
+				   efa_av_entry_reverse_av_key(entry), entry);
 }
 
 
 /*
  * @brief base reverse-AV remove: drop the entry from cur_reverse_av if current
  *
- * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
- * @param[in]		entry		efa_av_entry object
- * @return		true if the entry was the current one for its (ahn, qpn)
- *			and was removed from cur_reverse_av; false otherwise.
+ * @param[in]	cur_reverse_av	reverse AV indexed by efa_av_reverse_av_key()
+ * @param[in]	entry		efa_av_entry object
+ * @return	true if the entry was the current one for its (ahn, qpn)
+ *		and was removed from cur_reverse_av; false otherwise.
  */
-bool efa_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
+bool efa_av_reverse_av_remove(struct efa_av_array *cur_reverse_av,
 				    struct efa_av_entry *entry)
 {
-	struct efa_cur_reverse_av *cur_reverse_av_entry;
-	struct efa_cur_reverse_av_key cur_key;
+	uint64_t key = efa_av_entry_reverse_av_key(entry);
+	int err;
 
-	memset(&cur_key, 0, sizeof(cur_key));
-	cur_key.ahn = entry->ah->ahn;
-	cur_key.qpn = efa_av_entry_ep_addr(entry)->qpn;
-	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
-	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key),
-		  cur_reverse_av_entry);
-	if (cur_reverse_av_entry && cur_reverse_av_entry->entry == entry) {
-		HASH_DEL(*cur_reverse_av, cur_reverse_av_entry);
-		free(cur_reverse_av_entry);
-		return true;
-	}
-	return false;
+	if (efa_av_array_at(cur_reverse_av, key) != entry)
+		return false;
+
+	/* The slot already holds the entry, so clearing it allocates nothing. */
+	err = efa_av_array_insert(cur_reverse_av, key, NULL);
+	if (OFI_UNLIKELY(err))
+		EFA_WARN(FI_LOG_AV, "Failed to clear reverse AV entry for "
+			 "(ahn %u, qpn %u): %s\n", entry->ah->ahn,
+			 efa_av_entry_ep_addr(entry)->qpn, fi_strerror(-err));
+	return true;
 }
 
 
@@ -300,7 +265,7 @@ void efa_av_entry_release_explicit(struct efa_av *av, struct efa_av_entry *entry
 				   fi_addr_t fi_addr)
 	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
 {
-	efa_av_reverse_av_remove(&av->cur_reverse_av, entry);
+	efa_av_reverse_av_remove(av->cur_reverse_av, entry);
 	efa_ah_release(av->domain, entry->ah);
 	efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
 					 entry, fi_addr);
@@ -376,7 +341,7 @@ static int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *add
 		return -FI_EADDRNOTAVAIL;
 	}
 
-	if (efa_av_reverse_av_add(&av->cur_reverse_av, entry)) {
+	if (efa_av_reverse_av_add(av->cur_reverse_av, entry)) {
 		efa_av_entry_release_explicit(av, entry, new_fi_addr);
 		*fi_addr = FI_ADDR_NOTAVAIL;
 		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
@@ -617,6 +582,7 @@ static int efa_av_close(struct fid *fid)
 		EFA_WARN(FI_LOG_AV, "Failed to close util av: %s\n", fi_strerror(-err));
 
 	efa_av_array_destroy(av->addr_to_entry_map);
+	efa_av_array_destroy(av->cur_reverse_av);
 
 	free(av);
 	return 0;
@@ -662,10 +628,10 @@ int efa_av_init_util_av(struct efa_domain *efa_domain,
 /**
  * @brief initialize the shared (base) fields of an efa_av
  *
- * Initialize the explicit forward AV array, the explicit util AV (sized by
- * the caller-supplied entry_size), and the owning domain and AV type. The
- * cur_reverse_av map starts empty (NULL) and is populated on insert. This is
- * the shared base of both the efa-direct and RDM open paths.
+ * Initialize the explicit forward AV array, the explicit current reverse AV,
+ * the explicit util AV (sized by the caller-supplied entry_size), and the owning
+ * domain and AV type. This is the shared base of both the efa-direct and RDM
+ * open paths.
  *
  * @param[out]	av		efa address vector
  * @param[in]	efa_domain	owning domain
@@ -683,8 +649,15 @@ int efa_av_init_base(struct efa_av *av, struct efa_domain *efa_domain,
 	if (ret)
 		return ret;
 
+	ret = efa_av_reverse_av_init(&av->cur_reverse_av);
+	if (ret) {
+		efa_av_array_destroy(av->addr_to_entry_map);
+		return ret;
+	}
+
 	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context, entry_size);
 	if (ret) {
+		efa_av_array_destroy(av->cur_reverse_av);
 		efa_av_array_destroy(av->addr_to_entry_map);
 		return ret;
 	}

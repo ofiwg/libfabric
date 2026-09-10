@@ -176,7 +176,7 @@ TEST_F(EfaAvArrayTest, zero_max_idx_uses_default)
 	struct efa_av_array *a = efa_test_av_array_create_max(0);
 	ASSERT_NE(a, nullptr);
 
-	int m = efa_test_av_array_default_max_idx;
+	uint64_t m = efa_test_av_array_default_max_idx;
 	EXPECT_EQ(efa_test_av_array_insert(a, m, entry_ptr(1)), 0);
 	EXPECT_EQ(efa_test_av_array_at(a, m), entry_ptr(1));
 	EXPECT_EQ(efa_test_av_array_at(a, m + 1), nullptr);
@@ -191,7 +191,7 @@ TEST_F(EfaAvArrayTest, max_idx_at_cap_reachable)
 	struct efa_av_array *a = efa_test_av_array_create_max(efa_test_av_array_max_idx_ceiling);
 	ASSERT_NE(a, nullptr);
 
-	int m = efa_test_av_array_max_idx_ceiling;
+	uint64_t m = efa_test_av_array_max_idx_ceiling;
 	EXPECT_EQ(efa_test_av_array_insert(a, m, entry_ptr(7)), 0);
 	EXPECT_EQ(efa_test_av_array_at(a, m), entry_ptr(7));
 	EXPECT_EQ(efa_test_av_array_has_chunk_table(a), 1);
