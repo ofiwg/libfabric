@@ -7,11 +7,12 @@ version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
 
-v2.7.0, Tue Sept 15, 2026
+v2.7.0, Fri Sept 18, 2026
 =========================
 
 ## Core ##
 
+- man: Add section headers for domain ops in fi_efa.7.md
 - hmem/rocr: Report device ordinal from rocr_is_addr_valid
 - build: Add CUDA/ROCm build toggles to RPM spec files
 - man: List address vectors in FI_THREAD_DOMAIN serialization
@@ -48,6 +49,8 @@ v2.7.0, Tue Sept 15, 2026
 
 ## CXI ##
 
+- Ensure error message make it to user
+- fi_version minor bump to 7
 - Allow FI_REMOTE_CQ_DATA on fi_writemsg
 - Support extended NIDs used by SR-IOV VFs
 - Fix criterion put_red_pkt_distrib test
@@ -55,6 +58,24 @@ v2.7.0, Tue Sept 15, 2026
 
 ## EFA ##
 
+- Allow efa-direct without FI_CONTEXT2 for GDA usecase
+- Size the txe pool by what a txe id can index
+- Keep an rxe alive while its local read copies
+- Drop the PEER_ERROR op_id_valid flag
+- Drop a packet whose ope id no longer names a live operation
+- Split the ope pool into txe and rxe pools
+- Encode the ope type and slot generation in an ope id
+- Reserve an invalid ope id sentinel
+- Release the srx entry when an rxe cannot be allocated
+- Free shm_info on the efa_rdm_ep_open error path
+- Add gtest coverage for queued ope outcomes
+- Derive queued flag in efa_rdm_ope_process_queued_ope
+- Add gtest coverage for shm MR flag derivation
+- Move FI_EFA_MR_RELAXED_ORDERING to bit 61
+- Add domain ops for endpoint modification
+- Avoid SQ/CQ lock contention for 64-bit request IDs
+- Add FI_EFA_MR_RELAXED_ORDERING mr flag
+- Use RDMA read to copy Neuron RX payload into HBM
 - Make util_domain lock noop under FI_PROGRESS_CONTROL_UNIFIED
 - Include device ID in EFA-ness descriminator
 - Fix mis-stated vendor ID -> part ID
@@ -415,6 +436,7 @@ v2.7.0, Tue Sept 15, 2026
 
 ## Util ##
 
+- Do not unwind a queue for an unqueued peer rx entry
 - Require callers to hold srx lock in util_srx_close
 - Add dedicated lock for unspec unexpected queues
 - Add NULL checks in fabric init path
@@ -429,6 +451,9 @@ v2.7.0, Tue Sept 15, 2026
 
 ## Fabtests ##
 
+- efa: Declare the PR CI HMEM memory type matrix per test
+- pytest: Add a pr_ci_hmem test type for the PR CI HMEM matrix
+- efa: Test FI_EFA_MR_RELAXED_ORDERING mr flag
 - efa: Only build efa tests if libfabric has the efa provider
 - efa: Skip the slowest device memory unexpected_msg case in PR CI
 - Add check for fi_close return value
