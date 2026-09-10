@@ -9,8 +9,11 @@
 /* List of supported protocols.
  * The protocols listed here will be tried in the order they're listed.
  * The first protocol that can be used for the TX operation will be used.
+ *
+ * Only efa_rdm_proto_select_send_protocol() below walks this array, so it is
+ * internal to this file and its length is whatever the initializer holds.
  */
-struct efa_rdm_proto *efa_rdm_protocols[] = {
+static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
 };
 
