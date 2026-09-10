@@ -10,7 +10,7 @@ int efa_av_array_init_attr(struct efa_av_array **arr_out,
 			   const struct efa_av_array_attr *attr)
 {
 	struct efa_av_array *arr;
-	unsigned max_idx = attr ? attr->max_idx : 0;
+	uint64_t max_idx = attr ? attr->max_idx : 0;
 	unsigned inline_size = (attr && attr->inline_size) ?
 			       attr->inline_size : EFA_AV_ARRAY_INLINE_SIZE;
 	unsigned chunk_size = (attr && attr->chunk_size) ?
@@ -19,14 +19,14 @@ int efa_av_array_init_attr(struct efa_av_array **arr_out,
 	*arr_out = NULL;
 
 	if (max_idx == 0) {
-		size_t def = (size_t) inline_size * chunk_size - 1;
+		uint64_t def = (uint64_t) inline_size * chunk_size - 1;
 
 		max_idx = def > EFA_AV_ARRAY_MAX_IDX_CEILING ?
-			  EFA_AV_ARRAY_MAX_IDX_CEILING : (unsigned) def;
+			  EFA_AV_ARRAY_MAX_IDX_CEILING : def;
 	}
 	if (max_idx > EFA_AV_ARRAY_MAX_IDX_CEILING) {
-		EFA_WARN(FI_LOG_AV, "efa_av_array max_idx %u out of range\n",
-			 max_idx);
+		EFA_WARN(FI_LOG_AV, "efa_av_array max_idx %" PRIu64
+			 " out of range\n", max_idx);
 		return -FI_EINVAL;
 	}
 
@@ -39,9 +39,10 @@ int efa_av_array_init_attr(struct efa_av_array **arr_out,
 	arr->inline_size = inline_size;
 	arr->chunk_size = chunk_size;
 	if (max_idx >= inline_size) {
-		size_t span = (size_t) max_idx - inline_size + 1;
+		uint64_t span = max_idx - inline_size + 1;
 
-		arr->chunk_table_len = (span + chunk_size - 1) / chunk_size;
+		arr->chunk_table_len = (size_t) ((span + chunk_size - 1) /
+						 chunk_size);
 	}
 
 	*arr_out = arr;

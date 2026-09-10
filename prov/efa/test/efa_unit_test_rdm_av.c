@@ -6,6 +6,22 @@
 #include "efa_rdm_pke_req.h"
 #include "efa_av.h"
 
+static int test_av_array_count_entry(struct efa_av_array *arr, void *entry,
+				     void *context)
+{
+	(*(size_t *) context)++;
+	return 0;
+}
+
+/* Number of non-NULL entries in arr. Walks the whole array, so tests only. */
+static size_t test_av_array_count(struct efa_av_array *arr)
+{
+	size_t count = 0;
+
+	efa_av_array_iter(arr, &count, test_av_array_count_entry);
+	return count;
+}
+
 static void test_av_verify_av_hash_cnt(struct efa_av *av,
 				       int explicit_cur_av_count,
 				       int explicit_prv_av_count,
@@ -14,14 +30,14 @@ static void test_av_verify_av_hash_cnt(struct efa_av *av,
 {
 	assert_int_equal(HASH_CNT(hh, av->util_av.hash),
 			 explicit_cur_av_count + explicit_prv_av_count);
-	assert_int_equal(HASH_CNT(hh, av->cur_reverse_av),
+	assert_int_equal(test_av_array_count(av->cur_reverse_av),
 			 explicit_cur_av_count);
 	assert_int_equal(HASH_CNT(hh, ((struct efa_rdm_av *)(av))->prv_reverse_av),
 			 explicit_prv_av_count);
 
 	assert_int_equal(HASH_CNT(hh, ((struct efa_rdm_av *)(av))->util_av_implicit.hash),
 			 implicit_cur_av_count + implicit_prv_av_count);
-	assert_int_equal(HASH_CNT(hh, ((struct efa_rdm_av *)(av))->cur_reverse_av_implicit),
+	assert_int_equal(test_av_array_count(((struct efa_rdm_av *)(av))->cur_reverse_av_implicit),
 			 implicit_cur_av_count);
 	assert_int_equal(HASH_CNT(hh, ((struct efa_rdm_av *)(av))->prv_reverse_av_implicit),
 			 implicit_prv_av_count);

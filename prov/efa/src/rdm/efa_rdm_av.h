@@ -32,7 +32,7 @@ struct efa_rdm_av {
 	 * inserted by the application */
 	struct util_av util_av_implicit;
 	struct efa_av_array *addr_to_entry_map_implicit;
-	struct efa_cur_reverse_av *cur_reverse_av_implicit;
+	struct efa_av_array *cur_reverse_av_implicit;
 	struct efa_prv_reverse_av *prv_reverse_av_implicit;
 
 	size_t implicit_av_size;
@@ -85,11 +85,11 @@ _Static_assert(offsetof(struct efa_rdm_ah, efa_ah) == 0,
 int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		    struct fid_av **av_fid, void *context);
 
-int efa_rdm_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
+int efa_rdm_av_reverse_av_add(struct efa_av_array *cur_reverse_av,
 			      struct efa_prv_reverse_av **prv_reverse_av,
 			      struct efa_av_entry *entry);
 
-void efa_rdm_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
+void efa_rdm_av_reverse_av_remove(struct efa_av_array *cur_reverse_av,
 				  struct efa_prv_reverse_av **prv_reverse_av,
 				  struct efa_av_entry *entry);
 
