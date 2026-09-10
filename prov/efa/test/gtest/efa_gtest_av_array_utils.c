@@ -6,8 +6,8 @@
 
 const int efa_test_av_array_inline_size = EFA_AV_ARRAY_INLINE_SIZE;
 const int efa_test_av_array_chunk_size = EFA_AV_ARRAY_CHUNK_SIZE;
-const int efa_test_av_array_max_idx_ceiling = EFA_AV_ARRAY_MAX_IDX_CEILING;
-const int efa_test_av_array_default_max_idx = EFA_AV_ARRAY_DEFAULT_MAX_IDX;
+const uint64_t efa_test_av_array_max_idx_ceiling = EFA_AV_ARRAY_MAX_IDX_CEILING;
+const uint64_t efa_test_av_array_default_max_idx = EFA_AV_ARRAY_DEFAULT_MAX_IDX;
 
 struct efa_av_array *efa_test_av_array_create(void)
 {
@@ -18,7 +18,7 @@ struct efa_av_array *efa_test_av_array_create(void)
 	return arr;
 }
 
-struct efa_av_array *efa_test_av_array_create_max(unsigned max_idx)
+struct efa_av_array *efa_test_av_array_create_max(uint64_t max_idx)
 {
 	struct efa_av_array *arr;
 	struct efa_av_array_attr attr = {0};
@@ -29,7 +29,7 @@ struct efa_av_array *efa_test_av_array_create_max(unsigned max_idx)
 	return arr;
 }
 
-struct efa_av_array *efa_test_av_array_create_attr(unsigned max_idx,
+struct efa_av_array *efa_test_av_array_create_attr(uint64_t max_idx,
 						   unsigned inline_size,
 						   unsigned chunk_size)
 {

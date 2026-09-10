@@ -12,7 +12,7 @@
 #include <infiniband/verbs.h>
 
 struct efa_av;
-struct efa_cur_reverse_av;
+struct efa_av_array;
 struct efa_prv_reverse_av;
 struct efa_av_entry;
 struct ofi_mr_map;
@@ -45,7 +45,7 @@ struct dlist_entry;
 	   uint32_t inlen),                                                    \
 	  (ibv_ah, attr, inlen))                                               \
 	X(int, efa_av_reverse_av_add,                                          \
-	  (struct efa_cur_reverse_av * *cur_reverse_av,                        \
+	  (struct efa_av_array * cur_reverse_av,                               \
 	   struct efa_av_entry * entry),                                       \
 	  (cur_reverse_av, entry))                                             \
 	X(int, efa_ibv_cq_start_poll,                                          \
