@@ -101,12 +101,15 @@ struct efa_rdm_proto {
  * @param[in]  flags  Operation flags (FI_INJECT, FI_DELIVERY_COMPLETE, etc.)
  * @param[out] txe    Pre-allocated TXE, partially initialized on return
  * @param[out] proto  Selected protocol, or NULL if none matched
+ * @return 0 on success, negative errno if the operation cannot be carried at
+ *	   all. Finding no protocol is not a failure: it returns 0 with *proto
+ *	   NULL, and the caller falls back to the old send path.
  */
-void efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
-					struct efa_rdm_peer *peer,
-					const struct fi_msg *msg, uint32_t op,
-					uint64_t flags, struct efa_rdm_ope *txe,
-					struct efa_rdm_proto **proto);
+int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
+				       struct efa_rdm_peer *peer,
+				       const struct fi_msg *msg, uint32_t op,
+				       uint64_t flags, struct efa_rdm_ope *txe,
+				       struct efa_rdm_proto **proto);
 
 /* Utility funcions */
 
