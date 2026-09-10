@@ -11,11 +11,16 @@
 
 #define EFA_AV_ARRAY_INLINE_SIZE 8192
 #define EFA_AV_ARRAY_CHUNK_SIZE 8192
-/* Largest max_idx an array may be created with. */
-#define EFA_AV_ARRAY_MAX_IDX_CEILING 1000000000
+/*
+ * Largest max_idx an array may be created with. The reverse AV is indexed by a
+ * 32-bit key (see efa_av_reverse_av_key), so the whole 32-bit space must be
+ * addressable. The chunk table for such an array is 4MB of calloc'd (i.e.
+ * lazily faulted) pointers, so only the pages holding live chunks are resident.
+ */
+#define EFA_AV_ARRAY_MAX_IDX_CEILING UINT32_MAX
 /* max_idx applied when the caller passes 0. */
 #define EFA_AV_ARRAY_DEFAULT_MAX_IDX \
-	(EFA_AV_ARRAY_INLINE_SIZE * EFA_AV_ARRAY_CHUNK_SIZE - 1)
+	((uint64_t) EFA_AV_ARRAY_INLINE_SIZE * EFA_AV_ARRAY_CHUNK_SIZE - 1)
 
 /*
  * A pointer array indexed by a uint64_t in [0, max_idx] for endpoint peer
@@ -38,7 +43,7 @@
 struct efa_av_array {
 	void **chunk_table;
 	size_t chunk_table_len;
-	unsigned max_idx;
+	uint64_t max_idx;
 	unsigned inline_size;
 	unsigned chunk_size;
 	/* Flexible array member allocated with the struct; must stay last. */
@@ -50,7 +55,7 @@ _Static_assert(offsetof(struct efa_av_array, inline_entries) % 8 == 0,
 
 struct efa_av_array_attr {
 	/* Largest valid index; 0 selects EFA_AV_ARRAY_DEFAULT_MAX_IDX. */
-	unsigned max_idx;
+	uint64_t max_idx;
 	unsigned inline_size;
 	unsigned chunk_size;
 };

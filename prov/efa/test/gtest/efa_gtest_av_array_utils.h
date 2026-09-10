@@ -17,9 +17,9 @@ struct efa_av_array;
 /* Create with the default max_idx; NULL on failure. */
 struct efa_av_array *efa_test_av_array_create(void);
 /* Create with a custom max_idx; NULL if the value is rejected. */
-struct efa_av_array *efa_test_av_array_create_max(unsigned max_idx);
+struct efa_av_array *efa_test_av_array_create_max(uint64_t max_idx);
 /* Create with explicit attr fields; NULL if rejected. 0 selects defaults. */
-struct efa_av_array *efa_test_av_array_create_attr(unsigned max_idx,
+struct efa_av_array *efa_test_av_array_create_attr(uint64_t max_idx,
 						   unsigned inline_size,
 						   unsigned chunk_size);
 void efa_test_av_array_destroy(struct efa_av_array *arr);
@@ -37,8 +37,8 @@ int efa_test_av_array_iter_first_hit(struct efa_av_array *arr, void *target);
 
 extern const int efa_test_av_array_inline_size;
 extern const int efa_test_av_array_chunk_size;
-extern const int efa_test_av_array_max_idx_ceiling;
-extern const int efa_test_av_array_default_max_idx;
+extern const uint64_t efa_test_av_array_max_idx_ceiling;
+extern const uint64_t efa_test_av_array_default_max_idx;
 
 #ifdef __cplusplus
 }

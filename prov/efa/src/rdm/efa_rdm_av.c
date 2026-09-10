@@ -482,7 +482,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 	if (efa_av_entry_base_construct(av, entry, ah, fi_addr))
 		goto err_release_ah;
 
-	if (efa_rdm_av_reverse_av_add(&av->cur_reverse_av, &rdm_av->prv_reverse_av,
+	if (efa_rdm_av_reverse_av_add(av->cur_reverse_av, &rdm_av->prv_reverse_av,
 				      entry)) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert entry for fi_addr %" PRIu64
 			" into reverse AV\n", fi_addr);
@@ -508,7 +508,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert fi_addr %" PRIu64
 			" into shm provider's AV: %s\n", fi_addr, fi_strerror(-err));
-		efa_rdm_av_reverse_av_remove(&av->cur_reverse_av,
+		efa_rdm_av_reverse_av_remove(av->cur_reverse_av,
 					     &rdm_av->prv_reverse_av, entry);
 		efa_rdm_ah_release(av->domain, entry->ah, false);
 		efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
@@ -588,7 +588,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 	dlist_insert_tail(&av_entry->ah_implicit_conn_list_entry,
 			  &((struct efa_rdm_ah *)(av_entry->efa_av_entry.ah))->implicit_conn_list);
 
-	err = efa_rdm_av_reverse_av_add(&rdm_av->cur_reverse_av_implicit,
+	err = efa_rdm_av_reverse_av_add(rdm_av->cur_reverse_av_implicit,
 					&rdm_av->prv_reverse_av_implicit, efa_av_entry);
 	if (err) {
 		efa_rdm_av_entry_deinit(av, av_entry);
@@ -597,7 +597,7 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 
 	err = efa_av_array_insert(rdm_av->addr_to_entry_map_implicit, fi_addr, efa_av_entry);
 	if (err) {
-		efa_rdm_av_reverse_av_remove(&rdm_av->cur_reverse_av_implicit,
+		efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
 					     &rdm_av->prv_reverse_av_implicit, efa_av_entry);
 		efa_rdm_av_entry_deinit(av, av_entry);
 		goto err_release;
@@ -637,7 +637,7 @@ void efa_rdm_av_entry_release_explicit(struct efa_av *av,
 
 	assert(ofi_genlock_held(&av->util_av.lock));
 
-	efa_rdm_av_reverse_av_remove(&av->cur_reverse_av, &rdm_av->prv_reverse_av,
+	efa_rdm_av_reverse_av_remove(av->cur_reverse_av, &rdm_av->prv_reverse_av,
 				     &av_entry->efa_av_entry);
 	efa_rdm_av_entry_deinit(av, av_entry);
 	efa_rdm_ah_release(av->domain, av_entry->efa_av_entry.ah, false);
@@ -660,7 +660,7 @@ void efa_rdm_av_entry_release_implicit(struct efa_av *av, struct efa_rdm_av_entr
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 
 	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-	efa_rdm_av_reverse_av_remove(&rdm_av->cur_reverse_av_implicit,
+	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
 				     &rdm_av->prv_reverse_av_implicit,
 				     &av_entry->efa_av_entry);
 
@@ -689,7 +689,7 @@ void efa_rdm_av_entry_release_implicit_ah_unsafe(struct efa_av *av,
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 
 	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
-	efa_rdm_av_reverse_av_remove(&rdm_av->cur_reverse_av_implicit,
+	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
 				     &rdm_av->prv_reverse_av_implicit,
 				     &av_entry->efa_av_entry);
 
@@ -723,24 +723,36 @@ struct efa_rdm_av_entry *efa_rdm_av_addr_to_entry_implicit(struct efa_av *av,
 }
 
 
+/**
+ * @brief lock-free reverse lookup in the current reverse AV
+ *
+ * Reads the entry currently registered for (ahn, qpn) and validates it against
+ * the packet's connection ID. cur_reverse_av is an efa_av_array, so this needs
+ * no lock (see the concurrency notes on struct efa_av).
+ *
+ * @param[in]	cur_reverse_av	reverse AV indexed by efa_av_reverse_av_key()
+ * @param[in]	ahn		address handle number
+ * @param[in]	qpn		QP number
+ * @param[in]	pkt_entry	NULL or rdm packet entry, used to extract connid
+ * @param[out]	prv_connid	set to the connid the caller must look up in
+ *				prv_reverse_av when this function returns NULL
+ *				because the packet is from a previous connection
+ *				on this (ahn, qpn); left untouched otherwise
+ * @return	the matching efa_av_entry, or NULL. NULL with *prv_connid unset
+ *		means no peer is known for (ahn, qpn) at all.
+ */
 static inline struct efa_av_entry *
-efa_rdm_av_reverse_lookup_entry(struct efa_cur_reverse_av **cur_reverse_av,
-				struct efa_prv_reverse_av **prv_reverse_av,
-				uint16_t ahn, uint16_t qpn,
-				struct efa_rdm_pke *pkt_entry)
+efa_rdm_av_reverse_lookup_cur(struct efa_av_array *cur_reverse_av, uint16_t ahn,
+			      uint16_t qpn, struct efa_rdm_pke *pkt_entry,
+			      bool *check_prv, uint32_t *prv_connid)
 {
 	uint32_t *connid;
-	struct efa_cur_reverse_av *cur_entry;
-	struct efa_prv_reverse_av *prv_entry;
-	struct efa_cur_reverse_av_key cur_key;
-	struct efa_prv_reverse_av_key prv_key;
+	struct efa_av_entry *cur_entry;
 
-	cur_key.ahn = ahn;
-	cur_key.qpn = qpn;
+	*check_prv = false;
 
-	/* coverity[overflow_const : FALSE] - intentional unsigned wraparound in uthash Jenkins hash */
-	HASH_FIND(hh, *cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
-
+	cur_entry = efa_av_array_at(cur_reverse_av,
+				    efa_av_reverse_av_key(ahn, qpn));
 	if (OFI_UNLIKELY(!cur_entry))
 		return NULL;
 
@@ -751,7 +763,7 @@ efa_rdm_av_reverse_lookup_entry(struct efa_cur_reverse_av **cur_reverse_av,
 		 * the pkt_entry is allocated from a buffer user posted that
 		 * doesn't expect any pkt hdr.
 		 */
-		return cur_entry->entry;
+		return cur_entry;
 	}
 
 	connid = efa_rdm_pke_connid_ptr(pkt_entry);
@@ -764,25 +776,53 @@ efa_rdm_av_reverse_lookup_entry(struct efa_cur_reverse_av **cur_reverse_av,
 			      "The communication can continue but it is "
 			      "encouraged to use\n"
 			      "a newer version of libfabric\n");
-		return cur_entry->entry;
+		return cur_entry;
 	}
 
-	if (OFI_LIKELY(*connid == efa_av_entry_ep_addr(cur_entry->entry)->qkey))
-		return cur_entry->entry;
+	if (OFI_LIKELY(*connid == efa_av_entry_ep_addr(cur_entry)->qkey))
+		return cur_entry;
 
-	/* the packet is from a previous peer, look for its address from the
-	 * prv_reverse_av */
+	*check_prv = true;
+	*prv_connid = *connid;
+	return NULL;
+}
+
+
+/**
+ * @brief reverse lookup of a previous connection on a reused (ahn, qpn)
+ *
+ * Slow path taken only when a QP number was reused: prv_reverse_av is a hash map
+ * and the caller must hold the lock that guards it.
+ *
+ * @param[in]	prv_reverse_av	reverse AV keyed by (ahn, qpn, connid)
+ * @param[in]	ahn		address handle number
+ * @param[in]	qpn		QP number
+ * @param[in]	connid		connection ID taken from the incoming packet
+ * @return	the matching efa_av_entry, or NULL
+ */
+static struct efa_av_entry *
+efa_rdm_av_reverse_lookup_prv(struct efa_prv_reverse_av **prv_reverse_av,
+			      uint16_t ahn, uint16_t qpn, uint32_t connid)
+{
+	struct efa_prv_reverse_av *prv_entry;
+	struct efa_prv_reverse_av_key prv_key;
+
+	memset(&prv_key, 0, sizeof(prv_key));
 	prv_key.ahn = ahn;
 	prv_key.qpn = qpn;
-	prv_key.connid = *connid;
+	prv_key.connid = connid;
 	HASH_FIND(hh, *prv_reverse_av, &prv_key, sizeof(prv_key), prv_entry);
 
 	return OFI_LIKELY(!!prv_entry) ? prv_entry->entry : NULL;
-};
+}
 
 
 /**
  * @brief find fi_addr for rdm endpoint in the explicit AV (connid aware)
+ *
+ * The common case -- the packet comes from the current connection on its
+ * (ahn, qpn) -- is served lock free out of cur_reverse_av. Only a reused QP
+ * number falls through to the lock-protected prv_reverse_av hash map.
  *
  * @param[in]	av	address vector
  * @param[in]	ahn	address handle number
@@ -796,11 +836,22 @@ fi_addr_t efa_rdm_av_reverse_lookup(struct efa_av *av, uint16_t ahn,
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	struct efa_av_entry *entry;
+	uint32_t prv_connid = 0;
+	bool check_prv;
 	fi_addr_t fi_addr;
 
+	entry = efa_rdm_av_reverse_lookup_cur(av->cur_reverse_av, ahn, qpn,
+					      pkt_entry, &check_prv,
+					      &prv_connid);
+	if (OFI_LIKELY(!!entry))
+		return entry->fi_addr;
+
+	if (!check_prv)
+		return FI_ADDR_NOTAVAIL;
+
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
-	entry = efa_rdm_av_reverse_lookup_entry(
-		&av->cur_reverse_av, &rdm_av->prv_reverse_av, ahn, qpn, pkt_entry);
+	entry = efa_rdm_av_reverse_lookup_prv(&rdm_av->prv_reverse_av, ahn, qpn,
+					      prv_connid);
 	fi_addr = (OFI_LIKELY(!!entry)) ? entry->fi_addr : FI_ADDR_NOTAVAIL;
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
@@ -824,22 +875,34 @@ fi_addr_t efa_rdm_av_reverse_lookup_implicit(struct efa_av *av, uint16_t ahn,
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	struct efa_av_entry *entry;
+	struct efa_rdm_av_entry *av_entry;
 	fi_addr_t implicit_fi_addr = FI_ADDR_NOTAVAIL;
+	uint32_t prv_connid = 0;
+	bool check_prv;
 
-	ofi_genlock_lock(&av->domain->util_domain.lock);
+	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
+
+	entry = efa_rdm_av_reverse_lookup_cur(rdm_av->cur_reverse_av_implicit,
+					      ahn, qpn, pkt_entry, &check_prv,
+					      &prv_connid);
+	if (!entry && !check_prv)
+		goto unlock_domain;
+
 	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	entry = efa_rdm_av_reverse_lookup_entry(&rdm_av->cur_reverse_av_implicit,
-						&rdm_av->prv_reverse_av_implicit, ahn,
-						qpn, pkt_entry);
+	if (!entry)
+		entry = efa_rdm_av_reverse_lookup_prv(
+			&rdm_av->prv_reverse_av_implicit, ahn, qpn, prv_connid);
 
 	if (OFI_LIKELY(!!entry)) {
-		struct efa_rdm_av_entry *av_entry =
-			container_of(entry, struct efa_rdm_av_entry, efa_av_entry);
+		av_entry = container_of(entry, struct efa_rdm_av_entry,
+					efa_av_entry);
 		efa_rdm_av_implicit_av_lru_move(av, av_entry);
 		implicit_fi_addr = av_entry->implicit_fi_addr;
 	}
 	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	ofi_genlock_unlock(&av->domain->util_domain.lock);
+
+unlock_domain:
+	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 
 	return implicit_fi_addr;
 }
@@ -884,21 +947,21 @@ void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
  * connection is preserved there before the base cur slot is overwritten. The
  * efa-direct reverse lookup reads cur_reverse_av only and uses the base variant.
  *
- * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
+ * @param[in,out]	cur_reverse_av	Reverse AV keyed by efa_av_reverse_av_key()
  * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
  * @param[in]		entry		efa_av_entry object
  * @return		On success, return 0.
  * 			Otherwise, return a negative libfabric error code
  */
-int efa_rdm_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
+int efa_rdm_av_reverse_av_add(struct efa_av_array *cur_reverse_av,
 				     struct efa_prv_reverse_av **prv_reverse_av,
 				     struct efa_av_entry *entry)
 {
-	struct efa_cur_reverse_av *cur_entry;
+	struct efa_av_entry *cur_entry;
 	struct efa_prv_reverse_av *prv_entry;
-	struct efa_cur_reverse_av_key cur_key;
 
-	cur_entry = efa_base_av_reverse_av_add(cur_reverse_av, entry, &cur_key);
+	cur_entry = efa_av_array_at(cur_reverse_av,
+				    efa_av_entry_reverse_av_key(entry));
 	if (cur_entry) {
 		prv_entry = malloc(sizeof(*prv_entry));
 		if (!prv_entry) {
@@ -906,10 +969,10 @@ int efa_rdm_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
 			return -FI_ENOMEM;
 		}
 
-		prv_entry->key.ahn = cur_key.ahn;
-		prv_entry->key.qpn = cur_key.qpn;
-		prv_entry->key.connid = efa_av_entry_ep_addr(cur_entry->entry)->qkey;
-		prv_entry->entry = cur_entry->entry;
+		prv_entry->key.ahn = entry->ah->ahn;
+		prv_entry->key.qpn = efa_av_entry_ep_addr(entry)->qpn;
+		prv_entry->key.connid = efa_av_entry_ep_addr(cur_entry)->qkey;
+		prv_entry->entry = cur_entry;
 		HASH_ADD(hh, *prv_reverse_av, key, sizeof(prv_entry->key), prv_entry);
 	}
 
@@ -924,11 +987,11 @@ int efa_rdm_av_reverse_av_add(struct efa_cur_reverse_av **cur_reverse_av,
  * into the connid-keyed prv_reverse_av; remove it from there. efa-direct never
  * populates prv_reverse_av and uses the base variant.
  *
- * @param[in,out]	cur_reverse_av	Reverse AV with AHN and QPN as key
+ * @param[in,out]	cur_reverse_av	Reverse AV keyed by efa_av_reverse_av_key()
  * @param[in,out]	prv_reverse_av	Reverse AV with AHN, QPN and QKEY as key
  * @param[in]		entry		efa_av_entry object
  */
-void efa_rdm_av_reverse_av_remove(struct efa_cur_reverse_av **cur_reverse_av,
+void efa_rdm_av_reverse_av_remove(struct efa_av_array *cur_reverse_av,
 					 struct efa_prv_reverse_av **prv_reverse_av,
 					 struct efa_av_entry *entry)
 {
@@ -1034,7 +1097,7 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
-	err = efa_rdm_av_reverse_av_add(&av->cur_reverse_av, &rdm_av->prv_reverse_av,
+	err = efa_rdm_av_reverse_av_add(av->cur_reverse_av, &rdm_av->prv_reverse_av,
 					explicit_base_entry);
 	if (err) {
 		EFA_WARN(FI_LOG_AV, "Failed to insert explicit entry for fi_addr %" PRIu64 " into reverse AV: %s\n",
@@ -1049,7 +1112,7 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 	}
 
 	/* Handle reverse AV and AV ref counts */
-	efa_rdm_av_reverse_av_remove(&rdm_av->cur_reverse_av_implicit,
+	efa_rdm_av_reverse_av_remove(rdm_av->cur_reverse_av_implicit,
 				     &rdm_av->prv_reverse_av_implicit,
 				     &implicit_av_entry->efa_av_entry);
 
@@ -1381,12 +1444,43 @@ static struct fi_ops_av efa_rdm_av_ops = {
 };
 
 
+/*
+ * Release an explicit AV entry reached through the current reverse AV. Called
+ * only from the close path, where clearing the slot from under the iteration is
+ * safe because efa_av_array_iter has already loaded the pointer.
+ */
+static int efa_rdm_av_close_release_explicit(struct efa_av_array *arr,
+					     void *entry, void *context)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+{
+	struct efa_av *av = context;
+
+	efa_rdm_av_entry_release_explicit(
+		av, container_of((struct efa_av_entry *) entry,
+				 struct efa_rdm_av_entry, efa_av_entry));
+	return 0;
+}
+
+/* Implicit AV counterpart of efa_rdm_av_close_release_explicit. */
+static int efa_rdm_av_close_release_implicit(struct efa_av_array *arr,
+					     void *entry, void *context)
+	OFI_TSA_REQUIRES(efa_implicit_av_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+{
+	struct efa_av *av = context;
+
+	efa_rdm_av_entry_release_implicit(
+		av, container_of((struct efa_av_entry *) entry,
+				 struct efa_rdm_av_entry, efa_av_entry));
+	return 0;
+}
+
 static int efa_rdm_av_close(struct fid *fid)
 	OFI_TSA_NO_ANALYSIS
 {
 	struct efa_av *av;
 	struct efa_rdm_av *rdm_av;
-	struct efa_cur_reverse_av *cur_entry, *curtmp;
 	struct efa_prv_reverse_av *prv_entry, *prvtmp;
 	struct efa_ep_addr_hashable *ep_addr_hashable, *tmp;
 	int err = 0;
@@ -1400,18 +1494,16 @@ static int efa_rdm_av_close(struct fid *fid)
 	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
-	HASH_ITER(hh, av->cur_reverse_av, cur_entry, curtmp) {
-		efa_rdm_av_entry_release_explicit(av, container_of(cur_entry->entry, struct efa_rdm_av_entry, efa_av_entry));
-	}
+	efa_av_array_iter(av->cur_reverse_av, av,
+			  efa_rdm_av_close_release_explicit);
 	HASH_ITER(hh, rdm_av->prv_reverse_av, prv_entry, prvtmp) {
 		efa_rdm_av_entry_release_explicit(av, container_of(prv_entry->entry, struct efa_rdm_av_entry, efa_av_entry));
 	}
 	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
 
 	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	HASH_ITER(hh, rdm_av->cur_reverse_av_implicit, cur_entry, curtmp) {
-		efa_rdm_av_entry_release_implicit(av, container_of(cur_entry->entry, struct efa_rdm_av_entry, efa_av_entry));
-	}
+	efa_av_array_iter(rdm_av->cur_reverse_av_implicit, av,
+			  efa_rdm_av_close_release_implicit);
 	HASH_ITER(hh, rdm_av->prv_reverse_av_implicit, prv_entry, prvtmp) {
 		efa_rdm_av_entry_release_implicit(av, container_of(prv_entry->entry, struct efa_rdm_av_entry, efa_av_entry));
 	}
@@ -1439,6 +1531,8 @@ static int efa_rdm_av_close(struct fid *fid)
 
 	efa_av_array_destroy(av->addr_to_entry_map);
 	efa_av_array_destroy(rdm_av->addr_to_entry_map_implicit);
+	efa_av_array_destroy(av->cur_reverse_av);
+	efa_av_array_destroy(rdm_av->cur_reverse_av_implicit);
 
 	free(rdm_av);
 	return err;
@@ -1481,10 +1575,14 @@ int efa_rdm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto err_destruct_base;
 
+	ret = efa_av_reverse_av_init(&rdm_av->cur_reverse_av_implicit);
+	if (ret)
+		goto err_destroy_implicit_map;
+
 	ret = efa_av_init_util_av(efa_domain, attr, &rdm_av->util_av_implicit, context,
 				  sizeof(struct efa_rdm_av_entry) - EFA_EP_ADDR_LEN);
 	if (ret)
-		goto err_destroy_implicit_map;
+		goto err_destroy_implicit_reverse_av;
 
 	if (efa_domain->fabric &&
 	    ((struct efa_rdm_fabric *) efa_domain->fabric)->shm_fabric) {
@@ -1534,6 +1632,9 @@ err_close_util_av_implicit:
 		EFA_WARN(FI_LOG_AV,
 			 "Unable to close util_av_implicit: %s\n", fi_strerror(-retv));
 
+err_destroy_implicit_reverse_av:
+	efa_av_array_destroy(rdm_av->cur_reverse_av_implicit);
+
 err_destroy_implicit_map:
 	efa_av_array_destroy(rdm_av->addr_to_entry_map_implicit);
 
@@ -1543,6 +1644,7 @@ err_destruct_base:
 		EFA_WARN(FI_LOG_AV,
 			 "Unable to close util_av: %s\n", fi_strerror(-retv));
 	efa_av_array_destroy(av->addr_to_entry_map);
+	efa_av_array_destroy(av->cur_reverse_av);
 
 err_free:
 	free(rdm_av);
