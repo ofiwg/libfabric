@@ -45,6 +45,10 @@ if HAVE_FI_EFA_WR_HIGH_PPS
 bin_PROGRAMS += prov/efa/src/fi_efa_rma_bw
 endif HAVE_FI_EFA_WR_HIGH_PPS
 
+if HAVE_FI_EFA_EXTENDED_MSG
+bin_PROGRAMS += prov/efa/src/fi_efa_rma_comp_signal
+endif HAVE_FI_EFA_EXTENDED_MSG
+
 if HAVE_VERBS_DEVEL
 if HAVE_EFA_DV
 bin_PROGRAMS += prov/efa/src/fi_efa_exhaust_mr_reg_rdm_pingpong \
@@ -127,6 +131,13 @@ prov_efa_src_fi_efa_rma_bw_SOURCES = \
 	$(benchmarks_srcs)
 prov_efa_src_fi_efa_rma_bw_LDADD = libfabtests.la
 endif HAVE_FI_EFA_WR_HIGH_PPS
+
+if HAVE_FI_EFA_EXTENDED_MSG
+prov_efa_src_fi_efa_rma_comp_signal_SOURCES = \
+	prov/efa/src/efa_rma_comp_signal.c \
+	$(efa_shared_srcs)
+prov_efa_src_fi_efa_rma_comp_signal_LDADD = libfabtests.la
+endif HAVE_FI_EFA_EXTENDED_MSG
 
 if HAVE_VERBS_DEVEL
 if HAVE_EFA_DV
