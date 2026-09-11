@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2020 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2026 ETH Zurich. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -59,7 +60,7 @@ static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	util_ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
 	ep = container_of(util_ep, struct rxd_ep, util_ep);
 
-	str = fi_cq_strerror(ep->dg_cq, prov_errno, err_data, buf, len);
+	str = fi_cq_strerror(ep->dg_rx_cq, prov_errno, err_data, buf, len);
 	ofi_genlock_unlock(&cq->util_cq.ep_list_lock);
 	return str;
 }
@@ -85,6 +86,7 @@ void rxd_rx_entry_free(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 {
 	rx_entry->op <= RXD_TAGGED ? ep->rx_msg_avail++ : ep->rx_rma_avail++;
 	rx_entry->op = RXD_NO_OP;
+	memset(rx_entry->desc, 0, sizeof(rx_entry->desc));
 	dlist_remove(&rx_entry->entry);
 	ofi_ibuf_free(rx_entry);
 }
@@ -353,6 +355,9 @@ static int rxd_send_cts(struct rxd_ep *rxd_ep, struct rxd_rts_pkt *rts_pkt,
 	cts = (struct rxd_cts_pkt *) (pkt_entry->pkt);
 	pkt_entry->pkt_size = sizeof(*cts) + rxd_ep->tx_prefix_size;
 	pkt_entry->peer = peer;
+	pkt_entry->dg_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->rxdaddr_dg_idx),
+					    (int)peer);
+	pkt_entry->send_pkt_cb = &rxd_ep_send_pkt_no_cqe;
 
 	cts->base_hdr.version = RXD_PROTOCOL_VERSION;
 	cts->base_hdr.type = RXD_CTS;
@@ -1196,19 +1201,19 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 	ofi_buf_free(pkt_entry);
 }
 
-void rxd_handle_error(struct rxd_ep *ep)
+void rxd_handle_error(struct rxd_ep *ep, struct fid_cq *cq)
 {
 	struct fi_cq_err_entry err = {0};
 	ssize_t ret;
 
-	ret = fi_cq_readerr(ep->dg_cq, &err, 0);
+	ret = fi_cq_readerr(cq, &err, 0);
 	if (ret < 0) {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
 			"Error reading CQ: %s\n", fi_strerror((int) -ret));
 	} else {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
 			"Received %s error from core provider: %s\n",
-			err.flags & FI_SEND ? "tx" : "rx", fi_strerror(-err.err));
+			cq == ep->dg_tx_cq ? "tx" : "rx", fi_strerror(-err.err));
 	}
 }
 
