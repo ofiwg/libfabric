@@ -400,7 +400,7 @@ int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 			"read bool var %s=%d\n", param_name, *(int *) value);
 		break;
 	case FI_PARAM_SIZE_T:
-		* ((size_t *) value) = strtol(str_value, NULL, 0);
+		* ((size_t *) value) = strtoull(str_value, NULL, 0);
 		FI_INFO(provider, FI_LOG_CORE,
 			"read long var %s=%zu\n", param_name, *(size_t *) value);
 		break;
