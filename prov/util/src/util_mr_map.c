@@ -140,13 +140,22 @@ int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 
 	addr = (void *) (*io_addr + (uintptr_t) attr->offset);
 
+	/*
+	 * addr and len come from a remote peer's rma_iov, so the bounds check
+	 * must hold for every 64-bit value of either.
+	 *
+	 * Compare the offset of the target region into the MR against the
+	 * space the MR has left.  Neither subtraction can underflow because
+	 * the preceding checks establish addr >= iov_base and len <= iov_len.
+	 */
 	if ((addr < attr->mr_iov[0].iov_base) ||
-	    (((char *) addr + len) > ((char *) attr->mr_iov[0].iov_base +
-			    	      attr->mr_iov[0].iov_len))) {
+	    (len > attr->mr_iov[0].iov_len) ||
+	    ((uintptr_t) addr - (uintptr_t) attr->mr_iov[0].iov_base >
+	     attr->mr_iov[0].iov_len - len)) {
                 FI_WARN(map->prov, FI_LOG_MR,
-                        "target region (%p - %p) "
+                        "target region (%p, len %zu) "
                         "out of registered range (%p - %p)\n",
-                        addr, (char *) addr + len,
+                        addr, len,
                         (char *) attr->mr_iov[0].iov_base,
                         (char *) attr->mr_iov[0].iov_base +
                         attr->mr_iov[0].iov_len);
