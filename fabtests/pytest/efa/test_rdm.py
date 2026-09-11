@@ -32,6 +32,19 @@ def test_rdm_bw_functional_efa(cmdline_args, completion_semantic):
     test = ClientServerTest(cmdline_args, "fi_flood -e rdm -v -T 1", completion_semantic=completion_semantic, fabric="efa")
     test.run()
 
+# Functional check of the efa-direct no-FI_CONTEXT2 path (the GDA usecase):
+# "-M context2" clears FI_CONTEXT2 from the hints, so the provider must
+# complete send/recv without ever dereferencing the caller's context buffer.
+# Kept to a single small size and short iterations so it is quick for PR CI.
+@pytest.mark.pr_ci
+@pytest.mark.functional
+def test_rdm_bw_no_context2(cmdline_args):
+    from common import ClientServerTest
+    test = ClientServerTest(cmdline_args, "fi_rdm_bw -M context2 -S 1024 -j 0",
+                            completion_semantic="transmit_complete",
+                            fabric="efa-direct", iteration_type="short")
+    test.run()
+
 @pytest.mark.fabric(params=["efa", "efa-direct"])
 @pytest.mark.message_sizes(default_efa=PERF_SIZES, default_efa_direct=DIRECT_SIZES,
                            pr_ci_efa=PERF_PR_CI, pr_ci_efa_direct=DIRECT_SIZES)
