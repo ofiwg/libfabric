@@ -19,7 +19,7 @@ on:
 permissions: {}
 
 env:
-  RDMA_CORE_VERSION: v35.0
+  RDMA_CORE_VERSION: v65.0
   RDMA_CORE_PATH: '$PWD/rdma-core/build'
 
 jobs:
@@ -56,7 +56,7 @@ jobs:
                       CC=clang
           # -Werror=thread-safety makes only locking-contract violations fatal;
           # unrelated warnings do not fail the job.
-          make -j 2 AM_CFLAGS="-Wthread-safety -Werror=thread-safety"
+          make -j 2 AM_CFLAGS="-Werror=thread-safety"
 
       - name: Upload build logs
         if: failure()

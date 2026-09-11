@@ -160,6 +160,8 @@ AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
 # Clang Thread Safety Analysis. Off by default; enable with
 # --enable-thread-safety-analysis. Only then, and only if the compiler
 # supports it, add -Wthread-safety and define OFI_THREAD_SAFETY_ANALYSIS.
+# -Wthread-safety-beta additionally enables the lock ordering checks driven by
+# the acquired_after annotations.
 AC_ARG_ENABLE([thread_safety_analysis],
 	[AS_HELP_STRING([--enable-thread-safety-analysis],
 		[Enable Clang thread safety analysis @<:@default=no@:>@])],
@@ -169,10 +171,10 @@ AC_ARG_ENABLE([thread_safety_analysis],
 AS_IF([test x"$enable_thread_safety_analysis" != x"no"], [
 	AC_MSG_CHECKING([whether $CC supports -Wthread-safety])
 	CFLAGS_save="$CFLAGS"
-	CFLAGS="-Werror -Wthread-safety $CFLAGS_save"
+	CFLAGS="-Werror -Wthread-safety -Wthread-safety-beta $CFLAGS_save"
 	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[]])],
 			  [AC_MSG_RESULT([yes])
-			   CFLAGS="-Wthread-safety -DOFI_THREAD_SAFETY_ANALYSIS $CFLAGS_save"],
+			   CFLAGS="-Wthread-safety -Wthread-safety-beta -DOFI_THREAD_SAFETY_ANALYSIS $CFLAGS_save"],
 			  [AC_MSG_RESULT([no])
 			   CFLAGS="$CFLAGS_save"])
 	unset CFLAGS_save
