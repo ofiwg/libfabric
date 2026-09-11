@@ -1105,6 +1105,9 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 	if (opts.cqdata_op && allow_rx_cq_data)
 		hints->mode |= FI_RX_CQ_DATA;
 
+	if (opts.options & FT_OPT_NO_CONTEXT2)
+		hints->mode &= ~FI_CONTEXT2;
+
 	hints->domain_attr->threading = opts.threading;
 
 	ret = fi_getinfo(ft_fiversion, node, service, flags, hints, info);
@@ -3498,6 +3501,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-M <mode>", "Disable mode bit from test");
 	FT_PRINT_OPTS_USAGE("-K", "fork a child process after initializing endpoint");
 	FT_PRINT_OPTS_USAGE("", "mr_local");
+	FT_PRINT_OPTS_USAGE("", "context2");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
@@ -3598,6 +3602,8 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 	case 'M':
 		if (!strncasecmp("mr_local", optarg, 8))
 			opts->mr_mode &= ~FI_MR_LOCAL;
+		else if (!strncasecmp("context2", optarg, 8))
+			opts->options |= FT_OPT_NO_CONTEXT2;
 		break;
 	case 'K':
 		opts->options |= FT_OPT_FORK_CHILD;
