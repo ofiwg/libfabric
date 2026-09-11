@@ -175,6 +175,56 @@ def test_efa_rma_bw_high_pps(cmdline_args, operation_type, mem_type, rma_fabric)
                                additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
 
 
+# Completion actions ride on the writes fi_efa_rma_bw posts. They are an
+# EFA-direct feature, so this runs only on efa-direct, and the test itself
+# reports ENODATA (a skip) when the libfabric it was built against has no
+# completion actions or the device does not advertise support for them.
+@pytest.mark.comp_action
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.functional
+# A write with immediate only carries a local action, so writedata runs that one
+# mode and plain write covers the rest.
+@pytest.mark.parametrize("operation_type,action_mode",
+                         [("write", "local"),
+                          ("write", "remote"),
+                          ("write", "both"),
+                          ("writedata", "local")])
+@pytest.mark.parametrize("action_width", ["8", "16", "32"])
+def test_efa_rma_bw_comp_action(cmdline_args, operation_type, action_mode,
+                                action_width, rma_fabric):
+    command = ("fi_efa_rma_bw -e rdm -I 8"
+               " -o " + operation_type +
+               " --action-mode " + action_mode +
+               " --action-width " + action_width)
+    test = ClientServerTest(cmdline_args, command,
+                            iteration_type=None,
+                            message_size=1024,
+                            memory_type="host_to_host",
+                            fabric=rma_fabric)
+    test.run()
+
+
+# The action target lives in the memory type -D selects, so here the device
+# writes the action value straight into device memory over a dmabuf fd. Neuron
+# is the only hmem type covered: its dmabuf export is unconditional, while the
+# CUDA one depends on both driver support and a mapping type that has to match
+# the NIC the test picked.
+@pytest.mark.comp_action
+@pytest.mark.neuron_memory
+@pytest.mark.fabric(params=["efa-direct"])
+@pytest.mark.functional
+@pytest.mark.parametrize("action_mode", ["local", "remote", "both"])
+def test_efa_rma_bw_comp_action_neuron(cmdline_args, action_mode, rma_fabric):
+    command = ("fi_efa_rma_bw -e rdm -I 8 -o write"
+               " --action-mode " + action_mode)
+    test = ClientServerTest(cmdline_args, command,
+                            iteration_type=None,
+                            message_size=4096,
+                            memory_type="neuron_to_neuron",
+                            fabric=rma_fabric)
+    test.run()
+
+
 # Testing the batch mode of fi_efa_rma_bw (--post-list) which batch multiple WQEs with FI_MORE
 @pytest.mark.pr_ci
 @pytest.mark.fabric(params=["efa", "efa-direct"])
