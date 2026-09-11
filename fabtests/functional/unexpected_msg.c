@@ -336,9 +336,12 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "vCUM:h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv, "vCUM:h" CS_OPTS INFO_OPTS,
+				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parsecsopts(op, optarg, &opts);
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
@@ -362,6 +365,7 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE("-C", "transfer remote CQ data");
 			FT_PRINT_OPTS_USAGE("-M <count>", "number of concurrent msgs");
 			FT_PRINT_OPTS_USAGE("-U", "Do transmission with FI_DELIVERY_COMPLETE");
+			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
 	}
