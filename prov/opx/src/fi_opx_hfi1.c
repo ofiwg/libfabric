@@ -6757,9 +6757,10 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 		}
 	} else {
 		assert(hfi1_type & OPX_HFI1_MIXED_9B);
-		/* +4 dws for the 2 edge qwords. No extra SCB here: 9B carries
-		 * the tag in its header SCB, leaving two free payload qwords. */
-		const uint64_t pbc_dws	= 2 + 30 - 2 - 2 + (do_stripe << 4) + (has_edge ? 4 : 0);
+		const uint64_t pbc_dws = 2 +		   /* 1st SCB: pbc */
+					 14 +		   /* 1st SCB: 56 bytes of 9B packet header */
+					 16 +		   /* 2nd SCB: 64 bytes of payload */
+					 (do_stripe << 4); /* 3rd SCB: 64 more bytes if striping is on */
 		const uint16_t lrh_dws	= __cpu_to_be16(pbc_dws - 2 + 1);
 		const uint64_t pbc_dlid = OPX_PBC_DLID(addr.planes[0].lid, hfi1_type);
 		const uint64_t opcode =
@@ -6773,14 +6774,15 @@ ssize_t opx_hfi1_tx_rzv_rts_hfisvc(struct fi_opx_ep *opx_ep, const void *buf, co
 			((uint64_t) niov_field << 32) | (uint64_t) opx_ep->domain->hfisvc.ctxs[plane_idx].client_key;
 
 		volatile uint64_t *const scb = FI_OPX_HFI1_PIO_SCB_HEAD(tx->pio_scb_sop_first, pio_state);
-		opx_cacheline_copy_qw_vol(
-			opx_ep->domain, scb, replay->scb.qws,
-			tx->rzv_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) | tx->force_credit_return | pbc_dlid |
-				OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, addr.tx_index),
-			tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
-			tx->rzv_9B.hdr.qw_9B[1] | bth_rx | opcode,
-			tx->rzv_9B.hdr.qw_9B[2] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(addr.tx_index),
-			tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32), niov_client_key, xfer_len, tag);
+		opx_cacheline_copy_qw_vol(opx_ep->domain, scb, replay->scb.qws,
+					  tx->rzv_9B.qw0 | OPX_PBC_LEN(pbc_dws, hfi1_type) |
+						  OPX_PBC_CR(tx->force_credit_return, OPX_HFI1_MIXED_9B) | pbc_dlid |
+						  OPX_PBC_LOOPBACK(opx_ep->domain, pbc_dlid, hfi1_type, addr.tx_index),
+					  tx->rzv_9B.hdr.qw_9B[0] | lrh_dlid | ((uint64_t) lrh_dws << 32),
+					  tx->rzv_9B.hdr.qw_9B[1] | bth_rx | opcode,
+					  tx->rzv_9B.hdr.qw_9B[2] | psn | FI_OPX_PKT_TX_INDEX_TO_QW3(addr.tx_index),
+					  tx->rzv_9B.hdr.qw_9B[3] | (((uint64_t) data) << 32), niov_client_key,
+					  xfer_len, tag);
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 
