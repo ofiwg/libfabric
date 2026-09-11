@@ -33,7 +33,7 @@
 #include "udpx.h"
 
 #define UDPX_TX_CAPS (OFI_TX_MSG_CAPS | FI_MULTICAST)
-#define UDPX_RX_CAPS (FI_SOURCE | OFI_RX_MSG_CAPS)
+#define UDPX_RX_CAPS (FI_SOURCE | FI_SOURCE_ERR | OFI_RX_MSG_CAPS)
 #define UDPX_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 struct fi_tx_attr udpx_tx_attr = {
