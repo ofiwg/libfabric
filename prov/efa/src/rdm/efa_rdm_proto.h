@@ -83,6 +83,10 @@ struct efa_rdm_proto {
 	void (*handle_tx_pkes_posted)(struct efa_rdm_ep *ep,
 				      struct efa_rdm_ope *txe);
 
+	/* RX path handlers */
+	efa_rdm_pke_callback process_received_pke_after_robuf;
+	efa_rdm_pke_callback handle_unexp_pke_match;
+
 	/* TX utitlities */
 	int req_pkt_type;
 	int req_pkt_type_tagged;

@@ -16,6 +16,15 @@ using testing::Test;
 using testing::TestWithParam;
 using testing::Values;
 
+TEST(EfaRdmProtoRxTest, callbacks_preserve_return_values)
+{
+	struct efa_test_proto_rx_callback_result res = {};
+
+	efa_test_proto_callbacks_preserve_return_values(&res);
+	EXPECT_EQ(res.after_robuf_ret, -FI_EAGAIN);
+	EXPECT_EQ(res.unexpected_match_ret, 0);
+}
+
 class EfaRdmProtoTest : public Test
 {
 	protected:

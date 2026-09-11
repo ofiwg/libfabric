@@ -28,6 +28,33 @@ struct efa_test_proto_ctx {
 	struct fid_mr *mr;
 };
 
+static ssize_t efa_test_proto_after_robuf(struct efa_rdm_pke *pke)
+{
+	(void) pke;
+	return -FI_EAGAIN;
+}
+
+static ssize_t efa_test_proto_unexpected_match(struct efa_rdm_pke *pke)
+{
+	(void) pke;
+	return 0;
+}
+
+void efa_test_proto_callbacks_preserve_return_values(
+	struct efa_test_proto_rx_callback_result *out)
+{
+	struct efa_rdm_proto proto = {
+		.process_received_pke_after_robuf = efa_test_proto_after_robuf,
+		.handle_unexp_pke_match = efa_test_proto_unexpected_match,
+	};
+	struct efa_rdm_pke pke = {0};
+
+	pke.handle_pke = proto.process_received_pke_after_robuf;
+	out->after_robuf_ret = pke.handle_pke(&pke);
+	pke.handle_pke = proto.handle_unexp_pke_match;
+	out->unexpected_match_ret = pke.handle_pke(&pke);
+}
+
 static struct efa_rdm_ep *efa_test_proto_ep(struct fid_ep *ep)
 {
 	return container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
