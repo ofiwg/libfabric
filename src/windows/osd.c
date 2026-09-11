@@ -478,7 +478,12 @@ int getifaddrs(struct ifaddrs **ifap)
 			}
 			fa->speed = aa->TransmitLinkSpeed;
 			/* Generate fake Unix-like device names */
-			sprintf_s(fa->ad_name, sizeof(fa->ad_name), "eth%d", i++);
+			if (fa->ifa_flags & IFF_LOOPBACK) {
+				sprintf_s(fa->ad_name, sizeof(fa->ad_name), "lo");
+			}
+			else {
+				sprintf_s(fa->ad_name, sizeof(fa->ad_name), "eth%d", i++);
+			}
 		}
 	}
 	ret = 0;
