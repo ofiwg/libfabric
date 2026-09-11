@@ -8,6 +8,7 @@
 #include "efa_device.h"
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_mr.h"
+#include "rdm/efa_rdm_rma.h"
 #include "ofi_mr.h"
 #include "efa_gtest_common_helpers.h"
 
@@ -237,4 +238,15 @@ uint64_t efa_test_ofi_hmem_data_dev_reg_handle(void)
 uint64_t efa_test_rdm_mr_shm_flags(uint64_t mr_flags, enum fi_hmem_iface iface)
 {
 	return efa_rdm_mr_shm_flags(mr_flags, iface);
+}
+
+int efa_test_rdm_rma_verified_copy_iov(struct fid_ep *ep_fid, uint64_t addr,
+				       size_t len, uint64_t key, uint32_t flags,
+				       struct iovec *iov, void **desc)
+{
+	struct efa_rdm_ep *ep = container_of(ep_fid, struct efa_rdm_ep,
+					     base_ep.util_ep.ep_fid);
+	struct efa_rma_iov rma = {.addr = addr, .len = len, .key = key};
+
+	return efa_rdm_rma_verified_copy_iov(ep, &rma, 1, flags, iov, desc);
 }
