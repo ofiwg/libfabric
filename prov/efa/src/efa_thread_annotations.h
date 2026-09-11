@@ -34,6 +34,7 @@
 #define OFI_TSA_RELEASE(...)		OFI_TSA_ANNOTATION(release_capability(__VA_ARGS__))
 #define OFI_TSA_ASSERT_CAPABILITY(x)	OFI_TSA_ANNOTATION(assert_capability(x))
 #define OFI_TSA_NO_ANALYSIS		OFI_TSA_ANNOTATION(no_thread_safety_analysis)
+#define OFI_TSA_ACQUIRED_AFTER(...)	OFI_TSA_ANNOTATION(acquired_after(__VA_ARGS__))
 
 /*
  * Lock symbols.
@@ -49,6 +50,8 @@ struct OFI_TSA_CAPABILITY("mutex") ofi_tsa_lock_symbol { char dummy; };
 
 #define OFI_TSA_LOCK_SYMBOL_DECLARE(name) \
 	extern struct ofi_tsa_lock_symbol name
+#define OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(name, ...) \
+	extern struct ofi_tsa_lock_symbol name OFI_TSA_ACQUIRED_AFTER(__VA_ARGS__)
 #define OFI_TSA_LOCK_SYMBOL_DEFINE(name) \
 	struct ofi_tsa_lock_symbol name
 
@@ -83,6 +86,8 @@ efa_genlock_held(struct ofi_genlock *lock, struct ofi_tsa_lock_symbol *sym)
 #else /* !OFI_THREAD_SAFETY_ANALYSIS */
 
 #define OFI_TSA_LOCK_SYMBOL_DECLARE(name)	struct ofi_tsa_lock_symbol_unused_##name
+#define OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(name, ...) \
+	OFI_TSA_LOCK_SYMBOL_DECLARE(name)
 #define OFI_TSA_LOCK_SYMBOL_DEFINE(name)	struct ofi_tsa_lock_symbol_unused_##name
 
 #define EFA_GENLOCK_LOCK(lock, sym)	ofi_genlock_lock(lock)
@@ -91,12 +96,15 @@ efa_genlock_held(struct ofi_genlock *lock, struct ofi_tsa_lock_symbol *sym)
 
 #endif /* OFI_THREAD_SAFETY_ANALYSIS */
 
-/* EFA lock symbols (one per lock role). */
-OFI_TSA_LOCK_SYMBOL_DECLARE(efa_qp_table_lock_sym);
-OFI_TSA_LOCK_SYMBOL_DECLARE(efa_implicit_av_lock_sym);
-OFI_TSA_LOCK_SYMBOL_DECLARE(efa_util_ep_lock_sym);
-OFI_TSA_LOCK_SYMBOL_DECLARE(efa_ctrl_lock_sym);
-OFI_TSA_LOCK_SYMBOL_DECLARE(efa_util_av_lock_sym);
+/* EFA lock symbols (one per lock role), declared outermost lock first. */
 OFI_TSA_LOCK_SYMBOL_DECLARE(efa_util_domain_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_util_av_lock_sym,
+					   efa_util_domain_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_implicit_av_lock_sym,
+					   efa_util_av_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_ctrl_lock_sym,
+					   efa_implicit_av_lock_sym);
+
+OFI_TSA_LOCK_SYMBOL_DECLARE(efa_qp_table_lock_sym);
 
 #endif /* EFA_THREAD_ANNOTATIONS_H */
