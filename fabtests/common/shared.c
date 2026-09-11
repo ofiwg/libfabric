@@ -4638,6 +4638,32 @@ struct option long_opts[] = {
 	{NULL, 0, NULL, 0},
 };
 
+static int ft_count_long_opts(const struct option *opts)
+{
+	int n;
+
+	for (n = 0; opts[n].name; n++)
+		;
+	return n;
+}
+
+struct option *ft_merge_long_opts(const struct option *extra,
+				  const struct option *base)
+{
+	int extra_cnt = ft_count_long_opts(extra);
+	int base_cnt = ft_count_long_opts(base);
+	struct option *merged;
+
+	merged = calloc(extra_cnt + base_cnt + 1, sizeof(*merged));
+	if (!merged)
+		return NULL;
+
+	memcpy(merged, extra, extra_cnt * sizeof(*merged));
+	memcpy(merged + extra_cnt, base, base_cnt * sizeof(*merged));
+
+	return merged;
+}
+
 int ft_parse_progress_model_string(char* progress_str)
 {
 	int ret = -1;
