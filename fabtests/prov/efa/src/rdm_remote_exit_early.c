@@ -46,6 +46,56 @@ enum {
 	LONG_OPT_HETEROGENEOUS_PEERS,
 };
 
+static int post_tx_window(void)
+{
+	int i, ret;
+
+	for (i = 0; i < opts.window_size; i++) {
+		if (opts.rma_op == FT_RMA_WRITEDATA) {
+			ret = ft_post_rma(FT_RMA_WRITEDATA, tx_ctx_arr[i].buf,
+					  opts.transfer_size, &remote,
+					  &tx_ctx_arr[i].context);
+		} else if (hints->caps & FI_TAGGED) {
+			ret = fi_tsend(ep, tx_ctx_arr[i].buf, opts.transfer_size,
+				       tx_ctx_arr[i].desc, remote_fi_addr,
+				       ft_tag, &tx_ctx_arr[i].context);
+		} else {
+			ret = fi_send(ep, tx_ctx_arr[i].buf, opts.transfer_size,
+				      tx_ctx_arr[i].desc, remote_fi_addr,
+				      &tx_ctx_arr[i].context);
+		}
+		if (ret) {
+			FT_PRINTERR("fi_send/fi_tsend/ft_post_rma", ret);
+			return ret;
+		}
+	}
+	printf("client posted %d sends\n", opts.window_size);
+	return 0;
+}
+
+static int post_rx_window(void)
+{
+	int i, ret;
+
+	for (i = 0; i < opts.window_size; i++) {
+		if (hints->caps & FI_TAGGED) {
+			ret = fi_trecv(ep, rx_ctx_arr[i].buf, opts.transfer_size,
+				       rx_ctx_arr[i].desc, FI_ADDR_UNSPEC,
+				       ft_tag, 0x0, &rx_ctx_arr[i].context);
+		} else {
+			ret = fi_recv(ep, rx_ctx_arr[i].buf, opts.transfer_size,
+				      rx_ctx_arr[i].desc, FI_ADDR_UNSPEC,
+				      &rx_ctx_arr[i].context);
+		}
+		if (ret) {
+			FT_PRINTERR("fi_recv/fi_trecv", ret);
+			return ret;
+		}
+	}
+	printf("server posted %d recvs\n", opts.window_size);
+	return 0;
+}
+
 static int run()
 {
 	int ret, cleanup_ret;
@@ -117,36 +167,20 @@ static int run()
 	if (hints->caps & FI_TAGGED)
 		ft_tag = 0xabcd;
 
-	/* client post a send/writedata and then quit */
+	/* client post a window of sends and then quit */
 	if (opts.dst_addr) {
-		if (opts.rma_op == FT_RMA_WRITEDATA)
-			ret = ft_post_rma(FT_RMA_WRITEDATA, tx_buf,
-					  opts.transfer_size, &remote, &tx_ctx);
-		else
-			ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
-					 NO_CQ_DATA, &tx_ctx);
+		ret = post_tx_window();
+		if (ret)
+			goto out;
 		printf("client exits early\n");
 	} else {
-		/* server post a recv and wait for completion, it should get an
-		 * cq error as client exit early in a long protocol
+		/* server post a window of recvs and wait for completions,
+		 * it should get cq errors as client exits early
 		 */
 		if (post_rx) {
-			if (hints->caps & FI_TAGGED) {
-				ret = fi_trecv(ep, rx_buf, rx_size, mr_desc,
-					       FI_ADDR_UNSPEC, ft_tag, 0x0, &rx_ctx);
-				if (ret) {
-					FT_PRINTERR("fi_trecv", -ret);
-					goto out;
-				}
-			} else {
-				ret = fi_recv(ep, rx_buf, rx_size, mr_desc,
-					      FI_ADDR_UNSPEC, &rx_ctx);
-				if (ret) {
-					FT_PRINTERR("fi_recv", -ret);
-					goto out;
-				}
-			}
-			printf("server posts recv\n");
+			ret = post_rx_window();
+			if (ret)
+				goto out;
 		}
 
 		ft_start();
@@ -258,7 +292,10 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 	
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps |= FI_MSG | FI_RMA;
+	hints->caps |= FI_MSG;
+	if (opts.rma_op == FT_RMA_WRITEDATA)
+		hints->caps |= FI_RMA;
+	hints->mode |= FI_CONTEXT | FI_CONTEXT2;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	
 	ret = run();
