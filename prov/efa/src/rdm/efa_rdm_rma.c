@@ -22,25 +22,29 @@ int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma
 	struct efa_mr *efa_mr;
 	int i, ret;
 
+	ofi_genlock_lock(&efa_rdm_ep_domain(ep)->util_domain.lock);
 	for (i = 0; i < count; i++) {
-		ofi_genlock_lock(&efa_rdm_ep_domain(ep)->util_domain.lock);
 		ret = ofi_mr_map_verify(&efa_rdm_ep_domain(ep)->util_domain.mr_map,
 					(uintptr_t *)(&rma[i].addr),
 					rma[i].len, rma[i].key, flags,
 					&context);
-		efa_mr = context;
-		desc[i] = fi_mr_desc(&efa_mr->mr_fid);
-		ofi_genlock_unlock(&efa_rdm_ep_domain(ep)->util_domain.lock);
+
 		if (ret) {
+			ofi_genlock_unlock(&efa_rdm_ep_domain(ep)->util_domain.lock);
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"MR verification failed (%s), addr: %lx key: %ld\n",
 				fi_strerror(-ret), rma[i].addr, rma[i].key);
 			return ret;
 		}
 
+		efa_mr = context;
+		desc[i] = fi_mr_desc(&efa_mr->mr_fid);
+
 		iov[i].iov_base = (void *)rma[i].addr;
 		iov[i].iov_len = rma[i].len;
 	}
+
+	ofi_genlock_unlock(&efa_rdm_ep_domain(ep)->util_domain.lock);
 	return 0;
 }
 
