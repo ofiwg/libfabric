@@ -721,6 +721,9 @@ extern struct option long_opts[];
 int ft_parse_long_opts(int op, char *optarg);
 void ft_longopts_usage();
 
+struct option *ft_merge_long_opts(const struct option *extra,
+				  const struct option *base);
+
 #define ft_assert(expr)					\
 	do {						\
 		if (!debug_assert) {			\
