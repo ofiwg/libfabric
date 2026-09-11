@@ -398,6 +398,11 @@ additional optimizations.
   FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
   types of RMA operations supported by an endpoint.
 
+*FI_WR*
+: Requests that an endpoint support the Work Request API, which stages a
+  data transfer into separate prepare, queue, and flush steps. See
+  [`fi_wr`(3)](fi_wr.3.html) for details.
+
 *FI_RMA_EVENT*
 : Requests that an endpoint support the generation of completion events
   when it is the target of an RMA and/or atomic operation.  This
@@ -483,7 +488,7 @@ would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
 FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_TAGGED_DIRECTED_RECV, FI_HMEM,
-FI_COLLECTIVE, FI_XPU, FI_AV_USER_ID, FI_PEER
+FI_COLLECTIVE, FI_XPU, FI_AV_USER_ID, FI_PEER, FI_WR
 
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE

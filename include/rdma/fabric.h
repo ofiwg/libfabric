@@ -162,6 +162,7 @@ typedef struct fid *fid_t;
 
 #define FI_RESCAN		(1ULL << 35)
 #define FI_PEER_TRANSFER	(1ULL << 36)
+#define FI_WR			(1ULL << 39)
 /* #define FI_MR_DMABUF		(1ULL << 40) */
 #define FI_AV_USER_ID		(1ULL << 41)
 #define FI_FIREWALL_ADDR	(1ULL << 42)
@@ -701,9 +702,9 @@ enum {
 	FI_GET_RAW_MR,		/* fi_mr_raw_attr */
 	FI_MAP_RAW_MR,		/* fi_mr_map_raw */
 	FI_UNMAP_KEY,		/* uint64_t key */
-	FI_QUEUE_WORK,		/* struct fi_deferred_work */
+	FI_QUEUE_WORK,		/* domain: fi_deferred_work; ep: fi_wr_attr */
 	FI_CANCEL_WORK,		/* struct fi_deferred_work */
-	FI_FLUSH_WORK,		/* NULL */
+	FI_FLUSH_WORK,		/* NULL (domain or ep) */
 	FI_REFRESH,		/* mr: fi_mr_modify */
 	FI_DUP,			/* struct fid ** */
 	FI_GETWAITOBJ,		/*enum fi_wait_obj * */
@@ -712,6 +713,7 @@ enum {
 	FI_EXPORT_FID,		/* struct fi_fid_export */
 	FI_GET_FD, 		/* int */
 	FI_GET_MR_XPU_DESC,	/* fi_mr_xpu_desc */
+	FI_PREPARE_WORK,	/* struct fi_wr_attr */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)

@@ -79,6 +79,8 @@ enum {
 	FI_OPT_INJECT_RMA_SIZE,		/* size_t */
 	FI_OPT_INJECT_ATOMIC_SIZE,	/* size_t */
 	FI_OPT_FIREWALL_ADDR,           /* bool */
+	FI_OPT_TX_REQ_SIZE,		/* size_t */
+	FI_OPT_RX_REQ_SIZE,		/* size_t */
 };
 
 /*
@@ -227,6 +229,26 @@ static inline int fi_scalable_ep_bind(struct fid_ep *sep, struct fid *bfid, uint
 static inline int fi_enable(struct fid_ep *ep)
 {
 	return ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
+}
+
+struct fi_wr_attr;
+
+static inline int
+fi_prepare_wr(struct fid_ep *ep, struct fi_wr_attr *work)
+{
+	return ep->fid.ops->control(&ep->fid, FI_PREPARE_WORK, work);
+}
+
+static inline int
+fi_queue_wr(struct fid_ep *ep, struct fi_wr_attr *work)
+{
+	return ep->fid.ops->control(&ep->fid, FI_QUEUE_WORK, work);
+}
+
+static inline int
+fi_flush_wr(struct fid_ep *ep)
+{
+	return ep->fid.ops->control(&ep->fid, FI_FLUSH_WORK, NULL);
 }
 
 static inline ssize_t fi_cancel(fid_t fid, void *context)
