@@ -72,7 +72,7 @@ EFA_RDM_PROTO_DEF(eager,
  * that RECEIPT already arrived; otherwise
  * efa_rdm_pke_handle_receipt_recv() reports the completion and releases it.
  */
-void efa_rdm_proto_eager_handle_rtm_send_completion(
+ssize_t efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *txe;
@@ -89,6 +89,7 @@ void efa_rdm_proto_eager_handle_rtm_send_completion(
 	}
 
 	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 /**
