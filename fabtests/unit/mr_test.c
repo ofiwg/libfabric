@@ -291,11 +291,13 @@ static void usage(char *name)
 {
 	ft_unit_usage(name, "Unit test for Memory Region (MR)");
 	ft_hmem_usage();
+	ft_longopts_usage();
 }
 
 int main(int argc, char **argv)
 {
 	int op, ret, cleanup_ret;
+	int lopt_idx = 0;
 	int failed = 0;
 
 	buf = NULL;
@@ -304,9 +306,12 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, FAB_OPTS HMEM_OPTS "h")) != -1) {
+	while ((op = getopt_long(argc, argv, FAB_OPTS HMEM_OPTS "h", long_opts,
+				 &lopt_idx)) != -1) {
 		switch (op) {
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case '?':

@@ -2606,22 +2606,12 @@ static struct option *mr_abort_long_opts;
 
 static int build_mr_abort_long_opts(void)
 {
-	int efa_cnt, extra_cnt, i;
-
 	build_efa_long_opts();
 
-	for (efa_cnt = 0; efa_long_opts[efa_cnt].name; efa_cnt++)
-		;
-	extra_cnt = sizeof(mr_abort_extra_opts) / sizeof(mr_abort_extra_opts[0]) - 1;
-
-	mr_abort_long_opts = calloc(efa_cnt + extra_cnt + 1, sizeof(struct option));
+	mr_abort_long_opts = ft_merge_long_opts(mr_abort_extra_opts,
+						efa_long_opts);
 	if (!mr_abort_long_opts)
 		return -FI_ENOMEM;
-
-	for (i = 0; i < extra_cnt; i++)
-		mr_abort_long_opts[i] = mr_abort_extra_opts[i];
-	for (i = 0; i < efa_cnt; i++)
-		mr_abort_long_opts[extra_cnt + i] = efa_long_opts[i];
 
 	return 0;
 }

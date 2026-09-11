@@ -240,11 +240,13 @@ static void usage(char *name)
 {
 	ft_usage(name,
 		"Test HMEM dmabuf MR with aligned and unaligned VAs\n");
+	ft_longopts_usage();
 }
 
 int main(int argc, char **argv)
 {
 	int op, ret, cleanup_ret;
+	int lopt_idx = 0;
 
 	opts = INIT_OPTS;
 	opts.transfer_size = DEFAULT_BUF_SIZE;
@@ -253,9 +255,12 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "h" HMEM_OPTS CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv, "h" HMEM_OPTS CS_OPTS INFO_OPTS,
+				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
