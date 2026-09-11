@@ -39,14 +39,36 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 		   void **desc, void **desc_storage, size_t iov_count,
 		   uint64_t access, struct rxm_tx_buf *rma_buf)
 {
-	size_t i, ret;
+	size_t i, ret, page_size;
+	struct iovec reg_iov[RXM_IOV_LIMIT];
+
+	assert(iov_count <= RXM_IOV_LIMIT);
 
 	if (!rxm_ep->msg_mr_local)
 		return FI_SUCCESS;
 
 	if (!rxm_ep->rdm_mr_local) {
-		ret = rxm_msg_mr_regv(rxm_ep, msg_iov, iov_count, SIZE_MAX,
+		page_size = page_sizes[OFI_PAGE_SIZE];
+		for (i = 0; i < iov_count; i++) {
+			if (!msg_iov[i].iov_len) {
+				reg_iov[i] = msg_iov[i];
+				continue;
+			}
+			reg_iov[i].iov_base = ofi_get_page_start(
+						msg_iov[i].iov_base, page_size);
+			reg_iov[i].iov_len = ofi_get_page_bytes(
+						msg_iov[i].iov_base,
+						msg_iov[i].iov_len, page_size);
+		}
+
+		ret = rxm_msg_mr_regv(rxm_ep, reg_iov, iov_count, SIZE_MAX,
 				      access, rma_buf->rma.mr);
+
+		if (ret)
+			ret = rxm_msg_mr_regv(rxm_ep, msg_iov, iov_count,
+					      SIZE_MAX, access,
+					      rma_buf->rma.mr);
+
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
