@@ -20,6 +20,9 @@ static struct option efa_extra_opts[] = {
 	{"eps-per-domain", required_argument, NULL, OPT_EPS_PER_DOMAIN},
 	{"domains", required_argument, NULL, OPT_DOMAINS},
 	{"mr-relaxed-ordering", no_argument, NULL, OPT_MR_RELAXED_ORDERING},
+	{"action-mode", required_argument, NULL, OPT_ACTION_MODE},
+	{"action-width", required_argument, NULL, OPT_ACTION_WIDTH},
+	{"action-check", no_argument, NULL, OPT_ACTION_CHECK},
 	{0, 0, 0, 0}
 };
 
@@ -50,6 +53,12 @@ void efa_longopts_usage(void)
 		"--eps-per-domain and excludes -d");
 	FT_PRINT_OPTS_USAGE("--mr-relaxed-ordering",
 		"Register memory regions with FI_EFA_MR_RELAXED_ORDERING");
+	FT_PRINT_OPTS_USAGE("--action-mode <local|remote|both>",
+		"Attach an EFA completion action to each write");
+	FT_PRINT_OPTS_USAGE("--action-width <8|16|32>",
+		"Completion action vector entry width in bits (default: 32)");
+	FT_PRINT_OPTS_USAGE("--action-check",
+		"Exit 0 if completion actions can be enabled here, 61 if not");
 	ft_longopts_usage();
 }
 
