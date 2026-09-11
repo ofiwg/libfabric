@@ -170,19 +170,16 @@ static int smr_progress_return_entry(struct smr_ep *ep, struct smr_cmd *cmd,
 
 static void smr_progress_return(struct smr_ep *ep)
 {
-	struct smr_return_entry *queue_entry;
 	struct smr_cmd *cmd;
 	struct smr_pend_entry *pending;
-	int64_t pos;
 	int ret;
 
 	while (1) {
-		ret = smr_return_queue_head(smr_return_queue(ep->region),
-					    &queue_entry, &pos);
-		if (ret == -FI_ENOENT)
+		cmd = smr_fifo_read(smr_return_queue(ep->region),
+				    (uintptr_t)ep->region);
+		if (!cmd)
 			break;
 
-		cmd = (struct smr_cmd *) queue_entry->ptr;
 		pending = (struct smr_pend_entry *) cmd->hdr.tx_ctx;
 
 		ret = smr_progress_return_entry(ep, cmd, pending);
@@ -208,8 +205,6 @@ static void smr_progress_return(struct smr_ep *ep)
 			ofi_buf_free(pending);
 			smr_freestack_push(smr_cmd_stack(ep->region), cmd);
 		}
-		smr_return_queue_release(smr_return_queue(ep->region),
-					 queue_entry, pos);
 	}
 }
 
