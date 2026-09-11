@@ -53,8 +53,14 @@ static bool use_hw_cntr;
 static volatile uint64_t *hw_send_cntr_ptr;
 static volatile uint64_t *hw_recv_cntr_ptr;
 
+/* Numbered past the shared LONG_OPT_* values and every short option */
 enum {
-	LONG_OPT_USE_HW_CNTR,
+	LONG_OPT_USE_HW_CNTR = 256,
+};
+
+static struct option gda_long_opts[] = {
+	{"use-hw-cntr", no_argument, NULL, LONG_OPT_USE_HW_CNTR},
+	{0, 0, 0, 0}
 };
 
 static int create_hw_cntr(struct fid_cntr **cntr,
@@ -442,28 +448,31 @@ int main(int argc, char **argv)
 {
 	int op, ret, i, cleanup_ret;
 	struct fi_rma_iov remote_iov = {0};
+	struct option *test_opts;
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_OOB_SYNC;
 
 	timeout = 5;
 
+	test_opts = ft_merge_long_opts(gda_long_opts, long_opts);
+	if (!test_opts)
+		return EXIT_FAILURE;
+
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
 	while ((op = getopt_long(argc, argv,
-			    "vh" ADDR_OPTS INFO_OPTS CS_OPTS API_OPTS,
-			    (struct option[]){
-				{"use-hw-cntr", no_argument, NULL,
-				 LONG_OPT_USE_HW_CNTR},
-				{0, 0, 0, 0}
-			    }, NULL)) != -1) {
+				 "vh" ADDR_OPTS INFO_OPTS CS_OPTS API_OPTS,
+				 test_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		case LONG_OPT_USE_HW_CNTR:
 			use_hw_cntr = true;
 			break;
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
@@ -482,6 +491,7 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
 			FT_PRINT_OPTS_USAGE("--use-hw-cntr",
 				"Use hardware counter instead of send CQ");
+			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
 	}
