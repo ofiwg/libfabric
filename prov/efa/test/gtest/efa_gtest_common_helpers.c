@@ -134,6 +134,22 @@ int efa_test_device_supports_rma(void)
 	       efa_device_support_rdma_write();
 }
 
+int efa_test_device_supports_rdma_read(void)
+{
+	if (g_efa_selected_device_cnt <= 0)
+		return 0;
+
+	return efa_device_support_rdma_read();
+}
+
+int efa_test_device_supports_rdma_write(void)
+{
+	if (g_efa_selected_device_cnt <= 0)
+		return 0;
+
+	return efa_device_support_rdma_write();
+}
+
 size_t efa_test_ope_list_count(struct fid_ep *ep)
 {
 	struct efa_base_ep *base_ep =

@@ -136,6 +136,32 @@ int efa_mock_ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
 			   struct ibv_recv_wr **bad_wr);
 
 /* EFA data path ops mock helpers */
+/*
+ * Inert data path mocks. The data path ops now reach the real device when
+ * unmocked, so the mock table defaults to these: they report success without
+ * submitting anything, and no completion at all. A test that wants the device
+ * installs __real_* explicitly.
+ */
+int efa_mock_efa_qp_post_recv_no_op(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad);
+int efa_mock_efa_qp_post_send_no_op(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+int efa_mock_efa_qp_post_read_no_op(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+int efa_mock_efa_qp_post_write_no_op(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t sge_count, const struct ibv_data_buf *inline_data_list, bool use_inline, uint32_t remote_key, uint64_t remote_addr, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
+int efa_mock_efa_ibv_cq_start_poll_no_cqe(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
+int efa_mock_efa_ibv_cq_next_poll_no_cqe(struct efa_ibv_cq *ibv_cq);
+enum ibv_wc_opcode efa_mock_efa_ibv_cq_wc_read_opcode_no_op(struct efa_ibv_cq *ibv_cq);
+void efa_mock_efa_ibv_cq_end_poll_no_op(struct efa_ibv_cq *ibv_cq);
+uint32_t efa_mock_efa_ibv_cq_wc_read_qp_num_no_op(struct efa_ibv_cq *ibv_cq);
+uint32_t efa_mock_efa_ibv_cq_wc_read_vendor_err_no_op(struct efa_ibv_cq *ibv_cq);
+uint32_t efa_mock_efa_ibv_cq_wc_read_src_qp_no_op(struct efa_ibv_cq *ibv_cq);
+uint32_t efa_mock_efa_ibv_cq_wc_read_slid_no_op(struct efa_ibv_cq *ibv_cq);
+uint32_t efa_mock_efa_ibv_cq_wc_read_byte_len_no_op(struct efa_ibv_cq *ibv_cq);
+unsigned int efa_mock_efa_ibv_cq_wc_read_wc_flags_no_op(struct efa_ibv_cq *ibv_cq);
+__be32 efa_mock_efa_ibv_cq_wc_read_imm_data_no_op(struct efa_ibv_cq *ibv_cq);
+bool efa_mock_efa_ibv_cq_wc_is_unsolicited_no_op(struct efa_ibv_cq *ibv_cq);
+int efa_mock_efa_ibv_cq_wc_read_sgid_no_op(struct efa_ibv_cq *ibv_cq, union ibv_gid *sgid);
+int efa_mock_efa_ibv_get_cq_event_no_op(struct efa_ibv_cq *ibv_cq, void **cq_context);
+int efa_mock_efa_ibv_req_notify_cq_no_op(struct efa_ibv_cq *ibv_cq, int solicited_only);
+
 int efa_mock_efa_qp_post_recv_return_mock(struct efa_qp *qp, struct ibv_recv_wr *wr, struct ibv_recv_wr **bad);
 int efa_mock_efa_qp_post_send_return_mock(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
 int efa_mock_efa_qp_post_send_verify_not_inline(struct efa_qp *qp, const struct ibv_sge *sge_list, const struct ibv_data_buf *inline_data_list, size_t iov_count, bool use_inline, uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah, uint32_t qpn, uint32_t qkey);
