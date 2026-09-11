@@ -8,6 +8,7 @@
 #include "efa_device.h"
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_mr.h"
+#include "rdm/efa_rdm_rma.h"
 #include "ofi_mr.h"
 #include "efa_gtest_common_helpers.h"
 
@@ -271,4 +272,15 @@ bool efa_test_set_hmem_p2p_supported(enum fi_hmem_iface iface, bool value)
 
 	g_efa_hmem_info[iface].p2p_supported_by_device = value;
 	return prev;
+}
+
+int efa_test_rdm_rma_verified_copy_iov(struct fid_ep *ep_fid, uint64_t addr,
+				       size_t len, uint64_t key, uint32_t flags,
+				       struct iovec *iov, void **desc)
+{
+	struct efa_rdm_ep *ep = container_of(ep_fid, struct efa_rdm_ep,
+					     base_ep.util_ep.ep_fid);
+	struct efa_rma_iov rma = {.addr = addr, .len = len, .key = key};
+
+	return efa_rdm_rma_verified_copy_iov(ep, &rma, 1, flags, iov, desc);
 }

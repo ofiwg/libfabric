@@ -161,6 +161,14 @@ void efa_test_set_info_domain_caps(struct fid_domain *domain, uint64_t caps);
 bool efa_test_set_hmem_initialized(enum fi_hmem_iface iface, bool value);
 bool efa_test_set_hmem_p2p_supported(enum fi_hmem_iface iface, bool value);
 
+/**
+ * @brief Wrapper around the product efa_rdm_rma_verified_copy_iov() for a
+ * single peer-supplied rma_iov (struct efa_rma_iov is not includable from C++).
+ */
+int efa_test_rdm_rma_verified_copy_iov(struct fid_ep *ep_fid, uint64_t addr,
+				       size_t len, uint64_t key, uint32_t flags,
+				       struct iovec *iov, void **desc);
+
 #ifdef __cplusplus
 }
 #endif
