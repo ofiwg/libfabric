@@ -87,6 +87,18 @@ static struct ibv_mr *vrb_reg_hmem_dmabuf(enum fi_hmem_iface iface,
 	mr = ibv_reg_dmabuf_mr(pd, offset, len, (uint64_t)(uintptr_t)buf/* iova */,
 			       fd, vrb_access);
 
+	/*
+	 * The MR holds its own reference to the dma-buf, so the fd is only
+	 * needed for the registration call above.  Release it here, as the
+	 * efa provider does; otherwise every registration leaks a descriptor.
+	 * ofi_hmem_put_dmabuf_fd() may set errno, and the failover path below
+	 * reports the registration errno, so preserve it.
+	 */
+	saved_errno = errno;
+	(void) ofi_hmem_put_dmabuf_fd(iface, fd);
+	errno = saved_errno;
+	saved_errno = 0;
+
 	if (!mr && failover_policy[iface] == TRY &&
 	    vrb_gl_data.peer_mem_support) {
 		saved_errno = errno;
