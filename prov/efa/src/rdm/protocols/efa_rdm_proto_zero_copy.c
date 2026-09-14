@@ -63,10 +63,17 @@ int efa_rdm_proto_zero_copy_construct_tx_pkes(struct efa_rdm_ep *ep,
 					      uint32_t op, uint64_t tag,
 					      uint64_t flags,
 					      uint32_t internal_flags,
-					      struct efa_rdm_ope *txe)
+					      struct efa_rdm_ope *txe,
+					      uint64_t *pke_send_flags)
 {
 	int ret;
 	struct efa_rdm_pke *pkt_entry;
+
+	/*
+	 * The zero-copy path does not honor FI_MORE; ring the doorbell
+	 * immediately.
+	 */
+	*pke_send_flags = 0;
 
 	// Verify that the send queue is not full
 	assert(ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops -

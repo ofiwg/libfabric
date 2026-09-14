@@ -38,7 +38,7 @@
 static bool efa_rdm_proto_medium_can_use_for_send(struct efa_rdm_ope *txe,
 						  int req_pkt_type,
 						  uint16_t header_flags,
-						  int iface)
+						  int iface, bool use_p2p)
 {
 	/* A zero sized message should use eager protocol */
 	assert(txe->total_len > 0);
@@ -189,7 +189,8 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 					   const struct fi_msg *msg, uint32_t op,
 					   uint64_t tag, uint64_t flags,
 					   uint32_t internal_flags,
-					   struct efa_rdm_ope *txe)
+					   struct efa_rdm_ope *txe,
+					   uint64_t *pke_send_flags)
 {
 	int ret, req_pkt_type;
 	size_t i, pkt_entry_cnt = 0, pkt_entry_cnt_allocated = 0;
@@ -199,6 +200,12 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_medium_rtm_base_hdr *medium_rtm_hdr;
 	struct efa_rdm_dc_medium_rtm_base_hdr *dc_medium_rtm_hdr;
+
+	/*
+	 * The medium protocol posts multiple packets, so it does not honor
+	 * FI_MORE; ring the doorbell immediately.
+	 */
+	*pke_send_flags = 0;
 
 	/*
 	 * Inject should always use eager protocol

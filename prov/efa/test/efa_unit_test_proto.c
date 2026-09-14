@@ -126,6 +126,7 @@ void test_proto_eager_construct_pkes_single_pke(void **state)
 	struct fi_msg msg = {0};
 	struct iovec iov;
 	int err;
+	uint64_t pke_send_flags;
 
 	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 	efa_unit_test_buff_construct(&send_buff, resource, 64);
@@ -167,7 +168,8 @@ void test_proto_eager_construct_pkes_single_pke(void **state)
 	txe->msg_id = peer->next_msg_id++;
 
 	err = efa_rdm_proto_eager.construct_tx_pkes(ep, peer, &msg, ofi_op_msg,
-						    0, 0, 0, txe);
+						    0, 0, 0, txe,
+						    &pke_send_flags);
 	assert_int_equal(err, 0);
 	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
 	assert_non_null(ep->send_pkt_entry_vec[0]);
@@ -518,6 +520,7 @@ void test_proto_zero_copy_construct_pkes(void **state)
 	struct fi_msg msg = {0};
 	struct iovec iov;
 	int err;
+	uint64_t pke_send_flags;
 
 	efa_unit_test_resource_construct_rdm_shm_disabled(resource);
 	efa_unit_test_buff_construct(&send_buff, resource, 64);
@@ -556,7 +559,7 @@ void test_proto_zero_copy_construct_pkes(void **state)
 
 	err = efa_rdm_proto_zero_copy.construct_tx_pkes(ep, peer, &msg,
 							ofi_op_msg, 0, 0, 0,
-							txe);
+							txe, &pke_send_flags);
 	assert_int_equal(err, 0);
 	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
 
