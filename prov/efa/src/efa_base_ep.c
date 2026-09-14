@@ -48,6 +48,7 @@ int efa_base_ep_destruct_qp(struct efa_base_ep *base_ep)
 }
 
 int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
+	OFI_TSA_REQUIRES(efa_qp_table_lock_sym, efa_cq_ep_list_lock_sym)
 {
 	struct efa_domain *domain;
 	struct efa_qp *qp = base_ep->qp;
@@ -59,9 +60,12 @@ int efa_base_ep_destruct_qp_unsafe(struct efa_base_ep *base_ep)
 	tx_cq = efa_base_ep_get_tx_cq(base_ep);
 	rx_cq = efa_base_ep_get_rx_cq(base_ep);
 
-	assert(!tx_cq || ofi_genlock_held(&tx_cq->util_cq.ep_list_lock));
-	assert(!rx_cq || ofi_genlock_held(&rx_cq->util_cq.ep_list_lock));
-	assert(ofi_genlock_held(&base_ep->domain->device->qp_table_lock));
+	assert(!tx_cq || EFA_GENLOCK_HELD(&tx_cq->util_cq.ep_list_lock,
+					  efa_cq_ep_list_lock_sym));
+	assert(!rx_cq || EFA_GENLOCK_HELD(&rx_cq->util_cq.ep_list_lock,
+					  efa_cq_ep_list_lock_sym));
+	assert(EFA_GENLOCK_HELD(&base_ep->domain->device->qp_table_lock,
+				efa_qp_table_lock_sym));
 
 	if (!qp)
 		return 0;
@@ -395,7 +399,7 @@ void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
 static int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 				  struct efa_ibv_cq *tx_cq,
 				  struct efa_ibv_cq *rx_cq)
-	OFI_TSA_REQUIRES(efa_qp_table_lock_sym)
+	OFI_TSA_REQUIRES(efa_qp_table_lock_sym, efa_cq_ep_list_lock_sym)
 {
 	int ret;
 	struct ibv_qp_init_attr_ex attr_ex = {0};
@@ -548,12 +552,16 @@ static int efa_base_ep_attach_comp_cntrs(struct efa_base_ep *base_ep,
 
 static
 int efa_base_ep_enable_qp(struct efa_base_ep *base_ep, struct efa_qp *qp)
-	OFI_TSA_REQUIRES(efa_qp_table_lock_sym)
+	OFI_TSA_REQUIRES(efa_qp_table_lock_sym, efa_cq_ep_list_lock_sym)
 {
 	int err;
 
-	assert(!efa_base_ep_get_tx_cq(base_ep) || ofi_genlock_held(&efa_base_ep_get_tx_cq(base_ep)->util_cq.ep_list_lock));
-	assert(!efa_base_ep_get_rx_cq(base_ep) || ofi_genlock_held(&efa_base_ep_get_rx_cq(base_ep)->util_cq.ep_list_lock));
+	assert(!efa_base_ep_get_tx_cq(base_ep) ||
+	       EFA_GENLOCK_HELD(&efa_base_ep_get_tx_cq(base_ep)->util_cq.ep_list_lock,
+				efa_cq_ep_list_lock_sym));
+	assert(!efa_base_ep_get_rx_cq(base_ep) ||
+	       EFA_GENLOCK_HELD(&efa_base_ep_get_rx_cq(base_ep)->util_cq.ep_list_lock,
+				efa_cq_ep_list_lock_sym));
 
 #if HAVE_EFADV_CREATE_COMP_CNTR
 	/* Attach hw counters while QP is in RESET state */
@@ -608,7 +616,7 @@ void efa_qp_destruct(struct efa_qp *qp)
 }
 
 int efa_base_ep_enable(struct efa_base_ep *base_ep)
-	OFI_TSA_REQUIRES(efa_qp_table_lock_sym)
+	OFI_TSA_REQUIRES(efa_qp_table_lock_sym, efa_cq_ep_list_lock_sym)
 {
 	int err;
 
