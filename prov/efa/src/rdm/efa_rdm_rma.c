@@ -10,6 +10,7 @@
 #include "efa_rdm_fabric.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
+#include "efa_rdm_proto.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_cntr.h"
 #include "efa_rdm_tracepoint.h"
@@ -358,6 +359,45 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 /**
+ * @brief Post an emulated write using a selected write protocol.
+ *
+ * Builds the selected protocol's packets, sends them, and runs the protocol's
+ * post-send bookkeeping. On failure the packet entries are released here and
+ * the caller reports the error.
+ */
+static ssize_t efa_rdm_rma_post_write_proto(struct efa_rdm_ep *ep,
+					    struct efa_rdm_ope *txe,
+					    struct efa_rdm_proto *proto)
+{
+	uint64_t pke_send_flags = 0;
+	ssize_t err;
+	int i;
+
+	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
+		return -FI_EAGAIN;
+
+	err = proto->construct_tx_pkes(ep, txe->peer, NULL, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	if (err)
+		return err;
+
+	assert(efa_rdm_pkt_type_is_req(txe->req_pkt_type));
+
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
+				ep->send_pkt_entry_vec_size, pke_send_flags);
+	if (err) {
+		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+		return err;
+	}
+
+	txe->peer->flags |= EFA_RDM_PEER_REQ_SENT;
+	proto->handle_tx_pkes_posted(ep, txe);
+	return FI_SUCCESS;
+}
+
+/**
  * @brief Post a WRITE described the txe
  *
  * @param ep		The endpoint.
@@ -370,6 +410,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	bool delivery_complete_requested;
 	int ctrl_type, iface, use_p2p;
 	size_t max_eager_rtw_data_size;
+	struct efa_rdm_proto *proto;
 
 	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
 	if (err < 0)
@@ -389,6 +430,12 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		efa_rdm_ope_prepare_to_post_write(txe);
 		return efa_rdm_ope_post_remote_write(txe);
 	}
+
+	/* Use a registered write protocol if one applies. */
+	efa_rdm_proto_select_emulated_write_protocol(ep, txe->peer, txe,
+						     use_p2p, &proto);
+	if (proto)
+		return efa_rdm_rma_post_write_proto(ep, txe, proto);
 
 	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
 	if (delivery_complete_requested)
