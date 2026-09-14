@@ -702,6 +702,42 @@ EFA_ALWAYS_INLINE void efa_send_wr_set_processing_hint_high_pps(struct efa_io_tx
 	EFA_SET(&meta_desc->ctrl3, EFA_IO_TX_META_DESC_PROCESSING_HINTS, EFA_IO_PROCESSING_HINT_BURST_PPS_SENSITIVE);
 }
 
+/*
+ * Attach the local and/or remote completion actions described by @sig to a wide
+ * Tx WQE, writing the action block at the offset the device reported for this
+ * SQ and setting the corresponding req bits in the meta descriptor ctrl2.
+ * Mirrors rdma-core's efa_send_wr_set_comp_action_common().
+ *
+ * The action data operands are already packed by the caller; an operand whose
+ * feature bit is unset is 0, matching rdma-core's no-data setters.
+ */
+EFA_ALWAYS_INLINE void
+efa_data_path_direct_set_comp_actions(struct efa_io_tx_wqe_128 *wqe,
+				      const struct efa_data_path_direct_sq *sq,
+				      const struct efa_comp_action_wr *sig)
+{
+	struct efa_io_action_block *block;
+
+	if (!sig->feature_bits)
+		return;
+
+	assert(sq->action_block_offset);
+	block = (struct efa_io_action_block *)
+			((uint8_t *) wqe + sq->action_block_offset);
+
+	if (sig->feature_bits & FI_EFA_LOCAL_ACTION_ID) {
+		block->local_action_handle = sig->local_action_id;
+		block->local_action_data = sig->local_action_data;
+		EFA_SET(&wqe->meta.ctrl2, EFA_IO_TX_META_DESC_LOCAL_ACTION_REQ, 1);
+	}
+
+	if (sig->feature_bits & FI_EFA_REMOTE_ACTION_ID) {
+		block->remote_action_handle = sig->remote_action_id;
+		block->remote_action_data = sig->remote_action_data;
+		EFA_SET(&wqe->meta.ctrl2, EFA_IO_TX_META_DESC_REMOTE_ACTION_REQ, 1);
+	}
+}
+
 
 EFA_ALWAYS_INLINE void efa_send_wr_set_rdma_addr(struct efa_io_remote_mem_addr *remote_mem,
 					      uint32_t rkey,

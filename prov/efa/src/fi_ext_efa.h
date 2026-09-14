@@ -266,6 +266,70 @@ struct fi_efa_feature_ops {
  */
 #define FI_EFA_MR_RELAXED_ORDERING (1ULL << 61)
 
+/*
+ * Reinterpret the message descriptor pointer passed to fi_writemsg() as a
+ * struct fi_efa_msg_rma_action_v1, so the provider reads the extra EFA per-WR
+ * metadata (completion actions).
+ *
+ * Only fi_writemsg() interprets this flag. Other data transfer variants,
+ * including fi_sendmsg(), never read the EFA metadata fields, so the flag has
+ * no effect there. The endpoint must have action support enabled via
+ * FI_OPT_EFA_COMP_ACTION (see rdma/fi_ext.h) before the endpoint is enabled.
+ *
+ * The flag names the descriptor it reinterprets the pointer as, version
+ * included, because nothing else can: a flags word carries no length, and the
+ * libfabric API version the application negotiated says nothing about which
+ * struct a pointer points at. A descriptor that cannot be reached by appending
+ * a feature-bit gated member to _v1 therefore takes a flag and a struct of its
+ * own (_V2) rather than changing what this flag means, and a provider that does
+ * not know that flag rejects it instead of reading the wrong layout.
+ */
+#define FI_EFA_MSG_ACTION_V1 (1ULL << 62)
+
+/*
+ * Selects which EFA metadata fields the fi_efa_msg_rma_action_v1 struct
+ * carries. Each bit gates exactly one field, so new EFA per-WR metadata can be
+ * added over time without consuming bits in the common fi_writemsg flags word.
+ * A field whose bit is unset is ignored and need not be initialized.
+ *
+ * An action's value bit (FI_EFA_*_ACTION_VALUE) may only be set when its ID bit
+ * (FI_EFA_*_ACTION_ID) is also set.
+ *
+ * feature_bits is what keeps this descriptor compatible in both directions, so
+ * the fields it gates are append-only: a new bit may only gate a field newly
+ * appended to struct fi_efa_msg_rma_action_v1, and no bit or field is ever
+ * reused, renumbered, or reordered. An application built against a newer header
+ * that sets a bit this provider does not know gets -FI_EOPNOTSUPP rather than
+ * silently different behavior, and an application built against an older header
+ * only sets bits whose fields it carries, so the provider never reads past the
+ * end of the struct it was handed.
+ */
+enum {
+	FI_EFA_LOCAL_ACTION_ID     = 1 << 0,	/* local_id is valid     */
+	FI_EFA_REMOTE_ACTION_ID    = 1 << 1,	/* remote_id is valid    */
+	FI_EFA_LOCAL_ACTION_VALUE  = 1 << 2,	/* local_value is valid  */
+	FI_EFA_REMOTE_ACTION_VALUE = 1 << 3,	/* remote_value is valid */
+	/* future EFA per-WR metadata fields add bits here */
+};
+
+/*
+ * EFA-specific RMA message descriptor, the one FI_EFA_MSG_ACTION_V1 names. The
+ * core descriptor is the first member, so (struct fi_msg_rma *)&emsg is valid
+ * and vice versa. The feature_bits word selects which of the members below the
+ * provider reads.
+ *
+ * An id is an action's id, from fid_efa_comp_action_get_id(). A value is what
+ * that action's memory write sets, truncated to the action's entry_size. A
+ * member whose feature bit is unset is not read.
+ */
+struct fi_efa_msg_rma_action_v1 {
+	struct fi_msg_rma msg;		/* MUST be first -- castable to fi_msg_rma */
+	uint64_t feature_bits;		/* which members below are valid (FI_EFA_*) */
+	uint32_t local_id;		/* action executed at the initiator */
+	uint32_t local_value;
+	uint32_t remote_id;		/* action executed at the target */
+	uint32_t remote_value;
+};
 
 enum {
 	FI_EFA_EP_ATTR_QKEY = 1 << 0,
