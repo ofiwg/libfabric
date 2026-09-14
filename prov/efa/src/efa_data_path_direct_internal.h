@@ -236,6 +236,7 @@ EFA_ALWAYS_INLINE enum ibv_wc_status to_ibv_status(enum efa_errno status)
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_QP_INTERNAL_ERROR:
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNSUPPORTED_OP:
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_AH:
+	case EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_ACTION:
 		return IBV_WC_LOC_QP_OP_ERR;
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY:
 		return IBV_WC_LOC_PROT_ERR;
@@ -251,6 +252,7 @@ EFA_ALWAYS_INLINE enum ibv_wc_status to_ibv_status(enum efa_errno status)
 		return IBV_WC_BAD_RESP_ERR;
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_FEATURE_MISMATCH:
 	case EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_LENGTH:
+	case EFA_IO_COMP_STATUS_REMOTE_ERROR_INVALID_ACTION:
 		return IBV_WC_REM_INV_REQ_ERR;
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNRESP_REMOTE:
 	case EFA_IO_COMP_STATUS_LOCAL_ERROR_UNREACH_REMOTE:
@@ -700,6 +702,40 @@ EFA_ALWAYS_INLINE void efa_send_wr_set_imm_data(struct efa_io_tx_meta_desc *meta
 EFA_ALWAYS_INLINE void efa_send_wr_set_processing_hint_high_pps(struct efa_io_tx_meta_desc *meta_desc)
 {
 	EFA_SET(&meta_desc->ctrl3, EFA_IO_TX_META_DESC_PROCESSING_HINTS, EFA_IO_PROCESSING_HINT_BURST_PPS_SENSITIVE);
+}
+
+/*
+ * Attach the local and/or remote completion actions described by @sig to a wide
+ * Tx WQE, writing the action block at the offset the device reported for this
+ * SQ and setting the corresponding req bits in the meta descriptor ctrl2.
+ * Mirrors rdma-core's efa_send_wr_set_comp_action_common().
+ *
+ * The action data operands are already packed by the caller; an operand whose
+ * feature bit is unset is 0, matching rdma-core's no-data setters.
+ */
+EFA_ALWAYS_INLINE void
+efa_data_path_direct_set_comp_actions(struct efa_io_tx_wqe_128 *wqe,
+				      const struct efa_data_path_direct_sq *sq,
+				      const struct efa_comp_action_wr *sig)
+{
+	struct efa_io_action_block *block;
+
+	assert(sig->feature_bits);
+	assert(sq->action_block_offset);
+	block = (struct efa_io_action_block *)
+			((uint8_t *) wqe + sq->action_block_offset);
+
+	if (sig->feature_bits & FI_EFA_LOCAL_ACTION_ID) {
+		block->local_action_handle = sig->local_action_id;
+		block->local_action_data = sig->local_action_data;
+		EFA_SET(&wqe->meta.ctrl2, EFA_IO_TX_META_DESC_LOCAL_ACTION_REQ, 1);
+	}
+
+	if (sig->feature_bits & FI_EFA_REMOTE_ACTION_ID) {
+		block->remote_action_handle = sig->remote_action_id;
+		block->remote_action_data = sig->remote_action_data;
+		EFA_SET(&wqe->meta.ctrl2, EFA_IO_TX_META_DESC_REMOTE_ACTION_REQ, 1);
+	}
 }
 
 
