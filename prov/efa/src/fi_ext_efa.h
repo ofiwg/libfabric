@@ -6,9 +6,12 @@
 
 #include <stdbool.h>
 #include <rdma/fi_domain.h>
+#include <rdma/fi_endpoint.h>
+#include <rdma/fi_rma.h>
 
 #define FI_EFA_DOMAIN_OPS "efa domain ops"
 #define FI_EFA_GDA_OPS "efa gda ops"
+#define FI_EFA_MEM_COMP_ACTION_OPS "efa mem comp action ops"
 #define FI_EFA_FEATURE_OPS "efa feature ops"
 #define FI_EFA_MODIFY_EP_OPS "efa modify ep ops"
 
@@ -90,6 +93,31 @@ struct fi_efa_comp_cntr_init_attr {
 	struct fi_efa_memory_location err_cntr_ext_mem;
 };
 
+struct fid_efa_comp_action {
+	struct fid fid;
+	uint32_t action_id;
+};
+
+static inline uint32_t
+fid_efa_comp_action_get_id(struct fid_efa_comp_action *action)
+{
+	return action->action_id;
+}
+
+enum fi_efa_mem_comp_action_op {
+	FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL = 0,
+};
+
+struct fi_efa_mem_comp_action_attr {
+	uint64_t comp_mask;
+	uint32_t flags;
+	uint32_t op_mem_size;
+	uint64_t mem_size;
+	struct fi_efa_memory_location location;
+	enum fi_efa_mem_comp_action_op op;
+	uint8_t reserved[4];
+};
+
 struct fi_efa_ops_domain {
 	int (*query_mr)(struct fid_mr *mr, struct fi_efa_mr_attr *mr_attr);
 };
@@ -111,6 +139,14 @@ struct fi_efa_ops_gda {
 			     struct fid_cntr **cntr,
 			     void *context,
 			     struct fi_efa_comp_cntr_init_attr *efa_attr);
+};
+
+struct fi_efa_ops_mem_comp_action {
+	int (*create_mem_comp_action)(struct fid_domain *domain,
+				      struct fi_efa_mem_comp_action_attr *attr,
+				      struct fid_efa_comp_action **action);
+	int (*query_max_mem_comp_actions)(struct fid_domain *domain,
+					  uint32_t *max_mem_comp_actions);
 };
 
 /*
@@ -155,6 +191,7 @@ struct fi_efa_feature_ops {
  * set, that ordering guarantee is lost.
  */
 #define FI_EFA_MR_RELAXED_ORDERING (1ULL << 61)
+
 
 enum {
 	FI_EFA_EP_ATTR_QKEY = 1 << 0,
