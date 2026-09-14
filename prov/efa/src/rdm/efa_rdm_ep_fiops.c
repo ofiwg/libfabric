@@ -1182,9 +1182,10 @@ static int efa_rdm_ep_close(struct fid *fid)
 		efa_rdm_ep->peer_srx_ep = NULL;
 	}
 
+	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+
 	efa_base_ep_destruct_qp_unsafe(&efa_rdm_ep->base_ep);
 
-	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 	efa_cq_unlock_ep_list(&efa_rdm_ep->base_ep);
 	EFA_GENLOCK_UNLOCK(&domain->device->qp_table_lock, efa_qp_table_lock_sym);
 
