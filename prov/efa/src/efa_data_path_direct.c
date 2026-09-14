@@ -108,6 +108,17 @@ int efa_data_path_direct_qp_initialize(struct efa_qp *efa_qp,
 	sq_req_id_64_bit = !!(sq_attr.caps & EFADV_WQ_CAPS_64_BIT_REQ_ID) &&
 				efa_env.use_sq_req_id_64_bit;
 #endif
+#if HAVE_EFADV_COMP_ACTION
+	/*
+	 * Where in the WQE the completion-action block lives is the device's to
+	 * say, so take the queried offset rather than deriving it from the WQE
+	 * layout. It is reported only for an SQ created with
+	 * EFADV_WR_EX_WITH_COMP_ACTION_WITH_DATA, and is 0 otherwise.
+	 */
+	if (sq_attr.caps & EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA)
+		direct_qp->sq.action_block_offset =
+			sq_attr.comp_action_with_data_block_offset;
+#endif
 	/* Initialize send work queue management structures */
 	efa_data_path_direct_wq_initialize(&direct_qp->sq.wq, sq_attr.num_entries,
 			   sq_req_id_64_bit, wqlock);

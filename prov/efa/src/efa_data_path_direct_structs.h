@@ -154,6 +154,13 @@ struct efa_data_path_direct_sq {
 	 * built, but doorbell is deferred for batching efficiency.
 	 */
 	uint32_t num_wqe_pending;
+
+	/**
+	 * Byte offset of the completion-action block inside a Tx WQE, as
+	 * reported by efadv_query_qp_wqs(). 0 means the SQ was not created with
+	 * completion-action-with-data support and carries no action block.
+	 */
+	uint16_t action_block_offset;
 };
 
 /**
