@@ -718,6 +718,59 @@ EFA_ALWAYS_INLINE void efa_send_wr_set_processing_hint_high_pps(struct efa_io_tx
 	EFA_SET(&meta_desc->ctrl3, EFA_IO_TX_META_DESC_PROCESSING_HINTS, EFA_IO_PROCESSING_HINT_BURST_PPS_SENSITIVE);
 }
 
+#if HAVE_EFADV_COMP_SIGNAL
+/*
+ * Offset of the completion-with-signal block inside a wide (128-byte) Tx WQE.
+ * The block occupies the tail of the WQE. Hardcoded per rdma-core guidance
+ * (128 - sizeof(block)) until rdma-core exposes it; matches the value that
+ * efadv_query_qp_wqs reports as comp_signal_block_offset.
+ */
+#define EFA_DIRECT_SIGNAL_BLOCK_OFFSET \
+	(sizeof(struct efa_io_tx_wqe_128) - \
+	 sizeof(struct efa_io_signal_with_data_block))
+
+/* Operand a signal carries when the WR does not provide explicit data.
+ * Mirrors rdma-core's EFA_SIGNAL_DEFAULT_DATA. */
+#define EFA_DIRECT_SIGNAL_DEFAULT_DATA 1
+
+/*
+ * Attach the local and/or remote completion signals described by @sig to a
+ * wide Tx WQE, writing the signal block at the fixed tail offset and setting
+ * the corresponding req bits in the meta descriptor ctrl2. Mirrors rdma-core's
+ * efa_send_wr_set_comp_signal_common().
+ */
+EFA_ALWAYS_INLINE void
+efa_data_path_direct_set_comp_signals(struct efa_io_tx_wqe_128 *wqe,
+				      const struct efa_comp_signal_wr *sig)
+{
+	struct efa_io_signal_with_data_block *block;
+
+	if (!sig->feature_bits)
+		return;
+
+	block = (struct efa_io_signal_with_data_block *)
+			((uint8_t *) wqe + EFA_DIRECT_SIGNAL_BLOCK_OFFSET);
+
+	if (sig->feature_bits & FI_EFA_LOCAL_SIGNAL_ID) {
+		block->local_signal_handle = sig->local_signal_id;
+		block->local_signal_data =
+			(sig->feature_bits & FI_EFA_LOCAL_SIGNAL_DATA) ?
+				sig->local_signal_data :
+				EFA_DIRECT_SIGNAL_DEFAULT_DATA;
+		EFA_SET(&wqe->meta.ctrl2, EFA_IO_TX_META_DESC_LOCAL_SIGNAL_REQ, 1);
+	}
+
+	if (sig->feature_bits & FI_EFA_REMOTE_SIGNAL_ID) {
+		block->remote_signal_handle = sig->remote_signal_id;
+		block->remote_signal_data =
+			(sig->feature_bits & FI_EFA_REMOTE_SIGNAL_DATA) ?
+				sig->remote_signal_data :
+				EFA_DIRECT_SIGNAL_DEFAULT_DATA;
+		EFA_SET(&wqe->meta.ctrl2, EFA_IO_TX_META_DESC_REMOTE_SIGNAL_REQ, 1);
+	}
+}
+#endif /* HAVE_EFADV_COMP_SIGNAL */
+
 
 EFA_ALWAYS_INLINE void efa_send_wr_set_rdma_addr(struct efa_io_remote_mem_addr *remote_mem,
 					      uint32_t rkey,

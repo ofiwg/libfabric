@@ -200,6 +200,24 @@ struct efa_io_tx_wqe_128 {
 };
 
 /*
+ * Completion-with-signal descriptor block. Carried in the tail of a wide
+ * (128-byte) Tx WQE when the local/remote signal req bits are set in the meta
+ * descriptor ctrl2. See efa_io_signal_with_data_block in
+ * rdma-core/providers/efa/efa_io_defs.h.
+ */
+struct efa_io_signal_with_data_block {
+	/* Signal ID */
+	uint32_t local_signal_handle;
+
+	uint32_t remote_signal_handle;
+
+	/* signal operand data. LSB bits used for sub-64bit operations. */
+	uint64_t local_signal_data;
+
+	uint64_t remote_signal_data;
+} __attribute__((__packed__));
+
+/*
  * Rx buffer descriptor; RX WQE is composed of one or more RX buffer
  * descriptors.
  */
@@ -454,6 +472,8 @@ struct efa_io_rx_cdesc_ex {
 #define EFA_IO_TX_META_DESC_FIRST_MASK		BIT(2)
 #define EFA_IO_TX_META_DESC_LAST_MASK		BIT(3)
 #define EFA_IO_TX_META_DESC_COMP_REQ_MASK	BIT(4)
+#define EFA_IO_TX_META_DESC_LOCAL_SIGNAL_REQ_MASK	BIT(6)
+#define EFA_IO_TX_META_DESC_REMOTE_SIGNAL_REQ_MASK	BIT(7)
 #define EFA_IO_TX_META_DESC_PROCESSING_HINTS_MASK            GENMASK(1, 0)
 
 /* tx_buf_desc */

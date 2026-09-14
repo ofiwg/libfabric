@@ -739,7 +739,7 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 	sge.lkey = ((struct efa_mr *)desc)->lkey;
 
 	err = efa_qp_post_write(qp, &sge, 1, NULL, false, remote_key, remote_buf, wr_id,
-				cq_data, txe->fi_flags, ah, qpn, qkey);
+				cq_data, txe->fi_flags, ah, qpn, qkey, NULL);
 
 #if ENABLE_DEBUG
 	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);

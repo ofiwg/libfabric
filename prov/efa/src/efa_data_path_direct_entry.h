@@ -592,7 +592,8 @@ efa_data_path_direct_post_write(
 		uint64_t flags,
 		struct efa_ah *ah,
 		uint32_t qpn,
-		uint32_t qkey)
+		uint32_t qkey,
+		const struct efa_comp_signal_wr *sig)
 {
 	struct efa_data_path_direct_sq *sq = &qp->data_path_direct_qp.sq;
 	struct efa_io_tx_wqe_128 local_wqe = {0};
@@ -667,6 +668,11 @@ efa_data_path_direct_post_write(
 		remote_mem->length = efa_sge_total_bytes(sge_list, sge_count);
 		efa_data_path_direct_set_sgl(local_wqe.data.rdma_req.local_mem, meta_desc, sge_list, sge_count);
 	}
+
+#if HAVE_EFADV_COMP_SIGNAL
+	if (sig && sig->feature_bits)
+		efa_data_path_direct_set_comp_signals(&local_wqe, sig);
+#endif
 
 	efa_data_path_direct_send_wr_post(qp, sq, &local_wqe);
 
