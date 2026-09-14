@@ -95,6 +95,10 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_ibv_get_cq_event=0
 	have_efadv_create_comp_cntr=0
 	have_ibv_query_comp_cntr_caps=0
+	have_efadv_create_comp_signal=0
+	have_efadv_create_comp_mem_op=0
+	have_efadv_get_max_inline_data=0
+	have_efadv_comp_signal=0
 
 	dnl $have_neuron is defined at top-level configure.ac
 	AM_CONDITIONAL([HAVE_NEURON], [ test x"$have_neuron" = x1 ])
@@ -261,6 +265,21 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_efadv_create_comp_cntr=0],
 			[[#include <infiniband/efadv.h>]])
 
+		AC_CHECK_DECL([efadv_create_comp_signal],
+			[have_efadv_create_comp_signal=1],
+			[have_efadv_create_comp_signal=0],
+			[[#include <infiniband/efadv.h>]])
+
+		AC_CHECK_DECL([efadv_create_comp_mem_op],
+			[have_efadv_create_comp_mem_op=1],
+			[have_efadv_create_comp_mem_op=0],
+			[[#include <infiniband/efadv.h>]])
+
+		AC_CHECK_DECL([efadv_get_max_inline_data],
+			[have_efadv_get_max_inline_data=1],
+			[have_efadv_get_max_inline_data=0],
+			[[#include <infiniband/efadv.h>]])
+
 		AC_CHECK_DECL([ibv_query_comp_cntr_caps],
 			[have_ibv_query_comp_cntr_caps=1],
 			[have_ibv_query_comp_cntr_caps=0],
@@ -344,6 +363,17 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_IBV_QUERY_COMP_CNTR_CAPS],
 		[$have_ibv_query_comp_cntr_caps],
 		[Indicates if ibv_query_comp_cntr_caps is available])
+
+	dnl Completion-with-signal requires the mem-op, signal, and
+	dnl get_max_inline_data verbs together.
+	AS_IF([test "$have_efadv_create_comp_signal" = "1" -a \
+		    "$have_efadv_create_comp_mem_op" = "1" -a \
+		    "$have_efadv_get_max_inline_data" = "1"],
+		[have_efadv_comp_signal=1],
+		[have_efadv_comp_signal=0])
+	AC_DEFINE_UNQUOTED([HAVE_EFADV_COMP_SIGNAL],
+		[$have_efadv_comp_signal],
+		[Indicates if EFA completion-with-signal verbs are available])
 
 
 	CPPFLAGS=$save_CPPFLAGS

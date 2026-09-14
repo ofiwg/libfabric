@@ -684,10 +684,296 @@ static int efa_domain_cntr_open_ext(struct fid_domain *domain,
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */
 
 
+#if HAVE_EFADV_COMP_SIGNAL
+
+static int efa_comp_mem_op_close(struct fid *fid)
+{
+	struct efa_comp_mem_op *mem_op =
+		container_of(fid, struct efa_comp_mem_op, comp_mem_op.fid);
+	int ret;
+
+	ret = efadv_destroy_comp_mem_op(mem_op->efadv_mem_op);
+	if (ret)
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_destroy_comp_mem_op failed: %d\n", ret);
+	free(mem_op);
+	return ret ? -ret : FI_SUCCESS;
+}
+
+static struct fi_ops efa_comp_mem_op_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = efa_comp_mem_op_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+static int efa_comp_signal_close(struct fid *fid)
+{
+	struct efa_comp_signal *signal =
+		container_of(fid, struct efa_comp_signal, comp_signal.fid);
+	int ret;
+
+	ret = efadv_destroy_comp_signal(signal->efadv_signal);
+	if (ret)
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_destroy_comp_signal failed: %d\n", ret);
+	free(signal);
+	return ret ? -ret : FI_SUCCESS;
+}
+
+static struct fi_ops efa_comp_signal_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = efa_comp_signal_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+/*
+ * Translate a public fi_efa_comp_mem_op value width to the efadv comp mem op
+ * value. Returns 0 on success and sets *efadv_op, negative fi errno otherwise.
+ */
+static int efa_domain_fi_to_efadv_comp_mem_op(enum fi_efa_comp_mem_op fi_op,
+					      uint16_t *efadv_op)
+{
+	switch (fi_op) {
+	case FI_EFA_COMP_MEM_OP_NONE:
+		*efadv_op = EFADV_COMP_MEM_OP_NONE;
+		return FI_SUCCESS;
+	case FI_EFA_COMP_MEM_OP_SET_SIGNAL_VAL_8:
+		*efadv_op = EFADV_COMP_MEM_OP_SET_SIGNAL_VAL_8;
+		return FI_SUCCESS;
+	case FI_EFA_COMP_MEM_OP_SET_SIGNAL_VAL_16:
+		*efadv_op = EFADV_COMP_MEM_OP_SET_SIGNAL_VAL_16;
+		return FI_SUCCESS;
+	case FI_EFA_COMP_MEM_OP_SET_SIGNAL_VAL_32:
+		*efadv_op = EFADV_COMP_MEM_OP_SET_SIGNAL_VAL_32;
+		return FI_SUCCESS;
+	default:
+		return -FI_EINVAL;
+	}
+}
+
+static int efa_domain_create_comp_mem_op(struct fid_domain *domain_fid,
+					 struct fi_efa_comp_mem_op_attr *attr,
+					 struct fid_efa_comp_mem_op **mem_op_fid)
+{
+	struct efadv_comp_mem_op_init_attr efa_attr = {0};
+	struct efa_comp_mem_op *mem_op;
+	struct efa_domain *domain;
+	int ret;
+
+	if (!attr || !mem_op_fid)
+		return -FI_EINVAL;
+
+	domain = container_of(domain_fid, struct efa_domain,
+			      util_domain.domain_fid);
+
+	if (attr->comp_mask) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported comp_mask 0x%lx in fi_efa_comp_mem_op_attr\n",
+			 attr->comp_mask);
+		return -FI_EINVAL;
+	}
+
+	/*
+	 * Translate the caller's attributes into the efadv attributes honestly:
+	 * for each flag the caller sets, carry through the corresponding op,
+	 * memory location, and length. The device/efadv enforces which
+	 * combinations are actually supported.
+	 */
+	if (attr->flags & ~(FI_EFA_COMP_MEM_OP_WITH_COMP_EXTERNAL_MEM |
+			    FI_EFA_COMP_MEM_OP_WITH_ERR_EXTERNAL_MEM)) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported flags 0x%x in fi_efa_comp_mem_op_attr\n",
+			 attr->flags);
+		return -FI_EINVAL;
+	}
+
+	if (attr->flags & FI_EFA_COMP_MEM_OP_WITH_COMP_EXTERNAL_MEM) {
+		efa_attr.flags |= EFADV_COMP_MEM_OP_WITH_COMP_EXTERNAL_MEM;
+
+		ret = efa_domain_fi_to_efadv_comp_mem_op(attr->op,
+							 &efa_attr.comp_op);
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN, "Unsupported comp mem op %d\n",
+				 attr->op);
+			return ret;
+		}
+
+		efa_attr.comp_op_ext_mem_length = attr->length;
+		ret = efa_domain_fi_to_efadv_memory_location(
+			&attr->location, &efa_attr.comp_op_ext_mem);
+		if (ret)
+			return ret;
+	}
+
+	if (attr->flags & FI_EFA_COMP_MEM_OP_WITH_ERR_EXTERNAL_MEM) {
+		efa_attr.flags |= EFADV_COMP_MEM_OP_WITH_ERR_EXTERNAL_MEM;
+
+		ret = efa_domain_fi_to_efadv_comp_mem_op(attr->err_op,
+							 &efa_attr.err_op);
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN, "Unsupported err mem op %d\n",
+				 attr->err_op);
+			return ret;
+		}
+
+		efa_attr.err_op_ext_mem_length = attr->err_length;
+		ret = efa_domain_fi_to_efadv_memory_location(
+			&attr->err_location, &efa_attr.err_op_ext_mem);
+		if (ret)
+			return ret;
+	}
+
+	mem_op = calloc(1, sizeof(*mem_op));
+	if (!mem_op)
+		return -FI_ENOMEM;
+
+	mem_op->efadv_mem_op = efadv_create_comp_mem_op(domain->device->ibv_ctx,
+							&efa_attr,
+							sizeof(efa_attr));
+	if (!mem_op->efadv_mem_op) {
+		ret = -errno;
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_create_comp_mem_op failed: %d\n", ret);
+		free(mem_op);
+		return ret;
+	}
+
+	mem_op->comp_mem_op.fid.fclass = FI_CLASS_UNSPEC;
+	mem_op->comp_mem_op.fid.ops = &efa_comp_mem_op_fi_ops;
+
+	*mem_op_fid = &mem_op->comp_mem_op;
+	return FI_SUCCESS;
+}
+
+static int efa_domain_register_signal(struct fid_domain *domain_fid,
+				      struct fi_efa_comp_signal_attr *attr,
+				      struct fid_efa_comp_signal **signal_fid)
+{
+	struct efadv_comp_signal_init_attr efa_attr = {0};
+	struct efa_comp_mem_op *mem_op;
+	struct efa_comp_signal *signal;
+	struct efa_domain *domain;
+	struct efa_cntr *efa_cntr;
+	int ret;
+
+	if (!attr || !signal_fid)
+		return -FI_EINVAL;
+
+	domain = container_of(domain_fid, struct efa_domain,
+			      util_domain.domain_fid);
+
+	if (attr->comp_mask) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported comp_mask 0x%lx in fi_efa_comp_signal_attr\n",
+			 attr->comp_mask);
+		return -FI_EINVAL;
+	}
+
+	efa_attr.pd = domain->ibv_pd;
+
+	switch (attr->type) {
+	case FI_EFA_COMP_SIGNAL_MEM_OP:
+		efa_attr.type = EFADV_COMP_SIGNAL_INIT_TYPE_MEM_OP;
+		if (!attr->mem_op)
+			return -FI_EINVAL;
+		mem_op = container_of(attr->mem_op, struct efa_comp_mem_op,
+				      comp_mem_op);
+		efa_attr.comp_mem_op = mem_op->efadv_mem_op;
+		break;
+	case FI_EFA_COMP_SIGNAL_CNTR_INC:
+		efa_attr.type = EFADV_COMP_SIGNAL_INIT_TYPE_CNTR_INC;
+		if (!attr->cntr)
+			return -FI_EINVAL;
+		efa_cntr = container_of(attr->cntr, struct efa_cntr,
+					util_cntr.cntr_fid);
+		if (!efa_cntr->ibv_comp_cntr) {
+			EFA_WARN(FI_LOG_DOMAIN,
+				 "Counter is not a hardware completion counter\n");
+			return -FI_EINVAL;
+		}
+		efa_attr.comp_cntr = efa_cntr->ibv_comp_cntr;
+		break;
+	default:
+		EFA_WARN(FI_LOG_DOMAIN, "Unknown comp signal type %d\n",
+			 attr->type);
+		return -FI_EINVAL;
+	}
+
+	signal = calloc(1, sizeof(*signal));
+	if (!signal)
+		return -FI_ENOMEM;
+
+	signal->efadv_signal = efadv_create_comp_signal(domain->device->ibv_ctx,
+							&efa_attr,
+							sizeof(efa_attr));
+	if (!signal->efadv_signal) {
+		ret = -errno;
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_create_comp_signal failed: %d\n", ret);
+		free(signal);
+		return ret;
+	}
+
+	signal->comp_signal.fid.fclass = FI_CLASS_UNSPEC;
+	signal->comp_signal.fid.ops = &efa_comp_signal_fi_ops;
+	signal->comp_signal.id = signal->efadv_signal->id;
+
+	*signal_fid = &signal->comp_signal;
+	return FI_SUCCESS;
+}
+
+static int efa_domain_query_max_comp_mem_ops(struct fid_domain *domain_fid,
+					     uint32_t *max_comp_mem_ops)
+{
+	struct efa_domain *domain;
+
+	if (!max_comp_mem_ops)
+		return -FI_EINVAL;
+
+	domain = container_of(domain_fid, struct efa_domain,
+			      util_domain.domain_fid);
+
+	*max_comp_mem_ops = domain->device->efa_attr.max_comp_mem_ops;
+	return FI_SUCCESS;
+}
+
+#else /* HAVE_EFADV_COMP_SIGNAL */
+
+static int efa_domain_create_comp_mem_op(struct fid_domain *domain_fid,
+					 struct fi_efa_comp_mem_op_attr *attr,
+					 struct fid_efa_comp_mem_op **mem_op_fid)
+{
+	return -FI_ENOSYS;
+}
+
+static int efa_domain_register_signal(struct fid_domain *domain_fid,
+				      struct fi_efa_comp_signal_attr *attr,
+				      struct fid_efa_comp_signal **signal_fid)
+{
+	return -FI_ENOSYS;
+}
+
+static int efa_domain_query_max_comp_mem_ops(struct fid_domain *domain_fid,
+					     uint32_t *max_comp_mem_ops)
+{
+	return -FI_ENOSYS;
+}
+
+#endif /* HAVE_EFADV_COMP_SIGNAL */
+
+static struct fi_efa_ops_signal efa_ops_signal = {
+	.create_comp_mem_op = efa_domain_create_comp_mem_op,
+	.register_signal = efa_domain_register_signal,
+	.query_max_comp_mem_ops = efa_domain_query_max_comp_mem_ops,
+};
+
 struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
 };
-
 static struct fi_efa_ops_gda efa_ops_gda = {
 	.query_addr = efa_domain_query_addr,
 	.query_qp_wqs = efa_domain_query_qp_wqs,
@@ -806,8 +1092,16 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_GDA_OPS\n");
 			return -FI_EOPNOTSUPP;
 		}
-
 		*ops = &efa_ops_gda;
+		return ret;
+	}
+	if (strcmp(ops_name, FI_EFA_SIGNAL_OPS) == 0) {
+		efa_domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
+		if (efa_domain->info_type != EFA_INFO_DIRECT) {
+			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_SIGNAL_OPS\n");
+			return -FI_EOPNOTSUPP;
+		}
+		*ops = &efa_ops_signal;
 		return ret;
 	}
 	if (strcmp(ops_name, FI_EFA_MODIFY_EP_OPS) == 0) {
@@ -816,7 +1110,6 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_MODIFY_EP_OPS\n");
 			return -FI_EOPNOTSUPP;
 		}
-
 		*ops = &efa_ops_modify_ep;
 		return ret;
 	}

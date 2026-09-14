@@ -37,6 +37,7 @@ struct efa_env efa_env = {
 	.use_sm2 = false,
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
 	.use_unsolicited_write_recv = 1,
+	.enable_comp_signal = 1,
 	.internal_rx_refill_threshold = 8,
 	.rdm_txe_pool_size = EFA_RDM_TXE_POOL_SIZE_DEFAULT,
 	.use_data_path_direct = true,
@@ -63,6 +64,10 @@ static void efa_env_unregistered_param_get(void)
 	tmp = getenv("FI_EFA_USE_SQ_REQ_ID_64_BIT");
 	if (tmp)
 		efa_env.use_sq_req_id_64_bit = atoi(tmp);
+
+	tmp = getenv("FI_EFA_ENABLE_COMP_SIGNAL");
+	if (tmp)
+		efa_env.enable_comp_signal = atoi(tmp);
 }
 
 /* @brief Read and store the FI_EFA_* environment variables.
