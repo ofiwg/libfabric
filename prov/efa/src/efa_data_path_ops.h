@@ -31,6 +31,49 @@
 #endif
 
 
+#if HAVE_EFADV_COMP_ACTION
+/*
+ * Attach the local and/or remote completion action(s) described by @sig to the
+ * work request currently being built on the ibv_qp_ex, using the rdma-core
+ * efadv WR setters. @sig may be NULL (or have feature_bits == 0), meaning no
+ * actions to attach.
+ *
+ * The efadv setters take the whole 64-bit device operand, so the packed value
+ * and entry index are passed through as-is.
+ */
+static inline void
+efa_ibv_attach_comp_actions(struct efa_qp *qp,
+			    const struct efa_comp_action_wr *sig)
+{
+	struct efadv_qp *efadv_qp;
+
+	if (!sig || !sig->feature_bits)
+		return;
+
+	efadv_qp = efadv_qp_from_ibv_qp_ex(qp->ibv_qp_ex);
+
+	if (sig->feature_bits & FI_EFA_LOCAL_ACTION_ID) {
+		if (sig->feature_bits & FI_EFA_LOCAL_ACTION_VALUE)
+			efadv_wr_set_local_comp_action_with_data(
+				efadv_qp, sig->local_action_id,
+				sig->local_action_data);
+		else
+			efadv_wr_set_local_comp_action(efadv_qp,
+						       sig->local_action_id);
+	}
+
+	if (sig->feature_bits & FI_EFA_REMOTE_ACTION_ID) {
+		if (sig->feature_bits & FI_EFA_REMOTE_ACTION_VALUE)
+			efadv_wr_set_remote_comp_action_with_data(
+				efadv_qp, sig->remote_action_id,
+				sig->remote_action_data);
+		else
+			efadv_wr_set_remote_comp_action(efadv_qp,
+							sig->remote_action_id);
+	}
+}
+#endif
+
 /**
  * @brief RDMA-core version of send operation using ibv_* APIs
  */
@@ -136,7 +179,8 @@ efa_ibv_post_write(
 		uint64_t flags,
 		struct efa_ah *ah,
 		uint32_t qpn,
-		uint32_t qkey)
+		uint32_t qkey,
+		const struct efa_comp_action_wr *sig)
 {
 	struct efa_base_ep *base_ep = qp->base_ep;
 	int ret;
@@ -167,6 +211,10 @@ efa_ibv_post_write(
 					     EFADV_WR_PROCESSING_HINT_BURST_PPS_SENSITIVE);
 #endif
 
+#if HAVE_EFADV_COMP_ACTION
+	efa_ibv_attach_comp_actions(qp, sig);
+#endif
+
 	if (!(flags & FI_MORE)) {
 		ret = ibv_wr_complete(qp->ibv_qp_ex);
 		base_ep->is_wr_started = false;
@@ -194,7 +242,8 @@ int efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t 
 		       uint32_t remote_key, uint64_t remote_addr,
 		       uintptr_t wr_id, uint64_t data,
 		       uint64_t flags, struct efa_ah *ah, uint32_t qpn,
-		       uint32_t qkey);
+		       uint32_t qkey,
+		       const struct efa_comp_action_wr *sig);
 int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
 int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq);
 int efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq);
@@ -297,7 +346,8 @@ efa_qp_post_write(struct efa_qp *qp,
                   uint64_t flags,
                   struct efa_ah *ah,
                   uint32_t qpn,
-                  uint32_t qkey)
+                  uint32_t qkey,
+                  const struct efa_comp_action_wr *sig)
 {
 	EFA_DBG(FI_LOG_EP_DATA, "Posting WQE: qp=%p sge_count=%ld remote_key=%u remote_addr=0x%lx wr_id=0x%lx data=0x%lx flags=0x%lx qpn=%u qkey=0x%x\n",
 		qp, sge_count, remote_key, remote_addr, wr_id, data, flags, qpn, qkey);
@@ -305,11 +355,11 @@ efa_qp_post_write(struct efa_qp *qp,
 	if (qp->data_path_direct_enabled)
 		return efa_data_path_direct_post_write(qp, sge_list, sge_count,
 					 inline_data_list, use_inline,
-					 remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey);
+					 remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey, sig);
 #endif
 	return efa_ibv_post_write(qp, sge_list, sge_count,
 				  inline_data_list, use_inline,
-				  remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey);
+				  remote_key, remote_addr, wr_id, data, flags, ah, qpn, qkey, sig);
 }
 
 /* CQ wrapper functions */
