@@ -52,6 +52,15 @@ uint16_t efa_test_mock_efadv_sq_comp_action_caps(void)
 #endif
 }
 
+uint16_t efa_test_mock_efadv_action_block_offset(void)
+{
+#if HAVE_EFADV_COMP_ACTION
+	return EFA_TEST_MOCK_ACTION_BLOCK_OFFSET;
+#else
+	return 0;
+#endif
+}
+
 uint32_t efa_test_get_qp_qkey(struct fid_ep *ep)
 {
 	struct efa_base_ep *base_ep =
@@ -71,4 +80,38 @@ int efa_test_getname_qkey(struct fid_ep *ep, uint32_t *qkey)
 		*qkey = addr.qkey;
 
 	return ret;
+}
+
+bool efa_test_comp_action_wr_matches(const struct efa_comp_action_wr *sig,
+				     uint64_t feature_bits, uint32_t local_id,
+				     uint64_t local_data, uint32_t remote_id,
+				     uint64_t remote_data)
+{
+	return sig && sig->feature_bits == feature_bits &&
+	       sig->local_action_id == local_id &&
+	       sig->local_action_data == local_data &&
+	       sig->remote_action_id == remote_id &&
+	       sig->remote_action_data == remote_data;
+}
+
+bool efa_test_get_comp_action_enabled(struct fid_ep *ep)
+{
+	struct efa_base_ep *base_ep =
+		container_of(ep, struct efa_base_ep, util_ep.ep_fid);
+
+	return base_ep->comp_action_enabled;
+}
+
+bool efa_test_device_supports_comp_action(void)
+{
+	return efa_device_support_comp_action();
+}
+
+bool efa_test_build_has_comp_action(void)
+{
+#if HAVE_EFADV_COMP_ACTION
+	return true;
+#else
+	return false;
+#endif
 }
