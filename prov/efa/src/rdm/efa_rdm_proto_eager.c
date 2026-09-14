@@ -34,7 +34,7 @@
 static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_ope *txe,
 						 int req_pkt_type,
 						 uint16_t header_flags,
-						 int iface)
+						 int iface, bool use_p2p)
 {
 	size_t max_data_offset, max_rtm_data_capacity;
 
@@ -107,7 +107,8 @@ int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
 					  const struct fi_msg *msg, uint32_t op,
 					  uint64_t tag, uint64_t flags,
 					  uint32_t internal_flags,
-					  struct efa_rdm_ope *txe)
+					  struct efa_rdm_ope *txe,
+					  uint64_t *pke_send_flags)
 {
 	int ret, req_pkt_type, pkt_entry_cnt;
 	bool tagged, delivery_complete_requested;
@@ -117,6 +118,12 @@ int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
 
 	// Eager protocol sends 1 packet by definition
 	pkt_entry_cnt = 1;
+
+	/*
+	 * Eager is a single packet, so it honors the caller's FI_MORE request:
+	 * the doorbell can be deferred to batch with a following post.
+	 */
+	*pke_send_flags = (txe->fi_flags & FI_MORE) ? FI_MORE : 0;
 
 	// Verify that the send queue is not full
 	assert(ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops -
