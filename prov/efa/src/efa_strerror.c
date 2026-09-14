@@ -98,6 +98,18 @@ void efa_show_help(enum efa_errno err) {
 		help = "This error is detected remotely. "
 		"The peer doesn't support or didn't enable a locally requested feature.";
 		break;
+	case EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_ACTION:
+		help = "This error is detected locally. "
+		"The work request named a local completion action that is not "
+		"registered, has been closed, or belongs to a different domain "
+		"than the endpoint.";
+		break;
+	case EFA_IO_COMP_STATUS_REMOTE_ERROR_INVALID_ACTION:
+		help = "This error is detected remotely. "
+		"The work request named a remote completion action that is not "
+		"registered on the peer, has been closed, or belongs to a "
+		"different domain than the peer's endpoint.";
+		break;
 	case FI_EFA_ERR_PEER_ABORTED:
 		help = "The peer canceled this transfer by closing the memory "
 		"region or endpoint mid-transfer. This is expected when the peer "

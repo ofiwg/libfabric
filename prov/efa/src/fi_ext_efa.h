@@ -194,6 +194,27 @@ struct fi_efa_feature_ops {
  */
 #define FI_EFA_MR_RELAXED_ORDERING (1ULL << 61)
 
+/*
+ * Read the descriptor passed to fi_writemsg() as a struct fi_efa_msg_rma.
+ * This flag can be passed in the 'flags' argument of fi_writemsg().
+ */
+#define FI_EFA_EXTENDED_MSG (1ULL << 62)
+
+enum {
+	FI_EFA_LOCAL_ACTION_ID     = 1 << 0,
+	FI_EFA_REMOTE_ACTION_ID    = 1 << 1,
+	FI_EFA_LOCAL_ACTION_VALUE  = 1 << 2,
+	FI_EFA_REMOTE_ACTION_VALUE = 1 << 3,
+};
+
+struct fi_efa_msg_rma {
+	struct fi_msg_rma msg;
+	uint64_t feature_bits;
+	uint32_t local_id;
+	uint32_t remote_id;
+	uint64_t local_value;
+	uint64_t remote_value;
+};
 
 enum {
 	FI_EFA_EP_ATTR_QKEY = 1 << 0,
