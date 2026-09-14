@@ -62,6 +62,12 @@ struct efa_env {
 	enum efa_env_huge_page_setting huge_page_setting;
 	int use_unsolicited_write_recv;
 	/**
+	 * Debug knob (FI_EFA_ENABLE_COMP_ACTION, default 1). When set to 0 the
+	 * provider reports completion-action as unsupported regardless of
+	 * device capability, to exercise the unsupported path.
+	 */
+	int enable_comp_action;
+	/**
 	 * The threshold that EFA provider will refill the internal rx pkt pool.
 	 * When the number of internal rx pkts to post is lower than this threshold,
 	 * the refill will be skipped.
