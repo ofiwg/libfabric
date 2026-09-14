@@ -376,6 +376,7 @@ efa_cq_proc_ibv_recv_rdma_with_imm_completion(struct efa_base_ep *base_ep,
  * @param[in]   ibv_cq            EFA IBV CQ to poll completions from
  */
 int efa_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym)
 {
 	struct efa_base_ep *base_ep;
 	struct efa_cq *cq;
@@ -810,7 +811,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
 	/* Acquire the lock to prevent race conditions when qp_table is being updated */
-	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+	EFA_GENLOCK_LOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 
 	/* If there are cqes in the util cq (due to the cq flush in ep close or efa_trywait) */
 	if (!ofi_cirque_isempty(efa_cq->util_cq.cirq)) {
@@ -858,7 +859,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	efa_cq_end_poll(ibv_cq);
 
 out:
-	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 	return num_cqe ? num_cqe : err;
 }
 
@@ -871,7 +872,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 
 	efa_cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
-	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+	EFA_GENLOCK_LOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 
 	ibv_cq = &efa_cq->ibv_cq;
 
@@ -900,7 +901,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	ret = 1;
 
 out:
-	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 	return ret;
 }
 
@@ -933,9 +934,9 @@ void efa_cq_progress(struct util_cq *cq)
 	struct efa_cq *efa_cq = container_of(cq, struct efa_cq, util_cq);
 
 	/* Acquire the lock to prevent race conditions when qp_table is being updated */
-	ofi_genlock_lock(&cq->ep_list_lock);
+	EFA_GENLOCK_LOCK(&cq->ep_list_lock, efa_cq_ep_list_lock_sym);
 	(void) efa_cq_poll_ibv_cq(efa_env.efa_cq_read_size, &efa_cq->ibv_cq);
-	ofi_genlock_unlock(&cq->ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&cq->ep_list_lock, efa_cq_ep_list_lock_sym);
 }
 
 int efa_cq_close(fid_t fid)

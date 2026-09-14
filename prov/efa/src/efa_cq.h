@@ -51,6 +51,8 @@ extern struct fi_ops_cq efa_cq_bypass_util_cq_ops;
 extern struct fi_ops efa_cq_fi_ops;
 
 static inline void efa_cq_lock_ep_list(struct efa_base_ep *base_ep)
+	OFI_TSA_ACQUIRE(efa_cq_ep_list_lock_sym) 
+	OFI_TSA_NO_ANALYSIS // clang cannot reason about conditional locking
 {
 	struct efa_cq *tx_cq, *rx_cq;
 
@@ -64,6 +66,8 @@ static inline void efa_cq_lock_ep_list(struct efa_base_ep *base_ep)
 }
 
 static inline void efa_cq_unlock_ep_list(struct efa_base_ep *base_ep)
+	OFI_TSA_RELEASE(efa_cq_ep_list_lock_sym)
+	OFI_TSA_NO_ANALYSIS // clang cannot reason about conditional locking
 {
 	struct efa_cq *tx_cq, *rx_cq;
 

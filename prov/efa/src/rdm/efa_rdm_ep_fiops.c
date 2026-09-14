@@ -1025,6 +1025,7 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
  * @return 	no return
  */
 void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym)
 {
 	struct efa_cq *tx_cq, *rx_cq;
 
@@ -1452,9 +1453,9 @@ int efa_rdm_ep_register_ibv_cqs(struct efa_rdm_ep *ep)
 			if (ret)
 				return ret;
 		}
-		ofi_genlock_lock(&tx_cq->efa_cq.util_cq.ep_list_lock);
+		EFA_GENLOCK_LOCK(&tx_cq->efa_cq.util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 		tx_cq->need_to_scan_ep_list = true;
-		ofi_genlock_unlock(&tx_cq->efa_cq.util_cq.ep_list_lock);
+		EFA_GENLOCK_UNLOCK(&tx_cq->efa_cq.util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 	}
 
 	if (rx_cq) {
@@ -1473,9 +1474,9 @@ int efa_rdm_ep_register_ibv_cqs(struct efa_rdm_ep *ep)
 			if (ret)
 				return ret;
 		}
-		ofi_genlock_lock(&rx_cq->efa_cq.util_cq.ep_list_lock);
+		EFA_GENLOCK_LOCK(&rx_cq->efa_cq.util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 		rx_cq->need_to_scan_ep_list = true;
-		ofi_genlock_unlock(&rx_cq->efa_cq.util_cq.ep_list_lock);
+		EFA_GENLOCK_UNLOCK(&rx_cq->efa_cq.util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 	}
 
 	return FI_SUCCESS;

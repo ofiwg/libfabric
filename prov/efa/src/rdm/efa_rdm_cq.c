@@ -686,7 +686,8 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 	 * 1. the ibv-CQ's ep_list_lock serializes the shared ibv CQ poll cursor
 	 * 2. the ep's srx_lock serializes SRX recv-matching and per-ep ope/pke state.
 	 */
-	assert(ofi_genlock_held(&container_of(cq, struct efa_cq, ibv_cq)->util_cq.ep_list_lock));
+	assert(EFA_GENLOCK_HELD(&container_of(cq, struct efa_cq, ibv_cq)->util_cq.ep_list_lock,
+				efa_cq_ep_list_lock_sym));
 	assert(ofi_genlock_held(&ep->srx_lock));
 
 #if HAVE_LTTNG
@@ -750,7 +751,8 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 static inline
 enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_ep *ep)
 {
-	assert(ofi_genlock_held(&container_of(cq, struct efa_cq, ibv_cq)->util_cq.ep_list_lock));
+	assert(EFA_GENLOCK_HELD(&container_of(cq, struct efa_cq, ibv_cq)->util_cq.ep_list_lock,
+				efa_cq_ep_list_lock_sym));
 	assert(ofi_genlock_held(&ep->srx_lock));
 	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
 	enum ibv_wc_status status = cq->ibv_cq_ex->status;
@@ -859,6 +861,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 }
 
 void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm_ep *closing_ep)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym)
 {
 
 	struct efa_rdm_ep *ep = NULL;
@@ -867,7 +870,8 @@ void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm
 	struct dlist_entry rx_progressed_ep_list, *tmp;
 	enum ibv_wc_status status;
 
-	assert(ofi_genlock_held(&efa_cq->util_cq.ep_list_lock));
+	assert(EFA_GENLOCK_HELD(&efa_cq->util_cq.ep_list_lock,
+				efa_cq_ep_list_lock_sym));
 	dlist_init(&rx_progressed_ep_list);
 
 	efa_cq_start_poll(ibv_cq);
@@ -907,6 +911,7 @@ void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm
  * @param[in]	cqe_to_process	Max number of cq entry to poll and process. A negative number means to poll until cq empty
  */
 int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym)
 {
 	int err;
 	size_t i = 0;
@@ -917,7 +922,8 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 
 	struct dlist_entry rx_progressed_ep_list, *tmp;
 
-	assert(ofi_genlock_held(&efa_cq->util_cq.ep_list_lock));
+	assert(EFA_GENLOCK_HELD(&efa_cq->util_cq.ep_list_lock,
+				efa_cq_ep_list_lock_sym));
 	dlist_init(&rx_progressed_ep_list);
 
 	/* Call ibv_start_poll only once */
@@ -1148,7 +1154,7 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	struct efa_cq *efa_cq;
 	struct fid_list_entry *fid_entry;
 
-	ofi_genlock_lock(&cq->ep_list_lock);
+	EFA_GENLOCK_LOCK(&cq->ep_list_lock, efa_cq_ep_list_lock_sym);
 	efa_rdm_cq = container_of(cq, struct efa_rdm_cq, efa_cq.util_cq);
 
 	/**
@@ -1169,7 +1175,7 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		}
 		efa_rdm_cq->need_to_scan_ep_list = false;
 	}
-	ofi_genlock_unlock(&cq->ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&cq->ep_list_lock, efa_cq_ep_list_lock_sym);
 
 	/* Taking cq->ep_list_lock would deadlock in two ways:
 	 * 1. efa_cq_lock_ep_list() always locks rx before tx.
@@ -1179,9 +1185,9 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	dlist_foreach(&efa_rdm_cq->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		efa_cq = container_of(poll_list_entry->cq, struct efa_cq, ibv_cq);
-		ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+		EFA_GENLOCK_LOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
-		ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
+		EFA_GENLOCK_UNLOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 	}
 	ofi_genlock_unlock(&efa_rdm_cq->ibv_cq_poll_list_lock);
 }

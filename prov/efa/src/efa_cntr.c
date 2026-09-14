@@ -92,9 +92,9 @@ void efa_cntr_progress_ibv_cq_poll_list(struct efa_cntr *efa_cntr)
 	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		efa_cq = container_of(poll_list_entry->cq, struct efa_cq, ibv_cq);
-		ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+		EFA_GENLOCK_LOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 		(void) efa_cq->poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
-		ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
+		EFA_GENLOCK_UNLOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 	}
 }
 
