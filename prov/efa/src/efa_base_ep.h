@@ -60,14 +60,30 @@ struct efa_qp {
 	bool unsolicited_write_recv_enabled;
 };
 
+/*
+ * Query the device's maximum inline data for a QP configuration. qp_flags and
+ * flags are the EFADV_INLINE_DATA_ATTR_* bits describing the QP whose inline
+ * size is queried: a QP that carries completion actions with data has a smaller
+ * inline region, because the action block occupies part of the WQE. Returns the
+ * max inline size (>= 0) or a negative errno (-FI_ENOSYS on builds without
+ * efadv completion-action support). Shared by QP creation (to clamp the
+ * requested inline size) and fi_getopt (to report the effective inline size).
+ *
+ * Defined in efa_base_ep.c so the efadv attr types stay confined to a TU
+ * compiled with the efa provider's rdma-core include path.
+ */
+int efa_query_max_inline_data(struct ibv_context *ctx, uint32_t flags);
+
 #if HAVE_INLINE_BUF_SIZE_EX
 /*
  * Query the device's maximum send-queue depth for a wide-WQE configuration.
  * Wide WQEs consume more send-queue memory per entry, lowering the max depth.
  * sq_depth_flags selects which wide-WQE feature(s) apply
- * (EFADV_SQ_DEPTH_ATTR_INLINE_WRITE for large inline data); max_inline_data is
- * the inline size the QP will use. Returns the max SQ depth (>= 0) or a
- * negative errno.
+ * (EFADV_SQ_DEPTH_ATTR_INLINE_WRITE for large inline data,
+ * EFADV_SQ_DEPTH_ATTR_COMP_ACTION_WITH_DATA for actions); max_inline_data is the inline
+ * size the QP will use. Returns the max SQ depth (>= 0) or a negative errno.
+ * Shared by QP creation (to clamp max_send_wr) and fi_getopt (to report the
+ * effective tx size).
  */
 int efa_query_max_sq_depth(struct ibv_context *ctx, uint32_t sq_depth_flags,
 			   uint32_t max_inline_data);
@@ -125,6 +141,11 @@ struct efa_base_ep {
 
 	bool use_unsolicited_write_recv;
 
+	/* Whether completion-action support is enabled on this endpoint
+	 * (via FI_OPT_EFA_COMP_ACTION). Must be set before the endpoint is
+	 * enabled because it governs QP send-queue allocation (wide WQEs). */
+	bool comp_action_enabled;
+
 	/* Pools and list for outstanding operation entries, one pool per
 	 * direction. Each endpoint type fills them with its own entry
 	 * type, efa_direct_ope for efa-direct and efa_rdm_ope for efa-rdm.
@@ -159,7 +180,8 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context);
 
 int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
-		   uint32_t tclass, bool enable_unsolicited_write_recv);
+		   uint32_t tclass, bool enable_unsolicited_write_recv,
+		   bool comp_action_enabled);
 
 void efa_qp_destruct(struct efa_qp *qp);
 
