@@ -24,3 +24,16 @@ int efa_test_getname_qkey(struct fid_ep *ep, uint32_t *qkey)
 
 	return ret;
 }
+
+bool efa_test_get_comp_signal_enabled(struct fid_ep *ep)
+{
+	struct efa_base_ep *base_ep =
+		container_of(ep, struct efa_base_ep, util_ep.ep_fid);
+
+	return base_ep->comp_signal_enabled;
+}
+
+bool efa_test_device_supports_comp_signal(void)
+{
+	return efa_device_support_comp_signal();
+}

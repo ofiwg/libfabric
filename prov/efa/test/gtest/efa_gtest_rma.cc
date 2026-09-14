@@ -218,7 +218,7 @@ TEST_F(EfaRmaTest, write_track_mr_keeps_direct_ope_alive)
 		return wr_id != 0 && wr_id != (uintptr_t) &ctx;
 	});
 	EFA_EXPECT_CALL(mock_efa, efa_qp_post_write, _, _, 1, _, _, kRemoteKey,
-			kRemoteAddr, wr_id_is_direct_ope, _, _, _, _, _)
+			kRemoteAddr, wr_id_is_direct_ope, _, _, _, _, _, _)
 		.WillOnce(Return(0));
 
 	int ret = fi_write(resource.ep, local_buf, 4096, local_desc, peer_addr,

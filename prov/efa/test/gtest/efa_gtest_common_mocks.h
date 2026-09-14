@@ -100,9 +100,10 @@ struct dlist_entry;
 	   size_t sge_count, const struct ibv_data_buf *inline_data_list,      \
 	   bool use_inline, uint32_t remote_key, uint64_t remote_addr,         \
 	   uintptr_t wr_id, uint64_t data, uint64_t flags, struct efa_ah *ah,  \
-	   uint32_t qpn, uint32_t qkey),                                       \
+	   uint32_t qpn, uint32_t qkey,                                        \
+	   const struct efa_comp_signal_wr *sig),                             \
 	  (qp, sge_list, sge_count, inline_data_list, use_inline, remote_key,  \
-	   remote_addr, wr_id, data, flags, ah, qpn, qkey))                    \
+	   remote_addr, wr_id, data, flags, ah, qpn, qkey, sig))               \
 	X(struct ibv_qp *, efadv_create_qp_ex,                                 \
 	  (struct ibv_context * ibvctx, struct ibv_qp_init_attr_ex * attr_ex,  \
 	   struct efadv_qp_init_attr * efa_attr, uint32_t inlen),              \
