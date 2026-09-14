@@ -22,6 +22,7 @@
 #include "efa_rdm_cq.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_rtw.h"
+#include "protocols/efa_rdm_proto_eager_write.h"
 
 struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 {
@@ -677,7 +678,7 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 
 	if (trigger_mode) {
 		txe->msg_id = -1;
-		err = efa_rdm_pke_init_eager_rtw(pkt_entry, txe);
+		err = efa_rdm_proto_eager_write_init_rtw(pkt_entry, txe);
 		efa_rdm_tracepoint(trigger_handshake_begin, 0, 0, txe->msg_id,
 				   (size_t) txe->cq_entry.op_context, txe->total_len);
 	} else {

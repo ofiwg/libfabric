@@ -19,17 +19,9 @@ struct efa_rdm_dc_eager_rtw_hdr *efa_rdm_pke_dc_eager_rtw_hdr(struct efa_rdm_pke
 	return (struct efa_rdm_dc_eager_rtw_hdr *)pkt_entry->wiredata;
 }
 
-ssize_t efa_rdm_pke_init_eager_rtw(struct efa_rdm_pke *pkt_entry,
-				   struct efa_rdm_ope *txe);
-
-void efa_rdm_pke_handle_eager_rtw_send_completion(struct efa_rdm_pke *pkt_entry);
-
-void efa_rdm_pke_handle_eager_rtw_recv(struct efa_rdm_pke *pkt_entry);
-
-ssize_t efa_rdm_pke_init_dc_eager_rtw(struct efa_rdm_pke *pkt_entry,
-				      struct efa_rdm_ope *txe);
-
-void efa_rdm_pke_handle_dc_eager_rtw_recv(struct efa_rdm_pke *pkt_entry);
+ssize_t efa_rdm_pke_init_rtw_common(struct efa_rdm_pke *pkt_entry,
+				    struct efa_rdm_ope *txe,
+				    struct efa_rma_iov *rma_iov);
 
 ssize_t efa_rdm_pke_init_longcts_rtw(struct efa_rdm_pke *pkt_entry,
 				     struct efa_rdm_ope *txe);
