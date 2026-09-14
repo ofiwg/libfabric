@@ -6,6 +6,7 @@
 #include "efa_hmem.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_eager_write.h"
 #include "efa_rdm_msg.h"
 
 /* List of supported protocols.
@@ -21,6 +22,7 @@ struct efa_rdm_proto *efa_rdm_protocols[] = {
  * NULL.
  */
 static struct efa_rdm_proto * const efa_rdm_emulated_write_protocols[] = {
+	&efa_rdm_proto_eager_write,
 	NULL,
 };
 

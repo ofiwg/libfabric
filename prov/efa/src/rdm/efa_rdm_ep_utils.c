@@ -22,6 +22,7 @@
 #include "efa_rdm_cq.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_rtw.h"
+#include "efa_rdm_proto_eager_write.h"
 
 struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 {

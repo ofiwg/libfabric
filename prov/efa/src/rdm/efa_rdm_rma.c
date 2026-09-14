@@ -406,7 +406,6 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	ssize_t err;
 	bool delivery_complete_requested;
 	int ctrl_type, iface, use_p2p;
-	size_t max_eager_rtw_data_size;
 	struct efa_rdm_proto *proto;
 
 	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
@@ -435,10 +434,6 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		return efa_rdm_rma_post_write_proto(ep, txe, proto);
 
 	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
-	if (delivery_complete_requested)
-		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_DC_EAGER_RTW_PKT);
-	else
-		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_EAGER_RTW_PKT);
 
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->iface : FI_HMEM_SYSTEM;
 
@@ -453,11 +448,6 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 * If read write protocol failed due to memory registration, fall back to use long
 		 * message protocol
 		 */
-	}
-
-	if (txe->total_len <= max_eager_rtw_data_size) {
-		ctrl_type = delivery_complete_requested ? EFA_RDM_DC_EAGER_RTW_PKT : EFA_RDM_EAGER_RTW_PKT;
-		return efa_rdm_ope_post_send(txe, ctrl_type);
 	}
 
 	ctrl_type = delivery_complete_requested ? EFA_RDM_DC_LONGCTS_RTW_PKT : EFA_RDM_LONGCTS_RTW_PKT;
