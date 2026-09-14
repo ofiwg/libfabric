@@ -13,7 +13,8 @@ int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
 					  const struct fi_msg *msg, uint32_t op,
 					  uint64_t tag, uint64_t flags,
 					  uint32_t internal_flags,
-					  struct efa_rdm_ope *txe);
+					  struct efa_rdm_ope *txe,
+					  uint64_t *pke_send_flags);
 
 void efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry);

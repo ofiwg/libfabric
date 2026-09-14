@@ -54,11 +54,12 @@ struct efa_rdm_proto {
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
-	 * TX operation.
+	 * TX operation. use_p2p reports whether peer-to-peer access is
+	 * available; the read based protocols need it.
 	 */
 	bool (*can_use_protocol)(struct efa_rdm_ope *txe,
-					  int req_pkt_type,
-					  uint16_t header_flags, int iface);
+				 int req_pkt_type, uint16_t header_flags,
+				 int iface, bool use_p2p);
 
 	/* This function will allocate the pkes that need to be sent for a given
 	 * TX operation. At the end of this function, ep->send_pkt_entry_vec
@@ -66,14 +67,21 @@ struct efa_rdm_proto {
 	 * sent including copying the application data into the pke buffer if
 	 * necessary. Each pke will have an appropriate callback function set to
 	 * handle the TX completion of that pke. This function also constructs
-	 * and returns the txe
+	 * and returns the txe.
+	 *
+	 * pke_send_flags is an output: the flags to pass to
+	 * efa_rdm_pke_sendv() when posting the packets (currently either 0 or
+	 * FI_MORE). A protocol sets FI_MORE only when it honors the caller's
+	 * FI_MORE request; multi-packet protocols leave it 0 so the doorbell is
+	 * rung immediately.
 	 */
 	int (*construct_tx_pkes)(struct efa_rdm_ep *ep,
 				 struct efa_rdm_peer *peer,
 				 const struct fi_msg *msg, uint32_t op,
 				 uint64_t tag, uint64_t flags,
 				 uint32_t internal_flags,
-				 struct efa_rdm_ope *txe);
+				 struct efa_rdm_ope *txe,
+				 uint64_t *pke_send_flags);
 
 	/* This function is called after all pkes are posted to the EFA device.
 	 * It is useful for some protocols: e.g. to register the buffer after
@@ -116,6 +124,24 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 				       const struct fi_msg *msg, uint32_t op,
 				       uint64_t flags, struct efa_rdm_ope *txe,
 				       struct efa_rdm_proto **proto);
+
+/**
+ * @brief Select the emulated write protocol for a one-sided write.
+ *
+ * Runs on an already-constructed txe (the write path builds it before the
+ * handshake and the native RDMA write decision). Picks the first registered
+ * write protocol that can carry the operation.
+ *
+ * @param[in]  ep    Endpoint
+ * @param[in]  peer  Peer to write to
+ * @param[in]  txe   Constructed TX entry for the write
+ * @param[out] proto Selected protocol, or NULL if none matched
+ */
+void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
+						  struct efa_rdm_peer *peer,
+						  struct efa_rdm_ope *txe,
+						  bool use_p2p,
+						  struct efa_rdm_proto **proto);
 
 /* Utility funcions */
 

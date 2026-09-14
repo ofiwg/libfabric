@@ -38,6 +38,7 @@ efa_unit_test_construct_eager_rtm_pke(struct efa_resource *resource,
 	struct efa_rdm_ope *txe;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
+	uint64_t pke_send_flags;
 	fi_addr_t peer_addr;
 
 	ep = container_of(resource->ep, struct efa_rdm_ep,
@@ -67,7 +68,8 @@ efa_unit_test_construct_eager_rtm_pke(struct efa_resource *resource,
 	assert_ptr_equal(proto, &efa_rdm_proto_eager);
 
 	assert_int_equal(efa_rdm_proto_eager_construct_tx_pkes(
-				 ep, peer, &msg, ofi_op_msg, 0, 0, 0, txe),
+				 ep, peer, &msg, ofi_op_msg, 0, 0, 0, txe,
+				 &pke_send_flags),
 			 0);
 	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
 
