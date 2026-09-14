@@ -17,7 +17,7 @@
  *
  * 1. efa_rdm_proto_select_send_protocol() iterates through the protocol
  *    registry (efa_rdm_protocols[]) in priority order, calling
- *    can_use_protocol_for_send() on each. The first match is selected.
+ *    can_use_protocol() on each. The first match is selected.
  *    Some fields (e.g. MR descriptor) are required by multiple protocols.
  *    Instead of repeating the calculations for those fields, some fields in
  *    txe are populated at this stage. The remaining fields are populated
@@ -43,11 +43,11 @@ struct efa_rdm_proto {
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
-	 * send operation.
+	 * TX operation.
 	 */
-	bool (*can_use_protocol_for_send)(struct efa_rdm_ope *txe,
-					  int req_pkt_type,
-					  uint16_t header_flags, int iface);
+	bool (*can_use_protocol)(struct efa_rdm_ope *txe,
+				 int req_pkt_type,
+				 uint16_t header_flags, int iface);
 
 	/* This function will allocate the pkes that need to be sent for a given
 	 * TX operation. At the end of this function, ep->send_pkt_entry_vec
@@ -83,7 +83,7 @@ struct efa_rdm_proto {
  * @brief Select the appropriate send protocol for a TX operation.
  *
  * Iterates through registered protocols in priority order and selects
- * the first one whose can_use_protocol_for_send() returns true.
+ * the first one whose can_use_protocol() returns true.
  *
  * It will also handle memory registration of user buffers. If read based
  * protocols are appropriate but MR fails, it will automatically switch to a
@@ -150,8 +150,8 @@ static inline int efa_rdm_proto_req_pkt_type(struct efa_rdm_proto *proto,
 	 * packet type id is always the correspondent message rtm packet type
 	 * id + 1, thus the assertions here.
 	 */
-	assert(proto->req_pkt_type_tagged == proto->req_pkt_type + 1);
-	assert(proto->req_pkt_type_tagged_dc == proto->req_pkt_type_dc + 1);
+	assert(!tagged || proto->req_pkt_type_tagged == proto->req_pkt_type + 1);
+	assert(!tagged || proto->req_pkt_type_tagged_dc == proto->req_pkt_type_dc + 1);
 
 	return delivery_complete_requested ? proto->req_pkt_type_dc + tagged :
 					     proto->req_pkt_type + tagged;
