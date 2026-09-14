@@ -177,6 +177,14 @@ size_t efa_test_device_inline_buf_size(void);
 ssize_t efa_test_device_max_wide_wqe_sq_depth(size_t inject_size);
 
 /**
+ * @brief The selected EFA device's maximum inline data size, queried the way
+ * the provider queries it. With @p with_comp_action the limit is the one that
+ * leaves room for an action block in the same send queue entry, which is the
+ * smaller of the two. Returns a negative errno when unavailable.
+ */
+ssize_t efa_test_device_max_inline_data(int with_comp_action);
+
+/**
  * @brief The QP capabilities the endpoint's QP is created with, i.e. what
  * efa_base_ep_construct_ibv_qp_init_attr_ex() fills in. Lets a test check that
  * the depths fi_getopt reports are the ones the QP was created with. Any out
