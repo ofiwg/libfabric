@@ -674,6 +674,7 @@ static inline struct efa_rdm_ep *efa_rdm_cq_get_rdm_ep(struct efa_ibv_cq *cq, st
  */
 static inline
 enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym, efa_srx_lock_sym)
 {
 	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
 	enum ibv_wc_status status = cq->ibv_cq_ex->status;
@@ -688,7 +689,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
 	 */
 	assert(EFA_GENLOCK_HELD(&container_of(cq, struct efa_cq, ibv_cq)->util_cq.ep_list_lock,
 				efa_cq_ep_list_lock_sym));
-	assert(ofi_genlock_held(&ep->srx_lock));
+	assert(EFA_GENLOCK_HELD(&ep->srx_lock, efa_srx_lock_sym));
 
 #if HAVE_LTTNG
 	efa_rdm_tracepoint(poll_cq, (size_t) wr_id);
@@ -750,10 +751,11 @@ enum ibv_wc_status efa_rdm_cq_process_wc_closing_ep(struct efa_ibv_cq *cq, struc
  */
 static inline
 enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym, efa_srx_lock_sym)
 {
 	assert(EFA_GENLOCK_HELD(&container_of(cq, struct efa_cq, ibv_cq)->util_cq.ep_list_lock,
 				efa_cq_ep_list_lock_sym));
-	assert(ofi_genlock_held(&ep->srx_lock));
+	assert(EFA_GENLOCK_HELD(&ep->srx_lock, efa_srx_lock_sym));
 	uint64_t wr_id = cq->ibv_cq_ex->wr_id;
 	enum ibv_wc_status status = cq->ibv_cq_ex->status;
 	enum ibv_wc_opcode opcode = efa_ibv_cq_wc_read_opcode(cq);
@@ -877,7 +879,7 @@ void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm
 	efa_cq_start_poll(ibv_cq);
 	while (efa_cq_wc_available(ibv_cq)) {
 		ep = efa_rdm_cq_get_rdm_ep(ibv_cq, efa_domain);
-		ofi_genlock_lock(&ep->srx_lock);
+		EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
 		if (ep == closing_ep) {
 			status = efa_rdm_cq_process_wc_closing_ep(ibv_cq, ep);
 		} else {
@@ -887,7 +889,7 @@ void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm
 			    !dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
 				dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
 		}
-		ofi_genlock_unlock(&ep->srx_lock);
+		EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
 		if (OFI_UNLIKELY(status != IBV_WC_SUCCESS))
 			break;
 		efa_cq_next_poll(ibv_cq);
@@ -895,10 +897,10 @@ void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm
 	efa_cq_end_poll(ibv_cq);
 	dlist_foreach_container_safe(
 		&rx_progressed_ep_list, struct efa_rdm_ep, ep, entry, tmp) {
-		ofi_genlock_lock(&ep->srx_lock);
+		EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
 		efa_rdm_ep_post_internal_rx_pkts(ep);
 		dlist_remove(&ep->entry);
-		ofi_genlock_unlock(&ep->srx_lock);
+		EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
 	}
 	assert(dlist_empty(&rx_progressed_ep_list));
 }
@@ -931,14 +933,14 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 
 	while (efa_cq_wc_available(ibv_cq)) {
 		ep = efa_rdm_cq_get_rdm_ep(ibv_cq, efa_domain);
-		ofi_genlock_lock(&ep->srx_lock);
+		EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
 		if (OFI_UNLIKELY(efa_rdm_cq_process_wc(ibv_cq, ep) != IBV_WC_SUCCESS)) {
-			ofi_genlock_unlock(&ep->srx_lock);
+			EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
 			break;
 		}
 		if (ep->efa_rx_pkts_to_post > 0 && !dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
 			dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
-		ofi_genlock_unlock(&ep->srx_lock);
+		EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
 		if (++i >= cqe_to_process)
 			break;
 
@@ -953,10 +955,10 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	efa_cq_end_poll(ibv_cq);
 	dlist_foreach_container_safe(
 		&rx_progressed_ep_list, struct efa_rdm_ep, ep, entry, tmp) {
-		ofi_genlock_lock(&ep->srx_lock);
+		EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
 		efa_rdm_ep_post_internal_rx_pkts(ep);
 		dlist_remove(&ep->entry);
-		ofi_genlock_unlock(&ep->srx_lock);
+		EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
 	}
 	assert(dlist_empty(&rx_progressed_ep_list));
 
@@ -965,9 +967,9 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	dlist_foreach_container_safe(&efa_rdm_cq->progress_ep_list,
 				     struct efa_rdm_ep, ep,
 				     progress_ep_entry, tmp) {
-		ofi_genlock_lock(&ep->srx_lock);
+		EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
 		efa_rdm_ep_progress_peers_and_queues(ep);
-		ofi_genlock_unlock(&ep->srx_lock);
+		EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
 	}
 	EFA_GENLOCK_UNLOCK(&efa_rdm_cq->progress_ep_list_lock,
 			   efa_progress_ep_list_lock_sym);
@@ -1172,10 +1174,10 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		dlist_foreach(&cq->ep_list, item) {
 			fid_entry = container_of(item, struct fid_list_entry, entry);
 			efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-			ofi_genlock_lock(&efa_rdm_ep->srx_lock);
+			EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 			if (efa_rdm_ep->base_ep.efa_qp_enabled)
 				efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
-			ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+			EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 		}
 		efa_rdm_cq->need_to_scan_ep_list = false;
 	}

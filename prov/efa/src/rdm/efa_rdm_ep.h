@@ -247,11 +247,12 @@ struct efa_rdm_ep {
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
 
 void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
-	OFI_TSA_REQUIRES(efa_progress_ep_list_lock_sym);
+	OFI_TSA_REQUIRES(efa_progress_ep_list_lock_sym, efa_srx_lock_sym);
 
 void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep);
 
-void efa_rdm_ep_dequeue_progress_list(struct efa_rdm_ep *ep);
+void efa_rdm_ep_dequeue_progress_list(struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_srx_lock_sym);
 
 void efa_rdm_ep_purge_queued_blocking_copy_for_rxe(struct efa_rdm_ope *rxe);
 
@@ -439,9 +440,11 @@ struct efa_rdm_domain *efa_rdm_ep_rdm_domain(struct efa_rdm_ep *ep)
 	return (struct efa_rdm_domain *) efa_rdm_ep_domain(ep);
 }
 
-void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep);
+void efa_rdm_ep_post_internal_rx_pkts(struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_srx_lock_sym);
 
-int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep);
+int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_srx_lock_sym);
 
 /*
  * @brief: check whether we should use p2p for this transaction
