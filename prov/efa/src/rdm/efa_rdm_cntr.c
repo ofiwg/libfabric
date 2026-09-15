@@ -89,7 +89,7 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct fid_list_entry *fid_entry;
 
-	ofi_genlock_lock(&cntr->ep_list_lock);
+	EFA_GENLOCK_LOCK(&cntr->ep_list_lock, efa_ibv_cq_poll_list_lock_sym);
 	efa_rdm_cntr = container_of(cntr, struct efa_rdm_cntr, efa_cntr.util_cntr);
 
 	/**
@@ -112,7 +112,7 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 	}
 
 	efa_cntr_progress_ibv_cq_poll_list(&efa_rdm_cntr->efa_cntr);
-	ofi_genlock_unlock(&cntr->ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&cntr->ep_list_lock, efa_ibv_cq_poll_list_lock_sym);
 }
 
 int efa_rdm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,

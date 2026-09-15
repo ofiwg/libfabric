@@ -106,7 +106,9 @@ OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_ctrl_lock_sym,
 					   efa_implicit_av_lock_sym);
 
 OFI_TSA_LOCK_SYMBOL_DECLARE(efa_qp_table_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DECLARE(efa_ibv_cq_poll_list_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_cq_ep_list_lock_sym,
-					   efa_qp_table_lock_sym);
+					   efa_qp_table_lock_sym,
+					   efa_ibv_cq_poll_list_lock_sym);
 
 #endif /* EFA_THREAD_ANNOTATIONS_H */

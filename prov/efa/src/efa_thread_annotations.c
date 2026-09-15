@@ -4,6 +4,7 @@
 #include "efa_thread_annotations.h"
 
 OFI_TSA_LOCK_SYMBOL_DEFINE(efa_qp_table_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DEFINE(efa_ibv_cq_poll_list_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DEFINE(efa_cq_ep_list_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DEFINE(efa_implicit_av_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DEFINE(efa_ctrl_lock_sym);
