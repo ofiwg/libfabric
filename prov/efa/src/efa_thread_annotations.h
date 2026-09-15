@@ -112,5 +112,8 @@ OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_cq_ep_list_lock_sym,
 					   efa_ibv_cq_poll_list_lock_sym);
 OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_progress_ep_list_lock_sym,
 					   efa_cq_ep_list_lock_sym);
+OFI_TSA_LOCK_SYMBOL_DECLARE_ACQUIRED_AFTER(efa_srx_lock_sym,
+					   efa_cq_ep_list_lock_sym,
+					   efa_progress_ep_list_lock_sym);
 
 #endif /* EFA_THREAD_ANNOTATIONS_H */

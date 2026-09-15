@@ -185,7 +185,7 @@ ssize_t efa_rdm_rma_generic_readmsg(struct efa_rdm_ep *efa_rdm_ep,
 	       fi_flags);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
-	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, msg->addr);
 	assert(peer);
@@ -223,7 +223,7 @@ out:
 		}
 	}
 
-	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
 }
@@ -439,7 +439,7 @@ static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep
 	       ofi_total_iov_len(msg->msg_iov, msg->iov_count),
 	       fi_flags);
 
-	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, msg->addr);
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
@@ -473,7 +473,7 @@ static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep
 		}
 	}
 out:
-	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
 }
