@@ -64,8 +64,8 @@ enum {
 	FI_OPT_BUFFERED_LIMIT,		/* size_t */
 	FI_OPT_SEND_BUF_SIZE,
 	FI_OPT_RECV_BUF_SIZE,
-	FI_OPT_TX_SIZE,
-	FI_OPT_RX_SIZE,
+	FI_OPT_TX_SIZE,			/* size_t */
+	FI_OPT_RX_SIZE,			/* size_t */
 	FI_OPT_FI_HMEM_P2P,		/* int */
 	FI_OPT_XPU_TRIGGER,		/* reserved for compatibility */
 	FI_OPT_CUDA_API_PERMITTED,	/* bool */
