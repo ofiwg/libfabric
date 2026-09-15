@@ -173,6 +173,25 @@ free_rx_pool:
 	return ret;
 }
 
+/* Release MRs retained by unfinished rendezvous sends. */
+static void rxm_ep_close_rndv_mrs(struct rxm_ep *ep)
+{
+	struct rxm_tx_buf *tx_buf;
+	size_t i;
+
+	if (ep->rdm_mr_local)
+		return;
+
+	for (i = 0; i < ep->tx_pool->entry_cnt; i++) {
+		if (!ofi_bufpool_ibuf_is_valid(ep->tx_pool, i))
+			continue;
+
+		tx_buf = ofi_bufpool_get_ibuf(ep->tx_pool, i);
+		if (tx_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_req)
+			rxm_msg_mr_closev(tx_buf->rma.mr, tx_buf->rma.count);
+	}
+}
+
 /* It is safe to call this function, even if `rxm_ep_txrx_res_open`
  * has not yet been called */
 static void rxm_ep_txrx_res_close(struct rxm_ep *ep)
@@ -188,6 +207,7 @@ static void rxm_ep_txrx_res_close(struct rxm_ep *ep)
 		ep->rx_pool = NULL;
 	}
 	if (ep->tx_pool) {
+		rxm_ep_close_rndv_mrs(ep);
 		ofi_bufpool_destroy(ep->tx_pool);
 		ep->tx_pool = NULL;
 	}
