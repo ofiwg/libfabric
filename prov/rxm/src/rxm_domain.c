@@ -425,9 +425,6 @@ static int rxm_domain_close(fid_t fid)
 
 	rxm_domain = container_of(fid, struct rxm_domain, util_domain.domain_fid.fid);
 
-	ofi_mutex_destroy(&rxm_domain->amo_bufpool_lock);
-	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
-
 	ret = fi_close(&rxm_domain->msg_domain->fid);
 	if (ret)
 		return ret;
@@ -450,6 +447,8 @@ static int rxm_domain_close(fid_t fid)
 	if (ret)
 		return ret;
 
+	ofi_mutex_destroy(&rxm_domain->amo_bufpool_lock);
+	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
 	free(rxm_domain);
 	return 0;
 }

@@ -1778,12 +1778,19 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 
 	switch (RXM_GET_PROTO_STATE(err_entry.op_context)) {
 	case RXM_TX:
-	case RXM_RNDV_TX:
-	case RXM_RNDV_WRITE_DONE_SENT:
 	case RXM_ATOMIC_RESP_WAIT:
 		tx_buf = err_entry.op_context;
 		err_entry.op_context = tx_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(tx_buf->pkt.hdr.op);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
+		break;
+	case RXM_RNDV_TX:
+	case RXM_RNDV_WRITE_DONE_SENT:
+		tx_buf = err_entry.op_context;
+		err_entry.op_context = tx_buf->app_context;
+		err_entry.flags = ofi_tx_cq_flags(tx_buf->pkt.hdr.op);
+		if (!rxm_ep->rdm_mr_local)
+			rxm_msg_mr_closev(tx_buf->rma.mr, tx_buf->rma.count);
 		rxm_free_tx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_RNDV_READ_DONE_RECVD:
