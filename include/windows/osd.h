@@ -701,7 +701,7 @@ static inline int ofi_close(int fd)
 static inline int ofi_open(const char* path, int flags, ...)
 {
 	va_list arg;
-	int pmode = 0;
+	int pmode = 0, fd;
 
 	// _open takes a variadic argument 'int pmode', but not a va_list
 	// extract pmode if required, as indicated by flag _O_CREAT
@@ -710,7 +710,10 @@ static inline int ofi_open(const char* path, int flags, ...)
 		pmode = va_arg(arg, int);
 		va_end(arg);
 	}
-	return _open(path, flags, pmode);
+	if (!_sopen_s(&fd, path, flags, _SH_DENYNO, pmode))
+		return fd;
+	else
+		return -1;
 }
 
 static inline FILE* ofi_fdopen(int fd, const char* mode)
