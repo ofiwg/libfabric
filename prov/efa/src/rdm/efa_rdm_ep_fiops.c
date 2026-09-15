@@ -961,15 +961,15 @@ bool efa_rdm_ep_close_should_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 	struct efa_rdm_ope *ope;
 	struct dlist_entry *entry;
 
-	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 	dlist_foreach(&efa_rdm_ep->ope_posted_ack_list, entry) {
 		ope = container_of(entry, struct efa_rdm_ope, ack_list_entry);
 		if (ope->peer && !(ope->peer->flags & EFA_RDM_PEER_UNRESP)) {
-			ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+			EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 			return true;
 		}
 	}
-	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 
 	return false;
 }
@@ -980,7 +980,7 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 	struct dlist_entry *tmp;
 	struct efa_rdm_ope *ope;
 
-	ofi_genlock_lock(&ep->srx_lock);
+	EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
 	/* Update timers for peers that are in backoff list*/
 	dlist_foreach_container_safe(&ep->peer_backoff_list,
 			struct efa_rdm_peer, peer, rnr_backoff_entry, tmp) {
@@ -1007,7 +1007,7 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 			break;
 		}
 	}
-	ofi_genlock_unlock(&ep->srx_lock);
+	EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
 }
 
 /*
@@ -1150,7 +1150,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 	 * otherwise there can be race condition that efa_rdm_ep_progress_peers_and_queues
 	 * (part of fi_cq_read) can access entries that are from a closed QP.
 	 */
-	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 
 	efa_rdm_ep_dequeue_progress_list(efa_rdm_ep);
 
@@ -1183,7 +1183,7 @@ static int efa_rdm_ep_close(struct fid *fid)
 		efa_rdm_ep->peer_srx_ep = NULL;
 	}
 
-	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 
 	efa_base_ep_destruct_qp_unsafe(&efa_rdm_ep->base_ep);
 

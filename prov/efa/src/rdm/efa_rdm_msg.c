@@ -243,7 +243,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	assert(msg->iov_count <= ep->base_ep.info->tx_attr->iov_limit);
 
 	efa_perfset_start(ep, perf_efa_tx);
-	ofi_genlock_lock(&ep->srx_lock);
+	EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
 	peer = efa_rdm_ep_get_peer_explicit(ep, msg->addr);
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
@@ -343,7 +343,7 @@ ssize_t efa_rdm_msg_generic_send(struct efa_rdm_ep *ep, const struct fi_msg *msg
 	}
 
 out:
-	ofi_genlock_unlock(&ep->srx_lock);
+	EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
 	efa_perfset_end(ep, perf_efa_tx);
 	return err;
 }

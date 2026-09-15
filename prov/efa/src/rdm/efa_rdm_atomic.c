@@ -136,7 +136,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 	assert(msg->iov_count <= efa_rdm_ep->base_ep.info->tx_attr->iov_limit);
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 
-	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, msg->addr);
 	assert(peer);
@@ -162,7 +162,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 	}
 
 out:
-	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+	EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
 }

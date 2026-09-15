@@ -103,10 +103,10 @@ static void efa_rdm_cntr_progress(struct util_cntr *cntr)
 		dlist_foreach(&cntr->ep_list, item) {
 			fid_entry = container_of(item, struct fid_list_entry, entry);
 			efa_rdm_ep = container_of(fid_entry->fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-			ofi_genlock_lock(&efa_rdm_ep->srx_lock);
+			EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 			if (efa_rdm_ep->base_ep.efa_qp_enabled)
 				efa_rdm_ep_post_internal_rx_pkts(efa_rdm_ep);
-			ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
+			EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 		}
 		efa_rdm_cntr->need_to_scan_ep_list = false;
 	}
