@@ -202,10 +202,11 @@ static int tokparse(char *caps,
 		    uint64_t *flags)
 {
 	uint64_t value;
-	char *tok;
+	char *tok, *tmp;
 	int ret;
 
-	for (tok = strtok(caps, "|"); tok != NULL; tok = strtok(NULL, "|")) {
+	for (tok = strtok_r(caps, "|", &tmp);
+	     tok != NULL; tok = strtok_r(NULL, "|", &tmp)) {
 		ret = str2flag(tok, &value);
 		if (ret)
 			return ret;
