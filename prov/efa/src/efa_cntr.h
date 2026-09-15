@@ -8,9 +8,12 @@
 #ifndef _EFA_CNTR_H_
 #define _EFA_CNTR_H_
 
+#include "efa_thread_annotations.h"
+
 struct efa_cntr {
 	struct util_cntr util_cntr;
-	struct dlist_entry ibv_cq_poll_list;
+	struct dlist_entry ibv_cq_poll_list
+		OFI_TSA_GUARDED_BY(efa_ibv_cq_poll_list_lock_sym);
 	/* Hardware completion counter */
 	struct ibv_comp_cntr *ibv_comp_cntr;
 	/* Whether completion counter memory is on device (DMABUF) without host mapping */
@@ -30,7 +33,8 @@ int efa_cntr_construct(struct efa_cntr *cntr, struct fid_domain *domain,
 
 void efa_cntr_destruct(struct efa_cntr *cntr);
 
-void efa_cntr_progress_ibv_cq_poll_list(struct efa_cntr *efa_cntr);
+void efa_cntr_progress_ibv_cq_poll_list(struct efa_cntr *efa_cntr)
+	OFI_TSA_REQUIRES(efa_ibv_cq_poll_list_lock_sym);
 
 int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout);
 

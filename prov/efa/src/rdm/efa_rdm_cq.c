@@ -1028,7 +1028,8 @@ static int efa_rdm_cq_poll_events(struct efa_rdm_cq *cq, int timeout)
 		return ret;
 
 	/* Drain events and re-arm notifications */
-	ofi_genlock_lock(&cq->ibv_cq_poll_list_lock);
+	EFA_GENLOCK_LOCK(&cq->ibv_cq_poll_list_lock,
+			 efa_ibv_cq_poll_list_lock_sym);
 	dlist_foreach(&cq->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		if (!poll_list_entry->cq || !poll_list_entry->cq->channel)
@@ -1046,7 +1047,8 @@ static int efa_rdm_cq_poll_events(struct efa_rdm_cq *cq, int timeout)
 			break;
 		}
 	}
-	ofi_genlock_unlock(&cq->ibv_cq_poll_list_lock);
+	EFA_GENLOCK_UNLOCK(&cq->ibv_cq_poll_list_lock,
+			   efa_ibv_cq_poll_list_lock_sym);
 
 	return ret;
 }
@@ -1181,7 +1183,8 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 	 * 1. efa_cq_lock_ep_list() always locks rx before tx.
 	 * 2. another thread reading the other cq takes the two locks in the opposite order.
 	 */
-	ofi_genlock_lock(&efa_rdm_cq->ibv_cq_poll_list_lock);
+	EFA_GENLOCK_LOCK(&efa_rdm_cq->ibv_cq_poll_list_lock,
+			 efa_ibv_cq_poll_list_lock_sym);
 	dlist_foreach(&efa_rdm_cq->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
 		efa_cq = container_of(poll_list_entry->cq, struct efa_cq, ibv_cq);
@@ -1189,7 +1192,8 @@ static void efa_rdm_cq_progress(struct util_cq *cq)
 		(void) efa_rdm_cq_poll_ibv_cq(efa_env.efa_cq_read_size, poll_list_entry->cq);
 		EFA_GENLOCK_UNLOCK(&efa_cq->util_cq.ep_list_lock, efa_cq_ep_list_lock_sym);
 	}
-	ofi_genlock_unlock(&efa_rdm_cq->ibv_cq_poll_list_lock);
+	EFA_GENLOCK_UNLOCK(&efa_rdm_cq->ibv_cq_poll_list_lock,
+			   efa_ibv_cq_poll_list_lock_sym);
 }
 
 /**

@@ -6,12 +6,14 @@
 
 #include "efa_cq.h"
 #include "efa_data_path_ops.h"
+#include "efa_thread_annotations.h"
 #include <ofi_util.h>
 
 struct efa_rdm_cq {
 	struct efa_cq efa_cq;
 	struct fid_cq *shm_cq;
-	struct dlist_entry ibv_cq_poll_list;
+	struct dlist_entry ibv_cq_poll_list
+		OFI_TSA_GUARDED_BY(efa_ibv_cq_poll_list_lock_sym);
 	struct ofi_genlock ibv_cq_poll_list_lock;
 	/* list of EPs that have queued work needing progress */
 	struct dlist_entry progress_ep_list;

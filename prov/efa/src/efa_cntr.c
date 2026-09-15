@@ -82,12 +82,14 @@ static struct fi_ops efa_cntr_fi_ops = {
 };
 
 void efa_cntr_progress_ibv_cq_poll_list(struct efa_cntr *efa_cntr)
+	OFI_TSA_REQUIRES(efa_ibv_cq_poll_list_lock_sym)
 {
 	struct dlist_entry *item;
 	struct efa_ibv_cq_poll_list_entry *poll_list_entry;
 	struct efa_cq *efa_cq;
 
-	assert(ofi_genlock_held(&efa_cntr->util_cntr.ep_list_lock));
+	assert(EFA_GENLOCK_HELD(&efa_cntr->util_cntr.ep_list_lock,
+				efa_ibv_cq_poll_list_lock_sym));
 
 	dlist_foreach(&efa_cntr->ibv_cq_poll_list, item) {
 		poll_list_entry = container_of(item, struct efa_ibv_cq_poll_list_entry, entry);
@@ -104,9 +106,9 @@ static void efa_cntr_progress(struct util_cntr *cntr)
 
 	efa_cntr = container_of(cntr, struct efa_cntr, util_cntr);
 
-	ofi_genlock_lock(&cntr->ep_list_lock);
+	EFA_GENLOCK_LOCK(&cntr->ep_list_lock, efa_ibv_cq_poll_list_lock_sym);
 	efa_cntr_progress_ibv_cq_poll_list(efa_cntr);
-	ofi_genlock_unlock(&cntr->ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&cntr->ep_list_lock, efa_ibv_cq_poll_list_lock_sym);
 }
 
 int efa_cntr_construct(struct efa_cntr *cntr, struct fid_domain *domain,
