@@ -1117,9 +1117,11 @@ void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep)
 	 *   - the progress loop only takes an EP's srx_lock for EPs that ARE on the
 	 *     list.
 	 */
-	ofi_genlock_lock(&cq->progress_ep_list_lock);
+	EFA_GENLOCK_LOCK(&cq->progress_ep_list_lock,
+			 efa_progress_ep_list_lock_sym);
 	dlist_insert_tail(&ep->progress_ep_entry, &cq->progress_ep_list);
-	ofi_genlock_unlock(&cq->progress_ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&cq->progress_ep_list_lock,
+			   efa_progress_ep_list_lock_sym);
 }
 
 void efa_rdm_ep_dequeue_progress_list(struct efa_rdm_ep *ep)
@@ -1133,12 +1135,15 @@ void efa_rdm_ep_dequeue_progress_list(struct efa_rdm_ep *ep)
 	ep->needs_progress = false;
 
 	cq = efa_rdm_ep_get_progress_cq(ep);
-	ofi_genlock_lock(&cq->progress_ep_list_lock);
+	EFA_GENLOCK_LOCK(&cq->progress_ep_list_lock,
+			 efa_progress_ep_list_lock_sym);
 	dlist_remove(&ep->progress_ep_entry);
-	ofi_genlock_unlock(&cq->progress_ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&cq->progress_ep_list_lock,
+			   efa_progress_ep_list_lock_sym);
 }
 
 void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_progress_ep_list_lock_sym)
 {
 	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;

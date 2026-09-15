@@ -151,7 +151,8 @@ struct efa_rdm_ep {
 	/* list of #efa_rdm_peer that will retry posting handshake pkt */
 	struct dlist_entry handshake_queued_peer_list;
 	/* linked into efa_rdm_cq->progress_ep_list when this EP has queued work */
-	struct dlist_entry progress_ep_entry;
+	struct dlist_entry progress_ep_entry
+		OFI_TSA_GUARDED_BY(efa_progress_ep_list_lock_sym);
 	/* whether this EP is on the CQ's progress_ep_list */
 	bool needs_progress;
 
@@ -245,7 +246,8 @@ struct efa_rdm_ep {
 
 int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
 
-void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep);
+void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_progress_ep_list_lock_sym);
 
 void efa_rdm_ep_enqueue_progress_list(struct efa_rdm_ep *ep);
 

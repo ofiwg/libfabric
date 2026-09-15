@@ -960,7 +960,8 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 	}
 	assert(dlist_empty(&rx_progressed_ep_list));
 
-	ofi_genlock_lock(&efa_rdm_cq->progress_ep_list_lock);
+	EFA_GENLOCK_LOCK(&efa_rdm_cq->progress_ep_list_lock,
+			 efa_progress_ep_list_lock_sym);
 	dlist_foreach_container_safe(&efa_rdm_cq->progress_ep_list,
 				     struct efa_rdm_ep, ep,
 				     progress_ep_entry, tmp) {
@@ -968,7 +969,8 @@ int efa_rdm_cq_poll_ibv_cq(ssize_t cqe_to_process, struct efa_ibv_cq *ibv_cq)
 		efa_rdm_ep_progress_peers_and_queues(ep);
 		ofi_genlock_unlock(&ep->srx_lock);
 	}
-	ofi_genlock_unlock(&efa_rdm_cq->progress_ep_list_lock);
+	EFA_GENLOCK_UNLOCK(&efa_rdm_cq->progress_ep_list_lock,
+			   efa_progress_ep_list_lock_sym);
 
 	return err;
 }
