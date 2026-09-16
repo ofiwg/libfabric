@@ -17,6 +17,7 @@
 
 struct efa_rdm_proto efa_rdm_proto_zero_copy = {
 	.name = "zero_copy",
+	.wants_mr = false,
 	.construct_tx_pkes = &efa_rdm_proto_zero_copy_construct_tx_pkes,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,
 };
