@@ -129,6 +129,24 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 						  bool use_p2p,
 						  struct efa_rdm_proto **proto);
 
+/**
+ * @brief Select the emulated read protocol for a one-sided read.
+ *
+ * Runs on an already-constructed txe (the read path builds it before the
+ * handshake and the native RDMA read decision). Picks the first registered
+ * read protocol that can carry the operation. No emulated read protocol
+ * consumes use_p2p, so the selector passes it as false.
+ *
+ * @param[in]  ep    Endpoint
+ * @param[in]  peer  Peer to read from
+ * @param[in]  txe   Constructed TX entry for the read
+ * @param[out] proto Selected protocol, or NULL if none matched
+ */
+void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
+						 struct efa_rdm_peer *peer,
+						 struct efa_rdm_ope *txe,
+						 struct efa_rdm_proto **proto);
+
 /* Utility funcions */
 
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,

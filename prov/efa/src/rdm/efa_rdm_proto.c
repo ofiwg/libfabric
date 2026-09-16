@@ -26,6 +26,14 @@ static struct efa_rdm_proto * const efa_rdm_emulated_write_protocols[] = {
 	NULL,
 };
 
+/*
+ * Emulated read protocols, tried in order during selection, terminated by
+ * NULL.
+ */
+static struct efa_rdm_proto * const efa_rdm_emulated_read_protocols[] = {
+	NULL,
+};
+
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,
 						  const struct fi_msg *msg,
 						  struct efa_rdm_ope *txe)
@@ -197,6 +205,58 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 
 	/*
 	 * No emulated write protocol matched, so the caller falls back to the
+	 * old code path.
+	 */
+	*proto = NULL;
+	txe->proto = NULL;
+}
+
+void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
+						 struct efa_rdm_peer *peer,
+						 struct efa_rdm_ope *txe,
+						 struct efa_rdm_proto **proto)
+{
+	struct efa_rdm_proto *selected_proto;
+	uint16_t header_flags = 0;
+	int req_pkt_type, iface, i;
+
+	iface = txe->desc[0] ?
+			((struct efa_mr *) txe->desc[0])->iface :
+			FI_HMEM_SYSTEM;
+
+	/* Synapse AI is not handled on this path yet; use the old code path. */
+	if (iface == FI_HMEM_SYNAPSEAI) {
+		*proto = NULL;
+		txe->proto = NULL;
+		return;
+	}
+
+	if (efa_rdm_peer_need_raw_addr_hdr(peer))
+		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
+	else if (efa_rdm_peer_need_connid(peer))
+		header_flags |= EFA_RDM_PKT_CONNID_HDR;
+
+	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
+		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
+
+	for (i = 0; efa_rdm_emulated_read_protocols[i] != NULL; ++i) {
+		selected_proto = efa_rdm_emulated_read_protocols[i];
+
+		req_pkt_type = efa_rdm_proto_req_pkt_type(
+			selected_proto, txe->op, txe->fi_flags, peer);
+
+		if (selected_proto->can_use_protocol(
+			    txe, req_pkt_type, header_flags, iface,
+			    false /* use_p2p */)) {
+			*proto = selected_proto;
+			txe->proto = selected_proto;
+			txe->req_pkt_type = req_pkt_type;
+			return;
+		}
+	}
+
+	/*
+	 * No emulated read protocol matched, so the caller falls back to the
 	 * old code path.
 	 */
 	*proto = NULL;
