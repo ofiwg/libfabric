@@ -131,6 +131,7 @@ enum {
 	OFI_INTERCEPT_SHMAT,
 	OFI_INTERCEPT_SHMDT,
 	OFI_INTERCEPT_BRK,
+	OFI_INTERCEPT_SBRK,
 	OFI_INTERCEPT_MAX
 };
 
@@ -143,6 +144,7 @@ static int ofi_intercept_madvise(void *addr, size_t length, int advice);
 static void *ofi_intercept_shmat(int shmid, const void *shmaddr, int shmflg);
 static int ofi_intercept_shmdt(const void *shmaddr);
 static int ofi_intercept_brk(const void *brkaddr);
+static void *ofi_intercept_sbrk(intptr_t increment);
 
 static struct ofi_intercept intercepts[] = {
 	[OFI_INTERCEPT_MMAP] = { .symbol = "mmap",
@@ -159,6 +161,8 @@ static struct ofi_intercept intercepts[] = {
 				.our_func = ofi_intercept_shmdt},
 	[OFI_INTERCEPT_BRK] = { .symbol = "brk",
 				.our_func = ofi_intercept_brk},
+	[OFI_INTERCEPT_SBRK] = { .symbol = "sbrk",
+				.our_func = ofi_intercept_sbrk},
 };
 
 #ifdef HAVE___CURBRK
@@ -409,7 +413,7 @@ static bool ofi_is_function_patched(struct ofi_intercept *intercept)
  * addi
  *
  * Add 12 bit immediate to source register
- * save to destination register 
+ * save to destination register
  *
  */
 #define addi(_regd, _regs, _imm) \
@@ -665,6 +669,50 @@ static int ofi_intercept_brk(const void *brkaddr)
 	}
 
 	return 0;
+}
+
+static void *ofi_intercept_sbrk(intptr_t increment)
+{
+	void *old_addr, *new_addr, *target;
+
+#ifdef HAVE___CURBRK
+	old_addr = __curbrk;
+	if (!old_addr) {
+		old_addr = (void *) (intptr_t)
+			   ofi_memhooks_syscall(SYS_brk, 0);
+		__curbrk = old_addr;
+	}
+#else
+	old_addr = (void *) (intptr_t) ofi_memhooks_syscall(SYS_brk, 0);
+#endif
+
+	if (increment == 0)
+		return old_addr;
+
+	if (increment > 0
+	    ? ((uintptr_t) old_addr + (uintptr_t) increment <
+	       (uintptr_t) old_addr)
+	    : ((uintptr_t) old_addr < (uintptr_t) -increment)) {
+		errno = ENOMEM;
+		return (void *) -1;
+	}
+
+	target = (void *) ((intptr_t) old_addr + increment);
+	new_addr = (void *) (intptr_t) ofi_memhooks_syscall(SYS_brk, target);
+
+#ifdef HAVE___CURBRK
+	__curbrk = new_addr;
+#endif
+
+	if (new_addr < target) {
+		errno = ENOMEM;
+		return (void *) -1;
+	} else if (new_addr < old_addr) {
+		ofi_intercept_handler(new_addr, (intptr_t) old_addr -
+				      (intptr_t) new_addr);
+	}
+
+	return old_addr;
 }
 
 static int ofi_memhooks_subscribe(struct ofi_mem_monitor *monitor,
