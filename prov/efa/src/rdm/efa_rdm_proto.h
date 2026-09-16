@@ -45,6 +45,10 @@ struct efa_rdm_proto {
 	 */
 	char name[32];
 
+	/* Bool set to true if this protocol benefits from the source buffer
+	 * being registered */
+	bool wants_mr;
+
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
