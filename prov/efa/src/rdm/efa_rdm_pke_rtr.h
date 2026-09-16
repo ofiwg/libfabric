@@ -13,8 +13,8 @@ struct efa_rdm_rtr_hdr *efa_rdm_pke_get_rtr_hdr(struct efa_rdm_pke *pkt_entry)
 	return (struct efa_rdm_rtr_hdr *)pkt_entry->wiredata;
 }
 
-ssize_t efa_rdm_pke_init_short_rtr(struct efa_rdm_pke *pkt_entry,
-				   struct efa_rdm_ope *txe);
+void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry, int pkt_type,
+				 struct efa_rdm_ope *txe, int window);
 
 ssize_t efa_rdm_pke_init_longcts_rtr(struct efa_rdm_pke *pkt_entry,
 				     struct efa_rdm_ope *txe);

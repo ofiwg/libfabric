@@ -8,6 +8,7 @@
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
 #include "protocols/efa_rdm_proto_medium.h"
+#include "protocols/efa_rdm_proto_short_rtr.h"
 #include "efa_rdm_msg.h"
 
 /**
@@ -62,11 +63,10 @@ static struct efa_rdm_proto * const efa_rdm_emulated_write_protocols[] = {
 };
 
 /*
- * Emulated read protocols, tried in order during selection, terminated by
- * NULL.
+ * Emulated read protocols, tried in order during selection.
  */
 static struct efa_rdm_proto * const efa_rdm_emulated_read_protocols[] = {
-	NULL,
+	&efa_rdm_proto_short_rtr,
 };
 
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,
@@ -304,7 +304,7 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
 		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
 
-	for (i = 0; efa_rdm_emulated_read_protocols[i] != NULL; ++i) {
+	for (i = 0; i < ARRAY_SIZE(efa_rdm_emulated_read_protocols); ++i) {
 		selected_proto = efa_rdm_emulated_read_protocols[i];
 
 		req_pkt_type = efa_rdm_proto_req_pkt_type(

@@ -91,6 +91,7 @@ _efa_files = \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_eager.c \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_eager_write.c \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_medium.c \
+	prov/efa/src/rdm/protocols/efa_rdm_proto_short_rtr.c \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_zero_copy.c
 
 if ENABLE_EFA_DATA_PATH_OPS_STUB
@@ -166,6 +167,7 @@ _efa_headers = \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_eager.h \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_eager_write.h \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_medium.h \
+	prov/efa/src/rdm/protocols/efa_rdm_proto_short_rtr.h \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_zero_copy.h \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_write.h
 

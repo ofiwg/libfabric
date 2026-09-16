@@ -42,22 +42,6 @@ void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry,
 	pkt_entry->peer = txe->peer;
 }
 
-/**
- * @brief initialize a EFA_RDM_SHORT_RTR_PKT
- *
- * @param[in]		pkt_entry	packet entry to be initialized
- *
-*/
-ssize_t efa_rdm_pke_init_short_rtr(struct efa_rdm_pke *pkt_entry,
-				   struct efa_rdm_ope *txe)
-{
-	efa_rdm_pke_init_rtr_common(pkt_entry,
-				    EFA_RDM_SHORT_RTR_PKT,
-				    txe,
-				    txe->total_len);
-	return 0;
-}
-
 ssize_t efa_rdm_pke_init_longcts_rtr(struct efa_rdm_pke *pkt_entry,
 				     struct efa_rdm_ope *txe)
 {
