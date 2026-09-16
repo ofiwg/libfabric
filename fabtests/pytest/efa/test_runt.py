@@ -35,8 +35,11 @@ def run_runt_read_functional(cmdline_args, memory_type, copy_method):
             pytest.skip("No gdrcopy")
         additional_env += " FI_HMEM_CUDA_USE_GDRCOPY=1"
     elif copy_method == "localread":
-        assert memory_type == "cuda_to_cuda"
-        additional_env += " FI_HMEM_CUDA_USE_GDRCOPY=0"
+        # CUDA can choose between gdrcopy and local read to copy the received
+        # data, so disable gdrcopy to force the local read path. Neuron always
+        # uses local read (see commit 4fa4a6218), so no extra env is needed.
+        if "cuda" in memory_type:
+            additional_env += " FI_HMEM_CUDA_USE_GDRCOPY=0"
 
     # wrs stands for work requests
     server_read_wrs_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
@@ -117,4 +120,7 @@ def test_runt_read_functional_cuda(cmdline_args, memory_type, copy_method):
 @pytest.mark.pr_ci
 @pytest.mark.pr_ci_hmem
 def test_runt_read_functional_neuron(cmdline_args, memory_type):
-    run_runt_read_functional(cmdline_args, memory_type, copy_method=None)
+    # After commit 4fa4a6218, Neuron always uses EFA local read to copy the
+    # received payload into HBM, so it follows the same counter expectations
+    # as the CUDA local read path.
+    run_runt_read_functional(cmdline_args, memory_type, copy_method="localread")
