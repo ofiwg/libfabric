@@ -115,6 +115,56 @@ ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm
 }
 
 /**
+ * @brief Post an emulated read using a selected read protocol.
+ *
+ * Builds the selected protocol's RTR packet, sends it, and runs the protocol's
+ * post-send bookkeeping. The read is not complete when the RTR send completes;
+ * it completes when the response data is received, so the txe stays live. On
+ * failure the packet entries are released here and the caller reports the
+ * error.
+ */
+static ssize_t efa_rdm_rma_post_read_proto(struct efa_rdm_ep *ep,
+					   struct efa_rdm_ope *txe,
+					   struct efa_rdm_proto *proto)
+{
+	uint64_t pke_send_flags = 0;
+	ssize_t err;
+	int i;
+
+	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
+		return -FI_EAGAIN;
+
+	err = proto->construct_tx_pkes(ep, txe->peer, NULL, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	if (err)
+		return err;
+
+	assert(efa_rdm_pkt_type_is_req(txe->req_pkt_type));
+
+#if ENABLE_DEBUG
+	dlist_insert_tail(&txe->pending_recv_entry, &ep->ope_recv_list);
+	ep->pending_recv_counter++;
+#endif
+
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
+				ep->send_pkt_entry_vec_size, pke_send_flags);
+	if (err) {
+#if ENABLE_DEBUG
+		dlist_remove(&txe->pending_recv_entry);
+		ep->pending_recv_counter--;
+#endif
+		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+		return err;
+	}
+
+	txe->peer->flags |= EFA_RDM_PEER_REQ_SENT;
+	proto->handle_tx_pkes_posted(ep, txe);
+	return FI_SUCCESS;
+}
+
+/**
  * @brief Post an rma read request for a given ep and tx entry
  *
  * @param ep efa rdm ep
@@ -163,7 +213,15 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 				ret = -FI_EAGAIN;
 		}
 	} else {
-		ret = efa_rdm_rma_post_efa_emulated_read(ep, txe);
+		struct efa_rdm_proto *proto;
+
+		/* Use a registered read protocol if one applies. */
+		efa_rdm_proto_select_emulated_read_protocol(ep, txe->peer, txe,
+							    &proto);
+		if (proto)
+			ret = efa_rdm_rma_post_read_proto(ep, txe, proto);
+		else
+			ret = efa_rdm_rma_post_efa_emulated_read(ep, txe);
 	}
 
 	return ret;
