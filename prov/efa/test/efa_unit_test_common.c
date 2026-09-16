@@ -533,6 +533,9 @@ void efa_unit_test_set_pke_handler(struct efa_rdm_pke *pkt_entry) {
 		case EFA_RDM_DC_EAGER_RTW_PKT:
 			pkt_entry->handle_pke = &efa_rdm_proto_eager_write_handle_rtw_send_completion;
 			break;
+		case EFA_RDM_SHORT_RTR_PKT:
+			pkt_entry->handle_pke = &efa_rdm_proto_short_rtr_handle_send_completion;
+			break;
 		default:
 			pkt_entry->handle_pke = NULL;
 	}

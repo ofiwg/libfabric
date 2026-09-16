@@ -146,8 +146,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_longread_rtw(pkt_entry, ope);
 		break;
 	case EFA_RDM_SHORT_RTR_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_short_rtr(pkt_entry, ope);
+		assert(0 && "Short read protocol moved to refactored code path");
+		abort();
 		break;
 	case EFA_RDM_LONGCTS_RTR_PKT:
 		assert(data_offset == -1 && data_size == -1);
@@ -295,6 +295,9 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		/* nothing to do when LONGREAD RTW is sent */
 		break;
 	case EFA_RDM_SHORT_RTR_PKT:
+		assert(0 && "Short read protocol moved to refactored code path");
+		abort();
+		break;
 	case EFA_RDM_LONGCTS_RTR_PKT:
 		/* nothing can be done when RTR packets are sent */
 		break;
@@ -703,7 +706,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 			 EFA_RDM_OPE_PEER_ABORT_PENDING)
 			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
 		break;
-	case EFA_RDM_SHORT_RTR_PKT:
 	case EFA_RDM_LONGCTS_RTR_PKT:
 		/* For emulated read, the txe is released either here
 		 * or in efa_rdm_ope_handle_recv_completed(), whichever
