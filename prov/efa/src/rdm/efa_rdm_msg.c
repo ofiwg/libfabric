@@ -21,8 +21,8 @@
 
 #include "efa_mr.h"
 #include "efa_rdm_proto.h"
-#include "efa_rdm_proto_eager.h"
-#include "efa_rdm_proto_zero_copy.h"
+#include "protocols/efa_rdm_proto_eager.h"
+#include "protocols/efa_rdm_proto_zero_copy.h"
 #include "efa_rdm_tracepoint.h"
 
 /**

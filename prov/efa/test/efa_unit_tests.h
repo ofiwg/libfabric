@@ -19,7 +19,7 @@
 #include "rdm/efa_rdm_av.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_unit_test_mocks.h"
-#include "efa_rdm_proto_eager.h"
+#include "protocols/efa_rdm_proto_eager.h"
 
 /**
  * Maximum value of hardware completion counters on the EFA device.
