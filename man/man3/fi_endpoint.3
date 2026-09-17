@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_endpoint" "3" "2026\-08\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_endpoint" "3" "2026\-09\-17" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -734,6 +734,34 @@ provider\[cq]s capabilities, and must be less than or equal to
 Providers that don\[cq]t support this option will return
 -FI_ENOPROTOOPT.
 In that case, \f[V]tx_attr->inject_size\f[R] should be used.
+.RE
+\[bu] .RS 2
+.TP
+\f[I]FI_OPT_TX_SIZE - size_t\f[R]
+Return the size of the endpoint\[cq]s transmit context.
+See the \f[V]size\f[R] field of \f[V]tx_attr\f[R] (\f[V]fi_tx_attr\f[R])
+for the full description.
+The value is limited by the endpoint\[cq]s configuration and the
+provider\[cq]s capabilities, and is less than or equal to
+\f[V]tx_attr->size\f[R].
+This option only applies to the fi_getopt call.
+Providers that don\[cq]t support this option will return
+-FI_ENOPROTOOPT.
+In that case, \f[V]tx_attr->size\f[R] should be used.
+.RE
+\[bu] .RS 2
+.TP
+\f[I]FI_OPT_RX_SIZE - size_t\f[R]
+Return the size of the endpoint\[cq]s receive context.
+See the \f[V]size\f[R] field of \f[V]rx_attr\f[R] (\f[V]fi_rx_attr\f[R])
+for the full description.
+The value is limited by the endpoint\[cq]s configuration and the
+provider\[cq]s capabilities, and is less than or equal to
+\f[V]rx_attr->size\f[R].
+This option only applies to the fi_getopt call.
+Providers that don\[cq]t support this option will return
+-FI_ENOPROTOOPT.
+In that case, \f[V]rx_attr->size\f[R] should be used.
 .RE
 .SS fi_tc_dscp_set
 .PP
