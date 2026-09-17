@@ -417,10 +417,33 @@ EFA_ALWAYS_INLINE void efa_wq_put_wrid_idx(struct efa_data_path_direct_wq *wq,
 }
 
 /**
- * @brief Finalize a CQE by updating completion counter and returning pool index
+ * @brief Finalize a CQE without taking the work queue lock
  *
  * Always increments wqe_completed. Only returns the pool index when
  * not in 64-bit request ID mode.
+ *
+ * The caller must hold wq->wqlock, same contract as efa_wq_get_next_wrid_idx().
+ * This variant exists because for an RDM endpoint wq->wqlock aliases
+ * efa_rdm_ep->srx_lock (see efa_base_ep_create_qp), and efa_rdm_ep_close holds
+ * srx_lock across the whole close-path CQ drain, so the completion path cannot
+ * take it again.
+ *
+ * @param wq Pointer to the work queue structure
+ * @param cqe Pointer to the completion queue entry
+ */
+EFA_ALWAYS_INLINE void efa_wq_cqe_finalize_unsafe(struct efa_data_path_direct_wq *wq,
+						   struct efa_io_cdesc_common *cqe)
+{
+	assert(ofi_genlock_held(wq->wqlock));
+	wq->wqe_completed++;
+	if (!wq->req_id_64_bit)
+		efa_wq_put_wrid_idx(wq, cqe->req_id & ~wq->gen_mask);
+}
+
+/**
+ * @brief Finalize a CQE by updating completion counter and returning pool index
+ *
+ * Takes wq->wqlock around efa_wq_cqe_finalize_unsafe().
  *
  * @param wq Pointer to the work queue structure
  * @param cqe Pointer to the completion queue entry
@@ -429,9 +452,7 @@ EFA_ALWAYS_INLINE void efa_wq_cqe_finalize(struct efa_data_path_direct_wq *wq,
 					    struct efa_io_cdesc_common *cqe)
 {
 	ofi_genlock_lock(wq->wqlock);
-	wq->wqe_completed++;
-	if (!wq->req_id_64_bit)
-		efa_wq_put_wrid_idx(wq, cqe->req_id & ~wq->gen_mask);
+	efa_wq_cqe_finalize_unsafe(wq, cqe);
 	ofi_genlock_unlock(wq->wqlock);
 }
 

@@ -233,14 +233,40 @@ efa_data_path_direct_wc_read_opcode(struct efa_ibv_cq *ibv_cq)
 	return IBV_WC_RECV;
 }
 
-static inline int efa_data_path_direct_next_poll(struct efa_ibv_cq *ibv_cq)
+/**
+ * @brief Finalize the current CQE and poll the next one
+ *
+ * @param ibv_cq Pointer to the IBV completion queue
+ * @param wqlock_held Whether the caller already holds cur_wq->wqlock
+ */
+static inline int efa_data_path_direct_next_poll_common(struct efa_ibv_cq *ibv_cq,
+							bool wqlock_held)
 {
 	struct efa_io_cdesc_common *cqe = ibv_cq->data_path_direct.cur_cqe;
 	assert(cqe);
 
-	if (ibv_cq->data_path_direct.cur_wq)
-		efa_wq_cqe_finalize(ibv_cq->data_path_direct.cur_wq, cqe);
+	if (ibv_cq->data_path_direct.cur_wq) {
+		if (wqlock_held)
+			efa_wq_cqe_finalize_unsafe(ibv_cq->data_path_direct.cur_wq, cqe);
+		else
+			efa_wq_cqe_finalize(ibv_cq->data_path_direct.cur_wq, cqe);
+	}
 	return efa_data_path_direct_start_poll(ibv_cq, NULL);
+}
+
+static inline int efa_data_path_direct_next_poll(struct efa_ibv_cq *ibv_cq)
+{
+	return efa_data_path_direct_next_poll_common(ibv_cq, false);
+}
+
+/**
+ * @brief efa_data_path_direct_next_poll for callers already holding the wqlock
+ *
+ * @param ibv_cq Pointer to the IBV completion queue
+ */
+static inline int efa_data_path_direct_next_poll_unsafe(struct efa_ibv_cq *ibv_cq)
+{
+	return efa_data_path_direct_next_poll_common(ibv_cq, true);
 }
 
 #if HAVE_EFADV_CQ_ATTR_DB
@@ -258,18 +284,44 @@ efa_update_cq_doorbell(struct efa_data_path_direct_cq *data_path_direct,
 }
 #endif /* HAVE_EFADV_CQ_ATTR_DB */
 
-static inline void efa_data_path_direct_end_poll(struct efa_ibv_cq *ibv_cq)
+/**
+ * @brief Finalize the current CQE and ring the CQ doorbell
+ *
+ * @param ibv_cq Pointer to the IBV completion queue
+ * @param wqlock_held Whether the caller already holds cur_wq->wqlock
+ */
+static inline void efa_data_path_direct_end_poll_common(struct efa_ibv_cq *ibv_cq,
+							bool wqlock_held)
 {
 	struct efa_io_cdesc_common *cqe = ibv_cq->data_path_direct.cur_cqe;
 
 	if (cqe) {
-		if (ibv_cq->data_path_direct.cur_wq)
-			efa_wq_cqe_finalize(ibv_cq->data_path_direct.cur_wq, cqe);
+		if (ibv_cq->data_path_direct.cur_wq) {
+			if (wqlock_held)
+				efa_wq_cqe_finalize_unsafe(ibv_cq->data_path_direct.cur_wq, cqe);
+			else
+				efa_wq_cqe_finalize(ibv_cq->data_path_direct.cur_wq, cqe);
+		}
 #if HAVE_EFADV_CQ_ATTR_DB
 		if (ibv_cq->data_path_direct.db)
 			efa_update_cq_doorbell(&ibv_cq->data_path_direct, false);
 #endif
 	}
+}
+
+static inline void efa_data_path_direct_end_poll(struct efa_ibv_cq *ibv_cq)
+{
+	efa_data_path_direct_end_poll_common(ibv_cq, false);
+}
+
+/**
+ * @brief efa_data_path_direct_end_poll for callers already holding the wqlock
+ *
+ * @param ibv_cq Pointer to the IBV completion queue
+ */
+static inline void efa_data_path_direct_end_poll_unsafe(struct efa_ibv_cq *ibv_cq)
+{
+	efa_data_path_direct_end_poll_common(ibv_cq, true);
 }
 
 static inline uint32_t efa_data_path_direct_wc_read_vendor_err(struct efa_ibv_cq *ibv_cq)
