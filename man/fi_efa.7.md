@@ -99,8 +99,20 @@ The following features are supported:
   Because a wide entry occupies more send queue space, it lowers the number of
   entries the send queue can hold. When the inject size is negotiated through
   `fi_getinfo`, the reduced maximum is reported in `tx_attr->size`, and
-  `fi_getinfo` returns *-FI_ENODATA* if the `tx_attr->size` hint exceeds it. The
-  receive queue is unaffected.
+  `fi_getinfo` returns *-FI_ENODATA* if the `tx_attr->size` hint exceeds it. The depth an
+  endpoint was actually created with can also be queried with `fi_getopt`; see
+  *Endpoint queue depths* below, which is the only way to observe it when the
+  inject size was overwritten at `fi_endpoint` time. The receive queue is
+  unaffected.
+
+*Endpoint queue depths*
+: The effective transmit and receive queue depths of an endpoint can be queried
+  with the `fi_getopt` API with option names `FI_OPT_TX_SIZE` and
+  `FI_OPT_RX_SIZE`. The reported values are the depths the endpoint's queues were
+  created with, so they can be smaller than the `size` fields requested in
+  `tx_attr` and `rx_attr`, because they are capped by the maximum queue depths of
+  the EFA device and, for the transmit queue, by the use of wide send queue
+  entries described above.
 
 *Address vectors*
 : The provider supports *FI_AV_TABLE*. *FI_AV_MAP* was deprecated in Libfabric 2.x.

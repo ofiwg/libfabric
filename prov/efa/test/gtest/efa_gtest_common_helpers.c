@@ -250,3 +250,67 @@ int efa_test_rdm_rma_verified_copy_iov(struct fid_ep *ep_fid, uint64_t addr,
 
 	return efa_rdm_rma_verified_copy_iov(ep, &rma, 1, flags, iov, desc);
 }
+
+int efa_test_device_probe(void)
+{
+	struct fi_info *info = NULL;
+	int ret;
+
+	ret = fi_getinfo(FI_VERSION(2, 0), NULL, NULL, 0ULL, NULL, &info);
+	if (ret)
+		return ret;
+
+	fi_freeinfo(info);
+	return g_efa_selected_device_cnt > 0 ? 0 : -FI_ENODEV;
+}
+
+size_t efa_test_device_max_tx_size(void)
+{
+	return g_efa_selected_device_list[0].rdm_info->tx_attr->size;
+}
+
+size_t efa_test_device_max_rx_size(void)
+{
+	return g_efa_selected_device_list[0].rdm_info->rx_attr->size;
+}
+
+int efa_test_device_supports_wide_wqe(void)
+{
+	if (g_efa_selected_device_cnt <= 0)
+		return 0;
+
+	return efa_device_support_wide_wqe();
+}
+
+size_t efa_test_device_inline_buf_size(void)
+{
+	return g_efa_selected_device_list[0].efa_attr.inline_buf_size;
+}
+
+ssize_t efa_test_device_max_wide_wqe_sq_depth(size_t inject_size)
+{
+#if HAVE_INLINE_BUF_SIZE_EX
+	return efa_query_max_sq_depth(g_efa_selected_device_list[0].ibv_ctx,
+				      EFADV_SQ_DEPTH_ATTR_INLINE_WRITE,
+				      (uint32_t) inject_size);
+#else
+	return -FI_ENOSYS;
+#endif
+}
+
+void efa_test_ep_qp_cap(struct fid_ep *ep_fid, size_t *max_send_wr,
+			size_t *max_recv_wr, size_t *max_inline_data)
+{
+	struct efa_base_ep *base_ep;
+	struct ibv_qp_init_attr_ex attr_ex = {0};
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	efa_base_ep_construct_ibv_qp_init_attr_ex(base_ep, &attr_ex, NULL, NULL);
+
+	if (max_send_wr)
+		*max_send_wr = attr_ex.cap.max_send_wr;
+	if (max_recv_wr)
+		*max_recv_wr = attr_ex.cap.max_recv_wr;
+	if (max_inline_data)
+		*max_inline_data = attr_ex.cap.max_inline_data;
+}

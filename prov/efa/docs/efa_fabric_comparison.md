@@ -271,6 +271,9 @@ doesn't support any ordering.
 | GPU Direct Async (GDA) domain ops extension     |❌|✓         |
 | Data path direct | ✓ | ✓ |
 | Util CQ bypass | ❌ | ✓ |
+| `fi_inject` | ✓ | \* |
+| Wide send queue entry | ❌ | \* |
+| Queue depth query (`FI_OPT_TX_SIZE`/`FI_OPT_RX_SIZE`) | ✓ | ✓ |
 
 - **Unsolicited write recv**: This is a feature that allows efa device not consume a Rx buffer on the target side for rdma write with immediate data operations. Both efa and efa-direct support it. However, if application wants to turn this feature off, for efa-direct, application
 needs to support FI_RX_CQ_DATA to maintain the rx buffer itself. The efa fabric doesn't have such requirement, because it has internal rx buffer that can be consumed.
@@ -282,3 +285,17 @@ needs to support FI_RX_CQ_DATA to maintain the rx buffer itself. The efa fabric 
 directly in Libfabric without rdma-core API. It is now enabled in both fabrics
 - **Util CQ Bypass** Another improvement to get rid of the CQE staging in util CQ,
 more details are in the [util_cq_bypass doc](util_cq_bypass.md).
+- **fi_inject**: efa injects through its own protocol and always supports it.
+efa-direct supports it only with the FI_CONTEXT2 mode, because without that mode
+the provider hands the application's context straight to the device work request
+and has no way left to mark an operation as not requesting a completion. Without
+FI_CONTEXT2 an efa-direct endpoint reports an inject size of 0 and the inject
+calls return -FI_ENOSYS.
+- **Wide send queue entry**: efa-direct carries inject data inside the send queue
+entry, so a larger inject size needs the wide entry newer EFA devices offer,
+which also makes inline RMA write available. Because a wide entry occupies more
+send queue space, it lowers the maximum send queue depth. efa fabric does not use
+it. See the [fi_efa man page](../../../man/fi_efa.7.md) for details.
+- **Queue depth query**: Both fabrics report the transmit and receive queue depths
+their endpoint was created with through FI_OPT_TX_SIZE and FI_OPT_RX_SIZE, which
+can be smaller than the sizes requested in tx_attr and rx_attr.

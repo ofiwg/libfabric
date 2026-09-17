@@ -692,14 +692,12 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		} else if (hints->tx_attr->inject_size > inline_buf_size) {
 			/* Wide WQE: query actual tx depth */
 #if HAVE_INLINE_BUF_SIZE_EX
-			struct efadv_sq_depth_attr sq_attr = {0};
 			int max_sq_depth;
 
-			sq_attr.max_inline_data = hints->tx_attr->inject_size;
-			sq_attr.flags = EFADV_SQ_DEPTH_ATTR_INLINE_WRITE;
-			max_sq_depth = efadv_get_max_sq_depth(device->ibv_ctx,
-							      &sq_attr,
-							      sizeof(sq_attr));
+			max_sq_depth = efa_query_max_sq_depth(
+				device->ibv_ctx,
+				EFADV_SQ_DEPTH_ATTR_INLINE_WRITE,
+				hints->tx_attr->inject_size);
 			if (max_sq_depth < 0) {
 				EFA_INFO(FI_LOG_CORE,
 					 "efadv_get_max_sq_depth failed: %d\n",

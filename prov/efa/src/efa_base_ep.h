@@ -60,6 +60,19 @@ struct efa_qp {
 	bool unsolicited_write_recv_enabled;
 };
 
+#if HAVE_INLINE_BUF_SIZE_EX
+/*
+ * Query the device's maximum send-queue depth for a wide-WQE configuration.
+ * Wide WQEs consume more send-queue memory per entry, lowering the max depth.
+ * sq_depth_flags selects which wide-WQE feature(s) apply
+ * (EFADV_SQ_DEPTH_ATTR_INLINE_WRITE for large inline data); max_inline_data is
+ * the inline size the QP will use. Returns the max SQ depth (>= 0) or a
+ * negative errno.
+ */
+int efa_query_max_sq_depth(struct ibv_context *ctx, uint32_t sq_depth_flags,
+			   uint32_t max_inline_data);
+#endif /* HAVE_INLINE_BUF_SIZE_EX */
+
 struct efa_av;
 
 struct efa_recv_wr {
@@ -138,6 +151,8 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 			  ofi_ep_progress_func progress,
 			  void *context);
 
+size_t efa_base_ep_get_max_sq_depth(struct efa_base_ep *base_ep);
+
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
 
 int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
@@ -199,9 +214,14 @@ static inline size_t efa_base_ep_get_rx_pool_size(struct efa_base_ep *base_ep)
 	return MIN(base_ep->domain->device->rdm_info->rx_attr->size, base_ep->info->rx_attr->size);
 }
 
+/*
+ * efa_base_ep_get_max_sq_depth() is the device-advertised depth, lowered for an
+ * efa-direct endpoint whose send queue entries are wide, so that the QP is created
+ * with that depth and fi_getopt(FI_OPT_TX_SIZE) reports the same one.
+ */
 static inline size_t efa_base_ep_get_tx_pool_size(struct efa_base_ep *base_ep)
 {
-	return MIN(base_ep->domain->device->rdm_info->tx_attr->size, base_ep->info->tx_attr->size);
+	return MIN(efa_base_ep_get_max_sq_depth(base_ep), base_ep->info->tx_attr->size);
 }
 
 #endif

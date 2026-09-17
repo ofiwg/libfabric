@@ -2032,6 +2032,22 @@ static int efa_rdm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*(size_t *) optval = efa_rdm_ep->inject_atomic_size;
 		*optlen = sizeof (size_t);
 		break;
+	/*
+	 * The packet entry pools these sizes back are what bound the operations
+	 * the endpoint can hold, and they are also the QP send/recv WR counts.
+	 */
+	case FI_OPT_TX_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = efa_base_ep_get_tx_pool_size(&efa_rdm_ep->base_ep);
+		*optlen = sizeof (size_t);
+		break;
+	case FI_OPT_RX_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
+		*optlen = sizeof (size_t);
+		break;
 	case FI_OPT_EFA_EMULATED_READ:
 		if (*optlen < sizeof(bool))
 			return -FI_ETOOSMALL;

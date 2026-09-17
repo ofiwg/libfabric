@@ -60,6 +60,22 @@ static int efa_ep_getopt(fid_t fid, int level, int optname,
 		*(size_t *) optval = ep->inject_rma_size;
 		*optlen = sizeof (size_t);
 		break;
+	/*
+	 * These are the depths the endpoint's queues are created with, see
+	 * efa_base_ep_construct_ibv_qp_init_attr_ex().
+	 */
+	case FI_OPT_TX_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = efa_base_ep_get_tx_pool_size(ep);
+		*optlen = sizeof (size_t);
+		break;
+	case FI_OPT_RX_SIZE:
+		if (*optlen < sizeof (size_t))
+			return -FI_ETOOSMALL;
+		*(size_t *) optval = efa_base_ep_get_rx_pool_size(ep);
+		*optlen = sizeof (size_t);
+		break;
 	/* Emulated read/write is NOT used for efa direct ep */
 	case FI_OPT_EFA_EMULATED_READ: /* fall through */
 	case FI_OPT_EFA_EMULATED_WRITE:

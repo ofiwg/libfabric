@@ -67,6 +67,22 @@ void efa_test_resource_construct_no_enable(struct efa_resource *resource,
 					   struct fi_info *hints);
 
 /**
+ * @brief Run only the fi_getinfo step of the construction above, leaving
+ * resource->info for the test to inspect or modify before
+ * efa_test_resource_open() creates the endpoint from it. Use this when a test
+ * needs an attribute the fi_getinfo negotiation would have rejected or
+ * adjusted, e.g. an inject size overwritten after fi_getinfo.
+ */
+void efa_test_resource_getinfo(struct efa_resource *resource,
+			       struct fi_info *hints);
+
+/**
+ * @brief Create and bind the resources of resource->info, which
+ * efa_test_resource_getinfo() must have filled in. Stops short of fi_enable().
+ */
+void efa_test_resource_open(struct efa_resource *resource);
+
+/**
  * @brief Destroy all OFI resources in the resource struct.
  * Closes resources in correct order. Uses gtest EXPECT macros so that
  * all cleanup is attempted even if one close fails.

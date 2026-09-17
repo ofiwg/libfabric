@@ -41,14 +41,16 @@ void efa_test_resource_construct(struct efa_resource *resource,
 void efa_test_resource_construct_no_enable(struct efa_resource *resource,
 					   struct fi_info *hints)
 {
+	ASSERT_NO_FATAL_FAILURE(efa_test_resource_getinfo(resource, hints));
+	ASSERT_NO_FATAL_FAILURE(efa_test_resource_open(resource));
+}
+
+void efa_test_resource_getinfo(struct efa_resource *resource,
+			       struct fi_info *hints)
+{
 	int ret;
-	struct fi_av_attr av_attr = {};
-	struct fi_cq_attr cq_attr = {};
-	struct fi_eq_attr eq_attr = {};
 	const char *fabric_name;
 	uint32_t fi_version;
-
-	cq_attr.format = FI_CQ_FORMAT_DATA;
 
 	ASSERT_NE(hints, nullptr);
 	resource->hints = hints;
@@ -62,6 +64,18 @@ void efa_test_resource_construct_no_enable(struct efa_resource *resource,
 	ret = fi_getinfo(fi_version, NULL, NULL, 0ULL, resource->hints,
 			 &resource->info);
 	ASSERT_EQ(ret, 0) << "fi_getinfo failed: " << fi_strerror(-ret);
+}
+
+void efa_test_resource_open(struct efa_resource *resource)
+{
+	int ret;
+	struct fi_av_attr av_attr = {};
+	struct fi_cq_attr cq_attr = {};
+	struct fi_eq_attr eq_attr = {};
+
+	cq_attr.format = FI_CQ_FORMAT_DATA;
+
+	ASSERT_NE(resource->info, nullptr);
 
 	ret = fi_fabric(resource->info->fabric_attr, &resource->fabric, NULL);
 	ASSERT_EQ(ret, 0) << "fi_fabric failed: " << fi_strerror(-ret);

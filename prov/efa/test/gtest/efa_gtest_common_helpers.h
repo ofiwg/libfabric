@@ -145,6 +145,47 @@ int efa_test_util_domain_trylock(struct fid_domain *domain);
 void efa_test_util_domain_unlock(struct fid_domain *domain);
 
 /**
+ * @brief Initialize the provider so the device queries below are valid, by
+ * running a fi_getinfo. Returns 0 on success, a negative fi errno otherwise.
+ */
+int efa_test_device_probe(void);
+
+/**
+ * @brief The selected EFA device's maximum send/recv queue depths, i.e. the
+ * ceiling an endpoint's effective tx/rx size is capped by.
+ */
+size_t efa_test_device_max_tx_size(void);
+size_t efa_test_device_max_rx_size(void);
+
+/**
+ * @brief Whether the selected EFA device supports wide WQEs, i.e. an inject
+ * size above its inline_buf_size.
+ */
+int efa_test_device_supports_wide_wqe(void);
+
+/**
+ * @brief The selected EFA device's inline_buf_size, above which an inject size
+ * makes every send queue entry wide.
+ */
+size_t efa_test_device_inline_buf_size(void);
+
+/**
+ * @brief The selected EFA device's maximum send queue depth for a wide WQE
+ * configuration with the given inline size, i.e. the depth fi_getinfo reports
+ * for such an endpoint. Returns a negative errno when unavailable.
+ */
+ssize_t efa_test_device_max_wide_wqe_sq_depth(size_t inject_size);
+
+/**
+ * @brief The QP capabilities the endpoint's QP is created with, i.e. what
+ * efa_base_ep_construct_ibv_qp_init_attr_ex() fills in. Lets a test check that
+ * the depths fi_getopt reports are the ones the QP was created with. Any out
+ * parameter may be NULL.
+ */
+void efa_test_ep_qp_cap(struct fid_ep *ep_fid, size_t *max_send_wr,
+			size_t *max_recv_wr, size_t *max_inline_data);
+
+/**
  * @brief Value of OFI_HMEM_DATA_DEV_REG_HANDLE (the gdrcopy handle bit), which
  * lives in ofi_mr.h and is not includable from C++.
  */

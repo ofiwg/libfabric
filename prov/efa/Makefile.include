@@ -322,6 +322,8 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_rdm_peer.cc \
 	prov/efa/test/gtest/efa_gtest_msg.cc \
 	prov/efa/test/gtest/efa_gtest_rma.cc \
+	prov/efa/test/gtest/efa_gtest_ep.cc \
+	prov/efa/test/gtest/efa_gtest_info.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_rma.cc \
 	prov/efa/test/gtest/efa_gtest_hmem.cc \
 	prov/efa/test/gtest/efa_gtest_tclass_utils.c \
