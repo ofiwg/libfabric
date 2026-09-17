@@ -111,10 +111,9 @@ int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
 					  uint32_t internal_flags,
 					  struct efa_rdm_ope *txe)
 {
-	int ret, req_pkt_type, pkt_entry_cnt;
-	bool tagged, delivery_complete_requested;
+	int ret, pkt_entry_cnt;
+	bool delivery_complete_requested;
 	struct efa_rdm_pke *pkt_entry = NULL;
-	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	struct efa_rdm_dc_eager_rtm_base_hdr *dc_base_hdr;
 
 	// Eager protocol sends 1 packet by definition
@@ -131,36 +130,19 @@ int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
 	 */
 	assert(!efa_rdm_peer_expects_zero_hdr_data_transfer(peer));
 
-	tagged = (op == ofi_op_tagged);
-
-	req_pkt_type = txe->req_pkt_type;
 	delivery_complete_requested =
-		(req_pkt_type == efa_rdm_proto_eager.req_pkt_type_dc ||
-		 req_pkt_type == efa_rdm_proto_eager.req_pkt_type_tagged_dc);
+		efa_rdm_proto_get_dc(txe, &efa_rdm_proto_eager);
 
-	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
-				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	pkt_entry = efa_rdm_proto_tx_pke_init_common(txe, peer);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
-	efa_rdm_pke_set_ope(pkt_entry, txe);
-	pkt_entry->peer = peer;
 	pkt_entry->handle_pke = &efa_rdm_proto_eager_handle_rtm_send_completion;
-
-	efa_rdm_pke_init_req_hdr_common(pkt_entry, req_pkt_type, txe);
-
-	rtm_hdr = (struct efa_rdm_rtm_base_hdr *) pkt_entry->wiredata;
-	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
-	rtm_hdr->msg_id = txe->msg_id;
-
-	if (tagged) {
-		rtm_hdr->flags |= EFA_RDM_REQ_TAGGED;
-		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
-	}
 
 	EFA_DBG(FI_LOG_EP_DATA,
 		"eager protocol: dc_requested=%d tagged=%d req_pkt_type=%d\n",
-		delivery_complete_requested, tagged, req_pkt_type);
+		delivery_complete_requested, efa_rdm_proto_get_tagged(txe),
+		txe->req_pkt_type);
 
 	if (delivery_complete_requested) {
 		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;

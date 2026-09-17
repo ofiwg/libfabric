@@ -5,6 +5,8 @@
 #define _EFA_RDM_PROTO_H
 
 #include "efa.h"
+#include "efa_rdm_pke_rtm.h"
+#include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pkt_type.h"
 
 /**
@@ -168,6 +170,49 @@ static inline int efa_rdm_proto_req_pkt_type(struct efa_rdm_proto *proto,
 	return delivery_complete_requested ? proto->req_pkt_type_dc + tagged :
 					     proto->req_pkt_type + tagged;
 }
+
+static inline bool efa_rdm_proto_get_tagged(struct efa_rdm_ope *txe)
+{
+	return (txe->op == ofi_op_tagged);
+}
+
+static inline bool efa_rdm_proto_get_dc(struct efa_rdm_ope *txe,
+					struct efa_rdm_proto *proto)
+{
+	return (txe->req_pkt_type == proto->req_pkt_type_dc ||
+		txe->req_pkt_type == proto->req_pkt_type_tagged_dc);
+}
+
+static inline struct efa_rdm_pke* efa_rdm_proto_tx_pke_init_common(struct efa_rdm_ope *txe, struct efa_rdm_peer *peer) {
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+	bool tagged;
+
+	tagged = efa_rdm_proto_get_tagged(txe);
+
+	pkt_entry = efa_rdm_pke_alloc(txe->ep, txe->ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+
+	if (OFI_UNLIKELY(!pkt_entry))
+		return NULL;
+
+	efa_rdm_pke_set_ope(pkt_entry, txe);
+	pkt_entry->peer = peer;
+
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, txe->req_pkt_type, txe);
+
+	rtm_hdr = (struct efa_rdm_rtm_base_hdr *) pkt_entry->wiredata;
+	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
+	rtm_hdr->msg_id = txe->msg_id;
+
+	if (tagged) {
+		rtm_hdr->flags |= EFA_RDM_REQ_TAGGED;
+		efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
+	}
+
+	return pkt_entry;
+}
+
 
 /**
  * @brief Initialize a TXE for use by the new protocol interface.
