@@ -88,6 +88,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 #if HAVE_CUDA
 		.ofi_cudaMalloc = __real_ofi_cudaMalloc,
 		.ofi_cuDeviceGet = __real_ofi_cuDeviceGet,
+		.ofi_cuCtxGetCurrent = __real_ofi_cuCtxGetCurrent,
 		.ofi_cuCtxCreate_v2 = __real_ofi_cuCtxCreate_v2,
 		.ofi_cuCtxDestroy = __real_ofi_cuCtxDestroy,
 		.ofi_cuMemAlloc = __real_ofi_cuMemAlloc,

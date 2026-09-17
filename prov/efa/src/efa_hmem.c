@@ -118,9 +118,9 @@ static int efa_hmem_info_init_protocol_thresholds(enum fi_hmem_iface iface)
 static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *info) {
 #if HAVE_CUDA
 	CUdevice cu_dev;
-	CUcontext cu_ctx;
+	CUcontext cu_ctx = NULL;
 	CUresult cu_ret;
-	CUdeviceptr ptr = 0;
+	void *ptr = 0;
 	struct ibv_mr *ibv_mr;
 	struct ibv_pd *ibv_pd;
 	int ibv_access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
@@ -128,40 +128,56 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 	int ret;
 	int dmabuf_fd;
 	uint64_t dmabuf_offset;
+	bool own_cuda_ctx = false;
 
-	cu_ret = ofi_cuDeviceGet(&cu_dev, 0);
+	cu_ret = ofi_cuCtxGetCurrent(&cu_ctx);
 	if (cu_ret != CUDA_SUCCESS) {
 		info->initialized = false;
-		EFA_WARN(FI_LOG_CORE, "Failed to get CUDA device: %d\n", cu_ret);
+		EFA_WARN(FI_LOG_CORE, "Failed to probe CUDA ctx: %d\n", cu_ret);
 		return;
 	}
 
-	/*
-	 * Create a CUDA context explicitly. This is to prevent implicit ctx creation when
-	 * using the higher-level CUDA runtime functions (e.g., cudaMalloc). Managing the
-	 * ctx ourselves lets us make sure that we clean up properly to have minimal impact
-	 * on the system after we are done probing for p2p support.
-	*/
-	cu_ret = ofi_cuCtxCreate_v2(&cu_ctx, 0, cu_dev);
-	if (cu_ret != CUDA_SUCCESS) {
-		info->initialized = false;
-		EFA_WARN(FI_LOG_CORE, "Failed to create CUDA context: %d\n", cu_ret);
-		return;
+	if (!cu_ctx) {
+		cu_ret = ofi_cuDeviceGet(&cu_dev, 0);
+		if (cu_ret != CUDA_SUCCESS) {
+			info->initialized = false;
+			EFA_WARN(FI_LOG_CORE, "Failed to get CUDA device: %d\n", cu_ret);
+			return;
+		}
+
+		/*
+		 * Create a CUDA context explicitly. This is to prevent implicit ctx creation when
+		 * using the higher-level CUDA runtime functions (e.g., cudaMalloc). Managing the
+		 * ctx ourselves lets us make sure that we clean up properly to have minimal impact
+		 * on the system after we are done probing for p2p support.
+		 */
+		cu_ret = ofi_cuCtxCreate_v2(&cu_ctx, 0, cu_dev);
+		if (cu_ret != CUDA_SUCCESS) {
+			info->initialized = false;
+			EFA_WARN(FI_LOG_CORE, "Failed to create CUDA context: %d\n", cu_ret);
+			return;
+		}
+
+		own_cuda_ctx = true;
 	}
 
-	cu_ret = ofi_cuMemAlloc(&ptr, len);
+	cu_ret = ofi_cudaMalloc(&ptr, len);
 	if (cu_ret != CUDA_SUCCESS) {
 		info->initialized = false;
 		EFA_WARN(FI_LOG_CORE, "Failed to allocate CUDA buffer: %d\n", cu_ret);
-		ofi_cuCtxDestroy(cu_ctx);
+		if (own_cuda_ctx) {
+			ofi_cuCtxDestroy(cu_ctx);
+		}
 		return;
 	}
 
 	ibv_pd = ibv_alloc_pd(g_efa_selected_device_list[0].ibv_ctx);
 	if (!ibv_pd) {
 		EFA_WARN(FI_LOG_CORE, "failed to allocate ibv_pd: %d\n", errno);
-		ofi_cuMemFree(ptr);
-		ofi_cuCtxDestroy(cu_ctx);
+		ofi_cudaFree(ptr);
+		if (own_cuda_ctx) {
+			ofi_cuCtxDestroy(cu_ctx);
+		}
 		return;
 	}
 
@@ -201,26 +217,31 @@ static inline void efa_hmem_info_check_p2p_support_cuda(struct efa_hmem_info *in
 		info->p2p_supported_by_device = false;
 		EFA_WARN(FI_LOG_CORE,
 			 "Failed to register CUDA buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
-		ofi_cuMemFree(ptr);
+		ofi_cudaFree(ptr);
 		(void) ibv_dealloc_pd(ibv_pd);
-		ofi_cuCtxDestroy(cu_ctx);
+		if (own_cuda_ctx) {
+			ofi_cuCtxDestroy(cu_ctx);
+		}
 		return;
 	}
 
 	ret = ibv_dereg_mr(ibv_mr);
-	ofi_cuMemFree(ptr);
+	ofi_cudaFree(ptr);
 	(void) ibv_dealloc_pd(ibv_pd);
 	if (ret) {
 		EFA_WARN(FI_LOG_CORE,
 			 "Failed to deregister CUDA buffer: %s\n",
 			 fi_strerror(-ret));
-		ofi_cuCtxDestroy(cu_ctx);
+		if (own_cuda_ctx) {
+			ofi_cuCtxDestroy(cu_ctx);
+		}
 		return;
 	}
 
 	info->p2p_supported_by_device = true;
-	ofi_cuCtxDestroy(cu_ctx);
-	return;
+	if (own_cuda_ctx) {
+		ofi_cuCtxDestroy(cu_ctx);
+	}
 
 #endif
 	return;
