@@ -216,6 +216,7 @@ prov_efa_test_efa_unit_test_LDFLAGS = -static $(cmocka_rpath) $(efa_LDFLAGS) $(c
 					-Wl,--wrap=efa_rdm_ah_release \
 					-Wl,--wrap=ofi_cudaMalloc \
 					-Wl,--wrap=ofi_cuDeviceGet \
+					-Wl,--wrap=ofi_cuCtxGetCurrent \
 					-Wl,--wrap=ofi_cuCtxCreate_v2 \
 					-Wl,--wrap=ofi_cuCtxDestroy \
 					-Wl,--wrap=ofi_cuMemAlloc \

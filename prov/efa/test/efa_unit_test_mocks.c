@@ -405,6 +405,7 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #if HAVE_CUDA
 	.ofi_cudaMalloc = __real_ofi_cudaMalloc,
 	.ofi_cuDeviceGet = __real_ofi_cuDeviceGet,
+	.ofi_cuCtxGetCurrent = __real_ofi_cuCtxGetCurrent,
 	.ofi_cuCtxCreate_v2 = __real_ofi_cuCtxCreate_v2,
 	.ofi_cuCtxDestroy = __real_ofi_cuCtxDestroy,
 	.ofi_cuMemAlloc = __real_ofi_cuMemAlloc,
@@ -696,6 +697,17 @@ CUresult __wrap_ofi_cuDeviceGet(CUdevice *device, int ordinal)
 CUresult efa_mock_ofi_cuDeviceGet_return_mock(CUdevice *device, int ordinal)
 {
 	*device = (CUdevice) mock();
+	return (CUresult) mock();
+}
+
+CUresult __wrap_ofi_cuCtxGetCurrent(CUcontext *pctx)
+{
+	return g_efa_unit_test_mocks.ofi_cuCtxGetCurrent(pctx);
+}
+
+CUresult efa_mock_ofi_cuCtxGetCurrent_return_mock(CUcontext *pctx)
+{
+	*pctx = (CUcontext) mock();
 	return (CUresult) mock();
 }
 
