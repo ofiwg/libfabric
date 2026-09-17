@@ -300,13 +300,14 @@ real_man_pages = \
         man/man3/fi_getinfo.3 \
         man/man3/fi_mr.3 \
         man/man3/fi_msg.3 \
-	man/man3/fi_nic.3 \
+        man/man3/fi_nic.3 \
         man/man3/fi_poll.3 \
+        man/man3/fi_profile.3 \
         man/man3/fi_rma.3 \
         man/man3/fi_tagged.3 \
         man/man3/fi_trigger.3 \
+        man/man3/fi_xpu.3 \
         man/man3/fi_version.3 \
-        man/man3/fi_profile.3 \
         man/man7/fabric.7 \
         man/man7/fi_arch.7 \
         man/man7/fi_direct.7 \
