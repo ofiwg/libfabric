@@ -57,12 +57,21 @@ int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq)
 	return ENOENT;
 }
 
+int efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq)
+{
+	return ENOENT;
+}
+
 enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq)
 {
 	return 0;
 }
 
 void efa_ibv_cq_end_poll(struct efa_ibv_cq *ibv_cq)
+{
+}
+
+void efa_ibv_cq_end_poll_unsafe(struct efa_ibv_cq *ibv_cq)
 {
 }
 

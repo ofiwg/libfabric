@@ -1551,7 +1551,9 @@ void test_efa_rdm_ope_ack_packet_tracking_wait_send_common(void **state, int pkt
 
 	/* Poll the cq via wait_send */
 	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
+	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 
 	/* The cq poll should remove the rxe from the list */
@@ -1607,7 +1609,9 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 	 * unresponsive. See logic in efa_rdm_ep_close_should_wait_send()
 	 */
 	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
+	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 	assert_true(!!(rxe->peer->flags & EFA_RDM_PEER_UNRESP));
 
@@ -1625,7 +1629,9 @@ void test_efa_rdm_ope_ack_packet_tracking_unresponsive_wait_send_common(void **s
 
 	/* Kick off the second wait_send, which should NOT try to progress more because of the unresp peer */
 	ofi_genlock_lock(&efa_cq->util_cq.ep_list_lock);
+	ofi_genlock_lock(&efa_rdm_ep->srx_lock);
 	efa_rdm_ep_wait_send(efa_rdm_ep);
+	ofi_genlock_unlock(&efa_rdm_ep->srx_lock);
 	ofi_genlock_unlock(&efa_cq->util_cq.ep_list_lock);
 	assert_int_equal(efa_unit_test_get_dlist_length(&efa_rdm_ep->ope_posted_ack_list), 1);
 }

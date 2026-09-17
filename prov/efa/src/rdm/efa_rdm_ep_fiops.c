@@ -957,30 +957,30 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
  */
 static
 bool efa_rdm_ep_close_should_wait_send(struct efa_rdm_ep *efa_rdm_ep)
+	OFI_TSA_REQUIRES(efa_srx_lock_sym)
 {
 	struct efa_rdm_ope *ope;
 	struct dlist_entry *entry;
 
-	EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
+	assert(EFA_GENLOCK_HELD(&efa_rdm_ep->srx_lock, efa_srx_lock_sym));
+
 	dlist_foreach(&efa_rdm_ep->ope_posted_ack_list, entry) {
 		ope = container_of(entry, struct efa_rdm_ope, ack_list_entry);
-		if (ope->peer && !(ope->peer->flags & EFA_RDM_PEER_UNRESP)) {
-			EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
+		if (ope->peer && !(ope->peer->flags & EFA_RDM_PEER_UNRESP))
 			return true;
-		}
 	}
-	EFA_GENLOCK_UNLOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 
 	return false;
 }
 
 static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
+	OFI_TSA_REQUIRES(efa_srx_lock_sym)
 {
 	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
 	struct efa_rdm_ope *ope;
 
-	EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
+	assert(EFA_GENLOCK_HELD(&ep->srx_lock, efa_srx_lock_sym));
 	/* Update timers for peers that are in backoff list*/
 	dlist_foreach_container_safe(&ep->peer_backoff_list,
 			struct efa_rdm_peer, peer, rnr_backoff_entry, tmp) {
@@ -1007,7 +1007,6 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
 			break;
 		}
 	}
-	EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
 }
 
 /*
@@ -1018,16 +1017,19 @@ static inline void progress_queues_closing_ep(struct efa_rdm_ep *ep)
  * posted RECEIPT or EOR packets from responsive peers.
  *
  * This function polls the tx/rx CQs and progresses queued operations
- * until all inflight sends complete. It manages locking internally in the
- * order ep_list_lock -> srx_lock.
+ * until all inflight sends complete.
+ *
+ * The caller must hold ep_list_lock and efa_rdm_ep->srx_lock.
  *
  * @param[in]	efa_rdm_ep		endpoint
  * @return 	no return
  */
 void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
-	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym, efa_srx_lock_sym)
 {
 	struct efa_cq *tx_cq, *rx_cq;
+
+	assert(EFA_GENLOCK_HELD(&efa_rdm_ep->srx_lock, efa_srx_lock_sym));
 
 	tx_cq = efa_base_ep_get_tx_cq(&efa_rdm_ep->base_ep);
 	rx_cq = efa_base_ep_get_rx_cq(&efa_rdm_ep->base_ep);
@@ -1143,14 +1145,10 @@ static int efa_rdm_ep_close(struct fid *fid)
 	 */
 	efa_cq_lock_ep_list(&efa_rdm_ep->base_ep);
 
+	EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
+
 	if (efa_rdm_ep->base_ep.efa_qp_enabled)
 		efa_rdm_ep_wait_send(efa_rdm_ep);
-	/**
-	 * The QP destroy and op entries clean up must be in the same lock,
-	 * otherwise there can be race condition that efa_rdm_ep_progress_peers_and_queues
-	 * (part of fi_cq_read) can access entries that are from a closed QP.
-	 */
-	EFA_GENLOCK_LOCK(&efa_rdm_ep->srx_lock, efa_srx_lock_sym);
 
 	efa_rdm_ep_dequeue_progress_list(efa_rdm_ep);
 
