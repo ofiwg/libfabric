@@ -5,7 +5,7 @@
 #include "rdm/efa_rdm_pke_utils.h"
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
-#include "rdm/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_eager.h"
 
 /**
  * @brief Build an eager RTM TX packet the way the send path does.
