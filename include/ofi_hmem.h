@@ -72,6 +72,7 @@ cudaError_t ofi_cudaHostUnregister(void *ptr);
 cudaError_t ofi_cudaMalloc(void **ptr, size_t size);
 cudaError_t ofi_cudaFree(void *ptr);
 CUresult ofi_cuDeviceGet(CUdevice *device, int ordinal);
+CUresult ofi_cuCtxGetCurrent(CUcontext *pctx);
 CUresult ofi_cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev);
 CUresult ofi_cuCtxDestroy(CUcontext ctx);
 CUresult ofi_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
