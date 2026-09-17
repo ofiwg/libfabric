@@ -863,7 +863,7 @@ enum ibv_wc_status efa_rdm_cq_process_wc(struct efa_ibv_cq *cq, struct efa_rdm_e
 }
 
 void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm_ep *closing_ep)
-	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym)
+	OFI_TSA_REQUIRES(efa_cq_ep_list_lock_sym, efa_srx_lock_sym)
 {
 
 	struct efa_rdm_ep *ep = NULL;
@@ -874,33 +874,41 @@ void efa_rdm_cq_poll_ibv_cq_closing_ep(struct efa_ibv_cq *ibv_cq, struct efa_rdm
 
 	assert(EFA_GENLOCK_HELD(&efa_cq->util_cq.ep_list_lock,
 				efa_cq_ep_list_lock_sym));
+	assert(EFA_GENLOCK_HELD(&closing_ep->srx_lock, efa_srx_lock_sym));
 	dlist_init(&rx_progressed_ep_list);
 
 	efa_cq_start_poll(ibv_cq);
 	while (efa_cq_wc_available(ibv_cq)) {
 		ep = efa_rdm_cq_get_rdm_ep(ibv_cq, efa_domain);
-		EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
 		if (ep == closing_ep) {
 			status = efa_rdm_cq_process_wc_closing_ep(ibv_cq, ep);
 		} else {
+			/*
+			 * Take the other endpoint's lock plainly so
+			 * clang does not read this as a recursive acquire.
+			 */
+			ofi_genlock_lock(&ep->srx_lock);
 			status = efa_rdm_cq_process_wc(ibv_cq, ep);
 			if (status == IBV_WC_SUCCESS &&
 			    ep->efa_rx_pkts_to_post > 0 &&
 			    !dlist_find_first_match(&rx_progressed_ep_list, &efa_rdm_cq_match_ep, ep))
 				dlist_insert_tail(&ep->entry, &rx_progressed_ep_list);
 		}
-		EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
+		/* Use unsafe version to avoid taking srx_lock internally again */
 		if (OFI_UNLIKELY(status != IBV_WC_SUCCESS))
-			break;
-		efa_cq_next_poll(ibv_cq);
+			efa_cq_end_poll_unsafe(ibv_cq);
+		else
+			efa_cq_next_poll_unsafe(ibv_cq);
+		if (ep != closing_ep)
+			ofi_genlock_unlock(&ep->srx_lock);
 	}
 	efa_cq_end_poll(ibv_cq);
 	dlist_foreach_container_safe(
 		&rx_progressed_ep_list, struct efa_rdm_ep, ep, entry, tmp) {
-		EFA_GENLOCK_LOCK(&ep->srx_lock, efa_srx_lock_sym);
+		ofi_genlock_lock(&ep->srx_lock);
 		efa_rdm_ep_post_internal_rx_pkts(ep);
 		dlist_remove(&ep->entry);
-		EFA_GENLOCK_UNLOCK(&ep->srx_lock, efa_srx_lock_sym);
+		ofi_genlock_unlock(&ep->srx_lock);
 	}
 	assert(dlist_empty(&rx_progressed_ep_list));
 }

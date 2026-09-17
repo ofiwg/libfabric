@@ -52,7 +52,11 @@ struct dlist_entry;
 	  (struct efa_ibv_cq * ibv_cq, struct ibv_poll_cq_attr * attr),        \
 	  (ibv_cq, attr))                                                      \
 	X(int, efa_ibv_cq_next_poll, (struct efa_ibv_cq * ibv_cq), (ibv_cq))   \
+	X(int, efa_ibv_cq_next_poll_unsafe, (struct efa_ibv_cq * ibv_cq),      \
+	  (ibv_cq))                                                            \
 	X(void, efa_ibv_cq_end_poll, (struct efa_ibv_cq * ibv_cq), (ibv_cq))   \
+	X(void, efa_ibv_cq_end_poll_unsafe, (struct efa_ibv_cq * ibv_cq),      \
+	  (ibv_cq))                                                            \
 	X(enum ibv_wc_opcode, efa_ibv_cq_wc_read_opcode,                       \
 	  (struct efa_ibv_cq * ibv_cq), (ibv_cq))                              \
 	X(uint32_t, efa_ibv_cq_wc_read_vendor_err,                             \

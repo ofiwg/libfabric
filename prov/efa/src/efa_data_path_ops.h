@@ -197,8 +197,10 @@ int efa_qp_post_write(struct efa_qp *qp, const struct ibv_sge *sge_list, size_t 
 		       uint32_t qkey);
 int efa_ibv_cq_start_poll(struct efa_ibv_cq *ibv_cq, struct ibv_poll_cq_attr *attr);
 int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq);
+int efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq);
 enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq);
 void efa_ibv_cq_end_poll(struct efa_ibv_cq *ibv_cq);
+void efa_ibv_cq_end_poll_unsafe(struct efa_ibv_cq *ibv_cq);
 uint32_t efa_ibv_cq_wc_read_qp_num(struct efa_ibv_cq *ibv_cq);
 uint32_t efa_ibv_cq_wc_read_vendor_err(struct efa_ibv_cq *ibv_cq);
 uint32_t efa_ibv_cq_wc_read_src_qp(struct efa_ibv_cq *ibv_cq);
@@ -329,6 +331,15 @@ static inline int efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq)
 	return ibv_next_poll(ibv_cq->ibv_cq_ex);
 }
 
+static inline int efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	if (ibv_cq->data_path_direct_enabled)
+		return efa_data_path_direct_next_poll_unsafe(ibv_cq);
+#endif
+	return ibv_next_poll(ibv_cq->ibv_cq_ex);
+}
+
 static inline enum ibv_wc_opcode efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq)
 {
 #if HAVE_EFA_DATA_PATH_DIRECT
@@ -343,6 +354,17 @@ static inline void efa_ibv_cq_end_poll(struct efa_ibv_cq *ibv_cq)
 #if HAVE_EFA_DATA_PATH_DIRECT
 	if (ibv_cq->data_path_direct_enabled) {
 		efa_data_path_direct_end_poll(ibv_cq);
+		return;
+	}
+#endif
+	ibv_end_poll(ibv_cq->ibv_cq_ex);
+}
+
+static inline void efa_ibv_cq_end_poll_unsafe(struct efa_ibv_cq *ibv_cq)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	if (ibv_cq->data_path_direct_enabled) {
+		efa_data_path_direct_end_poll_unsafe(ibv_cq);
 		return;
 	}
 #endif
@@ -521,10 +543,11 @@ static inline void efa_cq_start_poll(struct efa_ibv_cq *cq)
 	}
 }
 
-static inline void efa_cq_next_poll(struct efa_ibv_cq *cq)
+static inline void efa_cq_next_poll_common(struct efa_ibv_cq *cq, bool wqlock_held)
 {
 	assert(cq->poll_active);
-	cq->poll_err = efa_ibv_cq_next_poll(cq);
+	cq->poll_err = wqlock_held ? efa_ibv_cq_next_poll_unsafe(cq)
+				   : efa_ibv_cq_next_poll(cq);
 	if (cq->poll_err) {
 		efa_cq_report_poll_err(cq);
 		return;
@@ -532,12 +555,36 @@ static inline void efa_cq_next_poll(struct efa_ibv_cq *cq)
 	EFA_DBG(FI_LOG_CQ, "Polled CQE: wr_id 0x%lx\n", cq->ibv_cq_ex->wr_id);
 }
 
-static inline void efa_cq_end_poll(struct efa_ibv_cq *cq)
+static inline void efa_cq_next_poll(struct efa_ibv_cq *cq)
 {
-	if (cq->poll_active)
-		efa_ibv_cq_end_poll(cq);
+	efa_cq_next_poll_common(cq, false);
+}
+
+static inline void efa_cq_next_poll_unsafe(struct efa_ibv_cq *cq)
+{
+	efa_cq_next_poll_common(cq, true);
+}
+
+static inline void efa_cq_end_poll_common(struct efa_ibv_cq *cq, bool wqlock_held)
+{
+	if (cq->poll_active) {
+		if (wqlock_held)
+			efa_ibv_cq_end_poll_unsafe(cq);
+		else
+			efa_ibv_cq_end_poll(cq);
+	}
 	cq->poll_active = false;
 	cq->poll_err = 0;
+}
+
+static inline void efa_cq_end_poll(struct efa_ibv_cq *cq)
+{
+	efa_cq_end_poll_common(cq, false);
+}
+
+static inline void efa_cq_end_poll_unsafe(struct efa_ibv_cq *cq)
+{
+	efa_cq_end_poll_common(cq, true);
 }
 
 static inline struct efa_base_ep *efa_ibv_cq_get_base_ep_from_cur_cqe(struct efa_ibv_cq *cq, struct efa_domain *efa_domain)

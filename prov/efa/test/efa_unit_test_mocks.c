@@ -497,12 +497,27 @@ int __wrap_efa_ibv_cq_next_poll(struct efa_ibv_cq *ibv_cq)
 	return g_efa_unit_test_mocks.efa_ibv_cq_next_poll(ibv_cq);
 }
 
+/*
+ * The _unsafe variants differ from their safe counterparts only in who takes
+ * the wqlock, which is not observable from a test, so they share the mock slot.
+ * Tests therefore need no knowledge of which variant a code path picked.
+ */
+int __wrap_efa_ibv_cq_next_poll_unsafe(struct efa_ibv_cq *ibv_cq)
+{
+	return g_efa_unit_test_mocks.efa_ibv_cq_next_poll(ibv_cq);
+}
+
 enum ibv_wc_opcode __wrap_efa_ibv_cq_wc_read_opcode(struct efa_ibv_cq *ibv_cq)
 {
 	return g_efa_unit_test_mocks.efa_ibv_cq_wc_read_opcode(ibv_cq);
 }
 
 void __wrap_efa_ibv_cq_end_poll(struct efa_ibv_cq *ibv_cq)
+{
+	g_efa_unit_test_mocks.efa_ibv_cq_end_poll(ibv_cq);
+}
+
+void __wrap_efa_ibv_cq_end_poll_unsafe(struct efa_ibv_cq *ibv_cq)
 {
 	g_efa_unit_test_mocks.efa_ibv_cq_end_poll(ibv_cq);
 }
