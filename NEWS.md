@@ -12,6 +12,7 @@ v2.7.0, Fri Sept 18, 2026
 
 ## Core ##
 
+- Makefile.am: Add missing xpu man page to distribution
 - man: Add section headers for domain ops in fi_efa.7.md
 - hmem/rocr: Report device ordinal from rocr_is_addr_valid
 - build: Add CUDA/ROCm build toggles to RPM spec files
@@ -46,6 +47,7 @@ v2.7.0, Fri Sept 18, 2026
 - hmem/cuda: Expose CUDA driver fns for ctx/memory management
 - configure.ac: Add --enable-coverage flag for code coverage
 - ofi_atomic_queue: Clean up assignment in \_head
+- windows: Convert to safe version of _open
 
 ## CXI ##
 
@@ -73,7 +75,6 @@ v2.7.0, Fri Sept 18, 2026
 - Add gtest coverage for shm MR flag derivation
 - Move FI_EFA_MR_RELAXED_ORDERING to bit 61
 - Add domain ops for endpoint modification
-- Avoid SQ/CQ lock contention for 64-bit request IDs
 - Add FI_EFA_MR_RELAXED_ORDERING mr flag
 - Use RDMA read to copy Neuron RX payload into HBM
 - Make util_domain lock noop under FI_PROGRESS_CONTROL_UNIFIED
@@ -387,6 +388,7 @@ v2.7.0, Fri Sept 18, 2026
 
 ## RXM ##
 
+- prov/rxm: Register RMA buffers on page granularity
 - Reduce the ordering claimed with multiple msg endpoints
 - Ask the ep-owning conn, not rx_buf->conn, whether rx_ep is still open
 - Fix the msg_ep use-after-free at connection teardown
@@ -436,6 +438,7 @@ v2.7.0, Fri Sept 18, 2026
 
 ## Util ##
 
+- fi_info: Use safe version of strtok
 - Do not unwind a queue for an unqueued peer rx entry
 - Require callers to hold srx lock in util_srx_close
 - Add dedicated lock for unspec unexpected queues
@@ -451,6 +454,7 @@ v2.7.0, Fri Sept 18, 2026
 
 ## Fabtests ##
 
+- efa: adjust neuron runt read test for local read copy
 - efa: Declare the PR CI HMEM memory type matrix per test
 - pytest: Add a pr_ci_hmem test type for the PR CI HMEM matrix
 - efa: Test FI_EFA_MR_RELAXED_ORDERING mr flag
