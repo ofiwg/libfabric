@@ -14,7 +14,7 @@
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_mr.h"
 #include "efa_rdm_cq.h"
-#include "efa_rdm_proto_zero_copy.h"
+#include "protocols/efa_rdm_proto_zero_copy.h"
 
 void efa_rdm_txe_construct_common(struct efa_rdm_ope *txe,
 				  struct efa_rdm_ep *ep,

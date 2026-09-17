@@ -4,8 +4,8 @@
 
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_proto.h"
-#include "rdm/efa_rdm_proto_eager.h"
-#include "rdm/efa_rdm_proto_zero_copy.h"
+#include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_zero_copy.h"
 
 /* Tests from efa_unit_test_proto_select.c */
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */

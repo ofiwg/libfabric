@@ -195,7 +195,7 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 	size_t i, pkt_entry_cnt = 0, pkt_entry_cnt_allocated = 0;
 	size_t segment_offset;
 	size_t *pkt_entry_data_size_vec = ep->send_pkt_entry_vec_data_sizes;
-	bool tagged, delivery_complete_requested;
+	bool delivery_complete_requested;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_medium_rtm_base_hdr *medium_rtm_hdr;
 	struct efa_rdm_dc_medium_rtm_base_hdr *dc_medium_rtm_hdr;
@@ -205,7 +205,6 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 	 */
 	assert(!(flags & FI_INJECT));
 
-	tagged = efa_rdm_proto_get_tagged(txe);
 	delivery_complete_requested =
 		efa_rdm_proto_get_dc(txe, &efa_rdm_proto_medium);
 
@@ -233,7 +232,8 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 		EFA_DBG(FI_LOG_EP_DATA,
 			"medium protocol: dc_requested=%d tagged=%d "
 			"req_pkt_type=%d pkt_count %ld\n",
-			delivery_complete_requested, tagged, req_pkt_type, i);
+			delivery_complete_requested,
+			efa_rdm_proto_get_tagged(txe), req_pkt_type, i);
 
 		pkt_entry->handle_pke =
 			&efa_rdm_proto_medium_handle_rtm_send_completion;
@@ -268,7 +268,7 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 	assert(segment_offset == txe->total_len);
 
 	ep->send_pkt_entry_vec_size = pkt_entry_cnt;
-	EFA_DBG(FI_LOG_EP_DATA,
+	EFA_INFO(FI_LOG_EP_DATA,
 		"medium protocol: posting %zu pkes, total_len %lu, msg_id %" PRIu32
 		"\n",
 		pkt_entry_cnt, txe->total_len, txe->msg_id);

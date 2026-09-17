@@ -5,8 +5,8 @@
 #include "efa.h"
 #include "efa_rdm_domain.h"
 #include "efa_rdm_ope.h"
-#include "efa_rdm_proto_eager.h"
-#include "efa_rdm_proto_medium.h"
+#include "protocols/efa_rdm_proto_eager.h"
+#include "protocols/efa_rdm_proto_medium.h"
 #include "efa_rdm_msg.h"
 
 /**
