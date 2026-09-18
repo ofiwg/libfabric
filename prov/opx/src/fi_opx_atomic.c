@@ -156,7 +156,6 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep, const uint32_t opcode, 
 		}
 		cc->initial_byte_count = cc->byte_counter;
 
-		opx_hfisvc_rma_watch_register(opx_ep, cc);
 		opx_hfisvc_rma_invoke_send_rts(opx_ep, hfisvc_work, hfisvc_iov, hfisvc_niov, opx_dst_addr, 0ul, cc,
 					       opcode, dt, op, lock_required, reliability, hfi1_type);
 		return;
@@ -324,7 +323,6 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t 
 			union fi_opx_hfi1_deferred_work *work =
 				(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_tx->work_pending_pool);
 			assert(work != NULL);
-			opx_hfisvc_rma_watch_register(opx_ep, cc);
 			opx_hfisvc_rma_invoke_send_rts(opx_ep, work, &hfisvc_iov, 1ul, opx_dst_addr, 0ul, cc,
 						       FI_OPX_HFI_DPUT_OPCODE_GET, FI_VOID, FI_NOOP, lock_required,
 						       reliability, hfi1_type);

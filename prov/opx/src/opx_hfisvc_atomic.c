@@ -204,7 +204,7 @@ void opx_hfisvc_atomic_poll_advance(struct fi_opx_ep *opx_ep, struct opx_hfisvc_
 		assert(len <= cc->byte_counter);
 		cc->byte_counter -= len;
 		if (cc->byte_counter == 0) {
-			opx_hfisvc_rma_cc_hit_zero(cc);
+			cc->hit_zero(cc);
 		}
 	} else if (context) {
 		opx_hfisvc_rma_context_drain_and_route(opx_ep, context, len);

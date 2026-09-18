@@ -809,7 +809,8 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 		return -FI_ENOMEM;
 	}
 
-	struct fi_opx_completion_counter *cc = opx_cc_alloc(opx_ep);
+	struct fi_opx_completion_counter *cc =
+		(struct fi_opx_completion_counter *) ofi_buf_alloc(opx_ep->rma_counter_pool);
 	if (OFI_UNLIKELY(cc == NULL)) {
 		if (context) {
 			OPX_BUF_FREE(context);
@@ -859,7 +860,6 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 			OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READ, 0, 0);
 			return -FI_ENOMEM;
 		}
-		opx_hfisvc_rma_watch_register(opx_ep, cc);
 		opx_hfisvc_rma_invoke_send_rts(opx_ep, work, &hfisvc_iov, 1ul, opx_addr, 0ul, cc,
 					       FI_OPX_HFI_DPUT_OPCODE_GET, FI_VOID, FI_NOOP, lock_required, reliability,
 					       hfi1_type);
@@ -933,7 +933,8 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 
 	const uint64_t tx_op_flags = opx_tx->op_flags;
 
-	struct fi_opx_completion_counter *cc = opx_cc_alloc(opx_ep);
+	struct fi_opx_completion_counter *cc =
+		(struct fi_opx_completion_counter *) ofi_buf_alloc(opx_ep->rma_counter_pool);
 	if (OFI_UNLIKELY(cc == NULL)) {
 		if (context) {
 			OPX_BUF_FREE(context);
@@ -1004,7 +1005,6 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc, si
 				OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READV, 0, 0);
 				return -FI_ENOMEM;
 			}
-			opx_hfisvc_rma_watch_register(opx_ep, cc);
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.hfisvc);
 			opx_hfisvc_rma_invoke_send_rts(opx_ep, work, hfisvc_iovs, count, opx_addr, 0ul, cc,
 						       FI_OPX_HFI_DPUT_OPCODE_GET, FI_VOID, FI_NOOP, lock_required,
@@ -1141,7 +1141,8 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	OFI_UNUSED(dst_iov_count);
 
 	ssize_t				  index;
-	struct fi_opx_completion_counter *cc = opx_cc_alloc(opx_ep);
+	struct fi_opx_completion_counter *cc =
+		(struct fi_opx_completion_counter *) ofi_buf_alloc(opx_ep->rma_counter_pool);
 	if (OFI_UNLIKELY(cc == NULL)) {
 		if (context) {
 			OPX_BUF_FREE(context);
@@ -1212,7 +1213,6 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 				OPX_TRACE_RMA_END_ERROR(OPX_TRACE_EVENT_RMA_READMSG, 0, 0);
 				return -FI_ENOMEM;
 			}
-			opx_hfisvc_rma_watch_register(opx_ep, cc);
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_read_path.hfisvc);
 			opx_hfisvc_rma_invoke_send_rts(opx_ep, work, hfisvc_iovs, msg->iov_count, opx_src_addr, 0ul, cc,
 						       FI_OPX_HFI_DPUT_OPCODE_GET, FI_VOID, FI_NOOP, lock_required,
