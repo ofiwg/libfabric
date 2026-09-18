@@ -4143,12 +4143,13 @@ void opx_ep_hfisvc_poll_one_queue(struct fi_opx_ep *opx_ep, hfisvc_client_comple
 {
 	struct hfisvc_client_cq_entry hfisvc_out[64];
 
-	size_t n = (*opx_ep->domain->hfisvc.cq_read)(queue, 0ul /* flags */, hfisvc_out, sizeof(*hfisvc_out), 64);
+	/* buf_size_bytes must describe the whole 64-entry array, not one entry */
+	size_t n = (*opx_ep->domain->hfisvc.cq_read)(queue, 0ul /* flags */, hfisvc_out, sizeof(hfisvc_out), 64);
 	while (n > 0) {
 		for (size_t i = 0; i < n; ++i) {
 			opx_ep_hfisvc_poll_proc_internal_completion(opx_ep, &hfisvc_out[i], ctx_idx);
 		}
-		n = (*opx_ep->domain->hfisvc.cq_read)(queue, 0ul /* flags */, hfisvc_out, sizeof(*hfisvc_out), 64);
+		n = (*opx_ep->domain->hfisvc.cq_read)(queue, 0ul /* flags */, hfisvc_out, sizeof(hfisvc_out), 64);
 	}
 }
 #endif
