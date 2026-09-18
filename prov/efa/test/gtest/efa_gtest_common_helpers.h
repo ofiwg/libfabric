@@ -38,6 +38,16 @@ void efa_test_fabricate_addr(struct fid_ep *ep, struct efa_ep_addr *addr);
 int efa_test_device_supports_rma(void);
 
 /**
+ * @brief Whether the real selected EFA device advertises RDMA read.
+ */
+int efa_test_device_supports_rdma_read(void);
+
+/**
+ * @brief Whether the real selected EFA device advertises RDMA write.
+ */
+int efa_test_device_supports_rdma_write(void);
+
+/**
  * @brief Set efa_env.track_mr and return its previous value.
  */
 int efa_test_set_track_mr(int value);

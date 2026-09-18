@@ -2,6 +2,7 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
 #include "efa_gtest_common_mocks.h"
+#include <errno.h>
 #include <cassert>
 
 static MockEfa *g_mock_efa = nullptr;
@@ -63,4 +64,27 @@ void efa_test_fail_mallocs(const std::vector<unsigned> &ordinals)
 		assert(n < EFA_TEST_MALLOC_FAIL_MAX);
 		g_malloc_fail[n] = true;
 	}
+}
+
+void efa_test_arm_inert_data_path(MockEfa &mock)
+{
+	using testing::_;
+	using testing::Return;
+
+	EFA_EXPECT_CALL(mock, efa_qp_post_recv).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_qp_post_send).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_qp_post_read).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_qp_post_write).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_start_poll).WillRepeatedly(Return(ENOENT));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_next_poll).WillRepeatedly(Return(ENOENT));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_end_poll).WillRepeatedly(Return());
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_wc_read_opcode).WillRepeatedly(Return(IBV_WC_SEND));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_wc_read_qp_num).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_wc_read_vendor_err).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_wc_read_src_qp).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_wc_read_slid).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_wc_read_byte_len).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_wc_read_wc_flags).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_wc_read_imm_data).WillRepeatedly(Return(0));
+	EFA_EXPECT_CALL(mock, efa_ibv_cq_wc_is_unsolicited).WillRepeatedly(Return(false));
 }

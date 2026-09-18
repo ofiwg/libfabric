@@ -74,6 +74,16 @@ contract or copy a pattern from a nearby test when the docs can settle it.
   `__real_<fn>`. Arming is what confines a `--wrap` (a process-wide symbol) to
   the test that cares. No-arg form matches any args; trailing args are matchers
   (`EFA_EXPECT_CALL(mock, ibv_destroy_ah, &ah)` → `ibv_destroy_ah(&ah)`).
+- **`--wrap` cannot intercept a call between two functions in the same object
+  file.** The linker only rewrites *undefined external references*, so a call the
+  compiler resolved locally is invisible to it. A mockable callee therefore has to
+  live in a different translation unit from its callers: the `efa_cq_*` helpers
+  stay `static inline` and inline into `efa_cq.o` / `efa_rdm_cq.o`, which is the
+  only reason mocking `efa_ibv_cq_start_poll` / `next_poll` / `end_poll` /
+  `wc_read_qp_num` / `wc_is_unsolicited` works at all. Co-locate those helpers with
+  the functions they call and every one of those expectations silently stops
+  firing. Check with `objdump -r <caller>.o | grep <callee>`: a relocation means
+  the seam is live.
 - **Any efa provider function (not just libibverbs/efadv) can be wrapped — so
   choose the seam deliberately.** Arming means an unarmed wrapped symbol stays
   real, but a seam close to the unit under test still keeps error injection
@@ -119,11 +129,47 @@ contract or copy a pattern from a nearby test when the docs can settle it.
   `efa_test_resource_destruct`, or `self_ah`'s real destroy routes into the mock
   as an unexpected call (see `EfaConnTest`).
 - **Static-inline functions** (`efa_qp_post_*`, `efa_ibv_cq_*` in
-  `efa_data_path_ops.h`) are only linkable under `#if EFA_UNIT_TEST`, which turns
-  their `static inline` bodies into extern decls backed by the stub
-  `efa_unit_test_data_path_ops.c`. `EFA_UNIT_TEST` is derived from *either* test
-  suite (`--enable-efa-gtest` OR `--enable-efa-unit-test`), so `--enable-efa-gtest`
-  alone makes them `--wrap`-able — the gtest suite does **not** need cmocka.
+  `efa_data_path_ops.h`) are only linkable under `#if EFA_UNIT_TEST`, which gives
+  them external linkage instead of `static inline` — `EFA_PROD_STATIC_INLINE`
+  selects which. Exactly one translation unit may then define them, so their
+  bodies sit behind `EFA_DATA_PATH_OPS_EMIT_BODIES`, defined only by
+  `efa_unit_test_data_path_ops.c` and necessarily before any include that could
+  reach the header. That file emits the definitions and calls none of them, which
+  is what leaves every caller with the undefined reference `--wrap` needs.
+  `EFA_UNIT_TEST` is derived from *either* test suite (`--enable-efa-gtest` OR
+  `--enable-efa-unit-test`), so `--enable-efa-gtest` alone makes them
+  `--wrap`-able — the gtest suite does **not** need cmocka.
+- **An unmocked data path op reaches the device.** These wrappers are the same
+  text the production build compiles; there are no stubs behind them. A fixture
+  that is not about the data path calls `efa_test_arm_inert_data_path(mock)` right
+  after `MockEfa::set`, which arms every one of them with a mock that does
+  nothing. Those expectations are `WillRepeatedly`, so they neither require nor
+  forbid a call, and gmock matches newest first, so a per-test `EFA_EXPECT_CALL`
+  added later still wins. A fixture that wants the device just does not call it.
+  Mocking only part of the CQ is the dangerous case: mock `start_poll` to succeed
+  and leave an accessor unarmed, and the accessor reads a completion queue that
+  was never really polled. That is a segfault, not a wrong value.
+- **To observe a device write, redirect the sink and restore it.** Neither
+  `efa_data_path_direct_post_*` nor `ibv_wr_complete` can be `--wrap`ped: both are
+  static inline, so there is no symbol to rewrite. `efa_test_dp_probe_*` redirects
+  whichever sink the selected backend uses — the doorbell register and SQ
+  descriptor buffer, or the `ibv_qp_ex` work-request vtable — and reports
+  `submitted()` / `pending()` the same way for both, so a test asserting the
+  contract does not care which backend it is on. Restore has to undo more than it
+  redirected: a FI_MORE test deliberately leaves work unsubmitted, so
+  `sq->num_wqe_pending` and `base_ep->is_wr_started` must be cleared too, or a
+  later real post rings the real doorbell for a producer counter the device never
+  saw, or skips `ibv_wr_start` on a session that no longer exists.
+- **Capability gates must not depend on test order.** `efa_test_device_supports_rma`
+  reads the selected device list, which the provider only populates on the first
+  `fi_getinfo`, so it answers false in a process where no endpoint exists yet.
+  Probe with a throwaway `fi_getinfo` first (see `probe_selected_device` in
+  `efa_gtest_fi_more.cc`) or a filter selecting only RMA tests silently skips
+  them all. Gate on the narrowest capability a test really needs, and gate in the
+  test rather than in `SetUp` — c5n and g4dn have no RDMA read, c7gn and hpc7g no
+  RDMA write, so a fixture-wide RMA gate discards the send coverage on all four.
+  `fi_mr_reg` is subject to the same split: asking for `FI_READ` or `FI_WRITE`
+  without the matching device capability fails with `-FI_EOPNOTSUPP`.
 - **Inject OOM with `efa_test_fail_mallocs(ordinals)`**, not a `MockEfa` row.
   It arms 0-based `malloc` ordinals to return NULL (`{0}` = next malloc, `{1,3}` =
   2nd and 4th; each failure is one-shot); all others hit `__real_malloc`. Counting

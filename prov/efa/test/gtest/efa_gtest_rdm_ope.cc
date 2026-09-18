@@ -92,6 +92,7 @@ class EfaRdmOpeQueuedFiMoreTest : public TestWithParam<int>
 				<< "device does not support RDMA read+write";
 
 		MockEfa::set(&mock_efa);
+		efa_test_arm_inert_data_path(mock_efa);
 	}
 
 	void TearDown() override
@@ -183,6 +184,7 @@ class EfaRdmOpeProcessQueuedTest : public Test
 		ASSERT_NE(resource.ep, nullptr);
 
 		MockEfa::set(&mock_efa);
+		efa_test_arm_inert_data_path(mock_efa);
 	}
 
 	void TearDown() override
@@ -311,6 +313,7 @@ class EfaRdmOpeQueuedFlagDispatchTest : public TestWithParam<int>
 		ASSERT_NE(resource.ep, nullptr);
 
 		MockEfa::set(&mock_efa);
+		efa_test_arm_inert_data_path(mock_efa);
 	}
 
 	void TearDown() override
