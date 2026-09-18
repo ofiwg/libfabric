@@ -354,14 +354,15 @@ void opx_cq_hfisvc_poll(struct fi_opx_cq *opx_cq)
 	}
 	struct hfisvc_client_cq_entry hfisvc_out[64];
 
+	/* buf_size_bytes must describe the whole 64-entry array, not one entry */
 	size_t n = (*opx_cq->domain->hfisvc.cq_read)(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out,
-						     sizeof(*hfisvc_out), 64);
+						     sizeof(hfisvc_out), 64);
 	while (n > 0) {
 		for (size_t i = 0; i < n; ++i) {
 			opx_cq_hfisvc_poll_process_completion(opx_cq, &hfisvc_out[i]);
 		}
 		n = (*opx_cq->domain->hfisvc.cq_read)(opx_cq->hfisvc.completion_queue, 0ul /* flags */, hfisvc_out,
-						      sizeof(*hfisvc_out), 64);
+						      sizeof(hfisvc_out), 64);
 	}
 }
 #endif
