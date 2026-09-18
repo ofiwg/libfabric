@@ -49,7 +49,7 @@ static bool efa_rdm_proto_medium_can_use_for_send(struct efa_rdm_ope *txe,
 struct efa_rdm_proto efa_rdm_proto_medium = {
 	.name = "medium",
 	.wants_mr = true,
-	.can_use_protocol_for_send = &efa_rdm_proto_medium_can_use_for_send,
+	.can_use_protocol = &efa_rdm_proto_medium_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_medium_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_MEDIUM_MSGRTM_PKT,
 	.req_pkt_type_dc = EFA_RDM_DC_MEDIUM_MSGRTM_PKT,
