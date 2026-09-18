@@ -121,6 +121,10 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 				       uint64_t flags, struct efa_rdm_ope *txe,
 				       struct efa_rdm_proto **proto);
 
+struct efa_rdm_proto *efa_rdm_proto_select_receive_protocol(int pkt_type);
+
+void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry);
+
 /* Utility funcions */
 
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,

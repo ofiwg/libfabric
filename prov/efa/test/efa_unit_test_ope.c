@@ -7,6 +7,7 @@
 #include "rdm/efa_rdm_mr.h"
 #include "rdm/efa_rdm_srx.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_longread.h"
 #include "ofi_util.h"
 
 typedef void (*efa_rdm_ope_handle_error_func_t)(struct efa_rdm_ope *ope, int err, int prov_errno);
@@ -1124,7 +1125,7 @@ void test_efa_rdm_pke_receipt_drops_stale_txe_id(void **state)
 	receipt_hdr->tx_id = stale_id;
 
 	pkts_to_post = ep->efa_rx_pkts_to_post;
-	efa_rdm_pke_handle_receipt_recv(receipt_pke);
+	efa_rdm_proto_handle_receipt_recv(receipt_pke);
 
 	/* The reused txe must not be credited with the stale transfer's ack. */
 	assert_false(reused->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED);
@@ -1983,9 +1984,9 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		} else if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT ||
 			   pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT ||
 			   pkt_type == EFA_RDM_LONGREAD_RTW_PKT) {
-			efa_rdm_pke_handle_eor_recv(resp_pkt_entry);
+			efa_rdm_proto_longread_handle_eor_recv(resp_pkt_entry);
 		} else {
-			efa_rdm_pke_handle_receipt_recv(resp_pkt_entry);
+			efa_rdm_proto_handle_receipt_recv(resp_pkt_entry);
 		}
 	} else {
 		/* Response arrives first - should not release TXE yet */
@@ -2000,10 +2001,10 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		} else if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT ||
 			   pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT ||
 			   pkt_type == EFA_RDM_LONGREAD_RTW_PKT) {
-			efa_rdm_pke_handle_eor_recv(resp_pkt_entry);
+			efa_rdm_proto_longread_handle_eor_recv(resp_pkt_entry);
 			assert_true(txe->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED);
 		} else {
-			efa_rdm_pke_handle_receipt_recv(resp_pkt_entry);
+			efa_rdm_proto_handle_receipt_recv(resp_pkt_entry);
 			assert_true(txe->internal_flags & EFA_RDM_TXE_REMOTE_ACK_RECEIVED);
 		}
 		assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 1);
@@ -5468,7 +5469,8 @@ void test_efa_rdm_pke_handle_peer_error_recv_longcts_cts_outstanding(
 	rxe->state = EFA_RDM_OPE_SEND;	/* LONGCTS recv: sending CTS/CTSDATA */
 	/*
 	 * A real rxe transitions to OPE_SEND together with being inserted
-	 * onto ope_longcts_send_list (efa_rdm_pke_handle_cts_recv). Mirror
+	 * onto ope_longcts_send_list
+	 * (efa_rdm_proto_longcts_handle_cts_recv). Mirror
 	 * that here so the drain's efa_rdm_rxe_handle_error() can validly
 	 * dlist_remove(&rxe->entry) for the OPE_SEND state.
 	 */

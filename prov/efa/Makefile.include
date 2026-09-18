@@ -90,6 +90,9 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_proto.c \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_eager.c \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_medium.c \
+	prov/efa/src/rdm/protocols/efa_rdm_proto_longcts.c \
+	prov/efa/src/rdm/protocols/efa_rdm_proto_longread.c \
+	prov/efa/src/rdm/protocols/efa_rdm_proto_runtread.c \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_zero_copy.c
 
 if ENABLE_EFA_DATA_PATH_OPS_STUB
@@ -164,6 +167,9 @@ _efa_headers = \
 	prov/efa/src/rdm/efa_rdm_proto.h \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_eager.h \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_medium.h \
+	prov/efa/src/rdm/protocols/efa_rdm_proto_longcts.h \
+	prov/efa/src/rdm/protocols/efa_rdm_proto_longread.h \
+	prov/efa/src/rdm/protocols/efa_rdm_proto_runtread.h \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_zero_copy.h
 
 if HAVE_LTTNG
@@ -227,7 +233,6 @@ prov_efa_test_efa_unit_test_LDFLAGS = -static $(cmocka_rpath) $(efa_LDFLAGS) $(c
 					-Wl,--wrap=ofi_copy_to_hmem_iov \
 					-Wl,--wrap=efa_rdm_pke_copy_payload_to_ope \
 					-Wl,--wrap=efa_rdm_pke_read \
-					-Wl,--wrap=efa_rdm_pke_proc_matched_rtm \
 					-Wl,--wrap=efa_rdm_ope_post_send \
 					-Wl,--wrap=efa_device_support_unsolicited_write_recv \
 					-Wl,--wrap=efa_qp_post_recv \
@@ -318,6 +323,8 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_cq.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_cntr.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_peer.cc \
+	prov/efa/test/gtest/efa_gtest_rdm_srx_utils.c \
+	prov/efa/test/gtest/efa_gtest_rdm_srx.cc \
 	prov/efa/test/gtest/efa_gtest_msg.cc \
 	prov/efa/test/gtest/efa_gtest_rma.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_rma.cc \

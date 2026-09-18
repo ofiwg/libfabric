@@ -13,7 +13,10 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_req.h"
+#include "efa_rdm_proto.h"
 #include "efa_rdm_tracepoint.h"
+#include "protocols/efa_rdm_proto_longcts.h"
+#include "protocols/efa_rdm_proto_longread.h"
 
 /* Handshake wait timeout in microseconds */
 #define EFA_RDM_HANDSHAKE_WAIT_TIMEOUT 1000000
@@ -658,7 +661,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
 		/* For long read, the txe is released either here or in
-		 * efa_rdm_pke_handle_eor_recv(), whichever happens last.
+		 * efa_rdm_proto_longread_handle_eor_recv(), whichever happens
+		 * last.
 		 * Release here if EOR already arrived.
 		 */
 		assert(pkt_entry->ope);
@@ -687,7 +691,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_LONGREAD_RTW_PKT:
 		/* For long read write, the txe is released either here or in
-		 * efa_rdm_pke_handle_eor_recv(), whichever happens last.
+		 * efa_rdm_proto_longread_handle_eor_recv(), whichever happens
+		 * last.
 		 * Release here if EOR already arrived.
 		 */
 		assert(pkt_entry->ope);
@@ -885,16 +890,16 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	case EFA_RDM_EOR_PKT:
-		efa_rdm_pke_handle_eor_recv(pkt_entry);
+		efa_rdm_proto_longread_handle_eor_recv(pkt_entry);
 		return;
 	case EFA_RDM_HANDSHAKE_PKT:
 		efa_rdm_pke_handle_handshake_recv(pkt_entry);
 		return;
 	case EFA_RDM_CTS_PKT:
-		efa_rdm_pke_handle_cts_recv(pkt_entry);
+		efa_rdm_proto_longcts_handle_cts_recv(pkt_entry);
 		return;
 	case EFA_RDM_CTSDATA_PKT:
-		efa_rdm_pke_handle_ctsdata_recv(pkt_entry);
+		efa_rdm_proto_longcts_handle_ctsdata_recv(pkt_entry);
 		return;
 	case EFA_RDM_READRSP_PKT:
 		efa_rdm_pke_handle_readrsp_recv(pkt_entry);
@@ -903,7 +908,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_handle_atomrsp_recv(pkt_entry);
 		return;
 	case EFA_RDM_RECEIPT_PKT:
-		efa_rdm_pke_handle_receipt_recv(pkt_entry);
+		efa_rdm_proto_handle_receipt_recv(pkt_entry);
 		return;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:

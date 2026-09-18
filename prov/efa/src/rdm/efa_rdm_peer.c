@@ -510,8 +510,10 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 			msg_id = efa_rdm_pke_get_rtm_msg_id(pending_pkt);
 			EFA_DBG(FI_LOG_EP_CTRL,
 			       "Processing msg_id %d from robuf\n", msg_id);
-			/* efa_rdm_pke_proc_rtm_rta will write error cq entry if needed */
-			ret = efa_rdm_pke_proc_rtm_rta(pending_pkt, peer);
+			if (pending_pkt->handle_pke)
+				ret = pending_pkt->handle_pke(pending_pkt);
+			else
+				ret = efa_rdm_pke_proc_rtm_rta(pending_pkt, peer);
 		}
 
 		*ofi_recvwin_get_next_msg((&peer->robuf)) = NULL;

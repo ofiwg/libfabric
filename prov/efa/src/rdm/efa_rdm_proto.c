@@ -5,8 +5,12 @@
 #include "efa.h"
 #include "efa_rdm_domain.h"
 #include "efa_rdm_ope.h"
+#include "efa_rdm_pke_nonreq.h"
 #include "protocols/efa_rdm_proto_eager.h"
+#include "protocols/efa_rdm_proto_longcts.h"
+#include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_medium.h"
+#include "protocols/efa_rdm_proto_runtread.h"
 #include "efa_rdm_msg.h"
 
 /**
@@ -50,6 +54,58 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
 };
+
+struct efa_rdm_proto *efa_rdm_proto_select_receive_protocol(int pkt_type)
+{
+	if (efa_rdm_pkt_type_is_eager_rtm(pkt_type))
+		return &efa_rdm_proto_eager;
+
+	if (efa_rdm_pkt_type_is_medium(pkt_type))
+		return &efa_rdm_proto_medium;
+
+	if (efa_rdm_pkt_type_is_longcts_rtm(pkt_type))
+		return &efa_rdm_proto_longcts;
+
+	if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT ||
+	    pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT)
+		return &efa_rdm_proto_longread;
+
+	if (efa_rdm_pkt_type_is_runtread(pkt_type))
+		return &efa_rdm_proto_runtread;
+
+	return NULL;
+}
+
+void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_receipt_hdr *receipt_hdr =
+		efa_rdm_pke_get_receipt_hdr(pkt_entry);
+	struct efa_rdm_ope *txe =
+		efa_rdm_ep_live_txe_from_id(pkt_entry->ep, receipt_hdr->tx_id);
+
+	if (!txe) {
+		EFA_INFO(FI_LOG_CQ,
+			 "RECEIPT names a send that is no longer live, dropping it\n");
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	/* Write send completion immediately to preserve DC semantics. */
+	efa_rdm_txe_report_completion(txe);
+
+	if (txe->state == EFA_RDM_OPE_SEND)
+		dlist_remove(&txe->entry);
+
+	/*
+	 * The TXE is released either here or when the request/CTSDATA packet's
+	 * send completes, whichever happens last.
+	 */
+	txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
+	if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
+		efa_rdm_txe_release(txe);
+
+	efa_rdm_pke_release_rx(pkt_entry);
+}
 
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,
 						  const struct fi_msg *msg,

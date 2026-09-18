@@ -18,4 +18,7 @@ int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
 ssize_t efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry);
 
+ssize_t efa_rdm_pke_proc_matched_eager_rtm(
+	struct efa_rdm_pke *pkt_entry);
+
 #endif /* _EFA_RDM_PROTO_EAGER_H */

@@ -27,6 +27,27 @@
  * https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#medium-message-featuresubprotocol
  */
 
+static ssize_t
+efa_rdm_proto_medium_process_received_pke_after_robuf(
+	struct efa_rdm_pke *pkt_entry)
+{
+	return efa_rdm_pke_proc_rtm_after_robuf(pkt_entry,
+					       &efa_rdm_proto_medium);
+}
+
+static ssize_t
+efa_rdm_proto_medium_handle_matched_rtm(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_ope *rxe = pkt_entry->ope;
+
+	efa_rdm_pke_prepare_matched_rtm(pkt_entry);
+	if (rxe->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
+		rxe->tx_id =
+			efa_rdm_pke_get_dc_medium_rtm_base_hdr(pkt_entry)->send_id;
+
+	return efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
+}
+
 /**
  * @brief Check if the medium protocol can handle this send operation.
  *
@@ -56,6 +77,9 @@ struct efa_rdm_proto efa_rdm_proto_medium = {
 	.req_pkt_type_tagged = EFA_RDM_MEDIUM_TAGRTM_PKT,
 	.req_pkt_type_tagged_dc = EFA_RDM_DC_MEDIUM_TAGRTM_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_medium_handle_tx_pkes_posted,
+	.process_received_pke_after_robuf =
+		&efa_rdm_proto_medium_process_received_pke_after_robuf,
+	.handle_unexp_pke_match = &efa_rdm_proto_medium_handle_matched_rtm,
 };
 
 /**
@@ -81,7 +105,7 @@ void efa_rdm_proto_medium_handle_tx_pkes_posted(struct efa_rdm_ep *ep,
  * cases.
  *
  */
-void efa_rdm_proto_medium_handle_rtm_send_completion(
+ssize_t efa_rdm_proto_medium_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *txe;
@@ -105,6 +129,7 @@ void efa_rdm_proto_medium_handle_rtm_send_completion(
 	}
 
 	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 /**

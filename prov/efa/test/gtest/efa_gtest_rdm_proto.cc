@@ -25,6 +25,16 @@ TEST(EfaRdmProtoRxTest, callbacks_preserve_return_values)
 	EXPECT_EQ(res.unexpected_match_ret, 0);
 }
 
+TEST(EfaRdmProtoRxTest, selects_protocol_with_receive_callbacks)
+{
+	struct efa_test_proto_rx_selection_result res = {};
+
+	efa_test_proto_selects_protocol_with_receive_callbacks(&res);
+	EXPECT_EQ(res.selected_count, res.case_count);
+	EXPECT_EQ(res.callbacks_set_count, res.case_count);
+	EXPECT_TRUE(res.unsupported_is_null);
+}
+
 class EfaRdmProtoTest : public Test
 {
 	protected:

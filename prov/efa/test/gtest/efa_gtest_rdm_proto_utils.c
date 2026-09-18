@@ -13,7 +13,11 @@
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pkt_type.h"
 #include "rdm/efa_rdm_proto.h"
+#include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_longcts.h"
+#include "rdm/protocols/efa_rdm_proto_longread.h"
 #include "rdm/protocols/efa_rdm_proto_medium.h"
+#include "rdm/protocols/efa_rdm_proto_runtread.h"
 #include "rdm/efa_rdm_protocol.h"
 #include <rdma/fi_errno.h>
 #include <stdlib.h>
@@ -53,6 +57,47 @@ void efa_test_proto_callbacks_preserve_return_values(
 	out->after_robuf_ret = pke.handle_pke(&pke);
 	pke.handle_pke = proto.handle_unexp_pke_match;
 	out->unexpected_match_ret = pke.handle_pke(&pke);
+}
+
+void efa_test_proto_selects_protocol_with_receive_callbacks(
+	struct efa_test_proto_rx_selection_result *out)
+{
+	struct {
+		int pkt_type;
+		struct efa_rdm_proto *expected;
+	} cases[] = {
+		{EFA_RDM_EAGER_MSGRTM_PKT, &efa_rdm_proto_eager},
+		{EFA_RDM_EAGER_TAGRTM_PKT, &efa_rdm_proto_eager},
+		{EFA_RDM_DC_EAGER_MSGRTM_PKT, &efa_rdm_proto_eager},
+		{EFA_RDM_DC_EAGER_TAGRTM_PKT, &efa_rdm_proto_eager},
+		{EFA_RDM_MEDIUM_MSGRTM_PKT, &efa_rdm_proto_medium},
+		{EFA_RDM_MEDIUM_TAGRTM_PKT, &efa_rdm_proto_medium},
+		{EFA_RDM_DC_MEDIUM_MSGRTM_PKT, &efa_rdm_proto_medium},
+		{EFA_RDM_DC_MEDIUM_TAGRTM_PKT, &efa_rdm_proto_medium},
+		{EFA_RDM_LONGCTS_MSGRTM_PKT, &efa_rdm_proto_longcts},
+		{EFA_RDM_LONGCTS_TAGRTM_PKT, &efa_rdm_proto_longcts},
+		{EFA_RDM_DC_LONGCTS_MSGRTM_PKT, &efa_rdm_proto_longcts},
+		{EFA_RDM_DC_LONGCTS_TAGRTM_PKT, &efa_rdm_proto_longcts},
+		{EFA_RDM_LONGREAD_MSGRTM_PKT, &efa_rdm_proto_longread},
+		{EFA_RDM_LONGREAD_TAGRTM_PKT, &efa_rdm_proto_longread},
+		{EFA_RDM_RUNTREAD_MSGRTM_PKT, &efa_rdm_proto_runtread},
+		{EFA_RDM_RUNTREAD_TAGRTM_PKT, &efa_rdm_proto_runtread},
+	};
+
+	memset(out, 0, sizeof *out);
+	out->case_count = ARRAY_SIZE(cases);
+	for (size_t i = 0; i < ARRAY_SIZE(cases); i++) {
+		struct efa_rdm_proto *selected =
+			efa_rdm_proto_select_receive_protocol(cases[i].pkt_type);
+
+		if (selected == cases[i].expected)
+			out->selected_count++;
+		if (selected && selected->process_received_pke_after_robuf &&
+		    selected->handle_unexp_pke_match)
+			out->callbacks_set_count++;
+	}
+	out->unsupported_is_null =
+		!efa_rdm_proto_select_receive_protocol(EFA_RDM_WRITE_RTA_PKT);
 }
 
 static struct efa_rdm_ep *efa_test_proto_ep(struct fid_ep *ep)
