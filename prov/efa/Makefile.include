@@ -166,7 +166,8 @@ _efa_headers = \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_eager.h \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_eager_write.h \
 	prov/efa/src/rdm/protocols/efa_rdm_proto_medium.h \
-	prov/efa/src/rdm/protocols/efa_rdm_proto_zero_copy.h
+	prov/efa/src/rdm/protocols/efa_rdm_proto_zero_copy.h \
+	prov/efa/src/rdm/protocols/efa_rdm_proto_write.h
 
 if HAVE_LTTNG
 efa_LDFLAGS += -llttng-ust

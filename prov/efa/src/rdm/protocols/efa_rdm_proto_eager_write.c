@@ -6,6 +6,7 @@
 #include "efa_rdm_ope.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_pke_rtw.h"
+#include "efa_rdm_proto_write.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_rma.h"
@@ -45,7 +46,7 @@ ssize_t efa_rdm_proto_eager_write_init_rtw(struct efa_rdm_pke *pkt_entry,
 	rtw_hdr = (struct efa_rdm_eager_rtw_hdr *)pkt_entry->wiredata;
 	rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_EAGER_RTW_PKT, txe);
-	return efa_rdm_pke_init_rtw_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
 }
 
 /**
@@ -176,7 +177,7 @@ static ssize_t efa_rdm_proto_eager_write_init_dc_rtw(struct efa_rdm_pke *pkt_ent
 	dc_eager_rtw_hdr = (struct efa_rdm_dc_eager_rtw_hdr *)pkt_entry->wiredata;
 	dc_eager_rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_DC_EAGER_RTW_PKT, txe);
-	ret = efa_rdm_pke_init_rtw_common(pkt_entry, txe,
+	ret = efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe,
 					  dc_eager_rtw_hdr->rma_iov);
 	dc_eager_rtw_hdr->send_id = txe->tx_id;
 	return ret;
