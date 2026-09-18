@@ -26,6 +26,8 @@
  * https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#emulated-eager-write-featuresubprotocol
  */
 
+/* TX path functions */
+
 /**
  * @brief initialize a EFA_RDM_EAGER_RTW packet
  *
@@ -50,6 +52,35 @@ ssize_t efa_rdm_proto_eager_write_init_rtw(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
+ * @brief initialize a EFA_RDM_DC_EAGER_RTW_PKT packet
+ *
+ * DC means delivery complete
+ *
+ * @param[in,out]	pkt_entry	packet entry to be initialized
+ * @param[in]		txe		TX entry that has RMA write information
+ * @returns
+ * 0 on success.
+ * negative libfabric error code on failure
+ */
+static ssize_t efa_rdm_proto_eager_write_init_dc_rtw(struct efa_rdm_pke *pkt_entry,
+				      struct efa_rdm_ope *txe)
+{
+	struct efa_rdm_dc_eager_rtw_hdr *dc_eager_rtw_hdr;
+	int ret;
+
+	assert(txe->op == ofi_op_write);
+
+	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	dc_eager_rtw_hdr = (struct efa_rdm_dc_eager_rtw_hdr *)pkt_entry->wiredata;
+	dc_eager_rtw_hdr->rma_iov_count = txe->rma_iov_count;
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_DC_EAGER_RTW_PKT, txe);
+	ret = efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe,
+					  dc_eager_rtw_hdr->rma_iov);
+	dc_eager_rtw_hdr->send_id = txe->tx_id;
+	return ret;
+}
+
+/**
  * @brief handle the send completion event of an EAGER RTW packet
  *
  * This function apply to both EFA_RDM_EAGER_RTW_PKT and
@@ -65,6 +96,8 @@ void efa_rdm_pke_handle_eager_rtw_send_completion(struct efa_rdm_pke *pkt_entry)
 	assert(txe->total_len == pkt_entry->payload_size);
 	efa_rdm_ope_handle_send_completed(txe);
 }
+
+/* RX path functions */
 
 /**
  * @brief process an received EAGER RTW packet
@@ -152,35 +185,6 @@ void efa_rdm_proto_eager_write_handle_rtw_recv(struct efa_rdm_pke *pkt_entry)
 				   rxe,
 				   rtw_hdr->rma_iov,
 				   rtw_hdr->rma_iov_count);
-}
-
-/**
- * @brief initialize a EFA_RDM_DC_EAGER_RTW_PKT packet
- *
- * DC means delivery complete
- *
- * @param[in,out]	pkt_entry	packet entry to be initialized
- * @param[in]		txe		TX entry that has RMA write information
- * @returns
- * 0 on success.
- * negative libfabric error code on failure
- */
-static ssize_t efa_rdm_proto_eager_write_init_dc_rtw(struct efa_rdm_pke *pkt_entry,
-				      struct efa_rdm_ope *txe)
-{
-	struct efa_rdm_dc_eager_rtw_hdr *dc_eager_rtw_hdr;
-	int ret;
-
-	assert(txe->op == ofi_op_write);
-
-	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	dc_eager_rtw_hdr = (struct efa_rdm_dc_eager_rtw_hdr *)pkt_entry->wiredata;
-	dc_eager_rtw_hdr->rma_iov_count = txe->rma_iov_count;
-	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_DC_EAGER_RTW_PKT, txe);
-	ret = efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe,
-					  dc_eager_rtw_hdr->rma_iov);
-	dc_eager_rtw_hdr->send_id = txe->tx_id;
-	return ret;
 }
 
 /**
