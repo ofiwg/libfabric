@@ -10,6 +10,7 @@
 #include "efa_rdm_fabric.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
+#include "efa_rdm_proto.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_cntr.h"
 #include "efa_rdm_tracepoint.h"
@@ -94,14 +95,10 @@ ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm
 	ep->pending_recv_counter++;
 #endif
 
-	if (txe->total_len < ep->mtu_size - sizeof(struct efa_rdm_readrsp_hdr)) {
-		err = efa_rdm_ope_post_send(txe, EFA_RDM_SHORT_RTR_PKT);
-	} else {
-		assert(efa_env.tx_min_credits > 0);
-		txe->window = MIN(txe->total_len,
-				       efa_env.tx_min_credits * ep->max_data_payload_size);
-		err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGCTS_RTR_PKT);
-	}
+	assert(efa_env.tx_min_credits > 0);
+	txe->window = MIN(txe->total_len,
+			       efa_env.tx_min_credits * ep->max_data_payload_size);
+	err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGCTS_RTR_PKT);
 
 	if (OFI_UNLIKELY(err)) {
 #if ENABLE_DEBUG
@@ -111,6 +108,53 @@ ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm
 	}
 
 	return err;
+}
+
+/**
+ * @brief Post an emulated read using a selected read protocol.
+ *
+ * Builds the selected protocol's RTR packet, sends it, and runs the protocol's
+ * post-send bookkeeping. The read is not complete when the RTR send completes;
+ * it completes when the response data is received, so the txe stays live. On
+ * failure the packet entries are released here and the caller reports the
+ * error.
+ */
+static ssize_t efa_rdm_rma_post_read_proto(struct efa_rdm_ep *ep,
+					   struct efa_rdm_ope *txe,
+					   struct efa_rdm_proto *proto)
+{
+	uint64_t pke_send_flags = 0;
+	ssize_t err;
+	int i;
+
+	err = proto->construct_tx_pkes(ep, txe->peer, NULL, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	if (err)
+		return err;
+
+	assert(efa_rdm_pkt_type_is_req(txe->req_pkt_type));
+
+#if ENABLE_DEBUG
+	dlist_insert_tail(&txe->pending_recv_entry, &ep->ope_recv_list);
+	ep->pending_recv_counter++;
+#endif
+
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
+				ep->send_pkt_entry_vec_size, pke_send_flags);
+	if (err) {
+#if ENABLE_DEBUG
+		dlist_remove(&txe->pending_recv_entry);
+		ep->pending_recv_counter--;
+#endif
+		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+		return err;
+	}
+
+	txe->peer->flags |= EFA_RDM_PEER_REQ_SENT;
+	proto->handle_tx_pkes_posted(ep, txe);
+	return FI_SUCCESS;
 }
 
 /**
@@ -162,7 +206,15 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 				ret = -FI_EAGAIN;
 		}
 	} else {
-		ret = efa_rdm_rma_post_efa_emulated_read(ep, txe);
+		struct efa_rdm_proto *proto;
+
+		/* Use a registered read protocol if one applies. */
+		efa_rdm_proto_select_emulated_read_protocol(ep, txe->peer, txe,
+							    &proto);
+		if (proto)
+			ret = efa_rdm_rma_post_read_proto(ep, txe, proto);
+		else
+			ret = efa_rdm_rma_post_efa_emulated_read(ep, txe);
 	}
 
 	return ret;
@@ -358,6 +410,42 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 /**
+ * @brief Post an emulated write using a selected write protocol.
+ *
+ * Builds the selected protocol's packets, sends them, and runs the protocol's
+ * post-send bookkeeping. On failure the packet entries are released here and
+ * the caller reports the error.
+ */
+static ssize_t efa_rdm_rma_post_write_proto(struct efa_rdm_ep *ep,
+					    struct efa_rdm_ope *txe,
+					    struct efa_rdm_proto *proto)
+{
+	uint64_t pke_send_flags = 0;
+	ssize_t err;
+	int i;
+
+	err = proto->construct_tx_pkes(ep, txe->peer, NULL, txe->op, txe->tag,
+				       txe->fi_flags, txe->internal_flags, txe,
+				       &pke_send_flags);
+	if (err)
+		return err;
+
+	assert(efa_rdm_pkt_type_is_req(txe->req_pkt_type));
+
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
+				ep->send_pkt_entry_vec_size, pke_send_flags);
+	if (err) {
+		for (i = 0; i < ep->send_pkt_entry_vec_size; ++i)
+			efa_rdm_pke_release_tx(ep->send_pkt_entry_vec[i]);
+		return err;
+	}
+
+	txe->peer->flags |= EFA_RDM_PEER_REQ_SENT;
+	proto->handle_tx_pkes_posted(ep, txe);
+	return FI_SUCCESS;
+}
+
+/**
  * @brief Post a WRITE described the txe
  *
  * @param ep		The endpoint.
@@ -369,7 +457,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	ssize_t err;
 	bool delivery_complete_requested;
 	int ctrl_type, iface, use_p2p;
-	size_t max_eager_rtw_data_size;
+	struct efa_rdm_proto *proto;
 
 	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
 	if (err < 0)
@@ -390,11 +478,13 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		return efa_rdm_ope_post_remote_write(txe);
 	}
 
+	/* Use a registered write protocol if one applies. */
+	efa_rdm_proto_select_emulated_write_protocol(ep, txe->peer, txe,
+						     use_p2p, &proto);
+	if (proto)
+		return efa_rdm_rma_post_write_proto(ep, txe, proto);
+
 	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
-	if (delivery_complete_requested)
-		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_DC_EAGER_RTW_PKT);
-	else
-		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_EAGER_RTW_PKT);
 
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->iface : FI_HMEM_SYSTEM;
 
@@ -409,11 +499,6 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 * If read write protocol failed due to memory registration, fall back to use long
 		 * message protocol
 		 */
-	}
-
-	if (txe->total_len <= max_eager_rtw_data_size) {
-		ctrl_type = delivery_complete_requested ? EFA_RDM_DC_EAGER_RTW_PKT : EFA_RDM_EAGER_RTW_PKT;
-		return efa_rdm_ope_post_send(txe, ctrl_type);
 	}
 
 	ctrl_type = delivery_complete_requested ? EFA_RDM_DC_LONGCTS_RTW_PKT : EFA_RDM_LONGCTS_RTW_PKT;

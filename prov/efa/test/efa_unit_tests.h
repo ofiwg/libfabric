@@ -20,6 +20,8 @@
 #include "efa_rdm_pke_cmd.h"
 #include "efa_unit_test_mocks.h"
 #include "efa_rdm_proto_eager.h"
+#include "efa_rdm_proto_eager_write.h"
+#include "efa_rdm_proto_short_rtr.h"
 
 /**
  * Maximum value of hardware completion counters on the EFA device.
@@ -444,6 +446,8 @@ void test_efa_rdm_txe_longread_msgrtm_send_first(void **state);
 void test_efa_rdm_txe_longread_msgrtm_resp_first(void **state);
 void test_efa_rdm_txe_longread_rtw_send_first(void **state);
 void test_efa_rdm_txe_longread_rtw_resp_first(void **state);
+void test_efa_rdm_txe_dc_eager_rtw_send_first(void **state);
+void test_efa_rdm_txe_dc_eager_rtw_resp_first(void **state);
 void test_efa_rdm_rxe_longcts_msg_cts_send_first(void **state);
 void test_efa_rdm_rxe_longcts_msg_cts_recv_first(void **state);
 void test_efa_rdm_rxe_longcts_write_cts_send_first(void **state);
