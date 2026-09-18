@@ -13,40 +13,10 @@
 #include "efa_rdm_ope.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_pke_rtw.h"
+#include "protocols/efa_rdm_proto_write.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_req.h"
-
-/**
- * @brief initialize the payload and rma_iov of a RTW packet
- *
- * Used by EAGER and LONGCTS RTW.
- * @param[in,out]	pkt_entry	RTW packet entry
- * @param[in]		txe		TX entry that has RMA write information
- * @param[in]		rma_iov		the "rma_iov" field in RTW packet header
- *
- * @returns
- * 0 on success
- * negative libfabric error code on error.
- */
-ssize_t efa_rdm_pke_init_rtw_common(struct efa_rdm_pke *pkt_entry,
-				    struct efa_rdm_ope *txe,
-				    struct efa_rma_iov *rma_iov)
-{
-	size_t hdr_size;
-	size_t data_size;
-	int i;
-
-	for (i = 0; i < txe->rma_iov_count; ++i) {
-		rma_iov[i].addr = txe->rma_iov[i].addr;
-		rma_iov[i].len = txe->rma_iov[i].len;
-		rma_iov[i].key = txe->rma_iov[i].key;
-	}
-
-	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
-	data_size = MIN(txe->ep->mtu_size - hdr_size, txe->total_len);
-	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, hdr_size, 0, data_size);
-}
 
 /**
  * @brief allcoate an RX entry for a incoming RTW packet
@@ -118,7 +88,7 @@ ssize_t efa_rdm_pke_init_longcts_rtw(struct efa_rdm_pke *pkt_entry,
 
 	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
 	efa_rdm_pke_init_longcts_rtw_hdr(pkt_entry, EFA_RDM_LONGCTS_RTW_PKT, txe);
-	return efa_rdm_pke_init_rtw_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
 }
 
 /**
@@ -274,7 +244,7 @@ ssize_t efa_rdm_pke_init_dc_longcts_rtw(struct efa_rdm_pke *pkt_entry,
 	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
 	efa_rdm_pke_init_longcts_rtw_hdr(pkt_entry, EFA_RDM_DC_LONGCTS_RTW_PKT, txe);
-	return efa_rdm_pke_init_rtw_common(pkt_entry, txe, rtw_hdr->rma_iov);
+	return efa_rdm_proto_write_rtw_pke_init_common(pkt_entry, txe, rtw_hdr->rma_iov);
 }
 
 /**
