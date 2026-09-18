@@ -1,4 +1,4 @@
-%{!?configopts: %global configopts LDFLAGS=-Wl,--build-id}
+%{!?configopts: %global configopts LDFLAGS="-Wl,-rpath,%{_libdir},--build-id"}
 %{!?provider: %define provider cxi}
 %{!?provider_formal: %define provider_formal cxi}
 
