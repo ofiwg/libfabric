@@ -153,7 +153,7 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 						assert(drop_len <= params->cc->byte_counter);
 						params->cc->byte_counter -= drop_len;
 						if (params->cc->byte_counter == 0) {
-							opx_hfisvc_rma_cc_hit_zero(params->cc);
+							params->cc->hit_zero(params->cc);
 						}
 					}
 					++cur_iov;
@@ -201,7 +201,7 @@ int opx_hfisvc_rma_send_rts(union fi_opx_hfi1_deferred_work *work)
 					assert(drop_len <= params->cc->byte_counter);
 					params->cc->byte_counter -= drop_len;
 					if (params->cc->byte_counter == 0) {
-						opx_hfisvc_rma_cc_hit_zero(params->cc);
+						params->cc->hit_zero(params->cc);
 					}
 				}
 				++cur_iov;

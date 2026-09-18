@@ -221,7 +221,6 @@ void opx_write_internal(struct fi_opx_ep *opx_ep, const struct fi_opx_hmem_iov *
 						    .remote_auth_key = key,
 						    .remote_offset   = addr_offset};
 
-		opx_hfisvc_rma_watch_register(opx_ep, cc);
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hfisvc.rma_write_path.hfisvc);
 		opx_hfisvc_rma_invoke_send_rts(opx_ep, work, &hfisvc_iov, 1ul, opx_dst_addr, hfisvc_data, cc,
 					       dput_opcode, dt, op, lock_required, reliability, hfi1_type);
