@@ -145,7 +145,7 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol_for_send(
+		if (selected_proto->can_use_protocol(
 			    txe, req_pkt_type, header_flags, iface)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;
