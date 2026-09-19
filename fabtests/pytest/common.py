@@ -29,6 +29,13 @@ OOB_POLL_INTERVAL_SEC = 0.5
 PORT_CLEAR_TIMEOUT_SEC = 10
 SERVER_LISTEN_TIMEOUT_SEC = 30
 
+# How an RDMA NIC's DMA reaches GPU memory, as classified by
+# efa_common.get_nic_dma_path(). The two routes need different CUDA dmabuf
+# mapping types, so a test that asks for a NIC on one of them determines the
+# mapping type as well.
+NIC_DMA_PATH_GPU_LOCAL = "gpu-local"
+NIC_DMA_PATH_CPU_MEDIATED = "cpu-mediated"
+
 
 class SshConnectionError(Exception):
 
@@ -501,7 +508,8 @@ class ClientServerTest:
                  completion_type="queue",
                  fabric=None,
                  additional_env='',
-                 might_fail=False):
+                 might_fail=False,
+                 nic_dma_path=None):
 
         self._cmdline_args = cmdline_args
         self._timeout = timeout or cmdline_args.timeout
@@ -533,7 +541,8 @@ class ClientServerTest:
                              completion_type="queue",
                              fabric=None,
                              additional_env='',
-                             might_fail=False):
+                             might_fail=False,
+                             nic_dma_path=None):
         if executable == "fi_ubertest":
             return "fi_ubertest", additional_env
 
@@ -618,14 +627,15 @@ class ClientServerTest:
         if self._cmdline_args.do_dmabuf_reg_for_hmem:
             command += " -R"
 
-            # runfabtests always selects the EFA NIC closest to the CUDA device
-            # (get_efa_device_name_for_cuda_device), which is the GPU-local
-            # (PCIe-attached) NIC. That NIC requires the PCIe CUDA dmabuf
-            # mapping type, so request it whenever we export a CUDA dmabuf fd
-            # (i.e. under -R). The runfabtests user does not need to know about
-            # this; standalone fabtests binaries expose --use-cuda-pcie-mapping
-            # for callers that select the NIC themselves.
-            if host_memory_type == "cuda":
+            # The mapping type has to match the NIC selected below. Unless a test
+            # asks for a CPU-mediated one, that is the EFA NIC closest to the CUDA
+            # device (get_efa_device_name_for_cuda_device), which is GPU-local
+            # (PCIe-attached) and needs the PCIe mapping type, so request it
+            # whenever we export a CUDA dmabuf fd (i.e. under -R). The
+            # runfabtests user does not need to know about this; standalone
+            # fabtests binaries expose --use-cuda-pcie-mapping for callers that
+            # select the NIC themselves.
+            if host_memory_type == "cuda" and nic_dma_path != NIC_DMA_PATH_CPU_MEDIATED:
                 command += " --use-cuda-pcie-mapping"
 
         if "PYTEST_XDIST_WORKER" in os.environ:
@@ -648,7 +658,13 @@ class ClientServerTest:
         if self._cmdline_args.provider == "efa":
             import efa.efa_common
             if host_memory_type == "cuda":
-                efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, hmem_device_id, num_hmem)
+                efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, hmem_device_id,
+                                                                               num_hmem, nic_dma_path)
+                # Deciding that a host cannot run a test is the test's call, not
+                # something to bury here, so a test that asks for a DMA path is
+                # expected to have checked that the hosts have a NIC on it.
+                assert efa_device, \
+                    "{} has no NIC on the {} path to GPU memory".format(host_ip, nic_dma_path)
             elif host_memory_type == "neuron":
                 efa_device = efa.efa_common.get_efa_device_name_for_neuron_core(host_ip, hmem_device_id)
             else:
