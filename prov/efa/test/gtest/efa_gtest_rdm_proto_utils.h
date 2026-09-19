@@ -23,6 +23,23 @@ extern "C" {
 /* A message needing more than one REQ packet but still fitting inside them. */
 #define EFA_TEST_PROTO_MEDIUM_LEN 16384
 
+struct efa_test_proto_rx_callback_result {
+	ssize_t after_robuf_ret;
+	ssize_t unexpected_match_ret;
+};
+
+struct efa_test_proto_rx_selection_result {
+	size_t case_count;
+	size_t selected_count;
+	size_t callbacks_set_count;
+	int unsupported_is_null;
+};
+
+void efa_test_proto_callbacks_preserve_return_values(
+	struct efa_test_proto_rx_callback_result *out);
+void efa_test_proto_selects_protocol_with_receive_callbacks(
+	struct efa_test_proto_rx_selection_result *out);
+
 /** @brief Whether @p len is above one eager packet and within the medium
  * threshold on the selected device. */
 int efa_test_proto_medium_len_in_band(struct fid_ep *ep, size_t len);

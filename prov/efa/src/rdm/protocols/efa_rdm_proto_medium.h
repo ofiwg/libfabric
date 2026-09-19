@@ -27,7 +27,7 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 void efa_rdm_proto_medium_handle_tx_pkes_posted(struct efa_rdm_ep *ep,
 						struct efa_rdm_ope *txe);
 
-void efa_rdm_proto_medium_handle_rtm_send_completion(
+ssize_t efa_rdm_proto_medium_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry);
 
 #endif /* _EFA_RDM_PROTO_MEDIUM_H */

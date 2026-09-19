@@ -8,6 +8,12 @@
 #include "efa_av.h"
 #include "efa_rdm_pke_rtm.h"
 
+static ssize_t test_efa_srx_matched_callback(struct efa_rdm_pke *pkt_entry)
+{
+	(void) pkt_entry;
+	return 0;
+}
+
 /**
  * @brief This test validates whether the default min_multi_recv size is correctly
  * passed from ep to srx, and whether is correctly modified when application
@@ -85,11 +91,8 @@ void test_efa_srx_unexp_pkt(void **state)
 	struct efa_rdm_peer peer;
 	struct efa_unit_test_eager_rtm_pkt_attr pke_attr = {.msg_id = 0,
 							    .connid = 0x1234};
-	void *desc;
-	struct iovec iov;
-
-	g_efa_unit_test_mocks.efa_rdm_pke_proc_matched_rtm =
-		&efa_mock_efa_rdm_pke_proc_matched_rtm_no_op;
+	void *desc = NULL;
+	struct iovec iov = {0};
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
@@ -119,11 +122,13 @@ void test_efa_srx_unexp_pkt(void **state)
 	 * Allocate an rxe with the rx pkt.
 	 * Since there is no recv posted, the rxe must be unexpected
 	 */
+	efa_env.rx_copy_unexp = 0;
 	ofi_genlock_lock(srx_ctx->lock);
-	rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(efa_rdm_ep, &pke);
+	assert_int_equal(efa_rdm_pke_proc_msgrtm(pke), 0);
+	rxe = pke->ope;
 	assert_true(rxe->state == EFA_RDM_RXE_UNEXP);
 	assert_true(rxe->unexp_pkt == pke);
-	srx_ctx->peer_srx.owner_ops->queue_msg(rxe->peer_rxe);
+	pke->handle_pke = test_efa_srx_matched_callback;
 	ofi_genlock_unlock(srx_ctx->lock);
 
 	/* Fake an application posted receive */

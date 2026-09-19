@@ -323,6 +323,7 @@ void efa_rdm_pke_copy(struct efa_rdm_pke *dest,
 		}
 	}
 	dest->peer = src->peer;
+	dest->handle_pke = src->handle_pke;
 	dest->flags = EFA_RDM_PKE_IN_USE;
 	dest->next = NULL;
 	memcpy(dest->wiredata, src->wiredata + src_pkt_offset, dest->pkt_size);

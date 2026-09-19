@@ -8,6 +8,8 @@
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_req.h"
 
+struct efa_rdm_proto;
+
 /**
  * @brief get the RTM base_hdr of a RTM pakcet entry
  *
@@ -90,13 +92,16 @@ void efa_rdm_pke_set_rtm_tag(struct efa_rdm_pke *pkt_entry, uint64_t tag)
 void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 				struct efa_rdm_ope *rxe);
 
-ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry);
-
 ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
 
 void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry);
+
+ssize_t efa_rdm_pke_proc_rtm_after_robuf(struct efa_rdm_pke *pkt_entry,
+					 struct efa_rdm_proto *proto);
+
+void efa_rdm_pke_prepare_matched_rtm(struct efa_rdm_pke *pkt_entry);
 
 static inline
 struct efa_rdm_dc_eager_rtm_base_hdr *efa_rdm_pke_get_dc_eager_rtm_base_hdr(struct efa_rdm_pke *pke)
@@ -146,8 +151,6 @@ struct efa_rdm_runtread_rtm_base_hdr *efa_rdm_pke_get_runtread_rtm_base_hdr(stru
 	return (struct efa_rdm_runtread_rtm_base_hdr *)pke->wiredata;
 }
 
-ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry);
-
 ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_init_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
@@ -171,8 +174,6 @@ ssize_t efa_rdm_pke_init_longread_msgrtm(struct efa_rdm_pke *pkt_entry,
 
 ssize_t efa_rdm_pke_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe);
-
-ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry);
 

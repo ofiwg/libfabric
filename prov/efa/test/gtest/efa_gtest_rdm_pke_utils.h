@@ -54,6 +54,19 @@ int efa_test_failed_reorder_msg_overflow_releases_rx_pkt_and_entry(
 	size_t *to_post_after, size_t *overflow_free_before,
 	size_t *overflow_free_after);
 
+struct efa_test_reorder_callback_result {
+	int callback_set;
+	int callback_invocations;
+	uint32_t exp_msg_id;
+};
+
+int efa_test_reordered_packet_retains_callback(
+	struct fid_ep *ep, fi_addr_t peer_addr,
+	struct efa_test_reorder_callback_result *out);
+int efa_test_reorder_drain_invokes_callback(
+	struct fid_ep *ep, fi_addr_t peer_addr,
+	struct efa_test_reorder_callback_result *out);
+
 // Sentinel values that will be used in assertions
 #define EFA_TEST_RTM_TAG	 0x1234567890abcdefULL
 #define EFA_TEST_RTM_MSG_ID	 0x4321u
