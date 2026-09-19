@@ -6,6 +6,7 @@
 #include "efa_rdm_domain.h"
 #include "efa_rdm_ope.h"
 #include "protocols/efa_rdm_proto_eager.h"
+#include "protocols/efa_rdm_proto_eager_write.h"
 #include "protocols/efa_rdm_proto_medium.h"
 #include "efa_rdm_msg.h"
 
@@ -49,6 +50,15 @@ static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
 static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
+};
+
+/*
+ * Emulated write protocols, tried in order during selection, terminated by
+ * NULL.
+ */
+static struct efa_rdm_proto * const efa_rdm_emulated_write_protocols[] = {
+	&efa_rdm_proto_eager_write,
+	NULL,
 };
 
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,
@@ -145,8 +155,8 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol_for_send(
-			    txe, req_pkt_type, header_flags, iface)) {
+		if (selected_proto->can_use_protocol(
+			    txe, req_pkt_type, header_flags, iface, use_p2p)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;
@@ -189,4 +199,71 @@ void efa_rdm_proto_txe_fill(struct efa_rdm_ope *txe, struct efa_rdm_ep *ep,
 		txe->cq_entry.tag = tag;
 		txe->tag = tag;
 	}
+}
+
+void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
+						  struct efa_rdm_peer *peer,
+						  struct efa_rdm_ope *txe,
+						  bool use_p2p,
+						  struct efa_rdm_proto **proto)
+{
+	struct efa_rdm_proto *selected_proto;
+	uint16_t header_flags = 0;
+	int req_pkt_type, iface, i;
+	bool mr_attempted = false;
+
+	iface = txe->desc[0] ?
+			((struct efa_mr *) txe->desc[0])->iface :
+			FI_HMEM_SYSTEM;
+
+	/* Synapse AI is not handled on this path yet; use the old code path. */
+	if (iface == FI_HMEM_SYNAPSEAI) {
+		*proto = NULL;
+		txe->proto = NULL;
+		return;
+	}
+
+	if (efa_rdm_peer_need_raw_addr_hdr(peer))
+		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
+	else if (efa_rdm_peer_need_connid(peer))
+		header_flags |= EFA_RDM_PKT_CONNID_HDR;
+
+	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
+		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
+
+	for (i = 0; efa_rdm_emulated_write_protocols[i] != NULL; ++i) {
+		selected_proto = efa_rdm_emulated_write_protocols[i];
+
+		req_pkt_type = efa_rdm_proto_req_pkt_type(
+			selected_proto, txe->op, txe->fi_flags, peer);
+
+		/*
+		 * Register the source buffer for a protocol that benefits from
+		 * it, asking for FI_REMOTE_READ when p2p is available because
+		 * the read based protocols require it.
+		 */
+		if (!mr_attempted && selected_proto->wants_mr) {
+			uint64_t access = FI_SEND |
+					  (use_p2p ? FI_REMOTE_READ : 0);
+
+			if (efa_is_cache_available(efa_rdm_ep_rdm_domain(ep)))
+				efa_rdm_ope_try_fill_desc(txe, 0, access);
+			mr_attempted = true;
+		}
+
+		if (selected_proto->can_use_protocol(
+			    txe, req_pkt_type, header_flags, iface, use_p2p)) {
+			*proto = selected_proto;
+			txe->proto = selected_proto;
+			txe->req_pkt_type = req_pkt_type;
+			return;
+		}
+	}
+
+	/*
+	 * No emulated write protocol matched, so the caller falls back to the
+	 * old code path.
+	 */
+	*proto = NULL;
+	txe->proto = NULL;
 }

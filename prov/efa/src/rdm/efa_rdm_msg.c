@@ -122,25 +122,11 @@ ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
 
 	err = proto->construct_tx_pkes(
 		ep, txe->peer, NULL, txe->op, txe->tag,
-		txe->fi_flags, txe->internal_flags, txe);
+		txe->fi_flags, txe->internal_flags, txe, &pke_send_flags);
 	if (err)
 		return err;
 
 	assert(efa_rdm_pkt_type_is_rtm(txe->req_pkt_type));
-
-	/**
-	 * We currently respect FI_MORE only for eager pkt type because
-	 * 1. For some non-REQ pkts like CTSDATA, its current implementation
-	 * relies on the logic that efa_rdm_ope_post_send always rings the doorbell,
-	 * because the ep progress call will keep calling this function until
-	 * ope->window is 0, but ope->window will only be decremented after
-	 * the CTSDATA pkts are actually posted to rdma-core.
-	 * 2. For non-eager REQ packets, we already send multiple pkts that contain
-	 * data and make the firmware saturated, there is no meaning to queue
-	 * pkts in this case.
-	 */
-	if (txe->fi_flags & FI_MORE && proto == &efa_rdm_proto_eager)
-		pke_send_flags |= FI_MORE;
 
 	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec,
 				ep->send_pkt_entry_vec_size,

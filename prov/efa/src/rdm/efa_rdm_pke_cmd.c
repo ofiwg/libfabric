@@ -8,6 +8,7 @@
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_rtw.h"
+#include "protocols/efa_rdm_proto_eager_write.h"
 #include "efa_rdm_pke_rtr.h"
 #include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
@@ -130,8 +131,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_runtread_tagrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_eager_rtw(pkt_entry, ope);
+		assert(0 && "Eager write protocol moved to refactored code path");
+		abort();
 		break;
 	case EFA_RDM_LONGCTS_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -190,8 +191,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_dc_eager_rtw(pkt_entry, ope);
+		assert(0 && "Eager write protocol moved to refactored code path");
+		abort();
 		break;
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -278,7 +279,8 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		efa_rdm_pke_handle_runtread_rtm_sent(pkt_entry, peer);
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
-		/* nothing to do when EAGER RTW is sent */
+		assert(0 && "Eager write protocol moved to refactored code path");
+		abort();
 		break;
 	case EFA_RDM_LONGCTS_RTW_PKT:
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
@@ -303,7 +305,8 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		abort();
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
-		/* nothing to do for DC EAGER RTW */
+		assert(0 && "Eager write protocol moved to refactored code path");
+		abort();
 		break;
 	case EFA_RDM_CTSDATA_PKT:
 		efa_rdm_pke_handle_ctsdata_sent(pkt_entry);
@@ -717,7 +720,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
-	case EFA_RDM_DC_EAGER_RTW_PKT:
 	case EFA_RDM_DC_WRITE_RTA_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
@@ -928,7 +930,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_handle_rtm_rta_recv(pkt_entry);
 		return;
 	case EFA_RDM_EAGER_RTW_PKT:
-		efa_rdm_pke_handle_eager_rtw_recv(pkt_entry);
+		efa_rdm_proto_eager_write_handle_rtw_recv(pkt_entry);
 		return;
 	case EFA_RDM_LONGCTS_RTW_PKT:
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
@@ -942,7 +944,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_handle_rtr_recv(pkt_entry);
 		return;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
-		efa_rdm_pke_handle_dc_eager_rtw_recv(pkt_entry);
+		efa_rdm_proto_eager_write_handle_dc_rtw_recv(pkt_entry);
 		return;
 	case EFA_RDM_READ_NACK_PKT:
 		efa_rdm_pke_handle_read_nack_recv(pkt_entry);

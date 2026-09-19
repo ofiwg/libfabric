@@ -1913,6 +1913,17 @@ static void test_efa_rdm_txe_with_resp_release_common(struct efa_resource *resou
 		txe->bytes_runt = 0;
 		txe->bytes_acked = 0;
 		txe->fi_flags |= FI_COMPLETION;
+	} else if (pkt_type == EFA_RDM_DC_EAGER_RTW_PKT) {
+		/* DC eager write: acked by a RECEIPT, released once both the
+		 * send completion and the RECEIPT have arrived. The forged
+		 * request packet carries no payload and the eager-write send
+		 * completion asserts total_len == payload_size, so keep the
+		 * write zero-length. */
+		txe = efa_unit_test_alloc_txe(resource, ofi_op_write);
+		txe->cq_entry.flags = FI_WRITE | FI_RMA;
+		txe->total_len = 0;
+		txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+		txe->fi_flags |= FI_COMPLETION | FI_DELIVERY_COMPLETE;
 	} else {
 		/* DC protocols */
 		txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
@@ -2169,6 +2180,22 @@ void test_efa_rdm_txe_longread_rtw_send_first(void **state)
 void test_efa_rdm_txe_longread_rtw_resp_first(void **state)
 {
 	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_LONGREAD_RTW_PKT);
+}
+
+/**
+ * @brief Test DC_EAGER_RTW txe release: send completion before RECEIPT
+ */
+void test_efa_rdm_txe_dc_eager_rtw_send_first(void **state)
+{
+	test_efa_rdm_txe_with_resp_release_common(*state, true, EFA_RDM_DC_EAGER_RTW_PKT);
+}
+
+/**
+ * @brief Test DC_EAGER_RTW txe release: RECEIPT before send completion
+ */
+void test_efa_rdm_txe_dc_eager_rtw_resp_first(void **state)
+{
+	test_efa_rdm_txe_with_resp_release_common(*state, false, EFA_RDM_DC_EAGER_RTW_PKT);
 }
 
 /**

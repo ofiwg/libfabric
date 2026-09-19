@@ -199,6 +199,7 @@ static int efa_test_proto_medium_build(struct efa_test_proto_ctx *ctx,
 	void *desc;
 	size_t i;
 	int err;
+	uint64_t pke_send_flags;
 
 	memset(out, 0, sizeof(*out));
 
@@ -232,7 +233,8 @@ static int efa_test_proto_medium_build(struct efa_test_proto_ctx *ctx,
 	/* No fi_msg, exactly as the repost path calls it. */
 	out->ret = proto->construct_tx_pkes(ep, ctx->peer, NULL, txe->op,
 					    txe->tag, txe->fi_flags,
-					    txe->internal_flags, txe);
+					    txe->internal_flags, txe,
+					    &pke_send_flags);
 	if (out->ret)
 		return 0;
 
