@@ -12,6 +12,88 @@
 #include "rdm/efa_rdm_protocol.h"
 #include "efa_data_path_direct.h"
 
+#if HAVE_INLINE_BUF_SIZE_EX
+int efa_query_max_sq_depth(struct ibv_context *ctx, uint32_t sq_depth_flags,
+			   uint32_t max_inline_data)
+{
+	struct efadv_sq_depth_attr attr = {0};
+
+	/*
+	 * Minimal SGE values (1) are always valid; the depth limit reflects the
+	 * wide WQE size (driven by sq_depth_flags), not the SGE count.
+	 */
+	attr.flags = sq_depth_flags;
+	attr.max_send_sge = 1;
+	attr.max_rdma_sge = 1;
+	attr.max_inline_data = max_inline_data;
+
+	return efadv_get_max_sq_depth(ctx, &attr, sizeof(attr));
+}
+#endif /* HAVE_INLINE_BUF_SIZE_EX */
+
+/**
+ * @brief The inline data size the endpoint's QP is created with
+ *
+ * Only efa-direct carries inject data in the send queue entry, so only there does
+ * the endpoint's inject size become the QP's inline data size. The efa fabric
+ * injects through its own protocol and leaves the QP at the device's regular
+ * inline buffer size, as does the DGRAM endpoint.
+ */
+static size_t efa_base_ep_get_max_inline_data(struct efa_base_ep *ep)
+{
+	return EFA_INFO_TYPE_IS_DIRECT(ep->info) ?
+		ep->info->tx_attr->inject_size :
+		ep->domain->device->efa_attr.inline_buf_size;
+}
+
+/**
+ * @brief The maximum send queue depth the device allows this endpoint
+ *
+ * That is the device-advertised max send queue limit, lowered when the endpoint's
+ * send queue entries are wide. An entry is wide when it carries more inline data
+ * than the device's regular inline buffer size, which only efa-direct does, and it
+ * consumes more send queue memory, so fewer of them fit.
+ *
+ * Whether an entry is wide follows from its inline data size alone. Whether the
+ * device supports RDMA write does not enter into it: that only decides whether
+ * inline RMA write is available, not how much send queue memory an entry occupies.
+ *
+ * The device-advertised limit is also the answer whenever the wide depth cannot be
+ * established: on a build without the required efadv support, or when the device
+ * cannot be queried.
+ */
+size_t efa_base_ep_get_max_sq_depth(struct efa_base_ep *ep)
+{
+	size_t device_tx_limit = ep->domain->device->rdm_info->tx_attr->size;
+#if HAVE_INLINE_BUF_SIZE_EX
+	size_t max_inline_data;
+	int max_sq_depth;
+
+	if (!EFA_INFO_TYPE_IS_DIRECT(ep->info))
+		return device_tx_limit;
+
+	max_inline_data = efa_base_ep_get_max_inline_data(ep);
+	if (max_inline_data <= ep->domain->device->efa_attr.inline_buf_size)
+		return device_tx_limit;
+
+	max_sq_depth = efa_query_max_sq_depth(ep->domain->device->ibv_ctx,
+					      EFADV_SQ_DEPTH_ATTR_INLINE_WRITE,
+					      max_inline_data);
+	if (max_sq_depth < 0) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "efadv_get_max_sq_depth failed (%d); reporting the "
+			 "device-advertised max send queue limit for the inline "
+			 "data size %zu\n", max_sq_depth, max_inline_data);
+		return device_tx_limit;
+	}
+
+	/* A wide entry can only lower the depth; MIN is used for safety. */
+	return MIN((size_t) max_sq_depth, device_tx_limit);
+#else
+	return device_tx_limit;
+#endif
+}
+
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
 {
 	if (base_ep->domain != av->domain) {
@@ -370,9 +452,7 @@ void efa_base_ep_construct_ibv_qp_init_attr_ex(struct efa_base_ep *ep,
 	attr_ex->cap.max_send_sge = device_info->tx_attr->iov_limit;
 	attr_ex->cap.max_recv_wr = efa_base_ep_get_rx_pool_size(ep);
 	attr_ex->cap.max_recv_sge = device_info->rx_attr->iov_limit;
-	attr_ex->cap.max_inline_data = EFA_INFO_TYPE_IS_DIRECT(ep->info) ?
-		ep->info->tx_attr->inject_size :
-		ep->domain->device->efa_attr.inline_buf_size;
+	attr_ex->cap.max_inline_data = efa_base_ep_get_max_inline_data(ep);
 
 	EFA_INFO(FI_LOG_EP_CTRL,
 		 "QP cap max_send_wr=%u max_recv_wr=%u max_send_sge=%u "
