@@ -36,6 +36,7 @@
  */
 
 #include <unistd.h>
+#include <fcntl.h>
 
 #include <ofi_mr.h>
 #include <ofi_mem.h>
@@ -80,6 +81,27 @@ struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
 #include <linux/userfaultfd.h>
+
+/* /dev/userfaultfd (Linux 6.1+) lets a process obtain a uffd context
+ * via an ioctl on the device node instead of the userfaultfd(2)
+ * syscall.  This is useful in environments where direct use of the
+ * syscall is restricted (e.g. by seccomp or by
+ * vm.unprivileged_userfaultfd=0), but access to the device node has
+ * been granted, since access can then be controlled with normal
+ * file permissions/cgroup device rules instead of CAP_SYS_PTRACE.
+ *
+ * Older kernels (< 6.1) or systems without the device node present
+ * (or without permission to open it) won't support this, so we fall
+ * back to the legacy userfaultfd(2) syscall in that case.
+ */
+#define OFI_UFFD_DEV_PATH "/dev/userfaultfd"
+
+#ifndef USERFAULTFD_IOC
+#define USERFAULTFD_IOC 0xAA
+#endif
+#ifndef USERFAULTFD_IOC_NEW
+#define USERFAULTFD_IOC_NEW _IO(USERFAULTFD_IOC, 0x00)
+#endif
 
 static void ofi_uffd_pagefault_handler(struct uffd_msg *msg);
 static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
@@ -356,6 +378,56 @@ static void ofi_uffd_close_pipe(struct ofi_uffd *monitor)
 	monitor->exit_pipe[1] = -1;
 }
 
+static int ofi_uffd_open_dev(void)
+{
+	int dev_fd, fd;
+
+	dev_fd = open(OFI_UFFD_DEV_PATH, O_RDWR | O_CLOEXEC);
+	if (dev_fd < 0)
+		return -errno;
+
+	fd = ioctl(dev_fd, USERFAULTFD_IOC_NEW,
+		   O_CLOEXEC | O_NONBLOCK | UFFD_USER_MODE_ONLY);
+	if (fd < 0)
+		fd = -errno;
+
+	close(dev_fd);
+	return fd;
+}
+
+static int ofi_uffd_open_syscall(void)
+{
+	int fd;
+
+	fd = syscall(__NR_userfaultfd,
+		     O_CLOEXEC | O_NONBLOCK | UFFD_USER_MODE_ONLY);
+	if (fd < 0)
+		return -errno;
+
+	return fd;
+}
+
+static int ofi_uffd_open(void)
+{
+	int fd;
+
+	fd = ofi_uffd_open_dev();
+	if (fd >= 0)
+		return fd;
+
+	FI_INFO(&core_prov, FI_LOG_MR,
+		"open/%s failed (%s), falling back to userfaultfd(2) "
+		"syscall\n", OFI_UFFD_DEV_PATH, strerror(-fd));
+
+	fd = ofi_uffd_open_syscall();
+	if (fd < 0) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"syscall/userfaultfd %s\n", strerror(-fd));
+	}
+
+	return fd;
+}
+
 static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 {
 	struct uffdio_api api;
@@ -374,12 +446,10 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 		return -errno;
 	}
 
-	uffd.fd = syscall(__NR_userfaultfd,
-			  O_CLOEXEC | O_NONBLOCK | UFFD_USER_MODE_ONLY);
+	uffd.fd = ofi_uffd_open();
 	if (uffd.fd < 0) {
-		FI_WARN(&core_prov, FI_LOG_MR,
-			"syscall/userfaultfd %s\n", strerror(errno));
-		ret = -errno;
+		ret = uffd.fd;
+		uffd.fd = -1;
 		goto close_pipe;
 	}
 
