@@ -6,7 +6,8 @@ import re
 import pytest
 from enum import IntEnum
 from collections import deque
-from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
+from common import (SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg,
+                    ClientServerTest, NIC_DMA_PATH_GPU_LOCAL, NIC_DMA_PATH_CPU_MEDIATED)
 from retrying import retry
 
 # EFA-specific memory type lists for the @pytest.mark.memory_type decorator.
@@ -64,7 +65,7 @@ DGRAM_PR_CI = ["l:16,128,8192"]
 @functools.lru_cache(2)
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def parse_lspci_tree(server_id):
-    """
+    r"""
     Function parse the lspci output and construct a tree of the PCIe hierarchy
 
     Snippet of lspci -tv output on p5en instance type
@@ -298,7 +299,8 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                                warmup_iteration_type=None, timeout=None,
                                completion_type="queue", fabric=None,
                                additional_env='',
-                               might_fail=False):
+                               might_fail=False,
+                               nic_dma_path=None):
     if timeout is None:
         timeout = cmdline_args.timeout
 
@@ -320,7 +322,8 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                             warmup_iteration_type=warmup_iteration_type,
                             completion_type=completion_type, fabric=fabric,
                             additional_env=additional_env,
-                            might_fail=might_fail)
+                            might_fail=might_fail,
+                            nic_dma_path=nic_dma_path)
     test.run()
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
@@ -492,6 +495,129 @@ def get_rdma_core_name_for_efa_nic(server_id, bdf):
         return result.stdout.strip().split()[0]
     return None
 
+# Print the sysfs path of every RDMA NIC and every GPU, one per line, so the
+# whole PCI hierarchy can be read in a single ssh call. GPUs are found by PCI
+# class (VGA controller / 3D controller) rather than by vendor or device name,
+# and are required to have a driver bound: the emulated display adapter these
+# instances expose is a VGA controller with no driver, and counting it as a GPU
+# would classify any NIC that shares a bridge with it as GPU-local.
+# The directory contents are listed with ls rather than matched with a glob
+# because the remote login shell may be zsh, which aborts the whole snippet on a
+# glob that matches nothing (a host with no RDMA device, for instance).
+_PCI_ANCESTRY_CMD = """
+for d in $(ls -d /sys/class/infiniband/* 2>/dev/null); do
+    [ -e "$d/device" ] || continue
+    echo "nic $(basename $d) $(readlink -f $d/device)"
+done
+for d in $(ls -d /sys/bus/pci/devices/* 2>/dev/null); do
+    cls=$(cat "$d/class" 2>/dev/null) || continue
+    [ -L "$d/driver" ] || continue
+    case "$cls" in
+    0x0300*|0x0302*) echo "gpu $(basename $d) $(readlink -f $d)" ;;
+    esac
+done
+"""
+
+@functools.lru_cache(2)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def get_pci_ancestry(server_id):
+    """
+    Return (nics, gpus), each a dict of device name to its PCI ancestry.
+
+    An ancestry is the tuple of sysfs path components below /sys/devices. For a
+    NIC at
+        /sys/devices/pci0000:24/0000:24:00.0/0000:25:00.0/0000:26:00.0/0000:27:00.0
+    that is
+        ('pci0000:24', '0000:24:00.0', '0000:25:00.0', '0000:26:00.0', '0000:27:00.0')
+    The last element is the device itself, the earlier ones are the bridges above
+    it, and the first is the PCI domain root, i.e. the host bridge.
+
+    NICs are keyed by rdma-core name, GPUs by BDF.
+    """
+    timeout = 60
+    result = subprocess.run(f"ssh {server_id} '{_PCI_ANCESTRY_CMD}'",
+                            shell=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            encoding="utf-8", timeout=timeout)
+
+    if has_ssh_connection_err_msg(result.stderr):
+        raise SshConnectionError()
+
+    sys_devices = "/sys/devices/"
+    nics = {}
+    gpus = {}
+    for line in result.stdout.strip().split('\n'):
+        parts = line.split()
+        if len(parts) != 3:
+            continue
+        kind, name, path = parts
+        if not path.startswith(sys_devices):
+            continue
+        ancestry = tuple(path[len(sys_devices):].split('/'))
+        if kind == "nic":
+            nics[name] = ancestry
+        elif kind == "gpu":
+            gpus[name] = ancestry
+
+    return nics, gpus
+
+def count_shared_pci_bridges(ancestry_a, ancestry_b):
+    """
+    Number of PCI bridges shared by two ancestries from get_pci_ancestry().
+
+    Element 0 is the PCI domain root, which every device under the same host
+    bridge shares, so sharing only that still leaves the DMA path going through
+    the host bridge; bridges are therefore counted from element 1 on. The last
+    element is the device itself and is excluded.
+    """
+    count = 0
+    for a, b in zip(ancestry_a[1:-1], ancestry_b[1:-1]):
+        if a != b:
+            break
+        count += 1
+    return count
+
+def get_nic_dma_path(server_id, nic_name):
+    """
+    Classify how an RDMA NIC's DMA reaches GPU memory.
+
+    A NIC is GPU-local ("PCIe-attached") when its PCI ancestry shares at least
+    one PCI bridge with a GPU, so DMA reaches HBM without leaving the PCIe
+    hierarchy. When the deepest shared ancestor is the host bridge or above, the
+    DMA path has to traverse the CPU; on a coherent CPU-GPU platform such as
+    p6e-gb200 that is the NVLink-C2C route. This is the same distinction NCCL
+    makes between PIX/PXB and PHB/NODE/SYS.
+
+    The rule is a property of the DMA path itself, so it holds on any
+    architecture. On p6e-gb200 the two classes also differ in link width and in
+    device naming, but those are properties of that board rather than of the
+    paths, so neither is used here. nvidia-smi topo -m cannot be used either: it
+    does not list the EFA devices on p6e-gb200.
+
+    Returns None when the topology cannot be read, e.g. a host with no GPU or a
+    NIC with no sysfs entry, so callers can fall back to their own default.
+    """
+    nics, gpus = get_pci_ancestry(server_id)
+
+    if nic_name not in nics or not gpus:
+        return None
+
+    if any(count_shared_pci_bridges(nics[nic_name], gpu) > 0
+           for gpu in gpus.values()):
+        return NIC_DMA_PATH_GPU_LOCAL
+
+    return NIC_DMA_PATH_CPU_MEDIATED
+
+def get_efa_devices_on_dma_path(server_id, dma_path):
+    """
+    rdma-core names of every EFA device that reaches GPU memory over dma_path.
+
+    Empty on a host where no device does, which is every platform that has only
+    one path to GPU memory.
+    """
+    return [device for device in get_efa_device_names(server_id)
+            if get_nic_dma_path(server_id, device) == dma_path]
+
 def get_closest_efa_nics_for_gpu(server_id, gpu_index, pcie_tree):
     """
     BFS traversal to find the closest EFA NICs for a given GPU
@@ -550,11 +676,28 @@ def get_efa_device_name_for_hmem_device(ip, hmem_device_id, num_hmem_devices):
     return efa_devices[(hmem_device_id * num_efa) // num_hmem_devices]
 
 @functools.lru_cache(10)
-def get_efa_device_name_for_cuda_device(ip, cuda_device_id, num_cuda_devices):
+def get_efa_device_name_for_cuda_device(ip, cuda_device_id, num_cuda_devices, dma_path=None):
     """
     Traverse the PCIe hierarchy and find the closest EFA NIC for a given GPU
     If the PCIe hierarchy traversal fails, fallback to a simple round robin
+
+    dma_path, when given, restricts the choice to NICs that reach GPU memory over
+    that path (see get_nic_dma_path). None then means the host has no such NIC,
+    rather than a NIC on the other path, so that asking for one cannot silently
+    test the other; use get_efa_devices_on_dma_path() to decide up front whether a
+    host can run at all. Selection within the path is a round robin: a CPU-mediated
+    NIC has no PCIe hop towards any GPU, which is what puts it on that path in the
+    first place, so the traversal below has no locality to rank it by.
+
+    Leave dma_path unset to select on locality alone, which is also the only case
+    that does not read the PCI hierarchy.
     """
+    if dma_path:
+        devices_on_path = get_efa_devices_on_dma_path(ip, dma_path)
+        if not devices_on_path:
+            return None
+        return devices_on_path[(cuda_device_id * len(devices_on_path)) // num_cuda_devices]
+
     efa_devices = get_efa_device_names(ip)
     num_efa = len(efa_devices)
 
