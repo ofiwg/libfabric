@@ -562,6 +562,30 @@ bool efa_device_support_wide_wqe(void)
 #endif
 
 /**
+ * @brief check whether efa device supports completion with signal
+ *
+ * @return a boolean indicating completion-with-signal support
+ */
+#if HAVE_EFADV_COMP_SIGNAL
+bool efa_device_support_comp_signal(void)
+{
+	assert(g_efa_selected_device_cnt > 0);
+
+	/* Debug knob to force the feature off regardless of device capability. */
+	if (!efa_env.enable_comp_signal)
+		return false;
+
+	return g_efa_selected_device_list[0].device_caps &
+	       EFADV_DEVICE_ATTR_CAPS_COMP_SIGNAL;
+}
+#else
+bool efa_device_support_comp_signal(void)
+{
+	return false;
+}
+#endif
+
+/**
  * @brief check whether efa device support unsolicited write recv
  *
  * @return a boolean indicating unsolicited write recv

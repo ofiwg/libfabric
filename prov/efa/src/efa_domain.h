@@ -5,6 +5,8 @@
 #define EFA_DOMAIN_H
 
 #include <infiniband/verbs.h>
+#include <infiniband/efadv.h>
+#include "fi_ext_efa.h"
 #include "efa_device.h"
 #include "efa_hmem.h"
 #include "efa_env.h"
@@ -48,6 +50,25 @@ struct efa_domain {
 	 */
 	struct ofi_bufpool *mr_pool;
 };
+
+#if HAVE_EFADV_COMP_SIGNAL
+/*
+ * Provider objects backing the public completion-with-signal handles. The
+ * public struct is the first member so it is recovered with container_of; the
+ * efadv handle owns the kernel resource. The application owns the lifetime of
+ * these objects (create/destroy, register/deregister), so no provider-side
+ * bookkeeping is needed.
+ */
+struct efa_comp_mem_op {
+	struct fid_efa_comp_mem_op comp_mem_op;
+	struct efadv_comp_mem_op *efadv_mem_op;
+};
+
+struct efa_comp_signal {
+	struct fid_efa_comp_signal comp_signal;
+	struct efadv_comp_signal *efadv_signal;
+};
+#endif
 
 extern struct dlist_entry g_efa_domain_list;
 extern ofi_mutex_t g_efa_domain_list_lock;

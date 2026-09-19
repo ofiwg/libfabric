@@ -430,6 +430,7 @@ def pytest_collection_modifyitems(session, config, items):
                     "Could not determine hw_cntr support: ssh to {} failed after "
                     "retries. Refusing to silently deselect hw_cntr tests.".format(host_id))
     have_gda = os.path.exists(os.path.join(binpath, "fi_efa_gda"))
+    have_comp_signal = os.path.exists(os.path.join(binpath, "fi_efa_rma_comp_signal"))
 
     deselected = []
     remaining = []
@@ -438,6 +439,8 @@ def pytest_collection_modifyitems(session, config, items):
         if "hw_cntr" in markers and not have_hw_cntr:
             deselected.append(item)
         elif "gda" in markers and not have_gda:
+            deselected.append(item)
+        elif "comp_signal" in markers and not have_comp_signal:
             deselected.append(item)
         else:
             remaining.append(item)

@@ -178,6 +178,287 @@ earlier, aborted transfer, so aborting transfers when either side runs an
 older version risks corrupting the communication state between the two
 endpoints.
 
+# COMPLETION WITH SIGNAL
+
+On the `efa-direct` fabric, the EFA device can execute a registered action -- a
+memory write (MEMSET) or a counter increment -- at a device-accessible address
+when a work request completes, notifying an accelerator (GPU/Neuron) without
+host CPU involvement. This is exposed through EFA provider specific extensions
+and has three parts: signal registration (control path), enabling signal
+support on the endpoint, and per work request signal attachment (data path).
+
+This feature requires a device and rdma-core that advertise completion with
+signal support; otherwise the calls below return *-FI_EOPNOTSUPP* (or
+*-FI_ENOSYS* if libfabric was built without support).
+
+## Signal registration (control path)
+
+Signal registration is exposed as a domain ops table obtained with
+`fi_open_ops()` using the name *FI_EFA_SIGNAL_OPS*, defined in
+*rdma/fi_ext_efa.h*:
+
+```c
+struct fi_efa_ops_signal *signal_ops;
+fi_open_ops(&domain->fid, FI_EFA_SIGNAL_OPS, 0, (void **)&signal_ops, NULL);
+
+struct fi_efa_ops_signal {
+	int (*create_comp_mem_op)(struct fid_domain *domain,
+				  struct fi_efa_comp_mem_op_attr *attr,
+				  struct fid_efa_comp_mem_op **mem_op);
+	int (*register_signal)(struct fid_domain *domain,
+			       struct fi_efa_comp_signal_attr *attr,
+			       struct fid_efa_comp_signal **signal);
+	int (*query_max_comp_mem_ops)(struct fid_domain *domain,
+				      uint32_t *max_comp_mem_ops);
+};
+```
+
+Registering a MEMSET signal is a two step process: first create a completion
+memory operation describing the target address and value width, then wrap it in
+a signal. Both are returned as handle objects that embed a *struct fid*, so they
+are destroyed with *fi_close()*; there is no separate destroy/deregister op.
+
+*create_comp_mem_op*
+: Creates a completion memory operation that writes a value to a target
+  address on completion. The target is described by *struct
+  fi_efa_comp_mem_op_attr*, whose *op* selects the value width
+  (*FI_EFA_COMP_MEM_OP_SET_SIGNAL_VAL_8*, *_16*, or *_32*) and whose
+  *location* (*struct fi_efa_memory_location*) points at host memory (a virtual
+  address) or device memory (a dmabuf `fd`/`offset`, for GPU/Neuron HBM).
+  *flags* selects which fields are carried through; a MEMSET completion target
+  uses *FI_EFA_COMP_MEM_OP_WITH_COMP_EXTERNAL_MEM*.
+  Returns a *struct fid_efa_comp_mem_op* handle; destroy it with
+  *fi_close(&mem_op->fid)*.
+
+*register_signal*
+: Creates a signal over a completion memory op handle
+  (*FI_EFA_COMP_SIGNAL_MEM_OP*, referencing a *struct fid_efa_comp_mem_op \**)
+  or an existing libfabric counter (*FI_EFA_COMP_SIGNAL_CNTR_INC*, referencing a
+  *struct fid_cntr \**), described by *struct fi_efa_comp_signal_attr*. Returns a
+  *struct fid_efa_comp_signal* handle; deregister it with
+  *fi_close(&signal->fid)*. A signal references its completion memory op, so
+  close the signal before its backing completion memory op. The opaque signal id
+  used in work requests is read with *fid_efa_comp_signal_get_id()*; for a signal
+  that fires on the receiver (a remote signal) that id must be communicated out
+  of band from the receiver to the sender.
+
+*query_max_comp_mem_ops*
+: Reports the maximum number of completion memory operations (MEMSET backed
+  signals) the device supports; a value of 0 means completion with signal is
+  unsupported. Counter backed signals are bounded separately by the device's
+  event counter capacity.
+
+The control path uses the following types, all defined in *rdma/fi_ext_efa.h*:
+
+```c
+/* Operation performed on the completion memory target. NONE performs no memory
+ * write (the signal fires without a MEMSET, e.g. a counter-increment-only
+ * signal); SET_SIGNAL_VAL_* write an operand of the given width. */
+enum fi_efa_comp_mem_op {
+	FI_EFA_COMP_MEM_OP_NONE,
+	FI_EFA_COMP_MEM_OP_SET_SIGNAL_VAL_8,
+	FI_EFA_COMP_MEM_OP_SET_SIGNAL_VAL_16,
+	FI_EFA_COMP_MEM_OP_SET_SIGNAL_VAL_32,
+};
+
+/* MEMSET target: host virtual address, or device memory via dmabuf. */
+enum fi_efa_memory_location_type {
+	FI_EFA_MEMORY_LOCATION_VA,
+	FI_EFA_MEMORY_LOCATION_DMABUF,
+};
+
+struct fi_efa_memory_location {
+	uint8_t *ptr;                 /* FI_EFA_MEMORY_LOCATION_VA */
+	struct {
+		uint64_t offset;
+		int32_t  fd;          /* FI_EFA_MEMORY_LOCATION_DMABUF */
+		uint32_t reserved;
+	} dmabuf;
+	uint8_t type;                 /* enum fi_efa_memory_location_type */
+	uint8_t reserved[7];
+};
+
+/* Attributes for create_comp_mem_op (step 1).
+ * The err_* fields (gated by FI_EFA_COMP_MEM_OP_WITH_ERR_EXTERNAL_MEM) describe
+ * an optional error-completion target. The provider carries the flags, ops,
+ * memory locations and lengths through to the device faithfully; the device
+ * enforces which combinations it supports. */
+enum {
+	FI_EFA_COMP_MEM_OP_WITH_COMP_EXTERNAL_MEM = 1 << 0,
+	FI_EFA_COMP_MEM_OP_WITH_ERR_EXTERNAL_MEM  = 1 << 1,
+};
+
+struct fi_efa_comp_mem_op_attr {
+	uint64_t                      comp_mask;
+	uint32_t                      flags;         /* FI_EFA_COMP_MEM_OP_WITH_* */
+	enum fi_efa_comp_mem_op       op;            /* comp value width to write */
+	enum fi_efa_comp_mem_op       err_op;        /* error value width */
+	struct fi_efa_memory_location location;      /* comp target: VA or dmabuf */
+	struct fi_efa_memory_location err_location;  /* error target: VA or dmabuf */
+	uint64_t                      length;        /* comp target region length */
+	uint64_t                      err_length;    /* error target region length */
+};
+
+/* Resource a signal is backed by. */
+enum fi_efa_comp_signal_type {
+	FI_EFA_COMP_SIGNAL_MEM_OP,    /* a completion memory operation */
+	FI_EFA_COMP_SIGNAL_CNTR_INC,  /* an event counter */
+};
+
+/* Completion memory op handle (a fid; fi_close() destroys it). */
+struct fid_efa_comp_mem_op {
+	struct fid fid;
+};
+
+/* Attributes for register_signal (step 2). */
+struct fi_efa_comp_signal_attr {
+	uint64_t                      comp_mask;
+	enum fi_efa_comp_signal_type  type;
+	union {
+		struct fid_efa_comp_mem_op *mem_op;  /* FI_EFA_COMP_SIGNAL_MEM_OP */
+		struct fid_cntr            *cntr;    /* FI_EFA_COMP_SIGNAL_CNTR_INC */
+	};
+};
+
+/* Signal handle (a fid; fi_close() deregisters it). */
+struct fid_efa_comp_signal {
+	struct fid fid;
+	uint32_t   id;   /* signal id used in work requests */
+};
+
+static inline uint32_t
+fid_efa_comp_signal_get_id(struct fid_efa_comp_signal *signal);
+```
+
+## Enabling signal support (endpoint)
+
+Signal support must be enabled on the endpoint before it is enabled, because it
+governs how the send queue is allocated (wide, 128 byte, WQEs). The application
+opts in with `fi_setopt()`:
+
+```c
+bool enable = true;
+fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_COMP_SIGNAL,
+	  &enable, sizeof(enable));
+```
+
+Enabling signals reduces the inline data a WQE can hold, so the device level
+inline size may not be achievable once signals are on. Query the effective
+inline size for the endpoint with `fi_getopt()` on *FI_OPT_INJECT_MSG_SIZE* /
+*FI_OPT_INJECT_RMA_SIZE* after enabling signals.
+
+Signals also use wider WQEs that consume more send queue memory per entry, so
+the effective send queue depth (tx size) is likewise reduced. The same happens
+when the endpoint requests a large inline (inject) size. Query the effective tx
+size with `fi_getopt()` on *FI_OPT_TX_SIZE*. The reported value is the minimum
+of the device's wide-WQE maximum SQ depth and the device advertised maximum.
+The large-inline reduction is known at `fi_getinfo()` (from the hints) and is
+already reflected in *tx_attr->size*; the signal reduction, being a per-endpoint
+`fi_setopt()` applied after `fi_getinfo()`, is only reported by `fi_getopt()` on
+the enabled endpoint. Use `fi_getopt()` for the effective per-endpoint limits.
+
+## Signal attachment (data path)
+
+A registered signal is attached to an individual work request by passing an
+EFA specific message structure and the *FI_EFA_EXTENDED_MSG* operation flag to
+*fi_writemsg()*. Completion with signal is currently supported only on RDMA
+write; *FI_EFA_EXTENDED_MSG* is rejected on *fi_sendmsg()* and the other data
+transfer calls. The EFA struct embeds the core descriptor as its first member,
+so a pointer to the EFA struct is passed wherever the core descriptor is
+expected:
+
+```c
+/* feature_bits gate which fields below the provider reads. */
+enum {
+	FI_EFA_LOCAL_SIGNAL_ID    = 1 << 0,
+	FI_EFA_REMOTE_SIGNAL_ID   = 1 << 1,
+	FI_EFA_LOCAL_SIGNAL_DATA  = 1 << 2,
+	FI_EFA_REMOTE_SIGNAL_DATA = 1 << 3,
+};
+
+struct fi_efa_msg_rma {
+	struct fi_msg_rma msg;    /* MUST be first -- castable to fi_msg_rma */
+	uint64_t feature_bits;    /* which fields below are valid (FI_EFA_*) */
+	uint32_t local_signal_id;
+	uint32_t remote_signal_id;
+	uint32_t local_signal_data;
+	uint32_t remote_signal_data;
+};
+```
+
+The outer *FI_EFA_EXTENDED_MSG* operation flag (a high, provider reserved bit of
+the *flags* word) is what tells the provider to reinterpret the descriptor as
+the EFA struct; the inner *feature_bits* word then selects the fields to read.
+
+*FI_EFA_LOCAL_SIGNAL_ID* / *FI_EFA_REMOTE_SIGNAL_ID*
+: Attach the local signal (fires on sender side TX completion) and/or the
+  remote signal (fires on receiver side RX completion), naming which registered
+  action fires.
+
+*FI_EFA_LOCAL_SIGNAL_DATA* / *FI_EFA_REMOTE_SIGNAL_DATA*
+: Supply that signal's per work request operand -- for a MEMSET signal the value
+  written, for a counter signal the increment amount. A signal may be attached
+  without data (leave the data bit unset), which the device treats as its
+  default operand. A signal's data bit may only be set when its ID bit is also
+  set.
+
+Constraints:
+
+- The endpoint must have signal support enabled; otherwise *FI_EFA_EXTENDED_MSG*
+  and the signal fields are rejected with *-FI_EINVAL*.
+- *FI_EFA_EXTENDED_MSG* is only accepted on *fi_writemsg()*. It is rejected with
+  *-FI_EINVAL* on *fi_sendmsg()* and the other data transfer variants.
+- Local and remote signals are independent: attach either or both.
+
+## Example
+
+Receiver: register a MEMSET signal over a host semaphore and send its id to the
+sender out of band.
+
+```c
+struct fi_efa_ops_signal *ops;
+struct fid_efa_comp_mem_op *mem_op;
+struct fid_efa_comp_signal *signal;
+uint32_t sem = 0;
+
+fi_open_ops(&domain->fid, FI_EFA_SIGNAL_OPS, 0, (void **)&ops, NULL);
+
+struct fi_efa_comp_mem_op_attr mem = {
+	.flags    = FI_EFA_COMP_MEM_OP_WITH_COMP_EXTERNAL_MEM,
+	.op       = FI_EFA_COMP_MEM_OP_SET_SIGNAL_VAL_32,
+	.location = { .type = FI_EFA_MEMORY_LOCATION_VA, .ptr = (uint8_t *)&sem },
+	.length   = sizeof(sem),
+};
+ops->create_comp_mem_op(domain, &mem, &mem_op);
+
+struct fi_efa_comp_signal_attr sig = {
+	.type = FI_EFA_COMP_SIGNAL_MEM_OP, .mem_op = mem_op,
+};
+ops->register_signal(domain, &sig, &signal);
+/* send fid_efa_comp_signal_get_id(signal) to the sender out of band */
+/* teardown: fi_close(&signal->fid); fi_close(&mem_op->fid); */
+```
+
+Sender: enable signals on the endpoint (before `fi_enable()`), then attach the
+peer's signal to an RDMA write.
+
+```c
+bool enable = true;
+fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_COMP_SIGNAL,
+	  &enable, sizeof(enable));
+/* ... fi_enable(ep), exchange RMA keys ... */
+
+struct fi_efa_msg_rma emsg = {
+	.msg = { .msg_iov = &iov, .iov_count = 1, .desc = &desc,
+		 .addr = dest, .rma_iov = &rma_iov, .rma_iov_count = 1,
+		 .context = ctx },
+	.feature_bits     = FI_EFA_REMOTE_SIGNAL_ID | FI_EFA_REMOTE_SIGNAL_DATA,
+	.remote_signal_id = peer_signal_id,
+	.remote_signal_data = 0xabcd,   /* value MEMSET into the peer's semaphore */
+};
+fi_writemsg(ep, (struct fi_msg_rma *)&emsg, FI_EFA_EXTENDED_MSG);
+```
+
 # LIMITATIONS
 
 ## Completion events

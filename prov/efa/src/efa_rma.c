@@ -221,6 +221,10 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	size_t total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	struct efa_context *efa_ctx;
 	struct efa_direct_ope *direct_ope = NULL;
+#if HAVE_EFADV_COMP_SIGNAL
+	struct efa_comp_signal_wr sig = {0};
+#endif
+	const struct efa_comp_signal_wr *sig_ptr = NULL;
 
 	efa_tracepoint(write_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 	EFA_DBG(FI_LOG_EP_DATA,
@@ -228,6 +232,48 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		total_len, msg->addr, (size_t) msg->context, flags);
 
 	ofi_genlock_lock(&base_ep->util_ep.lock);
+
+#if HAVE_EFADV_COMP_SIGNAL
+	if (flags & FI_EFA_EXTENDED_MSG) {
+		const struct fi_efa_msg_rma *emsg =
+			(const struct fi_efa_msg_rma *) msg;
+		uint64_t fb = emsg->feature_bits;
+
+		if (!base_ep->comp_signal_enabled) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "FI_EFA_EXTENDED_MSG used but signal support "
+				 "is not enabled on the endpoint\n");
+			err = -FI_EINVAL;
+			goto out_err;
+		}
+
+		/* A signal's data bit requires its ID bit. */
+		if (((fb & FI_EFA_LOCAL_SIGNAL_DATA) &&
+		     !(fb & FI_EFA_LOCAL_SIGNAL_ID)) ||
+		    ((fb & FI_EFA_REMOTE_SIGNAL_DATA) &&
+		     !(fb & FI_EFA_REMOTE_SIGNAL_ID))) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "FI_EFA_*_SIGNAL_DATA set without the "
+				 "corresponding FI_EFA_*_SIGNAL_ID\n");
+			err = -FI_EINVAL;
+			goto out_err;
+		}
+
+		sig.feature_bits = fb;
+		sig.local_signal_id = emsg->local_signal_id;
+		sig.remote_signal_id = emsg->remote_signal_id;
+		sig.local_signal_data = emsg->local_signal_data;
+		sig.remote_signal_data = emsg->remote_signal_data;
+		sig_ptr = &sig;
+	}
+#else
+	if (flags & FI_EFA_EXTENDED_MSG) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_EXTENDED_MSG is not supported by this build\n");
+		ofi_genlock_unlock(&base_ep->util_ep.lock);
+		return -FI_EINVAL;
+	}
+#endif
 
 	/* Prepare work request ID */
 	if (base_ep->context_mode != USE_CONTEXT2) {
@@ -318,7 +364,9 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 				inline_data_list, use_inline,
 				msg->rma_iov[0].key, msg->rma_iov[0].addr,
 				wr_id, msg->data, flags,
-				entry->ah, efa_av_entry_ep_addr(entry)->qpn, efa_av_entry_ep_addr(entry)->qkey);
+				entry->ah, efa_av_entry_ep_addr(entry)->qpn,
+				efa_av_entry_ep_addr(entry)->qkey,
+				sig_ptr);
 	if (OFI_UNLIKELY(err)) {
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 		goto out_err;

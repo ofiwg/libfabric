@@ -64,6 +64,15 @@ AC_CHECK_DECL([FI_EFA_WR_HIGH_PPS],
 	[[#include <rdma/fi_ext_efa.h>]])
 AM_CONDITIONAL([HAVE_FI_EFA_WR_HIGH_PPS], [test $have_fi_efa_wr_high_pps -eq 1])
 
+dnl Check for FI_EFA_EXTENDED_MSG (completion-with-signal) in fi_ext_efa.h,
+dnl needed for the efa_rma_comp_signal integration test.
+have_fi_efa_extended_msg=0
+AC_CHECK_DECL([FI_EFA_EXTENDED_MSG],
+	[have_fi_efa_extended_msg=1],
+	[have_fi_efa_extended_msg=0],
+	[[#include <rdma/fi_ext_efa.h>]])
+AM_CONDITIONAL([HAVE_FI_EFA_EXTENDED_MSG], [test $have_fi_efa_extended_msg -eq 1])
+
 dnl EFA GDA support
 AC_ARG_ENABLE([efagda],
 	[AS_HELP_STRING([--enable-efagda],
