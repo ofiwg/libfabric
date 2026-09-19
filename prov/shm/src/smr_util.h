@@ -38,6 +38,8 @@
 #include "ofi_lock.h"
 #include "ofi_xpmem.h"
 
+#include "smr_fifo.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -309,7 +311,6 @@ struct smr_return_entry {
 };
 
 OFI_DECLARE_ATOMIC_Q(struct smr_cmd, smr_cmd_queue);
-OFI_DECLARE_ATOMIC_Q(struct smr_return_entry, smr_return_queue);
 
 /* Queue of offsets of the command blocks obtained from the command pool
  * freestack
@@ -327,10 +328,9 @@ static inline struct smr_freestack *smr_inject_pool(struct smr_region *smr)
 	return (struct smr_freestack *)
 			((char *) smr + smr->inject_pool_offset);
 }
-static inline struct smr_return_queue *smr_return_queue(struct smr_region *smr)
+static inline struct smr_fifo *smr_return_queue(struct smr_region *smr)
 {
-	return (struct smr_return_queue *)
-			((char *) smr + smr->ret_queue_offset);
+	return (struct smr_fifo *) ((char *) smr + smr->ret_queue_offset);
 }
 static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {
