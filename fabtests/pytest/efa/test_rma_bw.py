@@ -1,7 +1,10 @@
 from efa.efa_common import (efa_run_client_server_test, DIRECT_SIZES,
-                            memory_type_list_all, memory_type_list_device_to_device)
+                            memory_type_list_all, memory_type_list_device_to_device,
+                            CudaMemorySupport, get_cuda_memory_support,
+                            get_efa_devices_on_dma_path)
 from common import (perf_progress_model_cli, ClientServerTest,
-                    PERF_SIZES, PERF_PR_CI, RANGE_SIZES, INJECT_SIZES)
+                    PERF_SIZES, PERF_PR_CI, RANGE_SIZES, INJECT_SIZES,
+                    NIC_DMA_PATH_CPU_MEDIATED)
 import pytest
 import copy
 
@@ -216,3 +219,43 @@ def test_efa_rma_bw_mr_relaxed_ordering(cmdline_args, operation_type, mem_type, 
                                message_size="all",
                                fabric=rma_fabric,
                                additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
+
+
+# A CUDA dmabuf fd encodes one of the two DMA paths to GPU memory, and the two
+# need different mapping types: a NIC that shares a PCIe switch with the GPU
+# needs CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE, while a NIC that reaches HBM
+# across the CPU needs the default mapping. Asking for the wrong one is not an
+# error at registration time, it just yields a handle to the wrong physical
+# address, so the mistake only surfaces as unresponsive-remote errors once data
+# moves.
+#
+# Every other CUDA test runs over a GPU-local NIC, because that is the NIC the
+# PCIe traversal in get_efa_device_name_for_cuda_device() finds, so nothing else
+# exercises the other mapping. Only a platform that has both kinds of NIC has
+# anything to run here: p6e-gb200, whose second set of NICs reaches GPU memory
+# over NVLink-C2C, is the one today, and this skips everywhere else.
+@pytest.mark.functional
+@pytest.mark.cuda_memory
+@pytest.mark.fabric(params=["efa", "efa-direct"])
+@pytest.mark.parametrize("operation_type", ["read", "write"])
+def test_rma_bw_cuda_dmabuf_over_cpu_mediated_nic(cmdline_args, operation_type, rma_fabric):
+    # The mapping type is only chosen where fabtests exports the dmabuf fd
+    # itself, which it does under -R, so without it there is nothing to cover.
+    if not cmdline_args.do_dmabuf_reg_for_hmem:
+        pytest.skip("this test needs dmabuf registration to be enabled")
+
+    for host in (cmdline_args.server_id, cmdline_args.client_id):
+        if not get_efa_devices_on_dma_path(host, NIC_DMA_PATH_CPU_MEDIATED):
+            pytest.skip("{} has no NIC that reaches GPU memory across the CPU".format(host))
+        if get_cuda_memory_support(cmdline_args, host) not in (CudaMemorySupport.DMA_BUF_ONLY,
+                                                              CudaMemorySupport.DMABUF_GDR_BOTH):
+            pytest.skip("{} does not support CUDA dmabuf".format(host))
+
+    command = "fi_rma_bw -e rdm -o " + operation_type
+    efa_run_client_server_test(cmdline_args, command, "short",
+                               completion_semantic="transmit_complete",
+                               memory_type="cuda_to_cuda",
+                               message_size="all",
+                               fabric=rma_fabric,
+                               nic_dma_path=NIC_DMA_PATH_CPU_MEDIATED,
+                               timeout=max(540, cmdline_args.timeout))
