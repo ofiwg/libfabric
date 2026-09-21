@@ -1527,6 +1527,10 @@ void smr_ep_progress(struct util_ep *util_ep)
 	 */
 	ofi_genlock_lock(ep->srx_lock);
 
+	/* util_ep.lock serializing shm's tx-completion path against the send path. */
+	if (ep->srx_lock != &ep->util_ep.lock)
+		ofi_genlock_lock(&ep->util_ep.lock);
+
 	if (smr_env.use_dsa_sar)
 		smr_dsa_progress(ep);
 
@@ -1540,6 +1544,9 @@ void smr_ep_progress(struct util_ep *util_ep)
 	/* always drive forward the ipc list since the completion is
 	 * independent of any action by the provider */
 	ep->smr_progress_async(ep);
+
+	if (ep->srx_lock != &ep->util_ep.lock)
+		ofi_genlock_unlock(&ep->util_ep.lock);
 
 	ofi_genlock_unlock(ep->srx_lock);
 }
