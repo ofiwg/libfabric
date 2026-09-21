@@ -698,6 +698,17 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 		cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
 	} while (mr->mr_state != CXIP_MR_UNLINKED);
 
+	/* Unlink alone does not fence operations that already matched the LE.
+	 * Invalidate so the buffer cannot be written after fi_close() returns.
+	 */
+	ret = cxil_invalidate_pte_le(mr->pte->pte, mr->req.req_id,
+				     C_PTL_LIST_PRIORITY);
+	if (ret)
+		CXIP_WARN("MR %p key 0x%016lX invalidate failed %d\n", mr,
+			  mr->key, ret);
+
+	cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
+
 cleanup:
 	cxip_pte_free(mr->pte);
 
