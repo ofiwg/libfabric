@@ -56,6 +56,64 @@ The following features are supported:
 : The DGRAM endpoint only supports *FI_MSG* capability with a maximum
   message size of the MTU of the underlying hardware (approximately 8 KiB).
 
+*Inject*
+: On the `efa-direct` fabric and on the *FI_EP_DGRAM* endpoint, inject
+  (`fi_inject`, `fi_injectdata`, `fi_inject_write` and `fi_inject_writedata`)
+  requires the *FI_CONTEXT2* mode. Without that mode the provider must not touch
+  the application's context buffer, so it hands the context straight to the
+  device work request, which leaves it no way to mark an operation as not
+  requesting a completion, the very thing inject needs. `fi_getinfo` therefore
+  reports an inject size of 0 without *FI_CONTEXT2*, and rejects a nonzero
+  `tx_attr->inject_size` hint; the inject calls themselves return *-FI_ENOSYS*.
+  The `efa` fabric of an RDM endpoint injects through its own protocol and has no
+  such requirement. The inject sizes an endpoint ended up with can be queried
+  with the `fi_getopt` API with option names `FI_OPT_INJECT_MSG_SIZE` and
+  `FI_OPT_INJECT_RMA_SIZE`.
+
+*Wide send queue entries*
+: On the `efa-direct` fabric, inject data is carried inside the send queue entry
+  itself, so the size of that entry bounds the inject size. Before Libfabric v2.6
+  the provider only used the regular send queue entry, which holds at most 32
+  bytes of inline data, and inline RMA write was not available at all: an
+  `efa-direct` endpoint reported 32 bytes for `FI_OPT_INJECT_MSG_SIZE` and 0 for
+  `FI_OPT_INJECT_RMA_SIZE`.
+  Libfabric v2.6 added support for the wide send queue entry offered by newer
+  EFA devices, which holds a larger, device-specific amount of inline data and,
+  on a device that also supports RDMA write, makes inline RMA write available.
+  Wide entries additionally require a Libfabric built against an rdma-core that
+  reports the wide inline buffer size, and are available to *FI_EP_RDM*
+  endpoints on the `efa-direct` fabric only.
+  Inject itself requires the *FI_CONTEXT2* mode, see *Inject* above.
+
+  An application enables wide entries by asking for an inject size above the
+  regular 32 byte limit, in either of two ways. It can pass a larger
+  `tx_attr->inject_size` hint to `fi_getinfo`, which returns *-FI_ENODATA* if the
+  device does not support wide entries or the requested size exceeds what one
+  holds. Alternatively, it can overwrite `tx_attr->inject_size` in the `fi_info`
+  returned by `fi_getinfo` before passing that `fi_info` to `fi_endpoint`, in
+  which case the send queue is created for wide entries without any negotiation
+  through `fi_getinfo`. Either way, the resulting endpoint reports the requested
+  size for `FI_OPT_INJECT_MSG_SIZE`, and for `FI_OPT_INJECT_RMA_SIZE` when the
+  device supports RDMA write, 0 otherwise.
+
+  Because a wide entry occupies more send queue space, it lowers the number of
+  entries the send queue can hold. When the inject size is negotiated through
+  `fi_getinfo`, the reduced maximum is reported in `tx_attr->size`, and
+  `fi_getinfo` returns *-FI_ENODATA* if the `tx_attr->size` hint exceeds it. The depth an
+  endpoint was actually created with can also be queried with `fi_getopt`; see
+  *Endpoint queue depths* below, which is the only way to observe it when the
+  inject size was overwritten at `fi_endpoint` time. The receive queue is
+  unaffected.
+
+*Endpoint queue depths*
+: The effective transmit and receive queue depths of an endpoint can be queried
+  with the `fi_getopt` API with option names `FI_OPT_TX_SIZE` and
+  `FI_OPT_RX_SIZE`. The reported values are the depths the endpoint's queues were
+  created with, so they can be smaller than the `size` fields requested in
+  `tx_attr` and `rx_attr`, because they are capped by the maximum queue depths of
+  the EFA device and, for the transmit queue, by the use of wide send queue
+  entries described above.
+
 *Address vectors*
 : The provider supports *FI_AV_TABLE*. *FI_AV_MAP* was deprecated in Libfabric 2.x.
   Applications can still use *FI_AV_MAP* to create an address vector. But the EFA
