@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-09\-08" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-09\-21" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -77,6 +77,82 @@ and \f[V]FI_OPT_MAX_RMA_SIZE\f[R]
 The DGRAM endpoint only supports \f[I]FI_MSG\f[R] capability with a
 maximum message size of the MTU of the underlying hardware
 (approximately 8 KiB).
+.TP
+\f[I]Inject\f[R]
+On the \f[V]efa-direct\f[R] fabric and on the \f[I]FI_EP_DGRAM\f[R]
+endpoint, inject (\f[V]fi_inject\f[R], \f[V]fi_injectdata\f[R],
+\f[V]fi_inject_write\f[R] and \f[V]fi_inject_writedata\f[R]) requires
+the \f[I]FI_CONTEXT2\f[R] mode.
+Without that mode the provider must not touch the application\[cq]s
+context buffer, so it hands the context straight to the device work
+request, which leaves it no way to mark an operation as not requesting a
+completion, the very thing inject needs.
+\f[V]fi_getinfo\f[R] therefore reports an inject size of 0 without
+\f[I]FI_CONTEXT2\f[R], and rejects a nonzero
+\f[V]tx_attr->inject_size\f[R] hint; the inject calls themselves return
+\f[I]-FI_ENOSYS\f[R].
+The \f[V]efa\f[R] fabric of an RDM endpoint injects through its own
+protocol and has no such requirement.
+The inject sizes an endpoint ended up with can be queried with the
+\f[V]fi_getopt\f[R] API with option names
+\f[V]FI_OPT_INJECT_MSG_SIZE\f[R] and \f[V]FI_OPT_INJECT_RMA_SIZE\f[R].
+.TP
+\f[I]Wide send queue entries\f[R]
+On the \f[V]efa-direct\f[R] fabric, inject data is carried inside the
+send queue entry itself, so the size of that entry bounds the inject
+size.
+Before Libfabric v2.6 the provider only used the regular send queue
+entry, which holds at most 32 bytes of inline data, and inline RMA write
+was not available at all: an \f[V]efa-direct\f[R] endpoint reported 32
+bytes for \f[V]FI_OPT_INJECT_MSG_SIZE\f[R] and 0 for
+\f[V]FI_OPT_INJECT_RMA_SIZE\f[R].
+Libfabric v2.6 added support for the wide send queue entry offered by
+newer EFA devices, which holds a larger, device-specific amount of
+inline data and, on a device that also supports RDMA write, makes inline
+RMA write available.
+Wide entries additionally require a Libfabric built against an rdma-core
+that reports the wide inline buffer size, and are available to
+\f[I]FI_EP_RDM\f[R] endpoints on the \f[V]efa-direct\f[R] fabric only.
+Inject itself requires the \f[I]FI_CONTEXT2\f[R] mode, see
+\f[I]Inject\f[R] above.
+.PP
+An application enables wide entries by asking for an inject size above
+the regular 32 byte limit, in either of two ways.
+It can pass a larger \f[V]tx_attr->inject_size\f[R] hint to
+\f[V]fi_getinfo\f[R], which returns \f[I]-FI_ENODATA\f[R] if the device
+does not support wide entries or the requested size exceeds what one
+holds.
+Alternatively, it can overwrite \f[V]tx_attr->inject_size\f[R] in the
+\f[V]fi_info\f[R] returned by \f[V]fi_getinfo\f[R] before passing that
+\f[V]fi_info\f[R] to \f[V]fi_endpoint\f[R], in which case the send queue
+is created for wide entries without any negotiation through
+\f[V]fi_getinfo\f[R].
+Either way, the resulting endpoint reports the requested size for
+\f[V]FI_OPT_INJECT_MSG_SIZE\f[R], and for
+\f[V]FI_OPT_INJECT_RMA_SIZE\f[R] when the device supports RDMA write, 0
+otherwise.
+.PP
+Because a wide entry occupies more send queue space, it lowers the
+number of entries the send queue can hold.
+When the inject size is negotiated through \f[V]fi_getinfo\f[R], the
+reduced maximum is reported in \f[V]tx_attr->size\f[R], and
+\f[V]fi_getinfo\f[R] returns \f[I]-FI_ENODATA\f[R] if the
+\f[V]tx_attr->size\f[R] hint exceeds it.
+The depth an endpoint was actually created with can also be queried with
+\f[V]fi_getopt\f[R]; see \f[I]Endpoint queue depths\f[R] below, which is
+the only way to observe it when the inject size was overwritten at
+\f[V]fi_endpoint\f[R] time.
+The receive queue is unaffected.
+.TP
+\f[I]Endpoint queue depths\f[R]
+The effective transmit and receive queue depths of an endpoint can be
+queried with the \f[V]fi_getopt\f[R] API with option names
+\f[V]FI_OPT_TX_SIZE\f[R] and \f[V]FI_OPT_RX_SIZE\f[R].
+The reported values are the depths the endpoint\[cq]s queues were
+created with, so they can be smaller than the \f[V]size\f[R] fields
+requested in \f[V]tx_attr\f[R] and \f[V]rx_attr\f[R], because they are
+capped by the maximum queue depths of the EFA device and, for the
+transmit queue, by the use of wide send queue entries described above.
 .TP
 \f[I]Address vectors\f[R]
 The provider supports \f[I]FI_AV_TABLE\f[R].
