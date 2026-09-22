@@ -6,6 +6,8 @@
 
 #include "efa_rdm_proto.h"
 
+extern struct efa_rdm_proto efa_rdm_proto_longcts;
+
 void efa_rdm_proto_longcts_handle_cts_recv(struct efa_rdm_pke *pkt_entry);
 void efa_rdm_proto_longcts_handle_ctsdata_recv(struct efa_rdm_pke *pkt_entry);
 

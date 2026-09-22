@@ -112,6 +112,7 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	pkt_entry->payload_mr = NULL;
 	pkt_entry->peer = NULL;
 	pkt_entry->handle_pke = NULL;
+	pkt_entry->proto = NULL;
 
 	switch (alloc_type) {
 	case EFA_RDM_PKE_FROM_READ_COPY_POOL:
@@ -323,6 +324,8 @@ void efa_rdm_pke_copy(struct efa_rdm_pke *dest,
 		}
 	}
 	dest->peer = src->peer;
+	dest->handle_pke = src->handle_pke;
+	dest->proto = src->proto;
 	dest->flags = EFA_RDM_PKE_IN_USE;
 	dest->next = NULL;
 	memcpy(dest->wiredata, src->wiredata + src_pkt_offset, dest->pkt_size);

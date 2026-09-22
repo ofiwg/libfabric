@@ -257,7 +257,7 @@ EFA_RDM_PROTO_DEF(eager_write,
  * A transmit complete write is done once the device reports the send, so it
  * reports the completion and releases the TXE here. A delivery complete write
  * must also wait for the peer's RECEIPT, so it only releases the TXE here if
- * that RECEIPT already arrived; otherwise efa_rdm_proto_handle_receipt_recv()
+ * that RECEIPT already arrived; otherwise efa_rdm_pke_handle_receipt_recv()
  * reports the completion and releases it.
  */
 ssize_t efa_rdm_proto_eager_write_handle_rtw_send_completion(

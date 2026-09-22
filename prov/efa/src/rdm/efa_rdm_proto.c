@@ -8,8 +8,11 @@
 #include "efa_rdm_pke_nonreq.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longcts.h"
+#include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_medium.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
+#include "protocols/efa_rdm_proto_runtread.h"
 #include "efa_rdm_msg.h"
 
 /**
@@ -82,11 +85,16 @@ void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	/* Write send completion immediately to preserve DC semantics. */
 	efa_rdm_txe_report_completion(txe);
 
 	if (txe->state == EFA_RDM_OPE_SEND)
 		dlist_remove(&txe->entry);
 
+	/*
+	 * The TXE is released either here or when the request/CTSDATA packet's
+	 * send completes, whichever happens last.
+	 */
 	txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
 	if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
 		efa_rdm_txe_release(txe);

@@ -35,6 +35,7 @@ enum efa_rdm_pke_alloc_type {
 };
 
 struct efa_rdm_pke;
+struct efa_rdm_proto;
 
 typedef ssize_t (*efa_rdm_pke_callback)(struct efa_rdm_pke *pkt_entry);
 
@@ -255,6 +256,9 @@ struct efa_rdm_pke {
 
 	/**@brief Callback function called in TX and RX paths */
 	efa_rdm_pke_callback handle_pke;
+
+	/** @brief Protocol selected for a received RTM packet */
+	struct efa_rdm_proto *proto;
 
 #if ENABLE_DEBUG
 	struct efa_rdm_pke_debug_info_buffer *debug_info; /**< Pointer to debug info buffer */
