@@ -6,6 +6,7 @@
 #include "rdm/efa_rdm_pke_cmd.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_longcts.h"
 
 /**
  * @brief Build an eager RTM TX packet the way the send path does.
@@ -1225,7 +1226,7 @@ void test_efa_rdm_pke_handle_cts_recv_grants_window(void **state)
 
 	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
 	assert_non_null(txe);
-	efa_rdm_pke_handle_cts_recv(
+	efa_rdm_proto_longcts_handle_cts_recv(
 		efa_unit_test_alloc_cts_pke(ep, txe->tx_id, 4096));
 	assert_int_equal(txe->window, 4096);
 	assert_int_equal(txe->state, EFA_RDM_OPE_SEND);
@@ -1233,7 +1234,7 @@ void test_efa_rdm_pke_handle_cts_recv_grants_window(void **state)
 	/* the emulated longcts read direction, where a CTS names an rxe */
 	rxe = efa_unit_test_alloc_rxe(resource, ofi_op_read_rsp);
 	assert_non_null(rxe);
-	efa_rdm_pke_handle_cts_recv(
+	efa_rdm_proto_longcts_handle_cts_recv(
 		efa_unit_test_alloc_cts_pke(ep, rxe->rx_id, 2048));
 	assert_int_equal(rxe->window, 2048);
 	assert_int_equal(rxe->state, EFA_RDM_OPE_SEND);
@@ -1266,7 +1267,7 @@ void test_efa_rdm_pke_handle_cts_recv_drops_stale_id(void **state)
 	efa_rdm_txe_release(txe);
 
 	/* nothing holds the slot, so the CTS has nowhere to land */
-	efa_rdm_pke_handle_cts_recv(
+	efa_rdm_proto_longcts_handle_cts_recv(
 		efa_unit_test_alloc_cts_pke(ep, stale_id, 4096));
 	assert_true(dlist_empty(&ep->ope_longcts_send_list));
 
@@ -1277,14 +1278,14 @@ void test_efa_rdm_pke_handle_cts_recv_drops_stale_id(void **state)
 			 efa_rdm_txe_id_index(stale_id));
 	assert_int_not_equal(reused->tx_id, stale_id);
 
-	efa_rdm_pke_handle_cts_recv(
+	efa_rdm_proto_longcts_handle_cts_recv(
 		efa_unit_test_alloc_cts_pke(ep, stale_id, 4096));
 	assert_int_equal(reused->window, 0);
 	assert_int_equal(reused->state, EFA_RDM_TXE_REQ);
 	assert_true(dlist_empty(&ep->ope_longcts_send_list));
 
 	/* the same CTS with the current id is applied */
-	efa_rdm_pke_handle_cts_recv(
+	efa_rdm_proto_longcts_handle_cts_recv(
 		efa_unit_test_alloc_cts_pke(ep, reused->tx_id, 4096));
 	assert_int_equal(reused->window, 4096);
 	assert_int_equal(reused->state, EFA_RDM_OPE_SEND);

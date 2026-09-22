@@ -70,7 +70,7 @@ EFA_RDM_PROTO_DEF(eager,
  * reports the completion and releases the TXE here. A delivery complete send
  * must also wait for the peer's RECEIPT, so it only releases the TXE here if
  * that RECEIPT already arrived; otherwise
- * efa_rdm_pke_handle_receipt_recv() reports the completion and releases it.
+ * efa_rdm_proto_handle_receipt_recv() reports the completion and releases it.
  */
 ssize_t efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry)

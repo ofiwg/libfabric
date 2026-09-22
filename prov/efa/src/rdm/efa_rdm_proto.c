@@ -5,6 +5,7 @@
 #include "efa.h"
 #include "efa_rdm_domain.h"
 #include "efa_rdm_ope.h"
+#include "efa_rdm_pke_nonreq.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
 #include "protocols/efa_rdm_proto_medium.h"
@@ -66,6 +67,59 @@ static struct efa_rdm_proto * const efa_rdm_emulated_write_protocols[] = {
 static struct efa_rdm_proto * const efa_rdm_emulated_read_protocols[] = {
 	&efa_rdm_proto_short_rtr,
 };
+
+void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_receipt_hdr *receipt_hdr =
+		efa_rdm_pke_get_receipt_hdr(pkt_entry);
+	struct efa_rdm_ope *txe =
+		efa_rdm_ep_live_txe_from_id(pkt_entry->ep, receipt_hdr->tx_id);
+
+	if (!txe) {
+		EFA_INFO(FI_LOG_CQ,
+			 "RECEIPT names a send that is no longer live, dropping it\n");
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	efa_rdm_txe_report_completion(txe);
+
+	if (txe->state == EFA_RDM_OPE_SEND)
+		dlist_remove(&txe->entry);
+
+	txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
+	if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
+		efa_rdm_txe_release(txe);
+
+	efa_rdm_pke_release_rx(pkt_entry);
+}
+
+void efa_rdm_proto_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_eor_hdr *eor_hdr =
+		(struct efa_rdm_eor_hdr *) pkt_entry->wiredata;
+	struct efa_rdm_ope *txe =
+		efa_rdm_ep_live_txe_from_id(pkt_entry->ep, eor_hdr->send_id);
+
+	if (!txe) {
+		EFA_INFO(FI_LOG_CQ,
+			 "EOR names a send that is no longer live, dropping it\n");
+		efa_rdm_pke_release_rx(pkt_entry);
+		return;
+	}
+
+	efa_rdm_txe_release_read_msg_slot(txe);
+
+	txe->bytes_acked += txe->total_len - txe->bytes_runt;
+	if (txe->bytes_acked == txe->total_len) {
+		efa_rdm_txe_report_completion(txe);
+		txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
+		if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
+			efa_rdm_txe_release(txe);
+	}
+
+	efa_rdm_pke_release_rx(pkt_entry);
+}
 
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,
 						  const struct fi_msg *msg,

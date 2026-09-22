@@ -181,6 +181,10 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 						 struct efa_rdm_ope *txe,
 						 struct efa_rdm_proto **proto);
 
+void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry);
+
+void efa_rdm_proto_handle_eor_recv(struct efa_rdm_pke *pkt_entry);
+
 /* Utility funcions */
 
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,
