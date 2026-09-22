@@ -54,12 +54,10 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 };
 
 /*
- * Emulated write protocols, tried in order during selection, terminated by
- * NULL.
+ * Emulated write protocols, tried in order during selection.
  */
 static struct efa_rdm_proto * const efa_rdm_emulated_write_protocols[] = {
 	&efa_rdm_proto_eager_write,
-	NULL,
 };
 
 /*
@@ -239,7 +237,7 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
 		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
 
-	for (i = 0; efa_rdm_emulated_write_protocols[i] != NULL; ++i) {
+	for (i = 0; i < ARRAY_SIZE(efa_rdm_emulated_write_protocols); ++i) {
 		selected_proto = efa_rdm_emulated_write_protocols[i];
 
 		req_pkt_type = efa_rdm_proto_req_pkt_type(
