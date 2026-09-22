@@ -235,6 +235,10 @@ static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_ope *txe,
 {
 	size_t max_data_offset, max_rtw_data_capacity;
 
+	/* TODO: remove interface-specific run-time checks for protocol usage */
+	if (iface == FI_HMEM_SYNAPSEAI)
+		return false;
+
 	max_data_offset = efa_rdm_pkt_type_get_req_hdr_size(
 		req_pkt_type, header_flags, txe->rma_iov_count);
 	max_rtw_data_capacity = txe->ep->mtu_size - max_data_offset;
