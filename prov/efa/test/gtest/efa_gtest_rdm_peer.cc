@@ -51,6 +51,17 @@ TEST_F(EfaRdmPeerTest, reordered_packet_retains_callback)
 	EXPECT_TRUE(res.protocol_correct);
 }
 
+TEST_F(EfaRdmPeerTest, reordered_rta_retains_callback)
+{
+	struct efa_test_reorder_callback_result res = {};
+
+	ASSERT_EQ(efa_test_reordered_rta_retains_callback(
+			  resource.ep, peer_addr, &res),
+		  0);
+	EXPECT_TRUE(res.callback_set);
+	EXPECT_TRUE(res.protocol_correct);
+}
+
 TEST_F(EfaRdmPeerTest, reorder_drain_invokes_callback)
 {
 	struct efa_test_reorder_callback_result res = {};

@@ -459,19 +459,46 @@ efa_rdm_pke_handle_existing_mulreq_rxe(struct efa_rdm_pke *pkt_entry)
 	return true;
 }
 
-void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_handle_rtm_recv(struct efa_rdm_pke *pkt_entry,
+				 struct efa_rdm_proto *proto)
+{
+	assert(efa_rdm_pkt_type_is_rtm(
+		efa_rdm_pke_get_base_hdr(pkt_entry)->type));
+	assert(proto);
+	assert(!pkt_entry->proto);
+	assert(!pkt_entry->handle_pke);
+
+	pkt_entry->proto = proto;
+	pkt_entry->handle_pke = efa_rdm_pke_proc_rtm_after_robuf;
+	efa_rdm_pke_handle_ordered_req_recv(pkt_entry);
+}
+
+void efa_rdm_pke_handle_mulreq_rtm_recv(struct efa_rdm_pke *pkt_entry,
+					struct efa_rdm_proto *proto)
 {
 	assert(pkt_entry->peer);
-	assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type >=
-	       EFA_RDM_BASELINE_REQ_PKT_BEGIN);
-	assert(pkt_entry->handle_pke);
+	assert(efa_rdm_pkt_type_is_mulreq(
+		efa_rdm_pke_get_base_hdr(pkt_entry)->type));
+	assert(proto);
+	assert(!pkt_entry->proto);
+	assert(!pkt_entry->handle_pke);
 
-	if (pkt_entry->proto &&
-	    efa_rdm_pkt_type_is_mulreq(
-		    efa_rdm_pke_get_base_hdr(pkt_entry)->type) &&
-	    efa_rdm_pke_handle_existing_mulreq_rxe(pkt_entry))
+	pkt_entry->proto = proto;
+	pkt_entry->handle_pke = efa_rdm_pke_proc_rtm_after_robuf;
+	if (efa_rdm_pke_handle_existing_mulreq_rxe(pkt_entry))
 		return;
 
+	efa_rdm_pke_handle_ordered_req_recv(pkt_entry);
+}
+
+void efa_rdm_pke_handle_rta_recv(struct efa_rdm_pke *pkt_entry)
+{
+	assert(efa_rdm_pkt_type_is_rta(
+		efa_rdm_pke_get_base_hdr(pkt_entry)->type));
+	assert(!pkt_entry->proto);
+	assert(!pkt_entry->handle_pke);
+
+	pkt_entry->handle_pke = efa_rdm_pke_proc_rta;
 	efa_rdm_pke_handle_ordered_req_recv(pkt_entry);
 }
 
