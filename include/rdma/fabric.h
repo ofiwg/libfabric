@@ -162,6 +162,7 @@ typedef struct fid *fid_t;
 
 #define FI_RESCAN		(1ULL << 35)
 #define FI_PEER_TRANSFER	(1ULL << 36)
+#define FI_WR			(1ULL << 39)
 /* #define FI_MR_DMABUF		(1ULL << 40) */
 #define FI_AV_USER_ID		(1ULL << 41)
 #define FI_FIREWALL_ADDR	(1ULL << 42)
@@ -431,6 +432,8 @@ struct fi_ep_attr {
 	size_t			auth_key_size;
 	uint8_t			*auth_key;
 	struct fid_xpu_ctx	*xpu_ctx;
+	size_t			max_tx_wr_size;
+	size_t			max_rx_wr_size;
 };
 
 struct fi_domain_attr {

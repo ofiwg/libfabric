@@ -398,6 +398,13 @@ additional optimizations.
   FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
   types of RMA operations supported by an endpoint.
 
+*FI_WR*
+: Requests that an endpoint support the Work Request API, which decomposes a
+  data transfer into separate prepare, modify, queue, and flush steps.  An
+  endpoint supporting this capability reports the required work request sizes
+  in fi_ep_attr::max_tx_wr_size and fi_ep_attr::max_rx_wr_size.  See
+  [`fi_wr`(3)](fi_wr.3.html) for details.
+
 *FI_RMA_EVENT*
 : Requests that an endpoint support the generation of completion events
   when it is the target of an RMA and/or atomic operation.  This
@@ -490,7 +497,7 @@ FI_REMOTE_READ, FI_REMOTE_WRITE
 
 Secondary capabilities: FI_MULTI_RECV, FI_TAGGED_MULTI_RECV, FI_SOURCE,
 FI_RMA_EVENT, FI_SHARED_AV, FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM,
-FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.
+FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM, FI_WR
 
 # MODE
 

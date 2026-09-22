@@ -253,6 +253,7 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_tagged.h \
 	$(top_srcdir)/include/rdma/fi_trigger.h \
 	$(top_srcdir)/include/rdma/fi_profile.h \
+	$(top_srcdir)/include/rdma/fi_wr.h \
 	$(top_srcdir)/include/rdma/fi_xpu.h \
 	$(top_srcdir)/include/rdma/fi_xpu_device.h
 providersinclude_HEADERS += \
@@ -306,6 +307,7 @@ real_man_pages = \
         man/man3/fi_rma.3 \
         man/man3/fi_tagged.3 \
         man/man3/fi_trigger.3 \
+        man/man3/fi_wr.3 \
         man/man3/fi_xpu.3 \
         man/man3/fi_version.3 \
         man/man7/fabric.7 \
