@@ -5,6 +5,7 @@
 #ifndef EFA_GTEST_COMMON_MOCKS_H
 #define EFA_GTEST_COMMON_MOCKS_H
 
+#include <config.h>
 #include <bitset>
 #include <gmock/gmock.h>
 #include <vector>
@@ -29,9 +30,27 @@ struct efa_rdm_ope;
 struct dlist_entry;
 
 /*
+ * The XPU queue geometry queries only exist in a recent enough rdma-core, which
+ * is exactly what HAVE_EFA_XPU tests, so wrapping them is conditional too.
+ */
+#if HAVE_EFA_XPU
+#define EFA_MOCK_XPU_FUNCTIONS(X)                                              \
+	X(int, efadv_query_qp_wqs,                                             \
+	  (struct ibv_qp * ibvqp, struct efadv_wq_attr * sq_attr,              \
+	   struct efadv_wq_attr * rq_attr, uint32_t inlen),                    \
+	  (ibvqp, sq_attr, rq_attr, inlen))                                    \
+	X(int, efadv_query_cq,                                                 \
+	  (struct ibv_cq * ibvcq, struct efadv_cq_attr * attr,                 \
+	   uint32_t inlen),                                                    \
+	  (ibvcq, attr, inlen))
+#else
+#define EFA_MOCK_XPU_FUNCTIONS(X)
+#endif
+
+/*
  * X-macro list of every mocked function. Each row is
  *   X(ret, name, (param decls), (arg names))
- * 
+ *
  * To add a new mocked function:
  *   1. Add a row to EFA_MOCK_FUNCTIONS
  *   2. Add any needed forward struct declarations above
@@ -137,7 +156,8 @@ struct dlist_entry;
 	  (pkt_entry, local_buf, len, desc, remote_buf, remote_key))           \
 	X(int, ibv_modify_qp,                                                  \
 	  (struct ibv_qp * qp, struct ibv_qp_attr * attr, int attr_mask),      \
-	  (qp, attr, attr_mask))
+	  (qp, attr, attr_mask))                                        \
+	EFA_MOCK_XPU_FUNCTIONS(X)
 
 /* --- Generator macros --- */
 
