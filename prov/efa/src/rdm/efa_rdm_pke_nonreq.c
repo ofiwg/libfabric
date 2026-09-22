@@ -267,41 +267,6 @@ void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry)
 	}
 }
 
-void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_ope *ope;
-	struct efa_rdm_cts_hdr *cts_pkt;
-
-	ep = pkt_entry->ep;
-	cts_pkt = (struct efa_rdm_cts_hdr *)pkt_entry->wiredata;
-
-	/*
-	 * Drop a CTS whose id no longer names the operation that created it.
-	 */
-	ope = efa_rdm_ep_live_ope_from_id(ep, cts_pkt->send_id);
-	if (OFI_UNLIKELY(!ope)) {
-		EFA_INFO(FI_LOG_CQ,
-			 "CTS names ope id %" PRIu32 ", which no longer holds "
-			 "the operation that requested it. Dropping the CTS.\n",
-			 cts_pkt->send_id);
-		efa_rdm_pke_release_rx(pkt_entry);
-		return;
-	}
-
-	ope->rx_id = cts_pkt->recv_id;
-	ope->window = cts_pkt->recv_length;
-	assert(ope->window > 0);
-
-	efa_rdm_pke_release_rx(pkt_entry);
-
-	if (ope->state != EFA_RDM_OPE_SEND) {
-		ope->state = EFA_RDM_OPE_SEND;
-		dlist_insert_tail(&ope->entry, &ep->ope_longcts_send_list);
-		efa_rdm_ep_enqueue_progress_list(ep);
-	}
-}
-
 /* CTSDATA pakcet related functions */
 int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 			     struct efa_rdm_ope *ope,
@@ -450,26 +415,6 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 			efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_PKT_POST);
 		}
 	}
-}
-
-void efa_rdm_pke_handle_ctsdata_recv(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ctsdata_hdr *data_hdr;
-	struct efa_rdm_ope *ope;
-	size_t hdr_size;
-
-	data_hdr = efa_rdm_pke_get_ctsdata_hdr(pkt_entry);
-
-	ope = efa_rdm_ep_get_ope_from_ope_id(pkt_entry->ep, data_hdr->recv_id);
-
-	hdr_size = sizeof(struct efa_rdm_ctsdata_hdr);
-	if (data_hdr->flags & EFA_RDM_PKT_CONNID_HDR)
-		hdr_size += sizeof(struct efa_rdm_ctsdata_opt_connid_hdr);
-
-	efa_rdm_pke_proc_ctsdata(pkt_entry, ope,
-				 pkt_entry->wiredata + hdr_size,
-				 data_hdr->seg_offset,
-				 data_hdr->seg_length);
 }
 
 /*  READRSP packet functions */
@@ -805,46 +750,6 @@ int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope
 	pkt_entry->peer = rxe->peer;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
 	return 0;
-}
-
-/*
- *   Sender handles the acknowledgment (EFA_RDM_EOR_PKT) from receiver on the completion
- *   of the large message copy via fi_readmsg operation
- */
-void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_eor_hdr *eor_hdr;
-	struct efa_rdm_ope *txe;
-
-	eor_hdr = (struct efa_rdm_eor_hdr *)pkt_entry->wiredata;
-
-	/* pre-post buf used here, so can NOT track back to txe with x_entry */
-	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, eor_hdr->send_id);
-	if (!txe) {
-		EFA_INFO(FI_LOG_CQ,
-			 "EOR names a send that is no longer live, dropping it\n");
-		efa_rdm_pke_release_rx(pkt_entry);
-		return;
-	}
-
-	efa_rdm_txe_release_read_msg_slot(txe);
-
-	txe->bytes_acked += txe->total_len - txe->bytes_runt;
-	if (txe->bytes_acked == txe->total_len) {
-		efa_rdm_txe_report_completion(txe);
-		/*
-		 * The txe is released either here or in
-		 * efa_rdm_pke_handle_send_completion() for the
-		 * LONGREAD_RTM packet, whichever happens last.
-		 * Release here if the send completion already arrived.
-		 */
-		txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
-		if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
-			efa_rdm_txe_release(txe);
-	}
-
-	efa_rdm_pke_release_rx(pkt_entry);
-
 }
 
 /*
@@ -1200,43 +1105,6 @@ void efa_rdm_pke_handle_receipt_send_completion(struct efa_rdm_pke *pkt_entry)
 	 */
 	if (rxe->efa_outstanding_tx_ops == 0)
 		efa_rdm_rxe_release(rxe);
-}
-
-void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *txe = NULL;
-	struct efa_rdm_receipt_hdr *receipt_hdr;
-
-	receipt_hdr = efa_rdm_pke_get_receipt_hdr(pkt_entry);
-	/* Retrieve the txe that will be written into TX CQ*/
-	txe = efa_rdm_ep_live_txe_from_id(pkt_entry->ep, receipt_hdr->tx_id);
-	if (!txe) {
-		EFA_INFO(FI_LOG_CQ,
-			 "RECEIPT names a send that is no longer live, dropping it\n");
-		efa_rdm_pke_release_rx(pkt_entry);
-		return;
-	}
-
-	/* Write send completion immediately to preserve DC semantics */
-	efa_rdm_txe_report_completion(txe);
-
-	/* Remove from ope_longcts_send_list since operation is complete */
-	if (txe->state == EFA_RDM_OPE_SEND) {
-		dlist_remove(&txe->entry);
-	}
-
-	/*
-	 * Mark that the remote ack (RECEIPT) has arrived.
-	 * The txe is released either here or in
-	 * efa_rdm_pke_handle_send_completion() for the DC
-	 * request/CTSDATA packet, whichever happens last.
-	 * Release here if the send completion already arrived.
-	 */
-	txe->internal_flags |= EFA_RDM_TXE_REMOTE_ACK_RECEIVED;
-	if (efa_rdm_txe_with_remote_ack_ready_for_release(txe))
-		efa_rdm_txe_release(txe);
-
-	efa_rdm_pke_release_rx(pkt_entry);
 }
 
 /* atomrsp packet related functions: init, handle_sent, handle_send_completion and recv

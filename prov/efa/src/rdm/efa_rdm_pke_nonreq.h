@@ -169,8 +169,6 @@ void efa_rdm_pke_handle_cts_sent(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_cts_send_completion(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry);
-
 static inline
 struct efa_rdm_ctsdata_hdr *efa_rdm_pke_get_ctsdata_hdr(struct efa_rdm_pke *pke)
 {
@@ -182,11 +180,15 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 			     size_t data_offset,
 			     int data_size);
 
+void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
+			      struct efa_rdm_ope *ope,
+			      char *data,
+			      size_t seg_offset,
+			      size_t seg_size);
+
 void efa_rdm_pke_handle_ctsdata_sent(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry);
-
-void efa_rdm_pke_handle_ctsdata_recv(struct efa_rdm_pke *pkt_entry);
 
 /* READRSP packet related functions */
 static inline struct efa_rdm_readrsp_hdr *efa_rdm_pke_get_readrsp_hdr(struct efa_rdm_pke *pke)
@@ -255,8 +257,6 @@ int efa_rdm_pke_init_eor(struct efa_rdm_pke *pkt_entry,
 			 struct efa_rdm_ope *rxe);
 
 void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry);
-
-void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry);
 
 /* Read NACK packet functions */
 
@@ -364,5 +364,4 @@ int efa_rdm_pke_init_receipt(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *
 
 void efa_rdm_pke_handle_receipt_send_completion(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry);
 #endif
