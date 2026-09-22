@@ -492,8 +492,7 @@ struct fi_opx_ep_daos_info {
  */
 struct fi_opx_ep {
 	/* == CACHE LINE 0,1 == */
-	struct fid_ep			   ep_fid; /* 10 qws */
-	uint64_t			   min_multi_recv;
+	struct fid_ep			   ep_fid; /* 11 qws */
 	struct fi_opx_ep_tx		  *tx;
 	struct fi_opx_ep_rx		  *rx;
 	struct fi_opx_reliability_service *reli_service; /* ONLOAD only */
@@ -517,16 +516,17 @@ struct fi_opx_ep {
 	int		     sep_index;
 	enum fi_opx_ep_state state;
 
-	uint32_t	threading;
-	uint32_t	av_type;
 	uint32_t	mr_mode;
 	enum fi_ep_type type;
+
+	uint64_t min_multi_recv;
 
 	/* Multi-plane support: arrays of TX contexts */
 	struct fi_opx_ep_tx *tx_contexts[OPX_MAX_TX_CONTEXTS];
 	uint16_t	     num_tx_contexts;
-	uint16_t	     unused_cl3_1;
-	uint32_t	     unused_cl3_pad;
+	uint8_t	 threading;
+	uint8_t	 av_type;
+	uint32_t unused_cl3_pad;
 
 	/* == CACHE LINE 4 == */
 	/* Init-only fields: fi_info, CQ/counter bindings */
