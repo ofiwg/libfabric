@@ -155,6 +155,12 @@ struct fi_cq_err_entry_1_1 {
 	size_t			err_data_size;
 };
 
+struct fi_xpu_ctx_attr_1_0 {
+	uint64_t		caps;
+	size_t			av_addr_size;
+	size_t			mr_desc_size;
+};
+
 #ifdef __cplusplus
 }
 #endif
