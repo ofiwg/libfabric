@@ -7,6 +7,7 @@
 #include "efa_rdm_ope.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longread_write.h"
 #include "protocols/efa_rdm_proto_medium.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
 #include "efa_rdm_msg.h"
@@ -58,6 +59,7 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
  */
 static struct efa_rdm_proto * const efa_rdm_emulated_write_protocols[] = {
 	&efa_rdm_proto_eager_write,
+	&efa_rdm_proto_longread_write,
 };
 
 /*
@@ -221,13 +223,6 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 	iface = txe->desc[0] ?
 			((struct efa_mr *) txe->desc[0])->iface :
 			FI_HMEM_SYSTEM;
-
-	/* Synapse AI is not handled on this path yet; use the old code path. */
-	if (iface == FI_HMEM_SYNAPSEAI) {
-		*proto = NULL;
-		txe->proto = NULL;
-		return;
-	}
 
 	if (efa_rdm_peer_need_raw_addr_hdr(peer))
 		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
