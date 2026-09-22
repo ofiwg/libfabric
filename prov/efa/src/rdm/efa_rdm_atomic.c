@@ -11,6 +11,23 @@
 #include "efa_rdm_pke_cmd.h"
 #include "protocols/efa_rdm_proto_atomic.h"
 
+static int efa_rdm_atomic_check_shm_count(struct fid_ep *shm_ep, enum fi_datatype datatype,
+			       enum fi_op op, uint64_t flags, size_t count){
+	size_t max_count;
+	int ret;
+
+	if (flags & FI_COMPARE_ATOMIC)
+		ret = fi_compare_atomicvalid(shm_ep, datatype, op, &max_count);
+	else if (flags & FI_FETCH_ATOMIC)
+		ret = fi_fetch_atomicvalid(shm_ep, datatype, op, &max_count);
+	else
+		ret = fi_atomicvalid(shm_ep, datatype, op, &max_count);
+	if (ret)
+		return ret;
+
+	return count > max_count ? -FI_EMSGSIZE : FI_SUCCESS;
+}
+
 static int efa_rdm_atomic_validate_counts(const struct fi_msg_atomic *msg,
 					  const struct fi_ioc *resultv, size_t result_count,
 					  bool check_source, size_t *logical_count){
@@ -221,6 +238,11 @@ efa_rdm_atomic_inject(struct fid_ep *ep,
 	if (efa_rdm_ep->shm_ep) {
 		shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, dest_addr);
 		if (shm_addr != FI_ADDR_NOTAVAIL) {
+			err = efa_rdm_atomic_check_shm_count(
+				efa_rdm_ep->shm_ep, datatype, op, 0, count);
+			if (err)
+				return err;
+
 			if (!(efa_rdm_ep->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
 				remote_addr = 0;
 
@@ -283,6 +305,12 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 	if (efa_rdm_ep->shm_ep) {
 		shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, msg->addr);
 		if (shm_addr != FI_ADDR_NOTAVAIL) {
+			err = efa_rdm_atomic_check_shm_count(
+				efa_rdm_ep->shm_ep, msg->datatype, msg->op, 0, 
+				ofi_total_rma_ioc_cnt(msg->rma_iov, msg->rma_iov_count));
+			if (err)
+				return err;
+
 			efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, rma_iov, shm_desc);
 			shm_msg.addr = shm_addr;
 			return fi_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg, flags);
@@ -389,6 +417,12 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	if (efa_rdm_ep->shm_ep) {
 		shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, msg->addr);
 		if (shm_addr != FI_ADDR_NOTAVAIL) {
+			err = efa_rdm_atomic_check_shm_count(
+				efa_rdm_ep->shm_ep, msg->datatype, msg->op,	FI_FETCH_ATOMIC,
+				ofi_total_rma_ioc_cnt(msg->rma_iov, msg->rma_iov_count));
+			if (err)
+				return err;
+
 			efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 			shm_msg.addr = shm_addr;
 			efa_rdm_get_desc_for_shm(result_count, result_desc, shm_res_desc);
@@ -520,6 +554,12 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	if (efa_rdm_ep->shm_ep) {
 		shm_addr = efa_rdm_ep_get_explicit_shm_fi_addr(efa_rdm_ep, msg->addr);
 		if (shm_addr != FI_ADDR_NOTAVAIL) {
+			err = efa_rdm_atomic_check_shm_count(
+				efa_rdm_ep->shm_ep, msg->datatype, msg->op, FI_COMPARE_ATOMIC,
+				ofi_total_rma_ioc_cnt(msg->rma_iov, msg->rma_iov_count));
+			if (err)
+				return err;
+
 			efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 			shm_msg.addr = shm_addr;
 			efa_rdm_get_desc_for_shm(result_count, result_desc, shm_res_desc);
@@ -649,6 +689,7 @@ static int efa_rdm_atomic_valid(struct fid_ep *ep_fid, enum fi_datatype datatype
 	struct util_ep *ep;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct fi_atomic_attr attr;
+	size_t shm_count;
 	int ret;
 
 	ep = container_of(ep_fid, struct util_ep, ep_fid);
@@ -660,10 +701,24 @@ static int efa_rdm_atomic_valid(struct fid_ep *ep_fid, enum fi_datatype datatype
 
 	ret = efa_rdm_atomic_query(&ep->domain->domain_fid,
 				   datatype, op, &attr, flags);
-	if (!ret)
-		*count = attr.count;
+	if (ret)
+		return ret;
 
-	return ret;
+	if (efa_rdm_ep->shm_ep) {
+		if (flags & FI_COMPARE_ATOMIC)
+			ret = fi_compare_atomicvalid(efa_rdm_ep->shm_ep, datatype, op, &shm_count);
+		else if (flags & FI_FETCH_ATOMIC)
+			ret = fi_fetch_atomicvalid(efa_rdm_ep->shm_ep, datatype, op, &shm_count);
+		else
+			ret = fi_atomicvalid(efa_rdm_ep->shm_ep, datatype, op, &shm_count);
+		if (ret)
+			return ret;
+
+		attr.count = MIN(attr.count, shm_count);
+	}
+
+	*count = attr.count;
+	return FI_SUCCESS;
 }
 
 static int efa_rdm_atomic_write_valid(struct fid_ep *ep, enum fi_datatype datatype,
