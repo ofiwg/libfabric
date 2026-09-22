@@ -264,8 +264,8 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 	}
 
 	/*
-	 * No emulated write protocol matched, so the caller falls back to the
-	 * old code path.
+	 * No emulated write protocol matched. This is not expected; the caller
+	 * reports an error.
 	 */
 	*proto = NULL;
 	txe->proto = NULL;

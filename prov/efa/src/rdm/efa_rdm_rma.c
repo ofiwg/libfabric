@@ -507,12 +507,8 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	/* Use a registered write protocol if one applies. */
 	efa_rdm_proto_select_emulated_write_protocol(ep, txe->peer, txe,
 						     use_p2p, &proto);
-	if (proto)
-		return efa_rdm_rma_post_write_proto(ep, txe, proto);
-
-	EFA_WARN(FI_LOG_EP_DATA,
-		 "No emulated write protocol was selected for the transfer.\n");
-	return -FI_EOPNOTSUPP;
+	assert(proto && "No emulated write protocol was selected for the transfer");
+	return efa_rdm_rma_post_write_proto(ep, txe, proto);
 }
 
 static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep,

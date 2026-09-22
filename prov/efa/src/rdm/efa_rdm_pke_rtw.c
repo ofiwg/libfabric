@@ -1,19 +1,11 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
-#include "ofi_iov.h"
-#include "ofi_proto.h"
-#include "efa_errno.h"
 #include "efa.h"
-#include "efa_env.h"
-#include "efa_hmem.h"
-#include "efa_base_ep.h"
 #include "efa_rdm_ep.h"
-#include "efa_rdm_rma.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_pke_rtw.h"
-#include "protocols/efa_rdm_proto_write.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_req.h"
