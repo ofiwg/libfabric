@@ -141,6 +141,7 @@ struct fi_ops_rma;
 struct fi_ops_tagged;
 struct fi_ops_atomic;
 struct fi_ops_collective;
+struct fi_ops_wr;
 
 /*
  * Calls which modify the properties of a endpoint (control, setopt, bind, ...)
@@ -160,6 +161,7 @@ struct fid_ep {
 	struct fi_ops_tagged	*tagged;
 	struct fi_ops_atomic	*atomic;
 	struct fi_ops_collective *collective;
+	struct fi_ops_wr	*wr;
 };
 
 struct fid_pep {

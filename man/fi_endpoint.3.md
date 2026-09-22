@@ -728,6 +728,8 @@ struct fi_ep_attr {
 	size_t          auth_key_size;
 	uint8_t         *auth_key;
 	struct fid_xpu_ctx *xpu_ctx;
+	size_t          max_tx_wr_size;
+	size_t          max_rx_wr_size;
 };
 {% endhighlight %}
 
@@ -1090,6 +1092,17 @@ together with `FI_XPU` in the flags parameter of `fi_endpoint2`, the endpoint
 is created for XPU device-side data transfer. See
 [`fi_xpu`(3)](fi_xpu.3.html) for details. This field must be NULL if the
 endpoint is not created with FI_XPU.
+
+## max_tx_wr_size / max_rx_wr_size - Work Request Size
+
+The maximum size, in bytes, that an application must allocate to back an fi_wr
+used with the Work Request API.  The work request format differs between
+transmit and receive operations, so the provider reports the two sizes
+separately: max_tx_wr_size for transmit work requests and max_rx_wr_size for
+receive work requests.
+
+These are output fields, set by the provider on the fi_info returned from
+fi_getinfo.  They are 0 when the endpoint does not report the FI_WR capability.
 
 # TRANSMIT CONTEXT ATTRIBUTES
 
@@ -1826,3 +1839,4 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 [`fi_tagged`(3)](fi_tagged.3.html),
 [`fi_rma`(3)](fi_rma.3.html)
 [`fi_peer`(3)](fi_peer.3.html)
+[`fi_wr`(3)](fi_wr.3.html)
