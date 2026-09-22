@@ -216,6 +216,7 @@ static void ofi_tostr_caps(char *buf, size_t len, uint64_t caps)
 	IFFLAGSTRN(caps, FI_PEER, len);
 	IFFLAGSTRN(caps, FI_HMEM, len);
 	IFFLAGSTRN(caps, FI_XPU, len);
+	IFFLAGSTRN(caps, FI_WR, len);
 
 	ofi_remove_comma(buf);
 }
@@ -410,6 +411,10 @@ ofi_tostr_ep_attr(char *buf, size_t len, const struct fi_ep_attr *attr,
 		     attr->auth_key_size);
 	ofi_strncatf(buf, len, "%s%sxpu_ctx: %p\n", prefix, TAB,
 		     (void *) attr->xpu_ctx);
+	ofi_strncatf(buf, len, "%s%smax_tx_wr_size: %zu\n", prefix, TAB,
+		     attr->max_tx_wr_size);
+	ofi_strncatf(buf, len, "%s%smax_rx_wr_size: %zu\n", prefix, TAB,
+		     attr->max_rx_wr_size);
 }
 
 static void
