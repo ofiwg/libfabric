@@ -37,9 +37,31 @@ struct efa_rdm_ope;
 struct dlist_entry;
 
 /*
+ * efadv_query_cq only exists in a recent enough rdma-core, so it is mocked -
+ * and wrapped, in prov/efa/Makefile.include - under the condition that says it
+ * exists. A mock of a function rdma-core lacks would refer to a __real_ symbol
+ * nothing defines, and a wrap of one the provider calls with no mock to stand
+ * in would leave __wrap_ undefined. efadv_query_qp_wqs is mocked the same way
+ * in EFA_MOCK_FUNCTIONS_QUERY_QP_WQS below.
+ */
+
+#if HAVE_EFADV_QUERY_CQ
+#define EFA_MOCK_QUERY_CQ(X)                                                   \
+	X(int, efadv_query_cq,                                                 \
+	  (struct ibv_cq * ibvcq, struct efadv_cq_attr * attr,                 \
+	   uint32_t inlen),                                                    \
+	  (ibvcq, attr, inlen))
+#else
+#define EFA_MOCK_QUERY_CQ(X)
+#endif
+
+#define EFA_MOCK_XPU_FUNCTIONS(X)                                              \
+	EFA_MOCK_QUERY_CQ(X)
+
+/*
  * X-macro list of every mocked function. Each row is
  *   X(ret, name, (param decls), (arg names))
- * 
+ *
  * To add a new mocked function:
  *   1. Add a row to EFA_MOCK_FUNCTIONS
  *   2. Add any needed forward struct declarations above
@@ -202,7 +224,8 @@ struct dlist_entry;
 	  (hmem_iface, device, hmem_iov, hmem_iov_count, hmem_iov_offset, src, \
 	   size))                                                              \
 	EFA_MOCK_FUNCTIONS_QUERY_QP_WQS(X)                                    \
-	EFA_MOCK_FUNCTIONS_CUDA_CTX_SYNC_MEMOPS(X)
+	EFA_MOCK_FUNCTIONS_CUDA_CTX_SYNC_MEMOPS(X) \
+	EFA_MOCK_XPU_FUNCTIONS(X)
 
 /* --- Generator macros --- */
 

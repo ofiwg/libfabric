@@ -371,8 +371,14 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_tclass.cc \
 	prov/efa/test/gtest/efa_gtest_domain_utils.c \
 	prov/efa/test/gtest/efa_gtest_domain.cc \
-	prov/efa/test/gtest/efa_gtest_comp_action.cc
+	prov/efa/test/gtest/efa_gtest_comp_action.cc \
+	prov/efa/test/gtest/efa_gtest_xpu_utils.c \
+	prov/efa/test/gtest/efa_gtest_xpu.cc
 
+# The rdma-core includes matter here as much as they do for the provider: a
+# gtest seam fills a struct the provider then reads, so both halves have to see
+# the same efadv declarations rather than the provider seeing the ones this
+# build configured against and the test seeing the system's.
 prov_efa_test_gtest_efa_gtest_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	$(gtest_CPPFLAGS) \
@@ -435,9 +441,15 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=ofi_copy_to_hmem_iov \
 	-Wl,--wrap=malloc
 
+# Each query is mocked only where rdma-core has it (see
+# efa_gtest_common_mocks.h), so it is wrapped under the same condition.
 if HAVE_EFADV_QUERY_QP_WQS
 prov_efa_test_gtest_efa_gtest_LDFLAGS += -Wl,--wrap=efadv_query_qp_wqs
 endif HAVE_EFADV_QUERY_QP_WQS
+
+if HAVE_EFADV_QUERY_CQ
+prov_efa_test_gtest_efa_gtest_LDFLAGS += -Wl,--wrap=efadv_query_cq
+endif HAVE_EFADV_QUERY_CQ
 
 prov_efa_test_gtest_efa_gtest_LIBS = $(linkback)
 

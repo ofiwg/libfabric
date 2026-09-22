@@ -81,8 +81,14 @@ void efa_test_resource_getinfo(struct efa_resource *resource,
 	ASSERT_NE(hints, nullptr);
 
 	fabric_name = hints->fabric_attr ? hints->fabric_attr->name : NULL;
+	/*
+	 * An info without FI_CONTEXT2, and any info carrying FI_XPU, is only
+	 * expressible from the 2.7 API on, so hints asking for either have to
+	 * be presented at that version.
+	 */
 	if (fabric_name && !strcmp(EFA_DIRECT_FABRIC_NAME, fabric_name))
-		fi_version = (hints->mode & FI_CONTEXT2) ?
+		fi_version = ((hints->mode & FI_CONTEXT2) &&
+			      !(hints->caps & FI_XPU)) ?
 				     FI_VERSION(2, 0) : FI_VERSION(2, 7);
 	else
 		fi_version = FI_VERSION(1, 14);
