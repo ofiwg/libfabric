@@ -8,6 +8,7 @@
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_rtw.h"
+#include "efa_rdm_proto.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
 #include "efa_rdm_pke_rtr.h"
 #include "efa_rdm_pke_rta.h"
@@ -88,13 +89,11 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		assert(0 && "Eager protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Eager");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
-		assert(0 && "Medium protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 		/* The data_offset will be non-zero when the long CTS RTM packet
@@ -131,8 +130,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_runtread_tagrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
-		assert(0 && "Eager write protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Eager write");
 		break;
 	case EFA_RDM_LONGCTS_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -143,8 +141,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_longread_rtw(pkt_entry, ope);
 		break;
 	case EFA_RDM_SHORT_RTR_PKT:
-		assert(0 && "Short read protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Short read");
 		break;
 	case EFA_RDM_LONGCTS_RTR_PKT:
 		assert(data_offset == -1 && data_size == -1);
@@ -164,13 +161,11 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		assert(0 && "Eager protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Eager");
 		break;
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		assert(0 && "Medium protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 		/* The data_offset will be non-zero when the DC long CTS RTM packet
@@ -191,8 +186,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
-		assert(0 && "Eager write protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Eager write");
 		break;
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -254,15 +248,13 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
-		assert(0 && "Eager protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Eager");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		assert(0 && "Medium protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
@@ -279,8 +271,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		efa_rdm_pke_handle_runtread_rtm_sent(pkt_entry, peer);
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
-		assert(0 && "Eager write protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Eager write");
 		break;
 	case EFA_RDM_LONGCTS_RTW_PKT:
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
@@ -290,8 +281,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		/* nothing to do when LONGREAD RTW is sent */
 		break;
 	case EFA_RDM_SHORT_RTR_PKT:
-		assert(0 && "Short read protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Short read");
 		break;
 	case EFA_RDM_LONGCTS_RTR_PKT:
 		/* nothing can be done when RTR packets are sent */
@@ -304,12 +294,10 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		assert(0 && "Eager protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Eager");
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
-		assert(0 && "Eager write protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Eager write");
 		break;
 	case EFA_RDM_CTSDATA_PKT:
 		efa_rdm_pke_handle_ctsdata_sent(pkt_entry);
@@ -647,15 +635,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-		assert(0 && "Eager protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Eager");
 		break;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-		assert(0 && "Medium protocol moved to refactored code path");
-		abort();
+		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
