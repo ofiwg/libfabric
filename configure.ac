@@ -831,12 +831,6 @@ AS_IF([test x"$with_cuda" != x"no"],
 			[],
 			[have_cuda_dmabuf=0],
 			[[#include <cuda.h>]])
-
-	have_cuda_dmabuf_mapping_type_pcie=1
-	AC_CHECK_DECL([CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE],
-			[],
-			[have_cuda_dmabuf_mapping_type_pcie=0],
-			[[#include <cuda.h>]])
       ])
 
 AC_DEFINE_UNQUOTED([ENABLE_CUDA_DLOPEN], [$cuda_dlopen], [dlopen CUDA libraries])
@@ -847,8 +841,6 @@ AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda" 
 AC_DEFINE_UNQUOTED([HAVE_CUDA], [$have_cuda], [CUDA support])
 
 AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF], [$have_cuda_dmabuf], [CUDA dmabuf support])
-
-AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF_MAPPING_TYPE_PCIE], [$have_cuda_dmabuf_mapping_type_pcie], [CUDA dmabuf PCIe BAR1 support])
 
 AS_IF([test "$cuda_dlopen" != "1"], [LIBS="$LIBS $cuda_LIBS"])
 
