@@ -7,6 +7,7 @@
 #include "rdm/efa_rdm_pke_nonreq.h"
 #include "rdm/protocols/efa_rdm_proto_eager.h"
 #include "rdm/protocols/efa_rdm_proto_longcts.h"
+#include "rdm/protocols/efa_rdm_proto_runtread.h"
 
 /**
  * @brief Build an eager RTM TX packet the way the send path does.
@@ -765,6 +766,7 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_runtread_trunc_chain(void **state)
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_entry, *pkt_entry2;
 	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer peer = {0};
 	char buf[16];
 	size_t to_post_before;
 	int err;
@@ -793,9 +795,12 @@ void test_efa_rdm_pke_proc_matched_mulreq_rtm_runtread_trunc_chain(void **state)
 	rxe->bytes_read_total_len = 0;
 	rxe->bytes_received = 0;
 	rxe->bytes_received_via_mulreq = 0;
+	dlist_init(&peer.rxe_list);
+	pkt_entry->peer = &peer;
+	pkt_entry2->peer = &peer;
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
 	to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
-	err = efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
+	err = efa_rdm_proto_runtread.handle_unexp_pke_match(pkt_entry);
 	assert_int_equal(err, -FI_ETRUNC);
 	assert_int_equal(efa_rdm_ep->efa_rx_pkts_to_post, to_post_before + 2);
 	efa_rdm_rxe_release(rxe);

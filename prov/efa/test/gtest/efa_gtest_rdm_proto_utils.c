@@ -13,7 +13,11 @@
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pkt_type.h"
 #include "rdm/efa_rdm_proto.h"
+#include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_longcts.h"
+#include "rdm/protocols/efa_rdm_proto_longread.h"
 #include "rdm/protocols/efa_rdm_proto_medium.h"
+#include "rdm/protocols/efa_rdm_proto_runtread.h"
 #include "rdm/efa_rdm_protocol.h"
 #include <rdma/fi_errno.h>
 #include <stdlib.h>
