@@ -131,9 +131,7 @@ int efa_test_failed_reorder_msg_releases_rx_pkt(struct fid_ep *ep,
 
 	/* efa_rx_pkts_to_post should be incremented by pke_release_rx */
 	*to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
-	pke->proto = &efa_rdm_proto_longcts;
-	pke->handle_pke = efa_rdm_pke_proc_rtm_after_robuf;
-	efa_rdm_pke_handle_rtm_rta_recv(pke);
+	efa_rdm_pke_handle_rtm_recv(pke, &efa_rdm_proto_longcts);
 	*to_post_after = efa_rdm_ep->efa_rx_pkts_to_post;
 	return 0;
 }
@@ -190,9 +188,7 @@ int efa_test_failed_reorder_msg_overflow_releases_rx_pkt_and_entry(
 	*to_post_before = efa_rdm_ep->efa_rx_pkts_to_post;
 	*overflow_free_before =
 		efa_test_bufpool_free_count(efa_rdm_ep->overflow_pke_pool);
-	pke->proto = &efa_rdm_proto_longcts;
-	pke->handle_pke = efa_rdm_pke_proc_rtm_after_robuf;
-	efa_rdm_pke_handle_rtm_rta_recv(pke);
+	efa_rdm_pke_handle_rtm_recv(pke, &efa_rdm_proto_longcts);
 	*to_post_after = efa_rdm_ep->efa_rx_pkts_to_post;
 	*overflow_free_after =
 		efa_test_bufpool_free_count(efa_rdm_ep->overflow_pke_pool);
@@ -261,6 +257,50 @@ int efa_test_reordered_packet_retains_callback(
 		return -FI_EINVAL;
 	out->callback_set = pke->handle_pke != NULL;
 	out->protocol_correct = pke->proto == &efa_rdm_proto_eager;
+	*ofi_recvwin_get_msg(&peer->robuf, 1) = NULL;
+	efa_rdm_pke_release_rx(pke);
+	return 0;
+}
+
+int efa_test_reordered_rta_retains_callback(
+	struct fid_ep *ep_fid, fi_addr_t peer_addr,
+	struct efa_test_reorder_callback_result *out)
+{
+	struct efa_rdm_ep *ep = container_of(
+		ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct efa_rdm_peer *peer =
+		efa_rdm_ep_get_peer_explicit(ep, peer_addr);
+	struct efa_rdm_pke *pke;
+	struct efa_rdm_rta_hdr hdr = {0};
+	int saved_rx_copy_ooo;
+
+	memset(out, 0, sizeof *out);
+	if (!peer)
+		return -FI_EINVAL;
+
+	pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	if (!pke)
+		return -FI_ENOMEM;
+
+	pke->peer = peer;
+	hdr.type = EFA_RDM_WRITE_RTA_PKT;
+	hdr.version = EFA_RDM_PROTOCOL_VERSION;
+	hdr.flags = EFA_RDM_REQ_ATOMIC;
+	hdr.msg_id = 1;
+	memcpy(pke->wiredata, &hdr, sizeof hdr);
+	pke->pkt_size = sizeof hdr;
+
+	saved_rx_copy_ooo = efa_env.rx_copy_ooo;
+	efa_env.rx_copy_ooo = 0;
+	efa_rdm_pke_proc_received(pke);
+	efa_env.rx_copy_ooo = saved_rx_copy_ooo;
+
+	pke = *ofi_recvwin_get_msg(&peer->robuf, 1);
+	if (!pke)
+		return -FI_EINVAL;
+	out->callback_set = pke->handle_pke == efa_rdm_pke_proc_rta;
+	out->protocol_correct = pke->proto == NULL;
 	*ofi_recvwin_get_msg(&peer->robuf, 1) = NULL;
 	efa_rdm_pke_release_rx(pke);
 	return 0;
