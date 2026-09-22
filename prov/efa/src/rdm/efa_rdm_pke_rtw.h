@@ -13,12 +13,6 @@ struct efa_rdm_rtw_base_hdr *efa_rdm_pke_get_rtw_base_hdr(struct efa_rdm_pke *pk
 	return (struct efa_rdm_rtw_base_hdr *)pkt_entry->wiredata;
 }
 
-static inline
-struct efa_rdm_dc_eager_rtw_hdr *efa_rdm_pke_dc_eager_rtw_hdr(struct efa_rdm_pke *pkt_entry)
-{
-	return (struct efa_rdm_dc_eager_rtw_hdr *)pkt_entry->wiredata;
-}
-
 struct efa_rdm_ope *efa_rdm_pke_alloc_rtw_rxe(struct efa_rdm_pke *pkt_entry);
 
 #endif
