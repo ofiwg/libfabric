@@ -152,11 +152,15 @@ contains provider-specific output parameters for the given XPU context.
 #define FI_XPU_CAP_EP      (1ULL << 0)
 #define FI_XPU_CAP_CQ      (1ULL << 1)
 #define FI_XPU_CAP_CNTR    (1ULL << 2)
+#define FI_XPU_CAP_WR      (1ULL << 3)
 
 struct fi_xpu_ctx_attr {
     uint64_t     caps;
     size_t       av_addr_size;
     size_t       mr_desc_size;
+    /* Added in 2.8 */
+    size_t       max_tx_wr_desc_size;
+    size_t       max_rx_wr_desc_size;
 };
 ```
 
@@ -180,6 +184,12 @@ struct fi_xpu_ctx_attr {
     device-side counter functions (`fi_xpu_cntr_read`, `fi_xpu_cntr_readerr`,
     `fi_xpu_cntr_wait`, `fi_xpu_cntr_add`, `fi_xpu_cntr_set`,
     `fi_xpu_cntr_adderr`, `fi_xpu_cntr_seterr`).
+  - `FI_XPU_CAP_WR`: Provider supports device-side work requests. This
+    includes the device-side work request functions (`fi_xpu_wr_prepare`,
+    `fi_xpu_wr_queue_tx`, `fi_xpu_wr_queue_recv`, `fi_xpu_wr_queue_trecv`,
+    `fi_xpu_tx_flush`, `fi_xpu_recv_flush`, `fi_xpu_trecv_flush`, and the
+    `fi_xpu_wr_modify_*` calls). Requires
+    `FI_XPU_CAP_EP`. See [`fi_wr`(3)](fi_wr.3.html).
 
 *av_addr_size*
 : Size in bytes of the raw address returned by `fi_av_lookup2` (when called
@@ -191,6 +201,15 @@ struct fi_xpu_ctx_attr {
   called with `FI_XPU` flag). All descriptors for a given context have the
   same size.
 
+*max_tx_wr_desc_size* / *max_rx_wr_desc_size*
+: Size in bytes of the device memory a work request queued from the device
+  requires, for transmit and receive operations respectively, whether it was
+  prepared with `fi_xpu_wr_prepare` or prepared on the host and copied to the
+  device. Only valid when *caps* includes `FI_XPU_CAP_WR`. These sizes may
+  differ from `fi_ep_attr::max_tx_wr_size` and `max_rx_wr_size`, which apply
+  to work requests queued on the host.  Added in 2.8, so they are only
+  filled in for applications requesting API version 2.8 or later.
+
 ## fi_xpu_ctx_query
 
 ```c
@@ -198,13 +217,19 @@ int fi_xpu_ctx_query(struct fid_xpu_ctx *ctx,
                      struct fi_xpu_ctx_attr *attr);
 ```
 
-Query the provider for XPU context parameters. The returned `caps` field
-indicates which XPU objects the provider supports (FI_XPU_CAP_EP,
-FI_XPU_CAP_CQ, FI_XPU_CAP_CNTR). The application should check these flags
-before attempting to create XPU resources. The returned `av_addr_size` and
-`mr_desc_size` fields are used to allocate appropriately sized buffers for
-`fi_av_lookup2` and `fi_mr_get_xpu_desc` calls. Different XPU contexts (targeting
-different devices) may report different sizes.
+Query the provider for XPU context parameters.
+
+Because `fi_xpu_ctx_attr` may grow in future releases, the provider selects
+the structure format and size to write based on the API version the
+application requested. Applications requesting version 2.7 receive the 2.7 format, containing only `caps`, `av_addr_size`, and `mr_desc_size`; applications requesting 2.8 or later also receive `max_tx_wr_desc_size` and `max_rx_wr_desc_size`.
+
+The returned `caps` field indicates which XPU objects the provider supports
+(FI_XPU_CAP_EP, FI_XPU_CAP_CQ, FI_XPU_CAP_CNTR, FI_XPU_CAP_WR). The
+application should check these flags before attempting to create XPU
+resources. The returned `av_addr_size` and `mr_desc_size` fields are used to
+allocate appropriately sized buffers for `fi_av_lookup2` and
+`fi_mr_get_xpu_desc` calls. Different XPU contexts (targeting different
+devices) may report different sizes.
 
 ## EP
 
@@ -375,6 +400,49 @@ APIs. See the following man pages for function signatures and semantics:
   fi_xpu_compare_atomic):
   [`fi_atomic`(3)](fi_atomic.3.html)
 
+## Work Requests
+
+The device-side data transfer operations above both format and issue the
+operation from device code. Work requests split that lifecycle into prepare,
+modify, queue, and flush, exactly as the host interface does. A work request
+can be prepared either on the device with `fi_xpu_wr_prepare`, or on the host
+with `fi_wr_prepare` and then copied into device memory, and in both cases it
+is subsequently modified and queued from device code.
+
+```c
+FI_XPU_FUNC int fi_xpu_wr_prepare(struct fid_xpu_ep *ep,
+    const struct fi_wr_attr *attr, fi_wr wr, size_t *wr_len,
+    int scope);
+FI_XPU_FUNC int fi_xpu_wr_queue_tx(struct fid_xpu_ep *ep,
+    const fi_wr wr, void *context, int scope);
+FI_XPU_FUNC int fi_xpu_wr_queue_recv(struct fid_xpu_ep *ep,
+    const fi_wr wr, void *context, int scope);
+FI_XPU_FUNC int fi_xpu_wr_queue_trecv(struct fid_xpu_ep *ep,
+    const fi_wr wr, void *context, int scope);
+FI_XPU_FUNC int fi_xpu_tx_flush(struct fid_xpu_ep *ep, uint64_t flags,
+    int scope);
+FI_XPU_FUNC int fi_xpu_recv_flush(struct fid_xpu_ep *ep, uint64_t flags,
+    int scope);
+FI_XPU_FUNC int fi_xpu_trecv_flush(struct fid_xpu_ep *ep, uint64_t flags,
+    int scope);
+
+FI_XPU_FUNC int fi_xpu_wr_modify_addr(struct fid_xpu_ep *ep,
+    fi_wr wr, const void *xpu_addr, int scope);
+FI_XPU_FUNC int fi_xpu_wr_modify_iov(struct fid_xpu_ep *ep,
+    fi_wr wr, const struct iovec *iov, const void *desc,
+    size_t count, int scope);
+FI_XPU_FUNC int fi_xpu_wr_modify_rma_iov(struct fid_xpu_ep *ep,
+    fi_wr wr, const struct fi_rma_iov *rma_iov, size_t count,
+    int scope);
+FI_XPU_FUNC int fi_xpu_wr_modify_tag(struct fid_xpu_ep *ep,
+    fi_wr wr, uint64_t tag, uint64_t ignore, int scope);
+FI_XPU_FUNC int fi_xpu_wr_modify_data(struct fid_xpu_ep *ep,
+    fi_wr wr, uint64_t data, int scope);
+FI_XPU_FUNC int fi_xpu_wr_modify_flags(struct fid_xpu_ep *ep,
+    fi_wr wr, uint64_t flags, int scope);
+```
+
+
 ## Completion Functions
 
 Device-side completion functions operate on exported CQ and counter handles.
@@ -508,4 +576,5 @@ fi_close(&domain->fid);
 [`fi_cntr`(3)](fi_cntr.3.html),
 [`fi_mr`(3)](fi_mr.3.html),
 [`fi_av`(3)](fi_av.3.html),
+[`fi_wr`(3)](fi_wr.3.html),
 [`fi_set_ops`(3)](fi_set_ops.3.html)
