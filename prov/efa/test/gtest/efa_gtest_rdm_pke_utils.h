@@ -64,6 +64,9 @@ struct efa_test_reorder_callback_result {
 int efa_test_reordered_packet_retains_callback(
 	struct fid_ep *ep, fi_addr_t peer_addr,
 	struct efa_test_reorder_callback_result *out);
+int efa_test_reordered_rta_retains_callback(
+	struct fid_ep *ep, fi_addr_t peer_addr,
+	struct efa_test_reorder_callback_result *out);
 int efa_test_reorder_drain_invokes_callback(
 	struct fid_ep *ep, fi_addr_t peer_addr,
 	struct efa_test_reorder_callback_result *out);
