@@ -2856,8 +2856,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	opx_ep->rx->mem		   = mem;
 	fi_opx_ref_init(&opx_ep->rx->ref_cnt, 1, "rx context");
 
-	opx_ep->threading = (uint32_t) opx_domain->threading;
-	opx_ep->av_type	  = (uint32_t) opx_ep->av->type;
+	opx_ep->threading = (uint8_t) opx_domain->threading;
+	opx_ep->av_type	  = (uint8_t) opx_ep->av->type;
 	opx_ep->mr_mode	  = (uint32_t) opx_domain->mr_mode;
 
 	// Check data structure alignments
@@ -4000,7 +4000,7 @@ int fi_opx_endpoint_rx_tx(struct fid_domain *dom, struct fi_info *info, struct f
 	fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
 
 	opx_ep->common_info = fi_dupinfo(info);
-	opx_ep->av_type	    = info->domain_attr->av_type; /* Use input av_type */
+	opx_ep->av_type	    = (uint8_t) info->domain_attr->av_type; /* Use input av_type */
 
 	/* just save an extra pointer dereference by storing
 	   the TID domain directly in each endpoint */
