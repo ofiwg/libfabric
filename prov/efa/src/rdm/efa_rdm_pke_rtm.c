@@ -18,6 +18,7 @@
 #include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_protocol.h"
+#include "efa_rdm_proto.h"
 #include "efa_rdm_tracepoint.h"
 #include "efa_rdm_pke_req.h"
 
@@ -170,25 +171,10 @@ void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 	}
 }
 
-/**
- * @brief process a RTM that has been matched to a RX entry
- *
- * @param[in,out]	pkt_entry	RTM packet entry
- *
- * @returns
- * 0 on success
- * negative libfabric error code on failure
- */
-ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_prepare_matched_rtm(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 	int pkt_type;
-	ssize_t ret;
-
-#if ENABLE_DEBUG
-	struct efa_rdm_ep *ep;
-	ep = pkt_entry->ep;
-#endif
 
 	rxe = pkt_entry->ope;
 	assert(rxe && rxe->state == EFA_RDM_RXE_MATCHED);
@@ -216,52 +202,7 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
 	    pkt_type < EFA_RDM_DC_REQ_PKT_END)
 		rxe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
-	if (pkt_type == EFA_RDM_LONGCTS_MSGRTM_PKT ||
-	    pkt_type == EFA_RDM_LONGCTS_TAGRTM_PKT)
-		rxe->tx_id = efa_rdm_pke_get_longcts_rtm_base_hdr(pkt_entry)->send_id;
-	else if (pkt_type == EFA_RDM_DC_EAGER_MSGRTM_PKT ||
-		 pkt_type == EFA_RDM_DC_EAGER_TAGRTM_PKT)
-		rxe->tx_id = efa_rdm_pke_get_dc_eager_rtm_base_hdr(pkt_entry)->send_id;
-	else if (pkt_type == EFA_RDM_DC_MEDIUM_MSGRTM_PKT ||
-		 pkt_type == EFA_RDM_DC_MEDIUM_TAGRTM_PKT)
-		rxe->tx_id = efa_rdm_pke_get_dc_medium_rtm_base_hdr(pkt_entry)->send_id;
-	else if (pkt_type == EFA_RDM_DC_LONGCTS_MSGRTM_PKT ||
-		 pkt_type == EFA_RDM_DC_LONGCTS_TAGRTM_PKT)
-		rxe->tx_id = efa_rdm_pke_get_longcts_rtm_base_hdr(pkt_entry)->send_id;
-
 	rxe->msg_id = efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->msg_id;
-
-	if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT || pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT)
-		return efa_rdm_pke_proc_matched_longread_rtm(pkt_entry);
-
-	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		return efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
-
-	if (pkt_type == EFA_RDM_EAGER_MSGRTM_PKT ||
-	    pkt_type == EFA_RDM_EAGER_TAGRTM_PKT ||
-	    pkt_type == EFA_RDM_DC_EAGER_MSGRTM_PKT ||
-	    pkt_type == EFA_RDM_DC_EAGER_TAGRTM_PKT) {
-		return efa_rdm_pke_proc_matched_eager_rtm(pkt_entry);
-	}
-
-	assert(pkt_type == EFA_RDM_LONGCTS_MSGRTM_PKT ||
-	       pkt_type == EFA_RDM_LONGCTS_TAGRTM_PKT ||
-	       pkt_type == EFA_RDM_DC_LONGCTS_MSGRTM_PKT ||
-	       pkt_type == EFA_RDM_DC_LONGCTS_TAGRTM_PKT);
-
-	rxe->bytes_received += pkt_entry->payload_size;
-	ret = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
-	if (ret) {
-		return ret;
-	}
-#if ENABLE_DEBUG
-	dlist_insert_tail(&rxe->pending_recv_entry, &ep->ope_recv_list);
-	ep->pending_recv_counter++;
-#endif
-	rxe->state = EFA_RDM_RXE_RECV;
-	ret = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_CTS_PKT);
-
-	return ret;
 }
 
 /**
@@ -269,7 +210,10 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
  *
  * @param[in,out]	pkt_entry	non-tagged RTM packet entry
  */
-ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
+static ssize_t
+efa_rdm_pke_proc_msgrtm_with_callback(
+	struct efa_rdm_pke *pkt_entry,
+	efa_rdm_pke_callback handle_unexp_pke_match)
 {
 	ssize_t err;
 	struct efa_rdm_ep *ep;
@@ -304,14 +248,14 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
-		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
+		err = handle_unexp_pke_match(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
-			/* proc_matched_rtm() (via the copy layer) releases pkt_entry on error; do not release it here. */
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
 	} else if (rxe->state == EFA_RDM_RXE_UNEXP) {
+		pkt_entry->handle_pke = handle_unexp_pke_match;
 		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 		return peer_srx->owner_ops->queue_msg(rxe->peer_rxe);
 	}
@@ -324,7 +268,10 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
  *
  * @param[in,out]	pkt_entry	non-tagged RTM packet entry
  */
-static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
+static ssize_t
+efa_rdm_pke_proc_tagrtm_with_callback(
+	struct efa_rdm_pke *pkt_entry,
+	efa_rdm_pke_callback handle_unexp_pke_match)
 {
 	ssize_t err;
 	struct efa_rdm_ep *ep;
@@ -359,16 +306,16 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_pke_set_ope(pkt_entry, rxe);
 
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
-		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
+		err = handle_unexp_pke_match(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
 			if (err == -FI_ENOMR)
 				return err;
-			/* proc_matched_rtm() (via the copy layer) releases pkt_entry on error; do not release it here. */
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_TAGRTM);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
 	} else if (rxe->state == EFA_RDM_RXE_UNEXP) {
+		pkt_entry->handle_pke = handle_unexp_pke_match;
 		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 		return peer_srx->owner_ops->queue_tag(rxe->peer_rxe);
 	}
@@ -376,17 +323,41 @@ static ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 	return 0;
 }
 
+ssize_t efa_rdm_pke_proc_rtm_after_robuf(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_proto *proto = pkt_entry->proto;
+
+	assert(proto);
+	assert(proto->handle_unexp_pke_match);
+
+	if (efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->flags &
+	    EFA_RDM_REQ_TAGGED)
+		return efa_rdm_pke_proc_tagrtm_with_callback(
+			pkt_entry, proto->handle_unexp_pke_match);
+
+	return efa_rdm_pke_proc_msgrtm_with_callback(
+		pkt_entry, proto->handle_unexp_pke_match);
+}
+
+ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_proto *proto = pkt_entry->proto;
+
+	assert(proto);
+	return efa_rdm_pke_proc_msgrtm_with_callback(
+		pkt_entry, proto->handle_unexp_pke_match);
+}
+
 /**
- * @brief process a received RTM or RTA packet entry
+ * @brief process a received RTA packet entry
  *
  * @details
- * The RTM or RTA passed to this function is ordered
+ * The RTA passed to this function is ordered
  * by msg_id in the packet header
  *
- * @param[in,out]	pkt_entry	received RTM or RTA packet entry
- * @param[in]	peer	efa_rdm_peer struct of the sender
+ * @param[in,out]	pkt_entry	received RTA packet entry
  */
-ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer)
+ssize_t efa_rdm_pke_proc_rta(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_base_hdr *base_hdr;
@@ -396,24 +367,6 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_p
 	assert(base_hdr->type >= EFA_RDM_BASELINE_REQ_PKT_BEGIN);
 
 	switch (base_hdr->type) {
-	case EFA_RDM_EAGER_MSGRTM_PKT:
-	case EFA_RDM_MEDIUM_MSGRTM_PKT:
-	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_LONGREAD_MSGRTM_PKT:
-	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
-	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		return efa_rdm_pke_proc_msgrtm(pkt_entry);
-	case EFA_RDM_EAGER_TAGRTM_PKT:
-	case EFA_RDM_MEDIUM_TAGRTM_PKT:
-	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
-	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		return efa_rdm_pke_proc_tagrtm(pkt_entry);
 	case EFA_RDM_WRITE_RTA_PKT:
 		return efa_rdm_pke_proc_write_rta(pkt_entry);
 	case EFA_RDM_DC_WRITE_RTA_PKT:
@@ -433,60 +386,26 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_p
 	return -FI_EINVAL;
 }
 
-/**
- * @brief handle the event that a RTM or RTA packet entry has been received
- *
- * @details
- * If the RTM or RTA is out-of-order, save it in the re-order buffer.
- * Otherwise, process it then process packet in the re-order buffer.
- *
- * @param[in,out]	pkt_entry	received RTM or RTA packet entry
- */
-void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
+static void
+efa_rdm_pke_handle_ordered_req_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
-	struct efa_rdm_base_hdr *base_hdr;
 	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	bool slide_recvwin;
 	int ret;
 	uint32_t exp_msg_id;
 
 	ep = pkt_entry->ep;
-
 	peer = pkt_entry->peer;
 	assert(peer);
-
-	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	assert(base_hdr->type >= EFA_RDM_BASELINE_REQ_PKT_BEGIN);
-
-	if (efa_rdm_pkt_type_is_mulreq(base_hdr->type)) {
-		struct efa_rdm_ope *rxe;
-		struct efa_rdm_pke *unexp_pkt_entry;
-
-		rxe = efa_rdm_rxe_map_lookup(&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
-		if (rxe) {
-			if (rxe->state == EFA_RDM_RXE_MATCHED) {
-				efa_rdm_pke_set_ope(pkt_entry, rxe);
-				efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
-			} else {
-				assert(rxe->unexp_pkt);
-				unexp_pkt_entry = efa_rdm_pke_get_unexp(&pkt_entry);
-				efa_rdm_pke_append(rxe->unexp_pkt, unexp_pkt_entry);
-				efa_rdm_pke_set_ope(unexp_pkt_entry, rxe);
-			}
-
-			return;
-		}
-	}
+	assert(pkt_entry->handle_pke);
 
 	ret = efa_rdm_peer_reorder_msg(peer, pkt_entry->ep, pkt_entry);
-	if (ret == 1) {
-		/* Packet was queued */
-		return;
-	} else if (OFI_UNLIKELY(ret < 0)) {
-		/* reorder_msg already reported error to the EQ */
-		efa_rdm_pke_release_rx(pkt_entry);
+	if (OFI_UNLIKELY(ret != 0)) {
+		if (ret < 0)
+			/* reorder_msg already reported error to the EQ */
+			efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -499,54 +418,62 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 	slide_recvwin = !(rtm_hdr->flags & EFA_RDM_REQ_READ_NACK);
 
 	/*
-	 * efa_rdm_pke_proc_rtm_rta() will write error cq entry if needed,
-	 * thus we do not write error cq entry.
-	 *
-	 * Even if we hit an error processing the packets contents, we still
-	 * need to slide the recv window so we can continue to do work.
+	 * The callback writes an error CQ entry if needed. Even if processing
+	 * fails, slide the receive window so progress can continue.
 	 */
-	(void) efa_rdm_pke_proc_rtm_rta(pkt_entry, peer);
+	pkt_entry->handle_pke(pkt_entry);
 
-	if (slide_recvwin) {
+	if (OFI_LIKELY(slide_recvwin)) {
 		ofi_recvwin_slide((&peer->robuf));
 	}
 
 	exp_msg_id = ofi_recvwin_next_exp_id((&peer->robuf));
-	if (exp_msg_id % efa_env.recvwin_size == 0)
+	if (OFI_UNLIKELY(exp_msg_id % efa_env.recvwin_size == 0))
 		efa_rdm_peer_move_overflow_pke_to_recvwin(peer);
 
 	efa_rdm_peer_proc_pending_items_in_robuf(peer, ep);
 }
 
-/**
- * @brief process a matched eager rtm packet entry
- *
- * @details
- * This function applies to all 4 types of EAGER RTM.
- *
- * @param[in]	pkt_entry	packet entry
- * @return	On success, return 0
- * 		On failure, return libfabric error code
- */
-ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
+static inline bool
+efa_rdm_pke_handle_existing_mulreq_rxe(struct efa_rdm_pke *pkt_entry)
 {
-	int err;
-	struct efa_rdm_ope *rxe;
+	struct efa_rdm_peer *peer = pkt_entry->peer;
+	struct efa_rdm_proto *proto = pkt_entry->proto;
+	struct efa_rdm_ope *rxe = efa_rdm_rxe_map_lookup(
+		&peer->rxe_map, efa_rdm_pke_get_rtm_msg_id(pkt_entry));
+	struct efa_rdm_pke *unexp_pkt_entry = NULL;
 
-	rxe = pkt_entry->ope;
+	if (!rxe)
+		return false;
 
-	/*
-	 * On success, efa_rdm_pke_copy_data_to_ope will write rx completion,
-	 * release pkt_entry and rxe
-	 *
-	 * On error, efa_rdm_pke_copy_payload_to_ope() releases pkt_entry;
-	 * the caller must NOT release it. rxe is released by the caller.
-	 */
-	err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
+	if (rxe->state == EFA_RDM_RXE_MATCHED) {
+		efa_rdm_pke_set_ope(pkt_entry, rxe);
+		proto->handle_unexp_pke_match(pkt_entry);
+	} else {
+		assert(rxe->unexp_pkt);
+		unexp_pkt_entry = efa_rdm_pke_get_unexp(&pkt_entry);
+		efa_rdm_pke_append(rxe->unexp_pkt, unexp_pkt_entry);
+		efa_rdm_pke_set_ope(unexp_pkt_entry, rxe);
+	}
 
-	return err;
+	return true;
 }
 
+void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
+{
+	assert(pkt_entry->peer);
+	assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type >=
+	       EFA_RDM_BASELINE_REQ_PKT_BEGIN);
+	assert(pkt_entry->handle_pke);
+
+	if (pkt_entry->proto &&
+	    efa_rdm_pkt_type_is_mulreq(
+		    efa_rdm_pke_get_base_hdr(pkt_entry)->type) &&
+	    efa_rdm_pke_handle_existing_mulreq_rxe(pkt_entry))
+		return;
+
+	efa_rdm_pke_handle_ordered_req_recv(pkt_entry);
+}
 
 /**
  * @brief process a matched MEDIUM or RUNTREAD RTM
@@ -559,41 +486,16 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
  */
 ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_pke *cur, *nxt;
 	int pkt_type;
 	ssize_t ret, err;
 	uint64_t msg_id;
 
-	ep = pkt_entry->ep;
 	rxe = pkt_entry->ope;
 	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
 	ret = 0;
-	if (efa_rdm_pkt_type_is_runtread(pkt_type)) {
-		struct efa_rdm_runtread_rtm_base_hdr *runtread_rtm_hdr;
-
-		runtread_rtm_hdr = efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry);
-		rxe->bytes_runt = runtread_rtm_hdr->runt_length;
-		if (rxe->total_len > rxe->bytes_runt && rxe->bytes_read_total_len == 0) {
-			struct fi_rma_iov *read_iov;
-
-			rxe->tx_id = runtread_rtm_hdr->send_id;
-			read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry));
-			rxe->rma_iov_count = runtread_rtm_hdr->read_iov_count;
-			memcpy(rxe->rma_iov, read_iov, rxe->rma_iov_count * sizeof(struct fi_rma_iov));
-			efa_rdm_tracepoint(runtread_read_posted, rxe->msg_id,
-				    (size_t) rxe->cq_entry.op_context, rxe->total_len);
-
-			err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
-			if (err) {
-				efa_rdm_pke_release_rx_list(pkt_entry);
-				return err;
-			}
-		}
-	}
-
 	cur = pkt_entry;
 	while (cur) {
 		assert(cur->payload);
@@ -894,43 +796,6 @@ void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry)
 	 */
 	assert(pkt_entry->ope);
 	pkt_entry->ope->internal_flags |= EFA_RDM_TXE_READ_MSG_COUNTED;
-}
-
-/**
- * @brief process a matched longread RTM
- *
- * @details
- * this function applies to both tagged and non-tagged
- * longread RTM
- *
- * @param[in,out]	pkt_entry	packet entry
- */
-ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_ope *rxe;
-	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
-	struct fi_rma_iov *read_iov;
-	struct efa_rdm_ep *ep;
-	int err;
-
-	rxe = pkt_entry->ope;
-	ep = rxe->ep;
-
-	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry);
-	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry));
-
-	rxe->tx_id = rtm_hdr->send_id;
-	rxe->rma_iov_count = rtm_hdr->read_iov_count;
-	memcpy(rxe->rma_iov, read_iov,
-	       rxe->rma_iov_count * sizeof(struct fi_rma_iov));
-
-	efa_rdm_tracepoint(longread_read_posted, rxe->msg_id,
-		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
-
-	err = efa_rdm_pke_post_remote_read_or_nack(ep, pkt_entry, rxe);
-	/* This function owns pkt_entry on both success and error (the caller no longer releases it). */
-	efa_rdm_pke_release_rx(pkt_entry);
-	return err;
 }
 
 /**
