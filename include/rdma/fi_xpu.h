@@ -64,6 +64,7 @@ struct fi_xpu_attr {
 #define FI_XPU_CAP_EP		(1ULL << 0)
 #define FI_XPU_CAP_CQ		(1ULL << 1)
 #define FI_XPU_CAP_CNTR		(1ULL << 2)
+#define FI_XPU_CAP_WR		(1ULL << 3)
 
 /*
  * XPU Context Attribute — output from fi_xpu_ctx_query()
@@ -72,6 +73,9 @@ struct fi_xpu_ctx_attr {
 	uint64_t		caps;
 	size_t			av_addr_size;
 	size_t			mr_desc_size;
+	/* Added in 2.8 */
+	size_t			max_tx_wr_desc_size;
+	size_t			max_rx_wr_desc_size;
 };
 
 /*
@@ -80,7 +84,7 @@ struct fi_xpu_ctx_attr {
 struct fi_ops_xpu_ctx {
 	size_t	size;
 	int	(*query)(struct fid_xpu_ctx *ctx,
-			struct fi_xpu_ctx_attr *attr);
+			struct fi_xpu_ctx_attr *attr, size_t *attr_len);
 };
 
 struct fid_xpu_ctx {
@@ -147,9 +151,10 @@ fi_xpu_ctx(struct fid_domain *domain, struct fi_xpu_attr *attr,
 }
 
 static inline int
-fi_xpu_ctx_query(struct fid_xpu_ctx *ctx, struct fi_xpu_ctx_attr *attr)
+fi_xpu_ctx_query(struct fid_xpu_ctx *ctx, struct fi_xpu_ctx_attr *attr,
+		 size_t *attr_len)
 {
-	return ctx->ops->query(ctx, attr);
+	return ctx->ops->query(ctx, attr, attr_len);
 }
 
 #ifdef __cplusplus

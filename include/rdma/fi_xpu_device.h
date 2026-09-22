@@ -30,6 +30,10 @@
 
 #include <rdma/fi_xpu.h>
 
+typedef void *fi_wr;
+struct fi_wr_attr;
+struct fi_rma_iov;
+
 #if defined(__CUDACC__) || (defined(__HIP_DEVICE_COMPILE__) && __HIP_DEVICE_COMPILE__)
   #define FI_XPU_FUNC __device__ static inline
 #elif defined(__SYCL_DEVICE_ONLY__)
@@ -152,6 +156,141 @@ fi_xpu_compare_atomic(struct fid_xpu_ep *ep, const void *buf, size_t count,
 		      void *dest_addr, uint64_t addr, uint64_t key,
 		      int datatype, int op, void *context,
 		      uint64_t flags, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+
+/*
+ * Work Request (WR) operations.
+ */
+FI_XPU_FUNC int
+fi_xpu_wr_prepare(struct fid_xpu_ep *ep, const struct fi_wr_attr *attr,
+		  fi_wr wr, size_t *wr_len, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_wr_queue_tx(struct fid_xpu_ep *ep, const fi_wr wr,
+		   void *context, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_wr_queue_rx(struct fid_xpu_ep *ep, const fi_wr wr,
+		   void *context, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_wr_queue_trx(struct fid_xpu_ep *ep, const fi_wr wr,
+		    void *context, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_tx_flush(struct fid_xpu_ep *ep, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_rx_flush(struct fid_xpu_ep *ep, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_trx_flush(struct fid_xpu_ep *ep, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+/* xpu_addr references fi_xpu_ctx_attr::av_addr_size bytes. */
+FI_XPU_FUNC int
+fi_xpu_wr_modify_addr(struct fid_xpu_ep *ep, fi_wr wr,
+		      const void *xpu_addr, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+/* desc references count * fi_xpu_ctx_attr::mr_desc_size bytes. */
+FI_XPU_FUNC int
+fi_xpu_wr_modify_iov(struct fid_xpu_ep *ep, fi_wr wr,
+		     const struct iovec *iov, const void *desc, size_t count,
+		     int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_wr_modify_rma_iov(struct fid_xpu_ep *ep, fi_wr wr,
+			 const struct fi_rma_iov *rma_iov, size_t count,
+			 int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_wr_modify_tag(struct fid_xpu_ep *ep, fi_wr wr,
+		     uint64_t tag, uint64_t ignore, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_wr_modify_data(struct fid_xpu_ep *ep, fi_wr wr,
+		      uint64_t data, int scope)
+{
+	switch (ep->fid.prov_id) {
+	default:
+		return -FI_ENOSYS;
+	}
+}
+
+FI_XPU_FUNC int
+fi_xpu_wr_modify_flags(struct fid_xpu_ep *ep, fi_wr wr,
+		       uint64_t flags, int scope)
 {
 	switch (ep->fid.prov_id) {
 	default:
