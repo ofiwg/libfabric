@@ -482,8 +482,7 @@ static ssize_t efa_rdm_rma_post_write_proto(struct efa_rdm_ep *ep,
 ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	ssize_t err;
-	bool delivery_complete_requested;
-	int ctrl_type, use_p2p;
+	int use_p2p;
 	struct efa_rdm_proto *proto;
 
 	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
@@ -511,10 +510,9 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	if (proto)
 		return efa_rdm_rma_post_write_proto(ep, txe, proto);
 
-	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
-
-	ctrl_type = delivery_complete_requested ? EFA_RDM_DC_LONGCTS_RTW_PKT : EFA_RDM_LONGCTS_RTW_PKT;
-	return efa_rdm_ope_post_send(txe, ctrl_type);
+	EFA_WARN(FI_LOG_EP_DATA,
+		 "No emulated write protocol was selected for the transfer.\n");
+	return -FI_EOPNOTSUPP;
 }
 
 static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep,
