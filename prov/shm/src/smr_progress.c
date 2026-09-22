@@ -518,6 +518,7 @@ static int smr_ipc_async_copy(struct smr_ep *ep, struct smr_cmd *cmd,
 	return FI_SUCCESS;
 
 fail:
+	cmd->hdr.rx_ctx = 0;
 	ofi_buf_free(ipc_entry);
 	return ret;
 }
