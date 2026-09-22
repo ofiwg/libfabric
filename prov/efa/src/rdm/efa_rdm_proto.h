@@ -109,6 +109,12 @@ struct efa_rdm_proto {
 	int req_pkt_type_tagged_dc;
 };
 
+#define EFA_RDM_PROTO_DEF(_name, ...) \
+	struct efa_rdm_proto efa_rdm_proto_##_name = { \
+		.name = #_name, \
+		__VA_ARGS__ \
+	}
+
 /**
  * @brief Select the appropriate send protocol for a TX operation.
  *

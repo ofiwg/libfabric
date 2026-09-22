@@ -49,8 +49,7 @@ static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_ope *txe,
 	return txe->total_len <= max_rtm_data_capacity;
 }
 
-struct efa_rdm_proto efa_rdm_proto_eager = {
-	.name = "eager",
+EFA_RDM_PROTO_DEF(eager,
 	.wants_mr = false,
 	.can_use_protocol = &efa_rdm_proto_eager_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_eager_construct_tx_pkes,
@@ -59,7 +58,7 @@ struct efa_rdm_proto efa_rdm_proto_eager = {
 	.req_pkt_type_tagged = EFA_RDM_EAGER_TAGRTM_PKT,
 	.req_pkt_type_tagged_dc = EFA_RDM_DC_EAGER_TAGRTM_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,
-};
+);
 
 /* TX path callbacks - one callback for each packet type that this protocol uses
  */
