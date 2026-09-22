@@ -256,7 +256,8 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_profile.h \
 	$(top_srcdir)/include/rdma/fi_wr.h \
 	$(top_srcdir)/include/rdma/fi_xpu.h \
-	$(top_srcdir)/include/rdma/fi_xpu_device.h
+	$(top_srcdir)/include/rdma/fi_xpu_device.h \
+	$(top_srcdir)/include/rdma/fi_xpu_device_efa.h
 providersinclude_HEADERS += \
 	$(top_srcdir)/include/rdma/providers/fi_log.h \
 	$(top_srcdir)/include/rdma/providers/fi_peer.h \
