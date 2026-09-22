@@ -39,14 +39,13 @@ static bool efa_rdm_proto_short_rtr_can_use(struct efa_rdm_ope *txe,
 	       txe->ep->mtu_size - sizeof(struct efa_rdm_readrsp_hdr);
 }
 
-struct efa_rdm_proto efa_rdm_proto_short_rtr = {
-	.name = "short_rtr",
+EFA_RDM_PROTO_DEF(short_rtr,
 	.can_use_protocol = &efa_rdm_proto_short_rtr_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_short_rtr_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_SHORT_RTR_PKT,
 	.req_pkt_type_dc = EFA_RDM_SHORT_RTR_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,
-};
+);
 
 /**
  * @brief Handle the send completion of a short RTR packet.

@@ -46,8 +46,7 @@ static bool efa_rdm_proto_medium_can_use_for_send(struct efa_rdm_ope *txe,
 	return txe->total_len <= g_efa_hmem_info[iface].max_medium_msg_size;
 }
 
-struct efa_rdm_proto efa_rdm_proto_medium = {
-	.name = "medium",
+EFA_RDM_PROTO_DEF(medium,
 	.wants_mr = true,
 	.can_use_protocol = &efa_rdm_proto_medium_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_medium_construct_tx_pkes,
@@ -56,7 +55,7 @@ struct efa_rdm_proto efa_rdm_proto_medium = {
 	.req_pkt_type_tagged = EFA_RDM_MEDIUM_TAGRTM_PKT,
 	.req_pkt_type_tagged_dc = EFA_RDM_DC_MEDIUM_TAGRTM_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_medium_handle_tx_pkes_posted,
-};
+);
 
 /**
  * @brief Account for the medium packets that just reached the device.
