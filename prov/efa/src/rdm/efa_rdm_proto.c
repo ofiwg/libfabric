@@ -13,6 +13,7 @@
 #include "protocols/efa_rdm_proto_longcts.h"
 #include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_longread_write.h"
+#include "protocols/efa_rdm_proto_longcts_write.h"
 #include "protocols/efa_rdm_proto_medium.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
 #include "protocols/efa_rdm_proto_runtread.h"
@@ -67,6 +68,7 @@ static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 static struct efa_rdm_proto * const efa_rdm_emulated_write_protocols[] = {
 	&efa_rdm_proto_eager_write,
 	&efa_rdm_proto_longread_write,
+	&efa_rdm_proto_longcts_write,
 };
 
 /*
