@@ -70,18 +70,25 @@ void efa_rdm_pke_pool_free_handler(struct ofi_bufpool_region *region)
 }
 
 /**
- * @brief creates a packet entry pool.
+ * @brief creates a pke-metadata pool and its paired wiredata bounce pool.
  *
- * The pool is allowed to grow if
- * max_cnt is 0 and is fixed size otherwise.
+ * The pke metadata (struct efa_rdm_pke) is allocated from a small dense pool
+ * so that hot metadata stays cache/TLB friendly. The mtu-sized wiredata
+ * bounce buffer is allocated from a separate pool whose memory is
+ * page-owned and (when need_mr) registered with the EFA device.
+ *
+ * Both pools use the same chunk_cnt / max_cnt so they grow in lockstep and
+ * a metadata entry always has a bounce buffer available to pair with. The
+ * pools are allowed to grow if max_cnt is 0 and are fixed size otherwise.
  *
  * @param ep efa_rdm_ep
- * @param pkt_pool_type type of pkt pool
+ * @param need_mr whether the bounce pool must be registered with the device
  * @param chunk_cnt count of chunks in the pool
  * @param max_cnt maximal count of chunks
- * @param alignment memory alignment
- * @param base_flags base flags for the pool
- * @param pkt_pool pkt pool
+ * @param alignment memory alignment of the wiredata bounce buffer
+ * @param base_flags base flags for the pools
+ * @param pke_pool output: the dense pke-metadata pool
+ * @param bounce_pool output: the paired wiredata bounce pool
  * @return int 0 on success, a negative integer on failure
  */
 int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
@@ -90,8 +97,11 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 			       size_t max_cnt,
 			       size_t alignment,
 			       uint64_t base_flags,
-			       struct ofi_bufpool **pke_pool)
+			       struct ofi_bufpool **pke_pool,
+			       struct ofi_bufpool **bounce_pool)
 {
+	int ret;
+
 	/*
 	 * use bufpool flags to make sure that no data structures can share
 	 * the memory pages used for this buffer pool if the pool's memory
@@ -109,17 +119,28 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 	 * This is especially important when rdma-core's fork support is turned on,
 	 * which will mark the entire pages of registered memory to be MADV_DONTFORK.
 	 * As a result, the child process does not have the page in its memory space.
+	 *
+	 * Only the wiredata bounce pool is registered; the pke-metadata pool is
+	 * never device-visible, so it needs neither the mr flags nor huge pages.
 	 */
 	uint64_t mr_flags = (efa_env.huge_page_setting == EFA_ENV_HUGE_PAGE_DISABLED)
 					? OFI_BUFPOOL_NONSHARED
 					: OFI_BUFPOOL_HUGEPAGES;
-	uint64_t flags = base_flags;
 
-	if (need_mr)
-		flags |= mr_flags;
+	struct ofi_bufpool_attr metadata_attr = {
+		.size = sizeof(struct efa_rdm_pke),
+		.alignment = EFA_RDM_BUFPOOL_ALIGNMENT,
+		.max_cnt = max_cnt,
+		.chunk_cnt = chunk_cnt,
+		.alloc_fn = NULL,
+		.free_fn = NULL,
+		.init_fn = NULL,
+		.context = NULL,
+		.flags = base_flags,
+	};
 
-	struct ofi_bufpool_attr wiredata_attr = {
-		.size = sizeof(struct efa_rdm_pke) + ep->mtu_size,
+	struct ofi_bufpool_attr bounce_attr = {
+		.size = ep->mtu_size,
 		.alignment = alignment,
 		.max_cnt = max_cnt,
 		.chunk_cnt = chunk_cnt,
@@ -127,10 +148,21 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 		.free_fn = need_mr ? efa_rdm_pke_pool_free_handler : NULL,
 		.init_fn = NULL,
 		.context = efa_rdm_ep_domain(ep),
-		.flags = flags,
+		.flags = need_mr ? (base_flags | mr_flags) : base_flags,
 	};
 
-	return ofi_bufpool_create_attr(&wiredata_attr, pke_pool);
+	ret = ofi_bufpool_create_attr(&metadata_attr, pke_pool);
+	if (ret)
+		return ret;
+
+	ret = ofi_bufpool_create_attr(&bounce_attr, bounce_pool);
+	if (ret) {
+		ofi_bufpool_destroy(*pke_pool);
+		*pke_pool = NULL;
+		return ret;
+	}
+
+	return 0;
 }
 
 /** @brief initializes the various buffer pools of EFA RDM endpoint.
@@ -163,11 +195,16 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		efa_base_ep_get_tx_pool_size(&ep->base_ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
 		tx_pkt_pool_base_flags,
-		&ep->efa_tx_pkt_pool);
+		&ep->efa_tx_pkt_pool,
+		&ep->efa_tx_bounce_pool);
 	if (ret)
 		goto err_free;
 
 	ret = ofi_bufpool_grow(ep->efa_tx_pkt_pool);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_grow(ep->efa_tx_bounce_pool);
 	if (ret)
 		goto err_free;
 
@@ -178,7 +215,8 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		efa_base_ep_get_rx_pool_size(&ep->base_ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
 		rx_pkt_pool_base_flags,
-		&ep->efa_rx_pkt_pool);
+		&ep->efa_rx_pkt_pool,
+		&ep->efa_rx_bounce_pool);
 	if (ret)
 		goto err_free;
 
@@ -190,7 +228,8 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
 			rx_pkt_pool_base_flags,
-			&ep->rx_unexp_pkt_pool);
+			&ep->rx_unexp_pkt_pool,
+			&ep->rx_unexp_bounce_pool);
 		if (ret)
 			goto err_free;
 	}
@@ -203,7 +242,8 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
 			0,
-			&ep->rx_ooo_pkt_pool);
+			&ep->rx_ooo_pkt_pool,
+			&ep->rx_ooo_bounce_pool);
 		if (ret)
 			goto err_free;
 	}
@@ -219,7 +259,8 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			efa_env.readcopy_pool_size, /* the pool grows a chunk at a time up to this cap */
 			EFA_RDM_EP_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
 			0,
-			&ep->rx_readcopy_pkt_pool);
+			&ep->rx_readcopy_pkt_pool,
+			&ep->rx_readcopy_bounce_pool);
 		if (ret)
 			goto err_free;
 
@@ -386,6 +427,21 @@ err_free:
 
 	if (ep->efa_tx_pkt_pool)
 		ofi_bufpool_destroy(ep->efa_tx_pkt_pool);
+
+	if (ep->rx_readcopy_bounce_pool)
+		ofi_bufpool_destroy(ep->rx_readcopy_bounce_pool);
+
+	if (efa_env.rx_copy_ooo && ep->rx_ooo_bounce_pool)
+		ofi_bufpool_destroy(ep->rx_ooo_bounce_pool);
+
+	if (efa_env.rx_copy_unexp && ep->rx_unexp_bounce_pool)
+		ofi_bufpool_destroy(ep->rx_unexp_bounce_pool);
+
+	if (ep->efa_rx_bounce_pool)
+		ofi_bufpool_destroy(ep->efa_rx_bounce_pool);
+
+	if (ep->efa_tx_bounce_pool)
+		ofi_bufpool_destroy(ep->efa_tx_bounce_pool);
 
 	if (ep->efa_rdm_peer_pool)
 		ofi_bufpool_destroy(ep->efa_rdm_peer_pool);
@@ -929,6 +985,21 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 
 	if (efa_rdm_ep->efa_tx_pkt_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->efa_tx_pkt_pool);
+
+	if (efa_rdm_ep->rx_readcopy_bounce_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->rx_readcopy_bounce_pool);
+
+	if (efa_rdm_ep->rx_ooo_bounce_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->rx_ooo_bounce_pool);
+
+	if (efa_rdm_ep->rx_unexp_bounce_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->rx_unexp_bounce_pool);
+
+	if (efa_rdm_ep->efa_rx_bounce_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->efa_rx_bounce_pool);
+
+	if (efa_rdm_ep->efa_tx_bounce_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->efa_tx_bounce_pool);
 
 	if (efa_rdm_ep->rx_atomrsp_pool)
 		ofi_bufpool_destroy(efa_rdm_ep->rx_atomrsp_pool);

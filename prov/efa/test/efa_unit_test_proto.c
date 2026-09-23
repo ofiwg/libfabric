@@ -570,7 +570,11 @@ void test_proto_zero_copy_construct_pkes(void **state)
 	assert_int_equal(pke->pkt_size, 64);
 	assert_int_equal(pke->payload_size, 64);
 
-	ofi_buf_free(pke);
+	/* Release through the pke helper, not ofi_buf_free: the pke metadata and
+	 * its wiredata bounce buffer come from separate bufpools, and only
+	 * efa_rdm_pke_release_tx() returns both. A raw ofi_buf_free(pke) frees
+	 * the metadata and leaks the bounce buffer. */
+	efa_rdm_pke_release_tx(pke);
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
