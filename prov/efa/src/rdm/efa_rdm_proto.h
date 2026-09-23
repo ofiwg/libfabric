@@ -291,6 +291,7 @@ static inline struct efa_rdm_pke* efa_rdm_proto_tx_pke_init_common(struct efa_rd
 	tagged = efa_rdm_proto_get_tagged(txe);
 
 	pkt_entry = efa_rdm_pke_alloc(txe->ep, txe->ep->efa_tx_pkt_pool,
+				      txe->ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 	if (OFI_UNLIKELY(!pkt_entry))

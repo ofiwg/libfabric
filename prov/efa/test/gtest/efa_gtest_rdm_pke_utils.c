@@ -29,6 +29,7 @@ int efa_test_rtm_read_nack_missing_rxe(struct fid_ep *ep, fi_addr_t peer_addr,
 		return 0;
 
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pke)
 		return 0;
@@ -59,6 +60,7 @@ struct efa_rdm_pke *efa_test_pke_build_unexp_chain(struct fid_ep *ep, size_t n)
 	for (i = 0; i < n; i++) {
 		pke = efa_rdm_pke_alloc(efa_rdm_ep,
 					efa_rdm_ep->rx_unexp_pkt_pool,
+					efa_rdm_ep->rx_unexp_bounce_pool,
 					EFA_RDM_PKE_FROM_UNEXP_POOL);
 		if (!pke)
 			return NULL;
@@ -109,6 +111,7 @@ int efa_test_failed_reorder_msg_releases_rx_pkt(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pke)
 		return -FI_ENOMEM;
@@ -165,6 +168,7 @@ int efa_test_failed_reorder_msg_overflow_releases_rx_pkt_and_entry(
 	ofi_buf_free(warmup);
 
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pke)
 		return -FI_ENOMEM;
@@ -397,6 +401,7 @@ void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 		txe->bytes_runt = EFA_TEST_RTM_RUNT_LEN;
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool,
+				      efa_rdm_ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (!pkt_entry) {
 		efa_rdm_txe_release(txe);
@@ -572,6 +577,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	txe->bytes_acked = bytes_already;
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool,
+				      efa_rdm_ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (!pkt_entry) {
 		efa_rdm_txe_release(txe);

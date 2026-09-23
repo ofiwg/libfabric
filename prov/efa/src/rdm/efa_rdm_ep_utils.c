@@ -665,7 +665,7 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 	 */
 	txe->fi_flags = 0;
 
-	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry)) {
 		EFA_DBG(FI_LOG_EP_CTRL, "PKE entries exhausted.\n");
 		efa_rdm_txe_release(txe);
@@ -875,6 +875,7 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted <= efa_base_ep_get_rx_pool_size(&ep->base_ep));
 	for (i = 0; i < ep->efa_rx_pkts_to_post; ++i) {
 		ep->pke_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+					       ep->efa_rx_bounce_pool,
 					       EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert(ep->pke_vec[i]);
 	}

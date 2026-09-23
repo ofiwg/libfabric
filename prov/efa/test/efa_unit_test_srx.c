@@ -99,6 +99,7 @@ void test_efa_srx_unexp_pkt(void **state)
 
 	/* Fake a rx pkt entry */
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke);
 	efa_rdm_ep->efa_rx_pkts_posted =
