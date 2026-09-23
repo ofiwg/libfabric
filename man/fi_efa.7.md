@@ -266,6 +266,33 @@ requires peer to peer transaction support between the EFA and the FI_HMEM
 device. Therefore, the FI_HMEM_P2P_DISABLED option is not supported by the EFA
 provider for AWS Neuron or Habana SynapseAI.
 
+## CUDA memory registration on the P6e-GB200 instance type
+
+A CUDA dmabuf file descriptor encodes one DMA path to GPU memory, and that
+path must match the EFA device the memory is registered against. On most
+instance types every EFA device reaches a given GPU the same way, so the
+default mapping, which the provider requests when an application registers
+CUDA memory by virtual address, is correct for every device.
+
+The P6e-GB200 instance type is an exception. On those instances each GPU is
+reachable both over a PCIe port and over an NVLink-C2C port, and the two
+paths need different mappings. The default mapping describes the C2C path, so
+registration by virtual address is only matched to an EFA device that reaches
+the GPU over C2C. A device attached to the GPU's PCIe port does not get the
+mapping that suits it, and transfers using such a memory region do not
+perform as well as they would with the PCIe mapping.
+
+On P6e-GB200 instances, applications are advised to manage the dmabuf export
+themselves, picking the mapping according to the topology of the EFA device
+in use, and to register the resulting file descriptor with the
+`FI_MR_DMABUF` flag of `fi_mr_regattr`(3). A device attached to the GPU's
+PCIe port needs `CU_MEM_RANGE_FLAG_DMA_BUF_MAPPING_TYPE_PCIE`; a device that
+reaches the GPU over C2C needs no flag.
+
+Instance types that expose a single path from a NIC to a GPU, such as P5en
+and P6-B200, are not affected. The default mapping is correct there and
+registration by virtual address works with every EFA device.
+
 # PROVIDER SPECIFIC ENDPOINT LEVEL OPTION
 
 *FI_OPT_EFA_RNR_RETRY*
