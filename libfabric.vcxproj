@@ -921,6 +921,8 @@
     <ClCompile Include="prov\efa\src\rdm\protocols\efa_rdm_proto_longread.c" />
     <ClCompile Include="prov\efa\src\rdm\protocols\efa_rdm_proto_longcts.c" />
     <ClCompile Include="prov\efa\src\rdm\protocols\efa_rdm_proto_zero_copy.c" />
+    <ClCompile Include="prov\efa\src\rdm\protocols\efa_rdm_proto_eager_write.c" />
+    <ClCompile Include="prov\efa\src\rdm\protocols\efa_rdm_proto_short_rtr.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rta.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtw.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtr.c" />
@@ -1054,6 +1056,9 @@
     <ClInclude Include="prov\efa\src\rdm\protocols\efa_rdm_proto_longread.h" />
     <ClInclude Include="prov\efa\src\rdm\protocols\efa_rdm_proto_longcts.h" />
     <ClInclude Include="prov\efa\src\rdm\protocols\efa_rdm_proto_zero_copy.h" />
+    <ClInclude Include="prov\efa\src\rdm\protocols\efa_rdm_proto_eager_write.h" />
+    <ClInclude Include="prov\efa\src\rdm\protocols\efa_rdm_proto_short_rtr.h" />
+    <ClInclude Include="prov\efa\src\rdm\protocols\efa_rdm_proto_write.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_atomic.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_msg.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pke.h" />
