@@ -1679,6 +1679,10 @@ Test(atomic, amo_cleanup)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
+	/* AMOs can write the window after fi_close(), so drain before freeing */
+	ret = fi_cntr_wait(cxit_write_cntr, writes, 10000);
+	cr_assert(ret == FI_SUCCESS, "fi_cntr_wait failed %d", ret);
+
 	_cxit_destroy_mr(&mr);
 
 	/* Exit without gathering events. */
