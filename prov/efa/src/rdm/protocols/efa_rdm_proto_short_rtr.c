@@ -35,6 +35,10 @@ static bool efa_rdm_proto_short_rtr_can_use(struct efa_rdm_ope *txe,
 					    uint16_t header_flags, int iface,
 					    bool use_p2p)
 {
+	/* TODO: remove interface-specific run-time checks for protocol usage */
+	if (iface == FI_HMEM_SYNAPSEAI)
+		return false;
+
 	return txe->total_len <
 	       txe->ep->mtu_size - sizeof(struct efa_rdm_readrsp_hdr);
 }
