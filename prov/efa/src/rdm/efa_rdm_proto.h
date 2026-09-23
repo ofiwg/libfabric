@@ -116,6 +116,14 @@ struct efa_rdm_proto {
 	/* RX path handler */
 	efa_rdm_pke_callback handle_unexp_pke_match;
 
+	/* Send the next batch of data for a flow-controlled transfer whose
+	 * peer has granted more window (long CTS). Called from the progress
+	 * engine for an ope on ep->ope_longcts_send_list. NULL for protocols
+	 * that do not drive a continuation, in which case the progress engine
+	 * sends CTSDATA directly.
+	 */
+	ssize_t (*post_continuation)(struct efa_rdm_ope *ope);
+
 	/* TX utitlities */
 	int req_pkt_type;
 	int req_pkt_type_tagged;
