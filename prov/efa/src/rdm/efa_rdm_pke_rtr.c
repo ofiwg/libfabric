@@ -15,6 +15,8 @@
 #include "efa_rdm_pke.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_req.h"
+#include "protocols/efa_rdm_proto_short_rtr.h"
+#include "protocols/efa_rdm_proto_longcts_rtr.h"
 
 void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry,
 				 int pkt_type,
@@ -40,16 +42,6 @@ void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry,
 	pkt_entry->pkt_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = txe->peer;
-}
-
-ssize_t efa_rdm_pke_init_longcts_rtr(struct efa_rdm_pke *pkt_entry,
-				     struct efa_rdm_ope *txe)
-{
-	efa_rdm_pke_init_rtr_common(pkt_entry,
-				    EFA_RDM_LONGCTS_RTR_PKT,
-				    txe,
-				    txe->window);
-	return 0;
 }
 
 /**
@@ -78,6 +70,10 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rtr_rxe(struct efa_rdm_pke *pkt_entry)
 	rxe->window = rtr_hdr->recv_length;
 	rxe->iov_count = rtr_hdr->rma_iov_count;
 	rxe->internal_flags |= EFA_RDM_OPE_INTERNAL;
+
+	rxe->proto = (rtr_hdr->type == EFA_RDM_SHORT_RTR_PKT) ?
+			     &efa_rdm_proto_short_rtr :
+			     &efa_rdm_proto_longcts_rtr;
 
 	return rxe;
 }
