@@ -277,6 +277,7 @@ int efa_test_queue_ope_with_flag(struct fid_ep *ep_fid, struct fid_av *av_fid,
 	switch (flag_kind) {
 	case EFA_TEST_QUEUED_FLAG_RNR:
 		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+					      ep->efa_tx_bounce_pool,
 					      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 		if (!pkt_entry)
 			return -FI_ENOMEM;
@@ -487,6 +488,7 @@ int efa_test_abort_waits_for_local_read_copy_setup(
 	 * clone (which would require an FI_HMEM domain). */
 	state->data_pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep,
 						  efa_rdm_ep->efa_rx_pkt_pool,
+						  efa_rdm_ep->efa_rx_bounce_pool,
 						  EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!state->data_pkt_entry)
 		return -FI_ENOMEM;

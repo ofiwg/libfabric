@@ -39,6 +39,92 @@ struct efa_rdm_pke *efa_test_pke_build_unexp_chain(struct fid_ep *ep, size_t n);
 
 void efa_test_pke_release_cloned(struct efa_rdm_pke *head);
 
+/* The five pke metadata pools, each paired with a wiredata bounce pool. */
+enum efa_test_pke_pool {
+	EFA_TEST_PKE_POOL_TX,
+	EFA_TEST_PKE_POOL_RX,
+	EFA_TEST_PKE_POOL_UNEXP,
+	EFA_TEST_PKE_POOL_OOO,
+	EFA_TEST_PKE_POOL_READCOPY,
+	EFA_TEST_PKE_POOL_COUNT,
+};
+
+/* Observable facts about one metadata/bounce pool pair and a pke allocated
+ * from it. */
+struct efa_test_pke_pool_facts {
+	int both_pools_exist;
+	size_t metadata_pool_size;
+	size_t bounce_pool_size;
+	size_t bounce_pool_alignment;
+	int metadata_from_metadata_pool;
+	int wiredata_from_bounce_pool;
+	int wiredata_separate_from_metadata;
+	size_t pkt_size;
+	int mr_present;
+};
+
+/**
+ * @brief Open an RDM endpoint with FI_MR_HMEM so all five pke/bounce pools
+ * exist, replacing resource->ep (teardown closes the new one).
+ * @return 0 on success, negative fabric errno on failure.
+ */
+int efa_test_pke_open_hmem_ep(struct fid_ep **ep_inout, struct fid_domain *domain,
+			      struct fi_info *info);
+
+/**
+ * @brief sizeof(struct efa_rdm_pke); the metadata pool's entry size.
+ */
+size_t efa_test_pke_metadata_struct_size(void);
+
+/**
+ * @brief Expected device-registration need of a pool pair (tx/rx/readcopy are
+ * registered; unexp/ooo are not).
+ */
+int efa_test_pke_pool_needs_mr(enum efa_test_pke_pool pool);
+
+/**
+ * @brief Expected bounce-buffer alignment of a pool pair.
+ */
+size_t efa_test_pke_pool_expected_alignment(struct fid_ep *ep,
+					    enum efa_test_pke_pool pool);
+
+/**
+ * @brief Allocate one pke from the given pool pair and report observable facts
+ * about the metadata/bounce split. Releases the pke before returning.
+ */
+void efa_test_pke_pool_check(struct fid_ep *ep, enum efa_test_pke_pool pool,
+			     struct efa_test_pke_pool_facts *out);
+
+/**
+ * @brief Allocate from the TX pool pair, record the metadata and wiredata
+ * addresses, release, then allocate again and report whether both regions were
+ * handed back (LIFO reuse proves release returned both to their pools).
+ */
+void efa_test_pke_release_frees_both(struct fid_ep *ep, int *metadata_reused,
+				     int *wiredata_reused);
+
+/* Per-pool entry counts observed around efa_rdm_ep_grow_rx_pools(). An index
+ * is -1 when that pool does not exist on the endpoint. */
+struct efa_test_rx_pool_growth {
+	int err;
+	ssize_t efa_rx_meta_before, efa_rx_meta_after;
+	ssize_t efa_rx_bounce_before, efa_rx_bounce_after;
+	ssize_t unexp_meta_before, unexp_meta_after;
+	ssize_t unexp_bounce_before, unexp_bounce_after;
+	ssize_t ooo_meta_before, ooo_meta_after;
+	ssize_t ooo_bounce_before, ooo_bounce_after;
+	ssize_t readcopy_meta_before, readcopy_meta_after;
+	ssize_t readcopy_bounce_before, readcopy_bounce_after;
+};
+
+/**
+ * @brief Snapshot every RX metadata/bounce pool's entry count, call
+ * efa_rdm_ep_grow_rx_pools(), and snapshot again. A pool that exists must have
+ * a larger entry count afterwards; a pool index is -1 when the pool is absent.
+ */
+void efa_test_grow_rx_pools(struct fid_ep *ep,
+			    struct efa_test_rx_pool_growth *out);
+
 /**
  * @brief Count allocated buffers in the unexpected packet pool.
  */
