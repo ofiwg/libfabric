@@ -45,6 +45,7 @@ struct fi_xpu_ops {
 	int	(*import)(uint64_t device, void *host_addr,
 			  uint64_t size, uint64_t flags,
 			  void **dev_addr);
+	int	(*unimport)(uint64_t device, void *host_addr);
 	void	(*free)(uint64_t device, void *addr);
 };
 
