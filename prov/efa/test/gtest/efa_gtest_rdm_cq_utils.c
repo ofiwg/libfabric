@@ -55,6 +55,7 @@ int efa_test_rdm_cq_race_setup(struct fid_ep *ep, struct fid_av *av,
 	ctx->ahn = efa_rdm_ep->self_ah->ahn;
 
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pke)
 		return -FI_ENOMEM;

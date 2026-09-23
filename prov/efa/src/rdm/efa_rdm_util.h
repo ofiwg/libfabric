@@ -8,7 +8,22 @@
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke.h"
 
-#define EFA_RDM_MSG_PREFIX_SIZE (sizeof(struct efa_rdm_pke) + sizeof(struct efa_rdm_eager_msgrtm_hdr) + EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE)
+/*
+ * The header region the provider reserves in front of the user payload,
+ * historically sizeof(struct efa_rdm_pke) rounded up to EFA_RDM_PKE_ALIGNMENT.
+ *
+ * sizeof(struct efa_rdm_pke) is larger in debug builds, which carry extra
+ * packet-lifecycle tracking fields, so this rounds up to 128 in release (prefix
+ * 176) but 256 in debug (prefix 304). Tying an application-visible value to the
+ * debug-only size of an internal struct is a bug; it is fixed in the next
+ * commit. This commit only splits the struct and must not change the advertised
+ * value, so it reproduces the size the pre-split code computed in each build.
+ */
+#define EFA_RDM_PKE_METADATA_PREFIX_SIZE \
+	(((sizeof(struct efa_rdm_pke) + EFA_RDM_PKE_ALIGNMENT - 1) / \
+	  EFA_RDM_PKE_ALIGNMENT) * EFA_RDM_PKE_ALIGNMENT)
+
+#define EFA_RDM_MSG_PREFIX_SIZE (EFA_RDM_PKE_METADATA_PREFIX_SIZE + sizeof(struct efa_rdm_eager_msgrtm_hdr) + EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE)
 
 #if defined(static_assert)
 static_assert(EFA_RDM_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");

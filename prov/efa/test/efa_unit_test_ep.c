@@ -149,7 +149,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(void **state, uint64_t local_hos
 	 * TODO: modify the rx pkt as part of the ibv cq poll mock so we don't have to
 	 * allocate pkt entry and hack the pkt counters.
 	 */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
@@ -271,7 +271,7 @@ void test_efa_rdm_ep_tx_pkt_pool_flags(void **state) {
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, flags);
+	assert_int_equal(efa_rdm_ep->efa_tx_bounce_pool->attr.flags, flags);
 }
 
 /**
@@ -292,7 +292,7 @@ void test_efa_rdm_ep_rx_pkt_pool_flags(void **state) {
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, flags);
+	assert_int_equal(efa_rdm_ep->efa_rx_bounce_pool->attr.flags, flags);
 }
 
 /**
@@ -320,11 +320,14 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(void **state)
 	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
 	assert_int_equal(ret, 0);
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, flags);
+	assert_int_equal(efa_rdm_ep->efa_rx_bounce_pool->attr.flags, flags);
 
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
-	assert_true(((uintptr_t)ofi_buf_region(pkt_entry)->alloc_region % ofi_get_page_size()) == 0);
+	/* The page-ownership (NONSHARED) property is on the wiredata bounce buffer,
+	 * which is what gets registered with the device; assert its region is page
+	 * aligned. */
+	assert_true(((uintptr_t)ofi_buf_region(pkt_entry->wiredata)->alloc_region % ofi_get_page_size()) == 0);
 	efa_rdm_pke_release_rx(pkt_entry);
 
 	fi_close(&ep->fid);
@@ -359,6 +362,7 @@ void test_efa_rdm_read_copy_pkt_pool_128_alignment(void **state)
 
 	pkt_entry =
 		efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->rx_readcopy_pkt_pool,
+				  efa_rdm_ep->rx_readcopy_bounce_pool,
 				  EFA_RDM_PKE_FROM_READ_COPY_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->rx_readcopy_pkt_pool_used++;
@@ -1096,7 +1100,7 @@ void test_efa_rdm_ep_handshake_receive_peer_user_recv_qp(void **state)
 	assert_non_null(peer);
 
 	/* Construct a handshake packet that mimics an old peer with zcpy enabled */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
@@ -1176,7 +1180,7 @@ void test_efa_rdm_ep_handshake_receive_peer_no_user_recv_qp(void **state)
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
@@ -1221,7 +1225,7 @@ void test_efa_rdm_ep_handshake_receive_hmem_p2p_supported(void **state)
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
@@ -1265,7 +1269,7 @@ void test_efa_rdm_ep_handshake_receive_hmem_p2p_not_supported(void **state)
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
@@ -1309,7 +1313,7 @@ void test_efa_rdm_ep_handshake_receive_hmem_legacy_peer(void **state)
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
@@ -1439,7 +1443,7 @@ void test_efa_rdm_ep_post_handshake_error_handling_pke_exhaustion(void **state)
 
 	/* Exhaust the tx pkt pool */
 	for (i = 0; i < tx_size; i++) {
-		pkt_entry_vec[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		pkt_entry_vec[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, efa_rdm_ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 		assert_non_null(pkt_entry_vec[i]);
 	}
 
@@ -2167,7 +2171,7 @@ void test_efa_rdm_ep_outstanding_tx_ops_decremented_with_error_completion(void *
 	assert_non_null(peer);
 
 	/* Allocate a packet entry for the test */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, efa_rdm_ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 
 	/* Allocate a TX operation entry */

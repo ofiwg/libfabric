@@ -31,6 +31,7 @@ int efa_test_rtm_read_nack_missing_rxe(struct fid_ep *ep, fi_addr_t peer_addr,
 		return 0;
 
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pke)
 		return 0;
@@ -63,6 +64,7 @@ struct efa_rdm_pke *efa_test_pke_build_unexp_chain(struct fid_ep *ep, size_t n)
 	for (i = 0; i < n; i++) {
 		pke = efa_rdm_pke_alloc(efa_rdm_ep,
 					efa_rdm_ep->rx_unexp_pkt_pool,
+					efa_rdm_ep->rx_unexp_bounce_pool,
 					EFA_RDM_PKE_FROM_UNEXP_POOL);
 		if (!pke)
 			return NULL;
@@ -113,6 +115,7 @@ int efa_test_failed_reorder_msg_releases_rx_pkt(struct fid_ep *ep,
 		return -FI_EINVAL;
 
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pke)
 		return -FI_ENOMEM;
@@ -169,6 +172,7 @@ int efa_test_failed_reorder_msg_overflow_releases_rx_pkt_and_entry(
 	ofi_buf_free(warmup);
 
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pke)
 		return -FI_ENOMEM;
@@ -212,6 +216,7 @@ efa_test_reorder_pke(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer,
 	struct efa_rdm_req_opt_connid_hdr connid = {0};
 	struct efa_rdm_pke *pke =
 		efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				  ep->efa_rx_bounce_pool,
 				  EFA_RDM_PKE_FROM_EFA_RX_POOL);
 
 	if (!pke)
@@ -279,6 +284,7 @@ int efa_test_reordered_rta_retains_callback(
 		return -FI_EINVAL;
 
 	pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pke)
 		return -FI_ENOMEM;
@@ -546,6 +552,7 @@ void efa_test_rtm_init_build(struct fid_ep *ep, struct fid_av *av,
 		txe->bytes_runt = EFA_TEST_RTM_RUNT_LEN;
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool,
+				      efa_rdm_ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (!pkt_entry) {
 		efa_rdm_txe_release(txe);
@@ -721,6 +728,7 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	txe->bytes_acked = bytes_already;
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool,
+				      efa_rdm_ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (!pkt_entry) {
 		efa_rdm_txe_release(txe);
@@ -834,4 +842,181 @@ void efa_test_rtm_sent_build(struct fid_ep *ep, struct fid_av *av,
 	} else if (!pkt_entry_released) {
 		efa_rdm_pke_release_tx(pkt_entry);
 	}
+}
+
+static void efa_test_pke_pools(struct efa_rdm_ep *ep, enum efa_test_pke_pool pool,
+			       struct ofi_bufpool **metadata,
+			       struct ofi_bufpool **bounce,
+			       enum efa_rdm_pke_alloc_type *alloc_type)
+{
+	switch (pool) {
+	case EFA_TEST_PKE_POOL_TX:
+		*metadata = ep->efa_tx_pkt_pool;
+		*bounce = ep->efa_tx_bounce_pool;
+		*alloc_type = EFA_RDM_PKE_FROM_EFA_TX_POOL;
+		break;
+	case EFA_TEST_PKE_POOL_RX:
+		*metadata = ep->efa_rx_pkt_pool;
+		*bounce = ep->efa_rx_bounce_pool;
+		*alloc_type = EFA_RDM_PKE_FROM_EFA_RX_POOL;
+		break;
+	case EFA_TEST_PKE_POOL_UNEXP:
+		*metadata = ep->rx_unexp_pkt_pool;
+		*bounce = ep->rx_unexp_bounce_pool;
+		*alloc_type = EFA_RDM_PKE_FROM_UNEXP_POOL;
+		break;
+	case EFA_TEST_PKE_POOL_OOO:
+		*metadata = ep->rx_ooo_pkt_pool;
+		*bounce = ep->rx_ooo_bounce_pool;
+		*alloc_type = EFA_RDM_PKE_FROM_OOO_POOL;
+		break;
+	case EFA_TEST_PKE_POOL_READCOPY:
+	default:
+		*metadata = ep->rx_readcopy_pkt_pool;
+		*bounce = ep->rx_readcopy_bounce_pool;
+		*alloc_type = EFA_RDM_PKE_FROM_READ_COPY_POOL;
+		break;
+	}
+}
+
+int efa_test_pke_open_hmem_ep(struct fid_ep **ep_inout, struct fid_domain *domain,
+			      struct fi_info *info)
+{
+	struct efa_domain *efa_domain =
+		container_of(domain, struct efa_domain, util_domain.domain_fid);
+	struct fid_ep *ep;
+	int err;
+
+	err = fi_close(&(*ep_inout)->fid);
+	if (err)
+		return err;
+	*ep_inout = NULL;
+
+	efa_domain->util_domain.mr_mode |= FI_MR_HMEM;
+
+	err = fi_endpoint(domain, info, &ep, NULL);
+	if (err)
+		return err;
+	*ep_inout = ep;
+	return 0;
+}
+
+int efa_test_pke_pool_needs_mr(enum efa_test_pke_pool pool)
+{
+	return pool == EFA_TEST_PKE_POOL_TX || pool == EFA_TEST_PKE_POOL_RX ||
+	       pool == EFA_TEST_PKE_POOL_READCOPY;
+}
+
+size_t efa_test_pke_metadata_struct_size(void)
+{
+	return sizeof(struct efa_rdm_pke);
+}
+
+size_t efa_test_pke_pool_expected_alignment(struct fid_ep *ep,
+					    enum efa_test_pke_pool pool)
+{
+	if (pool == EFA_TEST_PKE_POOL_READCOPY)
+		return EFA_RDM_EP_IN_ORDER_ALIGNMENT;
+	return EFA_RDM_BUFPOOL_ALIGNMENT;
+}
+
+void efa_test_pke_pool_check(struct fid_ep *ep, enum efa_test_pke_pool pool,
+			     struct efa_test_pke_pool_facts *out)
+{
+	struct efa_rdm_ep *efa_rdm_ep =
+		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct ofi_bufpool *metadata, *bounce;
+	enum efa_rdm_pke_alloc_type alloc_type;
+	struct efa_rdm_pke *pke;
+
+	memset(out, 0, sizeof(*out));
+	efa_test_pke_pools(efa_rdm_ep, pool, &metadata, &bounce, &alloc_type);
+
+	out->both_pools_exist = metadata && bounce;
+	if (!out->both_pools_exist)
+		return;
+
+	out->metadata_pool_size = metadata->attr.size;
+	out->bounce_pool_size = bounce->attr.size;
+	out->bounce_pool_alignment = bounce->attr.alignment;
+
+	pke = efa_rdm_pke_alloc(efa_rdm_ep, metadata, bounce, alloc_type);
+	if (!pke)
+		return;
+
+	out->metadata_from_metadata_pool = ofi_buf_pool(pke) == metadata;
+	out->wiredata_from_bounce_pool = ofi_buf_pool(pke->wiredata) == bounce;
+	out->wiredata_separate_from_metadata =
+		(char *) pke->wiredata < (char *) pke ||
+		(char *) pke->wiredata >= (char *) pke + sizeof(struct efa_rdm_pke);
+	out->pkt_size = pke->pkt_size;
+	out->mr_present = pke->mr != NULL;
+
+	efa_rdm_pke_release(pke);
+}
+
+void efa_test_pke_release_frees_both(struct fid_ep *ep, int *metadata_reused,
+				     int *wiredata_reused)
+{
+	struct efa_rdm_ep *efa_rdm_ep =
+		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+	struct efa_rdm_pke *pke;
+	void *metadata0, *wiredata0;
+
+	*metadata_reused = 0;
+	*wiredata_reused = 0;
+
+	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool,
+				efa_rdm_ep->efa_tx_bounce_pool,
+				EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	if (!pke)
+		return;
+	metadata0 = pke;
+	wiredata0 = pke->wiredata;
+	efa_rdm_pke_release(pke);
+
+	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool,
+				efa_rdm_ep->efa_tx_bounce_pool,
+				EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	if (!pke)
+		return;
+	*metadata_reused = pke == metadata0;
+	*wiredata_reused = pke->wiredata == wiredata0;
+	efa_rdm_pke_release(pke);
+}
+
+int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep);
+
+static ssize_t efa_test_pool_entry_cnt(struct ofi_bufpool *pool)
+{
+	return pool ? (ssize_t) pool->entry_cnt : -1;
+}
+
+void efa_test_grow_rx_pools(struct fid_ep *ep,
+			    struct efa_test_rx_pool_growth *out)
+{
+	struct efa_rdm_ep *efa_rdm_ep =
+		container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	memset(out, 0, sizeof(*out));
+
+	out->efa_rx_meta_before = efa_test_pool_entry_cnt(efa_rdm_ep->efa_rx_pkt_pool);
+	out->efa_rx_bounce_before = efa_test_pool_entry_cnt(efa_rdm_ep->efa_rx_bounce_pool);
+	out->unexp_meta_before = efa_test_pool_entry_cnt(efa_rdm_ep->rx_unexp_pkt_pool);
+	out->unexp_bounce_before = efa_test_pool_entry_cnt(efa_rdm_ep->rx_unexp_bounce_pool);
+	out->ooo_meta_before = efa_test_pool_entry_cnt(efa_rdm_ep->rx_ooo_pkt_pool);
+	out->ooo_bounce_before = efa_test_pool_entry_cnt(efa_rdm_ep->rx_ooo_bounce_pool);
+	out->readcopy_meta_before = efa_test_pool_entry_cnt(efa_rdm_ep->rx_readcopy_pkt_pool);
+	out->readcopy_bounce_before = efa_test_pool_entry_cnt(efa_rdm_ep->rx_readcopy_bounce_pool);
+
+	out->err = efa_rdm_ep_grow_rx_pools(efa_rdm_ep);
+
+	out->efa_rx_meta_after = efa_test_pool_entry_cnt(efa_rdm_ep->efa_rx_pkt_pool);
+	out->efa_rx_bounce_after = efa_test_pool_entry_cnt(efa_rdm_ep->efa_rx_bounce_pool);
+	out->unexp_meta_after = efa_test_pool_entry_cnt(efa_rdm_ep->rx_unexp_pkt_pool);
+	out->unexp_bounce_after = efa_test_pool_entry_cnt(efa_rdm_ep->rx_unexp_bounce_pool);
+	out->ooo_meta_after = efa_test_pool_entry_cnt(efa_rdm_ep->rx_ooo_pkt_pool);
+	out->ooo_bounce_after = efa_test_pool_entry_cnt(efa_rdm_ep->rx_ooo_bounce_pool);
+	out->readcopy_meta_after = efa_test_pool_entry_cnt(efa_rdm_ep->rx_readcopy_pkt_pool);
+	out->readcopy_bounce_after = efa_test_pool_entry_cnt(efa_rdm_ep->rx_readcopy_bounce_pool);
 }

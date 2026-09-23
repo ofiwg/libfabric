@@ -676,7 +676,7 @@ static ssize_t efa_rdm_ep_handshake_common(struct efa_rdm_ep *ep, struct efa_rdm
 	 */
 	txe->fi_flags = 0;
 
-	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry)) {
 		EFA_DBG(FI_LOG_EP_CTRL, "PKE entries exhausted.\n");
 		efa_rdm_txe_release(txe);
@@ -886,6 +886,7 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted <= efa_base_ep_get_rx_pool_size(&ep->base_ep));
 	for (i = 0; i < ep->efa_rx_pkts_to_post; ++i) {
 		ep->pke_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+					       ep->efa_rx_bounce_pool,
 					       EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert(ep->pke_vec[i]);
 	}
@@ -914,11 +915,15 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 }
 
 /*
- * @brief explicitly allocate a chunk of memory for 6 pools on RX side:
- *     efa's receive packet pool (efa_rx_pkt_pool)
- *     unexpected packet pool (rx_unexp_pkt_pool),
- *     out-of-order packet pool (rx_ooo_pkt_pool), and
- *     local read-copy packet pool (rx_readcopy_pkt_pool).
+ * @brief explicitly allocate a chunk of memory for the RX-side pools:
+ *     efa's receive packet pool (efa_rx_pkt_pool) and its bounce pool,
+ *     unexpected packet pool (rx_unexp_pkt_pool) and its bounce pool,
+ *     out-of-order packet pool (rx_ooo_pkt_pool) and its bounce pool,
+ *     local read-copy packet pool (rx_readcopy_pkt_pool) and its bounce pool,
+ *     and the rxe map entry pool (map_entry_pool).
+ *
+ * Each packet (metadata) pool is paired with a wiredata bounce pool that must
+ * grow with it.
  *
  * This function is called when the progress engine is called for
  * the 1st time on this endpoint.
@@ -940,11 +945,28 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 		return err;
 	}
 
+	assert(ep->efa_rx_bounce_pool);
+	err = ofi_bufpool_grow(ep->efa_rx_bounce_pool);
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_CQ,
+			"cannot allocate memory for EFA's RX bounce pool. error: %s\n",
+			strerror(-err));
+		return err;
+	}
+
 	if (ep->rx_unexp_pkt_pool) {
 		err = ofi_bufpool_grow(ep->rx_unexp_pkt_pool);
 		if (OFI_UNLIKELY(err)) {
 			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate memory for unexpected packet pool. error: %s\n",
+				strerror(-err));
+			return err;
+		}
+
+		err = ofi_bufpool_grow(ep->rx_unexp_bounce_pool);
+		if (OFI_UNLIKELY(err)) {
+			EFA_WARN(FI_LOG_CQ,
+				"cannot allocate memory for unexpected bounce pool. error: %s\n",
 				strerror(-err));
 			return err;
 		}
@@ -958,6 +980,14 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 				strerror(-err));
 			return err;
 		}
+
+		err = ofi_bufpool_grow(ep->rx_ooo_bounce_pool);
+		if (OFI_UNLIKELY(err)) {
+			EFA_WARN(FI_LOG_CQ,
+				"cannot allocate memory for out-of-order bounce pool. error: %s\n",
+				strerror(-err));
+			return err;
+		}
 	}
 
 	if (ep->rx_readcopy_pkt_pool) {
@@ -965,6 +995,14 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 		if (OFI_UNLIKELY(err)) {
 			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
+				strerror(-err));
+			return err;
+		}
+
+		err = ofi_bufpool_grow(ep->rx_readcopy_bounce_pool);
+		if (OFI_UNLIKELY(err)) {
+			EFA_WARN(FI_LOG_CQ,
+				"cannot allocate and register memory for readcopy bounce pool. error: %s\n",
 				strerror(-err));
 			return err;
 		}

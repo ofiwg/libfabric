@@ -698,6 +698,7 @@ struct efa_rdm_pke *efa_rdm_pke_get_ooo_pke(struct efa_rdm_pke *pkt_entry)
 
 	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	ooo_entry = efa_rdm_pke_clone(pkt_entry, pkt_entry->ep->rx_ooo_pkt_pool,
+				      pkt_entry->ep->rx_ooo_bounce_pool,
 				      EFA_RDM_PKE_FROM_OOO_POOL);
 
 	if (OFI_UNLIKELY(!ooo_entry)) {

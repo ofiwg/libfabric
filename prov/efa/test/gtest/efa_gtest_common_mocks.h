@@ -126,8 +126,8 @@ struct dlist_entry;
 	  (map, attr, key, context, flags))                                    \
 	X(struct efa_rdm_pke *, efa_rdm_pke_clone,                             \
 	  (struct efa_rdm_pke * src, struct ofi_bufpool * pkt_pool,            \
-	   int alloc_type),                                                    \
-	  (src, pkt_pool, alloc_type))                                         \
+	   struct ofi_bufpool * bounce_pool, int alloc_type),                  \
+	  (src, pkt_pool, bounce_pool, alloc_type))                            \
 	X(int, efa_qp_post_recv,                                               \
 	  (struct efa_qp * qp, struct ibv_recv_wr * wr,                        \
 	   struct ibv_recv_wr * *bad),                                         \

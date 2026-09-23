@@ -165,6 +165,9 @@ struct efa_rdm_pke {
 	/** @brief generation of ope when this pke was associated with it */
 	uint8_t ope_gen;
 
+	/**@brief Generation counter. It is incremented every time the packet is posted to rdma-core */
+	uint8_t gen;
+
 	/** @brief number of bytes sent/received over wire */
 	size_t pkt_size;
 
@@ -251,9 +254,6 @@ struct efa_rdm_pke {
 	 */
 	size_t payload_size;
 
-	/**@brief Generation counter. It is incremented every time the packet is posted to rdma-core */
-	uint8_t gen;
-
 	/**@brief Callback function called in TX and RX paths */
 	efa_rdm_pke_callback handle_pke;
 
@@ -264,7 +264,7 @@ struct efa_rdm_pke {
 	struct efa_rdm_pke_debug_info_buffer *debug_info; /**< Pointer to debug info buffer */
 #endif
 
-	/** @brief buffer that contains data that is going over wire
+	/** @brief pointer to the wiredata bounce buffer that goes over wire
 	 *
 	 * @details
 	 * wiredata consists of 3 parts:
@@ -281,14 +281,17 @@ struct efa_rdm_pke {
 	 *       (thus data has been copied to wiredata).
 	 *    b) packet is an incoming (RX) packet.
 	 */
-	_Alignas(EFA_RDM_PKE_ALIGNMENT) char wiredata[0];
+	char *wiredata;
 };
 
 #if defined(static_assert)
-static_assert(sizeof (struct efa_rdm_pke) % EFA_RDM_PKE_ALIGNMENT == 0, "efa_rdm_pke alignment check");
 #if !ENABLE_DEBUG
-/* In optimized builds, packet entry structure is designed to fit into two x86 cache lines */
-static_assert(sizeof (struct efa_rdm_pke) == EFA_RDM_PKE_ALIGNMENT, "efa_rdm_pke size check");
+/* The pke metadata is allocated from its own dense bufpool, separate from
+ * the mtu-sized wiredata bounce buffer. Keep the metadata within two x86
+ * cache lines so the dense pool stays cache/TLB friendly. (Debug builds add
+ * dbg_entry + debug_info and intentionally exceed this.)
+ */
+static_assert(sizeof (struct efa_rdm_pke) <= 2 * 64, "efa_rdm_pke size check");
 #endif
 #endif
 
@@ -296,12 +299,9 @@ struct efa_rdm_ep;
 
 struct efa_rdm_ope;
 
-struct efa_rdm_pke *efa_rdm_pke_init_prefix(struct efa_rdm_ep *ep,
-						const struct fi_msg *posted_buf,
-						struct ofi_bufpool *pkt_pool);
-
 struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 				      struct ofi_bufpool *pkt_pool,
+				      struct ofi_bufpool *bounce_pool,
 				      enum efa_rdm_pke_alloc_type alloc_type);
 
 void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry);
@@ -341,6 +341,7 @@ void efa_rdm_pke_append(struct efa_rdm_pke *dst,
 
 struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_pke *src,
 				      struct ofi_bufpool *pkt_pool,
+				      struct ofi_bufpool *bounce_pool,
 				      enum efa_rdm_pke_alloc_type alloc_type
 				      );
 

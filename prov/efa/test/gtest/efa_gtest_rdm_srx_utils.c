@@ -68,6 +68,7 @@ int efa_test_srx_dispatches_receive_callback(
 
 	struct efa_rdm_pke *pke =
 		efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				  ep->efa_rx_bounce_pool,
 				  EFA_RDM_PKE_FROM_EFA_RX_POOL);
 
 	if (!pke)
