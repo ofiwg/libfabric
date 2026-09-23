@@ -144,8 +144,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Short read");
 		break;
 	case EFA_RDM_LONGCTS_RTR_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_longcts_rtr(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long CTS read");
 		break;
 	case EFA_RDM_WRITE_RTA_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -284,7 +283,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		EFA_RDM_PROTO_MOVED("Short read");
 		break;
 	case EFA_RDM_LONGCTS_RTR_PKT:
-		/* nothing can be done when RTR packets are sent */
+		EFA_RDM_PROTO_MOVED("Long CTS read");
 		break;
 	case EFA_RDM_WRITE_RTA_PKT:
 	case EFA_RDM_DC_WRITE_RTA_PKT:
@@ -691,13 +690,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
 		break;
 	case EFA_RDM_LONGCTS_RTR_PKT:
-		/* For emulated read, the txe is released either here
-		 * or in efa_rdm_ope_handle_recv_completed(), whichever
-		 * happens last. Release here if recv already completed.
-		 */
-		assert(pkt_entry->ope);
-		if (efa_rdm_txe_emulated_read_ready_for_release(pkt_entry->ope))
-			efa_rdm_txe_release(pkt_entry->ope);
+		EFA_RDM_PROTO_MOVED("Long CTS read");
 		break;
 	case EFA_RDM_WRITE_RTA_PKT:
 		efa_rdm_pke_handle_write_rta_send_completion(pkt_entry);

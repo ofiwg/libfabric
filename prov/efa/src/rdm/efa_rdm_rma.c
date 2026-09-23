@@ -85,31 +85,6 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 }
 
 /* rma_read functions */
-ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
-{
-	int err;
-
-#if ENABLE_DEBUG
-	dlist_insert_tail(&txe->pending_recv_entry,
-			  &ep->ope_recv_list);
-	ep->pending_recv_counter++;
-#endif
-
-	assert(efa_env.tx_min_credits > 0);
-	txe->window = MIN(txe->total_len,
-			       efa_env.tx_min_credits * ep->max_data_payload_size);
-	err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGCTS_RTR_PKT);
-
-	if (OFI_UNLIKELY(err)) {
-#if ENABLE_DEBUG
-		dlist_remove(&txe->pending_recv_entry);
-		ep->pending_recv_counter--;
-#endif
-	}
-
-	return err;
-}
-
 /**
  * @brief Post an emulated read using a selected read protocol.
  *
@@ -214,10 +189,8 @@ ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		/* Use a registered read protocol if one applies. */
 		efa_rdm_proto_select_emulated_read_protocol(ep, txe->peer, txe,
 							    &proto);
-		if (proto)
-			ret = efa_rdm_rma_post_read_proto(ep, txe, proto);
-		else
-			ret = efa_rdm_rma_post_efa_emulated_read(ep, txe);
+		assert(proto && "No emulated read protocol was selected for the transfer");
+		ret = efa_rdm_rma_post_read_proto(ep, txe, proto);
 	}
 
 	return ret;

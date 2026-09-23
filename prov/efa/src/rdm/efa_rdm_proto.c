@@ -9,6 +9,7 @@
 #include "protocols/efa_rdm_proto_eager_write.h"
 #include "protocols/efa_rdm_proto_medium.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
+#include "protocols/efa_rdm_proto_longcts_rtr.h"
 #include "efa_rdm_msg.h"
 
 /**
@@ -65,6 +66,7 @@ static struct efa_rdm_proto * const efa_rdm_emulated_write_protocols[] = {
  */
 static struct efa_rdm_proto * const efa_rdm_emulated_read_protocols[] = {
 	&efa_rdm_proto_short_rtr,
+	&efa_rdm_proto_longcts_rtr,
 };
 
 void efa_rdm_proto_txe_init_buffers(struct efa_rdm_ep *ep,
@@ -287,13 +289,6 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 			((struct efa_mr *) txe->desc[0])->iface :
 			FI_HMEM_SYSTEM;
 
-	/* Synapse AI is not handled on this path yet; use the old code path. */
-	if (iface == FI_HMEM_SYNAPSEAI) {
-		*proto = NULL;
-		txe->proto = NULL;
-		return;
-	}
-
 	if (efa_rdm_peer_need_raw_addr_hdr(peer))
 		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
 	else if (efa_rdm_peer_need_connid(peer))
@@ -319,8 +314,8 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 	}
 
 	/*
-	 * No emulated read protocol matched, so the caller falls back to the
-	 * old code path.
+	 * No emulated read protocol matched. This is not expected; the caller
+	 * reports an error.
 	 */
 	*proto = NULL;
 	txe->proto = NULL;
