@@ -142,6 +142,8 @@ R = required mode bit
 
 O = optional mode bit
 
+R/O = required or optional depending on the libfabric API version
+
 ` ` (no mark) = not applicable or not needed
 
 ***
@@ -213,13 +215,28 @@ consistent with the FI_MSG iov limit.
 | `FI_ASYNC_IOV`            |   |          |
 | `FI_BUFFERED_RECV`        |   |          |
 | `FI_CONTEXT`              |   |          |
-| `FI_CONTEXT2`             |   |O         |
+| `FI_CONTEXT2`             |   |R/O       |
 | `FI_LOCAL_MR (compat)`    |   |          |
 | `FI_MSG_PREFIX`           |  |          |
 | `FI_RX_CQ_DATA`           |   |O         |
 
 Feature comparison:
-- **FI_CONTEXT2**: efa-direct accepts this optional mode; without it fi_inject, FI_SELECTIVE_COMPLETION, and FI_EFA_TRACK_MR are unavailable. efa fabric doesn't use it
+- **FI_CONTEXT2**: The requirement depends on the libfabric API version passed
+to `fi_getinfo`:
+
+  | API version | efa RDM | efa-direct RDM | DGRAM |
+  | ----------- | :-----: | :------------: | :---: |
+  | < 2.7       |         | Required       | Required |
+  | >= 2.7      |         | Optional       | Optional |
+
+  With API versions before 2.7, `fi_getinfo` filters out efa-direct and DGRAM
+  endpoints when non-NULL hints do not advertise `FI_CONTEXT2`. With API
+  version 2.7 and later, omitting the mode selects operation without an
+  application context buffer; `fi_inject`, `FI_SELECTIVE_COMPLETION`, and
+  `FI_EFA_TRACK_MR` are then unavailable. The efa RDM endpoint does not use
+  `FI_CONTEXT2`. DGRAM is listed separately because it belongs to the efa
+  fabric but uses the same base endpoint implementation and version-dependent
+  requirement as efa-direct.
 - **FI_MSG_PREFIX**: efa fabric DGRAM endpoint requires FI_MSG_PREFIX due to the 40-byte prefix requirement per IBV_QPT_UD spec
 - **FI_RX_CQ_DATA**: efa-direct accepts this optional mode, meaning operations carrying CQ data consume an RX buffer on responder side
 
@@ -286,11 +303,12 @@ directly in Libfabric without rdma-core API. It is now enabled in both fabrics
 - **Util CQ Bypass** Another improvement to get rid of the CQE staging in util CQ,
 more details are in the [util_cq_bypass doc](util_cq_bypass.md).
 - **fi_inject**: efa injects through its own protocol and always supports it.
-efa-direct supports it only with the FI_CONTEXT2 mode, because without that mode
-the provider hands the application's context straight to the device work request
-and has no way left to mark an operation as not requesting a completion. Without
-FI_CONTEXT2 an efa-direct endpoint reports an inject size of 0 and the inject
-calls return -FI_ENOSYS.
+efa-direct supports it only with the FI_CONTEXT2 mode. See the earlier
+**FI_CONTEXT2** bullet for the API-version-dependent mode requirement. Without
+FI_CONTEXT2 the provider hands the
+application's context straight to the device work request and has no way left
+to mark an operation as not requesting a completion. An efa-direct endpoint
+without FI_CONTEXT2 reports an inject size of 0 and the inject calls return -FI_ENOSYS.
 - **Wide send queue entry**: efa-direct carries inject data inside the send queue
 entry, so a larger inject size needs the wide entry newer EFA devices offer,
 which also makes inline RMA write available. Because a wide entry occupies more

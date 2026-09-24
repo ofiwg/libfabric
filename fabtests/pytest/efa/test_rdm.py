@@ -40,7 +40,7 @@ def test_rdm_bw_functional_efa(cmdline_args, completion_semantic):
 @pytest.mark.functional
 def test_rdm_bw_no_context2(cmdline_args):
     from common import ClientServerTest
-    test = ClientServerTest(cmdline_args, "fi_rdm_bw -M context2 -S 1024 -j 0",
+    test = ClientServerTest(cmdline_args, "fi_rdm_bw --fi-version 2.7 -M context2 -S 1024 -j 0",
                             completion_semantic="transmit_complete",
                             fabric="efa-direct", iteration_type="short")
     test.run()
