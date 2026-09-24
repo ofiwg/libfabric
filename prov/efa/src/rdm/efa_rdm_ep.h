@@ -266,6 +266,10 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr);
 struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr);
 
+struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit_unsafe(struct efa_rdm_ep *ep,
+							 fi_addr_t addr)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym);
+
 int efa_rdm_ep_peer_map_init(struct efa_av_array **arr);
 
 struct efa_rdm_peer *efa_rdm_ep_peer_map_lookup(struct efa_av_array *arr, fi_addr_t addr);
