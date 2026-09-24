@@ -828,6 +828,111 @@ void test_info_direct_ordering(void **state)
 	fi_freeinfo(hints);
 }
 
+void test_info_api_1_18_without_context2_excludes_direct(void **state)
+{
+	struct fi_info *hints, *info, *info_head;
+	bool efa_returned = false;
+	int err;
+
+	hints = fi_allocinfo();
+	assert_non_null(hints);
+	hints->caps = FI_MSG | FI_RMA | FI_LOCAL_COMM | FI_REMOTE_COMM;
+	hints->mode = FI_CONTEXT;
+	hints->ep_attr->type = FI_EP_RDM;
+	hints->domain_attr->mr_mode = ~3;
+
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0, hints, &info_head);
+	assert_int_equal(err, 0);
+	assert_non_null(info_head);
+
+	for (info = info_head; info; info = info->next) {
+		assert_true(strcmp(info->fabric_attr->name,
+				   EFA_DIRECT_FABRIC_NAME));
+		if (!strcmp(info->fabric_attr->name, EFA_FABRIC_NAME))
+			efa_returned = true;
+	}
+	assert_true(efa_returned);
+
+	fi_freeinfo(info_head);
+	fi_freeinfo(hints);
+}
+
+void test_info_direct_without_context2_api_lt_2_7(void **state)
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM,
+					 EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->mode &= ~FI_CONTEXT2;
+
+	err = fi_getinfo(FI_VERSION(2, 6), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, -FI_ENODATA);
+	assert_null(info);
+
+	fi_freeinfo(hints);
+}
+
+void test_info_direct_with_context2_api_lt_2_7(void **state)
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM,
+					 EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+
+	err = fi_getinfo(FI_VERSION(2, 6), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+	assert_true(info->mode & FI_CONTEXT2);
+	assert_true(info->tx_attr->mode & FI_CONTEXT2);
+	assert_true(info->rx_attr->mode & FI_CONTEXT2);
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+}
+
+void test_info_dgram_without_context2_api_lt_2_7(void **state)
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_DGRAM, EFA_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->mode &= ~FI_CONTEXT2;
+
+	err = fi_getinfo(FI_VERSION(2, 6), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, -FI_ENODATA);
+	assert_null(info);
+
+	fi_freeinfo(hints);
+}
+
+void test_info_direct_without_context2_api_ge_2_7(void **state)
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM,
+					 EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->mode &= ~FI_CONTEXT2;
+
+	err = fi_getinfo(FI_VERSION(2, 7), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+	assert_string_equal(info->fabric_attr->name, EFA_DIRECT_FABRIC_NAME);
+	assert_false(info->mode & FI_CONTEXT2);
+	assert_false(info->tx_attr->mode & FI_CONTEXT2);
+	assert_false(info->rx_attr->mode & FI_CONTEXT2);
+	assert_int_equal(info->tx_attr->inject_size, 0);
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+}
+
 /**
  * @brief core test function for use_device_rdma
  *

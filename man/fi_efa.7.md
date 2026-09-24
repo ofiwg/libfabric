@@ -74,9 +74,21 @@ The following features are supported:
 
 *Modes*
 : The provider requires the use of *FI_MSG_PREFIX* when running over
-  the DGRAM endpoint. And it requires the use of *FI_CONTEXT2* mode
-  for DGRAM endpoint and the `efa-direct` fabric of RDM endpoint.
-  The `efa` fabric of RDM endpoint doesn't have these requirements.
+  the DGRAM endpoint.
+
+  The *FI_CONTEXT2* requirement for the DGRAM endpoint and the `efa-direct`
+  fabric of an RDM endpoint depends on the libfabric API version passed to
+  `fi_getinfo`:
+
+  - For API versions before 2.7, *FI_CONTEXT2* is required. When non-NULL hints
+    do not advertise the mode, `fi_getinfo` does not return these endpoints.
+  - For API version 2.7 and later, *FI_CONTEXT2* is optional. With non-NULL
+    hints, omitting the mode selects operation without an application context
+    buffer. In this mode inject, *FI_SELECTIVE_COMPLETION*, and
+    *FI_EFA_TRACK_MR* are unavailable. When hints are NULL or advertise
+    *FI_CONTEXT2*, the returned `fi_info` includes the mode.
+
+  The `efa` fabric of an RDM endpoint does not use *FI_CONTEXT2*.
 
 *Memory registration modes*
 : The `efa` fabric of RDM endpoint does not require memory registration for send and receive

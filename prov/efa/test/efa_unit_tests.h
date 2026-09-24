@@ -242,6 +242,11 @@ void test_info_hmem_not_advertised_with_null_hints_when_unsupported(void **state
 void test_info_hmem_requested_but_unsupported_returns_enodata(void **state);
 void test_info_direct_unsupported(void **state);
 void test_info_direct_ordering(void **state);
+void test_info_api_1_18_without_context2_excludes_direct(void **state);
+void test_info_direct_without_context2_api_lt_2_7(void **state);
+void test_info_direct_with_context2_api_lt_2_7(void **state);
+void test_info_dgram_without_context2_api_lt_2_7(void **state);
+void test_info_direct_without_context2_api_ge_2_7(void **state);
 void test_info_reuse_fabric_via_fabric_attr(void **state);
 void test_info_reuse_domain_via_domain_attr(void **state);
 void test_info_reuse_fabric_via_name(void **state);
