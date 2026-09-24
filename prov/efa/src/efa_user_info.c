@@ -556,18 +556,26 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
  * @brief advertise FI_CONTEXT2 for an efa base-ep (efa-direct or DGRAM) info
  *
  * Advertises FI_CONTEXT2 when the application requested it (or passed NULL
- * hints). Without FI_CONTEXT2 the endpoint runs without touching the caller's
- * context buffer, which also disables inject; a nonzero inject_size hint
- * therefore cannot be satisfied and the info is rejected.
+ * hints). Calls using an API version before 2.7 are validated here with the
+ * legacy FI_CONTEXT2 requirement. Without FI_CONTEXT2 the endpoint runs
+ * without touching the caller's context buffer, which also disables inject; a
+ * nonzero inject_size hint therefore cannot be satisfied and the info is
+ * rejected.
  *
+ * @param	version[in]	libfabric API version
  * @param	info[in,out]	info to be updated
  * @param	hints[in]	user provided hints
  * @return	0 to keep the info, -FI_ENODATA if the caller should skip it
  */
-static int efa_user_info_set_context2(struct fi_info *info,
+static int efa_user_info_set_context2(uint32_t version, struct fi_info *info,
 				      const struct fi_info *hints)
 {
-	if (!hints || (hints->mode & FI_CONTEXT2)) {
+	bool use_context2 = !hints || (hints->mode & FI_CONTEXT2);
+
+	if (FI_VERSION_LT(version, FI_VERSION(2, 7)) && !use_context2)
+		return -FI_ENODATA;
+
+	if (use_context2) {
 		info->mode |= FI_CONTEXT2;
 		info->tx_attr->mode |= FI_CONTEXT2;
 		info->rx_attr->mode |= FI_CONTEXT2;
@@ -596,7 +604,7 @@ static int efa_user_info_set_context2(struct fi_info *info,
 static
 int efa_user_info_alter_direct(int version, struct fi_info *info, const struct fi_info *hints)
 {
-	int ret = efa_user_info_set_context2(info, hints);
+	int ret = efa_user_info_set_context2(version, info, hints);
 	if (ret)
 		return ret;
 	bool use_context2 = info->mode & FI_CONTEXT2;
@@ -884,7 +892,7 @@ int efa_get_user_info(uint32_t version, const char *node,
 		 * handles this inside efa_user_info_alter_direct()).
 		 */
 		if (EFA_INFO_TYPE_IS_DGRAM(prov_info)) {
-			ret = efa_user_info_set_context2(dupinfo, hints);
+			ret = efa_user_info_set_context2(version, dupinfo, hints);
 			if (ret) {
 				fi_freeinfo(dupinfo);
 				continue;
