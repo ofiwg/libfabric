@@ -85,6 +85,7 @@ struct fi_ops_tagged {
 			uint64_t data, fi_addr_t dest_addr, uint64_t tag, void *context);
 	ssize_t	(*injectdata)(struct fid_ep *ep, const void *buf, size_t len,
 			uint64_t data, fi_addr_t dest_addr, uint64_t tag);
+	ssize_t	(*recv_flush)(struct fid_ep *ep, uint64_t flags);
 };
 
 
@@ -115,6 +116,13 @@ static inline ssize_t
 fi_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags)
 {
 	return ep->tagged->recvmsg(ep, msg, flags);
+}
+
+static inline ssize_t
+fi_trecv_flush(struct fid_ep *ep, uint64_t flags)
+{
+	return FI_CHECK_OP(ep->tagged, struct fi_ops_tagged, recv_flush) ?
+		ep->tagged->recv_flush(ep, flags) : -FI_ENOSYS;
 }
 
 static inline ssize_t

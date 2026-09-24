@@ -15,6 +15,9 @@ fi_trecv / fi_trecvv / fi_trecvmsg
 fi_tsend / fi_tsendv / fi_tsendmsg / fi_tinject / fi_tsenddata
 :   Initiate an operation to send a message
 
+fi_trecv_flush
+:   Initiate tagged receives that the provider has queued but not started
+
 fi_xpu_tsend
 :   Initiate a tagged send operation from an XPU.
 
@@ -55,6 +58,8 @@ ssize_t fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr, uint64_t tag);
+
+ssize_t fi_trecv_flush(struct fid_ep *ep, uint64_t flags);
 
 #include <rdma/fi_xpu_device.h>
 
@@ -258,6 +263,15 @@ connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags.  The fi_trecvmsg function
 takes a struct fi_msg_tagged as input.
 
+## fi_trecv_flush
+
+The fi_trecv_flush call initiates tagged receives that the provider has queued
+on the endpoint's tagged receive queue but has not yet started, and returns once
+the queued work has been initiated.  Its primary use is to start tagged receives
+deferred by the FI_MORE flag.  A provider that does not maintain a separate
+tagged receive queue services this the same as fi_recv_flush.  Flags are
+reserved for future use and must be 0.
+
 ## fi_xpu_tsend / fi_xpu_trecv
 
 The fi_xpu_tsend and fi_xpu_trecv calls are device-side equivalents
@@ -289,13 +303,21 @@ and/or fi_tsendmsg.
   or this flag is ignored.
 
 *FI_MORE*
-: Indicates that the user has additional requests that will
-  immediately be posted after the current call returns.  Use of this
-  flag may improve performance by enabling the provider to optimize
-  its access to the fabric hardware.  Providers that utilize delayed
-  start optimizations for communication calls with FI_MORE flag set
-  must ensure that all previously delayed calls be flushed when an
-  error is returned from a new call.
+: Indicates that the user has additional requests that will immediately be
+  posted to the same queue after the current call returns.  Use of this flag
+  may improve performance by enabling the provider to optimize its access to
+  the fabric hardware.  Providers that utilize delayed start optimizations for
+  communication calls with FI_MORE flag set must ensure that all previously
+  delayed calls be flushed when an error is returned from a new call.
+
+  A tagged send places work on the endpoint's transmit queue, shared with
+  untagged sends, RMA, and atomics; a tagged receive places work on the tagged
+  receive queue, which a provider may keep separate from the untagged receive
+  queue.  Work deferred under FI_MORE on a queue is initiated when a subsequent
+  operation without FI_MORE is posted to that same queue, or when the queue is
+  flushed explicitly with fi_tx_flush for tagged sends (see
+  [`fi_endpoint`(3)](fi_endpoint.3.html)) or fi_trecv_flush for tagged
+  receives.
 
 *FI_INJECT*
 : Applies to fi_tsendmsg.  Indicates that the outbound data buffer

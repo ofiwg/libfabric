@@ -29,6 +29,9 @@ fi_enable
 fi_cancel
 :   Cancel a pending asynchronous data transfer
 
+fi_tx_flush
+:   Initiate transmit operations that the provider has queued but not started
+
 fi_ep_alias
 :   Create an alias to the endpoint
 
@@ -119,6 +122,8 @@ DEPRECATED ssize_t fi_tx_size_left(struct fid_ep *ep);
 
 int fi_ep_export_xpu(struct fid_ep *ep, uint64_t flags,
     struct fid_xpu_ep *xpu_ep);
+
+ssize_t fi_tx_flush(struct fid_ep *ep, uint64_t flags);
 ```
 
 # ARGUMENTS
@@ -431,6 +436,19 @@ match the context parameter, only one will be canceled. In this case, the
 operation which is canceled is provider specific.
 The cancel operation is asynchronous, but will complete within a bounded
 period of time.
+
+## fi_tx_flush
+
+This call initiates data transfers that the provider has queued on the
+endpoint's transmit queue but has not yet started, and returns once the queued
+work has been initiated.  The transmit queue carries sends, tagged sends, RMA
+writes and reads, and atomic operations.  Flags are reserved for future use and
+must be 0.
+
+The primary use of the flush calls is to start operations deferred by the
+FI_MORE flag. An application that posts a batch of transfers, each but the last
+carrying FI_MORE, may call the matching flush instead of issuing a final request
+without FI_MORE, which is useful when the batch size is not known in advance.
 
 ## fi_ep_alias
 
