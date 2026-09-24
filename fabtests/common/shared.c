@@ -4610,6 +4610,8 @@ void ft_longopts_usage()
 		"Completion semantic for inband sync:\n"
 		"transmit_complete, delivery_complete (default),\n"
 		"commit_complete");
+	FT_PRINT_OPTS_USAGE("--fi-version <major.minor>",
+			    "libfabric API version passed to fi_getinfo");
 }
 
 int debug_assert;
@@ -4627,6 +4629,7 @@ struct option long_opts[] = {
 	{"no-rx-cq-data", no_argument, NULL, LONG_OPT_NO_RX_CQ_DATA},
 	{"expect-error", required_argument, NULL, LONG_OPT_EXPECT_ERROR},
 	{"sync-comp", required_argument, NULL, LONG_OPT_SYNC_COMP},
+	{"fi-version", required_argument, NULL, LONG_OPT_FI_VERSION},
 	{NULL, 0, NULL, 0},
 };
 
@@ -4656,6 +4659,21 @@ static int ft_parse_threading_string(char* threading_str)
 		ret = FI_THREAD_DOMAIN;
 
 	return ret;
+}
+
+static int ft_parse_fi_version_string(const char *version)
+{
+	unsigned int major, minor;
+	char trailing;
+
+	if (sscanf(version, "%u.%u%c", &major, &minor, &trailing) != 2 ||
+	    major > UINT16_MAX || minor > UINT16_MAX) {
+		FT_ERR("Invalid libfabric API version: %s", version);
+		return EXIT_FAILURE;
+	}
+
+	ft_fiversion = FI_VERSION(major, minor);
+	return 0;
 }
 
 int ft_parse_long_opts(int op, char *optarg)
@@ -4708,6 +4726,8 @@ int ft_parse_long_opts(int op, char *optarg)
 			return EXIT_FAILURE;
 		}
 		return 0;
+	case LONG_OPT_FI_VERSION:
+		return ft_parse_fi_version_string(optarg);
 	default:
 		return EXIT_FAILURE;
 	}

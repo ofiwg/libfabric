@@ -708,6 +708,7 @@ enum {
 	LONG_OPT_NO_RX_CQ_DATA,
 	LONG_OPT_EXPECT_ERROR,
 	LONG_OPT_SYNC_COMP,
+	LONG_OPT_FI_VERSION,
 };
 
 extern int debug_assert;
