@@ -15,7 +15,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_xpu" "3" "2026\-09\-17" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_xpu" "3" "2026\-09\-24" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -101,6 +101,7 @@ struct fi_xpu_ops {
     int (*import)(uint64_t device, void *host_addr,
                   uint64_t size, uint64_t flags,
                   void **dev_addr);
+    int (*unimport)(uint64_t device, void *host_addr);
     void (*free)(uint64_t device, void *addr);
 };
 
@@ -127,8 +128,8 @@ If NULL, the provider uses its default mechanisms.
 .PP
 The \f[V]fi_xpu_ops\f[R] structure groups memory management callbacks
 for XPU device memory.
-The provider calls these when it needs to allocate, import, or free
-device memory on behalf of the XPU context.
+The provider calls these when it needs to allocate, import, unimport or
+free device memory on behalf of the XPU context.
 .TP
 \f[I]size\f[R]
 Must be set to \f[V]sizeof(struct fi_xpu_ops)\f[R].
@@ -152,6 +153,11 @@ host RAM) that the XPU kernel needs to access.
 Flags indicate the memory type: \f[V]FI_XPU_IMPORT_IOMEMORY\f[R] for
 PCIe BAR MMIO regions, \f[V]FI_XPU_IMPORT_DEVICEMAP\f[R] for addresses
 that must be accessible from XPU kernels.
+.TP
+\f[I]unimport\f[R]
+Release a mapping made by import.
+The provider calls this when the object that needed the mapping is
+closed, passing the same host address it passed to import.
 .TP
 \f[I]free\f[R]
 Release memory previously allocated via alloc.
