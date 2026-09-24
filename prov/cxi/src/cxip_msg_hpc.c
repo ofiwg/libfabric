@@ -1058,6 +1058,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 		if (ret != FI_SUCCESS)
 			return ret;
 
+		cxip_send_buf_fini(put_req);
 		cxip_tx_id_free(txc, mb.tx_id);
 
 		/* The unexpected message has been matched. Generate a
@@ -1072,6 +1073,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 
 		cxip_txc_otx_reqs_dec(put_req->send.txc);
 		cxip_evtq_req_free(put_req);
+		TXC_WARN(txc, "FREE: req=%p (ZBP completion)\n", put_req);
 
 		return FI_SUCCESS;
 
@@ -4650,27 +4652,30 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		return FI_SUCCESS;
 	}
 
-	ret = cxip_send_req_dequeue(req->send.txc_hpc, req);
-	if (ret != FI_SUCCESS)
-		return ret;
-
-	cxip_send_buf_fini(req);
-
-	/* If MATCH_COMPLETE was requested and the the Put did not match a user
+	/* If MATCH_COMPLETE was requested and the message did not match a user
 	 * buffer, do not generate a completion event until the target notifies
 	 * the initiator that the match is complete.
 	 */
 	if (match_complete) {
 		if (req->send.rc == C_RC_OK &&
 		    event->init_short.ptl_list != C_PTL_LIST_PRIORITY) {
-			TXC_DBG(req->send.txc,
-				"Waiting for match complete: %p\n", req);
+			TXC_WARN(req->send.txc,
+				"Waiting for match complete (OVERFLOW): %p ptl_list=%d\n",
+				req, event->init_short.ptl_list);
 			return FI_SUCCESS;
 		}
 
-		TXC_DBG(req->send.txc, "Match complete with Ack: %p\n", req);
+		TXC_WARN(req->send.txc,
+			"Completing match complete: %p ptl_list=%d rc=%d\n",
+			req, event->init_short.ptl_list, req->send.rc);
 		cxip_tx_id_free(req->send.txc_hpc, req->send.tx_id);
 	}
+
+	ret = cxip_send_req_dequeue(req->send.txc_hpc, req);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	cxip_send_buf_fini(req);
 
 	/* If MATCH_COMPLETE was requested, software must manage counters. */
 	cxip_report_send_completion(req, match_complete);
@@ -5192,6 +5197,9 @@ static int cxip_send_req_queue(struct cxip_txc_hpc *txc, struct cxip_req *req)
 
 	dlist_insert_tail(&req->send.txc_entry, &txc->base.msg_queue);
 
+	TXC_WARN(txc, "cxip_send_req_queue: INSERT: req=%p [%p - %p - %p]\n", req,
+		req->send.txc_entry.prev, &req->send.txc_entry,
+		req->send.txc_entry.next);
 	return FI_SUCCESS;
 }
 
@@ -5205,6 +5213,9 @@ static int cxip_send_req_dequeue(struct cxip_txc_hpc *txc, struct cxip_req *req)
 {
 	int ret;
 
+	TXC_WARN(txc, "cxip_send_req_dequeue: START: req=%p [%p - %p - %p]\n", req,
+		req->send.txc_entry.prev, &req->send.txc_entry,
+		req->send.txc_entry.next);
 	if (req->send.fc_peer) {
 		/* The peer was disabled after this message arrived. */
 		TXC_DBG(txc,
@@ -5220,6 +5231,9 @@ static int cxip_send_req_dequeue(struct cxip_txc_hpc *txc, struct cxip_req *req)
 		req->send.fc_peer = NULL;
 	}
 
+	TXC_WARN(txc, "cxip_send_req_dequeue: DLIST_REMOVE: req=%p [%p - %p - %p]\n", req,
+		req->send.txc_entry.prev, &req->send.txc_entry,
+		req->send.txc_entry.next);
 	dlist_remove(&req->send.txc_entry);
 
 	return FI_SUCCESS;
@@ -5373,7 +5387,7 @@ cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
-
+	TXC_WARN(txc, "ALLOC: req=%p\n", req);
 	/* Restrict outstanding success event requests to queue size */
 	if (cxip_txc_otx_reqs_get(txc) >= txc->attr.size) {
 		ret = -FI_EAGAIN;

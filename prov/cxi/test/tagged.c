@@ -4021,6 +4021,183 @@ Test(tagged, match_comp)
 	free(recv_buf);
 }
 
+/* Test match_comp_priority - Receive posted BEFORE send, message matches on PRIORITY list (no ZBP) */
+Test(tagged, match_comp_priority)
+{
+	int ret;
+	uint8_t *recv_buf, *send_buf;
+	int msg_size = 700;
+	struct fi_cq_tagged_entry tx_cqe, rx_cqe;
+	fi_addr_t from;
+	struct fi_msg_tagged rmsg = {};
+	struct fi_msg_tagged smsg = {};
+	struct iovec riovec, siovec;
+	char *rx_mode;
+
+	/* This test only makes sense in SW/hybrid match mode */
+	rx_mode = getenv("FI_CXI_RX_MATCH_MODE");
+	if (!rx_mode || (strcmp(rx_mode, "software") != 0 &&
+			 strcmp(rx_mode, "hybrid") != 0)) {
+		cr_skip("Test requires SW/hybrid match mode (FI_CXI_RX_MATCH_MODE=software or hybrid)");
+		return;
+	}
+
+	recv_buf = aligned_alloc(s_page_size, msg_size);
+	cr_assert(recv_buf);
+
+	send_buf = aligned_alloc(s_page_size, msg_size);
+	cr_assert(send_buf);
+
+	/* Initialize buffers */
+	memset(recv_buf, 0, msg_size);
+	for (int i = 0; i < msg_size; i++)
+		send_buf[i] = (i * 3) & 0xff;
+
+	/* POST RECEIVE FIRST - message will match on PRIORITY list */
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = msg_size;
+	rmsg.msg_iov = &riovec;
+	rmsg.iov_count = 1;
+	rmsg.addr = FI_ADDR_UNSPEC;
+	rmsg.tag = 123;
+	rmsg.ignore = 0;
+	rmsg.context = NULL;
+
+	ret = fi_trecvmsg(cxit_ep, &rmsg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecvmsg failed: %d", ret);
+
+	/* Send SECOND - message matches immediately on PRIORITY list (no OVERFLOW) */
+	siovec.iov_base = send_buf;
+	siovec.iov_len = msg_size;
+	smsg.msg_iov = &siovec;
+	smsg.iov_count = 1;
+	smsg.addr = cxit_ep_fi_addr;
+	smsg.tag = 123;  /* Same tag as receive */
+	smsg.ignore = 0;
+	smsg.context = NULL;
+
+	ret = fi_tsendmsg(cxit_ep, &smsg, FI_MATCH_COMPLETE | FI_COMPLETION);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsendmsg failed: %d", ret);
+
+	/* Wait for RX completion */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_readfrom failed: %d", ret);
+	validate_rx_event(&rx_cqe, NULL, msg_size,
+			  FI_TAGGED | FI_RECV, NULL, 0, 123);
+
+	/* Wait for TX completion */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read failed: %d", ret);
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+	/* Validate data */
+	for (int i = 0; i < msg_size; i++) {
+		cr_assert_eq(recv_buf[i], send_buf[i],
+			     "Data mismatch at byte %d: expected 0x%02x, got 0x%02x",
+			     i, send_buf[i], recv_buf[i]);
+	}
+
+	free(send_buf);
+	free(recv_buf);
+}
+
+/* Test match_comp_overflow - Send before receive posted (overflow buffer, 10 iterations) */
+Test(tagged, match_comp_overflow)
+{
+	int i, j, ret;
+	uint8_t *recv_buf, *send_buf;
+	int msg_size = 700;
+	struct fi_cq_tagged_entry tx_cqe, rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+	struct fi_msg_tagged rmsg = {};
+	struct fi_msg_tagged smsg = {};
+	struct iovec riovec, siovec;
+	char *rx_mode;
+	const int iterations = 10;  /* Moderate stress: 10 iterations */
+
+	/* This test only makes sense in SW/hybrid match mode */
+	rx_mode = getenv("FI_CXI_RX_MATCH_MODE");
+	if (!rx_mode || (strcmp(rx_mode, "software") != 0 &&
+			 strcmp(rx_mode, "hybrid") != 0)) {
+		cr_skip("Test requires SW/hybrid match mode (FI_CXI_RX_MATCH_MODE=software or hybrid)");
+		return;
+	}
+
+	recv_buf = aligned_alloc(s_page_size, msg_size);
+	cr_assert(recv_buf);
+
+	send_buf = aligned_alloc(s_page_size, msg_size);
+	cr_assert(send_buf);
+
+	for (j = 0; j < iterations; j++) {
+		memset(recv_buf, 0, msg_size);
+		for (i = 0; i < msg_size; i++)
+			send_buf[i] = ((i + j) * 5) & 0xff;  /* Vary pattern each iteration */
+
+		/* Send FIRST (before posting receive) - message goes to overflow buffer */
+		siovec.iov_base = send_buf;
+		siovec.iov_len = msg_size;
+		smsg.msg_iov = &siovec;
+		smsg.iov_count = 1;
+		smsg.addr = cxit_ep_fi_addr;
+		smsg.tag = j;  /* Vary tag each iteration */
+		smsg.ignore = 0;
+		smsg.context = NULL;
+
+		ret = fi_tsendmsg(cxit_ep, &smsg, FI_MATCH_COMPLETE | FI_COMPLETION);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsendmsg failed on iteration %d: %d", j, ret);
+
+		/* Post receive SECOND - will drain from overflow buffer */
+		riovec.iov_base = recv_buf;
+		riovec.iov_len = msg_size;
+		rmsg.msg_iov = &riovec;
+		rmsg.iov_count = 1;
+		rmsg.addr = FI_ADDR_UNSPEC;
+		rmsg.tag = j;  /* Same tag as send */
+		rmsg.ignore = 0;
+		rmsg.context = NULL;
+
+		ret = fi_trecvmsg(cxit_ep, &rmsg, 0);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecvmsg failed on iteration %d: %d", j, ret);
+
+		/* Wait for RX completion (from overflow buffer drain) */
+		do {
+			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, 1, "fi_cq_readfrom failed on iteration %d: %d", j, ret);
+		validate_rx_event(&rx_cqe, NULL, msg_size,
+				  FI_TAGGED | FI_RECV, NULL, 0, (uint64_t)j);
+
+		/* Wait for TX completion */
+		do {
+			ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, 1, "fi_cq_read failed on iteration %d: %d", j, ret);
+		validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+		/* Validate data integrity */
+		err = 0;
+		for (i = 0; i < msg_size; i++) {
+			if (recv_buf[i] != send_buf[i]) {
+				err++;
+				if (err <= 5) {
+					cr_log_warn("Data mismatch at iteration %d, byte %d: expected 0x%02x, got 0x%02x\n",
+						    j, i, send_buf[i], recv_buf[i]);
+				}
+			}
+		}
+		cr_assert_eq(err, 0, "Data mismatch on iteration %d\n", j);
+	}
+
+	free(send_buf);
+	free(recv_buf);
+}
+
 /* Test eager Send with FI_MORE */
 Test(tagged, esend_more)
 {
