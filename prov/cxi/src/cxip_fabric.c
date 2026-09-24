@@ -66,15 +66,23 @@ static int cxip_fabric_close(fid_t fid)
 {
 	struct cxip_fabric *fab;
 	int count;
+	int ret;
 
 	fab = container_of(fid, struct cxip_fabric, util_fabric.fabric_fid);
-	count = ofi_atomic_get32(&fab->ref);
+
+	/* util_fabric.ref is incremented by ofi_domain_init() on each domain open
+	 * and decremented by ofi_domain_close() on each domain close.
+	 * This ensures fabric cannot be freed while any domain is still open.
+	 */
+	count = ofi_atomic_get32(&fab->util_fabric.ref);
 	if (count) {
 		CXIP_DBG("FABRIC refcount non-zero:%d returning FI_EBUSY\n", count);
 		return -FI_EBUSY;
 	}
 
-	ofi_fabric_close(&fab->util_fabric);
+	ret = ofi_fabric_close(&fab->util_fabric);
+	if (ret)
+		return ret;
 	free(fab);
 
 	return 0;
