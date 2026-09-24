@@ -16,6 +16,9 @@ fi_send / fi_sendv / fi_sendmsg
 fi_inject / fi_senddata
 :   Initiate an operation to send a message
 
+fi_recv_flush
+:   Initiate receives that the provider has queued but not started
+
 fi_xpu_send
 :   Initiate a send operation from an XPU.
 
@@ -53,6 +56,8 @@ ssize_t fi_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	uint64_t data, fi_addr_t dest_addr);
+
+ssize_t fi_recv_flush(struct fid_ep *ep, uint64_t flags);
 
 #include <rdma/fi_xpu_device.h>
 
@@ -238,6 +243,13 @@ connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags.  The fi_recvmsg function
 takes a struct fi_msg as input.
 
+## fi_recv_flush
+
+The fi_recv_flush call initiates receives that the provider has queued on the
+endpoint's receive queue but has not yet started, and returns once the queued
+work has been initiated.  Its primary use is to start receives deferred by the
+FI_MORE flag.  Flags are reserved for future use and must be 0.
+
 ## fi_xpu_send / fi_xpu_recv
 
 The fi_xpu_send and fi_xpu_recv calls are device-side equivalents of
@@ -272,13 +284,19 @@ fi_sendmsg.
   specified operation, or this flag is ignored.
 
 *FI_MORE*
-: Indicates that the user has additional requests that will
-  immediately be posted after the current call returns.  Use of this
-  flag may improve performance by enabling the provider to optimize
-  its access to the fabric hardware.  Providers that utilize delayed
-  start optimizations for communication calls with FI_MORE flag set
-  must ensure that all previously delayed calls be flushed when an
-  error is returned from a new call.
+: Indicates that the user has additional requests that will immediately be
+  posted to the same queue after the current call returns.  Use of this flag
+  may improve performance by enabling the provider to optimize its access to
+  the fabric hardware.  Providers that utilize delayed start optimizations for
+  communication calls with FI_MORE flag set must ensure that all previously
+  delayed calls be flushed when an error is returned from a new call.
+
+  A send posted with FI_MORE places work on the transmit queue and a receive on the
+  receive queue.  Work deferred on a queue is initiated when a subsequent
+  operation without FI_MORE is posted to that same queue, or when the queue is
+  flushed explicitly with fi_recv_flush, fi_tx_flush (see
+  [`fi_endpoint`(3)](fi_endpoint.3.html)), or fi_trecv_flush (see
+  [`fi_tagged`(3)](fi_tagged.3.html)).
 
 *FI_INJECT*
 : Applies to fi_sendmsg.  Indicates that the outbound data buffer
