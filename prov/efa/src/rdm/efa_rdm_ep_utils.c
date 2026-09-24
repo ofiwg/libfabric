@@ -150,7 +150,6 @@ unlock:
 struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(ep->base_ep.av));
-	struct efa_rdm_av_entry *av_entry;
 	struct efa_rdm_peer *peer;
 
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
@@ -159,11 +158,10 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	/*
 	 * The util_domain.lock is required for efa_rdm_av_implicit_av_lru_move,
 	 * which modifies domain->ah_lru_list.
-	 * The endpoint lock protects the peer map; the implicit-AV lock
-	 * protects peer->av_entry and its implicit-LRU entry (touched by the LRU
-	 * move below).
+	 * The implicit-AV lock protects peer->av_entry and its implicit-LRU
+	 * entry (touched by the LRU move).
 	 *
-	 * We hold the implicit-AV lock across the whole function to prevent a
+	 * We hold the implicit-AV lock across the whole lookup to prevent a
 	 * concurrent fi_av_insert from promoting an implicit to explicit peer at
 	 * the same time. Otherwise, the promotion could free the implicit conn
 	 * and cause the LRU move to operate on a now-bad pointer.
@@ -172,6 +170,33 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr
 	 */
 	EFA_GENLOCK_LOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
 	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+
+	peer = efa_rdm_ep_get_peer_implicit_unsafe(ep, addr);
+
+	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	EFA_GENLOCK_UNLOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
+	return peer;
+}
+
+/**
+ * @brief Same as efa_rdm_ep_get_peer_implicit but does not take the
+ * util_domain or implicit-AV locks. The caller is expected to hold both.
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		addr 		libfabric address
+ * @returns pointer to #efa_rdm_peer
+ */
+struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit_unsafe(struct efa_rdm_ep *ep,
+							 fi_addr_t addr)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+{
+	struct efa_rdm_av_entry *av_entry;
+	struct efa_rdm_peer *peer;
+
+	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
+		return NULL;
+
+	/* The endpoint lock protects the peer map. */
 	EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 
 	peer = efa_rdm_ep_peer_map_lookup(ep->fi_addr_to_peer_map_implicit, addr);
@@ -208,12 +233,10 @@ unlock_ep:
 	EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 
 	/* Move to the front of the LRU list; peer->av_entry stays valid under the
-	 * implicit-AV lock held here. */
+	 * implicit-AV lock held by the caller. */
 	if (peer)
 		efa_rdm_av_implicit_av_lru_move(ep->base_ep.av, peer->av_entry);
 
-	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	EFA_GENLOCK_UNLOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
 	return peer;
 }
 
