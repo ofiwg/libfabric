@@ -99,6 +99,12 @@ int fi_enable(struct fid_ep *ep);
 
 int fi_cancel(struct fid_ep *ep, void *context);
 
+int fi_tx_flush(struct fid_ep *ep);
+
+int fi_rx_flush(struct fid_ep *ep);
+
+int fi_trx_flush(struct fid_ep *ep);
+
 int fi_ep_alias(struct fid_ep *ep, struct fid_ep **alias_ep, uint64_t flags);
 
 int fi_control(struct fid *ep, int command, void *arg);
@@ -431,6 +437,30 @@ match the context parameter, only one will be canceled. In this case, the
 operation which is canceled is provider specific.
 The cancel operation is asynchronous, but will complete within a bounded
 period of time.
+
+## fi_tx_flush / fi_rx_flush / fi_trx_flush
+
+These calls initiate data transfers that the provider has queued on one of the
+endpoint's submission queues but has not yet started, and return once the
+queued work has been initiated.
+
+- fi_tx_flush flushes the transmit queue, which carries sends, tagged sends,
+  RMA writes and reads, and atomic operations.
+- fi_rx_flush flushes the receive queue, which carries untagged receives.
+- fi_trx_flush flushes the tagged receive queue, which carries tagged
+  receives.  A provider that does not maintain a separate tagged receive queue
+  services this the same as fi_rx_flush.
+
+The primary use is to start operations deferred by the FI_MORE flag. An application
+that posts a batch of transfers, each but the last carrying FI_MORE, may call the
+matching flush instead of issuing a final request without FI_MORE, which is useful
+when the batch size is not known in advance.
+
+These calls also provide a defined recovery path when a data transfer returns
+-FI_EAGAIN because the provider is holding deferred work on that queue: rather
+than reposting, the application flushes the queue to start the pending
+operations and make forward progress.
+
 
 ## fi_ep_alias
 

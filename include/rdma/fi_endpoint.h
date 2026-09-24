@@ -109,6 +109,9 @@ struct fi_ops_ep {
 	ssize_t (*tx_size_left)(struct fid_ep *ep);
 	int	(*export_xpu)(struct fid_ep *ep, uint64_t flags,
 			struct fid_xpu_ep *xpu_ep);
+	int	(*tx_flush)(struct fid_ep *ep);
+	int	(*rx_flush)(struct fid_ep *ep);
+	int	(*trx_flush)(struct fid_ep *ep);
 };
 
 struct fi_ops_msg {
@@ -286,6 +289,27 @@ static inline FI_DEPRECATED_FUNC ssize_t
 fi_tx_size_left(struct fid_ep *ep)
 {
 	return ep->ops->tx_size_left(ep);
+}
+
+static inline int
+fi_tx_flush(struct fid_ep *ep)
+{
+	return FI_CHECK_OP(ep->ops, struct fi_ops_ep, tx_flush) ?
+		ep->ops->tx_flush(ep) : -FI_ENOSYS;
+}
+
+static inline int
+fi_rx_flush(struct fid_ep *ep)
+{
+	return FI_CHECK_OP(ep->ops, struct fi_ops_ep, rx_flush) ?
+		ep->ops->rx_flush(ep) : -FI_ENOSYS;
+}
+
+static inline int
+fi_trx_flush(struct fid_ep *ep)
+{
+	return FI_CHECK_OP(ep->ops, struct fi_ops_ep, trx_flush) ?
+		ep->ops->trx_flush(ep) : -FI_ENOSYS;
 }
 
 static inline int

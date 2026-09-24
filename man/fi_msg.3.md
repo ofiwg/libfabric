@@ -272,13 +272,18 @@ fi_sendmsg.
   specified operation, or this flag is ignored.
 
 *FI_MORE*
-: Indicates that the user has additional requests that will
-  immediately be posted after the current call returns.  Use of this
-  flag may improve performance by enabling the provider to optimize
-  its access to the fabric hardware.  Providers that utilize delayed
-  start optimizations for communication calls with FI_MORE flag set
-  must ensure that all previously delayed calls be flushed when an
-  error is returned from a new call.
+: Indicates that the user has additional requests that will immediately be
+  posted to the same queue after the current call returns.  Use of this flag
+  may improve performance by enabling the provider to optimize its access to
+  the fabric hardware.  Providers that utilize delayed start optimizations for
+  communication calls with FI_MORE flag set must ensure that all previously
+  delayed calls be flushed when an error is returned from a new call.
+
+  A send posted with FI_MORE places work on the transmit queue and a receive on the
+  receive queue.  Work deferred on a queue is initiated when a subsequent
+  operation without FI_MORE is posted to that same queue, or when the queue is
+  flushed explicitly with fi_tx_flush, fi_rx_flush, or fi_trx_flush (see
+  [`fi_endpoint`(3)](fi_endpoint.3.html)).
 
 *FI_INJECT*
 : Applies to fi_sendmsg.  Indicates that the outbound data buffer
