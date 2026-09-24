@@ -8,8 +8,8 @@ from efa.efa_common import has_gdrcopy, has_rdma
 @pytest.mark.serial
 @pytest.mark.functional
 @pytest.mark.cuda_memory
-@pytest.mark.parametrize("fabtest_name,cntrl_env_var", [("fi_efa_runt_read_no_handshake", "FI_EFA_INTER_MIN_READ_MESSAGE_SIZE"), ("fi_rma_bw", "FI_EFA_INTER_MIN_READ_WRITE_SIZE")])
-def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_var):
+@pytest.mark.parametrize("fabtest_name", ["fi_efa_runt_read_no_handshake", "fi_rma_bw"])
+def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name):
     """
     Verify that the read protocol is used for a 1024 byte message when the env variable
     switches are set to force the read protocol at 1000 bytes.
@@ -17,9 +17,6 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     import copy
     from common import has_cuda, has_hmem_support
     from efa.efa_common import efa_run_client_server_test, efa_retrieve_hw_counter_value
-
-    if cntrl_env_var == "FI_EFA_INTER_MIN_READ_WRITE_SIZE" and has_rdma(cmdline_args, "write"):
-        pytest.skip("FI_EFA_INTER_MIN_READ_WRITE_SIZE is only applied to emulated write protocols")
 
     if not has_rdma(cmdline_args, "read"):
         pytest.skip("RDMA read not supported, cannot test read protocol")
@@ -38,7 +35,7 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
 
     cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.append_environ("FI_EFA_USE_DEVICE_RDMA=1")
-    cmdline_args_copy.append_environ(f"{cntrl_env_var}=1000")
+    cmdline_args_copy.append_environ(f"FI_EFA_RDM_FORCE_SEND_PROTO=longread")
     cmdline_args_copy.append_environ("FI_EFA_RUNT_SIZE=0")
 
     # wrs stands for work requests
