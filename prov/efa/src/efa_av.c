@@ -359,7 +359,6 @@ static int efa_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr *add
 	return 0;
 }
 
-
 static int efa_av_insert(struct fid_av *av_fid, const void *addr,
 			 size_t count, fi_addr_t *fi_addr,
 			 uint64_t flags, void *context)

@@ -96,7 +96,7 @@ void efa_rdm_av_reverse_av_remove(struct efa_av_array *cur_reverse_av,
 int efa_rdm_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 				   fi_addr_t *fi_addr, uint64_t flags,
 				   void *context)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym);
 
 struct efa_rdm_av_entry *efa_rdm_av_addr_to_entry_implicit(struct efa_av *av,
 							   fi_addr_t fi_addr);
@@ -104,9 +104,18 @@ struct efa_rdm_av_entry *efa_rdm_av_addr_to_entry_implicit(struct efa_av *av,
 fi_addr_t efa_rdm_av_reverse_lookup(struct efa_av *av, uint16_t ahn,
 				    uint16_t qpn, struct efa_rdm_pke *pkt_entry);
 
+fi_addr_t efa_rdm_av_reverse_lookup_unsafe(struct efa_av *av, uint16_t ahn,
+				    uint16_t qpn, struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym);
+
 fi_addr_t efa_rdm_av_reverse_lookup_implicit(struct efa_av *av, uint16_t ahn,
 					     uint16_t qpn,
 					     struct efa_rdm_pke *pkt_entry);
+
+fi_addr_t efa_rdm_av_reverse_lookup_implicit_unsafe(struct efa_av *av,
+						    uint16_t ahn, uint16_t qpn,
+						    struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym);
 
 void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
 				     struct efa_rdm_av_entry *av_entry)

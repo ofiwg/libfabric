@@ -858,6 +858,42 @@ fi_addr_t efa_rdm_av_reverse_lookup(struct efa_av *av, uint16_t ahn,
 	return fi_addr;
 }
 
+/**
+ * @brief Same as efa_rdm_av_reverse_lookup but does not take the util_av
+ * lock. The caller is expected to hold the util_av lock.
+ *
+ * @param[in]	av	address vector
+ * @param[in]	ahn	address handle number
+ * @param[in]	qpn	QP number
+ * @param[in]   pkt_entry	NULL or rdm packet entry, used to extract connid
+ * @return	On success, return fi_addr to the peer who sent the packet.
+ * 		If no such peer exists, return FI_ADDR_NOTAVAIL
+ */
+fi_addr_t efa_rdm_av_reverse_lookup_unsafe(struct efa_av *av, uint16_t ahn,
+				    uint16_t qpn, struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	struct efa_av_entry *entry;
+	uint32_t prv_connid = 0;
+	bool check_prv;
+	fi_addr_t fi_addr;
+
+	entry = efa_rdm_av_reverse_lookup_cur(av->cur_reverse_av, ahn, qpn,
+					      pkt_entry, &check_prv,
+					      &prv_connid);
+	if (OFI_LIKELY(!!entry))
+		return entry->fi_addr;
+
+	if (!check_prv)
+		return FI_ADDR_NOTAVAIL;
+
+	entry = efa_rdm_av_reverse_lookup_prv(&rdm_av->prv_reverse_av, ahn, qpn,
+					      prv_connid);
+	fi_addr = (OFI_LIKELY(!!entry)) ? entry->fi_addr : FI_ADDR_NOTAVAIL;
+
+	return fi_addr;
+}
 
 /**
  * @brief find fi_addr for rdm endpoint in the implicit AV (connid aware)
@@ -874,37 +910,62 @@ fi_addr_t efa_rdm_av_reverse_lookup_implicit(struct efa_av *av, uint16_t ahn,
 					     struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
+	fi_addr_t implicit_fi_addr;
+
+	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
+	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+
+	implicit_fi_addr = efa_rdm_av_reverse_lookup_implicit_unsafe(av, ahn, qpn,
+								     pkt_entry);
+
+	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
+
+	return implicit_fi_addr;
+}
+
+/**
+ * @brief Same as efa_rdm_av_reverse_lookup_implicit but does not take any
+ * locks. The caller is expected to hold the util_domain and implicit AV locks.
+ *
+ * @param[in]	av	address vector
+ * @param[in]	ahn	address handle number
+ * @param[in]	qpn	QP number
+ * @param[in]   pkt_entry	NULL or rdm packet entry, used to extract connid
+ * @return	On success, return fi_addr to the peer who sent the packet.
+ * 		If no such peer exists, return FI_ADDR_NOTAVAIL
+ */
+fi_addr_t efa_rdm_av_reverse_lookup_implicit_unsafe(struct efa_av *av,
+						    uint16_t ahn, uint16_t qpn,
+						    struct efa_rdm_pke *pkt_entry)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	struct efa_av_entry *entry;
 	struct efa_rdm_av_entry *av_entry;
-	fi_addr_t implicit_fi_addr = FI_ADDR_NOTAVAIL;
 	uint32_t prv_connid = 0;
 	bool check_prv;
 
-	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
+	assert(EFA_GENLOCK_HELD(&av->domain->util_domain.lock, efa_util_domain_lock_sym));
+	assert(EFA_GENLOCK_HELD(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym));
 
 	entry = efa_rdm_av_reverse_lookup_cur(rdm_av->cur_reverse_av_implicit,
 					      ahn, qpn, pkt_entry, &check_prv,
 					      &prv_connid);
 	if (!entry && !check_prv)
-		goto unlock_domain;
+		return FI_ADDR_NOTAVAIL;
 
-	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 	if (!entry)
 		entry = efa_rdm_av_reverse_lookup_prv(
 			&rdm_av->prv_reverse_av_implicit, ahn, qpn, prv_connid);
 
-	if (OFI_LIKELY(!!entry)) {
-		av_entry = container_of(entry, struct efa_rdm_av_entry,
-					efa_av_entry);
-		efa_rdm_av_implicit_av_lru_move(av, av_entry);
-		implicit_fi_addr = av_entry->implicit_fi_addr;
-	}
-	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
+	if (OFI_UNLIKELY(!entry))
+		return FI_ADDR_NOTAVAIL;
 
-unlock_domain:
-	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
+	av_entry = container_of(entry, struct efa_rdm_av_entry, efa_av_entry);
+	efa_rdm_av_implicit_av_lru_move(av, av_entry);
 
-	return implicit_fi_addr;
+	return av_entry->implicit_fi_addr;
 }
 
 
@@ -1255,21 +1316,21 @@ static int efa_rdm_av_insert_one_explicit(struct efa_av *av, struct efa_ep_addr 
 /**
  * @brief insert one address into the implicit address vector (RDM only)
  *
- * If the address already exists in the explicit AV, return the existing
- * explicit fi_addr (no implicit insertion needed). If it already exists in
- * the implicit AV, update its LRU position. Otherwise allocate a new
- * connection entry in the implicit AV.
+ * Unconditionally allocates a new connection entry in the implicit AV. The
+ * caller must have already established, while holding the locks below, that
+ * the address is in neither the explicit nor the implicit AV. Otherwise a
+ * duplicate entry for the same address is created.
+ *
+ * The caller owns both locks for the whole call; this function neither
+ * acquires nor releases them.
  */
 int efa_rdm_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 				   fi_addr_t *fi_addr, uint64_t flags,
 				   void *context)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym)
 {
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	char raw_gid_str[INET6_ADDRSTRLEN];
 	struct efa_rdm_av_entry *av_entry;
-	fi_addr_t implicit_fi_addr;
-	fi_addr_t efa_fiaddr;
 	int ret;
 
 	ret = efa_av_insert_one_validate(addr, fi_addr, raw_gid_str);
@@ -1280,49 +1341,13 @@ int efa_rdm_av_insert_one_implicit(struct efa_av *av, struct efa_ep_addr *addr,
 		 "Inserting address GID[%s] QP[%u] QKEY[%u] to implicit AV\n",
 		 raw_gid_str, addr->qpn, addr->qkey);
 
-	/* Check if this address already exists in the explicit AV */
-	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
-	efa_fiaddr = ofi_av_lookup_fi_addr_unsafe(&av->util_av, addr);
-	if (efa_fiaddr != FI_ADDR_NOTAVAIL) {
-		*fi_addr = efa_fiaddr;
-		EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
-		EFA_INFO(FI_LOG_AV,
-			 "Found existing AV entry pointing to this "
-			 "address! fi_addr: %" PRId64 "\n",
-			 efa_fiaddr);
-		return 0;
-	}
-	EFA_GENLOCK_UNLOCK(&av->util_av.lock, efa_util_av_lock_sym);
-
-	/* Check if address already exists in the implicit AV */
-	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	implicit_fi_addr =
-		ofi_av_lookup_fi_addr_unsafe(&rdm_av->util_av_implicit, addr);
-	if (implicit_fi_addr != FI_ADDR_NOTAVAIL) {
-		EFA_INFO(FI_LOG_AV,
-			 "Found implicit AV entry id %" PRId64
-			 " for the same address\n",
-			 implicit_fi_addr);
-
-		/* Move to the end of the LRU list */
-		av_entry = efa_rdm_av_addr_to_entry_implicit(av, implicit_fi_addr);
-		efa_rdm_av_implicit_av_lru_move(av, av_entry);
-
-		*fi_addr = implicit_fi_addr;
-		EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-		return 0;
-	}
-
-	/* Address not found in either AV, allocate a new implicit entry */
 	av_entry = efa_rdm_av_entry_alloc_implicit(av, addr, flags, context);
 	if (!av_entry) {
 		*fi_addr = FI_ADDR_NOTAVAIL;
-		EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 		return -FI_EADDRNOTAVAIL;
 	}
 
 	*fi_addr = av_entry->implicit_fi_addr;
-	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
 
 	EFA_INFO(FI_LOG_AV,
 		 "Successfully inserted address GID[%s] QP[%u] "
