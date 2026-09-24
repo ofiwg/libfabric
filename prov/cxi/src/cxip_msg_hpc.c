@@ -1058,6 +1058,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 		if (ret != FI_SUCCESS)
 			return ret;
 
+		cxip_send_buf_fini(put_req);
 		cxip_tx_id_free(txc, mb.tx_id);
 
 		/* The unexpected message has been matched. Generate a
@@ -4650,13 +4651,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		return FI_SUCCESS;
 	}
 
-	ret = cxip_send_req_dequeue(req->send.txc_hpc, req);
-	if (ret != FI_SUCCESS)
-		return ret;
-
-	cxip_send_buf_fini(req);
-
-	/* If MATCH_COMPLETE was requested and the the Put did not match a user
+	/* If MATCH_COMPLETE was requested and the message did not match a user
 	 * buffer, do not generate a completion event until the target notifies
 	 * the initiator that the match is complete.
 	 */
@@ -4664,13 +4659,20 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		if (req->send.rc == C_RC_OK &&
 		    event->init_short.ptl_list != C_PTL_LIST_PRIORITY) {
 			TXC_DBG(req->send.txc,
-				"Waiting for match complete: %p\n", req);
+				"Waiting for match complete[msg landed in overflow list]: %p ptl_list=%d\n",
+				req, event->init_short.ptl_list);
 			return FI_SUCCESS;
 		}
 
 		TXC_DBG(req->send.txc, "Match complete with Ack: %p\n", req);
 		cxip_tx_id_free(req->send.txc_hpc, req->send.tx_id);
 	}
+
+	ret = cxip_send_req_dequeue(req->send.txc_hpc, req);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	cxip_send_buf_fini(req);
 
 	/* If MATCH_COMPLETE was requested, software must manage counters. */
 	cxip_report_send_completion(req, match_complete);
