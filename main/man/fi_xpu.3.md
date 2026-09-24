@@ -81,6 +81,7 @@ struct fi_xpu_ops {
     int (*import)(uint64_t device, void *host_addr,
                   uint64_t size, uint64_t flags,
                   void **dev_addr);
+    int (*unimport)(uint64_t device, void *host_addr);
     void (*free)(uint64_t device, void *addr);
 };
 
@@ -105,7 +106,7 @@ struct fi_xpu_attr {
 
 The `fi_xpu_ops` structure groups memory management callbacks for XPU
 device memory. The provider calls these when it needs to allocate, import,
-or free device memory on behalf of the XPU context.
+unimport or free device memory on behalf of the XPU context.
 
 *size*
 : Must be set to `sizeof(struct fi_xpu_ops)`. This allows future expansion
@@ -125,6 +126,11 @@ or free device memory on behalf of the XPU context.
   `FI_XPU_IMPORT_IOMEMORY` for PCIe BAR MMIO regions,
   `FI_XPU_IMPORT_DEVICEMAP` for addresses that must be accessible from
   XPU kernels.
+
+*unimport*
+: Release a mapping made by import. The provider calls this when the object
+  that needed the mapping is closed, passing the same host address it passed
+  to import.
 
 *free*
 : Release memory previously allocated via alloc.
