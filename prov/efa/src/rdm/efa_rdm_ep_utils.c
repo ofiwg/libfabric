@@ -143,44 +143,20 @@ unlock:
  * @brief get pointer to efa_rdm_peer structure for a given libfabric address in
  * the implicit AV
  *
- * @param[in]		ep		endpoint
- * @param[in]		addr 		libfabric address
- * @returns pointer to #efa_rdm_peer
- */
-struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(ep->base_ep.av));
-	struct efa_rdm_peer *peer;
-
-	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
-		return NULL;
-
-	/*
-	 * The util_domain.lock is required for efa_rdm_av_implicit_av_lru_move,
-	 * which modifies domain->ah_lru_list.
-	 * The implicit-AV lock protects peer->av_entry and its implicit-LRU
-	 * entry (touched by the LRU move).
-	 *
-	 * We hold the implicit-AV lock across the whole lookup to prevent a
-	 * concurrent fi_av_insert from promoting an implicit to explicit peer at
-	 * the same time. Otherwise, the promotion could free the implicit conn
-	 * and cause the LRU move to operate on a now-bad pointer.
-	 *
-	 * Follows locking order: util_domain -> implicit-AV -> endpoint.
-	 */
-	EFA_GENLOCK_LOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
-	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-
-	peer = efa_rdm_ep_get_peer_implicit_unsafe(ep, addr);
-
-	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	EFA_GENLOCK_UNLOCK(&ep->base_ep.domain->util_domain.lock, efa_util_domain_lock_sym);
-	return peer;
-}
-
-/**
- * @brief Same as efa_rdm_ep_get_peer_implicit but does not take the
- * util_domain or implicit-AV locks. The caller is expected to hold both.
+ * This function does not take the util_domain or implicit-AV locks. The caller
+ * is expected to hold both:
+ *
+ * The util_domain.lock is required for efa_rdm_av_implicit_av_lru_move, which
+ * modifies domain->ah_lru_list.
+ * The implicit-AV lock protects peer->av_entry and its implicit-LRU entry
+ * (touched by the LRU move).
+ *
+ * The implicit-AV lock must be held across the whole lookup to prevent a
+ * concurrent fi_av_insert from promoting an implicit to explicit peer at the
+ * same time. Otherwise, the promotion could free the implicit conn and cause
+ * the LRU move to operate on a now-bad pointer.
+ *
+ * Follows locking order: util_domain -> implicit-AV -> endpoint.
  *
  * @param[in]		ep		endpoint
  * @param[in]		addr 		libfabric address
