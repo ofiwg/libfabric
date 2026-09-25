@@ -202,6 +202,7 @@ static struct fi_ops_domain X = {
 	.query_atomic = fi_no_query_atomic,
 	.query_collective = fi_no_query_collective,
 	.endpoint2 = fi_no_endpoint2,
+	.xpu_ctx = fi_no_xpu_ctx,
 };
 */
 int fi_no_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -226,6 +227,8 @@ int fi_no_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
 int fi_no_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 			   struct fi_collective_attr *attr, uint64_t flags);
+int fi_no_xpu_ctx(struct fid_domain *domain, struct fi_xpu_attr *attr,
+		  struct fid_xpu_ctx **ctx, void *context);
 
 /*
 static struct fi_ops_mr X = {
