@@ -529,6 +529,10 @@ void efa_unit_test_set_pke_handler(struct efa_rdm_pke *pkt_entry) {
 		case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 			pkt_entry->handle_pke = &efa_rdm_proto_eager_handle_rtm_send_completion;
 			break;
+		case EFA_RDM_LONGREAD_MSGRTM_PKT:
+		case EFA_RDM_LONGREAD_TAGRTM_PKT:
+			pkt_entry->handle_pke = &efa_rdm_proto_longread_handle_rtm_send_completion;
+			break;
 		case EFA_RDM_EAGER_RTW_PKT:
 		case EFA_RDM_DC_EAGER_RTW_PKT:
 			pkt_entry->handle_pke = &efa_rdm_proto_eager_write_handle_rtw_send_completion;

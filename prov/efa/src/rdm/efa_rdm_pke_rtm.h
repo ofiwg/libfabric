@@ -150,48 +150,6 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry);
 
-ssize_t efa_rdm_pke_init_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
-					struct efa_rdm_ope *txe);
-
-ssize_t efa_rdm_pke_init_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
-					struct efa_rdm_ope *txe);
-
-ssize_t efa_rdm_pke_init_dc_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
-					   struct efa_rdm_ope *txe);
-
-ssize_t efa_rdm_pke_init_dc_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
-					   struct efa_rdm_ope *txe);
-
-void efa_rdm_pke_handle_longcts_rtm_send_completion(struct efa_rdm_pke *pkt_entry);
-
-void efa_rdm_pke_handle_longcts_rtm_sent(struct efa_rdm_pke *pkt_entry);
-
-ssize_t efa_rdm_pke_init_longread_msgrtm(struct efa_rdm_pke *pkt_entry,
-					 struct efa_rdm_ope *txe);
-
-ssize_t efa_rdm_pke_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
-					 struct efa_rdm_ope *txe);
-
 ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry);
-
-void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry);
-
-ssize_t efa_rdm_pke_init_runtread_msgrtm(struct efa_rdm_pke *pkt_entry,
-					 struct efa_rdm_ope *txe,
-					 size_t data_offset,
-					 int data_size);
-
-ssize_t efa_rdm_pke_init_runtread_tagrtm(struct efa_rdm_pke *pkt_entry,
-					 struct efa_rdm_ope *txe,
-					 size_t data_offset,
-					 int data_size);
-
-void efa_rdm_pke_handle_runtread_rtm_sent(struct efa_rdm_pke *pkt_entry, struct efa_rdm_peer *peer);
-
-void efa_rdm_pke_handle_runtread_rtm_send_completion(struct efa_rdm_pke *pkt_entry);
-
-ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
-					  int pkt_type, struct efa_rdm_ope *txe,
-					  size_t segment_offset, int data_size);
 
 #endif

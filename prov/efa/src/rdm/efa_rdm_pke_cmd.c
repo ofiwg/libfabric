@@ -96,38 +96,16 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_longread_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_longread_tagrtm(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long read");
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_runtread_msgrtm(pkt_entry, ope, data_offset, data_size);
-		break;
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		assert(data_offset >= 0 && data_size > 0);
-		ret = efa_rdm_pke_init_runtread_tagrtm(pkt_entry, ope, data_offset, data_size);
+		EFA_RDM_PROTO_MOVED("Runt read");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		EFA_RDM_PROTO_MOVED("Eager write");
@@ -168,22 +146,8 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Medium");
 		break;
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, ope);
-		break;
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		/* The data_offset will be non-zero when the DC long CTS tagged RTM packet
-		 * is sent to continue a runting read transfer after the
-		 * receiver has run out of memory registrations */
-		assert(data_offset == 0 ||
-		       ope->internal_flags & EFA_RDM_OPE_READ_NACK);
-		assert(data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_DC_EAGER_RTW_PKT:
 		EFA_RDM_PROTO_MOVED("Eager write");
@@ -260,15 +224,15 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_longread_rtm_sent(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Long read");
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_runtread_rtm_sent(pkt_entry, peer);
+		EFA_RDM_PROTO_MOVED("Runt read");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		EFA_RDM_PROTO_MOVED("Eager write");
@@ -645,31 +609,15 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Long CTS");
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
-		/* For long read, the txe is released either here or in
-		 * efa_rdm_pke_handle_eor_recv(), whichever happens last.
-		 * Release here if EOR already arrived.
-		 */
-		assert(pkt_entry->ope);
-		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
-			efa_rdm_txe_release(pkt_entry->ope);
-		/*
-		 * Peer-abort race: an inbound PEER_ERROR_PKT may have marked
-		 * this txe (source MR canceled, receiver's READ failed) while
-		 * this RTM SEND was still outstanding. The abort deferred the
-		 * free to WR drain; now that this WR has drained, reap it.
-		 * No-op for a healthy transfer (flag never set).
-		 */
-		else if (pkt_entry->ope->internal_flags &
-			 EFA_RDM_OPE_PEER_ABORT_PENDING)
-			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
+		EFA_RDM_PROTO_MOVED("Long read");
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
-		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Runt read");
 		break;
 	case EFA_RDM_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
@@ -685,7 +633,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		assert(pkt_entry->ope);
 		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
 			efa_rdm_txe_release(pkt_entry->ope);
-		/* Peer-abort race: see EFA_RDM_LONGREAD_*RTM_PKT above. */
+		/*
+		 * Peer-abort race: an inbound PEER_ERROR_PKT may have marked
+		 * this txe (source MR canceled, target's READ failed) while
+		 * this RTW SEND was still outstanding. The abort deferred the
+		 * free to WR drain; now that this WR has drained, reap it.
+		 * No-op for a healthy transfer (flag never set).
+		 */
 		else if (pkt_entry->ope->internal_flags &
 			 EFA_RDM_OPE_PEER_ABORT_PENDING)
 			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
@@ -708,6 +662,23 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		 * here or in efa_rdm_pke_handle_atomrsp_recv(), whichever
 		 * happens last. Release here if ATOMRSP already arrived.
 		 */
+	/*
+	 * The DC long CTS RTM packet types are unreachable here: the protocol
+	 * moved to the refactored code path, and its packets carry a handle_pke
+	 * callback that returns before this switch. The read NACK fallback, the
+	 * last thing that still drove a DC long CTS RTM through here, moved with
+	 * it. They stay listed so the fetch/compare atomic types above keep
+	 * falling through to the shared DC release code below.
+	 *
+	 * FETCH_RTA_PKT and COMPARE_RTA_PKT have no body of their own, so
+	 * nothing but comments and further case labels may sit between them and
+	 * the shared DC release code below: turning one of these labels into a
+	 * tripwire, or inserting any statement here, severs the atomics' path to
+	 * it. Move a migrated protocol's DC labels out to their own
+	 * EFA_RDM_PROTO_MOVED() arm instead, as the eager and medium protocols'
+	 * are; the group cannot become empty, because EFA_RDM_DC_WRITE_RTA_PKT
+	 * and EFA_RDM_DC_LONGCTS_RTW_PKT are atomic and RMA types that stay.
+	 */
 	case EFA_RDM_DC_WRITE_RTA_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:

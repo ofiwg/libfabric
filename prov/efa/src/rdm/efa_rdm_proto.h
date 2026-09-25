@@ -65,10 +65,18 @@ struct efa_rdm_proto {
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
-	 * TX operation. use_p2p reports whether peer-to-peer access is
-	 * available; the read based protocols need it.
+	 * TX operation.
+	 *
+	 * @param[in] txe		tracks the send operation
+	 * @param[in] peer		peer the operation is addressed to
+	 * @param[in] req_pkt_type	REQ packet type this protocol would use
+	 * @param[in] header_flags	optional headers the REQ will carry
+	 * @param[in] iface		HMEM interface of the source buffer
+	 * @param[in] use_p2p		whether the device can access the source
+	 *				buffer directly.
 	 */
 	bool (*can_use_protocol)(struct efa_rdm_ope *txe,
+				 struct efa_rdm_peer *peer,
 				 int req_pkt_type, uint16_t header_flags,
 				 int iface, bool use_p2p);
 
@@ -80,6 +88,9 @@ struct efa_rdm_proto {
 	 * handle the TX completion of that pke. This function also constructs
 	 * and returns the txe.
 	 *
+	 * construct_tx_pkes() must be idempotent. This function can run more than
+	 * once for the same operation if the txe gets queued in the ep->ope_queued_list.
+	 *
 	 * pke_send_flags is an output: the flags to pass to
 	 * efa_rdm_pke_sendv() when posting the packets (currently either 0 or
 	 * FI_MORE). A protocol sets FI_MORE only when it honors the caller's
@@ -88,8 +99,8 @@ struct efa_rdm_proto {
 	 */
 	int (*construct_tx_pkes)(struct efa_rdm_ep *ep,
 				 struct efa_rdm_peer *peer,
-				 const struct fi_msg *msg, uint32_t op,
-				 uint64_t tag, uint64_t flags,
+				 uint32_t op, uint64_t tag,
+				 uint64_t flags,
 				 uint32_t internal_flags,
 				 struct efa_rdm_ope *txe,
 				 uint64_t *pke_send_flags);
@@ -119,16 +130,27 @@ struct efa_rdm_proto {
  * protocols are appropriate but MR fails, it will automatically switch to a
  * different protocol.
  *
+ * Every protocol reachable from here writes a REQ header, so a peer that only
+ * accepts headerless packets must not be routed through this function:
+ * efa_rdm_msg_generic_send() sends such a peer straight to the zero-copy
+ * protocol instead.
+ *
+ * Selection never triggers or waits for a handshake. A predicate that needs an
+ * extra feature from the peer reports "cannot use" until the handshake has
+ * advertised it, so a send issued before the handshake simply lands on a
+ * protocol that needs nothing extra. See the comment on the sole remaining
+ * enforce-handshake call in efa_rdm_msg_generic_send().
+ *
  * @param[in]  ep     Endpoint
  * @param[in]  peer   Peer to send to
  * @param[in]  msg    Message descriptor from application
  * @param[in]  op     Operation type (ofi_op_msg or ofi_op_tagged)
  * @param[in]  flags  Operation flags (FI_INJECT, FI_DELIVERY_COMPLETE, etc.)
  * @param[out] txe    Pre-allocated TXE, partially initialized on return
- * @param[out] proto  Selected protocol, or NULL if none matched
- * @return 0 on success, negative errno if the operation cannot be carried at
- *	   all. Finding no protocol is not a failure: it returns 0 with *proto
- *	   NULL, and the caller falls back to the old send path.
+ * @param[out] proto  Selected protocol. Never NULL on success: the long CTS
+ *                    protocol is registered last and can always be used.
+ * @return 0 on success, negative errno on failure. -FI_EOPNOTSUPP if no
+ *         registered protocol can carry the operation.
  */
 int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 				       struct efa_rdm_peer *peer,
