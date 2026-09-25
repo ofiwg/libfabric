@@ -936,7 +936,6 @@ fi_addr_t efa_rdm_av_reverse_lookup_implicit_unsafe(struct efa_av *av,
 		return FI_ADDR_NOTAVAIL;
 
 	av_entry = container_of(entry, struct efa_rdm_av_entry, efa_av_entry);
-	efa_rdm_av_implicit_av_lru_move(av, av_entry);
 
 	return av_entry->implicit_fi_addr;
 }
