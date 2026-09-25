@@ -162,7 +162,8 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		}
 
 		if (selected_proto->can_use_protocol(
-			    txe, req_pkt_type, header_flags, iface, use_p2p)) {
+			    txe, peer, req_pkt_type, header_flags, iface,
+			    use_p2p)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;
@@ -257,8 +258,9 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol(
-			    txe, req_pkt_type, header_flags, iface, use_p2p)) {
+		if (selected_proto->can_use_protocol(txe, peer, req_pkt_type,
+						     header_flags, iface,
+						     use_p2p)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;
@@ -309,7 +311,7 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 			selected_proto, txe->op, txe->fi_flags, peer);
 
 		if (selected_proto->can_use_protocol(
-			    txe, req_pkt_type, header_flags, iface,
+			    txe, peer, req_pkt_type, header_flags, iface,
 			    false /* use_p2p */)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;

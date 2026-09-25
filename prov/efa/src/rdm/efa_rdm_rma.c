@@ -130,7 +130,7 @@ static ssize_t efa_rdm_rma_post_read_proto(struct efa_rdm_ep *ep,
 	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
 		return -FI_EAGAIN;
 
-	err = proto->construct_tx_pkes(ep, txe->peer, NULL, txe->op, txe->tag,
+	err = proto->construct_tx_pkes(ep, txe->peer, txe->op, txe->tag,
 				       txe->fi_flags, txe->internal_flags, txe,
 				       &pke_send_flags);
 	if (err)
@@ -430,7 +430,7 @@ static ssize_t efa_rdm_rma_post_write_proto(struct efa_rdm_ep *ep,
 	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
 		return -FI_EAGAIN;
 
-	err = proto->construct_tx_pkes(ep, txe->peer, NULL, txe->op, txe->tag,
+	err = proto->construct_tx_pkes(ep, txe->peer, txe->op, txe->tag,
 				       txe->fi_flags, txe->internal_flags, txe,
 				       &pke_send_flags);
 	if (err)

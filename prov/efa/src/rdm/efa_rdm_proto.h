@@ -65,10 +65,18 @@ struct efa_rdm_proto {
 	/* TX path handlers */
 
 	/* This function determines whether the protocol can be used for a given
-	 * TX operation. use_p2p reports whether peer-to-peer access is
-	 * available; the read based protocols need it.
+	 * TX operation.
+	 *
+	 * @param[in] txe		tracks the send operation
+	 * @param[in] peer		peer the operation is addressed to
+	 * @param[in] req_pkt_type	REQ packet type this protocol would use
+	 * @param[in] header_flags	optional headers the REQ will carry
+	 * @param[in] iface		HMEM interface of the source buffer
+	 * @param[in] use_p2p		whether the device can access the source
+	 *				buffer directly.
 	 */
 	bool (*can_use_protocol)(struct efa_rdm_ope *txe,
+				 struct efa_rdm_peer *peer,
 				 int req_pkt_type, uint16_t header_flags,
 				 int iface, bool use_p2p);
 
@@ -80,6 +88,9 @@ struct efa_rdm_proto {
 	 * handle the TX completion of that pke. This function also constructs
 	 * and returns the txe.
 	 *
+	 * construct_tx_pkes() must be idempotent. This function can run more than
+	 * once for the same operation if the txe gets queued in the ep->ope_queued_list.
+	 *
 	 * pke_send_flags is an output: the flags to pass to
 	 * efa_rdm_pke_sendv() when posting the packets (currently either 0 or
 	 * FI_MORE). A protocol sets FI_MORE only when it honors the caller's
@@ -88,8 +99,8 @@ struct efa_rdm_proto {
 	 */
 	int (*construct_tx_pkes)(struct efa_rdm_ep *ep,
 				 struct efa_rdm_peer *peer,
-				 const struct fi_msg *msg, uint32_t op,
-				 uint64_t tag, uint64_t flags,
+				 uint32_t op, uint64_t tag,
+				 uint64_t flags,
 				 uint32_t internal_flags,
 				 struct efa_rdm_ope *txe,
 				 uint64_t *pke_send_flags);

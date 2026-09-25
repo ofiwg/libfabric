@@ -68,7 +68,7 @@ efa_unit_test_construct_eager_rtm_pke(struct efa_resource *resource,
 	assert_ptr_equal(proto, &efa_rdm_proto_eager);
 
 	assert_int_equal(efa_rdm_proto_eager_construct_tx_pkes(
-				 ep, peer, &msg, ofi_op_msg, 0, 0, 0, txe,
+				 ep, peer, ofi_op_msg, 0, 0, 0, txe,
 				 &pke_send_flags),
 			 0);
 	assert_int_equal(ep->send_pkt_entry_vec_size, 1);

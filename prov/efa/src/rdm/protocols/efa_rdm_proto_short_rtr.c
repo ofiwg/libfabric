@@ -31,6 +31,7 @@
  * usable when the requested data fits in one READRSP packet after its header.
  */
 static bool efa_rdm_proto_short_rtr_can_use(struct efa_rdm_ope *txe,
+					    struct efa_rdm_peer *peer,
 					    int req_pkt_type,
 					    uint16_t header_flags, int iface,
 					    bool use_p2p)
@@ -99,7 +100,6 @@ static ssize_t efa_rdm_pke_init_short_rtr(struct efa_rdm_pke *pkt_entry,
  */
 int efa_rdm_proto_short_rtr_construct_tx_pkes(struct efa_rdm_ep *ep,
 					      struct efa_rdm_peer *peer,
-					      const struct fi_msg *msg,
 					      uint32_t op, uint64_t tag,
 					      uint64_t flags,
 					      uint32_t internal_flags,
