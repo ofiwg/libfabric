@@ -47,6 +47,7 @@
 #define _OFI_TREE_H_
 
 #include <stdlib.h>
+#include <pthread.h>
 
 
 enum ofi_node_color {
@@ -66,6 +67,7 @@ struct ofi_rbmap {
 	struct ofi_rbnode	*root;
 	struct ofi_rbnode	sentinel;
 	struct ofi_rbnode	*free_list;
+	pthread_mutex_t		free_list_lock;
 
 	/* compare()
 	 *	= 0: a == b

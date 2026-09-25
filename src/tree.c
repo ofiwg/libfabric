@@ -56,24 +56,33 @@ struct ofi_rbnode *ofi_rbnode_alloc(struct ofi_rbmap *map)
 {
 	struct ofi_rbnode *node;
 
-	if (!map->free_list)
+	pthread_mutex_lock(&map->free_list_lock);
+	if (!map->free_list) {
+		pthread_mutex_unlock(&map->free_list_lock);
 		return malloc(sizeof(*node));
+	}
 
 	node = map->free_list;
 	map->free_list = node->right;
+	pthread_mutex_unlock(&map->free_list_lock);
 	return node;
 }
 
 void ofi_rbnode_free(struct ofi_rbmap *map, struct ofi_rbnode *node)
 {
-	node->right = map->free_list ? map->free_list : NULL;
+	pthread_mutex_lock(&map->free_list_lock);
+	node->right = map->free_list;
 	map->free_list = node;
+	pthread_mutex_unlock(&map->free_list_lock);
 }
 
 void ofi_rbmap_init(struct ofi_rbmap *map,
 		int (*compare)(struct ofi_rbmap *map, void *key, void *data))
 {
 	map->compare = compare;
+
+	map->free_list = NULL;
+	pthread_mutex_init(&map->free_list_lock, NULL);
 
 	map->root = &map->sentinel;
 	map->sentinel.left = &map->sentinel;
@@ -127,6 +136,7 @@ void ofi_rbmap_cleanup(struct ofi_rbmap *map)
 		map->free_list = node->right;
 		free(node);
 	}
+	pthread_mutex_destroy(&map->free_list_lock);
 }
 
 void ofi_rbmap_destroy(struct ofi_rbmap *map)
