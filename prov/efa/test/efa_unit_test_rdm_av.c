@@ -68,6 +68,34 @@ static fi_addr_t test_av_reverse_lookup_implicit(struct efa_av *av, uint16_t ahn
 }
 
 /*
+ * Resolve a peer already in the implicit AV by (AHN, QPN), the way the CQ read
+ * path does. The reverse AV lookup only yields an fi_addr; it is resolving that
+ * to a peer that refreshes the entry's LRU position, so both steps are needed
+ * to model the CQ read path.
+ */
+static fi_addr_t test_av_implicit_av_lookup_reverse(struct efa_resource *resource,
+						    uint16_t ahn, uint16_t qpn)
+{
+	struct efa_av *av;
+	struct efa_rdm_ep *efa_rdm_ep;
+	struct efa_rdm_peer *peer;
+	fi_addr_t implicit_fi_addr;
+
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep,
+				  base_ep.util_ep.ep_fid);
+
+	implicit_fi_addr = test_av_reverse_lookup_implicit(av, ahn, qpn, NULL);
+	if (implicit_fi_addr == FI_ADDR_NOTAVAIL)
+		return FI_ADDR_NOTAVAIL;
+
+	peer = test_av_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
+	assert_non_null(peer);
+
+	return implicit_fi_addr;
+}
+
+/*
  * Resolve a peer already in the implicit AV by raw address, the way the CQ read
  * path does when the reverse AV lookup misses but the packet carries the raw
  * address. Refreshes the entry's LRU position.
@@ -465,8 +493,9 @@ void test_av_implicit_av_lru_insertion(void **state)
 
 	/* Access peer0 through the CQ read path */
 	ahn = efa_rdm_ep->self_ah->ahn;
-	implicit_fi_addr = test_av_reverse_lookup_implicit(
-		av, ahn, efa_av_entry_ep_addr(&peer0->av_entry->efa_av_entry)->qpn, NULL);
+	implicit_fi_addr = test_av_implicit_av_lookup_reverse(
+		resource, ahn,
+		efa_av_entry_ep_addr(&peer0->av_entry->efa_av_entry)->qpn);
 	assert_int_equal(implicit_fi_addr, 0);
 
 	/* Expected LRU list: HEAD->peer1->peer2->peer0 */
@@ -474,8 +503,9 @@ void test_av_implicit_av_lru_insertion(void **state)
 
 	/* Access peer2 through the CQ read path */
 	ahn = efa_rdm_ep->self_ah->ahn;
-	implicit_fi_addr = test_av_reverse_lookup_implicit(
-		av, ahn, efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry)->qpn, NULL);
+	implicit_fi_addr = test_av_implicit_av_lookup_reverse(
+		resource, ahn,
+		efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry)->qpn);
 	assert_int_equal(implicit_fi_addr, 2);
 
 	/* Expected LRU list: HEAD->peer1->peer0->peer2 */
@@ -540,8 +570,9 @@ void test_av_implicit_av_lru_eviction(void **state)
 
 	/* Access peer0 through the CQ read path */
 	ahn = efa_rdm_ep->self_ah->ahn;
-	implicit_fi_addr = test_av_reverse_lookup_implicit(
-		av, ahn, efa_av_entry_ep_addr(&peer0->av_entry->efa_av_entry)->qpn, NULL);
+	implicit_fi_addr = test_av_implicit_av_lookup_reverse(
+		resource, ahn,
+		efa_av_entry_ep_addr(&peer0->av_entry->efa_av_entry)->qpn);
 	assert_int_equal(implicit_fi_addr, 0);
 
 	/* Expected LRU list: HEAD->peer1->peer0 */
