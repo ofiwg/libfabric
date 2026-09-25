@@ -108,7 +108,7 @@ For each receiver worker thread:
    - Post receive operations (for msg operations)
    - For RMA writedata, skip posting (writes are one-sided)
 3. **Cycle completion**:
-   - Randomly decide whether to wait for all completions or proceed immediately
+   - Randomly decide whether to wait for all completions or proceed immediately (always waits with `--insert-sender-addr`)
    - Destroy endpoint and start next cycle
 4. **Termination**: Send terminator message to control thread
 
@@ -149,6 +149,7 @@ The test stresses the provider through:
 5. **Random timing**: Sleep intervals create non-deterministic interleaving
 6. **High message volume**: Configurable message count per endpoint lifecycle
 7. **Concurrent AV lookup**: Optional lookups run while other workers update a shared AV
+8. **Receiver-side AV insertion**: Optionally, receivers insert a sender's address while other workers sharing the AV receive from that sender
 
 ## Configuration Options
 
@@ -163,6 +164,7 @@ The test stresses the provider through:
 | `--av-lookup` | Look up the active peer before each send | off |
 | `--shared-av` | Use shared address vector | off |
 | `--shared-cq` | Use shared completion queue | off |
+| `--insert-sender-addr` | Senders put their endpoint address in every message; receivers insert each new sender address into their AV (give it on both sides) | off |
 | `--op-type` | Operation type (untagged/tagged/writedata) | untagged |
 | `--random-seed` | Seed for random behavior | time(NULL) |
 
