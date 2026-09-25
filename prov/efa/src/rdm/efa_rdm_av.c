@@ -434,8 +434,21 @@ static void efa_rdm_av_entry_deinit(struct efa_av *av, struct efa_rdm_av_entry *
 		EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 	}
 	ofi_genlock_unlock(&av->util_av.ep_list_lock);
+
+	/* Set the publish state to unpublished before returning the entry back
+	 * to the pool. The util AV pool does not zero out buffers after freeing,
+	 * so doing this makes sure that the state of the AV entry after it is
+	 * re-allocated is unpublished.
+	 */
+	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
+					   EFA_RDM_AV_ENTRY_UNPUBLISHED);
 }
 
+
+static int efa_rdm_av_entry_publish(struct efa_av *av,
+				    struct efa_rdm_av_entry *av_entry,
+				    fi_addr_t implicit_fi_addr)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym);
 
 /**
  * @brief allocate an explicit efa_rdm_av_entry (base entry + rdm state + shm).
@@ -449,7 +462,7 @@ static void efa_rdm_av_entry_deinit(struct efa_av *av, struct efa_rdm_av_entry *
 struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 						   struct efa_ep_addr *raw_addr,
 						   uint64_t flags, void *context)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym)
 {
 	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
 	struct util_av *util_av = &av->util_av;
@@ -474,6 +487,10 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 	util_av_entry = ofi_bufpool_get_ibuf(util_av->av_entry_pool, fi_addr);
 	entry = (struct efa_av_entry *)util_av_entry->data;
 	assert(efa_is_same_addr(raw_addr, efa_av_entry_ep_addr(entry)));
+	av_entry = container_of(entry, struct efa_rdm_av_entry, efa_av_entry);
+
+	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
+					   EFA_RDM_AV_ENTRY_UNPUBLISHED);
 
 	ah = efa_rdm_ah_alloc(av->domain, raw_addr->raw, false);
 	if (!ah)
@@ -482,22 +499,22 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 	if (efa_av_entry_base_construct(av, entry, ah, fi_addr))
 		goto err_release_ah;
 
-	if (efa_rdm_av_reverse_av_add(av->cur_reverse_av, &rdm_av->prv_reverse_av,
-				      entry)) {
-		EFA_WARN(FI_LOG_AV, "Failed to insert entry for fi_addr %" PRIu64
-			" into reverse AV\n", fi_addr);
-		efa_rdm_ah_release(av->domain, entry->ah, false);
-		efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
-						 entry, fi_addr);
-		return NULL;
-	}
-
-	av_entry = container_of(entry, struct efa_rdm_av_entry, efa_av_entry);
 	av_entry->av = rdm_av;
 	av_entry->implicit_fi_addr = FI_ADDR_NOTAVAIL;
 	av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	dlist_init(&av_entry->implicit_av_lru_entry);
 	dlist_init(&av_entry->ah_implicit_conn_list_entry);
+
+	/* Use efa_rdm_av_entry_publish to update the reverse AV
+	 * efa_rdm_av_entry_publish enforces the ordering between the reverse
+	 * AV and the peer map.
+	 */
+	if (efa_rdm_av_entry_publish(av, av_entry, FI_ADDR_NOTAVAIL)) {
+		efa_rdm_ah_release(av->domain, entry->ah, false);
+		efa_av_entry_remove_from_util_av(av->addr_to_entry_map, &av->util_av,
+						 entry, fi_addr);
+		return NULL;
+	}
 
 	/*
 	 * The explicit AV insertion is triggered by the application calling the
@@ -570,6 +587,9 @@ struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 	assert(av->type == FI_AV_TABLE);
 
 	av_entry = container_of(efa_av_entry, struct efa_rdm_av_entry, efa_av_entry);
+
+	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, EFA_RDM_AV_ENTRY_IMPLICIT);
+
 	av_entry->av = rdm_av;
 	av_entry->efa_av_entry.fi_addr = FI_ADDR_NOTAVAIL;
 	av_entry->implicit_fi_addr = fi_addr;
@@ -1059,6 +1079,116 @@ efa_rdm_av_get_addr_from_peer_rx_entry(struct fi_peer_rx_entry *rx_entry)
 }
 
 
+/**
+ * @brief Update every endpoint's peer map from an implicit to an explicit fi_addr
+ *
+ * @param[in]	av		address vector
+ * @param[in]	av_entry	explicit AV entry the peers now belong to
+ * @param[in]	implicit_fi_addr	fi_addr the peers are keyed by today
+ * @param[in]	undo		false to move implicit -> explicit, true to
+ *				move them back after a failed publish
+ */
+static void efa_rdm_av_entry_update_peer_maps(struct efa_av *av,
+					     struct efa_rdm_av_entry *av_entry,
+					     fi_addr_t implicit_fi_addr,
+					     bool undo)
+{
+	struct efa_av_array *from_map, *to_map;
+	fi_addr_t from_addr, to_addr;
+	struct dlist_entry *entry;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+
+	ofi_genlock_lock(&av->util_av.ep_list_lock);
+	dlist_foreach(&av->util_av.ep_list, entry) {
+		ep = container_of(entry, struct efa_rdm_ep,
+				  base_ep.util_ep.av_entry);
+
+		if (undo) {
+			from_map = ep->fi_addr_to_peer_map;
+			from_addr = av_entry->efa_av_entry.fi_addr;
+			to_map = ep->fi_addr_to_peer_map_implicit;
+			to_addr = implicit_fi_addr;
+		} else {
+			from_map = ep->fi_addr_to_peer_map_implicit;
+			from_addr = implicit_fi_addr;
+			to_map = ep->fi_addr_to_peer_map;
+			to_addr = av_entry->efa_av_entry.fi_addr;
+		}
+
+		EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
+		peer = efa_rdm_ep_peer_map_remove(from_map, from_addr);
+		if (peer) {
+			peer->av_entry = av_entry;
+			if (efa_rdm_ep_peer_map_insert(to_map, to_addr, peer))
+				EFA_WARN(FI_LOG_AV,
+					 "Failed to insert peer into map for addr %lu\n",
+					 to_addr);
+		}
+		EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
+	}
+	ofi_genlock_unlock(&av->util_av.ep_list_lock);
+}
+
+/**
+ * @brief Publish an explicit AV entry to the lock-free CQ read lookups
+ *
+ * Updates the peer maps first and only then adds the entry to the reverse AV.
+ * This ordering is required because the CQ read path reads the reverse AV
+ * without a lock. Without this order, the CQ read path can see an entry in the
+ * reverse AV but not in the peer map and try to create a new peer.
+ *
+ * The raw address -> fi_addr lookup is ordered by util_av.lock. Both readers
+ * and writers hold the lock when accessing the util_av hashmap.
+ *
+ * @param[in]	av		address vector
+ * @param[in]	av_entry	entry to publish, in state UNPUBLISHED
+ * @param[in]	implicit_fi_addr	implicit fi_addr whose peers move to this
+ *				entry, or FI_ADDR_NOTAVAIL when the entry is new
+ *				and has no peers yet
+ * @return	0 on success, or a negative libfabric error code
+ */
+static int efa_rdm_av_entry_publish(struct efa_av *av,
+				    struct efa_rdm_av_entry *av_entry,
+				    fi_addr_t implicit_fi_addr)
+	OFI_TSA_REQUIRES(efa_util_av_lock_sym)
+{
+	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *) (av));
+	int err;
+
+	assert(EFA_GENLOCK_HELD(&av->util_av.lock, efa_util_av_lock_sym));
+	EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry,
+					      EFA_RDM_AV_ENTRY_UNPUBLISHED);
+
+	if (implicit_fi_addr != FI_ADDR_NOTAVAIL)
+		efa_rdm_av_entry_update_peer_maps(av, av_entry, implicit_fi_addr,
+						 false);
+
+	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
+					   EFA_RDM_AV_ENTRY_PEERS_READY);
+
+	err = efa_rdm_av_reverse_av_add(av->cur_reverse_av,
+					&rdm_av->prv_reverse_av,
+					&av_entry->efa_av_entry);
+	if (err) {
+		EFA_WARN(FI_LOG_AV,
+			 "Failed to insert explicit entry for fi_addr %" PRIu64
+			 " into reverse AV: %s\n",
+			 av_entry->efa_av_entry.fi_addr, fi_strerror(-err));
+		EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(
+			av_entry, EFA_RDM_AV_ENTRY_UNPUBLISHED);
+		if (implicit_fi_addr != FI_ADDR_NOTAVAIL)
+			efa_rdm_av_entry_update_peer_maps(av, av_entry,
+							 implicit_fi_addr, true);
+		return err;
+	}
+
+	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry,
+					   EFA_RDM_AV_ENTRY_PUBLISHED);
+
+	return 0;
+}
+
 static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 					   struct efa_ep_addr *raw_addr,
 					   fi_addr_t implicit_fi_addr,
@@ -1074,7 +1204,6 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 	struct efa_rdm_ep *ep;
 	struct dlist_entry *entry;
 	struct util_av_entry *explicit_util_av_entry;
-	struct efa_rdm_peer *peer;
 	struct efa_av_entry *explicit_base_entry;
 	struct fid_peer_srx *peer_srx;
 
@@ -1111,6 +1240,13 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 
 	/* Copy information from the implicit entry to the explicit entry */
 	explicit_av_entry = container_of(explicit_base_entry, struct efa_rdm_av_entry, efa_av_entry);
+
+	/* See the matching comment in efa_rdm_av_entry_alloc_explicit.
+	 * Set the state to unpublished before releasing the entry.
+	 */
+	EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(explicit_av_entry,
+					   EFA_RDM_AV_ENTRY_UNPUBLISHED);
+
 	explicit_base_entry->ah = implicit_av_entry->efa_av_entry.ah;
 	explicit_base_entry->fi_addr = *fi_addr;
 	explicit_av_entry->av = rdm_av;
@@ -1130,11 +1266,8 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 		return err;
 	}
 
-	err = efa_rdm_av_reverse_av_add(av->cur_reverse_av, &rdm_av->prv_reverse_av,
-					explicit_base_entry);
+	err = efa_rdm_av_entry_publish(av, explicit_av_entry, implicit_fi_addr);
 	if (err) {
-		EFA_WARN(FI_LOG_AV, "Failed to insert explicit entry for fi_addr %" PRIu64 " into reverse AV: %s\n",
-			 *fi_addr, fi_strerror(-err));
 		cleanup_err = efa_av_array_insert(av->addr_to_entry_map, *fi_addr, NULL);
 		assert(!cleanup_err);
 		cleanup_err = ofi_av_remove_addr(&av->util_av, *fi_addr);
@@ -1174,26 +1307,14 @@ static int efa_rdm_av_entry_implicit_to_explicit(struct efa_av *av,
 		 implicit_fi_addr, *fi_addr);
 
 	/* Call foreach_unspec_addr to move unexpected messages
-	 * from the unspecified queue to the specified queues
+	 * from the unspecified queue to the specified queues. The peer maps were
+	 * already updateed by efa_rdm_av_entry_publish above.
 	 *
 	 * util_ep is bound to the explicit util_av, so the explicit util_av's
 	 * ep_list contains all of the endpoints bound to this AV */
 	ofi_genlock_lock(&av->util_av.ep_list_lock);
 	dlist_foreach(&av->util_av.ep_list, entry) {
 		ep = container_of(entry, struct efa_rdm_ep, base_ep.util_ep.av_entry);
-		/* move from implicit to explicit peer map, using new fi_addr */
-		EFA_GENLOCK_LOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
-		peer = efa_rdm_ep_peer_map_remove(ep->fi_addr_to_peer_map_implicit,
-					       implicit_fi_addr);
-		if (peer) {
-			peer->av_entry = explicit_av_entry;
-			if (efa_rdm_ep_peer_map_insert(ep->fi_addr_to_peer_map,
-						       *fi_addr, peer))
-				EFA_WARN(FI_LOG_AV,
-					 "Failed to insert peer into explicit map for addr %lu\n",
-					 *fi_addr);
-		}
-		EFA_GENLOCK_UNLOCK(&ep->ctrl_lock, efa_ctrl_lock_sym);
 		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
 		peer_srx->owner_ops->foreach_unspec_addr(peer_srx, &efa_rdm_av_get_addr_from_peer_rx_entry);
 	}
