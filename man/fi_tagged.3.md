@@ -289,13 +289,20 @@ and/or fi_tsendmsg.
   or this flag is ignored.
 
 *FI_MORE*
-: Indicates that the user has additional requests that will
-  immediately be posted after the current call returns.  Use of this
-  flag may improve performance by enabling the provider to optimize
-  its access to the fabric hardware.  Providers that utilize delayed
-  start optimizations for communication calls with FI_MORE flag set
-  must ensure that all previously delayed calls be flushed when an
-  error is returned from a new call.
+: Indicates that the user has additional requests that will immediately be
+  posted to the same queue after the current call returns.  Use of this flag
+  may improve performance by enabling the provider to optimize its access to
+  the fabric hardware.  Providers that utilize delayed start optimizations for
+  communication calls with FI_MORE flag set must ensure that all previously
+  delayed calls be flushed when an error is returned from a new call.
+
+  A tagged send places work on the endpoint's transmit queue, shared with
+  untagged sends, RMA, and atomics; a tagged receive places work on the tagged
+  receive queue, which a provider may keep separate from the untagged receive
+  queue.  Work deferred under FI_MORE on a queue is initiated when a subsequent
+  operation without FI_MORE is posted to that same queue, or when the queue is
+  flushed explicitly with fi_tx_flush for tagged sends or fi_trx_flush for
+  tagged receives (see [`fi_endpoint`(3)](fi_endpoint.3.html)).
 
 *FI_INJECT*
 : Applies to fi_tsendmsg.  Indicates that the outbound data buffer

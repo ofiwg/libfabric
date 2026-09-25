@@ -99,6 +99,12 @@ int fi_enable(struct fid_ep *ep);
 
 int fi_cancel(struct fid_ep *ep, void *context);
 
+int fi_tx_flush(struct fid_ep *ep);
+
+int fi_rx_flush(struct fid_ep *ep);
+
+int fi_trx_flush(struct fid_ep *ep);
+
 int fi_ep_alias(struct fid_ep *ep, struct fid_ep **alias_ep, uint64_t flags);
 
 int fi_control(struct fid *ep, int command, void *arg);
@@ -432,6 +438,30 @@ operation which is canceled is provider specific.
 The cancel operation is asynchronous, but will complete within a bounded
 period of time.
 
+## fi_tx_flush / fi_rx_flush / fi_trx_flush
+
+These calls initiate data transfers that the provider has queued on one of the
+endpoint's submission queues but has not yet started, and return once the
+queued work has been initiated.
+
+- fi_tx_flush flushes the transmit queue, which carries sends, tagged sends,
+  RMA writes and reads, and atomic operations.
+- fi_rx_flush flushes the receive queue, which carries untagged receives.
+- fi_trx_flush flushes the tagged receive queue, which carries tagged
+  receives.  A provider that does not maintain a separate tagged receive queue
+  services this the same as fi_rx_flush.
+
+The primary use is to start operations deferred by the FI_MORE flag. An application
+that posts a batch of transfers, each but the last carrying FI_MORE, may call the
+matching flush instead of issuing a final request without FI_MORE, which is useful
+when the batch size is not known in advance.
+
+These calls also provide a defined recovery path when a data transfer returns
+-FI_EAGAIN because the provider is holding deferred work on that queue: rather
+than reposting, the application flushes the queue to start the pending
+operations and make forward progress.
+
+
 ## fi_ep_alias
 
 This call creates an alias to the specified endpoint.  Conceptually,
@@ -698,6 +728,8 @@ struct fi_ep_attr {
 	size_t          auth_key_size;
 	uint8_t         *auth_key;
 	struct fid_xpu_ctx *xpu_ctx;
+	size_t          max_tx_wr_size;
+	size_t          max_rx_wr_size;
 };
 {% endhighlight %}
 
@@ -1060,6 +1092,17 @@ together with `FI_XPU` in the flags parameter of `fi_endpoint2`, the endpoint
 is created for XPU device-side data transfer. See
 [`fi_xpu`(3)](fi_xpu.3.html) for details. This field must be NULL if the
 endpoint is not created with FI_XPU.
+
+## max_tx_wr_size / max_rx_wr_size - Work Request Size
+
+The maximum size, in bytes, that an application must allocate to back an fi_wr
+used with the Work Request API.  The work request format differs between
+transmit and receive operations, so the provider reports the two sizes
+separately: max_tx_wr_size for transmit work requests and max_rx_wr_size for
+receive work requests.
+
+These are output fields, set by the provider on the fi_info returned from
+fi_getinfo.  They are 0 when the endpoint does not report the FI_WR capability.
 
 # TRANSMIT CONTEXT ATTRIBUTES
 
@@ -1796,3 +1839,4 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 [`fi_tagged`(3)](fi_tagged.3.html),
 [`fi_rma`(3)](fi_rma.3.html)
 [`fi_peer`(3)](fi_peer.3.html)
+[`fi_wr`(3)](fi_wr.3.html)
