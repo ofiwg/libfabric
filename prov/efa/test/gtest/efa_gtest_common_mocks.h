@@ -10,11 +10,13 @@
 #include <vector>
 #include <infiniband/efadv.h>
 #include <infiniband/verbs.h>
+#include <rdma/fabric.h>
 
 struct efa_av;
 struct efa_av_array;
 struct efa_prv_reverse_av;
 struct efa_av_entry;
+struct util_av;
 struct ofi_mr_map;
 struct fi_mr_attr;
 struct efa_ibv_cq;
@@ -69,6 +71,18 @@ struct dlist_entry;
 	  (ibv_cq))                                                            \
 	X(uint32_t, efa_ibv_cq_wc_read_slid, (struct efa_ibv_cq * ibv_cq),     \
 	  (ibv_cq))                                                            \
+	X(int, efa_ibv_cq_wc_read_sgid,                                        \
+	  (struct efa_ibv_cq * ibv_cq, union ibv_gid * sgid), (ibv_cq, sgid))   \
+	X(fi_addr_t, efa_rdm_av_reverse_lookup,                                \
+	  (struct efa_av * av, uint16_t ahn, uint16_t qpn,                      \
+	   struct efa_rdm_pke *pkt_entry),                                     \
+	  (av, ahn, qpn, pkt_entry))                                           \
+	X(fi_addr_t, efa_rdm_av_reverse_lookup_unsafe,                         \
+	  (struct efa_av * av, uint16_t ahn, uint16_t qpn,                      \
+	   struct efa_rdm_pke *pkt_entry),                                     \
+	  (av, ahn, qpn, pkt_entry))                                           \
+	X(fi_addr_t, ofi_av_lookup_fi_addr,                                    \
+	  (struct util_av * av, const void *addr), (av, addr))                 \
 	X(int, ofi_mr_map_insert,                                              \
 	  (struct ofi_mr_map * map, const struct fi_mr_attr *attr,             \
 	   uint64_t *key, void *context, uint64_t flags),                      \
