@@ -28,6 +28,7 @@ av_xfer
 shared_av
 fi_rdm\b
 sighandler_test
+sighandler_chain_test
 
 # Uses FI_RMA
 multi_mr
