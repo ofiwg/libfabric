@@ -898,35 +898,8 @@ fi_addr_t efa_rdm_av_reverse_lookup_unsafe(struct efa_av *av, uint16_t ahn,
 /**
  * @brief find fi_addr for rdm endpoint in the implicit AV (connid aware)
  *
- * @param[in]	av	address vector
- * @param[in]	ahn	address handle number
- * @param[in]	qpn	QP number
- * @param[in]   pkt_entry	NULL or rdm packet entry, used to extract connid
- * @return	On success, return fi_addr to the peer who sent the packet.
- * 		If no such peer exists, return FI_ADDR_NOTAVAIL
- */
-fi_addr_t efa_rdm_av_reverse_lookup_implicit(struct efa_av *av, uint16_t ahn,
-					     uint16_t qpn,
-					     struct efa_rdm_pke *pkt_entry)
-{
-	struct efa_rdm_av *rdm_av = ((struct efa_rdm_av *)(av));
-	fi_addr_t implicit_fi_addr;
-
-	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
-	EFA_GENLOCK_LOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-
-	implicit_fi_addr = efa_rdm_av_reverse_lookup_implicit_unsafe(av, ahn, qpn,
-								     pkt_entry);
-
-	EFA_GENLOCK_UNLOCK(&rdm_av->util_av_implicit.lock, efa_implicit_av_lock_sym);
-	EFA_GENLOCK_UNLOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
-
-	return implicit_fi_addr;
-}
-
-/**
- * @brief Same as efa_rdm_av_reverse_lookup_implicit but does not take any
- * locks. The caller is expected to hold the util_domain and implicit AV locks.
+ * This function does not take any locks. The caller is expected to hold the
+ * util_domain and implicit AV locks.
  *
  * @param[in]	av	address vector
  * @param[in]	ahn	address handle number

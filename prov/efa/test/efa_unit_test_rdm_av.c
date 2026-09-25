@@ -27,6 +27,47 @@ static int test_av_insert_one_implicit(struct efa_av *av,
 }
 
 /*
+ * efa_rdm_ep_get_peer_implicit_unsafe requires its caller to hold the
+ * util_domain and implicit AV locks, as the CQ read path does.
+ */
+static struct efa_rdm_peer *test_av_get_peer_implicit(struct efa_rdm_ep *ep,
+						      fi_addr_t addr)
+{
+	struct efa_av *av = ep->base_ep.av;
+	struct efa_rdm_av *rdm_av = (struct efa_rdm_av *) av;
+	struct efa_rdm_peer *peer;
+
+	ofi_genlock_lock(&av->domain->util_domain.lock);
+	ofi_genlock_lock(&rdm_av->util_av_implicit.lock);
+	peer = efa_rdm_ep_get_peer_implicit_unsafe(ep, addr);
+	ofi_genlock_unlock(&rdm_av->util_av_implicit.lock);
+	ofi_genlock_unlock(&av->domain->util_domain.lock);
+
+	return peer;
+}
+
+/*
+ * efa_rdm_av_reverse_lookup_implicit_unsafe requires its caller to hold the
+ * util_domain and implicit AV locks, as the CQ read path does.
+ */
+static fi_addr_t test_av_reverse_lookup_implicit(struct efa_av *av, uint16_t ahn,
+						 uint16_t qpn,
+						 struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_av *rdm_av = (struct efa_rdm_av *) av;
+	fi_addr_t implicit_fi_addr;
+
+	ofi_genlock_lock(&av->domain->util_domain.lock);
+	ofi_genlock_lock(&rdm_av->util_av_implicit.lock);
+	implicit_fi_addr = efa_rdm_av_reverse_lookup_implicit_unsafe(av, ahn, qpn,
+								    pkt_entry);
+	ofi_genlock_unlock(&rdm_av->util_av_implicit.lock);
+	ofi_genlock_unlock(&av->domain->util_domain.lock);
+
+	return implicit_fi_addr;
+}
+
+/*
  * Resolve a peer already in the implicit AV by raw address, the way the CQ read
  * path does when the reverse AV lookup misses but the packet carries the raw
  * address. Refreshes the entry's LRU position.
@@ -49,7 +90,7 @@ static fi_addr_t test_av_implicit_av_lookup_raw_addr(struct efa_resource *resour
 	if (implicit_fi_addr == FI_ADDR_NOTAVAIL)
 		return FI_ADDR_NOTAVAIL;
 
-	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
+	peer = test_av_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
 	assert_non_null(peer);
 
 	return implicit_fi_addr;
@@ -262,13 +303,13 @@ static struct efa_rdm_peer *test_av_get_peer_from_implicit_av(struct efa_resourc
 	err = test_av_insert_one_implicit(av, &raw_addr, &implicit_fi_addr);
 	assert_int_equal(err, 0);
 
-	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
+	peer = test_av_get_peer_implicit(efa_rdm_ep, implicit_fi_addr);
 
 	assert_int_equal(peer->av_entry->implicit_fi_addr, implicit_fi_addr);
 	assert_int_equal(peer->av_entry->efa_av_entry.fi_addr, FI_ADDR_NOTAVAIL);
 	assert_int_equal(efa_is_same_addr(&raw_addr, efa_av_entry_ep_addr(&peer->av_entry->efa_av_entry)), 1);
 
-	test_addr = efa_rdm_av_reverse_lookup_implicit(av, ahn, raw_addr.qpn, NULL);
+	test_addr = test_av_reverse_lookup_implicit(av, ahn, raw_addr.qpn, NULL);
 	assert_int_equal(test_addr, implicit_fi_addr);
 
 
@@ -424,7 +465,7 @@ void test_av_implicit_av_lru_insertion(void **state)
 
 	/* Access peer0 through the CQ read path */
 	ahn = efa_rdm_ep->self_ah->ahn;
-	implicit_fi_addr = efa_rdm_av_reverse_lookup_implicit(
+	implicit_fi_addr = test_av_reverse_lookup_implicit(
 		av, ahn, efa_av_entry_ep_addr(&peer0->av_entry->efa_av_entry)->qpn, NULL);
 	assert_int_equal(implicit_fi_addr, 0);
 
@@ -433,7 +474,7 @@ void test_av_implicit_av_lru_insertion(void **state)
 
 	/* Access peer2 through the CQ read path */
 	ahn = efa_rdm_ep->self_ah->ahn;
-	implicit_fi_addr = efa_rdm_av_reverse_lookup_implicit(
+	implicit_fi_addr = test_av_reverse_lookup_implicit(
 		av, ahn, efa_av_entry_ep_addr(&peer2->av_entry->efa_av_entry)->qpn, NULL);
 	assert_int_equal(implicit_fi_addr, 2);
 
@@ -499,7 +540,7 @@ void test_av_implicit_av_lru_eviction(void **state)
 
 	/* Access peer0 through the CQ read path */
 	ahn = efa_rdm_ep->self_ah->ahn;
-	implicit_fi_addr = efa_rdm_av_reverse_lookup_implicit(
+	implicit_fi_addr = test_av_reverse_lookup_implicit(
 		av, ahn, efa_av_entry_ep_addr(&peer0->av_entry->efa_av_entry)->qpn, NULL);
 	assert_int_equal(implicit_fi_addr, 0);
 
@@ -593,7 +634,7 @@ void test_ah_refcnt(void **state)
 	err = test_av_insert_one_implicit(av, &raw_addr, &fi_addr);
 	assert_int_equal(err, 0);
 
-	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep, fi_addr);
+	peer = test_av_get_peer_implicit(efa_rdm_ep, fi_addr);
 
 	efa_ah = peer->av_entry->efa_av_entry.ah;
 
@@ -716,7 +757,7 @@ void test_ah_lru_eviction_impl(bool explicit)
 	err = test_av_insert_one_implicit(efa_av[0], &raw_addr[0], &fi_addr);
 	assert_int_equal(err, 0);
 
-	peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep[0], fi_addr);
+	peer = test_av_get_peer_implicit(efa_rdm_ep[0], fi_addr);
 
 	assert_int_equal(HASH_CNT(hh, efa_domain[0]->ah_map), 1);
 	efa_ah = peer->av_entry->efa_av_entry.ah;
@@ -730,7 +771,7 @@ void test_ah_lru_eviction_impl(bool explicit)
 	} else {
 		err = test_av_insert_one_implicit(efa_av[0], &raw_addr[1], &fi_addr);
 		assert_int_equal(err, 0);
-		peer = efa_rdm_ep_get_peer_implicit(efa_rdm_ep[0], fi_addr);
+		peer = test_av_get_peer_implicit(efa_rdm_ep[0], fi_addr);
 	}
 
 	assert_int_equal(HASH_CNT(hh, efa_domain[0]->ah_map), 1);
