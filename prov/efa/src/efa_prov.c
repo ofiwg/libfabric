@@ -112,6 +112,30 @@ static int efa_util_prov_initialize()
 		/* This function must be called after efa_hmem_info_initialize() */
 		efa_prov_info_direct_set_hmem_flags(prov_info_direct);
 
+		/*
+		 * FI_XPU (GPU-initiated communication) is only supported on the
+		 * efa-direct path. Advertise it here, so that fi_getinfo() with
+		 * FI_XPU in hints can match efa-direct, but only when the
+		 * provider was built against an rdma-core that has the queue
+		 * geometry queries and the device supports the direct data path:
+		 * an XPU kernel drives the SQ, RQ and CQ rings itself, which a
+		 * device using sub completion queues cannot expose. FI_XPU is
+		 * in neither capability mask, so an application that does not
+		 * ask for it never gets it back (see efa_user_info.c).
+		 */
+#if HAVE_EFA_XPU
+		if (efa_device_support_xpu()) {
+			prov_info_direct->caps |= FI_XPU;
+			prov_info_direct->domain_attr->caps |= FI_XPU;
+			/*
+			 * One XPU context per domain: an EFA domain is one NIC,
+			 * and the context binds it to one device. 0 would mean
+			 * no XPU support at all.
+			 */
+			prov_info_direct->domain_attr->max_xpu_ctx_cnt = 1;
+		}
+#endif
+
 		if (!head) {
 			head = prov_info_direct;
 		} else {

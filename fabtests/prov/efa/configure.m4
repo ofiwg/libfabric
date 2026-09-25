@@ -101,3 +101,19 @@ AS_IF([test "x$enable_efagda" = xyes], [
 
 AM_CONDITIONAL([EFAGDA], [test x$enable_efagda = xyes])
 AC_SUBST([EFA_DP_DIRECT], [$efa_dp_direct_path])
+
+dnl FI_XPU GDA support
+AC_ARG_ENABLE([efa-xpu],
+	[AS_HELP_STRING([--enable-efa-xpu],
+		[Enable EFA XPU testing (requires CUDA)])],
+	[],
+	[enable_efa_xpu=no])
+
+AM_CONDITIONAL([EFA_XPU], [test x$enable_efa_xpu = xyes])
+
+dnl Generate the standalone Makefile used to build the efa_xpu CUDA kernels
+dnl (compiled out-of-band by nvcc). Only needed when XPU testing is enabled.
+dnl The template is named Makefile.template (rather than Makefile.in) so it is
+dnl not swept up by the repo-wide 'Makefile'/'Makefile.in' .gitignore rules.
+AS_IF([test x$enable_efa_xpu = xyes],
+	[AC_CONFIG_FILES([prov/efa/src/efa_xpu/Makefile:prov/efa/src/efa_xpu/Makefile.template])])

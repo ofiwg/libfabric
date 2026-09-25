@@ -439,6 +439,21 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 		info->caps &= ~FI_HMEM;
 	}
 
+	/*
+	 * FI_XPU is never supported on efa-rdm: the XPU kernel drives the
+	 * hardware queues itself, which bypasses the rdm protocol layer.
+	 */
+	if (hints && (hints->caps & FI_XPU)) {
+		EFA_WARN(FI_LOG_CORE,
+			 "FI_XPU capability is not supported on the efa fabric, "
+			 "use the " EFA_DIRECT_FABRIC_NAME " fabric instead\n");
+		return -FI_ENODATA;
+	}
+	info->caps &= ~FI_XPU;
+	info->domain_attr->caps &= ~FI_XPU;
+	info->domain_attr->max_xpu_ctx_cnt = 0;
+	info->domain_attr->mr_mode &= ~FI_MR_XPU_DESC;
+
 	if (info->caps & FI_HMEM) {
 		/* Add FI_MR_HMEM to mr_mode when claiming support of FI_HMEM
 		 * because EFA provider's HMEM support rely on
@@ -627,6 +642,44 @@ int efa_user_info_alter_direct(int version, struct fi_info *info, const struct f
 		info->caps |= FI_HMEM;
 	} else {
 		info->caps &= ~FI_HMEM;
+	}
+
+	/*
+	 * FI_XPU is opt-in: prov_info only carries it where the provider can
+	 * support it (see efa_util_prov_initialize), and it is kept in
+	 * info->caps only when the application explicitly asks for it, so a
+	 * plain fi_getinfo() never returns an XPU-capable info and a device
+	 * data path is never handed to an application that cannot drive it.
+	 */
+	if (!hints || !(hints->caps & FI_XPU)) {
+		info->caps &= ~FI_XPU;
+		info->domain_attr->caps &= ~FI_XPU;
+		info->domain_attr->max_xpu_ctx_cnt = 0;
+		info->domain_attr->mr_mode &= ~FI_MR_XPU_DESC;
+	} else if (!(info->caps & FI_XPU)) {
+		EFA_WARN(FI_LOG_CORE,
+			 "FI_XPU capability requested but not supported. It "
+			 "requires an rdma-core with XPU support and a device "
+			 "that supports the direct data path\n");
+		return -FI_ENODATA;
+	} else {
+		/*
+		 * A transfer posted by an XPU takes the memory key from a
+		 * descriptor the application fetches with
+		 * fi_mr_get_xpu_desc(), the XPU analog of FI_MR_LOCAL, so the
+		 * requirement belongs in mr_mode. It cannot live in prov_info:
+		 * that would tell every application, including the ones that
+		 * never ask for FI_XPU, that it needs XPU descriptors.
+		 */
+		if (hints->domain_attr &&
+		    !(hints->domain_attr->mr_mode & FI_MR_XPU_DESC)) {
+			EFA_WARN(FI_LOG_CORE,
+				 "FI_XPU capability requires XPU memory "
+				 "descriptors (FI_MR_XPU_DESC)\n");
+			return -FI_ENODATA;
+		}
+
+		info->domain_attr->mr_mode |= FI_MR_XPU_DESC;
 	}
 
 	if (info->caps & FI_HMEM) {

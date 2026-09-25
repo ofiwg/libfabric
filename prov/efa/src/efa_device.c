@@ -609,6 +609,21 @@ bool efa_device_use_sub_cq(void)
 	return vendor_part_id == 0xefa0;
 }
 
+/**
+ * @brief Check whether the device can support the FI_XPU capability
+ *
+ * An XPU kernel drives the send queue, receive queue and completion queue
+ * rings itself, which is only possible on the direct data path: the ring
+ * geometry queries the export path relies on (efadv_query_qp_wqs,
+ * efadv_query_cq) are the same ones that back the direct data path, and a
+ * device still using sub completion queues has no single CQ ring to hand to
+ * the device.
+ */
+bool efa_device_support_xpu(void)
+{
+	return efa_env.use_data_path_direct && !efa_device_use_sub_cq();
+}
+
 #ifndef _WIN32
 
 static char *get_sysfs_path(void)
