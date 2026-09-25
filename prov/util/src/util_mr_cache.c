@@ -345,18 +345,18 @@ util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 			cache->uncached_size += (*entry)->info.iov.iov_len;
 		}
 	}
-	/* ofi_rbnode_free() only returns the node to the tree free list (never
-	 * allocates), so it is safe to call while holding mm_lock.
+	pthread_mutex_unlock(&mm_lock);
+	/* ofi_rbnode_free() returns the node to the tree free list
+	 * under the free_list lock, so it is safe to call outside mm_lock.
 	 */
 	if (rbnode)
 		ofi_rbnode_free(&cache->tree, rbnode);
-	pthread_mutex_unlock(&mm_lock);
 	return 0;
 
 unlock:
+	pthread_mutex_unlock(&mm_lock);
 	if (rbnode)
 		ofi_rbnode_free(&cache->tree, rbnode);
-	pthread_mutex_unlock(&mm_lock);
 free:
 	util_mr_free_entry(cache, *entry);
 	return ret;
