@@ -301,7 +301,7 @@ static void *util_ns_accept_handler(void *args)
 	struct util_ns_cmd cmd;
 	int ret;
 
-	while (ns->run) {
+	while (ofi_atomic_get32(&ns->run)) {
 		conn_sock = accept(ns->listen_sock, NULL, 0);
 		if (conn_sock == INVALID_SOCKET)
 			break;
@@ -367,7 +367,7 @@ int ofi_ns_add_local_name(struct util_ns *ns, void *service, void *name)
 		.op = OFI_UTIL_NS_ADD,
 	};
 
-	if (!ns->is_initialized) {
+	if (!ofi_atomic_get32(&ns->is_initialized)) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Cannot add local name - name server uninitialized\n");
 		return -FI_EINVAL;
@@ -415,7 +415,7 @@ int ofi_ns_del_local_name(struct util_ns *ns, void *service, void *name)
 		.op = OFI_UTIL_NS_DEL
 	};
 
-	if (!ns->is_initialized)
+	if (!ofi_atomic_get32(&ns->is_initialized))
 		return -FI_EINVAL;
 
 	write_buf = calloc(cmd_len + ns->service_len + ns->name_len, 1);
@@ -460,7 +460,7 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server, void *service)
 		.op = OFI_UTIL_NS_QUERY
 	};
 
-	if (!ns->is_initialized)
+	if (!ofi_atomic_get32(&ns->is_initialized))
 		return NULL;
 
 	sockfd = util_ns_connect_server(ns, server);
@@ -519,7 +519,7 @@ int ofi_ns_start_server(struct util_ns *ns)
 {
 	int ret;
 
-	assert(ns->is_initialized);
+	assert(ofi_atomic_get32(&ns->is_initialized));
 	if (ofi_atomic_inc32(&ns->ref) > 1)
 		return 0;
 
@@ -547,7 +547,7 @@ int ofi_ns_start_server(struct util_ns *ns)
 		goto err2;
 	}
 
-	ns->run = 1;
+	ofi_atomic_set32(&ns->run, 1);
 	ret = -pthread_create(&ns->thread, NULL,
 			      util_ns_accept_handler, (void *) ns);
 	if (ret)
@@ -556,7 +556,7 @@ int ofi_ns_start_server(struct util_ns *ns)
 	return 0;
 
 err3:
-	ns->run = 0;
+	ofi_atomic_set32(&ns->run, 0);
 	util_ns_close_listen(ns);
 err2:
 	rbtDelete(ns->map);
@@ -570,7 +570,7 @@ void ofi_ns_stop_server(struct util_ns *ns)
 {
 	SOCKET sock;
 
-	assert(ns->is_initialized);
+	assert(ofi_atomic_get32(&ns->is_initialized));
 
 	if (ofi_atomic_dec32(&ns->ref))
 		return;
@@ -578,7 +578,7 @@ void ofi_ns_stop_server(struct util_ns *ns)
 	if (ns->listen_sock == INVALID_SOCKET)
 		return;
 
-	ns->run = 0;
+	ofi_atomic_set32(&ns->run, 0);
 	sock = util_ns_connect_server(ns, ns->hostname);
 	if (sock != INVALID_SOCKET)
 		ofi_close_socket(sock);
@@ -592,12 +592,12 @@ void ofi_ns_init(struct util_ns *ns)
 {
 	assert(ns && ns->name_len && ns->service_len && ns->service_cmp);
 
-	if (ns->is_initialized)
+	if (ofi_atomic_get32(&ns->is_initialized))
 		return;
 
 	ofi_atomic_initialize32(&ns->ref, 0);
 	ns->listen_sock = INVALID_SOCKET;
 	if (!ns->hostname)
 		ns->hostname = OFI_NS_DEFAULT_HOSTNAME;
-	ns->is_initialized = 1;
+	ofi_atomic_set32(&ns->is_initialized, 1);
 }
