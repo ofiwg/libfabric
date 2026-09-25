@@ -44,6 +44,47 @@ _Static_assert(offsetof(struct efa_rdm_av, efa_av) == 0,
 	       "efa_av must be the first member of efa_rdm_av");
 
 /**
+ * @brief Publication state of an AV entry, tracked in debug builds only
+ *
+ * The CQ read fast path resolves a peer with three lookups, the first two of
+ * which are lock free:
+ *
+ *   1. (GID, QPN) -> fi_addr	cur_reverse_av (lock free)
+ *   2. fi_addr -> peer		ep->fi_addr_to_peer_map (lock free)
+ *   3. raw address -> fi_addr	util_av hash (under util_av.lock)
+ *
+ * Lookup 1 or 3 runs first and lookup 2 second, so an fi_addr must never become
+ * visible to lookup 1 or 3 while lookup 2 would still miss for a peer that
+ * already exists. Publishing an entry therefore has to update the peer maps
+ * before adding the entry to the reverse AV; see efa_rdm_av_entry_publish.
+ *
+ * For an explicit AV entry, these states record where an entry is in that
+ * sequence so the ordering can be checked with asserts and unit tests.
+ *
+ *   UNPUBLISHED  allocated, fi_addr assigned, invisible to lookups 1 and 3
+ *   PEERS_READY  peer maps updateed, still invisible to lookups 1 and 3
+ *   PUBLISHED    visible to lookups 1 and 3, so lookup 2 must resolve
+ *
+ * Implicit AV entries also start in the UNPUBLISHED state but they can only
+ * get to the IMPLICIT state.
+ *
+ * The same hazard does exist on the implicit side, in the opposite direction.
+ * When the AV entry moves from implicit AV to explicit AV, the peer maps are
+ * updated before the reverse AV. But all accesses to the implicit AV take the
+ * util_av_implicit.lock, so the issue is beningn.
+ *
+ * The util AV entry pool does not zero recycled buffers, so a reused entry would
+ * start out holding the previous occupant's state. Both the allocation and teardown
+ * paths set the state to UNPUBLISHED to avoid any reuse.
+ */
+enum efa_rdm_av_entry_publish_state {
+	EFA_RDM_AV_ENTRY_UNPUBLISHED = 0,
+	EFA_RDM_AV_ENTRY_PEERS_READY,
+	EFA_RDM_AV_ENTRY_PUBLISHED,
+	EFA_RDM_AV_ENTRY_IMPLICIT,
+};
+
+/**
  * @brief RDM address vector entry
  *
  * Embeds the base efa_av_entry as its first member and adds the RDM-only state.
@@ -55,7 +96,26 @@ struct efa_rdm_av_entry {
 	fi_addr_t		shm_fi_addr;
 	struct dlist_entry	implicit_av_lru_entry;
 	struct dlist_entry	ah_implicit_conn_list_entry OFI_TSA_GUARDED_BY(efa_util_domain_lock_sym);
+#if ENABLE_DEBUG
+	enum efa_rdm_av_entry_publish_state publish_state;
+#endif
 };
+
+/*
+ * Advance and check the publication state. Both are no-ops outside debug
+ * builds, so callers must not depend on them for anything but the assertions.
+ */
+#if ENABLE_DEBUG
+#define EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, state)                    \
+	do {                                                                   \
+		(av_entry)->publish_state = (state);                            \
+	} while (0)
+#define EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry, state)                 \
+	assert((av_entry)->publish_state == (state))
+#else
+#define EFA_RDM_AV_ENTRY_SET_PUBLISH_STATE(av_entry, state)	do {} while (0)
+#define EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(av_entry, state)	do {} while (0)
+#endif
 
 _Static_assert(offsetof(struct efa_rdm_av_entry, efa_av_entry) == 0,
 	       "efa_av_entry must be the first member of efa_rdm_av_entry");
@@ -120,7 +180,7 @@ void efa_rdm_av_implicit_av_lru_move(struct efa_av *av,
 struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_explicit(struct efa_av *av,
 						   struct efa_ep_addr *raw_addr,
 						   uint64_t flags, void *context)
-	OFI_TSA_REQUIRES(efa_util_domain_lock_sym);
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_util_av_lock_sym);
 
 struct efa_rdm_av_entry *efa_rdm_av_entry_alloc_implicit(struct efa_av *av,
 						   struct efa_ep_addr *raw_addr,

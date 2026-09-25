@@ -37,6 +37,7 @@ struct test_opts {
 	bool av_lookup;
 	bool shared_av;
 	bool shared_cq;
+	bool insert_sender_addr;
 	enum { OP_MSG_UNTAGGED = 0, OP_MSG_TAGGED, OP_RMA_WRITEDATA } op_type;
 	bool verbose;
 	unsigned int random_seed;
@@ -53,6 +54,7 @@ static struct test_opts topts = {
 	.av_lookup = false,
 	.shared_av = false, // Default: 1 AV per EP
 	.shared_cq = false, // Default: 1 CQ per EP
+	.insert_sender_addr = false,
 	.op_type = OP_MSG_UNTAGGED,
 	.verbose = true,
 };
@@ -67,6 +69,7 @@ enum {
 	OPT_AV_LOOKUP,
 	OPT_SHARED_AV,
 	OPT_SHARED_CQ,
+	OPT_INSERT_SENDER_ADDR,
 	OPT_OP_TYPE,
 	OPT_RANDOM_SEED,
 };
@@ -81,6 +84,7 @@ static struct option test_long_opts[] = {
 	{"av-lookup", no_argument, NULL, OPT_AV_LOOKUP},
 	{"shared-av", no_argument, NULL, OPT_SHARED_AV},
 	{"shared-cq", no_argument, NULL, OPT_SHARED_CQ},
+	{"insert-sender-addr", no_argument, NULL, OPT_INSERT_SENDER_ADDR},
 	{"op-type", required_argument, NULL, OPT_OP_TYPE},
 	{"random-seed", required_argument, NULL, OPT_RANDOM_SEED},
 	{"threading", required_argument, NULL, LONG_OPT_THREADING},
@@ -223,6 +227,11 @@ struct worker_context {
 	struct context_pool pool;
 	uint16_t worker_id;
 	size_t av_remove_count;
+	/* --insert-sender-addr */
+	char ep_addr[MAX_EP_ADDR_LEN];		/* sender: own address */
+	char (*sender_addrs)[MAX_EP_ADDR_LEN];	/* receiver: inserted so far */
+	size_t num_sender_addrs;
+	size_t max_sender_addrs;
 };
 struct fid_cq *shared_cq = NULL;
 struct fid_av *shared_av = NULL;
@@ -341,6 +350,7 @@ static int setup_endpoint(struct worker_context *ctx, uint64_t total_ops)
 			FT_PRINTERR("fi_av_open", ret);
 			goto error;
 		}
+		ctx->num_sender_addrs = 0;
 	}
 
 	ret = fi_eq_open(fabric, &eq_attr, &ctx->eq, NULL);
@@ -379,23 +389,66 @@ error:
 	return ret;
 }
 
+/* With --insert-sender-addr every message starts with the sender's endpoint
+ * address; insert each one this worker has not inserted yet, which with
+ * --shared-av runs while other workers' fi_cq_read calls resolve packets from
+ * the same sender. */
+static int insert_sender_addr(struct worker_context *ctx, void *op_context)
+{
+	size_t idx = (struct fi_context2 *) op_context - ctx->pool.fi_ctx;
+	char *addr = (char *) ctx->pool.buffers + idx * ctx->pool.buffer_size;
+	fi_addr_t fi_addr;
+	void *grown;
+	int ret;
+
+	assert(idx < ctx->pool.allocated);
+	for (size_t i = 0; i < ctx->num_sender_addrs; i++) {
+		if (!memcmp(ctx->sender_addrs[i], addr, MAX_EP_ADDR_LEN))
+			return 0;
+	}
+
+	ret = fi_av_insert(ctx->av, addr, 1, &fi_addr, 0, NULL);
+	if (ret != 1) {
+		fprintf(stderr, "Receiver %u: fi_av_insert of the address at the "
+			"start of a received message returned %d; is "
+			"--insert-sender-addr set on the sender too?\n",
+			ctx->worker_id, ret);
+		return ret < 0 ? ret : -FI_EOTHER;
+	}
+	if (ctx->num_sender_addrs == ctx->max_sender_addrs) {
+		grown = realloc(ctx->sender_addrs,
+				2 * ctx->max_sender_addrs * MAX_EP_ADDR_LEN);
+		if (!grown)
+			return -FI_ENOMEM;
+		ctx->sender_addrs = grown;
+		ctx->max_sender_addrs *= 2;
+	}
+	memcpy(ctx->sender_addrs[ctx->num_sender_addrs++], addr, MAX_EP_ADDR_LEN);
+	if (topts.verbose)
+		printf("Receiver %u: inserted a sender address, fi_addr %" PRIu64 "\n",
+		       ctx->worker_id, fi_addr);
+	return 0;
+}
+
 /**
  * wait_for_comp - Poll completion queue until expected completions arrive
- * @cq: Completion queue to poll
- * @eq: Event queue associated with the endpoint
+ * @ctx: Worker whose completion queue and event queue to poll
  * @num_completions: Number of completions to wait for
  *
- * Polls the specified completion queue until the requested number of
+ * Polls the worker's completion queue until the requested number of
  * completions are received or a timeout occurs. Uses the global 'timeout'
  * variable (default: 10 seconds) to limit wait duration. When shared CQ
  * mode is enabled, acquires a mutex lock with timeout to serialize access.
  *
- * Returns: Number of completions successfully received (may be less than
- *          requested if timeout expires or error occurs)
+ * Returns: Number of completions received, which may be fewer than requested
+ *          after a timeout, or a negative fi_errno value if the event queue
+ *          reported an error or a sender address could not be inserted
  */
-static int wait_for_comp(struct fid_cq *cq, struct fid_eq *eq, int num_completions)
+static int wait_for_comp(struct worker_context *ctx, int num_completions)
 {
 	static pthread_mutex_t shared_cq_lock = PTHREAD_MUTEX_INITIALIZER;
+	struct fid_cq *cq = ctx->cq;
+	struct fid_eq *eq = ctx->eq;
 	struct fi_cq_data_entry comp;
 	int ret;
 	int completed = 0;
@@ -424,6 +477,13 @@ static int wait_for_comp(struct fid_cq *cq, struct fid_eq *eq, int num_completio
 		if (ret > 0) {
 			assert(ret == 1);
 			completed++;
+			if (ctx->sender_addrs) {
+				ret = insert_sender_addr(ctx, comp.op_context);
+				if (ret) {
+					completed = ret;
+					break;
+				}
+			}
 			continue;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			struct fi_cq_err_entry err_entry = {0};
@@ -539,6 +599,16 @@ static void *run_sender_worker(void *arg)
 					ctx->worker_id);
 				goto out;
 			}
+			if (topts.insert_sender_addr) {
+				size_t addr_len = MAX_EP_ADDR_LEN;
+
+				memset(ctx->ep_addr, 0, MAX_EP_ADDR_LEN);
+				ret = fi_getname(&ctx->ep->fid, ctx->ep_addr, &addr_len);
+				if (ret) {
+					FT_PRINTERR("fi_getname", ret);
+					goto out;
+				}
+			}
 			// Restore AV from cache
 			for (int i = 0; i < ctx->num_peers; i++) {
 				fi_addr[i] = FI_ADDR_UNSPEC;
@@ -641,6 +711,8 @@ static void *run_sender_worker(void *arg)
 			FT_PRINTERR("context_pool_alloc_ctx", ret);
 			goto out;
 		}
+		if (topts.insert_sender_addr)
+			memcpy(buffer, ctx->ep_addr, MAX_EP_ADDR_LEN);
 		do {
 			switch (topts.op_type) {
 			case OP_MSG_UNTAGGED:
@@ -681,7 +753,7 @@ static void *run_sender_worker(void *arg)
 			if (ret == 0) {
 				break;
 			} else if (ret == -FI_EAGAIN) {
-				comp_ret = wait_for_comp(ctx->cq, ctx->eq, 1);
+				comp_ret = wait_for_comp(ctx, 1);
 				if (comp_ret < 0) {
 					fprintf(stderr,
 						"Sender %d: peer endpoint closed, exiting now\n",
@@ -722,7 +794,7 @@ static void *run_sender_worker(void *arg)
 					"completions\n",
 					ctx->worker_id, cycle);
 				uint64_t ops_pending =  ops_total_in_this_cycle - ops_completed_in_this_cycle;
-				comp_ret = wait_for_comp(ctx->cq, ctx->eq, ops_pending);
+				comp_ret = wait_for_comp(ctx, ops_pending);
 				if (comp_ret < 0) {
 					fprintf(stderr,
 						"Sender %d: peer endpoint closed, exiting now\n",
@@ -801,7 +873,7 @@ static int notify_endpoint_update(struct worker_context *ctx, void *rma_buffer)
 static void *run_receiver_worker(void *arg)
 {
 	struct worker_context *ctx = (struct worker_context *) arg;
-	int ret = 0;
+	int ret = 0, comp_ret;
 	struct random_data random_data;
 	const uint64_t total_ops = ctx->num_peers * topts.msgs_per_sender;
 	const uint64_t msg_per_ep_lifecyle = total_ops / topts.receiver_ep_recycling;
@@ -909,11 +981,19 @@ static void *run_receiver_worker(void *arg)
 		ops_posted_in_this_cycle++;
 
 		if (ops_posted_in_this_cycle == ops_total_in_this_cycle) {
-			if (ft_random_get_bool(&random_data)) {
+			/* Sender addresses come from completed receives, so
+			 * always wait for them with --insert-sender-addr. */
+			if (topts.insert_sender_addr ||
+			    ft_random_get_bool(&random_data)) {
 				printf("Receiver %u EP cycle %d: Waiting for "
 					"completions\n",
 					ctx->worker_id, cycle);
-				ops_completed += wait_for_comp(ctx->cq, ctx->eq, ops_total_in_this_cycle);
+				comp_ret = wait_for_comp(ctx, ops_total_in_this_cycle);
+				if (comp_ret < 0 && topts.insert_sender_addr) {
+					ret = comp_ret;
+					goto out;
+				}
+				ops_completed += comp_ret;
 			} else {
 				printf("Receiver %u EP cycle %d: Not waiting for "
 					"completions\n",
@@ -939,6 +1019,9 @@ out:
 
 static void cleanup_worker_resourses(struct worker_context *worker) {
 	context_pool_destroy(&worker->pool);
+	free(worker->sender_addrs);
+	worker->sender_addrs = NULL;
+	worker->num_sender_addrs = 0;
 	if (worker->peer_ids) {
 		free(worker->peer_ids);
 		worker->peer_ids = NULL;
@@ -1218,6 +1301,15 @@ static int run_receiver(void)
 				i, ret);
 			goto out;
 		}
+		if (topts.insert_sender_addr) {
+			worker->max_sender_addrs = MAX_PEERS;
+			worker->sender_addrs = calloc(worker->max_sender_addrs,
+						      MAX_EP_ADDR_LEN);
+			if (!worker->sender_addrs) {
+				ret = -FI_ENOMEM;
+				goto out;
+			}
+		}
 
 		if (topts.verbose) {
 			printf("\nReceiver Worker %d:\n", i);
@@ -1344,6 +1436,9 @@ static void print_test_usage(void)
 			    "use shared AV among workers (default: off)");
 	FT_PRINT_OPTS_USAGE("--shared-cq",
 			    "use shared CQ among workers (default: off)");
+	FT_PRINT_OPTS_USAGE("--insert-sender-addr",
+			    "carry the sender's address in each message; receivers "
+			    "fi_av_insert each new sender (default: off)");
 	FT_PRINT_OPTS_USAGE("--op-type <type>",
 			    "operation type: untagged|tagged|writedata "
 			    "(default: untagged)");
@@ -1412,6 +1507,9 @@ static int parse_test_opts(int argc, char **argv)
 			break;
 		case OPT_SHARED_CQ:
 			topts.shared_cq = true;
+			break;
+		case OPT_INSERT_SENDER_ADDR:
+			topts.insert_sender_addr = true;
 			break;
 		case OPT_OP_TYPE:
 			if (strcmp(optarg, "untagged") == 0) {
@@ -1482,6 +1580,15 @@ int main(int argc, char **argv)
 	if (opts.threading == FI_THREAD_COMPLETION && topts.shared_cq) {
 		fprintf(stderr, "--shared-cq is incompatible with "
 			"--threading completion\n");
+		ret = -1;
+		goto out;
+	}
+	if (topts.insert_sender_addr &&
+	    (topts.op_type == OP_RMA_WRITEDATA || topts.shared_cq ||
+	     opts.transfer_size < MAX_EP_ADDR_LEN)) {
+		fprintf(stderr, "--insert-sender-addr cannot be combined with "
+			"--op-type writedata or --shared-cq, and needs -S %d "
+			"or larger\n", MAX_EP_ADDR_LEN);
 		ret = -1;
 		goto out;
 	}
