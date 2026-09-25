@@ -108,10 +108,6 @@ fi_addr_t efa_rdm_av_reverse_lookup_unsafe(struct efa_av *av, uint16_t ahn,
 				    uint16_t qpn, struct efa_rdm_pke *pkt_entry)
 	OFI_TSA_REQUIRES(efa_util_av_lock_sym);
 
-fi_addr_t efa_rdm_av_reverse_lookup_implicit(struct efa_av *av, uint16_t ahn,
-					     uint16_t qpn,
-					     struct efa_rdm_pke *pkt_entry);
-
 fi_addr_t efa_rdm_av_reverse_lookup_implicit_unsafe(struct efa_av *av,
 						    uint16_t ahn, uint16_t qpn,
 						    struct efa_rdm_pke *pkt_entry)
