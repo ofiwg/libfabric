@@ -1983,6 +1983,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		if (ret) {
 			CXIP_WARN("cxip_gen_auth_key failed: %d:%s", ret,
 				  fi_strerror(-ret));
+			ofi_domain_close(&cxi_domain->util_domain);
 			return ret;
 		}
 
