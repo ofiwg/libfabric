@@ -13,7 +13,11 @@
 #include "rdm/efa_rdm_pke_rtm.h"
 #include "rdm/efa_rdm_pkt_type.h"
 #include "rdm/efa_rdm_proto.h"
+#include "rdm/protocols/efa_rdm_proto_eager.h"
+#include "rdm/protocols/efa_rdm_proto_longcts.h"
+#include "rdm/protocols/efa_rdm_proto_longread.h"
 #include "rdm/protocols/efa_rdm_proto_medium.h"
+#include "rdm/protocols/efa_rdm_proto_runtread.h"
 #include "rdm/efa_rdm_protocol.h"
 #include <rdma/fi_errno.h>
 #include <stdlib.h>
@@ -27,6 +31,32 @@ struct efa_test_proto_ctx {
 	size_t len;
 	struct fid_mr *mr;
 };
+
+static ssize_t efa_test_proto_after_robuf(struct efa_rdm_pke *pke)
+{
+	(void) pke;
+	return -FI_EAGAIN;
+}
+
+static ssize_t efa_test_proto_unexpected_match(struct efa_rdm_pke *pke)
+{
+	(void) pke;
+	return 0;
+}
+
+void efa_test_proto_callbacks_preserve_return_values(
+	struct efa_test_proto_rx_callback_result *out)
+{
+	struct efa_rdm_proto proto = {
+		.handle_unexp_pke_match = efa_test_proto_unexpected_match,
+	};
+	struct efa_rdm_pke pke = {0};
+
+	pke.handle_pke = efa_test_proto_after_robuf;
+	out->after_robuf_ret = pke.handle_pke(&pke);
+	pke.handle_pke = proto.handle_unexp_pke_match;
+	out->unexpected_match_ret = pke.handle_pke(&pke);
+}
 
 static struct efa_rdm_ep *efa_test_proto_ep(struct fid_ep *ep)
 {

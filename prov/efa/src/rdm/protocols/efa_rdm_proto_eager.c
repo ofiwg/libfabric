@@ -4,6 +4,7 @@
 #include "efa_rdm_proto_eager.h"
 #include "efa.h"
 #include "efa_rdm_pke_req.h"
+#include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pkt_type.h"
 
@@ -24,6 +25,24 @@
  * Description of the protocol
  * https://github.com/ofiwg/libfabric/blob/main/prov/efa/docs/efa_rdm_protocol_v4.md#eager-message-featuresubprotocol
  */
+
+static ssize_t
+efa_rdm_proto_eager_handle_matched_rtm(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_ope *rxe = pkt_entry->ope;
+
+	efa_rdm_pke_prepare_matched_rtm(pkt_entry);
+	if (rxe->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
+		rxe->tx_id =
+			efa_rdm_pke_get_dc_eager_rtm_base_hdr(pkt_entry)->send_id;
+
+	return efa_rdm_pke_proc_matched_eager_rtm(pkt_entry);
+}
+
+ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
+{
+	return efa_rdm_pke_copy_payload_to_ope(pkt_entry, pkt_entry->ope);
+}
 
 /**
  * @brief Check if the eager protocol can handle this send operation.
@@ -49,8 +68,7 @@ static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_ope *txe,
 	return txe->total_len <= max_rtm_data_capacity;
 }
 
-struct efa_rdm_proto efa_rdm_proto_eager = {
-	.name = "eager",
+EFA_RDM_PROTO_DEF(eager,
 	.wants_mr = false,
 	.can_use_protocol = &efa_rdm_proto_eager_can_use_for_send,
 	.construct_tx_pkes = &efa_rdm_proto_eager_construct_tx_pkes,
@@ -59,7 +77,8 @@ struct efa_rdm_proto efa_rdm_proto_eager = {
 	.req_pkt_type_tagged = EFA_RDM_EAGER_TAGRTM_PKT,
 	.req_pkt_type_tagged_dc = EFA_RDM_DC_EAGER_TAGRTM_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,
-};
+	.handle_unexp_pke_match = &efa_rdm_proto_eager_handle_matched_rtm,
+);
 
 /* TX path callbacks - one callback for each packet type that this protocol uses
  */
@@ -71,9 +90,9 @@ struct efa_rdm_proto efa_rdm_proto_eager = {
  * reports the completion and releases the TXE here. A delivery complete send
  * must also wait for the peer's RECEIPT, so it only releases the TXE here if
  * that RECEIPT already arrived; otherwise
- * efa_rdm_pke_handle_receipt_recv() reports the completion and releases it.
+ * efa_rdm_proto_handle_receipt_recv() reports the completion and releases it.
  */
-void efa_rdm_proto_eager_handle_rtm_send_completion(
+ssize_t efa_rdm_proto_eager_handle_rtm_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *txe;
@@ -90,6 +109,7 @@ void efa_rdm_proto_eager_handle_rtm_send_completion(
 	}
 
 	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 /**

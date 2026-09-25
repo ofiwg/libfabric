@@ -9,13 +9,18 @@
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_rtw.h"
 #include "efa_rdm_proto.h"
+#include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_medium.h"
+#include "protocols/efa_rdm_proto_runtread.h"
 #include "efa_rdm_pke_rtr.h"
 #include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_tracepoint.h"
+#include "protocols/efa_rdm_proto_longcts.h"
+#include "protocols/efa_rdm_proto_longread.h"
 
 /* Handshake wait timeout in microseconds */
 #define EFA_RDM_HANDSHAKE_WAIT_TIMEOUT 1000000
@@ -650,7 +655,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
 		/* For long read, the txe is released either here or in
-		 * efa_rdm_pke_handle_eor_recv(), whichever happens last.
+		 * efa_rdm_proto_handle_eor_recv(), whichever happens
+		 * last.
 		 * Release here if EOR already arrived.
 		 */
 		assert(pkt_entry->ope);
@@ -679,7 +685,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case EFA_RDM_LONGREAD_RTW_PKT:
 		/* For long read write, the txe is released either here or in
-		 * efa_rdm_pke_handle_eor_recv(), whichever happens last.
+		 * efa_rdm_proto_handle_eor_recv(), whichever happens
+		 * last.
 		 * Release here if EOR already arrived.
 		 */
 		assert(pkt_entry->ope);
@@ -840,9 +847,7 @@ void efa_rdm_pke_proc_received_no_hdr(struct efa_rdm_pke *pkt_entry, bool has_im
 /**
  * @brief process a received packet
  *
- * @param[in]	ep		endpoint
  * @param[in]	pkt_entry	received packet entry
- * @param[in]	peer		peer struct of the sender
  */
 void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 {
@@ -875,16 +880,16 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	case EFA_RDM_EOR_PKT:
-		efa_rdm_pke_handle_eor_recv(pkt_entry);
+		efa_rdm_proto_handle_eor_recv(pkt_entry);
 		return;
 	case EFA_RDM_HANDSHAKE_PKT:
 		efa_rdm_pke_handle_handshake_recv(pkt_entry);
 		return;
 	case EFA_RDM_CTS_PKT:
-		efa_rdm_pke_handle_cts_recv(pkt_entry);
+		efa_rdm_proto_longcts_handle_cts_recv(pkt_entry);
 		return;
 	case EFA_RDM_CTSDATA_PKT:
-		efa_rdm_pke_handle_ctsdata_recv(pkt_entry);
+		efa_rdm_proto_longcts_handle_ctsdata_recv(pkt_entry);
 		return;
 	case EFA_RDM_READRSP_PKT:
 		efa_rdm_pke_handle_readrsp_recv(pkt_entry);
@@ -893,29 +898,43 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_handle_atomrsp_recv(pkt_entry);
 		return;
 	case EFA_RDM_RECEIPT_PKT:
-		efa_rdm_pke_handle_receipt_recv(pkt_entry);
+		efa_rdm_proto_handle_receipt_recv(pkt_entry);
 		return;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
+		efa_rdm_pke_handle_rtm_recv(pkt_entry, &efa_rdm_proto_eager);
+		return;
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
+		efa_rdm_pke_handle_mulreq_rtm_recv(pkt_entry,
+						  &efa_rdm_proto_medium);
+		return;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
+		efa_rdm_pke_handle_rtm_recv(pkt_entry,
+					    &efa_rdm_proto_longcts);
+		return;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_LONGREAD_TAGRTM_PKT:
+		efa_rdm_pke_handle_rtm_recv(pkt_entry,
+					    &efa_rdm_proto_longread);
+		return;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
+		efa_rdm_pke_handle_mulreq_rtm_recv(pkt_entry,
+						  &efa_rdm_proto_runtread);
+		return;
 	case EFA_RDM_WRITE_RTA_PKT:
 	case EFA_RDM_DC_WRITE_RTA_PKT:
 	case EFA_RDM_FETCH_RTA_PKT:
 	case EFA_RDM_COMPARE_RTA_PKT:
-		efa_rdm_pke_handle_rtm_rta_recv(pkt_entry);
+		efa_rdm_pke_handle_rta_recv(pkt_entry);
 		return;
 	case EFA_RDM_EAGER_RTW_PKT:
 		efa_rdm_proto_eager_write_handle_rtw_recv(pkt_entry);

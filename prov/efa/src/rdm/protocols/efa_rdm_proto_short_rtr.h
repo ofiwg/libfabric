@@ -17,7 +17,7 @@ int efa_rdm_proto_short_rtr_construct_tx_pkes(struct efa_rdm_ep *ep,
 					      struct efa_rdm_ope *txe,
 					      uint64_t *pke_send_flags);
 
-void efa_rdm_proto_short_rtr_handle_send_completion(
+ssize_t efa_rdm_proto_short_rtr_handle_send_completion(
 	struct efa_rdm_pke *pkt_entry);
 
 #endif /* _EFA_RDM_PROTO_SHORT_RTR_H */

@@ -34,6 +34,11 @@ enum efa_rdm_pke_alloc_type {
 	EFA_RDM_PKE_FROM_READ_COPY_POOL,  /**< packet is allocated from `ep->rx_readcopy_pkt_pool` */
 };
 
+struct efa_rdm_pke;
+struct efa_rdm_proto;
+
+typedef ssize_t (*efa_rdm_pke_callback)(struct efa_rdm_pke *pkt_entry);
+
 /**
  * @brief Packet entry
  *
@@ -250,7 +255,10 @@ struct efa_rdm_pke {
 	uint8_t gen;
 
 	/**@brief Callback function called in TX and RX paths */
-	void (*handle_pke)(struct efa_rdm_pke *pkt_entry);
+	efa_rdm_pke_callback handle_pke;
+
+	/** @brief Protocol selected for a received RTM packet */
+	struct efa_rdm_proto *proto;
 
 #if ENABLE_DEBUG
 	struct efa_rdm_pke_debug_info_buffer *debug_info; /**< Pointer to debug info buffer */

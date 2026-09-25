@@ -102,12 +102,21 @@ struct efa_rdm_proto {
 	void (*handle_tx_pkes_posted)(struct efa_rdm_ep *ep,
 				      struct efa_rdm_ope *txe);
 
+	/* RX path handler */
+	efa_rdm_pke_callback handle_unexp_pke_match;
+
 	/* TX utitlities */
 	int req_pkt_type;
 	int req_pkt_type_tagged;
 	int req_pkt_type_dc;
 	int req_pkt_type_tagged_dc;
 };
+
+#define EFA_RDM_PROTO_DEF(_name, ...) \
+	struct efa_rdm_proto efa_rdm_proto_##_name = { \
+		.name = #_name, \
+		__VA_ARGS__ \
+	}
 
 /**
  * @brief Select the appropriate send protocol for a TX operation.
@@ -171,6 +180,10 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 						 struct efa_rdm_peer *peer,
 						 struct efa_rdm_ope *txe,
 						 struct efa_rdm_proto **proto);
+
+void efa_rdm_proto_handle_receipt_recv(struct efa_rdm_pke *pkt_entry);
+
+void efa_rdm_proto_handle_eor_recv(struct efa_rdm_pke *pkt_entry);
 
 /* Utility funcions */
 

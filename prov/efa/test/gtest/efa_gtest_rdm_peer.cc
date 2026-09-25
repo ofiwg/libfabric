@@ -40,6 +40,39 @@ class EfaRdmPeerTest : public testing::Test
 	}
 };
 
+TEST_F(EfaRdmPeerTest, reordered_packet_retains_callback)
+{
+	struct efa_test_reorder_callback_result res = {};
+
+	ASSERT_EQ(efa_test_reordered_packet_retains_callback(
+			  resource.ep, peer_addr, &res),
+		  0);
+	EXPECT_TRUE(res.callback_set);
+	EXPECT_TRUE(res.protocol_correct);
+}
+
+TEST_F(EfaRdmPeerTest, reordered_rta_retains_callback)
+{
+	struct efa_test_reorder_callback_result res = {};
+
+	ASSERT_EQ(efa_test_reordered_rta_retains_callback(
+			  resource.ep, peer_addr, &res),
+		  0);
+	EXPECT_TRUE(res.callback_set);
+	EXPECT_TRUE(res.protocol_correct);
+}
+
+TEST_F(EfaRdmPeerTest, reorder_drain_invokes_callback)
+{
+	struct efa_test_reorder_callback_result res = {};
+
+	ASSERT_EQ(efa_test_reorder_drain_invokes_callback(
+			  resource.ep, peer_addr, &res),
+		  0);
+	EXPECT_EQ(res.callback_invocations, 1);
+	EXPECT_EQ(res.exp_msg_id, 2u);
+}
+
 /**
  * @brief Asserts that a efa_rdm_peer_reorder_msg failure on the ooo_clone path releases the rx_pkt
  */

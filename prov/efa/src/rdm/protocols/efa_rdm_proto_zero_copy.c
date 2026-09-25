@@ -15,12 +15,11 @@
  * it is not checked for all other message operations.
  */
 
-struct efa_rdm_proto efa_rdm_proto_zero_copy = {
-	.name = "zero_copy",
+EFA_RDM_PROTO_DEF(zero_copy,
 	.wants_mr = false,
 	.construct_tx_pkes = &efa_rdm_proto_zero_copy_construct_tx_pkes,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,
-};
+);
 
 void efa_rdm_proto_zero_copy_reselect_queued_before_handshake(
 	struct efa_rdm_ope *txe)
@@ -36,7 +35,7 @@ void efa_rdm_proto_zero_copy_reselect_queued_before_handshake(
 /**
  * @brief Handle the send completion of a zero-copy packet.
  */
-void efa_rdm_proto_zero_copy_handle_send_completion(
+ssize_t efa_rdm_proto_zero_copy_handle_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *txe;
@@ -50,6 +49,7 @@ void efa_rdm_proto_zero_copy_handle_send_completion(
 	efa_rdm_ope_handle_send_completed(txe);
 
 	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 /**

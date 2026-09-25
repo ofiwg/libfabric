@@ -242,15 +242,14 @@ static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_ope *txe,
 	return txe->total_len <= max_rtw_data_capacity;
 }
 
-struct efa_rdm_proto efa_rdm_proto_eager_write = {
-	.name = "eager_write",
+EFA_RDM_PROTO_DEF(eager_write,
 	.wants_mr = false,
 	.can_use_protocol = &efa_rdm_proto_eager_write_can_use,
 	.construct_tx_pkes = &efa_rdm_proto_eager_write_construct_tx_pkes,
 	.req_pkt_type = EFA_RDM_EAGER_RTW_PKT,
 	.req_pkt_type_dc = EFA_RDM_DC_EAGER_RTW_PKT,
 	.handle_tx_pkes_posted = &efa_rdm_proto_handle_tx_pkes_posted_no_op,
-};
+);
 
 /**
  * @brief Handle the send completion of an eager RTW packet.
@@ -261,7 +260,7 @@ struct efa_rdm_proto efa_rdm_proto_eager_write = {
  * that RECEIPT already arrived; otherwise efa_rdm_pke_handle_receipt_recv()
  * reports the completion and releases it.
  */
-void efa_rdm_proto_eager_write_handle_rtw_send_completion(
+ssize_t efa_rdm_proto_eager_write_handle_rtw_send_completion(
 	struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *txe;
@@ -278,6 +277,7 @@ void efa_rdm_proto_eager_write_handle_rtw_send_completion(
 	}
 
 	efa_rdm_pke_release_tx(pkt_entry);
+	return 0;
 }
 
 /**

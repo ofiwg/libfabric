@@ -98,7 +98,6 @@ static int efa_unit_test_mocks_teardown(void **state)
 		.ofi_copy_to_hmem_iov = __real_ofi_copy_to_hmem_iov,
 		.efa_rdm_pke_copy_payload_to_ope = __real_efa_rdm_pke_copy_payload_to_ope,
 		.efa_rdm_pke_read = __real_efa_rdm_pke_read,
-		.efa_rdm_pke_proc_matched_rtm = __real_efa_rdm_pke_proc_matched_rtm,
 		.efa_rdm_ope_post_send = __real_efa_rdm_ope_post_send,
 		.efa_device_support_unsolicited_write_recv = __real_efa_device_support_unsolicited_write_recv,
 		.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,

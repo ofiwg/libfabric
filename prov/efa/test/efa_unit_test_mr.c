@@ -3,6 +3,7 @@
 
 #include "efa_unit_tests.h"
 #include "rdm/efa_rdm_pke_nonreq.h"
+#include "rdm/protocols/efa_rdm_proto_longcts.h"
 #include "rdm/efa_rdm_cq.h"
 
 static void test_efa_mr_impl(struct efa_domain *efa_domain, struct fid_mr *mr,
@@ -2206,7 +2207,7 @@ void test_efa_rdm_mr_gen_check_cancels_longcts_ope(void **state)
 	cts_hdr->recv_id = 0;
 	cts_hdr->recv_length = 4096;
 
-	efa_rdm_pke_handle_cts_recv(cts_pke);
+	efa_rdm_proto_longcts_handle_cts_recv(cts_pke);
 
 	/* Force RX counters to satisfy invariant after CTS handler released the pke */
 	efa_rdm_ep->efa_rx_pkts_to_post = 0;

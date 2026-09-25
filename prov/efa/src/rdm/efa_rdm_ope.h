@@ -450,7 +450,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  * @brief Flag to indicate that a txe has received a remote
  * acknowledgment (RECEIPT or ATOMRSP).
  *
- * For DC protocols: set in efa_rdm_pke_handle_receipt_recv when
+ * For DC protocols: set in efa_rdm_proto_handle_receipt_recv when
  *                   the RECEIPT packet arrives from the remote.
  * For fetch/compare atomics: set in efa_rdm_pke_handle_atomrsp_recv
  *                            when the ATOMRSP packet arrives.
