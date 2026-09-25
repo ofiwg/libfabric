@@ -8,6 +8,7 @@
 #include "efa.h"
 #include "efa_tp.h"
 #include "efa_rdm_peer.h"
+#include "efa_rdm_av.h"
 #include "efa_base_ep.h"
 #include "efa_rdm_rxe_map.h"
 #include "efa_rdm_mr.h"
@@ -251,7 +252,10 @@ struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep);
 struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr_t addr);
 
 int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr);
-struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit(struct efa_rdm_ep *ep, fi_addr_t addr);
+
+struct efa_rdm_peer *efa_rdm_ep_get_peer_implicit_unsafe(struct efa_rdm_ep *ep,
+							 fi_addr_t addr)
+	OFI_TSA_REQUIRES(efa_util_domain_lock_sym, efa_implicit_av_lock_sym);
 
 int efa_rdm_ep_peer_map_init(struct efa_av_array **arr);
 
@@ -763,10 +767,10 @@ void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep);
 static inline
 fi_addr_t efa_rdm_ep_get_explicit_shm_fi_addr(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
-	struct efa_conn *conn;
+	struct efa_av_entry *entry;
 
-	conn = efa_av_addr_to_conn(ep->base_ep.av, addr);
-	return conn ? conn->shm_fi_addr : FI_ADDR_NOTAVAIL;
+	entry = efa_av_addr_to_entry(ep->base_ep.av, addr);
+	return entry ? container_of(entry, struct efa_rdm_av_entry, efa_av_entry)->shm_fi_addr : FI_ADDR_NOTAVAIL;
 }
 
 static inline size_t efa_rdm_ep_get_available_tx_pkts(struct efa_rdm_ep *ep)

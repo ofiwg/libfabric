@@ -38,7 +38,7 @@ _efa_files = \
 	prov/efa/src/efa_av.c \
 	prov/efa/src/efa_av_array.c \
 	prov/efa/src/efa_ah.c \
-	prov/efa/src/efa_conn.c \
+	prov/efa/src/rdm/efa_rdm_av.c \
 	prov/efa/src/rdm/efa_rdm_domain.c \
 	prov/efa/src/efa_domain.c \
 	prov/efa/src/efa_domain_util.c \
@@ -97,7 +97,7 @@ _efa_headers = \
 	prov/efa/src/efa_av.h \
 	prov/efa/src/efa_av_array.h \
 	prov/efa/src/efa_ah.h \
-	prov/efa/src/efa_conn.h \
+	prov/efa/src/rdm/efa_rdm_av.h \
 	prov/efa/src/efa_mr.h \
 	prov/efa/src/efa_shm.h \
 	prov/efa/src/efa_hmem.h \
@@ -175,6 +175,7 @@ nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_test_fabric.c \
 	prov/efa/test/efa_unit_test_ep.c \
 	prov/efa/test/efa_unit_test_av.c \
+	prov/efa/test/efa_unit_test_rdm_av.c \
 	prov/efa/test/efa_unit_test_cq.c \
 	prov/efa/test/efa_unit_test_cntr.c \
 	prov/efa/test/efa_unit_test_device.c \
@@ -204,8 +205,8 @@ prov_efa_test_efa_unit_test_LDFLAGS = -static $(cmocka_rpath) $(efa_LDFLAGS) $(c
 					-Wl,--wrap=ibv_destroy_ah \
 					-Wl,--wrap=ibv_is_fork_initialized \
 					-Wl,--wrap=efadv_query_device \
-					-Wl,--wrap=efa_ah_alloc \
-					-Wl,--wrap=efa_ah_release \
+					-Wl,--wrap=efa_rdm_ah_alloc \
+					-Wl,--wrap=efa_rdm_ah_release \
 					-Wl,--wrap=ofi_cudaMalloc \
 					-Wl,--wrap=ofi_cuDeviceGet \
 					-Wl,--wrap=ofi_cuCtxCreate_v2 \
@@ -290,17 +291,21 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_common_resource.cc \
 	prov/efa/test/gtest/efa_gtest_common_helpers.c \
 	prov/efa/test/gtest/efa_gtest_rdm_pke_utils.c \
-	prov/efa/test/gtest/efa_gtest_conn.cc \
+	prov/efa/test/gtest/efa_gtest_rdm_av.cc \
 	prov/efa/test/gtest/efa_gtest_ah_utils.c \
 	prov/efa/test/gtest/efa_gtest_ah.cc \
 	prov/efa/test/gtest/efa_gtest_av_array.cc \
 	prov/efa/test/gtest/efa_gtest_av_array_utils.c \
+	prov/efa/test/gtest/efa_gtest_reverse_av.cc \
+	prov/efa/test/gtest/efa_gtest_reverse_av_utils.c \
 	prov/efa/test/gtest/efa_gtest_rdm_pke_rtm.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_mr.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_pke.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_ope_helpers.c \
 	prov/efa/test/gtest/efa_gtest_rdm_ope.cc \
 	prov/efa/test/gtest/efa_gtest_cq.cc \
+	prov/efa/test/gtest/efa_gtest_rdm_cq_utils.c \
+	prov/efa/test/gtest/efa_gtest_rdm_cq.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_cntr.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_peer.cc \
 	prov/efa/test/gtest/efa_gtest_msg.cc \
@@ -345,6 +350,10 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=efa_ibv_cq_wc_read_byte_len \
 	-Wl,--wrap=efa_ibv_cq_wc_read_src_qp \
 	-Wl,--wrap=efa_ibv_cq_wc_read_slid \
+	-Wl,--wrap=efa_ibv_cq_wc_read_sgid \
+	-Wl,--wrap=efa_rdm_av_reverse_lookup \
+	-Wl,--wrap=efa_rdm_av_reverse_lookup_unsafe \
+	-Wl,--wrap=ofi_av_lookup_fi_addr \
 	-Wl,--wrap=efa_rdm_pke_clone \
 	-Wl,--wrap=efa_qp_post_recv \
 	-Wl,--wrap=efa_qp_post_send \

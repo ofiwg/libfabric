@@ -875,7 +875,6 @@
     <ClCompile Include="prov\efa\src\efa_av.c" />
     <ClCompile Include="prov\efa\src\efa_av_array.c" />
     <ClCompile Include="prov\efa\src\efa_ah.c" />
-    <ClCompile Include="prov\efa\src\efa_conn.c" />
     <ClCompile Include="prov\efa\src\efa_hmem.c" />
     <ClCompile Include="prov\efa\src\efa_device.c" />
     <ClCompile Include="prov\efa\src\efa_domain.c" />
@@ -899,6 +898,7 @@
     <ClCompile Include="prov\efa\src\efa_ep.c" />
     <ClCompile Include="prov\efa\src\efa_direct_ope.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_domain.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_av.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_fabric.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_ope.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_rxe_map.c" />
@@ -1030,10 +1030,10 @@
     <ClInclude Include="prov\efa\src\efa_av.h" />
     <ClInclude Include="prov\efa\src\efa_av_array.h" />
     <ClInclude Include="prov\efa\src\efa_ah.h" />
-    <ClInclude Include="prov\efa\src\efa_conn.h" />
     <ClInclude Include="prov\efa\src\efa_base_ep.h" />
     <ClInclude Include="prov\efa\src\efa_cntr.h" />
     <ClInclude Include="prov\efa\src\efa_hw_cntr.h" />
+    <ClInclude Include="prov\efa\src\rdm\efa_rdm_av.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_ep.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_fabric.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_cntr.h" />

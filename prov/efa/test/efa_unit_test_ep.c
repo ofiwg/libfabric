@@ -481,7 +481,7 @@ void test_efa_rdm_ep_rma_queue_before_handshake(void **state, int op)
 	peer = efa_rdm_ep_get_peer_explicit(efa_rdm_ep, peer_addr);
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	/* Do not use shm in this unit test because we are testing efa rma path */
-	peer->conn->shm_fi_addr = FI_ADDR_NOTAVAIL;
+	peer->av_entry->shm_fi_addr = FI_ADDR_NOTAVAIL;
 	assert_false(efa_rdm_ep->homogeneous_peers);
 	assert_int_equal(efa_unit_test_get_ope_list_length(efa_rdm_ep, EFA_RDM_TXE), 0);
 
@@ -2087,7 +2087,7 @@ void test_efa_direct_ep_setopt_cq_flow_control_with_rx_cq_data(void **state)
 }
 
 /**
- * @brief Test fi_enable failure when efa_ah_alloc returns NULL for RDM fabric
+ * @brief Test fi_enable failure when efa_rdm_ah_alloc returns NULL for RDM fabric
  *
  * @param[in] state cmocka state variable
  */
@@ -2099,8 +2099,8 @@ void test_efa_rdm_ep_enable_ah_alloc_failure(void **state)
 	/* Construct endpoint but don't enable it yet */
 	efa_unit_test_resource_construct_ep_not_enabled(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 
-	/* Mock efa_ah_alloc to return NULL to simulate failure */
-	g_efa_unit_test_mocks.efa_ah_alloc = &efa_mock_efa_ah_alloc_return_null;
+	/* Mock efa_rdm_ah_alloc to return NULL to simulate failure */
+	g_efa_unit_test_mocks.efa_rdm_ah_alloc = &efa_mock_efa_rdm_ah_alloc_return_null;
 
 	/* Attempt to enable the endpoint - should fail with -FI_EINVAL */
 	ret = fi_enable(resource->ep);
