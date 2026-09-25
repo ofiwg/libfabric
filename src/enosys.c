@@ -305,6 +305,12 @@ int fi_no_query_collective(struct fid_domain *domain, enum fi_collective_op coll
 	return -FI_ENOSYS;
 }
 
+int fi_no_xpu_ctx(struct fid_domain *domain, struct fi_xpu_attr *attr,
+		  struct fid_xpu_ctx **ctx, void *context)
+{
+	return -FI_ENOSYS;
+}
+
 /*
  * struct fi_ops_mr
  */
