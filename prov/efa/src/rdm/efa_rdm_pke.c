@@ -36,16 +36,61 @@
  *         on failure return NULL
  * @related efa_rdm_pke
  */
+/**
+ * @brief return the wiredata bounce pool paired with a given metadata pool
+ *
+ * The alloc_type 1:1 identifies which metadata pool the pke came from, and
+ * each metadata pool has a paired bounce pool on the endpoint.
+ *
+ * @param[in] ep         endpoint
+ * @param[in] alloc_type allocation type see `enum efa_rdm_pke_alloc_type`
+ * @return the paired bounce pool, or NULL for an unknown alloc_type
+ */
+static inline
+struct ofi_bufpool *efa_rdm_pke_get_bounce_pool(struct efa_rdm_ep *ep,
+						enum efa_rdm_pke_alloc_type alloc_type)
+{
+	switch (alloc_type) {
+	case EFA_RDM_PKE_FROM_EFA_TX_POOL:
+		return ep->efa_tx_bounce_pool;
+	case EFA_RDM_PKE_FROM_EFA_RX_POOL:
+		return ep->efa_rx_bounce_pool;
+	case EFA_RDM_PKE_FROM_UNEXP_POOL:
+		return ep->rx_unexp_bounce_pool;
+	case EFA_RDM_PKE_FROM_OOO_POOL:
+		return ep->rx_ooo_bounce_pool;
+	case EFA_RDM_PKE_FROM_READ_COPY_POOL:
+		return ep->rx_readcopy_bounce_pool;
+	default:
+		return NULL;
+	}
+}
+
 struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 				      struct ofi_bufpool *pkt_pool,
 				      enum efa_rdm_pke_alloc_type alloc_type)
 {
 	struct efa_rdm_pke *pkt_entry;
+	struct ofi_bufpool *bounce_pool;
+	char *wiredata;
 	void *mr = NULL;
 
-	pkt_entry = ofi_buf_alloc_ex(pkt_pool, &mr);
+	/* Allocate the dense pke metadata from its pool. */
+	pkt_entry = ofi_buf_alloc(pkt_pool);
 	if (!pkt_entry)
 		return NULL;
+
+	/* Allocate the paired mtu-sized wiredata bounce buffer. For
+	 * device-visible pools this returns the buffer's region MR in `mr`;
+	 * for the unregistered unexp/ooo pools `mr` stays NULL.
+	 */
+	bounce_pool = efa_rdm_pke_get_bounce_pool(ep, alloc_type);
+	assert(bounce_pool);
+	wiredata = ofi_buf_alloc_ex(bounce_pool, &mr);
+	if (!wiredata) {
+		ofi_buf_free(pkt_entry);
+		return NULL;
+	}
 
 #ifdef ENABLE_EFA_POISONING
 	/* Preserve gen across poisoning */
@@ -61,7 +106,11 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 		debug_info = NULL;
 	}
 #endif
+	/* Poison the metadata and the bounce buffer separately now that they
+	 * live in different pools. This clobbers the wiredata pointer field,
+	 * which is (re)assigned below after poisoning. */
 	efa_rdm_poison_mem_region(pkt_entry, pkt_pool->attr.size);
+	efa_rdm_poison_mem_region(wiredata, bounce_pool->attr.size);
 	pkt_entry->gen = gen;
 #if ENABLE_DEBUG
 	pkt_entry->debug_info = debug_info;
@@ -70,6 +119,11 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	/* Without poisoning, debug_info pointer is naturally preserved in memory. */
 
 	pkt_entry->gen &= EFA_RDM_GEN_MASK;
+	/* Bind the bounce buffer and its registration. Set after poisoning so
+	 * the pointer is not clobbered, and before any path that can call
+	 * efa_rdm_pke_release() so release can free the bounce buffer. */
+	pkt_entry->wiredata = wiredata;
+	pkt_entry->mr = mr;
 	dlist_init(&pkt_entry->entry);
 
 #if ENABLE_DEBUG
@@ -92,17 +146,16 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	}
 #endif
 	/* Initialize necessary fields in pkt_entry.
-	 * The memory region allocated by ofi_buf_alloc_ex is not initialized.
+	 * The memory allocated by ofi_buf_alloc is not initialized.
 	 */
 	pkt_entry->ep = ep;
-	pkt_entry->mr = mr;
 	/**
-	 * Initialize pkt_entry->pkt_size to the allocated buf size of the
-	 * bufpool. This is the data size posted to rdma-core, and MUST NOT
-	 * exceed the memory registration size. Therefore pkt_entry->pkt_size
+	 * Initialize pkt_entry->pkt_size to the allocated size of the wiredata
+	 * bounce buffer. This is the data size posted to rdma-core, and MUST
+	 * NOT exceed the memory registration size. Therefore pkt_entry->pkt_size
 	 * should be adjusted according to the actual data size.
 	 */
-	pkt_entry->pkt_size = pkt_pool->attr.size - sizeof(struct efa_rdm_pke);
+	pkt_entry->pkt_size = bounce_pool->attr.size;
 	pkt_entry->alloc_type = alloc_type;
 	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
 	pkt_entry->next = NULL;
@@ -132,12 +185,17 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
  */
 void efa_rdm_pke_release(struct efa_rdm_pke *pkt_entry)
 {
+	/* Capture the bounce buffer before poisoning clobbers the pointer. */
+	char *wiredata = pkt_entry->wiredata;
+
 #ifdef ENABLE_EFA_POISONING
 	/* Preserve gen and debug_info pointer across poisoning to maintain packet history */
 	uint8_t gen = pkt_entry->gen;
 #if ENABLE_DEBUG
 	struct efa_rdm_pke_debug_info_buffer *debug_info = pkt_entry->debug_info;
 #endif
+	if (wiredata)
+		efa_rdm_poison_mem_region(wiredata, ofi_buf_pool(wiredata)->attr.size);
 	efa_rdm_poison_mem_region(pkt_entry, ofi_buf_pool(pkt_entry)->attr.size);
 	pkt_entry->gen = gen;
 #if ENABLE_DEBUG
@@ -146,6 +204,9 @@ void efa_rdm_pke_release(struct efa_rdm_pke *pkt_entry)
 #endif
 	/* Without poisoning, debug_info pointer is naturally preserved in memory. */
 	pkt_entry->flags = 0;
+	/* Return the bounce buffer to its pool, then the metadata. */
+	if (wiredata)
+		ofi_buf_free(wiredata);
 	ofi_buf_free(pkt_entry);
 }
 

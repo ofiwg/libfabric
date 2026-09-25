@@ -118,7 +118,7 @@ struct efa_rdm_ep {
 	/* threshold to release multi_recv buffer */
 	size_t min_multi_recv_size;
 
-	/* buffer pool for send & recv */
+	/* dense pke-metadata pools for send & recv */
 	struct ofi_bufpool *efa_tx_pkt_pool;
 	struct ofi_bufpool *efa_rx_pkt_pool;
 
@@ -130,6 +130,16 @@ struct efa_rdm_ep {
 	struct ofi_bufpool *rx_readcopy_pkt_pool;
 	int rx_readcopy_pkt_pool_used;
 	int rx_readcopy_pkt_pool_max_used;
+
+	/* wiredata bounce-buffer pools, paired 1:1 with the pke-metadata pools
+	 * above. Each holds mtu-sized buffers; the tx/rx/readcopy pools are
+	 * page-owned and registered with the device, the unexp/ooo pools are
+	 * not registered (they only stage copied packets). */
+	struct ofi_bufpool *efa_tx_bounce_pool;
+	struct ofi_bufpool *efa_rx_bounce_pool;
+	struct ofi_bufpool *rx_unexp_bounce_pool;
+	struct ofi_bufpool *rx_ooo_bounce_pool;
+	struct ofi_bufpool *rx_readcopy_bounce_pool;
 
 	/* data structure to maintain overflow pke linked list entry */
 	struct ofi_bufpool *overflow_pke_pool;

@@ -271,7 +271,7 @@ void test_efa_rdm_ep_tx_pkt_pool_flags(void **state) {
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, flags);
+	assert_int_equal(efa_rdm_ep->efa_tx_bounce_pool->attr.flags, flags);
 }
 
 /**
@@ -292,7 +292,7 @@ void test_efa_rdm_ep_rx_pkt_pool_flags(void **state) {
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, flags);
+	assert_int_equal(efa_rdm_ep->efa_rx_bounce_pool->attr.flags, flags);
 }
 
 /**
@@ -320,11 +320,14 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(void **state)
 	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
 	assert_int_equal(ret, 0);
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, flags);
+	assert_int_equal(efa_rdm_ep->efa_rx_bounce_pool->attr.flags, flags);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
-	assert_true(((uintptr_t)ofi_buf_region(pkt_entry)->alloc_region % ofi_get_page_size()) == 0);
+	/* The page-ownership (NONSHARED) property is on the wiredata bounce buffer,
+	 * which is what gets registered with the device; assert its region is page
+	 * aligned. */
+	assert_true(((uintptr_t)ofi_buf_region(pkt_entry->wiredata)->alloc_region % ofi_get_page_size()) == 0);
 	efa_rdm_pke_release_rx(pkt_entry);
 
 	fi_close(&ep->fid);
