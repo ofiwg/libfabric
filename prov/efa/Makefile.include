@@ -323,6 +323,8 @@ nodist_prov_efa_test_gtest_efa_gtest_SOURCES = \
 	prov/efa/test/gtest/efa_gtest_rdm_proto_utils.c \
 	prov/efa/test/gtest/efa_gtest_rdm_proto.cc \
 	prov/efa/test/gtest/efa_gtest_cq.cc \
+	prov/efa/test/gtest/efa_gtest_rdm_cq_utils.c \
+	prov/efa/test/gtest/efa_gtest_rdm_cq.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_cntr.cc \
 	prov/efa/test/gtest/efa_gtest_rdm_peer.cc \
 	prov/efa/test/gtest/efa_gtest_msg.cc \
@@ -372,6 +374,10 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=efa_ibv_cq_wc_read_byte_len \
 	-Wl,--wrap=efa_ibv_cq_wc_read_src_qp \
 	-Wl,--wrap=efa_ibv_cq_wc_read_slid \
+	-Wl,--wrap=efa_ibv_cq_wc_read_sgid \
+	-Wl,--wrap=efa_rdm_av_reverse_lookup \
+	-Wl,--wrap=efa_rdm_av_reverse_lookup_unsafe \
+	-Wl,--wrap=ofi_av_lookup_fi_addr \
 	-Wl,--wrap=efa_rdm_pke_clone \
 	-Wl,--wrap=efa_qp_post_recv \
 	-Wl,--wrap=efa_qp_post_send \
