@@ -10,6 +10,8 @@
 #include "efa_rdm_pke_rtw.h"
 #include "efa_rdm_proto.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longread_write.h"
+#include "protocols/efa_rdm_proto_longcts_write.h"
 #include "efa_rdm_pke_rtr.h"
 #include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
@@ -133,12 +135,10 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Eager write");
 		break;
 	case EFA_RDM_LONGCTS_RTW_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_longcts_rtw(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long CTS write");
 		break;
 	case EFA_RDM_LONGREAD_RTW_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_longread_rtw(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long read write");
 		break;
 	case EFA_RDM_SHORT_RTR_PKT:
 		EFA_RDM_PROTO_MOVED("Short read");
@@ -189,8 +189,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		EFA_RDM_PROTO_MOVED("Eager write");
 		break;
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_dc_longcts_rtw(pkt_entry, ope);
+		EFA_RDM_PROTO_MOVED("Long CTS write");
 		break;
 	case EFA_RDM_DC_WRITE_RTA_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -275,10 +274,10 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry, int pkt_type, struct
 		break;
 	case EFA_RDM_LONGCTS_RTW_PKT:
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
-		efa_rdm_pke_handle_longcts_rtw_sent(pkt_entry);
+		EFA_RDM_PROTO_MOVED("Long CTS write");
 		break;
 	case EFA_RDM_LONGREAD_RTW_PKT:
-		/* nothing to do when LONGREAD RTW is sent */
+		EFA_RDM_PROTO_MOVED("Long read write");
 		break;
 	case EFA_RDM_SHORT_RTR_PKT:
 		EFA_RDM_PROTO_MOVED("Short read");
@@ -675,20 +674,11 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
 		break;
 	case EFA_RDM_LONGCTS_RTW_PKT:
-		efa_rdm_pke_handle_longcts_rtw_send_completion(pkt_entry);
+	case EFA_RDM_DC_LONGCTS_RTW_PKT:
+		EFA_RDM_PROTO_MOVED("Long CTS write");
 		break;
 	case EFA_RDM_LONGREAD_RTW_PKT:
-		/* For long read write, the txe is released either here or in
-		 * efa_rdm_pke_handle_eor_recv(), whichever happens last.
-		 * Release here if EOR already arrived.
-		 */
-		assert(pkt_entry->ope);
-		if (efa_rdm_txe_with_remote_ack_ready_for_release(pkt_entry->ope))
-			efa_rdm_txe_release(pkt_entry->ope);
-		/* Peer-abort race: see EFA_RDM_LONGREAD_*RTM_PKT above. */
-		else if (pkt_entry->ope->internal_flags &
-			 EFA_RDM_OPE_PEER_ABORT_PENDING)
-			efa_rdm_txe_progress_peer_abort_if_drained(pkt_entry->ope);
+		EFA_RDM_PROTO_MOVED("Long read write");
 		break;
 	case EFA_RDM_LONGCTS_RTR_PKT:
 		/* For emulated read, the txe is released either here
@@ -711,7 +701,6 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_DC_WRITE_RTA_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-	case EFA_RDM_DC_LONGCTS_RTW_PKT:
 		/* For DC packets, use efa_outstanding_tx_ops to track TX completions
 		 * instead of bytes_acked to avoid issues with unset payload_size.
 		 * Note: efa_rdm_ep_record_tx_op_completed() above decrements efa_outstanding_tx_ops,
@@ -922,10 +911,10 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		return;
 	case EFA_RDM_LONGCTS_RTW_PKT:
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
-		efa_rdm_pke_handle_longcts_rtw_recv(pkt_entry);
+		efa_rdm_proto_longcts_write_handle_rtw_recv(pkt_entry);
 		return;
 	case EFA_RDM_LONGREAD_RTW_PKT:
-		efa_rdm_pke_handle_longread_rtw_recv(pkt_entry);
+		efa_rdm_proto_longread_write_handle_rtw_recv(pkt_entry);
 		return;
 	case EFA_RDM_SHORT_RTR_PKT:
 	case EFA_RDM_LONGCTS_RTR_PKT:

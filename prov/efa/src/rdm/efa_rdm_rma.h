@@ -87,4 +87,9 @@ bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_o
 	       efa_both_support_p2p(ep, peer, use_p2p);
 }
 
+bool efa_rdm_rma_should_write_using_longread(struct efa_rdm_ep *ep,
+					     struct efa_rdm_ope *txe,
+					     struct efa_rdm_peer *peer,
+					     bool use_p2p);
+
 #endif

@@ -21,6 +21,8 @@
 #include "efa_unit_test_mocks.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longread_write.h"
+#include "protocols/efa_rdm_proto_longcts_write.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
 
 /**

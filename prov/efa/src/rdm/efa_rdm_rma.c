@@ -413,6 +413,27 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 /**
+ * @brief Determine if an emulated write should use the read based protocol.
+ *
+ * The peer RDMA-reads the source buffer, so this requires local p2p, a read
+ * capable peer, a large enough transfer, and a registrable source buffer.
+ */
+bool efa_rdm_rma_should_write_using_longread(struct efa_rdm_ep *ep,
+					     struct efa_rdm_ope *txe,
+					     struct efa_rdm_peer *peer,
+					     bool use_p2p)
+{
+	int iface = txe->desc[0] ?
+			((struct efa_mr *) txe->desc[0])->iface :
+			FI_HMEM_SYSTEM;
+
+	return use_p2p &&
+	       txe->total_len >= g_efa_hmem_info[iface].min_read_write_size &&
+	       efa_rdm_interop_rdma_read(ep, peer) &&
+	       (txe->desc[0] || efa_is_cache_available(efa_rdm_ep_rdm_domain(ep)));
+}
+
+/**
  * @brief Post an emulated write using a selected write protocol.
  *
  * Builds the selected protocol's packets, sends them, and runs the protocol's
@@ -461,8 +482,7 @@ static ssize_t efa_rdm_rma_post_write_proto(struct efa_rdm_ep *ep,
 ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	ssize_t err;
-	bool delivery_complete_requested;
-	int ctrl_type, iface, use_p2p;
+	int use_p2p;
 	struct efa_rdm_proto *proto;
 
 	err = efa_rdm_ep_use_p2p_for_mr(ep, txe->desc[0]);
@@ -487,28 +507,8 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	/* Use a registered write protocol if one applies. */
 	efa_rdm_proto_select_emulated_write_protocol(ep, txe->peer, txe,
 						     use_p2p, &proto);
-	if (proto)
-		return efa_rdm_rma_post_write_proto(ep, txe, proto);
-
-	delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
-
-	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->iface : FI_HMEM_SYSTEM;
-
-	if (use_p2p &&
-	    txe->total_len >= g_efa_hmem_info[iface].min_read_write_size &&
-	    efa_rdm_interop_rdma_read(ep, txe->peer) &&
-	    (txe->desc[0] || efa_is_cache_available(efa_rdm_ep_rdm_domain(ep)))) {
-		err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGREAD_RTW_PKT);
-		if (err != -FI_ENOMEM)
-			return err;
-		/*
-		 * If read write protocol failed due to memory registration, fall back to use long
-		 * message protocol
-		 */
-	}
-
-	ctrl_type = delivery_complete_requested ? EFA_RDM_DC_LONGCTS_RTW_PKT : EFA_RDM_LONGCTS_RTW_PKT;
-	return efa_rdm_ope_post_send(txe, ctrl_type);
+	assert(proto && "No emulated write protocol was selected for the transfer");
+	return efa_rdm_rma_post_write_proto(ep, txe, proto);
 }
 
 static inline ssize_t efa_rdm_rma_generic_writemsg(struct efa_rdm_ep *efa_rdm_ep,
