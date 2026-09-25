@@ -573,6 +573,11 @@ static uint64_t efa_domain_get_mr_lkey(struct fid_mr *mr)
 }
 
 
+/* Shared by the completion counter and the memory completion action paths,
+ * both of which describe a device-visible target with this struct. rdma-core
+ * always defines the completion action verbs after the counter ones, so
+ * HAVE_EFADV_COMP_ACTION implies HAVE_EFADV_CREATE_COMP_CNTR and only the
+ * latter is checked here. */
 #if HAVE_EFADV_CREATE_COMP_CNTR
 
 static inline int efa_domain_fi_to_efadv_memory_location(
@@ -601,6 +606,10 @@ static inline int efa_domain_fi_to_efadv_memory_location(
 	efadv_mem->type = fi_mem->type;
 	return FI_SUCCESS;
 }
+
+#endif /* HAVE_EFADV_CREATE_COMP_CNTR */
+
+#if HAVE_EFADV_CREATE_COMP_CNTR
 
 static int efa_domain_cntr_open_ext(struct fid_domain *domain,
 				       struct fi_cntr_attr *attr,
@@ -684,10 +693,200 @@ static int efa_domain_cntr_open_ext(struct fid_domain *domain,
 #endif /* HAVE_EFADV_CREATE_COMP_CNTR */
 
 
+#if HAVE_EFADV_COMP_ACTION
+
+static int efa_comp_action_close(struct fid *fid)
+{
+	struct efa_comp_action *action =
+		container_of(fid, struct efa_comp_action, comp_action.fid);
+	int ret;
+
+	ret = efadv_destroy_comp_action(action->efadv_action);
+	if (ret)
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_destroy_comp_action failed: %d\n", ret);
+	free(action);
+	return ret ? -ret : FI_SUCCESS;
+}
+
+static struct fi_ops efa_comp_action_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = efa_comp_action_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
+/*
+ * Translate a public memory action op into the efadv comp_op. Returns 0 and
+ * sets *efadv_op on success, a negative fi errno otherwise.
+ */
+static int
+efa_domain_fi_to_efadv_mem_comp_action_op(enum fi_efa_mem_comp_action_op fi_op,
+					  uint16_t *efadv_op)
+{
+	switch (fi_op) {
+	case FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL:
+		*efadv_op = EFADV_MEM_COMP_ACTION_SET_INITIATOR_VAL;
+		return FI_SUCCESS;
+	default:
+		return -FI_EINVAL;
+	}
+}
+
+/*
+ * The device writes one entry of entry_size bytes at
+ * location + index * entry_size, so entry_size is both the width of the write
+ * and the stride between entries. Only 1, 2 and 4 byte entries exist, the
+ * target must be aligned to the entry it is indexed by, and the device accepts
+ * a single entry today.
+ */
+static int
+efa_domain_check_mem_comp_action_attr(struct fi_efa_mem_comp_action_attr *attr)
+{
+	if (attr->entry_size != 1 && attr->entry_size != 2 &&
+	    attr->entry_size != 4) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported memory completion action entry_size %u, must be 1, 2 or 4\n",
+			 attr->entry_size);
+		return -FI_EINVAL;
+	}
+
+	if (attr->num_entries != 1) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported memory completion action num_entries %u, must be 1\n",
+			 attr->num_entries);
+		return -FI_EINVAL;
+	}
+
+	if (attr->location.type == FI_EFA_MEMORY_LOCATION_VA &&
+	    (uintptr_t) attr->location.ptr % attr->entry_size) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Memory completion action target %p is not aligned to entry_size %u\n",
+			 attr->location.ptr, attr->entry_size);
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int
+efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
+				  struct fi_efa_mem_comp_action_attr *attr,
+				  struct fid_efa_comp_action **action_fid)
+{
+	struct efadv_mem_comp_action_init_attr efa_attr = {0};
+	struct efa_comp_action *action;
+	struct efa_domain *domain;
+	int ret;
+
+	if (!attr || !action_fid)
+		return -FI_EINVAL;
+
+	domain = container_of(domain_fid, struct efa_domain,
+			      util_domain.domain_fid);
+
+	if (attr->comp_mask) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported comp_mask 0x%lx in fi_efa_mem_comp_action_attr\n",
+			 attr->comp_mask);
+		return -FI_EINVAL;
+	}
+
+	if (attr->flags) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported flags 0x%lx in fi_efa_mem_comp_action_attr\n",
+			 attr->flags);
+		return -FI_EINVAL;
+	}
+
+	ret = efa_domain_check_mem_comp_action_attr(attr);
+	if (ret)
+		return ret;
+
+	ret = efa_domain_fi_to_efadv_mem_comp_action_op(attr->op,
+							&efa_attr.comp_op);
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Unsupported memory completion action op %d\n",
+			 attr->op);
+		return ret;
+	}
+
+	ret = efa_domain_fi_to_efadv_memory_location(&attr->location,
+						     &efa_attr.comp_mem);
+	if (ret)
+		return ret;
+
+	efa_attr.pd = domain->ibv_pd;
+	efa_attr.num_entries = attr->num_entries;
+	efa_attr.entry_size = attr->entry_size;
+
+	action = calloc(1, sizeof(*action));
+	if (!action)
+		return -FI_ENOMEM;
+
+	action->efadv_action = efadv_create_mem_comp_action(
+		domain->device->ibv_ctx, &efa_attr, sizeof(efa_attr));
+	if (!action->efadv_action) {
+		ret = -errno;
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_create_mem_comp_action failed: %d\n", ret);
+		free(action);
+		return ret;
+	}
+
+	action->comp_action.fid.fclass = FI_CLASS_UNSPEC;
+	action->comp_action.fid.ops = &efa_comp_action_fi_ops;
+	action->comp_action.action_id = action->efadv_action->action_id;
+
+	*action_fid = &action->comp_action;
+	return FI_SUCCESS;
+}
+
+static int
+efa_domain_query_max_mem_comp_actions(struct fid_domain *domain_fid,
+				      uint32_t *max_mem_comp_actions)
+{
+	struct efa_domain *domain;
+
+	if (!max_mem_comp_actions)
+		return -FI_EINVAL;
+
+	domain = container_of(domain_fid, struct efa_domain,
+			      util_domain.domain_fid);
+
+	*max_mem_comp_actions = domain->device->efa_attr.max_mem_comp_actions;
+	return FI_SUCCESS;
+}
+
+#else /* HAVE_EFADV_COMP_ACTION */
+
+static int
+efa_domain_create_mem_comp_action(struct fid_domain *domain_fid,
+				  struct fi_efa_mem_comp_action_attr *attr,
+				  struct fid_efa_comp_action **action_fid)
+{
+	return -FI_ENOSYS;
+}
+
+static int
+efa_domain_query_max_mem_comp_actions(struct fid_domain *domain_fid,
+				      uint32_t *max_mem_comp_actions)
+{
+	return -FI_ENOSYS;
+}
+
+#endif /* HAVE_EFADV_COMP_ACTION */
+
+static struct fi_efa_ops_mem_comp_action efa_ops_mem_comp_action = {
+	.create_mem_comp_action = efa_domain_create_mem_comp_action,
+	.query_max_mem_comp_actions = efa_domain_query_max_mem_comp_actions,
+};
+
 struct fi_efa_ops_domain efa_ops_domain = {
 	.query_mr = efa_domain_query_mr,
 };
-
 static struct fi_efa_ops_gda efa_ops_gda = {
 	.query_addr = efa_domain_query_addr,
 	.query_qp_wqs = efa_domain_query_qp_wqs,
@@ -806,8 +1005,16 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_GDA_OPS\n");
 			return -FI_EOPNOTSUPP;
 		}
-
 		*ops = &efa_ops_gda;
+		return ret;
+	}
+	if (strcmp(ops_name, FI_EFA_MEM_COMP_ACTION_OPS) == 0) {
+		efa_domain = container_of(fid, struct efa_domain, util_domain.domain_fid.fid);
+		if (efa_domain->info_type != EFA_INFO_DIRECT) {
+			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_MEM_COMP_ACTION_OPS\n");
+			return -FI_EOPNOTSUPP;
+		}
+		*ops = &efa_ops_mem_comp_action;
 		return ret;
 	}
 	if (strcmp(ops_name, FI_EFA_MODIFY_EP_OPS) == 0) {
@@ -816,7 +1023,6 @@ efa_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 			EFA_WARN(FI_LOG_DOMAIN, "Only efa direct supports FI_EFA_MODIFY_EP_OPS\n");
 			return -FI_EOPNOTSUPP;
 		}
-
 		*ops = &efa_ops_modify_ep;
 		return ret;
 	}

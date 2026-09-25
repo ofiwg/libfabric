@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
 
+#include <assert.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ofi_mem.h>
@@ -9,6 +11,35 @@
 #include "efa_av.h"
 #include "efa_data_path_ops.h"
 #include "efa_data_path_direct.h"
+
+/*
+ * struct fi_efa_msg_rma is handed to fi_writemsg() as a struct fi_msg_rma
+ * pointer, and the EFA metadata is read from the bytes that follow it. That
+ * only holds while the core descriptor sits at offset 0 and the metadata starts
+ * exactly where it ends, so pin both: if core ever changes struct fi_msg_rma,
+ * this fails the build instead of silently reading the wrong offsets.
+ */
+#ifdef static_assert
+static_assert(offsetof(struct fi_efa_msg_rma, msg) == 0,
+	      "fi_msg_rma must be the first member of fi_efa_msg_rma");
+static_assert(offsetof(struct fi_efa_msg_rma, feature_bits) ==
+		      sizeof(struct fi_msg_rma),
+	      "fi_efa_msg_rma metadata must directly follow fi_msg_rma");
+/*
+ * The action descriptors are append-only: their members keep their offsets for
+ * the life of the interface, and new per-WR metadata appends to
+ * fi_efa_msg_rma instead. Pin the shape so growing either one fails the build.
+ */
+static_assert(sizeof(struct fi_efa_comp_action_desc) == 2 * sizeof(uint32_t),
+	      "fi_efa_comp_action_desc must stay id/value");
+static_assert(offsetof(struct fi_efa_msg_rma, local) ==
+		      sizeof(struct fi_msg_rma) + sizeof(uint64_t),
+	      "fi_efa_msg_rma.local must directly follow feature_bits");
+static_assert(offsetof(struct fi_efa_msg_rma, remote) ==
+		      offsetof(struct fi_efa_msg_rma, local) +
+			      sizeof(struct fi_efa_comp_action_desc),
+	      "fi_efa_msg_rma.remote must directly follow local");
+#endif
 
 /**
  * @brief check whether endpoint was configured with FI_RMA capability
@@ -198,6 +229,81 @@ ssize_t efa_rma_read(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 }
 
 /**
+ * @brief Validate the completion-action metadata of a WR and pack it for the
+ *        WQE builders
+ *
+ * Reads the local and remote action descriptors selected by @emsg's
+ * feature_bits and fills @sig with the action ids and their packed device
+ * operands. A descriptor member whose feature bit is unset is not read and its
+ * operand stays 0, which is what the device treats as "no data".
+ *
+ * An out-of-range entry index is not caught here: an action id is a device
+ * handle, and a remote id belongs to a peer, so the provider cannot resolve
+ * either back to the action's num_entries. The device rejects it, surfacing as
+ * a completion with error.
+ *
+ * @param base_ep endpoint the WR is posted on
+ * @param emsg    the caller's extended message descriptor
+ * @param sig[out] per-WR action descriptor handed to the WQE builders
+ * @return 0 on success, otherwise a negative libfabric error code.
+ */
+static inline int
+efa_rma_init_comp_action_wr(struct efa_base_ep *base_ep,
+			    const struct fi_efa_msg_rma *emsg,
+			    struct efa_comp_action_wr *sig)
+{
+	uint64_t fb = emsg->feature_bits;
+	uint64_t unknown =
+		fb & ~(uint64_t) FI_EFA_MSG_RMA_SUPPORTED_FEATURE_BITS;
+
+	/*
+	 * Checked before the endpoint state so a descriptor built against a
+	 * newer header is rejected on its own terms, not silently treated as if
+	 * the unknown fields were absent.
+	 */
+	if (unknown) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "Unsupported feature_bits in fi_efa_msg_rma: 0x%lx\n",
+			 (unsigned long) unknown);
+		return -FI_EOPNOTSUPP;
+	}
+
+	if (!base_ep->comp_action_enabled) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_EXTENDED_MSG used but action support is not "
+			 "enabled on the endpoint\n");
+		return -FI_EINVAL;
+	}
+
+	/* An action's value bit requires its ID bit. */
+	if (((fb & FI_EFA_LOCAL_ACTION_VALUE) &&
+	     !(fb & FI_EFA_LOCAL_ACTION_ID)) ||
+	    ((fb & FI_EFA_REMOTE_ACTION_VALUE) &&
+	     !(fb & FI_EFA_REMOTE_ACTION_ID))) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_*_ACTION_VALUE set without the corresponding "
+			 "FI_EFA_*_ACTION_ID\n");
+		return -FI_EINVAL;
+	}
+
+	sig->feature_bits = fb;
+
+	if (fb & FI_EFA_LOCAL_ACTION_ID) {
+		sig->local_action_id = emsg->local.id;
+		sig->local_action_data =
+			(fb & FI_EFA_LOCAL_ACTION_VALUE) ? emsg->local.value : 0;
+	}
+
+	if (fb & FI_EFA_REMOTE_ACTION_ID) {
+		sig->remote_action_id = emsg->remote.id;
+		sig->remote_action_data =
+			(fb & FI_EFA_REMOTE_ACTION_VALUE) ? emsg->remote.value : 0;
+	}
+
+	return 0;
+}
+
+/**
  * @brief Post a WRITE request
  *
  * Input:
@@ -221,6 +327,8 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	size_t total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	struct efa_context *efa_ctx;
 	struct efa_direct_ope *direct_ope = NULL;
+	struct efa_comp_action_wr sig = {0};
+	const struct efa_comp_action_wr *sig_ptr = NULL;
 
 	efa_tracepoint(write_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 	EFA_DBG(FI_LOG_EP_DATA,
@@ -228,6 +336,16 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		total_len, msg->addr, (size_t) msg->context, flags);
 
 	ofi_genlock_lock(&base_ep->util_ep.lock);
+
+	if (flags & FI_EFA_EXTENDED_MSG) {
+		const struct fi_efa_msg_rma *emsg =
+			(const struct fi_efa_msg_rma *) msg;
+
+		err = efa_rma_init_comp_action_wr(base_ep, emsg, &sig);
+		if (err)
+			goto out_err;
+		sig_ptr = &sig;
+	}
 
 	/* Prepare work request ID */
 	if (base_ep->context_mode != USE_CONTEXT2) {
@@ -318,7 +436,9 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 				inline_data_list, use_inline,
 				msg->rma_iov[0].key, msg->rma_iov[0].addr,
 				wr_id, msg->data, flags,
-				entry->ah, efa_av_entry_ep_addr(entry)->qpn, efa_av_entry_ep_addr(entry)->qkey);
+				entry->ah, efa_av_entry_ep_addr(entry)->qpn,
+				efa_av_entry_ep_addr(entry)->qkey,
+				sig_ptr);
 	if (OFI_UNLIKELY(err)) {
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 		goto out_err;

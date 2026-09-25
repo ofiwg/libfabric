@@ -12,6 +12,19 @@
 #include "rdm/efa_rdm_protocol.h"
 #include "efa_data_path_direct.h"
 
+int efa_query_max_inline_data(struct ibv_context *ctx, uint32_t flags)
+{
+#if HAVE_EFADV_COMP_ACTION
+	struct efadv_inline_data_attr attr = {0};
+
+	attr.flags = flags;
+
+	return efadv_get_max_inline_data(ctx, &attr, sizeof(attr));
+#else
+	return -FI_ENOSYS;
+#endif
+}
+
 #if HAVE_INLINE_BUF_SIZE_EX
 int efa_query_max_sq_depth(struct ibv_context *ctx, uint32_t sq_depth_flags,
 			   uint32_t max_inline_data)
@@ -50,13 +63,16 @@ static size_t efa_base_ep_get_max_inline_data(struct efa_base_ep *ep)
  * @brief The maximum send queue depth the device allows this endpoint
  *
  * That is the device-advertised max send queue limit, lowered when the endpoint's
- * send queue entries are wide. An entry is wide when it carries more inline data
- * than the device's regular inline buffer size, which only efa-direct does, and it
- * consumes more send queue memory, so fewer of them fit.
+ * send queue entries are wide. A wide entry consumes more send queue memory, so
+ * fewer of them fit. An entry is wide when it carries more inline data than the
+ * device's regular inline buffer size, which only efa-direct does, or when
+ * completion-action is enabled, whose per-WR action feature blocks require the
+ * wide WQE format whatever the inline size.
  *
- * Whether an entry is wide follows from its inline data size alone. Whether the
- * device supports RDMA write does not enter into it: that only decides whether
- * inline RMA write is available, not how much send queue memory an entry occupies.
+ * Whether an entry is wide follows from its inline data size and whether actions are
+ * enabled. Whether the device supports RDMA write does not enter into it: that only
+ * decides whether inline RMA write is available, not how much send queue memory an
+ * entry occupies.
  *
  * The device-advertised limit is also the answer whenever the wide depth cannot be
  * established: on a build without the required efadv support, or when the device
@@ -67,18 +83,27 @@ size_t efa_base_ep_get_max_sq_depth(struct efa_base_ep *ep)
 	size_t device_tx_limit = ep->domain->device->rdm_info->tx_attr->size;
 #if HAVE_INLINE_BUF_SIZE_EX
 	size_t max_inline_data;
+	uint32_t sq_depth_flags = 0;
 	int max_sq_depth;
 
 	if (!EFA_INFO_TYPE_IS_DIRECT(ep->info))
 		return device_tx_limit;
 
 	max_inline_data = efa_base_ep_get_max_inline_data(ep);
-	if (max_inline_data <= ep->domain->device->efa_attr.inline_buf_size)
+	if (max_inline_data > ep->domain->device->efa_attr.inline_buf_size)
+		sq_depth_flags |= EFADV_SQ_DEPTH_ATTR_INLINE_WRITE;
+
+#if HAVE_EFADV_COMP_ACTION
+	if (ep->comp_action_enabled)
+		sq_depth_flags |= EFADV_SQ_DEPTH_ATTR_COMP_ACTION_WITH_DATA;
+#endif
+
+	/* No wide-WQE feature applies: the device-advertised limit is the answer. */
+	if (!sq_depth_flags)
 		return device_tx_limit;
 
 	max_sq_depth = efa_query_max_sq_depth(ep->domain->device->ibv_ctx,
-					      EFADV_SQ_DEPTH_ATTR_INLINE_WRITE,
-					      max_inline_data);
+					      sq_depth_flags, max_inline_data);
 	if (max_sq_depth < 0) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "efadv_get_max_sq_depth failed (%d); reporting the "
@@ -385,6 +410,74 @@ int efa_qp_create(struct efa_qp **qp, struct ibv_qp_init_attr_ex *init_attr_ex,
 #endif
 #if HAVE_EFADV_WR_PROCESSING_HINTS
 		efa_attr.wr_flags |= EFADV_WR_EX_WITH_PROCESSING_HINTS;
+#endif
+#if HAVE_EFADV_COMP_ACTION
+		{
+			struct efa_base_ep *action_ep = init_attr_ex->qp_context;
+
+			/*
+			 * A single opt-in enables both action WQE feature
+			 * blocks (action-id and action-data), so the send queue
+			 * is sized for the with-data case and whether operand
+			 * data is present is chosen per work request on the
+			 * data path.
+			 */
+			if (action_ep && action_ep->comp_action_enabled) {
+				int max_inline;
+
+				efa_attr.wr_flags |= EFADV_WR_EX_WITH_COMP_ACTION;
+				efa_attr.wr_flags |= EFADV_WR_EX_WITH_COMP_ACTION_WITH_DATA;
+
+				/*
+				 * Actions carry per-WR feature blocks in the wide
+				 * WQE, shrinking the inline region below the
+				 * device's nominal inline_buf_size_ex. Clamp the
+				 * requested inline size to what the device allows
+				 * with actions on, otherwise QP creation fails
+				 * with -EINVAL.
+				 */
+				max_inline = efa_query_max_inline_data(
+					init_attr_ex->pd->context,
+					EFADV_INLINE_DATA_ATTR_COMP_ACTION_WITH_DATA);
+				if (max_inline >= 0 &&
+				    init_attr_ex->cap.max_inline_data >
+					    (uint32_t) max_inline) {
+					EFA_INFO(FI_LOG_EP_CTRL,
+						 "Clamping max_inline_data %u -> %d "
+						 "for completion-action QP\n",
+						 init_attr_ex->cap.max_inline_data,
+						 max_inline);
+					init_attr_ex->cap.max_inline_data =
+						max_inline;
+				}
+
+				/*
+				 * Wide (128-byte) WQEs consume more send-queue
+				 * memory per entry, so the maximum SQ depth is
+				 * lower with actions on. Clamp max_send_wr to the
+				 * action-mode SQ depth or QP creation fails with
+				 * -EINVAL.
+				 */
+				{
+					int max_sq = efa_query_max_sq_depth(
+						init_attr_ex->pd->context,
+						EFADV_SQ_DEPTH_ATTR_COMP_ACTION_WITH_DATA,
+						init_attr_ex->cap.max_inline_data);
+
+					if (max_sq > 0 &&
+					    init_attr_ex->cap.max_send_wr >
+						    (uint32_t) max_sq) {
+						EFA_INFO(FI_LOG_EP_CTRL,
+							 "Clamping max_send_wr %u -> %d "
+							 "for completion-action QP\n",
+							 init_attr_ex->cap.max_send_wr,
+							 max_sq);
+						init_attr_ex->cap.max_send_wr =
+							max_sq;
+					}
+				}
+			}
+		}
 #endif
 		(*qp)->ibv_qp = efadv_create_qp_ex(
 			init_attr_ex->pd->context, init_attr_ex, &efa_attr,

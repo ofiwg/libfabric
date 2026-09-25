@@ -202,7 +202,7 @@ movement on the same NIC/sidelink path as subsequent NIC-driven operations.
 This restores ordering between the receive and later NIC-driven accesses to the
 same HBM region: after an application observes the receive completion from
 libfabric, a NIC-driven read or write it issues to that HBM buffer (for
-example, an RDMA write of a semaphore into HBM to signal a consumer) is
+example, an RDMA write of a semaphore into HBM to action a consumer) is
 guaranteed to be ordered after the received data has landed. Note that this
 guarantee applies to NIC-driven (EFA) accesses issued after the completion; it
 does not cover host-driven (CPU) accesses to HBM, which take a different path
@@ -219,7 +219,7 @@ On the `efa` fabric of an *FI_EP_RDM* endpoint, an application can abort an
 in-flight transfer by calling `fi_close()` on the source memory region (MR)
 backing it -- the memory region associated with the local buffer for a
 send/write/read transmits operation, or the remote memory region associated
-with a read/write. Closing the MR signals the provider to cancel any in-flight
+with a read/write. Closing the MR actions the provider to cancel any in-flight
 operation that still references it.
 
 This does not apply to memory regions that are referenced by posted receive
@@ -249,6 +249,265 @@ control message belonging to the current transfer from one belonging to an
 earlier, aborted transfer, so aborting transfers when either side runs an
 older version risks corrupting the communication state between the two
 endpoints.
+
+# COMPLETION ACTIONS
+
+On the `efa-direct` fabric, the EFA device can execute a registered action --
+today a write into a registered memory vector -- when a work request completes,
+notifying an accelerator (GPU/Neuron) without host CPU involvement. This is
+exposed through EFA provider specific extensions and has three parts: action
+registration (control path), enabling action support on the endpoint, and per
+work request action attachment (data path).
+
+This feature requires a device and rdma-core that advertise completion action
+support; otherwise the calls below return *-FI_EOPNOTSUPP* (or *-FI_ENOSYS* if
+libfabric was built without support).
+
+## Action registration (control path)
+
+Memory action registration is exposed as a domain ops table obtained with
+`fi_open_ops()` using the name *FI_EFA_MEM_COMP_ACTION_OPS*, defined in
+*rdma/fi_ext_efa.h*:
+
+```c
+struct fi_efa_ops_mem_comp_action *action_ops;
+fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0, (void **)&action_ops, NULL);
+
+struct fi_efa_ops_mem_comp_action {
+	int (*create_mem_comp_action)(struct fid_domain *domain,
+				      struct fi_efa_mem_comp_action_attr *attr,
+				      struct fid_efa_comp_action **action);
+	int (*query_max_mem_comp_actions)(struct fid_domain *domain,
+					  uint32_t *max_mem_comp_actions);
+};
+```
+
+Every op names the domain explicitly, as the other EFA ops tables do. An action
+and the endpoint whose work requests name it must be opened from the same
+domain. Other action types -- a counter increment -- get their own creator and
+limit query appended to this table once the device supports them.
+
+*create_mem_comp_action*
+: Registers a memory completion action: a target of *num_entries* slots of
+  *entry_size* bytes each, starting at *location*, which is either host
+  memory (a virtual address) or device memory (a dmabuf `fd`/`offset`, for
+  GPU/Neuron HBM). *entry_size* is the width of the device's write.
+  *num_entries* must be 1, so the target is effectively a scalar at
+  *location*. Returns a *struct
+  fid_efa_comp_action* handle; release it with *fi_close(&action->fid)*, after
+  which the target memory is the application's to free. The action id a work
+  request names the action by is read with *fid_efa_comp_action_get_id()*; for
+  an action executed at the target (a remote action) that id must be
+  communicated out of band from the target to the initiator.
+
+*query_max_mem_comp_actions*
+: Reports how many memory completion actions the domain can have registered at
+  once. A value of 0 means the device does not support them and
+  *create_mem_comp_action* fails.
+
+*create_mem_comp_action* rejects the following with *-FI_EINVAL*: a non-zero
+*comp_mask* or *flags* (both reserved to be zero today, so they are rejected
+rather than silently ignored), an *entry_size* other than 1, 2 or 4, a
+*num_entries* other than 1 (the only value the device accepts; selecting a slot
+per work request would be a new data-path field and feature bit, not a change to
+this interface), a VA *location* not aligned to
+*entry_size*, and an *op* outside *enum fi_efa_mem_comp_action_op*.
+
+The control path uses the following types, all defined in *rdma/fi_ext_efa.h*:
+
+```c
+/* Operation a memory completion action performs. Mirrors efadv_comp_op:
+ * SET_INITIATOR_VAL writes (sets, does not accumulate) a value the initiator
+ * supplies per work request. */
+enum fi_efa_mem_comp_action_op {
+	FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL = 0,
+};
+
+/* Target memory: host virtual address, or device memory via dmabuf. */
+enum fi_efa_memory_location_type {
+	FI_EFA_MEMORY_LOCATION_VA,
+	FI_EFA_MEMORY_LOCATION_DMABUF,
+};
+
+struct fi_efa_memory_location {
+	uint8_t *ptr;                 /* FI_EFA_MEMORY_LOCATION_VA */
+	struct {
+		uint64_t offset;
+		int32_t  fd;          /* FI_EFA_MEMORY_LOCATION_DMABUF */
+		uint32_t reserved;
+	} dmabuf;
+	uint8_t type;                 /* enum fi_efa_memory_location_type */
+	uint8_t reserved[7];
+};
+
+/* Attributes for create_mem_comp_action. comp_mask versions this struct alone:
+ * with one creator per action type, each action type owns its own version
+ * namespace. */
+struct fi_efa_mem_comp_action_attr {
+	uint64_t                       comp_mask;
+	uint64_t                       flags;       /* 0 today */
+	struct fi_efa_memory_location  location;    /* VA or dmabuf */
+	uint32_t                       num_entries; /* must be 1 */
+	uint32_t                       entry_size;  /* 1, 2 or 4 */
+	enum fi_efa_mem_comp_action_op op;
+};
+
+/* Action handle (a fid; fi_close() releases it). */
+struct fid_efa_comp_action {
+	struct fid fid;
+	uint32_t   action_id;   /* the id a work request names the action by */
+};
+
+static inline uint32_t
+fid_efa_comp_action_get_id(struct fid_efa_comp_action *action);
+```
+
+## Enabling action support (endpoint)
+
+Action support must be enabled on the endpoint before it is enabled, because it
+governs how the send queue is allocated (wide, 128 byte, WQEs). The application
+opts in with `fi_setopt()`:
+
+```c
+bool enable = true;
+fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_COMP_ACTION,
+	  &enable, sizeof(enable));
+```
+
+Enabling actions reduces the inline data a WQE can hold, so the device level
+inline size may not be achievable once actions are on. Query the effective
+inline size for the endpoint with `fi_getopt()` on *FI_OPT_INJECT_MSG_SIZE* /
+*FI_OPT_INJECT_RMA_SIZE* after enabling actions.
+
+Actions also use wider WQEs that consume more send queue memory per entry, so
+the effective send queue depth (tx size) is likewise reduced. The same happens
+when the endpoint requests a large inline (inject) size. Query the effective tx
+size with `fi_getopt()` on *FI_OPT_TX_SIZE*. The reported value is the minimum
+of the device's wide-WQE maximum SQ depth and the device advertised maximum.
+The large-inline reduction is known at `fi_getinfo()` (from the hints) and is
+already reflected in *tx_attr->size*; the action reduction, being a per-endpoint
+`fi_setopt()` applied after `fi_getinfo()`, is only reported by `fi_getopt()` on
+the enabled endpoint. Use `fi_getopt()` for the effective per-endpoint limits.
+
+## Action attachment (data path)
+
+A registered action is attached to an individual work request by passing an
+EFA specific message structure and the *FI_EFA_EXTENDED_MSG* operation flag to
+*fi_writemsg()*. Completion action is currently supported only on RDMA
+write, and only *fi_writemsg()* interprets *FI_EFA_EXTENDED_MSG*. The EFA
+struct embeds the core descriptor as its first member,
+so a pointer to the EFA struct is passed wherever the core descriptor is
+expected:
+
+```c
+/* feature_bits gate which members below the provider reads. */
+enum {
+	FI_EFA_LOCAL_ACTION_ID     = 1 << 0,	/* local.id is valid     */
+	FI_EFA_REMOTE_ACTION_ID    = 1 << 1,	/* remote.id is valid    */
+	FI_EFA_LOCAL_ACTION_VALUE  = 1 << 2,	/* local.value is valid  */
+	FI_EFA_REMOTE_ACTION_VALUE = 1 << 3,	/* remote.value is valid */
+};
+
+#define FI_EFA_MSG_RMA_SUPPORTED_FEATURE_BITS \
+	(FI_EFA_LOCAL_ACTION_ID | FI_EFA_REMOTE_ACTION_ID | \
+	 FI_EFA_LOCAL_ACTION_VALUE | FI_EFA_REMOTE_ACTION_VALUE)
+
+/* One completion action named by a work request. Fixed once shipped: new
+ * per-work-request metadata appends to struct fi_efa_msg_rma, not here, so
+ * these offsets never move. */
+struct fi_efa_comp_action_desc {
+	uint32_t id;      /* fid_efa_comp_action_get_id() of the action */
+	uint32_t value;   /* value a memory action writes */
+};
+
+struct fi_efa_msg_rma {
+	struct fi_msg_rma msg;   /* MUST be first -- castable to fi_msg_rma */
+	uint64_t feature_bits;   /* which members below are valid (FI_EFA_*) */
+	struct fi_efa_comp_action_desc local;   /* action executed at the initiator */
+	struct fi_efa_comp_action_desc remote;  /* action executed at the target */
+};
+```
+
+The outer *FI_EFA_EXTENDED_MSG* operation flag (a high, provider reserved bit of
+the *flags* word) is what tells the provider to reinterpret the descriptor as
+the EFA struct; the inner *feature_bits* word then selects the members to read.
+
+*FI_EFA_LOCAL_ACTION_ID* / *FI_EFA_REMOTE_ACTION_ID*
+: Attach the local action (fires on initiator side TX completion) and/or the
+  remote action (fires on target side RX completion), naming which registered
+  action fires.
+
+*FI_EFA_LOCAL_ACTION_VALUE* / *FI_EFA_REMOTE_ACTION_VALUE*
+: Supply the value that action's memory write sets, truncated to the action's
+  *entry_size*. An action may be attached without a value (leave the bit unset),
+  which the device treats as its default operand.
+
+Constraints:
+
+- The endpoint must have action support enabled; otherwise *FI_EFA_EXTENDED_MSG*
+  and the action fields are rejected with *-FI_EINVAL*.
+- An action's *value* bit may only be set when its *ID* bit is also set; a value
+  names no action on its own and is rejected with *-FI_EINVAL*.
+- Only *fi_writemsg()* interprets *FI_EFA_EXTENDED_MSG*. *fi_sendmsg()* and the
+  other data transfer variants never read the EFA metadata fields, so the flag
+  has no effect there and no action is attached.
+- The validation above does not depend on how libfabric was built. Where the
+  device or the build lacks completion action support, *fi_setopt()* fails
+  and the endpoint is never action enabled, so the flag is rejected with
+  *-FI_EINVAL* by the rule above.
+- Local and remote actions are independent: attach either or both.
+- *feature_bits* outside *FI_EFA_MSG_RMA_SUPPORTED_FEATURE_BITS* are rejected
+  with *-FI_EOPNOTSUPP*. This is how the descriptor stays compatible across
+  versions, and it is why the gated members are append-only: a new bit only ever
+  gates a member newly appended to *struct fi_efa_msg_rma*, and no bit or member
+  is reused, renumbered, or reordered. An application built against a newer
+  header than the provider is told so explicitly, and one built against an
+  older header only sets bits whose members it carries, so the provider never
+  reads past the struct it was given.
+
+## Example
+
+Target: register a memory action over a one entry host semaphore and send its id
+to the initiator out of band.
+
+```c
+struct fi_efa_ops_mem_comp_action *ops;
+struct fid_efa_comp_action *action;
+uint32_t sem = 0;
+
+fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0, (void **)&ops, NULL);
+
+struct fi_efa_mem_comp_action_attr attr = {
+	.op          = FI_EFA_MEM_COMP_ACTION_SET_INITIATOR_VAL,
+	.location    = { .type = FI_EFA_MEMORY_LOCATION_VA,
+			 .ptr  = (uint8_t *)&sem },
+	.num_entries = 1,
+	.entry_size  = sizeof(sem),
+};
+ops->create_mem_comp_action(domain, &attr, &action);
+/* send fid_efa_comp_action_get_id(action) to the initiator out of band */
+/* teardown: fi_close(&action->fid); */
+```
+
+Initiator: enable actions on the endpoint (before `fi_enable()`), then attach the
+peer's action to an RDMA write.
+
+```c
+bool enable = true;
+fi_setopt(&ep->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_COMP_ACTION,
+	  &enable, sizeof(enable));
+/* ... fi_enable(ep), exchange RMA keys ... */
+
+struct fi_efa_msg_rma emsg = {
+	.msg = { .msg_iov = &iov, .iov_count = 1, .desc = &desc,
+		 .addr = dest, .rma_iov = &rma_iov, .rma_iov_count = 1,
+		 .context = ctx },
+	.feature_bits = FI_EFA_REMOTE_ACTION_ID | FI_EFA_REMOTE_ACTION_VALUE,
+	.remote = { .id    = peer_action_id,
+		    .value = 0xabcd },  /* value written into the peer's semaphore */
+};
+fi_writemsg(ep, (struct fi_msg_rma *)&emsg, FI_EFA_EXTENDED_MSG);
+```
 
 # LIMITATIONS
 

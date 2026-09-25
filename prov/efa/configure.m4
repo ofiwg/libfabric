@@ -95,6 +95,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	have_ibv_get_cq_event=0
 	have_efadv_create_comp_cntr=0
 	have_ibv_query_comp_cntr_caps=0
+	have_efadv_create_mem_comp_action=0
+	have_efadv_destroy_comp_action=0
+	have_efadv_get_max_inline_data=0
+	have_efadv_action_block_offset=0
+	have_efadv_comp_action=0
 
 	dnl $have_neuron is defined at top-level configure.ac
 	AM_CONDITIONAL([HAVE_NEURON], [ test x"$have_neuron" = x1 ])
@@ -261,6 +266,29 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[have_efadv_create_comp_cntr=0],
 			[[#include <infiniband/efadv.h>]])
 
+		AC_CHECK_DECL([efadv_create_mem_comp_action],
+			[have_efadv_create_mem_comp_action=1],
+			[have_efadv_create_mem_comp_action=0],
+			[[#include <infiniband/efadv.h>]])
+
+		AC_CHECK_DECL([efadv_destroy_comp_action],
+			[have_efadv_destroy_comp_action=1],
+			[have_efadv_destroy_comp_action=0],
+			[[#include <infiniband/efadv.h>]])
+
+		dnl The direct data path writes the action block at the offset
+		dnl efadv_query_qp_wqs reports, so the member is required.
+		AC_CHECK_MEMBER(
+			[struct efadv_wq_attr.comp_action_with_data_block_offset],
+			[have_efadv_action_block_offset=1],
+			[have_efadv_action_block_offset=0],
+			[[#include <infiniband/efadv.h>]])
+
+		AC_CHECK_DECL([efadv_get_max_inline_data],
+			[have_efadv_get_max_inline_data=1],
+			[have_efadv_get_max_inline_data=0],
+			[[#include <infiniband/efadv.h>]])
+
 		AC_CHECK_DECL([ibv_query_comp_cntr_caps],
 			[have_ibv_query_comp_cntr_caps=1],
 			[have_ibv_query_comp_cntr_caps=0],
@@ -344,6 +372,19 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_IBV_QUERY_COMP_CNTR_CAPS],
 		[$have_ibv_query_comp_cntr_caps],
 		[Indicates if ibv_query_comp_cntr_caps is available])
+
+	dnl Completion actions need the create/destroy verbs, the inline-size
+	dnl query used to report the reduced inject size, and the queried
+	dnl position of the action block in a WQE.
+	AS_IF([test "$have_efadv_create_mem_comp_action" = "1" -a \
+		    "$have_efadv_destroy_comp_action" = "1" -a \
+		    "$have_efadv_get_max_inline_data" = "1" -a \
+		    "$have_efadv_action_block_offset" = "1"],
+		[have_efadv_comp_action=1],
+		[have_efadv_comp_action=0])
+	AC_DEFINE_UNQUOTED([HAVE_EFADV_COMP_ACTION],
+		[$have_efadv_comp_action],
+		[Indicates if EFA completion-action verbs are available])
 
 
 	CPPFLAGS=$save_CPPFLAGS
