@@ -9,6 +9,7 @@
 #define _EFA_CNTR_H_
 
 #include "efa_thread_annotations.h"
+struct efa_xpu_cntr_state;
 
 struct efa_cntr {
 	struct util_cntr util_cntr;
@@ -22,6 +23,10 @@ struct efa_cntr {
 	bool err_use_device_mem;
 	/* Wait object type from fi_cntr_attr */
 	enum fi_wait_obj wait_obj;
+	/* XPU (FI_XPU) state: holds the device-resident counter buffers
+	 * allocated at open time. NULL when not an XPU counter. Mirrors the
+	 * acc_state model on the fi_accelerator branch. */
+	struct efa_xpu_cntr_state *xpu_state;
 };
 
 int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,

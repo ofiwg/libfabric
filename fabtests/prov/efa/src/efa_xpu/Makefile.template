@@ -1,0 +1,25 @@
+NVCC ?= /usr/local/cuda/bin/nvcc
+NVCC_FLAGS=-lineinfo -gencode arch=compute_90,code=sm_90 -gencode arch=compute_100,code=sm_100
+CUDA_FLAGS=-Xcompiler -fPIC
+LIBFABRIC_INCLUDE ?= @fab_incdir@
+prefix ?= @prefix@
+libdir = $(prefix)/lib
+
+all: libefaxpukernels.so
+
+libefaxpukernels.so: efa_xpu_kernels.o
+	$(NVCC) $(NVCC_FLAGS) -shared -o libefaxpukernels.so efa_xpu_kernels.o
+
+# -MMD records the libfabric device headers, which live outside this directory,
+# so editing one rebuilds the kernels instead of leaving a stale library behind.
+efa_xpu_kernels.o: efa_xpu_kernels.cu
+	$(NVCC) $(NVCC_FLAGS) -c efa_xpu_kernels.cu $(CUDA_FLAGS) -I$(LIBFABRIC_INCLUDE) -MMD -MF efa_xpu_kernels.d
+
+-include efa_xpu_kernels.d
+
+install: libefaxpukernels.so
+	install -d $(libdir)
+	install -m 755 libefaxpukernels.so $(libdir)
+
+clean:
+	rm -f *.o *.d libefaxpukernels.so

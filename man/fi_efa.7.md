@@ -185,6 +185,11 @@ The following features are supported:
   make progress and free CQ space before retrying the operation, regardless of whether
   FI_SELECTIVE_COMPLETION is set. Failure to do so will result in CQ overrun.
 
+*XPU (device-initiated) operations*
+: The `efa-direct` fabric supports *FI_XPU*, which lets a kernel running on an
+  accelerator post transfers and read completions itself, with no host thread
+  on the data path. See *XPU SUPPORT* below.
+
 # COMPLETION SEMANTICS
 
 Completion ordering and data visibility are only well-defined for transfers
@@ -250,6 +255,144 @@ earlier, aborted transfer, so aborting transfers when either side runs an
 older version risks corrupting the communication state between the two
 endpoints.
 
+# XPU SUPPORT
+
+On the `efa-direct` fabric the provider supports *FI_XPU*, which lets a kernel
+running on an accelerator post sends, receives, RMA reads and writes, and read
+completions itself. The API is described in
+[`fi_xpu`(3)](fi_xpu.3.html); this section covers what the EFA provider
+requires and what it implements.
+
+## Requirements
+
+*FI_XPU* is advertised only when all of the following hold:
+
+- The fabric is `efa-direct`. The `efa` fabric runs its own protocol layer on
+  top of the hardware queues, which a device-initiated transfer bypasses;
+  requesting *FI_XPU* against it fails `fi_getinfo` with *-FI_ENODATA*.
+- libfabric was built against an rdma-core providing the queue geometry
+  queries (`efadv_query_qp_wqs` and `efadv_query_cq`) that the export path
+  hands to the device.
+- The device uses the direct data path (see *FI_EFA_USE_DATA_PATH_DIRECT*) and
+  does not use sub completion queues, i.e. it is not a first generation EFA
+  device. A kernel drives the send, receive and completion queue rings itself,
+  which a device using sub completion queues cannot expose.
+- The build targets x86_64 or aarch64, the architectures EFA hardware is
+  deployed on; `rdma/fi_xpu_device.h` only pulls in the EFA device header
+  there.
+
+*FI_XPU* is opt-in. It is returned only when the application asks for it in
+`hints->caps`, so a plain `fi_getinfo` never reports it and a device data path
+is never handed to an application that cannot drive it. On an info that carries
+it, `domain_attr->max_xpu_ctx_cnt` is 1, one context per domain because an EFA
+domain is one NIC and the context binds it to one device; it is 0 everywhere
+else.
+
+## Host side
+
+`fi_xpu_ctx` opens the context. The provider uses the `fi_xpu_ops` callbacks in
+`fi_xpu_attr` to allocate device memory and to map host and MMIO pages into the
+device address space; when they are not supplied it falls back to the libfabric
+HMEM layer for the `iface` and `device` named in the same attributes.
+`fi_xpu_ctx_query` reports *FI_XPU_CAP_EP*, *FI_XPU_CAP_CQ* and
+*FI_XPU_CAP_CNTR*, an `av_addr_size` of `sizeof(struct efa_xpu_peer)` and an
+`mr_desc_size` of `sizeof(struct efa_xpu_desc)`.
+
+The resources a kernel drives are created against that context:
+
+*Endpoint*
+: Open with *FI_XPU* in the `fi_endpoint2` flags and `ep_attr->xpu_ctx` set on
+  the `fi_info` passed to it (not the endpoint context argument), then call
+  `fi_ep_export_xpu`; an endpoint opened without both fails the export with
+  *-FI_EINVAL*, and so does `fi_endpoint2` itself when given only one of them. The export maps the send
+  and receive queue buffers and their doorbells into the device address space
+  and publishes the handle the kernel passes to every operation.
+
+*Completion queue*
+: Open with *FI_XPU* in `fi_cq_attr::flags` and `fi_cq_attr::xpu_ctx` set. The
+  CQ ring is allocated in device memory and given to the device through a
+  dmabuf handle, so the host never sees its entries: `fi_cq_read` on such a CQ
+  always returns *-FI_EAGAIN*, and the kernel reads it with `fi_xpu_cq_read`
+  once `fi_cq_export_xpu` has published it.
+
+*Counter*
+: Open with *FI_XPU* in `fi_cntr_attr::flags` and `fi_cntr_attr::xpu_ctx` set.
+  The counter is an MSI-X hardware counter whose value and error value are in
+  device memory, so it cannot be read on the host (see *Completion counters*
+  above); the kernel reads it with `fi_xpu_cntr_read` and
+  `fi_xpu_cntr_readerr` once `fi_cntr_export_xpu` has published it.
+
+*Address vector*
+: `fi_av_lookup2` with *FI_XPU* returns the destination in the form the device
+  needs, the address handle number, remote QP number and qkey that EFA puts in
+  a work queue entry. The AV itself stays a host-only, domain-level resource.
+
+*Memory region*
+: `fi_mr_get_xpu_desc` returns the descriptor a kernel passes to a transfer,
+  which on EFA is the local memory key of the registration. A buffer a kernel
+  sends from or receives into has to be registered, as everywhere on
+  `efa-direct` (*FI_MR_LOCAL*), and the descriptor is mandatory rather than
+  optional: an info carrying *FI_XPU* also carries *FI_MR_XPU_DESC* in
+  `domain_attr->mr_mode`, and a request for *FI_XPU* whose hints do not accept
+  that mode fails `fi_getinfo` with *-FI_ENODATA*.
+
+Each export publishes a small device-resident handle, and closing the exported
+object releases it along with everything else that object took from the device:
+the endpoint's mappings of its queue buffers and doorbells, the completion
+queue's ring, and the counter's value buffers. Re-exporting an object releases
+the handle the previous export published. `struct fi_xpu_ops` has no
+counterpart to `import`, so a mapping produced by an application's own `import`
+callback is the application's to release; a mapping the provider made through
+the HMEM layer is undone there.
+
+## Device side
+
+A kernel includes `rdma/fi_xpu_device.h`, which dispatches on the handle's
+provider id and inlines the EFA implementation from
+`rdma/fi_xpu_device_efa.h`. EFA implements `fi_xpu_send`, `fi_xpu_recv`,
+`fi_xpu_write`, `fi_xpu_read`, `fi_xpu_cq_read`, `fi_xpu_cntr_read`,
+`fi_xpu_cntr_readerr` and `fi_xpu_cntr_wait`. Every other device-side entry
+point (tagged messaging, atomics, `fi_xpu_cq_readfrom`, `fi_xpu_cq_readerr`,
+the blocking CQ reads, and the counter mutators) returns *-FI_ENOSYS*, which
+matches the host side: `efa-direct` supports neither *FI_TAGGED* nor
+*FI_ATOMIC*. The message size limits are the ones the host side has, the device
+MTU for messages and the maximum RDMA size for RMA, queryable with
+*FI_OPT_MAX_MSG_SIZE* and *FI_OPT_MAX_RMA_SIZE*.
+
+The provider supports the *FI_XPU_WORK_ITEM*, *FI_XPU_SUBGROUP* and
+*FI_XPU_WORK_GROUP* scopes. *FI_XPU_DEVICE* returns *-FI_EOPNOTSUPP*, as does a
+scope the device header does not recognize. A scope spanning the grid would need
+a grid-wide barrier, which exists only in a cooperatively launched kernel - a
+launch the caller would then be bound to, with the grid no larger than the
+device can hold resident - and it would buy nothing, because a thread block
+already claims its queue slots with a single atomic and rings its own doorbell.
+
+A subgroup or work group claims one queue slot per participating thread, which
+is what lets one call post an operation for each of them. The device stages a
+bounded number of descriptors between doorbells, so a scope with more threads
+than that limit is posted in chunks; every thread of the scope must run the
+posting call to completion, including one whose slot fell in an earlier chunk,
+because closing a chunk is a barrier across the scope.
+
+Each exported handle carries the FI_VERSION of the library that exported it. A
+kernel is compiled against `rdma/fi_xpu_device_efa.h` but runs against handles
+exported by whatever libfabric the host process loaded, which may be older than
+the header; rather than read a layout it does not know, the EFA device
+operations return *-FI_EOPNOTSUPP* for a handle exported by a libfabric older
+than the release that introduced the layouts the header describes.
+`fi_xpu_cntr_read` and `fi_xpu_cntr_readerr` return the counter value itself
+and so cannot report this, but a kernel only reaches them through an endpoint
+or completion queue that has already been accepted.
+
+## Relation to FI_EFA_GDA_OPS
+
+*FI_XPU* is the standard form of what the provider-specific `FI_EFA_GDA_OPS`
+function table (see *PROVIDER SPECIFIC OPERATION EXTENSIONS* below) exposes.
+An application that queries queue geometry, addresses and memory keys through
+those ops to build its own device-side data path can get the same information
+from the *FI_XPU* calls, which are not specific to EFA. The GDA ops remain
+available.
+
 # LIMITATIONS
 
 ## Completion events
@@ -279,6 +422,24 @@ When using FI_HMEM for AWS Neuron or Habana SynapseAI buffers, the provider
 requires peer to peer transaction support between the EFA and the FI_HMEM
 device. Therefore, the FI_HMEM_P2P_DISABLED option is not supported by the EFA
 provider for AWS Neuron or Habana SynapseAI.
+
+## XPU (device-initiated) operations
+
+There is no unexport operation. The device-side handle and the device mappings
+that a successful `fi_ep_export_xpu`, `fi_cq_export_xpu` or
+`fi_cntr_export_xpu` creates stay live for the lifetime of the process, so
+export each object once and reuse the handle.
+
+An exported completion queue has a single consumer. The provider does not
+serialize `fi_xpu_cq_read` against another reader of the same CQ. A completion
+does not say which operation it belongs to, so a kernel whose scopes read the
+same CQ independently must ask for no more completions than the reading scope is
+owed, or it consumes the completions another scope is waiting for.
+
+An endpoint's send and receive queues are driven either by the kernel that
+exported them or by the host, not by both at once: the device side advances its
+own copy of the producer counters and rings the doorbell itself, so a host
+transfer posted on an exported endpoint at the same time corrupts the ring.
 
 # PROVIDER SPECIFIC ENDPOINT LEVEL OPTION
 
@@ -937,4 +1098,5 @@ This is useful for debugging memory registration issues. (Default: false).
 
 [`fabric`(7)](fabric.7.html),
 [`fi_provider`(7)](fi_provider.7.html),
-[`fi_getinfo`(3)](fi_getinfo.3.html)
+[`fi_getinfo`(3)](fi_getinfo.3.html),
+[`fi_xpu`(3)](fi_xpu.3.html)

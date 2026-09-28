@@ -148,8 +148,11 @@ AC_ARG_WITH([libfabric],
                                                     or defaults to the library search path]),
             [AS_IF([test -d $withval/lib64], [fab_libdir="lib64"], [fab_libdir="lib"])
              CPPFLAGS="-I$withval/include $CPPFLAGS"
-             LDFLAGS="-L$withval/$fab_libdir $LDFLAGS"],
-            [])
+             LDFLAGS="-L$withval/$fab_libdir $LDFLAGS"
+             fab_incdir="$withval/include"],
+            [fab_incdir="/usr/include"])
+
+AC_SUBST([fab_incdir])
 
 dnl Check for CUDA support. Require fabtests to dlopen CUDA runtime.
 have_cuda=0

@@ -240,6 +240,7 @@ endif
 src_libfabric_la_LDFLAGS += -export-dynamic \
 			   $(libfabric_version_script)
 rdmainclude_HEADERS += \
+	$(top_srcdir)/include/rdma/efa_io_defs.h \
 	$(top_srcdir)/include/rdma/fabric.h \
 	$(top_srcdir)/include/rdma/fi_atomic.h \
 	$(top_srcdir)/include/rdma/fi_cm.h \
@@ -254,7 +255,8 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_trigger.h \
 	$(top_srcdir)/include/rdma/fi_profile.h \
 	$(top_srcdir)/include/rdma/fi_xpu.h \
-	$(top_srcdir)/include/rdma/fi_xpu_device.h
+	$(top_srcdir)/include/rdma/fi_xpu_device.h \
+	$(top_srcdir)/include/rdma/fi_xpu_device_efa.h
 providersinclude_HEADERS += \
 	$(top_srcdir)/include/rdma/providers/fi_log.h \
 	$(top_srcdir)/include/rdma/providers/fi_peer.h \

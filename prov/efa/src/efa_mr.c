@@ -5,6 +5,8 @@
 #include <ofi_util.h>
 #include "efa.h"
 #include "efa_direct_ope.h"
+#include "efa_xpu.h"
+#include <rdma/fi_xpu_device_efa.h>
 #include "rdm/efa_rdm_ep.h"
 #include "rdm/efa_rdm_ope.h"
 #if HAVE_CUDA
@@ -284,11 +286,37 @@ static int efa_mr_close(fid_t fid)
 	return ret;
 }
 
+int efa_mr_control(struct fid *fid, int command, void *arg)
+{
+	struct fi_mr_xpu_desc *mr_desc;
+	struct efa_mr *efa_mr;
+	struct efa_xpu_desc *desc;
+
+	if (command != FI_GET_MR_XPU_DESC)
+		return -FI_ENOSYS;
+
+	mr_desc = (struct fi_mr_xpu_desc *) arg;
+	if (!fid || !mr_desc || !mr_desc->buf || !mr_desc->len)
+		return -FI_EINVAL;
+
+	if (*mr_desc->len < sizeof(struct efa_xpu_desc))
+		return -FI_ETOOSMALL;
+
+	efa_mr = container_of(fid, struct efa_mr, mr_fid.fid);
+
+	desc = (struct efa_xpu_desc *) mr_desc->buf;
+	memset(desc, 0, sizeof(*desc));
+	desc->lkey = efa_mr->lkey;
+
+	*mr_desc->len = sizeof(struct efa_xpu_desc);
+	return 0;
+}
+
 struct fi_ops efa_mr_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_mr_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = efa_mr_control,
 	.ops_open = fi_no_ops_open,
 };
 

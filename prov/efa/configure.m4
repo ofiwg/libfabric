@@ -332,6 +332,12 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([HAVE_EFA_DATA_PATH_DIRECT],
 		[$have_efa_data_path_direct],
 		[Indicates if data path direct is available (requires both QUERY_QP_WQS and QUERY_CQ)])
+	AS_IF([test "$have_efadv_query_qp_wqs" = "1" -a "$have_efadv_query_cq" = "1"],
+		[have_efa_xpu=1],
+		[have_efa_xpu=0])
+	AC_DEFINE_UNQUOTED([HAVE_EFA_XPU],
+		[$have_efa_xpu],
+		[Indicates if EFA XPU support is available (requires both QUERY_QP_WQS and QUERY_CQ)])
 	AS_IF([test "$have_ibv_create_comp_channel" = "1" -a "$have_ibv_get_cq_event" = "1"],
 		[have_efa_cq_notification=1],
 		[have_efa_cq_notification=0])

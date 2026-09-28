@@ -5,6 +5,7 @@
 #include "efa.h"
 #include "efa_cq.h"
 #include "efa_hw_cntr.h"
+#include "efa_xpu.h"
 
 #if HAVE_EFADV_CREATE_COMP_CNTR
 struct fi_ops efa_hw_cntr_fi_ops = {
@@ -24,6 +25,11 @@ struct fi_ops_cntr efa_hw_cntr_ops = {
 	.set = efa_hw_cntr_set,
 	.seterr = efa_hw_cntr_seterr,
 	.wait = efa_hw_cntr_wait,
+	/*
+	 * An FI_XPU counter is always a hardware counter, so this table is the
+	 * one an application reaches fi_cntr_export_xpu() through.
+	 */
+	.export_xpu = efa_cntr_export_xpu,
 };
 
 static int efa_hw_cntr_check_attr(struct efa_domain *efa_domain,

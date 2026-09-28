@@ -7,6 +7,9 @@
 #include "efa.h"
 
 #include "efa_data_path_direct_structs.h"
+
+struct efa_xpu_cq_state;
+
 enum ibv_cq_ex_type {
 	IBV_CQ,
 	EFADV_CQ
@@ -36,6 +39,7 @@ struct efa_cq {
 	struct efa_ibv_cq		ibv_cq;
 	int	(*poll_ibv_cq)(ssize_t cqe_to_progress, struct efa_ibv_cq *ibv_cq);
 	struct fd_signal		signal;
+	enum fi_cq_format		format;
 	size_t					entry_size;
 	ofi_atomic32_t			nevents;
 	enum fi_wait_obj		wait_obj;
@@ -43,6 +47,10 @@ struct efa_cq {
 	/* Only used by efa-direct cq on util cq bypass path */
 	void (*read_entry)(struct efa_ibv_cq *ibv_cq, void *buf, int opcode);
 	char *err_buf;
+	/* XPU (FI_XPU) state: holds the device-resident CQ ring buffer
+	 * allocated at open time. NULL when not an XPU CQ. Mirrors the
+	 * acc_state model on the fi_accelerator branch. */
+	struct efa_xpu_cq_state *xpu_state;
 };
 
 extern struct fi_ops_cq efa_cq_ops;

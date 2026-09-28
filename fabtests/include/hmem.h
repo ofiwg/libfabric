@@ -187,6 +187,8 @@ int ft_cuda_alloc_host(void **buf, size_t size);
 int ft_cuda_free(void *buf);
 int ft_cuda_free_host(void *buf);
 int ft_cuda_memset(uint64_t device, void *buf, int value, size_t size);
+int ft_cuda_stream_create(void **stream);
+int ft_cuda_stream_destroy(void *stream);
 int ft_cuda_copy_to_hmem(uint64_t device, void *dst, const void *src,
 			 size_t size);
 int ft_cuda_copy_from_hmem(uint64_t device, void *dst, const void *src,

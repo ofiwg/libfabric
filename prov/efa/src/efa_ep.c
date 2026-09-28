@@ -6,6 +6,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_cq.h"
+#include "efa_xpu.h"
 
 #include <infiniband/efadv.h>
 
@@ -215,6 +216,7 @@ static struct fi_ops_ep efa_ep_base_ops = {
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
+	.export_xpu = efa_ep_export_xpu,
 };
 
 static int efa_ep_close(fid_t fid)
@@ -501,11 +503,28 @@ struct fi_ops_cm efa_ep_cm_ops = {
 	.join = fi_no_join,
 };
 
-int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
-		struct fid_ep **ep_fid, void *context)
+static int efa_ep_open_flags(struct fid_domain *domain_fid,
+			     struct fi_info *user_info,
+			     struct fid_ep **ep_fid, uint64_t flags,
+			     void *context)
 {
 	struct efa_base_ep *ep;
+	struct fid_xpu_ctx *xpu_ctx;
 	int ret;
+
+	xpu_ctx = (user_info && user_info->ep_attr) ?
+		  user_info->ep_attr->xpu_ctx : NULL;
+
+	/*
+	 * FI_XPU and ep_attr->xpu_ctx describe the same decision from two
+	 * sides: the flag says the data path belongs to an XPU, the context
+	 * says which one. Either alone is an application asking for something
+	 * other than what it thinks, so take them only together. A context can
+	 * only be opened where FI_XPU is supported, so it is also what makes
+	 * the flag acceptable.
+	 */
+	if (!(flags & FI_XPU) != !xpu_ctx)
+		return -FI_EINVAL;
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
@@ -514,6 +533,13 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	ret = efa_base_ep_construct(ep, domain_fid, user_info, efa_ep_progress_no_op, context);
 	if (ret)
 		goto err_ep_destroy;
+
+	/*
+	 * Remember that the data path is the XPU's. The export call needs it,
+	 * and it is what tells the host paths that an endpoint they cannot
+	 * drive went out the door.
+	 */
+	ep->util_ep.flags |= flags & FI_XPU;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.fclass = FI_CLASS_EP;
@@ -532,4 +558,31 @@ err_ep_destroy:
 	if (ep)
 		free(ep);
 	return ret;
+}
+
+int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
+		struct fid_ep **ep_fid, void *context)
+{
+	return efa_ep_open_flags(domain_fid, user_info, ep_fid, 0, context);
+}
+
+/**
+ * @brief Open an endpoint with the flags fi_info cannot carry
+ *
+ * EFA takes one such flag, FI_XPU, which hands the endpoint data path to the
+ * XPU context in user_info->ep_attr->xpu_ctx. Everything else about the
+ * endpoint is opened the same way fi_endpoint() opens it.
+ */
+int efa_ep_open2(struct fid_domain *domain_fid, struct fi_info *user_info,
+		 struct fid_ep **ep_fid, uint64_t flags, void *context)
+{
+	if (flags & ~FI_XPU) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "Unsupported endpoint flags: 0x%" PRIx64
+			 ". EFA supports FI_XPU only.\n",
+			 (uint64_t) (flags & ~FI_XPU));
+		return -FI_EBADFLAGS;
+	}
+
+	return efa_ep_open_flags(domain_fid, user_info, ep_fid, flags, context);
 }
