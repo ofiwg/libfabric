@@ -1365,6 +1365,11 @@ struct util_srx_ctx {
 	struct ofi_bufpool	*rx_pool;
 	struct ofi_genlock	*lock;
 	struct ofi_genlock	unspec_lock;
+
+	/* Set by the peer provider on its first foreach_unspec_addr call.
+	 * Lets the app receive-post path drain older unspec-queued entries
+	 * for a resolved peer before matching. */
+	fi_addr_t		(*get_addr_fn)(struct fi_peer_rx_entry *);
 };
 
 struct util_match_attr {

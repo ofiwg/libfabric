@@ -775,6 +775,7 @@ ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
 		rx_entry = (struct util_rx_entry *)
 				(((struct fi_context *) context)->internal[0]);
 	} else {
+		util_foreach_unspec(&srx->peer_srx, srx->get_addr_fn);
 		rx_entry = util_search_unexp_tag(srx, addr, tag, ignore, true);
 		if (!rx_entry) {
 			queue = addr == FI_ADDR_UNSPEC ? &srx->tag_queue:
@@ -821,6 +822,7 @@ ssize_t util_srx_generic_recv(struct fid_ep *ep_fid, const struct iovec *iov,
 	addr = srx->dir_recv ? addr : FI_ADDR_UNSPEC;
 
 	ofi_genlock_lock(srx->lock);
+	util_foreach_unspec(&srx->peer_srx, srx->get_addr_fn);
 	rx_entry = util_search_unexp_msg(srx, addr);
 	if (!rx_entry) {
 		queue = addr == FI_ADDR_UNSPEC ? &srx->msg_queue :
