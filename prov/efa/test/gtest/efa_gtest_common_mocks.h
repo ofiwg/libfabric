@@ -7,6 +7,10 @@
 
 #include "config.h"
 
+#if HAVE_CUDA && HAVE_CUDA_CTX_SYNC_MEMOPS
+#include <cuda.h>
+#endif
+
 #include <bitset>
 #include <gmock/gmock.h>
 #include <vector>
@@ -55,7 +59,19 @@ struct dlist_entry;
 #define EFA_MOCK_FUNCTIONS_QUERY_QP_WQS(X)
 #endif
 
+#if HAVE_CUDA && HAVE_CUDA_CTX_SYNC_MEMOPS
+#define EFA_MOCK_FUNCTIONS_CUDA_CTX_SYNC_MEMOPS(X)                            \
+	X(CUresult, ofi_cuDevicePrimaryCtxGetState,                           \
+	  (CUdevice dev, unsigned int *flags, int *active),                   \
+	  (dev, flags, active))                                               \
+	X(CUresult, ofi_cuDevicePrimaryCtxSetFlags,                           \
+	  (CUdevice dev, unsigned int flags), (dev, flags))
+#else
+#define EFA_MOCK_FUNCTIONS_CUDA_CTX_SYNC_MEMOPS(X)
+#endif
+
 #define EFA_MOCK_FUNCTIONS(X)                                                  \
+	X(int, cuda_set_sync_memops, (void *ptr), (ptr))                        \
 	X(struct ibv_ah *, ibv_create_ah,                                      \
 	  (struct ibv_pd * pd, struct ibv_ah_attr * attr), (pd, attr))         \
 	X(int, ibv_destroy_ah, (struct ibv_ah * ibv_ah), (ibv_ah))             \
@@ -155,7 +171,8 @@ struct dlist_entry;
 	X(int, ibv_modify_qp,                                                  \
 	  (struct ibv_qp * qp, struct ibv_qp_attr * attr, int attr_mask),      \
 	  (qp, attr, attr_mask))                                               \
-	EFA_MOCK_FUNCTIONS_QUERY_QP_WQS(X)
+	EFA_MOCK_FUNCTIONS_QUERY_QP_WQS(X)                                    \
+	EFA_MOCK_FUNCTIONS_CUDA_CTX_SYNC_MEMOPS(X)
 
 /* --- Generator macros --- */
 
