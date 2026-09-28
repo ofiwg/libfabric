@@ -162,3 +162,21 @@ struct fi_ops_wr efa_wr_ops = {
 	.modify_data = efa_wr_modify_data,
 	.modify_flags = efa_wr_modify_flags,
 };
+
+size_t efa_wr_tx_size(void)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	return sizeof(struct efa_io_tx_wqe_128);
+#else
+	return 0;
+#endif
+}
+
+size_t efa_wr_rx_size(size_t num_sge)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	return num_sge * sizeof(struct efa_io_rx_desc);
+#else
+	return 0;
+#endif
+}
