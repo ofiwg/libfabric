@@ -112,3 +112,36 @@ TEST_F(EfaInfoQueueDepthTest, getinfo_rejects_tx_size_above_wide_wqe_depth)
 	EXPECT_EQ(getinfo(), -FI_ENODATA);
 	EXPECT_EQ(info, nullptr);
 }
+
+class EfaInfoMsgPrefixTest : public Test
+{
+	protected:
+	struct fi_info *hints = nullptr;
+	struct fi_info *info = nullptr;
+
+	void SetUp() override
+	{
+		hints = efa_test_alloc_default_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+		ASSERT_NE(hints, nullptr);
+		hints->mode |= FI_MSG_PREFIX;
+	}
+
+	void TearDown() override
+	{
+		if (info)
+			fi_freeinfo(info);
+		if (hints)
+			fi_freeinfo(hints);
+	}
+};
+
+TEST_F(EfaInfoMsgPrefixTest, advertised_prefix_size_is_176)
+{
+	ASSERT_EQ(fi_getinfo(FI_VERSION(1, 6), NULL, NULL, 0, hints, &info), 0);
+	ASSERT_NE(info, nullptr);
+
+	for (struct fi_info *cur = info; cur; cur = cur->next) {
+		EXPECT_TRUE(cur->mode & FI_MSG_PREFIX);
+		EXPECT_EQ(cur->ep_attr->msg_prefix_size, 176u);
+	}
+}
