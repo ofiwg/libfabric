@@ -241,6 +241,7 @@ void test_efa_rdm_cq_sread_with_cqe(void **state);
 /* begin efa_unit_test_info.c */
 void test_info_open_ep_with_wrong_info(void **state);
 void test_info_rdm_attributes(void **state);
+void test_info_rdm_msg_prefix_size(void **state);
 void test_info_dgram_attributes(void **state);
 void test_info_direct_attributes_no_rma(void **state);
 void test_info_direct_attributes_rma(void **state);
