@@ -397,6 +397,7 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #if HAVE_NEURON
 	.neuron_alloc = __real_neuron_alloc,
 #endif
+	.cuda_set_sync_memops = __real_cuda_set_sync_memops,
 #if HAVE_CUDA
 	.ofi_cudaMalloc = __real_ofi_cudaMalloc,
 	.ofi_cuDeviceGet = __real_ofi_cuDeviceGet,
@@ -685,6 +686,11 @@ void *efa_mock_neuron_alloc_return_mock(void **handle, size_t size)
 	return (void *) mock();
 }
 #endif
+
+int __wrap_cuda_set_sync_memops(void *ptr)
+{
+	return g_efa_unit_test_mocks.cuda_set_sync_memops(ptr);
+}
 
 #if HAVE_CUDA
 cudaError_t __wrap_ofi_cudaMalloc(void **ptr, size_t size)

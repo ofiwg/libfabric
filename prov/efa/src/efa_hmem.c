@@ -9,6 +9,44 @@
 
 struct efa_hmem_info g_efa_hmem_info[OFI_HMEM_MAX];
 
+int efa_hmem_set_sync_memops(void *ptr, uint64_t device){
+#if HAVE_CUDA_CTX_SYNC_MEMOPS
+	CUresult cu_result;
+	CUdevice cu_device = (CUdevice) device;
+	unsigned int ctx_flags;
+	int active;
+	int ret;
+
+	ret = cuda_set_sync_memops(ptr);
+	if (ret != -FI_EOPNOTSUPP)
+		return ret;
+
+	cu_result = ofi_cuDevicePrimaryCtxGetState(cu_device, &ctx_flags, &active);
+	if (cu_result != CUDA_SUCCESS) {
+		EFA_WARN(FI_LOG_MR,
+			 "Failed to get CUDA device %d primary context flags: %d\n",
+			 cu_device, (int) cu_result);
+		return -FI_EINVAL;
+	}
+
+	if (ctx_flags & CU_CTX_SYNC_MEMOPS)
+		return FI_SUCCESS;
+
+	cu_result = ofi_cuDevicePrimaryCtxSetFlags(cu_device, ctx_flags | CU_CTX_SYNC_MEMOPS);
+	if (cu_result == CUDA_SUCCESS)
+		return FI_SUCCESS;
+
+	EFA_WARN(FI_LOG_MR,
+		 "Failed to set CUDA device %d primary context flag "
+		 "CU_CTX_SYNC_MEMOPS: %d\n",
+		 cu_device, (int) cu_result);
+	return -FI_EINVAL;
+#else
+	(void) device;
+	return cuda_set_sync_memops(ptr);
+#endif
+}
+
 // TODO double-check for ROCr
 #if HAVE_CUDA || HAVE_NEURON || HAVE_ROCR
 static size_t efa_max_eager_msg_size_with_largest_header() {
