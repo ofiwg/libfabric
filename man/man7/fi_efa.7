@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_efa" "7" "2026\-09\-08" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_efa" "7" "2026\-09\-28" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -102,10 +102,25 @@ DGRAM endpoints do not support wait objects.
 \f[I]Modes\f[R]
 The provider requires the use of \f[I]FI_MSG_PREFIX\f[R] when running
 over the DGRAM endpoint.
-And it requires the use of \f[I]FI_CONTEXT2\f[R] mode for DGRAM endpoint
-and the \f[V]efa-direct\f[R] fabric of RDM endpoint.
-The \f[V]efa\f[R] fabric of RDM endpoint doesn\[cq]t have these
-requirements.
+.PP
+The \f[I]FI_CONTEXT2\f[R] requirement for the DGRAM endpoint and the
+\f[V]efa-direct\f[R] fabric of an RDM endpoint depends on the libfabric
+API version passed to \f[V]fi_getinfo\f[R]:
+.IP \[bu] 2
+For API versions before 2.7, \f[I]FI_CONTEXT2\f[R] is required.
+When non-NULL hints do not advertise the mode, \f[V]fi_getinfo\f[R] does
+not return these endpoints.
+.IP \[bu] 2
+For API version 2.7 and later, \f[I]FI_CONTEXT2\f[R] is optional.
+With non-NULL hints, omitting the mode selects operation without an
+application context buffer.
+In this mode inject, \f[I]FI_SELECTIVE_COMPLETION\f[R], and
+\f[I]FI_EFA_TRACK_MR\f[R] are unavailable.
+When hints are NULL or advertise \f[I]FI_CONTEXT2\f[R], the returned
+\f[V]fi_info\f[R] includes the mode.
+.PP
+The \f[V]efa\f[R] fabric of an RDM endpoint does not use
+\f[I]FI_CONTEXT2\f[R].
 .TP
 \f[I]Memory registration modes\f[R]
 The \f[V]efa\f[R] fabric of RDM endpoint does not require memory
