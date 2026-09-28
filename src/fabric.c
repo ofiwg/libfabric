@@ -778,10 +778,42 @@ static void ofi_load_preferred_dl_prov(const char *path)
 	prov_preferred = false;
 }
 
+static char* ofi_default_provdir(void) {
+	char *default_provdir = PROVDLDIR, *slash, *tmp, *dirname = NULL;
+	char *suffix = "libfabric";
+	int len;
+#if HAVE_LIBDL
+	Dl_info info;
+#ifdef _WIN32
+    #define PATH_SEP '\\'
+#else
+    #define PATH_SEP '/'
+#endif
+	if (dladdr(ofi_default_provdir, &info)) {
+		dirname = strdup(info.dli_fname);
+		slash = strrchr(dirname, PATH_SEP);
+		if (slash) {
+			*slash = '\0';
+			len = strlen(dirname) + strlen(suffix) + 1;
+			tmp = malloc(len + 1);
+			if (!tmp)
+				goto out;
+
+			snprintf(tmp, len + 1, "%s%c%s", dirname,
+				 PATH_SEP, suffix);
+			default_provdir = tmp;
+		}
+	}
+out:
+	free(dirname);
+#endif
+	return default_provdir;
+}
+
 static void ofi_load_dl_prov(void)
 {
 	char **dirs;
-	char *provdir = NULL;
+	char *provdir = NULL, *def_provdir = NULL;
 	void *dlhandle;
 	int i;
 
@@ -790,6 +822,10 @@ static void ofi_load_dl_prov(void)
 	if (!dlhandle)
 		return;
 	dlclose(dlhandle);
+
+	def_provdir = ofi_default_provdir();
+	FI_INFO(&core_prov, FI_LOG_CORE,
+		"default provider directory: \"%s\"\n", def_provdir);
 
 	fi_param_define(NULL, "provider_path", FI_PARAM_STRING,
 			"Search for providers in specific path.  Path is "
@@ -801,7 +837,7 @@ static void ofi_load_dl_prov(void)
 			"which specifies a preferred provider.  If registered "
 			"successfully, a preferred provider has priority over "
 			"other providers with the same name. "
-			"(default: " PROVDLDIR ")");
+			"(default: %s)", def_provdir);
 
 	fi_param_get_str(NULL, "provider_path", &provdir);
 
@@ -815,11 +851,11 @@ static void ofi_load_dl_prov(void)
 
 	if (!provdir || !strlen(provdir)) {
 		ofi_find_prov_libs();
-		dirs = ofi_split_and_alloc(PROVDLDIR, ":", NULL);
+		dirs = ofi_split_and_alloc(def_provdir, ":", NULL);
 	} else if (provdir[0] == '@') {
 		prov_order = OFI_PROV_ORDER_REGISTER;
 		if (strlen(provdir) == 1)
-			dirs = ofi_split_and_alloc(PROVDLDIR, ":", NULL);
+			dirs = ofi_split_and_alloc(def_provdir, ":", NULL);
 		else
 			dirs = ofi_split_and_alloc(&provdir[1], ":", NULL);
 	} else {
@@ -841,19 +877,21 @@ static void ofi_load_dl_prov(void)
 		ofi_free_string_array(dirs);
 
 		if (num_dirs)
-			return;
+			goto free;
 
 		/*
 		 * When FI_PROVIDER_PATH contains only preferred providers, go
 		 * back to search under the default path.
 		 */
-		dirs = ofi_split_and_alloc(PROVDLDIR, ":", NULL);
+		dirs = ofi_split_and_alloc(def_provdir, ":", NULL);
 		if (dirs) {
 			for (i = 0; dirs[i]; i++)
 				ofi_ini_dir(dirs[i]);
 			ofi_free_string_array(dirs);
 		}
 	}
+free:
+	free(def_provdir);
 }
 
 #else /* HAVE_LIBDL */
