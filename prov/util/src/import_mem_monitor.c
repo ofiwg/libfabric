@@ -95,7 +95,9 @@ static int ofi_import_monitor_start(struct ofi_mem_monitor *monitor)
 
 static void ofi_import_monitor_stop(struct ofi_mem_monitor *monitor)
 {
-	assert(impmon.impfid);
+	if (!impmon.impfid)
+		return;
+
 	impmon.impfid->export_ops->stop(impmon.impfid);
 }
 
@@ -103,7 +105,9 @@ static int ofi_import_monitor_subscribe(struct ofi_mem_monitor *notifier,
 					const void *addr, size_t len,
 					union ofi_mr_hmem_info *hmem_info)
 {
-	assert(impmon.impfid);
+	if (!impmon.impfid)
+		return -FI_ENOSYS;
+
 	return impmon.impfid->export_ops->subscribe(impmon.impfid, addr, len);
 }
 
@@ -111,7 +115,9 @@ static void ofi_import_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
 					   const void *addr, size_t len,
 					   union ofi_mr_hmem_info *hmem_info)
 {
-	assert(impmon.impfid);
+	if (!impmon.impfid)
+		return;
+
 	impmon.impfid->export_ops->unsubscribe(impmon.impfid, addr, len);
 }
 
@@ -119,7 +125,9 @@ static bool ofi_import_monitor_valid(struct ofi_mem_monitor *notifier,
 				     const struct ofi_mr_info *info,
 				     struct ofi_mr_entry *entry)
 {
-	assert(impmon.impfid);
+	if (!impmon.impfid)
+		return false;
+
 	return impmon.impfid->export_ops->valid(impmon.impfid,
 						entry->info.iov.iov_base,
 						entry->info.iov.iov_len);
@@ -138,10 +146,18 @@ static void ofi_import_monitor_notify(struct fid_mem_monitor *monitor,
 
 static int ofi_close_import(struct fid *fid)
 {
+	/*
+	 * Monitor start/stop callbacks are invoked with mm_state_lock held,
+	 * while cache callbacks are invoked with mm_lock held.  Take both
+	 * locks so that the exporter may release the monitor as soon as
+	 * fi_close() returns without racing an active callback.
+	 */
 	pthread_mutex_lock(&mm_state_lock);
+	pthread_mutex_lock(&mm_lock);
 	impmon.monitor.state = FI_MM_STATE_IDLE;
-	pthread_mutex_unlock(&mm_state_lock);
 	impmon.impfid = NULL;
+	pthread_mutex_unlock(&mm_lock);
+	pthread_mutex_unlock(&mm_state_lock);
 	return 0;
 }
 
