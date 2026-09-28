@@ -112,6 +112,12 @@ static int efa_util_prov_initialize()
 		/* This function must be called after efa_hmem_info_initialize() */
 		efa_prov_info_direct_set_hmem_flags(prov_info_direct);
 
+#if HAVE_EFA_DATA_PATH_DIRECT
+		prov_info_direct->caps          |= FI_WR;
+		prov_info_direct->tx_attr->caps |= FI_WR;
+		prov_info_direct->rx_attr->caps |= FI_WR;
+#endif
+
 		if (!head) {
 			head = prov_info_direct;
 		} else {

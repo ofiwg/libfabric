@@ -570,7 +570,14 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 static int efa_user_info_set_context2(uint32_t version, struct fi_info *info,
 				      const struct fi_info *hints)
 {
-	bool use_context2 = !hints || (hints->mode & FI_CONTEXT2);
+	/*
+	 * FI_WR is a secondary capability. It only works in NO_CONTEXT mode:
+	 * the opaque hardware work request has no room to carry the addr/flags 
+	 * that filling an efa_context into the caller's FI_CONTEXT2 buffer would require.
+	 */
+	bool wr_requested = hints && (hints->caps & FI_WR);
+	bool use_context2 = !wr_requested &&
+			    (!hints || (hints->mode & FI_CONTEXT2));
 
 	if (FI_VERSION_LT(version, FI_VERSION(2, 7)) && !use_context2)
 		return -FI_ENODATA;
@@ -579,6 +586,9 @@ static int efa_user_info_set_context2(uint32_t version, struct fi_info *info,
 		info->mode |= FI_CONTEXT2;
 		info->tx_attr->mode |= FI_CONTEXT2;
 		info->rx_attr->mode |= FI_CONTEXT2;
+		info->caps          &= ~FI_WR;
+		info->tx_attr->caps &= ~FI_WR;
+		info->rx_attr->caps &= ~FI_WR;
 		return 0;
 	}
 

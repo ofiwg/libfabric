@@ -397,6 +397,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_info_direct_with_context2_api_lt_2_7, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_dgram_without_context2_api_lt_2_7, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_direct_without_context2_api_ge_2_7, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_direct_wr_requested_drops_context2, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_reuse_fabric_via_fabric_attr, NULL, NULL),
 		cmocka_unit_test_setup_teardown(test_info_reuse_domain_via_domain_attr, NULL, NULL),
 		cmocka_unit_test_setup_teardown(test_info_reuse_fabric_via_name, NULL, NULL),

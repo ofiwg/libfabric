@@ -26,4 +26,8 @@ int efa_wr_rx_flush(struct fid_ep *ep_fid, uint64_t flags);
 
 extern struct fi_ops_wr efa_wr_ops;
 
+size_t efa_wr_tx_size(void);
+
+size_t efa_wr_rx_size(size_t num_sge);
+
 #endif /* EFA_WR_H */

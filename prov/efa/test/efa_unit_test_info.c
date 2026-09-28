@@ -3,6 +3,7 @@
 
 #include "efa_unit_tests.h"
 #include "efa_prov_info.h"
+#include "efa_wr.h"
 
 /**
  * @brief test that when a wrong fi_info was used to open resource, the error is handled
@@ -70,6 +71,9 @@ void test_info_rdm_attributes(void **state)
 		assert_int_equal(info->domain_attr->progress, FI_PROGRESS_MANUAL);
 		assert_int_equal(info->domain_attr->control_progress, FI_PROGRESS_MANUAL);
 		assert_int_equal(info->domain_attr->cntr_cnt, g_efa_selected_device_list[0].max_comp_cntr);
+		assert_int_equal(info->ep_attr->max_tx_wr_size, 0);
+		assert_int_equal(info->ep_attr->max_rx_wr_size, 0);
+		assert_false(info->caps & FI_WR);
 #if EFA_HAVE_NON_SYSTEM_HMEM
 		assert_false(info->caps & FI_HMEM);
 #endif
@@ -890,6 +894,10 @@ void test_info_direct_with_context2_api_lt_2_7(void **state)
 	assert_true(info->tx_attr->mode & FI_CONTEXT2);
 	assert_true(info->rx_attr->mode & FI_CONTEXT2);
 
+	assert_false(info->caps & FI_WR);
+	assert_false(info->tx_attr->caps & FI_WR);
+	assert_false(info->rx_attr->caps & FI_WR);
+
 	fi_freeinfo(info);
 	fi_freeinfo(hints);
 }
@@ -928,6 +936,41 @@ void test_info_direct_without_context2_api_ge_2_7(void **state)
 	assert_false(info->tx_attr->mode & FI_CONTEXT2);
 	assert_false(info->rx_attr->mode & FI_CONTEXT2);
 	assert_int_equal(info->tx_attr->inject_size, 0);
+	assert_true(info->caps & FI_WR);
+	assert_true(info->tx_attr->caps & FI_WR);
+	assert_true(info->rx_attr->caps & FI_WR);
+	assert_int_equal(info->ep_attr->max_tx_wr_size, efa_wr_tx_size());
+	assert_int_equal(info->ep_attr->max_rx_wr_size,
+			 efa_wr_rx_size(g_efa_selected_device_list[0].efa_attr.max_rq_sge));
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+}
+
+void test_info_direct_wr_requested_drops_context2(void **state)
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_DIRECT_FABRIC_NAME);
+	assert_non_null(hints);
+	assert_true(hints->mode & FI_CONTEXT2);
+	hints->caps |= FI_WR;
+
+	err = fi_getinfo(FI_VERSION(2, 7), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+	assert_string_equal(info->fabric_attr->name, EFA_DIRECT_FABRIC_NAME);
+	assert_false(info->mode & FI_CONTEXT2);
+	assert_false(info->tx_attr->mode & FI_CONTEXT2);
+	assert_false(info->rx_attr->mode & FI_CONTEXT2);
+	assert_true(info->caps & FI_WR);
+	assert_true(info->tx_attr->caps & FI_WR);
+	assert_true(info->rx_attr->caps & FI_WR);
+	assert_int_equal(info->tx_attr->inject_size, 0);
+	assert_int_equal(info->ep_attr->max_tx_wr_size, efa_wr_tx_size());
+	assert_int_equal(info->ep_attr->max_rx_wr_size,
+			 efa_wr_rx_size(g_efa_selected_device_list[0].efa_attr.max_rq_sge));
 
 	fi_freeinfo(info);
 	fi_freeinfo(hints);
