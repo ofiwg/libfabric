@@ -714,7 +714,8 @@ static inline int efa_rdm_attempt_to_sync_memops_iov(struct efa_rdm_ep *ep, stru
 		for (i = 0; i < num_desc; i++) {
 			efa_rdm_mr = (struct efa_rdm_mr *) desc[i];
 			if (efa_rdm_mr && efa_rdm_mr->needs_sync) {
-				err = cuda_set_sync_memops(iov[i].iov_base);
+				err = efa_hmem_set_sync_memops(
+					iov[i].iov_base, efa_rdm_mr->device);
 				if (err) {
 					EFA_WARN(FI_LOG_MR,
 						 "Unable to set memops for "
@@ -742,7 +743,8 @@ static inline int efa_rdm_attempt_to_sync_memops_ioc(struct efa_rdm_ep *ep, stru
 		for (i = 0; i < num_desc; i++) {
 			efa_rdm_mr = (struct efa_rdm_mr *) desc[i];
 			if (efa_rdm_mr && efa_rdm_mr->needs_sync) {
-				err = cuda_set_sync_memops(ioc[i].addr);
+				err = efa_hmem_set_sync_memops(
+					ioc[i].addr, efa_rdm_mr->device);
 				if (err) {
 					EFA_WARN(FI_LOG_MR,
 						 "Unable to set memops for "
