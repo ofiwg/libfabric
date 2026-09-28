@@ -85,6 +85,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 #if HAVE_NEURON
 		.neuron_alloc = __real_neuron_alloc,
 #endif
+		.cuda_set_sync_memops = __real_cuda_set_sync_memops,
 #if HAVE_CUDA
 		.ofi_cudaMalloc = __real_ofi_cudaMalloc,
 		.ofi_cuDeviceGet = __real_ofi_cuDeviceGet,
@@ -436,6 +437,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_p2p_disabled_synapse, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_disable_p2p_cuda, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_check_p2p_cuda_ctx_create_destroy_on_memalloc_fail, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_hmem_set_sync_memops_active_primary_context_worker_thread, efa_unit_test_hmem_setup, efa_unit_test_hmem_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_min_multi_recv_size, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_srx_lock, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
