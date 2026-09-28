@@ -56,6 +56,14 @@
 CUresult CUDAAPI cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev);
 
 /*
+ * Explicitly declare cuDevicePrimaryCtxSetFlags_v2 so its dynamic symbol name
+ * is stable regardless of the cuDevicePrimaryCtxSetFlags macro definition in
+ * the CUDA headers.
+ */
+CUresult CUDAAPI cuDevicePrimaryCtxSetFlags_v2(CUdevice dev,
+					       unsigned int flags);
+
+/*
  * Convenience higher-order macros for enumerating CUDA driver/runtime and
  * NVML API function names
  */
@@ -65,6 +73,14 @@ CUresult CUDAAPI cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice de
   _(cuMemGetHandleForAddressRange)
 #else
 #define CUDA_DRIVER_DMABUF_FUNCS_DEF(_)
+#endif
+
+#if HAVE_CUDA_CTX_SYNC_MEMOPS
+#define CUDA_DRIVER_OPTIONAL_FUNCS_DEF(_) \
+	_(cuDevicePrimaryCtxGetState) \
+	_(cuDevicePrimaryCtxSetFlags_v2)
+#else
+#define CUDA_DRIVER_OPTIONAL_FUNCS_DEF(_)
 #endif
 
 #define CUDA_DRIVER_FUNCS_DEF(_)	\
@@ -178,6 +194,13 @@ static struct {
 					 CUdevice_attribute attrib, CUdevice dev);
 	CUresult (*cuDeviceGet)(CUdevice* device, int ordinal);
 	CUresult (*cuCtxGetCurrent)(CUcontext *pctx);
+#if HAVE_CUDA_CTX_SYNC_MEMOPS
+	CUresult (*cuDevicePrimaryCtxGetState)(CUdevice dev,
+					       unsigned int *flags,
+					       int *active);
+	CUresult (*cuDevicePrimaryCtxSetFlags_v2)(CUdevice dev,
+						  unsigned int flags);
+#endif
 	CUresult (*cuCtxCreate_v2)(CUcontext *pctx, unsigned int flags, CUdevice dev);
 	CUresult (*cuCtxDestroy)(CUcontext ctx);
 	CUresult (*cuMemAlloc)(CUdeviceptr *dptr, size_t bytesize);
@@ -219,6 +242,7 @@ static struct {
 #define CUDA_OPS_INIT(sym) .sym = sym,
 = {
 	CUDA_DRIVER_FUNCS_DEF(CUDA_OPS_INIT)
+	CUDA_DRIVER_OPTIONAL_FUNCS_DEF(CUDA_OPS_INIT)
 	CUDA_RUNTIME_FUNCS_DEF(CUDA_OPS_INIT)
 	NVML_FUNCS_DEF(CUDA_OPS_INIT)
 }
@@ -304,7 +328,8 @@ CUresult ofi_cuPointerGetAttributes(unsigned int num_attributes,
  * the data consistency for CUDA IPC.
  *
  * @param ptr the cuda ptr
- * @return int 0 on success, -FI_EINVAL on failure.
+ * @return int 0 on success, -FI_EOPNOTSUPP when the pointer attribute is
+ * unsupported, or -FI_EINVAL on other failures.
  */
 int cuda_set_sync_memops(void *ptr)
 {
@@ -318,6 +343,9 @@ int cuda_set_sync_memops(void *ptr)
 					(CUdeviceptr) ptr);
 	if (cu_result == CUDA_SUCCESS)
 		return FI_SUCCESS;
+
+	if (cu_result == CUDA_ERROR_NOT_SUPPORTED)
+		return -FI_EOPNOTSUPP;
 
 	ofi_cuGetErrorName(cu_result, &cu_error_name);
 	ofi_cuGetErrorString(cu_result, &cu_error_str);
@@ -395,6 +423,25 @@ CUresult ofi_cuCtxGetCurrent(CUcontext *pctx)
 {
 	return cuda_ops.cuCtxGetCurrent(pctx);
 }
+
+#if HAVE_CUDA_CTX_SYNC_MEMOPS
+CUresult ofi_cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags,
+					int *active)
+{
+	if (!cuda_ops.cuDevicePrimaryCtxGetState)
+		return CUDA_ERROR_NOT_SUPPORTED;
+
+	return cuda_ops.cuDevicePrimaryCtxGetState(dev, flags, active);
+}
+
+CUresult ofi_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags)
+{
+	if (!cuda_ops.cuDevicePrimaryCtxSetFlags_v2)
+		return CUDA_ERROR_NOT_SUPPORTED;
+
+	return cuda_ops.cuDevicePrimaryCtxSetFlags_v2(dev, flags);
+}
+#endif
 
 CUresult ofi_cuCtxDestroy(CUcontext ctx)
 {
@@ -615,6 +662,15 @@ int cuda_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
 #define CUDA_RUNTIME_FUNCS_DLOPEN(sym) CUDA_FUNCS_DLOPEN(runtime, sym)
 #define NVML_LIB_FUNCS_DLOPEN(sym) CUDA_FUNCS_DLOPEN(nvml, sym)
 
+#define CUDA_DRIVER_OPTIONAL_FUNCS_DLOPEN(sym)			\
+	do {							\
+		cuda_ops.sym = dlsym(cuda_attr.driver_handle, #sym);	\
+		if (!cuda_ops.sym)				\
+			FI_INFO(&core_prov, FI_LOG_CORE,		\
+				"Optional CUDA symbol " #sym		\
+				" is unavailable\n");			\
+	} while (0);
+
 static int cuda_hmem_dl_init(void)
 {
 #if ENABLE_CUDA_DLOPEN
@@ -642,6 +698,7 @@ static int cuda_hmem_dl_init(void)
 	}
 
 	CUDA_DRIVER_FUNCS_DEF(CUDA_DRIVER_FUNCS_DLOPEN)
+	CUDA_DRIVER_OPTIONAL_FUNCS_DEF(CUDA_DRIVER_OPTIONAL_FUNCS_DLOPEN)
 	CUDA_RUNTIME_FUNCS_DEF(CUDA_RUNTIME_FUNCS_DLOPEN)
 	if (cuda_attr.nvml_handle) {
 		NVML_FUNCS_DEF(NVML_LIB_FUNCS_DLOPEN)
