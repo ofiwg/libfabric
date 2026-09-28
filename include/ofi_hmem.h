@@ -74,6 +74,11 @@ cudaError_t ofi_cudaMalloc(void **ptr, size_t size);
 cudaError_t ofi_cudaFree(void *ptr);
 CUresult ofi_cuDeviceGet(CUdevice *device, int ordinal);
 CUresult ofi_cuCtxGetCurrent(CUcontext *pctx);
+#if HAVE_CUDA_CTX_SYNC_MEMOPS
+CUresult ofi_cuDevicePrimaryCtxGetState(CUdevice dev, unsigned int *flags,
+					int *active);
+CUresult ofi_cuDevicePrimaryCtxSetFlags(CUdevice dev, unsigned int flags);
+#endif
 CUresult ofi_cuCtxCreate_v2(CUcontext *pctx, unsigned int flags, CUdevice dev);
 CUresult ofi_cuCtxDestroy(CUcontext ctx);
 CUresult ofi_cuMemAlloc(CUdeviceptr *dptr, size_t bytesize);
