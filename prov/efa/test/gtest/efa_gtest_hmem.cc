@@ -2,6 +2,8 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All
  * rights reserved. */
 
+#include "efa_gtest_common_mocks.h"
+
 #include <gtest/gtest.h>
 #include <rdma/fi_errno.h>
 #include <sys/uio.h>
@@ -11,6 +13,7 @@
 extern "C" {
 ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov,
 			     size_t iov_count, char *buff, size_t buff_size);
+int efa_hmem_set_sync_memops(void *ptr, uint64_t device);
 }
 
 class EfaHmemTest : public testing::Test
@@ -117,3 +120,137 @@ TEST_F(EfaHmemTest, scatter_source_larger_than_iov_returns_etrunc)
 
 	EXPECT_EQ(ret, -FI_ETRUNC);
 }
+
+#if HAVE_CUDA && HAVE_CUDA_CTX_SYNC_MEMOPS
+class EfaHmemSyncMemopsTest : public testing::Test
+{
+	protected:
+	testing::StrictMock<MockEfa> mock_efa;
+
+	void SetUp() override
+	{
+		MockEfa::set(&mock_efa);
+	}
+
+	void TearDown() override
+	{
+		MockEfa::set(nullptr);
+	}
+};
+
+class EfaHmemPointerSyncMemopsTest :
+	public EfaHmemSyncMemopsTest,
+	public testing::WithParamInterface<int>
+{
+};
+
+TEST_P(EfaHmemPointerSyncMemopsTest, returns_pointer_sync_result)
+{
+	uint8_t buffer;
+	void *ptr = &buffer;
+	CUdevice device = 1;
+	int expected_result = GetParam();
+
+	EFA_EXPECT_CALL(mock_efa, cuda_set_sync_memops, ptr)
+		.WillOnce(testing::Return(expected_result));
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxGetState,
+			testing::_, testing::_, testing::_)
+		.Times(0);
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxSetFlags,
+			testing::_, testing::_)
+		.Times(0);
+
+	EXPECT_EQ(efa_hmem_set_sync_memops(ptr, device), expected_result);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+	, EfaHmemPointerSyncMemopsTest,
+	testing::Values(FI_SUCCESS, -FI_EINVAL),
+	[](const testing::TestParamInfo<int> &info) {
+		return info.param == FI_SUCCESS ? "success" : "failure";
+	});
+
+TEST_F(EfaHmemSyncMemopsTest, falls_back_to_primary_context)
+{
+	uint8_t buffer;
+	void *ptr = &buffer;
+	CUdevice device = 1;
+	unsigned int ctx_flags = CU_CTX_SCHED_YIELD;
+
+	EFA_EXPECT_CALL(mock_efa, cuda_set_sync_memops, ptr)
+		.WillOnce(testing::Return(-FI_EOPNOTSUPP));
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxGetState, device,
+			testing::_, testing::_)
+		.WillOnce(testing::DoAll(
+			testing::SetArgPointee<1>(ctx_flags),
+			testing::SetArgPointee<2>(1),
+			testing::Return(CUDA_SUCCESS)));
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxSetFlags, device,
+			ctx_flags | CU_CTX_SYNC_MEMOPS)
+		.WillOnce(testing::Return(CUDA_SUCCESS));
+
+	EXPECT_EQ(efa_hmem_set_sync_memops(ptr, device), FI_SUCCESS);
+}
+
+TEST_F(EfaHmemSyncMemopsTest, keeps_enabled_primary_context)
+{
+	uint8_t buffer;
+	void *ptr = &buffer;
+	CUdevice device = 2;
+	unsigned int ctx_flags = CU_CTX_SCHED_YIELD | CU_CTX_SYNC_MEMOPS;
+
+	EFA_EXPECT_CALL(mock_efa, cuda_set_sync_memops, ptr)
+		.WillOnce(testing::Return(-FI_EOPNOTSUPP));
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxGetState, device,
+			testing::_, testing::_)
+		.WillOnce(testing::DoAll(
+			testing::SetArgPointee<1>(ctx_flags),
+			testing::SetArgPointee<2>(1),
+			testing::Return(CUDA_SUCCESS)));
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxSetFlags,
+			testing::_, testing::_)
+		.Times(0);
+
+	EXPECT_EQ(efa_hmem_set_sync_memops(ptr, device), FI_SUCCESS);
+}
+
+TEST_F(EfaHmemSyncMemopsTest, returns_einval_when_getting_context_state_fails)
+{
+	uint8_t buffer;
+	void *ptr = &buffer;
+	CUdevice device = 3;
+
+	EFA_EXPECT_CALL(mock_efa, cuda_set_sync_memops, ptr)
+		.WillOnce(testing::Return(-FI_EOPNOTSUPP));
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxGetState, device,
+			testing::_, testing::_)
+		.WillOnce(testing::Return(CUDA_ERROR_INVALID_DEVICE));
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxSetFlags,
+			testing::_, testing::_)
+		.Times(0);
+
+	EXPECT_EQ(efa_hmem_set_sync_memops(ptr, device), -FI_EINVAL);
+}
+
+TEST_F(EfaHmemSyncMemopsTest, returns_einval_when_setting_context_flags_fails)
+{
+	uint8_t buffer;
+	void *ptr = &buffer;
+	CUdevice device = 4;
+	unsigned int ctx_flags = 0;
+
+	EFA_EXPECT_CALL(mock_efa, cuda_set_sync_memops, ptr)
+		.WillOnce(testing::Return(-FI_EOPNOTSUPP));
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxGetState, device,
+			testing::_, testing::_)
+		.WillOnce(testing::DoAll(
+			testing::SetArgPointee<1>(ctx_flags),
+			testing::SetArgPointee<2>(1),
+			testing::Return(CUDA_SUCCESS)));
+	EFA_EXPECT_CALL(mock_efa, ofi_cuDevicePrimaryCtxSetFlags, device,
+			CU_CTX_SYNC_MEMOPS)
+		.WillOnce(testing::Return(CUDA_ERROR_NOT_SUPPORTED));
+
+	EXPECT_EQ(efa_hmem_set_sync_memops(ptr, device), -FI_EINVAL);
+}
+#endif /* HAVE_CUDA && HAVE_CUDA_CTX_SYNC_MEMOPS */

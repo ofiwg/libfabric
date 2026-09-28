@@ -63,6 +63,7 @@ extern struct efa_hmem_info	g_efa_hmem_info[OFI_HMEM_MAX];
 
 int efa_hmem_validate_p2p_opt(enum fi_hmem_iface iface, int p2p_opt, uint32_t api_version);
 int efa_hmem_info_initialize();
+int efa_hmem_set_sync_memops(void *ptr, uint64_t device);
 int efa_copy_from_hmem(void *desc, void *dest, const void *src, size_t size);
 int efa_copy_to_hmem(void *desc, void *dest, const void *src, size_t size);
 ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, size_t buff_size, const struct iovec *hmem_iov, size_t iov_count);
