@@ -28,10 +28,23 @@ int efa_test_mock_efadv_query_qp_wqs(struct ibv_qp *ibvqp,
 				     uint32_t inlen);
 
 /**
+ * @brief Offset the mock above reports for the completion action block, chosen
+ * to match no plausible derivation from the queue entry layout so that a
+ * provider computing one instead of passing the device's value through fails.
+ */
+#define EFA_TEST_MOCK_ACTION_BLOCK_OFFSET 104
+
+/**
  * @brief The fi_efa_wq_caps bits the mock above makes the device report on its
  * send queue, which is none on a build whose efadv_wq_attr has no caps member.
  */
 uint16_t efa_test_mock_efadv_sq_caps(void);
+
+/**
+ * @brief The completion action fi_efa_wq_caps bit the mock above makes the
+ * device report, which is none on a build without efadv completion actions.
+ */
+uint16_t efa_test_mock_efadv_sq_comp_action_caps(void);
 
 /**
  * @brief Read the QKEY the provider recorded on the endpoint's EFA QP. The

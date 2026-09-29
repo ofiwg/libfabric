@@ -10,6 +10,13 @@
 
 extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
 
+/*
+ * Offset the mocked efadv_query_qp_wqs() reports for the completion action
+ * block, so the provider is checked for passing the device's value through
+ * rather than computing one.
+ */
+#define EFA_UNIT_TEST_MOCK_ACTION_BLOCK_OFFSET 104
+
 
 struct efa_mock_ibv_send_wr_list
 {

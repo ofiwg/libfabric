@@ -34,6 +34,7 @@ enum {
 
 enum fi_efa_wq_caps {
     FI_EFA_WQ_CAPS_64_BIT_REQ_ID = 1 << 0,
+    FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA = 1 << 1,
 };
 
 struct fi_efa_wq_attr {
@@ -172,9 +173,11 @@ struct fi_efa_ops_gda {
  * table obtained with
  * fi_open_ops(&domain->fid, FI_EFA_MEM_COMP_ACTION_OPS, 0, &ops, NULL).
  *
- * Every call names the domain explicitly, as the other EFA ops tables do. An
- * action and the endpoint whose work requests name it must come from the same
- * domain.
+ * The table is opened on a domain and the registration calls name that domain
+ * explicitly, as the other EFA ops tables do; query_comp_action_block_offset
+ * names an endpoint instead, since the action block belongs to an endpoint's
+ * send queue. An action and the endpoint whose work requests name it must come
+ * from the same domain.
  *
  * create_mem_comp_action registers a memory completion action and returns a
  * struct fid_efa_comp_action; release it with fi_close(&action->fid), after
@@ -183,6 +186,14 @@ struct fi_efa_ops_gda {
  * query_max_mem_comp_actions reports how many memory completion actions the
  * domain can have registered at once; 0 means the device does not support them
  * and create_mem_comp_action fails.
+ *
+ * query_comp_action_block_offset reports the byte offset of the completion
+ * action block within a send queue entry, for a caller that builds its own
+ * entries. Where the block sits inside the entry is the device's to report, so
+ * it is queried rather than derived from the entry layout. Only a send queue
+ * whose caps carry FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA has one; any other is
+ * -FI_EOPNOTSUPP. Call it on an enabled endpoint: until fi_enable() the
+ * endpoint has no send queue, and the call is -FI_EINVAL.
  */
 struct fi_efa_ops_mem_comp_action {
 	int (*create_mem_comp_action)(struct fid_domain *domain,
@@ -190,6 +201,8 @@ struct fi_efa_ops_mem_comp_action {
 				      struct fid_efa_comp_action **action);
 	int (*query_max_mem_comp_actions)(struct fid_domain *domain,
 					  uint32_t *max_mem_comp_actions);
+	int (*query_comp_action_block_offset)(struct fid_ep *ep_fid,
+					     uint16_t *block_offset);
 };
 
 /*

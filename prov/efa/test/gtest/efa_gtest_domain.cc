@@ -311,6 +311,7 @@ TEST_P(EfaGdaQueryQpWqsTest, caps_reported_only_to_a_caller_that_defines_it)
 	const QueryQpWqsCase &param = GetParam();
 	struct fi_efa_wq_attr sq_attr = {};
 	struct fi_efa_wq_attr rq_attr = {};
+	uint16_t expected_caps = 0;
 
 	ASSERT_NO_FATAL_FAILURE(construct(param.api_version));
 
@@ -319,8 +320,11 @@ TEST_P(EfaGdaQueryQpWqsTest, caps_reported_only_to_a_caller_that_defines_it)
 
 	EXPECT_EQ(gda_ops->query_qp_wqs(resource.ep, &sq_attr, &rq_attr), 0);
 
-	EXPECT_EQ(sq_attr.caps,
-		  param.defines_caps ? efa_test_mock_efadv_sq_caps() : 0);
+	if (param.defines_caps)
+		expected_caps = efa_test_mock_efadv_sq_caps() |
+				efa_test_mock_efadv_sq_comp_action_caps();
+
+	EXPECT_EQ(sq_attr.caps, expected_caps);
 	EXPECT_EQ(rq_attr.caps, 0);
 
 	EXPECT_NE(sq_attr.buffer, nullptr);
