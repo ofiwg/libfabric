@@ -986,6 +986,7 @@ int ofi_av_init(struct util_domain *domain,
 	       struct util_av *av, void *context);
 int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr *attr,
 			    struct util_av *av, void *context);
+int ofi_av_close_check(struct util_av *av);
 int ofi_av_close(struct util_av *av);
 int ofi_av_close_lightweight(struct util_av *av);
 
