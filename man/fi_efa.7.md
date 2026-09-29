@@ -541,6 +541,16 @@ struct fi_efa_wq_attr {
 		When set, the associated completion queue is guaranteed
 		to return 64-bit request IDs as well.
 
+	FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA
+		Work queue entries carry a completion action block, so a
+		request posted to this queue may name a registered memory
+		completion action. Set only on a send queue, and only when
+		the endpoint was opened with completion actions enabled.
+		Where the block sits inside an entry is reported by
+		**query_comp_action_block_offset()** in
+		*FI_EFA_MEM_COMP_ACTION_OPS*; see the COMPLETION ACTIONS
+		section.
+
 #### Return value
 **query_qp_wqs()** returns 0 on success, or the value of errno on failure
 (which indicates the failure reason).

@@ -393,6 +393,15 @@ static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
 		if (qp_sq_attr.caps & EFADV_WQ_CAPS_64_BIT_REQ_ID)
 			sq_attr->caps |= FI_EFA_WQ_CAPS_64_BIT_REQ_ID;
 #endif
+#if HAVE_EFADV_COMP_ACTION
+		/*
+		 * Reported only for a send queue created with completion
+		 * actions; where the action block sits in an entry is a query
+		 * of its own.
+		 */
+		if (qp_sq_attr.caps & EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA)
+			sq_attr->caps |= FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA;
+#endif
 	}
 
 	rq_attr->buffer = qp_rq_attr.buffer;
@@ -413,6 +422,58 @@ static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
 	return -FI_ENOSYS;
 }
 #endif /* HAVE_EFADV_QUERY_QP_WQS */
+
+#if HAVE_EFADV_QUERY_QP_WQS && HAVE_EFADV_COMP_ACTION
+/**
+ * @brief Query where the completion action block sits in a send queue entry
+ *
+ * Of use only to a caller that builds its own send queue entries and wants to
+ * attach a completion action to one: the block's offset within the entry is the
+ * device's to report, not something to derive from the entry layout. A separate
+ * op rather than a member of struct fi_efa_wq_attr, which query_qp_wqs fills
+ * without a length and so can only grow by the caller's negotiated version.
+ *
+ * @param ep_fid pointer to endpoint fid
+ * @param block_offset[out] byte offset of the block within a send queue entry
+ * @return 0 on success, -FI_EOPNOTSUPP if the send queue carries no action
+ *         block, otherwise a negative libfabric error code
+ */
+static int efa_domain_query_comp_action_block_offset(struct fid_ep *ep_fid,
+						     uint16_t *block_offset)
+{
+	struct efa_base_ep *base_ep;
+	struct efadv_wq_attr qp_sq_attr = {0};
+	struct efadv_wq_attr qp_rq_attr = {0};
+	int ret;
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+
+	ret = efadv_query_qp_wqs(base_ep->qp->ibv_qp, &qp_sq_attr, &qp_rq_attr,
+				 sizeof(qp_sq_attr));
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "efadv_query_qp_wqs failed. err: %d\n", ret);
+		return (ret == EOPNOTSUPP) ? -FI_EOPNOTSUPP : -FI_EINVAL;
+	}
+
+	if (!(qp_sq_attr.caps & EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA)) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Send queue entries carry no completion action "
+			 "block\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	*block_offset = qp_sq_attr.comp_action_with_data_block_offset;
+
+	return FI_SUCCESS;
+}
+#else
+static int efa_domain_query_comp_action_block_offset(struct fid_ep *ep_fid,
+						     uint16_t *block_offset)
+{
+	return -FI_ENOSYS;
+}
+#endif /* HAVE_EFADV_QUERY_QP_WQS && HAVE_EFADV_COMP_ACTION */
 
 
 #if HAVE_EFADV_QUERY_CQ
@@ -900,6 +961,8 @@ efa_domain_query_max_mem_comp_actions(struct fid_domain *domain_fid,
 static struct fi_efa_ops_mem_comp_action efa_ops_mem_comp_action = {
 	.create_mem_comp_action = efa_domain_create_mem_comp_action,
 	.query_max_mem_comp_actions = efa_domain_query_max_mem_comp_actions,
+	.query_comp_action_block_offset =
+		efa_domain_query_comp_action_block_offset,
 };
 
 struct fi_efa_ops_domain efa_ops_domain = {
