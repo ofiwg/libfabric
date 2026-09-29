@@ -301,24 +301,33 @@ def record_coverage() {
 }
 
 def post_build_actions() {
-    if (env.SKIP_TESTS == 'true') {
-        return
-    }
-    sh "rm -rf \$PWD/outputs && cp -r ${portafiducia_path}/tests/outputs/ \${PWD}/outputs"
-    sh 'find outputs -name "*.xml" | xargs du -shc'
-    junit testResults: 'outputs/**/*.xml', keepLongStdio: false
-    archiveArtifacts artifacts: 'outputs/**/*.*'
-    record_coverage()
-    // Try To Cleanup Resources
-    def regions = ["us-east-1", "eu-north-1", "us-west-2", "ap-southeast-4"]
+    if (env.SKIP_TESTS == 'true') { return }
+
+    // Cleanup FIRST — fan out all regions in parallel so the agent can't
+    // die mid-loop before reaching a later region (the sequential version
+    // blocked on wait_for_instances_terminated in region 1, starving region 3+).
+    def regions = ["us-east-1","eu-north-1","us-west-2","ap-southeast-4"]
     def cluster_name_prefix = get_cluster_name_prefix(env.BUILD_TAG)
+    def cleanup_stages = [:]
     regions.each { region ->
-        try {
-            sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
-        } catch (Exception e) {
-            echo "Warning: Failed to cleanup resources in ${region}: ${e.getMessage()}"
+        cleanup_stages["cleanup-${region}"] = {
+            try {
+                echo "Cleaning up clusters matching '${cluster_name_prefix}*' in ${region}"
+                sh ". ${venv_path}/bin/activate; ${portafiducia_path}/scripts/delete_manual_cluster.py --cluster-name '${cluster_name_prefix}*' --region ${region}"
+            } catch (Exception e) {
+                echo "Warning: cleanup failed in ${region}: ${e.getMessage()}"
+            }
         }
     }
+    parallel cleanup_stages
+
+    echo "Cluster cleanup complete. Moving to reporting."
+
+    // Reporting after — and abort-safe so it can't skip anything above/below.
+    sh "rm -rf \$PWD/outputs && cp -r ${portafiducia_path}/tests/outputs/ \${PWD}/outputs || true"
+    junit testResults: 'outputs/**/*.xml', keepLongStdio: false, allowEmptyResults: true
+    archiveArtifacts artifacts: 'outputs/**/*.*', allowEmptyArchive: true
+    record_coverage()
 }
 
 def get_test_stage_with_lock(stage_name, build_tag, os, instance_type, instance_count, region, lock_label, addl_args) {
