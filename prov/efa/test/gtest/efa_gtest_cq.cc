@@ -4,6 +4,7 @@
 #include "efa_gtest_common_helpers.h"
 #include "efa_gtest_common_mocks.h"
 #include "efa_gtest_common_resource.h"
+#include "efa_gtest_cq_utils.h"
 #include <cstdlib>
 #include <errno.h>
 #include <gtest/gtest.h>
@@ -79,6 +80,23 @@ class EfaCqTest : public Test
 		EXPECT_NE(err_entry->err, 0);
 	}
 };
+
+TEST_F(EfaCqTest, dropped_completion_advances_cc)
+{
+	struct efa_test_dropped_cqe_result result = {};
+
+	efa_test_dropped_completion_advances_cc(resource.cq, resource.ep,
+						&result);
+	if (!result.supported)
+		GTEST_SKIP();
+
+	EXPECT_EQ(result.first_ret, EINVAL);
+	EXPECT_EQ(result.first_consumed_cnt, 1);
+	EXPECT_EQ(result.first_cc, 1);
+	EXPECT_EQ(result.second_ret, ENOENT);
+	EXPECT_EQ(result.second_consumed_cnt, 1);
+	EXPECT_EQ(result.second_cc, 1);
+}
 
 /**
  * @brief fi_cq_readerr must not write past the caller's err_data buffer.
