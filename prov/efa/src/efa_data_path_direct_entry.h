@@ -186,6 +186,9 @@ static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 	if (!data_path_direct->cur_cqe)
 		return ENOENT;
 
+	/* The entry is consumed even if it is dropped below */
+	data_path_direct->cc++;
+
 	qpn = data_path_direct->cur_cqe->qp_num;
 	data_path_direct->cur_qp =
 		efa_domain->device->qp_table[qpn & efa_domain->device->qp_table_sz_m1];
@@ -200,7 +203,6 @@ static inline int efa_data_path_direct_start_poll(struct efa_ibv_cq *ibv_cq,
 	}
 
 	efa_data_path_direct_process_ex_cqe(ibv_cq, data_path_direct->cur_qp);
-	data_path_direct->cc++;
 	return 0;
 }
 
