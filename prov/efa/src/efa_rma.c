@@ -37,12 +37,11 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 					uint64_t flags)
 {
 	struct efa_domain *domain = base_ep->domain;
-	struct efa_mr *efa_mr;
 	struct efa_av_entry *entry;
 	size_t iov_count = msg->iov_count;
 	struct ibv_sge sge_list[2];  /* efa device support up to 2 iov */
 	uintptr_t wr_id;
-	int i, err = 0;
+	int err = 0;
 	size_t total_len;
 	struct efa_context *efa_ctx;
 	struct efa_direct_ope *direct_ope = NULL;
@@ -91,20 +90,10 @@ static inline ssize_t efa_rma_post_read(struct efa_base_ep *base_ep,
 		sge_list[0].lkey = domain->zero_byte_bounce_buf_mr->lkey;
 		iov_count = 1;
 	} else {
-		/* Prepare SGE list */
-		for (i = 0; i < msg->iov_count; ++i) {
-			sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
-			sge_list[i].length = msg->msg_iov[i].iov_len;
-			if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
-				EFA_WARN(FI_LOG_EP_CTRL,
-					 "EFA direct requires FI_MR_LOCAL but "
-					 "application does not provide a valid desc\n");
-				err = -FI_EINVAL;
-				goto out_err;
-			}
-			efa_mr = (struct efa_mr *)msg->desc[i];
-			sge_list[i].lkey = efa_mr->lkey;
-		}
+		err = efa_msg_setup_sge_list(base_ep, msg->msg_iov, msg->desc,
+					     msg->iov_count, sge_list);
+		if (OFI_UNLIKELY(err))
+			goto out_err;
 	}
 
 	entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
@@ -216,7 +205,7 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 	struct ibv_sge sge_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
 	uintptr_t wr_id;
-	bool use_inline, len_fits_inline, is_hmem;
+	bool use_inline;
 	int err = 0;
 	size_t total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	struct efa_context *efa_ctx;
@@ -251,36 +240,11 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		}
 	}
 
-	len_fits_inline = total_len <= base_ep->inject_rma_size;
-	is_hmem = false;
-	if (msg->desc) {
-		for (size_t i = 0; i < msg->iov_count; i++) {
-			if (efa_mr_is_hmem(msg->desc[i])) {
-				is_hmem = true;
-				break;
-			}
-		}
-	}
-	use_inline = len_fits_inline && !is_hmem;
-
-	if (!use_inline && (flags & FI_INJECT)) {
-		err = -FI_EOPNOTSUPP;
-		if (!len_fits_inline) {
-			EFA_WARN(FI_LOG_EP_DATA,
-				 "FI_INJECT is requested but message "
-				 "size of %zu exceeds inject_rma_size "
-				 "of %zu.\n", total_len,
-				 base_ep->inject_rma_size);
-			err = -FI_EINVAL;
-		} else {
-			assert(is_hmem);
-			EFA_WARN(FI_LOG_EP_DATA,
-				 "FI_INJECT is not supported for "
-				 "FI_HMEM memory.\n");
-			err = -FI_ENOSYS;
-		}
+	err = efa_msg_use_inline(msg->desc, msg->iov_count, total_len,
+				 base_ep->inject_rma_size, flags);
+	if (OFI_UNLIKELY(err < 0))
 		goto out_err;
-	}
+	use_inline = err;
 
 	/* Handle 0-byte write with bounce buffer */
 	if (total_len == 0) {
@@ -290,24 +254,13 @@ static inline ssize_t efa_rma_post_write(struct efa_base_ep *base_ep,
 		sge_list[0].lkey = domain->zero_byte_bounce_buf_mr->lkey;
 		iov_count = 1;
 	} else if (use_inline) {
-		for (size_t i = 0; i < msg->iov_count; i++) {
-			inline_data_list[i].addr = msg->msg_iov[i].iov_base;
-			inline_data_list[i].length = msg->msg_iov[i].iov_len;
-		}
+		efa_msg_setup_inline_data_list(base_ep, msg->msg_iov,
+					       msg->iov_count, inline_data_list);
 	} else {
-		/* Prepare SGE list */
-		for (size_t i = 0; i < msg->iov_count; ++i) {
-			sge_list[i].addr = (uint64_t)msg->msg_iov[i].iov_base;
-			sge_list[i].length = msg->msg_iov[i].iov_len;
-			if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
-				EFA_WARN(FI_LOG_EP_CTRL,
-					 "EFA direct requires FI_MR_LOCAL but "
-					 "application does not provide a valid desc\n");
-				err = -FI_EINVAL;
-				goto out_err;
-			}
-			sge_list[i].lkey = ((struct efa_mr *)msg->desc[i])->lkey;
-		}
+		err = efa_msg_setup_sge_list(base_ep, msg->msg_iov, msg->desc,
+					     msg->iov_count, sge_list);
+		if (OFI_UNLIKELY(err))
+			goto out_err;
 	}
 
 	entry = efa_av_addr_to_entry(base_ep->av, msg->addr);
