@@ -386,12 +386,23 @@ static void util_av_close(struct util_av *av)
 	ofi_bufpool_destroy(av->av_entry_pool);
 }
 
-int ofi_av_close_lightweight(struct util_av *av)
+int ofi_av_close_check(struct util_av *av)
 {
 	if (ofi_atomic_get32(&av->ref)) {
 		FI_WARN(av->prov, FI_LOG_AV, "AV is busy\n");
 		return -FI_EBUSY;
 	}
+
+	return 0;
+}
+
+int ofi_av_close_lightweight(struct util_av *av)
+{
+	int ret;
+
+	ret = ofi_av_close_check(av);
+	if (ret)
+		return ret;
 
 	ofi_genlock_destroy(&av->ep_list_lock);
 
