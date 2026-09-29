@@ -1745,6 +1745,10 @@ static int efa_rdm_av_close(struct fid *fid)
 	av = container_of(fid, struct efa_av, util_av.av_fid.fid);
 	rdm_av = ((struct efa_rdm_av *)(av));
 
+	err = ofi_av_close_check(&av->util_av);
+	if (err)
+		return err;
+
 	/* The order in which the util domain and av locks are acquired must be
 	 * util_domain.lock -> util_av.lock -> util_av_implicit.lock
 	 * in the AV insertion, removal and CQ read paths to prevent deadlocks */
