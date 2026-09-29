@@ -16,6 +16,7 @@ using testing::StrictMock;
 using testing::Test;
 using testing::Truly;
 using testing::Values;
+using testing::ValuesIn;
 using testing::WithParamInterface;
 
 /* fi_efa.7: ep_attr->qkey must be below the privileged queue key range */
@@ -237,6 +238,8 @@ TEST(EfaWqAttrAbiTest, size_is_the_shape_the_callers_version_published)
 	EXPECT_EQ(efa_wq_attr_size(FI_VERSION(2, 6)),
 		  sizeof(struct fi_efa_wq_attr_2_3));
 	EXPECT_EQ(efa_wq_attr_size(FI_VERSION(2, 7)),
+		  sizeof(struct fi_efa_wq_attr_2_7));
+	EXPECT_EQ(efa_wq_attr_size(FI_VERSION(2, 8)),
 		  sizeof(struct fi_efa_wq_attr));
 	EXPECT_EQ(efa_wq_attr_size(FI_VERSION(3, 0)),
 		  sizeof(struct fi_efa_wq_attr));
@@ -257,6 +260,11 @@ TEST(EfaWqAttrAbiTest, published_shape_is_a_prefix_of_the_current_struct)
 
 	EXPECT_LE(sizeof(struct fi_efa_wq_attr_2_3),
 		  sizeof(struct fi_efa_wq_attr));
+
+	EXPECT_EQ(offsetof(struct fi_efa_wq_attr, caps),
+		  offsetof(struct fi_efa_wq_attr_2_7, caps));
+	EXPECT_LE(sizeof(struct fi_efa_wq_attr_2_7),
+		  sizeof(struct fi_efa_wq_attr));
 }
 
 #if HAVE_EFADV_QUERY_QP_WQS
@@ -265,6 +273,7 @@ struct QueryQpWqsCase {
 	const char *name;
 	uint32_t api_version;
 	bool defines_caps;
+	bool defines_block_offset;
 };
 
 class EfaGdaQueryQpWqsTest : public Test,
@@ -311,6 +320,7 @@ TEST_P(EfaGdaQueryQpWqsTest, caps_reported_only_to_a_caller_that_defines_it)
 	const QueryQpWqsCase &param = GetParam();
 	struct fi_efa_wq_attr sq_attr = {};
 	struct fi_efa_wq_attr rq_attr = {};
+	uint16_t expected_caps = 0;
 
 	ASSERT_NO_FATAL_FAILURE(construct(param.api_version));
 
@@ -319,8 +329,11 @@ TEST_P(EfaGdaQueryQpWqsTest, caps_reported_only_to_a_caller_that_defines_it)
 
 	EXPECT_EQ(gda_ops->query_qp_wqs(resource.ep, &sq_attr, &rq_attr), 0);
 
-	EXPECT_EQ(sq_attr.caps,
-		  param.defines_caps ? efa_test_mock_efadv_sq_caps() : 0);
+	if (param.defines_caps)
+		expected_caps = efa_test_mock_efadv_sq_caps() |
+				efa_test_mock_efadv_sq_comp_action_caps();
+
+	EXPECT_EQ(sq_attr.caps, expected_caps);
 	EXPECT_EQ(rq_attr.caps, 0);
 
 	EXPECT_NE(sq_attr.buffer, nullptr);
@@ -329,11 +342,40 @@ TEST_P(EfaGdaQueryQpWqsTest, caps_reported_only_to_a_caller_that_defines_it)
 	EXPECT_GT(rq_attr.entry_size, 0u);
 }
 
+TEST_P(EfaGdaQueryQpWqsTest, block_offset_reported_only_to_a_caller_that_defines_it)
+{
+	const QueryQpWqsCase &param = GetParam();
+	struct fi_efa_wq_attr sq_attr = {};
+	struct fi_efa_wq_attr rq_attr = {};
+	uint16_t expected_offset = 0;
+
+	ASSERT_NO_FATAL_FAILURE(construct(param.api_version));
+
+	EFA_EXPECT_CALL(mock_efa, efadv_query_qp_wqs, _, _, _, _)
+		.WillOnce(Invoke(efa_test_mock_efadv_query_qp_wqs));
+
+	EXPECT_EQ(gda_ops->query_qp_wqs(resource.ep, &sq_attr, &rq_attr), 0);
+
+#if HAVE_EFADV_COMP_ACTION
+	if (param.defines_block_offset)
+		expected_offset = EFA_TEST_MOCK_ACTION_BLOCK_OFFSET;
+#endif
+
+	EXPECT_EQ(sq_attr.comp_action_with_data_block_offset, expected_offset);
+	EXPECT_EQ(rq_attr.comp_action_with_data_block_offset, 0);
+}
+
+static const QueryQpWqsCase kQueryQpWqsCases[] = {
+	{"api_2_0", FI_VERSION(2, 0), false, false},
+	{"api_2_6", FI_VERSION(2, 6), false, false},
+	{"api_2_7", FI_VERSION(2, 7), true, false},
+#if FI_MAJOR_VERSION > 2 || FI_MINOR_VERSION >= 8
+	{"api_2_8", FI_VERSION(2, 8), true, true},
+#endif
+};
+
 INSTANTIATE_TEST_SUITE_P(
-	, EfaGdaQueryQpWqsTest,
-	Values(QueryQpWqsCase{"api_2_0", FI_VERSION(2, 0), false},
-	       QueryQpWqsCase{"api_2_6", FI_VERSION(2, 6), false},
-	       QueryQpWqsCase{"api_2_7", FI_VERSION(2, 7), true}),
+	, EfaGdaQueryQpWqsTest, ValuesIn(kQueryQpWqsCases),
 	[](const testing::TestParamInfo<QueryQpWqsCase> &info) {
 		return std::string(info.param.name);
 	});
