@@ -563,6 +563,10 @@ static int efa_av_close(struct fid *fid)
 	struct efa_av *av = container_of(fid, struct efa_av, util_av.av_fid.fid);
 	int err;
 
+	err = ofi_av_close_check(&av->util_av);
+	if (err)
+		return err;
+
 	EFA_GENLOCK_LOCK(&av->domain->util_domain.lock, efa_util_domain_lock_sym);
 	EFA_GENLOCK_LOCK(&av->util_av.lock, efa_util_av_lock_sym);
 	/*
