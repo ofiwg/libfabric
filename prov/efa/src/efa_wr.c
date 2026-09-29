@@ -5,6 +5,7 @@
 #include "efa_data_path_ops.h"
 #include "efa_io_defs.h"
 #include "efa_wr.h"
+#include <rdma/fi_wr.h>
 
 /**
  * @brief Initiate transmit work the provider has deferred
@@ -84,3 +85,80 @@ int efa_wr_rx_flush(struct fid_ep *ep_fid, uint64_t flags)
 
 	return err;
 }
+
+static int efa_wr_prepare(struct fid_ep *ep_fid, const struct fi_wr_attr *attr,
+			  fi_wr wr, size_t *wr_len)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t efa_wr_queue_tx(struct fid_ep *ep_fid, const fi_wr wr,
+			       void *context)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t efa_wr_queue_recv(struct fid_ep *ep_fid, const fi_wr wr,
+				 void *context)
+{
+	return -FI_ENOSYS;
+}
+
+static ssize_t efa_wr_queue_trecv(struct fid_ep *ep_fid, const fi_wr wr,
+				  void *context)
+{
+	return -FI_ENOSYS;
+}
+
+static int efa_wr_modify_addr(struct fid_ep *ep_fid, fi_wr wr,
+			      enum fi_op_type op_type, fi_addr_t addr)
+{
+	return -FI_ENOSYS;
+}
+
+static int efa_wr_modify_iov(struct fid_ep *ep_fid, fi_wr wr,
+			     enum fi_op_type op_type, const struct iovec *iov,
+			     void **desc, size_t count)
+{
+	return -FI_ENOSYS;
+}
+
+static int efa_wr_modify_rma_iov(struct fid_ep *ep_fid, fi_wr wr,
+				 enum fi_op_type op_type,
+				 const struct fi_rma_iov *rma_iov, size_t count)
+{
+	return -FI_ENOSYS;
+}
+
+static int efa_wr_modify_tag(struct fid_ep *ep_fid, fi_wr wr,
+			     enum fi_op_type op_type, uint64_t tag,
+			     uint64_t ignore)
+{
+	return -FI_ENOSYS;
+}
+
+static int efa_wr_modify_data(struct fid_ep *ep_fid, fi_wr wr,
+			      enum fi_op_type op_type, uint64_t data)
+{
+	return -FI_ENOSYS;
+}
+
+static int efa_wr_modify_flags(struct fid_ep *ep_fid, fi_wr wr,
+			       enum fi_op_type op_type, uint64_t flags)
+{
+	return -FI_ENOSYS;
+}
+
+struct fi_ops_wr efa_wr_ops = {
+	.size = sizeof(struct fi_ops_wr),
+	.prepare = efa_wr_prepare,
+	.queue_tx = efa_wr_queue_tx,
+	.queue_recv = efa_wr_queue_recv,
+	.queue_trecv = efa_wr_queue_trecv,
+	.modify_addr = efa_wr_modify_addr,
+	.modify_iov = efa_wr_modify_iov,
+	.modify_rma_iov = efa_wr_modify_rma_iov,
+	.modify_tag = efa_wr_modify_tag,
+	.modify_data = efa_wr_modify_data,
+	.modify_flags = efa_wr_modify_flags,
+};

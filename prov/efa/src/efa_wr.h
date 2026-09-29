@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <rdma/fabric.h>
+#include <rdma/fi_wr.h>
 
 /*
  * Flush calls.  These initiate work the provider deferred because the
@@ -22,5 +23,7 @@
  */
 int efa_wr_tx_flush(struct fid_ep *ep_fid, uint64_t flags);
 int efa_wr_rx_flush(struct fid_ep *ep_fid, uint64_t flags);
+
+extern struct fi_ops_wr efa_wr_ops;
 
 #endif /* EFA_WR_H */
