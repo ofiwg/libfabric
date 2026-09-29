@@ -526,6 +526,7 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	(*ep_fid)->cm = &efa_ep_cm_ops;
 	(*ep_fid)->rma = &efa_rma_ops;
 	(*ep_fid)->atomic = &efa_atomic_ops;
+	(*ep_fid)->wr = &efa_wr_ops;
 
 	return 0;
 
