@@ -18,6 +18,11 @@ int efa_test_mock_efadv_query_qp_wqs(struct ibv_qp *ibvqp,
 #if HAVE_EFADV_WQ_ATTR_CAPS
 	sq_attr->caps |= EFADV_WQ_CAPS_64_BIT_REQ_ID;
 #endif
+#if HAVE_EFADV_COMP_ACTION
+	sq_attr->caps |= EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA;
+	sq_attr->comp_action_with_data_block_offset =
+		EFA_TEST_MOCK_ACTION_BLOCK_OFFSET;
+#endif
 
 	rq_attr->buffer = (uint8_t *) 0x12345678;
 	rq_attr->doorbell = (uint32_t *) 0x87654321;
@@ -33,6 +38,15 @@ uint16_t efa_test_mock_efadv_sq_caps(void)
 {
 #if HAVE_EFADV_WQ_ATTR_CAPS
 	return FI_EFA_WQ_CAPS_64_BIT_REQ_ID;
+#else
+	return 0;
+#endif
+}
+
+uint16_t efa_test_mock_efadv_sq_comp_action_caps(void)
+{
+#if HAVE_EFADV_COMP_ACTION
+	return FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA;
 #else
 	return 0;
 #endif

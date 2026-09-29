@@ -35,11 +35,27 @@ struct fi_efa_wq_attr_2_3 {
 };
 
 /* 2.7 added caps. */
+struct fi_efa_wq_attr_2_7 {
+	uint8_t *buffer;
+	uint32_t entry_size;
+	uint32_t num_entries;
+	uint32_t *doorbell;
+	uint32_t max_batch;
+	uint16_t caps;
+};
+
+/* 2.8 added comp_action_with_data_block_offset. */
 
 static_assert(offsetof(struct fi_efa_wq_attr, max_batch) ==
 		      offsetof(struct fi_efa_wq_attr_2_3, max_batch),
 	      "struct fi_efa_wq_attr diverged from its 2.3 shape");
 static_assert(sizeof(struct fi_efa_wq_attr_2_3) <=
+		      sizeof(struct fi_efa_wq_attr),
+	      "struct fi_efa_wq_attr shapes must not shrink");
+static_assert(offsetof(struct fi_efa_wq_attr, caps) ==
+		      offsetof(struct fi_efa_wq_attr_2_7, caps),
+	      "struct fi_efa_wq_attr diverged from its 2.7 shape");
+static_assert(sizeof(struct fi_efa_wq_attr_2_7) <=
 		      sizeof(struct fi_efa_wq_attr),
 	      "struct fi_efa_wq_attr shapes must not shrink");
 
@@ -51,8 +67,11 @@ static_assert(sizeof(struct fi_efa_wq_attr_2_3) <=
  */
 static inline size_t efa_wq_attr_size(uint32_t api_version)
 {
-	if (FI_VERSION_GE(api_version, FI_VERSION(2, 7)))
+	if (FI_VERSION_GE(api_version, FI_VERSION(2, 8)))
 		return sizeof(struct fi_efa_wq_attr);
+
+	if (FI_VERSION_GE(api_version, FI_VERSION(2, 7)))
+		return sizeof(struct fi_efa_wq_attr_2_7);
 
 	return sizeof(struct fi_efa_wq_attr_2_3);
 }
