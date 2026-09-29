@@ -152,6 +152,146 @@ static_assert(sizeof(struct efa_context) <= sizeof(struct fi_context2),
         msg.data = (uint32_t) _data;                        \
     } while (0)
 
+
+/**
+ * @brief Decide whether a transfer uses the inline data path
+ *
+ * Shared by the send path (efa_post_send), the RMA write path
+ * (efa_rma_post_write), and the work request prepare path (efa_wr_prepare). A
+ * transfer uses inline when it fits the given inject threshold and references
+ * no HMEM buffer. When it cannot go inline and FI_INJECT was requested, the
+ * request cannot be honored: an oversized request is a size error
+ * (-FI_EMSGSIZE) and an HMEM buffer is unsupported (-FI_EOPNOTSUPP); the
+ * specific reason is logged.
+ *
+ * @param desc		array of memory descriptors (may be NULL)
+ * @param iov_count	number of iov/desc entries
+ * @param len		total transfer length (prefix already removed)
+ * @param inject_size	inject threshold (inject_msg_size or inject_rma_size)
+ * @param flags		operation flags (checked for FI_INJECT)
+ * @return 1 to use the inline path, 0 to use the SGL path, or a negative
+ *	   libfabric error code when FI_INJECT cannot be honored
+ */
+static inline int efa_msg_use_inline(void **desc, size_t iov_count,
+				     size_t len, size_t inject_size,
+				     uint64_t flags)
+{
+	bool len_fits_inline = len <= inject_size;
+	bool is_hmem = false;
+	size_t i;
+
+	if (desc) {
+		for (i = 0; i < iov_count; i++) {
+			if (efa_mr_is_hmem(desc[i])) {
+				is_hmem = true;
+				break;
+			}
+		}
+	}
+
+	if (len_fits_inline && !is_hmem)
+		return 1;
+
+	if (flags & FI_INJECT) {
+		if (!len_fits_inline) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "FI_INJECT is requested but message size of "
+				 "%zu exceeds inject size of %zu.\n", len,
+				 inject_size);
+			return -FI_EMSGSIZE;
+		}
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_INJECT is not supported for FI_HMEM memory.\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
+/**
+ * @brief Populate an inline data list from an iov for a transfer
+ *
+ * Shared by the send path (efa_post_send), the RMA write path
+ * (efa_rma_post_write), and the work request prepare path (efa_wr_prepare). For
+ * a DGRAM (UD) endpoint the message prefix is stripped from the first entry,
+ * since the whole prefix must sit on the first sgl. RMA never runs on a UD
+ * endpoint, so the prefix adjustment is a no-op there.
+ *
+ * @param base_ep		endpoint the transfer is issued on
+ * @param msg_iov		local data buffers
+ * @param iov_count		number of iov entries to convert
+ * @param inline_data_list[out]	array of at least iov_count entries to fill
+ */
+static inline void efa_msg_setup_inline_data_list(struct efa_base_ep *base_ep,
+						  const struct iovec *msg_iov,
+						  size_t iov_count,
+						  struct ibv_data_buf *inline_data_list)
+{
+	bool is_ud = base_ep->qp->ibv_qp->qp_type == IBV_QPT_UD;
+	size_t i;
+
+	for (i = 0; i < iov_count; i++) {
+		inline_data_list[i].addr = msg_iov[i].iov_base;
+		inline_data_list[i].length = msg_iov[i].iov_len;
+
+		/* Whole prefix must be on the first sgl for dgram */
+		if (!i && is_ud) {
+			inline_data_list[i].addr =
+				(char *) inline_data_list[i].addr +
+				base_ep->info->ep_attr->msg_prefix_size;
+			inline_data_list[i].length -=
+				base_ep->info->ep_attr->msg_prefix_size;
+		}
+	}
+}
+
+/**
+ * @brief Populate a scatter-gather list from an iov for a transfer
+ *
+ * Shared by the send path (efa_post_send), the RMA read/write paths, and the
+ * work request prepare path (efa_wr_prepare). Requires a valid memory
+ * descriptor per iov (efa-direct mandates FI_MR_LOCAL). For a DGRAM (UD)
+ * endpoint the message prefix is stripped from the first entry; RMA never runs
+ * on a UD endpoint, so the prefix adjustment is a no-op there.
+ *
+ * @param base_ep		endpoint the transfer is issued on
+ * @param msg_iov		local data buffers
+ * @param desc			array of memory descriptors
+ * @param iov_count		number of iov entries to convert
+ * @param sg_list[out]		array of at least iov_count entries to fill
+ * @return 0 on success, -FI_EINVAL if any descriptor is missing
+ */
+static inline int efa_msg_setup_sge_list(struct efa_base_ep *base_ep,
+					 const struct iovec *msg_iov,
+					 void **desc, size_t iov_count,
+					 struct ibv_sge *sg_list)
+{
+	bool is_ud = base_ep->qp->ibv_qp->qp_type == IBV_QPT_UD;
+	size_t i;
+
+	for (i = 0; i < iov_count; i++) {
+		if (OFI_UNLIKELY(!desc || !desc[i])) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "EFA direct requires FI_MR_LOCAL but "
+				 "application does not provide a valid desc\n");
+			return -FI_EINVAL;
+		}
+		sg_list[i].lkey = ((struct efa_mr *) desc[i])->lkey;
+		sg_list[i].addr = (uintptr_t) msg_iov[i].iov_base;
+		sg_list[i].length = msg_iov[i].iov_len;
+
+		/* Whole prefix must be on the first sgl for dgram */
+		if (!i && is_ud) {
+			sg_list[i].addr +=
+				base_ep->info->ep_attr->msg_prefix_size;
+			sg_list[i].length -=
+				base_ep->info->ep_attr->msg_prefix_size;
+		}
+	}
+
+	return 0;
+}
+
 /**
  * Prepare and return a pointer to an EFA context structure.
  *

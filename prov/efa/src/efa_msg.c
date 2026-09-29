@@ -219,9 +219,9 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	struct ibv_data_buf inline_data_list[2];
 	struct efa_context *efa_ctx;
 	struct efa_direct_ope *direct_ope = NULL;
-	size_t len, i;
+	size_t len;
 	size_t iov_count = msg->iov_count;
-	bool use_inline, len_fits_inline, is_hmem;
+	bool use_inline;
 	int ret = 0;
 	uintptr_t wr_id;
 
@@ -278,65 +278,19 @@ static inline ssize_t efa_post_send(struct efa_base_ep *base_ep, const struct fi
 	}
 
 	/* Check against supported inject msg size */
-	len_fits_inline = len <= base_ep->inject_msg_size;
-	is_hmem = false;
-	if (msg->desc) {
-		for (i = 0; i < msg->iov_count; i++) {
-			if (efa_mr_is_hmem(msg->desc[i])) {
-				is_hmem = true;
-				break;
-			}
-		}
-	}
-	if (len_fits_inline && !is_hmem) {
-		use_inline = true;
-		/* Prepare inline data list */
-		for (i = 0; i < msg->iov_count; i++) {
-			inline_data_list[i].addr = msg->msg_iov[i].iov_base;
-			inline_data_list[i].length = msg->msg_iov[i].iov_len;
-
-			/* Whole prefix must be on the first sgl for dgram */
-			if (!i && qp->ibv_qp->qp_type == IBV_QPT_UD) {
-				inline_data_list[i].addr = (char*)inline_data_list[i].addr + base_ep->info->ep_attr->msg_prefix_size;
-				inline_data_list[i].length -= base_ep->info->ep_attr->msg_prefix_size;
-			}
-		}
+	ret = efa_msg_use_inline(msg->desc, msg->iov_count, len,
+				 base_ep->inject_msg_size, flags);
+	if (OFI_UNLIKELY(ret < 0))
+		goto out_err;
+	use_inline = ret;
+	if (use_inline) {
+		efa_msg_setup_inline_data_list(base_ep, msg->msg_iov,
+					       msg->iov_count, inline_data_list);
 	} else {
-		use_inline = false;
-		if (flags & FI_INJECT) {
-			if (!len_fits_inline)
-				EFA_WARN(FI_LOG_EP_DATA,
-					 "FI_INJECT is requested but message "
-					 "size of %zu exceeds efa-direct "
-					 "inject_msg_size of %zu.\n", len,
-					 base_ep->inject_msg_size);
-			if (is_hmem)
-				EFA_WARN(FI_LOG_EP_DATA,
-					 "FI_INJECT is not supported for "
-					 "FI_HMEM memory.\n");
-			ret = -FI_EOPNOTSUPP;
+		ret = efa_msg_setup_sge_list(base_ep, msg->msg_iov, msg->desc,
+					     msg->iov_count, sg_list);
+		if (OFI_UNLIKELY(ret))
 			goto out_err;
-		}
-		/* Prepare SGE list */
-		for (i = 0; i < msg->iov_count; i++) {
-			/* Set TX buffer desc from SGE */
-			if (OFI_UNLIKELY(!msg->desc || !msg->desc[i])) {
-				EFA_WARN(FI_LOG_EP_CTRL,
-					 "EFA direct requires FI_MR_LOCAL but "
-					 "application does not provide a valid desc\n");
-				ret = -FI_EINVAL;
-				goto out_err;
-			}
-			sg_list[i].lkey = ((struct efa_mr *)msg->desc[i])->lkey;
-			sg_list[i].addr = (uintptr_t)msg->msg_iov[i].iov_base;
-			sg_list[i].length = msg->msg_iov[i].iov_len;
-
-			/* Whole prefix must be on the first sgl for dgram */
-			if (!i && qp->ibv_qp->qp_type == IBV_QPT_UD) {
-				sg_list[i].addr += base_ep->info->ep_attr->msg_prefix_size;
-				sg_list[i].length -= base_ep->info->ep_attr->msg_prefix_size;
-			}
-		}
 	}
 
 post:
