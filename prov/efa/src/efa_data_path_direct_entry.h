@@ -671,15 +671,6 @@ efa_data_path_direct_post_write(
 		return err;
 	}
 
-	/* Validate SGE count for RDMA operations */
-	if (OFI_UNLIKELY(sge_count > EFA_IO_TX_DESC_NUM_RDMA_BUFS)) {
-		EFA_WARN(FI_LOG_EP_DATA, "EFA device doesn't support > %d iov for rdma operations\n", EFA_IO_TX_DESC_NUM_RDMA_BUFS);
-		/* ring db for earlier wqes if there is any */
-		if (sq->num_wqe_pending)
-			efa_data_path_direct_send_wr_ring_db(sq);
-		return EINVAL;
-	}
-
 	/* This means we are starting from fresh after a db ring so we need a barrier */
 	if (!sq->num_wqe_pending)
 		mmio_wc_start();
@@ -697,10 +688,8 @@ efa_data_path_direct_post_write(
 
 	/* Set common control flags for RDMA WRITE */
 	efa_set_common_ctrl_flags(meta_desc, sq, EFA_IO_RDMA_WRITE);
-	if (flags & FI_REMOTE_CQ_DATA) {
+	if (flags & FI_REMOTE_CQ_DATA)
 		efa_send_wr_set_imm_data(meta_desc, data);
-	}
-
 
 	if (flags & FI_EFA_WR_HIGH_PPS)
 		efa_send_wr_set_processing_hint_high_pps(meta_desc);
