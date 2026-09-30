@@ -194,6 +194,16 @@ struct fi_ops_srx_owner {
 			fi_addr_t (*get_addr)(struct fi_peer_rx_entry *));
 
 	void	(*free_entry)(struct fi_peer_rx_entry *entry);
+
+	/* Migrate every older UNSPEC-queued unexpected entry that resolves
+	 * to `addr` into its per-peer queue, preserving FIFO order relative
+	 * to entries already there.  Must be called before any operation
+	 * that would let the peer bypass those older entries (message
+	 * classification with a resolved match.addr, or a directed
+	 * fi_trecv/fi_recv post).  Safe to call with an empty unspec queue. */
+	void	(*flush_unspec_for_addr)(struct fid_peer_srx *srx,
+			fi_addr_t addr,
+			fi_addr_t (*get_addr)(struct fi_peer_rx_entry *));
 };
 
 struct fi_ops_srx_peer {

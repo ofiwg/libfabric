@@ -221,7 +221,7 @@ static struct fi_ops_av_owner rxm_av_owner_ops = {
 	.ep_addr = rxm_peer_av_ep_addr,
 };
 
-static fi_addr_t rxm_get_addr(struct fi_peer_rx_entry *rx_entry)
+fi_addr_t rxm_get_addr(struct fi_peer_rx_entry *rx_entry)
 {
 	struct rxm_rx_buf *rx_buf = rx_entry->peer_context;
 
