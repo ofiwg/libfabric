@@ -5,6 +5,8 @@
 #ifndef EFA_GTEST_COMMON_MOCKS_H
 #define EFA_GTEST_COMMON_MOCKS_H
 
+#include "config.h"
+
 #include <bitset>
 #include <gmock/gmock.h>
 #include <vector>
@@ -37,7 +39,22 @@ struct dlist_entry;
  *   2. Add any needed forward struct declarations above
  *   3. Add -Wl,--wrap=<name> to prov_efa_test_gtest_efa_gtest_LDFLAGS
  *      in prov/efa/Makefile.include
+ *
+ * A function the installed rdma-core may not have gets its row from a
+ * conditional group below instead, so that neither the row nor its wrapper
+ * exists where the real symbol does not.
  */
+
+#if HAVE_EFADV_QUERY_QP_WQS
+#define EFA_MOCK_FUNCTIONS_QUERY_QP_WQS(X)                                     \
+	X(int, efadv_query_qp_wqs,                                             \
+	  (struct ibv_qp * ibvqp, struct efadv_wq_attr * sq_attr,              \
+	   struct efadv_wq_attr * rq_attr, uint32_t inlen),                    \
+	  (ibvqp, sq_attr, rq_attr, inlen))
+#else
+#define EFA_MOCK_FUNCTIONS_QUERY_QP_WQS(X)
+#endif
+
 #define EFA_MOCK_FUNCTIONS(X)                                                  \
 	X(struct ibv_ah *, ibv_create_ah,                                      \
 	  (struct ibv_pd * pd, struct ibv_ah_attr * attr), (pd, attr))         \
@@ -137,7 +154,8 @@ struct dlist_entry;
 	  (pkt_entry, local_buf, len, desc, remote_buf, remote_key))           \
 	X(int, ibv_modify_qp,                                                  \
 	  (struct ibv_qp * qp, struct ibv_qp_attr * attr, int attr_mask),      \
-	  (qp, attr, attr_mask))
+	  (qp, attr, attr_mask))                                               \
+	EFA_MOCK_FUNCTIONS_QUERY_QP_WQS(X)
 
 /* --- Generator macros --- */
 

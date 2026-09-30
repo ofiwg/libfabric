@@ -287,6 +287,7 @@ void test_efa_domain_open_ops_query_qp_wqs(void **state)
     assert_true(sq_attr.entry_size > 0);
     assert_true(sq_attr.num_entries > 0);
     assert_true(sq_attr.max_batch > 0);
+    /* This resource asks for 2.0, which predates caps. */
     assert_int_equal(sq_attr.caps, 0);
 
     assert_non_null(rq_attr.buffer);

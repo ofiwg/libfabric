@@ -126,6 +126,7 @@ _efa_headers = \
 	prov/efa/src/efa_prov.h \
 	prov/efa/src/efa_env.h \
 	prov/efa/src/fi_ext_efa.h \
+	prov/efa/src/efa_abi.h \
 	prov/efa/src/efa_data_path_ops.h \
 	prov/efa/src/efa_io_defs.h \
 	prov/efa/src/efa_io_regs_defs.h \
@@ -390,6 +391,10 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=efa_rdm_pke_read \
 	-Wl,--wrap=ibv_modify_qp \
 	-Wl,--wrap=malloc
+
+if HAVE_EFADV_QUERY_QP_WQS
+prov_efa_test_gtest_efa_gtest_LDFLAGS += -Wl,--wrap=efadv_query_qp_wqs
+endif HAVE_EFADV_QUERY_QP_WQS
 
 prov_efa_test_gtest_efa_gtest_LIBS = $(linkback)
 
