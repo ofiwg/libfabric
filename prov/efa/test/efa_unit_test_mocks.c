@@ -893,6 +893,9 @@ int efa_mock_efadv_query_qp_wqs(struct ibv_qp *ibvqp, struct efadv_wq_attr *sq_a
 	sq_attr->entry_size = 64;
 	sq_attr->num_entries = 128;
 	sq_attr->max_batch = 16;
+#if HAVE_EFADV_WQ_ATTR_CAPS
+	sq_attr->caps |= EFADV_WQ_CAPS_64_BIT_REQ_ID;
+#endif
 
 	rq_attr->buffer = (uint8_t *) 0x12345678;
 	rq_attr->doorbell = (uint32_t *) 0x87654321;

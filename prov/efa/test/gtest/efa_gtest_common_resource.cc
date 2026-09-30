@@ -26,16 +26,43 @@ struct fi_info *efa_test_alloc_default_hints(enum fi_ep_type ep_type,
 	return hints;
 }
 
-void efa_test_resource_construct(struct efa_resource *resource,
-				 struct fi_info *hints)
+static void efa_test_resource_getinfo_api_version(
+	struct efa_resource *resource, struct fi_info *hints,
+	uint32_t fi_version)
 {
 	int ret;
 
+	ASSERT_NE(hints, nullptr);
+	resource->hints = hints;
+
+	ret = fi_getinfo(fi_version, NULL, NULL, 0ULL, resource->hints,
+			 &resource->info);
+	ASSERT_EQ(ret, 0) << "fi_getinfo failed: " << fi_strerror(-ret);
+}
+
+static void efa_test_resource_enable(struct efa_resource *resource)
+{
+	int ret = fi_enable(resource->ep);
+
+	ASSERT_EQ(ret, 0) << "fi_enable failed: " << fi_strerror(-ret);
+}
+
+void efa_test_resource_construct(struct efa_resource *resource,
+				 struct fi_info *hints)
+{
 	ASSERT_NO_FATAL_FAILURE(
 		efa_test_resource_construct_no_enable(resource, hints));
+	ASSERT_NO_FATAL_FAILURE(efa_test_resource_enable(resource));
+}
 
-	ret = fi_enable(resource->ep);
-	ASSERT_EQ(ret, 0) << "fi_enable failed: " << fi_strerror(-ret);
+void efa_test_resource_construct_api_version(struct efa_resource *resource,
+					     struct fi_info *hints,
+					     uint32_t fi_version)
+{
+	ASSERT_NO_FATAL_FAILURE(efa_test_resource_getinfo_api_version(
+		resource, hints, fi_version));
+	ASSERT_NO_FATAL_FAILURE(efa_test_resource_open(resource));
+	ASSERT_NO_FATAL_FAILURE(efa_test_resource_enable(resource));
 }
 
 void efa_test_resource_construct_no_enable(struct efa_resource *resource,
@@ -48,12 +75,10 @@ void efa_test_resource_construct_no_enable(struct efa_resource *resource,
 void efa_test_resource_getinfo(struct efa_resource *resource,
 			       struct fi_info *hints)
 {
-	int ret;
 	const char *fabric_name;
 	uint32_t fi_version;
 
 	ASSERT_NE(hints, nullptr);
-	resource->hints = hints;
 
 	fabric_name = hints->fabric_attr ? hints->fabric_attr->name : NULL;
 	if (fabric_name && !strcmp(EFA_DIRECT_FABRIC_NAME, fabric_name))
@@ -62,9 +87,8 @@ void efa_test_resource_getinfo(struct efa_resource *resource,
 	else
 		fi_version = FI_VERSION(1, 14);
 
-	ret = fi_getinfo(fi_version, NULL, NULL, 0ULL, resource->hints,
-			 &resource->info);
-	ASSERT_EQ(ret, 0) << "fi_getinfo failed: " << fi_strerror(-ret);
+	ASSERT_NO_FATAL_FAILURE(efa_test_resource_getinfo_api_version(
+		resource, hints, fi_version));
 }
 
 void efa_test_resource_open(struct efa_resource *resource)
