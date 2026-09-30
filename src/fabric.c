@@ -779,9 +779,8 @@ static void ofi_load_preferred_dl_prov(const char *path)
 }
 
 static char* ofi_default_provdir(void) {
-	char *default_provdir = PROVDLDIR, *slash, *tmp, *dirname = NULL;
-	char *suffix = "libfabric";
-	int len;
+	char *provdir = NULL, *slash, *dirname = NULL;
+	const char *suffix = "libfabric";
 #if HAVE_LIBDL
 	Dl_info info;
 #ifdef _WIN32
@@ -789,31 +788,30 @@ static char* ofi_default_provdir(void) {
 #else
     #define PATH_SEP '/'
 #endif
-	if (dladdr(ofi_default_provdir, &info)) {
-		dirname = strdup(info.dli_fname);
-		slash = strrchr(dirname, PATH_SEP);
-		if (slash) {
-			*slash = '\0';
-			len = strlen(dirname) + strlen(suffix) + 1;
-			tmp = malloc(len + 1);
-			if (!tmp)
-				goto out;
+	if (!dladdr(&core_prov, &info) || !info.dli_fname)
+		goto out;
 
-			snprintf(tmp, len + 1, "%s%c%s", dirname,
-				 PATH_SEP, suffix);
-			default_provdir = tmp;
-		}
+	dirname = strdup(info.dli_fname);
+	if (!dirname)
+		goto out;
+
+	slash = strrchr(dirname, PATH_SEP);
+	if (slash) {
+		*slash = '\0';
+		if (asprintf(&provdir, "%s%c%s", dirname, PATH_SEP, suffix) <= 0)
+			provdir = NULL;
 	}
-out:
 	free(dirname);
+out:
 #endif
-	return default_provdir;
+	return provdir ? provdir : strdup(PROVDLDIR);
+
 }
 
 static void ofi_load_dl_prov(void)
 {
 	char **dirs;
-	char *provdir = NULL, *def_provdir = NULL;
+	char *provdir = NULL, *def_provdir = NULL, *provdir_tmp = NULL;
 	void *dlhandle;
 	int i;
 
@@ -823,7 +821,11 @@ static void ofi_load_dl_prov(void)
 		return;
 	dlclose(dlhandle);
 
-	def_provdir = ofi_default_provdir();
+	provdir_tmp = ofi_default_provdir();
+	if (provdir_tmp)
+		def_provdir = provdir_tmp;
+	else
+		def_provdir = PROVDLDIR;
 	FI_INFO(&core_prov, FI_LOG_CORE,
 		"default provider directory: \"%s\"\n", def_provdir);
 
@@ -891,7 +893,7 @@ static void ofi_load_dl_prov(void)
 		}
 	}
 free:
-	free(def_provdir);
+	free(provdir_tmp);
 }
 
 #else /* HAVE_LIBDL */
