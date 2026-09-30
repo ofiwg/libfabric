@@ -12936,7 +12936,7 @@ specific steps in order to use memory buffers with libfabric interfaces.
 As a special case, a new memory region can be created from an existing
 memory region. Such a new memory region is called a sub-MR, and the
 existing memory region is called the base MR. Sub-MRs may be used to
-shared hardware resources, such as virtual to physical address
+share hardware resources, such as virtual to physical address
 translations and page pinning. This can improve performance when
 creating and destroying sub-regions that need different access rights.
 The base MR itself can also be a sub-MR, allowing for a hierarchy of
