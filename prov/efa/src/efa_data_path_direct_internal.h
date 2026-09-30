@@ -58,6 +58,35 @@ efa_data_path_direct_rq_ring_doorbell(struct efa_data_path_direct_rq *rq,
 }
 
 /**
+ * @brief Claim the next receive descriptor slot in the RQ ring
+ *
+ * Returns a pointer to the rx descriptor at the current producer counter
+ * position and advances the producer counter, bumping the phase bit when
+ * the counter wraps around the ring. The returned descriptor is owned by
+ * the caller to populate before the doorbell is rung.
+ *
+ * @param rq Pointer to the direct receive queue structure
+ * @return Pointer to the next rx descriptor slot in the ring
+ */
+EFA_ALWAYS_INLINE struct efa_io_rx_desc *
+efa_rq_claim_next_desc(struct efa_data_path_direct_rq *rq)
+{
+	struct efa_data_path_direct_wq *wq = &rq->wq;
+	uint32_t rq_desc_offset;
+	struct efa_io_rx_desc *rx_buf;
+
+	rq_desc_offset = (wq->pc & wq->desc_mask) * sizeof(*rx_buf);
+	rx_buf = (struct efa_io_rx_desc *)(rq->buf + rq_desc_offset);
+
+	/* Advance producer counter, wrapping the phase on ring wrap */
+	wq->pc++;
+	if (!(wq->pc & wq->desc_mask))
+		wq->phase++;
+
+	return rx_buf;
+}
+
+/**
  * @brief Ring the send queue doorbell to notify hardware of new entries
  *
  * Writes the producer counter to the hardware doorbell register to notify
@@ -567,6 +596,38 @@ EFA_ALWAYS_INLINE void efa_set_tx_buf(struct efa_io_tx_buf_desc *tx_buf,
 	EFA_SET(&tx_buf->lkey, EFA_IO_TX_BUF_DESC_LKEY, lkey);
 	tx_buf->buf_addr_lo = addr & 0xffffffff;
 	tx_buf->buf_addr_hi = addr >> 32;
+}
+
+/**
+ * @brief Set a hardware receive buffer descriptor
+ *
+ * Initializes a hardware receive buffer descriptor with the provided
+ * address, memory key, and length, and sets the position flags in the
+ * packed lkey_ctrl word. Splits the 64-bit address into separate high and
+ * low 32-bit fields as required by the hardware. The req_id is left
+ * untouched because it belongs to the queue slot rather than the SGE and
+ * is patched in by the caller at post time.
+ *
+ * @param rx_buf Pointer to the receive buffer descriptor
+ * @param addr 64-bit buffer address
+ * @param lkey Local memory key for the buffer
+ * @param length Length of the buffer in bytes
+ * @param is_last True if this is the last descriptor of the work request
+ */
+EFA_ALWAYS_INLINE void efa_set_rx_buf(struct efa_io_rx_desc *rx_buf,
+				      uint64_t addr, uint32_t lkey,
+				      uint32_t length, bool is_last)
+{
+	uint32_t lkey_ctrl = 0;
+
+	EFA_SET(&lkey_ctrl, EFA_IO_RX_DESC_FIRST, 1);
+	EFA_SET(&lkey_ctrl, EFA_IO_RX_DESC_LAST, is_last);
+	EFA_SET(&lkey_ctrl, EFA_IO_RX_DESC_LKEY, lkey);
+	rx_buf->lkey_ctrl = lkey_ctrl;
+
+	rx_buf->length = MIN(length, UINT16_MAX);
+	rx_buf->buf_addr_lo = addr & 0xffffffff;
+	rx_buf->buf_addr_hi = addr >> 32;
 }
 
 /**
