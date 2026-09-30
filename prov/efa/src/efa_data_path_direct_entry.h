@@ -699,11 +699,9 @@ efa_data_path_direct_post_write(
 
 	if (use_inline) {
 		assert(sge_count == 1);
-		memcpy(local_wqe.data.rdma_req.inline_data,
-		       inline_data_list[0].addr, inline_data_list[0].length);
-		remote_mem->length = inline_data_list[0].length;
-		EFA_SET(&meta_desc->ctrl1, EFA_IO_TX_META_DESC_INLINE_MSG, 1);
-		meta_desc->length = inline_data_list[0].length;
+		efa_data_path_direct_set_rdma_inline_data(&local_wqe,
+							  inline_data_list[0].addr,
+							  inline_data_list[0].length);
 	} else {
 		remote_mem->length = efa_sge_total_bytes(sge_list, sge_count);
 		efa_data_path_direct_set_sgl(local_wqe.data.rdma_req.local_mem, meta_desc, sge_list, sge_count);
