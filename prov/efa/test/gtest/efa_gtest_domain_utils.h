@@ -9,9 +9,29 @@
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
 
+struct ibv_qp;
+struct efadv_wq_attr;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief Stand in for efadv_query_qp_wqs(), reporting a capability on the send
+ * queue so that a caller which must not be shown caps can be told apart from
+ * one which must. struct efadv_wq_attr does not always have a caps member, so
+ * the attributes are filled from C.
+ */
+int efa_test_mock_efadv_query_qp_wqs(struct ibv_qp *ibvqp,
+				     struct efadv_wq_attr *sq_attr,
+				     struct efadv_wq_attr *rq_attr,
+				     uint32_t inlen);
+
+/**
+ * @brief The fi_efa_wq_caps bits the mock above makes the device report on its
+ * send queue, which is none on a build whose efadv_wq_attr has no caps member.
+ */
+uint16_t efa_test_mock_efadv_sq_caps(void);
 
 /**
  * @brief Read the QKEY the provider recorded on the endpoint's EFA QP. The

@@ -7,6 +7,7 @@
 
 #include "config.h"
 #include "efa.h"
+#include "efa_abi.h"
 #include "efa_av.h"
 #include "efa_cntr.h"
 #include "efa_hw_cntr.h"
@@ -331,6 +332,12 @@ static int efa_domain_query_addr(struct fid_ep *ep_fid, fi_addr_t addr,
 /**
  * @brief Query EFA specific Queue Pair work queue attributes
  *
+ * The caller owns the structs and this op takes no length, so they are only as
+ * large as the fi_ext_efa.h the caller compiled against and the version it
+ * negotiated at fi_getinfo() is what says which members they have. Zero only
+ * as far as that version's struct reaches, and report a value only into a
+ * member it defines: caps arrived in 2.7.
+ *
  * @param ep_fid  pointer to endpoint fid
  * @param sq_attr pointer to send queue attributes
  * @param rq_attr pointer to receive queue attributes
@@ -343,12 +350,20 @@ static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
 	struct efa_base_ep *base_ep;
 	struct efadv_wq_attr qp_sq_attr = {0};
 	struct efadv_wq_attr qp_rq_attr = {0};
+	uint32_t api_version;
+	bool has_caps_field;
+	size_t attr_size;
 	int ret;
 
-	memset(sq_attr, 0, sizeof(*sq_attr));
-	memset(rq_attr, 0, sizeof(*rq_attr));
-
 	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	api_version =
+		base_ep->domain->util_domain.fabric->fabric_fid.api_version;
+	has_caps_field = FI_VERSION_GE(api_version, FI_VERSION(2, 7));
+	attr_size = efa_wq_attr_size(api_version);
+
+	memset(sq_attr, 0, attr_size);
+	memset(rq_attr, 0, attr_size);
+
 	ret = efadv_query_qp_wqs(base_ep->qp->ibv_qp, &qp_sq_attr, &qp_rq_attr, sizeof(qp_sq_attr));
 	if (ret) {
 		EFA_WARN(FI_LOG_DOMAIN, "efadv_query_qp_wqs failed. err: %d\n", ret);
@@ -372,18 +387,21 @@ static int efa_domain_query_qp_wqs(struct fid_ep *ep_fid,
 	sq_attr->num_entries = qp_sq_attr.num_entries;
 	sq_attr->doorbell = qp_sq_attr.doorbell;
 	sq_attr->max_batch = qp_sq_attr.max_batch;
-	sq_attr->caps = 0;
+	if (has_caps_field) {
+		sq_attr->caps = 0;
 #if HAVE_EFADV_WQ_ATTR_CAPS
-	if (qp_sq_attr.caps & EFADV_WQ_CAPS_64_BIT_REQ_ID)
-		sq_attr->caps |= FI_EFA_WQ_CAPS_64_BIT_REQ_ID;
+		if (qp_sq_attr.caps & EFADV_WQ_CAPS_64_BIT_REQ_ID)
+			sq_attr->caps |= FI_EFA_WQ_CAPS_64_BIT_REQ_ID;
 #endif
+	}
 
 	rq_attr->buffer = qp_rq_attr.buffer;
 	rq_attr->entry_size = qp_rq_attr.entry_size;
 	rq_attr->num_entries = qp_rq_attr.num_entries;
 	rq_attr->doorbell = qp_rq_attr.doorbell;
 	rq_attr->max_batch = qp_rq_attr.max_batch;
-	rq_attr->caps = 0;
+	if (has_caps_field)
+		rq_attr->caps = 0;
 
 	return FI_SUCCESS;
 }

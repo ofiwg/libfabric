@@ -58,6 +58,15 @@ void efa_test_resource_construct(struct efa_resource *resource,
 				 struct fi_info *hints);
 
 /**
+ * @brief Same as efa_test_resource_construct but requests @p fi_version at
+ * fi_getinfo instead of the version the fabric name implies. Use this when the
+ * behavior under test depends on the version the application negotiated.
+ */
+void efa_test_resource_construct_api_version(struct efa_resource *resource,
+					     struct fi_info *hints,
+					     uint32_t fi_version);
+
+/**
  * @brief Same as efa_test_resource_construct but stops short of fi_enable(),
  * so the endpoint's QP has not been created yet. Use this when a test must
  * install a mock that intercepts QP creation; call fi_enable() from the test
