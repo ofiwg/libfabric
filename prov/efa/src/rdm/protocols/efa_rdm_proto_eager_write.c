@@ -229,6 +229,7 @@ void efa_rdm_proto_eager_write_handle_dc_rtw_recv(struct efa_rdm_pke *pkt_entry)
  * holds the remote memory region, which grows it.
  */
 static bool efa_rdm_proto_eager_write_can_use(struct efa_rdm_ope *txe,
+					      struct efa_rdm_peer *peer,
 					      int req_pkt_type,
 					      uint16_t header_flags, int iface,
 					      bool use_p2p)
@@ -291,7 +292,6 @@ void efa_rdm_proto_eager_write_handle_rtw_send_completion(
  */
 int efa_rdm_proto_eager_write_construct_tx_pkes(struct efa_rdm_ep *ep,
 						struct efa_rdm_peer *peer,
-						const struct fi_msg *msg,
 						uint32_t op, uint64_t tag,
 						uint64_t flags,
 						uint32_t internal_flags,

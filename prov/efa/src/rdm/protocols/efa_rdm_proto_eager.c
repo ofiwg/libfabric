@@ -32,11 +32,23 @@
  * accounting for the request header size.
  */
 static bool efa_rdm_proto_eager_can_use_for_send(struct efa_rdm_ope *txe,
+						 struct efa_rdm_peer *peer,
 						 int req_pkt_type,
 						 uint16_t header_flags,
 						 int iface, bool use_p2p)
 {
 	size_t max_data_offset, max_rtm_data_capacity;
+
+	/*
+	 * Synapse AI buffers can only be carried by a read based protocol. The
+	 * legacy selector expressed that by checking the read protocols first
+	 * and setting min_read_msg_size to 1 for the interface, so anything with
+	 * a payload took a read protocol and only a zero length message reached
+	 * eager. The registry is ordered eager-first, so decline here instead to
+	 * keep that behaviour.
+	 */
+	if (iface == FI_HMEM_SYNAPSEAI && txe->total_len > 0)
+		return false;
 
 	/* TODO: For emulated read and atomics, need to consider RMA
 	 * IOVs in the header
@@ -106,8 +118,8 @@ void efa_rdm_proto_eager_handle_rtm_send_completion(
  */
 int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
 					  struct efa_rdm_peer *peer,
-					  const struct fi_msg *msg, uint32_t op,
-					  uint64_t tag, uint64_t flags,
+					  uint32_t op, uint64_t tag,
+					  uint64_t flags,
 					  uint32_t internal_flags,
 					  struct efa_rdm_ope *txe,
 					  uint64_t *pke_send_flags)

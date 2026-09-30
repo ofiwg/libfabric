@@ -19,8 +19,8 @@ ssize_t efa_rdm_proto_medium_plan_tx_pkes(struct efa_rdm_ep *ep,
 
 int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 					   struct efa_rdm_peer *peer,
-					   const struct fi_msg *msg, uint32_t op,
-					   uint64_t tag, uint64_t flags,
+					   uint32_t op, uint64_t tag,
+					   uint64_t flags,
 					   uint32_t internal_flags,
 					   struct efa_rdm_ope *txe,
 					   uint64_t *pke_send_flags);

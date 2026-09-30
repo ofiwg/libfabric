@@ -29,7 +29,6 @@ struct efa_rdm_ope *efa_rdm_msg_split_rxe(struct efa_rdm_ep *ep,
 					    struct efa_rdm_ope *posted_entry,
 					    struct efa_rdm_ope *consumer_entry,
 					    struct efa_rdm_pke *pkt_entry);
-ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 
 /**
  * @brief Compute the effective fi_flags for a TX operation.
@@ -56,6 +55,15 @@ uint64_t efa_rdm_msg_get_tx_flags(struct efa_rdm_ep *ep, uint64_t fi_flags)
 
 ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe,
 				    struct efa_rdm_proto *proto);
+
+ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
+				     struct efa_rdm_ope *txe);
+
+ssize_t efa_rdm_msg_post_read_nack_rtm_proto(struct efa_rdm_ep *ep,
+					     struct efa_rdm_ope *txe);
+
+ssize_t efa_rdm_msg_post_read_nack_rtm_proto_or_queue(struct efa_rdm_ep *ep,
+						      struct efa_rdm_ope *txe);
 /*
  * The following 2 OP structures are defined in efa_rdm_msg.c and is
  * used by #efa_rdm_ep_open()

@@ -7,7 +7,10 @@
 #include "efa_rdm_ope.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longcts.h"
+#include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_medium.h"
+#include "protocols/efa_rdm_proto_runtread.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
 #include "efa_rdm_msg.h"
 
@@ -15,10 +18,10 @@
  * @brief Undo the memory registrations the selection loop made.
  *
  * efa_rdm_ope_try_fill_desc() registers the source buffer so a read based
- * protocol can be evaluated. When no protocol is selected the caller falls back
- * to the legacy send path, whose efa_rdm_txe_construct() clears txe->mr without
- * closing it, so nothing would ever release those registrations. Hand them back
- * here instead.
+ * protocol can be evaluated. When no protocol is selected the caller returns the
+ * txe straight to the pool with ofi_buf_free(), because an unconstructed txe
+ * cannot go through efa_rdm_txe_release(), and only the latter closes txe->mr.
+ * Hand the registrations back here instead.
  *
  * TODO: Remove after all protocols are migrated to the new code path
  */
@@ -51,6 +54,12 @@ static void efa_rdm_proto_release_selection_mrs(struct efa_rdm_ope *txe)
 static struct efa_rdm_proto * const efa_rdm_protocols[] = {
 	&efa_rdm_proto_eager,
 	&efa_rdm_proto_medium,
+	&efa_rdm_proto_runtread,
+	&efa_rdm_proto_longread,
+	/* Long CTS must be last: it can always be used, so any protocol listed
+	 * after it would never be reached.
+	 */
+	&efa_rdm_proto_longcts,
 };
 
 /*
@@ -114,16 +123,17 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 
 	efa_rdm_proto_txe_init_buffers(ep, msg, txe);
 
+	/*
+	 * The predicates need the effective flags: the runt read protocol has no
+	 * delivery complete REQ variant, so it has to rule out a
+	 * FI_DELIVERY_COMPLETE send. efa_rdm_txe_construct_common() assigns the
+	 * same value again later, from the same helper.
+	 */
+	txe->fi_flags = effective_flags;
+
 	iface = (msg->desc && msg->desc[0]) ?
 			((struct efa_mr *) msg->desc[0])->iface :
 			FI_HMEM_SYSTEM;
-
-	/* Synapse AI only supports long read */
-	if (iface == FI_HMEM_SYNAPSEAI) {
-		*proto = NULL;
-		txe->proto = NULL;
-		return 0;
-	}
 
 	/*
 	 * The read based protocols can only be used when the device can access
@@ -162,7 +172,8 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		}
 
 		if (selected_proto->can_use_protocol(
-			    txe, req_pkt_type, header_flags, iface, use_p2p)) {
+			    txe, peer, req_pkt_type, header_flags, iface,
+			    use_p2p)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;
@@ -174,15 +185,21 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	}
 
 	/*
-	 * No protocol matched, so release any MRs that were registered
-	 * TODO: Remove after all protocols moved to new code path
+	 * No protocol matched. Unreachable while the long CTS protocol is
+	 * registered, since it can always be used, and there is no legacy send
+	 * path left to fall back to. Kept as a safety net for a registry that
+	 * loses its catch-all protocol: report the failure to the application
+	 * rather than posting nothing.
 	 */
+	EFA_WARN(FI_LOG_EP_DATA,
+		 "No protocol can carry a %zu byte send to peer %" PRIu64 "\n",
+		 txe->total_len, peer->av_entry->efa_av_entry.fi_addr);
+
 	if (mr_attempted)
 		efa_rdm_proto_release_selection_mrs(txe);
 
 	*proto = NULL;
-	txe->proto = NULL;
-	return FI_SUCCESS;
+	return -FI_EOPNOTSUPP;
 }
 
 /* Utility funcions */
@@ -257,8 +274,9 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol(
-			    txe, req_pkt_type, header_flags, iface, use_p2p)) {
+		if (selected_proto->can_use_protocol(txe, peer, req_pkt_type,
+						     header_flags, iface,
+						     use_p2p)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;
@@ -309,7 +327,7 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 			selected_proto, txe->op, txe->fi_flags, peer);
 
 		if (selected_proto->can_use_protocol(
-			    txe, req_pkt_type, header_flags, iface,
+			    txe, peer, req_pkt_type, header_flags, iface,
 			    false /* use_p2p */)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;

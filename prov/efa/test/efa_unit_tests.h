@@ -21,6 +21,7 @@
 #include "efa_unit_test_mocks.h"
 #include "protocols/efa_rdm_proto_eager.h"
 #include "protocols/efa_rdm_proto_eager_write.h"
+#include "protocols/efa_rdm_proto_longread.h"
 #include "protocols/efa_rdm_proto_short_rtr.h"
 
 /**
@@ -478,8 +479,6 @@ void test_efa_rdm_peer_get_runt_size_cuda_memory_128_multiple_alignment(void **s
 void test_efa_rdm_peer_get_runt_size_cuda_memory_non_128_multiple_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_smaller_than_128_alignment(void **state);
 void test_efa_rdm_peer_get_runt_size_cuda_memory_exceeding_total_len_128_alignment(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_no_runt(void **state);
-void test_efa_rdm_peer_select_readbase_rtm_do_runt(void **state);
 void test_efa_rdm_pke_get_available_copy_methods_align128(void **state);
 
 /* begin efa_unit_test_domain.c */
@@ -888,9 +887,31 @@ void test_proto_select_eager_for_zero_len_msg(void **state);
 void test_proto_eager_construct_pkes_single_pke(void **state);
 void test_proto_zero_copy_construct_pkes(void **state);
 void test_proto_zero_copy_reselected_after_handshake(void **state);
+void test_proto_zero_copy_send_end_to_end(void **state);
 void test_proto_eager_queue_dequeue_handshake(void **state);
 void test_proto_eager_send_completion_releases_txe(void **state);
 void test_proto_eager_assigns_msg_id(void **state);
 void test_proto_eager_queued_before_handshake_survives_mr_gen_check(void **state);
 void test_proto_eager_construct_pkes_failure_rolls_back_msg_id(void **state);
+void test_proto_select_medium_for_medium_msg(void **state);
+void test_proto_medium_construct_pkes_multiple_pkes(void **state);
+void test_proto_medium_construct_pkes_is_idempotent(void **state);
+void test_proto_medium_send_completion_tracks_bytes_acked(void **state);
+void test_proto_medium_send_completion_peer_abort(void **state);
+void test_proto_select_runtread_for_large_msg(void **state);
+void test_proto_select_longcts_before_handshake(void **state);
+void test_proto_select_runtread_before_handshake_with_homogeneous_peers(void **state);
+void test_proto_select_declines_runtread_for_delivery_complete(void **state);
+void test_proto_runtread_construct_pkes_carries_read_iov(void **state);
+void test_proto_runtread_construct_pkes_is_idempotent(void **state);
+void test_proto_select_longread_for_large_msg(void **state);
+void test_proto_select_declines_longread_without_mr(void **state);
+void test_proto_longread_construct_pkes_single_pke(void **state);
+void test_proto_longread_construct_pkes_is_idempotent(void **state);
+void test_proto_select_longcts_for_large_msg(void **state);
+void test_proto_longcts_construct_pkes_single_pke(void **state);
+void test_proto_longcts_construct_pkes_is_idempotent(void **state);
+void test_proto_longcts_send_completion_peer_abort(void **state);
+void test_proto_longcts_read_nack_continues_on_refactored_path(void **state);
+
 #endif
