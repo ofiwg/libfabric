@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_mr" "3" "2026\-08\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_mr" "3" "2026\-09\-30" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -163,7 +163,7 @@ As a special case, a new memory region can be created from an existing
 memory region.
 Such a new memory region is called a sub-MR, and the existing memory
 region is called the base MR.
-Sub-MRs may be used to shared hardware resources, such as virtual to
+Sub-MRs may be used to share hardware resources, such as virtual to
 physical address translations and page pinning.
 This can improve performance when creating and destroying sub-regions
 that need different access rights.
