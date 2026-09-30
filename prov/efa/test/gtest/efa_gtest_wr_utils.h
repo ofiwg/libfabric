@@ -2,8 +2,9 @@
 /* SPDX-FileCopyrightText: Copyright Amazon.com, Inc. or its affiliates. All
  * rights reserved. */
 
-/* C-linkage bridge for the work request (efa_wr.c) tests: flush, prepare, and
- * queue_tx. See efa_gtest_common_helpers.h for why this exists. */
+/* C-linkage bridge for the work request (efa_wr.c) tests: flush, prepare,
+ * queue_tx, and queue_recv. See efa_gtest_common_helpers.h for why this
+ * exists. */
 
 #ifndef EFA_GTEST_WR_UTILS_H
 #define EFA_GTEST_WR_UTILS_H
@@ -73,6 +74,12 @@ int efa_test_wr_op_type_rdma_write(void);
  * efa_test_ep_data_path_direct_enabled() is true.
  */
 unsigned int efa_test_ep_tx_num_wqe_pending(struct fid_ep *ep_fid);
+
+size_t efa_test_wr_rx_size(size_t num_sge);
+
+int efa_test_wr_rx_desc_is_last(const void *wr, size_t index);
+
+unsigned int efa_test_ep_rx_wqe_posted(struct fid_ep *ep_fid);
 
 #ifdef __cplusplus
 }

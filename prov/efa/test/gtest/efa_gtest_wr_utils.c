@@ -100,3 +100,31 @@ unsigned int efa_test_ep_tx_num_wqe_pending(struct fid_ep *ep_fid)
 	return 0;
 #endif
 }
+
+size_t efa_test_wr_rx_size(size_t num_sge)
+{
+	return efa_wr_rx_size(num_sge);
+}
+
+int efa_test_wr_rx_desc_is_last(const void *wr, size_t index)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	const struct efa_io_rx_desc *rx_buf = wr;
+
+	return EFA_GET(&rx_buf[index].lkey_ctrl, EFA_IO_RX_DESC_LAST);
+#else
+	(void) wr;
+	(void) index;
+	return -1;
+#endif
+}
+
+unsigned int efa_test_ep_rx_wqe_posted(struct fid_ep *ep_fid)
+{
+#if HAVE_EFA_DATA_PATH_DIRECT
+	return efa_test_wr_base_ep(ep_fid)->qp->data_path_direct_qp.rq.wq.wqe_posted;
+#else
+	(void) ep_fid;
+	return 0;
+#endif
+}

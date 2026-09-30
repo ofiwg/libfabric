@@ -82,6 +82,16 @@ int efa_wr_rx_flush(struct fid_ep *ep_fid, uint64_t flags)
 			err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 		base_ep->recv_wr_index = 0;
 	}
+#if HAVE_EFA_DATA_PATH_DIRECT
+	else if (base_ep->qp->data_path_direct_enabled) {
+		/*
+		 * ring the RQ doorbell directly for descriptors staged by
+		 * fi_wr_queue_recv
+		 */
+		struct efa_data_path_direct_rq *rq = &base_ep->qp->data_path_direct_qp.rq;
+		efa_data_path_direct_rq_ring_doorbell(rq, rq->wq.pc);
+	}
+#endif
 
 	ofi_genlock_unlock(&base_ep->util_ep.lock);
 
@@ -308,6 +318,79 @@ static inline int efa_wr_prepare_write(struct efa_base_ep *base_ep,
 
 	return 0;
 }
+
+/**
+ * @brief Fill a receive work request's descriptors from an iov
+ *
+ * The device consumes one receive queue descriptor per SGE, so a receive work
+ * request is an array of them, one per iov entry. LAST marks the final
+ * descriptor: it is what tells the device, and queue_recv, where the work
+ * request ends, since the array itself carries no count. Only the request id is
+ * left out, because it belongs to the queue slot rather than to the operation
+ * and is patched in at queue time.
+ */
+static inline int efa_wr_setup_rx_descs(struct efa_io_rx_desc *rx_buf,
+					const struct iovec *iov, void **desc,
+					size_t count)
+{
+	struct efa_mr *efa_mr;
+	uint32_t lkey_ctrl = 0;
+	uintptr_t addr;
+	size_t i;
+
+	/* Default init of the rx buffer */
+	EFA_SET(&lkey_ctrl, EFA_IO_RX_DESC_FIRST, 1);
+	EFA_SET(&lkey_ctrl, EFA_IO_RX_DESC_LAST, 0);
+
+	for (i = 0; i < count; i++) {
+		if (OFI_UNLIKELY(!desc || !desc[i])) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "EFA direct requires FI_MR_LOCAL but "
+				 "application does not provide a valid desc\n");
+			return -FI_EINVAL;
+		}
+		efa_mr = (struct efa_mr *) desc[i];
+
+		rx_buf[i].lkey_ctrl = lkey_ctrl;
+		/* Set last indication if need) */
+		if (i == count - 1)
+			EFA_SET(&rx_buf[i].lkey_ctrl, EFA_IO_RX_DESC_LAST, 1);
+
+		addr = (uintptr_t) iov[i].iov_base;
+
+		/* Set RX buffer desc from SGE */
+		rx_buf[i].length = MIN(iov[i].iov_len, UINT16_MAX);
+		EFA_SET(&rx_buf[i].lkey_ctrl, EFA_IO_RX_DESC_LKEY, efa_mr->lkey);
+		rx_buf[i].buf_addr_lo = addr;
+		rx_buf[i].buf_addr_hi = (uint64_t) addr >> 32;
+	}
+
+	return 0;
+}
+
+/**
+ * @brief Format a receive work request
+ */
+static inline int efa_wr_prepare_recv(struct efa_base_ep *base_ep,
+				      const struct fi_op_msg *op_msg,
+				      struct efa_io_rx_desc *rx_buf)
+{
+	const struct fi_msg *msg = &op_msg->msg;
+
+	assert(msg->iov_count <= base_ep->info->rx_attr->iov_limit);
+
+	if (base_ep->qp->ibv_qp->qp_type == IBV_QPT_UD &&
+	    OFI_UNLIKELY(msg->msg_iov[0].iov_len <
+			 base_ep->info->ep_attr->msg_prefix_size)) {
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "prefix not present on first iov, iov_len[%zu]\n",
+			 msg->msg_iov[0].iov_len);
+		return -FI_EINVAL;
+	}
+
+	return efa_wr_setup_rx_descs(rx_buf, msg->msg_iov, msg->desc,
+				     msg->iov_count);
+}
 #endif /* HAVE_EFA_DATA_PATH_DIRECT */
 
 static int efa_wr_prepare(struct fid_ep *ep_fid, const struct fi_wr_attr *attr,
@@ -323,7 +406,10 @@ static int efa_wr_prepare(struct fid_ep *ep_fid, const struct fi_wr_attr *attr,
 
 	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
 
-	len = efa_wr_tx_size();
+	if (attr->op_type == FI_OP_RECV)
+		len = efa_wr_rx_size(attr->op.msg->msg.iov_count);
+	else
+		len = efa_wr_tx_size();
 
 	if (!wr || *wr_len < len)
 		return -FI_ETOOSMALL;
@@ -331,6 +417,10 @@ static int efa_wr_prepare(struct fid_ep *ep_fid, const struct fi_wr_attr *attr,
 	memset(wr, 0, len);
 
 	switch (attr->op_type) {
+	case FI_OP_RECV:
+		assert(attr->op.msg->ep == ep_fid);
+		err = efa_wr_prepare_recv(base_ep, attr->op.msg, wr);
+		break;
 	case FI_OP_SEND:
 		assert(attr->op.msg->ep == ep_fid);
 		err = efa_wr_prepare_send(base_ep, attr->op.msg, wr);
@@ -423,7 +513,70 @@ static ssize_t efa_wr_queue_tx(struct fid_ep *ep_fid, const fi_wr wr,
 static ssize_t efa_wr_queue_recv(struct fid_ep *ep_fid, const fi_wr wr,
 				 void *context)
 {
+#if HAVE_EFA_DATA_PATH_DIRECT
+	struct efa_base_ep *base_ep;
+	struct efa_qp *qp;
+	struct efa_data_path_direct_rq *rq;
+	struct efa_data_path_direct_wq *wq;
+	const struct efa_io_rx_desc *prepared = wr;
+	struct efa_io_rx_desc *rx_buf;
+	uint32_t rq_desc_offset;
+	uint16_t req_id;
+	size_t i;
+	int err;
+
+	EFA_DBG(FI_LOG_EP_DATA, "ep: %p, wr: %p, context: %lx\n", ep_fid, wr,
+		(size_t) context);
+
+	if (OFI_UNLIKELY(!wr))
+		return -FI_EINVAL;
+
+	base_ep = container_of(ep_fid, struct efa_base_ep, util_ep.ep_fid);
+	qp = base_ep->qp;
+	rq = &qp->data_path_direct_qp.rq;
+	wq = &rq->wq;
+
+	assert(base_ep->context_mode != USE_CONTEXT2);
+
+	ofi_genlock_lock(&base_ep->util_ep.lock);
+
+	err = efa_post_recv_validate(qp, NULL);
+	if (OFI_UNLIKELY(err)) {
+		efa_data_path_direct_rq_ring_doorbell(rq, wq->pc);
+		ofi_genlock_unlock(&base_ep->util_ep.lock);
+		return (err == ENOMEM) ? -FI_EAGAIN : -err;
+	}
+
+	req_id = efa_wq_get_dev_req_id(wq, (uintptr_t) context);
+	wq->wqe_posted++;
+
+	/*
+	 * The prepared work request is const and may be queued concurrently, so
+	 * copy each of its descriptors into the ring and patch only the request
+	 * id, which carries this queue call's context and slot.
+	 *
+	 * The work request carries no num_sge, so LAST is what says
+	 * where it ends.
+	 */
+	for (i = 0; i < base_ep->info->rx_attr->iov_limit; i++) {
+		rq_desc_offset = (wq->pc & wq->desc_mask) * sizeof(*rx_buf);
+		rx_buf = (struct efa_io_rx_desc *)(rq->buf + rq_desc_offset);
+		*rx_buf = prepared[i];
+		rx_buf->req_id = req_id;
+		/* Wrap rx descriptor index */
+		wq->pc++;
+		if (!(wq->pc & wq->desc_mask))
+			wq->phase++;
+
+		if (EFA_GET(&prepared[i].lkey_ctrl, EFA_IO_RX_DESC_LAST))
+			break;
+	}
+
+	ofi_genlock_unlock(&base_ep->util_ep.lock);
+	return 0;
+#else
 	return -FI_ENOSYS;
+#endif
 }
 
 static ssize_t efa_wr_queue_trecv(struct fid_ep *ep_fid, const fi_wr wr,

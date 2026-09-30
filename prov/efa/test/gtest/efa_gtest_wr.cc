@@ -269,6 +269,27 @@ class EfaWrTestBase : public EfaWrFlushTestBase
 		*attr_out = &attr;
 	}
 
+	void prepare_recv(const struct fi_wr_attr **attr_out, size_t *wr_len,
+			  bool provide_desc = true)
+	{
+		iov.iov_base = local_buf;
+		iov.iov_len = EFA_TEST_WR_SEG_LEN;
+
+		memset(&op_msg, 0, sizeof(op_msg));
+		op_msg.ep = resource.ep;
+		op_msg.msg.msg_iov = &iov;
+		op_msg.msg.desc = provide_desc ? &local_desc : nullptr;
+		op_msg.msg.iov_count = 1;
+		op_msg.msg.addr = peer_addr;
+
+		memset(&attr, 0, sizeof(attr));
+		attr.op_type = FI_OP_RECV;
+		attr.op.msg = &op_msg;
+
+		*wr_len = efa_test_wr_rx_size(1);
+		*attr_out = &attr;
+	}
+
 	struct fi_wr_attr attr = {};
 	struct fi_op_msg op_msg = {};
 	struct fi_op_rma op_rma = {};
@@ -452,4 +473,133 @@ TEST_F(EfaWrTest, queue_tx_batches_prepared_send)
 	EXPECT_EQ(fi_wr_queue_tx(resource.ep, wr, &ctx), 0);
 	EXPECT_EQ(efa_test_ep_tx_num_wqe_pending(resource.ep), 1u);
 	EXPECT_TRUE(efa_test_ep_tx_wr_pending(resource.ep));
+}
+
+
+/**
+ * @brief fi_wr_prepare formats a receive into the caller's buffer, reports the
+ * receive work request size in wr_len, and marks the final descriptor with the
+ * LAST bit that tells the device where the work request ends.
+ */
+TEST_F(EfaWrTest, prepare_recv_formats_rx_descs)
+{
+	const struct fi_wr_attr *attr;
+	uint8_t wr[256];
+	size_t wr_len;
+
+	if (!efa_test_wr_supported())
+		GTEST_SKIP() << "build lacks data path direct work requests";
+
+	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
+	ASSERT_NE(efa_test_wr_rx_size(1), 0u);
+	ASSERT_LE(efa_test_wr_rx_size(1), sizeof(wr));
+
+	prepare_recv(&attr, &wr_len);
+
+	EXPECT_EQ(fi_wr_prepare(resource.ep, attr, wr, &wr_len), 0);
+	EXPECT_EQ(wr_len, efa_test_wr_rx_size(1));
+	EXPECT_EQ(efa_test_wr_rx_desc_is_last(wr, 0), 1);
+}
+
+/**
+ * @brief A receive work request buffer smaller than the required size is
+ * rejected with -FI_ETOOSMALL.
+ */
+TEST_F(EfaWrTest, prepare_recv_rejects_too_small_buffer)
+{
+	const struct fi_wr_attr *attr;
+	uint8_t wr[256];
+	size_t wr_len;
+
+	if (!efa_test_wr_supported())
+		GTEST_SKIP() << "build lacks data path direct work requests";
+
+	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
+	ASSERT_NE(efa_test_wr_rx_size(1), 0u);
+
+	prepare_recv(&attr, &wr_len);
+	wr_len = efa_test_wr_rx_size(1) - 1;
+
+	EXPECT_EQ(fi_wr_prepare(resource.ep, attr, wr, &wr_len),
+		  -FI_ETOOSMALL);
+}
+
+/**
+ * @brief efa-direct requires FI_MR_LOCAL, so a receive prepared without a
+ * memory descriptor is rejected with -FI_EINVAL.
+ */
+TEST_F(EfaWrTest, prepare_recv_rejects_missing_desc)
+{
+	const struct fi_wr_attr *attr;
+	uint8_t wr[256];
+	size_t wr_len;
+
+	if (!efa_test_wr_supported())
+		GTEST_SKIP() << "build lacks data path direct work requests";
+
+	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
+
+	prepare_recv(&attr, &wr_len, false);
+
+	EXPECT_EQ(fi_wr_prepare(resource.ep, attr, wr, &wr_len), -FI_EINVAL);
+}
+
+/**
+ * @brief fi_wr_queue_recv rejects a NULL work request with -FI_EINVAL before
+ * touching the receive queue, so no receive is posted.
+ */
+TEST_F(EfaWrTest, queue_recv_rejects_null_wr)
+{
+	if (!efa_test_wr_supported())
+		GTEST_SKIP() << "build lacks data path direct work requests";
+
+	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
+
+	EXPECT_EQ(fi_wr_queue_recv(resource.ep, nullptr, nullptr), -FI_EINVAL);
+}
+
+/**
+ * @brief Queueing a prepared receive posts one work request to the receive
+ * queue, advancing its posted count. Needs the direct data path, whose live
+ * receive queue the queue call writes into.
+ */
+TEST_F(EfaWrTest, queue_recv_posts_prepared_recv)
+{
+	const struct fi_wr_attr *attr;
+	struct fi_context2 ctx = {};
+	uint8_t wr[256];
+	size_t wr_len;
+	unsigned int posted_before;
+
+	if (!efa_test_wr_supported())
+		GTEST_SKIP() << "build lacks data path direct work requests";
+
+	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
+
+	if (!efa_test_ep_data_path_direct_enabled(resource.ep))
+		GTEST_SKIP() << "endpoint does not use the direct data path";
+
+	ASSERT_LE(efa_test_wr_rx_size(1), sizeof(wr));
+	prepare_recv(&attr, &wr_len);
+	ASSERT_EQ(fi_wr_prepare(resource.ep, attr, wr, &wr_len), 0);
+
+	posted_before = efa_test_ep_rx_wqe_posted(resource.ep);
+
+	EXPECT_EQ(fi_wr_queue_recv(resource.ep, wr, &ctx), 0);
+	EXPECT_EQ(efa_test_ep_rx_wqe_posted(resource.ep), posted_before + 1);
+}
+
+/**
+ * @brief efa-direct has no tagged receive queue, so fi_wr_queue_trecv is not
+ * supported and returns -FI_ENOSYS.
+ */
+TEST_F(EfaWrTest, queue_trecv_not_supported)
+{
+	if (!efa_test_wr_supported())
+		GTEST_SKIP() << "build lacks data path direct work requests";
+
+	ASSERT_NO_FATAL_FAILURE(construct(/*request_wr=*/true));
+
+	EXPECT_EQ(fi_wr_queue_trecv(resource.ep, nullptr, nullptr),
+		  -FI_ENOSYS);
 }
