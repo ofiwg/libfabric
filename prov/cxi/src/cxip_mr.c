@@ -528,7 +528,7 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 		do {
 			sched_yield();
 			cxip_ep_tgt_ctrl_progress_locked(ep_obj, true);
-		} while (mr->writedata_req.mr.mr->mr_state != CXIP_MR_UNLINKED);
+		} while (mr->writedata_mr_state != CXIP_MR_UNLINKED);
 	}
 
 	if (mr->count_events) {
