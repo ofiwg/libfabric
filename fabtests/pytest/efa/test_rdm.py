@@ -155,6 +155,14 @@ def test_rdm_tagged_bw_use_fi_more(cmdline_args, completion_semantic, memory_typ
     efa_run_client_server_test(cmdline_args, command,
                                "short", completion_semantic, memory_type, message_sizes, fabric="efa")
 
+# only efa-direct support fi_recv_flush
+@pytest.mark.functional
+@pytest.mark.memory_type(memory_type_list_all)
+def test_rdm_bw_use_fi_flush(cmdline_args, completion_semantic, memory_type):
+    command = "fi_rdm_bw -w 0 --use-fi-flush --sync-comp " + completion_semantic
+    efa_run_client_server_test(cmdline_args, command,
+                               "short", completion_semantic, memory_type, message_size=1024, fabric="efa-direct")
+
 # efa-direct does not support atomic
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
