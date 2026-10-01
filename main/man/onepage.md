@@ -4404,12 +4404,19 @@ with atomic message calls.
 
 *FI_MORE*
 :   Indicates that the user has additional requests that will
-    immediately be posted after the current call returns. Use of this
-    flag may improve performance by enabling the provider to optimize
-    its access to the fabric hardware. Providers that utilize delayed
-    start optimizations for communication calls with FI_MORE flag set
-    must ensure that all previously delayed calls be flushed when an
-    error is returned from a new call.
+    immediately be posted to the same queue after the current call
+    returns. Use of this flag may improve performance by enabling the
+    provider to optimize its access to the fabric hardware. Providers
+    that utilize delayed start optimizations for communication calls
+    with FI_MORE flag set must ensure that all previously delayed calls
+    be flushed when an error is returned from a new call.
+
+Atomic operations place work on the endpoint's transmit queue, shared
+with sends, tagged sends, and RMA operations. Work deferred under
+FI_MORE on the transmit queue is initiated when a subsequent transmit
+operation without FI_MORE is posted, or when the queue is flushed
+explicitly with fi_tx_flush (see
+[`fi_endpoint`(3)](fi_endpoint.3.html)).
 
 *FI_INJECT*
 :   Indicates that the control of constant data buffers should be
@@ -8814,6 +8821,10 @@ fi_enable
 fi_cancel
 :   Cancel a pending asynchronous data transfer
 
+fi_tx_flush
+:   Initiate transmit operations that the provider has queued but not
+    started
+
 fi_ep_alias
 :   Create an alias to the endpoint
 
@@ -8904,6 +8915,8 @@ DEPRECATED ssize_t fi_tx_size_left(struct fid_ep *ep);
 
 int fi_ep_export_xpu(struct fid_ep *ep, uint64_t flags,
     struct fid_xpu_ep *xpu_ep);
+
+ssize_t fi_tx_flush(struct fid_ep *ep, uint64_t flags);
 ```
 
 # ARGUMENTS
@@ -9223,6 +9236,20 @@ will be canceled. In this case, the operation which is canceled is
 provider specific. The cancel operation is asynchronous, but will
 complete within a bounded period of time.
 
+## fi_tx_flush
+
+This call initiates data transfers that the provider has queued on the
+endpoint's transmit queue but has not yet started, and returns once the
+queued work has been initiated. The transmit queue carries sends, tagged
+sends, RMA writes and reads, and atomic operations. Flags are reserved
+for future use and must be 0.
+
+The primary use of the flush calls is to start operations deferred by
+the FI_MORE flag. An application that posts a batch of transfers, each
+but the last carrying FI_MORE, may call the matching flush instead of
+issuing a final request without FI_MORE, which is useful when the batch
+size is not known in advance.
+
 ## fi_ep_alias
 
 This call creates an alias to the specified endpoint. Conceptually, an
@@ -9523,7 +9550,8 @@ protocol; uint32_t protocol_version; size_t max_msg_size; size_t
 msg_prefix_size; size_t max_order_raw_size; size_t max_order_war_size;
 size_t max_order_waw_size; uint64_t mem_tag_format; size_t tx_ctx_cnt;
 size_t rx_ctx_cnt; size_t auth_key_size; uint8_t *auth_key; struct
-fid_xpu_ctx *xpu_ctx; }; {% endhighlight %}
+fid_xpu_ctx *xpu_ctx; size_t max_tx_wr_size; size_t max_rx_wr_size; };
+{% endhighlight %}
 
 ## type - Endpoint Type
 
@@ -9883,6 +9911,18 @@ together with `FI_XPU` in the flags parameter of `fi_endpoint2`, the
 endpoint is created for XPU device-side data transfer. See
 [`fi_xpu`(3)](fi_xpu.3.html) for details. This field must be NULL if the
 endpoint is not created with FI_XPU.
+
+## max_tx_wr_size / max_rx_wr_size - Work Request Size
+
+The maximum size, in bytes, that an application must allocate to back an
+fi_wr used with the Work Request API. The work request format differs
+between transmit and receive operations, so the provider reports the two
+sizes separately: max_tx_wr_size for transmit work requests and
+max_rx_wr_size for receive work requests.
+
+These are output fields, set by the provider on the fi_info returned
+from fi_getinfo. They are 0 when the endpoint does not report the FI_WR
+capability.
 
 # TRANSMIT CONTEXT ATTRIBUTES
 
@@ -10606,6 +10646,7 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 [`fi_domain`(3)](fi_domain.3.html), [`fi_cq`(3)](fi_cq.3.html)
 [`fi_msg`(3)](fi_msg.3.html), [`fi_tagged`(3)](fi_tagged.3.html),
 [`fi_rma`(3)](fi_rma.3.html) [`fi_peer`(3)](fi_peer.3.html)
+[`fi_wr`(3)](fi_wr.3.html)
 
 {% include JB/setup %}
 
@@ -12006,6 +12047,14 @@ send-only or receive-only.
     FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the types of
     RMA operations supported by an endpoint.
 
+*FI_WR*
+:   Requests that an endpoint support the Work Request API, which
+    decomposes a data transfer into separate prepare, modify, queue, and
+    flush steps. An endpoint supporting this capability reports the
+    required work request sizes in fi_ep_attr::max_tx_wr_size and
+    fi_ep_attr::max_rx_wr_size. See [`fi_wr`(3)](fi_wr.3.html) for
+    details.
+
 *FI_RMA_EVENT*
 :   Requests that an endpoint support the generation of completion
     events when it is the target of an RMA and/or atomic operation. This
@@ -12099,7 +12148,7 @@ FI_REMOTE_WRITE
 
 Secondary capabilities: FI_MULTI_RECV, FI_TAGGED_MULTI_RECV, FI_SOURCE,
 FI_RMA_EVENT, FI_SHARED_AV, FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM,
-FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.
+FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM, FI_WR
 
 # MODE
 
@@ -12406,6 +12455,9 @@ fi_recv / fi_recvv / fi_recvmsg
 fi_send / fi_sendv / fi_sendmsg fi_inject / fi_senddata : Initiate an
 operation to send a message
 
+fi_recv_flush
+:   Initiate receives that the provider has queued but not started
+
 fi_xpu_send
 :   Initiate a send operation from an XPU.
 
@@ -12443,6 +12495,8 @@ ssize_t fi_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
     uint64_t data, fi_addr_t dest_addr);
+
+ssize_t fi_recv_flush(struct fid_ep *ep, uint64_t flags);
 
 #include <rdma/fi_xpu_device.h>
 
@@ -12628,6 +12682,14 @@ connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags. The fi_recvmsg function
 takes a struct fi_msg as input.
 
+## fi_recv_flush
+
+The fi_recv_flush call initiates receives that the provider has queued
+on the endpoint's receive queue but has not yet started, and returns
+once the queued work has been initiated. Its primary use is to start
+receives deferred by the FI_MORE flag. Flags are reserved for future use
+and must be 0.
+
 ## fi_xpu_send / fi_xpu_recv
 
 The fi_xpu_send and fi_xpu_recv calls are device-side equivalents of the
@@ -12663,12 +12725,19 @@ fi_sendmsg.
 
 *FI_MORE*
 :   Indicates that the user has additional requests that will
-    immediately be posted after the current call returns. Use of this
-    flag may improve performance by enabling the provider to optimize
-    its access to the fabric hardware. Providers that utilize delayed
-    start optimizations for communication calls with FI_MORE flag set
-    must ensure that all previously delayed calls be flushed when an
-    error is returned from a new call.
+    immediately be posted to the same queue after the current call
+    returns. Use of this flag may improve performance by enabling the
+    provider to optimize its access to the fabric hardware. Providers
+    that utilize delayed start optimizations for communication calls
+    with FI_MORE flag set must ensure that all previously delayed calls
+    be flushed when an error is returned from a new call.
+
+A send posted with FI_MORE places work on the transmit queue and a
+receive on the receive queue. Work deferred on a queue is initiated when
+a subsequent operation without FI_MORE is posted to that same queue, or
+when the queue is flushed explicitly with fi_recv_flush, fi_tx_flush
+(see [`fi_endpoint`(3)](fi_endpoint.3.html)), or fi_trecv_flush (see
+[`fi_tagged`(3)](fi_tagged.3.html)).
 
 *FI_INJECT*
 :   Applies to fi_sendmsg. Indicates that the outbound data buffer
@@ -15777,12 +15846,18 @@ list of flags are usable with fi_readmsg and/or fi_writemsg.
 
 *FI_MORE*
 :   Indicates that the user has additional requests that will
-    immediately be posted after the current call returns. Use of this
-    flag may improve performance by enabling the provider to optimize
-    its access to the fabric hardware. Providers that utilize delayed
-    start optimizations for communication calls with FI_MORE flag set
-    must ensure that all previously delayed calls be flushed when an
-    error is returned from a new call.
+    immediately be posted to the same queue after the current call
+    returns. Use of this flag may improve performance by enabling the
+    provider to optimize its access to the fabric hardware. Providers
+    that utilize delayed start optimizations for communication calls
+    with FI_MORE flag set must ensure that all previously delayed calls
+    be flushed when an error is returned from a new call.
+
+RMA write and read operations place work on the endpoint's transmit
+queue. Work deferred under FI_MORE on the transmit queue is initiated
+when a subsequent transmit operation without FI_MORE is posted, or when
+the queue is flushed explicitly with fi_tx_flush (see
+[`fi_endpoint`(3)](fi_endpoint.3.html)).
 
 *FI_INJECT*
 :   Applies to fi_writemsg. Indicates that the outbound data buffer
@@ -15853,6 +15928,10 @@ fi_trecv / fi_trecvv / fi_trecvmsg
 fi_tsend / fi_tsendv / fi_tsendmsg / fi_tinject / fi_tsenddata
 :   Initiate an operation to send a message
 
+fi_trecv_flush
+:   Initiate tagged receives that the provider has queued but not
+    started
+
 fi_xpu_tsend
 :   Initiate a tagged send operation from an XPU.
 
@@ -15893,6 +15972,8 @@ ssize_t fi_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 
 ssize_t fi_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
     uint64_t data, fi_addr_t dest_addr, uint64_t tag);
+
+ssize_t fi_trecv_flush(struct fid_ep *ep, uint64_t flags);
 
 #include <rdma/fi_xpu_device.h>
 
@@ -16099,6 +16180,15 @@ connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags. The fi_trecvmsg function
 takes a struct fi_msg_tagged as input.
 
+## fi_trecv_flush
+
+The fi_trecv_flush call initiates tagged receives that the provider has
+queued on the endpoint's tagged receive queue but has not yet started,
+and returns once the queued work has been initiated. Its primary use is
+to start tagged receives deferred by the FI_MORE flag. A provider that
+does not maintain a separate tagged receive queue services this the same
+as fi_recv_flush. Flags are reserved for future use and must be 0.
+
 ## fi_xpu_tsend / fi_xpu_trecv
 
 The fi_xpu_tsend and fi_xpu_trecv calls are device-side equivalents of
@@ -16129,12 +16219,21 @@ following list of flags are usable with fi_trecvmsg and/or fi_tsendmsg.
 
 *FI_MORE*
 :   Indicates that the user has additional requests that will
-    immediately be posted after the current call returns. Use of this
-    flag may improve performance by enabling the provider to optimize
-    its access to the fabric hardware. Providers that utilize delayed
-    start optimizations for communication calls with FI_MORE flag set
-    must ensure that all previously delayed calls be flushed when an
-    error is returned from a new call.
+    immediately be posted to the same queue after the current call
+    returns. Use of this flag may improve performance by enabling the
+    provider to optimize its access to the fabric hardware. Providers
+    that utilize delayed start optimizations for communication calls
+    with FI_MORE flag set must ensure that all previously delayed calls
+    be flushed when an error is returned from a new call.
+
+A tagged send places work on the endpoint's transmit queue, shared with
+untagged sends, RMA, and atomics; a tagged receive places work on the
+tagged receive queue, which a provider may keep separate from the
+untagged receive queue. Work deferred under FI_MORE on a queue is
+initiated when a subsequent operation without FI_MORE is posted to that
+same queue, or when the queue is flushed explicitly with fi_tx_flush for
+tagged sends (see [`fi_endpoint`(3)](fi_endpoint.3.html)) or
+fi_trecv_flush for tagged receives.
 
 *FI_INJECT*
 :   Applies to fi_tsendmsg. Indicates that the outbound data buffer
