@@ -12,6 +12,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_data_path_ops.h"
+#include "efa_wr.h"
 
 #include "efa_tp.h"
 #include "efa_data_path_direct.h"
@@ -452,4 +453,5 @@ struct fi_ops_msg efa_msg_ops = {
 	.senddata = efa_ep_senddata,
 	.inject = efa_ep_msg_inject,
 	.injectdata = efa_ep_msg_injectdata,
+	.recv_flush = efa_wr_rx_flush,
 };

@@ -18,6 +18,7 @@
 #include "efa_cntr.h"
 #include "efa_rdm_cntr.h"
 #include "efa_rdm_mr.h"
+#include "efa_wr.h"
 
 static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep);
 
@@ -462,6 +463,7 @@ static struct fi_ops_ep efa_rdm_ep_ep_ops = {
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
+	.tx_flush = efa_wr_tx_flush,
 };
 
 static int efa_rdm_ep_close(struct fid *fid);
