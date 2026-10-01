@@ -115,12 +115,13 @@ def test_rma_bw_large(cmdline_args, operation_type, rma_bw_completion_semantic, 
 @pytest.mark.message_sizes(default_efa=INJECT_SIZES, default_efa_direct=DIRECT_SIZES)
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["writedata", "write"])
+@pytest.mark.parametrize("fi_more_flag", ["fi-more", "fi-flush"])
 @pytest.mark.parametrize("iteration_type",
                          ["5", # smaller than max batch wqe cnt (16)
                           "48", # larger than max batch wqe cnt
                           "128"]) # larger than window size (64)
-def test_rma_bw_use_fi_more(cmdline_args, operation_type, iteration_type, rma_bw_completion_semantic, message_sizes, rma_fabric):
-    command = "fi_rma_bw -e rdm -w 0 -j 0 --use-fi-more --sync-comp " + rma_bw_completion_semantic
+def test_rma_bw_use_fi_more(cmdline_args, operation_type, iteration_type, fi_more_flag, rma_bw_completion_semantic, message_sizes, rma_fabric):
+    command = "fi_rma_bw -e rdm -w 0 -j 0 --use-" + fi_more_flag + " --sync-comp " + rma_bw_completion_semantic
     command = command + " -o " + operation_type
     # rma_bw test with data verification takes longer to finish
     timeout = max(540, cmdline_args.timeout)
