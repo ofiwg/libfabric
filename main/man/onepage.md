@@ -17084,7 +17084,8 @@ struct fi_efa_wq_attr {
 
 *caps*
 
-:   Work queue capabilities:
+:   Only filled in when the application uses API version 2.7 or later.
+    Work queue capabilities:
 
     FI_EFA_WQ_CAPS_64_BIT_REQ_ID Work queue supports posting requests
     with 64-bit IDs. When set, the associated completion queue is
