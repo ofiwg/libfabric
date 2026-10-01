@@ -158,7 +158,7 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	int req_pkt_type, iface, err;
 	bool use_p2p, mr_attempted = false;
 	uint16_t header_flags = 0;
-	uint64_t effective_flags;
+	uint64_t effective_flags, mr_access_flags;
 
 	/*
 	 * efa_rdm_msg_generic_send() sends a peer that only accepts headerless
@@ -197,8 +197,49 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 	if (err < 0)
 		return err;
 	use_p2p = err;
+	mr_access_flags = FI_SEND | (use_p2p ? FI_REMOTE_READ : 0);
 
 	header_flags = efa_rdm_proto_req_header_flags(peer, effective_flags);
+
+	/*
+	 * FI_EFA_RDM_FORCE_SEND_PROTO pins the choice to one protocol by name.
+	 * The name replaces the size decision rather than narrowing it, so the
+	 * named protocol is used whether or not this message suits it; that is
+	 * the point, since no threshold can steer a message that fits in a
+	 * single packet away from eager.
+	 */
+	if (efa_env.rdm_force_send_proto) {
+		for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
+			selected_proto = efa_rdm_protocols[i];
+
+			if (strcmp(efa_env.rdm_force_send_proto,
+				   selected_proto->name))
+				continue;
+
+			if (selected_proto->wants_mr &&
+			    efa_is_cache_available(efa_rdm_ep_rdm_domain(ep)))
+				efa_rdm_ope_try_fill_desc(
+					txe, 0, mr_access_flags);
+
+			*proto = selected_proto;
+			txe->proto = selected_proto;
+			txe->req_pkt_type = efa_rdm_proto_req_pkt_type(
+				selected_proto, op, effective_flags, peer);
+			EFA_INFO(FI_LOG_EP_DATA,
+				"Forced the %s protocol for a %zu byte send\n",
+				selected_proto->name, txe->total_len);
+			return FI_SUCCESS;
+		}
+
+		// TODO: fail the send operation after all protocols are migrated.
+		EFA_WARN(FI_LOG_EP_DATA,
+			 "FI_EFA_RDM_FORCE_SEND_PROTO=%s does not name a send protocol "
+			 "that supports the new code path. Falling back to the old code "
+			 "path\n", efa_env.rdm_force_send_proto);
+		*proto = NULL;
+		txe->proto = NULL;
+		return FI_SUCCESS;
+	}
 
 	for (int i = 0; i < ARRAY_SIZE(efa_rdm_protocols); ++i) {
 		selected_proto = efa_rdm_protocols[i];
@@ -215,16 +256,15 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 		 * TODO: Move efa_rdm_ope_try_fill_desc to efa_rdm_proto.c
 		 */
 		if (!mr_attempted && selected_proto->wants_mr) {
-			uint64_t access =
-				FI_SEND | (use_p2p ? FI_REMOTE_READ : 0);
 
 			if (efa_is_cache_available(efa_rdm_ep_rdm_domain(ep)))
-				efa_rdm_ope_try_fill_desc(txe, 0, access);
+				efa_rdm_ope_try_fill_desc(txe, 0, mr_access_flags);
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol(
-			    txe, req_pkt_type, header_flags, iface, use_p2p)) {
+		if (selected_proto->can_use_protocol(txe, req_pkt_type,
+						     header_flags, iface,
+						     use_p2p)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;
@@ -319,8 +359,9 @@ void efa_rdm_proto_select_emulated_write_protocol(struct efa_rdm_ep *ep,
 			mr_attempted = true;
 		}
 
-		if (selected_proto->can_use_protocol(
-			    txe, req_pkt_type, header_flags, iface, use_p2p)) {
+		if (selected_proto->can_use_protocol(txe, req_pkt_type,
+						     header_flags, iface,
+						     use_p2p)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;
@@ -370,9 +411,9 @@ void efa_rdm_proto_select_emulated_read_protocol(struct efa_rdm_ep *ep,
 		req_pkt_type = efa_rdm_proto_req_pkt_type(
 			selected_proto, txe->op, txe->fi_flags, peer);
 
-		if (selected_proto->can_use_protocol(
-			    txe, req_pkt_type, header_flags, iface,
-			    false /* use_p2p */)) {
+		if (selected_proto->can_use_protocol(txe, req_pkt_type,
+						     header_flags, iface,
+						     false /* use_p2p */)) {
 			*proto = selected_proto;
 			txe->proto = selected_proto;
 			txe->req_pkt_type = req_pkt_type;

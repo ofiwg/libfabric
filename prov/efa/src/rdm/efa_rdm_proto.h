@@ -128,6 +128,9 @@ struct efa_rdm_proto {
  * protocols are appropriate but MR fails, it will automatically switch to a
  * different protocol.
  *
+ * FI_EFA_RDM_FORCE_SEND_PROTO forces the use of a given protocol selected by
+ * name.
+ *
  * @param[in]  ep     Endpoint
  * @param[in]  peer   Peer to send to
  * @param[in]  msg    Message descriptor from application
@@ -136,8 +139,10 @@ struct efa_rdm_proto {
  * @param[out] txe    Pre-allocated TXE, partially initialized on return
  * @param[out] proto  Selected protocol, or NULL if none matched
  * @return 0 on success, negative errno if the operation cannot be carried at
- *	   all. Finding no protocol is not a failure: it returns 0 with *proto
- *	   NULL, and the caller falls back to the old send path.
+ *	   all. Finding no protocol by size is not a failure : it returns 0 with
+       *proto NULL, and the caller falls back to the old send path.
+ *     TODO: Fail send operation when FI_EFA_RDM_FORCE_SEND_PROTO is set but
+ *     does not match any of the implemented protocols.
  */
 int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 				       struct efa_rdm_peer *peer,

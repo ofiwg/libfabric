@@ -83,6 +83,13 @@ struct efa_env {
 	int track_mr;
 	int use_hw_cntr;
 	int use_sq_req_id_64_bit;
+	/**
+	 * Name of the RDM send protocol that selection is pinned to, as set by
+	 * FI_EFA_RDM_FORCE_SEND_PROTO, or NULL to use the default protocol
+	 * selection logic.
+	 * Two-sided sends only; the RMA paths are not affected by this env var.
+	 */
+	char *rdm_force_send_proto;
 };
 
 extern struct efa_env efa_env;

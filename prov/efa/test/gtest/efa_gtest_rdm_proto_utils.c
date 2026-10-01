@@ -159,6 +159,61 @@ int efa_test_proto_medium_msgrtm_pkt_type(void)
 	return EFA_RDM_MEDIUM_MSGRTM_PKT;
 }
 
+int efa_test_proto_force_select_send(struct fid_ep *ep_fid, struct fid_av *av,
+				     struct fid_domain *domain,
+				     const char *forced, size_t len,
+				     struct efa_test_proto_force_result *out)
+{
+	struct efa_test_proto_ctx ctx = {0};
+	struct efa_rdm_proto *proto = NULL;
+	struct efa_rdm_ope txe;
+	struct fi_msg msg = {0};
+	struct iovec iov;
+	char *saved_forced;
+	void *desc;
+	int err;
+
+	memset(out, 0, sizeof(*out));
+
+	err = efa_test_proto_setup_peer(ep_fid, av, &ctx);
+	if (err)
+		return err;
+
+	/* A zero length message still needs a registered buffer to describe. */
+	err = efa_test_proto_setup_buf(domain, &ctx, len ? len : 1);
+	if (err)
+		return err;
+
+	desc = fi_mr_desc(ctx.mr);
+	iov.iov_base = ctx.buf;
+	iov.iov_len = len;
+	msg.msg_iov = &iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = ctx.peer_addr;
+
+	/* The selector fills the rest of this txe itself. */
+	memset(&txe, 0, sizeof(txe));
+	txe.op = ofi_op_msg;
+	txe.peer = ctx.peer;
+
+	saved_forced = efa_env.rdm_force_send_proto;
+	efa_env.rdm_force_send_proto = (char *) forced;
+
+	out->ret = efa_rdm_proto_select_send_protocol(
+		ctx.ep, ctx.peer, &msg, ofi_op_msg, 0, &txe, &proto);
+
+	efa_env.rdm_force_send_proto = saved_forced;
+
+	/* Leave proto_name empty when selection picked nothing. */
+	if (proto)
+		strncpy(out->proto_name, proto->name,
+			sizeof(out->proto_name) - 1);
+
+	efa_test_proto_teardown_buf(&ctx);
+	return 0;
+}
+
 int efa_test_proto_medium_plan(struct fid_ep *ep, struct fid_av *av,
 			       enum fi_hmem_iface iface, int align128,
 			       size_t total_len, int leave_one_tx_pkt,
