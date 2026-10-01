@@ -14,7 +14,7 @@
 . ftr VB CB
 . ftr VBI CBI
 .\}
-.TH "fi_rma" "3" "2026\-08\-20" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
+.TH "fi_rma" "3" "2026\-10\-01" "Libfabric Programmer\[cq]s Manual" "#VERSION#"
 .hy
 .SH NAME
 .PP
@@ -284,12 +284,19 @@ this flag is ignored.
 .TP
 \f[I]FI_MORE\f[R]
 Indicates that the user has additional requests that will immediately be
-posted after the current call returns.
+posted to the same queue after the current call returns.
 Use of this flag may improve performance by enabling the provider to
 optimize its access to the fabric hardware.
 Providers that utilize delayed start optimizations for communication
 calls with FI_MORE flag set must ensure that all previously delayed
 calls be flushed when an error is returned from a new call.
+.PP
+RMA write and read operations place work on the endpoint\[cq]s transmit
+queue.
+Work deferred under FI_MORE on the transmit queue is initiated when a
+subsequent transmit operation without FI_MORE is posted, or when the
+queue is flushed explicitly with fi_tx_flush (see
+\f[V]fi_endpoint\f[R](3)).
 .TP
 \f[I]FI_INJECT\f[R]
 Applies to fi_writemsg.
