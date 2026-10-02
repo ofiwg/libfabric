@@ -210,6 +210,7 @@ struct ft_opts {
 	char *av_name;
 	int sizes_enabled;
 	int use_fi_more;
+	int use_fi_flush;
 	int options;
 	enum ft_comp_method comp_method;
 	int machr;
@@ -707,6 +708,7 @@ enum {
 	LONG_OPT_CONTROL_PROGRESS,
 	LONG_OPT_MAX_MSG_SIZE,
 	LONG_OPT_USE_FI_MORE,
+	LONG_OPT_USE_FI_FLUSH,
 	LONG_OPT_THREADING,
 	LONG_OPT_NO_RX_CQ_DATA,
 	LONG_OPT_EXPECT_ERROR,

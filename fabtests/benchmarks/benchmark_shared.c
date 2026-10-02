@@ -35,6 +35,7 @@
 #include <stdlib.h>
 
 #include <rdma/fi_errno.h>
+#include <rdma/fi_tagged.h>
 
 #include "shared.h"
 #include "benchmark_shared.h"
@@ -568,14 +569,24 @@ static int rma_bw_rx_comp()
 	return ft_tx(ep, remote_fi_addr, FT_RMA_SYNC_MSG_BYTES, &tx_ctx);
 }
 
+static bool fi_more_last_post(int i, int j)
+{
+	return !(j < opts.window_size - 1 &&
+		 i >= opts.warmup_iterations &&
+		 i < opts.iterations + opts.warmup_iterations - 1);
+}
+
 static uint64_t set_fi_more_flag(int i, int j, uint64_t flags)
 {
-	if (j < opts.window_size - 1 && i >= opts.warmup_iterations &&
-	    i < opts.iterations + opts.warmup_iterations - 1) {
+	/*
+	 * With fi_flush, FI_MORE stays set on every post and the queued
+	 * work is initiated explicitly via fi_tx_flush/fi_recv_flush.
+	 * Otherwise, FI_MORE is cleared on the last post to flush the queue.
+	 */
+	if (opts.use_fi_flush || !fi_more_last_post(i, j))
 		flags |= FI_MORE;
-	} else {
+	else
 		flags &= ~FI_MORE;
-	}
 	return flags;
 }
 
@@ -630,6 +641,14 @@ int bandwidth(void)
 						tx_ctx_arr[j].buf,
 						opts.transfer_size,
 						&tx_ctx_arr[j].context, flags);
+				if (!ret && opts.use_fi_flush &&
+				    fi_more_last_post(i, j)) {
+					ret = fi_tx_flush(ep, 0);
+					if (ret) {
+						FT_PRINTERR("fi_tx_flush", ret);
+						return ret;
+					}
+				}
 			} else {
 				ret = ft_post_tx_buf(ep, remote_fi_addr,
 						opts.transfer_size, NO_CQ_DATA,
@@ -663,6 +682,16 @@ int bandwidth(void)
 						     FT_MAX_CTRL_MSG) +
 							 ft_rx_prefix_size(),
 						 &rx_ctx_arr[j].context, flags);
+				if (!ret && opts.use_fi_flush &&
+				    fi_more_last_post(i, j)) {
+					ret = (hints->caps & FI_TAGGED) ?
+						fi_trecv_flush(ep, 0) :
+						fi_recv_flush(ep, 0);
+					if (ret) {
+						FT_PRINTERR("fi_recv_flush", ret);
+						return ret;
+					}
+				}
 			} else {
 				ret = ft_post_rx_buf(ep, remote_fi_addr, opts.transfer_size,
 						     &rx_ctx_arr[j].context,
@@ -786,6 +815,12 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 						tx_buf + offset,
 						opts.transfer_size, remote,
 						&tx_ctx_arr[j].context, flags);
+				if (!ret && opts.use_fi_flush &&
+				    fi_more_last_post(i, j)) {
+					ret = fi_tx_flush(ep, 0);
+					if (ret)
+						FT_PRINTERR("fi_tx_flush", ret);
+				}
 			} else {
 				ret = ft_post_rma(FT_RMA_WRITE, tx_buf + offset,
 						opts.transfer_size, remote,
@@ -833,6 +868,12 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 							tx_buf + offset,
 							opts.transfer_size, remote,
 							&tx_ctx_arr[j].context, flags);
+					if (!ret && opts.use_fi_flush &&
+					    fi_more_last_post(i, j)) {
+						ret = fi_tx_flush(ep, 0);
+						if (ret)
+							FT_PRINTERR("fi_tx_flush", ret);
+					}
 				} else {
 					ret = ft_post_rma(FT_RMA_WRITEDATA,
 							tx_buf + offset,

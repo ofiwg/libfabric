@@ -4608,6 +4608,8 @@ void ft_longopts_usage()
 		"maximum untagged message size");
 	FT_PRINT_OPTS_USAGE("--use-fi-more",
 		"Run tests with FI_MORE");
+	FT_PRINT_OPTS_USAGE("--use-fi-flush",
+		"Run FI_MORE tests with fi_tx_flush/fi_recv_flush/fi_trecv_flush");
 	FT_PRINT_OPTS_USAGE("--threading",
 		"threading model: safe|completion|domain (default:domain)");
 	FT_PRINT_OPTS_USAGE("--no-rx-cq-data",
@@ -4638,6 +4640,7 @@ struct option long_opts[] = {
 	{"control-progress", required_argument, NULL, LONG_OPT_CONTROL_PROGRESS},
 	{"max-msg-size", required_argument, NULL, LONG_OPT_MAX_MSG_SIZE},
 	{"use-fi-more", no_argument, NULL, LONG_OPT_USE_FI_MORE},
+	{"use-fi-flush", no_argument, NULL, LONG_OPT_USE_FI_FLUSH},
 	{"threading", required_argument, NULL, LONG_OPT_THREADING},
 	{"no-rx-cq-data", no_argument, NULL, LONG_OPT_NO_RX_CQ_DATA},
 	{"expect-error", required_argument, NULL, LONG_OPT_EXPECT_ERROR},
@@ -4741,6 +4744,10 @@ int ft_parse_long_opts(int op, char *optarg)
 		return 0;
 	case LONG_OPT_USE_FI_MORE:
 		opts.use_fi_more = 1;
+		return 0;
+	case LONG_OPT_USE_FI_FLUSH:
+		opts.use_fi_more = 1;
+		opts.use_fi_flush = 1;
 		return 0;
 	case LONG_OPT_THREADING:
 		opts.threading = ft_parse_threading_string(optarg);
