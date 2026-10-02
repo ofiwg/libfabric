@@ -20,6 +20,16 @@
 		abort(); \
 	} while (0)
 
+/*
+ * Tripwire for packet types the legacy dispatch no longer builds, as opposed to
+ * whole protocols that moved. "pkt" is a string literal naming the packet type.
+ */
+#define EFA_RDM_PKT_TYPE_MOVED(pkt) \
+	do { \
+		assert(0 && (pkt " packet is no longer built here")); \
+		abort(); \
+	} while (0)
+
 /**
  * @brief Interface for EFA RDM protocols.
  *
