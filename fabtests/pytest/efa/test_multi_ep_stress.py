@@ -108,6 +108,16 @@ def test_multi_ep_stress_thread_completion_shared_av(cmdline_args, op_type):
     test.run()
 
 @pytest.mark.unstable
+@pytest.mark.parametrize("threading", ["safe", "completion"])
+def test_multi_ep_stress_shared_av_insert_sender_addr(cmdline_args, threading):
+    # Each receiver worker calls fi_av_insert for a sender address read from the message payload
+    # while the other receiver workers' fi_cq_read calls resolve packets from that same sender
+    cmd = f"fi_efa_multi_ep_stress --threading {threading} --shared-av --insert-sender-addr " \
+          "--sender-workers 1 --receiver-workers 8 --sender-ep-cycles 100 --msgs-per-ep 10000"
+    test = ClientServerTest(cmdline_args, cmd, message_size=1024, fabric="efa", additional_env="FI_EFA_ENABLE_SHM_TRANSFER=0")
+    test.run()
+
+@pytest.mark.unstable
 def test_multi_ep_stress_thread_completion_shared_av_ep_recycling(cmdline_args):
     # With EP recycling, one thread could call fi_enable while other thread fi_av_insert under FI_THREAD_COMPLETION
     cmd = f"fi_efa_multi_ep_stress --threading completion --shared-av --sender-workers 4 --receiver-workers 4 --sender-ep-cycles 5 --receiver-ep-cycles 5"
