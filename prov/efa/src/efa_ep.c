@@ -12,6 +12,74 @@
 extern struct fi_ops_msg efa_msg_ops;
 extern struct fi_ops_rma efa_rma_ops;
 
+/**
+ * @brief Query the inline-data size actually available on this endpoint.
+ *
+ * When completion-action is enabled the QP uses wide WQEs whose action
+ * feature blocks reduce the inline region below the device-advertised
+ * inline_buf_size_ex. This queries the effective inline size for the endpoint's
+ * QP configuration via the efadv_get_max_inline_data verb and caps it by
+ * @p configured (the endpoint's msg or rma inject size). Falls back to
+ * @p configured when the verb is unavailable or actions are not enabled.
+ *
+ * @param[in]  ep		efa base endpoint
+ * @param[in]  configured	the endpoint's configured inject size to cap by
+ *				(ep->inject_msg_size or ep->inject_rma_size)
+ * @param[out] inline_size	effective inline size in bytes
+ * @return 0 on success, negative fi errno on failure
+ */
+static int efa_ep_query_inline_size(struct efa_base_ep *ep, size_t configured,
+				    size_t *inline_size)
+{
+	uint32_t flags = 0;
+	int ret;
+
+#if HAVE_EFADV_COMP_ACTION
+	if (ep->comp_action_enabled)
+		flags |= EFADV_INLINE_DATA_ATTR_COMP_ACTION_WITH_DATA;
+#endif
+
+	/*
+	 * Query with the QP's actual flags. Returns the max inline (>= 0), or a
+	 * negative errno (incl. -FI_ENOSYS on builds without efadv comp-action
+	 * support), in which case fall back to the configured inject size.
+	 */
+	ret = efa_query_max_inline_data(ep->domain->device->ibv_ctx, flags);
+	if (ret < 0) {
+		*inline_size = configured;
+		return FI_SUCCESS;
+	}
+
+	/* The effective inject size is capped by the endpoint configuration. */
+	*inline_size = MIN((size_t) ret, configured);
+	return FI_SUCCESS;
+}
+
+/**
+ * @brief Lower the endpoint's inject sizes to what the device accepts
+ *
+ * The action block shares the send queue entry with the inline payload, so an
+ * endpoint with actions enabled has less inline room than it was configured
+ * for. Bring the configured sizes down to the device's limit, otherwise the
+ * data path would inline past the end of the WQE.
+ *
+ * @param[in,out] ep	efa base endpoint
+ */
+static void efa_ep_clamp_inject_sizes(struct efa_base_ep *ep)
+{
+	size_t msg_size = ep->inject_msg_size;
+	size_t rma_size = ep->inject_rma_size;
+
+	efa_ep_query_inline_size(ep, msg_size, &ep->inject_msg_size);
+	efa_ep_query_inline_size(ep, rma_size, &ep->inject_rma_size);
+
+	if (ep->inject_msg_size != msg_size || ep->inject_rma_size != rma_size)
+		EFA_INFO(FI_LOG_EP_CTRL,
+			 "Lowered the inject sizes to the device's inline "
+			 "limit: msg %zu -> %zu, rma %zu -> %zu\n", msg_size,
+			 ep->inject_msg_size, rma_size, ep->inject_rma_size);
+}
+
 static int efa_ep_getopt(fid_t fid, int level, int optname,
 			 void *optval, size_t *optlen)
 {
@@ -149,9 +217,11 @@ static int efa_ep_setopt(fid_t fid, int level, int optname, const void *optval, 
 		break;
 	case FI_OPT_INJECT_MSG_SIZE:
 		EFA_EP_SETOPT_THRESHOLD(INJECT_MSG_SIZE, ep->inject_msg_size, (size_t) ep->info->tx_attr->inject_size)
+		efa_ep_clamp_inject_sizes(ep);
 		break;
 	case FI_OPT_INJECT_RMA_SIZE:
 		EFA_EP_SETOPT_THRESHOLD(INJECT_RMA_SIZE, ep->inject_rma_size, ep->inject_rma_size)
+		efa_ep_clamp_inject_sizes(ep);
 		break;
 	/* no op as efa direct ep will not use cuda api and shm in data transfer */
 	case FI_OPT_CUDA_API_PERMITTED: /* fall through */
@@ -197,6 +267,30 @@ static int efa_ep_setopt(fid_t fid, int level, int optname, const void *optval, 
 			return -FI_EOPNOTSUPP;
 		}
 		ep->use_unsolicited_write_recv = *(bool *)optval;
+		break;
+	case FI_OPT_EFA_COMP_ACTION:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		/*
+		 * Action support governs how the send queue is allocated
+		 * (wide 128-byte WQEs), so it must be set before the endpoint
+		 * is enabled (before the QP is created).
+		 */
+		if (ep->efa_qp_enabled) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "The option FI_OPT_EFA_COMP_ACTION is required "
+				 "to be set before EP enabled\n");
+			return -FI_EINVAL;
+		}
+		if (*(bool *)optval && !efa_device_support_comp_action()) {
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "Completion action is not supported by "
+				 "the device\n");
+			return -FI_EOPNOTSUPP;
+		}
+		ep->comp_action_enabled = *(bool *)optval;
+		if (ep->comp_action_enabled)
+			efa_ep_clamp_inject_sizes(ep);
 		break;
 	default:
 		EFA_INFO(FI_LOG_EP_CTRL, "Unknown / unsupported endpoint option\n");

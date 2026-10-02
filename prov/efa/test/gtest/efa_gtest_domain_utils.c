@@ -18,6 +18,11 @@ int efa_test_mock_efadv_query_qp_wqs(struct ibv_qp *ibvqp,
 #if HAVE_EFADV_WQ_ATTR_CAPS
 	sq_attr->caps |= EFADV_WQ_CAPS_64_BIT_REQ_ID;
 #endif
+#if HAVE_EFADV_COMP_ACTION
+	sq_attr->caps |= EFADV_WQ_CAPS_COMP_ACTION_WITH_DATA;
+	sq_attr->comp_action_with_data_block_offset =
+		EFA_TEST_MOCK_ACTION_BLOCK_OFFSET;
+#endif
 
 	rq_attr->buffer = (uint8_t *) 0x12345678;
 	rq_attr->doorbell = (uint32_t *) 0x87654321;
@@ -33,6 +38,24 @@ uint16_t efa_test_mock_efadv_sq_caps(void)
 {
 #if HAVE_EFADV_WQ_ATTR_CAPS
 	return FI_EFA_WQ_CAPS_64_BIT_REQ_ID;
+#else
+	return 0;
+#endif
+}
+
+uint16_t efa_test_mock_efadv_sq_comp_action_caps(void)
+{
+#if HAVE_EFADV_COMP_ACTION
+	return FI_EFA_WQ_CAPS_COMP_ACTION_WITH_DATA;
+#else
+	return 0;
+#endif
+}
+
+uint16_t efa_test_mock_efadv_action_block_offset(void)
+{
+#if HAVE_EFADV_COMP_ACTION
+	return EFA_TEST_MOCK_ACTION_BLOCK_OFFSET;
 #else
 	return 0;
 #endif
@@ -57,4 +80,26 @@ int efa_test_getname_qkey(struct fid_ep *ep, uint32_t *qkey)
 		*qkey = addr.qkey;
 
 	return ret;
+}
+
+bool efa_test_get_comp_action_enabled(struct fid_ep *ep)
+{
+	struct efa_base_ep *base_ep =
+		container_of(ep, struct efa_base_ep, util_ep.ep_fid);
+
+	return base_ep->comp_action_enabled;
+}
+
+bool efa_test_device_supports_comp_action(void)
+{
+	return efa_device_support_comp_action();
+}
+
+bool efa_test_build_has_comp_action(void)
+{
+#if HAVE_EFADV_COMP_ACTION
+	return true;
+#else
+	return false;
+#endif
 }
