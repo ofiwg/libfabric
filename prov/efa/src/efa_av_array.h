@@ -72,6 +72,17 @@ void efa_av_array_destroy(struct efa_av_array *arr);
 
 int efa_av_array_insert(struct efa_av_array *arr, uint64_t index, void *entry);
 
+/*
+ * Allocate the backing memory for index without changing the entry stored
+ * there, so that a later efa_av_array_insert() at the same index only has to
+ * store the pointer and cannot fail. The reservation holds until destroy:
+ * chunks are never freed or moved.
+ *
+ * Use this when an insert must not fail after an earlier step has already been
+ * committed. Like insert, it must be called with the array's write lock held.
+ */
+int efa_av_array_reserve(struct efa_av_array *arr, uint64_t index);
+
 /* Calls fn for each non-NULL entry, stopping early if fn returns non-zero. */
 void efa_av_array_iter(struct efa_av_array *arr, void *context,
 		       int (*fn)(struct efa_av_array *arr, void *entry,
