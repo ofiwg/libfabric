@@ -921,6 +921,16 @@ These OFI runtime parameters apply only to the RDM endpoint.
 *FI_EFA_INTER_MIN_READ_WRITE_SIZE*
 : The mimimum message size for emulated inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536). If the firmware supports RDMA write, device RDMA write will always be used.
 
+*FI_EFA_RDM_FORCE_SEND_PROTO*
+: Pin RDM send protocol selection to the protocol of this name (`eager`,
+`medium`, ...) instead of the regular protocol selection logic. The named
+protocol is used irrespective of the regular protocol selection logic. This
+environment variable is meant to be used for testing and debugging. If the
+value of the environment variable does not match any of the implemented
+protocols, the send operation will fail. This environment variable does not
+affect protocol selection for emulated RMA operations.
+(Default: unset, i.e. use default protocol selection logic.)
+
 *FI_EFA_USE_DEVICE_RDMA*
 : Specify whether to require or ignore RDMA features of the EFA device.
 - When set to 1/true/yes/on, all RDMA features of the EFA device are used. But if EFA device does not support RDMA and FI_EFA_USE_DEVICE_RDMA is set to 1/true/yes/on, user's application is aborted and a warning message is printed.

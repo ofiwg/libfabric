@@ -139,6 +139,24 @@ int efa_test_proto_peer_abort_prov_errno(void);
 /** @brief EFA_RDM_MEDIUM_MSGRTM_PKT, whose enum is not includable from C++. */
 int efa_test_proto_medium_msgrtm_pkt_type(void);
 
+struct efa_test_proto_force_result {
+	ssize_t ret;
+	/** Name of the protocol selection picked, empty when it picked none. */
+	char proto_name[32];
+};
+
+/**
+ * @brief Select a send protocol for a @p len byte host message with
+ * FI_EFA_RDM_FORCE_SEND_PROTO set to @p forced.
+ *
+ * @param[in]	forced	FI_EFA_RDM_FORCE_SEND_PROTO value, NULL for unset
+ * @return	0 if @p out was filled, negative on setup failure
+ */
+int efa_test_proto_force_select_send(struct fid_ep *ep, struct fid_av *av,
+				     struct fid_domain *domain,
+				     const char *forced, size_t len,
+				     struct efa_test_proto_force_result *out);
+
 #ifdef __cplusplus
 }
 #endif

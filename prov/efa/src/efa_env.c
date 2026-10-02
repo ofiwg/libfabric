@@ -44,6 +44,7 @@ struct efa_env efa_env = {
 	.track_mr = 0,
 	.use_hw_cntr = 1,
 	.use_sq_req_id_64_bit = 1,
+	.rdm_force_send_proto = NULL,
 };
 
 /**
@@ -164,6 +165,16 @@ void efa_env_param_get(void)
 	fi_param_get_bool(&efa_prov, "use_data_path_direct", &efa_env.use_data_path_direct);
 	fi_param_get_bool(&efa_prov, "track_mr", &efa_env.track_mr);
 
+	fi_param_get_str(&efa_prov, "rdm_force_send_proto",
+			 &efa_env.rdm_force_send_proto);
+	/*
+	 * An empty value is how the application can clear the variable.
+	 * So leave the field NULL when the string is empty.
+	 * NULL then means that we should not force the protocol at all.
+	 */
+	if (efa_env.rdm_force_send_proto && !*efa_env.rdm_force_send_proto)
+		efa_env.rdm_force_send_proto = NULL;
+
 	efa_fork_support_request_initialize();
 	efa_env_unregistered_param_get();
 }
@@ -265,6 +276,18 @@ void efa_env_define()
 			"any outstanding operations still reference an MR when "
 			"it is closed. This is useful for debugging memory "
 			"registration issues. (Default: false)");
+	fi_param_define(
+		&efa_prov, "rdm_force_send_proto", FI_PARAM_STRING,
+		"Pin RDM send protocol selection to the protocol of this name "
+		"(`eager`, `medium`, ...) instead of the regular protocol "
+		"selection logic. The named protocol is used irrespective of "
+		"the regular protocol selection logic. This environment "
+		"variable is meant to be used for testing and debugging. If "
+		"the value of the environment variable does not match any of "
+		"the implemented protocols, the send operation will fail. This "
+		"environment variable does not affect protocol selection for "
+		"emulated RMA operations. (Default: unset, i.e. use default "
+		"protocol selection logic.");
 }
 
 
