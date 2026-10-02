@@ -42,16 +42,6 @@ void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry,
 	pkt_entry->peer = txe->peer;
 }
 
-ssize_t efa_rdm_pke_init_longcts_rtr(struct efa_rdm_pke *pkt_entry,
-				     struct efa_rdm_ope *txe)
-{
-	efa_rdm_pke_init_rtr_common(pkt_entry,
-				    EFA_RDM_LONGCTS_RTR_PKT,
-				    txe,
-				    txe->window);
-	return 0;
-}
-
 /**
  * @brief allcoate an RX entry for a incoming RTR packet
  *
