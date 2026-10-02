@@ -669,3 +669,83 @@ Test(fabric, simple)
 
 	cxit_destroy_fabric();
 }
+
+Test(fabric, util_close_busy)
+{
+	struct cxip_fabric *fab;
+	int ret;
+
+	cxit_create_fabric();
+	cr_assert(cxit_fabric != NULL);
+	fab = container_of(cxit_fabric, struct cxip_fabric,
+			   util_fabric.fabric_fid);
+
+	ofi_atomic_inc32(&fab->util_fabric.ref);
+	ret = fi_close(&cxit_fabric->fid);
+	cr_assert_eq(ret, -FI_EBUSY);
+
+	ofi_atomic_dec32(&fab->util_fabric.ref);
+	cxit_destroy_fabric();
+}
+
+Test(fabric, domain_auth_key_failure_cleanup)
+{
+	struct cxip_nic_attr *nic_attr = cxit_fi->nic->prov_attr;
+	struct cxip_nic_attr no_default_rgroup = {
+		.version = nic_attr->version,
+		.addr = nic_attr->addr,
+		.default_rgroup_id = 0,
+		.default_vni = nic_attr->default_vni,
+	};
+	struct cxip_fabric *fab;
+	struct fid_domain *domain;
+	int ret;
+
+	cxit_create_fabric();
+	cr_assert(cxit_fabric != NULL);
+	fab = container_of(cxit_fabric, struct cxip_fabric,
+			   util_fabric.fabric_fid);
+	cxit_fi->nic->prov_attr = &no_default_rgroup;
+
+	ret = fi_domain(cxit_fabric, cxit_fi, &domain, NULL);
+	cxit_fi->nic->prov_attr = nic_attr;
+	cr_assert_eq(ret, -FI_ENOSYS);
+	cr_assert_eq(ofi_atomic_get32(&fab->util_fabric.ref), 0);
+
+	cxit_destroy_fabric();
+}
+
+Test(fabric, close_with_open_domain)
+{
+	struct cxip_fabric *fab;
+	struct fid_domain *domain;
+	int ret;
+
+	cxit_create_fabric();
+	cr_assert(cxit_fabric != NULL);
+	fab = container_of(cxit_fabric, struct cxip_fabric,
+			   util_fabric.fabric_fid);
+
+	/* Open a domain */
+	ret = fi_domain(cxit_fabric, cxit_fi, &domain, NULL);
+	cr_assert_eq(ret, FI_SUCCESS);
+	cr_assert_neq(domain, NULL);
+
+	/* Verify fabric refcount was incremented */
+	cr_assert_gt(ofi_atomic_get32(&fab->ref), 0);
+
+	/* Try to close fabric while domain is open - should fail */
+	ret = fi_close(&cxit_fabric->fid);
+	cr_assert_eq(ret, -FI_EBUSY);
+
+	/* Close domain */
+	ret = fi_close(&domain->fid);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	/* Verify fabric refcount was decremented */
+	cr_assert_eq(ofi_atomic_get32(&fab->ref), 0);
+
+	/* Now fabric close should succeed */
+	cxit_destroy_fabric();
+}
+
