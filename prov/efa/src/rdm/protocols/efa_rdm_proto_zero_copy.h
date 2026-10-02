@@ -12,10 +12,6 @@ void efa_rdm_proto_zero_copy_reselect_queued_before_handshake(
 	struct efa_rdm_ope *txe);
 
 int efa_rdm_proto_zero_copy_construct_tx_pkes(struct efa_rdm_ep *ep,
-					      struct efa_rdm_peer *peer,
-					      uint32_t op, uint64_t tag,
-					      uint64_t flags,
-					      uint32_t internal_flags,
 					      struct efa_rdm_ope *txe,
 					      uint64_t *pke_send_flags);
 

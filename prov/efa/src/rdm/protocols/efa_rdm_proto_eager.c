@@ -125,10 +125,6 @@ ssize_t efa_rdm_proto_eager_handle_rtm_send_completion(
  * @return 0 on success, negative errno on failure
  */
 int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
-					  struct efa_rdm_peer *peer,
-					  uint32_t op, uint64_t tag,
-					  uint64_t flags,
-					  uint32_t internal_flags,
 					  struct efa_rdm_ope *txe,
 					  uint64_t *pke_send_flags)
 {
@@ -155,12 +151,12 @@ int efa_rdm_proto_eager_construct_tx_pkes(struct efa_rdm_ep *ep,
 	 * A peer that only accepts headerless packets uses the zero-copy
 	 * protocol; this protocol always writes a REQ header.
 	 */
-	assert(!efa_rdm_peer_expects_zero_hdr_data_transfer(peer));
+	assert(!efa_rdm_peer_expects_zero_hdr_data_transfer(txe->peer));
 
 	delivery_complete_requested =
 		efa_rdm_proto_get_dc(txe, &efa_rdm_proto_eager);
 
-	pkt_entry = efa_rdm_proto_tx_pke_init_common(txe, peer);
+	pkt_entry = efa_rdm_proto_tx_pke_init_common(txe, txe->peer);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 

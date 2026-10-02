@@ -9,10 +9,6 @@
 extern struct efa_rdm_proto efa_rdm_proto_short_rtr;
 
 int efa_rdm_proto_short_rtr_construct_tx_pkes(struct efa_rdm_ep *ep,
-					      struct efa_rdm_peer *peer,
-					      uint32_t op, uint64_t tag,
-					      uint64_t flags,
-					      uint32_t internal_flags,
 					      struct efa_rdm_ope *txe,
 					      uint64_t *pke_send_flags);
 

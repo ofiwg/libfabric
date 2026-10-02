@@ -58,10 +58,6 @@ ssize_t efa_rdm_proto_zero_copy_handle_send_completion(
  * @return 0 on success, negative errno on failure
  */
 int efa_rdm_proto_zero_copy_construct_tx_pkes(struct efa_rdm_ep *ep,
-					      struct efa_rdm_peer *peer,
-					      uint32_t op, uint64_t tag,
-					      uint64_t flags,
-					      uint32_t internal_flags,
 					      struct efa_rdm_ope *txe,
 					      uint64_t *pke_send_flags)
 {
@@ -79,9 +75,9 @@ int efa_rdm_proto_zero_copy_construct_tx_pkes(struct efa_rdm_ep *ep,
 		       ep->efa_rnr_queued_pkt_cnt >
 	       0);
 
-	assert(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	assert(txe->peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
 	assert(txe->total_len <= ep->mtu_size);
-	assert(op == ofi_op_msg);
+	assert(txe->op == ofi_op_msg);
 
 	txe->req_pkt_type = EFA_RDM_EAGER_MSGRTM_PKT;
 
@@ -91,7 +87,7 @@ int efa_rdm_proto_zero_copy_construct_tx_pkes(struct efa_rdm_ep *ep,
 		return -FI_EAGAIN;
 
 	efa_rdm_pke_set_ope(pkt_entry, txe);
-	pkt_entry->peer = peer;
+	pkt_entry->peer = txe->peer;
 	pkt_entry->handle_pke = &efa_rdm_proto_zero_copy_handle_send_completion;
 	pkt_entry->flags |= EFA_RDM_PKE_SEND_TO_USER_RECV_QP |
 			    EFA_RDM_PKE_HAS_NO_BASE_HDR;

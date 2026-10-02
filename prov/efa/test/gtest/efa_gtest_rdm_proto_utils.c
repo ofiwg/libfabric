@@ -260,10 +260,7 @@ static int efa_test_proto_medium_build(struct efa_test_proto_ctx *ctx,
 		proto = txe->proto;
 	}
 
-	out->ret = proto->construct_tx_pkes(ep, ctx->peer, txe->op,
-					    txe->tag, txe->fi_flags,
-					    txe->internal_flags, txe,
-					    &pke_send_flags);
+	out->ret = proto->construct_tx_pkes(ep, txe, &pke_send_flags);
 	if (out->ret)
 		return 0;
 
