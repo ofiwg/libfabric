@@ -142,6 +142,17 @@ int efa_av_array_insert(struct efa_av_array *arr, uint64_t index, void *entry)
 	return FI_SUCCESS;
 }
 
+int efa_av_array_reserve(struct efa_av_array *arr, uint64_t index)
+{
+	/*
+	 * Re-insert whatever the slot already holds. Used to allocate memory for
+	 * slots that have no memory allocated yet. Re-inserting the same value
+	 * avoids race conditions with concurrent readers in the cases where the
+	 * memory is allocated.
+	 */
+	return efa_av_array_insert(arr, index, efa_av_array_at(arr, index));
+}
+
 void efa_av_array_iter(struct efa_av_array *arr, void *context,
 		       int (*fn)(struct efa_av_array *arr, void *entry,
 				 void *context))
