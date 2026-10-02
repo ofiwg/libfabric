@@ -387,6 +387,7 @@ prov_efa_test_gtest_efa_gtest_LDFLAGS = \
 	-Wl,--wrap=efa_rdm_av_reverse_lookup \
 	-Wl,--wrap=efa_rdm_av_reverse_lookup_unsafe \
 	-Wl,--wrap=ofi_av_lookup_fi_addr \
+	-Wl,--wrap=efa_ibv_cq_wc_is_unsolicited \
 	-Wl,--wrap=efa_rdm_pke_clone \
 	-Wl,--wrap=efa_qp_post_recv \
 	-Wl,--wrap=efa_qp_post_send \
