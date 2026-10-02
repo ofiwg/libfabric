@@ -567,7 +567,7 @@ void test_proto_zero_copy_construct_pkes(void **state)
 	assert_int_equal(pke->pkt_size, 64);
 	assert_int_equal(pke->payload_size, 64);
 
-	ofi_buf_free(pke);
+	efa_rdm_pke_release_tx(pke);
 	efa_unit_test_buff_destruct(&send_buff);
 }
 

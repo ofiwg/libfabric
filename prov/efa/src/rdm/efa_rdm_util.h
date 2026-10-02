@@ -8,7 +8,12 @@
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke.h"
 
-#define EFA_RDM_MSG_PREFIX_SIZE (sizeof(struct efa_rdm_pke) + sizeof(struct efa_rdm_eager_msgrtm_hdr) + EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE)
+/*
+ * The application-visible FI_MSG_PREFIX size the provider reserves in front of
+ * the user payload: the pke alignment (the header region the provider builds
+ * packets into) plus the largest eager RTM header.
+ */
+#define EFA_RDM_MSG_PREFIX_SIZE (EFA_RDM_PKE_ALIGNMENT + sizeof(struct efa_rdm_eager_msgrtm_hdr) + EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE)
 
 #if defined(static_assert)
 static_assert(EFA_RDM_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");

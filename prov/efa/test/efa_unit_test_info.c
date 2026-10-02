@@ -3,6 +3,7 @@
 
 #include "efa_unit_tests.h"
 #include "efa_prov_info.h"
+#include "rdm/efa_rdm_util.h"
 
 /**
  * @brief test that when a wrong fi_info was used to open resource, the error is handled
@@ -73,6 +74,40 @@ void test_info_rdm_attributes(void **state)
 #if EFA_HAVE_NON_SYSTEM_HMEM
 		assert_false(info->caps & FI_HMEM);
 #endif
+	}
+
+	fi_freeinfo(info_head);
+	fi_freeinfo(hints);
+}
+
+/**
+ * @brief The advertised FI_MSG_PREFIX size is the pke alignment plus headers.
+ *
+ * The prefix is an application-visible contract, so assert it against the
+ * expression the provider advertises rather than sizeof(struct efa_rdm_pke).
+ */
+void test_info_rdm_msg_prefix_size(void **state)
+{
+	struct fi_info *hints, *info = NULL, *info_head = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM, EFA_FABRIC_NAME);
+	assert_non_null(hints);
+	hints->mode |= FI_MSG_PREFIX;
+
+	err = fi_getinfo(FI_VERSION(1, 6), NULL, NULL, 0, hints, &info_head);
+	assert_int_equal(err, 0);
+	assert_non_null(info_head);
+
+	for (info = info_head; info; info = info->next) {
+		assert_true(info->mode & FI_MSG_PREFIX);
+		assert_int_equal(info->ep_attr->msg_prefix_size,
+				 EFA_RDM_PKE_ALIGNMENT +
+					 sizeof(struct efa_rdm_eager_msgrtm_hdr) +
+					 EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE);
+		/* matches the provider macro, and is build-independent */
+		assert_int_equal(info->ep_attr->msg_prefix_size,
+				 EFA_RDM_MSG_PREFIX_SIZE);
 	}
 
 	fi_freeinfo(info_head);

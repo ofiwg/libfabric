@@ -309,7 +309,7 @@ void test_rdm_cq_handshake_bad_send_status_impl(void **state, int prov_errno, bo
 	assert_int_equal(peer->host_id, 0);
 	assert_int_not_equal(peer->flags & EFA_RDM_PEER_HANDSHAKE_SENT, EFA_RDM_PEER_HANDSHAKE_SENT);
 
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, efa_rdm_ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 
 	txe = efa_unit_test_alloc_txe(resource, ofi_op_msg);
@@ -440,7 +440,7 @@ void test_ibv_cq_ex_read_bad_recv_status(void **state)
 	 * TODO: modify the rx pkt as part of the ibv cq poll mock so we don't have to
 	 * allocate pkt entry and hack the pkt counters.
 	 */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
@@ -565,7 +565,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(void **state, bool u
 		 * For solicited write recv, it will consume an internal rx pkt
 		 */
 		ibv_cq->unsolicited_write_recv_enabled = false;
-		struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert_non_null(pkt_entry);
 		efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 		ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
@@ -575,7 +575,7 @@ void test_ibv_cq_ex_read_bad_recv_rdma_with_imm_status_impl(void **state, bool u
 	 * Always test with solicited recv
 	 */
 	ibv_cq->unsolicited_write_recv_enabled = false;
-	struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	struct efa_rdm_pke *pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 	ibv_cq->ibv_cq_ex->wr_id = (uint64_t)pkt_entry | (uint64_t)pkt_entry->gen;
@@ -905,7 +905,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	 * TODO: modify the rx pkt as part of the ibv cq poll mock so we don't have to
 	 * allocate pkt entry and hack the pkt counters.
 	 */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 

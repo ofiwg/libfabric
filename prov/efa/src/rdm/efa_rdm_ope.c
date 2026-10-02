@@ -1755,6 +1755,7 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 
 	pkt_entry_copy = efa_rdm_pke_clone(pkt_entry,
 					   txe->ep->rx_readcopy_pkt_pool,
+					   txe->ep->rx_readcopy_bounce_pool,
 					   EFA_RDM_PKE_FROM_READ_COPY_POOL);
 	if (!pkt_entry_copy) {
 		EFA_WARN(FI_LOG_CQ,
@@ -1848,7 +1849,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 		 * Note that because send operation used a pkt_entry as wr_id,
 		 * we had to use a pkt_entry as context for read too.
 		 */
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -1914,7 +1915,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 				return -FI_ENOMR;
 			}
 
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -1996,7 +1997,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 		 * Note that because send operation used a pkt_entry as wr_id,
 		 * we had to use a pkt_entry as context for write too.
 		 */
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -2057,7 +2058,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 			 */
 			return -FI_EAGAIN;
 		}
-		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -2276,7 +2277,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 
 	segment_offset = efa_rdm_pkt_type_contains_data(pkt_type) ? (int64_t) ope->bytes_sent : -1;
 	for (i = 0; i < ep->send_pkt_entry_vec_size; ++i) {
-		ep->send_pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		ep->send_pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!ep->send_pkt_entry_vec[i])) {
 			err = -FI_EAGAIN;

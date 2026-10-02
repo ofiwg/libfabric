@@ -367,6 +367,7 @@ int main(void)
 		/* begin efa_unit_test_info.c */
 		cmocka_unit_test_setup_teardown(test_info_open_ep_with_wrong_info, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_rdm_attributes, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_info_rdm_msg_prefix_size, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_dgram_attributes, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_direct_attributes_no_rma, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_info_direct_attributes_rma, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
@@ -603,6 +604,9 @@ int main(void)
 		/* begin of efa_unit_test_pke.c */
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_get_available_copy_methods_align128, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_release_rx_list, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_metadata_buffer_pools_split, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_bounce_pool_registration, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_release_frees_both_pools, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_alloc_rta_rxe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_alloc_rtw_rxe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_pke_alloc_rtr_rxe, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

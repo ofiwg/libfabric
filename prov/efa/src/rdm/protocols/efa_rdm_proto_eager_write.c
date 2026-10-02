@@ -307,6 +307,7 @@ int efa_rdm_proto_eager_write_construct_tx_pkes(struct efa_rdm_ep *ep,
 	       0);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;

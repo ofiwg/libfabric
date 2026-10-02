@@ -222,7 +222,7 @@ void test_efa_rdm_pke_handle_longcts_rtm_send_completion(void **state)
     txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 
     /* construct a fallback long cts rtm pkt */
-    pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+    pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, efa_rdm_ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
     assert_non_null(pkt_entry);
 
     err = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, txe);
@@ -260,13 +260,13 @@ void test_efa_rdm_pke_release_rx_list(void **state)
     efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
     /* Fake a rx pkt entry */
-    pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+    pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
     assert_non_null(pke);
     efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
 
     /* link multiple pkes to this pke */
     for (i = 1; i < 10; i++) {
-        curr = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+        curr = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
         assert_non_null(curr);
         efa_rdm_pke_append(pke, curr);
     }
@@ -300,6 +300,7 @@ void test_efa_rdm_pke_alloc_rta_rxe(void **state)
 
 	/* Fake a rx pkt entry */
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke);
 	efa_rdm_ep->efa_rx_pkts_posted =
@@ -342,6 +343,7 @@ void test_efa_rdm_pke_alloc_rtw_rxe(void **state)
 
 	/* Fake a rx pkt entry */
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke);
 	efa_rdm_ep->efa_rx_pkts_posted =
@@ -391,6 +393,7 @@ void test_efa_rdm_pke_alloc_rtr_rxe(void **state)
 
 	/* Fake a rx pkt entry */
 	pke = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				efa_rdm_ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke);
 	efa_rdm_ep->efa_rx_pkts_posted =
@@ -433,6 +436,7 @@ void test_efa_rdm_pke_get_unexp(void **state)
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				      efa_rdm_ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&efa_rdm_ep->base_ep);
@@ -497,7 +501,7 @@ void test_efa_rdm_pke_flag_tracking(void **state)
 	efa_rdm_txe_construct(txe, efa_rdm_ep, peer, &msg, ofi_op_msg, 0, 0);
 
 	/* Allocate a packet entry */
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, efa_rdm_ep->efa_tx_bounce_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	efa_rdm_pke_set_ope(pkt_entry, txe);
 	pkt_entry->peer = peer;
@@ -560,7 +564,7 @@ void test_efa_rdm_pke_proc_matched_eager_rtm_error(void **state)
 	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	pkt_entry->payload_size = 1024;
 
@@ -601,7 +605,7 @@ static struct efa_rdm_pke *create_medium_rtm_pkt(struct efa_rdm_ep *ep, uint32_t
 	struct efa_rdm_medium_rtm_base_hdr *medium_hdr;
 	static char payload[1024];
 
-	pkt = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pkt)
 		return NULL;
 
@@ -731,7 +735,7 @@ static struct efa_rdm_pke *create_runtread_msgrtm_pkt(struct efa_rdm_ep *ep, uin
 	struct efa_rdm_runtread_rtm_base_hdr *runtread_hdr;
 	static char payload[1024];
 
-	pkt = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	if (!pkt)
 		return NULL;
 
@@ -837,7 +841,7 @@ void test_efa_rdm_pke_flush_queued_blocking_copy_to_hmem_copy_size_mismatch(void
 	rxe->total_len = sizeof(buf);
 
 	for (int i = 0; i < 2; i++) {
-		pkt_entry[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		pkt_entry[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert_non_null(pkt_entry[i]);
 		pkt_entry[i]->payload = pkt_entry[i]->wiredata;
 		pkt_entry[i]->payload_size = 64;
@@ -924,7 +928,7 @@ void test_efa_rdm_rxe_release_purges_queued_blocking_copy(void **state)
 	/* Queue two blocking copies for rxe_a, then one for rxe_b, replicating
 	 * efa_rdm_pke_queued_copy_payload_to_hmem() without triggering a flush. */
 	for (i = 0; i < 2; i++) {
-		pkt_a[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		pkt_a[i] = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert_non_null(pkt_a[i]);
 		pkt_a[i]->payload = pkt_a[i]->wiredata;
 		pkt_a[i]->payload_size = 64;
@@ -939,7 +943,7 @@ void test_efa_rdm_rxe_release_purges_queued_blocking_copy(void **state)
 		efa_rdm_pke_mark_held(pkt_a[i]);
 	}
 
-	pkt_b = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	pkt_b = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, efa_rdm_ep->efa_rx_bounce_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_b);
 	pkt_b->payload = pkt_b->wiredata;
 	pkt_b->payload_size = 64;
@@ -1022,6 +1026,7 @@ void test_efa_rdm_pkt_is_rxe_remote_read(void **state)
 			  base_ep.util_ep.ep_fid);
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	pkt_entry->ope = &rxe_ope;
@@ -1116,6 +1121,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state)
 	rxe.msg_id = 0x42;
 	rxe.peer_error_prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &rxe), 0);
@@ -1137,6 +1143,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_ope_index(void **state)
 	txe.msg_id = 0x43;
 	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
@@ -1175,6 +1182,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_unlearned_op_id(void **state)
 	rxe.peer_error_prov_errno = EFA_IO_COMP_STATUS_REMOTE_ERROR_BAD_ADDRESS;
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &rxe), 0);
@@ -1196,6 +1204,7 @@ efa_unit_test_alloc_cts_pke(struct efa_rdm_ep *ep, uint32_t send_id,
 	struct efa_rdm_cts_hdr *cts_hdr;
 
 	pke = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+				ep->efa_rx_bounce_pool,
 				EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pke);
 	ep->efa_rx_pkts_posted = efa_base_ep_get_rx_pool_size(&ep->base_ep);
@@ -1332,6 +1341,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_medium_msg_id(void **state)
 	for (i = 0; i < 2; i++) {
 		txe.bytes_acked = bytes_acked_cases[i];
 		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+					      ep->efa_tx_bounce_pool,
 					      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 		assert_non_null(pkt_entry);
 		assert_int_equal(
@@ -1387,6 +1397,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_runtread(void **state)
 		txe.bytes_runt = cases[i].bytes_runt;
 		txe.bytes_acked = cases[i].bytes_acked;
 		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+					      ep->efa_tx_bounce_pool,
 					      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 		assert_non_null(pkt_entry);
 		assert_int_equal(
@@ -1426,6 +1437,7 @@ void test_efa_rdm_pke_init_peer_error_for_ope_eager_skip(void **state)
 	txe.peer_error_prov_errno = EFA_IO_COMP_STATUS_LOCAL_ERROR_INVALID_LKEY;
 
 	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      ep->efa_tx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	assert_non_null(pkt_entry);
 	assert_int_equal(efa_rdm_pke_init_peer_error_for_ope(pkt_entry, &txe), 0);
@@ -1496,6 +1508,7 @@ static void test_efa_rdm_pke_copy_payload_neuron_uses_rdma_read_impl(
 	efa_rdm_ep_domain(efa_rdm_ep)->device->max_rdma_size = efa_env.efa_read_segment_size;
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool,
+				      efa_rdm_ep->efa_rx_bounce_pool,
 				      EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	pkt_entry->payload = pkt_entry->wiredata;
@@ -1592,4 +1605,220 @@ void test_efa_rdm_pke_copy_payload_neuron_rdma_read_error(void **state)
 	struct efa_resource *resource = *state;
 
 	test_efa_rdm_pke_copy_payload_neuron_uses_rdma_read_impl(resource, -FI_ENOMR);
+}
+
+/*
+ * The five pke metadata pools, each paired with its wiredata bounce pool, and
+ * whether the bounce pool is registered with the device (need_mr). readcopy
+ * uses a different bounce-buffer alignment than the rest.
+ *
+ * A test builds an HMEM endpoint (see efa_test_pke_get_hmem_ep) so that all
+ * five pairs exist: unexp/ooo require rx_copy_unexp/rx_copy_ooo (on by default)
+ * and readcopy additionally requires FI_MR_HMEM.
+ */
+struct efa_test_pke_pool_desc {
+	const char *name;
+	size_t metadata_offset;
+	size_t bounce_offset;
+	enum efa_rdm_pke_alloc_type alloc_type;
+	bool need_mr;
+	size_t bounce_alignment;
+};
+
+#define EFA_TEST_PKE_POOL(_name, _meta, _bounce, _type, _mr, _align)  \
+	{                                                             \
+		.name = (_name),                                      \
+		.metadata_offset = offsetof(struct efa_rdm_ep, _meta),\
+		.bounce_offset = offsetof(struct efa_rdm_ep, _bounce),\
+		.alloc_type = (_type),                                \
+		.need_mr = (_mr),                                     \
+		.bounce_alignment = (_align),                         \
+	}
+
+static const struct efa_test_pke_pool_desc efa_test_pke_pool_descs[] = {
+	EFA_TEST_PKE_POOL("tx", efa_tx_pkt_pool, efa_tx_bounce_pool,
+			  EFA_RDM_PKE_FROM_EFA_TX_POOL, true,
+			  EFA_RDM_BUFPOOL_ALIGNMENT),
+	EFA_TEST_PKE_POOL("rx", efa_rx_pkt_pool, efa_rx_bounce_pool,
+			  EFA_RDM_PKE_FROM_EFA_RX_POOL, true,
+			  EFA_RDM_BUFPOOL_ALIGNMENT),
+	EFA_TEST_PKE_POOL("unexp", rx_unexp_pkt_pool, rx_unexp_bounce_pool,
+			  EFA_RDM_PKE_FROM_UNEXP_POOL, false,
+			  EFA_RDM_BUFPOOL_ALIGNMENT),
+	EFA_TEST_PKE_POOL("ooo", rx_ooo_pkt_pool, rx_ooo_bounce_pool,
+			  EFA_RDM_PKE_FROM_OOO_POOL, false,
+			  EFA_RDM_BUFPOOL_ALIGNMENT),
+	EFA_TEST_PKE_POOL("readcopy", rx_readcopy_pkt_pool, rx_readcopy_bounce_pool,
+			  EFA_RDM_PKE_FROM_READ_COPY_POOL, true,
+			  EFA_RDM_EP_IN_ORDER_ALIGNMENT),
+};
+
+static struct ofi_bufpool *
+efa_test_pke_pool_at(struct efa_rdm_ep *ep, size_t offset)
+{
+	return *(struct ofi_bufpool **)((char *)ep + offset);
+}
+
+/**
+ * @brief Build an RDM endpoint with all five pke/bounce pool pairs created.
+ *
+ * rx_copy_unexp/rx_copy_ooo default on, so unexp and ooo exist after a normal
+ * construct; readcopy is only created when the application requests FI_HMEM, so
+ * set FI_MR_HMEM on the domain before opening the endpoint.
+ */
+static struct efa_rdm_ep *efa_test_pke_get_hmem_ep(struct efa_resource *resource)
+{
+	struct efa_domain *efa_domain;
+	struct fid_ep *ep;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+
+	efa_domain = container_of(resource->domain, struct efa_domain,
+				  util_domain.domain_fid);
+	efa_domain->util_domain.mr_mode |= FI_MR_HMEM;
+
+	/* Reopen the endpoint with FI_MR_HMEM in effect so the readcopy pool is
+	 * created. Replace resource->ep so the standard teardown closes this
+	 * endpoint rather than leaking it. */
+	assert_int_equal(fi_close(&resource->ep->fid), 0);
+	resource->ep = NULL;
+	assert_int_equal(fi_endpoint(resource->domain, resource->info, &ep, NULL),
+			 0);
+	resource->ep = ep;
+	return container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+}
+
+/**
+ * @brief For every pke pool, the metadata and its wiredata bounce buffer come
+ * from separate, correctly-sized bufpools, and the bounce pool used is the one
+ * the caller passed to efa_rdm_pke_alloc().
+ */
+void test_efa_rdm_pke_metadata_buffer_pools_split(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	size_t i;
+
+	ep = efa_test_pke_get_hmem_ep(resource);
+
+	for (i = 0; i < ARRAY_SIZE(efa_test_pke_pool_descs); i++) {
+		const struct efa_test_pke_pool_desc *desc =
+			&efa_test_pke_pool_descs[i];
+		struct ofi_bufpool *metadata_pool =
+			efa_test_pke_pool_at(ep, desc->metadata_offset);
+		struct ofi_bufpool *bounce_pool =
+			efa_test_pke_pool_at(ep, desc->bounce_offset);
+		struct efa_rdm_pke *pke;
+
+		print_message("checking pool pair: %s\n", desc->name);
+
+		/* both pools of a pair are created together */
+		assert_non_null(metadata_pool);
+		assert_non_null(bounce_pool);
+
+		/* metadata pool holds one dense struct; bounce pool is mtu-sized */
+		assert_int_equal(metadata_pool->attr.size,
+				 sizeof(struct efa_rdm_pke));
+		assert_int_equal(bounce_pool->attr.size, ep->mtu_size);
+
+		/* the metadata pool is never device-visible; the bounce pool is
+		 * registered only when the path needs an mr */
+		assert_int_equal(bounce_pool->attr.alignment,
+				 desc->bounce_alignment);
+
+		pke = efa_rdm_pke_alloc(ep, metadata_pool, bounce_pool,
+					desc->alloc_type);
+		assert_non_null(pke);
+
+		/* metadata came from the metadata pool; wiredata came from the
+		 * bounce pool the caller selected */
+		assert_ptr_equal(ofi_buf_pool(pke), metadata_pool);
+		assert_ptr_equal(ofi_buf_pool(pke->wiredata), bounce_pool);
+
+		/* the two buffers live in different memory, and pkt_size tracks
+		 * the bounce buffer's size rather than the metadata's */
+		assert_ptr_not_equal((char *)pke, pke->wiredata);
+		assert_true(pke->wiredata < (char *)pke ||
+			    pke->wiredata >=
+				    (char *)pke + sizeof(struct efa_rdm_pke));
+		assert_int_equal(pke->pkt_size, bounce_pool->attr.size);
+
+		efa_rdm_pke_release(pke);
+	}
+}
+
+/**
+ * @brief For every pke pool, the wiredata bounce buffer carries an mr exactly
+ * when that pool is device-visible (need_mr): tx, rx and readcopy are
+ * registered; unexp and ooo are not.
+ */
+void test_efa_rdm_pke_bounce_pool_registration(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	size_t i;
+
+	ep = efa_test_pke_get_hmem_ep(resource);
+
+	for (i = 0; i < ARRAY_SIZE(efa_test_pke_pool_descs); i++) {
+		const struct efa_test_pke_pool_desc *desc =
+			&efa_test_pke_pool_descs[i];
+		struct ofi_bufpool *metadata_pool =
+			efa_test_pke_pool_at(ep, desc->metadata_offset);
+		struct ofi_bufpool *bounce_pool =
+			efa_test_pke_pool_at(ep, desc->bounce_offset);
+		struct efa_rdm_pke *pke;
+
+		print_message("checking pool pair: %s\n", desc->name);
+
+		assert_non_null(metadata_pool);
+		assert_non_null(bounce_pool);
+
+		pke = efa_rdm_pke_alloc(ep, metadata_pool, bounce_pool,
+					desc->alloc_type);
+		assert_non_null(pke);
+		assert_ptr_equal(ofi_buf_pool(pke->wiredata), bounce_pool);
+
+		if (desc->need_mr)
+			assert_non_null(pke->mr);
+		else
+			assert_null(pke->mr);
+
+		efa_rdm_pke_release(pke);
+	}
+}
+
+/**
+ * @brief Releasing a pke returns both the metadata and the wiredata bounce
+ * buffer to their pools, so the next allocation reuses both regions.
+ */
+void test_efa_rdm_pke_release_frees_both_pools(void **state)
+{
+	struct efa_resource *resource = *state;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pke;
+	void *meta0, *wiredata0;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM, EFA_FABRIC_NAME);
+	ep = container_of(resource->ep, struct efa_rdm_ep,
+			  base_ep.util_ep.ep_fid);
+
+	pke = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool,
+				EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pke);
+	meta0 = pke;
+	wiredata0 = pke->wiredata;
+
+	efa_rdm_pke_release(pke);
+
+	/* both regions were returned to their pools, so the next allocation
+	 * hands the same metadata and bounce buffer back (LIFO reuse). A raw
+	 * ofi_buf_free(pke) would leak the bounce buffer and fail this. */
+	pke = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, ep->efa_tx_bounce_pool,
+				EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert_non_null(pke);
+	assert_ptr_equal(pke, meta0);
+	assert_ptr_equal(pke->wiredata, wiredata0);
+
+	efa_rdm_pke_release(pke);
 }
