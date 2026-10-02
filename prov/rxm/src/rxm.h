@@ -778,6 +778,8 @@ ssize_t rxm_handle_rx_buf(struct rxm_rx_buf *rx_buf);
 int rxm_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		    struct fid_ep **rx_ep, void *context);
 
+fi_addr_t rxm_get_addr(struct fi_peer_rx_entry *rx_entry);
+
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  struct fid_ep **ep, void *context);
 void rxm_cq_write_tx_error(struct rxm_ep *rxm_ep, uint8_t op, void *op_context,

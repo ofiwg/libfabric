@@ -925,6 +925,10 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		match.addr = FI_ADDR_UNSPEC;
 	}
 
+	if (match.addr != FI_ADDR_UNSPEC && srx->owner_ops->flush_unspec_for_addr)
+		srx->owner_ops->flush_unspec_for_addr(srx, match.addr,
+						      &rxm_get_addr);
+
 	if (rx_buf->ep->rxm_info->mode & OFI_BUFFERED_RECV) {
 		rxm_finish_buf_recv(rx_buf);
 		return 0;
