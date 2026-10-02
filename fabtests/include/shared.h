@@ -156,6 +156,7 @@ enum {
 	FT_OPT_CUDA_PCIE_MAPPING	= 1 << 29,
 	FT_OPT_NO_CONTEXT2		= 1 << 30,
 	FT_OPT_OOB_CTRL			= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
+	FT_OPT_NO_PREPOSTED_AUX_RX = 1 << 29,
 };
 
 /* for RMA tests --- we want to be able to select fi_writedata, but there is no
