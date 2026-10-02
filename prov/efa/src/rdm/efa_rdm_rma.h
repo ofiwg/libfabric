@@ -26,6 +26,10 @@ efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 
 ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 
+ssize_t efa_rdm_rma_post_write_proto(struct efa_rdm_ep *ep,
+				     struct efa_rdm_ope *txe,
+				     struct efa_rdm_proto *proto);
+
 ssize_t efa_rdm_rma_post_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 
 /**
@@ -86,5 +90,10 @@ bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_o
 	return efa_both_support_rdma_write(ep, peer) &&
 	       efa_both_support_p2p(ep, peer, use_p2p);
 }
+
+bool efa_rdm_rma_should_write_using_longread(struct efa_rdm_ep *ep,
+					     struct efa_rdm_ope *txe,
+					     struct efa_rdm_peer *peer,
+					     bool use_p2p);
 
 #endif

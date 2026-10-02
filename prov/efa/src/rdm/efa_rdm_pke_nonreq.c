@@ -11,6 +11,8 @@
 #include "efa_rdm_peer.h"
 
 #include "efa_rdm_tracepoint.h"
+#include "efa_rdm_rma.h"
+#include "protocols/efa_rdm_proto_longcts_write.h"
 
 /* This file define functons for the following packet type:
  *       HANDSHAKE
@@ -785,7 +787,9 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 		txe->req_pkt_type = delivery_complete_requested ?
 				EFA_RDM_DC_LONGCTS_RTW_PKT :
 				EFA_RDM_LONGCTS_RTW_PKT;
-		efa_rdm_ope_post_send_or_queue(txe, txe->req_pkt_type);
+		txe->proto = &efa_rdm_proto_longcts_write;
+		efa_rdm_rma_post_write_proto(txe->ep, txe,
+					     &efa_rdm_proto_longcts_write);
 	} else if (txe->op == ofi_op_tagged) {
 		EFA_INFO(FI_LOG_EP_CTRL,
 			 "Sender fallback to long CTS tagged "
