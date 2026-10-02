@@ -1139,7 +1139,7 @@ static int monitor_ep_init(struct fid *fid)
 static int monitor_env_init(void)
 {
 	struct fi_provider *prov = &hook_monitor_ctx.prov;
-	int signed_tick_max;
+	int signed_tick_max = MON_TICK_MAX_DEFAULT;
 	char *basepath = NULL;
 
 	fi_param_define(prov, "linger", FI_PARAM_BOOL,
