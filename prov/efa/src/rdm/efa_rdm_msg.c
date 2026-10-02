@@ -175,9 +175,7 @@ ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
 
 	assert(txe->proto == proto);
 
-	err = proto->construct_tx_pkes(
-		ep, txe->peer, txe->op, txe->tag,
-		txe->fi_flags, txe->internal_flags, txe, &pke_send_flags);
+	err = proto->construct_tx_pkes(ep, txe, &pke_send_flags);
 	if (err)
 		return err;
 
@@ -224,9 +222,7 @@ ssize_t efa_rdm_msg_repost_rtm_proto(struct efa_rdm_ep *ep,
 	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
 		return -FI_EAGAIN;
 
-	err = proto->construct_tx_pkes(
-		ep, txe->peer, txe->op, txe->tag,
-		txe->fi_flags, txe->internal_flags, txe, &pke_send_flags);
+	err = proto->construct_tx_pkes(ep, txe, &pke_send_flags);
 	if (err)
 		return err;
 

@@ -77,8 +77,10 @@ struct efa_rdm_proto {
 	 * will be correctly populated with the all of the pkes that need to be
 	 * sent including copying the application data into the pke buffer if
 	 * necessary. Each pke will have an appropriate callback function set to
-	 * handle the TX completion of that pke. This function also constructs
-	 * and returns the txe.
+	 * handle the TX completion of that pke.
+	 *
+	 * The txe describes the operation in full, so it is the only input a
+	 * protocol needs; the repost path has nothing else to offer.
 	 *
 	 * construct_tx_pkes() must be idempotent. This function can run more than
 	 * once for the same operation if the txe gets queued in the ep->ope_queued_list.
@@ -90,10 +92,6 @@ struct efa_rdm_proto {
 	 * rung immediately.
 	 */
 	int (*construct_tx_pkes)(struct efa_rdm_ep *ep,
-				 struct efa_rdm_peer *peer,
-				 uint32_t op, uint64_t tag,
-				 uint64_t flags,
-				 uint32_t internal_flags,
 				 struct efa_rdm_ope *txe,
 				 uint64_t *pke_send_flags);
 

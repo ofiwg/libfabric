@@ -176,6 +176,9 @@ int efa_rdm_proto_select_send_protocol(struct efa_rdm_ep *ep,
 
 	efa_rdm_proto_txe_init_buffers(ep, msg, txe);
 
+	/* can_use_protocol() reads the peer off the txe, before txe_fill runs. */
+	txe->peer = peer;
+
 	iface = (msg->desc && msg->desc[0]) ?
 			((struct efa_mr *) msg->desc[0])->iface :
 			FI_HMEM_SYSTEM;

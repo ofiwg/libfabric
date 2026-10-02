@@ -199,10 +199,6 @@ ssize_t efa_rdm_proto_medium_plan_tx_pkes(struct efa_rdm_ep *ep,
  * @return 0 on success, negative errno on failure
  */
 int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
-					   struct efa_rdm_peer *peer,
-					   uint32_t op, uint64_t tag,
-					   uint64_t flags,
-					   uint32_t internal_flags,
 					   struct efa_rdm_ope *txe,
 					   uint64_t *pke_send_flags)
 {
@@ -224,7 +220,7 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 	/*
 	 * Inject should always use eager protocol
 	 */
-	assert(!(flags & FI_INJECT));
+	assert(!(txe->fi_flags & FI_INJECT));
 
 	delivery_complete_requested =
 		efa_rdm_proto_get_dc(txe, &efa_rdm_proto_medium);
@@ -244,7 +240,7 @@ int efa_rdm_proto_medium_construct_tx_pkes(struct efa_rdm_ep *ep,
 	for (i = 0; i < pkt_entry_cnt; ++i) {
 		assert(pkt_entry_data_size_vec[i] > 0);
 
-		pkt_entry = efa_rdm_proto_tx_pke_init_common(txe, peer);
+		pkt_entry = efa_rdm_proto_tx_pke_init_common(txe, txe->peer);
 		if (OFI_UNLIKELY(!pkt_entry)) {
 			ret = -FI_EAGAIN;
 			goto err_release_pkes;

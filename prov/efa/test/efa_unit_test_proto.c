@@ -167,9 +167,7 @@ void test_proto_eager_construct_pkes_single_pke(void **state)
 	efa_rdm_proto_txe_fill(txe, ep, peer, &msg, ofi_op_msg, 0, 0, 0, proto);
 	txe->msg_id = peer->next_msg_id++;
 
-	err = efa_rdm_proto_eager.construct_tx_pkes(ep, peer, ofi_op_msg,
-						    0, 0, 0, txe,
-						    &pke_send_flags);
+	err = efa_rdm_proto_eager.construct_tx_pkes(ep, txe, &pke_send_flags);
 	assert_int_equal(err, 0);
 	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
 	assert_non_null(ep->send_pkt_entry_vec[0]);
@@ -557,9 +555,8 @@ void test_proto_zero_copy_construct_pkes(void **state)
 			       &efa_rdm_proto_zero_copy);
 	txe->msg_id = peer->next_msg_id++;
 
-	err = efa_rdm_proto_zero_copy.construct_tx_pkes(ep, peer,
-							ofi_op_msg, 0, 0, 0,
-							txe, &pke_send_flags);
+	err = efa_rdm_proto_zero_copy.construct_tx_pkes(ep, txe,
+							&pke_send_flags);
 	assert_int_equal(err, 0);
 	assert_int_equal(ep->send_pkt_entry_vec_size, 1);
 

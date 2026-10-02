@@ -98,10 +98,6 @@ static ssize_t efa_rdm_pke_init_short_rtr(struct efa_rdm_pke *pkt_entry,
  * @return 0 on success, negative errno on failure
  */
 int efa_rdm_proto_short_rtr_construct_tx_pkes(struct efa_rdm_ep *ep,
-					      struct efa_rdm_peer *peer,
-					      uint32_t op, uint64_t tag,
-					      uint64_t flags,
-					      uint32_t internal_flags,
 					      struct efa_rdm_ope *txe,
 					      uint64_t *pke_send_flags)
 {
@@ -120,7 +116,7 @@ int efa_rdm_proto_short_rtr_construct_tx_pkes(struct efa_rdm_ep *ep,
 		return -FI_EAGAIN;
 
 	efa_rdm_pke_set_ope(pkt_entry, txe);
-	pkt_entry->peer = peer;
+	pkt_entry->peer = txe->peer;
 	pkt_entry->handle_pke =
 		&efa_rdm_proto_short_rtr_handle_send_completion;
 
