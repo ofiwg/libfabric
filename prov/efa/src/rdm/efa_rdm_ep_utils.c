@@ -112,6 +112,16 @@ struct efa_rdm_peer *efa_rdm_ep_get_peer_explicit(struct efa_rdm_ep *ep, fi_addr
 	if (peer)
 		goto unlock;
 
+	/* Reaching here means no peer exists for this fi_addr yet, so the entry
+	 * must be fully published: an entry still being published can already own
+	 * a peer that the publish is about to update, and creating a second one
+	 * here would leave two peers for a single AV entry. If this fires, a
+	 * publish path made the entry visible to this lookup too early --
+	 * see efa_rdm_av_entry_publish. */
+	EFA_RDM_AV_ENTRY_ASSERT_PUBLISH_STATE(
+		container_of(entry, struct efa_rdm_av_entry, efa_av_entry),
+		EFA_RDM_AV_ENTRY_PUBLISHED);
+
 	EFA_INFO(FI_LOG_EP_DATA, "Creating peer for addr %lu\n", addr);
 	peer = ofi_buf_alloc(ep->efa_rdm_peer_pool);
 	if (OFI_UNLIKELY(!peer)) {
