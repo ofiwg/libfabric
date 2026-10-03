@@ -2485,6 +2485,22 @@ static ssize_t efa_rdm_ope_post_ctrl(struct efa_rdm_ope *ope, int pkt_type)
 	if (!efa_rdm_pkt_type_is_req(pkt_type))
 		return efa_rdm_ope_post_nonreq_ctrl(ope, pkt_type);
 
+	/* TODO: after the long CTS protocol is moved, verify that the long CTS
+	 * RTM packets that come from efa_rdm_ope_post_send_fallback are handled
+	 * correctly  */
+	if (ope->proto) {
+		assert(ope->type == EFA_RDM_TXE);
+		/* post_rtm_proto reads txe->req_pkt_type, not pkt_type. */
+		assert(pkt_type == ope->req_pkt_type);
+		assert(efa_rdm_pkt_type_is_rtm(pkt_type));
+		/* construct_tx_pkes() only asserts there is room, and unlike
+		 * the other callers we have no earlier check to lean on. */
+		if (efa_rdm_ep_get_available_tx_pkts(ope->ep) == 0)
+			return -FI_EAGAIN;
+		return efa_rdm_msg_post_rtm_proto(ope->ep, ope, ope->proto);
+	}
+
+	/* TODO: drop this fallback once every protocol is registered. */
 	return efa_rdm_ope_post_send(ope, pkt_type);
 }
 

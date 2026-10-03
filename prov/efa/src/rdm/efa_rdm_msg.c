@@ -153,12 +153,12 @@ static inline ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
 }
 
 /**
- * @brief Post a fresh send on the refactored protocol path.
+ * @brief Post a send on the refactored protocol path.
  *
- * Called only from efa_rdm_msg_generic_send(), on a txe that
- * efa_rdm_proto_txe_fill() has just filled and that has never been handed to
- * the protocol before. The repost after a pre-handshake queue is a separate
- * entry point, #efa_rdm_msg_repost_rtm_proto, because its contract differs.
+ * Called from efa_rdm_msg_generic_send() for a fresh send, and from
+ * efa_rdm_ope_post_ctrl() for a REQ ctrl packet. The repost after a
+ * pre-handshake queue is a separate entry point,
+ * #efa_rdm_msg_repost_rtm_proto, because its contract differs.
  *
  * @param[in,out]	ep	endpoint
  * @param[in,out]	txe	send operation, filled by efa_rdm_proto_txe_fill
