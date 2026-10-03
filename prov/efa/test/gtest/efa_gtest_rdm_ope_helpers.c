@@ -346,6 +346,17 @@ int efa_test_peer_abort_prov_errno(void)
 	return FI_EFA_ERR_PEER_ABORTED;
 }
 
+int efa_test_wire_pkt_type_from_wr_id(uintptr_t wr_id)
+{
+	struct efa_rdm_pke *pkt_entry =
+		efa_rdm_cq_get_pke_from_wr_id_solicited(wr_id);
+
+	if (!pkt_entry)
+		return -FI_EINVAL;
+
+	return efa_rdm_pke_get_base_hdr(pkt_entry)->type;
+}
+
 /**
  * @brief Build a recv matched through the SRX, so the abort path has a
  * peer_rxe to return and the caller's op_context to report.
