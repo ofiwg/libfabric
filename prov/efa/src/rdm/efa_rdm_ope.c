@@ -2478,9 +2478,20 @@ release:
  */
 static ssize_t efa_rdm_ope_post_ctrl(struct efa_rdm_ope *ope, int pkt_type)
 {
+	/* A non-REQ packet can ride a txe whose protocol already migrated, so
+	 * the packet type picks the arm -- not ope->proto on its own. */
 	if (!efa_rdm_pkt_type_is_req(pkt_type))
 		return efa_rdm_ope_post_nonreq_ctrl(ope, pkt_type);
 
+	if (ope->proto) {
+		assert(ope->type == EFA_RDM_TXE);
+		/* post_rtm_proto reads txe->req_pkt_type, not pkt_type. */
+		assert(pkt_type == ope->req_pkt_type);
+		assert(efa_rdm_pkt_type_is_rtm(pkt_type));
+		return efa_rdm_msg_post_rtm_proto(ope->ep, ope, ope->proto);
+	}
+
+	/* TODO: drop this fallback once every protocol is registered. */
 	return efa_rdm_ope_post_send(ope, pkt_type);
 }
 
