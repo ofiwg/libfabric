@@ -2380,10 +2380,119 @@ ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
 }
 
 /**
+ * @brief post a single non-REQ ctrl packet.
+ *
+ * Builds the packet by calling the init function for its type directly, rather
+ * than going through efa_rdm_pke_fill_data(). CTSDATA is also non-REQ but is not
+ * handled here: it is multiple packets and is posted by the progress engine.
+ *
+ * @param[in]   ope             pointer to efa_rdm_ope. (either a txe or an rxe)
+ * @param[in]   pkt_type        non-REQ packet type.
+ * @return      On success return 0, otherwise return a negative libfabric error
+ *              code. -FI_EAGAIN when no TX packet is available.
+ */
+static ssize_t efa_rdm_ope_post_nonreq_ctrl(struct efa_rdm_ope *ope, int pkt_type)
+{
+	struct efa_rdm_ep *ep = ope->ep;
+	struct efa_rdm_pke *pkt_entry;
+	/* Set alongside the init call so the type is switched on only once. */
+	void (*pke_handle_sent)(struct efa_rdm_pke *pkt_entry) = NULL;
+	ssize_t err;
+
+	assert(!efa_rdm_pkt_type_is_req(pkt_type));
+	assert(ep->efa_max_outstanding_tx_ops >=
+	       ep->efa_outstanding_tx_ops + ep->efa_rnr_queued_pkt_cnt);
+
+	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
+		return -FI_EAGAIN;
+
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool,
+				      EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	assert(pkt_entry);
+
+	/* Staged here, not in a local, because callers read back slot 0. */
+	ep->send_pkt_entry_vec[0] = pkt_entry;
+	ep->send_pkt_entry_vec_size = 1;
+
+	switch (pkt_type) {
+	case EFA_RDM_CTS_PKT:
+		err = efa_rdm_pke_init_cts(pkt_entry, ope);
+		pke_handle_sent = &efa_rdm_pke_handle_cts_sent;
+		break;
+	case EFA_RDM_READRSP_PKT:
+		/* These two carry data, so the old path passed ope->bytes_sent
+		 * as the segment offset and asserted it was 0. */
+		assert(ope->bytes_sent == 0);
+		err = efa_rdm_pke_init_readrsp(pkt_entry, ope);
+		pke_handle_sent = &efa_rdm_pke_handle_readrsp_sent;
+		break;
+	case EFA_RDM_EOR_PKT:
+		err = efa_rdm_pke_init_eor(pkt_entry, ope);
+		break;
+	case EFA_RDM_ATOMRSP_PKT:
+		assert(ope->bytes_sent == 0);
+		err = efa_rdm_pke_init_atomrsp(pkt_entry, ope);
+		break;
+	case EFA_RDM_RECEIPT_PKT:
+		err = efa_rdm_pke_init_receipt(pkt_entry, ope);
+		break;
+	case EFA_RDM_READ_NACK_PKT:
+		err = efa_rdm_pke_init_read_nack(pkt_entry, ope);
+		break;
+	case EFA_RDM_PEER_ERROR_PKT:
+		err = efa_rdm_pke_init_peer_error_for_ope(pkt_entry, ope);
+		break;
+	default:
+		assert(0 && "unknown non-REQ ctrl packet type to post");
+		err = -FI_EINVAL;
+		break;
+	}
+
+	if (OFI_UNLIKELY(err))
+		goto release;
+
+	/* No non-REQ packet type is eager, so FI_MORE never applies here. */
+	err = efa_rdm_pke_sendv(ep->send_pkt_entry_vec, 1, 0);
+	if (OFI_UNLIKELY(err))
+		goto release;
+
+	/* TODO: a non-REQ packet setting REQ_SENT looks wrong, but it is what
+	 * efa_rdm_ope_post_send() did. Revisit separately. */
+	ope->peer->flags |= EFA_RDM_PEER_REQ_SENT;
+	/* Only CTS and READRSP have anything to do once the device takes the WR. */
+	if (pke_handle_sent)
+		pke_handle_sent(pkt_entry);
+
+	return FI_SUCCESS;
+
+release:
+	efa_rdm_pke_release_tx(pkt_entry);
+	return err;
+}
+
+/**
+ * @brief post ctrl packet(s) according to packet type.
+ *
+ * Routes by packet type: a non-REQ ctrl packet is built here, a REQ packet goes
+ * to the protocol that owns it. Each arm checks TX packet availability itself.
+ *
+ * @param[in]   ope             pointer to efa_rdm_ope. (either a txe or an rxe)
+ * @param[in]   pkt_type        packet type.
+ * @return      On success return 0, otherwise return a negative libfabric error code.
+ */
+static ssize_t efa_rdm_ope_post_ctrl(struct efa_rdm_ope *ope, int pkt_type)
+{
+	if (!efa_rdm_pkt_type_is_req(pkt_type))
+		return efa_rdm_ope_post_nonreq_ctrl(ope, pkt_type);
+
+	return efa_rdm_ope_post_send(ope, pkt_type);
+}
+
+/**
  * @brief post packet(s) according to packet type. Queue the post if -FI_EAGAIN is encountered.
  *
- * This function will call efa_rdm_ope_post_send() to post packet(s) according to packet type.
- * If efa_rdm_ope_post_send() returned -FI_EAGAIN, this function will put the txe in efa_domain's
+ * This function will call efa_rdm_ope_post_ctrl() to post packet(s) according to packet type.
+ * If efa_rdm_ope_post_ctrl() returned -FI_EAGAIN, this function will put the txe in efa_domain's
  * queued_list. The progress engine will try to post the packet later.
  *
  * This function is mainly used by packet handler to post responsive ctrl packet (such as EOR and CTS).
@@ -2396,7 +2505,7 @@ ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
 {
 	ssize_t err;
 
-	err = efa_rdm_ope_post_send(ope, pkt_type);
+	err = efa_rdm_ope_post_ctrl(ope, pkt_type);
 	if (err == -FI_EAGAIN) {
 		assert(!(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR));
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
@@ -2480,7 +2589,7 @@ int efa_rdm_ope_process_queued_ope(struct efa_rdm_ope *ope)
 			ret = efa_rdm_ep_post_queued_pkts(ope->ep, &ope->queued_pkts);
 			break;
 		case EFA_RDM_OPE_QUEUED_CTRL:
-			ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
+			ret = efa_rdm_ope_post_ctrl(ope, ope->queued_ctrl_type);
 			break;
 		case EFA_RDM_OPE_QUEUED_READ:
 			ret = efa_rdm_ope_post_read(ope);

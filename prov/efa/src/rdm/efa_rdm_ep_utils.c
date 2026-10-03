@@ -1263,9 +1263,33 @@ void efa_rdm_ep_progress_peers_and_queues(struct efa_rdm_ep *ep)
 			continue;
 
 		if (ope->window > 0) {
-			if (efa_rdm_mr_gen_check_ope(ope))
-				ret = efa_rdm_ope_post_send(ope, EFA_RDM_CTSDATA_PKT);
-			else
+			if (efa_rdm_mr_gen_check_ope(ope)) {
+				/* TODO: When moving the Long CTS protocol, make
+				 * sure that construct_tx_pkes can correctly
+				 * generate CTSDATA packets for a partially
+				 * processed OPE. Verify that this entire code
+				 * path works end-to-end.
+				 *
+				 * Future protocols that need to send packets in
+				 * response to a received packet should NOT
+				 * maintain an ope list like the long CTS does.
+				 * Instead, they should handle the packet
+				 * construction and sending in the receive
+				 * completion callback itself.
+				 */
+				if (ope->proto) {
+					assert(ope->type == EFA_RDM_TXE);
+					if (efa_rdm_ep_get_available_tx_pkts(
+						    ope->ep) == 0)
+						ret = -FI_EAGAIN;
+					else
+						ret = efa_rdm_msg_post_rtm_proto(
+							ope->ep, ope,
+							ope->proto);
+				}
+				ret = efa_rdm_ope_post_send(
+					ope, EFA_RDM_CTSDATA_PKT);
+			} else
 				ret = -FI_ECANCELED;
 
 			if (OFI_UNLIKELY(ret && ret != -FI_EAGAIN)) {
