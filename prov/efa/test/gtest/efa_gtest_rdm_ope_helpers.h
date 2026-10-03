@@ -132,6 +132,13 @@ void efa_test_simulate_source_mr_canceled(struct efa_test_queued_op *qop);
 int efa_test_peer_abort_prov_errno(void);
 
 /**
+ * @brief Base header type of the packet a posted wr_id names. Must be called
+ * from inside the efa_qp_post_send action, before the poster releases the
+ * packet entry.
+ */
+int efa_test_wire_pkt_type_from_wr_id(uintptr_t wr_id);
+
+/**
  * @brief State of a matched recv that is peer-aborting, so a test can retire
  * its local-read payload copy after the abort has been decided.
  */

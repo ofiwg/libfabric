@@ -163,8 +163,9 @@ static inline ssize_t efa_rdm_msg_send_constructed_pkes(struct efa_rdm_ep *ep,
  * @param[in,out]	ep	endpoint
  * @param[in,out]	txe	send operation, filled by efa_rdm_proto_txe_fill
  * @param[in]		proto	protocol selected for this operation
- * @return 0 on success, negative errno on failure. On failure the caller
- *	   releases the txe and rolls back peer->next_msg_id.
+ * @return 0 on success, negative errno on failure. -FI_EAGAIN when no TX packet
+ *	   is available. On failure the caller releases the txe and rolls back
+ *	   peer->next_msg_id.
  */
 ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
 				    struct efa_rdm_ope *txe,
@@ -174,6 +175,10 @@ ssize_t efa_rdm_msg_post_rtm_proto(struct efa_rdm_ep *ep,
 	ssize_t err;
 
 	assert(txe->proto == proto);
+
+	/* construct_tx_pkes() only asserts there is room, so gate it here. */
+	if (efa_rdm_ep_get_available_tx_pkts(ep) == 0)
+		return -FI_EAGAIN;
 
 	err = proto->construct_tx_pkes(ep, txe, &pke_send_flags);
 	if (err)

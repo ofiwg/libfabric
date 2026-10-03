@@ -73,24 +73,19 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	 */
 	switch (pkt_type) {
 	case EFA_RDM_READRSP_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_readrsp(pkt_entry, ope);
+		EFA_RDM_PKT_TYPE_MOVED("READRSP");
 		break;
 	case EFA_RDM_CTS_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_cts(pkt_entry, ope);
+		EFA_RDM_PKT_TYPE_MOVED("CTS");
 		break;
 	case EFA_RDM_EOR_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_eor(pkt_entry, ope);
+		EFA_RDM_PKT_TYPE_MOVED("EOR");
 		break;
 	case EFA_RDM_ATOMRSP_PKT:
-		assert(data_offset == 0 && data_size == -1);
-		ret = efa_rdm_pke_init_atomrsp(pkt_entry, ope);
+		EFA_RDM_PKT_TYPE_MOVED("ATOMRSP");
 		break;
 	case EFA_RDM_RECEIPT_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_receipt(pkt_entry, ope);
+		EFA_RDM_PKT_TYPE_MOVED("RECEIPT");
 		break;
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_EAGER_TAGRTM_PKT:
@@ -206,12 +201,10 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_ctsdata(pkt_entry, ope, data_offset, data_size);
 		break;
 	case EFA_RDM_READ_NACK_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_read_nack(pkt_entry, ope);
+		EFA_RDM_PKT_TYPE_MOVED("READ_NACK");
 		break;
 	case EFA_RDM_PEER_ERROR_PKT:
-		assert(data_offset == -1 && data_size == -1);
-		ret = efa_rdm_pke_init_peer_error_for_ope(pkt_entry, ope);
+		EFA_RDM_PKT_TYPE_MOVED("PEER_ERROR");
 		break;
 	default:
 		assert(0 && "unknown pkt type to init");

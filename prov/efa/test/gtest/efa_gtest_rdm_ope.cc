@@ -16,6 +16,7 @@ using testing::StrictMock;
 using testing::Test;
 using testing::TestWithParam;
 using testing::Values;
+using testing::WithArg;
 
 class EfaRdmOpeTest : public Test
 {
@@ -325,6 +326,7 @@ TEST_P(EfaRdmOpeQueuedFlagDispatchTest, derived_flag_selects_post_routine)
 	int flag_kind = GetParam();
 	struct efa_test_queued_op qop = {};
 	struct efa_test_process_queued_result res = {};
+	int posted_pkt_type = 0;
 
 	ASSERT_EQ(efa_test_queue_ope_with_flag(resource.ep, resource.av,
 					       flag_kind, &qop),
@@ -349,12 +351,23 @@ TEST_P(EfaRdmOpeQueuedFlagDispatchTest, derived_flag_selects_post_routine)
 			.WillOnce(Return(0));
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_read).Times(0);
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
 		break;
 	case EFA_TEST_QUEUED_FLAG_CTRL:
-		/* The CTRL arm must forward the recorded queued_ctrl_type */
-		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data, _,
-				qop.queued_ctrl_type, qop.txe, _, _)
-			.WillOnce(Return(-FI_EAGAIN));
+		/*
+		 * The CTRL arm builds the recorded queued_ctrl_type itself now,
+		 * so the packet on the wire is the assertion. ENOMEM is the
+		 * device's queue-full, which sendv maps to -FI_EAGAIN.
+		 */
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send)
+			.WillOnce(DoAll(WithArg<5>([&posted_pkt_type](
+							   uintptr_t id) {
+					        posted_pkt_type =
+							efa_test_wire_pkt_type_from_wr_id(
+								id);
+					}),
+					Return(ENOMEM)));
+		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_ep_post_queued_pkts).Times(0);
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_read).Times(0);
 		break;
@@ -363,12 +376,16 @@ TEST_P(EfaRdmOpeQueuedFlagDispatchTest, derived_flag_selects_post_routine)
 			.WillOnce(Return(-FI_EAGAIN));
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_ep_post_queued_pkts).Times(0);
 		EFA_EXPECT_CALL(mock_efa, efa_rdm_pke_fill_data).Times(0);
+		EFA_EXPECT_CALL(mock_efa, efa_qp_post_send).Times(0);
 		break;
 	default:
 		FAIL() << "unknown flag kind " << flag_kind;
 	}
 
 	ASSERT_EQ(efa_test_process_queued_flag_op(&qop, &res), 0);
+
+	if (flag_kind == EFA_TEST_QUEUED_FLAG_CTRL)
+		EXPECT_EQ(posted_pkt_type, qop.queued_ctrl_type);
 
 	EXPECT_EQ(res.ret, expected_ret);
 	/* Success dequeues and clears the flag; EAGAIN leaves both in place */
